@@ -65,8 +65,7 @@ defineProps({
 }
 
 .subtitle {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--caption from global;
 }
 
 .subtitle_gray {

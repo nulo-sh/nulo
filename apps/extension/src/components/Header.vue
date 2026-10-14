@@ -232,15 +232,17 @@ onBeforeUnmount(() => {
 				<AccountAvatar :name="appStore.account?.name || 'Primary Account'" :address="appStore.account?.address" :size="32" />
 			</button>
 			<Flex direction="column" gap="2" :class="$style.account_col">
-				<button
-					type="button"
-					@click="handleOpenPopup('accounts')"
-					data-testid="account-selector"
-					aria-label="Switch account"
-					:class="$style.account_label"
-				>
-					{{ appStore.account?.name?.toUpperCase() || "PRIMARY ACCOUNT" }}
-				</button>
+				<div :class="$style.name_slot">
+					<button
+						type="button"
+						@click="handleOpenPopup('accounts')"
+						data-testid="account-selector"
+						aria-label="Switch account"
+						:class="$style.account_label"
+					>
+						{{ appStore.account?.name?.toUpperCase() || "PRIMARY ACCOUNT" }}
+					</button>
+				</div>
 				<button
 					type="button"
 					@click="handleCopyAddress"
@@ -248,7 +250,7 @@ onBeforeUnmount(() => {
 					aria-label="Copy address"
 					:class="$style.account_address"
 				>
-					<span :class="$style.address_text">
+					<span :class="$style.address_text" data-testid="account-address-text">
 						{{ appStore.account?.address ? trimAddress(appStore.account.address, 6, 4, "...") : "" }}
 						<span :class="$style.copy_reveal"><Icon name="copy" size="12" /></span>
 					</span>
@@ -256,7 +258,7 @@ onBeforeUnmount(() => {
 			</Flex>
 		</Flex>
 
-		<Flex align="center" gap="8">
+		<Flex align="center" gap="8" :class="$style.actions">
 			<button
 				v-if="appStore.isLogined && appStore.network?.name"
 				type="button"
@@ -299,14 +301,25 @@ onBeforeUnmount(() => {
 	background: var(--app-bg);
 }
 
+/* The name claims no width of its own, so the group's minimum is the avatar and the address: when
+ * the row runs short, the network chip truncates before the address can slide under it. */
 .account_group {
-	min-width: 0;
-	flex-shrink: 1;
+	flex-grow: 1;
 }
 
 .account_col {
-	min-width: 0;
+	flex-grow: 1;
 	align-items: flex-start;
+}
+
+.name_slot {
+	display: flex;
+	align-self: stretch;
+	contain: inline-size;
+}
+
+.actions {
+	min-width: 0;
 }
 
 .avatar_btn {
@@ -322,6 +335,7 @@ onBeforeUnmount(() => {
 }
 
 .account_label {
+	composes: type--name-tag from global;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -333,11 +347,6 @@ onBeforeUnmount(() => {
 	cursor: pointer;
 	text-align: left;
 
-	font-family: var(--font-headline);
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: -0.04em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
 
 	transition: color 0.2s var(--bezier);
@@ -357,22 +366,20 @@ onBeforeUnmount(() => {
 }
 
 .account_address {
-	padding: 0;
+	/* Room for the copy icon revealed past the address, so it never lands on the chip. */
+	padding: 0 6px 0 0;
 	background: transparent;
 	border: none;
 	cursor: pointer;
 	text-align: left;
 
-	font-family: var(--font-headline);
-	font-size: 14px;
-	font-weight: 700;
-	letter-spacing: -0.02em;
 	color: var(--txt-primary);
 }
 
 /* Hover/focus underlines the address and reveals the copy icon — the icon is absolutely
  * positioned in the free space to its right, so nothing shifts and no target shrinks. */
 .address_text {
+	composes: type--data-lead from global;
 	position: relative;
 	display: inline-flex;
 	align-items: center;
@@ -432,15 +439,11 @@ onBeforeUnmount(() => {
 }
 
 .network_label {
+	composes: type--tag from global;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 
-	font-family: var(--font-mono);
-	font-size: 10px;
-	font-weight: 500;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
 }
 
@@ -470,11 +473,7 @@ onBeforeUnmount(() => {
 }
 
 .lock_label {
-	font-family: var(--font-mono);
-	font-size: 10px;
-	font-weight: 500;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
+	composes: type--tag from global;
 	color: var(--nulo-secondary);
 }
 

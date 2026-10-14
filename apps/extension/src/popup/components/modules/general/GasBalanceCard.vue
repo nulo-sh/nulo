@@ -222,17 +222,12 @@ onBeforeUnmount(() => {
 }
 
 .label {
-	font-family: var(--font-mono);
-	font-size: 10px;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
+	composes: type--label from global;
 	color: var(--nulo-secondary);
 }
 
 .amount {
-	font-family: var(--font-mono);
-	font-size: 12px;
-	font-weight: 500;
+	composes: type--data from global;
 	color: var(--nulo-accent);
 	transition: opacity 0.2s var(--bezier, ease);
 }
@@ -242,8 +237,8 @@ onBeforeUnmount(() => {
 }
 
 .fiat {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--fiat from global;
+	font-size: 11px;
 	color: var(--nulo-secondary);
 }
 

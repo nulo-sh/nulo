@@ -780,6 +780,7 @@ onBeforeUnmount(() => {
 			<span aria-hidden="true">·</span>
 			<button
 				type="button"
+				class="type--label"
 				:class="$style.stalled_retry"
 				:disabled="syncHealth.retrying.value"
 				data-testid="incoming-sync-retry"
@@ -858,11 +859,7 @@ onBeforeUnmount(() => {
 
 <style module>
 .archive_link {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
+	composes: type--label from global;
 	color: var(--nulo-secondary);
 
 	transition: color 0.2s var(--bezier);
@@ -878,6 +875,7 @@ onBeforeUnmount(() => {
 }
 
 .stalled_line {
+	composes: type--meta from global;
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -885,8 +883,6 @@ onBeforeUnmount(() => {
 	padding: 8px 12px;
 	border: 1px dashed var(--nulo-border);
 
-	font-family: var(--font-mono);
-	font-size: 11px;
 	line-height: 1.4;
 	color: var(--nulo-outline);
 }
@@ -896,11 +892,8 @@ onBeforeUnmount(() => {
 	border: 0;
 	background: none;
 
-	font: inherit;
-	font-weight: 700;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
+	line-height: inherit;
 	cursor: pointer;
 
 	transition: color 0.2s var(--bezier);

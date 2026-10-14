@@ -85,11 +85,7 @@ function terminalCardProps(op) {
 }
 
 .date_label {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.15em;
-	text-transform: uppercase;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 	flex-shrink: 0;
 }

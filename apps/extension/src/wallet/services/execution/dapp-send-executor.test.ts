@@ -30,6 +30,7 @@ import type { ProveAndSendContext } from "./execution-coordinator"
 import { AUTHWITS_CHANGED_MESSAGE, ESTIMATE_INCOMPLETE_MESSAGE, PREVIEW_FOREIGN_MESSAGE, PreviewSnapshots } from "./preview-snapshots"
 import { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { fingerprintOperation } from "./operation-fingerprint"
+import { MAX_WAIT_MS, SendSequencer } from "./send-sequencer"
 import { ExecutionService } from "./service"
 
 // A pass-through spy: the extraction itself is aztec.js's; its arguments are the executor's.
@@ -77,6 +78,15 @@ vi.mock("@aztec-labs/protocol-contracts/fee-juice", async (importOriginal) => {
 
 const ORIGIN: LocalTxOrigin = { type: OriginType.DAPP, name: "test-dapp" }
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
+
+/** The lane's earlier-sends seams for a send that never has to wait. */
+const clearLine = () => ({
+	parkSlot: vi.fn(async () => {
+		throw new Error("a clear send never parks")
+	}),
+	joinOriginLine: vi.fn(() => ({ behind: () => false, earlierDone: async () => true, leave: vi.fn() })),
+	failUnclaimed: vi.fn(async () => {}),
+})
 const EXPIRY = { timestamp: 1_750_003_600, nullifier: `0x${"02".padStart(64, "0")}` }
 
 /** A popup approval envelope carrying a reuse id; the producer mints `previewId = estimateId`
@@ -173,6 +183,7 @@ function makeHarness(
 			beginJournal: vi.fn(async () => "j1"),
 			markJournal: vi.fn(async () => {}),
 			commitJournal: vi.fn(async () => {}),
+			...clearLine(),
 		},
 		operationEstimateReuse: { tryConsume: vi.fn(async () => undefined), stash: vi.fn(), evict: vi.fn() } as never,
 		previewSnapshots: new PreviewSnapshots(),
@@ -190,6 +201,8 @@ function makeHarness(
 		addTransaction: vi.fn(async () => ({}) as never),
 		recordPendingAuthwits: vi.fn(async () => {}),
 		noteSent: vi.fn(),
+		sequencer: new SendSequencer({ pendingTxs: () => [], sleep: async () => {}, now: () => 0 }),
+		chainTip: { unconfirmed: () => false, wait: async () => "confirmed" },
 		logDebug: vi.fn(),
 		readPublicStorageOnce: vi.fn(async () => new Fr(0n)),
 		...overrides,
@@ -462,6 +475,7 @@ describe("DappSendExecutor.executeAztecSendTx (standard path)", () => {
 				beginJournal: vi.fn(),
 				markJournal: vi.fn(async () => {}),
 				commitJournal: vi.fn(async () => {}),
+				...clearLine(),
 			},
 		})
 		await expect(executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)).rejects.toBeInstanceOf(
@@ -792,6 +806,7 @@ describe("DappSendExecutor — slot-scaffold oracle (ordering + no-leak on every
 				beginJournal: vi.fn(),
 				markJournal: vi.fn(async () => {}),
 				commitJournal: vi.fn(async () => {}),
+				...clearLine(),
 			},
 		})
 		await expect(executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)).rejects.toThrow("claim broke")
@@ -831,6 +846,7 @@ describe("DappSendExecutor — slot-scaffold oracle (ordering + no-leak on every
 			claimOrCreateJournal: vi.fn(async () => claimBehavior(map)),
 			beginJournal: vi.fn(),
 			markJournal: vi.fn(async () => {}),
+			...clearLine(),
 		}
 		return { lane, map, releaseLocal, order }
 	}
@@ -925,6 +941,165 @@ describe("DappSendExecutor — slot-scaffold oracle (ordering + no-leak on every
 	})
 })
 
+describe("DappSendExecutor: a dApp send waits outside the slot for its accounts' earlier sends", () => {
+	const HOOKS = { queuedJournalId: "q-1", originKey: "https://dapp.example" } as never
+	const tick = () => new Promise<void>((r) => setTimeout(r, 0))
+	const ticks = async () => {
+		for (let i = 0; i < 5; i++) await tick()
+	}
+	type Row = { hash: string; chainId: number; account: string; calls: object[]; createdAt: number }
+	const row = (account = "0xacct"): Row => ({ hash: "0xprev", chainId: 7, account, calls: [], createdAt: 0 })
+	const withExtra = () => makeAztecOp({ opts: { from: addr("0xacct"), additionalScopes: [addr("0xextra")], wait: "NO_WAIT" } })
+
+	/** A real sequencer over `pending`, and a park that gives the slot back, waits, and is granted a fresh one. */
+	function parked(chainTip?: DappSendExecutorDeps["chainTip"]) {
+		const pending: Row[] = []
+		const clock = { now: 0 }
+		const sequencer = new SendSequencer({
+			pendingTxs: (account) => pending.filter((r) => r.account.toLowerCase() === account.toLowerCase()) as never,
+			sleep: tick,
+			now: () => clock.now,
+		})
+		const h = makeHarness({ sequencer, ...(chainTip && { chainTip }) })
+		const preController = new AbortController()
+		const granted = vi.fn()
+		const regranted = vi.fn()
+		const lane = h.deps.lane
+		lane.acquireSlot = vi.fn(async () => ({ release: granted, preController }))
+		lane.parkSlot = vi.fn(async (release: () => void, ...rest: unknown[]) => {
+			release()
+			await (rest.at(-1) as () => Promise<void>)()
+			return regranted
+		})
+		const run = (op = makeAztecOp()) => h.executor.executeAztecSendTx(op, ORIGIN, undefined, HOOKS, FENCE)
+		return { ...h, pending, clock, sequencer, preController, granted, regranted, lane, run }
+	}
+
+	test("behind an unmined send of its account, neither the claim nor the build starts until it settles; then each once", async () => {
+		const clear = parked()
+		await clear.run()
+		expect(clear.lane.parkSlot).not.toHaveBeenCalled()
+
+		const h = parked()
+		h.pending.push(row())
+		const run = h.run()
+		await ticks()
+		expect(h.granted).toHaveBeenCalledTimes(1)
+		expect(h.lane.claimOrCreateJournal).not.toHaveBeenCalled()
+		expect(h.buildAndEstimateFolded).not.toHaveBeenCalled()
+		h.pending.length = 0
+		await run
+		expect(h.lane.parkSlot).toHaveBeenCalledTimes(1)
+		expect(h.lane.claimOrCreateJournal).toHaveBeenCalledTimes(1)
+		expect(h.buildAndEstimateFolded).toHaveBeenCalledTimes(1)
+		expect(h.regranted).toHaveBeenCalledTimes(1)
+	})
+
+	test("it waits in the line of every account it may spend from, and for the tip in each", async () => {
+		const h = parked()
+		h.pending.push(row("0xExtra"))
+		const run = h.run(withExtra())
+		await ticks()
+		expect(h.lane.claimOrCreateJournal).not.toHaveBeenCalled()
+		h.pending.length = 0
+		await run
+		expect(h.lane.claimOrCreateJournal).toHaveBeenCalledTimes(1)
+
+		const lagging = new Set(["0xextra"])
+		const chainTip = {
+			unconfirmed: vi.fn((scope: { account: string }) => lagging.has(scope.account)),
+			wait: vi.fn(async (scope: { account: string }) => {
+				while (lagging.has(scope.account)) await tick()
+				return "confirmed" as const
+			}),
+		}
+		const tip = parked(chainTip)
+		const behindTip = tip.run(withExtra())
+		await ticks()
+		expect(tip.lane.claimOrCreateJournal).not.toHaveBeenCalled()
+		lagging.clear()
+		await behindTip
+		expect(chainTip.wait.mock.calls.map((c) => c.slice(0, 3))).toEqual([
+			[{ chainId: 7, account: "0xacct" }, undefined, "net-1"],
+			[{ chainId: 7, account: "0xextra" }, undefined, "net-1"],
+		])
+		expect(tip.lane.claimOrCreateJournal).toHaveBeenCalledTimes(1)
+	})
+
+	test("a cancel while parked rejects as cancelled, claiming and building nothing", async () => {
+		const h = parked()
+		h.pending.push(row())
+		const run = h.run()
+		await ticks()
+		h.preController.abort()
+		await expect(run).rejects.toBeInstanceOf(JobCancelledSentinel)
+		expect(h.lane.claimOrCreateJournal).not.toHaveBeenCalled()
+		expect(h.buildAndEstimateFolded).not.toHaveBeenCalled()
+		expect(h.regranted).not.toHaveBeenCalled()
+	})
+
+	test("past the waiters' limit it runs once, unordered", async () => {
+		const h = parked()
+		h.sequencer.enter({ chainId: 7, account: "0xacct" }, new Set(["seq:0xt:0xbob"]))
+		const run = h.run()
+		await ticks()
+		expect(h.lane.claimOrCreateJournal).not.toHaveBeenCalled()
+		h.clock.now = MAX_WAIT_MS
+		await run
+		expect(h.deps.logDebug).toHaveBeenCalledWith("dApp send reached its wait limit for earlier sends; running unordered")
+		expect(h.lane.parkSlot).toHaveBeenCalledTimes(1)
+		expect(h.lane.claimOrCreateJournal).toHaveBeenCalledTimes(1)
+		expect(h.proveAndSend).toHaveBeenCalledTimes(1)
+	})
+
+	test("a wallet send (Settings) never waits: it claims at once behind an unmined send", async () => {
+		const h = parked()
+		h.pending.push(row())
+		await h.executor.executeAztecSendTx(makeAztecOp(), { type: OriginType.UI } as never, undefined, HOOKS, FENCE)
+		expect(h.lane.parkSlot).not.toHaveBeenCalled()
+		expect(h.lane.joinOriginLine).not.toHaveBeenCalled()
+		expect(h.lane.claimOrCreateJournal).toHaveBeenCalledTimes(1)
+	})
+
+	test("a throw while reading its scopes leaves no place behind in its origin's line", async () => {
+		const h = parked()
+		const places: { left: boolean }[] = []
+		h.lane.joinOriginLine = vi.fn(() => {
+			const place = { left: false }
+			places.push(place)
+			const leave = () => {
+				place.left = true
+			}
+			return { behind: () => false, earlierDone: async () => true, leave }
+		})
+		const op = makeAztecOp() as { opts: object }
+		Object.defineProperty(op.opts, "additionalScopes", {
+			get() {
+				throw new Error("scopes boom")
+			},
+		})
+		await expect(h.run(op as never)).rejects.toThrow("scopes boom")
+		expect(places.filter((p) => !p.left)).toEqual([])
+		expect(h.lane.failUnclaimed).toHaveBeenCalledWith("q-1", expect.objectContaining({ message: "scopes boom" }))
+	})
+
+	test("a throw before the claim fails the unclaimed record; a claimed send's failure leaves that to its catch", async () => {
+		const h = parked()
+		h.pending.push(row())
+		const broke = new Error("re-entry broke")
+		h.lane.parkSlot = vi.fn(async () => {
+			throw broke
+		})
+		await expect(h.run()).rejects.toBe(broke)
+		expect(h.lane.failUnclaimed).toHaveBeenCalledWith("q-1", broke)
+
+		const claimed = parked()
+		const op = makeAztecOp({ opts: { from: addr("0xother"), additionalScopes: [], wait: "NO_WAIT" } })
+		await expect(claimed.run(op)).rejects.toThrow("Invalid `opts.from`")
+		expect(claimed.lane.failUnclaimed).not.toHaveBeenCalled()
+	})
+})
+
 describe("DappSendExecutor estimate→confirm reuse (aztec_sendTx)", () => {
 	test("estimateOperationFee (aztec_sendTx, fj): stash written with bookkeeping fields, estimateId returned", async () => {
 		const { executor, deps, built } = makeHarness()
@@ -948,6 +1123,16 @@ describe("DappSendExecutor estimate→confirm reuse (aztec_sendTx)", () => {
 		})
 	})
 
+	test("an estimate built while a settled predecessor's block is past the node's tip is never stashed for reuse", async () => {
+		const unconfirmed = vi.fn(() => true)
+		const lagging = makeHarness({ chainTip: { unconfirmed, wait: async () => "confirmed" } })
+		const result = await lagging.executor.estimateOperationFee(makeAztecOp(), { paymentMethod: { kind: "fj" } } as never)
+		expect(unconfirmed).toHaveBeenCalledWith({ chainId: 7, account: "0xacct" }, undefined, "net-1")
+		expect(result.estimateId).toBeUndefined()
+		expect(result.maxFee).toBeDefined()
+		expect(lagging.deps.operationEstimateReuse.stash).not.toHaveBeenCalled()
+	})
+
 	test("the stash records the account's send epoch as it was before the build, not after", async () => {
 		let epoch = 4
 		const { executor, deps, built, buildAndEstimateValidated, buildAndEstimateFolded } = makeHarness({
@@ -965,6 +1150,22 @@ describe("DappSendExecutor estimate→confirm reuse (aztec_sendTx)", () => {
 		expect(deps.sequenceEpoch).toHaveBeenCalledWith(7, "0xacct")
 		const stash = (deps.operationEstimateReuse.stash as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]
 		expect(stash[1]).toMatchObject({ sequenceEpoch: 4 })
+	})
+
+	test("the stash records the account's pending set as it was before the build: a send settling during it is a miss", async () => {
+		let pending = [{ hash: "0xprev" }]
+		const { executor, deps, built, buildAndEstimateValidated, buildAndEstimateFolded } = makeHarness({
+			getPendingForAccount: vi.fn(() => pending),
+		})
+		const settling = async () => {
+			pending = []
+			return built as never
+		}
+		buildAndEstimateValidated.mockImplementation(settling)
+		buildAndEstimateFolded.mockImplementation(settling)
+		await executor.estimateOperationFee(makeAztecOp(), { paymentMethod: { kind: "fj" } } as never)
+		const stash = (deps.operationEstimateReuse.stash as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]
+		expect(stash[1]).toMatchObject({ pendingHashes: ["0xprev"] })
 	})
 
 	test("embedded payment method: no stash, estimateId undefined", async () => {
@@ -1992,7 +2193,7 @@ describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 		}
 	})
 
-	test("a pending tx that lands during the profile read is in the snapshot", async () => {
+	test("the snapshot is the pending set before the build: a tx landing during the profile read is a change the confirm sees", async () => {
 		const pending: { hash: string }[] = [{ hash: "0xpending" }]
 		const { executor, deps } = snapshotHarness({
 			getPendingForAccount: vi.fn(() => [...pending]),
@@ -2002,7 +2203,7 @@ describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 			}),
 		})
 		await executor.estimateOperationFee(makeAztecOp(), FPC_SETTINGS as never)
-		expect((stashed(deps)[0][1] as { pendingHashes: string[] }).pendingHashes).toEqual(["0xpending", "0xraced"])
+		expect((stashed(deps)[0][1] as { pendingHashes: string[] }).pendingHashes).toEqual(["0xpending"])
 	})
 
 	test("an fj entry carries no fpcIdentity", async () => {

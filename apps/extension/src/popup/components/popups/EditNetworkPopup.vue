@@ -128,7 +128,7 @@ usePopupEntity(() => props.show, {
 			<Button @click="handleFillFieldsWithDefaultValues" wide variant="primary_outline" size="medium">
 				Reset changes
 			</Button>
-			<Text size="12" weight="500" color="tertiary" height="140" align="center" style="padding: 8px 20px 0">
+			<Text variant="body" color="tertiary" height="140" align="center" style="padding: 8px 20px 0">
 				Endpoint URLs are managed in the per-network detail page.
 			</Text>
 		</template>

@@ -147,7 +147,7 @@ onBeforeUnmount(() => {
 		<header :class="$style.hero">
 			<BrutalistTitle main="Import" sub="Wallet" />
 			<div :class="$style.hero_bar" />
-			<Text size="14" color="secondary" height="150">Restore from a recovery phrase, passkey, or full backup.</Text>
+			<Text variant="body" color="secondary" height="150">Restore from a recovery phrase, passkey, or full backup.</Text>
 		</header>
 
 		<OnboardingProfileNameField

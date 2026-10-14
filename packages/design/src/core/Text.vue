@@ -3,16 +3,13 @@
 import { computed, type PropType } from "vue"
 import type { TextColorName } from "../color-names"
 import type { TextAlign } from "../layout-names"
-import type { FontSize, FontWeight } from "../tokens"
+import { type TypeRole, typeRoleNames } from "../tokens"
 
 const props = defineProps({
-	// Static Vue attrs arrive as strings (`size="13"`), dynamic binds as numbers (`:size="13"`) —
-	// accept both the token and its stringified form.
-	size: {
-		type: String as PropType<FontSize | `${FontSize}`>,
-	},
-	weight: {
-		type: String as PropType<FontWeight | `${FontWeight}`>,
+	// Validated at run time too: most callers are SFCs without `lang="ts"`, which vue-tsc skips.
+	variant: {
+		type: String as PropType<TypeRole>,
+		validator: (value: string) => (typeRoleNames as readonly string[]).includes(value),
 	},
 	// Line-height is an open scale (no token union); the class is `lh--${height}`.
 	height: {
@@ -28,14 +25,6 @@ const props = defineProps({
 	noWrap: {
 		type: Boolean,
 	},
-	mono: {
-		type: Boolean,
-		default: false,
-	},
-	tabular: {
-		type: Boolean,
-		default: false,
-	},
 	selectable: {
 		type: Boolean,
 		default: false,
@@ -45,11 +34,8 @@ const props = defineProps({
 const classes = computed(() => {
 	const flexClasses = []
 
-	if (props.size) {
-		flexClasses.push(`fz--${props.size}`)
-	}
-	if (props.weight) {
-		flexClasses.push(`fw--${props.weight}`)
+	if (props.variant) {
+		flexClasses.push(`type--${props.variant}`)
 	}
 	if (props.height) {
 		flexClasses.push(`lh--${props.height}`)
@@ -62,12 +48,6 @@ const classes = computed(() => {
 	}
 	if (props.noWrap) {
 		flexClasses.push("no-wrap")
-	}
-	if (props.mono) {
-		flexClasses.push("mono")
-	}
-	if (props.tabular) {
-		flexClasses.push("tabular")
 	}
 	if (props.selectable) {
 		flexClasses.push("selectable")

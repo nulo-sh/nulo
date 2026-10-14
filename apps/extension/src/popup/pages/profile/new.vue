@@ -128,7 +128,7 @@ onBeforeUnmount(() => {
 		<!-- Passkey info -->
 		<div v-else :class="$style.section_last">
 			<span :class="$style.section_label">Passkey</span>
-			<Text size="13" height="150" color="body">
+			<Text variant="body" height="150" color="body">
 				No password required. Your new profile will be linked to your passkey, so you can sign in securely and effortlessly. No memorizing, no typing, just one tap.
 			</Text>
 		</div>
@@ -166,11 +166,7 @@ onBeforeUnmount(() => {
 }
 
 .section_label {
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.18em;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 </style>

@@ -36,6 +36,7 @@ import { builtCapOf } from "./estimate-reuse-shared"
 import { failureKind } from "./mark-failed-unless-cancelled"
 import type { OperationPlanner, TransferRequest } from "./operation-planner"
 import { maybeRethrowAsRpcCancel, throwIfAborted } from "./rpc-cancel"
+import type { ChainTipGate } from "./chain-tip-gate"
 import type { SendSequencer, SequenceScope, SequenceTicket } from "./send-sequencer"
 import type { Action, FeeOptions, FeeSettings, TransferFeeEstimate, TransferFeeQueued } from "./spec"
 import { probeOwnFeeJuice, probeSponsorFunding } from "./sponsor-funding"
@@ -94,6 +95,7 @@ export interface TransferExecutorDeps {
 	coordinator: ExecutionCoordinator
 	lane: TransferExecutorLane
 	sequencer: SendSequencer
+	chainTip: Pick<ChainTipGate, "unconfirmed" | "wait">
 	getTokenContract(tokenId: number): Promise<string>
 	/** The validated row a build pays with: owned, with its protocol addresses derived even on a cold worker. */
 	getFpcImpl(fpcId: string): Promise<Fpc>
@@ -204,7 +206,10 @@ export class TransferExecutor {
 			const sequence = await this.sequence(req)
 			const held: TransferLine = { sequence, ticket: this.deps.sequencer.enter(sequence.scope, sequence.keys) }
 			line = held
-			const queued = held.ticket.blocked() || this.deps.lane.isSlotBusy(fence.profileId, sequence.scope.chainId)
+			const queued =
+				held.ticket.blocked() ||
+				this.deps.lane.isSlotBusy(fence.profileId, sequence.scope.chainId) ||
+				this.deps.chainTip.unconfirmed(sequence.scope, sequence.keys, req.networkId)
 			const created = await this.createTransferJournal(req, fence, queued)
 			journalId = created.journalId
 			controller = created.controller
@@ -312,11 +317,12 @@ export class TransferExecutor {
 	}
 
 	/**
-	 * Waits for the sends this one depends on, then takes the slot and re-checks under it: a dApp tx
-	 * proving when the wait ended is pending by now, and an edited fee contract moves this send's key,
-	 * so either gives the slot back (an edit re-enters the line). A send whose row is `pending` when it
-	 * has to wait moves it back to `queued` for the wait. Returns the fee contract row the build pays
-	 * with, the one this send was ordered against.
+	 * Waits for the sends this one depends on and for the PXE's node to hold their blocks, then takes
+	 * the slot and re-checks under it, with nothing awaited on the network: a dApp tx proving when the
+	 * wait ended is pending by now, a predecessor may have settled since, and an edited fee contract
+	 * moves this send's key, so any of them gives the slot back (an edit re-enters the line). A send
+	 * whose row is `pending` when it has to wait moves it back to `queued` for the wait. Returns the
+	 * fee contract row the build pays with, the one this send was ordered against.
 	 */
 	private async takeTurn(
 		req: TransferRequest,
@@ -336,14 +342,15 @@ export class TransferExecutor {
 			// claim awaits the transition itself and fails with its error.
 			requeued.catch(() => undefined)
 		}
+		const held = () => line.ticket.blocked() || this.deps.chainTip.unconfirmed(line.sequence.scope, line.sequence.keys, req.networkId)
 		for (;;) {
 			// `waitTurn` checks first in this same task, so this is the wait as it starts.
-			if (line.ticket.blocked()) waiting()
-			await this.waitForDependencies(journalId, controller, line.ticket)
+			if (held()) waiting()
+			await this.waitForDependencies(req.networkId, journalId, controller, line)
 			const release = await this.acquireSlotWithin(req.networkId, journalId, fence, controller, line.ticket, waiting)
 			// The caller holds no release until this returns, so every throw past the grant gives it back.
 			try {
-				if (line.ticket.blocked()) {
+				if (held()) {
 					release()
 					continue
 				}
@@ -371,12 +378,24 @@ export class TransferExecutor {
 		line.ticket = this.deps.sequencer.enter(next.scope, next.keys, deadline)
 	}
 
-	private async waitForDependencies(journalId: string, controller: AbortController, ticket: SequenceTicket): Promise<void> {
+	/** The ticket's turn, then the tip; a tip wait that outlasts the ticket is reported by the slot wait. */
+	private async waitForDependencies(
+		networkId: string,
+		journalId: string,
+		controller: AbortController,
+		line: TransferLine,
+	): Promise<void> {
 		this.deps.lane.beginQueuedWait(journalId)
-		const turn = await ticket.waitTurn(controller.signal).finally(() => this.deps.lane.endQueuedWait(journalId))
-		if (turn === "turn") return
-		if (turn === "aborted") throw new JobCancelledSentinel(journalId)
-		throw new Error(WAIT_LIMIT_MESSAGE)
+		try {
+			const turn = await line.ticket.waitTurn(controller.signal)
+			if (turn === "aborted") throw new JobCancelledSentinel(journalId)
+			if (turn === "expired") throw new Error(WAIT_LIMIT_MESSAGE)
+			const { scope, keys } = line.sequence
+			const tip = await this.deps.chainTip.wait(scope, keys, networkId, controller.signal, line.ticket.remainingMs())
+			if (tip === "aborted") throw new JobCancelledSentinel(journalId)
+		} finally {
+			this.deps.lane.endQueuedWait(journalId)
+		}
 	}
 
 	/** The slot, given up when the ticket's wait runs out, with the wait-limit failure. */

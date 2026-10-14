@@ -79,11 +79,11 @@ watch(
 		>
 			<Flex align="center" gap="8" :class="$style.error_title_wrapper">
 				<span :class="$style.error_tag">Error</span>
-				<Text size="12" weight="600" color="red" :class="$style.error_title">{{ error.title }}</Text>
+				<Text variant="body" color="red" :class="$style.error_title">{{ error.title }}</Text>
 				<Icon :name="isCopied ? 'check' : 'copy'" size="13" color="red" />
 			</Flex>
 			<Flex v-if="error.tooltip" align="start" :class="$style.error_description_wrapper" wide>
-				<Text size="12" height="120" color="red" :class="$style.error_description">{{ error.tooltip }}</Text>
+				<Text variant="body" height="120" color="red" :class="$style.error_description">{{ error.tooltip }}</Text>
 			</Flex>
 		</Flex>
 
@@ -99,7 +99,7 @@ watch(
 		>
 			<Flex align="center" gap="8">
 				<span :class="[$style.error_tag, $style.error_tag_warning]">Warning</span>
-				<Text size="12" weight="600" height="120" color="yellow">{{ warningText }}</Text>
+				<Text variant="body" height="120" color="yellow">{{ warningText }}</Text>
 			</Flex>
 		</Flex>
 	</div>
@@ -145,7 +145,7 @@ watch(
 				<template #bottom>
 					<Flex align="center" gap="6" :class="$style.hint_row">
 						<MaterialIcon name="lock" :size="12" color="tertiary" />
-						<Text size="12" weight="600" color="tertiary">{{ passwordHint }}</Text>
+						<Text variant="body" color="tertiary">{{ passwordHint }}</Text>
 					</Flex>
 				</template>
 			</Input>
@@ -158,7 +158,7 @@ watch(
 				autocomplete="new-password"
 				data-testid="import-full-backup-password-confirm-input"
 			/>
-			<Text size="12" weight="500" color="tertiary" height="150">
+			<Text variant="body" color="tertiary" height="150">
 				Create a new password that will be used to log in to your profile in the future
 			</Text>
 		</Flex>
@@ -182,11 +182,7 @@ watch(
 }
 
 .error_tag {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.2em;
-	text-transform: uppercase;
+	composes: type--tag from global;
 	color: var(--red);
 	border: 1px solid var(--red);
 	padding: 2px 6px;

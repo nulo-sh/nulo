@@ -9,6 +9,9 @@ import Icon from "../core/Icon.vue"
 import Text from "../core/Text.vue"
 import Tooltip from "./Tooltip.vue"
 
+/** Tokens */
+import type { TypeRole } from "../tokens"
+
 /** Utils */
 import { sanitizeString } from "../internal/sanitize"
 
@@ -105,6 +108,13 @@ const props = defineProps({
 	inputTestid: {
 		type: String,
 		required: false,
+	},
+	/** The typed text's role: `input-data` for an address, an amount or another value compared glyph by glyph. */
+	textVariant: {
+		type: String as PropType<Extract<TypeRole, "input" | "input-data">>,
+		default: "input",
+		// Validated at run time too: most callers are SFCs without `lang="ts"`, which vue-tsc skips.
+		validator: (value: string) => value === "input" || value === "input-data",
 	},
 	/** Maps the typed text to the text the field keeps, in place of `sanitize`'s built-in filter. */
 	normalize: {
@@ -276,7 +286,7 @@ const handleClear = () => {
 	<Flex direction="column" gap="8">
 		<Flex v-if="label" align="center" justify="between">
 			<Flex align="center" gap="4">
-				<Text size="13" weight="600" color="secondary">{{ label }}</Text>
+				<Text variant="label" color="secondary">{{ label }}</Text>
 				<slot name="labelSuffix" />
 			</Flex>
 
@@ -284,7 +294,7 @@ const handleClear = () => {
 				<Tooltip position="end">
 					<Flex align="center" gap="6">
 						<Icon name="warning" size="12" color="yellow" />
-						<Text size="12" color="primary"> Maximum length reached </Text>
+						<Text variant="body" color="primary"> Maximum length reached </Text>
 					</Flex>
 
 					<template #content>
@@ -300,14 +310,16 @@ const handleClear = () => {
 			ref="base"
 			@click="handleClick"
 			gap="12"
+			:data-input-size="size"
 			:class="[$style.base, isFocused && $style.focused, disabled && $style.disabled, error && $style.error, $style[size]]"
 		>
 			<Flex align="center" gap="6" wide :class="$style.left">
 				<Icon v-if="icon" :name="icon" size="16" color="tertiary" />
-				<Text v-if="leftText" size="13" weight="600" color="tertiary">{{ leftText }}</Text>
+				<Text v-if="leftText" variant="value" color="tertiary">{{ leftText }}</Text>
 
 				<input
 					ref="inputEl"
+					:class="`type--${textVariant}`"
 					:type="getInputType"
 					:max="max"
 					v-model="text"
@@ -408,9 +420,6 @@ const handleClear = () => {
 	padding: 0;
 	background: transparent;
 
-	font-family: var(--font-body);
-	font-size: 15px;
-	font-weight: 500;
 	color: var(--txt-primary);
 
 	text-overflow: ellipsis;

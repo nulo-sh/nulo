@@ -102,16 +102,16 @@ onBeforeUnmount(() => {
 		<!-- Agreement gate -->
 		<template v-if="!isStarted">
 			<div class="export_section">
-				<span class="export_section_label">Before you continue</span>
+				<span class="export_section_label type--label-section">Before you continue</span>
 				<Flex direction="column" gap="8">
-					<Text size="13" height="150" color="body">
+					<Text variant="body" height="150" color="body">
 						Your recovery phrase is direct and full access to your entire profile, once you lose it you will not
 						be able to regain access to your profile.
 					</Text>
-					<Text size="13" height="150" color="body">
+					<Text variant="body" height="150" color="body">
 						Ensure that your recovery phrase is securely stored.
 					</Text>
-					<Text size="13" height="150" color="body">
+					<Text variant="body" height="150" color="body">
 						By continuing you agree to all risks and responsibilities.
 					</Text>
 				</Flex>
@@ -129,7 +129,7 @@ onBeforeUnmount(() => {
 		<!-- Revealed phrase -->
 		<template v-else>
 			<div class="export_section">
-				<span class="export_section_label">Your recovery phrase</span>
+				<span class="export_section_label type--label-section">Your recovery phrase</span>
 				<SecretRevealCard
 					:value="phrase"
 					label="Recovery Phrase"
@@ -140,25 +140,25 @@ onBeforeUnmount(() => {
 			</div>
 
 			<div class="export_section_last">
-				<span class="export_section_label">Keep in mind</span>
+				<span class="export_section_label type--label-section">Keep in mind</span>
 				<Flex direction="column" gap="10">
 					<Flex gap="8">
 						<Icon name="warning" size="12" color="tertiary" style="height: 18px; flex-shrink: 0" />
-						<Text size="12" weight="500" height="150" color="tertiary">
+						<Text variant="body" height="150" color="tertiary">
 							Some applications on your PC can have access to your clipboard and read a recovery phrase
 						</Text>
 					</Flex>
 
 					<Flex gap="8">
 						<Icon name="warning" size="12" color="tertiary" style="height: 18px; flex-shrink: 0" />
-						<Text size="12" weight="500" height="150" color="tertiary">
+						<Text variant="body" height="150" color="tertiary">
 							Storing a text file with sensitive information like a recovery phrase can be dangerous
 						</Text>
 					</Flex>
 
 					<Flex gap="8">
 						<Icon name="warning" size="12" color="tertiary" style="height: 18px; flex-shrink: 0" />
-						<Text size="12" weight="500" height="150" color="tertiary">
+						<Text variant="body" height="150" color="tertiary">
 							Storing a recovery phrase in your notebook or in any other physical form can be considered one of
 							the safest methods, but a paper can be easily lost or destroyed (by water or fire)
 						</Text>

@@ -821,6 +821,32 @@ export async function deployDelegatedPullRig(
 	}
 }
 
+/**
+ * Publishes the standard `PublicChecks` contract at its canonical address, which the local network
+ * leaves unpublished (it publishes only the standard AuthRegistry, by the same two steps, and seeds
+ * neither at genesis). The Crowdfunding consumer of `deployDelegatedPullRig` calls it, so its pull
+ * cannot simulate, and no authwit is discovered, until it exists. Idempotent.
+ */
+export async function ensureStandardPublicChecks(aztecConfig: AztecTestConfig): Promise<void> {
+	const { publishContractClass, publishInstance } = await import("@aztec-labs/aztec.js/deployment")
+	const { PublicChecksArtifact, getStandardPublicChecks } = await import("@aztec-labs/standard-contracts/public-checks")
+	const { instance, contractClass } = await getStandardPublicChecks()
+	const { wallet, cleanup } = await createTestWallet(aztecConfig.nodeUrl)
+	try {
+		const from = AztecAddress.fromStringUnsafe(aztecConfig.minterAddress)
+		const fee = { ...(await createSponsoredFeeOptions(wallet)), gasSettings: E2E_FEE_GAS }
+		const send = { from, fee, wait: { timeout: 120 } } as never
+		if (!(await wallet.getContractClassMetadata(contractClass.id)).isContractClassPubliclyRegistered) {
+			await (await publishContractClass(wallet as never, PublicChecksArtifact)).send(send)
+		}
+		if (!(await wallet.getContractMetadata(instance.address)).isContractPublished) {
+			await publishInstance(wallet as never, instance).send(send)
+		}
+	} finally {
+		await cleanup()
+	}
+}
+
 /** Wait until the node reports `txHash` proven or finalized with a successful execution: a flow's
  *  next step may read state the tx wrote, and the wallet resolves a dApp's send at submission.
  *  Rejects when the node reports it dropped, when its public execution reverted, when a receipt read
@@ -837,6 +863,29 @@ export async function waitForTxMined(aztecConfig: AztecTestConfig, txHash: strin
 			() => "unavailable",
 		)
 		throw new Error(`waitForTxMined: tx ${txHash} not proven within ${timeoutMs}ms (status ${status})`, { cause: err })
+	}
+}
+
+async function mineL1Blocks(count: number): Promise<void> {
+	const res = await fetch(ANVIL_URL, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "anvil_mine", params: [`0x${count.toString(16)}`] }),
+	})
+	const body = (await res.json()) as { error?: { message: string } }
+	if (body.error) throw new Error(`anvil_mine: ${body.error.message}`)
+}
+
+/** Mines empty L1 blocks until the node's finalized L2 block reaches `block`. The local anvil mines
+ *  only on a transaction, so on a quiet chain the finalized tip stands still. */
+export async function finalizeThrough(node: ReturnType<typeof createAztecNodeClient>, block: number, timeoutMs = 180_000): Promise<void> {
+	const deadline = Date.now() + timeoutMs
+	for (;;) {
+		const finalized = await node.getBlockData("finalized")
+		if ((finalized?.header.getBlockNumber() ?? 0) >= block) return
+		if (Date.now() > deadline) throw new Error(`finalizeThrough: the finalized block stayed below ${block} for ${timeoutMs} ms`)
+		await mineL1Blocks(3)
+		await new Promise((resolve) => setTimeout(resolve, 2_000))
 	}
 }
 

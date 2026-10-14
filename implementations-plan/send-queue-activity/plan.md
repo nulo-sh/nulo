@@ -396,7 +396,7 @@ Every gate runs from the worktree root unless it says otherwise. "Single test fi
 - Pass: every command exits 0, and reverting step 4 makes the never-happens cases fail. Check that once, then restore.
 - Layers: lint, typecheck, unit, composition.
 
-#### Phase 1.2: the chain-tip gate (#219 b; only on OA-5 = A)
+#### Phase 1.2: the chain-tip gate (#219 b; only on OA-5 = A) ✓
 
 Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1b's layer, or not at all on B.
 
@@ -469,7 +469,7 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 
 ### Arc 1b: dApp sends wait (after OA-3 = A or B)
 
-#### Phase 1b.1: the parked slot and origin order
+#### Phase 1b.1: the parked slot and origin order ✓
 
 1. Confirm I2: read where `originKey` and the session baton are set.
 2. Build the mutex and lane pieces:
@@ -496,7 +496,7 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 - Pass: every command exits 0.
 - Layers: lint, typecheck, unit.
 
-#### Phase 1b.2: the waiter (#218)
+#### Phase 1b.2: the waiter (#218) ✓
 
 1. Add `SendSequencer.enterWaiter` with the blocking rule of the OA-3 option chosen, and enter a waiter for each scope the send spends from.
 2. In `runInSlot`, add:
@@ -532,7 +532,7 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 - Pass: every command exits 0, and reverting step 2 makes the never-happens cases fail. Check that once, then restore.
 - Layers: lint, typecheck, unit, composition.
 
-#### Phase 1b.3: arc 1b end-to-end gate
+#### Phase 1b.3: arc 1b end-to-end gate ✓
 
 1. Add a case to `same-token-concurrent-sends.test.ts`: "a Send-page send held unmined, then a dApp send of the same account through the approval popup".
    - Never-happens: the dApp record reaches `simulating` while the Send-page send is held.
@@ -930,6 +930,25 @@ Arc 2 as built (detail in `lessons/phase-2.md`):
 - **D47 P9-03.** `requoteReason(frozenUsd, liveUsd)` shares the gate's usable-quote predicate (`isUsableUsd`). A page test in `send.test.ts` drives the notice through the real gate.
 - **D48 The USD fit's e2e lives in `send-amount-exact.test.ts`**, not `fiat-send.test.ts`: that file already mints the seven-figure balance and holds the token field's fit checks. It seeds a $1 quote before Send opens and adds one USD step: the field shows its whole figure, the derived line is one line clear of the balance, Max stays in the row, focus restores 40 px. Failure mode: a real layout that still clips or wraps, which jsdom's stand-in font cannot show. It fails on the base sources (40 px hidden, three lines, Max 28.6 px out). The 2.4 gate runs both files.
 
+The orchestrator's calls at arc 1b's start (2026-10-13; OA-3 = A, OA-4 = B, OA-5 = A):
+
+- **D-orch-1b-1 The ordering rule.** A dApp send waits for every earlier unmined send of its account, Send-page or dApp (OA-3 A). A dApp never delays a Send-page send: the waiter holds an empty key set. The 60-minute wait limit and the 10-minute submitted hold stay as ratified.
+- **D-orch-1b-2 What the person and the dApp see.** The existing "Queued..." card and existing strings only; a surface that would need a new word goes to `OWNER-ASKS.md` in the "what ships now" form. Nothing on the Send page changes.
+- **D-orch-1b-3 Proportion.** New persistent state, an independent lifecycle, a coordination protocol beyond the waiter and the gate, a recovery policy or a public contract stops for the orchestrator.
+- **D-orch-1b-4 Shared files and delivery.** `dapp-send-executor.ts`, `execution-lane.ts`, `execution-mutex.ts`, `execution/service.ts` and `send-sequencer.ts` belong to this arc. Merge `origin/dev` before the final gates, never a union merge; `lessons.md` is at its 8 KiB budget. One PR against `dev`: `Closes #218`, and `Closes #219` since items a (#264) and c (#344) have shipped.
+- **D-orch-1b-5 E2E budget.** The G1 network files run at retry 0 on both browsers; each added scenario names its failure mode, why a cheaper layer cannot prove it, and its measured runtime; the PR body states each browser's suite wall-clock before and after.
+
+Arc 1b deviations from the text above (detail in `lessons/phase-1b.md`):
+
+- **D49 Origin order is a line from the first grant until the send starts.** The plan kept the tail of an origin's parked chain and let a request re-enter once the earlier one had re-entered. A request that has re-entered but is not yet re-granted must still count as ahead, or a later request of its origin granted in that window starts first. `ExecutionLane.joinOriginLine` gives each send a place, keyed by lane and origin, from its first grant until it starts or ends; a later send parks until every earlier place has left.
+- **D50 A silent-path dApp send reads "Queued..." while it waits.** `parkSlot` moves a `pending` record back to `queued`, the back-edge OA-1 = A opened (D37), and the claim takes it to `pending` again. This supersedes the plan's "Preparing..." line, which predates OA-1's answer; #219's decision text names "Queued..." for this path.
+- **D51 The gate is per network.** `ChainTipGate.unconfirmed` and `wait` take the network id beside the scope, since each network has its own tip; tips, failed reads and running reads are kept per network id.
+- **D52 One rule for what blocks a waiter.** On A a waiter is blocked by any holder of its scope that is sent, external, or earlier in line, and by any pending row of the scope inside the submitted hold. Rows a holder already carries need no exclusion, since that holder blocks too.
+- **D53 Only dApp-origin sends wait.** A wallet send through the same path (Settings: revoking authwits, toggling the auth registry; `OriginType.UI`) keeps today's behaviour: it has no record before its claim, so a wait would be a spinner with no card and nothing to cancel, and OA-3 names dApp sends (Opus, arc 1b review).
+- **D54 A lag-window dApp estimate is never stashed.** A build simulated while a settled predecessor's block is past the node's tip passes the reuse ladder's epoch and pending checks once the block lands, so `estimateOperationFee` skips the stash then (the ineligible path that already exists); the confirm builds afresh after the gate. The approval window is unchanged (Opus, arc 1b review).
+- **D55 Gate hygiene.** An observation is recorded once per placement (`hash|block hash`), so a later update of the same row (its finality) never restarts a lapsed hold; a failed read releases everything observed before the failure, not before the read began; a cancel ends `wait` without waiting out a tip read, and the recheck sleep never overshoots the bound (Codex, arc 1b review).
+- **D56 The dApp reuse snapshot is the pre-build view.** `estimateOperationFee` reads the pending set with the epoch, before the build, so a predecessor that settles during the build is a change the confirm sees. This replaces the post-build read pinned by #60: that read only turned a tx landing after the build into a hit, which the pre-build epoch already refuses (Codex, arc 1b review round 2).
+
 Arc 5 as built (detail in `lessons/phase-5.md`; numbered from D60 because the lane's parallel branches already take D45-D53):
 
 - **D60 The two fee links are buttons on a path no flow shows.** They render only when the card's v-model holds the app's payment (`kind: "embedded"`), and nothing passes it one: for every app-paid operation the execute window shows the "set by the app" badge instead of the card (`OperationCard.vue`), and `approval-delta.ts` refuses an embedded pick. Built as signed: `<button type="button">` through `Flex tag="button"`, the accent `:focus-visible` ring, `refuseRepeatEnter` so a held Enter activates once. Pressing one unmounts it and focus falls to the page. OA-20 asks whether the path stays.
@@ -1133,6 +1152,28 @@ Known limit: the trailing-margin band (D46), filed closed as #367.
 
 **Round 2 (resumed Codex session, over the comment fixes): approve, no new finding.** It upheld the rejection and the known-limit call, and compiled AmountCard's template both ways: identical production render code. **The loop converged here.**
 
+
+### Arc 1b code, round 1: Codex (gpt-6.1-sol, high) and an Opus review, over `e900f710..HEAD`
+
+**Codex** (session `01a136de-aba7-7b02-9052-83efa8909e5e`): the three lead questions hold (`parkSlot` maps every exit to one terminal state with the controller and heartbeat cleaned; no reservation leak or double return; first-grant origin order holds). No double send, network await under the slot, or reachable imported row. Five P2 findings, all **accepted**:
+1. A throw while reading the scopes, after `joinOriginLine`, stranded the origin's line (later sends parked until cancelled). Fixed: the place is taken last in `joinLines`; a test throws from `additionalScopes` and finds no place left behind.
+2. A finality update of a settled row re-observed the same block and restarted a lapsed hold. Fixed (D55); test.
+3. `wait` awaited a whole tip read before honouring a cancel or its bound. Fixed (D55); a hung-read test.
+4. A failed read used its start as the cutoff, so an observation made during it stayed held. Fixed (D55); test.
+5. The e2e asserted the playground's NO_WAIT answers, which are submissions. Fixed: both files read each dApp tx's inclusion on the node (`waitForTxMined`).
+Also: a vacuous `beginEstimate(...)?.end()` now asserts admission; four comments tightened or removed (the mutex depth now names parked requests).
+
+**Opus** (a general-purpose review, read-only; 283/283 arc tests run): sound on the three lead questions. Three findings:
+1. Medium: wallet sends (Settings) through `executeSendTransaction` parked with no card and no cancel. **Accepted** (D53); a test runs a UI-origin send past a pending row without a park.
+2. Low: the same stranded-line path as Codex 1. **Accepted** (same fix).
+3. Low, plausible: a dApp estimate built in the lag window could be reused after it. **Accepted** after a trace: the reuse carries the built request (account initialization included), and neither the epoch nor the pending set moves once the block lands (D54); a test.
+Comment: "today's degraded mode" reworded.
+
+Every new test fails on the pre-fix source (six cases), and the fixes restore it.
+
+**Round 2 (resumed Codex session): one P2, accepted.** The pending set was still read at stash time, after the build: a predecessor pending when the estimate began, settling during the build, left an empty snapshot, the gate's `lagging` sample was already taken, and the confirm would reuse the stale build once the gate cleared. Fixed (D56); a test settles the predecessor inside the build fake and fails on the round-1 source, and the #60 pin now asserts the pre-build view. Codex confirmed the round-1 fixes: skipping the stash still mints an independent `previewId`, cancellation evicts it, and every dApp send arm keeps `OriginType.DAPP` through `runInSlot`. Two gate comments corrected.
+
+**Round 3 (resumed): no new material finding.** The repaired race snapshots the predecessor before the build and the consume ladder refuses reuse with its unchanged "pending tx set changed"; the ladder's order and the transfer path's snapshot are untouched. **The loop converged here.**
 
 ### Arc 5 code, round 1: Codex (gpt-6.1-sol, high) and an Opus review, over `5523126b..c70ae5c1`
 

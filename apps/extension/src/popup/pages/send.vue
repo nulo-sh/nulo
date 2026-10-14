@@ -744,7 +744,7 @@ onBeforeUnmount(() => {
 					/>
 					<Flex v-if="fiatNeedsRequote" align="center" gap="6" :class="$style.requote_notice">
 						<Icon name="warning" size="12" color="tertiary" />
-						<Text size="11" weight="500" color="tertiary">
+						<Text variant="caption" color="tertiary">
 							{{ fiatQuoteMoved ? "The price moved since you started typing." : "The price quote went stale." }}
 						</Text>
 						<button type="button" @click="handleRequote" data-testid="send-fiat-requote" :class="$style.requote_action">
@@ -856,11 +856,7 @@ onBeforeUnmount(() => {
 }
 
 .section_label {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
@@ -880,13 +876,9 @@ onBeforeUnmount(() => {
 }
 
 .requote_action {
-	font: inherit;
+	composes: type--label from global;
+	line-height: inherit;
 	background: none;
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
 	color: var(--nulo-accent);
 	cursor: pointer;
 

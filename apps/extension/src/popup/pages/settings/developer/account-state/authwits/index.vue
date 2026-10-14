@@ -162,9 +162,9 @@ onBeforeUnmount(() => {
 		<Flex direction="column" gap="16" wide :class="$style.content">
 			<Flex v-if="!isRegistryEnabled" align="center" justify="center" gap="6" wide :class="$style.warning">
 				<Icon name="warning" color="orange" size="14" />
-				<Text size="13" color="secondary">
+				<Text variant="body" color="secondary">
 					Account authwits registry
-					<Text size="13" color="orange"> disabled</Text>
+					<Text color="orange"> disabled</Text>
 				</Text>
 			</Flex>
 			<Input

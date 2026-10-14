@@ -44,7 +44,8 @@ const emit = defineEmits(["copy"])
 }
 
 .detail_value_mono {
-	composes: detail_value_mono from "../../../pages/detail-page.module.css";
+	composes: type--data from global;
+	color: var(--txt-primary);
 }
 
 .detail_link {

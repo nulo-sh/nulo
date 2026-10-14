@@ -1,17 +1,17 @@
 import { expect, inject } from "vitest"
 import { openPopup, test } from "../fixtures/extension"
-import { snapshotResultSeq, waitForPgResult, assertPgOk } from "../fixtures/playground"
+import { snapshotResultSeq, waitForPgResults, assertPgOk } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { readDappExecuteRecords, waitForDappExecuteStagesPresent } from "../fixtures/journal"
 import { holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
-import type { AztecTestConfig } from "../fixtures/aztec"
+import { type AztecTestConfig, waitForTxMined } from "../fixtures/aztec"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
 /**
- * Concurrent sendTx — two APPROVED sends serialize on the execution mutex; T1
- * fully confirms (v3 parallel popups, heavy).
+ * Concurrent sendTx — two APPROVED sends serialize on the execution mutex, and
+ * both confirm (v3 parallel popups, heavy).
  *
  * Fire two sendTx, approve popup #1 (baton releases → popup #2 opens), approve
  * popup #2. The per-(profileId, chainId) execution mutex runs them one-at-a-time:
@@ -19,21 +19,18 @@ const hasConfig = aztecConfig !== undefined
  * behind it — the deterministic serialization signal. Releasing T1 lets it
  * complete its full prove + submit.
  *
- * ARCHITECTURAL LIMIT (see implementations-plan/archive/proverless-network-stabilization/plan.md,
- * Same source sends): two concurrent SAME-spend-source sends cannot BOTH succeed. The mutex releases at
- * submit (not mine) and the PXE's pending-nullifier cache is per-execution, so T2
- * simulates against the state from before T1 is mined and hits "duplicate siloed nullifier". That
- * is a real, proving-time-masked property — NOT a test bug. So this test asserts
- * only the mutex serialization (ordering) + T1's full confirm, NOT that T2 also
- * confirms. (Making T2's case succeed is product/design work — pending-aware
- * simulate or hold-until-mine — tracked as a follow-up, not patched here.)
+ * The mutex releases at submit, not at inclusion, and the PXE simulates against
+ * mined state only, so T2 built at once would spend T1's notes again ("duplicate
+ * siloed nullifier"). A dApp send therefore waits outside the slot, before its
+ * build, until every earlier send of its account is mined and the PXE's node has
+ * that block: T2 proves on T1's result and both confirm.
  *
- * Cost: T1's full prove on the sandbox. HEAVY — runs in the dedicated network-e2e
- * job, not the standard shard matrix.
+ * Cost: two full proves and two blocks on the sandbox. HEAVY — runs in the
+ * dedicated network-e2e job, not the standard shard matrix.
  */
 test.skipIf(!hasConfig)(
-	"concurrent-sendtx-confirm — two approved sends serialize on the mutex; T1 fully confirms",
-	{ timeout: 360_000 },
+	"concurrent-sendtx-confirm — two approved sends serialize on the mutex; both confirm",
+	{ timeout: 600_000 },
 	async ({ dappConnectedExtensionWithTransactionCap: ctx }) => {
 		const { playgroundPage: page, accountAddress } = ctx
 
@@ -95,15 +92,20 @@ test.skipIf(!hasConfig)(
 		expect(orderingStages).toContain("proving")
 		expect(orderingStages).toContain("queued")
 
-		// Release T1 → it completes its full prove + submit. We assert only what the
-		// architecture provides (see the ARCHITECTURAL LIMIT note above): the mutex
-		// SERIALIZED the two approved sends (ordering above) AND T1 fully confirms.
-		// We do NOT assert T2 also settles `ok` — for two same-spend-source
-		// concurrent sends it cannot (submit-vs-mine + per-execution pending cache).
+		// Release T1: it proves and submits; T2 builds once T1 is mined, then both confirm.
 		await releaseProofGate(orderingPopup)
 		await orderingPopup.close()
 
-		const r1 = await waitForPgResult(page, "sendTx", seqBefore, 300_000)
-		await assertPgOk(page, r1, "concurrent-sendtx-confirm:r1")
+		// The playground's sendTx is NO_WAIT: each answer is a submission, so inclusion is read on the node.
+		const [r1, r2] = await waitForPgResults(page, "sendTx", seqBefore, 2, 480_000)
+		for (const [label, result] of [
+			["r1", r1],
+			["r2", r2],
+		] as const) {
+			await assertPgOk(page, result, `concurrent-sendtx-confirm:${label}`)
+			const txHash = (result.resultJson as { txHash?: string }).txHash
+			if (typeof txHash !== "string") throw new Error(`${label}: no txHash in ${JSON.stringify(result.resultJson)}`)
+			await waitForTxMined(aztecConfig!, txHash)
+		}
 	},
 )

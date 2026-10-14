@@ -70,7 +70,7 @@ function onKey(e: KeyboardEvent) {
 		tabindex="0"
 		:class="$style.row"
 	>
-		<span :class="$style.addr">{{ sanitizeWireString(trimAddress(address), 128) }}</span>
+		<span :class="$style.addr" data-testid="scope-address-value">{{ sanitizeWireString(trimAddress(address), 128) }}</span>
 		<span v-if="contactName" :class="$style.contact">(@{{ contactName }})</span>
 	</span>
 </template>
@@ -95,13 +95,12 @@ function onKey(e: KeyboardEvent) {
 }
 
 .addr {
-	font-family: var(--font-mono);
-	font-size: 12px;
+	composes: type--data from global;
 	color: var(--nulo-secondary);
 }
 
 .contact {
-	font-family: var(--font-mono);
+	composes: type--name from global;
 	font-size: 11px;
 	color: var(--nulo-secondary);
 }

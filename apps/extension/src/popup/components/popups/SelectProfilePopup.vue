@@ -117,6 +117,7 @@ watch(
 							v-for="profile in profiles"
 							@click="handleSelectProfile(profile)"
 							:title="profile.name"
+							titleVariant="name"
 							data-testid="select-profile-row"
 							:data-profile-id="profile.id"
 							:data-profile-name="profile.name"

@@ -29,7 +29,11 @@ withDefaults(
 			<span data-testid="identity-account" :class="$style.identity_account">{{ accountLabel }}</span>
 			<template v-if="networkLabel !== undefined">
 				<span :class="$style.identity_sep">·</span>
-				<span data-testid="identity-network" :class="[$style.identity_network, warn && $style.identity_warn]">{{ networkLabel }}</span>
+				<span
+					data-testid="identity-network"
+					:data-warn="warn || undefined"
+					:class="[$style.identity_network, warn && $style.identity_warn]"
+				>{{ networkLabel }}</span>
 			</template>
 		</Flex>
 		<span :class="$style.identity_brand">NULO</span>
@@ -63,11 +67,7 @@ withDefaults(
 }
 
 .identity_account {
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
+	composes: type--name-tag from global;
 	color: var(--txt-primary);
 
 	overflow: hidden;
@@ -78,33 +78,31 @@ withDefaults(
 
 /* Chrome's normal line box here; Firefox's is 15px, a pixel over the drawn 35px strip. */
 .identity_sep {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--meta from global;
 	line-height: 14px;
 	color: var(--nulo-outline);
 }
 
 .identity_network {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	max-width: 80px;
+	max-width: 96px;
 }
 
 .identity_warn {
 	color: var(--orange);
+}
+
+.identity_network.identity_warn {
 	font-weight: 700;
 }
 
 .identity_brand {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.2em;
+	composes: type--brand from global;
 	color: var(--nulo-outline);
 }
 </style>

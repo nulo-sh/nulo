@@ -14,8 +14,8 @@ const STUBS = {
 		template: `<i data-testid="icon" :data-name="name" :data-size="size" :data-color="color" />`,
 	},
 	Text: {
-		props: ["size", "weight", "color"],
-		template: `<span data-testid="copy" :data-size="size" :data-weight="weight" :data-color="color"><slot /></span>`,
+		props: ["variant", "color"],
+		template: `<span data-testid="copy" :data-variant="variant" :data-color="color"><slot /></span>`,
 	},
 }
 
@@ -27,7 +27,7 @@ const until = async (done: () => boolean) => {
 }
 
 describe("ui/FieldWarning", () => {
-	test("is the warning row: a centred 6-gap flex with the red 12px warning glyph and 12/600 primary copy", () => {
+	test("is the warning row: a centred 6-gap flex with the red 12px warning glyph and primary copy in the body role", () => {
 		const w = mount(FieldWarning, { slots: { default: "Already exist" }, global: { stubs: STUBS } })
 		const row = w.find("[data-testid='row']")
 		expect(row.attributes("data-align")).toBe("center")
@@ -35,7 +35,7 @@ describe("ui/FieldWarning", () => {
 		const icon = w.find("[data-testid='icon']")
 		expect(icon.attributes()).toMatchObject({ "data-name": "warning", "data-size": "12", "data-color": "red" })
 		const copy = w.find("[data-testid='copy']")
-		expect(copy.attributes()).toMatchObject({ "data-size": "12", "data-weight": "600", "data-color": "primary" })
+		expect(copy.attributes()).toMatchObject({ "data-variant": "body", "data-color": "primary" })
 		expect(copy.text()).toBe("Already exist")
 	})
 

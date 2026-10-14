@@ -8,5 +8,7 @@ export default defineConfig({
 		...sharedTest,
 		globals: true,
 		environment: "jsdom",
+		// `Button.test.ts` reads the type its variants declare; every other module's CSS stays stubbed.
+		css: { include: [/\/src\/ui\/Button\.vue/] },
 	},
 })

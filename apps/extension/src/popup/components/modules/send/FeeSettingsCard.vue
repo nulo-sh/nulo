@@ -925,11 +925,11 @@ onBeforeUnmount(() => {
 		<!-- Embedded fee override banner -->
 		<template v-if="isCustomMethod && !useOwnMethod">
 			<Flex align="center" justify="between" :class="$style.card" data-testid="send-fee-embedded">
-				<Text size="13" weight="600" color="primary">Fee</Text>
-				<Text size="13" weight="600" color="primary">Embedded payload</Text>
+				<Text variant="label" color="primary">Fee</Text>
+				<Text variant="name" color="primary" :class="$style.method_size">Embedded payload</Text>
 			</Flex>
 			<Flex direction="column" gap="8" :class="$style.detail_row">
-				<Text size="12" weight="600" color="secondary">
+				<Text variant="body" color="secondary">
 					The app includes fee payment in the transaction.
 				</Text>
 				<Flex
@@ -942,7 +942,7 @@ onBeforeUnmount(() => {
 					:class="$style.link"
 					data-testid="send-fee-override"
 				>
-					<Text size="12" weight="600" color="primary">Override with my method</Text>
+					<Text variant="label" color="primary">Override with my method</Text>
 					<Icon name="arrow-right" size="10" color="primary" />
 				</Flex>
 			</Flex>
@@ -952,8 +952,8 @@ onBeforeUnmount(() => {
 		<template v-if="showMethodSelector">
 			<!-- A method the dApp asked for: shown, never a choice. -->
 			<Flex v-if="lockedMethod" align="center" justify="between" :class="$style.card" data-testid="send-fee-locked">
-				<Text size="13" weight="600" color="primary">Fee</Text>
-				<Text size="13" weight="600" color="primary">Public Fee Juice · set by the app</Text>
+				<Text variant="label" color="primary">Fee</Text>
+				<Text variant="name" color="primary" :class="$style.method_size">Public Fee Juice · set by the app</Text>
 			</Flex>
 			<FeeMethodSelector
 				v-else
@@ -984,7 +984,7 @@ onBeforeUnmount(() => {
 					data-testid="send-fee-back-embedded"
 				>
 					<Icon name="arrow-right" size="10" color="primary" style="transform: rotate(180deg)" />
-					<Text size="12" weight="600" color="primary">Use app's payment</Text>
+					<Text variant="label" color="primary">Use app's payment</Text>
 				</Flex>
 			</Flex>
 
@@ -1001,7 +1001,7 @@ onBeforeUnmount(() => {
 				data-testid="fee-init-degraded"
 			>
 				<Icon name="info" size="14" color="primary" aria-hidden="true" />
-				<Text size="12" weight="600" color="secondary" :style="{ paddingTop: '1px' }">
+				<Text variant="body" color="secondary" :style="{ paddingTop: '1px' }">
 					{{ statusNotice }}
 				</Text>
 			</Flex>
@@ -1026,7 +1026,7 @@ onBeforeUnmount(() => {
 				data-testid="fee-sponsor-short"
 			>
 				<Icon name="info" size="14" color="primary" aria-hidden="true" />
-				<Text size="12" weight="600" color="secondary" :style="{ paddingTop: '1px' }">
+				<Text variant="body" color="secondary" :style="{ paddingTop: '1px' }">
 					{{ sponsorShortText }}
 				</Text>
 			</Flex>
@@ -1039,7 +1039,7 @@ onBeforeUnmount(() => {
 				data-testid="fee-juice-shortfall"
 			>
 				<Icon name="warning" size="14" color="secondary" aria-hidden="true" />
-				<Text size="12" weight="600" color="secondary" :style="{ paddingTop: '1px' }">
+				<Text variant="body" color="secondary" :style="{ paddingTop: '1px' }">
 					{{ shortfallText }}
 				</Text>
 			</Flex>
@@ -1050,8 +1050,8 @@ onBeforeUnmount(() => {
 			<Flex v-if="feeJuiceMissing" align="center" gap="8" :class="$style.detail_row" data-testid="send-fee-nudge">
 				<Icon name="warning" size="14" color="secondary" />
 				<Flex direction="column" gap="2" :style="{ flex: 1, minWidth: 0 }">
-					<Text size="12" weight="600" color="primary">{{ nudgeCopy.title }}</Text>
-					<Text size="11" weight="500" color="tertiary">{{ nudgeCopy.body }}</Text>
+					<Text variant="value" color="primary">{{ nudgeCopy.title }}</Text>
+					<Text variant="caption" color="tertiary">{{ nudgeCopy.body }}</Text>
 				</Flex>
 				<a
 					:href="FEE_JUICE_BRIDGE_URL"
@@ -1089,6 +1089,10 @@ onBeforeUnmount(() => {
 	padding: 12px;
 }
 
+.method_size {
+	font-size: 13px;
+}
+
 .detail_row {
 	composes: detail_row from "./fee-shared.module.css";
 }
@@ -1121,11 +1125,7 @@ onBeforeUnmount(() => {
 }
 
 .get_fee_juice {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
+	composes: type--label from global;
 	color: var(--nulo-accent);
 	white-space: nowrap;
 	cursor: pointer;

@@ -68,14 +68,11 @@ const badgeSize = computed(() => (props.layout === "window" ? 20 : 14))
 
 <style module>
 .tag {
+	composes: type--tag from global;
 	display: inline-flex;
 	align-items: center;
 	padding: 4px 8px;
 	border: 1px solid var(--nulo-outline);
-	font-family: var(--font-mono);
-	font-size: 11px;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
 	color: var(--txt-secondary);
 	background: var(--nulo-surface-low);
 }
@@ -119,11 +116,8 @@ const badgeSize = computed(() => (props.layout === "window" ? 20 : 14))
 }
 
 .wordmark {
-	font-family: var(--font-headline);
+	composes: type--title-hero from global;
 	font-size: 20px;
-	font-weight: 700;
-	letter-spacing: -0.04em;
-	text-transform: uppercase;
 	color: var(--txt-primary);
 }
 
@@ -218,15 +212,14 @@ const badgeSize = computed(() => (props.layout === "window" ? 20 : 14))
 }
 
 .body {
+	composes: type--body from global;
 	margin: 0;
-	font-size: 13px;
 	line-height: 1.5;
 	color: var(--txt-secondary);
 }
 
 .window .body {
 	max-width: 340px;
-	font-size: 15px;
 }
 
 .foot {
@@ -240,8 +233,8 @@ const badgeSize = computed(() => (props.layout === "window" ? 20 : 14))
 }
 
 .note {
+	composes: type--body from global;
 	margin: 0;
-	font-size: 12px;
 	line-height: 1.5;
 	color: var(--txt-support);
 }

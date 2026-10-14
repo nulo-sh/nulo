@@ -160,7 +160,7 @@ onBeforeUnmount(() => {
 		<PopupCard :displaceIdx="depth">
 			<PopupHeader @onClose="emit('onClose')" closable>
 				<template #title>
-					<Text size="14" weight="600" color="primary">Select token</Text>
+					<Text variant="title-page" color="primary">Select token</Text>
 				</template>
 			</PopupHeader>
 
@@ -206,10 +206,9 @@ onBeforeUnmount(() => {
 }
 
 .error {
+	composes: type--body from global;
 	padding: 12px 16px;
 
-	font-family: var(--font-mono);
-	font-size: 12px;
 	color: var(--nulo-secondary);
 }
 </style>

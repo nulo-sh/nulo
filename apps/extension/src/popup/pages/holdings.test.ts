@@ -53,6 +53,15 @@ vi.mock("@/wallet/services/config/client", () => ({
 	}),
 }))
 
+// jsdom has no layout: a stand-in font measures the total at its full 26 px (digits and signs
+// 15 px, separators 6 px), and `room` is the summary line's width.
+let room = 10_000
+const standInWidth = (text: string) => [...text].reduce((w, c) => w + (c === "," || c === "." ? 6 : 15), 0)
+vi.mock("@/utils/hero-ruler", () => ({
+	heroRoom: () => room,
+	rulerWidth: (el: Element, scale: number) => standInWidth(el.textContent ?? "") * scale,
+}))
+
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
@@ -179,5 +188,80 @@ describe("holdings page", () => {
 
 		expect(w.find('[data-testid="holdings-error"]').exists()).toBe(true)
 		expect(w.find('[data-testid="holdings-search"]').exists()).toBe(false)
+	})
+})
+
+describe("holdings page — the total fits beside its meta line", () => {
+	afterEach(() => {
+		room = 10_000
+	})
+
+	// "$1,250.00" in the stand-in font: 7 digits and signs, 2 separators, 117 px at 26 px.
+	test.each([
+		["keeps 26 px when it fits", 10_000, "1"],
+		["shrinks to the largest scale that fits, 8 px clear of the meta line", 90, "0.7"],
+		["has no floor, so no digit is ever hidden", 20, "0.1"],
+	])("the total %s", async (_, width, scale) => {
+		installChromeStorage()
+		room = width
+		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
+		const w = await mountPage()
+		const figures = w.findAll('[data-testid="holdings-summary"] span[style]')
+		expect(figures.map((figure) => figure.text())).toEqual(["$1,250.00"])
+		expect((figures[0].element as HTMLElement).style.getPropertyValue("--hero-scale")).toBe(scale)
+	})
+
+	// "2 tokens · priced assets only" in a 7 px stand-in: 203 px on one line, 42 px at its narrowest
+	// ("tokens", "priced", "assets"), which only the hidden ruler is laid out at.
+	test.each([
+		["at the page's width", 312],
+		["4 px clear of the meta line at its narrowest", 117 + 42 + 4],
+		["when the measured room rounds a hair short of it", 117 + 42 - 0.02],
+	])("a total beside a partial meta line keeps 26 px %s", async (_, width) => {
+		installChromeStorage()
+		room = width
+		const metaWidth = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+			const words = (this.textContent ?? "").trim().split(/\s+/)
+			const narrowest = this.closest("[aria-hidden]") !== null
+			return { width: 7 * (narrowest ? Math.max(...words.map((w) => w.length)) : words.join(" ").length) } as DOMRect
+		})
+		try {
+			mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+			seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC), row("b2", "BBB", CHAIN_IDS.TESTNET)]
+			const w = await mountPage()
+			expect(w.find('[data-testid="holdings-summary"]').text()).toContain("2 tokens · priced assets only")
+			const figure = w.get('[data-testid="holdings-summary"] span[style]').element as HTMLElement
+			expect(figure.style.getPropertyValue("--hero-scale")).toBe("1")
+		} finally {
+			metaWidth.mockRestore()
+		}
+	})
+
+	test("a summary that renders after the page mounts is still watched for resizes", async () => {
+		installChromeStorage()
+		const observed: Element[] = []
+		vi.stubGlobal(
+			"ResizeObserver",
+			class {
+				observe = (el: Element) => observed.push(el)
+				unobserve = vi.fn()
+				disconnect = vi.fn()
+			},
+		)
+		try {
+			const pinia = createTestingPinia({ stubActions: false })
+			const appStore = useAppStore(pinia)
+			appStore.network = { id: "n1", chainId: CHAIN_IDS.TESTNET } as never
+			appStore.account = { address: "0xacct" } as never
+			const w = mount(Holdings, { global: { plugins: [pinia], stubs: STUBS } })
+			await flushPromises()
+			expect(observed).toEqual([])
+			appStore.isLogined = true
+			await flushPromises()
+			expect(observed).toEqual([w.get('[data-testid="holdings-summary"]').element])
+		} finally {
+			vi.unstubAllGlobals()
+		}
 	})
 })

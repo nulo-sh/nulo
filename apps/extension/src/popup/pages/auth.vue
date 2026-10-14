@@ -348,11 +348,8 @@ watch(
 }
 
 .wordmark {
-	font-family: var(--font-headline);
+	composes: type--title-hero from global;
 	font-size: 20px;
-	font-weight: 700;
-	letter-spacing: -0.04em;
-	text-transform: uppercase;
 	color: var(--txt-primary);
 }
 
@@ -367,18 +364,15 @@ watch(
 }
 
 .heading {
-	font-family: var(--font-headline);
+	composes: type--title-hero from global;
 	font-size: 24px;
-	font-weight: 600;
-	letter-spacing: -0.02em;
 	color: var(--txt-primary);
 	margin: 0;
 	line-height: 1.2;
 }
 
 .subheading {
-	font-family: var(--font-body);
-	font-size: 13px;
+	composes: type--body from global;
 	color: var(--nulo-secondary);
 	text-align: center;
 	margin: 0;
@@ -394,8 +388,7 @@ watch(
 }
 
 .error_text {
-	font-family: var(--font-body);
-	font-size: 12px;
+	composes: type--body from global;
 	color: var(--red);
 	margin-top: -8px;
 }
@@ -406,11 +399,7 @@ watch(
 }
 
 .reset_link {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.2em;
-	text-transform: uppercase;
+	composes: type--label from global;
 	color: var(--nulo-secondary);
 
 	background: transparent;

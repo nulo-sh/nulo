@@ -160,16 +160,16 @@ watch(
 				<Flex align="center" direction="column" gap="12" wide :class="$style.section_wrapper">
 					<Flex align="center" direction="column" gap="12">
 						<Flex direction="column" align="center" gap="12">
-							<Text size="16" weight="600" color="primary">
+							<Text variant="title-page" color="primary">
 								Import contacts
 							</Text>
 						</Flex>
 
-						<Text size="14" weight="500" color="body" height="140" align="center">
+						<Text variant="body" color="body" height="140" align="center">
 							Selected contacts are added or updated.
-							<Text color="primary" weight="700">Address and name changes</Text>
+							<Text variant="value" color="primary">Address and name changes</Text>
 							start unselected. Contacts that
-							<Text color="primary" weight="700">can't be imported</Text>
+							<Text variant="value" color="primary">can't be imported</Text>
 							are listed last.
 						</Text>
 
@@ -177,17 +177,16 @@ watch(
 						     selected import will trigger registerSender on confirm. -->
 						<Text
 							v-if="incomingSenderCount > 0 && appStore.network"
-							size="12"
-							weight="600"
+							variant="body"
 							color="secondary"
 							align="center"
 							data-testid="import-contacts-senders"
 						>
-							<Text color="primary" weight="700">{{ incomingSenderCount }}</Text>
+							<Text variant="value" color="primary">{{ incomingSenderCount }}</Text>
 							{{ incomingSenderCount === 1 ? "sender" : "senders" }} will be registered on
-							<Text color="primary" weight="700">{{ appStore.network.name }}</Text>.
+							<Text variant="value" color="primary">{{ appStore.network.name }}</Text>.
 						</Text>
-						<Text v-else-if="incomingSenderCount > 0" size="12" weight="600" color="secondary" align="center" data-testid="import-contacts-senders">
+						<Text v-else-if="incomingSenderCount > 0" variant="body" color="secondary" align="center" data-testid="import-contacts-senders">
 							No active network. Sender registrations will be skipped.
 						</Text>
 					</Flex>
@@ -243,12 +242,12 @@ watch(
 									<Flex direction="column" gap="4" wide :class="$style.row_text">
 										<Flex :id="`${uid}-${item.row.idx}-name`" align="center" gap="6" wide>
 											<template v-if="item.row.kind === 'name-change'">
-												<Text size="14" weight="600" color="tertiary" :class="$style.name_part">{{ item.row.savedName }}</Text>
+												<Text variant="name" color="tertiary" :class="[$style.name_part, $style.name_size]">{{ item.row.savedName }}</Text>
 												<span :class="$style.visually_hidden">changes to</span>
 												<Icon name="arrow-right" size="12" color="tertiary" aria-hidden="true" :class="$style.arrow" />
-												<Text size="14" weight="600" color="primary" :class="$style.name_part">{{ item.row.name }}</Text>
+												<Text variant="name" color="primary" :class="[$style.name_part, $style.name_size]">{{ item.row.name }}</Text>
 											</template>
-											<Text v-else size="14" weight="600" color="primary" :class="$style.title">
+											<Text v-else variant="name" color="primary" :class="[$style.title, $style.name_size]">
 												{{ item.row.name }}
 											</Text>
 										</Flex>
@@ -260,20 +259,20 @@ watch(
 											:class="item.row.addressText?.full && $style.detail_full"
 										>
 											<template v-if="item.row.addressText">
-												<Text size="13" weight="600" color="tertiary" :class="$style.address_saved">
+												<Text variant="data" color="tertiary" data-testid="import-contact-address-saved" :class="$style.address_saved">
 													{{ item.row.addressText.saved }}
 												</Text>
 												<span :class="$style.visually_hidden">changes to</span>
 												<Icon name="arrow-right" size="12" color="tertiary" aria-hidden="true" :class="$style.arrow" />
-												<Text size="13" weight="600" color="primary" :class="$style.address_incoming">
+												<Text variant="data" color="primary" data-testid="import-contact-address-incoming" :class="$style.address_incoming">
 													{{ item.row.addressText.incoming }}
 												</Text>
 											</template>
-											<Text v-else size="13" weight="600" color="tertiary">{{ trimAddress(item.row.address) }}</Text>
-											<Text v-if="item.row.isSender" size="10" weight="600" color="tertiary" :class="$style.tag">sender</Text>
+											<Text v-else variant="data" color="tertiary" data-testid="import-contact-address">{{ trimAddress(item.row.address) }}</Text>
+											<Text v-if="item.row.isSender" variant="tag" color="tertiary" :class="$style.tag">sender</Text>
 										</Flex>
 
-										<Text v-if="!item.row.importable" :id="`${uid}-${item.row.idx}-reason`" size="12" weight="500" color="tertiary">
+										<Text v-if="!item.row.importable" :id="`${uid}-${item.row.idx}-reason`" variant="caption" color="tertiary">
 											{{ REASONS[item.row.kind] }}
 										</Text>
 									</Flex>
@@ -373,9 +372,6 @@ watch(
 }
 
 .tag {
-	font-family: var(--font-mono);
-	text-transform: uppercase;
-	letter-spacing: 0.08em;
 	padding: 1px 4px;
 	border: 1px solid var(--nulo-border);
 }
@@ -401,6 +397,10 @@ watch(
 	text-overflow: ellipsis;
 	overflow: hidden;
 	white-space: nowrap;
+}
+
+.name_size {
+	font-size: 14px;
 }
 
 .arrow {

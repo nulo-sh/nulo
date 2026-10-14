@@ -18,6 +18,7 @@
 import { describe, expect, test, vi } from "vitest"
 import { SessionEndedError, TooManyPendingError } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
+import { deferred } from "@nulo/wallet-core/utils"
 import { ExecutionLane, type ExecutionLaneDeps } from "./execution-lane"
 import type { ExecutionMutex } from "./execution-mutex"
 
@@ -38,6 +39,7 @@ function makeLane(overrides: Partial<ExecutionLaneDeps> = {}) {
 			touchOperation: vi.fn(async (id: string) => {
 				touches.push(id)
 			}),
+			transitionIfStage: vi.fn(async () => ({ outcome: "stage", stage: "queued" })),
 		} as never,
 		getActiveProfile: vi.fn(async () => ({ id: "p1" }) as never),
 		assertFence: vi.fn(async () => {}),
@@ -616,5 +618,207 @@ describe("ExecutionLane.commitJournal", () => {
 		await expect(lane.commitJournal("j1", { stage: "submitting", txHash: "0xh" })).rejects.toBe(refused)
 		await expect(lane.commitJournal(undefined, { stage: "submitting", txHash: "0xh" })).rejects.toThrow()
 		expect(deps.logError).not.toHaveBeenCalled()
+	})
+})
+
+describe("ExecutionLane.parkSlot", () => {
+	const ORIGIN = "https://dapp.example"
+	/** The executor's wait: it ends as the cancel sentinel when the record's controller aborts. */
+	const waitUntil = (wake: Promise<void>, controller?: AbortController) => () =>
+		new Promise<void>((resolve, reject) => {
+			const cancel = () => reject(new JobCancelledSentinel("q-1"))
+			if (controller?.signal.aborted) cancel()
+			controller?.signal.addEventListener("abort", cancel)
+			void wake.then(resolve)
+		})
+
+	test("hands the slot on while it waits, keeps its counted place, and re-enters behind the line in its origin's bucket", async () => {
+		const { lane } = makeLane()
+		const parked = await lane.acquireSlot("net-1", "q-1", FENCE, undefined, ORIGIN)
+		const wake = deferred()
+		const back = lane.parkSlot(parked.release, "net-1", "q-1", FENCE, parked.preController, ORIGIN, waitUntil(wake.promise))
+		const others = Array.from({ length: 7 }, () => lane.acquireSlot("net-1", undefined, FENCE, undefined, ORIGIN))
+		const next = await others[0]
+		// The parked request still counts: with seven more of its origin, an eighth is refused.
+		await expect(lane.acquireSlot("net-1", undefined, FENCE, undefined, ORIGIN)).rejects.toBeInstanceOf(TooManyPendingError)
+		wake.resolve()
+		let reentered = false
+		void back.then(() => {
+			reentered = true
+		})
+		await flushMicrotasks()
+		expect(reentered).toBe(false)
+		next.release()
+		for (const other of others.slice(1)) (await other).release()
+		;(await back)()
+		expect(reentered).toBe(true)
+		expect(lane.isSlotBusy("p1", 7)).toBe(false)
+	})
+
+	test("keeps one registered controller and the record vouched for; a silent-path record reads queued while it waits", async () => {
+		vi.useFakeTimers()
+		try {
+			const { lane, touches, deps } = makeLane()
+			const register = vi.spyOn(lane, "registerInFlight")
+			const parked = await lane.acquireSlot("net-1", "q-1", FENCE, undefined, ORIGIN)
+			const wake = deferred()
+			const back = lane.parkSlot(parked.release, "net-1", "q-1", FENCE, parked.preController, ORIGIN, waitUntil(wake.promise))
+			await vi.advanceTimersByTimeAsync(30_000)
+			expect(touches).toContain("q-1")
+			expect(deps.operationJournal.transitionIfStage).toHaveBeenCalledWith("q-1", ["pending"], { stage: "queued" })
+			expect(controllers(lane).get("q-1")?.controller).toBe(parked.preController)
+			wake.resolve()
+			const release = await back
+			expect(register).toHaveBeenCalledTimes(1)
+			const touched = touches.length
+			await vi.advanceTimersByTimeAsync(60_000)
+			expect(touches.length).toBe(touched)
+			release()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	/** A journal whose transitions obey the stages the FSM allows from pre-submit. */
+	function sessionLane(assertFence: ExecutionLaneDeps["assertFence"]) {
+		const stages: Record<string, string> = { "q-1": "queued" }
+		const transitionIfStage = vi.fn(async (id: string, allowed: readonly string[], progress: { stage: string }) => {
+			if (!allowed.includes(stages[id] ?? "")) return { outcome: "stage", stage: stages[id] }
+			stages[id] = progress.stage
+			return { outcome: "transitioned", record: {} }
+		})
+		const transitionOperation = vi.fn(async (id: string, progress: { stage: string }) => {
+			if (stages[id] === "cancelled" || stages[id] === "failed") throw new Error("illegal transition")
+			stages[id] = progress.stage
+		})
+		const session = { serial: FENCE.session }
+		const harness = makeLane({
+			operationJournal: { transitionIfStage, transitionOperation, touchOperation: vi.fn(async () => {}) } as never,
+			peekLiveSerial: vi.fn(() => session.serial),
+			assertFence,
+		})
+		return { ...harness, stages, session, transitionIfStage }
+	}
+
+	test("a session that ends while parked, sweep first: cancelled, then nothing overwrites it, and the place is given back", async () => {
+		const { lane, stages, session, deps } = sessionLane(vi.fn(async () => {}))
+		const parked = await lane.acquireSlot("net-1", "q-1", FENCE, undefined, ORIGIN)
+		const back = lane.parkSlot(
+			parked.release,
+			"net-1",
+			"q-1",
+			FENCE,
+			parked.preController,
+			ORIGIN,
+			waitUntil(new Promise(() => {}), parked.preController),
+		)
+		session.serial = 2
+		await lane.abandonDeadSessions()
+		await expect(back).rejects.toBeInstanceOf(JobCancelledSentinel)
+		expect(stages["q-1"]).toBe("cancelled")
+		expect(controllers(lane).has("q-1")).toBe(false)
+		expect(deps.assertFence).toHaveBeenCalledTimes(1)
+		const holders = Array.from({ length: 8 }, () => lane.acquireSlot("net-1", undefined, FENCE, undefined, ORIGIN))
+		for (const holder of holders) (await holder).release()
+	})
+
+	test("a session that ends while parked, fence first: session_ended, and the later sweep finds nothing to cancel", async () => {
+		const ended = { now: false }
+		const { lane, stages, session, transitionIfStage } = sessionLane(
+			vi.fn(async () => {
+				if (ended.now) throw new SessionEndedError()
+			}),
+		)
+		const parked = await lane.acquireSlot("net-1", "q-1", FENCE, undefined, ORIGIN)
+		const wake = deferred()
+		const back = lane.parkSlot(parked.release, "net-1", "q-1", FENCE, parked.preController, ORIGIN, waitUntil(wake.promise))
+		ended.now = true
+		wake.resolve()
+		await expect(back).rejects.toBeInstanceOf(SessionEndedError)
+		expect(stages["q-1"]).toBe("failed")
+		expect(controllers(lane).has("q-1")).toBe(false)
+		session.serial = 2
+		await lane.abandonDeadSessions()
+		expect(transitionIfStage).not.toHaveBeenCalledWith("q-1", expect.anything(), { stage: "cancelled" })
+		expect(stages["q-1"]).toBe("failed")
+
+		// With no record there is nothing to fail; the place is still given back.
+		ended.now = false
+		const recordless = await lane.acquireSlot("net-1", undefined, FENCE, undefined, ORIGIN)
+		ended.now = true
+		await expect(
+			lane.parkSlot(recordless.release, "net-1", undefined, FENCE, undefined, ORIGIN, async () => {}),
+		).rejects.toBeInstanceOf(SessionEndedError)
+		ended.now = false
+		const holders = Array.from({ length: 8 }, () => lane.acquireSlot("net-1", undefined, FENCE, undefined, ORIGIN))
+		for (const holder of holders) (await holder).release()
+	})
+})
+
+describe("ExecutionLane.joinOriginLine", () => {
+	const ORIGIN = "https://dapp.example"
+
+	test("a later send of an origin is behind every earlier one until each starts or ends; another origin or chain never is", async () => {
+		const { lane } = makeLane()
+		const first = lane.joinOriginLine(FENCE, 7, ORIGIN)
+		const second = lane.joinOriginLine(FENCE, 7, ORIGIN)
+		const third = lane.joinOriginLine(FENCE, 7, ORIGIN)
+		const otherOrigin = lane.joinOriginLine(FENCE, 7, "https://other.example")
+		const otherChain = lane.joinOriginLine(FENCE, 8, ORIGIN)
+		expect([first.behind(), second.behind(), third.behind(), otherOrigin.behind(), otherChain.behind()]).toEqual([
+			false,
+			true,
+			true,
+			false,
+			false,
+		])
+		let thirdFree = false
+		const waited = third.earlierDone(new AbortController().signal).then((free) => {
+			thirdFree = free
+		})
+		second.leave()
+		await flushMicrotasks()
+		expect(thirdFree).toBe(false)
+		expect(third.behind()).toBe(true)
+		first.leave()
+		first.leave()
+		await waited
+		expect(thirdFree).toBe(true)
+		expect(third.behind()).toBe(false)
+		third.leave()
+	})
+
+	test("an abort ends the wait for earlier sends with false", async () => {
+		const { lane } = makeLane()
+		const first = lane.joinOriginLine(FENCE, 7, ORIGIN)
+		const second = lane.joinOriginLine(FENCE, 7, ORIGIN)
+		const abort = new AbortController()
+		const waited = second.earlierDone(abort.signal)
+		abort.abort()
+		expect(await waited).toBe(false)
+		expect(second.behind()).toBe(true)
+		first.leave()
+		second.leave()
+	})
+})
+
+describe("ExecutionLane.failUnclaimed", () => {
+	test("fails only a record still queued or pending, never for a cancel or with no record, and never throws", async () => {
+		const { lane, deps } = makeLane()
+		const transitionIfStage = deps.operationJournal.transitionIfStage as ReturnType<typeof vi.fn>
+		await lane.failUnclaimed("q-1", new Error("fence broke"))
+		expect(transitionIfStage).toHaveBeenCalledWith(
+			"q-1",
+			["queued", "pending"],
+			{ stage: "failed" },
+			expect.objectContaining({ kind: "dapp_execute" }),
+		)
+		transitionIfStage.mockClear()
+		await lane.failUnclaimed("q-1", new JobCancelledSentinel("q-1"))
+		await lane.failUnclaimed(undefined, new Error("no record"))
+		expect(transitionIfStage).not.toHaveBeenCalled()
+		transitionIfStage.mockRejectedValueOnce(new Error("journal down"))
+		await expect(lane.failUnclaimed("q-1", new Error("x"))).resolves.toBeUndefined()
+		expect(deps.logError).toHaveBeenCalledTimes(1)
 	})
 })

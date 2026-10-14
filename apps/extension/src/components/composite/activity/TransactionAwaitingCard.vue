@@ -115,14 +115,13 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
  * with ellipsis when the chip pushes back. min-width: 0 + flex: 0 1 auto
  * let it shrink below its intrinsic width inside the Flex parent. */
 .subtitle {
+	composes: type--caption from global;
 	flex: 0 1 auto;
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 
-	font-family: var(--font-mono);
-	font-size: 10px;
 	color: var(--nulo-secondary);
 }
 

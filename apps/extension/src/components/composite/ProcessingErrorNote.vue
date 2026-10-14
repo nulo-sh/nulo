@@ -20,13 +20,13 @@ defineProps({
 			<Flex align="center" wide>
 				<Icon name="info" size="14" :color="color" />
 
-				<Text size="12" weight="600" color="secondary" :style="{ paddingLeft: '4px' }">
+				<Text variant="body" color="secondary" :style="{ paddingLeft: '4px' }">
 					{{ title }}
 				</Text>
 			</Flex>
 
 			<template #content>
-				<Text size="12" color="secondary">
+				<Text color="secondary">
 					{{ tooltip }}
 				</Text>
 			</template>

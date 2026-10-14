@@ -76,8 +76,8 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 				<span :class="$style.symbol" data-testid="token-symbol" :data-symbol="token.symbol">
 					{{ token.symbol }}
 				</span>
-				<span v-if="fiatLabel" data-testid="token-fiat" :class="$style.fiat">{{ fiatLabel }}</span>
-				<span v-else :class="$style.fiat">{{ token?.name || "unknown" }}</span>
+				<span v-if="fiatLabel" data-testid="token-fiat" :class="[$style.fiat, $style.fiat_figure]">{{ fiatLabel }}</span>
+				<span v-else data-testid="token-name" :class="$style.fiat">{{ token?.name || "unknown" }}</span>
 			</Flex>
 
 			<Flex
@@ -94,7 +94,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 				<Skeleton :width="92" :height="9" />
 			</Flex>
 			<Flex v-else direction="column" align="end" gap="2">
-				<span :class="[$style.amount, syncFailed && $style.amount_stale]" :data-malformed="isMalformed || undefined">{{ totalBalance || 0 }}</span>
+				<span data-testid="token-amount" :class="[$style.amount, syncFailed && $style.amount_stale]" :data-malformed="isMalformed || undefined">{{ totalBalance || 0 }}</span>
 				<span v-if="!isMalformed" :class="$style.detail">
 					<span :class="$style.icon_private"><Icon name="lock" size="9" /></span>
 					{{ privateFormatted }}
@@ -149,13 +149,11 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	pointer-events: none;
 }
 
-/* Symbol and subtitle are contract-supplied: clipped so a hostile string cannot push the
-   balance off the row. */
+/* The symbol and an unpriced row's name are contract-supplied: clipped so a hostile string cannot
+   push the balance off the row. */
 .symbol {
-	font-family: var(--font-headline);
-	font-weight: 700;
+	composes: type--row-title from global;
 	font-size: 14px;
-	letter-spacing: -0.02em;
 	color: var(--txt-primary);
 
 	max-width: 160px;
@@ -165,22 +163,18 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 }
 
 .type_label {
-	font-family: var(--font-mono);
-	font-size: 10px;
-	text-transform: uppercase;
+	composes: type--caption from global;
 	color: var(--nulo-secondary);
 }
 
 .amount {
-	font-family: var(--font-mono);
-	font-size: 14px;
-	font-weight: 500;
+	composes: type--amount-row from global;
 	color: var(--txt-primary);
 }
 
 .fiat {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--fiat from global;
+	font-size: 11px;
 	color: var(--nulo-secondary);
 
 	max-width: 160px;
@@ -189,9 +183,14 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	text-overflow: ellipsis;
 }
 
+/* A priced figure wraps rather than hide digits: the row grows only when it does not fit. */
+.fiat_figure {
+	white-space: normal;
+	overflow-wrap: break-word;
+}
+
 .detail {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 
 	display: inline-flex;
@@ -229,8 +228,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 }
 
 .failed_text {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--caption from global;
 	color: var(--red);
 }
 </style>

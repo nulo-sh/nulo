@@ -34,10 +34,10 @@ const toggleReveal = () => {
 			<Flex align="center" gap="10" :class="$style.identity">
 				<AccountAvatar :name="name" :size="36" />
 				<Flex direction="column" gap="2" :class="$style.text">
-					<Text size="14" weight="600" color="primary" noWrap :class="$style.name">
+					<Text variant="name" color="primary" noWrap :class="[$style.name, $style.name_size]">
 						{{ name || "Address" }}
 					</Text>
-					<Text size="12" weight="500" color="tertiary" mono noWrap data-testid="recipient-card-masked">
+					<Text variant="data" color="tertiary" noWrap data-testid="recipient-card-masked">
 						{{ masked }}
 					</Text>
 				</Flex>
@@ -65,7 +65,7 @@ const toggleReveal = () => {
 		</Flex>
 
 		<Flex v-if="revealed" :class="$style.reveal" data-testid="recipient-card-full">
-			<Text size="12" weight="500" color="primary" mono selectable :class="$style.full_addr">
+			<Text variant="data" color="primary" selectable :class="$style.full_addr" data-testid="recipient-card-full-address">
 				{{ address }}
 			</Text>
 		</Flex>
@@ -94,6 +94,10 @@ const toggleReveal = () => {
 	max-width: 100%;
 	text-overflow: ellipsis;
 	overflow: hidden;
+}
+
+.name_size {
+	font-size: 14px;
 }
 
 .actions {

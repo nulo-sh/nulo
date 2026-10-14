@@ -33,29 +33,29 @@ const titleId = useId()
 		<div :class="$style.kv_grid">
 			<template v-if="authwit.content.kind === 'call'">
 				<span :class="$style.kv_key">caller</span>
-				<span :class="[$style.kv_val, $style.kv_val_wrap]">{{ authwit.content.caller }}</span>
+				<span data-testid="record-caller" :class="[$style.kv_val, $style.kv_val_wrap]">{{ authwit.content.caller }}</span>
 				<span :class="$style.kv_key">contract</span>
-				<span :class="[$style.kv_val, $style.kv_val_wrap]">{{ authwit.content.contract }}</span>
+				<span data-testid="record-contract" :class="[$style.kv_val, $style.kv_val_wrap]">{{ authwit.content.contract }}</span>
 				<span :class="$style.kv_key">method</span>
 				<span :class="$style.kv_val">{{ authwit.content.method }}</span>
 			</template>
 			<template v-else-if="authwit.content.kind === 'encoded_call'">
 				<span :class="$style.kv_key">caller</span>
-				<span :class="[$style.kv_val, $style.kv_val_wrap]">{{ authwit.content.caller }}</span>
+				<span data-testid="record-caller" :class="[$style.kv_val, $style.kv_val_wrap]">{{ authwit.content.caller }}</span>
 				<span :class="$style.kv_key">to</span>
-				<span :class="[$style.kv_val, $style.kv_val_wrap]">{{ authwit.content.to }}</span>
+				<span data-testid="record-to" :class="[$style.kv_val, $style.kv_val_wrap]">{{ authwit.content.to }}</span>
 				<span :class="$style.kv_key">selector</span>
-				<span :class="$style.kv_val">{{ authwit.content.selector }}</span>
+				<span data-testid="record-selector" :class="$style.kv_val">{{ authwit.content.selector }}</span>
 			</template>
 			<template v-else-if="authwit.content.kind === 'intent'">
 				<span :class="$style.kv_key">consumer</span>
-				<span :class="[$style.kv_val, $style.kv_val_wrap]">{{ authwit.content.consumer }}</span>
+				<span data-testid="record-consumer" :class="[$style.kv_val, $style.kv_val_wrap]">{{ authwit.content.consumer }}</span>
 				<span :class="$style.kv_key">intent</span>
 				<span :class="[$style.kv_val, $style.kv_val_wrap]">{{ authwit.content.intent.join(", ") }}</span>
 			</template>
 			<template v-else-if="authwit.content.kind === 'message_hash'">
 				<span :class="$style.kv_key">hash</span>
-				<span :class="[$style.kv_val, $style.kv_val_wrap]">{{ authwit.content.messageHash }}</span>
+				<span data-testid="record-hash" :class="[$style.kv_val, $style.kv_val_wrap]">{{ authwit.content.messageHash }}</span>
 			</template>
 		</div>
 	</div>

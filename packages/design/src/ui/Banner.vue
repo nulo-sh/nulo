@@ -47,12 +47,12 @@ defineProps({
 			</Flex>
 
 			<Flex :direction="direction === 'horizontal' ? 'row' : 'column'" gap="8">
-				<Text size="12" weight="600" :height="direction === 'vertical' ? '120' : '140'" color="primary" :style="{ marginTop: direction === 'vertical' && '4px' }">
+				<Text variant="value" :height="direction === 'vertical' ? '120' : '140'" color="primary" :style="{ marginTop: direction === 'vertical' && '4px' }">
 					<slot />
 					<slot name="title" />
 				</Text>
 
-				<Text size="12" weight="500" height="120" color="tertiary" :style="{ marginBottom: !action && '4px' }">
+				<Text variant="body" height="120" color="tertiary" :style="{ marginBottom: !action && '4px' }">
 					<slot name="description" />
 				</Text>
 
@@ -135,14 +135,8 @@ defineProps({
 }
 
 .action_btn {
+	composes: type--label from global;
 	align-self: flex-start;
-
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-
 	color: var(--nulo-accent);
 	background: transparent;
 	border: none;

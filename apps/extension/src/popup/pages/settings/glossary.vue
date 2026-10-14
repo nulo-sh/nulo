@@ -36,13 +36,9 @@ import { GLOSSARY, GLOSSARY_SECTIONS } from "@/utils/glossary"
 }
 
 .title {
+	composes: type--label-section from global;
 	padding: 18px 0 2px;
 
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.2em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
 }
 
@@ -65,22 +61,19 @@ import { GLOSSARY, GLOSSARY_SECTIONS } from "@/utils/glossary"
 }
 
 .term {
+	composes: type--row-title from global;
 	font-size: 14px;
-	font-weight: 600;
 	color: var(--txt-primary);
 }
 
 .definition {
-	font-size: 12.5px;
+	composes: type--body from global;
 	line-height: 1.45;
 	color: var(--nulo-secondary);
 }
 
 .where {
-	font-family: var(--font-mono);
-	font-size: 9.5px;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
+	composes: type--caption from global;
 	color: var(--nulo-outline);
 }
 </style>

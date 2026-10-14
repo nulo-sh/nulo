@@ -302,16 +302,11 @@ onBeforeUnmount(() => {
 
 /* The sanitizer caps code points, not width: a wide symbol ends in an ellipsis inside the hero. */
 .filter_label {
+	composes: type--label-section from global;
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
 }
 
 .empty_banner {
@@ -321,16 +316,12 @@ onBeforeUnmount(() => {
 }
 
 .empty_title {
-	font-family: var(--font-headline);
-	font-size: 14px;
-	font-weight: 600;
-	letter-spacing: -0.02em;
+	composes: type--title-page from global;
 	color: var(--txt-primary);
 }
 
 .empty_description {
-	font-family: var(--font-body);
-	font-size: 12px;
+	composes: type--body from global;
 	line-height: 1.5;
 	color: var(--nulo-secondary);
 }

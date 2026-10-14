@@ -36,6 +36,7 @@ const panelId = useId()
 }
 
 .toggle {
+	composes: type--label-section from global;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -46,13 +47,8 @@ const panelId = useId()
 	background: transparent;
 	cursor: pointer;
 
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
 	line-height: normal;
-	letter-spacing: 0.1em;
 	text-align: left;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
 }
 
@@ -68,10 +64,7 @@ const panelId = useId()
 }
 
 .tag {
-	font-family: var(--font-mono);
-	font-size: 10px;
-	font-weight: 600;
-	letter-spacing: 0.08em;
+	composes: type--tag from global;
 	white-space: nowrap;
 	color: var(--nulo-secondary);
 }
@@ -101,7 +94,6 @@ const panelId = useId()
 	border: 1px solid var(--nulo-border);
 	border-top: none;
 
-	font-size: 12px;
 	color: var(--nulo-secondary);
 }
 </style>

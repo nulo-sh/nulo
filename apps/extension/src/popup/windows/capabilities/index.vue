@@ -383,6 +383,7 @@ onUnmounted(disposeWindow)
 				:dapp="dapp"
 				:hostname="dappHostname"
 				:hostnameSuspicious="hostnameHasNonAscii"
+				hostnameTestId="capabilities-hostname"
 				:actionLabel="asksForMore ? `wants more permissions on ${chainName}` : `wants to connect on ${chainName}`"
 			/>
 
@@ -493,11 +494,11 @@ onUnmounted(disposeWindow)
 }
 
 .note {
+	composes: type--body from global;
 	padding: 10px 12px;
 	border: 1px solid var(--nulo-border);
 	background: var(--nulo-surface-low);
 
-	font-size: 11.5px;
 	line-height: 1.45;
 	color: var(--nulo-secondary);
 }

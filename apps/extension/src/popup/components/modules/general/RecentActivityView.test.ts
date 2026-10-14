@@ -713,6 +713,13 @@ describe("RecentActivityView — stalled incoming scan line", () => {
 		expect(retry(w).text()).toBe("Retry")
 	})
 
+	test("the stalled-sync Retry carries the label role", async () => {
+		H.getIncomingSyncHealth.mockResolvedValue({ stalled: true, since: 1 })
+		const w = mountFeed()
+		await flushPromises()
+		expect(retry(w).classes()).toContain("type--label")
+	})
+
 	test("a token lookup that rejects at mount does not abort the rest of mount — the health is still read", async () => {
 		H.getTokens.mockRejectedValue(new Error("port cannot open"))
 		H.getIncomingSyncHealth.mockResolvedValue({ stalled: true, since: 1 })

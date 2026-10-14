@@ -641,6 +641,7 @@ onUnmounted(() => {
 				:dapp="dapp ?? undefined"
 				:hostname="dappHostname"
 				:hostnameSuspicious="hostnameHasNonAscii"
+				hostnameTestId="execute-hostname"
 				actionLabel="wants to execute the following"
 			/>
 

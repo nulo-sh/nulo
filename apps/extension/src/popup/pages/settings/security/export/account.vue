@@ -221,7 +221,7 @@ onBeforeUnmount(() => {
 		<!-- Step 1: account picker (skipped when deep-linked with a preselected address) -->
 		<template v-if="!selectedAddress">
 			<div class="export_section_last">
-				<span class="export_section_label">Select account</span>
+				<span class="export_section_label type--label-section">Select account</span>
 				<ItemsContainer flat>
 					<SettingItem
 						v-for="account in accounts"
@@ -229,7 +229,9 @@ onBeforeUnmount(() => {
 						@click="handleSelect(account)"
 						size="large"
 						:title="account.name"
+						titleVariant="name"
 						:description="trimAddress(account.address, 6, 4, '...')"
+						descriptionVariant="data"
 						icon="user"
 						chevron
 						data-testid="export-account-row"
@@ -243,13 +245,13 @@ onBeforeUnmount(() => {
 		<!-- Step 2: agree gate -->
 		<template v-else-if="!isAgreed">
 			<div class="export_section_last">
-				<span class="export_section_label">Before you continue</span>
+				<span class="export_section_label type--label-section">Before you continue</span>
 				<Flex direction="column" gap="8">
-					<Text size="13" height="150" color="body"> This file gives full control of one account. </Text>
-					<Text size="13" height="150" color="body">
+					<Text variant="body" height="150" color="body"> This file gives full control of one account. </Text>
+					<Text variant="body" height="150" color="body">
 						Anyone holding the plain file can spend from this account. Store it as carefully as your recovery phrase.
 					</Text>
-					<Text size="13" height="150" color="body"> By continuing you accept these risks. </Text>
+					<Text variant="body" height="150" color="body"> By continuing you accept these risks. </Text>
 				</Flex>
 			</div>
 		</template>
@@ -265,7 +267,7 @@ onBeforeUnmount(() => {
 		<!-- Steps 4/5: file ready / protected -->
 		<template v-else>
 			<div class="export_section_last">
-				<span class="export_section_label">File</span>
+				<span class="export_section_label type--label-section">File</span>
 				<Flex direction="column" gap="12">
 					<Banner v-if="fileStatus === 'ready'" variant="info" direction="vertical" data-testid="account-file-ready-banner">
 						<template #title> Account file is ready </template>
@@ -283,7 +285,7 @@ onBeforeUnmount(() => {
 
 					<Flex v-if="selectedAccount?.type === AccountType.Imported" gap="8">
 						<Icon name="warning" size="12" color="tertiary" style="height: 18px; flex-shrink: 0" />
-						<Text size="12" weight="500" height="150" color="tertiary">
+						<Text variant="body" height="150" color="tertiary">
 							This account is not covered by your recovery phrase. This file is its only backup.
 						</Text>
 					</Flex>

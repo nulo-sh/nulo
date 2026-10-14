@@ -49,13 +49,13 @@ const filteredKeys = (kind, filters, search) => {
 				:class="[$style.filter_button, !allOptionsSelected[kind] && $style.filter_button_active]"
 			>
 				<Icon :name="allOptionsSelected[kind] ? 'filter-outline' : 'filter'" size="14" />
-				<Text size="12">{{ capitalize(kind) }}</Text>
+				<Text variant="tag">{{ capitalize(kind) }}</Text>
 			</Flex>
 
 			<template #content>
 				<Flex direction="column" gap="4" :class="$style.filter_content_wrapper">
 					<Flex direction="column" gap="8" wide :class="$style.filter_content_title">
-						<Text size="12" color="tertiary">{{ `Filter by log ${kind}` }}</Text>
+						<Text variant="label-section" color="tertiary">{{ `Filter by log ${kind}` }}</Text>
 
 						<Input
 							v-if="kind === 'source'"
@@ -84,7 +84,7 @@ const filteredKeys = (kind, filters, search) => {
 							:class="$style.filter_content_item"
 						>
 							<Icon :name="allOptionsSelected[kind] ? 'check-circle' : 'circle'" size="12" />
-							<Text size="12">Select All</Text>
+							<Text variant="body">Select All</Text>
 						</Flex>
 
 						<template v-if="filteredKeys(kind, filters, searchTerm).length">
@@ -98,11 +98,11 @@ const filteredKeys = (kind, filters, search) => {
 								:class="[$style.filter_content_item, !filters[kind][k] && $style.inactive]"
 							>
 								<Icon :name="filters[kind][k] ? 'check-circle' : 'circle'" size="12" />
-								<Text size="12">{{ getDisplayName(kind, k) }}</Text>
+								<Text variant="body">{{ getDisplayName(kind, k) }}</Text>
 							</Flex>
 						</template>
 						<Flex v-else align="center" justify="center" wide :class="$style.empty_content">
-							<Text size="12" weight="500" color="tertiary">Nothing was found</Text>
+							<Text variant="body" color="tertiary">Nothing was found</Text>
 						</Flex>
 					</Flex>
 				</Flex>
@@ -118,7 +118,7 @@ const filteredKeys = (kind, filters, search) => {
 				<DropdownItem @click="emit('exportCsv')" :class="$style.filter_content_item">
 					<Flex align="center" gap="8">
 						<Icon name="download-outline" size="12" />
-						<Text size="12">Export logs to CSV</Text>
+						<Text variant="body">Export logs to CSV</Text>
 					</Flex>
 				</DropdownItem>
 				<DropdownItem @click="emit('clearLogs')" :class="$style.filter_content_item">
