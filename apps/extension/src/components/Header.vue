@@ -36,7 +36,7 @@ configService.onUpdate.add(onSettingUpdate)
 const defaultConfig = makeDefaultConfig()
 const indicateFailures = ref(defaultConfig.indicateFailures)
 const showNode = ref(defaultConfig.showNode)
-const networkStatusKey = computed(() => String(appStore.networkStatus).toLowerCase())
+const networkStatusKey = computed(() => appStore.networkStatus?.toLowerCase())
 
 const HEADER_INDICATION_DURATION = 5_000
 let headerIndicateFailureTimer = null

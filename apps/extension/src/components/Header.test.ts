@@ -3,7 +3,7 @@
  * e2e owns the header). It pins the wiring unit tests cannot see: the address button hands the FULL
  * active address (not the truncated display text) to the clipboard, both switcher affordances open
  * the accounts popup, the lock chip runs the shared lock (its behavior: `useLockWallet.test.ts`), and
- * the network chip's `data-status`, which the e2e reads instead of the dot's CSS class, follows the status.
+ * the network chip's `data-status` follows the store's status.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
