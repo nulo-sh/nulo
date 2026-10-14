@@ -145,6 +145,7 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: H.makeEvent(),
 			onConnected: H.makeEvent(),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
 			refreshIfStale: H.refreshPrices,
 		}
 	}),
@@ -255,7 +256,7 @@ beforeEach(() => {
 	H.incomingConnect.mockReset().mockResolvedValue(undefined)
 	H.configConnect.mockReset().mockResolvedValue(undefined)
 	H.acceptQueuedFee.mockReset().mockResolvedValue(true)
-	H.refreshPrices.mockReset().mockResolvedValue({})
+	H.refreshPrices.mockReset().mockResolvedValue({ quotes: {}, pricedTokens: {} })
 	for (const ev of [
 		H.journalAdded,
 		H.journalUpdated,
@@ -1320,7 +1321,10 @@ describe("RecentActivityView — a queued send that asks again", () => {
 	})
 
 	test("a re-ask row reads its line, and its review opens the sheet with the new fee against the accepted one", async () => {
-		H.refreshPrices.mockResolvedValue({ aztec: { coingeckoId: "aztec", usd: 0.0147, fetchedAt: Date.now(), providerUpdatedAt: null } })
+		H.refreshPrices.mockResolvedValue({
+			quotes: { aztec: { coingeckoId: "aztec", usd: 0.0147, fetchedAt: Date.now(), providerUpdatedAt: null } },
+			pricedTokens: {},
+		})
 		H.getTokens.mockResolvedValue([{ id: 42, symbol: "USDC", decimals: 6, hasDecimals: true }])
 		H.getOperations.mockResolvedValue([asking()])
 		const w = mountView()
