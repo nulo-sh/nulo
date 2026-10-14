@@ -102,6 +102,13 @@
 	}
 }
 
+/* Restores the focus indication the base `a:focus` reset removes. */
+.hero_link:focus-visible,
+.detail_link:focus-visible {
+	outline: 2px solid var(--nulo-accent);
+	outline-offset: 2px;
+}
+
 .caption {
 	composes: type--label from global;
 	color: var(--nulo-secondary);

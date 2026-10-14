@@ -145,3 +145,22 @@ dev added the `@nulo/token-list` workspace, so the worktree needed a `bun instal
   `dc229c04` (the later commits touch only the fee hook's teardown and a stylesheet); full smoke at
   retry 0, Chrome 54 files passed, 4 skipped, 231 tests, 1522 s; Firefox 56 passed, 2 skipped, 230
   tests, 2141 s. The new scenario ran 10.1 s (Chrome) and 18.5 s (Firefox) inside the suites.
+
+## OA-7 follow-up: the Details links' focus ring (P4-15 A, 2026-10-14)
+
+- All four links compose two shared classes in `detail-page.module.css` (`.detail_link`: Tx hash,
+  Block, the journal's To through `.recipient_link`; `.hero_link`: "View on <explorer>"), so one
+  `:focus-visible` rule there covers the three pages; the trust prompt's own copy of it went.
+- Real Chrome, received page (throwaway probe): Tab gives "View on Aztecscan", the Tx hash and the
+  Block link `solid 2px 2px` in the accent; at rest and after a mouse press, `outline-style: none`.
+- The same probe's real mouse press on the Tx hash link failed smoke's egress guard
+  (`testnet.aztecscan.xyz:443`) though the click's default was prevented: Chrome reached the link's
+  host on the press (inferred: its pointer-down preconnect). A smoke spec presses an external link by
+  keyboard or synthetic click only.
+- Revert checks: ring removed, `:focus` for `:focus-visible`, the journal To anchor's class binding
+  removed, the received public Block anchor's `detail_link` removed: each reddens the pin.
+- Codex round 1 (`01a13cbe-34ed-7ce1-81d5-dc5f39e714d9`) `approve with fixes`, two Low, both
+  accepted; round 2 (resumed) `approve`.
+- Gate: lint 0, typecheck:all 0, the touched units 98/98; smoke on Chrome at retry 0 for the pages'
+  four files (`rows`, `received-fee-privacy`, `send-outcome-rows`, `type-roles`): 19 passed, 1
+  skipped, 100 s. Firefox not run: the CSS is the same rule for both browsers.
