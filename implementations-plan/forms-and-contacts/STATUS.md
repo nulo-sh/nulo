@@ -35,3 +35,4 @@
 - 2026-10-14: gate 3.9 pass: New/Edit network + account-name 24/24; the six new cases red on the HEAD popups.
 - 2026-10-14: arc 3a review round 1: Codex conditional approve (4 accepted), Opus conditional approve (same 3 + nits); fixes committed, Codex resumed.
 - 2026-10-14: arc 3a review rounds 2 and 3: Codex conditional approve (1 accepted: `shownToast` reads only a settled snack), then approve with no new material findings. Loop converged. Chrome contacts-import smoke 7/7 and the network stop pass at the fix; typecheck:all passes.
+- 2026-10-14: arc 3a gate pass: lint, typecheck:all, test, test:all, check:plans; full smoke Chrome 230 passed / 12 skipped (1498.1 s, before 1530.5 s), Firefox 229 / 13 (2041.5 s, before 2038.0 s without the new scenarios); network stop Chrome 29.3 s, Firefox 38.7 s. PR #435 opened; CodeQL flagged a backtracking pattern in `a11y-css.test.ts`, replaced.
