@@ -105,10 +105,28 @@ export const REGIMES = {
 			"fixes every Nulo V6 account address; changing any of these inputs rotates all derived " +
 			"addresses and ships ONLY as a new extension major with a new appended regime entry.",
 	},
+	"nulo-v6.1": {
+		id: "nulo-v6.1",
+		artifactSha256: "9aebda2a0b8cf96e833dba4379bef6a2ed0f93e975e9689afaa26ac71203cdc8",
+		classId: "0x2a5784fa8315d0150f36a1fba87b41cdb9cd8ebea611ceaa80c7a787e83efa60",
+		descriptorVersion: 1,
+		descriptorDigest: "3883065f0d6603d1be25db42348ec25b7a9dc29746d85b925b09efbd2a460605",
+		kdf: "nulo-account-kdf-v2",
+		kdfDigest: "29eca1a04b7acde8bb95905a2ac630b29f1edcf04d584274e90fd9f81736166d",
+		ack:
+			"I acknowledge that regime nulo-v6.1 (artifact sha256 " +
+			"9aebda2a0b8cf96e833dba4379bef6a2ed0f93e975e9689afaa26ac71203cdc8, class id " +
+			"0x2a5784fa8315d0150f36a1fba87b41cdb9cd8ebea611ceaa80c7a787e83efa60, descriptor v1 " +
+			"digest 3883065f0d6603d1be25db42348ec25b7a9dc29746d85b925b09efbd2a460605, kdf " +
+			"nulo-account-kdf-v2 digest 29eca1a04b7acde8bb95905a2ac630b29f1edcf04d584274e90fd9f81736166d) " +
+			"fixes every account address a Nulo V6 build bound to it derives. It supersedes nulo-v6 in place, " +
+			"a non-Mainnet rotation on the owner's recorded decision; changing any of these inputs rotates all " +
+			"derived addresses and ships only as a new appended regime entry.",
+	},
 } as const satisfies Record<string, AddressRegime>
 
 /**
- * The one regime this extension major (Nulo V6) derives accounts under — a compile-time binding,
- * not a runtime pointer. Rotation appends a regime and ships a new major bound to it.
+ * The one regime this build derives accounts under: a compile-time binding, not a runtime pointer,
+ * and always the last entry of `REGIMES`. The V6 major spans `nulo-v6` and `nulo-v6.1`.
  */
-export const V6_REGIME: AddressRegime = REGIMES["nulo-v6"]
+export const V6_REGIME: AddressRegime = REGIMES["nulo-v6.1"]
