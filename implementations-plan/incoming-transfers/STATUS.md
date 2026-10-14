@@ -24,3 +24,4 @@
 - 2026-10-14 — Phase 2.4 gate on the final product code (`cffb6200`): 7 files, 19/19 at retry 0; lint, typecheck:all, test, test:all, test:ci-gating and check:plans green on `9961b437`. Arc 2 ready for its PR.
 - 2026-10-14 — arc 3b revision on `incoming-transfers-arc-3b` (from `dev` `264a4b30`): recon (3 Explore agents), plan revised in place (arcs 1-2 record moved to decisions.md), OA-8 added; dual audit next.
 - 2026-10-14 — arc 3b audit: Codex round 1 `reject` (8 findings), Opus `conditional approve` (15); all accepted (one in part, one as words). Final fresh Codex pass `reject` (1 High, 1 Medium), accepted, unreviewed. plan.md at 350 lines; awaiting orchestrator approval.
+- 2026-10-14 — arc 3b build started on `incoming-transfers-arc-3b` (plan commit rebased onto `b3c98acb` as `f0beffb3`). Phase 3.3 gate passed: units 1278/1278, lint 0, typecheck:all 0; revert checks fail as required.

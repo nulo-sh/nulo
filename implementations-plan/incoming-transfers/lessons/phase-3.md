@@ -21,3 +21,18 @@ Where the approved Arc 3 text and the tree disagree, the tree wins:
   failed sync (stdlib `l2_block_stream.ts:237-242`), so a notes read can answer from a stale anchor
   (#140 now settles, strikes and deletes only at a verified anchor); and `getNodeForUrl`'s client
   retries a failed lookup up to three times (`aztec-runtime/src/utils/fetch.ts:112-122`).
+
+## Arc 3b implementation (2026-10-14, base `b3c98acb`)
+
+The planner rebased the plan commit onto `origin/dev` `b3c98acb` (now `f0beffb3`) before the build;
+dev added the `@nulo/token-list` workspace, so the worktree needed a `bun install`.
+
+### Phase 3.3
+
+- The reorg liveness proof ran with the token untrusted, so its receipts were hidden and Updated
+  (gated like Added) could not fire. The test now trusts the token first; without that the plan's
+  "one Updated naming `0xbh101b`" is unobservable.
+- Revert record: with `emitUpdatedIfShown` removed, the emit-once case, the reconcile control and
+  P11 rows, the handoff case and the liveness proof fail (5); with the feed's `refresh()` on Updated
+  removed, the held-read case fails (`[["a", "0xold"]]`).
+- Gate: units 55 files / 1278 tests, lint 0, typecheck:all 0.

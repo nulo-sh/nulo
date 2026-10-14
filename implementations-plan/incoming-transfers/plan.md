@@ -126,13 +126,13 @@ Per (account, contract), after the `ACTIVE` read and the per-note commits:
 Build in order; `received/[id].vue` changes only in 3.5, after merging `origin/dev` if arc 3a has
 merged (§ Delivery). Log to `lessons/phase-3.md` ("recorded": its red run is there); ✓ only on a pass.
 
-#### Phase 3.3: Updated on a re-mine, service and feed (#139)
+#### Phase 3.3: Updated on a re-mine, service and feed (#139) ✓
 
 1. `rewriteMovedRecord` returns its record; `emitUpdatedIfShown` after it; the feed refreshes on Updated.
 2. Scenarios: a visible rewrite emits one Updated with the new hash; hidden, visibility off, or a
    handoff during the visibility read: none, beside the undisturbed control. Re-pin the matrix's
    reconcile rows (`visibility`, `updated`, `receiptFlags`); the reorg liveness proof
-   (`service.scenarios.test.ts:6566-6597`) asserts one Updated naming `0xbh101b`. Feed: a read held
+   (`service.scenarios.test.ts`, "reorg: a same-height hash change …") asserts one Updated naming `0xbh101b`. Feed: a read held
    across an Updated, then released, leaves the new block; a Deleted during it still removes the row.
 
 Gate: `bun run --cwd apps/extension test src/wallet/services/incoming-transfer/ src/composables/ && bun run lint && bun run typecheck:all`.

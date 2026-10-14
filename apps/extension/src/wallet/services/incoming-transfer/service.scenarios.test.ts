@@ -5817,6 +5817,7 @@ function instrumentReceipt(f: ReceiptFixture, hold?: string) {
 	f.service.onIncomingTrustChanged.add(() => log.push("trustChanged"))
 	f.service.onIncomingTransferPending.add(() => log.push("pending"))
 	f.service.onIncomingTransferAdded.add(() => log.push("added"))
+	f.service.onIncomingTransferUpdated.add(() => log.push("updated"))
 	const svc = f.service as unknown as { serviceEpoch: number }
 	const bump = () => {
 		log.push("BUMP")
@@ -6065,6 +6066,7 @@ function commitPublic(service: unknown, opts?: { reconcile?: boolean }, ev: Publ
 
 const PUB_UNKNOWN = [...RECEIPT_HEAD, "getTrust", "setTrust", "trustRead", "trustChanged", "visibility", "pending", "setOutbox", "upsert"]
 const PUB_TRUSTED = [...RECEIPT_HEAD, "getTrust", "setOutbox", "upsert", "visibility", "added"]
+const PUB_RECONCILE = ["tokens", "getRecord", "upsert", "visibility", "updated"]
 
 describe("IncomingTransferService — public receipt epoch re-check matrix", () => {
 	test.each<[string, PublicFixture, string, string[], string]>([
@@ -6101,8 +6103,15 @@ describe("IncomingTransferService — public receipt epoch re-check matrix", () 
 		["P8 outbox write, trusted", "trusted", "setOutbox", bumpedAfter(PUB_TRUSTED, "setOutbox", "setOutbox"), "000100"],
 		["P9 record write, trusted: Added stands down", "trusted", "upsert", bumpedAfter(PUB_TRUSTED, "upsert", "visibility"), "000110"],
 		["P10 Added visibility read", "trusted", "visibility", bumpedAfter(PUB_TRUSTED, "visibility", "visibility"), "000110"],
-		["control, reconcile of a moved block", "reconcile", "none", ["tokens", "getRecord", "upsert"], "000010"],
+		["control, reconcile of a moved block", "reconcile", "none", PUB_RECONCILE, "000010"],
 		["P2 record read, reconcile: the update stands down", "reconcile", "getRecord", ["tokens", "getRecord", "BUMP"], "000000"],
+		[
+			"P11 Updated visibility read, reconcile: Updated stands down",
+			"reconcile",
+			"visibility",
+			bumpedAfter(PUB_RECONCILE, "visibility", "visibility"),
+			"000010",
+		],
 	])("%s", async (_name, fixture, hold, expectedLog, expectedFlags) => {
 		const f = await bootPublicReceipt(fixture)
 		const inst = instrumentReceipt(f, hold)
@@ -6139,6 +6148,43 @@ describe("IncomingTransferService — public receipt epoch re-check matrix", () 
 		const inst = instrumentReceipt(f)
 		await commitPublic(f.service)
 		expect(inst.log).toEqual(["tokens", "getRecord", "outgoing"])
+	})
+})
+
+describe("IncomingTransferService — Updated on a re-mine", () => {
+	const updatesOf = (service: IncomingTransferService) => {
+		const updated: IncomingTransferRecord[] = []
+		service.onIncomingTransferUpdated.add((r) => updated.push(r))
+		return updated
+	}
+
+	test("a visible rewrite emits one Updated carrying the new block; an unmoved record emits none", async () => {
+		const f = await bootPublicReceipt("reconcile")
+		const updated = updatesOf(f.service)
+		await commitPublic(f.service, { reconcile: true })
+		await commitPublic(f.service, { reconcile: true })
+		expect(updated).toHaveLength(1)
+		expect(updated[0]).toMatchObject({ id: PUB_ID, blockHash: "0xbh5", l2BlockNumber: 5 })
+	})
+
+	test.each<[string, (f: Awaited<ReturnType<typeof bootPublicReceipt>>) => void]>([
+		["a hidden record", () => seedPublic({ txHash: PUB_TX, blockHash: "0xold", hidden: true })],
+		["visibility off", (f) => f.config.setVisibility(false)],
+	])("%s is rewritten without an Updated", async (_name, arrange) => {
+		const f = await bootPublicReceipt("reconcile")
+		arrange(f)
+		const updated = updatesOf(f.service)
+		await commitPublic(f.service, { reconcile: true })
+		expect(records.get(PUB_ID)).toMatchObject({ blockHash: "0xbh5" })
+		expect(updated).toEqual([])
+	})
+
+	test("a handoff during Updated's visibility read rewrites the record and emits nothing", async () => {
+		const f = await bootPublicReceipt("reconcile")
+		const inst = instrumentReceipt(f, "visibility")
+		await runHandoff(inst, () => commitPublic(f.service, { reconcile: true }))
+		expect(inst.log).toEqual(handedOffAfter(PUB_RECONCILE, "visibility"))
+		expect(records.get(PUB_ID)).toMatchObject({ blockHash: "0xbh5" })
 	})
 })
 
@@ -6570,6 +6616,7 @@ describe("IncomingTransferService — liveness on the real cadence", () => {
 			pubReceipt(51 + Math.floor(i / 3), { txIndexWithinBlock: i % 3, to: "0xother" }),
 		)
 		const f = await bootTicking({}, { chain: below })
+		trustedRow()
 		await tick()
 		f.state.chain = [...below, pubReceipt(101, { blockHash: "0xbh101a" })]
 		f.state.tips = { ...f.state.tips, checkpointedBlockNumber: 101, checkpointedBlockHash: "0xcp101a", proposedBlockHash: "0xpp101a" }
@@ -6584,7 +6631,10 @@ describe("IncomingTransferService — liveness on the real cadence", () => {
 		f.state.responses.push(new Error("not an ancestor"))
 		const event = Date.now()
 
+		const updated: IncomingTransferRecord[] = []
+		f.service.onIncomingTransferUpdated.add((r) => updated.push(r))
 		expect(await landedAfter(() => storedBlockHash(remined) === "0xbh101b", event)).toBeLessThan(120_000)
+		expect(updated.map((r) => r.kind === "public-event" && r.blockHash)).toEqual(["0xbh101b"])
 		expect(cursorFor()?.reconciling).toBeUndefined()
 		f.state.fetchArgs.length = 0
 		await tick()

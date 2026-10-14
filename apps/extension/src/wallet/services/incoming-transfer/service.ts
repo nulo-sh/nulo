@@ -2315,7 +2315,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const existing = await this.repo.getRecord(publicRecordId(profileId, networkId, ev.txHash, ev.logIndexWithinTx))
 		if (!fenced()) return "revoked"
 		if (existing) {
-			if (opts?.reconcile) await this.rewriteMovedRecord(existing, ev)
+			const moved = opts?.reconcile ? await this.rewriteMovedRecord(existing, ev) : null
+			if (moved) await this.emitUpdatedIfShown(moved, fenced)
 			return "processed"
 		}
 
@@ -2329,17 +2330,24 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 	/** A reorg can re-mine the same tx (same PK) at a NEW block: update the chain fields so the
 	 *  reconciliation's blockHash comparison keeps the record instead of deleting it. The caller read
-	 *  `fenced()` with no await since. */
-	private async rewriteMovedRecord(existing: IncomingTransferRecord, ev: PublicTransferEvent): Promise<void> {
-		if (existing.kind !== "public-event" || existing.blockHash === ev.blockHash) return
-		await this.repo.upsertRecord({
+	 *  `fenced()` with no await since. Resolves the rewritten record, or null when nothing moved. */
+	private async rewriteMovedRecord(existing: IncomingTransferRecord, ev: PublicTransferEvent): Promise<IncomingTransferRecord | null> {
+		if (existing.kind !== "public-event" || existing.blockHash === ev.blockHash) return null
+		const moved: IncomingPublicEventRecord = {
 			...existing,
 			blockHash: ev.blockHash,
 			l2BlockNumber: ev.l2BlockNumber,
 			txIndexInBlock: ev.txIndexWithinBlock,
 			indexInTx: ev.logIndexWithinTx,
 			blockTimestamp: ev.blockTimestamp,
-		})
+		}
+		await this.repo.upsertRecord(moved)
+		return moved
+	}
+
+	/** Updated passes the gate Added does, so a hidden record never reaches a screen through it. */
+	private async emitUpdatedIfShown(record: IncomingTransferRecord, fenced: () => boolean): Promise<void> {
+		if (!record.hidden && (await this.isVisibilityEnabled()) && fenced()) this.emit("onIncomingTransferUpdated", record)
 	}
 
 	/** Whether `txHash` is the scope's own send: its outgoing transactions first, then the journal's
