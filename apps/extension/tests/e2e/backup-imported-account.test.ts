@@ -27,7 +27,7 @@ import {
 	waitForHash,
 	pickFileByTestId,
 } from "./fixtures/extension"
-import { acceptConfirmPopup, closeStuckPopup, navigateByHash, reopenAndRecoverAfterImport } from "./fixtures/helpers"
+import { acceptConfirmPopup, closeStuckPopup, navigateByHash, readSessionRow, reopenAndRecoverAfterImport } from "./fixtures/helpers"
 import {
 	confirmImport,
 	exportAccountBody,
@@ -145,6 +145,36 @@ test("a full backup carries an imported account; restoring it (dup-confirmed) re
 		const reExported = await exportImportedAccountBody(page, false, RESTORE_PASSWORD)
 		const reviewed = await previewImport(page, reExported)
 		expect(reviewed).toBe(importedAddress)
+
+		// ── Stage 6: a key row that no longer opens is named on the export page, which still
+		// gives out the file ──
+		const restoredProfile = (await readSessionRow(page))?.profile
+		const corrupted = await page.evaluate(async (profileId) => {
+			const all = await chrome.storage.local.get(null)
+			const garbage = btoa(String.fromCharCode(...new Uint8Array(45).fill(1)))
+			let count = 0
+			for (const [key, raw] of Object.entries(all)) {
+				if (!key.startsWith("nulo:core:imported-account-keys@")) continue
+				const row = JSON.parse(raw as string) as { profileId: string; encryptedSigningKey: string }
+				if (row.profileId !== profileId) continue
+				await chrome.storage.local.set({ [key]: JSON.stringify({ ...row, encryptedSigningKey: garbage }) })
+				count++
+			}
+			return count
+		}, restoredProfile)
+		expect(corrupted).toBe(1)
+		await navigateByHash(page, "#/popup/settings/security/export/full")
+		await clickByTestId(page, "agree-continue-btn")
+		await page.waitForSelector('[data-testid="unlock-password-input"]', { visible: true, timeout: 10_000 })
+		await replaceInputValue(page, '[data-testid="unlock-password-input"]', RESTORE_PASSWORD)
+		await clickByTestId(page, "unlock-submit-btn")
+		await page.waitForSelector('[data-testid="backup-imported-unopened-banner"]', { visible: true, timeout: 120_000 })
+		expect(await page.$eval('[data-testid="backup-imported-unopened-banner"]', (el) => (el as HTMLElement).innerText)).toContain(
+			"1 imported account could not be opened, so they will not be restored.",
+		)
+		expect(await page.$('[data-testid="backup-keys-lost-banner"]')).toBeNull()
+		const withUnopened = await openEncryptedBackup(await downloadEncryptedBackup(page), RESTORE_PASSWORD)
+		expect((withUnopened.data?.["imported-account-keys"] as unknown[] | undefined)?.length).toBe(1)
 	} finally {
 		rmSync(filePath, { force: true })
 	}

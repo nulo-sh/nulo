@@ -17,6 +17,7 @@ import { array_max, fromBase64Lenient, hasIntersectionByKeys, KeyedLock, Lock } 
 import { EventHandler, toBase64 } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { RunFence } from "@/wallet/services/profile/spec"
+import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import {
 	buildAccountExport,
 	decryptAccountExport,
@@ -44,6 +45,7 @@ import {
 	ImportedAccountUnusableError,
 	type FullBackupKeys,
 	type ImportedAccountKey,
+	type PasskeyBackupKeys,
 	accountRowId,
 	accountRowIdOf,
 	parseAccountRowId,
@@ -99,6 +101,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		"importAccount",
 		"previewImportAccount",
 		"exportFullBackupKeys",
+		"exportPasskeyBackupKeys",
 		"backupImportedKeys",
 		"restoreImportedKeys",
 		"reconcileImportedAccounts",
@@ -850,19 +853,41 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		try {
 			const accounts = await this.rowsOfProfile(fence.profileId)
 			const stored = await this.importedKeys.backup(fence.profileId)
-			const importedKeyRows = sourceDek ? await this.resealImportedKeys(stored, sourceDek, transferKey) : stored
+			const resealed = sourceDek ? await this.resealImportedKeys(stored, sourceDek, transferKey) : { rows: stored, unopened: 0 }
 			await this.profileService.assertRunFence(fence)
 			return {
 				masterKey,
 				entropy,
 				importedKeysKey: toBase64(transferKey),
-				importedKeyRows,
+				importedKeyRows: resealed.rows,
 				accounts,
 				dekReplaced: sourceDek === null,
+				unopenedImportedKeys: resealed.unopened,
 			}
 		} finally {
 			zeroize(sourceDek)
 			zeroize(transferKey)
+		}
+	}
+
+	/**
+	 * Accounts are read before the key rows, as for a password profile. The rows are counted where
+	 * the DEK lives and returned as read, so the file carries exactly the rows counted.
+	 */
+	public async exportPasskeyBackupKeys(fence: RunFence, credentialData: PasskeyCredentialData): Promise<PasskeyBackupKeys> {
+		await this.ensureInitialized()
+		await this.profileService.assertRunFence(fence)
+		const accounts = await this.rowsOfProfile(fence.profileId)
+		const importedKeyRows = await this.importedKeys.backup(fence.profileId)
+		const material = await this.profileService.exportPasskeyBackupKeys(fence.profileId, credentialData, importedKeyRows)
+		await this.profileService.assertRunFence(fence)
+		return {
+			credentialId: material.credentialId,
+			dekSealed: material.dekSealed,
+			dekReplaced: material.dekReplaced,
+			unopenedImportedKeys: material.unopened,
+			importedKeyRows,
+			accounts,
 		}
 	}
 
@@ -872,7 +897,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		rows: ImportedAccountKey[],
 		from: ImportedKeysDek,
 		to: ImportedKeysDek,
-	): Promise<ImportedAccountKey[]> {
+	): Promise<{ rows: ImportedAccountKey[]; unopened: number }> {
 		const out: ImportedAccountKey[] = []
 		let unopened = 0
 		for (const row of rows) {
@@ -891,7 +916,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 			}
 		}
 		if (unopened > 0) this.logWarn("imported-key rows did not open at backup export", { unopened })
-		return out
+		return { rows: out, unopened }
 	}
 
 	/** Backup this profile's imported-account key rows (the dedicated `imported-account-keys`

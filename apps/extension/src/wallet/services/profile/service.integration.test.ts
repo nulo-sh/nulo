@@ -42,7 +42,9 @@ import {
 	EncryptionKey,
 	IMPORTED_DEK_AAD,
 	PasswordSecretBox,
+	generateImportedKeysDek,
 	sealDekUnderWrapKey,
+	sealImportedSigningKeyV2,
 	type PasskeyCredential,
 	type PasskeyCredentialData,
 	type SessionWrappedSecret,
@@ -3322,17 +3324,17 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			const p = await service.createPasskeyProfile("PK")
 			const credentialId = await service.getPasskeyCredentialId(p.id)
 			const credData = fakeCredentialData(credentialId, p.id)
-			const intact = await service.exportPasskeyBackupMaterial(p.id, credData)
-			expect(intact).toEqual({ credentialId, dekSealed: (await readRow(api, p.id)).dekSealed, dekReplaced: false })
+			const intact = await service.exportPasskeyBackupKeys(p.id, credData, [])
+			expect(intact).toEqual({ credentialId, dekSealed: (await readRow(api, p.id)).dekSealed, dekReplaced: false, unopened: 0 })
 
 			await service.lockActiveProfile()
 			await corruptDekSlot(api, p.id)
 			const before = await readRow(api, p.id)
 			// Credential and fingerprint checks still reject BEFORE any tolerance applies.
-			await expect(service.exportPasskeyBackupMaterial(p.id, fakeCredentialData("cred-other", p.id))).rejects.toThrow(
+			await expect(service.exportPasskeyBackupKeys(p.id, fakeCredentialData("cred-other", p.id), [])).rejects.toThrow(
 				/Invalid profile id/,
 			)
-			const material = await service.exportPasskeyBackupMaterial(p.id, credData)
+			const material = await service.exportPasskeyBackupKeys(p.id, credData, [])
 			expect(material.credentialId).toBe(credentialId)
 			expect(material.dekReplaced).toBe(true)
 			expect(material.dekSealed).not.toBe(CORRUPT_SLOT)
@@ -3351,6 +3353,50 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			await service.finalizeRestore(restored.id)
 			expect(service.isRecoveryMode(restored.id)).toBe(false)
 			expect(await service.getProfileDek(restored.id)).toBeDefined()
+		}, 30_000)
+
+		test("the passkey backup counts the rows that do not open under the stored DEK, with no session open", async () => {
+			const { service } = await makeService()
+			const p = await service.createPasskeyProfile("PK")
+			const credentialId = await service.getPasskeyCredentialId(p.id)
+			const credData = fakeCredentialData(credentialId, p.id)
+			const dek = await service.getProfileDek(p.id)
+			const sk = new Uint8Array(32).fill(7)
+			const opens = { chainId: 1, address: "0xaa", encryptedSigningKey: await sealImportedSigningKeyV2(dek!, 1, "0xaa", sk) }
+			const foreign = {
+				chainId: 1,
+				address: "0xbb",
+				encryptedSigningKey: await sealImportedSigningKeyV2(generateImportedKeysDek(), 1, "0xbb", sk),
+			}
+			const transplanted = { ...opens, chainId: 2 }
+			await service.lockActiveProfile()
+
+			expect(await service.exportPasskeyBackupKeys(p.id, credData, [opens])).toMatchObject({ dekReplaced: false, unopened: 0 })
+			expect(await service.exportPasskeyBackupKeys(p.id, credData, [opens, foreign, transplanted])).toMatchObject({
+				dekReplaced: false,
+				unopened: 2,
+			})
+			// A row no store could hold aborts the count, and with it the export: nothing is reported.
+			await expect(service.exportPasskeyBackupKeys(p.id, credData, [opens, null as never])).rejects.toThrow(TypeError)
+		}, 30_000)
+
+		test("a replaced DEK counts nothing: no stored row opens under the fresh one", async () => {
+			const { api, service } = await makeService()
+			const p = await service.createPasskeyProfile("PK")
+			const credentialId = await service.getPasskeyCredentialId(p.id)
+			const dek = await service.getProfileDek(p.id)
+			const row = {
+				chainId: 1,
+				address: "0xaa",
+				encryptedSigningKey: await sealImportedSigningKeyV2(dek!, 1, "0xaa", new Uint8Array(32)),
+			}
+			await service.lockActiveProfile()
+			await corruptDekSlot(api, p.id)
+
+			expect(await service.exportPasskeyBackupKeys(p.id, fakeCredentialData(credentialId, p.id), [row])).toMatchObject({
+				dekReplaced: true,
+				unopened: 0,
+			})
 		}, 30_000)
 
 		test("passkey restore tolerates an UNOPENABLE dekSealed: the row mints a fresh dek, no rewrap context, finalize is non-degraded", async () => {
@@ -3522,7 +3568,7 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			await api.storage.local.set({ [key]: JSON.stringify(row) })
 
 			// The credentialId export never touched the DEK, so it is unaffected; the sealed-blob
-			// tolerance lives in `exportPasskeyBackupMaterial` (covered in the DEK-lifecycle block).
+			// tolerance lives in `exportPasskeyBackupKeys` (covered in the DEK-lifecycle block).
 			expect(await service.exportPlain(p.id, undefined, fakeCredentialData(credentialId, "uh-x"))).toBe(credentialId)
 		})
 

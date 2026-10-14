@@ -57,10 +57,12 @@ import {
 	type Events,
 	type FinalizedRestore,
 	type Methods,
+	type PasskeyBackupMaterial,
 	type RestoreSecret,
 	type RunFence,
 	toProfileInfo,
 } from "./spec"
+import { probeDekAndCount, type SealedImportedKey } from "./imported-key-count"
 import { RestorePendingRepository } from "./restore-pending-repository"
 import { TombstoneRepository } from "./tombstone-repository"
 import { ProfileDeletionState, type ExecutionFence } from "./profile-deletion-state"
@@ -104,7 +106,6 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		"importPasskey",
 		"importMnemonic",
 		"exportPlain",
-		"exportPasskeyBackupMaterial",
 		"exportMnemonic",
 		"restore",
 		"finalizeRestore",
@@ -1782,24 +1783,26 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	}
 
 	/**
-	 * The passkey arm of `exportPlain` / `exportPasskeyBackupMaterial`: the credentialId plus the
-	 * sealed DEK blob the backup carries. The popup ran the in-page WebAuthn ceremony and hands
-	 * over the credential data; it is materialized SW-side and bound to THIS profile's
-	 * credentialId — without that check a popup bug could supply data for a different key and
-	 * the wrong credential would be exported.
+	 * The passkey arm of `exportPlain` / `exportPasskeyBackupKeys`: the credentialId plus the
+	 * sealed DEK blob the backup carries, and with `rows` how many of them do not open. The popup
+	 * ran the in-page WebAuthn ceremony and hands over the credential data; it is materialized
+	 * SW-side and bound to THIS profile's credentialId — without that check a popup bug could
+	 * supply data for a different key and the wrong credential would be exported.
 	 */
 	private async exportPasskeyCredential(
 		id: string,
 		profile: Extract<Profile, { type: "passkey" }>,
 		capturedEpoch: number,
 		credentialData?: PasskeyCredentialData,
-	): Promise<{ credentialId: string; dekSealed: string; dekReplaced: boolean }> {
+		rows?: readonly SealedImportedKey[],
+	): Promise<PasskeyBackupMaterial> {
 		if (!credentialData) {
 			throw new Error("credentialData is required for passkey profile")
 		}
 		const recovery = await this.passkeyCoordinator.recoverFromCredentialData(credentialData)
 		let dekSealed = profile.dekSealed
 		let dekReplaced = false
+		let unopened = 0
 		try {
 			if (recovery.credentialId !== profile.credentialId) {
 				throw new Error("Invalid profile id")
@@ -1815,15 +1818,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// under that same key: a passkey profile has no recovery phrase, so this backup IS its
 			// repair path in recovery mode. The stored row is never touched; the caller names the
 			// loss (imported keys, local chain state).
-			let probe: ImportedKeysDek | null = null
-			try {
-				probe = await unsealDekUnderWrapKey(recovery.dekWrapKey, profile.dekSealed)
-			} catch {
-				probe = null
-			} finally {
-				zeroize(probe)
-			}
-			if (!probe) {
+			const probed = await probeDekAndCount(recovery.dekWrapKey, profile.dekSealed, rows)
+			unopened = probed.unopened
+			if (!probed.opens) {
 				this.logger.log(this.name, LogLevel.Warn, "imported-keys DEK unrecoverable at passkey export — exporting a fresh one", id)
 				const fresh = generateImportedKeysDek()
 				try {
@@ -1856,7 +1853,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		) {
 			throw new Error("Invalid profile id")
 		}
-		return { credentialId: current.credentialId, dekSealed, dekReplaced }
+		return { credentialId: current.credentialId, dekSealed, dekReplaced, unopened }
 	}
 
 	/**
@@ -1917,16 +1914,23 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		}
 	}
 
-	public async exportPasskeyBackupMaterial(
+	/**
+	 * A passkey profile's full-backup material, proven as `exportPlain`'s passkey arm proves it, plus
+	 * how many of `rows` do not open under the stored DEK. That DEK is opened with the credential's
+	 * wrap key, never the session's, and never leaves this service. In-process only: `AccountService`
+	 * reads the rows the file carries and asserts the run's fence around this call.
+	 */
+	public async exportPasskeyBackupKeys(
 		id: string,
 		credentialData: PasskeyCredentialData,
-	): Promise<{ credentialId: string; dekSealed: string; dekReplaced: boolean }> {
+		rows: readonly SealedImportedKey[],
+	): Promise<PasskeyBackupMaterial> {
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
 		if (profile.type !== "passkey") {
 			throw new Error("Operation not supported for password profile")
 		}
-		return this.exportPasskeyCredential(id, profile, capturedEpoch, credentialData)
+		return this.exportPasskeyCredential(id, profile, capturedEpoch, credentialData, rows)
 	}
 
 	/** Fresh-auth DEK unseal for the account-export path (mirrors `exportPlain`'s posture:

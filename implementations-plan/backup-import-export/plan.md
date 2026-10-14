@@ -180,7 +180,7 @@ Every arc 3 gate includes `bun run lint` and `bun run typecheck:all`. Unit tests
 
 ### Arc 3: warnings, outcomes, export rules
 
-#### Phase 3.1: a malformed profile part shows the integrity message (OA-9 B, #226)
+#### Phase 3.1: a malformed profile part shows the integrity message (OA-9 B, #226) ✓
 
 1. Add the check after migration. Share the integrity copy as one constant pair. Narrow `BackupProfile`.
 2. Add one test per refused class: not an object, an unknown `type`, a non-string `name`. Add a control: a valid part with an odd `id` passes and restores under a fresh id.
@@ -189,7 +189,7 @@ UI impact (OA-9, quoted): "The existing integrity message for any malformed prof
 
 Validation gate: lint; typecheck; `src/composables/useFullBackupImport.test.ts`. Pass: exit 0; each refused class fails before `profileService.restore` runs. Layers: lint, typecheck, unit.
 
-#### Phase 3.2: the import's warning, failed-Retry line and names (#189)
+#### Phase 3.2: the import's warning, failed-Retry line and names (#189) ✓
 
 1. Add the three helpers with tests: one and two names; no names; a row without `networkId`; the original rows unchanged.
 2. Add `retryFailedAgain` and the restored networks; pass the names to `showErrorLog`; render the line on both pages.
@@ -200,7 +200,7 @@ UI impact (P1-02 with the addendum, quoted): "The line above Retry after a Retry
 
 Validation gate: lint; typecheck; `src/components/composite/import/ src/composables/ src/popup/pages/import.test.ts` and the three ban tests; smoke `tests/e2e/import-errors-scroll.test.ts` on both browsers. Pass: exit 0. Layers: lint, typecheck, unit, component, smoke e2e.
 
-#### Phase 3.3: remember a restore that did not finish (#192)
+#### Phase 3.3: remember a restore that did not finish (#192) ✓
 
 1. Add `restore-outcome.ts` and its prefix in `PROFILE_UI_KEY_PREFIXES` (F24). Add the `RunFence` to `AccountStateService.restore`. Thread the checksum. Add `finalizeWithReminder`, admit and finish.
 2. Add record unit tests:
@@ -220,7 +220,7 @@ UI impact: none (no reader until 3.4).
 
 Validation gate: lint; typecheck; `src/utils/restore-outcome.test.ts src/utils/profile-ui-keys.test.ts src/wallet/services/account-state/ src/composables/` and the ban tests. Pass: exit 0. Layers: lint, typecheck, unit.
 
-#### Phase 3.4: the Home banner (#192, P1-01 A)
+#### Phase 3.4: the Home banner (#192, P1-01 A) ✓
 
 1. Add `RestoreOutcomeBanner.vue` and mount it.
 2. Add component tests:
@@ -235,7 +235,7 @@ UI impact (P1-01 A, quoted): "A Home warning banner under the recovery banner: "
 
 Validation gate: lint; typecheck; the banner test and the ban tests; smoke `tests/e2e/restore-outcome.test.ts` on both browsers. Pass: exit 0. Layers: lint, typecheck, component, smoke e2e.
 
-#### Phase 3.5: Restore again (#192, OA-7 B, OA-10)
+#### Phase 3.5: Restore again (#192, OA-7 B, OA-10) ✓
 
 1. Move `openEncryptedBackup`, export the capped pick, add `askNewPassword`.
 2. Add `planRestoreAgain`, `useRestoreAgain` and the page with the OA-10 words.
@@ -251,7 +251,7 @@ UI impact (OA-7 B, quoted): ""Restore again" asks for the backup file again and 
 
 Validation gate: lint; typecheck; `src/composables/ src/utils/full-backup-helpers.test.ts src/components/composite/import/` and the ban tests; smoke `restore-outcome.test.ts` on both browsers; network `tests/e2e/network/restore-again.test.ts` on Chrome, then Firefox. Pass: exit 0; every scenario ran. Layers: lint, typecheck, unit, component, smoke e2e, network e2e.
 
-#### Phase 3.6: protect the account file before Download (#230)
+#### Phase 3.6: protect the account file before Download (#230) ✓
 
 1. Add `canDownload` and the handler re-check. Set the P1-06 copy.
 2. Add `account.test.ts`. Download is disabled at the ready stage and enabled once protected. A forced press at the ready stage writes nothing. A passkey profile is redirected.

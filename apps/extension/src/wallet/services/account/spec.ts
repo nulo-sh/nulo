@@ -1,6 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { z } from "zod"
 import type { Restored } from "@/wallet/base"
+import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import type { RunFence } from "@/wallet/services/profile/spec"
 
 export const ACCOUNT_SERVICE_NAME = "account"
@@ -170,6 +171,25 @@ export type FullBackupKeys = {
 	accounts: Account[]
 	/** The stored DEK no longer opens, so no imported key survives the restore. */
 	dekReplaced: boolean
+	/** Imported-key rows that did not open, so travel as stored and will not restore; 0 when the
+	 *  DEK was replaced. */
+	unopenedImportedKeys: number
+}
+
+/** A passkey profile's full-backup key material and the slices it was counted over, read once. */
+export type PasskeyBackupKeys = {
+	/** The file's `master-key`. */
+	credentialId: string
+	/** The file's `imported-keys-dek-sealed`: the stored DEK, or a fresh one when it no longer opens. */
+	dekSealed: string
+	dekReplaced: boolean
+	/** Imported-key rows of `importedKeyRows` that do not open under the stored DEK; 0 when it was
+	 *  replaced. */
+	unopenedImportedKeys: number
+	/** The imported-keys slice the file carries, as stored. */
+	importedKeyRows: ImportedAccountKey[]
+	/** The account slice, read before the key rows. */
+	accounts: Account[]
 }
 
 /** Storage codec row schema — mirrors `Account` exactly. */
@@ -273,6 +293,13 @@ export type Methods = {
 	 */
 	exportFullBackupKeys(fence: RunFence, password: string): FullBackupKeys
 
+	/**
+	 * A passkey profile's full-backup key material from the in-page ceremony's `credentialData`, with
+	 * the account and imported-key slices it was counted over. Throws unless `fence` names the open
+	 * session both before the first read and after the count.
+	 */
+	exportPasskeyBackupKeys(fence: RunFence, credentialData: PasskeyCredentialData): PasskeyBackupKeys
+
 	/** Backup the active profile's imported-account encrypted key rows (the dedicated slice). */
 	backupImportedKeys(): ImportedAccountKey[]
 
@@ -302,6 +329,10 @@ export const AccountMethodSchemas = {
 	importAccount: z.tuple([z.string(), z.number(), z.string(), z.string(), z.string(), z.string().optional()]),
 	previewImportAccount: z.tuple([z.string(), z.string()]),
 	exportFullBackupKeys: z.tuple([RunFenceParamSchema, z.string()]),
+	exportPasskeyBackupKeys: z.tuple([
+		RunFenceParamSchema,
+		z.object({ id: z.string(), prf: z.string(), userHandle: z.string().optional() }),
+	]),
 	backupImportedKeys: z.tuple([]),
 	restoreImportedKeys: z.tuple([z.array(z.unknown())]),
 	reconcileImportedAccounts: z.tuple([z.string()]),

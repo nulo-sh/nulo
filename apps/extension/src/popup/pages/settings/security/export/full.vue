@@ -134,6 +134,9 @@ const showRecommendation = ref(false)
 // (a corrupt envelope MAC alone lands here) and travels in the file.
 const dekReplaced = ref(false)
 const chainStateOmitted = ref(false)
+/** Imported-key rows that did not open, so travel as stored and will not restore. A replaced DEK
+ *  has its own warning, which covers them. */
+const unopenedImportedKeys = ref(0)
 
 const isAgreed = ref(false)
 const handleAgree = () => {
@@ -193,10 +196,16 @@ async function exportKeyMaterial(gen, fence, credentialData, accountClient) {
 			// Passkey blobs carry the credentialId as `master-key` and NEVER an entropy field —
 			// the master re-derives from the passkey PRF at restore. The imported-keys DEK travels
 			// as a SEALED blob (the restore ceremony's wrap key opens it) — the stored one, or a
-			// fresh one when the stored slot no longer opens.
-			const passkeyMaterial = await managers.profile.exportPasskeyBackupMaterial(appStore.profile.id, credentialData)
+			// fresh one when the stored slot no longer opens. The file carries the key rows it counted.
+			const passkeyKeys = await accountClient.exportPasskeyBackupKeys(fence, credentialData)
 			if (gen !== generation) return "handled"
-			return { key: passkeyMaterial.credentialId, dekSealedB64: passkeyMaterial.dekSealed, dekReplaced: passkeyMaterial.dekReplaced }
+			return {
+				key: passkeyKeys.credentialId,
+				dekSealedB64: passkeyKeys.dekSealed,
+				dekReplaced: passkeyKeys.dekReplaced,
+				unopenedImportedKeys: passkeyKeys.unopenedImportedKeys,
+				heldSlices: { [ACCOUNT_SERVICE_NAME]: passkeyKeys.accounts, [IMPORTED_KEYS_SERVICE_NAME]: passkeyKeys.importedKeyRows },
+			}
 		}
 		// The file carries a key made for this backup alone, never the profile's imported-keys DEK.
 		const material = await accountClient.exportFullBackupKeys(fence, password.value)
@@ -205,6 +214,7 @@ async function exportKeyMaterial(gen, fence, credentialData, accountClient) {
 			entropyB64: material.entropy,
 			dekB64: material.importedKeysKey,
 			dekReplaced: material.dekReplaced,
+			unopenedImportedKeys: material.unopenedImportedKeys,
 			heldSlices: { [ACCOUNT_SERVICE_NAME]: material.accounts, [IMPORTED_KEYS_SERVICE_NAME]: material.importedKeyRows },
 		}
 	} catch (error) {
@@ -319,6 +329,7 @@ async function handleBackup() {
 		const material = await exportKeyMaterial(gen, fence, credentialData, accountClient)
 		if (material === "handled" || gen !== generation) return
 		dekReplaced.value = !!material.dekReplaced
+		unopenedImportedKeys.value = material.dekReplaced ? 0 : (material.unopenedImportedKeys ?? 0)
 		chainStateOmitted.value = !!appStore.profile.recoveryMode
 		const envelope = buildBackupEnvelope(material)
 
@@ -491,6 +502,7 @@ watch(
 		isWrongPassword.value = false
 		isPasswordMismatch.value = false
 		dekReplaced.value = false
+		unopenedImportedKeys.value = 0
 		chainStateOmitted.value = false
 	},
 	{ flush: "sync" },
@@ -609,6 +621,20 @@ onBeforeUnmount(discardRun)
 									To repair: restore this file (or your recovery phrase) into a new profile, then delete
 									this one.
 								</template>
+							</Text>
+						</template>
+					</Banner>
+					<Banner
+						v-if="unopenedImportedKeys > 0"
+						variant="warning"
+						direction="vertical"
+						data-testid="backup-imported-unopened-banner"
+					>
+						<template #title> Some imported accounts are not in this backup </template>
+						<template #description>
+							<Text color="secondary" height="140">
+								{{ unopenedImportedKeys === 1 ? "1 imported account" : `${unopenedImportedKeys} imported accounts` }}
+								could not be opened, so they will not be restored. Import their keys again after the restore.
 							</Text>
 						</template>
 					</Banner>
