@@ -10,3 +10,4 @@
 - 2026-10-14: arc1 Phase 2 gate pass (lint, typecheck:all, execute window 304 incl. copy/type-role scans).
 - 2026-10-14: arc1 Phase 3 gate pass (lint, typecheck:all, tx module 16).
 - 2026-10-14: arc1 Phase 4 gate pass (fee-sponsor-funding Chrome 4/4, Firefox 4/4; new scenario 21.1 s / 67.3 s; screenshots captured).
+- 2026-10-14: arc1 Phase 5 gates: lint, typecheck:all, test:ci-gating, check:plans green; network Chrome 17/17 + noFrom 3/3; Firefox 14/17 then rerun 7/8, the one failure (fee-methods "public gas only") reproduces on base d3dc4415 on this host; noFrom 3/3; smoke Chrome 15+1 skip, Firefox 16/16.
