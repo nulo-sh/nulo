@@ -255,7 +255,7 @@ on that contract and its operator. They may charge what they like, fail, or stop
 
 **7.5 Supporting services.** Nulo uses a small number of third-party services — a price feed, links
 to a block explorer, downloads of public proving parameters, and edge hosting for the passkey
-relying-party domain. These are described in the [Privacy Policy](privacy.md). They are governed by
+relying-party domain and for the token list the wallet downloads. These are described in the [Privacy Policy](privacy.md). They are governed by
 their own terms and privacy practices. The Developer does not control them or guarantee their
 performance; this does not exclude responsibility imposed by law for the Developer's own
 implementation, statements, selection or configuration.

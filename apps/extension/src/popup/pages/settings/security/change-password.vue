@@ -37,7 +37,9 @@ const currentPassword = ref("")
 const newPassword = ref("")
 const repeatedNewPassword = ref("")
 const maxPasswordLength = 128
-const isPasswordType = ref(true)
+// The current password has its own eye, so revealing the new pair never shows it.
+const isCurrentPasswordHidden = ref(true)
+const isNewPasswordHidden = ref(true)
 
 /**
  * Split error state: `isWrongCurrentPassword` drives the lock-screen
@@ -121,7 +123,7 @@ onBeforeUnmount(() => {
 					v-model="currentPassword"
 					:error="isWrongCurrentPassword"
 					:ariaInvalid="isWrongCurrentPassword"
-					:type="isPasswordType ? 'password' : 'text'"
+					:type="isCurrentPasswordHidden ? 'password' : 'text'"
 					@input="handlePasswordInput"
 					placeholder="Enter current password"
 					autocomplete="current-password"
@@ -130,9 +132,9 @@ onBeforeUnmount(() => {
 				>
 					<template #suffix>
 						<PasswordVisibilityToggle
-							:hidden="isPasswordType"
+							:hidden="isCurrentPasswordHidden"
 							data-testid="current-password-input-visibility-toggle"
-							@toggle="isPasswordType = !isPasswordType"
+							@toggle="isCurrentPasswordHidden = !isCurrentPasswordHidden"
 						/>
 					</template>
 				</Input>
@@ -155,7 +157,7 @@ onBeforeUnmount(() => {
 			<Flex direction="column" gap="12">
 				<Input
 					v-model="newPassword"
-					:type="isPasswordType ? 'password' : 'text'"
+					:type="isNewPasswordHidden ? 'password' : 'text'"
 					@input="handlePasswordInput"
 					:maxLength="maxPasswordLength"
 					placeholder="Enter new password"
@@ -164,9 +166,9 @@ onBeforeUnmount(() => {
 				>
 					<template #suffix>
 						<PasswordVisibilityToggle
-							:hidden="isPasswordType"
+							:hidden="isNewPasswordHidden"
 							data-testid="new-password-input-visibility-toggle"
-							@toggle="isPasswordType = !isPasswordType"
+							@toggle="isNewPasswordHidden = !isNewPasswordHidden"
 						/>
 					</template>
 					<template #bottom>
@@ -179,7 +181,7 @@ onBeforeUnmount(() => {
 				<Input
 					v-model="repeatedNewPassword"
 					data-testid="new-password-repeat-input"
-					:type="isPasswordType ? 'password' : 'text'"
+					:type="isNewPasswordHidden ? 'password' : 'text'"
 					@input="handlePasswordInput"
 					:maxLength="maxPasswordLength"
 					placeholder="Repeat new password"

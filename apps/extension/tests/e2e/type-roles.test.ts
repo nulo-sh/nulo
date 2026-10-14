@@ -41,6 +41,7 @@ import {
 	type TypeReading,
 	withBlockedAccount,
 } from "./fixtures/type-roles"
+import { skipUnlessListPrices } from "./fixtures/token-list"
 import { readActivityScope, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
 import { refuseTestnet } from "./helpers/contacts"
 
@@ -187,7 +188,7 @@ test("withBlockedAccount raises the verification barrier and hands back an unloc
 const VISIBLE = { visible: true, timeout: 15_000 } as const
 const TX_HASH = `0x${"5e".repeat(32)}`
 /** About 123 trillion of the scope's token: at $1, a figure Home's fit draws only below full size. */
-const LONG_BALANCE = "123456789012345678901"
+const longBalance = (decimals: number) => `123456789012345${"678901234567890123456789".slice(0, decimals)}`
 /** Wire-shaped: 0x and 64 hex, the x coordinate of a Grumpkin point. */
 const RECIPIENT = "0x09c1c9d2ce72c53c2451f8e9add86ccb8cb284dd4dc4f0eaf301b40b38a9459b"
 
@@ -312,7 +313,9 @@ async function openSeededHome(ctx: ExtensionContext): Promise<Page> {
 			timeout: 30_000,
 		})
 		.catch(() => undefined)
-	const scope = await readActivityScope(seeder)
+	const scope = await readActivityScope(seeder, { priced: true })
+	const priceId = scope.token.priceId
+	if (priceId === undefined) throw new Error("the held list prices no token on this chain")
 	await seedTokenRow(seeder, scope, 1)
 	await seedTransaction(seeder, scope, { hash: TX_HASH, amount: "1500000" })
 	await seeder.evaluate((items: Record<string, string>) => chrome.storage.local.set(items), {
@@ -324,11 +327,11 @@ async function openSeededHome(ctx: ExtensionContext): Promise<Page> {
 			chainId: scope.chainId,
 			contract: scope.token.contract,
 			publicBalance: "0",
-			privateBalance: LONG_BALANCE,
+			privateBalance: longBalance(scope.token.decimals),
 			updatedAt: Date.now(),
 		}),
 		"nulo:core:token-prices": JSON.stringify({
-			"usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null },
+			[priceId]: { coingeckoId: priceId, usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null },
 		}),
 	})
 	// Firefox keeps its event page alive while an extension page is open.
@@ -415,8 +418,10 @@ async function goAndSweep(page: Page, hash: string, ready: string, label: string
 }
 
 test("a seeded wallet's Home with its fitted balance, Holdings, Activity, a tx detail, Receive, Accounts and the unlock screen", async ({
-	registeredExtensionPerTest: ctx,
+	listedExtensionPerTest: ctx,
+	skip,
 }) => {
+	skipUnlessListPrices(skip)
 	const refusal = await refuseTestnet(ctx)
 	try {
 		const page = await openSeededHome(ctx)

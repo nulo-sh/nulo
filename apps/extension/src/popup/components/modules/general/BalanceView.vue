@@ -8,7 +8,6 @@ import GasBalanceCard from "./GasBalanceCard.vue"
 /** Services */
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
-import { getPriceMapEntry } from "@/wallet/services/price/price-map"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 
 /** Utils */
@@ -204,7 +203,8 @@ function restartCap() {
 	}, HERO_PENDING_CAP_MS)
 }
 /** A price-mapped holding counts as $0.00 until its quote lands, so a wallet holding one waits for
- *  the first price answer; an empty or unpriced wallet has none to wait for. */
+ *  the first price answer; an empty or unpriced wallet has none to wait for. Before the mapping
+ *  arrives, any holding may be priced. */
 const awaitingQuotes = computed(
 	() =>
 		showFiatValues.value &&
@@ -213,7 +213,7 @@ const awaitingQuotes = computed(
 			(tb) =>
 				typeof tb.token?.contract === "string" &&
 				(parseRawBalance(tb) ?? 0n) > 0n &&
-				getPriceMapEntry(tb.token.chainId, tb.token.contract) !== undefined,
+				(!prices.mapped.value || prices.isPriced(tb.token.chainId, tb.token.contract)),
 		),
 )
 const heroPending = computed(() => (isTotalUnsettled.value || awaitingQuotes.value) && !capElapsed.value)

@@ -31,15 +31,16 @@ async function pxeHostState(page: Page): Promise<PxeHostState> {
  * `<-loopback>` drops Chrome's implicit bypasses, link-local addresses among them, and the entries
  * after it put loopback back on the direct path. `MAP *` also captures IP literals, the guard's own
  * address included, hence the excludes; `::1` matches only unbracketed. The canary name resolves to
- * loopback, which only a direct path would use. A live host is bypassed and excluded by its exact
- * name, so it alone of the outside names goes direct and resolves.
+ * loopback, which only a direct path would use. Each live host is bypassed and excluded by its
+ * exact name, so the live hosts alone of the outside names go direct and resolve.
  */
-export function egressGuardArgs(guardPort: number, liveHost?: string): string[] {
-	const live = liveHost === undefined ? { bypass: "", exclude: "" } : { bypass: `;${liveHost}`, exclude: `, EXCLUDE ${liveHost}` }
+export function egressGuardArgs(guardPort: number, liveHosts: readonly string[] = []): string[] {
+	const bypass = liveHosts.map((host) => `;${host}`).join("")
+	const exclude = liveHosts.map((host) => `, EXCLUDE ${host}`).join("")
 	return [
 		`--proxy-server=http://127.0.0.1:${guardPort}`,
-		`--proxy-bypass-list=<-loopback>;localhost;127.0.0.1;[::1]${live.bypass}`,
-		`--host-resolver-rules=MAP ${EGRESS_CANARY_HOST} 127.0.0.1, MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1, EXCLUDE ::1${live.exclude}`,
+		`--proxy-bypass-list=<-loopback>;localhost;127.0.0.1;[::1]${bypass}`,
+		`--host-resolver-rules=MAP ${EGRESS_CANARY_HOST} 127.0.0.1, MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1, EXCLUDE ::1${exclude}`,
 	]
 }
 
@@ -64,7 +65,7 @@ async function launch({ extensionPath, userDataDir, headless, fixedWindowSize = 
 			"--disable-renderer-backgrounding",
 			"--disable-backgrounding-occluded-windows",
 			"--disable-features=CalculateNativeWinOcclusion",
-			...(egress ? egressGuardArgs(egress.guardPort, egress.liveHost) : []),
+			...(egress ? egressGuardArgs(egress.guardPort, egress.liveHosts) : []),
 		],
 		ignoreDefaultArgs: ["--disable-extensions"],
 		// The default 180s is not enough for a cold first run: argon2 unlock plus the bb.js wasm

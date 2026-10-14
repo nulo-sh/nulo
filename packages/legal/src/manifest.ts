@@ -30,6 +30,14 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 			material: false,
 			changes: ["Updated the address for reporting security vulnerabilities."],
 		},
+		{
+			version: "1.2",
+			effective: "13 October 2026",
+			material: true,
+			changes: [
+				"The wallet now downloads its list of default tokens from tokens.nulo.sh, a host I operate. The request carries no wallet data. Cloudflare, which hosts it, receives your IP address and browser headers (§ 5.11).",
+			],
+		},
 	],
 }
 

@@ -16,14 +16,17 @@ import {
 	openScratchPage,
 	pickFile,
 	prepareClick,
+	stopBackground,
 } from "./browser"
 import {
 	captureBalanceBaseline,
 	createAccount,
 	getAccountAddress,
 	importToken,
+	readLivenessBaseline,
 	switchToLocalNetwork,
 	waitForFreshBalanceRow,
+	waitForWorkerLiveness,
 } from "./helpers"
 import { assertPgOk, type PgBundle, selectPgBundle, snapshotResultSeq, waitForPgResult } from "./playground"
 import { waitForPopup, waitForPopupClosed, approveCapabilities } from "./popups"
@@ -32,9 +35,18 @@ import type { AztecTestConfig } from "./aztec"
 import { PRESTO_HTTP_HEALTH_URL, PRESTO_HTTPS_HEALTH_URL } from "./presto"
 import { LEGAL_ACCEPTANCE_KEY, type LegalSeed, legalSeedValue } from "./legal"
 import { assertNoCspViolations, CSP_REPORT_ARMED, closeAfterCspCheck, readCspViolations } from "./csp-violations"
-import { type EgressCanary, type EgressGuard, type HeldNode, LIVE_NODE_HOST, guardArmed, ownGuardedLaunch } from "./egress-guard"
+import {
+	type EgressCanary,
+	type EgressGuard,
+	type HeldNode,
+	LIVE_LIST_HOST,
+	LIVE_NODE_HOST,
+	guardArmed,
+	ownGuardedLaunch,
+} from "./egress-guard"
 import { holdNodeStub } from "./node-stub"
 import { pageErrorOf } from "./page-errors"
+import { heldListStorage } from "./token-list"
 
 export interface ExtensionContext {
 	browser: Browser
@@ -48,7 +60,7 @@ export interface ExtensionContext {
 	 *  before it reloads the extension, which discards the record; `close` then only closes. */
 	checkCspViolations(): Promise<void>
 	/** The smoke suite's egress guard, canary and stand-in Testnet node for this launch; absent where
-	 *  no guard is armed, and no stand-in in a `liveNode` launch. */
+	 *  no guard is armed, and no stand-in in a `live` launch. */
 	egress?: { guard: EgressGuard; canary: EgressCanary; node: HeldNode | undefined }
 }
 
@@ -84,11 +96,21 @@ function isPrestoProbeNoise(msg: ConsoleMessage): boolean {
  *
  *  `fixedWindowSize: false` launches without the driver's fixed window size (`LaunchOptions`).
  *
- *  `liveNode: true` sends the Testnet node's host direct instead of holding the stand-in, and fails
- *  the close if the guard sees that host. Only a run that provides `liveLeg` may ask: elsewhere the
- *  launch would make a gate depend on the live node. */
+ *  `live: true` sends the Testnet node's host and the token list's host direct instead of holding
+ *  the stand-in, and fails the close if the guard sees either. Only a run that provides `liveLeg` may
+ *  ask: elsewhere the launch would make a gate depend on a live host.
+ *
+ *  `tokenList: "held"` boots the worker a second time over a stored signed list (`token-list.ts`),
+ *  before any profile exists, so the list's price ids and, in an artifact run, its defaults apply. */
 export async function launchExtension(
-	opts: { userDataDir?: string; waitForLiveness?: boolean; legal?: LegalSeed; fixedWindowSize?: boolean; liveNode?: true } = {},
+	opts: {
+		userDataDir?: string
+		waitForLiveness?: boolean
+		legal?: LegalSeed
+		fixedWindowSize?: boolean
+		live?: true
+		tokenList?: "held"
+	} = {},
 ): Promise<ExtensionContext> {
 	const { userDataDir, waitForLiveness = true, fixedWindowSize } = opts
 	const extensionPath = inject("extensionPath")
@@ -99,14 +121,20 @@ export async function launchExtension(
 
 	// HEADLESS=0 flips to windowed mode for local debugging.
 	const headless: boolean = process.env.HEADLESS !== "0"
-	const launch = (egress?: { guardPort: number; liveHost?: string }) =>
+	const launch = (egress?: { guardPort: number; liveHosts?: readonly string[] }) =>
 		launchBrowser({ extensionPath, userDataDir, headless, fixedWindowSize, egress })
 	const settle = (browser: Browser) =>
-		settleLaunchedExtension(browser, { freshProfile, waitForLiveness, legal: opts.legal ?? (freshProfile ? "current" : "keep") })
-	if (opts.liveNode && inject("liveLeg") !== true) {
-		throw new Error("a liveNode launch reaches the live Testnet node, which only an artifact run's live spec may do")
+		settleLaunchedExtension(browser, {
+			freshProfile,
+			waitForLiveness,
+			legal: opts.legal ?? (freshProfile ? "current" : "keep"),
+			holdTokenList: opts.tokenList === "held",
+		})
+	if (opts.live && inject("liveLeg") !== true) {
+		throw new Error("a live launch reaches the live Testnet node and list host, which only an artifact run's live spec may do")
 	}
-	if (guardArmed(inject("egressGuard"))) return launchBehindEgressGuard(launch, settle, opts.liveNode ? LIVE_NODE_HOST : undefined)
+	const liveHosts = opts.live ? [LIVE_NODE_HOST, LIVE_LIST_HOST] : undefined
+	if (guardArmed(inject("egressGuard"))) return launchBehindEgressGuard(launch, settle, liveHosts)
 
 	const { browser, close: closeBrowser } = await launch()
 	try {
@@ -143,14 +171,14 @@ function cspLatch(
 }
 
 async function launchBehindEgressGuard(
-	launch: (egress: { guardPort: number; liveHost?: string }) => Promise<LaunchedBrowser>,
+	launch: (egress: { guardPort: number; liveHosts?: readonly string[] }) => Promise<LaunchedBrowser>,
 	settle: (browser: Browser) => Promise<string>,
-	liveHost: string | undefined,
+	liveHosts: readonly string[] | undefined,
 ): Promise<ExtensionContext> {
 	const guarded = await ownGuardedLaunch({
 		label: launchLabel(),
 		traffic: browserTraffic,
-		liveHost,
+		liveHosts,
 		launch: async (egress) => {
 			const launched = await launch(egress)
 			return { value: launched.browser, close: launched.close }
@@ -158,7 +186,7 @@ async function launchBehindEgressGuard(
 		settle,
 		probeCanary: fireCanary,
 		wrapClose: (closeBrowser, browser, extensionId) => cspLatch(browser, extensionId, closeBrowser),
-		holdNode: liveHost === undefined ? (browser, extensionId) => holdNodeStub(browser, extensionId, TESTNET_RPC_URL) : undefined,
+		holdNode: liveHosts === undefined ? (browser, extensionId) => holdNodeStub(browser, extensionId, TESTNET_RPC_URL) : undefined,
 	})
 	const { value: browser, settled: extensionId, wrapped, guard, canary, node } = guarded
 	return {
@@ -198,7 +226,12 @@ async function fireCanary(browser: Browser, extensionId: string, url: string, re
  *  complete. Returns the extension id. */
 async function settleLaunchedExtension(
 	browser: Browser,
-	{ freshProfile, waitForLiveness, legal }: { freshProfile: boolean; waitForLiveness: boolean; legal: LegalSeed },
+	{
+		freshProfile,
+		waitForLiveness,
+		legal,
+		holdTokenList,
+	}: { freshProfile: boolean; waitForLiveness: boolean; legal: LegalSeed; holdTokenList: boolean },
 ): Promise<string> {
 	const extensionId = await discoverExtensionId(browser)
 
@@ -277,10 +310,37 @@ async function settleLaunchedExtension(
 		await chrome.storage.local.set({ "nulo:onboarding:completed": true })
 	})
 	if (legal !== "keep") await seedLegalAcceptance(blankPage, legal)
+	if (holdTokenList) blankPage = await rebootOverHeldList(browser, extensionId, blankPage)
 
 	await blankPage.close()
 
 	return extensionId
+}
+
+/**
+ * The worker reads its stored list once, at start, so the list is written and the worker stopped
+ * and woken again. Firefox ends its event page only while no extension page is open, so the scratch
+ * page closes first, and wakes it only on an add-on event: the popup, whose service clients connect,
+ * is what wakes it. The stored deadline keeps that boot from fetching.
+ */
+async function rebootOverHeldList(browser: Browser, extensionId: string, scratch: Page): Promise<Page> {
+	const { local, session } = await heldListStorage()
+	await scratch.evaluate(
+		async (l: Record<string, string>, s: Record<string, unknown>) => {
+			await chrome.storage.local.set(l)
+			await chrome.storage.session.set(s)
+		},
+		local,
+		session,
+	)
+	const baseline = await readLivenessBaseline(scratch)
+	await scratch.close()
+	await stopBackground({ browser, extensionId })
+	const next = await newPage(browser)
+	patchPagePolling(next)
+	await gotoExtensionPage(next, extensionUrl(extensionId, "/src/popup/index.html"))
+	await waitForWorkerLiveness(next, baseline)
+	return next
 }
 
 /** Put the acceptance record in the named state, from any extension page. The service reads storage
@@ -590,6 +650,10 @@ export const test = base.extend<{
 	 *  for tests that wipe profile/account state mid-flow (reset-profile,
 	 *  destructive recovery flows) so the wipe doesn't leak into siblings. */
 	registeredExtensionPerTest: ExtensionContext
+	/** `registeredExtension` over a held signed list, whose price ids price its tokens. */
+	listedExtension: ExtensionContext
+	/** `registeredExtensionPerTest` over a held signed list. */
+	listedExtensionPerTest: ExtensionContext
 	/** Registered extension + Local Network + dapp connected via @nulo/playground.
 	 *  File-scoped: shared across tests in the same file. Use `dappConnectedExtensionPerTest`
 	 *  for parameterized files where each case needs a clean session. */
@@ -683,6 +747,28 @@ export const test = base.extend<{
 		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
 		async ({}, use) => {
 			const ctx = await launchExtension()
+			await registerProfile(ctx)
+			await use(ctx)
+			await ctx.close()
+		},
+		{ scope: "test" },
+	],
+
+	listedExtension: [
+		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
+		async ({}, use) => {
+			const ctx = await launchExtension({ tokenList: "held" })
+			await registerProfile(ctx)
+			await use(ctx)
+			await ctx.close()
+		},
+		{ scope: "file" },
+	],
+
+	listedExtensionPerTest: [
+		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
+		async ({}, use) => {
+			const ctx = await launchExtension({ tokenList: "held" })
 			await registerProfile(ctx)
 			await use(ctx)
 			await ctx.close()

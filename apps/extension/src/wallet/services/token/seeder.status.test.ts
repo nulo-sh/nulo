@@ -55,7 +55,7 @@ describe("seed status — derivation", () => {
 		expect(deriveSeedStatus({ attempts: 0, outcome: "deleted" }, VERSION, false)).toBeUndefined()
 	})
 
-	test("getStatus carries the compiled-in literals; a seeded default stays listed, a deleted one does not", async () => {
+	test("getStatus carries the list's literals; a seeded default stays listed, a deleted one does not", async () => {
 		const { seeder } = makeSeeder()
 		const literals = { chainId: CHAIN_ID, contract: CONTRACT, symbol: "cUSD", displayName: "Compressed USD" }
 		expect(await entriesOf(seeder)).toEqual([{ ...literals, status: "pending" }])

@@ -16,7 +16,7 @@ import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { AccountService } from "@/wallet/services/account/service"
-import { svc } from "@/wallet/services/composition-harness"
+import { svc, tokenListStub } from "@/wallet/services/composition-harness"
 import { NetworkService } from "@/wallet/services/network/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import { ProfileService } from "@/wallet/services/profile/service"
@@ -71,6 +71,7 @@ async function makeHarness() {
 	collection.add(svc(AccountService.name, { onAccountAdded: new EventHandler() }))
 	collection.add(svc(TaskService.name, { startNewTask: () => ({ complete() {}, fail() {} }) }))
 	collection.add(svc(OperationJournalService.name, journal))
+	collection.add(tokenListStub())
 	const tokenService = new TokenService(logger, api)
 	collection.add(tokenService)
 	await collection.start()

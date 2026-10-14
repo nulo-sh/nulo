@@ -17,6 +17,7 @@ import { FpcService } from "@/wallet/services/fpc/service"
 import { AccessLevel, DappSessionService } from "@/wallet/services/dapp-session/service"
 import { ExecutionService } from "@/wallet/services/execution/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import { TokenService } from "@/wallet/services/token/service"
 import { WindowManager } from "@/wallet/services/window-manager/window-manager"
 import { DappInteractionService } from "./service"
 import type { DappInteraction } from "./spec"
@@ -76,6 +77,7 @@ async function makeHarness() {
 	collection.add(svc(DappSessionService.name, { tryGetDappSession: async () => SESSION }))
 	collection.add(svc(ExecutionService.name, { executeOperations: vi.fn(async () => []) }))
 	collection.add(svc(FpcService.name, {}))
+	collection.add(svc(TokenService.name, { getVerifiedDefaults: async () => [] }))
 	collection.add(journal)
 	collection.add(dapp)
 	await collection.start()

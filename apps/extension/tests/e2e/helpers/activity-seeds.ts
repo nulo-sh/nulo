@@ -4,21 +4,20 @@
  * on demand.
  */
 import type { Page } from "puppeteer"
-import { getPriceMapEntry } from "@/wallet/services/price/price-map"
-import { seedsForChain } from "@/wallet/services/token/default-tokens"
+import type { TokenListEntry } from "@nulo/token-list"
 import { captureSoleProfileId, getAccountAddress } from "../fixtures/helpers"
+import { E2E_LIST_TOKENS, heldListEntries } from "../fixtures/token-list"
 
-/** The active profile, network and account, and the chain's first default token the price map
- *  prices. */
+/** The active profile, network and account, and the token the seeded rows name. */
 export type ActivityScope = {
 	profileId: string
 	networkId: string
 	chainId: number
 	account: string
-	token: { contract: string; name: string; symbol: string; decimals: number }
+	token: { contract: string; name: string; symbol: string; decimals: number; priceId?: string }
 }
 
-/** The scope without its token, for a chain with no default token seeds (the local one). */
+/** The scope without its token, for a spec that names its own token. */
 export async function readScopeIdentity(page: Page): Promise<Omit<ActivityScope, "token">> {
 	const profileId = await captureSoleProfileId(page)
 	const account = await getAccountAddress(page)
@@ -31,20 +30,27 @@ export async function readScopeIdentity(page: Page): Promise<Omit<ActivityScope,
 	return { profileId, networkId, chainId, account }
 }
 
-export async function readActivityScope(page: Page): Promise<ActivityScope> {
+/**
+ * `priced` names the chain's first priced entry of the list a listed launch holds, when it has one;
+ * otherwise, and for a spec that prices nothing, a fixture token, so no spec breaks on a valid list.
+ */
+export async function readActivityScope(page: Page, { priced = false } = {}): Promise<ActivityScope> {
 	const identity = await readScopeIdentity(page)
-	const { chainId } = identity
-	const seed = seedsForChain(chainId).find((s) => getPriceMapEntry(chainId, s.contract))
-	if (!seed) throw new Error(`the price map prices no default token seed on chain ${chainId}`)
-	const token = { contract: seed.contract, name: seed.displayName, symbol: seed.expectedSymbol, decimals: seed.expectedDecimals }
-	return { ...identity, token }
+	const listed = priced ? heldListEntries().find((e) => e.chainId === identity.chainId && e.priceId !== undefined) : undefined
+	return { ...identity, token: tokenOf(listed ?? E2E_LIST_TOKENS[0]) }
 }
 
-/** The chain's next default token: a second contract, for specs that tell two tokens' rows apart. */
+const tokenOf = (entry: TokenListEntry): ActivityScope["token"] => ({
+	contract: entry.address,
+	name: entry.name,
+	symbol: entry.symbol,
+	decimals: entry.decimals,
+	priceId: entry.priceId,
+})
+
+/** A second contract, for specs that tell two tokens' rows apart. */
 export function secondToken(scope: ActivityScope): ActivityScope["token"] {
-	const seed = seedsForChain(scope.chainId).find((s) => s.contract !== scope.token.contract)
-	if (!seed) throw new Error(`chain ${scope.chainId} has a single default token seed`)
-	return { contract: seed.contract, name: seed.displayName, symbol: seed.expectedSymbol, decimals: seed.expectedDecimals }
+	return tokenOf(E2E_LIST_TOKENS.find((e) => e.address !== scope.token.contract) ?? E2E_LIST_TOKENS[1])
 }
 
 export type TransferSeed = {

@@ -227,6 +227,10 @@ onBeforeUnmount(() => {
 				<AddressInput
 					v-model="searchTerm"
 					:autofocus="justCleared"
+					role="combobox"
+					:ariaLabelledby="labelId"
+					:ariaExpanded="showSuggestions"
+					ariaAutocomplete="list"
 					:ariaActivedescendant="activeId"
 					:ariaControls="showSuggestions ? listId : undefined"
 					@focus="handleSearchFocus"

@@ -9,6 +9,7 @@
 import { randomBytes } from "node:crypto"
 import { type Server, type Socket, createServer } from "node:net"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import { TOKEN_LIST_URL } from "@/wallet/services/token-list/spec"
 import { reservePort } from "../../../scripts/e2e/resolve-ports"
 import { REPO_ROOT } from "../lockfile"
 import { PortClaimConflict, claimPorts, registeredPorts, releasePorts } from "../port-registry"
@@ -57,6 +58,8 @@ export const MALFORMED = "<malformed>"
  * dRPC's shared load balancer serves it. The exception is URL routing, not a network boundary.
  */
 export const LIVE_NODE_HOST = new URL(TESTNET_RPC_URL).hostname
+/** The published token list's host, which the live launch also sends direct. */
+export const LIVE_LIST_HOST = new URL(TOKEN_LIST_URL).hostname
 
 /** Wallet and spec hosts the smoke build tries and the guard refuses, each with why it is tried. */
 export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
@@ -65,6 +68,10 @@ export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
 		"the default Testnet node: the background reads its status at popup start, the offscreen PXE on Home. The launch's stand-in answers it once settled; what reaches the guard is a request from before that, from a spec's interception swap, or one the interception could not see",
 	],
 	["api.coingecko.com", "the price fetch on profile create, unlock, popup open with an incomplete cache, and every 3 min"],
+	[
+		LIVE_LIST_HOST,
+		"the signed token list, fetched by a release build when the worker boots with the Terms accepted (a background restart) and on its daily alarm",
+	],
 	[EGRESS_CANARY_HOST, "the per-launch canary, fired from an extension page"],
 	[EGRESS_PROBE_HOST, "the control spec's background probe"],
 	[EGRESS_LINK_LOCAL_HOST, "the control spec's link-local probe"],
@@ -278,16 +285,15 @@ const CANARY_PROBE_BUDGET_MS = 5_000
 export function egressFailure(
 	{ attempts, overflowed, canaryConnections }: { attempts: readonly EgressAttempt[]; overflowed: boolean; canaryConnections: number },
 	traffic: { browser: string; ownHosts: ReadonlyMap<string, string> },
-	liveHost?: string,
+	liveHosts: readonly string[] = [],
 ): string | undefined {
 	if (canaryConnections > 0) {
 		return `${canaryConnections} connection(s) reached ${EGRESS_CANARY_HOST} directly: ${traffic.browser}'s proxy routing did not hold`
 	}
 	if (overflowed) return `more than ${MAX_DISTINCT} distinct hosts were tried; the record stopped counting new ones`
-	// Every node request of a live launch goes direct; one at the guard means the route held only in part.
-	if (liveHost !== undefined && attempts.some(({ host }) => host === liveHost)) {
-		return `${traffic.browser} sent ${liveHost} to the guard: this launch's direct route to it did not hold`
-	}
+	// Every live-host request of a live launch goes direct; one at the guard means the route held only in part.
+	const leaked = attempts.find(({ host }) => liveHosts.includes(host))
+	if (leaked) return `${traffic.browser} sent ${leaked.host} to the guard: this launch's direct route to it did not hold`
 	const hosts = undeclared(attempts, traffic.ownHosts)
 	if (hosts.length === 0) return undefined
 	return [
@@ -310,14 +316,14 @@ export async function closeAfterEgressCheck(
 		node,
 		label,
 		traffic,
-		liveHost,
+		liveHosts,
 	}: {
 		guard: EgressGuard
 		canary: EgressCanary
 		node?: HeldNode
 		label: string
 		traffic: Parameters<typeof egressFailure>[1]
-		liveHost?: string
+		liveHosts?: readonly string[]
 	},
 ): Promise<void> {
 	const nodeFailures = node ? await node.failures().catch((err) => [`its interception could not be read: ${String(err)}`]) : []
@@ -333,7 +339,7 @@ export async function closeAfterEgressCheck(
 		egressFailure(
 			{ attempts: guard.attempts(), overflowed: guard.overflowed(), canaryConnections: canary.connections() },
 			traffic,
-			liveHost,
+			liveHosts,
 		),
 		nodeFailures.length ? `the stand-in node's interception reported: ${nodeFailures.join("; ")}` : undefined,
 	]
@@ -350,9 +356,9 @@ export interface GuardedLaunchDeps<B, S, L extends { close(): Promise<void> }> {
 	/** Names the launch in a failure: the test file, and the test when there is one. */
 	label: string
 	traffic: Parameters<typeof egressFailure>[1]
-	/** The one outside host this launch sends direct; the guard recording it fails the close. */
-	liveHost?: string
-	launch(egress: { guardPort: number; liveHost?: string }): Promise<{ value: B; close(): Promise<void> }>
+	/** The outside hosts this launch sends direct; the guard recording one fails the close. */
+	liveHosts?: readonly string[]
+	launch(egress: { guardPort: number; liveHosts?: readonly string[] }): Promise<{ value: B; close(): Promise<void> }>
 	settle(value: B): Promise<S>
 	/** Fires a request for `url` from an extension page and returns once `recorded()` holds or the budget passes. */
 	probeCanary(value: B, settled: S, url: string, recorded: () => boolean, budgetMs: number): Promise<void>
@@ -389,7 +395,7 @@ export async function ownGuardedLaunch<B, S, L extends { close(): Promise<void> 
 	let launched: { value: B; close(): Promise<void> } | undefined
 	try {
 		canary = await (deps.startCanary ?? startEgressCanary)()
-		launched = await deps.launch({ guardPort: guard.port, liveHost: deps.liveHost })
+		launched = await deps.launch({ guardPort: guard.port, liveHosts: deps.liveHosts })
 		const settled = await deps.settle(launched.value)
 		const canaryPort = canary.port
 		// The port as well as the name: another launch's browser can still be sending its own canary here.
@@ -401,7 +407,7 @@ export async function ownGuardedLaunch<B, S, L extends { close(): Promise<void> 
 		}
 		node = await deps.holdNode?.(launched.value, settled)
 		const wrapped = deps.wrapClose(launched.close, launched.value, settled)
-		const checked = { guard, canary, node, label: deps.label, traffic: deps.traffic, liveHost: deps.liveHost }
+		const checked = { guard, canary, node, label: deps.label, traffic: deps.traffic, liveHosts: deps.liveHosts }
 		let closed = false
 		const close = () => {
 			if (closed) return wrapped.close()
