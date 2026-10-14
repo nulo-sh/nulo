@@ -6,8 +6,8 @@
  * scope but `@aztec/viem` is locked at all. Runtime resolution must agree: every consumer, and
  * everything that must share its generation, reaches one physical copy of each Aztec package.
  * A package's exact-pinned Aztec PEER only re-binds to the workspace line when the consuming
- * workspace DECLARES that package; otherwise it silently nests its own copy, which is why every peer
- * is checked from every consumer rather than a sample.
+ * workspace DECLARES that package at the pinned version; otherwise it silently nests its own copy,
+ * which is why every peer is checked from every consumer rather than a sample.
  *
  * One generation in the prover path is load-bearing: upstream's `getVKIndex` discriminates with
  * `instanceof` and silently mis-resolves when two copies of

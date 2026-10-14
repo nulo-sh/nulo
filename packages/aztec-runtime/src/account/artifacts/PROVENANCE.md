@@ -18,8 +18,9 @@ regime's bytes.
 - **Contract class id of the loaded artifact**:
   `0x2a5784fa8315d0150f36a1fba87b41cdb9cd8ebea611ceaa80c7a787e83efa60`
 - **Against the previous entry**: the same functions, parameters, attributes and structs as the
-  `nulo-v6` bytes; only the bytecode (recompiled against the 6.0.0-rc.3 PXE oracle interface) and
-  `aztec_version` differ.
+  `nulo-v6` bytes. What differs: the bytecode (recompiled against the 6.0.0-rc.3 PXE oracle
+  interface), the constructor's verification key, the debug metadata (`debug_symbols`, `file_map`)
+  and `aztec_version`.
 - **Previous entries**: the `nulo-v6` bytes (`@aztec-labs/accounts@6.0.0-rc.1`, sha256
   `4b4933a146a80872b184f47af22cd8ba3faa00f810d7a26217490c9d13507f94`) and the `nulo-v5` bytes
   (`@aztec/accounts@5.0.1`) are not vendored here; their `REGIMES` entries in `../address-freeze.ts`

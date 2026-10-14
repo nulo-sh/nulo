@@ -10,10 +10,9 @@ import { FROZEN_DESCRIPTOR_DIGEST, NULO_DESCRIPTOR_VERSION } from "./instantiati
  * source modules, the record, AND this file, in one reviewed, signed, branch-protected diff.
  * Editing or deleting a historical entry reds this test: never "fix" it by re-pinning an entry; a
  * rotation appends a new one, on the owner's recorded decision (CLAUDE.md "Account-address
- * freeze"). (The nulo-v5 baseline was redefined in place inside the pre-launch carve-out WINDOW —
- * KDF v1→v2 (`implementations-plan/key-model-v2/`) and the passkey-branch spec extension
- * (`implementations-plan/key-model-v2-hardening/`) — owner-ratified both times; that window closed
- * at V5's first store build, and nulo-v6's at its own.)
+ * freeze"). (The nulo-v5 baseline was redefined in place twice inside the pre-launch carve-out
+ * window `address-freeze.ts` describes, owner-ratified both times; that window closed at V5's
+ * first store build, and nulo-v6's closes at its own.)
  */
 const EXPECTED_KDF_DIGEST = "29eca1a04b7acde8bb95905a2ac630b29f1edcf04d584274e90fd9f81736166d"
 

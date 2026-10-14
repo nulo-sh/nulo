@@ -183,9 +183,11 @@ Then Branch A's delivery gates.
   `VK index for [object Object] not found in VK tree` — thrown in-wallet BEFORE any `/prove`
   request, so the presto log is silent and it looks like a proving failure that never
   reached the prover. Any package that exact-pins its own Aztec deps (the Presto SDK)
-  must move WITH the line; holding it is not an option. Packages that declare exact-version
-  PEERS (private-fee-juice) or nothing at all (standards) re-bind to the workspace line and are
-  safe to hold. Gate: `scripts/aztec-hold-residue-check.ts`.
+  must move WITH the line; holding it is not an option. Neither can a package whose Aztec PEERS
+  are pinned at another version (private-fee-juice): the isolated linker nests that version's
+  generation beneath it. Only a package that declares no Aztec dependency (standards) is safe to
+  hold. Gate: `scripts/aztec-hold-residue-check.ts`, which keeps one line per numbering
+  (`@aztec-labs/*`, the `@aztec-foundation/*` toolchain, `aztec-standards`).
 - **Upstream recompiles `@aztec-labs/accounts` artifacts on toolchain changes** (5.2.0 moved
   SchnorrAccount's class id, −3,892 bytes). Production is immune — addresses come from the
   vendored frozen artifact — but any E2E fixture that builds accounts through
