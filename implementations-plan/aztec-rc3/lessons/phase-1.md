@@ -1,0 +1,13 @@
+# Phase 1: the line
+
+## Pre-install work (2026-10-14, before the age gate)
+
+- `git merge origin/dev` (a4e148b2: #415, #417) before P1; no dependency file moved.
+- Pins: `@aztec-labs/*` → `6.0.0-rc.3`; `bb.js`, `l1-artifacts`, `noir-acvm_js`, `noir-noirc_abi` → `6.0.0-rc.6`; `aztec-standards`, `@alejoamiras/presto` → `6.0.0-rc.3`; `private-fee-juice` stays `6.0.0-rc.1` until P5. Every `@aztec-labs/*@6.0.0-rc.3` depends on foundation `6.0.0-rc.6` (`npm view … dependencies`).
+- Patches, checked read-only against `npm pack` tarballs (`git apply --check`): the PXE patch applies to rc.3 unchanged (`dest/pxe.js` blob `26fe161a…` in rc.1 and rc.3, byte-identical); both noir patches apply to rc.6, their `index` lines rewritten to rc.6's blob hashes (`38447b31…`, `d5a08fe2…`), as `bun patch --commit` would write them.
+- Excludes committed with the pins: `@aztec-foundation/aztec-standards` (published 2026-10-13T19:04:52Z), `@alejoamiras/presto` (2026-10-14T16:54:13Z). Every other locked Aztec name clears 2026-10-15 12:21Z.
+- CLI toolchain lock: `lock.sh 6.0.0-rc.3` (npm 11.19.0), 1118 packages. Outside the two Aztec scopes the diff is minor/patch moves only, each older than the 7-day gate (newest: `sonic-boom@5.0.2`, 2026-10-07): `@aws-sdk/client-s3` 3.1145→3.1147, `@babel/{helpers,traverse}`, `lmdb` + its seven `@lmdb/*` binaries 3.5.6→3.5.7, `@napi-rs/wasm-runtime`, `@types/node`, `baseline-browser-mapping`, `caniuse-lite`, `cjs-module-lexer` 2.2.1→2.3.0, `electron-to-chromium`, `fast-copy`, `idb`, `pino-pretty` 13.1.3→13.2.0, `sonic-boom` 4.2.1→5.0.2 (pino-pretty's). Install-script set unchanged (`@parcel/watcher bcrypto leveldown lmdb msgpackr-extract protobufjs unrs-resolver`); every entry a registry tarball with sha512.
+- Installer pins: `https://install.aztec-labs.com/6.0.0-rc.3/install` differs from rc.1's only in `VERSION=` (sha256 `f7f2349e…55d6`); `versions` byte-identical (`bd07b479…d5f9`: noir 1.0.0-rc.3, foundry 1.4.1, node 24.12.0), so the noir and Foundry lines stay. rc.1's two files still hash to the pinned values.
+- Notices: `aztec-node` LICENSE at `v6.0.0-rc.3`, `aztec-packages` LICENSE and `barretenberg/LICENSE` at `v6.0.0-rc.6` are byte-identical to `texts/`; noir submodule at `v6.0.0-rc.6` is `5a7ee9bf…`, as at rc.1; `@aztec-labs/sqlite3mc-wasm` rc.3 differs from rc.1 only in its `version` (same README pin, same wasm); `l1-contracts/scripts/network-defaults.json` in `l1-artifacts@6.0.0-rc.6` equals the file at the tag; bb.js still declares MIT. `reviewedVersion` follows each package's line.
+- Residue script: `LABS_LINE`, `FOUNDATION_LINE`, `STANDARDS_LINE`, `lineOf(name)`.
+- bb.js rc.6 still ships `dest/browser/barretenberg_wasm/fetch_code/browser/index.js`, byte-identical to rc.1's.
