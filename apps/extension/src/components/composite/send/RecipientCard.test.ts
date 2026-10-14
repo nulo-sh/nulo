@@ -4,7 +4,7 @@ import RecipientCard from "./RecipientCard.vue"
 
 const STUBS = {
 	Flex: { template: "<div><slot /></div>" },
-	Text: { template: "<span><slot /></span>", props: ["size", "weight", "color", "noWrap", "mono", "selectable"] },
+	Text: { template: "<span><slot /></span>", props: ["color", "noWrap", "selectable"] },
 	Icon: { template: '<i data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
 	AccountAvatar: { template: '<div data-testid="stub-avatar" :data-name="name" />', props: ["name", "address", "size"] },
 }

@@ -37,7 +37,7 @@ on divergence — modeled on the repo's other generated-artifact pins). Per-them
 ## Type roles
 
 A face, letter spacing or upper case comes only from a **type role**: one of the 28 records of
-`typeRoles` in the contract, each the board's row for one job (`label`, `data`, `body`, …). Each
+`typeRoles` in the contract, each the type for one job (`label`, `data`, `body`, …). Each
 renders one generated class, `.type--<role>`, which sets its family, weight, tracking, case and
 figures, and its size unless the role leaves the size to the element (`siteSizedTypeRoles`). No
 role sets line height. The floors are `MIN_TEXT_PX` (10) and `MIN_MONO_PX` (11).
@@ -47,8 +47,47 @@ global;` as the first line of the element's own single-class module rule (which 
 property the role sets, except a site-sized role's `font-size`); or a static `type--data` class on
 the element. A role class is one class, (0,1,0), so a plain module class on the same element must
 not set a role property: which of two equal selectors wins depends on stylesheet load order.
-`src/type-roles.contract.test.ts` pins the records to the signed board; the extension's
-`type-role-ban.test.ts` refuses a face, tracking or case picked anywhere else.
+`src/type-roles.contract.test.ts` pins the records to their signed values; the extension's
+`type-role-ban.test.ts` refuses a face, tracking or case picked anywhere else, and any `size`,
+`weight`, `mono` or `tabular` on a `<Text>`.
+
+Pick a role by the job the text does, from the last column. G is Space Grotesk (`--font-headline`),
+I Inter (`--font-body`), M JetBrains Mono (`--font-mono`). "Site" leaves the size to the element,
+which sets it in its own rule (at least the floors). Tracking is in em. A dagger marks tabular
+figures. `segment`'s selected item takes weight 700 through the component's own compound rule.
+
+| Role | Face | Size | Weight | Case | Tracking | For |
+|---|---|---|---|---|---|---|
+| `title-hero` | G | site | 700 | upper | -0.04 | Tab hero titles, wordmarks, the unlock and register headings |
+| `amount-hero` † | G | site | 700 | none | -0.04 | Home balance, the Send amount and its review |
+| `amount-total` | M | site | 500 | none | -0.02 | The Holdings total |
+| `title-page` | G | 13 | 700 | upper | 0.12 | Sub-page, popup and sheet titles; loading and empty-state titles |
+| `label-section` | G | 11 | 700 | upper | 0.1 | Section labels, Settings groups, pre-titles, date groups, toast titles |
+| `label` | G | 10 | 700 | upper | 0.1 | Field and key labels, toggle labels, inline actions, table heads |
+| `row-title` | G | site | 700 | none | -0.02 | Token, activity and Settings row titles; card and status titles |
+| `caption` | I | 11 | 400 | none | normal | A row's secondary line, Settings descriptions |
+| `name` | I | site | 600 | none | normal | Account, contact, profile and fee method names |
+| `name-tag` | I | 11 | 600 | upper | 0.04 | The account name in the header and the windows' identity strip |
+| `body` | I | 12 | 400 | none | normal | Sentences: help, warnings, errors, empty states, tooltips |
+| `button` | G | 14 | 700 | upper | 0.2 | CTA buttons at every size, Home's actions |
+| `button-md` | G | 13 | 700 | upper | 0.03 | `primary` and `primary_outline` buttons |
+| `nav` | G | 10 | 500 | upper | 0.05 | Bottom-nav labels |
+| `segment` | G | 10 | 500 | upper | 0.06 | Segmented controls (the Send type toggle, onboarding method tabs) |
+| `tag` | G | 10 | 600 | upper | 0.08 | Chips and badges, the network and lock chips, fee priority |
+| `tag-name` | G | 10 | 700 | upper | 0.08 | The publish strip's name cell |
+| `brand` | G | 10 | 700 | none | 0.2 | "NULO" in the identity strip |
+| `input-data` | M | 14 | 400 | none | normal | Typed text in mono fields: addresses, the dust threshold, token search |
+| `data` | M | 12 | 500 | none | normal | Addresses, hashes, ids, function names, inline amounts and fees |
+| `data-lead` | M | 13 | 600 | none | normal | The address or hostname a screen is about |
+| `amount-row` | M | 14 | 500 | none | normal | Token and activity row amounts |
+| `amount-detail` † | G | 24 | 700 | none | -0.02 | The receipt pages' amount |
+| `fiat` | M | site | 400 | none | normal | Every dollar value |
+| `time` | M | 11 | 400 | none | normal | Dates and times |
+| `meta` | M | 11 | 400 | none | normal | Small hashes, symbols beside amounts, counts, hints, conversions |
+| `value` | I | 12 | 600 | none | normal | Values in key/value rows, Settings trailing values, banner titles |
+| `input` | I | 15 | 500 | none | normal | Text a person types into `Input` |
+
+Avatar initials take no role: `AccountAvatar` sizes them from their box.
 
 ## Consumers compile the source
 

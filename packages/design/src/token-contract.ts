@@ -83,10 +83,10 @@ export const tokenGroups = {
 	},
 } as const
 
-/** Font-size scale (px). Drives `.fz--N` in the generated `utilities.css`. */
+/** Font-size scale (px): a role sets a step of it, and so does a module rule outside the guard's keyed exceptions. */
 export const fontSizes = [8, 10, 11, 12, 13, 14, 15, 16, 18, 20, 24, 26, 28, 32, 36, 38, 40] as const
 
-/** Font weights. Matches `.fw--N`. */
+/** Font-weight scale: every weight a role sets is a step of it. */
 export const fontWeights = [400, 500, 600, 700] as const
 
 /** Line-height scale: key is the `N` in `.lh--N`; value is the unitless multiplier. */
@@ -104,7 +104,7 @@ export const lineHeights = {
 export type TypeRoleSpec = {
 	/** A family token from `tokenGroups.fonts`. */
 	readonly family: (typeof tokenGroups.fonts)[keyof typeof tokenGroups.fonts]
-	/** A `fontSizes` step, or `null` when the element keeps its own size (the board's "size per slot"). */
+	/** A `fontSizes` step, or `null` when the element keeps its own size. */
 	readonly size: (typeof fontSizes)[number] | null
 	readonly weight: (typeof fontWeights)[number]
 	/** The weight of the selected item, applied by the component's own compound rule. */

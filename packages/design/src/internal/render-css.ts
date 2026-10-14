@@ -3,8 +3,6 @@ import {
 	flexDirections,
 	flexGaps,
 	flexWraps,
-	fontSizes,
-	fontWeights,
 	lineHeights,
 	textAligns,
 	textColors,
@@ -42,8 +40,6 @@ function typeRoleDeclarations(spec: TypeRoleSpec): string[] {
 export function renderUtilitiesCss(): string {
 	const blocks: string[] = [HEADER]
 
-	for (const size of fontSizes) blocks.push(rule(`.fz--${size}`, `font-size: ${size}px;`))
-	for (const weight of fontWeights) blocks.push(rule(`.fw--${weight}`, `font-weight: ${weight};`))
 	for (const [key, value] of Object.entries(lineHeights)) blocks.push(rule(`.lh--${key}`, `line-height: ${value};`))
 	for (const [name, spec] of Object.entries(typeRoles)) blocks.push(rule(`.type--${name}`, ...typeRoleDeclarations(spec)))
 	for (const [key, value] of Object.entries(textAligns)) blocks.push(rule(`.ta--${key}`, `text-align: ${value};`))

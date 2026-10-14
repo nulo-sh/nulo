@@ -13,7 +13,7 @@ import RecipientField from "./RecipientField.vue"
 
 const STUBS = {
 	Flex: { template: "<div><slot /></div>" },
-	Text: { template: "<span><slot /></span>", props: ["size", "weight", "color", "noWrap", "align", "mono", "selectable"] },
+	Text: { template: "<span><slot /></span>", props: ["color", "noWrap", "align", "selectable"] },
 	Icon: { template: '<i data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color", "scale"] },
 	AddressInput: {
 		template: `<div class="stub-input"><input :value="modelValue" :aria-activedescendant="ariaActivedescendant" :aria-controls="ariaControls" @focus="$emit('focus')" @blur="$emit('blur')" /><slot name="suffix" /></div>`,
