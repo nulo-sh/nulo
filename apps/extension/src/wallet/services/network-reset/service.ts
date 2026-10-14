@@ -1,4 +1,4 @@
-import { ImportedAccountUnusableError, RecoveryModeError } from "@nulo/extension-messaging/errors"
+import { ImportedAccountUnusableError, RecoveryModeError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { validateParams } from "@nulo/extension-messaging/zod"
 import type { BrowserApi, StorageChanges } from "@nulo/wallet-core/ports"
@@ -439,8 +439,12 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 			accounts,
 		}
 		await this.profiles.assertRunFence(fence)
-		await this.networks.commitResetCapture(profileId, row.id, { chainId: fromChainId, primary: view.probedEndpoint }, () =>
+		const check = { chainId: fromChainId, toChainId, primary: view.probedEndpoint }
+		await this.networks.commitResetCapture(profileId, row.id, check, () =>
 			this.staleNetworks.withLock(profileId, async () => {
+				// Synchronous: a deletion holds the profile lock while it waits on this one to clear the
+				// journal, so a deletion that began now must see no journal written after its clear.
+				if (!this.profiles.isFenceLive(fence)) throw new SessionEndedError()
 				if (await this.staleNetworks.getJournal(profileId))
 					throw new Error(`${ERR_RESET_IN_PROGRESS}: a reset journal already exists`)
 				await this.staleNetworks.setJournalLocked(journal)

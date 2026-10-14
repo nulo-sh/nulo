@@ -898,13 +898,14 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 
 	/**
 	 * Runs `write` under the network lock while the row is still on `chainId`, not being deleted,
-	 * and, when `primary` is given, its primary endpoint still has that id and URL. A reset's
-	 * capture commits its journal here, so a change that landed after the popup's view refuses.
+	 * no other row holds `toChainId`, and, when `primary` is given, its primary endpoint still has
+	 * that id and URL. A reset's capture commits its journal here, so a change that landed after the
+	 * popup's view refuses; once the journal exists, `addNetwork` refuses `toChainId` itself.
 	 */
 	public async commitResetCapture(
 		profileId: string,
 		networkId: string,
-		check: { chainId: number; primary: ProbedEndpoint | null },
+		check: { chainId: number; toChainId: number; primary: ProbedEndpoint | null },
 		write: () => Promise<void>,
 	): Promise<void> {
 		await this.ensureInitialized()
@@ -912,6 +913,10 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			const row = await this.storage.get(networkId)
 			if (row?.profileId !== profileId || row.chainId !== check.chainId || this.deletingNetworks.has(networkId)) {
 				throw notResettable("the network changed before the reset began")
+			}
+			const rows = await this.storage.getValues()
+			if (rows.some((n) => n.profileId === profileId && n.id !== networkId && n.chainId === check.toChainId)) {
+				throw notResettable("another network holds the new chain")
 			}
 			const primary = findPrimaryEndpoint(row)
 			if (check.primary && (primary?.id !== check.primary.id || primary.rpcUrl !== check.primary.url)) {
@@ -1017,16 +1022,13 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	 *     PXE resets, otherwise SW services could read against a fresh
 	 *     empty IDB and get inconsistent state.
 	 *
-	 * Subscriber failures are logged but don't abort the cascade — chain
-	 * cleanup is best-effort across boundaries. PXE clear is similarly
-	 * best-effort. The Network row is deleted by the caller (`deleteNetwork`)
-	 * only after this method resolves.
+	 * Every step runs even when an earlier one fails, and any failure then
+	 * rejects the purge, so no caller treats a partial purge as complete. The
+	 * Network row is deleted by the caller (`deleteNetwork`) only after this
+	 * method resolves.
 	 */
 	public async purgeChain(profileId: string, chainId: number, networkId: string): Promise<void> {
-		// FAIL-FAST: run every step best-effort so a
-		// single failure doesn't strand the others, but PROPAGATE if ANY failed —
-		// the deletion coordinator must keep the tombstone + retry (idempotent), not
-		// treat a swallowed subscriber/PXE failure as "chain erased".
+		// The deletion coordinator keeps its tombstone and retries (idempotent) on a rejection.
 		const errors: unknown[] = []
 		for (const subscriber of this.chainPurgeSubscribers) {
 			try {

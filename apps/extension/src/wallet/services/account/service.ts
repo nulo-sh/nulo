@@ -922,7 +922,16 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 
 	public async backup(): Promise<Account[]> {
 		const profile = await requireActiveProfile(this.profileService)
+		await this.refuseDuringReset(profile.id)
 		return this.rowsOfProfile(profile.id)
+	}
+
+	/** The journal is the only copy of the accounts a reset is moving, so a full backup refuses
+	 *  while one exists, before and after its reads. */
+	private async refuseDuringReset(profileId: string): Promise<void> {
+		if (await this.staleNetworks.getJournal(profileId)) {
+			throw new Error(`${ERR_RESET_PENDING}: Finish the network reset before making a full backup.`)
+		}
 	}
 
 	private async rowsOfProfile(profileId: string): Promise<Account[]> {
@@ -1012,15 +1021,13 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	public async exportFullBackupKeys(fence: RunFence, password: string): Promise<FullBackupKeys> {
 		await this.ensureInitialized()
 		await this.profileService.assertRunFence(fence)
-		// The journal is the only copy of the accounts a reset is moving.
-		if (await this.staleNetworks.getJournal(fence.profileId)) {
-			throw new Error(`${ERR_RESET_PENDING}: Finish the network reset before making a full backup.`)
-		}
+		await this.refuseDuringReset(fence.profileId)
 		const { masterKey, entropy, sourceDek, transferKey } = await this.profileService.openBackupTransfer(fence.profileId, password)
 		try {
 			const accounts = await this.rowsOfProfile(fence.profileId)
 			const stored = await this.importedKeys.backup(fence.profileId)
 			const resealed = sourceDek ? await this.resealImportedKeys(stored, sourceDek, transferKey) : { rows: stored, unopened: 0 }
+			await this.refuseDuringReset(fence.profileId)
 			await this.profileService.assertRunFence(fence)
 			return {
 				masterKey,
@@ -1091,6 +1098,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	public async backupImportedKeys(): Promise<ImportedAccountKey[]> {
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
+		await this.refuseDuringReset(profile.id)
 		return this.importedKeys.backup(profile.id)
 	}
 

@@ -91,6 +91,8 @@ async function harness(opts: { gate?: Gate; recovery?: () => boolean } = {}) {
 			assertRunFence: async (fence: { session: number }) => {
 				if (fence.session !== session) throw new SessionEndedError()
 			},
+			isFenceLive: (fence: { session: number; profileId: string; epoch: number }) =>
+				fence.session === session && deletion.isCurrent(fence.profileId, fence.epoch),
 			isRecoveryMode: () => opts.recovery?.() ?? false,
 			getProfileSecret: async () => new Fr(42n),
 			getProfileDek: async () => {
@@ -153,6 +155,7 @@ async function harness(opts: { gate?: Gate; recovery?: () => boolean } = {}) {
 		handedDeks,
 		events,
 		settled,
+		deletion,
 		endSession: () => {
 			session++
 		},
@@ -754,6 +757,34 @@ describe("NetworkResetService — resume and forged journals", () => {
 		gate2.release()
 		expect((await done).failed).toBe(true)
 		expect(await h2.repo.getJournal("p1")).toBeUndefined()
+	})
+
+	test("a deletion that begins before the journal is written leaves no journal and purges nothing", async () => {
+		const h = await harness()
+		await staleTestnet(h)
+		const commit = h.network.commitResetCapture.bind(h.network)
+		vi.spyOn(h.network, "commitResetCapture").mockImplementation(async (...args) => {
+			h.deletion.beginDeletion("p1")
+			return commit(...args)
+		})
+		await expect(startReset(h)).rejects.toBeInstanceOf(SessionEndedError)
+		expect(await h.repo.getJournal("p1")).toBeUndefined()
+		expect(await accountsOn(h, OLD)).toHaveLength(4)
+		expect(h.pxe).not.toHaveBeenCalled()
+	})
+
+	test("a network added on the new chain during capture refuses the reset before anything is purged", async () => {
+		const h = await harness()
+		await staleTestnet(h)
+		const commit = h.network.commitResetCapture.bind(h.network)
+		vi.spyOn(h.network, "commitResetCapture").mockImplementation(async (...args) => {
+			await putNetwork(h, { id: "late", name: "Late", chainId: NEW, l1ChainId: L1 })
+			return commit(...args)
+		})
+		await expect(startReset(h)).rejects.toThrow(/^ERR_NOT_RESETTABLE: another network holds the new chain/)
+		expect(await h.repo.getJournal("p1")).toBeUndefined()
+		expect(await accountsOn(h, OLD)).toHaveLength(4)
+		expect(h.pxe).not.toHaveBeenCalled()
 	})
 })
 

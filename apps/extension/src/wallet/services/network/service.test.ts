@@ -2000,19 +2000,34 @@ describe("NetworkService in-place reset", () => {
 		const { service, local } = setupServiceWithStorage({})
 		staleTestnet(local)
 		const write = vi.fn(async () => {})
-		await expect(service.commitResetCapture("p1", "tn", { chainId: 999, primary: null }, write)).rejects.toThrow(/^ERR_NOT_RESETTABLE/)
+		await expect(
+			service.commitResetCapture("p1", "tn", { chainId: 999, toChainId: CHAIN_IDS.TESTNET, primary: null }, write),
+		).rejects.toThrow(/^ERR_NOT_RESETTABLE/)
 		let release!: () => void
 		const held = new Promise<void>((resolve) => {
 			release = resolve
 		})
 		const run = service.resetChainInPlace(request(), hooks({ beforePurge: () => held }))
 		await vi.waitFor(async () => expect(await service.isNetworkLive("tn")).toBe(false))
-		await expect(service.commitResetCapture("p1", "tn", { chainId: OLD, primary: null }, write)).rejects.toThrow(/^ERR_NOT_RESETTABLE/)
+		await expect(
+			service.commitResetCapture("p1", "tn", { chainId: OLD, toChainId: CHAIN_IDS.TESTNET, primary: null }, write),
+		).rejects.toThrow(/^ERR_NOT_RESETTABLE/)
 		release()
 		await run
 		expect(write).not.toHaveBeenCalled()
-		await service.commitResetCapture("p1", "tn", { chainId: CHAIN_IDS.TESTNET, primary: null }, write)
+		await service.commitResetCapture("p1", "tn", { chainId: CHAIN_IDS.TESTNET, toChainId: CHAIN_IDS.TESTNET, primary: null }, write)
 		expect(write).toHaveBeenCalledTimes(1)
+	})
+
+	test("commitResetCapture writes nothing while another row holds the target chain", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		staleTestnet(local)
+		local.store.set("nulo:core:networks@held", JSON.stringify({ ...stored(local, "tn"), id: "held", chainId: CHAIN_IDS.TESTNET }))
+		const write = vi.fn(async () => {})
+		await expect(
+			service.commitResetCapture("p1", "tn", { chainId: OLD, toChainId: CHAIN_IDS.TESTNET, primary: null }, write),
+		).rejects.toThrow(/^ERR_NOT_RESETTABLE: another network holds the new chain/)
+		expect(write).not.toHaveBeenCalled()
 	})
 
 	test("probeIdentityOnce makes one single-attempt read within its budget", async () => {
