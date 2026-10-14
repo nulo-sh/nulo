@@ -139,7 +139,7 @@ Gate: `bun run --cwd apps/extension test src/wallet/services/incoming-transfer/ 
 Pass: exit 0; the emit-once case fails with the call removed, the held-read case with the refresh
 removed (recorded). Layers: unit, lint, typecheck.
 
-#### Phase 3.4: note reconciliation (#140)
+#### Phase 3.4: note reconciliation (#140) ✓
 
 1. Status on `getNotesRaw` (default `ACTIVE`); `getSyncedBlock` with a stub in `makeNoteStub`;
    `settled?: true` in the type, schema and codec row.

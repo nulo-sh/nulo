@@ -29,10 +29,12 @@ import { PublicEventIndexer, type PublicEventReader, type PublicScanResult } fro
 import { ScanEpisodeStore, scanEpisodeKey, scanEpisodeNetworkPrefix } from "./scan-episodes"
 import { isScanSuccess, type ScanOutcome } from "./scan-health"
 import { ARRIVAL_ID_MAX, ARRIVAL_PLAYED_CAP, type ArrivalState, arrivalStateOf, claimPlayed, isArrivalEligible } from "./arrival-state"
+import { type NoteRowDecision, decideNoteRow, isVerifiedBracket, movedRows, needsBracket, notesByNullifier } from "./note-reconcile"
 import {
 	INCOMING_TRANSFER_SERVICE_NAME,
 	type Events,
 	type IncomingBalanceOutboxRow,
+	type IncomingNoteRecord,
 	type IncomingPublicEventRecord,
 	type IncomingSyncHealth,
 	type IncomingSyncHealthChanged,
@@ -306,6 +308,10 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  simply never read again); only VIEWED public receipts populate it, so it stays tiny. Evicted on
 	 *  chain/profile purge, and never persisted (no storage bloat). */
 	private readonly feeCache = new Map<string, string>()
+
+	/** Note rows the last verified scan of their scope found missing, by record id, with that scope's
+	 *  key. In memory only: a restart forgets a strike, which only delays the delete by one scan. */
+	private readonly noteStrikes = new Map<string, string>()
 
 	/** E2E-only deterministic race lever. `undefined` in production (the ctor
 	 *  arg is only ever passed inside `if (E2E_PROVERLESS)` in runtime.ts), so
@@ -1461,12 +1467,13 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	): Promise<void> {
 		const { profileId, networkId, accountAddress } = target
 		const epochAtStart = this.serviceEpoch
-		const tipHash = (await this.sharedTips(networkId))?.proposedBlockHash
+		const tips = await this.sharedTips(networkId)
+		const tipHash = tips?.proposedBlockHash
 		if (!force && tipHash !== undefined && this.noteScannedAt.get(key) === tipHash) return
 		let reached = true
 		for (const contract of contracts) {
 			try {
-				if (!(await this.scanContract(profileId, networkId, accountAddress, contract, epochAtStart))) reached = false
+				if (!(await this.scanContract(profileId, networkId, accountAddress, contract, epochAtStart, tips))) reached = false
 			} catch (error) {
 				reached = false
 				this.logWarn(`Scan failed for ${contract}`, error)
@@ -1475,16 +1482,18 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		this.markScanned(this.noteScannedAt, key, reached ? tipHash : undefined, epochAtStart)
 	}
 
-	/** Resolves whether the scan reached the tip: its notes read succeeded and no commit stood down.
-	 *  `epochAtStart` is the target's, captured before its first await: a clear / onTokenDeleted /
-	 *  onAccountDeleted that runs during the tips read or the PXE I/O makes every per-note section
-	 *  below stand down instead of resurrecting just-wiped rows. */
+	/** Resolves whether the scan reached the tip: its notes read succeeded, no commit stood down and
+	 *  reconciliation left nothing a rerun at the same tips could decide. `epochAtStart` is the
+	 *  target's, captured before its first await: a clear / onTokenDeleted / onAccountDeleted that
+	 *  runs during the tips read or the PXE I/O makes every per-note section below stand down instead
+	 *  of resurrecting just-wiped rows. */
 	private async scanContract(
 		profileId: string,
 		networkId: string,
 		accountAddress: string,
 		contract: string,
 		epochAtStart: number,
+		tips?: PublicScanTips,
 	): Promise<boolean> {
 		// ── UNLOCKED discovery (PXE-bound — kept outside the service lock
 		// so user-mediated writers like setTrustAllow don't wait on PXE) ──
@@ -1550,7 +1559,151 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		// Tell the test the parked scan's locked commit is done (the late emission,
 		// if any, has fired) — its precondition before asserting cross-account isolation.
 		if (heldTxHash) await this.incomingPollGate?.markCommitted(heldTxHash)
+		const reconciled = await this.reconcileNoteRows(ctx, notesByNullifier(notes), tips, epochAtStart)
+		return reached && reconciled
+	}
+
+	/** Reconcile the scope's unsettled note rows with the PXE: a pruned note's row leaves the feed, a
+	 *  moved one follows its note, and one seen on the finalized chain is settled for good. Resolves
+	 *  false while a rerun at the same tips could still decide a row. */
+	private async reconcileNoteRows(
+		ctx: NoteScanContext,
+		active: Map<string, RawNote>,
+		tips: PublicScanTips | undefined,
+		epochAtStart: number,
+	): Promise<boolean> {
+		const { profileId, networkId, accountAddress, contract } = ctx
+		const scopeKey = `${profileId}|${networkId}|${accountAddress}|${contract}`
+		const rows = (await this.repo.listByContract(profileId, networkId, contract)).filter(
+			(r): r is IncomingNoteRecord => r.kind === "note" && r.accountAddress === accountAddress && !r.settled,
+		)
+		this.forgetStrikes(scopeKey, rows, active)
+		let reached = true
+		const moved = movedRows(rows, active)
+		for (const { row, note } of moved) if (!(await this.moveNoteRow(ctx, row, note, epochAtStart))) reached = false
+		const rest = rows.filter((r) => !moved.some((m) => m.row.id === r.id))
+		if (!needsBracket(rest, active, tips?.finalizedBlockNumber)) return reached
+		const bracket = tips ? await this.readNoteBracket(ctx, tips) : undefined
+		if (!tips || !bracket) return false
+		for (const row of rest) {
+			const note = bracket.notes.get(row.siloedNullifier)
+			if (note) this.noteStrikes.delete(row.id)
+			const decision = decideNoteRow(row, note, bracket, this.noteStrikes.has(row.id))
+			if (!(await this.applyNoteDecision(ctx, row, decision, scopeKey, epochAtStart))) reached = false
+		}
 		return reached
+	}
+
+	/** A strike lasts while its row is unsettled and missing from the scope's reads. */
+	private forgetStrikes(scopeKey: string, rows: IncomingNoteRecord[], active: Map<string, RawNote>): void {
+		const missing = new Set(rows.filter((r) => !active.has(r.siloedNullifier)).map((r) => r.id))
+		for (const [id, key] of this.noteStrikes) if (key === scopeKey && !missing.has(id)) this.noteStrikes.delete(id)
+	}
+
+	/** The spent-or-unspent read between two synced-block reads; undefined when any of them failed. */
+	private async readNoteBracket(
+		ctx: NoteScanContext,
+		tips: PublicScanTips,
+	): Promise<{ notes: Map<string, RawNote>; finalized: number; synced: number; verified: boolean } | undefined> {
+		const { networkId, accountAddress, contract } = ctx
+		try {
+			const before = await this.noteService.getSyncedBlock(networkId)
+			const notes = await this.noteService.getNotesRaw(networkId, accountAddress, contract, "active-or-nullified")
+			const after = await this.noteService.getSyncedBlock(networkId)
+			return {
+				notes: notesByNullifier(notes),
+				finalized: tips.finalizedBlockNumber,
+				synced: after.number,
+				verified: isVerifiedBracket(before, after, tips.proposedBlockHash),
+			}
+		} catch (error) {
+			this.logDebug("note reconciliation read failed", { error })
+			return undefined
+		}
+	}
+
+	private async applyNoteDecision(
+		ctx: NoteScanContext,
+		row: IncomingNoteRecord,
+		decision: NoteRowDecision,
+		scopeKey: string,
+		epochAtStart: number,
+	): Promise<boolean> {
+		switch (decision.kind) {
+			case "settle":
+				return this.settleNoteRow(ctx, row, epochAtStart)
+			case "move":
+				return this.moveNoteRow(ctx, row, decision.note, epochAtStart)
+			case "strike":
+				this.noteStrikes.set(row.id, scopeKey)
+				return false
+			case "delete":
+				return this.deleteNoteRow(ctx, row, epochAtStart)
+			case "wait":
+				return decision.reached
+		}
+	}
+
+	/** Settling re-reads the block's time first and rewrites a changed one: a same-position re-mine
+	 *  moves nothing else. */
+	private async settleNoteRow(ctx: NoteScanContext, row: IncomingNoteRecord, epochAtStart: number): Promise<boolean> {
+		const blockTimestamp = await ctx.blockTimestampFor(row.l2BlockNumber)
+		if (blockTimestamp === undefined) return false
+		const settled: IncomingNoteRecord = { ...row, blockTimestamp, settled: true }
+		return this.rewriteNoteRow(row, settled, blockTimestamp !== row.blockTimestamp, epochAtStart)
+	}
+
+	/** The row keeps its id, so an arrival it already played does not play again. */
+	private async moveNoteRow(ctx: NoteScanContext, row: IncomingNoteRecord, note: RawNote, epochAtStart: number): Promise<boolean> {
+		const blockTimestamp = await ctx.blockTimestampFor(note.l2BlockNumber)
+		if (blockTimestamp === undefined) return false
+		const moved: IncomingNoteRecord = {
+			...row,
+			l2BlockNumber: note.l2BlockNumber,
+			txIndexInBlock: note.txIndexInBlock,
+			indexInTx: note.noteIndexInTx,
+			blockTimestamp,
+		}
+		return this.rewriteNoteRow(row, moved, true, epochAtStart)
+	}
+
+	/** Writes `next` only over the very row the scan read, so an Allow that un-hid it meanwhile is
+	 *  never undone. */
+	private async rewriteNoteRow(
+		row: IncomingNoteRecord,
+		next: IncomingNoteRecord,
+		shownChange: boolean,
+		epochAtStart: number,
+	): Promise<boolean> {
+		return this.withServiceLock(async (isCurrent) => {
+			const { fenced } = this.receiptFence(epochAtStart, isCurrent)
+			if (!fenced()) return false
+			const current = await this.repo.getRecord(row.id)
+			if (!fenced() || !current || !sameRow(current, row)) return false
+			await this.repo.upsertRecord(next)
+			this.noteStrikes.delete(row.id)
+			if (shownChange) await this.emitUpdatedIfShown(next, fenced)
+			return fenced()
+		})
+	}
+
+	/** In `finishReconciliation`'s order: the balance refresh is enqueued before the row goes. The
+	 *  fence admits no other deleter, from lock entry to each write. */
+	private async deleteNoteRow(ctx: NoteScanContext, row: IncomingNoteRecord, epochAtStart: number): Promise<boolean> {
+		const { profileId, networkId, accountAddress } = ctx
+		return this.withDeleterLock(async (isCurrent) => {
+			const soleAtEntry = this.deletersRunning === 1
+			const fenced = () => soleAtEntry && this.deletersRunning === 1 && this.serviceEpoch === epochAtStart && isCurrent()
+			if (!fenced()) return false
+			const current = await this.repo.getRecord(row.id)
+			if (!fenced() || !current || !sameRow(current, row)) return false
+			if (row.tokenId !== undefined) await this.markBalanceDirty(profileId, networkId, accountAddress, row.tokenId)
+			if (!fenced()) return false
+			await this.repo.deleteRecord(row.id)
+			this.noteStrikes.delete(row.id)
+			this.emit("onIncomingTransferDeleted", row)
+			return true
+		})
 	}
 
 	/** The per-note locked critical section. Its head is the public arm's, read for read: tokens,
@@ -2630,6 +2783,13 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			return new Set()
 		}
 	}
+}
+
+/** Records are flat, so a shallow compare tells whether a row changed since it was read. */
+function sameRow(a: IncomingTransferRecord, b: IncomingTransferRecord): boolean {
+	const keys = new Set([...Object.keys(a), ...Object.keys(b)])
+	for (const key of keys) if ((a as Record<string, unknown>)[key] !== (b as Record<string, unknown>)[key]) return false
+	return true
 }
 
 /** Is this record deleted by a finished reconciliation? Records below `lowerBound` —

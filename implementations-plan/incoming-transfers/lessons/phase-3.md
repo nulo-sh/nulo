@@ -36,3 +36,19 @@ dev added the `@nulo/token-list` workspace, so the worktree needed a `bun instal
   P11 rows, the handoff case and the liveness proof fail (5); with the feed's `refresh()` on Updated
   removed, the held-read case fails (`[["a", "0xold"]]`).
 - Gate: units 55 files / 1278 tests, lint 0, typecheck:all 0.
+
+### Phase 3.4
+
+- Two scenario fixtures were inconsistent with the PXE they stubbed, and the reconciler read them
+  as re-mines: `note()` set `indexInTx` where `RawNote` carries `noteIndexInTx`, and the matrix's
+  "existing" row sat at block 1 while its note was at block 100. Both now match production shapes.
+- Plan step 3 says a move writes "the new block's timestamp"; a failed timestamp read now leaves the
+  row unmoved and the scan not reached (a rerun decides), so position and time always move together.
+- Settle emits Updated only when the re-read time differs, which is how a same-position re-mine with
+  a new time reaches an open screen; a settle that changes nothing visible emits nothing.
+- `getSyncedBlock` sits in the note service's `Methods` (RPC plus passthrough), as the plan's file
+  map lists `client.ts`; `defineRpcMethods` is exhaustive.
+- Revert record: the strike check removed (always delete) fails 8 scenarios, the survives-scan-one
+  case first; the bracket's hash check removed fails the stale-anchor and mid-scan-block cases; a
+  strike reporting reached fails 8, the next-unforced-tick case included.
+- Gate: units 56 files / 1315 tests, lint 0, typecheck:all 0, test:all 0 (extension 12228 passed).

@@ -37,6 +37,7 @@ import { IncomingTransferService } from "./service"
 import { PublicScanCursorSchema, noteRecordId } from "./spec"
 import type { IncomingNoteRecord, IncomingPublicEventRecord, IncomingTransferRecord, IncomingTrustRecord, IncomingTrustState } from "./spec"
 import { TaskStatus } from "@/wallet/services/task/spec"
+import type { SyncedBlock } from "@/wallet/services/note/spec"
 import { type ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { type PublicEventReader, comparePublicPositions } from "./public-event-indexer"
 import { SCAN_EPISODES_KEY, scanEpisodeNetworkPrefix } from "./scan-episodes"
@@ -334,6 +335,7 @@ function makeNoteStub(notesByContract: Record<string, unknown[]> = {}, blockTime
 		getBlockTimestamp: vi.fn().mockImplementation(async (_n: string, blockNumber: number) => {
 			return blockTimestampsByNumber[blockNumber]
 		}),
+		getSyncedBlock: vi.fn(async (_n: string): Promise<SyncedBlock> => ({ number: 0, hash: "0xunsynced" })),
 		async start() {},
 	}
 }
@@ -526,7 +528,7 @@ function note(
 		noteHash: "0xnh1",
 		l2BlockNumber: 100,
 		txIndexInBlock: 0,
-		indexInTx: 0,
+		noteIndexInTx: 0,
 		contract: tokenA.contract,
 		storageSlot: "0xslot",
 		txHash: "0xtx1",
@@ -5891,7 +5893,13 @@ async function bootNoteReceipt(fixture: NoteFixture) {
 	})
 	if (fixture === "trusted") trustedRow()
 	if (fixture === "existing")
-		seedNote({ siloedNullifier: validNullifier(1), contract: tokenA.contract, tokenId: tokenA.id, blockTimestamp: undefined })
+		seedNote({
+			siloedNullifier: validNullifier(1),
+			contract: tokenA.contract,
+			tokenId: tokenA.id,
+			l2BlockNumber: 100,
+			blockTimestamp: undefined,
+		})
 	return booted
 }
 
@@ -6925,5 +6933,303 @@ describe("IncomingTransferService — note-scheduler teardown", () => {
 		expect(clear).toHaveBeenCalledWith(interval)
 		expect(svc.schedulers.has("n1|0xa")).toBe(false)
 		expect(svc.watchedContracts.has("n1|0xa")).toBe(false)
+	})
+})
+
+// ── Note rows reconciled against the PXE ─────────────────────────────────────
+
+const SYNCED_TIP = `0x${"11".repeat(32)}`
+const LATER_TIP = `0x${"22".repeat(32)}`
+const reconcileTips = (overrides: Partial<PublicScanTips> = {}): PublicScanTips => ({
+	checkpointedBlockNumber: 120,
+	checkpointedBlockHash: "0xcheckpoint",
+	finalizedBlockNumber: 110,
+	proposedBlockHash: SYNCED_TIP,
+	...overrides,
+})
+
+type ReconcileInternals = {
+	serviceEpoch: number
+	deletersRunning: number
+	scanContract: (p: string, n: string, a: string, c: string, epoch: number, tips?: PublicScanTips) => Promise<boolean>
+}
+
+/** A trusted token, a PXE whose unspent and spent notes and synced block each test sets, and the
+ *  service's Updated and Deleted emits. */
+async function bootReconcile() {
+	const noteStub = makeNoteStub({}, { 40: 400, 100: 1_000, 101: 1_010, 115: 1_150, 116: 1_160 })
+	const f = await bootService({
+		network: makeNetworkStub([{ id: "n1", chainId: 1 }]),
+		token: makeTokenStub([tokenA, tokenB]),
+		note: noteStub,
+	})
+	trustedRow()
+	const pxe = {
+		active: [] as ReturnType<typeof note>[],
+		spent: [] as ReturnType<typeof note>[],
+		synced: { number: 120, hash: SYNCED_TIP } as SyncedBlock,
+	}
+	noteStub.getNotesRaw.mockImplementation(async (_n: string, _a: string, contract: string, status?: string) =>
+		[...pxe.active, ...(status === "active-or-nullified" ? pxe.spent : [])].filter((n) => n.contract === contract),
+	)
+	noteStub.getSyncedBlock.mockImplementation(async () => pxe.synced)
+	const updated: IncomingTransferRecord[] = []
+	const deleted: IncomingTransferRecord[] = []
+	f.service.onIncomingTransferUpdated.add((r) => updated.push(r))
+	f.service.onIncomingTransferDeleted.add((r) => deleted.push(r))
+	const svc = f.service as unknown as ReconcileInternals
+	const run = (tips: PublicScanTips | null = reconcileTips(), contract = tokenA.contract) =>
+		svc.scanContract("p1", "n1", "0xa", contract, svc.serviceEpoch, tips ?? undefined)
+	return { ...f, svc, pxe, updated, deleted, run }
+}
+
+/** A stored note row of tokenA for `0xa` at `block`, its PXE note at the same position. */
+function reconcileRow(n: number, block = 100, overrides: Partial<IncomingNoteRecord> = {}) {
+	const row = seedNote({
+		siloedNullifier: validNullifier(n),
+		contract: tokenA.contract,
+		tokenId: tokenA.id,
+		txHash: `0xtx${n}`,
+		l2BlockNumber: block,
+		blockTimestamp: 1_000,
+		...overrides,
+	})
+	const pxeNote = note({ siloedNullifier: validNullifier(n), l2BlockNumber: block, txHash: `0xtx${n}`, contract: row.contract })
+	return { row, pxeNote }
+}
+
+const OUTBOX_A = `p1|n1|0xa|${tokenA.id}`
+
+describe("IncomingTransferService — note rows reconciled against the PXE", () => {
+	test("a row missing from two verified scans past its block survives the first and is deleted on the second", async () => {
+		const f = await bootReconcile()
+		const { row } = reconcileRow(1)
+
+		expect(await f.run()).toBe(false)
+		expect(records.has(row.id)).toBe(true)
+		expect(outbox.has(OUTBOX_A)).toBe(false)
+		expect(f.deleted).toEqual([])
+
+		expect(await f.run()).toBe(true)
+		expect(records.has(row.id)).toBe(false)
+		expect(outbox.has(OUTBOX_A)).toBe(true)
+		expect(f.deleted.map((r) => r.id)).toEqual([row.id])
+	})
+
+	test("a row missing once and then found keeps no strike: the next absence strikes it again", async () => {
+		const f = await bootReconcile()
+		const { row, pxeNote } = reconcileRow(1, 115)
+		expect(await f.run()).toBe(false)
+		f.pxe.active = [pxeNote]
+		expect(await f.run()).toBe(true)
+		f.pxe.active = []
+		expect(await f.run()).toBe(false)
+		expect(records.has(row.id)).toBe(true)
+		expect(f.deleted).toEqual([])
+	})
+
+	test("a spent note's row on a finalized block settles and is never deleted", async () => {
+		const f = await bootReconcile()
+		const { row, pxeNote } = reconcileRow(1)
+		f.pxe.spent = [pxeNote]
+		expect(await f.run()).toBe(true)
+		expect(records.get(row.id)).toMatchObject({ settled: true, blockTimestamp: 1_000 })
+
+		f.pxe.spent = []
+		f.note.getSyncedBlock.mockClear()
+		for (let i = 0; i < 3; i++) expect(await f.run()).toBe(true)
+		expect(records.has(row.id)).toBe(true)
+		expect(f.note.getSyncedBlock).not.toHaveBeenCalled()
+	})
+
+	test("a stale anchor settles, strikes and deletes nothing and is not reached; at the tip it decides both", async () => {
+		const f = await bootReconcile()
+		const missing = reconcileRow(1)
+		const final = reconcileRow(2, 100, { txIndexInBlock: 1 })
+		f.pxe.active = [{ ...final.pxeNote, txIndexInBlock: 1 }]
+		f.pxe.synced = { number: 120, hash: LATER_TIP }
+		for (let i = 0; i < 3; i++) expect(await f.run()).toBe(false)
+		expect(records.get(missing.row.id)).toEqual(missing.row)
+		expect(records.get(final.row.id)).toEqual(final.row)
+		expect(f.deleted).toEqual([])
+
+		f.pxe.synced = { number: 120, hash: SYNCED_TIP }
+		expect(await f.run()).toBe(false)
+		expect(records.get(final.row.id)).toMatchObject({ settled: true })
+		expect(await f.run()).toBe(true)
+		expect(records.has(missing.row.id)).toBe(false)
+	})
+
+	test("a block landing mid-scan leaves a later contract unverified; the next quiet tick decides it", async () => {
+		const f = await bootReconcile()
+		const { row } = reconcileRow(2, 100, { contract: tokenB.contract, tokenId: tokenB.id })
+		reconcileRow(1, 115)
+		const tips = reconcileTips()
+		let syncedReads = 0
+		f.note.getSyncedBlock.mockImplementation(async () => ({ number: 121, hash: ++syncedReads <= 2 ? SYNCED_TIP : LATER_TIP }))
+		expect(await f.run(tips, tokenA.contract)).toBe(false)
+		expect(await f.run(tips, tokenB.contract)).toBe(false)
+		expect(syncedReads).toBe(4)
+
+		const quiet = reconcileTips({ proposedBlockHash: LATER_TIP })
+		expect(await f.run(quiet, tokenB.contract)).toBe(false)
+		expect(await f.run(quiet, tokenB.contract)).toBe(true)
+		expect(records.has(row.id)).toBe(false)
+	})
+
+	test("a row missing above the synced block waits for a new block and the scan is reached", async () => {
+		const f = await bootReconcile()
+		const { row } = reconcileRow(1, 121)
+		expect(await f.run()).toBe(true)
+		expect(await f.run()).toBe(true)
+		expect(records.get(row.id)).toEqual(row)
+	})
+
+	test.each<[string, (pxeNote: ReturnType<typeof note>) => ReturnType<typeof note>, Partial<IncomingNoteRecord>]>([
+		["a new transaction index", (n) => ({ ...n, txIndexInBlock: 3 }), { txIndexInBlock: 3, blockTimestamp: 1_000 }],
+		["a new block", (n) => ({ ...n, l2BlockNumber: 101 }), { l2BlockNumber: 101, blockTimestamp: 1_010 }],
+	])("a re-mine at %s rewrites the row in place with one Updated and no second arrival", async (_name, remine, expected) => {
+		const f = await bootReconcile()
+		const { row, pxeNote } = reconcileRow(1, 100, { discoveredAt: 7 })
+		arrivals.set("p1|n1|0xa", { sinceBlock: 50, played: [[row.id, 100]] })
+		f.pxe.active = [remine(pxeNote)]
+		expect(await f.run()).toBe(true)
+		expect(records.get(row.id)).toMatchObject({ ...expected, id: row.id, hidden: false, discoveredAt: 7 })
+		expect(f.updated.map((r) => r.id)).toEqual([row.id])
+		expect(await f.service.claimArrivals("p1", "n1", "0xa", [row.id])).toEqual([])
+		expect(records.size).toBe(1)
+	})
+
+	test("a same-position re-mine with a new time is rewritten when the row settles, with one Updated", async () => {
+		const f = await bootReconcile()
+		const { row, pxeNote } = reconcileRow(1)
+		f.pxe.active = [pxeNote]
+		f.note.getBlockTimestamp.mockResolvedValue(1_005)
+		expect(await f.run()).toBe(true)
+		expect(records.get(row.id)).toMatchObject({ settled: true, blockTimestamp: 1_005 })
+		expect(f.updated.map((r) => r.kind === "note" && r.blockTimestamp)).toEqual([1_005])
+	})
+
+	test("the steady state is one notes read; a hidden row's move emits no Updated", async () => {
+		const f = await bootReconcile()
+		const { pxeNote } = reconcileRow(1, 115)
+		const hidden = reconcileRow(2, 116, { hidden: true })
+		f.pxe.active = [pxeNote, { ...hidden.pxeNote, txIndexInBlock: 4 }]
+		f.note.getNotesRaw.mockClear()
+		expect(await f.run()).toBe(true)
+		expect(f.note.getNotesRaw).toHaveBeenCalledTimes(1)
+		expect(f.note.getSyncedBlock).not.toHaveBeenCalled()
+		expect(records.get(hidden.row.id)).toMatchObject({ txIndexInBlock: 4, hidden: true })
+		expect(f.updated).toEqual([])
+	})
+
+	test("after a restart, a row whose unfinalized block was dropped meanwhile goes; a settled one at that height stays", async () => {
+		const first = await bootReconcile()
+		const settled = reconcileRow(1)
+		first.pxe.spent = [settled.pxeNote]
+		expect(await first.run()).toBe(true)
+		const dropped = reconcileRow(2, 100, { txIndexInBlock: 1 })
+
+		const f = await bootReconcile()
+		f.pxe.synced = { number: 160, hash: SYNCED_TIP }
+		const tips = reconcileTips({ finalizedBlockNumber: 150 })
+		expect(await f.run(tips)).toBe(false)
+		expect(await f.run(tips)).toBe(true)
+		expect(records.has(dropped.row.id)).toBe(false)
+		expect(records.get(settled.row.id)).toMatchObject({ settled: true })
+	})
+
+	test("without tips nothing settles, strikes or deletes", async () => {
+		const f = await bootReconcile()
+		const missing = reconcileRow(1)
+		const final = reconcileRow(2, 100, { txIndexInBlock: 1 })
+		f.pxe.active = [{ ...final.pxeNote, txIndexInBlock: 1 }]
+		for (let i = 0; i < 3; i++) expect(await f.run(null)).toBe(false)
+		expect(records.get(missing.row.id)).toEqual(missing.row)
+		expect(records.get(final.row.id)).toEqual(final.row)
+		expect(f.note.getSyncedBlock).not.toHaveBeenCalled()
+	})
+
+	describe("a write that cannot be fenced stands down and the scan is not reached", () => {
+		type Arrange = (f: Awaited<ReturnType<typeof bootReconcile>>) => Promise<{ id: string; before: IncomingTransferRecord }>
+		const decisions: Array<[string, Arrange]> = [
+			[
+				"settle",
+				async (f) => {
+					const { row, pxeNote } = reconcileRow(1)
+					f.pxe.spent = [pxeNote]
+					return { id: row.id, before: row }
+				},
+			],
+			[
+				"move",
+				async (f) => {
+					const { row, pxeNote } = reconcileRow(1, 115)
+					f.pxe.active = [{ ...pxeNote, txIndexInBlock: 2 }]
+					return { id: row.id, before: row }
+				},
+			],
+			[
+				"delete",
+				async (f) => {
+					const { row } = reconcileRow(1)
+					expect(await f.run()).toBe(false)
+					return { id: row.id, before: row }
+				},
+			],
+		]
+
+		test.each(decisions)("%s, beside a displaced deleter still running; the control decides", async (_name, arrange) => {
+			const f = await bootReconcile()
+			const { id, before } = await arrange(f)
+			f.svc.deletersRunning += 1
+			expect(await f.run()).toBe(false)
+			expect(records.get(id)).toEqual(before)
+			f.svc.deletersRunning -= 1
+			expect(await f.run()).toBe(true)
+			expect(records.get(id)).not.toEqual(before)
+		})
+
+		test.each(decisions)("%s, across a watchdog handoff during its row re-read", async (_name, arrange) => {
+			const f = await bootReconcile()
+			const { id, before } = await arrange(f)
+			const reads = f.pxe.active.length
+			const reread = holdCall((f.service as unknown as { repo: object }).repo, "getRecord", reads + 1, "after")
+			vi.useFakeTimers()
+			try {
+				const scan = f.run()
+				await untilReached(reread.held)
+				await vi.advanceTimersByTimeAsync(WATCHDOG_MS)
+				reread.release()
+				await vi.advanceTimersByTimeAsync(0)
+				expect(await scan).toBe(false)
+			} finally {
+				vi.useRealTimers()
+			}
+			expect(records.get(id)).toEqual(before)
+			expect(f.updated).toEqual([])
+			expect(f.deleted).toEqual([])
+		})
+	})
+})
+
+describe("IncomingTransferService — note reconciliation on the real cadence", () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	test("a struck row leaves its target unmarked, so the very next unforced tick deletes it", async () => {
+		const f = await bootTicking()
+		const { row } = reconcileRow(1, 40)
+		f.note.getSyncedBlock.mockImplementation(async () => ({ number: 60, hash: f.state.tips.proposedBlockHash }))
+		f.state.tips = { ...f.state.tips, proposedBlockHash: SYNCED_TIP }
+
+		await tick()
+		expect(records.has(row.id)).toBe(true)
+		await tick()
+		expect(records.has(row.id)).toBe(false)
 	})
 })

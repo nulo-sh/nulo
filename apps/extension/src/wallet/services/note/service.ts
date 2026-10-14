@@ -8,7 +8,7 @@ import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { NetworkService, networkInfoFrom, type Network } from "@/wallet/services/network/service"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
-import { type Methods, type Note, type RawNote, NOTE_SERVICE_NAME } from "./spec"
+import { type Methods, type Note, type NoteReadStatus, type RawNote, type SyncedBlock, NOTE_SERVICE_NAME } from "./spec"
 
 export * from "./spec"
 
@@ -50,7 +50,7 @@ const safeNumber = (read: () => unknown): number => {
 }
 
 export class NoteService extends Service<Methods> implements ServiceSpec<Methods> {
-	protected readonly rpcMethods = defineRpcMethods<Methods>()("getNotes", "getNotesRaw", "getBlockTimestamp")
+	protected readonly rpcMethods = defineRpcMethods<Methods>()("getNotes", "getNotesRaw", "getBlockTimestamp", "getSyncedBlock")
 	public static name = NOTE_SERVICE_NAME
 
 	private pxeService: PxeServiceClient = null!
@@ -92,14 +92,22 @@ export class NoteService extends Service<Methods> implements ServiceSpec<Methods
 		}
 	}
 
-	public async getNotesRaw(networkId: string, account: string, contract?: string): Promise<RawNote[]> {
+	public async getSyncedBlock(networkId: string): Promise<SyncedBlock> {
 		await this.ensureInitialized()
 		const network = await this.networkService.getNetwork(networkId)
+		const header = await this.pxeService.getSyncedBlockHeader(networkInfoFrom(network))
+		return { number: Number(header.getBlockNumber()), hash: (await header.hash()).toString() }
+	}
+
+	public async getNotesRaw(networkId: string, account: string, contract?: string, status: NoteReadStatus = "active"): Promise<RawNote[]> {
+		await this.ensureInitialized()
+		const network = await this.networkService.getNetwork(networkId)
+		const noteStatus = status === "active-or-nullified" ? NoteStatus.ACTIVE_OR_NULLIFIED : NoteStatus.ACTIVE
 		let notes: NoteDao[]
 		try {
 			notes = contract
-				? await this.fetchContractNotes(network, account, AztecAddress.fromStringUnsafe(contract))
-				: await this.fetchKnownContractsNotes(network, account)
+				? await this.fetchContractNotes(network, account, AztecAddress.fromStringUnsafe(contract), noteStatus)
+				: await this.fetchKnownContractsNotes(network, account, noteStatus)
 		} catch (error) {
 			this.logError("Failed to fetch incoming notes", error)
 			throw new Error("PXE request failed")
@@ -158,19 +166,19 @@ export class NoteService extends Service<Methods> implements ServiceSpec<Methods
 		}
 	}
 
-	private async fetchKnownContractsNotes(network: Network, account: string): Promise<NoteDao[]> {
+	private async fetchKnownContractsNotes(network: Network, account: string, status: NoteStatus): Promise<NoteDao[]> {
 		const res = []
 		const knownContracts = await this.pxeService.getContracts(networkInfoFrom(network))
 		for (const contract of knownContracts.filter((x) => x.toBigInt() > 6n)) {
-			res.push(...(await this.fetchContractNotes(network, account, contract)))
+			res.push(...(await this.fetchContractNotes(network, account, contract, status)))
 		}
 		return res
 	}
 
-	private async fetchContractNotes(network: Network, account: string, contract: AztecAddress): Promise<NoteDao[]> {
+	private async fetchContractNotes(network: Network, account: string, contract: AztecAddress, status: NoteStatus): Promise<NoteDao[]> {
 		return await this.pxeService.getNotes(networkInfoFrom(network), {
 			contractAddress: contract,
-			status: NoteStatus.ACTIVE,
+			status,
 			scopes: [AztecAddress.fromStringUnsafe(account)],
 		})
 	}
