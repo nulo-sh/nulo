@@ -183,7 +183,7 @@ Commands run from the worktree root unless they start with `cd`. Every gate also
 
 **Validation gate.** `UNIT src/wallet/services/execution/ src/wallet/services/transaction/ src/wallet/services/storage-codecs.test.ts`; `bun run test`; `SMOKE` over the `seedTransaction` callers `tests/e2e/{rows,navigation,home-links,send-outcome-rows,type-roles}.test.ts`; `NULO_E2E_PROVERLESS=1 NET same-token-concurrent-sends.test.ts`; then CI's chaos seeds, each as `NULO_E2E_PROVERLESS=1 NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=<seed> NET send-chaos.test.ts` for seeds 1095865833 and 1960252198. Pass: all exit 0, and the chaos log shows its actions ran (a missing `NULO_E2E_CHAOS` skips the file and exits 0). Layers: unit, composition, smoke, network. e2e budget: no new scenario; the re-ask case adds one storage write and one assertion (estimated +0.5 s per browser; about 10 min per browser today).
 
-### Phase 4: final gate
+### Phase 4: final gate ✓
 
 `bun run test:all`; `bun run test:ci-gating`; `bun run check:plans`; `bun run audit:vue`. Pass: all exit 0 on the final head.
 
@@ -244,6 +244,23 @@ Verdict: `conditional approve (with conditions: complete the smoke commands, spe
 Kept with no new evidence to reopen them: D13, D14, the seeded basis, the two-place template, Tx rows as the home for speed.
 
 **Confirmation (the same session resumed):** `approve`. All three conditions are met and the edits introduce no regression.
+
+### Implementation review, round 1: Codex (gpt-6.1-sol, high, read-only; session `01a13b2a-6cd9-7ea0-842d-f6806fd450b0`, run on the `alejo-icloud` account the managed `CODEX_ACCOUNT=best` picked), 2026-10-14
+
+Over the net diff from d3dc4415 after Phase 4 was green. Verdict: `approve`, three low comment findings, all accepted after checking the tree (c61de66c):
+1. `TxCallRowSchema`'s comment called `type` display-only; the basis (and the sequence keys) branch on it. Reworded.
+2. The re-ask case's comment claimed the cap is A's fee and a 5/3 total-fee ratio "in every build"; the cap is about A's fee (rounded down) and 5/3 is the multiplier ratio. Reworded.
+3. Three `FeeSettingsCard.vue` comments narrated (`derivedSettings`, `identityDrifted`, the nudge's template comment). Tightened or removed.
+
+### Implementation review, round 1: Opus (general-purpose, read-only), 2026-10-14
+
+Verdict: no bugs; two low findings, both accepted (a43ef802):
+1. `FeeCostReadout.vue`'s `queuedCap` and `execution/spec.ts`'s `TransferFeeQueued` still said "the last fee of this token's sends". Now "like sends".
+2. Plausible regression path: no test pinned `sequence.feeSpender` into the shape, so passing `undefined` would let a Private FPC send take a sponsor's basis with every test green. A facade case now reds on that mutation (run).
+
+### Implementation review, round 2: Codex (same session resumed), 2026-10-14
+
+Verdict: `approve`. No new findings or regressions; it verified the five accepted fixes and the new case's spender propagation and control. The loop converged in two rounds.
 
 ## Delivery
 
