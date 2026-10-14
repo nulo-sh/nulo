@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
-import { defineComponent, h, nextTick, ref } from "vue"
+import { defineComponent, h, nextTick } from "vue"
 import Input from "./Input.vue"
 
 const STUBS = {
