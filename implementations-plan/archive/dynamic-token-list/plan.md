@@ -16,12 +16,12 @@ harden: not scheduled (owner, 2026-10-13)
 
 ## Outcome
 
-- **Date:** 2026-10-13.
+- **Date:** 2026-10-13; the held-token check and the second rebase onto `dev` followed on 2026-10-14.
 - **Status:** delivered as a three-PR stack against `dev`: [#388](https://github.com/nulo-sh/nulo/pull/388) (arc 1), [#389](https://github.com/nulo-sh/nulo/pull/389) (arc 2, `Closes #79`) and this close-out. The owner merges in the bootstrap order: #388 alone, then O3 to O6 until `token-list-host-live` is green, then the close-out, which lands #389 with it. That merge closes this plan.
 - **Shipped:**
   - Arc 1: `@nulo/token-list` (the `nulo-token-list/1` envelope and strict parser, `sign-cli` and `keygen-cli` with a pinned import closure, the price-id table and bundled class ids); `infra/token-list` (source, Worker, `FORMAT.md`, tree tests); `publish-token-list.yml` (`prepare`, `sign` in the `token-list` environment, `publish-pr`); `privileged()` counting custom secrets; the advisory nightly `token-list-host-live`.
   - The key ceremony ran as keyed run `token-list-keys-925e45c1`. It pinned `nulo-ci-1` `Al201vPu8pwqVmqmVBOxQqozL55HI0oViOA1QVeU6k4` and `nulo-recovery-1` `zxIA-cxJ7IPlSvaDWEW5V8UgFfzne2RsHoCN8kg1tl0`, and `FORMAT.md`'s key table is now checked against `keys.ts`.
-  - Arc 2: `TokenListService` (admission on the Terms, one persisted deadline, single-flight, verify before parse, strictly higher sequence); the seeder, tombstone, `verifiedPins` and price consumers; the armed e2e seam with held lists; the `token-list` smoke file and the artifact-only live leg; privacy 1.2, Terms § 7.5, the store documents and a `BEFORE-LAUNCH.md` § 1 re-read row.
+  - Arc 2: `TokenListService` (admission on the Terms, one persisted deadline, single-flight, verify before parse, strictly higher sequence); the seeder, tombstone, `verifiedPins` and price consumers, with the owner's held-token check (D12, amended 2026-10-14: a listed token the wallet already holds gets the same on-chain check before "Nulo knows" names it); the armed e2e seam with held lists; the `token-list` smoke file and the artifact-only live leg; privacy 1.2, Terms § 7.5, the store documents and a `BEFORE-LAUNCH.md` § 1 re-read row.
   - `lessons.md`: nothing promoted, since it sits at its 8 KiB budget. The facts worth reusing stay in `lessons/phase-1.md` and `lessons/phase-2.md`: WebCrypto takes an Ed25519 seed only as PKCS#8; the all-zero public key is small-order and verifies forgeries; a step summary renders HTML, so escape punctuation; env-exec needs a clean tree at the approved, pushed HEAD.
 - **Dropped, rejected, superseded:**
   - The narrated explainer: cancelled by the owner on 2026-10-13. Only the ELI5 was published.
