@@ -2686,6 +2686,11 @@ function pubEvent(overrides: Partial<PublicTransferEvent> = {}): PublicTransferE
 	}
 }
 
+/** A receipt at `block`, its tx hash unique per block and tx index. */
+const pubReceipt = (block: number, overrides: Partial<PublicTransferEvent> = {}) =>
+	pubEvent({ txHash: `0x${block}-${overrides.txIndexWithinBlock ?? 0}`, l2BlockNumber: block, blockHash: `0xbh${block}`, ...overrides })
+const pubRecordKey = (e: PublicTransferEvent) => `pub:p1|n1|${e.txHash}|${e.logIndexWithinTx}`
+
 /** A page whose `scannedThrough` is the last event's position (or null when empty). */
 function pubPage(events: PublicTransferEvent[], hasMore = false): PublicTransferPage {
 	const last = events[events.length - 1]
@@ -4195,13 +4200,7 @@ describe("IncomingTransferService — public-scan cursor resume (SW-restart, cas
 })
 
 describe("IncomingTransferService — newest-first public scan", () => {
-	const receipt = (block: number, overrides: Partial<PublicTransferEvent> = {}) =>
-		pubEvent({
-			txHash: `0x${block}-${overrides.txIndexWithinBlock ?? 0}`,
-			l2BlockNumber: block,
-			blockHash: `0xbh${block}`,
-			...overrides,
-		})
+	const receipt = pubReceipt
 	const recordedBlocks = (account = "0xa") =>
 		[...records.values()]
 			.filter((r) => r.kind === "public-event" && r.accountAddress === account)
@@ -4292,7 +4291,7 @@ describe("IncomingTransferService — newest-first public scan", () => {
 		await scanPublic(service)
 
 		expect(state.fetchArgs.find((a) => a.referenceBlock === undefined)?.afterCursor).toEqual(positionOf(logs[79]))
-		const ours = logs.filter((e) => e.to === "0xa").map((e) => `pub:p1|n1|${e.txHash}|${e.logIndexWithinTx}`)
+		const ours = logs.filter((e) => e.to === "0xa").map(pubRecordKey)
 		expect([...records.keys()].filter((k) => k.startsWith("pub:")).sort()).toEqual(ours.sort())
 		expect(added).toHaveBeenCalledTimes(ours.length)
 		expect(backfillOf()).toEqual({ low: 801, high: 900, position: null })
@@ -6340,9 +6339,12 @@ const PUBLIC_KEY = `p1|n1|${tokenA.contract}`
 
 /** Boots real-cadence schedulers on fake timers for two accounts and one token, after the install
  *  run has marked every target; the reader's counters and the notes reads start at zero. */
-async function bootTicking(stubs: Parameters<typeof bootService>[0] = {}, chain?: { tips: Partial<PublicScanTips> }) {
-	const { reader, state } = makePublicReader({ tips: { proposedBlockHash: "0xproposed1", ...chain?.tips } })
-	if (chain) state.chain = []
+async function bootTicking(
+	stubs: Parameters<typeof bootService>[0] = {},
+	opts: { tips?: Partial<PublicScanTips>; chain?: PublicTransferEvent[] } = {},
+) {
+	const { reader, state } = makePublicReader({ tips: { proposedBlockHash: "0xproposed1", ...opts.tips } })
+	state.chain = opts.chain
 	const note = stubs.note ?? makeNoteStub()
 	const accounts = [
 		{ profileId: "p1", chainId: 1, address: "0xa" },
@@ -6440,7 +6442,7 @@ describe("IncomingTransferService — block-gated ticks", () => {
 
 	test("a public target with history left to back-fill runs on every tick until it is read, then waits for a block", async () => {
 		// Eleven empty windows below the floor at four a tick: the install run and two ticks read them.
-		const { state } = await bootTicking({}, { tips: { finalizedBlockNumber: 1000, checkpointedBlockNumber: 1010 } })
+		const { state } = await bootTicking({}, { tips: { finalizedBlockNumber: 1000, checkpointedBlockNumber: 1010 }, chain: [] })
 
 		const reads: number[] = []
 		for (let i = 0; i < 3; i++) {
@@ -6501,6 +6503,132 @@ describe("IncomingTransferService — block-gated ticks", () => {
 		state.tips = { ...state.tips, checkpointedBlockNumber: 102, checkpointedBlockHash: "0xcheckpoint3" }
 		await tick()
 		expect(state.classCalls).toBe(2)
+	})
+})
+
+// ── Liveness on the real cadence ──────────────────────────────────────────────
+
+/** Ticks until `landed` holds, at most twelve ticks, and returns the fake time since `since`. Every
+ *  fourth tick runs every target, so a run the block rule missed would land on one 120 s or more
+ *  after an event that came just after the previous one. */
+async function landedAfter(landed: () => boolean, since: number): Promise<number> {
+	for (let i = 0; i < 12 && !landed(); i++) await tick()
+	expect(landed()).toBe(true)
+	return Date.now() - since
+}
+
+/** Runs the install run's three plain ticks and the fourth, which runs every target. */
+const pastFallback = async () => {
+	for (let i = 0; i < 4; i++) await tick()
+}
+
+describe("IncomingTransferService — liveness on the real cadence", () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	test("gap: after a tip jump the note lands on the first tick and the public receipt over budget-limited ticks", async () => {
+		const f = await bootTicking({}, { chain: [] })
+		await pastFallback()
+		// 250 logs ahead of ours: three five-page passes, the tip still between them.
+		const ahead = Array.from({ length: 250 }, (_, i) =>
+			pubReceipt(101 + Math.floor(i / 2), { txIndexWithinBlock: i % 2, to: "0xother" }),
+		)
+		const ours = pubReceipt(399)
+		f.state.chain = [...ahead, ours]
+		f.state.tips = {
+			checkpointedBlockNumber: 400,
+			checkpointedBlockHash: "0xcp400",
+			finalizedBlockNumber: 300,
+			proposedBlockHash: "0xpp400",
+		}
+		f.note.getNotesRaw.mockImplementation(async (_n: string, account: string) => (account === "0xa" ? [note()] : []))
+		const event = Date.now()
+
+		await tick()
+		expect(records.has(NOTE_ID)).toBe(true)
+		expect(records.has(pubRecordKey(ours))).toBe(false)
+
+		expect(await landedAfter(() => records.has(pubRecordKey(ours)), event)).toBeLessThan(120_000)
+	})
+
+	test("reorg: a same-height hash change runs the target, reconciliation finishes, the re-mined receipt lands and the scan resumes", async () => {
+		// 150 logs below ours, so the reconciliation takes two steps.
+		const below = Array.from({ length: 150 }, (_, i) =>
+			pubReceipt(51 + Math.floor(i / 3), { txIndexWithinBlock: i % 3, to: "0xother" }),
+		)
+		const f = await bootTicking({}, { chain: below })
+		await tick()
+		f.state.chain = [...below, pubReceipt(101, { blockHash: "0xbh101a" })]
+		f.state.tips = { ...f.state.tips, checkpointedBlockNumber: 101, checkpointedBlockHash: "0xcp101a", proposedBlockHash: "0xpp101a" }
+		await tick()
+		await tick()
+		await tick()
+		const remined = pubReceipt(101, { blockHash: "0xbh101b" })
+		expect(records.get(pubRecordKey(remined))?.blockHash).toBe("0xbh101a")
+
+		f.state.chain = [...below, remined]
+		f.state.tips = { ...f.state.tips, checkpointedBlockHash: "0xcp101b", proposedBlockHash: "0xpp101b" }
+		f.state.responses.push(new Error("not an ancestor"))
+		const event = Date.now()
+
+		expect(await landedAfter(() => records.get(pubRecordKey(remined))?.blockHash === "0xbh101b", event)).toBeLessThan(120_000)
+		expect(cursorFor()?.reconciling).toBeUndefined()
+		f.state.fetchArgs.length = 0
+		await tick()
+		expect(f.state.fetchArgs.find((a) => a.verifyAncestorHash === undefined)).toMatchObject({
+			referenceBlock: "0xcp101b",
+			afterCursor: positionOf(remined),
+		})
+	})
+
+	test("retry: after a failed scan both receipts land on the next tick with the tip unchanged", async () => {
+		const f = await bootTicking({}, { chain: [] })
+		for (let i = 0; i < 3; i++) await tick()
+		const ours = pubReceipt(101)
+		f.state.chain = [ours]
+		f.state.tips = { ...f.state.tips, checkpointedBlockNumber: 101, checkpointedBlockHash: "0xcp101", proposedBlockHash: "0xpp101" }
+		let noteFailures = 1
+		f.note.getNotesRaw.mockImplementation(async (_n: string, account: string) => {
+			if (account !== "0xa") return []
+			if (noteFailures-- > 0) throw new Error("PXE unavailable")
+			return [note()]
+		})
+		const classStatus = f.reader.getTokenClassStatus
+		let classFailures = 1
+		f.reader.getTokenClassStatus = async (...args) => {
+			if (classFailures-- > 0) throw new Error("node unavailable")
+			return classStatus(...args)
+		}
+		const event = Date.now()
+
+		await tick()
+		expect(records.has(NOTE_ID) || records.has(pubRecordKey(ours))).toBe(false)
+
+		expect(await landedAfter(() => records.has(NOTE_ID) && records.has(pubRecordKey(ours)), event)).toBeLessThan(120_000)
+	})
+
+	test("quiet chain: ticks with no new block drain the outbox, and the fourth lands a note the PXE delivered late", async () => {
+		const tokenBalance = makeTokenBalanceStub()
+		const task = makeTaskStub()
+		const f = await bootTicking({ tokenBalance, task })
+		outbox.set("p1|n1|0xa|1", { dirtyAt: 100 })
+		tokenBalance.setResult({ taskId: "T1" })
+		await tick()
+		expect(outboxFor()?.pendingTaskId).toBe("T1")
+		task.setTask("T1", TaskStatus.Completed, Date.now())
+		await tick()
+		expect(outboxFor()).toBeUndefined()
+
+		f.note.getNotesRaw.mockImplementation(async (_n: string, account: string) => (account === "0xa" ? [note()] : []))
+		const delivered = Date.now()
+		await tick()
+		expect(records.has(NOTE_ID)).toBe(false)
+
+		expect(await landedAfter(() => records.has(NOTE_ID), delivered)).toBeLessThan(120_000)
 	})
 })
 
