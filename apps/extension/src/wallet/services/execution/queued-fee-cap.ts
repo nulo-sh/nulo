@@ -4,10 +4,12 @@
  * place and asks again, and the build is neither proved nor broadcast until the person answers.
  */
 
+import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
+import type { FeeSettings, PriorityLevel } from "@nulo/wallet-bridge"
 import { isFeeAmount, type QueuedFeePayer } from "@nulo/wallet-core/jobs"
 import type { Fpc } from "@/wallet/services/fpc/fpc"
 import { FpcType } from "@/wallet/services/fpc/spec"
-import { OriginType, type Tx } from "@/wallet/services/transaction/spec"
+import { OriginType, type TransferType, type Tx } from "@/wallet/services/transaction/spec"
 
 export const QUEUED_FEE_MARGIN_PERCENT = 25n
 
@@ -15,15 +17,63 @@ export const QUEUED_FEE_MARGIN_PERCENT = 25n
  *  the Y enforced. */
 const READOUT_UNIT = 10n ** 12n
 
-/** The figures a queued answer offers: the last fee of this token's sends, and the cap above it. */
+/** The figures a queued answer offers: the last fee of this token's like sends, and the cap above it. */
 export type QueuedFeeCap = { basis: string; cap: string }
 
+/** What a Send-page send's fee depends on besides the network, as its Tx row records it. */
+export type SendShape = {
+	transferType: TransferType
+	feePaymentMethod: AccountFeePaymentMethodOptions
+	feeSpender?: string
+	priorityLevel: PriorityLevel
+}
+
+/** The speed a request is priced at: the Send page omits Normal. */
+export const speedOf = (feeSettings: FeeSettings): PriorityLevel => feeSettings.priorityLevel ?? "normal"
+
+/** The option a fee strategy builds with for each method the Send page offers; an app's own
+ *  payment has none, so it is never a basis. */
+function feeOptionOf(kind: FeeSettings["paymentMethod"]["kind"]): AccountFeePaymentMethodOptions | undefined {
+	switch (kind) {
+		case "fj":
+			return AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE
+		case "fjwc":
+			return AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM
+		case "fpc":
+			return AccountFeePaymentMethodOptions.EXTERNAL
+		default:
+			return undefined
+	}
+}
+
+/** The shape a request will be recorded with; `feeSpender` is the sequence's (`feeSpenderOf`). */
+export function sendShapeOf(feeSettings: FeeSettings, transferType: TransferType, feeSpender: string | undefined): SendShape | undefined {
+	const feePaymentMethod = feeOptionOf(feeSettings.paymentMethod.kind)
+	if (feePaymentMethod === undefined) return undefined
+	return { transferType, feePaymentMethod, feeSpender, priorityLevel: speedOf(feeSettings) }
+}
+
+/** A row without a recorded speed matches no shape: an older row never stands in for a Normal one. */
+const likeShape = (row: Tx, shape: SendShape): boolean =>
+	row.calls[0]?.transfers?.[0]?.type === shape.transferType &&
+	row.feePaymentMethod === shape.feePaymentMethod &&
+	row.priorityLevel === shape.priorityLevel &&
+	(row.feeSpender ?? "").toLowerCase() === (shape.feeSpender ?? "").toLowerCase()
+
 /**
- * The `estimatedFee` of the newest Send-page send of `token` this profile made on `chainId`.
- * Another profile of the same seed shares the address, so the profile stamp keeps its figure out;
- * a row dated in the future (a restored one) would stay the basis for good, so it never is.
+ * The `estimatedFee` of the newest Send-page send of `token` this profile made on `chainId` in the
+ * request's `shape`. Another profile of the same seed shares the address, so the profile stamp keeps
+ * its figure out; a row dated in the future (a restored one) would stay the basis for good, so it
+ * never is.
  */
-export function queuedFeeBasis(rows: readonly Tx[], profileId: string, chainId: number, token: string, now: number): string | undefined {
+export function queuedFeeBasis(
+	rows: readonly Tx[],
+	profileId: string,
+	chainId: number,
+	token: string,
+	shape: SendShape,
+	now: number,
+): string | undefined {
 	let newest: Tx | undefined
 	for (const row of rows) {
 		const basis =
@@ -32,6 +82,7 @@ export function queuedFeeBasis(rows: readonly Tx[], profileId: string, chainId: 
 			row.chainId === chainId &&
 			row.origin?.type === OriginType.UI &&
 			row.calls[0]?.contract.toLowerCase() === token.toLowerCase() &&
+			likeShape(row, shape) &&
 			isFeeAmount(row.estimatedFee) &&
 			row.createdAt <= now
 		if (basis && (!newest || row.createdAt > newest.createdAt)) newest = row

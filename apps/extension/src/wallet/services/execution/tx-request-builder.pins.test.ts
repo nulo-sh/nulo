@@ -540,12 +540,14 @@ describe("an app's priority fee on a send", () => {
 		expect((h.buildArgs[0] as unknown[])[5]).toBeUndefined()
 	})
 
-	test("NO_FROM: the build commits zero priority whatever the app's gas settings carry", async () => {
+	test("NO_FROM: the build commits the app's priority fee, and zero when it sets none", async () => {
 		noFromHarness()
-		const built = await buildNoFrom(wireCall({ name: FN.name, selector: await selectorOf() }), {
-			fee: { gasSettings: { maxPriorityFeesPerGas: APP_PRIORITY } },
-		})
+		const call = wireCall({ name: FN.name, selector: await selectorOf() })
+		const built = await buildNoFrom(call, { fee: { gasSettings: { maxPriorityFeesPerGas: APP_PRIORITY } } })
 		const { maxPriorityFeesPerGas } = built.txRequest.txContext.gasSettings
-		expect([maxPriorityFeesPerGas.feePerDaGas, maxPriorityFeesPerGas.feePerL2Gas]).toEqual([0n, 0n])
+		expect([maxPriorityFeesPerGas.feePerDaGas, maxPriorityFeesPerGas.feePerL2Gas]).toEqual([70n, 80n])
+
+		const none = (await buildNoFrom(call)).txRequest.txContext.gasSettings.maxPriorityFeesPerGas
+		expect([none.feePerDaGas, none.feePerL2Gas]).toEqual([0n, 0n])
 	})
 })

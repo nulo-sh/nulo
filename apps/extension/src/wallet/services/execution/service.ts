@@ -82,12 +82,12 @@ import { ChainTipGate } from "./chain-tip-gate"
 import { recordedTxKeys } from "./transfer-sequence-keys"
 import { coerceAmount } from "./coerce-amount"
 import { OperationPlanner, type TransferRequest } from "./operation-planner"
-import { type QueuedFeeCap, QueuedFeeAnswers, queuedFeeBasis, queuedFeeCap } from "./queued-fee-cap"
+import { type QueuedFeeCap, QueuedFeeAnswers, queuedFeeBasis, queuedFeeCap, sendShapeOf } from "./queued-fee-cap"
 import { TransferEstimateReuse } from "./transfer-estimate-reuse"
 import { type ChainIdentity, feeMultiplierFor } from "./estimate-reuse-shared"
 import { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { PreviewSnapshots } from "./preview-snapshots"
-import { TransferExecutor } from "./transfer-executor"
+import { TransferExecutor, type TransferSequence } from "./transfer-executor"
 import { DappSendExecutor } from "./dapp-send-executor"
 import { DiscoveryAwareEstimator, type DiscoveryProbe } from "./discovery-aware-estimator"
 import { ViewExecutor } from "./view-executor"
@@ -99,6 +99,7 @@ import { getViewSimulationDeps } from "./helpers/get-view-simulation-deps"
 import { AuthwitDiscoverer } from "./authwit-discoverer"
 import { TxRequestBuilder } from "./tx-request-builder"
 import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee/fee-strategy"
+import { appPriorityOf } from "./fee/fee-strategy"
 import { buildFeeStrategies } from "./fee/build-fee-strategies"
 import { ExecutionCoordinator } from "./execution-coordinator"
 import { type ProofGate, NOOP_PROOF_GATE } from "@/e2e/proof-gate"
@@ -455,10 +456,14 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			buildAndEstimateFolded: (op, feeSettings, fence, probe, parentTask, signal) =>
 				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, probe),
 			buildForDiscovery: async (op, method, fence) => {
+				const sendOp = op as SendTransactionOperation
+				// An app's private call may read its gas settings, so discovery simulates with its priority too.
 				const { txRequest, node, pxe, account, network } = await this.txBuilder.buildStandard(
-					op as SendTransactionOperation,
+					sendOp,
 					fence,
 					method,
+					undefined,
+					appPriorityOf(sendOp.fee),
 				)
 				return { txRequest, node, pxe, account, network }
 			},
@@ -617,19 +622,21 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		// The popup asks again every 2 s; the read it starts is what lets that answer change.
 		if (lagging) void this.chainTipGate.refresh(networkId)
 		if (slotBusy || lagging || this.sendSequencer.isBlocked(sequence.scope, sequence.keys)) {
-			const cap = await this.queuedFeeCapFor(req, profile.id, sequence.scope.chainId)
+			const cap = await this.queuedFeeCapFor(req, profile.id, sequence)
 			return { queued: true, tokenSpent: false, ...(cap ? { cap } : {}) }
 		}
 		return this.withEstimateAdmission(estimateToken, "send", (signal) => this.transferExecutor.estimateFee(req, signal, sequence))
 	}
 
 	/** The cap a queued transfer is offered, read from stored rows only: nothing on the network. */
-	private async queuedFeeCapFor(req: TransferRequest, profileId: string, chainId: number): Promise<QueuedFeeCap | undefined> {
+	private async queuedFeeCapFor(req: TransferRequest, profileId: string, sequence: TransferSequence): Promise<QueuedFeeCap | undefined> {
+		const shape = sendShapeOf(req.feeSettings, req.transferType, sequence.feeSpender)
+		if (!shape) return undefined
 		const [token, rows] = await Promise.all([
 			this.tokenService.getTokenRaw(req.tokenId),
 			this.transactionService.getTransactions(req.accountAddress),
 		])
-		const basis = queuedFeeBasis(rows, profileId, chainId, token.contract, Date.now())
+		const basis = queuedFeeBasis(rows, profileId, sequence.scope.chainId, token.contract, shape, Date.now())
 		const cap = basis ? queuedFeeCap(basis) : undefined
 		return basis && cap ? { basis, cap } : undefined
 	}

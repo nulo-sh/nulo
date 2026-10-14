@@ -108,31 +108,23 @@ export class DiscoveryAwareEstimator {
 	): Promise<DiscoveryEstimateResult> {
 		const hasPreAttachedAuthwit = actions.some((a) => a.kind === "add_private_authwit")
 		const foldableKind = feeSettings.paymentMethod.kind === "fpc" || feeSettings.paymentMethod.kind === "fj"
+		const withActions = (acts: readonly Action[]) =>
+			({ ...operation, actions: [...acts], ...(detectedFee ? { fee: detectedFee } : {}) }) as SendTransactionOperation
 		if (foldableKind && !hasPreAttachedAuthwit) {
 			const probe = new CollectingDiscoveryProbe()
-			const op = {
-				...operation,
-				actions: [...actions],
-				...(detectedFee ? { fee: detectedFee } : {}),
-			} as SendTransactionOperation
-			const built = await this.deps.buildAndEstimateFolded(op, feeSettings, fence, probe, parentTask, signal)
+			const built = await this.deps.buildAndEstimateFolded(withActions(actions), feeSettings, fence, probe, parentTask, signal)
 			return { built, discoveredActions: [...probe.collected], discovered: [...probe.discovered] }
 		}
 
 		const { actions: discoveredActions, discovered } = await this.deps.authwit.discoverPrivateAuthwits(
-			{ ...operation, actions: [...actions] } as SendTransactionOperation,
+			withActions(actions),
 			(op, method) => this.deps.buildForDiscovery(op, method, fence),
 		)
 		// Stage boundary preserved from the inline shape: a cancel landing
 		// during discovery must not start the sizing pipeline.
 		throwIfAborted(signal)
-		const finalActions = discoveredActions.length ? [...actions, ...discoveredActions] : [...actions]
-		const op = {
-			...operation,
-			actions: finalActions,
-			...(detectedFee ? { fee: detectedFee } : {}),
-		} as SendTransactionOperation
-		const built = await this.deps.buildAndEstimateValidated(op, feeSettings, fence, parentTask, signal)
+		const finalActions = discoveredActions.length ? [...actions, ...discoveredActions] : actions
+		const built = await this.deps.buildAndEstimateValidated(withActions(finalActions), feeSettings, fence, parentTask, signal)
 		return { built, discoveredActions, discovered }
 	}
 }

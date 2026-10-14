@@ -31,8 +31,8 @@ export function builtCapOf(txRequest: TxExecutionRequest): FeeCap {
 	return { feePerDaGas, feePerL2Gas }
 }
 
-/** The rule a fresh build of a reusable entry would commit by. No entry carries an app's cap: such
- *  an operation is never stashed. */
+/** The rule a fresh build of a reusable entry would commit by. No entry carries an app's cap or
+ *  priority fee: such an operation is never stashed. */
 export function reuseCapRule(
 	paymentMethod: FeeSettings["paymentMethod"],
 	fpc: FpcIdentitySnapshot | undefined,

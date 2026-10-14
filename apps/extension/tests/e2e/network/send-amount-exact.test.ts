@@ -84,23 +84,53 @@ async function fieldShowsWholeAmount(page: Page): Promise<boolean> {
 	)
 }
 
-/** The USD field, and the derived token line beside the balance and Max: on one line, Max inside the row. */
-async function readUsdLines(page: Page): Promise<{ hidden: number; fontSize: number; lines: number; overlap: number; spill: number }> {
+type UsdLines = {
+	hidden: number
+	fontSize: number
+	derivedPx: number
+	lines: number
+	overlap: number
+	spill: number
+	belowAmount: number
+	aboveBalance: number
+	sharesBalanceRow: boolean
+}
+
+/**
+ * The USD field, and the derived token line against the balance: `overlap` is how far the two boxes
+ * cross on both axes (positive only when they do), `spill` how far the line or Max runs past the
+ * amount row, and `belowAmount` and `aboveBalance` place the line between the amount and the balance.
+ */
+async function readUsdLines(page: Page): Promise<UsdLines> {
 	return page.$eval(USD, (el) => {
 		const input = el as HTMLInputElement
 		const at = input.scrollLeft
 		input.scrollLeft = 1e6
 		const hidden = input.scrollLeft
 		input.scrollLeft = at
-		const box = (id: string) => document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect()
+		const nan = { top: Number.NaN, bottom: Number.NaN, left: Number.NaN, right: Number.NaN }
+		const box = (id: string) => document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect() ?? nan
 		const derived = document.querySelector('[data-testid="send-amount-derived"]')
-		const [balance, max, row] = [box("send-amount-balance"), box("send-amount-max"), box("send-amount-row")]
+		const [line, balance, max, row] = [
+			box("send-amount-derived"),
+			box("send-amount-balance"),
+			box("send-amount-max"),
+			box("send-amount-row"),
+		]
+		const across = (a0: number, a1: number, b0: number, b1: number) => Math.min(a1, b1) - Math.max(a0, b0)
 		return {
 			hidden,
 			fontSize: Number.parseFloat(getComputedStyle(input).fontSize),
+			derivedPx: derived ? Number.parseFloat(getComputedStyle(derived).fontSize) : Number.NaN,
 			lines: derived?.getClientRects().length ?? 0,
-			overlap: (derived?.getBoundingClientRect().right ?? Number.NaN) - (balance?.left ?? Number.NaN),
-			spill: (max?.right ?? Number.NaN) - (row?.right ?? Number.NaN),
+			overlap: Math.min(
+				across(line.left, line.right, balance.left, balance.right),
+				across(line.top, line.bottom, balance.top, balance.bottom),
+			),
+			spill: Math.max(line.right, max.right) - row.right,
+			belowAmount: line.top - row.bottom,
+			aboveBalance: balance.top - line.bottom,
+			sharesBalanceRow: across(line.top, line.bottom, balance.top, balance.bottom) > 0,
 		}
 	})
 }
@@ -204,11 +234,15 @@ test.skipIf(!hasConfig)(
 		await pointerClick(page, "send-amount-fiat-toggle")
 		await page.waitForSelector('[data-testid="send-amount-derived"]', { visible: true, timeout: 10_000 })
 		expect((await page.$eval(USD, (el) => (el as HTMLInputElement).value)).length, "a long USD figure").toBeGreaterThanOrEqual(12)
+		// The whole balance's derived line would draw near 6 px beside the balance: it takes its own row.
 		const usd = await readUsdLines(page)
 		expect.soft(usd.hidden, `USD at rest hides its tail: ${JSON.stringify(usd)}`).toBe(0)
 		expect.soft(usd.lines, `the derived line wraps: ${JSON.stringify(usd)}`).toBe(1)
 		expect.soft(usd.overlap, `the derived line runs into the balance: ${JSON.stringify(usd)}`).toBeLessThanOrEqual(0.5)
-		expect.soft(usd.spill, `Max leaves the row: ${JSON.stringify(usd)}`).toBeLessThanOrEqual(0.5)
+		expect.soft(usd.spill, `the derived line or Max leaves the row: ${JSON.stringify(usd)}`).toBeLessThanOrEqual(0.5)
+		expect.soft(usd.belowAmount, `the derived line is not under the amount: ${JSON.stringify(usd)}`).toBeGreaterThanOrEqual(-0.5)
+		expect.soft(usd.aboveBalance, `the derived line is not above the balance: ${JSON.stringify(usd)}`).toBeGreaterThanOrEqual(-0.5)
+		expect.soft(usd.derivedPx, `the derived line draws below 8 px: ${JSON.stringify(usd)}`).toBeGreaterThanOrEqual(8)
 		await page.$eval(USD, (el) => (el as HTMLInputElement).focus())
 		await page
 			.waitForFunction(
@@ -270,6 +304,17 @@ test.skipIf(!hasConfig)(
 		await page.mouse.up()
 		await waitForAmount(page, "1,235,567.123456789012345678")
 		await page.waitForSelector('[data-testid="recipient-card"]', { visible: true, timeout: 5_000 })
+
+		// A short derived line keeps its full size beside the balance.
+		await pointerClick(page, "send-amount-fiat-toggle")
+		await replaceInputValue(page, USD, "25")
+		await page.waitForFunction(() => document.querySelector('[data-testid="send-amount-derived"]')?.textContent === "≈ 25 TST", {
+			timeout: 10_000,
+		})
+		const short = await readUsdLines(page)
+		expect.soft(short.derivedPx, `a short derived line shrinks: ${JSON.stringify(short)}`).toBe(11)
+		expect.soft(short.sharesBalanceRow, `a short derived line leaves the balance's row: ${JSON.stringify(short)}`).toBe(true)
+		expect.soft(short.overlap, `a short derived line runs into the balance: ${JSON.stringify(short)}`).toBeLessThanOrEqual(0.5)
 
 		expect(tokenReadyExtension.pageErrors).toEqual([])
 	},

@@ -25,6 +25,7 @@ import { JobCancelledError, RpcTimeoutError, SessionEndedError } from "@nulo/ext
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/spec"
 import { DappSendExecutor, type DappSendExecutorDeps } from "./dapp-send-executor"
+import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
 import type { ProveAndSendContext } from "./execution-coordinator"
 import { AUTHWITS_CHANGED_MESSAGE, ESTIMATE_INCOMPLETE_MESSAGE, PREVIEW_FOREIGN_MESSAGE, PreviewSnapshots } from "./preview-snapshots"
@@ -101,6 +102,7 @@ function makeTxRequest() {
 				gasLimits: { daGas: 100, l2Gas: 200 },
 				teardownGasLimits: { daGas: 10, l2Gas: 20 },
 				maxFeesPerGas: { feePerDaGas: 2n, feePerL2Gas: 3n },
+				maxPriorityFeesPerGas: { feePerDaGas: 0n, feePerL2Gas: 0n },
 			},
 		},
 	} as never
@@ -488,6 +490,15 @@ describe("DappSendExecutor.executeAztecSendTx (standard path)", () => {
 		expect((deps.lane.acquireSlot as ReturnType<typeof vi.fn>).mock.results.length).toBe(1)
 	})
 
+	test("an embedded confirm builds with the app's fee settings, its priority fee included", async () => {
+		const fee = { embeddedFeePayment: "fpc", maxPriorityFeesPerGas: { feePerDaGas: "7", feePerL2Gas: "8" } }
+		const h = makeHarness({
+			planner: { processAztecJsPayload: vi.fn(async () => ({ actions: [], feePaymentMethod: undefined, feeOptions: fee })) } as never,
+		})
+		await h.executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
+		expect((h.buildAndEstimateValidated.mock.calls[0] as unknown[])[0]).toMatchObject({ fee })
+	})
+
 	test("embedded fee payment skips authwit discovery; non-embedded runs it", async () => {
 		const embedded = makeHarness({
 			planner: {
@@ -577,6 +588,23 @@ describe("DappSendExecutor.executeNoFromSendTx (via default_entrypoint)", () => 
 			...overrides,
 		})
 	}
+
+	test("the app's cap and priority fee reach the embedded cap as the wire carries them", async () => {
+		collectOffchainEffectsMock.mockReturnValue([])
+		const { executor } = makeHarness()
+		// As the wire carries them: the wallet-sdk serializes each bigint as a decimal string.
+		const gasSettings = {
+			maxFeesPerGas: { feePerDaGas: "5", feePerL2Gas: "6" },
+			maxPriorityFeesPerGas: { feePerDaGas: "7", feePerL2Gas: "8" },
+		}
+		const op = makeNoFromOp({ opts: { from: addr("0xacct"), additionalScopes: [], wait: "NO_WAIT", fee: { gasSettings } } })
+		await executor.executeAztecSendTx(op, ORIGIN, undefined, undefined, FENCE)
+		expect(vi.mocked(applyEmbeddedFpcGasCap).mock.calls.at(-1)?.[1]).toMatchObject({
+			embeddedFeePayment: "fpc",
+			maxFeesPerGas: { feePerDaGas: "5", feePerL2Gas: "6" },
+			maxPriorityFeesPerGas: { feePerDaGas: "7", feePerL2Gas: "8" },
+		})
+	})
 
 	test("non-embedded fee payment rejected before any slot work", async () => {
 		const { executor, deps } = makeHarness()
@@ -1975,6 +2003,38 @@ describe("DappSendExecutor.estimateOperationFee: an operation the app pays for",
 			expect(result.estimateId).toBeUndefined()
 		},
 	)
+
+	test("the priority part of the figure is set, with its formatted pair, only when it shows as more than zero", async () => {
+		const { executor, built } = appPaidHarness(true)
+		const op = () => makeAztecOp({ feeSettings: EMBEDDED })
+		const plain = await executor.estimateOperationFee(op(), EMBEDDED)
+		expect(plain).not.toHaveProperty("priorityFee")
+		expect(plain).not.toHaveProperty("priorityFeeFormatted")
+
+		// 100 · 2e12 + 200 · 3e12 = 8e14 (0.0008 FJ), of which 100 · 1e12 + 200 · 1e12 = 3e14 is priority.
+		const gasSettings = new GasSettings(
+			new Gas(100, 200),
+			new Gas(10, 20),
+			new GasFees(2_000_000_000_000n, 3_000_000_000_000n),
+			new GasFees(1_000_000_000_000n, 1_000_000_000_000n),
+		)
+		Object.assign(built, { txRequest: { authWitnesses: [], txContext: { gasSettings } } })
+		const result = await executor.estimateOperationFee(op(), EMBEDDED)
+		expect([result.maxFee, result.maxFeeFormatted]).toEqual(["800000000000000", "0.0008"])
+		expect([result.priorityFee, result.priorityFeeFormatted]).toEqual(["300000000000000", "0.0003"])
+
+		// 300 · 1e9 = 3e11 rounds to "0" at six decimals: the row would read "includes a 0 FJ priority fee".
+		const tiny = new GasSettings(
+			new Gas(100, 200),
+			new Gas(10, 20),
+			gasSettings.maxFeesPerGas,
+			new GasFees(1_000_000_000n, 1_000_000_000n),
+		)
+		Object.assign(built, { txRequest: { authWitnesses: [], txContext: { gasSettings: tiny } } })
+		const rounded = await executor.estimateOperationFee(op(), EMBEDDED)
+		expect(rounded).not.toHaveProperty("priorityFee")
+		expect(rounded).not.toHaveProperty("priorityFeeFormatted")
+	})
 })
 
 describe("DappSendExecutor: the activity record, field by field", () => {
@@ -2227,6 +2287,7 @@ describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 		["default_entrypoint (not embedded)", () => makeAztecOp({ executionMode: "default_entrypoint" }), {}, "fj"],
 		["a detected embedded fee", () => makeAztecOp(), payload({ embeddedFeePayment: "fpc" }), "fj"],
 		["a dApp maxFeesPerGas", () => makeAztecOp(), payload({ maxFeesPerGas: { feePerDaGas: 5, feePerL2Gas: 6 } }), "fj"],
+		["a dApp maxPriorityFeesPerGas", () => makeAztecOp(), payload({ maxPriorityFeesPerGas: { feePerDaGas: 7, feePerL2Gas: 8 } }), "fj"],
 		["the fjwc kind", () => makeAztecOp(), {}, "fjwc"],
 		["the embedded kind", () => makeAztecOp(), {}, "embedded"],
 		["a non-fingerprintable operation", () => makeAztecOp(), payload({}, [() => 1]), "fj"],

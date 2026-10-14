@@ -45,7 +45,7 @@ import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { encodeArguments, FunctionCall, FunctionSelector, FunctionType, getFunctionReturnType } from "@aztec-labs/stdlib/abi"
 import { AuthWitness } from "@aztec-labs/stdlib/auth-witness"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
-import { Gas, GasSettings } from "@aztec-labs/stdlib/gas"
+import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { Capsule, ExecutionPayload, HashedValues, TxContext, TxExecutionRequest } from "@aztec-labs/stdlib/tx"
 import type { ILogger } from "@/wallet/logger"
@@ -437,9 +437,12 @@ export class TxRequestBuilder {
 
 			const hashedArguments = [await HashedValues.fromArgs(call.args)]
 			const currentMinFees = await node.getCurrentMinFees()
+			const appPriority = op.opts.fee?.gasSettings?.maxPriorityFeesPerGas
 			// 5.0: `fallback` requires explicit gasLimits — fill the network's per-tx admission limit.
+			// The cap is a placeholder the embedded cap overwrites; the app's priority fee is committed.
 			const gasSettings = GasSettings.fallback({
 				maxFeesPerGas: currentMinFees,
+				maxPriorityFeesPerGas: appPriority ? GasFees.from(appPriority) : undefined,
 				gasLimits: new Gas(nodeInfo.txsLimits.gas.daGas, nodeInfo.txsLimits.gas.l2Gas),
 			})
 			const txRequest = new TxExecutionRequest(

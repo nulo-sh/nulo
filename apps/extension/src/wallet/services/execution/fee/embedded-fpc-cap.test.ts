@@ -97,4 +97,37 @@ describe("applyEmbeddedFpcGasCap", () => {
 		expect(node.getCurrentMinFees).not.toHaveBeenCalled()
 		expect(node.getPredictedMinFees).not.toHaveBeenCalled()
 	})
+
+	test.each(["fjwc", "fpc"] as const)(
+		"4. embedded='%s' with an app priority fee and no cap → the predicted worst minimum plus the priority; the build's priority stays",
+		async (embeddedFeePayment) => {
+			const node = fakeNode()
+			const txRequest = fakeTxRequest(initialGasSettings())
+			const fee: FeeOptions = { embeddedFeePayment, maxPriorityFeesPerGas: { feePerDaGas: "6", feePerL2Gas: "11" }, gasPadding: 1 }
+			await applyEmbeddedFpcGasCap(txRequest, fee, node)
+
+			const after = txRequest.txContext.gasSettings
+			expect([after.maxFeesPerGas.feePerDaGas, after.maxFeesPerGas.feePerL2Gas]).toEqual([136n, 271n])
+			// The build committed the priority; the cap only makes room for it.
+			expect([after.maxPriorityFeesPerGas.feePerDaGas, after.maxPriorityFeesPerGas.feePerL2Gas]).toEqual([5n, 10n])
+		},
+	)
+
+	test.each(["fjwc", "fpc"] as const)(
+		"5. embedded='%s' with an app cap and priority fee → the cap verbatim",
+		async (embeddedFeePayment) => {
+			const node = fakeNode()
+			const txRequest = fakeTxRequest(initialGasSettings())
+			const fee: FeeOptions = {
+				embeddedFeePayment,
+				maxFeesPerGas: { feePerDaGas: "777", feePerL2Gas: "888" },
+				maxPriorityFeesPerGas: { feePerDaGas: "5", feePerL2Gas: "10" },
+				gasPadding: 1,
+			}
+			await applyEmbeddedFpcGasCap(txRequest, fee, node)
+			const after = txRequest.txContext.gasSettings
+			expect([after.maxFeesPerGas.feePerDaGas, after.maxFeesPerGas.feePerL2Gas]).toEqual([777n, 888n])
+			expect(node.getPredictedMinFees).not.toHaveBeenCalled()
+		},
+	)
 })

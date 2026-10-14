@@ -14,6 +14,7 @@ import { StepContent, type WrappedTask } from "@/wallet/services/task/service"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { EntityStorage } from "@/wallet/storage"
 import { Lock, sleep } from "@/wallet/utils"
+import type { PriorityLevel } from "@nulo/wallet-bridge"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
@@ -71,6 +72,8 @@ export type AddTransactionInput = {
 	gasDetails?: TxGasDetails
 	/** See {@link Tx.feeSpender}. */
 	feeSpender?: string
+	/** See {@link Tx.priorityLevel}. */
+	priorityLevel?: PriorityLevel
 	fence?: ExecutionFence
 	/** Owning network row id. Together with the fence's profile this is the
 	 *  row's activity scope — without it, two profiles holding the same
@@ -188,6 +191,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			estimatedFee,
 			gasDetails,
 			feeSpender,
+			priorityLevel,
 			fence,
 			networkId,
 		} = input
@@ -234,6 +238,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 				estimatedFee,
 				gasDetails,
 				...(feeSpender ? { feeSpender } : {}),
+				...(priorityLevel ? { priorityLevel } : {}),
 				submittedEndpointUrl,
 			}
 			await this.txs.set(tx.hash, tx)

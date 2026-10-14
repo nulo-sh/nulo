@@ -70,6 +70,16 @@ describe("DiscoveryAwareEstimator (inert extraction pins)", () => {
 		expect(builtOp.fee).toBe(fee)
 	})
 
+	test("an app's priority fee reaches discovery's build as well as the validated build", async () => {
+		const { estimator, authwit, buildAndEstimateValidated } = makeEstimator()
+		const fee = { maxPriorityFeesPerGas: { feePerDaGas: "7", feePerL2Gas: "9" } }
+		await estimator.estimate(OPERATION, [CALL], fee as never, FEE_SETTINGS, FENCE)
+		const discoveredOp = (authwit.discoverPrivateAuthwits.mock.calls[0] as unknown[])[0] as { fee?: unknown }
+		expect(discoveredOp.fee).toBe(fee)
+		const builtOp = (buildAndEstimateValidated.mock.calls[0] as unknown[])[0] as { fee?: unknown }
+		expect(builtOp.fee).toBe(fee)
+	})
+
 	test("cancel landing during discovery: sentinel, and the sizing pipeline never starts", async () => {
 		const controller = new AbortController()
 		const authwit = {

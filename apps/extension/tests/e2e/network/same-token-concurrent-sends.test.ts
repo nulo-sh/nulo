@@ -22,6 +22,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Page } from "puppeteer"
 import { afterEach, expect } from "vitest"
+import { queuedFeeCap } from "@/wallet/services/execution/queued-fee-cap"
 import { type AztecTestConfig, waitForTxMined } from "../fixtures/aztec"
 import { stopBackground } from "../fixtures/browser"
 import { type Burst, aztecConfig, burstTest as test, expectLedger, raw, reopen, settle } from "../fixtures/burst-account"
@@ -71,6 +72,7 @@ import {
 	waitForTransfersTerminal,
 	waitForTxsMined,
 } from "../fixtures/send-burst"
+import { readScopeIdentity, seedTransaction } from "../helpers/activity-seeds"
 import { deleteProfile, exportBackup, waitForHeldProjection } from "../helpers/handshake-import"
 import { importFullBackup, POPUP_IMPORT_SHELL } from "../helpers/import-drivers"
 
@@ -643,19 +645,33 @@ async function readRecordedFee(page: Page, hash: string): Promise<string | undef
 	}, hash)
 }
 
+/** Seeds a finalized private send of TST an hour old, paid from public Fee Juice at Urgent, whose
+ *  fee is 4/5 of the recorded fee of `hash`; returns that fee. */
+async function seedUrgentSend(burst: Burst, hash: string): Promise<string> {
+	const fee = await readRecordedFee(burst.page, hash)
+	if (fee === undefined) throw new Error(`no recorded fee for ${hash}`)
+	const estimatedFee = ((BigInt(fee) * 4n) / 5n).toString()
+	const token = { contract: burst.tokens.TST, name: "TestToken", symbol: "TST", decimals: 18 }
+	const scope = { ...(await readScopeIdentity(burst.page)), token }
+	const seed = { hash: `0x${"5e".repeat(32)}`, amount: raw("1"), at: Date.now() - 3_600_000, transferType: 0 }
+	await seedTransaction(burst.page, scope, { ...seed, estimatedFee, feePaymentMethod: 1, priorityLevel: "urgent" })
+	return estimatedFee
+}
+
 /** The case's bound on re-asks: each needs a price move between an accept and its build. */
 const MAX_ASKS = 3
 
 test.skipIf(!hasConfig)(
-	"a private send at Fast held unmined; a second private send of the token at Urgent is queued against the cap, asked again after the release, accepted from Home, and goes out once",
+	"a private send at Fast held unmined; a second at Urgent is queued against the cap of an older Urgent send, asked again after the release, accepted from Home, and goes out once",
 	{ timeout: 600_000, retry: 0 },
 	async ({ burst }) => {
 		const { nodeUrl } = aztecConfig as AztecTestConfig
-		// Both speeds are explicit: Normal prices at the build's default multiplier, which the e2e
-		// build widens above Urgent's, while Fast to Urgent is ×5/3 in every build, above the cap's ×1.25.
+		// Both speeds are explicit: Normal prices at the build's default multiplier, which the e2e build
+		// widens above Urgent's. B's basis is the older Urgent send, never A at Fast: seeded at 4/5 of A's
+		// fee, its cap is about A's fee, below B at Urgent, whose multiplier is 5/3 of Fast's in every build.
 		const a: BurstSend = { token: "TST", from: "private", to: "private", amount: "9", destination: to(), fee: "public", speed: "fast" }
 		const b: BurstSend = { ...a, amount: "10", speed: "urgent" }
-		await fireIntoHeldWindow(burst, a)
+		const basis = await seedUrgentSend(burst, await fireIntoHeldWindow(burst, a))
 		const { page } = burst
 
 		await startSend(page, b)
@@ -677,10 +693,13 @@ test.skipIf(!hasConfig)(
 		await releaseMining()
 
 		let accepted: string | undefined
+		const caps: string[] = []
 		for (let asks = 1; ; asks++) {
 			const asking = await waitForAskOrSent(burst.page, raw(b.amount), accepted)
 			if (asking === "sent") break
 			if (asks > MAX_ASKS) throw new Error(`asked again ${asks} times: ${JSON.stringify(asking)}`)
+			caps.push(asking.reask.cap)
+			console.log(`[same-token] re-ask ${asks} over a ${basis} basis: ${JSON.stringify(asking.reask)}`)
 			expect(BigInt(asking.reask.fee) > BigInt(asking.reask.cap), "a re-ask names a fee above its cap").toBe(true)
 			expect(await pendingTxCount(nodeUrl), "the node holds no tx of B before the accept").toBe(0)
 			if (asks === 1) await reopen(burst)
@@ -695,6 +714,7 @@ test.skipIf(!hasConfig)(
 			accepted = asking.reask.fee
 		}
 
+		expect(caps[0], "the first re-ask holds B to the like send's cap").toBe(queuedFeeCap(basis))
 		await expectBothSucceed(burst, a, b)
 		const sent = (await readTransferRows(burst.page)).filter((r) => r.amount === raw(b.amount))
 		expect(
