@@ -9,6 +9,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 import { nextTick } from "vue"
+import { Input } from "@nulo/design"
+import AddressInput from "@/components/composite/general/AddressInput.vue"
 import RecipientField from "./RecipientField.vue"
 
 const STUBS = {
@@ -16,18 +18,8 @@ const STUBS = {
 	Text: { template: "<span><slot /></span>", props: ["color", "noWrap", "align", "selectable"] },
 	Icon: { template: '<i data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color", "scale"] },
 	AddressInput: {
-		template: `<div class="stub-input"><input :value="modelValue" :role="role" :aria-labelledby="ariaLabelledby" :aria-expanded="ariaExpanded" :aria-autocomplete="ariaAutocomplete" :aria-activedescendant="ariaActivedescendant" :aria-controls="ariaControls" @focus="$emit('focus')" @blur="$emit('blur')" /><slot name="suffix" /></div>`,
-		props: [
-			"modelValue",
-			"placeholder",
-			"autofocus",
-			"role",
-			"ariaLabelledby",
-			"ariaExpanded",
-			"ariaAutocomplete",
-			"ariaActivedescendant",
-			"ariaControls",
-		],
+		template: `<div class="stub-input"><input :value="modelValue" :aria-activedescendant="ariaActivedescendant" :aria-controls="ariaControls" @focus="$emit('focus')" @blur="$emit('blur')" /><slot name="suffix" /></div>`,
+		props: ["modelValue", "placeholder", "autofocus", "ariaActivedescendant", "ariaControls"],
 		emits: ["focus", "blur", "update:modelValue"],
 	},
 	Transition: { template: "<slot />" },
@@ -271,20 +263,27 @@ describe("modules/send/RecipientField", () => {
 			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([account1])
 		})
 
-		test("the field is a combo box named by the list's visible label, expanded exactly while its list shows", async () => {
+		test("the field is a combo box named by the list's visible label, expanded exactly while its list is open", async () => {
+			const real = async (props: Record<string, unknown>) => {
+				const global = { components: { AddressInput, Input }, stubs: { ...STUBS, AddressInput: false } }
+				const w = mount(RecipientField, { props, global, attachTo: document.body })
+				mounted.push(w)
+				await w.get("input").trigger("focus")
+				return w
+			}
 			const combo = (w: ReturnType<typeof mount>) => {
 				const { role, "aria-autocomplete": autocomplete, "aria-expanded": expanded, "aria-labelledby": by } = field(w)
-				return { role, autocomplete, expanded, label: w.get(`[id="${by}"]`).text() }
+				return { role, autocomplete, expanded, label: w.get(`[id="${by}"]`).text(), list: w.find('[role="listbox"]').exists() }
 			}
-			const closed = { role: "combobox", autocomplete: "list", expanded: "false", label: "Recipient Address" }
-			const empty = await open({ candidates: [alice, account1], searchTerm: "" })
-			expect(combo(empty)).toEqual(closed)
+			const closed = { role: "combobox", autocomplete: "list", expanded: "false", label: "Recipient Address", list: false }
+			const opened = { ...closed, expanded: "true", list: true }
+			expect(combo(await real({ candidates: [alice, account1], searchTerm: "" }))).toEqual(closed)
 
-			const w = await open()
-			expect(combo(w)).toEqual({ ...closed, expanded: "true" })
+			const w = await real({ candidates: [alice, account1], searchTerm: "a" })
+			expect(combo(w)).toEqual(opened)
 			expect(field(w)["aria-labelledby"]).toBe(w.get('[role="listbox"]').attributes("aria-labelledby"))
 			await press(w, "ArrowDown")
-			expect(combo(w)).toEqual({ ...closed, expanded: "true" })
+			expect(combo(w)).toEqual(opened)
 			await press(w, "Escape")
 			expect(combo(w)).toEqual(closed)
 		})
