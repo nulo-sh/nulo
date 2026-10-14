@@ -20,6 +20,7 @@ import { type AwaitingTx, txBelongsToScope, txScope, useActivityStore } from "@/
 import { approvedSendsInFlight as countApprovedSendsInFlight, hasInFlightSend as inFlightHasSend } from "@/utils/in-flight-send"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import { OperationJournalServiceClient } from "@/wallet/services/operation-journal/client"
+import { createContactImportGuard } from "./contact-import-guard"
 
 /**
  * The setup is a coordinator: it owns the plain refs and composes module-level factories in the
@@ -61,10 +62,12 @@ export const useAppStore = defineStore("app", () => {
 	const accountActions = createAccountActions({ profile, network, account, accounts, commitScopeChange: inFlight.commitScopeChange })
 	const networkActions = createNetworkActions({ network, networkStatus, networks })
 	const feed = createActivityBridge({ activity, profile, profiles, network, account })
+	const contactImports = createContactImportGuard()
 
 	const dappSessions = ref([])
 	const isPrivacyModeEnabled = ref(false)
-	const defaultExplorer = ref<BlockExplorerType | null>("aztecscan")
+	// Null until the shell applies the stored choice, so a failed settings read shows no explorer link.
+	const defaultExplorer = ref<BlockExplorerType | null>(null)
 	const loggerWindowId = useSyncedRef("loggerWindowId", null)
 
 	return {
@@ -99,6 +102,10 @@ export const useAppStore = defineStore("app", () => {
 		refreshInFlight: inFlight.refreshInFlight,
 		resetInFlight: inFlight.resetInFlight,
 		commitScopeChange: inFlight.commitScopeChange,
+		contactImports: contactImports.contactImports,
+		lockHeldByImport: contactImports.lockHeldByImport,
+		beginContactImport: contactImports.beginContactImport,
+		resetContactImports: contactImports.resetContactImports,
 		/** @deprecated Prefer `commitScopeChange`; an async apply reopens the race. */
 		withScopeChangeAllowed: inFlight.commitScopeChange,
 		addAwaitingTransaction: feed.addAwaitingTransaction,

@@ -34,3 +34,8 @@
 		animation: none;
 	}
 }
+
+:global(.noanimations) .shake_password,
+:global(.noanimations) .shake_name {
+	animation: none;
+}

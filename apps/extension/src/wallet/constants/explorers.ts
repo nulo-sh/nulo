@@ -39,22 +39,58 @@ const EXPLORER_BASE_URLS: Record<BlockExplorerType, Record<number, string>> = {
 	},
 }
 
+const HEX_32_BYTES = /^0x[0-9a-fA-F]{64}$/
+
 /**
- * Construct a transaction explorer URL for a given transaction hash.
- * Returns null if explorer is disabled (null) or doesn't support the network.
- *
- * @param chainId - The network's chain ID
- * @param explorerId - User's selected explorer ID, or null if disabled
- * @param txHash - Transaction hash
- * @returns Full URL to view the transaction, or null if unavailable
+ * A transaction's explorer page. Returns null as `getBlockExplorerUrl` does, for anything but a
+ * 32-byte hex hash: a stored hash, which a restored backup supplies, lands in a URL path.
  */
 export function getTransactionExplorerUrl(
 	chainId: number,
 	explorerId: BlockExplorerType | null | undefined,
 	txHash: string,
 ): string | null {
-	if (!explorerId) return null
-
-	const baseUrl = EXPLORER_BASE_URLS[explorerId]?.[chainId]
+	const baseUrl = HEX_32_BYTES.test(txHash) ? explorerBaseUrl(chainId, explorerId) : null
 	return baseUrl ? `${baseUrl}/tx-effects/${txHash}` : null
+}
+
+/** The explorer's base URL for the chain, or null when the explorer is None or covers no such chain. */
+function explorerBaseUrl(chainId: number | null | undefined, explorerId: BlockExplorerType | null | undefined): string | null {
+	if (!explorerId || chainId === null || chainId === undefined) return null
+	return EXPLORER_BASE_URLS[explorerId]?.[chainId] ?? null
+}
+
+/**
+ * A block's explorer page, by its number or its hash. Returns null under explorer None, on a chain no
+ * explorer covers, and for anything but a non-negative safe integer or a 32-byte hex hash: the value
+ * comes from the node or from storage and lands in a URL path.
+ */
+export function getBlockExplorerUrl(
+	chainId: number | null | undefined,
+	explorerId: BlockExplorerType | null | undefined,
+	block: number | string,
+): string | null {
+	const valid = typeof block === "number" ? Number.isSafeInteger(block) && block >= 0 : HEX_32_BYTES.test(block)
+	const baseUrl = valid ? explorerBaseUrl(chainId, explorerId) : null
+	return baseUrl ? `${baseUrl}/blocks/${block}` : null
+}
+
+/** A contract instance's explorer page. Returns null as `getBlockExplorerUrl` does, for anything but a 32-byte hex address. */
+export function getContractExplorerUrl(
+	chainId: number | null | undefined,
+	explorerId: BlockExplorerType | null | undefined,
+	address: string,
+): string | null {
+	const baseUrl = HEX_32_BYTES.test(address) ? explorerBaseUrl(chainId, explorerId) : null
+	return baseUrl ? `${baseUrl}/contracts/instances/${address}` : null
+}
+
+/** An account's explorer page. Returns null as `getBlockExplorerUrl` does, for anything but a 32-byte hex address. */
+export function getAccountExplorerUrl(
+	chainId: number | null | undefined,
+	explorerId: BlockExplorerType | null | undefined,
+	address: string,
+): string | null {
+	const baseUrl = HEX_32_BYTES.test(address) ? explorerBaseUrl(chainId, explorerId) : null
+	return baseUrl ? `${baseUrl}/address/${address}` : null
 }

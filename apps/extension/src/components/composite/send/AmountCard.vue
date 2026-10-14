@@ -471,7 +471,7 @@ const handleFiatBalanceAction = (divisor) => {
 			</Flex>
 
 			<span v-if="fiatMode && derivedOwnRow" :class="$style.conversion">
-				<span v-if="fiatGuard?.converting" :class="$style.skeleton" data-testid="send-amount-converting" />
+				<Skeleton v-if="fiatGuard?.converting" :width="72" :height="10" data-testid="send-amount-converting" />
 				<span v-else-if="derivedTokenLabel" :title="conversionTitle" data-testid="send-amount-derived" :class="$style.derived_type" :style="{ '--hero-scale': derivedScale }">{{
 					derivedTokenLabel
 				}}</span>
@@ -481,7 +481,7 @@ const handleFiatBalanceAction = (divisor) => {
 				<span ref="conversionEl" :class="[$style.conversion, fiatMode && $style.conversion_fit]" data-testid="send-amount-meta">
 					<template v-if="fiatMode">
 						<template v-if="!derivedOwnRow">
-							<span v-if="fiatGuard?.converting" :class="$style.skeleton" data-testid="send-amount-converting" />
+							<Skeleton v-if="fiatGuard?.converting" :width="72" :height="10" data-testid="send-amount-converting" />
 							<span v-else-if="derivedTokenLabel" :title="conversionTitle" data-testid="send-amount-derived" :class="$style.derived_type" :style="{ '--hero-scale': derivedScale }">{{
 								derivedTokenLabel
 							}}</span>
@@ -625,30 +625,6 @@ const handleFiatBalanceAction = (divisor) => {
 .derived_type {
 	font-size: calc(11px * var(--hero-scale, 1));
 	white-space: nowrap;
-}
-
-.skeleton {
-	display: inline-block;
-	width: 72px;
-	height: 10px;
-	background: linear-gradient(90deg, var(--nulo-surface-high) 25%, var(--nulo-surface) 50%, var(--nulo-surface-high) 75%);
-	background-size: 200% 100%;
-	animation: shimmer 1.5s infinite;
-}
-
-@keyframes shimmer {
-	0% {
-		background-position: 200% 0;
-	}
-	100% {
-		background-position: -200% 0;
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.skeleton {
-		animation: none;
-	}
 }
 
 .clamp_hint {

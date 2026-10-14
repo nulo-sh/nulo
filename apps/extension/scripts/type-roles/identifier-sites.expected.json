@@ -589,12 +589,22 @@
 		{
 			"file": "apps/extension/src/popup/pages/journal/[id].vue",
 			"expression": "recipientLabel",
-			"branch": "op && display && recipientLabel",
+			"branch": "op && display && recipientLabel && recipientUrl",
 			"ordinal": 0,
+			"role": "data",
+			"selector": "[data-testid=\"journal-detail-recipient-link\"]",
+			"surface": "popup-journal-id",
+			"state": "a journal operation with a recipient on the testnet chain with an explorer"
+		},
+		{
+			"file": "apps/extension/src/popup/pages/journal/[id].vue",
+			"expression": "recipientLabel",
+			"branch": "op && display && recipientLabel && !(recipientUrl)",
+			"ordinal": 1,
 			"role": "data",
 			"selector": "[data-testid=\"journal-detail-recipient\"]",
 			"surface": "popup-journal-id",
-			"state": "a journal operation with a recipient"
+			"state": "a journal operation with a recipient without an explorer"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/legal/declined.vue",
@@ -650,12 +660,22 @@
 		{
 			"file": "apps/extension/src/popup/pages/received/[id].vue",
 			"expression": "trimAddress(received.blockHash, 6, 4)",
-			"branch": "received && received.l2BlockNumber && isPublic",
+			"branch": "received && received.l2BlockNumber && blockUrl && isPublic",
 			"ordinal": 0,
+			"role": "meta",
+			"selector": "[data-testid=\"received-block-link\"]",
+			"surface": "popup-received-id",
+			"state": "a public seedReceipt note with a block number on the testnet chain with an explorer"
+		},
+		{
+			"file": "apps/extension/src/popup/pages/received/[id].vue",
+			"expression": "trimAddress(received.blockHash, 6, 4)",
+			"branch": "received && received.l2BlockNumber && isPublic",
+			"ordinal": 1,
 			"role": "meta",
 			"selector": "[data-testid=\"tx-block-hash\"]",
 			"surface": "popup-received-id",
-			"state": "a public seedReceipt note with a block number"
+			"state": "a public seedReceipt note with a block number without an explorer"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/settings/accounts/import.vue",
@@ -810,12 +830,22 @@
 		{
 			"file": "apps/extension/src/popup/pages/tx/[id].vue",
 			"expression": "trimAddress(tx.block.hash, 6, 4)",
-			"branch": "tx && tx?.block",
+			"branch": "tx && tx?.block && blockUrl",
 			"ordinal": 0,
+			"role": "meta",
+			"selector": "[data-testid=\"tx-block-link\"]",
+			"surface": "popup-tx-id",
+			"state": "the seedTransaction row with a block on the testnet chain with an explorer"
+		},
+		{
+			"file": "apps/extension/src/popup/pages/tx/[id].vue",
+			"expression": "trimAddress(tx.block.hash, 6, 4)",
+			"branch": "tx && tx?.block && !(blockUrl)",
+			"ordinal": 1,
 			"role": "meta",
 			"selector": "[data-testid=\"tx-block-hash\"]",
 			"surface": "popup-tx-id",
-			"state": "the seedTransaction row with a block"
+			"state": "the seedTransaction row with a block without an explorer"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/tx/[id].vue",

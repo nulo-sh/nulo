@@ -19,6 +19,7 @@
 import { flushPromises, mount } from "@vue/test-utils"
 import { reactive, ref } from "vue"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 
 const openToastMock = vi.fn()
 const allowMock = vi.fn().mockResolvedValue(undefined)
@@ -35,6 +36,7 @@ const cacheStoreState: {
 		tokenDecimals?: number
 		amountRaw: string
 		contract: string
+		networkId: string
 		allow: () => Promise<void>
 		reject: () => Promise<void>
 	}
@@ -44,13 +46,21 @@ const cacheStoreState: {
 		tokenDecimals: 18,
 		amountRaw: "1000000000000000000",
 		contract: contractAddress,
+		networkId: "n1",
 		allow: allowMock,
 		reject: rejectMock,
 	},
 })
+const appStoreState: { network: { id: string; chainId: number }; defaultExplorer: string | null } = reactive({
+	network: { id: "n1", chainId: CHAIN_IDS.TESTNET },
+	defaultExplorer: "aztecscan",
+})
 
 vi.mock("@/stores/cache.store.ts", () => ({
 	useCacheStore: () => cacheStoreState,
+}))
+vi.mock("@/stores/app.store", () => ({
+	useAppStore: () => appStoreState,
 }))
 vi.mock("@/stores/popup.store", () => ({
 	usePopupStore: () => ({ len: 1, popups: { incoming_trust: { order: 0 } } }),
@@ -95,6 +105,9 @@ beforeEach(() => {
 	// restore it so each test starts from the same prompt.
 	cacheStoreState.incomingTrust.tokenSymbol = "TST"
 	cacheStoreState.incomingTrust.contract = contractAddress
+	cacheStoreState.incomingTrust.networkId = "n1"
+	appStoreState.network = { id: "n1", chainId: CHAIN_IDS.TESTNET }
+	appStoreState.defaultExplorer = "aztecscan"
 	cacheStoreState.incomingTrust.allow = allowMock
 	cacheStoreState.incomingTrust.reject = rejectMock
 })
@@ -213,6 +226,31 @@ describe("IncomingTrustPopup — contract verification surface", () => {
 		// to prevent state bleed across separate pending contracts.
 		expect(w.find("#incoming-trust-contract-full").attributes("style") ?? "").toContain("display: none")
 		expect(w.find('[data-testid="incoming-trust-contract-expand"]').attributes("aria-expanded")).toBe("false")
+	})
+})
+
+describe("IncomingTrustPopup — the contract's explorer link", () => {
+	const link = async () => {
+		const w = mount(IncomingTrustPopup, { props: { show: true }, global: { stubs: STUBS } })
+		await flushPromises()
+		return w.find('[data-testid="incoming-trust-contract-link"]')
+	}
+
+	test("opens the contract's page on the chosen explorer in a new tab", async () => {
+		const a = await link()
+		expect(a.attributes("href")).toBe(`https://testnet.aztecscan.xyz/contracts/instances/${contractAddress}`)
+		expect(a.attributes("target")).toBe("_blank")
+		expect(a.attributes("rel")).toBe("noopener noreferrer")
+		expect(a.text()).toBe("View contract on Aztecscan")
+	})
+
+	test.each([
+		["under explorer None", () => (appStoreState.defaultExplorer = null)],
+		["on the sandbox", () => (appStoreState.network = { id: "n1", chainId: CHAIN_IDS.SANDBOX })],
+		["for a prompt naming another network", () => (cacheStoreState.incomingTrust.networkId = "n2")],
+	])("does not show %s", async (_, arrange) => {
+		arrange()
+		expect((await link()).exists()).toBe(false)
 	})
 })
 
