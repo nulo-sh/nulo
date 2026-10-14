@@ -36,6 +36,7 @@ configService.onUpdate.add(onSettingUpdate)
 const defaultConfig = makeDefaultConfig()
 const indicateFailures = ref(defaultConfig.indicateFailures)
 const showNode = ref(defaultConfig.showNode)
+const networkStatusKey = computed(() => String(appStore.networkStatus).toLowerCase())
 
 const HEADER_INDICATION_DURATION = 5_000
 let headerIndicateFailureTimer = null
@@ -264,11 +265,12 @@ onBeforeUnmount(() => {
 				type="button"
 				@click="handleOpenNetworks"
 				data-testid="network-button"
+				:data-status="networkStatusKey"
 				:aria-label="`Manage networks (currently ${appStore.network.name})`"
 				:class="$style.network_chip"
 			>
 				<span :class="$style.network_label">{{ appStore.network.name }}</span>
-				<div :class="[$style.status_dot, $style[String(appStore.networkStatus).toLowerCase()]]" />
+				<div :class="[$style.status_dot, $style[networkStatusKey]]" />
 			</button>
 
 			<button
