@@ -16,4 +16,4 @@ Every visible change in this lane is signed on decision page 9 (#408 Decision C,
 
 **Status.** Not an open question: P9-12 B cannot be built without A, and option B contradicts it. Recorded because persistence is the owner's to approve, so the orchestrator can confirm it with the plan.
 
-**What ships now.** A.
+**What ships now.** A, confirmed by the orchestrator with the plan on 2026-10-14 (D-orch-15).

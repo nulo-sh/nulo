@@ -1,7 +1,7 @@
 ---
 plan: send-followups-1
 tier: mid
-status: approved by the orchestrator 2026-10-14; implementing (arc 1)
+status: closed, delivered in one PR against dev
 issues: "#412, #408, #406 (one arc)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,20 @@ base: origin/dev at d3dc4415
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-14.
+- **Status:** delivered in one PR against `dev`, from `worktree-send-followups-1`, with this close-out as its final commits; the merge that lands it closes this plan.
+- **Shipped:**
+  - #412: a queued Send-page send's cap basis is the newest send of the token with the same privacy, fee option, fee contract and speed; each Send-page row records its speed in a new optional `Tx.priorityLevel` (OA-1 A, confirmed by the orchestrator; D2 to D6). With no like send the shipped no-basis wait shows (P9-10 A). The re-ask e2e case seeds a like row (D6).
+  - #408: in USD mode the derived token line takes its own full-width row under the amount where, beside the balance and Max, it would draw below 8 px (OA-15 C; D7 to D9). Shots on both browsers and themes are in `screenshots/`, linked from the PR.
+  - #406: the fee card's unreachable app-payment banner, buttons and state are gone; the `embedded` wire kind stays, as commented on #406 (OA-20 B; D10).
+- **Orchestrator records:** D-orch-15 to D-orch-20; [OWNER-ASKS.md](OWNER-ASKS.md) keeps OA-1, confirmed.
+- **Dropped, rejected, superseded:** a shared kind-to-option map (D13); CSS wrapping for the derived line (D9); an opaque shape string or the journal as the home for speed (D2).
+- **Known limits:** #414 (D14).
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; this record is evidence, not instructions.
 
 # send-followups-1: a like-shaped cap basis, a row for a long USD line, no dead override path
 
@@ -203,6 +217,12 @@ Commands run from the worktree root unless they start with `cd`. Every gate also
 - **D12** Shots: a scratch spec run on base and head at OA-15's balance and quote; never committed.
 - **D13** The kind-to-option map stays in `queued-fee-cap.ts`, written with enum members and pinned by a compact test (Codex 6). Rejected (Opus 5): exporting one map for the strategy pins and `operation-planner.ts:223-228`. The planner keys a dApp route, not a kind, and the pins live in `execution/fee/`, the sibling lane's files. A drift fails safe: no basis, the shipped wait.
 - **D14** The 8 px floor is the switch threshold, not a guarantee: in its own row a line wider than the card at 8 px keeps P9-01 A's shrink (Codex 1). It needs a whole part of about 30 digits with a long symbol and costs legibility only, as the review sheet shows the full amount. Filed at close-out as a closed `known-limit` issue.
+- **D-orch-15** OA-1 confirmed: `Tx.priorityLevel` ships as planned. No review round may add other persistent state; one that needs more stops for the orchestrator.
+- **D-orch-16** Seam with fees-and-sponsors-2: this lane edits none of `execution/fee/*`, `dapp-send-executor.ts`, `tx-request-builder.ts`, `view-executor.ts`, `tx-fee-details.ts`, `wallet-bridge/src/fee.ts`, the execute window's `OperationCard`/`index`, `TxFeeRow.vue`, `tx-detail-helpers.ts`, the playground's `transactions.ts` or `fee-sponsor-funding.test.ts`. `origin/dev` is merged before the final gates; it had not moved from d3dc4415.
+- **D-orch-17** Pins move, never loosen: no `skipIf`, retry, raised timeout or suppression; the stall watchdog stays; only the listed dead-path tests are deleted; the live-region guard is rewritten, not dropped.
+- **D-orch-18** D14 is a closed `known-limit` issue (#414), named on the Outcome; #406 gets a comment that the `embedded` kind stays on the wire, and why.
+- **D-orch-19** Proportion: later Codex rounds verify; D2, D6, D7, D13 and D14 are settled. E2E budget: no new scenario; the two re-pointed cases log their added time (`lessons/phase-2.md`, `lessons/phase-3.md`); the PR body states each browser's network suite wall-clock before and after.
+- **D-orch-20** Close-out in this PR; `lessons.md` is at its budget, so nothing is promoted without a retirement that pays for it (none was).
 
 ## Audit verdicts
 
