@@ -4,6 +4,7 @@
  * popup can ask again with it. The boundary of a send queued against a fee cap sits here too.
  */
 import { describe, expect, test, vi } from "vitest"
+import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import { QueuedFeeAnswers } from "./queued-fee-cap"
 import { OriginType, TransferType, type Tx } from "@/wallet/services/transaction/spec"
@@ -14,17 +15,29 @@ import { ExecutionService } from "./service"
 const SCOPE = { chainId: 7, account: "0xme" }
 const KEYS = new Set(["seq:0xtoken:0xme"])
 
-/** A Send-page send of the token by `p1` on chain 7, whose recorded fee is `estimatedFee`. */
-const sent = (estimatedFee: string, createdAt = 1): Tx =>
+/** A Send-page private send of the token by `p1` on chain 7, paid from public Fee Juice at
+ *  `priorityLevel`, whose recorded fee is `estimatedFee`. */
+const sent = (estimatedFee: string, createdAt = 1, priorityLevel = "urgent"): Tx =>
 	({
 		chainId: 7,
 		profileId: "p1",
 		account: "0xme",
 		createdAt,
 		estimatedFee,
+		feePaymentMethod: AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE,
+		priorityLevel,
 		origin: { type: OriginType.UI },
-		calls: [{ contract: "0xtoken", method: "transfer_private_to_private", args: [] }],
+		calls: [
+			{
+				contract: "0xtoken",
+				method: "transfer_private_to_private",
+				args: [],
+				transfers: [{ type: TransferType.Private, from: "0xme", to: "0xyou" }],
+			},
+		],
 	}) as unknown as Tx
+
+const URGENT_FJ = { paymentMethod: { kind: "fj" }, priorityLevel: "urgent" } as const
 
 function makeFacade(rows: Tx[] = []) {
 	const sendSequencer = new SendSequencer({ pendingTxs: () => [], sleep: async () => {}, now: () => 0 })
@@ -52,7 +65,7 @@ function makeFacade(rows: Tx[] = []) {
 		tokenService: { getTokenRaw: async () => ({ contract: "0xtoken" }) },
 		transactionService: { getTransactions: vi.fn(async () => rows) },
 	}) as ExecutionService
-	const estimate = () => facade.estimateTransferFee("net-1", "0xme", 1, TransferType.Private, "0xyou", 5n, {} as never, "tok-1")
+	const estimate = () => facade.estimateTransferFee("net-1", "0xme", 1, TransferType.Private, "0xyou", 5n, URGENT_FJ, "tok-1")
 	return { facade, sendSequencer, chainTipGate, node, lane, admit, estimateFee, estimate }
 }
 
@@ -85,6 +98,11 @@ describe("ExecutionService.estimateTransferFee while a send holds the transfer's
 		const without = makeFacade()
 		without.sendSequencer.enter(SCOPE, KEYS)
 		expect(await without.estimate()).toEqual({ queued: true, tokenSpent: false })
+
+		// The newest send of the token went at another speed: the older Urgent one is the basis.
+		const unlike = makeFacade([sent("3577824000000000000", 1), sent("1000000000000000000", 2, "normal")])
+		unlike.sendSequencer.enter(SCOPE, KEYS)
+		expect(await unlike.estimate()).toMatchObject({ queued: true, cap: { basis: "3577824000000000000" } })
 
 		// A predecessor's block the node lacks queues the send the same way, so it offers the cap too.
 		const lagging = makeFacade([sent("3577824000000000000")])

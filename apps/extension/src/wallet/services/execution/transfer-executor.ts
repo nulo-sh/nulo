@@ -42,7 +42,7 @@ import type { FeeEstimate } from "./fee/fee-strategy"
 import { builtCapOf, type ChainIdentity } from "./estimate-reuse-shared"
 import { failureKind } from "./mark-failed-unless-cancelled"
 import type { OperationPlanner, TransferRequest } from "./operation-planner"
-import { type QueuedFeeAnswers, queuedFeePayer } from "./queued-fee-cap"
+import { type QueuedFeeAnswers, queuedFeePayer, speedOf } from "./queued-fee-cap"
 import { maybeRethrowAsRpcCancel, throwIfAborted } from "./rpc-cancel"
 import type { ChainTipGate } from "./chain-tip-gate"
 import type { SendSequencer, SequenceScope, SequenceTicket } from "./send-sequencer"
@@ -495,6 +495,7 @@ export class TransferExecutor {
 			fence,
 			networkId: network.id,
 			feeSpender,
+			priorityLevel: speedOf(req.feeSettings),
 		})
 	}
 
