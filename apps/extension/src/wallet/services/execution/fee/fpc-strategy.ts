@@ -35,8 +35,7 @@
  *   Pass 2: re-build + re-simulate with External + override gasSettings
  *   Finish: re-compute maxFee with padded gas, splice in final fee payload
  *
- * PrivateFPC's cap is `feeCapFor`'s private fee juice rule, whatever the speed level; an app's cap
- * or priority fee reaches a sponsor and private fee juice as it reaches every payer.
+ * PrivateFPC's cap is `feeCapFor`'s private fee juice rule, whatever the speed level.
  *
  * Pass 1 is LOAD-BEARING for PrivateFPC: its Noir `pay_fee` computes
  * `max_gas_cost` from the transaction's gas-settings envelope, so the FPC

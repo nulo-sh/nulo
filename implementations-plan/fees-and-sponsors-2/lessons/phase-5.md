@@ -33,3 +33,7 @@ Pass, with one recorded exception that is not this arc's: Firefox `fee-methods` 
 
 - zsh does not word-split an unquoted `$F`: a file list kept in one variable reaches vitest as a single argument ("No test files found"). Spell the files out.
 - Two `e2e:agent` runs in one worktree collide even when the second is refused: the refused run has already rebuilt `dist/<browser>` before setup sees the sandbox owner, so the first run's loaded extension loses its files (`net::ERR_FILE_NOT_FOUND` at `src/popup/index.html`). Results from an overlapped run are void; rerun alone.
+
+## Review loop
+
+- **Round 1** (Codex `01a13b39` and one Opus agent, in parallel, over the whole diff from d3dc4415): both fix-needed, every finding minor and accepted (plan § Audit verdicts, post-implementation round 1). The one behaviour fix: standalone discovery now simulates with the app's priority, as every other build does. Gates after the fixes: lint 0, typecheck:all 0, execution + execute window + tx module units 1475 passed, wallet-bridge 750 passed. A mutation check (`setsOwnFee` narrowed to app-paid rows) turns the new person-paid hold test red.

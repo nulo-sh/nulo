@@ -82,7 +82,7 @@ export type TransferFeeEstimate = {
 	/** Human-readable fee amount, e.g. "0.000123" */
 	readonly maxFeeFormatted: string
 	/** The part of `maxFee` an app's priority fee may take (raw), and its human-readable form; set
-	 *  together, only when non-zero. */
+	 *  together, only when the formatted form is not "0". */
 	readonly priorityFee?: string
 	readonly priorityFeeFormatted?: string
 	/** Gas breakdown */

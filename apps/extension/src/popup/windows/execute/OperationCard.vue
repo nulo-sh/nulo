@@ -287,7 +287,6 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 		<template v-if="isEmbeddedFeePayment(op)">
 			<Flex data-testid="execute-op-fee-set-badge" align="center" gap="8" wide :class="$style.op_fee_set">
 				<Icon name="check-circle" size="14" color="green" />
-				<!-- The figure is the fee limit the estimate committed; until it lands the row names the app. -->
 				<Text v-if="feeEstimate" variant="body" color="secondary" data-testid="execute-op-app-fee">
 					Fee up to
 					<Text variant="name" color="primary" :class="$style.name_size">{{ feeEstimate.maxFeeFormatted }} FJ</Text><template v-if="feeEstimate.priorityFeeFormatted">, includes a {{ feeEstimate.priorityFeeFormatted }} FJ priority fee the app asked for</template>

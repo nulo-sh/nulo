@@ -148,7 +148,7 @@ The app-paid row shows "Fee up to G·C" and, when q > 0, ", includes a G·min(q,
 
 ## Security & Adversarial Considerations
 
-- **Threat model.** An app chooses `maxFeesPerGas`, `maxPriorityFeesPerGas` and its payer in an `aztec_sendTx`, parsed by the wallet-sdk schema before the planner. Malformed or negative values fail the build (`GasFees`, `Fr`), never a silent default.
+- **Threat model.** An app chooses `maxFeesPerGas`, `maxPriorityFeesPerGas` and its payer in an `aztec_sendTx`. The wallet-sdk schema does not check them: aztec.js 6.0.0-rc.1's `GasSettingsOptionSchema` names `maxFeePerGas` and `maxPriorityFeePerGas` (singular), so the plural keys the wallet reads pass unparsed (Opus review, round 1). Malformed, negative or over-u128 values still fail loudly (`BigInt`, `GasSettings.toFields`/`toBuffer`), the window and the service worker read the same raw keys, and a failed estimate keeps Confirm held: never a silent default.
 - **A raised charge on the person's payer.** Path: the app sets k·P with k > 1.2 (or q > 0); the person's pick is private fee juice or Fee Juice; the person presses Confirm before the estimate lands; the PrivateFPC debits G·C with no refund. Plausible but unverified (a window of seconds), demonstrated by code trace (`index.vue:706-714`). The installed library warns that an unbounded fee is a fund-loss vector (`@alejoamiras/private-fee-juice` `dist/src/ts/utils/gas.js`). Fix: the Confirm wait, a computed value over the window's estimate state; no new state or lifecycle.
 - **A sponsor pays the app's priority.** Every sponsor row the wallet accepts runs `sponsor_unconditionally`, so any caller can already spend it with any priority: the wallet gives an app no new capability.
 - **The app's fee contract.** "Fee up to X" is the network limit. What the person pays that contract is in the app's own payload, as before, and an app may set a small cap so the row reads cheap; P6-19 B signed this design.
@@ -280,6 +280,19 @@ The PR body states the network suite's per-browser wall-clock before and after.
 - F1 medium, the profile path builds with zero priority while the cap helper adds q: **accepted** (Phase 1 step 4, a parity test).
 - F2 medium, `getTxByHash` serves only pending transactions, so a read-back races mining: **accepted**; the read-back is dropped and the confirm build's priority is a unit pin (D10). A worker network tap would be a new, Chrome-only harness.
 - F3 low, OA-2 and OA-3 defaults follow the signed text: **accepted**; OWNER-ASKS marks them as defaults the owner answers only to change.
+
+### Post-implementation round 1 (2026-10-14, the whole diff from d3dc4415)
+
+**Codex** (`gpt-6.1-sol`, high, session `01a13b39`): **fix-needed**.
+- R1-1 medium, standalone discovery (fjwc, embedded, or a pre-attached private authwit) built with no priority while the validated build had it; a private call that reads its gas settings could discover the wrong authwits: **accepted**. The discovery op carries the app's fee and `buildForDiscovery` passes `appPriorityOf` (D4 now holds for every build); a regression test in `discovery-aware-estimator.test.ts`.
+- R1-2 low, `priorityFeeOf`'s doc said "as the protocol pays it"; it is the cap-bounded allowance: **accepted**, reworded.
+- R1-3 low, the app-paid row's template comment narrated the `v-if`: **accepted**, deleted.
+
+**Opus** (general-purpose agent): **fix-needed**, all minor.
+- O1 low, a priority below 0.0000005 FJ rounds to "0" and the row would read "includes a 0 FJ priority fee": **accepted**. The pair is set only when its formatted form is not "0" (the row reads as the no-priority case at the precision every figure uses); pinned in `dapp-send-executor.test.ts`.
+- O2 info, the plan's threat model said the wallet-sdk schema parses the app's fee values; the installed schema spells them singular, so it does not: **accepted**, the Security line corrected. No exploit: every malformed value throws and holds Confirm.
+- O3 low, no test held Confirm on a person-paid row with an app cap: **accepted**, one test (red when `setsOwnFee` is narrowed to app-paid rows).
+- O4 comments: a wrong "NO_FROM builds never reach this function" in `finalizeGasLimits`' doc, `reuseCapRule`'s invariant missing "or priority fee", two restating comments, the rule restated in `embedded-fpc-cap.ts`, a blank line left in `TxFeeRow.vue`: **accepted**, each fixed.
 
 ## Post-implementation
 

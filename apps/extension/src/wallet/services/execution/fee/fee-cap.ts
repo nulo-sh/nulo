@@ -32,7 +32,6 @@ export type FeeCapRule =
 	 *  may budget against the cap. */
 	| ({ readonly payer: "app" } & AppFees)
 
-/** The cap `rule` commits. */
 export async function feeCapFor(node: MinFeeNode, rule: FeeCapRule): Promise<GasFees> {
 	if (rule.appCap) return new GasFees(BigInt(rule.appCap.feePerDaGas), BigInt(rule.appCap.feePerL2Gas))
 	const basis = basisOf(await predictedWorstMinFees(node), rule)

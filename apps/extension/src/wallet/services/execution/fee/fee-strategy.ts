@@ -201,8 +201,8 @@ export function isInitWrapped(built: { txRequest: TxExecutionRequest; account: {
 	return built.txRequest.origin?.toString() !== built.account.address.toString()
 }
 
-/** The gas settings a build starts from: the app's priority fee when it set one. The build's cap is a
- *  placeholder every strategy overwrites before its simulation or at finalize. */
+/** The gas settings a build starts from: the app's priority fee when it set one. The cap stays the
+ *  build's placeholder until a strategy sets it (`feeCapFor`). */
 export function appPriorityOf(fee?: FeeOptions): PartialGasSettingsRPC | undefined {
 	return fee?.maxPriorityFeesPerGas ? { maxPriorityFeesPerGas: fee.maxPriorityFeesPerGas } : undefined
 }
@@ -285,8 +285,7 @@ export function assertCustomGasLimitsWithinCap(fee: FeeOptions | undefined, txsL
  *  - dApp `customLimits` over the cap ⇒ THROW, never silently capped (a
  *    dApp-visible behavior contract; capping silently would commit different
  *    bytes than the dApp signed off on).
- *  Absent (defensive), behavior is unchanged. NO_FROM builds never reach this
- *  function — their gasSettings are capped by construction in the builder. */
+ *  Absent (defensive), behavior is unchanged. */
 export async function finalizeGasLimits(
 	node: AztecNode,
 	txRequest: TxExecutionRequest,

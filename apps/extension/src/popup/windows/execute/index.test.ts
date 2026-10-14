@@ -945,6 +945,27 @@ describe("execute window — an operation the app pays for", () => {
 		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
 	})
 
+	test("an app that set its own cap on a send the person pays: Confirm waits for the figure", async () => {
+		const personPaid = { ...withAppFee({ maxFeesPerGas: CAP }), exec: { calls: [] } }
+		const { vm, fees, confirm } = await opened(personPaid)
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		;(vm as unknown as { handleFeeUpdate: (index: number, value: unknown) => void }).handleFeeUpdate(0, {
+			paymentMethod: { kind: "fj" },
+		})
+		api.estimating.value = { 0: true }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+
+		api.results.value = { 0: { maxFee: "16000000000000000", maxFeeFormatted: "0.016" } }
+		api.estimating.value = { 0: false }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
 	test("an app that set its own cap: a failed estimate keeps Confirm off", async () => {
 		const { vm, fees, confirm } = await opened(withAppFee({ maxFeesPerGas: CAP }))
 		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }

@@ -63,7 +63,6 @@ const expanded = defineModel({ type: Boolean, default: false })
 				<span :class="$style.fee_grid_key">DA gas</span>
 				<span :class="[$style.fee_grid_num, $style.fee_grid_aux]">{{ gasBreakdown.daGas }}</span>
 				<span :class="[$style.fee_grid_num, $style.fee_grid_val]">{{ gasBreakdown.daCost }} FJ</span>
-
 			</div>
 			<Flex v-if="estimatedFee" wide justify="between" align="center" :class="$style.fee_breakdown_divider">
 				<span :class="$style.fee_grid_key">Estimated</span>

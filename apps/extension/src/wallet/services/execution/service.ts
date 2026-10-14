@@ -99,6 +99,7 @@ import { getViewSimulationDeps } from "./helpers/get-view-simulation-deps"
 import { AuthwitDiscoverer } from "./authwit-discoverer"
 import { TxRequestBuilder } from "./tx-request-builder"
 import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee/fee-strategy"
+import { appPriorityOf } from "./fee/fee-strategy"
 import { buildFeeStrategies } from "./fee/build-fee-strategies"
 import { ExecutionCoordinator } from "./execution-coordinator"
 import { type ProofGate, NOOP_PROOF_GATE } from "@/e2e/proof-gate"
@@ -455,10 +456,14 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			buildAndEstimateFolded: (op, feeSettings, fence, probe, parentTask, signal) =>
 				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, probe),
 			buildForDiscovery: async (op, method, fence) => {
+				const sendOp = op as SendTransactionOperation
+				// An app's private call may read its gas settings, so discovery simulates with its priority too.
 				const { txRequest, node, pxe, account, network } = await this.txBuilder.buildStandard(
-					op as SendTransactionOperation,
+					sendOp,
 					fence,
 					method,
+					undefined,
+					appPriorityOf(sendOp.fee),
 				)
 				return { txRequest, node, pxe, account, network }
 			},

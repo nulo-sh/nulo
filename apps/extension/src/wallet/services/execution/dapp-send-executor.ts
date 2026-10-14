@@ -463,10 +463,11 @@ export class DappSendExecutor {
 
 		const maxFeeRaw = BigInt(getEstimatedFee(txRequest))
 		const priorityFee = priorityFeeOf(txRequest)
+		const priorityFeeFormatted = formatFeeJuice(priorityFee)
 		return {
 			maxFee: maxFeeRaw.toString(),
 			maxFeeFormatted: formatFeeJuice(maxFeeRaw),
-			...(priorityFee > 0n ? { priorityFee: priorityFee.toString(), priorityFeeFormatted: formatFeeJuice(priorityFee) } : {}),
+			...(priorityFeeFormatted !== "0" ? { priorityFee: priorityFee.toString(), priorityFeeFormatted } : {}),
 			gasDetails: getGasDetails(txRequest),
 			estimateId,
 			previewId,

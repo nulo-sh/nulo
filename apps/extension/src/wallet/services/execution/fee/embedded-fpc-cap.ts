@@ -1,10 +1,8 @@
 /**
- * `maxFeesPerGas` for a payment the app's own payload makes (`fee.embeddedFeePayment`): the app's
- * `fee.maxFeesPerGas` verbatim, else the predicted worst minimum with no margin plus the app's
- * priority fee (`feeCapFor`'s `app` rule). An app whose fee contract budgets against the cap passes
- * its own. On the embedded strategy, the NO_FROM build and the profile path this is the only way the
- * app's explicit cap reaches the gas settings. Other gas-settings fields, the build's priority fee
- * included, pass through.
+ * `maxFeesPerGas` for a payment the app's own payload makes (`fee.embeddedFeePayment`), by
+ * `feeCapFor`'s `app` rule. On the embedded strategy, the NO_FROM build and the profile path this is
+ * the only way the app's explicit cap reaches the gas settings. Other gas-settings fields, the
+ * build's priority fee included, pass through.
  */
 import { GasSettings } from "@aztec-labs/stdlib/gas"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
