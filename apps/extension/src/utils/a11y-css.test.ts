@@ -29,13 +29,12 @@ function reducedMotionRules(source: string): Map<string, string> {
 
 /** The rules scoped under `:global(.noanimations)`, keyed by their selector list with that scope removed. */
 function noAnimationsRules(source: string): Map<string, string> {
+	const scope = ":global(.noanimations) "
 	const rules = new Map<string, string>()
-	for (const [, selectors, body] of source.matchAll(/((?::global\(\.noanimations\) [^,{}]+,?\s*)+)\{([^{}]*)\}/g)) {
-		const key = selectors
-			.replace(/:global\(\.noanimations\) /g, "")
-			.replace(/\s+/g, " ")
-			.trim()
-		rules.set(key, body.replace(/\s+/g, " ").trim())
+	for (const [, selectors, body] of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+		const list = selectors.split(",").map((s) => s.replace(/\s+/g, " ").trim())
+		if (!list.every((s) => s.startsWith(scope))) continue
+		rules.set(list.map((s) => s.slice(scope.length)).join(", "), body.replace(/\s+/g, " ").trim())
 	}
 	return rules
 }
