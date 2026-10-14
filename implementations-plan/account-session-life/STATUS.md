@@ -24,3 +24,10 @@
 - 2026-10-10 — phase 2.3 gate pass: lint 0, typecheck:all 0, test:all 0; four new proofs red on fd47407.
 - 2026-10-10 — arc 2 review: Codex r1 CHANGES (1 Medium fixed 964c9aa), Opus APPROVE (1 Low fixed fbe0f79), Codex r2 APPROVE. Final local gates on cdcdad1 green; network gate waits for the host.
 - 2026-10-10 — arc 2 boundary gate pass: audit:vue 0; final lint/typecheck:all/test:all 0 on cdcdad1; smoke retry-0 Chrome 10/10, Firefox 9/9 (4 files each); network retry-0 Chrome 3/3 + proverless 3/3, Firefox 4/4 (proverless file Chrome-only).
+- 2026-10-14 — arc 3 started: branch `account-session-life-arc-3` off dev d3dc4415 (D-orch-4). Page 7 signed 2026-10-14 17:42Z: P7-01 to P7-03 approved, P7-04 stands; backup-import-export arc 3 not merged (#418 is its arc 2, open), so Phase 3.4 is deferred (D-orch-7). P7-05 to P7-09 recorded in OWNER-ASKS § Answers, not built (D-orch-8).
+- 2026-10-14 — phase 3.1 gate pass: #24 CLOSED NOT_PLANNED with the decision comment (P7-01 text, 2026-10-14, SECURITY.md § Session secret (password profiles) item 5).
+- 2026-10-14 — phase 3.2 gate pass: lint 0, typecheck:all 0, auth.test.ts 26/26 (new proof red on base auth.vue), smoke auth-flows retry-0 Chrome 5/5 + Firefox 5/5 (new case 7.1 s / 10.7 s).
+- 2026-10-14 — phase 3.3 gate pass: lint 0, typecheck:all 0, settings/security unit 56/56 (two proofs red on base change-password.vue), smoke security retry-0 Chrome 4/4 + Firefox 4/4; before/after shots taken.
+- 2026-10-14 — arc 3 review round 1: Codex APPROVE (1 Low + 1 Comment fixed a71acaea, 1 Comment rejected), Opus CHANGES (same two; 1 Low → OWNER-ASKS OA-6, not built).
+- 2026-10-14 — arc 3 review round 2: Codex APPROVE, no findings; loop closed at 2 of 3. Boundary smoke retry-0 (auth-flows, security, passkey-backup): Chrome 12/12 in 98 s, Firefox 12/12 in 128 s; audit:vue 0 on ca83549.
+- 2026-10-14 — arc 3 boundary gate pass: audit:vue 0; smoke Chrome 12/12, Firefox 12/12; network backup-restore-integrity 2/2 retry-0 (host waited 23 min to load 56); test:all, test:ci-gating, check:plans 0.

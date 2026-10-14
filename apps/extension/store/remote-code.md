@@ -69,7 +69,7 @@ surface.
 ## When it runs without a click
 
 A connected application's calls go through the interaction service. `isConfirmationNeeded`
-(`apps/extension/src/wallet/services/dapp-interaction/service.ts:686-715`) shows the confirmation
+(`apps/extension/src/wallet/services/dapp-interaction/service.ts:735-763`) shows the confirmation
 popup when the call's access level reaches the session's confirmation level, when a send spends the
 account's own Fee Juice (it names no fee payer, or pays itself), and always for token registration; the wallet-sdk session is created at
 `AccessLevel.Transactions` (`apps/extension/src/wallet/services/wallet-sdk/background.ts:1081`), so
@@ -77,16 +77,33 @@ sends prompt. Auth-witness creation prompts too, unless the user let that applic
 asking, the authorizations its granted scopes cover: a consent stored on the session
 (`packages/wallet-bridge/src/dispatcher.ts:604-628`). Simulations and utility calls at lower
 levels run silently for a session the user already approved
-(`apps/extension/src/wallet/services/dapp-interaction/service.ts:430-431`). A silent utility call can
+(`apps/extension/src/wallet/services/dapp-interaction/service.ts:464-465`). A silent utility call can
 therefore execute application-supplied bytecode and, through the oracle, cause node reads, with no
 per-request window. What it cannot do is any of the things listed above.
 
+## The token list
+
+One other document arrives from outside: the list of default tokens, fetched from
+`https://tokens.nulo.sh/v1/list.json` without credentials or a referrer
+(`apps/extension/src/wallet/services/token-list/service.ts:191-206`). It is data too: a signed
+JSON payload naming, per network, a token's address, contract class, symbol, decimals, label and an
+optional price id. The wallet verifies its Ed25519 signature against keys compiled into the package
+before it parses the payload, and keeps it only when its sequence is above the kept one
+(`packages/token-list/src/index.ts:34-38`,
+`apps/extension/src/wallet/services/token-list/service.ts:181-187`). Of its entries it keeps only
+those whose class is one the package bundles an artifact for
+(`packages/token-list/src/class-ids.ts:6-9`, `packages/token-list/src/parse.ts:168-179`), and the
+wallet refuses a contract whose class on chain differs from the entry's before it asks the PXE for
+that bundled artifact (`apps/extension/src/wallet/services/token/service.ts:705-714`). So a list
+can name which bundled token contract to track at which address; it cannot supply bytecode, a
+script, or a host to call.
+
 ## What this bears on
 
-`legal/privacy.md` says in § 13 "The extension loads no remote code" (`legal/privacy.md:346-347`).
+`legal/privacy.md` says in § 13 "The extension loads no remote code" (`legal/privacy.md:391-392`).
 That sentence is true under the reading above — code is what the browser executes as script or
 WASM, and the package bundles all of it. § 2 credits the content security policy only with what it
-delivers, "forbids loading remote scripts" (`legal/privacy.md:48-49`): `script-src 'self'` forbids
+delivers, "forbids loading remote scripts" (`legal/privacy.md:51-52`): `script-src 'self'` forbids
 remote *scripts*, while `'wasm-unsafe-eval'` permits compiling WASM bytes from any source, and it is
 the bundled loaders above, not the policy, that keep the WASM local. The Firefox reviewer notes and
 the Chrome remote-code justification in `store/listing.md` summarise this note and rest on the § 13

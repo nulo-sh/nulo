@@ -1603,14 +1603,11 @@ describe("NetworkService node status: getNodeStatus and probeNodeStatus", () => 
 		expect([r.get, r.probed]).toEqual([NodeStatus.Inactive, NodeStatus.Inactive])
 	})
 
-	test("(BUG PIN) a local-kind network on a non-seed URL: getNodeStatus ignores the kind and reads InvalidChain", async () => {
-		// getNodeStatus passes no kind hint, so only the seeded-URL carve-out applies there;
-		// probeNodeStatus applies the kind too. Aligning them changes a visible status and what a
-		// backup captures (account-state's node-status gate), which is an owner call.
+	test("a local-kind network on a non-seed URL whose node answers is Active on both", async () => {
 		const { service, factory, local } = setupServiceWithStorage({ [NON_SEED_LOCAL_URL]: nodeInfoForChain(42) })
 		storeRow(local, { id: "loc", kind: "local" })
 		const r = await bothStatuses(service, factory, "loc")
-		expect([r.get, r.probed]).toEqual([NodeStatus.InvalidChain, NodeStatus.Active])
+		expect([r.get, r.probed]).toEqual([NodeStatus.Active, NodeStatus.Active])
 	})
 
 	test("a local-kind network whose node is down is Inactive on both: the carve-out never runs before the probe", async () => {

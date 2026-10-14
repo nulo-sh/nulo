@@ -28,7 +28,7 @@ import {
 	normalizeAccountStateSlice,
 	truncateErrorMessage,
 } from "./normalize"
-import { isPxeProvidedAddress } from "./pxe-provided"
+import { isPxeProvidedAddress, isPxeProvidedContract } from "./pxe-provided"
 
 export * from "./spec"
 
@@ -165,6 +165,9 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 			const nInfo = networkInfoFrom(n)
 			let skipped = 0
 			for (const c of contracts) {
+				// A restore never needs them (every PXE boot registers them itself), and their artifacts
+				// would only weigh against the import's slice cap.
+				if (isPxeProvidedContract(c)) continue
 				const instance = await this.pxeService.getContractInstance(nInfo, AztecAddress.fromStringUnsafe(c))
 				if (!instance?.currentContractClassId) {
 					skipped++
@@ -456,7 +459,10 @@ interface PreparedRegistration {
 /** Synchronous pre-launch gate for one contract: network-first error precedence (a missing
  *  network reports "Network not found", not the address-parse error), then the contracts every
  *  PXE boot registers by itself (the protocol contracts, upstream's preloaded standard
- *  contracts) are skipped outright. The parse stays here so a malformed address keeps its error. */
+ *  contracts) are skipped outright. The parse stays here so a malformed address keeps its error.
+ *  The profile's own account contracts and the protocol sponsors (`fpc/protocol-fpcs.ts`) stay
+ *  registered from the slice: a dApp's utility read of one looks it up without registering it and
+ *  fails unless the PXE already holds it, and nothing guarantees an earlier registration. */
 function precheckContractAddress(
 	contract: BackupContract,
 	network: Network | undefined,

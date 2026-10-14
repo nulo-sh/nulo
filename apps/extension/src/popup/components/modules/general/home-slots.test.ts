@@ -29,7 +29,7 @@ type TokenRow = ReturnType<typeof tokenRow>
 const slotsOf = (rows: TokenRow[], imports: SlotImportOp[], seeds = SEEDS) => homeSlots({ rows, imports, seeds, chainId: CHAIN })
 
 describe("homeSlots", () => {
-	test("every default on its way holds one slot under its compiled-in name; another chain's hold none", () => {
+	test("every default on its way holds one slot under its list name; another chain's hold none", () => {
 		const { slots, userImports } = slotsOf([], [], [...SEEDS, seed("XYZ", 99)])
 		expect(slots.map((s) => [s.kind, s.key, s.token.name])).toEqual([
 			["seed", "seed:0xseedusdc", "Test USDC"],

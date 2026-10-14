@@ -30,6 +30,7 @@ export const LOG_SOURCES: string[] = [
 	"incoming-transfer",
 	"operation-journal",
 	"legal-acceptance",
+	"token-list",
 ]
 	.flatMap((x) => [x, `${x}-client`])
 	.concat(["account-integrity-coordinator", "profile-deletion-coordinator", "wallet", "ui"])

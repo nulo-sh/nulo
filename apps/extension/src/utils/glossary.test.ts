@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest"
 import { GLOSSARY, GLOSSARY_SECTIONS } from "./glossary"
 
-// The design spec's nine entries, word for word, in its section order.
+// Every entry the owner signed, word for word, in section order.
 const SPEC = [
 	["Balances", "private-balance", "Private balance", "Only you can see it. Marked with a padlock.", "Home · tokens · send"],
 	[
@@ -15,6 +15,13 @@ const SPEC = [
 	["Fees", "public-fee-juice", "Public Fee Juice", "Paying a fee with it shows your address.", "Home · fee menu"],
 	["Fees", "private-fee-juice", "Private Fee Juice", "Paying a fee with it keeps your address hidden.", "Home · fee menu"],
 	["Fees", "sponsored", "Sponsored", "Someone else pays the network fee for you.", "Fee menu"],
+	[
+		"Fees",
+		"priority-fee",
+		"Priority fee",
+		"An extra the app asks you to pay the network for faster inclusion, up to the cap shown.",
+		"Approval window",
+	],
 	[
 		"Apps",
 		"authorization",
@@ -33,12 +40,12 @@ const SPEC = [
 ] as const
 
 describe("glossary", () => {
-	test("the nine entries are the spec's strings", () => {
+	test("the entries are the signed strings", () => {
 		const entries = Object.fromEntries(SPEC.map(([, key, term, definition, where]) => [key, { term, definition, where }]))
 		expect(GLOSSARY).toEqual(entries)
 	})
 
-	test("the sections are the spec's, in its order", () => {
+	test("the sections are the signed ones, in order", () => {
 		const flat = GLOSSARY_SECTIONS.flatMap((s) => s.keys.map((key) => [s.title, key]))
 		expect(flat).toEqual(SPEC.map(([title, key]) => [title, key]))
 	})

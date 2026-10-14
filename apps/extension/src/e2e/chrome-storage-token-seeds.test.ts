@@ -1,10 +1,8 @@
 /**
  * The e2e seed blob is written by a trusted extension page, so it is shaped by
  * whatever a test (or a bug) puts there. These pin the reader's fail-empty
- * contract: an armed build REPLACES the production seed list with this, so
- * every rejection path must yield `[]` rather than falling back to
- * `DEFAULT_TOKEN_SEEDS` — a fallback would point e2e wallets at the public
- * RPC endpoints the real seeds name.
+ * contract: every rejection path yields `[]`, and only an absent key yields
+ * `undefined`, which defers to the armed build's test-written token list.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
@@ -40,8 +38,8 @@ afterEach(() => {
 })
 
 describe("ChromeStorageTokenSeeds", () => {
-	test("absent key → empty list (never the production seeds)", async () => {
-		expect(await new ChromeStorageTokenSeeds().get()).toEqual([])
+	test("absent key → undefined, deferring to the armed token list", async () => {
+		expect(await new ChromeStorageTokenSeeds().get()).toBeUndefined()
 	})
 
 	test("a throwing storage read fails empty rather than propagating", async () => {

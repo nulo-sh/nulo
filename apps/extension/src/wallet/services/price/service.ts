@@ -4,9 +4,10 @@ import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import type { ILogger } from "@/wallet/logger"
 import { ConfigService } from "@/wallet/services/config/service"
 import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
+import { TokenListService } from "@/wallet/services/token-list/service"
 import { ValueStorage } from "@/wallet/storage"
 import { AlarmDispatcher, EventHandler, createSerialQueue } from "@nulo/wallet-core/utils"
-import { allCoingeckoIds, getSanityBand } from "./price-map"
+import { allCoingeckoIds, getSanityBand, pricedTokensOf } from "./price-map"
 import {
 	MAX_CLOCK_SKEW_MS,
 	PRICE_SERVICE_NAME,
@@ -15,6 +16,7 @@ import {
 	type Events,
 	type Methods,
 	type PriceQuote,
+	type PriceSnapshot,
 	type PriceState,
 } from "./spec"
 
@@ -64,9 +66,9 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 	protected readonly rpcMethods = defineRpcMethods<Methods>()("getQuotes", "refreshIfStale")
 	public static name = PRICE_SERVICE_NAME
 
-	public readonly dependencies = [ConfigService.name, ProfileService.name] as const
+	public readonly dependencies = [ConfigService.name, ProfileService.name, TokenListService.name] as const
 
-	public readonly onQuotesUpdated = new EventHandler<PriceState>()
+	public readonly onQuotesUpdated = new EventHandler<PriceSnapshot>()
 
 	private readonly cache: ValueStorage<PriceState>
 	// The named create/clear ritual is owned by the shared AlarmDispatcher.
@@ -80,6 +82,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 
 	private configService: ConfigService = null!
 	private profileService: ProfileService = null!
+	private tokenList: TokenListService = null!
 
 	/** Bumped on every kill-switch flip; in-flight refreshes from an older
 	 *  generation abort and never write. */
@@ -115,9 +118,11 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 	protected async init(services: ServiceCollection): Promise<void> {
 		this.configService = services.get(ConfigService.name)
 		this.profileService = services.get(ProfileService.name)
+		this.tokenList = services.get(TokenListService.name)
 
 		this.configService.onUpdate.add(this.onConfigUpdated)
 		this.profileService.onActiveProfileChanged.add(this.onActiveProfileChanged)
+		this.tokenList.onListChanged.add(this.onListChanged)
 
 		// Boot reconcile: the alarm must exist iff a session is unlocked AND
 		// fiat display is enabled. A stray alarm from a previous SW lifetime
@@ -134,14 +139,17 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 	// ── RPC surface ─────────────────────────────────────────────────────
 
 	/** Usable quotes only: validated, fresh, and fiat display enabled. */
-	public async getQuotes(): Promise<PriceState> {
+	public async getQuotes(): Promise<PriceSnapshot> {
 		await this.ensureInitialized()
-		if (!(await this.isEnabled())) return {}
-		return this.readUsable()
+		return this.withMapping(await this.usableIfEnabled())
 	}
 
 	/** Refresh when the cache is stale (popup-connect path), then return usable quotes. */
-	public async refreshIfStale(): Promise<PriceState> {
+	public async refreshIfStale(): Promise<PriceSnapshot> {
+		return this.withMapping(await this.refreshIfStaleQuotes())
+	}
+
+	private async refreshIfStaleQuotes(): Promise<PriceState> {
 		// Generation is captured BEFORE any await: a kill-switch flip while we
 		// were reading config/cache must abort the refresh — capturing at
 		// refresh() time would sample the post-flip generation and pass.
@@ -194,7 +202,14 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		})
 	}
 
-	// ── Session / config wiring ─────────────────────────────────────────
+	// ── Session / config / list wiring ──────────────────────────────────
+
+	/** A new list moves the mapping, not the quotes: the full id table is always requested. */
+	private readonly onListChanged = (): void => {
+		void this.usableIfEnabled()
+			.then((quotes) => this.emit("onQuotesUpdated", this.withMapping(quotes)))
+			.catch((err) => this.logWarn("list-change handling failed", err))
+	}
 
 	private readonly onActiveProfileChanged = (profile: ProfileInfo | undefined): void => {
 		const gen = this.generation
@@ -234,7 +249,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			if (!enable) {
 				await this.dispatcher.clear()
 				await this.cache.delete()
-				this.emit("onQuotesUpdated", {})
+				this.emit("onQuotesUpdated", this.withMapping({}))
 			} else {
 				const profile = await this.profileService.getActiveProfile()
 				if (profile) {
@@ -249,6 +264,14 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 
 	private async isEnabled(): Promise<boolean> {
 		return (await this.configService.getValue("showFiatValues")) === true
+	}
+
+	private async usableIfEnabled(): Promise<PriceState> {
+		return (await this.isEnabled()) ? this.readUsable() : {}
+	}
+
+	private withMapping(quotes: PriceState): PriceSnapshot {
+		return { quotes, pricedTokens: pricedTokensOf(this.tokenList.getSnapshot()?.entries ?? []) }
 	}
 
 	private async ensureAlarm(): Promise<void> {
@@ -360,7 +383,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 
 			const usable = await this.readUsable()
 			if (gen !== this.generation) return {}
-			this.emit("onQuotesUpdated", usable)
+			this.emit("onQuotesUpdated", this.withMapping(usable))
 			return usable
 		} catch (error) {
 			if (gen !== this.generation) return {}

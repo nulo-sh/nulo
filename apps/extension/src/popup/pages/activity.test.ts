@@ -10,7 +10,7 @@ import { ref } from "vue"
 import { createMemoryHistory, createRouter, type Router } from "vue-router"
 
 import { createAppStoreHarness } from "../../../tests/helpers/app-store-harness"
-import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
+import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
 const H = vi.hoisted(() => {
 	const event = () => ({ add: () => {}, remove: () => {} })
@@ -73,7 +73,13 @@ vi.mock("@/wallet/services/config/client", () => ({
 }))
 vi.mock("@/wallet/services/price/client", () => ({
 	PriceServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onQuotesUpdated: H.event(), onConnected: H.event(), refreshIfStale: async () => H.quotes }
+		return {
+			disconnect: vi.fn(),
+			onQuotesUpdated: H.event(),
+			onConnected: H.event(),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
+			refreshIfStale: async () => ({ quotes: H.quotes, pricedTokens: TEST_PRICED_TOKENS }),
+		}
 	}),
 }))
 vi.mock("@/stores/app.store", () => ({ useAppStore: () => H.store.current }))
@@ -219,7 +225,7 @@ describe("pages/activity — cancelled and failed operations by network", () => 
 })
 
 describe("pages/activity — the received row's token", () => {
-	const TEST_USDC = TESTNET_TOKENS.USDC
+	const TEST_USDC = TEST_TOKENS.USDC
 	const TESTNET = { id: "net-1", chainId: CHAIN_IDS.TESTNET }
 	const TST = { id: 7, chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC, name: "Test", symbol: "TST", decimals: 18, hasDecimals: true }
 	const USDC_QUOTE = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }

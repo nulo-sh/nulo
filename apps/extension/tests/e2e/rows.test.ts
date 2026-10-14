@@ -18,6 +18,7 @@ import {
 } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
 import { waitForPopup } from "./fixtures/popups"
+import { skipUnlessListPrices } from "./fixtures/token-list"
 import { readActivityScope, seedReceipt, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
 import { pointerClick } from "./helpers/legal-drivers"
 import { coveredAt, pressEscape, tabAround, waitForFocus } from "./helpers/pointer-probes"
@@ -79,13 +80,14 @@ async function waitForSettledTokens(page: Page, timeout = 15_000): Promise<void>
 		})
 }
 
-/** A priced 1.5 Test USDC transfer: the price map quotes it as USDC. Returns once the token card
- *  has settled, which in a release build waits for its default tokens to stop. */
-async function openHomeWithRow(ctx: ExtensionContext): Promise<Page> {
+/** A 1.5-unit transfer, of the held list's priced token when `priced`, quoted at $1. Returns once the
+ *  token card has settled, which in a release build waits for its default tokens to stop. */
+async function openHomeWithRow(ctx: ExtensionContext, { priced = true } = {}): Promise<Page> {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general")
-	await seedTransaction(page, await readActivityScope(page), { hash: TX_HASH, amount: "1500000" })
-	await seedUsdQuoteAndReload(page)
+	const scope = await readActivityScope(page, { priced })
+	await seedTransaction(page, scope, { hash: TX_HASH, amount: "1500000" })
+	await seedUsdQuoteAndReload(page, scope.token.priceId)
 	await page.waitForSelector(sel("tx-card"), { visible: true, timeout: 15_000 })
 	await waitForSettledTokens(page, TOKENS_LAND_MS)
 	await page.bringToFront()
@@ -253,9 +255,11 @@ async function ensureContact(page: Page): Promise<string> {
 }
 
 test("Home's first activity row: a Tab stop with the ring, Enter and Space each open it with one pushState, the priced span is on top, a press on the icon opens it", async ({
-	registeredExtension,
+	listedExtension,
+	skip,
 }) => {
-	const page = await openHomeWithRow(registeredExtension)
+	skipUnlessListPrices(skip)
+	const page = await openHomeWithRow(listedExtension)
 
 	const walk = await tabTo(page, "tx-card")
 	console.log(`[rows] the Tab walk to the row: ${walk.join(" → ")}`)
@@ -307,14 +311,14 @@ test("Home's first activity row: a Tab stop with the ring, Enter and Space each 
 	await waitForHashPrefix(page, "#/popup/tx/")
 	expect(await probe(page)).toMatchObject({ pushes: 1 })
 
-	expect(registeredExtension.consoleErrors).toEqual([])
-	expect(registeredExtension.pageErrors).toEqual([])
+	expect(listedExtension.consoleErrors).toEqual([])
+	expect(listedExtension.pageErrors).toEqual([])
 }, 240_000)
 
 test("a contact row: its edit action is a 24px box whose real press stays on Contacts; a Ctrl-click opens the row's link in a new tab", async ({
-	registeredExtension,
+	listedExtension,
 }) => {
-	const page = await openPopup(registeredExtension)
+	const page = await openPopup(listedExtension)
 	await waitForHash(page, "#/popup/general")
 	await navigateToSettings(page, "contacts")
 	await page.waitForSelector(`${sel("contacts-new-btn")}, ${sel("contact-row")}`, { visible: true, timeout: 10_000 })
@@ -340,7 +344,7 @@ test("a contact row: its edit action is a 24px box whose real press stays on Con
 	const point = await centreOf(page, row)
 	await armLinkClickProbe(page)
 	const tab = await waitForNewTab(
-		registeredExtension.browser,
+		listedExtension.browser,
 		async () => {
 			await page.keyboard.down("Control")
 			try {
@@ -362,14 +366,14 @@ test("a contact row: its edit action is a 24px box whose real press stays on Con
 		await tab.close()
 	}
 
-	expect(registeredExtension.consoleErrors).toEqual([])
-	expect(registeredExtension.pageErrors).toEqual([])
+	expect(listedExtension.consoleErrors).toEqual([])
+	expect(listedExtension.pageErrors).toEqual([])
 }, 90_000)
 
 test("a click-mode Settings row opens on Enter and on Space; an action inside a Tooltip runs once per key and never activates its row; inert rows are skipped", async ({
-	registeredExtension,
+	listedExtension,
 }) => {
-	const page = await openPopup(registeredExtension)
+	const page = await openPopup(listedExtension)
 	await waitForHash(page, "#/popup/general")
 	await navigateToSettings(page, "networks")
 	const firstName = await page.$eval(sel("network-row"), (el) => el.getAttribute("data-network-name"))
@@ -400,14 +404,14 @@ test("a click-mode Settings row opens on Enter and on Space; an action inside a 
 		await waitForFocus(page, "endpoint-edit-btn")
 	}
 
-	expect(registeredExtension.consoleErrors).toEqual([])
-	expect(registeredExtension.pageErrors).toEqual([])
+	expect(listedExtension.consoleErrors).toEqual([])
+	expect(listedExtension.pageErrors).toEqual([])
 }, 90_000)
 
 test("Settings → Developer's Logs row: one Tab stop with the ring; Enter opens the log window and Space runs the same handler", async ({
-	registeredExtension,
+	listedExtension,
 }) => {
-	const page = await openPopup(registeredExtension)
+	const page = await openPopup(listedExtension)
 	await waitForHash(page, "#/popup/general")
 	await setDeveloperMode(page, true)
 	await navigateByHash(page, "#/popup/settings/developer")
@@ -432,8 +436,8 @@ test("Settings → Developer's Logs row: one Tab stop with the ring; Enter opens
 	await shiftTab(page)
 	await waitForFocus(page, "settings-logs-open")
 
-	const before = new Set(registeredExtension.browser.targets())
-	const logsP = waitForPopup(registeredExtension, "logger", { timeout: 10_000 })
+	const before = new Set(listedExtension.browser.targets())
+	const logsP = waitForPopup(listedExtension, "logger", { timeout: 10_000 })
 	await page.keyboard.press("Enter")
 	const logs = await logsP
 	try {
@@ -442,17 +446,17 @@ test("Settings → Developer's Logs row: one Tab stop with the ring; Enter opens
 		await waitForFocus(page, "settings-logs-open")
 		await page.keyboard.press(SPACE)
 		await page.waitForFunction(() => (window as unknown as Probe).__logsClicks === 2, { timeout: 5_000, polling: 50 })
-		expect(registeredExtension.browser.targets().filter((t) => t.type() === "page" && !before.has(t))).toHaveLength(1)
+		expect(listedExtension.browser.targets().filter((t) => t.type() === "page" && !before.has(t))).toHaveLength(1)
 	} finally {
 		await logs.close().catch(() => undefined)
 	}
 
-	expect(registeredExtension.consoleErrors).toEqual([])
-	expect(registeredExtension.pageErrors).toEqual([])
+	expect(listedExtension.consoleErrors).toEqual([])
+	expect(listedExtension.pageErrors).toEqual([])
 }, 90_000)
 
-test("History's list keeps the −8px row box inside the page: nothing scrolls sideways", async ({ registeredExtension }) => {
-	const page = await openHomeWithRow(registeredExtension)
+test("History's list keeps the −8px row box inside the page: nothing scrolls sideways", async ({ listedExtension }) => {
+	const page = await openHomeWithRow(listedExtension, { priced: false })
 	await clickNavTab(page, "activity")
 	await waitForHash(page, "#/popup/activity")
 	await page.waitForSelector(`${sel("activity-feed-root")} ${sel("tx-card")}`, { visible: true, timeout: 15_000 })
@@ -477,8 +481,8 @@ test("History's list keeps the −8px row box inside the page: nothing scrolls s
 	expect(layout.left).toBeGreaterThanOrEqual(0)
 	expect(layout.right).toBeLessThanOrEqual(layout.width)
 
-	expect(registeredExtension.consoleErrors).toEqual([])
-	expect(registeredExtension.pageErrors).toEqual([])
+	expect(listedExtension.consoleErrors).toEqual([])
+	expect(listedExtension.pageErrors).toEqual([])
 }, 210_000)
 
 const ROWS = `${sel("tx-card")}, ${sel("tx-incoming-card")}`
@@ -586,11 +590,13 @@ const SURFACES = [
 ]
 
 test("rows sit 10px apart on Home, a token's page and History, the date heading 12px above the first; a dApp's long title, a nine-digit amount and a priced receipt stay inside their rows and never cover an amount, dark and light", async ({
-	registeredExtensionPerTest,
+	listedExtensionPerTest,
+	skip,
 }) => {
-	const page = await openPopup(registeredExtensionPerTest)
+	skipUnlessListPrices(skip)
+	const page = await openPopup(listedExtensionPerTest)
 	await waitForHash(page, "#/popup/general")
-	const scope = await readActivityScope(page)
+	const scope = await readActivityScope(page, { priced: true })
 	const now = Date.now()
 	await seedTransaction(page, scope, { hash: TX_HASH, amount: "1500000", at: now })
 	await seedTransaction(page, scope, { hash: `0x${"6a".repeat(32)}`, amount: "123456789123456", at: now - 1_000 })
@@ -603,7 +609,7 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 	})
 	await seedTokenRow(page, scope, RECEIPT_TOKEN_ID)
 	await seedReceipt(page, scope, { tokenId: RECEIPT_TOKEN_ID, amount: "4200000", nullifier: `0x${"5c".repeat(32)}`, at: now - 3_000 })
-	await seedUsdQuoteAndReload(page)
+	await seedUsdQuoteAndReload(page, scope.token.priceId)
 	await page.bringToFront()
 
 	for (const theme of ["dark", "light"] as const) {
@@ -629,6 +635,6 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 		}
 	}
 
-	expect(registeredExtensionPerTest.consoleErrors).toEqual([])
-	expect(registeredExtensionPerTest.pageErrors).toEqual([])
+	expect(listedExtensionPerTest.consoleErrors).toEqual([])
+	expect(listedExtensionPerTest.pageErrors).toEqual([])
 }, 180_000)

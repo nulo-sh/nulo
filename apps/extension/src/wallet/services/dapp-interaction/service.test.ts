@@ -35,7 +35,8 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { DappInteractionService } from "./service"
 import type { CapabilityPayload, DappInteraction, DiscoveryResult, ExecutionHooks, OperationRequest } from "./spec"
-import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
+import { TEST_LIST_ENTRIES, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import { seedsFromList } from "@/wallet/services/token/default-tokens"
 
 const noopLogger: ILogger = { log: () => {} }
 
@@ -613,6 +614,7 @@ describe("DappInteractionService — a confirmation window never falls back to s
 		collection.add(stub(ExecutionService.name, { executeOperations }))
 		collection.add(stub(OperationJournalService.name, { onOperationUpdated: new EventHandler() }))
 		collection.add(stub(FpcService.name, {}))
+		collection.add(stub(TokenService.name, {}))
 		collection.add(dapp)
 		await collection.start()
 		const creates = vi.spyOn(api.windows, "create")
@@ -738,8 +740,12 @@ describe("DappInteractionService — the capability window's known contracts", (
 				],
 			}),
 		)
+		const getVerifiedDefaults = vi.fn(async () => seedsFromList({ sequence: 1, keyId: "k", entries: TEST_LIST_ENTRIES }))
 		collection.add(
-			stub(TokenService.name, { getTokens: async () => [{ id: 1, chainId: CHAIN_IDS.TESTNET, contract: TOKEN, name: "Fee Juice" }] }),
+			stub(TokenService.name, {
+				getTokens: async () => [{ id: 1, chainId: CHAIN_IDS.TESTNET, contract: TOKEN, name: "Fee Juice" }],
+				getVerifiedDefaults,
+			}),
 		)
 		collection.add(
 			stub(ContactService.name, {
@@ -767,11 +773,12 @@ describe("DappInteractionService — the capability window's known contracts", (
 			{ address: SPONSORED, name: "Sponsored fee payer" },
 			{ address: PRIVATE, name: "Private fee payer" },
 			{ address: "0x2ba8714679fbee823f108f366f878ce3249861637de705b0ac7cfbd0f81b3a9c", name: "Auth registry" },
-			{ address: TESTNET_TOKENS.USDC, name: "Test USDC" },
-			{ address: TESTNET_TOKENS.USDT, name: "Test USDT" },
-			{ address: TESTNET_TOKENS.EURC, name: "Test EURC" },
-			{ address: TESTNET_TOKENS.GBPC, name: "Test GBPC" },
+			{ address: TEST_TOKENS.USDC, name: "Test USDC" },
+			{ address: TEST_TOKENS.USDT, name: "Test USDT" },
+			{ address: TEST_TOKENS.EURC, name: "Test EURC" },
+			{ address: TEST_TOKENS.GBPC, name: "Test GBPC" },
 		])
+		expect(getVerifiedDefaults).toHaveBeenCalledWith("p1", CHAIN_IDS.TESTNET)
 	})
 })
 

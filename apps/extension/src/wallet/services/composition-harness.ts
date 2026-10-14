@@ -1,3 +1,6 @@
+import { EventHandler } from "@nulo/wallet-core/utils"
+import { TOKEN_LIST_SERVICE_NAME, type TokenListSnapshot } from "@/wallet/services/token-list/spec"
+
 /**
  * Shared test-only helper for `*.composition.test.ts` harnesses.
  *
@@ -10,4 +13,9 @@
  */
 export function svc(name: string, methods: Record<string, unknown>) {
 	return { name, dependencies: [], async start() {}, ...methods } as never
+}
+
+/** A `TokenListService` stand-in serving one fixed snapshot (none by default). */
+export function tokenListStub(snapshot?: TokenListSnapshot) {
+	return svc(TOKEN_LIST_SERVICE_NAME, { getSnapshot: () => snapshot, onListChanged: new EventHandler<TokenListSnapshot>() })
 }

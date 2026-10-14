@@ -28,12 +28,13 @@ import { ContactService } from "./services/contact/service"
 import { DappInteractionService } from "./services/dapp-interaction/service"
 import { DappSessionService } from "./services/dapp-session/service"
 import { ExecutionService } from "./services/execution/service"
-import { E2E_PROVERLESS, E2E_TOKEN_SEEDS, E2E_TOKEN_SEEDS_BUILD_STAMP } from "@/e2e/config"
+import { E2E_PROVERLESS, E2E_TOKEN_LIST, E2E_TOKEN_LIST_BUILD_STAMP, E2E_TOKEN_SEEDS, E2E_TOKEN_SEEDS_BUILD_STAMP } from "@/e2e/config"
 import { ChromeStorageProofGate } from "@/e2e/chrome-storage-proof-gate"
 import { ChromeStorageRestoreGate } from "@/e2e/chrome-storage-restore-gate"
 import { ChromeStorageIncomingPollGate } from "@/e2e/chrome-storage-incoming-poll-gate"
 import { ChromeStorageProjectionGate } from "@/e2e/chrome-storage-projection-gate"
 import { ChromeStorageTokenSeeds } from "@/e2e/chrome-storage-token-seeds"
+import { ChromeStorageTokenListSource } from "@/e2e/chrome-storage-token-list"
 import { FpcService } from "./services/fpc/service"
 import { LogViewerService } from "./services/log-viewer/service"
 import { LoggerService } from "./services/logger/service"
@@ -47,6 +48,7 @@ import { PasskeyService } from "./services/passkey/service"
 import { ProfileDeletionCoordinator } from "./services/profile-deletion/coordinator"
 import { AccountIntegrityCoordinator } from "./services/account-integrity/coordinator"
 import { PriceService } from "./services/price/service"
+import { TokenListService } from "./services/token-list/service"
 import { ProfileService } from "./services/profile/service"
 import {
 	registerPxeGenerationProvider,
@@ -512,6 +514,13 @@ function registerServices(services: ServiceCollection, deps: WalletRuntimeDeps):
 	services.add(new NoteService(logger))
 	services.add(new OperationJournalService(logger, browserApi))
 	services.add(new PriceService(logger, browserApi))
+	// E2E_TOKEN_LIST swaps the endpoint and the pinned keys for a localhost list the running test
+	// signs; with no source written the fetcher is off. Tree-shaken from prod like the seed source.
+	if (E2E_TOKEN_LIST_BUILD_STAMP) {
+		;(globalThis as { __NULO_E2E_TOKEN_LIST_BUILD_STAMP__?: string }).__NULO_E2E_TOKEN_LIST_BUILD_STAMP__ = E2E_TOKEN_LIST_BUILD_STAMP
+	}
+	const tokenListSource = E2E_TOKEN_LIST ? new ChromeStorageTokenListSource() : undefined
+	services.add(new TokenListService(logger, browserApi, tokenListSource ? { getSource: () => tokenListSource.get() } : {}))
 	// Passing `browserApi` threads the storage port into ProfileService AND, because the port
 	// carries alarms, ACTIVATES SessionManager's proactive TTL auto-lock (dormant pre-arc when the
 	// composition root passed no port — see session-manager.ts "proactive TTL lights up once the
