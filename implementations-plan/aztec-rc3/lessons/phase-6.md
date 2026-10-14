@@ -1,0 +1,6 @@
+# Phase 6 — presto-server
+
+- The owner re-scoped P6 (decision record, 22:10Z): no rc.3 server release is needed or exists. The headless presto-server bundles no bb; it downloads the bb the SDK names in `x-aztec-version`, checks the asset digest and caches it. The CI pin stays 1.1.3 (`_extension-network-e2e.yml`), and the gate is evidence that rc.3 proves through it.
+- CI evidence, draft #431's first run: the canary job (prover-ON) is green on both browsers. Chrome: `frozen-account-canary`, `passkey-execution-canary`, `transfers` and 2 more files, 7/7 tests, "presto-server log: 12 /prove requests, 12 successful proofs". Firefox: 7/7, 12/12. `/health` answers `version 1.1.3`, `aztec_version unknown` (no bb bundled).
+- Local 1.1.3: `gh release download presto-v1.1.3`; tarball sha256 `90b76733…7c41` and binary sha256 `9e183fa9…ef21` equal the CI pins. The binary on PATH here is 1.1.1, so not used.
+- Not rc.3: Firefox network shard 4/5 passed all 21 files (40 tests in 1749 s) and then hit the job's 30-minute `timeout-minutes`. Chrome's shard 4 took 27 min. The shard now holds `snack-placement` (~500 s) and `failed-send-check` (~260 s); per-file rc.3 deltas elsewhere are seconds. ci-followups-5 already moves those files into a dedicated heavy job ("move the longest shard-4 network files into a dedicated heavy job").
