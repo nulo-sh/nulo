@@ -220,8 +220,11 @@ describe("finalizeGasLimits: exact slot projection", () => {
 		expect([s.feeDa, s.feeL2]).toEqual([555n, 666n])
 	})
 
-	test("embedded WITH explicit customLimits.maxFeesPerGas: commits exactly that (predicted-worst headroom)", async () => {
+	test("embedded WITH an app cap: commits the request's cap, which the embedded cap set to the app's; never re-derived", async () => {
 		const tx = makeTxRequest()
+		const gs = tx.txContext.gasSettings
+		// What `applyEmbeddedFpcGasCap` leaves on the request for an app cap of (1_500, 1_800).
+		tx.txContext.gasSettings = new GasSettings(gs.gasLimits, gs.teardownGasLimits, new GasFees(1_500n, 1_800n), PRIORITY)
 		await finalizeGasLimits(
 			DRIFT_NODE,
 			tx,
@@ -236,6 +239,22 @@ describe("finalizeGasLimits: exact slot projection", () => {
 		)
 		const s = shape(tx)
 		expect([s.feeDa, s.feeL2]).toEqual([1_500n, 1_800n])
+	})
+
+	test("NON-embedded with an app priority fee and no cap: node min × multiplier plus the priority; the priority is the build's", async () => {
+		const tx = makeTxRequest()
+		await finalizeGasLimits(
+			DRIFT_NODE,
+			tx,
+			makeSimulated(31_000, 32_000, 3_500, 3_600),
+			1,
+			undefined,
+			{ maxPriorityFeesPerGas: { feePerDaGas: "7", feePerL2Gas: "8" } },
+			2,
+		)
+		const s = shape(tx)
+		expect([s.feeDa, s.feeL2]).toEqual([2_005n, 2_230n])
+		expect([s.priorityDa, s.priorityL2]).toEqual([PRIORITY.feePerDaGas, PRIORITY.feePerL2Gas])
 	})
 
 	test("NON-embedded (no explicit fee): still refetches node min × multiplier (general default preserved)", async () => {

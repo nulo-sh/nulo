@@ -10,19 +10,37 @@ const node = () => ({
 const APP_CAP = { feePerDaGas: "5", feePerL2Gas: "6" }
 
 describe("feeCapFor", () => {
+	const PRIORITY = { feePerDaGas: "7", feePerL2Gas: "9" }
+
 	test.each<[string, FeeCapRule, [bigint, bigint]]>([
 		["the account, at the level's multiple", { payer: "account", multiplier: 3 }, [390n, 783n]],
-		["the account, with the app's cap", { payer: "account", multiplier: 3, appCap: APP_CAP }, [5n, 6n]],
 		["a sponsor, at the level's multiple", { payer: "sponsor", multiplier: 3 }, [390n, 783n]],
 		["private fee juice, × 1.2 rounded up", { payer: "private-fee-juice" }, [156n, 314n]],
 		["the app's own payment, with no cap of its own", { payer: "app" }, [130n, 261n]],
-		["the app's own payment, with its cap", { payer: "app", appCap: APP_CAP }, [5n, 6n]],
+		["the account, with a priority fee and no cap", { payer: "account", multiplier: 3, appPriority: PRIORITY }, [397n, 792n]],
+		["a sponsor, with a priority fee and no cap", { payer: "sponsor", multiplier: 3, appPriority: PRIORITY }, [397n, 792n]],
+		["private fee juice, with a priority fee and no cap", { payer: "private-fee-juice", appPriority: PRIORITY }, [163n, 323n]],
+		["the app's own payment, with a priority fee and no cap", { payer: "app", appPriority: PRIORITY }, [137n, 270n]],
 	])("%s", async (_case, rule, [da, l2]) => {
 		const n = node()
 		const cap = await feeCapFor(n, rule)
 		expect([cap.feePerDaGas, cap.feePerL2Gas]).toEqual([da, l2])
 		expect(n.getCurrentMinFees).not.toHaveBeenCalled()
-		expect(n.getPredictedMinFees).toHaveBeenCalledTimes("appCap" in rule ? 0 : 1)
+		expect(n.getPredictedMinFees).toHaveBeenCalledTimes(1)
+	})
+
+	test.each<FeeCapRule>([
+		{ payer: "account", multiplier: 3, appCap: APP_CAP },
+		{ payer: "sponsor", multiplier: 3, appCap: APP_CAP },
+		{ payer: "private-fee-juice", appCap: APP_CAP },
+		{ payer: "app", appCap: APP_CAP },
+		{ payer: "private-fee-juice", appCap: APP_CAP, appPriority: PRIORITY },
+		{ payer: "app", appCap: APP_CAP, appPriority: PRIORITY },
+	])("$payer with the app's cap (priority: $appPriority): the cap verbatim, below the minimum too", async (rule) => {
+		const n = node()
+		const cap = await feeCapFor(n, rule)
+		expect([cap.feePerDaGas, cap.feePerL2Gas]).toEqual([5n, 6n])
+		expect(n.getPredictedMinFees).not.toHaveBeenCalled()
 	})
 })
 

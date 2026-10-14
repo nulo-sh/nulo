@@ -15,7 +15,7 @@ import type {
 export const EXECUTION_SERVICE_NAME = "execution"
 
 /** An estimate that did not run: a send sharing its chain state is in flight. A spent token was
- *  admitted and cannot be sent again. `cap` holds the last fee of this token's sends and the cap a
+ *  admitted and cannot be sent again. `cap` holds the last fee of this token's like sends and the cap a
  *  send may be queued against above it (`queued-fee-cap.ts`); absent when there is none. */
 export type TransferFeeQueued = {
 	readonly queued: true

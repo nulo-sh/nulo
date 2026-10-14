@@ -70,7 +70,7 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 		vi.useRealTimers()
 	})
 
-	const add = (hash: string, fence?: ExecutionFence, networkId?: string, feeSpender?: string) =>
+	const add = (hash: string, fence?: ExecutionFence, networkId?: string, feeSpender?: string, priorityLevel?: "urgent") =>
 		service.addTransaction({
 			origin: { type: 0 } as never,
 			chainId: 1,
@@ -83,6 +83,7 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 			estimatedFee: undefined,
 			gasDetails: undefined,
 			feeSpender,
+			priorityLevel,
 			fence,
 			networkId,
 		})
@@ -144,14 +145,15 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 		expect(marked.map((tx) => tx.hash)).not.toContain("0xmarked")
 	})
 
-	test("the fee spender is stored and re-armed with its pending row after a restart; a row without one carries none", async () => {
+	test("the fee spender and the speed are stored and re-armed with their pending row after a restart; a row without them carries none", async () => {
 		const fence = { profileId: "p1", epoch: deletionState.capture("p1"), session: 1 }
-		await add("0xpaid", fence, "net-1", "0xF")
+		await add("0xpaid", fence, "net-1", "0xF", "urgent")
 		await add("0xplain", fence, "net-1")
 		const restarted = await start()
 		const pending = restarted.getPendingForAccount(ACCOUNT)
-		expect(pending.find((tx) => tx.hash === "0xpaid")?.feeSpender).toBe("0xF")
+		expect(pending.find((tx) => tx.hash === "0xpaid")).toMatchObject({ feeSpender: "0xF", priorityLevel: "urgent" })
 		expect(pending.find((tx) => tx.hash === "0xplain")).not.toHaveProperty("feeSpender")
+		expect(pending.find((tx) => tx.hash === "0xplain")).not.toHaveProperty("priorityLevel")
 	})
 
 	test("stamps the owning profile and network so history can be scoped", async () => {
