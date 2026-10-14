@@ -156,7 +156,7 @@ describe("account export: the same wipes, before the envelope is built", () => {
 	test("success wipes all three before the envelope is built", async () => {
 		const service = await makeHarness()
 		expect(await service.exportAccount("p1", 1, "0xA", "pw", false)).toBe("body")
-		expect(state.log).toEqual([...ALL_WIPED, "build"])
+		expect(state.log).toEqual([...ALL_WIPED, "construct", "constructed", "build"])
 	})
 
 	test("a non-canonical scalar propagates the field error raw, after the same wipes", async () => {

@@ -516,6 +516,13 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		} else {
 			throw new Error("unknown account type")
 		}
+		// The envelope names this build's regime, so it may only carry an address that regime derives
+		// from the key: a row stored under a superseded regime would export a file no build imports.
+		const derived = (await NuloAccount.fromSigningKey(signingKey, this.logger, this.name)).address.toString()
+		if (derived !== address) {
+			if (account.type === AccountType.Imported) throw new ImportedAccountUnusableError(address, "address mismatch")
+			await this.raiseRuntimeMismatch(profileId, chainId, account.index, address, derived)
+		}
 		const envelope = buildAccountExport(signingKey, account.l1ChainId, address)
 		return encrypt ? encryptAccountExport(envelope, password) : serializeAccountExport(envelope)
 	}

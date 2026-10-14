@@ -4,12 +4,13 @@
  * the test runtime's `Buffer` and under the one the extension ships.
  */
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { AccountAddressInconsistencyError } from "@nulo/extension-messaging/errors"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { BUFFER_BINDINGS, withBuffer } from "../../../../tests/helpers/shipped-buffer"
 
-const state = vi.hoisted(() => ({ seedInputs: [] as string[], master: "" }))
+const state = vi.hoisted(() => ({ seedInputs: [] as string[], master: "", derived: "0xA", locked: [] as string[] }))
 
 vi.mock("@nulo/wallet-crypto", async (importOriginal) => {
 	const original = await importOriginal<typeof import("@nulo/wallet-crypto")>()
@@ -24,6 +25,7 @@ vi.mock("@nulo/wallet-crypto", async (importOriginal) => {
 })
 vi.mock("@nulo/aztec-runtime/account", async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
+	NuloAccount: { fromSigningKey: async () => ({ address: { toString: () => state.derived } }) },
 	buildAccountExport: () => ({}),
 	serializeAccountExport: () => "body",
 }))
@@ -54,6 +56,10 @@ async function makeService(): Promise<AccountService> {
 			onProfileDeleted: new EventHandler(),
 			getDeletionState: () => new ProfileDeletionState(),
 			exportPlain: async () => state.master,
+			persistIntegrityBlockIfLive: async () => {},
+			lockProfileIfActive: async (id: string) => {
+				state.locked.push(id)
+			},
 		}),
 	)
 	services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {}, isChainLive: async () => true }))
@@ -79,5 +85,17 @@ describe.each(BUFFER_BINDINGS)("derived-account export: master decode (%s Buffer
 			await service.exportAccount("p1", 1, "0xA", "pw", false)
 		}
 		expect(state.seedInputs).toEqual([expected, expected, expected])
+	})
+})
+
+describe("derived-account export: the address gate", () => {
+	test("a row its master no longer derives is the runtime mismatch, never an export", async () => {
+		const service = await makeService()
+		state.master = CANONICAL
+		state.derived = "0xROTATED"
+		state.locked = []
+		await expect(service.exportAccount("p1", 1, "0xA", "pw", false)).rejects.toBeInstanceOf(AccountAddressInconsistencyError)
+		expect(state.locked).toEqual(["p1"])
+		state.derived = "0xA"
 	})
 })
