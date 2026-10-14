@@ -1,10 +1,7 @@
+import { isComposing, isRepeatOrComposing } from "@nulo/design/composables/keys.ts"
 import { onScopeDispose, watch } from "vue"
 
-/** An auto-repeated or composing keydown. An IME's boundary keydown can report `isComposing` false,
- *  so `keyCode` 229 counts too. */
-export function isRepeatOrComposing(e: KeyboardEvent): boolean {
-	return e.repeat || e.isComposing || e.keyCode === 229
-}
+export { isComposing, isRepeatOrComposing }
 
 /** Cancels a repeat or composing Enter so a focused control's native activation does not fire. */
 export function refuseRepeatEnter(e: KeyboardEvent): void {

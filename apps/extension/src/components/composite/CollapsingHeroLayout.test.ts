@@ -49,9 +49,11 @@ describe("composite/CollapsingHeroLayout", () => {
 		expect(titles.length).toBe(1)
 	})
 
-	test("collapsingLabel renders inside the SubPageHeader", () => {
+	test("collapsingLabel renders inside the SubPageHeader, hidden from a screen reader, which reads the hero", () => {
 		const w = factory({ collapsingLabel: "Plain Key" })
-		expect(w.find("header").text()).toContain("Plain Key")
+		const label = w.get("header span")
+		expect(label.text()).toBe("Plain Key")
+		expect(label.attributes("aria-hidden")).toBe("true")
 	})
 
 	test("default slot renders inside the content area", () => {
