@@ -412,7 +412,7 @@ Order: 3.10, 3.11, 3.4, 3.5, 3.6, each committed with its gate green before the 
 - Tests: `Button.test.ts` asserts both variants fill with `var(--btn-destructive)` and hover to the 18% toward-black mix, and that `cta_destructive` has no opacity hover; `theme-contrast.test.ts` asserts the label (`--txt-white`) at ≥ 4.5:1 on the rest colour and on that hover expression in both themes, plus a resolver case for the new mix; `base.css.test.ts` takes the new hash.
 - Validation gate: fast layers on the design package; storybook build; screenshots at rest and hovered (Delete profile's `cta_destructive`, and a `destructive`), both themes.
 
-**3.6 #211 (P11-04).**
+**3.6 #211 (P11-04).** ✓
 1. A Chrome probe on the parent build measures each page's Tx hash link colour, the journal's To link colour, received's from-text colour and the space under the last box to the scroll end, both themes (`lessons/phase-3.md`), re-checking F36 after the font remake.
 2. `TxHashRow.vue` and the journal's To link drop the grey; the journal's `.wrapper` drops `padding-bottom` and `.content` composes the shared one.
 3. A style pin (source read, `a11y-css.test.ts`'s shape): `TxHashRow` and the journal set no link colour of their own, and the journal's content composes `detail-page.module.css`'s `.content` with no padding of its own. The probe again on the new build: the three Tx hash links and the journal's To link in `--txt-primary` with the accent hover, the same bottom space on all three, received unchanged.

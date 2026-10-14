@@ -216,6 +216,19 @@ Lock is disabled for at most two minutes in a row while imports run (an import s
 
 **What ships now:** A.
 
+## FA-14. #211: the link hover in the dark theme (arc 3b)
+
+**Surface:** the Tx hash link on the tx, received and journal pages, and the journal's To link, in the dark theme. A Details link turns the accent colour on hover. The dark accent (#f8f1e7) is within 1% of the dark primary text (#f5f0e6), so once these links rest in primary (P11-04) a hover no longer changes their colour in the dark theme; the pointer cursor still shows. In the light theme the hover still turns them orange (#a8480c). Received's link already behaves this way.
+
+| Option | What a hover shows in the dark theme |
+|---|---|
+| **A. As signed** | no colour change; the pointer cursor only |
+| **B. A visible hover** | a hover cue of its own (an underline or another colour), a new treatment for every Details link |
+
+**Recommendation: A now; B as its own item if wanted.** B is a new look the page did not show.
+
+**What ships now:** A.
+
 ## For the record (arc 3b, not a question): the journal's To link follows the Tx hash link
 
 P11-04 puts the Tx hash link in the primary text colour. Since #426 that link is one row shared by the tx and journal pages, and page 4's OA-6 A signed the journal's To link "exactly as the Tx hash row in Details". Arc 3b keeps that equality: the To link turns primary with the Tx hash link. Leaving it grey would break OA-6 A.

@@ -60,3 +60,10 @@ The tree wins; each disagreement is also in `plan.md` (§ Assumptions, "Arc 3b r
 
 - A Pinia store hands back a reactive proxy of an object it holds, so `store.slot === mine` is never true for the object a run stored; compare with `toRaw`. The unit tests' plain-object store hid it; the composition test's reactive store caught it, and the unit store is now reactive too.
 - A per-row re-opened snack never settles (its 150 ms entrance outlasts a 46 ms row), so the e2e read of a relabelled card fails on it by timeout.
+
+## 3.6 the detail pages
+
+- Chrome probe (armed build, one seeded record per page, both themes; the scroller squeezed to 200 px so every page scrolls). Parent `7b4c3b17`: the Tx hash link grey on tx and journal (light `rgba(0,0,0,0.6)`, dark `rgb(153,145,135)`), primary on received (`rgba(0,0,0,0.88)`, `rgb(245,240,230)`); the journal's To link grey; received's from-text primary; the space under the last box at the scroll end 24 px on tx and received, 48 px on the journal (its `.wrapper`'s 24 px over the shared `.content`'s). F36 holds after the font remake. New build: all four links primary in both themes, 24 px on all three, received unchanged.
+- Hover turns every Details link the accent, `rgb(168,72,12)` light and `rgb(248,241,231)` dark. The dark accent is within 1% of the dark primary text, so a primary link shows no hover colour in the dark theme (FA-14).
+- The popup's scroller is a fixed 536 px tall, so a viewport change does not make a short page scroll; squeeze the scroller itself to measure the space at the scroll end.
+
