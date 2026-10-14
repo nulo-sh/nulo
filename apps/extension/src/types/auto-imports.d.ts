@@ -403,6 +403,7 @@ declare global {
   const useProfileImportFlow: typeof import('../composables/useProfileImportFlow').useProfileImportFlow
   const useProfileNameDefault: typeof import('../composables/useProfileNameDefault').useProfileNameDefault
   const useProfileNameField: typeof import('../composables/useProfileNameField').useProfileNameField
+  const useReceiptFee: typeof import('../composables/useReceiptFee').useReceiptFee
   const useRoute: typeof import('vue-router').useRoute
   const useRouter: typeof import('vue-router').useRouter
   const useScopedTokens: typeof import('../composables/useScopedTokens').useScopedTokens
@@ -521,6 +522,9 @@ declare global {
   // @ts-ignore
   export type { ProfileNameFieldOptions, ValidateOptions, ProfileNameField } from '../composables/useProfileNameField'
   import('../composables/useProfileNameField')
+  // @ts-ignore
+  export type { ReceiptFeeState, ReceiptFeeService, UseReceiptFeeResult } from '../composables/useReceiptFee'
+  import('../composables/useReceiptFee')
   // @ts-ignore
   export type { TokenScope, UseScopedTokensOptions, UseScopedTokensResult } from '../composables/useScopedTokens'
   import('../composables/useScopedTokens')
@@ -1049,6 +1053,7 @@ declare module 'vue' {
     readonly useProfileImportFlow: UnwrapRef<typeof import('../composables/useProfileImportFlow')['useProfileImportFlow']>
     readonly useProfileNameDefault: UnwrapRef<typeof import('../composables/useProfileNameDefault')['useProfileNameDefault']>
     readonly useProfileNameField: UnwrapRef<typeof import('../composables/useProfileNameField')['useProfileNameField']>
+    readonly useReceiptFee: UnwrapRef<typeof import('../composables/useReceiptFee')['useReceiptFee']>
     readonly useRoute: UnwrapRef<typeof import('vue-router')['useRoute']>
     readonly useRouter: UnwrapRef<typeof import('vue-router')['useRouter']>
     readonly useScopedTokens: UnwrapRef<typeof import('../composables/useScopedTokens')['useScopedTokens']>

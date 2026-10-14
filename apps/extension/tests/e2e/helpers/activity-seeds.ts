@@ -153,6 +153,38 @@ export async function seedReceipt(page: Page, scope: ActivityScope, seed: Receip
 	return id
 }
 
+export type PublicReceiptSeed = { tokenId: number; amount: string; txHash: string; at?: number }
+
+/** A visible public receipt of the registered token, on block 1 like `seedReceipt`'s. Its tx hash must
+ *  be a valid field element: the fee lookup parses it before it reaches the node. */
+export async function seedPublicReceipt(page: Page, scope: ActivityScope, seed: PublicReceiptSeed): Promise<string> {
+	const id = `pub:${scope.profileId}|${scope.networkId}|${seed.txHash}|0`
+	const record = {
+		kind: "public-event",
+		id,
+		from: `0x${"0e".repeat(32)}`,
+		blockHash: `0x0f${"3f".repeat(31)}`,
+		profileId: scope.profileId,
+		networkId: scope.networkId,
+		accountAddress: scope.account,
+		contract: scope.token.contract,
+		tokenId: seed.tokenId,
+		amountRaw: seed.amount,
+		txHash: seed.txHash,
+		l2BlockNumber: 1,
+		txIndexInBlock: 0,
+		indexInTx: 0,
+		hidden: false,
+		discoveredAt: seed.at ?? Date.now(),
+	}
+	await page.evaluate(
+		(key: string, value: unknown) => chrome.storage.local.set({ [key]: JSON.stringify(value) }),
+		`nulo:core:incoming-transfers@${id}`,
+		record,
+	)
+	return id
+}
+
 export type JournalSeed = {
 	/** 16 hex characters, as the journal mints them. */
 	id: string

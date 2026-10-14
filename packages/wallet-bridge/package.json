@@ -22,6 +22,7 @@
 		"@nulo/wallet-sdk-schema-patch": "workspace:*"
 	},
 	"devDependencies": {
+		"@types/node": "^24.13.2",
 		"chrome-types": "^0.1.429",
 		"typescript": "^6.0.3",
 		"vitest": "^4.1.9"

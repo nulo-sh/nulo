@@ -248,6 +248,29 @@ describe("useIncomingTransfers", () => {
 		expect((incomingTransfers.value[0] as unknown as { v: number }).v).toBe(9)
 	})
 
+	it("an Updated supersedes a read already in flight, and a Deleted during both still removes its row", async () => {
+		const incoming = makeIncomingService()
+		let releaseStale!: (rows: IncomingTransferRecord[]) => void
+		let releaseFresh!: (rows: IncomingTransferRecord[]) => void
+		incoming.getIncomingTransfers
+			.mockResolvedValueOnce([rec("a", { blockHash: "0xold" }), rec("b")])
+			.mockReturnValueOnce(new Promise<IncomingTransferRecord[]>((r) => (releaseStale = r)))
+			.mockReturnValueOnce(new Promise<IncomingTransferRecord[]>((r) => (releaseFresh = r)))
+		const { incomingTransfers, refresh } = setup({ incoming, config: makeConfigService() })
+		await refresh()
+		const stale = refresh()
+
+		incoming.onIncomingTransferUpdated.invoke(rec("a", { blockHash: "0xnew" }))
+		incoming.onIncomingTransferDeleted.invoke(rec("b"))
+		releaseStale([rec("a", { blockHash: "0xold" }), rec("b")])
+		await stale
+		releaseFresh([rec("a", { blockHash: "0xnew" }), rec("b")])
+		await new Promise((r) => setTimeout(r, 0))
+
+		expect(incoming.getIncomingTransfers).toHaveBeenCalledTimes(3)
+		expect(incomingTransfers.value.map((x) => [x.id, (x as unknown as { blockHash?: string }).blockHash])).toEqual([["a", "0xnew"]])
+	})
+
 	it("onUpdated ignores an unknown record (does not add)", () => {
 		const incoming = makeIncomingService()
 		const { incomingTransfers } = setup({ incoming, config: makeConfigService() })

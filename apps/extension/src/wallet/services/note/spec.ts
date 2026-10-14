@@ -43,6 +43,12 @@ export type RawNote = Note & {
 	noteIndexInTx: number
 }
 
+/** Which notes a raw read returns: unspent only, or spent ones too, unmarked. */
+export type NoteReadStatus = "active" | "active-or-nullified"
+
+/** The block the PXE last synced to. */
+export type SyncedBlock = { number: number; hash: string }
+
 export type Methods = {
 	/**
 	 * Returns a list of private notes (popup-friendly shape).
@@ -55,9 +61,9 @@ export type Methods = {
 	 * Same as `getNotes` but exposes the raw `NoteDao` identity + ordering
 	 * fields. Reserved for background-side consumers that key records by
 	 * `siloedNullifier` or order by `(l2BlockNumber, txIndexInBlock,
-	 * noteIndexInTx)`.
+	 * noteIndexInTx)`. `status` defaults to `"active"`.
 	 */
-	getNotesRaw(networkId: string, account: string, contract?: string): RawNote[]
+	getNotesRaw(networkId: string, account: string, contract?: string, status?: NoteReadStatus): RawNote[]
 	/**
 	 * Chain-derived UTC seconds for an L2 block. Returns `undefined` when
 	 * the node can't resolve it. Thin wrapper over PxeService so the
@@ -65,4 +71,9 @@ export type Methods = {
 	 * without taking a PXE-service dependency directly.
 	 */
 	getBlockTimestamp(networkId: string, blockNumber: number): number | undefined
+	/**
+	 * The PXE's synced block, read without syncing. A notes read syncs first but swallows a failed
+	 * sync, so a caller that must know which block a read answered from brackets it with this.
+	 */
+	getSyncedBlock(networkId: string): SyncedBlock
 }
