@@ -65,8 +65,10 @@ describe("reduced motion and Disable animations both stop the shakes and the shi
 	})
 })
 
-describe("the detail pages' links show keyboard focus, and only keyboard focus", () => {
-	const shared = read("popup/pages/detail-page.module.css").replace(/\s+/g, " ")
+describe("the detail pages' links draw the focus ring on :focus-visible, never on plain :focus", () => {
+	const shared = read("popup/pages/detail-page.module.css")
+		.replace(/\/\*[\s\S]*?\*\//g, "")
+		.replace(/\s+/g, " ")
 
 	test("the shared link classes draw the accent ring on :focus-visible", () => {
 		expect(shared).toContain(
@@ -78,19 +80,25 @@ describe("the detail pages' links show keyboard focus, and only keyboard focus",
 		expect(shared).not.toMatch(/:focus(?!-visible)/)
 	})
 
-	test("the Tx hash, Block and To links and the View on line compose those classes on every detail page", () => {
-		const sites = [
-			["popup/components/modules/tx/TxHashRow.vue", "detail_link", "detail_link"],
-			["popup/pages/tx/[id].vue", "detail_link", "detail_link"],
-			["popup/pages/tx/[id].vue", "hero_link", "hero_link"],
-			["popup/pages/received/[id].vue", "detail_link", "detail_link"],
-			["popup/pages/received/[id].vue", "hero_link", "hero_link"],
-			["popup/pages/journal/[id].vue", "recipient_link", "detail_link"],
-			["popup/pages/journal/[id].vue", "hero_link", "hero_link"],
-		]
-		const unringed = sites.filter(([path, local, from]) => {
-			const rule = new RegExp(`\\.${local} \\{[^}]*composes: ${from} from "(\\.\\./)+(pages/)?detail-page\\.module\\.css";`)
-			return !rule.test(read(path).replace(/\s+/g, " "))
+	test("every link on the tx, received and journal pages binds a local class composing a ringed one", () => {
+		// The links each file renders itself; the address cards' corner links are AddressCardLink's.
+		const pages = [
+			["popup/components/modules/tx/TxHashRow.vue", 1],
+			["popup/pages/tx/[id].vue", 2],
+			["popup/pages/received/[id].vue", 4],
+			["popup/pages/journal/[id].vue", 2],
+		] as const
+		const unringed = pages.flatMap(([path, count]) => {
+			const source = read(path).replace(/\s+/g, " ")
+			const anchors = [...source.matchAll(/<a [^>]*>/g)].map(([tag]) => tag)
+			const ringed = (tag: string) =>
+				[...tag.matchAll(/\$style\.(\w+)/g)].some(([, local]) =>
+					new RegExp(
+						`\\.${local} \\{[^}]*composes: (hero_link|detail_link) from "(\\.\\./)+(pages/)?detail-page\\.module\\.css";`,
+					).test(source),
+				)
+			const misses = anchors.filter((tag) => !ringed(tag))
+			return anchors.length === count && misses.length === 0 ? [] : [{ path, anchors: anchors.length, misses }]
 		})
 		expect(unringed).toEqual([])
 	})

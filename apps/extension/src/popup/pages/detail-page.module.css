@@ -102,7 +102,7 @@
 	}
 }
 
-/* The base stylesheet strips every link's focus outline; this returns it for the keyboard only. */
+/* Restores the focus indication the base `a:focus` reset removes. */
 .hero_link:focus-visible,
 .detail_link:focus-visible {
 	outline: 2px solid var(--nulo-accent);
