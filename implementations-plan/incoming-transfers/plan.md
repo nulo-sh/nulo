@@ -1156,6 +1156,18 @@ back-fill fences.
 Every round-1 finding fixed; neither commit changes production behaviour or weakens an assertion; no
 new finding. The loop converged.
 
+### Arc 3a implementation review, round 2: Codex (same session, resumed, on `5d73bf81..3ce70aed`), `approve with fixes`
+
+1. Medium, a regression of round 1's fix: if the shell's boot settings read fails, the app store
+   keeps its `"aztecscan"` default, so a person who chose None sees the received page's links (the
+   page's own read used to recover None). **Accepted**: the store's explorer choice starts `null`;
+   the config store's `props` lists every key with its default, so a normal boot always sets it. A
+   store test pins the null start.
+
+Verified, per the round: the reactive None reaches every received-page link; the rings match D17;
+`:has(> a)` leaves link-less cards alone; the tx builder's check keeps every production hash
+(`TxHash.toString()`); no assertion weakened; no comment finding.
+
 ## Post-implementation
 
 The implementing session runs these steps from this file. `code_review` is `off`, so no

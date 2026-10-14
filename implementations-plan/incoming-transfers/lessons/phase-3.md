@@ -44,3 +44,9 @@ Every kind has a route, so no builder returns null for a missing route.
   deleting two comments that state a cross-file anchor and the row a colour matches.
 - The tx builder's check reddened `TransactionCard.test.ts`, whose fixture hash was not 32-byte hex;
   the fixture is now wire-shaped.
+
+## Review round 2
+
+- Codex resumed, `approve with fixes`: one Medium, a regression of round 1 (a failed boot settings
+  read left the store's `"aztecscan"` default showing links to a None user). Fixed by starting the
+  store's choice at `null`; `ConfigStore.props` returns every key, so only a failed read keeps it.
