@@ -344,9 +344,10 @@ export async function readSwLogTrail(page: Page, opts: { limit?: number; match?:
  * included, before its last line, and the marker arriving proves every earlier line still retained
  * is stored. A trail with no tick line before the marker proves nothing, so it never reads idle:
  * missing history times out rather than passes. It cannot see a balance enqueued but not yet ticked,
- * so call it once the write that proves the enqueue ran has landed. Needs Developer Mode (the trail
- * is stored) and Debug Mode (the tick lines are debug). Logs how many lines sat between that tick's
- * end and the marker, the margin left before the trail would drop it.
+ * nor a refresh the transaction worker still owes, so call it once the write that proves the enqueue
+ * ran has landed. Needs Developer Mode (the trail is stored) and Debug Mode (the tick lines are
+ * debug). Logs how many lines sat between that tick's end and the marker, the margin left before the
+ * trail would drop it.
  */
 export async function waitForBalanceQueueIdle(page: Page, timeoutMs = 60_000): Promise<void> {
 	const deadline = Date.now() + timeoutMs

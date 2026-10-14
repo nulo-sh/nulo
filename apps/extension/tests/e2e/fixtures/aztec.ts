@@ -866,6 +866,29 @@ export async function waitForTxMined(aztecConfig: AztecTestConfig, txHash: strin
 	}
 }
 
+async function mineL1Blocks(count: number): Promise<void> {
+	const res = await fetch(ANVIL_URL, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "anvil_mine", params: [`0x${count.toString(16)}`] }),
+	})
+	const body = (await res.json()) as { error?: { message: string } }
+	if (body.error) throw new Error(`anvil_mine: ${body.error.message}`)
+}
+
+/** Mines empty L1 blocks until the node's finalized L2 block reaches `block`. The local anvil mines
+ *  only on a transaction, so on a quiet chain the finalized tip stands still. */
+export async function finalizeThrough(node: ReturnType<typeof createAztecNodeClient>, block: number, timeoutMs = 180_000): Promise<void> {
+	const deadline = Date.now() + timeoutMs
+	for (;;) {
+		const finalized = await node.getBlockData("finalized")
+		if ((finalized?.header.getBlockNumber() ?? 0) >= block) return
+		if (Date.now() > deadline) throw new Error(`finalizeThrough: the finalized block stayed below ${block} for ${timeoutMs} ms`)
+		await mineL1Blocks(3)
+		await new Promise((resolve) => setTimeout(resolve, 2_000))
+	}
+}
+
 /**
  * Give an EXTENSION-owned account public Fee Juice it can pay its own fees from: bridge from L1,
  * wait until the message is claimable (5.0 mints no empty blocks, so a cheap sponsored mint from
