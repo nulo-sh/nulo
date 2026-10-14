@@ -1,9 +1,31 @@
+import { spawnSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import type { LegalDocument, LegalVersion } from "@nulo/legal"
 import { describe, expect, test } from "vitest"
-import { legalPagePaths, planLegalPages, renderLegalPage } from "./legal-pages"
+import type * as LegalPages from "./legal-pages"
+import { legalPagePaths } from "./legal-pages"
+
+// The renderer needs `Bun.markdown`, so it runs in Bun as the landing's build does, whichever engine
+// runs this file; a throw comes back as an error with the same message.
+const MODULE = fileURLToPath(new URL("./legal-pages.ts", import.meta.url))
+const BRIDGE = `const pages = await import(process.argv[1])
+const { fn, args } = JSON.parse(await Bun.stdin.text())
+try { console.log(JSON.stringify({ value: pages[fn](...args) })) } catch (error) { console.log(JSON.stringify({ error: String(error?.message ?? error) })) }`
+function inBun<F extends "renderLegalPage" | "planLegalPages">(
+	fn: F,
+	...args: Parameters<(typeof LegalPages)[F]>
+): ReturnType<(typeof LegalPages)[F]> {
+	// A sync spawn blocks vitest's own test timeout, so the child gets one.
+	const run = spawnSync("bun", ["-e", BRIDGE, MODULE], { input: JSON.stringify({ fn, args }), encoding: "utf8", timeout: 30_000 })
+	if (run.status !== 0) throw new Error(`bun exited ${run.status}: ${run.error ?? run.stderr}`)
+	const reply = JSON.parse(run.stdout) as { value: ReturnType<(typeof LegalPages)[F]> } | { error: string }
+	if ("error" in reply) throw new Error(reply.error)
+	return reply.value
+}
+const renderLegalPage = (...args: Parameters<typeof LegalPages.renderLegalPage>) => inBun("renderLegalPage", ...args)
+const planLegalPages = (...args: Parameters<typeof LegalPages.planLegalPages>) => inBun("planLegalPages", ...args)
 
 const v = (version: string, effective: string | null = null): LegalVersion => ({ version, effective, material: true, changes: ["x"] })
 const manifest: Record<LegalDocument, readonly LegalVersion[]> = { terms: [v("1.0", "1 January 2027"), v("1.1")], privacy: [v("1.0")] }
