@@ -406,7 +406,7 @@ Order: 3.10, 3.11, 3.4, 3.5, 3.6, each committed with its gate green before the 
 - Tests in `Input.test.ts` with the real slot (a host component whose message appears and disappears reactively): at the cap, the message shows and the note does not; when the message goes, the note takes the slot; a slot that renders only a comment counts as empty; below the cap the message shows and no note. The existing popup tests that assert a message keep passing; one call-site test (the contact form) proves the note at the cap with no duplicate and the duplicate at the cap.
 - Validation gate: fast layers on `Input.test.ts` and the eight call sites' tests; `bun run --cwd apps/extension build-storybook` exits 0; screenshots of the contact, network and FPC name fields at the cap, with and without a duplicate, both themes.
 
-**3.5 #229 (P11-10b A).**
+**3.5 #229 (P11-10b A).** ✓
 1. The token in `token-contract.ts`, `bun run --cwd packages/design gen:tokens`, the two `base.css` blocks; `Button.vue`'s two variants.
 2. `theme-contrast.ts` resolves `color-mix(in srgb, <color>, black <p>%)`.
 - Tests: `Button.test.ts` asserts both variants fill with `var(--btn-destructive)` and hover to the 18% toward-black mix, and that `cta_destructive` has no opacity hover; `theme-contrast.test.ts` asserts the label (`--txt-white`) at ≥ 4.5:1 on the rest colour and on that hover expression in both themes, plus a resolver case for the new mix; `base.css.test.ts` takes the new hash.

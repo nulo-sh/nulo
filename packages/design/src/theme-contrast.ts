@@ -61,6 +61,7 @@ export function themeMap(theme: Theme | null, css = readFileSync(BASE_CSS_PATH, 
 const HEX = /^#([0-9a-f]{3,8})$/i
 const RGB = /^rgba?\(([^)]+)\)$/i
 const COLOR_MIX = /^color-mix\(\s*in\s+srgb\s*,\s*(.+?)\s+([\d.]+)%\s*,\s*transparent\s*\)$/i
+const MIX_BLACK = /^color-mix\(\s*in\s+srgb\s*,\s*(.+?)\s*,\s*black\s+([\d.]+)%\s*\)$/i
 
 function parseHex(hex: string): Rgba {
 	let h = hex.slice(1)
@@ -85,7 +86,8 @@ function parseRgb(str: string): Rgba {
 /**
  * Resolve a token NAME (or raw value) to an Rgba for the given theme, following `var(--x, fallback)`
  * chains, `color-mix(in srgb, C P%, transparent)` (≡ C at P% alpha — the repo idiom, see Spinner.vue),
- * hex, and rgb/rgba. Cycle-guarded. Throws on a genuinely unresolvable reference (a ghost token).
+ * `color-mix(in srgb, C, black P%)` on an opaque C (a hover, see Button.vue), hex, and rgb/rgba.
+ * Cycle-guarded. Throws on a genuinely unresolvable reference (a ghost token).
  */
 export function resolveColor(token: string, map: Record<string, string>, seen = new Set<string>()): Rgba {
 	let value = token.startsWith("--") ? map[token] : token
@@ -96,6 +98,14 @@ export function resolveColor(token: string, map: Record<string, string>, seen = 
 	if (mix) {
 		const base = resolveColor(mix[1].trim(), map, seen)
 		return { ...base, a: base.a * (Number.parseFloat(mix[2]) / 100) }
+	}
+
+	const toward = value.match(MIX_BLACK)
+	if (toward) {
+		const base = resolveColor(toward[1].trim(), map, seen)
+		if (base.a !== 1) throw new Error(`a mix toward black needs an opaque color: ${token}`)
+		const keep = 1 - Number.parseFloat(toward[2]) / 100
+		return { r: Math.round(base.r * keep), g: Math.round(base.g * keep), b: Math.round(base.b * keep), a: 1 }
 	}
 
 	const varMatch = value.match(/^var\(\s*(--[a-z0-9-]+)\s*(?:,\s*(.+))?\)$/i)
