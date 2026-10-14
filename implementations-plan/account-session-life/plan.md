@@ -95,7 +95,7 @@ Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Co
 
 ### Inferences (each checked in the phase named)
 
-- I1, I2 (arc 1): confirmed in [lessons/phase-1.md](lessons/phase-1.md).
+- I1, I2 (arc 1): confirmed in [lessons/phase-1.md](lessons/phase-1.md). I4 to I8 (arc 4): confirmed in phase 4.1, [lessons/phase-4.md](lessons/phase-4.md).
 - I4. Firefox's event page refuses a port opened before its listeners exist the way Chrome does, so one retry spacing covers both; the close channel does not matter, since any close before Ready is retried. Phase 4.1.
 - I5. Unknown. Both browsers close an extension's pages, tabs, own windows and side panels when it reloads, so no person reaches GlobalLoader's one visible case (F24). If false, such a page shows the bar, then the banner. Phase 4.1.
 - I6. A stopped worker's successor runs the fixture migration's hold when the schema marker is rewound before the stop. Phase 4.1; if not, 4.4 relaunches the browser as `migration.test.ts` does.
@@ -270,7 +270,7 @@ Every gate below passed with exit 0 at retry 0; STATUS.md and `lessons/phase-1.m
 
 ### Arc 4: the Ready handshake
 
-#### Phase 4.1: base evidence
+#### Phase 4.1: base evidence ✓
 
 1. List the 21 `onConnected` subscribers (F25). For each, write whether a first `onConnected` that now arrives after it subscribed changes what it does (I7). Name any that is not idempotent; phase 4.3 fixes it locally.
 2. On both browsers, stop the worker with no extension page open while the fixture migration's hold is set and the schema marker rewound (I6). Record whether the popup's ports are refused, at what rate, and how many ports one popup opens (I4).

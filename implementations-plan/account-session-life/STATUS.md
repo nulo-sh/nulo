@@ -37,3 +37,4 @@
 - 2026-10-14: revision audited (Codex r1 reject, Opus conditional approve); every finding checked at the tree and dispositioned in plan § Audit verdicts; fixes applied; Codex round 2 (resumed) running.
 - 2026-10-14: Codex r2 reject (3 items, all accepted and fixed); r3 (resumed, final verify) running.
 - 2026-10-14: Codex r3 conditional approve; its one condition applied in the plan. Revision committed for the orchestrator's approval.
+- 2026-10-14: phase 4.1 gate pass: I4 to I8 hold on both browsers (lessons/phase-4.md); I8 gap at most 63 ms, I5 yes, so nothing goes to OWNER-ASKS.
