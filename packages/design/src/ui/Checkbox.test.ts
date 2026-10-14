@@ -54,10 +54,36 @@ describe("ui/Checkbox", () => {
 		expect(w.html()).toMatch(/disabled/)
 	})
 
-	test("disabled blocks click and Enter from emitting", async () => {
+	test("disabled blocks click, Enter and Space from emitting", async () => {
 		const w = mountCheckbox({ disabled: true, modelValue: false })
 		await w.trigger("click")
 		await w.trigger("keydown.enter")
+		await w.trigger("keydown.space")
 		expect(w.emitted("update:modelValue")).toBeUndefined()
+	})
+
+	test("Space toggles once and is marked handled, so the page does not scroll", async () => {
+		const w = mountCheckbox({ modelValue: false })
+		const e = new KeyboardEvent("keydown", { key: " ", cancelable: true })
+		w.element.dispatchEvent(e)
+		expect(w.emitted("update:modelValue")).toEqual([[true]])
+		expect(e.defaultPrevented).toBe(true)
+	})
+
+	test.each([
+		["a repeated", { repeat: true }],
+		["a composing", { isComposing: true }],
+		["an IME boundary", { keyCode: 229 }],
+	])("%s Enter or Space does nothing", async (_case, init) => {
+		const w = mountCheckbox({ modelValue: false })
+		for (const key of ["Enter", " "]) w.element.dispatchEvent(new KeyboardEvent("keydown", { key, cancelable: true, ...init }))
+		expect(w.emitted("update:modelValue")).toBeUndefined()
+	})
+
+	test("a screen reader hears a checkbox, its state and whether it is disabled", () => {
+		expect(mountCheckbox({ modelValue: false }).attributes()).toMatchObject({ role: "checkbox", "aria-checked": "false" })
+		expect(mountCheckbox({ checked: true }).attributes("aria-checked")).toBe("true")
+		expect(mountCheckbox({ modelValue: true }).attributes("aria-disabled")).toBeUndefined()
+		expect(mountCheckbox({ disabled: true }).attributes("aria-disabled")).toBe("true")
 	})
 })

@@ -26,6 +26,7 @@
  * peer: `AddressDisplay.vue`.
  */
 import { onMounted } from "vue"
+import { isRepeatOrComposing } from "@/composables/usePopupEntity"
 import { copyWithToast } from "@/utils/clipboard"
 import { managers } from "@/utils/core"
 import { trimAddress } from "@/utils/string"
@@ -52,6 +53,10 @@ function handleClick() {
 	// what the user pastes.
 	void copyWithToast(props.address, openToast, "Address is copied", { sanitize: true })
 }
+
+function onKey(e: KeyboardEvent) {
+	if (!isRepeatOrComposing(e)) handleClick()
+}
 </script>
 
 <template>
@@ -59,7 +64,8 @@ function handleClick() {
 		data-testid="scope-address"
 		:data-scope-addr="address"
 		@click="handleClick"
-		@keydown.enter="handleClick"
+		@keydown.enter.prevent="onKey"
+		@keydown.space.prevent="onKey"
 		role="button"
 		tabindex="0"
 		:class="$style.row"

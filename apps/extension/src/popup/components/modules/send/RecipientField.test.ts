@@ -16,8 +16,8 @@ const STUBS = {
 	Text: { template: "<span><slot /></span>", props: ["size", "weight", "color", "noWrap", "align", "mono", "selectable"] },
 	Icon: { template: '<i data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color", "scale"] },
 	AddressInput: {
-		template: `<div class="stub-input"><input :value="modelValue" @focus="$emit('focus')" @blur="$emit('blur')" /><slot name="suffix" /></div>`,
-		props: ["modelValue", "placeholder", "autofocus"],
+		template: `<div class="stub-input"><input :value="modelValue" :aria-activedescendant="ariaActivedescendant" :aria-controls="ariaControls" @focus="$emit('focus')" @blur="$emit('blur')" /><slot name="suffix" /></div>`,
+		props: ["modelValue", "placeholder", "autofocus", "ariaActivedescendant", "ariaControls"],
 		emits: ["focus", "blur", "update:modelValue"],
 	},
 	Transition: { template: "<slot />" },
@@ -183,6 +183,124 @@ describe("modules/send/RecipientField", () => {
 			input.element.dispatchEvent(enter())
 			input.element.removeEventListener("keydown", handled)
 			expect(picks(w)).toEqual({ term: [], contact: [] })
+		})
+	})
+
+	describe("the suggestions are a listbox Down and Up move through", () => {
+		const mounted: ReturnType<typeof mount>[] = []
+		const open = async (props: Record<string, unknown> = { candidates: [alice, account1], searchTerm: "a" }) => {
+			const w = mount(RecipientField, { props, global: { stubs: STUBS }, attachTo: document.body })
+			mounted.push(w)
+			await w.get("input").trigger("focus")
+			return w
+		}
+		const press = async (w: ReturnType<typeof mount>, key: string, init: KeyboardEventInit = {}) => {
+			const e = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init })
+			w.get("input").element.dispatchEvent(e)
+			await nextTick()
+			return e.defaultPrevented
+		}
+		const field = (w: ReturnType<typeof mount>) => w.get("input").attributes()
+		const options = (w: ReturnType<typeof mount>) => w.findAll('[role="option"]')
+		const highlighted = (w: ReturnType<typeof mount>) => {
+			const id = field(w)["aria-activedescendant"]
+			const selected = options(w).flatMap((o, i) => (o.attributes("aria-selected") === "true" ? [i] : []))
+			return { index: options(w).findIndex((o) => o.attributes("id") === id), selected }
+		}
+		let scrolled: Element[]
+
+		beforeEach(() => {
+			scrolled = []
+			Element.prototype.scrollIntoView = vi.fn(function (this: Element, arg?: boolean | ScrollIntoViewOptions) {
+				expect(arg).toEqual({ block: "nearest" })
+				scrolled.push(this)
+			})
+		})
+		afterEach(() => {
+			for (const w of mounted.splice(0)) w.unmount()
+			document.body.innerHTML = ""
+			Reflect.deleteProperty(Element.prototype, "scrollIntoView")
+		})
+
+		test("a named listbox the field controls; nothing is highlighted, and no row is a Tab stop", async () => {
+			const w = await open()
+			const list = w.get('[data-testid="send-destination-suggestions"]')
+			expect(list.attributes("role")).toBe("listbox")
+			expect(field(w)["aria-controls"]).toBe(list.attributes("id"))
+			expect(document.getElementById(list.attributes("aria-labelledby") ?? "")?.textContent).toBe("Recipient Address")
+			expect(list.attributes("tabindex")).toBe("-1")
+			expect(options(w)).toHaveLength(2)
+			for (const o of options(w)) expect(o.attributes("tabindex")).toBeUndefined()
+			for (const a of w.findAll('[data-testid="stub-avatar"]')) expect(a.attributes("aria-hidden")).toBe("true")
+			expect(new Set(options(w).map((o) => o.attributes("id"))).size).toBe(2)
+			expect(highlighted(w)).toEqual({ index: -1, selected: [] })
+		})
+
+		test("Down starts at the first row and Up at the last; both wrap, and the row scrolls into view", async () => {
+			const w = await open()
+			const steps: number[] = []
+			for (const key of ["ArrowDown", "ArrowDown", "ArrowDown", "ArrowUp"]) {
+				expect(await press(w, key), key).toBe(true)
+				const { index, selected } = highlighted(w)
+				expect(selected).toEqual([index])
+				expect(scrolled.at(-1)).toBe(options(w)[index].element)
+				steps.push(index)
+			}
+			expect(steps).toEqual([0, 1, 0, 1])
+
+			const up = await open()
+			await press(up, "ArrowUp")
+			expect(highlighted(up).index).toBe(1)
+		})
+
+		test("Enter picks the highlighted row, and is marked handled", async () => {
+			const w = await open()
+			await press(w, "ArrowUp")
+			expect(await press(w, "Enter")).toBe(true)
+			expect(w.emitted("update:searchTerm")?.at(-1)).toEqual([account1.address])
+			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([account1])
+		})
+
+		test("Escape closes the list until the next input; with the list closed it is left unhandled", async () => {
+			const w = await open()
+			await press(w, "ArrowDown")
+			expect(await press(w, "Escape")).toBe(true)
+			expect(w.find('[role="listbox"]').exists()).toBe(false)
+			expect(field(w)["aria-controls"]).toBeUndefined()
+			expect(field(w)["aria-activedescendant"]).toBeUndefined()
+			expect(await press(w, "Escape")).toBe(false)
+			expect(await press(w, "ArrowDown")).toBe(false)
+			expect(await press(w, "Enter")).toBe(false)
+			expect(w.emitted("update:selectedContact")).toBeUndefined()
+
+			await w.setProps({ searchTerm: "acc" })
+			expect(options(w)).toHaveLength(1)
+			expect(highlighted(w).index).toBe(-1)
+		})
+
+		test("the highlight follows its row through a new list, and goes when the row does", async () => {
+			const w = await open()
+			await press(w, "ArrowUp")
+			const abe = { id: "6", name: "Abe", address: "0xdddd" }
+			await w.setProps({ candidates: [abe, alice, account1] })
+			expect(highlighted(w)).toEqual({ index: 2, selected: [2] })
+			await press(w, "Enter")
+			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([account1])
+
+			const next = await open()
+			await press(next, "ArrowUp")
+			await next.setProps({ searchTerm: "al" })
+			expect(highlighted(next)).toEqual({ index: -1, selected: [] })
+			await press(next, "ArrowDown")
+			expect(highlighted(next).index).toBe(0)
+		})
+
+		test("a composing key moves nothing and closes nothing", async () => {
+			const w = await open()
+			expect(await press(w, "ArrowDown", { isComposing: true })).toBe(false)
+			expect(await press(w, "Escape", { keyCode: 229 })).toBe(false)
+			expect(highlighted(w).index).toBe(-1)
+			expect(w.find('[role="listbox"]').exists()).toBe(true)
 		})
 	})
 

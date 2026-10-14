@@ -1,7 +1,7 @@
 ---
 plan: send-queue-activity
 tier: mid
-status: closing (arcs 1, 2, 3a, 3b merged; arc 4 carries the close-out; arcs 1b #392 and 5 #393 in review)
+status: closing (arcs 1, 2, 3a, 3b, 5 merged; arc 4 carries the close-out; arc 1b #392 in review)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -17,21 +17,22 @@ issues: [90, 103, 108, 109, 110, 112, 122, 152, 209, 213, 217, 218, 219, 220, 24
 ## Outcome
 
 - **Date:** 2026-10-13.
-- **Status:** delivered in one PR per arc against `dev`. Arc 4's PR, from `send-queue-activity-queued-cap`, is planned to merge last (D-orch-23) and carries this close-out; the merge that lands it closes this plan. When it was written, arc 1b (#392) and arc 5 (#393) were open, planned to merge before it with fees-and-sponsors arc 2; whoever merges `dev` into arc 4 after them moves them to Shipped and drops the issues they close (#218, #219, #242) from Open items.
+- **Status:** delivered in one PR per arc against `dev`. Arc 4's PR, from `send-queue-activity-queued-cap`, is planned to merge last (D-orch-23) and carries this close-out; the merge that lands it closes this plan. When it was written, arc 1b (#392) was open, planned to merge before it with fees-and-sponsors arc 2; whoever merges `dev` into arc 4 after them moves them to Shipped and drops the issues they close (#218, #219) from Open items.
 - **Shipped:**
   - Arc 1, #264: the fee spender kept across restarts, journal events scoped, the dApp estimate checked against the reuse epoch (#152; #219 items a and c, OA-1 A).
   - Arc 3a, #343: the expired send state and the pruned-block re-check (#108, #109). #112 was not built: its stop rule fired (OA-6).
   - Arc 3b, #344: one scope rule, known decimals, failed-send surfaces, status contrast (#209, #103, #213, #110, #122, #243).
   - Arc 2, #373: long USD figures fit, the review line's gap, the price-moved notice (#90).
+  - Arc 5, #393: keyboard reach on Send's fee card and suggestions: the two fee links are buttons, the suggestion list is a listbox, Space answers on three controls, the degraded-fee notice is a polite region (#242; D60 to D65).
   - Arc 4: a Send-page send queued behind an earlier one carries a cap, the newest same-token fee plus 25% rounded down to six decimals (D46, D47); it builds at its turn, proves at or under the cap, and above it releases the slot, keeps its ticket and asks again from Home ("Fee went up. Review", "Send for X FJ"), resuming on an accept or ending cancelled at its deadline (#217; D45 to D53, D-orch-20 to D-orch-24). One network e2e case on both browsers; § Audit verdicts holds the reviews.
-- **Orchestrator records:** D-orch-1 to D-orch-30; `OWNER-ASKS.md` keeps every ask with what shipped (OA-10 to OA-14 for #217, OA-15 for #90).
+- **Orchestrator records:** D-orch-1 to D-orch-30; `OWNER-ASKS.md` keeps every ask with what shipped (OA-10 to OA-14 for #217, OA-15 for #90, OA-20 and OA-21 for #242).
 - **Dropped, rejected, superseded:**
   - Arc 4's old Phase 4.1 (pin the ratified constants): superseded by the re-plan (D-orch-14).
   - Phase 4.2 (#220): moved to ci-followups-2 by the owner's call.
   - Outlines B (a persisted intent) and C (the intent in the popup) for arc 4: rejected (D45).
   - Mapping an accept in the last instant before the deadline to a cancel: rejected (§ Audit verdicts, arc 4 code).
 - **Known limits:** #367, #380, #381.
-- **Open items:** #112 (OA-6), #218 and #219 item b (arc 1b; OA-3, OA-5), #242 (arc 5), #244 (no arc).
+- **Open items:** #112 (OA-6), #218 and #219 item b (arc 1b; OA-3, OA-5), #244 (no arc), #406 (OA-20), #407 (OA-21).
 - **Seeds retired:** the `/goal` and `/loop` seeds below; this record is evidence, not instructions.
 
 Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md).
@@ -384,6 +385,7 @@ Outline A (this plan) won; both auditors judged it stronger. Opus noted that B c
 - **Phase 1.2 (OA-5):** on a multi-endpoint network, the same states show for up to 60 s on a send whose predecessor's block the PXE's node lacks. Built only on OA-5 = A.
 - **Arc 1b (OA-3):** while the account's earlier sends are unmined, a dApp send waits at "Queued..." ("Preparing..." on the silent path). The dApp's answer arrives later, and later requests of the same dApp wait behind it.
 - **Arc 2 (page 9, signed 2026-10-13).** P9-01 A: "Shrink: the USD field and the derived token line scale their type down until the figure fits; nothing wraps or is cut. Normal amounts look as today." P9-02: "In the review sheet the 4 px gap moves from the symbol's left margin to the number's end; unwrapped lines draw identical pixels." P9-03: "'The price moved since you started typing.' shows only when the live quote differs from the snapshot; a stale snapshot that did not move shows the existing 'The price quote went stale.'"
+- **Arc 5 (page 9 P9-05, signed 2026-10-13, approved as proposed).** "(1) 'Override with my method' and 'Use app's payment' become real buttons with the accent focus ring, Tab stops right where they sit in the fee card. (2) The destination suggestion list becomes a listbox: Down and Up from the recipient field move through the suggestions, Enter picks the highlighted one, Escape closes the list; no new Tab stops. (3) Checkbox, ScopeAddress and ScopeClassId answer Space as well as Enter, ignoring a repeat or composing key. (4) The degraded-fee notice is a polite region mounted empty before its text. (5) CollapsingHeroLayout's compact label is aria-hidden. Nothing changes for a pointer." The highlighted suggestion takes the row's hover background. No flow shows item 1's two buttons today (D60, OA-20).
 - **Arc 3a (page 10, signed 2026-10-12).**
   - #108 (P10-06, approved): "When the transaction's expiry is provably past chain time, the row reads 'Won't go through' / 'This transaction expired before the network included it. No fee was paid, and you can send it again.' Until then it reads today's 'Unconfirmed'." The look is the existing failed one (OA-7, D28).
   - #109 (P10-07, changed): "no new words; only the pruned-block re-check ships." A mined row reads as today until final. A row whose block the finalized chain excludes returns to today's "Not confirmed yet" (journal row) or today's pending clock (Tx row).
@@ -688,7 +690,7 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 
 **Validation gate.** Commands: `bun run lint`; `bun run typecheck:all`; `send-fiat-gate.test.ts` as a single test file. Pass: all exit 0. Layers: lint, typecheck, unit.
 
-#### Phase 2.4: arc 2 end-to-end gate
+#### Phase 2.4: arc 2 end-to-end gate ✓
 
 **Validation gate.** Commands: `bun run audit:vue`; `bun run test:all`; smoke on Chrome and Firefox (`cd apps/extension && bun run test:e2e -- --retry=0`, then the same with `NULO_E2E_BROWSER=firefox`); network Chrome and Firefox `tests/e2e/network/fiat-send.test.ts` and `send-amount-exact.test.ts` (D57). Pass: all exit 0; the PR attaches before and after screenshots of the amount card at rest and focused and of the review sheet, both themes, both browsers. Layers: unit, smoke e2e, network e2e.
 
@@ -887,21 +889,21 @@ Moved 2026-10-11 to [ci-followups-2](../ci-followups-2/plan.md) by the owner's c
 
 ### Arc 5: keyboard reach (after P9-05 and arc 2)
 
-#### Phase 5.1: buttons, Space and the live region (items 1, 3, 4, 5)
+#### Phase 5.1: buttons, Space and the live region (items 1, 3, 4, 5) ✓
 
 1. Make the two fee links buttons; move `isRepeatOrComposing` into `@nulo/design` and re-export it; add Space to the three controls; mount the degraded notice's region empty; hide the compact label.
 2. Tests: `FeeSettingsCard.test.ts` (buttons, Enter and Space activate once, a repeat does nothing; the region exists before its text); `Checkbox.test.ts` (≥ 5 cases, L2 rule); `ScopeAddress.test.ts`, `ScopeClassId.test.ts`; `CollapsingHeroLayout.test.ts`.
 
 **Validation gate.** Commands: `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run test:all`. Pass: all exit 0. Layers: lint, typecheck, unit.
 
-#### Phase 5.2: the suggestion listbox (item 2)
+#### Phase 5.2: the suggestion listbox (item 2) ✓
 
 1. Add the listbox roles, the highlight and the keys.
 2. Tests: `RecipientField.test.ts` (Down and Up move the highlight, Enter picks it, Escape closes, Tab leaves the field with no stop on a row); a smoke case in `send-keyboard.test.ts`.
 
 **Validation gate.** Commands: unit as 5.1; smoke on Chrome and Firefox for `send-keyboard.test.ts`. Pass: all exit 0. Layers: unit, smoke e2e.
 
-#### Phase 5.3: arc 5 end-to-end gate
+#### Phase 5.3: arc 5 end-to-end gate ✓
 
 **Validation gate.** Commands: smoke on Chrome and Firefox (whole suite, retry 0); network Chrome for the file that drives a dApp send with its own fee payment (find it with `git grep -l send-fee-override apps/extension/tests/e2e`). Pass: all exit 0; before and after screenshots on both browsers. Layers: smoke e2e, network e2e.
 
@@ -1178,6 +1180,15 @@ Arc 2 as built (detail in `lessons/phase-2.md`):
 - **D56 P9-03.** `requoteReason(frozenUsd, liveUsd)` shares the gate's usable-quote predicate (`isUsableUsd`). A page test in `send.test.ts` drives the notice through the real gate.
 - **D57 The USD fit's e2e lives in `send-amount-exact.test.ts`**, not `fiat-send.test.ts`: that file already mints the seven-figure balance and holds the token field's fit checks. It seeds a $1 quote before Send opens and adds one USD step: the field shows its whole figure, the derived line is one line clear of the balance, Max stays in the row, focus restores 40 px. Failure mode: a real layout that still clips or wraps, which jsdom's stand-in font cannot show. It fails on the base sources (40 px hidden, three lines, Max 28.6 px out). The 2.4 gate runs both files.
 
+Arc 5 as built (detail in `lessons/phase-5.md`; numbered from D60 because the lane's parallel branches already take D45-D53):
+
+- **D60 The two fee links are buttons on a path no flow shows.** They render only when the card's v-model holds the app's payment (`kind: "embedded"`), and nothing passes it one: for every app-paid operation the execute window shows the "set by the app" badge instead of the card (`OperationCard.vue`), and `approval-delta.ts` refuses an embedded pick. Built as signed: `<button type="button">` through `Flex tag="button"`, the accent `:focus-visible` ring, `refuseRepeatEnter` so a held Enter activates once. Pressing one unmounts it and focus falls to the page. OA-20 asks whether the path stays.
+- **D61 Checkbox says it is a checkbox.** CLAUDE.md § Keyboard & focus order pairs keyboard activation on a `div` with its `role` and `aria-*`, so Space comes with `role="checkbox"`, `aria-checked` and `aria-disabled`. The scope chips already had `role="button"`. All three mark Enter and Space handled. Nothing a pointer sees changes.
+- **D62 The degraded notice's region mounts with the card**, not with the method selector: a load error outlives a switch to the app's payment and back, and a region recreated with its text in place may stay silent. `FeeMethodRow` keeps its place after it.
+- **D63 The listbox.** Nothing is highlighted until Down or Up; Down starts at the first row and Up at the last, both wrap; the highlight is held by its row, so it follows that row through a new list and goes when the row leaves it; the row scrolls into view (`block: "nearest"`). The list takes `tabindex="-1"`: a list that scrolls (four or more rows) is otherwise a Tab stop in Chrome and Firefox, and Tab must go from the field to the next control. The avatar's initials are hidden from screen readers, so a row reads as its name and address. Enter picks the highlighted row, the first when none is, as before. Escape with the list open closes it until the next input or focus and is marked handled (Chrome would close the toolbar popup); with the list closed it is left alone. The field carries `aria-controls` (the rows are not its descendants) and `aria-activedescendant`, both new optional `Input` props; the "Recipient Address" label names the list; ids come from `useId()`. No `combobox` role: unsigned (OA-21). The listener stays on `document`: Send has no ancestor key handler. `isComposing` joins the shared key guard, so an arrow may repeat but not compose.
+- **D64 Arc 5's e2e.** 5.2 extends the suggestion scenario in `send-keyboard.test.ts`: three contacts seeded in storage make four rows, more than the list shows, then Down, Escape, Up to the last row (scrolled into view), Enter, and the Tab off the field. Failure mode: real keys on the native field that never reach the listener, an `aria-activedescendant` that never lands on the `<input>` through `AddressInput` and `Input` (the unit test stubs `AddressInput`), an Escape the page leaves unhandled, or a scrolling list that takes a Tab stop: only a browser lays out the scroll and decides the Tab order. Without the list's `tabindex="-1"` the step fails on Chrome: Tab lands on `send-destination-suggestions`. Measured: Chrome 7.5 s before, 7.0 s after; Firefox 14.3 s, 14.5 s (noise). For 5.3, `git grep -l send-fee-override apps/extension/tests/e2e` finds nothing; the file that drives a dApp send with its own fee payment is `network/tx-sendTx-feePayer.test.ts`, which sees the badge and never the card (D60). It runs as the gate names it, a regression check of that path.
+- **D65 Shots.** No shipped flow renders the two fee buttons (D60), so their shots come from a scratch build (never committed) whose `OperationCard` mounts the fee card for an app-paid send, driven by a scratch network spec; "before" swaps `FeeSettingsCard.vue` back to arc 2's head. At rest, before and after are pixel-identical in the fee card on both browsers and themes: the only rows that differ are the two per-run addresses. The same run presses both buttons with real Enter and Space, and reads the ring (solid 2 px, offset 2 px, `--nulo-accent`). After a press focus is on the page; the next Tab goes to the method picker on Firefox, and past it to the priority row on Chrome (OA-20). The highlighted suggestion is shot from `send-keyboard.test.ts`, after the list's fade-in: a shot mid-fade shows the token card through it. 28 shots, `screenshots/5-*`.
+
 ## Audit verdicts
 
 ### Round 1 (plan v1): dual audit
@@ -1419,6 +1430,24 @@ Rejected: an accept a few milliseconds before the deadline still fails with the 
 **Round 3 (resumed), after `origin/dev` was merged (#373, #379). Approve, no new finding.** The merged review sheet keeps one fee block (unvouched, re-ask, cap, ordinary) and arc 2's number span in both the line and its ruler. The loop stops here.
 
 Known limits: a restart while queued or asking fails the send (D53); the re-ask line can read X and Y equal at six decimals. Both are filed closed: #380, #381.
+
+### Arc 5 code, round 1: Codex (gpt-6.1-sol, high) and an Opus review, over `5523126b..c70ae5c1`
+
+**Codex: approve** (session `01a13734-acf5-7972-a1e7-f64b3ee5cb7a`). **Opus: approve.** Both confirmed D60 (no flow renders the two fee buttons), the degraded region empty before its text on every path, Escape handled only while the list is open, and no key that picks a destination nobody chose through Escape, another control, a held or composing Enter, the blur grace or the press hold.
+
+Accepted:
+- **The scrolling list is a Tab stop** (Opus, low-medium): four or more rows overflow the 160 px list, which Chrome and Firefox make a Tab stop, so Tab from the field landed on it and focus fell to the page when it closed. The list takes `tabindex="-1"`; the e2e now seeds four rows and checks Tab leaves the list.
+- **The highlight was held by position** (Opus, low): a row loading in ahead of it reset the highlight, and Enter then took the first row. It is held by its row now; a unit test drives the reorder.
+- the avatar's initials and the degraded notice's icon are `aria-hidden` (Opus, low);
+- an Enter after Escape picks nothing: asserted (Opus, low);
+- comments: the Escape `preventDefault` and the first-row fallback say why (Opus); two comments that restated their code removed (Codex).
+
+Rejected:
+- **The fee-button unit test does not prove native activation** (Codex, low): no flow renders the buttons (D60), so no committed e2e can press them; the scratch shot run presses them with real Enter and Space on both browsers (D65).
+
+To the owner: the `combobox` pattern for the field (Opus, low), OA-21.
+
+**Round 2 (resumed Codex session, over c060277c): approve, no production finding.** It confirmed the row-identity highlight (candidate objects survive Send's recomputes; two rows sharing an address stay distinct), that a press on a row still picks it before the list unmounts, and the rejection above. Accepted, e2e only: the Tab check asserts the next stop, the token card, since focus falling to the page would also pass a check that only rules out the list; the scenario waits for the four rows, since contacts load after the field already suggests the account.
 
 ## Seeds
 

@@ -247,3 +247,30 @@ Before, the same line wrapped onto three lines and pushed Max 28 px past the car
 - **C. Option C of P9-01 for long lines only.** The line moves to its own row under the amount when it would draw below the floor, so it gets the card's full width.
 
 **Recommendation.** C. It keeps the signed shrink for ordinary amounts and keeps the figure readable when it is long. The review sheet shows the full amount before anything is sent, so A is not a money risk; it is a legibility one.
+
+## OA-20: The fee card's "Override with my method" path is never shown (#242 item 1, page 9 P9-05)
+
+**Surface.** The fee card's banner for a payment the app sets: "Override with my method", and "Use app's payment" under the method picker.
+
+**What ships now.** Both are buttons with the accent focus ring, as signed. No flow shows them. Whenever an app sets the fee payment, the confirm window shows "Fee payment method set by <app>" in place of the fee card, and the wallet refuses an app-paid pick when the request is approved. Nobody sees the change.
+
+If the path were shown: pressing either button swaps it for the other control (the method picker or the banner), and focus falls to the page. The next Tab goes to the method picker on Firefox, but past it to the priority row on Chrome. Shots, from a build that shows the card for an app-paid send: `screenshots/5-fee-*`.
+
+**Options.**
+- **A. As built.** The path stays unreachable and is now keyboard-ready.
+- **B. Remove the override path from the card**: the banner, both buttons and their state. Nothing visible changes.
+- **C. Show it.** A person may replace an app's fee payment in the confirm window. That is a product change and needs its own security review, since an app that names a fee payer may rely on it. Focus would then move to the control that replaces the pressed button.
+
+**Recommendation.** B, in its own PR. A path nobody can reach still costs every review that reads it.
+
+## OA-21: How a screen reader names the recipient field (#242 item 2, page 9 P9-05)
+
+**Surface.** Send's "Recipient Address" field and its suggestions, heard through a screen reader.
+
+**What ships now.** The signed listbox: the suggestions are a list of options, and the field names the highlighted one as Down and Up move. The field itself is still announced as a text field, so a screen reader is not told it has suggestions until one is highlighted. VoiceOver is known to follow the highlighted option less reliably on a plain text field than on a combo box.
+
+**Options.**
+- **A. As built.**
+- **B. The standard combo box pattern:** the field is announced as a combo box, says whether its list is open, and that it suggests as you type. Nothing a sighted person sees changes.
+
+**Recommendation.** B. It is three attributes on the field, and it is the pattern screen readers are built around.

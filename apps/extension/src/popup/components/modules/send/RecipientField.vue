@@ -16,7 +16,7 @@
  * suggestions) until the press ends: the card is taller than the field, so swapping at the blur
  * would move whatever the press is on before its click lands.
  */
-import { isRepeatOrComposing } from "@/composables/usePopupEntity"
+import { isComposing } from "@/composables/usePopupEntity"
 import { trimAddress } from "@/utils/string"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { matchRecipients } from "./recipient-search"
@@ -30,6 +30,14 @@ const selectedContact = defineModel("selectedContact", { default: null })
 
 const isSearchInputFocused = ref(false)
 const justCleared = ref(false)
+/** Escape closed the suggestions; the next input or focus opens them again. */
+const dismissed = ref(false)
+/** The suggestion Down and Up moved to, or null: none until an arrow is pressed. Held by identity,
+ *  so a row that loads in ahead of it does not move the highlight onto another destination. */
+const activeRow = shallowRef(null)
+const listId = useId()
+const labelId = `${listId}-label`
+const optionId = (i) => `${listId}-${i}`
 const fieldEl = useTemplateRef("fieldEl")
 /** The field shows the typed text while the press that blurred it is still down. */
 const holdView = ref(false)
@@ -40,7 +48,9 @@ let releaseTimer
 
 const filteredContacts = computed(() => matchRecipients(props.candidates, searchTerm.value))
 
-const showSuggestions = computed(() => filteredContacts.value?.length && isSearchInputFocused.value)
+const showSuggestions = computed(() => Boolean(filteredContacts.value?.length && isSearchInputFocused.value && !dismissed.value))
+const activeIndex = computed(() => (showSuggestions.value ? filteredContacts.value.indexOf(activeRow.value) : -1))
+const activeId = computed(() => (activeIndex.value >= 0 ? optionId(activeIndex.value) : undefined))
 const showInvalidHint = computed(() => !isSearchInputFocused.value && !isValidAztecAddress(searchTerm.value) && searchTerm.value.length > 0)
 
 const handleSelectContact = (contact) => {
@@ -73,6 +83,7 @@ const handleSearchBlur = () => {
 
 const handleSearchFocus = () => {
 	clearTimeout(closeTimer)
+	dismissed.value = false
 	if (holdView.value) {
 		clearTimeout(releaseTimer)
 		holdView.value = false
@@ -125,20 +136,50 @@ const onWindowBlur = () => {
 watch(
 	() => searchTerm.value,
 	(val) => {
+		dismissed.value = false
 		if (selectedContact.value && val !== selectedContact.value.address) {
 			selectedContact.value = null
 		}
 	},
 )
 
+watch([filteredContacts, showSuggestions], () => {
+	if (activeIndex.value < 0) activeRow.value = null
+})
+
+const ARROW_STEPS = { ArrowDown: 1, ArrowUp: -1 }
+
+const moveHighlight = (e, step) => {
+	e.preventDefault()
+	const rows = filteredContacts.value
+	const at = activeIndex.value
+	const next = at < 0 && step < 0 ? rows.length - 1 : (at + step + rows.length) % rows.length
+	activeRow.value = rows[next]
+	document.getElementById(optionId(next))?.scrollIntoView({ block: "nearest" })
+}
+
+// With no row highlighted, Enter keeps its typed-name shortcut: the first suggestion.
+const pickHighlighted = (e) => {
+	if (e.repeat) return
+	e.preventDefault()
+	handleSelectContact(filteredContacts.value[Math.max(activeIndex.value, 0)])
+	e.target.blur()
+}
+
+// Marked handled: Chrome closes the toolbar popup on an Escape the page leaves unhandled.
+const dismiss = (e) => {
+	e.preventDefault()
+	dismissed.value = true
+}
+
 // Only the field's own input may pick: the suggestions outlive its blur, and an Enter meant for
 // another control must never set where the money goes.
 const onKeydown = (e) => {
-	if (e.key !== "Enter" || e.defaultPrevented || isRepeatOrComposing(e)) return
+	if (e.defaultPrevented || isComposing(e) || !showSuggestions.value) return
 	if (!(e.target instanceof HTMLInputElement) || !fieldEl.value?.contains(e.target)) return
-	if (!showSuggestions.value) return
-	handleSelectContact(filteredContacts.value[0])
-	e.target.blur()
+	if (e.key in ARROW_STEPS) moveHighlight(e, ARROW_STEPS[e.key])
+	else if (e.key === "Enter") pickHighlighted(e)
+	else if (e.key === "Escape") dismiss(e)
 }
 
 onMounted(() => {
@@ -166,7 +207,7 @@ onBeforeUnmount(() => {
 <template>
 	<div :class="$style.recipient_section">
 		<Flex align="center" justify="between">
-			<span :class="$style.section_label">Recipient Address</span>
+			<span :id="labelId" :class="$style.section_label">Recipient Address</span>
 			<Transition name="fade">
 				<Flex v-if="showInvalidHint" align="center" gap="6" data-testid="recipient-invalid-hint">
 					<Icon name="warning" size="12" color="red" />
@@ -186,11 +227,14 @@ onBeforeUnmount(() => {
 				<AddressInput
 					v-model="searchTerm"
 					:autofocus="justCleared"
+					:ariaActivedescendant="activeId"
+					:ariaControls="showSuggestions ? listId : undefined"
 					@focus="handleSearchFocus"
 					@blur="handleSearchBlur()"
 					placeholder="0x... or contact name"
 				/>
 
+				<!-- A list that scrolls is a Tab stop unless it opts out; the field keeps the keyboard. -->
 				<Transition name="fade">
 					<Flex
 						v-if="showSuggestions"
@@ -198,17 +242,24 @@ onBeforeUnmount(() => {
 						direction="column"
 						wide
 						:class="$style.contacts_wrapper"
+						:id="listId"
+						role="listbox"
+						tabindex="-1"
+						:aria-labelledby="labelId"
 						data-testid="send-destination-suggestions"
 					>
 						<Flex
-							v-for="c in filteredContacts"
+							v-for="(c, i) in filteredContacts"
 							@click="handleSelectContact(c)"
 							align="center"
 							gap="10"
-							:class="$style.contact"
+							:class="[$style.contact, i === activeIndex && $style.active]"
 							wide
+							:id="optionId(i)"
+							role="option"
+							:aria-selected="i === activeIndex"
 						>
-							<AccountAvatar :name="c.name" :address="c.address" :size="28" />
+							<AccountAvatar :name="c.name" :address="c.address" :size="28" aria-hidden="true" />
 
 							<Flex direction="column" gap="4" wide>
 								<Text size="14" weight="600" color="primary" :class="$style.title">{{ c.name }}</Text>
@@ -276,7 +327,8 @@ onBeforeUnmount(() => {
 		padding: 10px 14px;
 		transition: all 0.2s var(--bezier);
 
-		&:hover {
+		&:hover,
+		&.active {
 			background: var(--nulo-surface-low);
 		}
 
