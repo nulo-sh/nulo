@@ -22,3 +22,4 @@
 - 2026-10-10: final gates on the final head pass: lint, typecheck:all, test:all (extension 10743, aztec-runtime 372), check:plans 0 findings; revert check repeated on the final test (4 of 5 red unpatched).
 - 2026-10-14: arc 2 started on `backup-import-export-arc-2` off origin/dev d3dc441 (D-orch-4, D-orch-5); P1-05 approved; Arc 2 facts re-verified (F13, F14 hold).
 - 2026-10-14: gate 2.1 pass (lint, typecheck:all, network/ + components/ 76 files 1101/1101; the BUG PIN now reads Active on both).
+- 2026-10-14: gate 2.2 pass (lint, typecheck:all, account-state/ + importChainSync 5 files 67/67; the export test is red without the filter).

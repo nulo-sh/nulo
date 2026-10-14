@@ -9,3 +9,10 @@
 
 - `getNodeStatus` passes `network.kind`; the `(BUG PIN)` flipped to "a local-kind network on a non-seed URL whose node answers is Active on both". `Header.vue` computes the status key once and uses it for the dot's class and the chip's `data-status`; `Header.test.ts` pins the attribute.
 - Gate: lint 0, `typecheck:all` 0, `src/wallet/services/network/` + `src/components/` 76 files, 1101 tests passed.
+
+## Phase 2.2 (#191, export)
+
+- `backupNetworkState` skips `isPxeProvidedContract(c)` before `getContractInstance`. The string form (not `isPxeProvidedAddress`) because `getContracts` returns strings and a spelling the parse refuses stays work, as on the import side. The `normalize.ts` cap comment now says what is true: the export leaves them out, an older backup still carries them, and its measured 33.8M is why the bound cannot come down. `pxe-provided.ts`'s header said "a backup still carries them"; reworded.
+- Old-shape import: `restore-surface.pins.test.ts` already pins the skip of a protocol and a preloaded address with a custom sibling registered; unchanged and green.
+- New test: a protocol address and the AuthRegistry address are left out before their instance is read; a custom contract is kept (control). Red with the filter line removed (1 of 22), green with it.
+- Gate: lint 0, `typecheck:all` 0, `account-state/` + `importChainSync.test.ts` 5 files, 67 tests passed.

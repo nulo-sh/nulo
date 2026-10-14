@@ -8,6 +8,7 @@
  * status gating logic.
  */
 
+import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import type { IService, ServiceCollection as ServiceCollectionType } from "@/wallet/base"
 import { ServiceCollection } from "@/wallet/base"
@@ -56,6 +57,33 @@ function makeNetwork(id: string, chainId: number): Network {
 }
 
 describe("AccountStateService.backup", () => {
+	test("the contracts every PXE boot registers are left out before their instance or artifact is read; a custom one is kept", async () => {
+		const networkService = new FakeNetworkService()
+		const services = new ServiceCollection()
+		services.add(networkService)
+		const accountStateService = new AccountStateService(new LoggerStore(new ConfigStore()))
+		services.add(accountStateService)
+		await services.start()
+		networkService.networks = [{ ...makeNetwork("net-a", 7), endpoints: [{ id: "primary", rpcUrl: "https://a.example/" }] } as Network]
+		networkService.statuses.set("net-a", NodeStatus.Active)
+		const protocol = `0x${"00".repeat(31)}03`
+		const custom = `0x${"07".repeat(32)}`
+		vi.spyOn(accountStateService, "getSenders").mockResolvedValue([])
+		vi.spyOn(accountStateService, "getContracts").mockResolvedValue([protocol, STANDARD_AUTH_REGISTRY_ADDRESS.toString(), custom])
+		const instance = { currentContractClassId: { toString: () => "0xclass" } }
+		const pxe = {
+			getContractInstance: vi.fn(async () => instance),
+			getContractArtifact: vi.fn(async () => ({ name: "Custom" })),
+		}
+		;(accountStateService as unknown as { pxeService: typeof pxe }).pxeService = pxe
+
+		const items = await accountStateService.backup()
+
+		expect(items?.[0].contracts).toEqual([{ address: custom, instance, artifact: { name: "Custom" } }])
+		expect(pxe.getContractInstance).toHaveBeenCalledTimes(1)
+		expect(pxe.getContractArtifact).toHaveBeenCalledTimes(1)
+	})
+
 	test("each item names its chain beside the network id — the import rebinds by chain, never by the exported id", async () => {
 		const networkService = new FakeNetworkService()
 		const services = new ServiceCollection()

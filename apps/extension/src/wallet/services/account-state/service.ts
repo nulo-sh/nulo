@@ -28,7 +28,7 @@ import {
 	normalizeAccountStateSlice,
 	truncateErrorMessage,
 } from "./normalize"
-import { isPxeProvidedAddress } from "./pxe-provided"
+import { isPxeProvidedAddress, isPxeProvidedContract } from "./pxe-provided"
 
 export * from "./spec"
 
@@ -165,6 +165,9 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 			const nInfo = networkInfoFrom(n)
 			let skipped = 0
 			for (const c of contracts) {
+				// A restore never needs them (every PXE boot registers them itself), and their artifacts
+				// would only weigh against the import's slice cap.
+				if (isPxeProvidedContract(c)) continue
 				const instance = await this.pxeService.getContractInstance(nInfo, AztecAddress.fromStringUnsafe(c))
 				if (!instance?.currentContractClassId) {
 					skipped++
