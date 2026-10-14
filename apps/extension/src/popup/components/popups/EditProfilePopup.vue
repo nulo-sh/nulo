@@ -150,11 +150,9 @@ usePopupEntity(() => props.show, {
 					@input="isStartedEditing = true"
 					data-testid="profile-name-input"
 				>
-					<template #right>
-						<Transition name="fade">
-							<FieldWarning v-if="isCollision"> Name in use </FieldWarning>
-							<FieldWarning v-else-if="isUnchanged"> Already exist </FieldWarning>
-						</Transition>
+					<template v-if="isCollision || isUnchanged" #right>
+						<FieldWarning v-if="isCollision"> Name in use </FieldWarning>
+						<FieldWarning v-else> Already exist </FieldWarning>
 					</template>
 				</Input>
 

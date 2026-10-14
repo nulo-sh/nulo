@@ -152,10 +152,8 @@ watch(
 			v-model="nameTerm"
 			data-testid="fpc-name-input"
 		>
-			<template #right>
-				<Transition name="fade">
-					<FieldWarning v-if="isAlreadyExist"> Already exist </FieldWarning>
-				</Transition>
+			<template v-if="isAlreadyExist" #right>
+				<FieldWarning> Already exist </FieldWarning>
 			</template>
 		</Input>
 

@@ -307,20 +307,22 @@ const handleClear = () => {
 				<slot name="labelSuffix" />
 			</Flex>
 
-			<Transition v-if="warning.show" name="fade">
-				<Tooltip position="end">
-					<Flex align="center" gap="6">
-						<Icon name="warning" size="12" color="yellow" />
-						<Text variant="body" color="primary"> Maximum length reached </Text>
-					</Flex>
+			<!-- The caller's message wins: the length note is the fallback, shown only while the slot is
+				 empty, so a caller passes `#right` only while its message shows. -->
+			<slot name="right">
+				<Transition v-if="warning.show" name="fade">
+					<Tooltip position="end">
+						<Flex align="center" gap="6">
+							<Icon name="warning" size="12" color="yellow" />
+							<Text variant="body" color="primary"> Maximum length reached </Text>
+						</Flex>
 
-					<template #content>
-						{{ warning.text }}
-					</template>
-				</Tooltip>
-			</Transition>
-
-			<slot v-else name="right" />
+						<template #content>
+							{{ warning.text }}
+						</template>
+					</Tooltip>
+				</Transition>
+			</slot>
 		</Flex>
 
 		<Flex

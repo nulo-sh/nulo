@@ -400,7 +400,7 @@ Order: 3.10, 3.11, 3.4, 3.5, 3.6, each committed with its gate green before the 
 4. Smoke, the same hold scenario: before leaving Contacts, the open menu's `contacts-menu-import` is `aria-disabled="true"`. Proves the real binding to the real guard. Estimate +1 s.
 - Validation gate: fast layers on those files and the four import test files; smoke, both browsers, on `contacts-import.test.ts`; network (Chrome) on `contacts-import-stop`, since the import's snack sequence changed.
 
-**3.4 #216 (P11-02b A).**
+**3.4 #216 (P11-02b A).** ✓
 1. `Input.vue`: the note becomes the right slot's fallback.
 2. The eight call sites (F34) pass `#right` only while their message shows, without the Transition.
 - Tests in `Input.test.ts` with the real slot (a host component whose message appears and disappears reactively): at the cap, the message shows and the note does not; when the message goes, the note takes the slot; a slot that renders only a comment counts as empty; below the cap the message shows and no note. The existing popup tests that assert a message keep passing; one call-site test (the contact form) proves the note at the cap with no duplicate and the duplicate at the cap.
