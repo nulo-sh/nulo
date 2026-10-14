@@ -152,9 +152,29 @@ const {
 	debounceMs: 500,
 	onError: (key, err) => {
 		console.error(`[Execute] Fee estimation failed for op ${key}:`, err)
-		openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
+		// An app-paid operation's estimate only checks the app's fee contract; a failed check is unknown, never a refusal.
+		if (!isAppPaid(operations.value[key] as unknown as UIOperation))
+			openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
 	},
 })
+
+/** A send whose fee the app pays through its own payload. */
+const isAppPaid = (op: UIOperation | undefined): boolean =>
+	(op?.kind === "aztec_sendTx" || op?.kind === "send_transaction") && isEmbeddedFeePayment(op)
+
+/** An estimate whose payer the node would refuse at submission: an app's fee contract proven unable
+ *  to pay, or the account's own Fee Juice below the fee. Confirm stays off, so nothing is proven. */
+const isShortEstimate = (estimate: TransferFeeEstimate): boolean =>
+	estimate.appPayerFunding?.provenShort === true || estimate.feeJuiceShortfall !== undefined
+/** Each operation's last landed verdict. A replacement estimate clears the result while it runs, so a
+ *  shortfall already shown holds Confirm until the replacement answers. */
+const lastLandedShort = ref<Record<number, boolean>>({})
+const payerShort = computed(() =>
+	operations.value.some((_, i) => {
+		const landed = feeEstimates.value[i]
+		return landed ? isShortEstimate(landed) : estimatingOps.value[i] === true && lastLandedShort.value[i] === true
+	}),
+)
 
 // A `default_entrypoint` operation never gets a fee estimate (the dApp pays), so
 // the authorizations the wallet would sign are previewed through their own slot
@@ -244,6 +264,8 @@ const init = async () => {
 		initComplete.value = resolved.operations.length > 0
 		for (const [index, op] of resolved.operations.entries()) {
 			if (op.kind === "aztec_sendTx" && op.executionMode === "default_entrypoint") scheduleAuthwitPreview(index, { index })
+			// No fee card asks for these: the estimate runs once, to check the app's own fee contract.
+			else if (isAppPaid(op)) scheduleFeeEstimate(index, { index, feeSettings: { paymentMethod: { kind: "embedded" } } })
 		}
 		// Neither is awaited by the approve gate: a slow decode leaves the card on its vocabulary
 		// reading or "Reading arguments…", and a failed one falls back to the raw fields.
@@ -478,6 +500,7 @@ const approve = async () => {
 		setError("Validation error", "Select a fee payment method for each transaction", "warning")
 		return
 	}
+	if (payerShort.value) return
 	try {
 		isLoading.value = true
 		// Ownership handoff: approval transfers the estimates and previews to the
@@ -592,6 +615,14 @@ watch(
 )
 
 watch([feeEstimates, authwitPreviews], decodeDiscoveredAuthwits, { deep: true })
+// Synchronous, so a result cleared in the tick it landed still leaves its verdict behind.
+watch(
+	feeEstimates,
+	(results) => {
+		for (const [i, landed] of Object.entries(results)) if (landed) lastLandedShort.value[Number(i)] = isShortEstimate(landed)
+	},
+	{ deep: true, flush: "sync" },
+)
 
 onMounted(startWindow)
 
@@ -678,6 +709,7 @@ onUnmounted(() => {
 				!initComplete ||
 				operations.length === 0 ||
 				needsFeeSelection ||
+				payerShort ||
 				isInteractionCancelled
 			"
 			@reject="reject"

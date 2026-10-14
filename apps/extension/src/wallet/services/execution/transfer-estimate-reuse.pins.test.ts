@@ -65,7 +65,7 @@ function entry(feeSettings: FeeSettings = { paymentMethod: { kind: "fj" } }, ove
 		chainIdentity: { l1ChainId: 1, rollupVersion: 6 },
 		...(feeSettings.paymentMethod.kind === "fpc" ? { fpcIdentity: { ...SPONSOR } } : {}),
 		// (2,3) × the mocked default 7.
-		baseFeeFingerprint: "14:21",
+		builtCap: { feePerDaGas: 14n, feePerL2Gas: 21n },
 		primaryEndpointId: "e1",
 		primaryEndpointUrl: "http://primary",
 		pendingHashes: ["0xpending"],
@@ -203,7 +203,7 @@ describe("the ladder's order and reasons", () => {
 
 	test("base fee changed stops before the pending read", async () => {
 		const { reuse, logDebug } = harness()
-		expect(await consumeOnce(reuse, entry(undefined, { baseFeeFingerprint: "999:999" }), request())).toBeUndefined()
+		expect(await consumeOnce(reuse, entry(undefined, { builtCap: { feePerDaGas: 1n, feePerL2Gas: 1n } }), request())).toBeUndefined()
 		expect(calls).toEqual(FULL_LADDER.slice(0, 4))
 		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee changed`]])
 	})
@@ -259,17 +259,17 @@ describe("the TTL guard", () => {
 
 describe("the multiplier per priority", () => {
 	test.each([
-		[undefined, "14:21"],
-		["", "14:21"],
-		["normal", "4:6"],
-		["fast", "6:9"],
-		["urgent", "10:15"],
-	])("priority %j commits basis (2,3) × its multiplier: %s", async (priorityLevel, expected) => {
+		[undefined, 14n, 21n],
+		["", 14n, 21n],
+		["normal", 4n, 6n],
+		["fast", 6n, 9n],
+		["urgent", 10n, 15n],
+	])("priority %j commits basis (2,3) × its multiplier: %s:%s", async (priorityLevel, da, l2) => {
 		const fs = { paymentMethod: { kind: "fj" }, priorityLevel } as FeeSettings
 		const { reuse } = harness()
-		expect(await consumeOnce(reuse, entry(fs, { baseFeeFingerprint: expected }), request(fs))).toBeDefined()
+		expect(await consumeOnce(reuse, entry(fs, { builtCap: { feePerDaGas: da, feePerL2Gas: l2 } }), request(fs))).toBeDefined()
 		const { reuse: other } = harness()
-		expect(await consumeOnce(other, entry(fs, { baseFeeFingerprint: "0:0" }), request(fs))).toBeUndefined()
+		expect(await consumeOnce(other, entry(fs, { builtCap: { feePerDaGas: 0n, feePerL2Gas: 0n } }), request(fs))).toBeUndefined()
 	})
 })
 

@@ -7,17 +7,17 @@
  */
 
 import type { TxExecutionRequest } from "@aztec-labs/stdlib/tx"
-import { computeMaxFee } from "@/utils/fee-estimation"
 import type { TxGasDetails } from "@/wallet/services/transaction/spec"
 
-/** Extract estimated fee from finalized gas settings on a TxExecutionRequest. */
+/** The most the transaction can cost, gas limits × cap: the fee limit the node checks the payer's
+ *  balance against (`GasSettings.getFeeLimit`). The gas limits already include teardown. */
+export function feeLimitOf(txRequest: TxExecutionRequest): bigint {
+	const { gasLimits, maxFeesPerGas } = txRequest.txContext.gasSettings
+	return BigInt(gasLimits.daGas) * maxFeesPerGas.feePerDaGas + BigInt(gasLimits.l2Gas) * maxFeesPerGas.feePerL2Gas
+}
+
 export function getEstimatedFee(txRequest: TxExecutionRequest): string {
-	const gs = txRequest.txContext.gasSettings
-	return computeMaxFee(
-		{ daGas: gs.gasLimits.daGas, l2Gas: gs.gasLimits.l2Gas },
-		{ daGas: gs.teardownGasLimits.daGas, l2Gas: gs.teardownGasLimits.l2Gas },
-		{ feePerDaGas: gs.maxFeesPerGas.feePerDaGas, feePerL2Gas: gs.maxFeesPerGas.feePerL2Gas },
-	).toString()
+	return feeLimitOf(txRequest).toString()
 }
 
 /** Extract gas breakdown from finalized gas settings. */

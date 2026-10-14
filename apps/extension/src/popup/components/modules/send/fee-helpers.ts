@@ -1,5 +1,7 @@
 import { FpcType } from "@/wallet/services/fpc/client"
-import { feeJuicePricingFromUsd, feeToUsd, formatFeeJuice, formatGasBalance } from "@/utils/fee-estimation"
+import { FEE_JUICE_DECIMALS, feeJuicePricingFromUsd, feeToUsd, formatFeeJuice, formatGasBalance } from "@/utils/fee-estimation"
+import { formatBaseUnits } from "@/utils/amount"
+import type { AppPick } from "@/utils/fee-picks"
 
 export { formatGasBalance }
 
@@ -61,6 +63,9 @@ export interface FeeMethodOption {
 	spend?: string
 	/** The read that answers this row has not landed: it is drawn loading and is never picked. */
 	checking?: boolean
+	/** A sponsor whose funding read for the current transaction is in flight: drawn loading, and it
+	 *  can still be picked. */
+	verifying?: boolean
 	fpc?: { id: string; type: FpcType; name?: string; isProtocol?: boolean; address?: string } | null
 }
 
@@ -69,7 +74,18 @@ export interface FeeMethodOption {
  *  drifted only by luck). `null` on either leg = UNKNOWN (read failed):
  *  fail closed for gating, render as an em dash for display. */
 export type { GasBalances } from "@/wallet/services/execution/models"
-import type { GasBalances } from "@/wallet/services/execution/models"
+import type { FeeJuiceShortfall, GasBalances } from "@/wallet/services/execution/models"
+
+const SHORTFALL_DECIMALS = 6
+
+/** The refusal for a balance short of the fee. The cost rounds up and the balance down at the same
+ *  precision, so the two figures never read equal. */
+export function shortfallSentence({ maxFee, balance }: FeeJuiceShortfall): string {
+	const step = 10n ** BigInt(FEE_JUICE_DECIMALS - SHORTFALL_DECIMALS)
+	const cost = ((BigInt(maxFee) + step - 1n) / step) * step
+	const options = { maxDecimals: SHORTFALL_DECIMALS }
+	return `This send can cost up to ${formatBaseUnits(cost, FEE_JUICE_DECIMALS, options)} FJ. You have ${formatBaseUnits(BigInt(balance), FEE_JUICE_DECIMALS, options)} FJ.`
+}
 
 export interface BuildSettingsInput {
 	paymentMethod: { kind: string; fpcId?: string } | undefined
@@ -188,15 +204,9 @@ export function resolveSavedSelection(
 	}
 }
 
-/** The one-pick-per-account key's record: what the trigger shows while the card loads, and the
- *  sponsor's identity and whether Nulo vouches for it. */
-export type SavedSelection = Pick<FeeMethodOption, "type" | "title" | "subtitle"> & {
-	fpc?: Pick<RegisteredFpc, "id" | "isProtocol">
-}
-
 /** A picked row as plain values, without the row's `fpc` itself: that is the card's reactive state,
  *  and it carries fields no reader of the record uses. */
-export function savedSelectionOf({ type, title, subtitle, fpc }: FeeMethodOption): SavedSelection {
+export function savedSelectionOf({ type, title, subtitle, fpc }: FeeMethodOption): AppPick {
 	return fpc ? { type, title, subtitle, fpc: { id: fpc.id, isProtocol: fpc.isProtocol } } : { type, title, subtitle }
 }
 
@@ -209,6 +219,8 @@ export interface FeeMethodsOptions {
 	balancesPending?: boolean
 	/** Its FPC list is unread too: every row is `checking`. */
 	fpcsPending?: boolean
+	/** The sponsor whose funding read is in flight: its row is `verifying`. */
+	verifyingSponsorId?: string | null
 }
 
 /**
@@ -271,6 +283,7 @@ function sponsorOption(fpc: RegisteredFpc, options: FeeMethodsOptions | undefine
 		option.disabledReason = "can't pay now"
 	}
 	if (options?.setAsideSponsorIds?.has(fpc.id)) option.setAside = true
+	if (!option.disabled && !option.setAside && options?.verifyingSponsorId === fpc.id) option.verifying = true
 	return option
 }
 

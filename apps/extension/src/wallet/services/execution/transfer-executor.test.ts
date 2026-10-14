@@ -8,6 +8,7 @@
  * fence every stage answers to.
  */
 
+import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { describe, expect, test, vi } from "vitest"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
@@ -56,7 +57,7 @@ function makeTxRequest() {
 		},
 	} as never
 }
-// maxFee for the fixture: (100+10)*2 + (200+20)*3 = 880.
+// maxFee for the fixture, gas limits × cap with teardown counted once inside them: 100*2 + 200*3 = 800.
 
 function makeReq(overrides: Partial<TransferRequest> = {}): TransferRequest {
 	return {
@@ -550,7 +551,7 @@ describe("TransferExecutor.estimateFee", () => {
 		const { executor, deps } = makeHarness()
 		const result = (await executor.estimateFee(makeReq())) as TransferFeeEstimate
 
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect(result.estimateId).toBeDefined()
 		expect(deps.estimateReuse.stash).toHaveBeenCalledTimes(1)
 		const stashed = (deps.estimateReuse.stash as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]
@@ -559,7 +560,7 @@ describe("TransferExecutor.estimateFee", () => {
 			profileId: "p1",
 			primaryEndpointId: "e1",
 			pendingHashes: ["0xpending"],
-			baseFeeFingerprint: "2:3",
+			builtCap: { feePerDaGas: 2n, feePerL2Gas: 3n },
 			// The stash persists the BUILD's provenance (the harness build
 			// sets true) — a hardcoded false here would strip classification
 			// from every estimate→confirm transfer.
@@ -574,7 +575,7 @@ describe("TransferExecutor.estimateFee", () => {
 			makeReq({ feeSettings: { paymentMethod: { kind: "embedded" } } as never }),
 		)) as TransferFeeEstimate
 
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect(result.estimateId).toBeUndefined()
 		expect(deps.estimateReuse.stash).not.toHaveBeenCalled()
 	})
@@ -590,7 +591,7 @@ describe("TransferExecutor.estimateFee", () => {
 		})
 		const result = (await executor.estimateFee(makeReq())) as TransferFeeEstimate
 
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect(result.estimateId).toBeUndefined()
 	})
 })
@@ -659,12 +660,25 @@ describe("TransferExecutor.estimateFee sponsor funding", () => {
 		const result = (await executor.estimateFee(makeReq({ feeSettings: FPC_SETTINGS }))) as TransferFeeEstimate
 
 		expect(result.sponsorFunding).toEqual({ fpcId: "fpc-9", address: SPONSOR.toString(), funded: false })
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect(result.estimateId).toBeDefined()
 		expect(readPublicStorageOnce).toHaveBeenCalledTimes(1)
 		expect((readPublicStorageOnce.mock.calls[0] as unknown[])[0]).toBe(built.network)
 		expect(node.getPublicStorageAt).not.toHaveBeenCalled()
 		expect(deps.logDebug).toHaveBeenCalledWith("sponsor probe", { outcome: "short" })
+	})
+
+	test("a build paying from the account's own Fee Juice carries the shortfall the node would refuse", async () => {
+		const { executor, built } = sponsorHarness({ named: false, balance: 799n })
+		Object.assign(built, {
+			account: { address: SPONSOR },
+			feePaymentMethod: AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE,
+		})
+
+		const result = (await executor.estimateFee(makeReq())) as TransferFeeEstimate
+
+		expect(result.feeJuiceShortfall).toEqual({ maxFee: "800", balance: "799" })
+		expect(result.maxFee).toBe("800")
 	})
 
 	test.each([
@@ -676,7 +690,7 @@ describe("TransferExecutor.estimateFee sponsor funding", () => {
 		const result = (await executor.estimateFee(makeReq({ feeSettings: FPC_SETTINGS }))) as TransferFeeEstimate
 
 		expect(result).not.toHaveProperty("sponsorFunding")
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect(result.estimateId).toBeDefined()
 		expect(readPublicStorageOnce).toHaveBeenCalledTimes(reads)
 	})
@@ -735,7 +749,7 @@ describe("TransferExecutor: the activity record, field by field", () => {
 			feePaymentMethod: { kind: "fee_juice" },
 			hash: "0xhash",
 			submittedEndpointUrl: "http://submitted",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-built",
@@ -770,7 +784,7 @@ describe("TransferExecutor: the activity record, field by field", () => {
 			feePaymentMethod: { kind: "reused" },
 			hash: "0xhash",
 			submittedEndpointUrl: "http://live",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-live",
@@ -822,7 +836,7 @@ describe("TransferExecutor.estimateFee: the reuse snapshot", () => {
 						chainIdentity: { l1ChainId: 1, rollupVersion: 6 },
 						fpcIdentity: undefined,
 						// The built request's maxFeesPerGas; the node is never asked.
-						baseFeeFingerprint: "7:11",
+						builtCap: { feePerDaGas: 7n, feePerL2Gas: 11n },
 						primaryEndpointId: "e2",
 						primaryEndpointUrl: "http://primary",
 						pendingHashes: ["0xpending"],

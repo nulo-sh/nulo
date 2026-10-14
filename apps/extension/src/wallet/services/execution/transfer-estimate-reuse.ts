@@ -17,8 +17,7 @@
  * dependencies (node lookup only after endpoint checks pass, etc.).
  */
 
-import { GasFees } from "@aztec-labs/stdlib/gas"
-import { type MinFeeNode, predictedWorstMinFees } from "@nulo/aztec-runtime/fee-juice"
+import type { MinFeeNode } from "@nulo/aztec-runtime/fee-juice"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import type { Fpc } from "@/wallet/services/fpc/fpc"
 import type { FpcInfo } from "@/wallet/services/fpc/spec"
@@ -30,14 +29,15 @@ import {
 	type ChainIdentity,
 	chainIdentityDrift,
 	ESTIMATE_REUSE_TTL_MS,
-	fingerprintBaseFee,
 	fpcIdentityDrift,
 	pendingHashesChanged,
 	primaryEndpointMoved,
 	type ReuseEntryBase,
 	feeMultiplierFor,
+	reuseCapRule,
 	SingleShotTtlCache,
 } from "./estimate-reuse-shared"
+import { committedCapCovers, feeCapFor } from "./fee/fee-cap"
 import type { TransferRequest } from "./operation-planner"
 import type { FeeSettings } from "./spec"
 
@@ -196,19 +196,17 @@ export class TransferEstimateReuse {
 		return entry
 	}
 
-	/** Compares the entry's fingerprint (derived from the txRequest's actual `maxFeesPerGas`) against
-	 *  `predictedWorstMinFees * multiplier`, which is what a fresh build would finalize (same basis,
-	 *  same `GasFees.mul` as `finalizeGasLimits`). A read that fails is a miss: unverifiable, not reused. */
+	/** Whether the cap the entry was built with still covers the one a fresh build would commit. A read
+	 *  that fails is a miss: unverifiable, not reused. */
 	private async baseFeeDrift(network: Network, inputs: TransferRequest, entry: TransferEstimateReuseEntry): Promise<string | undefined> {
 		const node = await this.deps.getNode(network.chainId)
 		try {
-			const basis = await predictedWorstMinFees(node)
-			const multiplier = feeMultiplierFor(inputs.feeSettings.priorityLevel)
-			// Re-wrap before multiplying: the basis components may arrive as a bare
-			// `{feePerDaGas, feePerL2Gas}` from a minimal node, and the fingerprint
-			// must reproduce the exact `GasFees.mul` product the build finalized.
-			const expectedFingerprint = fingerprintBaseFee(new GasFees(basis.feePerDaGas, basis.feePerL2Gas).mul(multiplier))
-			return expectedFingerprint === entry.baseFeeFingerprint ? undefined : "base fee changed"
+			const rule = reuseCapRule(
+				inputs.feeSettings.paymentMethod,
+				entry.fpcIdentity,
+				feeMultiplierFor(inputs.feeSettings.priorityLevel),
+			)
+			return committedCapCovers(entry.builtCap, await feeCapFor(node, rule), rule) ? undefined : "base fee changed"
 		} catch {
 			// A fixed category: the node's message never reaches the log.
 			return "base fee fetch failed"

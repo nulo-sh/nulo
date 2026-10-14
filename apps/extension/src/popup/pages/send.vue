@@ -293,6 +293,10 @@ const isAllowedToSend = computed(() => {
 	if (isBlockedTransfer.value) return false
 	if (!isValidAddress.value) return false
 	if (!feeSettings.value) return false
+	// Nothing goes out on a fee the person has not seen: a failed estimate leaves this off too. A
+	// queued send's figure is the cap the card shows, and nothing goes out above it.
+	if (!queueCap.value && !feeEstimate.value) return false
+	if (feeEstimate.value?.feeJuiceShortfall) return false
 	if (fiatQuoteBlocked.value) return false
 	return amountValidation.value.valid
 })
@@ -522,8 +526,20 @@ watch(
 	{ deep: true },
 )
 
+// Every input the estimate is asked with is a source here, so a landed estimate is always the
+// current input's: each change re-asks (clearing the result) or cancels.
 watch(
-	[amountTerm, searchTerm, selectedSendType, selectedReceiverType, () => feeSettings.value, () => legal.isCurrent.value],
+	[
+		amountTerm,
+		searchTerm,
+		selectedSendType,
+		selectedReceiverType,
+		() => feeSettings.value,
+		() => legal.isCurrent.value,
+		() => activeToken.value?.id,
+		() => appStore.network?.id,
+		() => appStore.account?.address,
+	],
 	() => {
 		// An estimate simulates against the node: no work for a send the wall would refuse.
 		if (!legal.isCurrent.value) {

@@ -37,17 +37,6 @@ export function feeJuicePricingFromUsd(usd: number | undefined): AssetPricing | 
 	}
 }
 
-/** Compute max fee from gas limits and fees per gas */
-export function computeMaxFee(
-	gasLimits: { daGas: number; l2Gas: number },
-	teardownLimits: { daGas: number; l2Gas: number },
-	maxFeesPerGas: { feePerDaGas: bigint; feePerL2Gas: bigint },
-): bigint {
-	const totalDaGas = BigInt(gasLimits.daGas + teardownLimits.daGas)
-	const totalL2Gas = BigInt(gasLimits.l2Gas + teardownLimits.l2Gas)
-	return totalDaGas * maxFeesPerGas.feePerDaGas + totalL2Gas * maxFeesPerGas.feePerL2Gas
-}
-
 /**
  * Half-up round a base-units value to `targetDecimals` precision, returning
  * a bigint at the target scale. Pure bigint — no float, no BN.

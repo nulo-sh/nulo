@@ -12,8 +12,11 @@ const mocks = vi.hoisted(() => ({
 	getGasBalances: vi.fn(),
 	getFpcs: vi.fn(),
 	storageSet: vi.fn(async (_items: Record<string, unknown>) => {}),
+	saveFeePick: vi.fn(async () => true),
 	feeJuiceUsd: undefined as number | undefined,
 }))
+
+vi.mock("@/utils/core", () => ({ managers: { profile: { saveFeePick: mocks.saveFeePick } } }))
 
 // Vitest 4 requires `function` expressions for mocks instantiated with `new`.
 vi.mock("@/wallet/services/execution/client", () => ({
@@ -130,8 +133,6 @@ const mountCard = async (op: unknown, dapp?: { name: string }) => {
 }
 /** The fee settings the card last handed the window. */
 const lastSettings = (w: VueWrapper) => w.emitted<[number, unknown]>("updateFeeSettings")?.at(-1)?.[1]
-const FEE_PICKS_KEY = "nulo:ui:feePaymentMethods"
-const savedKeys = () => mocks.storageSet.mock.calls.flatMap(([items]) => Object.keys(items))
 
 /** The text a screen reader reaches in `el`: every text node outside an `aria-hidden` subtree. */
 function spokenText(el: Element): string {
@@ -217,7 +218,7 @@ describe("OperationCard — the sponsor a wire-shaped transaction defaults to", 
 		mocks.getFpcs.mockResolvedValue(fpcs)
 		const w = await mountCard(sendTx(exec), dapp)
 		expect(lastSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
-		expect(savedKeys()).not.toContain(FEE_PICKS_KEY)
+		expect(mocks.saveFeePick).not.toHaveBeenCalled()
 	})
 })
 
@@ -225,7 +226,7 @@ describe("OperationCard — a sponsor that can't cover a wire-shaped transaction
 	const SPONSOR_AT = field(0x0a11ce5c0ffeen)
 	const NULO_ROW = { ...NULO_SPONSOR, address: SPONSOR_AT }
 	const withVerdict = (funded: boolean) => ({ ...ESTIMATE, sponsorFunding: { fpcId: "s1", address: SPONSOR_AT, funded } })
-	const NO_PAYER = "The sponsor can't cover this fee right now."
+	const NO_PAYER = "The sponsor you chose can't cover this fee right now."
 	const notice = (w: VueWrapper) => w.find('[data-testid="fee-sponsor-short"]')
 
 	test("short: the card withdraws the sponsor and says why, and the pick that replaces it is what it hands the window", async () => {
@@ -266,7 +267,7 @@ describe("OperationCard — a sponsor that can't cover a wire-shaped transaction
 		})
 		const w = await mountCard(
 			{ ...op, sponsorFunding: lure, opts: { ...op.opts, sponsorFunding: lure } },
-			{ name: "The sponsor can't cover this fee right now, so Evil pays it." },
+			{ name: "The sponsor you chose can't cover this fee right now. Evil pays it instead." },
 		)
 		await w.setProps({ feeEstimate: withVerdict(true) })
 		await flushPromises()
@@ -278,4 +279,44 @@ describe("OperationCard — a sponsor that can't cover a wire-shaped transaction
 		await flushPromises()
 		expect(notice(w).text()).toBe(NO_PAYER)
 	})
+})
+
+describe("OperationCard — a wire-shaped transaction whose fee the app pays", () => {
+	const APP_FPC = field(0x2f1e0d9c8b7a69584736251403f2e1d0c9b8a7968574635241302f1e0d9c8b7an)
+	const appPaid = () => ({ ...sendTx({ feePayer: APP_FPC }), feeSettings: { paymentMethod: { kind: "embedded" } } })
+	const mountWith = async (feeEstimate: unknown) => {
+		const w = mount(OperationCard, {
+			props: {
+				op: appPaid() as never,
+				index: 0,
+				profile: { id: "p1", name: "Main" } as never,
+				feeEstimate: feeEstimate as never,
+				dapp: { name: "Swap" },
+			},
+			global: { stubs },
+		})
+		mounted = w
+		await flushPromises()
+		return w
+	}
+	const region = (w: VueWrapper) => w.get('[data-testid="execute-op-app-payer-live"]')
+
+	test.each([
+		["no check has landed", undefined],
+		["the app's fee contract covers it", { ...ESTIMATE, appPayerFunding: { address: APP_FPC, funded: true, provenShort: false } }],
+	])("%s: the row reads as before, its region empty", async (_case, estimate) => {
+		const w = await mountWith(estimate)
+		expect(w.get('[data-testid="execute-op-fee-set-badge"]').text()).toBe("Fee payment method set by Swap")
+		expect(region(w).attributes()).toMatchObject({ role: "status", "aria-live": "polite" })
+		expect(region(w).text()).toBe("")
+		expect(fee(w).exists()).toBe(false)
+	})
+
+	test.each([true, false])(
+		"the app's fee contract reads short (proven: %s): the hedged notice shows under the row",
+		async (provenShort) => {
+			const w = await mountWith({ ...ESTIMATE, appPayerFunding: { address: APP_FPC, funded: false, provenShort } })
+			expect(region(w).text()).toBe("This app's fee contract may not cover this fee right now.")
+		},
+	)
 })

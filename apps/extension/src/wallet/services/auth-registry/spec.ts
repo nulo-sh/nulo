@@ -1,6 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { z } from "zod"
-import type { FeeSettings, AuthwitContent } from "@/wallet/services/execution/spec"
+import type { FeeSettings, AuthwitContent, TransferFeeEstimate } from "@/wallet/services/execution/spec"
 
 export const AUTH_REGISTRY_SERVICE_NAME = "auth-registry"
 
@@ -107,8 +107,9 @@ export type Methods = {
 	 * @param account Account address.
 	 * @param ids Ids of the authwits to revoke.
 	 * @param feeSettings Fee settings to be used for sending the transaction.
+	 * @param correlation The caller's key for this call, echoed by `onSendStarted`.
 	 */
-	revokeAuthwits(networkId: string, account: string, ids: number[], feeSettings: FeeSettings): void
+	revokeAuthwits(networkId: string, account: string, ids: number[], feeSettings: FeeSettings, correlation?: string): void
 	/**
 	 * Returns whether or not the auth registry is enabled for `(active profile, chainId, account)`.
 	 * @param chainId Aztec chain id scoping the lookup.
@@ -121,8 +122,37 @@ export type Methods = {
 	 * @param account Account address.
 	 * @param enabled Whether to enable or disable the auth registry.
 	 * @param feeSettings Fee settings to be used for sending the transaction.
+	 * @param correlation The caller's key for this call, echoed by `onSendStarted`.
 	 */
-	setRegistryEnabled(networkId: string, account: string, enabled: boolean, feeSettings: FeeSettings): void
+	setRegistryEnabled(networkId: string, account: string, enabled: boolean, feeSettings: FeeSettings, correlation?: string): void
+	/**
+	 * Estimates `revokeAuthwits`' transaction, built as that RPC builds it.
+	 * @param estimateToken The caller's cancellation token for this attempt (`cancelFeeEstimate`).
+	 * @param flowKey The caller's estimate slot: a newer estimate parked on it replaces an older one.
+	 */
+	estimateRevokeFee(
+		networkId: string,
+		account: string,
+		ids: number[],
+		feeSettings: FeeSettings,
+		estimateToken?: string,
+		flowKey?: string,
+	): TransferFeeEstimate
+	/**
+	 * Estimates `setRegistryEnabled`'s transaction, built as that RPC builds it.
+	 * @param estimateToken The caller's cancellation token for this attempt (`cancelFeeEstimate`).
+	 * @param flowKey The caller's estimate slot: a newer estimate parked on it replaces an older one.
+	 */
+	estimateRegistryToggleFee(
+		networkId: string,
+		account: string,
+		enabled: boolean,
+		feeSettings: FeeSettings,
+		estimateToken?: string,
+		flowKey?: string,
+	): TransferFeeEstimate
+	/** Aborts the estimate minted with `estimateToken`; an unknown token is a no-op. */
+	cancelFeeEstimate(estimateToken: string): void
 	/**
 	 * Triggers synchronization of the auth registry for the account.
 	 * @param networkId Network id.
@@ -141,4 +171,9 @@ export type Events = {
 	onRegistryEnabled: AuthwitRegistryScope
 	/** Emitted when an auth registry is disabled — same scope. */
 	onRegistryDisabled: AuthwitRegistryScope
+	/** Emitted once a send's journal record exists, so its caller can follow the record's stage. */
+	onSendStarted: SendStarted
 }
+
+/** A send's journal record, named for the caller that passed `correlation`. */
+export type SendStarted = { correlation: string; journalId: string }

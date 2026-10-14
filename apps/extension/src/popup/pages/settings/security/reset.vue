@@ -12,8 +12,6 @@
 <script setup>
 /** Utils */
 import { managers } from "@/utils/core"
-import { storageLocalRemove } from "@/utils/storage"
-import { clearSendSelections } from "@/popup/components/modules/send/fee-send-selection"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -83,9 +81,6 @@ const handleReset = async () => {
 	appStore.accounts = []
 	appStore.account = null
 	appStore.clearActivity()
-	storageLocalRemove("nulo:ui:feePaymentMethods")
-	// Through the picks writer's own queue: a bare remove could be overtaken by a pick still in flight.
-	clearSendSelections().catch((e) => console.error("Failed to clear the send fee selections", e))
 
 	appStore.isLogined = false
 	appStore.isSessionChecked = false

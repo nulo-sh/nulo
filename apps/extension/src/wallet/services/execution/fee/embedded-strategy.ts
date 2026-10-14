@@ -4,14 +4,24 @@
  * (kind `"embedded"`). The dApp has already set `feePayer` in the
  * payload; no Nulo-side fee-payload injection required.
  *
- * The cap is the app's, else the current minimum at 1.0x (`applyEmbeddedFpcGasCap`), and
+ * The cap is the app's, else the predicted worst minimum at 1.0x (`applyEmbeddedFpcGasCap`), and
  * finalize commits it unchanged.
  */
 
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
+import type { TxSimulationResult } from "@aztec-labs/stdlib/tx"
+import { callsFeeJuice } from "../sponsor-funding"
 import { applyEmbeddedFpcGasCap } from "./embedded-fpc-cap"
 import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee-strategy"
 import { finalizeGasLimits, startEstimateTask, suggestGasLimits, validatedSimOpts } from "./fee-strategy"
+
+/** The app's own fee contract, as the final simulation's kernel names it. A claim to the sender
+ *  (`fjwc`) is the sender paying itself: no contract of the app's pays. */
+function appPayerOf(route: "fjwc" | "fpc", simulatedTx: TxSimulationResult): Pick<FeeEstimate, "appPayer"> {
+	const payer = simulatedTx.publicInputs?.feePayer
+	if (route !== "fpc" || !payer || payer.isZero()) return {}
+	return { appPayer: { address: payer, callsFeeJuice: callsFeeJuice(simulatedTx.privateExecutionResult) } }
+}
 
 export class EmbeddedStrategy implements FeeStrategy {
 	public readonly kind = "embedded" as const
@@ -37,7 +47,7 @@ export class EmbeddedStrategy implements FeeStrategy {
 			// The `1` is inert: an embedded payment commits the cap set above.
 			await finalizeGasLimits(node, txRequest, simulatedTx, ctx.gasPadding, undefined, ctx.op.fee, 1, built.txsLimits)
 			task.complete()
-			return { ...built, feePaymentMethod: embeddedMethod }
+			return { ...built, feePaymentMethod: embeddedMethod, ...appPayerOf(ctx.op.fee.embeddedFeePayment, simulatedTx) }
 		} catch (error) {
 			task.fail(error)
 			throw error

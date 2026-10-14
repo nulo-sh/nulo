@@ -317,6 +317,31 @@ describe("DappSendExecutor.executeSendTransaction", () => {
 		expect(call[4]).toBe("https://dapp.example")
 	})
 
+	const SEND_OP = {
+		kind: "send_transaction",
+		networkId: "net-1",
+		accountAddress: "0xacct",
+		feeSettings: { paymentMethod: { kind: "fj" } },
+		actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+	} as never
+
+	test("names the claimed journal record to onJournalCreated once, before the send leaves", async () => {
+		const { executor, deps } = makeHarness()
+		const onJournalCreated = vi.fn(() => expect(deps.lane.markJournal).not.toHaveBeenCalled())
+		await executor.executeSendTransaction(SEND_OP, ORIGIN, undefined, FENCE, { onJournalCreated })
+		expect(onJournalCreated.mock.calls).toEqual([["j1"]])
+	})
+
+	test("a send whose journal claim fails names no record", async () => {
+		const { executor, deps } = makeHarness()
+		;(deps.lane.claimOrCreateJournal as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("claim broke"))
+		const onJournalCreated = vi.fn()
+		await expect(executor.executeSendTransaction(SEND_OP, ORIGIN, undefined, FENCE, { onJournalCreated })).rejects.toThrow(
+			"claim broke",
+		)
+		expect(onJournalCreated).not.toHaveBeenCalled()
+	})
+
 	test("records the SUBMITTING network's primary endpoint URL (recording-site pin)", async () => {
 		// addTransaction's submittedEndpointUrl (arg 7) must come from the network the
 		// executor built+submitted against — NOT re-derived from active-profile state,
@@ -672,7 +697,7 @@ describe("DappSendExecutor.estimateOperationFee", () => {
 		const foldedOp = (buildAndEstimateFolded.mock.calls[0] as unknown[])[0] as { actions: unknown[] }
 		expect(foldedOp.actions).toEqual(originalActions)
 		expect(foldedOp.actions).not.toBe(originalActions)
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect("estimateId" in result && result.estimateId).toBeFalsy()
 	})
 
@@ -696,7 +721,7 @@ describe("DappSendExecutor.estimateOperationFee", () => {
 			actions: unknown[]
 		}
 		expect(builtOp.actions).toEqual([...originalActions, extraAction])
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect("estimateId" in result && result.estimateId).toBeFalsy()
 	})
 })
@@ -1908,6 +1933,50 @@ describe("DappSendExecutor.estimateOperationFee sponsor funding", () => {
 	})
 })
 
+describe("DappSendExecutor.estimateOperationFee: an operation the app pays for", () => {
+	const APP_PAYER = AztecAddress.fromNumberUnsafe(0xa9)
+	const EMBEDDED = { paymentMethod: { kind: "embedded" } } as never
+
+	function appPaidHarness(callsFeeJuice: boolean) {
+		const readPublicStorageOnce = vi.fn(async () => new Fr(0n))
+		const h = makeHarness({
+			readPublicStorageOnce,
+			planner: {
+				processAztecJsPayload: vi.fn(async () => ({
+					actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+					feePaymentMethod: undefined,
+					feeOptions: { embeddedFeePayment: "fpc" },
+				})),
+			} as never,
+		})
+		const gasSettings = new GasSettings(new Gas(100, 200), new Gas(10, 20), new GasFees(2n, 3n), new GasFees(0n, 0n))
+		Object.assign(h.built, {
+			txRequest: { authWitnesses: [], txContext: { gasSettings } },
+			appPayer: { address: APP_PAYER, callsFeeJuice },
+		})
+		return { ...h, readPublicStorageOnce }
+	}
+
+	test.each([
+		[false, true],
+		[true, false],
+	])(
+		"skips discovery, as its confirm does, and reads the app's fee contract (calls Fee Juice: %s)",
+		async (callsFeeJuice, provenShort) => {
+			const { executor, authwit, buildAndEstimateValidated, buildAndEstimateFolded } = appPaidHarness(callsFeeJuice)
+
+			const result = await executor.estimateOperationFee(makeAztecOp({ feeSettings: EMBEDDED }), EMBEDDED)
+
+			expect(authwit.discoverPrivateAuthwits).not.toHaveBeenCalled()
+			expect(buildAndEstimateFolded).not.toHaveBeenCalled()
+			expect((buildAndEstimateValidated.mock.calls[0] as unknown[])[0]).toMatchObject({ fee: { embeddedFeePayment: "fpc" } })
+			expect(result.appPayerFunding).toEqual({ address: APP_PAYER.toString(), funded: false, provenShort })
+			expect(result).not.toHaveProperty("sponsorFunding")
+			expect(result.estimateId).toBeUndefined()
+		},
+	)
+})
+
 describe("DappSendExecutor: the activity record, field by field", () => {
 	const GAS_DETAILS = {
 		l2GasLimit: 200,
@@ -1939,7 +2008,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			feePaymentMethod: { kind: "fee_juice" },
 			hash: "0xhash",
 			submittedEndpointUrl: "https://rpc.submit",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
@@ -1958,7 +2027,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			feePaymentMethod: { kind: "fee_juice" },
 			hash: "0xhash",
 			submittedEndpointUrl: "https://rpc.submit",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
@@ -1992,7 +2061,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
 			hash: "0xhash",
 			submittedEndpointUrl: "https://rpc.live",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-1",
@@ -2012,7 +2081,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
 			hash: "0xhash",
 			submittedEndpointUrl: "https://rpc.submit",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
@@ -2102,7 +2171,7 @@ describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 						feeSettings: FPC_SETTINGS,
 						profileId: "p-active",
 						chainIdentity: { l1ChainId: 1, rollupVersion: 6 },
-						baseFeeFingerprint: "7:11",
+						builtCap: { feePerDaGas: 7n, feePerL2Gas: 11n },
 						primaryEndpointId: "ep2",
 						primaryEndpointUrl: "https://primary",
 						pendingHashes: [],

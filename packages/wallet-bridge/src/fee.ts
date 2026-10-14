@@ -110,6 +110,12 @@ export type TransferFeeEstimate = {
 	 *  absent means unknown, which must never disable a sponsor, since a failed read is not an
 	 *  empty one. */
 	readonly sponsorFunding?: SponsorFunding
+	/** Set only when the app's own fee contract, at `address`, pays and its balance was read; absent
+	 *  means unknown. */
+	readonly appPayerFunding?: AppPayerFunding
+	/** Set only when the account pays from its own public Fee Juice and the balance read short of
+	 *  `maxFee`; absent means covered or unknown. */
+	readonly feeJuiceShortfall?: FeeJuiceShortfall
 }
 
 /** `funded`: the sponsor's public Fee Juice covers the estimate's fee limit. */
@@ -117,6 +123,22 @@ export type SponsorFunding = {
 	readonly fpcId: string
 	readonly address: string
 	readonly funded: boolean
+}
+
+/** `funded`: the app's fee contract's public Fee Juice covers the estimate's fee limit. `provenShort`:
+ *  it does not, and nothing in the transaction can credit it, since only a private call to Fee Juice
+ *  can and the transaction makes none. */
+export type AppPayerFunding = {
+	readonly address: string
+	readonly funded: boolean
+	readonly provenShort: boolean
+}
+
+/** The account's own public Fee Juice, read below the most the transaction can cost; both in base
+ *  units. The node refuses such a transaction at submission. */
+export type FeeJuiceShortfall = {
+	readonly maxFee: string
+	readonly balance: string
 }
 
 /** One private authorization discovered by simulation: the call it authorizes,

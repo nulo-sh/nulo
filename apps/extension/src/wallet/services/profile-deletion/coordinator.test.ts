@@ -10,7 +10,7 @@
  */
 import { describe, expect, test } from "vitest"
 import type { StorageArea } from "@nulo/wallet-core/ports"
-import { pinnedTokensKey } from "@/utils/profile-ui-keys"
+import { feePicksKey, pinnedTokensKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
@@ -115,12 +115,13 @@ describe("ProfileDeletionCoordinator.purge — awaited order contract", () => {
 
 	test("removes exactly the deleted profile's UI keys, after the networks and before the PXE", async () => {
 		const order: string[] = []
-		const store = uiKeyStore(order, [pinnedTokensKey("p1"), pinnedTokensKey("p10")])
+		const builders = [pinnedTokensKey, feePicksKey, sendFeePicksKey]
+		const store = uiKeyStore(order, [...builders.map((key) => key("p1")), ...builders.map((key) => key("p10"))])
 		const coord = await build(order, store.storage)
 
 		await coord.runFor("p1", SNAP)
 
-		expect([...store.keys]).toEqual([pinnedTokensKey("p10")])
+		expect([...store.keys]).toEqual(builders.map((key) => key("p10")))
 		expect(order.slice(-3)).toEqual(["networks", "uiKeys", "pxe"])
 	})
 

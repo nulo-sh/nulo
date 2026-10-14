@@ -1,6 +1,6 @@
 # Owner asks: fees-and-sponsors
 
-Eleven questions that no recorded decision answers. Each one changes a fee a person pays or sees, or how a screen behaves, so hold H3 or rule G4 keeps it from the panel. Page 6 (records P6-01 to P6-07) is asked separately and gates arc 2.
+Thirteen questions that no recorded decision answers. Each one changes a fee a person pays or sees, or how a screen behaves, so hold H3 or rule G4 keeps it from the panel. Page 6 (records P6-01 to P6-07) is asked separately and gates arc 2.
 
 None of these blocks arc 1. Arc 1 ships the form under "What ships now" for each one.
 
@@ -8,6 +8,7 @@ None of these blocks arc 1. Arc 1 ships the form under "What ships now" for each
 - **OA-7, OA-8 and OA-9** decide whether a send can go out on a fee you have not seen, and OA-7's option C would also change which cap wins.
 - Under H3, each of OA-1 to OA-9 is built only if you answer it, **and** pages 6 and 9 carry recorded answers.
 - **OA-10 and OA-11** cover what page 6 approves but does not spell out. Each is built only if you answer it.
+- **OA-12 and OA-13** come from arc 2: the owner's note on P6-07 states a cap rule that today's precedence does not follow on two paths, and OA-3 leaves one breakdown line reading as an addend.
 
 **Terms used below:**
 - **Fee cap** (`maxFeesPerGas`): the highest price per unit of gas the transaction accepts.
@@ -96,7 +97,7 @@ The cost of a refusal: nothing is spent if the node refuses at submission (infer
 - The shown maximum falls by teardown gas limit × cap.
 - The wallet's own payment handlers add no teardown gas, but a transaction's teardown limit comes from its simulation, or from the app when the app supplies one. So the drop is zero only where that limit is zero.
 - An app transaction with a teardown phase (for example, a fee contract that refunds) shows a lower maximum, including when the person pays with Fee Juice.
-- The real teardown limits are read on a live run before this is built.
+- Read on the arc 2 Chrome network run: the teardown limit was 0 on every one of the wallet's own sends, so their maximum does not move. An app transaction's limit was not read.
 
 **Recommendation.** B. The figure then matches what the network checks.
 
@@ -278,3 +279,55 @@ In both options the loading row stays selectable, as the row is today.
 **Recommendation.** A. It is Send's rule, so the two screens agree, and it adds no reads.
 
 **What ships now.** Today's behaviour, until arc 2.
+
+## OA-12: one cap rule for every payer (#188, the owner's note on P6-07)
+
+**Your rule, from the note on P6-07.** The figure on screen is the cap that goes on chain, from whichever side. An app may lower it, never raise it silently. If an app asks for more, the approval window shows the higher figure before Confirm. The same rule holds on Send and in the app window.
+
+**Today, after arc 2.** Today's precedence is not that rule on two paths. Arc 2 changes nothing about who wins; the arc 1 pins stand.
+- **Send.** No app takes part. The figure is gas limit × the wallet's cap, which is what goes on chain (OA-3 B). This follows your rule.
+- **App window, paid from the account's Fee Juice.** The app's cap goes on chain as the app gave it, higher or lower, and the figure shown before Confirm is computed from it. This follows your rule. A cap below the network's minimum also goes on chain as given, and the network refuses it.
+- **App window, paid by a sponsor or by private fee juice.** The app's cap is ignored and the wallet's goes on chain. An app cannot lower it. This breaks "an app may lower it".
+- **App window, paid by the app's own fee contract.** The app's cap goes on chain, or the predicted worst minimum when it gives none (OA-1 B). The row shows "Fee payment method set by the app" and no figure. This breaks "the figure on screen is the cap that goes on chain".
+
+**Options.**
+- **A. As today.** The pins stand.
+- **B. Your rule on every path.**
+  - A sponsor or private fee juice commits the app's cap when the app gives one, as Fee Juice does today.
+  - The app-paid row shows gas limit × the committed cap.
+  - This changes who wins on two paths and adds a figure to one screen.
+- **C. The higher cap wins (your note's second point).** Every path commits the higher of the app's cap and the wallet's. An app could then never lower the cap, which your rule allows.
+
+**Numbers.** Let X be gas limit × predicted worst minimum. The level is Normal, which the wallet commits as 2X (private fee juice: 1.2X after OA-2 C). The app asks for half or for three times the predicted worst minimum.
+
+| Path | App's cap | Today | B | C |
+|---|---|---|---|---|
+| Account's Fee Juice | 0.5× | 0.5X shown, refused if below the network's minimum | 0.5X | 2X |
+| Account's Fee Juice | 3× | 3X shown | 3X | 3X |
+| Sponsor | 0.5× | 2X | 0.5X, refused if below the minimum | 2X |
+| Sponsor | 3× | 2X | 3X shown; the sponsor must hold more | 3X |
+| Private fee juice (charges the cap) | 0.5× | 1.2X charged | 0.5X charged, refused if below the minimum | 1.2X |
+| Private fee juice (charges the cap) | 3× | 1.2X charged | 3X charged, shown before Confirm | 3X charged |
+| App's fee contract | 3× | 3X committed, no figure shown | 3X committed and shown | 3X |
+
+**Recommendation.** B. It is your rule as written, and it gives one rule to every path. Its cost: on private fee juice an app can now raise the charge, which the person sees before Confirm.
+
+**What ships now.** A, pinned. Open as #400.
+
+## OA-13: the activity detail's gas breakdown after OA-3 (#188)
+
+**Surface.** A transaction's detail page, the fee row's expanded gas breakdown.
+
+**Today, after arc 2.**
+- OA-3 B makes the estimated fee gas limit × cap, the figure the network checks.
+- The breakdown lists L2 gas, DA gas and, when the transaction has one, a Teardown line. The L2 and DA lines already include the teardown gas, so the three lines no longer add up to "Estimated"; before OA-3 they did, because the teardown was counted twice.
+- On the wallet's own sends the teardown limit is zero, so the line does not show (read on the arc 2 Chrome network run: 0 on every sponsor, public Fee Juice and private fee juice send).
+
+**Options.**
+- **A. As today.** The Teardown line stays and reads as an addend.
+- **B. Mark it as a part.** The line reads "of which teardown" under the L2 and DA lines (wording yours).
+- **C. Drop the Teardown line.**
+
+**Recommendation.** B. It keeps the information and stops the sum from misleading.
+
+**What ships now.** A. Open as #401.

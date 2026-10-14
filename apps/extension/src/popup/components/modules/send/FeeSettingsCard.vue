@@ -9,10 +9,12 @@ import FeeMethodSelector from "./FeeMethodSelector.vue"
 /** Vendor */
 import { getRandomHex } from "@/wallet/utils"
 import { sameFieldAddress } from "@nulo/wallet-bridge"
-import { UI_STORAGE_KEYS } from "@/popup/constants/storage-keys"
 
 /** Utils */
-import { storageLocalGet, storageLocalSet } from "@/utils/storage"
+import { managers } from "@/utils/core"
+import { storageLocalGet } from "@/utils/storage"
+import { readAppPicks, readSendSlots } from "@/utils/fee-picks"
+import { feePicksKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
 
 /** Services */
 import { FpcServiceClient } from "@/wallet/services/fpc/client"
@@ -34,9 +36,9 @@ import {
 	resolveSavedSelection,
 	savedSelectionOf,
 	settingsForMethod,
+	shortfallSentence,
 } from "./fee-helpers"
 import { applyFpcEdits, previewForPick, recordOf, resolveSendSelection } from "./fee-privacy"
-import { loadSendSelections, mutateSendSelections, readSendSlots, withSendSlot } from "./fee-send-selection"
 import { usePrices } from "@/composables/usePrices"
 
 /** Composables */
@@ -76,12 +78,16 @@ const props = defineProps({
 	payerNoticeShape: { type: String, default: null },
 	/** The transaction the fee is for, less its fee settings; a change is a new transaction. */
 	txShape: { type: String, default: "" },
+	/** Outside Send: a short sponsor's selection falls to the next payer of Send's public-side walk
+	 *  instead of to nothing. For a transaction whose calls are public, where paying from the
+	 *  account's own Fee Juice publishes nothing new. */
+	fallsBack: { type: Boolean, default: false },
 	/** `{ basis, cap }` in base units while the page offers to queue the send against a cap. */
 	queuedCap: { type: Object, default: null },
 })
 
-const FEE_METHOD_LS_KEY = UI_STORAGE_KEYS.FEE_PAYMENT_METHODS
-const readSavedFeeMethods = async () => (await storageLocalGet(FEE_METHOD_LS_KEY))[FEE_METHOD_LS_KEY] || {}
+const readStored = async (key) => (await storageLocalGet(key))[key]
+const readSavedFeeMethods = async (profileId) => readAppPicks(await readStored(feePicksKey(profileId)))
 
 const settings = defineModel()
 
@@ -131,6 +137,11 @@ const setAsideSponsorIds = reactive(new Set())
 const lastVerdict = ref(null)
 /** Outside Send: the sponsor a short verdict dropped the selection of, until the person picks. */
 const droppedForVerdictId = ref(null)
+/** The sponsor paying when the transaction last changed, while it still pays and until the estimate
+ *  for the new transaction ends: its earlier verdict was for another fee limit. Only the paying
+ *  sponsor is read, so no other row can have a read in flight. */
+const recheckFpcId = ref(null)
+const verifyingSponsorId = computed(() => (props.isEstimating ? recheckFpcId.value : null))
 
 /** The FPC list the store has read for the live identity. That read is never forced, so it usually
  *  lands well before the forced balance read lets the snapshot commit: the sponsor rows answer early. */
@@ -148,6 +159,7 @@ const methods = computed(() =>
 	buildFeeMethods(knownFpcs.value, isInitComplete.value ? gasBalances.value : undefined, {
 		shortSponsorIds,
 		setAsideSponsorIds,
+		verifyingSponsorId: verifyingSponsorId.value,
 	}),
 )
 
@@ -212,8 +224,11 @@ const showMethodSelector = computed(() => {
 	return useOwnMethod.value
 })
 
-/** Send's picks, `{ [address]: { private?, public? } }` — keyed by address so nothing crosses accounts. */
+/** Send's picks, `{ [slot]: { private?, public? } }`, one slot per profile and address: storage keeps
+ *  each profile's picks apart, so an account held by two profiles has two picks. */
 const sendPicks = reactive({})
+const pickSlot = (profileId, address) => `${profileId}\n${address}`
+const livePicks = () => sendPicks[pickSlot(props.profile?.id, props.account?.address)]
 
 /** Structured scope of the committed snapshot — the recovery watch's target. */
 const committedScope = ref(null)
@@ -238,7 +253,7 @@ const snapshotPending = computed(() => !snapshotCommitted.value && readingKey.va
  */
 const sendSelection = computed(() => {
 	if (props.originPrivacy === null) return null
-	const pick = sendPicks[props.account?.address]?.[props.originPrivacy]
+	const pick = livePicks()?.[props.originPrivacy]
 	if (!isInitComplete.value || !scopeIsLiveIdentity(committedScope.value)) {
 		return { kind: "pending", preview: previewForPick(pick, methods.value) }
 	}
@@ -251,7 +266,7 @@ const sendSelection = computed(() => {
 const sponsorShort = computed(() => {
 	if (props.originPrivacy === null) return droppedForVerdictId.value !== null
 	if (shortSponsorIds.size === 0 || !isInitComplete.value || !scopeIsLiveIdentity(committedScope.value)) return false
-	const pick = sendPicks[props.account?.address]?.[props.originPrivacy]
+	const pick = livePicks()?.[props.originPrivacy]
 	const know = { fpcs: knownFpcs.value, balances: gasBalances.value }
 	const unset = resolveSendSelection(props.originPrivacy, know, pick)
 	return unset.kind === "selected" && unset.method.type === "fpc" && shortSponsorIds.has(unset.method.fpc?.id)
@@ -281,11 +296,23 @@ const feePayer = computed(() => {
 	return feePayerOf(m && { type: m.type, isProtocol: m.fpc?.isProtocol }) ?? "self"
 })
 
-const sponsorShortText = computed(() =>
-	effectiveMethod.value
-		? `The sponsor can't cover this fee right now, so ${effectiveMethod.value.title} pays it.`
-		: "The sponsor can't cover this fee right now.",
-)
+const SPONSOR_SHORT = "The sponsor you chose can't cover this fee right now."
+/** The payer that takes over, named by kind: a sponsor's row title can be the short one's too. */
+const takeoverName = (m) => {
+	if (m?.type === "fj") return "Public Fee Juice"
+	if (m?.type === "private_fpc") return "Private FPC"
+	return m?.type === "fpc" && m.fpc?.isProtocol === true ? "The default sponsor" : null
+}
+const sponsorShortText = computed(() => {
+	const name = takeoverName(effectiveMethod.value)
+	return name ? `${SPONSOR_SHORT} ${name} pays it instead.` : SPONSOR_SHORT
+})
+
+/** The account's own Fee Juice, read short of this estimate's fee while it pays. */
+const shortfallText = computed(() => {
+	const shortfall = props.feeEstimate?.feeJuiceShortfall
+	return shortfall && effectiveMethod.value?.type === "fj" ? shortfallSentence(shortfall) : null
+})
 
 /** `short` while the notice shows, `funded` while the sponsor a funded verdict named pays. */
 const sponsorFunding = computed(() => {
@@ -317,8 +344,16 @@ const derivedSettings = computed(() => {
 const feeJuiceMissing = computed(() => {
 	// Send: only confirmed exhaustion — every applicable payer read, none can pay — whatever is selected.
 	if (sendSelection.value) return sendSelection.value.kind === "none"
-	return selectedMethodHasNoGas()
+	return selectedMethodHasNoGas() || noPayerCanPay()
 })
+/** Send's public-side walk, with this card's pick standing in for Send's saved one: a hand-added
+ *  sponsor counts only once picked, and an unread balance never counts as empty. */
+const noPayerCanPay = () => {
+	if (useEmbeddedFee.value || props.lockedMethod || !snapshotCommitted.value) return false
+	const know = { fpcs: knownFpcs.value, balances: gasBalances.value, shortSponsorIds, setAsideSponsorIds }
+	const pick = selectedMethod.value ? recordOf(selectedMethod.value) : undefined
+	return resolveSendSelection("public", know, pick).kind === "none"
+}
 const selectedMethodHasNoGas = () => {
 	if (!isInitComplete.value || useEmbeddedFee.value) return false
 	// Unknown balances (failed/timed-out read, silent retry pending) never
@@ -379,9 +414,8 @@ watch(
  * `onBalanceUpdated`.
  */
 const persistSelection = async (method) => {
-	const fpms = await readSavedFeeMethods()
-	fpms[props.account.address] = savedSelectionOf(method)
-	await storageLocalSet({ [FEE_METHOD_LS_KEY]: fpms })
+	const update = { kind: "app", address: props.account.address, pick: savedSelectionOf(method) }
+	await managers.profile.saveFeePick(props.profile.id, update)
 
 	if (method.type === "fpc" || method.type === "private_fpc") {
 		const idx = cacheStore.feePaymentMethods.findIndex((m) => m.id === methodId)
@@ -391,15 +425,17 @@ const persistSelection = async (method) => {
 	}
 }
 
-/** Address and origin are captured before any await: the pick belongs to the account and side it was made on. */
+/** Profile, address and origin are captured before any await: the pick belongs to the account and
+ *  side it was made on. */
 const pickForSend = (m) => {
+	const profileId = props.profile.id
 	const address = props.account.address
 	const origin = props.originPrivacy
 	const record = recordOf(m)
-	sendPicks[address] = { ...sendPicks[address], [origin]: record }
-	mutateSendSelections((raw) => withSendSlot(raw, address, origin, record)).catch((e) =>
-		console.error("Failed to save the send fee selection", { error: e }),
-	)
+	const slot = pickSlot(profileId, address)
+	sendPicks[slot] = { ...sendPicks[slot], [origin]: record }
+	const update = { kind: "send", address, side: origin, pick: record }
+	managers.profile.saveFeePick(profileId, update).catch((e) => console.error("Failed to save the send fee selection", { error: e }))
 }
 
 /** The selection is the card's own default, not a saved or live pick. */
@@ -629,10 +665,11 @@ const ensureLegsSettled = async (scope) => {
 /** The saved selections this card reconciles against. Send reads its own key into `sendPicks`, for
  *  the address it read for and under any pick already made in this mount (which is newer), and
  *  reconciles nothing — so it hands back an empty legacy map. */
-const readSavedSelections = async (address) => {
-	if (props.originPrivacy === null) return readSavedFeeMethods()
-	const slots = readSendSlots(await loadSendSelections(), address)
-	sendPicks[address] = { ...slots, ...sendPicks[address] }
+const readSavedSelections = async ({ profileId, accountAddress: address }) => {
+	if (props.originPrivacy === null) return readSavedFeeMethods(profileId)
+	const slots = readSendSlots(await readStored(sendFeePicksKey(profileId)), address)
+	const slot = pickSlot(profileId, address)
+	sendPicks[slot] = { ...slots, ...sendPicks[slot] }
 	return {}
 }
 
@@ -653,7 +690,7 @@ const prefillSelection = (saved) => {
  *  the pre-fill would clobber that run's reconcile. */
 const readAndPrefill = async (scope, myRun) => {
 	const beforeRead = { method: selectedMethod.value, pick: pickSeq }
-	const saved = await readSavedSelections(scope.accountAddress)
+	const saved = await readSavedSelections(scope)
 	if (myRun !== runSeq || !isMounted) return null
 	if (touchedSince(beforeRead)) return { saved, baseline: beforeRead }
 	prefillSelection(saved)
@@ -761,7 +798,7 @@ const recommit = async () => {
 	// baseline, so the reconcile keeps the pick instead of re-applying a
 	// stale storage snapshot over it.
 	const baseline = { method: selectedMethod.value, pick: pickSeq }
-	const saved = await readSavedFeeMethods()
+	const saved = await readSavedFeeMethods(scope.profileId)
 	// Re-validate AFTER the await: an identity switch during the storage read
 	// must not let this late commit re-open the gate with the OLD identity's
 	// data (the switch closed it; only the new identity's init may commit).
@@ -769,11 +806,19 @@ const recommit = async () => {
 	commitFromEntry(scope, feeScopeKey(scope), saved, baseline)
 }
 
+/** The payer Send's public-side walk lands on with this card's verdicts applied, or none. */
+const publicFallback = () => {
+	const know = { fpcs: knownFpcs.value, balances: gasBalances.value, shortSponsorIds, setAsideSponsorIds }
+	const next = resolveSendSelection("public", know, undefined)
+	return next.kind === "selected" ? next.method : undefined
+}
+
 const forgetVerdicts = () => {
 	shortSponsorIds.clear()
 	setAsideSponsorIds.clear()
 	lastVerdict.value = null
 	droppedForVerdictId.value = null
+	recheckFpcId.value = null
 }
 
 const recommitStillValid = (scope) => {
@@ -792,6 +837,7 @@ watch(
 		const row = methods.value.find((m) => m.type === "fpc" && m.fpc?.id === verdict.fpcId)
 		if (!row || !sameFieldAddress(verdict.address, row.fpc.address ?? "")) return
 		lastVerdict.value = { fpcId: verdict.fpcId, funded: verdict.funded }
+		if (recheckFpcId.value === verdict.fpcId) recheckFpcId.value = null
 		if (verdict.funded) {
 			shortSponsorIds.delete(verdict.fpcId)
 			setAsideSponsorIds.delete(verdict.fpcId)
@@ -801,7 +847,8 @@ watch(
 		setAsideSponsorIds.add(verdict.fpcId)
 		// A pick of a contract that cannot pay is dropped too; its saved record stays.
 		if (props.originPrivacy === null && selectedMethod.value?.fpc?.id === verdict.fpcId) {
-			selectedMethod.value = undefined
+			selectedMethod.value = props.fallsBack ? publicFallback() : undefined
+			chosenUnasked = true
 			droppedForVerdictId.value = verdict.fpcId
 		}
 	},
@@ -809,6 +856,22 @@ watch(
 // A short verdict holds for one fee limit, so a new priority or transaction offers its row again;
 // the fallback's own re-estimate changes neither.
 watch([selectedPriority, () => props.txShape], () => shortSponsorIds.clear())
+watch(effectiveMethod, (m) => {
+	if (m?.fpc?.id !== recheckFpcId.value) recheckFpcId.value = null
+})
+watch(
+	() => props.txShape,
+	() => {
+		const m = effectiveMethod.value
+		recheckFpcId.value = m?.type === "fpc" ? (m.fpc?.id ?? null) : null
+	},
+)
+watch(
+	() => props.isEstimating,
+	(estimating) => {
+		if (!estimating) recheckFpcId.value = null
+	},
+)
 watch(
 	() => [props.profile, props.network, props.account],
 	async () => {
@@ -983,6 +1046,19 @@ onBeforeUnmount(() => {
 				<Icon name="info" size="14" color="primary" aria-hidden="true" />
 				<Text variant="body" color="secondary" :style="{ paddingTop: '1px' }">
 					{{ sponsorShortText }}
+				</Text>
+			</Flex>
+			<Flex
+				v-if="showMethodSelector && shortfallText"
+				align="start"
+				gap="6"
+				wide
+				:class="$style.detail_row"
+				data-testid="fee-juice-shortfall"
+			>
+				<Icon name="warning" size="14" color="secondary" aria-hidden="true" />
+				<Text variant="body" color="secondary" :style="{ paddingTop: '1px' }">
+					{{ shortfallText }}
 				</Text>
 			</Flex>
 		</div>

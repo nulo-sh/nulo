@@ -172,7 +172,9 @@ async function makeHarness(opts: { node?: unknown; activeProfile?: { id: string 
 		if ((args[4] as ExecutionFence).session !== session) throw new SessionEndedError()
 		return "0xtx"
 	})
-	services.add(svc(EXECUTION_SERVICE_NAME, { executeSendTransaction }))
+	const estimateSendTransactionFee = vi.fn(async (..._args: unknown[]) => ({ maxFee: "1" }))
+	const cancelEstimate = vi.fn(async (_token: string) => {})
+	services.add(svc(EXECUTION_SERVICE_NAME, { executeSendTransaction, estimateSendTransactionFee, cancelEstimate }))
 	services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: txUpdated }))
 	const task = () => ({ complete() {}, fail() {}, startSubtask: task })
 	services.add(svc(TASK_SERVICE_NAME, { startNewTask: task }))
@@ -188,6 +190,8 @@ async function makeHarness(opts: { node?: unknown; activeProfile?: { id: string 
 		captureExecutionFence,
 		getNetwork,
 		executeSendTransaction,
+		estimateSendTransactionFee,
+		cancelEstimate,
 		setActive: (p: { id: string } | undefined) => (active = p),
 		/** A lock followed by an unlock of the same profile: a new session. */
 		reunlock: () => {
@@ -241,6 +245,49 @@ describe("AuthRegistryService sends run under the session the user acted in", ()
 		expect(h.captureExecutionFence).toHaveBeenCalledTimes(1)
 		expect(h.executeSendTransaction).toHaveBeenCalledTimes(1)
 		expect(h.executeSendTransaction.mock.calls[0]?.[4]).toMatchObject({ session: 1 })
+	})
+})
+
+describe("AuthRegistryService names a send's journal record to the caller that keyed it", () => {
+	const FEE = { paymentMethod: { kind: "fj" } } as never
+
+	async function harnessWithEvents() {
+		const h = await makeHarness()
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], "0xtx1")
+		const started: unknown[] = []
+		h.service.onSendStarted.add((event) => started.push(event))
+		const internals = h.service as unknown as Record<string, unknown> & { transactionService: Record<string, unknown> }
+		internals.transactionService.waitForTx = async () => {}
+		internals.nodeFor = async () => ({})
+		internals.waitForTxProven = async () => {}
+		internals.syncAuthwits = async () => {}
+		internals.syncStatus = async () => {}
+		return { h, started }
+	}
+
+	test.each([
+		["revokeAuthwits", (h: Awaited<ReturnType<typeof makeHarness>>) => h.service.revokeAuthwits("net-1", A, [1], FEE, "key-1")],
+		[
+			"setRegistryEnabled",
+			(h: Awaited<ReturnType<typeof makeHarness>>) => h.service.setRegistryEnabled("net-1", A, false, FEE, "key-1"),
+		],
+	])("%s emits the key and the journal id once the record exists, once", async (_name, send) => {
+		const { h, started } = await harnessWithEvents()
+		h.executeSendTransaction.mockImplementation(async (...args: unknown[]) => {
+			;(args[3] as { onJournalCreated: (id: string) => void }).onJournalCreated("journal-1")
+			return "0xtx"
+		})
+		await send(h)
+		expect(started).toEqual([{ correlation: "key-1", journalId: "journal-1" }])
+	})
+
+	test("a send that fails before its record exists emits nothing; a call with no key passes no hook", async () => {
+		const { h, started } = await harnessWithEvents()
+		h.executeSendTransaction.mockRejectedValueOnce(new Error("refused before the claim"))
+		await expect(h.service.revokeAuthwits("net-1", A, [1], FEE, "key-1")).rejects.toThrow("refused before the claim")
+		await h.service.setRegistryEnabled("net-1", A, false, FEE)
+		expect(started).toEqual([])
+		expect(h.executeSendTransaction.mock.calls.at(-1)?.[3]).toBeUndefined()
 	})
 })
 
@@ -378,6 +425,39 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 		}
 		expect(log).toEqual([])
 		expect(h.executeSendTransaction).not.toHaveBeenCalled()
+	})
+
+	test("each estimate is of the transaction its send builds, refused as the send is, and cancels through the service", async () => {
+		const h = await makeHarness()
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], "0xtx1")
+		await h.service.recordPendingAuthwits({ ...P1, profileId: "p2" }, [{ hash: "0xh2", content }], "0xtx2")
+		instrument(h)
+
+		await h.service.estimateRevokeFee("net-1", A, [1], FEE, "tok-1", "slot-1")
+		await h.service.revokeAuthwits("net-1", A, [1], FEE)
+		await h.service.estimateRegistryToggleFee("net-1", A, false, FEE, "tok-2")
+		await h.service.setRegistryEnabled("net-1", A, false, FEE)
+		const estimated = h.estimateSendTransactionFee.mock.calls
+		const sent = h.executeSendTransaction.mock.calls
+		expect(estimated.map((c) => c[0])).toEqual(sent.map((c) => c[0]))
+		expect(estimated.map((c) => c.slice(1))).toEqual([
+			["tok-1", "slot-1"],
+			["tok-2", undefined],
+		])
+
+		await expect(
+			h.service.estimateRevokeFee(
+				"net-1",
+				A,
+				Array.from({ length: 29 }, (_, i) => i),
+				FEE,
+			),
+		).rejects.toThrow(/^Cannot revoke more than 28 authwits per single tx$/)
+		await expect(h.service.estimateRevokeFee("net-1", A, [2], FEE)).rejects.toThrow(/^Authwit #2 doesn't exist$/)
+		expect(h.estimateSendTransactionFee).toHaveBeenCalledTimes(2)
+
+		await h.service.cancelFeeEstimate("tok-1")
+		expect(h.cancelEstimate).toHaveBeenCalledWith("tok-1")
 	})
 
 	test("a revoke settles in order: task, send under the captured fence, tx, proven, sync, complete", async () => {

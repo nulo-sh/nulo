@@ -2,7 +2,8 @@
  * The sponsor's Fee Juice, read from the node before a send proves. Nulo's own sponsor is the
  * sandbox's funded SponsoredFPC. The unfunded one is a second SponsoredFPC (salt 1) that is never
  * deployed or funded: the playground registers it and Settings adds it by hand, the kernel names it
- * as the fee payer, and the node would refuse its send for want of a balance.
+ * as the fee payer, and the node would refuse its send for want of a balance. An app that pays
+ * through it is read from the final simulation's kernel the same way: no unit layer runs that kernel.
  */
 import { getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts"
 import { Fr } from "@aztec-labs/aztec.js/fields"
@@ -14,14 +15,15 @@ import {
 	clickByTestId,
 	connectPlayground,
 	type ExtensionContext,
+	grantCapBundle,
 	openPopup,
 	replaceInputValue,
 	test,
 	waitForHash,
 } from "../fixtures/extension"
 import { fillSendForm, navigateToSettings, setActiveSendType } from "../fixtures/helpers"
-import { assertPgOk, callExpectingNoPopup, setPgTextarea, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
-import { approveCapabilities, waitForPopup } from "../fixtures/popups"
+import { assertPgOk, callExpectingNoPopup, clickPgButton, setPgInput, setPgTextarea } from "../fixtures/playground"
+import { rejectExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { serializeInstance } from "../fixtures/selfpay-phase"
 import { openSend, shotSend, waitForFee } from "../fixtures/send-page"
 
@@ -62,24 +64,29 @@ async function watchShortNotice(page: Page): Promise<() => Promise<boolean>> {
 const triggerText = (page: Page) =>
 	page.evaluate(() => document.querySelector('[data-testid="send-fee-method-trigger"]')?.textContent?.trim() ?? "")
 
+/** The playground, connected once per browser with a bundle that may register contracts and send:
+ *  a second connect finds the origin approved and opens no discovery window. */
+const playgrounds = new WeakMap<ExtensionContext, Promise<Page>>()
+function playgroundFor(ctx: ExtensionContext): Promise<Page> {
+	const known = playgrounds.get(ctx)
+	if (known) return known
+	const connected = (async () => {
+		const pg = await connectPlayground(ctx)
+		await grantCapBundle(ctx, pg, "transaction-contracts", async (ids) => [ids[0] as string])
+		return pg
+	})()
+	playgrounds.set(ctx, connected)
+	// A failed connect is not kept: a retry that fails before the origin was approved connects afresh.
+	connected.catch(() => playgrounds.delete(ctx))
+	return connected
+}
+
 /** Registers the salt-1 SponsoredFPC through the playground, then adds it in Settings. Returns its row id. */
 async function addUnfundedSponsor(ctx: ExtensionContext, address: string, instanceJson: string): Promise<string> {
-	const pg = await connectPlayground(ctx)
-	await pg.evaluate(() => {
-		const select = document.querySelector<HTMLSelectElement>('[data-testid="pg-bundle-select"]')
-		if (!select) throw new Error("no bundle select")
-		select.value = "basic"
-		select.dispatchEvent(new Event("change", { bubbles: true }))
-	})
-	const seqGrant = await snapshotResultSeq(pg)
-	const capabilities = waitForPopup(ctx, "capabilities", { timeout: 60_000 })
-	await clickByTestId(pg, "pg-btn-requestCapabilities")
-	await approveCapabilities(await capabilities)
-	await waitForPgResult(pg, "requestCapabilities", seqGrant, 30_000)
+	const pg = await playgroundFor(ctx)
 	await setPgTextarea(pg, "contractInstance", instanceJson)
 	const registered = await callExpectingNoPopup(ctx, pg, "registerContract", () => clickByTestId(pg, "pg-btn-registerContract"))
 	await assertPgOk(pg, registered, "fee-sponsor-funding:registerContract")
-	await pg.close()
 
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general")
@@ -170,7 +177,7 @@ test.skipIf(!hasConfig)(
 		)
 		expect(await triggerText(page)).toBe(nuloTrigger)
 		const notice = await page.$eval('[data-testid="fee-sponsor-short"]', (el) => el.textContent?.trim())
-		expect(notice).toBe("The sponsor can't cover this fee right now, so Sponsored pays it.")
+		expect(notice).toBe("The sponsor you chose can't cover this fee right now. The default sponsor pays it instead.")
 		await shotSend(page, "fee-sponsor-short", "fee-sponsor-short")
 		const region = await page.$eval('[data-testid="fee-sponsor-short"]', (el) => el.parentElement?.getAttribute("data-testid"))
 		expect(region).toBe("fee-sponsor-live")
@@ -191,5 +198,29 @@ test.skipIf(!hasConfig)(
 		expect(short.disabled).toBe("true")
 		expect(short.text).toContain("can't pay now")
 		await page.close()
+	},
+)
+
+test.skipIf(!hasConfig)(
+	"an app paying through its own unfunded sponsor: the app window says so and holds Confirm",
+	{ timeout: 300_000 },
+	async ({ tokenReadyExtension }) => {
+		const config = aztecConfig as AztecTestConfig
+		const pg = await playgroundFor(tokenReadyExtension)
+		await setPgInput(pg, "tokenAddress", config.tokenAddress)
+		await setPgInput(pg, "recipient", config.minterAddress)
+		await setPgInput(pg, "amount", "1")
+		await setPgInput(pg, "sponsorSalt", "1")
+
+		const execute = waitForPopup(tokenReadyExtension, "execute", { timeout: 60_000 })
+		await clickPgButton(pg, "sendTx-appSponsored")
+		const popup = await execute
+		await waitForExecuteContent(popup)
+		await popup.waitForSelector('[data-testid="execute-op-app-payer-short"]', { visible: true, timeout: 120_000 })
+		const notice = await popup.$eval('[data-testid="execute-op-app-payer-short"]', (el) => el.textContent?.trim())
+		expect(notice).toBe("This app's fee contract may not cover this fee right now.")
+		expect(await popup.$eval('[data-testid="execute-confirm-btn"]', (el) => (el as HTMLButtonElement).disabled)).toBe(true)
+		await shotSend(popup, "execute-app-payer-short", "execute-op-app-payer-short")
+		await rejectExecute(popup)
 	},
 )

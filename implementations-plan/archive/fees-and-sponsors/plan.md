@@ -1,7 +1,7 @@
 ---
 plan: fees-and-sponsors
 tier: mid
-status: approved v3.1 (D-orch-1 to D-orch-5); arc 1 in review
+status: completed (arc 1 merged as #270; arc 2 and the close-out in one PR against dev)
 issues: "#196, #119, #222, #188 pin, #118 comment (arc 1); #91, #107, #113, #114, #115, #188, #118 (arc 2, waits on decision page 6, and on pages 6 and 9 for anything hold H3 covers); #117 (no arc, blocked:external)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,21 @@ post_implementation_hardening: not scheduled
 base: origin/dev at fd47407
 trunk: dev
 ---
+
+## Outcome
+
+- **Date:** 2026-10-14.
+- **Status:** closed. Arc 1 merged as #270; arc 2 and this close-out ship in one PR against `dev` from `fees-and-sponsors-sponsors`, and the merge that lands it closes this plan.
+- **Shipped:**
+  - Arc 1 (#270): unknown speed levels refused at the seven popup RPCs (#196); a timed-out estimate keeps its admission place until its simulation ends (#119); the fee-cap precedence pinned (#188) and the budget comments corrected (#118); two extractions and eight declines (#222); the fee reply's shape check (Refs #197).
+  - Arc 2: per-profile fee picks under the profile lock (#91, D17); the authwit popups follow a long proof's stage (#107); sponsor checks on Send, in the authwit popups and on app-paid rows, with Confirm waiting for the current estimate on Send (#113, D18 to D21); the app-window nudge, the four signed notice sentences and the loading sponsor row (#114, #115, D22 to D24); one cap rule, `feeCapFor`, with the app-paid default at the predicted worst minimum (#118, OA-1 B), private fee juice at ×1.2 (OA-2 C), the shown maximum at gas limits × cap (OA-3 B), a refusal when the account's own Fee Juice is short (OA-4 B) and reuse while the committed cap covers (OA-5 B) (#188, D25 to D28); a playground `sendTx app-sponsored` and a live app-paid scenario.
+  - Screenshots of the eight touched surfaces, light and dark, Chrome and Firefox, in `screenshots/`.
+  - Merged with send-queue arc 4 (#402): Send's Confirm needs the current input's landed estimate or a queued cap, and the queued build's reuse entry carries the committed cap. `snack-placement`'s failed-send cases now estimate before the grant, whose send makes Confirm build again, since OA-9 A keeps Confirm off after a failed estimate.
+- **Dropped:** OA-6 (an app's priority fee) has no arc here (D-orch-10). Who wins between an app's cap and the wallet's is unchanged (D29); OA-12 asks whether to change it. Not promoted to `lessons.md`: the playground's `sendTx feePayer` sets no payer in the kernel ([lessons/phase-2.md](lessons/phase-2.md)); the file holds 8,192 bytes and no entry retires for it.
+- **Size:** 1,176 lines against mid's 350: two arcs, three plan audits and two implementation reviews are recorded inline; no trim was run at close-out.
+- **Known limits:** #394, #395, #396, #397, #398, #399.
+- **Open items:** #400 (OA-12), #401 (OA-13), both `owner-decision`; #117 (`blocked:external`); #197 (its external half); #410 (network shard 4 at its job limit on `dev`, found at the final gate).
+- **Seeds retired:** the `/goal` and `/loop` seeds below were never run (the orchestrator drove the lane); this record is evidence, not instructions.
 
 # Fees and sponsors: estimate and cap internals, sponsor checks, fee maps
 
@@ -36,7 +51,7 @@ Eleven issues on how the wallet estimates a fee, caps it, checks a sponsor, and 
   - Anything that moves a cap, a charge or which cap wins, and anything that decides whether a send can go out on a fee the person has not seen, also waits on recorded answers on pages 6 **and 9** (hold H3). That covers OA-1 to OA-6, OA-7, OA-8, OA-9, and Phase 2.3 as a whole.
 - **No arc.** #117 waits on a funded sponsor on mainnet (`blocked:external`). Nothing is planned for it.
 
-Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Live progress: [STATUS.md](STATUS.md).
+Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Issue map (the arc that closes each issue)
 
@@ -925,6 +940,26 @@ Run this section in order. It is the whole procedure; no other document is neede
 | D14 | **#118's comment sites are five.** The false upstream-parity claim the plan placed in `account/fee-options.ts` sits in `account/nulo-account.ts` ("byte-for-byte"), with a sibling "(matches upstream)" in `fee-options.ts`; both are corrected. | The tree wins (upstream defaults to `getMinFees(Limit)` × 1.5; Nulo to the current minimum × 1.5). | Correcting only `fee-options.ts` (leaves the false claim where it is). |
 | D15 | **An estimate hold ends on a successful `createDocument` too.** Chromium allows one offscreen document, so a create that succeeds proves the previous one is gone; v3.1 retired an epoch only on a successful close. | Opus review O3: a crash without a proven close otherwise held four places to the TTL. | Leaving crashes to the TTL. |
 | D16 | **A hold is skipped only for an epoch proven retired, and each create attempt starts its own epoch.** The epoch moves when a create starts (READY can beat the create's resolution), so "not the current epoch" no longer proves the work ended. | Codex rounds 2 and 3 (R2-1, R3-1, R3-2). | Moving the epoch only on proof (misses work sent on an early READY). |
+| D-orch-6 | **Page 6 signed (2026-10-13) and applied.** Each issue's `## Decision` section is the sign-off; OA-1 to OA-11 are answered there (P6-08 to P6-18): OA-1 B, OA-2 C, OA-3 B, OA-4 B, OA-5 B, OA-6 see D-orch-10, OA-7 B, OA-8 A, OA-9 A, OA-10 A, OA-11 A. Arc 2 builds each answer. Page 9 was not signed at arc start: H3 is a merge hold, so the orchestrator weighs its page-9 clause at merge. | The orchestrator's arc 2 brief. | — |
+| D-orch-7 | **#115's notice copy.** The owner struck "The sponsor can't cover this fee right now, so Sponsored pays it" and refused "Nulo's sponsor" (the default sponsor is not Nulo's). The replacement is the owner's pick, written by the orchestrator to its decisions file; if it is absent at Phase 2.4, the notice keeps today's words and an OWNER-ASKS entry says what ships. The loading row (P6-06's mechanism) is built: the strike was about the copy. | The orchestrator's arc 2 brief. | — |
+| D-orch-8 | **#188 precedence against the owner's rule** (the figure on screen is the cap that goes on chain, from whichever side; an app may lower it, never raise it silently; a higher app cap shows in the approval window before Confirm; one rule on Send and in the app window). Phase 2.5 states whether today's precedence is that rule; if it is, the pins stand; if not, nothing changes who wins and OWNER-ASKS carries the before and after numbers. | The orchestrator's arc 2 brief (P6-07 approved with a note). | — |
+| D-orch-9 | **OA-5 = B.** Reuse a prepared transaction while its cap covers the predicted price on both gas types, private fee juice excluded, the other checks unchanged. Cost: after a price fall the committed higher cap stays in the balance check. | P6-12 and the owner's note ("if the cap covers it, send it"). | — |
+| D-orch-10 | **OA-6: no arc.** Ships as A (the app's priority fee dropped, pinned in arc 1). The include-and-show change waits on a design the owner is choosing; it is a later arc, not a close-out item. | P6-13's note; the orchestrator's arc 2 brief. | — |
+| D-orch-11 | **Answer notes.** A note naming a concrete change is built as the note says; a note that is a question goes to OWNER-ASKS and the recorded option ships. | The orchestrator's arc 2 brief. | — |
+| D-orch-12 | **Delivery and sequencing.** No stack (D-orch-1 continues): arc 2 branches from `origin/dev` (e900f710) as `fees-and-sponsors-sponsors` and opens its own PR against `dev`, with the close-out in the same PR (the lane's last arc). R4 is clear (account-session-life arc 2 merged, #266). Merge `origin/dev` before the final gates; rebase #107's hook site on send-queue-activity arc 1b if it lands. The cap arithmetic stays in one named export (send-queue-activity arc 4 builds the queued send on it). | The orchestrator's arc 2 brief. | — |
+| D17 | **#91 keeps no generation stamp.** The fee picks live under per-profile keys written only by `ProfileService.saveFeePick` under the profile lock, which refuses a deleted, deleting or reserved profile and drops a displaced writer (`isCurrent()`). `ProfileInfo` is not stamped: it is the backup's profile record (H4), and the re-import path already clears an id's UI keys before adoption (`dropUiKeysBeforeAdoption`). The one remaining write, a page left open across a same-id re-import, writes that person's pick about their restored address. I-5 holds: the storage adapter issues `set` synchronously, in call order. | The tree at e900f710 (#271 landed the pre-adoption clear). | The plan's stamp in values and in `ProfileInfo` (changes the backup record for a case with no wrong outcome). |
+| D18 | **#113(b), OA-7 B: the one validated shape is "no private call to Fee Juice anywhere in the transaction".** Fee Juice credits a balance only through its private `claim` and `claim_and_end_setup` (its public `_increase_public_balance` is only-self; `@aztec-labs/protocol-contracts` 6.0.0-rc.1 artifact), and every private call is in the final simulation's tree, nested ones included. An app-paid standard operation is estimated once when the window opens, through the validated pipeline with no discovery, as its confirm builds it; the probe reads the kernel's fee payer against the fee limit. A short read shows OA-7's hedged sentence; Confirm is held only when the shape is proven. A failed check is silent. | OA-7 B's own condition; the tree is the simulation the confirm repeats. | Probing on the calls the app listed (misses nested claims). A probe for a claim to the sender (`fjwc`): the sender pays itself. |
+| D19 | **NO_FROM (default-entrypoint) app-paid operations get no funding check.** Their only simulation is the discovery run, with the app's suggested gas limits rather than the final ones, so its fee limit is not the committed one: a short read there proves nothing and would show a false notice. They keep today's row (OA-7 D). | The confirm path finalizes the limits after a simulation the preview does not run. | Probing the preview's limits (false "may not cover" notices). |
+| D20 | **The authwit popups fall back along Send's public-side walk** (Fee Juice, Private Fee Juice, Nulo's sponsor), through a `fallsBack` prop on the fee card; their calls (`set_authorized`, `set_reject_all`) are public, so the account's own Fee Juice publishes nothing new. The execute window's own card keeps dropping to "Select method". | OA-8 A: "another method is selected, as on Send". | A new walk for the popups. Changing the execute window's card (not asked). |
+| D21 | **Send's landed-estimate term reads the estimate engine's result**, which every schedule and cancel clears synchronously; the estimate watch now lists every input the estimate is asked with (token, network, account added), so a landed result is always the current input's. | OA-9 A and the plan's "for the current input". | A separate input key beside the result (a second source of truth). |
+| D22 | **#115's notice names the payer that takes over by kind**, in the owner's four signed forms: the protocol sponsor row (`fpc.isProtocol`) is "The default sponsor", `fj` is "Public Fee Juice", `private_fpc` is "Private FPC"; any other payer, or none, gets the first sentence alone. A hand-added sponsor is never the takeover payer on either walk, so its title never reaches the sentence. | D-orch-7 and the owner's copy decision (P6-05b = B). | The row's own title (the struck copy). |
+| D23 | **#115's loading row is a new `verifying` state**, separate from `checking`: drawn with the skeleton and `aria-busy`, still a choice. It is set on a transaction change for the sponsor paying at that moment, and ends when its verdict lands, when the estimate ends without one, or when another payer is picked. A speed change sets nothing (OA-10 A). | D11; OA-10 A; only the paying sponsor is read. | Reusing `checking` (makes the row unselectable). |
+| D24 | **#114's app-window nudge is Send's public-side walk with the card's pick standing in for Send's saved one**, shown only once the snapshot is committed, never for an embedded payment or a dApp-locked method; the existing "selected method has a confirmed zero" trigger stays. | OA-11 A. | A new rule over every listed sponsor (OA-11 B, C). |
+| D25 | **#188/#118: every cap comes from one named export, `feeCapFor` (`execution/fee/fee-cap.ts`)**, with `committedCapCovers` beside it. Rules: the account's own Fee Juice = the app's cap verbatim, else predicted worst minimum × level; a sponsor = predicted worst minimum × level; private fee juice (any `PrivateFpc` row) = predicted worst minimum × 1.2 rounded up, whatever the level or the app's cap (OA-2 C); the app's own payment = its cap, else the predicted worst minimum × 1 (OA-1 B). Who wins is unchanged everywhere. | D-orch-12 (send-queue-activity arc 4 builds on it); OA-1 B, OA-2 C. | Per-site arithmetic (four copies today). |
+| D26 | **OA-3 B: the shown maximum and the stored estimate are `feeLimitOf`**, gas limits × cap (equal to `GasSettings.getFeeLimit`, which the node checks), and the funding probes read the same function. The activity detail's gas grid keeps its Teardown row, now a part of the L2 and DA lines rather than an addend (OWNER-ASKS OA-13). | OA-3 B. | Changing the grid (a UI change OA-3 did not ask). |
+| D27 | **OA-4 B: the estimate reads the account's own public Fee Juice when it pays with `PREEXISTING_FEE_JUICE`** (`probeOwnFeeJuice`) and returns `feeJuiceShortfall` when it is below the fee limit; the card shows "This send can cost up to X FJ. You have Y FJ." (the owner's example, cost rounded up and balance down at six decimals), and Send, the app window and the authwit popups hold Confirm. A failed read is no refusal. A claim (`fjwc`) is not read: its claim funds the payer in setup. | OA-4 B, "wording yours" read as the example sentence. | A second check at confirm (the node refuses anyway, nothing spent). |
+| D28 | **OA-5 B: a reuse entry keeps its committed cap (`builtCap`), and consume reuses it while it covers the fresh cap on both gas types**; private fee juice needs the exact cap. The fresh cap is the one a build would commit now, the speed level included, so a reuse never goes out below the person's margin. `predictedWorstMinFees` now gives a plain fee reply the `GasFees` class, which keeps the transfer cache's tolerance of one. | D-orch-9 and the owner's note ("if the cap covers it, send it"). | Covering the bare predicted minimum (drops the level's margin). |
+| D29 | **#188's precedence is not the owner's rule on two paths** (a sponsor or private fee juice ignores an app's lower cap; an app-paid row shows no figure). Nothing changes who wins; OWNER-ASKS OA-12 carries the before and after numbers, and the arc 1 pins stand. Phase 2.5 step 1 (a gas-only module) is not applicable: no service-worker code imports aztec.js fee code. | D-orch-8. | — |
 
 ## Audit verdicts
 
@@ -1066,7 +1101,7 @@ The driver closed these conditions without another Codex round. Each is a narrow
 |---|---|---|
 | O1: the first predicted slot | minor | **Accepted** (C3). |
 | O2: an array-like `deltas` passes the port's speed-level check and executes | minor | **Accepted.** `approveInteraction` refuses a non-array like a count mismatch; a test with an array-like carrying an unknown level. |
-| O3: the cap is per profile, so held chain-A estimates hold places against chain-B estimates; a crashed document without a proven close holds them to the TTL | minor | **Accepted in part.** A successful `createDocument` now retires the previous epoch (Chromium allows one offscreen document), which ends holds after a crash. The per-profile count stays: chain-scoped admission is a registry redesign outside arc 1. The registry header says so, and the PR body names it. |
+| O3: the cap is per profile, so held chain-A estimates hold places against chain-B estimates; a crashed document without a proven close holds them to the TTL | minor | **Accepted in part.** A successful `createDocument` now retires the previous epoch (Chromium allows one offscreen document), which ends holds after a crash. The per-profile count stays: chain-scoped admission is a registry redesign outside arc 1. The registry header says so, and the PR body names it. Known limit #398. |
 | O4: surviving mutations (`send_transaction` reader, any-status record, `null` level, the L2 component) | nit | **Accepted.** One pin each; each now fails its mutation. The `onTerminal` order is pinned against the caller's first handler, the property the hold needs. |
 | O5: the wallet subclass's record-lifetime comment overstated the bound; the registry header omitted two ends | nit | **Accepted.** Both rewritten. |
 | O6: all nine PXE clients tracked timeouts and silenced warnings; `pxe/client.ts` imported from `execution/` | nit | **Accepted.** The tracking moved into `DEFAULT_PXE_CLIENT_FACTORY`; the wallet subclass is back to `dev`. |
@@ -1094,7 +1129,35 @@ The three-round limit was reached with the round-3 fixes unreviewed by Codex. Th
 |---|---|---|
 | E1: the plan's Shape section still described "epoch = current document" | minor | **Accepted.** Rewritten; D16. |
 | E2-E4: comments and a test title stated the same inference; announcements can arrive out of order | nit | **Accepted.** Rewritten; the doc says a listener keeps the highest (the client does, with `Math.max`). |
-| E5: a close could retire an epoch started by a create while the close was in flight | nit | **Declined.** It needs the new document to load, send READY and receive work before the close reply reaches the worker; the fuzz never produced it. |
+| E5: a close could retire an epoch started by a create while the close was in flight | nit | **Declined.** It needs the new document to load, send READY and receive work before the close reply reaches the worker; the fuzz never produced it. Known limit #399. |
+
+### Arc 2 implementation review, round 1
+
+**Codex (gpt-6.1-sol, high), session `01a13738`, on arc 2's commits.** Three findings; cap precedence, rounding, reuse, the execution-tree check, logging and the legal guard order clean.
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| C1: Send's in-mount picks were keyed by address alone, so an account held by two profiles carried one profile's pick into the other when the profile changed under an open Send | medium | **Accepted.** The map is keyed by profile and address, as storage is; a test switches profiles under one mount and back. |
+| C2: a known shortfall in the app window cleared when a replacement estimate started, so Confirm reopened while it ran | medium | **Accepted.** Each operation's last landed verdict holds Confirm until the replacement answers; a replacement that fails releases it (a failed read is no refusal). Both sides mutation-checked. |
+| C3: Revoke's shortfall gate had no test | low | **Accepted.** A two-chunk test where one chunk is short; removing the gate fails it. |
+
+**Opus review (general-purpose, read-only; 24 unit files run).** **VERDICT: approve**, three lows.
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| O1: the app window's Confirm is live while a Fee Juice estimate runs | low | **Accepted in part.** A shown shortfall now holds (C2). With no verdict yet, Confirm stays live as it is today: holding it would change the window's Confirm behaviour, which no answer covers, and the node refuses the send with nothing spent. Known limit #396. |
+| O2: Revoke-all over 12 chunks (337 or more authwits) cannot land every estimate under the per-profile admission caps (4 running, 8 parked), so Revoke stays off | low | **Known limit.** The surface is Settings → Developer, single revokes still work, and serializing the estimates is a client queue for a case nobody reported. Known limit #397. |
+| O3: the authwit popups' watcher and unmount hook sat above their handlers | low | **Accepted.** Moved below them. |
+
+**Codex round 2 (session `01a1374d`), on aac6d2e1.** **No findings.** All three round 1 findings closed, including the paths its reproductions used (a result that lands and clears in one tick, a pick made during a delayed storage read); no blocking or high finding elsewhere in the arc. The loop ends here.
+
+**Codex round 3 (session `01a1376a`), the last, on 8fe9253e (the playground's app-sponsored send and the live app-paid scenario) and the origin/dev merge.** One finding; the payload shape, the bundle, the playground's genericity and the merge clean.
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| R3-1: the once-per-browser playground connect kept a rejected attempt, so a retry after a failure before the origin was approved got the same rejection | low | **Accepted.** A failed connect is dropped from the cache. A failure after approval still cannot reconnect through discovery, as before the change. |
+
+**Live check of the teardown limits (OA-3, OA-13).** A temporary probe on the Chrome network run read every stored transaction's gas details: the teardown limits were 0 on all of the wallet's own sends (sponsor, public Fee Juice, private fee juice; 12 reads). The app-paid file's send was not stored within the probe's wait, so an app transaction's teardown limit stays unread.
 
 ## Seeds
 

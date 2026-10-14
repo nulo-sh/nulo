@@ -39,7 +39,7 @@ import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
 import { type ExecutionCoordinator, fenceChecks } from "./execution-coordinator"
 import type { ExecutionMutexRelease } from "./execution-mutex"
 import type { FeeEstimate } from "./fee/fee-strategy"
-import { type ChainIdentity, fingerprintBuiltFee } from "./estimate-reuse-shared"
+import { builtCapOf, type ChainIdentity } from "./estimate-reuse-shared"
 import { failureKind } from "./mark-failed-unless-cancelled"
 import type { OperationPlanner, TransferRequest } from "./operation-planner"
 import { type QueuedFeeAnswers, queuedFeePayer } from "./queued-fee-cap"
@@ -47,7 +47,7 @@ import { maybeRethrowAsRpcCancel, throwIfAborted } from "./rpc-cancel"
 import type { ChainTipGate } from "./chain-tip-gate"
 import type { SendSequencer, SequenceScope, SequenceTicket } from "./send-sequencer"
 import type { Action, FeeOptions, FeeSettings, TransferFeeEstimate, TransferFeeQueued } from "./spec"
-import { probeSponsorFunding } from "./sponsor-funding"
+import { probeOwnFeeJuice, probeSponsorFunding } from "./sponsor-funding"
 import { fingerprintFeeSettings, type TransferEstimateReuse, type TransferEstimateReuseEntry } from "./transfer-estimate-reuse"
 import { minedSuccessfully, type SequenceKey, transferSequenceKeys, usedSequences } from "./transfer-sequence-keys"
 import { getEstimatedFee, getGasDetails } from "./tx-fee-details"
@@ -437,7 +437,7 @@ export class TransferExecutor {
 			feeSettingsHash: fingerprintFeeSettings(req.feeSettings),
 			profileId,
 			...snapshot,
-			baseFeeFingerprint: fingerprintBuiltFee(built.txRequest),
+			builtCap: builtCapOf(built.txRequest),
 			primaryEndpointId: primary.id,
 			primaryEndpointUrl: primary.rpcUrl,
 			pendingHashes: this.deps.getPendingForAccount(accountAddress).map((tx) => tx.hash),
@@ -792,9 +792,9 @@ export class TransferExecutor {
 		const built = await this.deps.buildAndEstimate(op, op.feeSettings, fence, undefined, signal)
 		const { txRequest, network, nonce, feePaymentMethod, initializesAccount: builtInitializes } = built
 		throwIfAborted(signal)
-		const sponsorFunding = await probeSponsorFunding(built, this.deps.readPublicStorageOnce, (msg, data) =>
-			this.deps.logDebug(msg, data),
-		)
+		const log = (msg: string, data: object) => this.deps.logDebug(msg, data)
+		const sponsorFunding = await probeSponsorFunding(built, this.deps.readPublicStorageOnce, log)
+		const feeJuiceShortfall = await probeOwnFeeJuice(built, this.deps.readPublicStorageOnce, log)
 		throwIfAborted(signal)
 
 		const maxFeeRaw = BigInt(getEstimatedFee(txRequest))
@@ -834,6 +834,7 @@ export class TransferExecutor {
 			gasDetails: getGasDetails(txRequest),
 			estimateId,
 			...(sponsorFunding ? { sponsorFunding } : {}),
+			...(feeJuiceShortfall ? { feeJuiceShortfall } : {}),
 		}
 	}
 }

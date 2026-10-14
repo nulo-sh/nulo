@@ -27,7 +27,7 @@
  */
 
 import type { GasFees } from "@aztec-labs/stdlib/gas"
-import { type MinFeeNode, predictedWorstMinFees } from "@nulo/aztec-runtime/fee-juice"
+import type { MinFeeNode } from "@nulo/aztec-runtime/fee-juice"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import type { Network } from "@/wallet/services/network/service"
 import { findPrimaryEndpoint } from "@/wallet/services/network/spec"
@@ -37,14 +37,15 @@ import {
 	type ChainIdentity,
 	chainIdentityDrift,
 	ESTIMATE_REUSE_TTL_MS,
-	fingerprintBaseFee,
 	fpcIdentityDrift,
 	pendingHashesChanged,
 	primaryEndpointMoved,
 	type ReuseEntryBase,
 	feeMultiplierFor,
+	reuseCapRule,
 	SingleShotTtlCache,
 } from "./estimate-reuse-shared"
+import { committedCapCovers, feeCapFor } from "./fee/fee-cap"
 import { fingerprintOperation, type OperationFingerprintInput } from "./operation-fingerprint"
 import type { BuiltStandardTx } from "./tx-request-builder"
 import type { FeeSettings } from "./spec"
@@ -136,13 +137,14 @@ export class OperationEstimateReuse {
 		if (fpcDrift) return this.reject(fpcDrift)
 		const node = await this.deps.getNode(network.chainId)
 		const multiplier = feeMultiplierFor(entry.feeSettings.priorityLevel)
-		let current: GasFees
+		const rule = reuseCapRule(entry.feeSettings.paymentMethod, entry.fpcIdentity, multiplier)
+		let fresh: GasFees
 		try {
-			current = (await predictedWorstMinFees(node)).mul(multiplier)
+			fresh = await feeCapFor(node, rule)
 		} catch (error) {
 			return this.feeReadFailed(error, multiplier)
 		}
-		if (fingerprintBaseFee(current) !== entry.baseFeeFingerprint) {
+		if (!committedCapCovers(entry.builtCap, fresh, rule)) {
 			return this.reject("base fee drift")
 		}
 		return entry

@@ -83,4 +83,11 @@ describe("predictedWorstMinFees reply shape", () => {
 		expect(await predictedWorstMinFees(predicting)).toEqual(new GasFees(7n, 9n))
 		expect(await predictedWorstMinFees({ getCurrentMinFees: async () => new GasFees(3n, 4n) })).toEqual(new GasFees(3n, 4n))
 	})
+
+	test("a plain reply comes back with the class, so fee math works on it", async () => {
+		const plain = { feePerDaGas: 3n, feePerL2Gas: 4n } as unknown as GasFees
+		const fees = await predictedWorstMinFees({ getCurrentMinFees: async () => plain })
+		expect(fees).toBeInstanceOf(GasFees)
+		expect(fees.mul(2)).toEqual(new GasFees(6n, 8n))
+	})
 })

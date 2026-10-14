@@ -261,9 +261,9 @@ describe("FpcStrategy structural parity (two-pass choreography — byte-parity c
 		expect(ctx.op.actions[1]).toBe(originalAction)
 		expect(ctx.op.actions).toHaveLength(2)
 
-		// Fees finalized from baseFees = min × multiplier(2): 1_110/1_332.
+		// A PrivateFPC row: baseFees = min × 1.2, rounded up, whatever the multiplier: 666/800.
 		const s = shape(result.txRequest)
-		expect([s.feeDa, s.feeL2]).toEqual([1_110n, 1_332n])
+		expect([s.feeDa, s.feeL2]).toEqual([666n, 800n])
 		// Limits from finalize: second sim × padding 1.
 		expect([s.gasDa, s.gasL2]).toEqual([31_000, 32_000])
 	})

@@ -109,6 +109,7 @@ vi.mock("@/wallet/services/transaction/client", async (importOriginal) => ({
 }))
 vi.mock("@/utils/core", () => ({
 	managers: {
+		profile: { saveFeePick: vi.fn(async () => true) },
 		legal: {
 			onAcceptanceChanged: new EventHandler(),
 			onConnected: new EventHandler(),
@@ -129,7 +130,7 @@ vi.mock("vue-router", () => ({
 
 import type { PayerKind, TransferSide, Visibility } from "@/components/composite/send/publish-facts"
 import { REVIEW_ARM_MS } from "@/composables/useSendReview"
-import { UI_STORAGE_KEYS } from "@/popup/constants/storage-keys"
+import { sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { useAppStore } from "@/stores/app.store"
 import { INIT_RETRY_BACKOFF_MS } from "@/stores/balances.store"
 import { useCacheStore } from "@/stores/cache.store"
@@ -196,7 +197,7 @@ const HELD = "1000000000000000000"
 const PRIVATE_FPC = { id: "p1", type: 2, name: "Private FPC", isProtocol: true }
 const SPONSOR = { id: "s1", type: 1, name: "Sponsor", isProtocol: true }
 const HAND_ADDED = { id: "s2", type: 1, name: "Mine", isProtocol: false }
-const SEND_PICKS = UI_STORAGE_KEYS.SEND_FEE_PAYMENT_METHODS
+const SEND_PICKS = sendFeePicksKey("p1")
 /** A hand-added sponsor pays only once picked: saved for both origins. */
 const HAND_ADDED_PICKED = { [ACCOUNT]: { private: { type: "fpc", fpc: { id: "s2" } }, public: { type: "fpc", fpc: { id: "s2" } } } }
 
@@ -221,7 +222,17 @@ function deferred<T>(): Deferred<T> {
 	return { promise, resolve }
 }
 
+/** What a landed estimate answers when a test names none. */
+const LANDED = { maxFee: "1000", maxFeeFormatted: "0.000000000000001", gasDetails: {} }
+
+/** The page debounces its estimate by 800 ms; this lets the current input's estimate land. */
+async function estimateLands() {
+	await vi.advanceTimersByTimeAsync(800)
+	await flushPromises()
+}
+
 async function mountSend(funding: Funding, opts: { storage?: Record<string, unknown>; holdGas?: boolean; realTokenCard?: boolean } = {}) {
+	vi.useFakeTimers()
 	installChromeStorage(opts.storage ?? funding.storage ?? {})
 	mocks.getFpcs.mockResolvedValue(funding.fpcs)
 	const gas = deferred<Gas>()
@@ -280,6 +291,7 @@ beforeEach(() => {
 	mocks.getTokens.mockResolvedValue([TOKEN])
 	mocks.getTokenBalances.mockResolvedValue([BALANCE])
 	mocks.executeTransfer.mockResolvedValue(undefined)
+	mocks.estimateTransferFee.mockResolvedValue(LANDED)
 	mocks.legalStatus.mockResolvedValue("current")
 	vi.spyOn(console, "error").mockImplementation(() => {})
 	vi.spyOn(console, "debug").mockImplementation(() => {})
@@ -317,6 +329,7 @@ describe.each(SWEEP)("send page with the real fee card — %s, %s origin", (fund
 		await fillForm(w)
 		await setSide(w, "from", origin)
 		await setSide(w, "to", destination)
+		await estimateLands()
 		expect(mocks.getGasBalances).toHaveBeenCalledWith("n1", ACCOUNT, true)
 
 		const state = settled(w)
@@ -382,6 +395,7 @@ describe("send page with the real fee card — transitions", () => {
 		gas.resolve(FUNDING["public Fee Juice only"].gas)
 		await flushPromises()
 		expect(settled(w)).toMatchObject({ you: "exposed", action: "review" })
+		await estimateLands()
 		expect(submit(w).attributes("disabled")).toBeUndefined()
 		w.unmount()
 	})
@@ -394,6 +408,7 @@ describe("send page with the real fee card — transitions", () => {
 		await pickFee(w, "public")
 		expect(feeTrigger(w)).toBe("public")
 		expect(settled(w)).toMatchObject({ you: "exposed", action: "review" })
+		await estimateLands()
 		await submit(w).trigger("click")
 		expect(mocks.executeTransfer).not.toHaveBeenCalled()
 		expect(sheetOpen(w)).toBe(true)
@@ -401,6 +416,7 @@ describe("send page with the real fee card — transitions", () => {
 
 		await pickFee(w, "private")
 		expect(settled(w)).toMatchObject({ you: "hidden", action: "send" })
+		await estimateLands()
 		await submit(w).trigger("click")
 		expect(submittedFee()).toEqual({ kind: "fpc", fpcId: "p1" })
 		w.unmount()
@@ -512,6 +528,7 @@ describe("send page with the real fee card — transitions", () => {
 		vi.useFakeTimers()
 		const { w, appStore } = await mountSend(FUNDING["public Fee Juice only"])
 		await fillForm(w)
+		await estimateLands()
 		await submit(w).trigger("click")
 		expect(sheetOpen(w)).toBe(true)
 		vi.advanceTimersByTime(REVIEW_ARM_MS)
@@ -531,6 +548,7 @@ describe("send page with the real fee card — transitions", () => {
 		const { w } = await mountSend(FUNDING["both Fee Juices"])
 		await fillForm(w)
 		await pickFee(w, "public")
+		await estimateLands()
 		await submit(w).trigger("click")
 		expect(sheetOpen(w)).toBe(true)
 		await closeSheet(w)
@@ -580,7 +598,7 @@ describe("send page with the real fee card — a sponsor that can't cover the fe
 	test("its verdict lands: the sponsor is set aside, the account's Fee Juice pays, and the send goes through review", async () => {
 		const { w, release } = await heldEstimate()
 		await release()
-		expect(notice(w).text()).toBe("The sponsor can't cover this fee right now, so Public Fee Juice pays it.")
+		expect(notice(w).text()).toBe("The sponsor you chose can't cover this fee right now. Public Fee Juice pays it instead.")
 		expect(feeTrigger(w)).toBe("public")
 		expect(offered(w, "sponsored")).toBe(false)
 		expect(settled(w)).toMatchObject({ you: "exposed", action: "review" })
@@ -608,9 +626,7 @@ describe("send page with the real fee card — the review sheet's fee", () => {
 		mocks.estimateTransferFee.mockResolvedValue({ maxFee: HELD, maxFeeFormatted: "1", gasDetails: {} })
 		const { w } = await mountSend(FUNDING["public Fee Juice only"])
 		await fillForm(w)
-		// The page debounces its estimate by 800 ms.
-		await new Promise((r) => setTimeout(r, 900))
-		await flushPromises()
+		await estimateLands()
 		// Every price client holds a different quote, as after a reconnect that refreshed only one.
 		vi.mocked(PriceServiceClient).mock.results.forEach(({ value }, i) => {
 			value.onQuotesUpdated.invoke({
@@ -753,6 +769,88 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		await vi.advanceTimersByTimeAsync(0)
 		await flushPromises()
 		expect(queuedRow(w)).toBe(false)
+		expect(sendDisabled(w)).toBe(false)
+		w.unmount()
+	})
+})
+
+describe("send page — Confirm waits for the current input's estimate", () => {
+	const sendDisabled = (w: W) => submit(w).attributes("disabled") !== undefined
+	const PUBLIC_FJ = FUNDING["public Fee Juice only"]
+
+	test("off until the estimate lands; a press during the debounce sends nothing; a new input turns it off again", async () => {
+		const { w } = await mountSend(FUNDING["both Fee Juices"])
+		await fillForm(w)
+		expect(sendDisabled(w)).toBe(true)
+		await submit(w).trigger("click")
+		expect(mocks.executeTransfer).not.toHaveBeenCalled()
+
+		await estimateLands()
+		expect(sendDisabled(w)).toBe(false)
+		await w.get('[data-testid="stub-amount"]').setValue("2")
+		expect(sendDisabled(w)).toBe(true)
+		await estimateLands()
+		expect(sendDisabled(w)).toBe(false)
+		await submit(w).trigger("click")
+		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
+		w.unmount()
+	})
+
+	test("a failed estimate keeps it off and says so; the next input estimates again", async () => {
+		mocks.estimateTransferFee.mockRejectedValueOnce(new Error("node down"))
+		const { w } = await mountSend(PUBLIC_FJ)
+		await fillForm(w)
+		await estimateLands()
+		expect(mocks.openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't estimate fee. Try again." })
+		expect(sendDisabled(w)).toBe(true)
+		await submit(w).trigger("click")
+		expect(mocks.executeTransfer).not.toHaveBeenCalled()
+
+		await w.get('[data-testid="stub-amount"]').setValue("2")
+		await estimateLands()
+		expect(sendDisabled(w)).toBe(false)
+		w.unmount()
+	})
+
+	test("an estimate the account's own Fee Juice cannot cover keeps it off, and the card says by how much", async () => {
+		mocks.estimateTransferFee.mockResolvedValueOnce({
+			...LANDED,
+			feeJuiceShortfall: { maxFee: "2100000000000000", balance: "1500000000000000" },
+		})
+		const { w } = await mountSend(PUBLIC_FJ)
+		await fillForm(w)
+		await estimateLands()
+		expect(w.get('[data-testid="fee-juice-shortfall"]').text()).toBe("This send can cost up to 0.0021 FJ. You have 0.0015 FJ.")
+		expect(sendDisabled(w)).toBe(true)
+		await submit(w).trigger("click")
+		expect(mocks.executeTransfer).not.toHaveBeenCalled()
+
+		await w.get('[data-testid="stub-amount"]').setValue("2")
+		await estimateLands()
+		expect(w.find('[data-testid="fee-juice-shortfall"]').exists()).toBe(false)
+		expect(sendDisabled(w)).toBe(false)
+		w.unmount()
+	})
+
+	test("an estimate for the network just left never enables it", async () => {
+		const held = deferred<unknown>()
+		mocks.estimateTransferFee.mockReturnValueOnce(held.promise)
+		const next = deferred<unknown>()
+		mocks.estimateTransferFee.mockReturnValueOnce(next.promise)
+		const { w, appStore } = await mountSend(PUBLIC_FJ)
+		await fillForm(w)
+		await vi.advanceTimersByTimeAsync(800)
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
+
+		appStore.network = { id: "n2", chainId: TOKEN.chainId } as never
+		await flushPromises()
+		held.resolve(LANDED)
+		await flushPromises()
+		expect(sendDisabled(w)).toBe(true)
+		await estimateLands()
+		expect(mocks.estimateTransferFee.mock.calls.at(-1)?.[0]).toBe("n2")
+		next.resolve(LANDED)
+		await flushPromises()
 		expect(sendDisabled(w)).toBe(false)
 		w.unmount()
 	})

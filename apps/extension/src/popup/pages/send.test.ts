@@ -212,9 +212,19 @@ function setIdentity(appStore: ReturnType<typeof useAppStore>) {
 	appStore.account = { address: ACCOUNT } as never
 }
 
+/** What a landed estimate answers when a test names none. */
+const LANDED = { maxFee: "1000", maxFeeFormatted: "0.000000000000001", gasDetails: {} }
+
+/** The page debounces its estimate by 800 ms; this lets the current input's estimate land. */
+async function estimateLands() {
+	await vi.advanceTimersByTimeAsync(800)
+	await flushPromises()
+}
+
 async function mountSend(
 	opts: { errorHandler?: (error: unknown) => void; realTokenCard?: boolean; realAmountCard?: boolean; cold?: boolean } = {},
 ) {
+	vi.useFakeTimers()
 	installChromeStorage()
 	const pinia = createTestingPinia({ stubActions: false })
 	const appStore = useAppStore(pinia)
@@ -247,6 +257,7 @@ async function fillForm(w: W, method: { settings: unknown; payer: unknown } | nu
 	await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
 	await w.get('[data-testid="stub-amount"]').setValue("1.5")
 	await feeCard(w, method)
+	await estimateLands()
 }
 
 const submit = (w: W) => w.get('[data-testid="send-submit"]')
@@ -274,6 +285,7 @@ beforeEach(() => {
 	mocks.getTokens.mockResolvedValue([TOKEN])
 	mocks.getTokenBalances.mockResolvedValue([BALANCE])
 	mocks.executeTransfer.mockResolvedValue(undefined)
+	mocks.estimateTransferFee.mockResolvedValue(LANDED)
 	mocks.legalStatus.mockResolvedValue("current")
 	vi.spyOn(console, "error").mockImplementation(() => {})
 	vi.spyOn(console, "debug").mockImplementation(() => {})
@@ -318,6 +330,7 @@ describe("send page — the submit tail", () => {
 		const { w } = await mountSend()
 		await fillForm(w)
 		await w.get('[data-testid="stub-amount"]').setValue("1,234,567.123456")
+		await estimateLands()
 		await strip(w).trigger("click")
 		expect(w.get('[data-testid="send-review-amount"]').text()).toBe("1,234,567.123456TST")
 		await sendNow(w).trigger("click")
@@ -466,16 +479,16 @@ describe("send page — the footer", () => {
 	})
 
 	test("a well-formed recipient off the curve is never estimated or sent; one on it is", async () => {
-		vi.useFakeTimers()
 		const { w } = await mountSend()
 		await fillForm(w)
+		mocks.estimateTransferFee.mockClear()
 		await w.get('[data-testid="stub-recipient"]').setValue("0x24f20fb6e501242936eb1f47e2f51610f15e6c07486ed62012774e5f14ebd583")
-		await vi.advanceTimersByTimeAsync(800)
+		await estimateLands()
 		expect(mocks.estimateTransferFee).not.toHaveBeenCalled()
 		expect(submit(w).attributes("disabled")).toBeDefined()
 
 		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
-		await vi.advanceTimersByTimeAsync(800)
+		await estimateLands()
 		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
 		expect(submit(w).attributes("disabled")).toBeUndefined()
 		w.unmount()
@@ -603,6 +616,7 @@ describe("send page — consent", () => {
 		expect(sendNow(w).attributes("data-ready")).toBe("false")
 
 		await feeCard(w, SPONSOR)
+		await estimateLands()
 		expect(sendNow(w).attributes("data-ready")).toBe("true")
 		await sendNow(w).trigger("click")
 		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
@@ -745,6 +759,7 @@ describe("send page — the sheet on the popup stack", () => {
 		const { w } = await mountSend()
 		await fillForm(w, FJ)
 		await w.get('[data-testid="send-to-type"]').trigger("click")
+		await estimateLands()
 		await submit(w).trigger("click")
 		expect(sheetOpen(w)).toBe(true)
 		await close(w)

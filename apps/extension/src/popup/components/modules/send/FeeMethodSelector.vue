@@ -68,14 +68,15 @@ const onRowClick = (method, event) => {
 					:data-testid="`send-fee-method-${method.subtitle}`"
 					:data-fpc-id="method.fpc?.id"
 					:data-checking="method.checking ? 'true' : undefined"
-					:aria-busy="method.checking ? 'true' : undefined"
+					:data-verifying="method.verifying ? 'true' : undefined"
+					:aria-busy="method.checking || method.verifying ? 'true' : undefined"
 					@click="onRowClick(method, $event)"
 				>
 					<Flex align="center" justify="between" gap="8" wide>
 						<Text variant="name" :class="$style.method_title" :color="method.disabled || method.checking ? 'tertiary' : 'primary'">
 							{{ method.title }}
 						</Text>
-						<template v-if="method.checking">
+						<template v-if="method.checking || method.verifying">
 							<span :class="$style.skeleton" aria-hidden="true" />
 							<span :class="$style.visually_hidden">Checking</span>
 						</template>
