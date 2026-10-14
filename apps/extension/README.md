@@ -40,6 +40,10 @@ The sink. The four browser contexts (service worker, popup, content script, offs
 | `.storybook/` | Storybook 10 config. |
 | `vite.chrome.config.mts`, `vite.firefox.config.mts` | Per-target Vite builds. |
 
+The Vite and vitest configs, and every module they import, must load under Node's native loader (Vite's
+`configLoader: 'native'`): relative imports carry their extension, JSON imports carry `with { type: "json" }`,
+and no syntax needs transformation (parameter properties, enums). Vite warns on the first two only.
+
 For the L0–L6 component model and the C0/C1 composable rules, read [`../../CLAUDE.md`](../../CLAUDE.md). They are operating rules that span all packages — not extension-internal.
 
 ## Scripts
