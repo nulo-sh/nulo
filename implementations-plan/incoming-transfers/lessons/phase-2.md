@@ -137,7 +137,12 @@ On a busy chain the PXE's per-block sync dominates (`getPrivateLogsByTags`, `get
     empty scheduler set), so a row inside 30 s can only come from the unlock's install run.
 - Network gate (Phase 2.4's seven files, Chrome, `NULO_E2E_RETRY=0`) needs `NULO_E2E_PROVERLESS=1`,
   as Arc 1's did: `incoming-arrival` and `account-switch-isolation` are proverless-gated and the
-  runner refuses without it. On `ef6f484d`: 7 files, 19 tests passed, 13 min.
+  runner refuses without it. On `ef6f484d`: 7 files, 19 tests passed, 13 min. On `cffb6200` (the
+  final product code; the last commit touches one unit test): 7 files, 19 tests passed, 13 min,
+  install-run rows 2.0 s after the unlock on both arms.
+- Final-head gates on `9961b437`: `lint`, `typecheck:all`, `test` (extension 12111 passed),
+  `test:all`, `test:ci-gating` (547 pass) and `check:plans` all exit 0. A first `typecheck:all` on
+  `cffb6200` caught a record-union read in the reorg proof, fixed in `9961b437`.
 
 ## Arc 2 review, round 1
 

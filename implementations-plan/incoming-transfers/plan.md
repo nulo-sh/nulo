@@ -516,7 +516,7 @@ Validation gate:
 
 Validation gate: as Phase 2.2; the storage codec round-trip test covers the new field.
 
-#### Phase 2.4: liveness proofs (P4-04's condition)
+#### Phase 2.4: liveness proofs (P4-04's condition) ✓
 
 Each scenario asserts the receipt row exists less than 120 s of fake time after the event, so the
 fallback tick cannot explain it.
