@@ -7,6 +7,7 @@ import { describe, expect, test, vi } from "vitest"
 import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import { QueuedFeeAnswers } from "./queued-fee-cap"
 import { OriginType, TransferType, type Tx } from "@/wallet/services/transaction/spec"
+import { ChainTipGate } from "./chain-tip-gate"
 import { SendSequencer } from "./send-sequencer"
 import { ExecutionService } from "./service"
 
@@ -27,12 +28,23 @@ const sent = (estimatedFee: string, createdAt = 1): Tx =>
 
 function makeFacade(rows: Tx[] = []) {
 	const sendSequencer = new SendSequencer({ pendingTxs: () => [], sleep: async () => {}, now: () => 0 })
+	const node = { tip: 0, reads: 0 }
+	const chainTipGate = new ChainTipGate({
+		readTip: async () => {
+			node.reads += 1
+			return node.tip
+		},
+		sleep: () => new Promise((r) => setTimeout(r, 0)),
+		now: () => 0,
+		logDebug: () => {},
+	})
 	const admit = vi.fn(async () => new AbortController().signal)
 	const estimateFee = vi.fn(async () => ({ maxFee: "1", maxFeeFormatted: "1", gasDetails: {} }))
 	const lane = { isSlotBusy: vi.fn(() => false) }
 	const facade = Object.assign(Object.create(ExecutionService.prototype), {
 		ensureInitialized: async () => {},
 		sendSequencer,
+		chainTipGate,
 		transferExecutor: { sequence: vi.fn(async () => ({ scope: SCOPE, keys: KEYS })), estimateFee },
 		profileService: { getActiveProfile: async () => ({ id: "p1" }) },
 		lane,
@@ -41,7 +53,7 @@ function makeFacade(rows: Tx[] = []) {
 		transactionService: { getTransactions: vi.fn(async () => rows) },
 	}) as ExecutionService
 	const estimate = () => facade.estimateTransferFee("net-1", "0xme", 1, TransferType.Private, "0xyou", 5n, {} as never, "tok-1")
-	return { facade, sendSequencer, lane, admit, estimateFee, estimate }
+	return { facade, sendSequencer, chainTipGate, node, lane, admit, estimateFee, estimate }
 }
 
 describe("ExecutionService.estimateTransferFee while a send holds the transfer's chain state", () => {
@@ -73,6 +85,44 @@ describe("ExecutionService.estimateTransferFee while a send holds the transfer's
 		const without = makeFacade()
 		without.sendSequencer.enter(SCOPE, KEYS)
 		expect(await without.estimate()).toEqual({ queued: true, tokenSpent: false })
+
+		// A predecessor's block the node lacks queues the send the same way, so it offers the cap too.
+		const lagging = makeFacade([sent("3577824000000000000")])
+		lagging.chainTipGate.observe({
+			hash: "0xtx",
+			chainId: 7,
+			account: "0xme",
+			networkId: "net-1",
+			block: { number: 7, hash: "0xb" },
+			calls: [{ contract: "0xtoken", method: "swap", args: [] }],
+		})
+		await new Promise((r) => setTimeout(r, 0))
+		expect(await lagging.estimate()).toMatchObject({ queued: true, cap: { cap: "4472280000000000000" } })
+	})
+
+	test("a predecessor's block the PXE's node lacks answers queued and reads the tip; once read, it estimates", async () => {
+		const { chainTipGate, node, admit, estimateFee, estimate } = makeFacade()
+		node.tip = 6
+		const swap = { contract: "0xtoken", method: "swap", args: [] }
+		chainTipGate.observe({
+			hash: "0xtx",
+			chainId: 7,
+			account: "0xme",
+			networkId: "net-1",
+			block: { number: 7, hash: "0xb" },
+			calls: [swap],
+		})
+		await new Promise((r) => setTimeout(r, 0))
+		const readsBefore = node.reads
+		expect(await estimate()).toEqual({ queued: true, tokenSpent: false })
+		expect(node.reads).toBe(readsBefore + 1)
+		expect(admit).not.toHaveBeenCalled()
+		// Each queued answer reads the tip for the popup's next ask.
+		node.tip = 7
+		expect(await estimate()).toEqual({ queued: true, tokenSpent: false })
+		await new Promise((r) => setTimeout(r, 0))
+		expect(await estimate()).toMatchObject({ maxFee: "1" })
+		expect(estimateFee).toHaveBeenCalledTimes(1)
 	})
 
 	test("once clear, admits the token and estimates with the transfer's sequence", async () => {

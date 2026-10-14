@@ -78,6 +78,7 @@ import {
 } from "./spec"
 import type { LastProveOutcome } from "./models"
 import { SendSequencer } from "./send-sequencer"
+import { ChainTipGate } from "./chain-tip-gate"
 import { recordedTxKeys } from "./transfer-sequence-keys"
 import { coerceAmount } from "./coerce-amount"
 import { OperationPlanner, type TransferRequest } from "./operation-planner"
@@ -232,6 +233,12 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		now: () => Date.now(),
 	})
 	private readonly queuedFeeAnswers = new QueuedFeeAnswers()
+	private readonly chainTipGate = new ChainTipGate({
+		readTip: (networkId) => this.readChainTip(networkId),
+		sleep: abortableSleep,
+		now: () => Date.now(),
+		logDebug: (msg) => this.logDebug(msg),
+	})
 	private dappSendExecutor: DappSendExecutor = null!
 	private viewExecutor: ViewExecutor = null!
 	private lane: ExecutionLane = null!
@@ -403,6 +410,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 					this.lane.acquireTransferSlot(networkId, journalId, fence, signal, onWait),
 			},
 			sequencer: this.sendSequencer,
+			chainTip: this.chainTipGate,
 			getTokenContract: async (tokenId) => (await this.tokenService.getTokenRaw(tokenId)).contract,
 			getFpcImpl: (fpcId) => this.fpcService.getFpcImpl(fpcId),
 			getTransactions: (account) => this.transactionService.getTransactions(account),
@@ -484,7 +492,13 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 					this.lane.beginJournal(networkId, accountAddress, origin, calls, fence),
 				markJournal: (journalId, progress, error, failedTitle) => this.lane.markJournal(journalId, progress, error, failedTitle),
 				commitJournal: (journalId, progress) => this.lane.commitJournal(journalId, progress),
+				parkSlot: (release, networkId, queuedJournalId, fence, preController, originKey, wait) =>
+					this.lane.parkSlot(release, networkId, queuedJournalId, fence, preController, originKey, wait),
+				joinOriginLine: (fence, chainId, originKey) => this.lane.joinOriginLine(fence, chainId, originKey),
+				failUnclaimed: (journalId, error) => this.lane.failUnclaimed(journalId, error),
 			},
+			sequencer: this.sendSequencer,
+			chainTip: this.chainTipGate,
 			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal) =>
 				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal),
 			addTransaction: (...args) => this.transactionService.addTransaction(...args),
@@ -513,6 +527,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			if (tx.status !== TxStatus.Pending) {
 				this.gasBalances.invalidateAccount(tx.account)
 				this.sendSequencer.settled(tx.hash)
+				this.chainTipGate.observe(tx)
 			}
 		})
 
@@ -534,6 +549,15 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		}
 		this.fpcService.onFpcUpdated.add(invalidateOnPrivateFpc)
 		this.fpcService.onFpcDeleted.add(invalidateOnPrivateFpc)
+	}
+
+	/** The proposed tip of the node the network's PXE syncs from (its primary endpoint), read past the
+	 *  PXE's chain guard, which would wait behind a proof, through a node that dials once and logs
+	 *  nothing. */
+	private async readChainTip(networkId: string): Promise<number> {
+		const network = await this.networkService.getNetwork(networkId)
+		const node = await this.networkService.getSingleAttemptNodeForUrl(networkInfoFrom(network).rpcUrl)
+		return Number(await node.getBlockNumber())
 	}
 
 	/** Capture the {profileId, epoch, session} fence at execution AUTHORIZATION (before the
@@ -589,7 +613,10 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		// would wait behind that proof anyway, past its RPC deadline on a real prover.
 		const profile = await requireActiveProfile(this.profileService, "Wallet locked")
 		const slotBusy = this.lane.isSlotBusy(profile.id, sequence.scope.chainId)
-		if (slotBusy || this.sendSequencer.isBlocked(sequence.scope, sequence.keys)) {
+		const lagging = this.chainTipGate.unconfirmed(sequence.scope, sequence.keys, networkId)
+		// The popup asks again every 2 s; the read it starts is what lets that answer change.
+		if (lagging) void this.chainTipGate.refresh(networkId)
+		if (slotBusy || lagging || this.sendSequencer.isBlocked(sequence.scope, sequence.keys)) {
 			const cap = await this.queuedFeeCapFor(req, profile.id, sequence.scope.chainId)
 			return { queued: true, tokenSpent: false, ...(cap ? { cap } : {}) }
 		}

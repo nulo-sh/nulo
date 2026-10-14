@@ -17,6 +17,7 @@
 import { describe, expect, test, vi } from "vitest"
 import { OriginType } from "@/wallet/services/transaction/spec"
 import { DappSendExecutor } from "./dapp-send-executor"
+import { SendSequencer } from "./send-sequencer"
 import { ExecutionLane } from "./execution-lane"
 
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
@@ -114,7 +115,12 @@ describe("slot-for-executeSendTransaction", () => {
 				beginJournal: beginJournal as never,
 				markJournal: vi.fn(async () => {}),
 				commitJournal: vi.fn(async () => {}),
+				parkSlot: vi.fn() as never,
+				joinOriginLine: vi.fn(() => ({ behind: () => false, earlierDone: async () => true, leave: () => {} })),
+				failUnclaimed: vi.fn(async () => {}),
 			},
+			sequencer: new SendSequencer({ pendingTxs: () => [], sleep: async () => {}, now: () => 0 }),
+			chainTip: { unconfirmed: () => false, wait: async () => "confirmed" },
 			buildAndEstimateValidated: vi.fn(async () => ({
 				txRequest: { txContext: { gasSettings } },
 				node: {},
@@ -135,7 +141,7 @@ describe("slot-for-executeSendTransaction", () => {
 			captureExecutionFence: vi.fn(async () => FENCE),
 			assertFence: vi.fn(async () => {}),
 			isFenceLive: vi.fn(() => true),
-			getNetwork: vi.fn() as never,
+			getNetwork: vi.fn(async () => ({ chainId: 0 })) as never,
 			getNode: vi.fn() as never,
 			readPublicStorageOnce: vi.fn() as never,
 			getPXE: vi.fn() as never,

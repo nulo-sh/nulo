@@ -45,6 +45,7 @@ function makeDeps(overrides: Partial<TransferExecutorDeps>): TransferExecutorDep
 		estimateReuse: { tryConsume: vi.fn(async () => undefined), stash: vi.fn() } as never,
 		coordinator: { proveAndSend: vi.fn(async () => ({ txHash: { toString: () => "0xhash" } })) } as never,
 		sequencer: new SendSequencer({ pendingTxs: () => [], sleep: () => new Promise((r) => setTimeout(r, 5)), now: () => 0 }),
+		chainTip: { unconfirmed: () => false, wait: async () => "confirmed" },
 		getFpcImpl: vi.fn(
 			async () => ({ infoData: { type: FpcType.DefaultSponsoredFpc, isProtocol: true, chainId: 7, address: "0xsponsor" } }) as never,
 		),

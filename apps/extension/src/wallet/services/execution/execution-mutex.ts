@@ -26,6 +26,10 @@
  * journal record the user can cancel) can be released from the wait. Aborting
  * while waiting splices the waiter out WITHOUT breaking FIFO ordering for
  * everyone behind it (the successor still waits for the real prior holder).
+ *
+ * Park: `keep` hands a capped holder's slot on while its place under the caps
+ * stays counted, so a request that waits outside the slot and comes back can
+ * never be refused for capacity it was already admitted under.
  */
 
 import { deferred } from "@nulo/wallet-core/utils"
@@ -67,13 +71,23 @@ export type AcquireCaps = {
  *  forever. */
 export type ExecutionMutexRelease = () => void
 
+/** A capped request's counted place while it waits outside the slot (`keep`). Re-entering with it
+ *  moves the place to the new hold; it re-enters once, in the lane and origin that counted it. */
+export interface SlotReservation {
+	/** Gives the place back; a no-op once re-entered or dropped. */
+	drop(): void
+}
+
+/** One capped request's count in the lane and origin depths, given back exactly once. */
+type DepthClaim = { readonly key: string; readonly originDepthKey: string; returned: boolean }
+
 export class ExecutionMutex {
 	/** Per-key tail of the FIFO chain. The promise stored here resolves when the
 	 *  most-recently-enqueued waiter for the key releases. A fresh acquirer
 	 *  awaits the current tail, then installs its own promise as the new tail. */
 	private readonly tails = new Map<string, Promise<void>>()
 
-	/** Per-lane depth (waiting + holding). Tracked ONLY for capped acquires, so
+	/** Per-lane depth (waiting, holding or parked). Tracked ONLY for capped acquires, so
 	 *  uncapped callers (and the FIFO-mechanics unit tests) are unaffected. */
 	private readonly laneDepth = new Map<string, number>()
 	/** Per-(lane, origin) depth, keyed `${laneKey}|${originKey}` (a lane key
@@ -81,6 +95,9 @@ export class ExecutionMutex {
 	 *  unambiguous — and ASCII, unlike a NUL separator which makes git treat the
 	 *  source as binary). */
 	private readonly originDepth = new Map<string, number>()
+	private readonly keepers = new WeakMap<ExecutionMutexRelease, () => SlotReservation>()
+	/** Each reservation not yet re-entered or dropped, with the place it holds. */
+	private readonly reservations = new WeakMap<SlotReservation, DepthClaim>()
 
 	/**
 	 * Acquire the lock for `key`, FIFO. Resolves with a release callback once
@@ -91,26 +108,23 @@ export class ExecutionMutex {
 	 * When `caps` is given, a backpressure cap is enforced BEFORE enqueue: reject
 	 * with `ExecutionMutexCapacityError` if the per-origin OR total-lane depth is
 	 * already at its limit. A capacity reject mutates nothing. Depth is
-	 * incremented only after passing both caps, and decremented exactly once in
-	 * `release` (the sole decrement path) — an aborted waiter's slot is freed when
-	 * its chained release fires (conservative over-count; never an under-count, so
-	 * the cap cannot be bypassed).
+	 * incremented only after passing both caps, and decremented exactly once, by
+	 * `release` or by dropping the reservation `keep` turned it into — an aborted
+	 * waiter's slot is freed when its chained release fires (conservative
+	 * over-count; never an under-count, so the cap cannot be bypassed). A
+	 * `reservation` re-enters at the tail with the place it already holds: no cap
+	 * check, no increment.
 	 */
-	public async acquire(key: string, signal?: AbortSignal, caps?: AcquireCaps): Promise<ExecutionMutexRelease> {
-		// Fast reject: already aborted before we even enqueue.
+	public async acquire(
+		key: string,
+		signal?: AbortSignal,
+		caps?: AcquireCaps,
+		reservation?: SlotReservation,
+	): Promise<ExecutionMutexRelease> {
+		// Fast reject: already aborted before we even enqueue. A reservation stays the caller's to drop.
 		if (signal?.aborted) throw new ExecutionMutexAbortError(key)
 
-		// Backpressure cap — checked + applied atomically before enqueue.
-		const originDepthKey = caps ? `${key}|${caps.originKey}` : undefined
-		if (caps && originDepthKey) {
-			const laneNow = this.laneDepth.get(key) ?? 0
-			const originNow = this.originDepth.get(originDepthKey) ?? 0
-			if (laneNow >= caps.maxLaneDepth || originNow >= caps.maxOriginDepth) {
-				throw new ExecutionMutexCapacityError(key)
-			}
-			this.laneDepth.set(key, laneNow + 1)
-			this.originDepth.set(originDepthKey, originNow + 1)
-		}
+		const claim = reservation ? this.redeem(reservation, key, caps) : this.admit(key, caps)
 
 		const prior = this.tails.get(key) ?? Promise.resolve()
 
@@ -119,21 +133,23 @@ export class ExecutionMutex {
 		this.tails.set(key, mine)
 
 		let released = false
-		const release: ExecutionMutexRelease = () => {
-			if (released) return
+		const handOn = (): void => {
 			released = true
 			// GC the key if no one enqueued behind us (tail still points at mine).
 			if (this.tails.get(key) === mine) this.tails.delete(key)
-			// Sole decrement path for the depth counters (idempotent via `released`).
-			if (originDepthKey) {
-				const lane = (this.laneDepth.get(key) ?? 1) - 1
-				if (lane <= 0) this.laneDepth.delete(key)
-				else this.laneDepth.set(key, lane)
-				const origin = (this.originDepth.get(originDepthKey) ?? 1) - 1
-				if (origin <= 0) this.originDepth.delete(originDepthKey)
-				else this.originDepth.set(originDepthKey, origin)
-			}
 			resolveMine()
+		}
+		const release: ExecutionMutexRelease = () => {
+			if (released) return
+			this.keepers.delete(release)
+			handOn()
+			if (claim) this.returnDepth(claim)
+		}
+		if (claim) {
+			this.keepers.set(release, () => {
+				handOn()
+				return this.reserve(claim)
+			})
 		}
 
 		if (!signal) {
@@ -160,6 +176,63 @@ export class ExecutionMutex {
 		}
 
 		return release
+	}
+
+	/**
+	 * Hands a granted capped hold's slot to the next in line and keeps its counted place, for a holder
+	 * that waits outside the slot and comes back. Its release then does nothing.
+	 */
+	public keep(release: ExecutionMutexRelease): SlotReservation {
+		const keep = this.keepers.get(release)
+		if (!keep) throw new Error("ExecutionMutex: only an unreleased capped hold keeps its place, once")
+		this.keepers.delete(release)
+		return keep()
+	}
+
+	/** Backpressure cap — checked + applied atomically before enqueue. */
+	private admit(key: string, caps: AcquireCaps | undefined): DepthClaim | undefined {
+		if (!caps) return undefined
+		const originDepthKey = `${key}|${caps.originKey}`
+		const laneNow = this.laneDepth.get(key) ?? 0
+		const originNow = this.originDepth.get(originDepthKey) ?? 0
+		if (laneNow >= caps.maxLaneDepth || originNow >= caps.maxOriginDepth) {
+			throw new ExecutionMutexCapacityError(key)
+		}
+		this.laneDepth.set(key, laneNow + 1)
+		this.originDepth.set(originDepthKey, originNow + 1)
+		return { key, originDepthKey, returned: false }
+	}
+
+	private redeem(reservation: SlotReservation, key: string, caps: AcquireCaps | undefined): DepthClaim {
+		const claim = this.reservations.get(reservation)
+		if (!claim || claim.key !== key || claim.originDepthKey !== `${key}|${caps?.originKey}`) {
+			throw new Error("ExecutionMutex: a reservation re-enters once, in the lane and origin that counted it")
+		}
+		this.reservations.delete(reservation)
+		return claim
+	}
+
+	private reserve(claim: DepthClaim): SlotReservation {
+		const reservation: SlotReservation = {
+			drop: () => {
+				if (this.reservations.get(reservation) !== claim) return
+				this.reservations.delete(reservation)
+				this.returnDepth(claim)
+			},
+		}
+		this.reservations.set(reservation, claim)
+		return reservation
+	}
+
+	private returnDepth(claim: DepthClaim): void {
+		if (claim.returned) return
+		claim.returned = true
+		const lane = (this.laneDepth.get(claim.key) ?? 1) - 1
+		if (lane <= 0) this.laneDepth.delete(claim.key)
+		else this.laneDepth.set(claim.key, lane)
+		const origin = (this.originDepth.get(claim.originDepthKey) ?? 1) - 1
+		if (origin <= 0) this.originDepth.delete(claim.originDepthKey)
+		else this.originDepth.set(claim.originDepthKey, origin)
 	}
 
 	/** Resolve when `prior` settles; reject with `ExecutionMutexAbortError` if
