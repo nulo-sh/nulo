@@ -102,6 +102,13 @@
 	}
 }
 
+/* The base stylesheet strips every link's focus outline; this returns it for the keyboard only. */
+.hero_link:focus-visible,
+.detail_link:focus-visible {
+	outline: 2px solid var(--nulo-accent);
+	outline-offset: 2px;
+}
+
 .caption {
 	composes: type--label from global;
 	color: var(--nulo-secondary);

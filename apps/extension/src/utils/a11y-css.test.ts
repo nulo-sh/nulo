@@ -65,6 +65,37 @@ describe("reduced motion and Disable animations both stop the shakes and the shi
 	})
 })
 
+describe("the detail pages' links show keyboard focus, and only keyboard focus", () => {
+	const shared = read("popup/pages/detail-page.module.css").replace(/\s+/g, " ")
+
+	test("the shared link classes draw the accent ring on :focus-visible", () => {
+		expect(shared).toContain(
+			".hero_link:focus-visible, .detail_link:focus-visible { outline: 2px solid var(--nulo-accent); outline-offset: 2px; }",
+		)
+	})
+
+	test("no shared rule draws on plain :focus, which a mouse press or a tap also matches", () => {
+		expect(shared).not.toMatch(/:focus(?!-visible)/)
+	})
+
+	test("the Tx hash, Block and To links and the View on line compose those classes on every detail page", () => {
+		const sites = [
+			["popup/components/modules/tx/TxHashRow.vue", "detail_link", "detail_link"],
+			["popup/pages/tx/[id].vue", "detail_link", "detail_link"],
+			["popup/pages/tx/[id].vue", "hero_link", "hero_link"],
+			["popup/pages/received/[id].vue", "detail_link", "detail_link"],
+			["popup/pages/received/[id].vue", "hero_link", "hero_link"],
+			["popup/pages/journal/[id].vue", "recipient_link", "detail_link"],
+			["popup/pages/journal/[id].vue", "hero_link", "hero_link"],
+		]
+		const unringed = sites.filter(([path, local, from]) => {
+			const rule = new RegExp(`\\.${local} \\{[^}]*composes: ${from} from "(\\.\\./)+(pages/)?detail-page\\.module\\.css";`)
+			return !rule.test(read(path).replace(/\s+/g, " "))
+		})
+		expect(unringed).toEqual([])
+	})
+})
+
 describe("the toolbar button shows keyboard focus", () => {
 	test("RowAction's inset accent ring, nested in .icon_btn", () => {
 		const source = read("popup/pages/toolbar-button.module.css").replace(/\s+/g, " ")
