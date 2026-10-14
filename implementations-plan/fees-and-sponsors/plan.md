@@ -1,7 +1,7 @@
 ---
 plan: fees-and-sponsors
 tier: mid
-status: approved v3.1 (D-orch-1 to D-orch-12); arc 1 merged (#270); arc 2 building
+status: completed (arc 1 merged as #270; arc 2 and the close-out in one PR against dev)
 issues: "#196, #119, #222, #188 pin, #118 comment (arc 1); #91, #107, #113, #114, #115, #188, #118 (arc 2, waits on decision page 6, and on pages 6 and 9 for anything hold H3 covers); #117 (no arc, blocked:external)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,20 @@ post_implementation_hardening: not scheduled
 base: origin/dev at fd47407
 trunk: dev
 ---
+
+## Outcome
+
+- **Date:** 2026-10-14.
+- **Status:** closed. Arc 1 merged as #270; arc 2 and this close-out ship in one PR against `dev` from `fees-and-sponsors-sponsors`, and the merge that lands it closes this plan.
+- **Shipped:**
+  - Arc 1 (#270): unknown speed levels refused at the seven popup RPCs (#196); a timed-out estimate keeps its admission place until its simulation ends (#119); the fee-cap precedence pinned (#188) and the budget comments corrected (#118); two extractions and eight declines (#222); the fee reply's shape check (Refs #197).
+  - Arc 2: per-profile fee picks under the profile lock (#91, D17); the authwit popups follow a long proof's stage (#107); sponsor checks on Send, in the authwit popups and on app-paid rows, with Confirm waiting for the current estimate on Send (#113, D18 to D21); the app-window nudge, the four signed notice sentences and the loading sponsor row (#114, #115, D22 to D24); one cap rule, `feeCapFor`, with the app-paid default at the predicted worst minimum (#118, OA-1 B), private fee juice at ×1.2 (OA-2 C), the shown maximum at gas limits × cap (OA-3 B), a refusal when the account's own Fee Juice is short (OA-4 B) and reuse while the committed cap covers (OA-5 B) (#188, D25 to D28); a playground `sendTx app-sponsored` and a live app-paid scenario.
+  - Screenshots of the eight touched surfaces, light and dark, Chrome and Firefox, in `screenshots/`.
+- **Dropped:** OA-6 (an app's priority fee) has no arc here (D-orch-10). Who wins between an app's cap and the wallet's is unchanged (D29); OA-12 asks whether to change it. Not promoted to `lessons.md`: the playground's `sendTx feePayer` sets no payer in the kernel ([lessons/phase-2.md](lessons/phase-2.md)); the file holds 8,192 bytes and no entry retires for it.
+- **Size:** 1,175 lines against mid's 350: two arcs, three plan audits and two implementation reviews are recorded inline; no trim was run at close-out.
+- **Known limits:** #394, #395, #396, #397, #398, #399.
+- **Open items:** #400 (OA-12), #401 (OA-13), both `owner-decision`; #117 (`blocked:external`); #197 (its external half).
+- **Seeds retired:** the `/goal` and `/loop` seeds below were never run (the orchestrator drove the lane); this record is evidence, not instructions.
 
 # Fees and sponsors: estimate and cap internals, sponsor checks, fee maps
 
@@ -36,7 +50,7 @@ Eleven issues on how the wallet estimates a fee, caps it, checks a sponsor, and 
   - Anything that moves a cap, a charge or which cap wins, and anything that decides whether a send can go out on a fee the person has not seen, also waits on recorded answers on pages 6 **and 9** (hold H3). That covers OA-1 to OA-6, OA-7, OA-8, OA-9, and Phase 2.3 as a whole.
 - **No arc.** #117 waits on a funded sponsor on mainnet (`blocked:external`). Nothing is planned for it.
 
-Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Live progress: [STATUS.md](STATUS.md).
+Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Issue map (the arc that closes each issue)
 
