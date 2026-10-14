@@ -55,6 +55,7 @@ const config: StorybookConfig = {
 			__VERSION__: JSON.stringify("story"),
 			__SENTINEL__: JSON.stringify("0"),
 			__AZTEC_VERSION__: JSON.stringify("story"),
+			__BB_VERSION__: JSON.stringify("story"),
 			__NAME__: JSON.stringify("@nulo/extension"),
 			__DISPLAY_NAME__: JSON.stringify("Nulo (story)"),
 		}

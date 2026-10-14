@@ -198,7 +198,7 @@ export function copyFor(state: PrestoUiState, last?: LastProveOutcome | null, su
 				tone: "warn",
 				title: STRINGS["version-mismatch"].title,
 				detail: state.info.nativeAztecVersion
-					? `Presto runs Aztec ${state.info.nativeAztecVersion}; Nulo needs ${__AZTEC_VERSION__}. ${STRINGS["version-mismatch"].support}.`
+					? `Presto runs Aztec ${state.info.nativeAztecVersion}; Nulo needs ${__BB_VERSION__}. ${STRINGS["version-mismatch"].support}.`
 					: `${STRINGS["version-mismatch"].support}.`,
 				retry: "Retry",
 			}
