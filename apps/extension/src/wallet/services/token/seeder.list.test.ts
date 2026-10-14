@@ -177,12 +177,55 @@ describe("TokenSeeder — a new list while a pass is in flight", () => {
 })
 
 describe("TokenSeeder — verified pins and list versions", () => {
-	test("a token already in the wallet is marked seeded but never verified, so the list cannot name it", async () => {
-		const { seeder } = listSeeder({ isTokenPresent: vi.fn(async () => true) })
+	test("a token already in the wallet is checked on chain like a seed, and only a pass lets the list name it", async () => {
+		const { seeder, deps } = listSeeder({ isTokenPresent: vi.fn(async () => true) })
 		await seeder.run()
-		const entry = (await readMarker())[KEY]
-		expect(entry.outcome).toBe("seeded")
-		expect(entry.verifiedPins).toBeUndefined()
+		expect(deps.persist).not.toHaveBeenCalled()
+		expect((await readMarker())[KEY]).toMatchObject({ outcome: "seeded", verifiedPins: seedPins(SEED) })
+		expect(await seeder.verifiedSeeds("p1", CHAIN_ID)).toEqual([SEED])
+	})
+
+	test("a held token the check refuses stays unnamed until a new list, which checks it again", async () => {
+		const preview = vi.fn(async (): Promise<SeedPreview> => ({ ...goodPreview(), symbol: "EVIL" }))
+		const { seeder, publish } = listSeeder({ isTokenPresent: vi.fn(async () => true), preview })
+		await seeder.run()
+		expect((await readMarker())[KEY]).toMatchObject({ outcome: "seeded", rejectedAtVersion: "1.0.0+1" })
+		expect((await readMarker())[KEY].verifiedPins).toBeUndefined()
+		await seeder.run()
+		expect(preview).toHaveBeenCalledTimes(1)
+
+		preview.mockImplementation(async () => goodPreview())
+		await publish([SEED])
+		await vi.waitFor(async () => expect((await readMarker())[KEY].verifiedPins).toBe(seedPins(SEED)))
+		expect(preview).toHaveBeenCalledTimes(2)
+		expect(await seeder.verifiedSeeds("p1", CHAIN_ID)).toEqual([SEED])
+	})
+
+	test("a check that errors is retried on the next pass, not held until a new list", async () => {
+		const preview = vi.fn(async (): Promise<SeedPreview> => goodPreview())
+		preview.mockRejectedValueOnce(new Error("node unreachable"))
+		const { seeder } = listSeeder({ isTokenPresent: vi.fn(async () => true), preview })
+		await seeder.run()
+		const failed = (await readMarker())[KEY]
+		expect(failed.outcome).toBe("seeded")
+		expect(failed.verifiedPins).toBeUndefined()
+		expect(failed.rejectedAtVersion).toBeUndefined()
+		await seeder.run()
+		expect((await readMarker())[KEY].verifiedPins).toBe(seedPins(SEED))
+	})
+
+	test("a list change during the check drops what it confirmed under the old pins", async () => {
+		const { preview, held } = heldPreview()
+		const { seeder, publish } = listSeeder({ isTokenPresent: vi.fn(async () => true), preview })
+		const pass = seeder.run()
+		await vi.waitFor(() => expect(held.release).toBeDefined())
+		preview.mockImplementation(async () => goodPreview())
+		const changed = publish([REPINNED])
+		held.release?.(goodPreview())
+		await pass
+		await changed
+		await vi.waitFor(async () => expect((await readMarker())[KEY].rejectedAtVersion).toBe("1.0.0+2"))
+		expect((await readMarker())[KEY].verifiedPins).toBeUndefined()
 		expect(await seeder.verifiedSeeds("p1", CHAIN_ID)).toEqual([])
 	})
 

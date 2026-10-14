@@ -39,8 +39,8 @@ export type SeedMarkerEntry = {
 	attempts: number
 	/** Seed version active when `attempts` hit the cap. */
 	cappedAtVersion?: string
-	/** Seed version under which a pin or metadata bound rejected this seed. Not
-	 *  retried until the version changes: a new release or a new signed list. */
+	/** Seed version under which a pin or metadata bound rejected this seed, or refused the check
+	 *  of one already seeded. Not retried until the version changes: a new release or a new signed list. */
 	rejectedAtVersion?: string
 	/** When the seeder may try again by itself. Written WITH the attempt, before
 	 *  the slow work, so a service worker that dies mid-attempt still resumes. */
@@ -50,8 +50,9 @@ export type SeedMarkerEntry = {
 	outcome?: "seeded" | "deleted"
 	/** Chain-observed decimals recorded at seed time; equal to the seed's `expectedDecimals`. */
 	observedDecimals?: number
-	/** `seedPins` of the seed whose preview passed, written only by that path: what lets the
-	 *  connect window name the token as one Nulo knows while the list still pins it the same way. */
+	/** `seedPins` of the seed whose on-chain check passed, before seeding it or on a token the wallet
+	 *  already held: what lets the connect window name the token as one Nulo knows while the list
+	 *  still pins it the same way. */
 	verifiedPins?: string
 }
 
@@ -72,6 +73,12 @@ type SeedPassContext = {
 
 export function seedPins(seed: DefaultTokenSeed): string {
 	return `${seed.expectedClassId}|${seed.expectedSymbol}|${seed.expectedDecimals}`
+}
+
+/** A seeded default whose current pins were never checked on chain: a token the wallet held
+ *  before the list named it, or one the list re-pinned since. */
+function awaitsCheck(entry: SeedMarkerEntry, seed: DefaultTokenSeed, version: string): boolean {
+	return entry.outcome === "seeded" && entry.verifiedPins !== seedPins(seed) && entry.rejectedAtVersion !== version
 }
 
 /** Status of one default, or `undefined` for one the user deleted. `seeded` stays listed: the
@@ -411,7 +418,12 @@ export class TokenSeeder {
 		const now = Date.now()
 		for (const seed of ctx.seeds) {
 			const key = seedKey(seed.chainId, seed.contract)
-			const entry = { ...(ctx.state[key] ?? { attempts: 0 }) }
+			const stored = ctx.state[key]
+			if (stored !== undefined && awaitsCheck(stored, seed, ctx.version)) {
+				if ((await this.verifySeeded(ctx, seed, key)) === "abort") return
+				continue
+			}
+			const entry = { ...(stored ?? { attempts: 0 }) }
 			if (!prepareSeedEntry(entry, ctx.version, now)) continue
 			if ((await this.seedOne(ctx, seed, key, entry)) === "abort") return
 		}
@@ -478,7 +490,7 @@ export class TokenSeeder {
 				ctx.epoch,
 			)
 			await this.announce(profile.id, seed.chainId)
-			return "continue"
+			return this.verifySeeded(ctx, seed, key)
 		}
 
 		// Zero accounts on this chain: metadata simulation is impossible.
@@ -538,6 +550,36 @@ export class TokenSeeder {
 			// continuation (or the next trigger) retries until the cap.
 			this.log(LogLevel.Warn, "seed attempt failed", { seedKey: key, attempts: entry.attempts, category: errorCategory(err) })
 		}
+		return "continue"
+	}
+
+	/**
+	 * The preview a seed must pass, run on a default already seeded: it persists nothing and only
+	 * records the pins it confirmed, which is what lets the connect window name the token. A refusal
+	 * holds until the version changes; an error is retried on the next pass.
+	 */
+	private async verifySeeded(ctx: SeedPassContext, seed: DefaultTokenSeed, key: string): Promise<"continue" | "abort"> {
+		const { profile, network, account, version, guardsHold } = ctx
+		if (!account) return "continue"
+		let preview: SeedPreview | undefined
+		try {
+			preview = await this.previewOne(seed, key, network.id, account.address)
+		} catch (err) {
+			this.log(LogLevel.Warn, "seed check failed", { seedKey: key, category: errorCategory(err) })
+			return "continue"
+		}
+		if (!(await guardsHold())) return "abort"
+		const verifiedPins = seedPins(seed)
+		await this.updateMarker(
+			profile.id,
+			key,
+			(existing) => {
+				if (existing.outcome !== "seeded") return existing
+				if (!preview) return { ...existing, rejectedAtVersion: version }
+				return { ...existing, observedDecimals: preview.decimals, verifiedPins, rejectedAtVersion: undefined }
+			},
+			ctx.epoch,
+		)
 		return "continue"
 	}
 
