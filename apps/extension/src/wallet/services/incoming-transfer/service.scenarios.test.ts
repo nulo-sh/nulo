@@ -4732,14 +4732,14 @@ describe("IncomingTransferService — public-scan health (episodes, backoff, ret
 		const { reader, state } = makePublicReader()
 		const tips = vi.fn().mockRejectedValue(new Error("node down"))
 		reader.getScanTips = tips
+		// No account, so no note target reads tips: the public target is the only scheduler.
 		const { service } = await bootService(
-			{ account: publicAccountStub(), token: makeTokenStub([tokenA]), publicReader: reader },
+			{ account: makeAccountStub([]), token: makeTokenStub([tokenA]), publicReader: reader },
 			{ keepStorage: true },
 		)
 		await flushPromises()
 
-		// The one tips read is the note target's; the backed-off public target adds no call of its own.
-		expect(tips).toHaveBeenCalledTimes(1)
+		expect(tips).not.toHaveBeenCalled()
 		expect(state.classCalls).toBe(0)
 		expect(state.fetchArgs).toEqual([])
 		expect(await storedEpisodes(service)).toEqual({ [KEY]: { failures: 3, failingSince: T0 - 5 * MIN, nextAttemptAt: gate } })
@@ -6588,9 +6588,11 @@ describe("IncomingTransferService — liveness on the real cadence", () => {
 	test("retry: after a failed scan both receipts land on the next tick with the tip unchanged", async () => {
 		const f = await bootTicking({}, { chain: [] })
 		for (let i = 0; i < 3; i++) await tick()
+		// The checkpoint catches up with the proposed block, whose hash the note targets already
+		// reached, and the PXE delivers a note late: only a failed run that forgets its mark is rerun.
 		const ours = pubReceipt(101)
 		f.state.chain = [ours]
-		f.state.tips = { ...f.state.tips, checkpointedBlockNumber: 101, checkpointedBlockHash: "0xcp101", proposedBlockHash: "0xpp101" }
+		f.state.tips = { ...f.state.tips, checkpointedBlockNumber: 101, checkpointedBlockHash: "0xcp101" }
 		let noteFailures = 1
 		f.note.getNotesRaw.mockImplementation(async (_n: string, account: string) => {
 			if (account !== "0xa") return []

@@ -58,7 +58,6 @@ export class PublicEventIndexer {
 		private readonly maxPages: number = DEFAULT_MAX_PAGES_PER_SCAN,
 	) {}
 
-	/** The most pages one scan tick may fetch. */
 	public get pageBudget(): number {
 		return this.maxPages
 	}

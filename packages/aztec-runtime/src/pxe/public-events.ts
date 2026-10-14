@@ -391,7 +391,6 @@ function decodePublicTransfer(entry: LogResult, log?: PublicEventLogger): Public
 
 const BLOCK_HASH = /^0x[0-9a-fA-F]{64}$/
 
-/** A tip's block number, refused unless it is a block number. */
 function tipNumber(id: L2BlockId, tier: string): number {
 	const number: unknown = id.number
 	if (typeof number !== "number" || !Number.isSafeInteger(number) || number < 0)
@@ -399,7 +398,6 @@ function tipNumber(id: L2BlockId, tier: string): number {
 	return number
 }
 
-/** A tip's block hash, refused unless it is 32-byte hex. */
 function tipHash(id: L2BlockId, tier: string): string {
 	const hash: unknown = id.hash
 	if (typeof hash !== "string" || !BLOCK_HASH.test(hash)) throw new Error(`public-events: ${tier} tip hash refused`)

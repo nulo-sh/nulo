@@ -1628,7 +1628,7 @@ export async function navigateByHash(page: Page, hash: string, timeout = 5_000):
 export const INCOMING_SCAN_INTERVAL_MS = 30_000
 
 /** Unlock a locked wallet, then wait on History for an incoming row whose kind chip reads `label`
- *  and amount reads `amount`. Resolves the time from the unlock's submission to the row. */
+ *  and amount reads `amount`. Resolves the time from helper entry to the row. */
 export async function unlockUntilIncomingRow(page: Page, label: string, amount: string, timeout = 180_000): Promise<number> {
 	const unlockedFrom = Date.now()
 	await ensureUnlocked(page, TEST_PASSWORD)

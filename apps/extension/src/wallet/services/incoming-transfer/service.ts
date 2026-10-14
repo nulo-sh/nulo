@@ -102,7 +102,6 @@ type PublicTick = { outcome: ScanOutcome; atTip: boolean }
 
 type PublicTarget = { profileId: string; networkId: string; contract: string; chainId: number }
 
-/** A back-fill step's outcome, and whether history is still left to read. */
 type BackfillStep = { outcome: "none" | "progress" | "no-progress" | "failed"; left: boolean }
 
 type TrustScope = { profileId: string; networkId: string; accountAddress: string; contract: string }
@@ -1875,10 +1874,9 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		return { outcome: "progress", left: row.backfill !== undefined }
 	}
 
-	/** Reads one window upward from its position within `pages`, commits what it finds, and persists
-	 *  the new position, or the next window down once a validated end of results closes this one.
-	 *  `row` is null when the tick must stop: a revoked commit or a dropped page keeps the position,
-	 *  and a moved epoch writes nothing. */
+	/** Reads one window upward from its position within `pages`. A validated end of results closes the
+	 *  window and opens the next one down; a dropped page keeps only its valid prefix, and a revoked
+	 *  commit advances nothing. `row` is null when the tick must stop. */
 	private async backfillWindowPages(
 		target: PublicTarget,
 		row: PublicScanCursor,
@@ -2656,7 +2654,6 @@ function seedFreshCursor(cursor: PublicScanCursor, tips: PublicScanTips): Public
 	return { ...cursor, lastScanFinalized: floor, backfill: backfillWindow(cursor.startBlock, floor) }
 }
 
-/** The back-fill window ending at `high`, or none once `high` is below the start of history. */
 function backfillWindow(startBlock: number, high: number): PublicScanCursor["backfill"] {
 	if (high < startBlock) return undefined
 	return { low: Math.max(startBlock, high - BACKFILL_WINDOW_BLOCKS + 1), high, position: null }
