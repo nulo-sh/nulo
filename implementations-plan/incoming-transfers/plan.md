@@ -337,6 +337,13 @@ No findings; the loop converged.
    After #426 merged, the same session checked the merge's resolution of the received page (`35a20acc`,
    executed, 62 tests): `approve`.
 
+### OA-7 follow-up (P4-15 A), round 1: Codex (gpt-6.1-sol, high, read-only), `approve with fixes`
+
+1. Low, the composes pin passed with an anchor that dropped its class binding: each link the three
+   pages render is now pinned to a ringed class, counted per file. 2. Low, the comment promised
+   keyboard-only focus, which the browser's `:focus-visible` heuristic decides: reworded. **Both
+   accepted.** Round 2 (resumed): `approve`.
+
 ## Post-implementation
 
 This plan plus `implementations-plan/README.md` § Post-implementation standard at `264a4b30`; `code_review` off.
