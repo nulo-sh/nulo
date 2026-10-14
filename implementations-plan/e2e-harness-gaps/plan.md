@@ -336,7 +336,7 @@ Validation gate: Fast; `bun run test:ci-gating`; `bun run test:all`; the #279 su
 **Phase 4.1: ESM configs (#186).**
 1. Inventory and fix any CJS-only construct; add `"type": "module"`; rename and re-point `vitest.base.mts` in its importers, `biome.json`, `ARCHITECTURE.md` and `CLAUDE.md`. Commit, and keep the tree clean from here to the end of the gate.
 2. Run the soak matrix the archived `vitest-on-bun` plan records, at that one commit after `bun install --frozen-lockfile`: for each of the eleven workspaces whose `vitest.config.ts` imports the base, `bun scripts/ci-cd/test-soak/cli.ts soak --cwd <ws> --runtime node --runs 30 --out <scratch>/<ws>-node.json` (the reference) and the same with `--runtime script` (the Bun candidate), then `compare <node.json> <script.json>` (outputs in a scratch directory outside the repo); `bun run test:all` five times; `gh workflow run pr-quick.yml --ref e2e-harness-gaps-esm` bound to that commit (push the branch, no PR).
-3. Build, Storybook and the e2e configs: `bun run --cwd apps/extension build`, `bun run --cwd apps/extension build-storybook`, then the armed smoke build.
+3. Build, Storybook and the e2e configs: `bun run --cwd apps/extension build`, `bun run --cwd apps/extension build-storybook`, then the armed smoke build. Both browsers' plain builds at the head and at its `dev` base, `diff -r` of the two `dist` trees: identical.
 
 Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts`; Network (file) `tests/e2e/network/networks.test.ts`; from `apps/extension`, `bun --bun vitest run > <scratch>/unit.log 2>&1; echo "vitest=$?"`, then `grep -c 'ESM syntax in a file loaded as CommonJS' <scratch>/unit.log`; from the repo root, `bunx biome check vitest.base.mts` prints `Checked 1 file`, so Biome still lints the renamed base. Pass: every soak `compare` passes with an identical inventory, all runs exit 0, the dispatched `pr-quick.yml` run is green at the soaked SHA, `vitest=0`, and the grep prints 0 (its own exit status 1 is expected). Per D22, the same logs also hold no `configLoader: 'native'` block, and a Node probe loads every extension config with the native loader.
 
@@ -744,6 +744,21 @@ Verdict: **one medium finding**; 4a-C1 to 4a-C3 and the Opus fixes otherwise jud
 ### Arc 4a implementation, round 3: Codex (same session, resumed), 2026-10-13
 
 Verdict: **clean**, high confidence. The loop converged.
+
+### Arc 4 on the merged head, round 1: Codex (gpt-6.1-sol, high, fresh session), 2026-10-14
+
+Verdict: **approve**, no finding, on fbbf1cd (`origin/dev` 3133fb0 merged). It loaded the eight configs natively itself. The e2e global setups keep extensionless imports, but vitest loads them through its module runner, not Node's loader; both reporters are statically imported through `vite.shared.ts`, so the probe covers them. Nothing in `CI.md` or the skills #374 moved names the base. The proof holds if the checkout stays still through the soak and the dispatched run's `head_sha` equals the soaked SHA.
+
+### Arc 4 on the merged head: Opus review (same family, read-only), 2026-10-14
+
+Verdict: **approve with fixes**. Sound: of the 27 files the configs load, dev changed one comment; no extensionless or unattributed import, no type-stripping reject, no free `__dirname` or `require` in the native graph; the doc references.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 4-O1 | Low. `scripts/e2e/fixtures/stall-watchdog/vitest.config.ts`, the nested run's config, imports the watchdog without its extension, so that run prints the native-loader block into output the test captures and the gate's grep never reads | Accepted, demonstrated: the old import prints the block and fails the native probe; with `.ts` it loads natively and prints nothing; `stall-watchdog.test.ts` 2/2 |
+| 4-O2 | Low-medium. `"type": "module"` changes how Rolldown hands a CommonJS default export to the extension's importers, and nothing proves the shipped bytes unchanged | Accepted as a gate: Phase 4.1 step 3 diffs both browsers' builds against `dev`'s |
+| 4-O3 | Nit. The `ARCHITECTURE.md` row the arc edits names 9 of the 11 workspaces that spread the base | Accepted: `legal` and `third-party-notices` added |
+| 4-O4 | Optional. Nothing keeps the config graph natively loadable; Vite does not warn on parameter properties | Accepted as one README sentence, as `packages/third-party-notices` states its own rule; no guard |
 
 ## Post-implementation
 
