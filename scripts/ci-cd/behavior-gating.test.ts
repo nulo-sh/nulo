@@ -1027,6 +1027,52 @@ describe("store copies", () => {
 	})
 })
 
+// The environment approves a run, not its code: these pin what an approved run can do.
+describe("token-list publish", () => {
+	const file = ".github/workflows/publish-token-list.yml"
+	const text = readFileSync(join(ROOT, file), "utf8")
+	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+	const wf = Bun.YAML.parse(text) as any
+	const SIGN =
+		'bun --no-install packages/token-list/src/sign-cli.ts --source infra/token-list/list.source.json --published infra/token-list/public/v1/list.json --out dist/list.json --expect-tokens-sha256 "$EXPECT_TOKENS" | tee -a "$GITHUB_OUTPUT"'
+
+	test("runs on a dev push that changes the source and on dispatch, one run at a time, never cancelled", () => {
+		expect(wf.on).toEqual({ push: { branches: ["dev"], paths: ["infra/token-list/list.source.json"] }, workflow_dispatch: null })
+		expect(wf.concurrency).toEqual({ group: "publish-token-list", "cancel-in-progress": false })
+		expect(wf.permissions).toEqual({ contents: "read" })
+		expect(wf.jobs.prepare.if).toBe("github.ref == 'refs/heads/dev'")
+	})
+
+	test("prepare, then sign in the token-list environment, then publish-pr; only sign reads the signing key", () => {
+		expect(Object.keys(wf.jobs)).toEqual(["prepare", "sign", "publish-pr"])
+		expect([wf.jobs.sign.needs, wf.jobs["publish-pr"].needs]).toEqual(["prepare", "sign"])
+		expect(Object.entries(wf.jobs).flatMap(([name, job]) => ((job as { environment?: unknown }).environment ? [name] : []))).toEqual([
+			"sign",
+		])
+		expect(text.match(/secrets\.TOKEN_LIST_SIGNING_KEY/g)).toHaveLength(1)
+		const signStep = wf.jobs.sign.steps.find((step: { id?: string }) => step.id === "sign")
+		expect(signStep.env.TOKEN_LIST_SIGNING_KEY).toBe("${{ secrets.TOKEN_LIST_SIGNING_KEY }}")
+		expect(JSON.stringify(wf.jobs.prepare)).not.toContain("secrets.")
+		for (const name of ["sign", "publish-pr"]) expect(wf.jobs[name].permissions).toEqual({ contents: "read" })
+	})
+
+	test("the signer runs exactly the pinned command: the summary's digest, the served floor, the pinned keys", () => {
+		const signStep = wf.jobs.sign.steps.find((step: { id?: string }) => step.id === "sign")
+		expect(signStep.run.trim().split("\n")).toEqual(["mkdir -p dist", SIGN])
+		expect(signStep.env.EXPECT_TOKENS).toBe("${{ needs.prepare.outputs.tokens_sha256 }}")
+		expect(wf.jobs.prepare.outputs.tokens_sha256).toBe("${{ steps.summary.outputs.tokens_sha256 }}")
+	})
+
+	test("the publish PR is opened from the signed commit, by the script, with the App token in that step only", () => {
+		const steps = wf.jobs["publish-pr"].steps
+		const open = steps.at(-1)
+		expect(open.run).toBe("bun --no-install infra/token-list/scripts/open-publish-pr.ts")
+		expect(open.env.BASE_SHA).toBe("${{ github.sha }}")
+		expect(open.env.GH_TOKEN).toBe("${{ steps.app.outputs.token }}")
+		expect(wf.jobs["publish-pr"].env).toBeUndefined()
+	})
+})
+
 // Bun never re-checks cached files against bun.lock, and its install runs trusted packages'
 // lifecycle scripts: a poisoned cache must reach neither shipped bytes nor a job holding a write token.
 describe("Bun's install cache", () => {
