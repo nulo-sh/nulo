@@ -13,8 +13,8 @@ import {
 	stillAsShown,
 } from "@/utils/contact-import-rows"
 import { MAX_CONTACT_IMPORT_BYTES, parseContactsExport } from "@/utils/contacts-export-format"
-import type { AccountStateServiceClient } from "@/wallet/services/account-state/client"
-import type { ContactServiceClient } from "@/wallet/services/contact/client"
+import { AccountStateServiceClient } from "@/wallet/services/account-state/client"
+import { ContactServiceClient } from "@/wallet/services/contact/client"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
 import type { RunFence } from "@/wallet/services/profile/spec"
 import { useAppStore } from "@/stores/app.store"
@@ -29,7 +29,7 @@ interface ContactRecord {
 
 export interface UseContactImportExportOptions {
 	contacts: Ref<ContactRecord[]>
-	contactService: ContactServiceClient
+	/** The export's; an import opens its own clients, so leaving the page never cuts one off. */
 	accountStateService: AccountStateServiceClient
 }
 
@@ -39,11 +39,10 @@ export interface UseContactImportExportOptions {
  * import, and the aggregate user-facing toasts.
  */
 export function useContactImportExport(opts: UseContactImportExportOptions) {
-	const { contacts, contactService, accountStateService } = opts
+	const { contacts, accountStateService } = opts
 	const { openToast } = useToast()
 	const deps: ContactIoServices = {
 		contacts,
-		contactService,
 		accountStateService,
 		openToast,
 		appStore: useAppStore(),
@@ -55,7 +54,6 @@ export function useContactImportExport(opts: UseContactImportExportOptions) {
 
 interface ContactIoServices {
 	contacts: Ref<ContactRecord[]>
-	contactService: ContactServiceClient
 	accountStateService: AccountStateServiceClient
 	openToast: ReturnType<typeof useToast>["openToast"]
 	appStore: ReturnType<typeof useAppStore>
@@ -69,8 +67,8 @@ interface ImportRun {
 	profileService: ProfileServiceClient
 }
 
-/** One import's dependencies: every contact call it makes carries the run's fence. */
-type ContactIoDeps = ContactIoServices & { run: ImportRun }
+/** One import's dependencies: its own clients, and the run's fence on every call it makes. */
+type ContactIoDeps = ContactIoServices & { contactService: ContactServiceClient; run: ImportRun }
 
 type SelectedRow = ReviewedImportRow
 type UpsertError = { name: string; address: string; operation: string; error: unknown }
@@ -140,6 +138,8 @@ async function exportContacts(deps: ContactIoServices): Promise<void> {
 async function importContacts(deps: ContactIoServices): Promise<void> {
 	const { openToast, cacheStore, popupStore } = deps
 	const profileService = new ProfileServiceClient()
+	const contactService = new ContactServiceClient()
+	const accountStateService = new AccountStateServiceClient()
 	try {
 		// The `.json` accept filter is UI guidance, not a boundary — a
 		// `.gz`-named pick still auto-decompresses inside pickFile, so the
@@ -181,9 +181,7 @@ async function importContacts(deps: ContactIoServices): Promise<void> {
 			return
 		}
 
-		const tally = await applyImportRows({ ...deps, run }, res)
-		if (tally.stopped) toastStoppedImport(openToast, tally, res.length)
-		else toastImportOutcome(openToast, tally)
+		await applyHoldingLock({ ...deps, contactService, accountStateService, run }, res)
 	} catch (err) {
 		if (err instanceof FilePickCanceledError) return
 		if (err instanceof FileTooLargeError) {
@@ -195,6 +193,8 @@ async function importContacts(deps: ContactIoServices): Promise<void> {
 		openToast({ kind: "error", label: "Error occurred during import" })
 	} finally {
 		profileService.disconnect()
+		contactService.disconnect()
+		accountStateService.disconnect()
 		cacheStore.importContacts = []
 		cacheStore.importPromise = null
 	}
@@ -214,6 +214,18 @@ function openImportSelection(
 	})
 	popupStore.open("import_contacts")
 	return importPromise
+}
+
+/** Lock stays disabled while the rows are written, and the hold ends with the import however it ends. */
+async function applyHoldingLock(deps: ContactIoDeps, res: SelectedRow[]): Promise<void> {
+	const endHold = deps.appStore.beginContactImport()
+	try {
+		const tally = await applyImportRows(deps, res)
+		if (tally.stopped) toastStoppedImport(deps.openToast, tally, res.length)
+		else toastImportOutcome(deps.openToast, tally)
+	} finally {
+		endHold()
+	}
 }
 
 /** Register each selected row's sender intent, then upsert the row. Import is adds-only toward sender

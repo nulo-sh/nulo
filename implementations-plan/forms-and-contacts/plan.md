@@ -320,7 +320,7 @@ Every command runs from the worktree root unless it says otherwise. "Fast layers
 3. Tests: composition — a session that ends between the sender and the contact leaves no contact row (never-happens), and an unstopped run writes both (control); a registration already awaiting the PXE when the session ends may finish, and the contact write after it still stops; a failed sender (live session) still writes the contact and the outcome toast reports it (FA-11 A pin); with the registration held, another window renames the row's contact: the contact write is refused and counted as a refusal (never-happens), and with no change while held the row is written (control). Unit — a dead fence registers no sender and logs nothing at Error, a live one registers (control); the pins test's "contact before sender" row flips to "sender before contact" (F27); its stop table still reads "Import incomplete · N of M contacts written". A call-site pin: `setExpiryDeferral` has exactly one caller (H6).
 - Validation gate: fast layers on `useContactImportExport.{test,pins.test,composition.test,spaced-name.test}.ts`, the account-state service tests and the pin.
 
-**3.2 #151 the running state (FA-2 A, FA-3 A, FA-7 B).**
+**3.2 #151 the running state (FA-2 A, FA-3 A, FA-7 B).** ✓
 1. `contact-import-guard.ts` composed into the app store; `importContacts` begins and ends its entry around `applyImportRows`; the lock seal resets the guard (`locked-state.ts`, `app.vue`).
 2. The import opens and closes its own three clients; the options drop `contactService`.
 3. The chip and "Lock now" take `disabled`; `useLockWallet` refuses while held and asks with the import's wording after the hold.

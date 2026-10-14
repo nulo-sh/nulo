@@ -412,6 +412,7 @@ describe("useProfileBootstrap", () => {
 			},
 			clearActivity: () => undefined,
 			resetInFlight: () => undefined,
+			resetContactImports: () => undefined,
 			cachedProfiles: () => [fakeProfile],
 			setProfiles: () => undefined,
 			route: (path) => {

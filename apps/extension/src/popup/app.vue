@@ -179,6 +179,7 @@ const lockedState = createLockedState({
 	},
 	clearActivity: () => appStore.clearActivity(),
 	resetInFlight: () => appStore.resetInFlight(),
+	resetContactImports: () => appStore.resetContactImports(),
 	cachedProfiles: () => appStore.profiles,
 	setProfiles: (profiles) => {
 		appStore.profiles = profiles

@@ -8,6 +8,7 @@ export interface LockedStateShell<P> {
 	markLocked: () => void
 	clearActivity: () => void
 	resetInFlight: () => void
+	resetContactImports: () => void
 	cachedProfiles: () => P[]
 	setProfiles: (profiles: P[]) => void
 	route: (path: string) => void
@@ -25,6 +26,9 @@ export function createLockedState<P>(shell: LockedStateShell<P>) {
 		// The lock cancels the running sends, but the cancel events do not reach this popup; left
 		// in place, the rows would refuse every pick on the lock screen.
 		shell.resetInFlight()
+		// An import whose registration still awaits the PXE outlives its session; it must not hold
+		// Lock in the next one.
+		shell.resetContactImports()
 	}
 	const land = (profiles: P[]) => {
 		shell.setProfiles(profiles)

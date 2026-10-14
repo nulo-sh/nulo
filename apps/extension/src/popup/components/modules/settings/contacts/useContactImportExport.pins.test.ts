@@ -21,7 +21,12 @@ const captureRunFenceMock = vi.hoisted(() => vi.fn())
 const popupOpenMock = vi.fn()
 const trace: string[] = []
 
-const appStoreState: { network: { id: string; name: string } | null } = { network: { id: "net-1", name: "Testnet" } }
+const appStoreState = {
+	network: { id: "net-1", name: "Testnet" } as { id: string; name: string } | null,
+	beginContactImport: () => () => {},
+}
+// The clients the import opens for itself: the services each test builds.
+const importClients = vi.hoisted(() => ({ contact: {} as object, accountState: {} as object }))
 const cacheStoreState: {
 	importContacts: unknown[]
 	importPromise: { resolve: (rows: unknown[]) => void; reject: (v: unknown) => void } | null
@@ -49,6 +54,16 @@ vi.mock("@/wallet/services/profile/client", () => ({
 			captureRunFence: (...args: unknown[]) => captureRunFenceMock(...args),
 			assertRunFence: (...args: unknown[]) => assertRunFenceMock(...args),
 		}
+	}),
+}))
+vi.mock("@/wallet/services/contact/client", () => ({
+	ContactServiceClient: vi.fn(function () {
+		return { ...importClients.contact, disconnect: vi.fn() }
+	}),
+}))
+vi.mock("@/wallet/services/account-state/client", () => ({
+	AccountStateServiceClient: vi.fn(function () {
+		return { ...importClients.accountState, disconnect: vi.fn() }
 	}),
 }))
 vi.mock("@/stores/app.store", () => ({ useAppStore: () => appStoreState }))
@@ -93,7 +108,11 @@ function fileWith(payload: unknown, size?: number) {
 	pickFileMock.mockResolvedValueOnce({ size: size ?? raw.length, text: async () => raw })
 }
 
-const api = (services = makeServices(), contacts = ref([])) => useContactImportExport({ contacts, ...services } as never)
+function api(services: { contactService: object; accountStateService: object } = makeServices(), contacts = ref([])) {
+	importClients.contact = services.contactService
+	importClients.accountState = services.accountStateService
+	return useContactImportExport({ contacts, accountStateService: services.accountStateService } as never)
+}
 
 async function untilSelectionGate() {
 	await vi.waitFor(() => {
@@ -314,7 +333,7 @@ describe("importContacts — a session that ends mid-import", () => {
 
 	async function run(services: ReturnType<typeof stopServices>, file: unknown = threeRows) {
 		fileWith(file)
-		const done = useContactImportExport({ contacts: ref([]), ...services } as never).importContacts()
+		const done = api(services).importContacts()
 		await untilSelectionGate()
 		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts, saved))
 		await done
