@@ -50,3 +50,7 @@ Every kind has a route, so no builder returns null for a missing route.
 - Codex resumed, `approve with fixes`: one Medium, a regression of round 1 (a failed boot settings
   read left the store's `"aztecscan"` default showing links to a None user). Fixed by starting the
   store's choice at `null`; `ConfigStore.props` returns every key, so only a failed read keeps it.
+
+## Review round 3
+
+- Codex resumed on `d84f2baa..4faf04a4`, `approve`, no findings. The loop converged in three rounds.

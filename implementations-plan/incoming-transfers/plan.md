@@ -542,7 +542,10 @@ Validation gate:
 Every phase here waits on page 4 and C12. A phase answered "as is" is dropped and its issue closes as
 not planned (SR3). Phase 3.5 waits on OA-1.
 
-#### Phase 3.1: explorer builders and detail rows (#142)
+Arc 3a (D-orch-12) is Phases 3.1 and 3.2 and runs the Arc 3 boundary gate; Phases 3.3 to 3.5 are
+arc 3b.
+
+#### Phase 3.1: explorer builders and detail rows (#142) ✓
 
 1. Open testnet.aztecscan.xyz and confirm a block, a contract and an account route. Record each URL
    shape in `lessons/phase-3.md`.
@@ -560,7 +563,7 @@ Validation gate:
 - Pass: exit 0; component tests show each link present with an explorer and absent with None.
 - Layers: unit, component, lint, typecheck.
 
-#### Phase 3.2: trust prompt contract link (#97)
+#### Phase 3.2: trust prompt contract link (#97) ✓
 
 1. Read `defaultExplorer` and the prompt network's chain id in `IncomingTrustPopup.vue`.
 2. Render "View contract on <explorer>" under the contract address. Add testid
@@ -896,6 +899,29 @@ not verify the witness. Nothing in this plan widens that assumption.
   tick's outcome, so a page a hostile node drops forever opens a failure episode: backoff spaces the
   whole target, forward pass included, up to 5 minutes apart and the stalled banner shows. Before this
   arc the same page stopped the forward scan outright. Recorded, not changed (Opus review, Low).
+- **D-orch-12, Arc 3 split.** Orchestrator decision: Arc 3 ships as 3a (#142 and #97, the explorer
+  links, which touch no file arc 2 edits) and 3b (#141, #139 and #140, after arc 2 merges and after
+  the owner's remaining asks). 3a opens its own PR against `dev` from branch
+  `worktree-incoming-transfers-links`; whichever of arc 2 and 3a merges second rebases its plan edits.
+  Arc 2 merged first (#420); 3a rebased onto it with its code diff unchanged, so the review ranges
+  below name the rebased commits.
+- **D21, the owner's picks for #142 (2026-10-14, quoted on the issue).** P4-02b A (a corner icon on
+  each address card, the Block value as a link), OA-2 A, OA-3 B (no contract link on a detail page),
+  OA-6 A (the value is the link, as the Tx hash row). Built from the demo's look, not its code: the
+  demo's URL helpers guessed paths, and its account path was wrong (lessons/phase-3.md).
+- **D22, the Block link names the value it shows.** The tx page and a public receipt show the block
+  hash, so the link opens `/blocks/<hash>`, which stays on the block the wallet saw after a re-mine at
+  the same height; a note receipt shows only `#N`, so its number is the link.
+- **D23, one corner-link component.** The four card links (two cards on two pages) share
+  `AddressCardLink.vue` beside `TxHashRow.vue`: the 24 px target, the stop that keeps a click off the
+  card's copy, and the label live once. The owner's note asked for a larger hit area than the demo's
+  20 px; the glyph keeps its size and place. Its label is the plan's "View on <explorer>", tied to the
+  card's existing "From" or "To" caption by `aria-describedby`; no tooltip and no new words.
+- **D24, a focus ring on the two new controls that are not rows.** The design base stylesheet sets
+  `a:focus { outline: none }`, so no link in Details shows keyboard focus. The corner icon has no text
+  to show it otherwise and the trust prompt's other controls ring, so both take the wallet's 2 px
+  accent ring on `:focus-visible`; nothing changes at rest. The Block and To links are the Tx hash
+  row's link (OA-6) and stay as it is; OA-7 asks about that family.
 - **Unresolved:** I7 (storage dispatch order) is an inference neither reviewer could check from the
   tree; Phase 1.2's handoff rows prove the fence, not the browser's ordering.
 
@@ -1155,8 +1181,38 @@ back-fill fences.
 
 Every round-1 finding fixed; neither commit changes production behaviour or weakens an assertion; no
 new finding. The loop converged.
+### Arc 3a implementation review, round 1: Codex (gpt-6.1-sol, high, read-only, default login, fresh session on `d3dc4415..912f03bc`), `approve with fixes`
 
-### Arc 3a implementation review, round 2: Codex (same session, resumed, on `5d73bf81..3ce70aed`), `approve with fixes`
+1. Medium, the received page read the explorer choice once, so a page left open while another
+   surface chose None kept its links. **Accepted**: the page reads the app store's reactive choice,
+   as the tx and journal pages do, and drops its own config read; a test switches to None after
+   mount.
+2. Medium, the new links draw no focus ring: the design base stylesheet removes every link's
+   outline. **Accepted in part** (D24): the corner icon and the trust prompt link take the accent ring
+   the wallet's other controls draw, and the e2e asserts it. The Block and To links stay exactly the
+   Tx hash row's link (OA-6), which shares the gap; a ring on that family is OA-7.
+3. Low, the None test only found the copy span. **Accepted**: it clicks it and asserts the copy.
+4. Low, the received fixtures were not wire-shaped. **Accepted**: full note and public records,
+   checked with `satisfies`.
+5. Low, comments. **Accepted in part**: the corner link's two comments cut to one sentence each, the
+   Block comment now states why a hash binds the block. Kept: `position: relative`'s comment (it
+   names the absolutely placed child in another file) and the journal link's (it names the row it
+   matches).
+
+### Arc 3a implementation review: Opus (general-purpose agent, same diff), `ship after one Medium fix`
+
+1. Medium, the focus ring: the same finding as Codex 2, the same disposition.
+2. Low, a contact or account name of about 16 or more characters runs under the corner glyph
+   (contacts allow 25). **Accepted**: a card with a link reserves 14 px on its text's right, so only
+   names that long wrap earlier; the glyph, its place and the card's size are unchanged (shot
+   `arc3a-received-long-name`). A single word wider than the card overflows it as before.
+3. Low, `getTransactionExplorerUrl` put a stored hash, which a restored backup sets, into the path
+   unchecked. **Accepted**: the same 32-byte check and a refusal test; the activity card's test now
+   uses a wire-shaped hash.
+4. Housekeeping: the untracked shot spec matches the smoke glob. **Accepted**: deleted before every
+   full smoke run and before the PR.
+
+### Arc 3a implementation review, round 2: Codex (same session, resumed, on `912f03bc..d84f2baa`), `approve with fixes`
 
 1. Medium, a regression of round 1's fix: if the shell's boot settings read fails, the app store
    keeps its `"aztecscan"` default, so a person who chose None sees the received page's links (the
@@ -1164,9 +1220,14 @@ new finding. The loop converged.
    the config store's `props` lists every key with its default, so a normal boot always sets it. A
    store test pins the null start.
 
-Verified, per the round: the reactive None reaches every received-page link; the rings match D17;
+Verified, per the round: the reactive None reaches every received-page link; the rings match D24;
 `:has(> a)` leaves link-less cards alone; the tx builder's check keeps every production hash
 (`TxHash.toString()`); no assertion weakened; no comment finding.
+
+### Arc 3a implementation review, round 3: Codex (same session, resumed, on `d84f2baa..4faf04a4`), `approve`
+
+No findings. Every reader of the store's explorer choice falls back to copy, text or no link on
+`null`, and none renders before the shell's settings read. The loop converged.
 
 ## Post-implementation
 
