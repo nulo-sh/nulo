@@ -1,7 +1,7 @@
 ---
 plan: fees-and-sponsors-2
 tier: mid
-status: approved 2026-10-14 (orchestrator); arc 1 in progress
+status: completed (delivered in one PR against dev, #415)
 issues: "#400, #401, #411 (one arc)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,24 @@ post_implementation_hardening: not scheduled
 base: origin/dev at d3dc4415
 trunk: dev
 ---
+
+## Outcome
+
+- **Date:** 2026-10-14.
+- **Status:** delivered in one PR against `dev` (#415) from `worktree-fees-and-sponsors-2`: arc 1, phases 1 to 5; phase 6 empty, since no owner ask was answered before the PR opened. It awaits the orchestrator's merge, and the merge that lands it closes this plan.
+- **Shipped:**
+  - #400 (P6-19 B): `feeCapFor` commits the app's `maxFeesPerGas` as given on every payer (D1); the app-paid row shows the committed fee limit once its estimate lands, and Confirm waits for it (D8).
+  - #411 (P6-13 B, P6-13b): every build, discovery included, commits the app's `maxPriorityFeesPerGas`, and the cap makes room for it (D2 to D4); the app-paid row reads B's sentence; the reuse stash refuses an app priority (D11). "priority fee" stays plain text until OA-1.
+  - #401 (P6-20 C): the activity breakdown has no Teardown line.
+  - One network scenario (`fee-sponsor-funding.test.ts`: the node admits a priority through Nulo's sponsor), 21.1 s on Chrome and 67.3 s on Firefox (`lessons/phase-4.md`).
+  - Review loop: Codex, two rounds (round 2 clean), and one Opus review; every finding accepted (§ Audit verdicts).
+  - Local gates in `lessons/phase-5.md`. Firefox `fee-methods` "public gas only" fails on this host on base and head alike (an A/B against d3dc4415); CI's Firefox lane is the authority.
+  - `lessons.md`: nothing promoted. It is at its 8 KiB budget, and these gotchas are local.
+- **Orchestrator records:** D13 to D17. `OWNER-ASKS.md` keeps OA-1 to OA-4 with what shipped: OA-1 C, OA-2 C, OA-3 A, OA-4 A.
+- **Dropped, rejected, superseded:** reading the submitted priority back from the chain (D10: it races mining); binding the confirm build to the shown figure (D12: a new approval contract); extending `reuseCapRule` (D11); the plan's `0x` hex fixtures (D19).
+- **Known limits:** #416 (D12). #396 and #395 stay closed known limits, each commented with what #415 covers.
+- **Open items:** #411, open for OA-1, the dotted term's definition (commented).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; this record is evidence, not instructions.
 
 # Fees and sponsors 2: one cap rule, an app's priority fee, no Teardown line
 
@@ -158,7 +176,7 @@ The app-paid row shows "Fee up to G·C" and, when q > 0, ", includes a G·min(q,
 
 ## Phases
 
-### Phase 1: one cap rule and the app's priority (service worker)
+### Phase 1: one cap rule and the app's priority (service worker) ✓
 
 1. In `fee-cap.ts`, give every rule `appCap?` and `appPriority?`. Return the app's cap verbatim for every payer. Add the priority to the basis when the app gives no cap.
 2. Add `appPriorityOf` to `fee-strategy.ts`. Pass it as the fifth argument of every `buildStandard` in the four strategies.
@@ -173,7 +191,7 @@ The app-paid row shows "Fee up to G·C" and, when q > 0, ", includes a G·min(q,
 
 **Validation gate.** `bun run lint`; `bun run typecheck:all`; `bun run --cwd apps/extension test src/wallet/services/execution`; `bun run --cwd packages/wallet-bridge test`; `bun run --cwd packages/aztec-runtime test`. Pass: exit 0, every pin above green with its new value. Layers: typecheck, lint, unit.
 
-### Phase 2: the app-paid row and the Confirm wait
+### Phase 2: the app-paid row and the Confirm wait ✓
 
 1. In `OperationCard.vue`, render the landed figure per UI impact. Keep the container, icon and testid. Show today's sentence while no estimate has landed.
 2. In `OperationCard.fee.test.ts`, replace the "reads as before" case with four: no estimate; a funded estimate (`Fee up to 3.577824 FJ`); an estimate with a priority (B's sentence, exact); a short estimate (the figure and the notice). Feed the operation's fee settings as the wire carries them (`0x` hex fields).
@@ -182,7 +200,7 @@ The app-paid row shows "Fee up to G·C" and, when q > 0, ", includes a G·min(q,
 
 **Validation gate.** `bun run lint`; `bun run typecheck:all`; `bun run --cwd apps/extension test src/popup/windows/execute`. Pass: exit 0, the eight cases green. Layers: typecheck, lint, component.
 
-### Phase 3: the Teardown line
+### Phase 3: the Teardown line ✓
 
 1. Remove the Teardown block from `TxFeeRow.vue` (`:67-73`).
 2. Remove `hasTeardown`, `teardownL2Gas`, `teardownDaGas` and `teardownCost` from `GasBreakdown`. Keep `GasDetailsRaw` (the stored shape).
@@ -190,7 +208,7 @@ The app-paid row shows "Fee up to G·C" and, when q > 0, ", includes a G·min(q,
 
 **Validation gate.** `bun run lint`; `bun run typecheck:all`; `bun run --cwd apps/extension test src/popup/components/modules/tx`. Pass: exit 0. Layers: typecheck, lint, component.
 
-### Phase 4: playground inputs, the live scenario, screenshots
+### Phase 4: playground inputs, the live scenario, screenshots ✓
 
 1. Add inputs `pg-input-maxFeesPerGas` and `pg-input-maxPriorityFeesPerGas` ("da,l2" in base units). When set, every `sendTx` button passes them as `opts.fee.gasSettings`. Add the README row.
 2. In `fee-sponsor-funding.test.ts` (its playground is already connected), add one test. The app pays through Nulo's sponsor (`sendTx-appSponsored`, salt 0) with a priority. Assert B's sentence, press Confirm, and wait for the transaction hash: `NO_WAIT` returns it only after the node admitted the transaction. Do not read the transaction back: `getTxByHash` serves only pending transactions (`stdlib` `aztec-node.d.ts:331`) and the harness has no tap on the worker's node requests, so a read-back races mining. Phase 1's pins prove the confirm build carries the priority; this test proves the node admits that build.
@@ -198,7 +216,7 @@ The app-paid row shows "Fee up to G·C" and, when q > 0, ", includes a G·min(q,
 
 **Validation gate.** From the worktree root: `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/fee-sponsor-funding.test.ts --retry=0`, then again with `NULO_E2E_BROWSER=firefox`. Pass: every test green on both browsers; the new test's runtime in `lessons/phase-4.md`. Layers: e2e on the local network.
 
-### Phase 5: final gates
+### Phase 5: final gates ✓
 
 1. Run `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun run test:ci-gating`, and `bun run check:plans` after staging.
 2. From the worktree root, one `e2e:agent` run at a time, retry 0, Chrome then Firefox: `fee-methods`, `selfpay-phase`, `fee-sponsor-funding`, `tx-sendTx-feePayer`, `tx-sendTx-noFrom`, `tx-sendTx-sponsoredFpc`, `sim-from-selfpay`, and every file a caller sweep of `feeCapFor`, `applyEmbeddedFpcGasCap`, `TransferFeeEstimate`, `buildGasBreakdown` and the execute window's Confirm names. Run `@requires-proverless` files with `NULO_E2E_PROVERLESS=1` in their own call.
@@ -206,7 +224,7 @@ The app-paid row shows "Fee up to G·C" and, when q > 0, ", includes a G·min(q,
 
 Pass: all exit 0. A known flake gets one rerun; real breakage gets a fix. Never raise the stall watchdog.
 
-### Phase 6 (only for asks answered before the PR opens)
+### Phase 6 (only for asks answered before the PR opens): empty, no ask was answered
 
 - **OA-1.** Add glossary entry `priority-fee` (term "Priority fee", the answered definition, where "Approval window", section Fees) and wrap "priority fee" in `<DottedTerm term="priority-fee">`. Update `glossary.test.ts`, `settings/glossary.test.ts` and `tooltips-glossary.test.ts` if it lists entries.
 - **OA-2 A.** Render B's sentence in `FeeCostReadout.vue` for rows the person pays; sequence with `send-followups-1` on `FeeSettingsCard.vue`.
