@@ -148,7 +148,7 @@ jobs:
       shard: ${{ matrix.shard.id }}
       shard_label: ${{ matrix.shard.label }}
       retry: "0"
-      exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts"
+      exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
       proverless: true
 
   network-e2e-heavy:
@@ -175,6 +175,19 @@ jobs:
       shard_label: "heavy-concurrent"
       retry: "0"
       test_files: "tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+      proverless: true
+
+  network-e2e-heavy-long:
+    name: Run / heavy / snack-placement + failed-send-check
+    needs: decide
+    if: needs.decide.outputs.run == 'true'
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      browser: firefox
+      shard_label: "heavy-long"
+      retry: "0"
+      test_files: "tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
       proverless: true
 
   network-e2e-canary:
@@ -214,7 +227,7 @@ jobs:
   status:
     name: extension-network-e2e-firefox-status
     if: always()
-    needs: [changes, decide, network-e2e, network-e2e-heavy, network-e2e-heavy-concurrent, network-e2e-canary, network-e2e-chaos]
+    needs: [changes, decide, network-e2e, network-e2e-heavy, network-e2e-heavy-concurrent, network-e2e-heavy-long, network-e2e-canary, network-e2e-chaos]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -242,6 +255,7 @@ jobs:
             "${{ needs.network-e2e.result }}" \
             "${{ needs.network-e2e-heavy.result }}" \
             "${{ needs.network-e2e-heavy-concurrent.result }}" \
+            "${{ needs.network-e2e-heavy-long.result }}" \
             "${{ needs.network-e2e-canary.result }}" \
             "${{ needs.network-e2e-chaos.result }}" \
           ; do
