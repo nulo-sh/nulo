@@ -13,8 +13,8 @@ import {
 	stillAsShown,
 } from "@/utils/contact-import-rows"
 import { MAX_CONTACT_IMPORT_BYTES, parseContactsExport } from "@/utils/contacts-export-format"
-import type { AccountStateServiceClient } from "@/wallet/services/account-state/client"
-import type { ContactServiceClient } from "@/wallet/services/contact/client"
+import { AccountStateServiceClient } from "@/wallet/services/account-state/client"
+import { ContactServiceClient } from "@/wallet/services/contact/client"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
 import type { RunFence } from "@/wallet/services/profile/spec"
 import { useAppStore } from "@/stores/app.store"
@@ -29,21 +29,20 @@ interface ContactRecord {
 
 export interface UseContactImportExportOptions {
 	contacts: Ref<ContactRecord[]>
-	contactService: ContactServiceClient
+	/** The export's; an import opens its own clients, so leaving the page never cuts one off. */
 	accountStateService: AccountStateServiceClient
 }
 
 /**
  * Encapsulates the contacts page import/export flows: sender-union resolution
- * for export, file pick + parse + per-row upsert + sender restoration for
- * import, and the aggregate user-facing toasts.
+ * for export, file pick + parse + per-row sender registration then upsert
+ * for import, and the aggregate user-facing toasts.
  */
 export function useContactImportExport(opts: UseContactImportExportOptions) {
-	const { contacts, contactService, accountStateService } = opts
+	const { contacts, accountStateService } = opts
 	const { openToast } = useToast()
 	const deps: ContactIoServices = {
 		contacts,
-		contactService,
 		accountStateService,
 		openToast,
 		appStore: useAppStore(),
@@ -55,7 +54,6 @@ export function useContactImportExport(opts: UseContactImportExportOptions) {
 
 interface ContactIoServices {
 	contacts: Ref<ContactRecord[]>
-	contactService: ContactServiceClient
 	accountStateService: AccountStateServiceClient
 	openToast: ReturnType<typeof useToast>["openToast"]
 	appStore: ReturnType<typeof useAppStore>
@@ -69,8 +67,8 @@ interface ImportRun {
 	profileService: ProfileServiceClient
 }
 
-/** One import's dependencies: every contact call it makes carries the run's fence. */
-type ContactIoDeps = ContactIoServices & { run: ImportRun }
+/** One import's dependencies: its own clients, and the run's fence on every call it makes. */
+type ContactIoDeps = ContactIoServices & { contactService: ContactServiceClient; run: ImportRun }
 
 type SelectedRow = ReviewedImportRow
 type UpsertError = { name: string; address: string; operation: string; error: unknown }
@@ -140,6 +138,8 @@ async function exportContacts(deps: ContactIoServices): Promise<void> {
 async function importContacts(deps: ContactIoServices): Promise<void> {
 	const { openToast, cacheStore, popupStore } = deps
 	const profileService = new ProfileServiceClient()
+	const contactService = new ContactServiceClient()
+	const accountStateService = new AccountStateServiceClient()
 	try {
 		// The `.json` accept filter is UI guidance, not a boundary — a
 		// `.gz`-named pick still auto-decompresses inside pickFile, so the
@@ -181,9 +181,7 @@ async function importContacts(deps: ContactIoServices): Promise<void> {
 			return
 		}
 
-		const tally = await applyImportRows({ ...deps, run }, res)
-		if (tally.stopped) toastStoppedImport(openToast, tally, res.length)
-		else toastImportOutcome(openToast, tally)
+		await applyHoldingLock({ ...deps, contactService, accountStateService, run }, res)
 	} catch (err) {
 		if (err instanceof FilePickCanceledError) return
 		if (err instanceof FileTooLargeError) {
@@ -195,6 +193,8 @@ async function importContacts(deps: ContactIoServices): Promise<void> {
 		openToast({ kind: "error", label: "Error occurred during import" })
 	} finally {
 		profileService.disconnect()
+		contactService.disconnect()
+		accountStateService.disconnect()
 		cacheStore.importContacts = []
 		cacheStore.importPromise = null
 	}
@@ -216,7 +216,18 @@ function openImportSelection(
 	return importPromise
 }
 
-/** Upsert every selected row, then register its sender intent. Import is adds-only toward sender
+async function applyHoldingLock(deps: ContactIoDeps, res: SelectedRow[]): Promise<void> {
+	const endHold = deps.appStore.beginContactImport()
+	try {
+		const tally = await applyImportRows(deps, res)
+		if (tally.stopped) toastStoppedImport(deps.openToast, tally, res.length)
+		else toastImportOutcome(deps.openToast, tally)
+	} finally {
+		endHold()
+	}
+}
+
+/** Register each selected row's sender intent, then upsert the row. Import is adds-only toward sender
  *  state: rows explicitly carrying `isSender: true` (from a previous deliberate export) get registered
  *  on the active network. It never deletes or migrates registrations — those live in
  *  Settings → Developer → Account State → Senders. */
@@ -253,21 +264,32 @@ interface ImportPass {
 
 async function importRow(pass: ImportPass, { row, targetId }: ImportWrite<SelectedRow>): Promise<typeof STOPPED | undefined> {
 	const { deps, tally } = pass
-	// The book can change while earlier rows are written (another window), so each row is checked
-	// again just before its own write.
-	const saved = await pass.book()
-	if (saved === STOPPED) return STOPPED
-	if (!stillAsShown(row, saved)) {
-		tally.errors.push(refusal(row))
-		return
+	const shown = await stillShownInBook(pass, row)
+	if (shown !== true) return shown
+	// The sender goes first, so a stop between the two writes never leaves a contact saved without
+	// its sender, and a re-run lists the row as new. A failed registration still writes its contact.
+	if (row.isSender) {
+		const sender = await registerSender(deps, tally, pass.activeNetworkId, row.address)
+		if (sender === STOPPED) return STOPPED
+		// A registration waits on the PXE, long enough for another window to change the book.
+		if (sender !== "skipped") {
+			const again = await stillShownInBook(pass, row)
+			if (again !== true) return again
+		}
 	}
 	const error = await upsertOneContact(deps, row, targetId)
 	if (error === STOPPED) return STOPPED
 	if (error) tally.errors.push(error)
 	else tally.written++
+}
 
-	// Sender intent is independent of the upsert: it is attempted and counted even when the write failed.
-	if (row.isSender) await registerSender(deps, tally, pass.activeNetworkId, row.address)
+/** Reads the book and checks the row against it: the book can change while earlier rows are written
+ *  (another window). A row no longer as shown is refused and counted. */
+async function stillShownInBook(pass: ImportPass, row: SelectedRow): Promise<true | typeof STOPPED | undefined> {
+	const saved = await pass.book()
+	if (saved === STOPPED) return STOPPED
+	if (stillAsShown(row, saved)) return true
+	pass.tally.errors.push(refusal(row))
 }
 
 /** A fenced call that rejects asks the fence: a session the wallet no longer confirms, ended or
@@ -289,20 +311,27 @@ function refusal(row: SelectedRow): UpsertError {
 	return { name: row.name, address: row.address, operation: "import", error: new Error("row refused") }
 }
 
-async function registerSender(deps: ContactIoDeps, tally: ImportTally, activeNetworkId: string | null, address: string): Promise<void> {
+async function registerSender(
+	{ accountStateService, run }: ContactIoDeps,
+	tally: ImportTally,
+	activeNetworkId: string | null,
+	address: string,
+): Promise<"registered" | "failed" | "skipped" | typeof STOPPED> {
 	tally.senderTotal++
 	if (!activeNetworkId) {
 		tally.senderSkippedNoNetwork++
 		console.warn("Skipping sender registration: no active network")
-		return
+		return "skipped"
 	}
 	try {
-		await deps.accountStateService.addSender(activeNetworkId, address)
+		if ((await fenced(run, () => accountStateService.addSender(activeNetworkId, address, run.fence))) === STOPPED) return STOPPED
 		tally.senderOk++
-	} catch (err) {
+		return "registered"
+	} catch (error) {
 		// The counterparty address is PII and this fires per failed row; the counts below carry
 		// the diagnosis.
-		console.warn("Failed to register a sender", err)
+		console.warn("Failed to register a sender", { error })
+		return "failed"
 	}
 }
 

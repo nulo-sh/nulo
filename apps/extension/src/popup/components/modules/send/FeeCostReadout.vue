@@ -49,7 +49,7 @@ const sponsoredSentence = computed(() => {
 	</Flex>
 	<Flex v-else-if="isEstimating && !estimate" direction="column" gap="4" :class="$style.detail_row">
 		<span :class="$style.fee_label">You pay</span>
-		<span :class="$style.fee_value"><span :class="$style.skeleton" /></span>
+		<span :class="$style.fee_value"><Skeleton /></span>
 	</Flex>
 	<Flex v-else-if="estimate" direction="column" gap="4" :class="$style.detail_row" data-testid="fee-estimate">
 		<span :class="$style.fee_label" :aria-hidden="payer === 'sponsor' ? 'true' : undefined">You pay</span>
@@ -98,10 +98,6 @@ const sponsoredSentence = computed(() => {
 .queued {
 	composes: type--body from global;
 	color: var(--nulo-secondary);
-}
-
-.skeleton {
-	composes: skeleton from "./fee-shared.module.css";
 }
 
 .visually_hidden {

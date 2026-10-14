@@ -8,8 +8,8 @@ export function nextAccountName(names: readonly string[]): string {
 	return `Account ${n}`
 }
 
-/** The name an account or FPC name field would be told apart by: the input without its outer
- *  spaces. Case and inner spaces stay significant, and an unnamed FPC keys as `""`. */
+/** The name an account, FPC or network name field would be told apart by: the input without its
+ *  outer spaces. Case and inner spaces stay significant, and an unnamed FPC keys as `""`. */
 export function storedNameKey(name: string | undefined): string {
 	return (name ?? "").trim()
 }

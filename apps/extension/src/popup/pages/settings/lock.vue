@@ -175,6 +175,7 @@ onBeforeUnmount(() => {
 				title="Lock now"
 				description="Locks Nulo until you unlock it again"
 				materialIcon="lock"
+				:disabled="appStore.lockHeldByImport"
 				@click="lockNow"
 				data-testid="lock-now-btn"
 			/>

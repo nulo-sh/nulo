@@ -498,6 +498,10 @@ onBeforeUnmount(() => {
 	}
 }
 
+:global(.noanimations) .fee_shimmer {
+	animation: none;
+}
+
 .empty_headline {
 	composes: empty_headline from "../detail-page.module.css";
 }

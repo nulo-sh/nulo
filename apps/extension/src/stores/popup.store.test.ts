@@ -43,17 +43,16 @@ describe("stores/popup", () => {
 		expect(store.isOpened("b")).toBe(false)
 	})
 
-	test("(BUG PIN) re-opening an open popup leaves a gap, so a later open can share an order", () => {
-		// `open` counts the re-opened key itself, so its order skips one slot. Whether the stack
-		// closes that gap changes which lower card sits back: an owner decision, kept as is.
+	test("re-opening an open popup puts it on top with no gap, so a later close and open never share an order", () => {
 		const store = usePopupStore()
-		store.open("a")
+		store.open("a", "first")
 		store.open("b")
-		store.open("a")
-		expect(orders(store)).toEqual({ a: 2, b: 1 })
+		store.open("a", "second")
+		expect(orders(store)).toEqual({ b: 0, a: 1 })
+		expect(store.getPayload("a")).toBe("second")
 		store.close("a")
 		store.open("c")
-		expect(orders(store)).toEqual({ b: 1, c: 1 })
+		expect(orders(store)).toEqual({ b: 0, c: 1 })
 	})
 
 	test("closeAll empties the stack", () => {
