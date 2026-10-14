@@ -14,11 +14,8 @@ const router = useRouter()
 /** The last read of the active profile's record; `leased` while a restore run holds it. */
 const snapshot = shallowRef(undefined)
 
-/**
- * The record's networks the active profile still has, by their current names. Empty while the
- * profile's network list is not loaded: activation empties it before it reloads, and a read made
- * then must neither show nothing for good nor delete anything.
- */
+/** Empty while activation reloads the network list: a read then neither hides the banner for
+ *  good nor prunes the record. */
 const names = computed(() => {
 	const profileId = appStore.profile?.id
 	const read = snapshot.value

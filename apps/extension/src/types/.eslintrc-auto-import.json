@@ -513,6 +513,7 @@
     "rowDescriptionFor": true,
     "rowOnToken": true,
     "rulerWidth": true,
+    "runFenceLive": true,
     "runImportChainSync": true,
     "runRestoreFailurePath": true,
     "safeFiatOf": true,

@@ -1423,6 +1423,38 @@ describe("useFullBackupImport — Retry the networks that did not restore", () =
 		warn.mockRestore()
 	})
 
+	/** One sender over the per-network cap: the normalizer cuts it, and the rest registers. */
+	const overCap = Array.from({ length: 65 }, (_, i) => ({ address: `0x${i.toString(16).padStart(64, "0")}` }))
+
+	it("a network whose items the normalizer cut stays in the reminder though the rest registered", async () => {
+		const { restored } = await start((id) => answered(id), {
+			"account-state": [
+				{ ...item("x1", overCap), chainId: 1 },
+				{ ...item("x2"), chainId: 2 },
+			],
+		})
+		await restored
+		expect(reminder.finish).toHaveBeenCalledExactlyOnceWith("new-id", "run-1", ["M2"])
+	})
+
+	it("a Retry that registers a cut network leaves it in the reminder", async () => {
+		let m1Calls = 0
+		const { c, restored } = await start((id) => (id === "M1" && ++m1Calls === 1 ? ranOutOfTime("M1") : answered(id)), {
+			"account-state": [
+				{ ...item("x1", overCap), chainId: 1 },
+				{ ...item("x2"), chainId: 2 },
+			],
+		})
+		await restored
+		reminder.finish.mockClear()
+
+		await c.retryAccountState()
+
+		expect(reminder.finish).toHaveBeenCalledExactlyOnceWith("new-id", "run-1", [])
+		expect(c.canRetryAccountState.value).toBe(false)
+		expect(c.isRestoreHasErrors.value).toBe(true)
+	})
+
 	it("drops only the networks the tail restored; one that ran out of time stays", async () => {
 		const { restored } = await start((id) => (id === "M2" ? ranOutOfTime("M2") : answered(id)))
 		await restored

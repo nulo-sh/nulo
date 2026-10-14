@@ -2,12 +2,6 @@
  * The reminder of a full-backup restore that left networks unrestored, end to end in a real build:
  * the record the import arms, the Home banner that reads it across pages, and Restore again, which
  * takes only the backup that armed it.
- *
- * SE1 seeds the record into a cleanly imported profile: storage events across two popup pages, a
- * renamed and an unknown network, and Restore again refusing another valid backup and a tampered one.
- * SE2 lets the real import arm it with the local node refused, then drives Restore again and its
- * Retry through the real worker, probe and fence. SE3 closes the import page while a blackhole holds
- * the local node, so only the armed record is left behind.
  */
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"

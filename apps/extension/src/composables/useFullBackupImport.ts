@@ -331,11 +331,8 @@ async function restoreProfileStep(
 	return newProfile
 }
 
-/**
- * Arms the reminder for the networks the tail is about to restore, then opens the profile; the
- * tail is bound to the session that call opened. Arming is best effort: without it the restore
- * goes on, and nothing reminds of a network it leaves behind.
- */
+/** Arming is best effort: a failure costs only the reminder. The tail runs under the fence
+ *  finalize returns. */
 async function finalizeWithReminder(
 	validated: ValidatedBackup,
 	profileId: string,

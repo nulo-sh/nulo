@@ -275,10 +275,11 @@ async function runRetry(state: AgainRefs, opts: UseRestoreAgainOptions, writers:
 	const live = () => state.retry.value === ctx
 	let tail: AccountStateTail
 	try {
-		if (!(await runFenceLive(opts.profileService, ctx.restoreRun.fence))) return end(state, opts)
 		tail = await retryAccountStateStage(ctx, (serviceName, stale, data) =>
 			live() ? writers.replaceRestoreErrors(serviceName, stale, data) : [],
 		)
+		// Checked after the stage, which refuses an ended run before it starts and may see it end.
+		if (!(await runFenceLive(opts.profileService, ctx.restoreRun.fence))) return end(state, opts)
 	} finally {
 		if (state.retrying.value === ctx) state.retrying.value = null
 	}

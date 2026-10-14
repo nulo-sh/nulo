@@ -3,8 +3,8 @@ import { type ImportedKeysDek, unsealDekUnderWrapKey, unsealImportedSigningKeyV2
 /** An imported-key row as its storage holds it: the key sealed to its chain and address. */
 export type SealedImportedKey = { chainId: number; address: string; encryptedSigningKey: string }
 
-/** How many of `rows` do not open under `dek`. Each key that opens is wiped at once; a row that is
- *  not a stored row's shape throws. */
+/** How many of the decoded stored `rows` do not open under `dek`; each key that opens is wiped
+ *  at once. */
 export async function countUnopenedImportedKeys(dek: ImportedKeysDek, rows: readonly SealedImportedKey[]): Promise<number> {
 	let unopened = 0
 	for (const row of rows) {

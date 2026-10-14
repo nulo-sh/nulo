@@ -169,7 +169,7 @@ Sequence:
 - **Races.** One Web Lock per profile serializes the pages' writes (not the worker's removals: I9). A run's token keeps one restore of a reused id from editing another's record, and admission lets no run start from a record that is gone.
 - **Input validation.** OA-9 B refuses a profile part of the wrong shape. Network names are user-controlled and render through interpolation only.
 - **Key material.** #231's count runs inside `ProfileService` under the probe DEK; each plaintext is wiped before the next; nothing is logged, resealed or returned.
-- **Logging.** New lines carry counts and fixed categories only. Never a network name (user text, it may hold a URL), a URL, the checksum, a run token, a profile id or a row.
+- **Logging.** New lines carry counts, fixed categories and caught errors as `{ error }` only. Never a network name (user text, it may hold a URL), a URL, the checksum, a run token, a profile id or a row.
 - **Least privilege, supply chain.** No workflow, permission, secret or dependency change.
 
 ## Phases
@@ -303,7 +303,7 @@ Earlier rows: D1-D16 in [lessons/phase-0.md](lessons/phase-0.md); D-orch-1 to 4 
 | D-arc3-4 | A new page and composable reusing the import's form, gates, tail, Retry and decrypt chain | a `networksOnly` mode of `useFullBackupImport` | C, O: reject the mode | The import composable is at its budget; every stage would branch. |
 | D-arc3-5 | `askNewPassword` on `ImportFullBackupForm`; two buttons in the banner's slot | copy the blocks; an `actions` array on `Banner` | — | A copy rots apart; no shared-package option for one caller. |
 | D-arc3-6 | No per-network hook; one finish write after `runImportChainSync` resolves | the `onSettled` hook (draft) | O4 | A lock or `migrationIdle` wait would hold the tail's single record; a dead page's worker keeps registering anyway. |
-| D-arc3-7 | A network leaves the record only when it restored, read from the raw outcome records | settle by retryability (draft) | C2; C2-2 | Retryable is not restored: a wrong-network refusal would have toasted success. |
+| D-arc3-7 | A network leaves the record only when it restored, read from the raw outcome records; a network the normalizer cut never does | settle by retryability (draft) | C2; C2-2; X-1 | Retryable is not restored: a wrong-network refusal would have toasted success. A cut is permanent, like a refusal. |
 | D-arc3-8 | The read never deletes except a malformed record; display filters by the loaded network list | prune at read (draft) | O1, C3 | Activation empties the list (F27); a prune there erased OA-4a's reminder. |
 | D-arc3-9 | #98 closes as not planned at close-out, quoting OA-5 C; reopen if the owner reverses OA-5 or a user reports a deleted default token returning after a restore | carry the markers | owner | OA-5 = C. |
 | D-arc3-10 | Nothing remains for #148 here; it stays open `blocked:external`; Outcome lists it under Open items | close it | owner (P1-08) | The report is outward-facing and the owner's. |
@@ -325,6 +325,7 @@ Earlier rows: D1-D16 in [lessons/phase-0.md](lessons/phase-0.md); D-orch-1 to 4 
 - **Arc 3 revision, Codex round 2 (resumed): conditional approve.** C2-1 (High) the per-launch async assert left a window between the artifact check and the generation capture, and rows of another profile: D-arc3-13. C2-2 the filtered rows hold no successes: D-arc3-7. C2-3 the default network run refuses marked files: the arc gate's two selections. C2-4 a cold PXE read under the refusal: D-arc3-18. C2-5 OA-10's switch row promised a rollback: reworded. All accepted.
 - **Arc 3 revision, Codex round 3 (resumed, last): conditional approve.** The four other fixes verified. C3-1 (Medium) a fence captured by a second call after `finalizeRestore` could be a same-id successor's: `finalizeRestore` now returns it (D-arc3-13). Accepted; no fourth round (the standard's three-round stop), and the implementation's review loop re-checks it.
 - **Arc 3 implementation, Codex round 1 (2026-10-14; gpt-6.1-sol, high; session 01a13c7b-ac9d-7362-b631-a121c1ea02e3): conditional approve.** C3-1 verified in code. CR1-1 (Medium) error rows in the restore log line: taken. **Opus 5.5 diff review: approve with fixes.** O-1 a Retry under an ended fence offered forever: taken, no new words. O-2 one port re-opened after Back mid-run: known limit. O-3 the same-hold test, O-4 `joinNames`: taken. O-5 the singular "they" of P1-07's words: asked in the PR. Tables in [lessons/phase-3.md](lessons/phase-3.md).
+- **Codex round 2 (resumed): conditional approve.** CR2-1 (Low) Restore again stranded when the fence ends between its check and the stage's: taken (checked after the stage). CR2-2, CR2-3 comments: taken. **Codex cross-arc pass (fresh; session 01a13c90-bac8-7333-8a86-9928f14d07ca): conditional approve.** X-1 (Medium) a network the normalizer cut counted as restored (the export has no count cap): taken, D-arc3-7 now excludes it. X-2 `{ error }` in the reminder's logs: rejected, it is the logging policy's form. X-3 comments: taken in part.
 
 ## Delivery
 

@@ -318,6 +318,7 @@ declare global {
   const rowDescriptionFor: typeof import('../utils/presto-ui-state').rowDescriptionFor
   const rowOnToken: typeof import('../utils/activity-rows').rowOnToken
   const rulerWidth: typeof import('../utils/hero-ruler').rulerWidth
+  const runFenceLive: typeof import('../composables/full-backup-restore').runFenceLive
   const runImportChainSync: typeof import('../composables/importChainSync').runImportChainSync
   const runRestoreFailurePath: typeof import('../composables/full-backup-restore').runRestoreFailurePath
   const safeFiatOf: typeof import('../utils/token-amount').safeFiatOf
@@ -986,6 +987,7 @@ declare module 'vue' {
     readonly rowDescriptionFor: UnwrapRef<typeof import('../utils/presto-ui-state')['rowDescriptionFor']>
     readonly rowOnToken: UnwrapRef<typeof import('../utils/activity-rows')['rowOnToken']>
     readonly rulerWidth: UnwrapRef<typeof import('../utils/hero-ruler')['rulerWidth']>
+    readonly runFenceLive: UnwrapRef<typeof import('../composables/full-backup-restore')['runFenceLive']>
     readonly runImportChainSync: UnwrapRef<typeof import('../composables/importChainSync')['runImportChainSync']>
     readonly runRestoreFailurePath: UnwrapRef<typeof import('../composables/full-backup-restore')['runRestoreFailurePath']>
     readonly safeFiatOf: UnwrapRef<typeof import('../utils/token-amount')['safeFiatOf']>

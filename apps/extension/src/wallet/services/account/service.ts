@@ -871,8 +871,8 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	}
 
 	/**
-	 * Accounts are read before the key rows, as for a password profile. The rows are counted where
-	 * the DEK lives and returned as read, so the file carries exactly the rows counted.
+	 * Accounts are read first so a concurrent import cannot export an account without its key. The
+	 * rows are counted where the DEK lives and returned as read: the file carries exactly those.
 	 */
 	public async exportPasskeyBackupKeys(fence: RunFence, credentialData: PasskeyCredentialData): Promise<PasskeyBackupKeys> {
 		await this.ensureInitialized()

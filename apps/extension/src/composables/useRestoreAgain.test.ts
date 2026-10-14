@@ -320,6 +320,23 @@ describe("useRestoreAgain: outcomes", () => {
 		expect(page.isRestoreHasErrors.value).toBe(true)
 	})
 
+	test("a network the normalizer cut is not restored though the rest registered: no toast, the restore-again line", async () => {
+		const overCap = Array.from({ length: 65 }, (_, i) => ({ address: `0x${i.toString(16).padStart(64, "0")}` }))
+		const backup = await buildBackup({ data: { "account-state": [item(1), { ...item(2), senders: overCap }] } })
+		const run = await armRestoreOutcome("p1", backup.checksum, ["N1", "N2"])
+		const { opts } = makeOpts()
+		const page = useRestoreAgain(opts)
+		await page.start()
+		page.selectedBackup.value = { name: "b.json", backup, type: "plain", profileType: "password" }
+
+		await page.restoreBackup()
+
+		expect(store.get(KEY)).toMatchObject({ run, networkIds: ["N2"] })
+		expect(opts.openToast).not.toHaveBeenCalled()
+		expect(page.canRetry.value).toBe(false)
+		expect(page.warningText.value).toBe("Local Network couldn't be restored from this backup. You can review the details or continue.")
+	})
+
 	test("a Retry that fails again shows the line; one that restores goes Home", async () => {
 		let calls = 0
 		answerRestore((id) => (id === "N2" && ++calls <= 2 ? ranOutOfTime(id) : answered(id)))
@@ -401,6 +418,26 @@ describe("useRestoreAgain: races", () => {
 		expect(accountStateClient.restore).not.toHaveBeenCalled()
 		expect(store.get(KEY)).toEqual(left)
 		expect(page.isRetrying.value).toBe(false)
+	})
+
+	test("a session that ends during a Retry returns Home and settles nothing", async () => {
+		let calls = 0
+		accountStateClient.restore.mockImplementation(async (items: Array<{ networkId: string }>) => {
+			const id = items[0].networkId
+			if (id !== "N2") return answered(id)
+			if (++calls === 1) return ranOutOfTime(id)
+			session.live = false
+			return answered(id)
+		})
+		const { page, opts, run } = await open()
+		await page.restoreBackup()
+
+		await page.retryRestore()
+
+		expect(opts.leave).toHaveBeenCalledOnce()
+		expect(opts.openToast).not.toHaveBeenCalled()
+		// The Retry's admission renewed the lease, which runs out; the networks stay named.
+		expect(store.get(KEY)).toMatchObject({ run, networkIds: ["N2"] })
 	})
 
 	test("a profile switch mid-run returns Home, and the run writes nothing once its session ended", async () => {
