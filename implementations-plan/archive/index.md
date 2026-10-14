@@ -104,6 +104,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [faucet-add-token](faucet-add-token/plan.md) — completed — a dApp can ask the wallet to watch a token, through an approval window
 - [fee-estimation-init-race](fee-estimation-init-race/plan.md) — completed — fee settings derived only after initialisation in the fee card
 - [fee-estimation-speedup](fee-estimation-speedup/plan.md) — completed — fewer full simulations behind every fee estimate
+- [fees-and-sponsors](fees-and-sponsors/plan.md) — completed — unknown speed levels refused at the popup RPCs, a timed-out estimate keeps its place; per-profile fee picks, sponsor checks, long authwit proofs, the fee-juice nudge, one fee-cap rule
 - [firefox-arc-closeout](firefox-arc-closeout/plan.md) — completed — the Firefox arc closed: fast answers to in-flight dApp calls, canaries on both browsers
 - [firefox-background-kill](firefox-background-kill/plan.md) — completed — the e2e suite ends the Firefox background page through the browser driver
 - [firefox-first-class-spike](firefox-first-class-spike/plan.md) — completed — Firefox gets the same smoke and network suites as Chrome
