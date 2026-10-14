@@ -23,3 +23,6 @@
 - 2026-10-14: arc 2 started on `backup-import-export-arc-2` off origin/dev d3dc441 (D-orch-4, D-orch-5); P1-05 approved; Arc 2 facts re-verified (F13, F14 hold).
 - 2026-10-14: gate 2.1 pass (lint, typecheck:all, network/ + components/ 76 files 1101/1101; the BUG PIN now reads Active on both).
 - 2026-10-14: gate 2.2 pass (lint, typecheck:all, account-state/ + importChainSync 5 files 67/67; the export test is red without the filter).
+- 2026-10-14: gate 2.3 pass on its failure exit: the #221 proof fails at the trace (Codex session 01a13b50 and the Opus lens agree); no skip built; lint, typecheck:all, account-state/ + fpc/ + execution/ 70 files 1265/1265; the order pin in `view-executor.test.ts`; `restore-skip-proof.test.ts` not added (D-arc2-1, D-arc2-2).
+- 2026-10-14: Phase 2.4: unit inclusion test red without the kind hint; `backup-edited-local-network.test.ts` 1/1 Chrome retry 0 (18.4 s); red-check on HEAD minus the kind hint fails on `invalidchain`; header shots before/after, light and dark, in `screenshots/`.
+- 2026-10-14: arc gate unit legs pass: `audit:vue` 0; `test:all` 0 (extension 12094, aztec-runtime 392, wallet-bridge 750).

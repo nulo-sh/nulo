@@ -37,7 +37,8 @@ Restore state: a fresh install, a new profile with its own PXE store, the accoun
 | Developer notes viewer | `note/service.ts` `fetchKnownContractsNotes` | — | probe: lists only registered contracts |
 | Gas balance, private leg (PrivateFPC `balance_of`) | `gas-balance-reader.ts` | yes: `getFpcs` discovers the missing row and `registerContract`s before the row exists | needs the contract; ordered |
 | Wallet fee payment through a PrivateFPC or SponsoredFPC row | `fpc-strategy.ts` → `buildStandard` → resolver | yes for a restore: a protocol row exists only through discovery, which registers first; SponsoredFPC also resolves from the node and the known bundle | needs the contract; ordered |
-| dApp-supplied fee payload through the PrivateFPC, or a dApp utility on it, before discovery has run | resolver | no (plausible, unverified: discovery usually runs when the popup opens after the restore) | needs the contract; read first when discovery has not run |
+| dApp-supplied fee payload through the PrivateFPC, or a dApp utility on it (its `balance_of` is `abi_utility`), before discovery has run | resolver | no: discovery runs only from popup code (`stores/balances.store.ts`, the settings pages, `gas-balance-reader.ts`), never on the dApp RPC path (Opus) | needs the contract; read first when the popup has not run discovery |
+| The batched view's slow arm during a popup balance refresh (Opus) | `batched-view-simulation.ts` → `buildTxExecutionRequest` | registers the account contract as a side effect | incidental: popup-driven, not ordered before any dApp RPC |
 
 ### Verdict
 
@@ -48,6 +49,8 @@ Consequence: with the skip, between a restore and the account's first build on t
 ### Panel
 
 - Codex (gpt-6.1-sol, high, read-only; session 01a13b50-46b7-7b00-b97d-40b7f8edd03a): the proof fails (high confidence); it added the explicit-target tx build, the call-intent authwit, `getPrivateEvents` and the two probes above; it confirmed the composition matrix cannot be built (COMPOSITION-TESTS.md D2, D3, D6) and recommended a unit failure/control pair over the real `ContractResolver` and no e2e for the failure exit.
+- Opus 5.5 (Plan lens): the verdict stands; only three paths register an own account contract (`buildTxExecutionRequest`, `buildNoFrom`, the restore). It added the slow-arm row, verified the sponsor row, agreed to drop the e2e (the owner's rule puts the burden on the skip; the plan's scenario cannot tell the two cases apart; the only discriminating real-PXE run is a direct `executeUtility(lookup_validity)` before any send, since `lookupValidity` swallows the error), and asked for four fixes, all taken: the stubbed account is the target itself, `ensureContractRegistered` is asserted uncalled, a line says what the stub's `undefined` stands for, and the comment says the lookup fails rather than "resolves", naming the protocol sponsors.
+- The unit pair proves Nulo's ordering (the read registers nothing); upstream's refusal of an unregistered contract is read from its source (`pxe.js` syncs the target first and `contract/helpers.js` throws; `runUtility` refuses too), since the `executeUtility` stub answers either way.
 
 ### Tests that document the order
 
@@ -55,3 +58,13 @@ Consequence: with the skip, between a restore and the account's first build on t
 - The plan's step 2 (composition tests, one per class of read) is not buildable: COMPOSITION-TESTS.md, which is normative, excludes tx builds (D3), FpcService discovery (D6, bb), the gas-balance read (D2) and selector-bound views (D6). The unit pair replaces it (D-arc2-1).
 - No `restore-skip-proof.test.ts` (D-arc2-2). The plan's step 5 stops at the counterexample. Its e2e scenario (restore a used account, read private and fee balances, send through a sponsor) would pass with the skip on: every one of those reads registers first, so it could not have caught the failing read. A real-PXE run of the failing read adds no evidence the trace lacks: the wallet path registers nothing (unit-pinned) and upstream's `runUtility` refuses an unregistered contract whatever the node answers.
 - `precheckContractAddress` states the invariant in one sentence.
+
+## Phase 2.4 (#147, chain 0 in the backup)
+
+- Unit: `account-state/service.test.ts` runs `backup()` over a real `NetworkService` and a fake node: an edited Local Network (kind `local`, chain 0, a non-seed URL) whose node answers travels as its own chain-0 item; a custom network answering for another chain on the same URL stays out (control). Red with the kind hint removed, green with it.
+- **`tests/e2e/network/backup-edited-local-network.test.ts`** (the runtime budget):
+  - Failure mode: a Local Network edited off its seeded URL, whose node answers, reads red in the header and is left out of the full backup.
+  - Why not cheaper: the unit layer pins the status rule against a fake node and the backup gate over that rule; only the browser runs the real endpoint edit (its own kind-hinted identity probe), the header's status sync, the export and a real node together, so only it shows the screen and the file agreeing.
+  - Shape: on `localNetworkExtension`, the endpoint is edited from `localhost` to `127.0.0.1` (the same sandbox under another URL), the header's `data-status` must read `active` on a fresh popup, and the exported backup's only chain-0 item must be that network's.
+  - Runtime: estimated 30 s; measured 18.4 s (Chrome, retry 0, the file alone). Red-check: a scratch worktree at 1406a8b with only the kind hint removed fails on `expected 'invalidchain' to be 'active'`.
+  - No sandbox config fails the test (an assertion) instead of skipping it (D-orch-7).

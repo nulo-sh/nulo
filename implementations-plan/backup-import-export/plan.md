@@ -1,7 +1,7 @@
 ---
 plan: backup-import-export
 tier: mid
-status: approved by the orchestrator; arc 1 merged (#246); arc 1b in progress (A1 answered, D-orch-3); arcs 2 and 3 wait on decision page 1
+status: approved by the orchestrator; arcs 1 (#246) and 1b (#247) merged; arc 2 in progress (P1-05 approved 2026-10-14); arc 3 waits on its page 1 records
 issues: "#146, #203, #207, #223, #226 (arc 1); #148 in-repo half (arc 1b, stays open); #147, #191, #221 (arc 2); #98, #189, #192, #230, #231 (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -98,7 +98,7 @@ Recon: [recon.md](recon.md). Owner questions beyond page 1: [OWNER-ASKS.md](OWNE
 - I2. Bun's native `Buffer` decodes `" 0a"` differently from the shim, as #203 says. Not run; the fix does not depend on it, since the new decoder uses no `Buffer`.
 - I3. The watchdog's 60 s is a chosen policy, not a measurement: no real migration exists to measure. A data transform over `chrome.storage.local` is expected to finish in seconds.
 - I4. The watchdog bounds the engine's wait on an awaiting `up()` only. It cannot cut a loop that never yields, and it cannot help when `chrome.storage` itself stops answering (the restore and the attempt bump would hang too). On Chrome the worker's idle termination often comes first; the existing resume path then counts the interruption. Its real targets are Firefox's event page with a wallet page open and the in-page backup-import migrator.
-- I5. The lazily registered account contracts and protocol sponsors are registered before any read that needs them (#221). Phase 2.3 exists to prove or refute this, on a real PXE.
+- I5. The lazily registered account contracts and protocol sponsors are registered before any read that needs them (#221). Phase 2.3 exists to prove or refute this, on a real PXE. **Refuted at the trace** (2026-10-14): a dApp's utility read, a call-intent authwit and a tx naming an own account all resolve it without registering it (`lessons/phase-2.md`, D-arc2-2).
 - I6. A slice carrying an edited Local Network fits under the existing cap once #191 removes the PXE-provided contracts.
 - I7. Writing the deleted-token markers for the new profile before `finalizeRestore` beats the first seed pass, since the seeder runs for the active profile only (F15). The phase 3.1 e2e proves a seed pass ran.
 
@@ -324,11 +324,11 @@ Validation gate:
 - Pass: all exit 0; the heal test passes on the patched install and fails with the patch reverted (checked once by hand, logged in `lessons/phase-1b.md`); the build's notices step accepts the modified file.
 - Layers: install, lint, typecheck, unit, audit, build, network e2e.
 
-### Arc 2: the account-state slice (waits on page 1, P1-05)
+### Arc 2: the account-state slice (P1-05 approved as proposed, 2026-10-14)
 
-Every phase in this arc waits on page 1. If P1-05 is answered "as is", #191, #221 and #147 close as not planned (SR3) and the arc does not exist.
+P1-05 was signed as proposed; the phases below are built as written, with the deviations in the ledger (D-orch-5 to D-orch-10, D-arc2-1 to D-arc2-3).
 
-#### Phase 2.1: an edited Local Network reads its true status (#147)
+#### Phase 2.1: an edited Local Network reads its true status (#147) ✓
 
 1. Pass `network.kind` to `_getChainId` in `getNodeStatus`.
 2. Flip the `(BUG PIN)` in `network/service.test.ts`. A local-kind network on a non-seed URL that answers is Active. A local-kind network on a dead URL is Inactive. A public network whose chain id differs is still InvalidChain (the control).
@@ -341,7 +341,7 @@ Validation gate:
 - Pass: exit 0.
 - Layers: lint, typecheck, unit.
 
-#### Phase 2.2: the export drops PXE-provided contracts (#191)
+#### Phase 2.2: the export drops PXE-provided contracts (#191) ✓
 
 1. Skip `isPxeProvidedAddress` contracts in `backupNetworkState` before their instance and artifact are fetched.
 2. Rewrite the `normalize.ts:21-34` comment to what is now true.
@@ -354,7 +354,7 @@ Validation gate:
 - Pass: exit 0.
 - Layers: lint, typecheck, unit.
 
-#### Phase 2.3: the #221 proof, then the skip
+#### Phase 2.3: the #221 proof, then the skip ✓ (the proof failed: no skip, D-arc2-1, D-arc2-2)
 
 1. List in `lessons/phase-2.md` every PXE call that can name a profile account address or a protocol sponsor address after a restore. Mark each as a harmless probe or a read that needs the contract.
 2. Add composition tests on a fake PXE that refuses an unregistered address, one per class of read: tx build, fee payment through a sponsor (with no row, and with a row present on a fresh PXE), the gas-balance read, a view.
@@ -503,8 +503,8 @@ Each row: the chosen design, the alternatives weighed, the panel's views, and wh
 | D-orch-8 | Proportion: a finding becomes a change only with its path written; a fix that adds persistent state beyond the slice change, a lifecycle, a protocol, a recovery policy or a public contract stops for the orchestrator; later Codex rounds verify | — | orchestrator decision | — |
 | D-orch-9 | UI impact is only Phase 2.1's quoted line: the header dot reads its true status, `data-status` on the dot's testid'd element; no new words; a header screenshot in both themes in the PR | — | orchestrator decision | — |
 | D-orch-10 | Close-out is not arc 2's: arc 3 and the close-out layer follow; `STATUS.md` stays | — | orchestrator decision | — |
-| D-arc2-1 | The #221 order is documented by one unit failure/control pair in `view-executor.test.ts` over the real `ContractResolver` | the plan's composition tests, one per class of read (Phase 2.3 step 2) | Codex: the composition matrix is not buildable; use the real resolver, assert no contract registration and no `executeUtility` | COMPOSITION-TESTS.md, which is normative, excludes tx builds (D3), FpcService discovery (D6), the gas-balance read (D2) and selector-bound views (D6). The tree wins over the plan. |
-| D-arc2-2 | #221's proof fails at the trace: no skip is built, no `restore-skip-proof.test.ts` is added, #221 closes as not planned quoting P1-05 | build the skip and run the plan's e2e; an e2e that restores a backup with the account contract removed | Codex: skip both e2es for the failure exit | The plan's step 5 stops at the counterexample. Its e2e scenario reads balances and sends, each registering first, so it would pass with the skip on and miss the failing read; the failing read needs no real PXE to establish: the wallet path registers nothing (unit-pinned) and upstream's `runUtility` refuses an unregistered contract whatever the node answers. |
+| D-arc2-1 | The #221 order is documented by one unit failure/control pair in `view-executor.test.ts` over the real `ContractResolver` | the plan's composition tests, one per class of read (Phase 2.3 step 2) | Codex: the composition matrix is not buildable; use the real resolver, assert no contract registration and no `executeUtility`; Opus: make the stub's account the target and assert `ensureContractRegistered` uncalled | COMPOSITION-TESTS.md, which is normative, excludes tx builds (D3), FpcService discovery (D6), the gas-balance read (D2) and selector-bound views (D6). The tree wins over the plan. |
+| D-arc2-2 | #221's proof fails at the trace: no skip is built, no `restore-skip-proof.test.ts` is added, #221 closes as not planned quoting P1-05 | build the skip and run the plan's e2e; an e2e that restores a backup with the account contract removed | Codex: skip both e2es for the failure exit; Opus: agrees, the owner's rule puts the burden on the skip and one counterexample closes it | The plan's step 5 stops at the counterexample. Its e2e scenario reads balances and sends, each registering first, so it would pass with the skip on and miss the failing read; the failing read needs no real PXE to establish: the wallet path registers nothing (unit-pinned) and upstream's `runUtility` refuses an unregistered contract whatever the node answers. |
 | D-arc2-3 | `data-status` goes on `network-button`, the testid'd element that holds the dot | a new testid on the dot | — | The dot is a bare `<div>` with no testid; a testid on a non-interactive element would be invented for one read. The dot's class and the attribute read one computed key, so they cannot disagree. |
 
 ### Competing outline (cheapest-first), sent to both audits

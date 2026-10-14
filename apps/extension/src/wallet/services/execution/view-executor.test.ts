@@ -523,6 +523,10 @@ describe("ViewExecutor.executeAztecExecuteUtility — the target's registration"
 			executeUtility: vi.fn(async () => ({ result: [] })),
 		}
 		const { executor, account, deps } = makeHarness({ resolver: new ContractResolver({ log: vi.fn() } as never) })
+		const ensureContractRegistered = vi.fn(async () => {})
+		Object.assign(account, { address: own, ensureContractRegistered })
+		// `undefined` stands for the whole PXE, node and known-bundle lookup: the account contract is
+		// never published, so only a registration can make it resolve.
 		;(deps.pxeService.getPXE as ReturnType<typeof vi.fn>).mockReturnValue(pxe)
 		const lookupValidity = {
 			kind: "aztec_executeUtility",
@@ -536,6 +540,7 @@ describe("ViewExecutor.executeAztecExecuteUtility — the target's registration"
 			new ContractNotRegisteredError("Contract instance not found"),
 		)
 		expect(account.ensureRegistered).toHaveBeenCalledTimes(1)
+		expect(ensureContractRegistered).not.toHaveBeenCalled()
 		expect(pxe.registerContract).not.toHaveBeenCalled()
 		expect(pxe.executeUtility).not.toHaveBeenCalled()
 
