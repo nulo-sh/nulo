@@ -4,6 +4,8 @@ Decision page 11 (Forms, contacts and design system) already carries this lane's
 
 **Blocking asks.** FA-1, FA-2, FA-4 and FA-7 complete page 11's own proposals, so their phases wait for the answer instead of shipping a reduced version of what the owner signed. Put them on page 11 before it is signed.
 
+**Answered.** Page 11 was signed 2026-10-14 (the `## Decision` blocks on #151, #210, #214, #215, #216, #229, #211). Picks: FA-1 A, FA-1b A, FA-4 A and P11-02 A are re-asked as P11-06b, P11-07b, P11-10b and P11-02b (arc 3b waits on them); FA-2 A, FA-3 A, FA-5 A, FA-6 A, FA-7 B, FA-8 A, FA-9 B, FA-10 A, FA-11 A stand. The one new ask is P11-13b below.
+
 Arcs 1 and 2 add no words. Arc 1's visible effects restore what each screen was meant to show (plan.md § UI impact); the form-popup depth is covered by the orchestrator's no-ask record for #210, and the other three need the same record (§ Arc 1 corrections). FA-8 to FA-11 are items the plan leaves as they are; each would change what a person sees, so each is the owner's call.
 
 ## Arc 1 corrections (for the orchestrator's record, not a question)
@@ -171,3 +173,19 @@ Also: each popup keeps its own rule for a change it receives (some add an unknow
 **Recommendation: A.** The snack tells the person in the common case, and B makes an import with no network save nothing for its sender rows. After arc 3, the row an interruption cuts off is never saved without its sender; rows before it whose sender failed stay saved, under A, as today.
 
 **What ships now:** A.
+
+## P11-13b. #151: the "Lock anyway" confirm, worded for the import (FA-7 B)
+
+**Surface:** the confirm that opens when the person presses Lock (the header chip or Settings → Lock → "Lock now") while a contacts import has run for more than two minutes. It is the confirm running transactions use today: pre-title "Running transactions" (red), title "Lock wallet?", "1 transaction is still running. Locking cancels it.", and a "Lock anyway" button in the confirm's default look. The import's confirm keeps that look; only the words below are new.
+
+| Case | Pre-title | Title | Description | Button |
+|---|---|---|---|---|
+| An import, no running transaction | Contacts import | Lock wallet? | A contacts import is still running. Locking stops it. | Lock anyway |
+| Two imports (allowed until P11-07b is answered) | Contacts import | Lock wallet? | 2 contacts imports are still running. Locking stops them. | Lock anyway |
+| An import and running transactions | Running transactions | Lock wallet? | 1 transaction is still running. Locking cancels it. A contacts import is still running. Locking stops it. | Lock anyway |
+
+Lock is disabled for at most two minutes in a row while imports run (an import started during another's two minutes does not restart them). After "Lock anyway" the wallet locks and the existing "Import incomplete · N of M contacts written" snack shows, as when auto-lock fires.
+
+**Recommendation:** the wording above. It reuses the transactions confirm's title, button and sentence shape, and "stops" (not "cancels") because the contacts already written stay saved.
+
+**What ships now:** the recommendation, in arc 3a.

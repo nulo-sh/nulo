@@ -1,8 +1,8 @@
 ---
 plan: forms-and-contacts
 tier: mid
-status: approved; arc 1 merged (#255); arc 2 in review (#282); arc 3 waits on page 11
-issues: "#184, #205, #210, #212, #214 (arc 1); #224, #225 (arc 2); #151, #211, #215, #216, #229 (arc 3)"
+status: approved; arcs 1 and 2 merged (#255, #282); arc 3a building after page 11; arc 3b waits on the page 11 re-asks
+issues: "#184, #205, #210, #212, #214 (arc 1); #224, #225 (arc 2); #151, #215, #210 (FA-8), #214 (FA-10) (arc 3a); #151, #211, #216, #229 (arc 3b)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -19,7 +19,8 @@ Twelve issues on popup forms, contacts and presentation primitives, in three arc
 
 - **Arc 1 (no owner decision; ships first, as its own PR, once the orchestrator records its three visible corrections as it recorded #210).** Pages stop sending debug log lines the worker would drop (#184). A failed config write leaves memory, listeners and the toggle on the stored value (#205). Form popups give their card its depth (#210). The logs viewer ends every line with a newline, so the first live line gets its own line (#212). Account and FPC name checks compare names without their outer spaces (#214).
 - **Arc 2 (decision-free; waits on `account-session-life` arc 3 for `export/full.vue`).** A test helper holds a list read and injects service events; all six reducers are exercised at that seam with today's behaviour pinned, and the three identical contact reducers become one (#224). `GlobalLoader` uses the scrim token it duplicates and the export page's shake uses the shared shake; the snack card stays local because no shared primitive matches it (#225). No visible change, proven.
-- **Arc 3 (waits on decision page 11, hold H6, `send-queue-activity` arc 3, `incoming-transfers` arc 3, and the blocking owner asks FA-1, FA-2, FA-4, FA-7).** A contacts import a person cannot interrupt by accident (#151, P11-01); the name field at the cap, both options planned (#216, P11-02); a darker red for the destructive buttons (#229, P11-03); one link colour and one bottom spacing on detail pages (#211, P11-04); shakes and shimmers stop under Disable animations and reduced motion (#215, P11-05).
+- **Arc 3a (page 11 signed 2026-10-14; D-orch-6).** A contacts import a person cannot interrupt by accident, minus its progress line (#151, P11-01 with FA-2 A, FA-3 A, FA-7 B, FA-11 A); shakes and shimmers stop under Disable animations and reduced motion (#215, P11-05, FA-6 A); a re-opened popup goes on top and every popup under it sits back (#210, FA-8 A); network names follow the accounts and FPCs trim rule (#214, FA-10 A).
+- **Arc 3b (waits on the page 11 re-asks P11-02b, P11-06b, P11-07b, P11-10b and on `incoming-transfers` arc 3a).** The import's progress line and the rule for two imports at once (#151); the name field at the cap (#216); a darker red for the destructive buttons (#229); one link colour and one bottom spacing on detail pages (#211, measurements re-checked after the font remake).
 
 Recon: [recon.md](recon.md). Owner questions beyond page 11: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
@@ -28,9 +29,8 @@ Recon: [recon.md](recon.md). Owner questions beyond page 11: [OWNER-ASKS.md](OWN
 **In:** the twelve issues above, with every surface they name.
 
 **Out, with reason (each is an ask in OWNER-ASKS.md, or an issue filed at the arc that leaves it):**
-- #210's other recorded items: the order gap after re-opening an open popup (FA-8: fixing it changes which lower card sits back) and the per-owner reducer policies (a visible difference per owner; carried by FA-9 with #224's evidence).
-- #224's race: a list load can lose an event that lands during the read (real for the FPC popups and Send). Repairing it changes which rows show, which arc 2's "no visible change" contract excludes (FA-9).
-- Network names with outer spaces (FA-10): the popups and the worker agree on exact names today, so trimming them is a new rule, not a restored one.
+- #210's per-owner reducer policies and #224's race (a list load can lose an event that lands during the read): the owner kept both as they are (FA-9 = B, P11-15); SR3 comment.
+- Arc 1 and 2 also left out the re-open gap (FA-8) and network names with outer spaces (FA-10); the owner picked A for both, so arc 3a builds them (phases 3.8, 3.9).
 - `EditAccountPopup` has no duplicate-name check, and a New account name of only spaces saves as an empty name: issues at arc 1's delivery.
 - The logs viewer's trim branch never runs, so the editor document grows past its cap (recon § #212): an issue at arc 1's delivery. R3 asks for a small change to `LogsViewer.vue`.
 - Keyframe motion beyond shakes and shimmers under Disable animations, and onboarding applying the setting at all (FA-6).
@@ -43,15 +43,16 @@ Recon: [recon.md](recon.md). Owner questions beyond page 11: [OWNER-ASKS.md](OWN
 |---|---|---|
 | No-ask (orchestrator, decisions.json `no_ask` #210) | Arc 1's #210: "Pass the card depth, not the raw stack order." | recorded |
 | The orchestrator's record for #205, #212 and #214 | Arc 1's three visible corrections (§ UI impact) | recorded: D-orch-3 |
-| Page 11, P11-01 (approve), hold H6 | Arc 3 phase 3.1 (#151, the fenced sender) | decision page 11 |
-| Page 11, P11-01, FA-1, FA-2, FA-7 | Arc 3 phases 3.2-3.3 (#151, the running state and its e2e) | decision page 11; OWNER-ASKS.md |
-| Page 11, P11-02 (visual: A, B, As is), FA-5 if B | Arc 3 phase 3.4 (#216) | decision page 11 |
-| Page 11, P11-03 (approve), FA-4 | Arc 3 phase 3.5 (#229) | decision page 11 |
-| Page 11, P11-04 (approve); R1; #142 | Arc 3 phase 3.6 (#211) | decision page 11; sibling arcs |
-| Page 11, P11-05 (veto list), FA-6 | Arc 3 phase 3.7 (#215) | decision page 11 |
-| FA-3, FA-8, FA-9, FA-10, FA-11 | nothing in this plan; each "what ships now" is today's behaviour | OWNER-ASKS.md |
+| P11-01 approve, hold H6 | 3a: 3.1 (#151, the fenced sender) | signed 2026-10-14 |
+| P11-01; FA-2 A, FA-3 A, FA-7 B, FA-11 A (P11-08, -09, -13, -17) | 3a: 3.2-3.3 (#151, the running state and its e2e) | signed; the confirm's import wording is P11-13b (OWNER-ASKS.md, shipped as recommended) |
+| P11-05 veto list, FA-6 A (P11-12) | 3a: 3.7 (#215) | signed |
+| FA-8 A, FA-10 A (P11-14, P11-16) | 3a: 3.8 (#210), 3.9 (#214) | signed |
+| P11-06b, P11-07b (re-asks of FA-1, FA-1b) | 3b: the progress line, the overlap rule | re-ask open |
+| P11-02b, P11-10b (re-asks of P11-02, FA-4) | 3b: 3.4 (#216), 3.5 (#229) | re-ask open |
+| P11-04 approve, with its font re-check; `incoming-transfers` arc 3a | 3b: 3.6 (#211) | sibling arc |
+| FA-9 B (P11-15) | nothing; SR3 comment | signed |
 
-Sibling gates: arc 2 starts on a base that contains `account-session-life` arc 3 (both edit `popup/pages/settings/security/export/full.vue`; the lane map also names `backup-import-export` for that file). Phase 3.6 starts on a base that contains `send-queue-activity` arc 3 (R1, `journal/[id].vue`; R1's own rule text names that lane's arc 2, so wait for whichever is later) and `incoming-transfers` arc 3 (#142's detail rows). R3: arc 1 merges before `chain-endpoints` arc 2 edits `LogsViewer.vue`.
+Sibling gates: phase 3.6 starts on a base that contains `send-queue-activity` arc 3 (R1, `journal/[id].vue`) and `incoming-transfers` arc 3a (#142's detail rows). Arc 2's and R3's gates were met (D-orch-4; #255).
 
 ## Outcome & Quality Bar
 
@@ -94,18 +95,27 @@ Sibling gates: arc 2 starts on a base that contains `account-session-life` arc 3
 - F22. `setExpiryDeferral` is worker-internal with one caller, `ExecutionService` (`execution/service.ts:264`).
 - F23. Smoke setup only checks that `dist/<browser>/manifest.json` exists (`tests/e2e/global-setup-smoke.ts:42-49`); `e2e:agent` builds its own network-stamped wallet into the same `dist/<browser>/` (`scripts/e2e/agent.sh:99, 111`).
 
+**Arc 3 re-check at `7e9eb0f` (the tree wins; also in `lessons/phase-3.md`).** F18, F19, F20 and F22 hold, at moved lines: `useLockWallet.ts:46-50` (`lockWallet`), `:82-95` (the "Lock anyway" confirm); `useContactImportExport.ts:254-271` (contact counted, then the sender), `:292-307` (`registerSender`, unfenced); `account-state/service.ts:115-125` (`addSender`), `:144-154` (`viaPxe`); `base.css:375-378`; `execution/service.ts:305` (the one `setExpiryDeferral` caller). Profile switch in a window is still only the lock screen's `select_profile` (`auth.vue:246`). New since the plan:
+- F24. `.noanimations` sits on `document.documentElement` (`popup/app.vue:106`), so `:global(.noanimations) .x` matches every popup element.
+- F25. #287 gave Edit account `sameStoredName` and kept Save disabled for a name that trims to nothing (`EditAccountPopup.vue:32, 46`; New account `:49`): the precedent 3.9 follows.
+- F26. Arc 1 pinned the re-open gap (`popup.store.test.ts:46`, `usePopupStack.test.ts:62`) but no network-name behaviour: 3.9 adds tests rather than flipping one.
+- F27. `contacts-import.test.ts` has no 500-row file; 3.3 generates one. The pins test `useContactImportExport.pins.test.ts:146` pins "contact before sender", which 3.1 inverts.
+- F28. G1 (#169) merged 2026-10-10: `e2e:agent` is parallel-safe across worktrees, so the host `flock` is no longer needed.
+- F30. `Skeleton.vue` (`packages/design/src/ui/Skeleton.vue:24-50`) and the AmountCard and fee-shared `.skeleton` rules share gradient, `200% 100%` size and `1.5s infinite`; `Skeleton` adds `flex-shrink: 0` and `aria-hidden`, and the resolver already serves it (`apps/extension/scripts/design-resolver.ts:29`; `TokenCard`, `TokensView` use it).
+- F29. Settings → Lock's "Lock now" is a `SettingItem`, which has a `disabled` prop (opacity 0.5, inert; `SettingItem.vue:51, 184-187`); the header chip is a bare `<button>` with no disabled style (`Header.vue:276-286, 453-475`).
+
 ### Inferences (unverified; audits attack these)
 
 - I1. Arc 1 leaves `popupStore.open`'s re-open gap as it is; the phase pins it as a BUG PIN.
 - I2. A list load can lose an event that lands during the read only where the read does work after its storage call or waits on other reads: `getFpcs` (`fpc/service.ts:117-140`) and Send's three-read `Promise.all` (`send.vue:599-612`). For NewContact, ImportContacts and SelectProfile one storage read answers in order, so a held-read test there shows the reducer's mechanics, not a production schedule.
 - I3. Re-registering an already registered sender through `registerTaggingSecretSource` succeeds. Phase 3.3's re-run proves it by selecting an already registered row on purpose.
-- I4. An import the page's unmount disconnects keeps running on lazily reconnected clients (recon § #151); FA-3 decides whether that changes.
+- I4. An import the page's unmount disconnects keeps running on lazily reconnected clients (recon § #151); FA-3 A removes the case (3.2), and the smoke run that leaves Contacts mid-import proves it.
 
 ### Asks (each with the working assumption the plan proceeds on)
 
 - A1. The orchestrator may merge arc 1 without a stack (as `backup-import-export` did). Answered: D-orch-1, no stack; arc 1's PR targets `dev`.
-- A2. FA-1, FA-2, FA-4 and FA-7 go on decision page 11 before it is signed; they block their phases. Working assumption: those phases wait; the rest of arc 3 ships when page 11 is signed.
-- A3. FA-3, FA-5, FA-6, FA-8, FA-9, FA-10 and FA-11 ship in their "what ships now" form until answered.
+- A2, A3 (the asks' gating): answered by page 11 and D-orch-6.
+- A4. The "Lock anyway" confirm's import wording is new copy: OWNER-ASKS.md P11-13b, shipped as recommended until the owner answers.
 
 ## Architecture & Implementation
 
@@ -132,19 +142,38 @@ Sibling gates: arc 2 starts on a base that contains `account-session-life` arc 3
 
 **#225.** `GlobalLoader.vue:34` uses `var(--scrim-loader)`. `full.vue`'s `.shake` becomes `composes: shake_password from "../../../../../components/composite/shake.module.css"` (relative, like the four existing composes sites, `auth.vue:432`); its local keyframes and reduced-motion rule go, and `a11y-css.test.ts` drops the `full.vue` row (the shared file's row covers the rule). The snack card stays local: no shared primitive matches it (F17); the PR states that disposition.
 
-### Arc 3 (built only after page 11 is signed, and per phase after its blocking asks)
+### Arc 3a (page 11 signed; D-orch-6)
 
-**#151 (P11-01).**
-- The write unit. `AccountStateService` gains `ProfileService` (an `init` lookup and a `dependencies` entry). `addSender(networkId, address, fence?)` asserts the fence (`assertRunFence`) before `viaPxe` and checks `isFenceLive` immediately before the PXE call, both outside `viaPxe`, so a stop reaches the page as `SessionEndedError` and never as an Error log line. In `importRow`, after the `stillAsShown` check (a refused row registers nothing), the sender step runs first when the row asks for it and returns one outcome: `registered`, `failed`, `skipped` (no network) or `stopped`. When a sender step ran, the book is read again and `stillAsShown` checked again immediately before the contact write, so a contact another window changed while the registration waited on the PXE is refused, not overwritten (the window left between that read and the write is today's). Only `stopped` ends the run before the contact write; `failed` and `skipped` keep today's behaviour (the contact is written and the outcome toast reports the sender count). Guarantee: a sender stage that ends in `stopped` never proceeds to the contact write, and neither does a row after it. It is not atomicity: a registration already awaiting the PXE when the session ends may still complete (in its own profile), and `failed` and `skipped` rows are written as today.
-- The running state. The app store gains `contactImports: Map<symbol, { done: number; total: number }>`. `importContacts` adds its own token with its progress when `applyImportRows` starts, updates only that entry after each confirmed row, and deletes only that entry in its `finally`; Lock is disabled while the map is not empty, so an overlapping second import cannot clear the first one's state (today's overlap stays allowed). Which progress the line shows when two imports overlap is part of FA-1. The lock seal (`createLockedState`, `locked-state.ts:19-29`) clears the map beside `resetInFlight`, wired in `app.vue:178-185`: a registration still awaiting the PXE after its session ended keeps its import's `finally` pending, and its entry must not disable Lock in the next session. An import touches only its own entry, and only while it is present, so a late update or `finally` from an ended session neither re-adds its entry nor removes a newer one. The header Lock chip and Settings → Lock → "Lock now" read it as `disabled`; `lockWallet`, the final action both the direct path and the "Lock anyway" confirm reach, refuses while it is not empty. The worker's auto-lock is outside these guards (H6). The progress line renders where FA-1 says; FA-7 decides any time limit. `SRC/utils/in-flight-send.ts:14-15`'s comment is restated with the exception.
+**#151 (P11-01), the write unit.**
+- `AccountStateService` gains `ProfileService` (an `init` lookup and a `dependencies` entry). `addSender(networkId, address, fence?)` asserts the fence (`assertRunFence`) before `viaPxe` and checks `isFenceLive` immediately before it enters `viaPxe`, both outside it, so a stop reaches the page as `SessionEndedError` and never as an Error log line.
+- In `importRow`, after the `stillAsShown` check (a refused row registers nothing), the sender step runs first when the row asks for it and returns one outcome: `registered`, `failed`, `skipped` (no network) or `stopped` (a rejection the fence probe reads as an ended session, as `fenced()` does). After `registered` or `failed` (both awaited the PXE) the book is read again and `stillAsShown` checked again immediately before the contact write, so a contact another window changed meanwhile is refused, not overwritten. Only `stopped` ends the run before the contact write; `failed` and `skipped` keep today's behaviour (FA-11 A: the contact is written and the outcome toast reports the sender count).
+- Guarantee: a sender stage that ends in `stopped` never proceeds to the contact write, and neither does a row after it. Not atomicity: a registration already awaiting the PXE when the session ends may complete in its own profile.
+
+**#151, the running state (FA-2 A, FA-3 A, FA-7 B; no progress line, no overlap rule: 3b).**
+- **The guard.** New `SRC/stores/contact-import-guard.ts`, `createContactImportGuard()`, composed into the app store like its other factories. State: a reactive set of symbols, one per running import; a `holdsLock` flag; one hold timer. `beginContactImport()` adds its symbol and returns `end`; when the set goes from empty to one entry, `holdsLock` turns on and the `IMPORT_LOCK_HOLD_MS = 120_000` timer starts. The hold belongs to the window, not to an import: an import that begins while another runs does not restart it, so Lock is never disabled for more than two minutes in a row. The store exposes the running set as `contactImports` (read-only) and `lockHeldByImport`. One entry per import keeps either answer to P11-07b open.
+- **Who owns the timer, and how it ends.** The guard owns it. When it fires, `holdsLock` turns off and the imports keep running. It ends with the imports: an `end()` (the import's `finally`) deletes only its own symbol if present, and when the set empties it clears the timer and the hold. It ends with the session: the lock seal calls `resetContactImports()`, which clears the set, the timer and the hold (`createLockedState` gains a `resetContactImports` shell member beside `resetInFlight`, wired in `app.vue`), so an import whose registration still awaits the PXE after its session ended cannot hold Lock in the next one, and its late `end()` neither re-adds its entry nor removes a newer one (symbols are unique). It ends with the window: the store dies with it.
+- **Who holds.** `importContacts` calls `beginContactImport()` immediately before `applyImportRows` and `end()` in a `finally` around it, so file pick, parse and the selection popup hold nothing.
+- **Lock.** The header chip and Settings → Lock → "Lock now" take `disabled` from `lockHeldByImport` (the chip gains `SettingItem`'s disabled look, opacity 0.5 with no hover, F29). In `useLockWallet`, `lock()` returns at once while `lockHeldByImport`; after `readForLock` it locks at once only when no approved send and no import runs, else it opens the existing confirm. The import count is the window's own, so it is read whether or not `readForLock` answered (a failed read counts no sends, never no imports). `lockWallet`, the final action both the direct path and the confirm's callback reach, refuses while `lockHeldByImport`, which covers an import that began during `readForLock` or while the confirm was open. The confirm keeps the set of imports it named and its callback abandons when any running import is not in that set (one began after the confirm opened, even if another ended meanwhile), so it never stops an import the person was not told about; pressing Lock again asks afresh.
+- **"Lock anyway" worded for the import (P11-13b, OWNER-ASKS.md).** Import only: pre-title "Contacts import", title "Lock wallet?", "A contacts import is still running. Locking stops it." (two or more: "2 contacts imports are still running. Locking stops them."), button "Lock anyway". With approved sends too: the sends' pre-title, their sentence, then the import's. Confirming locks; the import stops at its next fenced call and shows "Import incomplete · N of M contacts written".
+- **Other windows (FA-2 A).** Nothing crosses windows: another window's Lock stays enabled; its lock reaches the importing window as the lock event, whose seal releases the guard, and the run fence stops the import with the incomplete toast, the auto-lock path.
+- **The import owns its connections (FA-3 A).** `importContacts` opens its own `ContactServiceClient` and `AccountStateServiceClient` beside its `ProfileServiceClient` and disconnects all three in its `finally`; the page's clients serve its list and the export only, and `UseContactImportExportOptions` drops `contactService`. Leaving the page no longer rejects the row being written.
+- **Not changed.** The worker's auto-lock (H6: a call-site pin keeps `setExpiryDeferral`'s one caller). `in-flight-send.ts:14-15`'s "never blocked" comment is restated with the import's two-minute exception.
+
+**#215 (P11-05, FA-6 A).** The shared shake (`shake.module.css`) gains the `:global(.noanimations)` stop beside its reduced-motion rule (F24). The shimmer is already shared: the design package's `Skeleton` (`packages/design/src/ui/Skeleton.vue`) draws the same gradient, size and 1.5 s cycle as AmountCard's and fee-shared's copies, sized by props (F30). AmountCard (72×10, keeping its `data-testid`) and the three fee components (60×12, its default) render `Skeleton`, their two local copies and their keyframes go, and `Skeleton.vue` gains the `.noanimations` stop beside its reduced-motion rule. `NewSenderPopup`'s own shake and the received page's fee shimmer keep their looks and gain the stops they lack. Spinners, pulses (including `Icon.vue`'s), the countdown bar and the row glow are left alone. The plan's first shape, a new `shimmer.module.css`, would have been a third copy of `Skeleton` (D-arc3-7).
+
+**#210 (FA-8 A).** `popupStore.open` on an open key closes it first (the same compaction `close` does), then opens it on top: `{a: 0, b: 1}`, re-open `a`, gives `{b: 0, a: 1}`, so `a` is at depth 1 and `b` sits back at depth 2. Orders stay 0..len-1. The payload is replaced, as today.
+
+**#214 (FA-10 A).** New and Edit network compare with `sameStoredName` (Edit excludes the network being edited) and save `storedNameKey(name)`; Save stays disabled while the name trims to nothing (F25's precedent: it would save an empty name), and Edit's "unchanged" test compares the key with the stored name. The worker is unchanged, as for accounts: the popup is the only place a typed name enters. `account-name.ts`'s doc names networks too.
+
+### Arc 3b (waits on the re-asks; planned, not built)
+
+The progress line (P11-06b) and the overlap rule (P11-07b) extend the guard's entries; 3.4 #216 (P11-02b: A, B or C), 3.5 #229 (P11-10b) and 3.6 #211 are as below, revised at 3b's start against the answers and the tree.
 
 **#216 (P11-02).** Option A: the length warning moves into the right slot's fallback, `<slot name="right"><Transition v-if="warning.show">…</Transition></slot>`. Vue renders the fallback when the slot is absent or renders only comments, so a `v-if`'d duplicate warning wins when it shows and the length note shows otherwise. Option B: the right slot always renders; the warning icon and "Maximum length reached" leave the `Tooltip` for a helper row under the field (`Text` size 12, colour secondary, `data-testid="input-max-length-note"`), as shot `o-216-B` shows; FA-5 decides which fields. As is: no change; #216 closes as not planned (SR3).
 
 **#229 (P11-03).** One new design token `--btn-destructive: #c62828` in both themes (through `token-contract.ts` and the generated `tokens.ts`); `.wrapper.destructive` and `.wrapper.cta_destructive` use it, and their hover is `color-mix(in srgb, var(--btn-destructive), black N%)` with N from FA-4 (the idiom `Button.vue:263` already uses). `--red` is not changed. `base.css.test.ts`'s hash and `Button.test.ts`'s red-fill assertion move in the same commit.
 
 **#211 (P11-04).** `tx/[id].vue` drops its `.detail_link` colour override; `journal/[id].vue` drops `.wrapper`'s `padding-bottom` and composes the shared `.content`. Received stays as it draws.
-
-**#215 (P11-05).** `shake.module.css` and a new `apps/extension/src/components/composite/shimmer.module.css` (the AmountCard and fee-shared skeleton, sized by `--shimmer-w`/`--shimmer-h`, set where each is used) each stop their animation under `@media (prefers-reduced-motion: reduce)` and under `:global(.noanimations)`. `NewSenderPopup`'s own shake keeps its look and gains both stops. The design package's `Skeleton.vue` and the received page's fee shimmer gain the `.noanimations` stop beside their existing reduced-motion rule. Spinners, pulses (including `Icon.vue`'s opacity pulse, `packages/design/src/core/Icon.vue:86-101`), the countdown bar and the row glow are left alone (FA-6).
 
 ### File-level change map
 
@@ -164,19 +193,19 @@ Sibling gates: arc 2 starts on a base that contains `account-session-life` arc 3
 | 2 | `SRC/utils/entity-list.ts`, `entity-list.test.ts` | `contactListReducers` |
 | 2 | `NewContactPopup.vue`, `ImportContactsPopup.vue`, `EditContactPopup.vue`, `pages/send.vue` + the six owners' tests (adds `NewFpcPopup.test.ts`, `EditFpcPopup.test.ts`, `SelectProfilePopup.test.ts` cases) | one contact reducer; held-read pins |
 | 2 | `SRC/components/GlobalLoader.vue`; `export/full.vue`; `SRC/utils/a11y-css.test.ts` | token; composed shake |
-| 3 | `SRC/wallet/services/account-state/{spec,service,client}.ts` + tests | fenced `addSender`, `ProfileService` dependency |
-| 3 | `SRC/stores/app.store.ts`, `useContactImportExport.ts`, `Header.vue`, `settings/lock.vue`, `useLockWallet.ts`, `utils/in-flight-send.ts` (comment), the FA-1 surface, tests | #151 |
-| 3 | `apps/extension/tests/e2e/contacts-import.test.ts`; new `tests/e2e/network/contacts-import-stop.test.ts` | #151 e2e |
-| 3 | `packages/design/src/ui/Input.vue`, `Input.test.ts`, `Input.stories.ts` | #216 (A or B) |
-| 3 | `packages/design/src/{token-contract.ts,tokens.ts,base.css,base.css.test.ts}`, `ui/Button.vue`, `ui/Button.test.ts` | #229 |
-| 3 | `SRC/popup/pages/{tx,journal}/[id].vue` | #211 |
-| 3 | `shake.module.css`, new `shimmer.module.css`, `AmountCard.vue`, `fee-shared.module.css`, `NewSenderPopup.vue`, `packages/design/src/ui/Skeleton.vue`, `received/[id].vue`, `a11y-css.test.ts`, a design-package pin | #215 |
+| 3a | `SRC/wallet/services/account-state/{spec,service}.ts` + tests; a call-site pin for `setExpiryDeferral` | fenced `addSender`, `ProfileService` dependency; H6 |
+| 3a | new `SRC/stores/contact-import-guard.ts` + test; `app.store.ts`; `popup/locked-state.ts`, `app.vue`; `useContactImportExport.ts` (+ its four test files); `Header.vue`, `settings/lock.vue`, `useLockWallet.ts` + their tests; `utils/in-flight-send.ts` (comment) | #151 |
+| 3a | `apps/extension/tests/e2e/contacts-import.test.ts` (+ a helper in `helpers/contacts.ts`); new `tests/e2e/network/contacts-import-stop.test.ts` | #151 e2e |
+| 3a | `shake.module.css`, `AmountCard.vue`, `fee-shared.module.css`, `FeeCostReadout.vue`, `FeeMethodRow.vue`, `FeeMethodSelector.vue`, `NewSenderPopup.vue`, `packages/design/src/ui/Skeleton.vue` (+ test), `received/[id].vue`, `a11y-css.test.ts` | #215 |
+| 3a | `SRC/stores/popup.store.ts`, `popup.store.test.ts`, `usePopupStack.test.ts` | #210 FA-8 |
+| 3a | `NewNetworkPopup.vue`, `EditNetworkPopup.vue` + tests; `utils/account-name.ts` (doc) | #214 FA-10 |
+| 3b | `packages/design/src/ui/Input.vue` (+ test, stories); `packages/design/src/{token-contract.ts,tokens.ts,base.css,base.css.test.ts}`, `ui/Button.vue` (+ test); `SRC/popup/pages/{tx,journal}/[id].vue`; the progress line's surface | #216, #229, #211, #151's line |
 
 ### Algorithms and non-obvious mechanics
 
 - **Level freshness (#184).** See the invariants above. A stale minimum can be Info at worst until the next answer, and Info drops only Debug lines.
 - **Sender first (#151).** The contact write is the commit point for a stop: a stop before it leaves the row "new", so a re-run writes it. A non-stop sender failure or skip is written and reported exactly as today.
-- **Import ownership (#151).** Each run owns a token; the Lock guard reads the set's size, so overlapping runs cannot release each other's guard.
+- **Import ownership (#151).** Each run owns a token, so overlapping runs cannot end each other's entry and a sealed run's late `end()` touches nothing; the two-minute hold belongs to the window and starts with its first running import.
 
 ### Trade-offs and alternatives not taken
 
@@ -191,12 +220,18 @@ See the decision ledger and the competing outline it was argued against.
   - New account, New FPC, Edit FPC: a name with outer spaces that matches a saved name shows the existing "Already exist" warning and Save stays disabled; saved names are not changed.
   - Logger: none.
 - **Arc 2**: none. Phase 2.3 proves it per shell; any difference fails the arc (SR2). The held-read pins change no behaviour.
-- **Arc 3** (quoting page 11 word for word):
-  - P11-01: "While an import runs, Lock and profile switch are disabled and the import shows "Importing contacts · N of M". Auto-lock is not postponed: if it fires mid-import the wallet locks and the existing "Import incomplete · N of M contacts written" toast shows. The PR attaches the result in both themes." Where the line shows: FA-1; other windows: FA-2; a time limit: FA-7.
+- **Arc 3a** (quoting page 11 word for word; the PR attaches both themes of each changed surface):
+  - P11-01: "While an import runs, Lock and profile switch are disabled and the import shows "Importing contacts · N of M". Auto-lock is not postponed: if it fires mid-import the wallet locks and the existing "Import incomplete · N of M contacts written" toast shows. The PR attaches the result in both themes." The progress line waits for 3b (P11-06b). Profile switch is the lock screen's, so a disabled Lock disables it (F18).
+  - FA-2 A: "Only the importing window disables Lock: the other window locks as usual; the import stops and shows "Import incomplete · N of M contacts written", exactly as when auto-lock fires."
+  - FA-3 A: "The import owns its connections: leaving the page does not disturb it; it ends with the result it really had."
+  - FA-7 B: "Disabled for up to 2 minutes, then "Lock anyway": after 2 minutes Lock works again behind the same "Lock anyway" confirm running transactions use, worded for the import." The wording: P11-13b (OWNER-ASKS.md), shipped as recommended. The disabled header chip takes the Settings row's disabled look (opacity 0.5, F29). Screenshots: the chip disabled, "Lock now" disabled, the confirm.
+  - P11-05 with FA-6 A: "Shakes and shimmers stop when Settings' Disable animations is on or the system asks for reduced motion, through one shared class." "Shakes and shimmers only, as P11-05 says; spinners, pulses and the countdown bar keep moving."
+  - FA-8 A: "Close the gap: the re-opened popup is on top and every popup under it sits back, like any other stack."
+  - FA-10 A: "Same rule as accounts and FPCs: "Testnet " shows "Already exists" when "Testnet" exists, and a saved name drops its outer spaces." A name of only spaces keeps Create and Update disabled, as for accounts (F25). Screenshot: the New network name field's "Already exists".
+- **Arc 3b** (held; quoted for the record):
   - P11-02 A: "The right slot wins at the cap: a duplicate warning shows; the length note shows only when the slot is empty." B: "Both show: the duplicate warning stays at the right; "Maximum length reached" moves to visible text under the field, with no tooltip."
   - P11-03: "Both red buttons use a darker red in both themes (#c62828: 5.62:1 with the white label) with a hover that darkens instead of lightening, so every state passes AA. The emoji check's wording stays as signed." The hover amount: FA-4.
   - P11-04: "The tx page drops its local grey link colour and the journal page its local padding, so all three use the shared module: the Tx hash link in the primary text colour, the same bottom spacing. Received keeps its from-text as it draws it."
-  - P11-05: "Shakes and shimmers stop when Settings' Disable animations is on or the system asks for reduced motion, through one shared class."
 
 ## Security & Adversarial Considerations
 
@@ -207,13 +242,13 @@ See the decision ledger and the competing outline it was argued against.
   - 1.1, 1.3, 1.4: no data path; 1.4 changes only which names the duplicate check refuses.
   - 2.1-2.2 (#224): tests and an identical-behaviour fold; no data path.
   - 2.3 (#225): CSS only.
-  - 3.1-3.3 (#151): disabling Lock is a security trade the owner signs (P11-01); a hostile 512-row file of senders behind a slow PXE keeps manual Lock disabled for as long as the import runs, and with auto-lock off nothing else ends it (FA-7). Auto-lock, other windows (FA-2), the integrity coordinator, deletion and a worker restart still end the session, and the run fence stays the guarantee. The fenced `addSender` stops a registration from starting after the import's session ended (one already awaiting the PXE may finish in its own profile); the fence check sits outside `viaPxe`, so a stop logs nothing at Error. H6: a call-site pin keeps `setExpiryDeferral`'s one caller. The lock seal clears every import entry, so a session that ended cannot leave Lock disabled in the next one. A row's contact is refused, not overwritten, when another window changed it while its registration waited.
-  - 3.4-3.7: CSS and design tokens only; #229 raises contrast.
+  - 3.1-3.3 (#151): disabling Lock is a security trade the owner signed (P11-01), bounded by FA-7 B: Lock is never held for more than two minutes in a row, however imports overlap, after which Lock works behind the confirm; `lockWallet` re-checks at the confirm, so the hold cannot be raced open or kept past its timer. Auto-lock, other windows (FA-2 A), the integrity coordinator, deletion and a worker restart still end the session, and the run fence stays the guarantee. The guard holds no secret and nothing persisted; a window's guard dies with it. Logging: the import logs no contact name or address (today's lines keep their categories); the fenced `addSender`'s stop is a typed refusal, never an Error line. The fenced `addSender` stops a registration from starting after the import's session ended (one already awaiting the PXE may finish in its own profile); the fence check sits outside `viaPxe`, so a stop logs nothing at Error. H6: a call-site pin keeps `setExpiryDeferral`'s one caller. The lock seal clears every import entry, so a session that ended cannot leave Lock disabled in the next one. A row's contact is refused, not overwritten, when another window changed it while its registration waited.
+  - 3.7: CSS only. 3.8: popup order only. 3.9: changes only which network names the check refuses and how a typed name is saved. 3b's 3.4-3.6: CSS and design tokens only; #229 raises contrast.
 - **Least privilege, crypto, supply chain.** No new dependency, permission, credential or cryptographic code. Frozen lockfile unchanged.
 
 ## Phases
 
-Every command runs from the worktree root unless it says otherwise. "Fast layers" means `bun run lint`, `bun run typecheck:all`, and the touched test files through the repository's runtime: `bun run --cwd apps/extension test <files>` or `bun run --cwd packages/<pkg> test <files>`; all exit 0. "Smoke, both browsers" means `bun run --cwd apps/extension build:chrome && bun run --cwd apps/extension test:e2e -- <files> --retry=0`, then `bun run --cwd apps/extension build:firefox && NULO_E2E_BROWSER=firefox bun run --cwd apps/extension test:e2e -- <files> --retry=0` (a fresh build before each run: smoke setup does not check freshness, and `e2e:agent` overwrites `dist/`). "Network" means `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<file>.test.ts`; until `e2e-harness-gaps` arc 1a (#169, gate G1) merges, run it inside an exclusive host lock that covers its build and its run, `flock --timeout 7200 ~/.cache/nulo-backlog/network-e2e.lock env NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<file>.test.ts` (the kernel releases it when the run exits, crash included). The lock is atomic only among runs that take it, so also wait while `~/.agents/ports.md` lists a live `e2e:agent` run from another worktree; the orchestrator's G1 schedule governs, and it can hand the same lock path to the other lanes. Never run two in this worktree.
+Every command runs from the worktree root unless it says otherwise. "Fast layers" means `bun run lint`, `bun run typecheck:all`, and the touched test files through the repository's runtime: `bun run --cwd apps/extension test <files>` or `bun run --cwd packages/<pkg> test <files>`; all exit 0. "Smoke, both browsers" means `bun run --cwd apps/extension build:chrome && bun run --cwd apps/extension test:e2e -- <files> --retry=0`, then `bun run --cwd apps/extension build:firefox && NULO_E2E_BROWSER=firefox bun run --cwd apps/extension test:e2e -- <files> --retry=0` (a fresh build before each run: smoke setup does not check freshness, and `e2e:agent` overwrites `dist/`). "Network" means `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<file>.test.ts` (parallel-safe across worktrees since G1, F28); never two in this worktree.
 
 ### Arc 1: logger, config, stack depth, logs viewer, names (decision-free)
 
@@ -277,70 +312,78 @@ Every command runs from the worktree root unless it says otherwise. "Fast layers
 
 **Arc 2 gate.** Arc 1's commands, the full smoke suite on both browsers, and the 2.3 table.
 
-### Arc 3: page 11 (waits on the signed page, H6, the sibling arcs and the blocking asks)
-
-Every phase waits on page 11. A struck or "As is" item is not built; its issue gets the SR3 comment.
+### Arc 3a: page 11 (D-orch-6)
 
 **3.1 #151 fenced sender, sender first.**
 1. Give `AccountStateService` the `ProfileService`; fence `addSender` outside `viaPxe`.
-2. Reorder `importRow`: refusal check, sender step with its outcome, the refusal check again when a sender step ran, then the contact write.
-3. Tests: composition — a session that ends between the sender and the contact leaves no contact row (never-happens), and an unstopped run writes both (control); a registration already awaiting the PXE when the session ends may finish, and the contact write after it still stops; a failed sender (live session) still writes the contact and the outcome toast reports it, as today (pin); with the registration held, another window renames the row's contact: the contact write is refused and counted as a refusal (never-happens), and with no change while held the row is written (control); unit — a dead fence registers no sender and logs nothing at Error; the pins stop table still reads "Import incomplete · N of M contacts written".
-- Validation gate: fast layers on `useContactImportExport.{test,pins.test,composition.test}.ts` and the account-state service tests.
+2. Reorder `importRow`: refusal check, sender step with its outcome, the refusal check again after a sender step that awaited the PXE, then the contact write.
+3. Tests: composition — a session that ends between the sender and the contact leaves no contact row (never-happens), and an unstopped run writes both (control); a registration already awaiting the PXE when the session ends may finish, and the contact write after it still stops; a failed sender (live session) still writes the contact and the outcome toast reports it (FA-11 A pin); with the registration held, another window renames the row's contact: the contact write is refused and counted as a refusal (never-happens), and with no change while held the row is written (control). Unit — a dead fence registers no sender and logs nothing at Error, a live one registers (control); the pins test's "contact before sender" row flips to "sender before contact" (F27); its stop table still reads "Import incomplete · N of M contacts written". A call-site pin: `setExpiryDeferral` has exactly one caller (H6).
+- Validation gate: fast layers on `useContactImportExport.{test,pins.test,composition.test,spaced-name.test}.ts`, the account-state service tests and the pin.
 
-**3.2 #151 the running state.** Waits on FA-1, FA-2 and FA-7, whichever option each answer picks. The steps below build the recommended answers (FA-1 A, FA-2 A, and FA-7 A or B). If FA-2 B or FA-7 B is picked, the phase is revised in `plan.md` before any code: files, the owner of the cross-window flag or the timer, how the timer ends with the import and with the session, the wording the page signs, and the tests below rewritten for that branch, with a Codex review of the revision recorded here. Sketch: FA-2 B moves the guard to a worker-side import flag set and cleared by `ContactService` under the run fence, read by every window's Lock and checked by the worker's lock entry; FA-7 B adds a 2-minute deadline per entry after which `lockWallet` opens the "Lock anyway" confirm instead of refusing.
-1. The token map in the app store; `importContacts` owns its entry; the lock seal clears the map (`locked-state.ts`, `app.vue`).
-2. Lock chip and "Lock now" disabled; `lockWallet` refuses while the set is not empty.
-3. The progress line where FA-1 says.
-4. Tests: both controls disabled while an import runs and enabled after it, including after a throw; with a sender registration held, a lock and an unlock leave Lock enabled, and the held import's late progress update and `finally` neither re-add its entry nor remove one a newer import added (never-happens, with the control that an import with no lock between keeps Lock disabled until it ends); two overlapping imports keep Lock disabled until both end, and each one's end removes only its own progress entry; `useLockWallet.test.ts` refuses on the direct path and from the confirm callback when an import started during `readForLock`; a call-site pin that `setExpiryDeferral` has exactly one caller (H6).
-- Validation gate: fast layers on the touched component, composable and store tests.
+**3.2 #151 the running state (FA-2 A, FA-3 A, FA-7 B).**
+1. `contact-import-guard.ts` composed into the app store; `importContacts` begins and ends its entry around `applyImportRows`; the lock seal resets the guard (`locked-state.ts`, `app.vue`).
+2. The import opens and closes its own three clients; the options drop `contactService`.
+3. The chip and "Lock now" take `disabled`; `useLockWallet` refuses while held and asks with the import's wording after the hold.
+4. Tests:
+   - `contact-import-guard.test.ts` (fake timers): an import holds until 119 999 ms and releases at 120 000 ms while it still counts as running (control: an `end()` before then releases at once); a second import begun at 119 s does not extend the hold past 120 s (never-happens), and the hold ends when the last import ends; `end()` removes only its own entry; after `resetContactImports()`, the sealed run's late `end()` and the old timer neither re-add its entry nor touch a newer import's hold (never-happens), and a run with no seal keeps holding until its deadline (control).
+   - `useContactImportExport.test.ts`: Lock is held from the first row to the result toast and released after it, including after a throw; nothing is held while the selection popup is open; the import's own clients carry every row and are disconnected only at its end, and the page's clients see no call from it.
+   - `useLockWallet.test.ts`: while held, `lock()` does nothing and `lockWallet` refuses; an import that begins during `readForLock` makes the direct path refuse; a confirm opened for sends alone, then an import that begins while it is open, abandons on confirm whether that import still holds or is past its hold (never-happens); a confirm naming import A, then B begins and A ends (one running before and after), abandons (never-happens); with the same imports running the callback locks (control); after the hold, `lock()` opens the confirm with the import's wording (one and two imports), and with approved sends too, both sentences under the sends' pre-title; a read that times out or rejects still asks with the import's wording while an import runs; with no import, every existing case passes unchanged.
+   - `Header.test.ts`, `lock.test.ts`: the chip and "Lock now" are disabled while held and enabled after; `locked-state.test.ts`: the seal calls `resetContactImports`.
+- Validation gate: fast layers on those files and every touched component's test.
 
-**3.3 #151 end to end.**
-1. Smoke, `contacts-import.test.ts`: during an import of the 500-row fixture with `isSender: false`, `header-lock` is disabled and enabled again after it ends; with `setSessionTtlMs`, auto-lock fires mid-import, the wallet locks and the incomplete toast shows.
-2. Network, new `tests/e2e/network/contacts-import-stop.test.ts`: an import of `isSender: true` rows stopped by auto-lock; every listed contact has its sender registered; after unlocking, a re-run selects one row the first run already registered (it lists as "Already saved" and is unselected by default) plus the remaining rows: the registration is attempted again for that address, and every row ends with its contact and its sender (I3).
+**3.3 #151 end to end.** Each scenario names its failure mode, why a cheaper layer cannot prove it, and its runtime; the PR states each browser's suite wall-clock before and after.
+1. Smoke, `contacts-import.test.ts`, two scenarios on a generated 500-row file of on-curve addresses, `isSender: false`:
+   - "an import holds Lock until it ends, and leaving Contacts does not disturb it": once the first row is stored, `header-lock` is disabled; the person goes to Settings, where the chip is still disabled, which proves rows were still pending when the Contacts page unmounted (the hold ends only with the import); the result toast is "Import completed successfully", the chip is enabled again and the book holds 500 rows. Proves the real chip's binding and that a real page unmount (whose port disconnect rejects in-flight requests) no longer touches the import; component tests mount stubs and fake clients. Estimate 20 s per browser.
+   - "auto-lock mid-import locks the wallet and stops the import": once a few rows are stored, `setSessionTtlMs(page, 1_500)`; the popup lands on the lock screen with "Import incomplete · N of 500 contacts written" where 0 < N < 500 (asserted, so a run whose stop missed the import fails loudly), and the book holds N or N+1 rows (a write whose reply the stop cut off). Proves the worker's real expiry, the seal and the toast surviving the lock screen together; the unit layers fake each. Estimate 25 s per browser.
+2. Network (Chrome), new `tests/e2e/network/contacts-import-stop.test.ts`: an import of 60 `isSender: true` rows on the local network, stopped once two rows are stored by a lock from outside the page (`lockActiveProfile` through the profile service, the FA-2 A path: what another window's Lock does); 0 < written < 60 is asserted (the stop landed mid-run), and every stored contact's address is a registered sender (never-happens: a contact without its sender). After unlocking, a re-run selects one row the first run already wrote (listed as "Already saved", unselected by default) plus the rest: every row ends with its contact and its sender (the success control; I3). Proves sender-first against a real PXE registration and a real cross-port lock; composition fakes both. Estimate 3 min including the suite's network setup.
 - Validation gate: smoke, both browsers, on `contacts-import.test.ts`; network (Chrome) on `contacts-import-stop`. No Firefox network twin: nothing here touches fixtures, focus, windows, user activation or WebAuthn.
 
-**3.4 #216, the option the page picks.** Build A or B; for B, FA-5's scope.
+**3.7 #215, motion.**
+- Tests: `a11y-css.test.ts` pins both stops (the reduced-motion rule and `:global(.noanimations)`, each `animation: none`) for the shared shake, `NewSenderPopup`'s shake and the received fee shimmer, and that no extension file defines its own `.skeleton` shimmer any more; the design package pins both stops for `Skeleton.vue`; the AmountCard and fee component tests find `Skeleton` at 72×10 and 60×12. A one-off Chrome probe compares each skeleton's computed size, background and animation with the parent commit, and that `.noanimations` and emulated reduced motion stop them (`lessons/phase-3.md`).
+- Validation gate: fast layers; the probe's values equal.
+
+**3.8 #210, re-open on top (FA-8 A).**
+- Tests: `popup.store.test.ts`'s BUG PIN becomes the contract: re-opening `a` in `{a, b}` gives `{b: 0, a: 1}`, and a later close and open never share an order; `usePopupStack.test.ts`'s re-open case expects depths 1 and 2.
+- Validation gate: fast layers on both files, `popup-stack.pins.test.ts` and `PopupCard.test.ts`.
+
+**3.9 #214, network names (FA-10 A).**
+- Tests, modelled on arc 1's account ones: beside a saved "Testnet", "Testnet " and " Testnet" show "Already exists" with Create disabled, "testnet" does not (control); `addNetwork` and `renameNetwork` receive the trimmed name; "   " keeps Create and Update disabled; Edit network excludes itself, and "Testnet " for a network named "Testnet" counts as unchanged.
+- Validation gate: fast layers on `NewNetworkPopup.{test,pins.test}.ts`, `EditNetworkPopup.test.ts`, `account-name.test.ts`.
+
+**Arc 3a gate.** Arc 1's commands, the full smoke suite on both browsers, and the network file from 3.3. Screenshots, both themes: the chip disabled, "Lock now" disabled, the import's confirm, New network's "Already exists".
+
+### Arc 3b: the re-asks (planned; revised at its start)
+
+**3.4 #216, the option the page picks.** Build what P11-02b picks; for B, FA-5's scope.
 - Tests in `Input.test.ts` with the real slot: at the cap with a `right` slot whose warning appears and disappears reactively, A shows the warning and hides the note, then shows the note when the warning goes; an empty fragment counts as empty; B shows both, the note as visible text with `input-max-length-note`; below the cap both show the slot.
 - Validation gate: fast layers on `Input.test.ts`; `bun run --cwd apps/extension build-storybook` exits 0; screenshots of the contact, network and FPC name fields at the cap, both themes.
 
-**3.5 #229, the darker red.** Waits on FA-4.
+**3.5 #229, the darker red.** Waits on P11-10b.
 - Tests: `Button.test.ts` asserts both variants use the token and a hover that mixes toward black; a contrast unit test computes ≥ 4.5:1 for the drawn label on the rest and hover colours in both themes.
 - Validation gate: fast layers; `base.css.test.ts` with its new hash; storybook build; screenshots at rest and hovered, both themes.
 
-**3.6 #211, detail pages.** Starts on a base with R1 and #142 in.
+**3.6 #211, detail pages.** Starts on a base with R1 and `incoming-transfers` arc 3a in; every measurement re-checked after the font remake.
 - Validation gate: fast layers on the three pages' tests; smoke, both browsers, on `rows.test.ts`; screenshots of the three pages full height, both themes.
 
-**3.7 #215, motion.**
-- Tests: `a11y-css.test.ts` rows pin both stops (reduced motion and `.noanimations`) for every shake and shimmer; the design package pins the same for `Skeleton.vue`; a computed-style check at both shimmer sizes (72×10 and 60×12) matches the parent.
-- Validation gate: fast layers; `bun run test:all`.
+**The progress line and the overlap rule (#151).** Built as P11-06b and P11-07b answer, on the guard's per-import entries.
 
-**Arc 3 gate.** Arc 1's commands, the full smoke suite on both browsers, and the network file from 3.3.
+**Arc 3b gate.** Arc 1's commands and the full smoke suite on both browsers.
 
 ## Delivery
 
-One `gh stack`, base `dev`, one PR per arc, each opened only after its gates pass and its Codex loop converges.
+No stack (D-orch-1): one plain PR per arc against `dev`, each opened only after its gates pass and its Codex loop converges.
 
-| Layer | Branch | Phases | Stacks on | PR title (≤ 93 chars) | Closes | code_review |
-|---|---|---|---|---|---|---|
-| 1 | `worktree-forms-and-contacts` (adopted) | 1.1-1.5 | `dev` | `fix(popup): form popup depth, trimmed name checks, config persist order, logger level gate` | #184, #205, #210, #212, #214 | off |
-| 2 | `forms-and-contacts-arc-2` | 2.1-2.3 | layer 1 | `refactor(popup): pin list reducers under held reads, share the loader scrim and the shake` | #224, #225 | off |
-| 3 | `forms-and-contacts-arc-3` | 3.1-3.7 | layer 2 | `feat(popup): guard contacts import, darker destructive red, shared detail and motion rules` | #151, #211, #215, #216, #229 (each only if page 11 approves it) | off |
-| 4 | `forms-and-contacts-close-out` | close-out | layer 3 | `docs(plans): close forms-and-contacts` | — | off |
+| Arc | Branch | Phases | PR title (≤ 93 chars) | Issues | code_review |
+|---|---|---|---|---|---|
+| 1 | `worktree-forms-and-contacts` | 1.1-1.5 | merged as #255 | closed #184, #205, #210, #212, #214 | off |
+| 2 | `forms-and-contacts-arc-2` | 2.1-2.3 | merged as #282 | closed #224, #225 | off |
+| 3a | `forms-and-contacts-arc-3a` off `origin/dev` | 3.1-3.3, 3.7-3.9 | `feat(contacts): fence the import's sender, hold Lock while it runs; honour reduced motion` | `Refs #151`, `Closes #215`, `Refs #210`, `Refs #214` | off |
+| 3b | `forms-and-contacts-arc-3b` | 3.4-3.6, the line, the overlap rule | set at its start | #151, #211, #216, #229 | off |
+| close-out | `forms-and-contacts-close-out` | close-out | `docs(plans): close forms-and-contacts` | — | off |
 
-- Start: `gh stack init --adopt worktree-forms-and-contacts --base dev`. Each later layer: `gh stack add <branch>` after the previous arc's loop converges.
-- Arc 1 may be submitted and merged before arcs 2 and 3 can start (A1). After its squash merge, restack with `gh stack sync`; never merge `dev` into the old head (add/add, `lessons.md`).
-- If R1 or #142 lags behind page 11, the orchestrator may cut phase 3.6 into its own layer; 3.6 touches no file another arc-3 phase touches. The same holds for any phase whose blocking ask stays open.
 - Open each PR without labels, then add `e2e:extension-smoke` or `e2e:extension-network` only when the path filter would skip a suite the arc needs.
-- PR body: what changed and why, the validation run with outcomes, `Closes #n` per issue, screenshots for arcs 1 and 3, the 2.3 table for arc 2, and each disposition: #205's bindings stay separate (D6); #210's re-open gap and per-owner policies go to FA-8 and FA-9; #224's race goes to FA-9; #225's snack card stays local.
+- PR body: what changed and why, the validation runs with outcomes, each browser's e2e wall-clock before and after, the issue lines above, screenshots of every changed popup surface in both themes, and each disposition: #151's line and overlap rule wait for 3b; FA-9 B (P11-15) builds nothing.
 - An issue whose fix is left out or did not hold gets a comment with the reason and stays open (a struck or "As is" page-11 item closes as not planned per SR3).
-
-### Issue to arc (for each issue's Pickup section)
-
-| Issue | Arc | Closed by |
-|---|---|---|
-| #212, #205, #210, #214, #184 | 1 | layer 1's PR |
-| #224, #225 | 2 | layer 2's PR (waits on `account-session-life` arc 3) |
-| #151, #216, #229, #211, #215 | 3 | layer 3's PR (waits on page 11; #151 also H6, FA-1, FA-2, FA-7; #229 also FA-4; #211 also R1 and #142) |
 
 ## Decision ledger
 
@@ -376,6 +419,14 @@ Each entry: the choice, the rejected alternatives and why. "C" is Codex, "O" the
 - D-arc2-3 (phase 2.2): `liveBus` returns a real `EventHandler` whose `add`/`remove` are `vi.fn` wrappers, so the existing `add.mock.calls[0][0]` pins keep working; the module-level mocks build fresh buses per test, since an unmounted component never removes its handlers. `ImportContactsPopup.test.ts`'s mount now hands the popup a copy of its saved book: an earlier test's in-place add was pushing into the shared `SAVED` fixture.
 - D-arc2-4 (#225, phase 2.3): the loader's source pin is a colocated `GlobalLoader.test.ts` (it reads `base.css` through `@nulo/resolve-asset`), not a row in `a11y-css.test.ts`, whose rules are about motion and focus. The Chrome loader capture holds the loader by replacing `chrome.runtime.connect` with a throwing stub before the page loads; the same stub did not take hold on Firefox, so the source pin stays Firefox's proof. The shake proof also compares the wrapper under emulated reduced motion on Chrome (the rule moved to the shared module).
 - D-arc2-5 (delivery): arc 2 is PR #282 against `dev` (D-orch-1). Filed with it: #283 (Send's active-token delete, D-arc2-2) and #284 (a zombie-owner race in `scripts/e2e/owned-processes.test.ts` that reddened one local `test:all` under host load; outside this lane).
+- D-orch-6 (orchestrator, 2026-10-14; the page 11 hand-off): page 11 signed 2026-10-14 17:53Z; the owner's notes re-open four picks (P11-02b, P11-06b, P11-07b, P11-10b). Arc 3a now: 3.1; 3.2 without the progress line and without an overlap rule (today's overlap stays allowed, one guard entry per import); 3.3 without the line's assertions; 3.7; 3.8 (FA-8 A) and 3.9 (FA-10 A) as new phases; the FA-7 B revision first. Arc 3b after the re-asks and `incoming-transfers` arc 3a: the line, the overlap rule, 3.4, 3.5, 3.6. FA-9 B and FA-11 A build nothing beyond pins. The "Lock anyway" import wording ships as recommended (P11-13b). Arc 3a branches off `origin/dev` and opens a plain PR (D-orch-1).
+- D-arc3-1 (#151, FA-7 B): the guard owns one window-level hold timer (`IMPORT_LOCK_HOLD_MS = 120_000`), started when the first import begins and cleared when the last one ends, by the seal and by the window's end; imports past it still count as running, so Lock asks instead of refusing. Rejected: a timer per import (the revision's first draft; R3a-C1: an import begun at 119 s held Lock until 239 s, and overlapping imports could hold it indefinitely, against "after 2 minutes Lock works again"); the deadline checked only when Lock is pressed (a disabled chip never re-enables without a re-render trigger); the timer in `importContacts` (the seal could not clear it, so a sealed import could flip a newer hold).
+- D-arc3-2 (#151, FA-3 A): the import constructs its own contact and account-state clients, as it already does its profile client; the options drop `contactService`. Rejected: factories in the options (an injection seam for one caller); keeping the page's clients alive while an import runs (couples the page's teardown to the import).
+- D-arc3-3 (#151): no progress state in 3a's guard entries; 3b adds it with the line. The plan's `{ done, total }` entry would be written and never read until then.
+- D-arc3-4 (#151, the chip): a disabled header chip takes `SettingItem`'s disabled look (opacity 0.5, no hover, default cursor), the existing convention for a disabled row; shown in the PR's screenshots under P11-01's "Lock … disabled".
+- D-arc3-5 (#214, FA-10 A): the popups trim and compare by `storedNameKey`; the worker keeps its exact check, as for accounts. A spaces-only name keeps Save disabled (F25), since it would otherwise save an empty name.
+- D-arc3-7 (#215): the AmountCard and fee skeletons render the design package's `Skeleton` instead of composing a new `shimmer.module.css`. The tree already holds the shared shimmer (F30), so a new module would have been a third copy; the 3.7 probe proves the computed look unchanged. `Skeleton`'s `flex-shrink: 0` matters only if a fee row overflowed, which none does at the popup's width; its `aria-hidden` hides an empty decorative span.
+- D-arc3-6 (plan size): this plan is over the mid target (≈ 550 lines against 350) because it carries three arcs' records; the Post-implementation section now cites `implementations-plan/README.md` § Post-implementation standard at `175d8268` instead of restating it.
 
 ### Competing outline (cheapest-first), sent to both audits
 
@@ -480,63 +531,34 @@ Outcome: the plan kept its #184, #205, #210 and #151 shapes; it took the outline
 
 **Codex round 3 (same session): approve, no new material findings.** The loop converged.
 
+### Arc 3a plan revision (2026-10-14): Codex (gpt-6.1-sol, high), one session
+
+**Round 1: reject** (the revision left two Lock guarantees open). Five findings, all verified and accepted:
+- R3a-C1 [High] a timer per import let overlapping imports hold Lock past two minutes (A at 0 s, B at 119 s: held to 239 s): the hold is now window-level (D-arc3-1).
+- R3a-C2 [High] a confirm opened for sends could, once a later import's hold expired, stop that import without naming it: the callback abandons on an import the confirm did not name.
+- R3a-C3 [Medium] the e2e stops were not proven mid-run: smoke 1 checks the chip still disabled after leaving Contacts; smoke 2 and the network run assert 0 < written < total; the network stop is a lock from outside the page once two rows are stored.
+- R3a-C4 [Medium] the read-failure fallback (`running = 0`) needed a test with a running import: added.
+- R3a-C5 [Low] P11-13b called the button red; `confirm_color` colours the pre-title only (`ConfirmPopup.vue:26`): corrected.
+
+**Round 2 (resumed): conditional approve.** The fixes hold; the `Skeleton` reuse for #215 (D-arc3-7) is sound (Codex also checked the fee menu with a 25-character FPC name: `flex-shrink: 0` changes nothing). One finding, accepted: R3a-C6 [Medium] a count check passes `1 → 2 → 1` (B begins, A ends): the confirm keeps the set of imports it named.
+
+**Round 3 (resumed): approve, no new material findings.**
+
 ## Post-implementation
 
-This section is self-contained: the implementing session follows it from here.
+`implementations-plan/README.md` § Post-implementation standard, read at `175d8268`, binds; what is specific to this plan:
 
-### Per arc, at each arc boundary (before `gh stack add` opens the next layer)
-
-1. Run the arc gate (above) and paste its result.
-2. Codex audit: `env -u CODEX_ACCOUNT ~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol` (on a quota or 401 error, retry once with `CODEX_ACCOUNT=alejo-icloud`; if that fails too, log the failed consult and continue on your own judgment within scope). The prompt carries: the arc's diff; this plan and its decision ledger; the arc map ("this is arc N of 3; later arcs build X on it", so seams reserved for later arcs are not flagged); the adversarial ask (what could go wrong, what would an attacker target, what are we trusting that we should not); and the two rules below, verbatim.
-3. Triage each finding. Verify Codex's factual claims against the repo first; it can misread code. Apply the accepted fixes, commit, and log the round (consult and verdict) in `lessons/phase-N.md`.
-4. Resume the same Codex session (`resume-codex.sh "" <followup> <codex-dir> high`) with the fix diff and ask for a re-review under the same rules. Repeat until a round yields no new material findings. Rejected nitpicks do not count. Still material after three rounds: stop and surface it to the orchestrator.
-
-### After every arc is looped
-
-5. Final cross-arc pass: a fresh Codex session over the net diff from the plan baseline, asking for seams between arcs, duplication across arcs and drift from this plan, with the two rules. Same loop, same three-round stop.
-
-**The no-over-engineering rule** (verbatim in every post-implementation Codex prompt): *"Report bugs and small, targeted improvements only. Do not propose speculative abstractions, extra configuration surface, new layers, or rewrites — the smallest change that fixes each real problem. If code works and is clear, leave it alone."*
-
-**The comment-quality rule** (verbatim in every post-implementation Codex prompt): *"Audit the comments for value per character. Flag any comment that narrates what the code visibly does, restates its line, references implementation plans / phases / reviews, or spends a paragraph where a sentence works — and flag places where a non-obvious invariant or constraint deserves a comment it doesn't have. Comments are permanent context every future reader, human or LLM, pays to re-read: they must be few, dense, and exact."*
-
-### Delivery
-
-6. Per the Delivery section. Never open a PR, not even a draft, before its arc's loop converges. `gh stack submit --auto`, then `gh pr edit` each body. Then `gh pr checks --watch`.
-
-### Close-out (the stack's docs-only top layer, after the arc PRs exist)
-
-7. Before the close-out commit, merge `origin/dev` into the branch and read what changed in `implementations-plan/index.md` and `lessons.md`; never a union merge.
-8. Write an `## Outcome` block directly after the front matter: date, status, what shipped with PR numbers, what was dropped or did not hold (a disposition line each), an `Open items:` line, and a line retiring the `/goal` and `/loop` seeds below.
-9. Promote the generalizable gotchas into `implementations-plan/lessons.md`, one line each, linking the archived detail; keep it under 8 KiB, deduplicate, retire what a new entry supersedes, date tool-specific lines.
-10. File every open item in its home (at least each FA-n still unanswered, as an `owner-decision` issue, unless an earlier arc filed it):
-
-| Situation | Home |
-|---|---|
-| Work inside the implementation you are on | this `plan.md` and the PR |
-| Actionable work that outlives the plan | a GitHub issue with a domain label and a `Record` link to the archived plan |
-| Needs a product call, or waits on something outside the repo | an issue labelled `owner-decision` or `blocked:external` |
-| A suspected exploitable weakness | a private draft security advisory; the plan records only "tracked privately: GHSA-…" |
-| Rejected, superseded or already done | a disposition line in the Outcome block |
-| Knowledge that prevents a repeat | `implementations-plan/lessons.md` |
-| A legal or store blank with a release deadline | `BEFORE-LAUNCH.md` |
-| Accepted code work that blocks launch | the `v1.0.0` milestone, pointed at once from `BEFORE-LAUNCH.md` |
-
-   Dedupe first (`gh issue list --state all --search "<words>"`); an issue body has `## What happens`, `## Where`, `## Impact`, `## Possible fix`, `## Record`.
-11. Delete `STATUS.md`. Keep `OWNER-ASKS.md` with its answers (it archives with the plan). `git mv implementations-plan/forms-and-contacts implementations-plan/archive/forms-and-contacts` in its own commit; repair the relative links the extra level breaks (`git grep -n 'forms-and-contacts'`); move the index line to `implementations-plan/archive/index.md`. Run `bun run check:plans`.
-12. Report and wait. Merging is the orchestrator's call; the merge of the close-out completes the plan.
-
-### Teardown after the merge
-
-13. Once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/forms-and-contacts/plan.md` succeeds, run `agent-worktree done forms-and-contacts --merged --trunk dev`, without asking (a session started inside the worktree has nothing to exit). It refuses rather than forces: relay a refusal and stop. A `/loop` session checks this on every firing; a `/goal` session arms one background wait after its wrap-up report: `until git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/forms-and-contacts/plan.md; do sleep 300; done`.
+- Step 1 is absent (`code_review: off`). Step 2's reviewer: `env -u CODEX_ACCOUNT ~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol` (on a quota or 401 error, retry once with `CODEX_ACCOUNT=alejo-icloud`); resume with `resume-codex.sh`. One Opus 5.5 review of the arc's diff runs beside the first round. Placement: per arc against its PR base (no stack); the final cross-arc pass runs over the lane's net diff once 3b lands.
+- Delivery as § Delivery. Close-out per step 4, after arc 3b; every FA-n still unanswered then is an `owner-decision` issue. Teardown per step 5 with slug `forms-and-contacts` and `--trunk dev`.
 
 ## Seeds
 
-Recommended: `/goal`. Use exactly one per session; they do not compose. Both are drafts until the orchestrator approves the plan; arc 2 starts only on a base with `account-session-life` arc 3, and arc 3 only with page 11 signed.
+Recommended: `/goal`. Use exactly one per session; they do not compose. Arc 3b starts only once the orchestrator records the re-asks' answers.
 
 ```
-/goal Every phase of the arcs the orchestrator released is marked ✓ in implementations-plan/forms-and-contacts/plan.md, each backed by its validation gate reported passing in the transcript; for each phase the transcript prints LESSONS_FILE=implementations-plan/forms-and-contacts/lessons/phase-N.md; /code-review was NOT run (code_review is off); the Codex fix loop (env -u CODEX_ACCOUNT run-codex.sh … high read-only gpt-6.1-sol) converged for each released arc at its boundary and for the final cross-arc pass, each convergence a resumed Codex pass reporting no new material findings, quoted in the transcript; the Delivery section's stack exists on GitHub, created only after the loops converged (gh stack view in the transcript), including the close-out layer that archived the plan (git show --stat of the archive-move commit); bun run test and bun run lint both exit 0 in the transcript.
+/goal Every phase of the arcs the orchestrator released is marked ✓ in implementations-plan/forms-and-contacts/plan.md, each backed by its validation gate reported passing in the transcript; for each phase the transcript prints LESSONS_FILE=implementations-plan/forms-and-contacts/lessons/phase-N.md; /code-review was NOT run (code_review is off); the Codex fix loop (env -u CODEX_ACCOUNT run-codex.sh … high read-only gpt-6.1-sol) converged for each released arc and for the final cross-arc pass, each convergence a resumed Codex pass reporting no new material findings, quoted in the transcript; each released arc's PR exists against dev, opened only after its loop converged, and the close-out PR archived the plan (git show --stat of the archive-move commit); bun run test and bun run lint both exit 0 in the transcript.
 ```
 
 ```
-/loop 15m Drive implementations-plan/forms-and-contacts forward. Never idle. Each firing: (1) read plan.md, STATUS.md, OWNER-ASKS.md and lessons/ from the top stack layer; if the plan path is gone, check `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/forms-and-contacts/plan.md`: success means merged, so run `agent-worktree done forms-and-contacts --merged --trunk dev`, report, clear this loop and stop; failure means delivered, so babysit CI only. (2) Waiting on CI is fine; confirm it progresses. (3) No task in hand: take the next pending step of a released arc; arc 2 needs account-session-life arc 3 on its base, arc 3 needs the signed page 11 and each phase's blocking asks, and an open OWNER-ASKS item leaves its part as it is. Run lint and the touched tests after each edit; commit; gh stack push. (4) A decision you would bring to a person: consult Codex (env -u CODEX_ACCOUNT run-codex.sh … high read-only gpt-6.1-sol) and log it; anything a person would see goes to OWNER-ASKS.md and waits. Never merge, publish or widen scope. (5) Same step failed 5 times: reassess with Codex. (6) Phase green per its gate: mark ✓, print LESSONS_FILE=…, advance; at an arc boundary run the Codex loop before gh stack add. (7) All released phases ✓: final cross-arc pass, Delivery, close-out per plan.md, gh pr checks --watch, report and stop.
+/loop 15m Drive implementations-plan/forms-and-contacts forward. Never idle. Each firing: (1) read plan.md, STATUS.md, OWNER-ASKS.md and lessons/ on the current arc branch; if the plan path is gone, check `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/forms-and-contacts/plan.md`: success means merged, so run `agent-worktree done forms-and-contacts --merged --trunk dev`, report, clear this loop and stop; failure means delivered, so babysit CI only. (2) Waiting on CI is fine; confirm it progresses. (3) No task in hand: take the next pending step of a released arc; arc 3b needs the re-asks answered and incoming-transfers arc 3a on dev; an open OWNER-ASKS item leaves its part as it is. Run lint and the touched tests after each edit; commit; push the arc branch. (4) A decision you would bring to a person: consult Codex (env -u CODEX_ACCOUNT run-codex.sh … high read-only gpt-6.1-sol) and log it; anything a person would see goes to OWNER-ASKS.md and waits. Never merge, publish or widen scope. (5) Same step failed 5 times: reassess with Codex. (6) Phase green per its gate: mark ✓, print LESSONS_FILE=…, advance; at an arc boundary run the Codex loop before opening its PR. (7) All released phases ✓: final cross-arc pass, Delivery, close-out per plan.md, gh pr checks --watch, report and stop.
 ```
