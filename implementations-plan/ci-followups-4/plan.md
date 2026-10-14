@@ -1,7 +1,7 @@
 ---
 plan: ci-followups-4
 tier: light
-status: planned; Codex approve (round 3), Opus conditional approve (conditions applied in v2); awaiting the orchestrator's approval and A1
+status: implementing arc 1; A1 approved by the orchestrator 2026-10-14
 issues: "#172, #365 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -86,6 +86,7 @@ Recon: [recon.md](recon.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). 
 | D4 | No test pins the list | `bunfig.toml` changes trip the audit gate and review |
 | D5 | Production-build identity on fresh trees, after a determinism control | Proves no shipped resolution moved |
 | D-orch-1 | One arc, one PR against `dev`, no stack | orchestrator |
+| D-impl-1 | Storybook's `framework.name` is `resolvePackageRoot("@storybook/vue3-vite", { from: import.meta.url })` | The package already exports the root lookup; same path as `dirname(resolvePackageAsset(…, "package.json", …))` without the `dirname` |
 
 ## Assumptions
 
@@ -118,7 +119,7 @@ Recon: [recon.md](recon.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). 
 
 Warnings: network e2e runs only through `agent.sh`, at retry 0; smoke uses `test:e2e` on its armed build; never two e2e runs at once in this worktree. If aztec-rc3 has landed, merge `origin/dev` first and reread its two gaps on the new versions. If `dev` moves with dependency changes between Phase 1 and Phase 2, retake the baseline.
 
-### Phase 1: declare the first-party gaps (#172)
+### Phase 1: declare the first-party gaps (#172) ✓
 
 1. Add `@types/node` `^24.13.2` to `packages/aztec-runtime` devDependencies and set its `types` to `["chrome-types", "node"]`.
 2. Add `@storybook/vue3-vite` to `packages/design` devDependencies.
