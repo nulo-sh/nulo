@@ -12,6 +12,11 @@ import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { NETWORK_SERVICE_NAME, type Network, NodeStatus } from "@/wallet/services/network/spec"
 import { AccountStateService } from "./service"
+import { svc } from "@/wallet/services/composition-harness"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
+
+/** The profile service a fence-free call never asks. */
+const profileStub = () => svc(PROFILE_SERVICE_NAME, {})
 
 // The fixtures carry stub instances and artifacts; the class-id check has its own real-data tests.
 vi.mock("@nulo/aztec-runtime/pxe", async (importOriginal) => ({
@@ -54,6 +59,7 @@ describe("restore() exact-branch pins", () => {
 
 	beforeEach(async () => {
 		const services = new ServiceCollection()
+		services.add(profileStub())
 		services.add(new FakeNetworkService())
 		accountStateService = new AccountStateService(new LoggerStore(new ConfigStore()))
 		services.add(accountStateService)

@@ -1,6 +1,6 @@
 # incoming-transfers — owner asks
 
-Six asks. None blocks Arc 1, which changes nothing a person sees. Each ask says what ships if it is
+Seven asks. None blocks Arc 1, which changes nothing a person sees. Each ask says what ships if it is
 not answered. Page 4 (P4-01 to P4-05) and charter C12 are already on the owner's pages and are not
 repeated here; these asks cover only what those records do not say.
 
@@ -145,7 +145,40 @@ So the record can be read two ways.
 **What ships now.** Nothing on these rows: they stay as they are until this is answered, and #142
 stays open.
 
+## OA-7. Keyboard focus on the Details links and the "View on <explorer>" line
+
+**Surface.** The sent transaction, received and journal pages: the Tx hash link, the new Block and
+To links (#142), and the "View on <explorer>" line under the time.
+
+**Situation.** The wallet's stylesheet removes every link's focus outline, so a person moving through
+these links with Tab sees no sign of where they are. The wallet's other controls draw a 2 px accent
+ring on keyboard focus. Arc 3a gave its two new controls that are not rows, the address card's
+corner icon and the trust prompt's "View contract on <explorer>", that ring. The new Block and To
+links are exactly the Tx hash row's link (OA-6), so they share its gap.
+
+**Options.**
+
+- **A. The accent ring on keyboard focus** for those four links (recommended). Nothing changes at
+  rest or for a mouse or a tap.
+- **B. As today.** No ring on these links.
+
+**Recommendation.** A: a keyboard user can see which link Enter opens, as on every other control.
+
+**What ships now.** B.
+
 ## Answers
 
 - **OA-5 = A, newest first** (decision page 4, signed 2026-10-14). Phase 2.3 is built: newest public
   receipts land on a token's first scan, and older rows fill in below, newest to oldest.
+- **OA-2 = A** (decision page 4 on #142, 2026-10-14; built in arc 3a). A small external-link icon in
+  each card's corner; a tap elsewhere on the card still copies; no icon under explorer None or on a
+  network with no explorer.
+- **OA-3 = B** (2026-10-14, same record). No contract link on detail pages; the contract link ships
+  only on the first-receive trust prompt (P4-01, #97).
+- **OA-6 = A** (2026-10-14, same record). The value is the link, exactly as the Tx hash row in
+  Details; with explorer None the row stays as it is today.
+- **P4-02b = A** (2026-10-14, same record; settles P4-02 and P4-07). A corner icon on each address
+  card and the Block hash as a link in the Tx hash row's style; no row added, nothing moves; the
+  icon's hit area may grow; From gets the icon only when the sender is an address.
+
+Open: OA-1, OA-4, OA-7.

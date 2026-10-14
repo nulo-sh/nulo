@@ -56,7 +56,16 @@ const STATE_KEYS = [
 	"defaultExplorer",
 	"loggerWindowId",
 ]
-const GETTER_KEYS = ["isRegistered", "hasInFlightSend", "approvedSendsInFlight", "activeScope", "transactions", "awaitingTransactions"]
+const GETTER_KEYS = [
+	"isRegistered",
+	"hasInFlightSend",
+	"approvedSendsInFlight",
+	"activeScope",
+	"transactions",
+	"awaitingTransactions",
+	"contactImports",
+	"lockHeldByImport",
+]
 const ACTION_KEYS = [
 	"loadOnboardingCompleted",
 	"setOnboardingCompleted",
@@ -70,6 +79,8 @@ const ACTION_KEYS = [
 	"refreshInFlight",
 	"resetInFlight",
 	"commitScopeChange",
+	"beginContactImport",
+	"resetContactImports",
 	"withScopeChangeAllowed",
 	"addAwaitingTransaction",
 	"removeAwaitingTransaction",
@@ -111,6 +122,10 @@ const RETURN_ORDER = [
 	"refreshInFlight",
 	"resetInFlight",
 	"commitScopeChange",
+	"contactImports",
+	"lockHeldByImport",
+	"beginContactImport",
+	"resetContactImports",
 	"withScopeChangeAllowed",
 	"addAwaitingTransaction",
 	"removeAwaitingTransaction",

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, beforeEach, vi } from "vitest"
 import { mount } from "@vue/test-utils"
+import { Skeleton } from "@nulo/design"
 import { nextTick } from "vue"
 import { validateSendAmount } from "@/popup/pages/send-amount"
 import { parseAmountToBaseUnits } from "@/utils/amount"
@@ -19,6 +20,7 @@ const STUBS = {
 	Text: { template: "<span><slot /></span>" },
 	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
 	Tooltip: { template: '<span><slot /><slot name="content" /></span>' },
+	Skeleton,
 }
 
 const mountCard = (props: Record<string, unknown> = {}) =>
@@ -297,7 +299,7 @@ describe("composite/AmountCard — C3 fiat input", () => {
 
 	test("skeleton shows while converting; derived line after", async () => {
 		const w = mountFiat({ fiatMode: true, fiatGuard: { frozenUsd: 1, frozenAt: Date.now(), converting: true } })
-		expect(w.find("[data-testid='send-amount-converting']").exists()).toBe(true)
+		expect(w.get("[data-testid='send-amount-converting']").attributes("style")).toBe("width: 72px; height: 10px;")
 
 		await w.setProps({ fiatGuard: { frozenUsd: 1, frozenAt: Date.now(), converting: false }, modelValue: "125.017875" })
 		const derived = w.find("[data-testid='send-amount-derived']")

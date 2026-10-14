@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest"
 import { mount } from "@vue/test-utils"
+import { Skeleton } from "@nulo/design"
 import { FpcType } from "@/wallet/services/fpc/client"
 import FeeMethodRow from "./FeeMethodRow.vue"
 
@@ -8,6 +9,7 @@ const STUBS = {
 	// e2e selectors visible in tests.
 	Flex: { template: "<div><slot /></div>" },
 	Text: { template: "<span><slot /></span>" },
+	Skeleton,
 }
 
 const factory = (props: Record<string, unknown> = {}) => mount(FeeMethodRow, { props, global: { stubs: STUBS } })
@@ -26,7 +28,7 @@ describe("FeeMethodRow", () => {
 	test("'fj' method shows skeleton while loading", () => {
 		const w = factory({ method: { type: "fj" }, isLoading: true, feeJuiceBalanceFormatted: "12" })
 		expect(w.text()).not.toContain("12 FJ")
-		expect(w.html()).toMatch(/skeleton/)
+		expect(w.findComponent(Skeleton).attributes("style")).toBe("width: 60px; height: 12px;")
 	})
 
 	test("'private_fpc' method with registered fpc renders private FJ value", () => {

@@ -180,7 +180,7 @@ jobs:
       ref: ${{ needs.resolve.outputs.sha }}
 
   # The network suite mirrors pr-extension-network-e2e.yml's job shape exactly (5
-  # proverless shards + two dedicated heavy jobs + the real-proving canary),
+  # proverless shards + three dedicated heavy jobs + the real-proving canary),
   # minus its paths-filter/decide plumbing — a nightly always runs everything.
   # scripts/ci-cd/behavior-gating.test.ts pins each job's files to that file's.
 
@@ -203,7 +203,7 @@ jobs:
       shard: ${{ matrix.shard.id }}
       shard_label: ${{ matrix.shard.label }}
       # No `retry` input → config default (2 retries, 3 attempts). See header, flake policy.
-      exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts"
+      exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
       proverless: true
 
   network-e2e-heavy:
@@ -226,6 +226,17 @@ jobs:
       ref: ${{ needs.resolve.outputs.sha }}
       shard_label: "heavy-concurrent"
       test_files: "tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+      proverless: true
+
+  network-e2e-heavy-long:
+    name: Run / heavy / snack-placement + failed-send-check
+    needs: resolve
+    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      ref: ${{ needs.resolve.outputs.sha }}
+      shard_label: "heavy-long"
+      test_files: "tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
       proverless: true
 
   network-e2e-canary:
@@ -391,7 +402,7 @@ jobs:
       ref: ${{ needs.resolve.outputs.sha }}
       shard: ${{ matrix.shard.id }}
       shard_label: ${{ matrix.shard.label }}
-      exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts"
+      exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
       proverless: true
 
   network-e2e-chaos-firefox:
@@ -430,6 +441,18 @@ jobs:
       ref: ${{ needs.resolve.outputs.sha }}
       shard_label: "heavy-concurrent"
       test_files: "tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+      proverless: true
+
+  network-e2e-heavy-long-firefox:
+    name: Firefox / Run / heavy / snack-placement + failed-send-check
+    needs: resolve
+    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      browser: firefox
+      ref: ${{ needs.resolve.outputs.sha }}
+      shard_label: "heavy-long"
+      test_files: "tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
       proverless: true
 
   network-e2e-canary-firefox:
@@ -520,11 +543,13 @@ jobs:
         network-e2e,
         network-e2e-heavy,
         network-e2e-heavy-concurrent,
+        network-e2e-heavy-long,
         network-e2e-canary,
         network-e2e-chaos,
         network-e2e-firefox,
         network-e2e-heavy-firefox,
         network-e2e-heavy-concurrent-firefox,
+        network-e2e-heavy-long-firefox,
         network-e2e-canary-firefox,
         network-e2e-chaos-firefox,
         build-chrome,
@@ -546,11 +571,13 @@ jobs:
       needs.network-e2e.result == 'success' &&
       needs.network-e2e-heavy.result == 'success' &&
       needs.network-e2e-heavy-concurrent.result == 'success' &&
+      needs.network-e2e-heavy-long.result == 'success' &&
       needs.network-e2e-canary.result == 'success' &&
       needs.network-e2e-chaos.result == 'success' &&
       needs.network-e2e-firefox.result == 'success' &&
       needs.network-e2e-heavy-firefox.result == 'success' &&
       needs.network-e2e-heavy-concurrent-firefox.result == 'success' &&
+      needs.network-e2e-heavy-long-firefox.result == 'success' &&
       needs.network-e2e-canary-firefox.result == 'success' &&
       needs.network-e2e-chaos-firefox.result == 'success' &&
       needs.build-chrome.result == 'success' &&
@@ -682,11 +709,13 @@ jobs:
         network-e2e,
         network-e2e-heavy,
         network-e2e-heavy-concurrent,
+        network-e2e-heavy-long,
         network-e2e-canary,
         network-e2e-chaos,
         network-e2e-firefox,
         network-e2e-heavy-firefox,
         network-e2e-heavy-concurrent-firefox,
+        network-e2e-heavy-long-firefox,
         network-e2e-canary-firefox,
         network-e2e-chaos-firefox,
         build-chrome,
@@ -709,11 +738,13 @@ jobs:
             "${{ needs.network-e2e.result }}" \
             "${{ needs.network-e2e-heavy.result }}" \
             "${{ needs.network-e2e-heavy-concurrent.result }}" \
+            "${{ needs.network-e2e-heavy-long.result }}" \
             "${{ needs.network-e2e-canary.result }}" \
             "${{ needs.network-e2e-chaos.result }}" \
             "${{ needs.network-e2e-firefox.result }}" \
             "${{ needs.network-e2e-heavy-firefox.result }}" \
             "${{ needs.network-e2e-heavy-concurrent-firefox.result }}" \
+            "${{ needs.network-e2e-heavy-long-firefox.result }}" \
             "${{ needs.network-e2e-canary-firefox.result }}" \
             "${{ needs.network-e2e-chaos-firefox.result }}" \
             "${{ needs.build-chrome.result }}" \

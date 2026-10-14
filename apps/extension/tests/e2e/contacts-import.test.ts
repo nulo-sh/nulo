@@ -23,7 +23,7 @@ import {
 	test,
 	waitForHash,
 } from "./fixtures/extension"
-import { fillNewContactForm, navigateToSettings } from "./fixtures/helpers"
+import { fillNewContactForm, navigateToSettings, setSessionTtlMs, waitForLockScreen } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
 import {
 	book,
@@ -46,6 +46,8 @@ import {
 	waitForListed,
 	waitForListedAddress,
 	waitForSelected,
+	waitForStoredCount,
+	shownToast,
 } from "./helpers/contacts"
 import { pressEscape } from "./helpers/pointer-probes"
 
@@ -71,6 +73,32 @@ const FULL_NAME = "Bartholomew Featherstones"
 const files = contactsFiles()
 afterAll(files.cleanup)
 const contactsFile = (contacts: unknown[]) => files.write({ version: 2, contacts })
+
+/** `count` distinct on-curve addresses from a fixed seed, so every run imports the same file. */
+function onCurveAddresses(count: number): string[] {
+	let state = 0x9e3779b9
+	const next = () => {
+		state ^= state << 13
+		state ^= state >>> 17
+		state ^= state << 5
+		return state >>> 0
+	}
+	const found = new Set<string>()
+	while (found.size < count) {
+		// A leading zero byte keeps the value below the field modulus.
+		const address = `0x00${Array.from({ length: 8 }, () => next().toString(16).padStart(8, "0"))
+			.join("")
+			.slice(2)}`
+		if (isValidAztecAddress(address)) found.add(address)
+	}
+	return [...found]
+}
+
+/** Enough rows that an import is still writing seconds after its first row is stored. */
+const LONG_IMPORT_ROWS = 500
+const longImportFile = () =>
+	contactsFile(onCurveAddresses(LONG_IMPORT_ROWS).map((address, i) => ({ name: `Contact ${String(i + 1).padStart(3, "0")}`, address })))
+const lockChipDisabled = (page: Page) => page.$eval(sel("header-lock"), (button) => (button as HTMLButtonElement).disabled)
 
 /** Runs `body` on the Contacts page of `ctx` with the Testnet RPC refused, then checks the refusal
  *  held every request it had to and that no page threw. */
@@ -363,3 +391,48 @@ test("export, then import: into the same wallet nothing changes, into a fresh wa
 		await fresh.close()
 	}
 }, 300_000)
+
+// Fails if leaving Contacts cuts off a running import (the page's clients rejected the row being
+// written), or if the real chip does not follow the hold. Component tests mount stubs and fake
+// clients, so only a real page unmount and the real Header can show either.
+test("an import holds Lock until it ends, and leaving Contacts does not disturb it", async ({ registeredExtensionPerTest: ctx }) => {
+	await onContacts(ctx, async (page) => {
+		await pickContactsFile(page, longImportFile())
+		await toastAfter(
+			page,
+			async () => {
+				await closeImportWith(page, "import-contacts-submit")
+				await waitForStoredCount(page, 1)
+				expect(await lockChipDisabled(page)).toBe(true)
+				await clickByTestId(page, "subpage-back")
+				await waitForHash(page, "#/popup/settings")
+				// Still disabled: the import was still running when the Contacts page unmounted (the hold
+				// ends with it, or at its deadline).
+				expect(await lockChipDisabled(page)).toBe(true)
+			},
+			"Import completed successfully",
+			120_000,
+		)
+		expect(await lockChipDisabled(page)).toBe(false)
+		expect(await storedContacts(page)).toHaveLength(LONG_IMPORT_ROWS)
+	})
+}, 240_000)
+
+// Fails if the worker's real expiry does not stop a running import, or if its result is lost to the
+// lock screen; the unit layers fake the expiry, the seal and the toast's survival separately.
+test("auto-lock mid-import locks the wallet and stops the import", async ({ registeredExtensionPerTest: ctx }) => {
+	await onContacts(ctx, async (page) => {
+		await pickContactsFile(page, longImportFile())
+		await closeImportWith(page, "import-contacts-submit")
+		await waitForStoredCount(page, 3)
+		await setSessionTtlMs(page, 1_500)
+		await waitForLockScreen(page)
+		const toast = await shownToast(page, "Import incomplete")
+		const written = Number(/^Import incomplete · (\d+) of 500 contacts written$/.exec(toast)?.[1] ?? Number.NaN)
+		// Strictly inside, so a stop that missed the import fails loudly instead of passing.
+		expect(written).toBeGreaterThan(0)
+		expect(written).toBeLessThan(LONG_IMPORT_ROWS)
+		// A write whose reply the stop cut off is stored but not counted.
+		expect([written, written + 1]).toContain((await storedContacts(page)).length)
+	})
+}, 180_000)

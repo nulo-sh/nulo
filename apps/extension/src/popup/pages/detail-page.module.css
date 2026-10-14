@@ -119,6 +119,8 @@
 }
 
 .address_card {
+	/* Anchors the corner explorer link. */
+	position: relative;
 	width: 100%;
 
 	padding: 12px;
@@ -131,6 +133,11 @@
 
 	&:hover {
 		background: var(--nulo-surface-low);
+	}
+
+	/* A name long enough to reach the corner link wraps before its glyph. */
+	&:has(> a) > :first-child {
+		padding-right: 14px;
 	}
 }
 

@@ -2,6 +2,7 @@
 import type { ContractArtifact } from "@aztec-labs/stdlib/abi"
 import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
 import type { Restored } from "@/wallet/base"
+import type { RunFence } from "@/wallet/services/profile/spec"
 
 export const ACCOUNT_STATE_SERVICE_NAME = "account-state"
 
@@ -49,9 +50,11 @@ export type Methods = {
 	 * Adds a sender.
 	 * @param networkId Network id.
 	 * @param address Sender address.
+	 * @param fence A popup run's fence: a session it no longer names refuses with `SessionEndedError`
+	 *        before the PXE is asked.
 	 * @emits `SenderAdded` event.
 	 */
-	addSender(networkId: string, address: string): string
+	addSender(networkId: string, address: string, fence?: RunFence | null): string
 
 	/**
 	 * Deletes a sender.

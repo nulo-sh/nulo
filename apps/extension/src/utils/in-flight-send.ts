@@ -11,8 +11,9 @@
  * has nothing to protect — and counting them would hand any connected site a
  * hold on the user's switching for the life of its transaction.
  *
- * Cancelling a send terminalizes its record, which clears the guard. Locking
- * the wallet is never blocked — it is a security action and must always work.
+ * Cancelling a send terminalizes its record, which clears the guard. A send
+ * never blocks locking the wallet, a security action; only a running contacts
+ * import holds Lock, for two minutes at most (`contact-import-guard.ts`).
  */
 
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"

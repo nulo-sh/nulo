@@ -23,9 +23,28 @@ type LockConfirm = {
 	callback?: () => void
 }
 
+const sendsSentence = (running: number) =>
+	running === 1
+		? "1 transaction is still running. Locking cancels it."
+		: `${running} transactions are still running. Locking cancels them.`
+
+const importsSentence = (imports: number) =>
+	imports === 1
+		? "A contacts import is still running. Locking stops it."
+		: `${imports} contacts imports are still running. Locking stops them.`
+
+function lockConfirmCopy(running: number, imports: number): { pre_title: string; description: string } {
+	const sentences: string[] = []
+	if (running > 0) sentences.push(sendsSentence(running))
+	if (imports > 0) sentences.push(importsSentence(imports))
+	return { pre_title: running > 0 ? "Running transactions" : "Contacts import", description: sentences.join(" ") }
+}
+
+const namesEvery = (named: ReadonlySet<symbol>, running: ReadonlySet<symbol>) => [...running].every((id) => named.has(id))
+
 /**
  * The wallet lock behind every lock control: it locks at once, or asks first while approved sends
- * run.
+ * or contacts imports run. While a contacts import holds Lock, it does nothing.
  *
  * Pass `managers.profile`: a page's own client rejects its pending read on unmount, which would
  * abandon a lock the person asked for. The caller calls `dispose()` in `onBeforeUnmount`; a decision
@@ -43,8 +62,9 @@ export function useLockWallet(profile: LockProfileClient): { lock: () => Promise
 	let sessionChanges = 0
 	let confirmLock: (() => void) | undefined
 
+	// The last check on every path: nothing locks while an import holds Lock.
 	const lockWallet = (handle: string | undefined) => {
-		if (!appStore.isLogined) return
+		if (!appStore.isLogined || appStore.lockHeldByImport) return
 		appStore.isLogined = false
 		void profile.lockActiveProfile(handle)
 	}
@@ -80,36 +100,42 @@ export function useLockWallet(profile: LockProfileClient): { lock: () => Promise
 	}
 
 	const askBeforeLock = (running: number, handle: string | undefined) => {
-		confirmLock = () => lockWallet(handle)
+		const named = new Set(appStore.contactImports)
+		// Confirming never stops an import the confirm did not name, even if another one ended meanwhile.
+		confirmLock = () => {
+			if (namesEvery(named, appStore.contactImports)) lockWallet(handle)
+		}
 		const confirm = confirmSlot()
-		confirm.pre_title = "Running transactions"
+		const { pre_title, description } = lockConfirmCopy(running, named.size)
+		confirm.pre_title = pre_title
 		confirm.title = "Lock wallet?"
-		confirm.description =
-			running === 1
-				? "1 transaction is still running. Locking cancels it."
-				: `${running} transactions are still running. Locking cancels them.`
+		confirm.description = description
 		confirm.confirm_text = "Lock anyway"
 		confirm.confirm_color = "red"
 		confirm.callback = confirmLock
 		popupStore.open("confirm")
 	}
 
+	const decide = ({ answered, handle }: LockRead, changesBefore: number) => {
+		if (sessionChanges !== changesBefore || appStore.lockHeldByImport) return
+		const running = answered ? appStore.approvedSendsInFlight : 0
+		// The window's own count: a failed read counts no sends, never no imports.
+		if (running === 0 && appStore.contactImports.size === 0) {
+			lockWallet(handle)
+			return
+		}
+		// Disposed: the listeners go once no decision is pending, so nothing would close this
+		// confirm on a later session change.
+		if (disposed) return
+		askBeforeLock(running, handle)
+	}
+
 	const lock = async (): Promise<void> => {
-		if (disposed || !appStore.isLogined) return
+		if (disposed || !appStore.isLogined || appStore.lockHeldByImport) return
 		const changesBefore = sessionChanges
 		pendingDecisions++
 		try {
-			const { answered, handle } = await readForLock()
-			if (sessionChanges !== changesBefore) return
-			const running = answered ? appStore.approvedSendsInFlight : 0
-			if (running === 0) {
-				lockWallet(handle)
-				return
-			}
-			// Disposed: the listeners go once no decision is pending, so nothing would close this
-			// confirm on a later session change.
-			if (disposed) return
-			askBeforeLock(running, handle)
+			decide(await readForLock(), changesBefore)
 		} finally {
 			pendingDecisions--
 			// The listeners outlive dispose() until the last pending decision ends: a session change

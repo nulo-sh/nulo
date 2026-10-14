@@ -200,3 +200,25 @@ describe("the hash of a send that reached the send line", () => {
 		expect(row(x, "explorer-link").exists()).toBe(false)
 	})
 })
+
+describe("the To row of a send that named its recipient", () => {
+	const TESTNET = { network: { id: "n1", chainId: CHAIN_IDS.TESTNET } }
+	const RECIPIENT = `0x${"09".repeat(32)}`
+	const addressed = (over: Partial<OperationRecord> = {}) => ({ ...failedSend("unconfirmed"), recipientAddress: RECIPIENT, ...over })
+
+	test("the shortened address opens the recipient's page on the explorer", async () => {
+		const w = await mountPage(addressed(), { ...TESTNET, defaultExplorer: "aztecscan" })
+		expect(row(w, "recipient-link").attributes("href")).toBe(`https://testnet.aztecscan.xyz/address/${RECIPIENT}`)
+		expect(row(w, "recipient-link").text()).toBe("0x0909…0909")
+		expect(row(w, "recipient").exists()).toBe(false)
+	})
+
+	test.each([
+		["under explorer None", addressed(), null],
+		["for a record with no network stamp", addressed({ networkId: undefined }), "aztecscan"],
+	])("stays text %s", async (_, record, defaultExplorer) => {
+		const w = await mountPage(record, { ...TESTNET, defaultExplorer })
+		expect(row(w, "recipient-link").exists()).toBe(false)
+		expect(row(w, "recipient").text()).toBe("0x0909…0909")
+	})
+})

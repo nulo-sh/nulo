@@ -24,6 +24,7 @@
 
 /** Components */
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
+import AddressCardLink from "@/popup/components/modules/tx/AddressCardLink.vue"
 
 /** Vendor */
 import { DateTime } from "luxon"
@@ -31,7 +32,6 @@ import { DateTime } from "luxon"
 /** Services */
 import { IncomingTransferServiceClient } from "@/wallet/services/incoming-transfer/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
-import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { NetworkServiceClient } from "@/wallet/services/network/client"
 
@@ -46,7 +46,7 @@ import { copyReceivedValue } from "./received-copy"
 import { trimAddress } from "@/utils/string"
 import { receivedLabel, resolveFromDisplay, resolveReceivedType, tokenForReceipt } from "@/utils/received-display"
 import { knownDecimals } from "@/utils/token-amount"
-import { getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
+import { getAccountExplorerUrl, getBlockExplorerUrl, getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
 import { formatFeeJuice, feeToUsd, feeJuicePricingFromUsd } from "@/utils/fee-estimation"
 
 /** Store */
@@ -63,7 +63,6 @@ const route = useRoute()
 const received = ref(null)
 const loaded = ref(false)
 const tokens = ref([])
-const explorerId = ref(null)
 /** The RECORD's own chainId (resolved from its networkId) — NOT the active network's. Token
  *  decimals/symbol + the explorer URL must follow the record, so a deep-linked or off-network record
  *  (or a network switch after open) can't show the wrong chain's catalogue/explorer. */
@@ -76,7 +75,6 @@ const feeLoading = ref(false)
 /** Service clients */
 const incomingTransferService = new IncomingTransferServiceClient()
 const tokenService = new TokenServiceClient()
-const configService = new ConfigServiceClient()
 const priceService = new PriceServiceClient()
 const networkService = new NetworkServiceClient()
 const prices = usePrices(priceService)
@@ -125,9 +123,24 @@ const receivedTime = computed(() => {
 const explorerUrl = computed(() => {
 	const inc = received.value
 	if (!inc) return null
-	return getTransactionExplorerUrl(recordChainId.value ?? undefined, explorerId.value, inc.txHash)
+	return getTransactionExplorerUrl(recordChainId.value ?? undefined, appStore.defaultExplorer, inc.txHash)
 })
-const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === explorerId.value)?.name ?? "explorer")
+const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === appStore.defaultExplorer)?.name ?? "explorer")
+/** A public receipt's hash names the block the wallet saw, whatever a re-mine did at its height;
+ *  a note carries only the height. */
+const blockUrl = computed(() => {
+	const inc = received.value
+	if (!inc?.l2BlockNumber) return null
+	return getBlockExplorerUrl(recordChainId.value, appStore.defaultExplorer, isPublic.value ? inc.blockHash : inc.l2BlockNumber)
+})
+const fromUrl = computed(() =>
+	fromClickable.value ? getAccountExplorerUrl(recordChainId.value, appStore.defaultExplorer, fromDisplay.value.address) : null,
+)
+const toUrl = computed(() =>
+	received.value ? getAccountExplorerUrl(recordChainId.value, appStore.defaultExplorer, received.value.accountAddress) : null,
+)
+const fromLabelId = useId()
+const toLabelId = useId()
 
 /** Derived — fee at today's rate (mirrors tx/[id].vue's fee valuation). */
 const feeJuicePricing = computed(() => feeJuicePricingFromUsd(prices.feeJuiceQuote.value?.usd))
@@ -154,7 +167,7 @@ onMounted(async () => {
 	const net = await networkService.getNetwork(inc.networkId).catch(() => null)
 	recordChainId.value = net?.chainId ?? null
 
-	// Aux data loads INDEPENDENTLY (allSettled): a token/config failure must not skip the fee fetch, and
+	// Aux data loads INDEPENDENTLY (allSettled): a token failure must not skip the fee fetch, and
 	// none of these may escape the async mounted hook as an unhandled rejection. The fee is PUBLIC-only
 	// (the service also gates on kind server-side) and fails soft to the dash.
 	const tasks = []
@@ -163,7 +176,6 @@ onMounted(async () => {
 	if (recordChainId.value !== null) {
 		tasks.push(tokenService.getTokens(inc.profileId, recordChainId.value).then((t) => (tokens.value = t)))
 	}
-	tasks.push(configService.getValue("defaultExplorer").then((v) => (explorerId.value = v)))
 	if (inc.kind === "public-event") {
 		feeLoading.value = true
 		tasks.push(
@@ -181,7 +193,6 @@ onBeforeUnmount(() => {
 	incomingTransferService.onIncomingTransferDeleted.remove(onReceiptDeleted)
 	incomingTransferService.disconnect()
 	tokenService.disconnect()
-	configService.disconnect()
 	networkService.disconnect()
 	prices.dispose()
 	priceService.disconnect()
@@ -249,7 +260,14 @@ onBeforeUnmount(() => {
 					<Text v-else-if="fromDisplay.kind === 'private'" variant="name" color="primary" :class="$style.from_name" data-testid="from-private">Private</Text>
 					<Text v-else-if="fromDisplay.kind === 'mint'" variant="name" color="primary" :class="$style.from_name" data-testid="from-mint">Mint</Text>
 					<Text v-else variant="name" color="primary" :class="$style.from_name" data-testid="from-redacted">Private</Text>
-					<span :class="$style.address_label">From</span>
+					<span :id="fromLabelId" :class="$style.address_label">From</span>
+					<AddressCardLink
+						v-if="fromUrl"
+						:href="fromUrl"
+						:label="`View on ${explorerName}`"
+						:aria-describedby="fromLabelId"
+						data-testid="received-from-explorer-link"
+					/>
 				</Flex>
 
 				<Flex
@@ -266,7 +284,14 @@ onBeforeUnmount(() => {
 						:address="received.accountAddress"
 						:formatter="(addr) => trimAddress(addr, 6, 4)"
 					/>
-					<span :class="$style.address_label">To</span>
+					<span :id="toLabelId" :class="$style.address_label">To</span>
+					<AddressCardLink
+						v-if="toUrl"
+						:href="toUrl"
+						:label="`View on ${explorerName}`"
+						:aria-describedby="toLabelId"
+						data-testid="received-to-explorer-link"
+					/>
 				</Flex>
 			</Flex>
 
@@ -314,9 +339,27 @@ onBeforeUnmount(() => {
 					<Flex v-if="received.l2BlockNumber" wide justify="between" align="center">
 						<span :class="$style.detail_key">Block</span>
 						<Flex align="center" gap="6">
-							<span :class="$style.detail_value_mono">#{{ received.l2BlockNumber }}</span>
+							<a
+								v-if="blockUrl && !isPublic"
+								:href="blockUrl"
+								target="_blank"
+								rel="noopener noreferrer"
+								data-testid="received-block-link"
+								:class="[$style.detail_value_mono, $style.detail_link]"
+								>#{{ received.l2BlockNumber }}</a
+							>
+							<span v-else :class="$style.detail_value_mono">#{{ received.l2BlockNumber }}</span>
+							<a
+								v-if="blockUrl && isPublic"
+								:href="blockUrl"
+								target="_blank"
+								rel="noopener noreferrer"
+								data-testid="received-block-link"
+								:class="[$style.detail_value_aux, $style.detail_link]"
+								>{{ trimAddress(received.blockHash, 6, 4) }}</a
+							>
 							<span
-								v-if="isPublic"
+								v-else-if="isPublic"
 								data-testid="tx-block-hash"
 								@click="copy(received.blockHash, 'Block hash')"
 								:class="[$style.detail_value_aux, 'copyable']"
@@ -453,6 +496,10 @@ onBeforeUnmount(() => {
 	.fee_shimmer {
 		animation: none;
 	}
+}
+
+:global(.noanimations) .fee_shimmer {
+	animation: none;
 }
 
 .empty_headline {
