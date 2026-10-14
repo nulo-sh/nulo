@@ -294,6 +294,10 @@ The PR body states the network suite's per-browser wall-clock before and after.
 - O3 low, no test held Confirm on a person-paid row with an app cap: **accepted**, one test (red when `setsOwnFee` is narrowed to app-paid rows).
 - O4 comments: a wrong "NO_FROM builds never reach this function" in `finalizeGasLimits`' doc, `reuseCapRule`'s invariant missing "or priority fee", two restating comments, the rule restated in `embedded-fpc-cap.ts`, a blank line left in `TxFeeRow.vue`: **accepted**, each fixed.
 
+### Post-implementation round 2 (2026-10-14, verify)
+
+**Codex** (same session `01a13b39`, resumed): **clean**, no new material finding through 7945ce79. Each round-1 fix verified (discovery's priority parity on the fj/fpc fallback and fjwc paths through the real discoverer; the pair at the 0.0000005 FJ rounding threshold). The loop converged.
+
 ## Post-implementation
 
 The execution contract is this plan plus `implementations-plan/README.md` § Post-implementation standard at d3dc4415. Plan-specific values:

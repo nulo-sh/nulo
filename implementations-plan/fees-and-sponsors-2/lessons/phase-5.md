@@ -37,3 +37,4 @@ Pass, with one recorded exception that is not this arc's: Firefox `fee-methods` 
 ## Review loop
 
 - **Round 1** (Codex `01a13b39` and one Opus agent, in parallel, over the whole diff from d3dc4415): both fix-needed, every finding minor and accepted (plan § Audit verdicts, post-implementation round 1). The one behaviour fix: standalone discovery now simulates with the app's priority, as every other build does. Gates after the fixes: lint 0, typecheck:all 0, execution + execute window + tx module units 1475 passed, wallet-bridge 750 passed. A mutation check (`setsOwnFee` narrowed to app-paid rows) turns the new person-paid hold test red.
+- **Round 2** (Codex, the same session resumed, verify only): clean, no new material finding. The loop converged after two rounds.
