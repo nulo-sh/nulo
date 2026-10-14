@@ -19,6 +19,8 @@ const props = defineProps({
 	hasOtherErrors: { type: Boolean, default: false },
 	/** Replaces the warning the form words from `unrestoredNetworks` and `hasOtherErrors`. */
 	warningText: { type: String, default: undefined },
+	/** The failed-Retry line the page adds above its buttons, which raises their edge again. */
+	retryFailedAgain: { type: Boolean, default: false },
 	/** Restoring into a new profile asks for its password; restoring into the open one does not. */
 	askNewPassword: { type: Boolean, default: true },
 	error: { type: Object, default: () => ({ type: "", title: "", tooltip: "" }) },
@@ -43,10 +45,10 @@ const showWarning = computed(() => props.restoreStatus === "finished" && props.i
 const shownWarning = computed(() => props.warningText ?? restoreWarningText(props.unrestoredNetworks, props.hasOtherErrors))
 
 // The errors screen's footer buttons appear with the warning and shorten the popup's scroller,
-// which leaves the warning below its edge.
+// which leaves the warning below its edge; the failed-Retry line shortens it once more.
 watch(
-	showWarning,
-	(shown) => {
+	[showWarning, () => props.retryFailedAgain],
+	([shown]) => {
 		const el = shown ? warningRef.value?.$el : null
 		if (!el) return
 		if (hero) hero.reveal(el)

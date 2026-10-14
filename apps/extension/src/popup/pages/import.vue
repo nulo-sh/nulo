@@ -246,6 +246,7 @@ onBeforeUnmount(() => {
 			:isRestoreHasErrors="isRestoreHasErrors"
 			:unrestoredNetworks="unrestoredNetworkNames"
 			:hasOtherErrors="hasOtherRestoreErrors"
+			:retryFailedAgain="retryFailedAgain"
 			:error="error"
 			:isCopied="isCopied"
 			:maxPasswordLength="maxPasswordLength"

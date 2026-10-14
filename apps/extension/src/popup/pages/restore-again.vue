@@ -122,6 +122,7 @@ onBeforeUnmount(() => {
 			:restoreStatus="restoreStatus"
 			:isRestoreHasErrors="restoreStatus === 'finished'"
 			:warningText="warningText"
+			:retryFailedAgain="retryFailedAgain"
 			:error="error"
 			:isCopied="isCopied"
 			@pickFile="pickBackupFile"

@@ -202,6 +202,19 @@ describe("ImportFullBackupForm", () => {
 			scroll.mockRestore()
 		}
 	})
+
+	it("reveals the warning again when a failed Retry adds its line above the buttons", async () => {
+		const reveal = vi.fn()
+		const wrapper = mount(ImportFullBackupForm, {
+			props: baseProps({ restoreStatus: "finished", isRestoreHasErrors: true }),
+			global: { stubs, provide: { [COLLAPSING_HERO as symbol]: { reveal } } },
+		})
+		reveal.mockClear()
+
+		await wrapper.setProps({ retryFailedAgain: true })
+
+		expect(reveal).toHaveBeenCalledExactlyOnceWith(wrapper.get("[data-testid=import-full-backup-warning]").element)
+	})
 })
 
 describe("ImportFullBackupForm — credential controls, real Input", () => {
