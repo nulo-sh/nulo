@@ -48,9 +48,10 @@ import {
 	unlockProfile,
 	waitForProfilePurged,
 } from "../fixtures/helpers"
-import { shotSend } from "../fixtures/send-page"
+import { shotSend, waitForReview, waitForReviewReady, waitForSendGone } from "../fixtures/send-page"
+import { pointerClick } from "../helpers/legal-drivers"
 import { readDappExecuteRecords, waitForDappExecuteStagesPresent } from "../fixtures/journal"
-import { holdMining, releaseMining, waitForEmptyMempool } from "../fixtures/mining-hold"
+import { holdMining, pendingTxCount, releaseMining, waitForEmptyMempool } from "../fixtures/mining-hold"
 import { assertPgOk, openPlayground, type PgResult, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { reconnectPlayground } from "../fixtures/send"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
@@ -61,8 +62,10 @@ import {
 	confirmSend,
 	expectEstimateQueued,
 	expectStageHeld,
+	readTransferRows,
 	readTxStatuses,
 	startSend,
+	type TransferRow,
 	waitForEstimate,
 	waitForTransferStage,
 	waitForTransfersTerminal,
@@ -354,7 +357,7 @@ test.skipIf(!hasConfig)(
 		await expectStageHeld(burst.page, raw(b.amount), "queued", 5_000)
 		expect(await waitForAwaitingCard(burst.page, "queued")).toEqual({
 			stage: "queued",
-			subtitle: "Queued...",
+			subtitle: "Waiting for your earlier send",
 			focus: false,
 			cancel: true,
 		})
@@ -598,5 +601,110 @@ baseTest.skipIf(!hasConfig)(
 			if (page) await releaseAccountRegistration(page).catch(() => {})
 			rmSync(dir, { recursive: true, force: true })
 		}
+	},
+)
+
+type Asking = TransferRow & { reask: { fee: string; cap: string } }
+
+const BEFORE_PROOF = new Set(["pending", "queued", "simulating"])
+
+/** Waits for a re-ask held to `cap` (any, before the first accept) or, after an accept, for proof
+ *  progress; fails on a terminal failure, or on proof progress before any accept. */
+async function waitForAskOrSent(page: Page, amountRaw: string, cap?: string): Promise<Asking | "sent"> {
+	const deadline = Date.now() + 180_000
+	for (;;) {
+		const row = (await readTransferRows(page)).find((r) => r.amount === amountRaw)
+		if (row?.stage === "queued" && row.reask && (cap === undefined || row.reask.cap === cap)) return row as Asking
+		if (row?.stage && !BEFORE_PROOF.has(row.stage)) {
+			if (cap === undefined || !["proving", "submitting", "succeeded"].includes(row.stage)) {
+				throw new Error(`transfer ${amountRaw} left the queue without an accept: ${JSON.stringify(row)}`)
+			}
+			return "sent"
+		}
+		if (Date.now() > deadline) throw new Error(`transfer ${amountRaw} never asked again: ${JSON.stringify(row)}`)
+		await new Promise((r) => setTimeout(r, 250))
+	}
+}
+
+async function readReaskSheet(page: Page): Promise<{ line: string; button: string }> {
+	await waitForReview(page, true)
+	await waitForReviewReady(page)
+	return page.evaluate(() => ({
+		line: document.querySelector('[data-testid="send-review-fee-reask"]')?.textContent?.trim() ?? "",
+		button: document.querySelector('[data-testid="send-review-submit"]')?.textContent?.trim() ?? "",
+	}))
+}
+
+async function readRecordedFee(page: Page, hash: string): Promise<string | undefined> {
+	return page.evaluate(async (h: string) => {
+		const value = (await chrome.storage.local.get(`nulo:core:txs@${h}`))[`nulo:core:txs@${h}`]
+		const row = (typeof value === "string" ? JSON.parse(value) : value) as { estimatedFee?: string } | undefined
+		return row?.estimatedFee
+	}, hash)
+}
+
+/** The case's bound on re-asks: each needs a price move between an accept and its build. */
+const MAX_ASKS = 3
+
+test.skipIf(!hasConfig)(
+	"a private send at Fast held unmined; a second private send of the token at Urgent is queued against the cap, asked again after the release, accepted from Home, and goes out once",
+	{ timeout: 600_000, retry: 0 },
+	async ({ burst }) => {
+		const { nodeUrl } = aztecConfig as AztecTestConfig
+		// Both speeds are explicit: Normal prices at the build's default multiplier, which the e2e
+		// build widens above Urgent's, while Fast to Urgent is ×5/3 in every build, above the cap's ×1.25.
+		const a: BurstSend = { token: "TST", from: "private", to: "private", amount: "9", destination: to(), fee: "public", speed: "fast" }
+		const b: BurstSend = { ...a, amount: "10", speed: "urgent" }
+		await fireIntoHeldWindow(burst, a)
+		const { page } = burst
+
+		await startSend(page, b)
+		await expectEstimateQueued(page, 3_000)
+		await page.waitForSelector('[data-testid="fee-estimate-queued-cap-line"]', { timeout: 5_000 })
+		await shotSend(page, "4-send-queued-cap", "fee-settings-card")
+		await pointerClick(page, "send-submit")
+		await waitForReview(page, true)
+		await waitForReviewReady(page)
+		expect(await page.$eval('[data-testid="send-review-submit"]', (el) => el.textContent?.trim())).toBe("Queue send")
+		await shotSend(page, "4-review-queued-cap", "send-review-fee")
+		await pointerClick(page, "send-review-submit")
+		await waitForSendGone(page, 30_000)
+
+		await expectStageHeld(page, raw(b.amount), "queued", HELD_MS)
+		expect(await pendingTxCount(nodeUrl), "while A is held the node holds A alone").toBe(1)
+		expect((await waitForAwaitingCard(page, "queued")).subtitle).toBe("Waiting for your earlier send")
+		await shotSend(page, "4-home-waiting", "tx-awaiting-card")
+		await releaseMining()
+
+		let accepted: string | undefined
+		for (let asks = 1; ; asks++) {
+			const asking = await waitForAskOrSent(burst.page, raw(b.amount), accepted)
+			if (asking === "sent") break
+			if (asks > MAX_ASKS) throw new Error(`asked again ${asks} times: ${JSON.stringify(asking)}`)
+			expect(BigInt(asking.reask.fee) > BigInt(asking.reask.cap), "a re-ask names a fee above its cap").toBe(true)
+			expect(await pendingTxCount(nodeUrl), "the node holds no tx of B before the accept").toBe(0)
+			if (asks === 1) await reopen(burst)
+			expect((await waitForAwaitingCard(burst.page, "queued")).subtitle).toBe("Fee went up. Review")
+			if (asks === 1) await shotSend(burst.page, "4-home-reask-row", "tx-awaiting-card")
+			await pointerClick(burst.page, "tx-awaiting-card")
+			const sheet = await readReaskSheet(burst.page)
+			expect(sheet.line).toMatch(/^Fee is now [\d.]+ FJ( \(.+\))?, above the [\d.]+ FJ you accepted\.$/)
+			expect(sheet.button).toMatch(/^Send for [\d.]+ FJ$/)
+			if (asks === 1) await shotSend(burst.page, "4-reask-sheet", "send-review-fee")
+			await pointerClick(burst.page, "send-review-submit")
+			accepted = asking.reask.fee
+		}
+
+		await expectBothSucceed(burst, a, b)
+		const sent = (await readTransferRows(burst.page)).filter((r) => r.amount === raw(b.amount))
+		expect(
+			sent.map((r) => r.stage),
+			"B goes out once",
+		).toEqual(["succeeded"])
+		const fee = await readRecordedFee(burst.page, sent[0].txHash as string)
+		expect(
+			BigInt(fee ?? "0") > 0n && BigInt(fee ?? "0") <= BigInt(accepted as string),
+			`B's fee ${fee} is at most the accepted ${accepted}`,
+		).toBe(true)
 	},
 )

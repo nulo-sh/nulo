@@ -14,8 +14,14 @@ import type {
 
 export const EXECUTION_SERVICE_NAME = "execution"
 
-/** An estimate that did not run: a send sharing its chain state is in flight. A spent token was admitted and cannot be sent again. */
-export type TransferFeeQueued = { readonly queued: true; readonly tokenSpent: boolean }
+/** An estimate that did not run: a send sharing its chain state is in flight. A spent token was
+ *  admitted and cannot be sent again. `cap` holds the last fee of this token's sends and the cap a
+ *  send may be queued against above it (`queued-fee-cap.ts`); absent when there is none. */
+export type TransferFeeQueued = {
+	readonly queued: true
+	readonly tokenSpent: boolean
+	readonly cap?: { readonly basis: string; readonly cap: string }
+}
 
 export * from "./models"
 
@@ -28,6 +34,8 @@ export type Methods = {
 	 * @param transferType Transfer type.
 	 * @param recipient Recipient address.
 	 * @param amount Amount.
+	 * @param feeCap With it, the send is queued against this fee in base units: a build above it is
+	 *   never proved, and the send asks again through its record (`acceptQueuedFee`).
 	 */
 	executeTransfer(
 		networkId: string,
@@ -38,6 +46,7 @@ export type Methods = {
 		amount: bigint,
 		feeSettings: FeeSettings,
 		precomputedEstimateId?: string,
+		feeCap?: string,
 	): string
 	/**
 	 * Executes batch of operations.
@@ -146,6 +155,12 @@ export type Methods = {
 	 * No-op for unknown jobIds or jobs that already terminated.
 	 */
 	cancelJob(jobId: string): void
+
+	/**
+	 * Resumes a queued send of the active profile that asked again, at exactly the `fee` its record
+	 * shows. False, with nothing resumed, for any other record, a changed fee or a second accept.
+	 */
+	acceptQueuedFee(jobId: string, fee: string): boolean
 
 	/** The SW's memory of the latest prove attempt (`outcome`) and of a Presto
 	 *  approval denial (`denial`, cleared by the next native proof). Hints only:

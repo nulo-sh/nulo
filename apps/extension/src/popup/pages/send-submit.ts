@@ -23,6 +23,8 @@ export interface TransferSnapshot {
 	feeSettings: unknown
 	/** A consumable estimate the SW may reuse; absent when none was ready. */
 	precomputedEstimateId: string | undefined
+	/** Queued against this fee in base units; then no estimate exists to reuse. */
+	feeCap?: string
 	/** The token contract, for the awaiting row only. */
 	contract: string
 	/** The token's symbol and decimals, for the result's text; the symbol is contract-controlled. */
@@ -42,6 +44,7 @@ export interface SubmitDeps {
 		amount: bigint,
 		feeSettings: unknown,
 		precomputedEstimateId: string | undefined,
+		feeCap: string | undefined,
 	) => Promise<string>
 	awaiting: {
 		add: (row: { id: string; account: string; destination: string; contract: string }) => void
@@ -77,6 +80,7 @@ export function submitTransfer(deps: SubmitDeps, snap: TransferSnapshot): string
 		snap.amount,
 		snap.feeSettings,
 		snap.precomputedEstimateId,
+		snap.feeCap,
 	)
 		.then((hash) => {
 			if (!deps.isCurrent(snap.epoch)) return

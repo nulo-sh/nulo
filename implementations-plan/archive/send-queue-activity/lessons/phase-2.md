@@ -2,7 +2,7 @@
 
 ## What the fit measures (2026-10-13)
 
-- **The derived line's room is what the balance and Max leave.** In USD mode the meta line fills the row (`flex: 1; min-width: 0`), so its width is the room, independent of its own text. With a 12,345,679,901.12 TST balance (18 decimals) the line drew at 4.6 px for Max and 6 px for a typed $1,234.56, on both browsers; before, it wrapped to three lines and pushed Max 28 px past the card. Signed as option A with no floor; the legibility question went to the owner (OA-10).
+- **The derived line's room is what the balance and Max leave.** In USD mode the meta line fills the row (`flex: 1; min-width: 0`), so its width is the room, independent of its own text. With a 12,345,679,901.12 TST balance (18 decimals) the line drew at 4.6 px for Max and 6 px for a typed $1,234.56, on both browsers; before, it wrapped to three lines and pushed Max 28 px past the card. Signed as option A with no floor; the legibility question went to the owner (OA-15).
 - **The USD field had no blur handler.** `isFocused` was set on its focus and never cleared, so nothing refitted when it lost the focus. It now clears on blur, as the token field's does; the fit keeps its `document.activeElement` check for a field swapped out while focused.
 
 ## Shots

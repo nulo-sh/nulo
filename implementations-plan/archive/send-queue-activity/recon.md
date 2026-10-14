@@ -68,3 +68,30 @@ Read at `dev` 9574a9d (643c0c9 plus #248). Three read-only Explore agents (sonne
 - `incoming-transfers` arc 1 (#248) has landed; `receiptFence` and `commitAddressedEvents` are its seams; #109 here must not change them.
 - Branch `type-roles-arc3` edits `RecentActivityView.vue`, its test, `TransactionAwaitingCard.vue` and `send.vue` (found by `git diff --name-only`, not by entering the worktree).
 - Reservations: R1 `journal/[id].vue`, R2 `usePrices.ts` and `BalanceView.vue`, R5 `RecentActivityView.vue` and `activity.vue` (lanes-v2 `holds.reservations`).
+
+## Arc 4 recon (queued send against a fee cap), read at `dev` e900f710
+
+Three read-only Explore agents (sonnet): the Send page's queued state and review sheet with the four shot branches; the journal record, Home's card, cancel and backup; the sequencer, the transfer executor and the fee arithmetic. The driver read `send-sequencer.ts`, `transfer-executor.ts`, `send-submit.ts` and the re-ask shot branches. Paths as above.
+
+| Capability | Found | Verdict |
+|---|---|---|
+| A send that waits in the service worker for earlier sends, then builds | `transfer-executor.ts` `execute` → `takeTurn` (ticket, slot, claim, `queued ↔ pending`) | reuse: the queued send is today's `execute` call, entered with a cap |
+| The fee figure a person sees | `getEstimatedFee` (`tx-fee-details.ts:14-21`) → `computeMaxFee` (`utils/fee-estimation.ts:41-49`): (gas limits + teardown limits) × `maxFeesPerGas`; the readout's `~X FJ` is this `maxFee` (`fee-helpers.ts:12-27`) | reuse for the basis and the at-turn check; fees-and-sponsors arc 2 changes its arithmetic (P6-10) |
+| The last send's fee | `Tx.estimatedFee` written by `recordTransfer` from the same `getEstimatedFee` (`transfer-executor.ts:306`, `transaction/spec.ts:142, 202`) | reuse as the basis |
+| The queued estimate answer | `service.ts:585` `{ queued: true, tokenSpent: false }`; popup loop `utils/estimate-when-clear.ts` (2 s) | extend: the answer carries the basis and the cap |
+| Reuse of a built tx at confirm | `transfer-estimate-reuse.ts` `stash` / `tryConsume` (TTL 120 s, epoch, pending set, identities, base fee) | reuse for the re-ask build; P6-12 changes its base-fee rung |
+| Cancel of a waiting send | `execution-lane.ts:178-254` `cancelJob` (journal first, abort second), card × `tx-awaiting-cancel` | reuse unchanged |
+| Heartbeat for a waiting record | `execution-lane.ts:440-486` `beginQueuedWait` (30 s touch, 90-minute lease) | reuse for the re-ask wait |
+| The review sheet | `SendReviewSheet.vue` (props `facts`, `feeText`, `payerKind`, `payerType`, `ready`; Escape through `Popup`'s `closeOnEscape`; no Enter handler) | reuse on Send and over Home |
+| Payer reading for the sheet | `publish-facts.ts` `payerKindOf`, `publishFacts`, `paidBy`; `FeeSettingsCard.vue:266-270` `feePayer` (`self` for fj and private fee juice) | reuse |
+| A background question to the person mid-send | none (`grep` of execution, journal, window-manager) | build: one in-memory answer per waiting send |
+| A queued card stage line | `utils/card-subtitle.ts:28-32` "Queued..."; only `RecentActivityView.vue` renders awaiting cards | adapt in `RecentActivityView.vue` |
+| Journal in backups | not in `BACKUP_SLICE_REGISTRY` (`backup-migration-registry.ts:198-222`); `OperationJournalService.backup()` is the default `null` | nothing travels; pin it |
+
+Claims of the brief and the decision checked against the tree:
+- **"The backup slice and `footprint-coverage.test.ts` must know the new shape" does not hold as stated.** The journal is in no backup slice and `footprint-coverage.test.ts` judges migrations only (`realMigrations` is empty). The new fields cannot enter or leave a backup; Phase 4.1 pins that premise.
+- **"Cancellable until its build starts"** matches today: the × shows at every stage but `submitting` (`TransactionAwaitingCard.vue:52`). Nothing changes there.
+- **The re-ask's "×"** is the existing `tx-awaiting-cancel` icon button (`aria-label="Cancel transaction"`).
+- **"Last estimate for this token"**: no estimate is kept by token; the newest submitted Send-page send's `Tx.estimatedFee` is the only recorded figure. An earlier send that is still proving has no row yet.
+- **`journal/[id].vue` refuses in-flight records** (`journal-detail-scope.ts:31`), as P9-04d's worker note says; option B does not use it.
+- **A restart fails a waiting Send-page send** (boot sweep, `stuck_queued`, reads "Transaction failed": `reaper.ts:142-153`, `journal-state.ts:93-122`), as for every queued send today.

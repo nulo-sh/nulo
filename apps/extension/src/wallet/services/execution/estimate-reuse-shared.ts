@@ -122,7 +122,8 @@ export function feeMultiplierFor(priority: PriorityLevel | undefined): number {
  * A single-shot, TTL-bounded id→entry store. `stash` records an entry and
  * opportunistically sweeps expired ones (so the map can't grow unboundedly
  * when the popup re-estimates without consuming), plus a per-entry timer that
- * physically drops the entry AT the TTL. `consume` pops an entry on first read
+ * physically drops the entry at its `builtAt` + TTL, so stashing an entry again
+ * never extends how long its build stays in memory. `consume` pops an entry on first read
  * (single-shot). Staleness is by `builtAt`; the caller still runs its own TTL
  * gate in the consume ladder (with its own diagnostics) — this store owns only
  * the background eviction.
@@ -136,9 +137,8 @@ export class SingleShotTtlCache<E extends { builtAt: number }> {
 	public stash(id: string, entry: E): void {
 		this.cache.set(id, entry)
 		this.evictStale()
-		// Per-entry timer so the entry is physically dropped AT the TTL
-		// (idempotent vs consume/evict; dies with the SW, as does the map).
-		setTimeout(() => this.cache.delete(id), this.ttlMs + 1)
+		// Idempotent vs consume/evict; dies with the SW, as does the map.
+		setTimeout(() => this.cache.delete(id), Math.max(0, entry.builtAt + this.ttlMs + 1 - Date.now()))
 	}
 
 	/** Pop an entry, removing it (single-shot). Unknown id ⇒ undefined. */

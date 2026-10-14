@@ -6,6 +6,7 @@ import TransactionAwaitingCard from "@/components/composite/activity/Transaction
 import TransactionTerminalCard from "@/components/composite/activity/TransactionTerminalCard.vue"
 import TransactionIncomingCard from "@/components/composite/activity/TransactionIncomingCard.vue"
 import TransactionCard from "../activity/TransactionCard.vue"
+import SendReviewSheet from "../send/SendReviewSheet.vue"
 
 /** Vendor */
 
@@ -48,16 +49,20 @@ import {
 	isOwnTerminalRecord,
 } from "./recent-activity-handlers"
 import { buildRecentActivityRows, remainingRowSlots } from "./recent-activity-rows"
+import { reaskReview } from "./reask-review"
 
 /** Composables */
 import { ARRIVALS_KEY } from "@/composables/useArrivals"
 import { useIncomingSyncHealth } from "@/composables/useIncomingSyncHealth"
 import { useIncomingTransfers } from "@/composables/useIncomingTransfers"
 import { useScopedTokens } from "@/composables/useScopedTokens"
+import { useSendReview } from "@/composables/useSendReview"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
+import { usePopupStore } from "@/stores/popup.store"
 const appStore = useAppStore()
+const popupStore = usePopupStore()
 
 const props = defineProps({
 	token: {
@@ -373,6 +378,65 @@ function cardAmountSymbolFor(op) {
 	return tokenById(op.tokenId)?.symbol || null
 }
 
+const isQueuedTransfer = (op) => op?.kind === "transfer" && op.progress?.stage === "queued"
+
+function awaitingSubtitleFor(op) {
+	return isQueuedTransfer(op) ? "Waiting for your earlier send" : cardSubtitleFor(op)
+}
+
+const reaskLineFor = (op) => (isQueuedTransfer(op) && op.progress.reask ? "Fee went up. Review" : null)
+
+/** A queued send that asked again is answered from a review sheet over this feed. The sheet draws
+ *  what it opened with and stays mounted after it closes, so it leaves the way it came and focus
+ *  returns to its row; a changed figure closes it rather than move under the finger. */
+const REASK_KEY = "send_reask_review"
+const reaskOpen = computed(() => popupStore.isOpened(REASK_KEY))
+const reaskOrder = computed(() => popupStore.popups[REASK_KEY]?.order ?? 0)
+const reaskDepth = computed(() => popupStore.len - reaskOrder.value)
+const reaskOpened = ref(null)
+const reaskSending = ref(false)
+const liveReaskFee = (id) => {
+	const op = renderedInFlightOps.value.find((x) => x.id === id)
+	return isQueuedTransfer(op) ? op.progress.reask?.fee : undefined
+}
+// Its subject is a higher fee, so its button arms after the usual pause whatever the facts say.
+const { ready: reaskReady } = useSendReview({
+	isGated: () => true,
+	isOpen: () => reaskOpen.value,
+	isTop: () => reaskOrder.value === popupStore.len - 1,
+})
+
+function onReviewInFlight(jobId) {
+	const op = renderedInFlightOps.value.find((x) => x.id === jobId)
+	const sheet = op && reaskReview(op, incomingPrices.feeJuiceQuote.value?.usd)
+	if (!sheet) return
+	reaskOpened.value = {
+		id: jobId,
+		fee: op.progress.reask.fee,
+		sheet,
+		amount: cardAmountFor(op) ?? undefined,
+		symbol: cardAmountSymbolFor(op) ?? undefined,
+		recipientAddress: op.recipientAddress,
+	}
+	if (!reaskOpen.value) popupStore.open(REASK_KEY)
+}
+
+const closeReask = () => popupStore.close(REASK_KEY)
+
+async function sendReask() {
+	const opened = reaskOpened.value
+	if (!opened || !reaskOpen.value || reaskSending.value) return
+	reaskSending.value = true
+	try {
+		await executionService.acceptQueuedFee(opened.id, opened.fee)
+	} catch {
+		// A refusal changes nothing; the row goes on reading the record.
+	} finally {
+		reaskSending.value = false
+		closeReask()
+	}
+}
+
 /** Compute card props for a terminal journal record. Thin wrapper over
  *  the shared `buildJournalTerminalCardProps` helper — id is spread in
  *  here because the template's `v-bind` propagates it as an attr; the
@@ -683,11 +747,20 @@ watch(
 		executingTask.value = null
 		executingSubtasks.value = []
 		pendingCancelJobIds.value = new Set()
+		closeReask()
+		reaskOpened.value = null
 		if (!nv) return
 		resnapshotJournal(journalRun)
 		loadExecutingTaskSnapshot(taskRun)
 	},
 	{ flush: "sync" },
+)
+
+watch(
+	() => reaskOpened.value && liveReaskFee(reaskOpened.value.id),
+	(fee) => {
+		if (reaskOpened.value && fee !== reaskOpened.value.fee) closeReask()
+	},
 )
 
 // Token mode is part of the scope: leaving it changes neither profile nor network, yet the account feed
@@ -744,6 +817,7 @@ onMounted(async () => {
 	await resnapshotJournal(journalRun)
 })
 onBeforeUnmount(() => {
+	closeReask()
 	taskService.disconnect()
 	tokenService.disconnect()
 	journalService.disconnect()
@@ -799,7 +873,8 @@ onBeforeUnmount(() => {
 				v-for="op in renderedInFlightOps"
 				:key="`awaiting:${op.id}`"
 				:title="journalCardTitle(op, tokenById)"
-				:subtitle="cardSubtitleFor(op)"
+				:subtitle="awaitingSubtitleFor(op)"
+				:reaskLine="reaskLineFor(op)"
 				:icon="journalCardIcon(op)"
 				:originLabel="journalCardOriginLabel(op)"
 				:amount="cardAmountFor(op)"
@@ -812,6 +887,7 @@ onBeforeUnmount(() => {
 				:hasApprovalWindow="op.kind === 'dapp_execute'"
 				@cancel="onCancelInFlight"
 				@focus="onFocusInFlight"
+				@review="onReviewInFlight"
 			/>
 			<!-- Orphan executingTask fallback: an active TaskService entry
 			     with no matching journal record (rare; legacy paths /
@@ -855,6 +931,24 @@ onBeforeUnmount(() => {
 			<span :class="$style.empty_sub">Send or receive {{ token.symbol }} to see activity here.</span>
 		</div>
 	</Flex>
+	<SendReviewSheet
+		v-if="reaskOpened"
+		:show="reaskOpen"
+		:order="reaskOrder"
+		:depth="reaskDepth"
+		:facts="reaskOpened.sheet.facts"
+		:amount="reaskOpened.amount"
+		:symbol="reaskOpened.symbol"
+		:recipientAddress="reaskOpened.recipientAddress"
+		:payerKind="reaskOpened.sheet.payerKind"
+		:payerType="reaskOpened.sheet.payerType"
+		:canSend="true"
+		:sending="reaskSending"
+		:ready="reaskReady"
+		:reask="reaskOpened.sheet.reask"
+		@close="closeReask"
+		@send="sendReask"
+	/>
 </template>
 
 <style module>

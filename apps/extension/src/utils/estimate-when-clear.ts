@@ -1,7 +1,8 @@
+import type { TransferFeeQueued } from "@/wallet/services/execution/spec"
 import { abortableSleep } from "./abortable-sleep"
 
 /** The wallet's answer while a send sharing the transfer's chain state is in flight. */
-type Queued = { queued: true; tokenSpent: boolean }
+type Queued = Pick<TransferFeeQueued, "queued" | "tokenSpent" | "cap">
 
 const QUEUED_POLL_MS = 2_000
 
@@ -23,12 +24,12 @@ const isQueued = (answer: unknown): answer is Queued =>
 export async function estimateWhenClear<T extends object>(
 	ask: () => Promise<T | Queued>,
 	signal: AbortSignal,
-	{ onQueued, pollMs = QUEUED_POLL_MS }: { onQueued?: () => void; pollMs?: number } = {},
+	{ onQueued, pollMs = QUEUED_POLL_MS }: { onQueued?: (answer: Queued) => void; pollMs?: number } = {},
 ): Promise<T> {
 	for (;;) {
 		const answer = await ask()
 		if (!isQueued(answer)) return answer
-		onQueued?.()
+		onQueued?.(answer)
 		if (answer.tokenSpent) throw new EstimateRequeue()
 		await abortableSleep(pollMs, signal)
 		signal.throwIfAborted()

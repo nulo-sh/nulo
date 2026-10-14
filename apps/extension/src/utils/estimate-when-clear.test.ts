@@ -16,6 +16,14 @@ describe("estimateWhenClear", () => {
 		expect(onQueued).toHaveBeenCalledTimes(2)
 	})
 
+	test("each queued answer reaches onQueued as the wallet gave it, its cap included", async () => {
+		const capped = { queued: true, tokenSpent: false, cap: { basis: "4", cap: "5" } }
+		const ask = vi.fn().mockResolvedValueOnce(capped).mockResolvedValueOnce({ queued: true, tokenSpent: true })
+		const onQueued = vi.fn()
+		await expect(estimateWhenClear(ask, new AbortController().signal, { onQueued, pollMs: 1 })).rejects.toBeInstanceOf(EstimateRequeue)
+		expect(onQueued.mock.calls).toEqual([[capped], [{ queued: true, tokenSpent: true }]])
+	})
+
 	test("a spent token reports queued, then asks for a fresh estimate instead of asking again", async () => {
 		const ask = vi.fn().mockResolvedValue({ queued: true, tokenSpent: true })
 		const onQueued = vi.fn()

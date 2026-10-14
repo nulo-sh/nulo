@@ -138,7 +138,17 @@ describe("send-submit", () => {
 		const { deps } = harness()
 		const id = submitTransfer(deps, SNAP)
 		expect(deps.awaiting.add).toHaveBeenCalledWith({ id, account: "0xacct", destination: DESTINATION, contract: "0xtoken" })
-		expect(deps.executeTransfer).toHaveBeenCalledWith("n1", "0xacct", 7, 0, DESTINATION, SNAP.amount, SNAP.feeSettings, "est-1")
+		expect(deps.executeTransfer).toHaveBeenCalledWith(
+			"n1",
+			"0xacct",
+			7,
+			0,
+			DESTINATION,
+			SNAP.amount,
+			SNAP.feeSettings,
+			"est-1",
+			undefined,
+		)
 		expect(submitTransfer(deps, SNAP)).not.toBe(id)
 	})
 

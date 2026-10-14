@@ -8,6 +8,7 @@ import { TOKEN_BALANCE_STORAGE_ROOT } from "@/wallet/services/token-balance/spec
 import { TOKEN_STORAGE_ROOT } from "@/wallet/services/token/spec"
 import { TRANSACTION_STORAGE_ROOT } from "@/wallet/services/transaction/spec"
 import { CONFIG_STORAGE_KEY } from "@/wallet/config/store"
+import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
 import {
 	BACKUP_BLOCKED_ROOTS,
 	BACKUP_SCHEMA_BASELINE,
@@ -162,6 +163,13 @@ describe("backup-migration-registry", () => {
 		expect(BACKUP_SLICE_REGISTRY["account-state"]).toEqual({ kind: "non-storage", optional: true })
 		expect(BACKUP_SLICE_REGISTRY.profile).toEqual({ kind: "block-listed", root: PROFILE_STORAGE_ROOT })
 		expect(BACKUP_BLOCKED_ROOTS).toEqual([PROFILE_STORAGE_ROOT, AUTH_REGISTRY_ENABLED_STORAGE_ROOT])
+	})
+
+	test("the operation journal is in no slice, so a queued send's fee question never enters or leaves a backup", () => {
+		expect(Object.keys(BACKUP_SLICE_REGISTRY)).not.toContain(OPERATION_JOURNAL_SERVICE_NAME)
+		const roots = Object.values(BACKUP_SLICE_REGISTRY).flatMap((slice) => ("root" in slice ? [slice.root] : []))
+		expect(roots).not.toContain("nulo:journal")
+		expect(roots).toContain(TRANSACTION_STORAGE_ROOT)
 	})
 
 	test("registry roots + id anchors match each service's own storage contract", () => {
