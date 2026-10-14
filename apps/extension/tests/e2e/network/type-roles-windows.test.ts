@@ -48,12 +48,12 @@ const SITES = identifierSites().map((site) =>
 		: site,
 )
 
-/** Sweep steps 1 and 2, then the identifier sites of each state the window renders. */
+/** The faces and roles of the window, then the identifier sites of each state it renders. */
 async function sweepWindow(win: Page, surface: string, states: readonly string[]): Promise<IdentifierObservation[]> {
 	expectSweepClean(await sweepTypeRoles(win), surface)
 	const observations: IdentifierObservation[] = []
 	for (const state of states) {
-		const observation = await observeIdentifierSites(win, surface, state, { arc: 4, sites: SITES })
+		const observation = await observeIdentifierSites(win, surface, state, { sites: SITES })
 		expectSitesClean(observation)
 		observations.push(observation)
 	}

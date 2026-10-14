@@ -109,7 +109,6 @@ const fixtureSite = (selector: string, role: SiteEntry["role"]): SiteEntry => ({
 	selector,
 	surface: "fixture",
 	state: "fixture",
-	liveFrom: 2,
 })
 
 test("a site reads its value or its native field, a name shown is judged as name, an override holds only its role in its scope", async ({
@@ -127,7 +126,7 @@ test("a site reads its value or its native field, a name shown is judged as name
 		expect(failures.map(({ testid, property }) => `${testid} ${property}`)).toEqual(["tr-mini-data font-size"])
 
 		const sites = [fixtureSite("tr-field", "input-data"), fixtureSite("tr-name", "data-lead")]
-		const { sites: observed } = await observeIdentifierSites(page, "fixture", "fixture", { arc: 5, sites })
+		const { sites: observed } = await observeIdentifierSites(page, "fixture", "fixture", { sites })
 		expect(observed.map(({ readings }) => readings.map(({ roles }) => roles.join(" ")))).toEqual([["input-data"], ["name"]])
 		expect(observed.flatMap(({ failures }) => failures)).toEqual([])
 	} finally {
@@ -185,7 +184,6 @@ test("withBlockedAccount raises the verification barrier and hands back an unloc
 	expect(ctx.pageErrors).toEqual([])
 })
 
-const OBSERVE = { arc: 4 } as const
 const VISIBLE = { visible: true, timeout: 15_000 } as const
 const TX_HASH = `0x${"5e".repeat(32)}`
 /** About 123 trillion of the scope's token: at $1, a figure Home's fit draws only below full size. */
@@ -223,14 +221,14 @@ const cutFigures = (readings: readonly TypeReading[]) =>
 		}))
 
 /**
- * Sweep steps 1 and 2 over the page as it stands, then the identifier sites and hex text of each
+ * The faces and roles of the page as it stands, then the identifier sites and hex text of each
  * state it renders, or the hex text alone when it names no state.
  */
 async function expectPageClean(page: Page, label: string, states: readonly SiteState[] = []): Promise<void> {
 	const sweep = await sweepTypeRoles(page)
 	expectSweepClean(sweep, label)
 	expect(cutFigures(sweep.readings), `${label}: figures cut`).toEqual([])
-	for (const [surface, state] of states) expectSitesClean(await observeIdentifierSites(page, surface, state, OBSERVE))
+	for (const [surface, state] of states) expectSitesClean(await observeIdentifierSites(page, surface, state))
 	if (states.length === 0) expect(await readHexOutsideMono(page), `${label}: hex outside a mono role`).toEqual([])
 }
 

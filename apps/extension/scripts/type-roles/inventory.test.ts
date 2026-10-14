@@ -10,7 +10,7 @@ import { type Surface, surfaces } from "./surfaces"
  * Holds both inventories to their reviewed expected files. A generated item with no entry, an entry
  * whose item is gone, a field missing, two entries one selector cannot tell apart, a pinned producer
  * set that moved, or a `review` note still open each fails here, so a change to what the wallet
- * renders reaches review before a board does.
+ * renders reaches review.
  */
 
 type Role = "data" | "data-lead" | "input-data" | "meta" | "name" | "none"
@@ -20,7 +20,6 @@ type SiteEntry = SiteKey & {
 	selector: string
 	surface: string
 	state: string
-	liveFrom: 2 | 3 | 4
 	unreachable?: string
 	why?: string
 	review?: string
@@ -37,7 +36,6 @@ type SurfaceEntry = {
 	name: string
 	kind: Surface["kind"]
 	source: string
-	arcs: number[]
 	reach: string
 	states: string[]
 	suite: "smoke" | "network" | "none"
@@ -92,7 +90,6 @@ function siteProblems(entry: SiteEntry, surfaceIds: ReadonlySet<string>): string
 	}
 	if (!Number.isInteger(entry.ordinal)) problems.push(`${where}: no ordinal`)
 	if (!ROLES.has(entry.role)) problems.push(`${where}: role ${entry.role}`)
-	if (![2, 3, 4].includes(entry.liveFrom)) problems.push(`${where}: liveFrom ${entry.liveFrom}`)
 	if (!surfaceIds.has(entry.surface)) problems.push(`${where}: surface ${entry.surface} has no entry`)
 	if (entry.role !== "none" && !entry.selector) problems.push(`${where}: no selector`)
 	if ((entry.role === "none" || entry.unreachable) && !entry.why) problems.push(`${where}: no why`)
@@ -160,7 +157,7 @@ describe("identifier sites", () => {
 	test("every site has an entry", () => {
 		const missing = sites.filter((site) => !entriesByKey.has(keyOf(site)))
 		const paste = missing.map(({ file, expression, branch, ordinal, line }) =>
-			JSON.stringify({ file, expression, branch, ordinal, role: "TODO", selector: "", surface: "", state: "", liveFrom: 0, line }),
+			JSON.stringify({ file, expression, branch, ordinal, role: "TODO", selector: "", surface: "", state: "", line }),
 		)
 		expect(paste).toEqual([])
 	})
@@ -248,12 +245,12 @@ describe("surfaces", () => {
 		generated = await surfaces()
 	}, 120_000)
 
-	test("every surface has an entry whose kind, source and arcs it still has", () => {
+	test("every surface has an entry whose kind and source it still has", () => {
 		const drift = generated.flatMap((surface) => {
 			const entry = byId.get(surface.id)
-			if (!entry) return [`${surface.id}: no entry (${surface.kind} ${surface.source}, arcs ${surface.arcs.join(",")})`]
-			const same = entry.kind === surface.kind && entry.source === surface.source && entry.arcs.join() === surface.arcs.join()
-			return same ? [] : [`${surface.id}: now ${surface.kind} ${surface.source}, arcs ${surface.arcs.join(",")}`]
+			if (!entry) return [`${surface.id}: no entry (${surface.kind} ${surface.source})`]
+			const same = entry.kind === surface.kind && entry.source === surface.source
+			return same ? [] : [`${surface.id}: now ${surface.kind} ${surface.source}`]
 		})
 		expect(drift).toEqual([])
 	})
