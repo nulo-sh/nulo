@@ -459,7 +459,10 @@ interface PreparedRegistration {
 /** Synchronous pre-launch gate for one contract: network-first error precedence (a missing
  *  network reports "Network not found", not the address-parse error), then the contracts every
  *  PXE boot registers by itself (the protocol contracts, upstream's preloaded standard
- *  contracts) are skipped outright. The parse stays here so a malformed address keeps its error. */
+ *  contracts) are skipped outright. The parse stays here so a malformed address keeps its error.
+ *  The profile's own account contracts and the fee sponsors stay registered from the slice: a
+ *  dApp's utility read of one resolves it without registering it, and nothing guarantees an
+ *  earlier registration. */
 function precheckContractAddress(
 	contract: BackupContract,
 	network: Network | undefined,

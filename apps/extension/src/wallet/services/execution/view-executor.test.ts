@@ -17,6 +17,8 @@ import { ContractInitializationStatus } from "@aztec-labs/aztec.js/wallet"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { FunctionSelector, FunctionType } from "@aztec-labs/stdlib/abi"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { ContractNotRegisteredError } from "@nulo/extension-messaging/errors"
+import { ContractResolver } from "./contract-resolver"
 import { ViewExecutor, type ViewExecutorDeps } from "./view-executor"
 
 const fastPathMocks = vi.hoisted(() => ({
@@ -505,5 +507,41 @@ describe("ViewExecutor.executeAztecExecuteUtility — the selector binding, with
 		await executor.executeAztecExecuteUtility(op(undefined))
 		expect(pxe.executeUtility).toHaveBeenCalledTimes(1)
 		expect((pxe.executeUtility as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatchObject({ name: "symbol" })
+	})
+})
+
+describe("ViewExecutor.executeAztecExecuteUtility — the target's registration", () => {
+	test("an own account the PXE does not hold is refused, and the read registers no contract; once registered, it runs", async () => {
+		const own = AztecAddress.fromBigIntUnsafe(0xacc0n)
+		const held = new Set<string>()
+		const pxe = {
+			getContractInstance: vi.fn(async (a: AztecAddress) =>
+				held.has(a.toString()) ? { address: a, currentContractClassId: Fr.fromString("0x0c1a55") } : undefined,
+			),
+			getContractArtifact: vi.fn(async () => ({})),
+			registerContract: vi.fn(async () => {}),
+			executeUtility: vi.fn(async () => ({ result: [] })),
+		}
+		const { executor, account, deps } = makeHarness({ resolver: new ContractResolver({ log: vi.fn() } as never) })
+		;(deps.pxeService.getPXE as ReturnType<typeof vi.fn>).mockReturnValue(pxe)
+		const lookupValidity = {
+			kind: "aztec_executeUtility",
+			networkId: "net-1",
+			accountAddress: own.toString(),
+			call: { to: own, selector: FunctionSelector.fromString("0x0f8efe19"), name: "lookup_validity", args: [], hideMsgSender: false },
+			opts: { scopes: [own.toString()] },
+		} as never
+
+		await expect(executor.executeAztecExecuteUtility(lookupValidity)).rejects.toThrow(
+			new ContractNotRegisteredError("Contract instance not found"),
+		)
+		expect(account.ensureRegistered).toHaveBeenCalledTimes(1)
+		expect(pxe.registerContract).not.toHaveBeenCalled()
+		expect(pxe.executeUtility).not.toHaveBeenCalled()
+
+		held.add(own.toString())
+		contractResolverMocks.findFunctionBySelector.mockResolvedValueOnce({ name: "lookup_validity", functionType: FunctionType.UTILITY })
+		await executor.executeAztecExecuteUtility(lookupValidity)
+		expect(pxe.executeUtility).toHaveBeenCalledTimes(1)
 	})
 })
