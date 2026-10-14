@@ -21,3 +21,8 @@
 - `change-password.vue` had both eyes already, each negating the one `isPasswordType`. Two flags now: `isCurrentPasswordHidden` drives the current field and its eye, `isNewPasswordHidden` the new field, its confirmation and the second eye. Test ids, the eyes' `tabindex="-1"` (`PasswordVisibilityToggle`) and every word stay.
 - `change-password.test.ts`: the old `test.each` pinned that either eye masks all three fields together. It became two cases on the shared `expectMaskToggle` helper, whose `others` list asserts the fields an eye must leave alone: the current eye drives the current field only, the new eye the pair only. Both fail on the base copy (the new pair, or the current field, flips with the wrong eye) and pass now. No e2e case is added: the component test proves the split, and `security.test.ts` guards the page's flows on both browsers.
 - Screenshots: a throwaway spec outside the repo, run with `vitest --config vitest.e2e.config.ts --dir <scratch>` and absolute imports of the repo's fixtures, drives the page and calls `shotSend`. The before shots come from the build carrying the base copy.
+
+## Arc 3 review
+
+- Codex round 1 (session `01a13b93-9f54-7221-b3c1-0e543b35f333`, on the alejo-icloud account that `best` picked): APPROVE with one Low (the passkey rung's `return` unguarded) and two Comments (a stale test count, accepted; the two-flag comment, rejected). Opus: CHANGES, the same two plus a Low that became OWNER-ASKS OA-6 (the error toast outlives a successful retry). Fixed in a71acaea.
+- A guard that a branch returns needs a call count: `toHaveBeenCalledWith` passes when any one call matches, so a fall-through that adds a second toast stays green.

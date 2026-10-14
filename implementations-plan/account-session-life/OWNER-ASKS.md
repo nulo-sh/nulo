@@ -1,6 +1,6 @@
 # Owner asks: account-session-life
 
-Four questions that no recorded decision answers. OA-1 to OA-3 block nothing: each part ships now in the form shown under "What ships now". OA-4 gates arc 4: nothing of it is built before the answer. Page 7 (records P7-01 to P7-04) is asked separately and gates arc 3.
+Six questions. Page 7 answered OA-1 to OA-5 on 2026-10-14 (§ Answers); their picks wait for a plan revision, and until it lands each part ships in its "What ships now" form. OA-6, found in arc 3's review, is open and ships as A.
 
 ## OA-1: profile create when the new profile does not start (#100)
 
@@ -77,6 +77,20 @@ Under both B and C, the banner for a service that never starts comes after up to
 **Recommendation.** B: it makes the page do what its own hint says, with no new words.
 
 **What ships now.** A. Arc 2 adds no time to it: `deleteProfile`'s new wait for the deletion coordinator shares the 30-second budget the call already spends waiting for the service to start, so the call reaches its first write no later than it does today.
+
+## OA-6: the unlock screen's error toast after a retry that succeeds (found in arc 3's review)
+
+**Surface.** The unlock screen (`popup/pages/auth.vue`), password profile, after an unlock fails and a later attempt succeeds.
+
+**Today.** An error toast stays until it is closed, on every screen. So after "Unlock timed out. Please try again", and from arc 3 on after "Something went wrong" with the line "Try unlocking again.", a retry that unlocks lands on the wallet's home with that toast still showing, until the person closes it. A retry that hits a wrong password shows the inline "Wrong password" beside it.
+
+**Options.**
+- **A. As today.** The toast stays until it is closed.
+- **B. A new attempt takes the last failure's toast away.** Pressing Continue again closes the unlock screen's own failure toast, so a success leaves nothing behind and a second failure shows its toast afresh. The passkey prompt already does this with "Passkey not confirmed. Try again." No new words.
+
+**Recommendation.** B: it matches the passkey path on the same screen.
+
+**What ships now.** A. Arc 3 adds the approved toast and changes nothing about how any toast leaves.
 
 ## Answers
 

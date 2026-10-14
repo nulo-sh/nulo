@@ -685,6 +685,15 @@ Opus's phase 1.1 notes:
   - **[Comment] Accepted.** Three trims (fbe0f79): the injection field's garbled sentence, `closeReason`'s "both are read every time", and a duplicate of the failed-erase rule in `eraseProfile`. The close test no longer pins `port.error` read counts, which no behaviour depends on.
 - **Codex round 2 (same session): `APPROVE`**, high confidence, no findings. It checked both reviews' fixes in memory (remaining budget, delegate replacement, timer cleanup). The loop closed at round 2 of 3.
 
+**Arc 3 review: the Codex fix loop and the Opus final-diff review**, on the arc diff from `d3dc441` (dev at the branch point).
+
+- **Codex round 1** (`gpt-6.1-sol`, high, new session `01a13b93-9f54-7221-b3c1-0e543b35f333`): `APPROVE`, high confidence, one Low and two Comments.
+  - **[Low] Accepted.** The passkey rung's new `return` had no guard: without it a passkey failure calls the passkey toast and then the generic one, and `toHaveBeenCalledWith` still matches. Fixed in a71acaea: "any other passkey failure" asserts one call; it fails with the `return` removed.
+  - **[Comment] Accepted.** "Tests 3-4 use the per-test fixture" went stale when the new case landed above it. Fixed in a71acaea: the new case sits under the comment, which names no count.
+  - **[Comment] Rejected.** "Delete the two-flag comment in `change-password.vue`." The names say which field each flag drives; the comment says why they must stay two (revealing the new pair never shows the current password), which a refactor that re-merges them would otherwise learn only from a red test. Opus read the same line as an invariant worth keeping.
+- **Opus 5.5 final-diff review** (general-purpose, read-only): `CHANGES`. It found the same test gap (rated Medium) and the same stale comment independently, and ran the two unit files (41/41).
+  - **[Low] Not built; OWNER-ASKS OA-6.** The new error toast, like today's "Unlock timed out", stays until closed, so a retry that unlocks lands on Home with "Try unlocking again." still showing (`scope-epoch.ts` closes only snacks with an action). Closing it on a new attempt, as `usePasskeyCeremony` does with its own line, changes when an approved toast leaves the screen: the owner's call. Ships as today.
+
 **Arc 2 deviations from the plan text** (the tree wins):
 - Phase 2.2: the delegate wait is not a separate 30 s after `ensureInitialized`. One deadline, taken at entry, covers both (D1). `DEFAULT_INIT_TIMEOUT_MS` is exported from `packages/extension-messaging/src/background/index.ts`.
 - Phase 2.3: besides `incarnation-fence.test.ts`, `service-idb-delete.test.ts`, `store-key-decode.test.ts` and `service-sweep.test.ts` move to the record shape or gain the sweep guard. The failed-joined-erase test (D3) is added to the plan's list.
