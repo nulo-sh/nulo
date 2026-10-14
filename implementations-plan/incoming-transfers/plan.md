@@ -17,6 +17,7 @@ issues: [92, 97, 138, 139, 140, 141, 142, 143, 144, 227]
 Live progress: [STATUS.md](STATUS.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md) (§ Answers holds
 page 4's). Recon: [recon.md](recon.md). Arcs 1 and 2: ledger D1 to D20, D-orch-1 to 11, audit
 verdicts, assumptions and residue in [decisions.md](decisions.md); design and phases here at `264a4b30`.
+Over the 350-line target by the build's audit verdicts, kept whole as this arc's evidence.
 
 ## Lane state
 
@@ -311,6 +312,29 @@ D1 to D20, D-orch-1 to 11: decisions.md; D21 to D24, D-orch-12: arc 3a's (§ Del
 Looks fine: the anchor, the delete fence, refresh-on-Updated, D27, revert checks, OA-8. The two fixes
 are not re-reviewed; the implementer's first Codex round checks them first.
 
+### Arc 3b build, round 1: Codex (gpt-6.1-sol, high, read-only), `reject (with blocking findings: a mount continuation can start a fresh fee lookup after unmount using stale mode-off permission)`
+
+F C1 holds while mounted, F C2 holds. 1. High, `dispose()` dropped only answers in flight, so the
+mount's continuation after a held network read looked up with the last mode, its listener gone.
+**Accepted**: `dispose()` is terminal; a composable and a page regression, red with the guard removed.
+
+### Arc 3b build, round 1: Opus (general-purpose), `holds (with non-blocking findings: a style copy, a PXE store reset, a storage read per block)`
+
+1. Low, a copy of `.fee_show` in the reduced-motion block: removed. 2. Low, a PXE schema bump opens an
+empty store, and unsettled rows from senders not re-registered are deleted: **a known limit**. 3. Low, a
+full storage read per contract per block: **declined**, milliseconds beside the PXE read; listing once
+per target would make every timestamp backfill a stand-down and a rerun.
+
+### Arc 3b build, round 2: Codex (resumed), `approve`
+
+No findings; the loop converged.
+
+### Cross-arc fresh pass: Codex (gpt-6.1-sol, high, read-only, new session; #426's head for 3a), `reject (with blocking findings: SDK warnings still leak receipt transaction hashes before the sanitized fee catch)`
+
+1. Medium, the retrying node logs a failed call's error text through the SDK's loggers (warn, and
+   error per retry), past the fee lookup's own line. **Out of scope**: it predates the lane and covers
+   every node the wallet builds; `trim` keeps the URL to its origin. Issue #432. Resumed: `approve`.
+
 ## Post-implementation
 
 This plan plus `implementations-plan/README.md` § Post-implementation standard at `264a4b30`; `code_review` off.
@@ -323,7 +347,8 @@ This plan plus `implementations-plan/README.md` § Post-implementation standard 
 - **Approval boundary.** Persisted state beyond `privacyMode` and `settled`, a timer, or a method
   beyond `getCachedReceiptFee` and `getSyncedBlock` stops for the orchestrator. **Close-out**, its own
   PR after 3a and 3b merge (standard step 4): decisions.md § Not this lane's four residues and the
-  two #140 limits filed; OA-7 and OA-8 answered or recorded.
+  three #140 limits (lying finality or a kept pruned note, a sustained mid-scan block, a PXE store
+  reset) filed; OA-7 and OA-8 answered or recorded.
 
 ## Delivery
 

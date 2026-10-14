@@ -71,3 +71,20 @@ dev added the `@nulo/token-list` workspace, so the worktree needed a `bun instal
   measured 11.9 s and 10.4 s on Chrome, 21.0 s and 14.6 s on Firefox.
 - Gate: lint 0, typecheck:all 0, test 0 (12253 passed); smoke with `fiat-display.test.ts` at retry 0,
   3/3 on Chrome (24.4 s) and Firefox (40.8 s).
+
+### Arc 3b boundary
+
+- Codex round 1 found that `useReceiptFee.dispose()` dropped only answers in flight: the mount's
+  continuation, released after unmount by the network read's rejection, still looked the fee up
+  with the last mode while its config listener was gone. A C1 hook's `dispose()` must be terminal;
+  an invalidated fence alone lets a later call start a new generation.
+- The cross-arc pass traced the fee lookup past the service: the retrying node logs a failed call's
+  error text through the SDK's default loggers (`retry` gets `undefined`, so its default logger
+  writes at error). Pre-existing and wallet-wide, so out of scope here (#432).
+- Opus: a PXE schema bump opens an empty store, so unsettled note rows from senders not
+  re-registered are deleted after two scans. A known limit for the close-out.
+- Gate on the final product code (`1aeb12a9`): lint 0, typecheck:all 0, test:all 0 (extension
+  12253, before the two regression tests); network, 8 files, 20/20 at retry 0, proverless, 834 s on
+  `dc229c04` (the later commits touch only the fee hook's teardown and a stylesheet); full smoke at
+  retry 0, Chrome 54 files passed, 4 skipped, 231 tests, 1522 s; Firefox 56 passed, 2 skipped, 230
+  tests, 2141 s. The new scenario ran 10.1 s (Chrome) and 18.5 s (Firefox) inside the suites.

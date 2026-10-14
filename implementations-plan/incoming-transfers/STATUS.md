@@ -27,3 +27,4 @@
 - 2026-10-14 — arc 3b build started on `incoming-transfers-arc-3b` (plan commit rebased onto `b3c98acb` as `f0beffb3`). Phase 3.3 gate passed: units 1278/1278, lint 0, typecheck:all 0; revert checks fail as required.
 - 2026-10-14 — Phase 3.4 gate passed: units 1315/1315, lint 0, typecheck:all 0, test:all 0; three revert checks fail as required.
 - 2026-10-14 — Phase 3.5 gate passed: lint 0, typecheck:all 0, test 0 (12253); smoke 3/3 on Chrome and Firefox at retry 0; revert checks fail as required; 24 screenshots in `screenshots/`.
+- 2026-10-14 — arc 3b boundary: Codex round 1 `reject` (post-unmount fee lookup, fixed), Opus `holds` (3 Low), Codex round 2 `approve`; cross-arc pass `reject` (SDK node-client logs, out of scope, #432), resumed `approve`. Network 8 files 20/20, full smoke Chrome 231 and Firefox 230 tests passed at retry 0.
