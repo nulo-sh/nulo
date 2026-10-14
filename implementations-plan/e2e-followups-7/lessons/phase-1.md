@@ -54,3 +54,7 @@ Base under the same amplifier failed 4 of 7 valid Chrome drained runs (`lessons/
 ## 2026-10-13: the moved helper's caller
 
 `tests/e2e/network/failed-send-check.test.ts`, `NULO_E2E_PROVERLESS=1`, retry 0, unpinned: Chrome 2/2 (372.1 s), Firefox 2/2 (337.5 s); its finality case drives `finalizeThrough` from `fixtures/aztec.ts`.
+
+## 2026-10-14: arc gate (final head, after merging `origin/dev` at 1823144f)
+
+The merge brought Send's `AmountCard.vue` and `send.vue` changes (#373), the path the drained cases drive, so snack-placement ran once more per browser on the merged head, unpinned, retry 0: Chrome 4/4 (537.1 s), Firefox 4/4 (596.7 s). `test:all`, `test:ci-gating` (535 pass), `lint`, `typecheck:all`, `check:plans`, `lint:actions`: exit 0.

@@ -11,3 +11,4 @@
 - 2026-10-13: head widened copy Firefox 4/4 green, final commit before the spend in each drained case; copy deleted. Runtime, amplified and failed-send-check runs queued.
 - 2026-10-13: amplified gate passed: Chrome 15/15 drained + 5/5 control, Firefox 15/15 + 5/5, worst headroom 44%. failed-send-check running.
 - 2026-10-13: failed-send-check Chrome 2/2, Firefox 2/2. Phase 1 gate passed. Arc gate next.
+- 2026-10-14: merged origin/dev (1823144f); snack-placement on the merged head Chrome 4/4, Firefox 4/4; arc gate (test:all, test:ci-gating, lint, typecheck:all, check:plans, lint:actions) exit 0.
