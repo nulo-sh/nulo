@@ -1,7 +1,7 @@
 ---
 plan: e2e-followups-7
 tier: light
-status: arc 1 implemented; Phase 1 gate passed (lessons/phase-1.md)
+status: completed
 issues: "#349 (arc-1); #322, #329, #354, #279, #186, #195 (no arc)"
 driver: claude-code
 claude_model: opus
@@ -15,27 +15,33 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-14.
+- **Status:** delivered in one PR against `dev`, [#404](https://github.com/nulo-sh/nulo/pull/404) (arc 1 and this close-out). The merge that lands it closes this plan.
+- **Shipped:** #349, closed by the PR. Before the mint the drain requires the grant, the account's only tx row, still awaiting finality (D3, D7), drives its block final with `finalizeThrough`, now in `fixtures/aztec.ts` (D4), waits for it to read Finalized, then for a balance write newer than that commit and the idle queue (D2, D6). Red on base 3/3 drained cases per browser, green on the head 3/3; amplified 15/15 drained and 5/5 control per browser; about +55 s per drained case, worst headroom 44% (`lessons/phase-1.md`). The product refresh (P) stays (D1).
+- **Known limits:** #403 (KL1: a reorg of the mint's receipt, or a parked transient balance retry, after the mint's barrier).
+- **Open items:** none.
+- **Lessons:** nothing promoted to `lessons.md` (at its 8 KiB budget, no retirement pays for it); the rule is the e2e-testing skill's flake ledger row 56.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
+
 # e2e-followups-7: the drain waits for the write its grant still owes
 
 Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Probes, rates and consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Scope
 
-**In (arc-1):** #349, Phase 1. The PR says `Closes #349`.
-
-**No arc, with reason:** #322 (investigated in #328, open until the recursion recurs); #329 and #354 (lane `wallet-followups-7`); #279 (decision page 5, P5-07); #186 (after #279); #195 (decision page 5).
-
-**Out:** no product file changes. No raised wait (the 60 s in `fillSendForm` stays), no retry, no reordered case, no `skipIf`, no suppression. `lessons.md` is at its 8 KiB budget: nothing is promoted unless a retirement pays for it.
+- **In (arc-1):** #349, Phase 1. The PR says `Closes #349`.
+- **No arc, with reason:** #322 (investigated in #328, open until the recursion recurs); #329 and #354 (lane `wallet-followups-7`); #279 (decision page 5, P5-07); #186 (after #279); #195 (decision page 5).
+- **Out:** no product file changes. No raised wait (the 60 s in `fillSendForm` stays), no retry, no reordered case, no `skipIf`, no suppression. `lessons.md` is at its 8 KiB budget: nothing is promoted unless a retirement pays for it.
 
 ## Outcome & Quality Bar
 
-**For whom:** the maintainer who reads `extension-network-e2e-status` on a PR that touches neither Send, balances nor authwits, and needs a red there to mean a real fault.
-
-**What excellent looks like:**
-- Before the mint, the drain proves the grant's last balance write has landed, and its doc comment names every write and its one cause.
-- Under the two-core amplifier the drained cases pass every round on both browsers (base failed 4 of 7 on Chrome, F2), and a widened copy is red on base and green on the head for the traced reason, on both browsers. The cost, about +55 s per drained case (three per browser), is measured and stated.
-
-**Good enough:** the barrier is local to snack-placement and fixture-specific; the helper it borrows moves to a fixture so it has one copy.
+- **For whom:** the maintainer who reads `extension-network-e2e-status` on a PR that touches neither Send, balances nor authwits, and needs a red there to mean a real fault.
+- **What excellent looks like:**
+  - Before the mint, the drain proves the grant's last balance write has landed, and its doc comment names every write and its one cause.
+  - Under the two-core amplifier the drained cases pass every round on both browsers (base failed 4 of 7 on Chrome, F2), and a widened copy is red on base and green on the head for the traced reason, on both browsers. The cost, about +55 s per drained case (three per browser), is measured and stated.
+- **Good enough:** the barrier is local to snack-placement and fixture-specific; the helper it borrows moves to a fixture so it has one copy.
 
 ## Assumptions
 
@@ -135,9 +141,8 @@ Follow `implementations-plan/README.md` § Post-implementation standard at e900f
 - **Codex, plan audit** (same session, resumed): `conditional approve`. Accepted: F4 and F5 narrowed; the sole-grant precondition (D3); the copy observes the causal write before Send and records non-qualifying base runs; the 90 s derivation (D6, resolved at 180 s); 15+5 denominators and the base ledger; `finalizeThrough`'s default; no recaptured baseline; probe removal; `lint:actions`. Rejected: none.
 - **Codex, verify** (same session, resumed): `approve`, confidence high; D6's 180 s accepted as an operational budget. One execution detail, accepted: the head copy compares against a timestamp taken before the spend is sent, not after it returns.
 - **Opus 5.5 Plan lens**: `conditional approve`. Accepted: D6; the clean tree; the base ledger; base's copy before implementing (run during planning: red 3/3 per browser); the error loop and Node-side classification; the grant inside the filtered set; the move's details; the Firefox and suite-runtime gate notes; the headroom bound; the cost in the Outcome; the non-vacuous head copy. Corrected: "owed" no longer names Dropped rows. Rejected: none.
-- **Codex, code review r1** (gpt-6.1-sol, high, read-only; session `01a1370b-868e-7410-90fe-4b75536177fc`, over `git diff 7ab2d3b8 0fcecdae`): `conditional approve`. Accepted: the mined/final overlap closed fail-closed (D7); one narrating comment cut. Rejected: cutting the drain's per-step write-count line (the steps' lines are the model). Headroom: the measured gate.
+- **Codex, code review r1** (gpt-6.1-sol, high, read-only; session `01a1370b-868e-7410-90fe-4b75536177fc`, over `git diff 7ab2d3b8 0fcecdae`): `conditional approve`. Accepted: the mined/final overlap closed fail-closed (D7); one narrating comment cut. Rejected: cutting the drain's per-step write-count line (the steps' lines are the model). Headroom: the measured gate. **r2** (resumed, over `git diff 0fcecdae 91353f1c`): no new material finding; `conditional approve`, the conditions being the validation gates.
 - **Opus 5.5 diff lens** (beside r1): `conditional approve`, no false green found. Accepted: the token import named as a cause, "refreshes balances", the README row's read timing, the narrating comment; ledger row 56 held until the head copy was green.
-- **Codex, code review r2** (resumed, over `git diff 0fcecdae 91353f1c`): no new material finding; `conditional approve`, the conditions being the validation gates.
 
 ## Seeds (draft; the orchestrator owns execution)
 
