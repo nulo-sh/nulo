@@ -4,7 +4,7 @@ import { DuplicateWalletError } from "@nulo/extension-messaging/errors"
 import type { ToastOptions } from "@/composables/toast"
 import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStore } from "@/stores/popup.store"
-import { useFullBackupImport } from "@/composables/useFullBackupImport"
+import { type RestoreErrorNetworks, useFullBackupImport } from "@/composables/useFullBackupImport"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 import { useProfileNameDefault } from "@/composables/useProfileNameDefault"
 import { useProfileNameField } from "@/composables/useProfileNameField"
@@ -44,7 +44,7 @@ export interface UseProfileImportFlowOptions {
 	 */
 	completeImport: (profile: unknown) => Promise<void> | void
 	/** Per-shell restore-error surface (popup = data-viewer overlay; onboarding = notification). */
-	showErrorLog: (errors: Record<string, unknown[]>) => void
+	showErrorLog: (errors: Record<string, unknown[]>, networks: RestoreErrorNetworks) => void
 	/** Per-shell passkey-import failure notification (page owns `notificationStore.create`). */
 	notifyImportFailed: () => void
 	/** The page's toast: the copy-error affordance, and a passkey prompt that was not confirmed. */
@@ -398,6 +398,7 @@ function wireBackupImport(deps: WireBackupImportDeps) {
 		parsedBackupName,
 		canRetryAccountState,
 		unrestoredNetworkNames,
+		retryFailedAgain,
 		hasOtherRestoreErrors,
 		isRetryingAccountState,
 		retryAccountState,
@@ -440,6 +441,7 @@ function wireBackupImport(deps: WireBackupImportDeps) {
 			isRestoreHasErrors,
 			canRetryAccountState,
 			unrestoredNetworkNames,
+			retryFailedAgain,
 			hasOtherRestoreErrors,
 			isRetryingAccountState,
 			retryAccountState,

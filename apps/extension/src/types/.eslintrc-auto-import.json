@@ -176,6 +176,7 @@
     "ReceivedType": true,
     "Ref": true,
     "RestoreData": true,
+    "RestoreErrorNetworks": true,
     "RestoreIo": true,
     "RestoreScratch": true,
     "RestoreStage": true,

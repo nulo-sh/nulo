@@ -124,6 +124,16 @@ describe("ImportFullBackupForm", () => {
 		expect(wrapper.text()).toContain("import completed with some errors")
 	})
 
+	it("writes the warning in the theme's warning text colour", () => {
+		const wrapper = mount(ImportFullBackupForm, {
+			props: baseProps({ restoreStatus: "finished", isRestoreHasErrors: true, unrestoredNetworks: ["Testnet"] }),
+			global: { stubs: { ...stubs, Text } },
+		})
+		const sentence = wrapper.get("[data-testid=import-full-backup-warning]").findAllComponents(Text).at(-1)
+		expect(sentence?.classes()).toContain("color--txt-warning")
+		expect(sentence?.classes()).not.toContain("color--yellow")
+	})
+
 	it("names the networks a Retry replays in the warning", () => {
 		const wrapper = mount(ImportFullBackupForm, {
 			props: baseProps({

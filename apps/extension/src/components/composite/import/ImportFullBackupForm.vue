@@ -99,7 +99,7 @@ watch(
 		>
 			<Flex align="center" gap="8">
 				<span :class="[$style.error_tag, $style.error_tag_warning]">Warning</span>
-				<Text variant="body" height="120" color="yellow">{{ warningText }}</Text>
+				<Text variant="body" height="120" color="txt-warning">{{ warningText }}</Text>
 			</Flex>
 		</Flex>
 	</div>
@@ -190,7 +190,7 @@ watch(
 }
 
 .error_tag_warning {
-	color: var(--yellow);
+	color: var(--txt-warning);
 	border-color: var(--yellow);
 }
 

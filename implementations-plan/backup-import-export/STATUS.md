@@ -34,3 +34,4 @@
 - 2026-10-14: round 1 of the arc 3 planning audit: Codex reject (C1-C8), Opus conditional approve (O1-O13), all accepted; plan revised (348 lines); OWNER-ASKS gained OA-10 rows, OA-11 and two explanations. Codex round 2 resumed.
 - 2026-10-14: Codex r2 conditional approve (C2-1..C2-5) and r3 conditional approve (C3-1), all accepted and applied; plan 349 lines; check:plans 0 findings. Planning commit next.
 - 2026-10-14: gate 3.1 pass (lint, typecheck:all, useFullBackupImport.test.ts 103/103; the three refusal cases fail with the check removed).
+- 2026-10-14: gate 3.2 pass (lint, typecheck:all, composite/import + composables + both import pages + three ban tests 55 files 1092/1092; smoke import-errors-scroll 4/4 Chrome 55.0 s, Firefox 4/4 67.5 s, retry 0; notification-description testid added; screenshots batched for the arc's final build).

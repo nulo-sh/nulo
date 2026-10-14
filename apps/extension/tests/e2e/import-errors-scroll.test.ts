@@ -2,7 +2,9 @@
  * The full-backup import's errors screen opens with its warning whole in view, and never rests with
  * the popup hero's title cut by the sticky bar: where the scroller's end carries the title past the
  * bar, the screen lands there; otherwise it scrolls only as far as the warning needs. Real layout,
- * so both browsers: the popup at its 360x600 size, onboarding at the launcher's window.
+ * so both browsers: the popup at its 360x600 size, onboarding at the launcher's window. Both shells
+ * then name the unrestored network where they report it: the line a failed Retry leaves, the popup's
+ * error viewer and onboarding's notice.
  *
  * A synthetic backup. Its local-chain item names a sender and the local seed is refused, so a
  * Retry is offered (four footer buttons, a three-line warning); an item on a chain no seed serves
@@ -14,10 +16,10 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
-import { restoreWarningText } from "@/components/composite/import/restore-warning"
+import { restoreNoticeText, restoreWarningText, retryResultText } from "@/components/composite/import/restore-warning"
 import { LOCAL_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { interceptRpc } from "./fixtures/browser"
-import { launchExtension, test } from "./fixtures/extension"
+import { clickByTestId, launchExtension, test } from "./fixtures/extension"
 import {
 	buildSyntheticBackup,
 	deriveNuloAccountAddress,
@@ -115,6 +117,22 @@ async function popupLanding(page: Page) {
 
 type Landing = Awaited<ReturnType<typeof popupLanding>>
 
+async function textOf(page: Page, testId: string, timeout = 10_000): Promise<string> {
+	const shown = await page.waitForFunction(
+		(id) => (document.querySelector(`[data-testid="${id}"]`) as HTMLElement | null)?.innerText.trim() || false,
+		{ timeout, polling: 100 },
+		testId,
+	)
+	return (await shown.jsonValue()) as string
+}
+
+/** Presses Retry with the local node still refused and returns the line the failed Retry leaves. */
+async function failedRetryLine(page: Page): Promise<string> {
+	await clickByTestId(page, "import-full-backup-retry-btn")
+	// A Retry is one more tail: 45 s at most, plus margin.
+	return textOf(page, "import-full-backup-retry-result", 90_000)
+}
+
 /** Scroll offsets snap to whole device pixels, so a nearest scroll can leave an edge up to half a
  *  pixel past the view (a four-line warning at 96.2 lands at 96). */
 function expectWarningWhole(l: Landing): void {
@@ -133,6 +151,10 @@ test("one network to retry: the open lands at the scroller's end, the title abov
 		expectWarningWhole(l)
 		expect(l.scrollTop).toBe(l.maxScroll)
 		expect(l.title.bottom).toBeLessThanOrEqual(l.barBottom)
+
+		expect(await failedRetryLine(page)).toBe(retryResultText(["Local Network"]))
+		await clickByTestId(page, "import-full-backup-view-errors-btn")
+		expect(await textOf(page, "data-viewer")).toMatch(/"network": "Local Network",\s*"networkId": "[0-9a-f]{8}"/)
 	})
 })
 
@@ -169,5 +191,9 @@ test("onboarding: the page does not scroll, the warning already in view", { time
 		})
 		expect(warning.top).toBeGreaterThanOrEqual(0)
 		expect(warning.bottom).toBeLessThanOrEqual(warning.viewport)
+
+		expect(await failedRetryLine(page)).toBe(retryResultText(["Local Network"]))
+		await clickByTestId(page, "import-full-backup-view-errors-btn")
+		expect(await textOf(page, "notification-description")).toBe(restoreNoticeText(["Local Network"]))
 	})
 })

@@ -1268,10 +1268,56 @@ describe("useFullBackupImport — Retry the networks that did not restore", () =
 
 			expect(rowsFor(c, "M2")).toEqual([{ networkId: "M2", contracts: [], senders: [], restoreError: ACCOUNT_STATE_SKIP_DEADLINE }])
 			expect(c.canRetryAccountState.value).toBe(true)
+			expect(c.retryFailedAgain.value).toBe(true)
 			expect(opts.completeImport).not.toHaveBeenCalled()
 		} finally {
 			vi.useRealTimers()
 		}
+	})
+
+	it("a Retry that fails again says so until a Retry restores the network or the page moves on", async () => {
+		let m2Calls = 0
+		const { c, restored } = await start((id) => (id === "M2" && ++m2Calls < 3 ? ranOutOfTime("M2") : answered(id)))
+		await restored
+		expect(c.retryFailedAgain.value).toBe(false)
+
+		await c.retryAccountState()
+		expect(c.retryFailedAgain.value).toBe(true)
+		expect(c.unrestoredNetworkNames.value).toEqual(["Alpha V5"])
+
+		await c.retryAccountState()
+		expect(c.retryFailedAgain.value).toBe(false)
+	})
+
+	it("View Errors hands the shell every restored network's name and the networks a Retry replays", async () => {
+		const showErrorLog = vi.fn()
+		accountStateClient.restore = vi.fn(async (items: unknown) =>
+			networkOf(items) === "M2" ? ranOutOfTime("M2") : answered(networkOf(items)),
+		) as never
+		const c = useFullBackupImport({ ...makeOpts(), showErrorLog })
+		const backup = await buildBackup({
+			data: {
+				"account-state": [
+					{ ...item("x1"), chainId: 1 },
+					{ ...item("x2"), chainId: 2 },
+				],
+			},
+		})
+		c.selectedBackup.value = { name: "x.json", backup, type: "plain", profileType: "password" }
+		profileClient.restore.mockResolvedValue({ id: "new-id", name: "Imported", type: "password" })
+		networkClient.seedDefaultsForProfile.mockResolvedValue(seeds)
+		accountClient.restore.mockResolvedValue([{ address: "0xaaaa", chainId: 1 }])
+		await c.restoreBackup()
+
+		c.showRestoreErrorLog()
+
+		expect(showErrorLog).toHaveBeenCalledExactlyOnceWith(c.restoreErrorLog.value, {
+			byNetworkId: new Map([
+				["M1", "Testnet"],
+				["M2", "Alpha V5"],
+			]),
+			unrestored: ["Alpha V5"],
+		})
 	})
 
 	it("a second press while a Retry runs makes no call", async () => {

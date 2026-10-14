@@ -37,6 +37,7 @@ import {
 	type RestoreIo,
 	type RestoreScratch,
 	resolvePasskeyCredential,
+	type RestoredNetwork,
 	restoreAccountStateStage,
 	restoreAccountsStage,
 	restoreActiveNetworkPointer,
@@ -185,7 +186,7 @@ export interface UseFullBackupImportOptions {
 	 * it to a simpler notification. Defaults to console.error so the
 	 * composable stays usable from any shell.
 	 */
-	showErrorLog?: (errors: Record<string, unknown[]>) => void
+	showErrorLog?: (errors: Record<string, unknown[]>, networks: RestoreErrorNetworks) => void
 	/**
 	 * The name the restored profile gets, asked inside the restore's latch once the backup is
 	 * validated. `backupName` is the validated backup's own name, sanitized (`null` when it has
@@ -208,6 +209,13 @@ export interface UseFullBackupImportOptions {
 	confirmDuplicate?: <T>(run: () => Promise<T>) => Promise<T | undefined>
 }
 
+/** What an error surface needs to name networks: the restored ones by id, and the names of those a
+ *  Retry would replay. */
+export interface RestoreErrorNetworks {
+	byNetworkId: ReadonlyMap<string, string>
+	unrestored: string[]
+}
+
 export interface UseFullBackupImportResult {
 	selectedBackup: Ref<BackupSelection | null>
 	decryptionPassword: Ref<string>
@@ -228,6 +236,8 @@ export interface UseFullBackupImportResult {
 	canRetryAccountState: Ref<boolean>
 	/** The seeded names of the networks a Retry replays, in seed order; empty while none can. */
 	unrestoredNetworkNames: Ref<string[]>
+	/** The last Retry left a network a Retry would replay again. */
+	retryFailedAgain: Ref<boolean>
 	/** The error log holds a row that no Retry replaces. */
 	hasOtherRestoreErrors: Ref<boolean>
 	/** A Retry is running; Continue and View Errors wait for it. */
@@ -329,7 +339,11 @@ async function executeRestore(
 	scratch: RestoreScratch,
 	io: RestoreIo,
 	deps: { profileService: ProfileServiceClient; networkService: NetworkServiceClient; opts: UseFullBackupImportOptions },
-): Promise<{ profile: { id: string; restoreError?: unknown }; accountStateRetry?: AccountStateRetryContext } | null> {
+): Promise<{
+	profile: { id: string; restoreError?: unknown }
+	networks: RestoredNetwork[]
+	accountStateRetry?: AccountStateRetryContext
+} | null> {
 	const { data, backup } = validated
 	const { profileService, networkService, opts } = deps
 	const masterKey = backup["master-key"] as string
@@ -433,7 +447,7 @@ async function executeRestore(
 
 	io.setStage("restoring:account-state")
 	const accountStateRetry = await restoreAccountStateStage(data, nets.seeded, networkService, io)
-	return { profile: newProfile, accountStateRetry }
+	return { profile: newProfile, networks: nets.seeded, accountStateRetry }
 }
 
 /** The composable's reactive state, bundled for the module-level flow functions. */
@@ -445,6 +459,9 @@ interface ImportRefs {
 	restoreErrorLog: Ref<Record<string, unknown[]>>
 	importedProfile: Ref<unknown>
 	parsedBackupName: Ref<string | null>
+	/** The networks the last restore seeded; error surfaces name rows by them. */
+	restoredNetworks: ShallowRef<RestoredNetwork[]>
+	retryFailedAgain: Ref<boolean>
 	/** What a Retry replays; a reset, a new import and an unmount drop it. */
 	accountStateRetry: ShallowRef<AccountStateRetryContext | null>
 	/** The context a running Retry replays; a Retry whose context was dropped writes nothing. */
@@ -454,6 +471,7 @@ interface ImportRefs {
 function dropAccountStateRetry(state: ImportRefs) {
 	state.accountStateRetry.value = null
 	state.retryingAccountState.value = null
+	state.retryFailedAgain.value = false
 }
 
 /**
@@ -612,11 +630,13 @@ async function runRestoreBackup(
 
 	try {
 		state.restoreErrorLog.value = {}
+		state.restoredNetworks.value = []
 		const restored = await executeRestore(validated, scratch, io, { profileService, networkService, opts })
 		if (!restored) return
 
 		state.restoreStatus.value = "finished"
 		state.restoreStage.value = "finished"
+		state.restoredNetworks.value = restored.networks
 		if (!guards.hasErrors()) {
 			await completeAfterRestore(opts, restored.profile)
 			return
@@ -653,6 +673,7 @@ async function runRetryAccountState(
 	}
 	if (!live()) return
 	state.accountStateRetry.value = next ?? null
+	state.retryFailedAgain.value = next !== undefined
 	if (!deps.hasErrors()) await completeAfterRestore(opts, state.importedProfile.value)
 }
 
@@ -709,16 +730,37 @@ function errorLogWriters(restoreErrorLog: Ref<Record<string, unknown[]>>) {
 	return { recordRestoreErrors, replaceRestoreErrors }
 }
 
+function createImportRefs(): ImportRefs {
+	return {
+		selectedBackup: ref<BackupSelection | null>(null),
+		decryptionPassword: ref(""),
+		restoreStatus: ref<RestoreStatus>(""),
+		restoreStage: ref<RestoreStage>(""),
+		restoreErrorLog: ref<Record<string, unknown[]>>({}),
+		importedProfile: ref<unknown>(null),
+		parsedBackupName: ref<string | null>(null),
+		restoredNetworks: shallowRef<RestoredNetwork[]>([]),
+		retryFailedAgain: ref(false),
+		accountStateRetry: shallowRef<AccountStateRetryContext | null>(null),
+		retryingAccountState: shallowRef<AccountStateRetryContext | null>(null),
+	}
+}
+
 export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBackupImportResult {
-	const selectedBackup = ref<BackupSelection | null>(null)
-	const decryptionPassword = ref("")
-	const restoreStatus = ref<RestoreStatus>("")
-	const restoreStage = ref<RestoreStage>("")
-	const restoreErrorLog = ref<Record<string, unknown[]>>({})
-	const importedProfile = ref<unknown>(null)
-	const parsedBackupName = ref<string | null>(null)
-	const accountStateRetry = shallowRef<AccountStateRetryContext | null>(null)
-	const retryingAccountState = shallowRef<AccountStateRetryContext | null>(null)
+	const state = createImportRefs()
+	const {
+		selectedBackup,
+		decryptionPassword,
+		restoreStatus,
+		restoreStage,
+		restoreErrorLog,
+		importedProfile,
+		parsedBackupName,
+		restoredNetworks,
+		retryFailedAgain,
+		accountStateRetry,
+		retryingAccountState,
+	} = state
 
 	const isRestoreHasErrors = computed(() => Object.keys(restoreErrorLog.value).length > 0)
 	const canRetryAccountState = computed(() => restoreStatus.value === "finished" && accountStateRetry.value !== null)
@@ -737,17 +779,6 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 
 	const { recordRestoreErrors, replaceRestoreErrors } = errorLogWriters(restoreErrorLog)
 
-	const state: ImportRefs = {
-		selectedBackup,
-		decryptionPassword,
-		restoreStatus,
-		restoreStage,
-		restoreErrorLog,
-		importedProfile,
-		parsedBackupName,
-		accountStateRetry,
-		retryingAccountState,
-	}
 	const { unrestoredNetworkNames, hasOtherRestoreErrors } = retryWarningRefs(state)
 	const pickBackupFile = () => runPickBackupFile(state, opts)
 	const decryptBackup = () => runDecryptBackup(state, opts)
@@ -767,7 +798,8 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 	function showRestoreErrorLog() {
 		if (!isRestoreHasErrors.value) return
 		if (opts.showErrorLog) {
-			opts.showErrorLog(restoreErrorLog.value)
+			const byNetworkId = new Map(restoredNetworks.value.map((network) => [network.id, network.name]))
+			opts.showErrorLog(restoreErrorLog.value, { byNetworkId, unrestored: unrestoredNetworkNames.value })
 		} else {
 			console.error("Restore errors:", restoreErrorLog.value)
 		}
@@ -780,6 +812,7 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 		restoreErrorLog.value = {}
 		importedProfile.value = null
 		parsedBackupName.value = null
+		restoredNetworks.value = []
 		dropAccountStateRetry(state)
 	}
 
@@ -795,6 +828,7 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 		parsedBackupName,
 		canRetryAccountState,
 		unrestoredNetworkNames,
+		retryFailedAgain,
 		hasOtherRestoreErrors,
 		isRetryingAccountState,
 		retryAccountState,
