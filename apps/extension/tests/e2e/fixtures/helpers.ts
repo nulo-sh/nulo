@@ -1241,8 +1241,8 @@ export async function sendTransfer(page: Page, opts: SendTransferOptions): Promi
 	await page.waitForFunction(() => !document.querySelector('[data-testid="send-destination-field"]'), { timeout: 10_000 })
 }
 
-/** Fills the open Send form and waits until the footer is clickable — the fee estimate landed. */
-export async function fillSendForm(page: Page, opts: { amount: string; destination: string }): Promise<void> {
+/** Types the amount and destination into the open Send form, once its amount field takes input. */
+export async function enterSendForm(page: Page, opts: { amount: string; destination: string }): Promise<void> {
 	// Wait for amount input to become ENABLED
 	// AmountCard has :disabled="!tokenBalanceByType" — disabled when balance for selected type is 0/loading
 	await page.waitForFunction(
@@ -1257,6 +1257,11 @@ export async function fillSendForm(page: Page, opts: { amount: string; destinati
 	// triple-click + type is unreliable on our custom Input wrapper.
 	await replaceInputValue(page, '[data-testid="send-amount-input"]', opts.amount)
 	await replaceInputValue(page, '[data-testid="send-destination-field"] input', opts.destination)
+}
+
+/** Fills the open Send form and waits until the footer is clickable — the fee estimate landed. */
+export async function fillSendForm(page: Page, opts: { amount: string; destination: string }): Promise<void> {
+	await enterSendForm(page, opts)
 
 	// Wait for send button to become clickable (pointer-events != none)
 	// This means fee estimation (which triggers simulateTx → PXE sync) completed.

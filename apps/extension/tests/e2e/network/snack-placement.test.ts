@@ -4,6 +4,7 @@
  *  that fails once its record is written offers Details, which opens that record. */
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
+import { ESTIMATE_REUSE_TTL_MS } from "@/wallet/constants/estimate-reuse"
 import { TRANSACTION_STORAGE_ROOT, type Tx, TxStatus } from "@/wallet/services/transaction/spec"
 import {
 	type AztecTestConfig,
@@ -17,6 +18,7 @@ import {
 import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "../fixtures/extension"
 import {
 	captureBalanceBaseline,
+	enterSendForm,
 	fillSendForm,
 	importToken,
 	navigateByHash,
@@ -353,7 +355,7 @@ async function settledGrantFinality(page: Page, node: TxNode, account: string, g
  * once; each move or prune of its block can add another. A receipt to the account refreshes it once.
  * Nothing here asks for a refresh, so each write has one known cause, and none is owed at the spend.
  */
-async function balanceDrainedBehindTheWallet(ctx: DrainCtx): Promise<Page> {
+async function balanceDrainedBehindTheWallet(ctx: DrainCtx, beforeDrain?: (page: Page) => Promise<void>): Promise<Page> {
 	const config = aztecConfig as AztecTestConfig
 	const account = ctx.accountAddress
 	const { wallet, accounts, node, cleanup } = await createTestWallet(config.nodeUrl)
@@ -393,6 +395,7 @@ async function balanceDrainedBehindTheWallet(ctx: DrainCtx): Promise<Page> {
 		await waitFor("the wallet never settled the mint's receipt", () => receiptSettled(page, minted))
 		await waitForBalanceQueueIdle(page)
 
+		await beforeDrain?.(page)
 		await spendPublicAuthwit(wallet, config.tokenAddress, account, spender, DRAINED, nonce, fee)
 		return page
 	} finally {
@@ -400,15 +403,43 @@ async function balanceDrainedBehindTheWallet(ctx: DrainCtx): Promise<Page> {
 	}
 }
 
-/** On Send: 1 token, public to public, to the sandbox minter, from a balance the chain no longer
- *  holds, until the estimate has failed. */
-async function sendFromDrainedBalance(page: Page): Promise<void> {
+const ONE_TO_MINTER = () => ({ amount: "1", destination: (aztecConfig as AztecTestConfig).minterAddress })
+
+async function openPublicSend(page: Page): Promise<void> {
 	await navigateByHash(page, "#/popup/send", 10_000)
 	await page.waitForSelector(sel("send-from-type"), { timeout: 10_000 })
 	await setActiveSendType(page, "send-from-type", "public")
 	await setActiveSendType(page, "send-to-type", "public")
-	await fillSendForm(page, { amount: "1", destination: (aztecConfig as AztecTestConfig).minterAddress })
+}
+
+/** On Send: 1 token, public to public, to the sandbox minter, from a balance the chain no longer
+ *  holds, until the estimate has failed. Nothing goes out on a fee the person has not seen, so the
+ *  footer stays off. */
+async function sendFromDrainedBalance(page: Page): Promise<void> {
+	await openPublicSend(page)
+	await enterSendForm(page, ONE_TO_MINTER())
 	await waitForToast(page, "Couldn't estimate fee", 120_000, { kind: "error" })
+	expect(await page.$eval(sel("send-submit"), (el) => getComputedStyle(el).pointerEvents)).toBe("none")
+}
+
+/**
+ * On Send, while the chain still holds the balance: the same transfer, until its estimate lands.
+ * Confirm reuses that estimate's build without simulating it again for `ESTIMATE_REUSE_TTL_MS`;
+ * past it, Confirm builds afresh, against the balance the chain holds then. Returns when it landed.
+ */
+async function estimateOnSend(page: Page): Promise<number> {
+	await openPublicSend(page)
+	await fillSendForm(page, ONE_TO_MINTER())
+	return Date.now()
+}
+
+/** A drained send whose estimate landed first: Confirm builds again, so it fails once its record is written. */
+async function confirmPastEstimateReuse(page: Page, landedAt: number): Promise<void> {
+	const left = landedAt + ESTIMATE_REUSE_TTL_MS + 1_000 - Date.now()
+	if (left > 0) await new Promise((r) => setTimeout(r, left))
+	// A public origin needs no review, so the footer sends at once.
+	expect(await page.$eval(sel("send-submit"), (el) => el.getAttribute("data-action"))).toBe("send")
+	await clickByTestId(page, "send-submit")
 }
 
 /** Asks, through the playground, for a public transfer of 1,000,000 base units from an account that
@@ -456,11 +487,11 @@ test.skipIf(!hasConfig)(
 	async ({ dappConnectedExtensionWithTransactionCap }) => {
 		expect(dappConnectedExtensionWithTransactionCap.consoleErrors).toEqual([])
 		expect(dappConnectedExtensionWithTransactionCap.pageErrors).toEqual([])
-		const page = await balanceDrainedBehindTheWallet(dappConnectedExtensionWithTransactionCap)
-		await sendFromDrainedBalance(page)
-		// A public origin needs no review, so the footer sends at once.
-		expect(await page.$eval(sel("send-submit"), (el) => el.getAttribute("data-action"))).toBe("send")
-		await clickByTestId(page, "send-submit")
+		let landedAt = 0
+		const page = await balanceDrainedBehindTheWallet(dappConnectedExtensionWithTransactionCap, async (p) => {
+			landedAt = await estimateOnSend(p)
+		})
+		await confirmPastEstimateReuse(page, landedAt)
 
 		const card = await waitForToast(page, "Send failed", 180_000, { kind: "error" })
 		expect(await card.$eval(sel("snackbar-action"), (el) => el.textContent?.trim())).toBe("Details")
@@ -542,9 +573,11 @@ test.skipIf(!hasConfig)(
 		const ctx = dappConnectedExtensionWithTransactionCap
 		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
-		const page = await balanceDrainedBehindTheWallet(ctx)
-		await sendFromDrainedBalance(page)
-		await clickByTestId(page, "send-submit")
+		let landedAt = 0
+		const page = await balanceDrainedBehindTheWallet(ctx, async (p) => {
+			landedAt = await estimateOnSend(p)
+		})
+		await confirmPastEstimateReuse(page, landedAt)
 		await waitForHash(page, "#/popup/general", 10_000)
 		await waitForToast(page, "Send failed", 180_000, { kind: "error" })
 
