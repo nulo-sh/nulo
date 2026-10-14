@@ -26,7 +26,7 @@ import { ref, watch } from "vue"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { NodeStatus } from "@/wallet/services/network/spec"
 import { asBase64CredentialId, asBase64SecretPrf, asHexUserHandle, EncryptionKey } from "@nulo/wallet-crypto"
-import { RpcDisconnectedError, UserRejectedError } from "@nulo/extension-messaging/errors"
+import { RpcDisconnectedError, SessionEndedError, UserRejectedError } from "@nulo/extension-messaging/errors"
 
 // ── Mocks ───────────────────────────────────────────────────────────────────
 
@@ -203,7 +203,7 @@ import {
 	restoreAccountsAndFilterOwnedSlices,
 	restoredNetworkIds,
 } from "./full-backup-restore"
-import { useFullBackupImport, validateAndMigrateBackup } from "./useFullBackupImport"
+import { errorLogWriters, useFullBackupImport, validateAndMigrateBackup } from "./useFullBackupImport"
 import { collectRestoreErrors, sealFullBackupText } from "@/utils/full-backup-helpers"
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { awaitLivenessAdvance, readLiveness } from "@/utils/background-liveness"
@@ -307,6 +307,24 @@ describe("validateAndMigrateBackup — exact reject copy", () => {
 			expect(r.backup).not.toHaveProperty("checksum")
 			expect((r.data.profile as { id: unknown }).id).toBe("src-profile-id")
 		}
+	})
+})
+
+describe("errorLogWriters — what reaches the log", () => {
+	it("logs the service and the count, never a row's network id or address", () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+		const log = ref<Record<string, unknown[]>>({})
+		const contract = `0x${"07".repeat(32)}`
+		const rows = errorLogWriters(log).recordRestoreErrors("account-state", [
+			{ networkId: "net-secret-id", senders: [], contracts: [{ address: contract, restoreError: "boom" }] },
+		])
+		expect(rows).toHaveLength(1)
+		expect(log.value["account-state"]).toEqual(rows)
+		const logged = JSON.stringify(warn.mock.calls)
+		expect(logged).toContain("1 restore error(s)")
+		expect(logged).not.toContain("net-secret-id")
+		expect(logged).not.toContain(contract)
+		warn.mockRestore()
 	})
 })
 
@@ -1438,6 +1456,27 @@ describe("useFullBackupImport — Retry the networks that did not restore", () =
 		expect(reminder.admit).toHaveBeenCalledExactlyOnceWith("new-id", "run-1")
 		expect(reminder.finish).toHaveBeenCalledExactlyOnceWith("new-id", "run-1", ["M2"])
 		expect(accountStateClient.restore).toHaveBeenLastCalledWith([item("M2")], seeds, FENCE, expect.anything())
+	})
+
+	it("a Retry whose session ended registers nothing and drops Retry, leaving the reminder's lease alone", async () => {
+		const { c, opts, restored } = await start((id) => (id === "M2" ? ranOutOfTime("M2") : answered(id)))
+		await restored
+		const rows = [...accountStateRows(c)]
+		reminder.admit.mockClear()
+		reminder.finish.mockClear()
+		accountStateClient.restore.mockClear()
+		profileClient.assertRunFence.mockRejectedValue(new SessionEndedError())
+
+		await c.retryAccountState()
+
+		expect(accountStateClient.restore).not.toHaveBeenCalled()
+		expect(reminder.admit).not.toHaveBeenCalled()
+		expect(reminder.finish).not.toHaveBeenCalled()
+		expect(c.canRetryAccountState.value).toBe(false)
+		expect(c.unrestoredNetworkNames.value).toEqual([])
+		expect(accountStateRows(c)).toEqual(rows)
+		expect(c.isRestoreHasErrors.value).toBe(true)
+		expect(opts.completeImport).not.toHaveBeenCalled()
 	})
 
 	it("a second press while a Retry runs makes no call", async () => {

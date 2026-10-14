@@ -374,6 +374,35 @@ describe("useRestoreAgain: races", () => {
 		expect(store.get(KEY)).toEqual(other)
 	})
 
+	test("a session that ended before Restore returns Home with the reminder untouched and no restore call", async () => {
+		const { page, opts } = await open()
+		const armed = structuredClone(store.get(KEY))
+		session.live = false
+
+		await page.restoreBackup()
+
+		expect(opts.leave).toHaveBeenCalledOnce()
+		expect(accountStateClient.restore).not.toHaveBeenCalled()
+		expect(store.get(KEY)).toEqual(armed)
+		expect(opts.fillError).not.toHaveBeenCalled()
+	})
+
+	test("a session that ended before Retry returns Home with the reminder as the run left it", async () => {
+		answerRestore((id) => (id === "N2" ? ranOutOfTime(id) : answered(id)))
+		const { page, opts } = await open()
+		await page.restoreBackup()
+		const left = structuredClone(store.get(KEY))
+		accountStateClient.restore.mockClear()
+		session.live = false
+
+		await page.retryRestore()
+
+		expect(opts.leave).toHaveBeenCalledOnce()
+		expect(accountStateClient.restore).not.toHaveBeenCalled()
+		expect(store.get(KEY)).toEqual(left)
+		expect(page.isRetrying.value).toBe(false)
+	})
+
 	test("a profile switch mid-run returns Home, and the run writes nothing once its session ended", async () => {
 		let release: () => void = () => {}
 		const held = new Promise<void>((resolve) => {

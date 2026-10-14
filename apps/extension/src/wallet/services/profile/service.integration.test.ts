@@ -1508,6 +1508,20 @@ describe("ProfileService integration", () => {
 			expect(service.isFenceLive(successor)).toBe(true)
 		}, 30_000)
 
+		test("finalizeRestore() captures its fence in the hold that opened the session: a lock queued behind it ends that fence", async () => {
+			const { service } = await makeService()
+			const out = await service.restore({ id: "ignored", name: "P", type: "password" }, await restoreSecretFor(11), "pass1234")
+			const finalizing = service.finalizeRestore(out.id, "pass1234")
+			const locking = service.lockActiveProfile()
+
+			const { fence } = await finalizing
+			await locking
+
+			expect(fence.profileId).toBe(out.id)
+			expect(service.isFenceLive(fence)).toBe(false)
+			await expect(service.assertRunFence(fence)).rejects.toBeInstanceOf(SessionEndedError)
+		}, 30_000)
+
 		test("finalizeRestore() with wrong password throws InvalidPasswordError; profile stays in storage", async () => {
 			const { service } = await makeService()
 			const out = await service.restore({ id: "ignored", name: "P", type: "password" }, await restoreSecretFor(11), "pass1234")

@@ -720,9 +720,9 @@ function retryWarningRefs(state: ImportRefs) {
 
 function reportRestoreErrors(serviceName: string, data: unknown): unknown[] {
 	const errors = collectRestoreErrors(serviceName, data) ?? []
-	// Names the service that gates the Continue screen. Without it a degraded import is
-	// only visible as "some slice failed", with the reasons stranded in the RPC result.
-	if (errors.length) console.warn(`[full-backup-import] ${serviceName} reported ${errors.length} restore error(s)`, errors)
+	// Names the service and the count only: the rows carry network ids and addresses, which stay
+	// in the error viewer and never reach the exportable log.
+	if (errors.length) console.warn(`[full-backup-import] ${serviceName} reported ${errors.length} restore error(s)`)
 	return errors
 }
 

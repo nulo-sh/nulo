@@ -10,7 +10,7 @@
 
 import { asBase64CredentialId, asBase64MasterSecret } from "@nulo/wallet-crypto"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
-import { isClientDisconnectRejection, RpcDisconnectedError } from "@nulo/extension-messaging/errors"
+import { isClientDisconnectRejection, RpcDisconnectedError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { awaitLivenessAdvance, readLiveness } from "@/utils/background-liveness"
 import { capRecords, remapNetworkIdByChain, resolveRestoredActiveNetworkIdByChain } from "@/utils/full-backup-helpers"
 import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
@@ -737,6 +737,17 @@ async function admitReminder({ fence, run }: RestoreRun): Promise<boolean> {
 	}
 }
 
+/** Whether `fence`'s session is still the open one; any failure other than its end is thrown. */
+export async function runFenceLive(profileService: RunFenceClient, fence: RunFence): Promise<boolean> {
+	try {
+		await profileService.assertRunFence(fence)
+		return true
+	} catch (error) {
+		if (error instanceof SessionEndedError) return false
+		throw error
+	}
+}
+
 /** Drops the networks the tail restored from the reminder; a tail whose session ended writes nothing. */
 async function settleReminder({ fence, run }: RestoreRun, restored: readonly string[], profileService: RunFenceClient) {
 	if (!run) return
@@ -780,12 +791,16 @@ export async function retryAccountStateStage(
 	ctx: AccountStateRetryContext,
 	replaceRestoreErrors: (serviceName: string, stale: unknown[], data: unknown) => unknown[],
 ): Promise<AccountStateTail> {
-	const admitted = await admitReminder(ctx.restoreRun)
 	const accountStateService = new AccountStateServiceClient()
 	const networkService = new NetworkServiceClient()
 	const profileService = new ProfileServiceClient()
 	let records: unknown[] = []
 	try {
+		// The service refuses every registration of an ended run and the sync reads each refusal as a
+		// node that did not answer, so no Retry could succeed. The reminder keeps its networks, its
+		// lease untouched, for Restore again under a new fence.
+		if (!(await runFenceLive(profileService, ctx.restoreRun.fence))) return { restored: [] }
+		const admitted = await admitReminder(ctx.restoreRun)
 		const retryable = await runImportChainSync({
 			slice: ctx.retryable,
 			...chainSyncClients(accountStateService, networkService, ctx.networks, ctx.restoreRun.fence),

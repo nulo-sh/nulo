@@ -1,5 +1,6 @@
 <script setup>
 /** Utils */
+import { joinNames } from "@/components/composite/import/restore-warning"
 import { restoreOutcomeKey } from "@/utils/profile-ui-keys"
 import { clearRestoreOutcome, readRestoreOutcome } from "@/utils/restore-outcome"
 
@@ -28,11 +29,7 @@ const names = computed(() => {
 	return networks.filter((network) => unrestored.has(network.id)).map((network) => network.name)
 })
 
-const namesText = computed(() => {
-	const list = names.value
-	if (list.length <= 2) return list.join(" and ")
-	return `${list.slice(0, -1).join(", ")}, and ${list[list.length - 1]}`
-})
+const namesText = computed(() => joinNames(names.value))
 
 let readSeq = 0
 let leaseTimer

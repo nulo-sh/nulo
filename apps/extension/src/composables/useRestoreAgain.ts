@@ -22,6 +22,7 @@ import {
 	type RestoreStatus,
 	restoreAccountStateStage,
 	retryAccountStateStage,
+	runFenceLive,
 } from "./full-backup-restore"
 import {
 	DECRYPTION_FAILED,
@@ -241,6 +242,8 @@ async function runRestore(state: AgainRefs, opts: UseRestoreAgainOptions, writer
 			state.restoreStatus.value = "failed"
 			return opts.fillError("full_backup", refusal.title, refusal.message)
 		}
+		// A run whose session ended could register nothing; Home offers Restore again afresh.
+		if (!(await runFenceLive(opts.profileService, fence))) return end(state, opts)
 		const carried = await admitCarried(state, opts, fence, record)
 		if (state.ended.value) return
 		if (carried.length === 0) return end(state, opts)
@@ -272,6 +275,7 @@ async function runRetry(state: AgainRefs, opts: UseRestoreAgainOptions, writers:
 	const live = () => state.retry.value === ctx
 	let tail: AccountStateTail
 	try {
+		if (!(await runFenceLive(opts.profileService, ctx.restoreRun.fence))) return end(state, opts)
 		tail = await retryAccountStateStage(ctx, (serviceName, stale, data) =>
 			live() ? writers.replaceRestoreErrors(serviceName, stale, data) : [],
 		)
