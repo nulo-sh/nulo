@@ -197,6 +197,7 @@ let profileEventSeq = 0
 const onActiveProfileChanged = async (profile) => {
 	const seq = ++profileEventSeq
 	if (profile) {
+		lockedState.onSessionOpened()
 		// bootstrapActiveProfile carries its own lock-wins guard: it flips isLogined only if its
 		// re-read of getActiveProfile() still finds the profile and no lock has superseded its run.
 		// The wrap is load-bearing: an emitter-callback rejection would otherwise become an

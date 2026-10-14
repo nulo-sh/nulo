@@ -61,6 +61,16 @@ function expectSealed(s: ReturnType<typeof shell>) {
 	expect(s.store).toMatchObject({ isLogined: false, activity: 0, inFlight: 0, imports: 0, popups: 0 })
 }
 
+describe("a session opened without a lock", () => {
+	test("clears the import entries an earlier session left, and seals nothing else", () => {
+		const s = shell()
+		s.onSessionOpened()
+		expect(s.store).toMatchObject({ isLogined: true, activity: 3, inFlight: 1, imports: 0, popups: 1 })
+		expect(s.toast.value).not.toBeNull()
+		expect(s.routes).toEqual([])
+	})
+})
+
 describe("the lock event", () => {
 	test("seals the popup before its profile lookup answers, and lands once it does", async () => {
 		const s = shell()

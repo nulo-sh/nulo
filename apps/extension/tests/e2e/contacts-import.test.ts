@@ -47,6 +47,7 @@ import {
 	waitForListedAddress,
 	waitForSelected,
 	waitForStoredCount,
+	shownToast,
 } from "./helpers/contacts"
 import { pressEscape } from "./helpers/pointer-probes"
 
@@ -405,8 +406,8 @@ test("an import holds Lock until it ends, and leaving Contacts does not disturb 
 				expect(await lockChipDisabled(page)).toBe(true)
 				await clickByTestId(page, "subpage-back")
 				await waitForHash(page, "#/popup/settings")
-				// The hold ends only with the import, so a chip still disabled here means rows were still
-				// being written when the Contacts page unmounted.
+				// Still disabled: the import was still running when the Contacts page unmounted (the hold
+				// ends with it, or at its deadline).
 				expect(await lockChipDisabled(page)).toBe(true)
 			},
 			"Import completed successfully",
@@ -422,17 +423,11 @@ test("an import holds Lock until it ends, and leaving Contacts does not disturb 
 test("auto-lock mid-import locks the wallet and stops the import", async ({ registeredExtensionPerTest: ctx }) => {
 	await onContacts(ctx, async (page) => {
 		await pickContactsFile(page, longImportFile())
-		const toast = await toastAfter(
-			page,
-			async () => {
-				await closeImportWith(page, "import-contacts-submit")
-				await waitForStoredCount(page, 3)
-				await setSessionTtlMs(page, 1_500)
-				await waitForLockScreen(page)
-			},
-			"Import incomplete",
-			60_000,
-		)
+		await closeImportWith(page, "import-contacts-submit")
+		await waitForStoredCount(page, 3)
+		await setSessionTtlMs(page, 1_500)
+		await waitForLockScreen(page)
+		const toast = await shownToast(page, "Import incomplete")
 		const written = Number(/^Import incomplete · (\d+) of 500 contacts written$/.exec(toast)?.[1] ?? Number.NaN)
 		// Strictly inside, so a stop that missed the import fails loudly instead of passing.
 		expect(written).toBeGreaterThan(0)

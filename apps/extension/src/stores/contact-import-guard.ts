@@ -21,7 +21,7 @@ export function createContactImportGuard() {
 	}
 
 	/** Registers a running import; the returned `end` removes only its own entry, and is a no-op after
-	 *  the seal reset the guard. */
+	 *  a reset. */
 	const beginContactImport = (): (() => void) => {
 		const id = Symbol("contact import")
 		if (running.size === 0) {
@@ -38,15 +38,15 @@ export function createContactImportGuard() {
 		}
 	}
 
-	/** The lock seal: an import whose session ended may still be awaiting the PXE, and must not hold
-	 *  Lock in the next session. */
+	/** For a session that ended or was replaced: an import fenced to it may still await the PXE, and
+	 *  must not hold Lock in the next one. */
 	const resetContactImports = () => {
 		running.clear()
 		releaseHold()
 	}
 
 	return {
-		// A getter, not state: the set holds no data the store's state should carry.
+		// Computed, so Pinia keeps the set out of the store's `$state`.
 		contactImports: computed((): ReadonlySet<symbol> => running),
 		lockHeldByImport: computed(() => holding.value),
 		beginContactImport,

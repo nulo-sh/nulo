@@ -33,7 +33,6 @@ const importsSentence = (imports: number) =>
 		? "A contacts import is still running. Locking stops it."
 		: `${imports} contacts imports are still running. Locking stops them.`
 
-/** With sends running too, the sends' pre-title leads and both sentences follow, sends first. */
 function lockConfirmCopy(running: number, imports: number): { pre_title: string; description: string } {
 	const sentences: string[] = []
 	if (running > 0) sentences.push(sendsSentence(running))

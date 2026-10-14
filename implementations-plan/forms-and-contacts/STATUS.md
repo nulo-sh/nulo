@@ -33,3 +33,4 @@
 - 2026-10-14: gate 3.7 pass: a11y-css 6, design Skeleton 7, AmountCard + fee components 396; the Chrome probe's values equal the parent build's but `flex-shrink` (1 → 0, reviewed), and both stops hold. Firefox contacts-import: 7/7 (hold 18.9 s, auto-lock 12.0 s).
 - 2026-10-14: gate 3.8 pass: popup store, usePopupStack, popup-stack pins, PopupCard 69/69; the two re-open pins now state the contract.
 - 2026-10-14: gate 3.9 pass: New/Edit network + account-name 24/24; the six new cases red on the HEAD popups.
+- 2026-10-14: arc 3a review round 1: Codex conditional approve (4 accepted), Opus conditional approve (same 3 + nits); fixes committed, Codex resumed.

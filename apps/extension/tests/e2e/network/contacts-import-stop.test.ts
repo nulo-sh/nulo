@@ -19,6 +19,7 @@ import {
 	pressRow,
 	refuseTestnet,
 	shownRows,
+	shownToast,
 	storedContacts,
 	toastAfter,
 	waitForSelected,
@@ -65,17 +66,11 @@ test.skipIf(!aztecConfig)(
 			const storedOurs = async () => (await storedContacts(page)).filter((c) => ours.has(c.address.toLowerCase()))
 
 			await pickContactsFile(page, file)
-			const toast = await toastAfter(
-				page,
-				async () => {
-					await closeImportWith(page, "import-contacts-submit")
-					await waitForStoredCount(page, before + 2, 180_000)
-					await lockFromAnotherWindow(page)
-					await waitForLockScreen(page)
-				},
-				"Import incomplete",
-				60_000,
-			)
+			await closeImportWith(page, "import-contacts-submit")
+			await waitForStoredCount(page, before + 2, 180_000)
+			await lockFromAnotherWindow(page)
+			await waitForLockScreen(page)
+			const toast = await shownToast(page, "Import incomplete")
 			const written = Number(/^Import incomplete · (\d+) of 60 contacts written$/.exec(toast)?.[1] ?? Number.NaN)
 			expect(written).toBeGreaterThan(0)
 			expect(written).toBeLessThan(ROWS)

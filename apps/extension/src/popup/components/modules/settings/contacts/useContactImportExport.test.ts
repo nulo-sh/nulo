@@ -273,7 +273,7 @@ describe("useContactImportExport — import sender semantics (adds-only)", () =>
 		expect(contactService.addContact).toHaveBeenCalledWith("Good", ADDR_A, RUN_FENCE)
 	})
 
-	test("an explicit isSender intent is attempted and counted even when the contact upsert fails", async () => {
+	test("a contact that fails after its sender registered is reported, with the sender counted", async () => {
 		const { contactService, accountStateService } = makeServices()
 		contactService.addContact.mockRejectedValueOnce(new Error("storage down"))
 		const api = useContactImportExport({ contacts: ref([]), accountStateService } as never)

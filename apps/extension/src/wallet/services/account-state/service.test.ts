@@ -569,4 +569,19 @@ describe("AccountStateService.addSender under a run fence", () => {
 		await expect(accountStateService.addSender("net-a", SENDER, FENCE)).resolves.toBe(SENDER)
 		expect(pxe.registerSender).toHaveBeenCalledTimes(1)
 	})
+
+	test.each([
+		["has ended is a stop, logged nothing at Error", false],
+		["still holds is a PXE failure, logged at Error (control)", true],
+	])("a PXE failure after which the session %s", async (_case, liveAfter) => {
+		let live = true
+		const { accountStateService, pxe, logError } = await fencedService({ assertRunFence: async () => {}, isFenceLive: () => live })
+		pxe.registerSender.mockImplementationOnce(async () => {
+			live = liveAfter
+			throw new Error("store key unavailable")
+		})
+		const refused = await accountStateService.addSender("net-a", SENDER, FENCE).catch((e: unknown) => e)
+		expect(refused instanceof SessionEndedError).toBe(!liveAfter)
+		expect(logError).toHaveBeenCalledTimes(liveAfter ? 1 : 0)
+	})
 })

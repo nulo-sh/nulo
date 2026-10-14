@@ -544,6 +544,16 @@ Outcome: the plan kept its #184, #205, #210 and #151 shapes; it took the outline
 
 **Round 3 (resumed): approve, no new material findings.**
 
+### Arc 3a implementation (2026-10-14): Codex (gpt-6.1-sol, high), one session; one Opus 5.5 review
+
+**Codex round 1: conditional approve.** Four findings, all verified against the tree and accepted:
+- A3a-C1 [Medium] a password change re-opens the session without a lock event, so the seal never ran and an import whose registration still awaited the PXE held Lock in the new session: `createLockedState` gains `onSessionOpened` (a reset of the guard), called on every opened session in `app.vue`; tested in `locked-state.test.ts`.
+- A3a-C2 [Medium] the auto-lock and network e2e read the stop toast from a log that keeps toasts the lock seal then closed: both now require the "Import incomplete" snack on screen after the lock lands (`shownToast`); both pass.
+- A3a-C3 [Low] a fenced registration whose PXE call failed after its session ended logged at Error before the import classified it as a stop: `viaPxe` takes an `ended` check and refuses as `SessionEndedError` without logging; red without the change.
+- A3a-C4 [Low] comments: the sender-first comment now says a failed registration still writes its contact; the e2e hold comment names the deadline; two narrating comments deleted. Kept: `popup.store.ts`'s, which says why `open` calls `close`.
+
+**Opus 5.5 review, beside round 1: conditional approve.** Its three Low findings are A3a-C1..C3, found independently; its comment and naming nits are applied (the import's doc names sender-first, a test title restated, the H6 pin names the forwarder, the guard's getter comment says why). It checked and found sound: no path locks while the hold stands, a confirm never stops an import it did not name, the cap cannot be extended, fenced writes stay in the fence's profile, every re-opening caller of `popupStore.open` checks `isOpened` first, and the trimmed names reach only the two network popups.
+
 ## Post-implementation
 
 `implementations-plan/README.md` § Post-implementation standard, read at `175d8268`, binds; what is specific to this plan:

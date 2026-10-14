@@ -35,8 +35,8 @@ export interface UseContactImportExportOptions {
 
 /**
  * Encapsulates the contacts page import/export flows: sender-union resolution
- * for export, file pick + parse + per-row upsert + sender restoration for
- * import, and the aggregate user-facing toasts.
+ * for export, file pick + parse + per-row sender registration then upsert
+ * for import, and the aggregate user-facing toasts.
  */
 export function useContactImportExport(opts: UseContactImportExportOptions) {
 	const { contacts, accountStateService } = opts
@@ -216,7 +216,6 @@ function openImportSelection(
 	return importPromise
 }
 
-/** Lock stays disabled while the rows are written, and the hold ends with the import however it ends. */
 async function applyHoldingLock(deps: ContactIoDeps, res: SelectedRow[]): Promise<void> {
 	const endHold = deps.appStore.beginContactImport()
 	try {
@@ -267,8 +266,8 @@ async function importRow(pass: ImportPass, { row, targetId }: ImportWrite<Select
 	const { deps, tally } = pass
 	const shown = await stillShownInBook(pass, row)
 	if (shown !== true) return shown
-	// The sender goes first, so a stop between the two writes leaves no contact saved without its
-	// sender, and a re-run lists the row as new.
+	// The sender goes first, so a stop between the two writes never leaves a contact saved without
+	// its sender, and a re-run lists the row as new. A failed registration still writes its contact.
 	if (row.isSender) {
 		const sender = await registerSender(deps, tally, pass.activeNetworkId, row.address)
 		if (sender === STOPPED) return STOPPED

@@ -26,8 +26,6 @@ export function createLockedState<P>(shell: LockedStateShell<P>) {
 		// The lock cancels the running sends, but the cancel events do not reach this popup; left
 		// in place, the rows would refuse every pick on the lock screen.
 		shell.resetInFlight()
-		// An import whose registration still awaits the PXE outlives its session; it must not hold
-		// Lock in the next one.
 		shell.resetContactImports()
 	}
 	const land = (profiles: P[]) => {
@@ -56,7 +54,11 @@ export function createLockedState<P>(shell: LockedStateShell<P>) {
 		land(profiles)
 	}
 
-	return { enter, onLockEvent }
+	/** A session opened without a lock before it (a password change re-opens one). An import fenced to
+	 *  the session it replaced may still await the PXE, and must not hold Lock in this one. */
+	const onSessionOpened = () => shell.resetContactImports()
+
+	return { enter, onLockEvent, onSessionOpened }
 }
 
 /** A lock control (the header chip or Lock now) marks the popup locked before the worker answers its

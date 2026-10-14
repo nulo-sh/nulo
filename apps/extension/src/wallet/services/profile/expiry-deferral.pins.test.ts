@@ -23,6 +23,7 @@ test("the auto-lock deferral has exactly one caller", () => {
 		.map((path) => ({ path: relative(SRC, path), text: readFileSync(path, "utf8") }))
 		.filter(({ text }) => /\.setExpiryDeferral\(/.test(text))
 		.map(({ path, text }) => [path, text.match(/\.setExpiryDeferral\(/g)?.length])
+	// The profile service's line is the forwarder to its session manager, not a second caller.
 	expect(callers).toEqual([
 		["wallet/services/execution/service.ts", 1],
 		["wallet/services/profile/service.ts", 1],

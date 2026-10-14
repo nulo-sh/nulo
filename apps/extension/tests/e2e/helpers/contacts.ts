@@ -201,6 +201,24 @@ export async function toastAfter(page: Page, act: () => Promise<void>, text: str
 	}
 }
 
+/** Waits until the snack on screen reads `text`, and returns its title. An error snack stays until
+ *  closed, so one a lock closed is never found here. */
+export async function shownToast(page: Page, text: string, timeout = 15_000): Promise<string> {
+	const read = (s: string) => [...document.querySelectorAll(s)].map((el) => el.textContent ?? "")
+	const title = await withTimeoutMessage(
+		page.waitForFunction(
+			(s: string, t: string) =>
+				[...document.querySelectorAll(s)].map((el) => el.textContent ?? "").find((title) => title.includes(t)),
+			{ timeout, polling: 100 },
+			'[data-testid="snackbar"] [data-testid="snackbar-title"]',
+			text,
+		),
+		async () =>
+			`no snack on screen reads "${text}"; on screen: ${JSON.stringify(await page.evaluate(read, '[data-testid="snackbar-title"]'))}`,
+	)
+	return String(await title.jsonValue())
+}
+
 export type StoredContact = { id: string; profileId: string; name: string; address: string; abbr: string }
 
 /** Every stored contact row, ordered by id. */

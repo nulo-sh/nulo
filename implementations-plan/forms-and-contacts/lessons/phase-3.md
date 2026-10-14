@@ -33,3 +33,9 @@ The tree wins; each disagreement is also in `plan.md` (§ Assumptions, "Arc 3 re
 
 - Chrome probe (one-off, headless, each build's CSS in a blank page): AmountCard's 72×10 and the fee 60×12 skeletons match the parent build in display, size, gradient, background size, 1.5 s ease infinite and keyframes; `flex-shrink` goes 1 → 0, as reviewed. `.noanimations` on the root: before, both kept animating; after, `none`. Emulated reduced motion: `none` in both builds.
 - The extension's vitest has no design resolver: a test that renders `<Skeleton>` registers it (`stubs: { Skeleton }`). Without that, `<skeleton>` renders as an unknown element and a `/skeleton/` html match still passes.
+
+## Arc 3a review loop
+
+- Codex round 1 (gpt-6.1-sol, high, read-only): conditional approve, four findings, all accepted (plan § Audit verdicts, A3a-C1..C4). The real one: `SessionManager.open` emits a defined profile on a password change with no lock before it, so anything reset only by the lock seal survives into the replacement session.
+- The lock seal closes any snack (`scope-epoch.ts`), and `toastAfter` keeps toasts that were closed: a test of a result shown across a lock reads the snack on screen (`shownToast`), not the toast log.
+- Opus 5.5 review beside round 1: conditional approve; its three Low findings are Codex's A3a-C1..C3, found independently; its nits applied.
