@@ -59,12 +59,12 @@ describe("usePopupStack", () => {
 		expect([order.value, depth.value]).toEqual([1, 1])
 	})
 
-	test("a re-opened key takes the next order, so it can reach depth 0", () => {
+	test("a re-opened key goes on top at depth 1, and the one it passed sits back at depth 2", () => {
 		store.open("a")
 		store.open("b")
 		store.open("a")
-		expect(values("a")).toEqual([2, 0])
-		expect(values("b")).toEqual([1, 1])
+		expect(values("a")).toEqual([1, 1])
+		expect(values("b")).toEqual([0, 2])
 	})
 
 	test("closing the key returns undefined and NaN", () => {

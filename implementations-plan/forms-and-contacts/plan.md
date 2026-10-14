@@ -342,7 +342,7 @@ Every command runs from the worktree root unless it says otherwise. "Fast layers
 - Tests: `a11y-css.test.ts` pins both stops (the reduced-motion rule and `:global(.noanimations)`, each `animation: none`) for the shared shake, `NewSenderPopup`'s shake and the received fee shimmer, and that no extension file defines its own `.skeleton` shimmer any more; the design package pins both stops for `Skeleton.vue`; the AmountCard and fee component tests find `Skeleton` at 72×10 and 60×12. A one-off Chrome probe compares each skeleton's computed size, background and animation with the parent commit, and that `.noanimations` and emulated reduced motion stop them (`lessons/phase-3.md`).
 - Validation gate: fast layers; the probe's values equal.
 
-**3.8 #210, re-open on top (FA-8 A).**
+**3.8 #210, re-open on top (FA-8 A).** ✓
 - Tests: `popup.store.test.ts`'s BUG PIN becomes the contract: re-opening `a` in `{a, b}` gives `{b: 0, a: 1}`, and a later close and open never share an order; `usePopupStack.test.ts`'s re-open case expects depths 1 and 2.
 - Validation gate: fast layers on both files, `popup-stack.pins.test.ts` and `PopupCard.test.ts`.
 
