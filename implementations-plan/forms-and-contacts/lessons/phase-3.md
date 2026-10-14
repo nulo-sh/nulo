@@ -41,3 +41,17 @@ The tree wins; each disagreement is also in `plan.md` (§ Assumptions, "Arc 3 re
 - Opus 5.5 review beside round 1: conditional approve; its three Low findings are Codex's A3a-C1..C3, found independently; its nits applied.
 - Codex round 2: one Medium (A3a-C5). A Vue `<Transition>` keeps a closed card in the DOM through its leave, so "on screen" means settled: no `/leave/` class, opacity 1, `getAnimations()` empty. Opacity and animations alone miss the leave's first frame, before `leave_to` applies.
 - CodeQL's ReDoS query reads test files too, and its high alert fails the PR's CodeQL check. A repeated group whose inner class can also match the group's own prefix (`(?:<scope> [^,{}]+,?\s*)+`) backtracks exponentially. Split rules with `([^{}]+)\{([^{}]*)\}` and test each selector in plain code instead. Lint and the local gates do not catch it.
+
+# Phase 3: arc 3b
+
+Base `21d806e3` (`origin/dev`; arcs 1, 2 and 3a merged as #255, #282 and #435; `incoming-transfers` arc 3a as #426).
+
+## Re-check of § Arc 3b against the tree
+
+The tree wins; each disagreement is also in `plan.md` (§ Assumptions, "Arc 3b re-check", F31-F36).
+
+- #211: the tx page's grey link override is gone; #426 moved it into `TxHashRow.vue`, shared with the journal, whose To link copies it under page 4's OA-6 A. 3.6 edits `TxHashRow` and the To link, not `tx/[id].vue`.
+- #216: the plan's option-A mechanics alone (the slot's fallback) would never show the note, since every call site wraps its message in a Transition; eight call sites change, not ten (the endpoint labels have no message).
+- #428 holds; and the lock seal clears the guard while a released run can still reach its `finally`, so the disabled item alone leaves the silent loss reachable across a lock.
+- The toast API has no update; its region clears hover and focus on every toast change.
+- 2026-10-14: 3b revision review, Codex gpt-6.1-sol high, session `01a13c9d`: conditional approve, R3b-C1..C3 accepted (plan § Audit verdicts).

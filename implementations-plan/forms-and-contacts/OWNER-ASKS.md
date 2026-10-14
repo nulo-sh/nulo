@@ -4,7 +4,7 @@ Decision page 11 (Forms, contacts and design system) already carries this lane's
 
 **Blocking asks.** FA-1, FA-2, FA-4 and FA-7 complete page 11's own proposals, so their phases wait for the answer instead of shipping a reduced version of what the owner signed. Put them on page 11 before it is signed.
 
-**Answered.** Page 11 was signed 2026-10-14 (the `## Decision` blocks on #151, #210, #214, #215, #216, #229, #211). Picks: FA-1 A, FA-1b A, FA-4 A and P11-02 A are re-asked as P11-06b, P11-07b, P11-10b and P11-02b (arc 3b waits on them); FA-2 A, FA-3 A, FA-5 A, FA-6 A, FA-7 B, FA-8 A, FA-9 B, FA-10 A, FA-11 A stand. The one new ask is P11-13b below.
+**Answered.** Page 11 was signed 2026-10-14 (the `## Decision` blocks on #151, #210, #214, #215, #216, #229, #211). Picks: FA-1 A, FA-1b A, FA-4 A and P11-02 A are re-asked as P11-06b, P11-07b, P11-10b and P11-02b (arc 3b waits on them); FA-2 A, FA-3 A, FA-5 A, FA-6 A, FA-7 B, FA-8 A, FA-9 B, FA-10 A, FA-11 A stand. The one new ask is P11-13b below. The re-asks were answered on 2026-10-14 (P11-02b A, P11-06b A, P11-07b C, P11-10b A; plan D-orch-7); arc 3b's build found the three items at the end of this file, each shipped in its "what ships now" form.
 
 Arcs 1 and 2 add no words. Arc 1's visible effects restore what each screen was meant to show (plan.md § UI impact); the form-popup depth is covered by the orchestrator's no-ask record for #210, and the other three need the same record (§ Arc 1 corrections). FA-8 to FA-11 are items the plan leaves as they are; each would change what a person sees, so each is the owner's call.
 
@@ -189,3 +189,33 @@ Lock is disabled for at most two minutes in a row while imports run (an import s
 **Recommendation:** the wording above. It reuses the transactions confirm's title, button and sentence shape, and "stops" (not "cancels") because the contacts already written stay saved.
 
 **What ships now:** the recommendation, in arc 3a.
+
+## FA-12. #151: screen readers and the counting snack (arc 3b)
+
+**Surface:** the "Importing contacts · N of M" snack (P11-06b A) with a screen reader on. An info snack sits in the snack's alert region, which reads its whole text again whenever the text changes; the count changes after every contact written.
+
+| Option | What a screen-reader user hears during a 500-row import |
+|---|---|
+| **A. As the snack region reads any change** | the line read again after each written contact, until the result snack; closing the snack stops it |
+| **B. Read once** | the line when it opens, then the result; the count updates on screen only |
+
+**Recommendation: A now; B as its own item if wanted.** B needs the snack region to treat an in-place update differently from a new snack, a change to the shared region beyond P11-06b.
+
+**What ships now:** A.
+
+## FA-13. #151: the progress snack replaced by another snack (arc 3b)
+
+**Surface:** the progress snack while the person does something that opens another snack (copying an address shows "Address is copied"). One snack shows at a time, so the other snack replaces the line.
+
+| Option | What the person sees |
+|---|---|
+| **A. The line stays gone until the result** | after the other snack, no progress line; the result snack still shows at the end, and Lock stays disabled within its two minutes |
+| **B. The line comes back** | when the other snack closes, the line re-opens with the current count |
+
+**Recommendation: A**, the page's "closed stays closed, no re-show" applied to any end of the line.
+
+**What ships now:** A.
+
+## For the record (arc 3b, not a question): the journal's To link follows the Tx hash link
+
+P11-04 puts the Tx hash link in the primary text colour. Since #426 that link is one row shared by the tx and journal pages, and page 4's OA-6 A signed the journal's To link "exactly as the Tx hash row in Details". Arc 3b keeps that equality: the To link turns primary with the Tx hash link. Leaving it grey would break OA-6 A.

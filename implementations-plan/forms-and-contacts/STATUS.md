@@ -36,3 +36,5 @@
 - 2026-10-14: arc 3a review round 1: Codex conditional approve (4 accepted), Opus conditional approve (same 3 + nits); fixes committed, Codex resumed.
 - 2026-10-14: arc 3a review rounds 2 and 3: Codex conditional approve (1 accepted: `shownToast` reads only a settled snack), then approve with no new material findings. Loop converged. Chrome contacts-import smoke 7/7 and the network stop pass at the fix; typecheck:all passes.
 - 2026-10-14: arc 3a gate pass: lint, typecheck:all, test, test:all, check:plans; full smoke Chrome 230 passed / 12 skipped (1498.1 s, before 1530.5 s), Firefox 229 / 13 (2041.5 s, before 2038.0 s without the new scenarios); network stop Chrome 29.3 s, Firefox 38.7 s. PR #435 opened; CodeQL flagged a backtracking pattern in `a11y-css.test.ts`, replaced.
+- 2026-10-14: arc 3b started on forms-and-contacts-arc-3b off origin/dev 21d806e3; D-orch-7 read; § Arc 3b re-verified (F31-F36) and revised; FA-12, FA-13 and the To-link record added to OWNER-ASKS.md; Codex review of the revision started.
+- 2026-10-14: Codex review of the 3b revision: conditional approve, 3 findings (R3b-C1..C3), all verified and applied.
