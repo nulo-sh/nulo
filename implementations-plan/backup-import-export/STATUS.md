@@ -33,3 +33,4 @@
 - 2026-10-14: plan.md revised for arc 3 (phases 3.1-3.7); closed arcs' ledger and audit tables moved to the arc lessons files; OWNER-ASKS.md rewritten (OA-10 open); dual audit started (Codex gpt-6.1-sol high, Opus Plan).
 - 2026-10-14: round 1 of the arc 3 planning audit: Codex reject (C1-C8), Opus conditional approve (O1-O13), all accepted; plan revised (348 lines); OWNER-ASKS gained OA-10 rows, OA-11 and two explanations. Codex round 2 resumed.
 - 2026-10-14: Codex r2 conditional approve (C2-1..C2-5) and r3 conditional approve (C3-1), all accepted and applied; plan 349 lines; check:plans 0 findings. Planning commit next.
+- 2026-10-14: gate 3.1 pass (lint, typecheck:all, useFullBackupImport.test.ts 103/103; the three refusal cases fail with the check removed).

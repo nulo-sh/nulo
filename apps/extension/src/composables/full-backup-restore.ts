@@ -321,8 +321,8 @@ export async function restoreActiveNetworkPointer(
 
 /**
  * The migrated backup body the restore stages read and filter in place. `validateAndMigrateBackup`
- * guarantees each present root slice is an array of plain objects with a valid row id; `profile`
- * is unchecked there, and the entry gates and the profile service judge it.
+ * guarantees each present root slice is an array of plain objects with a valid row id, and that
+ * `profile` is a {@link BackupProfile}.
  */
 export type RestoreData = Record<string, unknown> & {
 	account?: Array<Record<string, unknown>>
@@ -331,8 +331,8 @@ export type RestoreData = Record<string, unknown> & {
 	profile?: unknown
 }
 
-/** The backup's profile part as the restore reads it; the entry gates require only a `type`. */
-export type BackupProfile = { id: unknown; name: unknown; type: unknown }
+/** The backup's profile part as the restore reads it; the profile service judges the `id`. */
+export type BackupProfile = { id: unknown; name: string; type: "password" | "passkey" }
 
 /** Bound on dropped-balance records. This path never reaches the collector, so it carries no cap
  *  of its own — and a hostile backup can ship tens of thousands of un-relinkable rows. */

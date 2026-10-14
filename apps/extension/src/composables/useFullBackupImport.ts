@@ -67,11 +67,26 @@ export type FullBackupEnvelope = {
 
 /** The checksum-stripped body + the migrated slices that survive stage 1. */
 type ValidatedBackup = {
-	data: RestoreData
+	data: RestoreData & { profile: BackupProfile }
 	backup: Omit<FullBackupEnvelope, "checksum">
 }
 
 type ValidateAndMigrateResult = ({ kind: "ok" } & ValidatedBackup) | { kind: "rejected"; title: string; message: string }
+
+/** What a backup that is not the one the wallet exported shows, whichever check refused it. */
+const INTEGRITY_REFUSAL = {
+	kind: "rejected",
+	title: "Backup Integrity Check Failed",
+	message: "The backup file appears to be corrupted or has been tampered with. Please ensure you have the correct backup file.",
+} as const
+
+/** The restore reads `type` and `name` as the wallet wrote them; `id` is replaced by the service
+ *  whenever the wallet would not have generated it. */
+function isBackupProfile(profile: unknown): profile is BackupProfile {
+	if (typeof profile !== "object" || profile === null || Array.isArray(profile)) return false
+	const { type, name } = profile as Record<string, unknown>
+	return (type === "password" || type === "passkey") && typeof name === "string"
+}
 
 /**
  * Stage 1 of the full-backup restore — integrity + compatibility gate,
@@ -93,13 +108,7 @@ export async function validateAndMigrateBackup(fullBackup: FullBackupEnvelope): 
 	// accidental-integrity detection only — a plain backup's checksum is
 	// attacker-recomputable, so nothing downstream may treat it as authentication.
 	const comparisonChecksum = await EncryptionKey.getHashHex(JSON.stringify(backup))
-	if (checksum !== comparisonChecksum) {
-		return {
-			kind: "rejected",
-			title: "Backup Integrity Check Failed",
-			message: "The backup file appears to be corrupted or has been tampered with. Please ensure you have the correct backup file.",
-		}
-	}
+	if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL
 
 	// A pre-baseline blob (the legacy conflated `schema-version: 2`, no
 	// `compat-epoch`) fails this gate too — intended fail-closed.
@@ -147,7 +156,9 @@ export async function validateAndMigrateBackup(fullBackup: FullBackupEnvelope): 
 		}
 	}
 
-	return { kind: "ok", data: migrationResult.data as ValidatedBackup["data"], backup }
+	const data = migrationResult.data as RestoreData
+	if (!isBackupProfile(data.profile)) return INTEGRITY_REFUSAL
+	return { kind: "ok", data: data as ValidatedBackup["data"], backup }
 }
 
 export interface UseFullBackupImportOptions {
@@ -322,7 +333,7 @@ async function executeRestore(
 	const { data, backup } = validated
 	const { profileService, networkService, opts } = deps
 	const masterKey = backup["master-key"] as string
-	const profile = data.profile as BackupProfile
+	const profile = data.profile
 
 	// Before the passkey ceremony, so a name the user must fix never costs a ceremony.
 	const name = await opts.resolveProfileName(sanitizedBackupName(profile.name))

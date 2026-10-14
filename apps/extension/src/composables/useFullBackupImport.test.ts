@@ -783,6 +783,30 @@ describe("useFullBackupImport — guards before any writes", () => {
 		await expectRejected(backup, "Backup Integrity Check Failed")
 	})
 
+	it.each([
+		["not an object", "Imported"],
+		["an unknown type", { id: "src-profile-id", name: "Imported", type: "seed" }],
+		["a non-string name", { id: "src-profile-id", name: { first: "Imported" }, type: "password" }],
+	])("refuses a profile part that is %s with the integrity message", async (_label, profile) => {
+		await expectRejected(await buildBackup({ data: { profile } }), "Backup Integrity Check Failed")
+	})
+
+	it("a profile part with an id the wallet would not generate passes; the service picks the id", async () => {
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		const backup = await buildBackup({ data: { profile: { id: ["not", "an", "id"], name: "Imported", type: "password" } } })
+		c.selectedBackup.value = { name: "x.json", backup, type: "plain", profileType: "password" }
+		profileClient.restore.mockResolvedValue({ id: "new-id", name: "Imported", type: "password" })
+		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
+		accountClient.restore.mockResolvedValue([])
+
+		await c.restoreBackup()
+
+		expect(profileClient.restore).toHaveBeenCalledOnce()
+		expect(profileClient.finalizeRestore).toHaveBeenCalledWith("new-id", "pass1234")
+		expect(c.restoreStatus.value).toBe("finished")
+	})
+
 	it("a migration failure aborts BEFORE any restore() call — zero-rollback atomicity", async () => {
 		// An unknown slice fails the migrator's trust-boundary validation; the
 		// import must reject with profileService.restore never invoked (nothing
