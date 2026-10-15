@@ -272,8 +272,7 @@ describe("NewTokenPopup", () => {
 	})
 
 	// Each error arrives as the RPC envelope rebuilds it: a plain Error carrying the background's text,
-	// or a WalletError rebuilt by its code. A missing contract reads the generic line until its own
-	// words are decided.
+	// or a WalletError rebuilt by its code.
 	test.each([
 		[
 			"a PXE store refusal",

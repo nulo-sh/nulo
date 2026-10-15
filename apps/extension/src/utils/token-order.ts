@@ -1,9 +1,10 @@
 /**
  * One ordering for every token list in the popup (Home, Holdings, the Send picker):
  * pinned → held and priced (fiat desc) → held and unpriced → unknown (malformed, or held in
- * decimals the wallet does not know) → nothing held (never synced or empty), names inside a class. Emptiness is decided before price so a priced token with
- * nothing in it never outranks a funded token the price feed does not know. Pin membership is
- * decided before the row's numbers are parsed, so a malformed pinned row keeps its slot.
+ * decimals the wallet does not know) → nothing held (never synced or empty), names inside a
+ * class. Emptiness is decided before price so a priced token with nothing in it never outranks a
+ * funded token the price feed does not know. Pin membership is decided before the row's numbers
+ * are parsed, so a malformed pinned row keeps its slot.
  */
 import { stringCompare } from "@/utils/string"
 import { type FiatOf, isUnknownRow, knownDecimals, parseRawBalance } from "@/utils/token-amount"

@@ -38,8 +38,8 @@ type Watch = {
 }
 
 /** A row whose answer can still change: one with none yet, read against the window that starts at
- *  `since`; an `unconfirmed` one whose expiry can still prove it will never go through; or a mined
- *  one whose block is not yet final. */
+ *  `since`; an `unconfirmed` one whose expiry can still prove it went through or never will; or a
+ *  mined one whose block is not yet final. */
 type OpenRow =
 	| { kind: "unanswered"; txHash: string; url: string | undefined; since: number }
 	| { kind: "expiring"; txHash: string; url: string; expiry: SendExpiry }

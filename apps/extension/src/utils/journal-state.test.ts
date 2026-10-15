@@ -694,8 +694,7 @@ describe("refusals filed before any window: card and detail", () => {
 
 /**
  * The waiting-sends cap fails the row before `submitting`: from `pending` on the silent path, from
- * `queued` once a window approved it. Until the refusal has words of its own it reads exactly as
- * the app send it refused did.
+ * `queued` once a window approved it. Either way it reads exactly as the app send it refused.
  */
 describe("a send the waiting-sends cap refused: card and detail", () => {
 	test.each(["pending", "queued"] as const)("failed from %s, it reads as a send stopped before broadcast", (from) => {

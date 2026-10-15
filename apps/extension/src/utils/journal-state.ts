@@ -241,7 +241,7 @@ function nothingSentLabel(kind: JobErrorKind): CategoricalFailureLabel | undefin
 	switch (kind) {
 		case "transfer":
 		case "dapp_execute":
-		// A cap refusal reads as the app send it refused until it has words of its own.
+		// A cap refusal reads as the app send it refused.
 		case "too_many_pending":
 			return { ...STOPPED_BEFORE_BROADCAST }
 		case "sw_restart_post_prove":

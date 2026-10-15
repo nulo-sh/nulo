@@ -102,9 +102,10 @@ describe("settings/accounts/import — the account name", () => {
 		expect(account.importAccount).not.toHaveBeenCalled()
 	})
 
-	test("a name no account has imports on Enter", async () => {
+	test("a name no account has imports on Enter, and the imported account does not warn against itself", async () => {
 		const w = await confirmStep()
 		expect(await nameAndEnter(w, "Imported")).toEqual({ warns: false, disabled: false })
 		expect(account.importAccount).toHaveBeenCalledWith("p1", 7, '{"type":"nulo-account"}', ADDRESS, "", "Imported")
+		expect(w.find('[data-testid="name-warning"]').exists()).toBe(false)
 	})
 })
