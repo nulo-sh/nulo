@@ -554,3 +554,17 @@ describe("export/full.vue — a passkey profile's plain download asks first", ()
 		expect(usePopupStore().isOpened("confirm")).toBe(false)
 	})
 })
+
+describe("export/full.vue — the encrypt pair", () => {
+	it("asks a password manager for a new password on both fields", async () => {
+		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
+		const wrapper = mountPage("passkey")
+		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
+		await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
+
+		for (const id of ["backup-encrypt-password-input", "backup-encrypt-password-confirm-input"]) {
+			expect(wrapper.get(`[data-testid='${id}']`).attributes("autocomplete")).toBe("new-password")
+		}
+	})
+})

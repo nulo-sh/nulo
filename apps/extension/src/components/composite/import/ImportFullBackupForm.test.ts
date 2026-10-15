@@ -239,10 +239,10 @@ describe("ImportFullBackupForm — credential controls, real Input", () => {
 	const DECRYPT = "import-full-backup-decrypt-password-input"
 	const PAIR = ["import-full-backup-password-input", "import-full-backup-password-confirm-input"]
 
-	it("the decrypt field: its own toggle, focused on mount, no autocomplete", async () => {
+	it("the decrypt field: its own toggle, focused on mount, autocomplete current-password", async () => {
 		const w = mountReal(ENCRYPTED)
 		expect(document.activeElement).toBe(nativeInput(w, DECRYPT))
-		expectNativeAttrs(w, DECRYPT, { autocomplete: null, autocapitalize: null, autocorrect: null })
+		expectNativeAttrs(w, DECRYPT, { autocomplete: "current-password", autocapitalize: null, autocorrect: null })
 		await expectMaskToggle(w, {
 			toggle: "import-full-backup-decrypt-password-input-visibility-toggle",
 			field: DECRYPT,
