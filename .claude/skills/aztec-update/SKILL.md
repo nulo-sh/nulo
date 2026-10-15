@@ -40,9 +40,14 @@ Do not start Phase 1 before the answer. Mid-run surprises that change the shape 
 
 **The pin surface** — miss one and you get a mixed old/new set:
 - `@aztec-labs/*` and `@aztec-foundation/*` exact pins across the workspace package.json files (`rg '"@aztec-(labs|foundation)/' apps/*/package.json packages/*/package.json`). `@aztec/viem` is versioned independently — leave it.
-- **`@alejoamiras/presto`** (extension + aztec-runtime) — it exact-depends on `@aztec-labs` transitives; skipping it silently reintroduces the old line. Bump it WITH the Aztec line: the page-side client sends the workspace `@aztec-labs/pxe` version and the offscreen prover sends the SDK's own pin, and a drift surfaces as the visible `version-mismatch` state.
-- **`@aztec-foundation/aztec-standards` + `@alejoamiras/private-fee-juice`** (6 pins across `apps/extension`, `apps/playground`, `packages/aztec-runtime`) — they move with the line. The PrivateFPC artifact the wallet derives from ships in `private-fee-juice` (the drift detector below), and `aztec-standards` fixes the Token class every default seed and user-added standards token runs (`default-tokens.test.ts` pins the two together). Holding either is its own decision: list it in `HELD_ROOTS` in `scripts/aztec-hold-residue-check.ts`, which otherwise enforces one generation.
-- **Four version readers keyed by package name**: `.github/actions/setup-aztec/action.yml`, `apps/extension/scripts/e2e/docker-ci-like.sh` and `apps/extension/tests/e2e/global-setup.ts` read the `@aztec-labs/aztec.js` pin to pick the toolchain, and `apps/extension/vite.shared.ts` reads `@aztec-labs/pxe` into `__AZTEC_VERSION__` (Presto's version handshake, the About page, the backup envelope's `aztec-version`), throwing on a missing key. A package or scope rename moves all four.
+- **`@alejoamiras/presto`** (extension + aztec-runtime) — it exact-depends on `@aztec-labs` transitives; skipping it silently reintroduces the old line. Bump it WITH the Aztec line: the page-side status client sends the extension's `@aztec-foundation/bb.js` pin and the offscreen prover sends the SDK's own, and a drift between the two surfaces as the visible `version-mismatch` state.
+- **`@aztec-foundation/aztec-standards` + `@alejoamiras/private-fee-juice`** (6 pins across `apps/extension`, `apps/playground`, `packages/aztec-runtime`) — they move with the line. The PrivateFPC artifact the wallet derives from ships in `private-fee-juice` (the drift detector below), and `aztec-standards` fixes the Token class every default seed and user-added standards token runs (`default-tokens.test.ts` pins the two together). A moved class reds the token list's tree check on the signed envelope, and `publish-token-list.yml` runs that check before `sign`, so nothing can re-sign it: publish a list both class sets accept (an empty one, an owner UI decision) before the class moves (`implementations-plan/archive/aztec-rc3/lessons/phase-4.md`). Holding either is its own decision: list it in `HELD_ROOTS` in `scripts/aztec-hold-residue-check.ts`, which otherwise enforces one generation.
+- **The `@nulo-sh/*` npm packages** (`scripts/publish/`): they peer exactly on the workspace's Aztec pins, so unleashed cannot take the new line until a new lockstep version is on npm. Once the bump is on `dev`, move the Aztec line in `scripts/publish/readme/*.md`, rehearse the new version and record its digests (`scripts/publish/README.md` § A later version), and hand the owner the `publish-packages.yml` dispatch, which no agent runs.
+- **Five version readers keyed by package name**:
+  - `.github/actions/setup-aztec/action.yml`, `apps/extension/scripts/e2e/docker-ci-like.sh` and `apps/extension/tests/e2e/global-setup.ts` read the `@aztec-labs/aztec.js` pin to pick the toolchain.
+  - `apps/extension/vite.shared.ts` reads `@aztec-labs/pxe` into `__AZTEC_VERSION__` (the About page, the backup envelope's `aztec-version`).
+  - It also reads `@aztec-foundation/bb.js` into `__BB_VERSION__`, Presto's version handshake: the SDK sends its bb.js pin as `x-aztec-version`, and since 6.0.0-rc.3 that number differs from the labs line.
+  - Both throw on a missing key. A package or scope rename moves all five.
 - **CI's installer pins** (`.github/actions/setup-aztec/installer-pins.sha256`): SHA-256 of the per-version installer (`https://install.aztec-labs.com/<pin>/install`), of the `versions` manifest beside it, and of the noir (`noir-x86_64-unknown-linux-gnu.tar.gz`) and Foundry (`foundry_v<foundry>_linux_amd64.tar.gz`) release tarballs that manifest's `noir:` and `foundry:` lines name. `setup-aztec/install.sh` hashes each before use and refuses a version with no pin, so a bump that skips them fails every cold network-e2e job at setup. A pin certifies the bytes you read: diff the new installer against the pinned one, and confirm it still reads `INSTALL_URI` and `NARGO`, still ends its block with exactly one `main "$@"` and one `exit` line, still defines `install_foundry` and `install_aztec_packages` with the steps install.sh replaces, and fetches nothing new. install.sh refuses an installer that loses the block shape or one of the two steps' known lines, but not one that adds work around them: read both function bodies whole. Then `sha256sum` both files; check each tarball's hash against its release asset's `digest` (`gh api repos/noir-lang/noir/releases/tags/v<noir>`, `gh api repos/foundry-rs/foundry/releases/tags/v<foundry>`); for a new Foundry, extract the tarball (exactly `forge`, `cast`, `anvil`, `chisel`) and `gh attestation verify <binary> --repo foundry-rs/foundry` each binary, recording the signer workflow and commit in the pin file's header. Replace the old lines in the bump commit.
 - **The CLI's npm lockfile** (`.github/actions/setup-aztec/cli/`): `install.sh` installs `@aztec-labs/aztec` and `@aztec-labs/cli-wallet` with `npm ci --ignore-scripts` from the committed lockfile, so a bump regenerates it: `.github/actions/setup-aztec/lock.sh <new version>` (a lock-only resolve under the 7-day gate, Aztec scopes exempt). Review the lockfile diff like any dependency change; `scripts/ci-cd/setup-aztec-pins.test.ts` fails until both packages sit at the extension's pin and every entry is a registry tarball with a sha512. If the new tree adds a package with an install script the toolchain needs, it fails at run time, not install: prove the failure, read the script, then add the package to `REBUILD` in `install.sh` (today: `bcrypto`, which `@aztec-labs/aztec-node` loads natively).
 - **Name-keyed sites tsc cannot see** — a rename misses them silently (the full list: `implementations-plan/archive/nulo-v6/plan.md#name-keyed-sites`): the bb.js fetch-code shim's importer match in `apps/extension/vite.config.ts`, `HEAVY_SCOPES` and `NEVER_GROUPED` in `apps/extension/scripts/vendor-chunks.ts` (keeps the content script one file), the scope prefixes in `store-listing.test.ts`, `presto-core-deps.test.ts`, `scripts/lockfile-exception-diff.ts` and `scripts/publish/stage.ts`, the `@nulo/resolve-asset` and `require.resolve` strings (`layout-identity.test.ts`, `packages/resolve-asset/src/index.test.ts`, `scripts/ci-cd/test-soak/lib.ts`), and the Vite `dedupe`, `optimizeDeps` and noir alias keys.
@@ -82,9 +87,14 @@ version and invites unrelated churn).
 descriptor + regime record (`frozen-artifact.ts`, `instantiation-descriptor.ts`,
 `address-freeze.ts`), fixes every derived account address. A bump must leave the KAT
 (`derivation-vectors.test.ts`) and all freeze tests green with ZERO vector regeneration and zero
-pin edits — if a bump reds any of them, upstream moved a protocol-level input; STOP, that is
-new-extension-major territory, not a re-pin (mirror the PrivateFPC conscious-re-pin spirit; see
-CLAUDE.md "Account-address freeze").
+pin edits — if a bump reds any of them, upstream moved a protocol-level input (6.0.0-rc.3's
+contract-address domain separator did): STOP and re-gate. Hold the bump, or rotate the regime on
+the owner's recorded decision: append a `REGIMES` entry the build binds (the last one), re-vendor
+the artifact byte-exact with its `PROVENANCE.md`, add a `reference/<regime>/` generator with its
+own lockfile, regenerate the vectors twice with an empty diff, and move the tests to the new
+truth. Off Mainnet that ships in place as an update; a Mainnet-serving build rotates only as a new
+extension major (CLAUDE.md "Account-address freeze"). Worked example:
+`implementations-plan/archive/aztec-rc3/plan.md` (`nulo-v6.1`).
 
 **The scope guard's coverage.** `PxeService` refuses to sync a scope the PXE holds no keys for,
 because the HandshakeRegistry sync would move that account's cursor past its handshakes for good
@@ -95,7 +105,7 @@ each is still reached only through `getNotes`, `simulateTx`, `proveTx`, `profile
 `executeUtility` or `getPrivateEvents` (`scope-registration.test.ts`). A new entry point needs the
 guard before the bump ships.
 
-**The drift detector** (GREEN on every bump, reset or not — the address is network-independent):
+**The drift detector** (GREEN on a bump, reset or not, unless upstream's address derivation moved: the address is network-independent, but a protocol bump that rotates the contract-address domain separator moves it on purpose):
 `apps/extension/src/wallet/services/fpc/protocol-fpcs.test.ts` re-derives the PrivateFPC through
 the wallet's own `derivePrivateFpc()` (`protocol-fpcs.ts`: the `private-fee-juice` artifact, salt
 `0x…01`, deployer zero) and pins salt, deployer and address to the canonical deployment. The same
@@ -143,8 +153,8 @@ the same for a PRF-derived account (in-page ceremony → frozen ctor → authwit
 background-restart ceremony re-unlock + tx). The address KAT cannot see execution breakage — these
 canaries are the only gate that does. **A red canary on either browser BLOCKS the bump** (read the
 Firefox lane's canary job on the bump PR by hand — advisory means it cannot block a merge, not that it
-may be ignored): default response is HOLD the Aztec line; shipping a new extension major
-(address-regime rotation) is the deliberate alternative — never a casual fix.
+may be ignored): default response is HOLD the Aztec line; an address-regime rotation (above) is
+the deliberate alternative — never a casual fix.
 
 ## Branch A — bump-only (no reset, detectors green)
 
@@ -178,9 +188,11 @@ Then Branch A's delivery gates.
   `VK index for [object Object] not found in VK tree` — thrown in-wallet BEFORE any `/prove`
   request, so the presto log is silent and it looks like a proving failure that never
   reached the prover. Any package that exact-pins its own Aztec deps (the Presto SDK)
-  must move WITH the line; holding it is not an option. Packages that declare exact-version
-  PEERS (private-fee-juice) or nothing at all (standards) re-bind to the workspace line and are
-  safe to hold. Gate: `scripts/aztec-hold-residue-check.ts`.
+  must move WITH the line; holding it is not an option. Neither can a package whose Aztec PEERS
+  are pinned at another version (private-fee-juice): the isolated linker nests that version's
+  generation beneath it. Only a package that declares no Aztec dependency (standards) is safe to
+  hold. Gate: `scripts/aztec-hold-residue-check.ts`, which keeps one line per numbering
+  (`@aztec-labs/*`, the `@aztec-foundation/*` toolchain, `aztec-standards`).
 - **Upstream recompiles `@aztec-labs/accounts` artifacts on toolchain changes** (5.2.0 moved
   SchnorrAccount's class id, −3,892 bytes). Production is immune — addresses come from the
   vendored frozen artifact — but any E2E fixture that builds accounts through

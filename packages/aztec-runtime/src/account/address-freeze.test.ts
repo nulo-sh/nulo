@@ -8,11 +8,11 @@ import { FROZEN_DESCRIPTOR_DIGEST, NULO_DESCRIPTOR_VERSION } from "./instantiati
  * Paired anti-tamper test for the regime record. EVERY entry (not just the newest) is
  * independently hardcoded here as literals — moving any digest requires a coherent edit of the
  * source modules, the record, AND this file, in one reviewed, signed, branch-protected diff.
- * Editing or deleting a historical entry reds this test: never "fix" it by re-pinning; append a
- * new regime + a new extension major instead. (The nulo-v5 baseline was redefined in place inside
- * the pre-launch carve-out WINDOW — KDF v1→v2 (`implementations-plan/key-model-v2/`) and the
- * passkey-branch spec extension (`implementations-plan/key-model-v2-hardening/`) — owner-ratified
- * both times; that window closed at V5's first store build. nulo-v6's closes at its own.)
+ * Editing or deleting a historical entry reds this test: never "fix" it by re-pinning an entry; a
+ * rotation appends a new one, on the owner's recorded decision (CLAUDE.md "Account-address
+ * freeze"). (The nulo-v5 baseline was redefined in place twice inside the pre-launch carve-out
+ * window `address-freeze.ts` describes, owner-ratified both times; that window closed at V5's
+ * first store build, and nulo-v6's closes at its own.)
  */
 const EXPECTED_KDF_DIGEST = "29eca1a04b7acde8bb95905a2ac630b29f1edcf04d584274e90fd9f81736166d"
 
@@ -50,6 +50,24 @@ const EXPECTED_REGIMES: Record<string, Record<string, unknown>> = {
 			`nulo-account-kdf-v2 digest ${EXPECTED_KDF_DIGEST}) fixes every ` +
 			"Nulo V6 account address; changing any of these inputs rotates all derived addresses " +
 			"and ships ONLY as a new extension major with a new appended regime entry.",
+	},
+	"nulo-v6.1": {
+		id: "nulo-v6.1",
+		artifactSha256: "9aebda2a0b8cf96e833dba4379bef6a2ed0f93e975e9689afaa26ac71203cdc8",
+		classId: "0x2a5784fa8315d0150f36a1fba87b41cdb9cd8ebea611ceaa80c7a787e83efa60",
+		descriptorVersion: 1,
+		descriptorDigest: "3883065f0d6603d1be25db42348ec25b7a9dc29746d85b925b09efbd2a460605",
+		kdf: "nulo-account-kdf-v2",
+		kdfDigest: EXPECTED_KDF_DIGEST,
+		ack:
+			"I acknowledge that regime nulo-v6.1 (artifact sha256 " +
+			"9aebda2a0b8cf96e833dba4379bef6a2ed0f93e975e9689afaa26ac71203cdc8, class id " +
+			"0x2a5784fa8315d0150f36a1fba87b41cdb9cd8ebea611ceaa80c7a787e83efa60, descriptor v1 " +
+			"digest 3883065f0d6603d1be25db42348ec25b7a9dc29746d85b925b09efbd2a460605, kdf " +
+			`nulo-account-kdf-v2 digest ${EXPECTED_KDF_DIGEST}) fixes every account address a ` +
+			"Nulo V6 build bound to it derives. It supersedes nulo-v6 in place, a non-Mainnet rotation " +
+			"on the owner's recorded decision; changing any of these inputs rotates all derived addresses " +
+			"and ships only as a new appended regime entry.",
 	},
 }
 
@@ -100,15 +118,21 @@ describe("address-freeze regime record", () => {
 		}
 	})
 
-	test("the nulo-v6 entry is consistent with the live freeze modules", () => {
-		const v6 = REGIMES["nulo-v6"]
-		expect(v6.artifactSha256).toBe(FROZEN_ARTIFACT_SHA256)
-		expect(v6.classId).toBe(FROZEN_ACCOUNT_CLASS_ID)
-		expect(v6.descriptorVersion).toBe(NULO_DESCRIPTOR_VERSION)
-		expect(v6.descriptorDigest).toBe(FROZEN_DESCRIPTOR_DIGEST)
+	test("the nulo-v6.1 entry is consistent with the live freeze modules", () => {
+		const bound = REGIMES["nulo-v6.1"]
+		expect(bound.artifactSha256).toBe(FROZEN_ARTIFACT_SHA256)
+		expect(bound.classId).toBe(FROZEN_ACCOUNT_CLASS_ID)
+		expect(bound.descriptorVersion).toBe(NULO_DESCRIPTOR_VERSION)
+		expect(bound.descriptorDigest).toBe(FROZEN_DESCRIPTOR_DIGEST)
 	})
 
-	test("this extension major binds to exactly the nulo-v6 regime", () => {
-		expect(V6_REGIME).toBe(REGIMES["nulo-v6"])
+	test("this build binds to exactly the nulo-v6.1 regime", () => {
+		expect(V6_REGIME).toBe(REGIMES["nulo-v6.1"])
+	})
+
+	test("the bound regime is the last entry, so no build binds an earlier one", () => {
+		const ids = Object.keys(REGIMES)
+		expect(ids).toEqual(["nulo-v5", "nulo-v6", "nulo-v6.1"])
+		expect(V6_REGIME).toBe(REGIMES[ids[ids.length - 1] as keyof typeof REGIMES])
 	})
 })

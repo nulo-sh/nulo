@@ -18,17 +18,17 @@ export { walletChainId }
  *  No mainnet network is seeded on the V6 line. */
 export const MAINNET_L1_CHAIN_ID = 1
 
-/** V6 testnet identity (live-verified via node_getNodeInfo: nodeVersion 6.0.0-rc.1) —
+/** Testnet identity (live-verified via node_getNodeInfo: nodeVersion 6.0.0-rc.3, after its reset) —
  *  the L1/rollup pair behind CHAIN_IDS.TESTNET. The bridge keeps its own copy; nothing checks that
  *  the two agree. */
 export const TESTNET_L1_CHAIN_ID = 11155111
-export const TESTNET_ROLLUP_VERSION = 2914217885
+export const TESTNET_ROLLUP_VERSION = 3409706519
 
 /** Anvil's fixed default chain id — the seeded Local Network's L1 identity. Hardcoded (never
  *  probed at seed time) so profile creation stays offline-safe; key derivation consumes it. */
 export const LOCAL_L1_CHAIN_ID = 31337
 
 export const CHAIN_IDS = {
-	TESTNET: walletChainId(TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION), // 2904119610 — V6 testnet
+	TESTNET: walletChainId(TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION), // 3415328944
 	SANDBOX: 0, // localhost:8080
 } as const

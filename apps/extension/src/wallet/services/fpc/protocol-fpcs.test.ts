@@ -13,7 +13,7 @@ import { derivePrivateFpc, deriveSponsoredFpc } from "./protocol-fpcs"
 const CANONICAL_PRIVATE_FPC = {
 	salt: "0x0000000000000000000000000000000000000000000000000000000000000001",
 	deployer: "0x0000000000000000000000000000000000000000000000000000000000000000",
-	address: "0x0b3bc795b5c077b57920d590ecc163af18705554abf7164cb0f8c52850943c08",
+	address: "0x2e189d0c28cb86234a17951a94131e19620cda595fa8f9c5c10c24268ceb6db4",
 }
 
 /** The SponsoredFPC deployed and funded on the testnet, the wallet's default fee sponsor. A red run
@@ -21,12 +21,12 @@ const CANONICAL_PRIVATE_FPC = {
 const CANONICAL_SPONSORED_FPC = {
 	salt: "0x0000000000000000000000000000000000000000000000000000000000000000",
 	deployer: "0x0000000000000000000000000000000000000000000000000000000000000000",
-	address: "0x06a9fa0208c78509921b0487a6b5cd5c2e93baf17de1a18d310f65a3cc1d924b",
+	address: "0x2adfb70e860909f0db8268b3fec80bce52a94559963444f5c0341816b8412130",
 }
 
 /** sha256 of the key-sorted `target/` artifact without its debug file map, as reviewed for
- *  `@alejoamiras/private-fee-juice@6.0.0-rc.1`. */
-const REVIEWED_PRIVATE_FPC_ARTIFACT = "7092f28d73832aeff38bb7e4c01e88ee8b9c15993e869d22d73c74d0916f67c6"
+ *  `@alejoamiras/private-fee-juice@6.0.0-rc.3`. */
+const REVIEWED_PRIVATE_FPC_ARTIFACT = "eb15143e72540efe8c49c54de1b7c8f31299c503fce14ce2739d29e296e143e0"
 
 function artifactWithoutDebugInfo(file: string): unknown {
 	const path = resolvePackageAsset("@alejoamiras/private-fee-juice", file, { from: import.meta.url })
@@ -49,6 +49,13 @@ describe("protocol FPC derivation", () => {
 			deployer: instance.deployer.toString(),
 			address: instance.address.toString(),
 		}).toEqual(CANONICAL_PRIVATE_FPC)
+	})
+
+	// The package publishes the address it was released for; the wallet and unleashed both copy it.
+	test("the canonical PrivateFPC is the one the installed package publishes", () => {
+		const path = resolvePackageAsset("@alejoamiras/private-fee-juice", "canonical-deployment.json", { from: import.meta.url })
+		const { salt, expectedAddress } = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>
+		expect({ salt, address: expectedAddress }).toEqual({ salt: CANONICAL_PRIVATE_FPC.salt, address: CANONICAL_PRIVATE_FPC.address })
 	})
 
 	test("the wallet derives the deployed SponsoredFPC", async () => {

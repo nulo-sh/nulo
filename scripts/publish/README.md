@@ -71,3 +71,15 @@ Ordinary comment-only edits (`//` and `/** */`) to a published source file leave
 3. **Package settings.** Require 2FA and disallow tokens on each package, then deprecate the placeholders.
 4. **Log out.** Run `npm logout`.
 5. **Rehearsal.** Record the three `0.1.0` digests in `approved-digests.json`.
+
+### A later version
+
+Listing a later version in `approved-digests.json` is optional, and once listed it binds byte for byte. So rehearse on the `dev` commit you will dispatch, with the workflow's Node 24.12.0 and Bun:
+
+```sh
+bun scripts/publish/stage.ts --all --version X.Y.Z
+mkdir -p <tgz-dir>
+for dir in dist-publish/*/; do npm pack "./$dir" --pack-destination <tgz-dir> --ignore-scripts; done
+```
+
+Record the three sha256 under `"X.Y.Z"`. Then delete `dist-publish/`, stage and pack again from a clean tree, and run `bun scripts/publish/check-digests.ts X.Y.Z <tgz-dir>`, which must pass. If `dev` later changes anything staged (a published source, `readme/`, `LICENSE`, `NOTICE`, a workspace pin, Bun or TypeScript), the dispatch's `pack` refuses: rehearse again.
