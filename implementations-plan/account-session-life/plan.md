@@ -33,8 +33,7 @@ Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Co
 - `confirmProfileOperation` and the recovery coordinator's `confirm`, which lost their popup caller in arc 1; session checks on account reads and metadata edits (`getAccounts`, `getAccount`, `changeAccountName`, `changeAccountVisibility`). The close-out files both (dedupe first).
 - Fee-map cleanup on profile deletion (#91, fees-and-sponsors arc 2): arc 2's R4 seam stands.
 - `restore()`'s account writes (backup-import-export owns them).
-- OA-6 (an unlock error toast that stays after a retry unlocks): unsigned, ships as today, listed for the orchestrator's next page.
-- OA-7 and OA-8 (the start-up unlock screen's details; a create superseded by another profile): each ships its "what ships now" form.
+- OA-9 (which toasts Continue closes on the unlock screen): ships its "what ships now" form. OA-6 to OA-8 were signed on page 7's re-signing.
 - The onboarding tab's start-up: page 7 names the popup. Onboarding keeps its page while its calls wait, with no bar.
 - The `--scrim-loader` token in `@nulo/design`: its contract belongs to that package, though arc 4 deletes its only reader.
 
@@ -104,7 +103,7 @@ Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Co
 
 ### Asks
 
-OA-1 to OA-5 were answered on page 7 (OWNER-ASKS § Answers). OA-6 is open and ships as today. OA-7 (the unlock screen before the service answers) and OA-8 (a create superseded by another profile) are new; each ships its "what ships now" form.
+OA-1 to OA-8 were answered on page 7 and its re-signing (OWNER-ASKS § Answers). OA-9 (which toasts Continue closes) is open and ships its "what ships now" form.
 
 ## Architecture & Implementation
 
@@ -422,7 +421,7 @@ Every gate below passed with exit 0 at retry 0; STATUS.md and `lessons/phase-1.m
 - Commands: `bun run audit:vue`; `bun run test:all`; `cd apps/extension && bun run test:e2e -- tests/e2e/accounts.test.ts tests/e2e/account-import-export.test.ts tests/e2e/registration.test.ts tests/e2e/passkey-retry.test.ts tests/e2e/passkey-toolbar-panel.test.ts tests/e2e/auth-flows.test.ts --retry=0`, then the same with `NULO_E2E_BROWSER=firefox`; `NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/imported-account-execution.test.ts`.
 - Pass: every command exits 0.
 - Layers: lint, typecheck, unit, build, smoke e2e on both browsers, network e2e (Chrome). No e2e scenario is added: each pick's branch is proved where it lives (the account service, the activation helper, the window), and no browser behaviour decides it.
-- Then the arc's Codex loop, then the final cross-arc pass.
+- Then the arc's Codex loop. The final cross-arc pass rides the close-out, after 3.4.
 
 ### Phase 3.4: backup autocomplete (P7-04), deferred
 
@@ -550,8 +549,9 @@ Sign-off: each line rides the record it quotes; OA-7 and OA-8 were signed on pag
 | C2 Medium, O1 | A superseded activation failing later published the shell's failure toast over the hand-off's (the shell fences on its event sequence, which a supersede does not move) | FIXED eee20090: an event-driven activation overtaken by `supersedeProfileActivations` resolves false; proof red before |
 | C3 Medium, O3 | No PRF found while confirming a kept credential: the window confirmed it forever (`confirmCreatedCredential` throws a bare `PasskeyPrfError`) | FIXED eee20090: the window confirms through `confirmMinted`, which wraps every failure; proof red before |
 | O4 Comment | A hand-off from a page the person already left moved them out of their screen | FIXED 9bcb382a: no route, toast, pointer or supersede once the page is not current |
-| O5, O6 Comment | A vacuous assertion; the predicate's doc | FIXED; O6's path (another window's unlock superseded by the create, then the create failing) left as is |
-| test:all | `toast-call-sites.test.ts` reads each `openToast` call for one object literal | FIXED 9bcb382a: both new sites pass literals |
+| O5, O6 Comment; test:all | A vacuous assertion; the predicate's doc; `toast-call-sites.test.ts` wants each `openToast` call a literal | FIXED (9bcb382a for the literals); O6's path (another window's unlock superseded by the create, then the create failing) left as is |
+
+**Arc 5 review, rounds 2 and 3** (Codex, resumed): round 2 `CHANGES`, round 1's six verified; one Low, demonstrated: a person who pressed Back during the hand-off's pointer write still got the created profile selected, the unlock screen and the toast. FIXED 3e190ed7 (leaving joins the write's `unless` and ends the hand-off); proof red before. Round 3 `APPROVE`, no findings.
 
 ### Deviations from the plan text (the tree wins)
 
