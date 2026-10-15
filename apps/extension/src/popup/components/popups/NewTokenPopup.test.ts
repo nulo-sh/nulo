@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { ref } from "vue"
-import { ContractNotFoundError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
+import { ChainNotSupportedError, ContractNotFoundError, WalletError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -286,10 +286,11 @@ describe("NewTokenPopup", () => {
 			walletErrorFromPayload(new ContractNotFoundError().toPayload()),
 			"There is no token at this address on this network.",
 		],
+		["a quarantined chain", walletErrorFromPayload(new ChainNotSupportedError().toPayload()), "Something went wrong. Try again."],
 	])("%s reads its line under Submit, never the error's own text, and goes to the debug log", async (_, refusal, line) => {
 		const debug = vi.spyOn(console, "debug").mockImplementation(() => {})
 		const { message } = refusal
-		if (refusal instanceof ContractNotFoundError) tokenServiceMock.parseTokenInterface.mockRejectedValueOnce(refusal)
+		if (refusal instanceof WalletError) tokenServiceMock.parseTokenInterface.mockRejectedValueOnce(refusal)
 		else {
 			tokenServiceMock.parseTokenInterface.mockResolvedValueOnce({ isComplete: true })
 			tokenServiceMock.addToken.mockRejectedValueOnce(refusal)

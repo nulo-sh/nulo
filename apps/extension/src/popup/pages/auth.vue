@@ -167,8 +167,8 @@ const handleUnlockWallet = async () => {
 	// must not mint duplicate same-profile continuations.
 	if (isAwaitingResponse.value) return
 	const isPasskeyAttempt = isPasskeyProfile.value
-	// Every error toast here is about the attempt being made again, so one that unlocks lands on a
-	// clean Home and a second failure shows its toast afresh.
+	// Closed before the attempt, so one that unlocks lands on a clean Home and a second failure shows
+	// its toast afresh.
 	if (toast.value?.kind === "error") closeToast()
 
 	try {

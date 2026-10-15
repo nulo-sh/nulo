@@ -493,7 +493,7 @@ describe("auth.vue — what a failed unlock says", () => {
 		const { toast, openToast } = useToast()
 		const wrapper = await failPasswordUnlock(new Error("Invalid profile id"))
 		expect(toast.value).toMatchObject({ label: "Something went wrong", sub: "Try unlocking again." })
-		/** Submits an attempt and reads the toast while it is in flight. */
+		/** The toast before the attempt answers: the close must not wait for the unlock. */
 		const retry = async () => {
 			let answer!: (profile: unknown) => void
 			unlockProfile.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
