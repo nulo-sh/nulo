@@ -36,4 +36,4 @@
 - Against `reference/nulo-v6/bun.lock`, 19 third-party entries changed and 2 were added; all were published 2026-09-25..10-07 except the two `mime-db`s.
   - Each publisher matches the version it replaces, except `mime-db` (see above). The `@smithy/*` and `fast-xml-parser` versions carry provenance.
   - The only install hook is `lmdb`'s `node-gyp-build-optional-packages`, identical in 3.5.6. It loads the prebuilt `@lmdb/*` binaries from the same publisher, and Bun's default trust list runs it. protobufjs's postinstall stays blocked, as before.
-  - None of these versions is in the root lock, and no workflow installs the reference project: they reach only a developer who regenerates the vectors.
+  - None of the newly selected versions is in the root lock (the nested `mime-db@1.52.0` already is), and no workflow installs the reference project: they reach only a developer who regenerates the vectors.

@@ -288,6 +288,7 @@ All three take `0.2.0`, one lockstep version (F15). `wallet-crypto` changes only
 
 - **Codex (gpt-6.1-sol, high), fresh session `01a13ca0`: approve with fixes.** Three findings, verified. The pages' Presto status asked about the labs line (`6.0.0-rc.3`) while the prover requests bb `6.0.0-rc.6`, so a cached rc.6 read as a pending download (fixed: `__BB_VERSION__` from the exact `@aztec-foundation/bb.js` pin feeds the status client, the mismatch copy and the e2e health fixture; About and backups keep `__AZTEC_VERSION__`; a test holds the status client to the Presto SDK's own pin, red with the old constant). `reference/nulo-v6.1/bunfig.toml` claims an age-gated resolve that P2's excludes bypassed, and the reference lock's third-party moves have no disposition (accepted: P7 re-resolves it without excludes once the last Aztec name clears the gate, requires identical vectors and dispositions each move).
 - **Codex, resumed round 2: the Presto fix complete, the reference plan sound.** One stale clause in the aztec-update skill's Presto bullet (fixed).
+- **Codex, resumed round 3 (the re-resolved reference lock and the `dev` merge at `9e905c9b`): converged.** Findings 2 and 3 are closed by the re-resolve and its dispositions. The merge does not clash: both export actions still pass the address gate, import still re-derives, and the new paths stamp no regime and key on no chain literal. One wording fix in the lessons (made).
 
 ## Delivery
 
