@@ -2,12 +2,14 @@
  * The token page's "Pin to Home" menu item: the label and `data-pinned` follow the stored pins, a
  * pin writes the contract and toasts, an unpin removes it, and a fourth pin opens the single-action
  * "Home is full" popup listing the pinned symbols — read from the token client AT CLICK TIME, so a
- * token added after mount is named too.
+ * token added after mount is named too. And the banner on a token the signed list flags.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { nextTick, reactive } from "vue"
 import { pinnedTokensKey } from "@/utils/profile-ui-keys"
+import { flaggedKeysOf } from "@/utils/token-flag"
+import { TEST_FLAGGED } from "@/wallet/services/token-list/list.fixture"
 
 const H = vi.hoisted(() => {
 	const makeEvent = () => {
@@ -32,6 +34,7 @@ const H = vi.hoisted(() => {
 		popupIsOpened: vi.fn(() => false),
 		store: { current: null as unknown as Record<string, unknown> },
 		cache: { current: null as unknown as { confirm: Record<string, unknown>; activeTokenIdx: unknown } },
+		flagged: { current: [] as string[] },
 	}
 })
 
@@ -56,6 +59,21 @@ vi.mock("@/wallet/services/token-balance/client", () => ({
 		}
 	}),
 }))
+vi.mock("@/wallet/services/price/client", async () => {
+	const { EventHandler } = await import("@nulo/wallet-core/utils")
+	const snapshot = async () => ({ quotes: {}, pricedTokens: {}, flaggedTokens: H.flagged.current })
+	return {
+		PriceServiceClient: vi.fn(function () {
+			return {
+				disconnect: vi.fn(),
+				onQuotesUpdated: new EventHandler(),
+				onConnected: new EventHandler(),
+				getQuotes: snapshot,
+				refreshIfStale: snapshot,
+			}
+		}),
+	}
+})
 vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast: H.openToast }) }))
 vi.mock("@/stores/app.store", () => ({ useAppStore: () => H.store.current }))
 vi.mock("@/stores/cache.store", () => ({ useCacheStore: () => H.cache.current }))
@@ -81,7 +99,7 @@ const STUBS = {
 	DropdownItem: { emits: ["click"], template: "<div v-bind='$attrs' @click=\"$emit('click')\"><slot /></div>", inheritAttrs: false },
 	DropdownDivider: { template: "<hr />" },
 	Tooltip: { template: "<div><slot /><slot name='content' /></div>" },
-	BalanceView: { template: "<div />" },
+	BalanceView: { template: '<div data-testid="stub-balance-view" />' },
 	Banner: { template: "<div><slot /></div>" },
 	RecentActivityView: { template: "<div />" },
 	MaterialIcon: { template: "<i />" },
@@ -207,5 +225,33 @@ describe("token page — Pin to Home", () => {
 		await pinItem(wrapper).trigger("click")
 		await flushPromises()
 		expect(H.cache.current.confirm.description).toContain(`${"X".repeat(32)}…, CCC, DDD`)
+	})
+})
+
+describe("token page — a token the signed list flags", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		installChromeStorage()
+		H.store.current = reactive({
+			isLogined: true,
+			profile: { id: "p1" },
+			network: { id: "n1", chainId: 7 },
+			account: { address: "0xacct" },
+		})
+		H.cache.current = reactive({ confirm: {}, activeTokenIdx: undefined })
+		H.flagged.current = flaggedKeysOf([{ chainId: 7, address: TEST_FLAGGED.address }])
+	})
+
+	test("the banner sits above the balance for a flagged token, and is absent for another", async () => {
+		// Wire-shaped, in the upper case a restored row may keep.
+		const scam = { ...tok(9, "SCAM"), contract: `0x${TEST_FLAGGED.address.slice(2).toUpperCase()}` }
+		H.getToken.mockResolvedValue(scam)
+		const flagged = await mountPage()
+		const banner = flagged.get('[data-testid="token-flagged-banner"]')
+		expect(banner.element.parentElement?.nextElementSibling?.getAttribute("data-testid")).toBe("stub-balance-view")
+
+		H.getToken.mockResolvedValue(tok(1, "AAA"))
+		const plain = await mountPage()
+		expect(plain.find('[data-testid="token-flagged-banner"]').exists()).toBe(false)
 	})
 })

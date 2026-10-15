@@ -45,6 +45,7 @@ const totalBalance = computed(() =>
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const fiatLabel = computed(() => (isMalformed.value ? undefined : prices.tokenFiatLabel(token.value, privateRaw.value + publicRaw.value)))
+const isFlagged = computed(() => prices.isFlagged(token.value))
 onBeforeUnmount(() => {
 	prices.dispose()
 	priceService.disconnect()
@@ -76,7 +77,8 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 				<span :class="$style.symbol" data-testid="token-symbol" :data-symbol="token.symbol">
 					{{ token.symbol }}
 				</span>
-				<span v-if="fiatLabel" data-testid="token-fiat" :class="[$style.fiat, $style.fiat_figure]">{{ fiatLabel }}</span>
+				<span v-if="isFlagged" data-testid="token-flagged" :class="$style.flagged">Flagged as a scam</span>
+				<span v-else-if="fiatLabel" data-testid="token-fiat" :class="[$style.fiat, $style.fiat_figure]">{{ fiatLabel }}</span>
 				<span v-else data-testid="token-name" :class="$style.fiat">{{ token?.name || "unknown" }}</span>
 			</Flex>
 
@@ -187,6 +189,12 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 .fiat_figure {
 	white-space: normal;
 	overflow-wrap: break-word;
+}
+
+/* The signed list flags this token: the AA danger colour in both themes, in place of its fiat or name. */
+.flagged {
+	composes: type--caption from global;
+	color: var(--txt-danger);
 }
 
 .detail {
