@@ -1,7 +1,7 @@
 ---
 plan: ci-followups-5
 tier: light
-status: approved; arc 1 in progress (Phase 1 ✓)
+status: approved; arc 1 in progress (Phases 1-2 ✓)
 issues: "#251 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -75,6 +75,7 @@ One arc, one PR against `dev`, closing #251 as the owner decided it (decision pa
 | D8 | Phase 2 proves the trigger on GitHub before the PR | Only GitHub can prove that a `GITHUB_TOKEN` re-run works and that the `if` reads `changes.base`. `/cancel` with this token already runs in production (`pr-supersede.yml`) |
 | D9 | Known limit, filed at close-out as a closed `known-limit` issue: when the job cannot re-run a lane, the lane keeps its old-base check and only the job is red | Causes: GitHub's 30-day re-run window and 50-re-run cap, a cancelled run not completed within 15 minutes, a refusal after the retry, and I4's stale read after a cancel (a red lane, not a stale one). A cancel after `Decide` skipped posts the skip's success, so the cancel is not fail-closed (Codex 1). The job cannot be required: it runs only on a base change, so every other PR would wait at `Expected`. A later title edit's skipped run may hide the red in the rollup. Recovery: re-run all jobs of the failed Retarget run (its payload keeps `changes.base`), push, or close and reopen. Turning the lane red would need `checks: write` and a new contract (Opus 3) |
 | D-orch-1 | One arc, one PR against `dev`, no stack | orchestrator |
+| D-impl-2 | The job prints `cancelled <id> <file>` for each cancel | Phase 2 found a successful cancel left no trace in the log; R5 asserts the line |
 | D-impl-1 | The hoisted lane map is `E2E_LANES`; the harness takes `overrides` | `describe("canary lanes")` has its own `LANES`, which would shadow a module-level one; both tests zero their pauses after binding |
 
 ## Assumptions
@@ -110,7 +111,7 @@ Assumes F1-F6 and nothing about GitHub beyond what the shim encodes; Phase 2 car
 
 Gate: `bun run test:ci-gating`; `bun run lint`; `bun run lint:actions`; `bun run typecheck:all`; `bun run test:release`. Pass: all exit 0; the eight reds from step 5 observed. Layers: lint, typecheck, unit (CI gating).
 
-## Phase 2: prove it on GitHub (throwaway branches, never `main`)
+## Phase 2: prove it on GitHub (throwaway branches, never `main`) ✓
 
 Assumes the arc's Phase 1 is green; tests I1, I2 and, when step 4 catches a run in flight, I3.
 Warning: create, change and delete only the three `retarget-probe-<s>-*` branches this phase names, with `<s>` a fresh UTC timestamp.
