@@ -55,6 +55,7 @@ const isWrongPassword = ref(false)
 const isTornImport = ref(false)
 const isPasswordType = ref(true)
 const isAwaitingResponse = ref(false)
+let isUnmounted = false
 // The failure toast this screen opened last: a new attempt closes it, never another surface's.
 let failureToastId
 
@@ -229,11 +230,18 @@ onMounted(async () => {
 		passwordInput.value?.focus()
 	}
 
+	// The lookup waits for the service, so it can outlast this page or lose to an activation: a
+	// profile selected or opened meanwhile stands, as in the route guard.
+	const selectedAtStart = appStore.profile?.id
 	const lastActiveProfileId = await getLastActiveProfileId()
 	if (lastActiveProfileId) {
 		const profile = (await managers.profile.getProfiles())?.find((p) => p.id === lastActiveProfileId)
-		if (profile) appStore.profile = profile
+		const unchanged = !isUnmounted && !appStore.isLogined && appStore.profile?.id === selectedAtStart
+		if (profile && unchanged) appStore.profile = profile
 	}
+})
+onUnmounted(() => {
+	isUnmounted = true
 })
 watch(
 	() => appStore.profile?.id,

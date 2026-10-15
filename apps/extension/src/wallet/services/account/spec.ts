@@ -237,10 +237,10 @@ export type Methods = {
 	createAccount(profileId: string, chainId: number, type: AccountType, name: string): Account
 
 	/**
-	 * Idempotent default-account provisioning. Returns the lowest-index existing
-	 * account for `(profileId, chainId)` if one exists, otherwise creates the
-	 * index-0 account and returns it. Serialized per-tuple — concurrent callers
-	 * resolve to the same account, never to a duplicate.
+	 * Idempotent default-account provisioning. Returns the lowest-index derived account for
+	 * `(profileId, chainId)`; with none, creates the first derived account whose address no row
+	 * holds. Serialized per-tuple — concurrent callers resolve to the same account, never to a
+	 * duplicate.
 	 */
 	ensureDefaultAccount(profileId: string, chainId: number, type: AccountType, name: string): Account
 
