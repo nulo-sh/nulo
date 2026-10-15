@@ -193,6 +193,20 @@ describe("useProfileBootstrap", () => {
 		expect(lastAccountClient().ensureDefaultAccount).toHaveBeenCalledWith("prof-1", 2, "Nulo_v1", "Account 1")
 	})
 
+	test("a failed automatic run re-reads the view, so its paused journal shows R1 instead of nothing", async () => {
+		const paused = staleView({ accounts: [], reset: { running: false, purged: true, doneCount: 0 } })
+		reset.getStaleNetwork.mockResolvedValueOnce(staleView({ accounts: [] })).mockResolvedValue(paused)
+		reset.resetStaleNetwork.mockImplementationOnce(async (networkId: string) => {
+			queueMicrotask(() => reset.onStaleNetworkChanged.invoke({ profileId: "prof-1", networkId, failed: true }))
+			return null
+		})
+		const { bootstrapActiveProfile } = useProfileBootstrap()
+		const appStore = useAppStore()
+		await bootstrapActiveProfile(fakeProfile)
+		expect(appStore.staleNetwork).toEqual(paused)
+		expect(lastAccountClient().ensureDefaultAccount).not.toHaveBeenCalled()
+	})
+
 	test("a node switch is never unattended: the view stays for A1 to confirm", async () => {
 		reset.getStaleNetwork.mockResolvedValue(staleView({ accounts: [], switchToSeedNode: true }))
 		const { bootstrapActiveProfile } = useProfileBootstrap()

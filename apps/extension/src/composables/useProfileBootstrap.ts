@@ -101,11 +101,15 @@ async function settleActiveNetwork(
 	if (!isCurrent()) return
 	const view = await appStore.syncStaleNetwork(networkId)
 	if (!view || !runsUnattended(view) || !isCurrent()) return
-	if (!(await runUnattended(managers.networkReset, view)) || !isCurrent()) return
-	const nets = await network.getNetworks()
+	const completed = await runUnattended(managers.networkReset, view)
 	if (!isCurrent()) return
-	appStore.networks = nets
-	appStore.network = nets.find((n) => n.id === networkId) ?? appStore.network
+	if (completed) {
+		const nets = await network.getNetworks()
+		if (!isCurrent()) return
+		appStore.networks = nets
+		appStore.network = nets.find((n) => n.id === networkId) ?? appStore.network
+	}
+	// A failed run leaves its journal, which R1 shows.
 	await appStore.syncStaleNetwork(networkId)
 }
 

@@ -200,16 +200,20 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 		await takeoverScreen(page, "blocked")
 		await capture(page, "A6-mainnet-blocked")
 
-		// A15b: the first switch to Local, held while it creates Local's default account.
+		// A4c, then A15b: the first switch to Local, still stale from R3 and with no account, resets
+		// it behind the loader, then is held while it creates Local's default account.
 		await clickByTestId(page, "stale-network-switch")
 		await waitForHash(page, "#/popup/settings/networks")
-		await armHold(ctx, "local-default-account")
+		await armHold(ctx, "purged")
 		const local = '[data-testid="network-row"][data-network-name="Local Network"]'
 		await page.waitForSelector(local, { visible: true })
 		await page.evaluate((sel: string) => {
 			document.querySelector(sel)?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
 		}, local)
 		await clickByTestId(page, "network-set-active")
+		await takeoverScreen(page, "loading")
+		await capture(page, "A4c-loader")
+		await releaseHold(ctx, "local-default-account")
 		await navigateByHash(page, "#/popup/general", 15_000)
 		await page.waitForSelector('[data-testid="header-account-loading"]', { visible: true, timeout: 30_000 })
 		await capture(page, "A15b-header-loading")

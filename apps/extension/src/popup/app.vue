@@ -174,6 +174,7 @@ const stale = useStaleNetwork({
 			? { profileId: appStore.profile.id, networkId: appStore.network.id }
 			: undefined,
 	syncActive: (networkId) => appStore.syncStaleNetwork(networkId),
+	staleActive: () => appStore.staleNetwork,
 	onCompleted: completeReset,
 	announce: (notice) => {
 		const name = appStore.networks.find((n) => n.id === notice.networkId)?.name
@@ -227,7 +228,11 @@ const switchNetwork = createNetworkSwitchHandler({
 		appStore.account = undefined
 	},
 	resetUnattended: async (view, live) => {
-		if (await runUnattended(managers.networkReset, view)) await reloadNetwork(view.networkId, live)
+		// The loader drops once the store holds the row's view: R1 for a failed run's journal, or none,
+		// and the Header's skeleton while the re-keyed row's account loads.
+		await runUnattended(managers.networkReset, view, async (completed) => {
+			if (completed ? await reloadNetwork(view.networkId, live) : live()) await appStore.syncStaleNetwork(view.networkId)
+		})
 	},
 })
 watch(

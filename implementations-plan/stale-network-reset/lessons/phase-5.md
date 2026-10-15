@@ -72,6 +72,16 @@ Low: the captures header no longer names the plan.
 
 A full unit run in the scratch copy failed `scripts/e2e/stall-watchdog.test.ts` on its 90 s timeout at a load average near 200; alone it passed in 21 s. It spawns processes and measures wall-clock, so it reads machine load as a stall.
 
+## Arc 2 Codex fix loop (gpt-6.1-sol, high)
+
+Over `010586a4..aacbed3e`, fresh. **Round 1: 3 material findings**, all verified by trace and accepted; 13 mutants, all killed.
+
+1. A completion that reached a booting popup before its session began found no scope, and the bootstrap, having read the active network as stale, loaded no account: the popup stayed on A4 with no account. The resume now compares the store's view with a fresh read and, when the active network turned live, runs the completion itself (`catchUp`).
+2. A switch to a stale target waits for its view, up to 5 s for A6's probe, while the store still holds the previous network's account: Home's Receive showed that address under the new network's name. Send and Receive now act only on the account the Header would show (D55).
+3. An automatic run showed nothing in the popup that started it and A4 in any other. A run that moves no account now shows the loader in every popup, and the starting popup keeps it until the store holds the row's new view; a failed automatic run re-reads the view, so its journal shows R1 instead of leaving Home with no account (D54).
+
+Low: A1 and A3's type roles differ from the references (phase 6 lists them for the sign-off); the completion helper's header named its extraction history.
+
 ## Gate
 
 At the Phase 5 commit, retry 0: `bun run audit:vue` exit 0 (typecheck, lint, 776 test files passed and 3 skipped, 12368 tests, build); `bun run --cwd apps/extension build-storybook` exit 0. The copy, order, phishing and keyboard pins are in the unit run.

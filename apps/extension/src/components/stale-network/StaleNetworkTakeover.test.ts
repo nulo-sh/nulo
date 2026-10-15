@@ -262,6 +262,15 @@ describe("StaleNetworkTakeover — copy and order", () => {
 		).wrapper
 		expect(lines(creating.element).slice(3, 6)).toEqual(["Removed old data", "Created Account 1", "Creating Account 2"])
 	})
+
+	test("a run that moves no account: the loader alone, no text and no control", () => {
+		const { wrapper } = mountTakeover(view({ accounts: [], reset: { running: true, purged: false, doneCount: 0 } }))
+		const root = wrapper.find('[data-testid="stale-network-takeover"]')
+		expect(root.attributes("data-screen")).toBe("loading")
+		expect(root.find('[data-testid="stub-spinner"]').exists()).toBe(true)
+		expect(lines(wrapper.element)).toEqual([])
+		expect(wrapper.findAll("button").length).toBe(0)
+	})
 })
 
 describe("StaleNetworkTakeover — actions", () => {

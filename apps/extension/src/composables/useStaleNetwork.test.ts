@@ -62,6 +62,7 @@ function harness(w: ReturnType<typeof fakeWorker>, over: Partial<StaleNetworkDep
 		client: w.client,
 		scope: () => ({ profileId: "p1", networkId: "ln" }),
 		syncActive: vi.fn(async () => null),
+		staleActive: () => null,
 		onCompleted: vi.fn(async () => {}),
 		announce,
 		...over,
@@ -297,19 +298,54 @@ describe("useStaleNetwork", () => {
 		expect(a.announce.mock.calls.length + b.announce.mock.calls.length).toBe(1)
 	})
 
-	test("an unattended run, whoever starts it, shows no progress and no toast, and resolves on its completion", async () => {
+	test("an unattended run, whoever starts it, shows its view until it settles, and no toast", async () => {
 		const w = fakeWorker()
 		const target = view({ accounts: [] })
 		w.views.set("tn", target)
 		const { stale, announce, deps } = harness(w, { scope: () => ({ profileId: "p1", networkId: "tn" }) })
-		const run = runUnattended(w.client, target)
+		let settled!: () => void
+		const run = runUnattended(w.client, target, () => new Promise<void>((r) => (settled = r)))
 		w.emit({ networkId: "tn", running: true })
 		await settle()
-		expect(stale.running.value).toBeNull()
+		expect(stale.running.value).toBe(target)
 		w.complete("tn", null)
+		await settle()
+		expect(stale.running.value).toBe(target)
+		settled()
 		await expect(run).resolves.toBe(true)
+		expect(stale.running.value).toBeNull()
 		expect(deps.onCompleted).not.toHaveBeenCalled()
 		expect(announce).not.toHaveBeenCalled()
+	})
+
+	test("a completion this popup heard before its session began is finished at the resume", async () => {
+		const w = fakeWorker()
+		w.views.set("tn", view({ reset: { running: true, purged: true, doneCount: 0 } }))
+		w.state.pending = { networkId: "tn", running: true }
+		let scope: ReturnType<StaleNetworkDeps["scope"]>
+		const booted = w.views.get("tn") ?? null
+		const order: string[] = []
+		const onCompleted = vi.fn(() => new Promise<void>((r) => setTimeout(() => r(void order.push("loaded")), 5)))
+		const { stale, announce } = harness(w, { scope: () => scope, staleActive: () => booted, onCompleted })
+		announce.mockImplementation(() => order.push("toast"))
+		w.complete("tn", { networkId: "tn", addressesMoved: false })
+		await settle()
+		expect(onCompleted).not.toHaveBeenCalled()
+		scope = { profileId: "p1", networkId: "tn" }
+		await stale.resume("p1")
+		expect(onCompleted).toHaveBeenCalledWith("tn", expect.any(Function))
+		expect(order).toEqual(["loaded", "toast"])
+	})
+
+	test("the resume finishes nothing while the active network is still stale, or was live at the bootstrap", async () => {
+		const w = fakeWorker()
+		w.views.set("tn", view())
+		const stuck = harness(w, { scope: () => ({ profileId: "p1", networkId: "tn" }), staleActive: () => w.views.get("tn") ?? null })
+		await stuck.stale.resume("p1")
+		expect(stuck.deps.onCompleted).not.toHaveBeenCalled()
+		const live = harness(w, { scope: () => ({ profileId: "p1", networkId: "ln" }), staleActive: () => w.views.get("tn") ?? null })
+		await live.stale.resume("p1")
+		expect(live.deps.onCompleted).not.toHaveBeenCalled()
 	})
 
 	test("an unreachable custom node marks that network for R4, and a later start clears it", async () => {

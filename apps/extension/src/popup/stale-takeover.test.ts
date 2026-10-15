@@ -87,4 +87,10 @@ describe("takeoverScreen", () => {
 	test("a journal whose run is in flight shows the progress before the popup hears of the run", () => {
 		expect(takeoverScreen(view({ reset: { running: true, purged: false, doneCount: 0 } }), false, false)).toBe("progress")
 	})
+
+	test("a run that moves no account shows the loader, whoever started it", () => {
+		expect(takeoverScreen(view({ accounts: [] }), true, false)).toBe("loading")
+		expect(takeoverScreen(view({ accounts: [], reset: { running: true, purged: true, doneCount: 0 } }), false, false)).toBe("loading")
+		expect(takeoverScreen(view({ accounts: [], reset: { running: false, purged: true, doneCount: 0 } }), false, false)).toBe("paused")
+	})
 })

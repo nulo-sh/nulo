@@ -525,6 +525,8 @@ Sources: **M** main leg, **C** Codex leg, **F** Opus leg; **K** contradiction ch
 | D51 | `takeResetNotice(profileId)` hands a notice only to the profile still active | arc 2 review (C) | accepted; a take answered for a profile that ends before the answer lands loses one toast, which a peek-and-acknowledge record would not justify |
 | D52 | A dApp window takes no part: no takeover, no resume, no notice, no route | arc 2 review (C) | accepted: a completion routed a dApp window to Home |
 | D53 | The takeover closes every popup open over the route when it appears | arc 2 review (C) | accepted: Receive's address outlived a takeover that started under it; listed for the owner's capture sign-off |
+| D54 | A run that moves no account shows the loader (a spinner, no copy) in every popup; the popup that started it keeps the loader until the store holds the row's new view | arc 2 loop (C) | accepted: "a run with N = 0 shows the loader" had no screen behind it, so the starting popup stayed interactive while another popup showed A4; listed for the owner's capture sign-off (A4c) |
+| D55 | Send and Receive act only on the active network's own account | arc 2 loop (C) | accepted: a stale target's view waits up to 5 s for A6's probe while the store still holds the previous network's account, whose address Receive would show under the new network's name; the buttons look the same and do nothing until the Header shows the account |
 
 ## Audit verdicts
 

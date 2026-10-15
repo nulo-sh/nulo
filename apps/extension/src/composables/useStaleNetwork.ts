@@ -3,7 +3,7 @@
  * not answer, and the reset's lifecycle (start, the resume at each unlock, completion and its
  * notice). Receives a connected client; the shell owns connect and disconnect and calls `dispose`.
  */
-import { type InjectionKey, type Ref, ref } from "vue"
+import { computed, type InjectionKey, type Ref, ref, shallowReactive } from "vue"
 import {
 	ERR_NODE_UNREACHABLE,
 	type NetworkResetServiceClient,
@@ -66,17 +66,27 @@ export function runResetToEnd(client: StaleNetworkClient, view: StaleNetworkView
 	})
 }
 
-/** Networks whose reset runs with no screen (A2). Module scope: the bootstrap and the switch both
- *  start one, and the shell's instance must skip its events whichever did. */
-const unattended = new Set<string>()
+/** This document's automatic runs (A2), one entry per caller. Module scope: the bootstrap and the
+ *  switch both start one, and the shell's instance skips their events, whichever started it. */
+const unattended = shallowReactive<StaleNetworkView[]>([])
+const isUnattended = (networkId: string) => unattended.some((v) => v.networkId === networkId)
 
-/** A network cause with nothing to move: reset with no screen and no toast. */
-export async function runUnattended(client: StaleNetworkClient, view: StaleNetworkView): Promise<boolean> {
-	unattended.add(view.networkId)
+/**
+ * A network cause with nothing to move: reset behind the loader, with no other screen and no toast.
+ * `settle` runs once the run ends, the loader still up, so the route never shows the stale row.
+ */
+export async function runUnattended(
+	client: StaleNetworkClient,
+	view: StaleNetworkView,
+	settle: (completed: boolean) => Promise<unknown> = async () => {},
+): Promise<boolean> {
+	unattended.push(view)
 	try {
-		return await runResetToEnd(client, view)
+		const completed = await runResetToEnd(client, view)
+		await settle(completed)
+		return completed
 	} finally {
-		unattended.delete(view.networkId)
+		unattended.splice(unattended.indexOf(view), 1)
 	}
 }
 
@@ -87,6 +97,8 @@ export interface StaleNetworkDeps {
 	scope: () => { profileId: string; networkId: string } | undefined
 	/** Re-reads the active network's view into the store. */
 	syncActive: (networkId: string) => Promise<unknown>
+	/** The store's view of the active network, as the bootstrap or the last read left it. */
+	staleActive: () => StaleNetworkView | null
 	/** The active network's reset completed: re-read its row, assign it, await the account load.
 	 *  `live` turns false once the session or profile that saw the completion has ended. */
 	onCompleted: (networkId: string, live: () => boolean) => Promise<void>
@@ -122,8 +134,10 @@ class Session {
 }
 
 export function useStaleNetwork(deps: StaleNetworkDeps) {
-	/** The view of the network whose reset runs, whatever network is active (A4). */
-	const running: Ref<StaleNetworkView | null> = ref(null)
+	/** The view of the network whose reset another document runs, or a paused one this one resumed. */
+	const observed: Ref<StaleNetworkView | null> = ref(null)
+	/** The view of the network whose reset runs, whatever network is active (A4, or the loader). */
+	const running = computed(() => observed.value ?? unattended[0] ?? null)
 	/** The network whose custom node did not answer the last start (R4). */
 	const nodeDown: Ref<string | null> = ref(null)
 	const starting = ref(false)
@@ -134,8 +148,8 @@ export function useStaleNetwork(deps: StaleNetworkDeps) {
 	const syncRunning = async (s: Session) => {
 		const read = ++s.reads
 		const pending = await deps.client.getPendingReset()
-		const next = pending?.running && !unattended.has(pending.networkId) ? await deps.client.getStaleNetwork(pending.networkId) : null
-		if (live(s) && read === s.reads && s.completions === 0) running.value = next
+		const next = pending?.running && !isUnattended(pending.networkId) ? await deps.client.getStaleNetwork(pending.networkId) : null
+		if (live(s) && read === s.reads && s.completions === 0) observed.value = next
 	}
 
 	/** Taking a notice consumes it; the worker hands one only to the profile still active. */
@@ -176,8 +190,17 @@ export function useStaleNetwork(deps: StaleNetworkDeps) {
 		await syncRunning(s)
 	}
 
+	/** A completion that reached this popup before its session began found no scope, and the
+	 *  bootstrap that read the active network as stale loaded no account: finish it here. */
+	const catchUp = async (s: Session) => {
+		const now = deps.scope()
+		if (!now || deps.staleActive()?.networkId !== now.networkId) return
+		if ((await deps.client.getStaleNetwork(now.networkId)) || !live(s)) return
+		await s.hold(deps.onCompleted(now.networkId, () => live(s)))
+	}
+
 	/** At each unlock and reconnect of `profileId`: resumes a paused reset on any network, shows a
-	 *  run in flight, and announces a completion no popup took. */
+	 *  run in flight, and finishes and announces a completion no popup took. */
 	const resume = async (profileId: string) => {
 		const s = session
 		const pending = await deps.client.getPendingReset()
@@ -185,6 +208,7 @@ export function useStaleNetwork(deps: StaleNetworkDeps) {
 		if (!live(s)) return
 		if (paused) await start(paused)
 		await syncRunning(s)
+		if (pending?.networkId !== deps.scope()?.networkId) await catchUp(s)
 		// A run pending at the unlock announces its own completion, once its account load ends: the
 		// worker writes the notice before the completion reaches this popup.
 		if (!pending) await takeNotice(s, profileId)
@@ -193,7 +217,7 @@ export function useStaleNetwork(deps: StaleNetworkDeps) {
 	/** Ends what the ended session or profile showed and owned. */
 	const clear = () => {
 		session = new Session()
-		running.value = null
+		observed.value = null
 		nodeDown.value = null
 		starting.value = false
 	}
@@ -201,7 +225,7 @@ export function useStaleNetwork(deps: StaleNetworkDeps) {
 	/** The scope an event belongs to, if this popup acts on it. */
 	const scopeOf = (e: StaleNetworkChanged) => {
 		const scope = deps.scope()
-		return !disposed && scope?.profileId === e.profileId && !unattended.has(e.networkId) ? scope : undefined
+		return !disposed && scope?.profileId === e.profileId && !isUnattended(e.networkId) ? scope : undefined
 	}
 
 	const onChanged = async (e: StaleNetworkChanged) => {

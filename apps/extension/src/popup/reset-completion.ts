@@ -1,7 +1,7 @@
 /**
- * What the popup shell does once a reset re-keyed a network row, outside the shell so its fence is
- * unit-testable (app.vue has no harness). Each step runs only while the caller's `live` holds: a
- * lock or a profile change ends it before it writes the networks it read, or routes.
+ * What the popup shell does once a reset re-keyed a network row. Each step runs only while the
+ * caller's `live` holds: a lock or a profile change ends it before it writes the networks it read,
+ * or routes.
  */
 import type { Network } from "@/wallet/services/network/client"
 

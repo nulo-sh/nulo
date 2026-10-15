@@ -18,3 +18,19 @@ export function headerAccountState({ profileId, network, staleNetworkId, account
 	if (!network || staleNetworkId === network.id) return "hidden"
 	return account?.profileId === profileId && account?.chainId === network.chainId ? "shown" : "loading"
 }
+
+export interface AccountStoreSlice {
+	profile?: { id: string } | null
+	network?: { id: string; chainId: number } | null
+	staleNetwork?: { networkId: string } | null
+	account?: { profileId: string; chainId: number } | null
+}
+
+/** {@link headerAccountState} over the app store's fields. */
+export const accountStateOf = (store: AccountStoreSlice): HeaderAccountState =>
+	headerAccountState({
+		profileId: store.profile?.id,
+		network: store.network ?? undefined,
+		staleNetworkId: store.staleNetwork?.networkId,
+		account: store.account ?? undefined,
+	})

@@ -17,6 +17,19 @@
 
 Scratch copy, before the worktree gate: S1 3 tests, Chrome 41 s, Firefox 50 s; captures 37 s (Chrome).
 
+## Deviations awaiting sign-off
+
+- Type roles, not the mockups' type: eyebrows and box labels use `meta` (the mockups' 10 px wide-tracked mono is below the 11 px floor), the chip and LOCK `tag`, titles `row-title`, body text `body`. So A3's body wraps on three lines where the reference has four, and A1's chip and labels differ in face and tracking.
+- A3 is the shared `Popup`: its backdrop dims less, and CANCEL shows the focus ring as the first focus.
+- A4 uses the design system's spinner, and its first step reads "Removing old data" (the owner's A3 answer).
+- The Header's network dot follows the node's real status.
+- R3's eyebrow follows the active network's cause.
+- The light theme is the app's own light tokens.
+- A5 follows A5b, per the A8 answer.
+- A popup open over Home closes when the takeover appears (D53).
+- A run that moves no account shows a spinner with no copy (A4c, D54).
+- Send and Receive do nothing until the switched-to network's account loads (D55); nothing on screen changes.
+
 ## Sign-off
 
 Sent on the review page (17 states, 34 frames, with five open asks). Pending.

@@ -12,7 +12,7 @@ import { useLockWallet } from "@/composables/useLockWallet"
 /** Utils */
 import { managers } from "@/utils/core"
 import { copyAddressToClipboard } from "./header-copy-address"
-import { headerAccountState } from "./header-account"
+import { accountStateOf } from "./header-account"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -38,14 +38,7 @@ const defaultConfig = makeDefaultConfig()
 const indicateFailures = ref(defaultConfig.indicateFailures)
 const showNode = ref(defaultConfig.showNode)
 const networkStatusKey = computed(() => appStore.networkStatus?.toLowerCase())
-const accountState = computed(() =>
-	headerAccountState({
-		profileId: appStore.profile?.id,
-		network: appStore.network,
-		staleNetworkId: appStore.staleNetwork?.networkId,
-		account: appStore.account,
-	}),
-)
+const accountState = computed(() => accountStateOf(appStore))
 
 const HEADER_INDICATION_DURATION = 5_000
 let headerIndicateFailureTimer = null

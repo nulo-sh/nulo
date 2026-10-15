@@ -148,7 +148,7 @@ function cause(view) {
 	}
 }
 
-const content = computed(() => (screen.value === "progress" ? undefined : SCREENS[screen.value](props.view)))
+const content = computed(() => SCREENS[screen.value]?.(props.view))
 /** A1 with the node line runs one line longer, so its gaps tighten to keep the buttons' margin. */
 const density = computed(() => {
 	if (props.view.switchToSeedNode && content.value?.box?.label) return "dense_tight"
@@ -183,7 +183,20 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<Flex v-if="screen === 'progress'" direction="column" :class="$style.progress" data-testid="stale-network-takeover" data-screen="progress">
+	<Flex
+		v-if="screen === 'loading'"
+		align="center"
+		justify="center"
+		:class="$style.loading"
+		role="status"
+		aria-busy="true"
+		data-testid="stale-network-takeover"
+		data-screen="loading"
+	>
+		<Spinner size="24" color="--txt-primary" />
+	</Flex>
+
+	<Flex v-else-if="screen === 'progress'" direction="column" :class="$style.progress" data-testid="stale-network-takeover" data-screen="progress">
 		<Flex direction="column" gap="8" data-testid="stale-progress">
 			<span :class="$style.eyebrow_text">{{ copy.progress(view.name).preTitle }}</span>
 			<h1 :class="$style.title_progress" data-testid="stale-network-title">{{ copy.progress(view.name).title }}</h1>
@@ -249,6 +262,12 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
+.loading {
+	flex: 1;
+	min-height: 0;
+	background: var(--app-bg);
+}
+
 .screen {
 	flex: 1;
 	min-height: 0;

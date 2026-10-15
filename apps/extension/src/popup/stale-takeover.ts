@@ -42,6 +42,7 @@ export function takeoverView(input: TakeoverInput): StaleNetworkView | null {
 }
 
 export type TakeoverScreen =
+	| "loading"
 	| "progress"
 	| "blocked"
 	| "paused"
@@ -51,10 +52,11 @@ export type TakeoverScreen =
 	| "network-reset"
 	| "new-addresses"
 
-/** The screen for a view, in precedence order: a run in flight, Mainnet, a paused journal, another
- *  network's journal, a held target chain, an unreachable custom node, then the cause. */
+/** The screen for a view, in precedence order: a run in flight (the loader when it moves no
+ *  account), Mainnet, a paused journal, another network's journal, a held target chain, an
+ *  unreachable custom node, then the cause. */
 export function takeoverScreen(view: StaleNetworkView, running: boolean, nodeDown: boolean): TakeoverScreen {
-	if (running || view.reset?.running) return "progress"
+	if (running || view.reset?.running) return view.accounts.length === 0 ? "loading" : "progress"
 	if (view.blocked) return "blocked"
 	if (view.reset) return "paused"
 	if (view.otherPending) return "one-at-a-time"
