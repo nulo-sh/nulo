@@ -2,6 +2,7 @@ import { once } from "node:events"
 import { createServer } from "node:http"
 import type { AddressInfo } from "node:net"
 import { expect } from "vitest"
+import manifest from "../../manifest/manifest.config"
 import { extensionUrl, newPage } from "./fixtures/browser"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
@@ -150,4 +151,13 @@ test("a web page can fetch no extension file, the injected content script includ
 	} finally {
 		server.close()
 	}
+})
+
+// The policy every extension page runs under is the one the browser loaded, not the source: a build
+// step that rewrote it would widen `connect-src` past what `src/manifest.test.ts` pins.
+test("the loaded manifest carries the source's extension-page policy", async ({ extension }) => {
+	const popup = await openPopup(extension)
+	const loaded = await popup.evaluate(() => chrome.runtime.getManifest().content_security_policy)
+	await popup.close()
+	expect(loaded).toEqual((manifest as { content_security_policy: unknown }).content_security_policy)
 })

@@ -4,6 +4,21 @@ Decision page 12 (Network, prices and privacy) carries this lane's calls, P12-01
 
 Arc 1 (#171) changes nothing a person sees in a shipped build and has no ask.
 
+## Answers (pages 12 and 18, 2026-10-15)
+
+| Ask | Answer | Ships in |
+|---|---|---|
+| OA-1 | **B** | arc 2a |
+| OA-2 | **A** | arc 2a |
+| OA-3 | **A** | arc 2a |
+| OA-4 | **B**, no words given | arc 2a ships the example as recommended: "Use http://localhost instead of http://[::1]." |
+| OA-5 | **A** | arc 2a |
+| OA-6 | **B** | arc 2c |
+| OA-7 | **B** | arc 2c |
+| P12-01 / P12-11 | P18-01 **A**: "—" and "Prices unavailable" | arc 2c |
+
+**A wording the owner may still change:** OA-4's line, "Use http://localhost instead of http://[::1].", shown under the RPC URL field when a person types plain HTTP to `[::1]` (`ERR_RPC_URL_IPV6_LOOPBACK` in `apps/extension/src/wallet/services/network/spec.ts`). A new wording is a one-line change there plus the popup test rows that quote it.
+
 ## OA-1. #200: which characters count as "hidden"
 
 **Surface:** Settings → Networks, the RPC URL field (add network, add endpoint, edit endpoint).
