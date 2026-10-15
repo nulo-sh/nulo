@@ -33,20 +33,23 @@ Scratch copy, before the worktree gate: S1 3 tests, Chrome 41 s, Firefox 50 s; c
 
 ## Sign-off
 
-Sent on the review page, now 18 states and 36 frames with A4c and the arc 2 review changes, with five open asks. Pending.
+Sent on the review page, now 18 states and 36 frames with A4c, the arc 2 review changes and the final pass's R2 change, retaken after the rebase onto `dev`, with five open asks. Pending.
 
 ## Gate
 
-At `562cb12a`, after the arc 2 review's fixes, retry 0, after `audit:vue` at `d41fc363` (the last commit changes one composable and its test, both re-run), each browser on its armed build:
+At `65cb3089`, the arc's head after the rebase onto `dev`, retry 0, after `bun run audit:vue` exit 0 at the same commit (794 files passed, 3 skipped; 12749 tests), each browser on its armed build:
 
-- Chrome: S1 3 tests passed (36.4 s); captures 1 test passed (38.2 s), 34 frames (17 states, both themes, A4c new) in the ignored `.captures/`, none tracked; full smoke 53 files passed and 5 skipped, 231 tests passed and 13 skipped, 1509 s.
-- Firefox: S1 3 tests passed (52.4 s); full smoke 55 files passed and 3 skipped, 230 tests passed and 14 skipped, 2076 s.
+- Chrome: S1 4 tests passed (46.7 s; S1d 6.7 s); captures 1 test passed (38.2 s), 34 frames (17 states, both themes) in the ignored `.captures/`, none tracked; full smoke 56 files passed and 5 skipped, 242 tests passed and 13 skipped, 1601 s.
+- Firefox: S1 4 tests passed (61.2 s; S1d 9.9 s); full smoke 58 files passed and 3 skipped, 241 tests passed and 14 skipped, 2126 s.
+- A10's two frames, from the network suite's opt-in file at `e681339f`: 1 test passed (61.3 s).
 
-The first run, at the Phase 6 commit, after the Phase 5 `audit:vue`:
+The retaken frames match the ones on the review page before the rebase, apart from the generated addresses and the spinners' animation.
+
+Before the rebase, after the arc 2 review's fixes, the same gate passed with three S1 tests: Chrome S1 36.4 s, full smoke 1509 s; Firefox S1 52.4 s, full smoke 2076 s. The first run, at the Phase 6 commit, after the Phase 5 `audit:vue`:
 
 - Chrome: S1 3 tests passed (42.8 s); captures 1 test passed (35.2 s), 32 frames (16 states, both themes) in the ignored `.captures/`, none tracked; full smoke 53 files passed and 5 skipped, 231 tests passed and 13 skipped, 1354 s.
 - Firefox: S1 3 tests passed (62.6 s); full smoke 55 files passed and 3 skipped, 230 tests passed and 14 skipped, 1946 s.
 
-Suite wall-clock before this arc (Phase 4 gate): Chrome 1560 s, Firefox 2168 s. S1 adds about 43 s on Chrome and 63 s on Firefox; the run-to-run spread on this shared machine is larger than either.
+Suite wall-clock before this arc (Phase 4 gate, over the older base): Chrome 1560 s, Firefox 2168 s; `dev` has since added three smoke files. S1 adds 47 s on Chrome and 61 s on Firefox; the run-to-run spread on this shared machine is larger than either.
 
 The phase stays open until the owner signs off on the captures.

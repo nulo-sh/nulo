@@ -37,4 +37,11 @@ The fixes broke into the gate's second Chrome run, which was stopped; the gate r
 
 ## Gate
 
-Pending.
+At `e681339f`, after the rebase onto `dev`, and after `bun run audit:vue` exit 0 at the same commit (794 files passed, 3 skipped; 12749 tests), retry 0, `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent` on the three files, three runs in a row per browser:
+
+- Chrome: 3 files, 6 tests passed in each run; 169.6 s, 169.2 s, 163.9 s. N1 27.6 / 30.9 / 28.4 s, N2 35.2 / 34.7 / 34.6 s, N3 22.6 / 21.6 / 22.1 s.
+- Firefox: 3 files, 6 tests passed in each run; 225.9 s, 200.1 s, 180.9 s. N1 33.0 / 29.0 / 29.9 s, N2 46.8 / 47.0 / 40.4 s, N3 40.2 / 35.8 / 33.1 s.
+- `agent.sh`'s check printed "bundle contains NULO_E2E_PROVERLESS_BUILD_STAMP ✓" in all six runs.
+- Production `build:chrome` and `build:firefox` exit 0; neither bundle contains `nulo:e2e:restore-gate`.
+
+The full network suite was last run whole at the Phase 4 gate (Chrome 6391 s, Firefox 7575 s, before this arc); these three files add about 85 s of test time on Chrome and 110 s on Firefox to it, inside its run-to-run spread on this shared machine.
