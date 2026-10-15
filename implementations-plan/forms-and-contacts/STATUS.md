@@ -47,3 +47,4 @@
 - 2026-10-15: arc 3b review round 1: Codex approve (3 Low accepted), Opus approve (3 Low accepted, 1 known limit #447); fixes pass the design and import suites, lint, typecheck:all, and smoke contacts-import on Chrome 7/7 (hold 10.9 s).
 - 2026-10-15: arc 3b review round 2: Codex approve, no new findings; loop converged. Final cross-arc Codex pass started.
 - 2026-10-15: final cross-arc Codex pass: approve, two Low comment findings accepted (X-1, X-2).
+- 2026-10-15: arc 3b gate pass on 394db428: lint, typecheck:all, test, test:all, check:plans (on 258eca5c, the round fixes re-checked with the touched suites); full smoke at retry 0, Chrome 234 passed / 12 skipped (1479.8 s; before 1393.7 s), Firefox 233 / 13 (2109.2 s; before 2072.7 s); the hold scenario 9.1 s and 19.4 s.
