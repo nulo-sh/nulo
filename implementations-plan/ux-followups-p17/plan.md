@@ -1,7 +1,7 @@
 ---
 plan: ux-followups-p17
 tier: light
-status: draft, awaiting the orchestrator's approval
+status: completed; delivered in one PR against dev, close-out included
 issues: "#450, #449, #448, #413, #363, #192, #230 (all arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 479ba56d
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-15. Planned and implemented 2026-10-15.
+- **Status:** delivered in one PR against `dev` from `worktree-ux-followups-p17`, this close-out included. Merging it closes the plan.
+- **Shipped:** the signed option of each issue: #450 B (a Details link underlines on hover), #449 B (the import's line comes back after another snack closes), #448 B (a relabelled snack's title is `aria-live="off"`), #413 A (an Enter pick lands on Change recipient with the ring), #363 B on the lane's eight rules, #192/#230 A (singular). The review added D9 (Change refuses a repeat Enter, so a held Enter picks once) and D10 (a stronger #448 wait-path pin).
+- **Dropped, rejected, superseded:** OA-1 shipped as A (the lane's eight rules); the wider #363 scope is decision page 18 OA-1. OA-2 shipped as A (banner titles and "Import their keys again" unchanged). OA-3 shipped as A's markup; the screen-reader check is decision page 18 OA-3, so no known-limit issue was filed here. Codex's `restore-warning.ts` comment finding: rejected (the file's copy helpers name their surface).
+- **Docs:** `CLAUDE.md` § Keyboard & focus order gains the auto-repeat rule D9 taught; `lessons.md` gains nothing (it sits at its budget, and the rule is a code rule).
+- **Known limits:** none.
+- **Open items:** #363 (page 18 OA-1), #448 check (page 18 OA-3).
+- **Seeds retired:** the `/goal` and `/loop` drafts are retired and removed; this plan is a record, not a task list.
 
 # ux-followups-p17: the six UI follow-ups of decision page 17
 
@@ -144,10 +155,4 @@ Follow `implementations-plan/README.md` § Post-implementation standard at revis
 **Round 1, Codex** (gpt-6.1-sol, high, session 01a13ffd): conditional approve. Accepted: #1 the epoch guard suppresses a re-open after a network switch (D3); #2 a static `off` risks every snack's title, so the attribute comes with the first relabel (D4), and the real-AT check goes to the owner (OA-3), since the lane brief pins attributes and no screen reader runs here; #5 armed smoke builds and `lint:actions` (`S(file)`, phase 7); #6 terminal cleanup on both endings, settled imports, the network-switch control. Rejected: #3 remove `blur()` (D7); #4 the Reveal ring exceeds P17-05: the record signs "the card's buttons get the ring too"; #4's Tab-order ask: nothing changes the order, so it is an information note in OWNER-ASKS.
 **Round 1, Opus Plan:** conditional approve. Accepted: #1 lock-only guard (D3); #2 the mock is bare today, pass-through setup, the re-opened-line case; #3 Fact 3; #4 `focus({ focusVisible: true })` (I2); #6 OA-1 reframed as the lane brief against the signed text, with `Closes #363` held on it; #7 the Tab-order note; #8 assertions in existing tests; #9 one `test.each` and the existing contrast table; #10 `NULO_E2E_RETRY=0`, `expectAccentRing`. #5 is met by D4 and OA-3.
 **Round 2, Codex** (resume): conditional approve. Verified D3 (no lock or profile path defeats the seal's order), D4 across the leave-wait path, and `focus({ focusVisible: true })` (typechecks under the repo's TypeScript 6.0.3). Accepted: #1 a rejected write is caught and counted, so the throw case rejects `getContacts` instead; #2 OA-3's known limit joins the close-out; the leave-wait relabel assertion on `:211`. Conditions met in place; no open finding.
-**Implementation round 1, Codex** (gpt-6.1-sol, high, session 01a140aa): approve, two low comment findings; one accepted (the relabel flag's comment now states the markup contract, not AT speech), the e2e restating comment removed, `restoreReminderText`'s doc line kept (every copy helper in that file names its surface). **Opus review:** no blocker; two low findings accepted (D9, D10). Detail: [lessons/phase-7.md](lessons/phase-7.md).
-
-## Seeds
-
-`/goal Phases 1-7 of implementations-plan/ux-followups-p17/plan.md are ✓, each backed by its gate's output in the transcript; LESSONS_FILE=implementations-plan/ux-followups-p17/lessons/phase-N.md printed per phase; the Codex loop converged (a resumed round with no new material finding, quoted); one PR against dev exists, opened after the loop, with the close-out's archive-move commit shown by git show --stat; bun run test and bun run lint exit 0.`
-
-`/loop 15m Drive implementations-plan/ux-followups-p17 forward per its plan.md: reality-check plan.md and lessons/, take the next phase, run its gate, decide open questions with Codex (gpt-6.1-sol, high), never cross the owner boundary in OWNER-ASKS.md; after phase 7 run the Post-implementation section; once the archived plan is on dev, run agent-worktree done ux-followups-p17 --merged and stop.` Recommended: `/goal` (completion shows in the transcript).
+**Implementation round 1, Codex** (gpt-6.1-sol, high, session 01a140aa): approve, two low comment findings; one accepted (the relabel flag's comment now states the markup contract, not AT speech), the e2e restating comment removed, `restoreReminderText`'s doc line kept (every copy helper in that file names its surface). **Opus review:** no blocker; two low findings accepted (D9, D10). **Round 2, Codex** (resume): approve, no new material finding; the loop converged. Detail: [lessons/phase-7.md](lessons/phase-7.md).
