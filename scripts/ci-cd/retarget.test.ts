@@ -40,8 +40,10 @@ interface Run {
 interface Scenario {
 	runs: Run[]
 	/** Per call key (`list-<file>`, `run-<id>`, `cancel-<id>`, `rerun-<id>`), the failure messages that
-	 *  answer its first calls, in order; later calls succeed. */
+	 *  answer its first calls, in order (an empty one lets its call succeed); later calls succeed. */
 	fails?: Record<string, string[]>
+	/** A lane's listing body as sent, in place of the one built from `runs`. */
+	rawLists?: Record<string, string>
 }
 
 /** The `gh` shim: answers from files in its own directory and appends each call to `calls`. */
@@ -51,10 +53,13 @@ call="$*"
 key=$(sed -n -e 's#.*/workflows/\([^/ ]*\)/runs .*#list-\1#p' -e 's#.*/runs/\([0-9]*\)/\(cancel\|rerun\)$#\2-\1#p' \
 	-e 's#.*/runs/\([0-9]*\)$#run-\1#p' <<<"$call")
 if [ -s "$dir/fail-$key" ]; then
-	echo "$call (failed)" >>"$dir/calls"
-	echo "gh: $(head -n1 "$dir/fail-$key")" >&2
+	message=$(head -n1 "$dir/fail-$key")
 	sed -i 1d "$dir/fail-$key"
-	exit 1
+	if [ -n "$message" ]; then
+		echo "$call (failed)" >>"$dir/calls"
+		echo "gh: $message" >&2
+		exit 1
+	fi
 fi
 echo "$call" >>"$dir/calls"
 case "$key" in
@@ -100,7 +105,7 @@ function retarget(scenario: Scenario): { code: number; stdout: string; calls: st
 						})
 					return JSON.stringify({ total_count: lane.length, workflow_runs })
 				})
-				writeFileSync(join(dir, `list-${file}.json`), body.join("\n"))
+				writeFileSync(join(dir, `list-${file}.json`), scenario.rawLists?.[file] ?? body.join("\n"))
 			}
 			for (const run of scenario.runs) {
 				writeFileSync(join(dir, `run-${run.id}`), `${(run.reads ?? [run.listed ?? "1 completed"]).join("\n")}\n`)
@@ -200,6 +205,39 @@ describe("pr-retarget.yml", () => {
 		expect(callsTo(refused.calls, "/runs/10/rerun")).toHaveLength(1)
 		expect(refused.posts).toEqual(["rerun 20", "rerun 30", "rerun 40"])
 		expect(refused.stdout).toContain(`::error::not re-run on the new base: 10 ${SMOKE}`)
+	})
+
+	const others: Run[] = [
+		{ id: 20, file: SMOKE_FIREFOX },
+		{ id: 30, file: NETWORK },
+		{ id: 40, file: NETWORK_FIREFOX },
+	]
+	const inFlight: Run = { id: 10, file: SMOKE, listed: "1 in_progress", reads: ["1 in_progress"] }
+	test.each<[string, Scenario, string]>([
+		[
+			"its runs cannot be listed",
+			{
+				runs: [{ id: 10, file: SMOKE }, ...others],
+				fails: { [`list-${SMOKE}`]: ["HTTP 502: Bad Gateway", "HTTP 502: Bad Gateway"] },
+			},
+			SMOKE,
+		],
+		[
+			"its listing cannot be read",
+			{ runs: [{ id: 10, file: SMOKE }, ...others], rawLists: { [SMOKE]: '{"workflow_runs":null}' } },
+			SMOKE,
+		],
+		["its cancelled run cannot be read", { runs: [inFlight, ...others], fails: { "run-10": ["Not Found (HTTP 404)"] } }, `10 ${SMOKE}`],
+		[
+			"its run cannot be read while it waits",
+			{ runs: [inFlight, ...others], fails: { "run-10": ["", "Not Found (HTTP 404)"] } },
+			`10 ${SMOKE}`,
+		],
+	])("a lane fails the job when %s, and the others are still re-run", (_, scenario, named) => {
+		const result = retarget(scenario)
+		expect(result.code).not.toBe(0)
+		expect(result.posts.filter((post) => post.startsWith("rerun"))).toEqual(["rerun 20", "rerun 30", "rerun 40"])
+		expect(result.stdout).toContain(`::error::not re-run on the new base: ${named}.`)
 	})
 
 	test("a refused re-run whose next read shows a newer attempt counts as done", () => {

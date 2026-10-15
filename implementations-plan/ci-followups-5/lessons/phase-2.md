@@ -10,3 +10,9 @@ Throwaway branches `retarget-probe-20261015151122-{a,b,head}`: `-a` and `-b` at 
 - 15:17:47Z / 15:18:04Z, step 5: title edit, then body edit (both ok). Retarget runs 38759071994 and 38759111837 concluded `skipped`; every lane still at attempt 2. Seen here: the newest `Re-run the e2e lanes on the new base` check of the head is now the skipped one, the rollup effect D9 names.
 - 15:19Z, step 6: closed #482; deleted the three branches; `git ls-remote origin 'refs/heads/retarget-probe-*'` empty.
 - Gate: steps 3, 4 and 5 hold. No 403.
+
+## Codex fix loop
+
+- Round 1, 2026-10-15 15:19-15:23Z: Codex `gpt-6.1-sol` high, read-only (host approve-for-me mode), session `01a14025-8793-78d0-9198-debdd5525e30`: approve with fixes (CX1). Opus diff review: approve with fixes (OP1-OP3). Dispositions in `plan.md` § Implementation review. CX1 checked: `c0e1e696` is on `dev` only; `main` protection `strict: true`; the one open PR (#477) has lane runs from 2026-10-15 only.
+- OP1 red proofs (scratch, restored): M9 list failure skipped, M10 unreadable listing skipped, M11 the read after a cancel skipped, M12 the poll read skipped: each `bun test scripts/ci-cd/retarget.test.ts -t <case>` exit 1 on its case; M1-M8 re-run, all still red.
+- A waiting loop of mine (`pgrep -f <prompt file>`) matched its own command line and never ended; the Codex run had finished in four minutes.

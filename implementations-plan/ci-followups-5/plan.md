@@ -163,6 +163,17 @@ One PR from `worktree-ci-followups-5` against `dev`; `code_review: off`. Merge `
 
 **Opus Plan lens:** conditional approve (round 1); its conditions are the accepted O-rows above.
 
+## Implementation review (Codex fix loop over `origin/dev...HEAD`)
+
+**Round 1 (2026-10-15).** Codex (gpt-6.1-sol high, session `01a14025`): **approve with fixes**, one finding. Opus diff review beside it: **approve with fixes**, three.
+
+| # | Finding | Disposition |
+|---|---|---|
+| CX1 | A re-run keeps its run's workflow revision and event, so a lane run created before the lanes read their base live (`c0e1e696`, 2026-10-09) re-decides on the event's base: every job green, the lane stale (plausible-unverified) | Needs conditions the repo lacks: the one open PR's lane runs date from today, and a retarget to `main` reaches this job only once `main` carries it, after a promote whose merge commit no old branch contains, so `main`'s `strict: true` forces a push and fresh runs first. Known limit (close-out issue); one clause in `CI.md` |
+| OP1 | The four fail-closed branches (list, unreadable listing, read after a cancel, read in the poll) had no test: each mutated to a skip, all tests passed (demonstrated) | Fixed: four cases; each mutation now red (M9-M12, `lessons/phase-2.md`) |
+| OP2 | `CI.md` said the job "goes red naming the run"; on a timeout the final summary never prints | Fixed: the text names the `cancelled <id> <file>` lines for that case |
+| OP3 | A listing that trails a re-run started before the base change would count that stale attempt as done (plausible-unverified, the I4 class) | Known limit, folded into the close-out issue; no code |
+
 ## Seeds (drafts; the orchestrator runs the implementer)
 
 `/goal Phases 1-2 of implementations-plan/ci-followups-5/plan.md marked ✓, each backed by its gate's output in the transcript; the Codex loop converged; the PR exists with the close-out as its final commits; bun run test:ci-gating and bun run lint exit 0.`
