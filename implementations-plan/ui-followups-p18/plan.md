@@ -140,6 +140,9 @@ Follow `implementations-plan/README.md` § Post-implementation standard at revis
 **Round 2, Codex** (resume): conditional approve; withdrew round 1's #1. Accepted: #1 phase 4's gate split by answer (the promo tile may not change); #2 SA-1 states B's consequences; #3 screenshots after the gate and the loop, before the PR.
 **Round 3, Codex** (resume): approve; no new material finding.
 
+**Arc 1, Codex** (gpt-6.1-sol, high, session 01a141b2; [lessons/phase-2.md](lessons/phase-2.md)): r1 conditional: case-insensitive `color` and a one-sentence `source-scan.ts` header accepted; the fee row's hover fade (3.51:1 light while hovered) verified but pre-existing and visible, so OWNER-ASKS SA-2. r2 conditional: one low over-match rejected (fails closed on a token nobody defines). r3 approve.
+**Arc 1, Opus diff review:** no bugs; three low points accepted (the token regex in any case, the alias blind spot named, a coverage check on both roots).
+
 ## Seeds
 
 - `/goal`: Implement implementations-plan/ui-followups-p18/plan.md arc 1 (phases 1-2), its Codex loop and its PR; then arc 2 phase 3, stopping at SA-1.

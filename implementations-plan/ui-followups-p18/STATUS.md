@@ -8,3 +8,5 @@
 - 2026-10-15 phase 1 gate F: lint, typecheck:all, test (795 files), design test (36 files) green; grep prints only the two DetailsTable icon lines. Sweep red first with the 30 keys, green after the edit.
 - 2026-10-15 phase 2: test:all, test:ci-gating (571 pass), check:plans green; load1 40.7 at 22:32Z, smoke e2e next.
 - 2026-10-15 Codex arc-1 r1 (01a141b2): conditional; #2 case-insensitive property and #3 header accepted; #1 (hover dim, pre-existing, visible) to OWNER-ASKS SA-2.
+- 2026-10-15 phase 2 smoke Chrome (armed, retry 0): 244 passed, 13 skipped, 0 failed, 1484 s. Opus review: 3 low accepted. Codex r2: 1 low rejected. Firefox smoke waits for load1 < 60 (83 at 22:58Z).
+- 2026-10-15 Codex arc-1 r3: approve; loop converged at three rounds.

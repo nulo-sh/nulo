@@ -14,3 +14,15 @@ Verdict: no bugs; traced the fills of `Input` (every caller), `SearchField`, `Ac
 1. The value regex was case-sensitive (`VAR(--nulo-outline)` is valid CSS): `/i`.
 2. The blind-spot comment missed an alias custom property: named.
 3. The equality proves only that `apps/extension/src` was read: one `arrayContaining` over a design SFC and a `.module.css`.
+
+## Codex round 2 (resume)
+
+Verdict: conditional approve; round 1's fixes and the Opus fixes verified (the 256-file sweep returns the two icon keys; both coverage paths present; `COLOR` and `VAR` caught; SA-2 settled). One low finding, **rejected**: the `/i` also flags `color: var(--NULO-OUTLINE)`, a different custom property. That needs a token nobody defines, and it fails closed (a red test someone reads), so the precise `[vV][aA][rR]` pattern buys nothing worth its readability.
+
+## Codex round 3 (resume)
+
+Verdict: approve; withdrew round 2's finding (no differently cased token exists; the false positive fails closed with its location). Loop converged.
+
+## Smoke e2e, Chrome
+
+`build:chrome` with the four armed flags, then the full suite at `--retry=0`: 56 files passed, 5 skipped; 244 tests passed, 13 skipped, 0 failed; 1484 s (22:33-22:58Z, load1 53 at start). No e2e scenario added.
