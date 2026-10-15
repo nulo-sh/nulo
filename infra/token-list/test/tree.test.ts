@@ -89,7 +89,7 @@ describe("the host tree", () => {
 		expect(floorFindings(floorText(0), 1792014908)).toEqual([`${FLOOR_PATH}: sequence must be an integer from 1`])
 		expect(floorFindings(floorText(1792014909), 1792014908)).toEqual([`${FLOOR_PATH}: above the committed list's sequence 1792014908`])
 		expect(floorFindings('{"sequence":1792014908}\n', 1792014908)).toEqual([`${FLOOR_PATH}: not in canonical form`])
-		expect(floorFindings(floorText(1792014908).replace("}", '\t,"note": 1\n}'), 1792014908)).toEqual([
+		expect(floorFindings('{\n\t"sequence": 1792014908,\n\t"note": 1\n}\n', 1792014908)).toEqual([
 			`${FLOOR_PATH}: not in canonical form`,
 		])
 	})
