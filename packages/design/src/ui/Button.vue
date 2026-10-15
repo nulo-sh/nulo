@@ -285,12 +285,14 @@ const rel = computed(() => {
 }
 
 .wrapper.destructive {
-	background: var(--red);
+	background: var(--btn-destructive);
 	color: var(--txt-white);
 	fill: var(--txt-white);
 }
-.wrapper.destructive:hover:not(.disabled):not(.loading) {
-	background: color-mix(in srgb, var(--red), var(--txt-primary) 18%);
+/* Toward black in both themes: a mix toward the text colour lightens it in the dark one, below AA. */
+.wrapper.destructive:hover:not(.disabled):not(.loading),
+.wrapper.cta_destructive:hover:not(.disabled):not(.loading) {
+	background: color-mix(in srgb, var(--btn-destructive), black 18%);
 }
 
 /** Brutalist outlined variant — primary's type on a transparent bg with a
@@ -400,13 +402,10 @@ const rel = computed(() => {
 /** Destructive CTA flavor — red bg + white text. Reserved for
  *  irreversible actions (Delete Profile, Wipe Wallet). */
 .wrapper.cta_destructive {
-	background: var(--red);
+	background: var(--btn-destructive);
 	color: var(--txt-white);
 	fill: var(--txt-white);
 	border: none;
-}
-.wrapper.cta_destructive:hover:not(.disabled):not(.loading) {
-	opacity: 0.9;
 }
 
 /** OTHER */

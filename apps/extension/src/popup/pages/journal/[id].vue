@@ -367,11 +367,10 @@ onBeforeUnmount(() => {
 <style module>
 .wrapper {
 	composes: wrapper from "../detail-page.module.css";
-	padding-bottom: var(--nav-clearance);
 }
 
 .content {
-	padding: 4px 20px 24px 20px;
+	composes: content from "../detail-page.module.css";
 }
 
 .hero_meta {
@@ -420,9 +419,8 @@ onBeforeUnmount(() => {
 
 /* TxHashRow's link, so both linked values in Details read alike. */
 .recipient_link {
-	composes: type--data from global;
+	composes: detail_value_mono from "../detail-page.module.css";
 	composes: detail_link from "../detail-page.module.css";
-	color: var(--txt-secondary);
 }
 
 .detail_context {

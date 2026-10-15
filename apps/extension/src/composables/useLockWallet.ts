@@ -8,7 +8,7 @@ export type LockProfileClient = Pick<
 	"getSessionHandle" | "lockActiveProfile" | "onActiveProfileChanged" | "onDisconnected"
 >
 
-/** Locking is a security action: a read that answers late or never locks without asking. */
+/** Bounds the worker read, so an unresponsive worker cannot delay Lock indefinitely. */
 const LOCK_READ_BUDGET_MS = 3_000
 
 type LockRead = { answered: true; handle: string | undefined } | { answered: false; handle?: undefined }

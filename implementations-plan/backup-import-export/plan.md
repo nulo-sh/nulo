@@ -22,7 +22,7 @@ post_implementation_hardening: not scheduled
   - Arc 1b: the `@aztec-labs/pxe` patch that lets `ensureRegistered` heal a half-registered account (the in-repo half of #148).
   - Arc 2: an edited Local Network reads its true status and travels in the backup (#147); the export drops PXE-provided contracts (#191).
   - Arc 3: a backup whose profile part is not the wallet's shape is refused (OA-9 B, #226); the import's warning, a failed Retry and the error viewer name the networks (#189); a per-profile restore reminder, the Home banner and the Restore again page, fenced to the profile's session and settled only by networks restored in full (#192); the account file downloads only once protected (#230); the full-backup export warns of imported accounts that will not restore (#231).
-  - `lessons.md`: one line, on capturing a fence inside the lock hold that commits what it guards. Pruning pass: nothing else retired, since #437 had just pruned it.
+  - `lessons.md`: nothing promoted, since it sits at its 8 KiB budget and #437 had just pruned it. The fact worth reusing stays in the audit verdicts below and in [lessons/phase-3.md](lessons/phase-3.md): a fence read by a second call after a commit can name a same-id successor's session, so capture it inside the lock hold that commits.
 - **Dropped, rejected, superseded:**
   - #98 (deleted default tokens returning after a restore): not planned, by OA-5 = C; closed with its reopening condition (D-arc3-9). D11, F15, F16 and I7 retired with it.
   - #221 (skip the profile's own contracts on import): closed as not planned in arc 2.
