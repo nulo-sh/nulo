@@ -381,7 +381,7 @@ Outcome (2026-10-10): the six whole-smoke runs stand as the whole-smoke gate (Ch
 
 Every phase of arcs 2a, 2b and 2c **waits on page 12**. Build none of it before the orchestrator releases the arc. A record answered "Change (with a note)" or struck replaces its phase's text with the note, through the orchestrator. Start each arc from a `dev` that holds arc 1.
 
-#### Phase 2a.1: refuse hidden characters inside a node URL (#200, P12-04) — waits on page 12
+#### Phase 2a.1: refuse hidden characters inside a node URL (#200, P12-04) ✓
 
 1. Add `hasHiddenUrlCharacter` to `rpc-url.ts` with the set and edge rule that ship now (OA-1, OA-2).
 2. Add `ERR_RPC_URL_HIDDEN_CHARACTERS` and its refine to `RpcUrlSchema`, before the transport refine.
@@ -406,7 +406,9 @@ Every phase of arcs 2a, 2b and 2c **waits on page 12**. Build none of it before 
 
 Validation gate: Fast; the armed smoke builds; `tests/e2e/endpoints.test.ts` and `tests/e2e/settings-crud.test.ts` on both browsers. Pass: exit 0; every refused class has its test. Layers: lint, typecheck, unit, component, smoke e2e.
 
-#### Phase 2a.2: plain HTTP only to this computer (#101 item 14, P12-02) — waits on page 12
+Outcome (2026-10-15): passed. Fast green (787 files); `endpoints` and `settings-crud` 15/15 on Chrome and on Firefox at retry 0. Deviations: the set is the two Unicode properties OA-1 B's signed text names, plus White_Space and Cc (D-orch-5), with a case per class; `endpoint-error-text.test.ts` was not created, because the popup tests' copy tables already drive `endpointErrorText` and `NewNetworkPopup` with the validation error's real message.
+
+#### Phase 2a.2: plain HTTP only to this computer (#101 item 14, P12-02) ✓
 
 Warning: this phase edits `manifest.config.ts`. Home-onboarding-chrome arc 2 (#156) waits for this arc and for arc 2b (R5).
 
@@ -431,7 +433,9 @@ Validation gate:
 
 Pass: exit 0. The CSP recorder records no violation. `security.test.ts` passes on both browsers. Layers: lint, typecheck, unit, smoke e2e, network e2e.
 
-#### Phase 2a.3: the default token list stays built in (#79, P12-05) — waits on page 12
+Outcome (2026-10-15): passed. `test:all`, lint and `typecheck:all` exit 0. Whole smoke at retry 0 with the CSP recorder armed: Chrome 55 files and 240 tests on the build before the round-1 fixes, then `endpoints`, `security` and `settings-crud` 21/21 on the final head; Firefox 57 files and 239 tests on the final head. Network files 7/7 on Chrome and on Firefox at retry 0, proverless as CI's pool runs them. Deviations: a refused `[::1]` reads OA-4 B's line, not the transport message (D-orch-4); step 3 became one `NetworkSchema` for results and the restore filter (§ Audit verdicts, Arc 2a, round 1, Opus, finding 1); `store/remote-code.md` needed no edit, because the policy's comment kept its line count.
+
+#### Phase 2a.3: the default token list stays built in (#79, P12-05) — dropped (D-orch-6)
 
 1. If page 12 records P12-05 as approved, run `gh issue close 79 --comment "<the page's decision text>"`.
 2. If it is changed, leave #79 open. A fetched list is its own blueprint, outside this plan.
@@ -538,7 +542,7 @@ Validation gate: Fast; `bun run test:all`; the armed smoke builds; `tests/e2e/fi
 | D25 | The fee-method-picker case seeds the two protocol FPC rows discovery writes and asserts that Enter saved the pick | It needs a pickable row, not a node: with both rows stored `getFpcs` never discovers, and Nulo's sponsor is eligible without a gas balance. The pick can land on the row already showing, so the saved pick is what tells Enter from a no-op | Moving the pick to the network suite, which turns that step's Firefox coverage on `main` from required to advisory |
 | D26 | A background kill (`stopBackground`) suspends the launch's held interceptions for the kill and re-arms them after; a spec's own stays armed | A DevTools session attached to Chrome's stopping service worker keeps its host for the successor, which then never starts clean: with the stand-in held, `sw-resilience` failed the same two tests on all three Chrome runs, and passed with the interception released for the kill (`lessons/phase-1.md`) | Detaching only the worker's session (no seam reaches it from the driver); leaving the stand-in out of kill specs (each spec would have to know) |
 | D-orch-4 | Arc 2a builds the signed page-12 picks: P12-04 with OA-1 **B**, OA-2 **A**, OA-3 **A**; P12-02 with OA-4 **B** and OA-5 **A**. OA-4 came with no words, so the page's example ships as recommended: "Use http://localhost instead of http://[::1]." (`ERR_RPC_URL_IPV6_LOOPBACK`); OWNER-ASKS.md lists it as a wording the owner may change | The orchestrator's release of arc 2a (2026-10-15) after pages 12 and 18 were signed | Shipping "Something went wrong." (OA-4 A) |
-| D-orch-5 | The refused set is `\p{White_Space}`, `\p{Cc}`, `\p{Bidi_Control}`, U+200B-U+200D, U+2060 and U+FEFF, inside the trimmed string; one line for all | OA-1 B names "bidirectional controls"; Unicode's `Bidi_Control` property is that set (U+202A-U+202E and U+2066-U+2069, plus the marks U+061C, U+200E and U+200F, which are as invisible and also reorder how text reads) | Only the ranges the release message lists (would let an RLM through); all of `Default_Ignorable_Code_Point` (refuses variation selectors and fillers the page never named) |
+| D-orch-5 | The refused set is `\p{White_Space}`, `\p{Cc}`, `\p{Cf}` and `\p{Default_Ignorable_Code_Point}`, inside the trimmed string; one line for all | OA-1 B's signed text names `Cf` and `Default_Ignorable_Code_Point`; together they hold every zero-width character, every bidirectional control (`Bidi_Control`, U+200E and U+200F included), the byte-order mark, and the fillers and soft hyphen a host drops silently (Codex round 1, finding 3). No legitimate node URL contains one | The release message's code-point ranges alone (first build: would let a Hangul filler through); `Bidi_Control` plus the listed ranges (round-1 build) |
 | D-orch-6 | Phase 2a.3 is dropped: P12-05 was answered "change" ("move to the remote token list fully"), so #79 no longer closes by comment; this lane does nothing on #79 | The orchestrator routes #79 to a planner (2026-10-15) | Closing #79 by comment (A4, D16; superseded) |
 | D-orch-7 | Arc 2b is not built by this session, per the orchestrator's release message ("struck: P12-03 was vetoed"); #101 stays open for item 15. #101's Decision block records P12-03 as "accepted from the veto list", not struck, so the #101 comment says only that item 14 ships in arc 2a's PR and item 15 is not in it; the report raises the discrepancy | The release message scopes this session; the issue text is what was signed, so no comment claims a veto it does not carry | Building 2b without a release; quoting a veto the issue does not hold |
 | D-orch-8 | Arcs 2a and 2c open as plain PRs against `dev` (`gh pr create --base dev`, no `gh stack`), 2c branched from the merged plan branch, not from 2a; both may be open at once and neither merges (release freeze until the 0.31.0 promote) | The orchestrator's call (2026-10-15); lifts D17's one-unmerged-arc rule for these two | One stack, one unmerged layer (D17) |
@@ -730,6 +734,30 @@ Verdict: **approve**. All 16 kill sites go through the exported `stopBackground`
 | 2 | Low. A kill while a spec's stop is still re-arming skips that origin, so the re-arm lands during the kill | Rejected: no file uses both `interceptRpc` and `stopBackground`, and a spec awaits its stop before anything else |
 | 3 | Info. The refusal and the unstopped-read messages name only a spec, while a kill now takes the origin too | Accepted: both are worded for either holder |
 | 4 | Info. Three comments still describe only a spec's suspension, and the kill hazard is Chrome's | Accepted |
+
+### Arc 2a, round 1, Codex (gpt-6.1-sol, high, read-only; session `01a14105-fa58-7a60-8e02-6a9eb0f92035`), 2026-10-15
+
+Verdict: **approve with fixes** (two Low comment findings). It exercised all 101 refused code points in four positions against the real schema and found no accepted input carrying one; the result relaxation, the activation guard and I1-I4 hold.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Low. The set's comment says `URL` percent-encodes what it does not drop; a host drops U+200B outright | Accepted: reworded |
+| 2 | Low. Two comments restate their code (`NewNetworkPopup.vue`, `refusedRpcUrlLine`) | Accepted: one deleted, one reduced to its contract |
+| 3 | Noted as outside the set: Hangul fillers, the soft hyphen, U+180E, U+034F and variation selectors pass and vanish from a host (`https://trusted.test` + U+3164 + `evil.test/` dials `trusted.testevil.test`); deception plausible, rendering-dependent | Accepted as a fix, not a limit: OA-1 B's signed text names `Cf` and `Default_Ignorable_Code_Point`, so the set becomes `White_Space`, `Cc`, `Cf` and `Default_Ignorable_Code_Point` (D-orch-5 revised), with a case each for a filler and a soft hyphen |
+
+### Arc 2a, round 1, Opus (general-purpose, read-only), 2026-10-15
+
+Verdict: **approve with one optional fix**.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Low. Restore again passes the live rows (`restore-again.vue:71` → `useRestoreAgain.ts` `namedNetworks`) into the restore filter, whose strict `NetworkSchema` drops a network holding a saved `http://[::1]` endpoint even when its primary is `localhost`; § Arc 2a's "it only ever sees the seeded built-in networks" did not hold | Accepted: one `NetworkSchema` whose endpoint URLs read as stored, for results and the restore filter; `RpcUrlSchema` stays on inputs, and the node factory still judges every URL it dials |
+| 2 | Nit. Two comments tell history ("now refuses", "no longer dials") | Accepted: stated as the rule |
+| 3 | The arc's new e2e cases had not run yet | The arc gate runs them |
+
+### Arc 2a, round 2, Codex (session `01a14105-fa58-7a60-8e02-6a9eb0f92035` resumed), 2026-10-15
+
+Verdict: **approve**, no new findings; the loop converged. It traced the relaxed restore filter to the dial (`restore` → `networkInfoFrom` → PXE registration → `createChainRuntime` → `NodeFactory.createNode` → `isAllowedRpcUrl`), so no URL reaches a socket unjudged, probed all 4,290 refused code points in four positions with no bypass, and confirmed IDN hosts, percent-encoded paths and API-key characters still pass.
 
 ## Delivery
 
