@@ -26,3 +26,11 @@ Verdict: approve; withdrew round 2's finding (no differently cased token exists;
 ## Smoke e2e, Chrome
 
 `build:chrome` with the four armed flags, then the full suite at `--retry=0`: 56 files passed, 5 skipped; 244 tests passed, 13 skipped, 0 failed; 1484 s (22:33-22:58Z, load1 53 at start). No e2e scenario added.
+
+## Smoke e2e, Firefox
+
+`build:firefox` with the four armed flags, then the full suite at `--retry=0` (the orchestrator raised the load threshold to load1 < 150 for this host's 188 cores): 58 files passed, 3 skipped; 243 tests passed, 14 skipped, 0 failed; 2650 s (23:11-23:56Z, load1 95-206).
+
+## Screenshots
+
+Two throwaway specs, deleted before commit: a smoke spec seeding a token row, a priced transfer with fee, gas and block, and the quotes (the tx page with the fee breakdown open, Contacts empty, New contact, Connected apps, Glossary); and a network spec through `e2e:agent` (proverless, retry 0) opening the connect window with Details and its contract row open. Proving's resting state shows no step numbers, so it has no shot. A hash set right after `reloadExtensionPage` is overridden by the start-up navigation to Home: wait for Home's row first.
