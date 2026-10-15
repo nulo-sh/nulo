@@ -149,10 +149,14 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 		try {
 			const page = await openHomeHoldingFlagged(ctx)
 			await page.waitForSelector(`${sel("tokens-card")} ${sel("token-flagged")}`, VISIBLE)
-			const symbol = await page.$eval(`${sel("tokens-card")}:has(${sel("token-flagged")}) ${sel("token-symbol")}`, (el) =>
-				el.getAttribute("data-symbol"),
+			const rows = await page.$$eval(
+				sel("tokens-card"),
+				(cards, symbol: string, flagged: string) =>
+					cards.map((card) => [card.querySelector(symbol)?.getAttribute("data-symbol"), card.querySelector(flagged) !== null]),
+				sel("token-symbol"),
+				sel("token-flagged"),
 			)
-			expect(symbol).toBe("SCAM")
+			expect(rows).toEqual([["SCAM", true]])
 			await shotSend(page, "flagged-home", "token-flagged")
 
 			await openHoldings(page)
@@ -164,7 +168,7 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 			await shotSend(page, "flagged-token-page", "token-flagged-banner")
 
 			await navigateByHash(page, "#/popup/send?tokenId=1", 10_000)
-			await page.waitForSelector(`${sel("token-flagged-banner")} + ${sel("send-token-trigger")}`, VISIBLE)
+			await page.waitForSelector(sel("token-flagged-banner"), VISIBLE)
 			await shotSend(page, "flagged-send", "token-flagged-banner")
 
 			await clickByTestId(page, "send-token-trigger")

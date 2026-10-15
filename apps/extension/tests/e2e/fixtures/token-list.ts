@@ -6,8 +6,8 @@
  *
  * A source run holds and serves a fixed two-token list that also flags one pair, signed with a
  * per-process key that the armed build reads from `nulo:e2e:token-list`, so no spec depends on what
- * the owner lists. An
- * artifact run holds the published envelope, the only list a release build's pinned keys accept.
+ * the owner lists. An artifact run holds the published envelope, the only list a release build's
+ * pinned keys accept.
  */
 import { readFileSync } from "node:fs"
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http"

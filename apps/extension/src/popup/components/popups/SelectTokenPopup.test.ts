@@ -91,7 +91,12 @@ const STUBS = {
 	PopupCard: { template: "<div><slot /></div>" },
 	PopupHeader: { template: "<div><slot name='title' /></div>" },
 	ItemsContainer: { template: "<div><slot /></div>" },
-	SettingItem: { props: ["title"], template: "<div :data-title='title'><slot name='description' /></div>" },
+	// Draws the description only when a slot is passed, as `SettingItem` does.
+	SettingItem: {
+		props: ["title"],
+		template:
+			"<div :data-title='title'><div v-if='$slots.description' data-testid='setting-description'><slot name='description' /></div></div>",
+	},
 	MaterialIcon: { template: "<i />" },
 	Text: { template: "<span><slot /></span>" },
 	Flex: { template: "<div><slot /></div>" },
@@ -168,8 +173,8 @@ describe("SelectTokenPopup", () => {
 		const contract = `0x${TEST_FLAGGED.address.slice(2).toUpperCase()}`
 		const wrapper = await mountOpen([row(1, "SCAM", { contract }), row(2, "ALPHA")])
 		const lines = wrapper.findAll('[data-testid="select-token-row"]').map((el) => {
-			const line = el.find('[data-testid="select-token-flagged"]')
-			return [el.attributes("data-symbol"), line.exists() ? line.text() : null]
+			const line = el.find('[data-testid="setting-description"]')
+			return [el.attributes("data-symbol"), line.exists() ? line.get('[data-testid="select-token-flagged"]').text() : null]
 		})
 		expect(lines).toEqual([
 			["ALPHA", null],
