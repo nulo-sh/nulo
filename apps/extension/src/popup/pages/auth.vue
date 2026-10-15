@@ -34,7 +34,7 @@ import { usePopupStore } from "@/stores/popup.store.ts"
 const appStore = useAppStore()
 const popupStore = usePopupStore()
 
-const { openToast } = useToast()
+const { openToast, toast, closeToast } = useToast()
 
 const router = useRouter()
 
@@ -55,6 +55,8 @@ const isWrongPassword = ref(false)
 const isTornImport = ref(false)
 const isPasswordType = ref(true)
 const isAwaitingResponse = ref(false)
+// The failure toast this screen opened last: a new attempt closes it, never another surface's.
+let failureToastId
 
 const isPasskeyProfile = computed(() => appStore.profile?.type === "passkey")
 // Opened before the service answered: the heading, its line and the form depend on the profile's
@@ -118,6 +120,11 @@ const unlockActiveProfile = async () => {
 	return managers.profile.unlockProfile(appStore.profile.id, password.value)
 }
 
+const openFailureToast = (options) => {
+	openToast(options)
+	failureToastId = toast.value?.id
+}
+
 /** The unlock failure ladder — one synchronous pass, in this order, on the original error. */
 const handleUnlockError = (error, activeProfileId, isPasskeyAttempt) => {
 	// Service throws `InvalidPasswordError` (a WalletError subclass).
@@ -144,7 +151,7 @@ const handleUnlockError = (error, activeProfileId, isPasskeyAttempt) => {
 		// live and a "try again" toast would race a successful
 		// navigation. Otherwise the wait genuinely expired: say so.
 		if (appStore.isLogined && appStore.profile?.id !== activeProfileId) return
-		openToast({ kind: "error", label: "Unlock timed out. Please try again" })
+		openFailureToast({ kind: "error", label: "Unlock timed out. Please try again" })
 		return
 	}
 	if (error instanceof BootstrapFailedError) {
@@ -153,11 +160,11 @@ const handleUnlockError = (error, activeProfileId, isPasskeyAttempt) => {
 		return
 	}
 	if (isPasskeyAttempt) {
-		openToast({ kind: "error", label: passkeyFailureCopy(error, PASSKEY_COPY.unlockFailed) })
+		openFailureToast({ kind: "error", label: passkeyFailureCopy(error, PASSKEY_COPY.unlockFailed) })
 		return
 	}
 	// The error's text never reaches the toast: it can name internals.
-	openToast({ kind: "error", label: "Something went wrong", sub: "Try unlocking again." })
+	openFailureToast({ kind: "error", label: "Something went wrong", sub: "Try unlocking again." })
 }
 
 const handleUnlockWallet = async () => {
@@ -166,6 +173,8 @@ const handleUnlockWallet = async () => {
 	// must not mint duplicate same-profile continuations.
 	if (isAwaitingResponse.value) return
 	const isPasskeyAttempt = isPasskeyProfile.value
+	// So an attempt that unlocks lands on a clean Home, and a second failure shows its toast afresh.
+	if (toast.value && toast.value.id === failureToastId) closeToast()
 
 	try {
 		let activeProfile

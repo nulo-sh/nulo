@@ -6,6 +6,7 @@ import { Flex, Input, MaterialIcon, Text } from "@nulo/design"
 import { expectMaskToggle, expectNativeAttrs, nativeInput, typeNow } from "../../../tests/helpers/credential-pins"
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { useAppStore } from "@/stores/app.store"
+import { useToast } from "@/composables/toast"
 import { managers } from "@/utils/core"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
@@ -46,9 +47,22 @@ vi.mock("@/utils/core", () => ({
 	initTransactionService: (...args: unknown[]) => initTransactionServiceMock(...(args as [])),
 	refreshBalances: vi.fn(async () => undefined),
 }))
-vi.mock("@/composables/toast", () => ({
-	useToast: () => ({ openToast: openToastMock }),
-}))
+vi.mock("@/composables/toast", async (importOriginal) => {
+	const real = await importOriginal<typeof import("@/composables/toast")>()
+	return {
+		...real,
+		useToast: () => {
+			const toast = real.useToast()
+			return {
+				...toast,
+				openToast: (options: Parameters<typeof toast.openToast>[0]) => {
+					openToastMock(options)
+					toast.openToast(options)
+				},
+			}
+		},
+	}
+})
 vi.mock("@/composables/usePasskeyCeremony", () => ({
 	usePasskeyCeremony: () => ({
 		request: { value: null },
@@ -76,6 +90,7 @@ beforeEach(() => {
 	runCeremony.mockReset()
 	vi.mocked(passkeyNeedsOwnWindow).mockReturnValue(false)
 	openToastMock.mockReset()
+	useToast().closeToast()
 	initTransactionServiceMock.mockReset()
 	setLastActiveProfileIdMock.mockReset()
 	setLastActiveProfileIdMock.mockResolvedValue(undefined)
@@ -426,6 +441,27 @@ describe("auth.vue — what a failed unlock says", () => {
 		// The latch is released: the next submit reaches the service again.
 		await wrapper.find("form").trigger("submit")
 		expect(unlockProfile).toHaveBeenCalledTimes(2)
+	})
+
+	test("Continue again closes the last failure's toast before the new attempt; another surface's toast stays", async () => {
+		const { toast, openToast } = useToast()
+		const wrapper = await failPasswordUnlock(new Error("Invalid profile id"))
+		expect(toast.value).toMatchObject({ label: "Something went wrong", sub: "Try unlocking again." })
+
+		let answer!: (profile: unknown) => void
+		unlockProfile.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+		await wrapper.find("form").trigger("submit")
+		expect(unlockProfile).toHaveBeenCalledTimes(2)
+		expect(toast.value).toBeNull()
+		answer(undefined)
+		await flushPromises()
+
+		const handOff = { kind: "error", label: "Something went wrong", sub: "Open the wallet again to unlock your new profile." } as const
+		openToast(handOff)
+		unlockProfile.mockReturnValueOnce(new Promise(() => {}))
+		await wrapper.find("form").trigger("submit")
+		expect(unlockProfile).toHaveBeenCalledTimes(3)
+		expect(toast.value).toMatchObject(handOff)
 	})
 
 	test("a wrong password keeps its inline error and gets no toast", async () => {
