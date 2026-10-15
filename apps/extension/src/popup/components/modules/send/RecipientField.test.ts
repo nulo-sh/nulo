@@ -11,6 +11,7 @@ import { mount } from "@vue/test-utils"
 import { nextTick } from "vue"
 import { Input } from "@nulo/design"
 import AddressInput from "@/components/composite/general/AddressInput.vue"
+import RecipientCard from "@/components/composite/send/RecipientCard.vue"
 import RecipientField from "./RecipientField.vue"
 
 const STUBS = {
@@ -31,6 +32,7 @@ const STUBS = {
 		template: `<div data-testid="stub-card" :data-name="name" :data-address="address"><button data-testid="card-change-btn" @click="$emit('change')" /></div>`,
 		props: ["name", "address"],
 		emits: ["change"],
+		methods: { focusChange() {} },
 	},
 }
 
@@ -172,6 +174,41 @@ describe("modules/send/RecipientField", () => {
 			input.element.dispatchEvent(enter())
 			expect(w.emitted("update:searchTerm")?.at(-1)).toEqual([alice.address])
 			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([alice])
+		})
+
+		/** Picks the first suggestion with the real card mounted, and lets the card render. */
+		const pickWithCard = async (how: "Enter" | "click") => {
+			const { RecipientCard: _stub, ...stubs } = STUBS
+			const w = mount(RecipientField, {
+				props: { candidates: [alice, account1], searchTerm: "a" },
+				global: { stubs, components: { RecipientCard } },
+				attachTo: document.body,
+			})
+			mounted.push(w)
+			w.get("input").element.focus()
+			await nextTick()
+			if (how === "Enter") w.get("input").element.dispatchEvent(enter())
+			else await w.get('[role="option"]').trigger("click")
+			await nextTick()
+			await nextTick()
+			expect(w.find('[data-testid="recipient-card"]').exists()).toBe(true)
+		}
+
+		test.each([
+			["an Enter pick moves the focus to the card's Change recipient", "Enter", "recipient-card-change"],
+			["a click pick leaves the focus where the removed field had it", "click", undefined],
+		] as const)("%s", async (_, how, focused) => {
+			await pickWithCard(how)
+			expect(document.activeElement?.getAttribute("data-testid") ?? undefined).toBe(focused)
+		})
+
+		test("the pick's auto-repeat on Change is refused, so a held Enter picks once; a new press is not", async () => {
+			await pickWithCard("Enter")
+			const repeat = enter({ repeat: true })
+			const press = enter()
+			document.activeElement?.dispatchEvent(repeat)
+			document.activeElement?.dispatchEvent(press)
+			expect([repeat.defaultPrevented, press.defaultPrevented]).toEqual([true, false])
 		})
 
 		test("a repeat, composing or already handled Enter in the input picks nothing", async () => {

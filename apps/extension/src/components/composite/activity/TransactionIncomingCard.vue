@@ -92,6 +92,6 @@ const hashSlice = computed(() => {
 
 .hash {
 	composes: type--meta from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 </style>

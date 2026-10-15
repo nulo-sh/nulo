@@ -9,8 +9,10 @@ import { LOG_SOURCES } from "./useLogFilters"
  *
  * The first pin starts from the registration sites: every service the worker or the offscreen
  * document registers, and its popup client, has a row. The second resolves the source of every
- * logger call: each is a row, and each mapped helper logs under the service that owns it. Both
- * fail closed: a shape the resolver does not understand is a failure, never a skip.
+ * logger call: each is a row, and each mapped helper logs under the service that owns it. The
+ * third is the converse: every row is a source the first two find, so a row nothing logs under
+ * cannot come back. All fail closed: a shape the resolver does not understand is a failure,
+ * never a skip.
  *
  * KNOWN FALSE-NEGATIVES, textual like `log-payload-ban.test.ts`: a logger reached under another
  * name (`logger.log.bind`, `logger["log"]`, a variable not named `logger`), and files outside
@@ -149,14 +151,31 @@ function requiredSources(cls: string): string[] {
 	return client ? [name, `${name}-client`] : [name]
 }
 
-describe("log source filter: every registered service is listed", () => {
-	const perFile = REGISTRATION_FILES.map((path) => {
+/** Computed on first use inside a test, so a resolver error fails that test by name rather than the collection. */
+function once<T>(compute: () => T): () => T {
+	let value: { result: T } | undefined
+	return () => {
+		value ??= { result: compute() }
+		return value.result
+	}
+}
+
+const registeredPerFile = once(() =>
+	REGISTRATION_FILES.map((path) => {
 		const text = SOURCES.get(path)
 		if (!text) throw new Error(`registration file missing: ${path}`)
 		return { path, ...registrations(text) }
-	})
+	}),
+)
+const registeredSources = once(() =>
+	registeredPerFile()
+		.flatMap((f) => f.classes)
+		.flatMap(requiredSources),
+)
 
+describe("log source filter: every registered service is listed", () => {
 	test("every services.add call resolves to a class, the multiline and bound forms included", () => {
+		const perFile = registeredPerFile()
 		for (const { path, refused } of perFile) expect(refused, path).toEqual([])
 		const [worker, offscreen] = perFile.map((f) => f.classes)
 		expect(worker).toEqual(expect.arrayContaining(["AccountService", "IncomingTransferService", "ProfileDeletionCoordinator"]))
@@ -171,8 +190,7 @@ describe("log source filter: every registered service is listed", () => {
 	})
 
 	test("every registered service and its client has a source row", () => {
-		const required = perFile.flatMap((f) => f.classes).flatMap(requiredSources)
-		expect(required.filter((name) => !LOG_SOURCES.includes(name))).toEqual([])
+		expect(registeredSources().filter((name) => !LOG_SOURCES.includes(name))).toEqual([])
 	})
 })
 
@@ -314,9 +332,11 @@ const OWNED: [string, string][] = [
 	["packages/aztec-runtime/src/pxe/artifact-registry.ts", "pxe"],
 ]
 
+const loggedPerFile = once(() => [...SOURCES].map(([file, text]) => fileSources(file, text)))
+
 describe("log source filter: every logger call's source is listed", () => {
 	test("every source resolves to a row", () => {
-		const all = [...SOURCES].map(([file, text]) => fileSources(file, text))
+		const all = loggedPerFile()
 		expect(all.flatMap((r) => r.refused)).toEqual([])
 		expect([...new Set(all.flatMap((r) => r.sources))].filter((source) => !LOG_SOURCES.includes(source))).toEqual([])
 	})
@@ -340,5 +360,12 @@ describe("log source filter: every logger call's source is listed", () => {
 		])
 		expect(read("this.logger.log(source, level, 'm')").refused).toEqual(["inline.ts:1: unsupported source source"])
 		expect(read("new ClockTickerAdapter(clock, logger)").refused).toEqual(["inline.ts:1: a logger with no source"])
+	})
+})
+
+describe("log source filter: every row is a live source", () => {
+	test("every row is a source a registered service, its client or a logger call writes", () => {
+		const live = new Set([...registeredSources(), ...loggedPerFile().flatMap((r) => r.sources)])
+		expect(LOG_SOURCES.filter((row) => !live.has(row))).toEqual([])
 	})
 })

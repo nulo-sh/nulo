@@ -137,7 +137,7 @@ describe("ExecutionLane.acquireSlot", () => {
 		// same failed shape the silent path would otherwise leave stuck at pending.
 		const failedCall = transitions.find((t) => t[0] === "q9")
 		expect(failedCall?.[1]).toEqual({ stage: "failed" })
-		expect(failedCall?.[2]).toMatchObject({ kind: "dapp_execute" })
+		expect(failedCall?.[2]).toMatchObject({ kind: "too_many_pending" })
 		expect(controllers(lane).has("q9")).toBe(false)
 
 		// Drain so nothing leaks into other tests.

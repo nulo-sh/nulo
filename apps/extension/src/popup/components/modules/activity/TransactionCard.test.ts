@@ -213,4 +213,19 @@ describe("TransactionCard fiat (D2 activity rows)", () => {
 		await flushPromises()
 		expect(w.find('[data-testid="activity-fiat"]').exists()).toBe(false)
 	})
+
+	test.each([
+		["unknown decimals: no figure and no fiat", false, { amount: "", fiat: false }],
+		["known decimals (control): the figure and its fiat", true, { amount: "125", fiat: true }],
+	])("a priced transfer of a listed token with %s; the title keeps the symbol", async (_label, hasDecimals, want) => {
+		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1.0, fetchedAt: Date.now(), providerUpdatedAt: null } }
+		const tokens = [{ contract: TEST_USDC, symbol: "cUSD", decimals: hasDecimals ? 6 : 0, hasDecimals }]
+		const w = mount(TransactionCard, { props: { tx: mkTransferTx(TEST_USDC), tokens }, global: { stubs: STUBS } })
+		await flushPromises()
+		expect({
+			title: w.find(".title").text(),
+			amount: w.find(".amount").text(),
+			fiat: w.find('[data-testid="activity-fiat"]').exists(),
+		}).toEqual({ title: "cUSD", ...want })
+	})
 })

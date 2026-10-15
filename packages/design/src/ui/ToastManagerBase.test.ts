@@ -33,6 +33,8 @@ const cards = () => toastRoot.querySelectorAll(CARD)
 const card = () => toastRoot.querySelector<HTMLElement>(CARD)
 const status = () => toastRoot.querySelector('[role="status"]') as HTMLElement
 const alert = () => toastRoot.querySelector('[role="alert"]') as HTMLElement
+/** The shown title's own `aria-live`: null while its text is announced with its region. */
+const titleLive = () => card()?.querySelector('[data-testid="snackbar-title"]')?.getAttribute("aria-live") ?? null
 
 /** Flushes Vue, then advances fake time in 16 ms frames, flushing between frames. */
 async function step(ms: number) {
@@ -119,6 +121,7 @@ describe("ToastManagerBase", () => {
 		expect(status().querySelector(CARD)?.getAttribute("data-kind")).toBe("success")
 		expect(alert().querySelector(CARD)).toBeNull()
 		expect(status().querySelector('[data-name="check-circle"]')?.getAttribute("data-color")).toBe("green")
+		expect(titleLive()).toBeNull()
 		await settle()
 
 		open({ kind: "error", label: "Failed" })
@@ -126,6 +129,7 @@ describe("ToastManagerBase", () => {
 		expect(status().querySelector(CARD)).toBeNull()
 		expect(alert().querySelector(CARD)?.getAttribute("data-kind")).toBe("error")
 		expect(alert().querySelector('[data-name="close-circle"]')?.getAttribute("data-color")).toBe("red")
+		expect(titleLive()).toBeNull()
 	})
 
 	test("an info renders in the alert region with a grey clock and ×, and no error border", async () => {
@@ -159,17 +163,21 @@ describe("ToastManagerBase", () => {
 		expect(height()).toBe(72)
 	})
 
-	test("the same text opened twice renders twice: the second card is a new element", async () => {
+	test("the same text opened twice renders twice: the second card is a new element, announced again", async () => {
 		mountRegion()
-		open({ kind: "success", label: "Copied" })
+		const id = open({ kind: "success", label: "Copied" })
 		await settle()
 		const first = card()
+		useToast().updateToast(id, "Copied")
+		await nextTick()
+		expect(titleLive()).toBe("off")
 		open({ kind: "success", label: "Copied" })
 		await settle()
 		const second = card()
 		expect(second).not.toBeNull()
 		expect(second).not.toBe(first)
 		expect(first?.isConnected).toBe(false)
+		expect(titleLive()).toBeNull()
 	})
 
 	test.each([
@@ -222,6 +230,21 @@ describe("ToastManagerBase", () => {
 		await settle()
 		expect(cards().length).toBe(1)
 		expect(card()?.textContent).toContain("Third")
+	})
+
+	test("a snack relabelled while it waits enters announced, and its next relabel is silent", async () => {
+		stubTransitionDuration()
+		mountRegion()
+		open({ kind: "success", label: "Address is copied" })
+		await stepUntil(entered("Address is copied"))
+		const line = open({ kind: "info", label: "Importing contacts · 1 of 3" })
+		await step(16)
+		useToast().updateToast(line, "Importing contacts · 2 of 3")
+		await stepUntil(entered("2 of 3"))
+		expect(titleLive()).toBeNull()
+		useToast().updateToast(line, "Importing contacts · 3 of 3")
+		await nextTick()
+		expect(titleLive()).toBe("off")
 	})
 
 	test("unmounting during the wait renders nothing and throws nothing", async () => {
@@ -339,11 +362,13 @@ describe("ToastManagerBase", () => {
 		const id = open({ kind: "info", label: "Importing contacts · 0 of 3" })
 		await stepUntil(entered("0 of 3"))
 		const first = card()
+		expect(titleLive()).toBeNull()
 		useToast().updateToast(id, "Importing contacts · 1 of 3")
 		await nextTick()
 		expect(card()).toBe(first)
 		expect(first?.className).not.toMatch(/enter|leave/)
 		expect(first?.textContent).toContain("1 of 3")
+		expect(titleLive()).toBe("off")
 	})
 
 	test("× focused before an update still returns focus after it", async () => {
