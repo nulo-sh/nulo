@@ -41,7 +41,8 @@ Do not start Phase 1 before the answer. Mid-run surprises that change the shape 
 **The pin surface** — miss one and you get a mixed old/new set:
 - `@aztec-labs/*` and `@aztec-foundation/*` exact pins across the workspace package.json files (`rg '"@aztec-(labs|foundation)/' apps/*/package.json packages/*/package.json`). `@aztec/viem` is versioned independently — leave it.
 - **`@alejoamiras/presto`** (extension + aztec-runtime) — it exact-depends on `@aztec-labs` transitives; skipping it silently reintroduces the old line. Bump it WITH the Aztec line: the page-side status client sends the extension's `@aztec-foundation/bb.js` pin and the offscreen prover sends the SDK's own, and a drift between the two surfaces as the visible `version-mismatch` state.
-- **`@aztec-foundation/aztec-standards` + `@alejoamiras/private-fee-juice`** (6 pins across `apps/extension`, `apps/playground`, `packages/aztec-runtime`) — they move with the line. The PrivateFPC artifact the wallet derives from ships in `private-fee-juice` (the drift detector below), and `aztec-standards` fixes the Token class every default seed and user-added standards token runs (`default-tokens.test.ts` pins the two together). Holding either is its own decision: list it in `HELD_ROOTS` in `scripts/aztec-hold-residue-check.ts`, which otherwise enforces one generation.
+- **`@aztec-foundation/aztec-standards` + `@alejoamiras/private-fee-juice`** (6 pins across `apps/extension`, `apps/playground`, `packages/aztec-runtime`) — they move with the line. The PrivateFPC artifact the wallet derives from ships in `private-fee-juice` (the drift detector below), and `aztec-standards` fixes the Token class every default seed and user-added standards token runs (`default-tokens.test.ts` pins the two together). A moved class reds the token list's tree check on the signed envelope, and `publish-token-list.yml` runs that check before `sign`, so nothing can re-sign it: publish a list both class sets accept (an empty one, an owner UI decision) before the class moves (`implementations-plan/archive/aztec-rc3/lessons/phase-4.md`). Holding either is its own decision: list it in `HELD_ROOTS` in `scripts/aztec-hold-residue-check.ts`, which otherwise enforces one generation.
+- **The `@nulo-sh/*` npm packages** (`scripts/publish/`): they peer exactly on the workspace's Aztec pins, so unleashed cannot take the new line until a new lockstep version is on npm. Once the bump is on `dev`, move the Aztec line in `scripts/publish/readme/*.md`, rehearse the new version and record its digests (`scripts/publish/README.md` § A later version), and hand the owner the `publish-packages.yml` dispatch, which no agent runs.
 - **Five version readers keyed by package name**:
   - `.github/actions/setup-aztec/action.yml`, `apps/extension/scripts/e2e/docker-ci-like.sh` and `apps/extension/tests/e2e/global-setup.ts` read the `@aztec-labs/aztec.js` pin to pick the toolchain.
   - `apps/extension/vite.shared.ts` reads `@aztec-labs/pxe` into `__AZTEC_VERSION__` (the About page, the backup envelope's `aztec-version`).
@@ -93,7 +94,7 @@ the artifact byte-exact with its `PROVENANCE.md`, add a `reference/<regime>/` ge
 own lockfile, regenerate the vectors twice with an empty diff, and move the tests to the new
 truth. Off Mainnet that ships in place as an update; a Mainnet-serving build rotates only as a new
 extension major (CLAUDE.md "Account-address freeze"). Worked example:
-`implementations-plan/aztec-rc3/` (`nulo-v6.1`).
+`implementations-plan/archive/aztec-rc3/plan.md` (`nulo-v6.1`).
 
 **The scope guard's coverage.** `PxeService` refuses to sync a scope the PXE holds no keys for,
 because the HandshakeRegistry sync would move that account's cursor past its handshakes for good

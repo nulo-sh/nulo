@@ -20,6 +20,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [aztec-5.0.0-stable](aztec-5.0.0-stable/plan.md) — superseded by aztec-5.2.0-js-line — Aztec 5.0.0 stable and the signing-key-root account model under a frozen derivation spec
 - [aztec-5.0.1-line](aztec-5.0.1-line/plan.md) — completed — client bump to Aztec 5.0.1 with the restore-boot fix and a deletion fence for per-profile PXE stores
 - [aztec-5.2.0-js-line](aztec-5.2.0-js-line/plan.md) — completed — a version-only bump of the Aztec JS packages to 5.2.0, with the Noir toolchain held
+- [aztec-rc3](aztec-rc3/plan.md) — completed — Aztec 6.0.0-rc.3 and the reset Testnet: the line, an in-place account re-pin, the empty Testnet list, the @nulo-sh 0.2.0 release prep
 - [backup-import](backup-import/plan.md) — completed — a full-backup import that one slow public node cannot stall
 - [backup-import-decomposition](backup-import-decomposition/plan.md) — completed — the full-backup restore stages split into plain functions behind a short orchestrator
 - [backup-import-export](backup-import-export/plan.md) — completed — one key-unseal wipe order, strict hex, migration watchdog; a slimmer account-state slice; restore outcomes and a partial restore, protected exports
