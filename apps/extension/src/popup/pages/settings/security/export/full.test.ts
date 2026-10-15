@@ -537,6 +537,7 @@ describe("export/full.vue — a reset in progress", () => {
 			"FINISH THE TESTNET RESET FIRST",
 			"A backup made now would miss the accounts the reset is moving. Open Testnet to finish the reset, then come back.",
 		])
+		expect(wrapper.get("[data-testid='full-backup-agreement']").attributes("data-blocked")).toBe("true")
 		const agree = wrapper.get("[data-testid='agree-continue-btn']")
 		expect(agree.attributes("disabled")).toBeDefined()
 		;(agree.element as HTMLButtonElement).disabled = false
@@ -547,6 +548,7 @@ describe("export/full.vue — a reset in progress", () => {
 		await onChanged()
 		await flushPromises()
 		expect(wrapper.find("[data-testid='full-backup-reset-notice']").exists()).toBe(false)
+		expect(wrapper.get("[data-testid='full-backup-agreement']").attributes("data-blocked")).toBe("false")
 		expect(wrapper.get("[data-testid='agree-continue-btn']").attributes("disabled")).toBeUndefined()
 		wrapper.unmount()
 		expect(managers.networkReset.onStaleNetworkChanged.remove).toHaveBeenCalledWith(onChanged)

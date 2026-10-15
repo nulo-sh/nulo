@@ -19,7 +19,7 @@ export function accountLine(name: string, n: number, addressesMoved: boolean): s
 
 export const KEEP_LINE = "Keep your profile, contacts and other networks."
 export const removeLine = (name: string) => `Remove old ${name} tokens and history from this device.`
-export const nodeLine = (name: string) => `Switch ${name} to Nulo’s node, because yours is not serving the new ${name}.`
+export const nodeLine = (name: string) => `Use Nulo’s node for ${name}. Yours is not serving the new ${name}.`
 export const willLabel = (name: string) => `RESETTING ${upper(name)} IN NULO WILL`
 export const NO_PHRASE_NOTE = "You do not need your recovery phrase."
 export const SWITCH_NETWORK = "SWITCH NETWORK"
@@ -39,16 +39,18 @@ export const newAddresses = (name: string) => ({
 	notice: "Tokens at your old addresses stay there. This version cannot reach them.",
 })
 
+/** A Mainnet derivation change ships as a new extension, so this screen only shows through a fault in
+ *  Nulo or a damaged store, and the fix is an update, never a reset or a restore. */
 export const mainnetBlocked = (name: string) => ({
-	eyebrow: "WALLET UPDATE",
-	title: `${name} accounts unavailable`,
-	body: `This version of Nulo gives ${name} accounts new addresses, so it cannot open your current ones.`,
+	eyebrow: "NEEDS A NULO UPDATE",
+	title: `${name} accounts paused`,
+	body: `This version of Nulo cannot match your ${name} accounts to their addresses, so it stopped using them. That is a fault in Nulo, not in your wallet, and a Nulo update fixes it.`,
 	lines: [
-		"Your funds stay at your current addresses.",
-		`Nulo does not reset ${name} and changes nothing on this device.`,
+		"Your funds are safe at your current addresses.",
+		"Nulo changed nothing on this device, so the update reopens your accounts as they were.",
 		"Your other networks keep working.",
 	],
-	note: "Never enter your recovery phrase anywhere in response to this message.",
+	note: "Nulo never needs your recovery phrase to fix this. Do not enter it anywhere in response to this message.",
 })
 
 export const paused = (name: string) => ({

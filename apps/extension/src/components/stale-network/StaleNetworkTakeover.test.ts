@@ -123,7 +123,7 @@ describe("StaleNetworkTakeover — copy and order", () => {
 		expect(text.slice(5, 9)).toEqual([
 			"RESETTING MY TEST IN NULO WILL",
 			"Move your account to the new My Test. Its address stays the same.",
-			"Switch My Test to Nulo’s node, because yours is not serving the new My Test.",
+			"Use Nulo’s node for My Test. Yours is not serving the new My Test.",
 			KEEP,
 		])
 		expect(wrapper.find('[data-testid="stale-network-node-line"]').exists()).toBe(true)
@@ -160,13 +160,13 @@ describe("StaleNetworkTakeover — copy and order", () => {
 		expect(lines(wrapper.element)).toEqual([
 			"MAINNET",
 			"LOCK",
-			"WALLET UPDATE",
-			"Mainnet accounts unavailable",
-			"This version of Nulo gives Mainnet accounts new addresses, so it cannot open your current ones.",
-			"Your funds stay at your current addresses.",
-			"Nulo does not reset Mainnet and changes nothing on this device.",
+			"NEEDS A NULO UPDATE",
+			"Mainnet accounts paused",
+			"This version of Nulo cannot match your Mainnet accounts to their addresses, so it stopped using them. That is a fault in Nulo, not in your wallet, and a Nulo update fixes it.",
+			"Your funds are safe at your current addresses.",
+			"Nulo changed nothing on this device, so the update reopens your accounts as they were.",
 			"Your other networks keep working.",
-			"Never enter your recovery phrase anywhere in response to this message.",
+			"Nulo never needs your recovery phrase to fix this. Do not enter it anywhere in response to this message.",
 			"SWITCH NETWORK",
 		])
 		expect(wrapper.find('[data-testid="stale-network-reset"]').exists()).toBe(false)

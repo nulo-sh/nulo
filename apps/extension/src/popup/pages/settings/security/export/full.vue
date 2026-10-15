@@ -550,7 +550,12 @@ onBeforeUnmount(() => {
 				<span :class="$style.reset_notice_label">{{ pendingReset.label }}</span>
 				<span :class="$style.reset_notice_text">{{ pendingReset.text }}</span>
 			</div>
-			<div class="export_section_last">
+			<div
+				class="export_section_last"
+				:class="pendingReset && $style.agreement_blocked"
+				:data-blocked="pendingReset ? 'true' : 'false'"
+				data-testid="full-backup-agreement"
+			>
 				<span class="export_section_label type--label-section">Before you continue</span>
 				<Flex direction="column" gap="8">
 					<Text variant="body" height="150" color="body">
@@ -850,6 +855,11 @@ onBeforeUnmount(() => {
 
 .shake {
 	composes: shake_password from "../../../../../components/composite/shake.module.css";
+}
+
+/* The agreement fades with the disabled button while a reset blocks the backup. */
+.agreement_blocked {
+	opacity: 0.38;
 }
 
 .reset_notice {
