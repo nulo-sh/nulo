@@ -91,7 +91,8 @@
 	}
 }
 
-/* No base colour: the hover outranks whichever colour a page or a sibling class sets. */
+/* No base colour: the hover outranks whichever colour a page or a sibling class sets. The
+ * underline is the dark theme's only hover cue, where the accent nearly matches the value. */
 .detail_link {
 	text-decoration: none;
 	cursor: pointer;
@@ -99,6 +100,7 @@
 
 	&:hover {
 		color: var(--nulo-accent);
+		text-decoration: underline;
 	}
 }
 
