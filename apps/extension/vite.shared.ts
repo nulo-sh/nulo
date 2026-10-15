@@ -25,11 +25,20 @@ export function resolvePackageFile(pkg: string, file: string): string {
 /** Absolute path to `apps/extension/src`. */
 export const srcDir = fileURLToPath(new URL("./src", import.meta.url))
 
-/** The Aztec line the wallet is built against. Presto compares it by exact string equality, so a
- *  missing pin fails the build instead of shipping a version that silently disables native proving. */
+/** The Aztec line the wallet is built against, as About and full backups name it. */
 function aztecVersion(): string {
 	const version: string | undefined = (packageJson.dependencies as Record<string, string | undefined>)["@aztec-labs/pxe"]
 	if (!version) throw new Error('apps/extension/package.json declares no "@aztec-labs/pxe", so __AZTEC_VERSION__ has no value')
+	return version
+}
+
+/** The barretenberg release the Presto SDK proves with, sent as `x-aztec-version`: the exact
+ *  `@aztec-foundation/bb.js` pin, numbered apart from the labs line since 6.0.0-rc.3. Presto compares
+ *  it by exact string equality, so a missing pin fails the build instead of a status that never
+ *  matches. */
+function bbVersion(): string {
+	const version: string | undefined = (packageJson.dependencies as Record<string, string | undefined>)["@aztec-foundation/bb.js"]
+	if (!version) throw new Error('apps/extension/package.json declares no "@aztec-foundation/bb.js", so __BB_VERSION__ has no value')
 	return version
 }
 
@@ -37,6 +46,7 @@ function aztecVersion(): string {
 export const sharedDefine: Record<string, string> = {
 	__VERSION__: JSON.stringify(packageJson.version),
 	__AZTEC_VERSION__: JSON.stringify(aztecVersion()),
+	__BB_VERSION__: JSON.stringify(bbVersion()),
 	__NAME__: JSON.stringify(packageJson.name),
 	__DISPLAY_NAME__: JSON.stringify(packageJson.displayName),
 }

@@ -18,8 +18,8 @@
  * Every stage asserts an exact outcome — no ok-or-error tolerances in this file. Run it
  * prover-ON per bump, on Chrome and on Firefox: `bun run e2e:agent
  * tests/e2e/network/frozen-account-canary.test.ts` (see the aztec-update skill; a red canary on
- * either browser BLOCKS the bump — hold the line, or ship a new extension major as a deliberate
- * rotation).
+ * either browser BLOCKS the bump — hold the line, or rotate the address regime as a deliberate
+ * act, never as a fix).
  */
 import { Buffer } from "node:buffer"
 import { describe, expect, inject } from "vitest"

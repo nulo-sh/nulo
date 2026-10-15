@@ -28,7 +28,7 @@ describe("bbFetchCodeShim", () => {
 	})
 
 	test("the build check flags only bb.js's own browser fetcher", () => {
-		const store = "/repo/node_modules/.bun/@aztec-foundation+bb.js@6.0.0-rc.1/node_modules/@aztec-foundation/bb.js/dest"
+		const store = "/repo/node_modules/.bun/@aztec-foundation+bb.js@6.0.0-rc.6/node_modules/@aztec-foundation/bb.js/dest"
 		const browserFetcher = `${store}/browser/barretenberg_wasm/fetch_code/browser/index.js`
 		const nodeCopy = `${store}/node/barretenberg_wasm/fetch_code/browser/index.js`
 		expect(unshimmedFetchers([browserFetcher, nodeCopy, BB_FETCH_CODE_SHIM])).toEqual([browserFetcher])

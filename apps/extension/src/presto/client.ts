@@ -13,7 +13,7 @@ let client: PrestoClient | undefined
  */
 export function getPrestoClient(): PrestoClient {
 	client ??= new PrestoClient({
-		aztecVersion: __AZTEC_VERSION__,
+		aztecVersion: __BB_VERSION__,
 		presto: { host: PRESTO_HOST, port: PRESTO_PORT, httpsPort: PRESTO_HTTPS_PORT, httpsOnly: true },
 	})
 	return client

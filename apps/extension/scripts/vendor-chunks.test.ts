@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest"
 import { artifactChunkName, packageChunkName } from "./vendor-chunks"
 
-const ISOLATED = "/repo/node_modules/.bun/@aztec-labs+stdlib@6.0.0-rc.1+c1edb6f0/node_modules/@aztec-labs/stdlib/dest/abi/abi.js"
+const ISOLATED = "/repo/node_modules/.bun/@aztec-labs+stdlib@6.0.0-rc.3+c1edb6f0/node_modules/@aztec-labs/stdlib/dest/abi/abi.js"
 
 describe("packageChunkName", () => {
 	// The isolated linker nests the package under a `.bun/<pkg>@<ver>` directory of another name.
@@ -17,7 +17,7 @@ describe("packageChunkName", () => {
 
 	// The content script reaches it, and a grouped copy would break the script's single file.
 	test("never regroups @aztec-labs/wallet-sdk", () => {
-		const sdk = "/repo/node_modules/.bun/@aztec-labs+wallet-sdk@6.0.0-rc.1/node_modules/@aztec-labs/wallet-sdk/dest/crypto.js"
+		const sdk = "/repo/node_modules/.bun/@aztec-labs+wallet-sdk@6.0.0-rc.3/node_modules/@aztec-labs/wallet-sdk/dest/crypto.js"
 		expect(packageChunkName(sdk)).toBeNull()
 		expect(artifactChunkName(sdk.replace("crypto.js", "schema.json"))).toBeNull()
 	})
