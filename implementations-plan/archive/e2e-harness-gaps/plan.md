@@ -42,14 +42,17 @@ post_implementation_hardening: not scheduled
     - CLAUDE.md's full soak matrix passed at e1c4f33f, with one quiet-host re-run of the extension's Node reference (§ Audit verdicts).
 - **Dropped or refuted:**
   - #165's discovered-authwit half: I2 did not hold, so the env gate stays and #165 stays open with the reason; a later comment there names `ensureStandardPublicChecks` as the way in.
-  - The final cross-arc Codex pass (§ Post-implementation step 3) did not run. Each arc landed on `dev` alone, with its own converged loop (D-orch-1), so no stack existed to diff across.
+  - The final cross-arc Codex pass (§ Post-implementation step 3) did not run, and nobody waived it.
+    - Each arc landed on `dev` alone (D-orch-1) and was reviewed on a base that already held the arcs below it, so each loop saw its own seams.
+    - A diff from 4a357b7 to the top arc would now carry every other lane's merged work.
+    - Arc 4's last review was one round over its docs, as the orchestrator scoped it.
   - Not this lane:
     - #195 shipped with ci-release-supply as #370 (D-orch-17);
     - #81 was closed as not planned by the owner (P5-01, D-orch-17);
     - #190 stays `blocked:external`, with no in-repo half (§ Scope);
     - #269, the navigation flake arc 4's first gate met, is closed.
   - Not promoted to `lessons.md`: a soak compare's one-off Node timeout under host load ([lessons/phase-4.md](lessons/phase-4.md)). The file holds 8,191 bytes, and no entry retires for it.
-- **Size:** 930 lines against mid's 350. Six arcs' plan audits and implementation reviews are recorded inline; no trim was run at close-out.
+- **Size:** 934 lines against mid's 350. The close-out cut § Post-implementation's copy of README's table; what remains is six arcs' decisions, plan audits and implementation reviews.
 - **Known limits:** none.
 - **Open items:** #165 (its discovered-authwit half).
 - **Seeds retired:** the `/goal` and `/loop` seeds below were never run, because the orchestrator drove the lane. This record is evidence, not instructions.
@@ -833,7 +836,7 @@ The matrix ran at e1c4f33f after `bun install --frozen-lockfile` (no changes), o
 | `packages/wallet-sdk-schema-patch` | 0 / 15 | 0 / 15 | 785 / 646 ms | OK |
 
 - **The extension's failed compare had one cause.** In Node run 16 of 30, `src/utils/zod-jitless.test.ts` "zod reads the jitless flag from the global this module sets" failed on vitest's 5 s test timeout; its stack carries vitest's `STACK_TRACE_ERROR` capture. The test's whole body is two dynamic imports through vitest's module runner: the fork's first `import("zod")`, then one assertion. It asserts no timing, so a host with load 120 to 200 can push the transform and evaluation of those imports past 5 s. The other 29 Node runs passed it, as did all 30 Bun runs. All three problems in the compare come from that one run: the run row, `failedRuns=1`, and the test's status counts.
-- **A load artefact, cleared on a quiet host.** The same test failed once in 30 at f8d1200, at load 200 to 330 (`lessons/phase-4.md`). D-orch-20 re-ran only the failed side, with nothing raised, retried or set aside: 30 Node runs at the same e1c4f33f, compared with the matrix's Bun candidate. The re-run went from 2026-10-15 04:37Z to 06:12Z (95 min), starting at load 25 with 0 live rows: 30/30 clean, an identical 11,964-test inventory, `COMPARE OK`. The candidate's 10 Bun-only tests (`store-icons`, `windows/{json,logger}`) were set aside as `BUN_ONLY_FILES` pins them, each passing every Bun run. Both runs are kept as orchestrator evidence: `extension-node.json`, `extension-compare.log`, `extension-node-rerun.json`, `extension-rerun-compare.log`.
+- **Consistent with a load-related timeout, and cleared by a quiet-host re-run.** The same test failed once in 30 at f8d1200, at load 200 to 330 (`lessons/phase-4.md`). One failure in 60 Node runs at e1c4f33f supports reading it as a load artefact, but it cannot rule out a rare intermittent. D-orch-20 re-ran only the failed side, with nothing raised, retried or set aside: 30 Node runs at the same e1c4f33f, compared with the matrix's Bun candidate. The re-run went from 2026-10-15 04:37Z to 06:12Z (95 min), starting at load 25 with 0 live rows: 30/30 clean, an identical 11,964-test inventory, `COMPARE OK`. The candidate's 10 Bun-only tests (`store-icons`, `windows/{json,logger}`) were set aside as `BUN_ONLY_FILES` pins them, each passing every Bun run. Both runs are kept as orchestrator evidence: `extension-node.json`, `extension-compare.log`, `extension-node-rerun.json`, `extension-rerun-compare.log`.
 - **The side gates at e1c4f33f, 2026-10-14:**
   - `bun run test:all` five times: every run exit 0, 125 to 146 s each, with no native-loader block and no CommonJS line in any log.
   - `pr-quick.yml` dispatch 38513631120: `headSha` e1c4f33, success (quality-status; unit tests; lint and typecheck; Chrome, Firefox, landing and Storybook builds).
@@ -843,6 +846,20 @@ The matrix ran at e1c4f33f after `bun install --frozen-lockfile` (no changes), o
   - `bunx biome check vitest.base.mts`: `Checked 1 file`. `bun run test:ci-gating`: 547 pass.
   - The dist diff (step 3), at b9cce85: Chrome and Firefox builds byte-identical to `dev` 3133fb0, 585 files each. b9cce85 to e1c4f33f renames six soak fixture configs and edits plan files, none of which the build reads.
   - No Firefox twin ran: arc 4 changes no fixture, focus, window or WebAuthn code.
+
+### Close-out docs round: Codex (gpt-6.1-sol, high, read-only), 2026-10-15
+
+The orchestrator scoped this round to the docs after e1c4f33f, since the code loop had converged. Verdict: **approve with fixes**, with high confidence in the figures and moderate confidence in the load reading. Codex verified:
+
+- every workspace's counts and medians, the dates, the side gates, and the PR and issue states;
+- D29's conflict claim: the close-out head conflicts with `origin/dev` in `implementations-plan/index.md` only, while add1c80 merges cleanly. It found no index edit that avoids the conflict.
+
+| # | Finding | Disposition |
+|---|---|---|
+| CO-1 | Medium. The skipped cross-arc pass is explained, but nobody waived it | Accepted: the Outcome says it did not run, that nobody waived it, and why |
+| CO-2 | Medium. "The timeout tracks host load, not the change" claims a cause the runs do not establish | Accepted: both texts now say the runs fit a load-related timeout and cannot rule out a rare intermittent. PR #477's copy keeps the first wording until this close-out lands |
+| CO-3 | Low. The plan is over its size target and no trim ran | Accepted in part: § Post-implementation's copy of README's table is cut. The rest is decisions and audit evidence |
+| CO-4 | Low. #165's Record does not link this plan | Accepted: its Record now names `implementations-plan/archive/e2e-harness-gaps/plan.md#outcome` |
 
 ## Post-implementation
 
@@ -857,20 +874,7 @@ Run per arc, at each arc boundary, before `gh stack add` opens the next arc; the
 5. **Close-out**, as the stack's docs-only top layer:
    - An `## Outcome` block directly after the front matter: date, status, what shipped with PR numbers, each dropped or refuted item with its disposition, an `Open items:` line naming issue numbers or `none`, and a line retiring the `/goal` and `/loop` seeds below.
    - Promote generalizable gotchas to `implementations-plan/lessons.md` (8 KiB budget; dedupe, retire, date tool versions).
-   - File open items where CLAUDE.md § Where open work lives says (copied here):
-
-     | Situation | Home |
-     |---|---|
-     | Work inside the implementation you are on | the active `plan.md` and the PR |
-     | Actionable work that outlives the plan | a GitHub issue, with a domain label and a `Record` link to the archived plan |
-     | Needs a product call, or waits on something outside the repo | an issue labelled `owner-decision` or `blocked:external` |
-     | A suspected exploitable weakness | a private draft security advisory |
-     | Rejected, superseded or already done | a disposition line in the Outcome block |
-     | Knowledge that prevents a repeat | `implementations-plan/lessons.md` |
-     | A legal or store blank with a release deadline | `BEFORE-LAUNCH.md` |
-     | Accepted code work that blocks launch | the `v1.0.0` milestone |
-
-     Dedupe first (`gh issue list --state all --search "<words>"`); an issue body has `## What happens`, `## Where`, `## Impact`, `## Possible fix`, `## Record`. Comment on every lane issue left open with the reason.
+   - File open items where `implementations-plan/README.md` § Where open work lives says, deduplicated first; comment on every lane issue left open with the reason.
    - Merge `origin/dev` into the close-out branch first and read what changed in `index.md` and `lessons.md` (never a union merge).
    - `git mv implementations-plan/e2e-harness-gaps implementations-plan/archive/e2e-harness-gaps` in its own commit; repair links the extra level breaks (`git grep -n e2e-harness-gaps`); move the index line to `archive/index.md`; delete `STATUS.md` in the close-out.
    - Report and wait. Merging is the orchestrator's call.
