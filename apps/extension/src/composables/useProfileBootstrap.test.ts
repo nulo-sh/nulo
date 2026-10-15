@@ -17,10 +17,24 @@ vi.mock("@/utils/core", () => {
 		ensureDefaultAccount: vi.fn(async () => undefined),
 		getAccounts: vi.fn(async () => []),
 	}
+	const listeners = new Set<(e: unknown) => void>()
+	const networkResetMock = {
+		getStaleNetwork: vi.fn(async (_networkId: string): Promise<unknown> => null),
+		resetStaleNetwork: vi.fn(async (_networkId: string, _confirmed: unknown): Promise<unknown> => null),
+		onStaleNetworkChanged: {
+			add: (fn: (e: unknown) => void) => listeners.add(fn),
+			remove: (fn: (e: unknown) => void) => listeners.delete(fn),
+			invoke: (e: unknown) => {
+				for (const fn of [...listeners]) fn(e)
+			},
+		},
+		onDisconnected: { add: vi.fn(), remove: vi.fn() },
+	}
 	const managers = {
 		profile: profileMock,
 		network: networkMock,
 		account: accountMock,
+		networkReset: networkResetMock,
 	}
 	return {
 		managers,
@@ -48,6 +62,7 @@ const netMock = vi.hoisted(() => ({
 	getPrimaryNetwork: vi.fn(),
 	setActiveNetwork: vi.fn(),
 	getNodeStatus: vi.fn(),
+	getNetworks: vi.fn(),
 }))
 vi.mock("@/wallet/services/network/client", () => ({
 	NetworkServiceClient: vi.fn(function () {
@@ -83,6 +98,13 @@ import { isActivatingOtherThan, supersedeProfileActivations, useProfileBootstrap
 // vue + vue-router, so we mirror the symbol onto globalThis manually.
 ;(globalThis as { managers?: unknown }).managers = managers
 
+/** The mocked reset client, typed as the mock it is. */
+const reset = managers.networkReset as unknown as {
+	getStaleNetwork: ReturnType<typeof vi.fn>
+	resetStaleNetwork: ReturnType<typeof vi.fn>
+	onStaleNetworkChanged: { invoke: (e: unknown) => void }
+}
+
 const fakeProfile = { id: "prof-1", name: "Test", type: "password" as const } as never
 
 beforeEach(() => {
@@ -116,11 +138,84 @@ beforeEach(() => {
 	netMock.getPrimaryNetwork.mockResolvedValue(null)
 	netMock.setActiveNetwork.mockResolvedValue(undefined)
 	netMock.getNodeStatus.mockResolvedValue(0)
+	reset.getStaleNetwork.mockResolvedValue(null)
 	;(managers.profile.getProfiles as ReturnType<typeof vi.fn>).mockResolvedValue([fakeProfile])
 	;(managers.profile.getActiveProfile as ReturnType<typeof vi.fn>).mockResolvedValue(null)
 })
 
+const staleView = (over: Record<string, unknown> = {}) => ({
+	networkId: "n1",
+	name: "Testnet",
+	cause: { networkReset: true, addressesMoved: false },
+	blocked: false,
+	accounts: [{ name: "Account 1", address: `0x${"1".repeat(64)}` }],
+	unmovable: [],
+	switchToSeedNode: false,
+	probedEndpoint: null,
+	...over,
+})
+
+const lastAccountClient = () =>
+	vi.mocked(AccountServiceClient).mock.results.at(-1)?.value as { ensureDefaultAccount: ReturnType<typeof vi.fn> }
+
 describe("useProfileBootstrap", () => {
+	test("a quarantined active network loads no account and starts nothing: the takeover owns the screen", async () => {
+		reset.getStaleNetwork.mockResolvedValue(staleView())
+		const { bootstrapActiveProfile } = useProfileBootstrap()
+		const appStore = useAppStore()
+		await bootstrapActiveProfile(fakeProfile)
+		expect(appStore.staleNetwork?.networkId).toBe("n1")
+		expect(appStore.accounts).toEqual([])
+		expect(appStore.account).toBeUndefined()
+		expect(lastAccountClient().ensureDefaultAccount).not.toHaveBeenCalled()
+		expect(reset.resetStaleNetwork).not.toHaveBeenCalled()
+	})
+
+	test("a network cause with nothing to move resets behind the loader, and the re-keyed row loads its accounts", async () => {
+		reset.getStaleNetwork.mockResolvedValueOnce(staleView({ accounts: [] })).mockResolvedValue(null)
+		reset.resetStaleNetwork.mockImplementationOnce(async (networkId: string) => {
+			queueMicrotask(() =>
+				reset.onStaleNetworkChanged.invoke({
+					profileId: "prof-1",
+					networkId,
+					completed: { addressesMoved: false },
+				}),
+			)
+			return null
+		})
+		netMock.getNetworks.mockResolvedValue([{ id: "n1", chainId: 2, kind: "testnet" }])
+		const { bootstrapActiveProfile } = useProfileBootstrap()
+		const appStore = useAppStore()
+		await bootstrapActiveProfile(fakeProfile)
+		expect(reset.resetStaleNetwork).toHaveBeenCalledWith("n1", expect.objectContaining({ accountCount: 0 }))
+		expect(appStore.network?.chainId).toBe(2)
+		expect(appStore.staleNetwork).toBeNull()
+		expect(lastAccountClient().ensureDefaultAccount).toHaveBeenCalledWith("prof-1", 2, "Nulo_v1", "Account 1")
+	})
+
+	test("a failed automatic run re-reads the view, so its paused journal shows R1 instead of nothing", async () => {
+		const paused = staleView({ accounts: [], reset: { running: false, purged: true, doneCount: 0 } })
+		reset.getStaleNetwork.mockResolvedValueOnce(staleView({ accounts: [] })).mockResolvedValue(paused)
+		reset.resetStaleNetwork.mockImplementationOnce(async (networkId: string) => {
+			queueMicrotask(() => reset.onStaleNetworkChanged.invoke({ profileId: "prof-1", networkId, failed: true }))
+			return null
+		})
+		const { bootstrapActiveProfile } = useProfileBootstrap()
+		const appStore = useAppStore()
+		await bootstrapActiveProfile(fakeProfile)
+		expect(appStore.staleNetwork).toEqual(paused)
+		expect(lastAccountClient().ensureDefaultAccount).not.toHaveBeenCalled()
+	})
+
+	test("a node switch is never unattended: the view stays for A1 to confirm", async () => {
+		reset.getStaleNetwork.mockResolvedValue(staleView({ accounts: [], switchToSeedNode: true }))
+		const { bootstrapActiveProfile } = useProfileBootstrap()
+		const appStore = useAppStore()
+		await bootstrapActiveProfile(fakeProfile)
+		expect(reset.resetStaleNetwork).not.toHaveBeenCalled()
+		expect(appStore.staleNetwork?.switchToSeedNode).toBe(true)
+	})
+
 	test("bootstrapActiveProfile sets appStore.profile", async () => {
 		const { bootstrapActiveProfile } = useProfileBootstrap()
 		const appStore = useAppStore()

@@ -1,4 +1,4 @@
-import { ImportedAccountUnusableError, RecoveryModeError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import { RecoveryModeError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { validateParams } from "@nulo/extension-messaging/zod"
 import type { BrowserApi, StorageChanges } from "@nulo/wallet-core/ports"
@@ -71,9 +71,6 @@ const notResettable = (why: string) => new Error(`${ERR_NOT_RESETTABLE}: ${why}`
 
 const byIndexThenAddress = (a: Account, b: Account) => a.index - b.index || (a.address < b.address ? -1 : a.address > b.address ? 1 : 0)
 
-/** An unusable imported key's message names its address, which no log line carries. */
-const loggable = (error: unknown) => (error instanceof ImportedAccountUnusableError ? error.code : error)
-
 /**
  * The journal is trusted for screens only: before anything runs, its targets and L1 must be the
  * build's seed or the row's own, and `resetChainInPlace` refuses a row not on its source chain, so
@@ -103,6 +100,23 @@ function splitAccounts(onChain: Account[], imported: Map<string, string | null>,
 		accounts.push({ name: account.name, address: account.address })
 	}
 	return { accounts, unmovable, moved }
+}
+
+/** The journal's account list: each imported row with its resealed key, or by name among the
+ *  unmovable when its key did not open. */
+function journalAccounts(rows: Account[], resealed: ReadonlyMap<string, { newAddress: string; encryptedSigningKey: string } | null>) {
+	const accounts: JournalAccount[] = []
+	const unmovable: string[] = []
+	for (const a of rows) {
+		const base = { index: a.index, name: a.name, visible: a.visible, oldAddress: a.address, done: false }
+		if (a.type === AccountType.Nulo_v1) accounts.push({ type: 0, ...base })
+		else if (a.type === AccountType.Imported) {
+			const key = resealed.get(a.address)
+			if (key) accounts.push({ type: 1, ...base, ...key })
+			else unmovable.push(a.name)
+		} else throw notResettable("an account of an unknown type is on the chain")
+	}
+	return { accounts, unmovable }
 }
 
 function conflictsOf(row: Network, networks: Network[], target: number, journal: ResetJournal | undefined) {
@@ -251,11 +265,13 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 		return this.requireView(profile.id, networkId)
 	}
 
-	public async takeResetNotice(): Promise<ResetNotice | null> {
-		validateParams(NetworkResetMethodSchemas.takeResetNotice.params, [], "takeResetNotice")
+	/** Takes `profileId`'s notice only while it is the active profile: a popup that asks for an
+	 *  ended profile cannot consume the next one's. */
+	public async takeResetNotice(profileId: string): Promise<ResetNotice | null> {
+		validateParams(NetworkResetMethodSchemas.takeResetNotice.params, [profileId], "takeResetNotice")
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profiles)
-		return this.staleNetworks.takeNotice(profile.id)
+		return profile.id === profileId ? this.staleNetworks.takeNotice(profile.id) : null
 	}
 
 	// ── Run lock ─────────────────────────────────────────────────────────
@@ -319,7 +335,7 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 			cause: { networkReset: journal.fromChainId !== journal.toChainId, addressesMoved: journal.cause.addressesMoved },
 			blocked: false,
 			accounts: journal.accounts.map((a) => ({ name: a.name, address: a.newAddress ?? a.oldAddress })),
-			unmovable: [],
+			unmovable: journal.unmovable ?? [],
 			switchToSeedNode: journal.switchToSeedNode,
 			probedEndpoint: journal.probedEndpoint,
 			reset: { running, purged: journal.purged, doneCount: journal.accounts.filter((a) => a.done).length },
@@ -328,7 +344,7 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 
 	/**
 	 * The network cause is recomputed from the row and the build, never read from the record, so a
-	 * forged record cannot start the unattended run of a network with no accounts. Each imported
+	 * forged record cannot move a network to another chain or node. Each imported
 	 * key on the chain is opened: one that does not open is `unmovable`, one that derives another
 	 * address moves the addresses, so the screen never promises an address that will change.
 	 */
@@ -418,15 +434,7 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 			throw notResettable("Mainnet is never reset")
 		await this.profiles.assertRunFence(fence)
 		const resealed = await this.accounts.resealImportedForReset(profileId, fromChainId, toChainId)
-		const accounts: JournalAccount[] = []
-		for (const a of rows) {
-			const base = { index: a.index, name: a.name, visible: a.visible, oldAddress: a.address, done: false }
-			if (a.type === AccountType.Nulo_v1) accounts.push({ type: 0, ...base })
-			else if (a.type === AccountType.Imported) {
-				const key = resealed.get(a.address)
-				if (key) accounts.push({ type: 1, ...base, ...key })
-			} else throw notResettable("an account of an unknown type is on the chain")
-		}
+		const { accounts, unmovable } = journalAccounts(rows, resealed)
 		if (accounts.length !== view.accounts.length) throw new Error(`${ERR_STALE_CHANGED}: the accounts changed since they were shown`)
 		const journal: ResetJournal = {
 			profileId,
@@ -439,6 +447,7 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 			switchToSeedNode: view.switchToSeedNode,
 			probedEndpoint: view.probedEndpoint,
 			accounts,
+			unmovable,
 		}
 		await this.profiles.assertRunFence(fence)
 		const check = { chainId: fromChainId, toChainId, primary: view.probedEndpoint }
@@ -472,7 +481,7 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 			const addressesMoved = await this.run(flight, fence)
 			this.endFlight(flight, { running: false, completed: { addressesMoved } })
 		} catch (error) {
-			this.logWarn("network reset stopped", { networkId: flight.networkId, step: flight.step, error: loggable(error) })
+			this.logWarn("network reset stopped", { networkId: flight.networkId, step: flight.step, error })
 			this.endFlight(flight, { running: false, failed: true })
 		}
 	}

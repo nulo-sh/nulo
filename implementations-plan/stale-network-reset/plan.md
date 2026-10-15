@@ -362,6 +362,7 @@ The mockups are the spec. A deviation is an Ask; none is made silently.
 | S1a | Network reset: unlock gives A1; Switch network round trip (the networks page shows no account block); double-click RESET; A4; A5 toast with the account loaded; row chainId equals the seed; addresses, names, indexes kept; Local untouched | the unlock → classify → bootstrap → takeover → router chain runs only in the real shell, and A5's account load races the switch handler only there | 40 s |
 | S1b | Address change on Testnet (A2), with one hidden account and one account imported through the UI: Nulo_v1 addresses become the true derivation; the hidden one stays hidden; the imported account survives at its address and its key opens (re-export preview); "new addresses" toast | the journal's reseal, the purge of key rows and the ciphertext check run together only in the real worker. The helper moves only Nulo_v1 address rows, so it needs no DEK; both causes with an imported key are unit-tested with real seal and unseal | 35 s |
 | S1c | Mainnet A6: one button; a user-data storage snapshot is unchanged after Switch | only a full popup run shows that no bootstrap, seeder or default-account path writes to Mainnet's rows | 20 s |
+| S1d | R2: deleting, from Networks, the network that holds the new chain brings back A1 (D56) | the re-read hangs on the shell's watcher of the network list, and `app.vue` has no harness | 10 s (measured 7.4 s, Chrome) |
 
 A mixed tamper that still blocks the profile is not an e2e: the coordinator unit test and `AccountIntegrityBarrier.test.ts` prove it.
 
@@ -431,7 +432,7 @@ NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent <files>   # builds its 
 
 **Validation gate:** `bun run audit:vue`, `bun run test:ci-gating`, then the armed smoke build and the full smoke suite on both browsers, then `bun run e2e:agent` on both browsers, all as § Running the gates, at retry 0. Pass: all exit 0; no existing e2e regresses on either browser.
 
-### Phase 5. Popup takeover
+### Phase 5. Popup takeover ✓
 
 1. Add the store field, the client in `managers`, `useStaleNetwork`, and the bootstrap and switch skips.
 2. Add the bootstrap resume through `getPendingReset`.
@@ -452,7 +453,7 @@ NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent <files>   # builds its 
 
 **Validation gate:** the armed smoke build, then `tests/e2e/stale-network.test.ts` and the full smoke suite on both browsers at retry 0 (§ Running the gates), then `STALE_NETWORK_CAPTURES=1 NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension test:e2e tests/e2e/stale-network-captures.test.ts`. Pass: both browsers green; every capture produced and none tracked by git; the owner's sign-off quoted.
 
-### Phase 7. Docs
+### Phase 7. Docs ✓
 
 1. Rewrite the `CLAUDE.md`, `ARCHITECTURE.md` and Branch B text.
 2. Dedupe, then file each known limit as a closed `known-limit` issue.
@@ -520,6 +521,14 @@ Sources: **M** main leg, **C** Codex leg, **F** Opus leg; **K** contradiction ch
 | D46 | No copy promises re-importing an old key file after an address change | review 2 | accepted: `decodeAccountExport` refuses a file whose claimed address the current derivation does not give (`S/account/service.ts:831`); known limit |
 | D47 | The view recomputes `cause.networkReset` from the row; a network cause needs `fromChainId ≠ toChainId` | review 2 | accepted: A2's automatic run must not start from a forged record |
 | D48 | The reset deletes the reset chain's dApp sessions in its own purge step, not through every chain purge | Phase 4 gate | accepted: a chain-purge subscriber also deleted a deleted network's sessions, which `connect-unserved-chain.test.ts` pins as kept until the next connect drops them (so a network added back keeps them) |
+| D49 | The unusable-imported-account error never names the account | arc 2 review (C) | accepted: every log line that printed it carried the address; fixed in the message, not at each log site |
+| D50 | The popup's per-session stale-network state lives in a session that every lock, unlock and profile change replaces | arc 2 review (C) | accepted: four rounds of fences for one interleaving each showed the class; an ended session writes nothing and holds back nothing of the next |
+| D51 | `takeResetNotice(profileId)` hands a notice only to the profile still active | arc 2 review (C) | accepted; a take answered for a profile that ends before the answer lands loses one toast, which a peek-and-acknowledge record would not justify |
+| D52 | A dApp window takes no part: no takeover, no resume, no notice, no route | arc 2 review (C) | accepted: a completion routed a dApp window to Home |
+| D53 | The takeover closes every popup open over the route when it appears | arc 2 review (C) | accepted: Receive's address outlived a takeover that started under it; listed for the owner's capture sign-off |
+| D54 | A run that moves no account shows the loader (a spinner, no copy) in every popup; the popup that started it keeps the loader until the store holds the row's new view | arc 2 loop (C) | accepted: "a run with N = 0 shows the loader" had no screen behind it, so the starting popup stayed interactive while another popup showed A4; listed for the owner's capture sign-off (A4c) |
+| D55 | Send and Receive act only on the active network's own account | arc 2 loop (C) | accepted: a stale target's view waits up to 5 s for A6's probe while the store still holds the previous network's account, whose address Receive would show under the new network's name; the buttons look the same and do nothing until the Header shows the account |
+| D56 | Adding, renaming or deleting a network re-reads the active network's stale view | final pass (C) | accepted: R2 kept its cached holder after the user deleted it from Networks, with no way to reset; S1d pins the shell's wiring |
 
 ## Audit verdicts
 
@@ -554,6 +563,10 @@ The owner answered A1–A15 and proposed the run lock (A16). Ten boards for fail
 
 Over `1ba770cf..5785b342`, then each fix. **Round 1 (fresh): 4 material.** Accepted: a full backup could omit accounts while a reset ran; a capture could write a journal after the profile's deletion cleared it; a network added on the target chain during capture. Rejected: a guard on transaction polling of a quarantined chain, a new guard surface the plan sends to the owner (it reads chain truth for rows the reset deletes). **Round 2 (resumed): 2 material, accepted**: the passkey backup slices re-check the journal after their reads; an obsolete runtime verdict writes nothing. **Round 3 (resumed): 1 material, accepted**: a chain that classifies clean at runtime refuses the operation instead of blocking the profile. **Round 4 (resumed, verifying round 3): "VERDICT: no new material findings".** Fixes in `8eb26c66`, `712809f4`, `f4d8912f`. The network gate then found D48 (`908455f4`); **round 5 (resumed, verifying it): "VERDICT: no new material findings"**.
 
+### Arc 2 Codex fix loop (gpt-6.1-sol high), 2026-10-15
+
+Over the Phase 5–7 commits, fresh; a preliminary pass on the uncommitted code had converged (D49–D53), and this one was told its convergence was not evidence. **Round 1: 3 material, all accepted**: a completion that reached a booting popup before its session began left it on A4 with no account (the resume catches up); Receive could show the previous network's address while a stale target's view waited on A6's probe (D55); an automatic run showed nothing in the popup that started it and A4 in another (D54). The low ones: A1 and A3's type roles, itemized in `lessons/phase-6.md` for the sign-off, and a comment's history. **Round 2 (resumed): 2 material, accepted**: an ended session's automatic run kept the next session behind the loader; the catch-up and the completion event could both run one completion. **Round 3 (resumed): "VERDICT: no new material findings"**. Fixes in `8d28bfd6`, `02d3a5fa`, `5713f56b` (SHAs after the arc was rebased onto the final pass's arc 1 fix).
+
 ## Delivery
 
 Trunk `dev`; `gh stack submit --auto`; **merge the whole stack together**. `code_review` is `off` on every arc.
@@ -574,7 +587,7 @@ Follow [`implementations-plan/README.md` § Post-implementation standard](../REA
 - Step 1 is absent (`code_review: off`).
 - Step 2 runs per arc while that arc is the stack tip: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. The prompt carries the arc map, this plan and its ledger, the adversarial ask, the two rules verbatim, and a UI-fidelity check against § UI fidelity. A final fresh session covers the net diff from `1ba770cf`.
 - Approval boundaries: a change to the record or journal shape, a new guard surface, or any copy change is a plan change that stops for the owner.
-- Known limits, each a closed `known-limit` issue: imported-only chains, and the refused re-import of an old key file after an address change (A10, D46); codec-hidden rows on a reset chain; the lenient-mode boot bounce (I2); custom-network node reset not detected; a corrupt journal after the purge; one journal per profile (R3); a full backup whose reads straddle a whole reset (A11); an imported key that does not open is dropped (A14).
+- Known limits, each a closed `known-limit` issue: imported-only chains, and the refused re-import of an old key file after an address change (A10, D46); codec-hidden rows on a reset chain; the lenient-mode boot bounce (I2); custom-network node reset not detected; a corrupt journal after the purge; one journal per profile (R3); a full backup whose reads straddle a whole reset (A11); an imported key that does not open is dropped (A14). Filed as #468–#475, with #476 for D51's lost toast; #427 already held the imported-only half of the first.
 - #262 stays closed; its admission rules are unchanged, which a review confirms.
 - Close-out on `stale-network-reset-close-out`: merge `origin/dev`, reconcile `index.md` and `lessons.md` by reading them, write the Outcome, promote lessons, file open items, `git mv` into `archive/` in its own commit, `bun run check:plans` green. Then report and wait: merging is the owner's call.
 - Teardown after the merge: once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/stale-network-reset/plan.md` succeeds, `ExitWorktree` with `keep` (when entered through `EnterWorktree`), then `agent-worktree done stale-network-reset --merged`. A `/loop` session checks on every firing; a `/goal` session arms one background wait after its wrap-up report.

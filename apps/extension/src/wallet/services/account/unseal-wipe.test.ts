@@ -137,14 +137,14 @@ describe("signing load: wipes DEK, plaintext, copy before the contract is constr
 
 	test("an address mismatch has already wiped all three", async () => {
 		const service = await makeHarness({ address: "0xB" })
-		await expect(service.getAccountContract("p1", 1, "0xA")).rejects.toThrow(/^Imported account 0xA is unusable: address mismatch$/)
+		await expect(service.getAccountContract("p1", 1, "0xA")).rejects.toThrow(/^Imported account is unusable: address mismatch$/)
 		expect(state.log).toEqual([...ALL_WIPED, "construct", "constructed"])
 	})
 
 	test("a non-canonical scalar never constructs and still wipes all three", async () => {
 		const service = await makeHarness({ skFill: 0xff })
 		await expect(service.getAccountContract("p1", 1, "0xA")).rejects.toThrow(
-			/^Imported account 0xA is unusable: signing key could not be recovered$/,
+			/^Imported account is unusable: signing key could not be recovered$/,
 		)
 		expect(state.log).toEqual(ALL_WIPED)
 	})
@@ -152,7 +152,7 @@ describe("signing load: wipes DEK, plaintext, copy before the contract is constr
 	test("an unseal rejection wipes the DEK, the only buffer that exists", async () => {
 		const service = await makeHarness({ unsealFails: true })
 		await expect(service.getAccountContract("p1", 1, "0xA")).rejects.toThrow(
-			/^Imported account 0xA is unusable: signing key could not be recovered$/,
+			/^Imported account is unusable: signing key could not be recovered$/,
 		)
 		expect(state.log).toEqual(["unseal", "wipe:dek"])
 	})

@@ -46,6 +46,7 @@ import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import { TransactionServiceClient } from "@/wallet/services/transaction/client"
 import { TxStatus } from "@/wallet/services/transaction/spec"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
+import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
 
 export type BalanceScope = ActivityScope
 export type SliceStatus = "idle" | "fetching" | "ready" | "degraded"
@@ -61,6 +62,8 @@ export interface GasSlice {
 	forcedVersion: number
 	retryDebt: boolean
 	lastError?: string
+	/** The last read failed because this imported account's stored key does not open, which no retry fixes. */
+	accountUnusable?: boolean
 }
 
 export interface FpcSlice {
@@ -178,11 +181,12 @@ function gasSuccessEntry(entry: BalanceEntry, opts: FetchOpts, result: GasBalanc
 			// and wakes the degraded card's recovery watch.
 			retryDebt: opts.cause === "retry" ? false : entry.gas.retryDebt,
 			lastError: undefined,
+			accountUnusable: false,
 		},
 	}
 }
 
-function gasFailureEntry(entry: BalanceEntry, opts: FetchOpts, failed: string | undefined): BalanceEntry {
+function gasFailureEntry(entry: BalanceEntry, opts: FetchOpts, failed: string | undefined, accountUnusable: boolean): BalanceEntry {
 	return {
 		...entry,
 		gas: {
@@ -193,6 +197,7 @@ function gasFailureEntry(entry: BalanceEntry, opts: FetchOpts, failed: string | 
 			// A tx-refresh failure creates no retry debt (D11).
 			retryDebt: opts.cause === "forced" ? entry.gas.retryDebt : true,
 			lastError: failed,
+			accountUnusable,
 		},
 	}
 }
@@ -483,6 +488,7 @@ class BalancesCore {
 		})
 		let result: GasBalances | undefined
 		let failed: string | undefined
+		let accountUnusable = false
 		try {
 			if (opts.cause === "forced") {
 				// Never join a raw flight that predates the trigger: wait it
@@ -512,6 +518,7 @@ class BalancesCore {
 			)
 		} catch (err) {
 			failed = errorMessageFromUnknown(err)
+			accountUnusable = err instanceof ImportedAccountUnusableError
 		}
 		if (this.isGasRunStale(key, scope, epoch, opts, mySeq)) return
 		const entry = this.entries.value[key]
@@ -520,7 +527,7 @@ class BalancesCore {
 			key,
 			result !== undefined
 				? gasSuccessEntry(entry, opts, result, this.forcedGasPending.has(key))
-				: gasFailureEntry(entry, opts, failed),
+				: gasFailureEntry(entry, opts, failed, accountUnusable),
 		)
 	}
 

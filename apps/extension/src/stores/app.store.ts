@@ -5,6 +5,7 @@ import type { Ref } from "vue"
 
 import type { Account } from "@/wallet/services/account/client"
 import type { Network } from "@/wallet/services/network/client"
+import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
 import { NodeStatus } from "@/wallet/services/network/client"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import type { Tx } from "@/wallet/services/transaction/spec"
@@ -56,6 +57,7 @@ export const useAppStore = defineStore("app", () => {
 	const network = ref<Network>()
 	const networkStatus = ref<string>()
 	const networks = ref<Network[]>([])
+	const stale = createStaleNetworkState()
 
 	const activity = useActivityStore()
 	const inFlight = createInFlightTracker({ profile, account, network })
@@ -91,6 +93,8 @@ export const useAppStore = defineStore("app", () => {
 		networkStatus,
 		syncNetworkStatus: networkActions.syncNetworkStatus,
 		networks,
+		staleNetwork: stale.staleNetwork,
+		syncStaleNetwork: stale.syncStaleNetwork,
 		dappSessions,
 		renameNetwork: networkActions.renameNetwork,
 		removeNetwork: networkActions.removeNetwork,
@@ -120,6 +124,24 @@ export const useAppStore = defineStore("app", () => {
 		setOnboardingCompleted: onboarding.setOnboardingCompleted,
 	}
 })
+
+// ---------------------------------------------------------------------------------------------
+// Stale network
+// ---------------------------------------------------------------------------------------------
+
+/** The active network's stale view; null while it is live. A read commits only if no newer read
+ *  started, so a quick switch never lands the previous network's view. */
+function createStaleNetworkState() {
+	const staleNetwork = ref<StaleNetworkView | null>(null)
+	let reads = 0
+	const syncStaleNetwork = async (networkId: string): Promise<StaleNetworkView | null> => {
+		const read = ++reads
+		const view = await managers.networkReset.getStaleNetwork(networkId)
+		if (read === reads) staleNetwork.value = view
+		return view
+	}
+	return { staleNetwork, syncStaleNetwork }
+}
 
 // ---------------------------------------------------------------------------------------------
 // Onboarding flag

@@ -74,6 +74,9 @@ export const ResetJournalSchema = z.object({
 	switchToSeedNode: z.boolean(),
 	probedEndpoint: ProbedEndpointSchema.nullable(),
 	accounts: z.array(JournalAccountSchema),
+	/** The imported accounts whose key did not open, by name: the run removes them and re-creates
+	 *  none, and the running screen must not read as a first open. */
+	unmovable: z.array(z.string()).optional(),
 })
 export type ResetJournal = z.infer<typeof ResetJournalSchema>
 

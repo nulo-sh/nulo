@@ -47,6 +47,7 @@ vi.mock("@/stores/app.store", async () => {
 	return { useAppStore: () => fake }
 })
 
+import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
 import { TxStatus } from "@/wallet/services/transaction/spec"
 import { EnsureSuperseded, INIT_FETCH_TIMEOUT_MS, INIT_RETRY_BACKOFF_MS, useBalancesStore, withTimeout } from "./balances.store"
 
@@ -92,6 +93,20 @@ describe("balances store — fetch pipeline", () => {
 		const entry = store.entry(SCOPE_A)
 		expect(entry?.gas.display).toEqual(BAL) // SWR retained for rendering
 		expect(entry?.gas.status).toBe("degraded")
+	})
+
+	it("a read refused for an imported key that does not open marks the gas slice until a read lands", async () => {
+		const store = useBalancesStore()
+		mocks.getGasBalances.mockRejectedValueOnce(ImportedAccountUnusableError.because("signing key missing"))
+		await store.ensure(SCOPE_A, { legs: ["gas"] })
+		expect(store.entry(SCOPE_A)?.gas).toMatchObject({ status: "degraded", accountUnusable: true })
+		mocks.getGasBalances.mockRejectedValueOnce(new Error("down"))
+		await store.ensure(SCOPE_A, { legs: ["gas"] })
+		expect(store.entry(SCOPE_A)?.gas).toMatchObject({ status: "degraded", accountUnusable: false })
+		mocks.getGasBalances.mockRejectedValueOnce(ImportedAccountUnusableError.because("signing key missing"))
+		await store.ensure(SCOPE_A, { legs: ["gas"] })
+		await store.ensure(SCOPE_A, { legs: ["gas"] })
+		expect(store.entry(SCOPE_A)?.gas).toMatchObject({ status: "ready", accountUnusable: false })
 	})
 
 	it("per-leg isolation: an fpc failure never discards a good gas result", async () => {
