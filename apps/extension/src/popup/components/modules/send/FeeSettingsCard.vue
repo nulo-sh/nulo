@@ -107,6 +107,9 @@ const feeDisplayOut = defineModel("feeDisplay", { default: null })
 /** One-way child→parent: the cap as the readout words it, for the review sheet, priced once here. */
 const queuedCapTextOut = defineModel("queuedCapText", { default: null })
 
+/** One-way child→parent: the fee read refused the account because its imported key does not open. */
+const accountUnusableOut = defineModel("accountUnusable", { type: Boolean, default: false })
+
 const methodId = getRandomHex(6)
 
 /**
@@ -589,6 +592,7 @@ const commitFromEntry = (scope, reqKey, saved, baseline) => {
 	committedScope.value = scope
 	isInitComplete.value = true
 
+	accountUnusableOut.value = entry.gas.accountUnusable === true
 	const degraded = entry.gas.status === "degraded" || entry.fpc.status === "degraded"
 	if (degraded) {
 		console.error("Fee init degraded", entry.gas.lastError, entry.fpc.lastError)
