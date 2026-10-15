@@ -1,7 +1,7 @@
 ---
 plan: dynamic-token-list-2
 tier: light (the orchestrator's call; the common brief's panel of two still argues each decision)
-status: planned (Codex approve, round 2); awaiting the orchestrator
+status: arc 1 (P1–P3) implemented, PR open; the warning arc waits on W1
 issues: "#383 (Refs: this arc ships the payload, the signer and the floor; the warning waits on OWNER-ASKS W1 and its own PR closes #383); #386 (Refs: the floor ends its fresh-install delisting half; it stays a closed known limit)"
 driver: claude-code
 claude_model: opus
@@ -67,7 +67,7 @@ The warning on flagged rows and in Send is a new surface. It goes to the owner a
 ## Security & Adversarial Considerations
 
 - **Threat.** A host attacker (DNS, Cloudflare, the deploy) serves any signed list. Before, an older list re-seeds a delisted pair on a fresh install (#386). After, every list below the floor is refused, fetched or stored. Still open: a wallet built before a flag never learns its floor; the freeze; the A2 rollbacks.
-- **Bot write.** The App-token job now writes `floor.json`, which every build enforces, and the owner merges it. The tree test refuses a floor above the served list; a low floor only weakens it. `publish.test.ts` keeps the job's closure free of bare imports.
+- **Bot write.** The App-token job now writes `floor.json`, which every build enforces, and the owner merges it. The tree test refuses a floor above the served list; a low floor only weakens it. `publish.test.ts` keeps the job's closure free of bare imports. A run whose base no longer holds the envelope `dev` serves refuses before any write.
 - **Manual publishes.** A recovery-key publish bypasses `runPublish`; `infra/token-list/README.md` tells it to set `floor.json` when the list delists or flags.
 - **Approval binding.** The digest covers the flags, so `sign` refuses a flag set the approver was not shown.
 - **Unchanged:** the keys, the environment, the signing step, `contents: read`, no new dependency.
@@ -80,7 +80,7 @@ None in this arc. The warning (rows, Send) is W1 and ships only after the owner 
 
 Every gate also runs `bun run lint` and `bun run typecheck:all`, each exiting 0.
 
-### P1. `flagged` in the format and the signer
+### P1. `flagged` in the format and the signer ✓
 
 1. Add the test "a signed list carrying a flagged set verifies and parses" to `parse.test.ts`. Run it on the unchanged parser, then commit it alone: it is the proof on the current parser.
 2. Change `parse.ts` (payload, source, and `checkFlagged` sharing the entry's chainId and address rules), `sign.ts` (`listSha256`, `flagged` signed), `summary.ts` (flag diff, relabel), `open-publish-pr.ts` (body relabel). `list.source.json` stays untouched.
@@ -92,7 +92,7 @@ Every gate also runs `bun run lint` and `bun run typecheck:all`, each exiting 0.
    - `publish.test.ts` renders and escapes the flag diff.
 - **Gate:** `bun run --cwd packages/token-list test`, `bun run --cwd infra/token-list test` and `bun run --cwd infra/token-list check` exit 0.
 
-### P2. The floor
+### P2. The floor ✓
 
 1. Add `floor.json`, `SEQUENCE_FLOOR` and the `readTokenList` parameter. The P2 typecheck proves that the JSON import compiles; add `resolveJsonModule` to `packages/token-list/tsconfig.json` only if it does not.
 2. Add `infra/token-list/scripts/floor.ts`. Change `open-publish-pr.ts` (read at `baseSha`, a commit of two files), `summary.ts` (the floor line) and `check.ts` (`floorFindings`).
@@ -107,7 +107,7 @@ Every gate also runs `bun run lint` and `bun run typecheck:all`, each exiting 0.
    - A stored list below the floor with a future deadline is dropped, refetched at once, and replaced.
 - **Gate:** the P1 commands, `bun run test` and `bun run test:ci-gating` exit 0, and `import-closure.test.ts` passes unchanged.
 
-### P3. Regression and docs
+### P3. Regression and docs ✓
 
 1. Update the docs:
    - `SECURITY.md` § Token list signing: "Rollback and freeze", A2, and the bot write.
@@ -146,6 +146,7 @@ Follows [`implementations-plan/README.md` § Post-implementation standard](../RE
 | D4 | The floor check lives in `readTokenList`, reusing `refused` (both legs agree) | A compare in the service: two call sites, and other readers would skip it |
 | D5 | `VerifiedTokenList` carries `flagged`; the snapshot waits for the warning PR (Opus over Codex) | Snapshot now (Codex: "a small, useful seam"). No consumer reads it before the warning PR, which must add the popup channel anyway. A required field forces edits to unrelated test literals (`price/service.test.ts`, `token/service.composition.test.ts`) |
 | D6 | `raisesFloor` lives in `infra/token-list/scripts` | In the package: it is publish policy, and a cross-package relative import from the App-token job |
+| D7 | Implementation deviations (2026-10-15): the review diff's base is `0ac9e062` (`origin/dev`, merged in before P1), not `116974dc`, whose net diff would carry the rc.3 move; the plan stays active and this PR runs no close-out, by the orchestrator's call (the warning arc closes it); `floor.ts` also owns `floorText`, the file's canonical form, which both the tree check and the publish PR need and which the App-token job cannot import from `check.ts` | Close-out now: the warning arc belongs to this plan |
 
 ## Audit verdicts
 
@@ -157,6 +158,13 @@ Follows [`implementations-plan/README.md` § Post-implementation standard](../RE
 - **Rejected:** Codex 4, a stale `baseSha` that drops a flag. It needs conditions the workflow does not allow (Fact 9).
 
 **Round 2** (Codex, same session, resumed over the revised plan): **approve**, "No new material findings. Confidence: high." Codex withdrew finding 4 on the Fact 9 trace.
+
+**Implementation, arc 1** (Codex `gpt-6.1-sol` high, fresh session over `0ac9e062..HEAD`; one Opus 5.5 diff review beside round 1; log in [lessons/phase-3.md](lessons/phase-3.md)):
+
+- **Round 1:** Codex conditional approve (a fixed-sequence compatibility test a raised floor would red; a publish closure scan blind to side-effect imports and run-time loads; comment trims), all accepted. Opus no must-fix: a flag test for `runPublish` accepted, two nits rejected with reasons.
+- **Finding 4 reversed, on new evidence (Opus, agreed by Codex in round 2):** the stale-base conflict is not a reliable stop, since GitHub's web editor resolves it in M's favour, and the run's summary already diffed against a list no longer served. `runPublish` now refuses before any write when `dev` serves another envelope than the run's base, and the README says to close a conflicted publish PR and re-dispatch. That is a refusal, so it adds no state.
+- **Round 2:** Codex conditional approve over the round-1 fixes and the stale-base path. The refusal landed in 5e3932d6.
+- **Round 3:** Codex **approve**, "No new material findings. Confidence: high." The loop converged.
 
 ## Seeds
 
