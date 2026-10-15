@@ -136,7 +136,7 @@ Size: about 205 lines against the light target of 150. The ledger, the audit ver
 
 **Gate.** `bun run lint && bun run typecheck:all && bun run test`. Pass: exit 0, and the existing `presto.test.ts` case passes unchanged. Layers: lint, typecheck, unit, component.
 
-### Phase 2: the Firefox manifest's optional host permission (P16-04 B)
+### Phase 2: the Firefox manifest's optional host permission (P16-04 B) ✓
 1. Before the edit, run `bun run --cwd apps/extension build:firefox && bunx web-ext@10.6.0 lint --source-dir apps/extension/dist/firefox --self-hosted` and keep the output.
 2. Edit the config and the two pins. Run the same build and lint again.
 
