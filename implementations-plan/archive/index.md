@@ -270,6 +270,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [unserved-chain-connect](unserved-chain-connect/plan.md) — completed — a connection to a chain the profile has no network for is refused, and the wallet says so
 - [ux-cleanup-arc](ux-cleanup-arc/plan.md) — completed in part — five small fixes for user-facing rough edges
 - [ux-feedback](ux-feedback/plan.md) — completed — a user-testing proposal built as five batches on one stack
+- [ux-followups-p17](ux-followups-p17/plan.md) — completed — decision page 17: a Details link underlines on hover, the import line comes back and is read once, Send focus after a keyboard pick, meta text to secondary, singular banners
 - [ux-owner-picks](ux-owner-picks/plan.md) — completed — five UI decisions from the feedback follow-ups, each signed off once built
 - [vitest-on-bun](vitest-on-bun/plan.md) — completed — the workspace Vitest suites run on Bun (all but resolve-asset), shown to be no flakier than Node
 - [vitest-vite-bumps](vitest-vite-bumps/plan.md) — completed — vitest 4 everywhere, and Vite 8 with its polyfill plugin in lockstep
