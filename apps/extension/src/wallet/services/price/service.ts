@@ -142,12 +142,12 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 	/** Usable quotes only: validated, fresh, and fiat display enabled. */
 	public async getQuotes(): Promise<PriceSnapshot> {
 		await this.ensureInitialized()
-		return this.withMapping(await this.usableIfEnabled())
+		return this.snapshotOf(await this.usableIfEnabled())
 	}
 
 	/** Refresh when the cache is stale (popup-connect path), then return usable quotes. */
 	public async refreshIfStale(): Promise<PriceSnapshot> {
-		return this.withMapping(await this.refreshIfStaleQuotes())
+		return this.snapshotOf(await this.refreshIfStaleQuotes())
 	}
 
 	private async refreshIfStaleQuotes(): Promise<PriceState> {
@@ -208,7 +208,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 	/** A new list moves the mapping, not the quotes: the full id table is always requested. */
 	private readonly onListChanged = (): void => {
 		void this.usableIfEnabled()
-			.then((quotes) => this.emit("onQuotesUpdated", this.withMapping(quotes)))
+			.then((quotes) => this.emit("onQuotesUpdated", this.snapshotOf(quotes)))
 			.catch((err) => this.logWarn("list-change handling failed", err))
 	}
 
@@ -250,7 +250,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			if (!enable) {
 				await this.dispatcher.clear()
 				await this.cache.delete()
-				this.emit("onQuotesUpdated", this.withMapping({}))
+				this.emit("onQuotesUpdated", this.snapshotOf({}))
 			} else {
 				const profile = await this.profileService.getActiveProfile()
 				if (profile) {
@@ -273,9 +273,14 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 
 	/** Reads the list as each answer is built, after any price await, so a slow refresh never carries
 	 *  an older list's mapping or flags. */
-	private withMapping(quotes: PriceState): PriceSnapshot {
+	private snapshotOf(quotes: PriceState): PriceSnapshot {
 		const list = this.tokenList.getSnapshot()
-		return { quotes, pricedTokens: pricedTokensOf(list?.entries ?? []), flaggedTokens: flaggedKeysOf(list?.flagged ?? []) }
+		return {
+			quotes,
+			pricedTokens: pricedTokensOf(list?.entries ?? []),
+			flaggedTokens: flaggedKeysOf(list?.flagged ?? []),
+			lastRefreshFailed: this.consecutiveFailures > 0,
+		}
 	}
 
 	private async ensureAlarm(): Promise<void> {
@@ -387,21 +392,29 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 
 			const usable = await this.readUsable()
 			if (gen !== this.generation) return {}
-			this.emit("onQuotesUpdated", this.withMapping(usable))
+			this.emit("onQuotesUpdated", this.snapshotOf(usable))
 			return usable
 		} catch (error) {
-			if (gen !== this.generation) return {}
-			this.consecutiveFailures += 1
-			const backoff = Math.min(BACKOFF_BASE_MS * 2 ** (this.consecutiveFailures - 1), BACKOFF_CAP_MS)
-			const jitter = 0.75 + Math.random() * 0.5
-			this.nextAllowedFetchAt = this.now() + Math.round(backoff * jitter)
-			this.logWarn(`refresh failed (attempt ${this.consecutiveFailures})`, error)
-			return this.readUsable()
+			return await this.recordFailure(gen, error)
 		} finally {
 			clearTimeout(timeout)
 			// Retract only our own controller — a newer refresh may have published its own.
 			if (this.abortController === controller) this.abortController = undefined
 		}
+	}
+
+	private async recordFailure(gen: number, error: unknown): Promise<PriceState> {
+		if (gen !== this.generation) return {}
+		this.consecutiveFailures += 1
+		const backoff = Math.min(BACKOFF_BASE_MS * 2 ** (this.consecutiveFailures - 1), BACKOFF_CAP_MS)
+		const jitter = 0.75 + Math.random() * 0.5
+		this.nextAllowedFetchAt = this.now() + Math.round(backoff * jitter)
+		this.logWarn(`refresh failed (attempt ${this.consecutiveFailures})`, error)
+		const usable = await this.readUsable()
+		if (gen !== this.generation) return {}
+		// A popup open across a scheduled refresh has no request of its own to learn the failure from.
+		this.emit("onQuotesUpdated", this.snapshotOf(usable))
+		return usable
 	}
 
 	/** Validate the provider response per-id; invalid entries are dropped, never stored. */

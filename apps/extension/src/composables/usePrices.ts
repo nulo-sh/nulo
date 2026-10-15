@@ -15,6 +15,63 @@ import { isFlaggedToken } from "@/utils/token-flag"
 /** A token as pricing reads it: priced only when its decimals are known (`knownDecimals`). */
 export type PricedToken = { chainId?: number; contract?: string; decimals?: number; hasDecimals?: boolean }
 
+/** Orders price answers against broadcasts, so a slow answer never overwrites a newer one: an answer
+ *  takes its number when it is requested, a broadcast when it arrives. Dropping a late answer loses
+ *  nothing only because the worker broadcasts every change of its failure state. */
+function latestWins() {
+	let issued = 0
+	let applied = 0
+	return {
+		issue: () => ++issued,
+		admit(seq: number): boolean {
+			if (seq <= applied) return false
+			applied = seq
+			return true
+		},
+		close() {
+			applied = Number.POSITIVE_INFINITY
+		},
+	}
+}
+
+/** The signed list's half of every snapshot: which token each id prices and which pairs it flags. */
+function listState() {
+	/** Which token each id prices. It comes from the signed list, through the worker, with the quotes. */
+	const pricedTokens = ref<PricedTokens>({})
+	/** The pairs the signed list flags as scams, as `flaggedKeysOf` keys. */
+	const flaggedTokens = ref<ReadonlySet<string>>(new Set())
+	/** The mapping has arrived. Until then no surface can tell a priced token from an unpriced one. */
+	const mapped = ref(false)
+	/** Bumped by each full snapshot, a broadcast or a refresh answer: a list read begun before one is older. */
+	let adopted = 0
+
+	const adopt = (snapshot: PriceSnapshot) => {
+		pricedTokens.value = snapshot.pricedTokens
+		flaggedTokens.value = new Set(snapshot.flaggedTokens)
+		mapped.value = true
+	}
+	return {
+		pricedTokens,
+		flaggedTokens,
+		mapped,
+		adoptFull(snapshot: PriceSnapshot) {
+			adopted++
+			adopt(snapshot)
+		},
+		/** From a read that never touches the network: a refresh can wait on the price provider, and a
+		 *  surface must not wait with it to learn what the list says. */
+		read(priceService: PriceServiceClient) {
+			const before = adopted
+			priceService
+				.getQuotes()
+				.then((snapshot) => {
+					if (adopted === before) adopt(snapshot)
+				})
+				.catch(() => {})
+		},
+	}
+}
+
 /**
  * C1 composable over the price feed. Receives the CONNECTED client from the
  * parent (which owns connect/disconnect per the composable conventions) and
@@ -26,54 +83,44 @@ export type PricedToken = { chainId?: number; contract?: string; decimals?: numb
  */
 export function usePrices(priceService: PriceServiceClient) {
 	const quotes = ref<PriceState>({})
-	/** Which token each id prices. It comes from the signed list, through the worker, with the quotes. */
-	const pricedTokens = ref<PricedTokens>({})
-	/** The pairs the signed list flags as scams, as `flaggedKeysOf` keys. */
-	const flaggedTokens = ref<ReadonlySet<string>>(new Set())
-	/** The mapping has arrived. Until then no surface can tell a priced token from an unpriced one. */
-	const mapped = ref(false)
+	const list = listState()
 	/** The first price answer has arrived: a refresh result or failure, or a broadcast. */
 	const settled = ref(false)
+	/** The worker's latest fetch failed, or this composable's request to it did. Usable quotes held
+	 *  beside it stay usable. */
+	const unavailable = ref(false)
 	const now = useTicker(30_000)
-	/** Bumped by each full snapshot, a broadcast or a refresh answer: a list read begun before one is older. */
-	let adopted = 0
 
-	const adoptList = (snapshot: PriceSnapshot) => {
-		pricedTokens.value = snapshot.pricedTokens
-		flaggedTokens.value = new Set(snapshot.flaggedTokens)
-		mapped.value = true
+	const failures = latestWins()
+	const applyFailure = (seq: number, failed: boolean) => {
+		if (failures.admit(seq)) unavailable.value = failed
 	}
 
-	const onQuotesUpdated = (snapshot: PriceSnapshot) => {
-		adopted++
+	const adopt = (snapshot: PriceSnapshot) => {
 		quotes.value = snapshot.quotes
-		adoptList(snapshot)
+		list.adoptFull(snapshot)
 		settled.value = true
 	}
-	priceService.onQuotesUpdated.add(onQuotesUpdated)
-
-	// The list's mapping and flags first, from a read that never touches the network: a refresh can
-	// wait on the price provider, and a surface must not wait with it to learn what the list says.
-	const readList = () => {
-		const before = adopted
-		priceService
-			.getQuotes()
-			.then((snapshot) => {
-				if (adopted === before) adoptList(snapshot)
-			})
-			.catch(() => {})
+	const onQuotesUpdated = (snapshot: PriceSnapshot) => {
+		adopt(snapshot)
+		applyFailure(failures.issue(), snapshot.lastRefreshFailed)
 	}
+	priceService.onQuotesUpdated.add(onQuotesUpdated)
 
 	// Stale-on-connect refresh; the service no-ops when the cache is fresh
 	// (and returns {} when fiat display is disabled).
 	const resnapshot = () => {
-		readList()
+		list.read(priceService)
+		const seq = failures.issue()
 		priceService
 			.refreshIfStale()
-			.then(onQuotesUpdated)
+			.then((snapshot) => {
+				adopt(snapshot)
+				applyFailure(seq, snapshot.lastRefreshFailed)
+			})
 			.catch(() => {
-				// Price data is best-effort; surfaces render token-only without it.
 				settled.value = true
+				applyFailure(seq, true)
 			})
 	}
 	resnapshot()
@@ -93,17 +140,17 @@ export function usePrices(priceService: PriceServiceClient) {
 	/** Quote for a mapped token, or undefined (unmapped / unpriced / stale / disabled). */
 	const quoteFor = (chainId: number | undefined, contract: string | undefined): PriceQuote | undefined => {
 		if (chainId === undefined || contract === undefined) return undefined
-		const entry = getPriceMapEntry(pricedTokens.value, chainId, contract)
+		const entry = getPriceMapEntry(list.pricedTokens.value, chainId, contract)
 		if (!entry) return undefined
 		return usableQuotes.value[entry.coingeckoId]
 	}
 
 	/** The signed list prices this token. False until `mapped`. */
 	const isPriced = (chainId: number | undefined, contract: string | undefined): boolean =>
-		chainId !== undefined && contract !== undefined && getPriceMapEntry(pricedTokens.value, chainId, contract) !== undefined
+		chainId !== undefined && contract !== undefined && getPriceMapEntry(list.pricedTokens.value, chainId, contract) !== undefined
 
 	/** The signed list flags this token as a scam, on its chain and contract. False until `mapped`. */
-	const isFlagged = (token: PricedToken | undefined): boolean => isFlaggedToken(flaggedTokens.value, token)
+	const isFlagged = (token: PricedToken | undefined): boolean => isFlaggedToken(list.flaggedTokens.value, token)
 
 	/** Fee Juice quote (chain-independent mapping). */
 	const feeJuiceQuote = computed<PriceQuote | undefined>(() => usableQuotes.value[FEE_JUICE_ENTRY.coingeckoId])
@@ -128,6 +175,7 @@ export function usePrices(priceService: PriceServiceClient) {
 	}
 
 	const dispose = () => {
+		failures.close()
 		priceService.onQuotesUpdated.remove(onQuotesUpdated)
 		priceService.onConnected.remove(resnapshot)
 	}
@@ -135,7 +183,8 @@ export function usePrices(priceService: PriceServiceClient) {
 	return {
 		usableQuotes,
 		settled: readonly(settled),
-		mapped: readonly(mapped),
+		unavailable: readonly(unavailable),
+		mapped: readonly(list.mapped),
 		isPriced,
 		isFlagged,
 		quoteFor,

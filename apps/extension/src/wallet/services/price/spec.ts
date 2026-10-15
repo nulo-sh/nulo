@@ -42,8 +42,14 @@ export function isQuoteFresh(quote: PriceQuote, now: number): boolean {
 /** Usable quotes with the mapping that says which token each id prices. They travel together, so a
  *  reader never prices a token with a mapping from another moment than its quotes. `flaggedTokens`
  *  rides along as the popup's one channel to the signed list: the `flaggedKeysOf` key of each pair
- *  it flags as a scam, whatever the fiat setting. */
-export type PriceSnapshot = { quotes: PriceState; pricedTokens: PricedTokens; flaggedTokens: readonly string[] }
+ *  it flags as a scam, whatever the fiat setting. `lastRefreshFailed`: this worker's latest fetch
+ *  failed. It says nothing about `quotes`, which may still hold usable cached ones. */
+export type PriceSnapshot = {
+	quotes: PriceState
+	pricedTokens: PricedTokens
+	flaggedTokens: readonly string[]
+	lastRefreshFailed: boolean
+}
 
 export type Methods = {
 	/** Usable quotes only (validated + fresh + fiat display enabled). */
@@ -53,7 +59,7 @@ export type Methods = {
 }
 
 export type Events = {
-	/** Emitted after every successful refresh and every new token list, and with no quotes when
-	 *  fiat display is disabled. */
+	/** Emitted after every fetch no fiat-display flip superseded, failed or not, after every new token
+	 *  list, and with no quotes when fiat display is disabled. */
 	onQuotesUpdated: PriceSnapshot
 }
