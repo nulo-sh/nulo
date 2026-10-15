@@ -130,6 +130,8 @@ Follow `implementations-plan/README.md` § Post-implementation standard at revis
 | D5 | The composite | a scratch script, `--no-install`, the repo's Puppeteer | a committed tool; a scratch import that lets Bun fetch Puppeteer |
 | D6 | SA-1 B | close #364 as not planned; the README fix ships anyway | leave #364 open (an open item with no plan) |
 | D7 | Local Firefox smoke | run it, as the lane brief requires | CI only (Opus #10): the brief names both browsers |
+| D8 | The sweep's rule lookup (implementation deviation) | `enclosingRule` in `source-scan.ts` takes any postcss child, so the sweep keys a declaration by it | a copy of its ancestor loop in the test; the plan's "header only" edit |
+| D9 | When arc 1's Codex loop runs (deviation) | round 1 alongside the smoke e2e, in the host's load window | strictly after the e2e gate: the diff is CSS and a test, and a red e2e that needs a fix resumes the loop with it |
 
 ## Audit verdicts
 
