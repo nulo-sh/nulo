@@ -300,7 +300,9 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	}
 
 	private readonly onAccountDeleted = async (account: Account) => {
-		await this.purgeForAccounts([account.address], account.profileId)
+		// Chain-scoped: an address is the same on every chain with one L1, and deleting an account
+		// on one chain must keep its history on the others.
+		await this.purgeForAccounts([account.address], account.profileId, account.chainId)
 	}
 
 	/**
@@ -325,10 +327,12 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	/** Awaited tx purge for a SET of accounts — called by the deletion coordinator
 	 *  with the tombstone's authoritative address snapshot. Runs under
 	 *  the tx lock; idempotent. `onAccountDeleted` delegates here so the single-
-	 *  account (deleteNetwork chain-purge) path shares one implementation. */
-	public async purgeForAccounts(addresses: readonly string[], profileId?: string): Promise<void> {
+	 *  account (deleteNetwork chain-purge) path shares one implementation. `chainId` limits the
+	 *  purge to that chain's rows. */
+	public async purgeForAccounts(addresses: readonly string[], profileId?: string, chainId?: number): Promise<void> {
 		await this.ensureInitialized()
 		const set = new Set(addresses)
+		const onChain = (rowChainId: unknown) => chainId === undefined || rowChainId === chainId
 		await this.lock.withLock(async () => {
 			// Two profiles built from one mnemonic own the same address, so an
 			// address-only match deletes the OTHER profile's history too. When the
@@ -338,7 +342,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			const soleOwner = profileId !== undefined ? await this.isSoleOwner(addresses, profileId) : true
 			const all = await this.txs.getValues()
 			const txs = all.filter((x) => {
-				if (!set.has(x.account)) return false
+				if (!set.has(x.account) || !onChain(x.chainId)) return false
 				if (profileId === undefined) return true
 				if (x.profileId !== undefined) return x.profileId === profileId
 				return soleOwner
@@ -349,7 +353,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			// silently become theirs. Mark it instead, permanently.
 			if (profileId !== undefined && !soleOwner) {
 				for (const tx of all) {
-					if (!set.has(tx.account) || tx.profileId !== undefined || tx.ambiguous) continue
+					if (!set.has(tx.account) || !onChain(tx.chainId) || tx.profileId !== undefined || tx.ambiguous) continue
 					// A marked row must leave every watch: one left watched would keep
 					// being polled AND let a later write (built from the pre-mark
 					// in-memory object) silently erase the `ambiguous` flag.
@@ -374,7 +378,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			await purgeMalformedRows(
 				this.txs,
 				(raw) => {
-					if (typeof raw.account !== "string" || !set.has(raw.account)) return false
+					if (typeof raw.account !== "string" || !set.has(raw.account) || !onChain(raw.chainId)) return false
 					if (profileId === undefined) return true
 					if (raw.profileId !== undefined) return raw.profileId === profileId
 					return soleOwner

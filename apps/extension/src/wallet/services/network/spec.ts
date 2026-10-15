@@ -126,6 +126,10 @@ export const ERR_PRIMARY_ENDPOINT = "PRIMARY_ENDPOINT"
 export const ERR_ACTIVE_NETWORK = "ACTIVE_NETWORK"
 /** An unattended caller asked to verify a network whose L1 identity needs a live endpoint probe. */
 export const ERR_UNATTENDED_LIVE_CHECK = "UNATTENDED_LIVE_CHECK"
+/** A stale-network verdict or a reset journal names this chain, so no new row may take it. */
+export const ERR_CHAIN_QUARANTINED = "CHAIN_QUARANTINED"
+/** A reset of this network is running: deleting it would race the reset's purge. */
+export const ERR_RESET_RUNNING = "RESET_RUNNING"
 
 // ── Zod schemas for the RPC boundary ─────────────────────────────────
 

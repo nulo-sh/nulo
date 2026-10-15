@@ -82,6 +82,7 @@ async function makeHarness(over: { chainLive?: (call: number) => boolean | Promi
 	services.add(
 		svc(NETWORK_SERVICE_NAME, {
 			registerChainPurgeSubscriber: () => {},
+			isChainQuarantined: async () => false,
 			isChainLive: async () => over.chainLive?.(++liveCalls) ?? true,
 			resolveVerifiedL1ChainId: async () => 1,
 			getL1ChainIdStored: async () => 1,

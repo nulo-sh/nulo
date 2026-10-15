@@ -3,6 +3,7 @@
  * delete events reach the REAL teardown wiring; the SDK handler is the only boundary faked. No PXE,
  * no bb, no browser. See `apps/extension/tests/COMPOSITION-TESTS.md`.
  */
+import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { describe, expect, test } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
@@ -38,6 +39,7 @@ async function harness() {
 		}),
 	)
 	const sessions = new DappSessionService(logger, new FakeBrowserApi())
+	collection.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {} }))
 	collection.add(sessions)
 	await collection.start()
 	for (const profileId of ["p2", "p1"]) {

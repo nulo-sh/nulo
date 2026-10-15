@@ -68,6 +68,7 @@ describe("AccountService.createAccount — deletion fence", () => {
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
 				registerChainPurgeSubscriber: () => {},
+				isChainQuarantined: async () => false,
 				isChainLive: async () => over.chainLive?.(++liveCalls) ?? true,
 				resolveVerifiedL1ChainId: () => over.probe ?? Promise.resolve(1),
 			}),
@@ -159,6 +160,7 @@ describe("AccountService restore writers — deletion fence", () => {
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
 				registerChainPurgeSubscriber: () => {},
+				isChainQuarantined: async () => false,
 				isChainLive: async () => true,
 				getL1ChainIdStored: async () => 1,
 			}),
@@ -249,6 +251,7 @@ describe("AccountService.restore — validation + provenance", () => {
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
 				registerChainPurgeSubscriber: () => {},
+				isChainQuarantined: async () => false,
 				isChainLive: async () => true,
 				getL1ChainIdStored: async () => 1,
 			}),
@@ -462,6 +465,7 @@ describe("AccountService.sweepOrphanImportedKeys", () => {
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
 				registerChainPurgeSubscriber: () => {},
+				isChainQuarantined: async () => false,
 				isChainLive: async () => true,
 				getL1ChainIdStored: async () => 1,
 			}),
@@ -538,6 +542,7 @@ describe("AccountService — same-row field editors serialize", () => {
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
 				registerChainPurgeSubscriber: () => {},
+				isChainQuarantined: async () => false,
 				isChainLive: async () => true,
 			}),
 		)
@@ -614,6 +619,7 @@ describe("AccountService.importAccount — deletion fence", () => {
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
 				registerChainPurgeSubscriber: () => {},
+				isChainQuarantined: async () => false,
 				isChainLive: async () => over.chainLive?.(++liveCalls) ?? true,
 				getL1ChainIdStored: async () => {
 					if (over.l1Gate) await over.l1Gate
@@ -893,6 +899,7 @@ describe("AccountService.provisionDefaultAccount — unattended rule", () => {
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
 				registerChainPurgeSubscriber: () => {},
+				isChainQuarantined: async () => false,
 				isChainLive: async () => true,
 				resolveVerifiedL1ChainId: (_profileId: string, _chainId: number, opts?: { unattended?: boolean }) => resolve(opts),
 			}),
@@ -979,6 +986,7 @@ describe("AccountService keyed reads bind the row body to the requested address"
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
 				registerChainPurgeSubscriber: () => {},
+				isChainQuarantined: async () => false,
 				isChainLive: async () => true,
 				getL1ChainIdStored: async () => 1,
 			}),

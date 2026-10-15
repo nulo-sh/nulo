@@ -183,7 +183,9 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 				getActiveProfile: () => this.profiles.getActiveProfile(),
 				getActiveNetwork: () => this.networks.getActiveNetwork(),
 				getSeeds: async () => (await this.seederOverrides?.getSeeds?.()) ?? seedsFromList(this.tokenList.getSnapshot()),
-				getAccounts: async (profileId, chainId) => await this.accounts.getAccounts(profileId, chainId),
+				// A quarantined scope reads as one with no accounts: the seeder then burns no attempt.
+				getAccounts: async (profileId, chainId) =>
+					(await this.networks.isChainQuarantined(profileId, chainId)) ? [] : await this.accounts.getAccounts(profileId, chainId),
 				preview: async (networkId, accountAddress, contract, expectedClassId) =>
 					await this.previewTokenMetadata(networkId, accountAddress, contract, expectedClassId),
 				isTokenPresent: async (profileId, chainId, contract) => (await this.findToken(profileId, chainId, contract)) !== undefined,
@@ -247,7 +249,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		// inside the lock would invert the seeder-commit's markerLock→tokenLock
 		// order into a deadlock.)
 		await this.seeder.onChainPurged(profileId, chainId)
-		// NO token lock here — the caller (purgeChain) holds the NETWORK lock
+		// NO token lock here — the caller (purgeChain) may hold the NETWORK lock
 		// (watchdog-disabled by design), and persistToken's in-token-lock
 		// metadata fetch takes the network lock via getNode: a sweep under the
 		// token lock closes that pair into an ABBA deadlock broken only by the

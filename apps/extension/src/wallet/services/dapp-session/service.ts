@@ -493,6 +493,21 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		})
 	}
 
+	/** Every session of `profileId` on `chainId`, read raw like `purgeForProfile`, so a lock or
+	 *  recovery mode cannot hide one. Not part of the chain purge: a deleted network's sessions stay
+	 *  until the next connect drops them, so a network added back on that chain keeps them. */
+	public async purgeForChain(profileId: string, chainId: number): Promise<void> {
+		await this.ensureInitialized()
+		await this.lock.withLock(async () => {
+			const rows = (await this.storage.rowsForProfile(profileId)).filter(({ row }) => Number(row.chainId) === chainId)
+			await purgeRows(
+				rows,
+				({ storageId }) => this.storage.delete(storageId),
+				({ row }) => this.emit("onDappSessionDeleted", row),
+			)
+		})
+	}
+
 	/** Awaited profile-scoped purge, called by the deletion coordinator (relocated
 	 *  from the removed fire-and-forget `onProfileDeleted` sub). */
 	public async purgeForProfile(profileId: string): Promise<void> {

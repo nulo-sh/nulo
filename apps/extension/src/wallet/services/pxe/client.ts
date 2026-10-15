@@ -5,7 +5,7 @@
  */
 import { ensureOffscreenRunning, isOffscreenDocumentSender } from "@/wallet/utils/offscreen"
 import type { ILogger } from "@nulo/wallet-core/logger"
-import { PxeScopeUnregisteredError, RecoveryModeError } from "@nulo/extension-messaging/errors"
+import { ChainNotSupportedError, PxeScopeUnregisteredError, RecoveryModeError } from "@nulo/extension-messaging/errors"
 import { type Methods, PxeServiceClientBase, type ScopeRegistrar, type StoreKeyProvision } from "@nulo/aztec-runtime/pxe"
 
 /**
@@ -44,6 +44,14 @@ let recoveryGuard: ((profileId: string) => boolean) | undefined
 
 export function registerPxeRecoveryGuard(guard: (profileId: string) => boolean): void {
 	recoveryGuard = guard
+}
+
+/** Whether a profile's chain is quarantined: its PXE state belongs to a network this build no
+ *  longer serves, so a warm runtime must not sync, read or prove on it. Cleanup stays admitted. */
+let chainGuard: ((profileId: string, chainId: number) => Promise<boolean>) | undefined
+
+export function registerPxeChainGuard(guard: (profileId: string, chainId: number) => Promise<boolean>): void {
+	chainGuard = guard
 }
 
 /** An op is profile-bound when its first argument is a `NetworkInfo` (profile + chain). The
@@ -85,6 +93,9 @@ export class PxeServiceClient extends PxeServiceClientBase {
 	): Promise<Awaited<ReturnType<Methods[T]>>> {
 		const netArg = args[0]
 		if (isProfileBound(netArg) && recoveryGuard?.(netArg.profileId)) throw new RecoveryModeError()
+		if (isProfileBound(netArg) && (await chainGuard?.(netArg.profileId, (netArg as { chainId: number }).chainId))) {
+			throw new ChainNotSupportedError()
+		}
 		return super.request(method, ...args)
 	}
 }
