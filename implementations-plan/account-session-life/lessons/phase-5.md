@@ -21,3 +21,9 @@
 - 5.2: unit 82/82; 14 proofs red on base; smoke passkey-retry + registration Chrome 11/11 (81 s).
 - 5.3: window unit 12/12; two proofs red on base; smoke passkey-retry + passkey-toolbar-panel Chrome 9 passed / 6 skipped by design (71 s), Firefox 15/15 (211 s).
 - 5.4: auth unit 30/30; the proof red on base; smoke auth-flows Chrome 5/5 (40 s).
+
+## Review, round 1 (2026-10-15)
+
+- Codex `gpt-6.1-sol` high, session `01a13d01-613b-7ee0-9f12-1227ec89d9c3`, read-only: `CHANGES`, three Medium, each demonstrated with a probe. The Opus agent found the same three (as Medium, Low, Low) plus three comments. All fixed (plan § Audit verdicts).
+- `test:all` caught what the targeted unit runs did not: `toast-call-sites.test.ts` is a textual guard over every `openToast` call in `src/`, so a toast passed as a constant or through a wrapper fails it. Run `test:all` before the review, not after.
+- Two fences guard one activation: the bootstrap fence (`supersedeProfileActivations`) stops `isLogined`, and the shell's event sequence stops failure publication. A supersede that is not also an event (the hand-off) must fence the failure itself.

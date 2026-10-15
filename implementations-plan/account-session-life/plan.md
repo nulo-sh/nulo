@@ -19,7 +19,7 @@ Nine issues and page 7's picks on how accounts, profiles and sessions start, wai
 
 - **Arcs 1 to 3 (merged).** Arc 1 (#253): one critical section per account address (#99), a bounded, identity-checked profile activation (#100), the passkey retry confirms its saved credential (#159), account RPC params (#198), ConfirmPopup's dead branch (#158). Arc 2 (#266): the half of #157 no person sees. Arc 3 (#422): #24 closed as not planned (P7-01), the unlock toast (#137, P7-02), the split reveal (#208, P7-03).
 - **Arc 4.** The Ready handshake (#157, P7-08 = C): a popup call waits until the service says it has started. The start-up moment as P7-08b = C draws it: the unlock screen, and a 2 px bar along the top edge until Ready. The boot check stops depending on a connection, so a service that never starts ends in the banner and the reconnect storm stops (#421). Delete Profile gets the time its page promises (P7-09).
-- **Arc 5.** Page 7's picks for arc 1's surfaces: Create account skips an imported account's address (P7-06, #99); a new profile that does not open says so and goes to the unlock screen, or to the open profile's home when another profile took over (P7-05, P7-12, #100); the passkey window starts over after an authenticator with no PRF (P7-07, #159); Continue closes the last unlock failure's toast (P7-10, #137). Arc 4 is already a full PR (the messaging core's state machine, the popup's boot, both browsers' smoke and network suites); arc 5 shares one file with it, where arc 4 only rewrites a comment (`account/service.ts:246`), and needs only unit and smoke gates, so it reviews and merges on its own.
+- **Arc 5.** Page 7's picks for arc 1's surfaces: Create account skips an imported account's address (P7-06, #99); a new profile that does not open says so and goes to the unlock screen, or to the open profile's home when another profile took over (P7-05, P7-12, #100); the passkey window starts over after an authenticator with no PRF (P7-07, #159); Continue closes the last unlock failure's toast (P7-10, #137).
 - **Phase 3.4** (#208's autocomplete, P7-04) waits on backup-import-export arc 3, which rewrites both files first. It joins this lane's first arc after that merges; nothing is planned for it now.
 
 Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md) (first plan), [lessons/phase-4.md](lessons/phase-4.md) (this revision).
@@ -542,6 +542,17 @@ Sign-off: each line rides the record it quotes; OA-7 and OA-8 were signed on pag
 
 **Arc 4 review, round 3** (Codex, resumed over `3b579ef0..133460ca`): `APPROVE`, no findings; R2-1 and R2-2 verified. The loop closes at its third round.
 
+**Arc 5 review, round 1** (`1a8b2b6d..de20bab6`; Codex `01a13d01-…` gpt-6.1-sol high, and one Opus agent alongside): Codex `CHANGES`, Opus `CHANGES`; each item checked at the tree:
+
+| # | Finding | Disposition |
+|---|---|---|
+| C1 Medium, O2 | The unawaited push released Create's latch while a guard read kept the page up: a second click made a second profile | FIXED eee20090: the hand-off awaits its navigation and rethrows a failed one; proof red before |
+| C2 Medium, O1 | A superseded activation failing later published the shell's failure toast over the hand-off's (the shell fences on its event sequence, which a supersede does not move) | FIXED eee20090: an event-driven activation overtaken by `supersedeProfileActivations` resolves false; proof red before |
+| C3 Medium, O3 | No PRF found while confirming a kept credential: the window confirmed it forever (`confirmCreatedCredential` throws a bare `PasskeyPrfError`) | FIXED eee20090: the window confirms through `confirmMinted`, which wraps every failure; proof red before |
+| O4 Comment | A hand-off from a page the person already left moved them out of their screen | FIXED 9bcb382a: no route, toast, pointer or supersede once the page is not current |
+| O5, O6 Comment | A vacuous assertion; the predicate's doc | FIXED; O6's path (another window's unlock superseded by the create, then the create failing) left as is |
+| test:all | `toast-call-sites.test.ts` reads each `openToast` call for one object literal | FIXED 9bcb382a: both new sites pass literals |
+
 ### Deviations from the plan text (the tree wins)
 
 - **Arc 2.** One deadline taken at entry covers the init and the delegate waits; `DEFAULT_INIT_TIMEOUT_MS` is exported from `background/index.ts`; three more PXE test files moved to the record shape; the shared `PortRegistry` fake passes the port to `onDisconnect`.
@@ -564,7 +575,6 @@ No stack (D-orch-1, D-orch-4): each arc opens one PR against `dev` (`gh pr creat
 | 4 | `account-session-life-arc-4` (this branch) | 4.1 to 4.5 | `dev` `15881c7d` | `fix(messaging): calls wait for the background's ready, the popup opens on the unlock screen` | `Closes #157`, `Closes #421` |
 | 5 | `account-session-life-arc-5` | 5.1 to 5.4 | `dev` `1a8b2b6d` | `feat(profile): create skips a taken address; a new profile that does not open says so` | `Closes #99, #100, #159`, `Refs #137` (D-orch-10) |
 
-- The orchestrator may build arc 5 before arc 4: they share `account/service.ts`, where arc 4 only rewrites a comment, so the later arc rebases over the earlier.
 - The close-out rides the last built arc as its final commits (`implementations-plan/README.md` § Portable rules, rule 5). If 3.4 is still blocked then, the Outcome names #208 as its open item.
 - Each PR body says what changed and why, the validation runs with outcomes, the per-browser suite wall-clock before and after when it adds an e2e scenario, the records it quotes, and the screenshots. Merging is the orchestrator's call.
 

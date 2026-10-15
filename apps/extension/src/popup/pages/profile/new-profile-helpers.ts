@@ -99,7 +99,8 @@ async function handOffCreatedProfile(profile: ProfileInfo, deps: CreateActivatio
 	const { appStore, router, openToast, selectedOnEntry } = deps
 	console.warn("created profile did not open", { reason: activationFailureReason(failure) })
 	// A person who left the page meanwhile is not moved: the shell places the activation's outcome.
-	if (router.currentRoute.value.name !== "popup-profile-new") return
+	const left = () => router.currentRoute.value.name !== "popup-profile-new"
+	if (left()) return
 	const anotherOpens = () =>
 		appStore.isLogined ||
 		isActivatingOtherThan(profile.id) ||
@@ -107,7 +108,8 @@ async function handOffCreatedProfile(profile: ProfileInfo, deps: CreateActivatio
 	let target = "/popup/general"
 	if (!anotherOpens()) {
 		supersedeProfileActivations()
-		await setLastActiveProfileId(profile.id, { unless: anotherOpens })
+		await setLastActiveProfileId(profile.id, { unless: () => left() || anotherOpens() })
+		if (left()) return
 		if (!anotherOpens()) {
 			appStore.profile = profile
 			target = "/popup/auth"

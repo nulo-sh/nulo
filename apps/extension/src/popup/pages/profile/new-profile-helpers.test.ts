@@ -230,6 +230,22 @@ describe("activateCreatedProfile (popup manual sequence)", () => {
 		expectUnlockHandOff(store, router, openToast)
 	})
 
+	test("a person who leaves during the pointer write: the write is skipped, nothing selected, routed or shown", async () => {
+		const store = makeAppStore({ profile: { id: "locked" } })
+		const { router, openToast, state } = start(store, "locked")
+		vi.mocked(setLastActiveProfileId).mockImplementationOnce(async (_id, options) => {
+			router.currentRoute.value.name = "popup-auth"
+			expect(options?.unless?.()).toBe(true)
+		})
+		store.bootstrapFailure = { profileId: "created", message: "boom" }
+		await vi.advanceTimersByTimeAsync(0)
+
+		expect(state.outcome).toBe("resolved")
+		expect(store.profile).toEqual({ id: "locked" })
+		expect(router.push).not.toHaveBeenCalled()
+		expect(openToast).not.toHaveBeenCalled()
+	})
+
 	test("another profile opening during the pointer write: the write is skipped and the popup goes to its home", async () => {
 		const store = makeAppStore()
 		vi.mocked(setLastActiveProfileId).mockImplementationOnce(async (_id, options) => {
