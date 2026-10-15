@@ -271,6 +271,8 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		return (await this.isEnabled()) ? this.readUsable() : {}
 	}
 
+	/** Reads the list as each answer is built, after any price await, so a slow refresh never carries
+	 *  an older list's mapping or flags. */
 	private withMapping(quotes: PriceState): PriceSnapshot {
 		const list = this.tokenList.getSnapshot()
 		return { quotes, pricedTokens: pricedTokensOf(list?.entries ?? []), flaggedTokens: flaggedKeysOf(list?.flagged ?? []) }

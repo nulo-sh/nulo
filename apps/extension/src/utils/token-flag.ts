@@ -1,8 +1,6 @@
 /**
- * A token the signed list flags as a scam, matched on its chain and contract whoever added it: the
- * list, the person or a dApp. The list's addresses are canonical (`0x` and lower-case hex), while a
- * restored row may keep another spelling the address parser accepts (upper case, no `0x`), so both
- * sides go through one key.
+ * A row matches a flag on chain and contract, whoever added it. A restored row may keep its contract
+ * in upper case or without `0x`, so the list's pairs and the rows go through one key.
  */
 import type { TokenListPair } from "@nulo/token-list"
 

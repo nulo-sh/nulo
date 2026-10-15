@@ -191,7 +191,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	overflow-wrap: break-word;
 }
 
-/* The signed list flags this token: the AA danger colour in both themes, in place of its fiat or name. */
+/* --txt-danger passes AA in both themes; --red does not on the light one. */
 .flagged {
 	composes: type--caption from global;
 	color: var(--txt-danger);

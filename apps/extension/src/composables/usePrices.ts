@@ -77,10 +77,7 @@ export function usePrices(priceService: PriceServiceClient) {
 			})
 	}
 	resnapshot()
-	// Re-snapshot after every reconnect (MV3 SW restarts drop the port): the
-	// held quotes, mapping and flags may have changed while we were detached — e.g.
-	// the kill-switch flipped from another context, or a new list landed, and we
-	// missed the broadcast.
+	// A worker restart drops the port and any broadcast sent meanwhile (a new list, the kill-switch).
 	priceService.onConnected.add(resnapshot)
 
 	/** Fresh usable quotes only (ticker-reactive). */
