@@ -133,14 +133,15 @@ describe("meta text reads in --nulo-secondary; --nulo-outline is for borders and
 		expect(body).toMatch(/\bcolor: var\(--nulo-secondary\);/)
 	})
 
-	// Blind to template `style` / `:style` bindings and colours set from script strings.
+	// Blind to template `style` / `:style` bindings, colours set from script strings, and an alias
+	// custom property that names the token.
 	test("no stylesheet rule colours text with --nulo-outline; the connect window's copy glyph and row chevron are icons", () => {
 		const stylesheets = [
 			...sourceFiles().filter((file) => /\.(vue|css|scss)$/.test(file)),
 			"packages/design/src/base.css",
 			"packages/design/src/utilities.css",
 		]
-		const outline = /var\(\s*--nulo-outline\s*[,)]/
+		const outline = /var\(\s*--nulo-outline\s*[,)]/i
 		const found = stylesheets.flatMap((file) =>
 			parseSource(file).styles.flatMap(({ root }) => {
 				const keys: string[] = []
@@ -150,6 +151,9 @@ describe("meta text reads in --nulo-secondary; --nulo-outline is for borders and
 				})
 				return keys
 			}),
+		)
+		expect(stylesheets).toEqual(
+			expect.arrayContaining(["packages/design/src/ui/Input.vue", "apps/extension/src/popup/pages/detail-page.module.css"]),
 		)
 		expect(found).toEqual([
 			"apps/extension/src/components/composite/capabilities/DetailsTable.vue .address .copy_glyph",
