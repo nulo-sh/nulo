@@ -40,6 +40,15 @@ First review, 2026-10-15, on the 18 captured states: approved A1, A3, A3b, A4, A
 
 ## Gate
 
+At `3846f020`, arc 2's head after the rebase onto #431, retry 0, in a clean copy:
+
+- Chrome: S1 4 tests passed (58.3 s). Captures 1 test passed (76.1 s): 38 frames (19 states, both themes), none tracked. Full smoke: 56 files passed and 5 skipped, 242 tests passed and 13 skipped, 1795 s.
+- Firefox: S1 4 tests passed (90.5 s). The full suite's result is recorded at close-out.
+- `bun run lint` exit 0 at this head.
+- The unit gate ran at arc 3's head (`phase-8.md`), whose changes over this arc are e2e files, plan docs, comments and test names.
+
+Earlier runs:
+
 At `ac3768f5`, arc 2's head after the capture review's changes and their review loop, retry 0, after `bun run audit:vue` exit 0 at the same commit (794 files passed, 3 skipped; 12758 tests), each browser on its armed build, in a clean copy of the commit (`git archive`, `bun install --frozen-lockfile`):
 
 - Chrome: S1 4 tests passed (54.8 s); captures 1 test passed (44.8 s), 38 frames (19 states, both themes) in the ignored `.captures/`, none tracked; full smoke 56 files passed and 5 skipped, 242 tests passed and 13 skipped, 1813 s.

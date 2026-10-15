@@ -91,3 +91,19 @@ Two `dev` changes met this phase's code without a textual conflict. Create accou
 Lesson: a conflict-free rebase is not a reviewed one. Search the incoming commits for every path this plan guards (exports, account writes, chain rows), not only the files that conflicted.
 
 Gotcha: committing with `git add -A` on a lower arc commits files that only a higher arc's `.gitignore` ignores. Arc 1's endpoint fix took the 34 captures with it; the final pass caught it, and the commit was amended without them. Stage paths by name on a lower arc.
+
+## Rebase onto #431
+
+`dev` moved to `0ac9e062`. #431 brought Aztec 6.0.0-rc.3, the reset Testnet (`CHAIN_IDS.TESTNET` 3415328944) and the in-place regime `nulo-v6.1` (D66). One textual conflict: CLAUDE.md's freeze section keeps #431's rotation bullets beside this plan's per-chain bullet. The other changes did not conflict in text:
+
+- #431's export check called `new ImportedAccountUnusableError(address, "address mismatch")`, the old two-argument constructor. Here that constructor takes (message, details), so the address became the message. It now calls `forAccount`; arc 2 then moves it to `because`, which names no address.
+- The coordinator tests' Testnet row hardcoded the rc.1 chain id. That id now reads as a network reset, so the row takes `CHAIN_IDS.TESTNET`.
+- The final pass's review of the rebase found that the new export check sent a mismatching derived row on a quarantined chain to classification, which needs the session (D67, `d7d70caa`).
+
+Gate at `d7d70caa`, retry 0, in a clean copy over `0ac9e062`:
+- `bun run typecheck:all` and `bun run build` exit 0.
+- `bun run lint` exit 0 in the worktree.
+- `bun run test`: 785 files and 12668 tests passed; 2 failed. The failures are `dev`'s `scripts/e2e/boot-guard.test.ts` and `reconcile-lock.test.ts`: 5 s timeouts while four suites and two e2e lanes ran at once. Both pass alone at this head (13/13).
+- The export guard was mutation-checked: removing its line alone fails its test.
+
+Gotcha: a `git archive` copy has no `.git`, so `audit:vue`'s lint leg (its `git grep`) fails and Bun's `--parallel` SIGINTs the test leg (exit 130). In a copy, run typecheck, test and build; lint in the checkout.

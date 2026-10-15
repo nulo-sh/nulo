@@ -37,6 +37,18 @@ The fixes broke into the gate's second Chrome run, which was stopped; the gate r
 
 ## Gate
 
+Re-run at `d4858eb9`, after the rebase onto #431, on the `6.0.0-rc.3` sandbox. The runner logged "Setting up Aztec local network 6.0.0-rc.3", with the toolchain from a private `AZTEC_HOME`. Retry 0, three runs in a row per browser:
+
+- Chrome: 6/6 tests in each run (219.1 s, 157.7 s, 191.1 s). N1 33.0 / 26.0 / 31.3 s, N2 55.3 / 30.9 / 43.8 s, N3 21.2 / 18.7 / 26.8 s.
+- Firefox: 6/6 in each run (224.3 s, 187.5 s, 272.8 s). N1 33.0 / 31.1 / 47.8 s, N2 52.9 / 39.1 / 65.3 s, N3 42.2 / 37.1 / 61.9 s.
+- The proverless stamp was found in every bundle.
+- Production `build:chrome` and `build:firefox` exit 0, with no `nulo:e2e:restore-gate` string.
+- The A10 capture passed (109.4 s, four frames).
+- Unit gate in a clean copy: `bun run typecheck:all` and `bun run build` exit 0. `bun run test` gave 792 files and 12762 tests passed. 2 failed: the same two `dev` harness timeouts as arc 1's, which pass alone here (13/13).
+- `bun run lint` exit 0 in the worktree.
+
+Before the fix that followed the rebase review, the same files had passed at the rebase's first head (Chrome, one run, 6/6), and so had the A10 capture.
+
 Re-run at `62b7a8db`, over arc 2's capture-review changes (the never-opened rule, the journal's unmovable names, Send closing on a key refusal), retry 0, three runs in a row per browser: Chrome 6/6 tests each run (197 s, 242 s, 209 s), Firefox 6/6 each run (250 s, 253 s, 242 s); the proverless stamp found in every bundle; production `build:chrome` and `build:firefox` exit 0 with no `nulo:e2e:restore-gate` string.
 
 Earlier runs:
