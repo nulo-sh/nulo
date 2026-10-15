@@ -7,7 +7,7 @@ import { profileDeletedError } from "@/wallet/services/profile/profile-deletion-
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { validateParams } from "@nulo/extension-messaging/zod"
-import { AztecNodeFactoryAdapter } from "@nulo/aztec-runtime/adapters"
+import { AztecNodeFactoryAdapter, isAllowedRpcUrl } from "@nulo/aztec-runtime/adapters"
 import type { NodeFactory } from "@nulo/aztec-runtime/ports"
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "@nulo/aztec-runtime/utils"
 import type { ILogger } from "@/wallet/logger"
@@ -647,8 +647,13 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			const network = requireOwnedRow(await this.storage.get(id), profile.id)
 			await this._writeActive(profile.id, id)
 			const primaryEndpoint = findPrimaryEndpoint(network)
-			if (primaryEndpoint) {
+			// A stored URL the transport rule now refuses must fail where an unreachable node fails, at
+			// the first read: thrown here, it would stop popup start before Settings could fix it.
+			if (primaryEndpoint && isAllowedRpcUrl(primaryEndpoint.rpcUrl).ok) {
 				this.nodes.set(network.chainId, this.nodeFactory.createNode(primaryEndpoint.rpcUrl))
+			} else if (primaryEndpoint) {
+				this.nodes.delete(network.chainId)
+				this.logDebug("active network's primary endpoint refused by the transport rule")
 			}
 			this.emit("onActiveNetworkChanged", network)
 			return network

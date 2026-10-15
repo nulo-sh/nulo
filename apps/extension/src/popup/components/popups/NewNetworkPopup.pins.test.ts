@@ -140,6 +140,10 @@ describe("NewNetworkPopup — failures and refusals", () => {
 			"Invalid params for addNetwork: 1: RPC URL can't contain spaces or hidden characters.",
 			"RPC URL can't contain spaces or hidden characters.",
 		],
+		[
+			"Invalid params for addNetwork: 1: Use http://localhost instead of http://[::1].",
+			"Use http://localhost instead of http://[::1].",
+		],
 	])("'%s' shows %j under the URL field, no toast", async (msg, line) => {
 		addNetworkMock.mockRejectedValueOnce(new Error(msg))
 		const w = await mountFilled()

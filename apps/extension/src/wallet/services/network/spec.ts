@@ -130,8 +130,10 @@ export const ERR_UNATTENDED_LIVE_CHECK = "UNATTENDED_LIVE_CHECK"
 export const ERR_CHAIN_QUARANTINED = "CHAIN_QUARANTINED"
 /** A reset of this network is running: deleting it would race the reset's purge. */
 export const ERR_RESET_RUNNING = "RESET_RUNNING"
-/** The RPC URL field's own line, matched by the popups in the validation error's message. */
+/** The RPC URL field's own lines, matched by the popups in the validation error's message. */
 export const ERR_RPC_URL_HIDDEN_CHARACTERS = "RPC URL can't contain spaces or hidden characters."
+export const ERR_RPC_URL_IPV6_LOOPBACK = "Use http://localhost instead of http://[::1]."
+const ERR_RPC_URL_TRANSPORT = "RPC URL must use https:// or http://localhost / http://127.0.0.1 and contain no userinfo"
 
 // ── Zod schemas for the RPC boundary ─────────────────────────────────
 
@@ -143,28 +145,28 @@ export const ChainKindSchema: z.ZodType<ChainKind> = z.enum(["mainnet", "testnet
  * zod's `.url()` returns the trimmed string, so a caller stores the parsed value,
  * never its own argument.
  *
- * Runs on the popup client's params and results (`network/client.ts`), on the
- * service's params, and on the backup-restore network filter
- * (`account-state/service.ts`); not in the lax storage row codec. The
- * node-factory adapter applies the transport rule on its own to every URL it
- * dials.
+ * Runs on the params of the popup client (`network/client.ts`) and of the
+ * service, and on the backup-restore network filter (`account-state/service.ts`);
+ * not on results, nor in the lax storage row codec. The node-factory adapter
+ * applies the transport rule on its own to every URL it dials.
  */
 export const RpcUrlSchema = z
 	.string()
 	.url()
 	.refine((url) => !hasHiddenUrlCharacter(url), { message: ERR_RPC_URL_HIDDEN_CHARACTERS, abort: true })
-	.refine(
-		(url) => {
-			let parsed: URL
-			try {
-				parsed = new URL(url)
-			} catch {
-				return false
-			}
-			return rpcTransportVerdict(parsed).allowed
-		},
-		{ message: "RPC URL must use https:// or http://localhost / http://127.0.0.1 / http://[::1] and contain no userinfo" },
-	)
+	.superRefine((url, ctx) => {
+		let parsed: URL
+		try {
+			parsed = new URL(url)
+		} catch {
+			ctx.addIssue({ code: "custom", message: ERR_RPC_URL_TRANSPORT })
+			return
+		}
+		const verdict = rpcTransportVerdict(parsed)
+		if (verdict.allowed) return
+		const ipv6Loopback = verdict.refusal === "http-host" && verdict.host === "[::1]"
+		ctx.addIssue({ code: "custom", message: ipv6Loopback ? ERR_RPC_URL_IPV6_LOOPBACK : ERR_RPC_URL_TRANSPORT })
+	})
 
 export const NetworkEndpointSchema: z.ZodType<NetworkEndpoint> = z.object({
 	id: z.string(),
@@ -172,15 +174,27 @@ export const NetworkEndpointSchema: z.ZodType<NetworkEndpoint> = z.object({
 	label: z.string().optional(),
 })
 
-export const NetworkSchema: z.ZodType<Network> = z.object({
+const networkFields = {
 	id: z.string(),
 	profileId: z.string(),
 	chainId: z.number(),
 	l1ChainId: z.number().int().nonnegative().max(0xffffffff),
 	name: z.string(),
 	primaryEndpointId: z.string(),
-	endpoints: z.array(NetworkEndpointSchema).min(1),
 	kind: ChainKindSchema.optional(),
+}
+
+export const NetworkSchema: z.ZodType<Network> = z.object({
+	...networkFields,
+	endpoints: z.array(NetworkEndpointSchema).min(1),
+})
+
+/** The service's answers: `NetworkSchema` with each stored endpoint URL read as the row codec reads
+ *  it. A URL saved before a rule tightened (an `http://[::1]` node) must still list, so the person
+ *  can switch or delete it; new input still meets `RpcUrlSchema` as a param. */
+const NetworkResultSchema: z.ZodType<Network> = z.object({
+	...networkFields,
+	endpoints: z.array(NetworkEndpointRowSchema).min(1),
 })
 
 export const NodeStatusSchema: z.ZodType<NodeStatus> = z.enum(NodeStatus)
@@ -192,43 +206,43 @@ export const NodeStatusSchema: z.ZodType<NodeStatus> = z.enum(NodeStatus)
 export const NetworkMethodSchemas = {
 	getOrInitNetworks: {
 		params: z.tuple([]),
-		result: z.array(NetworkSchema),
+		result: z.array(NetworkResultSchema),
 	},
 	seedDefaultsForProfile: {
 		params: z.tuple([z.string().min(1)]),
-		result: z.array(NetworkSchema),
+		result: z.array(NetworkResultSchema),
 	},
 	getNetworks: {
 		params: z.tuple([z.number().int().nonnegative().optional()]),
-		result: z.array(NetworkSchema),
+		result: z.array(NetworkResultSchema),
 	},
 	getNetwork: {
 		params: z.tuple([z.string().min(1)]),
-		result: NetworkSchema,
+		result: NetworkResultSchema,
 	},
 	addNetwork: {
 		params: z.tuple([z.string().min(1), RpcUrlSchema]),
-		result: NetworkSchema,
+		result: NetworkResultSchema,
 	},
 	renameNetwork: {
 		params: z.tuple([z.string().min(1), z.string().min(1)]),
-		result: NetworkSchema,
+		result: NetworkResultSchema,
 	},
 	deleteNetwork: {
 		params: z.tuple([z.string().min(1)]),
-		result: NetworkSchema,
+		result: NetworkResultSchema,
 	},
 	setActiveNetwork: {
 		params: z.tuple([z.string().min(1)]),
-		result: NetworkSchema,
+		result: NetworkResultSchema,
 	},
 	getActiveNetwork: {
 		params: z.tuple([]),
-		result: NetworkSchema.nullable(),
+		result: NetworkResultSchema.nullable(),
 	},
 	getPrimaryNetwork: {
 		params: z.tuple([]),
-		result: NetworkSchema.nullable(),
+		result: NetworkResultSchema.nullable(),
 	},
 	setActiveForProfile: {
 		params: z.tuple([z.string().min(1), z.string().min(1)]),
@@ -236,19 +250,19 @@ export const NetworkMethodSchemas = {
 	},
 	addEndpoint: {
 		params: z.tuple([z.string().min(1), z.string().optional(), RpcUrlSchema]),
-		result: NetworkEndpointSchema,
+		result: NetworkEndpointRowSchema,
 	},
 	updateEndpoint: {
 		params: z.tuple([z.string().min(1), z.string().min(1), z.string().optional(), RpcUrlSchema]),
-		result: NetworkEndpointSchema,
+		result: NetworkEndpointRowSchema,
 	},
 	deleteEndpoint: {
 		params: z.tuple([z.string().min(1), z.string().min(1)]),
-		result: NetworkEndpointSchema,
+		result: NetworkEndpointRowSchema,
 	},
 	setPrimaryEndpoint: {
 		params: z.tuple([z.string().min(1), z.string().min(1)]),
-		result: NetworkSchema,
+		result: NetworkResultSchema,
 	},
 	getNodeStatus: {
 		params: z.tuple([z.string().min(1)]),

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 import {
 	ERR_RPC_URL_HIDDEN_CHARACTERS,
+	ERR_RPC_URL_IPV6_LOOPBACK,
 	type Network,
 	NodeStatus,
 	NodeStatusSchema,
@@ -22,8 +23,6 @@ const ACCEPTED = [
 	"http://LOCALHOST:8080",
 	"http://127.0.0.1:8080",
 	"http://127.1:8080",
-	"http://[::1]:8080",
-	"http://[0:0:0:0:0:0:0:1]:8080",
 	"https://[2001:db8::1]:8443",
 	"https://exämple.com",
 	" https://rpc.example.com",
@@ -45,6 +44,8 @@ const REFUSED = [
 	"http://127.0.0.2:8080",
 	"http://0.0.0.0:8080",
 	"http://[::ffff:127.0.0.1]:8080",
+	"http://[::1]:8080",
+	"http://[0:0:0:0:0:0:0:1]:8080",
 	"https://rpc.example.com:65536",
 	"",
 	"ws://localhost:8080",
@@ -79,8 +80,14 @@ describe("RpcUrlSchema", () => {
 		const result = RpcUrlSchema.safeParse("http://example.com")
 		expect(result.success).toBe(false)
 		expect(result.error?.issues.map((i) => i.message)).toEqual([
-			"RPC URL must use https:// or http://localhost / http://127.0.0.1 / http://[::1] and contain no userinfo",
+			"RPC URL must use https:// or http://localhost / http://127.0.0.1 and contain no userinfo",
 		])
+	})
+
+	test("plain HTTP to [::1], in either spelling, carries its own line", () => {
+		for (const url of ["http://[::1]:8080", "http://[0:0:0:0:0:0:0:1]:8080"]) {
+			expect(RpcUrlSchema.safeParse(url).error?.issues.map((i) => i.message)).toEqual([ERR_RPC_URL_IPV6_LOOPBACK])
+		}
 	})
 })
 

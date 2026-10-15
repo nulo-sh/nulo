@@ -118,6 +118,10 @@ describe("EditEndpointPopup: the RPC URL field's error copy", () => {
 			"Invalid params for updateEndpoint: 3: Invalid URL; 3: RPC URL can't contain spaces or hidden characters.",
 			"RPC URL can't contain spaces or hidden characters.",
 		],
+		[
+			"Invalid params for updateEndpoint: 3: Use http://localhost instead of http://[::1].",
+			"Use http://localhost instead of http://[::1].",
+		],
 	])("a rejection %j shows %j", async (message, copy) => {
 		updateEndpointMock.mockRejectedValueOnce(new Error(message))
 		const { w, errors } = await mountEditing()

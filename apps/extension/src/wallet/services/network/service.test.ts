@@ -27,10 +27,11 @@ import { LoggerStore } from "@/wallet/logger"
 import { ConfigStore } from "@/wallet/config"
 import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
+import { isAllowedRpcUrl } from "@nulo/aztec-runtime/adapters"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { ProfileService } from "@/wallet/services/profile/service"
 import { type ChainResetHooks, type ChainResetRequest, LOCAL_NETWORK_RPC_URL, NetworkService } from "./service"
-import { ERR_UNATTENDED_LIVE_CHECK, findPrimaryEndpoint, NodeStatus } from "./spec"
+import { ERR_RPC_URL_IPV6_LOOPBACK, ERR_UNATTENDED_LIVE_CHECK, findPrimaryEndpoint, NodeStatus } from "./spec"
 import type { Network, NetworkEndpoint } from "./spec"
 import { seedForKind } from "./seeds"
 
@@ -704,12 +705,69 @@ describe("NetworkService public API", () => {
 			expect(network.chainId).toBe(31337)
 		})
 
-		test("accepts http://[::1]:8888 (IPv6 loopback, WHATWG-URL form)", async () => {
+		test("refuses http://[::1]:8888 with its own line", async () => {
 			const { service } = setupServiceWithStorage({
 				"http://[::1]:8888": nodeInfoForChain(31337),
 			})
-			const network = await service.addNetwork("Local-v6", "http://[::1]:8888")
-			expect(network.chainId).toBe(31337)
+			await expect(service.addNetwork("Local-v6", "http://[::1]:8888")).rejects.toThrow(ERR_RPC_URL_IPV6_LOOPBACK)
+		})
+	})
+
+	// A URL saved before the transport rule refused it must fail where an unreachable node fails, so
+	// popup start (which awaits `setActiveNetwork`) still reaches Settings, where the person fixes it.
+	describe("a saved http://[::1] endpoint", () => {
+		const SAVED_V6 = "http://[::1]:8080"
+
+		/** The production adapter's refusal on the fake, so an unguarded `createNode` throws as it would. */
+		function refuseAsTheAdapterDoes(factory: FakeNodeFactory) {
+			const create = factory.createNode.bind(factory)
+			vi.spyOn(factory, "createNode").mockImplementation((url) => {
+				if (!isAllowedRpcUrl(url).ok) throw new Error("AztecNodeFactoryAdapter refused to construct node client")
+				return create(url)
+			})
+		}
+
+		test("activating it resolves, emits, evicts the chain's cached node and reads inactive", async () => {
+			const { service, factory, local } = setupServiceWithStorage({ "https://old.example": nodeInfoForChain(42) })
+			refuseAsTheAdapterDoes(factory)
+			const row = storeRow(local, { id: "v6", chainId: 42, endpoints: [{ id: "e1", rpcUrl: "https://old.example" }] })
+			await service.setActiveNetwork(row.id)
+
+			storeRow(local, { id: "v6", chainId: 42, endpoints: [{ id: "e1", rpcUrl: SAVED_V6 }] })
+			const changed: Network[] = []
+			service.onActiveNetworkChanged.add(async (n) => {
+				changed.push(n)
+			})
+			await expect(service.setActiveNetwork(row.id)).resolves.toMatchObject({ id: row.id })
+
+			expect(changed.map((n) => n.id)).toEqual([row.id])
+			expect(factory.created.map((c) => c.rpcUrl)).not.toContain(SAVED_V6)
+			// A cache miss: the node primed for the old URL is gone.
+			await expect(service.getNode(42)).rejects.toThrow(/refused/)
+			expect(await service.getNodeStatus(row.id)).toBe(NodeStatus.Inactive)
+		})
+
+		test("an unexpected factory error on an allowed URL still rejects the switch", async () => {
+			const { service, factory, local } = setupServiceWithStorage({})
+			vi.spyOn(factory, "createNode").mockImplementation(() => {
+				throw new Error("factory exploded")
+			})
+			const row = storeRow(local, { id: "ok", chainId: 42, endpoints: [{ id: "e1", rpcUrl: "https://rpc.example" }] })
+			await expect(service.setActiveNetwork(row.id)).rejects.toThrow("factory exploded")
+		})
+
+		test("the person replaces it: add a localhost endpoint, make it primary, delete the [::1] one", async () => {
+			const { service, factory, local } = setupServiceWithStorage({ [NON_SEED_LOCAL_URL]: nodeInfoForChain(42) })
+			refuseAsTheAdapterDoes(factory)
+			const row = storeRow(local, { id: "v6", chainId: 42, endpoints: [{ id: "e1", rpcUrl: SAVED_V6 }] })
+			await service.setActiveNetwork(row.id)
+
+			const added = await service.addEndpoint(row.id, undefined, NON_SEED_LOCAL_URL)
+			await service.setPrimaryEndpoint(row.id, added.id)
+			await service.deleteEndpoint(row.id, "e1")
+
+			expect((await service.getNetwork(row.id)).endpoints.map((e) => e.rpcUrl)).toEqual([NON_SEED_LOCAL_URL])
+			expect(await service.getNodeStatus(row.id)).toBe(NodeStatus.Active)
 		})
 	})
 

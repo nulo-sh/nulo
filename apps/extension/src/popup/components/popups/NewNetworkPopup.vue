@@ -5,7 +5,7 @@ import { FieldWarning } from "@nulo/design"
 import { sameStoredName, storedNameKey } from "@/utils/account-name"
 import { managers } from "@/utils/core"
 import { activateNetworkGuarded } from "@/utils/guarded-network-activation"
-import { ERR_RPC_URL_HIDDEN_CHARACTERS } from "@/wallet/services/network/spec"
+import { refusedRpcUrlLine } from "./endpoint-error-text"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -127,12 +127,13 @@ function toastNonActivatedOutcome(result) {
 
 function reportCreateFailure(error) {
 	const msg = errorMessageFromUnknown(error)
-	if (msg.startsWith("DUPLICATE_CHAIN")) {
+	const refused = refusedRpcUrlLine(msg)
+	if (refused) {
+		urlFailureText.value = refused
+	} else if (msg.startsWith("DUPLICATE_CHAIN")) {
 		// Smart-add: chain already exists in profile. Surface this clearly
 		// so the user knows to use Settings → Networks → [chain] → Add endpoint.
 		openToast({ kind: "error", label: "A network for this chain already exists. Add it as an endpoint instead." })
-	} else if (msg.includes(ERR_RPC_URL_HIDDEN_CHARACTERS)) {
-		urlFailureText.value = ERR_RPC_URL_HIDDEN_CHARACTERS
 	} else if (msg === "Failed to fetch node info" || msg === "Failed to fetch network info") {
 		urlFailureText.value = "Failed to fetch network info"
 	} else {
