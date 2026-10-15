@@ -99,7 +99,7 @@ const expanded = defineModel({ type: Boolean, default: false })
 .detail_value_aux {
 	composes: type--fiat from global;
 	font-size: 11px;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .fee_row_toggle {
@@ -137,7 +137,7 @@ const expanded = defineModel({ type: Boolean, default: false })
 }
 
 .fee_grid_aux {
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .fee_grid_val {

@@ -197,6 +197,7 @@ describe("theme contrast — home links, meta text, focus rings and the step bar
 		{ fg: "--nulo-secondary", bg: "--app-bg", min: AA_TEXT, label: "a view link or meta text on the page" },
 		{ fg: "--nulo-secondary", bg: "--nulo-surface-low", min: AA_TEXT, label: "meta text on a row's hover tint" },
 		{ fg: "--nulo-secondary", bg: "--nulo-surface-high", min: AA_TEXT, label: "meta text on a row's pressed tint" },
+		{ fg: "--nulo-secondary", bg: "--dropdown-bg", min: AA_TEXT, label: "a placeholder in a popover" },
 		{ fg: "--nulo-accent", bg: "--app-bg", min: AA_NON_TEXT, label: "the accent ring on the page" },
 		{ fg: "--nulo-accent", bg: "--nulo-surface-low", min: AA_NON_TEXT, label: "the accent ring on a row's hover tint" },
 		{ fg: "--nulo-accent", bg: "--nulo-surface-high", min: AA_NON_TEXT, label: "the accent ring on a row's pressed tint" },

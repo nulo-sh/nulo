@@ -5,3 +5,4 @@
 - 2026-10-15 panel round 1: Codex conditional approve (5 accepted, 1 refuted); Opus pending.
 - 2026-10-15 panel round 1: Opus conditional approve (11 accepted, 1 rejected); plan revised (140 lines); Codex resume next.
 - 2026-10-15 panel round 2-3: Codex r2 conditional (3 accepted), r3 approve. Plan committed; awaiting the orchestrator's approval.
+- 2026-10-15 phase 1 gate F: lint, typecheck:all, test (795 files), design test (36 files) green; grep prints only the two DetailsTable icon lines. Sweep red first with the 30 keys, green after the edit.
