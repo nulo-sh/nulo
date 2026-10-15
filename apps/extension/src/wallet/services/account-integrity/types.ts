@@ -54,10 +54,24 @@ export type AccountIntegrityBlocked = z.infer<typeof AccountIntegrityBlockedSche
 export interface AccountIntegrityDelegate {
 	/**
 	 * Re-derive every stored account of the profile (all chains) from the master secret and
-	 * compare to the stored addresses. On mismatch: persists the blocking record and THROWS
-	 * `AccountAddressInconsistencyError` — the caller must NOT open the session. On success:
-	 * clears any stale blocking record for the profile (a compatible build heals the block).
+	 * classify each chain against the build. A mismatch no single chain confines persists the
+	 * blocking record and THROWS `AccountAddressInconsistencyError` — the caller must NOT open the
+	 * session. Otherwise it writes the stale-network record (confined chains are quarantined, not
+	 * blocked) and clears any stale blocking record (a compatible build heals the block).
 	 * Deterministic and PXE/node-independent, so there are no transient false positives.
 	 */
 	verifyBeforeSessionOpen(profileId: string, masterSecret: MasterSecretBytes): Promise<void>
+}
+
+/**
+ * Injected into AccountService by the last-started AccountIntegrityCoordinator. Until it is set,
+ * an operation-time mismatch blocks the whole profile, as it always did.
+ */
+export interface AccountRuntimeMismatchDelegate {
+	/**
+	 * Re-derive every account on `chainId` and, when the mismatch is confined to that chain, merge
+	 * its entry into the stale-network record. Never closes the session.
+	 * @returns true when the chain is now quarantined; false leaves the caller to block the profile.
+	 */
+	classifyRuntimeMismatch(profileId: string, chainId: number): Promise<boolean>
 }

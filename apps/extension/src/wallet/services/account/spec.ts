@@ -83,20 +83,7 @@ export function parseAccountRowId(id: string): { profileId: string; chainId: num
 	return { profileId, chainId, address }
 }
 
-/**
- * An imported account's stored key is unusable (missing, un-decryptable, or its recomputed
- * address no longer matches the stored row). Fail-closed for THAT account only — never a
- * profile-wide block (imported key material is external). The UI surfaces
- * this and offers delete + re-import as the repair.
- */
-export class ImportedAccountUnusableError extends Error {
-	public readonly address: string
-	public constructor(address: string, reason: string) {
-		super(`Imported account ${address} is unusable: ${reason}`)
-		this.name = "ImportedAccountUnusableError"
-		this.address = address
-	}
-}
+export { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
 
 export enum AccountType {
 	// SECURITY: Numeric value is used in poseidon2Hash for key derivation. NEVER change it.

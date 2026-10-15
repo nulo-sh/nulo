@@ -3,6 +3,7 @@ import {
 	AccountAddressInconsistencyError,
 	ChainNotSupportedError,
 	DuplicateWalletError,
+	ImportedAccountUnusableError,
 	RecoveryModeError,
 	RestoreTornError,
 	CapabilityNotGrantedError,
@@ -287,6 +288,13 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			rebuild: pass,
 		},
 		{ ctor: RecoveryModeError, make: () => new RecoveryModeError(), name: "RecoveryModeError", code: "RECOVERY_MODE", rebuild: pass },
+		{
+			ctor: ImportedAccountUnusableError,
+			make: () => ImportedAccountUnusableError.forAccount("0xA", "address mismatch"),
+			name: "ImportedAccountUnusableError",
+			code: "IMPORTED_ACCOUNT_UNUSABLE",
+			rebuild: pass,
+		},
 	]
 
 	function expected(row: Row, payload: WalletErrorPayload): Expected {
