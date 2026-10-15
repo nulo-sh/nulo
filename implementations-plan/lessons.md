@@ -32,6 +32,7 @@
 - CSS Modules refuse `composes` in `:global()`; `text-transform` changes `innerText`, not `textContent`; Firefox lays out in 1/60 px. [Evidence](archive/type-roles/plan.md#lessons)
 - A dropped port reconnects under a mounted page and replays nothing: read config through `useConfigRead`. [Evidence](archive/wallet-followups/lessons/phase-4.md)
 - A session id re-keys after its session ends: code paused across an await checks its own `ActiveSession` object, not the id. [Evidence](archive/dapp-dispatch-hold/plan.md#mechanics-that-are-not-obvious)
+- A fence read by a second call after a commit can name a same-id successor's session: capture it inside the lock hold that commits. [Evidence](backup-import-export/plan.md#audit-verdicts)
 - A `Lock` watchdog handoff admits a successor but never stops the displaced holder, which keeps writing: a current ticket proves no wipe ran only beside a count of deleters still running. [Evidence](archive/incoming-transfers/decisions.md#decision-ledger)
 - A C1 hook's `dispose()` must be terminal: a run fence that only drops answers in flight lets a continuation released after unmount start a new call. [Evidence](archive/incoming-transfers/lessons/phase-3.md)
 

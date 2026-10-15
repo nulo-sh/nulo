@@ -1,7 +1,7 @@
 ---
 plan: backup-import-export
 tier: mid
-status: arcs 1 (#246), 1b (#247) and 2 (#418) merged; arc 3 revised 2026-10-14 against the signed page 1, waiting on the orchestrator's approval
+status: completed; arcs 1 (#246), 1b (#247), 2 (#418) and 3 (#454, with this close-out)
 issues: "#146, #203, #207, #223, #226 (arc 1); #148 in-repo half (arc 1b, stays open); #147, #191, #221 (arc 2); #189, #192, #230, #231 and the OA-9 residual of #226 (arc 3); #98 not planned (OA-5 C)"
 driver: claude-code
 claude_model: opus
@@ -12,6 +12,27 @@ eli5_mode: skipped (orchestrator-owned)
 budget: recon 2 explorers (sonnet) for the arc 3 revision; dual audit (Codex gpt-6.1-sol high + one Opus Plan agent) over the revised sections, one resumed Codex round
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-15.
+- **Status:** delivered in four PRs against `dev`: [#246](https://github.com/nulo-sh/nulo/pull/246) (arc 1), [#247](https://github.com/nulo-sh/nulo/pull/247) (arc 1b), [#418](https://github.com/nulo-sh/nulo/pull/418) (arc 2) and [#454](https://github.com/nulo-sh/nulo/pull/454) (arc 3, whose final commits are this close-out). #454 waits on the owner's sign-off of the Restore again words (OA-10, P1-20) and answers two singular-copy questions in its body; merging it closes this plan.
+- **Shipped:**
+  - Arc 1: one key-unseal wipe order (#223), strict hex decoders under the shipped Buffer shim (#203), the migration watchdog with non-vacuous registry tests (#146), the restore Enter guard (#207), the generated-profile-id rule (#226).
+  - Arc 1b: the `@aztec-labs/pxe` patch that lets `ensureRegistered` heal a half-registered account (the in-repo half of #148).
+  - Arc 2: an edited Local Network reads its true status and travels in the backup (#147); the export drops PXE-provided contracts (#191).
+  - Arc 3: a backup whose profile part is not the wallet's shape is refused (OA-9 B, #226); the import's warning, a failed Retry and the error viewer name the networks (#189); a per-profile restore reminder, the Home banner and the Restore again page, fenced to the profile's session and settled only by networks restored in full (#192); the account file downloads only once protected (#230); the full-backup export warns of imported accounts that will not restore (#231).
+  - `lessons.md`: one line, on capturing a fence inside the lock hold that commits what it guards. Pruning pass: nothing else retired, since #437 had just pruned it.
+- **Dropped, rejected, superseded:**
+  - #98 (deleted default tokens returning after a restore): not planned, by OA-5 = C; closed with its reopening condition (D-arc3-9). D11, F15, F16 and I7 retired with it.
+  - #221 (skip the profile's own contracts on import): closed as not planned in arc 2.
+  - #146's resume-journal authentication: rejected (D4), since no key exists before unlock, when the migrator runs.
+  - OA-11 B (rewording the account export's warning): not taken; A, the sentence unchanged, ships.
+  - Cross-arc X-2 (logging only fixed categories in the reminder): rejected, since `{ error }` is the logging policy's form.
+  - The alternatives each decision rejected are in the ledgers: D1 to D16 in [lessons/phase-0.md](lessons/phase-0.md), D-arc3-1 to D-arc3-19 below.
+- **Known limits:** #455 (I8, two Restore again runs move one lease), #456 (I9, worker removals race a reminder write), #457 (O-2, a port re-opened after Back mid-run).
+- **Open items:** #148 (the upstream HandshakeRegistry report, the owner's; `blocked:external`, commented).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # Backup import and export: key wipes, decoders, the migration engine, the account-state slice, restore outcomes
 
