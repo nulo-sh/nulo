@@ -393,6 +393,20 @@ describe("useStaleNetwork", () => {
 		expect(live.deps.onCompleted).not.toHaveBeenCalled()
 	})
 
+	test("refresh re-reads the active network's view only while it is stale", async () => {
+		const w = fakeWorker()
+		const held = view({ heldBy: { name: "My Testnet" } })
+		let stored: StaleNetworkView | null = held
+		const { stale, deps } = harness(w, { scope: () => ({ profileId: "p1", networkId: "tn" }), staleActive: () => stored })
+		await stale.refresh()
+		expect(deps.syncActive).toHaveBeenCalledWith("tn")
+		stored = null
+		await stale.refresh()
+		stored = view({ networkId: "ln" })
+		await stale.refresh()
+		expect(deps.syncActive).toHaveBeenCalledTimes(1)
+	})
+
 	test("an unreachable custom node marks that network for R4, and a later start clears it", async () => {
 		const w = fakeWorker()
 		w.views.set("tn", view())

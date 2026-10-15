@@ -193,6 +193,10 @@ const takeover = computed(() =>
 	}),
 )
 watch(
+	() => appStore.networks,
+	() => void stale.refresh(),
+)
+watch(
 	() => appStore.isLogined && appStore.profile?.id,
 	(active) => {
 		stale.clear()

@@ -362,6 +362,7 @@ The mockups are the spec. A deviation is an Ask; none is made silently.
 | S1a | Network reset: unlock gives A1; Switch network round trip (the networks page shows no account block); double-click RESET; A4; A5 toast with the account loaded; row chainId equals the seed; addresses, names, indexes kept; Local untouched | the unlock → classify → bootstrap → takeover → router chain runs only in the real shell, and A5's account load races the switch handler only there | 40 s |
 | S1b | Address change on Testnet (A2), with one hidden account and one account imported through the UI: Nulo_v1 addresses become the true derivation; the hidden one stays hidden; the imported account survives at its address and its key opens (re-export preview); "new addresses" toast | the journal's reseal, the purge of key rows and the ciphertext check run together only in the real worker. The helper moves only Nulo_v1 address rows, so it needs no DEK; both causes with an imported key are unit-tested with real seal and unseal | 35 s |
 | S1c | Mainnet A6: one button; a user-data storage snapshot is unchanged after Switch | only a full popup run shows that no bootstrap, seeder or default-account path writes to Mainnet's rows | 20 s |
+| S1d | R2: deleting, from Networks, the network that holds the new chain brings back A1 (D56) | the re-read hangs on the shell's watcher of the network list, and `app.vue` has no harness | 10 s (measured 7.4 s, Chrome) |
 
 A mixed tamper that still blocks the profile is not an e2e: the coordinator unit test and `AccountIntegrityBarrier.test.ts` prove it.
 
@@ -527,6 +528,7 @@ Sources: **M** main leg, **C** Codex leg, **F** Opus leg; **K** contradiction ch
 | D53 | The takeover closes every popup open over the route when it appears | arc 2 review (C) | accepted: Receive's address outlived a takeover that started under it; listed for the owner's capture sign-off |
 | D54 | A run that moves no account shows the loader (a spinner, no copy) in every popup; the popup that started it keeps the loader until the store holds the row's new view | arc 2 loop (C) | accepted: "a run with N = 0 shows the loader" had no screen behind it, so the starting popup stayed interactive while another popup showed A4; listed for the owner's capture sign-off (A4c) |
 | D55 | Send and Receive act only on the active network's own account | arc 2 loop (C) | accepted: a stale target's view waits up to 5 s for A6's probe while the store still holds the previous network's account, whose address Receive would show under the new network's name; the buttons look the same and do nothing until the Header shows the account |
+| D56 | Adding, renaming or deleting a network re-reads the active network's stale view | final pass (C) | accepted: R2 kept its cached holder after the user deleted it from Networks, with no way to reset; S1d pins the shell's wiring |
 
 ## Audit verdicts
 
@@ -563,7 +565,7 @@ Over `1ba770cf..5785b342`, then each fix. **Round 1 (fresh): 4 material.** Accep
 
 ### Arc 2 Codex fix loop (gpt-6.1-sol high), 2026-10-15
 
-Over `010586a4..aacbed3e`, fresh; a preliminary pass on the uncommitted code had converged (D49–D53), and this one was told its convergence was not evidence. **Round 1: 3 material, all accepted**: a completion that reached a booting popup before its session began left it on A4 with no account (the resume catches up); Receive could show the previous network's address while a stale target's view waited on A6's probe (D55); an automatic run showed nothing in the popup that started it and A4 in another (D54). The low ones: A1 and A3's type roles, itemized in `lessons/phase-6.md` for the sign-off, and a comment's history. **Round 2 (resumed): 2 material, accepted**: an ended session's automatic run kept the next session behind the loader; the catch-up and the completion event could both run one completion. **Round 3 (resumed): "VERDICT: no new material findings"**. Fixes in `7f956cf7`, `d41fc363`, `562cb12a`.
+Over the Phase 5–7 commits, fresh; a preliminary pass on the uncommitted code had converged (D49–D53), and this one was told its convergence was not evidence. **Round 1: 3 material, all accepted**: a completion that reached a booting popup before its session began left it on A4 with no account (the resume catches up); Receive could show the previous network's address while a stale target's view waited on A6's probe (D55); an automatic run showed nothing in the popup that started it and A4 in another (D54). The low ones: A1 and A3's type roles, itemized in `lessons/phase-6.md` for the sign-off, and a comment's history. **Round 2 (resumed): 2 material, accepted**: an ended session's automatic run kept the next session behind the loader; the catch-up and the completion event could both run one completion. **Round 3 (resumed): "VERDICT: no new material findings"**. Fixes in `8d28bfd6`, `02d3a5fa`, `5713f56b` (SHAs after the arc was rebased onto the final pass's arc 1 fix).
 
 ## Delivery
 

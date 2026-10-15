@@ -13,14 +13,24 @@
  *      back at their true addresses, the hidden one hidden, the imported one at its address with
  *      a key that opens.
  * S1c  Mainnet (A6): one button, no reset, and leaving it writes nothing to Mainnet's rows.
+ * S1d  R2: deleting, from Networks, the network that holds the new chain brings back A1's reset.
  */
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
-import { CHAIN_IDS } from "@/utils/chain-ids"
+import { CHAIN_IDS, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { clickByTestId, launchExtension, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
-import { closeStuckPopup, createAccount, ensureUnlocked, lockWallet, waitForToast } from "./fixtures/helpers"
+import {
+	closeStuckPopup,
+	createAccount,
+	deleteNetworkRow,
+	ensureUnlocked,
+	lockWallet,
+	navigateByHash,
+	waitForToast,
+} from "./fixtures/helpers"
 import { confirmImport, exportAccountBody, exportImportedAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "./helpers/account-io"
 import {
+	addNetwork,
 	E2E_MAINNET_CHAIN_ID,
 	PREVIOUS_TESTNET_CHAIN_ID,
 	readAccounts,
@@ -167,5 +177,31 @@ describe("stale network", () => {
 		await page.waitForSelector('[data-testid="account-address-copy"]', { visible: true, timeout: 60_000 })
 		expect(await page.$(TAKEOVER)).toBeNull()
 		expect(await snapshotChain(page, E2E_MAINNET_CHAIN_ID, networkId)).toEqual(mainnetBefore)
+	})
+
+	test("S1d R2: deleting the network that holds the new chain, from Networks, brings back A1's reset", {
+		timeout: 180_000,
+		retry: 0,
+	}, async ({ registeredExtensionPerTest: ctx }) => {
+		const page = await openPopup(ctx)
+		await waitForHash(page, "#/popup/general", 30_000)
+		await lockWallet(page)
+		await seedStaleNetwork(page, "network-reset")
+		await addNetwork(page, {
+			name: "My Testnet",
+			kind: "custom",
+			chainId: CHAIN_IDS.TESTNET,
+			l1ChainId: TESTNET_L1_CHAIN_ID,
+			movedAccount: false,
+			active: false,
+		})
+		await ensureUnlocked(page)
+		expect(await takeoverScreen(page)).toBe("already-added")
+
+		await clickByTestId(page, "stale-network-open-networks")
+		await waitForHash(page, "#/popup/settings/networks")
+		await deleteNetworkRow(page, "My Testnet")
+		await navigateByHash(page, "#/popup/general", 15_000)
+		expect(await takeoverScreen(page, "network-reset", 15_000)).toBe("network-reset")
 	})
 })

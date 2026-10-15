@@ -4,6 +4,7 @@
 
 - `tests/e2e/stale-network.test.ts`: S1a (network reset: A1, Networks and back, one reset from a double click, A4, then A5 with the account loaded and Local untouched), S1b (address change: A2; derived accounts back at their true addresses, the hidden one hidden, the imported one with its key), S1c (Mainnet: A6 with one button, and leaving it writes nothing to Mainnet's rows).
 - `tests/e2e/stale-network-captures.test.ts`, opt-in (`STALE_NETWORK_CAPTURES=1`, Chrome only): every takeover state in both themes at 360×600 and 2×, into `tests/e2e/.captures/`, one file per `ui-spec/` reference. A running reset (A4, A4b, A15b) is frozen by holding one storage write inside the background, never by a build flag.
+- S1d, from the final cross-arc review: R2, the holder deleted from Networks, then A1 again. It fails without the shell's watcher (the cached R2 stays) and passes with it, in 7.4 s on Chrome.
 - Helpers: `helpers/stale-network.ts` (seeding the stale shapes, reading accounts and rows, the takeover trace, `takeoverScreen`), `helpers/stale-network-capture.ts` (when captures run, the frame, both themes), `helpers/stale-network-capture-seeds.ts` (the states only captures need).
 - The root `.gitignore` ignores `apps/extension/tests/e2e/.captures/`; nothing ignored it before.
 

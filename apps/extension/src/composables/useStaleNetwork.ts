@@ -225,6 +225,13 @@ export function useStaleNetwork(deps: StaleNetworkDeps) {
 		if (!pending) await takeNotice(s, profileId)
 	}
 
+	/** Re-reads the active network's view while it is stale: adding, renaming or deleting a network
+	 *  changes its name or which row holds its new chain (R2). */
+	const refresh = async () => {
+		const scope = deps.scope()
+		if (scope && deps.staleActive()?.networkId === scope.networkId) await deps.syncActive(scope.networkId)
+	}
+
 	/** Ends what the ended session or profile showed and owned. */
 	const clear = () => {
 		session = new Session()
@@ -258,10 +265,9 @@ export function useStaleNetwork(deps: StaleNetworkDeps) {
 		deps.client.onStaleNetworkChanged.remove(onChanged)
 	}
 
-	return { running, nodeDown, starting, start, resume, clear, dispose }
+	return { running, nodeDown, starting, start, resume, refresh, clear, dispose }
 }
 
 export type StaleNetwork = ReturnType<typeof useStaleNetwork>
 
-/** The shell provides its one instance; the takeover injects it. */
 export const STALE_NETWORK_KEY: InjectionKey<StaleNetwork> = Symbol("stale-network")
