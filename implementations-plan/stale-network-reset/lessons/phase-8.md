@@ -26,6 +26,8 @@
 
 The fixes broke into the gate's second Chrome run, which was stopped; the gate restarted from the first run.
 
+**Round 2 (resumed): "All three gaps are closed … No new bug, security, test-gap or comment findings. VERDICT: no new material findings"**.
+
 ## Runtimes (scratch runs at retry 0, Chrome / Firefox; final versions)
 
 - N1: 26.3 s / 34.5 s (plan estimate 150 s).
