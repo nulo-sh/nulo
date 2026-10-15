@@ -3,5 +3,10 @@
 		"nulo-sh-resolve-asset-0.1.0.tgz": "df1f2369b5d33994988e7ecbd7a319c66f1f3c776ea358a40fc13539dc13acf4",
 		"nulo-sh-wallet-crypto-0.1.0.tgz": "d57ca93768261e9365f6e6e3c3393722787ffee1c89abd958e7703a164adb8c2",
 		"nulo-sh-wallet-sdk-schema-patch-0.1.0.tgz": "dc6b507754e22b82f6e07e248683fc4a903ff9fb5a8d3ef1c391c74bb4a7a778"
+	},
+	"0.2.0": {
+		"nulo-sh-resolve-asset-0.2.0.tgz": "d6e5c503db044be5792803aba4ddcac19d87cd6f1a15c22f3aea49ad36792c32",
+		"nulo-sh-wallet-crypto-0.2.0.tgz": "dfe257f5022f10c3c3b898c1a874f046b6f7d0d042d5cc681aa0943b4a703c3a",
+		"nulo-sh-wallet-sdk-schema-patch-0.2.0.tgz": "089d8d9e46f7f33289cdfe3d9108294a101d58dd44c48dd75483006ca6a23cd2"
 	}
 }
