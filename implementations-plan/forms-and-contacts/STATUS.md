@@ -45,3 +45,5 @@
 - 2026-10-14: gate 3.6 pass: lint, the three pages' tests + type-role ban + a11y-css + the new detail-page style pin 112/112 (the pin reds 4 cases on the parent CSS); the Chrome probe before and after recorded in lessons/phase-3.md; smoke rows Chrome 7/7 (32.8 s), Firefox 7/7 (55.1 s); FA-14 added to OWNER-ASKS.md.
 - 2026-10-15: arc 3b fast gate pass on 258eca5c: lint, typecheck:all, test (extension 12,352), test:all, check:plans. Screenshots committed at a1db94b2 and dropped in a26d61b1.
 - 2026-10-15: arc 3b review round 1: Codex approve (3 Low accepted), Opus approve (3 Low accepted, 1 known limit #447); fixes pass the design and import suites, lint, typecheck:all, and smoke contacts-import on Chrome 7/7 (hold 10.9 s).
+- 2026-10-15: arc 3b review round 2: Codex approve, no new findings; loop converged. Final cross-arc Codex pass started.
+- 2026-10-15: final cross-arc Codex pass: approve, two Low comment findings accepted (X-1, X-2).

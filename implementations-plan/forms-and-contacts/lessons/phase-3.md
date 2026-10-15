@@ -72,4 +72,5 @@ The tree wins; each disagreement is also in `plan.md` (§ Assumptions, "Arc 3b r
 - Codex round 1 (gpt-6.1-sol, high, read-only, session `01a13cd8`): approve, three Low findings, all accepted (plan § Audit verdicts, A3b-C1..C3).
 - Opus 5.5 review beside round 1: approve; A3b-O1..O3 accepted, A3b-O4 filed as #447 (`known-limit`, closed). The snack region reset focus on every change of card, so a replaced snack dropped keyboard focus to the body; restoring it where `show()` changes the card covers ×, a replacement and a timeout alike.
 - The before-suite ran this arc's test files against the base build, so the hold scenario, whose progress assertions need this arc's code, fails there by design (30 s wait); every other file passed.
+- Codex round 2 (resumed): approve, no new findings. Final cross-arc pass (fresh session `01a13ceb`): approve, two stale comments from earlier arcs fixed (plan § Audit verdicts, X-1, X-2).
 

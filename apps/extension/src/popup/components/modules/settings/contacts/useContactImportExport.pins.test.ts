@@ -1,11 +1,11 @@
 /**
- * Pre-extraction pins for the contacts import flow, complementing the sibling
- * suite (which already proves the byte cap, minimal rows, dedupe and adds-only senders):
+ * Pins for the contacts import flow, complementing the sibling suite (which already proves the
+ * byte cap, minimal rows, dedupe and adds-only senders):
  *   - the selection promise's CONTROLS are registered on the cache store BEFORE the popup opens, with
  *     the staged rows already in place, and settling through those controls settles the import;
  *   - per row the sender registration settles before that row's contact upsert, and a contact that
  *     then fails is reported as before;
- *   - every early exit clears the cache store's staging + controls;
+ *   - an early exit leaves the selection slot as it found it, since another selection may own it;
  *   - the toast ladder: contact errors (logged in order with the ORIGINAL error objects) win over
  *     sender failures; partial and total sender failures read differently.
  */

@@ -637,6 +637,14 @@ Outcome: the plan kept its #184, #205, #210 and #151 shapes; it took the outline
 - A3b-O4 [Low, known limit] a late stop snack from a run a lock released can replace the next import's line: #447, closed as a `known-limit`.
 - Nits applied: a comment wrapped mid-sentence and an unused type in the e2e. Kept: the comment-only slot case in `Input.test.ts`, a fallback check rather than before/after proof.
 
+**Codex round 2 (resumed): approve, no new findings.** A3b-C1..C3 and A3b-O1..O3 verified; the focus hand-back runs only on a change of card while focus is inside it, clears the flag before `focus()` (no focusout loop), and timeout and lock closes take the same guarded path. Loop converged.
+
+### Final cross-arc pass (2026-10-15): Codex (gpt-6.1-sol, high), fresh session `01a13ceb`
+
+**Approve** (high confidence), over the lane's net diff (#255, #282, #435 and this arc). No cross-arc behavioural defect; two Low comment findings, both accepted:
+- X-1 [Low] the import pins' header still said every early exit clears the selection slot, which arc 3b reversed: it now says an early exit leaves the slot as it found it.
+- X-2 [Low] `useLockWallet.ts`'s read-budget comment promised a lock without asking when the read never answers, but a running import still asks (arc 3a's confirm): it now states only the bound.
+
 ## Post-implementation
 
 `implementations-plan/README.md` § Post-implementation standard, read at `175d8268`, binds; what is specific to this plan:
