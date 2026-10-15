@@ -171,6 +171,7 @@ export function humanizeErrorKind(kind: JobErrorKind): string {
 		case "popup_bound":
 			return "Popup closed"
 		case "dapp_execute":
+		case "too_many_pending":
 			return "App"
 		case "transfer":
 			return "Transfer"
@@ -240,6 +241,8 @@ function nothingSentLabel(kind: JobErrorKind): CategoricalFailureLabel | undefin
 	switch (kind) {
 		case "transfer":
 		case "dapp_execute":
+		// A cap refusal reads as the app send it refused until it has words of its own.
+		case "too_many_pending":
 			return { ...STOPPED_BEFORE_BROADCAST }
 		case "sw_restart_post_prove":
 		case "stale_on_resume":
@@ -292,6 +295,7 @@ function kindLabel(kind: JobErrorKind): CategoricalFailureLabel {
 				context: "Your wallet couldn't finish this send. If it was already submitted, it may still go through.",
 			}
 		case "dapp_execute":
+		case "too_many_pending":
 			return { label: "Reported by app", context: "The connected app reported an error." }
 		default:
 			return { label: "Error", context: "Something went wrong with this transaction." }
