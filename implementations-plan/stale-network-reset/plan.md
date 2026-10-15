@@ -529,6 +529,7 @@ Sources: **M** main leg, **C** Codex leg, **F** Opus leg; **K** contradiction ch
 | D54 | A run that moves no account shows the loader (a spinner, no copy) in every popup; the popup that started it keeps the loader until the store holds the row's new view | arc 2 loop (C) | accepted: "a run with N = 0 shows the loader" had no screen behind it, so the starting popup stayed interactive while another popup showed A4; listed for the owner's capture sign-off (A4c) |
 | D55 | Send and Receive act only on the active network's own account | arc 2 loop (C) | accepted: a stale target's view waits up to 5 s for A6's probe while the store still holds the previous network's account, whose address Receive would show under the new network's name; the buttons look the same and do nothing until the Header shows the account |
 | D56 | Adding, renaming or deleting a network re-reads the active network's stale view | final pass (C) | accepted: R2 kept its cached holder after the user deleted it from Networks, with no way to reset; S1d pins the shell's wiring |
+| D57 | A10 is captured by an opt-in file of the network suite | Phase 8 | accepted: the Send page reaches a send only over a live node's balance, which the smoke suite has not |
 
 ## Audit verdicts
 
