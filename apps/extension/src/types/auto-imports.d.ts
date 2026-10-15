@@ -422,6 +422,7 @@ declare global {
   const usePopupStack: typeof import('../composables/usePopupStack').usePopupStack
   const usePopupStore: typeof import('../stores/popup.store').usePopupStore
   const usePrestoCheck: typeof import('../composables/usePrestoCheck').usePrestoCheck
+  const usePrestoHostPermission: typeof import('../composables/usePrestoHostPermission').usePrestoHostPermission
   const usePrestoStatus: typeof import('../composables/usePrestoStatus').usePrestoStatus
   const usePrices: typeof import('../composables/usePrices').usePrices
   const useProfileBootstrap: typeof import('../composables/useProfileBootstrap').useProfileBootstrap
@@ -536,6 +537,9 @@ declare global {
   // @ts-ignore
   export type { PrestoCheckConfig } from '../composables/usePrestoCheck'
   import('../composables/usePrestoCheck')
+  // @ts-ignore
+  export type { PrestoHostPermissionCallbacks } from '../composables/usePrestoHostPermission'
+  import('../composables/usePrestoHostPermission')
   // @ts-ignore
   export type { PricedToken } from '../composables/usePrices'
   import('../composables/usePrices')
@@ -1110,6 +1114,7 @@ declare module 'vue' {
     readonly usePopupStack: UnwrapRef<typeof import('../composables/usePopupStack')['usePopupStack']>
     readonly usePopupStore: UnwrapRef<typeof import('../stores/popup.store')['usePopupStore']>
     readonly usePrestoCheck: UnwrapRef<typeof import('../composables/usePrestoCheck')['usePrestoCheck']>
+    readonly usePrestoHostPermission: UnwrapRef<typeof import('../composables/usePrestoHostPermission')['usePrestoHostPermission']>
     readonly usePrestoStatus: UnwrapRef<typeof import('../composables/usePrestoStatus')['usePrestoStatus']>
     readonly usePrices: UnwrapRef<typeof import('../composables/usePrices')['usePrices']>
     readonly useProfileBootstrap: UnwrapRef<typeof import('../composables/useProfileBootstrap')['useProfileBootstrap']>

@@ -45,4 +45,6 @@ export default defineManifest((_env) => ({
 	},
 	// @ts-expect-error
 	permissions: ManifestConfig.permissions.filter((permission) => !FIREFOX_INCOMPATIBLE_PERMISSIONS.has(permission)),
+	// Firefox merges these with the MV3 host origins into one optional set: the install grant is unchanged.
+	optional_host_permissions: ["https://127.0.0.1/*", "http://127.0.0.1/*"],
 }))
