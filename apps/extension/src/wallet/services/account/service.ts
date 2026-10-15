@@ -660,7 +660,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		// from the key: a row stored under a superseded regime would export a file no build imports.
 		const derived = (await NuloAccount.fromSigningKey(signingKey, this.logger, this.name)).address.toString()
 		if (derived !== address) {
-			if (account.type === AccountType.Imported) throw ImportedAccountUnusableError.forAccount(address, "address mismatch")
+			if (account.type === AccountType.Imported) throw ImportedAccountUnusableError.because("address mismatch")
 			// A quarantined chain's rows are expected to mismatch. Classifying again needs the session,
 			// which a password-authenticated export may not hold, and would block the whole profile.
 			await this.assertChainUsable(profileId, chainId)
