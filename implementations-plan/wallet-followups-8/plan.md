@@ -8,7 +8,7 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: d59459ab
-status: draft (awaiting the orchestrator's approval)
+status: approved by the orchestrator; arc 1 implementing
 ---
 
 # wallet-followups-8: teardown stops waiting on node retries, a dead RPC goes, three popup fixes
@@ -84,6 +84,7 @@ The lane brief numbers the background set arc 1; this plan builds the popup set 
 - D3. #338: known limit. The consequence is one pin preference in a profile that took a deleted profile's id, behind a stale page or a parked write straddling a delete and a same-id restore. The fix needs `pxeGeneration` in `ProfileInfo` and pins keyed by it with a prefix purge: persistent shape and every pin path for a preference. Reopen on a report or when per-profile UI keys hold more than preferences.
 - D4. #277's token-add path: KL-4, not a fix. It needs a token add already running when the reset starts (its popup can be dismissed: the request keeps running, and the lock spans profiles); token persistence is a journaled, resumable state machine, and moving its metadata reads out of `withTokenLock` reworks it. The incoming path is fixed: scans run by themselves, and the read moves before the lock without changing who commits (Codex).
 - D-orch-1. Two arcs, each one PR against `dev`, no stack. Arc 1 merges first; arc 2 carries the close-out and merges last.
+- D-arc1-1 (deviation). Arc 1 is built in the lane worktree on `worktree-wallet-followups-8-popup`, cut from `origin/dev` at `2dcdad48`, not in a second worktree: the arc's write boundary is the lane worktree. So `agent-worktree done wallet-followups-8-popup` has nothing to remove; the branch goes when its PR merges. T5 gained a third row, a rebuilt `ChainNotSupportedError` reading the generic line, so a check widened to any typed error cannot pass (Opus review).
 
 ## Security & Adversarial Considerations
 
@@ -152,6 +153,9 @@ Known limits to file: **KL-3** (#277): after the stop, each node call still make
 | 1 | Opus 5.5 | conditional approve | the token-add path (Fact 2, KL-4); the #464 comment and gate fix; arm T4 before `openPopup`; the backoff wrap; T1 in `fetch.pins.test.ts`; KL-3 per call; OA-1's delay | none |
 | 2 | Codex, resumed | conditional approve | a stop raised during a backoff sleep still dispatched one retry (reproduced on the SDK): a second check before each retry; KL-4 is any running add, not a second window; OA-1's visible delay is the popup's 60 s RPC deadline; T8 release check | none |
 | 3 | Codex, resumed | **approve** | none new: the three conditions verified, no regression | none |
+| arc 1, r1 | Codex, gpt-6.1-sol (session 01a141dd) | approve | two comments: `auth.vue`'s close comment asserted an ownership the toast singleton lacks; `auth.test.ts`'s `retry` doc restated its body | none |
+| arc 1, r1 | Opus 5.5 | approve | a typed non-contract refusal (`ChainNotSupportedError`) as T5's control | none |
+| arc 1, r2 | Codex, resumed | **approve** | none new: the fixes (`0a039883`) verified, no regression | none |
 
 Over the light target: the two panel rounds and #466 added scope; nothing restates.
 
