@@ -19,7 +19,14 @@ import { CONFIG_SERVICE_NAME } from "@/wallet/services/config/spec"
 import { PROFILE_SERVICE_NAME, type ProfileInfo } from "@/wallet/services/profile/spec"
 import { TEST_LIST_ENTRIES, TEST_PRICED_TOKENS } from "@/wallet/services/token-list/list.fixture"
 import { TOKEN_LIST_SERVICE_NAME, type TokenListSnapshot } from "@/wallet/services/token-list/spec"
-import { PRICE_REFRESH_ALARM_NAME, PriceService, QUOTE_TTL_MS, type PriceSnapshot, type PriceState } from "./service"
+import {
+	PRICE_REFRESH_ALARM_NAME,
+	PRICE_REFRESH_PERIOD_MINUTES,
+	PriceService,
+	QUOTE_TTL_MS,
+	type PriceSnapshot,
+	type PriceState,
+} from "./service"
 
 type FetchResponse = { ok: boolean; status: number; json(): Promise<unknown> }
 
@@ -208,6 +215,38 @@ describe("PriceService — refresh pipeline", () => {
 		const { quotes } = await service.refreshIfStale()
 		expect(state.fetchCalls).toHaveLength(2)
 		expect(quotes.aztec).toBeDefined()
+	})
+
+	test("lastRefreshFailed reports this worker's latest fetch, whatever the cache still holds", async () => {
+		const { service, state } = await harness()
+		const failing = async () => ({ ok: false, status: 503, json: async () => ({}) })
+		state.fetchImpl = failing
+		expect(await service.refreshIfStale()).toMatchObject({ quotes: {}, lastRefreshFailed: true })
+		// Suppressed by the backoff: no new attempt, so the last one still stands.
+		expect((await service.refreshIfStale()).lastRefreshFailed).toBe(true)
+		expect(state.fetchCalls).toHaveLength(1)
+
+		state.nowMs += 60_000
+		state.fetchImpl = undefined
+		expect((await service.refreshIfStale()).lastRefreshFailed).toBe(false)
+
+		state.nowMs += PRICE_REFRESH_PERIOD_MINUTES * 60_000
+		state.fetchImpl = failing
+		const cached = await service.refreshIfStale()
+		expect(state.fetchCalls).toHaveLength(3)
+		expect(cached.lastRefreshFailed).toBe(true)
+		expect(Object.keys(cached.quotes).sort()).toEqual(["aztec", "usd-coin"])
+	})
+
+	test("a failed scheduled refresh is broadcast, so an open popup learns of it", async () => {
+		const { service, state } = await harness()
+		const seen: PriceSnapshot[] = []
+		service.onQuotesUpdated.add((s) => seen.push(s))
+		state.fetchImpl = async () => {
+			throw new Error("offline")
+		}
+		await service.onAlarmTick()
+		expect(seen).toEqual([{ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, lastRefreshFailed: true }])
 	})
 
 	test("a newer stored quote is never overwritten by an older response (monotonic)", async () => {

@@ -40,8 +40,10 @@ export function isQuoteFresh(quote: PriceQuote, now: number): boolean {
 }
 
 /** Usable quotes with the mapping that says which token each id prices. They travel together, so a
- *  reader never prices a token with a mapping from another moment than its quotes. */
-export type PriceSnapshot = { quotes: PriceState; pricedTokens: PricedTokens }
+ *  reader never prices a token with a mapping from another moment than its quotes.
+ *  `lastRefreshFailed`: this worker's latest fetch failed. It says nothing about `quotes`, which may
+ *  still hold usable cached ones. */
+export type PriceSnapshot = { quotes: PriceState; pricedTokens: PricedTokens; lastRefreshFailed: boolean }
 
 export type Methods = {
 	/** Usable quotes only (validated + fresh + fiat display enabled). */
@@ -51,7 +53,7 @@ export type Methods = {
 }
 
 export type Events = {
-	/** Emitted after every successful refresh and every new token list, and with no quotes when
+	/** Emitted after every fetch, failed or not, and every new token list, and with no quotes when
 	 *  fiat display is disabled. */
 	onQuotesUpdated: PriceSnapshot
 }

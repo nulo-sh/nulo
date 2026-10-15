@@ -16,6 +16,7 @@ let addedHandler: ((tb: unknown) => void) | undefined
 let updatedHandler: ((tb: unknown) => void) | undefined
 let configHandler: ((prop: { key: string; value: unknown }) => void) | undefined
 let connectedHandler: (() => void) | undefined
+let quotesHandler: ((snapshot: unknown) => void) | undefined
 
 const TEST_USDC = TEST_TOKENS.USDC
 // tok-1 is price-mapped (the testnet Test USDC row); tok-2 is deliberately unmapped.
@@ -94,14 +95,24 @@ vi.mock("@/wallet/services/config/client", () => ({
 // Controllable price feed: tests set `mockQuotes`.
 let mockQuotes: Record<string, unknown> = {}
 let answerQuotes: () => Promise<Record<string, unknown>> = async () => mockQuotes
+let mockRefreshFailed = false
 vi.mock("@/wallet/services/price/client", () => ({
 	PriceServiceClient: vi.fn(function () {
 		return {
 			disconnect: vi.fn(),
-			onQuotesUpdated: { add: vi.fn(), remove: vi.fn() },
+			onQuotesUpdated: {
+				add: vi.fn((fn: (snapshot: unknown) => void) => {
+					quotesHandler = fn
+				}),
+				remove: vi.fn(),
+			},
 			onConnected: { add: vi.fn(), remove: vi.fn() },
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
-			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: await answerQuotes(), pricedTokens: TEST_PRICED_TOKENS })),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, lastRefreshFailed: false })),
+			refreshIfStale: vi.fn().mockImplementation(async () => ({
+				quotes: await answerQuotes(),
+				pricedTokens: TEST_PRICED_TOKENS,
+				lastRefreshFailed: mockRefreshFailed,
+			})),
 		}
 	}),
 }))
@@ -209,7 +220,9 @@ afterEach(() => {
 	updatedHandler = undefined
 	configHandler = undefined
 	connectedHandler = undefined
+	quotesHandler = undefined
 	mockQuotes = {}
+	mockRefreshFailed = false
 	answerQuotes = async () => mockQuotes
 	mockShowFiat = true
 	seedRows = SEED
@@ -555,7 +568,7 @@ describe("BalanceView — Home hero while the total is still moving", () => {
 		expect(amount(wrapper).text()).toContain("$1,249.82")
 	})
 
-	test("a failed first price answer ends the wait in $0.00 with 'priced assets only'", async () => {
+	test("a price request that fails ends the wait in '—' and 'Prices unavailable', never $0.00", async () => {
 		let fail: (error: Error) => void = () => {}
 		answerQuotes = () =>
 			new Promise((_resolve, reject) => {
@@ -566,8 +579,9 @@ describe("BalanceView — Home hero while the total is still moving", () => {
 
 		fail(new Error("offline"))
 		await flushPromises()
-		expect(amount(wrapper).text()).toContain("$0.00")
-		expect(wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(true)
+		expect(amount(wrapper).text()).toBe("—")
+		expect(wrapper.find('[data-testid="balance-prices-unavailable"]').exists()).toBe(true)
+		expect(wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(false)
 	})
 
 	test("an empty wallet and an unpriced-only wallet never wait for prices", async () => {
@@ -595,6 +609,59 @@ describe("BalanceView — Home hero while the total is still moving", () => {
 		await vi.advanceTimersByTimeAsync(1)
 		expect(amount(wrapper).text()).toContain("$0.00")
 		expect(wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(true)
+	})
+})
+
+describe("BalanceView — Home hero when prices could not be fetched", () => {
+	type Wrapper = Awaited<ReturnType<typeof mountView>>["wrapper"]
+	const amount = (w: Wrapper) => w.find('[data-testid="balance-amount"]')
+	const unavailableCaption = (w: Wrapper) => w.find('[data-testid="balance-prices-unavailable"]')
+	const partialCaption = (w: Wrapper) => w.find('[data-testid="balance-fiat-partial"]')
+	// Price-mapped (tether) and never quoted here.
+	const USDT_ROW = { ...SEED[0], id: "b3", token: { ...SEED[0].token, id: "tok-3", symbol: "CCC", contract: TEST_TOKENS.USDT } }
+
+	test("funded, nothing priced: '—' and 'Prices unavailable', never $0.00", async () => {
+		mockRefreshFailed = true
+		const { wrapper } = await mountView()
+		expect(amount(wrapper).text()).toBe("—")
+		expect(amount(wrapper).find('[aria-hidden="true"]').text()).toBe("—")
+		expect(unavailableCaption(wrapper).text()).toBe("Prices unavailable")
+		expect(partialCaption(wrapper).exists()).toBe(false)
+	})
+
+	test("a usable cached quote still shows the amount, partly priced with 'priced assets only'", async () => {
+		mockRefreshFailed = true
+		mockQuotes = FRESH()
+		seedRows = [SEED[0], USDT_ROW] as typeof SEED
+		const { wrapper } = await mountView()
+		expect(amount(wrapper).text()).toContain("$1,249.82")
+		expect(partialCaption(wrapper).exists()).toBe(true)
+		expect(unavailableCaption(wrapper).exists()).toBe(false)
+	})
+
+	test("an empty wallet still reads $0.00, with no caption", async () => {
+		mockRefreshFailed = true
+		seedRows = [{ ...SEED[0], publicBalance: "0", privateBalance: "0" }] as typeof SEED
+		const { wrapper } = await mountView()
+		expect(amount(wrapper).text()).toContain("$0.00")
+		expect(unavailableCaption(wrapper).exists()).toBe(false)
+		expect(partialCaption(wrapper).exists()).toBe(false)
+	})
+
+	test("a failed refresh while Home is open replaces the figure, and a clean one brings it back", async () => {
+		mockQuotes = FRESH()
+		const { wrapper } = await mountView()
+		expect(amount(wrapper).text()).toContain("$1,249.82")
+
+		quotesHandler?.({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, lastRefreshFailed: true })
+		await flushPromises()
+		expect(amount(wrapper).text()).toBe("—")
+		expect(unavailableCaption(wrapper).exists()).toBe(true)
+
+		quotesHandler?.({ quotes: FRESH(), pricedTokens: TEST_PRICED_TOKENS, lastRefreshFailed: false })
+		await flushPromises()
+		expect(amount(wrapper).text()).toContain("$1,249.82")
+		expect(unavailableCaption(wrapper).exists()).toBe(false)
 	})
 })
 

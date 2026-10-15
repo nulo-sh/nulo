@@ -14,6 +14,25 @@ import { knownDecimals } from "@/utils/token-amount"
 /** A token as pricing reads it: priced only when its decimals are known (`knownDecimals`). */
 export type PricedToken = { chainId?: number; contract?: string; decimals?: number; hasDecimals?: boolean }
 
+/** Orders price answers against broadcasts, so a slow answer never overwrites a newer one: an answer
+ *  takes its number when it is requested, a broadcast when it arrives. */
+function latestWins() {
+	let issued = 0
+	let applied = 0
+	return {
+		issue: () => ++issued,
+		/** True when `seq` is newer than every number applied so far; it then becomes the newest. */
+		admit(seq: number): boolean {
+			if (seq <= applied) return false
+			applied = seq
+			return true
+		},
+		close() {
+			applied = Number.POSITIVE_INFINITY
+		},
+	}
+}
+
 /**
  * C1 composable over the price feed. Receives the CONNECTED client from the
  * parent (which owns connect/disconnect per the composable conventions) and
@@ -31,13 +50,25 @@ export function usePrices(priceService: PriceServiceClient) {
 	const mapped = ref(false)
 	/** The first price answer has arrived: a refresh result or failure, or a broadcast. */
 	const settled = ref(false)
+	/** The latest price answer says no fetch could succeed: the worker's last fetch failed, or the
+	 *  request itself did. Usable quotes held beside it stay usable. */
+	const unavailable = ref(false)
 	const now = useTicker(30_000)
 
-	const onQuotesUpdated = (snapshot: PriceSnapshot) => {
+	const failures = latestWins()
+	const applyFailure = (seq: number, failed: boolean) => {
+		if (failures.admit(seq)) unavailable.value = failed
+	}
+
+	const adopt = (snapshot: PriceSnapshot) => {
 		quotes.value = snapshot.quotes
 		pricedTokens.value = snapshot.pricedTokens
 		mapped.value = true
 		settled.value = true
+	}
+	const onQuotesUpdated = (snapshot: PriceSnapshot) => {
+		adopt(snapshot)
+		applyFailure(failures.issue(), snapshot.lastRefreshFailed)
 	}
 	priceService.onQuotesUpdated.add(onQuotesUpdated)
 
@@ -55,12 +86,16 @@ export function usePrices(priceService: PriceServiceClient) {
 	// Stale-on-connect refresh; the service no-ops when the cache is fresh
 	// (and returns {} when fiat display is disabled).
 	const resnapshot = () => {
+		const seq = failures.issue()
 		priceService
 			.refreshIfStale()
-			.then(onQuotesUpdated)
+			.then((snapshot) => {
+				adopt(snapshot)
+				applyFailure(seq, snapshot.lastRefreshFailed)
+			})
 			.catch(() => {
-				// Price data is best-effort; surfaces render token-only without it.
 				settled.value = true
+				applyFailure(seq, true)
 			})
 	}
 	resnapshot()
@@ -115,6 +150,7 @@ export function usePrices(priceService: PriceServiceClient) {
 	}
 
 	const dispose = () => {
+		failures.close()
 		priceService.onQuotesUpdated.remove(onQuotesUpdated)
 		priceService.onConnected.remove(resnapshot)
 	}
@@ -122,6 +158,7 @@ export function usePrices(priceService: PriceServiceClient) {
 	return {
 		usableQuotes,
 		settled: readonly(settled),
+		unavailable: readonly(unavailable),
 		mapped: readonly(mapped),
 		isPriced,
 		quoteFor,
