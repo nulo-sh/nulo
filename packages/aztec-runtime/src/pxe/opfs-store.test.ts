@@ -92,11 +92,25 @@ describe("initStoreVersionStamp — refuse-and-preserve on mismatch (D-B2v3, 5.0
 	})
 
 	it("THROWS (never wipes) on an unparseable stamp — a hostile/corrupt blob is refused, not wiped", async () => {
-		const { store, calls } = fakeStore("not-a-valid-database-version-stamp")
+		const STAMP = "not-a-valid-database-version-stamp"
+		const { store, calls } = fakeStore(STAMP)
 		const { warn, log } = spyLog()
-		const refused = initStoreVersionStamp(store, ROLLUP, log)
-		await expect(refused).rejects.toBeInstanceOf(PxeStoreVersionMismatch)
-		await expect(refused).rejects.toThrow("stamp failed to parse (")
+		const refused = await initStoreVersionStamp(store, ROLLUP, log).then(
+			() => undefined,
+			(err: unknown) => err,
+		)
+		expect(refused).toBeInstanceOf(PxeStoreVersionMismatch)
+		// The message ends at the category; the parser's error, which quotes the stored bytes, is only the cause.
+		expect((refused as Error).message).toBe("PXE store version mismatch. Refusing to open (preserving data): stamp failed to parse")
+		const parserError = (() => {
+			try {
+				DatabaseVersion.fromBuffer(Buffer.from(STAMP, "utf-8"))
+			} catch (err) {
+				return err
+			}
+		})()
+		expect(parserError).toBeInstanceOf(Error)
+		expect((refused as Error).cause).toEqual(parserError)
 		expect(calls.cleared).toBe(false)
 		// The parser's message quotes the stored bytes, which the log line must never carry.
 		expect(warn.mock.calls).toEqual([[REFUSAL, { reason: "stamp failed to parse" }]])

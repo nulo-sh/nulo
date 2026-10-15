@@ -128,7 +128,8 @@ export type JobProgress =
  * Producers: `normalizeError(…, "transfer" | "dapp_execute" | "prover" |
  * "network" | "unknown")`, `popup_bound`, `scope_refused`, `malformed_request`, `terms_refused` and
  * `wallet_refused` (wallet-sdk; `scope_refused` also from execution's `markFailedUnlessCancelled`,
- * `terms_refused` also from the dApp interaction service), the reaper
+ * `terms_refused` also from the dApp interaction service), `too_many_pending` (execution's
+ * waiting-sends cap), the reaper
  * (`sw_restart_post_prove` | `stuck_proving` | `stuck_queued` | `stale_on_resume`),
  * and `classifyTokenImportError` (`network_unreachable` | `contract_invalid` |
  * `metadata_fetch` | `unknown`). `user_rejected` | `network` | `simulation` are
@@ -141,6 +142,7 @@ export type KnownJobErrorKind =
 	| "malformed_request"
 	| "terms_refused"
 	| "wallet_refused"
+	| "too_many_pending"
 	| "sw_restart_post_prove"
 	| "stale_on_resume"
 	| "stuck_proving"
@@ -173,6 +175,7 @@ const KNOWN_JOB_ERROR_KIND_TABLE = {
 	malformed_request: true,
 	terms_refused: true,
 	wallet_refused: true,
+	too_many_pending: true,
 	sw_restart_post_prove: true,
 	stale_on_resume: true,
 	stuck_proving: true,

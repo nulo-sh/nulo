@@ -9,6 +9,7 @@ const row = (symbol: string, over: Partial<OrderableRow> & { contract?: string; 
 		name: over.name ?? `${symbol} Token`,
 		symbol,
 		decimals: 6,
+		hasDecimals: true,
 	},
 	publicBalance: over.publicBalance ?? "0",
 	privateBalance: over.privateBalance ?? "0",
@@ -33,6 +34,24 @@ describe("classifyRow", () => {
 		const huge = row("HUGE", { privateBalance: "1" })
 		huge.token.decimals = 500
 		expect(classifyRow(huge, ctx({}))).toBe("unknown")
+	})
+
+	test("a held row in decimals the wallet does not know ranks with the unknown rows, behind a held unpriced row", () => {
+		const guessed = (over: Partial<OrderableRow> = {}) => {
+			const r = row("GUESS", { name: "Aardvark", privateBalance: "5", ...over })
+			r.token.decimals = 0
+			r.token.hasDecimals = false
+			return r
+		}
+		expect(classifyRow(guessed(), ctx({}))).toBe("unknown")
+		expect(orderTokenRows([guessed(), row("ALPHA", { privateBalance: "1" })], ctx({})).map((r) => r.token.symbol)).toEqual([
+			"ALPHA",
+			"GUESS",
+		])
+		// Controls: known decimals stay held, a zero balance stays empty, a pin stays pinned.
+		expect(classifyRow(row("GUESS", { privateBalance: "5" }), ctx({}))).toBe("held-unpriced")
+		expect(classifyRow(guessed({ privateBalance: "0" }), ctx({}))).toBe("empty")
+		expect(classifyRow(guessed(), ctx({}, new Set(["0xguess"])))).toBe("pinned")
 	})
 
 	test("pin membership wins before any number is read", () => {

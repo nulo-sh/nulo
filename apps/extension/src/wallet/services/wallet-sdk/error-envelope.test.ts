@@ -13,6 +13,7 @@ import {
 	UserRejectedError,
 } from "@nulo/extension-messaging/errors"
 import {
+	ContractNotFoundError,
 	ContractNotRegisteredError,
 	InvalidWalletArgumentsError,
 	DuplicateInitializationError,
@@ -224,6 +225,11 @@ describe("stale-anchor and unregistered-contract arms", () => {
 		expect(JSON.stringify(env)).not.toContain("0x2015")
 		// The phrase dApp-side substring classifiers key on.
 		expect((env as { message: string }).message.toLowerCase()).toContain("not registered")
+	})
+
+	test("ContractNotFoundError stays unclassified, as the plain error it replaced did: no new dApp contract", () => {
+		expect(toWalletResponseError(new ContractNotFoundError())).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+		expect(toWalletResponseError(new Error(ContractNotFoundError.MESSAGE))).toBe(UNCLASSIFIED_ERROR_MESSAGE)
 	})
 
 	test("InvalidWalletArgumentsError → {code:-32602, INVALID_PARAMS} with a constant message naming no method", () => {

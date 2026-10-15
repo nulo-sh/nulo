@@ -10,6 +10,7 @@
 
 <script setup>
 /** Components */
+import { FieldWarning } from "@nulo/design"
 import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vue"
 
 /** Services */
@@ -17,6 +18,8 @@ import { managers } from "@/utils/core"
 
 /** Utils */
 import { FileTooLargeError, pickFile } from "@/utils"
+import { sameStoredName } from "@/utils/account-name"
+import { sameFieldAddress } from "@nulo/wallet-bridge"
 import { storageLocalSet } from "@/utils/storage"
 
 /** Composables */
@@ -47,6 +50,10 @@ let generation = 0
  *  needs the password it was exported with. */
 const isProtectedFile = computed(() => fileBody.value.trim().length > 0 && !fileBody.value.trim().startsWith("{"))
 const needsConfirm = computed(() => previewAddress.value.length > 0)
+/** Another account's name: the account this page imports, once in the list, is not another. */
+const nameTaken = computed(() =>
+	appStore.accounts.some((a) => !sameFieldAddress(a.address, previewAddress.value) && sameStoredName(a.name, accountName.value)),
+)
 
 // Coarse pre-read byte gate (×4 headroom over the service's authoritative
 // 64 KiB string-length check, covering UTF-8-bytes vs UTF-16-units skew).
@@ -96,7 +103,7 @@ const handlePreview = async () => {
 
 /** The user confirmed the previewed address; write the account and return to the list. */
 const handleConfirmImport = async () => {
-	if (!needsConfirm.value || !accountName.value.trim() || isBusy.value) return
+	if (!needsConfirm.value || !accountName.value.trim() || nameTaken.value || isBusy.value) return
 	isBusy.value = true
 	error.value = ""
 	const gen = generation
@@ -244,7 +251,11 @@ const collapsingLabel = "Import Account"
 					:disabled="isBusy"
 					data-testid="import-account-name-input"
 					v-model="accountName"
-				/>
+				>
+					<template v-if="nameTaken" #right>
+						<FieldWarning> Already exist </FieldWarning>
+					</template>
+				</Input>
 			</div>
 
 			<div class="export_section_last">
@@ -278,7 +289,7 @@ const collapsingLabel = "Import Account"
 			<Button
 				v-else
 				@click="handleConfirmImport"
-				:disabled="!accountName.trim() || isBusy"
+				:disabled="!accountName.trim() || nameTaken || isBusy"
 				variant="cta"
 				data-testid="import-account-submit"
 			>

@@ -223,7 +223,8 @@ export type SendCheckState = Pick<FailedProgress, "check" | "inclusion" | "check
 /**
  * The answers the send check may record over what a row holds:
  * - none: `sent` or `reverted` (with the block, unless already final), or `unconfirmed`;
- * - `unconfirmed`: `expired`, on a row with a recorded expiry;
+ * - `unconfirmed`, on a row with a recorded expiry: `expired`, or `sent` (with the block, unless
+ *   already final) once its expiry nullifier is spent and its own receipt is a mined success;
  * - `sent` or `reverted` with a block not yet final: final (the block cleared), included in
  *   another block, or pruned (no answer, its window restarted at `checkSince`).
  * Nothing replaces `expired`, or a `sent` or `reverted` that holds no block.
@@ -231,7 +232,9 @@ export type SendCheckState = Pick<FailedProgress, "check" | "inclusion" | "check
 export function isSendCheckMove(from: FailedProgress, to: SendCheckState): boolean {
 	const mined = to.check === "sent" || to.check === "reverted"
 	if (from.check === undefined) return mined || (to.check === "unconfirmed" && to.inclusion === undefined)
-	if (from.check === "unconfirmed") return to.check === "expired" && from.expiry !== undefined && to.inclusion === undefined
+	if (from.check === "unconfirmed") {
+		return from.expiry !== undefined && (to.check === "sent" || (to.check === "expired" && to.inclusion === undefined))
+	}
 	if (from.inclusion === undefined || from.check === "expired") return false
 	if (to.check === undefined) return to.inclusion === undefined && to.checkSince !== undefined
 	return mined && to.inclusion?.hash !== from.inclusion.hash

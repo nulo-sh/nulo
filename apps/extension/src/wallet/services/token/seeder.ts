@@ -794,7 +794,14 @@ function continuationDelay(attempts: number): number {
 }
 
 /** `Error.name` is writable, so only names from this list reach a log line. */
-const ERROR_CATEGORIES: ReadonlySet<string> = new Set(["Error", "TypeError", "RangeError", "AbortError", "TimeoutError"])
+const ERROR_CATEGORIES: ReadonlySet<string> = new Set([
+	"Error",
+	"TypeError",
+	"RangeError",
+	"AbortError",
+	"TimeoutError",
+	"ContractNotFoundError",
+])
 
 function errorCategory(err: unknown): string {
 	return err instanceof Error && ERROR_CATEGORIES.has(err.name) ? err.name : "unknown"
