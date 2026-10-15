@@ -27,6 +27,7 @@ import { CAPTURE_VIEWPORT, CAPTURES_ENABLED, capture } from "./helpers/stale-net
 import {
 	armHold,
 	corruptImportedKeys,
+	forgetTestnetAccounts,
 	heldWrites,
 	releaseHold,
 	removeNetwork,
@@ -219,5 +220,19 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 		await capture(page, "A15b-header-loading")
 		await releaseHold(ctx)
 		await page.waitForSelector('[data-testid="account-address-copy"]', { visible: true, timeout: 60_000 })
+
+		// A1c and A3c: a Testnet this profile never opened, whose only change is the move off the
+		// user's node.
+		await relock(page, async () => {
+			await forgetTestnetAccounts(page)
+			await setTestnetPrimary(page, DEAD_NODE)
+		})
+		await takeoverScreen(page, "network-reset")
+		await page.waitForSelector('[data-testid="stale-network-node-line"]', { visible: true, timeout: 30_000 })
+		await capture(page, "A1c-never-opened")
+		await clickByTestId(page, "stale-network-reset")
+		await page.waitForSelector('[data-testid="stale-confirm"]', { visible: true })
+		await capture(page, "A3c-never-opened")
+		await clickByTestId(page, "stale-confirm-cancel")
 	})
 })

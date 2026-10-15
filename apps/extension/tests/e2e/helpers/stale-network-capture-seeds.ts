@@ -70,6 +70,29 @@ export async function seedStaleLocal(page: Page): Promise<void> {
 	}, NETWORKS)
 }
 
+/** Removes every account and imported key on the Testnet row's chain and makes Testnet the active
+ *  network: a Testnet this profile never opened. */
+export async function forgetTestnetAccounts(page: Page): Promise<void> {
+	await page.evaluate(
+		async (networks: string, roots: string[]) => {
+			const all = await chrome.storage.local.get(null)
+			const rows = Object.entries(all).filter(([, raw]) => typeof raw === "string") as [string, string][]
+			const testnet = rows
+				.filter(([key]) => key.startsWith(networks))
+				.map(([, raw]) => JSON.parse(raw))
+				.find((r) => r.kind === "testnet")
+			const gone = rows
+				.filter(([key, raw]) => roots.some((r) => key.startsWith(r)) && JSON.parse(raw).chainId === testnet.chainId)
+				.map(([key]) => key)
+			if (gone.length === 0) throw new Error("forgetTestnetAccounts: the Testnet chain holds no account")
+			await chrome.storage.local.remove(gone)
+			await chrome.storage.local.set({ [`nulo:core:active-network@${testnet.profileId}`]: testnet.id })
+		},
+		NETWORKS,
+		[ACCOUNTS, IMPORTED_KEYS],
+	)
+}
+
 /** Flips one character in every imported key's sealed fields, so no stored key opens. */
 export async function corruptImportedKeys(page: Page): Promise<number> {
 	return page.evaluate(async (prefix: string) => {
