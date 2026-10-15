@@ -12,6 +12,7 @@ import { AccountServiceClient } from "@/wallet/services/account/client"
 import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
 import { captureOwnWindow, releaseOwnWindow } from "@/utils/own-window"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
+import type { ProfileInfo } from "@/wallet/services/profile/spec"
 import Auth from "./auth.vue"
 
 const unlockProfile = vi.fn()
@@ -369,8 +370,8 @@ describe("auth.vue — bounded activation wait", () => {
 })
 
 describe("auth.vue — the mount's last-active lookup", () => {
-	const A = { id: "pA", name: "A", type: "password" }
-	const B = { id: "pB", name: "B", type: "password" }
+	const A = { id: "pA", name: "A", type: "password" } as ProfileInfo
+	const B = { id: "pB", name: "B", type: "password" } as ProfileInfo
 
 	/** Mounts with nothing selected and holds the profile list until the returned release. */
 	async function mountWithHeldLookup() {
@@ -378,11 +379,11 @@ describe("auth.vue — the mount's last-active lookup", () => {
 		let release!: () => void
 		vi.mocked(managers.profile.getProfiles).mockReturnValueOnce(
 			new Promise((resolve) => {
-				release = () => resolve([A, B] as never)
+				release = () => resolve([A, B])
 			}),
 		)
 		const mounted = mountAuth()
-		mounted.appStore.profile = undefined as never
+		mounted.appStore.profile = undefined
 		await flushPromises()
 		return { ...mounted, release }
 	}
@@ -396,7 +397,7 @@ describe("auth.vue — the mount's last-active lookup", () => {
 
 	test("a profile opened while the list loads stays selected", async () => {
 		const { appStore, release } = await mountWithHeldLookup()
-		appStore.profile = B as never
+		appStore.profile = B
 		appStore.isLogined = true
 		release()
 		await flushPromises()
