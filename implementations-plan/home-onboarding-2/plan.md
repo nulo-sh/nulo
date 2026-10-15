@@ -1,7 +1,7 @@
 ---
 plan: home-onboarding-2
 tier: light
-status: draft, awaiting the orchestrator's approval
+status: approved; arc 1 in progress
 issues: "#156 (arc 1); #132 (no arc: shipped by #348)"
 driver: claude-code
 claude_model: opus
@@ -119,7 +119,7 @@ On Firefox, while Nulo lacks its loopback host permission, the onboarding Presto
 
 Size: about 205 lines against the light target of 150. The ledger, the audit verdicts of a split panel and KL-1 (about 45 lines) are the record, so they stay.
 
-### Phase 1: the permission read and the row (#156)
+### Phase 1: the permission read and the row (#156) ✓
 1. Build the composable with at least 10 tests (CLAUDE.md § composables). Each never-happens case has a success control. The cases:
    - Chrome: no API call and no listener; `onFirstAllowed` runs once.
    - A manifest with `https://passkey.nulo.sh/` and `*://*/*`: the request names only the two loopback origins. No loopback entry: no API call.
