@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest"
 import { BUNDLED_TOKEN_CLASS_IDS } from "./class-ids"
 import { signEnvelope } from "./envelope"
-import { readTokenList } from "./index"
+import { readTokenList, SEQUENCE_FLOOR } from "./index"
 import {
 	BN254_FR_MODULUS,
 	checkPayload,
@@ -110,10 +110,10 @@ describe("payload", () => {
 
 	test("a signed list carrying a flagged set verifies and parses", async () => {
 		const { privateKey, pinned } = await freshKey()
-		const flagged = payload([entry(0)], { sequence: 1_792_100_000, flagged: [{ chainId: 7, address: hex64(9n) }] })
+		const flagged = payload([entry(0)], { sequence: SEQUENCE_FLOOR, flagged: [{ chainId: 7, address: hex64(9n) }] })
 		const bytes = new TextEncoder().encode(JSON.stringify(flagged))
 		const list = await readTokenList(JSON.stringify(await signEnvelope(bytes, privateKey, pinned.keyId)), [pinned])
-		expect(list).toMatchObject({ sequence: 1_792_100_000, entries: [expect.objectContaining({ symbol: "T0" })] })
+		expect(list).toMatchObject({ sequence: SEQUENCE_FLOOR, entries: [expect.objectContaining({ symbol: "T0" })] })
 	})
 
 	test("both modes parse a flagged set alike, and read an absent one as empty", () => {

@@ -43,9 +43,8 @@ export type VerifiedTokenList = {
 }
 
 /**
- * Verifies an envelope's signature, then parses its payload, refuses a sequence below `floor`, then
- * keeps the entries the wallet acts on. Throws `EnvelopeError` or `PayloadError`; a caller keeps its
- * previous list on either.
+ * Verifies the envelope before parsing a byte of its payload, and refuses a sequence below `floor`.
+ * Throws `EnvelopeError` or `PayloadError`.
  */
 export async function readTokenList(
 	text: string,

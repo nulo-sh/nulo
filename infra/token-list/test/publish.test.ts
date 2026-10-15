@@ -27,6 +27,15 @@ const envelopeFor = (sequence: number, tokens: unknown[] = [], flagged?: unknown
 		null,
 		"\t",
 	)}\n`
+// The static forms and the run-time loads no static scan follows, read as `import-closure.test.ts` reads them.
+const SPECIFIER = /(?:^|\n)\s*(?:import|export)\s[^;"]*?from\s+"([^"]+)"|(?:^|\n)\s*import\s+"([^"]+)"/g
+const RUNTIME_LOAD = /\bimport\s*\(|\brequire\s*\(/
+
+function specifiers(file: string, text: string): string[] {
+	expect(RUNTIME_LOAD.test(text), `${file} loads a module at run time`).toBe(false)
+	return [...text.matchAll(SPECIFIER)].map((match) => match[1] ?? match[2]).filter((specifier) => !specifier.startsWith("node:"))
+}
+
 const INPUT = { baseSha: "b".repeat(40), runUrl: "https://github.com/nulo-sh/nulo/actions/runs/1", payloadSha256: "p", tokensSha256: "t" }
 
 function fakeIO(state: { heads?: Record<string, string>; files?: Record<string, string>; open?: { number: number; branch: string }[] }) {
@@ -190,12 +199,7 @@ describe("the prepare summary", () => {
 			expect(specifier).toMatch(/^@nulo\/token-list(\/[a-z-]+)?$/)
 			return `packages/token-list/src/${specifier.replace(/^@nulo\/token-list\/?/, "") || "index"}.ts`
 		}
-		const imports = (file: string) =>
-			file.endsWith(".json")
-				? []
-				: [...readFileSync(join(REPO_ROOT, file), "utf8").matchAll(/\bfrom\s+"([^"]+)"/g)]
-						.map(([, specifier]) => specifier)
-						.filter((specifier) => !specifier.startsWith("node:"))
+		const imports = (file: string) => (file.endsWith(".json") ? [] : specifiers(file, readFileSync(join(REPO_ROOT, file), "utf8")))
 		const closure = (roots: readonly string[]) => {
 			const seen = new Set<string>()
 			const visit = (file: string) => {
@@ -213,11 +217,18 @@ describe("the prepare summary", () => {
 		// `publish-pr` installs nothing, so its closure imports only `node:` builtins and relative files.
 		const publishPr = closure(["infra/token-list/scripts/open-publish-pr.ts"])
 		expect(publishPr).toContain("infra/token-list/scripts/floor.ts")
-		for (const file of publishPr)
+		for (const file of publishPr) {
 			expect(
 				imports(file).filter((specifier) => !specifier.startsWith(".")),
 				file,
 			).toEqual([])
+		}
+	})
+
+	test("the import scan reads a side-effect import and refuses a run-time load", () => {
+		expect(specifiers("x.ts", 'import "pkg"\nimport { a } from "./a"\nexport { b } from "node:fs"')).toEqual(["pkg", "./a"])
+		for (const text of [`await import("pkg")`, `require("pkg")`])
+			expect(() => specifiers("x.ts", text)).toThrow("loads a module at run time")
 	})
 
 	test("diffs flags by (chainId, address) and renders each change", () => {

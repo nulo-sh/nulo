@@ -1,7 +1,8 @@
 /**
- * Turns `list.source.json` into a signed envelope. The signer refuses everything a wallet would
- * refuse, so a published list never fails verification or parsing for a reason the signer could
- * have caught.
+ * Turns `list.source.json` into a signed envelope. The signer refuses every payload a wallet would
+ * fail to verify or parse, so a published list never fails either for a reason the signer could
+ * have caught. It never checks the compiled floor: its sequence is above the published one, which
+ * the tree check holds at or above the floor.
  */
 
 import { decodeBase64Url, importSeed, type PinnedKey, PAYLOAD_FORMAT, publicKeyOf, signEnvelope, verifyEnvelope } from "./envelope"

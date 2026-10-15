@@ -43,7 +43,6 @@ export type TokenListEntry = {
 	priceId?: string
 }
 
-/** A token named by its chain and contract, as `flagged` carries it. */
 export type TokenListPair = { chainId: number; address: string }
 
 export type TokenListPayload = {
