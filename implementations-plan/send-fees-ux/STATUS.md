@@ -7,3 +7,5 @@
 - 2026-10-15: round 3 (Codex resume, confirmation): approve. Plan committed; awaiting the orchestrator's approval and OA-1 to OA-4.
 - 2026-10-15: arc1 started; merged origin/dev (4edf2c8f). Phase 1 (#316) gate F pass: lint, typecheck:all, test (795 files).
 - 2026-10-15: phase 2 (#340) gate F pass: lint, typecheck:all, test (795 files).
+- 2026-10-15: review round 1 (Codex conditional approve, Opus approve-after-fix): fixture fix 84e49ca0; known limits #528 #529; OA-5 added. Phase 3 network run started (load1 118).
+- 2026-10-15: phase 3 (#504 measure) pass: one prover-on run of fee-methods (-t fee-timing), green, 198 s; idle opens settle in 0.25-0.37 s, an open during a proof in 5.8 s with both legs held; probes reverted (git diff --stat -- apps empty); numbers on #504. Codex round 2: approve (loop converged).

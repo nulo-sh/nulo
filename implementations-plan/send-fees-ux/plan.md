@@ -45,7 +45,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
 1. ✓ **#316.** Change: `EditFpcPopup.vue`, `NewFpcPopup.vue` and its "duplicate addresses" pins. A new `EditFpcPopup.test.ts` block. Never: another row's address, pasted in upper case, warns "Already added", disables Save, and Enter calls no `updateFpcAddress`. Controls: a new address saves, and a rename beside an untouched address that another row also holds saves. UI impact: P18-09 A, "'Already added' on both forms". Gate: `F`.
    **1b, on OA-4 B only.** The own address re-cased reads as no change: Save stays disabled and nothing is called. Test beside phase 1's. UI impact: OA-4 B.
 2. ✓ **#340.** Change: `journal-state.ts`, `journal-state.test.ts:688-712` (header comment and expectations). The `test.each` over `pending` and `queued` expects the new label and line on the detail page and "Refused before sending" on the card. Control: a `wallet_refused` record keeps its own line. UI impact: P18-11 A, "Refused before sending" / "Too many sends were already waiting. Nothing was sent.". Gate: `F`.
-3. **#504, measure (no code lands).**
+3. ✓ **#504, measure (no code lands).** Numbers: [lessons/phase-3.md](lessons/phase-3.md); posted on #504.
    - Probe: temporary `console.info("[fee-timing]", { stage, ms })` lines with numbers only. Mark them in `FeeSettingsCard` (mount, prefill read, FPC leg ready, gas leg ready, commit, and whether `peekGasBalances` hit and was stale) and in `balances.store.ts` (the wait for an earlier attempt, the new attempt, a timeout).
    - Collect: turn Developer Mode on in the run, since `readSwLogTrail` (`tests/e2e/fixtures/journal.ts:310-319`) is empty without it, and read the trail once the commit marker has flushed (2 s).
    - Runs, through `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/fee-methods.test.ts --retry=0` with a temporary step: Send opened twice with no transaction between, once after a send, and once while a real proof runs (prover on). The proof gate holds before `pxe.proveTx` (`execution-coordinator.ts:265`), so the proverless burst cannot show this. Open Send only after the offscreen prove call has started (its line in the trail).
@@ -99,6 +99,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
 | D3 | peek source (C) | read-only `balancesStore.peekGas` | `peek: true` caps: a peek never lands while the card's forced read is pending (`balances.store.ts:406`), and it would write display data into the shared entry; a new service client in the card |
 | D4 | #316 rule | the forms, as the add form | a service refusal (the name rule has none; the archived plan's D3) |
 | D5 | #503 init debounce (500 ms) | unchanged | skip it at init: one option for one caller |
+| D7 | #504 probe collection (deviation, arc 1) | popup marks in a page global, worker marks in a `chrome.storage.session` key, read by the test | Developer Mode plus `readSwLogTrail`: Codex round 1 allowed any temporary numeric-only probe, and this one needs no logger level or flush wait |
 | D6 | #505 test layer | executor unit tests and one e2e scenario | a composition test (lane brief): the no-id path builds fresh, which the harness may not simulate |
 
 ## Delivery
@@ -118,6 +119,8 @@ The steps are `implementations-plan/README.md` § Post-implementation standard a
 **Round 2, Codex** (resume): conditional approve, 5 findings, all accepted. #1 phase 3 could not read its probes (Developer Mode off), the burst spec needs `NULO_E2E_PROVERLESS=1`, and the proof gate holds before `pxe.proveTx`, so contention needs a prover-on run; #2 20 s is per attempt, not the whole wait; #3 OA-2 now excludes a hand-picked method, and phase 4 leaves the miss to phase 7; #4 the payer rule keyed on "entered with Nulo's sponsor", checked in `buildPass`, never on "queued with no cap", which would refuse an ordinary send that became queued; #5 the re-cased own address is OA-4, not information. It agreed the preview belongs in OA-2 C.
 
 **Round 3, Codex** (resume, confirmation): **approve**. All five round 2 resolutions verified; no regression found.
+
+**Implementation rounds 1-2** (phases 1-2 diff; round 2, Codex resume: approve, the loop converged). Codex (gpt-6.1-sol, high, session 01a141e3): conditional approve; its one in-scope finding, the rename control's out-of-field addresses, fixed (84e49ca0). Opus diff review: approve after the same fix. Pre-existing, outside the arc: the submit button is live while the duplicate list loads (#528, known limit); a row another network adds while a form is open (#529, known limit); a Send-page send the cap refused reads "Stopped before broadcast" (OA-5, ships as is). Log: [lessons/phase-8.md](lessons/phase-8.md).
 
 ## Seeds
 

@@ -76,3 +76,20 @@ A sponsor you added yourself ("You pay: —") keeps A either way.
 **Recommendation: B.** The address is the same contract; a warning that it is "already added" would point at the row being edited.
 
 **What ships now: A.**
+
+## OA-5. A send from Send that the waiting-sends cap refused
+
+**Surface:** Home and History's card, and the transaction's detail page, for a send made on the Send page and refused because too many of the account's sends were already waiting (eight from Send, or the line's limit).
+
+**Today:** the wallet files it as an ordinary failed send (`transfer-executor.ts` maps the refusal to `transfer`). The card reads "Transaction failed"; the detail page reads "Stopped before broadcast" with "Your wallet caught this before reaching the network. Often balance, fees, or invalid call." P18-11 A covers a send an app asked for, not this one.
+
+| Option | Card | Detail page |
+|---|---|---|
+| **A. As today** | "Transaction failed" | "Stopped before broadcast" / "… Often balance, fees, or invalid call." |
+| **B. P18-11's words** | "Refused before sending" | "Refused before sending" / "Too many sends were already waiting. Nothing was sent." |
+
+B is one line: the refusal keeps its own kind on the Send path too, as a lock or a first-transaction race already does.
+
+**Recommendation: B.** The same refusal reads the same wherever the send came from, and the current line names causes that did not happen.
+
+**What ships now: A.**
