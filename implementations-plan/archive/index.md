@@ -7,6 +7,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [account-artifact-freeze](account-artifact-freeze/plan.md) — completed — account addresses frozen per extension major: vendored artifact, frozen descriptor, execution canary
 - [account-balance-orphans](account-balance-orphans/plan.md) — completed — balance rows carry their own profile, chain and contract scope, judged by one identity predicate
 - [account-profile-siloing](account-profile-siloing/plan.md) — completed — one composite scope of profile, network, chain and account governs every activity record and slice
+- [account-session-life](account-session-life/plan.md) — completed — one lock per account address, a bounded identity-checked profile activation, the passkey retry, the popup port's Ready handshake and start bar, the unlock toast and the split reveal, page 7's picks, backup autocomplete
 - [account-switch-isolation](account-switch-isolation/plan.md) — completed — scope-filtered reducers contain cross-account activity leaks on an account switch
 - [adversarial-key-model-review](adversarial-key-model-review/plan.md) — completed — read-only adversarial review of the second-generation key model
 - [amount-honesty](amount-honesty/plan.md) — completed — the wallet never guesses an amount's magnitude, and what it cannot state exactly it does not state
