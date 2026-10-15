@@ -12,3 +12,5 @@
 - 2026-10-15 P3 gate: audit:vue 0; armed build 0; smoke token-list.test.ts 1/1 (retry 0); network default-token-seeding 1/1 (retry 0). Review loop: Codex r1 conditional, r2 conditional, r3 approve (no new material findings); Opus diff review folded.
 - 2026-10-15 final head 5e3932d6: test:all 0, typecheck:all, test:ci-gating and lint re-run before the plan commit.
 - 2026-10-15 PR #489: required checks green; CodeQL red on a test fixture's single-occurrence replace; fixed with a literal.
+- 2026-10-15 arc2 start: merged origin/dev dfdf4c31; W1 signed as A (page 18, P18-05); arc-2 section and D8 drafted; panel next.
+- 2026-10-15 arc2 panel: Codex r1 conditional (2 must-fix applied), Opus conditional (5 must-fix folded into W1–W3); D8 kept by both.

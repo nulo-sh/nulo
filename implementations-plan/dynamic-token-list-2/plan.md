@@ -1,7 +1,7 @@
 ---
 plan: dynamic-token-list-2
 tier: light (the orchestrator's call; the common brief's panel of two still argues each decision)
-status: arc 1 (P1–P3) implemented, PR open; the warning arc waits on W1
+status: arc 1 merged (#489); arc 2, the warning (W1 signed as A on page 18), in progress
 issues: "#383 (Refs: this arc ships the payload, the signer and the floor; the warning waits on OWNER-ASKS W1 and its own PR closes #383); #386 (Refs: the floor ends its fresh-install delisting half; it stays a closed known limit)"
 driver: claude-code
 claude_model: opus
@@ -121,6 +121,46 @@ Every gate also runs `bun run lint` and `bun run typecheck:all`, each exiting 0.
    - `bun run test:all` and `bun run check:plans` exit 0.
    - No e2e scenario is added: the composition test proves each refusal without a browser.
 
+## The warning arc (arc 2)
+
+The owner signed W1 as **option A** on decision page 18 (P18-05 = A, 2026-10-15; the second `## Decision` paragraph on #383). The words, colours and surfaces in [OWNER-ASKS.md § Option A](OWNER-ASKS.md#option-a-recommended-a-red-line-on-each-row-and-a-banner-where-you-act-on-the-token) are the sign-off, and the sub-questions keep their first-listed answers: flagged rows keep their order and their fold, and Send stays allowed. Base: `origin/dev` at `dfdf4c31`.
+
+**Facts** (verified at `dfdf4c31`):
+- F1. The popup sees the signed list only through `PriceSnapshot.pricedTokens` (`price/service.ts` `withMapping`), which `onQuotesUpdated` re-sends on every new list. Every warning surface but the token page already holds `usePrices`; `TokenCard` holds one per row.
+- F2. The list's addresses are canonical lower-case hex (`parse.ts`). Rows compare contracts lower-cased (`usePinnedTokens`, `getPriceMapEntry`).
+- F3. The "Couldn't refresh" and "Couldn't set up" lines use `--red`, not `--txt-danger`. The signed mockup names `--txt-danger` (AA in both themes, `type--caption`), so the row line uses `--txt-danger`; the two existing lines are unchanged.
+- F4. The Send picker's rows (`SelectTokenPopup`, `SettingItem`) have one line today; the flagged line goes in `SettingItem`'s description slot.
+
+**Design.**
+- `TokenListSnapshot` carries `flagged` (D5's deferred half). `PriceSnapshot` gains `flaggedTokens: string[]`, the `${chainId}:${address}` key of each flagged pair, beside `pricedTokens` (D8).
+- `apps/extension/src/utils/token-flag.ts` owns the key and the match: `flaggedKeysOf(pairs)` for the worker, `isFlaggedToken(keys, token)` for the popup, the row's contract lower-cased. `usePrices` exposes `isFlagged(token)`; no component parses a pair.
+- Rows: `TokenCard` (Home, Holdings) shows "Flagged as a scam" in place of its fiat value or name; a picker row adds it as its second line. Banners: `FlaggedTokenBanner` (an error `Banner`, title and text verbatim) directly above `BalanceView` on the token page, and above `SelectTokenCard` in Send's Select Asset section when the active token is flagged.
+
+**UI impact** (signed, page 18, P18-05 = A): the row line on Home, Holdings and the Send picker; the banner on the token page and the Send form. No tooltip, glossary term, colour, type role or other copy.
+
+**Security.** A flag only adds a warning: it never hides a row, blocks a send or changes a figure, so a host that withholds a flag (the freeze, #386) or a popup whose price channel fails shows an ordinary row, as before this arc. Flag keys come from a verified list only.
+
+### W1. The channel and the match
+
+1. `TokenListSnapshot.flagged`; `PriceSnapshot.flaggedTokens` from `withMapping`; `usePrices.isFlagged`. `usePrices` reads the list from the network-free `getQuotes()` on every connect, not only the first, and a read begun before a broadcast or refresh answer is dropped, so a warning never waits on the price provider.
+2. `token-flag.ts` with `token-flag.test.ts`: chain and address both match, a row in upper case or without `0x` (a restored row may keep either) matches, the same address on another chain and another address on the same chain do not, an empty set flags nothing.
+3. Tests: `price/service.test.ts` (a snapshot carries the flags, a new list re-sends them, fiat off still carries them); `usePrices.test.ts` (flags before the refresh answers, a reconnect re-reads them, an older read never overwrites a broadcast); `token-list/service.composition.test.ts` (`getSnapshot().flagged` survives the verified read).
+- **Gate:** the touched suites, `bun run lint`, `bun run typecheck:all` exit 0.
+
+### W2. The rows and the banners
+
+1. `TokenCard`, `SelectTokenPopup`, `FlaggedTokenBanner` (L4, `modules/general/`, vertical error `Banner`), `send.vue`, and `tokens/[id].vue`, which gains its own `PriceServiceClient` and `usePrices`, torn down in its `onBeforeUnmount`. Each warning element carries a `data-testid`; the row line is its own rule composing `type--caption`.
+2. Component tests with a wire-shaped flagged pair (0x + 64 hex, upper case on the row): `TokenCard` shows the line in place of the name, with an unflagged row as control, and a source check that the rule is `type--caption` in `--txt-danger`; `FlaggedTokenBanner` renders the two strings in a vertical error `Banner`; the picker row's line through the real description slot; Send and the token page show the banner only for a flagged token.
+- **Gate:** W1's commands, `bun run test`, `bun run --cwd apps/extension test:components`.
+
+### W3. One smoke scenario, screenshots
+
+1. The source run's held list flags one Testnet pair beside its two tokens, as its own export at an address no spec seeds (`fixtures/token-list.ts`; `tests/e2e/README.md` says so). A scenario in `token-list.test.ts`: the flagged pair's token and balance rows are seeded and the worker restarted, as `type-roles.test.ts`'s seeded Home does; Home's row reads the line, the token page and Send show the banner. **Failure mode:** the flag never crosses from the verified list in the worker to the popup's rows (snapshot, port, composable, row), which only a real worker and popup exercise; the unit and component layers each stub one side. **Runtime:** estimated 35 s per browser; measured in the PR body with the suite wall-clock before and after.
+2. Screenshots (Chrome, dark and light): the Home row, the Send form, the token page, the Send picker and Holdings.
+- **Gate:** the armed build, the scenario on Chrome and Firefox at retry 0, `bun run audit:vue`, `bun run test:all`, `bun run check:plans`.
+
+**Delivery.** One plain PR against `dev`: `feat(tokens): warn on a flagged token with a red row line and a banner`; `Closes #383`, `Refs #386`; `## UI impact` quoting page 18; the review loop as in Post-implementation; then the close-out in the same PR.
+
 ## Delivery
 
 One arc, one PR against `dev`, no stack (D-orch-1). Open it only after the P3 gate passes and the Codex loop converges.
@@ -147,6 +187,7 @@ Follows [`implementations-plan/README.md` § Post-implementation standard](../RE
 | D5 | `VerifiedTokenList` carries `flagged`; the snapshot waits for the warning PR (Opus over Codex) | Snapshot now (Codex: "a small, useful seam"). No consumer reads it before the warning PR, which must add the popup channel anyway. A required field forces edits to unrelated test literals (`price/service.test.ts`, `token/service.composition.test.ts`) |
 | D6 | `raisesFloor` lives in `infra/token-list/scripts` | In the package: it is publish policy, and a cross-package relative import from the App-token job |
 | D7 | Implementation deviations (2026-10-15): the review diff's base is `0ac9e062` (`origin/dev`, merged in before P1), not `116974dc`, whose net diff would carry the rc.3 move; the plan stays active and this PR runs no close-out, by the orchestrator's call (the warning arc closes it); `floor.ts` also owns `floorText`, the file's canonical form, which both the tree check and the publish PR need and which the App-token job cannot import from `check.ts` | Close-out now: the warning arc belongs to this plan |
+| D8 | The flags reach the popup in `PriceSnapshot`, beside `pricedTokens` (both legs agree) | A token-list RPC service and its own composable: a second channel for the same list, five new clients, and a prop through `TokensView` and `TokenList`. A `TokenInfo` field: Home's rows keep the balance service's token map, refilled only on a profile switch or a token add, so a new list would not reach them |
 
 ## Audit verdicts
 
@@ -165,6 +206,12 @@ Follows [`implementations-plan/README.md` § Post-implementation standard](../RE
 - **Finding 4 reversed, on new evidence (Opus, agreed by Codex in round 2):** the stale-base conflict is not a reliable stop, since GitHub's web editor resolves it in M's favour, and the run's summary already diffed against a list no longer served. `runPublish` now refuses before any write when `dev` serves another envelope than the run's base, and the README says to close a conflicted publish PR and re-dispatch. That is a refusal, so it adds no state.
 - **Round 2:** Codex conditional approve over the round-1 fixes and the stale-base path. The refusal landed in 5e3932d6.
 - **Round 3:** Codex **approve**, "No new material findings. Confidence: high." The loop converged.
+
+**Arc 2 plan review** (Codex `gpt-6.1-sol` high, session `01a1417a`; Opus 5.5 Plan, in parallel). Both: **conditional approve**, both keep D8.
+
+- **Accepted, Codex:** a reconnect waited on the price provider for changed flags (W1.1); a restored row without `0x` missed its flag, reproduced in memory (W1.2); usePrices, fiat-off and Send/token-page tests (W1.3, W2.2); the picker test must render the real description slot.
+- **Accepted, Opus:** the token page had no price client (W2.1); the Home row needs a balance row and a worker restart (W3.1); a separate fixture export at an unused address, and the e2e README (W3.1); a `toSnapshot` assertion (W1.3); picker and Holdings screenshots, since the picker's second line is new (W3.2); `--txt-danger` over `--red`, stated in the PR body.
+- **Rejected:** Codex's "plausible" list-change emit lost to a config read failure: the mapping has the same exposure today, and the fix is a recovery policy. Opus's residual, a hand-made backup row with junk after the address: a hostile backup's author already chooses every row it restores, so the consequence does not matter.
 
 ## Seeds
 
