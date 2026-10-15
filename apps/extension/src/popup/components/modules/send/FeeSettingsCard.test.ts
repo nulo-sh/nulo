@@ -1227,6 +1227,39 @@ describe("FeeSettingsCard — init failure resilience (degraded settings + silen
 		}
 	})
 
+	test("a retry's key refusal for an account the card no longer shows leaves Send open", async () => {
+		vi.useFakeTimers()
+		try {
+			let refuse!: (error: unknown) => void
+			const retry = new Promise<never>((_, reject) => {
+				refuse = reject
+			})
+			let reads = 0
+			mocks.getGasBalances.mockImplementation((_networkId: string, address: string) => {
+				if (address !== account.address) return new Promise(() => {})
+				reads++
+				return reads === 1 ? Promise.reject(new Error("boom")) : retry
+			})
+			mocks.getFpcs.mockResolvedValue([{ id: "s1", type: 1, name: "Sponsor", isProtocol: true }])
+
+			const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+			await vi.advanceTimersByTimeAsync(0)
+			expect(w.find('[data-testid="fee-init-degraded"]').exists()).toBe(true)
+			await vi.advanceTimersByTimeAsync(INIT_RETRY_BACKOFF_MS[0])
+			expect(reads).toBe(2)
+
+			// The retry is in flight when the page moves to another account, whose read never lands.
+			await w.setProps({ account: { id: "a2", address: "0xother" } })
+			await vi.advanceTimersByTimeAsync(0)
+			refuse(ImportedAccountUnusableError.because("signing key missing"))
+			await vi.advanceTimersByTimeAsync(0)
+			expect(w.emitted("update:accountUnusable")).toBeUndefined()
+			w.unmount()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	test("(BUG PIN) getGasBalances rejects with saved fj: fails closed without a nudge, sponsored still pickable", async () => {
 		// Self-paid fj must NOT derive settings from a balance we never saw
 		// (estimation runs with skipFeeEnforcement and would not catch an

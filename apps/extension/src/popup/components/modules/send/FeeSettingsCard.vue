@@ -747,11 +747,13 @@ watch(
 )
 
 /** A background retry that finds the imported key unusable fails, so it bumps no retryVersion and
- *  commits nothing: its verdict reaches the page here, for the committed key only. */
+ *  commits nothing: its verdict reaches the page here, only while the committed key is still the
+ *  account on screen. */
 watch(
 	() => {
 		const scope = committedScope.value
-		return scope ? balancesStore.entry(scope)?.gas.accountUnusable === true : false
+		if (!scope || identityDrifted(scope)) return false
+		return balancesStore.entry(scope)?.gas.accountUnusable === true
 	},
 	(unusable) => {
 		if (unusable) accountUnusableOut.value = true
