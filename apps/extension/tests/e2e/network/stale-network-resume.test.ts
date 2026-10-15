@@ -58,15 +58,16 @@ async function startHeld(page: Page, screen: string, at: RestoreGateHoldPoint): 
 }
 
 /** Closes every page, stops the background, and reopens a popup at the lock screen with the hold
- *  cleared, so the resumed run passes the step the dead one stopped at. */
-async function killAndReopen(ctx: ExtensionContext, page: Page, at: RestoreGateHoldPoint): Promise<Page> {
+ *  moved to `next`, or cleared, so the resumed run passes the step the dead one stopped at. */
+async function killAndReopen(ctx: ExtensionContext, page: Page, at: RestoreGateHoldPoint, next?: RestoreGateHoldPoint): Promise<Page> {
 	await page.close()
 	await stopBackground(ctx)
 	const popup = await openPopup(ctx)
 	await waitForLockScreen(popup, 60_000)
 	// Still held: the run was parked at `at` when the background died, so what follows is a resume.
 	expect(await readRestoreGate(popup)).toEqual({ at, held: true })
-	await clearRestoreGate(popup)
+	if (next) await armRestoreGate(popup, next)
+	else await clearRestoreGate(popup)
 	return popup
 }
 
@@ -99,9 +100,13 @@ describe("stale network reset after a background death", () => {
 				await ensureUnlocked(page)
 				await startHeld(page, "network-reset", "network-reset-purged")
 				await storeActiveNetwork(page, "local")
-				page = await killAndReopen(ctx, page, "network-reset-purged")
+				page = await killAndReopen(ctx, page, "network-reset-purged", "network-reset-account")
 				await traceTakeover(page)
 				await ensureUnlocked(page, TEST_PASSWORD, { decisionBudgetMs: 120_000 })
+				// Held again after its first account, so A4's paint does not race the resumed run's end.
+				await waitForRestoreGateHeld(page, "network-reset-account", 60_000)
+				expect(await takeoverScreen(page, "progress", 30_000)).toBe("progress")
+				await clearRestoreGate(page)
 				await waitForToast(page, "Your accounts have new addresses.", 120_000, { kind: "success" })
 				await page.waitForSelector('[data-testid="account-address-copy"]', { visible: true, timeout: 120_000 })
 				expect(await getAccountAddress(page)).toBe(localAccount)

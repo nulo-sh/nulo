@@ -14,6 +14,7 @@
 - The playground writes a pending result row the moment a call starts, so the highest `data-result-seq` moves at once; "not answered" means no row with status `ok` or `error` after the snapshot.
 - `readAccounts` ordered rows by storage key, and the key ends in the address, so index order was luck: N3 got `[1, 0]` on Firefox. It now sorts by index, type, then address. S1a's `[name, index]` check had the same exposure.
 - The restore gate's record lives in `chrome.storage.session`, which survives a background death; a resumed run passing the same hold point would park again. N3 clears it from the reopened popup before unlocking; the resume starts only after the unlock.
+- N3's A4 check raced the resumed run: with the purge already done, the run can end within the two reads that show A4, and one gate run failed on it. The resume is now held again after its first account, A4 is asserted there, then released.
 - `[aztec-node] Error: Address already in use` at boot is the aztec CLI's own anvil colliding with the one the runner started; the runner says so on the line before.
 
 ## Arc 3 Codex fix loop (gpt-6.1-sol, high)
