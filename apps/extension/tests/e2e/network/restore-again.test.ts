@@ -41,7 +41,7 @@ const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
 const SENDERS_HASH = "#/popup/settings/developer/account-state/senders"
-const BANNER_SENTENCE = "Local Network didn't finish restoring. Restore the backup again to bring them back."
+const BANNER_SENTENCE = "Local Network didn't finish restoring. Restore the backup again to bring it back."
 
 type AccountStateItem = { networkId?: string; chainId?: number; senders?: Array<{ address: string }>; contracts?: unknown[] }
 
