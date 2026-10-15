@@ -1,7 +1,7 @@
 ---
 plan: ci-followups-5
 tier: light
-status: approved; arc 1 in progress (Phases 1-2 ✓)
+status: completed; one arc, one PR against dev (Closes #251); close-out in the same PR
 issues: "#251 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -15,9 +15,19 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-15. Planned and delivered the same day.
+- **Status:** delivered in one PR against `dev` from `worktree-ci-followups-5`, which closes #251; this close-out is its final commits, and its merge closes the plan.
+- **Shipped:** `.github/workflows/pr-retarget.yml`: on a base change of a same-repository pull request, one job with `actions: write` re-runs all jobs of each e2e lane's latest run of the head, cancelling and then waiting for a run in flight, so the lane's `Detect changes` reads the new base; a title or body edit runs nothing. `retarget.test.ts` (13 cases, each failure mode proven red by a mutation), B1-B3 in `behavior-gating.test.ts`, the shim runner shared with `supersede.test.ts` in `gh-step-harness.ts`; `CI.md` § Concurrency and `.github/WORKFLOWS.md`. The live probe (`lessons/phase-2.md`) proved the `GITHUB_TOKEN` re-run, two quick retargets, a retarget over runs in flight and the skipped edits.
+- **Dropped, rejected, superseded:** `pr-quick.yml` is not re-run (D6: its base gates read the event payload, which a re-run keeps); the reason is commented on #251. Review dispositions are in § Audit record and § Implementation review. No `lessons.md` promotion: the probe's GitHub behaviours are stated in `CI.md`, and the curated budget is full.
+- **Known limits:** #483 (D9, OP3, CX1: a lane left on its old-base check when the job cannot re-run it, a listing that trails a re-run, a run older than the live base read).
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` drafts are retired and removed; this plan is a record, not a task list.
+
 # ci-followups-5: re-run the e2e lanes when a pull request's base changes
 
-One arc, one PR against `dev`, closing #251 as the owner decided it (decision page 17, option A, 2026-10-15). Recon: [recon.md](recon.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults: [lessons/phase-0.md](lessons/phase-0.md). Over the light target (150 lines) because the audit record carries both legs' findings.
+One arc, one PR against `dev`, closing #251 as the owner decided it (decision page 17, option A, 2026-10-15). Recon: [recon.md](recon.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults: [lessons/phase-0.md](lessons/phase-0.md). Over the light target (150 lines) because the audit record and the implementation review carry both legs' findings.
 
 **The path (#251, plausible but unverified until Phase 2).** A PR into `dev` whose diff misses every lane's paths filter gets green e2e aggregators with skipped suites. Its author changes the base to `main`. GitHub sends `pull_request` `edited`, which no workflow subscribes to (F1), so no run starts. The skipped-suite greens stay on the head although `main` force-runs every suite (F2): a PR could merge into `main` on suites that never ran. Every claim in the issue holds at the base.
 
@@ -177,9 +187,3 @@ One PR from `worktree-ci-followups-5` against `dev`; `code_review: off`. Merge `
 **Round 2 (Codex resume, verify).** **Approve**, no findings: CX1's disposition holds under `strict: true` (no merge path into `main` keeps the old checks); the four tests and the doc fixes hold.
 
 **Round 3 (Codex resume).** Rounds 1-2 omitted the comment-audit rule of [§ Post-implementation standard](../README.md#post-implementation-standard), so round 3 carried both rules verbatim. **Approve with fixes**, comments only; no correctness or security finding. Accepted: the harness header (the shim lives in, not runs from, a fresh directory), the narrating `read_run` and shim comments and B1's lead comment deleted, B1's concurrency comment cut to its reason. Rejected: replacing the `api()` comment (it decodes the retry regex and mirrors supersede's deliberate copy), the test-file headers (the repo's convention for these files), the pre-existing supersede comment, and a reword of `E2E_LANES`'s doc of equal length. The loop stops here: three rounds, no material finding left.
-
-## Seeds (drafts; the orchestrator runs the implementer)
-
-`/goal Phases 1-2 of implementations-plan/ci-followups-5/plan.md marked ✓, each backed by its gate's output in the transcript; the Codex loop converged; the PR exists with the close-out as its final commits; bun run test:ci-gating and bun run lint exit 0.`
-
-`/loop 15m Drive implementations-plan/ci-followups-5: read plan.md and lessons/, take the next unchecked step, run its gate, commit; follow § Post-implementation when Phase 2 is green; never merge.`
