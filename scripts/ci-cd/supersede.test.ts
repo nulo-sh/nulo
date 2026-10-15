@@ -1,20 +1,20 @@
 /**
- * Behavioral pin for pr-supersede.yml's one step, the only script that holds `actions: write`. It
- * runs the step's script under a `gh` that serves a scripted pull request (its head, the branch's
- * runs per status, each cancel's answer) and records every call in order, including a push that
- * lands between the two reads.
+ * Behavioral pin for pr-supersede.yml's one step, a script that holds `actions: write`. It runs the
+ * step's script under a `gh` that serves a scripted pull request (its head, the branch's runs per
+ * status, each cancel's answer) and records every call in order, including a push that lands between
+ * the two reads.
  *
  * Wired into CI via the root `test:ci-gating` script in `_unit-tests.yml`.
  */
 import { describe, expect, test } from "bun:test"
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
+import { runStep, type WorkflowStep } from "./gh-step-harness"
 
 const ROOT = join(import.meta.dir, "..", "..")
 // biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
 const WORKFLOW: any = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows/pr-supersede.yml"), "utf8"))
-const STEP: { run: string; env: Record<string, string> } = WORKFLOW.jobs["cancel-superseded"].steps[0]
+const STEP: WorkflowStep = WORKFLOW.jobs["cancel-superseded"].steps[0]
 
 const PR = 7
 const [H1, H2, H3] = ["1", "2", "3"].map((digit) => digit.repeat(40))
@@ -67,49 +67,39 @@ esac
 `
 
 function sweep(scenario: Scenario): { code: number; stdout: string; calls: string[]; cancelled: number[] } {
-	const dir = mkdtempSync(join(tmpdir(), "supersede-"))
-	try {
-		writeFileSync(join(dir, "gh"), SHIM)
-		chmodSync(join(dir, "gh"), 0o755)
-		writeFileSync(join(dir, "calls"), "")
-		writeFileSync(join(dir, "heads"), `${scenario.heads.join("\n")}\n`)
-		if (scenario.pushOnList) writeFileSync(join(dir, "push"), `${scenario.pushOnList}\n`)
-		if (scenario.pullsFail) writeFileSync(join(dir, "pulls-fail"), scenario.pullsFail)
-		for (const status of LISTED) {
-			const workflow_runs = scenario.runs
-				.filter((run) => (run.status ?? "in_progress") === status)
-				.map((run) => ({
-					id: run.id,
-					head_sha: run.head_sha,
-					path: run.path ?? ".github/workflows/pr-quick.yml",
-					pull_requests: [{ number: run.pr ?? PR }],
-				}))
-			writeFileSync(join(dir, `runs-${status}.json`), JSON.stringify({ total_count: workflow_runs.length, workflow_runs }))
-		}
-		for (const [id, message] of Object.entries(scenario.cancelFails ?? {})) writeFileSync(join(dir, `fail-${id}`), message)
-		const env: Record<string, string> = { PATH: `${dir}:${process.env.PATH}` }
-		const bound: Record<string, string> = {
+	const { code, stdout, calls } = runStep(STEP, {
+		shim: SHIM,
+		bound: {
 			"${{ github.token }}": "t",
 			"${{ github.repository }}": "nulo-sh/nulo",
 			"${{ github.event.pull_request.number }}": String(PR),
 			"${{ github.event.pull_request.head.ref }}": "feature",
 			"${{ github.event.pull_request.head.sha }}": scenario.eventHead ?? H2,
-		}
-		for (const [key, value] of Object.entries(STEP.env)) {
-			if (value.includes("${{") && !(value in bound)) throw new Error(`no test value for ${key}: ${value}`)
-			env[key] = bound[value] ?? value
-		}
-		env.RETRY_PAUSE = "0"
-		const run = Bun.spawnSync(["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", STEP.run], { env })
-		const calls = readFileSync(join(dir, "calls"), "utf8").split("\n").filter(Boolean)
-		const cancelled = calls
-			.map((call) => /runs\/(\d+)\/cancel$/.exec(call)?.[1])
-			.filter((id): id is string => id !== undefined && !scenario.cancelFails?.[Number(id)])
-			.map(Number)
-		return { code: run.exitCode, stdout: run.stdout.toString(), calls, cancelled }
-	} finally {
-		rmSync(dir, { recursive: true, force: true })
-	}
+		},
+		overrides: { RETRY_PAUSE: "0" },
+		setup: (dir) => {
+			writeFileSync(join(dir, "heads"), `${scenario.heads.join("\n")}\n`)
+			if (scenario.pushOnList) writeFileSync(join(dir, "push"), `${scenario.pushOnList}\n`)
+			if (scenario.pullsFail) writeFileSync(join(dir, "pulls-fail"), scenario.pullsFail)
+			for (const status of LISTED) {
+				const workflow_runs = scenario.runs
+					.filter((run) => (run.status ?? "in_progress") === status)
+					.map((run) => ({
+						id: run.id,
+						head_sha: run.head_sha,
+						path: run.path ?? ".github/workflows/pr-quick.yml",
+						pull_requests: [{ number: run.pr ?? PR }],
+					}))
+				writeFileSync(join(dir, `runs-${status}.json`), JSON.stringify({ total_count: workflow_runs.length, workflow_runs }))
+			}
+			for (const [id, message] of Object.entries(scenario.cancelFails ?? {})) writeFileSync(join(dir, `fail-${id}`), message)
+		},
+	})
+	const cancelled = calls
+		.map((call) => /runs\/(\d+)\/cancel$/.exec(call)?.[1])
+		.filter((id): id is string => id !== undefined && !scenario.cancelFails?.[Number(id)])
+		.map(Number)
+	return { code, stdout, calls, cancelled }
 }
 
 const kind = (call: string): string => (call.includes("/pulls/") ? "head" : call.includes("/cancel") ? "cancel" : "list")
