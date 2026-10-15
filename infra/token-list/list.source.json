@@ -17,6 +17,23 @@
 			"decimals": 6,
 			"name": "Test USDT",
 			"priceId": "tether"
+		},
+		{
+			"chainId": 3415328944,
+			"address": "0x1d7cf5ef4a2ed63584d4c915e94268a4ffb2c95cd91e2f2940d9a16a0ddb4813",
+			"classId": "0x163b2b247391083157f9fc30405e81810e6c08c58501fa2dd10de27d42be1d8a",
+			"symbol": "EURC",
+			"decimals": 6,
+			"name": "Test EURC",
+			"priceId": "euro-coin"
+		},
+		{
+			"chainId": 3415328944,
+			"address": "0x0e2d0bbe86f69fe27272cb09539952cb055e83088d1419afbeda64da05e67cb5",
+			"classId": "0x163b2b247391083157f9fc30405e81810e6c08c58501fa2dd10de27d42be1d8a",
+			"symbol": "GBPC",
+			"decimals": 6,
+			"name": "Test GBPC"
 		}
 	]
 }
