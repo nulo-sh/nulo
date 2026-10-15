@@ -51,6 +51,28 @@ export function supersedeProfileActivations(): void {
 	bootstrapFence.invalidate()
 }
 
+/** Profile ids of the event-driven activations (`bootstrapActiveProfile`), counted from entry to
+ *  settlement. `inFlightBootstraps` cannot answer this: it clears before the final session read. */
+const activating = new Map<string, number>()
+
+async function trackActivation<T>(profileId: string, run: () => Promise<T>): Promise<T> {
+	activating.set(profileId, (activating.get(profileId) ?? 0) + 1)
+	try {
+		return await run()
+	} finally {
+		const left = (activating.get(profileId) ?? 1) - 1
+		if (left > 0) activating.set(profileId, left)
+		else activating.delete(profileId)
+	}
+}
+
+/** Whether an event-driven activation of a profile other than `profileId` may still set
+ *  `isLogined`. */
+export function isActivatingOtherThan(profileId: string): boolean {
+	for (const id of activating.keys()) if (id !== profileId) return true
+	return false
+}
+
 export function useProfileBootstrap() {
 	const appStore = useAppStore()
 
@@ -153,7 +175,9 @@ export function useProfileBootstrap() {
 	 * popup/app.vue's `onActiveProfileChanged(profile)` — minus the routing
 	 * decisions and `popupStore.closeAll()` which stay in the calling shell.
 	 */
-	const bootstrapActiveProfile = async (profile: ProfileInfo): Promise<boolean> => {
+	const bootstrapActiveProfile = (profile: ProfileInfo): Promise<boolean> => trackActivation(profile.id, () => runActivation(profile))
+
+	const runActivation = async (profile: ProfileInfo): Promise<boolean> => {
 		appStore.profile = profile
 		// Supersede at entry: kick off / join the core SYNCHRONOUSLY, before
 		// the getProfiles await, so this activation's generation is bumped up front

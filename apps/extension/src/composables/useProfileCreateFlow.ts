@@ -1,7 +1,7 @@
 import { computed, ref } from "vue"
 import type { ToastOptions } from "@/composables/toast"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
-import { ActivationSupersededError, BootstrapFailedError, UnlockTimeoutError } from "@/composables/unlockWait"
+import { activationFailureReason } from "@/composables/unlockWait"
 import { useProfileNameDefault } from "@/composables/useProfileNameDefault"
 import { useProfileNameField } from "@/composables/useProfileNameField"
 import { managers } from "@/utils/core"
@@ -34,14 +34,6 @@ export interface UseProfileCreateFlowOptions {
 	notifyCreateFailed: (isPasskey: boolean) => void
 	/** The page's toast, for a passkey prompt that was dismissed or timed out. */
 	openToast: (toast: ToastOptions) => void
-}
-
-/** Logged as a fixed category: a bootstrap failure's message is arbitrary text. */
-function activationFailureReason(e: unknown): "timeout" | "bootstrap-failed" | "superseded" | "other" {
-	if (e instanceof UnlockTimeoutError) return "timeout"
-	if (e instanceof BootstrapFailedError) return "bootstrap-failed"
-	if (e instanceof ActivationSupersededError) return "superseded"
-	return "other"
 }
 
 async function listProfileNames(): Promise<string[]> {

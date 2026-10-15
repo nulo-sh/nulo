@@ -19,11 +19,23 @@ export interface ProfileActivationWithFailureSubject {
 /** The shell selected another profile after it had started bootstrapping the awaited one. */
 export class ActivationSupersededError extends Error {}
 
+/** An activation failure as a fixed category for a log line: a bootstrap failure's message is
+ *  arbitrary text. */
+export function activationFailureReason(e: unknown): "timeout" | "bootstrap-failed" | "superseded" | "other" {
+	if (e instanceof UnlockTimeoutError) return "timeout"
+	if (e instanceof BootstrapFailedError) return "bootstrap-failed"
+	if (e instanceof ActivationSupersededError) return "superseded"
+	return "other"
+}
+
 export interface ActivationWaitOptions {
 	/** `"start"`: the deadline ends when the shell selects the expected profile, which its bootstrap
 	 *  does at entry; every await in the bootstrap is bounded and a failure is recorded, so a slow
 	 *  but healthy start-up still resolves. */
 	deadlineCovers?: "start"
+	/** An overall bound that a start does not end: past it the wait rejects with
+	 *  `UnlockTimeoutError` however far the activation got. */
+	limitMs?: number
 }
 
 /** What one change of the watched store means for the wait. `started` is `undefined` without a
@@ -47,7 +59,8 @@ function activationStep(
  * Rejects with `BootstrapFailedError` the moment the shell records that profile's bootstrap
  * failure, and with `UnlockTimeoutError` at `timeoutMs`. Under `deadlineCovers: "start"` the
  * deadline ends once the shell selects the profile; from then on the shell selecting another one
- * rejects with `ActivationSupersededError`, and a lock that clears the profile leaves it pending.
+ * rejects with `ActivationSupersededError`, and a lock that clears the profile leaves it pending
+ * until `limitMs`, when one is given.
  *
  * One watcher covers every signal ON PURPOSE, so every settlement stops it: racing separate
  * watchers leaves the loser's live until its own timeout. Callers branch on `instanceof`.
@@ -67,14 +80,11 @@ export function awaitProfileActivation(
 			return reject(new BootstrapFailedError(initialFailure.message))
 		}
 		let started = opts.deadlineCovers === "start" ? store.profile?.id === expectedId : undefined
-		const timer = started
-			? undefined
-			: setTimeout(() => {
-					stop()
-					reject(new UnlockTimeoutError())
-				}, timeoutMs)
+		const timer = started ? undefined : setTimeout(() => finish(new UnlockTimeoutError()), timeoutMs)
+		const limit = opts.limitMs === undefined ? undefined : setTimeout(() => finish(new UnlockTimeoutError()), opts.limitMs)
 		const finish = (error?: Error) => {
 			clearTimeout(timer)
+			clearTimeout(limit)
 			stop()
 			if (error) reject(error)
 			else resolve()

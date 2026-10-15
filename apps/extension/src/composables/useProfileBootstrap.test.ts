@@ -76,7 +76,7 @@ import { useAppStore } from "@/stores/app.store"
 import { createMemoryHistory, createRouter } from "vue-router"
 import { createLockedState } from "@/popup/locked-state"
 import { createPopupGuard } from "@/popup/route-guard"
-import { supersedeProfileActivations, useProfileBootstrap } from "./useProfileBootstrap"
+import { isActivatingOtherThan, supersedeProfileActivations, useProfileBootstrap } from "./useProfileBootstrap"
 
 // app.store references `managers` as an auto-imported global at runtime
 // (vite auto-import via src/utils/). In vitest the auto-import only covers
@@ -337,6 +337,20 @@ describe("useProfileBootstrap", () => {
 		expect(chrome.storage.local.set).not.toHaveBeenCalledWith(
 			expect.objectContaining({ "nulo:ui:lastActiveProfile": expect.anything() }),
 		)
+	})
+
+	test("an activation counts as in flight until it settles, through its final session read", async () => {
+		const answers = deferredReads()
+		const { bootstrapActiveProfile } = useProfileBootstrap()
+		const activation = bootstrapActiveProfile(fakeProfile)
+		expect(isActivatingOtherThan("created")).toBe(true)
+		expect(isActivatingOtherThan("prof-1")).toBe(false)
+		await vi.waitFor(() => expect(answers).toHaveLength(1))
+		expect(isActivatingOtherThan("created")).toBe(true)
+
+		answers[0](fakeProfile)
+		await activation
+		expect(isActivatingOtherThan("created")).toBe(false)
 	})
 
 	test("a hydration superseded by a lock commits nothing and reports no active profile", async () => {
