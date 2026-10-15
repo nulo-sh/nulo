@@ -8,6 +8,7 @@
  * summary, the reveal is for 100% certainty (select the text to copy if needed).
  */
 import { computed, ref, useTemplateRef } from "vue"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import { maskAddress } from "./masked-address"
 
 /** Macros */
@@ -62,6 +63,7 @@ const toggleReveal = () => {
 					data-testid="recipient-card-change"
 					aria-label="Change recipient"
 					@click="emit('change')"
+					@keydown.enter="refuseRepeatEnter"
 				>
 					<Icon name="close" size="16" color="secondary" />
 				</button>

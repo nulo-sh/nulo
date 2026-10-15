@@ -144,10 +144,12 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 	// Up from no highlight goes to the last row, which the list scrolls to.
 	await page.keyboard.press("ArrowUp")
 	expect((await readSuggestionList(page)).active).toMatchObject({ row: 3, shown: true })
-	await page.keyboard.press("Enter")
+	// A held Enter: its auto-repeat reaches the Change button the pick focuses, and must not clear it.
+	await page.keyboard.down("Enter")
+	await page.keyboard.down("Enter")
+	await page.keyboard.up("Enter")
 	await page.waitForSelector(sel("recipient-card"), { timeout: 5_000 })
 	expect((await readSendInputs(page)).destination).toBe(account)
-	// The pick lands on the card's Change recipient with the ring, and Tab goes on past the card.
 	await waitForFocus(page, "recipient-card-change")
 	await expectAccentRing(page, "recipient-card-change")
 	expect(await tabAround(page, 1)).toEqual(["send-token-trigger"])

@@ -27,7 +27,7 @@ defineExpose({ snackHeight: () => wrap.value?.getBoundingClientRect().height ?? 
 
 /** The snack the regions render: a copy of the shared toast that lags it while a card is leaving. */
 const shown = ref<ToastState | null>(null)
-/** The shown card was relabelled in place: its open was announced, and its later text is not. */
+/** The shown card was relabelled in place, so its title stops taking the region's politeness. */
 const relabelled = ref(false)
 let leaveWaiting = false
 
