@@ -546,8 +546,9 @@ describe("NetworkResetService — the run", () => {
 		const finish = writes.log.filter((w) => /network-reset/.test(w))
 		expect(finish.slice(-2)).toEqual(["set:nulo:core:network-reset-done@p1", "remove:nulo:core:network-reset@p1"])
 		expect(h.journalAtSeeding).toEqual([undefined])
-		expect(await h.reset.takeResetNotice()).toEqual({ networkId: "tn", addressesMoved: false })
-		expect(await h.reset.takeResetNotice()).toBeNull()
+		expect(await h.reset.takeResetNotice("p2")).toBeNull()
+		expect(await h.reset.takeResetNotice("p1")).toEqual({ networkId: "tn", addressesMoved: false })
+		expect(await h.reset.takeResetNotice("p1")).toBeNull()
 	})
 
 	test("the record entry is removed before the journal", async () => {
@@ -583,14 +584,14 @@ describe("NetworkResetService — the run", () => {
 			[1, "Savings", derived(L1, 1)],
 		])
 		expect(await h.repo.getRecord("p1")).toBeUndefined()
-		expect(await h.reset.takeResetNotice()).toEqual({ networkId: "tn", addressesMoved: true })
+		expect(await h.reset.takeResetNotice("p1")).toEqual({ networkId: "tn", addressesMoved: true })
 
 		const empty = await harness()
 		await putNetwork(empty, { id: "tn", name: "Testnet", chainId: OLD, l1ChainId: L1, kind: "testnet" })
 		done = empty.settled()
 		await startReset(empty)
 		expect((await done).completed).toBeDefined()
-		expect(await empty.reset.takeResetNotice()).toBeNull()
+		expect(await empty.reset.takeResetNotice("p1")).toBeNull()
 	})
 })
 
@@ -874,9 +875,9 @@ describe("NetworkResetService — the run lock and the notice", () => {
 		const h = await harness()
 		await putJournal(h, journalOf())
 		await h.repo.withLock("p1", () => h.repo.setNoticeLocked("p1", { networkId: "tn", addressesMoved: false }))
-		expect(await h.reset.takeResetNotice()).toBeNull()
+		expect(await h.reset.takeResetNotice("p1")).toBeNull()
 		await h.repo.withLock("p1", () => h.repo.deleteJournalLocked("p1"))
-		const [a, b] = await Promise.all([h.reset.takeResetNotice(), h.reset.takeResetNotice()])
+		const [a, b] = await Promise.all([h.reset.takeResetNotice("p1"), h.reset.takeResetNotice("p1")])
 		expect([a, b].filter(Boolean)).toEqual([{ networkId: "tn", addressesMoved: false }])
 	})
 

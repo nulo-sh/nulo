@@ -64,7 +64,7 @@ export type Methods = {
 	getStaleNetwork(networkId: string): StaleNetworkView | null
 	getPendingReset(): PendingReset | null
 	resetStaleNetwork(networkId: string, confirmed: ResetConfirmation): StaleNetworkView
-	takeResetNotice(): ResetNotice | null
+	takeResetNotice(profileId: string): ResetNotice | null
 }
 
 export type Events = {
@@ -97,5 +97,5 @@ export const NetworkResetMethodSchemas = {
 				.strict(),
 		]),
 	},
-	takeResetNotice: { params: z.tuple([]) },
+	takeResetNotice: { params: z.tuple([z.string().min(1)]) },
 } as const

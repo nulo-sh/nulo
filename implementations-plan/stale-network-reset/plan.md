@@ -431,7 +431,7 @@ NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent <files>   # builds its 
 
 **Validation gate:** `bun run audit:vue`, `bun run test:ci-gating`, then the armed smoke build and the full smoke suite on both browsers, then `bun run e2e:agent` on both browsers, all as § Running the gates, at retry 0. Pass: all exit 0; no existing e2e regresses on either browser.
 
-### Phase 5. Popup takeover
+### Phase 5. Popup takeover ✓
 
 1. Add the store field, the client in `managers`, `useStaleNetwork`, and the bootstrap and switch skips.
 2. Add the bootstrap resume through `getPendingReset`.
@@ -520,6 +520,11 @@ Sources: **M** main leg, **C** Codex leg, **F** Opus leg; **K** contradiction ch
 | D46 | No copy promises re-importing an old key file after an address change | review 2 | accepted: `decodeAccountExport` refuses a file whose claimed address the current derivation does not give (`S/account/service.ts:831`); known limit |
 | D47 | The view recomputes `cause.networkReset` from the row; a network cause needs `fromChainId ≠ toChainId` | review 2 | accepted: A2's automatic run must not start from a forged record |
 | D48 | The reset deletes the reset chain's dApp sessions in its own purge step, not through every chain purge | Phase 4 gate | accepted: a chain-purge subscriber also deleted a deleted network's sessions, which `connect-unserved-chain.test.ts` pins as kept until the next connect drops them (so a network added back keeps them) |
+| D49 | The unusable-imported-account error never names the account | arc 2 review (C) | accepted: every log line that printed it carried the address; fixed in the message, not at each log site |
+| D50 | The popup's per-session stale-network state lives in a session that every lock, unlock and profile change replaces | arc 2 review (C) | accepted: four rounds of fences for one interleaving each showed the class; an ended session writes nothing and holds back nothing of the next |
+| D51 | `takeResetNotice(profileId)` hands a notice only to the profile still active | arc 2 review (C) | accepted; a take answered for a profile that ends before the answer lands loses one toast, which a peek-and-acknowledge record would not justify |
+| D52 | A dApp window takes no part: no takeover, no resume, no notice, no route | arc 2 review (C) | accepted: a completion routed a dApp window to Home |
+| D53 | The takeover closes every popup open over the route when it appears | arc 2 review (C) | accepted: Receive's address outlived a takeover that started under it; listed for the owner's capture sign-off |
 
 ## Audit verdicts
 

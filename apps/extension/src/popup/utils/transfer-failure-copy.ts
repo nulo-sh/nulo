@@ -1,4 +1,5 @@
-import { OperationNotRecordedError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
+import { ImportedAccountUnusableError, OperationNotRecordedError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
+import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
 import { isSendCheckable, type OperationRecord, wasNeverSent } from "@/wallet/services/operation-journal/spec"
 
 export const TRANSFER_NOT_STARTED_COPY = "Couldn't start this transaction. Nothing was sent. Try again."
@@ -28,6 +29,7 @@ export function transferFailureSnack(err: unknown, record: OperationRecord | und
 		return { checking: false, label: "Send failed", sub: TRANSFER_TERMS_COPY, details: true }
 	if (err instanceof OperationNotRecordedError)
 		return { checking: false, label: "Send failed", sub: TRANSFER_NOT_STARTED_COPY, details: true }
+	if (err instanceof ImportedAccountUnusableError) return { checking: false, ...IMPORTED_UNUSABLE_TOAST, details: false }
 	if (record === undefined) return STATUS_UNKNOWN
 	if (isSendCheckable(record)) return { checking: true, label: "Send not confirmed", sub: TRANSFER_NOT_CONFIRMED_COPY, details: true }
 	if (wasNeverSent(record)) return { checking: false, label: "Send failed", sub: TRANSFER_NOTHING_SENT_COPY, details: true }
@@ -36,5 +38,5 @@ export function transferFailureSnack(err: unknown, record: OperationRecord | und
 
 /** `console.error` is captured for every user; an expected refusal belongs at `debug`. */
 export function transferFailureLogLevel(err: unknown): "debug" | "error" {
-	return err instanceof TermsAcceptanceRequiredError ? "debug" : "error"
+	return err instanceof TermsAcceptanceRequiredError || err instanceof ImportedAccountUnusableError ? "debug" : "error"
 }

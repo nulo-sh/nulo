@@ -409,7 +409,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		if (!dek) throw new RecoveryModeError()
 		const signingKey = await unsealImportedScalar(dek, toChainId, newAddress, encryptedSigningKey)
 		if ((await NuloAccount.fromSigningKey(signingKey, this.logger, this.name)).address.toString() !== newAddress) {
-			throw ImportedAccountUnusableError.forAccount(newAddress, "address mismatch")
+			throw ImportedAccountUnusableError.because("address mismatch")
 		}
 		const account: Account = {
 			profileId,
@@ -596,28 +596,28 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	 *
 	 * Blast radius is deliberately the SINGLE account: a tampered imported key
 	 * is external material, so it must not profile-wide-block the derived accounts. The typed
-	 * error names the account; the UI offers delete + re-import as the repair. No profile block,
-	 * no `raiseRuntimeMismatch`.
+	 * error lets the UI say so; delete + re-import is the repair. No profile block, no
+	 * `raiseRuntimeMismatch`.
 	 */
 	private async loadImportedAccountContract(profileId: string, account: Account, requestedAddress: string): Promise<IAccountContract> {
 		await this.assertChainUsable(profileId, account.chainId)
 		const keyRow = await this.importedKeys.get(profileId, account.chainId, account.address)
-		if (!keyRow) throw ImportedAccountUnusableError.forAccount(account.address, "signing key missing")
+		if (!keyRow) throw ImportedAccountUnusableError.because("signing key missing")
 		// The imported-key root is the CREDENTIAL-sealed per-profile DEK, never the master (a
 		// shared recovery phrase means a shared master — the DEK is the isolation boundary).
 		// A DEGRADED session (dek undefined — the slot failed at unlock) quarantines per-account.
 		const dek = await this.profileService.getProfileDek(profileId)
-		if (!dek) throw ImportedAccountUnusableError.forAccount(account.address, "imported keys unavailable — unlock again")
+		if (!dek) throw ImportedAccountUnusableError.because("imported keys unavailable — unlock again")
 		try {
 			const signingKey = await unsealImportedScalar(dek, account.chainId, account.address, keyRow.encryptedSigningKey)
 			const contract = await NuloAccount.fromSigningKey(signingKey, this.logger, this.name)
 			if (contract.address.toString() !== requestedAddress) {
-				throw ImportedAccountUnusableError.forAccount(account.address, "address mismatch")
+				throw ImportedAccountUnusableError.because("address mismatch")
 			}
 			return contract
 		} catch (err) {
 			if (err instanceof ImportedAccountUnusableError) throw err
-			throw ImportedAccountUnusableError.forAccount(account.address, "signing key could not be recovered")
+			throw ImportedAccountUnusableError.because("signing key could not be recovered")
 		}
 	}
 
@@ -642,7 +642,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		let signingKey: GrumpkinScalar
 		if (account.type === AccountType.Imported) {
 			const keyRow = await this.importedKeys.get(profileId, chainId, address)
-			if (!keyRow) throw ImportedAccountUnusableError.forAccount(address, "signing key missing")
+			if (!keyRow) throw ImportedAccountUnusableError.because("signing key missing")
 			// Fresh auth: the DEK unseals under the SUPPLIED password directly —
 			// session-independent, deletion-guarded — never via SessionManager.
 			const dek = await this.profileService.exportImportedKeysDek(profileId, password)

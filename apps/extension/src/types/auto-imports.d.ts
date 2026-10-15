@@ -61,6 +61,7 @@ declare global {
   const REVIEW_ARM_MS: typeof import('../composables/useSendReview').REVIEW_ARM_MS
   const SEED_STATUS_RETRY_MS: typeof import('../composables/useSeedStatus').SEED_STATUS_RETRY_MS
   const SNACK_GAP: typeof import('../composables/snackInset').SNACK_GAP
+  const STALE_NETWORK_KEY: typeof import('../composables/useStaleNetwork').STALE_NETWORK_KEY
   const STALLED_MIN_DISPLAY_MS: typeof import('../composables/useIncomingSyncHealth').STALLED_MIN_DISPLAY_MS
   const SUCCESS_TOAST_MS: typeof import('../composables/toast.js').SUCCESS_TOAST_MS
   const TESTNET_L1_CHAIN_ID: typeof import('../utils/chain-ids').TESTNET_L1_CHAIN_ID
@@ -118,6 +119,7 @@ declare global {
   const completeImportWithRecovery: typeof import('../composables/completeImportWithRecovery').completeImportWithRecovery
   const compressData: typeof import('../utils/files').compressData
   const computed: typeof import('vue').computed
+  const confirmationOf: typeof import('../composables/useStaleNetwork').confirmationOf
   const confirmationPolicies: typeof import('../utils/confirmation-policies').confirmationPolicies
   const contactListReducers: typeof import('../utils/entity-list').contactListReducers
   const contactNameKey: typeof import('../utils/contact-name').contactNameKey
@@ -324,7 +326,10 @@ declare global {
   const rulerWidth: typeof import('../utils/hero-ruler').rulerWidth
   const runFenceLive: typeof import('../composables/full-backup-restore').runFenceLive
   const runImportChainSync: typeof import('../composables/importChainSync').runImportChainSync
+  const runResetToEnd: typeof import('../composables/useStaleNetwork').runResetToEnd
   const runRestoreFailurePath: typeof import('../composables/full-backup-restore').runRestoreFailurePath
+  const runUnattended: typeof import('../composables/useStaleNetwork').runUnattended
+  const runsUnattended: typeof import('../composables/useStaleNetwork').runsUnattended
   const safeFiatOf: typeof import('../utils/token-amount').safeFiatOf
   const sameContactAddress: typeof import('../utils/contact-rules').sameContactAddress
   const sameContactName: typeof import('../utils/contact-name').sameContactName
@@ -435,6 +440,7 @@ declare global {
   const useSendStageLine: typeof import('../composables/useSendStageLine').useSendStageLine
   const useSlots: typeof import('vue').useSlots
   const useSnackInset: typeof import('../composables/snackInset').useSnackInset
+  const useStaleNetwork: typeof import('../composables/useStaleNetwork').useStaleNetwork
   const useSyncedRef: typeof import('../composables/syncedRef.js').useSyncedRef
   const useTemplateRef: typeof import('vue').useTemplateRef
   const useTicker: typeof import('../composables/ticker').useTicker
@@ -565,6 +571,9 @@ declare global {
   // @ts-ignore
   export type { SendStageLineDeps, SendStageLine } from '../composables/useSendStageLine'
   import('../composables/useSendStageLine')
+  // @ts-ignore
+  export type { StaleNetworkClient, StaleNetworkDeps, StaleNetwork } from '../composables/useStaleNetwork'
+  import('../composables/useStaleNetwork')
   // @ts-ignore
   export type { TokenBalanceSnapshotState } from '../composables/useTokenBalanceSnapshot'
   import('../composables/useTokenBalanceSnapshot')
@@ -739,6 +748,7 @@ declare module 'vue' {
     readonly REVIEW_ARM_MS: UnwrapRef<typeof import('../composables/useSendReview')['REVIEW_ARM_MS']>
     readonly SEED_STATUS_RETRY_MS: UnwrapRef<typeof import('../composables/useSeedStatus')['SEED_STATUS_RETRY_MS']>
     readonly SNACK_GAP: UnwrapRef<typeof import('../composables/snackInset')['SNACK_GAP']>
+    readonly STALE_NETWORK_KEY: UnwrapRef<typeof import('../composables/useStaleNetwork')['STALE_NETWORK_KEY']>
     readonly STALLED_MIN_DISPLAY_MS: UnwrapRef<typeof import('../composables/useIncomingSyncHealth')['STALLED_MIN_DISPLAY_MS']>
     readonly SUCCESS_TOAST_MS: UnwrapRef<typeof import('../composables/toast.js')['SUCCESS_TOAST_MS']>
     readonly TESTNET_L1_CHAIN_ID: UnwrapRef<typeof import('../utils/chain-ids')['TESTNET_L1_CHAIN_ID']>
@@ -796,6 +806,7 @@ declare module 'vue' {
     readonly completeImportWithRecovery: UnwrapRef<typeof import('../composables/completeImportWithRecovery')['completeImportWithRecovery']>
     readonly compressData: UnwrapRef<typeof import('../utils/files')['compressData']>
     readonly computed: UnwrapRef<typeof import('vue')['computed']>
+    readonly confirmationOf: UnwrapRef<typeof import('../composables/useStaleNetwork')['confirmationOf']>
     readonly confirmationPolicies: UnwrapRef<typeof import('../utils/confirmation-policies')['confirmationPolicies']>
     readonly contactListReducers: UnwrapRef<typeof import('../utils/entity-list')['contactListReducers']>
     readonly contactNameKey: UnwrapRef<typeof import('../utils/contact-name')['contactNameKey']>
@@ -1002,7 +1013,10 @@ declare module 'vue' {
     readonly rulerWidth: UnwrapRef<typeof import('../utils/hero-ruler')['rulerWidth']>
     readonly runFenceLive: UnwrapRef<typeof import('../composables/full-backup-restore')['runFenceLive']>
     readonly runImportChainSync: UnwrapRef<typeof import('../composables/importChainSync')['runImportChainSync']>
+    readonly runResetToEnd: UnwrapRef<typeof import('../composables/useStaleNetwork')['runResetToEnd']>
     readonly runRestoreFailurePath: UnwrapRef<typeof import('../composables/full-backup-restore')['runRestoreFailurePath']>
+    readonly runUnattended: UnwrapRef<typeof import('../composables/useStaleNetwork')['runUnattended']>
+    readonly runsUnattended: UnwrapRef<typeof import('../composables/useStaleNetwork')['runsUnattended']>
     readonly safeFiatOf: UnwrapRef<typeof import('../utils/token-amount')['safeFiatOf']>
     readonly sameContactAddress: UnwrapRef<typeof import('../utils/contact-rules')['sameContactAddress']>
     readonly sameContactName: UnwrapRef<typeof import('../utils/contact-name')['sameContactName']>
@@ -1113,6 +1127,7 @@ declare module 'vue' {
     readonly useSendStageLine: UnwrapRef<typeof import('../composables/useSendStageLine')['useSendStageLine']>
     readonly useSlots: UnwrapRef<typeof import('vue')['useSlots']>
     readonly useSnackInset: UnwrapRef<typeof import('../composables/snackInset')['useSnackInset']>
+    readonly useStaleNetwork: UnwrapRef<typeof import('../composables/useStaleNetwork')['useStaleNetwork']>
     readonly useSyncedRef: UnwrapRef<typeof import('../composables/syncedRef.js')['useSyncedRef']>
     readonly useTemplateRef: UnwrapRef<typeof import('vue')['useTemplateRef']>
     readonly useTicker: UnwrapRef<typeof import('../composables/ticker')['useTicker']>

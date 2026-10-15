@@ -34,7 +34,7 @@ export class NetworkResetServiceClient extends ServiceClient<Methods, Events> im
 		return this.request("resetStaleNetwork", networkId, confirmed)
 	}
 
-	public takeResetNotice(): Promise<ResetNotice | null> {
-		return this.request("takeResetNotice")
+	public takeResetNotice(profileId: string): Promise<ResetNotice | null> {
+		return this.request("takeResetNotice", profileId)
 	}
 }

@@ -1,4 +1,4 @@
-import { ImportedAccountUnusableError, RecoveryModeError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import { RecoveryModeError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { validateParams } from "@nulo/extension-messaging/zod"
 import type { BrowserApi, StorageChanges } from "@nulo/wallet-core/ports"
@@ -70,9 +70,6 @@ class Flight {
 const notResettable = (why: string) => new Error(`${ERR_NOT_RESETTABLE}: ${why}`)
 
 const byIndexThenAddress = (a: Account, b: Account) => a.index - b.index || (a.address < b.address ? -1 : a.address > b.address ? 1 : 0)
-
-/** An unusable imported key's message names its address, which no log line carries. */
-const loggable = (error: unknown) => (error instanceof ImportedAccountUnusableError ? error.code : error)
 
 /**
  * The journal is trusted for screens only: before anything runs, its targets and L1 must be the
@@ -251,11 +248,13 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 		return this.requireView(profile.id, networkId)
 	}
 
-	public async takeResetNotice(): Promise<ResetNotice | null> {
-		validateParams(NetworkResetMethodSchemas.takeResetNotice.params, [], "takeResetNotice")
+	/** Takes `profileId`'s notice only while it is the active profile: a popup that asks for an
+	 *  ended profile cannot consume the next one's. */
+	public async takeResetNotice(profileId: string): Promise<ResetNotice | null> {
+		validateParams(NetworkResetMethodSchemas.takeResetNotice.params, [profileId], "takeResetNotice")
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profiles)
-		return this.staleNetworks.takeNotice(profile.id)
+		return profile.id === profileId ? this.staleNetworks.takeNotice(profile.id) : null
 	}
 
 	// ── Run lock ─────────────────────────────────────────────────────────
@@ -472,7 +471,7 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 			const addressesMoved = await this.run(flight, fence)
 			this.endFlight(flight, { running: false, completed: { addressesMoved } })
 		} catch (error) {
-			this.logWarn("network reset stopped", { networkId: flight.networkId, step: flight.step, error: loggable(error) })
+			this.logWarn("network reset stopped", { networkId: flight.networkId, step: flight.step, error })
 			this.endFlight(flight, { running: false, failed: true })
 		}
 	}

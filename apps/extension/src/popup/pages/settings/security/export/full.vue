@@ -35,6 +35,7 @@ import { MAX_BACKUP_FILE_BYTES, assembleFullBackup, sealFullBackupText } from "@
 import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow, ownWindowRoute } from "@/utils/own-window"
 import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
+import { backupNotice } from "@/components/stale-network/copy"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
@@ -138,8 +139,21 @@ const chainStateOmitted = ref(false)
  *  has its own warning, which covers them. */
 const unopenedImportedKeys = ref(0)
 
+/** A reset in progress: its journal holds accounts a backup made now would miss. */
+const pendingReset = ref(null)
+let pendingReads = 0
+const syncPendingReset = async () => {
+	const read = ++pendingReads
+	const pending = await managers.networkReset.getPendingReset()
+	if (read !== pendingReads) return
+	pendingReset.value = pending ? backupNotice(appStore.networks.find((n) => n.id === pending.networkId)?.name ?? "") : null
+}
+managers.networkReset.onStaleNetworkChanged.add(syncPendingReset)
+void syncPendingReset()
+
 const isAgreed = ref(false)
 const handleAgree = () => {
+	if (pendingReset.value) return
 	isAgreed.value = true
 	if (isPasskeyProfile.value) handleBackup()
 }
@@ -504,6 +518,8 @@ watch(
 		dekReplaced.value = false
 		unopenedImportedKeys.value = 0
 		chainStateOmitted.value = false
+		pendingReset.value = null
+		void syncPendingReset()
 	},
 	{ flush: "sync" },
 )
@@ -514,7 +530,10 @@ onBeforeMount(() => {
 	if (isPasskeyProfile.value && passkeyNeedsOwnWindow()) void moveToOwnWindow(OWN_WINDOW_ROUTES.export)
 })
 
-onBeforeUnmount(discardRun)
+onBeforeUnmount(() => {
+	managers.networkReset.onStaleNetworkChanged.remove(syncPendingReset)
+	discardRun()
+})
 </script>
 
 <template>
@@ -527,6 +546,10 @@ onBeforeUnmount(discardRun)
 	>
 		<!-- Agreement gate -->
 		<template v-if="!isAgreed">
+			<div v-if="pendingReset" :class="$style.reset_notice" data-testid="full-backup-reset-notice">
+				<span :class="$style.reset_notice_label">{{ pendingReset.label }}</span>
+				<span :class="$style.reset_notice_text">{{ pendingReset.text }}</span>
+			</div>
 			<div class="export_section_last">
 				<span class="export_section_label type--label-section">Before you continue</span>
 				<Flex direction="column" gap="8">
@@ -726,7 +749,7 @@ onBeforeUnmount(discardRun)
 
 		<!-- Bottom CTAs -->
 		<template #bottom>
-			<Button v-if="!isAgreed" @click="handleAgree" variant="cta" data-testid="agree-continue-btn">
+			<Button v-if="!isAgreed" @click="handleAgree" variant="cta" :disabled="!!pendingReset" data-testid="agree-continue-btn">
 				Agree &amp; Continue
 			</Button>
 
@@ -827,5 +850,26 @@ onBeforeUnmount(discardRun)
 
 .shake {
 	composes: shake_password from "../../../../../components/composite/shake.module.css";
+}
+
+.reset_notice {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-bottom: 20px;
+	padding: 14px 12px;
+	background: color-mix(in srgb, var(--yellow) 7%, transparent);
+	border: 1px solid color-mix(in srgb, var(--yellow) 45%, transparent);
+}
+
+.reset_notice_label {
+	composes: type--meta from global;
+	color: var(--txt-warning);
+}
+
+.reset_notice_text {
+	composes: type--body from global;
+	line-height: 1.5;
+	color: var(--txt-primary);
 }
 </style>

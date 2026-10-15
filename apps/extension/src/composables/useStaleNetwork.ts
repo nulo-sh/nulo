@@ -1,0 +1,230 @@
+/**
+ * The popup's side of a stale network: the reset running on any network, a custom node that did
+ * not answer, and the reset's lifecycle (start, the resume at each unlock, completion and its
+ * notice). Receives a connected client; the shell owns connect and disconnect and calls `dispose`.
+ */
+import { type InjectionKey, type Ref, ref } from "vue"
+import {
+	ERR_NODE_UNREACHABLE,
+	type NetworkResetServiceClient,
+	type ResetConfirmation,
+	type ResetNotice,
+	type StaleNetworkChanged,
+	type StaleNetworkView,
+} from "@/wallet/services/network-reset/client"
+
+export type StaleNetworkClient = Pick<
+	NetworkResetServiceClient,
+	"getStaleNetwork" | "getPendingReset" | "resetStaleNetwork" | "takeResetNotice" | "onStaleNetworkChanged" | "onDisconnected"
+>
+
+/** What the screen showed, which the service compares with a fresh view before a first run. */
+export const confirmationOf = (view: StaleNetworkView): ResetConfirmation => ({
+	networkReset: view.cause.networkReset,
+	addressesMoved: view.cause.addressesMoved,
+	accountCount: view.accounts.length,
+	unmovableCount: view.unmovable.length,
+	switchToSeedNode: view.switchToSeedNode,
+	probedEndpoint: view.probedEndpoint,
+})
+
+/** A network cause with nothing to move resets with no screen and no toast (A2). Never one that
+ *  would switch the user's own node to Nulo's: only A1, confirmed, may do that. */
+export function runsUnattended(view: StaleNetworkView): boolean {
+	return (
+		view.cause.networkReset &&
+		!view.switchToSeedNode &&
+		!view.blocked &&
+		!view.reset &&
+		view.accounts.length === 0 &&
+		view.unmovable.length === 0 &&
+		!view.heldBy &&
+		!view.otherPending
+	)
+}
+
+const errorCode = (error: unknown) => (error instanceof Error ? error.message.split(":")[0] : "")
+
+/**
+ * Starts `view`'s reset and resolves when it ends: true when it completed, false when it failed,
+ * was refused, or the worker went away mid-run (its journal then resumes at the next unlock).
+ */
+export function runResetToEnd(client: StaleNetworkClient, view: StaleNetworkView): Promise<boolean> {
+	return new Promise((resolve) => {
+		const settle = (completed: boolean) => {
+			client.onStaleNetworkChanged.remove(onChanged)
+			client.onDisconnected.remove(onGone)
+			resolve(completed)
+		}
+		const onChanged = (e: StaleNetworkChanged) => {
+			if (e.networkId === view.networkId && (e.completed || e.failed)) settle(!!e.completed)
+		}
+		const onGone = () => settle(false)
+		client.onStaleNetworkChanged.add(onChanged)
+		client.onDisconnected.add(onGone)
+		client.resetStaleNetwork(view.networkId, confirmationOf(view)).catch(() => settle(false))
+	})
+}
+
+/** Networks whose reset runs with no screen (A2). Module scope: the bootstrap and the switch both
+ *  start one, and the shell's instance must skip its events whichever did. */
+const unattended = new Set<string>()
+
+/** A network cause with nothing to move: reset with no screen and no toast. */
+export async function runUnattended(client: StaleNetworkClient, view: StaleNetworkView): Promise<boolean> {
+	unattended.add(view.networkId)
+	try {
+		return await runResetToEnd(client, view)
+	} finally {
+		unattended.delete(view.networkId)
+	}
+}
+
+export interface StaleNetworkDeps {
+	client: StaleNetworkClient
+	/** The logged-in profile and its active network; undefined before a session, and in a dApp
+	 *  window, which the takeover never covers. */
+	scope: () => { profileId: string; networkId: string } | undefined
+	/** Re-reads the active network's view into the store. */
+	syncActive: (networkId: string) => Promise<unknown>
+	/** The active network's reset completed: re-read its row, assign it, await the account load.
+	 *  `live` turns false once the session or profile that saw the completion has ended. */
+	onCompleted: (networkId: string, live: () => boolean) => Promise<void>
+	announce: (notice: ResetNotice) => void
+}
+
+/** What one session or profile owns. `clear` replaces it, so work begun under an ended one writes
+ *  nothing once it resumes and holds back nothing of the next. */
+class Session {
+	reads = 0
+	/** Completions of the active network whose account load has not ended. Until it ends, A4 stays
+	 *  and the notice waits. */
+	completions = 0
+	private completing: Promise<void> = Promise.resolve()
+
+	async hold(done: Promise<void>): Promise<void> {
+		this.completions++
+		this.completing = Promise.all([this.completing, done.catch(() => {})]).then(() => {})
+		try {
+			await done
+		} finally {
+			this.completions--
+		}
+	}
+
+	/** Resolves once every completion held so far, and any held meanwhile, has settled. */
+	async settled(): Promise<void> {
+		for (let seen = this.completing; ; seen = this.completing) {
+			await seen
+			if (seen === this.completing) return
+		}
+	}
+}
+
+export function useStaleNetwork(deps: StaleNetworkDeps) {
+	/** The view of the network whose reset runs, whatever network is active (A4). */
+	const running: Ref<StaleNetworkView | null> = ref(null)
+	/** The network whose custom node did not answer the last start (R4). */
+	const nodeDown: Ref<string | null> = ref(null)
+	const starting = ref(false)
+	let session = new Session()
+	let disposed = false
+	const live = (s: Session) => s === session && !disposed
+
+	const syncRunning = async (s: Session) => {
+		const read = ++s.reads
+		const pending = await deps.client.getPendingReset()
+		const next = pending?.running && !unattended.has(pending.networkId) ? await deps.client.getStaleNetwork(pending.networkId) : null
+		if (live(s) && read === s.reads && s.completions === 0) running.value = next
+	}
+
+	/** Taking a notice consumes it; the worker hands one only to the profile still active. */
+	const takeNotice = async (s: Session, profileId: string) => {
+		if (!live(s)) return
+		const notice = await deps.client.takeResetNotice(profileId)
+		await s.settled()
+		if (notice && live(s)) deps.announce(notice)
+	}
+
+	/** Re-reads the view of the network active now: after a switch, the event's network is not it. */
+	const syncLive = async (s: Session, profileId: string) => {
+		const now = deps.scope()
+		if (live(s) && now?.profileId === profileId) await deps.syncActive(now.networkId)
+	}
+
+	/** A refusal re-reads the active view, which then says why; an unanswered custom node is R4. */
+	const refused = async (view: StaleNetworkView, error: unknown) => {
+		if (errorCode(error) === ERR_NODE_UNREACHABLE) nodeDown.value = view.networkId
+		const scope = deps.scope()
+		if (scope) await deps.syncActive(scope.networkId)
+	}
+
+	/** Starts or resumes `view`'s reset. */
+	const start = async (view: StaleNetworkView) => {
+		if (starting.value) return
+		const s = session
+		starting.value = true
+		nodeDown.value = null
+		try {
+			await deps.client.resetStaleNetwork(view.networkId, confirmationOf(view))
+		} catch (error) {
+			if (!live(s)) return
+			await refused(view, error)
+		} finally {
+			if (live(s)) starting.value = false
+		}
+		await syncRunning(s)
+	}
+
+	/** At each unlock and reconnect of `profileId`: resumes a paused reset on any network, shows a
+	 *  run in flight, and announces a completion no popup took. */
+	const resume = async (profileId: string) => {
+		const s = session
+		const pending = await deps.client.getPendingReset()
+		const paused = pending && !pending.running ? await deps.client.getStaleNetwork(pending.networkId) : null
+		if (!live(s)) return
+		if (paused) await start(paused)
+		await syncRunning(s)
+		// A run pending at the unlock announces its own completion, once its account load ends: the
+		// worker writes the notice before the completion reaches this popup.
+		if (!pending) await takeNotice(s, profileId)
+	}
+
+	/** Ends what the ended session or profile showed and owned. */
+	const clear = () => {
+		session = new Session()
+		running.value = null
+		nodeDown.value = null
+		starting.value = false
+	}
+
+	/** The scope an event belongs to, if this popup acts on it. */
+	const scopeOf = (e: StaleNetworkChanged) => {
+		const scope = deps.scope()
+		return !disposed && scope?.profileId === e.profileId && !unattended.has(e.networkId) ? scope : undefined
+	}
+
+	const onChanged = async (e: StaleNetworkChanged) => {
+		const scope = scopeOf(e)
+		if (!scope) return
+		const s = session
+		// A4 stays up until the account load ends, so the route and the toast never meet an empty Home.
+		if (e.completed && e.networkId === scope.networkId) await s.hold(deps.onCompleted(e.networkId, () => live(s)))
+		await syncRunning(s)
+		await syncLive(s, scope.profileId)
+		if (e.completed) await takeNotice(s, scope.profileId)
+	}
+	deps.client.onStaleNetworkChanged.add(onChanged)
+
+	const dispose = () => {
+		disposed = true
+		deps.client.onStaleNetworkChanged.remove(onChanged)
+	}
+
+	return { running, nodeDown, starting, start, resume, clear, dispose }
+}
+
+export type StaleNetwork = ReturnType<typeof useStaleNetwork>
+
+/** The shell provides its one instance; the takeover injects it. */
+export const STALE_NETWORK_KEY: InjectionKey<StaleNetwork> = Symbol("stale-network")

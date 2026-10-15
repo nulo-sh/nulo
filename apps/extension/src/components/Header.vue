@@ -12,6 +12,7 @@ import { useLockWallet } from "@/composables/useLockWallet"
 /** Utils */
 import { managers } from "@/utils/core"
 import { copyAddressToClipboard } from "./header-copy-address"
+import { headerAccountState } from "./header-account"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -37,6 +38,14 @@ const defaultConfig = makeDefaultConfig()
 const indicateFailures = ref(defaultConfig.indicateFailures)
 const showNode = ref(defaultConfig.showNode)
 const networkStatusKey = computed(() => appStore.networkStatus?.toLowerCase())
+const accountState = computed(() =>
+	headerAccountState({
+		profileId: appStore.profile?.id,
+		network: appStore.network,
+		staleNetworkId: appStore.staleNetwork?.networkId,
+		account: appStore.account,
+	}),
+)
 
 const HEADER_INDICATION_DURATION = 5_000
 let headerIndicateFailureTimer = null
@@ -222,7 +231,7 @@ onBeforeUnmount(() => {
 		<!-- The switcher owns TWO explicit affordances (avatar + name) while the address is a
 		     one-click copy target — no popup detour. `account-selector` stays on the name button so
 		     every existing e2e switching flow passes unchanged (testid-preservation contract). -->
-		<Flex v-if="appStore.isLogined" align="center" gap="10" :class="$style.account_group">
+		<Flex v-if="appStore.isLogined && accountState === 'shown'" align="center" gap="10" :class="$style.account_group">
 			<button
 				type="button"
 				@click="handleOpenPopup('accounts')"
@@ -258,6 +267,20 @@ onBeforeUnmount(() => {
 				</button>
 			</Flex>
 		</Flex>
+		<Flex
+			v-else-if="appStore.isLogined && accountState === 'loading'"
+			align="center"
+			gap="10"
+			:class="$style.account_group"
+			data-testid="header-account-loading"
+		>
+			<Skeleton :width="32" :height="32" />
+			<Flex direction="column" gap="6">
+				<Skeleton :width="90" :height="12" />
+				<Skeleton :width="110" :height="12" />
+			</Flex>
+		</Flex>
+		<div v-else-if="appStore.isLogined" :class="$style.account_group" />
 
 		<Flex align="center" gap="8" :class="$style.actions">
 			<button

@@ -110,8 +110,13 @@ vi.mock("@/wallet/services/config/client", () => ({
 const FENCE = { profileId: "p1", epoch: 0, session: 1, incarnation: "worker-1" }
 const captureRunFence = vi.fn(async (): Promise<unknown> => FENCE)
 const assertRunFence = vi.fn(async (_fence: unknown): Promise<void> => undefined)
+const pendingReset = vi.fn(async (): Promise<unknown> => null)
 vi.mock("@/utils/core", () => ({
 	managers: {
+		networkReset: {
+			getPendingReset: () => pendingReset(),
+			onStaleNetworkChanged: { add: vi.fn(), remove: vi.fn() },
+		},
 		profile: {
 			captureRunFence: () => captureRunFence(),
 			assertRunFence: (fence: unknown) => assertRunFence(fence),
@@ -517,5 +522,47 @@ describe.each(BUFFER_BINDINGS)("export/full.vue — encrypted file encoding (%s 
 		expect(filename).toMatch(/^NuloEncryptedBackup_/)
 		expect(data).toBe(`${FULL_BACKUP_V2_TAG}:${"+/v7".repeat(20)}+w==`)
 		expect(new TextDecoder().decode(encrypt.mock.calls[0][1])).toBe(FULL_BACKUP_V2_TAG)
+	})
+})
+
+describe("export/full.vue — a reset in progress", () => {
+	it("names the reset above the agreement and keeps Continue disabled until the journal is gone", async () => {
+		const { managers } = await import("@/utils/core")
+		pendingReset.mockResolvedValueOnce({ networkId: "net1", running: false })
+		const wrapper = mountPage()
+		useAppStore().networks = [{ id: "net1", name: "Testnet", chainId: 7 }] as never
+		await flushPromises()
+		const notice = wrapper.get("[data-testid='full-backup-reset-notice']")
+		expect(notice.findAll("span").map((s) => s.text())).toEqual([
+			"FINISH THE TESTNET RESET FIRST",
+			"A backup made now would miss the accounts the reset is moving. Open Testnet to finish the reset, then come back.",
+		])
+		const agree = wrapper.get("[data-testid='agree-continue-btn']")
+		expect(agree.attributes("disabled")).toBeDefined()
+		;(agree.element as HTMLButtonElement).disabled = false
+		await agree.trigger("click")
+		expect(wrapper.find("[data-testid='unlock-password-input']").exists()).toBe(false)
+
+		const onChanged = vi.mocked(managers.networkReset.onStaleNetworkChanged.add).mock.calls.at(-1)?.[0] as () => Promise<void>
+		await onChanged()
+		await flushPromises()
+		expect(wrapper.find("[data-testid='full-backup-reset-notice']").exists()).toBe(false)
+		expect(wrapper.get("[data-testid='agree-continue-btn']").attributes("disabled")).toBeUndefined()
+		wrapper.unmount()
+		expect(managers.networkReset.onStaleNetworkChanged.remove).toHaveBeenCalledWith(onChanged)
+	})
+
+	it("a profile switch made elsewhere re-reads the notice, and the previous profile's late answer lands nowhere", async () => {
+		let answerFirst!: (v: unknown) => void
+		pendingReset.mockImplementationOnce(() => new Promise((r) => (answerFirst = r)))
+		const wrapper = mountPage()
+		useAppStore().networks = [{ id: "net1", name: "Testnet", chainId: 7 }] as never
+		useAppStore().profile = { id: "p2", type: "password", name: "Other" } as never
+		await flushPromises()
+		answerFirst({ networkId: "net1", running: false })
+		await flushPromises()
+		expect(wrapper.find("[data-testid='full-backup-reset-notice']").exists()).toBe(false)
+		expect(wrapper.get("[data-testid='agree-continue-btn']").attributes("disabled")).toBeUndefined()
+		wrapper.unmount()
 	})
 })

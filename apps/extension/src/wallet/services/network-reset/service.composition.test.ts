@@ -357,7 +357,7 @@ describe("a stale network reset through the real service graph", () => {
 		expect(after["nulo:core:active-network@p1"]).toBe("tn")
 		expect(after["nulo:core:network-reset@p1"]).toBeUndefined()
 		expect(after["nulo:core:stale-networks@p1"]).toBeUndefined()
-		expect(await h.reset.takeResetNotice()).toEqual({ networkId: "tn", addressesMoved: false })
+		expect(await h.reset.takeResetNotice("p1")).toEqual({ networkId: "tn", addressesMoved: false })
 	})
 
 	test("while the reset holds the old chain mid-purge, the other network stays readable and editable", async () => {

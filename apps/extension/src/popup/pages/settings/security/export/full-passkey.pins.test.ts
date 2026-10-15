@@ -124,6 +124,10 @@ const captureRunFence = vi.hoisted(() => vi.fn<() => Promise<unknown>>())
 const getPasskeyCredentialId = vi.fn(async (_id: string) => "cred-1")
 vi.mock("@/utils/core", () => ({
 	managers: {
+		networkReset: {
+			getPendingReset: async () => null,
+			onStaleNetworkChanged: { add: () => undefined, remove: () => undefined },
+		},
 		profile: {
 			captureRunFence: () => captureRunFence(),
 			assertRunFence: async () => undefined,

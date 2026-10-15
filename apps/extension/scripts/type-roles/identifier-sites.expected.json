@@ -218,12 +218,77 @@
 		{
 			"file": "apps/extension/src/components/Header.vue",
 			"expression": "appStore.account?.address ? trimAddress(appStore.account.address, 6, 4, \"...\") : \"\"",
-			"branch": "!appStore._isHomeScreenOpened && route.name !== 'popup-auth' && !route.meta.hideHeader && appStore.isLogined",
+			"branch": "!appStore._isHomeScreenOpened && route.name !== 'popup-auth' && !route.meta.hideHeader && appStore.isLogined && accountState === 'shown'",
 			"ordinal": 0,
 			"role": "data-lead",
 			"selector": "[data-testid=\"account-address-text\"]",
 			"surface": "overlay:Header",
 			"state": ""
+		},
+		{
+			"file": "apps/extension/src/components/stale-network/StaleNetworkConfirm.vue",
+			"expression": "trimAddress(account.address, 6, 4, \"...\")",
+			"branch": "view.accounts.length",
+			"ordinal": 0,
+			"role": "meta",
+			"selector": "[data-testid=\"stale-confirm-account-address\"]",
+			"surface": "overlay:StaleNetworkTakeover",
+			"state": "A3 opened from A1 on a stale Testnet seeded by seedStaleNetwork"
+		},
+		{
+			"file": "apps/extension/src/components/stale-network/StaleNetworkTakeover.vue",
+			"expression": "step.text",
+			"branch": "screen === 'progress'",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "overlay:StaleNetworkTakeover",
+			"state": "",
+			"why": "screen copy from copy.ts, reached only through the name of `newAddresses` (the address-change screen's strings); no identifier renders here"
+		},
+		{
+			"file": "apps/extension/src/components/stale-network/StaleNetworkTakeover.vue",
+			"expression": "content.eyebrow.text",
+			"branch": "!(screen === 'progress')",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "overlay:StaleNetworkTakeover",
+			"state": "",
+			"why": "screen copy from copy.ts, reached only through the name of `newAddresses` (the address-change screen's strings); no identifier renders here"
+		},
+		{
+			"file": "apps/extension/src/components/stale-network/StaleNetworkTakeover.vue",
+			"expression": "line.text",
+			"branch": "!(screen === 'progress') && content.box",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "overlay:StaleNetworkTakeover",
+			"state": "",
+			"why": "screen copy from copy.ts, reached only through the name of `newAddresses` (the address-change screen's strings); no identifier renders here"
+		},
+		{
+			"file": "apps/extension/src/components/stale-network/StaleNetworkTakeover.vue",
+			"expression": "content.primary.text",
+			"branch": "!(screen === 'progress')",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "overlay:StaleNetworkTakeover",
+			"state": "",
+			"why": "screen copy from copy.ts, reached only through the name of `newAddresses` (the address-change screen's strings); no identifier renders here"
+		},
+		{
+			"file": "apps/extension/src/components/stale-network/StaleNetworkTakeover.vue",
+			"expression": "content.secondary.text",
+			"branch": "!(screen === 'progress') && content.secondary",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "overlay:StaleNetworkTakeover",
+			"state": "",
+			"why": "screen copy from copy.ts, reached only through the name of `newAddresses` (the address-change screen's strings); no identifier renders here"
 		},
 		{
 			"file": "apps/extension/src/components/LegalAcceptanceSheet.vue",

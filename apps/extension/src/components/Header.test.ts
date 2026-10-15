@@ -77,6 +77,7 @@ const STUBS = {
 	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
 	MaterialIcon: { template: '<span data-testid="stub-material" :data-name="name" />', props: ["name", "size", "color"] },
 	AccountAvatar: { template: '<span data-testid="stub-avatar" />', props: ["name", "address", "size"] },
+	Skeleton: { template: '<span data-testid="stub-skeleton" :data-width="width" :data-height="height" />', props: ["width", "height"] },
 }
 
 function mountHeader() {
@@ -92,17 +93,19 @@ beforeEach(() => {
 	H.disconnectListeners.clear()
 	H.getSessionHandle.mockReset().mockResolvedValue("session-1")
 	H.lockActiveProfile.mockClear()
-	H.app = {
+	H.app = reactive({
 		isLogined: true,
 		_isHomeScreenOpened: false,
-		account: { name: "Primary Account", address: FULL_ADDRESS },
-		network: { name: "Alpha V5" },
+		profile: { id: "p1" },
+		account: { name: "Primary Account", address: FULL_ADDRESS, profileId: "p1", chainId: 1 },
+		network: { id: "n1", name: "Alpha V5", chainId: 1 },
+		staleNetwork: null,
 		networkStatus: "Active",
 		approvedSendsInFlight: 0,
 		refreshInFlight: vi.fn(async () => {}),
 		lockHeldByImport: false,
 		contactImports: new Set(),
-	}
+	})
 	H.cache = { failureLog: null, activeTasksCount: null, confirm: {} }
 })
 
@@ -172,5 +175,38 @@ describe("Header — network status", () => {
 		expect(mountHeader().get('[data-testid="network-button"]').attributes("data-status")).toBe("active")
 		H.app.networkStatus = "InvalidChain"
 		expect(mountHeader().get('[data-testid="network-button"]').attributes("data-status")).toBe("invalidchain")
+	})
+})
+
+describe("Header — the account group follows the active scope", () => {
+	const group = (w: ReturnType<typeof mountHeader>) => ({
+		shown: w.find('[data-testid="account-address-copy"]').exists(),
+		skeleton: w.findAll('[data-testid="stub-skeleton"]').map((el) => `${el.attributes("data-width")}x${el.attributes("data-height")}`),
+	})
+
+	test("a quarantined active network hides the group with no skeleton, and a runtime quarantine hides it at once", async () => {
+		const w = mountHeader()
+		expect(group(w)).toEqual({ shown: true, skeleton: [] })
+		H.app.staleNetwork = { networkId: "n1" }
+		await nextTick()
+		expect(group(w)).toEqual({ shown: false, skeleton: [] })
+		expect(w.find('[data-testid="header-account-loading"]').exists()).toBe(false)
+	})
+
+	test("another network's stale view leaves the active account shown", () => {
+		H.app.staleNetwork = { networkId: "n2" }
+		expect(group(mountHeader())).toEqual({ shown: true, skeleton: [] })
+	})
+
+	test("an account of the previous chain or profile never shows: the skeleton holds its footprint", async () => {
+		H.app.account = { name: "Old", address: FULL_ADDRESS, profileId: "p1", chainId: 7 }
+		const w = mountHeader()
+		expect(group(w)).toEqual({ shown: false, skeleton: ["32x32", "90x12", "110x12"] })
+		H.app.account = { name: "Other", address: FULL_ADDRESS, profileId: "p2", chainId: 1 }
+		await nextTick()
+		expect(group(w).shown).toBe(false)
+		H.app.account = undefined
+		await nextTick()
+		expect(w.find('[data-testid="header-account-loading"]').exists()).toBe(true)
 	})
 })
