@@ -3,12 +3,17 @@ import { dirname, join } from "node:path"
 import type { TokenListEntry } from "@nulo/token-list"
 import { describe, expect, test } from "vitest"
 import { BRANCH_PREFIX, ENVELOPE_PATH, envelopeMeta, type PublishIO, publishPrs, runPublish } from "../scripts/open-publish-pr"
-import { publishedTokens, REPO_ROOT, renderDiff, SIGNING_PATHS, tokenDiff } from "../scripts/summary"
+import { flagDiff, publishedList, REPO_ROOT, renderDiff, renderFlagDiff, SIGNING_PATHS, tokenDiff } from "../scripts/summary"
 
 const b64url = (text: string) => btoa(text).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "")
-const envelopeFor = (sequence: number, tokens: unknown[] = []) =>
+const envelopeFor = (sequence: number, tokens: unknown[] = [], flagged?: unknown[]) =>
 	`${JSON.stringify(
-		{ format: "nulo-token-list-envelope/1", keyId: "nulo-ci-1", payload: b64url(JSON.stringify({ sequence, tokens })), signature: "x" },
+		{
+			format: "nulo-token-list-envelope/1",
+			keyId: "nulo-ci-1",
+			payload: b64url(JSON.stringify({ sequence, tokens, flagged })),
+			signature: "x",
+		},
 		null,
 		"\t",
 	)}\n`
@@ -135,8 +140,21 @@ describe("the prepare summary", () => {
 		expect([...files].filter((file) => !SIGNING_PATHS.some((path) => file === path || file.startsWith(`${path}/`)))).toEqual([])
 	})
 
-	test("reads the served envelope's tokens, and none before the first publish", () => {
-		expect(publishedTokens(undefined)).toEqual([])
-		expect(publishedTokens(envelopeFor(5, [token(4)]))).toEqual([token(4)])
+	test("diffs flags by (chainId, address) and renders each change", () => {
+		const pair = (n: number, chainId = 1) => ({ chainId, address: token(n).address })
+		const diff = flagDiff([pair(1), pair(2)], [pair(2), pair(1, 2)])
+		expect(diff).toEqual({ added: [pair(1, 2)], removed: [pair(1)] })
+		expect(renderFlagDiff(diff).split("\n").slice(2, 4)).toEqual([
+			`| + | 2 | \`${pair(1).address}\` |`,
+			`| − | 1 | \`${pair(1).address}\` |`,
+		])
+		expect(renderFlagDiff(flagDiff([pair(1)], [pair(1)]))).toBe("No flag changes against the served list.\n")
+	})
+
+	test("reads the served envelope's tokens and flags, and none before the first publish", () => {
+		const flagged = [{ chainId: 1, address: token(9).address }]
+		expect(publishedList(undefined)).toEqual({ tokens: [], flagged: [] })
+		expect(publishedList(envelopeFor(5, [token(4)]))).toEqual({ tokens: [token(4)], flagged: [] })
+		expect(publishedList(envelopeFor(5, [token(4)], flagged))).toEqual({ tokens: [token(4)], flagged })
 	})
 })

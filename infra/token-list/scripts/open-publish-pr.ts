@@ -35,7 +35,7 @@ export function prBody(input: PublishInput, keyId: string, sequence: number): st
 		`Publishes token list sequence ${sequence}, signed with \`${keyId}\` by ${input.runUrl}.`,
 		"",
 		`- payload sha256: \`${input.payloadSha256}\``,
-		`- tokens sha256: \`${input.tokensSha256}\` (the set the approver was shown)`,
+		`- tokens and flags sha256: \`${input.tokensSha256}\` (the set the approver was shown)`,
 		"",
 		"The tree tests in `quality-status` verify this envelope against the pinned keys and parse it strictly.",
 		"Once merged, Workers Builds deploys `dev` and https://tokens.nulo.sh/v1/list.json serves it.",

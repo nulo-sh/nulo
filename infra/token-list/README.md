@@ -8,7 +8,7 @@ verifier are [`@nulo/token-list`](../../packages/token-list/README.md).
 
 | File | Purpose |
 |---|---|
-| `list.source.json` | The tokens, and nothing else. Edit this in a PR; the sequence is assigned at signing. |
+| `list.source.json` | The tokens and, once there is one, the `flagged` pairs; nothing else. Edit this in a PR; the sequence is assigned at signing. |
 | `public/v1/list.json` | The signed envelope. Written only by the publish PR; absent until the first publish. |
 | `public/_headers` | The response policy (CORS `*`, `max-age=300`, `nosniff`, CSP `default-src 'none'`, HSTS, `no-referrer`). Parsed by wrangler, never served. |
 | `wrangler.jsonc` | Static assets only, `workers_dev` and preview URLs off, observability off. |
@@ -32,8 +32,8 @@ verifier are [`@nulo/token-list`](../../packages/token-list/README.md).
 
 1. Edit `list.source.json` in a PR (keys in payload order, tab indent; `bun run check` says so) and
    merge it into `dev`.
-2. The push runs `.github/workflows/publish-token-list.yml`. Read the `prepare` summary: the token diff,
-   the tokens digest, and every signing-relevant change since the last publish.
+2. The push runs `.github/workflows/publish-token-list.yml`. Read the `prepare` summary: the token and
+   flag diffs, the digest of both, and every signing-relevant change since the last publish.
 3. Approve `sign` in the `token-list` environment.
 4. Merge the `chore(token-list): publish sequence <n>` PR the release App opens. Workers Builds deploys
    `dev`; the nightly `token-list-host-live` job checks the served list.

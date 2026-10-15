@@ -53,6 +53,12 @@ The payload is a UTF-8 JSON object:
 			"name": "Test USDC",
 			"priceId": "usd-coin"
 		}
+	],
+	"flagged": [
+		{
+			"chainId": 2904119610,
+			"address": "0x2a6c…41d7"
+		}
 	]
 }
 ```
@@ -67,9 +73,11 @@ The payload is a UTF-8 JSON object:
 | `name` | 1 to 80 characters. |
 | `decimals` | Integer, 0 to 18. |
 | `priceId` | Optional CoinGecko id. Absent means unpriced. |
+| `flagged` | Optional array of `{chainId, address}` pairs, under the rules above: tokens the publisher flags as scams. Absent means none. |
 
 `symbol` and `name` contain no control, format (bidi overrides, zero-width joiners) or line and
-paragraph separator characters. Each (`chainId`, `address`) pair appears once.
+paragraph separator characters. Each (`chainId`, `address`) pair appears once across `tokens` and
+`flagged`: a flagged token is never listed.
 
 ### What a reader does with it
 
@@ -78,6 +86,7 @@ paragraph separator characters. Each (`chainId`, `address`) pair appears once.
   an artifact for, and checks the class, symbol and decimals against the chain before it adds a row.
 - Leave an entry unpriced when its `priceId` is not one it knows.
 - Use at most the first 16 entries per `chainId`. The publisher never signs more than 16.
+- Warn wherever a flagged token shows, whoever added it, and never treat a flagged pair as listed.
 
 A list is a suggestion of which contracts to show, not a statement that a token is safe or worth
 anything. The class, symbol and decimals are checked against the chain. The name is a label: Nulo

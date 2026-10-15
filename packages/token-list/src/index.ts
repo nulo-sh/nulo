@@ -1,6 +1,6 @@
 import { type PinnedKey, verifyEnvelope } from "./envelope"
 import { PINNED_KEYS } from "./keys"
-import { parsePayload, selectEntries, type TokenListEntry } from "./parse"
+import { parsePayload, selectEntries, type TokenListEntry, type TokenListPair } from "./parse"
 
 export { BUNDLED_TOKEN_CLASS_IDS } from "./class-ids"
 export {
@@ -21,11 +21,19 @@ export {
 	parsePayload,
 	selectEntries,
 	type TokenListEntry,
+	type TokenListPair,
 	type TokenListPayload,
 } from "./parse"
 export { isPriceId, PRICE_IDS, type PriceId } from "./price-ids"
 
-export type VerifiedTokenList = { keyId: string; sequence: number; issuedAt: string; entries: TokenListEntry[] }
+export type VerifiedTokenList = {
+	keyId: string
+	sequence: number
+	issuedAt: string
+	entries: TokenListEntry[]
+	/** Every flagged pair, of any class: a flag warns about a token whoever added it. */
+	flagged: TokenListPair[]
+}
 
 /**
  * Verifies an envelope's signature, then parses its payload, then keeps the entries the wallet acts
@@ -34,5 +42,5 @@ export type VerifiedTokenList = { keyId: string; sequence: number; issuedAt: str
 export async function readTokenList(text: string, keys: readonly PinnedKey[] = PINNED_KEYS): Promise<VerifiedTokenList> {
 	const { keyId, payload } = await verifyEnvelope(text, keys)
 	const parsed = parsePayload(payload, "wallet")
-	return { keyId, sequence: parsed.sequence, issuedAt: parsed.issuedAt, entries: selectEntries(parsed.tokens) }
+	return { keyId, sequence: parsed.sequence, issuedAt: parsed.issuedAt, entries: selectEntries(parsed.tokens), flagged: parsed.flagged }
 }

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url"
 import { afterAll, describe, expect, test } from "vitest"
 import { BUNDLED_TOKEN_CLASS_IDS } from "./class-ids"
 import { readTokenList } from "./index"
-import { publishedSequence, signList, tokensSha256 } from "./sign"
+import { listSha256, publishedSequence, signList } from "./sign"
 import { main } from "./sign-cli"
 import { freshKey } from "./test-keys"
 
@@ -36,7 +36,8 @@ describe("signList", () => {
 		const list = await readTokenList(result.envelopeText, [pinned])
 		expect(list).toMatchObject({ keyId: "nulo-ci-1", sequence: 1_760_000_000, issuedAt: "2025-10-09T08:53:20.000Z" })
 		expect(list.entries).toEqual(SOURCE.tokens)
-		expect(result.tokensSha256).toBe(await tokensSha256(SOURCE.tokens))
+		expect(list.flagged).toEqual([])
+		expect(result.tokensSha256).toBe(await listSha256({ tokens: SOURCE.tokens, flagged: [] }))
 		expect(publishedSequence(result.envelopeText)).toBe(1_760_000_000)
 	})
 
@@ -51,6 +52,17 @@ describe("signList", () => {
 		await expect(signList({ ...base, keys: [other.pinned] })).rejects.toThrow("does not match the pinned key")
 		await expect(signList({ ...base, expectTokensSha256: "0".repeat(64) })).rejects.toThrow("approver was shown")
 		await expect(signList({ ...base, sourceText: JSON.stringify({ ...SOURCE, sequence: 9 }) })).rejects.toThrow("source.sequence")
+	})
+
+	test("signs the flags, and refuses a flag set the approver was not shown", async () => {
+		const { seedHex, pinned } = await freshKey("nulo-ci-1")
+		const flagged = [{ chainId: 1, address: `0x${"0".repeat(63)}2` }]
+		const base = { sourceText: JSON.stringify({ ...SOURCE, flagged }), seedHex, keyId: "nulo-ci-1", nowMs: NOW, keys: [pinned] }
+		const unflagged = await listSha256({ tokens: SOURCE.tokens, flagged: [] })
+		await expect(signList({ ...base, expectTokensSha256: unflagged })).rejects.toThrow("approver was shown")
+		const shown = await listSha256({ tokens: SOURCE.tokens, flagged })
+		const result = await signList({ ...base, expectTokensSha256: shown })
+		expect((await readTokenList(result.envelopeText, [pinned])).flagged).toEqual(flagged)
 	})
 })
 
