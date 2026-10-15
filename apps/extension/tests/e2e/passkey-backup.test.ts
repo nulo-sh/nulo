@@ -22,7 +22,7 @@
  */
 import { expect } from "vitest"
 import type { Page } from "puppeteer"
-import { clickByTestId, expectNoNameField, openPopup, waitForHash, test } from "./fixtures/extension"
+import { clickByTestId, expectNoNameField, openPopup, waitForHash, test, waitForServiceReady } from "./fixtures/extension"
 import { getActiveProfileName } from "./fixtures/helpers"
 import { setupPasskeyVirtualAuth, stallNextPasskeyCeremony } from "./fixtures/passkey"
 import { shotSend } from "./fixtures/send-page"
@@ -70,10 +70,7 @@ async function resetWallet(page: Page): Promise<void> {
 	)
 	await clickByTestId(page, "reset-submit-btn")
 	await waitForHash(page, "#/popup/register", 10_000)
-	await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), {
-		timeout: 15_000,
-		polling: 500,
-	})
+	await waitForServiceReady(page, 15_000)
 }
 
 /** Drive the passkey-register flow on a fresh extension at /popup/register.
@@ -81,10 +78,7 @@ async function resetWallet(page: Page): Promise<void> {
  *  /popup/general. */
 async function registerPasskeyProfile(page: Page): Promise<void> {
 	await waitForHash(page, "#/popup/register", 15_000)
-	await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), {
-		timeout: 15_000,
-		polling: 500,
-	})
+	await waitForServiceReady(page, 15_000)
 	await clickByTestId(page, "register-create-btn")
 
 	// A fresh install's first profile has no name field; it is created as "Main".

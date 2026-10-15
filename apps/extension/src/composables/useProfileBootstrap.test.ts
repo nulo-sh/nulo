@@ -393,6 +393,7 @@ describe("useProfileBootstrap", () => {
 			createPopupGuard(
 				() => appStore,
 				() => managers.profile as never,
+				{ ready: async () => true, markProvisional: () => {}, settle: () => {}, replay: () => {} },
 			),
 		)
 		await router.push("/popup/general")

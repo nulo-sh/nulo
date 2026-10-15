@@ -61,11 +61,20 @@ describe("logger ports per document", () => {
 			new NetworkServiceClient(),
 			new AccountServiceClient(),
 		]
-		for (const client of clients) await client.connect()
-		await drain()
+		// One at a time, as Chrome delivers each port's Ready in a task of its own.
+		for (const client of clients) {
+			await client.connect()
+			await drain()
+		}
 
 		expect(lines()).toEqual(
-			clients.map((c) => [undefined, (c as unknown as { clientName: string }).clientName, LogLevel.Debug, "Connected"]),
+			clients.flatMap((c) => {
+				const name = (c as unknown as { clientName: string }).clientName
+				return [
+					[undefined, name, LogLevel.Debug, "Connecting"],
+					[undefined, name, LogLevel.Debug, "Connected"],
+				]
+			}),
 		)
 		expectSettled()
 		expectOneLoggerPort()
@@ -80,7 +89,8 @@ describe("logger ports per document", () => {
 		await drain()
 
 		const messages = lines().map((l) => l[3])
-		expect(messages).toHaveLength(100)
+		expect(messages).toHaveLength(150)
+		expect(messages.filter((m) => m === "Connecting")).toHaveLength(50)
 		expect(messages.filter((m) => m === "Connected")).toHaveLength(50)
 		expect(messages.filter((m) => m === "Disconnected")).toHaveLength(50)
 		expect(registry.live.get("config")?.size ?? 0).toBe(0)
@@ -96,6 +106,8 @@ describe("logger ports per document", () => {
 		const pending = logger.log("ui", LogLevel.Info, "in flight") as unknown as Promise<void>
 		const [first] = registry.opened.get(LOGGER_SERVICE_NAME) ?? []
 		expect(first).toBeDefined()
+		// The line waits for the port's Ready; only a line already posted is lost with its port.
+		await vi.waitFor(() => expect(registry.posted).toHaveLength(1))
 
 		registry.remoteClose(first)
 		await expect(pending).rejects.toThrow(CLIENT_DISCONNECTED_MESSAGE)

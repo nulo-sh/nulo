@@ -4,7 +4,8 @@
  * It mirrors the parts of Chrome a client's lifecycle depends on: any number of ports may be open
  * under one name, a closed port throws on `postMessage`, a local `disconnect()` fires nothing, and
  * only the far end closing fires that one port's `onDisconnect`. Tests read counts off the
- * registry instead of relying on the fake to refuse a second port.
+ * registry instead of relying on the fake to refuse a second port. Each port hears Ready one
+ * microtask after it opens, as from a background that has started, unless `holdReady` is set.
  */
 
 import { type Mock, vi } from "vitest"
@@ -66,6 +67,8 @@ export class PortRegistry {
 	public readonly answered: PostedRequest[] = []
 	/** `microtask` mode only: while set, requests are recorded but not answered. */
 	public hold = false
+	/** While set, a port that opens hears no Ready until `ready` is called. */
+	public holdReady = false
 
 	private readonly sendMocks = new Map<string, Mock<Listener>>()
 
@@ -77,7 +80,15 @@ export class PortRegistry {
 		if (!this.live.get(name)?.size) this.sendMocks.set(name, vi.fn())
 		this.liveSet(name).add(port)
 		this.opened.set(name, [...(this.opened.get(name) ?? []), port])
+		queueMicrotask(() => {
+			if (!this.holdReady) this.sendReady(port)
+		})
 		return port
+	}
+
+	/** Posts Ready on every live port under `name`, as a started background does once per port. */
+	public ready(name: string): void {
+		for (const port of [...this.liveSet(name)]) this.sendReady(port)
 	}
 
 	/**
@@ -102,7 +113,7 @@ export class PortRegistry {
 	 *  whose request ids collide cannot be told apart here — use the port's own listeners for that. */
 	public deliver(name: string, message: unknown): void {
 		for (const port of [...this.liveSet(name)]) {
-			for (const listener of [...port.messageListeners]) listener(message)
+			for (const listener of [...port.messageListeners]) listener(message, port)
 		}
 	}
 
@@ -134,7 +145,12 @@ export class PortRegistry {
 		if (entry.port.closed) return
 		this.answered.push(entry)
 		const response = { type: MessageType.Response, content: { requestId: entry.requestId, result: undefined } }
-		for (const listener of [...entry.port.messageListeners]) listener(response)
+		for (const listener of [...entry.port.messageListeners]) listener(response, entry.port)
+	}
+
+	private sendReady(port: FakePort): void {
+		if (port.closed) return
+		for (const listener of [...port.messageListeners]) listener({ type: MessageType.Ready }, port)
 	}
 
 	private liveSet(name: string): Set<FakePort> {

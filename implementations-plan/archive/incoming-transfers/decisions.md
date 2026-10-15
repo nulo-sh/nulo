@@ -16,12 +16,14 @@ name `plan.md` at `b886fda6`.
 - `onTokenAdded` and `trustRestoredTokens` write the trust row and then the floor in two awaits; a
   handoff between them leaves a token trusted with its floor unmoved, so a back-filled old receipt could
   play an arrival. No hidden row is involved, so #92 does not cover it. The close-out opens an issue if
-  a test confirms it.
+  a test confirms it. **Disposition:** no test was written; a closed known limit with the next two,
+  #443 (plan.md D43).
 - Writes a displaced receipt dispatched just before a handoff-admitted purge are removed by that purge,
   if storage applies operations in dispatch order (I7). If it did not, a purged scope could keep a
   stray `pending` trust row (a restored profile's `trustRestoredTokens`, `service.ts:694`, would then
   skip auto-trusting that token), an outbox row or a receipt row, and a successor's decision could be
   overwritten by a late write. Each needs a five-minute storage stall first. Recorded, not built.
+  **Disposition:** closed known limit #443 (D43); I7 stays unverified there.
 - A deleter displaced by the watchdog keeps deleting after the handoff (F11). Receipt and acceptance
   writes stand down until it ends (`deletersRunning`), but other successors (`onTokenAdded`'s trust
   write, cursor and outbox writes) are not fenced on it, nor are the arrival and floor writers, which
@@ -31,10 +33,12 @@ name `plan.md` at `b886fda6`.
   get a trust row written back through `setArrivalFloor`. A deleter that never returns holds receipt
   writes off, and every public page held, until the background restarts. The close-out files an
   issue. The property to reproduce: with the real `Lock`, a successor's ticket stays current while
-  the displaced holder deletes its row.
+  the displaced holder deletes its row. **Disposition:** closed known limit #443 (D43); that property is
+  its reopening condition.
 - Discovery reads unspent notes only (F6), so a private receipt whose note is spent before a scan sees
   it never gets a row, and a re-included transaction whose note was spent before the wallet saw it
   again does not bring its row back (OA-1 says so). The close-out dedupes and files an issue.
+  **Disposition:** no twin found; closed known limit #444 (D43).
 
 ## Trade-offs and alternatives not taken
 

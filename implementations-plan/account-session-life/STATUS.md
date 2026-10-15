@@ -31,3 +31,16 @@
 - 2026-10-14 — arc 3 review round 1: Codex APPROVE (1 Low + 1 Comment fixed a71acaea, 1 Comment rejected), Opus CHANGES (same two; 1 Low → OWNER-ASKS OA-6, not built).
 - 2026-10-14 — arc 3 review round 2: Codex APPROVE, no findings; loop closed at 2 of 3. Boundary smoke retry-0 (auth-flows, security, passkey-backup): Chrome 12/12 in 98 s, Firefox 12/12 in 128 s; audit:vue 0 on ca83549.
 - 2026-10-14 — arc 3 boundary gate pass: audit:vue 0; smoke Chrome 12/12, Firefox 12/12; network backup-restore-integrity 2/2 retry-0 (host waited 23 min to load 56); test:all, test:ci-gating, check:plans 0.
+- 2026-10-14 — arc 4 revision started: branch `account-session-life-arc-4` off dev 15881c7d (D-orch-9); page 7 picks, #421 and the shots report read.
+- 2026-10-14 — revision recon done (2 Sonnet explorers + planner reading); nine plan-vs-tree disagreements recorded in lessons/phase-4.md (the tree wins).
+- 2026-10-14 — revision drafted: arc 4 (Ready, the bar, #421, P7-09), arc 5 (P7-05 to P7-07); OWNER-ASKS OA-7, OA-8 added; OA-6 listed for the next page.
+- 2026-10-14: revision audited (Codex r1 reject, Opus conditional approve); every finding checked at the tree and dispositioned in plan § Audit verdicts; fixes applied; Codex round 2 (resumed) running.
+- 2026-10-14: Codex r2 reject (3 items, all accepted and fixed); r3 (resumed, final verify) running.
+- 2026-10-14: Codex r3 conditional approve; its one condition applied in the plan. Revision committed for the orchestrator's approval.
+- 2026-10-14: phase 4.1 gate pass: I4 to I8 hold on both browsers (lessons/phase-4.md); I8 gap at most 63 ms, I5 yes, so nothing goes to OWNER-ASKS.
+- 2026-10-14: phase 4.2 gate pass: lint 0, typecheck:all 0 (after a bun install the dev merge needed), test:all 0 (extension 12167, messaging 394); nine new proofs red on 15881c7d, the drop guard green there.
+- 2026-10-14: phase 4.3 gate pass: lint 0, typecheck:all 0, test 0 (extension 12184), the rg gate clean; 14 new proofs red on the pre-shell source; smoke sw-resilience + registration + passkey-paths retry-0 Chrome 14/14 in 84 s, Firefox 9/9 (5 Chrome-only skips) in 94 s. The type-roles inventory swaps GlobalLoader for StartBar.
+- 2026-10-14: phase 4.4 held-boot case pass: Chrome 10/10 (64 s), Firefox 5/5 (67 s) on sw-resilience retry-0; red on base at the auth hash; release to Ready 550 ms / 708–844 ms.
+- 2026-10-14: phase 4.5 gate pass: lint 0, typecheck:all 0, profile client + composables 887/887; both new proofs red on the pre-4.5 client, the 60 s guard green there. reset.vue's catch stays silent after unmount, as the shared client's call ran on before.
+- 2026-10-14: phase 4.4 screenshots taken (Chrome, both themes): the bar over unlock (sweep and reduced motion, with edge crops), the boot banner, the revealed password and passkey forms, the bar over General across a restart, an empty wallet's unlock then register, Delete Profile waiting.
+- 2026-10-14: arc 4 boundary gate pass on e4a32d9f: audit:vue 0, test:all 0, check:plans 0; full smoke retry-0 Chrome 230 passed / 12 skipped in 1452 s, Firefox 229 / 13 in 2010 s; network retry-0 (restart trio, then the proverless pair) Chrome 2+6 passed in 115 + 249 s, Firefox 3+3 passed in 253 + 235 s, skips by browser design. Review loop closed: Codex r1 CHANGES, r2 CHANGES, r3 APPROVE; Opus r1 CHANGES; all fixed.

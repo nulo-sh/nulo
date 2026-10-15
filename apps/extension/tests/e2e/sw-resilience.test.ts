@@ -1,8 +1,19 @@
-import type { Page } from "puppeteer"
+import type { Browser, Page } from "puppeteer"
 import { describe, expect } from "vitest"
-import { isFirefox, stopBackground } from "./fixtures/browser"
+import { SCHEMA_VERSION_KEY } from "@nulo/wallet-core/migration"
+import { MIGRATION_FIXTURE_HOLD_KEY } from "@/e2e/migration-fixture"
+import { extensionUrl, gotoExtensionPage, isFirefox, newPage, stopBackground } from "./fixtures/browser"
 import { TEST_PASSWORD } from "./fixtures/constants"
-import { test, openPopup, waitForHash, clickByTestId, replaceInputValue, withTimeoutMessage } from "./fixtures/extension"
+import {
+	test,
+	openPopup,
+	waitForHash,
+	clickByTestId,
+	recordPageErrors,
+	replaceInputValue,
+	waitForServiceReady,
+	withTimeoutMessage,
+} from "./fixtures/extension"
 import {
 	acceptConfirmPopup,
 	ensureUnlocked,
@@ -13,6 +24,16 @@ import {
 } from "./fixtures/helpers"
 
 const STRICT_TOGGLE = '[data-testid="strict-security-toggle"]'
+
+// The held boot needs the build-stamped fixture migration (`migration.test.ts` says how it is armed).
+const HAS_MIGRATION_FIXTURE = process.env.NULO_E2E_MIGRATION_FIXTURE === "1"
+
+/** Firefox keeps an event page alive while any extension page is open, so a stop must close them all. */
+async function closeExtensionPages(browser: Browser): Promise<void> {
+	for (const p of await browser.pages()) {
+		if (/^(chrome|moz)-extension:\/\//.test(p.url())) await p.close().catch(() => {})
+	}
+}
 
 /**
  * Turns strict mode off through Settings → Lock and its confirmation, asserting the flag flipped, then
@@ -278,4 +299,63 @@ describe("background death and cold respawn", () => {
 		expect(registeredExtension.pageErrors).toEqual([])
 		await page2.close()
 	}, 60_000)
+
+	// A background that starts slowly refuses the popup's ports until its listeners exist: Chrome holds
+	// the first connect, then refuses; Firefox refuses at once. Here a storage migration holds the boot
+	// before them. The popup must show the unlock screen on its own while it waits, then settle on the
+	// service's reads once the background says Ready. The barrier covers the frame while the hold
+	// stands, so this proves the route and the hidden form; the look is in the PR's screenshots.
+	test.skipIf(!HAS_MIGRATION_FIXTURE)(
+		"a popup opened while the background starts shows the unlock screen, then settles once it is Ready",
+		async ({ registeredExtension: ctx }) => {
+			const errorsBefore = { console: ctx.consoleErrors.length, page: ctx.pageErrors.length }
+			const page = await openPopup(ctx)
+			await ensureUnlocked(page)
+			await lockWallet(page)
+			const name = await page.$eval('[data-testid="auth-profile"]', (el) => el.textContent?.trim() ?? "")
+			expect(name).not.toBe("")
+			await page.evaluate((v, h) => chrome.storage.local.set({ [v]: 1, [h]: 1 }), SCHEMA_VERSION_KEY, MIGRATION_FIXTURE_HOLD_KEY)
+			await closeExtensionPages(ctx.browser)
+			await stopBackground(ctx)
+
+			// At once, as a raw page: the hold self-releases 30 s after the successor starts, and
+			// `openPopup` would wait for the Ready the hold withholds.
+			const raw = await newPage(ctx.browser)
+			recordPageErrors(ctx, raw)
+			await raw.setViewport({ width: 360, height: 600 })
+			await gotoExtensionPage(raw, extensionUrl(ctx.extensionId, "/src/popup/index.html"))
+			await raw.waitForSelector('[data-testid="migration-updating"]', { timeout: 10_000 })
+			await waitForHash(raw, "#/popup/auth", 10_000)
+			const held = await raw.evaluate(() => {
+				const field = document.querySelector('[data-testid="auth-password-input"]')
+				return {
+					bar: document.querySelector('[data-testid="start-pending"]') !== null,
+					ready: document.querySelector('[data-service-ready="true"]') !== null,
+					field: field ? getComputedStyle(field).visibility : "absent",
+					updating: document.querySelector('[data-testid="migration-updating"]') !== null,
+				}
+			})
+			expect(held).toEqual({ bar: true, ready: false, field: "hidden", updating: true })
+
+			const released = Date.now()
+			await raw.evaluate((h) => chrome.storage.local.remove(h), MIGRATION_FIXTURE_HOLD_KEY)
+			await waitForServiceReady(raw, 30_000)
+			console.log(`[held boot] release to Ready: ${Date.now() - released} ms`)
+			await raw.waitForFunction(() => !document.querySelector('[data-testid="migration-updating"]'), {
+				timeout: 10_000,
+				polling: 100,
+			})
+			await raw.waitForSelector('[data-testid="auth-password-input"]', { visible: true, timeout: 10_000 })
+			expect(await raw.$eval('[data-testid="auth-profile"]', (el) => el.textContent?.trim() ?? "")).toBe(name)
+			expect(await raw.$('[data-testid="start-pending"]')).toBeNull()
+
+			await replaceInputValue(raw, '[data-testid="auth-password-input"]', TEST_PASSWORD)
+			await clickByTestId(raw, "auth-submit")
+			await waitForHash(raw, "#/popup/general", 15_000)
+			expect(ctx.consoleErrors.slice(errorsBefore.console)).toEqual([])
+			expect(ctx.pageErrors.slice(errorsBefore.page)).toEqual([])
+			await raw.close()
+		},
+		90_000,
+	)
 })
