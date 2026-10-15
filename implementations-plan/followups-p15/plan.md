@@ -1,7 +1,7 @@
 ---
 plan: followups-p15
 tier: light
-status: approved; arc 1 implemented and reviewed
+status: completed
 issues: "#294 #316 #321 #339 #340 #290 (arc 1, closes); #108 #103 #250 (arc 1, refs); #341 #112 (no arc)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 479ba56d
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-15. Planned and implemented the same day.
+- **Status:** delivered in one PR against `dev`, [#490](https://github.com/nulo-sh/nulo/pull/490), whose final commits are this close-out. Merging it closes the plan.
+- **Shipped:** #294 (six dead log rows and the converse scan); #316's behaviour (a stored sponsor address refused, in the existing words); #290 (the import name check, D9); #321 (the stamp refusal ends at its category, the parser's error its `cause`); #339's background half (`ContractNotFoundError`); #340's stored kind (`too_many_pending`, the row unchanged); #108 OA-7 (an Unconfirmed send found on chain reads Sent); #103 OA-8 and OA-9 (no figure on the settled card, the order); #250 (the skill sentence). #341 closed as not planned with its decision; #112 commented and open, as signed.
+- **Dropped, rejected, superseded:** OA-1..6 shipped only their "what ships now" form; the rest is the open items below. The same-family review's other two findings (the card before the token list loads, a mined receipt with no block) became known limits #491 and #492, and the add form's own row flashing "Already exist" #493. #341 needs no code: closed as not planned with its decision. #112 is unchanged, as signed: commented, left open.
+- **Known limits:** #491, #492, #493.
+- **Open items:** #316 #339 #340 (page 18 OA-1..3), #103 detail page (page 18 OA-4), #108 reverted (page 18 OA-5), logs filter row (page 18 OA-6).
+- **Lessons:** none promoted: the one tooling gotcha met here (an options object `waitForFunction`'s page patch does not recognise) is already in the e2e-testing skill.
+- **Seeds retired:** the `/goal` and `/loop` under § Seeds are retired with this record.
 
 # followups-p15: the twelve calls of decision page 15
 
