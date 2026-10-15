@@ -4,3 +4,5 @@
 - 2026-10-15: fast-forwarded to origin/dev 479ba56d (no lane file changed); plan.md, OWNER-ASKS.md (OA-1, OA-2) drafted; Codex audit and Opus Plan critique started.
 - 2026-10-15: round 1: Codex conditional approve (6 findings: 4 accepted, 2 rejected), Opus Plan conditional approve (10 findings, all accepted or met). Re-open guard is now the lock (D3); the silent relabel marks a card from its first relabel (D4); OA-1 reframed (lane brief against the signed text), OA-3 added; smoke gates name the armed build. Codex resume (verification round) next.
 - 2026-10-15: round 2 (Codex resume): conditional approve, 2 low findings, both accepted and applied (the throw fixture, OA-3's known limit in the close-out). No open finding; plan committed for the orchestrator's approval.
+- 2026-10-15: phase 1 (#450) ✓ — F: lint 0, typecheck:all 0, test 0 (12530 passed); red without the rule, green with it.
+- 2026-10-15: phase 2 (#363) ✓ — F + design: lint 0, typecheck:all 0, test 0 (12537 passed), design 0 (494); the 7+1 pins red on the base rules.

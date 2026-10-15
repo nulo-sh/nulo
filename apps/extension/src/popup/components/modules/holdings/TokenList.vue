@@ -188,6 +188,6 @@ const toggleSort = () => {
 }
 
 .fold_action {
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 </style>

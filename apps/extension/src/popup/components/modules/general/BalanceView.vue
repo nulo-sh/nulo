@@ -504,7 +504,7 @@ onBeforeUnmount(() => {
 
 .fiat_partial {
 	composes: type--meta from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 	margin-top: 4px;
 }
 
@@ -532,7 +532,7 @@ onBeforeUnmount(() => {
 }
 
 .breakdown_divider {
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 /* Text on the bubble must reach WCAG AA's 4.5:1 in both themes. */
