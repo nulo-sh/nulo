@@ -417,7 +417,7 @@ NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent <files>   # builds its 
 
 **Validation gate:** `bun run test`, `bun run lint`, `bun run typecheck:all`. Pass: all exit 0; each guard test fails when its guard line is removed.
 
-### Phase 4. Reset service
+### Phase 4. Reset service ✓
 
 1. Add `resetChainInPlace` with the lock limited to reservation and rewrite.
 2. Add the `createAccountInternal` overrides and `recreateForReset` with the ciphertext check.
@@ -549,6 +549,10 @@ Sources: **M** main leg, **C** Codex leg, **F** Opus leg; **K** contradiction ch
 ### Review round 2 (owner), 2026-10-14
 
 The owner answered A1–A15 and proposed the run lock (A16). Ten boards for failures and edge cases, and A1's node line, were added to the layout A canvas and approved with the answers. One code finding: an old key file cannot be re-imported after an address change (D46). **Codex delta check (resumed, gpt-6.1-sol high): reject**, four majors and three minors, each verified against the code and all accepted: the automatic run ignored unmovable rows (D41); a crash between the notice and the journal delete could announce twice (D44); the A6 cache ignored a primary changed after A1, and the named probe retries far past 5 s (D43); discovery bypassed the run lock (D40); the Header could show the previous account during a switch (D45); N3's switch was impossible under the lock. **Verification (resumed): approve with fixes**: the endpoint decision also needed a check at commit time (`probedEndpoint`, re-read under the network lock), and the Header predicate kept the quarantine check and gained a profile match; both applied. **Third round: approve with fixes**: an in-place URL edit kept the endpoint id, so `probedEndpoint` binds the URL too; applied. The loop stops here (three rounds). **Owner approval, 2026-10-14:** "Sounds good. But shouldn't we use skeleton so it doesnt just flash out of nowhere? Approved."
+
+### Arc 1 Codex fix loop (gpt-6.1-sol high), 2026-10-14
+
+Over `1ba770cf..5785b342`, then each fix. **Round 1 (fresh): 4 material.** Accepted: a full backup could omit accounts while a reset ran; a capture could write a journal after the profile's deletion cleared it; a network added on the target chain during capture. Rejected: a guard on transaction polling of a quarantined chain, a new guard surface the plan sends to the owner (it reads chain truth for rows the reset deletes). **Round 2 (resumed): 2 material, accepted**: the passkey backup slices re-check the journal after their reads; an obsolete runtime verdict writes nothing. **Round 3 (resumed): 1 material, accepted**: a chain that classifies clean at runtime refuses the operation instead of blocking the profile. **Round 4 (resumed, verifying round 3): "VERDICT: no new material findings".** Fixes in `8eb26c66`, `712809f4`, `f4d8912f`. The network gate then found D48 (`908455f4`); **round 5 (resumed, verifying it): "VERDICT: no new material findings"**.
 
 ## Delivery
 
