@@ -18,6 +18,7 @@ export default defineConfig({
 		include: ["tests/e2e/**/*.test.ts"],
 		environment: "node",
 		globalSetup: "./tests/e2e/global-setup.ts",
+		setupFiles: ["./tests/e2e/network-setup.ts"],
 		testTimeout: 30_000,
 		// 5 min — `tokenReadyExtension` (and global-setup's contract deploy)
 		// creates EmbeddedWallet + mints tokens. Same as vitest.e2e.network.config.ts.
