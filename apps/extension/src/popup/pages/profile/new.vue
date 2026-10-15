@@ -43,6 +43,7 @@ const router = useRouter()
 onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
 
 const backTo = computed(() => String(route.query.from || "/popup/register"))
+const selectedOnEntry = appStore.profile?.id
 
 const maxPasswordLength = 128
 
@@ -68,7 +69,7 @@ const {
 	// Popup activation is listener-based (app.vue's onActiveProfileChanged runs
 	// the bootstrap); this manual tail waits for it, loads accounts, persists
 	// the active account, and routes. Extracted to a testable page helper.
-	onCreated: (profile) => activateCreatedProfile(profile, { appStore, router }),
+	onCreated: (profile) => activateCreatedProfile(profile, { appStore, router, openToast, selectedOnEntry }),
 	openToast,
 	notifyCreateFailed: (isPasskey) => {
 		notificationStore.create({

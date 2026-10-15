@@ -40,6 +40,14 @@ export type LockLandingAction =
 	/** Nothing to change; only mark the session as checked. */
 	| "settle"
 
+/** Whether a boot run's page owns its flow when the run decides. A page the person reached while
+ *  the run waited does too: a start-up can take seconds, and the unlock frame offers New profile,
+ *  Import and Delete profile meanwhile. A run that began before any route resolved has no page to
+ *  compare. */
+export function isEstablishedAtDecision(establishedAtStart: boolean, pathAtStart: string | undefined, pathNow: string): boolean {
+	return establishedAtStart || (pathAtStart !== undefined && pathNow !== pathAtStart)
+}
+
 export function decideLockLanding(state: LockLandingState): LockLandingAction {
 	if (state.isPasskeyRoute && !state.hasProfile) return "passkey-hold"
 	if (!state.hasProfile) return state.hasCandidate && !state.pageEstablished ? "select-and-auth" : "settle"

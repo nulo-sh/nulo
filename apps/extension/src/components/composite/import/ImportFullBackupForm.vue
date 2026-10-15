@@ -17,6 +17,12 @@ const props = defineProps({
 	/** Names of the networks a Retry replays; the warning names them. */
 	unrestoredNetworks: { type: Array, default: () => [] },
 	hasOtherErrors: { type: Boolean, default: false },
+	/** Replaces the warning the form words from `unrestoredNetworks` and `hasOtherErrors`. */
+	warningText: { type: String, default: undefined },
+	/** The failed-Retry line the page adds above its buttons, which raises their edge again. */
+	retryFailedAgain: { type: Boolean, default: false },
+	/** Restoring into a new profile asks for its password; restoring into the open one does not. */
+	askNewPassword: { type: Boolean, default: true },
 	error: { type: Object, default: () => ({ type: "", title: "", tooltip: "" }) },
 	isCopied: { type: Boolean, default: false },
 	maxPasswordLength: { type: Number, default: 128 },
@@ -36,13 +42,13 @@ const warningRef = useTemplateRef("warningRef")
 
 const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeatedPassword.value ?? ""))
 const showWarning = computed(() => props.restoreStatus === "finished" && props.isRestoreHasErrors)
-const warningText = computed(() => restoreWarningText(props.unrestoredNetworks, props.hasOtherErrors))
+const shownWarning = computed(() => props.warningText ?? restoreWarningText(props.unrestoredNetworks, props.hasOtherErrors))
 
 // The errors screen's footer buttons appear with the warning and shorten the popup's scroller,
-// which leaves the warning below its edge.
+// which leaves the warning below its edge; the failed-Retry line shortens it once more.
 watch(
-	showWarning,
-	(shown) => {
+	[showWarning, () => props.retryFailedAgain],
+	([shown]) => {
 		const el = shown ? warningRef.value?.$el : null
 		if (!el) return
 		if (hero) hero.reveal(el)
@@ -99,7 +105,7 @@ watch(
 		>
 			<Flex align="center" gap="8">
 				<span :class="[$style.error_tag, $style.error_tag_warning]">Warning</span>
-				<Text variant="body" height="120" color="yellow">{{ warningText }}</Text>
+				<Text variant="body" height="120" color="txt-warning">{{ shownWarning }}</Text>
 			</Flex>
 		</Flex>
 	</div>
@@ -110,6 +116,7 @@ watch(
 			v-model="decryptionPassword"
 			:type="isDecryptionPasswordType ? 'password' : 'text'"
 			placeholder="Enter the password used to encrypt this backup"
+			autocomplete="current-password"
 			autofocus
 			data-testid="import-full-backup-decrypt-password-input"
 		>
@@ -123,7 +130,7 @@ watch(
 		</Input>
 	</div>
 
-	<div v-if="selectedBackup?.profileType === 'password' && !restoreStatus" :class="$style.section">
+	<div v-if="askNewPassword && selectedBackup?.profileType === 'password' && !restoreStatus" :class="$style.section">
 		<span :class="$style.section_label">New Password</span>
 		<Flex direction="column" gap="12">
 			<Input
@@ -190,7 +197,7 @@ watch(
 }
 
 .error_tag_warning {
-	color: var(--yellow);
+	color: var(--txt-warning);
 	border-color: var(--yellow);
 }
 

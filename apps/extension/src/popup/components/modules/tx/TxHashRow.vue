@@ -50,6 +50,5 @@ const emit = defineEmits(["copy"])
 
 .detail_link {
 	composes: detail_link from "../../../pages/detail-page.module.css";
-	color: var(--txt-secondary);
 }
 </style>

@@ -21,6 +21,18 @@ export type ProfileType = "password" | "passkey"
 export type RunFence = ExecutionFence & { incarnation: string }
 
 /**
+ * Passkey full-backup material from ONE authenticated ceremony: the credentialId (the backup's
+ * `master-key`) and the SEALED imported-keys DEK blob the backup carries verbatim. When the stored
+ * slot no longer opens under the ceremony's wrap key, a FRESH DEK is sealed under that key and
+ * carried instead (`dekReplaced: true`); the stored row is never modified. `unopened` counts the
+ * imported-key rows that do not open under the stored DEK, and is 0 when it was replaced.
+ */
+export type PasskeyBackupMaterial = { credentialId: string; dekSealed: string; dekReplaced: boolean; unopened: number }
+
+/** A finalized restore: the opened profile, and the fence of the session its finalize opened. */
+export type FinalizedRestore = { profile: ProfileInfo; fence: RunFence }
+
+/**
  * The secret half of a full-backup `restore()`, discriminated by profile type.
  * Replaces the old polymorphic `masterKey: string` slot, where a password profile
  * passed a base64 32-byte plain master key and a passkey profile passed a credential
@@ -351,20 +363,6 @@ export type Methods = {
 	exportPlain(id: string, password?: string, credentialData?: PasskeyCredentialData): string
 
 	/**
-	 * Passkey full-backup material: the credentialId (the backup's `master-key`)
-	 * and the SEALED imported-keys DEK blob the backup carries verbatim, from ONE authenticated
-	 * ceremony. When the stored slot no longer opens under the ceremony's wrap key, a FRESH DEK
-	 * is sealed under that key and carried instead (`dekReplaced: true`); the stored row is never
-	 * modified.
-	 * @param id Profile id.
-	 * @param credentialData The in-page WebAuthn ceremony's result for this profile's credential.
-	 */
-	exportPasskeyBackupMaterial(
-		id: string,
-		credentialData: PasskeyCredentialData,
-	): { credentialId: string; dekSealed: string; dekReplaced: boolean }
-
-	/**
 	 * Returns the 24-word recovery phrase, re-encoded from the profile's stored entropy after
 	 * the words↔master pairing check (fails closed on a tampered row).
 	 * @param id Profile id.
@@ -414,11 +412,13 @@ export type Methods = {
 	 *
 	 * Emits `onActiveProfileChanged` once the session is up. Idempotent: if
 	 * the session is already active for `id`, returns without re-opening.
+	 * The fence is captured under the same lock hold that opened the session, so it can only
+	 * name this restore's profile, never a same-id successor.
 	 *
 	 * @param id Profile id (from the `restore` return value).
 	 * @param password Password (password profiles only).
 	 */
-	finalizeRestore(id: string, password?: string): ProfileInfo
+	finalizeRestore(id: string, password?: string): FinalizedRestore
 }
 
 export type Events = {

@@ -283,8 +283,8 @@ jobs:
 
   # Advisory duplication trend (jscpd) — a report instrument, never a gate.
   # Deliberately absent from publish-nightly's needs; continue-on-error keeps a
-  # tool hiccup from reddening the nightly battery. See CLAUDE.md § Complexity
-  # budgets for why duplication is watched as a trend rather than ratcheted.
+  # tool hiccup from reddening the nightly battery. See .claude/skills/complexity-budgets/SKILL.md
+  # for why duplication is watched as a trend rather than ratcheted.
   dup-trend:
     needs: resolve
     if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'

@@ -11,6 +11,7 @@ import { describe, expect, test, vi } from "vitest"
 import { LoggerStore } from "@/wallet/logger"
 import { loggedAfter } from "../../../../tests/helpers/logged"
 import { ConfigStore } from "@/wallet/config"
+import { NoteStatus } from "@aztec-labs/stdlib/note"
 import { NoteService } from "./service"
 import type { Note } from "./spec"
 
@@ -163,6 +164,31 @@ describe("NoteService.getNotes", () => {
 		await expect(service.getNotes("n", "0x0000000000000000000000000000000000000000000000000000000000000001")).rejects.toThrow(
 			/PXE request failed/,
 		)
+	})
+})
+
+describe("NoteService reads for incoming reconciliation", () => {
+	const acc = "0x0000000000000000000000000000000000000000000000000000000000000001"
+	const contract = "0x0000000000000000000000000000000000000000000000000000000000000002"
+	const pxeOf = (service: NoteService) =>
+		(service as unknown as { pxeService: { getNotes: ReturnType<typeof vi.fn>; getSyncedBlockHeader?: unknown } }).pxeService
+
+	test("getNotesRaw reads unspent notes by default and spent ones too on request", async () => {
+		const { service } = makeService()
+		await service.getNotesRaw("n", acc, contract)
+		await service.getNotesRaw("n", acc, contract, "active-or-nullified")
+		const statuses = pxeOf(service).getNotes.mock.calls.map(([, filter]) => (filter as { status: NoteStatus }).status)
+		expect(statuses).toEqual([NoteStatus.ACTIVE, NoteStatus.ACTIVE_OR_NULLIFIED])
+	})
+
+	test("getSyncedBlock returns the synced header's number and hash", async () => {
+		const { service } = makeService()
+		const hash = `0x${"ab".repeat(32)}`
+		pxeOf(service).getSyncedBlockHeader = vi.fn(async () => ({
+			getBlockNumber: () => 42,
+			hash: async () => ({ toString: () => hash }),
+		}))
+		expect(await service.getSyncedBlock("n")).toEqual({ number: 42, hash })
 	})
 })
 

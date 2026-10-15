@@ -76,7 +76,7 @@ import { useAppStore } from "@/stores/app.store"
 import { createMemoryHistory, createRouter } from "vue-router"
 import { createLockedState } from "@/popup/locked-state"
 import { createPopupGuard } from "@/popup/route-guard"
-import { supersedeProfileActivations, useProfileBootstrap } from "./useProfileBootstrap"
+import { isActivatingOtherThan, supersedeProfileActivations, useProfileBootstrap } from "./useProfileBootstrap"
 
 // app.store references `managers` as an auto-imported global at runtime
 // (vite auto-import via src/utils/). In vitest the auto-import only covers
@@ -339,6 +339,44 @@ describe("useProfileBootstrap", () => {
 		)
 	})
 
+	test("an activation counts as in flight until it settles, through its final session read", async () => {
+		const answers = deferredReads()
+		const { bootstrapActiveProfile } = useProfileBootstrap()
+		const activation = bootstrapActiveProfile(fakeProfile)
+		expect(isActivatingOtherThan("created")).toBe(true)
+		expect(isActivatingOtherThan("prof-1")).toBe(false)
+		await vi.waitFor(() => expect(answers).toHaveLength(1))
+		expect(isActivatingOtherThan("created")).toBe(true)
+
+		answers[0](fakeProfile)
+		await activation
+		expect(isActivatingOtherThan("created")).toBe(false)
+	})
+
+	test("an activation superseded before it fails resolves false; one not superseded reports its failure", async () => {
+		const { bootstrapActiveProfile } = useProfileBootstrap()
+		const failing = () => {
+			let fail!: (err: Error) => void
+			;(managers.profile.getActiveProfile as ReturnType<typeof vi.fn>).mockImplementationOnce(
+				() => new Promise((_resolve, reject) => (fail = reject)),
+			)
+			return (err: Error) => fail(err)
+		}
+
+		const failSuperseded = failing()
+		const superseded = bootstrapActiveProfile(fakeProfile)
+		await vi.waitFor(() => expect(managers.profile.getActiveProfile).toHaveBeenCalledTimes(1))
+		supersedeProfileActivations()
+		failSuperseded(new Error("timed out"))
+		expect(await superseded).toBe(false)
+
+		const failCurrent = failing()
+		const current = bootstrapActiveProfile(fakeProfile)
+		await vi.waitFor(() => expect(managers.profile.getActiveProfile).toHaveBeenCalledTimes(2))
+		failCurrent(new Error("timed out"))
+		await expect(current).rejects.toThrow("timed out")
+	})
+
 	test("a hydration superseded by a lock commits nothing and reports no active profile", async () => {
 		const answers = deferredReads()
 		const { hydrateKnownProfile } = useProfileBootstrap()
@@ -393,6 +431,7 @@ describe("useProfileBootstrap", () => {
 			createPopupGuard(
 				() => appStore,
 				() => managers.profile as never,
+				{ ready: async () => true, markProvisional: () => {}, settle: () => {}, replay: () => {} },
 			),
 		)
 		await router.push("/popup/general")

@@ -1,6 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { type ILogger, LogLevel } from "@nulo/wallet-core/logger"
-import { getErrorMessage, jsonSanitize, jsonStringify } from "@nulo/wallet-core/utils"
+import { deferred, getErrorMessage, jsonSanitize, jsonStringify } from "@nulo/wallet-core/utils"
 import type { EventsMap, EventsSpec, IService, MethodsMap, ServiceCollection } from "@nulo/wallet-core/base"
 import { buildErrorResponseContent } from "./error-response"
 import { awaitInitialized } from "./initialization"
@@ -44,6 +44,7 @@ export abstract class BaseService<TRequests extends MethodsMap, TEvents extends 
 	public readonly name: string
 	protected readonly logger: ILogger
 	private initialized = false
+	private readonly started = deferred<void>()
 
 	protected constructor(name: string, logger: ILogger) {
 		this.name = name
@@ -66,6 +67,15 @@ export abstract class BaseService<TRequests extends MethodsMap, TEvents extends 
 		await this.init(services)
 		this.initialized = true
 		this.logDebug("Service started")
+	}
+
+	public collectionStarted(): void {
+		this.started.resolve()
+	}
+
+	/** Resolves once the whole service collection has started, not just this service. */
+	protected whenCollectionStarted(): Promise<void> {
+		return this.started.promise
 	}
 
 	protected async ensureInitialized() {

@@ -1,7 +1,7 @@
 import type { Browser, Page } from "puppeteer"
 import { PASSKEY_COPY } from "@/utils/passkey-copy"
 import { type VirtualAuthenticator, holdNextCredentialGet, virtualAuthenticator } from "./browser"
-import { clickByTestId, expectNoNameField, waitForHash } from "./extension"
+import { clickByTestId, expectNoNameField, waitForHash, waitForServiceReady } from "./extension"
 import { waitForToast } from "./helpers"
 
 /** Drive the passkey-register flow on a fresh extension at /popup/register.
@@ -24,10 +24,7 @@ export async function registerPasskeyProfile(page: Page): Promise<void> {
 /** Brings a fresh extension's /popup/register to its passkey form, one press from creating the profile. */
 export async function openPasskeyRegister(page: Page): Promise<void> {
 	await waitForHash(page, "#/popup/register", 15_000)
-	await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), {
-		timeout: 15_000,
-		polling: 500,
-	})
+	await waitForServiceReady(page, 15_000)
 
 	await clickByTestId(page, "register-create-btn")
 

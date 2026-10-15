@@ -78,7 +78,7 @@ const panelOn = (browser: Browser, hash: string, timeoutMs?: number) =>
 	untilInPanel<true>(
 		browser,
 		`const doc = content.document;
-		return content.location.hash === ${JSON.stringify(hash)} && doc.querySelector('[data-session-checked="true"]') && !doc.querySelector('${sel("boot-outcome-banner")}') && !doc.querySelector('${sel("global-loader")}') ? true : null;`,
+		return content.location.hash === ${JSON.stringify(hash)} && doc.querySelector('[data-session-checked="true"]') && !doc.querySelector('${sel("boot-outcome-banner")}') && doc.querySelector('[data-service-ready="true"]') ? true : null;`,
 		`reached ${hash}`,
 		timeoutMs,
 	)

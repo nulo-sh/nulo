@@ -92,6 +92,26 @@ for (const theme of ["light", "dark"] as const) {
 	})
 }
 
+// The red buttons' label at rest and hovered; the hover is the expression Button.vue's red variants use.
+const DESTRUCTIVE_HOVER = "color-mix(in srgb, var(--btn-destructive), black 18%)"
+for (const theme of ["light", "dark"] as const) {
+	describe(`theme contrast — ${theme} red buttons (required)`, () => {
+		test(`${theme}: the label on --btn-destructive >= ${AA_TEXT}:1`, () => {
+			expect(contrast("--txt-white", "--btn-destructive", theme)).toBeGreaterThanOrEqual(AA_TEXT)
+		})
+		test(`${theme}: the label on the hover >= ${AA_TEXT}:1`, () => {
+			expect(contrast("--txt-white", DESTRUCTIVE_HOVER, theme)).toBeGreaterThanOrEqual(AA_TEXT)
+		})
+	})
+}
+
+describe("resolveColor color-mix toward black", () => {
+	test("keeps 82% of each channel at 18%, and refuses a translucent color", () => {
+		expect(resolveColor(DESTRUCTIVE_HOVER, { "--btn-destructive": "#c62828" })).toEqual({ r: 162, g: 33, b: 33, a: 1 })
+		expect(() => resolveColor("color-mix(in srgb, rgba(0, 0, 0, 0.5), black 18%)", {})).toThrow(/opaque/)
+	})
+})
+
 // Regression: resolveColor must tolerate both comma and CSS Color 4 space-separated rgb() syntax.
 describe("resolveColor rgb() parsing", () => {
 	test("parses comma and space-separated rgb/rgba", () => {

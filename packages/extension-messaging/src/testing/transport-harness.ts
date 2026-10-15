@@ -45,6 +45,9 @@ export const emitPortDisconnect = (service: string) => ports.closeAll(service)
  *  client just sent. Throws if no client has connected yet. */
 export const capturePortMessage = (service: string) => ports.sendMock(service)
 
+/** The registry behind this file's `chrome.runtime.connect`, for tests that hold or count Ready. */
+export const portRegistry = () => ports
+
 // ── Background SERVICE side (chrome.runtime.onConnect) ──────────────────
 const connectListeners = createListenerBag<(port: unknown) => void>()
 

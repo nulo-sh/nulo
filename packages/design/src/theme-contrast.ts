@@ -82,10 +82,23 @@ function parseRgb(str: string): Rgba {
 	return { r: chan(parts[0]), g: chan(parts[1]), b: chan(parts[2]), a: alpha(parts[3]) }
 }
 
+/** `color-mix(in srgb, C, black P%)` split at its first and last commas: a pattern with a free-form
+ *  C beside optional spaces backtracks polynomially on a run of spaces. */
+function mixTowardBlack(value: string): { color: string; percent: number } | null {
+	if (!/^color-mix\(/i.test(value) || !value.endsWith(")")) return null
+	const inner = value.slice("color-mix(".length, -1)
+	const first = inner.indexOf(",")
+	const last = inner.lastIndexOf(",")
+	if (first === -1 || first === last || !/^in\s+srgb$/i.test(inner.slice(0, first).trim())) return null
+	const black = /^black\s+([\d.]+)%$/i.exec(inner.slice(last + 1).trim())
+	return black ? { color: inner.slice(first + 1, last).trim(), percent: Number.parseFloat(black[1]) } : null
+}
+
 /**
  * Resolve a token NAME (or raw value) to an Rgba for the given theme, following `var(--x, fallback)`
  * chains, `color-mix(in srgb, C P%, transparent)` (≡ C at P% alpha — the repo idiom, see Spinner.vue),
- * hex, and rgb/rgba. Cycle-guarded. Throws on a genuinely unresolvable reference (a ghost token).
+ * `color-mix(in srgb, C, black P%)` on an opaque C (a hover, see Button.vue), hex, and rgb/rgba.
+ * Cycle-guarded. Throws on a genuinely unresolvable reference (a ghost token).
  */
 export function resolveColor(token: string, map: Record<string, string>, seen = new Set<string>()): Rgba {
 	let value = token.startsWith("--") ? map[token] : token
@@ -96,6 +109,14 @@ export function resolveColor(token: string, map: Record<string, string>, seen = 
 	if (mix) {
 		const base = resolveColor(mix[1].trim(), map, seen)
 		return { ...base, a: base.a * (Number.parseFloat(mix[2]) / 100) }
+	}
+
+	const toward = mixTowardBlack(value)
+	if (toward) {
+		const base = resolveColor(toward.color, map, seen)
+		if (base.a !== 1) throw new Error(`a mix toward black needs an opaque color: ${token}`)
+		const keep = 1 - toward.percent / 100
+		return { r: Math.round(base.r * keep), g: Math.round(base.g * keep), b: Math.round(base.b * keep), a: 1 }
 	}
 
 	const varMatch = value.match(/^var\(\s*(--[a-z0-9-]+)\s*(?:,\s*(.+))?\)$/i)

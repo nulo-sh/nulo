@@ -1,7 +1,7 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup lang="ts">
 /** Services */
-import { managers } from "@/utils/core"
+import { isServiceReady, managers } from "@/utils/core"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 
 /** Composables */
@@ -92,7 +92,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<main :class="$style.shell">
+	<main :class="$style.shell" :data-service-ready="isServiceReady ? 'true' : undefined">
 		<!-- Passkey ceremony dialog teleports to #popup. The popup app.vue
 			declares this anchor too; onboarding mirrors it. -->
 		<div id="popup" />
@@ -103,7 +103,6 @@ onBeforeUnmount(() => {
 		<PopupManager />
 		<ToastManager />
 		<NotificationManager />
-		<GlobalLoader />
 		<MigrationBarrier />
 
 		<!-- Brand signature: lock icon + NULO wordmark — same as popup

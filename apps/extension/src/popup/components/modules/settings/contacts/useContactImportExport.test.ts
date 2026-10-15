@@ -7,32 +7,40 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { ref } from "vue"
+import { reactive, ref } from "vue"
+import { held as deferred } from "../../../../../../tests/helpers/held-read"
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
 const openToastMock = vi.fn()
+const updateToastMock = vi.fn()
 const pickFileMock = vi.fn()
 const popupOpenMock = vi.fn()
 
-const appStoreState: { network: { id: string; name: string } | null; beginContactImport: () => () => void } = {
+const appStoreState: {
+	network: { id: string; name: string } | null
+	beginContactImport: () => () => void
+	contactImports: ReadonlySet<symbol>
+} = {
 	network: { id: "net-1", name: "Testnet" },
 	beginContactImport: () => () => {},
+	contactImports: new Set(),
 }
+// Reactive, as the Pinia store is: what it holds reads back as a proxy.
 const cacheStoreState: {
 	importContacts: unknown[]
 	importPromise: { resolve: (rows: unknown[]) => void; reject: (v: unknown) => void } | null
-} = {
+} = reactive({
 	importContacts: [],
 	importPromise: null,
-}
+})
 
 // The run fence the profile service hands the import; every contact call of the run must carry it.
 const RUN_FENCE = vi.hoisted(() => ({ profileId: "p1", epoch: 0, session: 1, incarnation: "w1" }))
 // The clients the import opens for itself; `makeServices` hands it the fakes it builds.
 const importClients = vi.hoisted(() => ({ contact: {} as object, accountState: {} as object }))
 vi.mock("@/composables/toast", () => ({
-	useToast: () => ({ openToast: openToastMock }),
+	useToast: () => ({ openToast: openToastMock, updateToast: updateToastMock }),
 }))
 vi.mock("@/utils", () => ({
 	FilePickCanceledError: class FilePickCanceledError extends Error {},
@@ -126,6 +134,7 @@ beforeEach(() => {
 	vi.clearAllMocks()
 	appStoreState.network = { id: "net-1", name: "Testnet" }
 	appStoreState.beginContactImport = () => () => {}
+	appStoreState.contactImports = new Set()
 	cacheStoreState.importContacts = []
 	cacheStoreState.importPromise = null
 })
@@ -517,30 +526,207 @@ describe("useContactImportExport — apply refuses what no row on screen promise
 	})
 })
 
+describe("useContactImportExport — the progress snack", () => {
+	const SNACK_ID = 41
+	const labels = () => openToastMock.mock.calls.map((c) => (c[0] as { label: string }).label)
+	const updates = () => updateToastMock.mock.calls.map((c) => c as [number, string])
+
+	test("opens at 0 of the selected rows before the first row, counts each confirmed write, and the result opens after it", async () => {
+		const { contactService, accountStateService } = makeServices()
+		const order: string[] = []
+		let nextId = SNACK_ID - 1
+		contactService.addContact.mockImplementation(async (name: string) => {
+			order.push(`write ${name}`)
+			// The second row's write fails: a row the wallet did not confirm moves nothing.
+			if (name === "Eve") throw new Error("disk full")
+		})
+		openToastMock.mockImplementation((toast: { label: string }) => {
+			order.push(toast.label)
+			return ++nextId
+		})
+		updateToastMock.mockImplementation((_id: number, label: string) => order.push(label))
+		fileWith({
+			version: 2,
+			contacts: [
+				{ name: "Dana", address: ADDR_A },
+				{ name: "Eve", address: ADDR_B },
+			],
+		})
+
+		await runImport(useContactImportExport({ contacts: ref([]), accountStateService } as never))
+
+		expect(order).toEqual([
+			"Importing contacts · 0 of 2",
+			"write Dana",
+			"Importing contacts · 1 of 2",
+			"write Eve",
+			"Import ended with errors",
+		])
+		expect(updates().map(([id]) => id)).toEqual([SNACK_ID])
+	})
+
+	test("a stop's incomplete toast reads the count the line last showed", async () => {
+		const { contactService, accountStateService } = makeServices()
+		const sessionEnds = vi.fn().mockResolvedValue(undefined)
+		contactService.addContact.mockResolvedValueOnce(undefined).mockImplementationOnce(async () => {
+			sessionEnds.mockRejectedValue(new Error("session ended"))
+			throw new Error("port closed")
+		})
+		const { ProfileServiceClient } = await import("@/wallet/services/profile/client")
+		vi.mocked(ProfileServiceClient).mockImplementationOnce(function () {
+			return {
+				connect: vi.fn(),
+				disconnect: vi.fn(),
+				captureRunFence: vi.fn().mockResolvedValue(RUN_FENCE),
+				assertRunFence: sessionEnds,
+			} as never
+		})
+		fileWith({
+			version: 2,
+			contacts: [
+				{ name: "Dana", address: ADDR_A },
+				{ name: "Eve", address: ADDR_B },
+			],
+		})
+
+		await runImport(useContactImportExport({ contacts: ref([]), accountStateService } as never))
+
+		expect(updates().map(([, label]) => label)).toEqual(["Importing contacts · 1 of 2"])
+		expect(labels().at(-1)).toBe("Import incomplete · 1 of 2 contacts written")
+	})
+})
+
 describe("useContactImportExport — the running import holds Lock and owns its connections", () => {
 	let guard: ReturnType<typeof createContactImportGuard>
 	beforeEach(() => {
 		guard = createContactImportGuard()
 		appStoreState.beginContactImport = guard.beginContactImport
+		appStoreState.contactImports = guard.contactImports.value
 	})
 	const held = () => ({ running: guard.contactImports.value.size, holds: guard.lockHeldByImport.value })
 
-	test("Lock is held from the first row to the result toast, and released after it", async () => {
+	test("Lock is held from the progress snack through the rows to the result toast, and released after it", async () => {
 		const { contactService, accountStateService } = makeServices()
 		const seen: Array<{ at: string; running: number; holds: boolean }> = []
 		contactService.addContact.mockImplementation(async () => {
 			seen.push({ at: "row", ...held() })
 		})
-		openToastMock.mockImplementation(() => seen.push({ at: "toast", ...held() }))
+		openToastMock.mockImplementation((toast: { label: string }) => seen.push({ at: toast.label, ...held() }))
 		fileWith({ version: 2, contacts: [{ name: "Dana", address: ADDR_A }] })
 
 		await runImport(useContactImportExport({ contacts: ref([]), accountStateService } as never))
 
 		expect(seen).toEqual([
+			{ at: "Importing contacts · 0 of 1", running: 1, holds: true },
 			{ at: "row", running: 1, holds: true },
-			{ at: "toast", running: 1, holds: true },
+			{ at: "Import completed successfully", running: 1, holds: true },
 		])
 		expect(held()).toEqual({ running: 0, holds: false })
+	})
+
+	const gate = () =>
+		vi.waitFor(() => {
+			if (!cacheStoreState.importPromise) throw new Error("selection gate not reached")
+		})
+	const staged = () => (cacheStoreState.importContacts as Array<{ name: string }>).map((row) => row.name)
+	const written = (contactService: { addContact: { mock: { calls: unknown[][] } } }) =>
+		contactService.addContact.mock.calls.map((call) => call[1])
+	/** The next import's profile client, with its fence calls replaced. */
+	async function nextProfileClient(fence: { captureRunFence?: () => Promise<unknown>; assertRunFence?: () => Promise<unknown> }) {
+		const { ProfileServiceClient } = await import("@/wallet/services/profile/client")
+		const client = {
+			connect: vi.fn(),
+			disconnect: vi.fn(),
+			captureRunFence: vi.fn(fence.captureRunFence ?? (async () => RUN_FENCE)),
+			assertRunFence: vi.fn(fence.assertRunFence ?? (async () => undefined)),
+		}
+		vi.mocked(ProfileServiceClient).mockImplementationOnce(function () {
+			return client as never
+		})
+		return client
+	}
+
+	test("while an import writes, a second import opens no picker and stages nothing; once it ends, the next one opens the picker", async () => {
+		const { contactService, accountStateService } = makeServices()
+		const write = deferred<void>()
+		contactService.addContact.mockImplementationOnce(() => write.promise)
+		fileWith({ version: 2, contacts: [{ name: "Dana", address: ADDR_A }] })
+		const api = useContactImportExport({ contacts: ref([]), accountStateService } as never)
+
+		const first = api.importContacts()
+		await gate()
+		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts))
+		await vi.waitFor(() => expect(contactService.addContact).toHaveBeenCalled())
+		await api.importContacts()
+		expect(pickFileMock).toHaveBeenCalledTimes(1)
+		expect(popupOpenMock).toHaveBeenCalledTimes(1)
+		expect(cacheStoreState.importPromise).toBeNull()
+
+		write.resolve()
+		await first
+		expect(openToastMock).toHaveBeenLastCalledWith({ kind: "success", label: "Import completed successfully" })
+		fileWith({ version: 2, contacts: [{ name: "Eve", address: ADDR_B }] })
+		const next = api.importContacts()
+		await gate()
+		expect(pickFileMock).toHaveBeenCalledTimes(2)
+		cacheStoreState.importPromise?.reject(false)
+		await next
+	})
+
+	test("two imports past the entry check: the later finds the selection taken and stages nothing; the first writes its own rows", async () => {
+		const { contactService, accountStateService } = makeServices()
+		await nextProfileClient({})
+		const fenceB = deferred<unknown>()
+		const clientB = await nextProfileClient({ captureRunFence: () => fenceB.promise })
+		fileWith({ version: 2, contacts: [{ name: "Dana", address: ADDR_A }] })
+		fileWith({ version: 2, contacts: [{ name: "Eve", address: ADDR_B }] })
+		const api = useContactImportExport({ contacts: ref([]), accountStateService } as never)
+
+		const a = api.importContacts()
+		const b = api.importContacts()
+		await gate()
+		fenceB.resolve(RUN_FENCE)
+		await b
+		expect(popupOpenMock).toHaveBeenCalledTimes(1)
+		expect(staged()).toEqual(["Dana"])
+		expect(clientB.disconnect).toHaveBeenCalled()
+
+		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts))
+		await a
+		expect(written(contactService)).toEqual([ADDR_A])
+	})
+
+	test("a run a lock released cannot cancel the next run's selection: its late stop leaves the slot, and the next run writes its rows", async () => {
+		const { contactService, accountStateService } = makeServices()
+		const registration = deferred<void>()
+		accountStateService.addSender.mockImplementationOnce(() => registration.promise)
+		const sessionA = vi.fn(async (): Promise<unknown> => undefined)
+		await nextProfileClient({ assertRunFence: () => sessionA() })
+		fileWith({ version: 2, contacts: [{ name: "Dana", address: ADDR_A, isSender: true }] })
+		const api = useContactImportExport({ contacts: ref([]), accountStateService } as never)
+
+		const a = api.importContacts()
+		await gate()
+		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts))
+		await vi.waitFor(() => expect(accountStateService.addSender).toHaveBeenCalled())
+		// The lock: the seal resets the guard, and A's session is gone while its registration waits.
+		guard.resetContactImports()
+		sessionA.mockRejectedValue(new Error("session ended"))
+
+		fileWith({ version: 2, contacts: [{ name: "Eve", address: ADDR_B }] })
+		const b = api.importContacts()
+		await gate()
+		const slotB = cacheStoreState.importPromise
+		registration.reject(new Error("port closed"))
+		await a
+		expect(openToastMock).toHaveBeenLastCalledWith({ kind: "error", label: "Import incomplete · 0 of 1 contact written" })
+		expect(cacheStoreState.importPromise).toBe(slotB)
+		expect(staged()).toEqual(["Eve"])
+
+		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts))
+		await b
+		expect(written(contactService)).toEqual([ADDR_B])
+		expect(cacheStoreState.importPromise).toBeNull()
 	})
 
 	test("nothing is held while the selection popup is open, and a throw while rows are written still releases", async () => {

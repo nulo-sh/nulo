@@ -102,3 +102,19 @@ describe("ContactFormFields — the name field keeps what a stored name holds", 
 		expect(await typed(`${"a".repeat(CONTACT_NAME_MAX - 1)}\u{20000}`)).toBe("a".repeat(CONTACT_NAME_MAX - 1))
 	})
 })
+
+describe("ContactFormFields — at the name cap, one message at a time", () => {
+	test("a duplicate shows in place of the length note; once it clears, the note takes the slot", async () => {
+		const { Input: _stub, ...stubs } = STUBS
+		const w = mount(ContactFormFields, {
+			props: { name: "", address: "", addressValid: false, nameExists: true },
+			global: { stubs: { ...stubs, Tooltip: { template: "<span><slot /></span>" } }, components: { Input } },
+		})
+		await w.find('[data-testid="contact-name-input"]').setValue("a".repeat(CONTACT_NAME_MAX))
+		expect(w.find('[data-testid="contact-name-exists"]').exists()).toBe(true)
+		expect(w.text()).not.toContain("Maximum length reached")
+		await w.setProps({ nameExists: false })
+		expect(w.find('[data-testid="contact-name-exists"]').exists()).toBe(false)
+		expect(w.text()).toContain("Maximum length reached")
+	})
+})

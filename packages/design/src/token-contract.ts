@@ -64,6 +64,8 @@ export const tokenGroups = {
 		orange: "--orange",
 		yellow: "--yellow",
 		red: "--red",
+		/** The red buttons' fill: darker than `--red`, so their label reads AA at rest and hovered. */
+		btnDestructive: "--btn-destructive",
 		purple: "--purple",
 		gray: "--gray",
 		sand: "--sand",

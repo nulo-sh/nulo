@@ -7,6 +7,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [account-artifact-freeze](account-artifact-freeze/plan.md) — completed — account addresses frozen per extension major: vendored artifact, frozen descriptor, execution canary
 - [account-balance-orphans](account-balance-orphans/plan.md) — completed — balance rows carry their own profile, chain and contract scope, judged by one identity predicate
 - [account-profile-siloing](account-profile-siloing/plan.md) — completed — one composite scope of profile, network, chain and account governs every activity record and slice
+- [account-session-life](account-session-life/plan.md) — completed — one lock per account address, a bounded identity-checked profile activation, the passkey retry, the popup port's Ready handshake and start bar, the unlock toast and the split reveal, page 7's picks, backup autocomplete
 - [account-switch-isolation](account-switch-isolation/plan.md) — completed — scope-filtered reducers contain cross-account activity leaks on an account switch
 - [adversarial-key-model-review](adversarial-key-model-review/plan.md) — completed — read-only adversarial review of the second-generation key model
 - [amount-honesty](amount-honesty/plan.md) — completed — the wallet never guesses an amount's magnitude, and what it cannot state exactly it does not state
@@ -21,6 +22,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [aztec-5.2.0-js-line](aztec-5.2.0-js-line/plan.md) — completed — a version-only bump of the Aztec JS packages to 5.2.0, with the Noir toolchain held
 - [backup-import](backup-import/plan.md) — completed — a full-backup import that one slow public node cannot stall
 - [backup-import-decomposition](backup-import-decomposition/plan.md) — completed — the full-backup restore stages split into plain functions behind a short orchestrator
+- [backup-import-export](backup-import-export/plan.md) — completed — one key-unseal wipe order, strict hex, migration watchdog; a slimmer account-state slice; restore outcomes and a partial restore, protected exports
 - [backup-import-repair](backup-import-repair/plan.md) — completed — restore writes the profile, and a separate last step opens the session
 - [backup-integrity](backup-integrity/plan.md) — completed — the backup migration core and restore surface split under the complexity budget, behaviour unchanged
 - [backup-log-hygiene](backup-log-hygiene/plan.md) — completed — every extension log line made safe to persist and export, in three redundant layers
@@ -42,6 +44,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [ci-followups](ci-followups/plan.md) — completed — no Bun auto-install in jobs that install nothing, the move-approval label read live, the Docker Bun pins in the runbook
 - [ci-followups-2](ci-followups-2/plan.md) — completed — nightly's Firefox jobs and both send-chaos runs gate the nightly release (#220), two fixed chaos seeds gate every network PR, chaos jobs asserted like canaries
 - [ci-followups-3](ci-followups-3/plan.md) — completed — a draft release keeps its tag through every edit (#309), a malformed chaos seed is refused (#305), release's opt-in network run replays the PR chaos seeds (#306)
+- [ci-followups-4](ci-followups-4/plan.md) — completed — the first-party imports the store fallback hid, declared (#172 a known limit: six upstream gaps), the raw call field's e2e case (#365), a lessons retirement pass
 - [ci-gates](ci-gates/plan.md) — completed — fail-closed CI aggregators, and no PR run cancels another on its own head
 - [ci-release-supply](ci-release-supply/plan.md) — completed — Storybook in quality-status, live e2e labels and per-head queues, the shard-fold probe, the launch «FILL» gate, store-copy checks, plans ignore shapes, presto's blocked-access title, an advisory in-browser nightly leg, nightly retention at fourteen
 - [code-followups-1](code-followups-1/plan.md) — completed — prune resolved follow-ups, ship 14 small code-only ones in three arcs, settle the boot-line flake
@@ -126,6 +129,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [fix-transport-sessions](fix-transport-sessions/plan.md) — completed — transport and dApp-session fixes, each proved by a failing test
 - [fix-ui-storage](fix-ui-storage/plan.md) — completed — UI, storage and composable fixes, each proved by a failing test
 - [followups-6](followups-6/plan.md) — completed — every smoke run behind the egress guard with one declared live spec for the shipped token list (#317); a fixed log category for an unparseable PXE stamp (#315)
+- [forms-and-contacts](forms-and-contacts/plan.md) — completed — a contacts import a lock cannot break, counted on one snack, one at a time; one message at a name cap, a darker red, shared detail links, motion stops, trimmed names, the logger gate
 - [frontend-ux-fixes](frontend-ux-fixes/plan.md) — completed — six reported UX fixes in one batch, ordered by risk
 - [furthering-non-network-e2e](furthering-non-network-e2e/plan.md) — completed — the fast non-network e2e suite grown in seven mergeable steps
 - [fuzz-runner](fuzz-runner/plan.md) — completed — the balances-store fuzz test refactored instead of accepting its suppressions
@@ -150,6 +154,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [import-stage-deadlines](import-stage-deadlines/plan.md) — completed — import stage timing and console-capture fixes in the e2e suite
 - [incoming-public-transfers](incoming-public-transfers/plan.md) — completed — incoming public token transfers indexed into the activity feed
 - [incoming-sync-indicator](incoming-sync-indicator/plan.md) — superseded by holdings-loading-sync — a per-token indicator for incoming history backfill
+- [incoming-transfers](incoming-transfers/plan.md) — completed — the receive path: fenced trust writes, scans on new blocks, explorer links and their focus ring, the fee on a tap under Privacy mode, re-mined and pruned note receipts reconciled against the PXE
 - [incoming-trust-state-machine-refactor](incoming-trust-state-machine-refactor/plan.md) — completed — the incoming-transfer trust table serialized behind one lock per service
 - [isolated-linker-store](isolated-linker-store/plan.md) — completed — Bun's isolated linker adopted consumers first, with `@nulo/resolve-asset`
 - [journal-reaper](journal-reaper/plan.md) — completed — three fixes for the operation-journal reaper and its neighbours

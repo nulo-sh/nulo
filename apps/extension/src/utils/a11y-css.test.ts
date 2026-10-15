@@ -65,6 +65,45 @@ describe("reduced motion and Disable animations both stop the shakes and the shi
 	})
 })
 
+describe("the detail pages' links draw the focus ring on :focus-visible, never on plain :focus", () => {
+	const shared = read("popup/pages/detail-page.module.css")
+		.replace(/\/\*[\s\S]*?\*\//g, "")
+		.replace(/\s+/g, " ")
+
+	test("the shared link classes draw the accent ring on :focus-visible", () => {
+		expect(shared).toContain(
+			".hero_link:focus-visible, .detail_link:focus-visible { outline: 2px solid var(--nulo-accent); outline-offset: 2px; }",
+		)
+	})
+
+	test("no shared rule draws on plain :focus, which a mouse press or a tap also matches", () => {
+		expect(shared).not.toMatch(/:focus(?!-visible)/)
+	})
+
+	test("every link on the tx, received and journal pages binds a local class composing a ringed one", () => {
+		// The links each file renders itself; the address cards' corner links are AddressCardLink's.
+		const pages = [
+			["popup/components/modules/tx/TxHashRow.vue", 1],
+			["popup/pages/tx/[id].vue", 2],
+			["popup/pages/received/[id].vue", 4],
+			["popup/pages/journal/[id].vue", 2],
+		] as const
+		const unringed = pages.flatMap(([path, count]) => {
+			const source = read(path).replace(/\s+/g, " ")
+			const anchors = [...source.matchAll(/<a [^>]*>/g)].map(([tag]) => tag)
+			const ringed = (tag: string) =>
+				[...tag.matchAll(/\$style\.(\w+)/g)].some(([, local]) =>
+					new RegExp(
+						`\\.${local} \\{[^}]*composes: (hero_link|detail_link) from "(\\.\\./)+(pages/)?detail-page\\.module\\.css";`,
+					).test(source),
+				)
+			const misses = anchors.filter((tag) => !ringed(tag))
+			return anchors.length === count && misses.length === 0 ? [] : [{ path, anchors: anchors.length, misses }]
+		})
+		expect(unringed).toEqual([])
+	})
+})
+
 describe("the toolbar button shows keyboard focus", () => {
 	test("RowAction's inset accent ring, nested in .icon_btn", () => {
 		const source = read("popup/pages/toolbar-button.module.css").replace(/\s+/g, " ")

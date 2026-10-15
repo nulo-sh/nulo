@@ -10,16 +10,12 @@
  * (real sender only for pub→pub; "From private" for priv→pub; redacted for note kinds — never the
  * MAGIC/zero sentinel raw) and, for PUBLIC receipts only, the network fee the sender paid.
  *
- * The fee is fetched LAZILY on open (never persisted): a mined tx's fee is immutable, so the
- * background service caches it in-memory and the row shimmers until it lands. The fee row is
- * public-event-only (the record carries the block hash the reorg-safe cache needs; the sender-paid fee
- * is a public-transfer concept).
+ * The fee is fetched LAZILY (never persisted) and only for a public receipt: the record carries the
+ * block hash the reorg-safe cache needs, and a sender-paid fee is a public-transfer concept.
  *
- * Privacy posture (deferred — see the "Privacy maxi" follow-up in
- * implementations-plan/archive/incoming-public-transfers/plan.md, Explorer links): explorer links resolve for ALL
- * receipts (notes included), and the public-fee fetch is automatic on open. Both narrow an RPC/explorer's
- * view to a specific tx — a future opt-in "Privacy maxi" setting is where we'd strip explorer links on
- * private receipts and gate the fee fetch behind an explicit tap. Not done here by product decision.
+ * The fee lookup names the transaction to the node, so under privacy mode it runs only on a press of
+ * "Show fee". A mode not yet read, unreadable, or lost with the config port counts as on: nothing is
+ * looked up without a tap until a read says the mode is off.
  */
 
 /** Components */
@@ -32,12 +28,15 @@ import { DateTime } from "luxon"
 /** Services */
 import { IncomingTransferServiceClient } from "@/wallet/services/incoming-transfer/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
+import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { NetworkServiceClient } from "@/wallet/services/network/client"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { usePrices } from "@/composables/usePrices"
+import { useConfigRead } from "@/composables/useConfigRead"
+import { useReceiptFee } from "@/composables/useReceiptFee"
 
 /** Utils */
 import { DETAIL_TIME_FORMAT } from "../detail-page"
@@ -68,28 +67,48 @@ const tokens = ref([])
  *  (or a network switch after open) can't show the wrong chain's catalogue/explorer. */
 const recordChainId = ref(null)
 
-/** Lazy network-fee state (public receipts only). */
-const feeJuiceRaw = ref(null)
-const feeLoading = ref(false)
+/** `null` until a read lands, and again from a lost config port until the reconnect's read lands. */
+const privacyMode = ref(null)
+const tapOnly = computed(() => privacyMode.value !== false)
 
 /** Service clients */
 const incomingTransferService = new IncomingTransferServiceClient()
 const tokenService = new TokenServiceClient()
+const configService = new ConfigServiceClient()
 const priceService = new PriceServiceClient()
 const networkService = new NetworkServiceClient()
 const prices = usePrices(priceService)
+const modeRead = useConfigRead(configService, () => configService.getValue("privacyMode"), landPrivacyMode)
+const { state: feeState, feeJuice: feeJuiceRaw, load: loadFee, show: showFee, dispose: disposeFee } = useReceiptFee(incomingTransferService)
 
 /** If a reorg/reconcile removes THIS receipt while the page is open, drop to the not-found state rather
  *  than keep showing an orphaned receipt. `deletedIds` tombstones the delete so one that races the initial
  *  load (fired while getIncomingTransferById is still awaiting, when `received` is still null) still wins —
- *  the post-load check in onMounted honors it. (A re-mine that only rewrites a surviving record's block/fee
- *  emits no event yet, so a stale fee on a still-valid record isn't caught here.) */
+ *  the post-load check in onMounted honors it. An Updated that races the load is held and wins over the
+ *  record the load returns, which may predate it; a delete still wins over both. */
 const deletedIds = new Set()
+let heldUpdate = null
+/** Set once the mode's first read settled and the mount looked the fee up: an Updated before then
+ *  only replaces the record. */
+let feeArmed = false
 const onReceiptDeleted = (rec) => {
 	deletedIds.add(rec.id)
 	if (received.value?.id === rec.id) received.value = null
 }
+const onReceiptUpdated = (rec) => {
+	if (rec.id !== route.params.id || deletedIds.has(rec.id)) return
+	if (!loaded.value) {
+		heldUpdate = rec
+		return
+	}
+	if (received.value?.id !== rec.id) return
+	received.value = rec
+	if (feeArmed) void loadFee(rec, tapOnly.value)
+}
 incomingTransferService.onIncomingTransferDeleted.add(onReceiptDeleted)
+incomingTransferService.onIncomingTransferUpdated.add(onReceiptUpdated)
+configService.onUpdate.add(onConfigUpdate)
+configService.onDisconnected.add(onConfigDisconnected)
 
 /** Derived — token + amount */
 const token = computed(() => (received.value ? tokenForReceipt(tokens.value, received.value) : undefined))
@@ -152,10 +171,27 @@ const copy = async (value, label) => {
 	await copyReceivedValue(value, label, openToast)
 }
 
+/** A value other than a boolean keeps the mode unknown, which counts as on. */
+function landPrivacyMode(value, updatedSince) {
+	if (!updatedSince("privacyMode")) privacyMode.value = typeof value === "boolean" ? value : null
+}
+
+function onConfigUpdate(prop) {
+	if (prop.key === "privacyMode") privacyMode.value = typeof prop.value === "boolean" ? prop.value : null
+}
+
+/** Updates sent while the port is down are lost, so the last answer no longer holds. */
+function onConfigDisconnected() {
+	privacyMode.value = null
+}
+
 /** Lifecycle */
 onMounted(async () => {
+	// The mode read is the page's first request on `config`, so the port it opens is the mount's own.
+	const modeSettled = modeRead.read()
 	// Resolve the record FIRST; `loaded` gates the not-found state, so flip it as soon as we know.
 	received.value = (await incomingTransferService.getIncomingTransferById(route.params.id).catch(() => null)) ?? null
+	if (received.value && heldUpdate) received.value = heldUpdate
 	// A delete that fired WHILE this load was in flight tombstoned the id — honor it so the just-loaded
 	// (now stale) record can't paint over a deletion that already happened.
 	if (received.value && deletedIds.has(received.value.id)) received.value = null
@@ -176,23 +212,24 @@ onMounted(async () => {
 	if (recordChainId.value !== null) {
 		tasks.push(tokenService.getTokens(inc.profileId, recordChainId.value).then((t) => (tokens.value = t)))
 	}
-	if (inc.kind === "public-event") {
-		feeLoading.value = true
-		tasks.push(
-			incomingTransferService
-				.getReceiptFee(inc.id)
-				.then((res) => {
-					if (res) feeJuiceRaw.value = res.feeJuice
-				})
-				.finally(() => (feeLoading.value = false)),
-		)
-	}
+	tasks.push(
+		modeSettled.then(() => {
+			feeArmed = true
+			if (received.value) return loadFee(received.value, tapOnly.value)
+		}),
+	)
 	await Promise.allSettled(tasks)
 })
 onBeforeUnmount(() => {
 	incomingTransferService.onIncomingTransferDeleted.remove(onReceiptDeleted)
+	incomingTransferService.onIncomingTransferUpdated.remove(onReceiptUpdated)
+	configService.onUpdate.remove(onConfigUpdate)
+	configService.onDisconnected.remove(onConfigDisconnected)
 	incomingTransferService.disconnect()
+	disposeFee()
 	tokenService.disconnect()
+	configService.disconnect()
+	modeRead.dispose()
 	networkService.disconnect()
 	prices.dispose()
 	priceService.disconnect()
@@ -325,14 +362,23 @@ onBeforeUnmount(() => {
 							<span :class="$style.detail_key_note">Paid by sender</span>
 						</Flex>
 						<Flex align="center" gap="6">
-							<span v-if="feeLoading" :class="$style.fee_shimmer" data-testid="received-fee-loading" />
-							<template v-else-if="formattedFee">
-								<span :class="$style.detail_value_mono">{{ formattedFee }} FJ</span>
+							<span v-if="feeState === 'loading'" :class="$style.fee_shimmer" data-testid="received-fee-loading" />
+							<template v-else-if="feeState === 'shown' && formattedFee">
+								<span :class="$style.detail_value_mono" data-testid="received-fee-value">{{ formattedFee }} FJ</span>
 								<span v-if="formattedFeeUsd" :class="$style.detail_value_aux" title="At today's AZTEC price">{{
 									formattedFeeUsd
 								}}</span>
 							</template>
-							<span v-else :class="$style.detail_value_aux">—</span>
+							<button
+								v-else-if="feeState === 'tap'"
+								type="button"
+								:class="$style.fee_show"
+								data-testid="received-fee-show"
+								@click="showFee"
+							>
+								Show fee
+							</button>
+							<span v-else :class="$style.detail_value_aux" data-testid="received-fee-none">—</span>
 						</Flex>
 					</Flex>
 
@@ -466,6 +512,25 @@ onBeforeUnmount(() => {
 
 .detail_link {
 	composes: detail_link from "../detail-page.module.css";
+}
+
+.fee_show {
+	composes: type--data from global;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--txt-primary);
+	cursor: pointer;
+	transition: color 0.2s var(--bezier);
+
+	&:hover {
+		color: var(--nulo-accent);
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
+	}
 }
 
 .fee_shimmer {

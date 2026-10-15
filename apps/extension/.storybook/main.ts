@@ -13,11 +13,12 @@ import useAutoImport from "unplugin-auto-import/vite"
 import useComponents from "unplugin-vue-components/vite"
 // Storybook v10's main.ts loader requires explicit .ts extensions on relative imports.
 import { nuloDesignResolver } from "../scripts/design-resolver.ts"
-import { resolvePackageAsset } from "@nulo/resolve-asset"
+import { resolvePackageAsset, resolvePackageRoot } from "@nulo/resolve-asset"
 
 const config: StorybookConfig = {
 	framework: {
-		name: "@storybook/vue3-vite",
+		// Storybook resolves a bare framework name from its own package, which declares none.
+		name: resolvePackageRoot("@storybook/vue3-vite", { from: import.meta.url }),
 		options: {},
 	},
 	stories: [

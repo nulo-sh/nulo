@@ -1,22 +1,18 @@
 /**
- * Full-backup restore stages, extracted from useFullBackupImport.ts as module functions
- * (the deposit-flow.ts pattern). No Vue reactivity: the composable passes a RestoreIo of
- * LIVE callbacks — never a captured error-log object (its ref value is replaced at restore
- * start). Stages return typed terminal descriptors rendered by ONE applyOutcome, so every
- * status/stage/error combination is explicit; the copy stays with the branch that earns it.
- * Behavior is pinned by useFullBackupImport.stages.test.ts + the pre-existing 74-test suite;
- * every transform here is a verbatim transcription.
+ * Full-backup restore stages, free of Vue reactivity. A caller passes a RestoreIo of LIVE
+ * callbacks, never a captured error-log object: the log's ref value is replaced at restore start.
  */
 
 import { asBase64CredentialId, asBase64MasterSecret } from "@nulo/wallet-crypto"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
-import { isClientDisconnectRejection, RpcDisconnectedError } from "@nulo/extension-messaging/errors"
+import { isClientDisconnectRejection, RpcDisconnectedError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { awaitLivenessAdvance, readLiveness } from "@/utils/background-liveness"
 import { capRecords, remapNetworkIdByChain, resolveRestoredActiveNetworkIdByChain } from "@/utils/full-backup-helpers"
 import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
 import type { ToastOptions } from "@/composables/toast"
 import type { PasskeyRequest } from "@/wallet/services/passkey/spec"
-import type { RestoreSecret } from "@/wallet/services/profile/client"
+import type { RestoreSecret, RunFence } from "@/wallet/services/profile/client"
+import { admitRestoreOutcome, finishRestoreOutcome } from "@/utils/restore-outcome"
 import { ACCOUNT_SERVICE_NAME, IMPORTED_KEYS_SERVICE_NAME, accountScopeKey } from "@/wallet/services/account/spec"
 import { AUTH_REGISTRY_SERVICE_NAME } from "@/wallet/services/auth-registry/spec"
 import { TOKEN_BALANCE_SERVICE_NAME } from "@/wallet/services/token-balance/spec"
@@ -26,8 +22,13 @@ import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
 import { TokenServiceClient } from "@/wallet/services/token/client"
 import { IncomingTransferServiceClient } from "@/wallet/services/incoming-transfer/client"
 import { AccountStateServiceClient } from "@/wallet/services/account-state/client"
-import type { NormalizedAccountStateItem } from "@/wallet/services/account-state/normalize"
+import {
+	type NormalizedAccountStateItem,
+	normalizeAccountStateSlice,
+	registrableNetworkIds,
+} from "@/wallet/services/account-state/normalize"
 import { NetworkServiceClient } from "@/wallet/services/network/client"
+import { ProfileServiceClient } from "@/wallet/services/profile/client"
 import { runImportChainSync } from "./importChainSync"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 
@@ -121,9 +122,13 @@ export interface ProfileRestoreClient {
 		credentialData: PasskeyCredentialData | undefined,
 		allowDuplicate: boolean | undefined,
 	): Promise<{ id: string; restoreError?: unknown } | undefined>
-	finalizeRestore(profileId: string, password: string | undefined): Promise<unknown>
+	finalizeRestore(profileId: string, password: string | undefined): Promise<{ fence: RunFence }>
 	deleteProfile(profileId: string): Promise<unknown>
 	disconnect(): void
+}
+/** The fence check a tail makes before it settles the reminder. */
+export interface RunFenceClient {
+	assertRunFence(fence: RunFence): Promise<unknown>
 }
 export interface NetworkRestoreClient {
 	seedDefaultsForProfile(profileId: string): Promise<unknown>
@@ -252,6 +257,10 @@ export function buildRestoreSecret(
 	return { kind: "proceed", restoreSecret }
 }
 
+/** A network a tail registers into. The service re-validates the whole stored row it is handed,
+ *  so callers pass rows as the network service returned them. */
+export type TailNetwork = { id: string; name: string; chainId: number }
+
 export interface RestoredNetwork {
 	id: string
 	name: string
@@ -321,8 +330,8 @@ export async function restoreActiveNetworkPointer(
 
 /**
  * The migrated backup body the restore stages read and filter in place. `validateAndMigrateBackup`
- * guarantees each present root slice is an array of plain objects with a valid row id; `profile`
- * is unchecked there, and the entry gates and the profile service judge it.
+ * guarantees each present root slice is an array of plain objects with a valid row id, and that
+ * `profile` is a {@link BackupProfile}.
  */
 export type RestoreData = Record<string, unknown> & {
 	account?: Array<Record<string, unknown>>
@@ -331,8 +340,8 @@ export type RestoreData = Record<string, unknown> & {
 	profile?: unknown
 }
 
-/** The backup's profile part as the restore reads it; the entry gates require only a `type`. */
-export type BackupProfile = { id: unknown; name: unknown; type: unknown }
+/** The backup's profile part as the restore reads it; the profile service judges the `id`. */
+export type BackupProfile = { id: unknown; name: string; type: "password" | "passkey" }
 
 /** Bound on dropped-balance records. This path never reaches the collector, so it carries no cap
  *  of its own — and a hostile backup can ship tens of thousands of un-relinkable rows. */
@@ -624,43 +633,151 @@ export async function restoreServiceSlices(
  * tail runs on one shared wall-clock budget through the SAME errors screen. Present-but-malformed slices (a hostile
  * `{}`/`null`) MUST still enter the chain-sync: the normalizer converts them into a
  * violation record — gating on Array.isArray here would let a malformed slice auto-route
- * past the Continue gate unrecorded. Resolves with what a Retry replays when a network is left
- * retryable.
+ * past the Continue gate unrecorded.
  */
 export async function restoreAccountStateStage(
 	data: Record<string, unknown>,
-	createdNetworks: RestoredNetwork[],
+	createdNetworks: TailNetwork[],
 	networkService: NetworkRestoreClient,
 	io: RestoreIo,
-): Promise<AccountStateRetryContext | undefined> {
+	restoreRun: RestoreRun,
+	profileService: RunFenceClient,
+): Promise<AccountStateTail> {
 	const accountStateSlice = data[ACCOUNT_STATE_SERVICE_NAME]
-	if (accountStateSlice === undefined) return undefined
+	if (accountStateSlice === undefined) return { restored: [] }
+	const admitted = await admitReminder(restoreRun)
 	const accountStateService = new AccountStateServiceClient()
 	let outcomeRows: unknown[] = []
+	let outcomes: unknown[] = []
+	let cut: string[] = []
 	try {
 		io.setStage("chain-sync")
 		const retryable = await runImportChainSync({
 			slice: accountStateSlice,
-			...chainSyncClients(accountStateService, networkService, createdNetworks),
+			...chainSyncClients(accountStateService, networkService, createdNetworks, restoreRun.fence),
 			record: (records, kind) => {
 				const rows = io.recordRestoreErrors(ACCOUNT_STATE_SERVICE_NAME, records)
-				if (kind === "outcomes") outcomeRows = rows
+				if (kind === "violations") cut = cutNetworkIds(records, createdNetworks)
+				if (kind !== "outcomes") return
+				outcomeRows = rows
+				outcomes = records
 			},
 		})
-		return retryable.length ? { networks: createdNetworks, retryable, outcomeRows } : undefined
+		const restored = restoredNetworkIds(outcomes).filter((id) => !cut.includes(id))
+		if (admitted) await settleReminder(restoreRun, restored, profileService)
+		return {
+			restored,
+			retry: retryable.length ? { networks: createdNetworks, retryable, outcomeRows, cut, restoreRun } : undefined,
+		}
 	} finally {
 		accountStateService.disconnect()
+	}
+}
+
+export interface AccountStateTail {
+	restored: string[]
+	retry?: AccountStateRetryContext
+}
+
+/** Binds a tail to its restore: the session it registers under, and the reminder run it settles. */
+export interface RestoreRun {
+	fence: RunFence
+	/** Absent when nothing was armed. */
+	run: string | undefined
+}
+
+/**
+ * What Restore again restores from a verified backup: the account-state items of `networks` only,
+ * each bound by its chain. Every other slice, and every item on another chain, drops; the tail's
+ * normalizer bounds what is left.
+ */
+export function planRestoreAgain(
+	data: Record<string, unknown>,
+	networks: ReadonlyArray<{ id: string; chainId: number }>,
+): Record<string, unknown> {
+	const planned: Record<string, unknown> = { [ACCOUNT_STATE_SERVICE_NAME]: data[ACCOUNT_STATE_SERVICE_NAME] }
+	if (planned[ACCOUNT_STATE_SERVICE_NAME] === undefined) return {}
+	remapNetworkIdByChain(planned, networks, [ACCOUNT_STATE_SERVICE_NAME])
+	return planned
+}
+
+/** The networks the tail will try to restore: the normalized, remapped items with registrable work. */
+export function accountStateNetworkIds(data: Record<string, unknown>): string[] {
+	const slice = data[ACCOUNT_STATE_SERVICE_NAME]
+	return slice === undefined ? [] : registrableNetworkIds(normalizeAccountStateSlice(slice))
+}
+
+/**
+ * The networks a tail restored, read from its raw outcome records (the collected error rows leave
+ * successes out): an outcome with no error of its own or on any child. A network refused for its
+ * chain or with a refused contract is not restored, though no Retry would change it.
+ */
+export function restoredNetworkIds(outcomes: readonly unknown[]): string[] {
+	return outcomes.flatMap((record) => {
+		const { networkId, restoreError, senders, contracts } = (record ?? {}) as Record<string, unknown>
+		if (typeof networkId !== "string" || restoreError !== undefined) return []
+		const children = [senders, contracts].flatMap((list) => (Array.isArray(list) ? list : []))
+		return children.some((child) => (child as { restoreError?: unknown } | null)?.restoreError !== undefined) ? [] : [networkId]
+	})
+}
+
+/**
+ * The networks whose items the normalizer cut: registering the rest leaves them incomplete, and no
+ * Retry brings the cut back. A slice-wide cut names no network, so it marks every one.
+ */
+function cutNetworkIds(violations: readonly unknown[], networks: readonly TailNetwork[]): string[] {
+	const named = new Set(violations.map((record) => (record as { networkId?: unknown } | null)?.networkId))
+	return networks.map((network) => network.id).filter((id) => named.has(id) || named.has("(slice)"))
+}
+
+/** Renews the reminder's lease for this tail; false once the reminder is gone or another run's. */
+async function admitReminder({ fence, run }: RestoreRun): Promise<boolean> {
+	if (!run) return false
+	try {
+		return (await admitRestoreOutcome(fence.profileId, run)) !== undefined
+	} catch (error) {
+		console.warn("[restore-outcome] the reminder could not be renewed", { error })
+		return false
+	}
+}
+
+/** Whether `fence`'s session is still the open one; any failure other than its end is thrown. */
+export async function runFenceLive(profileService: RunFenceClient, fence: RunFence): Promise<boolean> {
+	try {
+		await profileService.assertRunFence(fence)
+		return true
+	} catch (error) {
+		if (error instanceof SessionEndedError) return false
+		throw error
+	}
+}
+
+/** Drops the networks the tail restored from the reminder; a tail whose session ended writes nothing. */
+async function settleReminder({ fence, run }: RestoreRun, restored: readonly string[], profileService: RunFenceClient) {
+	if (!run) return
+	try {
+		await profileService.assertRunFence(fence)
+	} catch {
+		return
+	}
+	try {
+		await finishRestoreOutcome(fence.profileId, run, restored)
+	} catch (error) {
+		console.warn("[restore-outcome] the reminder could not be settled", { error })
 	}
 }
 
 /** What a Retry replays. It lives in the page's memory while the errors screen shows and is
  *  never persisted: the items are hostile backup content, bounded by the normalizer. */
 export interface AccountStateRetryContext {
-	networks: RestoredNetwork[]
+	restoreRun: RestoreRun
+	networks: TailNetwork[]
 	/** The normalized items of the networks the last run left retryable. */
 	retryable: NormalizedAccountStateItem[]
 	/** The account-state rows the registration outcomes wrote, the only ones a Retry replaces. */
 	outcomeRows: unknown[]
+	/** The networks the normalizer cut, which no Retry restores in full. */
+	cut: string[]
 }
 
 /** The rows a Retry of `ctx` replaces: the retried networks' outcome rows only. A violation row
@@ -673,44 +790,56 @@ export function retryReplacedRows(ctx: AccountStateRetryContext): unknown[] {
 /**
  * Replays the chain-sync tail for the networks the last run left retryable, on fresh connections
  * closed once it settles. `replaceRestoreErrors` swaps the retried networks' outcome rows for the
- * Retry's own and returns the rows it wrote. Resolves with the next context, or `undefined` when no
- * network is left to retry.
+ * Retry's own and returns the rows it wrote. The next context is absent when no network is left to
+ * retry.
  */
 export async function retryAccountStateStage(
 	ctx: AccountStateRetryContext,
 	replaceRestoreErrors: (serviceName: string, stale: unknown[], data: unknown) => unknown[],
-): Promise<AccountStateRetryContext | undefined> {
+): Promise<AccountStateTail> {
 	const accountStateService = new AccountStateServiceClient()
 	const networkService = new NetworkServiceClient()
+	const profileService = new ProfileServiceClient()
 	let records: unknown[] = []
 	try {
+		// An ended run's registrations are refused and read as timeouts: it neither retries nor
+		// renews the lease.
+		if (!(await runFenceLive(profileService, ctx.restoreRun.fence))) return { restored: [] }
+		const admitted = await admitReminder(ctx.restoreRun)
 		const retryable = await runImportChainSync({
 			slice: ctx.retryable,
-			...chainSyncClients(accountStateService, networkService, ctx.networks),
+			...chainSyncClients(accountStateService, networkService, ctx.networks, ctx.restoreRun.fence),
 			// Items the normalizer already bounded yield no violations: only outcomes arrive.
 			record: (outcomes, kind) => {
 				if (kind === "outcomes") records = outcomes
 			},
 		})
+		const restored = restoredNetworkIds(records).filter((id) => !ctx.cut.includes(id))
+		if (admitted) await settleReminder(ctx.restoreRun, restored, profileService)
 		const stale = retryReplacedRows(ctx)
 		const fresh = replaceRestoreErrors(ACCOUNT_STATE_SERVICE_NAME, stale, records)
 		const outcomeRows = [...ctx.outcomeRows.filter((row) => !stale.includes(row)), ...fresh]
-		return retryable.length ? { networks: ctx.networks, retryable, outcomeRows } : undefined
+		return {
+			restored,
+			retry: retryable.length ? { ...ctx, retryable, outcomeRows } : undefined,
+		}
 	} finally {
 		accountStateService.disconnect()
 		networkService.disconnect()
+		profileService.disconnect()
 	}
 }
 
 function chainSyncClients(
 	accountStateService: AccountStateServiceClient,
 	networkService: NetworkRestoreClient,
-	networks: RestoredNetwork[],
+	networks: TailNetwork[],
+	fence: RunFence,
 ) {
 	return {
 		createdNetworkIds: networks.map((n) => n.id),
 		restore: (items: unknown[], deadlineMs: number) =>
-			accountStateService.restore(items as never, networks as never, deadlineMs) as Promise<unknown>,
+			accountStateService.restore(items as never, networks as never, fence, deadlineMs) as Promise<unknown>,
 		probe: (networkId: string, timeoutMs: number) => networkService.probeNodeStatus(networkId, timeoutMs) as never,
 	}
 }

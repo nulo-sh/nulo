@@ -124,7 +124,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
-/* Below GlobalLoader (9999) and the barriers (10000): a migration or integrity block outranks this. */
+/* Below the start-up bar (9999) and the barriers (10000): a migration or integrity block outranks this. */
 .backdrop {
 	position: fixed;
 	inset: 0;

@@ -27,6 +27,7 @@ import {
 	waitForHash,
 	withTimeoutMessage,
 	pickFileByTestId,
+	waitForServiceReady,
 } from "../fixtures/extension"
 import { expectNewProfileNamed, readProfileNames } from "../fixtures/helpers"
 import { refusePasskeyStep } from "../fixtures/passkey"
@@ -170,11 +171,11 @@ export async function submitWhenEnabled(page: Page, testId: string): Promise<voi
 	await clickByTestId(page, testId)
 }
 
-/** Open the popup and land on `/popup/import` (waits for register + global-loader to clear). */
+/** Open the popup and land on `/popup/import` (waits for register and the service's Ready). */
 export async function gotoPopupImport(ctx: ExtensionContext): Promise<Page> {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/register", 15_000)
-	await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), { timeout: 15_000, polling: 500 })
+	await waitForServiceReady(page, 15_000)
 	await page.evaluate(() => {
 		window.location.hash = "#/popup/import"
 	})

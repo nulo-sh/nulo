@@ -93,6 +93,9 @@ export type IncomingNoteRecord = IncomingTransferRecordCommon & {
 	noteHash: string
 	/** Note's owner (the user's account at note-encoded time). */
 	owner: string
+	/** Seen at its position on a finalized block at a PXE anchor matching the chain's tip, spent or
+	 *  not: reconciliation never examines the row again. */
+	settled?: true
 }
 
 /** A public `Transfer` event receipt (the new arm). */
@@ -145,6 +148,7 @@ export const IncomingTransferRecordSchema: z.ZodType<IncomingTransferRecord> = z
 		siloedNullifier: z.string(),
 		noteHash: z.string(),
 		owner: z.string(),
+		settled: z.literal(true).optional(),
 	}),
 	z.object({
 		kind: z.literal("public-event"),
@@ -343,6 +347,9 @@ export type Methods = {
 	 * fee, or the node lookup fails.
 	 */
 	getReceiptFee(id: string): { feeJuice: string } | null
+	/** The fee `getReceiptFee` already fetched this session for the record's current block, or `null`
+	 *  (a note receipt, an unknown id, nothing fetched yet). Never makes a network call. */
+	getCachedReceiptFee(id: string): { feeJuice: string } | null
 	/** Trust state for a (profile, network, contract) triple. Returns
 	 *  `unknown` for contracts that have never received an incoming note. */
 	getTrustState(profileId: string, networkId: string, contract: string): IncomingTrustState

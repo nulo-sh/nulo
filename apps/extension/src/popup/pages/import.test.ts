@@ -5,7 +5,13 @@ import { createApp, customRef, h, ref } from "vue"
 
 const holder = vi.hoisted(() => ({
 	flow: undefined as unknown as ReturnType<typeof makeFlow>,
-	opts: undefined as unknown as { completeImport: (profile: { id: string }) => Promise<void> },
+	opts: undefined as unknown as {
+		completeImport: (profile: { id: string }) => Promise<void>
+		showErrorLog: (
+			errors: Record<string, unknown[]>,
+			networks: { byNetworkId: ReadonlyMap<string, string>; unrestored: string[] },
+		) => void
+	},
 }))
 vi.mock("@/composables/useProfileImportFlow", () => ({
 	useProfileImportFlow: (opts: typeof holder.opts) => {
@@ -81,6 +87,7 @@ function makeFlow() {
 		canRetryAccountState: ref(false),
 		isRetryingAccountState: ref(false),
 		unrestoredNetworkNames: ref<string[]>([]),
+		retryFailedAgain: ref(false),
 		hasOtherRestoreErrors: ref(false),
 		retryAccountState: vi.fn(),
 		continueImport: vi.fn(),
@@ -260,6 +267,30 @@ describe("popup import — full backup, finished with a network left to retry", 
 		const back = w.findAll("button").find((b) => b.text() === "Back")
 		if (!back) throw new Error("no Back button")
 		expect((back.element as HTMLButtonElement).disabled).toBe(true)
+	})
+
+	test("a Retry that failed again says so above Retry, naming the network", async () => {
+		const w = await mountImport()
+		expect(w.find('[data-testid="import-full-backup-retry-result"]').exists()).toBe(false)
+
+		holder.flow.retryFailedAgain.value = true
+		await flushPromises()
+
+		expect(w.get('[data-testid="import-full-backup-retry-result"]').text()).toBe("Retry didn't work · Alpha V5 still not restored")
+		const order = [...w.element.querySelectorAll("[data-testid]")].map((el) => el.getAttribute("data-testid"))
+		expect(order.indexOf("import-full-backup-retry-result")).toBe(order.indexOf("import-full-backup-retry-btn") - 1)
+	})
+
+	test("View Errors names each restored network beside its id, and leaves the log's rows as they were", async () => {
+		await mountImport()
+		const row = { networkId: "3f2a9c1e", senders: [], contracts: [], restoreError: "Skipped: ran out of time reaching the network" }
+		const errors = { "account-state": [row] }
+
+		holder.opts.showErrorLog(errors, { byNetworkId: new Map([["3f2a9c1e", "Testnet"]]), unrestored: ["Testnet"] })
+
+		const { useCacheStore } = await import("@/stores/cache.store")
+		expect(useCacheStore().viewerData).toEqual({ "account-state": [{ network: "Testnet", ...row }] })
+		expect(errors["account-state"][0]).toBe(row)
 	})
 
 	test("the warning names the network the Retry replays", async () => {

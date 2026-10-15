@@ -10,7 +10,7 @@ import { ADDED_COALESCE, coalesce } from "@/utils/coalesce"
  * Recent-Activity widget. The parent owns the service clients and their
  * connect/disconnect lifecycle (so the page's `request()`-driven auto-connect
  * timing is unchanged); this only wires the listeners, the update and delete
- * merges and the coalesced refresh on Added, the `incomingTransfersVisible`
+ * merges, the coalesced refresh on Added, the refresh on Updated, the `incomingTransfersVisible`
  * toggle reload, and the D8 dust re-filter. An Added is never merged as sent:
  * only a read applies the dust filter. `dispose()` removes every handler (also
  * auto-invoked via `onScopeDispose`).
@@ -130,6 +130,8 @@ export function useIncomingTransfers(options: UseIncomingTransfersOptions): UseI
 		if (!inLiveScope(inc)) return
 		const idx = incomingTransfers.value.findIndex((x) => x.id === inc.id)
 		if (idx !== -1) incomingTransfers.value[idx] = inc
+		// A read already in flight can predate the update; the refresh supersedes it.
+		refresh()
 	}
 	const onDeleted = (inc: IncomingTransferRecord) => {
 		// Unscoped by design: a delete is strictly subtractive (filter by the

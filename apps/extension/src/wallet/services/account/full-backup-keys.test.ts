@@ -170,6 +170,7 @@ describe("exportFullBackupKeys — the per-backup key", () => {
 		expect(Array.from(fileKey)).not.toEqual(Array.from(dek))
 		expect(JSON.stringify(keys)).not.toContain(toBase64(dek))
 		expect(keys.dekReplaced).toBe(false)
+		expect(keys.unopenedImportedKeys).toBe(0)
 		expect(keys.accounts.map((a) => a.address)).toEqual([ADDR_A])
 		expect(keys.importedKeyRows).toHaveLength(1)
 		expect(await opened(fileKey, keys.importedKeyRows[0]!)).toEqual(Array(32).fill(0x2a))
@@ -198,6 +199,7 @@ describe("exportFullBackupKeys — the per-backup key", () => {
 
 		const partial = await account.exportFullBackupKeys(await profile.captureRunFence(), PASSWORD)
 		expect(partial.dekReplaced).toBe(false)
+		expect(partial.unopenedImportedKeys).toBe(1)
 		expect(partial.importedKeyRows.find((r) => r.address === ADDR_B)).toEqual(corrupt)
 		expect(await opened(keyOf(partial.importedKeysKey), partial.importedKeyRows.find((r) => r.address === ADDR_A)!)).toEqual(
 			Array(32).fill(0x2a),
@@ -212,6 +214,7 @@ describe("exportFullBackupKeys — the per-backup key", () => {
 
 		const replaced = await account.exportFullBackupKeys(await profile.captureRunFence(), PASSWORD)
 		expect(replaced.dekReplaced).toBe(true)
+		expect(replaced.unopenedImportedKeys, "a replaced DEK has only its own warning").toBe(0)
 		expect(replaced.importedKeyRows).toEqual(stored)
 	}, 30_000)
 

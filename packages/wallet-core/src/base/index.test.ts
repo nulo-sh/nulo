@@ -95,4 +95,29 @@ describe("ServiceCollection.start — mid-phase failure semantics", () => {
 		await collection.start()
 		expect(order).toEqual(["A", "C"])
 	})
+
+	test("collectionStarted reaches every service after the last phase, and none after a failed phase", async () => {
+		const started = (collection: ServiceCollection, names: string[]) => {
+			const seen: string[] = []
+			for (const name of names) {
+				const service = collection.get<IService & { collectionStarted: () => void }>(name)
+				service.collectionStarted = () => seen.push(`${name}@${order.join(",")}`)
+			}
+			return seen
+		}
+		const order: string[] = []
+		const healthy = new ServiceCollection()
+		healthy.add(svc("A", async () => void order.push("A")))
+		healthy.add(svc("C", async () => void order.push("C"), ["A"]))
+		const seen = started(healthy, ["A", "C"])
+		await healthy.start()
+		expect(seen).toEqual(["A@A,C", "C@A,C"])
+
+		const failing = new ServiceCollection()
+		failing.add(svc("A", async () => {}))
+		failing.add(svc("C", async () => Promise.reject(new Error("C broke")), ["A"]))
+		const none = started(failing, ["A", "C"])
+		await expect(failing.start()).rejects.toBeInstanceOf(AggregateError)
+		expect(none).toEqual([])
+	})
 })
