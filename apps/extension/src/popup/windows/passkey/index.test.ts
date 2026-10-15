@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
-import { PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
+import { PasskeyPrfError, PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
 import PasskeyWindow from "./index.vue"
 
 const client = vi.hoisted(() => ({
@@ -110,6 +110,39 @@ describe("the passkey window", () => {
 		expect(ceremony.run).toHaveBeenCalledTimes(1)
 		expect(ceremony.confirm).toHaveBeenCalledWith("cred-1", "a3f29b14", expect.any(AbortSignal))
 		expect(client.resolvePasskeyRequest).toHaveBeenCalledWith("req-1", DATA)
+	})
+
+	test("after an authenticator with no PRF, Try again starts a new passkey for the same request and never confirms", async () => {
+		ceremony.run
+			.mockRejectedValueOnce(new PasskeyUnconfirmedError("cred-1", "a3f29b14", new PasskeyPrfError("no prf")))
+			.mockReturnValueOnce(new Promise(() => {}))
+		const wrapper = mountWindow()
+		await flushPromises()
+
+		await byTestId(wrapper, "passkey-window-retry").trigger("click")
+		await flushPromises()
+
+		expect(ceremony.confirm).not.toHaveBeenCalled()
+		expect(ceremony.run).toHaveBeenCalledTimes(2)
+		expect(ceremony.run).toHaveBeenLastCalledWith(CREATE, expect.any(AbortSignal))
+		expect(windowState(wrapper)).toBe("waiting")
+	})
+
+	test("a new passkey after no PRF that fails again keeps the saved-but-not-confirmed line", async () => {
+		ceremony.run
+			.mockRejectedValueOnce(new PasskeyUnconfirmedError("cred-1", "a3f29b14", new PasskeyPrfError("no prf")))
+			.mockRejectedValueOnce(dismissed())
+		const wrapper = mountWindow()
+		await flushPromises()
+		const line = "Your passkey was saved but not confirmed. Try again to finish."
+		expect(byTestId(wrapper, "passkey-window-error").text()).toBe(line)
+
+		await byTestId(wrapper, "passkey-window-retry").trigger("click")
+		await flushPromises()
+
+		expect(ceremony.confirm).not.toHaveBeenCalled()
+		expect(windowState(wrapper)).toBe("failed")
+		expect(byTestId(wrapper, "passkey-window-error").text()).toBe(line)
 	})
 
 	test("a request that is gone shows the step failure, and Try again is never offered", async () => {
