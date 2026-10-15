@@ -4,8 +4,9 @@
  * write saw no acceptance. A launch that needs the list's entries (a priced token, the defaults)
  * holds one from its first boot instead: `launchExtension({ tokenList: "held" })`.
  *
- * A source run holds and serves a fixed two-token list, signed with a per-process key that the
- * armed build reads from `nulo:e2e:token-list`, so no spec depends on what the owner lists. An
+ * A source run holds and serves a fixed two-token list that also flags one pair, signed with a
+ * per-process key that the armed build reads from `nulo:e2e:token-list`, so no spec depends on what
+ * the owner lists. An
  * artifact run holds the published envelope, the only list a release build's pinned keys accept.
  */
 import { readFileSync } from "node:fs"
@@ -13,7 +14,15 @@ import { type IncomingMessage, type Server, type ServerResponse, createServer } 
 import path from "node:path"
 import type { Page } from "puppeteer"
 import { type TestContext, inject } from "vitest"
-import { BUNDLED_TOKEN_CLASS_IDS, readTokenList, selectEntries, parsePayload, type PinnedKey, type TokenListEntry } from "@nulo/token-list"
+import {
+	BUNDLED_TOKEN_CLASS_IDS,
+	readTokenList,
+	selectEntries,
+	parsePayload,
+	type PinnedKey,
+	type TokenListEntry,
+	type TokenListPair,
+} from "@nulo/token-list"
 import { decodeBase64Url, importSeed, publicKeyOf } from "@nulo/token-list/envelope"
 import { signList } from "@nulo/token-list/sign"
 import { E2E_TOKEN_LIST_KEY_ID, TOKEN_LIST_SOURCE_KEY } from "@/e2e/chrome-storage-token-list"
@@ -42,6 +51,9 @@ const fixtureToken = (byte: string, symbol: string, priceId: string): TokenListE
 /** The source run's list: two Testnet tokens, the first priced as USDC. */
 export const E2E_LIST_TOKENS: readonly TokenListEntry[] = [fixtureToken("a1", "USDC", "usd-coin"), fixtureToken("a2", "USDT", "tether")]
 
+/** The pair the source run's list flags as a scam: a row shows the warning only where a spec seeds it. */
+export const E2E_LIST_FLAGGED: readonly TokenListPair[] = [{ chainId: CHAIN_IDS.TESTNET, address: `0x${"0".repeat(62)}f1` }]
+
 type Signer = { seedHex: string; pinned: PinnedKey }
 let signer: Promise<Signer> | undefined
 
@@ -55,10 +67,11 @@ export function e2eSigner(): Promise<Signer> {
 	return signer
 }
 
-/** `E2E_LIST_TOKENS` (or `tokens` in their place) signed with the run's key, at `nowMs`'s sequence. */
+/** `E2E_LIST_TOKENS` (or `tokens` in their place) and `E2E_LIST_FLAGGED`, signed with the run's key at
+ *  `nowMs`'s sequence. */
 export async function signTestList(opts: { tokens?: readonly unknown[]; nowMs?: number } = {}): Promise<string> {
 	const { seedHex, pinned } = await e2eSigner()
-	const sourceText = JSON.stringify({ tokens: opts.tokens ?? E2E_LIST_TOKENS })
+	const sourceText = JSON.stringify({ tokens: opts.tokens ?? E2E_LIST_TOKENS, flagged: E2E_LIST_FLAGGED })
 	const signed = await signList({ sourceText, seedHex, keyId: pinned.keyId, nowMs: opts.nowMs ?? Date.now(), keys: [pinned] })
 	return signed.envelopeText
 }
