@@ -1,7 +1,7 @@
 ---
 plan: forms-and-contacts
 tier: mid
-status: approved; arcs 1, 2 and 3a merged (#255, #282, #435); arc 3b building after the page 11 re-asks (D-orch-7), with the close-out in its PR
+status: completed; arcs 1, 2 and 3a merged (#255, #282, #435), arc 3b and the close-out in #452
 issues: "#184, #205, #210, #212, #214 (arc 1); #224, #225 (arc 2); #151, #215, #210 (FA-8), #214 (FA-10) (arc 3a); #151, #428, #211, #216, #229 (arc 3b)"
 driver: claude-code
 claude_model: opus
@@ -12,6 +12,26 @@ eli5_mode: skipped (orchestrator-owned)
 budget: recon 3 explorers (sonnet); dual audit (Codex gpt-6.1-sol high + one Opus Plan agent); final fresh Codex pass
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-15.
+- **Status:** completed in four PRs against `dev`: arc 1 [#255](https://github.com/nulo-sh/nulo/pull/255), arc 2 [#282](https://github.com/nulo-sh/nulo/pull/282), arc 3a [#435](https://github.com/nulo-sh/nulo/pull/435), arc 3b with this close-out [#452](https://github.com/nulo-sh/nulo/pull/452), awaiting the orchestrator's merge; that merge closes this plan.
+- **Shipped:**
+  - Arc 1 (#255): the logger level gate (#184), config persist order (#205), form popup depth (#210), the logs newline (#212), trimmed account and FPC name checks (#214).
+  - Arc 2 (#282): held-read pins for the six list reducers and one shared contact reducer (#224); the shared loader scrim and shake (#225); no visible change, proven per shell.
+  - Arc 3a (#435): the import's fenced sender, its own clients and a two-minute Lock hold with the "Lock anyway" confirm (#151); shakes and shimmers stop under Disable animations and reduced motion (#215); a re-opened popup on top (#210, FA-8 A); trimmed network names (#214, FA-10 A).
+  - Arc 3b (#452): "Importing contacts · N of M", one snack relabelled in place through `updateToast` (#151, P11-06b A); a second import refused, the menu item disabled, the selection slot owned by its selection (#428, P11-07b C); one message at a time at a name cap on eight fields (#216, P11-02b A); `--btn-destructive` #c62828 with an 18% hover toward black, 5.19:1 and 6.96:1 in both themes (#229, P11-10b A); the Tx hash and To links in the primary colour and one bottom space on the three detail pages (#211); a replaced snack hands keyboard focus back (A3b-O1).
+  - `lessons.md`: one line promoted (a Pinia store's proxy and `toRaw`); the CodeQL lesson (its ReDoS query reads test files) stays in [lessons/phase-3.md](lessons/phase-3.md): the file has 42 bytes left under its budget.
+- **Orchestrator records:** D-orch-1 to D-orch-7 (§ Decision ledger).
+- **Dropped, rejected, superseded:**
+  - #210's per-owner reducer policies and #224's race: kept as they are by the owner (FA-9 B, P11-15); pinned.
+  - FA-1, FA-1b, FA-4 and P11-02's first picks: superseded by the re-asks' answers (D-orch-7).
+  - #205's three hand-copied toggle bindings stay separate (D6).
+  - P11-13b's two-imports wording: unreachable in one window since P11-07b C; the code keeps its plural branch.
+- **Known limits:** #447 (a late stop snack from an import a lock released can replace the next import's line).
+- **Open items:** #448 (FA-12), #449 (FA-13), #450 (FA-14) and #451 (P11-13b), each `owner-decision`, shipped in its "what ships now" form. The issues earlier arcs filed (#256 to #259, #283, #284) are closed.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # Forms and contacts: validators, stack depth, logger, toggles, shells, contacts import, motion
 

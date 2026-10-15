@@ -34,6 +34,7 @@
 - A session id re-keys after its session ends: code paused across an await checks its own `ActiveSession` object, not the id. [Evidence](archive/dapp-dispatch-hold/plan.md#mechanics-that-are-not-obvious)
 - A `Lock` watchdog handoff admits a successor but never stops the displaced holder, which keeps writing: a current ticket proves no wipe ran only beside a count of deleters still running. [Evidence](archive/incoming-transfers/decisions.md#decision-ledger)
 - A C1 hook's `dispose()` must be terminal: a run fence that only drops answers in flight lets a continuation released after unmount start a new call. [Evidence](archive/incoming-transfers/lessons/phase-3.md)
+- A Pinia store hands back a reactive proxy of an object it holds, so `store.x === mine` is never true: compare with `toRaw`, and give unit fakes a `reactive()` store. [Evidence](archive/forms-and-contacts/lessons/phase-3.md)
 
 ## Aztec
 
