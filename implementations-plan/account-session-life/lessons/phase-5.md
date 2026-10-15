@@ -27,3 +27,9 @@
 - Codex `gpt-6.1-sol` high, session `01a13d01-613b-7ee0-9f12-1227ec89d9c3`, read-only: `CHANGES`, three Medium, each demonstrated with a probe. The Opus agent found the same three (as Medium, Low, Low) plus three comments. All fixed (plan § Audit verdicts).
 - `test:all` caught what the targeted unit runs did not: `toast-call-sites.test.ts` is a textual guard over every `openToast` call in `src/`, so a toast passed as a constant or through a wrapper fails it. Run `test:all` before the review, not after.
 - Two fences guard one activation: the bootstrap fence (`supersedeProfileActivations`) stops `isLogined`, and the shell's event sequence stops failure publication. A supersede that is not also an event (the hand-off) must fence the failure itself.
+- Rounds 2 and 3: round 2 `CHANGES`, one Low (Back during the pointer write), fixed; round 3 `APPROVE`.
+
+## Boundary gate (15d5ae61)
+
+- audit:vue 0; test:all 0; smoke retry-0 Chrome 28 passed / 6 skipped by design (182 s), Firefox 34/34 (361 s); network imported-account-execution Chrome 3/3 (230 s). No e2e scenario added.
+- Screenshots came from throwaway hooks (a local flag that fails the activation, a window that fakes its request) and one throwaway spec; the passkey window's route is `#/windows/passkey`, not under `/popup`.

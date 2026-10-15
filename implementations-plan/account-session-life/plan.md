@@ -416,7 +416,7 @@ Every gate below passed with exit 0 at retry 0; STATUS.md and `lessons/phase-1.m
 
 **Validation gate**: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/popup/pages/auth.test.ts`; smoke `tests/e2e/auth-flows.test.ts` on Chrome, retry 0. Pass: exit 0; the proof fails on the base copy.
 
-#### Arc 5 boundary gate
+#### Arc 5 boundary gate ✓
 
 - Commands: `bun run audit:vue`; `bun run test:all`; `cd apps/extension && bun run test:e2e -- tests/e2e/accounts.test.ts tests/e2e/account-import-export.test.ts tests/e2e/registration.test.ts tests/e2e/passkey-retry.test.ts tests/e2e/passkey-toolbar-panel.test.ts tests/e2e/auth-flows.test.ts --retry=0`, then the same with `NULO_E2E_BROWSER=firefox`; `NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/imported-account-execution.test.ts`.
 - Pass: every command exits 0.
