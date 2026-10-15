@@ -155,6 +155,33 @@ describe("usePrestoHostPermission", () => {
 		expect(onFirstAllowed).toHaveBeenCalledOnce()
 	})
 
+	test("a grant whose event overtakes the mount read re-checks, and the mount read's late answer lands nothing", async () => {
+		const { permissions, reads } = browser()
+		const { missing, onFirstAllowed, onGranted } = mountPermission()
+		permissions.onAdded.fire()
+		reads[1].resolve(true)
+		await flushPromises()
+		expect(onGranted).toHaveBeenCalledOnce()
+		expect(onFirstAllowed).not.toHaveBeenCalled()
+
+		reads[0].resolve(false)
+		await flushPromises()
+		expect(missing.value).toBe(false)
+		expect(onGranted).toHaveBeenCalledOnce()
+	})
+
+	test("an event's read that fails before any read answered shows today's page", async () => {
+		const { permissions, reads } = browser()
+		vi.spyOn(console, "debug").mockImplementation(() => {})
+		const { missing, onFirstAllowed, onGranted } = mountPermission()
+		permissions.onRemoved.fire()
+		reads[1].reject(new Error("port closed"))
+		await flushPromises()
+		expect(missing.value).toBe(false)
+		expect(onFirstAllowed).toHaveBeenCalledOnce()
+		expect(onGranted).not.toHaveBeenCalled()
+	})
+
 	test("an older read resolving late never lands over a newer one", async () => {
 		const { permissions, reads } = browser()
 		const { missing, onFirstAllowed, onGranted } = mountPermission()
@@ -191,25 +218,29 @@ describe("usePrestoHostPermission", () => {
 		expect(debug).toHaveBeenCalledWith("presto host permission request failed", { error: expect.any(Error) })
 	})
 
-	test("dispose() unsubscribes, and a read or request answered after it lands nothing", async () => {
+	test("dispose() unsubscribes, and a read or request answered after it lands, calls and logs nothing", async () => {
 		const { permissions, reads, requests } = browser()
+		const debug = vi.spyOn(console, "debug").mockImplementation(() => {})
 		const { missing, request, dispose, onGranted } = mountPermission()
 		reads[0].resolve(false)
 		await flushPromises()
 		permissions.onAdded.fire()
+		request()
 		request()
 		dispose()
 		expect(permissions.onAdded.listeners.size).toBe(0)
 		expect(permissions.onRemoved.listeners.size).toBe(0)
 
 		reads[1].resolve(true)
-		requests[0].resolve(true)
+		requests[0].resolve(false)
+		requests[1].reject(new Error("prompt dismissed"))
 		await flushPromises()
 		expect(missing.value).toBe(true)
 		expect(onGranted).not.toHaveBeenCalled()
+		expect(debug).not.toHaveBeenCalled()
 
 		request()
-		expect(permissions.request).toHaveBeenCalledOnce()
+		expect(permissions.request).toHaveBeenCalledTimes(2)
 	})
 
 	test("a first read answered after dispose() never lets the page probe", async () => {

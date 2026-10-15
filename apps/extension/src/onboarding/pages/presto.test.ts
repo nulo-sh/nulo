@@ -116,6 +116,7 @@ describe("onboarding presto", () => {
 		const w = mountPresto()
 		await flushPromises()
 		expect(w.find("presto-status-card-stub").exists()).toBe(true)
+		expect(w.text()).toContain("Presto will ask you to allow Nulo")
 		expect(w.find('[data-testid="presto-permission-allow"]').exists()).toBe(false)
 
 		permission.missing.value = true

@@ -18,8 +18,8 @@ export interface LaunchOptions {
 	 *  `liveHosts`, which go direct. */
 	egress?: { guardPort: number; liveHosts?: readonly string[] }
 	/** A permission request from a real click is granted with no prompt, which no protocol can
-	 *  answer. Chrome ignores it: it grants an MV3 add-on's host permissions at install and has no
-	 *  withheld state to grant from. */
+	 *  answer. Chrome ignores it: its `permissions.remove` refuses a required host permission, so no
+	 *  spec there reaches a withheld one to grant. */
 	grantPermissionRequests?: true
 }
 
@@ -215,7 +215,7 @@ export const CHROME_ONLY = {
 export const FIREFOX_ONLY = {
 	windowRefocus: "refocuses an approval popup; headless Chrome moves focus only by creating a window",
 	toolbarPanel: "drives the toolbar popup itself, which no protocol opens on Chrome",
-	permissionRequest: "withholds and re-grants the add-on's host permission, which Chrome grants at install for good",
+	permissionRequest: "withholds and re-grants a required host permission, which Chrome's permissions.remove refuses",
 } as const
 
 /** The launch a background call is made against; every `ExtensionContext` is one. */

@@ -7,7 +7,7 @@ import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { FIREFOX_ONLY, isFirefox, openScratchPage, prepareKeys } from "./fixtures/browser"
 import { launchExtension, openOnboarding, test } from "./fixtures/extension"
-import { interceptHealth, PRESTO_DETAILED_HEALTH } from "./fixtures/presto"
+import { interceptHealth, PRESTO_DETAILED_HEALTH, PRESTO_HTTP_HEALTH_URL, PRESTO_HTTPS_HEALTH_URL } from "./fixtures/presto"
 import { pointerClick } from "./helpers/legal-drivers"
 import { focusRing, tabTo, tokenColor } from "./helpers/pointer-probes"
 import { gotoPrestoStep } from "./helpers/presto-step"
@@ -36,6 +36,11 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.permissionRequest, () => {
 		try {
 			const page = await openOnboarding(extension)
 			await interceptHealth(page, { https: { status: 200, body: PRESTO_DETAILED_HEALTH }, http: "refused" })
+			// The stub answers whatever the grant, so only the count proves the check came after Allow.
+			const probes: string[] = []
+			page.on("request", (req) => {
+				if (req.url() === PRESTO_HTTPS_HEALTH_URL || req.url() === PRESTO_HTTP_HEALTH_URL) probes.push(req.url())
+			})
 			await gotoPrestoStep(page)
 			await page.waitForSelector(statusCard("idle"), { visible: true, timeout: 10_000 })
 			expect(await readStep(page)).toEqual({ row: false, pitch: true, card: true, skip: true, continue: false })
@@ -62,9 +67,11 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.permissionRequest, () => {
 				color: await tokenColor(page, "--nulo-accent"),
 			})
 
+			expect(probes).toEqual([])
 			await pointerClick(page, "presto-permission-allow")
 			await page.waitForSelector(statusCard("available"), { visible: true, timeout: 10_000 })
 			expect(await readStep(page)).toEqual({ row: false, pitch: false, card: true, skip: false, continue: true })
+			expect(probes).toEqual([PRESTO_HTTPS_HEALTH_URL])
 			expect(extension.consoleErrors).toEqual([])
 			expect(extension.pageErrors).toEqual([])
 			await page.close()

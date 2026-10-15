@@ -1,26 +1,21 @@
 /**
- * Whether Firefox withholds the loopback origins Presto listens on. Firefox lets a person switch an
- * MV3 add-on's host permissions off in about:addons; Chrome grants them at install, so there the
- * page probes at once and nothing is read.
- *
- * Without the grant a probe still leaves, and Presto answers it with its minimal body, so the page
- * holds its first probe (`onFirstAllowed`) until the grant is known, and a later grant (`onGranted`)
- * re-checks at once. Every grant, Allow's included, arrives through `permissions.onAdded`.
- *
- * The parent calls `dispose()`.
+ * Firefox lets a person withhold the loopback origins Presto listens on, and a probe sent without
+ * them gets Presto's minimal body. So on Firefox the page's first probe waits until the grant is
+ * known, and every later grant, Allow's included, arrives through `permissions.onAdded` and re-checks.
+ * Elsewhere nothing is read and the page probes at once. The parent calls `dispose()`.
  */
 import { computed, ref } from "vue"
 import { createRunFence } from "@/composables/runFence"
 import { PRESTO_HOST } from "@/presto/config"
 import { isFirefox } from "@/utils/browser-surface"
 
-/** `unknown`: the first read failed, so the page shows as if the row did not exist. */
+/** `unknown`: a read failed before any answered, so the page shows as if the row did not exist. */
 type GrantStatus = "pending" | "unknown" | "missing" | "granted"
 
 export interface PrestoHostPermissionCallbacks {
-	/** Runs once, when the page may probe: the grant is held, unreadable, or not Firefox's to withhold. */
+	/** Runs at most once, when the page may probe before any grant: held at mount, unreadable, or never read. */
 	onFirstAllowed: () => void
-	/** Runs on each grant that lands after the page saw it missing or could not read it. */
+	/** Runs on each grant a permission event brings, unless the page already held it. */
 	onGranted: () => void
 }
 
@@ -47,15 +42,16 @@ export function usePrestoHostPermission(callbacks: PrestoHostPermissionCallbacks
 	const fence = createRunFence()
 	let disposed = false
 
-	function land(granted: boolean): void {
+	function land(granted: boolean, fromEvent: boolean): void {
 		const before = status.value
 		status.value = granted ? "granted" : "missing"
 		if (!granted || before === "granted") return
-		if (before === "pending") callbacks.onFirstAllowed()
+		// An event's read that overtook the mount read reports a grant that landed after mount.
+		if (before === "pending" && !fromEvent) callbacks.onFirstAllowed()
 		else callbacks.onGranted()
 	}
 
-	async function read(): Promise<void> {
+	async function read(fromEvent: boolean): Promise<void> {
 		const isCurrent = fence.begin()
 		let granted: boolean
 		try {
@@ -63,26 +59,28 @@ export function usePrestoHostPermission(callbacks: PrestoHostPermissionCallbacks
 		} catch (error) {
 			if (disposed || !isCurrent()) return
 			console.debug("presto host permission read failed", { error })
-			// Only a first read falls back; a later failure keeps what the page last saw.
+			// Only a failure before any answer falls back; a later one keeps what the page last saw.
 			if (status.value !== "pending") return
 			status.value = "unknown"
 			callbacks.onFirstAllowed()
 			return
 		}
 		if (disposed || !isCurrent()) return
-		land(granted)
+		land(granted, fromEvent)
 	}
 
-	const onChanged = () => void read()
+	const onChanged = () => void read(true)
 
 	/** Must run inside the click's own dispatch: Firefox refuses a request without user input. */
 	function request(): void {
 		if (disposed || origins.length === 0) return
 		chrome.permissions.request({ origins }).then(
 			(granted) => {
-				if (!granted) console.debug("presto host permission refused")
+				if (!granted && !disposed) console.debug("presto host permission refused")
 			},
-			(error: unknown) => console.debug("presto host permission request failed", { error }),
+			(error: unknown) => {
+				if (!disposed) console.debug("presto host permission request failed", { error })
+			},
 		)
 	}
 
@@ -100,7 +98,7 @@ export function usePrestoHostPermission(callbacks: PrestoHostPermissionCallbacks
 		// Subscribed before the first read, so a change landing mid-read is never lost to it.
 		chrome.permissions.onAdded.addListener(onChanged)
 		chrome.permissions.onRemoved.addListener(onChanged)
-		void read()
+		void read(false)
 	}
 
 	return { missing, request, dispose }
