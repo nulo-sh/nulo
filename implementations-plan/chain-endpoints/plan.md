@@ -1,7 +1,7 @@
 ---
 plan: chain-endpoints
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-3); arc 1 in build; arc 2 waits on decision page 12 and reservations R2, R3, R5
+status: arc 1 merged (#276); arcs 2a and 2c in build (D-orch-4 to D-orch-9); arc 2b not released (D-orch-7)
 issues: "#171 (arc 1); #200, #101, #116, #79 (arc 2, waits on page 12); #77, #197 (no arc, blocked:external)"
 driver: claude-code
 claude_model: opus
@@ -381,7 +381,7 @@ Outcome (2026-10-10): the six whole-smoke runs stand as the whole-smoke gate (Ch
 
 Every phase of arcs 2a, 2b and 2c **waits on page 12**. Build none of it before the orchestrator releases the arc. A record answered "Change (with a note)" or struck replaces its phase's text with the note, through the orchestrator. Start each arc from a `dev` that holds arc 1.
 
-#### Phase 2a.1: refuse hidden characters inside a node URL (#200, P12-04) — waits on page 12
+#### Phase 2a.1: refuse hidden characters inside a node URL (#200, P12-04) ✓
 
 1. Add `hasHiddenUrlCharacter` to `rpc-url.ts` with the set and edge rule that ship now (OA-1, OA-2).
 2. Add `ERR_RPC_URL_HIDDEN_CHARACTERS` and its refine to `RpcUrlSchema`, before the transport refine.
@@ -406,7 +406,9 @@ Every phase of arcs 2a, 2b and 2c **waits on page 12**. Build none of it before 
 
 Validation gate: Fast; the armed smoke builds; `tests/e2e/endpoints.test.ts` and `tests/e2e/settings-crud.test.ts` on both browsers. Pass: exit 0; every refused class has its test. Layers: lint, typecheck, unit, component, smoke e2e.
 
-#### Phase 2a.2: plain HTTP only to this computer (#101 item 14, P12-02) — waits on page 12
+Outcome (2026-10-15): passed. Fast green (787 files); `endpoints` and `settings-crud` 15/15 on Chrome and on Firefox at retry 0. Deviations: the set is the two Unicode properties OA-1 B's signed text names, plus White_Space and Cc (D-orch-5), with a case per class; `endpoint-error-text.test.ts` was not created, because the popup tests' copy tables already drive `endpointErrorText` and `NewNetworkPopup` with the validation error's real message.
+
+#### Phase 2a.2: plain HTTP only to this computer (#101 item 14, P12-02) ✓
 
 Warning: this phase edits `manifest.config.ts`. Home-onboarding-chrome arc 2 (#156) waits for this arc and for arc 2b (R5).
 
@@ -431,7 +433,9 @@ Validation gate:
 
 Pass: exit 0. The CSP recorder records no violation. `security.test.ts` passes on both browsers. Layers: lint, typecheck, unit, smoke e2e, network e2e.
 
-#### Phase 2a.3: the default token list stays built in (#79, P12-05) — waits on page 12
+Outcome (2026-10-15): passed. `test:all`, lint and `typecheck:all` exit 0. Whole smoke at retry 0 with the CSP recorder armed: Chrome 55 files and 240 tests on the build before the round-1 fixes, then `endpoints`, `security` and `settings-crud` 21/21 on the final head; Firefox 57 files and 239 tests on the final head. Network files 7/7 on Chrome and on Firefox at retry 0, proverless as CI's pool runs them. Deviations: a refused `[::1]` reads OA-4 B's line, not the transport message (D-orch-4); step 3 became one `NetworkSchema` for results and the restore filter (§ Audit verdicts, Arc 2a, round 1, Opus, finding 1); `store/remote-code.md` needed no edit, because the policy's comment kept its line count.
+
+#### Phase 2a.3: the default token list stays built in (#79, P12-05) — dropped (D-orch-6)
 
 1. If page 12 records P12-05 as approved, run `gh issue close 79 --comment "<the page's decision text>"`.
 2. If it is changed, leave #79 open. A fetched list is its own blueprint, outside this plan.
@@ -474,7 +478,7 @@ Validation gate: Fast; `bun run test:all`; the armed smoke builds; whole smoke o
 
 Warning: start only after send-queue-activity arc 3 (#103) merges.
 
-#### Phase 2c: the hero state
+#### Phase 2c: the hero state ✓
 
 1. Return `{ quotes, lastRefreshFailed }` from `refreshIfStale` in the service, spec and client.
 2. Expose `unavailable` from `usePrices` with the rules in § Architecture: sequence-fenced, set only by the first request's answer, cleared by an applied event or a later clean answer, untouched by a rejection, frozen after `dispose`.
@@ -503,6 +507,13 @@ Warning: start only after send-queue-activity arc 3 (#103) merges.
 9. Capture the hero in both themes for the PR.
 
 Validation gate: Fast; `bun run test:all`; the armed smoke builds; `tests/e2e/fiat-display.test.ts` on both browsers; network `hero-prices-unavailable.test.ts` and `fiat-send.test.ts` on both browsers. Pass: exit 0. Layers: lint, typecheck, unit, component, smoke e2e, network e2e.
+
+Outcome (2026-10-15): local gate passed. `test:all`, lint and `typecheck:all` exit 0. `test:all` was rerun once after a 5-second timeout in `zod-jitless.test.ts`, a cold `zod` import under parallel load; it passed alone and on the rerun. At retry 0: network `hero-prices-unavailable` (new, about 41 s per browser) and `fiat-send` 2/2 on Chrome and on Firefox; smoke `fiat-display` 2/2 on both. Deviations, all from D-orch-9:
+- Any answer, a rejected request and every broadcast may move `unavailable`, not only the open answer, and a rejection sets it.
+- The worker broadcasts a failed fetch, which § Arc 2c did not need while only the open answer counted: a popup open across the three-minute refresh has no request of its own.
+- Step 5's cases follow those rules. Step 7's pin now reads "—" and "Prices unavailable".
+- The failure bookkeeping moved into `recordFailure` to keep `doRefresh` within the complexity budget.
+- The hero asks what the total sums (`fiatOf`), not `quoteFor` (Opus round 1, finding 7).
 
 ## Decision ledger
 
@@ -537,6 +548,12 @@ Validation gate: Fast; `bun run test:all`; the armed smoke builds; `tests/e2e/fi
 | D24 | One interception per browser and origin: a spec's `interceptRpc` on an origin the launch holds suspends the launch's until the spec's `stop()`, which re-arms it; Firefox keeps one observer per origin and gains `redirect` | Two CDP `Fetch` sessions on one origin would both pause its requests, in an order the harness does not control; Firefox's single slot refused any second arm, a different origin included | Letting the spec's and the launch's interceptions coexist |
 | D25 | The fee-method-picker case seeds the two protocol FPC rows discovery writes and asserts that Enter saved the pick | It needs a pickable row, not a node: with both rows stored `getFpcs` never discovers, and Nulo's sponsor is eligible without a gas balance. The pick can land on the row already showing, so the saved pick is what tells Enter from a no-op | Moving the pick to the network suite, which turns that step's Firefox coverage on `main` from required to advisory |
 | D26 | A background kill (`stopBackground`) suspends the launch's held interceptions for the kill and re-arms them after; a spec's own stays armed | A DevTools session attached to Chrome's stopping service worker keeps its host for the successor, which then never starts clean: with the stand-in held, `sw-resilience` failed the same two tests on all three Chrome runs, and passed with the interception released for the kill (`lessons/phase-1.md`) | Detaching only the worker's session (no seam reaches it from the driver); leaving the stand-in out of kill specs (each spec would have to know) |
+| D-orch-4 | Arc 2a builds the signed page-12 picks: P12-04 with OA-1 **B**, OA-2 **A**, OA-3 **A**; P12-02 with OA-4 **B** and OA-5 **A**. OA-4 came with no words, so the page's example ships as recommended: "Use http://localhost instead of http://[::1]." (`ERR_RPC_URL_IPV6_LOOPBACK`); OWNER-ASKS.md lists it as a wording the owner may change | The orchestrator's release of arc 2a (2026-10-15) after pages 12 and 18 were signed | Shipping "Something went wrong." (OA-4 A) |
+| D-orch-5 | The refused set is `\p{White_Space}`, `\p{Cc}`, `\p{Cf}` and `\p{Default_Ignorable_Code_Point}`, inside the trimmed string; one line for all | OA-1 B's signed text names `Cf` and `Default_Ignorable_Code_Point`; together they hold every zero-width character, every bidirectional control (`Bidi_Control`, U+200E and U+200F included), the byte-order mark, and the fillers and soft hyphen a host drops silently (Codex round 1, finding 3). No legitimate node URL contains one | The release message's code-point ranges alone (first build: would let a Hangul filler through); `Bidi_Control` plus the listed ranges (round-1 build) |
+| D-orch-6 | Phase 2a.3 is dropped: P12-05 was answered "change" ("move to the remote token list fully"), so #79 no longer closes by comment; this lane does nothing on #79 | The orchestrator routes #79 to a planner (2026-10-15) | Closing #79 by comment (A4, D16; superseded) |
+| D-orch-7 | Arc 2b is not built by this session, per the orchestrator's release message ("struck: P12-03 was vetoed"); #101 stays open for item 15. #101's Decision block records P12-03 as "accepted from the veto list", not struck, so the #101 comment says only that item 14 ships in arc 2a's PR and item 15 is not in it; the report raises the discrepancy | The release message scopes this session; the issue text is what was signed, so no comment claims a veto it does not carry | Building 2b without a release; quoting a veto the issue does not hold |
+| D-orch-8 | Arcs 2a and 2c open as plain PRs against `dev` (`gh pr create --base dev`, no `gh stack`), 2c branched from the merged plan branch, not from 2a; both may be open at once and neither merges (release freeze until the 0.31.0 promote) | The orchestrator's call (2026-10-15); lifts D17's one-unmerged-arc rule for these two | One stack, one unmerged layer (D17) |
+| D-orch-9 | Arc 2c builds P18-01 **A** (it replaces the held P12-11) with OA-6 **B** and OA-7 **B**: any failed fetch with no usable price switches the hero, the 3-minute refresh, a background that did not answer and a reconnect after a restart included. This supersedes D14's rule that only the open answer may set `unavailable` | The signed answers on #116 (pages 12 and 18) | What shipped-now text OA-6 A and OA-7 described |
 
 ## Audit verdicts
 
@@ -724,6 +741,59 @@ Verdict: **approve**. All 16 kill sites go through the exported `stopBackground`
 | 2 | Low. A kill while a spec's stop is still re-arming skips that origin, so the re-arm lands during the kill | Rejected: no file uses both `interceptRpc` and `stopBackground`, and a spec awaits its stop before anything else |
 | 3 | Info. The refusal and the unstopped-read messages name only a spec, while a kill now takes the origin too | Accepted: both are worded for either holder |
 | 4 | Info. Three comments still describe only a spec's suspension, and the kill hazard is Chrome's | Accepted |
+
+### Arc 2a, round 1, Codex (gpt-6.1-sol, high, read-only; session `01a14105-fa58-7a60-8e02-6a9eb0f92035`), 2026-10-15
+
+Verdict: **approve with fixes** (two Low comment findings). It exercised all 101 refused code points in four positions against the real schema and found no accepted input carrying one; the result relaxation, the activation guard and I1-I4 hold.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Low. The set's comment says `URL` percent-encodes what it does not drop; a host drops U+200B outright | Accepted: reworded |
+| 2 | Low. Two comments restate their code (`NewNetworkPopup.vue`, `refusedRpcUrlLine`) | Accepted: one deleted, one reduced to its contract |
+| 3 | Noted as outside the set: Hangul fillers, the soft hyphen, U+180E, U+034F and variation selectors pass and vanish from a host (`https://trusted.test` + U+3164 + `evil.test/` dials `trusted.testevil.test`); deception plausible, rendering-dependent | Accepted as a fix, not a limit: OA-1 B's signed text names `Cf` and `Default_Ignorable_Code_Point`, so the set becomes `White_Space`, `Cc`, `Cf` and `Default_Ignorable_Code_Point` (D-orch-5 revised), with a case each for a filler and a soft hyphen |
+
+### Arc 2a, round 1, Opus (general-purpose, read-only), 2026-10-15
+
+Verdict: **approve with one optional fix**.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Low. Restore again passes the live rows (`restore-again.vue:71` → `useRestoreAgain.ts` `namedNetworks`) into the restore filter, whose strict `NetworkSchema` drops a network holding a saved `http://[::1]` endpoint even when its primary is `localhost`; § Arc 2a's "it only ever sees the seeded built-in networks" did not hold | Accepted: one `NetworkSchema` whose endpoint URLs read as stored, for results and the restore filter; `RpcUrlSchema` stays on inputs, and the node factory still judges every URL it dials |
+| 2 | Nit. Two comments tell history ("now refuses", "no longer dials") | Accepted: stated as the rule |
+| 3 | The arc's new e2e cases had not run yet | The arc gate runs them |
+
+### Arc 2a, round 2, Codex (session `01a14105-fa58-7a60-8e02-6a9eb0f92035` resumed), 2026-10-15
+
+Verdict: **approve**, no new findings; the loop converged. It traced the relaxed restore filter to the dial (`restore` → `networkInfoFrom` → PXE registration → `createChainRuntime` → `NodeFactory.createNode` → `isAllowedRpcUrl`), so no URL reaches a socket unjudged, probed all 4,290 refused code points in four positions with no bypass, and confirmed IDN hosts, percent-encoded paths and API-key characters still pass.
+
+### Arc 2c, round 1, Codex (gpt-6.1-sol, high; session `01a14161-87d9-7fb3-9e5c-80858eb400e5`), 2026-10-15
+
+Verdict: **approve**. Three Low findings, no runtime defect. I1, I3 and I4 hold. On I4: `return await` now runs `finally` after the failure bookkeeping, which is harmless.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Low. The e2e drops the interception handle, so a caption caused some other way would pass | Accepted: it asserts `hits() > 0` and `failures()` empty |
+| 2 | Low. No control for a wallet holding only unpriced tokens after a failed fetch | Accepted: a case asserts $0.00 with "priced assets only" |
+| 3 | Low. The `admit` and `pricesUnavailable` docs restate their code | Accepted: deleted |
+
+### Arc 2c, round 1, Opus (general-purpose, read-only), 2026-10-15
+
+Verdict: **approve with small fixes**. No correctness bug. I2 was wrong as stated: mount's request and the first `onConnected` request can be answered out of order. It is harmless by I1.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Low. `unavailable`'s doc overclaims | Accepted: reworded |
+| 2 | Low. The `Events` doc says every fetch, but a superseded one emits nothing | Accepted |
+| 3 | Low. The fence relies on the worker broadcasting every change of its failure state, and no comment says so | Accepted: one clause on `latestWins` |
+| 4 | Low. The balance-count guard is untested | Accepted: a case in "an arrival on Home"; it fails with the guard removed |
+| 5 | Low. The 12-second hero cap can elapse before the 10-second abort on a cold worker, showing $0.00 "priced assets only" for seconds | Rejected: the cap is an existing trade-off, and the state is transient |
+| 6 | Low, owner's call. A partial provider answer is a success, so a wallet holding only a dropped token reads $0.00 once its quote expires | Outside the signed trigger, a failed fetch: OWNER-ASKS OA-8 |
+| 7 | Nit. The hero's test (`quoteFor`) and the total (`tokenFiatMicro`, which needs known decimals) disagree | Accepted: the hero asks `fiatOf` |
+| 8 | Nits: an e2e comment, a test name, the moved `logWarn`'s bare error | First two accepted; the third predates the arc |
+
+### Arc 2c, round 2, Codex (session `01a14161-87d9-7fb3-9e5c-80858eb400e5` resumed), 2026-10-15
+
+Verdict: **approve**, no new findings; the loop converged. The interception assertions prove the refusal path, the unpriced-only and balance-count cases test what they name, and `fiatOf` aligns the hero with the total.
 
 ## Delivery
 
