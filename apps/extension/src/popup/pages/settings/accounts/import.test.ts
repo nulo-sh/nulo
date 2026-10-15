@@ -1,7 +1,3 @@
-/**
- * Account import refuses a name another account in the profile already has, as New account does:
- * the confirm step warns and neither the button nor Enter imports until the name changes.
- */
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
