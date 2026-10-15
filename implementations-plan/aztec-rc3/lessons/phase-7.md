@@ -8,21 +8,26 @@
 - Final review (Codex `01a13ca0`) found the pages' Presto status asking about `6.0.0-rc.3` while the SDK's prover sends its bb.js pin, `6.0.0-rc.6`, as `x-aztec-version`. Presto matches the string exactly, so with rc.6 cached, onboarding and Settings showed a pending download. Fixed with `__BB_VERSION__`; the regression test reads the Presto SDK's own bb.js pin. The version-mismatch copy now names the bb release, while About still shows the labs line.
 - Merged `dev` at `50898ed8` (#433 moves the long shard-4 files into a heavy job, plus #426 and #435). The merged code keys on `CHAIN_IDS` only. The frozen install made no change and the residue check passed. `audit:vue`, `test:all`, `test:ci-gating`, `test:release` and `build-storybook` each exited 0. The audit gate (enforce) reported 41 acknowledged and 0 unacknowledged. `lockfile-exception-diff` against `dev` found 44 Aztec-scope moves (23 `@aztec-labs`, 19 `@aztec-foundation`, 2 `@alejoamiras`), with `exceptions`, `added` and `removed` empty.
 - CI on `50898ed8`: all five required aggregators pass, with no reds. In the canary job (prover-ON, presto-server 1.1.3), Chrome and Firefox each logged "12 /prove requests, 12 successful proofs".
-- Smoke on `50898ed8` at retry 0, with the armed build:
-  - Chrome: 53 files, 233 tests, 1388 s.
-  - Firefox: 55 files, 232 tests, 2073 s.
-  - Skips on both browsers: `shipped-token-list`, which needs the live leg (M7: it proves nothing here), and the console-capture probe. On Chrome, the two Firefox-only files skip as well.
-- Network, proverless, on `50898ed8` at retry 0 (`e2e:agent` with its own services, one run at a time):
-  - Chrome: 117 files, 216 tests, 6518 s.
-  - Firefox: 117 files, 214 tests, 7524 s.
-  - Skips are opt-ins or browser-specific and match `dev`: chaos, store captures, the standard-contracts opt-in that nothing sets, a probe, and on each browser the other one's files.
-- Canaries, prover-ON, on `50898ed8` at retry 0, through presto-server 1.1.3 with a private `PRESTO_HOME`, bb 6.0.0-rc.6 cached:
-  - Chrome: 4/4 tests, 230 s; window 04:15:36–04:19:26Z.
-  - Firefox: 4/4 tests, 260 s; window 04:19:26–04:23:46Z.
-  - Each window holds 6 "Requested Aztec version version=6.0.0-rc.6" and 6 "Proving succeeded". The log has no error and no failed proof. The server's process group was stopped afterwards.
-- CI wall-clock per browser, this head against `account-session-life-closeout` `d2a41ef6` (same hour, includes #433; it carries its own changes). Workflow wall-clock is the first figure, summed job time the second:
-  - Network Chrome: 1041 s / 6991 s here, 1069 s / 7202 s there.
-  - Network Firefox: 1220 s / 7661 s here, 1243 s / 8253 s there.
-  - Smoke Chrome: 583 s / 1377 s here, 655 s / 1587 s there.
-  - Smoke Firefox: 893 s / 1925 s here, 943 s / 2002 s there.
-  - No e2e scenario is added.
+- `50898ed8` passed the whole e2e gate at retry 0:
+  - smoke: Chrome 1388 s, Firefox 2073 s;
+  - network, proverless: Chrome 6518 s, Firefox 7524 s;
+  - canaries: 4/4 per browser, 6 proofs each.
+- `dev` then moved: #437 changed `bun.lock`, and #436, #445, #453, #454 and #467 landed, among others. The PR still merged cleanly, but #453 and #454 touch profile creation and account files next to the export gate, so `dev` was merged again at `9e905c9b`. That merge left `bun.lock` unchanged under a frozen `--force` install and added no rc.1 literal (each hit predates it). `bunfig.toml` equals `dev`. The unit, release, Storybook, audit and lockfile gates repeat with the same results.
+- Final head `9e905c9b`, every e2e suite at retry 0 (`e2e:agent` owns its services; one run at a time):
+
+| Suite | Chrome | Firefox |
+|---|---|---|
+| Smoke (armed build) | 55 files, 238 tests, 1561 s | 57 files, 237 tests, 2193 s |
+| Network, proverless | 118 files, 219 tests, 6558 s | 118 files, 217 tests, 7784 s |
+| Canaries, prover-ON | 4/4, 253 s, window 10:08:54–10:13:07Z | 4/4, 303 s, window 10:13:07–10:18:10Z |
+
+  - Canaries ran through presto-server 1.1.3 (private `PRESTO_HOME`, bb 6.0.0-rc.6 cached). Each window logs 6 "Requested Aztec version version=6.0.0-rc.6" and 6 "Proving succeeded", with no error and no failed proof. The server was stopped afterwards.
+  - Skips are opt-ins or browser-specific and match `dev`:
+    - smoke: `shipped-token-list` (it needs the live leg; M7 says it proves nothing here), the console-capture probe, and on Chrome the two Firefox-only files;
+    - network: chaos, store captures, the standard-contracts opt-in that nothing sets, a probe, and on each browser the other one's file.
+- CI on `9e905c9b` passes every required aggregator, and the canary job logs 12/12 proofs per browser.
+- Per-browser wall-clock against `account-session-life-closeout` `d2a41ef6` (#467, whose squash is this merge's `dev` base). Figures are workflow wall-clock / summed job time; no e2e scenario is added:
+  - Network Chrome: 1111 s / 7386 s here, 1069 s / 7202 s there.
+  - Network Firefox: 1237 s / 8095 s here, 1243 s / 8253 s there.
+  - Smoke Chrome: 697 s / 1605 s here, 655 s / 1587 s there.
+  - Smoke Firefox: 981 s / 2030 s here, 943 s / 2002 s there.
