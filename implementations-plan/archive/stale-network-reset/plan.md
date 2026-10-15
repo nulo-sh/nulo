@@ -615,7 +615,7 @@ Every body: `Refs #324`. Arcs 2 and 3: each browser's suite wall-clock before an
 
 ## Post-implementation
 
-Follow [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `d01569a2`. Plan-specific settings:
+Follow [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `d01569a2`. Plan-specific settings:
 
 - Step 1 is absent (`code_review: off`).
 - Step 2 runs per arc while that arc is the stack tip: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. The prompt carries the arc map, this plan and its ledger, the adversarial ask, the two rules verbatim, and a UI-fidelity check against § UI fidelity. A final fresh session covers the net diff from `1ba770cf`.
