@@ -1,7 +1,7 @@
 ---
 plan: e2e-harness-gaps
 tier: mid
-status: approved by the orchestrator 2026-10-09; arcs 1a (#267), 1b (#273), 2 (#278), 3 (#293) and 4a (#369) merged; arc 4 (#186) soaked at e1c4f33f and in review
+status: completed (arcs 1a #267, 1b #273, 2 #278, 3 #293 and 4a #369 merged; arc 4 #477 soaked at e1c4f33f; the close-out lands with or after #477, D29)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -15,6 +15,44 @@ issues: [169, 155, 161, 162, 163, 194, 186, 164, 153, 165, 279]
 not_this_lane: [195, 81, 190]
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-15.
+- **Status:** closed. Arcs 1a, 1b, 2, 3 and 4a are merged. Arc 4 is #477 (`Closes #186`), at the soaked e1c4f33f plus docs. This close-out lands with #477 or after it (D29); the merge that lands it closes this plan.
+- **Shipped:**
+  - Arc 1a (#267, gate G1), for #169:
+    - each run claims its ports in the host registry;
+    - every run process and sandbox service carries a marker, so teardown and `e2e:reap` stop exactly what a dead run started;
+    - a listener on a claimed port is refused.
+  - Arc 1b (#273):
+    - the Lock page reads again after a worker restart (#162);
+    - the backup export case runs on hosted CI under an in-page observer (#163);
+    - the five anchor sleeps are gone (#161);
+    - a calibrated 10-minute stall watchdog and a 2048 MiB heap cap per network fork (#155).
+  - Arc 2 (#278): `tsconfig.e2e.json` joins `typecheck`, its 461 errors fixed with type-only edits, and the name scan is deleted (#194).
+  - Arc 3 (#293):
+    - the multicall sends nonce 0 (#164);
+    - a sponsored NO_FROM control, with two concurrent sends that serialize and both confirm (#153); its wallet fix also shipped alone as #285 (D23, D24);
+    - a transfer-function select and the three private transfer rows (#165, private half).
+  - Arc 4a (#369): the soak's Node reference runs every suite it can, and `BUN_ONLY_FILES` pins the three Bun-only files (#279).
+  - Arc 4 (#477, #186):
+    - the extension's configs load as ES modules with Node's native loader;
+    - Vite prints no warning block, and the builds are byte-identical;
+    - CLAUDE.md's full soak matrix passed at e1c4f33f, with one quiet-host re-run of the extension's Node reference (§ Audit verdicts).
+- **Dropped or refuted:**
+  - #165's discovered-authwit half: I2 did not hold, so the env gate stays and #165 stays open with the reason; a later comment there names `ensureStandardPublicChecks` as the way in.
+  - The final cross-arc Codex pass (§ Post-implementation step 3) did not run. Each arc landed on `dev` alone, with its own converged loop (D-orch-1), so no stack existed to diff across.
+  - Not this lane:
+    - #195 shipped with ci-release-supply as #370 (D-orch-17);
+    - #81 was closed as not planned by the owner (P5-01, D-orch-17);
+    - #190 stays `blocked:external`, with no in-repo half (§ Scope);
+    - #269, the navigation flake arc 4's first gate met, is closed.
+  - Not promoted to `lessons.md`: a soak compare's one-off Node timeout under host load ([lessons/phase-4.md](lessons/phase-4.md)). The file holds 8,191 bytes, and no entry retires for it.
+- **Size:** 930 lines against mid's 350. Six arcs' plan audits and implementation reviews are recorded inline; no trim was run at close-out.
+- **Known limits:** none.
+- **Open items:** #165 (its discovered-authwit half).
+- **Seeds retired:** the `/goal` and `/loop` seeds below were never run, because the orchestrator drove the lane. This record is evidence, not instructions.
 
 # e2e-harness-gaps: run isolation, unproven waits, the e2e type gate, missing coverage
 
@@ -879,7 +917,7 @@ Superseded in part by D-orch-1 and D-orch-2: no stack; each arc's PR targets `de
 
 ## Seeds
 
-Retired at close-out. Draft until the orchestrator approves.
+Retired at close-out (§ Outcome): never run, kept as evidence.
 
 ```
 /goal Every phase in implementations-plan/e2e-harness-gaps/plan.md is marked ✓, each backed by its validation gate reported passing in the transcript; for each phase `LESSONS_FILE=implementations-plan/e2e-harness-gaps/lessons/phase-N.md` is printed; `/code-review` was NOT run (code_review: off); the Codex fix loop converged for each arc (1a, 1b, 2, 3, 4) and for the final cross-arc pass, each convergence a resumed Codex pass with no new material finding quoted in the transcript; the six-layer stack (1a, 1b, 2, 3, 4, close-out) exists on GitHub, created only after the loops converged (`gh stack view` in the transcript), the close-out archiving the plan (`git show --stat` of the archive-move commit); `bun run test` and `bun run lint` both exit 0 in the transcript.
