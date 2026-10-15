@@ -78,6 +78,7 @@ Listing a later version in `approved-digests.json` is optional, and once listed 
 
 ```sh
 bun scripts/publish/stage.ts --all --version X.Y.Z
+mkdir -p <tgz-dir>
 for dir in dist-publish/*/; do npm pack "./$dir" --pack-destination <tgz-dir> --ignore-scripts; done
 ```
 
