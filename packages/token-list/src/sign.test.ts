@@ -5,7 +5,8 @@ import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterAll, describe, expect, test } from "vitest"
 import { BUNDLED_TOKEN_CLASS_IDS } from "./class-ids"
-import { readTokenList } from "./index"
+import { readTokenList, SEQUENCE_FLOOR } from "./index"
+import { PayloadError } from "./parse"
 import { listSha256, publishedSequence, signList } from "./sign"
 import { main } from "./sign-cli"
 import { freshKey } from "./test-keys"
@@ -25,7 +26,8 @@ const SOURCE = {
 	],
 }
 const SOURCE_TEXT = `${JSON.stringify(SOURCE, null, "\t")}\n`
-const NOW = 1_760_000_000_500
+const SIGNED = SEQUENCE_FLOOR + 1
+const NOW = SIGNED * 1000 + 500
 const dir = mkdtempSync(join(tmpdir(), "token-list-sign-"))
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
@@ -34,11 +36,21 @@ describe("signList", () => {
 		const { seedHex, pinned } = await freshKey("nulo-ci-1")
 		const result = await signList({ sourceText: SOURCE_TEXT, seedHex, keyId: "nulo-ci-1", nowMs: NOW, keys: [pinned] })
 		const list = await readTokenList(result.envelopeText, [pinned])
-		expect(list).toMatchObject({ keyId: "nulo-ci-1", sequence: 1_760_000_000, issuedAt: "2025-10-09T08:53:20.000Z" })
+		expect(list).toMatchObject({ keyId: "nulo-ci-1", sequence: SIGNED, issuedAt: new Date(SIGNED * 1000).toISOString() })
 		expect(list.entries).toEqual(SOURCE.tokens)
 		expect(list.flagged).toEqual([])
 		expect(result.tokensSha256).toBe(await listSha256({ tokens: SOURCE.tokens, flagged: [] }))
-		expect(publishedSequence(result.envelopeText)).toBe(1_760_000_000)
+		expect(publishedSequence(result.envelopeText)).toBe(SIGNED)
+	})
+
+	test("the wallet refuses a list below the compiled floor and accepts one at it", async () => {
+		const { seedHex, pinned } = await freshKey("nulo-ci-1")
+		const signedAt = async (sequence: number) =>
+			(await signList({ sourceText: SOURCE_TEXT, seedHex, keyId: "nulo-ci-1", nowMs: sequence * 1000, keys: [pinned] })).envelopeText
+		const below = await readTokenList(await signedAt(SEQUENCE_FLOOR - 1), [pinned]).catch((error: unknown) => error)
+		expect(below).toBeInstanceOf(PayloadError)
+		expect((below as PayloadError).path).toBe("payload.sequence")
+		expect((await readTokenList(await signedAt(SEQUENCE_FLOOR), [pinned])).sequence).toBe(SEQUENCE_FLOOR)
 	})
 
 	test("refuses a non-increasing sequence, a foreign seed, an unexpected token set and an invalid source", async () => {

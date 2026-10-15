@@ -14,6 +14,7 @@ import { decodeBase64Url } from "@nulo/token-list/envelope"
 import { checkFlagged, checkSource, checkTokens } from "@nulo/token-list/parse"
 import { listSha256 } from "@nulo/token-list/sign"
 import { ENVELOPE, HOST_ROOT, SOURCE } from "./check"
+import { FLOOR_PATH, raisesFloor } from "./floor"
 
 export const REPO_ROOT = join(HOST_ROOT, "..", "..")
 /** Everything that decides what gets signed, what this summary shows, or what runs beside a secret. */
@@ -124,6 +125,8 @@ if (import.meta.main) {
 			"### Flag changes",
 			"",
 			renderFlagDiff(flagDiff(published.flagged, flagged)),
+			`Raises the compiled floor: ${raisesFloor(published, { tokens, flagged }) ? `yes. The publish PR sets \`${FLOOR_PATH}\` to the signed sequence, and every wallet built after it refuses an older list.` : "no."}`,
+			"",
 			"### Signing-relevant changes",
 			"",
 			signingChanges(),

@@ -1,8 +1,18 @@
 import { readFileSync } from "node:fs"
-import { dirname, join } from "node:path"
+import { dirname, extname, join } from "node:path"
 import type { TokenListEntry } from "@nulo/token-list"
 import { describe, expect, test } from "vitest"
-import { BRANCH_PREFIX, ENVELOPE_PATH, envelopeMeta, type PublishIO, publishPrs, runPublish } from "../scripts/open-publish-pr"
+import { FLOOR_PATH, floorText, raisesFloor } from "../scripts/floor"
+import {
+	BRANCH_PREFIX,
+	ENVELOPE_PATH,
+	envelopeMeta,
+	type PublishFile,
+	type PublishIO,
+	prBody,
+	publishPrs,
+	runPublish,
+} from "../scripts/open-publish-pr"
 import { flagDiff, publishedList, REPO_ROOT, renderDiff, renderFlagDiff, SIGNING_PATHS, tokenDiff } from "../scripts/summary"
 
 const b64url = (text: string) => btoa(text).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "")
@@ -21,12 +31,15 @@ const INPUT = { baseSha: "b".repeat(40), runUrl: "https://github.com/nulo-sh/nul
 
 function fakeIO(state: { heads?: Record<string, string>; files?: Record<string, string>; open?: { number: number; branch: string }[] }) {
 	const calls: string[] = []
+	const commits: (readonly PublishFile[])[] = []
 	const io: PublishIO = {
 		branchHead: async (branch) => state.heads?.[branch] ?? null,
 		createBranch: async (branch, sha) => void calls.push(`branch ${branch}@${sha.slice(0, 4)}`),
 		read: async (path, commit) => state.files?.[`${commit}:${path}`] ?? null,
-		commit: async (branch, head, path, _text, headline) =>
-			void calls.push(`commit ${branch}@${head.slice(0, 4)} ${path} "${headline}"`),
+		commit: async (branch, head, files, headline) => {
+			commits.push(files)
+			calls.push(`commit ${branch}@${head.slice(0, 4)} ${files.map((file) => file.path).join(" + ")} "${headline}"`)
+		},
 		openPublishPrs: async () => state.open ?? [],
 		openPr: async (branch, title) => {
 			calls.push(`open ${branch} "${title}"`)
@@ -35,7 +48,7 @@ function fakeIO(state: { heads?: Record<string, string>; files?: Record<string, 
 		close: async (number, comment) => void calls.push(`close #${number}: ${comment}`),
 		log: () => {},
 	}
-	return { io, calls }
+	return { io, calls, commits }
 }
 
 describe("open-publish-pr", () => {
@@ -83,9 +96,59 @@ describe("open-publish-pr", () => {
 		expect(publishPrs(pulls, "nulo-sh/nulo")).toEqual([{ number: 4, branch }])
 	})
 
+	test("commits the floor beside the envelope only when the list delists or flags, and a re-run repeats nothing", async () => {
+		const pair = (n: number) => ({ chainId: 1, address: `0x${n.toString(16).padStart(64, "0")}` })
+		const served = { [`${INPUT.baseSha}:${ENVELOPE_PATH}`]: envelopeFor(1760000000, [pair(1), pair(2)]) }
+		const delist = envelopeFor(1770000000, [pair(1)])
+		const both = [
+			{ path: ENVELOPE_PATH, text: delist },
+			{ path: FLOOR_PATH, text: floorText(1770000000) },
+		]
+		const raised = fakeIO({ files: served })
+		await runPublish({ ...INPUT, envelopeText: delist }, raised.io)
+		expect(raised.commits).toEqual([both])
+
+		const added = envelopeFor(1770000000, [pair(1), pair(2), pair(3)])
+		const kept = fakeIO({ files: served })
+		await runPublish({ ...INPUT, envelopeText: added }, kept.io)
+		expect(kept.commits).toEqual([[{ path: ENVELOPE_PATH, text: added }]])
+
+		const branch = `${BRANCH_PREFIX}1770000000`
+		const head = "c".repeat(40)
+		const onBranch = { ...served, [`${head}:${ENVELOPE_PATH}`]: delist, [`${head}:${FLOOR_PATH}`]: floorText(1770000000) }
+		const rerun = fakeIO({ heads: { [branch]: head }, files: onBranch, open: [{ number: 12, branch }] })
+		expect(await runPublish({ ...INPUT, envelopeText: delist }, rerun.io)).toBe(12)
+		expect(rerun.calls).toEqual([])
+		const partial = fakeIO({ heads: { [branch]: head }, files: { ...onBranch, [`${head}:${FLOOR_PATH}`]: floorText(1) } })
+		await runPublish({ ...INPUT, envelopeText: delist }, partial.io)
+		expect(partial.commits).toEqual([both])
+	})
+
+	test("the PR body names the floor only when the list raises it", () => {
+		const input = { ...INPUT, envelopeText: envelopeFor(5) }
+		expect(prBody(input, "nulo-ci-1", 5, true)).toContain(`(\`${FLOOR_PATH}\`) to 5`)
+		expect(prBody(input, "nulo-ci-1", 5, false)).not.toContain(FLOOR_PATH)
+	})
+
 	test("refuses a file that is not an envelope with a sequence", () => {
 		expect(() => envelopeMeta("{}")).toThrow("not a token list envelope")
 		expect(() => envelopeMeta(envelopeFor(0))).toThrow("no sequence")
+	})
+})
+
+describe("the floor", () => {
+	const pair = (n: number) => ({ chainId: 1, address: `0x${n}` })
+	const list = (tokens: number[], flagged: number[] = []) => ({ tokens: tokens.map(pair), flagged: flagged.map(pair) })
+
+	test.each([
+		["a delisting", true, list([1, 2]), list([1])],
+		["a new flag", true, list([1]), list([1], [2])],
+		["a first publish with flags", true, list([]), list([1], [2])],
+		["an addition", false, list([1]), list([1, 2])],
+		["a re-listing", false, list([1], [2]), list([1, 2])],
+		["an unflag", false, list([1], [2]), list([1])],
+	])("%s raises it: %s", (_name, raises, served, next) => {
+		expect(raisesFloor(served, next)).toBe(raises)
 	})
 })
 
@@ -123,21 +186,38 @@ describe("the prepare summary", () => {
 		)
 		expect(entries).toContain("infra/token-list/scripts/summary.ts")
 		const resolve = (file: string, specifier: string) => {
-			if (specifier.startsWith(".")) return `${join(dirname(file), specifier)}.ts`
+			if (specifier.startsWith(".")) return `${join(dirname(file), specifier)}${extname(specifier) === "" ? ".ts" : ""}`
 			expect(specifier).toMatch(/^@nulo\/token-list(\/[a-z-]+)?$/)
 			return `packages/token-list/src/${specifier.replace(/^@nulo\/token-list\/?/, "") || "index"}.ts`
 		}
-		const files = new Set([workflow, "infra/token-list/package.json"])
-		const visit = (file: string) => {
-			if (files.has(file)) return
-			files.add(file)
-			for (const [, specifier] of readFileSync(join(REPO_ROOT, file), "utf8").matchAll(/\bfrom\s+"([^"]+)"/g)) {
-				if (!specifier.startsWith("node:")) visit(resolve(file, specifier))
+		const imports = (file: string) =>
+			file.endsWith(".json")
+				? []
+				: [...readFileSync(join(REPO_ROOT, file), "utf8").matchAll(/\bfrom\s+"([^"]+)"/g)]
+						.map(([, specifier]) => specifier)
+						.filter((specifier) => !specifier.startsWith("node:"))
+		const closure = (roots: readonly string[]) => {
+			const seen = new Set<string>()
+			const visit = (file: string) => {
+				if (seen.has(file)) return
+				seen.add(file)
+				for (const specifier of imports(file)) visit(resolve(file, specifier))
 			}
+			for (const root of roots) visit(root)
+			return seen
 		}
 		// `prepare` reaches `check.ts` through the host's `check` script.
-		for (const entry of [...entries, "infra/token-list/scripts/check.ts"]) visit(entry)
-		expect([...files].filter((file) => !SIGNING_PATHS.some((path) => file === path || file.startsWith(`${path}/`)))).toEqual([])
+		const files = [workflow, "infra/token-list/package.json", ...closure([...entries, "infra/token-list/scripts/check.ts"])]
+		expect(files).toContain("packages/token-list/src/floor.json")
+		expect(files.filter((file) => !SIGNING_PATHS.some((path) => file === path || file.startsWith(`${path}/`)))).toEqual([])
+		// `publish-pr` installs nothing, so its closure imports only `node:` builtins and relative files.
+		const publishPr = closure(["infra/token-list/scripts/open-publish-pr.ts"])
+		expect(publishPr).toContain("infra/token-list/scripts/floor.ts")
+		for (const file of publishPr)
+			expect(
+				imports(file).filter((specifier) => !specifier.startsWith(".")),
+				file,
+			).toEqual([])
 	})
 
 	test("diffs flags by (chainId, address) and renders each change", () => {

@@ -10,12 +10,14 @@ import {
 	ENVELOPE,
 	envelopeFindings,
 	FORMAT,
+	floorFindings,
 	formatFindings,
 	HOST_ROOT,
 	keyFindings,
 	SOURCE,
 	treeFindings,
 } from "../scripts/check"
+import { FLOOR_PATH, floorText } from "../scripts/floor"
 
 const work = mkdtempSync(join(tmpdir(), "token-list-host-"))
 afterAll(() => rmSync(work, { recursive: true, force: true }))
@@ -78,6 +80,17 @@ describe("the host tree", () => {
 		writeFileSync(join(root, SOURCE), JSON.stringify(JSON.parse(readFileSync(join(root, SOURCE), "utf8"))))
 		expect(await treeFindings(root, [pinned])).toEqual([
 			`${SOURCE}: not in canonical form (tab indent, payload key order, trailing newline)`,
+		])
+	})
+
+	test("refuses a floor below 1, above the committed list, or not in canonical form", () => {
+		expect(floorFindings(floorText(1792014908), 1792014908)).toEqual([])
+		expect(floorFindings(floorText(1792014908), undefined)).toEqual([])
+		expect(floorFindings(floorText(0), 1792014908)).toEqual([`${FLOOR_PATH}: sequence must be an integer from 1`])
+		expect(floorFindings(floorText(1792014909), 1792014908)).toEqual([`${FLOOR_PATH}: above the committed list's sequence 1792014908`])
+		expect(floorFindings('{"sequence":1792014908}\n', 1792014908)).toEqual([`${FLOOR_PATH}: not in canonical form`])
+		expect(floorFindings(floorText(1792014908).replace("}", '\t,"note": 1\n}'), 1792014908)).toEqual([
+			`${FLOOR_PATH}: not in canonical form`,
 		])
 	})
 
