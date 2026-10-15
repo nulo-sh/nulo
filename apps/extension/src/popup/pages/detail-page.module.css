@@ -102,6 +102,13 @@
 	}
 }
 
+/* Restores the focus indication the base `a:focus` reset removes. */
+.hero_link:focus-visible,
+.detail_link:focus-visible {
+	outline: 2px solid var(--nulo-accent);
+	outline-offset: 2px;
+}
+
 .caption {
 	composes: type--label from global;
 	color: var(--nulo-secondary);
@@ -119,6 +126,8 @@
 }
 
 .address_card {
+	/* Anchors the corner explorer link. */
+	position: relative;
 	width: 100%;
 
 	padding: 12px;
@@ -131,6 +140,11 @@
 
 	&:hover {
 		background: var(--nulo-surface-low);
+	}
+
+	/* A name long enough to reach the corner link wraps before its glyph. */
+	&:has(> a) > :first-child {
+		padding-right: 14px;
 	}
 }
 

@@ -20,6 +20,7 @@ import {
 	replaceInputValue,
 	test,
 	waitForHash,
+	waitForServiceReady,
 } from "./fixtures/extension"
 import { ensureUnlocked, lockWallet, navigateByHash, waitForLockScreen, waitForToast } from "./fixtures/helpers"
 import { setupPasskeyVirtualAuth } from "./fixtures/passkey"
@@ -357,7 +358,7 @@ describe("popup: a passkey wallet that declined", () => {
 		const auth = await setupPasskeyVirtualAuth(extension.browser, page)
 		try {
 			await waitForHash(page, "#/popup/register", 15_000)
-			await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), { timeout: 15_000, polling: 500 })
+			await waitForServiceReady(page, 15_000)
 			await clickByTestId(page, "register-create-btn")
 			await expectNoNameField(page, "register-page", "register-name-input")
 			await clickByTestId(page, "register-method-passkey")

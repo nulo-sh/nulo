@@ -1,7 +1,8 @@
 /**
- * Create and import of one address take turns on that address's row lock. The derivation is
- * mocked so a create at index 0 derives the address the import file carries, which is what an
- * account exported from a same-phrase install does.
+ * Create and import of one address take turns on that address's row lock, and a create never
+ * writes over a row that stands. The derivation is mocked so a create at index 0 derives the
+ * address the import file carries, which is what an account exported from a same-phrase install
+ * does, and every later index derives `NEXT`.
  */
 
 import { describe, expect, test, vi } from "vitest"
@@ -110,7 +111,20 @@ async function makeHarness(over: { chainLive?: (call: number) => boolean | Promi
 }
 
 describe("create and import of one address", () => {
-	test("a create waits while an import holds the address, then replaces it and leaves no key behind", async () => {
+	test("a create over an imported address keeps that row and its key and writes the next index", async () => {
+		const h = await makeHarness()
+		const key = { profileId: "p1", chainId: 1, address: SHARED, encryptedSigningKey: "s" }
+		await h.seed({ [accountKey(SHARED)]: importedRow(SHARED), [keyRowKey(SHARED)]: key })
+
+		const created = await h.create()
+
+		expect(created).toMatchObject({ address: NEXT, index: 1, type: AccountType.Nulo_v1 })
+		expect(await h.row(SHARED)).toEqual(importedRow(SHARED))
+		expect(await h.hasKey(SHARED)).toBe(true)
+		expect(await h.row(NEXT)).toEqual(created)
+	})
+
+	test("a create that meets an import holding the address waits, then lands on the next index; both rows stand", async () => {
 		const h = await makeHarness()
 		const area = h.api.storage.local
 		const realSet = area.set.bind(area)
@@ -133,61 +147,33 @@ describe("create and import of one address", () => {
 		expect(log).toEqual([])
 
 		held.open()
-		await Promise.all([importing, creating])
-		expect(await h.row(SHARED)).toMatchObject({ type: AccountType.Nulo_v1, index: 0 })
-		expect(await h.hasKey(SHARED)).toBe(false)
+		const [, created] = await Promise.all([importing, creating])
+		expect(created).toMatchObject({ address: NEXT, index: 1 })
+		expect(await h.row(SHARED)).toMatchObject({ type: AccountType.Imported, name: "Mine" })
+		expect(await h.hasKey(SHARED)).toBe(true)
+		expect(await h.row(NEXT)).toEqual(created)
 	})
 
-	test("a rename parked on an imported row's read cannot write it back over the create that replaces it", async () => {
+	test("a row the codec hides at the derived address is skipped, not overwritten", async () => {
 		const h = await makeHarness()
-		await h.seed({
-			[accountKey(SHARED)]: importedRow(SHARED),
-			[keyRowKey(SHARED)]: { profileId: "p1", chainId: 1, address: SHARED, encryptedSigningKey: "s" },
-		})
-		const area = h.api.storage.local
-		const realGet = area.get.bind(area)
-		const held = gate()
-		let armed = true
-		area.get = (async (key: unknown) => {
-			const value = await realGet(key as never)
-			if (armed && key === accountKey(SHARED)) {
-				armed = false
-				held.reached()
-				await held.opened
-			}
-			return value
-		}) as typeof area.get
+		await h.seed({ [accountKey(SHARED)]: { garbage: true } })
 
-		const renaming = h.service.changeAccountName("p1", 1, SHARED, "Renamed")
-		await held.parked
-		const creating = h.create()
-		await settle()
-		held.open()
-		await Promise.all([renaming, creating])
+		const created = await h.create()
 
-		expect(await h.row(SHARED)).toMatchObject({ type: AccountType.Nulo_v1 })
-		expect(await h.hasKey(SHARED)).toBe(false)
+		expect(created).toMatchObject({ address: NEXT, index: 1 })
+		expect(await h.row(SHARED)).toEqual({ garbage: true })
 	})
 
-	test("an import whose post-write liveness read fails after a create replaced its row leaves the derived row", async () => {
-		const held = gate()
-		const h = await makeHarness({
-			chainLive: async (call) => {
-				if (call !== 2) return true
-				held.reached()
-				await held.opened
-				throw new Error("read failed")
-			},
-		})
-		const importing = h.importShared()
-		await held.parked
-		const created = await h.create()
-		held.open()
+	test("the default account over an imported address is the next index, and a second call returns it", async () => {
+		const h = await makeHarness()
+		await h.seed({ [accountKey(SHARED)]: importedRow(SHARED) })
 
-		await expect(importing).rejects.toThrow(/^read failed$/)
-		expect(created).toMatchObject({ address: SHARED, type: AccountType.Nulo_v1 })
-		expect(await h.row(SHARED)).toEqual(created)
-		expect(await h.hasKey(SHARED)).toBe(false)
+		const first = await h.service.ensureDefaultAccount("p1", 1, AccountType.Nulo_v1, "Account 1")
+		const second = await h.service.ensureDefaultAccount("p1", 1, AccountType.Nulo_v1, "Account 1")
+
+		expect(first).toMatchObject({ address: NEXT, index: 1 })
+		expect(second).toEqual(first)
+		expect(await h.row(SHARED)).toEqual(importedRow(SHARED))
 	})
 
 	test("an import after a create of its address is refused before any write; the derived row stands", async () => {
@@ -210,59 +196,7 @@ describe("create and import of one address", () => {
 	})
 })
 
-describe("reconcileImportedAccounts against a create of the same address", () => {
-	test("a keyless candidate a create replaces during the dependent purge is not deleted or reported", async () => {
-		const h = await makeHarness()
-		await h.seed({ [accountKey(SHARED)]: importedRow(SHARED) })
-		const purging = gate()
-		h.service.registerAccountPurgeSubscriber(async () => {
-			purging.reached()
-			await purging.opened
-		})
-
-		const reconciling = h.service.reconcileImportedAccounts("p1")
-		await purging.parked
-		const created = await h.create()
-		purging.open()
-
-		expect(await reconciling).toEqual([])
-		expect(await h.row(SHARED)).toEqual(created)
-	})
-
-	test("an imported row with its key, replaced by a create between the listing and the key read, is never a candidate", async () => {
-		const h = await makeHarness()
-		await h.seed({
-			[accountKey(SHARED)]: importedRow(SHARED),
-			[keyRowKey(SHARED)]: { profileId: "p1", chainId: 1, address: SHARED, encryptedSigningKey: "s" },
-		})
-		const purged: unknown[] = []
-		h.service.registerAccountPurgeSubscriber(async (_profileId, scopes) => {
-			purged.push(scopes)
-		})
-		const area = h.api.storage.local
-		const realGet = area.get.bind(area)
-		const held = gate()
-		let armed = true
-		area.get = (async (key: unknown) => {
-			const value = await realGet(key as never)
-			if (armed && key === undefined) {
-				armed = false
-				held.reached()
-				await held.opened
-			}
-			return value
-		}) as typeof area.get
-
-		const reconciling = h.service.reconcileImportedAccounts("p1")
-		await held.parked
-		const created = await h.create()
-		held.open()
-
-		expect(await reconciling).toEqual([])
-		expect(purged).toEqual([])
-		expect(await h.row(SHARED)).toEqual(created)
-	})
-
+describe("reconcileImportedAccounts", () => {
 	test("control: a keyless imported row with no create is purged, deleted and reported", async () => {
 		const h = await makeHarness()
 		await h.seed({ [accountKey(SHARED)]: importedRow(SHARED) })

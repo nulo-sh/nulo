@@ -2,8 +2,6 @@
 
 ## Bun & deps
 
-- An incremental `bun install` leaves a removed dependency on disk, so a leftover import passes locally, fails on CI: prove removals fresh (1.4.2). [Evidence](archive/vitest-vite8-dedupe/plan.md#fresh-install)
-- Under the isolated linker, root `bunx <tool>` fetches npm `@latest`, past lockfile and age gate: use workspace scripts (1.4.2). [Evidence](archive/plans-scaffolding/plan.md#root-bunx)
 - When one `bun run --parallel` leg fails, Bun SIGINTs the rest (exit 130): blame the leg that printed `Exited with code N` (1.4.2). [Evidence](archive/isolated-linker-store/plan.md#exit-130)
 
 ## CI & gates
@@ -15,9 +13,8 @@
 
 ## Git & GitHub
 
-- A `pull_request` run takes workflows from the merge ref but builds `head.sha`, so a later `dev` fix is absent; a conflicted PR gets no run: merge `dev` first. [Evidence](archive/dedup-ledger/plan.md#merge-ref), [more](archive/accessibility-1/plan.md)
+- A `pull_request` run takes workflows from the merge ref but builds `head.sha`, so a later `dev` fix is absent: merge `dev` first. [Evidence](archive/dedup-ledger/plan.md#merge-ref)
 - A job needing a skipped job is skipped unless its `if` calls a status function; `always()` also runs after a cancel: use `always() && !cancelled()`. [Evidence](archive/release-pipeline-hardening/plan.md#always)
-- Never skip required aggregators. PR runs queue per head, cancel only on dispatch; `pr-supersede.yml` cancels old heads after a fresh head read; a cancelled run posts FAILURE. [Evidence](archive/ci-release-supply/plan.md#arc-1-workflows)
 - `git diff -M`'s R100 is not byte identity (compare blob ids and modes), and a pathspec splits a move across it into a delete and an add. [Evidence](archive/plans-scaffolding/plan.md#renames)
 - A `gh stack` runs the plans gate on every arc head, so an arc cannot link a later arc's file; after the squash merge, merging `dev` into the old head is add/add. [Evidence](archive/ux-feedback/plan.md#stack-gate), [more](archive/amount-honesty/plan.md#add-add)
 
@@ -34,16 +31,18 @@
 - A MAC binds only what it names: key it on the storage key (a stored `id` moves with its row); refuse on failure, never self-heal. An address binds its original class: check artifacts against it; the PXE reports that class, a call runs the node's current one (`node.getContract`). [Evidence](archive/mac-identity-binding/plan.md#mac-scope), [more](archive/security-fixes-1/lessons/phase-6.md), [more](archive/tokens-and-balances/lessons/phase-3.md)
 - CSS Modules refuse `composes` in `:global()`; `text-transform` changes `innerText`, not `textContent`; Firefox lays out in 1/60 px. [Evidence](archive/type-roles/plan.md#lessons)
 - A dropped port reconnects under a mounted page and replays nothing: read config through `useConfigRead`. [Evidence](archive/wallet-followups/lessons/phase-4.md)
-- A balances fuzz model owes what the store's observers adopt, and only where it holds an entry: owe rules keyed on failure commits over- and under-owed. [Evidence](archive/wallet-followups-2/lessons/phase-4.md)
 - A session id re-keys after its session ends: code paused across an await checks its own `ActiveSession` object, not the id. [Evidence](archive/dapp-dispatch-hold/plan.md#mechanics-that-are-not-obvious)
+- A `Lock` watchdog handoff admits a successor but never stops the displaced holder, which keeps writing: a current ticket proves no wipe ran only beside a count of deleters still running. [Evidence](archive/incoming-transfers/decisions.md#decision-ledger)
+- A C1 hook's `dispose()` must be terminal: a run fence that only drops answers in flight lets a continuation released after unmount start a new call. [Evidence](archive/incoming-transfers/lessons/phase-3.md)
 
 ## Aztec
 
-- Aztec 5 mints a block only for a pending tx, so waiting N blocks or `.simulate()` hangs a quiet sandbox: send a real tx. [Evidence](archive/aztec-5.0-upgrade/plan.md#quiet-blocks)
+- Aztec 5 mints a block only for a pending tx, so waiting N blocks or `.simulate()` hangs a quiet sandbox: send a real tx (still on 6.0.0-rc.1). [Evidence](archive/aztec-5.0-upgrade/plan.md#quiet-blocks)
 - Blocks above the proven tip can be pruned and a symbolic tag can name another fork per call: pin reads to one block hash; reconcile records above the tip. [Evidence](archive/incoming-public-transfers/plan.md#pruning)
 - The node client retries a failed POST but not a 4xx refusal, so a refused retry can hide a send that landed (6.0.0-rc.1). [Evidence](archive/failed-send-check/plan.md#node-retries)
-- HandshakeRegistry (6.0.0-rc.1): a PXE sync of an account without its keys skips its handshakes for good (only a gated sandbox shows it); a pair's first send uses it for every token; the PXE takes a note's index (per token, sender, recipient) at proving: two such sends in flight collide. [Evidence](archive/hd-import-handshake-loss/plan.md#handshake-cursor), [more](archive/hd-same-token-concurrent-sends/plan.md#note-index)
+- HandshakeRegistry (6.0.0-rc.1): a pair's first send uses it for every token; the PXE takes a note's index (per token, sender, recipient) at proving: two such sends in flight collide. [Evidence](archive/hd-same-token-concurrent-sends/plan.md#note-index)
 - Half of field elements are no Aztec address and `0x${"a".repeat(64)}` exceeds the modulus: check fixture addresses (`isValidAztecAddress`). `schemas.Fr.safeParse` throws on `""` or `"abc"` (6.0.0-rc.1). [Evidence](archive/hd-behaviour-alignment/plan.md#fixture-addresses), [more](archive/dapp-ingress-grants/lessons/phase-3.md)
+- PXE `getNotes` syncs first (a node round trip per call) and swallows a failed sync, so it can answer from a stale anchor: trust a read only when the synced block hash before and after it is the node's tip (6.0.0-rc.1). [Evidence](archive/incoming-transfers/lessons/phase-3.md), [more](archive/incoming-transfers/lessons/phase-2.md)
 
 ## Agent tooling
 

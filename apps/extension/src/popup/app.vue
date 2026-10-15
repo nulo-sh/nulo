@@ -5,7 +5,7 @@ import PopupManager from "./components/popups/PopupManager.vue"
 import Navigation from "./components/Navigation.vue"
 
 /** Utils */
-import { managers, isBackgroundConnected } from "@/utils/core"
+import { managers, isServiceReady } from "@/utils/core"
 import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { ownWindowRoute, postAuthRoute } from "@/utils/own-window"
@@ -21,6 +21,8 @@ import { createNetworkSwitchHandler } from "@/popup/network-switch"
 import { runFencedBootstrap } from "@/popup/profile-bootstrap"
 import { createScopeEpochHandlers } from "@/popup/scope-epoch"
 import { createLockedState, watchLockStart } from "@/popup/locked-state"
+import { createBootTriggers } from "@/popup/boot-triggers"
+import { START_GRACE_KEY } from "@/popup/start-grace"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { IncomingTransferServiceClient } from "@/wallet/services/incoming-transfer/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
@@ -69,7 +71,8 @@ configService.onUpdate.add(applySetting)
 const arrivalsIncoming = new IncomingTransferServiceClient()
 const arrivalsTokens = new TokenServiceClient()
 const arrivalsPrices = new PriceServiceClient()
-// Opened before the coordinator listens, so only a reconnect reads through `onConnected`.
+// Opened before the coordinator listens. Its first Ready reaches the coordinator too, whose read
+// waits for an open profile's scope.
 void arrivalsIncoming.connect()
 void arrivalsPrices.connect()
 const arrivals = useArrivals({
@@ -179,6 +182,7 @@ const lockedState = createLockedState({
 	},
 	clearActivity: () => appStore.clearActivity(),
 	resetInFlight: () => appStore.resetInFlight(),
+	resetContactImports: () => appStore.resetContactImports(),
 	cachedProfiles: () => appStore.profiles,
 	setProfiles: (profiles) => {
 		appStore.profiles = profiles
@@ -196,6 +200,7 @@ let profileEventSeq = 0
 const onActiveProfileChanged = async (profile) => {
 	const seq = ++profileEventSeq
 	if (profile) {
+		lockedState.onSessionOpened()
 		// bootstrapActiveProfile carries its own lock-wins guard: it flips isLogined only if its
 		// re-read of getActiveProfile() still finds the profile and no lock has superseded its run.
 		// The wrap is load-bearing: an emitter-callback rejection would otherwise become an
@@ -286,16 +291,15 @@ const lockLandingActions = {
 	},
 }
 
-// Generation fence for loadProfile: mount and every background reconnect start a run, and a
-// run that awaited past a newer one must not commit — its push or marker would land on top of
-// the newer run's (or the user's own unlock's) state.
+// Generation fence for loadProfile: mount and every drop of a Ready port start a run
+// (`boot-triggers.ts`), and a run that awaited past a newer one must not commit — its push or
+// marker would land on top of the newer run's (or the user's own unlock's) state.
 let loadProfileSeq = 0
 
 const loadProfile = async ({ reconnect = false } = {}) => {
 	const seq = ++loadProfileSeq
 	// A reconnect over a resolved route reaches a mounted page that owns its flow; a reconnect
-	// before the router resolved is the only boot this popup will get (the mount-time run was
-	// lost when a disconnect rejected the guard's first read) and must still land somewhere.
+	// before the router resolved has no page yet and must still land somewhere.
 	// An own window's page owns its flow from its first boot.
 	const pageEstablished = (reconnect && route.matched.length > 0) || ownWindowRoute() !== undefined
 	const isCurrent = () => seq === loadProfileSeq
@@ -347,11 +351,9 @@ const bootOutcomeShell = (pageEstablished) => ({
 	},
 })
 
-onBeforeMount(async () => {
-	await router.isReady()
-
-	// Settings are cosmetic (theme, links…): a read that rejects during a service-worker
-	// restart keeps the defaults and must never keep the session check from running.
+// Settings are cosmetic (theme, links…): a read that rejects during a service-worker restart
+// keeps the defaults and must never keep the session check from running.
+const readSettings = async () => {
 	try {
 		const settings = await configService.getProps()
 		for (const setting of settings) {
@@ -365,9 +367,18 @@ onBeforeMount(async () => {
 	} catch (error) {
 		console.error("settings read failed at boot; defaults kept", { error })
 	}
+}
 
-	await loadProfile()
+const startGrace = inject(START_GRACE_KEY, undefined)
+const bootTriggers = createBootTriggers({
+	client: managers.profile,
+	routerReady: () => router.isReady(),
+	readSettings,
+	runBoot: (opts) => loadProfile(opts),
+	replay: () => startGrace?.replay(),
 })
+
+onBeforeMount(() => bootTriggers.mount())
 
 onMounted(async () => {
 	/** DevTools Warnings -> Logo + Scam Prevention */
@@ -419,20 +430,8 @@ watch(
 	},
 )
 
-// `flush: "sync"` is load-bearing: the port client reconnects synchronously inside its own
-// disconnect callback (a dead worker is woken by `chrome.runtime.connect`, which returns at
-// once), so the flag goes false → true in ONE tick and a batched watcher sees no change at all.
-// Every worker restart under an open popup must start a boot run, or the shell keeps a session
-// that no longer exists.
-watch(
-	() => isBackgroundConnected.value,
-	(connected) => {
-		if (connected) loadProfile({ reconnect: true })
-	},
-	{ flush: "sync" },
-)
-
 onBeforeUnmount(() => {
+	bootTriggers.dispose()
 	clearInterval(intervalId.value)
 	configService.disconnect()
 	arrivalsIncoming.disconnect()
@@ -449,6 +448,7 @@ onBeforeUnmount(() => {
 		:class="$style.wrapper"
 		:data-boot-outcome="bootOutcome || undefined"
 		:data-session-checked="appStore.isSessionChecked ? 'true' : undefined"
+		:data-service-ready="isServiceReady ? 'true' : undefined"
 		:data-arrivals-seeded="arrivalsSeeded ? 'true' : undefined"
 	>
 		<!-- Popup Teleport -->
@@ -461,11 +461,12 @@ onBeforeUnmount(() => {
 			<PopupManager />
 			<ToastManager />
 			<NotificationManager />
-			<GlobalLoader />
 			<MigrationBarrier />
 			<AccountIntegrityBarrier />
 			<LegalAcceptanceSheet @visibility="legalSheetShown = $event" />
 		</div>
+
+		<StartBar :boot-outcome="bootOutcome" />
 
 		<Header />
 
@@ -479,7 +480,7 @@ onBeforeUnmount(() => {
 							: "The wallet service could not be reached."
 				}}
 			</Text>
-			<button type="button" :class="$style.retry" class="type--button-md" data-testid="boot-retry" :disabled="bootRetrying" @click="loadProfile()">RETRY</button>
+			<button type="button" :class="$style.retry" class="type--button-md" data-testid="boot-retry" :disabled="bootRetrying" @click="bootTriggers.retry()">RETRY</button>
 		</Banner>
 
 		<RouterView v-slot="{ Component }">
@@ -505,7 +506,7 @@ onBeforeUnmount(() => {
 	min-height: 0;
 }
 
-/* While the Terms sheet (9000) shows, the snack draws over it, still under the loader and the barriers. */
+/* While the Terms sheet (9000) shows, the snack draws over it, still under the start-up bar and the barriers. */
 .toast_over_sheet {
 	position: relative;
 	z-index: 9500;

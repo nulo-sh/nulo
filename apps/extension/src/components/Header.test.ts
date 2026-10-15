@@ -7,6 +7,7 @@
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
+import { nextTick, reactive } from "vue"
 
 const H = vi.hoisted(() => ({
 	openPopup: vi.fn(),
@@ -99,6 +100,8 @@ beforeEach(() => {
 		networkStatus: "Active",
 		approvedSendsInFlight: 0,
 		refreshInFlight: vi.fn(async () => {}),
+		lockHeldByImport: false,
+		contactImports: new Set(),
 	}
 	H.cache = { failureLog: null, activeTasksCount: null, confirm: {} }
 })
@@ -148,6 +151,19 @@ describe("Header — lock", () => {
 
 		w.unmount()
 		expect(H.profileListeners.size + H.disconnectListeners.size).toBe(0)
+	})
+
+	test("is disabled while a contacts import holds Lock, and enabled once the hold ends", async () => {
+		H.app = reactive({ ...H.app, lockHeldByImport: true })
+		const w = mountHeader()
+		await w.get('[data-testid="header-lock"]').trigger("click")
+		await flushPromises()
+		expect(w.get('[data-testid="header-lock"]').attributes()).toHaveProperty("disabled")
+		expect(H.getSessionHandle).not.toHaveBeenCalled()
+
+		H.app.lockHeldByImport = false
+		await nextTick()
+		expect(w.get('[data-testid="header-lock"]').attributes()).not.toHaveProperty("disabled")
 	})
 })
 

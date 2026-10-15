@@ -34,7 +34,7 @@ import { usePopupStore } from "@/stores/popup.store.ts"
 const appStore = useAppStore()
 const popupStore = usePopupStore()
 
-const { openToast } = useToast()
+const { openToast, toast, closeToast } = useToast()
 
 const router = useRouter()
 
@@ -55,8 +55,13 @@ const isWrongPassword = ref(false)
 const isTornImport = ref(false)
 const isPasswordType = ref(true)
 const isAwaitingResponse = ref(false)
+// The failure toast this screen opened last: a new attempt closes it, never another surface's.
+let failureToastId
 
 const isPasskeyProfile = computed(() => appStore.profile?.type === "passkey")
+// Opened before the service answered: the heading, its line and the form depend on the profile's
+// kind, so they keep their place hidden until it is known rather than show the wrong form.
+const isProfileKnown = computed(() => !!appStore.profile)
 
 // The shell's boot outcome. "failed" = an OPEN session whose activation bootstrap threw: the
 // banner's RETRY is the only true recovery, and a password typed here would unlock an already-
@@ -163,6 +168,8 @@ const handleUnlockWallet = async () => {
 	// must not mint duplicate same-profile continuations.
 	if (isAwaitingResponse.value) return
 	const isPasskeyAttempt = isPasskeyProfile.value
+	// So an attempt that unlocks lands on a clean Home, and a second failure shows its toast afresh.
+	if (toast.value && toast.value.id === failureToastId) closeToast()
 
 	try {
 		let activeProfile
@@ -180,7 +187,10 @@ const handleUnlockWallet = async () => {
 			// the analogous import handshake allows 30 s).
 			await awaitProfileActivation(appStore, activeProfile.id, UNLOCK_WAIT_MS)
 		} catch (error) {
+			// The ladder runs synchronously, so a toast that appears during it is its own.
+			const shown = toast.value?.id
 			handleUnlockError(error, activeProfile?.id, isPasskeyAttempt)
+			if (toast.value && toast.value.id !== shown) failureToastId = toast.value.id
 			return
 		} finally {
 			isAwaitingResponse.value = false
@@ -215,7 +225,7 @@ const handleUnlockWallet = async () => {
 }
 
 onMounted(async () => {
-	if (!isPasskeyProfile.value) {
+	if (isProfileKnown.value && !isPasskeyProfile.value) {
 		passwordInput.value?.focus()
 	}
 
@@ -229,6 +239,16 @@ watch(
 	() => appStore.profile?.id,
 	() => {
 		isTornImport.value = false
+	},
+)
+// The mount's focus for a profile that became known later; never taken from a control the person
+// already moved to.
+watch(
+	() => appStore.profile?.type,
+	async (type, previous) => {
+		if (previous || !type || type === "passkey") return
+		await nextTick()
+		if (document.activeElement === document.body) passwordInput.value?.focus()
 	},
 )
 watch(
@@ -250,7 +270,7 @@ watch(
 
 			<AuthProfilePill :name="appStore.profile?.name ?? ''" @click="popupStore.open('select_profile')" />
 
-			<Flex direction="column" align="center" gap="8">
+			<Flex direction="column" align="center" gap="8" :class="!isProfileKnown && $style.unknown" data-testid="auth-heading">
 				<h1 :class="$style.heading">
 					{{ isBootWithheld ? 'Wallet not ready' : isPasskeyProfile ? 'Passkey required' : 'Password required' }}
 				</h1>
@@ -262,7 +282,12 @@ watch(
 				</p>
 			</Flex>
 
-			<form v-if="!isBootWithheld" @submit.prevent="handleUnlockWallet" :class="$style.form">
+			<form
+				v-if="!isBootWithheld"
+				@submit.prevent="handleUnlockWallet"
+				:class="[$style.form, !isProfileKnown && $style.unknown]"
+				data-testid="auth-form"
+			>
 				<template v-if="!isPasskeyProfile">
 					<div :class="[isWrongPassword && $style.shake]">
 						<Input
@@ -382,6 +407,11 @@ watch(
 	text-align: center;
 	margin: 0;
 	line-height: 1.4;
+}
+
+/* Hidden in place: no layout shift, no Tab stop, nothing read out. */
+.unknown {
+	visibility: hidden;
 }
 
 .form {

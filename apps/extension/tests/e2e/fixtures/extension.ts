@@ -401,11 +401,7 @@ export async function registerProfile(ctx: ExtensionContext): Promise<void> {
 
 	await waitForHash(page, "#/popup/register")
 
-	// Wait for GlobalLoader to disappear (SW must connect first)
-	await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), {
-		timeout: 30_000,
-		polling: 500,
-	})
+	await waitForServiceReady(page, 30_000)
 
 	await clickByTestId(page, "register-create-btn")
 
@@ -1069,10 +1065,7 @@ export const test = base.extend<{
 			const page = await openPopup(ctx)
 
 			await waitForHash(page, "#/popup/register", 30_000)
-			await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), {
-				timeout: 30_000,
-				polling: 500,
-			})
+			await waitForServiceReady(page, 30_000)
 
 			// Navigate to import page (the register page has an "Import" link, but
 			// direct hash nav is simpler for tests).
@@ -1352,9 +1345,14 @@ async function closeConfirmed(page: Page): Promise<void> {
 	}
 }
 
+/** Until the shell has heard the background's Ready: before it, every call the page makes waits. */
+export async function waitForServiceReady(page: Page, timeout = 30_000): Promise<void> {
+	await page.waitForSelector('[data-service-ready="true"]', { timeout })
+}
+
 const popupReady = (page: Page, timeout: number, polling: number) =>
 	page.waitForFunction(
-		() => window.location.hash !== "#/" && window.location.hash !== "" && !document.querySelector('[data-testid="global-loader"]'),
+		() => window.location.hash !== "#/" && window.location.hash !== "" && document.querySelector('[data-service-ready="true"]'),
 		{ timeout, polling },
 	)
 
@@ -1371,14 +1369,10 @@ async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> 
 	// triple-nav (popup → about:blank → popup); it now loads the popup again in
 	// a fresh tab — the second load sees a fully-warm SW.
 	//
-	// Readiness predicate: hash leaves "#/"
-	// AND the GlobalLoader is gone. The hash redirect alone fires too
-	// early — `app.vue` pushes `/popup/auth` BEFORE `initNetworks()` /
-	// `initAccount()` complete, so a fast-path that resolved on hash
-	// only would return a popup whose wallet-bridge isn't fully connected
-	// yet. `GlobalLoader.vue:14` renders `[data-testid="global-loader"]`
-	// when `!isBackgroundConnected`; its absence is the correct
-	// "bridge ready" signal.
+	// Readiness predicate: hash leaves "#/" AND the shell has heard the
+	// background's Ready (`data-service-ready`). The hash alone fires too
+	// early: past the start grace the guard routes before the service
+	// answers, and a route decided then is replayed once Ready comes.
 	//
 	// Budget: 2s is provisional and tuned for the prewarmed SW that
 	// `launchExtension()` produces (the SW liveness wait at line 70-80

@@ -35,6 +35,7 @@ import {
 	test,
 	waitForHash,
 	pickFileByTestId,
+	waitForServiceReady,
 } from "../fixtures/extension"
 import { navigateByHash, reopenAndRecoverAfterImport } from "../fixtures/helpers"
 import { confirmImport, exportAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "../helpers/account-io"
@@ -155,7 +156,7 @@ test.skipIf(!hasConfig)(
 		try {
 			const page2 = await openPopup(ctx2)
 			await navigateByHash(page2, "#/popup/import", 15_000)
-			await page2.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), { timeout: 15_000, polling: 300 })
+			await waitForServiceReady(page2, 15_000)
 			await page2.waitForSelector('[data-testid="import-option-full-backup"]', { visible: true, timeout: 15_000 })
 			await clickByTestId(page2, "import-option-full-backup")
 			await pickFileByTestId(page2, "import-full-backup-pick-file", filePath)

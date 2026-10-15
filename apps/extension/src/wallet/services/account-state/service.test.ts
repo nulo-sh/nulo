@@ -24,6 +24,8 @@ import { LOCAL_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { ACCOUNT_STATE_CAPS, normalizeAccountStateSlice } from "./normalize"
 import { AccountStateService } from "./service"
 import { FakeFenceProfileService, LIVE_FENCE } from "./fence.fixtures"
+import { svc } from "@/wallet/services/composition-harness"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 
 // The fixtures carry stub instances and artifacts; the class-id check has its own real-data tests.
 vi.mock("@nulo/aztec-runtime/pxe", async (importOriginal) => ({
@@ -639,5 +641,55 @@ describe("AccountStateService.restore (run fence)", () => {
 		const result = await running
 		expect(pxe.registerContract).not.toHaveBeenCalled()
 		expect(result[0].contracts[0].restoreError).toBe(new SessionEndedError().message)
+	})
+})
+
+describe("AccountStateService.addSender under a run fence", () => {
+	const FENCE = { profileId: "p1", epoch: 0, session: 1, incarnation: "w1" }
+	const SENDER = "0x01904dba18e847d163097ce15dcd8597e763fb11fe19ef1273d266d6e959ec4a"
+
+	async function fencedService(profile: { assertRunFence: (f: unknown) => Promise<void>; isFenceLive: (f: unknown) => boolean }) {
+		const services = new ServiceCollection()
+		services.add(svc(PROFILE_SERVICE_NAME, profile))
+		services.add(new FakeNetworkService())
+		const accountStateService = new AccountStateService(new LoggerStore(new ConfigStore()))
+		services.add(accountStateService)
+		await services.start()
+		const pxe = { registerSender: vi.fn(async (_info: unknown, addr: { toString(): string }) => addr) }
+		const network = { ...makeNetwork("net-a", 7), endpoints: [{ id: "primary", rpcUrl: "https://a.example/" }] }
+		Object.assign(accountStateService, { networkService: { getNetwork: async () => network }, pxeService: pxe })
+		const logError = vi.spyOn(accountStateService as unknown as { logError: (...a: unknown[]) => void }, "logError")
+		return { accountStateService, pxe, logError }
+	}
+
+	test.each([
+		["refused by the fence check", { assertRunFence: async () => Promise.reject(new SessionEndedError()), isFenceLive: () => true }],
+		["ended while the network was read", { assertRunFence: async () => {}, isFenceLive: () => false }],
+	])("a session %s registers nothing, refuses as a stop and logs nothing at Error", async (_when, profile) => {
+		const { accountStateService, pxe, logError } = await fencedService(profile)
+		await expect(accountStateService.addSender("net-a", SENDER, FENCE)).rejects.toBeInstanceOf(SessionEndedError)
+		expect(pxe.registerSender).not.toHaveBeenCalled()
+		expect(logError).not.toHaveBeenCalled()
+	})
+
+	test("control: a live fence registers the sender", async () => {
+		const { accountStateService, pxe } = await fencedService({ assertRunFence: async () => {}, isFenceLive: () => true })
+		await expect(accountStateService.addSender("net-a", SENDER, FENCE)).resolves.toBe(SENDER)
+		expect(pxe.registerSender).toHaveBeenCalledTimes(1)
+	})
+
+	test.each([
+		["has ended is a stop, logged nothing at Error", false],
+		["still holds is a PXE failure, logged at Error (control)", true],
+	])("a PXE failure after which the session %s", async (_case, liveAfter) => {
+		let live = true
+		const { accountStateService, pxe, logError } = await fencedService({ assertRunFence: async () => {}, isFenceLive: () => live })
+		pxe.registerSender.mockImplementationOnce(async () => {
+			live = liveAfter
+			throw new Error("store key unavailable")
+		})
+		const refused = await accountStateService.addSender("net-a", SENDER, FENCE).catch((e: unknown) => e)
+		expect(refused instanceof SessionEndedError).toBe(!liveAfter)
+		expect(logError).toHaveBeenCalledTimes(liveAfter ? 1 : 0)
 	})
 })

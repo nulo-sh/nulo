@@ -108,11 +108,7 @@ accountStateService.onSenderAdded.add(onSenderAdded)
 accountStateService.onSenderDeleted.add(onSenderDeleted)
 watch(() => appStore.network?.id, syncSenders)
 
-const { exportContacts, importContacts } = useContactImportExport({
-	contacts,
-	contactService,
-	accountStateService,
-})
+const { exportContacts, importContacts } = useContactImportExport({ contacts, accountStateService })
 
 const handleCopyContactAddress = (contact) => {
 	void copyWithToast(contact.address, openToast, "Address is copied")

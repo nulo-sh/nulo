@@ -2,7 +2,7 @@
  * jsdom evaluates neither media queries nor `:focus-visible`, so these rules are pinned in their
  * sources; the screenshot harness and the computed-style probe cover them in real browsers.
  */
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { describe, expect, test } from "vitest"
 
@@ -27,19 +27,80 @@ function reducedMotionRules(source: string): Map<string, string> {
 	return rules
 }
 
-describe("reduced motion stops the shake and the shimmers", () => {
+/** The rules scoped under `:global(.noanimations)`, keyed by their selector list with that scope removed. */
+function noAnimationsRules(source: string): Map<string, string> {
+	const scope = ":global(.noanimations) "
+	const rules = new Map<string, string>()
+	for (const [, selectors, body] of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+		const list = selectors.split(",").map((s) => s.replace(/\s+/g, " ").trim())
+		if (!list.every((s) => s.startsWith(scope))) continue
+		rules.set(list.map((s) => s.slice(scope.length)).join(", "), body.replace(/\s+/g, " ").trim())
+	}
+	return rules
+}
+
+describe("reduced motion and Disable animations both stop the shakes and the shimmers", () => {
 	test.each([
 		["components/composite/shake.module.css", ".shake_password, .shake_name"],
-		["popup/components/modules/send/fee-shared.module.css", ".skeleton"],
-		["components/composite/send/AmountCard.vue", ".skeleton"],
+		["popup/components/popups/NewSenderPopup.vue", ".shake"],
+		["popup/pages/received/[id].vue", ".fee_shimmer"],
 	])("%s: %s", (path, selectors) => {
-		expect(reducedMotionRules(read(path)).get(selectors)).toBe("animation: none;")
+		const source = read(path)
+		expect(reducedMotionRules(source).get(selectors)).toBe("animation: none;")
+		expect(noAnimationsRules(source).get(selectors)).toBe("animation: none;")
 	})
 
 	test("popup/pages/settings/security/export/full.vue: .shake is the shared one, with its stop", () => {
 		expect(read("popup/pages/settings/security/export/full.vue")).toMatch(
 			/\.shake \{\s*composes: shake_password from "(\.\.\/)+components\/composite\/shake\.module\.css";\s*\}/,
 		)
+	})
+
+	test("no extension file draws its own skeleton shimmer: they all render the design package's Skeleton", () => {
+		const root = resolve(__dirname, "..")
+		const own = readdirSync(root, { recursive: true, encoding: "utf8" })
+			.filter((file) => /\.(vue|css)$/.test(file))
+			.filter((file) => /^\s*\.skeleton\s*\{/m.test(readFileSync(resolve(root, file), "utf8")))
+		expect(own).toEqual([])
+	})
+})
+
+describe("the detail pages' links draw the focus ring on :focus-visible, never on plain :focus", () => {
+	const shared = read("popup/pages/detail-page.module.css")
+		.replace(/\/\*[\s\S]*?\*\//g, "")
+		.replace(/\s+/g, " ")
+
+	test("the shared link classes draw the accent ring on :focus-visible", () => {
+		expect(shared).toContain(
+			".hero_link:focus-visible, .detail_link:focus-visible { outline: 2px solid var(--nulo-accent); outline-offset: 2px; }",
+		)
+	})
+
+	test("no shared rule draws on plain :focus, which a mouse press or a tap also matches", () => {
+		expect(shared).not.toMatch(/:focus(?!-visible)/)
+	})
+
+	test("every link on the tx, received and journal pages binds a local class composing a ringed one", () => {
+		// The links each file renders itself; the address cards' corner links are AddressCardLink's.
+		const pages = [
+			["popup/components/modules/tx/TxHashRow.vue", 1],
+			["popup/pages/tx/[id].vue", 2],
+			["popup/pages/received/[id].vue", 4],
+			["popup/pages/journal/[id].vue", 2],
+		] as const
+		const unringed = pages.flatMap(([path, count]) => {
+			const source = read(path).replace(/\s+/g, " ")
+			const anchors = [...source.matchAll(/<a [^>]*>/g)].map(([tag]) => tag)
+			const ringed = (tag: string) =>
+				[...tag.matchAll(/\$style\.(\w+)/g)].some(([, local]) =>
+					new RegExp(
+						`\\.${local} \\{[^}]*composes: (hero_link|detail_link) from "(\\.\\./)+(pages/)?detail-page\\.module\\.css";`,
+					).test(source),
+				)
+			const misses = anchors.filter((tag) => !ringed(tag))
+			return anchors.length === count && misses.length === 0 ? [] : [{ path, anchors: anchors.length, misses }]
+		})
+		expect(unringed).toEqual([])
 	})
 })
 

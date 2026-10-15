@@ -26,6 +26,7 @@ import {
 	test,
 	waitForHash,
 	pickFileByTestId,
+	waitForServiceReady,
 } from "./fixtures/extension"
 import { acceptConfirmPopup, closeStuckPopup, navigateByHash, readSessionRow, reopenAndRecoverAfterImport } from "./fixtures/helpers"
 import {
@@ -85,7 +86,7 @@ test("a full backup carries an imported account; restoring it (dup-confirmed) re
 	try {
 		// ── Stage 3: import the backup into the SAME extension → dup-phrase warn → confirm ──
 		await navigateByHash(page, "#/popup/import", 15_000)
-		await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), { timeout: 15_000, polling: 300 })
+		await waitForServiceReady(page, 15_000)
 		await page.waitForSelector('[data-testid="import-option-full-backup"]', { visible: true, timeout: 15_000 })
 		await clickByTestId(page, "import-option-full-backup")
 		await pickFileByTestId(page, "import-full-backup-pick-file", filePath)

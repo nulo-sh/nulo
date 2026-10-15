@@ -13,6 +13,10 @@ const addNetworkMock = vi.fn()
 const getNetworksMock = vi.fn()
 const activateGuardedMock = vi.fn()
 const openToastMock = vi.fn()
+const appStoreState: { networks: Array<{ name: string; endpoints: Array<{ rpcUrl: string }> }>; hasInFlightSend: boolean } = {
+	networks: [],
+	hasInFlightSend: false,
+}
 
 vi.mock("@/utils/core", () => ({
 	managers: {
@@ -31,7 +35,7 @@ vi.mock("@/composables/toast", () => ({
 	useToast: () => ({ openToast: openToastMock }),
 }))
 vi.mock("@/stores/app.store", () => ({
-	useAppStore: () => ({ networks: [], hasInFlightSend: false }),
+	useAppStore: () => appStoreState,
 }))
 vi.mock("@/stores/popup.store", () => ({
 	usePopupStore: () => ({ len: 1, popups: { new_network: { order: 1 } } }),
@@ -87,6 +91,7 @@ async function fillForm(w: VueWrapper) {
 }
 
 beforeEach(() => {
+	appStoreState.networks = []
 	addNetworkMock.mockResolvedValue({ id: "net-9", chainId: 9 })
 	getNetworksMock.mockResolvedValue([])
 	activateGuardedMock.mockResolvedValue("activated")
@@ -136,5 +141,38 @@ describe("NewNetworkPopup — full-lifetime submit latch", () => {
 		// The finally released the latch — the form is submittable again.
 		expect(w.find("[data-submit-disabled]").attributes("data-submit-disabled")).toBe("false")
 		await dispose(w)
+	})
+})
+
+describe("NewNetworkPopup — names compare and save without their outer spaces", () => {
+	async function typeName(w: VueWrapper, name: string) {
+		await w.find('input[data-input-label="Name"]').setValue(name)
+		await w.find('input[data-input-label="RPC Link"]').setValue("https://rpc.example.com")
+		await flushPromises()
+		return {
+			warns: w.text().includes("Already exists"),
+			disabled: w.find('[data-testid="form-submit"]').attributes("disabled") !== undefined,
+		}
+	}
+
+	test("a saved name with outer spaces added warns and keeps Create disabled; another case does not", async () => {
+		appStoreState.networks = [{ name: "Testnet", endpoints: [{ rpcUrl: "https://rpc.testnet.example" }] }]
+		const w = await mountShown()
+		expect(await typeName(w, "Testnet ")).toEqual({ warns: true, disabled: true })
+		expect(await typeName(w, " Testnet")).toEqual({ warns: true, disabled: true })
+		expect(await typeName(w, "testnet")).toEqual({ warns: false, disabled: false })
+	})
+
+	test("a name of only spaces counts as empty: Create stays disabled", async () => {
+		const w = await mountShown()
+		expect(await typeName(w, "   ")).toEqual({ warns: false, disabled: true })
+	})
+
+	test("the network is created under the name without its outer spaces", async () => {
+		const w = await mountShown()
+		await typeName(w, "  My Net  ")
+		await w.find('[data-testid="form-submit"]').trigger("click")
+		await flushPromises()
+		expect(addNetworkMock).toHaveBeenCalledExactlyOnceWith("My Net", "https://rpc.example.com")
 	})
 })

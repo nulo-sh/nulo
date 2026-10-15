@@ -42,6 +42,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [ci-followups](ci-followups/plan.md) — completed — no Bun auto-install in jobs that install nothing, the move-approval label read live, the Docker Bun pins in the runbook
 - [ci-followups-2](ci-followups-2/plan.md) — completed — nightly's Firefox jobs and both send-chaos runs gate the nightly release (#220), two fixed chaos seeds gate every network PR, chaos jobs asserted like canaries
 - [ci-followups-3](ci-followups-3/plan.md) — completed — a draft release keeps its tag through every edit (#309), a malformed chaos seed is refused (#305), release's opt-in network run replays the PR chaos seeds (#306)
+- [ci-followups-4](ci-followups-4/plan.md) — completed — the first-party imports the store fallback hid, declared (#172 a known limit: six upstream gaps), the raw call field's e2e case (#365), a lessons retirement pass
 - [ci-gates](ci-gates/plan.md) — completed — fail-closed CI aggregators, and no PR run cancels another on its own head
 - [ci-release-supply](ci-release-supply/plan.md) — completed — Storybook in quality-status, live e2e labels and per-head queues, the shard-fold probe, the launch «FILL» gate, store-copy checks, plans ignore shapes, presto's blocked-access title, an advisory in-browser nightly leg, nightly retention at fourteen
 - [code-followups-1](code-followups-1/plan.md) — completed — prune resolved follow-ups, ship 14 small code-only ones in three arcs, settle the boot-line flake
@@ -150,6 +151,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [import-stage-deadlines](import-stage-deadlines/plan.md) — completed — import stage timing and console-capture fixes in the e2e suite
 - [incoming-public-transfers](incoming-public-transfers/plan.md) — completed — incoming public token transfers indexed into the activity feed
 - [incoming-sync-indicator](incoming-sync-indicator/plan.md) — superseded by holdings-loading-sync — a per-token indicator for incoming history backfill
+- [incoming-transfers](incoming-transfers/plan.md) — completed — the receive path: fenced trust writes, scans on new blocks, explorer links and their focus ring, the fee on a tap under Privacy mode, re-mined and pruned note receipts reconciled against the PXE
 - [incoming-trust-state-machine-refactor](incoming-trust-state-machine-refactor/plan.md) — completed — the incoming-transfer trust table serialized behind one lock per service
 - [isolated-linker-store](isolated-linker-store/plan.md) — completed — Bun's isolated linker adopted consumers first, with `@nulo/resolve-asset`
 - [journal-reaper](journal-reaper/plan.md) — completed — three fixes for the operation-journal reaper and its neighbours

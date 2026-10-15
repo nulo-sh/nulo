@@ -11,6 +11,7 @@ export async function getLastActiveProfileId(): Promise<string | undefined> {
 	return result[LAST_ACTIVE_PROFILE_KEY] as string | undefined
 }
 
-export async function setLastActiveProfileId(id: string): Promise<void> {
-	await storageLocalSet({ [LAST_ACTIVE_PROFILE_KEY]: id })
+/** `unless` is the storage facade's: consulted right before the write, which it skips when true. */
+export async function setLastActiveProfileId(id: string, options?: { unless?: () => boolean }): Promise<void> {
+	await storageLocalSet({ [LAST_ACTIVE_PROFILE_KEY]: id }, options)
 }

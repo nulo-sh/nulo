@@ -248,6 +248,7 @@ const CORPUS = [
 			hidden: false,
 			discoveredAt: 123,
 			blockTimestamp: 456,
+			settled: true,
 		} satisfies IncomingTransferRecord,
 		minimal: {
 			kind: "note",

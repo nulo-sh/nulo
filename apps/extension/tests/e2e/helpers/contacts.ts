@@ -157,10 +157,10 @@ export async function closeImportWith(page: Page, testid: "import-contacts-submi
 
 type ToastLog = { titles: string[]; observer: MutationObserver }
 
-/** Runs `act` and waits for a toast reading `text` that was not on screen before it. Toasts are
- *  recorded from before `act` starts, so one that has already left by the time `act` returns (a
- *  success toast lasts six seconds) still counts. */
-export async function toastAfter(page: Page, act: () => Promise<void>, text: string, timeout = 15_000): Promise<void> {
+/** Runs `act` and waits for a toast reading `text` that was not on screen before it, and returns
+ *  that toast's whole title. Toasts are recorded from before `act` starts, so one that has already
+ *  left by the time `act` returns (a success toast lasts six seconds) still counts. */
+export async function toastAfter(page: Page, act: () => Promise<void>, text: string, timeout = 15_000): Promise<string> {
 	await page.evaluate((s: string) => {
 		const w = window as unknown as { __e2eToastLog?: ToastLog }
 		w.__e2eToastLog?.observer.disconnect()
@@ -178,9 +178,9 @@ export async function toastAfter(page: Page, act: () => Promise<void>, text: str
 	}, sel("snackbar"))
 	try {
 		await act()
-		await withTimeoutMessage(
+		const matched = await withTimeoutMessage(
 			page.waitForFunction(
-				(t: string) => (window as unknown as { __e2eToastLog?: ToastLog }).__e2eToastLog?.titles.some((title) => title.includes(t)),
+				(t: string) => (window as unknown as { __e2eToastLog?: ToastLog }).__e2eToastLog?.titles.find((title) => title.includes(t)),
 				{ timeout, polling: 100 },
 				text,
 			),
@@ -189,6 +189,7 @@ export async function toastAfter(page: Page, act: () => Promise<void>, text: str
 				return `no new toast reading "${text}"; new toasts: ${JSON.stringify(seen)}`
 			},
 		)
+		return String(await matched.jsonValue())
 	} finally {
 		await page
 			.evaluate(() => {
@@ -198,6 +199,30 @@ export async function toastAfter(page: Page, act: () => Promise<void>, text: str
 			})
 			.catch(() => {})
 	}
+}
+
+/** Waits until a settled snack reads `text` — not leaving, fully opaque, not animating — and
+ *  returns its title. A card a close (a lock's included) has begun to remove never matches. */
+export async function shownToast(page: Page, text: string, timeout = 15_000): Promise<string> {
+	const read = (s: string) => [...document.querySelectorAll(s)].map((el) => el.textContent ?? "")
+	const title = await withTimeoutMessage(
+		page.waitForFunction(
+			(s: string, t: string) =>
+				[...document.querySelectorAll(s)]
+					.filter(
+						(card) =>
+							!/leave/.test(card.className) && getComputedStyle(card).opacity === "1" && card.getAnimations().length === 0,
+					)
+					.map((card) => card.querySelector('[data-testid="snackbar-title"]')?.textContent ?? "")
+					.find((title) => title.includes(t)),
+			{ timeout, polling: 100 },
+			'[data-testid="snackbar"]',
+			text,
+		),
+		async () =>
+			`no settled snack reads "${text}"; on screen: ${JSON.stringify(await page.evaluate(read, '[data-testid="snackbar-title"]'))}`,
+	)
+	return String(await title.jsonValue())
 }
 
 export type StoredContact = { id: string; profileId: string; name: string; address: string; abbr: string }
@@ -211,6 +236,20 @@ export function storedContacts(page: Page): Promise<StoredContact[]> {
 			.map(([, value]) => JSON.parse(value as string) as StoredContact)
 			.sort((x, y) => x.id.localeCompare(y.id))
 	})
+}
+
+/** Waits until at least `count` contacts are stored, and returns how many are. */
+export async function waitForStoredCount(page: Page, count: number, timeout = 30_000): Promise<number> {
+	await withTimeoutMessage(
+		page.waitForFunction(
+			async (n: number) =>
+				Object.keys(await chrome.storage.local.get()).filter((key) => key.startsWith("nulo:core:contacts@")).length >= n,
+			{ timeout, polling: 50 },
+			count,
+		),
+		async () => `${(await storedContacts(page)).length} contacts stored, not ${count}`,
+	)
+	return (await storedContacts(page)).length
 }
 
 /** The book as name → address, which is what an import may change. */
