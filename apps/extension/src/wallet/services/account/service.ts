@@ -660,7 +660,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		// from the key: a row stored under a superseded regime would export a file no build imports.
 		const derived = (await NuloAccount.fromSigningKey(signingKey, this.logger, this.name)).address.toString()
 		if (derived !== address) {
-			if (account.type === AccountType.Imported) throw new ImportedAccountUnusableError(address, "address mismatch")
+			if (account.type === AccountType.Imported) throw ImportedAccountUnusableError.forAccount(address, "address mismatch")
 			await this.raiseRuntimeMismatch(profileId, chainId, account.index, address, derived)
 		}
 		const envelope = buildAccountExport(signingKey, account.l1ChainId, address)

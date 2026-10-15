@@ -17,6 +17,7 @@ import { NetworkService, type Network } from "@/wallet/services/network/service"
 import { ProfileService } from "@/wallet/services/profile/service"
 import { StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
 import { loggedAfter } from "../../../../tests/helpers/logged"
+import { CHAIN_IDS, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { svc } from "../composition-harness"
 import { AccountIntegrityBlockedRepository, AccountIntegrityVerifiedStampRepository } from "./blocked-repository"
 import { AccountIntegrityCoordinator, type DeriveAddress } from "./coordinator"
@@ -262,8 +263,8 @@ describe("AccountIntegrityCoordinator", () => {
 const TESTNET_ROW: Network = {
 	id: "tn",
 	profileId: "p1",
-	chainId: 2904119610,
-	l1ChainId: 11155111,
+	chainId: CHAIN_IDS.TESTNET,
+	l1ChainId: TESTNET_L1_CHAIN_ID,
 	name: "Testnet",
 	primaryEndpointId: "e1",
 	endpoints: [{ id: "e1", rpcUrl: "https://rpc.example" }],
