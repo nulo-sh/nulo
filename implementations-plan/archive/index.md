@@ -21,6 +21,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [aztec-5.2.0-js-line](aztec-5.2.0-js-line/plan.md) — completed — a version-only bump of the Aztec JS packages to 5.2.0, with the Noir toolchain held
 - [backup-import](backup-import/plan.md) — completed — a full-backup import that one slow public node cannot stall
 - [backup-import-decomposition](backup-import-decomposition/plan.md) — completed — the full-backup restore stages split into plain functions behind a short orchestrator
+- [backup-import-export](backup-import-export/plan.md) — completed — one key-unseal wipe order, strict hex, migration watchdog; a slimmer account-state slice; restore outcomes and a partial restore, protected exports
 - [backup-import-repair](backup-import-repair/plan.md) — completed — restore writes the profile, and a separate last step opens the session
 - [backup-integrity](backup-integrity/plan.md) — completed — the backup migration core and restore surface split under the complexity budget, behaviour unchanged
 - [backup-log-hygiene](backup-log-hygiene/plan.md) — completed — every extension log line made safe to persist and export, in three redundant layers
