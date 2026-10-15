@@ -32,11 +32,16 @@ Scratch copy, before the worktree gate: S1 3 tests, Chrome 41 s, Firefox 50 s; c
 
 ## Sign-off
 
-Sent on the review page (17 states, 34 frames, with five open asks). Pending.
+Sent on the review page, now 18 states and 36 frames with A4c and the arc 2 review changes, with five open asks. Pending.
 
 ## Gate
 
-At the Phase 6 commit, retry 0, after the Phase 5 `audit:vue`, each browser on its armed build:
+At `562cb12a`, after the arc 2 review's fixes, retry 0, after `audit:vue` at `d41fc363` (the last commit changes one composable and its test, both re-run), each browser on its armed build:
+
+- Chrome: S1 3 tests passed (36.4 s); captures 1 test passed (38.2 s), 34 frames (17 states, both themes, A4c new) in the ignored `.captures/`, none tracked; full smoke 53 files passed and 5 skipped, 231 tests passed and 13 skipped, 1509 s.
+- Firefox: S1 3 tests passed (52.4 s); full smoke 55 files passed and 3 skipped, 230 tests passed and 14 skipped, 2076 s.
+
+The first run, at the Phase 6 commit, after the Phase 5 `audit:vue`:
 
 - Chrome: S1 3 tests passed (42.8 s); captures 1 test passed (35.2 s), 32 frames (16 states, both themes) in the ignored `.captures/`, none tracked; full smoke 53 files passed and 5 skipped, 231 tests passed and 13 skipped, 1354 s.
 - Firefox: S1 3 tests passed (62.6 s); full smoke 55 files passed and 3 skipped, 230 tests passed and 14 skipped, 1946 s.

@@ -561,6 +561,10 @@ The owner answered A1–A15 and proposed the run lock (A16). Ten boards for fail
 
 Over `1ba770cf..5785b342`, then each fix. **Round 1 (fresh): 4 material.** Accepted: a full backup could omit accounts while a reset ran; a capture could write a journal after the profile's deletion cleared it; a network added on the target chain during capture. Rejected: a guard on transaction polling of a quarantined chain, a new guard surface the plan sends to the owner (it reads chain truth for rows the reset deletes). **Round 2 (resumed): 2 material, accepted**: the passkey backup slices re-check the journal after their reads; an obsolete runtime verdict writes nothing. **Round 3 (resumed): 1 material, accepted**: a chain that classifies clean at runtime refuses the operation instead of blocking the profile. **Round 4 (resumed, verifying round 3): "VERDICT: no new material findings".** Fixes in `8eb26c66`, `712809f4`, `f4d8912f`. The network gate then found D48 (`908455f4`); **round 5 (resumed, verifying it): "VERDICT: no new material findings"**.
 
+### Arc 2 Codex fix loop (gpt-6.1-sol high), 2026-10-15
+
+Over `010586a4..aacbed3e`, fresh; a preliminary pass on the uncommitted code had converged (D49–D53), and this one was told its convergence was not evidence. **Round 1: 3 material, all accepted**: a completion that reached a booting popup before its session began left it on A4 with no account (the resume catches up); Receive could show the previous network's address while a stale target's view waited on A6's probe (D55); an automatic run showed nothing in the popup that started it and A4 in another (D54). The low ones: A1 and A3's type roles, itemized in `lessons/phase-6.md` for the sign-off, and a comment's history. **Round 2 (resumed): 2 material, accepted**: an ended session's automatic run kept the next session behind the loader; the catch-up and the completion event could both run one completion. **Round 3 (resumed): "VERDICT: no new material findings"**. Fixes in `7f956cf7`, `d41fc363`, `562cb12a`.
+
 ## Delivery
 
 Trunk `dev`; `gh stack submit --auto`; **merge the whole stack together**. `code_review` is `off` on every arc.
