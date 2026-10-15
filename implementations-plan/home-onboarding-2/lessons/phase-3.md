@@ -1,0 +1,6 @@
+# Phase 3: Firefox e2e and shots
+
+- 2026-10-15: harness option `LaunchOptions.grantPermissionRequests` → `permissionRequestPrefs` (`extensions.webextOptionalPermissionPrompts: false`), joined in `capabilities()` only when asked; `firefox-driver.test.ts` pins the pref, its absence from `FIREFOX_LAUNCH_PREFS`, and `capabilities()` unchanged without the option (`FIREFOX_PATH` stubbed to an existing file, since `resolveFirefoxBinary` checks only that it exists). `gotoPrestoStep` moved to `helpers/presto-step.ts`: `fixtures/presto.ts` cannot take it, because `fixtures/extension.ts` imports that module and the helper needs `waitForHash` from it.
+- The armed smoke dist for the red proof: the base copies of `presto.vue` and `proving.vue` (from `git merge-base HEAD origin/dev`, `2dcdad48`), built with the CI smoke flags, then the head copies restored. zsh reads `$BASE:a` as a path modifier: brace it (`"${BASE}:apps/..."`).
+- Host rule: every e2e run waits for load1 below 150, polled every 10 minutes (`load-readings.log` in the lane's scratch dir). The Codex loop ran beside the wait (D7).
+- Codex arc-r1 and the Opus review: see plan.md § Audit verdicts. The spec now counts health probes, so the base-page run fails at the row and a head run proves the check follows Allow.

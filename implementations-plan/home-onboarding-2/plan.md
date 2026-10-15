@@ -184,6 +184,8 @@ Execute [`implementations-plan/README.md` § Post-implementation standard](../RE
 | D4 | Origins from `getManifest()`, exact host | The request can never exceed the manifest | A constant beside `PRESTO_HOST` |
 | D5 | Grants arrive only through `onAdded`. The e2e grants with a real click under a launch-time pref. | One path for every grant, which the click then proves (Opus 4). The pref keeps user input required (F3). | A re-read after `request()`; a privileged grant; answering the doorhanger from chrome scope |
 | D6 | E2E on the onboarding step of a fresh install; Settings by component test | The stand-in node needs the loopback grant (recon); the browser facts do not depend on the page | Both pages in the e2e |
+| D7 (arc 1) | The Codex loop starts beside Phase 3's e2e gates, not after them | The host's load gate (load1 below 150) held the e2e runs; a later round verifies any e2e-driven change | Waiting out the load before the first round |
+| D8 (arc 1) | "The first read" is the mount read: an event read that overtakes it and finds the grant calls `onGranted`; a failure while still `pending`, from either read, falls back | Codex arc-r1 F1: keyed on "first to land", a grant arriving during the mount read rested the page unchecked | Keying the callbacks on the first read to land |
 
 ## Audit verdicts
 
@@ -194,6 +196,8 @@ Execute [`implementations-plan/README.md` § Post-implementation standard](../RE
   - Rejected 7 (an AMO note): the owner chose B knowing A meant "nothing new on the AMO listing".
 - **Codex r2** (resume): conditional approve. R2-1 (a revoke and re-grant inside a startup probe's life): accepted as KL-1, the alternative Codex named, since the fix is a coordination protocol for a cosmetic residual. R2-2 (a grant after a failed first read was lost): fixed with the `unknown` status. The other accepted fixes verified, with no Chrome or footer regression.
 - **Codex r3** (resume): **approve**, no new material finding. One Low, applied: KL-1 now names the failed-read variant, and Outcome item 2 says "a page that mounts without the grant".
+- **Arc 1, Codex r1** (gpt-6.1-sol, high; session `01a141ee-ee4d-7e90-99da-5b2f42bd0159`): conditional approve. F1 Medium, demonstrated: a grant whose event read overtook the mount read called `onFirstAllowed`, so the page rested unchecked; fixed (D8), with its test red on the pre-fix code. F2 Low: a request answered after `dispose()` still logged; fixed, test red before. F3 Low: the spec could not tell a post-grant check from an earlier probe; it now counts probes (none before Allow, one HTTPS after). F4 Low: two restating comments; cut.
+- **Arc 1, Opus diff review:** no correctness bug. Accepted: comments claimed Chrome cannot withhold host permissions (its site access can; the suite cannot `permissions.remove` a required one), reworded in the composable, `LaunchOptions`, `FIREFOX_ONLY` and `FIREFOX.md`; the onboarding note's absence gained its positive control; the scratch shots spec stays out of the suite runs; the dispose test's name. Noted for KL-1: a sibling Settings page's probe in flight is one more way in.
 
 ## Seeds (written, not run)
 

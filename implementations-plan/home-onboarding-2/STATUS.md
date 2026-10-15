@@ -7,3 +7,4 @@
 - 2026-10-15 round 3: Codex approve; plan ready for check:plans and the commit.
 - 2026-10-15 arc1 phase 1 gate: pass (lint 0, typecheck:all 0, test 0: 798 files).
 - 2026-10-15 arc1 phase 2 gate: pass (lint 0, test 0, web-ext lint 0 errors before and after, output identical).
+- 2026-10-15 arc1 codex r1: conditional approve (1 Medium, 3 Low) + opus review (3 Low); all accepted and fixed (4f5f9a99); codex r2 running. Phase 3 e2e waiting on host load (161 at 23:47Z).
