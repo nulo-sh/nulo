@@ -623,6 +623,20 @@ Outcome: the plan kept its #184, #205, #210 and #151 shapes; it took the outline
 - R3b-C2 [Medium] the journal's To link has no colour under its grey, so removing it shows the base `a { color: var(--blue) }`: it composes `detail_value_mono`; the probe measures it.
 - R3b-C3 [Low] the early-exit cleanup pins and the Lock trace test contradict the revised contract: both rewritten as the new contract; every import test's toast mock gains `updateToast`. The e2e rationale corrected (the region's component test already runs real transitions).
 
+### Arc 3b implementation (2026-10-15): Codex (gpt-6.1-sol, high), session `01a13cd8`; one Opus 5.5 review
+
+**Codex round 1: approve** (high confidence). Three Low findings, all verified and accepted:
+- A3b-C1 [Low] `logImportErrors` passed the caught error bare (present before this arc): it goes under `{ error }`, the named key the logging policy asks for; the pin follows.
+- A3b-C2 [Low] the hold scenario's result read matched any card in the DOM: it now also requires the result snack settled on screen (`shownToast`); its comment says the menu item is disabled, not that a second import is tried.
+- A3b-C3 [Low] `openImportSelection`'s doc narrated its steps: one sentence keeps the race it guards.
+
+**Opus 5.5 review, beside round 1: approve** (moderate to high). Four Low findings:
+- A3b-O1 [Low, accepted] a result snack replacing a focused progress snack took the focused × away and focus fell to the body (the region's reset predates the arc; a line open for minutes makes it likely): `show()` hands focus back to where it came from on any change of card, as × did, and `closeFor` drops its copy; red without the change, both kinds.
+- A3b-O2 [Low, accepted] the slot's release comment named a path that cannot occur (a selection holds the slot until it settles); it now says what does protect the next run: no run's `finally` touches the slot.
+- A3b-O3 [Low, accepted] the style pin's header claimed real-browser coverage the repo does not keep: the clause is gone.
+- A3b-O4 [Low, known limit] a late stop snack from a run a lock released can replace the next import's line: #447, closed as a `known-limit`.
+- Nits applied: a comment wrapped mid-sentence and an unused type in the e2e. Kept: the comment-only slot case in `Input.test.ts`, a fallback check rather than before/after proof.
+
 ## Post-implementation
 
 `implementations-plan/README.md` § Post-implementation standard, read at `175d8268`, binds; what is specific to this plan:

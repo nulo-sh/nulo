@@ -190,7 +190,9 @@ describe("importContacts — per-row order and early exits", () => {
 		expect(trace).toEqual(["sender:A", "add:A:rejected", "sender:B", "add:B"])
 		// Contact errors win the toast and are logged with the ORIGINAL error object.
 		expect(openToastMock).toHaveBeenLastCalledWith({ kind: "error", label: "Import ended with errors" })
-		expect(console.error).toHaveBeenCalledWith("Failed to create a contact", expect.objectContaining({ message: "row A failed" }))
+		expect(console.error).toHaveBeenCalledWith("Failed to create a contact", {
+			error: expect.objectContaining({ message: "row A failed" }),
+		})
 	})
 
 	test.each<[string, () => void, string | null]>([

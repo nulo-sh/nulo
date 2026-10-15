@@ -1,7 +1,4 @@
-/**
- * jsdom applies no CSS modules, so the detail pages' shared look is pinned in their sources; the
- * computed-style probe and the screenshots cover it in real browsers.
- */
+/** jsdom applies no CSS modules, so the detail pages' shared look is pinned in their sources. */
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { describe, expect, test } from "vitest"

@@ -366,6 +366,26 @@ describe("ToastManagerBase", () => {
 		}
 	})
 
+	test.each([
+		["of another kind", "success"],
+		["of the same kind", "info"],
+	] as const)("a snack %s replacing the focused one returns focus to where focus came from", async (_, kind) => {
+		mountRegion()
+		const origin = document.createElement("button")
+		document.body.appendChild(origin)
+		try {
+			open({ kind: "info", label: "Importing contacts · 1 of 3" })
+			await settle()
+			origin.focus()
+			card()?.querySelector<HTMLButtonElement>('[data-testid="snackbar-close"]')?.focus()
+			open({ kind, label: "Import completed successfully" })
+			await settle()
+			expect(document.activeElement).toBe(origin)
+		} finally {
+			origin.remove()
+		}
+	})
+
 	test("a click on the card leaves the timer armed", async () => {
 		mountRegion()
 		open({ kind: "success", label: "Disposable" })

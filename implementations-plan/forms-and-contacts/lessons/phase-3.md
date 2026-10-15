@@ -67,3 +67,9 @@ The tree wins; each disagreement is also in `plan.md` (§ Assumptions, "Arc 3b r
 - Hover turns every Details link the accent, `rgb(168,72,12)` light and `rgb(248,241,231)` dark. The dark accent is within 1% of the dark primary text, so a primary link shows no hover colour in the dark theme (FA-14).
 - The popup's scroller is a fixed 536 px tall, so a viewport change does not make a short page scroll; squeeze the scroller itself to measure the space at the scroll end.
 
+## Arc 3b review loop
+
+- Codex round 1 (gpt-6.1-sol, high, read-only, session `01a13cd8`): approve, three Low findings, all accepted (plan § Audit verdicts, A3b-C1..C3).
+- Opus 5.5 review beside round 1: approve; A3b-O1..O3 accepted, A3b-O4 filed as #447 (`known-limit`, closed). The snack region reset focus on every change of card, so a replaced snack dropped keyboard focus to the body; restoring it where `show()` changes the card covers ×, a replacement and a timeout alike.
+- The before-suite ran this arc's test files against the base build, so the hold scenario, whose progress assertions need this arc's code, fails there by design (30 s wait); every other file passed.
+

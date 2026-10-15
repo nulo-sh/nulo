@@ -207,10 +207,9 @@ async function importContacts(deps: ContactIoServices): Promise<void> {
 	}
 }
 
-/** Stage the rows, create the selection promise, REGISTER its controls on the cache store and open
- *  the popup — one synchronous unit; the caller awaits the returned promise (reject = canceled).
- *  `undefined` while an import runs or another selection is open: two runs can both pass the entry
- *  check while each awaits its file and its fence, and the later one must not take the slot. */
+/** Opens the selection, which rejects on cancel, or returns `undefined` while an import runs or
+ *  another selection is open: two runs can both pass the entry check while they await their file
+ *  and fence, and the later one must not replace the open selection. */
 function openImportSelection(
 	{ appStore, cacheStore, popupStore }: ContactIoServices,
 	rows: ImportRow[],
@@ -225,8 +224,8 @@ function openImportSelection(
 		slot.importPromise = controls
 	})
 	popupStore.open("import_contacts")
-	// Released by this selection only: a run a lock released can settle while the next run's
-	// selection holds the slot. The store hands back a reactive proxy of what it holds.
+	// The slot is this selection's until it settles, and no run's `finally` touches it, so a run a
+	// lock released cannot clear the next one's. Compared raw: the store hands back a proxy.
 	return importPromise.finally(() => {
 		if (toRaw(slot.importPromise) !== controls) return
 		slot.importPromise = null
@@ -383,7 +382,7 @@ function logImportErrors(errors: UpsertError[]): void {
 	for (const e of errors) {
 		// The contact's name and address are PII; the operation and the error are the
 		// diagnosis, and the toast already tells the user the import had failures.
-		console.error(`Failed to ${e.operation} a contact`, e.error)
+		console.error(`Failed to ${e.operation} a contact`, { error: e.error })
 	}
 }
 

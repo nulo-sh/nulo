@@ -106,9 +106,7 @@ const lockChipDisabled = (page: Page) => page.$eval(sel("header-lock"), (button)
 async function progressAbove(page: Page, above: number): Promise<number> {
 	const read = await page.waitForFunction(
 		(n: number) => {
-			const card = document.querySelector('[data-testid="snackbar"][data-kind="info"]') as
-				| (HTMLElement & { __e2eProgress?: true })
-				| null
+			const card = document.querySelector('[data-testid="snackbar"][data-kind="info"]') as HTMLElement | null
 			if (!card || /enter|leave/.test(card.className)) return null
 			const match = /^Importing contacts · (\d+) of 500$/.exec(
 				card.querySelector('[data-testid="snackbar-title"]')?.textContent ?? "",
@@ -421,9 +419,8 @@ test("export, then import: into the same wallet nothing changes, into a fresh wa
 // Fails if leaving Contacts cuts off a running import (the page's clients rejected the row being
 // written), if the real chip or the menu's Import item does not follow the running import, or if
 // the import's progress snack does not reach the shell's region on every page as one card
-// relabelled in place. Component tests mount
-// stubs, fake clients and a mocked toast, so only the built popup's real page unmount, Header, menu
-// and snack region can show these.
+// relabelled in place. Component tests mount stubs, fake clients and a mocked toast, so only the
+// built popup's real page unmount, Header, menu and snack region can show these.
 test("an import holds Lock until it ends, counts on one snack on every page, and leaving Contacts does not disturb it", async ({
 	registeredExtensionPerTest: ctx,
 }) => {
@@ -436,7 +433,7 @@ test("an import holds Lock until it ends, counts on one snack on every page, and
 				await waitForStoredCount(page, 1)
 				expect(await lockChipDisabled(page)).toBe(true)
 				const onContactsPage = await progressAbove(page, 0)
-				// A second import is refused while this one runs.
+				// The menu's Import item is disabled while this import runs.
 				await clickByTestId(page, "contacts-menu-trigger")
 				await page.waitForSelector(sel("contacts-menu-import"), { visible: true, timeout: 5_000 })
 				expect(await page.$eval(sel("contacts-menu-import"), (item) => item.getAttribute("aria-disabled"))).toBe("true")
@@ -451,6 +448,7 @@ test("an import holds Lock until it ends, counts on one snack on every page, and
 			"Import completed successfully",
 			120_000,
 		)
+		await shownToast(page, "Import completed successfully")
 		expect(await lockChipDisabled(page)).toBe(false)
 		expect(await storedContacts(page)).toHaveLength(LONG_IMPORT_ROWS)
 	})
