@@ -104,6 +104,13 @@ describe("the detail pages' links draw the focus ring on :focus-visible, never o
 	})
 })
 
+describe("the recipient card's buttons show keyboard focus", () => {
+	test("the accent ring on :focus-visible", () => {
+		const source = read("components/composite/send/RecipientCard.vue").replace(/\s+/g, " ")
+		expect(source).toContain(".icon_btn:focus-visible { outline: 2px solid var(--nulo-accent); outline-offset: 2px; }")
+	})
+})
+
 describe("the toolbar button shows keyboard focus", () => {
 	test("RowAction's inset accent ring, nested in .icon_btn", () => {
 		const source = read("popup/pages/toolbar-button.module.css").replace(/\s+/g, " ")

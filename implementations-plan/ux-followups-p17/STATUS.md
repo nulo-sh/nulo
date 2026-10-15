@@ -7,3 +7,4 @@
 - 2026-10-15: phase 1 (#450) ✓ — F: lint 0, typecheck:all 0, test 0 (12530 passed); red without the rule, green with it.
 - 2026-10-15: phase 2 (#363) ✓ — F + design: lint 0, typecheck:all 0, test 0 (12537 passed), design 0 (494); the 7+1 pins red on the base rules.
 - 2026-10-15: phase 3 (#192, #230) ✓ — F: lint 0, typecheck:all 0, test 0 (12537 passed); e2e literals follow (run in phase 7).
+- 2026-10-15: phase 4 (#413) ✓ — F: lint 0, typecheck:all 0, test 0 (12540 passed); S(send-keyboard) chrome 5/5 (file 53.96 s → 52.48 s, scenario 9.66 → 9.01 s), firefox 5/5 (file 81.19 → 88.05 s, scenario 17.45 → 13.93 s); I2 holds on Firefox (ring drawn).

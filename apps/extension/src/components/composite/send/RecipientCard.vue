@@ -7,7 +7,7 @@
  * Reveal is OPTIONAL by design (user decision); the masked form is a glance
  * summary, the reveal is for 100% certainty (select the text to copy if needed).
  */
-import { computed, ref } from "vue"
+import { computed, ref, useTemplateRef } from "vue"
 import { maskAddress } from "./masked-address"
 
 /** Macros */
@@ -16,9 +16,12 @@ const props = defineProps<{
 	address: string
 }>()
 const emit = defineEmits<{ change: [] }>()
+// `focusVisible`: a script focus carries no keyboard event a browser could infer the ring from.
+defineExpose({ focusChange: () => changeBtn.value?.focus({ focusVisible: true }) })
 
 /** Reactive state */
 const revealed = ref(false)
+const changeBtn = useTemplateRef<HTMLButtonElement>("changeBtn")
 
 const masked = computed(() => maskAddress(props.address))
 
@@ -53,6 +56,7 @@ const toggleReveal = () => {
 					<Icon :name="revealed ? 'eye-off' : 'eye'" size="16" color="secondary" />
 				</button>
 				<button
+					ref="changeBtn"
 					type="button"
 					:class="$style.icon_btn"
 					data-testid="recipient-card-change"
@@ -117,6 +121,12 @@ const toggleReveal = () => {
 
 .icon_btn:hover {
 	background: var(--nulo-surface-high);
+}
+
+/* Restores the focus indication the base `button` reset removes. */
+.icon_btn:focus-visible {
+	outline: 2px solid var(--nulo-accent);
+	outline-offset: 2px;
 }
 
 .reveal {

@@ -147,6 +147,10 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 	await page.keyboard.press("Enter")
 	await page.waitForSelector(sel("recipient-card"), { timeout: 5_000 })
 	expect((await readSendInputs(page)).destination).toBe(account)
+	// The pick lands on the card's Change recipient with the ring, and Tab goes on past the card.
+	await waitForFocus(page, "recipient-card-change")
+	await expectAccentRing(page, "recipient-card-change")
+	expect(await tabAround(page, 1)).toEqual(["send-token-trigger"])
 
 	await clickByTestId(page, "recipient-card-change")
 	await page.waitForSelector(DESTINATION_INPUT, { timeout: 5_000 })
