@@ -1,5 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
-import { type Ref, toRaw } from "vue"
+import { type Ref, toRaw, watch } from "vue"
 import { useToast } from "@/composables/toast"
 import { FilePickCanceledError, FileTooLargeError, downloadFile, pickFile } from "@/utils"
 import {
@@ -40,10 +40,11 @@ export interface UseContactImportExportOptions {
  */
 export function useContactImportExport(opts: UseContactImportExportOptions) {
 	const { contacts, accountStateService } = opts
-	const { openToast, updateToast } = useToast()
+	const { toast, openToast, updateToast } = useToast()
 	const deps: ContactIoServices = {
 		contacts,
 		accountStateService,
+		toast,
 		openToast,
 		updateToast,
 		appStore: useAppStore(),
@@ -61,6 +62,7 @@ export function useContactImportExport(opts: UseContactImportExportOptions) {
 interface ContactIoServices {
 	contacts: Ref<ContactRecord[]>
 	accountStateService: AccountStateServiceClient
+	toast: ReturnType<typeof useToast>["toast"]
 	openToast: ReturnType<typeof useToast>["openToast"]
 	updateToast: ReturnType<typeof useToast>["updateToast"]
 	appStore: ReturnType<typeof useAppStore>
@@ -236,7 +238,13 @@ function openImportSelection(
 async function applyHoldingLock(deps: ContactIoDeps, res: SelectedRow[]): Promise<void> {
 	const endHold = deps.appStore.beginContactImport()
 	try {
-		const tally = await applyImportRows(deps, res, showProgress(deps, res.length))
+		const progress = showProgress(deps, res.length)
+		let tally: ImportTally
+		try {
+			tally = await applyImportRows(deps, res, progress.set)
+		} finally {
+			progress.stop()
+		}
 		if (tally.stopped) toastStoppedImport(deps.openToast, tally, res.length)
 		else toastImportOutcome(deps.openToast, tally)
 	} finally {
@@ -244,12 +252,40 @@ async function applyHoldingLock(deps: ContactIoDeps, res: SelectedRow[]): Promis
 	}
 }
 
-/** Opens the running import's snack and returns what moves its count; the count is the incomplete
- *  toast's, written of selected, and a snack the person closed stays closed. */
-function showProgress({ openToast, updateToast }: ContactIoDeps, selected: number): (written: number) => void {
-	const label = (written: number) => `Importing contacts · ${written} of ${selected}`
-	const id = openToast({ kind: "info", label: label(0) })
-	return (written) => updateToast(id, label(written))
+interface ImportProgress {
+	set: (written: number) => void
+	/** Ends the watch on the snack, so nothing opened after the rows brings the line back. */
+	stop: () => void
+}
+
+/** Opens the running import's snack; the count is the incomplete toast's, written of selected. When a
+ *  snack that replaced the line closes, the line opens again at the count; one the person closed, or
+ *  a lock closed, stays closed. */
+function showProgress({ toast, openToast, updateToast, appStore }: ContactIoDeps, selected: number): ImportProgress {
+	let written = 0
+	const label = () => `Importing contacts · ${written} of ${selected}`
+	const open = () => openToast({ kind: "info", label: label() })
+	let id = open()
+	let replaced = false
+	// Not a sync flush: the lock's seal closes the snack before it marks the window locked.
+	const stop = watch(
+		() => toast.value?.id,
+		(shownId) => {
+			if (shownId === id) return
+			if (shownId != null) replaced = true
+			else if (replaced && appStore.isLogined) {
+				replaced = false
+				id = open()
+			} else stop()
+		},
+	)
+	return {
+		set: (count) => {
+			written = count
+			updateToast(id, label())
+		},
+		stop,
+	}
 }
 
 /** Register each selected row's sender intent, then upsert the row. Import is adds-only toward sender

@@ -9,3 +9,4 @@
 - 2026-10-15: phase 3 (#192, #230) ✓ — F: lint 0, typecheck:all 0, test 0 (12537 passed); e2e literals follow (run in phase 7).
 - 2026-10-15: phase 4 (#413) ✓ — F: lint 0, typecheck:all 0, test 0 (12540 passed); S(send-keyboard) chrome 5/5 (file 53.96 s → 52.48 s, scenario 9.66 → 9.01 s), firefox 5/5 (file 81.19 → 88.05 s, scenario 17.45 → 13.93 s); I2 holds on Firefox (ring drawn).
 - 2026-10-15: phase 5 (#448) ✓ — F + design: lint 0, typecheck:all 0, design 0 (494); test 1 on run 1 (content-message-relay.test.ts beforeEach hook timeout at host load 150, untouched module), the file alone 7/7 and the rerun 0 (12540 passed); mutations (no attribute, a sticky flag) each red.
+- 2026-10-15: phase 6 (#449) ✓ — F: lint 0, typecheck:all 0 (after the test imports the design toast as `.ts`, as `usePopupEntity.ts` does), test 0 (12547 passed); six mutations (no stop, replaced kept, no login check, a sync flush, no latch, no re-open) each red.
