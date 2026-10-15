@@ -7,7 +7,7 @@
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { ServiceClient } from "@nulo/extension-messaging/offscreen"
-import { RecoveryModeError } from "@nulo/extension-messaging/errors"
+import { ChainNotSupportedError, RecoveryModeError } from "@nulo/extension-messaging/errors"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import type { NetworkInfo } from "@nulo/aztec-runtime/pxe"
 
@@ -16,7 +16,7 @@ vi.mock("@/wallet/utils/offscreen", async (importOriginal) => ({
 	ensureOffscreenRunning: vi.fn(async () => undefined),
 }))
 
-import { PxeServiceClient, registerPxeGenerationProvider, registerPxeRecoveryGuard } from "./client"
+import { PxeServiceClient, registerPxeChainGuard, registerPxeGenerationProvider, registerPxeRecoveryGuard } from "./client"
 
 const noopLogger: ILogger = { log: () => {} }
 const net: NetworkInfo = { profileId: "p1", chainId: 31337, rpcUrl: "http://n/1" }
@@ -76,6 +76,53 @@ describe("PxeServiceClient recovery-mode admission", () => {
 		await client.clearChainState("p1", 31337)
 		await client.clearProfileState("p1", "gen-A")
 		expect(wire).toEqual(["clearChainState", "clearProfileState"])
+	})
+})
+
+describe("PxeServiceClient quarantined-chain admission", () => {
+	let wire: string[]
+	let quarantined: Set<string>
+
+	beforeEach(() => {
+		vi.stubGlobal("self", globalThis)
+		vi.stubGlobal("chrome", {
+			runtime: {
+				onMessage: { addListener: () => {} },
+				connect: () => ({ onMessage: { addListener: () => {} }, onDisconnect: { addListener: () => {} }, postMessage: () => {} }),
+			},
+		})
+		wire = []
+		const impl = async (method: unknown) => {
+			wire.push(method as string)
+			return []
+		}
+		vi.spyOn(ServiceClient.prototype as unknown as { request: (...a: unknown[]) => Promise<unknown> }, "request").mockImplementation(
+			impl,
+		)
+		vi.spyOn(
+			Object.getPrototypeOf(ServiceClient.prototype) as { request: (...a: unknown[]) => Promise<unknown> },
+			"request",
+		).mockImplementation(impl)
+		quarantined = new Set()
+		registerPxeRecoveryGuard(() => false)
+		registerPxeGenerationProvider(async () => "gen-A")
+		registerPxeChainGuard(async (profileId, chainId) => quarantined.has(`${profileId}:${chainId}`))
+	})
+
+	test("a profile-bound op on a quarantined chain is refused in the SW; another chain or profile still goes out", async () => {
+		const client = new PxeServiceClient(noopLogger)
+		quarantined.add("p1:31337")
+		await expect(client.getSenders(net)).rejects.toBeInstanceOf(ChainNotSupportedError)
+		await client.getSenders({ ...net, chainId: 7 })
+		await client.getSenders({ ...net, profileId: "p2" })
+		expect(wire).toEqual(["getSenders", "getSenders"])
+	})
+
+	test("cleanup on a quarantined chain stays admitted: the purge must reach the PXE", async () => {
+		const client = new PxeServiceClient(noopLogger)
+		quarantined.add("p1:31337")
+		await client.clearChainState("p1", 31337)
+		expect(wire).toEqual(["clearChainState"])
 	})
 })
 

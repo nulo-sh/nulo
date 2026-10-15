@@ -1,5 +1,6 @@
 import {
 	CLIENT_DISCONNECTED_MESSAGE,
+	ImportedAccountUnusableError,
 	JobCancelledError,
 	OperationNotRecordedError,
 	RpcDisconnectedError,
@@ -10,6 +11,7 @@ import {
 } from "@nulo/extension-messaging/errors"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { ref } from "vue"
+import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
 import type { ToastState } from "@/composables/toast"
 import { createScopeEpochHandlers } from "@/popup/scope-epoch"
 import {
@@ -205,6 +207,16 @@ describe("send-submit", () => {
 		await flush()
 		expect(deps.openToast).toHaveBeenCalledWith({ kind: "error", label: "Send failed", sub: TRANSFER_TERMS_COPY })
 		expect(console.debug).toHaveBeenCalledWith("[send] executeTransfer refused:", expect.any(TermsAcceptanceRequiredError))
+		expect(console.error).not.toHaveBeenCalled()
+	})
+
+	test("an imported account whose key does not open: A10, logged at debug only", async () => {
+		const { deps, settle } = harness()
+		submitTransfer(deps, SNAP)
+		settle().reject(ImportedAccountUnusableError.because("address mismatch"))
+		await flush()
+		expect(deps.openToast).toHaveBeenCalledWith(expect.objectContaining(IMPORTED_UNUSABLE_TOAST))
+		expect(console.debug).toHaveBeenCalledWith("[send] executeTransfer refused:", expect.any(ImportedAccountUnusableError))
 		expect(console.error).not.toHaveBeenCalled()
 	})
 

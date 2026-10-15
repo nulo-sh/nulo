@@ -409,6 +409,24 @@ export class OperationNotRecordedError extends WalletError {
 	}
 }
 
+/**
+ * An imported account's stored key is missing, does not open, or derives another address than its
+ * row. Fail-closed for that account only, never a profile-wide block: imported key material is
+ * external. Typed so the popup can say so; a dApp's envelope for it is the unclassified constant.
+ * Its message never names the account: it reaches log lines in the worker and the popup.
+ */
+export class ImportedAccountUnusableError extends WalletError {
+	public static readonly CODE = "IMPORTED_ACCOUNT_UNUSABLE"
+
+	public constructor(message: string, details?: unknown) {
+		super(ImportedAccountUnusableError.CODE, message, details, "ImportedAccountUnusableError")
+	}
+
+	public static because(reason: string): ImportedAccountUnusableError {
+		return new ImportedAccountUnusableError(`Imported account is unusable: ${reason}`)
+	}
+}
+
 /** Request payload failed validation at the RPC boundary. */
 export class ValidationError extends WalletError {
 	public static readonly CODE = "VALIDATION"
@@ -542,6 +560,7 @@ const REBUILT_AS = [
 	SessionEndedError,
 	TermsAcceptanceRequiredError,
 	OperationNotRecordedError,
+	ImportedAccountUnusableError,
 ] as const
 
 /** A `Map`, not an object, so a code such as `"constructor"` resolves to nothing. */

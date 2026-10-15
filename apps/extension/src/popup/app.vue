@@ -3,6 +3,7 @@
 /** Components */
 import PopupManager from "./components/popups/PopupManager.vue"
 import Navigation from "./components/Navigation.vue"
+import StaleNetworkTakeover from "@/components/stale-network/StaleNetworkTakeover.vue"
 
 /** Utils */
 import { managers, isServiceReady } from "@/utils/core"
@@ -18,11 +19,14 @@ import { applyRootFlags } from "./root-flags"
 import { defaultConfig } from "@/wallet/config"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { createNetworkSwitchHandler } from "@/popup/network-switch"
+import { createResetCompletion } from "@/popup/reset-completion"
 import { runFencedBootstrap } from "@/popup/profile-bootstrap"
 import { createScopeEpochHandlers } from "@/popup/scope-epoch"
 import { createLockedState, watchLockStart } from "@/popup/locked-state"
 import { createBootTriggers } from "@/popup/boot-triggers"
 import { START_GRACE_KEY } from "@/popup/start-grace"
+import { isDappWindow, takeoverView } from "@/popup/stale-takeover"
+import { readyToast } from "@/components/stale-network/copy"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { IncomingTransferServiceClient } from "@/wallet/services/incoming-transfer/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
@@ -31,6 +35,7 @@ import { TokenServiceClient } from "@/wallet/services/token/client"
 /** Composables */
 import { supersedeProfileActivations, useProfileBootstrap } from "@/composables/useProfileBootstrap"
 import { ARRIVALS_KEY, useArrivals } from "@/composables/useArrivals"
+import { runUnattended, STALE_NETWORK_KEY, useStaleNetwork } from "@/composables/useStaleNetwork"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -143,28 +148,102 @@ watch(
 	},
 )
 
+// The switch handler's latest run, which a completed reset awaits before it routes and announces.
+let switchRun = Promise.resolve()
+const { reloadNetwork, completeReset } = createResetCompletion({
+	activeNetworkId: () => appStore.network?.id,
+	getNetworks: () => managers.network.getNetworks(),
+	setNetworks: (networks) => {
+		appStore.networks = networks
+	},
+	setNetwork: (network) => {
+		appStore.network = network
+	},
+	accountLoaded: async () => {
+		await nextTick()
+		await switchRun
+	},
+	ownsRoute: () => !isDappWindow(route.name),
+	toHome: () => router.push(postAuthRoute()),
+})
+
+const stale = useStaleNetwork({
+	client: managers.networkReset,
+	scope: () =>
+		appStore.isLogined && appStore.profile && appStore.network && !isDappWindow(route.name)
+			? { profileId: appStore.profile.id, networkId: appStore.network.id }
+			: undefined,
+	syncActive: (networkId) => appStore.syncStaleNetwork(networkId),
+	staleActive: () => appStore.staleNetwork,
+	onCompleted: completeReset,
+	announce: (notice) => {
+		const name = appStore.networks.find((n) => n.id === notice.networkId)?.name
+		if (name) openToast({ kind: "success", ...readyToast(name, notice.addressesMoved) })
+	},
+})
+provide(STALE_NETWORK_KEY, stale)
+
+const takeover = computed(() =>
+	takeoverView({
+		logined: appStore.isLogined,
+		route: { name: route.name, path: route.path },
+		networkId: appStore.network?.id,
+		stale: appStore.staleNetwork,
+		running: stale.running.value,
+	}),
+)
+watch(
+	() => appStore.networks,
+	() => void stale.refresh(),
+)
+watch(
+	() => appStore.isLogined && appStore.profile?.id,
+	(active) => {
+		stale.clear()
+		if (active && !isDappWindow(route.name)) void stale.resume(active)
+	},
+)
+
 // Identity-fenced network-switch orchestration — the body lives in
 // `network-switch.ts` so its fence is unit-testable (this shell has no
 // harness). The factory owns run invalidation, scope capture, and the
 // generation+live-scope guard at every await boundary.
+const switchNetwork = createNetworkSwitchHandler({
+	getScope: () =>
+		appStore.network && appStore.profile
+			? { profileId: appStore.profile.id, networkId: appStore.network.id, chainId: appStore.network.chainId }
+			: undefined,
+	liveScopeMatches: (scope) =>
+		appStore.profile?.id === scope.profileId && appStore.network?.id === scope.networkId && appStore.network?.chainId === scope.chainId,
+	syncNetworkStatus: () => appStore.syncNetworkStatus(),
+	replaceAccountClient: () => {
+		managers.account?.disconnect()
+		managers.account = new AccountServiceClient()
+		return managers.account
+	},
+	setAccounts: (accounts) => {
+		appStore.accounts = accounts
+	},
+	setupActiveAccount: () => appStore.setupActiveAccount(),
+	syncTransactions: () => appStore.syncTransactions(),
+	syncStaleNetwork: (networkId) => appStore.syncStaleNetwork(networkId),
+	clearAccounts: () => {
+		appStore.accounts = []
+		appStore.account = undefined
+	},
+	resetUnattended: async (view, live) => {
+		// The loader drops once the store holds the row's view: R1 for a failed run's journal, or none,
+		// and the Header's skeleton while the re-keyed row's account loads.
+		await runUnattended(managers.networkReset, view, async (completed) => {
+			if (completed ? await reloadNetwork(view.networkId, live) : live()) await appStore.syncStaleNetwork(view.networkId)
+		})
+	},
+})
 watch(
 	() => appStore.network,
-	createNetworkSwitchHandler({
-		getScope: () =>
-			appStore.network && appStore.profile ? { profileId: appStore.profile.id, chainId: appStore.network.chainId } : undefined,
-		liveScopeMatches: (scope) => appStore.profile?.id === scope.profileId && appStore.network?.chainId === scope.chainId,
-		syncNetworkStatus: () => appStore.syncNetworkStatus(),
-		replaceAccountClient: () => {
-			managers.account?.disconnect()
-			managers.account = new AccountServiceClient()
-			return managers.account
-		},
-		setAccounts: (accounts) => {
-			appStore.accounts = accounts
-		},
-		setupActiveAccount: () => appStore.setupActiveAccount(),
-		syncTransactions: () => appStore.syncTransactions(),
-	}),
+	() => {
+		switchRun = switchNetwork()
+	},
 )
 
 // `flush: "sync"`: a send settling in the next microtask must already see the new epoch.
@@ -331,6 +410,8 @@ const loadProfile = async ({ reconnect = false } = {}) => {
 	// reconnect can bump the sequence in between — fence again here, never on the core's word.
 	if (!isCurrent()) return
 	applyBootOutcome(result, bootOutcomeShell(establishedNow()))
+	// A worker restart drops a running reset without a word; its journal resumes here.
+	if (reconnect && appStore.isLogined && appStore.profile && !isDappWindow(route.name)) void stale.resume(appStore.profile.id)
 }
 
 /** The shell as `applyBootOutcome` drives it. */
@@ -440,6 +521,7 @@ onBeforeUnmount(() => {
 	arrivalsTokens.disconnect()
 	arrivalsPrices.disconnect()
 	arrivals.dispose()
+	stale.dispose()
 })
 </script>
 
@@ -465,12 +547,13 @@ onBeforeUnmount(() => {
 			<NotificationManager />
 			<MigrationBarrier />
 			<AccountIntegrityBarrier />
-			<LegalAcceptanceSheet @visibility="legalSheetShown = $event" />
+			<LegalAcceptanceSheet v-if="!takeover" @visibility="legalSheetShown = $event" />
 		</div>
 
 		<StartBar :boot-outcome="bootOutcome" />
 
-		<Header />
+		<StaleNetworkTakeover v-if="takeover" :view="takeover" />
+		<Header v-else />
 
 		<Banner v-if="bootOutcome || bootRetrying" variant="warning" direction="vertical" data-testid="boot-outcome-banner">
 			<Text>
@@ -485,13 +568,15 @@ onBeforeUnmount(() => {
 			<button type="button" :class="$style.retry" class="type--button-md" data-testid="boot-retry" :disabled="bootRetrying" @click="bootTriggers.retry()">RETRY</button>
 		</Banner>
 
-		<RouterView v-slot="{ Component }">
-			<component :is="Component"></component>
-		</RouterView>
+		<template v-if="!takeover">
+			<RouterView v-slot="{ Component }">
+				<component :is="Component"></component>
+			</RouterView>
 
-		<Navigation v-if="$route.meta.showBottomNav" />
+			<Navigation v-if="$route.meta.showBottomNav" />
+		</template>
 
-		<div id="toast" data-testid="toast-root" :class="legalSheetShown && $style.toast_over_sheet" />
+		<div id="toast" data-testid="toast-root" :class="legalSheetShown && !takeover && $style.toast_over_sheet" />
 	</Flex>
 </template>
 

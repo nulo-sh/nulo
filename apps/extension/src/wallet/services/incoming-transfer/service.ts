@@ -1183,7 +1183,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		try {
 			const episodeKey = scanEpisodeKey(target.profileId, target.networkId, target.contract)
 			this.announceHealth(target.profileId, target.networkId)
-			if (!this.episodes.isBackingOff(episodeKey, Date.now())) {
+			const backingOff = this.episodes.isBackingOff(episodeKey, Date.now())
+			if (!backingOff && !(await this.isQuarantined(target.profileId, target.networkId))) {
 				await this.scanAndRecord(key, target, episodeKey, force)
 				this.announceHealth(target.profileId, target.networkId)
 			}
@@ -1452,13 +1453,23 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		})
 	}
 
+	/** A quarantined chain is skipped before any read, so its refusals never reach a warn line or a
+	 *  scan episode; the skip itself is a debug line. */
+	private async isQuarantined(profileId: string, networkId: string): Promise<boolean> {
+		const network = (await this.networkService.getNetworksRaw(profileId)).find((n) => n.id === networkId)
+		if (!network || !(await this.networkService.isChainQuarantined(profileId, network.chainId))) return false
+		this.logDebug("incoming scan skipped: quarantined chain", { networkId })
+		return true
+	}
+
 	private async poll(profileId: string, networkId: string, accountAddress: string, force: boolean): Promise<void> {
 		const key = this.schedulerKey(networkId, accountAddress)
 		if (this.polling.has(key)) return
 		this.polling.add(key)
 		try {
 			const contracts = this.watchedContracts.get(key)
-			if (contracts && contracts.size > 0) await this.scanNoteTarget(key, { profileId, networkId, accountAddress }, contracts, force)
+			const scan = contracts !== undefined && contracts.size > 0 && !(await this.isQuarantined(profileId, networkId))
+			if (scan) await this.scanNoteTarget(key, { profileId, networkId, accountAddress }, contracts, force)
 			// Drain the balance-refresh outbox each tick (both arms). The drain is service-global +
 			// active-profile-scoped, so any scheduler tick makes progress on the causal ack.
 			await this.drainBalanceOutbox()

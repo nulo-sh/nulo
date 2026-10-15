@@ -87,6 +87,7 @@ async function build(withBalances = false) {
 	services.add(
 		svc(NETWORK_SERVICE_NAME, {
 			registerChainPurgeSubscriber: () => {},
+			isChainQuarantined: async () => false,
 			isChainLive: async () => true,
 			getL1ChainIdStored: async () => L1,
 		}),

@@ -70,6 +70,7 @@ import { WalletLockedError } from "./wallet-locked-error"
 import type { ProfileDeletionDelegate } from "../profile-deletion/types"
 import { AccountIntegrityBlockedRepository, AccountIntegrityVerifiedStampRepository } from "../account-integrity/blocked-repository"
 import type { AccountIntegrityBlocked, AccountIntegrityDelegate } from "../account-integrity/types"
+import { StaleNetworkRepository } from "../stale-network/repository"
 
 export * from "./spec"
 
@@ -248,6 +249,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	private readonly integrityBlocked: AccountIntegrityBlockedRepository
 	/** Deletion-time cleanup of the coordinator's per-profile verified stamps. */
 	private readonly integrityStamps: AccountIntegrityVerifiedStampRepository
+	/** Deletion-time cleanup of the stale-network record, reset journal and reset notice. */
+	private readonly staleNetworks: StaleNetworkRepository
 	/** Restore-in-progress markers (torn-import detection at the unlock gate). */
 	private readonly restorePending: RestorePendingRepository
 	private readonly local: StorageArea
@@ -265,6 +268,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		this.tombstones = new TombstoneRepository(this.local)
 		this.integrityBlocked = new AccountIntegrityBlockedRepository(this.local)
 		this.integrityStamps = new AccountIntegrityVerifiedStampRepository(this.local)
+		this.staleNetworks = new StaleNetworkRepository(this.local)
 		this.restorePending = new RestorePendingRepository(this.local)
 		this.secretBox = new PasswordSecretBox()
 		this.sessionManager = new SessionManager(
@@ -967,19 +971,26 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	}
 
 	/**
-	 * Persist an integrity block record — but ONLY if the profile still exists and isn't being
-	 * deleted. The two OFF-LOCK integrity writers (the coordinator's boot re-verify, AccountService's
-	 * operation-time mismatch) route through here so a `deleteProfile` racing them (whose own
-	 * block-CLEAR runs under this same lock) can't be followed by an orphan write: the write either
-	 * lands before the delete's clear (then the delete clears it) or is skipped here because the
-	 * profile is gone/reserved. Prevents an unclearable block record for a deleted profile.
+	 * Run an integrity verdict write — but ONLY if the profile still exists and isn't being
+	 * deleted. The OFF-LOCK integrity writers (the coordinator's boot re-verify and its
+	 * operation-time classification, AccountService's operation-time block) route through here so
+	 * a `deleteProfile` racing them (whose own clears run under this same lock) can't be followed
+	 * by an orphan write: the write either lands before the delete's clear (then the delete clears
+	 * it) or is skipped here because the profile is gone/reserved. Prevents an unclearable block,
+	 * stamp or stale-network record for a deleted profile.
+	 * @returns `write`'s result, or undefined when it was skipped.
 	 */
-	public async persistIntegrityBlockIfLive(record: AccountIntegrityBlocked): Promise<void> {
+	public async persistIntegrityVerdictIfLive<T>(profileId: string, write: () => Promise<T>): Promise<T | undefined> {
 		await this.ensureInitialized()
 		return this.runExclusive(async () => {
-			if (this.deletionState.isReserved(record.profileId) || !(await this.repo.get(record.profileId))) return
-			await this.integrityBlocked.set(record)
+			if (this.deletionState.isReserved(profileId) || !(await this.repo.get(profileId))) return undefined
+			return write()
 		})
+	}
+
+	/** {@link persistIntegrityVerdictIfLive} for the profile block. */
+	public async persistIntegrityBlockIfLive(record: AccountIntegrityBlocked): Promise<void> {
+		await this.persistIntegrityVerdictIfLive(record.profileId, () => this.integrityBlocked.set(record))
 	}
 
 	/**
@@ -1552,6 +1563,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// same-id re-import skip its first boot verification.
 			await this.integrityBlocked.clear(id)
 			await this.integrityStamps.clear(id)
+			await this.staleNetworks.clearProfile(id)
 			// The restore-pending marker clears LAST among the fallible cleanups —
 			// session close + pending-secret zeroization above must never be
 			// skipped by a rejecting storage remove. A failure here leaves the
@@ -1635,6 +1647,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 					// profile can't leave an orphan block/stamp behind.
 					await this.integrityBlocked.clear(t.profileId)
 					await this.integrityStamps.clear(t.profileId)
+					await this.staleNetworks.clearProfile(t.profileId)
 				})
 				await delegate.runFor(t.profileId, {
 					addresses: t.addresses,

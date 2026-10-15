@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest"
-import { OperationNotRecordedError, TermsAcceptanceRequiredError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
+import {
+	ImportedAccountUnusableError,
+	OperationNotRecordedError,
+	TermsAcceptanceRequiredError,
+	walletErrorFromPayload,
+} from "@nulo/extension-messaging/errors"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import { transferFailureLogLevel, transferFailureSnack } from "./transfer-failure-copy"
 
@@ -28,6 +33,17 @@ function failed(progress: OperationRecord["progress"]): OperationRecord {
 }
 
 describe("transferFailureSnack", () => {
+	test("an imported account whose key does not open says so and points at another account, with no details", () => {
+		const overTheWire = walletErrorFromPayload(ImportedAccountUnusableError.because("the key does not open").toPayload())
+		expect(transferFailureSnack(overTheWire, undefined)).toEqual({
+			checking: false,
+			label: "Cannot send from this account",
+			sub: "Nulo cannot use this imported account’s key. Send from another account.",
+			details: false,
+		})
+		expect(transferFailureLogLevel(overTheWire)).toBe("debug")
+	})
+
 	test("a refusal that crossed the RPC boundary reads as not started, in the owner-approved words", () => {
 		const overTheWire = walletErrorFromPayload(new OperationNotRecordedError().toPayload())
 		expect(transferFailureSnack(overTheWire, undefined)).toMatchObject({
