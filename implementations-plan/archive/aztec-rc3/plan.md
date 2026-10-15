@@ -321,6 +321,7 @@ All three take `0.2.0`, one lockstep version (F15). `wallet-crypto` changes only
 
 - **Codex (gpt-6.1-sol, high), fresh session `01a14009`: approve with fixes.** Three findings, verified and accepted: D9 and OA-1 get a home (`BEFORE-LAUNCH.md` § 4), two more paths are repaired at the archive move, and the #324 comment is posted. **Opus (general-purpose), fresh:** six accepted (STATUS.md, the lessons wording, a later-version rehearsal in `scripts/publish/README.md`, the private-fee note's source, two skill words, the `BEFORE-LAUNCH.md` section) and one nit rejected (`lessons/phase-8.md`).
 - **Codex, resumed round 2: converged.** The fixes are confirmed. `check:plans` reds only on references to the archive path, which the move resolves.
+- **Codex, resumed round 3 (the archive move): converged.** No stale path is left, and `check:plans` reports 0 findings.
 
 ## Delivery
 
