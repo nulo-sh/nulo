@@ -661,6 +661,9 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		const derived = (await NuloAccount.fromSigningKey(signingKey, this.logger, this.name)).address.toString()
 		if (derived !== address) {
 			if (account.type === AccountType.Imported) throw ImportedAccountUnusableError.forAccount(address, "address mismatch")
+			// A quarantined chain's rows are expected to mismatch. Classifying again needs the session,
+			// which a password-authenticated export may not hold, and would block the whole profile.
+			await this.assertChainUsable(profileId, chainId)
 			await this.raiseRuntimeMismatch(profileId, chainId, account.index, address, derived)
 		}
 		const envelope = buildAccountExport(signingKey, account.l1ChainId, address)
