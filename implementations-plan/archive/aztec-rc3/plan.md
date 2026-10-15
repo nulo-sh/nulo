@@ -1,7 +1,7 @@
 ---
 plan: aztec-rc3
 tier: mid
-status: draft; dual audit and final Codex pass applied (all conditional approve, conditions met); awaiting the orchestrator's approval
+status: completed; arc 1 merged (#431), arc 3 and this close-out in the arc 3 PR
 issues: "Closes #324 (arc 1); refs #324 in arc 3"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,31 @@ base: origin/dev at d3dc4415
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-15. Planned 2026-10-14; arc 1 merged 2026-10-15.
+- **Status:** delivered in two PRs against `dev`: [#431](https://github.com/nulo-sh/nulo/pull/431) (arc 1, P1-P7, closes #324) and the arc 3 PR from `aztec-rc3-sdk` (P8 and this close-out, D12). Merging it closes the plan.
+- **Shipped:**
+  - Arc 1 (#431):
+    - Aztec `6.0.0-rc.3`, with the `@aztec-foundation/*` toolchain at `6.0.0-rc.6` and presto, aztec-standards and private-fee-juice at rc.3.
+    - The reset Testnet: rollup `3409706519`, chainId `3415328944`.
+    - Regime `nulo-v6.1`, appended and bound in place. It vendors the rc.3 `SchnorrAccount.json`, and its vectors come from `reference/nulo-v6.1`. The freeze rule text now allows an in-place re-pin off Mainnet.
+    - SponsoredFPC, PrivateFPC, AuthRegistry and the Token class re-pinned, each from its source.
+    - Presto's status asks about the bb release (`__BB_VERSION__`).
+    - The empty Testnet list shipped first, as #429 (publish #434).
+  - Arc 3: `@nulo-sh/*` `0.2.0` prepared. The READMEs name the Aztec line and drop F16's false claim; the three digests are approved and a clean tree reproduces them (`lessons/phase-8.md`); the schema patch also carries #335 (D13).
+  - Docs: `lessons.md` gains the rc.3 numbering and the oracle-major refusal, and its quiet-blocks entry moves to the `e2e-testing` skill to stay within budget. The `aztec-update` skill gains the `@nulo-sh/*` release and the token-class publishing order.
+- **Owner step:** P8 step 3, dispatch `publish-packages.yml` (dry run, then `dry_run=false` and the `npm-publish` approval). The live Testnet send (D9) and OA-1 (a), no store upload of an rc.3 build before stale-network-reset's reset screen is on `dev`, gate the first store upload of an rc.3 build: `BEFORE-LAUNCH.md` § 4.
+- **Live standard contracts:** on the reset Testnet, AuthRegistry is published as of 2026-10-15 block 3737; PublicChecks and HandshakeRegistry are not. The wallet calls no public function on either. #430's thread has the probe.
+- **Dropped, rejected, superseded:**
+  - `nulo-v7`, a new major and a compat-epoch move: the owner (F2). Amending `nulo-v6`: rejected (F5).
+  - An rc.3 presto-server release: not needed, since 1.1.3 fetches and checks the bb the SDK names (P6).
+  - A live private-fee `blocked:external` note on an unleashed deploy: not filed. The owner, 2026-10-14: the PrivateFPC "doesn't get deployed, it's a fully private smart contract", so P5's pin enables the live path.
+  - OA-2 (a), OA-3 (a), OA-4 `nulo-v6.1`, OA-5 not raised, OA-6 (a).
+- **Known limits:** #427, #430.
+- **Open items:** #479 (Testnet default tokens, `blocked:external` on unleashed's rc.3 generation), #480 (nightly `token-list-host-live` red until then); `BEFORE-LAUNCH.md` § 4 (the first store upload of an rc.3 build).
+- **Seeds retired:** the `/goal` and `/loop` drafts are retired and removed; this plan is a record, not a task list.
 
 # aztec-rc3: Aztec 6.0.0-rc.3, the reset Testnet, an in-place account re-pin
 
@@ -264,6 +289,8 @@ All three take `0.2.0`, one lockstep version (F15). `wallet-crypto` changes only
 | D9 | Live Testnet send is the owner's pre-release step; the Outcome says so | F (A4) | accepted |
 | D10 | No CI sharding locally (sibling checkouts are off limits) | M | accepted; time cost only |
 | D11 | Correct M4's backup claim; add no restore test | C (final 2) | accepted in part: the plan changes no restore code, and the unseeded-chain path is pinned (`useFullBackupImport.test.ts:1060-1086`, per-row errors `account/service.test.ts:205`) |
+| D12 | The close-out ships as the final commits of arc 3's PR: arc 1 was squash-merged (#431), so no stack is left to carry a docs-only top layer | orchestrator | accepted; the `aztec-rc3-close-out` row folds into `aztec-rc3-sdk` |
+| D13 | `wallet-sdk-schema-patch` 0.2.0 also carries #335's `grantPublicAuthwit` address parsing, which P8's "patch unchanged" missed | tree (`lessons/phase-8.md`) | accepted; its README's 0.2.0 entry names both changes |
 
 ## Audit verdicts
 
@@ -290,6 +317,12 @@ All three take `0.2.0`, one lockstep version (F15). `wallet-crypto` changes only
 - **Codex, resumed round 2: the Presto fix complete, the reference plan sound.** One stale clause in the aztec-update skill's Presto bullet (fixed).
 - **Codex, resumed round 3 (the re-resolved reference lock and the `dev` merge at `9e905c9b`): converged.** Findings 2 and 3 are closed by the re-resolve and its dispositions. The merge does not clash: both export actions still pass the address gate, import still re-derives, and the new paths stamp no regime and key on no chain literal. One wording fix in the lessons (made).
 
+### Implementation review, arc 3 and close-out, 2026-10-15
+
+- **Codex (gpt-6.1-sol, high), fresh session `01a14009`: approve with fixes.** Three findings, verified and accepted: D9 and OA-1 get a home (`BEFORE-LAUNCH.md` § 4), two more paths are repaired at the archive move, and the #324 comment is posted. **Opus (general-purpose), fresh:** six accepted (STATUS.md, the lessons wording, a later-version rehearsal in `scripts/publish/README.md`, the private-fee note's source, two skill words, the `BEFORE-LAUNCH.md` section) and one nit rejected (`lessons/phase-8.md`).
+- **Codex, resumed round 2: converged.** The fixes are confirmed. `check:plans` reds only on references to the archive path, which the move resolves.
+- **Codex, resumed round 3 (the archive move): converged.** No stale path is left, and `check:plans` reports 0 findings.
+
 ## Delivery
 
 Trunk `dev`. `code_review` is `off` on every arc.
@@ -298,7 +331,7 @@ Trunk `dev`. `code_review` is `off` on every arc.
 |---|---|---|---|
 | 1 | P1-P7 | `worktree-aztec-rc3` | `feat(aztec): move to 6.0.0-rc.3 and the reset testnet, re-pin the account artifact` |
 | 3 | P8 | `aztec-rc3-sdk` | `chore(publish): prepare the @nulo-sh packages 0.2.0 on aztec 6.0.0-rc.3` |
-| close-out | — | `aztec-rc3-close-out` | `docs(plans): close the aztec-rc3 plan` |
+| close-out | — | `aztec-rc3-sdk` (D12) | the final commits of arc 3's PR |
 
 - **Deviation (decision record, item 3):** arc 1 may open as a draft once P1-P3 are green and its Codex loop has converged on that diff: `gh stack init --adopt worktree-aztec-rc3`, then `gh stack submit --auto --draft` (or `gh pr create --draft --base dev`). Each fill-in lands as its own commit and gets a resumed Codex round; the PR turns ready only after P7.
 - **Deviation (implementation, P4):** M7's one-PR ordering deadlocks the list's publishing. The tree check, which `publish-token-list.yml` runs before `sign`, refuses the signed rc.1-class envelope once the class set moves, so nothing could re-sign it. The empty source therefore ships first as #429, and the owner publishes its envelope. Arc 1 then merges `dev`, its source edit becomes a no-op, and P4's gate passes (`lessons/phase-4.md`; Codex agreed, fresh session `01a13c11`).
@@ -309,26 +342,10 @@ Trunk `dev`. `code_review` is `off` on every arc.
 
 ## Post-implementation
 
-Follow [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `d3dc4415`. Plan-specific settings:
+Follow [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `d3dc4415`. Plan-specific settings:
 
 - Step 1 is absent (`code_review: off`).
 - Step 2 per arc while it is the stack tip: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. Arc 1: once over P1-P3, then one resumed round per fill-in commit. Arc map: "arc 1 of 2 moves the line; arc 3 prepares the npm release on it". A final fresh session covers the net diff from `d3dc4415`. Hard stop at three rounds.
 - Approval boundaries (stop for the orchestrator): a pin moved without its evidence, a held package, a new regime field, any edit to `nulo-v5` or `nulo-v6`, a third token-list file, or any change to what a screen shows.
-- Close-out on `aztec-rc3-close-out`: merge `origin/dev`, read `index.md` and `lessons.md`, write the Outcome, promote lessons (the two-line foundation numbering; the oracle-major refusal), file open items (Testnet defaults waiting on unleashed's generation, `blocked:external`; OA-3's disposition), comment on #324's follow-ups, `git mv` into `archive/` in its own commit, `bun run check:plans` green. Then report and wait.
+- Close-out as arc 3's final commits (D12): merge `origin/dev`, read `index.md` and `lessons.md`, write the Outcome, promote lessons (the two-line foundation numbering; the oracle-major refusal), file open items (Testnet defaults waiting on unleashed's generation, `blocked:external`; OA-3's disposition), comment on #324's follow-ups, `git mv` into `archive/` in its own commit, `bun run check:plans` green. Then report and wait.
 - Teardown after the merge: once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/aztec-rc3/plan.md` succeeds, `agent-worktree done aztec-rc3 --merged`. A `/loop` session checks on every firing; a `/goal` session arms one background wait after its wrap-up report.
-
-## Seeds (draft until approval)
-
-Use exactly one per session, inside this worktree (`agent-worktree resume aztec-rc3`). No ELI5 (orchestrator-owned).
-
-**Recommended, `/goal`:**
-
-```
-/goal Phases P1-P8 marked ✓ in implementations-plan/aztec-rc3/plan.md (the file's phase headers), each backed by its validation gate reported passing in the transcript at retry 0, every allowed red listed per the expected-red rule; each fill-in's value read from its source as § Fill-ins says and quoted; for each phase `LESSONS_FILE=implementations-plan/aztec-rc3/lessons/phase-N.md` printed; `/code-review` NOT run; the codex loop (gpt-6.1-sol, high) converged on arc 1 (and each fill-in round) and arc 3, plus the final cross-arc pass, each quoted; no exclude left in bunfig.toml; the stack (arc 1, arc 3, close-out) on GitHub with the close-out's archive move (`git show --stat`); `bun run test:all` and `bun run lint` exit 0. Never merge, never dispatch a workflow.
-```
-
-**Fallback, `/loop`:**
-
-```
-/loop 15m Drive implementations-plan/aztec-rc3. Each firing: (1) read plan.md and lessons/ from the stack's top layer; if the plan is archived on dev, run the teardown and stop; if delivered, babysit CI only. (2) Pick the next phase; if it waits on a fill-in, check its source (npm, `gh release list -R alejoamiras/presto`, `gh pr view 389`) and work on another phase meanwhile. (3) Run the phase's gate exactly as written; mark ✓ only on a pass. (4) Decide with /codex high (gpt-6.1-sol) and log it in lessons; never pin a value without its evidence, never merge, never dispatch. (5) Arc boundary: the codex loop first, then `gh stack add aztec-rc3-sdk`.
-```
