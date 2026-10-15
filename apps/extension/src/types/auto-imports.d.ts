@@ -72,6 +72,7 @@ declare global {
   const abiNameFitsRole: typeof import('../utils/token-transfer-vocabulary').abiNameFitsRole
   const abortableSleep: typeof import('../utils/abortable-sleep').abortableSleep
   const activateNetworkGuarded: typeof import('../utils/guarded-network-activation').activateNetworkGuarded
+  const activationFailureReason: typeof import('../composables/unlockWait').activationFailureReason
   const activityRowRoute: typeof import('../utils/activity-rows').activityRowRoute
   const addressChangeText: typeof import('../utils/contact-import-rows').addressChangeText
   const aggregateFiat: typeof import('../utils/token-aggregate').aggregateFiat
@@ -177,6 +178,7 @@ declare global {
   const initTransactionService: typeof import('../utils/core').initTransactionService
   const inject: typeof import('vue').inject
   const inputRoom: typeof import('../utils/hero-ruler').inputRoom
+  const isActivatingOtherThan: typeof import('../composables/useProfileBootstrap').isActivatingOtherThan
   const isActiveScopeRow: typeof import('../utils/token-order').isActiveScopeRow
   const isAmountAboveDustThreshold: typeof import('../utils/incoming-dust').isAmountAboveDustThreshold
   const isApprovedSendInFlight: typeof import('../utils/in-flight-send').isApprovedSendInFlight
@@ -723,6 +725,7 @@ declare module 'vue' {
     readonly abiNameFitsRole: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['abiNameFitsRole']>
     readonly abortableSleep: UnwrapRef<typeof import('../utils/abortable-sleep')['abortableSleep']>
     readonly activateNetworkGuarded: UnwrapRef<typeof import('../utils/guarded-network-activation')['activateNetworkGuarded']>
+    readonly activationFailureReason: UnwrapRef<typeof import('../composables/unlockWait')['activationFailureReason']>
     readonly activityRowRoute: UnwrapRef<typeof import('../utils/activity-rows')['activityRowRoute']>
     readonly addressChangeText: UnwrapRef<typeof import('../utils/contact-import-rows')['addressChangeText']>
     readonly aggregateFiat: UnwrapRef<typeof import('../utils/token-aggregate')['aggregateFiat']>
@@ -828,6 +831,7 @@ declare module 'vue' {
     readonly initTransactionService: UnwrapRef<typeof import('../utils/core')['initTransactionService']>
     readonly inject: UnwrapRef<typeof import('vue')['inject']>
     readonly inputRoom: UnwrapRef<typeof import('../utils/hero-ruler')['inputRoom']>
+    readonly isActivatingOtherThan: UnwrapRef<typeof import('../composables/useProfileBootstrap')['isActivatingOtherThan']>
     readonly isActiveScopeRow: UnwrapRef<typeof import('../utils/token-order')['isActiveScopeRow']>
     readonly isAmountAboveDustThreshold: UnwrapRef<typeof import('../utils/incoming-dust')['isAmountAboveDustThreshold']>
     readonly isApprovedSendInFlight: UnwrapRef<typeof import('../utils/in-flight-send')['isApprovedSendInFlight']>

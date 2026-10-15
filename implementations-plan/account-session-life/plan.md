@@ -1,8 +1,8 @@
 ---
 plan: account-session-life
 tier: mid
-status: arcs 1 to 3 merged (#253, #266, #422); revised 2026-10-14 at dev 15881c7d for arc 4 (the Ready handshake, the start-up bar, #421, P7-09) and arc 5 (P7-05 to P7-07); awaiting the orchestrator's approval; 3.4 waits on backup-import-export arc 3
-issues: "#99, #100, #159, #198, #158 (arc 1, merged); #157 part (arc 2, merged); #24, #137, #208 reveal (arc 3, merged); #157, #421 (arc 4); #99, #100, #159 page 7 picks (arc 5, Refs); #208 autocomplete (3.4, deferred)"
+status: arcs 1 to 4 merged (#253, #266, #422, #445); arc 5 built 2026-10-15 at dev 1a8b2b6d (P7-05 to P7-07, P7-10, P7-12); 3.4 waits on backup-import-export arc 3
+issues: "#99, #100, #159, #198, #158 (arc 1, merged); #157 part (arc 2, merged); #24, #137, #208 reveal (arc 3, merged); #157, #421 (arc 4); #99, #100, #159, #137 page 7 picks (arc 5); #208 autocomplete (3.4, deferred)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -19,7 +19,7 @@ Nine issues and page 7's picks on how accounts, profiles and sessions start, wai
 
 - **Arcs 1 to 3 (merged).** Arc 1 (#253): one critical section per account address (#99), a bounded, identity-checked profile activation (#100), the passkey retry confirms its saved credential (#159), account RPC params (#198), ConfirmPopup's dead branch (#158). Arc 2 (#266): the half of #157 no person sees. Arc 3 (#422): #24 closed as not planned (P7-01), the unlock toast (#137, P7-02), the split reveal (#208, P7-03).
 - **Arc 4.** The Ready handshake (#157, P7-08 = C): a popup call waits until the service says it has started. The start-up moment as P7-08b = C draws it: the unlock screen, and a 2 px bar along the top edge until Ready. The boot check stops depending on a connection, so a service that never starts ends in the banner and the reconnect storm stops (#421). Delete Profile gets the time its page promises (P7-09).
-- **Arc 5.** Page 7's picks for arc 1's surfaces: Create account skips an imported account's address (P7-06, #99); a new profile that does not open says so and goes to the unlock screen (P7-05, #100); the passkey window starts over after an authenticator with no PRF (P7-07, #159). Arc 4 is already a full PR (the messaging core's state machine, the popup's boot, both browsers' smoke and network suites); arc 5 shares one file with it, where arc 4 only rewrites a comment (`account/service.ts:246`), and needs only unit and smoke gates, so it reviews and merges on its own.
+- **Arc 5.** Page 7's picks for arc 1's surfaces: Create account skips an imported account's address (P7-06, #99); a new profile that does not open says so and goes to the unlock screen, or to the open profile's home when another profile took over (P7-05, P7-12, #100); the passkey window starts over after an authenticator with no PRF (P7-07, #159); Continue closes the last unlock failure's toast (P7-10, #137).
 - **Phase 3.4** (#208's autocomplete, P7-04) waits on backup-import-export arc 3, which rewrites both files first. It joins this lane's first arc after that merges; nothing is planned for it now.
 
 Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md) (first plan), [lessons/phase-4.md](lessons/phase-4.md) (this revision).
@@ -33,8 +33,7 @@ Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Co
 - `confirmProfileOperation` and the recovery coordinator's `confirm`, which lost their popup caller in arc 1; session checks on account reads and metadata edits (`getAccounts`, `getAccount`, `changeAccountName`, `changeAccountVisibility`). The close-out files both (dedupe first).
 - Fee-map cleanup on profile deletion (#91, fees-and-sponsors arc 2): arc 2's R4 seam stands.
 - `restore()`'s account writes (backup-import-export owns them).
-- OA-6 (an unlock error toast that stays after a retry unlocks): unsigned, ships as today, listed for the orchestrator's next page.
-- OA-7 and OA-8 (the start-up unlock screen's details; a create superseded by another profile): each ships its "what ships now" form.
+- OA-9 (which toasts Continue closes on the unlock screen): ships its "what ships now" form. OA-6 to OA-8 were signed on page 7's re-signing.
 - The onboarding tab's start-up: page 7 names the popup. Onboarding keeps its page while its calls wait, with no bar.
 - The `--scrim-loader` token in `@nulo/design`: its contract belongs to that package, though arc 4 deletes its only reader.
 
@@ -104,7 +103,7 @@ Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Co
 
 ### Asks
 
-OA-1 to OA-5 were answered on page 7 (OWNER-ASKS § Answers). OA-6 is open and ships as today. OA-7 (the unlock screen before the service answers) and OA-8 (a create superseded by another profile) are new; each ships its "what ships now" form.
+OA-1 to OA-8 were answered on page 7 and its re-signing (OWNER-ASKS § Answers). OA-9 (which toasts Continue closes) is open and ships its "what ships now" form.
 
 ## Architecture & Implementation
 
@@ -168,11 +167,12 @@ OA-1 to OA-5 were answered on page 7 (OWNER-ASKS § Answers). OA-6 is open and s
 
 **P7-05 (#100): a create that does not open says so.** In `activateCreatedProfile`:
 - The wait gains `limitMs`: `CREATE_ACTIVATION_LIMIT_MS` = 60 s, beside the 30 s start deadline, counted from when the create call returns and the profile exists. Name entry, the create call and a passkey ceremony are the person's own steps, so they are not the start-up the record names. It is one more timer in the one watcher, cleared on every settlement. 60 s is the call bound every popup read already has and the boot banner's limit; the record asks for a named limit without a value, so OA-8 lists 60 s for the owner.
-- On `UnlockTimeoutError` or `BootstrapFailedError` it hands off only while this popup shows no other profile: `!appStore.isLogined`; `appStore.profile` is unset, the created one, or the one selected when Create was pressed; and no activation of another profile is in flight. `useProfileBootstrap` keeps the ids of the `bootstrapActiveProfile` calls from entry to settlement, through the final session read and the `isLogined` commit, and exports the predicate; `inFlightBootstraps` would not do, as it clears before that read (`useProfileBootstrap.ts:142-144,175-180`). New profile opens only from the unlock screen and from register, so `isLogined` is false at Create. Otherwise it rethrows `ActivationSupersededError` (OA-8).
-- The hand-off calls `supersedeProfileActivations()`, so a start that finishes later does not move the screen (F32); an activation that starts after it is untouched. It awaits `setLastActiveProfileId(profile.id, { unless })` through the storage facade's `unless` seam (`utils/storage.ts:80`), where `unless` is "another profile opened or was selected", then checks again and throws `ActivationSupersededError` if so, which keeps the latch. Otherwise it sets `appStore.profile`, pushes `/popup/auth` (the unlock screen re-selects the last active profile on mount) and calls `openToast({ kind: "error", label: "Something went wrong", sub: "Open the wallet again to unlock your new profile." })`, which replaces the shell's bootstrap-failure toast (one snack at a time).
-- It logs `{ reason: "timeout" | "bootstrap-failed" }` at warn and resolves, so `handleCreate` releases its latch as the page leaves.
-- `ActivationSupersededError`, and a failure of the tail after the profile opened, rethrow as arc 1 ships, so the page keeps "Creating…" (OA-8).
+- On any failure of the wait or the tail it hands off. To the unlock screen only while this popup shows no other profile: `!appStore.isLogined`; `appStore.profile` is unset, the created one, or the one selected when the page opened (`selectedOnEntry`); and no activation of another profile is in flight. `useProfileBootstrap` keeps the ids of the `bootstrapActiveProfile` calls from entry to settlement, through the final session read and the `isLogined` commit, and exports the predicate; `inFlightBootstraps` would not do, as it clears before that read (`useProfileBootstrap.ts:142-144,175-180`). New profile opens only from the unlock screen and from register, so `isLogined` is false at Create. Otherwise (P7-12 = B): the toast below and `/popup/general`, the open profile's home, with nothing recorded or superseded; a tail failure after the created profile opened lands there too.
+- The hand-off calls `supersedeProfileActivations()`, so a start that finishes later does not move the screen (F32); an activation that starts after it is untouched. It awaits `setLastActiveProfileId(profile.id, { unless })` through the storage facade's `unless` seam (`utils/storage.ts:80`), where `unless` is "another profile opened or was selected", then checks again and goes home if so (P7-12). Otherwise it sets `appStore.profile`, pushes `/popup/auth` (the unlock screen re-selects the last active profile on mount) and calls `openToast({ kind: "error", label: "Something went wrong", sub: "Open the wallet again to unlock your new profile." })`, which replaces the shell's bootstrap-failure toast (one snack at a time).
+- It logs `{ reason }` (`activationFailureReason`'s category) at warn and resolves, so `handleCreate` releases its latch as the page leaves. Only a failure of the hand-off itself rejects, which keeps the latch.
 - The session the create opened stays open in the worker. Unlocking re-opens it, and reopening the popup goes straight in (OA-8 notes it). The unlock screen is not a security boundary for an open session. Onboarding is unchanged (F32).
+
+**P7-10 (#137): Continue closes the last failure's toast.** The unlock page records the id of each toast its failure ladder opens; `handleUnlockWallet`, past its two guards, closes the current toast when it has that id, as the passkey ceremony closes only its own. Another surface's toast stays (OA-9 asks).
 
 **P7-07 (#159): the window starts over after a no-PRF authenticator.** In the window's `prompt`, a kept `PasskeyUnconfirmedError` is confirmed on Try again only when `classifyPasskeyFailure` does not read it as "no-prf". Otherwise Try again runs the request's own create again, under the same profile id the background requires (F33). `unconfirmed` stays set, so the body keeps "Your passkey was saved but not confirmed. Try again to finish.": the record keeps the words. The no-PRF credential stays orphaned, as the in-page start-over leaves one.
 
@@ -193,6 +193,7 @@ OA-1 to OA-5 were answered on page 7 (OWNER-ASKS § Answers). OA-6 is open and s
 | 5 | `wallet/services/account/service.ts`, `create-import-lock.test.ts` | the skip; `dropReplacedImportedKey` deleted |
 | 5 | `composables/unlockWait.ts`, `composables/useProfileBootstrap.ts`, `utils/lastActiveProfile.ts`, `popup/pages/profile/new-profile-helpers.ts`, `new.vue`, `useProfileCreateFlow.ts` (+ tests) | `limitMs`; the fenced hand-off; the activation predicate; the pointer's `unless` |
 | 5 | `popup/windows/passkey/index.vue` (+ `index.test.ts`) | start over after no-PRF |
+| 5 | `popup/pages/auth.vue` (+ `auth.test.ts`) | Continue closes its own failure toast |
 
 ### Trade-offs and alternatives not taken
 
@@ -237,7 +238,7 @@ The secrets in play are the master secret, the imported-keys DEK, sealed importe
 | 4 | A boot that crash-loops or hangs | About 140 reconnects a second, each a new boot run | Reconnects spaced 250 ms per client; no boot run per pre-Ready reconnect |
 | 4 | Delete Profile behind a proof | The page reported failure at 60 s while the deletion ran on | The page's own client waits 30.5 minutes; the backup rollback keeps 60 s; the call gains no authority |
 | 5 | Create against an imported address | The imported row and its key were replaced | Create never overwrites an occupied address, so an imported key keeps its row |
-| 5 | A new profile that does not open | "Creating…" forever | The hand-off writes the pointer only while no other profile opened (`unless`), routes only after re-checking, and opens or closes no session |
+| 5 | A new profile that does not open | "Creating…" forever | The hand-off writes the pointer only while no other profile opened (`unless`), routes to the unlock screen only after re-checking, else to the open profile's home with nothing written, and opens or closes no session |
 | 5 | The window's retry after no PRF | The same credential, which cannot confirm | A new credential under the same user handle; the old one stays orphaned, as in-page |
 
 **Lock order (1, 5).** Type key, then row key. A row-lock holder awaits storage only and never calls `unwrite`; arc 5 takes the row lock per attempt, never across a derivation. Reconcile's dependent purges run outside every row lock. Nothing that holds `restoreLock` or `runExclusive` calls create or import.
@@ -366,7 +367,7 @@ Every gate below passed with exit 0 at retry 0; STATUS.md and `lessons/phase-1.m
 
 ### Arc 5: page 7's picks for arc 1's surfaces
 
-#### Phase 5.1: Create account skips an imported address (P7-06)
+#### Phase 5.1: Create account skips an imported address (P7-06) ✓
 
 1. Build the skip as § Arc 5 states; delete `dropReplacedImportedKey`.
 2. Rewrite the replacement cases of `create-import-lock.test.ts`, whose mock gives index 0 the address `SHARED` and every later index `NEXT`:
@@ -381,7 +382,7 @@ Every gate below passed with exit 0 at retry 0; STATUS.md and `lessons/phase-1.m
 - Pass: exit 0; the new proofs fail against the base `service.ts`.
 - Layers: lint, typecheck, unit, smoke e2e (Chrome).
 
-#### Phase 5.2: the hand-off (P7-05)
+#### Phase 5.2: the hand-off (P7-05, P7-12) ✓
 
 1. Add `limitMs` to `awaitProfileActivation`, and the hand-off to `activateCreatedProfile`, which now takes `openToast`.
 2. Tests, with fake timers:
@@ -396,7 +397,7 @@ Every gate below passed with exit 0 at retry 0; STATUS.md and `lessons/phase-1.m
 - Pass: exit 0; the new proofs fail against the base copies.
 - Layers: lint, typecheck, unit, smoke e2e (Chrome).
 
-#### Phase 5.3: the window starts over (P7-07)
+#### Phase 5.3: the window starts over (P7-07) ✓
 
 1. Change `prompt` in `popup/windows/passkey/index.vue` as § Arc 5 states.
 2. `index.test.ts`:
@@ -408,12 +409,19 @@ Every gate below passed with exit 0 at retry 0; STATUS.md and `lessons/phase-1.m
 - Pass: exit 0 on both browsers; the new proof fails against the base copy.
 - Layers: lint, typecheck, unit, smoke e2e on Chrome and Firefox.
 
-#### Arc 5 boundary gate
+#### Phase 5.4: Continue closes the last failure's toast (P7-10) ✓
 
-- Commands: `bun run audit:vue`; `bun run test:all`; `cd apps/extension && bun run test:e2e -- tests/e2e/accounts.test.ts tests/e2e/account-import-export.test.ts tests/e2e/registration.test.ts tests/e2e/passkey-retry.test.ts tests/e2e/passkey-toolbar-panel.test.ts --retry=0`, then the same with `NULO_E2E_BROWSER=firefox`; `NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/imported-account-execution.test.ts`.
+1. Route the failure ladder's toasts through one helper that records the toast id; close that toast at the next attempt, as § Arc 5 states.
+2. **New proof** (`auth.test.ts`): Continue after an unexpected failure closes its toast before the new attempt answers. **Guard**, in the same case: a toast another surface opened stays.
+
+**Validation gate**: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/popup/pages/auth.test.ts`; smoke `tests/e2e/auth-flows.test.ts` on Chrome, retry 0. Pass: exit 0; the proof fails on the base copy.
+
+#### Arc 5 boundary gate ✓
+
+- Commands: `bun run audit:vue`; `bun run test:all`; `cd apps/extension && bun run test:e2e -- tests/e2e/accounts.test.ts tests/e2e/account-import-export.test.ts tests/e2e/registration.test.ts tests/e2e/passkey-retry.test.ts tests/e2e/passkey-toolbar-panel.test.ts tests/e2e/auth-flows.test.ts --retry=0`, then the same with `NULO_E2E_BROWSER=firefox`; `NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/imported-account-execution.test.ts`.
 - Pass: every command exits 0.
 - Layers: lint, typecheck, unit, build, smoke e2e on both browsers, network e2e (Chrome). No e2e scenario is added: each pick's branch is proved where it lives (the account service, the activation helper, the window), and no browser behaviour decides it.
-- Then the arc's Codex loop, then the final cross-arc pass.
+- Then the arc's Codex loop. The final cross-arc pass rides the close-out, after 3.4.
 
 ### Phase 3.4: backup autocomplete (P7-04), deferred
 
@@ -431,10 +439,12 @@ Add `autocomplete="current-password"` to `ImportFullBackupForm.vue`'s decrypt fi
 - **The full-screen loader** "INITIALIZING / RECONNECTING" (arc 4): removed. Today it renders only on a page whose extension context is gone (I5); that page now shows the bar, then the banner.
 - **Delete Profile beyond 60 s** (arc 4; P7-09 = B): "the popup waits for deleteProfile up to the hint's 30 minutes plus the start-up allowance, so the page keeps "Deleting…" and its hint until the background finishes, then shows "Profile deleted" as on the quick path. No new words." The backup import's rollback keeps its 60 s.
 - **Create account on an imported account's address** (arc 5; P7-06 = B): "Skip it: keep the imported account as it is and create the next account after it."
-- **Popup New profile that does not open** (arc 5; P7-05 = B): "the toast reads "Something went wrong" with the line "Open the wallet again to unlock your new profile." and the popup goes to the unlock screen with the new profile selected." Named limit: 60 s after the new profile exists, the planner's value (OA-8). A create superseded by another profile keeps "Creating…", and reopening the popup after the hand-off goes straight in, since the session stays open (OA-8 asks both).
+- **Popup New profile that does not open** (arc 5; P7-05 = B): "the toast reads "Something went wrong" with the line "Open the wallet again to unlock your new profile." and the popup goes to the unlock screen with the new profile selected." Named limit: 60 s after the new profile exists (OA-8). Reopening the popup after the hand-off goes straight in, since the session stays open.
+- **The same, while another profile took over or after the page's last steps failed** (arc 5; P7-12 = B): "Say so and stay on the open profile. The toast reads 'Something went wrong' with the line 'Open the wallet again to unlock your new profile.', and the popup goes to the open profile's home."
+- **Unlock screen, Continue after a failed unlock** (arc 5; P7-10 = B): "pressing Continue again dismisses the toast before the new attempt, so a retry that unlocks lands on a clean Home." As built: the screen's own failure toasts only (OA-9 asks about the other two).
 - **Passkey window, Try again after no PRF** (arc 5; P7-07 = B): "Try again starts a new passkey so the person can pick an authenticator that works. The window's words stay."
 
-Sign-off: each line rides the record it quotes; OA-7 and OA-8 ship their "what ships now" forms, and their PRs may open before the answers. The orchestrator holds arc 4's merge until OA-7 is signed and arc 5's until OA-8 is (CLAUDE.md § UI changes). Arc 4's PR attaches both themes of the bar over the unlock frame, the never-starts frame and the bar over General across a restart. Arc 5's attaches the P7-05 toast and the accounts list after a skip. All are taken with throwaway local hooks, never committed. P7-07 and P7-09 draw nothing new: a browser prompt, and the page's ten-second state held longer.
+Sign-off: each line rides the record it quotes; OA-7 and OA-8 were signed on page 7's re-signing (P7-11 = A, P7-12 = B); OA-9 ships its "what ships now" form (CLAUDE.md § UI changes). Arc 4's PR attaches both themes of the bar over the unlock frame, the never-starts frame and the bar over General across a restart. Arc 5's attaches the P7-05 toast and the accounts list after a skip. All are taken with throwaway local hooks, never committed. P7-07 and P7-09 draw nothing new: a browser prompt, and the page's ten-second state held longer.
 
 ## Decision ledger
 
@@ -447,7 +457,8 @@ Sign-off: each line rides the record it quotes; OA-7 and OA-8 ship their "what s
 - **D-orch-1 to D-orch-3 (2026-10-10).** No stack: each arc opens its own PR against `dev`. Arc 1 only, then. R2-1 asked first on arc 1's review: both legs found it unreachable.
 - **D-orch-4 to D-orch-6 (2026-10-10).** After a squash merge the next arc branches from `dev`. Arc 2 lands first under R4 and says `Refs #157`. Arc 2's design was asked first; the answers are below.
 - **D-orch-7, D-orch-8 (2026-10-14).** Arc 3 builds 3.1 to 3.3; 3.4 is deferred until backup-import-export arc 3 merges, and #208 stays open. P7-05 to P7-09 wait for a plan revision.
-- **D-orch-9 (2026-10-14, this revision's brief).** Arc 4 builds P7-08 and P7-08b = C, owns #421, and gives each of P7-05, P7-06, P7-07 and P7-09 a phase, in arc 4 or a small arc 5. OA-6 is not planned. 3.4 stays deferred. The tree wins over the plan; the branch is `account-session-life-arc-4` from `dev` `15881c7d`.
+- **D-orch-10 (2026-10-15, arc 5's brief).** Build P7-06, P7-05 with P7-12's words, P7-07 and P7-10 from dev `1a8b2b6d`; one PR against `dev` with `Closes #99`, `#100`, `#159` and `Refs #137`; 3.4 and the close-out are not this arc's.
+- **D-orch-9 (2026-10-14, the arc 4 revision's brief).** Arc 4 builds P7-08 and P7-08b = C, owns #421, and gives each of P7-05, P7-06, P7-07 and P7-09 a phase, in arc 4 or a small arc 5. OA-6 is not planned. 3.4 stays deferred. The tree wins over the plan; the branch is `account-session-life-arc-4` from `dev` `15881c7d`.
 
 ### Audit verdicts
 
@@ -530,6 +541,18 @@ Sign-off: each line rides the record it quotes; OA-7 and OA-8 ship their "what s
 
 **Arc 4 review, round 3** (Codex, resumed over `3b579ef0..133460ca`): `APPROVE`, no findings; R2-1 and R2-2 verified. The loop closes at its third round.
 
+**Arc 5 review, round 1** (`1a8b2b6d..de20bab6`; Codex `01a13d01-…` gpt-6.1-sol high, and one Opus agent alongside): Codex `CHANGES`, Opus `CHANGES`; each item checked at the tree:
+
+| # | Finding | Disposition |
+|---|---|---|
+| C1 Medium, O2 | The unawaited push released Create's latch while a guard read kept the page up: a second click made a second profile | FIXED eee20090: the hand-off awaits its navigation and rethrows a failed one; proof red before |
+| C2 Medium, O1 | A superseded activation failing later published the shell's failure toast over the hand-off's (the shell fences on its event sequence, which a supersede does not move) | FIXED eee20090: an event-driven activation overtaken by `supersedeProfileActivations` resolves false; proof red before |
+| C3 Medium, O3 | No PRF found while confirming a kept credential: the window confirmed it forever (`confirmCreatedCredential` throws a bare `PasskeyPrfError`) | FIXED eee20090: the window confirms through `confirmMinted`, which wraps every failure; proof red before |
+| O4 Comment | A hand-off from a page the person already left moved them out of their screen | FIXED 9bcb382a: no route, toast, pointer or supersede once the page is not current |
+| O5, O6 Comment; test:all | A vacuous assertion; the predicate's doc; `toast-call-sites.test.ts` wants each `openToast` call a literal | FIXED (9bcb382a for the literals); O6's path (another window's unlock superseded by the create, then the create failing) left as is |
+
+**Arc 5 review, rounds 2 and 3** (Codex, resumed): round 2 `CHANGES`, round 1's six verified; one Low, demonstrated: a person who pressed Back during the hand-off's pointer write still got the created profile selected, the unlock screen and the toast. FIXED 3e190ed7 (leaving joins the write's `unless` and ends the hand-off); proof red before. Round 3 `APPROVE`, no findings.
+
 ### Deviations from the plan text (the tree wins)
 
 - **Arc 2.** One deadline taken at entry covers the init and the delegate waits; `DEFAULT_INIT_TIMEOUT_MS` is exported from `background/index.ts`; three more PXE test files moved to the record shape; the shared `PortRegistry` fake passes the port to `onDisconnect`.
@@ -539,6 +562,7 @@ Sign-off: each line rides the record it quotes; OA-7 and OA-8 ship their "what s
   - OA-4's premise "the unlock screen while it is still deciding" held only for a popup open across a restart; a fresh popup is empty until `getProfiles` answers (F22), so the first screen is a change to make.
   - "The loader keeps today's timing under C" became the loader's removal, because Ready makes the flag false at every start (F24).
   - I3 is demonstrated (F19, #421). The send boundary became a deadline check before the post and a `Connected` check in `sendEnvelope`, which leave the offscreen transport alone (F18). Ready comes after the whole collection started, not from the 500 ms poll (F20) or one service's start (F35). `sw-resilience.test.ts` gains a held-boot case instead of the first plan's base-evidence case, because arc 2 already reads `lastError`.
+- **Arc 5 build** (details in `lessons/phase-5.md`): P7-12 = B replaces the superseded and tail-failure rethrows with the open profile's home; the selection is captured when the page opens; the in-flight predicate counts the event-driven activations only (the 80-line budget; the hydrate-only case is a deep edge); P7-10 is phase 5.4; `activationFailureReason` moved to `unlockWait.ts`.
 - **Arc 4 build.** `reset.vue` disconnects its client on unmount only when no call runs, else when the call settles: a disconnect at unmount dropped the rest of a reset the lock had routed away from (O1). The type-roles surface inventory swaps `overlay:GlobalLoader` for `overlay:StartBar`.
 
 ## Delivery
@@ -549,9 +573,8 @@ No stack (D-orch-1, D-orch-4): each arc opens one PR against `dev` (`gh pr creat
 |---|---|---|---|---|---|
 | 1 to 3 | (merged) | 1.1 to 3.3 | `dev` | #253, #266, #422 | closed or referenced |
 | 4 | `account-session-life-arc-4` (this branch) | 4.1 to 4.5 | `dev` `15881c7d` | `fix(messaging): calls wait for the background's ready, the popup opens on the unlock screen` | `Closes #157`, `Closes #421` |
-| 5 | `account-session-life-arc-5` | 5.1 to 5.3 (+ 3.4 if unblocked) | `dev` after arc 4's merge | `fix(account): create skips an imported address, a new profile that does not open says so` | `Refs #99, #100, #159` (closed by #253); `Closes #208` only with 3.4 |
+| 5 | `account-session-life-arc-5` | 5.1 to 5.4 | `dev` `1a8b2b6d` | `feat(profile): create skips a taken address; a new profile that does not open says so` | `Closes #99, #100, #159`, `Refs #137` (D-orch-10) |
 
-- The orchestrator may build arc 5 before arc 4: they share `account/service.ts`, where arc 4 only rewrites a comment, so the later arc rebases over the earlier.
 - The close-out rides the last built arc as its final commits (`implementations-plan/README.md` § Portable rules, rule 5). If 3.4 is still blocked then, the Outcome names #208 as its open item.
 - Each PR body says what changed and why, the validation runs with outcomes, the per-browser suite wall-clock before and after when it adds an e2e scenario, the records it quotes, and the screenshots. Merging is the orchestrator's call.
 

@@ -1,6 +1,6 @@
 # Owner asks: account-session-life
 
-Eight questions. Page 7 answered OA-1 to OA-5 on 2026-10-14 (§ Answers); the plan's arcs 4 and 5 build those picks. OA-6 (found in arc 3's review), OA-7 and OA-8 (found in the arc 4 revision) are open, and each ships in its "What ships now" form.
+Nine questions. Page 7 answered OA-1 to OA-5 on 2026-10-14, and its re-signing the same night answered OA-6 (P7-10 = B), OA-7 (P7-11 = A) and OA-8 (P7-12 = B) (§ Answers); arcs 4 and 5 build those picks. OA-9 (found building arc 5) is open and ships in its "What ships now" form.
 
 ## OA-1: profile create when the new profile does not start (#100)
 
@@ -131,6 +131,20 @@ Under both B and C, the banner for a service that never starts comes after up to
 
 Arc 5's PR may open before you answer; its merge waits for it.
 
+## OA-9: which toasts Continue closes on the unlock screen (#137, arc 5)
+
+**Surface.** The unlock screen (`popup/pages/auth.vue`) when Continue is pressed with a toast showing that the screen's own unlock failure did not open.
+
+**Why it is asked.** P7-10 = B closes "the unlock error toast" on a new attempt, "as the passkey ceremony does", which closes only its own. Two other error toasts can sit over the unlock screen: the wallet's "Something went wrong" (no line) when an unlock's start-up fails, which the shell opens; and P7-05's "Something went wrong" with the line "Open the wallet again to unlock your new profile." after a new profile did not open.
+
+**Options.**
+- **A. Only its own.** Continue closes the toasts the unlock screen's failures opened ("Unlock timed out. Please try again", "Something went wrong" with "Try unlocking again.", the passkey lines). The two above stay until closed, so an unlock that succeeds can land on Home with one of them.
+- **B. Any error toast.** Continue closes whatever error toast shows, so a successful unlock always lands on a clean Home.
+
+**Recommendation.** B: both toasts are about the attempt the person is now making again.
+
+**What ships now.** A. Either is a one-line change on the unlock page.
+
 ## Answers
 
 Decision page 7, signed by the owner on 2026-10-14 and applied to the issues the same day (each issue's `## Decision` block). Each pick below changes what arc 1 or arc 2 shipped as "what ships now"; the 2026-10-14 revision of the plan builds them in arcs 4 and 5.
@@ -143,6 +157,10 @@ Decision page 7, signed by the owner on 2026-10-14 and applied to the issues the
 - **OA-4 follow-up (P7-08b, #157): C**, picked 2026-10-14 19:20Z: "The unlock screen at once with a 2 px bar sweeping along the popup's top edge until the service has started. Nothing else changes and nothing moves. On a normal open at most one frame of the bar, none with a 200 ms delay before it shows; on a cold start the bar runs about a second and the unlock screen appears about a second sooner than today. The profile name stays blank until the service answers." Built in arc 4; OA-7 asks the details it leaves open.
 - **OA-5 (P7-09, #157): B.** Give this one call the time the page promises: the popup waits for `deleteProfile` up to the hint's 30 minutes plus the start-up allowance, so the page keeps "Deleting…" and its hint until the background finishes, then shows "Profile deleted" as on the quick path. No new words. Built in arc 4.
 
-OA-6 is not on page 7: it goes on the orchestrator's next page, with OA-7 and OA-8.
+Page 7 re-signed on 2026-10-14 21:59Z (the `## Decision` blocks on #137, #157, #100):
+
+- **OA-6 (P7-10, #137): B.** "Close it on a new attempt, as the passkey ceremony already does: pressing Continue again dismisses the toast before the new attempt, so a retry that unlocks lands on a clean Home." Built in arc 5; OA-9 asks which toasts count.
+- **OA-7 (P7-11, #157): A.** Keep their place, hidden, as arc 4 built it.
+- **OA-8 (P7-12, #100): B.** "Say so and stay on the open profile. The toast reads 'Something went wrong' with the line 'Open the wallet again to unlock your new profile.', and the popup goes to the open profile's home." Built in arc 5, with the 60 s limit as listed.
 
 Page 7's arc 3 records, built in arc 3 as approved: P7-01 (#24, no recovery bearer), P7-02 (#137, the unlock toast), P7-03 (#208, one eye per change-password field). P7-04 (#208, backup autocomplete) was not struck, so it stands; it is built in Phase 3.4, deferred by D-orch-7.

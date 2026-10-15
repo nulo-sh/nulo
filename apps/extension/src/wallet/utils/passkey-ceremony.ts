@@ -119,9 +119,10 @@ async function runCreate(userHandle: string, name: string, signal?: AbortSignal)
 	return await confirmMinted(id, userHandle, signal)
 }
 
-/** Confirms a credential a create already minted; when that fails, the credential still exists
- *  and only needs confirming again. */
-async function confirmMinted(credentialId: string, userHandle: string, signal?: AbortSignal): Promise<PasskeyCredentialData> {
+/** Confirms a credential a create already minted. Every failure is a `PasskeyUnconfirmedError`
+ *  with this attempt's cause: the credential still exists, and a caller can tell a credential
+ *  whose authenticator has no PRF from a prompt that was dismissed. */
+export async function confirmMinted(credentialId: string, userHandle: string, signal?: AbortSignal): Promise<PasskeyCredentialData> {
 	try {
 		return await confirmCreatedCredential(credentialId, userHandle, signal)
 	} catch (cause) {

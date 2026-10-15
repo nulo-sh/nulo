@@ -34,7 +34,7 @@ import { usePopupStore } from "@/stores/popup.store.ts"
 const appStore = useAppStore()
 const popupStore = usePopupStore()
 
-const { openToast } = useToast()
+const { openToast, toast, closeToast } = useToast()
 
 const router = useRouter()
 
@@ -55,6 +55,8 @@ const isWrongPassword = ref(false)
 const isTornImport = ref(false)
 const isPasswordType = ref(true)
 const isAwaitingResponse = ref(false)
+// The failure toast this screen opened last: a new attempt closes it, never another surface's.
+let failureToastId
 
 const isPasskeyProfile = computed(() => appStore.profile?.type === "passkey")
 // Opened before the service answered: the heading, its line and the form depend on the profile's
@@ -166,6 +168,8 @@ const handleUnlockWallet = async () => {
 	// must not mint duplicate same-profile continuations.
 	if (isAwaitingResponse.value) return
 	const isPasskeyAttempt = isPasskeyProfile.value
+	// So an attempt that unlocks lands on a clean Home, and a second failure shows its toast afresh.
+	if (toast.value && toast.value.id === failureToastId) closeToast()
 
 	try {
 		let activeProfile
@@ -183,7 +187,10 @@ const handleUnlockWallet = async () => {
 			// the analogous import handshake allows 30 s).
 			await awaitProfileActivation(appStore, activeProfile.id, UNLOCK_WAIT_MS)
 		} catch (error) {
+			// The ladder runs synchronously, so a toast that appears during it is its own.
+			const shown = toast.value?.id
 			handleUnlockError(error, activeProfile?.id, isPasskeyAttempt)
+			if (toast.value && toast.value.id !== shown) failureToastId = toast.value.id
 			return
 		} finally {
 			isAwaitingResponse.value = false
