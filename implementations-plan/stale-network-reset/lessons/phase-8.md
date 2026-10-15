@@ -37,6 +37,11 @@ The fixes broke into the gate's second Chrome run, which was stopped; the gate r
 
 ## Gate
 
+Re-run at `62b7a8db`, over arc 2's capture-review changes (the never-opened rule, the journal's unmovable names, Send closing on a key refusal), retry 0, three runs in a row per browser: Chrome 6/6 tests each run (197 s, 242 s, 209 s), Firefox 6/6 each run (250 s, 253 s, 242 s); the proverless stamp found in every bundle; production `build:chrome` and `build:firefox` exit 0 with no `nulo:e2e:restore-gate` string.
+
+Earlier runs:
+
+
 At `e681339f`, after the rebase onto `dev`, and after `bun run audit:vue` exit 0 at the same commit (794 files passed, 3 skipped; 12749 tests), retry 0, `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent` on the three files, three runs in a row per browser:
 
 - Chrome: 3 files, 6 tests passed in each run; 169.6 s, 169.2 s, 163.9 s. N1 27.6 / 30.9 / 28.4 s, N2 35.2 / 34.7 / 34.6 s, N3 22.6 / 21.6 / 22.1 s.
