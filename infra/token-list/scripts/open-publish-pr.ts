@@ -4,6 +4,7 @@ import { FLOOR_PATH, floorText, type ListPairs, raisesFloor } from "./floor"
 
 export const ENVELOPE_PATH = "infra/token-list/public/v1/list.json"
 export const BRANCH_PREFIX = "token-list-publish-"
+const TRUNK = "dev"
 
 export interface PublishIO {
 	branchHead(branch: string): Promise<string | null>
@@ -65,9 +66,16 @@ export function publishPrs(pulls: readonly Pull[], repo: string): { number: numb
 		.map((pr) => ({ number: pr.number, branch: pr.head.ref }))
 }
 
-/** Whether this list raises the floor, against the envelope served at the commit the run signed. */
+/**
+ * Whether this list raises the floor, against the envelope at the commit the run signed. A run whose
+ * base no longer holds the envelope `dev` serves was approved on a stale diff and could miss a
+ * delisting, so it stops before any write.
+ */
 async function raisesFloorAt(io: PublishIO, baseSha: string, next: ListPairs): Promise<boolean> {
 	const served = await io.read(ENVELOPE_PATH, baseSha)
+	if ((await io.read(ENVELOPE_PATH, TRUNK)) !== served) {
+		throw new Error(`${TRUNK} serves another list than this run's base: close any stale publish PR and re-dispatch`)
+	}
 	return raisesFloor(served === null ? { tokens: [], flagged: [] } : envelopeMeta(served).pairs, next)
 }
 

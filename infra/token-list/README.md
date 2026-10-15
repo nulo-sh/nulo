@@ -44,6 +44,10 @@ verifier are [`@nulo/token-list`](../../packages/token-list/README.md).
    or flags, it also raises the floor and says so. Workers Builds deploys `dev`; the nightly
    `token-list-host-live` job checks the served list.
 
+A run whose base no longer holds the list `dev` serves fails before it opens a PR: its summary and its
+floor decision compared against a list no longer served. A publish PR that conflicts with `dev` on
+`list.json` is stale the same way: close it and re-dispatch, never resolve the conflict.
+
 `gh workflow run publish-token-list.yml --ref dev` re-signs the current source with a new sequence.
 
 ## Keys

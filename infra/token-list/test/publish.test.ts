@@ -37,6 +37,9 @@ function specifiers(file: string, text: string): string[] {
 }
 
 const INPUT = { baseSha: "b".repeat(40), runUrl: "https://github.com/nulo-sh/nulo/actions/runs/1", payloadSha256: "p", tokensSha256: "t" }
+const pair = (n: number) => ({ chainId: 1, address: `0x${n.toString(16).padStart(64, "0")}` })
+/** The envelope at the run's base, still the one `dev` serves. */
+const servedFiles = (text: string) => ({ [`${INPUT.baseSha}:${ENVELOPE_PATH}`]: text, [`dev:${ENVELOPE_PATH}`]: text })
 
 function fakeIO(state: { heads?: Record<string, string>; files?: Record<string, string>; open?: { number: number; branch: string }[] }) {
 	const calls: string[] = []
@@ -106,8 +109,7 @@ describe("open-publish-pr", () => {
 	})
 
 	test("commits the floor beside the envelope only when the list delists or flags, and a re-run repeats nothing", async () => {
-		const pair = (n: number) => ({ chainId: 1, address: `0x${n.toString(16).padStart(64, "0")}` })
-		const served = { [`${INPUT.baseSha}:${ENVELOPE_PATH}`]: envelopeFor(1760000000, [pair(1), pair(2)]) }
+		const served = servedFiles(envelopeFor(1760000000, [pair(1), pair(2)]))
 		const delist = envelopeFor(1770000000, [pair(1)])
 		const both = [
 			{ path: ENVELOPE_PATH, text: delist },
@@ -131,6 +133,35 @@ describe("open-publish-pr", () => {
 		const partial = fakeIO({ heads: { [branch]: head }, files: { ...onBranch, [`${head}:${FLOOR_PATH}`]: floorText(1) } })
 		await runPublish({ ...INPUT, envelopeText: delist }, partial.io)
 		expect(partial.commits).toEqual([both])
+	})
+
+	test("reads the flags of both envelopes: a new flag commits the floor, a kept one does not", async () => {
+		const servedAt = (flagged: unknown[]) => servedFiles(envelopeFor(1760000000, [pair(1)], flagged))
+		const flagging = envelopeFor(1770000000, [pair(1)], [pair(2)])
+		const newFlag = fakeIO({ files: servedAt([]) })
+		await runPublish({ ...INPUT, envelopeText: flagging }, newFlag.io)
+		expect(newFlag.commits).toEqual([
+			[
+				{ path: ENVELOPE_PATH, text: flagging },
+				{ path: FLOOR_PATH, text: floorText(1770000000) },
+			],
+		])
+		const keptFlag = fakeIO({ files: servedAt([pair(2)]) })
+		await runPublish({ ...INPUT, envelopeText: flagging }, keptFlag.io)
+		expect(keptFlag.commits).toEqual([[{ path: ENVELOPE_PATH, text: flagging }]])
+	})
+
+	test("refuses before any write when dev no longer serves the list the run was based on", async () => {
+		const base = envelopeFor(1760000000, [pair(1), pair(2)])
+		const next = envelopeFor(1770000000, [pair(1), pair(2)])
+		const moved = fakeIO({
+			files: { ...servedFiles(base), [`dev:${ENVELOPE_PATH}`]: envelopeFor(1765000000, [pair(1), pair(2), pair(3)]) },
+		})
+		await expect(runPublish({ ...INPUT, envelopeText: next }, moved.io)).rejects.toThrow("re-dispatch")
+		expect(moved.calls).toEqual([])
+		const current = fakeIO({ files: servedFiles(base) })
+		await runPublish({ ...INPUT, envelopeText: next }, current.io)
+		expect(current.commits).toEqual([[{ path: ENVELOPE_PATH, text: next }]])
 	})
 
 	test("the PR body names the floor only when the list raises it", () => {
