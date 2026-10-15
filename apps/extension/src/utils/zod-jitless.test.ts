@@ -2,7 +2,7 @@ import { beforeAll, expect, test } from "vitest"
 
 let z: typeof import("zod").z
 
-// Loading is not the behaviour under test, so it runs in the hook, not on the test's own budget.
+// The cold imports run on the hook's budget, not the test's; the flag module must load before zod.
 beforeAll(async () => {
 	await import("./zod-jitless")
 	z = (await import("zod")).z
