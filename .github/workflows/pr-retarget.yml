@@ -1,0 +1,152 @@
+# A base change fires `edited`, which the e2e lanes do not subscribe to, since every title or body
+# edit fires it too. Without a new run, a head keeps the checks it earned on its old base, skipped
+# suites included, although `main` force-runs every suite. This re-runs all jobs of each lane's latest
+# run of the head, and a re-run's `Detect changes` reads the new base. The `actions: write` scope it
+# needs sits in one job that runs no action, checks nothing out and interpolates nothing.
+name: Retarget
+
+on:
+  pull_request:
+    types: [edited]
+
+permissions: {}
+
+jobs:
+  rerun-e2e:
+    name: Re-run the e2e lanes on the new base
+    # A fork's or Dependabot's token is read-only, so it could not re-run anything.
+    if: github.event.changes.base && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: write
+    steps:
+      - name: Re-run each lane's latest run of the head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RETRY_PAUSE: "5"
+          POLL_PAUSE: "10"
+        run: |
+          set -euo pipefail
+          WORKFLOWS=(
+            pr-extension-smoke-e2e.yml
+            pr-extension-smoke-e2e-firefox.yml
+            pr-extension-network-e2e.yml
+            pr-extension-network-e2e-firefox.yml
+          )
+          err=$(mktemp)
+          # One call; a rate limit, a server error or a dropped connection is retried once after a
+          # pause. The body is printed only on success, and the last attempt's error stays in $err.
+          api() {
+            local out attempt
+            out=$(mktemp)
+            for attempt in 1 2; do
+              if gh api "$@" >"$out" 2>"$err"; then
+                cat "$out"
+                return 0
+              fi
+              cat "$err" >&2
+              if [ "$attempt" = 2 ] || { grep -Eq 'HTTP 4[0-9]{2}' "$err" && ! grep -Eq 'HTTP (403|429)' "$err"; }; then
+                return 1
+              fi
+              sleep "$RETRY_PAUSE"
+            done
+          }
+          # Prints "<attempt> <status>".
+          read_run() {
+            local run
+            run=$(api "repos/$REPO/actions/runs/$1") || return 1
+            jq -er 'select((.run_attempt | type) == "number" and (.status | type) == "string") | "\(.run_attempt) \(.status)"' <<<"$run"
+          }
+
+          failed=()
+          fail() {
+            echo "::error::$1"
+            failed+=("$2")
+          }
+          # GitHub re-runs only a completed run, so a refusal followed by an attempt above <seen> means
+          # another request re-ran it after this job's read, and that attempt reads the new base too.
+          rerun() {
+            local file=$1 id=$2 seen=$3 now
+            if api -X POST "repos/$REPO/actions/runs/$id/rerun" >/dev/null; then
+              echo "re-ran $id $file"
+            elif now=$(read_run "$id") && [ "${now%% *}" -gt "$seen" ]; then
+              echo "$id $file is already at attempt ${now%% *}"
+            else
+              fail "could not re-run run $id ($file)" "$id $file"
+            fi
+          }
+
+          # The event's head, not a live read: a head pushed since then has runs of its own, started
+          # after the change, and a re-run of an old head's run stops itself in `Detect changes`.
+          declare -A id_of baseline
+          pending=()
+          for file in "${WORKFLOWS[@]}"; do
+            if ! runs=$(api "repos/$REPO/actions/workflows/$file/runs" -X GET --paginate -f event=pull_request \
+              -f head_sha="$HEAD_SHA" -f per_page=100); then
+              fail "could not list the runs of $file" "$file"
+              continue
+            fi
+            # The query filters are checked again here, since GitHub ignores one it does not know.
+            if ! latest=$(jq -sr --arg head "$HEAD_SHA" --argjson pr "$PR" '
+              [.[].workflow_runs[] | select(.head_sha == $head and .event == "pull_request" and any(.pull_requests[]?; .number == $pr))]
+              | max_by(.id) // empty
+              | "\(.id) \(.run_attempt) \(.status)"' <<<"$runs"); then
+              fail "could not read the runs of $file" "$file"
+              continue
+            fi
+            if [ -z "$latest" ]; then
+              echo "$file has no run of $HEAD_SHA for #$PR"
+              continue
+            fi
+            read -r id attempt status <<<"$latest"
+            if [ "$status" = completed ]; then
+              rerun "$file" "$id" "$attempt"
+              continue
+            fi
+            # A run in flight may have read the old base. HTTP 409: it finished meanwhile.
+            if ! api -X POST "repos/$REPO/actions/runs/$id/cancel" >/dev/null && ! grep -q 'HTTP 409' "$err"; then
+              fail "could not cancel run $id ($file)" "$id $file"
+              continue
+            fi
+            # The cancel may have hit an attempt newer than the listed one, started by another request
+            # after this job's listing, so the attempt read now is the one to wait for.
+            if ! now=$(read_run "$id"); then
+              fail "could not read run $id ($file)" "$id $file"
+              continue
+            fi
+            id_of[$file]=$id
+            baseline[$file]=${now%% *}
+            pending+=("$file")
+          done
+
+          # One pass reads every cancelled lane, so a slow cancel holds back none of the others.
+          while [ "${#pending[@]}" -gt 0 ]; do
+            sleep "$POLL_PAUSE"
+            waiting=()
+            for file in "${pending[@]}"; do
+              id=${id_of[$file]}
+              if ! now=$(read_run "$id"); then
+                fail "could not read run $id ($file)" "$id $file"
+                continue
+              fi
+              read -r attempt status <<<"$now"
+              # An attempt this job's cancel never reached, started after its listing.
+              if [ "$attempt" -gt "${baseline[$file]}" ]; then
+                echo "$id $file was re-run by another request: attempt $attempt"
+              elif [ "$status" = completed ]; then
+                rerun "$file" "$id" "$attempt"
+              else
+                waiting+=("$file")
+              fi
+            done
+            pending=("${waiting[@]}")
+          done
+
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "::error::not re-run on the new base: ${failed[*]}. Re-run all jobs of this run, or push."
+            exit 1
+          fi
