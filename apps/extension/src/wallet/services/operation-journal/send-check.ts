@@ -178,8 +178,7 @@ export class SendCheck {
 	}
 
 	/** Starts once the device clock passes the expiry and reads until the finalized chain's time
-	 *  does. A nullifier that chain holds ends the watch for this run; nothing records it, so a
-	 *  restart asks once more. */
+	 *  does. A nullifier that chain holds sends the read on to the row's own receipt. */
 	private async expiryAnswer(
 		watch: Watch,
 		row: Extract<OpenRow, { kind: "expiring" }>,
@@ -203,8 +202,28 @@ export class SendCheck {
 			return undefined
 		}
 		if (proof === "expired") return { next: { check: "expired" }, refresh: false }
-		if (proof === "present") this.unwatch(watch)
-		else watch.nextAt = now + Math.max(DROPPED_RECHECK_INTERVAL_MS, proof * 1_000)
+		if (proof === "present") return this.presentAnswer(watch, row.txHash, node, live)
+		watch.nextAt = now + Math.max(DROPPED_RECHECK_INTERVAL_MS, proof * 1_000)
+		return undefined
+	}
+
+	/** A spent expiry nullifier proves only that some transaction spent it, a replacement included,
+	 *  so the row's own receipt decides: a mined success is `sent`. Any other receipt ends the watch
+	 *  for this run, unrecorded, so a restart asks once more; a read that fails keeps the slow
+	 *  watch, as a failed expiry read does. Read through `node` itself: `minedVerdict` folds a
+	 *  failed read into no answer. */
+	private async presentAnswer(watch: Watch, txHash: string, node: AztecNode, live: () => boolean): Promise<Answer | undefined> {
+		if (!live()) return undefined
+		let receipt: TxReceipt
+		try {
+			receipt = await node.getTxReceipt(TxHash.fromString(txHash))
+		} catch {
+			this.deps.logger.log(LOG_SOURCE, LogLevel.Debug, "send check receipt failed", { journalId: watch.id, stage: "receipt-error" })
+			return undefined
+		}
+		const verdict = verdictOf(receipt)
+		if (verdict?.check === "sent") return { next: verdict, refresh: true }
+		this.unwatch(watch)
 		return undefined
 	}
 

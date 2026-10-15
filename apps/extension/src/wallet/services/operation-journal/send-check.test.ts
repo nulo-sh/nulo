@@ -530,15 +530,66 @@ describe("SendCheck: an expiry the finalized chain has passed", () => {
 		expect(watched(h.check)).toBe(0)
 	})
 
-	test("the nullifier present writes nothing and ends the watch for this run", async () => {
+	/** Past the expiry with its nullifier spent: only the row's own receipt can say it went through. */
+	const presentHarness = () => {
 		const h = makeHarness([unconfirmedRow()])
 		h.clock.setNow(EXPIRES_AT + 1_000)
 		h.findLeavesIndexes.mockResolvedValue([{ data: 3n, l2BlockNumber: 4, l2BlockHash: finalizedAt(0).blockHash }])
+		return h
+	}
+
+	test.each([
+		["no mined receipt", pending()],
+		["a reverted receipt", mined("proven", "reverted")],
+	])("the nullifier present with %s writes nothing and ends the watch for this run", async (_label, receipt) => {
+		const h = presentHarness()
+		h.getTxReceipt.mockResolvedValue(receipt)
 		await h.check.start()
 		await h.tick(4)
 		expect(h.journal.writes).toEqual([])
 		expect(h.findLeavesIndexes).toHaveBeenCalledTimes(1)
+		expect(h.getTxReceipt).toHaveBeenCalledTimes(1)
 		expect(watched(h.check)).toBe(0)
+	})
+
+	test("the nullifier present with a mined success receipt writes sent with its block and refreshes the account", async () => {
+		const h = presentHarness()
+		h.getTxReceipt.mockResolvedValue(mined("proven"))
+		await h.check.start()
+		await h.tick()
+		expect(h.getTxReceipt.mock.calls[0]?.[0]?.toString()).toBe(HASH)
+		expect(h.journal.writes).toEqual([{ id: "op-1", check: "sent" }])
+		expect((await h.journal.getOperation("op-1"))?.progress).toMatchObject({ check: "sent", inclusion: BLOCK })
+		expect(h.balances.refreshAccountBalances).toHaveBeenCalledWith(ACCOUNT)
+		expect(watched(h.check)).toBe(1)
+	})
+
+	test("a receipt read that throws writes nothing and keeps the slow watch; the next read that answers writes sent", async () => {
+		const h = presentHarness()
+		h.getTxReceipt.mockRejectedValueOnce(new Error(`no answer from ${URL}`)).mockResolvedValue(mined("proven"))
+		await h.check.start()
+		await h.tick()
+		expect(h.journal.writes).toEqual([])
+		expect(watched(h.check)).toBe(1)
+		expect(JSON.stringify(h.logs)).not.toContain(URL)
+		await h.tick(DROPPED_RECHECK_INTERVAL_MS / SEND_CHECK_TICK_MS - 1)
+		expect(h.getTxReceipt).toHaveBeenCalledTimes(1)
+		await h.tick()
+		expect(h.journal.writes).toEqual([{ id: "op-1", check: "sent" }])
+	})
+
+	test("a lock while the post-expiry receipt is read: its answer is dropped, no write, no refresh", async () => {
+		const h = presentHarness()
+		const receipt = deferred<unknown>()
+		h.getTxReceipt.mockImplementationOnce(() => receipt.promise)
+		await h.check.start()
+		await h.tick()
+		h.lock()
+		receipt.resolve(mined("proven"))
+		await h.tick(3)
+		expect(h.getTxReceipt).toHaveBeenCalledTimes(1)
+		expect(h.journal.writes).toEqual([])
+		expect(h.balances.refreshAccountBalances).not.toHaveBeenCalled()
 	})
 
 	test.each([
