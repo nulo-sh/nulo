@@ -713,6 +713,35 @@ describe("NetworkService public API", () => {
 		})
 	})
 
+	// A trailing non-breaking space survives `URL`'s own trim and would be stored as `%C2%A0`.
+	describe("a URL with a trailing non-breaking space is stored as the schema trimmed it", () => {
+		const nodes = { "https://rpc.test/1": nodeInfoForChain(50), "https://rpc.test/2": nodeInfoForChain(50) }
+
+		test("addNetwork", async () => {
+			const { service } = setupServiceWithStorage(nodes)
+			const network = await service.addNetwork("Chain50", "https://rpc.test/1\u00A0")
+			expect((await service.getNetwork(network.id)).endpoints[0]!.rpcUrl).toBe("https://rpc.test/1")
+		})
+
+		test("addEndpoint", async () => {
+			const { service } = setupServiceWithStorage(nodes)
+			const network = await service.addNetwork("Chain50", "https://rpc.test/1")
+			const ep = await service.addEndpoint(network.id, undefined, "https://rpc.test/2\u00A0")
+			expect(ep.rpcUrl).toBe("https://rpc.test/2")
+			expect((await service.getNetwork(network.id)).endpoints.map((e) => e.rpcUrl)).toEqual([
+				"https://rpc.test/1",
+				"https://rpc.test/2",
+			])
+		})
+
+		test("updateEndpoint", async () => {
+			const { service } = setupServiceWithStorage(nodes)
+			const network = await service.addNetwork("Chain50", "https://rpc.test/1")
+			await service.updateEndpoint(network.id, network.primaryEndpointId, undefined, "https://rpc.test/2\u00A0")
+			expect((await service.getNetwork(network.id)).endpoints[0]!.rpcUrl).toBe("https://rpc.test/2")
+		})
+	})
+
 	describe("addNetwork", () => {
 		test("creates a Network with one initial endpoint and emits onNetworkAdded", async () => {
 			const { service } = setupServiceWithStorage({

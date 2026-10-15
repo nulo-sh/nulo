@@ -1,5 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
-import { rpcTransportVerdict } from "@nulo/wallet-core/utils"
+import { hasHiddenUrlCharacter, rpcTransportVerdict } from "@nulo/wallet-core/utils"
 import { z } from "zod"
 
 export const NETWORK_SERVICE_NAME = "network"
@@ -130,15 +130,18 @@ export const ERR_UNATTENDED_LIVE_CHECK = "UNATTENDED_LIVE_CHECK"
 export const ERR_CHAIN_QUARANTINED = "CHAIN_QUARANTINED"
 /** A reset of this network is running: deleting it would race the reset's purge. */
 export const ERR_RESET_RUNNING = "RESET_RUNNING"
+/** The RPC URL field's own line, matched by the popups in the validation error's message. */
+export const ERR_RPC_URL_HIDDEN_CHARACTERS = "RPC URL can't contain spaces or hidden characters."
 
 // ── Zod schemas for the RPC boundary ─────────────────────────────────
 
 export const ChainKindSchema: z.ZodType<ChainKind> = z.enum(["mainnet", "testnet", "devnet", "local", "custom"])
 
 /**
- * An RPC URL the wallet may treat as its chain authority: the transport rule
- * (`rpcTransportVerdict`), userinfo refused. zod trims the string before the
- * refine sees it.
+ * An RPC URL the wallet may treat as its chain authority: no hidden character
+ * inside it, then the transport rule (`rpcTransportVerdict`), userinfo refused.
+ * zod's `.url()` returns the trimmed string, so a caller stores the parsed value,
+ * never its own argument.
  *
  * Runs on the popup client's params and results (`network/client.ts`), on the
  * service's params, and on the backup-restore network filter
@@ -149,6 +152,7 @@ export const ChainKindSchema: z.ZodType<ChainKind> = z.enum(["mainnet", "testnet
 export const RpcUrlSchema = z
 	.string()
 	.url()
+	.refine((url) => !hasHiddenUrlCharacter(url), { message: ERR_RPC_URL_HIDDEN_CHARACTERS, abort: true })
 	.refine(
 		(url) => {
 			let parsed: URL

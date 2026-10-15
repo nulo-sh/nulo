@@ -114,6 +114,10 @@ describe("EditEndpointPopup: the RPC URL field's error copy", () => {
 		["Failed to fetch node info.", "Something went wrong."],
 		["DUPLICATE_ENDPOINT then ENDPOINT_CHAIN_MISMATCH", "Wrong chain. This network is chain 1."],
 		["Invalid params for updateEndpoint: RPC URL must use https://", "Something went wrong."],
+		[
+			"Invalid params for updateEndpoint: 3: Invalid URL; 3: RPC URL can't contain spaces or hidden characters.",
+			"RPC URL can't contain spaces or hidden characters.",
+		],
 	])("a rejection %j shows %j", async (message, copy) => {
 		updateEndpointMock.mockRejectedValueOnce(new Error(message))
 		const { w, errors } = await mountEditing()
