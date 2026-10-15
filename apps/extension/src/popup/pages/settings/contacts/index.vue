@@ -108,11 +108,7 @@ accountStateService.onSenderAdded.add(onSenderAdded)
 accountStateService.onSenderDeleted.add(onSenderDeleted)
 watch(() => appStore.network?.id, syncSenders)
 
-const { exportContacts, importContacts } = useContactImportExport({
-	contacts,
-	contactService,
-	accountStateService,
-})
+const { exportContacts, importContacts } = useContactImportExport({ contacts, accountStateService })
 
 const handleCopyContactAddress = (contact) => {
 	void copyWithToast(contact.address, openToast, "Address is copied")
@@ -153,7 +149,7 @@ onBeforeUnmount(() => {
 				</button>
 
 				<template #popup>
-					<DropdownItem @click="importContacts" data-testid="contacts-menu-import">
+					<DropdownItem @click="importContacts" :disabled="appStore.contactImports.size > 0" data-testid="contacts-menu-import">
 						<Flex align="center" gap="8">
 							<Icon name="upload-outline" size="14" color="secondary" />
 							Import contacts

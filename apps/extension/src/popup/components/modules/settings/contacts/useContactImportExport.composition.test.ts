@@ -33,7 +33,7 @@ import { svc } from "@/wallet/services/composition-harness"
 import { ContactService } from "@/wallet/services/contact/service"
 import { type Contact, CONTACT_SERVICE_NAME, CONTACT_STORAGE_ROOT } from "@/wallet/services/contact/spec"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
-import { PROFILE_SERVICE_NAME, type RunFence } from "@/wallet/services/profile/spec"
+import { PROFILE_SERVICE_NAME, type RunFence, toProfileInfo } from "@/wallet/services/profile/spec"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
 
 const boundary = vi.hoisted(() => ({
@@ -44,6 +44,8 @@ const boundary = vi.hoisted(() => ({
 	service: null as unknown,
 	/** The background's profile service, which the popup's own profile client reaches too. */
 	profile: null as unknown,
+	/** The account-state port every popup client of it reaches. */
+	accountState: null as unknown,
 }))
 
 vi.mock("@/utils", async (importOriginal) => ({
@@ -54,9 +56,11 @@ vi.mock("@/utils", async (importOriginal) => ({
 	},
 }))
 vi.mock("@/composables/toast", () => ({
-	useToast: () => ({ openToast: (toast: { kind: string; label: string }) => boundary.toasts.push(toast) }),
+	useToast: () => ({ openToast: (toast: { kind: string; label: string }) => boundary.toasts.push(toast), updateToast: () => {} }),
 }))
-vi.mock("@/stores/app.store", () => ({ useAppStore: () => ({ network: { id: "net-1", name: "Testnet" } }) }))
+vi.mock("@/stores/app.store", () => ({
+	useAppStore: () => ({ network: { id: "net-1", name: "Testnet" }, beginContactImport: () => () => {}, contactImports: new Set() }),
+}))
 vi.mock("@/stores/cache.store", async () => {
 	const { reactive } = await import("vue")
 	const state = reactive({ importContacts: [] as unknown[], importContact: null as unknown, importPromise: null as unknown })
@@ -77,17 +81,25 @@ vi.mock("@/wallet/services/profile/client", () => ({
 		}
 	}),
 }))
-// The popup's port to the contact service, wired straight to the real service in this process.
+// A popup port to the contact service, wired straight to the real service in this process.
 vi.mock("@/wallet/services/contact/client", () => ({
 	ContactServiceClient: vi.fn(function () {
 		const service = boundary.service as ContactService
 		return {
-			getContacts: () => service.getContacts(),
+			getContacts: (fence?: RunFence) => service.getContacts(fence),
+			addContact: (name: string, address: string, fence?: RunFence) => service.addContact(name, address, fence),
+			updateContact: (id: string, name?: string, address?: string, fence?: RunFence) =>
+				service.updateContact(id, name, address, fence),
 			onContactAdded: service.onContactAdded,
 			onContactUpdated: service.onContactUpdated,
 			onContactDeleted: service.onContactDeleted,
 			disconnect() {},
 		}
+	}),
+}))
+vi.mock("@/wallet/services/account-state/client", () => ({
+	AccountStateServiceClient: vi.fn(function () {
+		return { ...(boundary.accountState as object), disconnect() {} }
 	}),
 }))
 
@@ -147,6 +159,7 @@ const accountState = {
 	}),
 	getSendersAcrossActiveNetworks: vi.fn(async () => [...sendersOf(activeProfile)]),
 }
+boundary.accountState = accountState
 
 async function startWallet() {
 	const api = new FakeBrowserApi()
@@ -184,9 +197,9 @@ type ProfileStub = Awaited<ReturnType<typeof startWallet>>["profile"]
 const mounted: VueWrapper[] = []
 
 /** The Contacts page: its import/export composable, and the import popup as the popup manager shows it. */
-function openContactsPage(contacts: ContactService) {
+function openContactsPage() {
 	const list = ref<Contact[]>([])
-	const io = useContactImportExport({ contacts: list, contactService: contacts as never, accountStateService: accountState as never })
+	const io = useContactImportExport({ contacts: list, accountStateService: accountState as never })
 	const popup: VueWrapper = mount(ImportContactsPopup, {
 		props: { show: false, onOnClose: () => popup.setProps({ show: false }) },
 		global: { stubs: STUBS },
@@ -298,7 +311,7 @@ describe("import composition — what the screen showed chosen is what is writte
 			await contacts.addContact(name, address)
 		}
 		const aliceId = (await contacts.getContacts()).find((c) => c.name === "Alice")?.id
-		const page = openContactsPage(contacts)
+		const page = openContactsPage()
 
 		const { done } = await pick(
 			page,
@@ -346,7 +359,7 @@ describe("import composition — what the screen showed chosen is what is writte
 		const saved = await contacts.getContacts()
 		const named = (name: string) => saved.find((c) => c.name === name) as Contact
 		const [alice, bob] = [named("Alice"), named("Bob")]
-		const page = openContactsPage(contacts)
+		const page = openContactsPage()
 
 		const { done } = await pick(
 			page,
@@ -394,9 +407,10 @@ describe("import composition — a profile switch mid-import", () => {
 		return out
 	}
 
-	test("a switch after the second row writes nothing more, to either profile, and the toast reports it", async () => {
-		const { api, contacts } = await startWallet()
-		const page = openContactsPage(contacts)
+	test("a switch while a row's sender registers leaves that row's contact unwritten, writes nothing more, and the toast reports it", async () => {
+		const { api } = await startWallet()
+		const page = openContactsPage()
+		// The registration that was already running finishes in its profile; its contact never follows.
 		accountState.addSender.mockImplementationOnce(async (_networkId: string, address: string) => {
 			sendersOf(activeProfile).add(address.toLowerCase())
 			switchProfile("p2")
@@ -404,16 +418,56 @@ describe("import composition — a profile switch mid-import", () => {
 		})
 
 		const { done } = await pick(page, fiveNew)
-		expect(await confirm(page, done)).toBe("Import incomplete · 2 of 5 contacts written")
-		expect(await namesByProfile(api)).toEqual({ p1: ["Ana", "Ben"] })
+		expect(await confirm(page, done)).toBe("Import incomplete · 1 of 5 contacts written")
+		expect(await namesByProfile(api)).toEqual({ p1: ["Ana"] })
 		expect(accountState.addSender).toHaveBeenCalledTimes(1)
 		expect([...sendersOf("p1")]).toEqual([ADDR.b])
 		expect(sendersOf("p2").size).toBe(0)
 	})
 
+	test("a sender that fails while the session holds still writes its contact, and the toast says so", async () => {
+		const { api } = await startWallet()
+		const page = openContactsPage()
+		accountState.addSender.mockRejectedValueOnce(new Error("PXE request failed"))
+
+		const { done } = await pick(page, fiveNew)
+		expect(await confirm(page, done)).toBe("Contacts imported · sender registration failed")
+		expect(await namesByProfile(api)).toEqual({ p1: ["Ana", "Ben", "Cleo", "Dan", "Eve"] })
+	})
+
+	test.each([
+		{ change: true, toast: "Import ended with errors", ben: ADDR.f },
+		{ change: false, toast: "Contacts imported · 1 sender registered", ben: ADDR.b },
+	])(
+		"another window saving a Ben while Ben's sender registers: the import's Ben is refused (change: $change)",
+		async ({ change, toast, ben }) => {
+			const { contacts } = await startWallet()
+			const page = openContactsPage()
+			let release: () => void = () => {}
+			accountState.addSender.mockImplementationOnce(async (_networkId: string, address: string) => {
+				await new Promise<void>((resolve) => {
+					release = resolve
+				})
+				sendersOf(activeProfile).add(address.toLowerCase())
+				return address
+			})
+
+			const { done } = await pick(page, fiveNew)
+			await page.popup.find(SUBMIT).trigger("click")
+			await vi.waitFor(() => expect(accountState.addSender).toHaveBeenCalledTimes(1))
+			if (change) await contacts.addContact("Ben", ADDR.f)
+			release()
+			await done
+			await flushPromises()
+			expect(boundary.toasts.at(-1)?.label).toBe(toast)
+			expect((await book(contacts)).Ben).toBe(ben)
+			expect(Object.keys(await book(contacts)).sort()).toEqual(["Ana", "Ben", "Cleo", "Dan", "Eve"])
+		},
+	)
+
 	test("control: the same file without a switch writes every row to the profile it was shown in", async () => {
-		const { api, contacts } = await startWallet()
-		const page = openContactsPage(contacts)
+		const { api } = await startWallet()
+		const page = openContactsPage()
 
 		const { done } = await pick(page, fiveNew)
 		expect(await confirm(page, done)).toBe("Contacts imported · 1 sender registered")
@@ -443,7 +497,7 @@ describe("import composition — one name, whatever its case, spacing or invisib
 			})
 		}
 		const aliceId = (await contacts.getContacts()).find((c) => c.name === "Alice")?.id
-		const page = openContactsPage(contacts)
+		const page = openContactsPage()
 
 		const { done } = await pick(
 			page,
@@ -507,7 +561,7 @@ describe("import composition — the released contacts file", () => {
 	test("export writes the released file; into the same book nothing changes, into an empty book it comes back with its senders, and a second time nothing changes", async () => {
 		const { api, contacts } = await startWallet()
 		await seedReleasedBook(api)
-		const page = openContactsPage(contacts)
+		const page = openContactsPage()
 		page.list.value = await contacts.getContacts()
 
 		await page.io.exportContacts()
@@ -550,7 +604,10 @@ describe("import composition — the released full backup", () => {
 		await seedReleasedBook(api)
 		const assembled = await assembleFullBackup(
 			{ [COMPAT_EPOCH_FIELD]: CURRENT_COMPAT_EPOCH, [BACKUP_SCHEMA_VERSION_FIELD]: CURRENT_BACKUP_SCHEMA_VERSION },
-			[{ name: CONTACT_SERVICE_NAME, backup: () => contacts.backup() }],
+			[
+				{ name: PROFILE_SERVICE_NAME, backup: async () => toProfileInfo({ id: "p1", name: "Main", type: "password" }, false) },
+				{ name: CONTACT_SERVICE_NAME, backup: () => contacts.backup() },
+			],
 		)
 		expectFixture(CURRENT_BACKUP_FIXTURE, assembled.pretty)
 

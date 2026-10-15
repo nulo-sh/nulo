@@ -71,8 +71,9 @@ test("makes get task request", async () => {
 	const client = new TaskServiceClient()
 	const taskId = "test-id"
 
-	client.getTask(taskId)
+	void client.getTask(taskId)
 
+	await vi.waitFor(() => expect(capturePortMessage(TASK_SERVICE_NAME)).toHaveBeenCalled())
 	expect(capturePortMessage(TASK_SERVICE_NAME)).toHaveBeenCalledWith(
 		expect.objectContaining({
 			type: MessageType.Request,
@@ -87,8 +88,9 @@ test("makes get task request", async () => {
 test("makes get all tasks request", async () => {
 	const client = new TaskServiceClient()
 
-	client.getTasks()
+	void client.getTasks()
 
+	await vi.waitFor(() => expect(capturePortMessage(TASK_SERVICE_NAME)).toHaveBeenCalled())
 	expect(capturePortMessage(TASK_SERVICE_NAME)).toHaveBeenCalledWith(
 		expect.objectContaining({
 			type: MessageType.Request,

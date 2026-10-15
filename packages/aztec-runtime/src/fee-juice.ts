@@ -6,14 +6,15 @@ export type MinFeeNode = {
 	getCurrentMinFees: () => Promise<GasFees>
 }
 
-/** The node's fee reply, refused unless both components are integers: the JSON-RPC client returns a
- *  null-like result as `undefined` without parsing it, so fee math would otherwise fail opaquely. */
+/** The node's fee reply as `GasFees`, refused unless both components are integers: the JSON-RPC
+ *  client returns a null-like result as `undefined` without parsing it, so fee math would otherwise
+ *  fail opaquely. A plain `{ feePerDaGas, feePerL2Gas }` reply is accepted and given the class. */
 function checkedFees(reply: unknown): GasFees {
 	const fees = reply as { feePerDaGas?: unknown; feePerL2Gas?: unknown } | null | undefined
 	if (typeof fees?.feePerDaGas !== "bigint" || typeof fees.feePerL2Gas !== "bigint") {
 		throw new Error("Malformed fee reply from the node")
 	}
-	return reply as GasFees
+	return new GasFees(fees.feePerDaGas, fees.feePerL2Gas)
 }
 
 async function currentMinFees(node: MinFeeNode): Promise<GasFees> {

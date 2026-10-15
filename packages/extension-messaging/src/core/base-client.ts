@@ -123,12 +123,16 @@ export abstract class BaseServiceClient<TRequests extends MethodsMap, TEvents ex
 		// synchronous-send timing the Port transport always had.
 		const ready = this.ensureTransportReady()
 		if (ready) await this.awaitReadyWithinDeadline(ready, deadline, requestId, methodName, timeoutMs)
-		const startedAtMs = Date.now()
 		const content = {
 			requestId,
 			method,
 			params: jsonSanitize(wrapParams(params)) as unknown as Parameters<TRequests[T]>,
 		}
+		// A continuation can run after its deadline (a busy page, a suspended tab, a large payload's
+		// serialization): a caller that gave up must not have its request run. Nothing is awaited from
+		// here to the send.
+		if (Date.now() >= deadline) throw this.makeTimeoutError({ requestId, methodName, timeoutMs })
+		const startedAtMs = Date.now()
 		this.logDebug(`→ ${methodName}`)
 
 		const promise = new Promise<Awaited<ReturnType<TRequests[T]>>>((resolve, reject) => {

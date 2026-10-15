@@ -57,12 +57,20 @@ const armTimer = (ms: number) => {
  * never leaves on its own.
  */
 export const useToast = () => {
-	const openToast = (options: ToastOptions) => {
+	/** Returns the snack's id, for `updateToast`. */
+	const openToast = (options: ToastOptions): number => {
 		clearTimer()
 		held = false
 		const kind: ToastKind = options.kind === "success" || options.kind === "info" ? options.kind : "error"
 		toast.value = { ...options, kind, id: ++nextId }
 		if (kind === "success") armTimer(SUCCESS_TOAST_MS)
+		return nextId
+	}
+
+	/** Relabels snack `id` in place, keeping its id and timer, so its card neither leaves nor enters.
+	 *  Once that snack is closed or replaced this does nothing: nothing an update does re-opens it. */
+	const updateToast = (id: number, label: string) => {
+		if (toast.value?.id === id) toast.value = { ...toast.value, label }
 	}
 
 	const closeToast = () => {
@@ -87,5 +95,5 @@ export const useToast = () => {
 		armTimer(remaining)
 	}
 
-	return { toast, openToast, closeToast, holdToast }
+	return { toast, openToast, updateToast, closeToast, holdToast }
 }

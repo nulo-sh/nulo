@@ -176,11 +176,14 @@ const fileName = computed(() => {
 	// subdirectory; "../" is refused outright).
 	const profile = (appStore.profile?.name ?? "profile").replace(/[^\p{L}\p{N}_-]+/gu, "_") || "profile"
 	const addr = selectedAddress.value.slice(0, 10)
-	return fileStatus.value === "protected" ? `NuloEncryptedAccount_${profile}_${addr}.txt` : `NuloAccount_${profile}_${addr}.json`
+	return `NuloEncryptedAccount_${profile}_${addr}.txt`
 })
 
+/** Only the password-protected file leaves the page: the plain body Create fetched is spendable. */
+const canDownload = computed(() => fileStatus.value === "protected")
+
 const handleDownload = async () => {
-	if (isDownloading.value || isBusy.value) return
+	if (!canDownload.value || isDownloading.value || isBusy.value) return
 	isDownloading.value = true
 	const gen = generation
 	try {
@@ -270,9 +273,12 @@ onBeforeUnmount(() => {
 				<span class="export_section_label type--label-section">File</span>
 				<Flex direction="column" gap="12">
 					<Banner v-if="fileStatus === 'ready'" variant="info" direction="vertical" data-testid="account-file-ready-banner">
-						<template #title> Account file is ready </template>
+						<template #title> Protect your account file </template>
 						<template #description>
-							<Text height="140"> You can download it now. We strongly recommend protecting it with your password first. </Text>
+							<Text height="140">
+								Encrypt the file with your profile password before you download it. Without a password, anyone who opens the
+								file controls this account.
+							</Text>
 						</template>
 					</Banner>
 
@@ -314,7 +320,14 @@ onBeforeUnmount(() => {
 				<Button @click="handleProtect" :disabled="isBusy || isDownloading" variant="cta" data-testid="account-protect-btn">
 					{{ isBusy ? "Protecting" : "Protect with Password" }}
 				</Button>
-				<Button @click="handleDownload" :disabled="isBusy || isDownloading" variant="cta_outline" data-testid="account-download-btn"> Download File </Button>
+				<Button
+					@click="handleDownload"
+					:disabled="!canDownload || isBusy || isDownloading"
+					variant="cta_outline"
+					data-testid="account-download-btn"
+				>
+					Download File
+				</Button>
 			</Flex>
 
 			<Button v-else-if="fileStatus === 'protected'" @click="handleDownload" :disabled="isDownloading" variant="cta" data-testid="account-download-btn">

@@ -42,7 +42,13 @@ vi.mock("@/wallet/services/token/client", () => ({
 }))
 vi.mock("@/wallet/services/price/client", () => ({
 	PriceServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onQuotesUpdated: H.event(), onConnected: H.event(), refreshIfStale: vi.fn().mockResolvedValue({}) }
+		return {
+			disconnect: vi.fn(),
+			onQuotesUpdated: H.event(),
+			onConnected: H.event(),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
+			refreshIfStale: vi.fn().mockResolvedValue({ quotes: {}, pricedTokens: {} }),
+		}
 	}),
 }))
 vi.mock("@/wallet/services/incoming-transfer/client", () => ({

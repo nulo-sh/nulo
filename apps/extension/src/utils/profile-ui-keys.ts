@@ -6,12 +6,29 @@
  */
 
 const PINNED_TOKENS_PREFIX = "nulo:ui:pinnedTokens@"
+const FEE_PICKS_PREFIX = "nulo:ui:feePaymentMethods@"
+const SEND_FEE_PICKS_PREFIX = "nulo:ui:sendFeePaymentMethods@"
+const RESTORE_OUTCOME_PREFIX = "nulo:ui:restoreOutcome@"
 
 /** Each prefix ends in `@`, so a key is its prefix followed by one whole profile id. */
-export const PROFILE_UI_KEY_PREFIXES: readonly string[] = [PINNED_TOKENS_PREFIX]
+export const PROFILE_UI_KEY_PREFIXES: readonly string[] = [
+	PINNED_TOKENS_PREFIX,
+	FEE_PICKS_PREFIX,
+	SEND_FEE_PICKS_PREFIX,
+	RESTORE_OUTCOME_PREFIX,
+]
 
 /** Per-profile map of chain id → pinned token contracts; a UI preference, never backed up. */
 export const pinnedTokensKey = (profileId: string) => `${PINNED_TOKENS_PREFIX}${profileId}`
+
+/** Per-profile map of account address → the app windows' fee pick (`utils/fee-picks.ts`). */
+export const feePicksKey = (profileId: string) => `${FEE_PICKS_PREFIX}${profileId}`
+
+/** Per-profile map of account address → Send's fee pick per transfer side (`utils/fee-picks.ts`). */
+export const sendFeePicksKey = (profileId: string) => `${SEND_FEE_PICKS_PREFIX}${profileId}`
+
+/** The networks a full-backup restore of this profile has not restored (`utils/restore-outcome.ts`). */
+export const restoreOutcomeKey = (profileId: string) => `${RESTORE_OUTCOME_PREFIX}${profileId}`
 
 /** The exact keys `profileId` can hold: `p1`'s never include `p10`'s. */
 export const profileUiKeys = (profileId: string): string[] => PROFILE_UI_KEY_PREFIXES.map((prefix) => `${prefix}${profileId}`)

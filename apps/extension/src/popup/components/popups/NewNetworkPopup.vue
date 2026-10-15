@@ -2,6 +2,7 @@
 <script setup>
 import { FieldWarning } from "@nulo/design"
 /** Utils */
+import { sameStoredName, storedNameKey } from "@/utils/account-name"
 import { managers } from "@/utils/core"
 import { activateNetworkGuarded } from "@/utils/guarded-network-activation"
 
@@ -34,7 +35,7 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v.length) return null
-			if (appStore.networks.some((n) => n.name === v)) return "Already exists"
+			if (appStore.networks.some((n) => sameStoredName(n.name, v))) return "Already exists"
 			return null
 		},
 	},
@@ -60,7 +61,7 @@ const isAvailableToCreateNetwork = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
 	// route (button, Enter, future callers) — not just the pointer path.
 	if (isCreating.value) return false
-	if (!nameTerm.value.length) return false
+	if (!storedNameKey(nameTerm.value)) return false
 	if (!urlTerm.value.length) return false
 	if (urlTerm.value.length < 5) return false
 	if (form.fields.name.error.value || form.fields.url.error.value) return false
@@ -83,7 +84,7 @@ const handleCreateNetwork = async () => {
 		// addNetwork): the activation + refresh awaits below are still part of
 		// this submit, and a re-entry during them would double-create.
 		isCreating.value = true
-		const network = await managers.network.addNetwork(nameTerm.value, urlTerm.value)
+		const network = await managers.network.addNetwork(storedNameKey(nameTerm.value), urlTerm.value)
 
 		// Guard first, persist second: the guard admits (and moves the in-memory
 		// scope) before the service write, so a refusal leaves the durable active
@@ -163,10 +164,8 @@ usePopupEntity(() => props.show, {
 			v-model="nameTerm"
 			data-testid="network-name-input"
 		>
-			<template #right>
-				<Transition name="fade">
-					<FieldWarning v-if="isNameAlreadyExist"> Already exists </FieldWarning>
-				</Transition>
+			<template v-if="isNameAlreadyExist" #right>
+				<FieldWarning> Already exists </FieldWarning>
 			</template>
 		</Input>
 

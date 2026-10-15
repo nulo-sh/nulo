@@ -45,6 +45,7 @@ vi.mock("@/wallet/services/account/client", () => ({
 			...named("account"),
 			backupImportedKeys: vi.fn(async () => []),
 			exportFullBackupKeys: (fence: unknown, password: string) => exportFullBackupKeys(fence, password),
+			exportPasskeyBackupKeys: (fence: unknown, credentialData: unknown) => exportPasskeyBackupKeys(fence, credentialData),
 		}
 	}),
 }))
@@ -98,21 +99,35 @@ vi.mock("@/wallet/services/config/client", () => ({
 }))
 
 const exportFullBackupKeys = vi.hoisted(() => vi.fn<(fence: unknown, password: string) => Promise<unknown>>())
-const FENCE = { profileId: "p1", epoch: 0, session: 1, incarnation: "worker-1" }
-const captureRunFence = vi.hoisted(() => vi.fn<() => Promise<unknown>>())
-const getPasskeyCredentialId = vi.fn(async (_id: string) => "cred-1")
-const exportPasskeyBackupMaterial = vi.fn(async (_id: string, _credentialData: unknown) => ({
+const PASSKEY_KEYS = {
 	credentialId: "cred-1",
 	dekSealed: "sealed",
 	dekReplaced: false,
-}))
+	unopenedImportedKeys: 0,
+	importedKeyRows: [] as unknown[],
+	accounts: [] as unknown[],
+}
+const exportPasskeyBackupKeys = vi.hoisted(() =>
+	vi.fn(
+		async (_fence: unknown, _credentialData: unknown): Promise<Record<string, unknown>> => ({
+			credentialId: "cred-1",
+			dekSealed: "sealed",
+			dekReplaced: false,
+			unopenedImportedKeys: 0,
+			importedKeyRows: [],
+			accounts: [],
+		}),
+	),
+)
+const FENCE = { profileId: "p1", epoch: 0, session: 1, incarnation: "worker-1" }
+const captureRunFence = vi.hoisted(() => vi.fn<() => Promise<unknown>>())
+const getPasskeyCredentialId = vi.fn(async (_id: string) => "cred-1")
 vi.mock("@/utils/core", () => ({
 	managers: {
 		profile: {
 			captureRunFence: () => captureRunFence(),
 			assertRunFence: async () => undefined,
 			getPasskeyCredentialId: (id: string) => getPasskeyCredentialId(id),
-			exportPasskeyBackupMaterial: (id: string, credentialData: unknown) => exportPasskeyBackupMaterial(id, credentialData),
 		},
 	},
 }))
@@ -213,7 +228,7 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 		expect(wrapper.find("[data-testid='agree-continue-btn']").exists()).toBe(true)
 		expect(openToast).not.toHaveBeenCalled()
 		expect(routerGo).not.toHaveBeenCalled()
-		expect(exportPasskeyBackupMaterial).not.toHaveBeenCalled()
+		expect(exportPasskeyBackupKeys).not.toHaveBeenCalled()
 	})
 
 	it("an unconfirmed prompt resets the agreement and says so, without navigating", async () => {
@@ -224,7 +239,7 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 		expect(wrapper.find("[data-testid='agree-continue-btn']").exists()).toBe(true)
 		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Passkey not confirmed. Try again." })
 		expect(routerGo).not.toHaveBeenCalled()
-		expect(exportPasskeyBackupMaterial).not.toHaveBeenCalled()
+		expect(exportPasskeyBackupKeys).not.toHaveBeenCalled()
 	})
 
 	it("ceremony failure toasts the generic passkey copy and navigates back", async () => {
@@ -234,7 +249,7 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 		await flushPromises()
 		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Failed to authenticate by passkey" })
 		expect(routerGo).toHaveBeenCalledWith(-1)
-		expect(exportPasskeyBackupMaterial).not.toHaveBeenCalled()
+		expect(exportPasskeyBackupKeys).not.toHaveBeenCalled()
 	})
 
 	it("in an own window, a failed passkey step resets to the agreement with its toast instead of going back", async () => {
@@ -260,11 +275,11 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 
 	it("a passkey export carries the service's sealed DEK (fresh or stored) into the file and names the loss only when it was replaced", async () => {
 		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
-		exportPasskeyBackupMaterial.mockResolvedValueOnce({ credentialId: "cred-1", dekSealed: "fresh-sealed", dekReplaced: true })
+		exportPasskeyBackupKeys.mockResolvedValueOnce({ ...PASSKEY_KEYS, dekSealed: "fresh-sealed", dekReplaced: true })
 		const wrapper = mountPage("passkey")
 		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
 		await flushPromises()
-		expect(exportPasskeyBackupMaterial).toHaveBeenCalledWith("p1", { id: "cred-1" })
+		expect(exportPasskeyBackupKeys).toHaveBeenCalledWith(FENCE, { id: "cred-1" })
 		// The local Banner stub drops attrs, so assert on the copy the loss banner renders once
 		// the assembly settles (real assembleFullBackup runs over the stubbed slice clients).
 		await vi.waitFor(() => expect(wrapper.text()).toContain("Imported keys are not in this backup"))
@@ -275,7 +290,7 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 
 		// A healthy slot: no loss banner.
 		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
-		exportPasskeyBackupMaterial.mockResolvedValueOnce({ credentialId: "cred-1", dekSealed: "stored-sealed", dekReplaced: false })
+		exportPasskeyBackupKeys.mockResolvedValueOnce({ ...PASSKEY_KEYS, dekSealed: "stored-sealed" })
 		const healthy = mountPage("passkey")
 		await healthy.find("[data-testid='agree-continue-btn']").trigger("click")
 		await vi.waitFor(() => expect(healthy.find("[data-testid='protect-password-btn']").exists()).toBe(true))
@@ -309,6 +324,76 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 		expect(wrapper.find("[data-testid='unlock-password-input']").attributes("data-error")).toBe("true")
 		expect(openToast).not.toHaveBeenCalled()
 		expect(routerGo).not.toHaveBeenCalled()
+	})
+})
+
+describe("export/full.vue — imported accounts that will not restore", () => {
+	const UNOPENED = "Some imported accounts are not in this backup"
+	const LOST = "Imported keys are not in this backup"
+
+	async function passwordExport(material: Record<string, unknown>) {
+		exportFullBackupKeys.mockResolvedValueOnce({
+			masterKey: "mk",
+			entropy: "en",
+			importedKeysKey: "dk",
+			importedKeyRows: [],
+			accounts: [],
+			dekReplaced: false,
+			unopenedImportedKeys: 0,
+			...material,
+		})
+		const wrapper = mountPage("password")
+		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await wrapper.find("[data-testid='unlock-password-input']").setValue("pass1234")
+		await wrapper.find("[data-testid='unlock-submit-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
+		return wrapper
+	}
+
+	async function passkeyExport(material: Record<string, unknown>) {
+		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
+		exportPasskeyBackupKeys.mockResolvedValueOnce({ ...PASSKEY_KEYS, ...material })
+		const wrapper = mountPage("passkey")
+		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
+		return wrapper
+	}
+
+	it.each([
+		["password", passwordExport],
+		["passkey", passkeyExport],
+	] as const)("a %s export names one, three or no unopened imported accounts", async (_kind, run) => {
+		const one = await run({ unopenedImportedKeys: 1 })
+		expect(one.text()).toContain(UNOPENED)
+		expect(one.text()).toContain("1 imported account could not be opened, so they will not be restored.")
+		expect(one.text()).toContain("Import their keys again after the restore.")
+
+		const three = await run({ unopenedImportedKeys: 3 })
+		expect(three.text()).toContain("3 imported accounts could not be opened")
+
+		expect((await run({ unopenedImportedKeys: 0 })).text()).not.toContain(UNOPENED)
+	})
+
+	it.each([
+		["password", passwordExport],
+		["passkey", passkeyExport],
+	] as const)("a %s export whose DEK was replaced shows only that loss", async (_kind, run) => {
+		const wrapper = await run({ dekReplaced: true, unopenedImportedKeys: 2 })
+		expect(wrapper.text()).toContain(LOST)
+		expect(wrapper.text()).not.toContain(UNOPENED)
+	})
+
+	it("a passkey file carries the account and key rows the count was made over", async () => {
+		const rows = [{ profileId: "p1", chainId: 0, address: "0xaa", encryptedSigningKey: "sealed-row" }]
+		const accounts = [{ profileId: "p1", chainId: 0, address: "0xaa", name: "Imp" }]
+		const wrapper = await passkeyExport({ unopenedImportedKeys: 1, importedKeyRows: rows, accounts })
+		await wrapper.get("[data-testid='download-backup-btn']").trigger("click")
+		;(useCacheStore().confirm as { callback: () => void }).callback()
+		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
+		const { data } = JSON.parse(downloadFile.mock.calls[0][0].data) as { data: Record<string, unknown> }
+		expect(data["imported-account-keys"]).toEqual(rows)
+		expect(data.account).toEqual(accounts)
+		expect(clients.account?.backup).not.toHaveBeenCalled()
 	})
 })
 
@@ -467,5 +552,19 @@ describe("export/full.vue — a passkey profile's plain download asks first", ()
 		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
 		expect(downloadFile.mock.calls[0][0].filename).toMatch(/^NuloEncryptedBackup_/)
 		expect(usePopupStore().isOpened("confirm")).toBe(false)
+	})
+})
+
+describe("export/full.vue — the encrypt pair", () => {
+	it("asks a password manager for a new password on both fields", async () => {
+		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
+		const wrapper = mountPage("passkey")
+		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
+		await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
+
+		for (const id of ["backup-encrypt-password-input", "backup-encrypt-password-confirm-input"]) {
+			expect(wrapper.get(`[data-testid='${id}']`).attributes("autocomplete")).toBe("new-password")
+		}
 	})
 })

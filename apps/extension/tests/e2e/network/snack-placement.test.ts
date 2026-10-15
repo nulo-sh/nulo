@@ -17,6 +17,7 @@ import {
 import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "../fixtures/extension"
 import {
 	captureBalanceBaseline,
+	enterSendForm,
 	fillSendForm,
 	importToken,
 	navigateByHash,
@@ -315,11 +316,11 @@ async function soleGrantRow(page: Page, account: string, grantHash: string): Pro
  * Drives the grant's block final and waits for the balance write the wallet owes for it. The worker
  * commits the row Finalized, then emits the update its balance subscriber answers with a refresh it
  * does not await, so the row alone proves nothing. The grant still awaits finality once its mined
- * write has settled, so the final commit follows that write; before the mint the final refresh is the
- * only one left to enqueue, so a write newer than the commit is its write, and the idle queue after
- * it ends it.
+ * write has settled, so the final commit follows that write; with the mint's receipt settled the final
+ * refresh is the only one left to enqueue, so a write newer than the commit is its write, and the idle
+ * queue after it ends it.
  */
-async function settledGrantFinality(page: Page, node: TxNode, account: string, grantHash: string): Promise<void> {
+async function settledGrantFinality(page: Page, node: TxNode, account: string, grantHash: string, publicRaw: string): Promise<void> {
 	const mined = await soleGrantRow(page, account, grantHash)
 	const block = mined.block?.number
 	if (block === undefined || !Number.isFinite(block) || !mined.awaitingFinality) {
@@ -340,20 +341,21 @@ async function settledGrantFinality(page: Page, node: TxNode, account: string, g
 	console.log(
 		`[snack-placement] grant block ${block}: chain final in ${chainFinal - started} ms, wallet final ${Date.now() - chainFinal} ms later`,
 	)
-	await settledBalanceWrite(page, account, "0", grant.updatedAt)
+	await settledBalanceWrite(page, account, publicRaw, grant.updatedAt)
 }
 
 /**
  * Leaves the wallet showing a public balance the chain no longer holds, as when a dApp spends a
- * public approval: the account grants the sandbox's first account a public authwit for
- * {@link DRAINED}, receives that much, and the spender takes it all. A balance refreshes only on a
- * token import, the wallet's own transactions, receipts to its accounts and a manual refresh, and the
- * spend is none of them. A wallet transaction first seen mined below Finalized refreshes balances
- * twice, when mined and when the worker reads its block final; one first seen Finalized refreshes
- * once; each move or prune of its block can add another. A receipt to the account refreshes it once.
- * Nothing here asks for a refresh, so each write has one known cause, and none is owed at the spend.
+ * public approval: the account receives {@link DRAINED}, grants the sandbox's first account a
+ * public authwit for it, and the spender takes it all; `beforeGrant` runs once the wallet shows the
+ * balance. A balance refreshes only on a token import, the wallet's own transactions, receipts to
+ * its accounts and a manual refresh, and the spend is none of them. A wallet transaction first seen
+ * mined below Finalized refreshes balances twice, when mined and when the worker reads its block
+ * final; one first seen Finalized refreshes once; each move or prune of its block can add another.
+ * A receipt to the account refreshes it once. Nothing here asks for a refresh, so each write has
+ * one known cause, and none is owed at the spend.
  */
-async function balanceDrainedBehindTheWallet(ctx: DrainCtx): Promise<Page> {
+async function balanceDrainedBehindTheWallet(ctx: DrainCtx, beforeGrant?: (page: Page) => Promise<void>): Promise<Page> {
 	const config = aztecConfig as AztecTestConfig
 	const account = ctx.accountAddress
 	const { wallet, accounts, node, cleanup } = await createTestWallet(config.nodeUrl)
@@ -372,14 +374,6 @@ async function balanceDrainedBehindTheWallet(ctx: DrainCtx): Promise<Page> {
 		await importToken(page, config.tokenAddress)
 		await settledBalanceWrite(page, account, "0", baseline)
 
-		// The grant leaving Pending refreshes the account's balances once.
-		const nonce = BigInt(Math.floor(Math.random() * 2 ** 48))
-		baseline = await captureBalanceBaseline(page, account, config.tokenAddress)
-		const grantHash = await grantSpender(ctx, page, spender, nonce)
-		await settledBalanceWrite(page, account, "0", baseline)
-		// The grant read final refreshes them again.
-		await settledGrantFinality(page, node, account, grantHash)
-
 		// The mint's receipt refreshes the balance once, and its outbox row clears after that.
 		baseline = await captureBalanceBaseline(page, account, config.tokenAddress)
 		const minted = await mintPublicTokens(wallet, config.tokenAddress, account, DRAINED, config.minterAddress, fee)
@@ -392,6 +386,15 @@ async function balanceDrainedBehindTheWallet(ctx: DrainCtx): Promise<Page> {
 		})
 		await waitFor("the wallet never settled the mint's receipt", () => receiptSettled(page, minted))
 		await waitForBalanceQueueIdle(page)
+		await beforeGrant?.(page)
+
+		// The grant leaving Pending refreshes the account's balances once.
+		const nonce = BigInt(Math.floor(Math.random() * 2 ** 48))
+		baseline = await captureBalanceBaseline(page, account, config.tokenAddress)
+		const grantHash = await grantSpender(ctx, page, spender, nonce)
+		await settledBalanceWrite(page, account, DRAINED.toString(), baseline)
+		// The grant read final refreshes them again.
+		await settledGrantFinality(page, node, account, grantHash, DRAINED.toString())
 
 		await spendPublicAuthwit(wallet, config.tokenAddress, account, spender, DRAINED, nonce, fee)
 		return page
@@ -400,15 +403,43 @@ async function balanceDrainedBehindTheWallet(ctx: DrainCtx): Promise<Page> {
 	}
 }
 
-/** On Send: 1 token, public to public, to the sandbox minter, from a balance the chain no longer
- *  holds, until the estimate has failed. */
-async function sendFromDrainedBalance(page: Page): Promise<void> {
+const ONE_TO_MINTER = () => ({ amount: "1", destination: (aztecConfig as AztecTestConfig).minterAddress })
+
+async function openPublicSend(page: Page): Promise<void> {
 	await navigateByHash(page, "#/popup/send", 10_000)
 	await page.waitForSelector(sel("send-from-type"), { timeout: 10_000 })
 	await setActiveSendType(page, "send-from-type", "public")
 	await setActiveSendType(page, "send-to-type", "public")
-	await fillSendForm(page, { amount: "1", destination: (aztecConfig as AztecTestConfig).minterAddress })
+}
+
+/** On Send: 1 token, public to public, to the sandbox minter, from a balance the chain no longer
+ *  holds, until the estimate has failed. Nothing goes out on a fee the person has not seen, so the
+ *  footer stays off. */
+async function sendFromDrainedBalance(page: Page): Promise<void> {
+	await openPublicSend(page)
+	await enterSendForm(page, ONE_TO_MINTER())
 	await waitForToast(page, "Couldn't estimate fee", 120_000, { kind: "error" })
+	expect(await page.$eval(sel("send-submit"), (el) => getComputedStyle(el).pointerEvents)).toBe("none")
+}
+
+/**
+ * On Send, while the chain still holds the balance: the same transfer, until its estimate lands.
+ * Confirm reuses that estimate's build without simulating it again unless a send of the account
+ * reached the node since; the grant that follows is one, so Confirm builds afresh against the
+ * balance the chain holds then.
+ */
+async function estimateOnSend(page: Page): Promise<void> {
+	await openPublicSend(page)
+	await fillSendForm(page, ONE_TO_MINTER())
+}
+
+/** A drained send whose estimate landed before the grant: Confirm builds again, so it fails once its
+ *  record is written. */
+async function confirmDrainedSend(page: Page): Promise<void> {
+	await page.bringToFront()
+	// A public origin needs no review, so the footer sends at once.
+	expect(await page.$eval(sel("send-submit"), (el) => el.getAttribute("data-action"))).toBe("send")
+	await clickByTestId(page, "send-submit")
 }
 
 /** Asks, through the playground, for a public transfer of 1,000,000 base units from an account that
@@ -456,11 +487,8 @@ test.skipIf(!hasConfig)(
 	async ({ dappConnectedExtensionWithTransactionCap }) => {
 		expect(dappConnectedExtensionWithTransactionCap.consoleErrors).toEqual([])
 		expect(dappConnectedExtensionWithTransactionCap.pageErrors).toEqual([])
-		const page = await balanceDrainedBehindTheWallet(dappConnectedExtensionWithTransactionCap)
-		await sendFromDrainedBalance(page)
-		// A public origin needs no review, so the footer sends at once.
-		expect(await page.$eval(sel("send-submit"), (el) => el.getAttribute("data-action"))).toBe("send")
-		await clickByTestId(page, "send-submit")
+		const page = await balanceDrainedBehindTheWallet(dappConnectedExtensionWithTransactionCap, estimateOnSend)
+		await confirmDrainedSend(page)
 
 		const card = await waitForToast(page, "Send failed", 180_000, { kind: "error" })
 		expect(await card.$eval(sel("snackbar-action"), (el) => el.textContent?.trim())).toBe("Details")
@@ -542,9 +570,8 @@ test.skipIf(!hasConfig)(
 		const ctx = dappConnectedExtensionWithTransactionCap
 		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
-		const page = await balanceDrainedBehindTheWallet(ctx)
-		await sendFromDrainedBalance(page)
-		await clickByTestId(page, "send-submit")
+		const page = await balanceDrainedBehindTheWallet(ctx, estimateOnSend)
+		await confirmDrainedSend(page)
 		await waitForHash(page, "#/popup/general", 10_000)
 		await waitForToast(page, "Send failed", 180_000, { kind: "error" })
 

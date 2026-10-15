@@ -3,6 +3,7 @@ import { Flex, MaterialIcon, Text } from "@nulo/design"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
+import { nextTick } from "vue"
 import type { ConfigProp } from "@/wallet/config"
 
 const fakes = vi.hoisted(() => ({
@@ -32,6 +33,7 @@ vi.mock("@/wallet/services/profile/client", () => ({
 }))
 
 import { useLockWallet } from "@/composables/useLockWallet"
+import { useAppStore } from "@/stores/app.store"
 import ItemsContainer from "@/components/ui/Settings/ItemsContainer.vue"
 import SettingItem from "@/components/ui/Settings/SettingItem.vue"
 import LockPage from "./lock.vue"
@@ -93,6 +95,22 @@ describe("settings/lock", () => {
 	test("Lock now runs the shared lock on the popup's long-lived profile client", async () => {
 		const w = await mountLock()
 		expect(useLockWallet).toHaveBeenCalledExactlyOnceWith(fakes.managerProfile)
+		await w.get('[data-testid="lock-now-btn"]').trigger("click")
+		expect(fakes.lockWallet.lock).toHaveBeenCalledTimes(1)
+	})
+
+	test("Lock now is disabled while a contacts import holds Lock, and enabled once the hold ends", async () => {
+		const w = await mountLock()
+		// The testing pinia lets a test set a getter; the store's type keeps it read-only.
+		const app = useAppStore() as { lockHeldByImport: boolean }
+		app.lockHeldByImport = true
+		await nextTick()
+		await w.get('[data-testid="lock-now-btn"]').trigger("click")
+		expect(w.get('[data-testid="lock-now-btn"]').classes().join(" ")).toMatch(/disabled/)
+		expect(fakes.lockWallet.lock).not.toHaveBeenCalled()
+
+		app.lockHeldByImport = false
+		await nextTick()
 		await w.get('[data-testid="lock-now-btn"]').trigger("click")
 		expect(fakes.lockWallet.lock).toHaveBeenCalledTimes(1)
 	})

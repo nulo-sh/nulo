@@ -18,6 +18,7 @@ test("base.css content is pinned (edits must be deliberate + visually re-verifie
 	// `::-webkit-scrollbar` rule Firefox ignores, with `-moz-osx-font-smoothing` on the icon font, so
 	// Firefox matches Chrome; the dark palette is declared once (`:root, [theme="dark"]`), its hairline
 	// and scrim tokens at their literals' values, its --txt-danger lighter than --red so it reads 4.5:1 on a
-	// pressed row; line 1 carries the Apache-2.0 §4(b) header.
-	expect(hash).toBe("63aabfe04107936e4286dfd43d7817d9d734ecf21900dea082f6561536ae3c90")
+	// pressed row, and --btn-destructive darker than --red so the red buttons' label reads AA; line 1
+	// carries the Apache-2.0 §4(b) header.
+	expect(hash).toBe("2b4cf462c70465e99f3131b814fd267d2a145dfbe9905fc1d26bdfbb7f954739")
 })

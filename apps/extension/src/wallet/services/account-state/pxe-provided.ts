@@ -1,6 +1,6 @@
 /**
  * Contracts every PXE registers by itself at boot: the protocol contracts and upstream's preloaded
- * standard contracts. A backup still carries them, but an import never needs to register them, so a
+ * standard contracts. The export leaves them out, and the import skips them in an older backup, so a
  * network whose slice holds only these is neither probed nor booted. Nothing here derives from slice
  * content: the set is compiled in from upstream's constants.
  */

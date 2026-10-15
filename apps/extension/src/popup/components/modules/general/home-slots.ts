@@ -1,7 +1,7 @@
 /**
  * Home's token rows before ordering and the cap. A listed default holds ONE slot from its
  * placeholder, through the import row its own persist step journals, to its token row. Until that
- * row lands it sorts as a never-synced row holding nothing, under its compiled-in name, which is how
+ * row lands it sorts as a never-synced row holding nothing, under its list name, which is how
  * its token row sorts: adding the defaults never shows a row and then takes it away. Matched by
  * contract, never by symbol.
  */

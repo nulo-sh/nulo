@@ -1,5 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
-import type { LocalTxOrigin } from "@nulo/wallet-bridge"
+import { isPriorityLevel, type LocalTxOrigin, type PriorityLevel } from "@nulo/wallet-bridge"
 import { z } from "zod"
 import type { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 
@@ -145,6 +145,9 @@ export type Tx = {
 	/** The fee contract the build paid through when it may spend the sender's notes (any FPC but
 	 *  the protocol sponsor): a later send through it waits for this tx, across a worker restart. */
 	feeSpender?: string
+	/** The speed a Send-page send was priced at; a queued send's fee cap is drawn only from a send of
+	 *  the same speed. */
+	priorityLevel?: PriorityLevel
 	/** Error message, if some. */
 	error?: string
 	/** Set by this wallet's sync worker on a row it saw mined below Finalized, until the finalized
@@ -163,10 +166,9 @@ export type Tx = {
 	calls: TxCall[]
 }
 
-/** Tolerant-deep sub-schema: validates only the fields consumers BRANCH on
- *  (contract/method/args + transfer from/to for balance-refresh targeting);
- *  `z.custom` passes the value through VERBATIM, so display-only fields
- *  (token, type, amount, …) are never stripped by the codec. */
+/** Tolerant-deep sub-schema: validates the call's contract/method/args and each transfer's from/to;
+ *  `z.custom` passes the value through VERBATIM, so a field it does not check (token, type,
+ *  amount, …) is never stripped, and a reader that branches on one compares it exactly. */
 const TxCallRowSchema = z.custom<TxCall>((v) => {
 	const c = v as TxCall
 	if (typeof c !== "object" || c === null) return false
@@ -202,6 +204,8 @@ export const TxSchema: z.ZodType<Tx> = z.object({
 	estimatedFee: z.string().optional(),
 	gasDetails: z.custom<TxGasDetails>(tolerantObject).optional(),
 	feeSpender: z.string().optional(),
+	// An unknown speed reads as none rather than hiding the row: it only ever withholds a basis.
+	priorityLevel: z.custom<PriorityLevel>(isPriorityLevel).optional().catch(undefined),
 	error: z.string().optional(),
 	awaitingFinality: z.boolean().optional(),
 	submittedEndpointUrl: z.string().optional(),

@@ -204,6 +204,26 @@ describe("awaitProfileActivation with a start-only deadline", () => {
 		expect(outcome).toBeInstanceOf(ActivationSupersededError)
 	})
 
+	test("with an overall limit, an activation that started and still runs rejects at the limit", async () => {
+		const started = async (store: ReturnType<typeof makeStore>, advance: (ms: number) => Promise<unknown>) => {
+			store.profile = { id: "A" }
+			await advance(59_999)
+		}
+		const limit = { deadlineCovers: "start", limitMs: 60_000 } as const
+		expect(await settleWith(limit, started)).toBe("pending")
+		expect(await settleWith(limit, slowStart)).toBeInstanceOf(UnlockTimeoutError)
+	})
+
+	test("control: an activation inside the overall limit resolves", async () => {
+		const outcome = await settleWith({ deadlineCovers: "start", limitMs: 60_000 }, async (store, advance) => {
+			store.profile = { id: "A" }
+			await advance(59_999)
+			store.isLogined = true
+			await advance(0)
+		})
+		expect(outcome).toBe("resolved")
+	})
+
 	test("control: another profile selected before the start is no supersede; the deadline ends the wait", async () => {
 		const outcome = await settleWith({ deadlineCovers: "start" }, async (store, advance) => {
 			store.profile = { id: "B" }

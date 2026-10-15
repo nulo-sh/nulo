@@ -17,7 +17,7 @@ import { ConfigService } from "@/wallet/services/config/service"
 import { TokenBalanceService } from "@/wallet/services/token-balance/service"
 import { TaskService } from "@/wallet/services/task/service"
 import { TaskStatus } from "@/wallet/services/task/spec"
-import { PriceService } from "@/wallet/services/price/service"
+import { PriceService, type PriceSnapshot } from "@/wallet/services/price/service"
 import { getPriceMapEntry } from "@/wallet/services/price/price-map"
 import { isAmountAboveDustThreshold, usdThresholdToMicro } from "@/utils/incoming-dust"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
@@ -29,10 +29,12 @@ import { PublicEventIndexer, type PublicEventReader, type PublicScanResult } fro
 import { ScanEpisodeStore, scanEpisodeKey, scanEpisodeNetworkPrefix } from "./scan-episodes"
 import { isScanSuccess, type ScanOutcome } from "./scan-health"
 import { ARRIVAL_ID_MAX, ARRIVAL_PLAYED_CAP, type ArrivalState, arrivalStateOf, claimPlayed, isArrivalEligible } from "./arrival-state"
+import { type NoteRowDecision, decideNoteRow, isVerifiedBracket, movedRows, needsBracket, notesByNullifier } from "./note-reconcile"
 import {
 	INCOMING_TRANSFER_SERVICE_NAME,
 	type Events,
 	type IncomingBalanceOutboxRow,
+	type IncomingNoteRecord,
 	type IncomingPublicEventRecord,
 	type IncomingSyncHealth,
 	type IncomingSyncHealthChanged,
@@ -52,6 +54,18 @@ export * from "./spec"
  *  conservative (30s); a future PR can tune based on SW restart frequency
  *  + PXE sync cadence. */
 const DEFAULT_POLL_INTERVAL_MS = 30_000
+
+/** Every target runs on every fourth tick whatever the tips say, so a note the PXE delivers late or
+ *  a balance refresh retried after a failure still lands when no block comes. */
+const FALLBACK_EVERY_TICKS = 4
+
+/** How long one tips read serves every target of its network. Targets are installed together and
+ *  tick in phase, so a tick's targets share one read. */
+const SHARED_TIPS_TTL_MS = 5_000
+
+/** Public history at or below the first scan's floor is read in windows of this many blocks, newest
+ *  window first. At one transfer a block, a window fits one tick's five pages of 20 logs. */
+const BACKFILL_WINDOW_BLOCKS = 100
 
 /** One scan's capture for its per-note critical sections: the scope and the scan-scoped timestamp
  *  cache. */
@@ -83,6 +97,14 @@ type ReceiptFence = { fenced: () => boolean; isCurrent: () => boolean }
 /** A public commit is `revoked` exactly when a `fenced()` read stopped it before its record write; the
  *  caller then holds its page. */
 type PublicCommit = "revoked" | "processed"
+
+/** A public tick's outcome, and whether it left nothing to do below the tips it worked from: no page
+ *  or marker pending and no page left unread. Only then may later ticks skip it until the tips move. */
+type PublicTick = { outcome: ScanOutcome; atTip: boolean }
+
+type PublicTarget = { profileId: string; networkId: string; contract: string; chainId: number }
+
+type BackfillStep = { outcome: "none" | "progress" | "no-progress" | "failed"; left: boolean }
 
 type TrustScope = { profileId: string; networkId: string; accountAddress: string; contract: string }
 
@@ -176,6 +198,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		"getIncomingTransfers",
 		"getIncomingTransferById",
 		"getReceiptFee",
+		"getCachedReceiptFee",
 		"getTrustState",
 		"getIncomingSyncHealth",
 		"retryIncomingScan",
@@ -247,6 +270,14 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	private readonly classGateCache = new Map<string, { finalizedTip: number; checkpointHash: string; status: PublicTokenClassStatus }>()
 	/** Failure episodes of the public scan; session-backed so an alarm-woken worker keeps the streak. */
 	private readonly episodes: ScanEpisodeStore
+	/** The tip hash handed to each target's last run that reached it, by scheduler key: a note target
+	 *  keys on the proposed tip, a public one on the checkpointed tip. A tick skips a target whose hash
+	 *  has not moved. */
+	private readonly noteScannedAt = new Map<string, string>()
+	private readonly publicScannedAt = new Map<string, string>()
+	/** One in-flight or recent tips read per network, shared by every target of a tick. `settledAt`
+	 *  is set once the read succeeded; a pending read is shared whatever its age. */
+	private readonly tipsReads = new Map<string, { read: Promise<PublicScanTips | undefined>; settledAt?: number }>()
 	private pxeService: PxeServiceClient = null!
 	private reader: PublicEventReader = null!
 	private indexer: PublicEventIndexer = null!
@@ -278,6 +309,10 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  simply never read again); only VIEWED public receipts populate it, so it stays tiny. Evicted on
 	 *  chain/profile purge, and never persisted (no storage bloat). */
 	private readonly feeCache = new Map<string, string>()
+
+	/** Note rows the last verified scan of their scope found missing, by record id, with that scope's
+	 *  key. In memory only: a restart forgets a strike, which only delays the delete by one scan. */
+	private readonly noteStrikes = new Map<string, string>()
 
 	/** E2E-only deterministic race lever. `undefined` in production (the ctor
 	 *  arg is only ever passed inside `if (E2E_PROVERLESS)` in runtime.ts), so
@@ -427,10 +462,10 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 	private onAccountAdded = async (account: { chainId: number; address: string }): Promise<void> => {
 		// A new account means the per-(network, contract) public cursors have already scanned PAST
-		// its historical receipts (one stream serves all accounts). Reset those cursors to null so
-		// the next scan re-indexes public history from `startBlock` and discovers the new account's
-		// receipts (correctness over speed; the reset restarts backfill). Done under the lock +
-		// the hydrateSchedulers epoch bump so an in-flight scan bails.
+		// its historical receipts (one stream serves all accounts). Reset both halves of those cursors
+		// so the next scan re-indexes public history, newest first, and discovers the new account's
+		// receipts (correctness over speed). The reset and an epoch bump share one critical section, so
+		// an in-flight scan bails.
 		const profile = await this.profileService.getActiveProfile()
 		if (profile) {
 			try {
@@ -582,8 +617,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const epochAtStart = this.serviceEpoch
 		const record = await this.getIncomingTransferById(id)
 		if (record?.kind !== "public-event") return null
-		// The reconciler rewrites `record.blockHash` on re-mine, so keying on it busts a stale cached fee.
-		const cacheKey = `${record.networkId}|${record.txHash}|${record.blockHash}`
+		const cacheKey = receiptFeeKey(record)
 		const cached = this.feeCache.get(cacheKey)
 		if (cached !== undefined) return { feeJuice: cached }
 		try {
@@ -609,9 +643,20 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			if (this.serviceEpoch === epochAtStart) this.feeCache.set(cacheKey, feeJuice)
 			return { feeJuice }
 		} catch (err) {
-			this.logDebug(`getReceiptFee failed for ${record.txHash.slice(0, 10)}`, err)
+			// The node's message can echo the transaction hash, so only the error's class is logged.
+			this.logDebug("receipt fee lookup failed", { errorName: err instanceof Error ? err.name : typeof err })
 			return null
 		}
+	}
+
+	/** The fee a lookup already fetched this session for the record's current block, or `null`. It
+	 *  makes no network call, so a page under privacy mode can show a held fee without naming the
+	 *  transaction to a node. */
+	public async getCachedReceiptFee(id: string): Promise<{ feeJuice: string } | null> {
+		const record = await this.getIncomingTransferById(id)
+		if (record?.kind !== "public-event") return null
+		const cached = this.feeCache.get(receiptFeeKey(record))
+		return cached === undefined ? null : { feeJuice: cached }
 	}
 
 	/**
@@ -635,11 +680,11 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (thresholdMicro <= 0n) return records // filter off
 		let chainId: number
 		let tokensById: Map<number, Token>
-		let quotes: Record<string, { usd: number }>
+		let prices: PriceSnapshot
 		try {
 			chainId = (await this.networkService.getNetwork(networkId)).chainId
 			tokensById = new Map((await this.tokenService.getTokensRaw(profileId, chainId)).map((t) => [t.id, t]))
-			quotes = await this.priceService.getQuotes()
+			prices = await this.priceService.getQuotes()
 		} catch {
 			return records // any price/token/network dependency unavailable → fail open
 		}
@@ -647,8 +692,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			if (r.tokenId === undefined) return true
 			const token = tokensById.get(r.tokenId)
 			if (!token) return true
-			const entry = getPriceMapEntry(chainId, token.contract)
-			const usdRate = entry ? quotes[entry.coingeckoId]?.usd : undefined // `getQuotes` returns FRESH quotes only
+			const entry = getPriceMapEntry(prices.pricedTokens, chainId, token.contract)
+			const usdRate = entry ? prices.quotes[entry.coingeckoId]?.usd : undefined // `getQuotes` returns FRESH quotes only
 			return isAmountAboveDustThreshold({ amountRaw: r.amountRaw, decimals: token.decimals, usdRate, thresholdMicro })
 		})
 	}
@@ -1043,6 +1088,9 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		for (const id of this.publicSchedulers.values()) clearInterval(id)
 		this.publicSchedulers.clear()
 		this.publicWatched.clear()
+		// Every installed target runs at once, so no earlier run's mark carries over.
+		this.noteScannedAt.clear()
+		this.publicScannedAt.clear()
 		for (const d of noteDescriptors) {
 			this.watchedContracts.set(this.schedulerKey(d.networkId, d.accountAddress), d.contracts)
 			this.startScheduler(d.profileId, d.networkId, d.accountAddress)
@@ -1059,7 +1107,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	private startScheduler(profileId: string, networkId: string, accountAddress: string): void {
 		const key = this.schedulerKey(networkId, accountAddress)
 		if (this.schedulers.has(key)) return
-		this.startPollScheduler(this.schedulers, key, () => this.poll(profileId, networkId, accountAddress), {
+		this.startPollScheduler(this.schedulers, key, (force) => this.poll(profileId, networkId, accountAddress, force), {
 			tick: "Poll failed",
 			initial: "Initial poll failed",
 		})
@@ -1070,20 +1118,22 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  interval can still fire; its tick bails, otherwise the scan it starts would capture the NEW
 	 *  epoch and commit stale old-profile work under it. The map is written BEFORE the immediate
 	 *  first poll, which exists so first-receive doesn't wait one full interval after SW restart /
-	 *  token-add. */
+	 *  token-add. That poll and every fallback tick are forced: they run whatever the tips say. */
 	private startPollScheduler(
 		schedulers: Map<string, ReturnType<typeof setInterval>>,
 		key: string,
-		poll: () => Promise<void>,
+		poll: (force: boolean) => Promise<void>,
 		labels: { tick: string; initial: string },
 	): void {
 		const bornAtEpoch = this.serviceEpoch
+		let ticks = 0
 		const interval = setInterval(() => {
 			if (this.serviceEpoch !== bornAtEpoch) return
-			poll().catch((err) => this.logWarn(labels.tick, err))
+			ticks += 1
+			poll(ticks % FALLBACK_EVERY_TICKS === 0).catch((err) => this.logWarn(labels.tick, err))
 		}, this.pollIntervalMs)
 		schedulers.set(key, interval)
-		poll().catch((err) => this.logWarn(labels.initial, err))
+		poll(true).catch((err) => this.logWarn(labels.initial, err))
 	}
 
 	private publicSchedulerKey(networkId: string, contract: string): string {
@@ -1095,7 +1145,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const key = this.publicSchedulerKey(networkId, contract)
 		this.publicWatched.set(key, { profileId, networkId, contract, epoch: this.serviceEpoch })
 		if (this.publicSchedulers.has(key)) return
-		this.startPollScheduler(this.publicSchedulers, key, () => this.pollPublic(key), {
+		this.startPollScheduler(this.publicSchedulers, key, (force) => this.pollPublic(key, force), {
 			tick: "Public poll failed",
 			initial: "Initial public poll failed",
 		})
@@ -1106,6 +1156,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (interval) clearInterval(interval)
 		this.schedulers.delete(key)
 		this.watchedContracts.delete(key)
+		this.noteScannedAt.delete(key)
 	}
 
 	/** Tear down the public-event scheduler for `(networkId, contract)`. */
@@ -1115,6 +1166,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (interval) clearInterval(interval)
 		this.publicSchedulers.delete(key)
 		this.publicWatched.delete(key)
+		this.publicScannedAt.delete(key)
 	}
 
 	/** Single-flight public poll for one `(networkId, contract)` stream. Every caller — the interval,
@@ -1123,7 +1175,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  capture the NEW epoch and write old-scope cursors and episodes under it. A contract in backoff
 	 *  skips the scan; health is announced before AND after, because the flip to stalled comes from
 	 *  time passing and a recovery must be measured against what a reader could already have seen. */
-	private async pollPublic(key: string): Promise<void> {
+	private async pollPublic(key: string, force: boolean): Promise<void> {
 		if (this.publicPolling.has(key)) return
 		const target = this.publicWatched.get(key)
 		if (!target || target.epoch !== this.serviceEpoch) return
@@ -1132,7 +1184,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			const episodeKey = scanEpisodeKey(target.profileId, target.networkId, target.contract)
 			this.announceHealth(target.profileId, target.networkId)
 			if (!this.episodes.isBackingOff(episodeKey, Date.now())) {
-				await this.scanAndRecord(target, episodeKey)
+				await this.scanAndRecord(key, target, episodeKey, force)
 				this.announceHealth(target.profileId, target.networkId)
 			}
 			await this.drainBalanceOutbox()
@@ -1143,21 +1195,66 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		}
 	}
 
-	/** Run one scan tick and fold its outcome into the contract's episode. The write is fenced by the
-	 *  epoch captured BEFORE the scan, inside the service lock, so an outcome that lands after a
-	 *  lock / purge / profile switch cannot recreate the episode that transition cleared. */
-	private async scanAndRecord(target: { profileId: string; networkId: string; contract: string }, episodeKey: string): Promise<void> {
+	/** Run one scan tick, unless the checkpoint has not moved since the target last reached it, and
+	 *  fold its outcome into the contract's episode. The write is fenced by the epoch captured BEFORE
+	 *  the scan, inside the service lock, so an outcome that lands after a lock / purge / profile
+	 *  switch cannot recreate the episode that transition cleared. */
+	private async scanAndRecord(
+		key: string,
+		target: { profileId: string; networkId: string; contract: string },
+		episodeKey: string,
+		force: boolean,
+	): Promise<void> {
 		const epochAtStart = this.serviceEpoch
-		const outcome = await this.scanPublicContract(target.profileId, target.networkId, target.contract).catch((error): ScanOutcome => {
-			this.logDebug("public scan tick threw", { contract: target.contract, error })
-			return "failed"
-		})
+		const tips = await this.sharedTips(target.networkId)
+		if (tips && !force && this.publicScannedAt.get(key) === tips.checkpointedBlockHash) return
+		const tick = tips
+			? await this.scanPublicContract(target.profileId, target.networkId, target.contract, tips, epochAtStart).catch(
+					(error): PublicTick => {
+						this.logDebug("public scan tick threw", { contract: target.contract, error })
+						return notAtTip("failed")
+					},
+				)
+			: notAtTip("failed")
+		this.markScanned(this.publicScannedAt, key, tick.atTip ? tips?.checkpointedBlockHash : undefined, epochAtStart)
 		// The steady state — healthy, and nothing to clear — takes no lock.
-		if (isScanSuccess(outcome) && !this.episodes.has(episodeKey)) return
+		if (isScanSuccess(tick.outcome) && !this.episodes.has(episodeKey)) return
 		await this.withServiceLock(async () => {
 			if (this.serviceEpoch !== epochAtStart) return
-			this.episodes.record(episodeKey, outcome, Date.now())
+			this.episodes.record(episodeKey, tick.outcome, Date.now())
 		})
+	}
+
+	/** Record that the target reached `tipHash`, or forget its mark when the run did not reach the
+	 *  tips (so the next tick runs it again). A run that outlived a rebuild leaves no mark: the rebuilt
+	 *  target's own install run decides. */
+	private markScanned(marks: Map<string, string>, key: string, tipHash: string | undefined, epochAtStart: number): void {
+		if (this.serviceEpoch !== epochAtStart) return
+		if (tipHash === undefined) marks.delete(key)
+		else marks.set(key, tipHash)
+	}
+
+	/** The network's tips, read once for every target of a tick; `undefined` when the read failed.
+	 *  Then a note target runs ungated and a public tick fails, as it did on its own failed read. A
+	 *  failed read is shared only while in flight, so a Retry right after it reads again. */
+	private sharedTips(networkId: string): Promise<PublicScanTips | undefined> {
+		const recent = this.tipsReads.get(networkId)
+		if (recent && (recent.settledAt === undefined || Date.now() - recent.settledAt < SHARED_TIPS_TTL_MS)) return recent.read
+		const entry: { read: Promise<PublicScanTips | undefined>; settledAt?: number } = {
+			read: this.indexer.getTips(networkId).then(
+				(tips) => {
+					entry.settledAt = Date.now()
+					return tips
+				},
+				(error) => {
+					if (this.tipsReads.get(networkId) === entry) this.tipsReads.delete(networkId)
+					this.logDebug("public scan: tips failed", { networkId, error })
+					return undefined
+				},
+			),
+		}
+		this.tipsReads.set(networkId, entry)
+		return entry.read
 	}
 
 	/** Emit `onIncomingSyncHealthChanged` when the network's health differs from the last announced
@@ -1198,7 +1295,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		this.episodes.clearRetryGate(scanEpisodeNetworkPrefix(profile.id, networkId))
 		const polls: Promise<void>[] = []
 		for (const [key, target] of this.publicWatched) {
-			if (target.profileId === profile.id && target.networkId === networkId) polls.push(this.pollPublic(key))
+			if (target.profileId === profile.id && target.networkId === networkId) polls.push(this.pollPublic(key, true))
 		}
 		await Promise.all(polls)
 	}
@@ -1355,21 +1452,13 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		})
 	}
 
-	private async poll(profileId: string, networkId: string, accountAddress: string): Promise<void> {
+	private async poll(profileId: string, networkId: string, accountAddress: string, force: boolean): Promise<void> {
 		const key = this.schedulerKey(networkId, accountAddress)
 		if (this.polling.has(key)) return
 		this.polling.add(key)
 		try {
 			const contracts = this.watchedContracts.get(key)
-			if (contracts && contracts.size > 0) {
-				for (const contract of contracts) {
-					try {
-						await this.scanContract(profileId, networkId, accountAddress, contract)
-					} catch (error) {
-						this.logWarn(`Scan failed for ${contract}`, error)
-					}
-				}
-			}
+			if (contracts && contracts.size > 0) await this.scanNoteTarget(key, { profileId, networkId, accountAddress }, contracts, force)
 			// Drain the balance-refresh outbox each tick (both arms). The drain is service-global +
 			// active-profile-scoped, so any scheduler tick makes progress on the causal ack.
 			await this.drainBalanceOutbox()
@@ -1378,14 +1467,45 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		}
 	}
 
-	private async scanContract(profileId: string, networkId: string, accountAddress: string, contract: string): Promise<void> {
-		// Capture lifecycle epoch BEFORE any await — if a clear / onTokenDeleted /
-		// onAccountDeleted runs during PXE I/O or any other await in the unlocked
-		// discovery phase, every per-note CS below will observe the mismatch
-		// and bail. Closes the hole where PXE I/O outside the lock lets a
-		// scan resurrect just-wiped rows.
+	/** Scan every watched contract for the account, unless no block was proposed since the target
+	 *  last reached the tip. It reaches the tip only when every read succeeded and no commit stood
+	 *  down. */
+	private async scanNoteTarget(
+		key: string,
+		target: { profileId: string; networkId: string; accountAddress: string },
+		contracts: Set<string>,
+		force: boolean,
+	): Promise<void> {
+		const { profileId, networkId, accountAddress } = target
 		const epochAtStart = this.serviceEpoch
+		const tips = await this.sharedTips(networkId)
+		const tipHash = tips?.proposedBlockHash
+		if (!force && tipHash !== undefined && this.noteScannedAt.get(key) === tipHash) return
+		let reached = true
+		for (const contract of contracts) {
+			try {
+				if (!(await this.scanContract(profileId, networkId, accountAddress, contract, epochAtStart, tips))) reached = false
+			} catch (error) {
+				reached = false
+				this.logWarn(`Scan failed for ${contract}`, error)
+			}
+		}
+		this.markScanned(this.noteScannedAt, key, reached ? tipHash : undefined, epochAtStart)
+	}
 
+	/** Resolves whether the scan reached the tip: its notes read succeeded, no commit stood down and
+	 *  reconciliation left nothing a rerun at the same tips could decide. `epochAtStart` is the
+	 *  target's, captured before its first await: a clear / onTokenDeleted / onAccountDeleted that
+	 *  runs during the tips read or the PXE I/O makes every per-note section below stand down instead
+	 *  of resurrecting just-wiped rows. */
+	private async scanContract(
+		profileId: string,
+		networkId: string,
+		accountAddress: string,
+		contract: string,
+		epochAtStart: number,
+		tips?: PublicScanTips,
+	): Promise<boolean> {
 		// ── UNLOCKED discovery (PXE-bound — kept outside the service lock
 		// so user-mediated writers like setTrustAllow don't wait on PXE) ──
 		let notes: RawNote[]
@@ -1393,7 +1513,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			notes = await this.noteService.getNotesRaw(networkId, accountAddress, contract)
 		} catch (error) {
 			this.logWarn("getNotesRaw failed", error)
-			return
+			return false
 		}
 
 		// E2E-only deterministic race lever (prod: `incomingPollGate` is undefined →
@@ -1435,14 +1555,166 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			chainId: network.chainId,
 			blockTimestampFor,
 		}
+		let reached = true
 		for (const note of notes) {
 			if (!note.siloedNullifier) continue
-			await this.withServiceLock((isCurrent) => this.commitScannedNote(ctx, note, this.receiptFence(epochAtStart, isCurrent)))
+			// A fence only ever turns false inside a held section, so one still open at its end never refused.
+			const open = await this.withServiceLock(async (isCurrent) => {
+				const fence = this.receiptFence(epochAtStart, isCurrent)
+				await this.commitScannedNote(ctx, note, fence)
+				return fence.fenced()
+			})
+			if (!open) reached = false
 		}
 
 		// Tell the test the parked scan's locked commit is done (the late emission,
 		// if any, has fired) — its precondition before asserting cross-account isolation.
 		if (heldTxHash) await this.incomingPollGate?.markCommitted(heldTxHash)
+		const reconciled = await this.reconcileNoteRows(ctx, notesByNullifier(notes), tips, epochAtStart)
+		return reached && reconciled
+	}
+
+	/** Reconcile the scope's unsettled note rows with the PXE: a pruned note's row leaves the feed, a
+	 *  moved one follows its note, and one seen on the finalized chain is settled for good. Resolves
+	 *  false while a rerun at the same tips could still decide a row. */
+	private async reconcileNoteRows(
+		ctx: NoteScanContext,
+		active: Map<string, RawNote>,
+		tips: PublicScanTips | undefined,
+		epochAtStart: number,
+	): Promise<boolean> {
+		const { profileId, networkId, accountAddress, contract } = ctx
+		const scopeKey = `${profileId}|${networkId}|${accountAddress}|${contract}`
+		const rows = (await this.repo.listByContract(profileId, networkId, contract)).filter(
+			(r): r is IncomingNoteRecord => r.kind === "note" && r.accountAddress === accountAddress && !r.settled,
+		)
+		this.forgetStrikes(scopeKey, rows, active)
+		let reached = true
+		const moved = movedRows(rows, active)
+		for (const { row, note } of moved) if (!(await this.moveNoteRow(ctx, row, note, epochAtStart))) reached = false
+		const rest = rows.filter((r) => !moved.some((m) => m.row.id === r.id))
+		if (!needsBracket(rest, active, tips?.finalizedBlockNumber)) return reached
+		const bracket = tips ? await this.readNoteBracket(ctx, tips) : undefined
+		if (!tips || !bracket) return false
+		for (const row of rest) {
+			const note = bracket.notes.get(row.siloedNullifier)
+			if (note) this.noteStrikes.delete(row.id)
+			const decision = decideNoteRow(row, note, bracket, this.noteStrikes.has(row.id))
+			if (!(await this.applyNoteDecision(ctx, row, decision, scopeKey, epochAtStart))) reached = false
+		}
+		return reached
+	}
+
+	/** A strike lasts while its row is unsettled and missing from the scope's reads. */
+	private forgetStrikes(scopeKey: string, rows: IncomingNoteRecord[], active: Map<string, RawNote>): void {
+		const missing = new Set(rows.filter((r) => !active.has(r.siloedNullifier)).map((r) => r.id))
+		for (const [id, key] of this.noteStrikes) if (key === scopeKey && !missing.has(id)) this.noteStrikes.delete(id)
+	}
+
+	/** The spent-or-unspent read between two synced-block reads; undefined when any of them failed. */
+	private async readNoteBracket(
+		ctx: NoteScanContext,
+		tips: PublicScanTips,
+	): Promise<{ notes: Map<string, RawNote>; finalized: number; synced: number; verified: boolean } | undefined> {
+		const { networkId, accountAddress, contract } = ctx
+		try {
+			const before = await this.noteService.getSyncedBlock(networkId)
+			const notes = await this.noteService.getNotesRaw(networkId, accountAddress, contract, "active-or-nullified")
+			const after = await this.noteService.getSyncedBlock(networkId)
+			return {
+				notes: notesByNullifier(notes),
+				finalized: tips.finalizedBlockNumber,
+				synced: after.number,
+				verified: isVerifiedBracket(before, after, tips.proposedBlockHash),
+			}
+		} catch (error) {
+			this.logDebug("note reconciliation read failed", { error })
+			return undefined
+		}
+	}
+
+	private async applyNoteDecision(
+		ctx: NoteScanContext,
+		row: IncomingNoteRecord,
+		decision: NoteRowDecision,
+		scopeKey: string,
+		epochAtStart: number,
+	): Promise<boolean> {
+		switch (decision.kind) {
+			case "settle":
+				return this.settleNoteRow(ctx, row, epochAtStart)
+			case "move":
+				return this.moveNoteRow(ctx, row, decision.note, epochAtStart)
+			case "strike":
+				this.noteStrikes.set(row.id, scopeKey)
+				return false
+			case "delete":
+				return this.deleteNoteRow(ctx, row, epochAtStart)
+			case "wait":
+				return decision.reached
+		}
+	}
+
+	/** Settling re-reads the block's time first and rewrites a changed one: a same-position re-mine
+	 *  moves nothing else. */
+	private async settleNoteRow(ctx: NoteScanContext, row: IncomingNoteRecord, epochAtStart: number): Promise<boolean> {
+		const blockTimestamp = await ctx.blockTimestampFor(row.l2BlockNumber)
+		if (blockTimestamp === undefined) return false
+		const settled: IncomingNoteRecord = { ...row, blockTimestamp, settled: true }
+		return this.rewriteNoteRow(row, settled, blockTimestamp !== row.blockTimestamp, epochAtStart)
+	}
+
+	/** The row keeps its id, so an arrival it already played does not play again. */
+	private async moveNoteRow(ctx: NoteScanContext, row: IncomingNoteRecord, note: RawNote, epochAtStart: number): Promise<boolean> {
+		const blockTimestamp = await ctx.blockTimestampFor(note.l2BlockNumber)
+		if (blockTimestamp === undefined) return false
+		const moved: IncomingNoteRecord = {
+			...row,
+			l2BlockNumber: note.l2BlockNumber,
+			txIndexInBlock: note.txIndexInBlock,
+			indexInTx: note.noteIndexInTx,
+			blockTimestamp,
+		}
+		return this.rewriteNoteRow(row, moved, true, epochAtStart)
+	}
+
+	/** Writes `next` only over the very row the scan read, so an Allow that un-hid it meanwhile is
+	 *  never undone. */
+	private async rewriteNoteRow(
+		row: IncomingNoteRecord,
+		next: IncomingNoteRecord,
+		shownChange: boolean,
+		epochAtStart: number,
+	): Promise<boolean> {
+		return this.withServiceLock(async (isCurrent) => {
+			const { fenced } = this.receiptFence(epochAtStart, isCurrent)
+			if (!fenced()) return false
+			const current = await this.repo.getRecord(row.id)
+			if (!fenced() || !current || !sameRow(current, row)) return false
+			await this.repo.upsertRecord(next)
+			this.noteStrikes.delete(row.id)
+			if (shownChange) await this.emitUpdatedIfShown(next, fenced)
+			return fenced()
+		})
+	}
+
+	/** In `finishReconciliation`'s order: the balance refresh is enqueued before the row goes. The
+	 *  fence admits no other deleter, from lock entry to each write. */
+	private async deleteNoteRow(ctx: NoteScanContext, row: IncomingNoteRecord, epochAtStart: number): Promise<boolean> {
+		const { profileId, networkId, accountAddress } = ctx
+		return this.withDeleterLock(async (isCurrent) => {
+			const soleAtEntry = this.deletersRunning === 1
+			const fenced = () => soleAtEntry && this.deletersRunning === 1 && this.serviceEpoch === epochAtStart && isCurrent()
+			if (!fenced()) return false
+			const current = await this.repo.getRecord(row.id)
+			if (!fenced() || !current || !sameRow(current, row)) return false
+			if (row.tokenId !== undefined) await this.markBalanceDirty(profileId, networkId, accountAddress, row.tokenId)
+			if (!fenced()) return false
+			await this.repo.deleteRecord(row.id)
+			this.noteStrikes.delete(row.id)
+			this.emit("onIncomingTransferDeleted", row)
+			return true
+		})
 	}
 
 	/** The per-note locked critical section. Its head is the public arm's, read for read: tokens,
@@ -1628,12 +1900,9 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		networkId: string,
 		contract: string,
 		finalizedTip: number,
-		checkpointHash: string | null,
+		checkpointHash: string,
 		epochAtStart: number,
 	): Promise<PublicTokenClassStatus> {
-		// No checkpoint hash this tick → we can't pin the checkpointed class anchor, so fail closed
-		// (the forward scan defers on the same condition). Never cache an unresolved.
-		if (!checkpointHash) return "unresolved"
 		// Cache by the finalized tip + the exact checkpoint HASH: the gate resolves the class at the
 		// finalized AND checkpoint anchors so a checkpoint change — including a
 		// SAME-HEIGHT reorg (a number-keyed cache would miss it) — must re-resolve, else a mid-cache
@@ -1667,21 +1936,27 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	}
 
 	/**
-	 * One public-event scan tick for `(networkId, contract)`. Class-gates, then either resumes an
-	 * in-progress reconciliation / pending page or runs a bounded forward scan. A reorg throw
-	 * (referenceBlock dropped) escalates to reconciliation. The outcome covers the WHOLE tick:
-	 * every path that did not confirm anything reports `failed` or `no-progress`, never silence.
+	 * One public-event scan tick for `(networkId, contract)` on the tick's tips, fenced to the epoch
+	 * its target captured before reading them. Class-gates, then either resumes an in-progress
+	 * reconciliation / pending page or runs a bounded forward scan, then back-fill on the pages left. A
+	 * reorg throw (referenceBlock dropped) escalates to reconciliation. The outcome covers the WHOLE
+	 * tick: every path that did not confirm anything reports `failed` or `no-progress`, never silence.
 	 */
-	private async scanPublicContract(profileId: string, networkId: string, contract: string): Promise<ScanOutcome> {
-		const epochAtStart = this.serviceEpoch
-		const inputs = await this.resolveScanInputs(networkId, contract)
-		if (!inputs) return "failed"
-		const { network, tips } = inputs
-
-		// The checkpoint hash anchors the class gate, the pending-page ancestry probe and the forward
-		// scan; a degraded tick without one confirms nothing.
+	private async scanPublicContract(
+		profileId: string,
+		networkId: string,
+		contract: string,
+		tips: PublicScanTips,
+		epochAtStart: number,
+	): Promise<PublicTick> {
+		let network: Network
+		try {
+			network = await this.networkService.getNetwork(networkId)
+		} catch (error) {
+			this.logDebug("public scan: network resolve failed", { networkId }, error)
+			return notAtTip("failed")
+		}
 		const checkpointHash = tips.checkpointedBlockHash
-		if (!checkpointHash) return "no-progress"
 
 		const classStatus = await this.resolvePublicClassGate(
 			profileId,
@@ -1691,42 +1966,109 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			checkpointHash,
 			epochAtStart,
 		)
-		// Fail closed: a non-standard token is never scanned, an unresolvable one is retried.
-		if (classStatus === "non-standard") return "ineligible"
-		if (classStatus !== "standard") return "failed"
+		// Fail closed: a non-standard token is never scanned, an unresolvable one is retried. A
+		// non-standard verdict holds until the tips move, so it counts as caught up.
+		if (classStatus === "non-standard") return { outcome: "ineligible", atTip: true }
+		if (classStatus !== "standard") return notAtTip("failed")
 
-		const cursor = (await this.repo.getCursor(profileId, networkId, contract)) ?? this.freshCursor(0)
+		const cursor = seedFreshCursor((await this.repo.getCursor(profileId, networkId, contract)) ?? this.freshCursor(0), tips)
 
 		// Resume an in-progress reconciliation FIRST (crash / MV3-tick resume) — don't forward-scan
 		// the same tick.
-		if (cursor.reconciling) return this.stepReconciliation(profileId, networkId, contract, network.chainId, epochAtStart)
+		if (cursor.reconciling)
+			return notAtTip(await this.stepReconciliation(profileId, networkId, contract, network.chainId, epochAtStart))
 
 		// Resume a pending page (normal-scan record-before-cursor crash window).
 		if (cursor.pendingPage) {
 			const reorged = await this.pendingPageReorged(networkId, contract, cursor.pendingPage, checkpointHash)
 			if (reorged) {
 				await this.beginReconciliation(profileId, networkId, contract, network.chainId, cursor, tips, epochAtStart)
-				return "failed"
+				return notAtTip("failed")
 			}
 			// Clean fork — clear the marker; the forward scan below re-fetches from the un-advanced
 			// cursor and idempotently re-commits any records the crash may have already written.
 			if (!(await this.persistCursorLocked(profileId, networkId, contract, { ...cursor, pendingPage: undefined }, epochAtStart)))
-				return "no-progress"
+				return notAtTip("no-progress")
 		}
 
+		const target: PublicTarget = { profileId, networkId, contract, chainId: network.chainId }
+		let forward: { tick: PublicTick; pages: number }
 		try {
-			return await this.forwardScanOnce(
-				profileId,
-				networkId,
-				contract,
-				network.chainId,
-				{ ...cursor, pendingPage: undefined },
-				tips,
-				epochAtStart,
-			)
+			forward = await this.forwardScanOnce(target, { ...cursor, pendingPage: undefined }, tips, epochAtStart)
 		} catch (err) {
-			return this.handleScanFailure({ profileId, networkId, contract, chainId: network.chainId }, cursor, tips, epochAtStart, err)
+			return notAtTip(await this.handleScanFailure(target, cursor, tips, epochAtStart, err))
 		}
+		return this.backfillAfter(target, forward, epochAtStart)
+	}
+
+	/** Back-fill reads only after a forward pass that committed, on the pages that pass left. */
+	private async backfillAfter(
+		target: PublicTarget,
+		forward: { tick: PublicTick; pages: number },
+		epochAtStart: number,
+	): Promise<PublicTick> {
+		if (!isScanSuccess(forward.tick.outcome)) return forward.tick
+		const step = await this.backfillOnce(target, this.indexer.pageBudget - forward.pages, epochAtStart).catch((error): BackfillStep => {
+			this.logDebug("public back-fill failed", { error })
+			return { outcome: "failed", left: true }
+		})
+		return {
+			outcome: step.outcome === "none" ? forward.tick.outcome : step.outcome,
+			atTip: forward.tick.atTip && !step.left,
+		}
+	}
+
+	/**
+	 * Reads history at or below the first scan's floor, newest window first, within `budget` pages.
+	 * Back-fill blocks are final, so its pages carry no reorg anchor and it keeps no pending-page
+	 * marker: a crash between a record write and the cursor write replays the page, and records are
+	 * keyed by transaction and log index.
+	 */
+	private async backfillOnce(target: PublicTarget, budget: number, epochAtStart: number): Promise<BackfillStep> {
+		let row = await this.repo.getCursor(target.profileId, target.networkId, target.contract)
+		if (!row?.backfill || budget < 1) return { outcome: "none", left: row?.backfill !== undefined }
+		const recipients = await this.recipientsFor(target.profileId, target.chainId)
+		let pages = budget
+		while (row.backfill && pages > 0) {
+			const step = await this.backfillWindowPages(target, row, row.backfill, pages, recipients, epochAtStart)
+			if (!step.row) return { outcome: "no-progress", left: true }
+			row = step.row
+			pages -= step.pages
+		}
+		return { outcome: "progress", left: row.backfill !== undefined }
+	}
+
+	/** Reads one window upward from its position within `pages`. A validated end of results closes the
+	 *  window and opens the next one down; a dropped page keeps only its valid prefix, and a revoked
+	 *  commit advances nothing. `row` is null when the tick must stop. */
+	private async backfillWindowPages(
+		target: PublicTarget,
+		row: PublicScanCursor,
+		window: NonNullable<PublicScanCursor["backfill"]>,
+		pages: number,
+		recipients: Map<string, string>,
+		epochAtStart: number,
+	): Promise<{ row: PublicScanCursor | null; pages: number }> {
+		const { profileId, networkId, contract } = target
+		const result = await this.indexer.scan(networkId, contract, {
+			fromBlock: window.position === null ? window.low : undefined,
+			toBlock: window.high,
+			afterCursor: window.position,
+			maxPages: pages,
+		})
+		const matching = this.indexer.filterToRecipients(result.events, recipients)
+		if (!(await this.commitAddressedEvents(target, matching, recipients, epochAtStart))) return { row: null, pages: result.pages }
+		const ended = !result.hasMore && !result.dropped
+		const next: PublicScanCursor = {
+			...row,
+			backfill: ended
+				? backfillWindow(row.startBlock, window.low - 1)
+				: { ...window, position: result.scannedThrough ?? window.position },
+		}
+		const persisted =
+			(ended || result.scannedThrough !== null) &&
+			(await this.persistCursorLocked(profileId, networkId, contract, next, epochAtStart))
+		return { row: persisted && !result.dropped ? next : null, pages: result.pages }
 	}
 
 	/** A forward scan threw. With a reorg anchor the throw means the anchor was reorged out — or a
@@ -1747,42 +2089,19 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		return "failed"
 	}
 
-	/** The scan tick's inputs, or `undefined` when either resolve fails (the tick reports `failed`). */
-	private async resolveScanInputs(networkId: string, contract: string): Promise<{ network: Network; tips: PublicScanTips } | undefined> {
-		let network: Network
-		try {
-			network = await this.networkService.getNetwork(networkId)
-		} catch (error) {
-			this.logDebug("public scan: network resolve failed", { networkId }, error)
-			return undefined
-		}
-		try {
-			return { network, tips: await this.indexer.getTips(networkId) }
-		} catch (error) {
-			this.logDebug("public scan: tips failed", { contract }, error)
-			return undefined
-		}
-	}
-
-	/** One budgeted forward-scan batch. Persists `pendingPage` before record writes and advances the
-	 *  cursor after; the finalized watermark advances on every tick (even empty ones). The outcome is
-	 *  judged on the CURSOR, not on block coverage: the scan pages by log count, so a busy block takes
-	 *  many productive ticks without covering a new block. A quiet token reaches `idle-at-tip` on its
-	 *  validated empty read. */
+	/** One budgeted forward-scan batch, and the pages it fetched. The outcome is judged on the CURSOR,
+	 *  not on block coverage: the scan pages by log count, so a busy block takes many productive ticks
+	 *  without covering a new block. A quiet token reaches `idle-at-tip` on its validated empty read. */
 	private async forwardScanOnce(
-		profileId: string,
-		networkId: string,
-		contract: string,
-		chainId: number,
+		target: PublicTarget,
 		cursor: PublicScanCursor,
 		tips: PublicScanTips,
 		epochAtStart: number,
-	): Promise<ScanOutcome> {
-		// A public scan REQUIRES the checkpoint fork hash: it is the reorg anchor every page pins, the
-		// frame the boundary-ancestry proof is rooted in, AND the committed-fork anchor we persist.
-		// Fail-slow beats a blind fork splice.
+	): Promise<{ tick: PublicTick; pages: number }> {
+		const { networkId, contract } = target
+		// The checkpoint fork hash is the reorg anchor every page pins, the frame the boundary-ancestry
+		// proof is rooted in, AND the committed-fork anchor we persist.
 		const checkpointHash = tips.checkpointedBlockHash
-		if (!checkpointHash) return "no-progress"
 
 		// BOUNDARY ancestry: prove the last-committed block is an ANCESTOR of the
 		// checkpoint we're scanning toward, via ONE atomic archive-membership query rooted at
@@ -1798,12 +2117,25 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		// page throw immediately (defeats even a transient A→B→A excursion — the B page can't validate
 		// against H_A).
 		const result = await this.indexer.scan(networkId, contract, {
-			fromBlock: cursor.cursor === null ? cursor.startBlock : undefined,
+			fromBlock: forwardStart(cursor),
 			toBlock: tips.checkpointedBlockNumber,
 			afterCursor: cursor.cursor,
 			referenceBlock: checkpointHash,
 		})
+		return { tick: await this.commitForwardPass(target, cursor, tips, result, epochAtStart), pages: result.pages }
+	}
 
+	/** Persists `pendingPage` before record writes and advances the cursor after; the finalized
+	 *  watermark advances on every tick (even empty ones). */
+	private async commitForwardPass(
+		target: PublicTarget,
+		cursor: PublicScanCursor,
+		tips: PublicScanTips,
+		result: PublicScanResult,
+		epochAtStart: number,
+	): Promise<PublicTick> {
+		const { profileId, networkId, contract, chainId } = target
+		const checkpointHash = tips.checkpointedBlockHash
 		const watermark = this.finalizedWatermark(cursor, result, tips)
 
 		if (result.scannedThrough === null) {
@@ -1817,7 +2149,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 				{ ...cursor, lastScanFinalized: watermark },
 				epochAtStart,
 			)
-			return committed && !result.dropped ? "idle-at-tip" : "no-progress"
+			return committed && !result.dropped ? { outcome: "idle-at-tip", atTip: true } : notAtTip("no-progress")
 		}
 
 		const recipients = await this.recipientsFor(profileId, chainId)
@@ -1852,10 +2184,9 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			...cursor,
 			pendingPage: { fromCursor: cursor.cursor, toScannedThrough: result.scannedThrough, upperHash: checkpointHash },
 		}
-		if (!(await this.persistCursorLocked(profileId, networkId, contract, withPending, epochAtStart))) return "no-progress"
+		if (!(await this.persistCursorLocked(profileId, networkId, contract, withPending, epochAtStart))) return notAtTip("no-progress")
 
-		const target = { profileId, networkId, contract, chainId }
-		if (!(await this.commitAddressedEvents(target, matching, recipients, epochAtStart))) return "no-progress"
+		if (!(await this.commitAddressedEvents(target, matching, recipients, epochAtStart))) return notAtTip("no-progress")
 
 		// Advance the cursor + clear `pendingPage` + record the watermark.
 		const committed = await this.persistCursorLocked(
@@ -1876,9 +2207,10 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 	/** A forward pass that advanced the cursor. The valid pages are committed either way; the TICK is
 	 *  a success only if no page of it was dropped — a node that serves one good page and one bad page
-	 *  forever must still surface as failing. */
-	private forwardOutcome(committed: boolean, result: PublicScanResult): ScanOutcome {
-		return committed && !result.dropped ? "progress" : "no-progress"
+	 *  forever must still surface as failing — and it reached the tips only if no page is left. */
+	private forwardOutcome(committed: boolean, result: PublicScanResult): PublicTick {
+		const success = committed && !result.dropped
+		return { outcome: success ? "progress" : "no-progress", atTip: success && !result.hasMore }
 	}
 
 	/** The finalized rewind floor to persist: `min(finalized, the highest block CONTIGUOUSLY scanned
@@ -1934,10 +2266,6 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		tips: PublicScanTips,
 		epochAtStart: number,
 	): Promise<void> {
-		if (!tips.checkpointedBlockHash) {
-			this.logWarn(`reconcile deferred for ${contract}: no checkpointed block hash this tick`)
-			return
-		}
 		const lowerBound = cursor.lastScanFinalized !== null ? cursor.lastScanFinalized + 1 : cursor.startBlock
 		const marker: PublicScanCursor = {
 			...cursor,
@@ -2074,7 +2402,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (!cursorRow) return false
 		// If the cursor sits ABOVE the reconciled checkpoint (a rollback stranded it) and reconcile
 		// found nothing to resume from, reset it to `null` so the next forward scan re-covers from
-		// `startBlock` as the checkpoint re-advances — otherwise it would forever query the empty
+		// the finalized floor as the checkpoint re-advances — otherwise it would forever query the empty
 		// `(oldCursor, newCheckpoint]` backwards range and the deleted rollback rows never re-index.
 		// A full re-scan is heavy but rollbacks are rare + commits are idempotent.
 		const strandedAboveCheckpoint = cursorRow.cursor !== null && cursorRow.cursor.blockNumber > marker.upperBound
@@ -2151,7 +2479,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const existing = await this.repo.getRecord(publicRecordId(profileId, networkId, ev.txHash, ev.logIndexWithinTx))
 		if (!fenced()) return "revoked"
 		if (existing) {
-			if (opts?.reconcile) await this.rewriteMovedRecord(existing, ev)
+			const moved = opts?.reconcile ? await this.rewriteMovedRecord(existing, ev) : null
+			if (moved) await this.emitUpdatedIfShown(moved, fenced)
 			return "processed"
 		}
 
@@ -2165,17 +2494,24 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 	/** A reorg can re-mine the same tx (same PK) at a NEW block: update the chain fields so the
 	 *  reconciliation's blockHash comparison keeps the record instead of deleting it. The caller read
-	 *  `fenced()` with no await since. */
-	private async rewriteMovedRecord(existing: IncomingTransferRecord, ev: PublicTransferEvent): Promise<void> {
-		if (existing.kind !== "public-event" || existing.blockHash === ev.blockHash) return
-		await this.repo.upsertRecord({
+	 *  `fenced()` with no await since. Resolves the rewritten record, or null when nothing moved. */
+	private async rewriteMovedRecord(existing: IncomingTransferRecord, ev: PublicTransferEvent): Promise<IncomingTransferRecord | null> {
+		if (existing.kind !== "public-event" || existing.blockHash === ev.blockHash) return null
+		const moved: IncomingPublicEventRecord = {
 			...existing,
 			blockHash: ev.blockHash,
 			l2BlockNumber: ev.l2BlockNumber,
 			txIndexInBlock: ev.txIndexWithinBlock,
 			indexInTx: ev.logIndexWithinTx,
 			blockTimestamp: ev.blockTimestamp,
-		})
+		}
+		await this.repo.upsertRecord(moved)
+		return moved
+	}
+
+	/** Updated passes the gate Added does, so a hidden record never reaches a screen through it. */
+	private async emitUpdatedIfShown(record: IncomingTransferRecord, fenced: () => boolean): Promise<void> {
+		if (!record.hidden && (await this.isVisibilityEnabled()) && fenced()) this.emit("onIncomingTransferUpdated", record)
 	}
 
 	/** Whether `txHash` is the scope's own send: its outgoing transactions first, then the journal's
@@ -2460,6 +2796,18 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	}
 }
 
+/** The reconciler rewrites `blockHash` on a re-mine, so keying on it retires a stale cached fee. */
+function receiptFeeKey(record: IncomingPublicEventRecord): string {
+	return `${record.networkId}|${record.txHash}|${record.blockHash}`
+}
+
+/** Records are flat, so a shallow compare tells whether a row changed since it was read. */
+function sameRow(a: IncomingTransferRecord, b: IncomingTransferRecord): boolean {
+	const keys = new Set([...Object.keys(a), ...Object.keys(b)])
+	for (const key of keys) if ((a as Record<string, unknown>)[key] !== (b as Record<string, unknown>)[key]) return false
+	return true
+}
+
 /** Is this record deleted by a finished reconciliation? Records below `lowerBound` —
  *  therefore at or below the finalized floor — are never touched. A record ABOVE the reconciled checkpoint
  *  (`upperBound`) is stale unconditionally: Aztec prunes the checkpointed tip back to the
@@ -2477,6 +2825,33 @@ export function orphanedByReconciliation(
 	const aboveCheckpoint = record.l2BlockNumber > marker.upperBound
 	if (!aboveCheckpoint && canonicalByHeight.get(record.l2BlockNumber) === record.blockHash) return false
 	return true
+}
+
+/** A cursor that never scanned starts its forward scan above the floor `F0 = min(finalized,
+ *  checkpointed)`, so the newest receipts land first, and back-fills everything at or below it. `F0`
+ *  is final, so every back-filled block sits below reconciliation's `lastScanFinalized + 1`. */
+function seedFreshCursor(cursor: PublicScanCursor, tips: PublicScanTips): PublicScanCursor {
+	const unscanned =
+		cursor.cursor === null && cursor.lastScanFinalized === null && !cursor.backfill && !cursor.reconciling && !cursor.pendingPage
+	if (!unscanned) return cursor
+	const floor = Math.min(tips.finalizedBlockNumber, tips.checkpointedBlockNumber)
+	return { ...cursor, lastScanFinalized: floor, backfill: backfillWindow(cursor.startBlock, floor) }
+}
+
+function backfillWindow(startBlock: number, high: number): PublicScanCursor["backfill"] {
+	if (high < startBlock) return undefined
+	return { low: Math.max(startBlock, high - BACKFILL_WINDOW_BLOCKS + 1), high, position: null }
+}
+
+/** Where a forward scan with nothing committed begins: just above the finalized floor, at or below
+ *  which every block was read or is left to back-fill, or at the start of history before any scan. */
+function forwardStart(cursor: PublicScanCursor): number | undefined {
+	if (cursor.cursor !== null) return undefined
+	return cursor.lastScanFinalized === null ? cursor.startBlock : cursor.lastScanFinalized + 1
+}
+
+function notAtTip(outcome: ScanOutcome): PublicTick {
+	return { outcome, atTip: false }
 }
 
 function findToken(tokens: Token[], contract: string, chainId: number): Token | undefined {

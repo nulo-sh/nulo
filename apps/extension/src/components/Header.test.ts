@@ -2,10 +2,12 @@
  * Narrow integration test for the header — deliberately NOT a full Header suite (L4+ convention:
  * e2e owns the header). It pins the wiring unit tests cannot see: the address button hands the FULL
  * active address (not the truncated display text) to the clipboard, both switcher affordances open
- * the accounts popup, and the lock chip runs the shared lock (its behavior: `useLockWallet.test.ts`).
+ * the accounts popup, the lock chip runs the shared lock (its behavior: `useLockWallet.test.ts`), and
+ * the network chip's `data-status` follows the store's status.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
+import { nextTick, reactive } from "vue"
 
 const H = vi.hoisted(() => ({
 	openPopup: vi.fn(),
@@ -98,6 +100,8 @@ beforeEach(() => {
 		networkStatus: "Active",
 		approvedSendsInFlight: 0,
 		refreshInFlight: vi.fn(async () => {}),
+		lockHeldByImport: false,
+		contactImports: new Set(),
 	}
 	H.cache = { failureLog: null, activeTasksCount: null, confirm: {} }
 })
@@ -147,5 +151,26 @@ describe("Header — lock", () => {
 
 		w.unmount()
 		expect(H.profileListeners.size + H.disconnectListeners.size).toBe(0)
+	})
+
+	test("is disabled while a contacts import holds Lock, and enabled once the hold ends", async () => {
+		H.app = reactive({ ...H.app, lockHeldByImport: true })
+		const w = mountHeader()
+		await w.get('[data-testid="header-lock"]').trigger("click")
+		await flushPromises()
+		expect(w.get('[data-testid="header-lock"]').attributes()).toHaveProperty("disabled")
+		expect(H.getSessionHandle).not.toHaveBeenCalled()
+
+		H.app.lockHeldByImport = false
+		await nextTick()
+		expect(w.get('[data-testid="header-lock"]').attributes()).not.toHaveProperty("disabled")
+	})
+})
+
+describe("Header — network status", () => {
+	test("the network chip's data-status names the store's status", () => {
+		expect(mountHeader().get('[data-testid="network-button"]').attributes("data-status")).toBe("active")
+		H.app.networkStatus = "InvalidChain"
+		expect(mountHeader().get('[data-testid="network-button"]').attributes("data-status")).toBe("invalidchain")
 	})
 })

@@ -15,7 +15,9 @@ export const usePopupStore = defineStore("popup", () => {
 	const isOpened = (target: string) => {
 		return target in popups.value
 	}
+	// A re-opened popup leaves its slot first, so it goes on top and every popup under it sits back.
 	const open = (target: string, payload?: unknown) => {
+		close(target)
 		popups.value[target] = {
 			order: Object.keys(popups.value).length,
 			payload,

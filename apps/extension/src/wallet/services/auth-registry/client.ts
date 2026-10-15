@@ -3,7 +3,8 @@ import type { MethodsSpec, ServiceSpec } from "@/wallet/base"
 import { ServiceClient, definePassthroughsExhaustive } from "@nulo/extension-messaging/background"
 import { documentLogger } from "@/wallet/services/logger/client"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { AUTH_REGISTRY_SERVICE_NAME, type Authwit, type AuthwitRegistryScope, type Events, type Methods } from "./spec"
+import { EXECUTE_SEND_TIMEOUT_MS } from "@/wallet/services/execution/client"
+import { AUTH_REGISTRY_SERVICE_NAME, type Authwit, type AuthwitRegistryScope, type Events, type Methods, type SendStarted } from "./spec"
 
 export * from "./spec"
 
@@ -17,9 +18,14 @@ export class AuthRegistryServiceClient extends ServiceClient<Methods, Events> im
 	public readonly onAuthwitDeleted = new EventHandler<Authwit>()
 	public readonly onRegistryEnabled = new EventHandler<AuthwitRegistryScope>()
 	public readonly onRegistryDisabled = new EventHandler<AuthwitRegistryScope>()
+	public readonly onSendStarted = new EventHandler<SendStarted>()
 
 	public constructor(name?: string) {
 		super(AUTH_REGISTRY_SERVICE_NAME, documentLogger(), name)
+	}
+
+	protected override getRequestTimeoutMs(method: keyof Methods): number {
+		return method === "revokeAuthwits" || method === "setRegistryEnabled" ? EXECUTE_SEND_TIMEOUT_MS : super.getRequestTimeoutMs(method)
 	}
 
 	/** Restore forces every row's profileId to the authoritative created-profile id (a backup's
@@ -38,4 +44,7 @@ definePassthroughsExhaustive<Methods>()(AuthRegistryServiceClient.prototype, [
 	"getRegistryEnabled",
 	"setRegistryEnabled",
 	"syncRegistry",
+	"estimateRevokeFee",
+	"estimateRegistryToggleFee",
+	"cancelFeeEstimate",
 ])

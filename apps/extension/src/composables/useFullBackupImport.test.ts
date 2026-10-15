@@ -26,16 +26,29 @@ import { ref, watch } from "vue"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { NodeStatus } from "@/wallet/services/network/spec"
 import { asBase64CredentialId, asBase64SecretPrf, asHexUserHandle, EncryptionKey } from "@nulo/wallet-crypto"
-import { RpcDisconnectedError, UserRejectedError } from "@nulo/extension-messaging/errors"
+import { RpcDisconnectedError, SessionEndedError, UserRejectedError } from "@nulo/extension-messaging/errors"
 
 // ── Mocks ───────────────────────────────────────────────────────────────────
 
 const profileClient = {
 	restore: vi.fn(),
 	finalizeRestore: vi.fn(),
+	assertRunFence: vi.fn(),
 	deleteProfile: vi.fn(),
 	disconnect: vi.fn(),
 }
+/** The fence `finalizeRestore` hands back for the created profile. */
+const FENCE = { profileId: "new-id", epoch: 0, session: 1, incarnation: "w1" }
+const reminder = vi.hoisted(() => ({
+	arm: vi.fn(async (..._args: unknown[]): Promise<string | undefined> => "run-1"),
+	admit: vi.fn(async (..._args: unknown[]): Promise<unknown> => ({})),
+	finish: vi.fn(async (..._args: unknown[]) => undefined),
+}))
+vi.mock("@/utils/restore-outcome", () => ({
+	armRestoreOutcome: reminder.arm,
+	admitRestoreOutcome: reminder.admit,
+	finishRestoreOutcome: reminder.finish,
+}))
 const networkClient = {
 	seedDefaultsForProfile: vi.fn(),
 	setActiveForProfile: vi.fn(),
@@ -184,12 +197,17 @@ vi.mock("@/wallet/storage/migrations", async () => {
 })
 
 // Imported AFTER mocks are registered.
-import { relinkRestoredTokenBalances, resolvePasskeyCredential, restoreAccountsAndFilterOwnedSlices } from "./full-backup-restore"
-import { useFullBackupImport, validateAndMigrateBackup } from "./useFullBackupImport"
-import { sealFullBackupText } from "@/utils/full-backup-helpers"
+import {
+	relinkRestoredTokenBalances,
+	resolvePasskeyCredential,
+	restoreAccountsAndFilterOwnedSlices,
+	restoredNetworkIds,
+} from "./full-backup-restore"
+import { errorLogWriters, useFullBackupImport, validateAndMigrateBackup } from "./useFullBackupImport"
+import { collectRestoreErrors, sealFullBackupText } from "@/utils/full-backup-helpers"
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { awaitLivenessAdvance, readLiveness } from "@/utils/background-liveness"
-import { ACCOUNT_STATE_SKIP_DEADLINE } from "@/wallet/services/account-state/normalize"
+import { ACCOUNT_STATE_SKIP_DEADLINE, ACCOUNT_STATE_SKIP_WRONG_NETWORK } from "@/wallet/services/account-state/normalize"
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -289,6 +307,50 @@ describe("validateAndMigrateBackup — exact reject copy", () => {
 			expect(r.backup).not.toHaveProperty("checksum")
 			expect((r.data.profile as { id: unknown }).id).toBe("src-profile-id")
 		}
+	})
+})
+
+describe("errorLogWriters — what reaches the log", () => {
+	it("logs the service and the count, never a row's network id or address", () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+		const log = ref<Record<string, unknown[]>>({})
+		const contract = `0x${"07".repeat(32)}`
+		const rows = errorLogWriters(log).recordRestoreErrors("account-state", [
+			{ networkId: "net-secret-id", senders: [], contracts: [{ address: contract, restoreError: "boom" }] },
+		])
+		expect(rows).toHaveLength(1)
+		expect(log.value["account-state"]).toEqual(rows)
+		const logged = JSON.stringify(warn.mock.calls)
+		expect(logged).toContain("1 restore error(s)")
+		expect(logged).not.toContain("net-secret-id")
+		expect(logged).not.toContain(contract)
+		warn.mockRestore()
+	})
+})
+
+describe("restoredNetworkIds", () => {
+	it("names only a network whose outcome and every child carry no error, which the collected rows leave out", () => {
+		const outcomes = [
+			{ networkId: "M1", senders: [AS_SENDER], contracts: [] },
+			{ networkId: "M2", senders: [], contracts: [], restoreError: ACCOUNT_STATE_SKIP_WRONG_NETWORK },
+			{
+				networkId: "M3",
+				senders: [AS_SENDER],
+				contracts: [
+					{ address: `0x${"07".repeat(32)}`, restoreError: "Contract artifact doesn't match instance's current class id" },
+				],
+			},
+			{
+				networkId: "M4",
+				senders: [],
+				contracts: [],
+				restoreError: `${ACCOUNT_STATE_SKIP_DEADLINE} (1 registration(s) not attempted)`,
+			},
+		]
+
+		expect(restoredNetworkIds(outcomes)).toEqual(["M1"])
+		const collected = collectRestoreErrors("account-state", outcomes) as Array<{ networkId?: unknown }>
+		expect(collected.map((row) => row.networkId)).toEqual(["M2", "M3", "M4"])
 	})
 })
 
@@ -449,7 +511,13 @@ function makeOpts(o: MakeOpts = {}) {
 beforeEach(() => {
 	setActivePinia(createTestingPinia({ createSpy: vi.fn }))
 	profileClient.restore.mockReset()
-	profileClient.finalizeRestore.mockReset().mockResolvedValue({ id: "new-id", name: "Imported", type: "password" })
+	profileClient.finalizeRestore
+		.mockReset()
+		.mockResolvedValue({ profile: { id: "new-id", name: "Imported", type: "password" }, fence: FENCE })
+	profileClient.assertRunFence.mockReset().mockResolvedValue(undefined)
+	reminder.arm.mockReset().mockResolvedValue("run-1")
+	reminder.admit.mockReset().mockResolvedValue({})
+	reminder.finish.mockReset().mockResolvedValue(undefined)
 	profileClient.deleteProfile.mockReset().mockResolvedValue(undefined)
 	profileClient.disconnect.mockReset()
 	networkClient.seedDefaultsForProfile.mockReset()
@@ -783,6 +851,30 @@ describe("useFullBackupImport — guards before any writes", () => {
 		await expectRejected(backup, "Backup Integrity Check Failed")
 	})
 
+	it.each([
+		["not an object", "Imported"],
+		["an unknown type", { id: "src-profile-id", name: "Imported", type: "seed" }],
+		["a non-string name", { id: "src-profile-id", name: { first: "Imported" }, type: "password" }],
+	])("refuses a profile part that is %s with the integrity message", async (_label, profile) => {
+		await expectRejected(await buildBackup({ data: { profile } }), "Backup Integrity Check Failed")
+	})
+
+	it("a profile part with an id the wallet would not generate passes; the service picks the id", async () => {
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		const backup = await buildBackup({ data: { profile: { id: ["not", "an", "id"], name: "Imported", type: "password" } } })
+		c.selectedBackup.value = { name: "x.json", backup, type: "plain", profileType: "password" }
+		profileClient.restore.mockResolvedValue({ id: "new-id", name: "Imported", type: "password" })
+		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
+		accountClient.restore.mockResolvedValue([])
+
+		await c.restoreBackup()
+
+		expect(profileClient.restore).toHaveBeenCalledOnce()
+		expect(profileClient.finalizeRestore).toHaveBeenCalledWith("new-id", "pass1234")
+		expect(c.restoreStatus.value).toBe("finished")
+	})
+
 	it("a migration failure aborts BEFORE any restore() call — zero-rollback atomicity", async () => {
 		// An unknown slice fails the migrator's trust-boundary validation; the
 		// import must reject with profileService.restore never invoked (nothing
@@ -1029,11 +1121,13 @@ describe("useFullBackupImport — rows bind to the seeded network of their chain
 		expect(accountStateClient.restore).toHaveBeenCalledWith(
 			[{ networkId: "M1", contracts: [], senders: [AS_SENDER] }],
 			seeds,
+			FENCE,
 			expect.anything(),
 		)
 		expect(accountStateClient.restore).toHaveBeenCalledWith(
 			[{ networkId: "M2", contracts: [], senders: [AS_SENDER] }],
 			seeds,
+			FENCE,
 			expect.anything(),
 		)
 		expect(transactionClient.restore).toHaveBeenCalledWith([{ hash: "h1", account: "0xaaaa", chainId: 1, networkId: "M1" }], "new-id")
@@ -1159,7 +1253,7 @@ describe("useFullBackupImport — Retry the networks that did not restore", () =
 		await c.retryAccountState()
 
 		expect(accountStateClient.restore).toHaveBeenCalledOnce()
-		expect(accountStateClient.restore).toHaveBeenCalledWith([item("M2")], seeds, expect.anything())
+		expect(accountStateClient.restore).toHaveBeenCalledWith([item("M2")], seeds, FENCE, expect.anything())
 		expect(accountStateRows(c)).toEqual([{ row: 2, restoreError: DROPPED }])
 		expect(c.restoreErrorLog.value.transaction).toEqual([{ row: 0, restoreError: DROPPED }])
 		expect(c.canRetryAccountState.value).toBe(false)
@@ -1244,10 +1338,177 @@ describe("useFullBackupImport — Retry the networks that did not restore", () =
 
 			expect(rowsFor(c, "M2")).toEqual([{ networkId: "M2", contracts: [], senders: [], restoreError: ACCOUNT_STATE_SKIP_DEADLINE }])
 			expect(c.canRetryAccountState.value).toBe(true)
+			expect(c.retryFailedAgain.value).toBe(true)
 			expect(opts.completeImport).not.toHaveBeenCalled()
 		} finally {
 			vi.useRealTimers()
 		}
+	})
+
+	it("a Retry that fails again says so until a Retry restores the network or the page moves on", async () => {
+		let m2Calls = 0
+		const { c, restored } = await start((id) => (id === "M2" && ++m2Calls < 3 ? ranOutOfTime("M2") : answered(id)))
+		await restored
+		expect(c.retryFailedAgain.value).toBe(false)
+
+		await c.retryAccountState()
+		expect(c.retryFailedAgain.value).toBe(true)
+		expect(c.unrestoredNetworkNames.value).toEqual(["Alpha V5"])
+
+		await c.retryAccountState()
+		expect(c.retryFailedAgain.value).toBe(false)
+	})
+
+	it("View Errors hands the shell every restored network's name and the networks a Retry replays", async () => {
+		const showErrorLog = vi.fn()
+		accountStateClient.restore = vi.fn(async (items: unknown) =>
+			networkOf(items) === "M2" ? ranOutOfTime("M2") : answered(networkOf(items)),
+		) as never
+		const c = useFullBackupImport({ ...makeOpts(), showErrorLog })
+		const backup = await buildBackup({
+			data: {
+				"account-state": [
+					{ ...item("x1"), chainId: 1 },
+					{ ...item("x2"), chainId: 2 },
+				],
+			},
+		})
+		c.selectedBackup.value = { name: "x.json", backup, type: "plain", profileType: "password" }
+		profileClient.restore.mockResolvedValue({ id: "new-id", name: "Imported", type: "password" })
+		networkClient.seedDefaultsForProfile.mockResolvedValue(seeds)
+		accountClient.restore.mockResolvedValue([{ address: "0xaaaa", chainId: 1 }])
+		await c.restoreBackup()
+
+		c.showRestoreErrorLog()
+
+		expect(showErrorLog).toHaveBeenCalledExactlyOnceWith(c.restoreErrorLog.value, {
+			byNetworkId: new Map([
+				["M1", "Testnet"],
+				["M2", "Alpha V5"],
+			]),
+			unrestored: ["Alpha V5"],
+		})
+	})
+
+	it("arms the remapped networks with registrable work after the networks stage, before the profile opens", async () => {
+		const { c, restored } = await start((id) => answered(id), {
+			"account-state": [
+				{ ...item("x1"), chainId: 1 },
+				{ ...item("x2", []), chainId: 2 },
+			],
+		})
+		await restored
+
+		const backup = c.selectedBackup.value?.backup as { checksum: string }
+		expect(reminder.arm).toHaveBeenCalledExactlyOnceWith("new-id", backup.checksum, ["M1"])
+		const order = (mock: { mock: { invocationCallOrder: number[] } }) => mock.mock.invocationCallOrder[0]
+		expect(order(networkClient.seedDefaultsForProfile)).toBeLessThan(order(reminder.arm))
+		expect(order(reminder.arm)).toBeLessThan(order(profileClient.finalizeRestore))
+		expect(order(reminder.admit)).toBeGreaterThan(order(profileClient.finalizeRestore))
+		expect(reminder.admit).toHaveBeenCalledWith("new-id", "run-1")
+		expect(reminder.finish).toHaveBeenCalledExactlyOnceWith("new-id", "run-1", ["M1"])
+	})
+
+	it("a reminder that cannot be armed costs the reminder, never the restore", async () => {
+		reminder.arm.mockRejectedValue(new Error("storage gone"))
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+		const { c, opts, restored } = await start((id) => answered(id))
+		await restored
+
+		expect(c.restoreStatus.value).toBe("finished")
+		expect(accountStateClient.restore).toHaveBeenCalledTimes(2)
+		expect(reminder.admit).not.toHaveBeenCalled()
+		expect(reminder.finish).not.toHaveBeenCalled()
+		expect(opts.completeImport).toHaveBeenCalledOnce()
+		warn.mockRestore()
+	})
+
+	/** One sender over the per-network cap: the normalizer cuts it, and the rest registers. */
+	const overCap = Array.from({ length: 65 }, (_, i) => ({ address: `0x${i.toString(16).padStart(64, "0")}` }))
+
+	it("a network whose items the normalizer cut stays in the reminder though the rest registered", async () => {
+		const { restored } = await start((id) => answered(id), {
+			"account-state": [
+				{ ...item("x1", overCap), chainId: 1 },
+				{ ...item("x2"), chainId: 2 },
+			],
+		})
+		await restored
+		expect(reminder.finish).toHaveBeenCalledExactlyOnceWith("new-id", "run-1", ["M2"])
+	})
+
+	it("a Retry that registers a cut network leaves it in the reminder", async () => {
+		let m1Calls = 0
+		const { c, restored } = await start((id) => (id === "M1" && ++m1Calls === 1 ? ranOutOfTime("M1") : answered(id)), {
+			"account-state": [
+				{ ...item("x1", overCap), chainId: 1 },
+				{ ...item("x2"), chainId: 2 },
+			],
+		})
+		await restored
+		reminder.finish.mockClear()
+
+		await c.retryAccountState()
+
+		expect(reminder.finish).toHaveBeenCalledExactlyOnceWith("new-id", "run-1", [])
+		expect(c.canRetryAccountState.value).toBe(false)
+		expect(c.isRestoreHasErrors.value).toBe(true)
+	})
+
+	it("drops only the networks the tail restored; one that ran out of time stays", async () => {
+		const { restored } = await start((id) => (id === "M2" ? ranOutOfTime("M2") : answered(id)))
+		await restored
+		expect(reminder.finish).toHaveBeenCalledExactlyOnceWith("new-id", "run-1", ["M1"])
+	})
+
+	it("a tail whose session ended settles nothing", async () => {
+		profileClient.assertRunFence.mockRejectedValue(new Error("Session ended"))
+		const { restored } = await start((id) => answered(id))
+		await restored
+		expect(reminder.admit).toHaveBeenCalledOnce()
+		expect(reminder.finish).not.toHaveBeenCalled()
+	})
+
+	it("a tail whose reminder is gone settles nothing", async () => {
+		reminder.admit.mockResolvedValue(undefined)
+		const { restored } = await start((id) => answered(id))
+		await restored
+		expect(reminder.finish).not.toHaveBeenCalled()
+	})
+
+	it("Retry admits and settles the same run, under the same fence", async () => {
+		let m2Calls = 0
+		const { c, restored } = await start((id) => (id === "M2" && ++m2Calls === 1 ? ranOutOfTime("M2") : answered(id)))
+		await restored
+		reminder.admit.mockClear()
+		reminder.finish.mockClear()
+
+		await c.retryAccountState()
+
+		expect(reminder.admit).toHaveBeenCalledExactlyOnceWith("new-id", "run-1")
+		expect(reminder.finish).toHaveBeenCalledExactlyOnceWith("new-id", "run-1", ["M2"])
+		expect(accountStateClient.restore).toHaveBeenLastCalledWith([item("M2")], seeds, FENCE, expect.anything())
+	})
+
+	it("a Retry whose session ended registers nothing and drops Retry, leaving the reminder's lease alone", async () => {
+		const { c, opts, restored } = await start((id) => (id === "M2" ? ranOutOfTime("M2") : answered(id)))
+		await restored
+		const rows = [...accountStateRows(c)]
+		reminder.admit.mockClear()
+		reminder.finish.mockClear()
+		accountStateClient.restore.mockClear()
+		profileClient.assertRunFence.mockRejectedValue(new SessionEndedError())
+
+		await c.retryAccountState()
+
+		expect(accountStateClient.restore).not.toHaveBeenCalled()
+		expect(reminder.admit).not.toHaveBeenCalled()
+		expect(reminder.finish).not.toHaveBeenCalled()
+		expect(c.canRetryAccountState.value).toBe(false)
+		expect(c.unrestoredNetworkNames.value).toEqual([])
+		expect(accountStateRows(c)).toEqual(rows)
+		expect(c.isRestoreHasErrors.value).toBe(true)
+		expect(opts.completeImport).not.toHaveBeenCalled()
 	})
 
 	it("a second press while a Retry runs makes no call", async () => {

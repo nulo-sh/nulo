@@ -14,7 +14,9 @@ const cacheStoreState: {
 
 // The run fence the profile service hands the import; every contact call of the run must carry it.
 const RUN_FENCE = vi.hoisted(() => ({ profileId: "p1", epoch: 0, session: 1, incarnation: "w1" }))
-vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
+// The clients the import opens for itself: the services each test builds.
+const importClients = vi.hoisted(() => ({ contact: {} as object, accountState: {} as object }))
+vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn(), updateToast: vi.fn() }) }))
 vi.mock("@/utils", async (importOriginal) => {
 	const real = await importOriginal<typeof import("@/utils")>()
 	return {
@@ -35,7 +37,19 @@ vi.mock("@/wallet/services/profile/client", () => ({
 		}
 	}),
 }))
-vi.mock("@/stores/app.store", () => ({ useAppStore: () => ({ network: { id: "net-1", name: "Testnet" } }) }))
+vi.mock("@/wallet/services/contact/client", () => ({
+	ContactServiceClient: vi.fn(function () {
+		return { ...importClients.contact, disconnect: vi.fn() }
+	}),
+}))
+vi.mock("@/wallet/services/account-state/client", () => ({
+	AccountStateServiceClient: vi.fn(function () {
+		return { ...importClients.accountState, disconnect: vi.fn() }
+	}),
+}))
+vi.mock("@/stores/app.store", () => ({
+	useAppStore: () => ({ network: { id: "net-1", name: "Testnet" }, beginContactImport: () => () => {}, contactImports: new Set() }),
+}))
 vi.mock("@/stores/cache.store", () => ({ useCacheStore: () => cacheStoreState }))
 vi.mock("@/stores/popup.store", () => ({ usePopupStore: () => ({ open: vi.fn() }) }))
 
@@ -72,7 +86,9 @@ describe("importContacts — a file name differing from a saved one by outer spa
 			addContact: vi.fn(async () => {}),
 			updateContact: vi.fn(async () => {}),
 		}
-		const done = useContactImportExport({ contacts, contactService, accountStateService } as never).importContacts()
+		importClients.contact = contactService
+		importClients.accountState = accountStateService
+		const done = useContactImportExport({ contacts, accountStateService } as never).importContacts()
 		await vi.waitFor(() => {
 			if (!cacheStoreState.importPromise) throw new Error("selection gate not reached")
 		})
@@ -95,7 +111,9 @@ describe("importContacts — a file name differing from a saved one by outer spa
 			addContact: vi.fn(async () => {}),
 			updateContact: vi.fn(async () => {}),
 		}
-		const done = useContactImportExport({ contacts, contactService, accountStateService } as never).importContacts()
+		importClients.contact = contactService
+		importClients.accountState = accountStateService
+		const done = useContactImportExport({ contacts, accountStateService } as never).importContacts()
 		await vi.waitFor(() => {
 			if (!cacheStoreState.importPromise) throw new Error("selection gate not reached")
 		})

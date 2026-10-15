@@ -30,6 +30,8 @@ export interface IService {
 	 */
 	readonly dependencies?: readonly string[]
 	start(services: ServiceCollection): Promise<void>
+	/** Called on every service once the whole collection has started, never after a failed phase. */
+	collectionStarted?(): void
 }
 
 export { DependencyCycleError, UnknownDependencyError, topologicalPhases } from "./topology"
@@ -90,5 +92,6 @@ export class ServiceCollection {
 				)
 			}
 		}
+		for (const service of this.services.values()) service.collectionStarted?.()
 	}
 }

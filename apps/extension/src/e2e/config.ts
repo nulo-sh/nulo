@@ -66,10 +66,9 @@ export const E2E_MIGRATION_FIXTURE = (import.meta.env.VITE_NULO_E2E_MIGRATION_FI
 
 /**
  * E2E-only default-token seed source. When armed at BUILD time, the token
- * seeder reads its seed list from `chrome.storage.session` instead of
- * `DEFAULT_TOKEN_SEEDS` — the sandbox mints a fresh token address per run, so
- * no build-time list can cover it (same problem `price-map.ts` solves for
- * pricing).
+ * seeder reads its seed list from `chrome.storage.session` instead of the
+ * token list — the sandbox mints a fresh token address per run, so no signed
+ * list can cover it (same problem `price-map.ts` solves for pricing).
  *
  * Double opt-in, like proverless and unlike the migration fixture: an armed
  * build REPLACES the production seed list, so a stray single flag would not be
@@ -96,4 +95,15 @@ export const E2E_TOKEN_SEEDS = TOKEN_SEEDS && TOKEN_SEEDS_CONFIRM
  */
 export const E2E_TOKEN_SEEDS_BUILD_STAMP: "NULO_E2E_TOKEN_SEEDS_BUILD_STAMP" | null = E2E_TOKEN_SEEDS
 	? "NULO_E2E_TOKEN_SEEDS_BUILD_STAMP"
+	: null
+
+/**
+ * E2E-only token-list source, armed by the same double opt-in as the seed source: both replace a
+ * production list with one the running test writes, so a release carrying either would ship a
+ * wallet that never loads its defaults. Its own stamp, pinned as live data in `wallet/runtime.ts`.
+ */
+export const E2E_TOKEN_LIST = E2E_TOKEN_SEEDS
+
+export const E2E_TOKEN_LIST_BUILD_STAMP: "NULO_E2E_TOKEN_LIST_BUILD_STAMP" | null = E2E_TOKEN_LIST
+	? "NULO_E2E_TOKEN_LIST_BUILD_STAMP"
 	: null

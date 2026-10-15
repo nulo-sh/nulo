@@ -11,7 +11,6 @@
 
 import { describe, expect, test } from "vitest"
 import type { FeeSettings } from "./spec"
-import { fingerprintBaseFee } from "./estimate-reuse-shared"
 import { fingerprintFeeSettings } from "./transfer-estimate-reuse"
 
 describe("fingerprintFeeSettings", () => {
@@ -71,25 +70,5 @@ describe("fingerprintFeeSettings", () => {
 			priorityLevel: "fast",
 		}
 		expect(fingerprintFeeSettings(a)).toBe(fingerprintFeeSettings(b))
-	})
-})
-
-describe("fingerprintBaseFee", () => {
-	test("produces stable string for the same fees", () => {
-		const a = fingerprintBaseFee({ feePerDaGas: 100n, feePerL2Gas: 200n })
-		const b = fingerprintBaseFee({ feePerDaGas: 100n, feePerL2Gas: 200n })
-		expect(a).toBe(b)
-	})
-
-	test("changes when feePerDaGas changes", () => {
-		const a = fingerprintBaseFee({ feePerDaGas: 100n, feePerL2Gas: 200n })
-		const b = fingerprintBaseFee({ feePerDaGas: 101n, feePerL2Gas: 200n })
-		expect(a).not.toBe(b)
-	})
-
-	test("changes when feePerL2Gas changes", () => {
-		const a = fingerprintBaseFee({ feePerDaGas: 100n, feePerL2Gas: 200n })
-		const b = fingerprintBaseFee({ feePerDaGas: 100n, feePerL2Gas: 201n })
-		expect(a).not.toBe(b)
 	})
 })

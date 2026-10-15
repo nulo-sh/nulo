@@ -52,6 +52,7 @@ let lastText = String(model.value ?? "")
 
 const inputEl = useTemplateRef("inputEl")
 const fieldRuler = useTemplateRef("fieldRuler")
+const amountRow = useTemplateRef("amountRow")
 const conversionEl = useTemplateRef("conversionEl")
 const derivedRuler = useTemplateRef("derivedRuler")
 
@@ -169,14 +170,27 @@ function fitField() {
 	fieldScale.value = typing ? 1 : fitHero(1, (_, scale) => rulerWidth(form, scale), inputRoom(input)).scale
 }
 
+/** `.derived_type`'s full size, and the type scale's smallest step. */
+const DERIVED_PX = 11
+const DERIVED_MIN_PX = 8
+
 /** The derived token line's type as a fraction of its 11 px: the largest that keeps it on one line
- *  beside the balance and Max. */
+ *  beside the balance and Max or, where that is under 8 px, in its own row under the amount. */
 const derivedScale = ref(1)
+const derivedOwnRow = ref(false)
+/** Neither room depends on where the line is drawn, so a move never feeds back into the decision. */
 function fitDerived() {
 	const form = derivedRuler.value
-	const line = conversionEl.value
-	if (!form || !line) return
-	derivedScale.value = fitHero(1, (_, scale) => rulerWidth(form, scale), heroRoom(line)).scale
+	const beside = conversionEl.value
+	const row = amountRow.value?.wrapper
+	if (!form || !beside || !row) return
+	const full = heroRoom(row)
+	if (!(full > 0)) return
+	const widthAt = (_, scale) => rulerWidth(form, scale)
+	const room = heroRoom(beside)
+	const besideScale = room > 0 ? fitHero(1, widthAt, room).scale : 0
+	derivedOwnRow.value = besideScale * DERIVED_PX < DERIVED_MIN_PX
+	derivedScale.value = derivedOwnRow.value ? fitHero(1, widthAt, full).scale : besideScale
 }
 
 function fitLines() {
@@ -410,7 +424,7 @@ const handleFiatBalanceAction = (divisor) => {
 <template>
 	<Flex @click="handleFocus" gap="8" direction="column" :class="$style.wrapper">
 		<Flex direction="column" gap="4">
-			<Flex gap="8" justify="between" data-testid="send-amount-row">
+			<Flex ref="amountRow" gap="8" justify="between" data-testid="send-amount-row">
 				<div :class="$style.field_line">
 					<input
 						v-if="fiatMode"
@@ -456,17 +470,24 @@ const handleFiatBalanceAction = (divisor) => {
 				</button>
 			</Flex>
 
+			<span v-if="fiatMode && derivedOwnRow" :class="$style.conversion">
+				<Skeleton v-if="fiatGuard?.converting" :width="72" :height="10" data-testid="send-amount-converting" />
+				<span v-else-if="derivedTokenLabel" :title="conversionTitle" data-testid="send-amount-derived" :class="$style.derived_type" :style="{ '--hero-scale': derivedScale }">{{
+					derivedTokenLabel
+				}}</span>
+			</span>
+
 			<Flex align="center" justify="between" gap="8">
 				<span ref="conversionEl" :class="[$style.conversion, fiatMode && $style.conversion_fit]" data-testid="send-amount-meta">
 					<template v-if="fiatMode">
-						<span v-if="fiatGuard?.converting" :class="$style.skeleton" data-testid="send-amount-converting" />
-						<template v-else-if="derivedTokenLabel">
-							<span :title="conversionTitle" data-testid="send-amount-derived" :class="$style.derived_type" :style="{ '--hero-scale': derivedScale }">{{
+						<template v-if="!derivedOwnRow">
+							<Skeleton v-if="fiatGuard?.converting" :width="72" :height="10" data-testid="send-amount-converting" />
+							<span v-else-if="derivedTokenLabel" :title="conversionTitle" data-testid="send-amount-derived" :class="$style.derived_type" :style="{ '--hero-scale': derivedScale }">{{
 								derivedTokenLabel
 							}}</span>
-							<!-- Inside the meta line, so it measures in the line's own mono 11 px. -->
-							<span aria-hidden="true" :class="$style.ruler"><span ref="derivedRuler" :class="$style.derived_type">{{ derivedTokenLabel }}</span></span>
 						</template>
+						<!-- Here wherever the line is drawn, in the meta line's own mono 11 px, so a shortened line is fitted again. -->
+						<span v-if="derivedTokenLabel" aria-hidden="true" :class="$style.ruler"><span ref="derivedRuler" :class="$style.derived_type">{{ derivedTokenLabel }}</span></span>
 					</template>
 					<template v-else>
 						<span v-if="tokenModeFiatLabel" :title="conversionTitle" data-testid="send-amount-fiat-label">{{
@@ -595,7 +616,7 @@ const handleFiatBalanceAction = (divisor) => {
 	color: var(--nulo-secondary);
 }
 
-/* The derived line's room is all the row leaves beside the balance and Max. */
+/* The derived line's room is all the row leaves beside the balance and Max, drawn there or not. */
 .conversion_fit {
 	flex: 1;
 	min-width: 0;
@@ -604,30 +625,6 @@ const handleFiatBalanceAction = (divisor) => {
 .derived_type {
 	font-size: calc(11px * var(--hero-scale, 1));
 	white-space: nowrap;
-}
-
-.skeleton {
-	display: inline-block;
-	width: 72px;
-	height: 10px;
-	background: linear-gradient(90deg, var(--nulo-surface-high) 25%, var(--nulo-surface) 50%, var(--nulo-surface-high) 75%);
-	background-size: 200% 100%;
-	animation: shimmer 1.5s infinite;
-}
-
-@keyframes shimmer {
-	0% {
-		background-position: 200% 0;
-	}
-	100% {
-		background-position: -200% 0;
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.skeleton {
-		animation: none;
-	}
 }
 
 .clamp_hint {

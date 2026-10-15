@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
-import { Flex } from "@nulo/design"
+import { Flex, Skeleton } from "@nulo/design"
 
 // The real-Dropdown suite below runs without a layout engine: no focus trap, no outside-click wiring.
 vi.mock("focus-trap", () => ({ createFocusTrap: vi.fn(() => ({ activate: vi.fn(), deactivate: vi.fn(), active: false })) }))
@@ -10,6 +10,7 @@ import DropdownItem from "@/components/ui/Dropdown/DropdownItem.vue"
 import FeeMethodSelector from "./FeeMethodSelector.vue"
 
 const STUBS = {
+	Skeleton,
 	Flex: { template: "<div><slot /></div>" },
 	Text: { template: "<span><slot /></span>" },
 	MaterialIcon: { template: "<i />" },
@@ -164,9 +165,9 @@ describe("FeeMethodSelector — rows still loading", () => {
 			const row = w.find(`[data-testid="send-fee-method-${key}"]`)
 			expect(row.attributes("aria-busy")).toBe("true")
 			expect(row.attributes("data-checking")).toBe("true")
-			const skeleton = row.find('[aria-hidden="true"]')
-			expect(skeleton.classes().join(" ")).toMatch(/skeleton/)
-			expect(skeleton.text()).toBe("")
+			const skeleton = row.findComponent(Skeleton)
+			expect(skeleton.attributes("style")).toBe("width: 60px; height: 12px;")
+			expect(skeleton.attributes("aria-hidden")).toBe("true")
 			expect(row.findAll("span").map((n) => n.text())).toEqual([expect.any(String), "", "Checking"])
 		}
 		expect(w.text()).not.toMatch(/checking…|— FJ|not available/)
@@ -176,6 +177,20 @@ describe("FeeMethodSelector — rows still loading", () => {
 		const w = factory({ methods: loadingMethods })
 		await w.find('[data-testid="send-fee-method-private"]').trigger("click")
 		expect(w.emitted("update:modelValue")).toBeUndefined()
+	})
+
+	test("a sponsor whose funding read is in flight loads instead of reading free, and can still be picked", async () => {
+		const sponsor = { ...baseMethods[2], verifying: true }
+		const w = factory({ methods: [baseMethods[0], sponsor] })
+		const row = w.get('[data-testid="send-fee-method-sponsored"]')
+		expect(row.attributes("aria-busy")).toBe("true")
+		expect(row.attributes("data-verifying")).toBe("true")
+		expect(row.attributes("disabled")).toBeUndefined()
+		expect(row.text()).not.toContain("free")
+		expect(row.find('[aria-hidden="true"]').classes().join(" ")).toMatch(/skeleton/)
+
+		await row.trigger("click")
+		expect(w.emitted("update:modelValue")?.at(-1)).toEqual([sponsor])
 	})
 })
 

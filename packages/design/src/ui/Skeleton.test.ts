@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import { mount } from "@vue/test-utils"
 import { describe, expect, it } from "vitest"
 import Skeleton from "./Skeleton.vue"
@@ -38,5 +40,12 @@ describe("Skeleton", () => {
 	it("forwards attributes such as data-testid to the root", () => {
 		const w = mount(Skeleton, { attrs: { "data-testid": "gas-skeleton-public" } })
 		expect(w.attributes("data-testid")).toBe("gas-skeleton-public")
+	})
+
+	// jsdom evaluates no media query and the root class is the app's, so both stops are pinned in the source.
+	it("stops its shimmer under reduced motion and under the app's Disable animations", () => {
+		const source = readFileSync(resolve(__dirname, "Skeleton.vue"), "utf8").replace(/\s+/g, " ")
+		expect(source).toContain("@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }")
+		expect(source).toContain(":global(.noanimations) .skeleton { animation: none; }")
 	})
 })

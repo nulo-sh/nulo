@@ -127,6 +127,34 @@
 			}
 		},
 		{
+			"includes": ["packages/token-list/src/**", "!packages/token-list/src/**/*.test.ts"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedImports": {
+							"level": "error",
+							"options": {
+								"patterns": [
+									{
+										"group": ["@nulo/*", "@aztec-labs/*", "@aztec-foundation/*", "zod"],
+										"message": "@nulo/token-list is a dependency-free leaf: its signer runs with bun --no-install, and the extension pins its Aztec-derived constants"
+									}
+								]
+							}
+						},
+						"noRestrictedGlobals": {
+							"level": "error",
+							"options": {
+								"deniedGlobals": {
+									"chrome": "@nulo/token-list runs in CI and in the wallet — no chrome.*"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		{
 			"includes": ["packages/design/src/core/**"],
 			"linter": {
 				"rules": {

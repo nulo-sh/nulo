@@ -30,10 +30,12 @@
  * ## Two-pass (PrivateFPC + every non-canonical/user-added FPC)
  *
  *   Pass 1: build + simulate with FeeJuice to get total gas used
- *   Between: fetch baseFees (with priority multiplier), compute maxFee,
+ *   Between: fetch baseFees (`feeCapFor`), compute maxFee,
  *     prepend FPC fee payload to op.actions
  *   Pass 2: re-build + re-simulate with External + override gasSettings
  *   Finish: re-compute maxFee with padded gas, splice in final fee payload
+ *
+ * PrivateFPC's cap is `feeCapFor`'s private fee juice rule, whatever the speed level.
  *
  * Pass 1 is LOAD-BEARING for PrivateFPC: its Noir `pay_fee` computes
  * `max_gas_cost` from the transaction's gas-settings envelope, so the FPC
@@ -76,14 +78,15 @@ import { GasSettings } from "@aztec-labs/stdlib/gas"
 import type { TxSimulationResult } from "@aztec-labs/stdlib/tx"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
-import { predictedWorstMinFees } from "@nulo/aztec-runtime/fee-juice"
 import { sameFieldAddress } from "@nulo/wallet-bridge"
 import type { Fpc } from "@/wallet/services/fpc/fpc"
 import { FpcType } from "@/wallet/services/fpc/service"
 import { fpcIdentityOf } from "@/wallet/services/fpc/spec"
-import type { Action } from "../spec"
+import type { Action, FeeOptions } from "../spec"
+import { feeCapFor, type FeeCapRule } from "./fee-cap"
 import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee-strategy"
 import {
+	appPriorityOf,
 	assertCustomGasLimitsWithinCap,
 	DEFAULT_FEE_MULTIPLIER,
 	finalizeGasLimits,
@@ -102,6 +105,12 @@ function sponsorOf(fpc: Fpc, simulatedTx: TxSimulationResult): Pick<FeeEstimate,
 	const payer = simulatedTx.publicInputs?.feePayer
 	if (info?.type !== FpcType.DefaultSponsoredFpc || !payer || !sameFieldAddress(payer.toString(), info.address)) return {}
 	return { sponsor: { fpcId: info.id, address: payer } }
+}
+
+/** Private fee juice charges the whole cap, so its row's cap ignores the speed level. */
+function capRuleOf(fpc: Fpc, multiplier: number, fee: FeeOptions | undefined): FeeCapRule {
+	const app = { appCap: fee?.maxFeesPerGas, appPriority: fee?.maxPriorityFeesPerGas }
+	return fpc.infoData?.type === FpcType.PrivateFpc ? { payer: "private-fee-juice", ...app } : { payer: "sponsor", multiplier, ...app }
 }
 
 export class FpcStrategy implements FeeStrategy {
@@ -141,7 +150,13 @@ export class FpcStrategy implements FeeStrategy {
 			// Payload included from the start (`maxFee` inert — args: []), so the
 			// single sim measures app + FPC together, mirroring Pass 2's coverage.
 			ctx.op.actions.unshift(...fpc.getFeePayload(ctx.op.accountAddress, Fr.ZERO))
-			let built = await this.deps.txBuilder.buildStandard(ctx.op, ctx.fence, AccountFeePaymentMethodOptions.EXTERNAL, task)
+			let built = await this.deps.txBuilder.buildStandard(
+				ctx.op,
+				ctx.fence,
+				AccountFeePaymentMethodOptions.EXTERNAL,
+				task,
+				appPriorityOf(ctx.op.fee),
+			)
 			// The row's chain must equal the operation's resolved network —
 			// `isProtocol` was decorated against the row's OWN chain, so a
 			// cross-chain row selection would ride a stale eligibility signal.
@@ -167,12 +182,18 @@ export class FpcStrategy implements FeeStrategy {
 				if (discovered.length || isInitWrapped(built)) {
 					if (discovered.length) ctx.op.actions.push(...discovered)
 					if (ctx.signal?.aborted) throw new JobCancelledSentinel("")
-					built = await this.deps.txBuilder.buildStandard(ctx.op, ctx.fence, AccountFeePaymentMethodOptions.EXTERNAL, task)
+					built = await this.deps.txBuilder.buildStandard(
+						ctx.op,
+						ctx.fence,
+						AccountFeePaymentMethodOptions.EXTERNAL,
+						task,
+						appPriorityOf(ctx.op.fee),
+					)
 					suggestGasLimits(built.txRequest, ctx.op.fee)
 					simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.account.address), task)
 				}
 			}
-			const baseFees = (await predictedWorstMinFees(built.node)).mul(multiplier)
+			const baseFees = await feeCapFor(built.node, capRuleOf(fpc, multiplier, ctx.op.fee))
 			const maxFee = simulatedTx.gasUsed.totalGas.mul(ctx.gasPadding).computeFee(baseFees)
 			ctx.op.actions.splice(
 				0,
@@ -215,6 +236,7 @@ export class FpcStrategy implements FeeStrategy {
 				ctx.fence,
 				AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE,
 				task,
+				appPriorityOf(ctx.op.fee),
 			)
 			// FPC finalization deliberately IGNORES dApp custom limits in the
 			// committed gasSettings (they only shape the sims via
@@ -248,14 +270,13 @@ export class FpcStrategy implements FeeStrategy {
 						ctx.fence,
 						AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE,
 						task,
+						appPriorityOf(ctx.op.fee),
 					)
 					suggestGasLimits(built.txRequest, ctx.op.fee)
 					simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.account.address), task)
 				}
 			}
-			// Fetch actual fees for FPC fee payload (with priority multiplier). Same
-			// inclusion-safe predicted-worst basis as `finalizeGasLimits`.
-			const baseFees = (await predictedWorstMinFees(built.node)).mul(multiplier)
+			const baseFees = await feeCapFor(built.node, capRuleOf(fpc, multiplier, ctx.op.fee))
 			let maxFee = simulatedTx.gasUsed.totalGas.add(fpc.getTotalGas()).computeFee(baseFees)
 			ctx.op.actions.unshift(...fpc.getFeePayload(ctx.op.accountAddress, maxFee))
 			// A cancel landing during Pass 1's sim must not start Pass 2 —
@@ -264,7 +285,13 @@ export class FpcStrategy implements FeeStrategy {
 			// precise estimation (rebuild — the rebinding of `built` is the
 			// two-pass shape the byte-parity constraint freezes; the
 			// gasSettings below deliberately reads the FIRST pass's sim)
-			built = await this.deps.txBuilder.buildStandard(ctx.op, ctx.fence, AccountFeePaymentMethodOptions.EXTERNAL, task)
+			built = await this.deps.txBuilder.buildStandard(
+				ctx.op,
+				ctx.fence,
+				AccountFeePaymentMethodOptions.EXTERNAL,
+				task,
+				appPriorityOf(ctx.op.fee),
+			)
 			built.txRequest.txContext.gasSettings = new GasSettings(
 				simulatedTx.gasUsed.totalGas.add(fpc.getTotalGas()),
 				simulatedTx.gasUsed.teardownGas.add(fpc.getTeardownGas()),

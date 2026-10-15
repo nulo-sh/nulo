@@ -23,7 +23,7 @@
  */
 import { expect } from "vitest"
 import type { Page } from "puppeteer"
-import { clickByTestId, expectNoNameField, openPopup, waitForHash, test } from "./fixtures/extension"
+import { clickByTestId, expectNoNameField, openPopup, waitForHash, test, waitForServiceReady } from "./fixtures/extension"
 import { getActiveProfileName } from "./fixtures/helpers"
 import { readPasskeySurface, registerPasskeyProfile, setupPasskeyVirtualAuth, watchPasskeySurface } from "./fixtures/passkey"
 
@@ -172,10 +172,7 @@ test("register → reset profile → import via passkey discovery → same addre
 			window.location.hash = "#/popup/import"
 		})
 		await waitForHash(page, "#/popup/import", 5_000)
-		await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), {
-			timeout: 15_000,
-			polling: 500,
-		})
+		await waitForServiceReady(page, 15_000)
 
 		// The reset left no profile, so the re-import is a first profile: no name field.
 		await expectNoNameField(page, "import-page", "import-name-input")

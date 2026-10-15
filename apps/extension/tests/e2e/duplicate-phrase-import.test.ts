@@ -10,7 +10,15 @@
 import { expect } from "vitest"
 import type { Page } from "puppeteer"
 import { TEST_PASSWORD } from "./fixtures/constants"
-import { clickByTestId, expectNameFieldPrefill, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
+import {
+	clickByTestId,
+	expectNameFieldPrefill,
+	openPopup,
+	replaceInputValue,
+	test,
+	waitForHash,
+	waitForServiceReady,
+} from "./fixtures/extension"
 import { acceptConfirmPopup, closeStuckPopup, navigateByHash, revealSeedPhrase } from "./fixtures/helpers"
 
 /** Read the revealed recovery phrase out of the reveal card. */
@@ -28,7 +36,7 @@ async function readRevealedPhrase(page: Page): Promise<string> {
  *  holds "Main", so the name field shows prefilled "Profile 2", kept as is. */
 async function submitSeedImport(page: Page, phrase: string): Promise<void> {
 	await navigateByHash(page, "#/popup/import", 15_000)
-	await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), { timeout: 15_000, polling: 300 })
+	await waitForServiceReady(page, 15_000)
 	await page.waitForSelector('[data-testid="import-option-seed"]', { visible: true, timeout: 15_000 })
 	await expectNameFieldPrefill(page, "import-page", "import-name-input", "Profile 2")
 	await clickByTestId(page, "import-option-seed")

@@ -13,7 +13,10 @@ vi.mock("@/wallet/services/config/client", async () => {
 	}
 })
 vi.mock("@/stores/app.store", () => ({ useAppStore: () => ({ loadOnboardingCompleted: async () => {}, onboardingCompleted: false }) }))
-vi.mock("@/utils/core", () => ({ managers: { profile: { getProfiles: vi.fn(async () => []) } } }))
+vi.mock("@/utils/core", async () => {
+	const { ref } = await import("vue")
+	return { isServiceReady: ref(false), managers: { profile: { getProfiles: vi.fn(async () => []) } } }
+})
 vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () => ({ hydrateKnownProfile: vi.fn(async () => undefined) }) }))
 vi.mock("vue-router", () => ({ useRouter: () => ({ replace: vi.fn() }) }))
 

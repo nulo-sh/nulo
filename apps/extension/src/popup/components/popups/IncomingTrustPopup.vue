@@ -27,13 +27,16 @@ import { usePopupStack } from "@/composables/usePopupStack"
 const { openToast } = useToast()
 
 /** Store */
+import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store.ts"
 
 /** Utils */
 import { copyToClipboard } from "@/utils/clipboard"
 import { trimAddress } from "@/utils/string"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
+import { getContractExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
 
+const appStore = useAppStore()
 const cacheStore = useCacheStore()
 const { order, depth } = usePopupStack("incoming_trust")
 
@@ -46,6 +49,12 @@ const props = defineProps({
 const tokenSymbol = computed(() => sanitizeWireString(cacheStore.incomingTrust.tokenSymbol ?? "Token", 32))
 const contractFull = computed(() => cacheStore.incomingTrust.contract ?? "")
 const contractSlice = computed(() => (contractFull.value ? trimAddress(contractFull.value, 6, 4) : ""))
+// A prompt only ever shows for the active network; the check keeps a stale one off another chain's explorer.
+const contractUrl = computed(() => {
+	if (!appStore.network || cacheStore.incomingTrust.networkId !== appStore.network.id) return null
+	return getContractExplorerUrl(appStore.network.chainId, appStore.defaultExplorer, contractFull.value)
+})
+const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === appStore.defaultExplorer)?.name ?? "explorer")
 
 // Verification surface: keyboard-reachable expand toggle + copy. Without
 // these as real <button> elements, a keyboard-only user couldn't get to
@@ -182,6 +191,17 @@ watch(
 							<Icon name="copy" size="14" color="primary" />
 						</button>
 					</div>
+					<a
+						v-if="contractUrl"
+						:href="contractUrl"
+						target="_blank"
+						rel="noopener noreferrer"
+						:class="$style.contract_link"
+						data-testid="incoming-trust-contract-link"
+					>
+						<span>View contract on {{ explorerName }}</span>
+						<Icon name="external-link" size="10" color="tertiary" />
+					</a>
 				</Flex>
 
 				<Text variant="body" color="tertiary" height="150" align="center" :class="$style.warning">
@@ -282,6 +302,10 @@ watch(
 .copy_button:focus-visible {
 	outline: 2px solid var(--nulo-accent);
 	outline-offset: 2px;
+}
+.contract_link {
+	composes: hero_link from "../../pages/detail-page.module.css";
+	align-self: flex-start;
 }
 .warning {
 	padding: 0 8px;

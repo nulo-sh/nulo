@@ -49,9 +49,15 @@ const trackPointer = (event: PointerEvent) => {
 
 watch([hovered, focusWithin], ([h, f]) => holdToast(h || f))
 
+// A relabel keeps its id and its card, so the pointer and focus the card holds stay as they are.
+// Any other change takes the card away, so focus inside it goes back to where it came from.
 const show = (next: ToastState | null) => {
-	hovered.value = false
-	focusWithin.value = false
+	if (next?.id !== shown.value?.id) {
+		const target = focusWithin.value ? returnFocusTo : null
+		hovered.value = false
+		focusWithin.value = false
+		if (target instanceof HTMLElement && target.isConnected) target.focus()
+	}
 	shown.value = next
 }
 
@@ -97,10 +103,7 @@ const onFocusOut = (event: FocusEvent) => {
 // A leaving card keeps its listeners while `shown` already holds its successor, so each control is
 // bound at render to the snack its card shows and does nothing once that snack is gone.
 const closeFor = (id: number) => () => {
-	if (shown.value?.id !== id) return
-	const target = focusWithin.value ? returnFocusTo : null
-	closeToast()
-	if (target instanceof HTMLElement && target.isConnected) target.focus()
+	if (shown.value?.id === id) closeToast()
 }
 
 const selectFor = (id: number) => () => {

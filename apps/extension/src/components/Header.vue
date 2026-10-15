@@ -36,6 +36,7 @@ configService.onUpdate.add(onSettingUpdate)
 const defaultConfig = makeDefaultConfig()
 const indicateFailures = ref(defaultConfig.indicateFailures)
 const showNode = ref(defaultConfig.showNode)
+const networkStatusKey = computed(() => appStore.networkStatus?.toLowerCase())
 
 const HEADER_INDICATION_DURATION = 5_000
 let headerIndicateFailureTimer = null
@@ -264,11 +265,12 @@ onBeforeUnmount(() => {
 				type="button"
 				@click="handleOpenNetworks"
 				data-testid="network-button"
+				:data-status="networkStatusKey"
 				:aria-label="`Manage networks (currently ${appStore.network.name})`"
 				:class="$style.network_chip"
 			>
 				<span :class="$style.network_label">{{ appStore.network.name }}</span>
-				<div :class="[$style.status_dot, $style[String(appStore.networkStatus).toLowerCase()]]" />
+				<div :class="[$style.status_dot, $style[networkStatusKey]]" />
 			</button>
 
 			<button
@@ -277,6 +279,7 @@ onBeforeUnmount(() => {
 				@click="handleLockWallet"
 				data-testid="header-lock"
 				aria-label="Lock wallet"
+				:disabled="appStore.lockHeldByImport"
 				:class="$style.lock_chip"
 			>
 				<MaterialIcon name="lock" :size="15" color="primary" />
@@ -463,12 +466,17 @@ onBeforeUnmount(() => {
 
 	transition: background 0.2s var(--bezier);
 
-	&:hover {
+	&:hover:not(:disabled) {
 		background: var(--nulo-surface-low);
 	}
 
-	&:active {
+	&:active:not(:disabled) {
 		opacity: 0.8;
+	}
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: default;
 	}
 }
 

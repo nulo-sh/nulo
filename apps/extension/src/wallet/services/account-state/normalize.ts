@@ -17,20 +17,16 @@ export const ACCOUNT_STATE_CAPS = {
 	maxInputItems: 16,
 	maxSendersPerNetwork: 64,
 	maxContractsPerNetwork: 32,
-	// UTF-16 code units of the serialized slice (not bytes — a cheap, still-hard bound).
-	// The slice stores a full contract artifact PER NETWORK, so canonical contracts
-	// (HandshakeRegistry, AuthRegistry, PrivateFPC) are duplicated once per network and dominate
-	// it — a 3-network profile measured 33.8M of which ~35% was those duplicates, which crossed
-	// the old 32MiB bound the moment upstream added HandshakeRegistry to the preloaded set.
-	// Two constraints pin this number, and raising it further breaks both:
+	// UTF-16 code units of the serialized slice (not bytes: a cheap, still-hard bound). The slice
+	// stores a full contract artifact per network, so a contract registered on several networks is
+	// repeated once per network. The export leaves out the contracts every PXE boot registers by
+	// itself, but a backup made before it did still carries them: a 3-network one measured 33.8M,
+	// so this bound cannot come down without refusing it. Raising it breaks two constraints:
 	//   - It must stay well under MAX_BACKUP_FILE_BYTES (64MiB) and under the ~48MiB of plaintext
 	//     a base64-sealed encrypted backup can carry, or the whole-file cap always trips first and
 	//     this stops being a bound at all.
 	//   - The export-time warning derives from it as 80% of this value, so a larger cap silently
 	//     raises the threshold past the payload we actually ship and disables the early signal.
-	// 40MiB keeps today's 33.8M above the warning line while leaving ~8M of headroom.
-	// The import skips the contracts every PXE boot registers, but the export still writes them,
-	// so they still count against this cap.
 	maxSliceCodeUnits: 40 * 1024 * 1024,
 	maxErrorMessageLength: 200,
 } as const

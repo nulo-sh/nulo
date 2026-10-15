@@ -275,7 +275,7 @@ describe.each([SMOKE, SMOKE_FIREFOX])("$file aggregator", (agg) => {
 // need, and to the exact set it waits on: a job added to the workflow gates the nightly, or is named
 // advisory here.
 const NIGHTLY = aggregator("nightly.yml")
-const NIGHTLY_ADVISORY = ["dup-trend", "rp-host-live", "network-e2e-canary-wasm"]
+const NIGHTLY_ADVISORY = ["dup-trend", "rp-host-live", "network-e2e-canary-wasm", "token-list-host-live"]
 const NIGHTLY_WORLDS: Record<string, World> = {
 	"a green night": results(NIGHTLY.needs, []),
 	"a quiet day": results(

@@ -1,0 +1,5 @@
+# Phase 1: the first-party gaps
+
+- 2026-10-14: `@types/node` `^24.13.2` declared in `packages/aztec-runtime` (`types: ["chrome-types", "node"]`), `@storybook/vue3-vite` `^10.4.6` in `packages/design`; `bun install` added exactly the two workspace lines to `bun.lock`. Both resolve to the extension's store copies (`@types+node@24.13.3`, `@storybook+vue3-vite@10.5.8+d634a74ea7452fdc`).
+- 2026-10-14: Storybook's `framework.name` is `resolvePackageRoot("@storybook/vue3-vite", { from: import.meta.url })`, not the plan's `dirname(resolvePackageAsset(…, "package.json", …))`: `@nulo/resolve-asset` already exports the root lookup, same result, no `dirname`.
+- 2026-10-14: baseline on a fresh tree (all 17 `node_modules` deleted, `bun install --frozen-lockfile`, fallback 698 links). `build:full` twice: 1,172 files under `dist/{chrome,firefox}`, the two manifests identical (the determinism control). Identities of `test:all`, `test:release` and `test:ci-gating`: 15,751 (15,717 pass, 27 skip, 7 todo, 0 fail), 4 min 19 s.

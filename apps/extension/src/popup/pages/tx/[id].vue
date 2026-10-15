@@ -12,6 +12,7 @@
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import TxFeeRow from "@/popup/components/modules/tx/TxFeeRow.vue"
 import TxHashRow from "@/popup/components/modules/tx/TxHashRow.vue"
+import AddressCardLink from "@/popup/components/modules/tx/AddressCardLink.vue"
 import TxDebugPanel from "@/popup/components/modules/tx/TxDebugPanel.vue"
 
 /** Vendor */
@@ -38,7 +39,7 @@ import {
 } from "@/utils/tx-enrichment"
 import { formatFeeJuice, feeToUsd, feeJuicePricingFromUsd } from "@/utils/fee-estimation"
 import { PriceServiceClient } from "@/wallet/services/price/client"
-import { getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
+import { getAccountExplorerUrl, getBlockExplorerUrl, getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
 import { buildGasBreakdown, computeFeeSavings, describeFeePaymentMethod } from "@/popup/components/modules/tx/tx-detail-helpers"
 
 /** Composables */
@@ -127,6 +128,17 @@ const explorerUrl = computed(() => {
 	return getTransactionExplorerUrl(appStore.network.chainId, appStore.defaultExplorer, tx.value.hash)
 })
 const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === appStore.defaultExplorer)?.name ?? "explorer")
+const blockUrl = computed(() =>
+	tx.value?.block ? getBlockExplorerUrl(appStore.network?.chainId, appStore.defaultExplorer, tx.value.block.hash) : null,
+)
+const fromUrl = computed(() =>
+	transfer.value ? getAccountExplorerUrl(appStore.network?.chainId, appStore.defaultExplorer, transfer.value.from) : null,
+)
+const toUrl = computed(() =>
+	transfer.value ? getAccountExplorerUrl(appStore.network?.chainId, appStore.defaultExplorer, transfer.value.to) : null,
+)
+const fromLabelId = useId()
+const toLabelId = useId()
 
 /** User-facing calls list — excludes fee/entrypoint infrastructure. An ALL-infra tx (e.g. a
  *  sponsored authorization: [sponsor_unconditionally, set_authorized]) falls back to the full list —
@@ -234,7 +246,14 @@ onBeforeUnmount(() => {
 							:address="transfer.from"
 							:formatter="(addr) => trimAddress(addr, 6, 4)"
 						/>
-						<span :class="$style.address_label">From</span>
+						<span :id="fromLabelId" :class="$style.address_label">From</span>
+						<AddressCardLink
+							v-if="fromUrl"
+							:href="fromUrl"
+							:label="`View on ${explorerName}`"
+							:aria-describedby="fromLabelId"
+							data-testid="tx-from-explorer-link"
+						/>
 					</Flex>
 
 					<Flex
@@ -251,7 +270,14 @@ onBeforeUnmount(() => {
 							:address="transfer.to"
 							:formatter="(addr) => trimAddress(addr, 6, 4)"
 						/>
-						<span :class="$style.address_label">To</span>
+						<span :id="toLabelId" :class="$style.address_label">To</span>
+						<AddressCardLink
+							v-if="toUrl"
+							:href="toUrl"
+							:label="`View on ${explorerName}`"
+							:aria-describedby="toLabelId"
+							data-testid="tx-to-explorer-link"
+						/>
 					</Flex>
 				</Flex>
 			</Flex>
@@ -298,7 +324,16 @@ onBeforeUnmount(() => {
 						<span :class="$style.detail_key">Block</span>
 						<Flex align="center" gap="6">
 							<span :class="$style.detail_value_mono">#{{ tx.block.number }}</span>
-							<span data-testid="tx-block-hash" @click="handleCopy(tx.block.hash)" :class="[$style.detail_value_aux, 'copyable']">
+							<a
+								v-if="blockUrl"
+								:href="blockUrl"
+								target="_blank"
+								rel="noopener noreferrer"
+								data-testid="tx-block-link"
+								:class="[$style.detail_value_aux, $style.detail_link]"
+								>{{ trimAddress(tx.block.hash, 6, 4) }}</a
+							>
+							<span v-else data-testid="tx-block-hash" @click="handleCopy(tx.block.hash)" :class="[$style.detail_value_aux, 'copyable']">
 								{{ trimAddress(tx.block.hash, 6, 4) }}
 							</span>
 						</Flex>
@@ -419,6 +454,10 @@ onBeforeUnmount(() => {
 .detail_value_aux {
 	composes: type--meta from global;
 	color: var(--nulo-outline);
+}
+
+.detail_link {
+	composes: detail_link from "../detail-page.module.css";
 }
 
 .calls_box {

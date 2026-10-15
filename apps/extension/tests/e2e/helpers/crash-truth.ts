@@ -7,7 +7,7 @@
  * imports another test module and nothing is duplicated.
  */
 import type { Page } from "puppeteer"
-import { clickByTestId, waitForHash, withTimeoutMessage, type ExtensionContext } from "../fixtures/extension"
+import { clickByTestId, waitForHash, withTimeoutMessage, type ExtensionContext, waitForServiceReady } from "../fixtures/extension"
 import { getActiveProfileName } from "../fixtures/helpers"
 import { accountChainId, exportBackupContent, keepChainAccountState, sealPlainBackup } from "./backup-export"
 import { POPUP_IMPORT_SHELL, submitFullBackupImport, submitWhenEnabled, TEST_PASSWORD, writeBackupToTemp } from "./import-drivers"
@@ -75,10 +75,7 @@ export async function reimportToTerminal(page: Page, filePath: string): Promise<
 		window.location.hash = "#/popup/import"
 	})
 	await waitForHash(page, "#/popup/import", 5_000)
-	await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), {
-		timeout: 15_000,
-		polling: 500,
-	})
+	await waitForServiceReady(page, 15_000)
 	await driveImportToSubmit(page, filePath)
 	await withTimeoutMessage(
 		page.waitForFunction(

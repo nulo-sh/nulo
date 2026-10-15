@@ -119,6 +119,29 @@ describe("useToast", () => {
 		expect(toast.value).toBeNull()
 	})
 
+	it("an update relabels the open snack in place: same id, kind and timer", () => {
+		const { toast, openToast, updateToast } = useToast()
+		const id = openToast({ kind: "success", label: "One" })
+		expect(toast.value?.id).toBe(id)
+		vi.advanceTimersByTime(5_000)
+		updateToast(id, "Two")
+		expect(toast.value).toMatchObject({ id, kind: "success", label: "Two" })
+		vi.advanceTimersByTime(1_000)
+		expect(toast.value).toBeNull()
+	})
+
+	it("an update after a close or a replacement changes nothing and opens nothing", () => {
+		const { toast, openToast, updateToast, closeToast } = useToast()
+		const closed = openToast({ kind: "info", label: "Importing" })
+		closeToast()
+		updateToast(closed, "Importing again")
+		expect(toast.value).toBeNull()
+		const replaced = openToast({ kind: "info", label: "Importing" })
+		const next = openToast({ kind: "success", label: "Copied" })
+		updateToast(replaced, "Importing again")
+		expect(toast.value).toMatchObject({ id: next, label: "Copied" })
+	})
+
 	it("carries the sub line and the action through", () => {
 		const { toast, openToast } = useToast()
 		const onSelect = vi.fn()

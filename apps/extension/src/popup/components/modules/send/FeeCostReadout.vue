@@ -9,7 +9,7 @@ const props = defineProps({
 	isQueued: { type: Boolean, default: false },
 	/** Who pays an estimate. The parent decides: only it knows whether a sponsor is Nulo's own. */
 	payer: { type: String, default: "self", validator: (v) => ["self", "sponsor", "unvouched"].includes(v) },
-	/** Set while the send can be queued against a cap: `about` is the last fee of this token's sends,
+	/** Set while the send can be queued against a cap: `about` is the last fee of this token's like sends,
 	 *  `cap` the most it goes out for without asking again, both as the card writes a fee. */
 	queuedCap: { type: Object, default: null },
 })
@@ -49,7 +49,7 @@ const sponsoredSentence = computed(() => {
 	</Flex>
 	<Flex v-else-if="isEstimating && !estimate" direction="column" gap="4" :class="$style.detail_row">
 		<span :class="$style.fee_label">You pay</span>
-		<span :class="$style.fee_value"><span :class="$style.skeleton" /></span>
+		<span :class="$style.fee_value"><Skeleton /></span>
 	</Flex>
 	<Flex v-else-if="estimate" direction="column" gap="4" :class="$style.detail_row" data-testid="fee-estimate">
 		<span :class="$style.fee_label" :aria-hidden="payer === 'sponsor' ? 'true' : undefined">You pay</span>
@@ -98,10 +98,6 @@ const sponsoredSentence = computed(() => {
 .queued {
 	composes: type--body from global;
 	color: var(--nulo-secondary);
-}
-
-.skeleton {
-	composes: skeleton from "./fee-shared.module.css";
 }
 
 .visually_hidden {

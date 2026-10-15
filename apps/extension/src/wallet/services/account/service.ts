@@ -2,7 +2,7 @@
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { z } from "zod"
 import { assertRestoreEpoch, captureRestoreEpochs, restoreRowProfileId } from "@/wallet/services/restore-fence"
-import { profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
+import { profileDeletedError, type ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { restoreRows } from "@/wallet/services/restore-rows"
 import { deriveAccountSeed, deriveSigningKeyFromSeed } from "@nulo/wallet-crypto"
 import { LogLevel, type ILogger } from "@/wallet/logger"
@@ -17,6 +17,7 @@ import { array_max, fromBase64Lenient, hasIntersectionByKeys, KeyedLock, Lock } 
 import { EventHandler, toBase64 } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { RunFence } from "@/wallet/services/profile/spec"
+import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import {
 	buildAccountExport,
 	decryptAccountExport,
@@ -44,6 +45,7 @@ import {
 	ImportedAccountUnusableError,
 	type FullBackupKeys,
 	type ImportedAccountKey,
+	type PasskeyBackupKeys,
 	accountRowId,
 	accountRowIdOf,
 	parseAccountRowId,
@@ -99,6 +101,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		"importAccount",
 		"previewImportAccount",
 		"exportFullBackupKeys",
+		"exportPasskeyBackupKeys",
 		"backupImportedKeys",
 		"restoreImportedKeys",
 		"reconcileImportedAccounts",
@@ -236,14 +239,13 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	}
 
 	/**
-	 * Idempotent default-account provisioning. If a visible-or-hidden account
-	 * already exists for the `(profileId, chainId)` tuple, returns the
-	 * lowest-index one. Otherwise creates the index-0 account and returns it.
+	 * Idempotent default-account provisioning. Returns the lowest-index derived account of the
+	 * `(profileId, chainId)` tuple, visible or hidden; with none, creates the first derived account
+	 * whose address no row holds.
 	 *
 	 * The whole sequence runs under the same per-tuple serialization as
-	 * `createAccount`, so concurrent callers (e.g. `app.vue`'s `initAccount`
-	 * fired by both `onActiveProfileChanged` and `loadProfile` re-entry on
-	 * `isBackgroundConnected` flip) don't race-create duplicates.
+	 * `createAccount`, so concurrent callers (the popup's activation bootstrap,
+	 * reached from both a profile event and a boot run) don't race-create duplicates.
 	 */
 	public async ensureDefaultAccount(profileId: string, chainId: number, type: AccountType, name: string): Promise<Account> {
 		await this.ensureInitialized()
@@ -311,39 +313,43 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		// Next index over the SAME-TYPE rows only: the guard must sit on the filtered list, or the
 		// first account of a new type starts at 1 (`array_max([]) + 1` — the cross-type guard bug).
 		const sameType = accounts.filter((x) => x.type === type)
-		const index = sameType.length > 0 ? array_max(sameType.map((x) => +x.index)) + 1 : 0
+		let index = sameType.length > 0 ? array_max(sameType.map((x) => +x.index)) + 1 : 0
 		// The derivation chain input is the verified EXACT L1 id, never the composite: seeded rows
 		// are checked against in-code constants, custom rows against a live probe (fail-closed).
 		const l1ChainId = await this.networkService.resolveVerifiedL1ChainId(profileId, chainId, opts)
-		const secret = await deriveAccountSeed(master, l1ChainId, type, index)
-		const address = (await NuloAccount.new(secret, this.logger, this.name)).address.toString()
-		const account: Account = {
-			profileId,
-			chainId,
-			address,
-			index,
-			type,
-			l1ChainId,
-			name,
-			visible: true,
+		let account: Account | undefined
+		while (!account) {
+			const secret = await deriveAccountSeed(master, l1ChainId, type, index)
+			const address = (await NuloAccount.new(secret, this.logger, this.name)).address.toString()
+			const candidate: Account = { profileId, chainId, address, index, type, l1ChainId, name, visible: true }
+			if (await this.writeIfFree(candidate, deletion, epoch)) account = candidate
+			else index++
 		}
-		// A chain reserved for deletion may already have snapshotted its rows: a row written now
-		// would outlive the purge.
-		if (!(await this.networkService.isChainLive(profileId, chainId))) throw new Error("network deleted")
-		await this.tupleLocks.withLock(accountRowIdOf(account), async () => {
-			// A deletion that began during the probe/derivation bumped the epoch — the
-			// purge has already harvested addresses, so writing now would mint a row it
-			// can never reclaim. No await between this assert and the write.
-			deletion.assertCurrent(profileId, epoch)
-			await this.storage.set(accountRowIdOf(account), account)
-			await this.dropReplacedImportedKey(account)
-		})
 		// Either purge can snapshot during the set. The epoch check runs after the liveness await,
 		// and nothing awaits between it and the emit.
 		await this.assertStillLive(account)
 		if (!deletion.isCurrent(profileId, epoch)) await this.unwrite(account, profileDeletedError(profileId))
 		this.emit("onAccountAdded", account)
 		return account
+	}
+
+	/** Writes a derived row only where no row stands. The check reads the physical key, so an
+	 *  imported account, or a row the codec hides, keeps its address and its key, and the caller
+	 *  derives the next index. The row lock is never held across a derivation. */
+	private async writeIfFree(account: Account, deletion: ProfileDeletionState, epoch: number): Promise<boolean> {
+		// A chain reserved for deletion may already have snapshotted its rows: a row written now
+		// would outlive the purge.
+		if (!(await this.networkService.isChainLive(account.profileId, account.chainId))) throw new Error("network deleted")
+		const id = accountRowIdOf(account)
+		return this.tupleLocks.withLock(id, async () => {
+			if (await this.storage.contains(id)) return false
+			// A deletion that began during the probe/derivation bumped the epoch — the
+			// purge has already harvested addresses, so writing now would mint a row it
+			// can never reclaim. No await between this assert and the write.
+			deletion.assertCurrent(account.profileId, epoch)
+			await this.storage.set(id, account)
+			return true
+		})
 	}
 
 	/** The post-write liveness read. A read that fails removes the row too, so no caller is left
@@ -358,21 +364,9 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		if (!live) await this.unwrite(account, new Error("network deleted"))
 	}
 
-	/** A derived address is a pure function of its signing key, as an imported one is, so an
-	 *  imported key stored at the address a create just took is the derived row's own key: nothing
-	 *  else would remove it while the derived row stands. Called under the row's lock. The row is
-	 *  already written, so a failed delete is logged, not thrown. */
-	private async dropReplacedImportedKey(account: Account): Promise<void> {
-		try {
-			await this.importedKeys.delete(account.profileId, account.chainId, account.address)
-		} catch {
-			this.logWarn("replaced imported key not deleted")
-		}
-	}
-
 	/** Removes a row no purge will see, then throws `refusal`. Under the row's lock, so a rename
 	 *  that read the row cannot write it back, and only while the row still has the type and index
-	 *  this writer gave it: a create that replaced an import's row keeps it. */
+	 *  this writer gave it, so another writer's row at the address stays. */
 	private async unwrite(account: Account, refusal: unknown): Promise<never> {
 		const id = accountRowIdOf(account)
 		await this.tupleLocks.withLock(id, async () => {
@@ -850,19 +844,41 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		try {
 			const accounts = await this.rowsOfProfile(fence.profileId)
 			const stored = await this.importedKeys.backup(fence.profileId)
-			const importedKeyRows = sourceDek ? await this.resealImportedKeys(stored, sourceDek, transferKey) : stored
+			const resealed = sourceDek ? await this.resealImportedKeys(stored, sourceDek, transferKey) : { rows: stored, unopened: 0 }
 			await this.profileService.assertRunFence(fence)
 			return {
 				masterKey,
 				entropy,
 				importedKeysKey: toBase64(transferKey),
-				importedKeyRows,
+				importedKeyRows: resealed.rows,
 				accounts,
 				dekReplaced: sourceDek === null,
+				unopenedImportedKeys: resealed.unopened,
 			}
 		} finally {
 			zeroize(sourceDek)
 			zeroize(transferKey)
+		}
+	}
+
+	/**
+	 * Accounts are read first so a concurrent import cannot export an account without its key. The
+	 * rows are counted where the DEK lives and returned as read: the file carries exactly those.
+	 */
+	public async exportPasskeyBackupKeys(fence: RunFence, credentialData: PasskeyCredentialData): Promise<PasskeyBackupKeys> {
+		await this.ensureInitialized()
+		await this.profileService.assertRunFence(fence)
+		const accounts = await this.rowsOfProfile(fence.profileId)
+		const importedKeyRows = await this.importedKeys.backup(fence.profileId)
+		const material = await this.profileService.exportPasskeyBackupKeys(fence.profileId, credentialData, importedKeyRows)
+		await this.profileService.assertRunFence(fence)
+		return {
+			credentialId: material.credentialId,
+			dekSealed: material.dekSealed,
+			dekReplaced: material.dekReplaced,
+			unopenedImportedKeys: material.unopened,
+			importedKeyRows,
+			accounts,
 		}
 	}
 
@@ -872,7 +888,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		rows: ImportedAccountKey[],
 		from: ImportedKeysDek,
 		to: ImportedKeysDek,
-	): Promise<ImportedAccountKey[]> {
+	): Promise<{ rows: ImportedAccountKey[]; unopened: number }> {
 		const out: ImportedAccountKey[] = []
 		let unopened = 0
 		for (const row of rows) {
@@ -891,7 +907,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 			}
 		}
 		if (unopened > 0) this.logWarn("imported-key rows did not open at backup export", { unopened })
-		return out
+		return { rows: out, unopened }
 	}
 
 	/** Backup this profile's imported-account key rows (the dedicated `imported-account-keys`
@@ -976,10 +992,8 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	 * the next reconcile. Scopes are full (chainId, address) tuples — the same address can
 	 * legitimately exist on another chain of this profile and must survive. Returns only the
 	 * scopes actually deleted: the delete pass re-reads each row under its lock, so an account
-	 * whose key appeared during the awaited purge, or a derived row a create wrote over it, is kept
-	 * and not reported. The purges hold no row lock (a holder awaits storage only), so a create of a
-	 * candidate's address during them would lose its new dependents; none runs, as create needs the
-	 * session.
+	 * whose key appeared during the awaited purge is kept and not reported. A create never writes
+	 * over a candidate: it skips every occupied address.
 	 */
 	public async reconcileImportedAccounts(profileId: string): Promise<AccountScope[]> {
 		await this.ensureInitialized()
@@ -1009,8 +1023,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	}
 
 	/** Whether the row stored at `account`'s address is still an imported account with no key row,
-	 *  read fresh: a create may have replaced it with a derived row since it was listed. Called
-	 *  under the row's lock. */
+	 *  read fresh, since it was listed before an await. Called under the row's lock. */
 	private async isKeylessImport(account: Account): Promise<boolean> {
 		const { profileId, chainId, address } = account
 		const stored = await this.storage.get(accountRowIdOf(account))

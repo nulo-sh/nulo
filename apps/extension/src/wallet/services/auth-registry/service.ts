@@ -5,7 +5,13 @@ import { restoreRows } from "@/wallet/services/restore-rows"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { maybeRethrowAsRpcCancel } from "@/wallet/services/execution/rpc-cancel"
-import { ExecutionService, type FeeSettings, type AuthwitContent } from "@/wallet/services/execution/service"
+import {
+	ExecutionService,
+	type FeeSettings,
+	type AuthwitContent,
+	type SendTransactionOperation,
+	type TransferFeeEstimate,
+} from "@/wallet/services/execution/service"
 import { ProfileService } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { NetworkService } from "@/wallet/services/network/service"
@@ -36,22 +42,43 @@ import {
 	AuthwitSchema,
 	AuthwitStatusSchema,
 	parseAuthwitStatusRowId,
+	type SendStarted,
 } from "./spec"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
-import { type FeeSettingsReaders, refuseUnknownPriorities } from "@nulo/wallet-bridge"
+import { type FeeSettingsReaders, type IExecutionHooks, refuseUnknownPriorities } from "@nulo/wallet-bridge"
 import { TxHash } from "@aztec-labs/stdlib/tx"
 
 export * from "./spec"
 
-/** The popup's fee settings for the two RPCs that send a transaction. */
+/** A popup mints its key per call; the bound only keeps an absurd one off the event. */
+const MAX_CORRELATION_LENGTH = 64
+
+/** The popup's fee settings for the RPCs that send or estimate a transaction. */
 const FEE_SETTINGS_OF = {
 	revokeAuthwits: ([, , , feeSettings]) => [feeSettings],
 	setRegistryEnabled: ([, , , feeSettings]) => [feeSettings],
+	estimateRevokeFee: ([, , , feeSettings]) => [feeSettings],
+	estimateRegistryToggleFee: ([, , , feeSettings]) => [feeSettings],
 } satisfies FeeSettingsReaders<Methods>
 
 /** The `(profileId, chainId, account)` scope every authwit read/write is bound to. `profileId` is
  *  never a popup parameter — it is always the active profile, resolved SW-side. */
 type AuthwitScope = { profileId: string; chainId: number; account: string }
+
+function assertRevokeCount(ids: number[]): void {
+	if (ids.length > MAX_REVOKES_PER_TX) throw new Error(`Cannot revoke more than ${MAX_REVOKES_PER_TX} authwits per single tx`)
+}
+
+function registryToggleOperation(networkId: string, account: string, enabled: boolean, feeSettings: FeeSettings): SendTransactionOperation {
+	const contract = getAuthRegistryAddress().toString()
+	return {
+		kind: "send_transaction",
+		networkId,
+		accountAddress: account,
+		feeSettings,
+		actions: [{ kind: "call", contract, method: "set_reject_all", args: [!enabled] }],
+	}
+}
 
 export class AuthRegistryService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
@@ -60,6 +87,9 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		"getRegistryEnabled",
 		"setRegistryEnabled",
 		"syncRegistry",
+		"estimateRevokeFee",
+		"estimateRegistryToggleFee",
+		"cancelFeeEstimate",
 	)
 	public static name = AUTH_REGISTRY_SERVICE_NAME
 
@@ -67,6 +97,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	public readonly onAuthwitDeleted = new EventHandler<Authwit>()
 	public readonly onRegistryEnabled = new EventHandler<AuthwitRegistryScope>()
 	public readonly onRegistryDisabled = new EventHandler<AuthwitRegistryScope>()
+	public readonly onSendStarted = new EventHandler<SendStarted>()
 
 	private readonly authwits: EntityStorage<Authwit>
 	private readonly statuses: EntityStorage<boolean>
@@ -263,54 +294,93 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		})
 	}
 
-	public async revokeAuthwits(networkId: string, account: string, ids: number[], feeSettings: FeeSettings): Promise<void> {
-		await this.ensureInitialized()
-		if (ids.length > MAX_REVOKES_PER_TX) {
-			throw new Error(`Cannot revoke more than ${MAX_REVOKES_PER_TX} authwits per single tx`)
-		}
-		// Bound to the session the user acted in before anything else is awaited:
-		// a lock and re-unlock during the reads below must not authorize the send.
-		const fence = await this.profileService.captureExecutionFence()
+	/** Names the send's journal record to the caller that keyed the call; a call with no key gets none. */
+	private sendStartedHooks(correlation: unknown): IExecutionHooks | undefined {
+		if (typeof correlation !== "string" || correlation.length === 0 || correlation.length > MAX_CORRELATION_LENGTH) return undefined
+		return { onJournalCreated: (journalId) => this.emit("onSendStarted", { correlation, journalId }) }
+	}
+
+	/** The revoke's transaction, built from this scope's own rows: a foreign id reads as missing, so
+	 *  no caller revokes another profile's, chain's or account's authwit and nothing discloses one. */
+	private async revokeOperation(
+		networkId: string,
+		account: string,
+		ids: number[],
+		feeSettings: FeeSettings,
+	): Promise<{ network: Network; scope: AuthwitScope; authwits: Authwit[]; operation: SendTransactionOperation }> {
 		const network = await this.networkService.getNetwork(networkId)
 		const scope: AuthwitScope = { profileId: network.profileId, chainId: network.chainId, account }
-
 		const authwits: Authwit[] = []
 		for (const id of ids) {
 			const authwit = await this.authwits.get(`${id}`)
-			// Reject an id owned by a DIFFERENT (profileId, chainId, account) tuple: without this a
-			// caller could revoke another profile's / chain's / account's authwits by supplying its
-			// ids. Treat a foreign id as "doesn't exist" — there is deliberately no cross-scope
-			// existence oracle.
-			if (
-				!authwit ||
-				authwit.profileId !== scope.profileId ||
-				authwit.chainId !== scope.chainId ||
-				authwit.account !== scope.account
-			) {
-				throw new Error(`Authwit #${id} doesn't exist`)
-			}
+			const inScope = authwit?.profileId === scope.profileId && authwit.chainId === scope.chainId && authwit.account === scope.account
+			if (!authwit || !inScope) throw new Error(`Authwit #${id} doesn't exist`)
 			authwits.push(authwit)
 		}
+		const registryAddress = getAuthRegistryAddress().toString()
+		const operation: SendTransactionOperation = {
+			kind: "send_transaction",
+			networkId,
+			accountAddress: account,
+			feeSettings,
+			actions: authwits.map((x) => ({ kind: "call", contract: registryAddress, method: "set_authorized", args: [x.hash, false] })),
+		}
+		return { network, scope, authwits, operation }
+	}
+
+	public async estimateRevokeFee(
+		networkId: string,
+		account: string,
+		ids: number[],
+		feeSettings: FeeSettings,
+		estimateToken?: string,
+		flowKey?: string,
+	): Promise<TransferFeeEstimate> {
+		await this.ensureInitialized()
+		assertRevokeCount(ids)
+		const { operation } = await this.revokeOperation(networkId, account, ids, feeSettings)
+		return this.executionService.estimateSendTransactionFee(operation, estimateToken, flowKey)
+	}
+
+	public async estimateRegistryToggleFee(
+		networkId: string,
+		account: string,
+		enabled: boolean,
+		feeSettings: FeeSettings,
+		estimateToken?: string,
+		flowKey?: string,
+	): Promise<TransferFeeEstimate> {
+		await this.ensureInitialized()
+		const operation = registryToggleOperation(networkId, account, enabled, feeSettings)
+		return this.executionService.estimateSendTransactionFee(operation, estimateToken, flowKey)
+	}
+
+	public async cancelFeeEstimate(estimateToken: string): Promise<void> {
+		await this.ensureInitialized()
+		await this.executionService.cancelEstimate(estimateToken)
+	}
+
+	public async revokeAuthwits(
+		networkId: string,
+		account: string,
+		ids: number[],
+		feeSettings: FeeSettings,
+		correlation?: string,
+	): Promise<void> {
+		await this.ensureInitialized()
+		assertRevokeCount(ids)
+		// Bound to the session the user acted in before anything else is awaited:
+		// a lock and re-unlock during the reads below must not authorize the send.
+		const fence = await this.profileService.captureExecutionFence()
+		const { network, scope, authwits, operation } = await this.revokeOperation(networkId, account, ids, feeSettings)
 
 		const task = this.taskService.startNewTask(new RevokeAuthwitsContent(ids))
 		try {
-			const registryAddress = getAuthRegistryAddress().toString()
 			const txHash = await this.executionService.executeSendTransaction(
-				{
-					kind: "send_transaction",
-					networkId,
-					accountAddress: account,
-					feeSettings,
-					actions: authwits.map((x) => ({
-						kind: "call",
-						contract: registryAddress,
-						method: "set_authorized",
-						args: [x.hash, false],
-					})),
-				},
+				operation,
 				{ type: OriginType.UI },
 				task,
-				undefined,
+				this.sendStartedHooks(correlation),
 				fence,
 			)
 
@@ -340,7 +410,13 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		return (await this.statuses.get(authwitStatusRowId(profile.id, chainId, account))) ?? true
 	}
 
-	public async setRegistryEnabled(networkId: string, account: string, enabled: boolean, feeSettings: FeeSettings): Promise<void> {
+	public async setRegistryEnabled(
+		networkId: string,
+		account: string,
+		enabled: boolean,
+		feeSettings: FeeSettings,
+		correlation?: string,
+	): Promise<void> {
 		await this.ensureInitialized()
 		// Captured first, for the same reason as `revokeAuthwits`.
 		const fence = await this.profileService.captureExecutionFence()
@@ -349,23 +425,10 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		const task = this.taskService.startNewTask(new StepContent(`${enabled ? "Enable" : "Disable"} auth registry`))
 		try {
 			const txHash = await this.executionService.executeSendTransaction(
-				{
-					kind: "send_transaction",
-					networkId,
-					accountAddress: account,
-					feeSettings,
-					actions: [
-						{
-							kind: "call",
-							contract: getAuthRegistryAddress().toString(),
-							method: "set_reject_all",
-							args: [!enabled],
-						},
-					],
-				},
+				registryToggleOperation(networkId, account, enabled, feeSettings),
 				{ type: OriginType.UI },
 				task,
-				undefined,
+				this.sendStartedHooks(correlation),
 				fence,
 			)
 

@@ -15,12 +15,12 @@ describe("chrome egress routing", () => {
 		)
 	})
 
-	test("a live host, alone of the outside names, bypasses the guard and resolves", () => {
-		const args = egressGuardArgs(4321, "lb.drpc.live")
+	test("the live hosts, alone of the outside names, bypass the guard and resolve", () => {
+		const args = egressGuardArgs(4321, ["lb.drpc.live", "tokens.nulo.sh"])
 		expect(args).toContain("--proxy-server=http://127.0.0.1:4321")
-		expect(args).toContain("--proxy-bypass-list=<-loopback>;localhost;127.0.0.1;[::1];lb.drpc.live")
+		expect(args).toContain("--proxy-bypass-list=<-loopback>;localhost;127.0.0.1;[::1];lb.drpc.live;tokens.nulo.sh")
 		expect(args.find((arg) => arg.startsWith("--host-resolver-rules="))).toBe(
-			"--host-resolver-rules=MAP egress-canary.test 127.0.0.1, MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1, EXCLUDE ::1, EXCLUDE lb.drpc.live",
+			"--host-resolver-rules=MAP egress-canary.test 127.0.0.1, MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1, EXCLUDE ::1, EXCLUDE lb.drpc.live, EXCLUDE tokens.nulo.sh",
 		)
 	})
 })

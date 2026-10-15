@@ -128,7 +128,7 @@ vi.mock("@/composables/useDappHostname", () => ({
 /** One entry per composable instance the window creates, in creation order:
  *  [0] fee estimates, [1] authorization previews. */
 const feeMapInstances: Array<{
-	opts: { estimate: (params: unknown, token: string, flowKey: string) => Promise<unknown> }
+	opts: { estimate: (params: unknown, token: string, flowKey: string) => Promise<unknown>; onError?: (key: number, err: unknown) => void }
 	api: { results: Ref<Record<number, unknown>>; estimate: ReturnType<typeof vi.fn>; handoffAll: ReturnType<typeof vi.fn> }
 }> = []
 vi.mock("@/composables/useFeeEstimationMap", () => ({
@@ -150,8 +150,9 @@ vi.mock("@/composables/useFeeEstimationMap", () => ({
 const estimateOperationFeeMock = vi.fn(async () => undefined)
 const previewOperationAuthwitsMock = vi.fn(async () => undefined)
 
+const toastMocks = vi.hoisted(() => ({ openToast: vi.fn() }))
 vi.mock("@/composables/toast", () => ({
-	useToast: () => ({ openToast: vi.fn() }),
+	useToast: () => ({ openToast: toastMocks.openToast }),
 }))
 
 // Vitest 4 requires `function` expressions (not arrow functions) for mocks
@@ -817,6 +818,173 @@ describe("execute window — approval envelope", () => {
 		expect(estimateOperationFeeMock).toHaveBeenCalledExactlyOnceWith("req-123", 0, { paymentMethod: { kind: "fj" } }, "tok-a", "flow-a")
 		await previews!.opts.estimate({ index: 1 }, "tok-b", "flow-b")
 		expect(previewOperationAuthwitsMock).toHaveBeenCalledExactlyOnceWith("req-123", 1, "tok-b", "flow-b")
+	})
+})
+
+// ── An operation whose fee the app pays: the window estimates it once, only to check the app's fee
+//    contract, and holds Confirm only when that contract is proven unable to pay. ──
+describe("execute window — an operation the app pays for", () => {
+	const NETWORK = { id: "n1", chainId: 1, name: "TestNet" }
+	const OWNER = `0x${"0a".repeat(32)}`
+	const APP_FPC = `0x${"0f".repeat(32)}`
+	const EMBEDDED = { paymentMethod: { kind: "embedded" } }
+	const resolvable = () => {
+		accountServiceCtorMock.mockImplementationOnce(function () {
+			return {
+				getAccount: vi.fn(async (_p: string, _c: number, address: string) => ({ address, chainId: 1, name: `acct-${address}` })),
+				connect: vi.fn(),
+				disconnect: vi.fn(),
+			}
+		})
+		networkServiceCtorMock.mockImplementationOnce(function () {
+			return { getNetworks: vi.fn(async () => [NETWORK]), connect: vi.fn(), disconnect: vi.fn() }
+		} as never)
+	}
+	const appPaid = { kind: "aztec_sendTx", account: `aztec:1:${OWNER}`, exec: { calls: [], feePayer: APP_FPC }, opts: { from: OWNER } }
+	async function opened(op: object = appPaid) {
+		resolvable()
+		payloadToLoad = {
+			session: { profileId: "p1", dappMetadata: { name: "Test DApp", url: "https://example.com" } },
+			params: { operations: [op] },
+		}
+		w = factory()
+		await completeInit()
+		return { vm: w.vm as unknown as ExecVm, fees: feeMapInstances[0]!, confirm: () => w!.find('[data-testid="execute-confirm-btn"]') }
+	}
+	const verdict = (provenShort: boolean) => ({ 0: { maxFee: "1", appPayerFunding: { address: APP_FPC, funded: false, provenShort } } })
+
+	test("is estimated once at init with the app's own payment", async () => {
+		const { fees } = await opened()
+		expect(fees.api.estimate).toHaveBeenCalledExactlyOnceWith(0, { index: 0, feeSettings: EMBEDDED })
+	})
+
+	test("a fee contract proven unable to pay holds Confirm, and approve sends nothing", async () => {
+		const { vm, fees, confirm } = await opened()
+		fees.api.results.value = verdict(true)
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+	})
+
+	test("an estimate whose payer is the account, read short of the fee, holds Confirm the same way", async () => {
+		const { vm, fees, confirm } = await opened()
+		fees.api.results.value = { 0: { maxFee: "800", feeJuiceShortfall: { maxFee: "800", balance: "799" } } }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+	})
+
+	test("a shortfall already shown holds Confirm while its replacement estimate runs", async () => {
+		const { vm, fees, confirm } = await opened()
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		api.results.value = { 0: { maxFee: "800", feeJuiceShortfall: { maxFee: "800", balance: "799" } } }
+		await flushPromises()
+		api.results.value = { 0: null }
+		api.estimating.value = { 0: true }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+
+		api.results.value = { 0: { maxFee: "700" } }
+		api.estimating.value = { 0: false }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+	})
+
+	test("a replacement estimate that fails releases the hold: a failed read is no refusal", async () => {
+		const { fees, confirm } = await opened()
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		api.results.value = verdict(true)
+		await flushPromises()
+		api.results.value = { 0: null }
+		api.estimating.value = { 0: false }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+	})
+
+	test("a short read the transaction could still fund leaves Confirm as today", async () => {
+		const { vm, fees, confirm } = await opened()
+		fees.api.results.value = verdict(false)
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("a failed check is unknown, never a refusal: no toast", async () => {
+		const { fees } = await opened()
+		toastMocks.openToast.mockClear()
+		fees.opts.onError?.(0, new Error("node down"))
+		expect(toastMocks.openToast).not.toHaveBeenCalled()
+	})
+
+	// The app's own fee settings as the wallet-sdk serializes them: each bigint a decimal string.
+	const withAppFee = (gasSettings: object) => ({ ...appPaid, opts: { from: OWNER, fee: { gasSettings } } })
+	const CAP = { feePerDaGas: "1200000000", feePerL2Gas: "1200000000" }
+
+	test.each([
+		["its own cap", { maxFeesPerGas: CAP }],
+		["its own priority fee", { maxPriorityFeesPerGas: { feePerDaGas: "300000000", feePerL2Gas: "300000000" } }],
+	])("an app that set %s: Confirm waits for the figure, and approve sends nothing until it lands", async (_case, gas) => {
+		const { vm, fees, confirm } = await opened(withAppFee(gas))
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		api.estimating.value = { 0: true }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+
+		api.results.value = { 0: { maxFee: "16000000000000000", maxFeeFormatted: "0.016" } }
+		api.estimating.value = { 0: false }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("an app that set its own cap on a send the person pays: Confirm waits for the figure", async () => {
+		const personPaid = { ...withAppFee({ maxFeesPerGas: CAP }), exec: { calls: [] } }
+		const { vm, fees, confirm } = await opened(personPaid)
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		;(vm as unknown as { handleFeeUpdate: (index: number, value: unknown) => void }).handleFeeUpdate(0, {
+			paymentMethod: { kind: "fj" },
+		})
+		api.estimating.value = { 0: true }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+
+		api.results.value = { 0: { maxFee: "16000000000000000", maxFeeFormatted: "0.016" } }
+		api.estimating.value = { 0: false }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("an app that set its own cap: a failed estimate keeps Confirm off", async () => {
+		const { vm, fees, confirm } = await opened(withAppFee({ maxFeesPerGas: CAP }))
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		api.results.value = { 0: null }
+		api.estimating.value = { 0: false }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+	})
+
+	test("an app that set nothing: Confirm never waits for the figure", async () => {
+		const { vm, fees, confirm } = await opened()
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		api.estimating.value = { 0: true }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
 	})
 })
 

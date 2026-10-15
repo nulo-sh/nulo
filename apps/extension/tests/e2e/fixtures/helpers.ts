@@ -465,6 +465,17 @@ export async function peekSession(page: Page): Promise<{ id: string } | undefine
 	return callService(page, "profile", "getActiveProfile")
 }
 
+/** Locks the wallet as another window's Lock does: through the profile service, so this page learns
+ *  of it only from the lock event. */
+export async function lockFromAnotherWindow(page: Page): Promise<void> {
+	await callService(page, "profile", "lockActiveProfile")
+}
+
+/** Every sender the active profile has registered on its active networks, as the PXE reports them. */
+export async function registeredSenders(page: Page): Promise<string[]> {
+	return callService(page, "account-state", "getSendersAcrossActiveNetworks", [], 60_000)
+}
+
 /** Set the auto-lock TTL in milliseconds through the config service (the settings page offers whole
  *  minutes only), and return the session row once it carries the new deadline. The deadline is
  *  recomputed from `since`, and one older than `ms` would lock the wallet on the spot, so the
@@ -1081,13 +1092,15 @@ export async function importTokenAndWaitForBalance(
 	})
 }
 
-/** Seed a fresh $1 USDC quote (the agent build maps every sandbox contract to `usd-coin`) and
- *  remount the popup so the stale-on-connect read adopts it. Resolves on Home. */
-export async function seedUsdQuoteAndReload(page: Page): Promise<void> {
-	await page.evaluate(() => {
-		const state = { "usd-coin": { coingeckoId: "usd-coin", usd: 1.0, fetchedAt: Date.now(), providerUpdatedAt: null } }
+/** Seed a fresh $1 quote for `priceId` (USDC by default) and remount the popup so the
+ *  stale-on-connect read adopts it. Resolves on Home. The quote prices a token only through a
+ *  mapping: the agent build maps every sandbox contract to `usd-coin`, and a smoke launch needs a
+ *  held list (`listedExtension`), whose priced token `readActivityScope(page, { priced: true })` names. */
+export async function seedUsdQuoteAndReload(page: Page, priceId = "usd-coin"): Promise<void> {
+	await page.evaluate((id: string) => {
+		const state = { [id]: { coingeckoId: id, usd: 1.0, fetchedAt: Date.now(), providerUpdatedAt: null } }
 		return chrome.storage.local.set({ "nulo:core:token-prices": JSON.stringify(state) })
-	})
+	}, priceId)
 	await reloadExtensionPage(page)
 	await page.waitForFunction(() => window.location.hash === "#/popup/general", { timeout: 15_000 })
 }
@@ -1241,8 +1254,8 @@ export async function sendTransfer(page: Page, opts: SendTransferOptions): Promi
 	await page.waitForFunction(() => !document.querySelector('[data-testid="send-destination-field"]'), { timeout: 10_000 })
 }
 
-/** Fills the open Send form and waits until the footer is clickable — the fee estimate landed. */
-export async function fillSendForm(page: Page, opts: { amount: string; destination: string }): Promise<void> {
+/** Types the amount and destination into the open Send form, once its amount field takes input. */
+export async function enterSendForm(page: Page, opts: { amount: string; destination: string }): Promise<void> {
 	// Wait for amount input to become ENABLED
 	// AmountCard has :disabled="!tokenBalanceByType" — disabled when balance for selected type is 0/loading
 	await page.waitForFunction(
@@ -1257,6 +1270,11 @@ export async function fillSendForm(page: Page, opts: { amount: string; destinati
 	// triple-click + type is unreliable on our custom Input wrapper.
 	await replaceInputValue(page, '[data-testid="send-amount-input"]', opts.amount)
 	await replaceInputValue(page, '[data-testid="send-destination-field"] input', opts.destination)
+}
+
+/** Fills the open Send form and waits until the footer is clickable — the fee estimate landed. */
+export async function fillSendForm(page: Page, opts: { amount: string; destination: string }): Promise<void> {
+	await enterSendForm(page, opts)
 
 	// Wait for send button to become clickable (pointer-events != none)
 	// This means fee estimation (which triggers simulateTx → PXE sync) completed.
@@ -1616,6 +1634,30 @@ export async function navigateByHash(page: Page, hash: string, timeout = 5_000):
 	// an element on the destination page (or asserts on a globally-stable
 	// document attribute like `theme`). If a new caller doesn't, it should
 	// add its own state-driven wait, not bring the sleep back.
+}
+
+/** The incoming scheduler's tick interval: a receipt shown sooner after an unlock came from the
+ *  unlock's own scan, not from a tick. */
+export const INCOMING_SCAN_INTERVAL_MS = 30_000
+
+/** Unlock a locked wallet, then wait on History for an incoming row whose kind chip reads `label`
+ *  and amount reads `amount`. Resolves the time from helper entry to the row. */
+export async function unlockUntilIncomingRow(page: Page, label: string, amount: string, timeout = 180_000): Promise<number> {
+	const unlockedFrom = Date.now()
+	await ensureUnlocked(page, TEST_PASSWORD)
+	await waitForHash(page, "#/popup/general", 60_000)
+	await navigateByHash(page, "#/popup/activity")
+	await page.waitForFunction(
+		([lbl, amt]) =>
+			[...document.querySelectorAll('[data-testid="tx-incoming-card"]')].some(
+				(card) =>
+					(card.querySelector('[data-testid="tx-incoming-kind-chip"]')?.textContent || "").trim() === lbl &&
+					(card.querySelector('[data-testid="activity-amount"]')?.textContent || "").trim() === amt,
+			),
+		{ timeout, polling: 500 },
+		[label, amount] as const,
+	)
+	return Date.now() - unlockedFrom
 }
 
 /** Drive the change-password form. Assumes you're on `/popup/settings/profile`

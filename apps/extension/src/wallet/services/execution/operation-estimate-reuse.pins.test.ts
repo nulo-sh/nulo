@@ -30,7 +30,7 @@ const predicted = vi.mocked(predictedWorstMinFees)
 const REASON = "operation estimate reuse rejected: "
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
 const CALL: Action = { kind: "call", contract: "0xtoken", method: "transfer", args: ["0xme", "0xyou", 5] }
-const FPC = { id: "fpc-1", type: 2, address: "0xfpc", chainId: 7, isProtocol: true } as const
+const FPC = { id: "fpc-1", type: 1, address: "0xfpc", chainId: 7, isProtocol: true } as const
 const FULL_LADDER = [
 	"getNetwork",
 	"getPendingForAccount",
@@ -62,7 +62,7 @@ function entry(feeSettings?: FeeSettings, overrides: Partial<OperationEstimateRe
 		feeSettings: identity.feeSettings,
 		profileId: "p1",
 		// (2,3) × the mocked default 7.
-		baseFeeFingerprint: "14:21",
+		builtCap: { feePerDaGas: 14n, feePerL2Gas: 21n },
 		primaryEndpointId: "e1",
 		primaryEndpointUrl: "http://primary",
 		pendingHashes: ["0xpending"],
@@ -146,22 +146,6 @@ async function realRead(reply: unknown): Promise<GasFees> {
 	const actual = await vi.importActual<typeof import("@nulo/aztec-runtime/fee-juice")>("@nulo/aztec-runtime/fee-juice")
 	return actual.predictedWorstMinFees({ getCurrentMinFees: async () => reply as never })
 }
-
-/** Today's composition on the same value. Only the module transform's import rewrite is normalized. */
-async function compositionError(value: unknown, multiplier: unknown): Promise<Error> {
-	predicted.mockResolvedValueOnce(value as never)
-	const node = {} as never
-	try {
-		;(await predictedWorstMinFees(node)).mul(multiplier as never)
-	} catch (error) {
-		return error as Error
-	}
-	throw new Error("expected a throw")
-}
-
-/** JSC quotes the transformed source: `(0,__vite_ssr_import_N__.f)` in a module, `__vi_import_N__.f` in a test. */
-const normalized = (message: string) =>
-	message.replace(/\(0,\s*__vite_ssr_import_\d+__\.(\w+)\)/g, "$1").replace(/__vi_import_\d+__\.(\w+)/g, "$1")
 
 beforeEach(() => {
 	calls.length = 0
@@ -267,7 +251,7 @@ describe("the ladder's order and reasons", () => {
 
 	test.each([
 		["id", { id: "fpc-2" }],
-		["type", { type: 1 }],
+		["type", { type: 2 }],
 		["address", { address: "0xother" }],
 		["chainId", { chainId: 8 }],
 		["isProtocol", { isProtocol: false }],
@@ -279,8 +263,8 @@ describe("the ladder's order and reasons", () => {
 	})
 
 	test("FPC identity: an absent isProtocol reads as false", async () => {
-		const { reuse } = harness({ fpc: { id: "fpc-1", type: 2, address: "0xfpc", chainId: 7 } })
-		expect(await consumeOnce(reuse, entry(undefined, { fpcIdentity: { ...FPC, type: 2 as never, isProtocol: false } }))).toBeDefined()
+		const { reuse } = harness({ fpc: { id: "fpc-1", type: 1, address: "0xfpc", chainId: 7 } })
+		expect(await consumeOnce(reuse, entry(undefined, { fpcIdentity: { ...FPC, isProtocol: false } }))).toBeDefined()
 	})
 
 	test("FPC identity: an unreadable row misses with the category only", async () => {
@@ -320,7 +304,7 @@ describe("the ladder's order and reasons", () => {
 
 	test("base fee drift is the last step", async () => {
 		const { reuse, logDebug } = harness()
-		expect(await consumeOnce(reuse, entry(undefined, { baseFeeFingerprint: "999:999" }))).toBeUndefined()
+		expect(await consumeOnce(reuse, entry(undefined, { builtCap: { feePerDaGas: 1n, feePerL2Gas: 1n } }))).toBeUndefined()
 		expect(calls).toEqual(FULL_LADDER)
 		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee drift`]])
 	})
@@ -360,17 +344,21 @@ describe("the TTL guard", () => {
 
 describe("the multiplier per priority", () => {
 	test.each([
-		[undefined, "14:21"],
-		["", "14:21"],
-		["normal", "4:6"],
-		["fast", "6:9"],
-		["urgent", "10:15"],
-	])("priority %j commits basis (2,3) × its multiplier: %s", async (priorityLevel, expected) => {
+		[undefined, 14n, 21n],
+		["", 14n, 21n],
+		["normal", 4n, 6n],
+		["fast", 6n, 9n],
+		["urgent", 10n, 15n],
+	])("priority %j commits basis (2,3) × its multiplier: %s:%s", async (priorityLevel, da, l2) => {
 		const fj = { paymentMethod: { kind: "fj" }, priorityLevel } as FeeSettings
 		const { reuse } = harness()
-		expect(await consumeOnce(reuse, entry(fj, { fpcIdentity: undefined, baseFeeFingerprint: expected }))).toBeDefined()
+		expect(
+			await consumeOnce(reuse, entry(fj, { fpcIdentity: undefined, builtCap: { feePerDaGas: da, feePerL2Gas: l2 } })),
+		).toBeDefined()
 		const { reuse: other } = harness()
-		expect(await consumeOnce(other, entry(fj, { fpcIdentity: undefined, baseFeeFingerprint: "0:0" }))).toBeUndefined()
+		expect(
+			await consumeOnce(other, entry(fj, { fpcIdentity: undefined, builtCap: { feePerDaGas: 0n, feePerL2Gas: 0n } })),
+		).toBeUndefined()
 	})
 })
 
@@ -438,15 +426,14 @@ describe("a failed fee read under a known priority misses (a fixed reason, never
 		})
 	}
 
-	test("an unknown priority with a bare-object reply still throws the composition's own TypeError", async () => {
+	test("an unknown priority with a bare-object reply still throws: the cap's own TypeError, never a miss", async () => {
 		const bare = { feePerDaGas: 2n, feePerL2Gas: 3n }
-		const expected = await compositionError(bare, undefined)
 		predicted.mockResolvedValueOnce(bare as never)
 		const bogus = { paymentMethod: { kind: "fj" }, priorityLevel: "bogus" } as unknown as FeeSettings
 		const { reuse } = harness()
 		reuse.stash("id-1", entry(bogus, { fpcIdentity: undefined }))
 		const error = await reuse.tryConsume("id-1", input(bogus), FENCE).catch((e: unknown) => e as Error)
 		expect(error).toBeInstanceOf(TypeError)
-		expect(normalized((error as Error).message)).toBe(normalized(expected.message))
+		expect((error as Error).message).toContain("mul")
 	})
 })

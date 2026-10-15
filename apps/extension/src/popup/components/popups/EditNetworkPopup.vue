@@ -2,6 +2,9 @@
 <script setup>
 import { FieldWarning } from "@nulo/design"
 
+/** Utils */
+import { sameStoredName, storedNameKey } from "@/utils/account-name"
+
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { usePopupStack } from "@/composables/usePopupStack"
@@ -26,7 +29,7 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v.length) return null
-			const conflicting = appStore.networks.find((n) => n.name === v && n.id !== networkToEdit.value?.id)
+			const conflicting = appStore.networks.find((n) => sameStoredName(n.name, v) && n.id !== networkToEdit.value?.id)
 			if (conflicting) return "Already exists"
 			return null
 		},
@@ -42,8 +45,8 @@ const isAvailableToUpdateNetwork = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
 	// route (button, Enter, future callers) — not just the pointer path.
 	if (isNetworkUpdateInProgress.value) return false
-	if (!nameTerm.value.length) return false
-	if (nameTerm.value === networkToEdit.value?.name) return false
+	if (!storedNameKey(nameTerm.value)) return false
+	if (storedNameKey(nameTerm.value) === networkToEdit.value?.name) return false
 	if (form.fields.name.error.value) return false
 	return true
 })
@@ -65,7 +68,7 @@ const handleUpdateNetwork = async () => {
 	// feedback; the family's standard error toast handles it.
 	isNetworkUpdateInProgress.value = true
 	try {
-		await appStore.renameNetwork(cacheStore.networkToEditIdx, nameTerm.value)
+		await appStore.renameNetwork(cacheStore.networkToEditIdx, storedNameKey(nameTerm.value))
 	} catch {
 		openToast({ kind: "error", label: "Something went wrong" })
 		return
@@ -117,10 +120,8 @@ usePopupEntity(() => props.show, {
 			:maxLength="25"
 			data-testid="network-name-input"
 		>
-			<template #right>
-				<Transition name="fade">
-					<FieldWarning v-if="isNameAlreadyExist"> Already exists </FieldWarning>
-				</Transition>
+			<template v-if="isNameAlreadyExist" #right>
+				<FieldWarning> Already exists </FieldWarning>
 			</template>
 		</Input>
 

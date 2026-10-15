@@ -4,12 +4,13 @@
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
-import { UI_STORAGE_KEYS } from "@/popup/constants/storage-keys"
+import { sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { interceptRpc } from "./fixtures/browser"
-import { clickByTestId, openPopup, registerProfile, test, waitForHash, type ExtensionContext } from "./fixtures/extension"
+import { clickByTestId, launchExtension, openPopup, registerProfile, test, waitForHash, type ExtensionContext } from "./fixtures/extension"
 import { captureSoleProfileId, getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { startNodeStub } from "./fixtures/node-stub"
+import { skipUnlessListPrices } from "./fixtures/token-list"
 import { readSendInputs, shotSend } from "./fixtures/send-page"
 import { readActivityScope, seedTokenRow } from "./helpers/activity-seeds"
 import { SEEDED_FPC_IDS, SEEDED_SPONSOR_FPC_ID, fpcRowIds, seedProtocolFpcs } from "./helpers/fpc-seeds"
@@ -45,14 +46,14 @@ async function openSendPage(ctx: ExtensionContext, { priced = false, sponsors = 
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general", 30_000)
 	if (contacts.length) await seedContacts(page, contacts)
-	const scope = priced || sponsors ? await readActivityScope(page) : undefined
+	const scope = priced || sponsors ? await readActivityScope(page, { priced }) : undefined
 	if (scope && sponsors) {
 		expect(await fpcRowIds(page), "FPC rows before the seed").toEqual([])
 		await seedProtocolFpcs(page, scope)
 	}
 	if (scope && priced) {
 		await seedTokenRow(page, scope, 1)
-		await seedUsdQuoteAndReload(page)
+		await seedUsdQuoteAndReload(page, scope.token.priceId)
 	}
 	await clickByTestId(page, "actions-send")
 	await page.waitForSelector(sel("send-destination-field"), { visible: true, timeout: 15_000 })
@@ -163,7 +164,8 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 test("the unit switch: a Tab stop right after the token card, the accent ring, Enter and Space, a held Enter once", {
 	timeout: 180_000,
 	retry: 0,
-}, async ({ registeredExtensionPerTest: ctx }) => {
+}, async ({ listedExtensionPerTest: ctx, skip }) => {
+	skipUnlessListPrices(skip)
 	const page = await openSendPage(ctx, { priced: true })
 	await page.waitForSelector(sel("send-amount-fiat-toggle"), { visible: true, timeout: 30_000 })
 	await shotSend(page, "send-at-rest", "send-amount-row")
@@ -192,7 +194,8 @@ test("the unit switch: a Tab stop right after the token card, the accent ring, E
 	expect((await tabAround(page, 1))[0]).not.toBe("send-amount-max")
 })
 
-test("the token card draws the accent ring when focused", { timeout: 180_000, retry: 0 }, async ({ registeredExtensionPerTest: ctx }) => {
+test("the token card draws the accent ring when focused", { timeout: 180_000, retry: 0 }, async ({ listedExtensionPerTest: ctx, skip }) => {
+	skipUnlessListPrices(skip)
 	const page = await openSendPage(ctx, { priced: true })
 	await page.waitForSelector(sel("send-token-symbol"), { visible: true, timeout: 30_000 })
 	await tabTo(page, "send-token-trigger")
@@ -240,7 +243,7 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 			return pick?.type === "fpc" && pick.fpc?.id === want
 		},
 		{ timeout: 10_000 },
-		UI_STORAGE_KEYS.SEND_FEE_PAYMENT_METHODS,
+		sendFeePicksKey(await captureSoleProfileId(page)),
 		account,
 		SEEDED_SPONSOR_FPC_ID,
 	)
@@ -257,9 +260,19 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrows and Enter pick, Escape returns to it", {
 	timeout: 180_000,
 	retry: 0,
-}, async ({ freshExtensionPerTest: ctx }) => {
+}, async ({ skip }) => {
+	skipUnlessListPrices(skip)
 	// Discovery stores its own sponsor rows beside the seeded ones whenever a node answers, so the
 	// node is held from before the profile exists, in every run mode.
+	const ctx = await launchExtension({ tokenList: "held" })
+	try {
+		await pickSponsorBehindStub(ctx)
+	} finally {
+		await ctx.close()
+	}
+})
+
+async function pickSponsorBehindStub(ctx: ExtensionContext): Promise<void> {
 	const stub = await startNodeStub()
 	try {
 		const node = await interceptRpc(ctx.browser, ctx.extensionId, TESTNET_RPC_ORIGIN, { kind: "redirect", to: stub.url })
@@ -276,7 +289,7 @@ test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrow
 	} finally {
 		await stub.stop()
 	}
-})
+}
 
 /** The fee menu's edge and its trigger's, once the menu's entry transition has settled. */
 async function feeMenuGap(page: Page): Promise<{ above: number; below: number }> {

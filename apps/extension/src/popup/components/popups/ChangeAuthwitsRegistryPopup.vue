@@ -5,6 +5,8 @@ import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue
 
 /** Utils */
 import { AuthRegistryServiceClient } from "@/wallet/services/auth-registry/client"
+import { OperationJournalServiceClient } from "@/wallet/services/operation-journal/client"
+import { getRandomHex } from "@/wallet/utils"
 import { classifyCancellableRejection } from "@/popup/utils/cancellable-rejection"
 
 /** Composables */
@@ -13,6 +15,8 @@ import { useToast } from "@/composables/toast"
 import { useAuthRegistryStatus } from "@/composables/useAuthRegistryStatus"
 import { refuseRepeatEnter, usePopupEntity } from "@/composables/usePopupEntity"
 import { usePopupStack } from "@/composables/usePopupStack"
+import { useSendStageLine } from "@/composables/useSendStageLine"
+import { useWalletTxEstimates } from "@/composables/useWalletTxEstimates"
 const { openToast } = useToast()
 
 /** Store */
@@ -32,16 +36,36 @@ const registry = useAuthRegistryStatus(authwitsService, () =>
 		: undefined,
 )
 const { isRegistryEnabled, isLoading, error } = registry
-onBeforeUnmount(() => registry.dispose())
+const journalService = new OperationJournalServiceClient()
+const stage = useSendStageLine({ sendStarted: authwitsService.onSendStarted, journal: journalService })
+const stageLine = stage.line
 
 const feeSettings = ref()
 const isErrorOccurred = computed(() => !!error.value)
 
-const isAllowedToExecute = computed(() => {
-	if (!feeSettings.value) return
-
-	return true
+const estimates = useWalletTxEstimates({
+	estimate: (p, token, flowKey) =>
+		authwitsService.estimateRegistryToggleFee(p.networkId, p.account, p.enabled, p.feeSettings, token, flowKey),
+	cancel: (token) => authwitsService.cancelFeeEstimate(token),
+	paramsOf: () =>
+		props.show && feeSettings.value && isRegistryEnabled.value !== undefined && appStore.network && appStore.account
+			? {
+					networkId: appStore.network.id,
+					account: appStore.account.address,
+					enabled: !isRegistryEnabled.value,
+					feeSettings: feeSettings.value,
+				}
+			: undefined,
+	keys: () => [0],
+	scope: () => appStore.scopeEpoch,
+	onError: (err) => {
+		console.error("Registry toggle fee estimate failed", { error: err })
+		openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
+	},
 })
+const { results: feeEstimates, estimating: estimatingFees } = estimates
+
+const isAllowedToExecute = computed(() => Boolean(feeSettings.value) && estimates.landed() && !estimates.short())
 
 async function handleChangeRegistry() {
 	// Full-lifetime submit latch, handler-owned: every route (click, any future caller) self-checks
@@ -52,7 +76,15 @@ async function handleChangeRegistry() {
 	try {
 		isLoading.value = true
 
-		await authwitsService.setRegistryEnabled(appStore.network.id, appStore.account.address, !isRegistryEnabled.value, feeSettings.value)
+		const correlation = getRandomHex(16)
+		stage.follow(correlation)
+		await authwitsService.setRegistryEnabled(
+			appStore.network.id,
+			appStore.account.address,
+			!isRegistryEnabled.value,
+			feeSettings.value,
+			correlation,
+		)
 
 		openToast({ kind: "success", label: "Account authwit registry is changed" })
 	} catch (err) {
@@ -65,6 +97,7 @@ async function handleChangeRegistry() {
 	} finally {
 		// Handler-owned latch release — closure via the hide watcher still
 		// happens, but the latch must not depend on it.
+		stage.stop()
 		isLoading.value = false
 		emit("onClose")
 	}
@@ -74,8 +107,20 @@ usePopupEntity(() => props.show, {
 	onShow: registry.fetch,
 	onHide: () => {
 		registry.reset()
+		stage.stop()
+		estimates.cancelAll()
 		authwitsService.disconnect()
+		journalService.disconnect()
 	},
+})
+
+// Synchronous: Confirm never reads an estimate made for the inputs just replaced.
+watch([feeSettings, isRegistryEnabled], () => estimates.refresh(0), { flush: "sync" })
+onBeforeUnmount(() => {
+	registry.dispose()
+	stage.dispose()
+	estimates.dispose()
+	journalService.disconnect()
 })
 </script>
 
@@ -108,6 +153,9 @@ usePopupEntity(() => props.show, {
 					:profile="appStore.profile"
 					:network="appStore.network"
 					:account="appStore.account"
+					:feeEstimate="feeEstimates[0] ?? null"
+					:isEstimating="!!estimatingFees[0]"
+					fallsBack
 					v-model="feeSettings"
 				/>
 
@@ -125,6 +173,10 @@ usePopupEntity(() => props.show, {
 					>
 						Send
 					</Button>
+
+					<div role="status" aria-live="polite" data-testid="authwit-stage-line">
+						<Text v-if="stageLine" variant="body" color="secondary">{{ stageLine }}</Text>
+					</div>
 
 					<Tooltip v-if="isErrorOccurred" side="top">
 						<Flex align="center" gap="6">

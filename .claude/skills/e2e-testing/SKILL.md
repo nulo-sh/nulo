@@ -222,8 +222,9 @@ runtime env var can never arm a build-time flag.
   Required check `extension-smoke-e2e-status` on both branches.
 - **Network** — `pr-extension-network-e2e.yml` → `_extension-network-e2e.yml`. Filter `extension-network`, label
   `e2e:extension-network`. Lanes: 5 vitest shards (`--shard=N/5`, SHA-1 of the file path, proverless, retry 0,
-  the 10 dedicated files excluded); two heavy lanes (`fee-methods` + `selfpay-phase`, and
-  `concurrent-sendtx-confirm` + `same-token-concurrent-sends`, proverless); the **canary** lane prover-ON with the SHA-256-pinned
+  the 12 dedicated files excluded); three heavy lanes (`fee-methods` + `selfpay-phase`,
+  `concurrent-sendtx-confirm` + `same-token-concurrent-sends`, and `snack-placement` + `failed-send-check`,
+  proverless); the **canary** lane prover-ON with the SHA-256-pinned
   `presto-server` and `VITE_NULO_PRESTO_REQUIRED=1` (`transfers`, `tx-sendTx-default`,
   `frozen-account-canary`, `passkey-execution-canary`, `delete-after-prove`) — a canary run with zero `Proving succeeded` lines fails; the
   `disable_presto` dispatch input (or the `NULO_E2E_DISABLE_PRESTO` variable) is the
@@ -628,6 +629,11 @@ the pattern.
   replaces the $1 seed mid-test and every fiat figure moves. Wait for a priced figure, never
   for an exact one carried across a remount
   (`implementations-plan/archive/hygiene/plan.md#price-settle`).
+- **A smoke launch holds no token list unless it asks for one.** The worker fetches on Terms
+  acceptance, and a launch's seeded acceptance is a storage write no listener hears, so a plain
+  launch prices nothing and shows no defaults. A spec that needs a priced token or the defaults
+  launches with `tokenList: "held"` or the `listedExtension` fixtures (`fixtures/token-list.ts`;
+  the e2e README's "The signed token list").
 
 ## 3. Kill or restart the background
 

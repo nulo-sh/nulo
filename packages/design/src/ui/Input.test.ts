@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
-import { nextTick } from "vue"
+import { defineComponent, h, nextTick } from "vue"
 import Input from "./Input.vue"
 
 const STUBS = {
@@ -71,12 +71,29 @@ describe("Input", () => {
 		expect(mountInput().get("input").attributes("data-testid")).toBeUndefined()
 	})
 
-	test("the list attributes land on the native <input>, and are absent when not given", () => {
-		const given = mountInput({ ariaActivedescendant: "opt-2", ariaControls: "list-1" }).get("input")
-		expect(given.attributes()).toMatchObject({ "aria-activedescendant": "opt-2", "aria-controls": "list-1" })
+	test("the combo box attributes land on the native <input>, and none is set when not given", async () => {
+		const w = mountInput({
+			role: "combobox",
+			ariaLabelledby: "label-1",
+			ariaExpanded: false,
+			ariaAutocomplete: "list",
+			ariaActivedescendant: "opt-2",
+			ariaControls: "list-1",
+		})
+		const attributes = {
+			role: "combobox",
+			"aria-labelledby": "label-1",
+			"aria-expanded": "false",
+			"aria-autocomplete": "list",
+			"aria-activedescendant": "opt-2",
+			"aria-controls": "list-1",
+		}
+		expect(w.get("input").attributes()).toMatchObject(attributes)
+		await w.setProps({ ariaExpanded: true })
+		expect(w.get("input").attributes("aria-expanded")).toBe("true")
+
 		const bare = mountInput().get("input").attributes()
-		expect(bare["aria-activedescendant"]).toBeUndefined()
-		expect(bare["aria-controls"]).toBeUndefined()
+		for (const name of Object.keys(attributes)) expect(bare[name], name).toBeUndefined()
 	})
 
 	test.each([
@@ -155,6 +172,51 @@ describe("Input", () => {
 		await w.find("input").setValue("abc")
 		const emits = w.emitted("maxLengthReached")
 		expect(emits?.[emits.length - 1]).toEqual([true])
+	})
+
+	// A host passes `#right` only while its message shows, as every capped name field does.
+	const Host = defineComponent({
+		props: { duplicate: { type: Boolean, default: false } },
+		setup(props) {
+			return () =>
+				h(
+					Input,
+					{ label: "Name", placeholder: "Name", maxLength: 3 },
+					props.duplicate ? { right: () => h("span", { "data-testid": "duplicate" }, "Already exist") } : {},
+				)
+		},
+	})
+	const mountHost = () => mount(Host, { global: { stubs: STUBS } })
+	const shows = (w: ReturnType<typeof mountHost>) => ({
+		duplicate: w.find('[data-testid="duplicate"]').exists(),
+		note: w.text().includes("Maximum length reached"),
+	})
+
+	test("at the cap the caller's message shows and the length note does not; when the message goes, the note takes the slot", async () => {
+		const w = mountHost()
+		await w.setProps({ duplicate: true })
+		await w.find("input").setValue("abc")
+		expect(shows(w)).toEqual({ duplicate: true, note: false })
+		await w.setProps({ duplicate: false })
+		expect(shows(w)).toEqual({ duplicate: false, note: true })
+		await w.setProps({ duplicate: true })
+		expect(shows(w)).toEqual({ duplicate: true, note: false })
+	})
+
+	test("below the cap the caller's message shows and no note; with no message, nothing", async () => {
+		const w = mountHost()
+		await w.setProps({ duplicate: true })
+		await w.find("input").setValue("ab")
+		expect(shows(w)).toEqual({ duplicate: true, note: false })
+		await w.setProps({ duplicate: false })
+		expect(shows(w)).toEqual({ duplicate: false, note: false })
+	})
+
+	test("a right slot that renders only a comment counts as empty: at the cap the note shows", async () => {
+		const w = mountInput({ label: "Name", maxLength: 3 }, { right: '<span v-if="false">Already exist</span>' })
+		await w.find("input").setValue("abc")
+		expect(w.text()).toContain("Maximum length reached")
+		expect(w.text()).not.toContain("Already exist")
 	})
 
 	test("(BUG PIN) subtype='int' emits parseInt of the RAW text (stops at first non-digit), not the cleaned digits", async () => {

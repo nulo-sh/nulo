@@ -1,6 +1,6 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
-import { UI_STORAGE_KEYS } from "@/popup/constants/storage-keys"
+import { feePicksKey } from "@/utils/profile-ui-keys"
 import { clickByTestId, openPopup, test } from "../fixtures/extension"
 import { captureSoleProfileId } from "../fixtures/helpers"
 import { snapshotResultSeq } from "../fixtures/playground"
@@ -87,7 +87,7 @@ test.skipIf(!hasConfig)(
 
 		// Only an explicit pick saves, so an empty record here makes the readback below this pick's.
 		const sponsorFpcId = await fpcIdAt(execPopup, await getSponsoredFpcAddress())
-		const feeKey = UI_STORAGE_KEYS.FEE_PAYMENT_METHODS
+		const feeKey = feePicksKey(await captureSoleProfileId(execPopup))
 		expect(await execPopup.evaluate(savedFeePick, feeKey, accountAddress)).toBeNull()
 
 		// Use the existing FeeSettingsCard's send-fee-method-* testids via approveExecute.

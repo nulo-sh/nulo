@@ -52,7 +52,7 @@ import type { Network } from "@/wallet/services/network/service"
 import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
 import type { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
 import { type ExecutionCoordinator, type ProveAndSendContext, fenceChecks } from "./execution-coordinator"
-import { fingerprintBuiltFee } from "./estimate-reuse-shared"
+import { builtCapOf } from "./estimate-reuse-shared"
 import type { ChainTipGate } from "./chain-tip-gate"
 import type { OriginTurn } from "./execution-lane"
 import type { ExecutionMutexRelease } from "./execution-mutex"
@@ -62,7 +62,7 @@ import { PREVIEW_FOREIGN_MESSAGE, type PreviewLookup, type PreviewSnapshots, ass
 import { decodeAuthwitEffects } from "./decode-authwit-effects"
 import { throwIfAborted } from "./rpc-cancel"
 import type { SendSequencer, SequenceScope, SequenceTicket } from "./send-sequencer"
-import { probeSponsorFunding } from "./sponsor-funding"
+import { probeAppPayerFunding, probeOwnFeeJuice, probeSponsorFunding } from "./sponsor-funding"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { type FeeEstimate, finalizeGasLimits, suggestGasLimits } from "./fee/fee-strategy"
 import type { OperationPlanner } from "./operation-planner"
@@ -81,7 +81,7 @@ import type {
 } from "./spec"
 import type { TxRequestBuilder } from "./tx-request-builder"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
-import { getEstimatedFee, getGasDetails } from "./tx-fee-details"
+import { getEstimatedFee, getGasDetails, priorityFeeOf } from "./tx-fee-details"
 import { detectEmbeddedFeePayment } from "./utils/fee-detection"
 
 /** Project an `Action[]` (a discriminated union with non-call variants like
@@ -290,6 +290,7 @@ export class DappSendExecutor {
 				params.fence,
 			)
 			journalId = claimed.journalId
+			if (journalId) params.hooks?.onJournalCreated?.(journalId)
 			const controller = claimed.controller
 			const checkCancelled = (): void => {
 				if (controller?.signal.aborted) throw new JobCancelledSentinel(journalId ?? "")
@@ -440,20 +441,13 @@ export class DappSendExecutor {
 		// choreography for dApp sends; stage-boundary cancellation preserved
 		// inside it).
 		throwIfAborted(signal)
-		const { built, discovered } = await this.deps.estimateWithDiscovery.estimate(
-			operation,
-			actions,
-			detectedFee,
-			feeSettings,
-			fence,
-			undefined,
-			signal,
-		)
+		const { built, discovered } = await this.buildForEstimate(operation, actions, detectedFee, feeSettings, fence, signal)
 		const { txRequest } = built
 		throwIfAborted(signal)
-		const sponsorFunding = await probeSponsorFunding(built, this.deps.readPublicStorageOnce, (msg, data) =>
-			this.deps.logDebug(msg, data),
-		)
+		const log = (msg: string, data: object) => this.deps.logDebug(msg, data)
+		const sponsorFunding = await probeSponsorFunding(built, this.deps.readPublicStorageOnce, log)
+		const appPayerFunding = await probeAppPayerFunding(built, this.deps.readPublicStorageOnce, log)
+		const feeJuiceShortfall = await probeOwnFeeJuice(built, this.deps.readPublicStorageOnce, log)
 		throwIfAborted(signal)
 
 		const identity = fingerprintInputFor(operation, feeSettings, detectedFee, preDiscoveryActions)
@@ -468,15 +462,38 @@ export class DappSendExecutor {
 			bound && preview ? this.writePreview(preview, fingerprintOperation(identity), discoveredHashes, estimateId) : undefined
 
 		const maxFeeRaw = BigInt(getEstimatedFee(txRequest))
+		const priorityFee = priorityFeeOf(txRequest)
+		const priorityFeeFormatted = formatFeeJuice(priorityFee)
 		return {
 			maxFee: maxFeeRaw.toString(),
 			maxFeeFormatted: formatFeeJuice(maxFeeRaw),
+			...(priorityFeeFormatted !== "0" ? { priorityFee: priorityFee.toString(), priorityFeeFormatted } : {}),
 			gasDetails: getGasDetails(txRequest),
 			estimateId,
 			previewId,
 			...(bound ? { discoveredAuthwits: discovered } : {}),
 			...(sponsorFunding ? { sponsorFunding } : {}),
+			...(appPayerFunding ? { appPayerFunding } : {}),
+			...(feeJuiceShortfall ? { feeJuiceShortfall } : {}),
 		}
+	}
+
+	/** An embedded fee payment skips discovery, as its confirm does: the app's own fee calls conflict
+	 *  with the discovery simulation's dummy fee method. */
+	private async buildForEstimate(
+		operation: Operation,
+		actions: Action[],
+		detectedFee: FeeOptions | undefined,
+		feeSettings: FeeSettings,
+		fence: ExecutionFence,
+		signal?: AbortSignal,
+	): Promise<{ built: FeeEstimate; discovered: readonly DiscoveredAuthwit[] }> {
+		const fee = detectedFee ?? (operation as SendTransactionOperation).fee
+		if (!fee?.embeddedFeePayment) {
+			return this.deps.estimateWithDiscovery.estimate(operation, actions, detectedFee, feeSettings, fence, undefined, signal)
+		}
+		const op = { ...(operation as SendTransactionOperation), actions: [...actions], fee }
+		return { built: await this.deps.buildAndEstimateValidated(op, feeSettings, fence, undefined, signal), discovered: [] }
 	}
 
 	/**
@@ -578,11 +595,11 @@ export class DappSendExecutor {
 			operation.kind === "aztec_sendTx" &&
 			((operation as AztecSendTxOperation).executionMode ?? "standard") !== "default_entrypoint" &&
 			!detectedFee?.embeddedFeePayment &&
-			// A dApp-supplied fee cap makes the built request's maxFees diverge
-			// from the predicted-worst basis the consume ladder re-derives, so
-			// such an entry would ALWAYS miss on "base fee drift" — stashing it
-			// only parks an unusable signed request for the TTL.
+			// A dApp-supplied fee cap or priority fee makes the built request's
+			// maxFees diverge from the predicted-worst basis the consume ladder
+			// re-derives, which carries neither.
 			!detectedFee?.maxFeesPerGas &&
+			!detectedFee?.maxPriorityFeesPerGas &&
 			(kind === "fj" || kind === "fpc")
 		if (!eligible) return undefined
 		try {
@@ -592,7 +609,7 @@ export class DappSendExecutor {
 			if (!primary) return undefined
 			const profile = await this.deps.getActiveProfile()
 			if (!profile) return undefined
-			const baseFeeFingerprint = fingerprintBuiltFee(built.txRequest)
+			const builtCap = builtCapOf(built.txRequest)
 			const estimateId = crypto.randomUUID()
 			this.deps.operationEstimateReuse.stash(estimateId, {
 				fingerprint,
@@ -604,7 +621,7 @@ export class DappSendExecutor {
 				// an endpoint flip would snapshot a chain this request was not
 				// signed under (consume would then compare live-vs-live).
 				chainIdentity: built.chainIdentity,
-				baseFeeFingerprint,
+				builtCap,
 				primaryEndpointId: primary.id,
 				primaryEndpointUrl: primary.rpcUrl,
 				...before,
@@ -1051,12 +1068,19 @@ export class DappSendExecutor {
 		// set explicitly here (the planner-built path infers it) — that is what
 		// gates `applyEmbeddedFpcGasCap`; see the helper's JSDoc for the cap rationale.
 		const maxFeesUpstream = op.opts.fee?.gasSettings?.maxFeesPerGas
+		const maxPriorityFeesUpstream = op.opts.fee?.gasSettings?.maxPriorityFeesPerGas
 		const feeOpts: FeeOptions = {
 			embeddedFeePayment: detectEmbeddedFeePayment(op.exec?.feePayer, op.opts.from, op.exec?.calls) ?? "fpc",
 			gasLimits: op.opts.fee?.gasSettings?.gasLimits,
 			teardownGasLimits: op.opts.fee?.gasSettings?.teardownGasLimits,
 			maxFeesPerGas: maxFeesUpstream
 				? { feePerDaGas: maxFeesUpstream.feePerDaGas.toString(), feePerL2Gas: maxFeesUpstream.feePerL2Gas.toString() }
+				: undefined,
+			maxPriorityFeesPerGas: maxPriorityFeesUpstream
+				? {
+						feePerDaGas: maxPriorityFeesUpstream.feePerDaGas.toString(),
+						feePerL2Gas: maxPriorityFeesUpstream.feePerL2Gas.toString(),
+					}
 				: undefined,
 			gasPadding: 1,
 		}

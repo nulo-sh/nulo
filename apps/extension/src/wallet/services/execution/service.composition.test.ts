@@ -63,7 +63,6 @@ import { fingerprintOperation } from "./operation-fingerprint"
 import type { OperationPlanner } from "./operation-planner"
 import type { PreviewSnapshots } from "./preview-snapshots"
 import type { SendSequencer } from "./send-sequencer"
-import { fingerprintBaseFee } from "./estimate-reuse-shared"
 import { fingerprintFeeSettings, type TransferEstimateReuse, type TransferEstimateReuseEntry } from "./transfer-estimate-reuse"
 import { ExecutionService } from "./service"
 import { assertSelectorBinding, CALL_BINDING } from "./contract-resolver"
@@ -280,10 +279,10 @@ async function makeHarness() {
 		profileId: "p1",
 		chainIdentity: { l1ChainId: 5, rollupVersion: 4 },
 		fpcIdentity: SPONSOR,
-		baseFeeFingerprint: fingerprintBaseFee({
+		builtCap: {
 			feePerDaGas: MIN_FEES.feePerDaGas * BigInt(DEFAULT_FEE_MULTIPLIER),
 			feePerL2Gas: MIN_FEES.feePerL2Gas * BigInt(DEFAULT_FEE_MULTIPLIER),
-		}),
+		},
 		primaryEndpointId: "ep1",
 		primaryEndpointUrl: "http://fake",
 		pendingHashes: [],
@@ -1277,9 +1276,10 @@ describe("ExecutionService composition — a send whose answer was lost is check
 })
 
 describe("ExecutionService composition — a send queued against a fee cap asks again above it", () => {
-	// The seeded request's fee: (100+10)×2 + (200+20)×3 = 880. A cap one below it asks.
-	const FEE = "880"
-	const CAP = "879"
+	// The seeded request's fee, gas limits × cap with teardown counted once inside them: 100×2 + 200×3 = 800.
+	// A cap one below it asks.
+	const FEE = "800"
+	const CAP = "799"
 	const queuedTransfer = (h: Harness) =>
 		h.service
 			.executeTransfer(

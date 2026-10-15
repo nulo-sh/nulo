@@ -23,7 +23,7 @@ import {
 	test,
 	waitForHash,
 } from "./fixtures/extension"
-import { fillNewContactForm, navigateToSettings } from "./fixtures/helpers"
+import { fillNewContactForm, navigateToSettings, setSessionTtlMs, waitForLockScreen } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
 import {
 	book,
@@ -46,6 +46,8 @@ import {
 	waitForListed,
 	waitForListedAddress,
 	waitForSelected,
+	waitForStoredCount,
+	shownToast,
 } from "./helpers/contacts"
 import { pressEscape } from "./helpers/pointer-probes"
 
@@ -71,6 +73,56 @@ const FULL_NAME = "Bartholomew Featherstones"
 const files = contactsFiles()
 afterAll(files.cleanup)
 const contactsFile = (contacts: unknown[]) => files.write({ version: 2, contacts })
+
+/** `count` distinct on-curve addresses from a fixed seed, so every run imports the same file. */
+function onCurveAddresses(count: number): string[] {
+	let state = 0x9e3779b9
+	const next = () => {
+		state ^= state << 13
+		state ^= state >>> 17
+		state ^= state << 5
+		return state >>> 0
+	}
+	const found = new Set<string>()
+	while (found.size < count) {
+		// A leading zero byte keeps the value below the field modulus.
+		const address = `0x00${Array.from({ length: 8 }, () => next().toString(16).padStart(8, "0"))
+			.join("")
+			.slice(2)}`
+		if (isValidAztecAddress(address)) found.add(address)
+	}
+	return [...found]
+}
+
+/** Enough rows that an import is still writing seconds after its first row is stored. */
+const LONG_IMPORT_ROWS = 500
+const longImportFile = () =>
+	contactsFile(onCurveAddresses(LONG_IMPORT_ROWS).map((address, i) => ({ name: `Contact ${String(i + 1).padStart(3, "0")}`, address })))
+const lockChipDisabled = (page: Page) => page.$eval(sel("header-lock"), (button) => (button as HTMLButtonElement).disabled)
+
+/** The count on the progress snack, once a settled card reads more than `above`; the card is marked
+ *  the first time, and a later read requires the marked card, so a re-keyed card (a replayed
+ *  entrance) fails it. */
+async function progressAbove(page: Page, above: number): Promise<number> {
+	const read = await page.waitForFunction(
+		(n: number) => {
+			const card = document.querySelector('[data-testid="snackbar"][data-kind="info"]') as HTMLElement | null
+			if (!card || /enter|leave/.test(card.className)) return null
+			const match = /^Importing contacts · (\d+) of 500$/.exec(
+				card.querySelector('[data-testid="snackbar-title"]')?.textContent ?? "",
+			)
+			if (!match || Number(match[1]) <= n) return null
+			const w = window as unknown as { __e2eProgressCard?: Element }
+			w.__e2eProgressCard ??= card
+			return w.__e2eProgressCard === card ? Number(match[1]) : -1
+		},
+		{ timeout: 30_000, polling: 50 },
+		above,
+	)
+	const count = Number(await read.jsonValue())
+	expect(count, "the progress snack was re-created instead of relabelled").toBeGreaterThan(0)
+	return count
+}
 
 /** Runs `body` on the Contacts page of `ctx` with the Testnet RPC refused, then checks the refusal
  *  held every request it had to and that no page threw. */
@@ -363,3 +415,60 @@ test("export, then import: into the same wallet nothing changes, into a fresh wa
 		await fresh.close()
 	}
 }, 300_000)
+
+// Fails if leaving Contacts cuts off a running import (the page's clients rejected the row being
+// written), if the real chip or the menu's Import item does not follow the running import, or if
+// the import's progress snack does not reach the shell's region on every page as one card
+// relabelled in place. Component tests mount stubs, fake clients and a mocked toast, so only the
+// built popup's real page unmount, Header, menu and snack region can show these.
+test("an import holds Lock until it ends, counts on one snack on every page, and leaving Contacts does not disturb it", async ({
+	registeredExtensionPerTest: ctx,
+}) => {
+	await onContacts(ctx, async (page) => {
+		await pickContactsFile(page, longImportFile())
+		await toastAfter(
+			page,
+			async () => {
+				await closeImportWith(page, "import-contacts-submit")
+				await waitForStoredCount(page, 1)
+				expect(await lockChipDisabled(page)).toBe(true)
+				const onContactsPage = await progressAbove(page, 0)
+				// The menu's Import item is disabled while this import runs.
+				await clickByTestId(page, "contacts-menu-trigger")
+				await page.waitForSelector(sel("contacts-menu-import"), { visible: true, timeout: 5_000 })
+				expect(await page.$eval(sel("contacts-menu-import"), (item) => item.getAttribute("aria-disabled"))).toBe("true")
+				expect(await pressEscape(page)).toBe(true)
+				await clickByTestId(page, "subpage-back")
+				await waitForHash(page, "#/popup/settings")
+				// Still disabled: the import was still running when the Contacts page unmounted (the hold
+				// ends with it, or at its deadline).
+				expect(await lockChipDisabled(page)).toBe(true)
+				await progressAbove(page, onContactsPage)
+			},
+			"Import completed successfully",
+			120_000,
+		)
+		await shownToast(page, "Import completed successfully")
+		expect(await lockChipDisabled(page)).toBe(false)
+		expect(await storedContacts(page)).toHaveLength(LONG_IMPORT_ROWS)
+	})
+}, 240_000)
+
+// Fails if the worker's real expiry does not stop a running import, or if its result is lost to the
+// lock screen; the unit layers fake the expiry, the seal and the toast's survival separately.
+test("auto-lock mid-import locks the wallet and stops the import", async ({ registeredExtensionPerTest: ctx }) => {
+	await onContacts(ctx, async (page) => {
+		await pickContactsFile(page, longImportFile())
+		await closeImportWith(page, "import-contacts-submit")
+		await waitForStoredCount(page, 3)
+		await setSessionTtlMs(page, 1_500)
+		await waitForLockScreen(page)
+		const toast = await shownToast(page, "Import incomplete")
+		const written = Number(/^Import incomplete · (\d+) of 500 contacts written$/.exec(toast)?.[1] ?? Number.NaN)
+		// Strictly inside, so a stop that missed the import fails loudly instead of passing.
+		expect(written).toBeGreaterThan(0)
+		expect(written).toBeLessThan(LONG_IMPORT_ROWS)
+		// A write whose reply the stop cut off is stored but not counted.
+		expect([written, written + 1]).toContain((await storedContacts(page)).length)
+	})
+}, 180_000)

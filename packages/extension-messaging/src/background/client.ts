@@ -1,11 +1,11 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import type { ILogger } from "@nulo/wallet-core/logger"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { type Deferred, deferred, EventHandler } from "@nulo/wallet-core/utils"
 import type { EventsMap, MethodsMap } from "@nulo/wallet-core/base"
 import { BaseServiceClient, type RequestErrorMeta } from "../core/base-client"
 import { summarizeMessage } from "../core/envelope-summary"
 import { RpcConnectError } from "../errors"
-import { MessageType, type EventMessage, type ResponseMessage } from "../messages"
+import { MessageType, type EventMessage, type ReadyMessage, type ResponseMessage } from "../messages"
 
 /** Default upper bound on any RPC request. Individual calls can override.
  *
@@ -19,6 +19,9 @@ export const DEFAULT_RPC_TIMEOUT_MS = 60_000
 /** Warn (don't fail) when a request has been pending unusually long. */
 const WARN_AFTER_MS = 10_000
 
+/** A port that closes before Ready (a worker still starting refuses it at once) reopens after this. */
+export const RECONNECT_DELAY_MS = 250
+
 /**
  * Popup ↔ service-worker client over a long-lived `chrome.runtime.Port`.
  * Correlation, timeout, and terminal cleanup live in `BaseServiceClient`; this
@@ -29,7 +32,9 @@ export abstract class ServiceClient<
 	TRequests extends MethodsMap,
 	TEvents extends EventsMap = Record<string, never>,
 > extends BaseServiceClient<TRequests, TEvents> {
+	/** Fires once per Ready, in a task after the requests that waited for it have posted. */
 	public onConnected: EventHandler<void> = new EventHandler()
+	/** Fires when a port that said Ready drops, or on an explicit `disconnect()` from that state. */
 	public onDisconnected: EventHandler<void> = new EventHandler()
 
 	/** onConnected/onDisconnected are local lifecycle signals — never wire
@@ -38,14 +43,20 @@ export abstract class ServiceClient<
 
 	private state: ClientState = ClientState.Disconnected
 	private port?: chrome.runtime.Port
+	/** Moves whenever the current port changes, so a deferred `onConnected` from an older port fires nothing. */
+	private generation = 0
+	/** The Ready of this `Connecting` episode; it outlives closes before Ready. */
+	private ready?: Deferred<void>
+	private reconnectTimer?: ReturnType<typeof setTimeout>
 
 	protected constructor(service: string, logger: ILogger, name?: string, options?: { requestTimeoutMs?: number }) {
 		super(service, logger, name, { defaultTimeoutMs: options?.requestTimeoutMs ?? DEFAULT_RPC_TIMEOUT_MS, warnAfterMs: WARN_AFTER_MS })
 	}
 
 	/**
-	 * Opens the port if it is closed. Never rejects — most callers do not await this: a failed open
-	 * is logged where it happens and reported by the request that needs the port.
+	 * Opens the port if none is open or pending. Never rejects and never waits for Ready — most
+	 * callers do not await this: a failed open is logged where it happens and reported by the
+	 * request that needs the port.
 	 */
 	public async connect(): Promise<void> {
 		try {
@@ -54,51 +65,102 @@ export abstract class ServiceClient<
 	}
 
 	/**
-	 * Opens the port synchronously or throws `RpcConnectError`. A synchronous throw from
-	 * `chrome.runtime.connect` is treated as permanent — the known ones are (the extension context is
-	 * gone) — so nothing retries: an asleep worker never throws, it is woken, and a missing peer
-	 * surfaces later as `onDisconnect`.
+	 * Opens a port synchronously or throws `RpcConnectError`. A synchronous throw from
+	 * `chrome.runtime.connect` is permanent (the extension context is gone), so nothing retries: an
+	 * asleep worker never throws, it is woken, and a missing peer surfaces later as `onDisconnect`.
 	 */
 	private openPort(): void {
-		if (this.state !== ClientState.Disconnected) return
+		if (this.port || this.reconnectTimer) return
 		let port: chrome.runtime.Port
 		try {
 			port = chrome.runtime.connect(undefined, { name: this.service })
 		} catch (cause) {
 			const error = new RpcConnectError(this.service, cause)
 			this.logError("Failed to connect", error)
+			this.endEpisode(error)
 			throw error
 		}
+		this.generation++
 		this.port = port
 		port.onDisconnect.addListener(this.onDisconnect)
 		port.onMessage.addListener(this.onMessage)
-		this.state = ClientState.Connected
-		this.logDebug("Connected")
-		this.onConnected.invoke()
+		if (this.state === ClientState.Disconnected) {
+			this.state = ClientState.Connecting
+			this.ready = deferred()
+			// A close with no waiter must not surface as an unhandled rejection.
+			this.ready.promise.catch(() => {})
+		}
+		this.logDebug("Connecting")
 	}
 
 	public disconnect() {
-		this.state = ClientState.Disconnecting
-		if (this.port) {
-			this.port.onMessage.removeListener(this.onMessage)
-			this.port.onDisconnect.removeListener(this.onDisconnect)
-			this.port.disconnect()
-			this.port = undefined
-		}
+		const wasConnected = this.state === ClientState.Connected
+		this.closePort()
+		this.endEpisode(this.makeDisconnectError())
 		this.rejectAllPending(() => this.makeDisconnectError(), "disconnected", "client_disconnect")
-		this.state = ClientState.Disconnected
 		this.logDebug("Disconnected")
-		this.onDisconnected.invoke()
+		if (wasConnected) this.onDisconnected.invoke()
+	}
+
+	/** Stops using the current port and any pending reopen. Closing it from this end fires nothing here. */
+	private closePort(): void {
+		if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+		this.reconnectTimer = undefined
+		const port = this.port
+		if (!port) return
+		this.port = undefined
+		this.generation++
+		port.onMessage.removeListener(this.onMessage)
+		port.onDisconnect.removeListener(this.onDisconnect)
+		port.disconnect()
+	}
+
+	private endEpisode(error: unknown): void {
+		const ready = this.ready
+		this.ready = undefined
+		this.state = ClientState.Disconnected
+		ready?.reject(error)
 	}
 
 	private readonly onDisconnect = (port: chrome.runtime.Port) => {
+		if (port !== this.port) {
+			this.dropStalePort(port)
+			return
+		}
 		const reason = closeReason(port)
 		if (reason) this.logDebug("Port closed with an error", { reason })
-		this.disconnect()
+		this.closePort()
+		if (this.state === ClientState.Connecting) {
+			// Nothing was posted on it, so nothing is rejected: the episode's waiters keep waiting.
+			this.reconnectTimer = setTimeout(this.reopen, RECONNECT_DELAY_MS)
+			return
+		}
+		this.state = ClientState.Disconnected
+		// A posted request may have run, so it is rejected, never resent.
+		this.rejectAllPending(() => this.makeDisconnectError(), "disconnected", "client_disconnect")
+		this.onDisconnected.invoke()
 		void this.connect()
 	}
 
-	private readonly onMessage = (message: ResponseMessage<TRequests> | EventMessage<TEvents>) => {
+	private readonly reopen = () => {
+		this.reconnectTimer = undefined
+		try {
+			this.openPort()
+		} catch {}
+	}
+
+	private readonly onMessage = (
+		message: ResponseMessage<TRequests> | EventMessage<TEvents> | ReadyMessage,
+		port: chrome.runtime.Port,
+	) => {
+		if (port !== undefined && port !== this.port) {
+			this.dropStalePort(port)
+			return
+		}
+		if (message?.type === MessageType.Ready) {
+			this.onReady()
+			return
+		}
 		if (!message || (message.type !== MessageType.Response && message.type !== MessageType.Event) || !message.content) {
 			this.logWarn("Invalid message received", summarizeMessage(message))
 			return
@@ -111,21 +173,46 @@ export abstract class ServiceClient<
 		}
 	}
 
-	// ── Transport hooks ─────────────────────────────────────────────────
-
-	/** Synchronous by design: returning void keeps the request running straight through to the Port
-	 *  send with no intervening microtask. A failed open throws and rejects that request. */
-	protected ensureTransportReady(): void {
-		this.openPort()
+	private onReady(): void {
+		if (this.state !== ClientState.Connecting) return
+		this.state = ClientState.Connected
+		const ready = this.ready
+		this.ready = undefined
+		const generation = this.generation
+		this.logDebug("Connected")
+		ready?.resolve()
+		// A task, not a microtask: every request that waited for this Ready posts first.
+		setTimeout(() => {
+			if (this.generation === generation && this.state === ClientState.Connected) this.onConnected.invoke()
+		}, 0)
 	}
 
+	private dropStalePort(port: chrome.runtime.Port): void {
+		this.logDebug("Stale port dropped")
+		port.onMessage.removeListener(this.onMessage)
+		port.onDisconnect.removeListener(this.onDisconnect)
+		try {
+			port.disconnect()
+		} catch {}
+	}
+
+	// ── Transport hooks ─────────────────────────────────────────────────
+
+	/** Void once Ready, so a request runs straight through to the send. Otherwise the episode's
+	 *  Ready, opening a port first if none is open or pending. A failed open throws and rejects that
+	 *  request. */
+	protected ensureTransportReady(): void | Promise<void> {
+		if (this.state === ClientState.Connected) return
+		this.openPort()
+		return this.ready?.promise
+	}
+
+	/** Posts only on a port that said Ready. Between Ready and a waiting request's continuation only
+	 *  microtasks run, so the one thing that can intervene is an explicit `disconnect()`; that request
+	 *  then fails as a send failure and nothing reopens a port. */
 	protected sendEnvelope(content: unknown): void {
-		// Capture the connected port locally so a concurrent
-		// onDisconnect (which sets `this.port = undefined` via `disconnect()`)
-		// can't turn this `postMessage` into a null deref. A throw here (port
-		// torn down) is caught by the core and surfaced as a send failure.
 		const port = this.port
-		if (!port) throw new Error("port reference cleared between connect and send")
+		if (this.state !== ClientState.Connected || !port) throw new Error("port not ready at send")
 		port.postMessage({ type: MessageType.Request, content })
 	}
 
@@ -162,7 +249,8 @@ function closeReason(port: chrome.runtime.Port): "runtime.lastError" | "port.err
 }
 
 enum ClientState {
-	Connected,
-	Disconnecting,
 	Disconnected,
+	/** A port is open or about to reopen, and no Ready has come. Nothing is posted. */
+	Connecting,
+	Connected,
 }

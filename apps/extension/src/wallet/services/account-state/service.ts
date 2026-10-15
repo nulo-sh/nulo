@@ -6,11 +6,13 @@ import { toRestoreError } from "@/utils/restore-error"
 import type { ILogger } from "@/wallet/logger"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
-import { RecoveryModeError } from "@nulo/extension-messaging/errors"
+import { RecoveryModeError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { NetworkService } from "@/wallet/services/network/service"
-import type { Network } from "@/wallet/services/network/spec"
+import type { Network, NetworkInfo } from "@/wallet/services/network/spec"
 import { networkInfoFrom, NetworkSchema, NodeStatus } from "@/wallet/services/network/spec"
+import { ProfileService } from "@/wallet/services/profile/service"
+import type { RunFence } from "@/wallet/services/profile/spec"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import {
 	ACCOUNT_STATE_SERVICE_NAME,
@@ -28,7 +30,7 @@ import {
 	normalizeAccountStateSlice,
 	truncateErrorMessage,
 } from "./normalize"
-import { isPxeProvidedAddress } from "./pxe-provided"
+import { isPxeProvidedAddress, isPxeProvidedContract } from "./pxe-provided"
 
 export * from "./spec"
 
@@ -43,11 +45,14 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 	)
 	public static name = ACCOUNT_STATE_SERVICE_NAME
 
+	public readonly dependencies = [ProfileService.name] as const
+
 	public readonly onSenderAdded = new EventHandler<string>()
 	public readonly onSenderDeleted = new EventHandler<string>()
 
 	private pxeService: PxeServiceClient = null!
 	private networkService: NetworkService = null!
+	private profileService: ProfileService = null!
 
 	public constructor(
 		logger: ILogger,
@@ -59,6 +64,7 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 	protected async init(services: ServiceCollection) {
 		this.pxeService = new PxeServiceClient(this.logger)
 		this.networkService = services.get(NetworkService.name)
+		this.profileService = services.get(ProfileService.name)
 	}
 
 	public async getAccounts(networkId: string): Promise<string[]> {
@@ -110,15 +116,24 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 		return [...union]
 	}
 
-	public async addSender(networkId: string, address: string): Promise<string> {
+	public async addSender(networkId: string, address: string, fence?: RunFence | null): Promise<string> {
 		await this.ensureInitialized()
+		if (fence) await this.profileService.assertRunFence(fence)
 		const network = await this.networkService.getNetwork(networkId)
 		const info = networkInfoFrom(network)
-		return this.viaPxe("register sender", async () => {
-			const sender = (await this.pxeService.registerSender(info, AztecAddress.fromStringUnsafe(address))).toString()
-			this.emit("onSenderAdded", sender)
-			return sender
-		})
+		// A stop reaches the caller as a stop, never as a logged PXE failure; a registration that
+		// already reached the PXE finishes in its own profile.
+		const ended = () => fence != null && !this.profileService.isFenceLive(fence)
+		if (ended()) throw new SessionEndedError()
+		return this.viaPxe(
+			"register sender",
+			async () => {
+				const sender = (await this.pxeService.registerSender(info, AztecAddress.fromStringUnsafe(address))).toString()
+				this.emit("onSenderAdded", sender)
+				return sender
+			},
+			ended,
+		)
 	}
 
 	public async deleteSender(networkId: string, address: string): Promise<string> {
@@ -141,13 +156,14 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 
 	/** Every PXE failure surfaces as the same opaque error; the cause goes to the log. The network
 	 *  lookup stays outside so a missing network keeps its own error. */
-	private async viaPxe<T>(action: string, fn: () => Promise<T>): Promise<T> {
+	private async viaPxe<T>(action: string, fn: () => Promise<T>, ended?: () => boolean): Promise<T> {
 		try {
 			return await fn()
 		} catch (error) {
 			// The recovery sentence is the user's repair instruction and the backup assembler's
 			// per-network omission signal — it must reach the caller by type, not as the opaque error.
 			if (error instanceof RecoveryModeError) throw error
+			if (ended?.()) throw new SessionEndedError()
 			this.logError(`Failed to ${action}`, error)
 			throw new Error("PXE request failed")
 		}
@@ -165,6 +181,9 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 			const nInfo = networkInfoFrom(n)
 			let skipped = 0
 			for (const c of contracts) {
+				// A restore never needs them (every PXE boot registers them itself), and their artifacts
+				// would only weigh against the import's slice cap.
+				if (isPxeProvidedContract(c)) continue
 				const instance = await this.pxeService.getContractInstance(nInfo, AztecAddress.fromStringUnsafe(c))
 				if (!instance?.currentContractClassId) {
 					skipped++
@@ -276,10 +295,16 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 	 * slow-but-successful call crossed the line. A connectivity-class failure
 	 * fails the REST of that network fast (the payload can't register against
 	 * an endpoint that isn't answering).
+	 *
+	 * The run belongs to `fence`'s session: only that profile's network rows are used, every PXE
+	 * call carries the profile incarnation read while the fence was live, and none starts once the
+	 * fence has died, so a page holding stale rows never registers into a same-id successor. A
+	 * registration already started when the fence dies finishes in its own profile.
 	 */
 	public async restore(
 		backupAccountState: BackupAccountState[],
 		networks: Network[],
+		fence: RunFence,
 		deadlineMs?: number,
 	): Promise<Restored<BackupAccountState>[]> {
 		// E2e hold point: "account-state" parks a POST-finalize import RPC here
@@ -294,14 +319,17 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 		const deadlineAt = clamped !== undefined ? Date.now() + clamped : undefined
 		await this.ensureInitialized()
 		const expired = () => deadlineAt !== undefined && Date.now() >= deadlineAt
+		const run = await this.openFencedRun(fence)
 
 		const { items, violations } = normalizeAccountStateSlice(backupAccountState)
 		const result: Restored<BackupAccountState>[] = [...violations]
 
 		// The networks argument crosses the same trust boundary as the slice:
-		// require an array, cap the scan, keep only schema-valid rows — an
-		// invalid entry behaves as an absent network ("Network not found").
-		const safeNetworks = (Array.isArray(networks) ? networks : []).slice(0, 64).filter((n) => NetworkSchema.safeParse(n).success)
+		// require an array, cap the scan, keep only schema-valid rows of the fence's profile — any
+		// other entry behaves as an absent network ("Network not found").
+		const safeNetworks = (Array.isArray(networks) ? networks : [])
+			.slice(0, 64)
+			.filter((n) => NetworkSchema.safeParse(n).success && n.profileId === fence.profileId)
 
 		for (const item of items) {
 			const network = safeNetworks.find((n) => n.id === item.networkId)
@@ -313,7 +341,8 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 			const contracts: Restored<BackupContract>[] = []
 
 			// `launch` is the only await: a skipped operation or an empty item awaits nothing.
-			for (const prepared of this.iterateRegistrations(item, network, expired, reg, senders, contracts)) {
+			const target = network && run.target(network)
+			for (const prepared of this.iterateRegistrations(item, target, expired, reg, senders, contracts)) {
 				if (!prepared) continue
 				try {
 					await prepared.launch()
@@ -329,6 +358,22 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 		return result
 	}
 
+	/** Asserts the fence, then reads its profile's incarnation once, while the fence is still live. */
+	private async openFencedRun(fence: RunFence): Promise<{ target: (network: Network) => RegistrationTarget }> {
+		await this.profileService.assertRunFence(fence)
+		const pxeGeneration = await this.profileService.getPxeGeneration(fence.profileId)
+		if (!pxeGeneration || !this.profileService.isFenceLive(fence)) throw new SessionEndedError()
+		return {
+			target: (network) => ({
+				network,
+				info: () => {
+					if (!this.profileService.isFenceLive(fence)) throw new SessionEndedError()
+					return { ...networkInfoFrom(network), pxeGeneration }
+				},
+			}),
+		}
+	}
+
 	/** The returned text reaches the import's error viewer; the error is logged as an argument
 	 *  so the redactor scrubs and bounds it. */
 	private classifyRestoreFailure(networkId: string, err: unknown, reg: RestoreRegistrationState): string {
@@ -342,7 +387,7 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 	 *  samples its guards (unreachable, expired) only after the previous operation settled. */
 	private *iterateRegistrations(
 		item: { networkId: string; senders: BackupSender[]; contracts: BackupContract[] },
-		network: Network | undefined,
+		network: RegistrationTarget | undefined,
 		expired: () => boolean,
 		reg: RestoreRegistrationState,
 		senders: Restored<BackupSender>[],
@@ -359,7 +404,7 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 	private prepareSenderRegistration(
 		networkId: string,
 		sender: BackupSender,
-		network: Network | undefined,
+		network: RegistrationTarget | undefined,
 		expired: () => boolean,
 		reg: RestoreRegistrationState,
 		senders: Restored<BackupSender>[],
@@ -375,7 +420,7 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 		return {
 			launch: () => {
 				if (!network) throw new Error("Network not found")
-				return this.pxeService.registerSender(networkInfoFrom(network), AztecAddress.fromStringUnsafe(sender.address))
+				return this.pxeService.registerSender(network.info(), AztecAddress.fromStringUnsafe(sender.address))
 			},
 			recordSuccess: () => senders.push(sender),
 			recordFailure: (err) => senders.push({ ...sender, restoreError: this.classifyRestoreFailure(networkId, err, reg) }),
@@ -385,7 +430,7 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 	private prepareContractRegistration(
 		networkId: string,
 		contract: BackupContract,
-		network: Network | undefined,
+		network: RegistrationTarget | undefined,
 		expired: () => boolean,
 		reg: RestoreRegistrationState,
 		contracts: Restored<BackupContract>[],
@@ -394,7 +439,7 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 			contracts.push({ ...contract, restoreError: ACCOUNT_STATE_SKIP_UNREACHABLE })
 			return undefined
 		}
-		const precheck = precheckContractAddress(contract, network)
+		const precheck = precheckContractAddress(contract, network?.network)
 		if (precheck === "pxe-provided") return undefined
 		if (precheck !== "register") {
 			contracts.push(precheck)
@@ -410,7 +455,7 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 				// Upstream registration never checks the class id, so a backup could otherwise pair a
 				// contract's instance with an artifact of another class.
 				await assertWireArtifactClassId(contract.instance, contract.artifact)
-				return this.pxeService.registerContract(networkInfoFrom(network), {
+				return this.pxeService.registerContract(network.info(), {
 					instance: contract.instance,
 					artifact: contract.artifact,
 				})
@@ -446,6 +491,13 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 	}
 }
 
+/** A network a fenced run registers into. `info` throws once the run's fence has died, so it is read
+ *  right before each PXE call, with nothing awaited between the two. */
+interface RegistrationTarget {
+	network: Network
+	info: () => NetworkInfo & { pxeGeneration: string }
+}
+
 /** One launchable PXE registration with its per-outcome recorders. */
 interface PreparedRegistration {
 	launch: () => Promise<unknown>
@@ -456,7 +508,10 @@ interface PreparedRegistration {
 /** Synchronous pre-launch gate for one contract: network-first error precedence (a missing
  *  network reports "Network not found", not the address-parse error), then the contracts every
  *  PXE boot registers by itself (the protocol contracts, upstream's preloaded standard
- *  contracts) are skipped outright. The parse stays here so a malformed address keeps its error. */
+ *  contracts) are skipped outright. The parse stays here so a malformed address keeps its error.
+ *  The profile's own account contracts and the protocol sponsors (`fpc/protocol-fpcs.ts`) stay
+ *  registered from the slice: a dApp's utility read of one looks it up without registering it and
+ *  fails unless the PXE already holds it, and nothing guarantees an earlier registration. */
 function precheckContractAddress(
 	contract: BackupContract,
 	network: Network | undefined,

@@ -1,11 +1,8 @@
 import type { TransferSide } from "@/components/composite/send/publish-facts"
+import type { SendPick } from "@/utils/fee-picks"
 import { buildFeeMethods, defaultSponsor, type FeeMethodOption, type GasBalances, type RegisteredFpc } from "./fee-helpers"
 
 export type { TransferSide }
-
-/** The compact form a pick is stored in — never a presentation row. `fpc.name` only labels the
- *  loading preview; a pick is resolved by `fpc.id` against fresh rows, never by name. */
-export type SavedRecord = { type: "fj" | "private_fpc" | "fpc"; fpc?: { id: string; name?: string } | null }
 
 /** The committed snapshot the card holds. `undefined` balances = the gas read failed. The id sets are
  *  the card's sponsor verdicts, as `buildFeeMethods` takes them. */
@@ -92,7 +89,7 @@ function walkPublicOrigin(payers: Payers, know: FeeKnowledge): SendSelection {
 }
 
 /** The fresh row a saved pick names, or undefined when that row no longer exists. */
-export function rowForPick(pick: SavedRecord | undefined, methods: FeeMethodOption[]): FeeMethodOption | undefined {
+export function rowForPick(pick: SendPick | undefined, methods: FeeMethodOption[]): FeeMethodOption | undefined {
 	if (!pick) return undefined
 	if (pick.type !== "fpc") return methods.find((m) => m.type === pick.type)
 	const id = pick.fpc?.id
@@ -101,14 +98,14 @@ export function rowForPick(pick: SavedRecord | undefined, methods: FeeMethodOpti
 
 /** What the trigger shows before the first snapshot. FPC rows do not exist until the FPC list has
  *  loaded, so a sponsor pick is drawn from its saved label — display only, it carries no `fpc` to pay with. */
-export function previewForPick(pick: SavedRecord | undefined, methods: FeeMethodOption[]): FeeMethodOption | undefined {
+export function previewForPick(pick: SendPick | undefined, methods: FeeMethodOption[]): FeeMethodOption | undefined {
 	const row = rowForPick(pick, methods)
 	if (row || pick?.type !== "fpc" || !pick.fpc?.id) return row
 	return { type: "fpc", title: pick.fpc.name || "Sponsored", subtitle: "sponsored" }
 }
 
 /** A saved pick wins when its row still exists and is eligible; otherwise the default walk. */
-export function resolveSendSelection(origin: TransferSide, know: FeeKnowledge, pick: SavedRecord | undefined): SendSelection {
+export function resolveSendSelection(origin: TransferSide, know: FeeKnowledge, pick: SendPick | undefined): SendSelection {
 	const methods = buildFeeMethods(know.fpcs, know.balances, {
 		shortSponsorIds: know.shortSponsorIds,
 		setAsideSponsorIds: know.setAsideSponsorIds,
@@ -134,7 +131,7 @@ export function applyFpcEdits<T extends { id: string }>(fpcs: T[], edits: Readon
 }
 
 /** The compact record persisted for a picked row. */
-export function recordOf(method: FeeMethodOption): SavedRecord {
+export function recordOf(method: FeeMethodOption): SendPick {
 	if (method.type !== "fpc" || !method.fpc) return { type: method.type }
 	return { type: "fpc", fpc: method.fpc.name ? { id: method.fpc.id, name: method.fpc.name } : { id: method.fpc.id } }
 }

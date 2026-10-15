@@ -272,7 +272,7 @@ async function openPopupAt(page: Page, extensionId: string, hash: string): Promi
 	await page.setViewport({ width: 360, height: 600 })
 	await page.bringToFront()
 	await gotoExtensionPage(page, extensionUrl(extensionId, `/src/popup/index.html${hash}`))
-	await page.waitForFunction(() => window.location.hash !== "#/" && !document.querySelector('[data-testid="global-loader"]'), {
+	await page.waitForFunction(() => window.location.hash !== "#/" && document.querySelector('[data-service-ready="true"]'), {
 		timeout: 30_000,
 	})
 }

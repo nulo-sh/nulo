@@ -8,10 +8,11 @@
  *  - Unsubscribe: detaches both the event handler and the reconnect hook.
  */
 
-import { beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { RpcTimeoutError } from "@nulo/extension-messaging/errors"
 import { MessageType, type ResponseMessage } from "@nulo/extension-messaging/messages"
 import { capturePortMessage, emitPortMessage } from "../../../../tests/vitest.setup"
-import { ProfileServiceClient } from "./client"
+import { DELETE_PROFILE_TIMEOUT_MS, ProfileServiceClient, deleteProfileClient } from "./client"
 import { PROFILE_SERVICE_NAME, type Events, type ProfileInfo } from "./spec"
 
 const profileA: ProfileInfo = { id: "a", name: "A", type: "password" }
@@ -127,5 +128,48 @@ describe("ProfileServiceClient.subscribeActiveProfile", () => {
 		const callsBefore = capturePortMessage(PROFILE_SERVICE_NAME).mock.calls.length
 		await Promise.resolve()
 		expect(capturePortMessage(PROFILE_SERVICE_NAME).mock.calls.length).toBe(callsBefore)
+	})
+})
+
+describe("Delete Profile's bound", () => {
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	test("a deletion answered after 10 minutes resolves on the Delete Profile client", async () => {
+		vi.useFakeTimers()
+		const client = deleteProfileClient()
+		const call = client.deleteProfile("a")
+		await vi.advanceTimersByTimeAsync(10 * 60_000)
+		respondWith(nextRequestId(), profileA)
+		await expect(call).resolves.toEqual(profileA)
+		client.disconnect()
+	})
+
+	test("unanswered, it gives up at 30 minutes and 30 seconds, not before", async () => {
+		vi.useFakeTimers()
+		expect(DELETE_PROFILE_TIMEOUT_MS).toBe(30 * 60_000 + 30_000)
+		const client = deleteProfileClient()
+		const call = client.deleteProfile("a")
+		const settled = vi.fn()
+		call.then(settled, settled)
+		await vi.advanceTimersByTimeAsync(DELETE_PROFILE_TIMEOUT_MS - 1)
+		expect(settled).not.toHaveBeenCalled()
+		await vi.advanceTimersByTimeAsync(1)
+		await expect(call).rejects.toBeInstanceOf(RpcTimeoutError)
+		client.disconnect()
+	})
+
+	test("the shared client's deleteProfile and getProfiles still give up at 60 s", async () => {
+		vi.useFakeTimers()
+		const client = new ProfileServiceClient()
+		const calls = [client.deleteProfile("a"), client.getProfiles()]
+		const settled = vi.fn()
+		for (const call of calls) call.then(settled, settled)
+		await vi.advanceTimersByTimeAsync(60_000 - 1)
+		expect(settled).not.toHaveBeenCalled()
+		await vi.advanceTimersByTimeAsync(1)
+		for (const call of calls) await expect(call).rejects.toBeInstanceOf(RpcTimeoutError)
+		client.disconnect()
 	})
 })

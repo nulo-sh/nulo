@@ -25,6 +25,7 @@ import { JobCancelledError, RpcTimeoutError, SessionEndedError } from "@nulo/ext
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/spec"
 import { DappSendExecutor, type DappSendExecutorDeps } from "./dapp-send-executor"
+import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
 import type { ProveAndSendContext } from "./execution-coordinator"
 import { AUTHWITS_CHANGED_MESSAGE, ESTIMATE_INCOMPLETE_MESSAGE, PREVIEW_FOREIGN_MESSAGE, PreviewSnapshots } from "./preview-snapshots"
@@ -101,6 +102,7 @@ function makeTxRequest() {
 				gasLimits: { daGas: 100, l2Gas: 200 },
 				teardownGasLimits: { daGas: 10, l2Gas: 20 },
 				maxFeesPerGas: { feePerDaGas: 2n, feePerL2Gas: 3n },
+				maxPriorityFeesPerGas: { feePerDaGas: 0n, feePerL2Gas: 0n },
 			},
 		},
 	} as never
@@ -317,6 +319,31 @@ describe("DappSendExecutor.executeSendTransaction", () => {
 		expect(call[4]).toBe("https://dapp.example")
 	})
 
+	const SEND_OP = {
+		kind: "send_transaction",
+		networkId: "net-1",
+		accountAddress: "0xacct",
+		feeSettings: { paymentMethod: { kind: "fj" } },
+		actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+	} as never
+
+	test("names the claimed journal record to onJournalCreated once, before the send leaves", async () => {
+		const { executor, deps } = makeHarness()
+		const onJournalCreated = vi.fn(() => expect(deps.lane.markJournal).not.toHaveBeenCalled())
+		await executor.executeSendTransaction(SEND_OP, ORIGIN, undefined, FENCE, { onJournalCreated })
+		expect(onJournalCreated.mock.calls).toEqual([["j1"]])
+	})
+
+	test("a send whose journal claim fails names no record", async () => {
+		const { executor, deps } = makeHarness()
+		;(deps.lane.claimOrCreateJournal as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("claim broke"))
+		const onJournalCreated = vi.fn()
+		await expect(executor.executeSendTransaction(SEND_OP, ORIGIN, undefined, FENCE, { onJournalCreated })).rejects.toThrow(
+			"claim broke",
+		)
+		expect(onJournalCreated).not.toHaveBeenCalled()
+	})
+
 	test("records the SUBMITTING network's primary endpoint URL (recording-site pin)", async () => {
 		// addTransaction's submittedEndpointUrl (arg 7) must come from the network the
 		// executor built+submitted against — NOT re-derived from active-profile state,
@@ -463,6 +490,15 @@ describe("DappSendExecutor.executeAztecSendTx (standard path)", () => {
 		expect((deps.lane.acquireSlot as ReturnType<typeof vi.fn>).mock.results.length).toBe(1)
 	})
 
+	test("an embedded confirm builds with the app's fee settings, its priority fee included", async () => {
+		const fee = { embeddedFeePayment: "fpc", maxPriorityFeesPerGas: { feePerDaGas: "7", feePerL2Gas: "8" } }
+		const h = makeHarness({
+			planner: { processAztecJsPayload: vi.fn(async () => ({ actions: [], feePaymentMethod: undefined, feeOptions: fee })) } as never,
+		})
+		await h.executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
+		expect((h.buildAndEstimateValidated.mock.calls[0] as unknown[])[0]).toMatchObject({ fee })
+	})
+
 	test("embedded fee payment skips authwit discovery; non-embedded runs it", async () => {
 		const embedded = makeHarness({
 			planner: {
@@ -552,6 +588,23 @@ describe("DappSendExecutor.executeNoFromSendTx (via default_entrypoint)", () => 
 			...overrides,
 		})
 	}
+
+	test("the app's cap and priority fee reach the embedded cap as the wire carries them", async () => {
+		collectOffchainEffectsMock.mockReturnValue([])
+		const { executor } = makeHarness()
+		// As the wire carries them: the wallet-sdk serializes each bigint as a decimal string.
+		const gasSettings = {
+			maxFeesPerGas: { feePerDaGas: "5", feePerL2Gas: "6" },
+			maxPriorityFeesPerGas: { feePerDaGas: "7", feePerL2Gas: "8" },
+		}
+		const op = makeNoFromOp({ opts: { from: addr("0xacct"), additionalScopes: [], wait: "NO_WAIT", fee: { gasSettings } } })
+		await executor.executeAztecSendTx(op, ORIGIN, undefined, undefined, FENCE)
+		expect(vi.mocked(applyEmbeddedFpcGasCap).mock.calls.at(-1)?.[1]).toMatchObject({
+			embeddedFeePayment: "fpc",
+			maxFeesPerGas: { feePerDaGas: "5", feePerL2Gas: "6" },
+			maxPriorityFeesPerGas: { feePerDaGas: "7", feePerL2Gas: "8" },
+		})
+	})
 
 	test("non-embedded fee payment rejected before any slot work", async () => {
 		const { executor, deps } = makeHarness()
@@ -672,7 +725,7 @@ describe("DappSendExecutor.estimateOperationFee", () => {
 		const foldedOp = (buildAndEstimateFolded.mock.calls[0] as unknown[])[0] as { actions: unknown[] }
 		expect(foldedOp.actions).toEqual(originalActions)
 		expect(foldedOp.actions).not.toBe(originalActions)
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect("estimateId" in result && result.estimateId).toBeFalsy()
 	})
 
@@ -696,7 +749,7 @@ describe("DappSendExecutor.estimateOperationFee", () => {
 			actions: unknown[]
 		}
 		expect(builtOp.actions).toEqual([...originalActions, extraAction])
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect("estimateId" in result && result.estimateId).toBeFalsy()
 	})
 })
@@ -1908,6 +1961,82 @@ describe("DappSendExecutor.estimateOperationFee sponsor funding", () => {
 	})
 })
 
+describe("DappSendExecutor.estimateOperationFee: an operation the app pays for", () => {
+	const APP_PAYER = AztecAddress.fromNumberUnsafe(0xa9)
+	const EMBEDDED = { paymentMethod: { kind: "embedded" } } as never
+
+	function appPaidHarness(callsFeeJuice: boolean) {
+		const readPublicStorageOnce = vi.fn(async () => new Fr(0n))
+		const h = makeHarness({
+			readPublicStorageOnce,
+			planner: {
+				processAztecJsPayload: vi.fn(async () => ({
+					actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+					feePaymentMethod: undefined,
+					feeOptions: { embeddedFeePayment: "fpc" },
+				})),
+			} as never,
+		})
+		const gasSettings = new GasSettings(new Gas(100, 200), new Gas(10, 20), new GasFees(2n, 3n), new GasFees(0n, 0n))
+		Object.assign(h.built, {
+			txRequest: { authWitnesses: [], txContext: { gasSettings } },
+			appPayer: { address: APP_PAYER, callsFeeJuice },
+		})
+		return { ...h, readPublicStorageOnce }
+	}
+
+	test.each([
+		[false, true],
+		[true, false],
+	])(
+		"skips discovery, as its confirm does, and reads the app's fee contract (calls Fee Juice: %s)",
+		async (callsFeeJuice, provenShort) => {
+			const { executor, authwit, buildAndEstimateValidated, buildAndEstimateFolded } = appPaidHarness(callsFeeJuice)
+
+			const result = await executor.estimateOperationFee(makeAztecOp({ feeSettings: EMBEDDED }), EMBEDDED)
+
+			expect(authwit.discoverPrivateAuthwits).not.toHaveBeenCalled()
+			expect(buildAndEstimateFolded).not.toHaveBeenCalled()
+			expect((buildAndEstimateValidated.mock.calls[0] as unknown[])[0]).toMatchObject({ fee: { embeddedFeePayment: "fpc" } })
+			expect(result.appPayerFunding).toEqual({ address: APP_PAYER.toString(), funded: false, provenShort })
+			expect(result).not.toHaveProperty("sponsorFunding")
+			expect(result.estimateId).toBeUndefined()
+		},
+	)
+
+	test("the priority part of the figure is set, with its formatted pair, only when it shows as more than zero", async () => {
+		const { executor, built } = appPaidHarness(true)
+		const op = () => makeAztecOp({ feeSettings: EMBEDDED })
+		const plain = await executor.estimateOperationFee(op(), EMBEDDED)
+		expect(plain).not.toHaveProperty("priorityFee")
+		expect(plain).not.toHaveProperty("priorityFeeFormatted")
+
+		// 100 · 2e12 + 200 · 3e12 = 8e14 (0.0008 FJ), of which 100 · 1e12 + 200 · 1e12 = 3e14 is priority.
+		const gasSettings = new GasSettings(
+			new Gas(100, 200),
+			new Gas(10, 20),
+			new GasFees(2_000_000_000_000n, 3_000_000_000_000n),
+			new GasFees(1_000_000_000_000n, 1_000_000_000_000n),
+		)
+		Object.assign(built, { txRequest: { authWitnesses: [], txContext: { gasSettings } } })
+		const result = await executor.estimateOperationFee(op(), EMBEDDED)
+		expect([result.maxFee, result.maxFeeFormatted]).toEqual(["800000000000000", "0.0008"])
+		expect([result.priorityFee, result.priorityFeeFormatted]).toEqual(["300000000000000", "0.0003"])
+
+		// 300 · 1e9 = 3e11 rounds to "0" at six decimals: the row would read "includes a 0 FJ priority fee".
+		const tiny = new GasSettings(
+			new Gas(100, 200),
+			new Gas(10, 20),
+			gasSettings.maxFeesPerGas,
+			new GasFees(1_000_000_000n, 1_000_000_000n),
+		)
+		Object.assign(built, { txRequest: { authWitnesses: [], txContext: { gasSettings: tiny } } })
+		const rounded = await executor.estimateOperationFee(op(), EMBEDDED)
+		expect(rounded).not.toHaveProperty("priorityFee")
+		expect(rounded).not.toHaveProperty("priorityFeeFormatted")
+	})
+})
+
 describe("DappSendExecutor: the activity record, field by field", () => {
 	const GAS_DETAILS = {
 		l2GasLimit: 200,
@@ -1939,7 +2068,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			feePaymentMethod: { kind: "fee_juice" },
 			hash: "0xhash",
 			submittedEndpointUrl: "https://rpc.submit",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
@@ -1958,7 +2087,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			feePaymentMethod: { kind: "fee_juice" },
 			hash: "0xhash",
 			submittedEndpointUrl: "https://rpc.submit",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
@@ -1992,7 +2121,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
 			hash: "0xhash",
 			submittedEndpointUrl: "https://rpc.live",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-1",
@@ -2012,7 +2141,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
 			hash: "0xhash",
 			submittedEndpointUrl: "https://rpc.submit",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
@@ -2102,7 +2231,7 @@ describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 						feeSettings: FPC_SETTINGS,
 						profileId: "p-active",
 						chainIdentity: { l1ChainId: 1, rollupVersion: 6 },
-						baseFeeFingerprint: "7:11",
+						builtCap: { feePerDaGas: 7n, feePerL2Gas: 11n },
 						primaryEndpointId: "ep2",
 						primaryEndpointUrl: "https://primary",
 						pendingHashes: [],
@@ -2158,6 +2287,7 @@ describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 		["default_entrypoint (not embedded)", () => makeAztecOp({ executionMode: "default_entrypoint" }), {}, "fj"],
 		["a detected embedded fee", () => makeAztecOp(), payload({ embeddedFeePayment: "fpc" }), "fj"],
 		["a dApp maxFeesPerGas", () => makeAztecOp(), payload({ maxFeesPerGas: { feePerDaGas: 5, feePerL2Gas: 6 } }), "fj"],
+		["a dApp maxPriorityFeesPerGas", () => makeAztecOp(), payload({ maxPriorityFeesPerGas: { feePerDaGas: 7, feePerL2Gas: 8 } }), "fj"],
 		["the fjwc kind", () => makeAztecOp(), {}, "fjwc"],
 		["the embedded kind", () => makeAztecOp(), {}, "embedded"],
 		["a non-fingerprintable operation", () => makeAztecOp(), payload({}, [() => 1]), "fj"],

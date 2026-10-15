@@ -22,7 +22,8 @@ E2E tests append `?test=1` to the URL and run the Vite dev server with `VITE_DIS
 - `pg-btn-{action}` for every button (e.g. `pg-btn-connect`, `pg-btn-sendTx-default`)
 - `pg-input-{name}` for every input (e.g. `pg-input-recipient`, `pg-input-amount`)
 - `pg-bundle-select` with `<option data-bundle-id="X">` per capability bundle
-- `pg-select-transferFn`: the Token transfer function `pg-btn-sendTx-default` builds, one of `transfer_public_to_public` (untouched), `transfer_private_to_private`, `transfer_private_to_public`, `transfer_public_to_private`; the NoFrom, feePayer, multicall and chunked buttons build `transfer_public_to_public`
+- `pg-input-maxFeesPerGas` and `pg-input-maxPriorityFeesPerGas`: the app's own `maxFeesPerGas` and `maxPriorityFeesPerGas`, each `da,l2` in base units; when either is set, every `sendTx` button passes it as `opts.fee.gasSettings`
+- `pg-select-transferFn`: the Token transfer function `pg-btn-sendTx-default` builds, one of `transfer_public_to_public` (untouched), `transfer_private_to_private`, `transfer_private_to_public`, `transfer_public_to_private`; the NoFrom, feePayer, app-sponsored, multicall and chunked buttons build `transfer_public_to_public`
 - `pg-result` rows with `data-result-seq` (monotonic), `data-method`, `data-status="pending|ok|error"`, `data-result-json` (JSON-escaped). Tests snapshot the seq before invocation and wait for the matching row.
 - `pg-error-text` (with `role="alert"`) for inline errors
 - `pg-protocol-log` (debug only)
@@ -49,12 +50,12 @@ Bundles are a playground-only convenience: the wallet itself models capabilities
 | Meta | `getChainInfo`, `getAccounts`, `getAddressBook` |
 | Contracts | `registerContract`, `registerSender`, `getContractMetadata`, `getContractClassMetadata` |
 | Simulation | `simulateTx`, `profileTx`, `executeUtility` |
-| Transactions | `sendTx` (default / NoFrom / NoFrom sponsored / feePayer / multicall / chunked / delegated) |
+| Transactions | `sendTx` (default / NoFrom / NoFrom sponsored / feePayer / app-sponsored / multicall / chunked / delegated) |
 | AuthWit | `createAuthWit` (callIntent / innerHash) |
 | Data | `getPrivateEvents` |
 | Batch | meta-only / mixed / partial-failure |
 
-The NoFrom button sends a public transfer, which the wallet refuses: the default entrypoint runs only a private call. NoFrom sponsored sends the one private call that can stand alone, the canonical SponsoredFPC's `sponsor_unconditionally`, after registering the sponsor, so it needs the `transaction-contracts` bundle.
+The NoFrom button sends a public transfer, which the wallet refuses: the default entrypoint runs only a private call. NoFrom sponsored sends the one private call that can stand alone, the canonical SponsoredFPC's `sponsor_unconditionally`, after registering the sponsor, so it needs the `transaction-contracts` bundle. App-sponsored sends a transfer the app pays for through a SponsoredFPC at the salt in `pg-input-sponsorSalt` (0, the canonical one, by default), built as aztec.js's `SponsoredFeePaymentMethod` builds it; it registers that sponsor too, so it needs the same bundle.
 
 `registerToken` is the only Nulo-custom RPC surfaced on top of the canonical wallet-sdk schema — see `packages/wallet-bridge/README.md` for the schema-patch contract. `getCompleteAddress` and `simulateViews` were retired (both dApp-facing AND, in the case of `simulateViews`, the internal op kind too) and are not coming back; use the granted-accounts capability response and `simulateUtility` / `BatchCall.simulate()` respectively.
 

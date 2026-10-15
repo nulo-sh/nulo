@@ -36,6 +36,10 @@ describe("Config — frozen UX defaults", () => {
 		expect(defaultConfig().theme).toBe("system")
 	})
 
+	test("privacy mode defaults OFF: lookups stay automatic until a person opts in", () => {
+		expect(defaultConfig().privacyMode).toBe(false)
+	})
+
 	test("debug + developer flags default OFF", () => {
 		const config = defaultConfig()
 		expect(config.developerMode).toBe(false)

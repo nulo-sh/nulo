@@ -39,6 +39,9 @@ export const emitPortDisconnect = (service: string) => ports.closeAll(service)
 
 export const capturePortMessage = (service: string) => ports.sendMock(service)
 
+/** This test's port registry, for tests that hold or count the background's Ready. */
+export const portRegistry = () => ports
+
 export const emitMessage = (message: unknown) => {
 	for (const listener of messageListeners) {
 		listener(message)

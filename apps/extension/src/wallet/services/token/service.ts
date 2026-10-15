@@ -26,7 +26,8 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { feeJuiceAddress, feeJuiceName, feeJuiceSymbol } from "@/wallet/utils/fee-juice"
 import { buildViewCall, type ViewFn } from "@/wallet/utils/fn"
-import { DEFAULT_TOKEN_SEEDS, type DefaultTokenSeed, findSeed } from "./default-tokens"
+import { TokenListService } from "@/wallet/services/token-list/service"
+import { type DefaultTokenSeed, seedsFromList } from "./default-tokens"
 import { PinMismatchError, TokenSeeder } from "./seeder"
 import {
 	type Token,
@@ -105,7 +106,8 @@ export * from "./spec"
 type SeederOverrides = {
 	getVersion?: () => string
 	enabled?: boolean
-	getSeeds?: () => Promise<readonly DefaultTokenSeed[]>
+	/** `undefined` falls through to the signed list: an armed e2e build whose test wrote no seeds. */
+	getSeeds?: () => Promise<readonly DefaultTokenSeed[] | undefined>
 }
 
 export class TokenService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
@@ -121,6 +123,9 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		"retrySeed",
 	)
 	public static name = TOKEN_SERVICE_NAME
+
+	/** The list's stored copy must be loaded before the first seed pass reads it. */
+	public readonly dependencies = [TokenListService.name] as const
 
 	public readonly onTokenAdded = new EventHandler<TokenAdded>()
 	public readonly onTokenDeleted = new EventHandler<TokenDeleted>()
@@ -141,6 +146,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	private accounts: AccountService = null!
 	private tasks: TaskService = null!
 	private journal: OperationJournalService = null!
+	private tokenList: TokenListService = null!
 	/** Stateless; the execution service owns another. Depending on that service for it would be a cycle. */
 	private readonly contractResolver: ContractResolver
 
@@ -164,6 +170,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		this.accounts = services.get(AccountService.name)
 		this.tasks = services.get(TaskService.name)
 		this.journal = services.get(OperationJournalService.name)
+		this.tokenList = services.get(TokenListService.name)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		this.networks.registerChainPurgeSubscriber(async (profileId, chainId) => this.clearChainState(profileId, chainId))
 
@@ -175,7 +182,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			{
 				getActiveProfile: () => this.profiles.getActiveProfile(),
 				getActiveNetwork: () => this.networks.getActiveNetwork(),
-				getSeeds: this.seederOverrides?.getSeeds ?? (async () => DEFAULT_TOKEN_SEEDS),
+				getSeeds: async () => (await this.seederOverrides?.getSeeds?.()) ?? seedsFromList(this.tokenList.getSnapshot()),
 				getAccounts: async (profileId, chainId) => await this.accounts.getAccounts(profileId, chainId),
 				preview: async (networkId, accountAddress, contract, expectedClassId) =>
 					await this.previewTokenMetadata(networkId, accountAddress, contract, expectedClassId),
@@ -187,9 +194,12 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			},
 			this.browserApi.storage.local,
 			this.logger,
-			this.seederOverrides?.getVersion,
+			// A new list is a new version, so a default it re-pinned gets a fresh round.
+			this.seederOverrides?.getVersion ??
+				(() => `${chrome.runtime.getManifest().version}+${this.tokenList.getSnapshot()?.sequence ?? 0}`),
 		)
 		if (this.seederOverrides?.enabled !== false) {
+			this.tokenList.onListChanged.add(this.onListChangedSeed)
 			this.profiles.onActiveProfileChanged.add(this.onActiveProfileChangedSeed)
 			this.networks.onActiveNetworkChanged.add(this.onActiveNetworkChangedSeed)
 			this.accounts.onAccountAdded.add(this.onAccountAddedSeed)
@@ -203,6 +213,10 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 
 	private readonly onActiveNetworkChangedSeed = (): void => {
 		void this.seeder.run()
+	}
+
+	private readonly onListChangedSeed = (): void => {
+		void this.seeder.listChanged()
 	}
 
 	/**
@@ -575,6 +589,12 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		return await this.seeder.retry(chainId, contract)
 	}
 
+	/** Listed defaults on `chainId` whose current pins `profileId`'s seeding verified on chain. SW-internal. */
+	public async getVerifiedDefaults(profileId: string, chainId: number): Promise<DefaultTokenSeed[]> {
+		await this.ensureInitialized()
+		return await this.seeder.verifiedSeeds(profileId, chainId)
+	}
+
 	/** Re-arms a retry the previous service worker persisted but did not live to
 	 *  run. SW-internal (the composition root calls it once the services are up). */
 	public async resumeSeeding(): Promise<void> {
@@ -617,13 +637,11 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profiles)
 		const token = requireOwnedRow(await this.tokens.get(`${id}`), profile.id, "unknown token id")
-		// An explicit user delete of a DEFAULT token writes a permanent
-		// tombstone: the seeder must never resurrect it — not on the next
-		// unlock, and not after a network remove/re-add (tombstones survive
+		// Every explicit user delete writes a permanent tombstone, listed or not: the
+		// list can name the token later, and the seeder must never resurrect it — not on
+		// the next unlock, and not after a network remove/re-add (tombstones survive
 		// chain purges; only the attempt bookkeeping resets there).
-		if (findSeed(token.chainId, token.contract)) {
-			await this.seeder.markDeletedByUser(profile.id, token.chainId, token.contract)
-		}
+		await this.seeder.markDeletedByUser(profile.id, token.chainId, token.contract)
 		return this._deleteTokenById(id)
 	}
 

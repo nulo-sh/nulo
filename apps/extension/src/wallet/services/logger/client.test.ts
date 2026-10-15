@@ -37,40 +37,46 @@ afterEach(async () => {
  * `jsonSanitize`. The logger client is private to its module, so the transport is observed at
  * `chrome.runtime.connect`.
  */
-function captureWire(context: "popup" | "offscreen"): { logger: ILogger; sent: () => unknown[] } {
-	return { logger: documentLogger(context), sent: () => registry.posted.flatMap((p) => [p.method, ...p.params]) }
+function captureWire(context: "popup" | "offscreen"): { logger: ILogger; sent: () => Promise<unknown[]> } {
+	const sent = async () => {
+		// A fresh port posts its first line once the background says Ready.
+		await vi.waitFor(() => expect(registry.posted.length).toBeGreaterThan(0))
+		return registry.posted.flatMap((p) => [p.method, ...p.params])
+	}
+	return { logger: documentLogger(context), sent }
 }
 
 describe("documentLogger — redaction before the wire", () => {
-	test("blanks a secret key before it crosses the RPC", () => {
+	test("blanks a secret key before it crosses the RPC", async () => {
 		const { logger, sent } = captureWire("popup")
 
 		logger.log("ui", LogLevel.Error, { password: SECRET })
 
-		expect(JSON.stringify(sent())).not.toContain(SECRET)
+		expect(JSON.stringify(await sent())).not.toContain(SECRET)
 	})
 
-	test("projects an Error before jsonSanitize can flatten it into a stack-carrying object", () => {
+	test("projects an Error before jsonSanitize can flatten it into a stack-carrying object", async () => {
 		const { logger, sent } = captureWire("popup")
 
 		logger.log("ui", LogLevel.Error, new Error(`failed for https://rpc.example.com/v2/${SECRET}`))
 
-		expect(sent()[4]).toEqual({ name: "Error", message: "failed for https://rpc.example.com" })
-		expect(sent()[4]).not.toBeInstanceOf(Error)
+		const wire = await sent()
+		expect(wire[4]).toEqual({ name: "Error", message: "failed for https://rpc.example.com" })
+		expect(wire[4]).not.toBeInstanceOf(Error)
 	})
 
-	test("summarises a typed array instead of shipping its bytes", () => {
+	test("summarises a typed array instead of shipping its bytes", async () => {
 		const { logger, sent } = captureWire("popup")
 
 		logger.log("ui", LogLevel.Error, { key: new Uint8Array([1, 2, 3, 4]) })
 
-		const wire = JSON.stringify(sent())
+		const wire = JSON.stringify(await sent())
 		expect(wire).toContain("Uint8Array(4)")
 		// The generic walk would have serialized it as {"0":1,"1":2,…}.
 		expect(wire).not.toContain('"0":1')
 	})
 
-	test("collapses a real Note shape before it leaves the popup", () => {
+	test("collapses a real Note shape before it leaves the popup", async () => {
 		const { logger, sent } = captureWire("popup")
 
 		// A COMPLETE Note — the collapse requires contract/txHash/storageSlot/rawContent, so a
@@ -84,20 +90,22 @@ describe("documentLogger — redaction before the wire", () => {
 			content: { amount: SECRET },
 		})
 
-		expect(JSON.stringify(sent())).not.toContain(SECRET)
-		expect(sent()[4]).toMatchObject({ note: "UintNote", rawContentLen: 1, contentKeys: 1 })
+		const wire = await sent()
+		expect(JSON.stringify(wire)).not.toContain(SECRET)
+		expect(wire[4]).toMatchObject({ note: "UintNote", rawContentLen: 1, contentKeys: 1 })
 	})
 
-	test("still forwards the routing arguments unchanged", () => {
+	test("still forwards the routing arguments unchanged", async () => {
 		const { logger, sent } = captureWire("offscreen")
 
 		logger.log("pxe", LogLevel.Warn, "plain message")
 
-		expect(sent()[0]).toBe("log")
-		expect(sent()[1]).toBe("offscreen")
-		expect(sent()[2]).toBe("pxe")
-		expect(sent()[3]).toBe(LogLevel.Warn)
-		expect(sent()[4]).toBe("plain message")
+		const wire = await sent()
+		expect(wire[0]).toBe("log")
+		expect(wire[1]).toBe("offscreen")
+		expect(wire[2]).toBe("pxe")
+		expect(wire[3]).toBe(LogLevel.Warn)
+		expect(wire[4]).toBe("plain message")
 	})
 })
 
@@ -128,6 +136,7 @@ describe("documentLogger — the worker's level gate", () => {
 	async function knowing(level: unknown): Promise<ILogger> {
 		const logger = documentLogger("popup")
 		logger.log("ui", LogLevel.Info, "first")
+		await vi.waitFor(() => expect(gate.posted).toHaveLength(1))
 		answerAll(level)
 		await settle()
 		return logger
@@ -171,7 +180,7 @@ describe("documentLogger — the worker's level gate", () => {
 		const logger = await knowing(LogLevel.Info)
 		gate.closeAll(LOGGER_SERVICE_NAME)
 		logger.log("ui", LogLevel.Debug, "line")
-		expect(sentLevels()).toEqual([LogLevel.Info, LogLevel.Debug])
+		await vi.waitFor(() => expect(sentLevels()).toEqual([LogLevel.Info, LogLevel.Debug]))
 		expect(gate.posted[1].port).not.toBe(gate.posted[0].port)
 		answerAll(LogLevel.Info)
 	})
@@ -218,7 +227,8 @@ describe("documentLogger — against a real LoggerService", () => {
 		const reached = joinPorts()
 		const config = { onUpdate: new EventHandler<ConfigProp>(), get: (() => false) as IConfig["get"] }
 		const store = new LoggerStore(config)
-		new LoggerService(store)
+		// A started wallet: its ports say Ready.
+		new LoggerService(store).collectionStarted()
 		const line = (level: LogLevel, text: string) => documentLogger("popup").log("ui", level, text) as unknown as Promise<unknown>
 		const sentToWorker = () => JSON.stringify(reached.worker)
 

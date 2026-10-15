@@ -14,8 +14,7 @@ import { FpcServiceClient, FpcType } from "@/wallet/services/fpc/client"
 /** Utils */
 import { stringCompare } from "@/utils/string"
 import { copyWithToast } from "@/utils/clipboard"
-import { UI_STORAGE_KEYS } from "@/popup/constants/storage-keys"
-import { storageLocalGet, storageLocalSet } from "@/utils/storage"
+import { managers } from "@/utils/core"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -26,7 +25,6 @@ import FpcRow from "@/popup/components/modules/settings/fpcs/FpcRow.vue"
 
 /** Helpers */
 import { fpcSortOrder, isSyntheticRow, prepareFpc, PUBLIC_FJ_ROW } from "@/popup/components/modules/settings/fpcs/fpc-helpers"
-import { mutateSendSelections, withoutFpc } from "@/popup/components/modules/send/fee-send-selection"
 
 const { openToast } = useToast()
 
@@ -37,8 +35,6 @@ import { usePopupStore } from "@/stores/popup.store"
 const appStore = useAppStore()
 const cacheStore = useCacheStore()
 const popupStore = usePopupStore()
-
-const FEE_METHOD_LS_KEY = UI_STORAGE_KEYS.FEE_PAYMENT_METHODS
 
 /** Service clients */
 const fpcService = new FpcServiceClient()
@@ -90,17 +86,7 @@ const handleDelete = (fpc) => {
 	cacheStore.confirm.description = "By confirming this action, the selected FPC will be permanently deleted from your wallet"
 	cacheStore.confirm.callback = async () => {
 		await fpcService.deleteFpc(fpc.id)
-
-		const fpms = (await storageLocalGet(FEE_METHOD_LS_KEY))[FEE_METHOD_LS_KEY] || {}
-		if (Object.keys(fpms).length) {
-			for (const [account, data] of Object.entries(fpms)) {
-				if (data.fpc?.id === fpc.id) {
-					delete fpms[account]
-				}
-			}
-			await storageLocalSet({ [FEE_METHOD_LS_KEY]: fpms })
-		}
-		await mutateSendSelections((raw) => withoutFpc(raw, fpc.id))
+		await managers.profile.saveFeePick(fpc.profileId, { kind: "forgetFpc", fpcId: fpc.id })
 
 		openToast({ kind: "success", label: "FPC is deleted" })
 	}

@@ -94,8 +94,25 @@ const props = defineProps({
 		type: Boolean,
 		default: undefined,
 	},
-	/** The native `<input>`'s `aria-activedescendant` and `aria-controls`, for a field that drives a
-	 *  list it does not contain. */
+	/** The native `<input>`'s `aria-labelledby`, for a field whose visible label sits outside the component. */
+	ariaLabelledby: {
+		type: String,
+		required: false,
+	},
+	/** The native `<input>`'s `role`, `aria-expanded`, `aria-autocomplete`, `aria-activedescendant`
+	 *  and `aria-controls`, for a field that drives a list it does not contain. */
+	role: {
+		type: String,
+		required: false,
+	},
+	ariaExpanded: {
+		type: Boolean,
+		default: undefined,
+	},
+	ariaAutocomplete: {
+		type: String as PropType<"list" | "inline" | "both">,
+		required: false,
+	},
 	ariaActivedescendant: {
 		type: String,
 		required: false,
@@ -290,20 +307,22 @@ const handleClear = () => {
 				<slot name="labelSuffix" />
 			</Flex>
 
-			<Transition v-if="warning.show" name="fade">
-				<Tooltip position="end">
-					<Flex align="center" gap="6">
-						<Icon name="warning" size="12" color="yellow" />
-						<Text variant="body" color="primary"> Maximum length reached </Text>
-					</Flex>
+			<!-- The caller's message wins: the length note is the fallback, shown only while the slot is
+				 empty, so a caller passes `#right` only while its message shows. -->
+			<slot name="right">
+				<Transition v-if="warning.show" name="fade">
+					<Tooltip position="end">
+						<Flex align="center" gap="6">
+							<Icon name="warning" size="12" color="yellow" />
+							<Text variant="body" color="primary"> Maximum length reached </Text>
+						</Flex>
 
-					<template #content>
-						{{ warning.text }}
-					</template>
-				</Tooltip>
-			</Transition>
-
-			<slot v-else name="right" />
+						<template #content>
+							{{ warning.text }}
+						</template>
+					</Tooltip>
+				</Transition>
+			</slot>
 		</Flex>
 
 		<Flex
@@ -333,7 +352,11 @@ const handleClear = () => {
 					:autocomplete="autocomplete"
 					:autocapitalize="autocapitalize"
 					:autocorrect="autocorrect"
+					:role="role"
+					:aria-labelledby="ariaLabelledby"
 					:aria-invalid="ariaInvalid"
+					:aria-expanded="ariaExpanded"
+					:aria-autocomplete="ariaAutocomplete"
 					:aria-activedescendant="ariaActivedescendant"
 					:aria-controls="ariaControls"
 					:data-testid="inputTestid"

@@ -31,13 +31,11 @@ const addressModel = defineModel("address", { type: String, default: "" })
 		v-model="nameModel"
 		inputTestid="contact-name-input"
 	>
-		<template #right>
-			<Transition name="fade">
-				<Flex v-if="nameExists" align="center" gap="6" data-testid="contact-name-exists">
-					<Icon name="warning" size="12" color="primary" />
-					<Text variant="body" color="primary"> Already exist </Text>
-				</Flex>
-			</Transition>
+		<template v-if="nameExists" #right>
+			<Flex align="center" gap="6" data-testid="contact-name-exists">
+				<Icon name="warning" size="12" color="primary" />
+				<Text variant="body" color="primary"> Already exist </Text>
+			</Flex>
 		</template>
 	</Input>
 

@@ -11,8 +11,8 @@ Accepted code work that blocks launch is not listed here: it is the
 
 ## 1. Any time before v1.0.0 — look these up, do not guess
 
-**Done** for the privacy policy, every row below; the Terms carry the same security URL and Presto
-links. Each filled fact reads in place in `legal/privacy.md` and `legal/terms.md`.
+**Done** for the privacy policy, every row below but the last; the Terms carry the same security
+URL and Presto links. Each filled fact reads in place in `legal/privacy.md` and `legal/terms.md`.
 
 | Fill | Where | How to find it |
 |---|---|---|
@@ -25,6 +25,7 @@ links. Each filled fact reads in place in `legal/privacy.md` and `legal/terms.md
 | EU/UK Article 27 representative | `legal/privacy.md` § 10 | Only if required. **Delete the line** if not; never leave it blank |
 | Security-reporting URL | `legal/terms.md` § 24, `legal/privacy.md` § 13 | A URL that resolves for a reader outside the repo (`SECURITY.md` is a repo path) |
 | Presto's own licence + privacy links | `legal/terms.md` § 7, `legal/privacy.md` § 5.8 | Published by the Presto native app |
+| Re-read what the Cloudflare dashboard exposes, now with `tokens.nulo.sh` | `legal/privacy.md` §§ 5.5, 5.11 | Once the `nulo-tokens` Worker serves that domain: open the zone's request sample filtered to the hostname and confirm § 5.5's list still holds. Workers Logs stays off (`infra/token-list/wrangler.jsonc`) |
 
 ## 2. When the store listings exist
 

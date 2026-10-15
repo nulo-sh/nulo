@@ -11,6 +11,7 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import type { PriceState } from "@/wallet/services/price/spec"
 import { TransactionServiceClient } from "@/wallet/services/transaction/client"
 import GasBalanceCard from "./GasBalanceCard.vue"
+import { TEST_PRICED_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
 // Reactive so tests can drive identity changes (the card's `scope` computed
 // and the store's belt watcher both read it live).
@@ -38,7 +39,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: new EventHandler(),
 			onConnected: new EventHandler(),
-			refreshIfStale: vi.fn().mockImplementation(async () => mockQuotes),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
+			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: mockQuotes, pricedTokens: TEST_PRICED_TOKENS })),
 		}
 	}),
 }))
