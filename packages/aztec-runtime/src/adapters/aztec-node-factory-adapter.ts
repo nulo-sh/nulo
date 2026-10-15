@@ -55,10 +55,13 @@ export function isAllowedRpcUrl(rpcUrl: string): { ok: true } | { ok: false; rea
 	const verdict = rpcTransportVerdict(parsed)
 	if (verdict.allowed) return { ok: true }
 	if (verdict.refusal === "userinfo") return { ok: false, reason: "userinfo is not permitted in an RPC URL" }
-	if (verdict.refusal === "non-loopback-http") {
-		return { ok: false, reason: `http: only permitted for loopback hosts (got host="${verdict.host}")` }
+	if (verdict.refusal === "http-host") {
+		return { ok: false, reason: `http: only permitted for localhost and 127.0.0.1 (got host="${verdict.host}")` }
 	}
-	return { ok: false, reason: `scheme "${verdict.scheme}:" not in allowlist (only https: and http://loopback are permitted)` }
+	return {
+		ok: false,
+		reason: `scheme "${verdict.scheme}:" not in allowlist (only https: and http: to localhost or 127.0.0.1 are permitted)`,
+	}
 }
 
 export class AztecNodeFactoryAdapter implements NodeFactory {

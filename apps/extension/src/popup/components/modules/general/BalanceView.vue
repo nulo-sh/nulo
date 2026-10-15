@@ -114,8 +114,8 @@ const displayedTokenFiat = computed(() => {
 const fiatOf = safeFiatOf((tb) => prices.tokenFiatMicro(tb.token, parseRawBalance(tb)))
 const aggregate = computed(() => aggregateFiat(tokenBalances.value, fiatOf))
 
-/** Always a dollar figure — holdings that lack a price count as $0.00 and
- *  the "priced assets only" caption owns the honesty, never an em-dash. */
+/** Holdings that lack a price count as $0.00 under the "priced assets only" caption; a wallet where
+ *  none has one after a failed fetch is `pricesUnavailable`. */
 const aggregateFiatDisplay = computed(() => prices.formatUsdMicro(aggregate.value.micro))
 const isAggregatePartial = computed(() => aggregate.value.partial)
 
@@ -202,20 +202,19 @@ function restartCap() {
 		capElapsed.value = true
 	}, HERO_PENDING_CAP_MS)
 }
+/** A positive holding a price could cover. Before the mapping arrives, any holding may be priced. */
+const isPriceableHolding = (tb) =>
+	typeof tb.token?.contract === "string" &&
+	(parseRawBalance(tb) ?? 0n) > 0n &&
+	(!prices.mapped.value || prices.isPriced(tb.token.chainId, tb.token.contract))
 /** A price-mapped holding counts as $0.00 until its quote lands, so a wallet holding one waits for
- *  the first price answer; an empty or unpriced wallet has none to wait for. Before the mapping
- *  arrives, any holding may be priced. */
-const awaitingQuotes = computed(
-	() =>
-		showFiatValues.value &&
-		!prices.settled.value &&
-		tokenBalances.value.some(
-			(tb) =>
-				typeof tb.token?.contract === "string" &&
-				(parseRawBalance(tb) ?? 0n) > 0n &&
-				(!prices.mapped.value || prices.isPriced(tb.token.chainId, tb.token.contract)),
-		),
-)
+ *  the first price answer; an empty or unpriced wallet has none to wait for. */
+const awaitingQuotes = computed(() => showFiatValues.value && !prices.settled.value && tokenBalances.value.some(isPriceableHolding))
+const pricesUnavailable = computed(() => {
+	if (!showFiatValues.value || !prices.unavailable.value) return false
+	const holdings = tokenBalances.value.filter(isPriceableHolding)
+	return holdings.length > 0 && holdings.every((tb) => fiatOf(tb) === undefined)
+})
 const heroPending = computed(() => (isTotalUnsettled.value || awaitingQuotes.value) && !capElapsed.value)
 /** After the cap one question decides the figure: did ANY snapshot succeed for this scope? A loaded
  *  empty list is a real $0.00; a list that never loaded is unknown. */
@@ -251,7 +250,10 @@ watch(
 )
 // Only a figure the hero displays is recorded: loading, unknown and fiat off count nothing.
 watch(
-	() => (!tokenToDisplay.value && showFiatValues.value && !heroPending.value && isTotalKnown.value ? aggregate.value.micro : null),
+	() =>
+		!tokenToDisplay.value && showFiatValues.value && !heroPending.value && isTotalKnown.value && !pricesUnavailable.value
+			? aggregate.value.micro
+			: null,
 	(micro) => (micro === null ? balanceCount.reset() : balanceCount.observe(micro)),
 	{ immediate: true },
 )
@@ -303,6 +305,7 @@ onBeforeUnmount(() => {
 						<span :class="$style.balance_symbol">{{ tokenToDisplay?.symbol }}</span>
 					</span>
 					<Skeleton v-else-if="heroPending" :width="150" :height="40" data-testid="balance-hero-loading" :class="$style.hero_skeleton" />
+					<span v-else-if="isTotalKnown && pricesUnavailable" aria-hidden="true">—</span>
 					<span v-else-if="isTotalKnown" :class="$style.hero_fit" :style="{ '--hero-scale': heroFit.scale }">{{ heroText }}</span>
 					<!-- The balance list could not be read at all: unknown, which is not zero. -->
 					<span v-else data-testid="balance-hero-unknown">—</span>
@@ -336,7 +339,14 @@ onBeforeUnmount(() => {
 				{{ displayedTokenFiat }}
 			</div>
 			<div
-				v-if="!tokenToDisplay && !heroPending && isTotalKnown && isAggregatePartial"
+				v-if="!tokenToDisplay && !heroPending && isTotalKnown && pricesUnavailable"
+				data-testid="balance-prices-unavailable"
+				:class="$style.fiat_partial"
+			>
+				Prices unavailable
+			</div>
+			<div
+				v-else-if="!tokenToDisplay && !heroPending && isTotalKnown && isAggregatePartial"
 				data-testid="balance-fiat-partial"
 				:class="$style.fiat_partial"
 			>
