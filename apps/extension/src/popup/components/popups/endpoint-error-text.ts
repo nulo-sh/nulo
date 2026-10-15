@@ -6,8 +6,7 @@ import {
 	ERR_RPC_URL_IPV6_LOOPBACK,
 } from "@/wallet/services/network/spec"
 
-/** The line a refused RPC URL shows under its field in every network form, or `undefined` when the
- *  schema did not refuse it for one of these reasons. */
+/** Finds an RPC URL field line in a serialized validation error, which carries every issue's message. */
 export function refusedRpcUrlLine(msg: string): string | undefined {
 	return [ERR_RPC_URL_HIDDEN_CHARACTERS, ERR_RPC_URL_IPV6_LOOPBACK].find((line) => msg.includes(line))
 }

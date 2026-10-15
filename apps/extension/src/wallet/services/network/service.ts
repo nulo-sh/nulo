@@ -647,8 +647,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			const network = requireOwnedRow(await this.storage.get(id), profile.id)
 			await this._writeActive(profile.id, id)
 			const primaryEndpoint = findPrimaryEndpoint(network)
-			// A stored URL the transport rule now refuses must fail where an unreachable node fails, at
-			// the first read: thrown here, it would stop popup start before Settings could fix it.
+			// A stored URL the transport rule refuses must fail where an unreachable node fails, at the
+			// first read: thrown here, it would stop popup start before Settings could fix it.
 			if (primaryEndpoint && isAllowedRpcUrl(primaryEndpoint.rpcUrl).ok) {
 				this.nodes.set(network.chainId, this.nodeFactory.createNode(primaryEndpoint.rpcUrl))
 			} else if (primaryEndpoint) {

@@ -23,10 +23,10 @@ export function rpcTransportVerdict(url: URL): RpcTransportVerdict {
 	return { allowed: false, refusal: "scheme", scheme }
 }
 
-/** Spaces, control characters, bidirectional controls and the zero-width characters. Each can make
- *  the URL a person reads differ from the one dialed: `URL` drops a tab or newline silently and
- *  percent-encodes the rest. */
-const HIDDEN_URL_CHARACTER = /[\p{White_Space}\p{Cc}\p{Bidi_Control}\u200B-\u200D\u2060\uFEFF]/u
+/** Spaces, control characters and invisible format characters (zero-width, bidirectional controls,
+ *  the byte-order mark, fillers). Each can make the URL a person reads differ from the one dialed:
+ *  URL parsing silently drops some of them and percent-encodes the rest. */
+const HIDDEN_URL_CHARACTER = /[\p{White_Space}\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}]/u
 
 /** True when a hidden character sits inside the URL. The edges are exempt: they are what
  *  `String.prototype.trim` strips, the common paste accident, which the schema trims away. */

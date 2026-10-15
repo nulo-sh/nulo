@@ -54,7 +54,6 @@ const form = useFormState({
 const nameTerm = form.fields.name.value
 const urlTerm = form.fields.url.value
 
-/** The RPC field's own warning after a failed create; empty when there is none. */
 const urlFailureText = ref("")
 const isNameAlreadyExist = computed(() => form.fields.name.error.value === "Already exists")
 const isUrlAlreadyExist = computed(() => form.fields.url.error.value === "Already exists")

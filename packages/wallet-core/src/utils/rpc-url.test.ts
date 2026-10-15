@@ -32,6 +32,8 @@ describe("hasHiddenUrlCharacter", () => {
 		["a byte-order mark inside", "https://rpc.example/\uFEFFp"],
 		["a right-to-left override", "https://rpc.example/\u202Ep"],
 		["a right-to-left mark", "https://rpc.example/p\u200F"],
+		["a Hangul filler, which a host drops silently", "https://trusted.test\u3164evil.test/"],
+		["a soft hyphen", "https://rpc.ex\u00ADample/"],
 	])("refuses %s", (_, url) => {
 		expect(hasHiddenUrlCharacter(url)).toBe(true)
 	})

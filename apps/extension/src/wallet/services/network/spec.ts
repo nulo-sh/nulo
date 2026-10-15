@@ -56,9 +56,9 @@ const NetworkEndpointRowSchema: z.ZodType<NetworkEndpoint> = z.object({
 })
 
 /** STORAGE codec row schema — structural only, deliberately LAXER than the wire
- *  `NetworkSchema` below (no `RpcUrlSchema` refine, no `.min(1)`): a legacy row
- *  written before a value-constraint was tightened must still LOAD (the strict
- *  rules keep applying at the add/update/restore boundaries). The `kind` enum
+ *  `NetworkSchema` below (no `.min(1)`): a legacy row written before a
+ *  value-constraint was tightened must still LOAD (the strict rules keep applying
+ *  at the add/update/restore boundaries). The `kind` enum
  *  list MUST stay in sync with `ChainKind` above: a new kind written before it
  *  is added here would make those rows unreadable (kept, but hidden) on read. */
 export const NetworkRowSchema: z.ZodType<Network> = z.object({
@@ -145,10 +145,9 @@ export const ChainKindSchema: z.ZodType<ChainKind> = z.enum(["mainnet", "testnet
  * zod's `.url()` returns the trimmed string, so a caller stores the parsed value,
  * never its own argument.
  *
- * Runs on the params of the popup client (`network/client.ts`) and of the
- * service, and on the backup-restore network filter (`account-state/service.ts`);
- * not on results, nor in the lax storage row codec. The node-factory adapter
- * applies the transport rule on its own to every URL it dials.
+ * Runs on every input URL: the params of the popup client (`network/client.ts`)
+ * and of the service. A stored URL is never re-judged by it (see `NetworkSchema`);
+ * the node-factory adapter applies the transport rule to every URL it dials.
  */
 export const RpcUrlSchema = z
 	.string()
@@ -168,33 +167,18 @@ export const RpcUrlSchema = z
 		ctx.addIssue({ code: "custom", message: ipv6Loopback ? ERR_RPC_URL_IPV6_LOOPBACK : ERR_RPC_URL_TRANSPORT })
 	})
 
-export const NetworkEndpointSchema: z.ZodType<NetworkEndpoint> = z.object({
-	id: z.string(),
-	rpcUrl: RpcUrlSchema,
-	label: z.string().optional(),
-})
-
-const networkFields = {
+/** A network as storage holds it, every field checked except each endpoint's URL, which is read as
+ *  the row codec reads it: a URL saved before a rule tightened (an `http://[::1]` node) must still
+ *  list and restore, so the person can switch or delete it. */
+export const NetworkSchema: z.ZodType<Network> = z.object({
 	id: z.string(),
 	profileId: z.string(),
 	chainId: z.number(),
 	l1ChainId: z.number().int().nonnegative().max(0xffffffff),
 	name: z.string(),
 	primaryEndpointId: z.string(),
-	kind: ChainKindSchema.optional(),
-}
-
-export const NetworkSchema: z.ZodType<Network> = z.object({
-	...networkFields,
-	endpoints: z.array(NetworkEndpointSchema).min(1),
-})
-
-/** The service's answers: `NetworkSchema` with each stored endpoint URL read as the row codec reads
- *  it. A URL saved before a rule tightened (an `http://[::1]` node) must still list, so the person
- *  can switch or delete it; new input still meets `RpcUrlSchema` as a param. */
-const NetworkResultSchema: z.ZodType<Network> = z.object({
-	...networkFields,
 	endpoints: z.array(NetworkEndpointRowSchema).min(1),
+	kind: ChainKindSchema.optional(),
 })
 
 export const NodeStatusSchema: z.ZodType<NodeStatus> = z.enum(NodeStatus)
@@ -206,43 +190,43 @@ export const NodeStatusSchema: z.ZodType<NodeStatus> = z.enum(NodeStatus)
 export const NetworkMethodSchemas = {
 	getOrInitNetworks: {
 		params: z.tuple([]),
-		result: z.array(NetworkResultSchema),
+		result: z.array(NetworkSchema),
 	},
 	seedDefaultsForProfile: {
 		params: z.tuple([z.string().min(1)]),
-		result: z.array(NetworkResultSchema),
+		result: z.array(NetworkSchema),
 	},
 	getNetworks: {
 		params: z.tuple([z.number().int().nonnegative().optional()]),
-		result: z.array(NetworkResultSchema),
+		result: z.array(NetworkSchema),
 	},
 	getNetwork: {
 		params: z.tuple([z.string().min(1)]),
-		result: NetworkResultSchema,
+		result: NetworkSchema,
 	},
 	addNetwork: {
 		params: z.tuple([z.string().min(1), RpcUrlSchema]),
-		result: NetworkResultSchema,
+		result: NetworkSchema,
 	},
 	renameNetwork: {
 		params: z.tuple([z.string().min(1), z.string().min(1)]),
-		result: NetworkResultSchema,
+		result: NetworkSchema,
 	},
 	deleteNetwork: {
 		params: z.tuple([z.string().min(1)]),
-		result: NetworkResultSchema,
+		result: NetworkSchema,
 	},
 	setActiveNetwork: {
 		params: z.tuple([z.string().min(1)]),
-		result: NetworkResultSchema,
+		result: NetworkSchema,
 	},
 	getActiveNetwork: {
 		params: z.tuple([]),
-		result: NetworkResultSchema.nullable(),
+		result: NetworkSchema.nullable(),
 	},
 	getPrimaryNetwork: {
 		params: z.tuple([]),
-		result: NetworkResultSchema.nullable(),
+		result: NetworkSchema.nullable(),
 	},
 	setActiveForProfile: {
 		params: z.tuple([z.string().min(1), z.string().min(1)]),
@@ -262,7 +246,7 @@ export const NetworkMethodSchemas = {
 	},
 	setPrimaryEndpoint: {
 		params: z.tuple([z.string().min(1), z.string().min(1)]),
-		result: NetworkResultSchema,
+		result: NetworkSchema,
 	},
 	getNodeStatus: {
 		params: z.tuple([z.string().min(1)]),

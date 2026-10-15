@@ -208,8 +208,8 @@ test("seeded dRPC endpoint row is titled 'dRPC', never the raw provider URL", as
 	expect(registeredExtension.pageErrors).toEqual([])
 })
 
-// The wallet no longer dials plain HTTP to [::1], but a URL saved before that rule must not stop
-// the popup from starting: the person fixes it in Settings, which they could not reach otherwise.
+// A stored URL the transport rule refuses (plain HTTP to [::1]) must not stop the popup from
+// starting: the person fixes it in Settings, which they could not reach otherwise.
 test("a saved http://[::1] node URL leaves the popup starting and the endpoint listed", async ({ registeredExtensionPerTest }) => {
 	const first = await openPopup(registeredExtensionPerTest)
 	await waitForHash(first, "#/popup/general")
