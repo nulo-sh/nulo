@@ -20,6 +20,7 @@ describe("KNOWN_JOB_ERROR_KINDS (drift guard)", () => {
 			"malformed_request",
 			"terms_refused",
 			"wallet_refused",
+			"too_many_pending",
 			"session_ended",
 			"sw_restart_post_prove",
 			"stuck_proving",

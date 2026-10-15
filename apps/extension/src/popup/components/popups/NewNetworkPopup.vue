@@ -5,6 +5,7 @@ import { FieldWarning } from "@nulo/design"
 import { sameStoredName, storedNameKey } from "@/utils/account-name"
 import { managers } from "@/utils/core"
 import { activateNetworkGuarded } from "@/utils/guarded-network-activation"
+import { refusedRpcUrlLine } from "./endpoint-error-text"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -53,7 +54,7 @@ const form = useFormState({
 const nameTerm = form.fields.name.value
 const urlTerm = form.fields.url.value
 
-const isUrlHasError = ref(false)
+const urlFailureText = ref("")
 const isNameAlreadyExist = computed(() => form.fields.name.error.value === "Already exists")
 const isUrlAlreadyExist = computed(() => form.fields.url.error.value === "Already exists")
 
@@ -125,12 +126,15 @@ function toastNonActivatedOutcome(result) {
 
 function reportCreateFailure(error) {
 	const msg = errorMessageFromUnknown(error)
-	if (msg.startsWith("DUPLICATE_CHAIN")) {
+	const refused = refusedRpcUrlLine(msg)
+	if (refused) {
+		urlFailureText.value = refused
+	} else if (msg.startsWith("DUPLICATE_CHAIN")) {
 		// Smart-add: chain already exists in profile. Surface this clearly
 		// so the user knows to use Settings → Networks → [chain] → Add endpoint.
 		openToast({ kind: "error", label: "A network for this chain already exists. Add it as an endpoint instead." })
 	} else if (msg === "Failed to fetch node info" || msg === "Failed to fetch network info") {
-		isUrlHasError.value = true
+		urlFailureText.value = "Failed to fetch network info"
 	} else {
 		openToast({ kind: "error", label: "Something went wrong" })
 	}
@@ -173,12 +177,12 @@ usePopupEntity(() => props.show, {
 			label="RPC Link"
 			placeholder="http://localhost:8080"
 			v-model="urlTerm"
-			@click="isUrlHasError = false"
+			@click="urlFailureText = ''"
 			data-testid="network-rpc-input"
 		>
 			<template #right>
 				<Transition name="fade">
-					<FieldWarning v-if="isUrlHasError"> Failed to fetch network info </FieldWarning>
+					<FieldWarning v-if="urlFailureText">{{ urlFailureText }}</FieldWarning>
 					<FieldWarning v-else-if="isUrlAlreadyExist"> Already exists </FieldWarning>
 				</Transition>
 			</template>

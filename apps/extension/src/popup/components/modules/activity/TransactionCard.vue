@@ -18,6 +18,7 @@ import { TxStatus, TxExecutionResult } from "@/wallet/services/transaction/clien
 import { STATUS_ICON_FILL } from "@/components/composite/activity/status-icon-fill"
 import { balanceFormatted } from "@/utils/amount.js"
 import { txAmount } from "@/utils/tx-amount"
+import { knownDecimals } from "@/utils/token-amount"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { usePrices } from "@/composables/usePrices"
 import { getTransactionExplorerUrl } from "@/wallet/constants/explorers"
@@ -31,7 +32,8 @@ const props = defineProps({
 	tx: {
 		type: Object,
 	},
-	/** The profile and chain's tokens: a mint shows an amount only for a token in this list. */
+	/** The profile and chain's tokens: a mint shows an amount only for a token in this list, and a
+	 *  transfer none for a listed token whose decimals the wallet does not know. */
 	tokens: { type: Array, default: () => [] },
 	/** The route the row opens. */
 	to: { type: String, default: undefined },
@@ -41,6 +43,12 @@ const call = computed(() => getPrimaryCall(props.tx.calls))
 const type = computed(() => getTxCategory(props.tx.calls))
 const transfer = computed(() => (call.value?.transfers ? call.value.transfers[0] : null))
 const amount = computed(() => txAmount(props.tx.calls, props.tokens))
+/** The record's decimals are no better than a guess while the wallet's token for the contract has
+ *  none it knows; a mint's amount already requires known ones. */
+const figureUnknown = computed(() => {
+	const listed = props.tokens.find((t) => t.contract === call.value?.contract)
+	return listed !== undefined && knownDecimals(listed) === null
+})
 
 const icon = computed(() => {
 	if (type.value === "transfer") return "arrow-narrow-up-right"
@@ -109,7 +117,7 @@ const explorerUrl = computed(() => {
 })
 
 const amountStr = computed(() =>
-	amount.value ? balanceFormatted(amount.value.units, amount.value.decimals, 8, { compact: true }).value : null,
+	amount.value && !figureUnknown.value ? balanceFormatted(amount.value.units, amount.value.decimals, 8, { compact: true }).value : null,
 )
 const displayAmountSymbol = computed(() => amount.value?.symbol || null)
 
@@ -117,7 +125,7 @@ const displayAmountSymbol = computed(() => amount.value?.symbol || null)
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const amountFiat = computed(() => {
-	if (type.value !== "transfer" || !amount.value || !call.value?.contract) return null
+	if (type.value !== "transfer" || !amount.value || figureUnknown.value || !call.value?.contract) return null
 	// The fiat follows the decimals the amount above is shown in.
 	const label = prices.tokenFiatLabel(
 		{ chainId: appStore.network?.chainId, contract: call.value.contract, decimals: amount.value.decimals, hasDecimals: true },
@@ -193,7 +201,7 @@ onBeforeUnmount(() => {
 
 .hash {
 	composes: type--meta from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .title_sep {

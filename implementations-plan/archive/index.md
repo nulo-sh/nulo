@@ -131,6 +131,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [fix-transport-sessions](fix-transport-sessions/plan.md) — completed — transport and dApp-session fixes, each proved by a failing test
 - [fix-ui-storage](fix-ui-storage/plan.md) — completed — UI, storage and composable fixes, each proved by a failing test
 - [followups-6](followups-6/plan.md) — completed — every smoke run behind the egress guard with one declared live spec for the shipped token list (#317); a fixed log category for an unparseable PXE stamp (#315)
+- [followups-p15](followups-p15/plan.md) — completed — decision page 15: dead log rows, sponsor and import name checks, the PXE stamp row, two refusals, Unconfirmed to Sent, unknown-decimals figure and order, the move label
 - [forms-and-contacts](forms-and-contacts/plan.md) — completed — a contacts import a lock cannot break, counted on one snack, one at a time; one message at a name cap, a darker red, shared detail links, motion stops, trimmed names, the logger gate
 - [frontend-ux-fixes](frontend-ux-fixes/plan.md) — completed — six reported UX fixes in one batch, ordered by risk
 - [furthering-non-network-e2e](furthering-non-network-e2e/plan.md) — completed — the fast non-network e2e suite grown in seven mergeable steps
@@ -271,6 +272,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [unserved-chain-connect](unserved-chain-connect/plan.md) — completed — a connection to a chain the profile has no network for is refused, and the wallet says so
 - [ux-cleanup-arc](ux-cleanup-arc/plan.md) — completed in part — five small fixes for user-facing rough edges
 - [ux-feedback](ux-feedback/plan.md) — completed — a user-testing proposal built as five batches on one stack
+- [ux-followups-p17](ux-followups-p17/plan.md) — completed — decision page 17: a Details link underlines on hover, the import line comes back and is read once, Send focus after a keyboard pick, meta text to secondary, singular banners
 - [ux-owner-picks](ux-owner-picks/plan.md) — completed — five UI decisions from the feedback follow-ups, each signed off once built
 - [vitest-on-bun](vitest-on-bun/plan.md) — completed — the workspace Vitest suites run on Bun (all but resolve-asset), shown to be no flakier than Node
 - [vitest-vite-bumps](vitest-vite-bumps/plan.md) — completed — vitest 4 everywhere, and Vite 8 with its polyfill plugin in lockstep

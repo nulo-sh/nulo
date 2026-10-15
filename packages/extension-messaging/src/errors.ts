@@ -325,6 +325,20 @@ export class ContractNotRegisteredError extends WalletError {
 }
 
 /**
+ * The node and the wallet hold no contract instance at an address the user or a dApp gave as a
+ * token: the lookup answered, and it was empty. A node that could not answer throws its own error
+ * instead. Constant message and no details, so the address never rides the error.
+ */
+export class ContractNotFoundError extends WalletError {
+	public static readonly CODE = "CONTRACT_NOT_FOUND"
+	public static readonly MESSAGE = "contract instance not found"
+
+	public constructor() {
+		super(ContractNotFoundError.CODE, ContractNotFoundError.MESSAGE, undefined, "ContractNotFoundError")
+	}
+}
+
+/**
  * A session's chain has no network in its profile, as when the user removes that network while the
  * dApp stays connected. Constant message and no details: the requested chain is the dApp's own
  * input, and nothing here may name a chain the wallet does serve.
@@ -554,6 +568,7 @@ const REBUILT_AS = [
 	InvalidWalletArgumentsError,
 	PxeStaleAnchorError,
 	ContractNotRegisteredError,
+	ContractNotFoundError,
 	ChainNotSupportedError,
 	PxeStoreKeyMissingError,
 	PxeScopeUnregisteredError,

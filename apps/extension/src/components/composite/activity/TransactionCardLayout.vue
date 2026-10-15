@@ -246,7 +246,7 @@ function hasActionsContent() {
 
 .amount_symbol {
 	composes: type--meta from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .n-row-in {

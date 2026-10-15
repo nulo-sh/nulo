@@ -2,6 +2,7 @@
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
+import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
 import { normalizeError } from "@nulo/wallet-core/jobs"
 import type { ILogger } from "@/wallet/logger"
 import { NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
@@ -704,7 +705,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			const canonical = address.toString()
 			const instance = await pxe.getContractInstance(address)
 			if (!instance) {
-				throw new Error("contract instance not found")
+				throw new ContractNotFoundError()
 			}
 
 			if (expectedClassId !== undefined) {

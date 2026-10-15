@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url"
 import { PINNED_KEYS, PLACEHOLDER_PUBLIC_KEY, type PinnedKey } from "@nulo/token-list"
 import { decodeBase64Url, verifyEnvelope } from "@nulo/token-list/envelope"
 import { checkSource, parsePayload } from "@nulo/token-list/parse"
+import { publishedSequence } from "@nulo/token-list/sign"
+import { FLOOR_PATH, floorText } from "./floor"
 
 export const HOST_ROOT = fileURLToPath(new URL("..", import.meta.url))
 export const SOURCE = "list.source.json"
@@ -79,15 +81,43 @@ export async function envelopeFindings(text: string, keys: readonly PinnedKey[])
 	}
 }
 
+/**
+ * The compiled floor: canonical, at least 1, and at most the committed list's sequence, since every
+ * build refuses a list below it. Lowering it is a reviewed source change, like an edit to `keys.ts`.
+ */
+export function floorFindings(text: string, served: number | undefined): string[] {
+	let sequence: unknown
+	try {
+		sequence = (JSON.parse(text) as { sequence?: unknown }).sequence
+	} catch {
+		return [`${FLOOR_PATH}: not JSON`]
+	}
+	if (typeof sequence !== "number" || !Number.isSafeInteger(sequence) || sequence < 1)
+		return [`${FLOOR_PATH}: sequence must be an integer from 1`]
+	if (floorText(sequence) !== text) return [`${FLOOR_PATH}: not in canonical form`]
+	return served !== undefined && sequence > served ? [`${FLOOR_PATH}: above the committed list's sequence ${served}`] : []
+}
+
 export async function treeFindings(root = HOST_ROOT, keys: readonly PinnedKey[] = PINNED_KEYS): Promise<string[]> {
 	const envelope = join(root, ENVELOPE)
+	const envelopeText = existsSync(envelope) ? readFileSync(envelope, "utf8") : undefined
 	return [
 		...sourceFindings(root),
 		...keyFindings(keys),
 		...formatFindings(readFileSync(join(root, FORMAT), "utf8"), keys),
 		...publicFindings(root),
-		...(existsSync(envelope) ? await envelopeFindings(readFileSync(envelope, "utf8"), keys) : []),
+		...(envelopeText === undefined ? [] : await envelopeFindings(envelopeText, keys)),
+		...floorFindings(readFileSync(join(HOST_ROOT, "..", "..", FLOOR_PATH), "utf8"), servedSequence(envelopeText)),
 	]
+}
+
+function servedSequence(envelopeText: string | undefined): number | undefined {
+	if (envelopeText === undefined) return undefined
+	try {
+		return publishedSequence(envelopeText)
+	} catch {
+		return undefined
+	}
 }
 
 if (import.meta.main) {

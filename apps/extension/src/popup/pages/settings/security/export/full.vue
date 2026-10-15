@@ -662,7 +662,8 @@ onBeforeUnmount(() => {
 						<template #description>
 							<Text color="secondary" height="140">
 								{{ unopenedImportedKeys === 1 ? "1 imported account" : `${unopenedImportedKeys} imported accounts` }}
-								could not be opened, so they will not be restored. Import their keys again after the restore.
+								could not be opened, so {{ unopenedImportedKeys === 1 ? "it" : "they" }} will not be restored. Import
+								their keys again after the restore.
 							</Text>
 						</template>
 					</Banner>

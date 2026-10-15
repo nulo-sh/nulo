@@ -171,7 +171,7 @@ test("a full backup carries an imported account; restoring it (dup-confirmed) re
 		await clickByTestId(page, "unlock-submit-btn")
 		await page.waitForSelector('[data-testid="backup-imported-unopened-banner"]', { visible: true, timeout: 120_000 })
 		expect(await page.$eval('[data-testid="backup-imported-unopened-banner"]', (el) => (el as HTMLElement).innerText)).toContain(
-			"1 imported account could not be opened, so they will not be restored.",
+			"1 imported account could not be opened, so it will not be restored.",
 		)
 		expect(await page.$('[data-testid="backup-keys-lost-banner"]')).toBeNull()
 		const withUnopened = await openEncryptedBackup(await downloadEncryptedBackup(page), RESTORE_PASSWORD)

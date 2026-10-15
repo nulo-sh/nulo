@@ -96,7 +96,8 @@ async function waitForGone(page: Page, testId: string, timeout = 10_000): Promis
 	await page.waitForFunction((id) => !document.querySelector(`[data-testid="${id}"]`), { timeout, polling: 100 }, testId)
 }
 
-const bannerSentence = (names: string) => `${names} didn't finish restoring. Restore the backup again to bring them back.`
+const bannerSentence = (...names: string[]) =>
+	`${names.join(" and ")} didn't finish restoring. Restore the backup again to bring ${names.length === 1 ? "it" : "them"} back.`
 
 async function activeProfileId(page: Page): Promise<string> {
 	const profile = (await readSessionRow(page))?.profile
@@ -183,7 +184,7 @@ test("SE1: the banner follows renames and other pages; Restore again refuses ano
 		await waitForText(page, "restore-outcome-banner", "didn't finish restoring")
 		const first = await bannerNames()
 		expect(
-			[bannerSentence("Local Network and Testnet"), bannerSentence("Testnet and Local Network")].some((s) => first.includes(s)),
+			[bannerSentence("Local Network", "Testnet"), bannerSentence("Testnet", "Local Network")].some((s) => first.includes(s)),
 		).toBe(true)
 
 		await renameNetwork(page, "Testnet", "Old Testnet")

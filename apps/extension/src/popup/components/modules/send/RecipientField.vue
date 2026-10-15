@@ -39,6 +39,7 @@ const listId = useId()
 const labelId = `${listId}-label`
 const optionId = (i) => `${listId}-${i}`
 const fieldEl = useTemplateRef("fieldEl")
+const cardEl = useTemplateRef("cardEl")
 /** The field shows the typed text while the press that blurred it is still down. */
 const holdView = ref(false)
 /** The `pointerId` of the primary mouse or pen press now down, or null. */
@@ -164,6 +165,8 @@ const pickHighlighted = (e) => {
 	e.preventDefault()
 	handleSelectContact(filteredContacts.value[Math.max(activeIndex.value, 0)])
 	e.target.blur()
+	// The card replaces the field, which would leave the keyboard on the page's body.
+	nextTick(() => cardEl.value?.focusChange())
 }
 
 // Marked handled: Chrome closes the toolbar popup on an Escape the page leaves unhandled.
@@ -218,6 +221,7 @@ onBeforeUnmount(() => {
 		<div ref="fieldEl" data-testid="send-destination-field" :class="$style.recipient_wrap">
 			<RecipientCard
 				v-if="selectedContact && !holdView"
+				ref="cardEl"
 				:name="selectedContact.name"
 				:address="selectedContact.address"
 				@change="handleChange"

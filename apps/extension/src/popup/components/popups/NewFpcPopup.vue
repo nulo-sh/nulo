@@ -2,6 +2,7 @@
 <script setup>
 import { FieldWarning } from "@nulo/design"
 /** Utils */
+import { sameFieldAddress } from "@nulo/wallet-bridge"
 import { sameStoredName } from "@/utils/account-name"
 import { isValidHex } from "@/utils/string"
 
@@ -42,6 +43,7 @@ const form = useFormState({
 		validate: (v) => {
 			if (!v) return null
 			if (!isValidHex(v)) return "Invalid FPC address"
+			if (fpcs.value.some((f) => sameFieldAddress(v, f.address ?? ""))) return "Already exist"
 			return null
 		},
 	},
@@ -51,6 +53,7 @@ const nameTerm = form.fields.name.value
 const fpcAddressTerm = form.fields.address.value
 
 const isAlreadyExist = computed(() => form.fields.name.error.value === "Already exist")
+const isAddressStored = computed(() => form.fields.address.error.value === "Already exist")
 const isValidAddress = computed(() => isValidHex(fpcAddressTerm.value))
 const isAvailableToAddFpc = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
@@ -59,6 +62,7 @@ const isAvailableToAddFpc = computed(() => {
 	if (!nameTerm.value.replace(/\s/g, "").length) return false
 	if (!isValidAddress.value) return false
 	if (form.fields.name.error.value) return false
+	if (form.fields.address.error.value) return false
 	return true
 })
 
@@ -168,6 +172,7 @@ watch(
 			<template #right>
 				<Transition name="fade">
 					<FieldWarning v-if="!isValidAddress && fpcAddressTerm"> Invalid FPC address </FieldWarning>
+					<FieldWarning v-else-if="isAddressStored"> Already exist </FieldWarning>
 				</Transition>
 			</template>
 		</Input>

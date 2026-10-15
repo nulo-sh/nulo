@@ -840,25 +840,26 @@ describe("a failed send's record: the carry, the answer, the predicates", () => 
 		expect((await service.getOperation(id))?.progress).toMatchObject({ stage: "failed", check: "sent" })
 	})
 
-	test("unconfirmed becomes expired only on a row with a recorded expiry, never mined, and nothing leaves expired", async () => {
+	test("unconfirmed becomes expired, or sent once found on chain, only on a row with a recorded expiry; never reverted, and nothing leaves expired", async () => {
 		const withExpiry = await failedFromSubmitting(EXPIRY)
 		const without = await failedFromSubmitting()
+		const block = { block: 5, hash: `0x${"01".repeat(32)}` }
 		expect(await service.setSendCheck(withExpiry, HASH, {}, { check: "unconfirmed" }, live)).toBe(true)
-		for (const check of ["sent", "reverted"] as const) {
-			expect(await service.setSendCheck(withExpiry, HASH, { check: "unconfirmed" }, { check }, live)).toBe(false)
-			expect(
-				await service.setSendCheck(
-					withExpiry,
-					HASH,
-					{ check: "unconfirmed" },
-					{ check, inclusion: { block: 5, hash: `0x${"01".repeat(32)}` } },
-					live,
-				),
-			).toBe(false)
-		}
+		expect(await service.setSendCheck(withExpiry, HASH, { check: "unconfirmed" }, { check: "reverted" }, live)).toBe(false)
+		expect(await service.setSendCheck(withExpiry, HASH, { check: "unconfirmed" }, { check: "reverted", inclusion: block }, live)).toBe(
+			false,
+		)
 		expect(await service.setSendCheck(without, HASH, {}, { check: "expired" }, live)).toBe(false)
 		expect(await service.setSendCheck(without, HASH, {}, { check: "unconfirmed" }, live)).toBe(true)
 		expect(await service.setSendCheck(without, HASH, { check: "unconfirmed" }, { check: "expired" }, live)).toBe(false)
+		expect(await service.setSendCheck(without, HASH, { check: "unconfirmed" }, { check: "sent" }, live)).toBe(false)
+		expect(await service.setSendCheck(without, HASH, { check: "unconfirmed" }, { check: "sent", inclusion: block }, live)).toBe(false)
+		for (const found of [{ check: "sent" }, { check: "sent", inclusion: block }] as const) {
+			const id = await failedFromSubmitting(EXPIRY)
+			expect(await service.setSendCheck(id, HASH, {}, { check: "unconfirmed" }, live)).toBe(true)
+			expect(await service.setSendCheck(id, HASH, { check: "unconfirmed" }, found, live)).toBe(true)
+			expect((await service.getOperation(id))?.progress).toMatchObject(found)
+		}
 		expect(await service.setSendCheck(withExpiry, HASH, { check: "unconfirmed" }, { check: "expired" }, live)).toBe(true)
 		expect(await service.setSendCheck(withExpiry, HASH, { check: "expired" }, { check: "unconfirmed" }, live)).toBe(false)
 		expect(await service.setSendCheck(withExpiry, HASH, { check: "expired" }, {}, live)).toBe(false)
