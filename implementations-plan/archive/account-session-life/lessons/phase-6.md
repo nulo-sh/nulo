@@ -27,3 +27,8 @@
 - Filed: known limits #458 to #463, closed as not planned; open #464 (`confirmProfileOperation`), #465 (account-file autocomplete), #466 (OA-9, `owner-decision`). Dedupe searches found no twin. #137 commented for OA-9.
 - `lessons.md` sat at 8,135 of 8,192 bytes: the Ready fact joins the 60 s popup-call entry and absorbs the dropped-port entry, ending at 8,183 bytes.
 - Codex round 3 over the close-out text found four errors in it and the issue bodies, all checked at the tree and corrected (plan § Audit verdicts): close-out text gets the same verification as code.
+
+## Final gates (7e270f39)
+
+- lint 0, typecheck:all 0, test:all 0 (extension 12524 passed), check:plans 0.
+- Smoke, retry 0, on armed builds (auth-flows, sw-resilience, registration, backup-roundtrip, passkey-backup): Chrome 21/21 in 156 s, Firefox 16 passed / 5 skipped by design in 195 s. No e2e scenario added; no network file touched.
