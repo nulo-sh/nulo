@@ -1,5 +1,14 @@
 import { describe, expect, test } from "vitest"
-import { type Network, NodeStatus, NodeStatusSchema, networkInfoFrom, primaryEndpointUrl, RpcUrlSchema } from "./spec"
+import {
+	ERR_RPC_URL_HIDDEN_CHARACTERS,
+	ERR_RPC_URL_IPV6_LOOPBACK,
+	type Network,
+	NodeStatus,
+	NodeStatusSchema,
+	networkInfoFrom,
+	primaryEndpointUrl,
+	RpcUrlSchema,
+} from "./spec"
 
 // The schema's acceptance set is a security boundary: these rows pin it input by input. The
 // adapter's own table (aztec-node-factory-adapter.test.ts) covers the same inputs, so a row whose
@@ -14,8 +23,6 @@ const ACCEPTED = [
 	"http://LOCALHOST:8080",
 	"http://127.0.0.1:8080",
 	"http://127.1:8080",
-	"http://[::1]:8080",
-	"http://[0:0:0:0:0:0:0:1]:8080",
 	"https://[2001:db8::1]:8443",
 	"https://exämple.com",
 	" https://rpc.example.com",
@@ -37,6 +44,8 @@ const REFUSED = [
 	"http://127.0.0.2:8080",
 	"http://0.0.0.0:8080",
 	"http://[::ffff:127.0.0.1]:8080",
+	"http://[::1]:8080",
+	"http://[0:0:0:0:0:0:0:1]:8080",
 	"https://rpc.example.com:65536",
 	"",
 	"ws://localhost:8080",
@@ -54,12 +63,31 @@ describe("RpcUrlSchema", () => {
 		expect(RpcUrlSchema.safeParse(url).success).toBe(false)
 	})
 
+	test("a hidden character inside the URL carries its own line, never the transport message", () => {
+		for (const url of ["https://rpc.example/p\u00A0q", "https://rpc .example/"]) {
+			const result = RpcUrlSchema.safeParse(url)
+			expect(result.success).toBe(false)
+			expect(result.error?.issues.map((i) => i.message)).toContain(ERR_RPC_URL_HIDDEN_CHARACTERS)
+			expect(result.error?.issues.some((i) => i.message.startsWith("RPC URL must use"))).toBe(false)
+		}
+	})
+
+	test("the parsed value is the trimmed URL", () => {
+		expect(RpcUrlSchema.parse(" https://rpc.example/\u00A0")).toBe("https://rpc.example/")
+	})
+
 	test("a URL that parses but fails the allowlist carries the refine's message", () => {
 		const result = RpcUrlSchema.safeParse("http://example.com")
 		expect(result.success).toBe(false)
 		expect(result.error?.issues.map((i) => i.message)).toEqual([
-			"RPC URL must use https:// or http://localhost / http://127.0.0.1 / http://[::1] and contain no userinfo",
+			"RPC URL must use https:// or http://localhost / http://127.0.0.1 and contain no userinfo",
 		])
+	})
+
+	test("plain HTTP to [::1], in either spelling, carries its own line", () => {
+		for (const url of ["http://[::1]:8080", "http://[0:0:0:0:0:0:0:1]:8080"]) {
+			expect(RpcUrlSchema.safeParse(url).error?.issues.map((i) => i.message)).toEqual([ERR_RPC_URL_IPV6_LOOPBACK])
+		}
 	})
 })
 
