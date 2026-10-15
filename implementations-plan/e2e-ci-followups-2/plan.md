@@ -53,7 +53,7 @@ Steps:
 
 Gate: the five files through `bun --bun vitest run …` and `bun run vitest run …` (Node) from `apps/extension`, and `bun run --cwd packages/wallet-bridge test`, exit 0; the reproducer red at base and green at head on both engines, in `lessons/phase-1.md`; the full extension suite once per engine (`bun run test` and, from `apps/extension`, `bun run vitest run`), exit 0; `bun run lint`, `bun run typecheck:all` exit 0.
 
-### Phase 2: one ladder for every speed (#405)
+### Phase 2: one ladder for every speed (#405) ✓
 
 Change map:
 - `apps/extension/src/wallet/services/execution/fee/fee-strategy.ts`: `FEE_MULTIPLIERS`, `DEFAULT_FEE_MULTIPLIER`; the doc comment states the scaled ladder.

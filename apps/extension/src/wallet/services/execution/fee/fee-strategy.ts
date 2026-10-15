@@ -32,7 +32,7 @@
  * ## Priority multiplier
  *
  * `feeSettings.priorityLevel` ("normal" / "fast" / "urgent") maps to
- * a numeric multiplier via `PRIORITY_MULTIPLIERS` in `@nulo/wallet-bridge`.
+ * a numeric multiplier via `FEE_MULTIPLIERS` (`feeMultiplierFor`).
  * All strategies get the pre-computed `feeMultiplier` in the context.
  * FJ / FJWC pass it to `finalizeGasLimits`; Embedded commits its capped
  * fee instead, so no multiplier applies there. A sponsor row applies it to
@@ -62,18 +62,26 @@ import type { DiscoveryProbe } from "../discovery-aware-estimator"
 import type { Action, FeeOptions, FeeSettings } from "../spec"
 import type { BuiltStandardTx, TxRequestBuilder } from "../tx-request-builder"
 import type { PartialGasSettingsRPC } from "@nulo/aztec-runtime/account"
+import { PRIORITY_MULTIPLIERS, type PriorityLevel } from "@nulo/wallet-bridge"
 import { feeCapFor } from "./fee-cap"
 
-/** Default multiplier for `maxFeesPerGas`. Production default is `2`.
- *  Overridable at build time via `VITE_NULO_FEE_MULTIPLIER` so e2e CI can
- *  widen the envelope when devnet base-fees drift on loaded GHA runners
- *  (a real cross-branch flake class — confirmed reproducible against
- *  `transfers.test.ts` and `concurrent-sendtx-confirm.test.ts` on a
- *  non-PR commit). Parsed once at module load; invalid / unset → 2. */
+/** The `maxFeesPerGas` multiplier per speed: `PRIORITY_MULTIPLIERS` in production. A build may set
+ *  Normal's with `VITE_NULO_FEE_MULTIPLIER`, so e2e CI can widen the envelope when devnet base fees
+ *  drift on loaded runners; Fast and Urgent scale with it, so the ladder keeps its order. Parsed once
+ *  at module load; unset, invalid or below 1 leaves the ladder as it is. */
 const VITE_FEE_MULTIPLIER_RAW = (import.meta.env?.VITE_NULO_FEE_MULTIPLIER ?? "") as string
 const VITE_FEE_MULTIPLIER_PARSED = Number.parseFloat(VITE_FEE_MULTIPLIER_RAW)
-export const DEFAULT_FEE_MULTIPLIER: number =
-	Number.isFinite(VITE_FEE_MULTIPLIER_PARSED) && VITE_FEE_MULTIPLIER_PARSED >= 1 ? VITE_FEE_MULTIPLIER_PARSED : 2
+const FEE_LADDER_SCALE =
+	Number.isFinite(VITE_FEE_MULTIPLIER_PARSED) && VITE_FEE_MULTIPLIER_PARSED >= 1
+		? VITE_FEE_MULTIPLIER_PARSED / PRIORITY_MULTIPLIERS.normal
+		: 1
+export const FEE_MULTIPLIERS: Record<PriorityLevel, number> = {
+	normal: PRIORITY_MULTIPLIERS.normal * FEE_LADDER_SCALE,
+	fast: PRIORITY_MULTIPLIERS.fast * FEE_LADDER_SCALE,
+	urgent: PRIORITY_MULTIPLIERS.urgent * FEE_LADDER_SCALE,
+}
+/** The multiplier when no speed is named, which is how the Send page asks for Normal. */
+export const DEFAULT_FEE_MULTIPLIER: number = FEE_MULTIPLIERS.normal
 
 /** Result returned by every strategy: the built tx plus the payment
  *  method the strategy resolved. Field names — not positions — are the

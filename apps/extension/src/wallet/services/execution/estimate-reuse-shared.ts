@@ -8,11 +8,11 @@
 
 import type { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import type { TxExecutionRequest } from "@aztec-labs/stdlib/tx"
-import { PRIORITY_MULTIPLIERS, type PriorityLevel } from "@nulo/wallet-bridge"
+import type { PriorityLevel } from "@nulo/wallet-bridge"
 import { FpcType, type FpcIdentitySnapshot, type FpcInfo } from "@/wallet/services/fpc/spec"
 import type { NetworkEndpoint } from "@/wallet/services/network/spec"
 import type { FeeCapRule } from "./fee/fee-cap"
-import { DEFAULT_FEE_MULTIPLIER } from "./fee/fee-strategy"
+import { DEFAULT_FEE_MULTIPLIER, FEE_MULTIPLIERS } from "./fee/fee-strategy"
 import type { FeeSettings } from "./spec"
 
 // 120 s, owner-set: the retention bound on signed tx requests held in SW memory.
@@ -123,7 +123,7 @@ export async function fpcIdentityDrift(
 /** The fee multiplier for a known or absent priority. The popup RPC boundary refuses an unknown
  *  priority; the lookup stays unchecked here, so one that bypassed it still fails, never a default. */
 export function feeMultiplierFor(priority: PriorityLevel | undefined): number {
-	return priority ? PRIORITY_MULTIPLIERS[priority] : DEFAULT_FEE_MULTIPLIER
+	return priority ? FEE_MULTIPLIERS[priority] : DEFAULT_FEE_MULTIPLIER
 }
 
 /**
