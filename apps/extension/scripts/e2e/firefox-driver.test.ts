@@ -266,6 +266,17 @@ describe("a page error's location", () => {
 			"no context: TypeError: x is undefined",
 		])
 	})
+
+	const builtIn = { url: "self-hosted", functionName: "forEach", lineNumber: 3601, columnNumber: 20 }
+	const addon = { url: "moz-extension://5c9e/assets/client.js", functionName: "walk", lineNumber: 0, columnNumber: 99 }
+	const addonReported = { url: reported.sourceName, functionName: "", lineNumber: 4, columnNumber: 811 }
+	test.each([
+		["its first add-on frame under a built-in's", [builtIn, addon], addonReported, addon],
+		["the add-on location it reports when no frame is the add-on's", [builtIn], addonReported, addonReported],
+		["its top frame when neither is the add-on's", [builtIn], { ...addonReported, url: "https://dapp.example/x.js" }, builtIn],
+	])("the close reports an exception at %s", (_, frames, reported, expected) => {
+		expect(runSerialised(RELAY_HELPERS, "recentFrame(frames, reported)", { frames, reported })).toEqual(expected)
+	})
 })
 
 /**
