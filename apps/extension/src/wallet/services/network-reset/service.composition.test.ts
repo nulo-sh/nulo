@@ -56,6 +56,7 @@ import { makeShallowPxeFake } from "@/wallet/services/pxe/shallow-port.fake"
 import { TaskService } from "@/wallet/services/task/service"
 import { TokenBalanceService } from "@/wallet/services/token-balance/service"
 import { TokenService } from "@/wallet/services/token/service"
+import { TOKEN_LIST_SERVICE_NAME } from "@/wallet/services/token-list/spec"
 import { TransactionService } from "@/wallet/services/transaction/service"
 import { TxStatus } from "@/wallet/services/transaction/spec"
 import { NetworkResetService } from "./service"
@@ -130,6 +131,7 @@ async function harness(hold?: Hold) {
 	services.add(account)
 	services.add(new TransactionService(logger(), api))
 	const shallow = makeShallowPxeFake()
+	services.add(svc(TOKEN_LIST_SERVICE_NAME, { getSnapshot: () => undefined, onListChanged: new EventHandler() }))
 	services.add(new TokenService(logger(), api, () => shallow.client, { getSeeds: async () => [] }))
 	services.add(new FpcService(logger(), api))
 	services.add(new AuthRegistryService(logger(), api))

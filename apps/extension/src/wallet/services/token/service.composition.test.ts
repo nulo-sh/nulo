@@ -499,7 +499,7 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 	})
 
 	test("a quarantined chain reads as one with no accounts: a due retry burns no attempt and runs nothing", async () => {
-		const seed = { ...DEFAULT_TOKEN_SEEDS[0], chainId: NETWORK.chainId }
+		const seed = { ...FIXTURE_SEED, chainId: NETWORK.chainId }
 		const markerKey = "nulo:core:token-seeded@p1"
 		const seedKey = `${seed.chainId}:${seed.contract}`
 		const preview = vi.spyOn(TokenService.prototype, "previewTokenMetadata").mockRejectedValue(new Error("rpc down"))

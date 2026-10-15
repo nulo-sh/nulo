@@ -1053,9 +1053,11 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	public async exportPasskeyBackupKeys(fence: RunFence, credentialData: PasskeyCredentialData): Promise<PasskeyBackupKeys> {
 		await this.ensureInitialized()
 		await this.profileService.assertRunFence(fence)
+		await this.refuseDuringReset(fence.profileId)
 		const accounts = await this.rowsOfProfile(fence.profileId)
 		const importedKeyRows = await this.importedKeys.backup(fence.profileId)
 		const material = await this.profileService.exportPasskeyBackupKeys(fence.profileId, credentialData, importedKeyRows)
+		await this.refuseDuringReset(fence.profileId)
 		await this.profileService.assertRunFence(fence)
 		return {
 			credentialId: material.credentialId,

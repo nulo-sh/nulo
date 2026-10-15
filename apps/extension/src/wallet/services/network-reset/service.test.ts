@@ -911,6 +911,18 @@ describe("AccountService.recreateForReset", () => {
 		expect(added).toHaveBeenCalledTimes(1)
 	})
 
+	test("a derived account whose address another row holds is left to it: nothing is written at any index", async () => {
+		const h = await harness()
+		await putNetwork(h, { id: "dv", name: "Devnet", chainId: 55, l1ChainId: 5 })
+		const held = await putImported(h, 55, SK1, 0, { address: derived(5, 3) })
+		const added = vi.fn()
+		h.account.onAccountAdded.add(added)
+		const entry = { type: 0 as const, index: 3, name: "Savings", visible: true, oldAddress: "0xold", done: false }
+		await h.account.recreateForReset("p1", 55, entry, 5)
+		expect((await accountsOn(h, 55)).map((a) => [a.type, a.index, a.address])).toEqual([[1, 0, held]])
+		expect(added).not.toHaveBeenCalled()
+	})
+
 	test("an imported account writes its key row before its account row, and only once", async () => {
 		const h = await harness()
 		await putNetwork(h, { id: "tn", name: "Testnet", chainId: NEW, l1ChainId: L1, kind: "testnet" })
