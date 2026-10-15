@@ -40,8 +40,10 @@ export function isQuoteFresh(quote: PriceQuote, now: number): boolean {
 }
 
 /** Usable quotes with the mapping that says which token each id prices. They travel together, so a
- *  reader never prices a token with a mapping from another moment than its quotes. */
-export type PriceSnapshot = { quotes: PriceState; pricedTokens: PricedTokens }
+ *  reader never prices a token with a mapping from another moment than its quotes. `flaggedTokens`
+ *  rides along as the popup's one channel to the signed list: the `flaggedKeysOf` key of each pair
+ *  it flags as a scam, whatever the fiat setting. */
+export type PriceSnapshot = { quotes: PriceState; pricedTokens: PricedTokens; flaggedTokens: readonly string[] }
 
 export type Methods = {
 	/** Usable quotes only (validated + fresh + fiat display enabled). */

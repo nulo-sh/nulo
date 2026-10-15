@@ -10,6 +10,7 @@ import { isQuoteFresh } from "@/wallet/services/price/spec"
 import { getPriceMapEntry, FEE_JUICE_ENTRY, type PricedTokens } from "@/wallet/services/price/price-map"
 import { tokenAmountToUsdMicro, formatUsdMicro } from "@/wallet/services/price/convert"
 import { knownDecimals } from "@/utils/token-amount"
+import { isFlaggedToken } from "@/utils/token-flag"
 
 /** A token as pricing reads it: priced only when its decimals are known (`knownDecimals`). */
 export type PricedToken = { chainId?: number; contract?: string; decimals?: number; hasDecimals?: boolean }
@@ -27,34 +28,46 @@ export function usePrices(priceService: PriceServiceClient) {
 	const quotes = ref<PriceState>({})
 	/** Which token each id prices. It comes from the signed list, through the worker, with the quotes. */
 	const pricedTokens = ref<PricedTokens>({})
+	/** The pairs the signed list flags as scams, as `flaggedKeysOf` keys. */
+	const flaggedTokens = ref<ReadonlySet<string>>(new Set())
 	/** The mapping has arrived. Until then no surface can tell a priced token from an unpriced one. */
 	const mapped = ref(false)
 	/** The first price answer has arrived: a refresh result or failure, or a broadcast. */
 	const settled = ref(false)
 	const now = useTicker(30_000)
+	/** Bumped by each full snapshot, a broadcast or a refresh answer: a list read begun before one is older. */
+	let adopted = 0
+
+	const adoptList = (snapshot: PriceSnapshot) => {
+		pricedTokens.value = snapshot.pricedTokens
+		flaggedTokens.value = new Set(snapshot.flaggedTokens)
+		mapped.value = true
+	}
 
 	const onQuotesUpdated = (snapshot: PriceSnapshot) => {
+		adopted++
 		quotes.value = snapshot.quotes
-		pricedTokens.value = snapshot.pricedTokens
-		mapped.value = true
+		adoptList(snapshot)
 		settled.value = true
 	}
 	priceService.onQuotesUpdated.add(onQuotesUpdated)
 
-	// The mapping first, from a read that never touches the network: a refresh can wait on the price
-	// provider, and a surface must not wait with it to learn that a token has no price at all.
-	priceService
-		.getQuotes()
-		.then((snapshot) => {
-			if (mapped.value) return
-			pricedTokens.value = snapshot.pricedTokens
-			mapped.value = true
-		})
-		.catch(() => {})
+	// The list's mapping and flags first, from a read that never touches the network: a refresh can
+	// wait on the price provider, and a surface must not wait with it to learn what the list says.
+	const readList = () => {
+		const before = adopted
+		priceService
+			.getQuotes()
+			.then((snapshot) => {
+				if (adopted === before) adoptList(snapshot)
+			})
+			.catch(() => {})
+	}
 
 	// Stale-on-connect refresh; the service no-ops when the cache is fresh
 	// (and returns {} when fiat display is disabled).
 	const resnapshot = () => {
+		readList()
 		priceService
 			.refreshIfStale()
 			.then(onQuotesUpdated)
@@ -65,8 +78,8 @@ export function usePrices(priceService: PriceServiceClient) {
 	}
 	resnapshot()
 	// Re-snapshot after every reconnect (MV3 SW restarts drop the port): the
-	// held quotes and mapping may have changed while we were detached — e.g. the
-	// kill-switch flipped from another context, or a new list landed, and we
+	// held quotes, mapping and flags may have changed while we were detached — e.g.
+	// the kill-switch flipped from another context, or a new list landed, and we
 	// missed the broadcast.
 	priceService.onConnected.add(resnapshot)
 
@@ -91,6 +104,9 @@ export function usePrices(priceService: PriceServiceClient) {
 	/** The signed list prices this token. False until `mapped`. */
 	const isPriced = (chainId: number | undefined, contract: string | undefined): boolean =>
 		chainId !== undefined && contract !== undefined && getPriceMapEntry(pricedTokens.value, chainId, contract) !== undefined
+
+	/** The signed list flags this token as a scam, on its chain and contract. False until `mapped`. */
+	const isFlagged = (token: PricedToken | undefined): boolean => isFlaggedToken(flaggedTokens.value, token)
 
 	/** Fee Juice quote (chain-independent mapping). */
 	const feeJuiceQuote = computed<PriceQuote | undefined>(() => usableQuotes.value[FEE_JUICE_ENTRY.coingeckoId])
@@ -124,6 +140,7 @@ export function usePrices(priceService: PriceServiceClient) {
 		settled: readonly(settled),
 		mapped: readonly(mapped),
 		isPriced,
+		isFlagged,
 		quoteFor,
 		feeJuiceQuote,
 		tokenFiatMicro,

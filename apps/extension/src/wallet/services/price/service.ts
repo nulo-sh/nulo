@@ -6,6 +6,7 @@ import { ConfigService } from "@/wallet/services/config/service"
 import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
 import { TokenListService } from "@/wallet/services/token-list/service"
 import { ValueStorage } from "@/wallet/storage"
+import { flaggedKeysOf } from "@/utils/token-flag"
 import { AlarmDispatcher, EventHandler, createSerialQueue } from "@nulo/wallet-core/utils"
 import { allCoingeckoIds, getSanityBand, pricedTokensOf } from "./price-map"
 import {
@@ -271,7 +272,8 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 	}
 
 	private withMapping(quotes: PriceState): PriceSnapshot {
-		return { quotes, pricedTokens: pricedTokensOf(this.tokenList.getSnapshot()?.entries ?? []) }
+		const list = this.tokenList.getSnapshot()
+		return { quotes, pricedTokens: pricedTokensOf(list?.entries ?? []), flaggedTokens: flaggedKeysOf(list?.flagged ?? []) }
 	}
 
 	private async ensureAlarm(): Promise<void> {

@@ -12,11 +12,18 @@ import { CHAIN_IDS } from "@/utils/chain-ids"
 import { QUOTE_TTL_MS, type PriceSnapshot, type PriceState } from "@/wallet/services/price/spec"
 import type { PriceServiceClient } from "@/wallet/services/price/client"
 import { usePrices } from "./usePrices"
-import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import { flaggedKeysOf } from "@/utils/token-flag"
+import { TEST_FLAGGED, TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
 const TEST_USDC = TEST_TOKENS.USDC
 
-const snap = (quotes: PriceState): PriceSnapshot => ({ quotes, pricedTokens: TEST_PRICED_TOKENS })
+const snap = (quotes: PriceState, flagged = [TEST_FLAGGED]): PriceSnapshot => ({
+	quotes,
+	pricedTokens: TEST_PRICED_TOKENS,
+	flaggedTokens: flaggedKeysOf(flagged),
+})
+/** A row as a restored backup may store it: upper-case hex. */
+const FLAGGED_ROW = { chainId: TEST_FLAGGED.chainId, contract: `0x${TEST_FLAGGED.address.slice(2).toUpperCase()}` }
 
 function quoteState(now: number, overrides?: Partial<PriceState>): PriceState {
 	return {
@@ -105,6 +112,39 @@ describe("composables/usePrices", () => {
 		expect(api.mapped.value).toBe(true)
 		expect(api.isPriced(CHAIN_IDS.TESTNET, TEST_USDC)).toBe(true)
 		expect(api.isPriced(CHAIN_IDS.TESTNET, TEST_TOKENS.GBPC)).toBe(false)
+	})
+
+	test("the list's flags arrive from the network-free read while the refresh waits, and a broadcast replaces them", async () => {
+		const client = fakeClient()
+		client.refreshIfStale.mockReturnValue(new Promise(() => {}))
+		const { api } = await withPrices(client)
+		expect(api.isFlagged(FLAGGED_ROW)).toBe(true)
+		expect(api.isFlagged({ chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC })).toBe(false)
+
+		client.onQuotesUpdated.invoke(snap({}, []))
+		expect(api.isFlagged(FLAGGED_ROW)).toBe(false)
+	})
+
+	test("a reconnect reads the list again without waiting on the refresh; a read older than a broadcast is dropped", async () => {
+		const client = fakeClient()
+		client.getQuotes.mockResolvedValue(snap({}, []))
+		client.refreshIfStale.mockResolvedValue(snap({}, []))
+		const { api } = await withPrices(client)
+		expect(api.isFlagged(FLAGGED_ROW)).toBe(false)
+
+		client.getQuotes.mockResolvedValue(snap({}))
+		client.refreshIfStale.mockReturnValue(new Promise(() => {}))
+		;(client as unknown as { onConnected: EventHandler<void> }).onConnected.invoke()
+		await flushPromises()
+		expect(api.isFlagged(FLAGGED_ROW)).toBe(true)
+
+		let answer: (s: PriceSnapshot) => void = () => {}
+		client.getQuotes.mockReturnValue(new Promise<PriceSnapshot>((resolve) => (answer = resolve)))
+		;(client as unknown as { onConnected: EventHandler<void> }).onConnected.invoke()
+		client.onQuotesUpdated.invoke(snap({}, []))
+		answer(snap({}))
+		await flushPromises()
+		expect(api.isFlagged(FLAGGED_ROW)).toBe(false)
 	})
 
 	test("a refreshIfStale rejection is swallowed (surfaces render token-only)", async () => {
