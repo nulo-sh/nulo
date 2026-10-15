@@ -218,8 +218,9 @@ describe("EditFpcPopup — duplicate names", () => {
 })
 
 describe("EditFpcPopup — duplicate addresses", () => {
+	// Both under the field modulus: an address above it never matches any row.
 	const OTHER = `0x2a${"cf".repeat(31)}`
-	const FRESH = `0x${"b".repeat(64)}`
+	const FRESH = `0x1b${"0d".repeat(31)}`
 
 	async function addressState(w: VueWrapper, address: string) {
 		const input = w.find('input[data-input-label="Address"]')
@@ -257,7 +258,11 @@ describe("EditFpcPopup — duplicate addresses", () => {
 	})
 
 	test("a rename beside an untouched address another row also holds saves", async () => {
-		fpcServiceMock.getFpcs.mockResolvedValue([{ ...FPC }, { ...FPC, id: "fpc-2", name: "Other" }])
+		fpcServiceMock.getFpc.mockResolvedValue({ ...FPC, address: OTHER })
+		fpcServiceMock.getFpcs.mockResolvedValue([
+			{ ...FPC, address: OTHER },
+			{ ...FPC, id: "fpc-2", name: "Other", address: OTHER },
+		])
 		const w = await mountShown()
 		await typeName(w, "Renamed")
 		expect(w.text()).not.toContain("Already added")
