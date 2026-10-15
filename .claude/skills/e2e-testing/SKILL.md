@@ -634,6 +634,10 @@ the pattern.
   launch prices nothing and shows no defaults. A spec that needs a priced token or the defaults
   launches with `tokenList: "held"` or the `listedExtension` fixtures (`fixtures/token-list.ts`;
   the e2e README's "The signed token list").
+- **A quiet local network mints no L2 block.** Since Aztec 5.0 a block is minted only for a
+  pending transaction (still so on 6.0.0-rc.1), so a helper that waits for N more blocks, or makes
+  one with `.simulate()`, hangs. Gate the wait on a real signal with a time cap and drive blocks
+  with a real `.send()` (`implementations-plan/archive/aztec-5.0-upgrade/plan.md#quiet-blocks`).
 
 ## 3. Kill or restart the background
 
