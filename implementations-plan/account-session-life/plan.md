@@ -1,788 +1,577 @@
 ---
 plan: account-session-life
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-8); arcs 1 and 2 merged (#253, #266); arc 3 (3.1 to 3.3) built and reviewed (Codex approve), in delivery; 3.4 deferred; arc 4 waits on a plan revision for page 7's picks
-issues: "#99, #100, #159, #198, #158 (arc 1); #157 decision-free half (arc 2); #24, #137, #208 (arc 3, waits on page 7, hold H2 and backup-import-export arc 3); #157 Ready half (arc 4, waits on OWNER-ASKS OA-4)"
+status: arcs 1 to 3 merged (#253, #266, #422); revised 2026-10-14 at dev 15881c7d for arc 4 (the Ready handshake, the start-up bar, #421, P7-09) and arc 5 (P7-05 to P7-07); awaiting the orchestrator's approval; 3.4 waits on backup-import-export arc 3
+issues: "#99, #100, #159, #198, #158 (arc 1, merged); #157 part (arc 2, merged); #24, #137, #208 reveal (arc 3, merged); #157, #421 (arc 4); #99, #100, #159 page 7 picks (arc 5, Refs); #208 autocomplete (3.4, deferred)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
 code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
-budget: recon 3 explorers (sonnet); dual audit (Codex gpt-6.1-sol high + one Opus Plan agent); final fresh Codex pass
+budget: recon 3 explorers (sonnet), plus 2 for the arc 4 revision; dual audit (Codex gpt-6.1-sol high + one Opus Plan agent) per revision; resumed rounds verify
 post_implementation_hardening: not scheduled
 ---
 
 # Account, profile and session lifecycle: races, retry, the port handshake, unlock and credentials
 
-Nine issues on how accounts, profiles and sessions start, wait and end, in four arcs and a close-out.
+Nine issues and page 7's picks on how accounts, profiles and sessions start, wait and end, in five arcs and a close-out. Size: the orchestrator set this five-arc plan a 600-line target; shipped arcs keep their evidence in short form.
 
-- **Arc 1 (decision-free).** Account creation and import check and write an address under that address's own lock, so neither can land between the other's check and write (#99). The popup's profile create waits for the created profile by id, joined to a bootstrap failure, under a deadline, and re-checks identity after every await (#100). A retry after "Passkey not confirmed" confirms the passkey the first attempt saved, as the passkey window does (#159). Two no-ask items ride here because page 7 governs neither: account RPC params are validated and a bad call is refused as `INVALID_PARAMS` (#198); ConfirmPopup's unreachable passkey branch and button are deleted (#158).
-- **Arc 2 (decision-free; reservation R4).** The half of #157 that no person sees: `onDisconnect` reads `lastError`; the background closes a port it refuses; `deleteProfile` waits, bounded, for the deletion coordinator instead of throwing; the PXE fence keeps every dead generation of a profile and joins an erase already in flight.
-- **Arc 3 (waits on decision page 7, hold H2, and backup-import-export arc 3).** Planned now, built only after page 7 is signed: #24 closes as not planned if P7-01 is approved; #137's toast (P7-02); #208's split reveal (P7-03) and backup autocomplete (P7-04, veto list).
-- **Arc 4 (waits on OWNER-ASKS OA-4).** The Ready handshake: the popup counts as connected only when the background says Ready, and a call made before that waits for Ready within its deadline. Both audits showed that this changes what a person sees (the start-up loader and the "unreachable" banner's timing), so it is planned in full and built only on the owner's answer. Closes #157.
+- **Arcs 1 to 3 (merged).** Arc 1 (#253): one critical section per account address (#99), a bounded, identity-checked profile activation (#100), the passkey retry confirms its saved credential (#159), account RPC params (#198), ConfirmPopup's dead branch (#158). Arc 2 (#266): the half of #157 no person sees. Arc 3 (#422): #24 closed as not planned (P7-01), the unlock toast (#137, P7-02), the split reveal (#208, P7-03).
+- **Arc 4.** The Ready handshake (#157, P7-08 = C): a popup call waits until the service says it has started. The start-up moment as P7-08b = C draws it: the unlock screen, and a 2 px bar along the top edge until Ready. The boot check stops depending on a connection, so a service that never starts ends in the banner and the reconnect storm stops (#421). Delete Profile gets the time its page promises (P7-09).
+- **Arc 5.** Page 7's picks for arc 1's surfaces: Create account skips an imported account's address (P7-06, #99); a new profile that does not open says so and goes to the unlock screen (P7-05, #100); the passkey window starts over after an authenticator with no PRF (P7-07, #159). Arc 4 is already a full PR (the messaging core's state machine, the popup's boot, both browsers' smoke and network suites); arc 5 shares one file with it, where arc 4 only rewrites a comment (`account/service.ts:246`), and needs only unit and smoke gates, so it reviews and merges on its own.
+- **Phase 3.4** (#208's autocomplete, P7-04) waits on backup-import-export arc 3, which rewrites both files first. It joins this lane's first arc after that merges; nothing is planned for it now.
 
-Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md) (first plan), [lessons/phase-4.md](lessons/phase-4.md) (this revision).
 
 ## Scope
 
-**In:** the nine issues above, with every surface they name.
+**In:** the nine issues, #421, and page 7's records P7-01 to P7-09 with every surface they name.
 
 **Out:**
-- A strict-mode recovery bearer of any kind (#24): hold H2 forbids it without a page-7 answer, and P7-01 proposes none.
-- `ProfileService.confirmProfileOperation` and the passkey recovery coordinator's `confirm`: #158's decision covers the popup branch only. The close-out files an issue if the RPC is left with no caller (dedupe first).
-- Session checks on account reads and metadata edits (`getAccounts`, `getAccount`, `changeAccountName`, `changeAccountVisibility` run without one today, `account/service.ts:202-221,369-398`). Found in audit, not in any lane issue; the close-out files it (dedupe first).
-- The passkey window's own retry for an authenticator that returns no PRF (OWNER-ASKS OA-3).
-- Fee-map cleanup on profile deletion (#91, fees-and-sponsors arc 2). Arc 2 stays out of `ProfileDeletionCoordinator.purge` and the tombstone shape.
-- `restore()`'s account writes (backup-import-export owns them; recon § Collisions).
-- The popup's 60 s call limit on `deleteProfile`, which a purge waiting behind a proof outlives (OWNER-ASKS OA-5): changing it changes what the Delete Profile page shows.
-- A reconnect backoff for the port client: it would make the start-up loader visible between attempts (`components/GlobalLoader.vue:14`), so it waits with arc 4.
+- A strict-mode recovery bearer (#24, closed under P7-01).
+- `confirmProfileOperation` and the recovery coordinator's `confirm`, which lost their popup caller in arc 1; session checks on account reads and metadata edits (`getAccounts`, `getAccount`, `changeAccountName`, `changeAccountVisibility`). The close-out files both (dedupe first).
+- Fee-map cleanup on profile deletion (#91, fees-and-sponsors arc 2): arc 2's R4 seam stands.
+- `restore()`'s account writes (backup-import-export owns them).
+- OA-6 (an unlock error toast that stays after a retry unlocks): unsigned, ships as today, listed for the orchestrator's next page.
+- OA-7 and OA-8 (the start-up unlock screen's details; a create superseded by another profile): each ships its "what ships now" form.
+- The onboarding tab's start-up: page 7 names the popup. Onboarding keeps its page while its calls wait, with no bar.
+- The `--scrim-loader` token in `@nulo/design`: its contract belongs to that package, though arc 4 deletes its only reader.
 
 ## Regrouping against the lane map
 
-The lane map has three arcs. This plan keeps arcs 1 and 3, narrows arc 2, and adds arc 4:
-
-- **#198 and #158 move into arc 1.** The lane brief allows it when page 7 governs neither. #198 edits `account/spec.ts` and `account/service.ts`, the files #99 edits. #158 deletes code no screen renders.
-- **#157 splits into arc 2 (decision-free) and arc 4 (owner decision).** The lane map called #157 decision-free. The tree says otherwise: `isBackgroundConnected` follows the profile client's `onConnected` (`utils/core.ts:62-73`), and it drives the full-screen "INITIALIZING / RECONNECTING" loader (`components/GlobalLoader.vue:14`) and the reconnect boot (`popup/app.vue:432`). Today the port reopens in the same tick, so the loader practically never shows; once Connected means Ready, it covers every background start, and a background that never starts shows it for up to 60 s instead of the "unreachable" banner after about 1.5 s (`popup/auth-guard.ts:60-80`). Everything of #157 that changes no screen ships in arc 2; the Ready handshake waits on OA-4 as arc 4.
+- **#198 and #158 moved into arc 1**: page 7 governs neither, and #198 edits the files #99 edits.
+- **#157 split into arc 2 (no screen) and arc 4 (owner decision)**: `isBackgroundConnected` drives the start-up loader and the reconnect boot (`apps/extension/src/utils/core.ts:62-73`, `popup/app.vue:425-433`), so Ready changes what a person sees.
+- **Arc 5 is new**: P7-05 to P7-07 reverse what arc 1 shipped as "what ships now". P7-09 is #157's and #421 was filed for arc 4, so both ride arc 4.
 
 ## Outcome & Quality Bar
 
-**For whom.** A person using the wallet popup: creating a profile, importing an account, unlocking after the browser restarted the background; and the maintainer who later reads a lock or a fence and must see why it is safe.
+**For whom.** A person using the wallet popup: creating a profile or an account, importing one, opening the popup while the background service starts, unlocking after the browser restarted it, deleting a profile behind a proof; and the maintainer who later reads a lock, a fence or the port state machine and must see why it is safe.
 
 **What excellent looks like.**
-1. A race between two of the person's own actions ends in one of the two outcomes the actions would have had one after the other, never a mixed state. Proved by a never-happens test with its success control for each race: create against import, create against a rename, a stale activation, overlapping PXE erases.
-2. A retry never creates a second secret. One passkey per created profile; an imported key row only behind an imported account row. Proved by the e2e count of `navigator.credentials.create` calls and the unit test of the row and key stores.
-3. Nothing a person sees changes except what a recorded decision names: the mirrored passkey confirmation (#159) in arc 1, page 7's words in arc 3, and the OA-4 answer in arc 4.
-4. A call made while the background restarts is answered or refused exactly as a fresh call made just after the restart would be, and is never posted twice (arc 4).
+1. A race between two of the person's own actions ends in one of the outcomes the actions would have had one after the other, never a mixed state. Each race has a never-happens test with its success control.
+2. A retry creates a second secret only where a record says so: one passkey per created profile, except a new one after an authenticator with no PRF (P7-07); an imported key row only behind its imported account row.
+3. Nothing a person sees changes except what a recorded decision names, quoted in § UI impact.
+4. A call made while the service starts or restarts is answered or refused exactly as a fresh call made just after the start would be, and is posted at most once. A service that never starts ends in the banner within about a minute, whatever its ports do.
 
-**What good enough looks like.** No new abstraction beyond what each fix needs. No refactor of the window's passkey flow, the deletion coordinator or the offscreen handshake. No timing tune of existing timeouts.
+**What good enough looks like.** No new abstraction beyond what each fix needs. No refactor of the window's passkey flow, the deletion coordinator or the offscreen handshake. No timing change beyond the numbers a record names (200 ms, 30 minutes) and two this plan names: P7-05's 60 s limit, listed for the owner (OA-8), and a flat 250 ms between refused ports, which can lengthen a cold start's bar by at most that and is measured in 4.4.
 
 ## Assumptions
 
-### Facts (verified against `643c0c9`)
+### Facts, arcs 1 to 3 (verified at `643c0c9`)
 
-- F1. Create, `ensureDefaultAccount` and `provisionDefaultAccount` serialise on `${profileId}:${chainId}:0`, import on `${profileId}:${chainId}:1` (`apps/extension/src/wallet/services/account/service.ts:225,240,263,366,522`). Create has no duplicate-address check and writes without the row lock (`:327`); import's duplicate check is at `:524`.
-- F2. An imported account's address is a pure function of its signing key, the same function a derived account uses (`packages/aztec-runtime/src/account/nulo-account.ts:67-89`). So an account exported from a same-phrase install has the address a later create derives at that index, and two rows at one address hold the same signing key.
-- F3. Row-lock keys are `JSON.stringify(["account", profileId, chainId, address])` (`account/spec.ts:27-29`), taken by `patchAccountField` (`:386`, a whole-row read-modify-write), `unwrite` (`:351`), `clearChainState` (`:193`), the profile purge (`:677`) and `reconcileImportedAccounts` (`:949`), each awaiting storage only. `KeyedLock` is not reentrant (`packages/wallet-core/src/utils/keyed-lock.ts`). `EntityStorage.get` hides an undecodable row; `contains(id)` reads the physical key and does not (`packages/wallet-core/src/storage/entity_storage.ts:176-186`).
-- F4. `activateCreatedProfile` polls `appStore.isLogined` every 100 ms with no id check and no deadline, then awaits `setLastActiveProfileId`, `getAccounts` and `storageLocalSet` before it routes (`apps/extension/src/popup/pages/profile/new-profile-helpers.ts:25-45`). The page is reached only from the lock screen's profile picker and from register (`popup/components/popups/SelectProfilePopup.vue:73`, `popup/pages/register.vue:46`), so `isLogined` is false when it starts. The shell's bootstrap sets `appStore.profile` to the activated profile synchronously at entry and flips `isLogined` last (`composables/useProfileBootstrap.ts:148-175`). `awaitProfileActivation` is the bounded, identity-checked, failure-joined wait (`apps/extension/src/composables/unlockWait.ts:33`). `auth.vue` re-checks identity after each await of its own tail (`popup/pages/auth.vue:185-197`). A failed bootstrap records `appStore.bootstrapFailure` (`popup/app.vue:215`).
-- F5. `handleCreate` keeps its latch when `onCreated` throws (`apps/extension/src/composables/useProfileCreateFlow.ts`, pinned by `useProfileCreateFlow.test.ts:219`).
-- F6. The in-page passkey create mints a new id and a new credential on every attempt and drops the `PasskeyUnconfirmedError` (`apps/extension/src/wallet/utils/create-passkey-profile.ts`); the window keeps it and calls `confirmCreatedCredential` on Try again (`apps/extension/src/popup/windows/passkey/index.vue:36,76-88`). The create writes the profile name into the credential's `user.name` (`wallet/utils/passkey-ceremony.ts:47`).
-- F7. `classifyPasskeyFailure` unwraps a `PasskeyUnconfirmedError` to its cause: `NotAllowedError` is "not-confirmed" (toast "Passkey not confirmed. Try again."), `PasskeyPrfError` is "no-prf" (`apps/extension/src/utils/passkey-copy.ts:80-96`). A create that returns no `prf` at all fails as no-prf (`passkey-ceremony.ts:107`); one that returns `prf` without `results` goes to the confirming assertion (`:109-123`).
-- F8. RPC params keep `undefined` holes across the wire (`packages/extension-messaging/src/utils.ts` `wrapParams`/`unwrapParams`), so `.optional()` tuple members match omitted arguments.
-- F9. `BaseService.handleRequest` calls `invoke(method, params)` for `rpcMethods` and for the framework RPCs `backup` and `restore`, and logs a thrown error at debug; a malformed params object gets a `VALIDATION` response before `invoke` (`packages/extension-messaging/src/core/base-service.ts:80-120`). `OperationJournalService` already overrides `invoke` and passes other names to `super.invoke` (`apps/extension/src/wallet/services/operation-journal/service.ts:117-127`). `InvalidWalletArgumentsError.forMethod` carries code `INVALID_PARAMS` and a message that names only the method (`packages/extension-messaging/src/errors.ts:284-295`).
-- F10. The port client sets Connected and fires `onConnected` right after `chrome.runtime.connect` (`packages/extension-messaging/src/background/client.ts:62-78`) and reconnects at once on `onDisconnect` without reading `lastError` (`:94-97`). `isBackgroundConnected` follows the profile client's two events (`apps/extension/src/utils/core.ts:62-73`); the loader shows while it is false (`components/GlobalLoader.vue:14`); `app.vue` runs the reconnect boot when it turns true (`popup/app.vue:420-436`).
-- F11. The server logs and leaves open a port from an untrusted sender (`background/service.ts:45-48`).
-- F12. `deleteProfile` throws "deletion coordinator not ready" when no delegate is set (`apps/extension/src/wallet/services/profile/service.ts:1455-1457`); the coordinator sets it at the end of its `start()`, the last start phase. Resume and torn reap run after start (`:1543-1545`).
-- F13. `clearProfileState(id, G2)` over `deleted(G1)` throws a generation mismatch (`packages/aztec-runtime/src/pxe/service.ts:752-759`); `provisionChainStoreKey` refuses only the one retained dead generation (`:829-846`); `clearProfileState` marks `deleting` before it awaits the write barrier and drops the barrier on success (`:763-786`); the orphan sweep skips any profile with a lifecycle entry (`:286`); `incarnation-fence.test.ts:133-146` pins that `clear(G1)` over `live(G2)` refuses.
-- F14. `ToastOptions` has `sub` (`packages/design/src/composables/toast.ts:15-20`); about ten popups write the label "Something went wrong" by hand.
-- F15. `change-password.vue` drives all three fields from one `isPasswordType` flag (`apps/extension/src/popup/pages/settings/security/change-password.vue:124-186`); the backup decrypt field and the export pair carry no `autocomplete` (`ImportFullBackupForm.vue:111`, `export/full.vue:665,679`).
-- F16. SECURITY.md § Session secret (password profiles), item 5, already says that after a background death under strict mode the next popup shows the lock screen.
-- F17. Eleven network files carry `@requires-proverless`, three of them in this plan's gates: `account-switch-isolation.test.ts`, `backup-restore-sw-restart.test.ts` and `inflight-call-background-death.test.ts`. `apps/extension/scripts/e2e/agent.sh:21-33` refuses a marked file unless `NULO_E2E_PROVERLESS=1` is set.
+- F1. Create and the default-account paths serialised on `${profileId}:${chainId}:0`, import on `:1`; create had no duplicate-address check (`account/service.ts`).
+- F2. An imported account's address is a pure function of its signing key, the function a derived account uses (`packages/aztec-runtime/src/account/nulo-account.ts:67-89`).
+- F3. Row-lock keys are `JSON.stringify(["account", profileId, chainId, address])` (`account/spec.ts:27-29`); `KeyedLock` is not reentrant; `EntityStorage.get` hides an undecodable row, `contains(id)` does not.
+- F4. `activateCreatedProfile` polled `isLogined` with no id check and no deadline; `awaitProfileActivation` is the bounded, identity-checked wait (`composables/unlockWait.ts`); a failed bootstrap records `appStore.bootstrapFailure`.
+- F5. `handleCreate` keeps its latch when `onCreated` throws (`useProfileCreateFlow.ts`).
+- F6, F7. The in-page passkey create minted a new credential per attempt; the window confirms the kept one (`popup/windows/passkey/index.vue`). `classifyPasskeyFailure` reads a `NotAllowedError` cause as "not-confirmed" and a `PasskeyPrfError` as "no-prf" (`utils/passkey-copy.ts:80-96`).
+- F8, F9. RPC params keep `undefined` holes; `BaseService.handleRequest` invokes `rpcMethods` and the framework `backup`/`restore`; `InvalidWalletArgumentsError.forMethod` carries `INVALID_PARAMS`.
+- F10 to F13. The port client reported Connected at `connect` and ignored `lastError`; the server left an untrusted port open; `deleteProfile` threw before its delegate existed; the PXE fence kept one dead generation.
+- F14 to F16. `ToastOptions.sub` exists; `change-password.vue` drove three fields from one flag; SECURITY.md § Session secret (password profiles) item 5 already says a strict-mode restart shows the lock screen.
+- F17. Network files marked `@requires-proverless` run only with `NULO_E2E_PROVERLESS=1` (`apps/extension/scripts/e2e/agent.sh:21-33`).
 
-### Inferences (unverified; each is checked in the phase named)
+### Facts, arcs 4 and 5 (verified at `15881c7d`)
 
-- I1. Once the shell has started the created profile's bootstrap, the bootstrap ends on its own: every await in it is an RPC under the client's 60 s timeout or a storage call, a failure of the current run records `bootstrapFailure` (`popup/app.vue:205-216`), and a newer profile event supersedes it by selecting another profile or by locking. A run of slow but healthy calls can take longer than any fixed bound (Codex final pass, finding 4), so arc 1 puts no time bound after the start. Phase 1.2 lists every await and failure path and confirms this.
-- I2. Overriding `getClientExtensionResults` on the credential a real create returns (to `{ prf: { enabled: true } }`, no `results`) sends the in-page ceremony down the confirming-assertion path on both browsers (F7). Phase 1.3 checks it on Chrome and Firefox before the test relies on it.
-- I3. A port opened during a cold wake can meet no `onConnect` listener, because the services register theirs inside `registerServices` after awaited boot steps (`apps/extension/src/wallet/runtime.ts:254,478`). Arc 4 checks it on the base build before any red/green claim.
+- F18. The port client sets Connected and fires `onConnected` synchronously inside `openPort`, and reconnects at once on any close (`packages/extension-messaging/src/background/client.ts:62-78,94-99`). A request awaits readiness only when `ensureTransportReady` returns a promise, under a deadline set before the wait (`core/base-client.ts:117,125,287-309`), and posts at `:165` without checking that deadline again. The offscreen transport returns a promise except once after its bypass is armed (`offscreen/client.ts:141-148`).
+- F19. The server registers `onConnect` in each `Service` constructor (`background/service.ts:31-36`), and the worker constructs the services only in `registerServices`, after the migration gate, the engine and the config and Barretenberg load (`apps/extension/src/wallet/runtime.ts:207-264`). The worker's entry registers no `onConnect` (`wallet/index.ts`). The shots capture showed a port opened before then is refused, and reopened about 140 times a second (#421).
+- F20. `ensureInitialized` polls every 500 ms for up to `DEFAULT_INIT_TIMEOUT_MS` = 30 s (`core/initialization.ts:13-21`); `start()` sets `initialized` after `init` (`core/base-service.ts:64-69`).
+- F21. `popup/index.ts:28` opens the profile client before mount, so the first `onConnected` fires before `app.vue`'s watch exists and only a reconnect starts `loadProfile({ reconnect: true })` (`popup/app.vue:425-433`). `onBeforeMount` awaits `router.isReady()`, then the settings read, then `loadProfile()` (`app.vue:350-369`).
+- F22. The router's first navigation awaits the guard's `getProfiles` whenever no profile is selected and the route is not register, import or new profile; passkey routes proceed early (`popup/route-guard.ts:28,47-56`). So a fresh popup is empty until the service answers. A guard that throws fails the first navigation, and `onBeforeMount` then never reaches `loadProfile` (the comment at `app.vue:296-299` relies on a reconnect run for that case).
+- F23. `resolveBootSession` bounds each read by `lookupActiveProfileWithBackoff`'s 60 s deadline (`popup/boot-session.ts:39-64`, `popup/auth-guard.ts:48,60-81`); an "unreachable" result sets the banner (`app.vue:254-263,472-481`).
+- F24. `GlobalLoader.vue` renders while `!isBackgroundConnected`, at `z-index: 9999`, in the popup and the onboarding shells. It is visible only when `chrome.runtime.connect` throws, since a reconnect flips the flag back in the same tick. About 20 e2e sites wait for its absence.
+- F25. Twenty-one `onConnected` subscribers re-read on reconnect (`rg -n "onConnected\.add" apps/extension/src`), among them `useConfigRead`, `useArrivals`, `useLegalAcceptance` and the profile and journal clients' snapshots.
+- F26. `auth.vue` focuses the password field only at mount and selects the last-active profile through `getProfiles` (`popup/pages/auth.vue:217-227`); the heading, its line and the form depend on `appStore.profile?.type` (`:59,253-310`).
+- F27. The theme is painted before first paint from a `localStorage` hint (`popup/index.html:6-8`, `utils/general.ts:8-15`). `.noanimations` kills transitions only (`packages/design/src/base.css:375-378`).
+- F28. The only `runtime.onConnect` listeners are the worker's (`background/service.ts:35`, `core/adapters/chrome-browser-api.ts:126`).
+- F29. Fixture builds hold the boot inside the migration engine, before `registerServices`, while `nulo:e2e:migration-hold` is set (`apps/extension/src/e2e/migration-fixture.ts:28,56`); the hold releases itself after 30 s (`:38`). CI's source-built smoke arms it (`.github/workflows/_extension-smoke-e2e.yml:66,115`); the release-artifact smoke has no fixture (`tests/e2e/migration.test.ts:20-24`). A popup opened mid-migration shows the Updating barrier over every screen (`tests/e2e/migration.test.ts:220`).
+- F30. `ProfileServiceClient` overrides no timeout and passes no `requestTimeoutMs`, which `ServiceClient` already accepts (`wallet/services/profile/client.ts:23`, `background/client.ts:42`), so `deleteProfile` gives up at 60 s; the backup rollback retries its delete up to three times through the shared client (`composables/full-backup-restore.ts:62,152`); `reset.vue` shows its 30-minute hint after 10 s and "Couldn't delete profile. Try again" on any error (`popup/pages/settings/security/reset.vue:45,61-72,158-161`). Other clients override per method (`execution/client.ts:23-25`).
+- F31. Create picks max index + 1 over same-type rows, writes over whatever holds the address under its row lock, then deletes that address's imported key (`account/service.ts:311-314,333-340,365-371`). `ensureDefaultAccount` shares the path; `provisionDefaultAccount` returns when any row exists. New accounts are named by the smallest free number, not the index (`utils/account-name.ts`).
+- F32. `activateCreatedProfile` has one caller, the popup's New profile page, which opens only from the unlock screen's profile list and from register (`SelectProfilePopup.vue:73`, `register.vue:46`); onboarding activates on its own (`popup/pages/profile/new.vue:71`, `onboarding/pages/create.vue:56-59`). `CREATE_START_WAIT_MS` (30 s) bounds only the start; `ActivationSupersededError` comes from the start-only mode (`unlockWait.ts:31-43,69`). `supersedeProfileActivations()` stops every earlier run from setting `isLogined` (`composables/useProfileBootstrap.ts:50`). An error toast stays until closed; a lock closes every toast (`popup/scope-epoch.ts:17-26`).
+- F33. The window keeps every `PasskeyUnconfirmedError`, no-PRF included, and confirms it on Try again; its body reads the unconfirmed line while one is kept (`popup/windows/passkey/index.vue:45-50,74-88`). The background fixes the profile id when it opens the window and refuses another user handle (`profile/service.ts:729-740`).
+- F34. #99, #100 and #159 closed with arc 1's merge; #157, #208 and #421 are open. #169 (gate G1) has merged.
+- F35. The integrity coordinator installs its delegate in its own `start()`, a later phase than Profile's, and `openSessionVerified` skips the check while no delegate is set, refusing only a known durable block (`account-integrity/coordinator.ts:65-68`, `profile/service.ts:1344-1353`). `ServiceCollection.start` starts no later phase after a failed one (`packages/wallet-core/src/base/index.ts:69-89`). The wallet-sdk handler is installed only after `services.start()` (`wallet/runtime.ts:264,275`).
+- F36. A boot run over a locked wallet with no profile selected and no candidate settles where it is (`popup/lock-landing.ts:45`); only the guard (`route-guard.ts:54`) and `lockedState.land` (`locked-state.ts:31`) route to register. A reconnect run over a matched route, and every run in an own window, treat the page as established and select nothing (`app.vue:300`).
+
+### Inferences (each checked in the phase named)
+
+- I1, I2 (arc 1): confirmed in [lessons/phase-1.md](lessons/phase-1.md). I4 to I8 (arc 4): confirmed in phase 4.1, [lessons/phase-4.md](lessons/phase-4.md).
+- I4. Firefox's event page refuses a port opened before its listeners exist the way Chrome does, so one retry spacing covers both; the close channel does not matter, since any close before Ready is retried. Phase 4.1.
+- I5. Unknown. Both browsers close an extension's pages, tabs, own windows and side panels when it reloads, so no person reaches GlobalLoader's one visible case (F24). If false, such a page shows the bar, then the banner. Phase 4.1.
+- I6. A stopped worker's successor runs the fixture migration's hold when the schema marker is rewound before the stop. Phase 4.1; if not, 4.4 relaunches the browser as `migration.test.ts` does.
+- I7. The `onConnected` subscribers (F25) re-read idempotently, so a first `onConnected` that now reaches them after they subscribe only repeats a read. Phase 4.1 lists each, and names those that do more than a read (`tryReplayForTriple`, `useArrivals.startRead`).
+- I8. The whole collection starts within a few hundred milliseconds of Profile's start, since every `init` awaits storage only and the coordinator's re-derivation runs outside `start()` (`coordinator.ts:74-84`). Phase 4.1 measures it on both browsers.
 
 ### Asks
 
-None block arcs 1 and 2. OWNER-ASKS.md holds OA-1 (#100, a create whose activation fails or wedges), OA-2 (#99, a create that lands on an imported account's address), OA-3 (the window's retry for a no-PRF authenticator) OA-4 (the Ready handshake's visible effects; gates arc 4) and OA-5 (found in arc 2's review: Delete Profile gives up at the popup's 60 s call limit while the page promises up to 30 minutes; not built). Page 7's four records gate arc 3.
+OA-1 to OA-5 were answered on page 7 (OWNER-ASKS § Answers). OA-6 is open and ships as today. OA-7 (the unlock screen before the service answers) and OA-8 (a create superseded by another profile) are new; each ships its "what ships now" form.
 
 ## Architecture & Implementation
 
-### Arc 1
+### Arcs 1 to 3 as built
 
-**#99: one critical section per address.** The per-type serialisation (`serializePerTuple`) stays: it keeps two creates, or two imports, from picking one index. What changes is the final check and write. Both create and import run them under the existing row lock, `tupleLocks.withLock(accountRowId(profileId, chainId, address))`, the lock `patchAccountField` and every purge already take (F3). Create learns its address only after the derivation, so it takes the row lock then, inside its type section. Nesting is always type key, then row key; nothing takes them in the other order, and no code holding a row lock calls `unwrite`.
+- **#99.** Create and import check and write an address under its row lock (`tupleLocks.withLock(accountRowId(...))`), taken inside the type section. Lock order 1: type key, then row key; a row-lock holder awaits storage only and never calls `unwrite`. `unwrite` deletes only a row whose `type` and `index` are its writer's; `reconcileImportedAccounts` selects and deletes under the row lock. Create replaced an imported row and deleted its key: OA-2's "what ships now", which arc 5 replaces.
+- **#100.** `awaitProfileActivation(appStore, id, CREATE_START_WAIT_MS, { deadlineCovers: "start" })`, an identity re-check after every await, and `ActivationSupersededError`; `handleCreate` logs a category and keeps its latch on any rejection (OA-1's "what ships now", which arc 5 replaces).
+- **#159.** `credentialId?` on the create request; `useProfileCreateFlow` keeps the last non-no-PRF `PasskeyUnconfirmedError` while the name is unchanged.
+- **#198, #158.** `AccountMethodSchemas` checked by an `invoke` override that refuses with `INVALID_PARAMS`; the dead ConfirmPopup branch deleted.
+- **Arc 2.** The client reads `lastError` and `port.error`; the server disconnects an untrusted sender's port; `deleteProfile` waits for its delegate inside one 30 s budget taken at entry (`performance.now()`); the PXE fence keeps a per-profile lifecycle record (current, dead generations, the clear in flight) and joins a clear in flight. R4 seam: `coordinator.ts`, `profile-deletion/types.ts` and the tombstone repository untouched.
+- **Arc 3.** `auth.vue`'s failure ladder ends with the P7-02 toast; `change-password.vue` has two reveal flags.
 
-Inside the row lock, each side awaits storage only:
-- It reads occupancy with `contains(id)`, the physical key, not the decoded view, so a row the codec hides still counts as present (F3).
-- It asserts the deletion epoch with no await before the write. The network liveness read stays before the lock, as today, and the post-write liveness read and epoch check stay after it.
-- **Import:** an occupied key refuses with "This account is already in your wallet", before any key row is written. Otherwise it writes the key row, then the account row, as today.
-- **Create:** whatever occupies the key is overwritten, as today; for an imported row that is today's sequential outcome (OWNER-ASKS OA-2 asks whether to change it). It then deletes any sealed imported key stored for that address, in the same hold. The derived row signs with the same key (F2), and while it stands nothing else removes that key row: `clearChainState` deletes keys only behind imported rows (`account/service.ts:196`), the init sweep only behind absent rows (`:171-178`), and a backup would carry it (`:805`). A failed key delete logs a fixed category at warn and does not throw: the new row is already committed.
+### Arc 4: the Ready handshake and the start-up moment
 
-Because a rename's read-modify-write holds the same row lock, a rename parked on its read can no longer write an imported row back over a create's derived row after its key is gone (Codex finding 1). Import no longer waits behind a create's custom-network L1 probe, which runs in create's type section, outside the row lock (Codex finding 8).
+**Wire and server.** `MessageType.Ready` (4) carries no content and means the whole wallet has started, not one service.
+- `IService` gains an optional `collectionStarted()`, which `ServiceCollection.start` calls on every service after its last phase succeeds. `BaseService` resolves a one-shot promise there.
+- On a port it accepts, the Port `Service` posts Ready when that promise resolves. Past `DEFAULT_INIT_TIMEOUT_MS` from the accept, it logs a fixed category at debug and `disconnect()`s the port; the client opens another. A post to a port that closed meanwhile is dropped. Request handling is unchanged.
+- Why the whole collection: a popup call then never meets the start-up window in which an unlock opens unchecked (F35). The dApp path already waits for the same point. A boot that fails in any phase never says Ready, so it ends in the banner. The cost is the later phases' start, storage reads only (I8).
 
-Two other writers must respect a replacement, or a create that replaced an imported row can still lose its row (final pass, findings 1 and 2):
-- **`unwrite` deletes only its own row.** Under the row lock it re-reads the row and deletes it only while the stored `type` and `index` are the ones this writer wrote; otherwise it throws its refusal and deletes nothing. A rename keeps `type` and `index`, so a renamed row is still removed. Import's key compensation in its `catch` stays: only imports write key rows, imports of one (profile, chain) serialise on the import type key, and that `catch` runs inside the section, so the key it deletes is its own or already gone.
-- **`reconcileImportedAccounts` selects and deletes under the row lock.** A candidate is a row that, read fresh under its row lock, is still imported and has no key. The delete pass re-checks the same two facts under the lock, so the reconcile never deletes a row that is not an imported, keyless one. Its one caller, the full-backup import, runs it before the restored profile has a session (`apps/extension/src/composables/useFullBackupImport.ts:388-399`), when create and import refuse (`profile/session-manager.ts:248-252`); the re-checks keep the rule for a direct RPC call too. A dependent purge for a candidate that a create replaces mid-reconcile is not fenced: no session-holding create can reach that window (final pass, round 2).
+**Client states** (`background/client.ts`): `Disconnected` → `Connecting` (a port, no Ready yet) → `Connected`.
+- Every port has a generation. A message or a close from a port that is not current is ignored, and that port is closed, so the client never holds two. Events from the current port are dispatched in either state, as today.
+- `ensureTransportReady()` returns void when `Connected`. Otherwise it opens a port if none is open and no reconnect is pending, and returns the Ready promise of this `Connecting` episode, which survives pre-Ready closes. A throw from `chrome.runtime.connect` rejects as today.
+- On Ready from the current port while `Connecting`: `Connected`, then resolve the Ready promise. `onConnected` fires in a task (`setTimeout(0)`), so every queued request has posted first; the task captures the generation and fires nothing if it moved. Any other Ready is ignored.
+- A close from `Connected`: as today. Reject every posted request with "Client disconnected" (a posted request may have run, so it is never resent), fire `onDisconnected`, reconnect at once.
+- A close from `Connecting`: reject nothing (nothing was posted), fire nothing, reconnect after a flat 250 ms.
+- An explicit `disconnect()`: close the port, cancel the reconnect, reject the Ready promise and every posted request, and fire `onDisconnected` only from `Connected`.
 
-**#100: the activation wait.** `activateCreatedProfile` replaces the poll with `awaitProfileActivation(appStore, profile.id, CREATE_START_WAIT_MS, { deadlineCovers: "start" })`, `CREATE_START_WAIT_MS = 30_000`. The one watcher the helper already has gains one option and one typed error:
-- With `deadlineCovers: "start"`, the timer stops once the shell has selected the expected profile (`store.profile?.id === expectedId`), which its bootstrap does at entry (F4). Before that, the deadline covers the one part nothing else bounds: a profile event that never arrives. After it, the bootstrap ends the wait by itself (I1): activation resolves, a recorded failure rejects with `BootstrapFailedError`, and the shell selecting another profile rejects with a new `ActivationSupersededError`. A start-up that is slow but succeeds still lands on General, as today. A lock during the bootstrap leaves the wait pending, as today's poll does.
-- Without the option (the unlock's use), nothing changes.
+**The send check** (`core/base-client.ts`, `background/client.ts`). After the readiness wait, `request()` rejects with its timeout error, sending nothing, when the deadline has passed. Nothing is awaited between that check and the post. The port client's `sendEnvelope` posts only while `Connected` on the current port; otherwise the request rejects with the disconnect error, and nothing reopens a port. Between Ready and a request's continuation only microtasks run, so the one thing that can intervene is an explicit `disconnect()`. The offscreen transport is untouched.
 
-The tail follows `auth.vue`. It drops the redundant `appStore.profile = profile` write. It returns without writing or routing unless `appStore.isLogined && appStore.profile?.id === profile.id` holds right after the wait, and again after each of its three awaits (`setLastActiveProfileId`, `getAccounts`, `storageLocalSet`). On any rejection it rethrows. `handleCreate` catches an `onCreated` rejection, logs a fixed category at warn (`{ reason: "timeout" | "bootstrap-failed" | "superseded" | "other" }`, never the error text), and keeps its latch: today's visible behaviour (OA-1).
+**The boot check never waits for Ready to start** (`popup/app.vue`, new `popup/boot-triggers.ts`, `utils/core.ts`). `isBackgroundConnected` becomes `isServiceReady`: true on the profile client's `onConnected` (a Ready), false on its `onDisconnected` (a drop of a Ready port).
+- `boot-triggers.ts` owns the wiring, testable without mounting the shell, like `network-switch.ts`. `loadProfile` runs at mount and on `onDisconnected`, the drop today's reconnect follows in the same tick (F21); never on Ready. A Ready says the reads can now be answered, not that the shell's knowledge went stale. The reads wait for Ready inside their own 60 s lookup deadline (F23).
+- So a service that never says Ready ends in the "unreachable" banner at about 60 s, for a fresh popup and for one open across a restart. Pre-Ready churn starts no run, so nothing supersedes the run that waits (#421).
+- `onBeforeMount` awaits `router.isReady().catch(() => {})`, so a first navigation that fails no longer skips the check (F22). It then starts `loadProfile()` and the settings read side by side. The settings read waits for Ready too and must not delay the check; the theme is already painted (F27).
 
-**#159: the saved credential.** Three small edits, no new module:
-- `PasskeyRequest`'s create variant gains `credentialId?: string`: a credential this create already minted. `runPasskeyCeremony` confirms it through `confirmCreatedCredential` instead of running `create`, and wraps a failure as `PasskeyUnconfirmedError(credentialId, userHandle, cause)`, as `runCreate` does once a credential exists. The background never sets the field; the window's own path is unchanged.
-- `createPasskeyProfileWithRetry(name, deps, saved?)`: the first attempt uses `saved.userHandle` as the profile id and passes `saved.credentialId`; a `ProfileIdConflictError` falls back to a fresh id and a fresh create, as today.
-- `useProfileCreateFlow` keeps the last `PasskeyUnconfirmedError` with the name it was created under and passes it on the next passkey attempt; success clears it. It is not reused when the name changed (the credential's label would name another profile, F6) or when the failure was "no-prf" (that authenticator can never confirm, and pinning the retry to it would stop the person picking another one). Both keep today's fresh create.
+**The first screen** (`popup/route-guard.ts`, `popup/index.ts`, new `popup/start-grace.ts`). `popup/index.ts` takes one deadline at page load: `START_GRACE_MS` = 200 ms, the bar's delay before it shows.
+- While the session is unchecked and the service has not said Ready, a navigation waits for Ready until that deadline, never longer. So the redirect chain `/popup` → General → `popup-auth` spends 200 ms in all.
+- With Ready by then, the guard decides as today. Past it, the guard skips its service reads and marks the navigation provisional. An auth-required route goes to `popup-auth`, the answer an unchecked session gets today (`auth-guard.ts:35`), and any other route proceeds, unselected. So `router.isReady()` no longer waits on the service (F22), and a normal open looks as today.
+- **The repair.** On every Ready while a navigation is provisional, and when a boot run decides while one is and the service is Ready, the shell replays it: `router.replace({ path, force: true })`, with `path` the provisional navigation's target. The guard now reads and decides exactly as today: register for an empty wallet, the last-active profile, `requirePasswordProfile`, an own window's route. A guard run whose reads fail also marks its navigation provisional, so a read that fails after Ready is replayed when the boot run decides. The mark clears only when a guard run's reads complete.
+- The replay and the mount's boot run may interleave. The guard's profile block now assigns only if no profile is set after its awaits (`route-guard.ts:47-52` assigns unconditionally today), so a profile the boot run selected meanwhile stands. With that, every order ends where today's guard-then-run order ends, since the guard also sends a logged-in `popup-auth` back (`route-guard.ts:30`).
+- So no route the shell reaches without reads outlives the next Ready, and the boot runs keep today's `pageEstablished` rule (F36).
 
-**#198: params at the RPC boundary.** `account/spec.ts` gains `AccountMethodSchemas`, one `z.tuple` per name in `rpcMethods` (13 methods), with `.optional()` for optional parameters (F8). `restoreImportedKeys` checks only that it receives an array, so `restoreRows` still records each bad row as its own error. `AccountService` overrides `invoke` on the operation-journal precedent (F9): a name with no schema (`backup`, `restore`) goes to `super.invoke` unchanged; otherwise the tuple is checked with `safeParse`, a failure throws `InvalidWalletArgumentsError.forMethod(method)` before the method runs, and a success calls the method with the original params, so zod never rewrites an argument such as a `RunFence`. A malformed params object keeps today's `VALIDATION` response. The stale TypeError comment at `account/spec.ts:37-41` is rewritten. A test pins that the schema keys equal `rpcMethods`.
+**The bar** (`components/StartBar.vue`, new, mounted in `popup/app.vue` before `<Header />`). It renders while `!isServiceReady && !bootOutcome`, as `data-testid="start-pending"`, `aria-hidden="true"`, `pointer-events: none`, `position: fixed` along the top edge, 2 px high, under the barriers (10000) and above the sheet (9000). It is transparent until a CSS animation delay of 200 ms; then a segment in `var(--nulo-accent)` sweeps across, and under `prefers-reduced-motion: reduce` a static bar shows instead (shot `shot/157-C`, commit `a4c7f456`). It gives way to the banner when the boot check gives up; during RETRY it shows again until Ready. The shell root renders `data-service-ready` from `isServiceReady`, an e2e hook like `data-session-checked`.
 
-**#158: ConfirmPopup.** Delete `isPasskeyConfirmed`, `handlePasskeyConfirmation`, the passkey `Button`, and the `passkeyConfirmation` terms in `isConfirmed` and in the row's `v-if`; drop imports left unused.
+**The loader goes.** `GlobalLoader.vue` and its test are deleted from both shells: under C nothing covers the start-up, and its one visible case is a page whose extension context is gone (F24, I5). Such a page now shows the bar, then the banner when its calls fail at once. Every e2e wait for the loader's absence becomes `waitForServiceReady(page)` on `data-service-ready`. The regenerated `types/{auto-imports,components}.d.ts` drop it, and the comments that name it (`LegalAcceptanceSheet.vue:127`, `account/service.ts:246`) are rewritten.
 
-### Arc 2: the decision-free half of #157
+**The unlock screen before the profile is known** (`popup/pages/auth.vue`; OA-7). While `appStore.profile` is undefined, the heading, its line and the form keep their place but are hidden (`visibility: hidden`), out of the Tab order and the accessibility tree. A passkey profile never shows the password form; a password profile's form appears in place, and a passkey profile's shorter form re-centres the column once (OA-7 asks). When a password profile becomes known and focus is on `document.body`, focus moves to the password field, as the mount does today. The pill shows an empty name until then (P7-08b). An empty wallet's unlock frame gives way to register at the repair (OA-7 asks).
 
-**Transport (`packages/extension-messaging/src/background/*`).**
-- The client's `onDisconnect` reads `chrome.runtime.lastError` (Chrome) and the port's `error` (Firefox), so neither browser reports an unchecked error, and logs a fixed category at debug. Its timing and events are unchanged.
-- The server `disconnect()`s a port from an untrusted sender after logging it, instead of leaving it open. A port for another service name is still ignored: every service sees every `onConnect`.
+**Delete Profile's bound (P7-09).** `ProfileServiceClient`'s constructor passes `options` through to `ServiceClient` (F30). `profile/client.ts` exports `deleteProfileClient()`, a client with `requestTimeoutMs: DELETE_PROFILE_TIMEOUT_MS = 30 * 60_000 + DEFAULT_INIT_TIMEOUT_MS`, the page's promise in the record's words. `reset.vue` uses one for `deleteProfile` only and disconnects it in `onBeforeUnmount`. The deadline covers the Ready wait (F18). The backup rollback keeps the shared client's 60 s, so its three attempts stay bounded at three minutes. A deletion behind proofs on two of a profile's chains can still outlast the bound, and the page then says what it says today while the background finishes. That path is plausible but unverified, its consequence a wrong message; the close-out files it as a known limit.
 
-**Delegate wait (`profile/service.ts`).** `setDeletionDelegate` resolves a one-shot promise. `deleteProfile` awaits it before any lock, inside the one `DEFAULT_INIT_TIMEOUT_MS` (30 s) budget its `ensureInitialized` already spends, taken at entry; at the bound it throws the existing "deletion coordinator not ready", having written nothing. So the call reaches its first write no later than it does today (Audit verdicts, D1). This is the only edit to the deletion path, in the first lines of `ProfileService.deleteProfile` (the R4 seam, below).
+**Queued calls and sessions.** A call queued across a restart reaches the new worker, which applies its own session state: exactly what a fresh call from the same page just after the restart would get. Under strict mode no session exists and session-checked calls are refused; under lenient mode the bearer restores the same profile during init, before Ready. A call that acts on "the active profile" acts on the one active when it arrives. The flows that move secrets carry a `RunFence` or `ExecutionFence` that refuses a changed session.
 
-**Dead generations (`pxe/service.ts`).** `profileLifecycles` becomes a per-profile record `{ current?: { kind: "live" | "deleting"; gen }, dead: Set<gen>, clearing?: { gen, done: Promise<void> } }`. A record exists while a profile is live, deleting or has any dead generation, so the orphan sweep's `has` check (`:286`) keeps its meaning.
-- `clearProfileState(id, gen)`, in this order:
-  1. A clear of the same `gen` already in flight is joined: the caller awaits it. No second erase runs through a barrier the first may drop.
-  2. A `current` under another `gen` refuses, as `incarnation-fence.test.ts:133-146` pins: a late clear never erases a live or in-flight successor.
-  3. A dead `gen` is an idempotent no-op.
-  4. Otherwise it marks `deleting(gen)` synchronously and takes the barrier. It re-checks that `current` is still `deleting(gen)` before the first destructive step, then erases. On success it drops `current` and adds `gen` to `dead`.
-- `provisionChainStoreKey(id, key, gen)`: refuse while `deleting`, refuse any dead `gen`, refuse `live` under another `gen`; otherwise as today.
-- `assertGenerationCurrent`: a dead captured `gen` is stale. With no `current` the op falls through, as today: a successor booting before its first provision. `live` under the captured `gen` passes.
+**Invariants.** A request is posted at most once, before its deadline, and only on a port that said Ready after the whole wallet started. `onConnected` fires at most once per Ready, never for a port that is no longer current. Every port the client stops using is closed. A boot run starts at mount and on a drop of a Ready port, and nothing else supersedes it. A route decided without reads is replayed at the next Ready.
 
-The record lives as long as the offscreen document, like today's map, and grows by one entry per deletion of a profile id. Generations are minted fresh for every row (`apps/extension/src/wallet/services/profile/profile-row.ts:37,60`), so no successor can carry a dead generation.
+### Arc 5: page 7's picks for arc 1's surfaces
 
-**R4 seam.** fees-and-sponsors arc 2 (#91) appends a purge to `ProfileDeletionCoordinator.purge` and may widen the deletion snapshot. Arc 2 edits neither `coordinator.ts`, `profile-deletion/types.ts` nor the tombstone repository. Its only deletion-path edit is the delegate acquisition at the top of `ProfileService.deleteProfile`. Whichever lands second rebases and re-runs its network gate.
+**P7-06 (#99): Create account skips an occupied address.** In `createAccountInternal`, inside the type section: derive at max index + 1, take that address's row lock, and read `contains(id)`. If the key is occupied, release the lock, take the next index and derive again; otherwise write, as today.
+- Any occupied key is skipped: an imported row, or one the codec hides. So create never overwrites a row it cannot read.
+- A skipped index is never chosen again while a derived row above it exists, because the next index is max + 1 over derived rows (F31). The visible name takes the smallest free number, so no gap shows.
+- `dropReplacedImportedKey` is deleted: an imported key now always keeps its row. A key without its row exists only between a torn import and the next boot's orphan sweep, which init awaits before any call (`account/service.ts:162-172`), so no create meets one. `ensureDefaultAccount` inherits the skip; `provisionDefaultAccount` never reaches it.
+- The loop is bounded by the occupied keys at derived addresses: imported rows and rows the codec hides. Each attempt takes the row lock afresh, never across a derivation, so lock order 1 holds. Arc 1's `unwrite` and reconcile re-checks stay; they guard a row's own writer.
 
-### Arc 3 (planned, not built until page 7 is signed)
+**P7-05 (#100): a create that does not open says so.** In `activateCreatedProfile`:
+- The wait gains `limitMs`: `CREATE_ACTIVATION_LIMIT_MS` = 60 s, beside the 30 s start deadline, counted from when the create call returns and the profile exists. Name entry, the create call and a passkey ceremony are the person's own steps, so they are not the start-up the record names. It is one more timer in the one watcher, cleared on every settlement. 60 s is the call bound every popup read already has and the boot banner's limit; the record asks for a named limit without a value, so OA-8 lists 60 s for the owner.
+- On `UnlockTimeoutError` or `BootstrapFailedError` it hands off only while this popup shows no other profile: `!appStore.isLogined`; `appStore.profile` is unset, the created one, or the one selected when Create was pressed; and no activation of another profile is in flight. `useProfileBootstrap` keeps the ids of the `bootstrapActiveProfile` calls from entry to settlement, through the final session read and the `isLogined` commit, and exports the predicate; `inFlightBootstraps` would not do, as it clears before that read (`useProfileBootstrap.ts:142-144,175-180`). New profile opens only from the unlock screen and from register, so `isLogined` is false at Create. Otherwise it rethrows `ActivationSupersededError` (OA-8).
+- The hand-off calls `supersedeProfileActivations()`, so a start that finishes later does not move the screen (F32); an activation that starts after it is untouched. It awaits `setLastActiveProfileId(profile.id, { unless })` through the storage facade's `unless` seam (`utils/storage.ts:80`), where `unless` is "another profile opened or was selected", then checks again and throws `ActivationSupersededError` if so, which keeps the latch. Otherwise it sets `appStore.profile`, pushes `/popup/auth` (the unlock screen re-selects the last active profile on mount) and calls `openToast({ kind: "error", label: "Something went wrong", sub: "Open the wallet again to unlock your new profile." })`, which replaces the shell's bootstrap-failure toast (one snack at a time).
+- It logs `{ reason: "timeout" | "bootstrap-failed" }` at warn and resolves, so `handleCreate` releases its latch as the page leaves.
+- `ActivationSupersededError`, and a failure of the tail after the profile opened, rethrow as arc 1 ships, so the page keeps "Creating…" (OA-8).
+- The session the create opened stays open in the worker. Unlocking re-opens it, and reopening the popup goes straight in (OA-8 notes it). The unlock screen is not a security boundary for an open session. Onboarding is unchanged (F32).
 
-- **#24 (P7-01).** Approved as proposed: no code. The issue closes as not planned with a comment that quotes the decision and its date and cites SECURITY.md § Session secret (password profiles), item 5 (F16). Changed: hold H2 stands; the change becomes its own blueprint, and arc 3 ships the rest.
-- **#137 (P7-02).** `auth.vue`'s unlock failure ladder ends with `openToast({ kind: "error", label: "Something went wrong", sub: "Try unlocking again." })` for a password unlock that no earlier rung handled. The passkey rung keeps its own copy. The toast never carries the error's text.
-- **#208 (P7-03).** `change-password.vue` uses two flags: the current-password eye drives the current field only; the new-password eye drives the new field and its confirmation. Test ids stay.
-- **#208 (P7-04, veto list).** Accepted unless struck: `autocomplete="current-password"` on `ImportFullBackupForm.vue`'s decrypt field, `autocomplete="new-password"` on `export/full.vue`'s encrypt pair, after backup-import-export arc 3 lands on both files. Struck: not built, and #208 closes on P7-03 with the strike quoted.
-
-### Arc 4 (planned, not built until OA-4 is answered)
-
-Built as below if the owner picks OA-4 B or C; with A, nothing is built and #157 closes after arc 2 with a comment quoting the answer.
-
-**Wire.** `MessageType.Ready`, an envelope that carries no content, posted by the server on a port it accepts once `ensureInitialized()` resolves. If init fails its 30 s budget, the server logs a fixed category, drops the port and `disconnect()`s it.
-
-**Client states.** `Disconnected` → `Connecting` (port open, no Ready yet) → `Connected`.
-- Every port carries a generation number. A message or a disconnect from a port that is not the current one is ignored, and that port is closed, so the client never holds two open ports.
-- `ensureTransportReady()` returns void when `Connected`. Otherwise it opens a port if none is open and returns a Ready promise that survives Connecting-to-Connecting retries.
-- **Send boundary.** The request posts only in the same synchronous turn that sees `Connected` on the current generation. After its readiness wait, the base client asks a background-only hook (`isTransportStillReady()`, default `true`, so the offscreen transport is untouched) and waits again within the same deadline when the port changed in between (Codex finding 3).
-- An explicit `disconnect()` bumps an epoch; a request that captured an older epoch rejects at the send boundary instead of reopening the port. It also rejects the Ready promise and cancels any reconnect timer (Opus finding 9).
-- On Ready: `Connected`, resolve the Ready promise, then fire `onConnected` in a task (`setTimeout(0)`), so every queued request has posted before a subscriber's re-read. The task captures the port generation and the disconnect epoch and fires nothing if either moved, so an explicit `disconnect()` or a dropped port before it runs never emits a stale Connected (final pass, finding 6).
-- On `onDisconnect` from `Connected`: as today. Reject every posted request with "Client disconnected" (a posted request may have run, so it is never resent), fire `onDisconnected`, reconnect. From `Connecting`: reject nothing (nothing was posted) and reconnect after a delay of 100 ms doubling to 2 s, reset on Ready.
-- The reconnect boot (`popup/app.vue:432`) runs on Ready under B and C.
-- **Loader under B.** It shows while no Ready has arrived and gives way to the boot banner once the boot gives up (`bootOutcome` set, `popup/app.vue:476-486`). Without that, a service that never says Ready keeps the loader, at `z-index: 9999`, over the banner for good (final pass, finding 5).
-- **Loader under C.** It keeps today's timing. It turns off on `onDisconnected`, which now fires only from `Connected`, and on again when that disconnect's immediate reconnect opens the next port, in the same tick, as today. A close before Ready fires neither event, so the spaced retries never show it.
-
-**Queued calls and sessions.** A call queued across a background restart reaches the new worker, which applies its own session state. That is exactly what a fresh call made just after the restart, from the same page, would get. The page has not re-read yet, so the call's authority and the page's knowledge are the same either way. Under strict mode no session exists and session-checked calls are refused. Under lenient mode the bearer restores the same profile during init, before Ready. A call that acts on "the active profile" (`backup`, `lockActiveProfile` without a handle) acts on whichever profile is active when it arrives, as it does today for a call made one moment later. The flows that move secrets carry a `RunFence` or `ExecutionFence` that refuses a changed session. Account reads and metadata edits check no session at all; that is pre-existing and filed separately (Scope).
-
-**Invariants.** A request is posted at most once, and only on a port that said Ready. `onConnected` fires at most once per Ready, and never for a port that is no longer current. Every port the client stops using is closed.
+**P7-07 (#159): the window starts over after a no-PRF authenticator.** In the window's `prompt`, a kept `PasskeyUnconfirmedError` is confirmed on Try again only when `classifyPasskeyFailure` does not read it as "no-prf". Otherwise Try again runs the request's own create again, under the same profile id the background requires (F33). `unconfirmed` stays set, so the body keeps "Your passkey was saved but not confirmed. Try again to finish.": the record keeps the words. The no-PRF credential stays orphaned, as the in-page start-over leaves one.
 
 ### File-level change map
 
 | Arc | File | Change |
 |---|---|---|
-| 1 | `apps/extension/src/wallet/services/account/service.ts` | row-lock check and write in create and import; create's key cleanup; `unwrite` deletes only its own row; `reconcileImportedAccounts` selects and deletes under the row lock; `invoke` override |
-| 1 | `apps/extension/src/wallet/services/account/spec.ts` | `AccountMethodSchemas`; the stale comment |
-| 1 | `apps/extension/src/wallet/services/account/create-import-lock.test.ts` (new) | #99 never-happens tests and controls |
-| 1 | `apps/extension/src/wallet/services/account/rpc-params.test.ts` (new) | #198 refusals, framework passthrough, surface pin |
-| 1 | `apps/extension/src/composables/unlockWait.ts` (+ `.test.ts`) | `deadlineCovers: "start"`; `ActivationSupersededError` |
-| 1 | `apps/extension/src/popup/pages/profile/new-profile-helpers.ts` (+ `.test.ts`) | the wait, identity re-checks |
-| 1 | `apps/extension/src/composables/useProfileCreateFlow.ts` (+ `.test.ts`) | keep the unconfirmed credential; catch an activation rejection |
-| 1 | `apps/extension/src/wallet/utils/create-passkey-profile.ts` (+ `.test.ts`) | `saved` |
-| 1 | `apps/extension/src/wallet/utils/passkey-ceremony.ts` (+ `.test.ts`), `apps/extension/src/wallet/services/passkey/spec.ts` | `credentialId` on the create request |
-| 1 | `apps/extension/tests/e2e/fixtures/passkey.ts`, `apps/extension/tests/e2e/passkey-retry.test.ts` | the withheld-PRF interceptor; the one-credential case |
-| 1 | `apps/extension/src/popup/components/popups/ConfirmPopup.vue` (+ `.test.ts`) | the deletion |
-| 2 | `packages/extension-messaging/src/background/client.ts`, `service.ts` (+ tests) | `lastError`; close refused ports |
-| 2 | `apps/extension/src/wallet/services/profile/service.ts` (+ `service.integration.test.ts`), `packages/extension-messaging/src/background/index.ts` | delegate wait under the init budget; export `DEFAULT_INIT_TIMEOUT_MS` |
-| 2 | `packages/aztec-runtime/src/pxe/service.ts`, `incarnation-fence.test.ts`, `service-sweep.test.ts`, `service-idb-delete.test.ts`, `store-key-decode.test.ts` | dead generations, joined clears; tests on the record shape |
-| 3 | `apps/extension/src/popup/pages/auth.vue` (+ `auth.test.ts`), `apps/extension/tests/e2e/auth-flows.test.ts` | the toast |
-| 3 | `apps/extension/src/popup/pages/settings/security/change-password.vue` (+ `.test.ts`) | two reveal flags |
-| 3 | `apps/extension/src/components/composite/import/ImportFullBackupForm.vue`, `apps/extension/src/popup/pages/settings/security/export/full.vue` (+ tests) | `autocomplete` |
-| 4 | `packages/extension-messaging/src/messages.ts`, `background/client.ts`, `background/service.ts`, `core/base-client.ts`, `testing/port-registry.ts`, `testing/transport-harness.ts` (+ tests) | Ready, states, generations, send boundary, epoch, backoff |
-| 4 | `apps/extension/src/utils/core.ts`, `apps/extension/src/popup/app.vue`, `apps/extension/src/components/GlobalLoader.vue` (+ test) | per the OA-4 answer |
-| 4 | `apps/extension/tests/e2e/sw-resilience.test.ts` | the restart cases |
+| 1 to 3 | `account/{service,spec}.ts`, `unlockWait.ts`, `new-profile-helpers.ts`, `useProfileCreateFlow.ts`, `create-passkey-profile.ts`, `passkey-ceremony.ts`, `passkey/spec.ts`, `ConfirmPopup.vue`, `fixtures/passkey.ts`, `passkey-retry.test.ts` | arc 1 (merged, #253) |
+| 1 to 3 | `extension-messaging/src/background/{client,service,index}.ts`, `profile/service.ts`, `aztec-runtime/src/pxe/service.ts` (+ tests) | arc 2 (merged, #266) |
+| 1 to 3 | `auth.vue`, `change-password.vue` (+ tests), `auth-flows.test.ts` | arc 3 (merged, #422) |
+| 4 | `packages/wallet-core/src/base/index.ts` (+ test) | `collectionStarted()` after the last phase |
+| 4 | `packages/extension-messaging/src/messages.ts`, `background/{client,service}.ts`, `core/{base-client,base-service}.ts`, `testing/{port-registry,transport-harness}.ts` (+ `client.test.ts`, `service.test.ts`, `base-client` tests) | Ready, states, generations, the 250 ms retry, the send check |
+| 4 | `apps/extension/src/utils/core.ts` (+ test), `popup/app.vue`, `popup/boot-triggers.ts` (+ test, new), `popup/start-grace.ts` (+ test, new), `popup/route-guard.ts` (+ test), `popup/index.ts` | `isServiceReady`, `waitForServiceReady`, the boot triggers, the grace, the replay, `data-service-ready` |
+| 4 | `components/StartBar.vue` (+ test, new); `components/GlobalLoader.vue` (+ test, deleted); `onboarding/app.vue`; `types/{auto-imports,components}.d.ts` (regenerated); comments in `LegalAcceptanceSheet.vue`, `account/service.ts` | the bar; the loader goes |
+| 4 | `popup/pages/auth.vue` (+ `auth.test.ts`) | the hidden form while no profile is known; focus when it appears |
+| 4 | `wallet/services/profile/client.ts`, `popup/pages/settings/security/reset.vue` (+ tests) | `deleteProfile`'s bound on the page's own client |
+| 4 | `tests/e2e/fixtures/extension.ts`, the files that wait for the loader, `tests/e2e/sw-resilience.test.ts` | `waitForServiceReady`; the held-boot case |
+| 5 | `wallet/services/account/service.ts`, `create-import-lock.test.ts` | the skip; `dropReplacedImportedKey` deleted |
+| 5 | `composables/unlockWait.ts`, `composables/useProfileBootstrap.ts`, `utils/lastActiveProfile.ts`, `popup/pages/profile/new-profile-helpers.ts`, `new.vue`, `useProfileCreateFlow.ts` (+ tests) | `limitMs`; the fenced hand-off; the activation predicate; the pointer's `unless` |
+| 5 | `popup/windows/passkey/index.vue` (+ `index.test.ts`) | start over after no-PRF |
 
 ### Trade-offs and alternatives not taken
 
-- **#99, one lock per (profile, chain)** (this plan's first draft). Replaced: both audits showed that create's write would still race a rename's read-modify-write under the row lock (Codex 1). It would also queue an import behind a create's custom-network probe, whose per-attempt fetch timeout is 60 s with retries (Codex 8). The row lock is already the address's lock.
-- **#99, re-check the row after the write** (the issue's second option). Rejected: an undo after a lost race is itself a write another writer can interleave with.
-- **#100, one deadline over the whole activation** (30 s as the unlock uses, or 120 s as the revised draft had). Rejected: a start-up of healthy but slow calls lands on General today, and any fixed bound over the whole bootstrap would leave some of them on "Creating…" (Opus 5; final pass, finding 4). The deadline covers the start, which nothing else bounds; the bootstrap bounds the rest (I1).
-- **#159, a fourth `PasskeyRequest` mode for confirmation.** Rejected: every exhaustive switch over `mode` would grow; an optional field on the create variant keeps one meaning ("finish this create").
-- **#159, exact mirror for no-PRF too.** Rejected for the page: the page tells the person the authenticator may not be supported, and a retry pinned to that credential can never succeed (OA-3 asks the same about the window).
-- **#198, `ValidationError` with per-method `validateParams`** (the network pattern). Rejected: the recorded no-ask names `INVALID_PARAMS`, the refusal #196 uses for a popup RPC; `ValidationError`'s message also carries zod's issue text; and one `invoke` override cannot be forgotten by a new method. Both audits agree.
-- **#157, Ready in arc 2 as decision-free** (this plan's first draft). Replaced: it changes the loader and the "unreachable" banner's timing (Opus 1, Codex 7).
-- **#157, a module-scope `onConnect` that buffers ports and their messages until the services exist** (Outline B). Rejected for arc 4: registering at evaluation time is the documented rule on both browsers (Opus corrected this plan's earlier doubt), but the buffer must also hold messages, it does nothing about `lastError` or refused ports, and it still reports Connected before the background can answer.
-- **#157, a background boot id that refuses a queued call across a restart.** Rejected: it would refuse the reconnect boot's own reads, which `app.vue` issues when the port reopens. A queued call gains no authority a fresh call would not have (Arc 4, Queued calls).
-- **#157, resend unanswered requests after a reconnect.** Rejected: a posted request may have run.
+- **#99, one lock per (profile, chain)**: replaced, because create's write still raced a rename's read-modify-write and import queued behind create's L1 probe (Codex 1, 8). **Re-check after the write**: an undo is itself a racing write.
+- **#100, one deadline over the whole activation** (first plan): rejected then, because slow but healthy start-ups landed on General. P7-05 now accepts that cost, so arc 5 adds the overall limit beside the start deadline, which keeps the superseded detection.
+- **#159, a fourth `PasskeyRequest` mode**; **an exact mirror for no-PRF**: rejected (one meaning per field; a credential that can never confirm).
+- **#198, `ValidationError` with per-method `validateParams`**: rejected; the no-ask names `INVALID_PARAMS`, and one override cannot be forgotten.
+- **#157, Ready in arc 2**: replaced; it changes what the popup shows (Opus 1, Codex 7).
+- **#157, a module-scope `onConnect` that parks early ports and hands them to each service** (outline B4). It would end the refusals instead of spacing them, and Ready would arrive without a retry step. It adds a registration protocol between the entry and every service, and a boot that fails holds its ports until each page's deadline. A flat 250 ms retry bounds the cost to four attempts a second per client and at most 250 ms of extra wait.
+- **#157, Ready per service; refusing session opens until the delegate exists** (Codex). Per-service Ready leaves a queued unlock able to open unchecked while a later phase hangs (F35). Refusing opens instead turns a quick unlock on every cold start into an error. One Ready after the whole start closes the window for popup calls, at the cost of the later phases' storage reads (I8).
+- **#157, doubling the retry to 2 s** (first draft): it adds up to 1.5 s to a cold start (Opus). Now that a reconnect starts no boot run, a flat 250 ms cannot bring #421 back.
+- **#157, the boot run repairs a provisional route itself** (a `register` landing in `decideLockLanding`, Opus). It misses an own window's route and `requirePasswordProfile`; replaying the navigation reuses the guard's every rule.
+- **#157, a separate boot timer started on the first connection attempt** (#421's suggestion). Once only mount and a drop start a run, the run's own lookup deadline is that timer; a second one would race it.
+- **#157, the loader on a "transport lost" signal**: new client state for a case no person reaches (I5).
+- **#157, the unlock screen with no grace; the password form before the profile is known** (the shot): every normal open would show the empty pill and swap the form a round trip later, and a passkey profile would flash the password form. OA-7 asks.
+- **#157, a background boot id that refuses queued calls; resending unanswered requests**: rejected; the first refuses the boot's own reads, the second can repeat a request that ran.
+- **P7-05, lock the new profile's session at the hand-off.** It needs a handle-guarded pair of reads and closes a session the record does not name; superseding the activation keeps the screen where the record puts it.
+- **P7-07, a fresh profile id in the window**: the background fixes the id when it opens the window, so a new id needs a new request and cancels the step (F33).
+- **P7-09, a longer timeout for every profile call**, or a per-method override: only the page waits on a proof drain, and the backup rollback would inherit 91.5 minutes (Codex).
 
 ## Security & Adversarial Considerations
 
 **Threat model.** The actors are:
-- a web page or dApp, which reaches the background only through the wallet-sdk path, never these ports or the account RPCs;
-- another extension or a content script, which can open a port with a service's name (`isTrustedInternalSender` refuses it);
+- a web page or dApp, which reaches the background only through the wallet-sdk path, never these ports or RPCs;
+- another extension or a content script, which can open a port with a service's name, refused by `isTrustedInternalSender`;
 - a compromised popup or extension page, which has full RPC access;
-- stale state: a restarted service worker, a restarted offscreen document, a capture that outlived a deletion.
+- stale state: a restarted worker or offscreen document, a capture that outlived a deletion, a port from before a restart.
 
-The secrets in play are the master secret, the imported-keys DEK, sealed imported signing keys, passkey credential ids and user handles, and the PXE store keys.
+The secrets in play are the master secret, the imported-keys DEK, sealed imported keys, passkey credential ids and user handles, and the PXE store keys.
 
 | Arc | Actor | Before | After |
 |---|---|---|---|
-| 1 (#99) | The person, two popups; a dApp that triggers `provisionDefaultAccount` on a new chain | A create and an import of one address interleave: the stored row disagrees with what one caller was told, and a later create re-derives the lost index and overwrites again. A rename parked on its read can write an imported row back over a derived one | One address, one lock: each outcome is one of the serial orders; an imported key row never outlives its imported row behind a derived row, and an imported row never loses its key. A failing writer's undo and the restore reconcile delete only the row they own, so a replacement survives them |
-| 1 (#100) | Another popup or tab unlocking another profile | The create page writes the created profile into the store while the session is another profile | Nothing is written or routed unless the created id is the active, bootstrapped profile right after the wait and after each await |
-| 1 (#159) | None hostile; privacy | Each retry leaves an orphan passkey in the password manager, labelled with the profile name | One passkey per created profile; the saved id lives only in page memory, never logged or persisted |
-| 1 (#198) | A compromised extension page | A missing `profileId` ends in a TypeError whose text names internals | A typed refusal with a fixed message that echoes no value; the method body never runs; `restore` is untouched |
-| 1 (#158) | None | A dead branch called `confirmProfileOperation` without a password and swallowed the throw | Gone |
-| 2 | Another extension or content script | Its refused port stays open | Closed at once |
-| 2 | A restarted worker | Chrome logs an unchecked `lastError` per dropped port | Read and logged as a category at debug |
-| 2 | A restarted offscreen; a stale capture; a resumed deletion | A same-id re-import cannot be deleted until the offscreen restarts; after a second deletion, a stale provision of the first erased generation is admitted again; two clears of one generation can both erase | Both deletions complete; every erased generation stays refused for the document's lifetime; a second clear joins the first |
-| 2 | An RPC caller during boot | `deleteProfile` throws before the coordinator exists | It waits up to 30 s with no lock held, then throws as today |
-| 3 | Shoulder-surfing; password managers | One eye reveals the current password with the new ones; managers cannot tell backup fields apart | Page 7's proposals; the unlock toast never shows error text |
-| 4 | A restarted worker; a forged Ready | Calls on a port opened during boot fail; `onConnected` fires per failed port | Calls wait for Ready within their deadline and are posted at most once; only the port's far end can post a Ready, and a stale port's Ready is ignored |
+| 1 | The person, two popups; a dApp that provisions a default account | A create and an import of one address interleave; a parked rename writes an imported row back | One address, one lock; each outcome is a serial order; undo and reconcile delete only their own rows |
+| 1 | Another window unlocking another profile | The create page wrote its profile over another session | Nothing is written or routed unless the created profile is the active, bootstrapped one after every await |
+| 1 | A compromised extension page | A missing `profileId` ended in a TypeError naming internals | A typed refusal with a fixed message; the method never runs |
+| 2 | Another extension; a restarted worker or offscreen | Refused ports stayed open; erased generations could be re-admitted | Closed at once; every erased generation stays refused |
+| 3 | Shoulder-surfing; password managers | One eye revealed all three passwords | Page 7's proposals; the toast never carries error text |
+| 4 | A page whose service never says Ready | A fresh popup stayed empty, for good when the hang came before the listeners (#421) | Its calls wait inside their own deadline and reject with the timeout. The send check posts nothing past the deadline, so no request, an unlock's password included, reaches a worker after its caller gave up. The boot check gives up at 60 s and shows the banner |
+| 4 | An unlock queued across a cold start | It could reach the worker before the integrity delegate existed, and open unchecked if a later phase hung (F35) | Ready comes only after the whole start, so no popup call meets that window; a boot that fails in a phase answers no popup call |
+| 4 | A route decided without reads | No such route | It goes only to the unlock screen or proceeds unselected, under the barriers; the next Ready replays it through every rule of the guard (register, own windows, `requirePasswordProfile`) |
+| 4 | A forged or stale Ready | No handshake | Only the port's far end can post on it, and the only `onConnect` listeners are the worker's (F28), behind the trusted-sender check. A Ready on a non-current port is ignored and the port closed; a second Ready changes nothing; Ready carries no content |
+| 4 | A boot that crash-loops or hangs | About 140 reconnects a second, each a new boot run | Reconnects spaced 250 ms per client; no boot run per pre-Ready reconnect |
+| 4 | Delete Profile behind a proof | The page reported failure at 60 s while the deletion ran on | The page's own client waits 30.5 minutes; the backup rollback keeps 60 s; the call gains no authority |
+| 5 | Create against an imported address | The imported row and its key were replaced | Create never overwrites an occupied address, so an imported key keeps its row |
+| 5 | A new profile that does not open | "Creating…" forever | The hand-off writes the pointer only while no other profile opened (`unless`), routes only after re-checking, and opens or closes no session |
+| 5 | The window's retry after no PRF | The same credential, which cannot confirm | A new credential under the same user handle; the old one stays orphaned, as in-page |
 
-**Lock order (1).** Type key, then row key, in both create and import. Code that holds a row lock awaits storage only, and never calls `unwrite`, which takes the row lock itself. The reconcile's dependent purges run outside every row lock, as today. `resolveVerifiedL1ChainId`, `isChainLive` and `getL1ChainIdStored` take no account lock. Nothing that holds `restoreLock` or `runExclusive` calls create or import.
+**Lock order (1, 5).** Type key, then row key. A row-lock holder awaits storage only and never calls `unwrite`; arc 5 takes the row lock per attempt, never across a derivation. Reconcile's dependent purges run outside every row lock. Nothing that holds `restoreLock` or `runExclusive` calls create or import.
 
-**Logging.** No new log line carries a credential id, user handle, address, password, error message or URL: categories and counts only (CLAUDE.md § Logging policy).
+**Logging.** Ready, a pre-Ready close (its reason category), a stale-port drop, the send check's refusal, the server's give-up and the replay log fixed categories and numbers at debug: a service that never starts would otherwise fill every person's buffer at warn. The P7-05 hand-off logs its reason at warn. No new line carries a credential id, user handle, address, password, profile id, error message or URL (CLAUDE.md § Logging policy).
 
-**Least privilege, crypto, supply chain.** No new permission, dependency, CI token or cryptographic primitive. WebAuthn goes through the existing `passkey-ceremony.ts`; sealing stays in `@nulo/wallet-crypto`. The 7-day npm age gate and the frozen lockfile are untouched.
+**Keyboard and focus.** The bar takes no focus and no pointer, and is `aria-hidden`. The hidden form is out of the Tab order and the accessibility tree, and focus moves to the password field only from `document.body`. No Escape or Enter handler is added.
+
+**Least privilege, crypto, supply chain.** No new permission, dependency, CI token or cryptographic primitive; WebAuthn stays in `passkey-ceremony.ts`, sealing in `@nulo/wallet-crypto`; the age gate and the frozen lockfile are untouched.
 
 ## Implementation
 
-Every gate runs from the repo root unless it says `apps/extension`. Retry 0 everywhere: smoke `--retry=0`, network `NULO_E2E_RETRY=0`; a file marked `@requires-proverless` runs in its own call with `NULO_E2E_PROVERLESS=1` (F17).
+Gates run from the repo root unless they say `apps/extension`. Retry 0 everywhere: smoke `--retry=0`, network `NULO_E2E_RETRY=0`; a file marked `@requires-proverless` runs in its own call with `NULO_E2E_PROVERLESS=1` (F17). G1 (#169) has merged, so lanes may share the host: check the load first, and never run two `e2e:agent` runs in this worktree. A red/green proof takes the old copy from the arc's base (`git show 15881c7d:<path>` for arcs 4 and 5), never from `HEAD`. Each test is a **new proof** (fails on the base copy) or a **guard** (holds on base and pins behaviour the change keeps).
 
-**Warning:** until #169 (gate G1) merges, network e2e runs one lane at a time on this host. Wait for a free host before each `e2e:agent` run, and never run two in this worktree.
+### Arcs 1 to 3 (shipped)
 
-A red/green proof takes the old copy from the base SHA (`git show 643c0c9:<path>`), never from `HEAD`. Each test below is labelled **new proof** (fails on the base copy) or **guard** (already holds on base; it pins the behaviour the change must keep).
+Every gate below passed with exit 0 at retry 0; STATUS.md and `lessons/phase-1.md` to `phase-3.md` hold the runs.
 
-### Arc 1: races and retry
-
-#### Phase 1.1: one critical section per address (#99) ✓
-
-1. Move create's final check and write, and import's duplicate check and writes, under the row lock as the Architecture section states. Read occupancy with `contains(id)`. Assert the epoch inside the lock with no await before the write.
-2. In create, after the row write in the same hold, delete the replaced imported row's key. On failure, log a fixed category and continue.
-3. Add `create-import-lock.test.ts`. Mock the derivation so create and import produce one address.
-   - **New proof.** Park import inside the row lock (a held `importedKeys.set`), then start a create. While import is parked, no create write occurs (`recordWrites`). After both settle, one row exists, it is the create's, and no key row sits behind it.
-   - **New proof.** Park a rename on its read inside the row lock, then start a create that replaces the imported row. After both settle, the row is derived and no imported row lacks its key.
-   - **New proof.** Import writes its row; a create replaces it; then import's post-write liveness read rejects. The derived row survives and the create's result stands. **Guard:** with no create in between, the same rejection removes import's row and its key row, as today.
-   - **New proof.** A keyless imported row is chosen by `reconcileImportedAccounts`, which is paused after its selection; a create replaces the row; the reconcile resumes. The derived row survives (the base delete pass checks only the key and deletes it).
-   - **Guard.** An imported row whose key is present at the listing; a create replaces it and deletes the key mid-reconcile. No dependent purge runs and the derived row survives. This passes on the base, whose create keeps the key, and fails if the key cleanup ships without the reconcile change.
-   - **Guard.** A keyless imported row with no create in between is still purged, deleted and reported.
-   - **Guard.** Create first, then import. Import rejects "This account is already in your wallet", writes no key row, and the derived row is unchanged.
-   - **Guard.** Two creates still get indices 0 and 1 (`serialize-per-tuple.test.ts`).
-
-**Validation gate**
-- Commands: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/wallet/services/account/`.
-- Pass: exit 0. The four new proofs fail against `git show 643c0c9:apps/extension/src/wallet/services/account/service.ts` (the base create ignores the row lock, deletes no key, and the base `unwrite` and reconcile delete whatever row they find).
-- Layers: lint, typecheck, unit.
-
-#### Phase 1.2: the activation wait (#100) ✓
-
-1. Confirm I1: list every await in `bootstrapActiveProfile` and `runBootstrapCore` and every failure path, and check that each await is an RPC under the client timeout or a storage call, and that each failure of a current run writes `bootstrapFailure`. Log it in `lessons/phase-1.md`. If one is not, record that path in OA-1 and stop before step 3.
-2. Add `deadlineCovers: "start"` and `ActivationSupersededError` to `awaitProfileActivation`, keeping its one watcher.
-3. Replace the poll with the wait; rewrite the tail with the identity check right after the wait and after each of its three awaits; drop the redundant `appStore.profile` write.
-4. In `handleCreate`, catch an `onCreated` rejection, log the fixed category at warn, and keep the latch.
-5. `unlockWait.test.ts`, with fake timers:
-   - **New proof.** With the option, the deadline never fires once the expected profile is selected; activation after 5 minutes resolves. **Guard:** without the option, the same schedule rejects at the deadline, as today (the unlock's case).
-   - **New proof.** With the option, the shell selecting another profile after the start rejects with `ActivationSupersededError` at once.
-6. Rewrite `new-profile-helpers.test.ts` without the `sleep` mock, on a `reactive` store with fake timers:
-   - **New proof.** Another profile becomes active and the created one never starts. The wait rejects at 30 s, and the helper never sets the store, never calls `setLastActiveProfileId`, `getAccounts` or `router.push`.
-   - **New proof.** A bootstrap failure for the created id rejects at once with `BootstrapFailedError`. Same nothing-written assertions.
-   - **New proof.** The session switches to another profile while `getAccounts` is pending, and in a second case while `storageLocalSet` is pending. The helper writes no accounts in the first and routes in neither.
-   - **Guard.** The created profile starts at once and becomes active after 3 minutes. The tail runs in today's order and routes to General.
-
-**Validation gate**
-- Commands: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/popup/pages/profile/ src/composables/unlockWait.test.ts src/composables/useProfileCreateFlow.test.ts`.
-- Pass: exit 0. The new proofs fail against the base copy of `new-profile-helpers.ts`.
-- Layers: lint, typecheck, unit.
-
-#### Phase 1.3: the passkey retry confirms (#159) ✓
-
-1. Add `credentialId?` to the create variant of `PasskeyRequest`. Teach `runPasskeyCeremony` to confirm it and to wrap a confirm failure as `PasskeyUnconfirmedError`.
-2. Add `saved` to `createPasskeyProfileWithRetry`.
-3. In `useProfileCreateFlow`, keep the last non-"no-prf" `PasskeyUnconfirmedError` with its name. Pass it on the next passkey attempt while the name is unchanged; clear it on success.
-4. Unit tests:
-   - **New proof** (`create-passkey-profile.test.ts`). With `saved`, `generateProfileId` is never called, and the request carries `saved.credentialId` and `saved.userHandle`. **Guard:** a `ProfileIdConflictError` on that attempt falls back to a fresh id and a create.
-   - **New proof** (`passkey-ceremony.test.ts`). With `credentialId`, `navigator.credentials.create` is never called, and a refused confirmation rejects as `PasskeyUnconfirmedError` with the same id. **Guard:** without it, today's create runs.
-   - **New proof** (`useProfileCreateFlow.test.ts`). A retry after a "not-confirmed" failure never mints a new id. **Guard:** a retry after "no-prf", or after a name change, runs a fresh create, as today. A second refusal of the confirmation keeps the same saved credential for the next retry.
-5. Check I2 on both browsers. Add `withholdCreatePrf(page)` to `tests/e2e/fixtures/passkey.ts`. The real create runs, and its result reports `prf: { enabled: true }` with no `results`. The first confirmation is refused with `NotAllowedError`. A page counter records `create` calls.
-6. Add a case to `passkey-retry.test.ts` for the popup's new passkey profile.
-   - **New proof.** The `create` counter reads 1 after the retry finishes.
-   - **Guard.** The retry lands on the general page with the profile active.
-
-**Validation gate**
-- Commands: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/wallet/utils/ src/composables/useProfileCreateFlow.test.ts src/components/passkey/ src/popup/windows/passkey/`; `cd apps/extension && bun run test:e2e -- tests/e2e/passkey-retry.test.ts --retry=0`; the same with `NULO_E2E_BROWSER=firefox` (a fixture changed).
-- Pass: exit 0 on both browsers. The new e2e case fails on the base copy of the three source files (the counter reads 2).
-- Layers: lint, typecheck, unit, smoke e2e on Chrome and Firefox.
-
-#### Phase 1.4: account RPC params (#198) ✓
-
-1. Add `AccountMethodSchemas` to `account/spec.ts`; rewrite the stale comment at `:37-41`.
-2. Override `invoke` in `AccountService` as the Architecture section states.
-3. Add `rpc-params.test.ts`, driven through the real request path (`transport-harness`):
-   - Pin: the schema keys equal `rpcMethods`.
-   - **New proof**, one per refused class. Each asserts code `INVALID_PARAMS`, the fixed message, and that the method body never ran:
-     - a missing required argument (`getAccounts(undefined, 1)`);
-     - a wrong primitive (`chainId: "1"`);
-     - an out-of-range enum (`type: 2`);
-     - an extra argument.
-   - **Guard.** A valid tuple reaches the method, both with an optional argument omitted and with it passed as `undefined`.
-   - **Guard.** `restore` and `backup` still run, and a malformed params object still gets `VALIDATION`.
-
-**Validation gate**
-- Commands: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/wallet/services/account/`.
-- Pass: exit 0. The new proofs fail against the base copy of `service.ts`.
-- Layers: lint, typecheck, unit.
-
-#### Phase 1.5: ConfirmPopup's dead branch (#158) ✓
-
-1. Delete the branch, the button and the unused imports.
-2. Drop the `confirmProfileOperation` stubs from `ConfirmPopup.test.ts`; keep its existing cases.
-
-**Validation gate**
-- Commands: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/popup/components/popups/ConfirmPopup.test.ts`; `! rg -q "passkeyConfirmation|handlePasskeyConfirmation" apps/extension/src`.
-- Pass: every command exits 0 (the last one exits 0 only when nothing matches).
-- Layers: lint, typecheck, unit.
-
-#### Arc 1 boundary gate
-
-- Commands:
-  - `bun run audit:vue`; `bun run test:all`.
-  - `cd apps/extension && bun run test:e2e -- tests/e2e/registration.test.ts tests/e2e/passkey-paths.test.ts tests/e2e/passkey-retry.test.ts tests/e2e/accounts.test.ts tests/e2e/account-import-export.test.ts tests/e2e/passkey-backup.test.ts --retry=0`. `passkey-backup.test.ts` is the smoke file that opens ConfirmPopup.
-  - The passkey files again with `NULO_E2E_BROWSER=firefox`.
-  - After a free host is confirmed: `NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/imported-account-execution.test.ts`, then `NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_RETRY=0 NULO_E2E_PROVERLESS=1 bun run e2e:agent tests/e2e/network/account-switch-isolation.test.ts`.
-- Pass: every command exits 0.
-- Layers: lint, typecheck, unit, build, smoke e2e (Chrome; Firefox for the passkey files), network e2e (Chrome).
-- Then the arc's Codex loop (Post-implementation), then `gh stack add account-session-life-arc-2`.
-
-### Arc 2: the decision-free half of #157
-
-**Warning:** arc 2 edits `ProfileService.deleteProfile`, under reservation R4. If fees-and-sponsors arc 2 (#91) is ready at the same time, it lands first. Whichever lands second rebases on the other and re-runs its network gate.
-
-#### Phase 2.1: transport hardening ✓
-
-1. Read `lastError` and the port's `error` in the client's `onDisconnect`; log the fixed category at debug.
-2. `disconnect()` an untrusted sender's port on the server.
-3. Tests:
-   - **New proof** (`client.test.ts`). Every `onDisconnect` reads `chrome.runtime.lastError` (a counting getter on the fake) and `port.error`. **Guard:** reconnect timing and events are unchanged.
-   - **New proof** (`service.test.ts`). An untrusted sender's port is `disconnect()`ed. **Guard:** it is never added to the clients and gets no event; a trusted port is unaffected.
-
-**Validation gate**
-- Commands: `bun run lint`; `bun run typecheck:all`; `bun run test:all`.
-- Pass: exit 0. The new proofs fail against the base copies of `client.ts` and `service.ts`.
-- Layers: lint, typecheck, unit.
-
-#### Phase 2.2: the delegate wait ✓
-
-1. Add the one-shot delegate promise and await it in `deleteProfile`.
-2. Tests in `service.integration.test.ts`, with fake timers:
-   - **New proof.** A `deleteProfile` started before `setDeletionDelegate` does not throw "not ready"; it completes once the delegate is set.
-   - **Guard.** With no delegate, at the bound it rejects with "deletion coordinator not ready". No tombstone is written, and the row is still present.
-
-**Validation gate**
-- Commands: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/wallet/services/profile/ src/wallet/services/profile-deletion/`.
-- Pass: exit 0. The new proof fails against the base copy of `profile/service.ts`.
-- Layers: lint, typecheck, unit.
-
-#### Phase 2.3: dead generations and joined clears ✓
-
-1. Reshape `profileLifecycles` and its four readers (clear, provision, the op guard, the orphan sweep) as the Architecture section states; update their comments.
-2. Tests in `incarnation-fence.test.ts`:
-   - **New proof.** After deleting G1, a clear of G2 with no provision in between does not throw. **Guard:** a clear of G1 over `live(G2)` still refuses (`:133-146`).
-   - **New proof.** After deleting G1, then provisioning and deleting G2, a provision of G1 is refused. **Guard:** a provision of G3 is admitted.
-   - **New proof.** Two clears of one generation started together erase once (one registry dispose, one directory removal), and both resolve. **Guard:** a failed erase leaves `deleting(gen)`, and its retry succeeds.
-   - **Guard.** An op captured under a dead generation is refused. An op captured under a successor with no provision falls through to the missing-key path (`:223`). The orphan sweep skips a profile with only dead generations.
-
-**Validation gate**
-- Commands: `bun run lint`; `bun run typecheck:all`; `bun run test:all`.
-- Pass: exit 0. The three new proofs fail against the base copy of `pxe/service.ts`.
-- Layers: lint, typecheck, unit.
-
-#### Arc 2 boundary gate ✓
-
-- Commands:
-  - `bun run audit:vue`; `bun run test:all`.
-  - `cd apps/extension && bun run test:e2e -- tests/e2e/security-reset.test.ts tests/e2e/passkey-paths.test.ts tests/e2e/duplicate-phrase-import.test.ts tests/e2e/sw-resilience.test.ts --retry=0`, and the same with `NULO_E2E_BROWSER=firefox`.
-  - After a free host is confirmed, on Chrome and then with `NULO_E2E_BROWSER=firefox`: `NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/profile-reimport-matrix.test.ts tests/e2e/network/firefox-background-restart.test.ts`.
-  - The same pair of browsers with `NULO_E2E_PROVERLESS=1` for `tests/e2e/network/backup-restore-sw-restart.test.ts`.
-- Pass: every command exits 0; a file the browser skips by design (`CHROME_ONLY`, `skipIf`) counts as passing.
-- Layers: lint, typecheck, unit, build, smoke e2e and network e2e on both browsers. The same-id re-import race is timing-bound in a browser, so the unit tests carry its proof; the e2e runs guard the deletion and restart paths on both browsers.
-- Then the arc's Codex loop.
-
-### Arc 3: unlock, credentials, bearer
-
-**Warning:** build nothing in this arc until all three hold:
-1. Page 7 carries the owner's signed message.
-2. Hold H2 has its recorded answer.
-3. backup-import-export arc 3 has merged (`ImportFullBackupForm.vue`, `export/full.vue`).
-
-Re-read the page's answers first: a changed record replaces the proposal quoted here, and a struck veto item is not built.
-
-#### Phase 3.1: #24 (P7-01) ✓
-
-1. Approved: comment on #24 with the decision text, its date and the SECURITY.md citation, then close it as not planned. No code.
-2. Changed: record it in STATUS.md, leave #24 open under H2, and continue with phase 3.2.
-
-**Validation gate**
-- Commands: `gh issue view 24 --repo nulo-sh/nulo --json state,stateReason,comments`.
-- Pass: approved → `CLOSED`, `NOT_PLANNED`, the comment present; changed → `OPEN` with the hold recorded.
-- Layers: none (tracker).
-
-#### Phase 3.2: the unlock toast (#137, P7-02) ✓
-
-1. Add the final rung to `handleUnlockError`.
-2. `auth.test.ts`:
-   - **New proof.** A password unlock that rejects with an unlisted error shows `{ label: "Something went wrong", sub: "Try unlocking again." }` and stops the spinner.
-   - **Guard**, one case each: an `InvalidPasswordError`, a `UserRejectedError`, a `BootstrapFailedError`, a lost-race `UnlockTimeoutError` and a passkey failure never show this toast.
-3. `auth-flows.test.ts`: drive the unlisted failure through a tampered profile row (the pattern at `imported-account-lifecycle.test.ts:120`); assert the toast by its text (the `waitForToast` exception); capture the screenshot for the PR.
-
-**Validation gate**
-- Commands: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/popup/pages/auth.test.ts`; `cd apps/extension && bun run test:e2e -- tests/e2e/auth-flows.test.ts --retry=0` and the same with `NULO_E2E_BROWSER=firefox`.
-- Pass: exit 0 on both browsers.
-- Layers: lint, typecheck, unit, smoke e2e on Chrome and Firefox.
-
-#### Phase 3.3: the split reveal (#208, P7-03) ✓
-
-1. Split the flag in `change-password.vue`.
-2. `change-password.test.ts`:
-   - **New proof.** The current-password eye never unmasks the new pair, and the new-password eye never unmasks the current field.
-   - **Guard.** Each eye unmasks its own field or fields.
-3. Capture the before and after screenshots.
-
-**Validation gate**
-- Commands: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/popup/pages/settings/security/`; `cd apps/extension && bun run test:e2e -- tests/e2e/security.test.ts --retry=0` and the same with `NULO_E2E_BROWSER=firefox`.
-- Pass: exit 0 on both browsers.
-- Layers: lint, typecheck, unit, smoke e2e on Chrome and Firefox.
-
-#### Phase 3.4: backup autocomplete (#208, P7-04) — deferred (D-orch-7)
-
-**Warning:** skip this phase if the owner struck P7-04; then comment the strike on #208.
-
-1. Add the two attributes.
-2. Add one component assertion per field class. **New proof:** the decrypt field reads `current-password`, and both export fields read `new-password`.
-
-**Validation gate**
-- Commands: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/components/composite/import/ src/popup/pages/settings/security/export/`.
-- Pass: exit 0.
-- Layers: lint, typecheck, unit.
-
-#### Arc 3 boundary gate
-
-- Commands:
-  - `bun run audit:vue`.
-  - `cd apps/extension && bun run test:e2e -- tests/e2e/auth-flows.test.ts tests/e2e/security.test.ts tests/e2e/passkey-backup.test.ts --retry=0`, and the same with `NULO_E2E_BROWSER=firefox`.
-  - After a free host is confirmed: `NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/backup-restore-integrity.test.ts`.
-- Pass: every command exits 0.
-- Layers: lint, typecheck, unit, build, smoke e2e on both browsers, network e2e on Chrome.
-- Then the arc's Codex loop.
+| Phase | What | Gate result |
+|---|---|---|
+| 1.1 ✓ | #99 row-lock check and write, owned undo and reconcile | account unit 113/113; four proofs red on `643c0c9` |
+| 1.2 ✓ | #100 the activation wait, the identity re-checks | unit 52/52; I1 confirmed |
+| 1.3 ✓ | #159 the retry confirms | unit 227/227; `passkey-retry` Chrome 9/9, Firefox 9/9; base created twice |
+| 1.4 ✓, 1.5 ✓ | #198 params; #158 deletion | account unit 121/121; ConfirmPopup 8/8; `rg` gate 0 |
+| Arc 1 boundary ✓ | audit:vue, test:all, six smoke files, two network files | Chrome 29/29, Firefox 15/15 |
+| 2.1 ✓, 2.2 ✓, 2.3 ✓ | transport; the delegate wait; dead generations | test:all 0; profile unit 370/370; proofs red on `fd47407` |
+| Arc 2 boundary ✓ | audit:vue; smoke and network on both browsers | smoke Chrome 10/10, Firefox 9/9; network Chrome 3/3 + 3/3, Firefox 4/4 |
+| 3.1 ✓, 3.2 ✓, 3.3 ✓ | #24 closed; the unlock toast; the split reveal | auth 26/26; settings 56/56; smoke Chrome and Firefox |
+| Arc 3 boundary ✓ | audit:vue; smoke on both browsers; one network file | Chrome 12/12, Firefox 12/12; network 2/2 |
 
 ### Arc 4: the Ready handshake
 
-**Warning:** build nothing in this arc until OA-4 has the owner's recorded answer. With A, build nothing: comment the answer on #157 and close it after arc 2 merges. With B or C, build as below, wiring `isBackgroundConnected` and the reconnect boot as the answer says.
+#### Phase 4.1: base evidence ✓
 
-#### Phase 4.1: base evidence
-
-1. On the base build, kill the background with no extension page open, then open the popup. Record what fails and where it is observable. The app's own `console.*` never reaches Puppeteer (`tests/e2e/fixtures/extension.ts:248-262`), so observe the browser's "Unchecked runtime.lastError" entries or the logger buffer (I3).
-2. List every `onConnected` and `onDisconnected` subscriber and say whether a first `onConnected` that now arrives a task later changes what it does.
-3. Write both to `lessons/phase-4.md`.
+1. List the 21 `onConnected` subscribers (F25). For each, write whether a first `onConnected` that now arrives after it subscribed changes what it does (I7). Name any that is not idempotent; phase 4.3 fixes it locally.
+2. On both browsers, stop the worker with no extension page open while the fixture migration's hold is set and the schema marker rewound (I6). Record whether the popup's ports are refused, at what rate, and how many ports one popup opens (I4).
+3. On a cold start on both browsers, time Profile's start and the end of `services.start()` with a throwaway log line (I8).
+4. Reload the extension with a popup, an extension tab, an own window and, on Chrome, the side panel open, on both browsers, and record which close (I5).
+5. Write all four to `lessons/phase-4.md`.
 
 **Validation gate**
 - Commands: none beyond the recorded evidence.
-- Pass: `lessons/phase-4.md` names the observation, each subscriber, and whether phase 4.3's e2e can fail on the base.
+- Pass: `lessons/phase-4.md` answers I4 to I8. A "no" for I6 makes phase 4.4 relaunch the browser as `migration.test.ts` does. A gap over 500 ms for I8, or a "no" for I5, goes to OWNER-ASKS before phase 4.2 or 4.3 builds on it.
 - Layers: none (evidence).
 
-#### Phase 4.2: wire, server, client
+#### Phase 4.2: wire, server, client, send check ✓
 
-1. Build the Architecture section's arc 4, including the send-boundary hook in `core/base-client.ts`.
-2. Teach `port-registry.ts` and `transport-harness.ts` to answer Ready.
-3. Tests in `client.test.ts`, with fake timers where timing matters:
-   - **New proof.** A request made while `Connecting` is not posted before Ready. **Guard:** it is posted once after Ready and resolves.
-   - **New proof.** Two pre-Ready refusals in a row reject nothing. **Guard:** the request resolves after the third port's Ready.
-   - **New proof.** A port change between Ready and a queued request's continuation (the fake drops the port inside the Ready handler) makes the request wait for the next port's Ready and post once, there.
-   - **Guard.** A subscriber that reconnects in `onConnected` drops a request that had already posted: it rejects with "Client disconnected" and was posted exactly once.
-   - **New proof.** An explicit `disconnect()` between Ready and a request's continuation rejects the request and opens no port. **Guard:** a later request reopens normally.
-   - **New proof.** A request whose deadline passes while it waits is never posted when a late Ready arrives. **Guard:** it rejects with the timeout error.
-   - **New proof.** `onConnected` does not fire on a bare connect, and fires only after every queued request has posted. **Guard:** it fires once per Ready, and twice for a duplicated Ready only if the port changed.
-   - **New proof.** An explicit `disconnect()`, or a dropped port, between Ready and the scheduled `onConnected` task fires no `onConnected`. **Guard:** with nothing in between, it fires once.
-   - **New proof.** A Ready or an event from a stale port is not acted on, and that port is closed.
-   - **New proof.** Pre-Ready closes space the reconnects, a Ready resets the spacing, and an explicit `disconnect()` cancels a pending reconnect.
-   - **Guard.** A request posted on a `Connected` port that then drops is not posted again; it rejects with "Client disconnected".
-4. Tests in `service.test.ts`:
-   - **New proof.** A trusted port gets Ready only after init.
-   - **New proof.** When init fails, the port gets no Ready and is `disconnect()`ed.
-5. Under B only, `GlobalLoader.test.ts`: **new proof**, with no Ready and the boot outcome set, the loader is not rendered and the banner is reachable; **guard**, with no Ready and no outcome, the loader shows.
+1. Build `collectionStarted()`, the wire, the server's Ready, the client's states and the send check as § Arc 4 states.
+2. Teach `port-registry.ts` and `transport-harness.ts` to post Ready after `collectionStarted()`.
+3. `client.test.ts`, with fake timers:
+   - **New proof.** A request made while `Connecting` is not posted before Ready. **Guard:** it posts once after Ready and resolves.
+   - **New proof.** Two pre-Ready closes reject nothing, fire no `onDisconnected`, and each reconnects after 250 ms; an explicit `disconnect()` cancels a pending reconnect. **Guard:** the request resolves after the third port's Ready.
+   - **New proof.** An explicit `disconnect()` between Ready and a request's continuation rejects the request and opens no port. **Guard:** a later request reopens the port.
+   - **New proof.** A request is never posted when its deadline passes while it waits, nor when the clock passes the deadline between Ready and the continuation. **Guard:** both reject with the timeout error.
+   - **New proof.** `onConnected` does not fire on a bare connect. It fires once per Ready, in a later task, after every queued request has posted. A disconnect or a drop before that task fires none.
+   - **New proof.** A message or a Ready from a stale port is not acted on, and that port is closed. A second Ready on the current port fires nothing. An event from the current port while `Connecting` is dispatched.
+   - **Guard.** A request posted on a `Connected` port that drops rejects with "Client disconnected" and is not posted again, also when a subscriber reconnects in `onConnected`.
+4. `service.test.ts`:
+   - **New proof.** A trusted port gets Ready only after `collectionStarted()`, not at `onConnect` and not at its own service's `start()`.
+   - **New proof.** At the init bound the port gets no Ready and is disconnected. **Guard:** an untrusted port still gets nothing.
+5. **New proof** (`wallet-core` base test). `collectionStarted()` reaches every service after the last phase, and none after a failed phase.
+6. **Guard.** The offscreen transport's tests (`core/base-client-*.test.ts`, `offscreen/*.test.ts`) pass unchanged.
 
 **Validation gate**
-- Commands: `bun run lint`; `bun run typecheck:all`; `bun run test:all`; `bun run test`.
-- Pass: exit 0. Each new proof fails against the base copies.
+- Commands: `bun run lint`; `bun run typecheck:all`; `bun run test:all`.
+- Pass: exit 0. Each new proof fails against the base copies of `index.ts`, `client.ts`, `service.ts` and `base-client.ts`.
 - Layers: lint, typecheck, unit (every package).
 
-#### Phase 4.3: the restart e2e
+#### Phase 4.3: the popup shell ✓
 
-1. Add a case to `sw-resilience.test.ts`, shaped by the phase 4.1 evidence. Stop the background with no extension page open, then open the popup.
-   - **New proof.** No browser-emitted "Unchecked runtime.lastError" entry and no logger-buffer transport failure appears during the start-up.
-   - **Guard.** The screen the OA-4 answer names appears, and an unlock then reaches the general page.
-2. If phase 4.1 shows the failure is not observable on the base build, keep the case as a guard and record that the unit tests carry the proof.
+1. In `utils/core.ts`, rename `isBackgroundConnected` to `isServiceReady` and add `waitForServiceReady(ms)`. Move the boot triggers to `boot-triggers.ts` and remove the watch on the flag; `onBeforeMount` as § Arc 4 states.
+2. Add `start-grace.ts` (the page-load deadline, the provisional mark, the replay), the guard's use of it, the bar, `data-service-ready` on the popup and onboarding shell roots, and the hidden form in `auth.vue`.
+3. Delete `GlobalLoader.vue`, its test and both mounts; regenerate the two `.d.ts` files; rewrite the two comments. Replace every e2e wait for the loader's absence with a new `waitForServiceReady(page)` fixture.
+4. Fix any subscriber phase 4.1 named, locally.
+5. Tests:
+   - **New proof** (`route-guard.test.ts`). An unchecked session with no Ready by the page-load deadline sends an auth-required route to `popup-auth`, calls neither read, and marks the navigation provisional. A second navigation after the deadline waits for nothing. **Guard:** with Ready inside the grace, the guard reads and decides as today; once the session is checked, no grace applies.
+   - **New proof** (`start-grace.test.ts`). On Ready, a provisional navigation is replayed once, with `force`, and its reads decide: an empty list goes to register, a list selects the last active profile, a passkey profile on a `requirePasswordProfile` route goes to `/popup/settings/profile`. A failed read keeps the mark and the next Ready replays again; a completed read clears it. A read that fails after Ready, with no later Ready, is replayed when the boot run decides.
+   - **New proof** (`route-guard.test.ts`). The guard's `getProfiles` answers, the boot run selects B, then the last-active read answers A: B stays selected. **Guard:** with no selection meanwhile, the last active profile is selected as today.
+   - **New proof** (`boot-triggers.test.ts`). Mount starts `loadProfile` without waiting for Ready or the settings, whether `router.isReady()` resolves or rejects. A drop of a Ready port starts a run; a pre-Ready close and a Ready start none. With a client that never says Ready, the mount's run is the only one and ends "unreachable" at the lookup deadline.
+   - **New proof** (`core.test.ts`). `isServiceReady` follows `onConnected` and `onDisconnected`. `waitForServiceReady` resolves true on Ready and false at its bound.
+   - **New proof** (`StartBar.test.ts`). The bar renders while the service is not Ready and no boot outcome is set; it is gone after Ready and with an outcome. The source pins the 200 ms delay and the static bar under reduced motion.
+   - **New proof** (`auth.test.ts`). With no profile, the heading, its line and the form are hidden and the password field cannot take focus. **Guard:** a password profile set later shows the field and focuses it when focus was on the body, not when the pill had focus. A passkey profile shows the passkey form and never shows the password field.
+6. Run `! rg -n "global-loader|GlobalLoader|isBackgroundConnected" apps/extension packages`.
 
 **Validation gate**
-- Commands: `cd apps/extension && bun run test:e2e -- tests/e2e/sw-resilience.test.ts --retry=0`, and the same with `NULO_E2E_BROWSER=firefox`.
-- Pass: exit 0 on both browsers.
+- Commands: `bun run lint`; `bun run typecheck:all`; `bun run test`; the `rg` gate; `cd apps/extension && bun run test:e2e -- tests/e2e/sw-resilience.test.ts tests/e2e/registration.test.ts tests/e2e/passkey-paths.test.ts --retry=0`, then the same with `NULO_E2E_BROWSER=firefox` (a fixture changed).
+- Pass: exit 0 on both browsers. The new proofs fail against the base copies.
+- Layers: lint, typecheck, unit, component, smoke e2e on Chrome and Firefox.
+
+#### Phase 4.4: the held-boot e2e and the screenshots ✓
+
+1. Add one case to `sw-resilience.test.ts`, skipped unless the build carries the fixture (`migration.test.ts:20-24`). Register a password profile, lock, rewind the schema marker and set the migration hold (F29). Close every page and stop the worker. The hold's 30 s self-release counts from the stop, so open the popup at once as a raw page, as `migration.test.ts:131-135` does, not through `openPopup`, which would wait out the hold.
+   - **New proof.** While the hold stands, the hash reaches `#/popup/auth` under the Updating barrier, with `start-pending` present, `data-service-ready` absent and the password field's computed visibility hidden. On the base, the hash stays empty. The barrier covers the frame, so this proves the route, not the look; the screenshots show the look.
+   - **Guard.** After the hold clears, the barrier goes, the pill shows the profile's name, the password field shows, `data-service-ready` appears, an unlock reaches `#/popup/general`, and `consoleErrors` and `pageErrors` are empty. Record the time from the release to `data-service-ready`, the retry's added wait.
+   - Failure mode: the first screen and the shell's first boot run on real browser ports while the worker has no listeners (Chrome holds the first connect, then refuses; Firefox per I4), with the real router. No fake reproduces that refusal pattern or the first navigation. Estimate: 20 s on Chrome, 30 s on Firefox; measure both.
+2. **Guard.** The Chrome-only "open popup survives the kill" case proves the run started by a drop.
+3. Take screenshots in both themes with `shotSend` (`tests/e2e/fixtures/send-page.ts`) under a throwaway local hold after the listeners, before `collectionStarted()`, never committed: the bar over the unlock frame; the never-starts frame (the banner over the unlock frame); the bar over General across a restart; an empty wallet's unlock frame, then register.
+
+**Validation gate**
+- Commands: `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 bun run test:e2e -- tests/e2e/sw-resilience.test.ts --retry=0` on a build with `VITE_NULO_E2E_MIGRATION_FIXTURE=1`, then the same with `NULO_E2E_BROWSER=firefox`.
+- Pass: exit 0 on both browsers; the new proof fails on the base build; both measured runtimes and the added wait are recorded in `lessons/phase-4.md`.
 - Layers: smoke e2e on Chrome and Firefox.
+
+#### Phase 4.5: Delete Profile's bound (P7-09) ✓
+
+1. Pass the constructor's `options` through, add `deleteProfileClient()`, and use it in `reset.vue` as § Arc 4 states.
+2. `profile/client.test.ts`, with fake timers:
+   - **New proof.** A `deleteProfile` on `deleteProfileClient()` answered after 10 minutes resolves.
+   - **Guard.** One unanswered at 30 minutes and 30 seconds rejects with the timeout error. The shared client's `deleteProfile` and `getProfiles` still give up at 60 s, the rollback's bound.
+
+**Validation gate**
+- Commands: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/wallet/services/profile/client.test.ts src/composables/`.
+- Pass: exit 0; the new proof fails against the base copy.
+- Layers: lint, typecheck, unit.
 
 #### Arc 4 boundary gate
 
 - Commands:
   - `bun run audit:vue`; `bun run test:all`.
-  - `cd apps/extension && bun run test:e2e -- --retry=0` (full smoke), and the same with `NULO_E2E_BROWSER=firefox`.
-  - After a free host is confirmed, on Chrome and then with `NULO_E2E_BROWSER=firefox`: `NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/connect-locked-queue-sw-restart.test.ts tests/e2e/network/cold-wake-discovery.test.ts tests/e2e/network/firefox-background-restart.test.ts`.
+  - `cd apps/extension && bun run test:e2e -- --retry=0` (full smoke), then the same with `NULO_E2E_BROWSER=firefox`.
+  - On Chrome, then with `NULO_E2E_BROWSER=firefox`: `NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/connect-locked-queue-sw-restart.test.ts tests/e2e/network/cold-wake-discovery.test.ts tests/e2e/network/firefox-background-restart.test.ts`.
   - The same pair of browsers with `NULO_E2E_PROVERLESS=1` for `tests/e2e/network/backup-restore-sw-restart.test.ts tests/e2e/network/inflight-call-background-death.test.ts`.
-- Pass: every command exits 0; a file the browser skips by design counts as passing.
-- Layers: lint, typecheck, unit, build, smoke e2e and network e2e on both browsers.
+- Pass: every command exits 0; a file a browser skips by design counts as passing.
+- Layers: lint, typecheck, unit, build, smoke and network e2e on both browsers.
+- Then the arc's Codex loop. The PR body states each browser's smoke and network suite wall-clock before and after.
+
+### Arc 5: page 7's picks for arc 1's surfaces
+
+#### Phase 5.1: Create account skips an imported address (P7-06)
+
+1. Build the skip as § Arc 5 states; delete `dropReplacedImportedKey`.
+2. Rewrite the replacement cases of `create-import-lock.test.ts`, whose mock gives index 0 the address `SHARED` and every later index `NEXT`:
+   - **New proof.** An imported row at `SHARED`: a create keeps that row and its key unchanged and writes `NEXT` at index 1.
+   - **New proof.** A create that started before an import of `SHARED` took the row lock lands at `NEXT`, and both rows survive.
+   - **New proof.** A row the codec hides at `SHARED` is skipped, not overwritten.
+   - **New proof.** `ensureDefaultAccount` over an imported `SHARED` returns index 1, and a second call returns the same row.
+   - **Guard.** Two creates still take indices 0 and 1; an import of an address a create holds is refused; a keyless imported row is still reconciled. The schedules where a create replaces a row mid-reconcile can no longer occur and are removed.
+
+**Validation gate**
+- Commands: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/wallet/services/account/`; `cd apps/extension && bun run test:e2e -- tests/e2e/accounts.test.ts tests/e2e/account-import-export.test.ts --retry=0`.
+- Pass: exit 0; the new proofs fail against the base `service.ts`.
+- Layers: lint, typecheck, unit, smoke e2e (Chrome).
+
+#### Phase 5.2: the hand-off (P7-05)
+
+1. Add `limitMs` to `awaitProfileActivation`, and the hand-off to `activateCreatedProfile`, which now takes `openToast`.
+2. Tests, with fake timers:
+   - **New proof** (`unlockWait.test.ts`). With `limitMs`, an activation that started and still runs rejects with `UnlockTimeoutError` at the limit. **Guard:** without it, the same schedule resolves after 5 minutes.
+   - **New proof** (`new-profile-helpers.test.ts`), one case per class: a bootstrap failure, a start that never comes (30 s) and a slow start (60 s after the create returns). Each sets the store's profile to the created one, writes it as last active, pushes `/popup/auth` and opens the P7-05 toast once. In the slow case, a later activation routes nowhere.
+   - **New proof.** Another profile open, or its activation in flight (its final session read held), in this popup when the wait fails: `ActivationSupersededError`, no pointer, route or toast. Another profile opening during the pointer write: the write is skipped (`unless`) and the hand-off throws `ActivationSupersededError`, so the latch holds.
+   - **Guard.** A superseded activation rejects with `ActivationSupersededError` and hands off nothing; an activation inside the limit lands on General as today; `handleCreate` releases its latch after a hand-off and keeps it after a rejection.
+3. Take the toast over the unlock screen in both themes with a throwaway local hook, never committed.
+
+**Validation gate**
+- Commands: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/composables/unlockWait.test.ts src/popup/pages/profile/ src/composables/useProfileCreateFlow.test.ts`; `cd apps/extension && bun run test:e2e -- tests/e2e/passkey-retry.test.ts tests/e2e/registration.test.ts --retry=0`.
+- Pass: exit 0; the new proofs fail against the base copies.
+- Layers: lint, typecheck, unit, smoke e2e (Chrome).
+
+#### Phase 5.3: the window starts over (P7-07)
+
+1. Change `prompt` in `popup/windows/passkey/index.vue` as § Arc 5 states.
+2. `index.test.ts`:
+   - **New proof.** After a no-PRF unconfirmed failure, Try again calls the ceremony's create and never its confirm, and the body still reads the unconfirmed line.
+   - **Guard.** After a not-confirmed failure, Try again confirms the kept credential (the existing case).
+
+**Validation gate**
+- Commands: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/popup/windows/passkey/`; `cd apps/extension && bun run test:e2e -- tests/e2e/passkey-retry.test.ts tests/e2e/passkey-toolbar-panel.test.ts --retry=0`, then the same with `NULO_E2E_BROWSER=firefox` (WebAuthn).
+- Pass: exit 0 on both browsers; the new proof fails against the base copy.
+- Layers: lint, typecheck, unit, smoke e2e on Chrome and Firefox.
+
+#### Arc 5 boundary gate
+
+- Commands: `bun run audit:vue`; `bun run test:all`; `cd apps/extension && bun run test:e2e -- tests/e2e/accounts.test.ts tests/e2e/account-import-export.test.ts tests/e2e/registration.test.ts tests/e2e/passkey-retry.test.ts tests/e2e/passkey-toolbar-panel.test.ts --retry=0`, then the same with `NULO_E2E_BROWSER=firefox`; `NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/imported-account-execution.test.ts`.
+- Pass: every command exits 0.
+- Layers: lint, typecheck, unit, build, smoke e2e on both browsers, network e2e (Chrome). No e2e scenario is added: each pick's branch is proved where it lives (the account service, the activation helper, the window), and no browser behaviour decides it.
 - Then the arc's Codex loop, then the final cross-arc pass.
+
+### Phase 3.4: backup autocomplete (P7-04), deferred
+
+**Warning:** build nothing until backup-import-export arc 3 has merged.
+
+Add `autocomplete="current-password"` to `ImportFullBackupForm.vue`'s decrypt field and `autocomplete="new-password"` to `export/full.vue`'s pair, with one component assertion per field class. Gate: lint, typecheck, `cd apps/extension && bun --bun vitest run src/components/composite/import/ src/popup/pages/settings/security/export/`.
 
 ## UI impact
 
-- **Profile create, passkey, retry after "Passkey not confirmed. Try again."** (popup `profile/new.vue` and onboarding `create.vue`; #159). Before: the retry opens the browser's create-a-passkey prompt and saves a second passkey. After: it opens the browser's sign-in prompt for the passkey already saved, as the passkey window's Try again does. The card, the toast and the button keep their words. A retry after a no-PRF failure or a name change stays as today. Recorded decision: no-ask #159 ("Mirror the passkey window's saved-credential confirmation on retry").
-- **Profile create in the popup when activation fails or wedges** (#100): none. The button keeps reading "Creating…", as today, and a slow start-up still lands on General. One race changes: when another popup opens another profile during the create, this page no longer loads the new profile's accounts over the other session and routes to General; it stays on "Creating…" as a failed create does. That is the issue's fix, not a new screen. OWNER-ASKS OA-1.
-- **Create account landing on an imported account's address** (#99): none. The row is replaced, as today. OWNER-ASKS OA-2.
-- **ConfirmPopup** (#158): none. The deleted button never rendered.
-- **Account RPCs** (#198) and **arc 2**: none.
-- **Unlock screen after a background restart under strict mode** (#24, P7-01): none, by the page's proposal: "No recovery bearer: under strict mode a background restart asks for your password again, as SECURITY.md documents, and an import it interrupts lands on the unlock screen as today. #24 closes as not planned with that line; lenient mode stays the opt-in convenience."
-- **Unlock screen, password profile, unlisted failure** (#137, P7-02): "The spinner stops and a toast reads "Something went wrong" with the line "Try unlocking again.""
-- **Settings → Security → Change password** (#208, P7-03): "The current-password field gets its own show/hide eye; the new password and its confirmation share the second one. Both eyes stay out of the Tab path (SR8)."
-- **Backup password fields** (#208, P7-04, veto list): "The backup decrypt field gets autocomplete=current-password and the export encrypt pair new-password, as every other credential field has." No visible change; a password manager reads the fields differently.
-- **Start-up loader, "unreachable" banner and reconnect after a background restart** (arc 4): exactly as the OA-4 answer says; nothing ships before it.
+- **Arc 1** (#159, recorded no-ask "Mirror the passkey window's saved-credential confirmation on retry"): the retry opens the sign-in prompt for the saved passkey. #100, #99, #158, #198 and arc 2: none.
+- **Arc 3**: #24 (P7-01) none; #137 (P7-02) "The spinner stops and a toast reads "Something went wrong" with the line "Try unlocking again.""; #208 (P7-03) "The current-password field gets its own show/hide eye; the new password and its confirmation share the second one."
+- **Popup opened while the service starts** (arc 4; #157, P7-08 = C, P7-08b = C): "The unlock screen at once with a 2 px bar sweeping along the popup's top edge until the service has started. Nothing else changes and nothing moves. On a normal open at most one frame of the bar, none with a 200 ms delay before it shows; on a cold start the bar runs about a second and the unlock screen appears about a second sooner than today. The profile name stays blank until the service answers." As built: the unlock screen comes once 200 ms pass without Ready, one grace per page load, so a normal open looks as today; until the profile is known its heading, line and form keep their place hidden, and a passkey profile's shorter form re-centres the column once; an empty wallet's unlock frame gives way to register when the service answers (OA-7 asks all three). Today: an empty page for 1.2 to 1.9 s on a cold start.
+- **A service that never starts** (arc 4; P7-08 = C): "A service that never starts shows that screen for up to 60 s, then the banner." As built: the unlock frame and the bar, then at about 60 s the banner "The wallet service could not be reached." with RETRY; the bar gives way to it. A boot that fails in any start phase counts as one that never starts. Today: empty for about 61 s then the banner, or empty for good (#421).
+- **A popup open across a restart** (arc 4): the bar shows over the current screen until Ready, none within 200 ms. Today nothing shows, and a call in the gap could fail.
+- **The full-screen loader** "INITIALIZING / RECONNECTING" (arc 4): removed. Today it renders only on a page whose extension context is gone (I5); that page now shows the bar, then the banner.
+- **Delete Profile beyond 60 s** (arc 4; P7-09 = B): "the popup waits for deleteProfile up to the hint's 30 minutes plus the start-up allowance, so the page keeps "Deleting…" and its hint until the background finishes, then shows "Profile deleted" as on the quick path. No new words." The backup import's rollback keeps its 60 s.
+- **Create account on an imported account's address** (arc 5; P7-06 = B): "Skip it: keep the imported account as it is and create the next account after it."
+- **Popup New profile that does not open** (arc 5; P7-05 = B): "the toast reads "Something went wrong" with the line "Open the wallet again to unlock your new profile." and the popup goes to the unlock screen with the new profile selected." Named limit: 60 s after the new profile exists, the planner's value (OA-8). A create superseded by another profile keeps "Creating…", and reopening the popup after the hand-off goes straight in, since the session stays open (OA-8 asks both).
+- **Passkey window, Try again after no PRF** (arc 5; P7-07 = B): "Try again starts a new passkey so the person can pick an authenticator that works. The window's words stay."
 
-Sign-off: arc 1's one visible change rides the recorded no-ask decision for #159. Arc 3 ships only on page 7's signed message, and arc 4 only on the OA-4 answer, each quoted in its PR body. Arc 3's PR attaches screenshots of the unlock toast and the Change password eyes; arc 4's attaches the start-up screens it changes (CLAUDE.md § UI changes).
+Sign-off: each line rides the record it quotes; OA-7 and OA-8 ship their "what ships now" forms, and their PRs may open before the answers. The orchestrator holds arc 4's merge until OA-7 is signed and arc 5's until OA-8 is (CLAUDE.md § UI changes). Arc 4's PR attaches both themes of the bar over the unlock frame, the never-starts frame and the bar over General across a restart. Arc 5's attaches the P7-05 toast and the accounts list after a skip. All are taken with throwaway local hooks, never committed. P7-07 and P7-09 draw nothing new: a browser prompt, and the page's ten-second state held longer.
 
 ## Decision ledger
 
-**Outlines compared.**
-- *Outline A (chosen):* the fixes above. A per-address check and write; the existing activation wait with a deadline that only a wedged start-up reaches; a saved credential on the create request; an `invoke` override; the invisible transport fixes and the deletion fence now; the Ready handshake on the owner's answer.
-- *Outline B (competing, cheapest-first):* re-check the account row after each write and undo a lost race; keep the activation poll and add an id check and a deadline; retry the confirmation inside one `handleCreate` call with no saved state across clicks; register one `onConnect` listener at the worker's module scope that buffers ports and messages until the services exist, with no wire change; leave `deleteProfile` throwing and let callers retry.
-- *Why A:* B's undo is a second racing write. B's poll is the bare poll the lane brief rules out. B's in-call retry changes what the person sees (a second prompt with no click). B's buffering still has to hold messages and leaves `lastError` and refused ports alone. B's caller retry does not help the resume and torn-reap paths, which run after start; those fail on the PXE generation, which arc 2 fixes (Opus corrected the first draft's reason here).
+**Outlines compared, first plan.** A (chosen): a per-address check and write; the existing activation wait with a start deadline; a saved credential on the create request; an `invoke` override; the invisible transport fixes and the fence now; Ready on the owner's answer. B (cheapest first): re-check rows and undo; a bounded poll; an in-call confirmation retry; a module-scope port buffer; callers retry `deleteProfile`. A won: B's undo races, its poll is the bare poll the brief rules out, its retry shows a second prompt with no click, and its buffer leaves `lastError` and refused ports alone.
 
-### Orchestrator decisions (on approval, 2026-10-10)
+**Outlines compared, arc 4 revision.** A4 (chosen): Ready from the started promise; client-side generations, epoch and backoff; boot runs started only by mount and by a drop; a 200 ms grace before a provisional first route; the bar; the loader deleted. B4: the worker parks early ports at module scope and hands them to each service on registration; no client backoff; the loader kept for a lost transport. A4 won: B4 adds a registration protocol across every service and holds the ports of a boot that failed (§ Trade-offs). The audit then reshaped A4: one Ready after the whole start, a flat 250 ms retry, a send check in place of the epoch, one grace per page load and the replay.
 
-- **D-orch-1. No stack.** Arc 1 opens its own PR against `dev` (`gh pr create --base dev`) with the Delivery table's title; no `gh stack`. Later arcs branch from arc 1's branch and rebase onto `dev` after it lands. This replaces the Delivery section's `gh stack init` / `gh stack add` / `gh stack submit` steps for arc 1.
-- **D-orch-2. Arc 1 only.** Nothing of arcs 2, 3 or 4 is built now: arc 2 waits on reservation R4 (fees-and-sponsors #91); arc 3 on decision page 7 and hold H2; arc 4 on OA-4, which is now page 7's item P7-08 (OA-1 to OA-3 are P7-05 to P7-07, and each ships its "what ships now" form in arc 1). Nothing a screen shows changes beyond § UI impact; no new words.
-- **D-orch-3. R2-1 is asked first.** Before phase 1.1's gate counts as passed, the first Codex round and the Opus review are each asked, first and explicitly, whether R2-1's schedule is reachable on the merged tree (a create from a second window, a restore that activates the profile early, an import that reconciles later). Reachable: build the fix (the row lock across the purge, or an equivalent that keeps lock order 1) with a never-happens test. Unreachable: record the evidence below and keep the plan. Result: both unreachable (Audit verdicts, "R2-1 asked first").
+### Orchestrator decisions
 
-### Orchestrator decisions (arc 2, 2026-10-10)
-
-- **D-orch-4. After a squash merge, an arc branches from `dev`.** Arc 1 merged as fd47407 (#253, squash), so arc 2 is `account-session-life-arc-2` cut from `origin/dev` at fd47407, not from arc 1's branch. Its PR opens against `dev` (`gh pr create --base dev`) with the Delivery table's title and says `Refs #157`, never `Closes`. D-orch-1 to D-orch-3 stand.
-- **D-orch-5. Arc 2 only, and it lands first under R4.** fees-and-sponsors arc 2 (#91) waits on decision page 6, which is unsigned, so arc 2 edits `ProfileService.deleteProfile`'s first lines now and #91 rebases later. Nothing else on the deletion path changes: `coordinator.ts`, `profile-deletion/types.ts` and the tombstone repository stay untouched (the R4 seam). Nothing of arcs 3 or 4 is built (page 7 and H2; P7-08). Nothing a screen shows changes; no new words.
-- **D-orch-6. Any open panel finding on arc 2 comes first.** Before phase 2.1's gate counts as passed, the first Codex round and the Opus review are each asked, first and explicitly, whether the arc-2 design holds on the merged tree: the per-profile lifecycle record (`live`/`deleting`/`dead`/`clearing`), the joined clear, and the delegate wait's 30 s bound against a `deleteProfile` that starts before the offscreen document exists. A hole is fixed within the plan's lock order with a never-happens test. The answers are under Audit verdicts, "Arc 2 design asked first".
-
-### Orchestrator decisions (arc 3, 2026-10-14)
-
-- **D-orch-7. Arc 3 builds 3.1 to 3.3; Phase 3.4 is deferred, not skipped.** Decision page 7 was signed by the owner at 2026-10-14 17:42Z and applied to #24, #137 and #208: P7-01, P7-02 and P7-03 approved as proposed, P7-04 not struck. Hold H2's recorded answer is P7-01 as approved. backup-import-export arc 3 has not merged (its arc 2 is in flight), so Phase 3.4 moves to this lane's first arc after it lands. #208 stays open after Phase 3.3, with a comment naming the pending autocomplete half, and arc 3's PR says `Refs #208`, not `Closes`. Arc 3 branches from `dev` (D-orch-4) as `account-session-life-arc-3` and opens one plain PR against `dev`.
-- **D-orch-8. Page 7's other picks wait for a plan revision.** P7-05 = B (#100), P7-06 = B (#99), P7-07 = B (#159), P7-08 = C (#157, OA-4) and P7-09 = B (#157, OA-5) each change what an earlier arc shipped as "what ships now" and have no phase here. They are recorded in [OWNER-ASKS.md](OWNER-ASKS.md) § Answers; the orchestrator revises the plan for them after arc 3's PR. Arc 3 builds none of them and adds no words beyond § UI impact's two arc 3 lines.
+- **D-orch-1 to D-orch-3 (2026-10-10).** No stack: each arc opens its own PR against `dev`. Arc 1 only, then. R2-1 asked first on arc 1's review: both legs found it unreachable.
+- **D-orch-4 to D-orch-6 (2026-10-10).** After a squash merge the next arc branches from `dev`. Arc 2 lands first under R4 and says `Refs #157`. Arc 2's design was asked first; the answers are below.
+- **D-orch-7, D-orch-8 (2026-10-14).** Arc 3 builds 3.1 to 3.3; 3.4 is deferred until backup-import-export arc 3 merges, and #208 stays open. P7-05 to P7-09 wait for a plan revision.
+- **D-orch-9 (2026-10-14, this revision's brief).** Arc 4 builds P7-08 and P7-08b = C, owns #421, and gives each of P7-05, P7-06, P7-07 and P7-09 a phase, in arc 4 or a small arc 5. OA-6 is not planned. 3.4 stays deferred. The tree wins over the plan; the branch is `account-session-life-arc-4` from `dev` `15881c7d`.
 
 ### Audit verdicts
 
-**Round 1, Codex** (`gpt-6.1-sol`, high): `reject (with blocking findings: unsafe imported-key cleanup, unfenced activation tail, Ready-to-send race, unsupported session-isolation claim, overlapping erasures)`.
+**First plan, round 1, Codex** (`gpt-6.1-sol`, high): `reject` (blocking findings: imported-key cleanup, the activation tail, Ready-to-send race, session isolation, overlapping erasures).
 
 | # | Finding | Disposition |
 |---|---|---|
-| C1 [High] | Create's write does not take the row lock, so a parked rename can write an imported row back after its key is deleted | **Accepted.** #99 moved to a per-address check and write under the row lock |
-| C2 [High] | #100 fences the wait, not the tail's awaits | **Accepted.** Identity re-check after each await, as `auth.vue` does |
-| C3 [High] | Ready is not bound to the send; a reconnect in `onConnected` or an explicit disconnect in the continuation gap can post on an unacknowledged port | **Accepted** into arc 4: send-boundary hook, explicit-disconnect epoch |
-| C4 [High] | "Every call carries `profileId`" is false; queued calls can act under a successor session | **Accepted as a fact correction.** Session binding of every call **rejected**: a queued call gains no authority a fresh call would not have. The claim is rewritten (Arc 4, Queued calls), and the unchecked account reads and edits are filed separately |
-| C5 [High] | Two same-generation clears can overlap and erase a successor | **Accepted.** Join an in-flight clear; re-check ownership after the barrier. The trigger needs a duplicate clear, which no known path sends while the id is reserved; the join removes the dependency anyway |
-| C6 [Medium] | Dead-generation no-op contradicts the pinned refusal | **Accepted.** Explicit precedence: join, refuse a different current, dead no-op, erase |
-| C7 [Medium] | `isBackgroundConnected` drives reconnect boot and screens; I3 cannot say "none" | **Accepted.** The Ready handshake moved to arc 4 behind OA-4 |
-| C8 [Medium] | The L1 probe has no total bound; a shared lock queues import behind it | **Accepted.** Moot under the per-address design: the probe runs in create's type section, outside the row lock |
-| C9 [Medium] | The `invoke` override must pass `backup`/`restore` and test optional args | **Accepted** |
-| C10 [Low] | Not every never-happens test fails on base; the `rg` gate's exit code | **Accepted.** Each test is labelled new proof or guard; the gate is `! rg -q` |
-| — | Make R4's "#91 first" unconditional | **Rejected.** R4 is the orchestrator's text; arc 2's seam stays out of the coordinator either way |
+| C1 High | Create's write skips the row lock; a parked rename writes back | Accepted: per-address check and write |
+| C2 High | #100 fences the wait, not the tail | Accepted: re-check after each await |
+| C3 High | Ready is not bound to the send | Accepted into arc 4 (now the send check, arc 4 revision) |
+| C4 High | Queued calls can act under a successor session | Fact corrected; session binding rejected (a queued call gains nothing a fresh call lacks) |
+| C5 High | Two same-generation clears overlap | Accepted: join the clear in flight |
+| C6 Medium | Dead-generation no-op contradicts the pinned refusal | Accepted: explicit precedence |
+| C7 Medium | `isBackgroundConnected` drives screens | Accepted: Ready moved to arc 4 behind OA-4 |
+| C8 Medium | The L1 probe has no total bound | Moot under the per-address design |
+| C9, C10 | Override must pass `backup`/`restore`; label guards | Accepted |
+| — | Make R4's order unconditional | Rejected: R4 is the orchestrator's text |
 
-**Round 1, Opus 5.5 Plan agent**: `conditional approve (with conditions: resolve #1 before arc 2a is built; fix #2–#8 in plan.md before their phases run)`.
+**First plan, round 1, Opus 5.5 Plan agent**: `conditional approve`. O1 (the loader's timing; same as C7), O2 (proverless files), O3 (the sweep is a fourth reader), O4 (`restore` through the override), O5 (a 30 s deadline regresses slow starts), O6 (a renamed profile's passkey label; keep `prf` without `results`), O7 (the app's console never reaches Puppeteer), O8 (same as C4), O9 (disconnect cancels backoff and rejects Ready), O10 (labels), O11 (log, not throw, a failed key delete), O12 (2b need not wait): all accepted, O8 as a fact correction.
 
-| # | Finding | Disposition |
-|---|---|---|
-| O1 [High] | Arc 2a changes the loader and the "unreachable" banner timing | **Accepted.** Same move as C7: arc 4 behind OA-4; the backoff waits with it |
-| O2 [Medium] | Two of the gates' network files need `NULO_E2E_PROVERLESS=1` (a third, in arc 4, also does) | **Accepted** (F17); gates split |
-| O3 [Medium] | Dead-generation precedence; the orphan sweep is a fourth reader | **Accepted** |
-| O4 [Medium] | The `invoke` override would refuse `restore`; call with original params; stale comment | **Accepted** |
-| O5 [Medium] | A 30 s deadline regresses slow start-ups; copy `auth.vue`'s re-checks | **Accepted.** The re-checks; the revised draft's 120 s deadline was later narrowed to the start (final pass F4) |
-| O6 [Medium] | A renamed profile would unlock through a passkey labelled with the old name; the interceptor must keep `prf` without `results` | **Accepted** |
-| O7 [Medium] | The app's console never reaches Puppeteer | **Accepted** into arc 4's evidence phase |
-| O8 [Medium] | The queued-call claim is false | **Accepted.** Same as C4 |
-| O9 [Low] | Disconnect must cancel backoff and reject the Ready promise; ordering of `onConnected` against queued requests | **Accepted** into arc 4 |
-| O10 [Low] | Label guards | **Accepted.** Same as C10 |
-| O11 [Low] | A failed key delete should log, not throw; import holds the DEK behind create's probe | **Accepted.** The second is moot under the per-address design |
-| O12 [Low] | 2b need not wait on 2a | **Accepted** in effect: the old 2a no longer exists, and arc 2 carries no owner question |
+**First plan, final fresh pass, Codex**: `reject`. F1 (import's undo deletes a replacement) accepted, its key half rejected. F2 (reconcile deletes a healthy derived row), F3 (the unfenced `storageLocalSet`), F4 (120 s does not mean wedged: start-only deadline), F5 (the loader over the banner under B), F6 (a deferred `onConnected` after a disconnect), F7 (the subscriber guard's order): accepted. **Round 2** (resumed): `reject` on R2-1 (a stale dependent purge after a replacement), rejected on evidence: no session-holding create reaches the reconcile window, and holding a row lock across subscriber purges breaks lock order 1. R2-2 (a proof that passed on base) accepted: it is a guard.
 
-**Final fresh pass, Codex** (`gpt-6.1-sol`, high, new session): `reject (with blocking findings: stale account undo and reconciliation can delete a successful replacement; activation remains incompletely fenced; OA-4 promises failure behavior the handshake does not implement)`. Its "looks fine" list: `contains(id)`, the type-then-row lock order, the #159 binding, the PXE precedence, the #198 override, the gates.
+**R2-1 asked first** (D-orch-3, on `9574a9d`, again on arc 1's HEAD). Codex (`01a12394-…`, then `01a123b2-…`) and Opus: `UNREACHABLE, high`. The evidence: `SessionManager.open`'s one call site refuses a restore-pending profile; neither restore branch opens a session; the only caller reconciles before `finalizeRestore`; create and import need the profile's session. The plan stands.
+
+**Arc 1 review** (`9574a9d..9c4b9c8`). Codex round 1: `CHANGES`, three Medium, each fixed with a never-happens test: the import's emit after its epoch check (a5c3170), a cancel during the confirming assertion dropped the credential (dd9bc51), a failed identity check released the latch (95c6ec7). Opus: `CHANGES`, the same three plus a type-level schema pin and four comments (1a6e040); one rejected (clearing the saved credential after an "other" failure: the window keeps it). Codex round 2: `APPROVE`.
+
+**Arc 2 design asked first** (D-orch-6, on `fd47407`). Codex (`01a12405-…`): 1a, 1b HOLD, 1c HOLE; Opus: all HOLD. D1 (the popup's 60 s against two 30 s waits) was accepted for arc 2's share as one budget taken at entry; the page's own 60 s limit became OA-5. D2 to D7: accepted or confirmed (clear `clearing` on every settlement, publish the erase synchronously, a joiner inherits a failure, no start phase awaits the offscreen, refused ports log only the sender id). **Arc 2 review** (`fd47407..eeb3303`): Codex `CHANGES`, one Medium (wall clock in the budget: `performance.now()`, 964c9aa); Opus `APPROVE`, one Low (`Promise.withResolvers` raised the Chrome floor: `deferred()`, fbe0f79); Codex round 2 `APPROVE`.
+
+**Arc 3 review** (from `d3dc441`). Codex (`01a13b93-…`): `APPROVE`, one Low (the passkey rung's `return` had no guard; a71acaea), one Comment accepted, one rejected (the two-flag comment states an invariant). Opus: `CHANGES`, the same two plus OA-6 (not built). Codex round 2: `APPROVE`.
+
+**Arc 4 revision, round 1, Codex** (`gpt-6.1-sol`, high, `01a13c0a-…`): `reject` (blocking findings: the provisional route's repair, the send-time deadline, Ready before the integrity delegate, the unfenced hand-off). **Opus 5.5 Plan agent**: `conditional approve` (register reachable, a run after the provisional route selects, one grace per load, a lower retry cap, the hand-off fenced, OA-7 signed before arc 4 merges). Each finding was checked at the tree.
 
 | # | Finding | Disposition |
 |---|---|---|
-| F1 [High] | Import's post-write `unwrite` deletes a create's replacement row | **Accepted.** `unwrite` deletes only a row whose `type` and `index` are still its writer's. Its other half, making import's key compensation respect ownership, **rejected**: only imports write key rows, they serialise per (profile, chain), and the `catch` runs inside that section |
-| F2 [High] | Create's key cleanup makes `reconcileImportedAccounts` purge and delete a healthy derived row | **Accepted.** Candidates are chosen, and the delete re-checked, from a fresh read under the row lock |
-| F3 [High] | The tail's `storageLocalSet` await is unfenced; the post-wait check must be explicit | **Accepted** |
-| F4 [Medium] | 120 s does not mean wedged: the bootstrap is a sequence of RPCs | **Accepted.** The deadline now covers only the start; I1 rewritten and checked in phase 1.2 |
-| F5 [High] | Under OA-4 B a never-Ready service keeps the loader over the banner for good; the 1.5 s baseline is misstated | **Accepted.** Under B the loader gives way to the boot banner; OA-4's baseline corrected; a component test added |
-| F6 [Medium] | The deferred `onConnected` can fire after an explicit disconnect | **Accepted.** It captures the port generation and the epoch |
-| F7 [Medium] | The reconnect-subscriber guard contradicts the posting order | **Accepted.** The guard asserts rejection and one post; the port change before the continuation has its own test |
+| C1 High, O-R1 High, O-R2 | Past the grace, an empty wallet stays on auth; a drop or an own window makes the next run select nothing (F36) | Accepted: the provisional mark and the replay on Ready. Opus's `register` landing rejected (§ Trade-offs) |
+| C2 High | Ready can come before the integrity delegate exists (F35) | Accepted: Ready after the whole start. Refusing opens without a delegate rejected (§ Trade-offs) |
+| C3 Medium | A delayed continuation posts past its deadline | Accepted: the send check, with that schedule as a proof |
+| C4 High, O-R5 | The hand-off can land over another profile's session | Accepted: hand off only while no other profile shows, `unless` on the pointer, re-check after the write |
+| C5, O-R3 | The grace repeats per navigation, about 600 ms | Accepted: one deadline at page load |
+| C6 | "60 s from Create" starts at the wrong point | Accepted as wording: 60 s after the profile exists; OA-8 lists the value |
+| C7, O-R12 | Updating covers the held frame; the 30 s self-release; `openPopup` waits out the hold | Accepted: a raw page, the route asserted under the barrier, skipped without the fixture, a never-Ready proof in `boot-triggers.test.ts`, screenshots under a post-listener hold |
+| C8, O-R14a | The rollback inherits 30.5 minutes three times | Accepted: the page's own client; the rollback keeps 60 s |
+| C9, O-R6 | OA-7 lets the column move; the grace; the planner's 60 s; reopening goes straight in; the register swap | Accepted: all on OA-7 and OA-8; merges held until signed |
+| C10, O-R8 | F18, F22, F23, F29, the skip bound, I5 | Accepted: corrected |
+| O-R4 | The doubling retry adds up to 1.5 s | Accepted: a flat 250 ms, measured in 4.4 |
+| O-R7 | A failed first navigation still skips the check | Accepted: `router.isReady().catch` |
+| O-R9 | The send boundary's "wait" branch is dead | Accepted: no epoch or hook; `sendEnvelope` checks `Connected` |
+| O-R10 | The `rg` gate hits generated types and two comments; arc 5 shares a file | Accepted: listed in the file map; the intro corrected |
+| O-R11, O-R14b, O-R14c | A keyless imported row's index lost to reconcile; a never-starting service holds `reset.vue` 30.5 minutes; a crash-loop after Ready keeps superseding runs | Known limits, filed at the close-out |
+| O-R13 | Events before Ready unspecified | Accepted: dispatched from the current port in either state |
 
-**Final pass, round 2** (same session, resumed with the fix diff): `reject (with blocking findings: reconciliation still allows a stale dependent purge after a successful replacement)`. F1 and F3-F7 resolved; F2 resolved for the account row.
-
-| # | Finding | Disposition |
-|---|---|---|
-| R2-1 [High] | A genuinely keyless candidate that a create replaces after selection still has the derived account's new dependents purged; fix by holding the row lock across the dependent purge | **Rejected.** The schedule needs a create on the restored profile while the restore reconciles it. The full-backup import reconciles before it opens that profile's session (`useFullBackupImport.ts:388-399`), and create and import refuse a profile without one (`session-manager.ts:248-252`). Only a direct RPC call reaches it, from a page that can already delete those records outright. Holding a row lock across subscriber purges would break the rule that a row-lock holder awaits storage only. The plan now says the purge is not fenced, and why |
-| R2-2 [Medium] | The reconcile "new proof" passes on base | **Accepted.** It is now a guard (it fails only if the key cleanup ships without the reconcile change); the new proof starts from a keyless row and fails on base, whose delete pass deletes the derived row |
-
-The planner closes the panel here. Codex is advisory. Its one open finding is rejected on evidence above, and the orchestrator sees the disagreement in the report.
-
-**R2-1 asked first (arc 1, D-orch-3), on the merged tree (`9574a9d` + the plan).** Both legs were asked only this question first, with three schedules to break: a create from a second window, a restore that activates the profile early, an import that reconciles later.
-
-- **Codex** (`gpt-6.1-sol`, high, new session `01a12394-69f4-7bf3-8f41-121e759cf705`): `UNREACHABLE, high confidence through the existing non-hostile application paths`.
-- **Opus 5.5** (general-purpose, read-only): `UNREACHABLE, high confidence, for any path a person can take through the UI or a dApp`.
-
-Evidence both legs found, each checked by the implementer in the tree:
-- `SessionManager.open` has one call site, inside `openSessionVerified` (`profile/service.ts:1324`). Every unlock, create and import reaches it there, and it refuses a profile whose restore-pending marker matches its generation (`:1286-1289`). Bearer rehydration after a worker restart (`:466-478`) refuses a torn restore too, and passkey sessions never rehydrate. So the planner's "every session open goes through `openSessionVerified`" was overbroad, but the conclusion holds.
-- The marker is written before the row, under the facade lock (`:1432-1439`). If the marker write fails, no row is written. A corrupt marker counts as torn. A stale marker is one whose generation differs from the row's, and a new restore always mints a fresh generation.
-- Neither restore branch opens a session. Restored ids are never a live profile's id (`:2329-2332`, `:2489`).
-- The only caller is `useFullBackupImport.ts:398`, before `finalizeRestore` (`:413`). Retry re-runs only the account-state stage. No boot step, resume or migration reconciles.
-- Create, `ensureDefaultAccount` and `provisionDefaultAccount` need the profile's secret, and import needs its DEK. Both are refused unless that profile holds the session (`session-manager.ts:248-265`).
-
-The residual is a direct `reconcileImportedAccounts` RPC on a profile that already has a session. Only an extension page can send it, never a dApp, and that page can delete those records outright. Both legs agree that holding the row lock across the subscribers would break lock order 1: they take their own service locks (`token-balance/service.ts:571-587`, `auth-registry/service.ts:511-526`). **Disposition: the plan stands; no fix is built.**
-
-Opus's phase 1.1 notes:
-- **Accepted.** Name the reconcile guard's pause point. It parks after the listing (`storage.get()`) and before the key read, the only point where the hazard exists. The test title says so.
-- **Rejected.** "`unwrite` throws a parse error on a row the codec cannot decode." `EntityStorage.get` returns `undefined` for an undecodable or invalid row (`packages/wallet-core/src/storage/entity_storage.ts:98-143`), so `unwrite` reads the row as not its own and deletes nothing.
-
-**Arc 1 review: the Codex fix loop and the Opus final-diff review**, on the arc diff `9574a9d..9c4b9c8`. Each leg was asked R2-1 first again, now against the built code.
-
-- **R2-1 on HEAD.** Codex round 1 (new session `01a123b2-acff-7732-a938-7c3440cdd925`): `UNREACHABLE, high confidence through existing UI/dApp paths`. Opus: `UNREACHABLE, high confidence`; only a direct RPC from a compromised extension page reaches it. The evidence is the same as above, and the plan stands.
-- **Codex round 1: CHANGES.** Three Medium findings, all confirmed in the tree and fixed with a never-happens test that fails on the pre-fix copy:
-  - The import's emit sat one await after its final epoch check, once the check moved into `commitImportedAccount`, so a deletion beginning in that gap saw the add announced after it began. Fixed in a5c3170: the helper emits.
-  - A Cancel or Escape during the confirming assertion turned into a bare `UserRejectedError` in `PasskeyCeremonyDialog`, which dropped the minted credential, so the retry created a second passkey. Fixed in dd9bc51: the cancel is wrapped in `PasskeyUnconfirmedError` and `handleCancelOrUnconfirmed` unwraps it, so it stays silent.
-  - A failed identity check in `activateCreatedProfile` returned quietly, so `handleCreate` cleared its latch, against § UI impact's "it stays on Creating…". Fixed in 95c6ec7: it throws `ActivationSupersededError`.
-  - Three comment findings were applied: reconcile's unfenced purge is now stated, the `invoke` doc is cut to its contract, and the `unlockWait` contract covers both deadline modes and the lock-pending case.
-- **Opus: CHANGES.** It found the same three defects independently (rated Medium, Low and Low) and checked the fixes. Also from Opus:
-  - **Accepted.** A type-level pin that every argument list a method's signature allows fits its schema, because `satisfies` pinned only the key set (1a6e040). It fails typecheck when an optional member is made required.
-  - **Accepted.** Four stale comments: the import's L1-ordering note, `importAccount`'s "omit/empty for plaintext", `createPasskeyProfileWithRetry`'s `@throws`, and a doubled invariant on the emit (1a6e040).
-  - **Rejected.** "Clear the saved credential after an `other`-classed failure." The passkey window keeps an unconfirmed credential for every later failure (`popup/windows/passkey/index.vue` `prompt`). #159's recorded decision is to mirror the window, and the quality bar is that a retry never creates a second passkey. The in-page flow is already narrower than the window: it clears the credential on no-PRF and on a name change.
-- **Codex round 2 (same session): APPROVE**, with high confidence and no new runtime defect. It checked all four fixes, and it rejected an injected optional-argument mismatch through the schema pin. It accepted the Opus rejection: an `other` failure does not show that the credential is unusable. One Comment was applied: `Promise.race` handles the loser's late rejection, so the `unlockWait` doc now names only the live watcher. The loop closed at round 2 of 3.
-
-**Arc 2 design asked first (D-orch-6), on the merged tree (`fd47407`).** Both legs were asked only the three design questions first, in parallel with phase 2.1's code.
-
-- **Codex** (`gpt-6.1-sol`, high, new session `01a12405-c32c-7a61-aa62-ac211ca2740a`): `1a HOLDS (high), 1b HOLDS (high), 1c HOLE (high)`.
-- **Opus 5.5** (general-purpose, read-only): `1a HOLDS (moderate-high), 1b HOLDS (high), 1c HOLDS (moderate-high)`, the last given the shared deadline that the working copy already had by then.
+**Round 2** (Codex, resumed over the fixes): `reject`. Findings 2, 3, 5 to 10 FIXED. Each remaining item was checked at the tree and accepted:
 
 | # | Finding | Disposition |
 |---|---|---|
-| D1 [High, Codex 1c] | The popup's `ProfileServiceClient` sets no timeout, so `deleteProfile` gets 60 s (`DEFAULT_RPC_TIMEOUT_MS`). `ensureInitialized` (≤ 30 s) plus a separate 30 s delegate wait can spend all of it before the first write, so the popup can report failure after the tombstone is written while the deletion continues. Codex's fix: give this call a longer client timeout | **Accepted for arc 2's share; the rest goes to OA-5.** One 30 s budget, taken at entry, now covers both waits, so the call reaches its first write no later than it does today (new proof: a delete that arrives while init runs for 20 s refuses at 30 s, not 50 s). Opus confirmed this closes the arc-2 part. The longer client timeout is **not built**: the pre-existing gap (`reset.vue` promises "up to ~30 minutes" while the call gives up at 60 s and shows "Couldn't delete profile. Try again") changes what the page shows, so it is OWNER-ASKS OA-5 |
-| D2 [Codex 1a, Opus 1a] | `clearing` must be cleared on every way the erase settles, identity-checked, or a retry joins a rejected promise forever; the dead check must come before the no-current fallthrough | **Accepted.** Both are built as stated; a never-happens test pins the retry |
-| D3 [Codex 1b, Opus 1b] | Publish the erase synchronously; add a test that two joined callers both reject and the retry runs one fresh erase | **Accepted.** Built and tested |
-| D4 [Opus 1b, nuance] | A joiner inherits the first erase's failure, so a deletion whose resume joined a failing erase waits for the next boot's resume instead of trying once more itself | **Accepted as the cost of the join.** The id stays fenced meanwhile, and the next boot's resume retries |
-| D5 [Codex 1c, Opus 1c] | No start phase before the coordinator awaits the offscreen document, a READY or a PXE RPC; a failed boot leaves every waiter to its bound with nothing written | **Confirmed**; no change |
-| D6 [Opus Q2] | Plan gaps: `DEFAULT_INIT_TIMEOUT_MS` has no package export at fd47407; three more test files read the old `{kind, gen}` map shape; the tick-count pin in `service-idb-delete.test.ts` must hold | **Accepted.** Recorded below as deviations; the pin holds unchanged (2 and 2) |
-| D7 [Codex Q2, Opus Q2] | Phase 2.1 is correct; disconnecting a refused port fires nothing on our side, and foreign extensions reach `onConnectExternal`, which nothing registers | **Confirmed.** Keep the refused-port warn line to the sender id, never `sender.url` |
+| R2-1 High (C1 not fixed) | A guard read that fails after Ready, with no later Ready, leaves its mark unreplayed | Accepted: the boot run's decision also replays a remaining mark |
+| R2-new High | The replay's unconditional assignment after its awaits overwrites the profile the boot run selected (`route-guard.ts:47-52`; Codex reproduced it) | Accepted: the guard assigns only if still unset, with the split-read proof |
+| R2-4 Medium (C4's fix) | A hand-off abandoned after the pointer write resolves and releases Create's latch | Accepted: it throws `ActivationSupersededError`. Found while checking it: a bootstrap of another profile in flight also passed the fence; the in-flight predicate closes it |
 
-**Arc 2 review: the Codex fix loop and the Opus final-diff review**, on the arc diff `fd47407..eeb3303`. Each leg was asked the three design questions first again, now against the built code.
+**Round 3** (Codex, resumed over the round 2 fixes): `conditional approve`. R2-1, R2-new and R2-4 FIXED. One condition, checked at the tree and accepted: the predicate over `inFlightBootstraps` misses an activation whose core finished but whose final session read is pending (`useProfileBootstrap.ts:142-144,175-180`); the predicate now spans each `bootstrapActiveProfile` call to settlement, with a proof that holds that read. The audit loop stops here at its third round; arc 4's own Codex loop re-reads the built fence.
 
-- **Codex round 1** (new session `01a12413-2d7f-7bd3-8a94-a662d0da92ea`): `CHANGES`. Q0: lifecycle record HOLDS (high), joined clear HOLDS (high), delegate bound HOLE (high), the Medium below.
-  - **[Medium] Accepted.** The shared budget used `Date.now`, so a wall clock set back mid-wait stretched it by the shift and one set forward cut it. Fixed in 964c9aa: `performance.now()`, with two never-happens tests (clock back, clock forward) that fail on the `Date.now` copy; the normal-clock budget test is the control.
-  - **[Comment] Accepted.** The op fence's successor paragraph is cut to three lines, and the fence test's header describes the record (964c9aa).
-  - Its other checks: the transport matches both browsers' Port semantics; the fake changes weaken no test; the tick pin holds.
-- **Opus 5.5 final-diff review**: `APPROVE`. Q0: all three HOLD (high) on the built code; it found the wall-clock defect independently (fixed by then) and checked by reading that every new proof fails on fd47407.
-  - **[Low] Accepted.** `Promise.withResolvers` was the only ES2024 built-in in production code and would silently raise the Chrome floor above the 116 the code states. Fixed in fbe0f79 with the existing `deferred()` helper from `@nulo/wallet-core/utils`.
-  - **[Comment] Accepted.** Three trims (fbe0f79): the injection field's garbled sentence, `closeReason`'s "both are read every time", and a duplicate of the failed-erase rule in `eraseProfile`. The close test no longer pins `port.error` read counts, which no behaviour depends on.
-- **Codex round 2 (same session): `APPROVE`**, high confidence, no findings. It checked both reviews' fixes in memory (remaining budget, delegate replacement, timer cleanup). The loop closed at round 2 of 3.
+**Arc 4 review, round 1** (`15881c7d..8e29450c`; Codex `01a13c6d-…` gpt-6.1-sol high, and one Opus agent alongside): Codex `CHANGES`, Opus `CHANGES`. Each item was checked at the tree:
 
-**Arc 3 review: the Codex fix loop and the Opus final-diff review**, on the arc diff from `d3dc441` (dev at the branch point).
+| # | Finding | Disposition |
+|---|---|---|
+| C1 High | A forced replay of the unlock screen after the session unlocked redirects to `from`, itself, without end (Opus confirmed: no 30-hop cap in production) | FIXED 4d913436: never back to the route itself; proof red before |
+| C2 Medium | A superseded guard whose read fails late marks the route the person left | FIXED 4d913436: only the latest navigation's guard marks or settles; proof red before |
+| C3 Medium | The deadline check ran before serialization, so a large payload could still post past it | FIXED 4d913436: the check follows serialization; proof red before |
+| O1 Medium | Deleting the open profile locks the popup off Delete Profile; the unmount's disconnect rejected the call and dropped the rest of the reset (no toast, the deleted profile stays selected) | FIXED 3c3263ad: the client outlives the page while a call runs; component proof red before |
+| O2 Low | `??=` keeps the reset's `0`, so the guard selects nothing | FIXED 3c3263ad: assigns when falsy; proof red before |
+| O3 Low | The grace counted from navigation start while the bar's delay counts from its render | FIXED 3c3263ad: the deadline is taken at `popup/index.ts` evaluation, as § Arc 4 words it |
+| O4, C4 to C6 | Comments: a wrong event claim, a plan path, narration, a garbled line, a caller named, the grace contract stated three times; `hidden()` reads a class | FIXED; the test notes the e2e reads the computed visibility |
 
-- **Codex round 1** (`gpt-6.1-sol`, high, new session `01a13b93-9f54-7221-b3c1-0e543b35f333`): `APPROVE`, high confidence, one Low and two Comments.
-  - **[Low] Accepted.** The passkey rung's new `return` had no guard: without it a passkey failure calls the passkey toast and then the generic one, and `toHaveBeenCalledWith` still matches. Fixed in a71acaea: "any other passkey failure" asserts one call; it fails with the `return` removed.
-  - **[Comment] Accepted.** "Tests 3-4 use the per-test fixture" went stale when the new case landed above it. Fixed in a71acaea: the new case sits under the comment, which names no count.
-  - **[Comment] Rejected.** "Delete the two-flag comment in `change-password.vue`." The names say which field each flag drives; the comment says why they must stay two (revealing the new pair never shows the current password), which a refactor that re-merges them would otherwise learn only from a red test. Opus read the same line as an invariant worth keeping.
-- **Opus 5.5 final-diff review** (general-purpose, read-only): `CHANGES`. It found the same test gap (rated Medium) and the same stale comment independently, and ran the two unit files (41/41).
-  - **[Low] Not built; OWNER-ASKS OA-6.** The new error toast, like today's "Unlock timed out", stays until closed, so a retry that unlocks lands on Home with "Try unlocking again." still showing (`scope-epoch.ts` closes only snacks with an action). Closing it on a new attempt, as `usePasskeyCeremony` does with its own line, changes when an approved toast leaves the screen: the owner's call. Ships as today.
+**Arc 4 review, round 2** (Codex, resumed over `8e29450c..3b579ef0`): `CHANGES`; C1 to C3 verified fixed. Two regressions, both checked at the tree:
 
-- **Codex round 2 (same session): `APPROVE`**, high confidence, no findings. It checked the call-count guard and the fixture comment, kept the two-flag comment's rejection, and agreed OA-6 leaves the toast's timing to the owner. The loop closed at round 2 of 3.
+| # | Finding | Disposition |
+|---|---|---|
+| R2-1 Medium | With the client now outliving the page, a deletion that returns after another profile was unlocked selected the first remaining profile, cleared its state and routed to the unlock screen (the 60 s shared client had the same path, much shorter) | FIXED: the tail drops the deleted profile, shows its toast, and leaves a session another profile took over; proof red before |
+| R2-2 Medium | The self-redirect fallback sent a replayed unlock screen to Home, losing an own window's route when the replay cancelled the shell's push | FIXED: it goes where an unlock would (`postAuthRoute`); proof red before |
 
-**Arc 2 deviations from the plan text** (the tree wins):
-- Phase 2.2: the delegate wait is not a separate 30 s after `ensureInitialized`. One deadline, taken at entry, covers both (D1). `DEFAULT_INIT_TIMEOUT_MS` is exported from `packages/extension-messaging/src/background/index.ts`.
-- Phase 2.3: besides `incarnation-fence.test.ts`, `service-idb-delete.test.ts`, `store-key-decode.test.ts` and `service-sweep.test.ts` move to the record shape or gain the sweep guard. The failed-joined-erase test (D3) is added to the plan's list.
-- Phase 2.1: the shared `PortRegistry` fake now passes the port to `onDisconnect` listeners, as the browsers do; `connectServiceClient` takes an optional sender.
+**Arc 4 review, round 3** (Codex, resumed over `3b579ef0..133460ca`): `APPROVE`, no findings; R2-1 and R2-2 verified. The loop closes at its third round.
 
-**Arc 3 deviations from the plan text** (the tree wins):
-- Phase 3.4 is deferred to the lane's first arc after backup-import-export arc 3 lands (D-orch-7); arc 3's PR says `Refs #208`.
-- Phase 3.2: the plan's guard list is carried mostly by cases already in `auth.test.ts` (wrong password, bootstrap failure, the lost-race timeout, both passkey toasts, the passkey cancel); the torn-import case gained its no-toast assertion and the passkey generic case its one-call count. A password unlock cannot raise `UserRejectedError`, so no password-path case exists for it.
-- Phase 3.3: no e2e case; the component test proves the split and `security.test.ts` guards the page on both browsers.
+### Deviations from the plan text (the tree wins)
+
+- **Arc 2.** One deadline taken at entry covers the init and the delegate waits; `DEFAULT_INIT_TIMEOUT_MS` is exported from `background/index.ts`; three more PXE test files moved to the record shape; the shared `PortRegistry` fake passes the port to `onDisconnect`.
+- **Arc 3.** 3.4 deferred (D-orch-7); 3.2's guards are mostly existing `auth.test.ts` cases; 3.3 added no e2e case.
+- **Arc 4 revision, against the first plan's § Arc 4** (details in `lessons/phase-4.md`):
+  - The reconnect boot ran "on Ready". It must not depend on Ready: it now runs on mount and on a drop (F21 to F23; shots findings 2 and 3).
+  - OA-4's premise "the unlock screen while it is still deciding" held only for a popup open across a restart; a fresh popup is empty until `getProfiles` answers (F22), so the first screen is a change to make.
+  - "The loader keeps today's timing under C" became the loader's removal, because Ready makes the flag false at every start (F24).
+  - I3 is demonstrated (F19, #421). The send boundary became a deadline check before the post and a `Connected` check in `sendEnvelope`, which leave the offscreen transport alone (F18). Ready comes after the whole collection started, not from the 500 ms poll (F20) or one service's start (F35). `sw-resilience.test.ts` gains a held-boot case instead of the first plan's base-evidence case, because arc 2 already reads `lastError`.
+- **Arc 4 build.** `reset.vue` disconnects its client on unmount only when no call runs, else when the call settles: a disconnect at unmount dropped the rest of a reset the lock had routed away from (O1). The type-roles surface inventory swaps `overlay:GlobalLoader` for `overlay:StartBar`.
 
 ## Delivery
 
-One `gh stack` on trunk `dev`. Arc 1 is the worktree branch itself (`gh stack init --adopt worktree-account-session-life --base dev`).
+No stack (D-orch-1, D-orch-4): each arc opens one PR against `dev` (`gh pr create --base dev`), without labels. Add `e2e:extension-network` or `e2e:extension-smoke` afterwards only when the path filter would skip a suite the change needs; arc 4 needs both suites, arc 5 smoke.
 
-| Layer | Branch | Phases | Stacks on | `/code-review` | PR title (≤ 93 chars) | Closes |
-|---|---|---|---|---|---|---|
-| 1 | `worktree-account-session-life` | 1.1-1.5 | `dev` | off | `fix(account): lock per address, identity-checked profile activation, passkey retry confirms` | #99, #100, #159, #198, #158 |
-| 2 | `account-session-life-arc-2` | 2.1-2.3 | arc 1 | off | `fix(profile): deletion waits for its coordinator, the pxe fence keeps dead generations` | none (`Part of #157`) |
-| 3 | `account-session-life-arc-3` | 3.1-3.4 | arc 2 | off | `fix(auth): say when an unlock fails, reveal the current password on its own` | #137, #208 (#24 closes by comment) |
-| 4 | `account-session-life-arc-4` | 4.1-4.3 | arc 3 | off | `fix(messaging): ports connect on the background's ready, calls wait for it` | #157 |
-| 5 | `account-session-life-close-out` | close-out | the top built arc | n/a | `docs(plans): close account-session-life` | none |
+| Arc | Branch | Phases | Base | PR title (≤ 93 chars) | Issues |
+|---|---|---|---|---|---|
+| 1 to 3 | (merged) | 1.1 to 3.3 | `dev` | #253, #266, #422 | closed or referenced |
+| 4 | `account-session-life-arc-4` (this branch) | 4.1 to 4.5 | `dev` `15881c7d` | `fix(messaging): calls wait for the background's ready, the popup opens on the unlock screen` | `Closes #157`, `Closes #421` |
+| 5 | `account-session-life-arc-5` | 5.1 to 5.3 (+ 3.4 if unblocked) | `dev` after arc 4's merge | `fix(account): create skips an imported address, a new profile that does not open says so` | `Refs #99, #100, #159` (closed by #253); `Closes #208` only with 3.4 |
 
-- Gated arcs: arc 2 follows #91 under R4 if both are ready together. Arc 3 follows page 7, H2 and backup-import-export arc 3. Arc 4 follows OA-4.
-- When a higher arc's gate opens before a lower one, the orchestrator may reorder the unmerged layers. They share no file, except that arcs 2 and 4 both edit `packages/extension-messaging/src/background/client.ts` and `service.ts`, and arc 4 builds on arc 2's edits.
-- Arc 1 and backup-import-export arc 3 both edit `apps/extension/src/wallet/services/account/service.ts` and `spec.ts`, in different functions (create, import, `unwrite`, `reconcileImportedAccounts`, `invoke` and the params schemas here; the reseal path there). Whichever lands second rebases and re-runs `src/wallet/services/account/`; if the other added or changed an account RPC, it adds that method's schema, which the surface pin (schema keys equal `rpcMethods`) demands.
-- An arc that is not built drops out of the stack, and the close-out goes on the top built arc.
-- Open each PR without labels. Afterwards, add `e2e:extension-network` or `e2e:extension-smoke` only when the path filter would skip a suite the change needs. Arcs 2 and 4 need both suites; arcs 1 and 3 need smoke. Check what the filter picked before adding a label.
-- PR body: what changed and why, the validation run with its outcomes, the `Closes` lines. Arc 3's and arc 4's bodies quote the owner's recorded answer and attach the screenshots.
-- Merging is the orchestrator's call, in stack order.
+- The orchestrator may build arc 5 before arc 4: they share `account/service.ts`, where arc 4 only rewrites a comment, so the later arc rebases over the earlier.
+- The close-out rides the last built arc as its final commits (`implementations-plan/README.md` § Portable rules, rule 5). If 3.4 is still blocked then, the Outcome names #208 as its open item.
+- Each PR body says what changed and why, the validation runs with outcomes, the per-browser suite wall-clock before and after when it adds an e2e scenario, the records it quotes, and the screenshots. Merging is the orchestrator's call.
 
 ## Post-implementation
 
-`code_review: off`, so no `/code-review` runs.
+The execution contract is this plan plus `implementations-plan/README.md` § Post-implementation standard, read at `15881c7d`. `code_review: off`, so step 1 is absent. What is specific here:
 
-1. **Codex audit, per arc, at the arc boundary** (before `gh stack add` opens the next arc), while that arc is the stack tip. Run `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol` with:
-   - the arc's diff;
-   - this plan and its decision ledger;
-   - the arc map: "this is arc N of 4; later arcs build: 2 the transport and deletion fence, 3 page 7's surfaces, 4 the Ready handshake";
-   - the adversarial ask: "What could go wrong? What would an attacker target? What are we trusting that we shouldn't?";
-   - these two rules, verbatim:
-     - *"Report bugs and small, targeted improvements only. Do not propose speculative abstractions, extra configuration surface, new layers, or rewrites — the smallest change that fixes each real problem. If code works and is clear, leave it alone."*
-     - *"Audit the comments for value per character. Flag any comment that narrates what the code visibly does, restates its line, references implementation plans / phases / reviews, or spends a paragraph where a sentence works — and flag places where a non-obvious invariant or constraint deserves a comment it doesn't have. Comments are permanent context every future reader, human or LLM, pays to re-read: they must be few, dense, and exact."*
-2. **Fix loop.**
-   1. Verify each finding against the repo first.
-   2. Apply the accepted fixes and commit.
-   3. Log the round (the consult and its verdict) in `lessons/phase-N.md`.
-   4. Resume the same session (`resume-codex.sh`) with the fix diff.
-   5. Repeat until a round yields no new material finding.
-
-   **Warning:** hard stop at three rounds. If a finding is still material after round three, stop and report `ARC_FAILED` with the open findings.
-3. **Final cross-arc pass** after the last built arc: a fresh Codex session over the net diff from `643c0c9`, asking for cross-arc issues (seams between arcs, duplication across arcs, drift from this plan), with the same two rules and the same loop.
-4. **Delivery** per the Delivery section. This is the first time any PR opens.
-   1. Run `gh stack sync` if `dev` moved.
-   2. Run `gh stack submit --auto`, then `gh pr edit` each body.
-   3. Watch checks with `gh pr checks <n> --watch`.
-5. **Close-out**, as the stack's docs-only top layer (`gh stack add account-session-life-close-out`). First merge `origin/dev` in and read what changed in `implementations-plan/index.md` and `lessons.md`; another lane may have landed. Never use a union merge.
-   1. Write an `## Outcome` block directly after the front matter: the date; the status; what shipped, with PR numbers; what was dropped, rejected or superseded, with a disposition line each; an `Open items:` line; one line that retires this plan's `/goal` and `/loop` seeds.
-   2. Promote the generalizable gotchas to `implementations-plan/lessons.md`, one line each with a link to the archived detail. Deduplicate, retire what a new line supersedes, date tool versions, and stay under 8 KiB.
-   3. File every open item in its home (table below). Dedupe first (`gh issue list --state all --search "<words>"`). An issue body has five sections: `## What happens`, `## Where`, `## Impact`, `## Possible fix`, `## Record`. Known candidates: the unchecked account reads and edits, and `confirmProfileOperation` without a caller. Comment on any lane issue whose fix was left out or did not hold, with the reason, and leave it open.
-   4. Run `git mv implementations-plan/account-session-life implementations-plan/archive/account-session-life` in its own commit. Repair the links the extra directory level breaks, and move the index line to `implementations-plan/archive/index.md`. Delete `STATUS.md` in the close-out commit.
-   5. Report and wait: merging is the orchestrator's call.
-
-   | Situation | Home |
-   |---|---|
-   | Work inside the implementation you are on | this `plan.md` and the PR |
-   | Actionable work that outlives the plan: a bug, a gap, a missing test, a deferred refactor | a GitHub issue, with a domain label and a `Record` link to the archived plan |
-   | Needs a product call, or waits on something outside the repo | an issue labelled `owner-decision` or `blocked:external` (the body names the trigger) |
-   | A suspected exploitable weakness | a private draft security advisory; `plan.md` records only "tracked privately: GHSA-…" until it is published |
-   | Rejected, superseded or already done | a disposition line in the Outcome block; no open item anywhere |
-   | Knowledge that prevents a repeat | `implementations-plan/lessons.md` (8 KiB budget) |
-   | A legal or store blank with a release deadline | `BEFORE-LAUNCH.md` |
-   | Accepted code work that blocks launch | the `v1.0.0` milestone, pointed at once from `BEFORE-LAUNCH.md` |
-
-6. **Teardown after the merge.** This step is standing authorization; do not ask first.
-   - Trigger: `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/account-session-life/plan.md` succeeds.
-   - Run `agent-worktree done account-session-life --merged`. This session did not enter through `EnterWorktree`, so there is nothing to exit.
-   - The helper refuses rather than forces. Relay a refusal and stop.
-   - Who notices the merge: a `/loop` session checks on every firing. A `/goal` session arms one background wait right after its wrap-up report (`until <the check>; do sleep 300; done`, `run_in_background`, maximum timeout), and otherwise runs this step at the start of its next turn.
+- **Review loop** per arc at its boundary, before its PR: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, hard stop at three rounds (then `ARC_FAILED`). Arc map: "this is arc N of 5; arcs 1 to 3 are merged; arc 4 builds the Ready handshake and the start-up moment; arc 5 builds page 7's picks for arc 1's surfaces". Log each round in `lessons/phase-N.md` and § Audit verdicts.
+- **Final cross-arc pass** after the last built arc: a fresh Codex session over the net diff from `643c0c9`, asking for seams between arcs, duplication across arcs and drift from this plan, in the same loop.
+- **Close-out.** Merge `origin/dev` in and read what changed in `index.md` and `lessons.md` first. Known items to file (dedupe first): the unchecked account reads and edits; `confirmProfileOperation` without a caller; and as closed `known-limit` issues: the deletion behind proofs on two chains (P7-09), a never-starting service holding `reset.vue` for 30.5 minutes, a worker that crash-loops after Ready superseding every boot run, and a keyless imported row whose index reconcile frees for good (O-R11). Comment on any lane issue whose fix was left out, with the reason. Then the Outcome block, the lessons promotion, `STATUS.md` deleted and the `git mv` into `archive/` in its own commit.
+- **Teardown** after the close-out merges: `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/account-session-life/plan.md`, then `agent-worktree done account-session-life --merged`. This session did not enter through `EnterWorktree`; relay a refusal and stop.
 
 ## Seeds
 
 Not run by this planner (orchestrator-owned). Drafts:
 
 ```
-/goal Arcs 1 and 2 of implementations-plan/account-session-life/plan.md are marked ✓ in plan.md, each phase ✓ backed by its validation gate reported passing in the transcript, each phase's LESSONS_FILE=implementations-plan/account-session-life/lessons/phase-N.md printed; /code-review was NOT run (code_review: off); the Codex fix loop converged for each built arc and for the final cross-arc pass, each convergence quoted from a resumed Codex pass reporting no new material findings; the stack exists on GitHub with PRs opened only after the loops converged (gh stack view in the transcript); arcs 3 and 4 are built only if STATUS.md records their gates (page 7, hold H2 and backup-import-export arc 3; OA-4) as cleared; `bun run test` and `bun run lint` both report exit 0 in the transcript.
+/goal Arcs 4 and 5 of implementations-plan/account-session-life/plan.md are marked ✓, each phase ✓ backed by its validation gate reported passing in the transcript, each phase's LESSONS_FILE=implementations-plan/account-session-life/lessons/phase-N.md printed; /code-review was NOT run (code_review: off); the Codex fix loop converged for each built arc and for the final cross-arc pass, each convergence quoted from a resumed Codex pass reporting no new material findings; each arc's PR was opened against dev only after its loop converged, with the screenshots and the per-browser suite wall-clock in its body; phase 3.4 is built only if STATUS.md records backup-import-export arc 3 as merged; `bun run test` and `bun run lint` both report exit 0 in the transcript.
 ```
 
 ```
-/loop 15m Drive implementations-plan/account-session-life forward. Never idle waiting for input. Each firing: 1. Reality check: read plan.md, STATUS.md and lessons/ (the authority, not the chat), including the Outcome & Quality Bar; on a stack read them from the top layer. If plan.md is gone from the live path, check `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/account-session-life/plan.md`: success → run `agent-worktree done account-session-life --merged`, report, clear this loop and stop; failure → babysit delivery only. 2. Waiting on CI is fine; confirm it progresses. 3. No task in hand → take the next pending step of plan.md; after each edit run `bun run lint` and the phase's unit command; commit; push with `gh stack push`. Never run network e2e while another lane holds the host before #169 merges. 4. Stuck or facing a decision → consult `/codex high` on gpt-6.1-sol, log it in lessons/phase-N.md; anything a person would see goes to OWNER-ASKS.md, never decided here. 5. Same step failed 3 times → stop and report ARC_FAILED. 6. Phase green = its validation gate passes; mark ✓, write lessons, advance; at an arc boundary run the arc's Codex loop first, then `gh stack add`. Arc 3 waits for page 7, hold H2 and backup-import-export arc 3; arc 4 waits for OA-4. 7. All buildable arcs ✓ → final cross-arc pass, Delivery, close-out per plan.md; report and stop: merging is the orchestrator's call.
+/loop 15m Drive implementations-plan/account-session-life forward. Never idle waiting for input. Each firing: 1. Reality check: read plan.md, STATUS.md and lessons/ (the authority, not the chat), including the Outcome & Quality Bar. If plan.md is gone from the live path, check `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/account-session-life/plan.md`: success → run `agent-worktree done account-session-life --merged`, report, clear this loop and stop; failure → babysit delivery only. 2. Waiting on CI is fine; confirm it progresses. 3. No task in hand → take the next pending step of plan.md; after each edit run `bun run lint` and the phase's unit command; commit. Never run two e2e:agent runs in this worktree. 4. Stuck or facing a decision → consult `/codex high` on gpt-6.1-sol and log it in lessons/phase-N.md; anything a person would see goes to OWNER-ASKS.md, never decided here. 5. Same step failed 3 times → stop and report ARC_FAILED. 6. Phase green = its validation gate passes; mark ✓, write lessons, advance; at an arc boundary run the arc's Codex loop, then open that arc's PR against dev. Phase 3.4 waits for backup-import-export arc 3. 7. All buildable arcs ✓ → final cross-arc pass, then the close-out per plan.md; report and stop: merging is the orchestrator's call.
 ```

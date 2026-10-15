@@ -125,9 +125,9 @@ describe.skipIf(!HAS_FIXTURE)("storage migration through the real boot path", ()
 	/** REAL cold boot over the surviving profile. Liveness gate off: a held or
 	 *  failing migration parks the boot before the heartbeat starts. Returns a
 	 *  RAW popup page (plain goto, no readiness gate) — `openPopup`'s predicate
-	 *  waits for the GlobalLoader to clear, which never happens while the SW is
-	 *  parked pre-services; storage evaluation + the barrier testids don't need
-	 *  a connected app. */
+	 *  waits for the service's Ready, which never comes while the SW is parked
+	 *  pre-services; storage evaluation + the barrier testids don't need a
+	 *  connected app. */
 	async function relaunch(): Promise<Page> {
 		ctx = await launchExtension({ userDataDir: profileDir, waitForLiveness: false })
 		const page = await newPage(ctx.browser)

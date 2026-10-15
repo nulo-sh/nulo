@@ -48,6 +48,7 @@ function routerFor(store: { isLogined: boolean; profile: { id: string; name: str
 		createPopupGuard(
 			() => appStore as never,
 			() => profileApi as never,
+			{ ready: async () => true, markProvisional: () => {}, settle: () => {}, replay: () => {} },
 		),
 	)
 	return router

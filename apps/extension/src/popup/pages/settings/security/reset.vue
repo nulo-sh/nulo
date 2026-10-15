@@ -10,8 +10,8 @@
 </route>
 
 <script setup>
-/** Utils */
-import { managers } from "@/utils/core"
+/** Services */
+import { deleteProfileClient } from "@/wallet/services/profile/client"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -46,6 +46,12 @@ const SLOW_DELETE_HINT_DELAY_MS = 10_000
 const isSlowDelete = ref(false)
 let slowDeleteTimer = null
 
+// Its own client: the shared one gives up at 60 s, well inside the wait the hint promises. It
+// outlives the page while a call runs: deleting the open profile locks the wallet, whose route
+// unmounts this page before the purge returns, and the rest of the reset must still run.
+const deleteService = deleteProfileClient()
+let isUnmounted = false
+
 const handleReset = async () => {
 	if (!isReadyToReset.value || isResetting.value) return
 
@@ -62,19 +68,27 @@ const handleReset = async () => {
 		isSlowDelete.value = true
 	}, SLOW_DELETE_HINT_DELAY_MS)
 	try {
-		await managers.profile.deleteProfile(deletedId)
+		await deleteService.deleteProfile(deletedId)
 	} catch (_err) {
+		if (isUnmounted) deleteService.disconnect()
 		isResetting.value = false
 		clearTimeout(slowDeleteTimer)
 		isSlowDelete.value = false
 		openToast({ kind: "error", label: "Couldn't delete profile. Try again" })
 		return
 	}
+	if (isUnmounted) deleteService.disconnect()
 	isResetting.value = false
 	clearTimeout(slowDeleteTimer)
 	isSlowDelete.value = false
 
 	appStore.profiles = appStore.profiles.filter((p) => p.id !== deletedId)
+	// The lock this deletion causes lets another profile be unlocked before a long purge returns;
+	// that profile's session and route stand.
+	if (appStore.profile && appStore.profile.id !== deletedId) {
+		openToast({ kind: "success", label: "Profile deleted" })
+		return
+	}
 	appStore.profile = appStore.profiles.length && appStore.profiles[0]
 	appStore.networks = []
 	appStore.network = null
@@ -101,6 +115,8 @@ const handleReset = async () => {
 }
 
 onBeforeUnmount(() => {
+	isUnmounted = true
+	if (!isResetting.value) deleteService.disconnect()
 	if (slowDeleteTimer) clearTimeout(slowDeleteTimer)
 })
 </script>

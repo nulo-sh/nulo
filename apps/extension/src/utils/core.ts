@@ -7,7 +7,7 @@
  * which made the module impossible to import in tests without a live SW and
  * caused phantom ports when multiple popup surfaces loaded the bundle.
  *
- * The public shape (`managers`, `isBackgroundConnected`, `initTransactionService`,
+ * The public shape (`managers`, `isServiceReady`, `initTransactionService`,
  * `refreshBalances`) is preserved — every existing consumer keeps working
  * unchanged. Under the hood:
  *   1. `managers` is a Proxy; client construction is deferred until first
@@ -29,8 +29,29 @@ import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/clien
 import type { Tx } from "@/wallet/services/transaction/spec"
 import { TransactionServiceClient } from "@/wallet/services/transaction/client"
 
-/** Reactive: true when the long-lived port to the service worker is open. */
-export const isBackgroundConnected = ref(false)
+/** Reactive: true once the background has said Ready on the profile port, false when that port drops. */
+export const isServiceReady = ref(false)
+
+/** Resolves true once the service is Ready, or false after `ms`. */
+export function waitForServiceReady(ms: number): Promise<boolean> {
+	if (isServiceReady.value) return Promise.resolve(true)
+	return new Promise((resolve) => {
+		const timer = setTimeout(() => {
+			stop()
+			resolve(false)
+		}, ms)
+		const stop = watch(
+			isServiceReady,
+			(ready) => {
+				if (!ready) return
+				clearTimeout(timer)
+				stop()
+				resolve(true)
+			},
+			{ flush: "sync" },
+		)
+	})
+}
 
 /**
  * Service-client container. `profile`, `contact` and `legal` are populated eagerly by
@@ -61,10 +82,10 @@ let appServices: AppServices | undefined
 
 function createAppServices(): AppServices {
 	const onConnected = () => {
-		isBackgroundConnected.value = true
+		isServiceReady.value = true
 	}
 	const onDisconnected = () => {
-		isBackgroundConnected.value = false
+		isServiceReady.value = false
 	}
 
 	const profileService = new ProfileServiceClient()
