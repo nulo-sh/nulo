@@ -51,3 +51,5 @@
 - 2026-10-15: phase 5.4 (P7-10, #137) gate pass: lint 0, typecheck:all 0, auth unit 30/30 (the new proof red on 1a8b2b6d), smoke auth-flows retry-0 Chrome 5/5 in 40 s.
 - 2026-10-15: arc 5 review loop closed: Codex r1 CHANGES (3 Medium) + Opus CHANGES (same three + 3 comments), fixed eee20090 and 9bcb382a; r2 CHANGES (1 Low) fixed 3e190ed7; r3 APPROVE. test:all caught `toast-call-sites.test.ts` after r1; fixed.
 - 2026-10-15: arc 5 boundary gate pass on 15d5ae61: audit:vue 0 (160 s), test:all 0 (extension 12390), check:plans 0; smoke retry-0 (accounts, account-import-export, registration, passkey-retry, passkey-toolbar-panel, auth-flows) Chrome 28 passed / 6 skipped by design in 182 s, Firefox 34/34 in 361 s; network imported-account-execution retry-0 Chrome 3/3 in 230 s. Screenshots: both themes, Chrome.
+- 2026-10-15: close-out started: branch `account-session-life-closeout` off dev 0266d1b2 (#454 merged, so 3.4 is unblocked).
+- 2026-10-15: phase 3.4 gate pass: lint 0, typecheck:all 0, import + export unit 100/100; both new assertions red on 0266d1b2's markup.

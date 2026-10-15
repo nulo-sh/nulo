@@ -423,11 +423,9 @@ Every gate below passed with exit 0 at retry 0; STATUS.md and `lessons/phase-1.m
 - Layers: lint, typecheck, unit, build, smoke e2e on both browsers, network e2e (Chrome). No e2e scenario is added: each pick's branch is proved where it lives (the account service, the activation helper, the window), and no browser behaviour decides it.
 - Then the arc's Codex loop. The final cross-arc pass rides the close-out, after 3.4.
 
-### Phase 3.4: backup autocomplete (P7-04), deferred
+### Phase 3.4: backup autocomplete (P7-04) ✓
 
-**Warning:** build nothing until backup-import-export arc 3 has merged.
-
-Add `autocomplete="current-password"` to `ImportFullBackupForm.vue`'s decrypt field and `autocomplete="new-password"` to `export/full.vue`'s pair, with one component assertion per field class. Gate: lint, typecheck, `cd apps/extension && bun --bun vitest run src/components/composite/import/ src/popup/pages/settings/security/export/`.
+Built on `account-session-life-closeout` from dev `0266d1b2`, after backup-import-export arc 3 merged (#454). Add `autocomplete="current-password"` to `ImportFullBackupForm.vue`'s decrypt field and `autocomplete="new-password"` to `export/full.vue`'s pair, with one component assertion per field class. Gate: lint, typecheck, `cd apps/extension && bun --bun vitest run src/components/composite/import/ src/popup/pages/settings/security/export/`. Result: 100/100; both assertions red on the base markup. The fields are where the plan names them; the export pair's assertion sits in `full-passkey.pins.test.ts`, since the pair renders for passkey profiles only.
 
 ## UI impact
 
