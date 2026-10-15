@@ -12,3 +12,4 @@
 - 2026-10-14: P4: the empty list shipped first (#429, publish #434), then the rc.3 Token class; tree check green.
 - 2026-10-14: P6: rc.3 proves through presto-server 1.1.3 on both browsers (bb 6.0.0-rc.6 downloaded and verified); no server release needed.
 - 2026-10-15: P7: excludes out (`bunfig.toml` equals `dev`), audit acks re-judged; final review fixed Presto's status check to the bb release (OA-6). `dev` merged at 9e905c9b; smoke, network proverless and prover-ON canaries green at retry 0 on both browsers; `reference/nulo-v6.1` re-resolved under its gate with identical vectors; Codex converged; PR #431 ready. The merge is the owner's call.
+- 2026-10-15: arc 3 on `aztec-rc3-sdk` off `dev` 479ba56d: P8 READMEs; 0.2.0 digests recorded and reproduced from a clean tree; test:release 0, check-digests 0, lint 0, every staged Aztec peer 6.0.0-rc.3.

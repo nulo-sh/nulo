@@ -264,6 +264,8 @@ All three take `0.2.0`, one lockstep version (F15). `wallet-crypto` changes only
 | D9 | Live Testnet send is the owner's pre-release step; the Outcome says so | F (A4) | accepted |
 | D10 | No CI sharding locally (sibling checkouts are off limits) | M | accepted; time cost only |
 | D11 | Correct M4's backup claim; add no restore test | C (final 2) | accepted in part: the plan changes no restore code, and the unseeded-chain path is pinned (`useFullBackupImport.test.ts:1060-1086`, per-row errors `account/service.test.ts:205`) |
+| D12 | The close-out ships as the final commits of arc 3's PR: arc 1 was squash-merged (#431), so no stack is left to carry a docs-only top layer | orchestrator | accepted; the `aztec-rc3-close-out` row folds into `aztec-rc3-sdk` |
+| D13 | `wallet-sdk-schema-patch` 0.2.0 also carries #335's `grantPublicAuthwit` address parsing, which P8's "patch unchanged" missed | tree (`lessons/phase-8.md`) | accepted; its README's 0.2.0 entry names both changes |
 
 ## Audit verdicts
 
@@ -298,7 +300,7 @@ Trunk `dev`. `code_review` is `off` on every arc.
 |---|---|---|---|
 | 1 | P1-P7 | `worktree-aztec-rc3` | `feat(aztec): move to 6.0.0-rc.3 and the reset testnet, re-pin the account artifact` |
 | 3 | P8 | `aztec-rc3-sdk` | `chore(publish): prepare the @nulo-sh packages 0.2.0 on aztec 6.0.0-rc.3` |
-| close-out | — | `aztec-rc3-close-out` | `docs(plans): close the aztec-rc3 plan` |
+| close-out | — | `aztec-rc3-sdk` (D12) | the final commits of arc 3's PR |
 
 - **Deviation (decision record, item 3):** arc 1 may open as a draft once P1-P3 are green and its Codex loop has converged on that diff: `gh stack init --adopt worktree-aztec-rc3`, then `gh stack submit --auto --draft` (or `gh pr create --draft --base dev`). Each fill-in lands as its own commit and gets a resumed Codex round; the PR turns ready only after P7.
 - **Deviation (implementation, P4):** M7's one-PR ordering deadlocks the list's publishing. The tree check, which `publish-token-list.yml` runs before `sign`, refuses the signed rc.1-class envelope once the class set moves, so nothing could re-sign it. The empty source therefore ships first as #429, and the owner publishes its envelope. Arc 1 then merges `dev`, its source edit becomes a no-op, and P4's gate passes (`lessons/phase-4.md`; Codex agreed, fresh session `01a13c11`).
