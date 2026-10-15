@@ -5,7 +5,7 @@
  * change, and a Mainnet chain whose addresses moved is quarantined with no reset.
  */
 import type { Page } from "puppeteer"
-import { CHAIN_IDS, MAINNET_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 
 const NETWORKS = "nulo:core:networks@"
 const ACCOUNTS = "nulo:core:accounts@"
@@ -63,6 +63,17 @@ export async function readNetwork(page: Page, kind: string): Promise<{ id: strin
 	return row
 }
 
+/** Points the stored active network at the row of `kind`, as a switch made before this moment
+ *  would have; the network service reads the pointer on every call. */
+export async function storeActiveNetwork(page: Page, kind: string): Promise<void> {
+	const { id, profileId } = await readNetwork(page, kind)
+	await page.evaluate(
+		(key: string, value: string) => chrome.storage.local.set({ [key]: value }),
+		`nulo:core:active-network@${profileId}`,
+		id,
+	)
+}
+
 /** Every stored row that names `chainId`, and the network row `networkId`, exactly as stored. */
 export async function snapshotChain(page: Page, chainId: number, networkId: string): Promise<Record<string, string>> {
 	return page.evaluate(
@@ -92,12 +103,12 @@ export async function snapshotChain(page: Page, chainId: number, networkId: stri
 /**
  * Rewrites the Testnet row the way an update meets it. `network-reset` moves the row and every
  * row of its chain to an older chainId; `address-change` moves every derived (Nulo_v1) address on
- * it and hides the account at `hideIndex`. Run it locked: an unlocked worker would act on half
- * the writes.
+ * it and hides the account at `hideIndex`; `both` does the two. Run it locked: an unlocked worker
+ * would act on half the writes.
  */
 export async function seedStaleNetwork(
 	page: Page,
-	shape: "network-reset" | "address-change",
+	shape: "network-reset" | "address-change" | "both",
 	opts: { hideIndex?: number } = {},
 ): Promise<void> {
 	const changed = await page.evaluate(
@@ -119,11 +130,13 @@ export async function seedStaleNetwork(
 			}
 			let fake = 0
 			const rewrite = (key: string, row: Record<string, unknown>): Record<string, unknown> | null => {
-				if (args.shape === "network-reset") return { ...row, chainId: args.previous }
-				if (!key.startsWith(args.accounts) || row.type !== 0) return null
+				const chain = args.shape === "address-change" ? {} : { chainId: args.previous }
+				const derived = key.startsWith(args.accounts) && row.type === 0
+				if (args.shape === "network-reset" || (args.shape === "both" && !derived)) return { ...row, ...chain }
+				if (!derived) return null
 				fake++
 				const address = `0x${fake.toString(16).padStart(2, "0").repeat(32)}`
-				return { ...row, address, visible: row.index === args.hideIndex ? false : row.visible }
+				return { ...row, ...chain, address, visible: row.index === args.hideIndex ? false : row.visible }
 			}
 			// Account and imported-key rows live under their scope (`accountRowId`): a moved row moves key.
 			const keyFor = (key: string, row: Record<string, unknown>) => {
@@ -156,6 +169,43 @@ export async function seedStaleNetwork(
 		},
 	)
 	if (changed === 0) throw new Error(`seedStaleNetwork(${shape}) rewrote no network or account row`)
+}
+
+/** Local's chainId before an update moved it: no build seeds it. */
+export const PREVIOUS_LOCAL_CHAIN_ID = (LOCAL_L1_CHAIN_ID ^ 5) >>> 0
+
+/**
+ * Local as a reset bump meets it, with both causes, on a profile that never opened Local: the row
+ * on {@link PREVIOUS_LOCAL_CHAIN_ID}, the Testnet's derived accounts copied onto it at moved
+ * addresses, and Local active. Refuses a profile that already holds Local accounts, whose PXE
+ * store for the seed chain would already exist. Run it locked.
+ */
+export async function seedStaleLocalBothCauses(page: Page): Promise<{ profileId: string; networkId: string; moved: string[] }> {
+	return page.evaluate(
+		async (args: { networks: string; accounts: string; previous: number; l1: number; seed: number }) => {
+			const all = await chrome.storage.local.get(null)
+			const rows = Object.entries(all).filter(([, raw]) => typeof raw === "string") as [string, string][]
+			const parsed = (prefix: string) => rows.filter(([key]) => key.startsWith(prefix)).map(([, raw]) => JSON.parse(raw))
+			const local = parsed(args.networks).find((row) => row.kind === "local")
+			const testnet = parsed(args.networks).find((row) => row.kind === "testnet")
+			const accounts = parsed(args.accounts)
+			if (accounts.some((row) => row.chainId === args.seed)) throw new Error("the profile already opened Local")
+			const derived = accounts.filter((row) => row.chainId === testnet.chainId && row.type === 0)
+			const writes: Record<string, string> = {
+				[`${args.networks}${local.id}`]: JSON.stringify({ ...local, chainId: args.previous }),
+				[`nulo:core:active-network@${local.profileId}`]: local.id,
+			}
+			const moved = derived.map((row, i) => {
+				const address = `0x${(0xa0 + i).toString(16).repeat(32)}`
+				const next = { ...row, chainId: args.previous, l1ChainId: args.l1, address }
+				writes[`${args.accounts}${JSON.stringify(["account", next.profileId, next.chainId, address])}`] = JSON.stringify(next)
+				return address
+			})
+			await chrome.storage.local.set(writes)
+			return { profileId: local.profileId as string, networkId: local.id as string, moved }
+		},
+		{ networks: NETWORKS, accounts: ACCOUNTS, previous: PREVIOUS_LOCAL_CHAIN_ID, l1: LOCAL_L1_CHAIN_ID, seed: CHAIN_IDS.SANDBOX },
+	)
 }
 
 export type AddedNetwork = { name: string; kind: string; chainId: number; l1ChainId: number; movedAccount: boolean; active: boolean }
@@ -250,18 +300,28 @@ export type TakeoverTrace = {
 	sawProgress: boolean
 	/** The shell when the first "is ready" snack appeared. */
 	atToast: null | { hash: string; account: boolean; takeover: boolean }
+	/** How many distinct "is ready" snacks this page showed. */
+	readyToasts: number
 }
 
-/** Records, from now on, whether A4 ever shows and what the shell shows when the A5 snack lands. */
+/** Records, from now on, whether A4 ever shows, what the shell shows when the A5 snack lands, and
+ *  how many A5 snacks land. */
 export async function traceTakeover(page: Page): Promise<void> {
 	await page.evaluate(() => {
-		const trace: TakeoverTrace = { sawProgress: false, atToast: null }
+		const trace: TakeoverTrace = { sawProgress: false, atToast: null, readyToasts: 0 }
 		;(window as unknown as { __staleTrace: TakeoverTrace }).__staleTrace = trace
+		const counted = new WeakSet<Element>()
 		const check = () => {
 			if (document.querySelector('[data-testid="stale-progress"]')) trace.sawProgress = true
-			if (trace.atToast) return
-			const titles = [...document.querySelectorAll('[data-testid="snackbar-title"]')]
-			if (!titles.some((t) => /is ready/i.test(t.textContent ?? ""))) return
+			const titles = [...document.querySelectorAll('[data-testid="snackbar-title"]')].filter((t) =>
+				/is ready/i.test(t.textContent ?? ""),
+			)
+			for (const title of titles) {
+				if (counted.has(title)) continue
+				counted.add(title)
+				trace.readyToasts++
+			}
+			if (trace.atToast || titles.length === 0) return
 			trace.atToast = {
 				hash: window.location.hash,
 				account: !!document.querySelector('[data-testid="account-address-copy"]'),

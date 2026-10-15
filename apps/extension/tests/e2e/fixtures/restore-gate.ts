@@ -46,6 +46,11 @@ export async function waitForRestoreGateHeld(extensionPage: Page, at: RestoreGat
 	)
 }
 
+/** The gate's record, or null once released: a hold its safety timer released is removed. */
+export async function readRestoreGate(extensionPage: Page): Promise<{ at?: string; held?: boolean } | null> {
+	return extensionPage.evaluate(async (key: string) => (await chrome.storage.session.get(key))[key] ?? null, RESTORE_GATE_KEY)
+}
+
 /** Remove the key. Call from the test's `finally` — releases a surviving
  *  worker's hold and, after a kill, clears the stale record for the next run. */
 export async function clearRestoreGate(extensionPage: Page): Promise<void> {

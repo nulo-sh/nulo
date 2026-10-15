@@ -32,31 +32,33 @@
 
 ## Gate
 
-At `5785b342`, then `f4d8912f` for the smoke runs, retry 0:
+The stack was rebased onto `dev` at `116974dc` on 2026-10-15; the SHAs here name the rebased commits, and every gate recorded before that date ran on the same changes over `1ba770cf`.
+
+At `f2e6c3d5`, then `24bb195d` for the smoke runs, retry 0:
 
 - `bun run lint` exit 0 (27 warnings, all pre-existing); `bun run test:ci-gating` exit 0 (556 pass); `bun run audit:vue` exit 0 (770 files, 12284 tests).
 - Armed builds: `build:chrome` and `build:firefox` exit 0.
 - Smoke, Chrome: 52 files passed, 4 skipped; 228 tests passed, 12 skipped; 1560 s; exit 0.
 - Smoke, Firefox: 54 files passed, 2 skipped; 227 tests passed, 13 skipped; 2168 s; exit 0.
 
-At `908455f4`, retry 0, proverless (`NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent`):
+At `1b945f5b`, retry 0, proverless (`NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent`):
 
 - `bun run audit:vue` exit 0 (770 files passed, 3 skipped; 12293 tests); `bun run test:ci-gating` exit 0 (556 pass, 0 fail).
 - Network, Chrome: 116 files passed, 5 skipped; 215 tests passed, 7 skipped; 6391 s; exit 0.
 - Network, Firefox: 116 files passed, 5 skipped; 213 tests passed, 9 skipped; 7575 s; exit 0.
 - The skips are opt-in or browser-specific (store captures, send chaos, the delegated-authwit and warm-up probes, the background-restart files).
 
-The smoke runs stand for `908455f4`: its change is the dApp-session delete on a chain purge, which no smoke test reaches.
+The smoke runs stand for `1b945f5b`: its change is the dApp-session delete on a chain purge, which no smoke test reaches.
 
 ## The network gate's one failure (D48)
 
-The first proverless Chrome network run, on `f4d8912f`, failed one test at retry 0: `connect-unserved-chain.test.ts`, "a deleted network: calls get the typed 4901, and the next connect drops the row and shows the notice", which expects a deleted network's session row to survive `deleteNetwork`. Phase 3 had put the dApp-session delete on the chain purge's subscriber, so every purge, `deleteNetwork`'s included, deleted the chain's sessions. The fix (`908455f4`) moves the delete into the reset's own `afterPurge` step (`dappSessions.purgeForChain`, after the transaction purge) and removes the subscriber: a deleted network keeps its sessions until the next connect drops them, and only a reset deletes them, since a kept session would auto-approve with the accounts the reset creates. A composition test pins both halves; 5 mutants, all killed. Recorded as D48; D28 narrowed to the reset.
+The first proverless Chrome network run, on `24bb195d`, failed one test at retry 0: `connect-unserved-chain.test.ts`, "a deleted network: calls get the typed 4901, and the next connect drops the row and shows the notice", which expects a deleted network's session row to survive `deleteNetwork`. Phase 3 had put the dApp-session delete on the chain purge's subscriber, so every purge, `deleteNetwork`'s included, deleted the chain's sessions. The fix (`1b945f5b`) moves the delete into the reset's own `afterPurge` step (`dappSessions.purgeForChain`, after the transaction purge) and removes the subscriber: a deleted network keeps its sessions until the next connect drops them, and only a reset deletes them, since a kept session would auto-approve with the accounts the reset creates. A composition test pins both halves; 5 mutants, all killed. Recorded as D48; D28 narrowed to the reset.
 
 Lesson: a chain purge is shared by three callers (delete, reset, profile deletion); a subscriber on it applies to all three, so a reset-only consequence belongs in the reset's hook, not on the purge.
 
 ## Codex fix loop, arc 1 (gpt-6.1-sol, high)
 
-Round 1, fresh session over `1ba770cf..5785b342`: 4 material findings.
+Round 1, fresh session over `1ba770cf..f2e6c3d5`: 4 material findings.
 
 1. A full backup could omit accounts while a reset ran: accepted. The password path re-checks the journal after its reads, and the passkey path's two slices refuse while a journal exists.
 2. A capture could write a journal after the profile's deletion had cleared it: accepted. The journal write checks the run fence inside the record lock, synchronously, because deletion holds the profile lock while it waits on the record lock.
@@ -65,19 +67,43 @@ Round 1, fresh session over `1ba770cf..5785b342`: 4 material findings.
 5. Two Source-filter rows in the dev log viewer: on the owner's arc 2 sign-off list.
 6. The purge's doc comment said best-effort: fixed.
 
-Fixes in `8eb26c66`; 6 mutants, all killed.
+Fixes in `013a6eee`; 6 mutants, all killed.
 
 Round 2, resumed: 2 material findings, both accepted.
 
 1. The passkey slices had no check after their reads: both re-check the journal after reading.
 2. A runtime verdict read before a reset finished could quarantine the healed chain again: `mergeEntry` compares the classified digest with the current one under the record lock; an obsolete verdict refuses the operation and writes nothing, never a profile block.
 
-Fixes in `712809f4`; 5 mutants, all killed.
+Fixes in `c09d762f`; 5 mutants, all killed.
 
-Round 3, resumed: 1 material finding, accepted. An account load that started before a reset finished derived a replaced row; the runtime classifier then read the clean replacement and returned false, which blocked the healed profile. A chain that classifies clean now refuses the operation and writes nothing; a mixed or orphaned chain is still unclassifiable and still blocks. Fix in `f4d8912f`; its mutant killed.
+Round 3, resumed: 1 material finding, accepted. An account load that started before a reset finished derived a replaced row; the runtime classifier then read the clean replacement and returned false, which blocked the healed profile. A chain that classifies clean now refuses the operation and writes nothing; a mixed or orphaned chain is still unclassifiable and still blocks. Fix in `24bb195d`; its mutant killed.
 
 Round 4, resumed, verifying round 3 (the repo rule stops at three rounds while a finding stays material; this one was fixed locally, so the fourth pass only verifies it): "VERDICT: no new material findings". The loop converged.
 
-Round 5, resumed, verifying `908455f4`: "Verified by code trace; confidence: high. … Dapp-session remains phase 0. Its added dependency creates no cycle … VERDICT: no new material findings". The loop holds at `908455f4`.
+Round 5, resumed, verifying `1b945f5b`: "Verified by code trace; confidence: high. … Dapp-session remains phase 0. Its added dependency creates no cycle … VERDICT: no new material findings". The loop holds at `1b945f5b`.
 
 The final cross-arc pass (fresh, over all three arcs) found one more here: a capture whose view probed nothing (the seed's endpoint was primary) skipped the endpoint check at commit, so a user primary set from another popup during the capture was replaced by the seed's at the rewrite, unannounced. The commit now requires the seed's endpoint, or none, still primary in that case; an address change, which keeps the row's chain, is not checked. Two comments that restated their functions are gone.
+
+## Rebase onto dev
+
+Two `dev` changes met this phase's code without a textual conflict. Create account now skips an address another row holds by deriving the next index (#453): `recreateForReset` pins the index, so a taken address there now means the account is already back, and nothing is written (D58). The passkey full backup now reads its accounts and key rows in `exportPasskeyBackupKeys` (#454), outside `backup()`, which had carried the refusal; it now refuses before and after its reads (D59). A test for each, three mutants, all killed. The reset's composition graph also needed `dev`'s new `token-list` service, which the token service depends on.
+
+Lesson: a conflict-free rebase is not a reviewed one. Search the incoming commits for every path this plan guards (exports, account writes, chain rows), not only the files that conflicted.
+
+Gotcha: committing with `git add -A` on a lower arc commits files that only a higher arc's `.gitignore` ignores. Arc 1's endpoint fix took the 34 captures with it; the final pass caught it, and the commit was amended without them. Stage paths by name on a lower arc.
+
+## Rebase onto #431
+
+`dev` moved to `0ac9e062`. #431 brought Aztec 6.0.0-rc.3, the reset Testnet (`CHAIN_IDS.TESTNET` 3415328944) and the in-place regime `nulo-v6.1` (D66). One textual conflict: CLAUDE.md's freeze section keeps #431's rotation bullets beside this plan's per-chain bullet. The other changes did not conflict in text:
+
+- #431's export check called `new ImportedAccountUnusableError(address, "address mismatch")`, the old two-argument constructor. Here that constructor takes (message, details), so the address became the message. It now calls `forAccount`; arc 2 then moves it to `because`, which names no address.
+- The coordinator tests' Testnet row hardcoded the rc.1 chain id. That id now reads as a network reset, so the row takes `CHAIN_IDS.TESTNET`.
+- The final pass's review of the rebase found that the new export check sent a mismatching derived row on a quarantined chain to classification, which needs the session (D67, `d7d70caa`).
+
+Gate at `d7d70caa`, retry 0, in a clean copy over `0ac9e062`:
+- `bun run typecheck:all` and `bun run build` exit 0.
+- `bun run lint` exit 0 in the worktree.
+- `bun run test`: 785 files and 12668 tests passed; 2 failed. The failures are `dev`'s `scripts/e2e/boot-guard.test.ts` and `reconcile-lock.test.ts`: 5 s timeouts while four suites and two e2e lanes ran at once. Both pass alone at this head (13/13).
+- The export guard was mutation-checked: removing its line alone fails its test.
+
+Gotcha: a `git archive` copy has no `.git`, so `audit:vue`'s lint leg (its `git grep`) fails and Bun's `--parallel` SIGINTs the test leg (exit 130). In a copy, run typecheck, test and build; lint in the checkout.

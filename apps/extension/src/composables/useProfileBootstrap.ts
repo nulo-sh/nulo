@@ -89,7 +89,7 @@ function clearQuarantinedAccounts(appStore: ReturnType<typeof useAppStore>): voi
 }
 
 /** Persists the resolved active network (the restored-active and fallback branches alike), then
- *  reads its stale view. A network cause with nothing to move resets here, behind the unlock, and
+ *  reads its stale view. A network the profile never opened resets here, behind the unlock, and
  *  the re-keyed row replaces the stale one (A2). */
 async function settleActiveNetwork(
 	appStore: ReturnType<typeof useAppStore>,

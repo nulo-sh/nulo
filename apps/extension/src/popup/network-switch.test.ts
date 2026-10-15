@@ -238,7 +238,7 @@ describe("createNetworkSwitchHandler", () => {
 		expect(h.syncTransactions).not.toHaveBeenCalled()
 	})
 
-	test("a network cause with nothing to move resets unattended; a node switch waits for the user", async () => {
+	test("a network never opened resets unattended; a node switch waits for the user", async () => {
 		const h = makeDeps()
 		const quiet = staleView({ accounts: [] })
 		h.syncStaleNetwork.mockResolvedValueOnce(quiet).mockResolvedValueOnce(staleView({ accounts: [], switchToSeedNode: true }))

@@ -58,7 +58,7 @@ describe("takeoverView", () => {
 		expect(takeoverView(input({ networkId: "ln" }))).toBeNull()
 	})
 
-	test("a network cause with nothing to move shows no screen while it resets by itself", () => {
+	test("a network never opened shows no takeover while it resets by itself, whatever the cause", () => {
 		expect(takeoverView(input({ stale: view({ accounts: [] }) }))).toBeNull()
 		expect(takeoverView(input({ stale: view({ accounts: [], cause: { networkReset: false, addressesMoved: true } }) }))).toBeNull()
 		expect(takeoverView(input({ stale: view({ accounts: [], unmovable: ["Imported 1"] }) }))?.networkId).toBe("tn")
@@ -89,7 +89,7 @@ describe("takeoverScreen", () => {
 		expect(takeoverScreen(view({ reset: { running: true, purged: false, doneCount: 0 } }), false, false)).toBe("progress")
 	})
 
-	test("a run that moves no account shows the loader, whoever started it", () => {
+	test("a run on a network never opened shows A4c, whoever started it; one removing unmovable accounts shows A4", () => {
 		expect(takeoverScreen(view({ accounts: [] }), true, false)).toBe("loading")
 		expect(takeoverScreen(view({ accounts: [], unmovable: ["Imported 1"] }), true, false)).toBe("progress")
 		expect(takeoverScreen(view({ accounts: [], reset: { running: true, purged: true, doneCount: 0 } }), false, false)).toBe("loading")

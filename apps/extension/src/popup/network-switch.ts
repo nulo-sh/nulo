@@ -46,7 +46,7 @@ export interface NetworkSwitchDeps {
 	syncStaleNetwork: (networkId: string) => Promise<StaleNetworkView | null>
 	/** Empties the account list and the active account; the durable pointer stays. */
 	clearAccounts: () => void
-	/** Resets a network cause with nothing to move, then re-assigns the re-keyed row (A2) while
+	/** Resets a network the profile never opened, then re-assigns the re-keyed row (A2) while
 	 *  `live` holds. */
 	resetUnattended: (view: StaleNetworkView, live: () => boolean) => Promise<void>
 }
