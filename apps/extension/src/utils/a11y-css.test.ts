@@ -144,7 +144,7 @@ describe("meta text reads in --nulo-secondary; --nulo-outline is for borders and
 		const found = stylesheets.flatMap((file) =>
 			parseSource(file).styles.flatMap(({ root }) => {
 				const keys: string[] = []
-				root.walkDecls("color", (decl) => {
+				root.walkDecls(/^color$/i, (decl) => {
 					const rule = enclosingRule(decl)
 					if (outline.test(decl.value)) keys.push(`${file} ${rule ? resolveSelector(rule) : "(no rule)"}`)
 				})

@@ -6,10 +6,9 @@ import postcss, { type ChildNode, type Container, type Document, type Root, type
 import { compileString } from "sass"
 
 /**
- * One reader of the wallet's sources for the type-role guard, the outline-text sweep and the two
- * inventory generators, so all four see the same files the same way: Vue SFCs split into template,
- * scripts and styles, stylesheets parsed by postcss (nested rules kept as written), the one `.scss`
- * file compiled first.
+ * One reader of the wallet's sources, so every guard and inventory sees the same files the same way:
+ * Vue SFCs split into template, scripts and styles, stylesheets parsed by postcss (nested rules kept
+ * as written), the one `.scss` file compiled first.
  */
 
 export const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..")
