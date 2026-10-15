@@ -353,6 +353,30 @@ describe("useProfileBootstrap", () => {
 		expect(isActivatingOtherThan("created")).toBe(false)
 	})
 
+	test("an activation superseded before it fails resolves false; one not superseded reports its failure", async () => {
+		const { bootstrapActiveProfile } = useProfileBootstrap()
+		const failing = () => {
+			let fail!: (err: Error) => void
+			;(managers.profile.getActiveProfile as ReturnType<typeof vi.fn>).mockImplementationOnce(
+				() => new Promise((_resolve, reject) => (fail = reject)),
+			)
+			return (err: Error) => fail(err)
+		}
+
+		const failSuperseded = failing()
+		const superseded = bootstrapActiveProfile(fakeProfile)
+		await vi.waitFor(() => expect(managers.profile.getActiveProfile).toHaveBeenCalledTimes(1))
+		supersedeProfileActivations()
+		failSuperseded(new Error("timed out"))
+		expect(await superseded).toBe(false)
+
+		const failCurrent = failing()
+		const current = bootstrapActiveProfile(fakeProfile)
+		await vi.waitFor(() => expect(managers.profile.getActiveProfile).toHaveBeenCalledTimes(2))
+		failCurrent(new Error("timed out"))
+		await expect(current).rejects.toThrow("timed out")
+	})
+
 	test("a hydration superseded by a lock commits nothing and reports no active profile", async () => {
 		const answers = deferredReads()
 		const { hydrateKnownProfile } = useProfileBootstrap()

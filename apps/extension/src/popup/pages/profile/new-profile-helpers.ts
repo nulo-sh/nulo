@@ -116,8 +116,10 @@ async function handOffCreatedProfile(profile: ProfileInfo, deps: CreateActivatio
 		}
 	}
 	console.warn("created profile did not open", { reason: activationFailureReason(failure) })
-	router.push(target)
+	// Awaited: until the page has left, the caller's latch must hold, or Create could run again.
+	const leaving = await router.push(target)
 	openToast(HAND_OFF_TOAST)
+	if (leaving) throw leaving
 }
 
 /** Popup-create's Enter shortcut, bound on the page's root: an Enter in one of its fields submits

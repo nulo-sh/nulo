@@ -257,6 +257,24 @@ describe("activateCreatedProfile (popup manual sequence)", () => {
 		expect(openToast).toHaveBeenCalledWith(HAND_OFF_TOAST)
 	})
 
+	test("the hand-off settles only once the page has left; a navigation that fails rejects, so the latch holds", async () => {
+		const store = makeAppStore()
+		const { router, openToast, state } = start(store)
+		const leaving = deferred<unknown>()
+		router.push.mockReturnValueOnce(leaving.promise)
+		store.profile = created
+		store.bootstrapFailure = { profileId: "created", message: "boom" }
+		await vi.advanceTimersByTimeAsync(0)
+		expect(router.push).toHaveBeenCalledWith("/popup/auth")
+		expect(state.outcome).toBe("pending")
+
+		const cancelled = new Error("Navigation cancelled")
+		leaving.resolve(cancelled)
+		await vi.advanceTimersByTimeAsync(0)
+		expect(state.outcome).toBe(cancelled)
+		expect(openToast).toHaveBeenCalledWith(HAND_OFF_TOAST)
+	})
+
 	test("the hand-off's own failure rejects, routes nowhere and shows no toast", async () => {
 		const store = makeAppStore()
 		vi.mocked(setLastActiveProfileId).mockRejectedValueOnce(new Error("storage"))

@@ -19,7 +19,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue"
 import { PasskeyServiceClient } from "@/wallet/services/passkey/client"
 import type { PasskeyCredentialData, PasskeyRequest } from "@/wallet/services/passkey/spec"
-import { confirmCreatedCredential, runPasskeyCeremony } from "@/wallet/utils/passkey-ceremony"
+import { confirmMinted, runPasskeyCeremony } from "@/wallet/utils/passkey-ceremony"
 import { PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
 import { classifyPasskeyFailure, PASSKEY_COPY, type PasskeyTitle, passkeyTag, stepFailedTitle } from "@/utils/passkey-copy"
 import PasskeyScreen from "@/components/composite/PasskeyScreen.vue"
@@ -77,7 +77,7 @@ async function prompt(req: PasskeyRequest): Promise<PasskeyCredentialData | unde
 	const { signal } = controller
 	const saved = unconfirmed.value && classifyPasskeyFailure(unconfirmed.value) !== "no-prf" ? unconfirmed.value : undefined
 	try {
-		return saved ? await confirmCreatedCredential(saved.credentialId, saved.userHandle, signal) : await runPasskeyCeremony(req, signal)
+		return saved ? await confirmMinted(saved.credentialId, saved.userHandle, signal) : await runPasskeyCeremony(req, signal)
 	} catch (err) {
 		// The window's own abort means it is closing: there is nothing left to show.
 		if (signal.aborted) return undefined

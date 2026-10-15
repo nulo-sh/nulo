@@ -44,21 +44,30 @@ const inFlightBootstraps = new Map<string, { isCurrent: () => boolean; promise: 
  */
 const bootstrapFence = createRunFence()
 
+/** Counts `supersedeProfileActivations` calls. The shell fences a failure's publication on its own
+ *  event sequence, which a supersede does not move. */
+let supersessions = 0
+
 /** After this, no activation whose core run started or was joined earlier sets `isLogined`,
  *  whatever its last read of the session answered, and those runs abandon their network and
- *  account setup. */
+ *  account setup. An event-driven one that then fails resolves `false` instead of reporting it. */
 export function supersedeProfileActivations(): void {
 	bootstrapFence.invalidate()
+	supersessions++
 }
 
 /** Profile ids of the event-driven activations (`bootstrapActiveProfile`), counted from entry to
  *  settlement. `inFlightBootstraps` cannot answer this: it clears before the final session read. */
 const activating = new Map<string, number>()
 
-async function trackActivation<T>(profileId: string, run: () => Promise<T>): Promise<T> {
+async function trackActivation(profileId: string, run: () => Promise<boolean>): Promise<boolean> {
+	const epoch = supersessions
 	activating.set(profileId, (activating.get(profileId) ?? 0) + 1)
 	try {
 		return await run()
+	} catch (err) {
+		if (supersessions !== epoch) return false
+		throw err
 	} finally {
 		const left = (activating.get(profileId) ?? 1) - 1
 		if (left > 0) activating.set(profileId, left)
