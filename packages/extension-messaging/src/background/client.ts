@@ -66,9 +66,8 @@ export abstract class ServiceClient<
 
 	/**
 	 * Opens a port synchronously or throws `RpcConnectError`. A synchronous throw from
-	 * `chrome.runtime.connect` is treated as permanent — the known ones are (the extension context is
-	 * gone) — so nothing retries: an asleep worker never throws, it is woken, and a missing peer
-	 * surfaces later as `onDisconnect`.
+	 * `chrome.runtime.connect` is permanent (the extension context is gone), so nothing retries: an
+	 * asleep worker never throws, it is woken, and a missing peer surfaces later as `onDisconnect`.
 	 */
 	private openPort(): void {
 		if (this.port || this.reconnectTimer) return
