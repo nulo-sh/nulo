@@ -110,6 +110,17 @@ export function isSeedEndpointUrl(seed: DefaultSeed, rpcUrl: string): boolean {
 	return rpcUrl === normalizeRpcUrl(seed.rpcUrl) || (seed.kind === "local" && sameLocalNetworkUrl(rpcUrl, seed.rpcUrl))
 }
 
+/** Whether the row's primary is no longer the one the reset's view decided on. A view that probed
+ *  nothing saw the seed's endpoint primary, or none; a user primary set since was never checked
+ *  against the new chain, and the rewrite would replace it with the seed's unannounced. */
+function primaryMoved(row: Network, check: { chainId: number; toChainId: number; primary: ProbedEndpoint | null }): boolean {
+	const primary = findPrimaryEndpoint(row)
+	if (check.primary) return primary?.id !== check.primary.id || primary.rpcUrl !== check.primary.url
+	if (check.chainId === check.toChainId || !primary) return false
+	const seed = seedForKind(row.kind)
+	return !seed || !isSeedEndpointUrl(seed, primary.rpcUrl)
+}
+
 /** One in-place reset of a network row, as the reset journal names it. */
 export type ChainResetRequest = {
 	profileId: string
@@ -918,10 +929,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			if (rows.some((n) => n.profileId === profileId && n.id !== networkId && n.chainId === check.toChainId)) {
 				throw notResettable("another network holds the new chain")
 			}
-			const primary = findPrimaryEndpoint(row)
-			if (check.primary && (primary?.id !== check.primary.id || primary.rpcUrl !== check.primary.url)) {
-				throw new Error(`${ERR_STALE_CHANGED}: the network's node changed before the reset began`)
-			}
+			if (primaryMoved(row, check)) throw new Error(`${ERR_STALE_CHANGED}: the network's node changed before the reset began`)
 			await write()
 		})
 	}

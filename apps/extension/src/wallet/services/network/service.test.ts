@@ -32,6 +32,7 @@ import type { ProfileService } from "@/wallet/services/profile/service"
 import { type ChainResetHooks, type ChainResetRequest, LOCAL_NETWORK_RPC_URL, NetworkService } from "./service"
 import { ERR_UNATTENDED_LIVE_CHECK, findPrimaryEndpoint, NodeStatus } from "./spec"
 import type { Network, NetworkEndpoint } from "./spec"
+import { seedForKind } from "./seeds"
 
 type NodeInfo = {
 	l1ChainId: number
@@ -2017,6 +2018,28 @@ describe("NetworkService in-place reset", () => {
 		expect(write).not.toHaveBeenCalled()
 		await service.commitResetCapture("p1", "tn", { chainId: CHAIN_IDS.TESTNET, toChainId: CHAIN_IDS.TESTNET, primary: null }, write)
 		expect(write).toHaveBeenCalledTimes(1)
+	})
+
+	test("commitResetCapture of a view that probed nothing refuses a user primary set since, and admits the seed's", async () => {
+		const write = vi.fn(async () => {})
+		const capture = { chainId: OLD, toChainId: CHAIN_IDS.TESTNET, primary: null }
+		const userPrimary = setupServiceWithStorage({})
+		staleTestnet(userPrimary.local)
+		await expect(userPrimary.service.commitResetCapture("p1", "tn", capture, write)).rejects.toThrow(/^ERR_STALE_CHANGED/)
+		expect(write).not.toHaveBeenCalled()
+		// An address change keeps the row's chain, so its endpoints are not the reset's to decide.
+		await userPrimary.service.commitResetCapture("p1", "tn", { ...capture, toChainId: OLD }, write)
+		expect(write).toHaveBeenCalledTimes(1)
+		const seedPrimary = setupServiceWithStorage({})
+		staleTestnet(seedPrimary.local, {
+			primaryEndpointId: "s1",
+			endpoints: [
+				{ id: "s1", rpcUrl: seedForKind("testnet")!.rpcUrl },
+				{ id: "u1", rpcUrl: MY_NODE },
+			],
+		})
+		await seedPrimary.service.commitResetCapture("p1", "tn", capture, write)
+		expect(write).toHaveBeenCalledTimes(2)
 	})
 
 	test("commitResetCapture writes nothing while another row holds the target chain", async () => {

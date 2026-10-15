@@ -105,7 +105,6 @@ function splitAccounts(onChain: Account[], imported: Map<string, string | null>,
 	return { accounts, unmovable, moved }
 }
 
-/** Another row already on the reset's target chain, and another network's pending reset. */
 function conflictsOf(row: Network, networks: Network[], target: number, journal: ResetJournal | undefined) {
 	const holder = networks.find((n) => n.id !== row.id && n.chainId === target)
 	const pending = journal && journal.networkId !== row.id ? journal.networkId : undefined
@@ -128,7 +127,6 @@ function sameConfirmation(view: StaleNetworkView, confirmed: ResetConfirmation):
 	)
 }
 
-/** The record entries one storage change added, removed or altered, by network id. */
 function changedNetworkIds(before: StaleNetworksRecord | undefined, after: StaleNetworksRecord | undefined): string[] {
 	const key = (r: StaleNetworksRecord | undefined) => new Map((r?.entries ?? []).map((e) => [e.networkId, JSON.stringify(e)]))
 	const a = key(before)

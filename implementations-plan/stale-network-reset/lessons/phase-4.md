@@ -79,3 +79,5 @@ Round 3, resumed: 1 material finding, accepted. An account load that started bef
 Round 4, resumed, verifying round 3 (the repo rule stops at three rounds while a finding stays material; this one was fixed locally, so the fourth pass only verifies it): "VERDICT: no new material findings". The loop converged.
 
 Round 5, resumed, verifying `908455f4`: "Verified by code trace; confidence: high. … Dapp-session remains phase 0. Its added dependency creates no cycle … VERDICT: no new material findings". The loop holds at `908455f4`.
+
+The final cross-arc pass (fresh, over all three arcs) found one more here: a capture whose view probed nothing (the seed's endpoint was primary) skipped the endpoint check at commit, so a user primary set from another popup during the capture was replaced by the seed's at the rewrite, unannounced. The commit now requires the seed's endpoint, or none, still primary in that case; an address change, which keeps the row's chain, is not checked. Two comments that restated their functions are gone.
