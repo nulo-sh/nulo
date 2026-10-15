@@ -746,6 +746,18 @@ watch(
 	},
 )
 
+/** A background retry that finds the imported key unusable fails, so it bumps no retryVersion and
+ *  commits nothing: its verdict reaches the page here, for the committed key only. */
+watch(
+	() => {
+		const scope = committedScope.value
+		return scope ? balancesStore.entry(scope)?.gas.accountUnusable === true : false
+	},
+	(unusable) => {
+		if (unusable) accountUnusableOut.value = true
+	},
+)
+
 const recommit = async () => {
 	const scope = committedScope.value
 	if (!scope || !isMounted) return

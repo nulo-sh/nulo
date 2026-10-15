@@ -1205,6 +1205,28 @@ describe("FeeSettingsCard — init failure resilience (degraded settings + silen
 		w.unmount()
 	})
 
+	test("a background retry that finds the imported key unusable tells the page", async () => {
+		vi.useFakeTimers()
+		try {
+			mocks.getGasBalances.mockRejectedValueOnce(new Error("boom"))
+			mocks.getGasBalances.mockRejectedValue(ImportedAccountUnusableError.because("signing key missing"))
+			mocks.getFpcs.mockResolvedValue([{ id: "s1", type: 1, name: "Sponsor", isProtocol: true }])
+
+			const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+			await vi.advanceTimersByTimeAsync(0)
+			expect(w.find('[data-testid="fee-init-degraded"]').exists()).toBe(true)
+			expect(w.emitted("update:accountUnusable")).toBeUndefined()
+
+			await vi.advanceTimersByTimeAsync(INIT_RETRY_BACKOFF_MS[0])
+			await vi.advanceTimersByTimeAsync(0)
+			expect(mocks.getGasBalances).toHaveBeenCalledTimes(2)
+			expect(w.emitted<unknown[]>("update:accountUnusable")?.at(-1)).toEqual([true])
+			w.unmount()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	test("(BUG PIN) getGasBalances rejects with saved fj: fails closed without a nudge, sponsored still pickable", async () => {
 		// Self-paid fj must NOT derive settings from a balance we never saw
 		// (estimation runs with skipFeeEnforcement and would not catch an

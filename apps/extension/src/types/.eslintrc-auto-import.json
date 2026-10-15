@@ -433,6 +433,7 @@
     "matchesQuery": true,
     "migrationIdle": true,
     "moveToOwnWindow": true,
+    "neverOpened": true,
     "newPasswordHint": true,
     "nextAccountName": true,
     "nextTick": true,

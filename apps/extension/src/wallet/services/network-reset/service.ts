@@ -102,6 +102,23 @@ function splitAccounts(onChain: Account[], imported: Map<string, string | null>,
 	return { accounts, unmovable, moved }
 }
 
+/** The journal's account list: each imported row with its resealed key, or by name among the
+ *  unmovable when its key did not open. */
+function journalAccounts(rows: Account[], resealed: ReadonlyMap<string, { newAddress: string; encryptedSigningKey: string } | null>) {
+	const accounts: JournalAccount[] = []
+	const unmovable: string[] = []
+	for (const a of rows) {
+		const base = { index: a.index, name: a.name, visible: a.visible, oldAddress: a.address, done: false }
+		if (a.type === AccountType.Nulo_v1) accounts.push({ type: 0, ...base })
+		else if (a.type === AccountType.Imported) {
+			const key = resealed.get(a.address)
+			if (key) accounts.push({ type: 1, ...base, ...key })
+			else unmovable.push(a.name)
+		} else throw notResettable("an account of an unknown type is on the chain")
+	}
+	return { accounts, unmovable }
+}
+
 function conflictsOf(row: Network, networks: Network[], target: number, journal: ResetJournal | undefined) {
 	const holder = networks.find((n) => n.id !== row.id && n.chainId === target)
 	const pending = journal && journal.networkId !== row.id ? journal.networkId : undefined
@@ -318,7 +335,7 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 			cause: { networkReset: journal.fromChainId !== journal.toChainId, addressesMoved: journal.cause.addressesMoved },
 			blocked: false,
 			accounts: journal.accounts.map((a) => ({ name: a.name, address: a.newAddress ?? a.oldAddress })),
-			unmovable: [],
+			unmovable: journal.unmovable ?? [],
 			switchToSeedNode: journal.switchToSeedNode,
 			probedEndpoint: journal.probedEndpoint,
 			reset: { running, purged: journal.purged, doneCount: journal.accounts.filter((a) => a.done).length },
@@ -417,15 +434,7 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 			throw notResettable("Mainnet is never reset")
 		await this.profiles.assertRunFence(fence)
 		const resealed = await this.accounts.resealImportedForReset(profileId, fromChainId, toChainId)
-		const accounts: JournalAccount[] = []
-		for (const a of rows) {
-			const base = { index: a.index, name: a.name, visible: a.visible, oldAddress: a.address, done: false }
-			if (a.type === AccountType.Nulo_v1) accounts.push({ type: 0, ...base })
-			else if (a.type === AccountType.Imported) {
-				const key = resealed.get(a.address)
-				if (key) accounts.push({ type: 1, ...base, ...key })
-			} else throw notResettable("an account of an unknown type is on the chain")
-		}
+		const { accounts, unmovable } = journalAccounts(rows, resealed)
 		if (accounts.length !== view.accounts.length) throw new Error(`${ERR_STALE_CHANGED}: the accounts changed since they were shown`)
 		const journal: ResetJournal = {
 			profileId,
@@ -438,6 +447,7 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 			switchToSeedNode: view.switchToSeedNode,
 			probedEndpoint: view.probedEndpoint,
 			accounts,
+			unmovable,
 		}
 		await this.profiles.assertRunFence(fence)
 		const check = { chainId: fromChainId, toChainId, primary: view.probedEndpoint }

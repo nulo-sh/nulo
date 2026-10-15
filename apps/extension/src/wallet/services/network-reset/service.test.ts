@@ -420,6 +420,18 @@ describe("NetworkResetService — admission and capture", () => {
 		gate.release()
 	})
 
+	test("the journal keeps the unmovable names, so the running view never reads as a never-opened network", async () => {
+		const gate = holdAt("network-reset-purging")
+		const h = await harness({ gate })
+		await staleTestnet(h)
+		await putImported(h, OLD, SK1, 2, { address: "0xbroken", sealed: "not-a-ciphertext", name: "Broken" })
+		await startReset(h)
+		await gate.reached
+		expect((await h.repo.getJournal("p1"))?.unmovable).toEqual(["Broken"])
+		expect(await h.reset.getStaleNetwork("tn")).toMatchObject({ unmovable: ["Broken"], reset: { running: true } })
+		gate.release()
+	})
+
 	test("a recovery-mode session refuses before anything changes", async () => {
 		const h = await harness({ recovery: () => true })
 		await staleTestnet(h)

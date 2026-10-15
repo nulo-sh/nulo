@@ -29,7 +29,8 @@ export const confirmationOf = (view: StaleNetworkView): ResetConfirmation => ({
 })
 
 /** No account row on the chain, hidden or imported: the profile never opened the network, since
- *  opening one creates Account 1 and accounts can only be hidden, so nothing of the user's is on it. */
+ *  opening one creates Account 1 and accounts can only be hidden, so it holds no account or history
+ *  of the user's. */
 export const neverOpened = (view: StaleNetworkView): boolean => view.accounts.length === 0 && view.unmovable.length === 0
 
 /** A never-opened network resets behind A4c with no toast, whatever the cause: it has no address

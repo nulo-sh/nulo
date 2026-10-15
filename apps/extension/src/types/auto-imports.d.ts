@@ -232,6 +232,7 @@ declare global {
   const matchesQuery: typeof import('../utils/token-search').matchesQuery
   const migrationIdle: typeof import('../utils/storage').migrationIdle
   const moveToOwnWindow: typeof import('../utils/own-window').moveToOwnWindow
+  const neverOpened: typeof import('../composables/useStaleNetwork').neverOpened
   const newPasswordHint: typeof import('../utils/password').newPasswordHint
   const nextAccountName: typeof import('../utils/account-name').nextAccountName
   const nextTick: typeof import('vue').nextTick
@@ -919,6 +920,7 @@ declare module 'vue' {
     readonly matchesQuery: UnwrapRef<typeof import('../utils/token-search')['matchesQuery']>
     readonly migrationIdle: UnwrapRef<typeof import('../utils/storage')['migrationIdle']>
     readonly moveToOwnWindow: UnwrapRef<typeof import('../utils/own-window')['moveToOwnWindow']>
+    readonly neverOpened: UnwrapRef<typeof import('../composables/useStaleNetwork')['neverOpened']>
     readonly newPasswordHint: UnwrapRef<typeof import('../utils/password')['newPasswordHint']>
     readonly nextAccountName: UnwrapRef<typeof import('../utils/account-name')['nextAccountName']>
     readonly nextTick: UnwrapRef<typeof import('vue')['nextTick']>

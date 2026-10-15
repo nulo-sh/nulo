@@ -857,7 +857,6 @@ onBeforeUnmount(() => {
 	composes: shake_password from "../../../../../components/composite/shake.module.css";
 }
 
-/* The agreement fades with the disabled button while a reset blocks the backup. */
 .agreement_blocked {
 	opacity: 0.38;
 }

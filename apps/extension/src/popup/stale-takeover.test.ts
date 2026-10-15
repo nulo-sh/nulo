@@ -91,6 +91,7 @@ describe("takeoverScreen", () => {
 
 	test("a run that moves no account shows the loader, whoever started it", () => {
 		expect(takeoverScreen(view({ accounts: [] }), true, false)).toBe("loading")
+		expect(takeoverScreen(view({ accounts: [], unmovable: ["Imported 1"] }), true, false)).toBe("progress")
 		expect(takeoverScreen(view({ accounts: [], reset: { running: true, purged: true, doneCount: 0 } }), false, false)).toBe("loading")
 		expect(takeoverScreen(view({ accounts: [], reset: { running: false, purged: true, doneCount: 0 } }), false, false)).toBe("paused")
 	})

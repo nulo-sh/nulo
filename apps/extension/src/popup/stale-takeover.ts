@@ -2,7 +2,7 @@
  * Whether the popup shows the stale-network takeover, and which of its screens. Pure over a
  * snapshot of the shell's state, so every route and state is testable without mounting the shell.
  */
-import { runsUnattended } from "@/composables/useStaleNetwork"
+import { neverOpened, runsUnattended } from "@/composables/useStaleNetwork"
 import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
 
 /** The way out of a reset (Networks), every export, and the legal pages: an idle takeover yields. */
@@ -52,11 +52,11 @@ export type TakeoverScreen =
 	| "network-reset"
 	| "new-addresses"
 
-/** The screen for a view, in precedence order: a run in flight (the loader when it moves no
- *  account), Mainnet, a paused journal, another network's journal, a held target chain, an
+/** The screen for a view, in precedence order: a run in flight (A4c on a network never opened),
+ *  Mainnet, a paused journal, another network's journal, a held target chain, an
  *  unreachable custom node, then the cause. */
 export function takeoverScreen(view: StaleNetworkView, running: boolean, nodeDown: boolean): TakeoverScreen {
-	if (running || view.reset?.running) return view.accounts.length === 0 ? "loading" : "progress"
+	if (running || view.reset?.running) return neverOpened(view) ? "loading" : "progress"
 	if (view.blocked) return "blocked"
 	if (view.reset) return "paused"
 	if (view.otherPending) return "one-at-a-time"
