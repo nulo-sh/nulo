@@ -7,7 +7,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { reactive, ref } from "vue"
+import { nextTick, reactive, ref } from "vue"
+import { useToast as useRealToast } from "@nulo/design/composables/toast.ts"
 import { held as deferred } from "../../../../../../tests/helpers/held-read"
 
 // ── Mocks ────────────────────────────────────────────────────────────
@@ -19,10 +20,12 @@ const popupOpenMock = vi.fn()
 
 const appStoreState: {
 	network: { id: string; name: string } | null
+	isLogined: boolean
 	beginContactImport: () => () => void
 	contactImports: ReadonlySet<symbol>
 } = {
 	network: { id: "net-1", name: "Testnet" },
+	isLogined: true,
 	beginContactImport: () => () => {},
 	contactImports: new Set(),
 }
@@ -39,9 +42,11 @@ const cacheStoreState: {
 const RUN_FENCE = vi.hoisted(() => ({ profileId: "p1", epoch: 0, session: 1, incarnation: "w1" }))
 // The clients the import opens for itself; `makeServices` hands it the fakes it builds.
 const importClients = vi.hoisted(() => ({ contact: {} as object, accountState: {} as object }))
-vi.mock("@/composables/toast", () => ({
-	useToast: () => ({ openToast: openToastMock, updateToast: updateToastMock }),
-}))
+// The real snack, so the import's line meets other snacks; the spies pin its calls.
+vi.mock("@/composables/toast", async (importOriginal) => {
+	const real = await importOriginal<typeof import("@/composables/toast")>()
+	return { ...real, useToast: () => ({ ...real.useToast(), openToast: openToastMock, updateToast: updateToastMock }) }
+})
 vi.mock("@/utils", () => ({
 	FilePickCanceledError: class FilePickCanceledError extends Error {},
 	FileTooLargeError: class FileTooLargeError extends Error {},
@@ -73,6 +78,7 @@ vi.mock("@/stores/app.store", () => ({ useAppStore: () => appStoreState }))
 vi.mock("@/stores/cache.store", () => ({ useCacheStore: () => cacheStoreState }))
 vi.mock("@/stores/popup.store", () => ({ usePopupStore: () => ({ open: popupOpenMock }) }))
 
+import { createScopeEpochHandlers } from "@/popup/scope-epoch"
 import { createContactImportGuard } from "@/stores/contact-import-guard"
 import { classifyImportRow, indexSavedContacts } from "@/utils/contact-import-rows"
 import { useContactImportExport } from "./useContactImportExport"
@@ -126,19 +132,25 @@ async function runImport(api: ReturnType<typeof useContactImportExport>, saved: 
 	await done
 }
 
+const realToast = useRealToast()
+
 // Wire-shaped: 0x + 64 hex, valid Aztec addresses.
 const ADDR_A = "0x01904dba18e847d163097ce15dcd8597e763fb11fe19ef1273d266d6e959ec4a"
 const ADDR_B = "0x047bb28204a2545c566dff691c298d2023fe7cad44bb6468e3f7f1e633f8f7d2"
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	openToastMock.mockReset().mockImplementation(realToast.openToast)
+	updateToastMock.mockReset().mockImplementation(realToast.updateToast)
 	appStoreState.network = { id: "net-1", name: "Testnet" }
+	appStoreState.isLogined = true
 	appStoreState.beginContactImport = () => () => {}
 	appStoreState.contactImports = new Set()
 	cacheStoreState.importContacts = []
 	cacheStoreState.importPromise = null
 })
 afterEach(() => {
+	realToast.closeToast()
 	vi.restoreAllMocks()
 })
 
@@ -593,6 +605,114 @@ describe("useContactImportExport — the progress snack", () => {
 
 		expect(updates().map(([, label]) => label)).toEqual(["Importing contacts · 1 of 2"])
 		expect(labels().at(-1)).toBe("Import incomplete · 1 of 2 contacts written")
+	})
+})
+
+describe("useContactImportExport — the progress line after another snack", () => {
+	const line = (written: number, of = 2) => ({ kind: "info", label: `Importing contacts · ${written} of ${of}` })
+	const shown = () => realToast.toast.value ?? null
+	const scope = createScopeEpochHandlers({ bumpEpoch: () => {}, toast: realToast.toast, closeToast: realToast.closeToast })
+	const cover = async (action = false) => {
+		realToast.openToast({
+			kind: "success",
+			label: "Address is copied",
+			...(action && { action: { label: "View", onSelect: () => {} } }),
+		})
+		await nextTick()
+	}
+	const close = async () => {
+		realToast.closeToast()
+		await nextTick()
+	}
+
+	/** A two-row import held at its second write, its line at 1 of 2. */
+	async function midRun() {
+		const { contactService, accountStateService } = makeServices()
+		const write = deferred<void>()
+		contactService.addContact.mockResolvedValueOnce(undefined).mockReturnValueOnce(write.promise)
+		fileWith({
+			version: 2,
+			contacts: [
+				{ name: "Dana", address: ADDR_A },
+				{ name: "Eve", address: ADDR_B },
+			],
+		})
+		const done = runImport(useContactImportExport({ contacts: ref([]), accountStateService } as never))
+		await vi.waitFor(() => expect(shown()).toMatchObject(line(1)))
+		return { end: () => write.resolve(), done }
+	}
+
+	/** A one-row import held at its first book read, which then rejects while the session holds. */
+	async function failingRun() {
+		const { contactService, accountStateService } = makeServices()
+		const read = deferred<never>()
+		contactService.getContacts.mockReturnValueOnce(read.promise)
+		fileWith({ version: 2, contacts: [{ name: "Dana", address: ADDR_A }] })
+		const done = runImport(useContactImportExport({ contacts: ref([]), accountStateService } as never))
+		await vi.waitFor(() => expect(shown()).toMatchObject(line(0, 1)))
+		return { end: () => read.reject(new Error("port closed")), done }
+	}
+
+	test.each([
+		["it closes", false, () => realToast.closeToast()],
+		["a network switch closes it", true, () => scope.onScopeChanged()],
+	])("a snack covers the line and %s: the line opens again at its count, and the next count moves it", async (_, action, uncover) => {
+		const { end, done } = await midRun()
+		await cover(action)
+		expect(shown()?.label).toBe("Address is copied")
+		uncover()
+		await nextTick()
+		expect(shown()).toMatchObject(line(1))
+		const reopened = shown()?.id
+		end()
+		await done
+		expect(updateToastMock.mock.calls.at(-1)).toEqual([reopened, "Importing contacts · 2 of 2"])
+	})
+
+	test.each([
+		["the line", false],
+		["a line that came back", true],
+	])("%s the person closed stays closed after another snack opens and closes", async (_, reopenFirst) => {
+		const { end, done } = await midRun()
+		if (reopenFirst) {
+			await cover()
+			await close()
+			expect(shown()).toMatchObject(line(1))
+		}
+		await close()
+		await cover()
+		await close()
+		expect(shown()).toBeNull()
+		end()
+		await done
+	})
+
+	test("a lock's seal closes the covering snack and nothing opens, then or after an unlock and another snack", async () => {
+		const { end, done } = await midRun()
+		await cover()
+		// The seal's order: the snack closes, then the window is marked locked, in one task.
+		scope.onLocked()
+		appStoreState.isLogined = false
+		await nextTick()
+		expect(shown()).toBeNull()
+		appStoreState.isLogined = true
+		await cover()
+		await close()
+		expect(shown()).toBeNull()
+		end()
+		await done
+	})
+
+	test.each([
+		["its result", midRun, "Import completed successfully"],
+		["a throw", failingRun, "Error occurred during import"],
+	])("an import that ends by %s settles, and closing its last snack opens nothing", async (_, run, outcome) => {
+		const { end, done } = await run()
+		end()
+		await done
+		expect(shown()?.label).toBe(outcome)
+		await close()
+		expect(shown()).toBeNull()
 	})
 })
 

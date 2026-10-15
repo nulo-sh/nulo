@@ -3,7 +3,7 @@
 .title_sep {
 	composes: type--row-title from global;
 	font-size: 13px;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 	user-select: none;
 }
 

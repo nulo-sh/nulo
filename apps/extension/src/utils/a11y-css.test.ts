@@ -104,9 +104,31 @@ describe("the detail pages' links draw the focus ring on :focus-visible, never o
 	})
 })
 
+describe("the recipient card's buttons show keyboard focus", () => {
+	test("the accent ring on :focus-visible", () => {
+		const source = read("components/composite/send/RecipientCard.vue").replace(/\s+/g, " ")
+		expect(source).toContain(".icon_btn:focus-visible { outline: 2px solid var(--nulo-accent); outline-offset: 2px; }")
+	})
+})
+
 describe("the toolbar button shows keyboard focus", () => {
 	test("RowAction's inset accent ring, nested in .icon_btn", () => {
 		const source = read("popup/pages/toolbar-button.module.css").replace(/\s+/g, " ")
 		expect(source).toMatch(/\.icon_btn \{[\s\S]*&:focus-visible \{ outline: 2px solid var\(--nulo-accent\); outline-offset: -2px; \}/)
+	})
+})
+
+describe("meta text reads in --nulo-secondary; --nulo-outline is for borders and decoration", () => {
+	test.each([
+		["components/composite/activity/activity-card.module.css", ".title_sep"],
+		["popup/components/modules/activity/TransactionCard.vue", ".hash"],
+		["components/composite/activity/TransactionIncomingCard.vue", ".hash"],
+		["components/composite/activity/TransactionCardLayout.vue", ".amount_symbol"],
+		["popup/components/modules/general/BalanceView.vue", ".fiat_partial"],
+		["popup/components/modules/general/BalanceView.vue", ".breakdown_divider"],
+		["popup/components/modules/holdings/TokenList.vue", ".fold_action"],
+	])("%s: %s", (path, selector) => {
+		const body = read(path).match(new RegExp(`^\\${selector} \\{([^{}]*)\\}`, "m"))?.[1] ?? ""
+		expect(body).toMatch(/\bcolor: var\(--nulo-secondary\);/)
 	})
 })

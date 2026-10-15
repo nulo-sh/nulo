@@ -201,7 +201,7 @@ onBeforeUnmount(() => {
 
 .hash {
 	composes: type--meta from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .title_sep {
