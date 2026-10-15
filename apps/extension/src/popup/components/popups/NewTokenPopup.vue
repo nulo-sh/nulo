@@ -5,6 +5,7 @@ import { TaskServiceClient } from "@/wallet/services/task/client"
 import { ContentKind } from "@/wallet/services/task/spec"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
+import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
 
 /** Utils */
 import { isValidHex } from "@/utils/string"
@@ -253,8 +254,10 @@ const handleAddToken = async () => {
 				break
 		}
 	} catch (err) {
-		// Nothing that lands here has copy of its own; its text is a developer's, for the log.
-		error.value = "Something went wrong. Try again."
+		// Only a lookup the node answered empty has copy of its own; any other refusal's text is a
+		// developer's, for the log.
+		error.value =
+			err instanceof ContractNotFoundError ? "There is no token at this address on this network." : "Something went wrong. Try again."
 		console.debug("[new-token] add refused", { reason: err })
 		balanceWait?.abort()
 	} finally {
