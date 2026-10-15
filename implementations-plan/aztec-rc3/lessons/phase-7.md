@@ -31,3 +31,9 @@
   - Network Firefox: 1237 s / 8095 s here, 1243 s / 8253 s there.
   - Smoke Chrome: 697 s / 1605 s here, 655 s / 1587 s there.
   - Smoke Firefox: 981 s / 2030 s here, 943 s / 2002 s there.
+- `reference/nulo-v6.1` re-resolved under its own gate at 12:22:41Z on 2026-10-15. The newest name in its graph is `@aztec-labs/simulator@6.0.0-rc.3`, published 2026-10-08T12:21:12Z, so it cleared the 7-day gate at 12:21:12Z. The lock was deleted, then `bun install` ran with no exclude and exited 0 (388 packages). `bun derive-vectors.ts` matches the committed `vectors.json` byte for byte. The `bunfig.toml` comment is now true as written.
+- Against the bypass lock there is one move. `mime-db` resolves 1.54.0 for `compressible`'s `>= 1.43.0 < 2` range; it was published 2025-03-18, is data only (`db.json`), has no install hook and carries a registry signature. Its publisher, `wesleytodd`, is a listed maintainer. 1.52.0 nests under `mime-types`' exact pin.
+- Against `reference/nulo-v6/bun.lock`, 19 third-party entries changed and 2 were added; all were published 2026-09-25..10-07 except the two `mime-db`s.
+  - Each publisher matches the version it replaces, except `mime-db` (see above). The `@smithy/*` and `fast-xml-parser` versions carry provenance.
+  - The only install hook is `lmdb`'s `node-gyp-build-optional-packages`, identical in 3.5.6. It loads the prebuilt `@lmdb/*` binaries from the same publisher, and Bun's default trust list runs it. protobufjs's postinstall stays blocked, as before.
+  - None of these versions is in the root lock, and no workflow installs the reference project: they reach only a developer who regenerates the vectors.
