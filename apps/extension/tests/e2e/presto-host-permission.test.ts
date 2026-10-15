@@ -1,0 +1,75 @@
+/**
+ * Firefox lets a person withhold the loopback origins Presto listens on. Only a real Firefox proves
+ * what the step rests on: `contains` after a removal, the change reaching a page that did not make
+ * it, a hit-tested click counting as the request's user input, and the ring in real layout.
+ */
+import type { Page } from "puppeteer"
+import { describe, expect } from "vitest"
+import { FIREFOX_ONLY, isFirefox, openScratchPage, prepareKeys } from "./fixtures/browser"
+import { launchExtension, openOnboarding, test } from "./fixtures/extension"
+import { interceptHealth, PRESTO_DETAILED_HEALTH } from "./fixtures/presto"
+import { pointerClick } from "./helpers/legal-drivers"
+import { focusRing, tabTo, tokenColor } from "./helpers/pointer-probes"
+import { gotoPrestoStep } from "./helpers/presto-step"
+
+const LOOPBACK = ["https://127.0.0.1/*", "http://127.0.0.1/*"]
+/** The content script's all-sites pattern covers loopback too, so it is withheld with them. */
+const WITHHELD = [...LOOPBACK, "*://*/*"]
+
+const statusCard = (status: string) => `[data-testid="onboarding-presto-status"][data-status="${status}"]`
+
+const readStep = (page: Page) =>
+	page.evaluate(() => {
+		const shown = (testid: string) => document.querySelector(`[data-testid="${testid}"]`)?.checkVisibility() ?? false
+		return {
+			row: shown("presto-permission-row"),
+			pitch: shown("onboarding-presto-pitch"),
+			card: shown("onboarding-presto-status"),
+			skip: shown("onboarding-presto-skip"),
+			continue: shown("onboarding-presto-continue"),
+		}
+	})
+
+describe.skipIf(!isFirefox)(FIREFOX_ONLY.permissionRequest, () => {
+	test("a withheld grant puts the row in place of the step, and Allow brings the step back checked", async () => {
+		const extension = await launchExtension({ grantPermissionRequests: true })
+		try {
+			const page = await openOnboarding(extension)
+			await interceptHealth(page, { https: { status: 200, body: PRESTO_DETAILED_HEALTH }, http: "refused" })
+			await gotoPrestoStep(page)
+			await page.waitForSelector(statusCard("idle"), { visible: true, timeout: 10_000 })
+			expect(await readStep(page)).toEqual({ row: false, pitch: true, card: true, skip: true, continue: false })
+
+			const scratch = await openScratchPage(extension.browser, extension.extensionId)
+			const held = await scratch.evaluate(
+				async (withheld, loopback) => {
+					await chrome.permissions.remove({ origins: withheld })
+					return chrome.permissions.contains({ origins: loopback })
+				},
+				WITHHELD,
+				LOOPBACK,
+			)
+			await scratch.close()
+			expect(held).toBe(false)
+
+			await page.waitForSelector('[data-testid="presto-permission-row"]', { visible: true, timeout: 10_000 })
+			expect(await readStep(page)).toEqual({ row: true, pitch: false, card: false, skip: true, continue: false })
+
+			await prepareKeys(page)
+			await tabTo(page, "presto-permission-allow")
+			expect(await focusRing(page, "presto-permission-allow")).toEqual({
+				ring: "solid 2px 2px",
+				color: await tokenColor(page, "--nulo-accent"),
+			})
+
+			await pointerClick(page, "presto-permission-allow")
+			await page.waitForSelector(statusCard("available"), { visible: true, timeout: 10_000 })
+			expect(await readStep(page)).toEqual({ row: false, pitch: false, card: true, skip: false, continue: true })
+			expect(extension.consoleErrors).toEqual([])
+			expect(extension.pageErrors).toEqual([])
+			await page.close()
+		} finally {
+			await extension.close()
+		}
+	})
+})

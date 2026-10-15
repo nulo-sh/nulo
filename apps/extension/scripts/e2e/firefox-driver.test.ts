@@ -5,8 +5,10 @@ import {
 	FIREFOX_LAUNCH_PREFS,
 	type SilentCloseWatch,
 	abandonSession,
+	capabilities,
 	egressGuardPrefs,
 	firefoxDirFor,
+	permissionRequestPrefs,
 	silentlyClosed,
 	stopBackgroundWith,
 	uuidFromPrefs,
@@ -69,6 +71,29 @@ describe("egress guard prefs", () => {
 			expect(findLive(`https://${host}/`, host)).toBe("PROXY 127.0.0.1:4321")
 		}
 		expect({ ...live, "network.proxy.autoconfig_url": "" }).toEqual({ ...prefs, "network.proxy.autoconfig_url": "" })
+	})
+})
+
+/** Users answer Firefox's permission prompt; only a launch that asks skips it. */
+describe("permission request prefs", () => {
+	const prefsOf = (grantPermissionRequests?: true) => {
+		vi.stubEnv("FIREFOX_PATH", process.execPath)
+		try {
+			const caps = capabilities({ profileDir: "profile", headless: true, grantPermissionRequests })
+			return (caps["moz:firefoxOptions"] as { prefs: Record<string, unknown> }).prefs
+		} finally {
+			vi.unstubAllEnvs()
+		}
+	}
+
+	test("skip only the prompt, and stay out of the prefs users run with", () => {
+		expect(permissionRequestPrefs).toEqual({ "extensions.webextOptionalPermissionPrompts": false })
+		expect(Object.keys(FIREFOX_LAUNCH_PREFS).filter((key) => key.startsWith("extensions."))).toEqual([])
+	})
+
+	test("join a launch only when it asks", () => {
+		expect(prefsOf()).toEqual(FIREFOX_LAUNCH_PREFS)
+		expect(prefsOf(true)).toEqual({ ...FIREFOX_LAUNCH_PREFS, ...permissionRequestPrefs })
 	})
 })
 
