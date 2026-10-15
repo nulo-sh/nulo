@@ -8,6 +8,7 @@ import {
 	CapabilityNotGrantedError,
 	CLIENT_DISCONNECTED_MESSAGE,
 	ContractNotRegisteredError,
+	ContractNotFoundError,
 	DuplicateInitializationError,
 	InvalidPasswordError,
 	InvalidWalletArgumentsError,
@@ -210,6 +211,13 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			name: "ContractNotRegisteredError",
 			code: "CONTRACT_NOT_REGISTERED",
 			rebuild: pass,
+		},
+		{
+			ctor: ContractNotFoundError,
+			make: () => new ContractNotFoundError(),
+			name: "ContractNotFoundError",
+			code: "CONTRACT_NOT_FOUND",
+			rebuild: { kind: "constant", message: "contract instance not found" },
 		},
 		{
 			ctor: ChainNotSupportedError,

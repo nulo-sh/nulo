@@ -20,6 +20,7 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
 import { TokenContractArtifact } from "@aztec-labs/noir-contracts.js/Token"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
+import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { ServiceCollection } from "@/wallet/base"
@@ -130,6 +131,21 @@ describe("TokenService composition — in-process, no sandbox", () => {
 		expect(ti.transferPublicFnCandidates.length).toBeGreaterThan(0)
 		// getContracts() returned [] → the contract was registered exactly once.
 		expect(fake.registerCalls).toHaveLength(1)
+	})
+
+	test("an address the PXE and the node hold no instance at refuses as ContractNotFoundError, before any registration", async () => {
+		const { tokenService, fake } = await makeHarness({ instances: new Map(), artifacts: new Map(), registered: [] })
+		await expect(tokenService.parseTokenInterface(NETWORK.id, CONTRACT)).rejects.toBeInstanceOf(ContractNotFoundError)
+		expect(fake.registerCalls).toHaveLength(0)
+	})
+
+	test("a lookup the node could not answer keeps its own error, never ContractNotFoundError", async () => {
+		const { tokenService, fake } = await makeHarness()
+		const unreachable = new Error("fetch failed")
+		fake.pxe.getContractInstance = async () => Promise.reject(unreachable)
+		const refused = await tokenService.parseTokenInterface(NETWORK.id, CONTRACT).catch((err: unknown) => err)
+		expect(refused).toBe(unreachable)
+		expect(refused).not.toBeInstanceOf(ContractNotFoundError)
 	})
 
 	test("parseTokenInterface skips registration when already registered (dedup)", async () => {

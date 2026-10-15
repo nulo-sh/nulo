@@ -8,6 +8,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { ref } from "vue"
+import { ContractNotFoundError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -270,18 +271,25 @@ describe("NewTokenPopup", () => {
 		expect(w.emitted("onClose")).toBeUndefined()
 	})
 
-	// Each error arrives as the RPC envelope rebuilds it: a plain Error carrying the background's text.
+	// Each error arrives as the RPC envelope rebuilds it: a plain Error carrying the background's text,
+	// or a WalletError rebuilt by its code. A missing contract reads the generic line until its own
+	// words are decided.
 	test.each([
 		[
 			"a PXE store refusal",
-			"openChainStore: an open for pxe-1a2b3c4d-1 is already in flight or a prior one wedged (its OPFS worker never released its lock). Refusing to start a second worker. Restart the offscreen document to recover.",
+			new Error(
+				"openChainStore: an open for pxe-1a2b3c4d-1 is already in flight or a prior one wedged (its OPFS worker never released its lock). Refusing to start a second worker. Restart the offscreen document to recover.",
+			),
 		],
-		["a node refusal", "contract instance not found"],
-	])("%s reads the generic line under Submit, never its own text, and goes to the debug log", async (_, message) => {
+		["a contract the network does not hold", walletErrorFromPayload(new ContractNotFoundError().toPayload())],
+	])("%s reads the generic line under Submit, never its own text, and goes to the debug log", async (_, refusal) => {
 		const debug = vi.spyOn(console, "debug").mockImplementation(() => {})
-		const refusal = new Error(message)
-		tokenServiceMock.parseTokenInterface.mockResolvedValueOnce({ isComplete: true })
-		tokenServiceMock.addToken.mockRejectedValueOnce(refusal)
+		const { message } = refusal
+		if (refusal instanceof ContractNotFoundError) tokenServiceMock.parseTokenInterface.mockRejectedValueOnce(refusal)
+		else {
+			tokenServiceMock.parseTokenInterface.mockResolvedValueOnce({ isComplete: true })
+			tokenServiceMock.addToken.mockRejectedValueOnce(refusal)
+		}
 		const w = await mountAndOpen()
 		await typeAddress(w, validHex)
 		await submitBtn(w).trigger("click")
