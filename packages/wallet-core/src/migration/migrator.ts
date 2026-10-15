@@ -19,7 +19,10 @@
  *     clear the journal WITHOUT restoring (restoring here would silently revert
  *     committed data underneath the new version marker).
  *   - valid backup + `version < backup.version` ⇒ interrupted mid-migration;
- *     restore the declared footprint from the backup, then clear + re-run.
+ *     restore the declared footprint from the backup, then clear + re-run —
+ *     only when the journal's refs equal its registered migration's declared
+ *     footprint and every entry lies inside it; otherwise fail closed to
+ *     `needs-recovery`, journal kept.
  *   - no backup ⇒ the crash predated any write; clear + proceed.
  *   - PRESENT-but-invalid backup ⇒ tampering/corruption (the backup is written
  *     as one atomic set, so a prep-crash cannot produce a partial one); fail
@@ -31,6 +34,15 @@
  * barrier forever. A throw never advances `version`. Durable attempt counters
  * (stored under the engine's own reserved namespace, never inside a footprint)
  * bound both the up() retries and the restore retries across boots.
+ *
+ * An `up()` still unsettled after `upTimeoutMs` fails like an interrupted one: its staging area
+ * is revoked, so it can no longer read the store or have a write committed. The bound covers an
+ * `up()` that awaits forever, not one that never yields, nor a store that stops answering.
+ *
+ * The journal is not authenticated, by decision: no secret exists before unlock, a checksum
+ * detects nothing a forger cannot recompute, and whoever can forge the journal can write the same
+ * keys directly. Resume confines a restore to the registered footprint, inside which a forged
+ * journal can still delete or substitute any key.
  */
 
 import type { Migration, MigrationContext, MigrationResult, MinimalStorageArea, StorageRef } from "./types"
@@ -58,6 +70,34 @@ const LEGACY_VERSION_KEY = "nulo:core:storage-version"
 export const RESERVED_KEYS: readonly string[] = [SCHEMA_VERSION_KEY, SCHEMA_RUNNING_KEY, SCHEMA_BACKUP_KEY, SCHEMA_ATTEMPTS_KEY]
 
 const DEFAULT_MAX_RETRIES = 3
+/** A policy bound, not a measurement: a data transform over extension storage takes seconds. */
+const DEFAULT_UP_TIMEOUT_MS = 60_000
+
+const interruptedMidWrite = (version: number): string => `migration ${version} was interrupted mid-write`
+/** The reason once the footprint is restored; it reaches the recovery screen verbatim. */
+const interruptedReason = (version: number): string => `${interruptedMidWrite(version)} (restored cleanly)`
+
+/** The watchdog's error: reported as `interruptedReason` only after its restore succeeds. */
+class UpTimeoutError extends Error {}
+
+/** Awaits `up()`, or revokes `staging` and throws once `ms` pass first. The abandoned promise
+ *  keeps a no-op handler, so its later rejection is never unhandled. */
+async function runWithWatchdog(up: () => Promise<void>, staging: StagingArea, ms: number, version: number): Promise<void> {
+	const running = up()
+	running.catch(() => {})
+	let timer: ReturnType<typeof setTimeout> | undefined
+	const expired = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => {
+			staging.revoke()
+			reject(new UpTimeoutError(interruptedMidWrite(version)))
+		}, ms)
+	})
+	try {
+		await Promise.race([running, expired])
+	} finally {
+		clearTimeout(timer)
+	}
+}
 
 /** `counted` marks a retained journal whose failure has already been recorded
  *  in the attempt counter — the resume path must not count it again. Set
@@ -94,6 +134,24 @@ function isValidBackup(v: unknown): v is BackupPayload {
 	)
 }
 
+/** One text for every journal resume will not trust: the reason reaches the recovery screen
+ *  verbatim, and which check refused is a storage-forensics detail. */
+const INVALID_JOURNAL: MigrationResult = {
+	kind: "needs-recovery",
+	reason: "interrupted migration journal has an invalid backup payload",
+	retryable: false,
+}
+
+const refId = (r: StorageRef): string => (r.kind === "root" ? `root:${r.root}` : `value:${r.key}`)
+
+/** The keys `refs` cover. The engine's namespace is excluded unconditionally:
+ *  a migration cannot footprint the journal itself. */
+function footprintCovers(refs: StorageRef[]): (key: string) => boolean {
+	const roots = refs.flatMap((r) => (r.kind === "root" ? [`${r.root}@`] : []))
+	const values = new Set(refs.flatMap((r) => (r.kind === "value" ? [r.key] : [])))
+	return (k) => !k.startsWith(RESERVED_PREFIX) && (values.has(k) || roots.some((p) => k.startsWith(p)))
+}
+
 export interface MigratorOptions {
 	store: MinimalStorageArea
 	migrations: Migration[]
@@ -102,6 +160,8 @@ export interface MigratorOptions {
 	 *  The effective max is `max(baselineVersion, …migration versions)`; fresh
 	 *  installs stamp it and run nothing. Default 0. */
 	baselineVersion?: number
+	/** How long one `up()` may stay unsettled before it fails as interrupted. Default 60 s. */
+	upTimeoutMs?: number
 }
 
 export class Migrator {
@@ -109,10 +169,18 @@ export class Migrator {
 	private readonly migrations: Migration[]
 	private readonly maxRetries: number
 	private readonly maxVersion: number
+	private readonly upTimeoutMs: number
 
-	constructor({ store, migrations, maxRetries = DEFAULT_MAX_RETRIES, baselineVersion = 0 }: MigratorOptions) {
+	constructor({
+		store,
+		migrations,
+		maxRetries = DEFAULT_MAX_RETRIES,
+		baselineVersion = 0,
+		upTimeoutMs = DEFAULT_UP_TIMEOUT_MS,
+	}: MigratorOptions) {
 		this.store = store
 		this.maxRetries = maxRetries
+		this.upTimeoutMs = upTimeoutMs
 		this.migrations = [...migrations].sort((a, b) => a.version - b.version)
 		for (let i = 0; i < this.migrations.length; i++) {
 			const v = this.migrations[i].version
@@ -233,7 +301,7 @@ export class Migrator {
 		let stamped = false
 		try {
 			const staging = new StagingArea(this.store)
-			await m.up({ local: staging } satisfies MigrationContext)
+			await runWithWatchdog(() => m.up({ local: staging } satisfies MigrationContext), staging, this.upTimeoutMs, m.version)
 
 			const { sets, removes } = staging.diff()
 			this.guardCommit(m, Object.keys(sets).concat(removes))
@@ -275,7 +343,7 @@ export class Migrator {
 				kind: "failed",
 				version: m.version,
 				breaking: m.breaking,
-				reason: errorMessageFromUnknown(err),
+				reason: err instanceof UpTimeoutError ? interruptedReason(m.version) : errorMessageFromUnknown(err),
 				attempts,
 				terminal: attempts >= this.maxRetries,
 			}
@@ -317,7 +385,7 @@ export class Migrator {
 		if (!isValidBackup(backup)) {
 			// The backup is written atomically, so partial-from-crash is impossible;
 			// an invalid one means tampering or corruption. Keep it, fail closed.
-			return { kind: "needs-recovery", reason: "interrupted migration journal has an invalid backup payload", retryable: false }
+			return INVALID_JOURNAL
 		}
 		// An armed journal REQUIRES a valid marker AND an in-range backup version
 		// (every path that writes the journal starts from a validated marker and
@@ -346,6 +414,7 @@ export class Migrator {
 			await this.store.remove([SCHEMA_BACKUP_KEY, SCHEMA_RUNNING_KEY])
 			return undefined
 		}
+		if (!this.journalMatchesRegistry(backup)) return INVALID_JOURNAL
 		try {
 			await this.restore(backup)
 		} catch (err) {
@@ -371,7 +440,7 @@ export class Migrator {
 			await this.store.remove([SCHEMA_BACKUP_KEY, SCHEMA_RUNNING_KEY])
 			return {
 				kind: "needs-recovery",
-				reason: `migration ${backup.version} was interrupted mid-write (restored cleanly)`,
+				reason: interruptedReason(backup.version),
 				retryable: attempts < this.maxRetries,
 			}
 		}
@@ -379,6 +448,21 @@ export class Migrator {
 		// the run continuing past this point IS this boot's one authorized up().
 		await this.store.remove([SCHEMA_BACKUP_KEY, SCHEMA_RUNNING_KEY])
 		return undefined
+	}
+
+	/** Whether the registered migration of the journal's version could have written it: its refs
+	 *  equal that migration's declared footprint and every entry lies inside them. `restore()`
+	 *  writes every entry and removes every key the refs cover, so this confines a restore to the
+	 *  registered footprint. It does not authenticate the journal: forged entries under matching
+	 *  refs still restore. Because of the equality, a shipped migration's footprint is frozen. */
+	private journalMatchesRegistry(backup: BackupPayload): boolean {
+		const m = this.migrations.find((x) => x.version === backup.version)
+		if (!m) return false
+		const declared = new Set([...m.reads, ...m.writes].map(refId))
+		const journaled = new Set(backup.refs.map(refId))
+		if (declared.size !== journaled.size || [...journaled].some((r) => !declared.has(r))) return false
+		const covers = footprintCovers(backup.refs)
+		return Object.keys(backup.entries).every(covers)
 	}
 
 	/** Bring the DECLARED footprint back to its pre-migration state: re-set the
@@ -429,18 +513,8 @@ export class Migrator {
 		await this.store.set({ [SCHEMA_BACKUP_KEY]: { ...backup, counted: true } satisfies BackupPayload })
 	}
 
-	/** Every live key covered by the refs. The engine's namespace is excluded
-	 *  unconditionally — a migration cannot footprint the journal itself. */
 	private async footprintKeysFor(refs: StorageRef[]): Promise<string[]> {
-		const roots = refs.flatMap((r) => (r.kind === "root" ? [`${r.root}@`] : []))
-		const values = new Set(refs.flatMap((r) => (r.kind === "value" ? [r.key] : [])))
-		const all = await this.store.get()
-		const out: string[] = []
-		for (const k of Object.keys(all)) {
-			if (k.startsWith(RESERVED_PREFIX)) continue
-			if (values.has(k) || roots.some((p) => k.startsWith(p))) out.push(k)
-		}
-		return out
+		return Object.keys(await this.store.get()).filter(footprintCovers(refs))
 	}
 
 	private async snapshot(keys: string[]): Promise<Record<string, unknown>> {

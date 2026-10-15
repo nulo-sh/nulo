@@ -22,8 +22,7 @@ function fakeTxRequest(initialGasSettings: GasSettings): TxExecutionRequest {
 }
 
 function initialGasSettings(): GasSettings {
-	// `1.5× minFees`-style settings — what `completeFeeOptions` would produce
-	// for the default case. The cap helper should override these to `1.0×`.
+	// `1.5× minFees`-style settings, what `completeFeeOptions` produces for the default case.
 	return GasSettings.forEstimation({
 		gasLimits: Gas.from({ daGas: 1_000_000, l2Gas: 2_000_000 }),
 		teardownGasLimits: Gas.from({ daGas: 100_000, l2Gas: 200_000 }),
@@ -32,10 +31,14 @@ function initialGasSettings(): GasSettings {
 	})
 }
 
-function fakeNode(minFees: GasFees = new GasFees(100n, 200n)): AztecNode & { getCurrentMinFees: ReturnType<typeof vi.fn> } {
+type FakeNode = AztecNode & { getCurrentMinFees: ReturnType<typeof vi.fn>; getPredictedMinFees: ReturnType<typeof vi.fn> }
+
+/** Current minimum (100, 200); the slots ahead peak at DA 130 and L2 260, in different slots. */
+function fakeNode(minFees: GasFees = new GasFees(100n, 200n)): FakeNode {
 	return {
 		getCurrentMinFees: vi.fn(async () => minFees),
-	} as unknown as AztecNode & { getCurrentMinFees: ReturnType<typeof vi.fn> }
+		getPredictedMinFees: vi.fn(async () => [new GasFees(130n, 210n), new GasFees(110n, 260n)]),
+	} as unknown as FakeNode
 }
 
 describe("applyEmbeddedFpcGasCap", () => {
@@ -48,9 +51,10 @@ describe("applyEmbeddedFpcGasCap", () => {
 		// Same object reference — no mutation
 		expect(txRequest.txContext.gasSettings.maxFeesPerGas).toBe(beforeMaxFees)
 		expect(node.getCurrentMinFees).not.toHaveBeenCalled()
+		expect(node.getPredictedMinFees).not.toHaveBeenCalled()
 	})
 
-	test("2. embedded='fjwc', no explicit maxFeesPerGas → uses node.getCurrentMinFees() (1.0×, NOT 1.5×); other fields preserved verbatim", async () => {
+	test("2. embedded='fjwc', no explicit maxFeesPerGas → the predicted worst minimum at 1.0×, never the current one; other fields preserved verbatim", async () => {
 		const node = fakeNode(new GasFees(100n, 200n))
 		const initial = initialGasSettings()
 		const txRequest = fakeTxRequest(initial)
@@ -58,9 +62,8 @@ describe("applyEmbeddedFpcGasCap", () => {
 		await applyEmbeddedFpcGasCap(txRequest, fee, node)
 
 		const after = txRequest.txContext.gasSettings
-		// maxFeesPerGas dropped from 1.5× (150, 300) to 1.0× (100, 200)
-		expect(after.maxFeesPerGas.feePerDaGas).toBe(100n)
-		expect(after.maxFeesPerGas.feePerL2Gas).toBe(200n)
+		expect(after.maxFeesPerGas.feePerDaGas).toBe(130n)
+		expect(after.maxFeesPerGas.feePerL2Gas).toBe(260n)
 		// Other fields untouched — regression pin for the 4 prior copies
 		expect(after.gasLimits.daGas).toBe(initial.gasLimits.daGas)
 		expect(after.gasLimits.l2Gas).toBe(initial.gasLimits.l2Gas)
@@ -68,7 +71,8 @@ describe("applyEmbeddedFpcGasCap", () => {
 		expect(after.teardownGasLimits.l2Gas).toBe(initial.teardownGasLimits.l2Gas)
 		expect(after.maxPriorityFeesPerGas.feePerDaGas).toBe(initial.maxPriorityFeesPerGas.feePerDaGas)
 		expect(after.maxPriorityFeesPerGas.feePerL2Gas).toBe(initial.maxPriorityFeesPerGas.feePerL2Gas)
-		expect(node.getCurrentMinFees).toHaveBeenCalledOnce()
+		expect(node.getPredictedMinFees).toHaveBeenCalledOnce()
+		expect(node.getCurrentMinFees).not.toHaveBeenCalled()
 	})
 
 	// This IS the private-fuel claim path: PrivateMintAndPayFeePaymentMethod sets feePayer=FPC (≠ from)
@@ -91,5 +95,39 @@ describe("applyEmbeddedFpcGasCap", () => {
 		expect(after.teardownGasLimits.daGas).toBe(100_000)
 		expect(after.teardownGasLimits.l2Gas).toBe(200_000)
 		expect(node.getCurrentMinFees).not.toHaveBeenCalled()
+		expect(node.getPredictedMinFees).not.toHaveBeenCalled()
 	})
+
+	test.each(["fjwc", "fpc"] as const)(
+		"4. embedded='%s' with an app priority fee and no cap → the predicted worst minimum plus the priority; the build's priority stays",
+		async (embeddedFeePayment) => {
+			const node = fakeNode()
+			const txRequest = fakeTxRequest(initialGasSettings())
+			const fee: FeeOptions = { embeddedFeePayment, maxPriorityFeesPerGas: { feePerDaGas: "6", feePerL2Gas: "11" }, gasPadding: 1 }
+			await applyEmbeddedFpcGasCap(txRequest, fee, node)
+
+			const after = txRequest.txContext.gasSettings
+			expect([after.maxFeesPerGas.feePerDaGas, after.maxFeesPerGas.feePerL2Gas]).toEqual([136n, 271n])
+			// The build committed the priority; the cap only makes room for it.
+			expect([after.maxPriorityFeesPerGas.feePerDaGas, after.maxPriorityFeesPerGas.feePerL2Gas]).toEqual([5n, 10n])
+		},
+	)
+
+	test.each(["fjwc", "fpc"] as const)(
+		"5. embedded='%s' with an app cap and priority fee → the cap verbatim",
+		async (embeddedFeePayment) => {
+			const node = fakeNode()
+			const txRequest = fakeTxRequest(initialGasSettings())
+			const fee: FeeOptions = {
+				embeddedFeePayment,
+				maxFeesPerGas: { feePerDaGas: "777", feePerL2Gas: "888" },
+				maxPriorityFeesPerGas: { feePerDaGas: "5", feePerL2Gas: "10" },
+				gasPadding: 1,
+			}
+			await applyEmbeddedFpcGasCap(txRequest, fee, node)
+			const after = txRequest.txContext.gasSettings
+			expect([after.maxFeesPerGas.feePerDaGas, after.maxFeesPerGas.feePerL2Gas]).toEqual([777n, 888n])
+			expect(node.getPredictedMinFees).not.toHaveBeenCalled()
+		},
+	)
 })

@@ -9,11 +9,14 @@
  * waiting on it or in a window of its own, and the slot is held until that window is removed.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
-import type { ILogger } from "@/wallet/logger"
+import { deferred } from "@nulo/wallet-core/utils"
+import { type ILogger, LogLevel } from "@/wallet/logger"
 import type { WindowBounds } from "@nulo/wallet-core/ports"
 import { cancelPendingVerification, PENDING_VERIFICATION_STALE_MS, type PendingVerificationEntry } from "./pending-verification"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import { chainInfoToChainId, type SessionEstablishedDeps, handleSessionEstablished } from "./session-established"
+import { revokeLiveSessions } from "./session-revocation"
 import { VerifyAdmissionGate, type WindowReservation } from "./verify-admission"
 
 const noopLogger = { log: () => {} } as unknown as ILogger
@@ -40,7 +43,12 @@ function reserved(
 	id = "sess-1",
 	markers = new Map<string, PendingVerificationEntry>(),
 ): { gate: VerifyAdmissionGate; reservation: WindowReservation } {
-	const gate = new VerifyAdmissionGate(clock, { closeWindow: () => {}, released: (rid) => cancelPendingVerification(markers, rid) })
+	const gate = new VerifyAdmissionGate(clock, {
+		closeWindow: () => {},
+		navigateWindow: async () => {},
+		expired: (rid) => cancelPendingVerification(markers, rid),
+		released: (rid) => cancelPendingVerification(markers, rid),
+	})
 	let reservation: WindowReservation | undefined
 	gate.admit(
 		{ id, origin: ORIGIN, deadline: Date.now() + 55_000, needsWindow: true, consumesToken: false },
@@ -63,6 +71,7 @@ function makeDeps(over: Partial<SessionEstablishedDeps> = {}) {
 	const getLastFocused = vi.fn<() => Promise<WindowBounds | undefined>>().mockResolvedValue(ANCHOR)
 	const navigate = vi.fn<(windowId: number, url: string) => Promise<void>>().mockResolvedValue(undefined)
 	const update = vi.fn().mockResolvedValue(undefined)
+	const release = vi.fn()
 	const pendingVerification = over.pendingVerification ?? new Map<string, PendingVerificationEntry>()
 	const { gate, reservation } = reserved("sess-1", pendingVerification)
 	let live = true
@@ -82,10 +91,25 @@ function makeDeps(over: Partial<SessionEstablishedDeps> = {}) {
 		isSessionLive: () => live,
 		windows: { create, remove, getLastFocused, navigate, update },
 		reservations: gate,
+		hold: { release },
 		logger: noopLogger,
 		...over,
 	}
-	return { deps, terminate, stamp, create, remove, getLastFocused, navigate, update, gate, reservation, endSession, pendingVerification }
+	return {
+		deps,
+		terminate,
+		stamp,
+		create,
+		remove,
+		getLastFocused,
+		navigate,
+		update,
+		release,
+		gate,
+		reservation,
+		endSession,
+		pendingVerification,
+	}
 }
 
 /** A fresh marker for the harness session, approved under `profileId`. */
@@ -394,6 +418,97 @@ describe("handleSessionEstablished — profile binding", () => {
 	})
 })
 
+/** A discovery that reused the harness id after its slot was given back: admitted, then approved. */
+function admitReplacement(gate: VerifyAdmissionGate, markers: Map<string, PendingVerificationEntry>) {
+	let slot: WindowReservation | undefined
+	gate.admit(
+		{ id: "sess-1", origin: ORIGIN, deadline: Date.now() + 55_000, needsWindow: true, consumesToken: false },
+		(r) => {
+			slot = r
+		},
+		() => {},
+	)
+	const replacement = marker("prof-A")
+	markers.set("sess-1", replacement)
+	return { replacement, slot }
+}
+
+describe("handleSessionEstablished — the approval ends while establishment waits", () => {
+	const ownRow = { id: "dapp-1", profileId: "prof-A", trustedVerification: false }
+	/** A new connection approved under prof-A whose row read or hash write waits on `step`. */
+	function pausedIn(at: "lookup" | "hash") {
+		const step = deferred<unknown>()
+		const approved = marker("prof-A")
+		const lookup = at === "lookup" ? vi.fn(() => step.promise) : vi.fn().mockResolvedValue(ownRow)
+		const setVerificationHash = at === "hash" ? vi.fn(() => step.promise) : vi.fn().mockResolvedValue(undefined)
+		const h = makeDeps({
+			pendingVerification: new Map([["sess-1", approved]]),
+			dappSessionService: { tryGetDappSessionByOriginAndChain: lookup, setVerificationHash },
+		})
+		const establishing = handleSessionEstablished(makeSession(), h.deps)
+		const reached = vi.waitFor(() => expect(at === "lookup" ? lookup : setVerificationHash).toHaveBeenCalledTimes(1))
+		return { ...h, approved, establishing, step, reached }
+	}
+
+	test("a revocation for the approving profile whose termination throws: no stamp, the session ends, the marker stays a tombstone", async () => {
+		const h = pausedIn("hash")
+		await h.reached
+		revokeLiveSessions(
+			{
+				getActiveSessions: () => [{ ...makeSession(), tabId: 7 }],
+				sessionProfiles: new Map(),
+				pendingVerification: h.pendingVerification,
+				terminateSession: () => {
+					throw new Error("port gone")
+				},
+				logger: noopLogger,
+			},
+			{ origin: ORIGIN, chainId: "0", profileId: "prof-A" },
+		)
+		h.step.resolve(undefined)
+		expect(await h.establishing).toBe(false)
+		expect(h.stamp).not.toHaveBeenCalled()
+		expect(h.terminate).toHaveBeenCalledWith("sess-1")
+		expect(h.pendingVerification.get("sess-1")).toBe(h.approved)
+		expect(h.approved.cancelled).toBe(true)
+	})
+
+	test("control: with no revocation the same establishment stamps and spends the marker", async () => {
+		const h = pausedIn("hash")
+		await h.reached
+		h.step.resolve(undefined)
+		expect(await h.establishing).toBe(true)
+		expect(h.stamp).toHaveBeenCalledWith("sess-1", "prof-A")
+		expect(h.pendingVerification.has("sess-1")).toBe(false)
+	})
+
+	test.each<[string, "lookup" | "hash", (step: ReturnType<typeof deferred<unknown>>) => void]>([
+		["its row is gone", "lookup", (step) => step.resolve(undefined)],
+		["its row is another profile's", "lookup", (step) => step.resolve({ ...ownRow, profileId: "prof-B" })],
+		["its row read fails", "lookup", (step) => step.reject(new Error("storage"))],
+		["its hash write fails", "hash", (step) => step.reject(new Error("QuotaExceededError"))],
+		["its hash write lands", "hash", (step) => step.resolve(undefined)],
+	])(
+		"a discovery that reused the id is left alone when %s: no stamp, no termination, its marker and slot untouched",
+		async (_name, at, settle) => {
+			const h = pausedIn(at)
+			await h.reached
+			// The old slot was given back, which tombstones the old marker, before the id was reused.
+			h.reservation.releaseIfUnstarted()
+			const { replacement, slot } = admitReplacement(h.gate, h.pendingVerification)
+			settle(h.step)
+			expect(await h.establishing).toBe(false)
+			expect(h.stamp).not.toHaveBeenCalled()
+			expect(h.terminate).not.toHaveBeenCalled()
+			expect(h.pendingVerification.get("sess-1")).toBe(replacement)
+			expect(replacement.cancelled).toBeUndefined()
+			expect(h.gate.reservation("sess-1")).toBe(slot)
+			expect(slot?.status).toBe("unstarted")
+			expect(h.gate.windowsHeld(ORIGIN)).toBe(1)
+		},
+	)
+})
+
 describe("handleSessionEstablished — the check in the waiting connect window", () => {
 	/** A new connection whose connect window 41 waits on standby, as the approval leaves it. */
 	function standby(over: Partial<SessionEstablishedDeps> = {}) {
@@ -448,6 +563,18 @@ describe("handleSessionEstablished — the check in the waiting connect window",
 		expect(pendingVerification.get("sess-1")?.cancelled).toBe(true)
 	})
 
+	test("a stamped channel whose check cannot load still ends after a discovery reused its id", async () => {
+		const { deps, navigate, gate, stamp, terminate, pendingVerification } = standby()
+		navigate.mockImplementationOnce(async () => {
+			gate.windowRemoved(41)
+			admitReplacement(gate, pendingVerification)
+			throw new Error("No tab with id: 314.")
+		})
+		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
+		expect(stamp).toHaveBeenCalledWith("sess-1", "prof-A")
+		expect(terminate).toHaveBeenCalledWith("sess-1")
+	})
+
 	test("a failed establishment leaves a tombstone, so a retry on a row since marked trusted terminates", async () => {
 		const tryGetDappSessionByOriginAndChain = vi
 			.fn()
@@ -463,7 +590,7 @@ describe("handleSessionEstablished — the check in the waiting connect window",
 		gate.windowRemoved(41)
 		expect(gate.windowsHeld(ORIGIN)).toBe(0)
 
-		// A sibling's check set "Always trust" on the row, and the SDK replays the restored discovery.
+		// A sibling's check set "Skip this check next time" on the row, and the SDK replays the restored discovery.
 		tryGetDappSessionByOriginAndChain.mockResolvedValue({ id: "dapp-1", profileId: "prof-A", trustedVerification: true })
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
 		expect(terminate).toHaveBeenCalledTimes(2)
@@ -531,38 +658,118 @@ describe("handleSessionEstablished — the check in the waiting connect window",
 	})
 })
 
+describe("handleSessionEstablished — the hold on the session's calls", () => {
+	const rowTrusted = (trustedVerification: boolean) => ({
+		tryGetDappSessionByOriginAndChain: vi.fn().mockResolvedValue({ id: "dapp-1", profileId: "prof-A", trustedVerification }),
+		setVerificationHash: vi.fn().mockResolvedValue(undefined),
+	})
+
+	test.each([
+		["a new connection", () => makeDeps({ pendingVerification: new Map([["sess-1", marker()]]) })],
+		["an untrusted reconnect", () => makeDeps({ dappSessionService: rowTrusted(false) })],
+	])("%s shows the check and keeps its calls held", async (_, made) => {
+		const { deps, create, release } = made()
+		expect(await handleSessionEstablished(makeSession(), deps)).toBe(true)
+		expect(create).toHaveBeenCalledTimes(1)
+		expect(release).not.toHaveBeenCalled()
+	})
+
+	test("a trusted reconnect releases its calls and shows no check", async () => {
+		const { deps, create, release } = makeDeps({ dappSessionService: rowTrusted(true) })
+		expect(await handleSessionEstablished(makeSession(), deps)).toBe(true)
+		expect(release).toHaveBeenCalledTimes(1)
+		expect(create).not.toHaveBeenCalled()
+	})
+
+	test.each([
+		["a lost approval", () => makeDeps({ pendingVerification: new Map([["sess-1", marker("prof-A", { cancelled: true })]]) })],
+		[
+			"a session ended during validation",
+			() => {
+				const made = makeDeps({ dappSessionService: rowTrusted(true) })
+				made.endSession()
+				return made
+			},
+		],
+		[
+			"a check that could not be shown",
+			() => {
+				const made = makeDeps()
+				made.create.mockResolvedValueOnce({ id: undefined })
+				return made
+			},
+		],
+	])("%s never releases the calls", async (_, made) => {
+		const { deps, release } = made()
+		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
+		expect(release).not.toHaveBeenCalled()
+	})
+})
+
 // The decoded id keys persisted, MAC'd session rows, so its exact number is frozen.
 describe("chainInfoToChainId", () => {
+	/** A field as the SDK serializes it. */
+	const field = (value: bigint) => new Fr(value).toString()
+	const U32_MAX = 2n ** 32n - 1n
+
 	test.each([
-		{ name: "hex strings", chainInfo: { chainId: "0xaa36a7", version: "0xadb36f9d" }, expected: 2904119610 },
-		{ name: "fields, high bit", chainInfo: { chainId: new Fr(1n), version: new Fr(2n ** 31n) }, expected: 2147483649 },
-		// A bigint XOR would give 31338: the Number rounding above 2^53 is part of the key.
-		{ name: "fields above 2^53", chainInfo: { chainId: new Fr(31337n), version: new Fr(2n ** 64n + 3n) }, expected: 31337 },
+		{ name: "the local network as the SDK sends it", chainInfo: { chainId: field(0n), version: field(0n) }, expected: 0 },
+		{
+			name: "testnet as the SDK sends it",
+			chainInfo: { chainId: field(11155111n), version: field(3409706519n) },
+			expected: 3415328944,
+		},
+		{ name: "short hex strings", chainInfo: { chainId: "0xaa36a7", version: "0xcb3bfe17" }, expected: 3415328944 },
+		{ name: "the high bit", chainInfo: { chainId: field(1n), version: field(2n ** 31n) }, expected: 2147483649 },
+		{ name: "chainId at the u32 bound", chainInfo: { chainId: field(U32_MAX), version: field(1n) }, expected: 4294967294 },
+		{ name: "version at the u32 bound", chainInfo: { chainId: field(1n), version: field(U32_MAX) }, expected: 4294967294 },
 	])("$name → $expected", ({ chainInfo, expected }) => {
 		const id = chainInfoToChainId({ chainInfo })
 		expect(id).toBe(expected)
 		expect(typeof id).toBe("number")
 	})
 
-	test("a malformed chainId throws before version is read", () => {
-		const toBigInt = vi.fn(() => 1n)
-		const version = { toBigInt } as unknown as Fr
-		expect(() => chainInfoToChainId({ chainInfo: { chainId: "not-a-number", version } })).toThrow(SyntaxError)
-		expect(toBigInt).not.toHaveBeenCalled()
+	const canonical = field(1n)
+	test.each<[string, unknown]>([
+		// The field schema refuses these.
+		["a blank chainId, which once folded onto the local network", { chainId: "", version: "" }],
+		["a negative chainId", { chainId: "-1", version: canonical }],
+		["a chainId that is not an integer", { chainId: "1.5", version: canonical }],
+		["a chainId that is not a number", { chainId: "abc", version: canonical }],
+		["a chainId sent as a JSON number", { chainId: 31337, version: canonical }],
+		["a missing chainInfo", undefined],
+		// The field schema accepts these and the wallet's bounds refuse them.
+		["a chainId above 2^53", { chainId: "0x20000000000001", version: canonical }],
+		["a chainId above the u32 range", { chainId: "0x100000000", version: canonical }],
+		["a version above the u32 range", { chainId: canonical, version: "0x100000000" }],
+		["a version above 2^53, which once folded onto chain 31337", { chainId: field(31337n), version: field(2n ** 64n + 3n) }],
+	])("%s is refused as invalid arguments", (_label, chainInfo) => {
+		expect(() => chainInfoToChainId({ chainInfo } as never)).toThrow(InvalidWalletArgumentsError)
 	})
 
-	test("a malformed chainInfo rejects the handler before it touches any dependency", async () => {
+	test("a malformed chainId refuses before version is read", () => {
+		const read = vi.fn(() => canonical)
+		const chainInfo = {
+			chainId: "not-a-number",
+			get version() {
+				return read()
+			},
+		}
+		expect(() => chainInfoToChainId({ chainInfo })).toThrow(InvalidWalletArgumentsError)
+		expect(read).not.toHaveBeenCalled()
+	})
+
+	test("a chainInfo that does not decode ends the attempt like any failed exit, logged at debug", async () => {
 		const log = vi.fn()
-		const { deps, terminate } = makeDeps({ logger: { log } as unknown as ILogger })
-		const markerRead = vi.spyOn(deps.pendingVerification, "get")
-		const reservationRead = vi.spyOn(deps.reservations, "reservation")
-		await expect(handleSessionEstablished(makeSession({ chainInfo: { chainId: "zz", version: "0x1" } }), deps)).rejects.toThrow(
-			SyntaxError,
-		)
-		expect(markerRead).not.toHaveBeenCalled()
-		expect(reservationRead).not.toHaveBeenCalled()
+		const pendingVerification = new Map([["sess-1", marker()]])
+		const { deps, terminate, stamp, gate } = makeDeps({ pendingVerification, logger: { log } as unknown as ILogger })
+		const session = makeSession({ chainInfo: { chainId: "", version: canonical } })
+		expect(await handleSessionEstablished(session, deps)).toBe(false)
+		expect(terminate).toHaveBeenCalledWith("sess-1")
+		expect(stamp).not.toHaveBeenCalled()
 		expect(deps.dappSessionService.tryGetDappSessionByOriginAndChain).not.toHaveBeenCalled()
-		expect(terminate).not.toHaveBeenCalled()
-		expect(log).not.toHaveBeenCalled()
+		expect(pendingVerification.get("sess-1")?.cancelled).toBe(true)
+		expect(gate.windowsHeld(ORIGIN)).toBe(0)
+		expect(log.mock.calls.map(([, level]) => level)).toEqual([LogLevel.Debug])
 	})
 })

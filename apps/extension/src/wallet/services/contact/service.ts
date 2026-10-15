@@ -2,23 +2,29 @@
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
+import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import type { ILogger } from "@/wallet/logger"
 import { ProfileService } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { assertRestoreEpoch, captureRestoreEpochs, restoreRowProfileId } from "@/wallet/services/restore-fence"
-import { profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
+import { type ExecutionFence, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
+import type { RunFence } from "@/wallet/services/profile/spec"
 import { restoreRows } from "@/wallet/services/restore-rows"
 import { nextRandomId, preferOrReallocId } from "@/wallet/services/id-allocators"
 import { requireOwnedRow } from "@/wallet/services/require-owned-row"
 import { type RestoreGate, NOOP_RESTORE_GATE } from "@/e2e/restore-gate"
 import { EntityStorage } from "@/wallet/storage"
 import { Lock } from "@/wallet/utils"
-import { getInitials, sanitizeString } from "@/utils"
+import { getInitials } from "@/utils"
+import { isEmptyContactName, sanitizeContactName } from "@/utils/contact-name"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { type Contact, CONTACT_SERVICE_NAME, CONTACT_STORAGE_ROOT, ContactSchema, type Events, type Methods } from "./spec"
 
 export * from "./spec"
+
+/** Never quotes the name: a contact name is personal data. */
+const NO_VISIBLE_NAME = "contact name has no visible characters"
 
 export class ContactService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
@@ -29,7 +35,6 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 		"updateContact",
 		"deleteContact",
 		"exportContacts",
-		"importContacts",
 	)
 	public static name = CONTACT_SERVICE_NAME
 
@@ -66,11 +71,11 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 	}
 
-	public async getContacts(): Promise<Contact[]> {
+	public async getContacts(fence?: RunFence | null): Promise<Contact[]> {
 		await this.ensureInitialized()
-		const profile = await requireActiveProfile(this.profileService)
+		const profileId = await this.actingProfileId(fence)
 
-		return (await this.storage.getValues()).filter((c) => c.profileId === profile.id)
+		return (await this.storage.getValues()).filter((c) => c.profileId === profileId)
 	}
 
 	public async getContact(contactId: string): Promise<Contact> {
@@ -95,12 +100,14 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 		return contact[0]
 	}
 
-	public async addContact(name: string, address: string): Promise<Contact> {
+	public async addContact(name: string, address: string, runFence?: RunFence | null): Promise<Contact> {
 		await this.ensureInitialized()
+		if (isEmptyContactName(name)) throw new Error(NO_VISIBLE_NAME)
+		const stored = sanitizeContactName(name)
 		// Atomic read+capture: the lock wait and id allocation below can span the
 		// profile's deletion — without a fence the row lands stamped with the
 		// deleted profile, surviving the cascade's earlier snapshot as an orphan.
-		const fence = await this.profileService.captureExecutionFence()
+		const fence = await this.writeFence(runFence)
 		const deletion = this.profileService.getDeletionState()
 
 		return await this.lock.withLock(async () => {
@@ -109,12 +116,13 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 			const contact: Contact = {
 				id,
 				profileId: fence.profileId,
-				name,
+				name: stored,
 				address,
-				abbr: this._getAbbreviation(name),
+				abbr: this._getAbbreviation(stored),
 			}
 
 			deletion.assertCurrent(fence.profileId, fence.epoch)
+			this.assertStillLive(runFence)
 			await this.storage.set(contact.id, contact)
 			// The set awaits — compensate the just-written row if the deletion
 			// landed during it, before the row becomes observable via the emit.
@@ -129,20 +137,23 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 		})
 	}
 
-	public async updateContact(contactId: string, name?: string, address?: string): Promise<Contact> {
+	public async updateContact(contactId: string, name?: string, address?: string, fence?: RunFence | null): Promise<Contact> {
 		await this.ensureInitialized()
-		const profile = await requireActiveProfile(this.profileService)
+		if (name && isEmptyContactName(name)) throw new Error(NO_VISIBLE_NAME)
+		const stored = name ? sanitizeContactName(name) : undefined
+		const profileId = await this.actingProfileId(fence)
 
 		return await this.lock.withLock(async () => {
-			const contact = requireOwnedRow(await this.storage.get(contactId), profile.id, "invalid id")
+			const contact = requireOwnedRow(await this.storage.get(contactId), profileId, "invalid id")
 
 			const newContact = {
 				...contact,
-				name: name || contact.name,
-				abbr: name ? this._getAbbreviation(name) : contact.abbr,
+				name: stored ?? contact.name,
+				abbr: stored ? this._getAbbreviation(stored) : contact.abbr,
 				address: address || contact.address,
 			}
 
+			this.assertStillLive(fence)
 			await this.storage.set(contactId, newContact)
 
 			this.emit("onContactUpdated", newContact)
@@ -175,63 +186,6 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 		}))
 
 		return JSON.stringify(data, null, 2)
-	}
-
-	public async importContacts(data: string): Promise<Contact[]> {
-		await this.ensureInitialized()
-		const profile = await requireActiveProfile(this.profileService)
-
-		const results: Contact[] = []
-
-		type importedContact = { name: string; address: string }
-		const importedContacts = JSON.parse(data)
-			.map((c: importedContact) => ({
-				name: sanitizeString(c.name, 20),
-				address: sanitizeString(c.address, 66),
-			}))
-			.filter((c: importedContact) => !!c.name && !!c.address)
-
-		if (importedContacts.length) {
-			const existingContacts = (await this.storage.getValues()).filter((c) => c.profileId === profile.id)
-			const contactsByAddress = new Map<string, Contact>()
-			const contactsByName = new Map<string, Contact>()
-
-			existingContacts.forEach((contact) => {
-				contactsByAddress.set(contact.address, contact)
-				contactsByName.set(contact.name, contact)
-			})
-
-			for (const _c of importedContacts) {
-				try {
-					let contact: Contact
-
-					const existingByAddress = contactsByAddress.get(_c.address)
-					const existingByName = contactsByName.get(_c.name)
-
-					// A contact's name and address are user PII — the row id identifies which contact
-					// was touched without writing down who it is.
-					if (existingByAddress) {
-						contact = await this.updateContact(existingByAddress.id, _c.name, _c.address)
-
-						this.logDebug(`Updated existing contact #${existingByAddress.id} (matched by address)`)
-					} else if (existingByName) {
-						contact = await this.updateContact(existingByName.id, _c.name, _c.address)
-
-						this.logDebug(`Updated existing contact #${existingByName.id} (matched by name)`)
-					} else {
-						contact = await this.addContact(_c.name, _c.address)
-
-						this.logDebug(`Added new contact #${contact?.id}`)
-					}
-
-					results.push(contact!)
-				} catch (error) {
-					this.logError("Failed to import a contact", error)
-				}
-			}
-		}
-
-		return results
 	}
 
 	/**
@@ -270,6 +224,27 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 		})
 	}
 
+	/** The profile a read or update acts for: a run fence's own once proven live, else the active
+	 *  one. Asserted before the contact lock, never inside it: the assert takes the profile lock. */
+	private async actingProfileId(fence: RunFence | null | undefined): Promise<string> {
+		if (fence === undefined || fence === null) return (await requireActiveProfile(this.profileService)).id
+		await this.profileService.assertRunFence(fence)
+		return fence.profileId
+	}
+
+	private async writeFence(fence: RunFence | null | undefined): Promise<ExecutionFence> {
+		if (fence === undefined || fence === null) return await this.profileService.captureExecutionFence()
+		await this.profileService.assertRunFence(fence)
+		return fence
+	}
+
+	/** Runs synchronously right before a write starts, so a session that ended while the write
+	 *  waited for the lock or its reads stops it; a write already started finishes in its profile. */
+	private assertStillLive(fence: RunFence | null | undefined): void {
+		if (fence === undefined || fence === null) return
+		if (!this.profileService.isFenceLive(fence)) throw new SessionEndedError()
+	}
+
 	private _getAbbreviation(name: string): string {
 		return getInitials(name)
 	}
@@ -295,8 +270,11 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 		return await this.lock.withLock(async () => {
 			return await restoreRows(contacts, async (contact) => {
 				const id = await preferOrReallocId(this.storage, contact.id)
-				// Same sanitizer the plaintext import applies: a backup name is untrusted display text.
-				const written = { ...contact, id, name: sanitizeString(contact.name, 20) }
+				// A backup name is untrusted display text, stored as any other name is.
+				if (isEmptyContactName(contact.name)) throw new Error(NO_VISIBLE_NAME)
+				const name = sanitizeContactName(contact.name)
+				const abbr = name === contact.name ? contact.abbr : this._getAbbreviation(name)
+				const written = { ...contact, id, name, abbr }
 				// Parse the persisted shape so a malformed backup contact is recorded as
 				// restoreError, not silently written + codec-hidden on read.
 				ContactSchema.parse(written)

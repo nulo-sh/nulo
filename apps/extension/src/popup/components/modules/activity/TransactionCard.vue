@@ -15,6 +15,7 @@ import TransactionCardLayout from "@/components/composite/activity/TransactionCa
 import { TxStatus, TxExecutionResult } from "@/wallet/services/transaction/client"
 
 /** Utils */
+import { STATUS_ICON_FILL } from "@/components/composite/activity/status-icon-fill"
 import { balanceFormatted } from "@/utils/amount.js"
 import { txAmount } from "@/utils/tx-amount"
 import { PriceServiceClient } from "@/wallet/services/price/client"
@@ -117,8 +118,9 @@ const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const amountFiat = computed(() => {
 	if (type.value !== "transfer" || !amount.value || !call.value?.contract) return null
+	// The fiat follows the decimals the amount above is shown in.
 	const label = prices.tokenFiatLabel(
-		{ chainId: appStore.network?.chainId, contract: call.value.contract, decimals: amount.value.decimals },
+		{ chainId: appStore.network?.chainId, contract: call.value.contract, decimals: amount.value.decimals, hasDecimals: true },
 		amount.value.units,
 	)
 	return label ?? null
@@ -144,7 +146,7 @@ onBeforeUnmount(() => {
 		:txHash="props.tx.hash"
 	>
 		<template #badge>
-			<Icon :name="statusIcon" size="12" :color="statusColor" :class="$style.status_icon" />
+			<Icon :name="statusIcon" size="12" :color="STATUS_ICON_FILL[statusColor]" :class="$style.status_icon" data-testid="activity-status-icon" />
 		</template>
 
 		<template v-if="transferTypeLabel || originLabel" #title-trailing>
@@ -165,12 +167,12 @@ onBeforeUnmount(() => {
 
 		<template #secondary>
 			<span v-if="hashSlice && explorerUrl" :class="$style.hash_group">
-				<span :class="$style.hash">{{ hashSlice }}</span>
+				<span data-testid="activity-row-hash" :class="$style.hash">{{ hashSlice }}</span>
 				<RowAction :href="explorerUrl" label="Open in block explorer" :class="$style.explorer">
 					<Icon name="external-link" size="10" color="tertiary" />
 				</RowAction>
 			</span>
-			<span v-else-if="hashSlice" :class="$style.hash">{{ hashSlice }}</span>
+			<span v-else-if="hashSlice" data-testid="activity-row-hash" :class="$style.hash">{{ hashSlice }}</span>
 		</template>
 	</TransactionCardLayout>
 </template>
@@ -190,9 +192,7 @@ onBeforeUnmount(() => {
 }
 
 .hash {
-	font-family: var(--font-mono);
-	font-size: 9px;
-	text-transform: uppercase;
+	composes: type--meta from global;
 	color: var(--nulo-outline);
 }
 
@@ -201,9 +201,7 @@ onBeforeUnmount(() => {
 }
 
 .chip {
-	font-family: var(--font-mono);
-	font-size: 8px;
-	text-transform: uppercase;
+	composes: type--tag from global;
 	color: var(--nulo-secondary);
 	background: var(--nulo-surface-low);
 	border: 1px solid var(--hairline-soft);

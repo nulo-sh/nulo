@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: a public-event scan arm in `apps/extension/src/wallet/services/incoming-transfer/` (`public-event-indexer.ts`, `service.ts`), a node-read RPC in `packages/aztec-runtime/src/pxe/`, the received detail page `apps/extension/src/popup/pages/received/[id].vue`, and the network e2e `apps/extension/tests/e2e/network/incoming-public-transfers.test.ts`.
-- **Open items**: a checked record shows no tx hash or explorer link; a reorg that re-mines a surviving incoming transfer emits nothing; incoming note rows are never reconciled against the PXE; an opt-in "Privacy maxi" setting; only transactions get explorer links. All are tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: a checked record shows no tx hash or explorer link; a reorg that re-mines a surviving incoming transfer emits nothing; incoming note rows are never reconciled against the PXE; an opt-in "Privacy maxi" setting; only transactions get explorer links. All are tracked in #110, #139, #140, #141 and #142.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

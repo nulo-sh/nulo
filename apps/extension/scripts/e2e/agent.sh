@@ -13,44 +13,60 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
-# Proverless-marker guard: some network tests only function against a
-# proverless-armed build (their e2e gate is compiled OUT otherwise, and they
-# fail as an inscrutable multi-minute timeout instead of an error). Those
-# files carry a formal `@requires-proverless` marker line; running any of
-# them unarmed is refused HERE, before a single port or build cycle is spent.
-if [ "${NULO_E2E_PROVERLESS:-}" != "1" ]; then
-  if [ "$#" -gt 0 ]; then
-    marker_scan_targets=("$@")
-  else
-    marker_scan_targets=(tests/e2e/network)
-  fi
-  marked_files=$(grep -rls "@requires-proverless" "${marker_scan_targets[@]}" 2>/dev/null || true)
-  if [ -n "$marked_files" ]; then
-    echo "[e2e:agent] FATAL: this run includes proverless-gated test file(s) but NULO_E2E_PROVERLESS is not set:" >&2
-    while IFS= read -r marked; do echo "[e2e:agent]   $marked" >&2; done <<< "$marked_files"
-    echo "[e2e:agent] Re-run the same command with NULO_E2E_PROVERLESS=1 set." >&2
-    exit 2
-  fi
-fi
+NETWORK_CONFIG=vitest.e2e.network.config.ts
+
+# Before the port claim and the build: the guard exists to spare both.
+bash scripts/e2e/proverless-guard.sh "$NETWORK_CONFIG" "$@"
 
 PORTS_JSON=".e2e-state/ports.json"
 
-# DELIBERATELY NO signal trap here (review CONFIRMED x5): bash defers INT/TERM traps until the
-# foreground child exits, so a trap can never run during the build or vitest - the only windows
-# worth protecting - and a DEFERRED trap that fires after the child completes would clobber the
-# real classified exit (a green 25-min run reported as 130, or an exit-86 that must trigger the
-# CI retry swallowed). Pre-vitest this script owns NO processes (spawns happen inside vitest's
-# global-setup), and a trap reading owned.json in that window would kill a PRIOR/CONCURRENT run's
-# recorded pids. Sandbox lifecycle is owned end-to-end by the TypeScript side: vitest's wired
-# global teardown (KILL-escalated, ownership-gated) + its signal hooks + the next run's
-# liveness-checked orphan reap via the progressively-written lock.
+# DELIBERATELY NO INT/TERM trap here: bash defers those until the foreground child exits, so a
+# trap can never run during the build or vitest - the only windows worth protecting - and a
+# DEFERRED trap that fires after the child completes would clobber the real classified exit (a
+# green 25-min run reported as 130, or an exit-86 that must trigger the CI retry swallowed).
+# Pre-vitest this script owns NO processes (spawns happen inside vitest's global-setup), and a
+# trap reading owned.json in that window would kill a PRIOR/CONCURRENT run's recorded pids.
+# Sandbox lifecycle is owned end-to-end by the TypeScript side: vitest's wired global teardown
+# (KILL-escalated, ownership-gated) + its signal hooks + the next run's orphan reap.
+#
+# The one trap is on EXIT, and it signals nothing: it drops this run's rows from the host port
+# registry and re-exits with the status it was given, so a failed build or bundle assertion
+# neither leaks the claim nor changes its exit code. `exec` skips EXIT traps, hence the explicit
+# release before the final exec. The rows name this shell's pid as their owner, so a SIGKILLed
+# run's rows are dropped by the next claim on the host.
+export NULO_E2E_OWNER_PID=$$
+NULO_E2E_RUN_ID=""
+release_ports() {
+  if [ -n "$NULO_E2E_RUN_ID" ]; then
+    bun run scripts/e2e/resolve-ports.ts --release "$NULO_E2E_RUN_ID" || true
+    NULO_E2E_RUN_ID=""
+  fi
+}
+on_exit() {
+  local rc=$?
+  release_ports
+  exit "$rc"
+}
+trap on_exit EXIT
 
-# Clear stale boot-sentinel markers from a prior run so the boot-failure
-# classifier (scripts/e2e/classify-exit.ts) sees only THIS run's state.
-rm -f .e2e-state/boot-started .e2e-state/boot-ready .e2e-state/tests-started
+# Clear a prior run's markers so the boot-failure classifier
+# (scripts/e2e/classify-exit.ts) and the stall report read only THIS run's state.
+rm -f .e2e-state/boot-started .e2e-state/boot-ready .e2e-state/tests-started .e2e-state/stalled
 
 echo "[e2e:agent] resolving ports..."
 bun run scripts/e2e/resolve-ports.ts
+NULO_E2E_RUN_ID=$(jq -r '.runId // empty' "$PORTS_JSON")
+if [ -z "$NULO_E2E_RUN_ID" ]; then
+  echo "[e2e:agent] FATAL: resolve-ports claimed no ports in the host registry" >&2
+  exit 2
+fi
+export NULO_E2E_RUN_ID
+# Inherited by every process the run starts (forks, Chrome, the sandbox), so a SIGKILLed run's
+# survivors can be found and stopped by marker once this shell, the run's owner, is gone.
+NULO_E2E_RUN=$(jq -r '.runMarker // empty' "$PORTS_JSON")
+NULO_E2E_RUN_OWNER=$(jq -r '.runOwner // empty' "$PORTS_JSON")
+NULO_E2E_WORKTREE=$(jq -r '.worktree // empty' "$PORTS_JSON")
+export NULO_E2E_RUN NULO_E2E_RUN_OWNER NULO_E2E_WORKTREE
 
 ANVIL_PORT=$(jq -r .anvil "$PORTS_JSON")
 AZTEC_PORT=$(jq -r .aztec "$PORTS_JSON")
@@ -79,6 +95,9 @@ echo "[e2e:agent] building $BROWSER wallet with VITE_LOCAL_NETWORK_RPC_URL=$AZTE
 # every other network test (fresh installs stamp max and run nothing; the
 # backup fixture only runs on backup import). Never ships: prod builds omit
 # the env and _build-extension.yml greps release bundles for the markers.
+# VITE_NULO_E2E_CSP_REPORT builds in the e2e-only violation recorder
+# (src/e2e/csp-report.ts); the run below arms the launch fixture's check, which
+# fails every launch that recorded a violation.
 if [ "${NULO_E2E_PROVERLESS:-}" = "1" ]; then
   if [ "${VITE_NULO_PRESTO_REQUIRED:-}" = "1" ]; then
     echo "[e2e:agent] FATAL: NULO_E2E_PROVERLESS and VITE_NULO_PRESTO_REQUIRED are mutually exclusive" >&2
@@ -90,6 +109,7 @@ if [ "${NULO_E2E_PROVERLESS:-}" = "1" ]; then
   VITE_NULO_E2E_MIGRATION_FIXTURE=1 \
   VITE_NULO_E2E_TOKEN_SEEDS=1 \
   VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 \
+  VITE_NULO_E2E_CSP_REPORT=1 \
   VITE_NULO_E2E_PROVERLESS=1 \
   VITE_NULO_E2E_PROVERLESS_CONFIRM=1 \
     bun run "build:$BROWSER"
@@ -103,6 +123,7 @@ else
   VITE_NULO_E2E_MIGRATION_FIXTURE=1 \
   VITE_NULO_E2E_TOKEN_SEEDS=1 \
   VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 \
+  VITE_NULO_E2E_CSP_REPORT=1 \
     bun run "build:$BROWSER"
 fi
 
@@ -139,6 +160,14 @@ for marker in "NULO_E2E_TOKEN_SEEDS_BUILD_STAMP" "nulo:e2e:token-seeds"; do
   fi
 done
 echo "[e2e:agent] bundle contains the e2e token-seed source ✓"
+
+# Positive CSP-recorder assertion: the run arms the check below, and a build
+# without the recorder fails every launch on its missing key, far from the cause.
+if ! grep -rq "nulo:e2e:csp-violations" "$DIST_DIR" 2>/dev/null; then
+  echo "[e2e:agent] FATAL: VITE_NULO_E2E_CSP_REPORT did not propagate (recorder key absent from $DIST_DIR)" >&2
+  exit 2
+fi
+echo "[e2e:agent] bundle contains the CSP violation recorder ✓"
 
 # Parallel bundle assertion for VITE_NULO_PRESTO_REQUIRED: if the env var ever
 # stops propagating from the workflow into the build, the chain-runtime
@@ -197,6 +226,7 @@ echo "[e2e:agent] running network e2e..."
 set +e
 E2E_REQUIRE_SETUP=1 \
 NULO_E2E_MIGRATION_FIXTURE=1 \
+NULO_E2E_CSP_REPORT=1 \
 ANVIL_URL="$ANVIL_URL" \
 ANVIL_PORT="$ANVIL_PORT" \
 AZTEC_NODE_URL="$AZTEC_NODE_URL" \
@@ -205,9 +235,11 @@ AZTEC_ADMIN_PORT="$AZTEC_ADMIN_PORT" \
 AZTEC_P2P_PORT="$AZTEC_P2P_PORT" \
 PLAYGROUND_URL="$PLAYGROUND_URL" \
 PLAYGROUND_PORT="$PLAYGROUND_PORT" \
-  bun run vitest run --config vitest.e2e.network.config.ts "$@"
+  bun run vitest run --config "$NETWORK_CONFIG" "$@"
 VITEST_EXIT=$?
 set -e
+
+release_ports
 
 # Map an infra-boot failure (sandbox never became ready AND no test ran) to exit
 # 86 so _extension-network-e2e.yml retries the agent ONCE. Any other non-zero — including a

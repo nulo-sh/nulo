@@ -1,4 +1,5 @@
 import { EncryptionKey } from "@nulo/wallet-crypto"
+import { toBase64 } from "@nulo/wallet-core/utils"
 import { describe, expect, it, vi } from "vitest"
 import { IMPORTED_KEYS_SERVICE_NAME } from "@/wallet/services/account/spec"
 import {
@@ -8,9 +9,13 @@ import {
 	MAX_BACKUP_FILE_BYTES,
 	collectRestoreErrors,
 	detectBackupType,
+	FULL_BACKUP_V2_TAG,
 	normalizeAllIds,
+	openFullBackupText,
+	parseEncryptedBackup,
 	readBackupFile,
 	remapByMap,
+	sealFullBackupText,
 	resolveRestoredActiveNetworkIdByChain,
 	remapNetworkIdByChain,
 	capRecords,
@@ -108,10 +113,10 @@ describe("detectBackupType", () => {
 	it("trims leading/trailing whitespace before classifying", () => {
 		expect(detectBackupType('   { "x": 1 }   ')).toBe("plain")
 	})
-	it("detects encrypted base64 prefix (first byte 0, length >=13)", () => {
-		const bytes = new Uint8Array(20)
-		const b64 = btoa(String.fromCharCode(...bytes))
+	it("detects an untagged frame (first byte 0, at least 29 bytes) and a v2-tagged one as encrypted", () => {
+		const b64 = btoa(String.fromCharCode(...new Uint8Array(29)))
 		expect(detectBackupType(b64)).toBe("encrypted")
+		expect(detectBackupType(`${FULL_BACKUP_V2_TAG}:${b64}`)).toBe("encrypted")
 	})
 	it("returns unknown for short base64", () => {
 		const bytes = new Uint8Array(5)
@@ -121,6 +126,66 @@ describe("detectBackupType", () => {
 	it("returns unknown for non-base64 garbage", () => {
 		expect(detectBackupType("not really base64 ###")).toBe("unknown")
 	})
+})
+
+describe("encrypted full-backup text", () => {
+	const PASSWORD = "pass1234"
+	const BODY = JSON.stringify({ data: { profile: { type: "password", name: "P" } } })
+	const PREFIX = `${FULL_BACKUP_V2_TAG}:`
+	/** A frame as the export wrote it before the tag existed, or under another purpose's AAD. */
+	async function frameText(password: string, aad?: string): Promise<string> {
+		const key = await EncryptionKey.fromPassword(password)
+		return toBase64(await key.encrypt(new TextEncoder().encode(BODY), aad === undefined ? undefined : new TextEncoder().encode(aad)))
+	}
+
+	it("a v2 file carries its tag and round-trips", async () => {
+		const text = await sealFullBackupText(BODY, PASSWORD)
+		expect(text.startsWith(PREFIX)).toBe(true)
+		expect(await openFullBackupText(text, PASSWORD)).toBe(BODY)
+	})
+
+	it("a legacy untagged file still opens", async () => {
+		expect(await openFullBackupText(await frameText(PASSWORD), PASSWORD)).toBe(BODY)
+	})
+
+	it("a v2 body with its tag stripped is refused", async () => {
+		const text = await sealFullBackupText(BODY, PASSWORD)
+		await expect(openFullBackupText(text.slice(PREFIX.length), PASSWORD)).rejects.toThrow()
+	})
+
+	it("a legacy body with the v2 tag added is refused", async () => {
+		await expect(openFullBackupText(`${PREFIX}${await frameText(PASSWORD)}`, PASSWORD)).rejects.toThrow()
+	})
+
+	it("a wrong password is refused", async () => {
+		await expect(openFullBackupText(await sealFullBackupText(BODY, PASSWORD), "wrong-pass")).rejects.toThrow()
+	})
+
+	it("a frame sealed under the same password for another purpose is refused, tagged or not", async () => {
+		const accountExport = await frameText(PASSWORD, "nulo:account-export:v1")
+		await expect(openFullBackupText(accountExport, PASSWORD)).rejects.toThrow()
+		await expect(openFullBackupText(`${PREFIX}${accountExport}`, PASSWORD)).rejects.toThrow()
+	})
+
+	const frame29 = toBase64(new Uint8Array(29))
+	it.each([
+		["an unknown full-backup tag", `nulo:full-backup:v3:${frame29}`],
+		["a malformed body", `${PREFIX}not base64 ###`],
+		["a tagged frame under 29 bytes", `${PREFIX}${toBase64(new Uint8Array(28))}`],
+		["an untagged frame under 29 bytes", toBase64(new Uint8Array(28))],
+	])("%s is refused before any key derivation", async (_label, text) => {
+		const kdf = vi.spyOn(EncryptionKey, "getPasshash")
+		expect(detectBackupType(text)).toBe("unknown")
+		await expect(openFullBackupText(text, PASSWORD)).rejects.toThrow("Not an encrypted backup")
+		expect(kdf).not.toHaveBeenCalled()
+		kdf.mockRestore()
+	})
+
+	it("the byte cap counts the tag: a file at the cap parses, one byte over does not", () => {
+		const atCap = PREFIX + "A".repeat(MAX_BACKUP_FILE_BYTES - PREFIX.length)
+		expect(parseEncryptedBackup(atCap)).not.toBeNull()
+		expect(parseEncryptedBackup(`${atCap}\n`)).toBeNull()
+	}, 30_000)
 })
 
 describe("readBackupFile", () => {
@@ -146,7 +211,7 @@ describe("readBackupFile", () => {
 	})
 
 	it("treats encrypted backup as raw text", async () => {
-		const bytes = new Uint8Array(20)
+		const bytes = new Uint8Array(29)
 		const b64 = btoa(String.fromCharCode(...bytes))
 		const { selection } = await readBackupFile(makeFile(b64, "backup.txt"))
 		expect(selection.type).toBe("encrypted")

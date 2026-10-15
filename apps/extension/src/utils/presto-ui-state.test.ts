@@ -141,9 +141,9 @@ describe("copyFor", () => {
 		expect(copyFor({ kind: "downloading", info: {} }).detail).toContain("one-time download")
 	})
 
-	test("permission-blocked → Presto's title and three steps on onboarding; the compact variant on settings", () => {
+	test("permission-blocked → Presto's title and three steps on onboarding; Nulo's compact variant on settings", () => {
 		const onboarding = copyFor({ kind: "permission-blocked", info: {} })
-		expect(onboarding.title).toBe("Your browser blocked local access")
+		expect(onboarding.title).toBe("Your browser blocked this site from reaching Presto")
 		expect(onboarding.steps).toHaveLength(3)
 		expect(onboarding.retry).toBe("Retry")
 		const settings = copyFor({ kind: "permission-blocked", info: {} }, null, "settings")
@@ -168,7 +168,7 @@ describe("copyFor", () => {
 
 	test("version-mismatch names both versions when the native one is known", () => {
 		expect(copyFor({ kind: "version-mismatch", info: { nativeAztecVersion: "5.1.0" } }).detail).toBe(
-			`Presto runs Aztec 5.1.0; Nulo needs ${__AZTEC_VERSION__}. Open Presto from your menu bar and let it update.`,
+			`Presto runs Aztec 5.1.0; Nulo needs ${__BB_VERSION__}. Open Presto from your menu bar and let it update.`,
 		)
 		expect(copyFor({ kind: "version-mismatch", info: {} }).detail).toBe("Open Presto from your menu bar and let it update.")
 	})

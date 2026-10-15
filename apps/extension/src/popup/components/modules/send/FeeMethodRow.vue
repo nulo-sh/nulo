@@ -25,24 +25,24 @@ defineProps({
 <template>
 	<!-- Fee Juice details -->
 	<Flex v-if="method?.type === 'fj'" align="center" justify="between" :class="$style.detail_row">
-		<Text size="12" weight="600" color="secondary">Available</Text>
-		<span v-if="isLoading" :class="$style.skeleton" />
-		<Text v-else size="12" weight="600" color="primary">
+		<Text variant="label" color="secondary">Available</Text>
+		<Skeleton v-if="isLoading" />
+		<Text v-else variant="value" color="primary">
 			{{ feeJuiceBalanceFormatted ?? '—' }} FJ
 		</Text>
 	</Flex>
 
 	<!-- Private Fee Juice (PrivateFPC) details -->
 	<Flex v-else-if="method?.type === 'private_fpc'" align="center" justify="between" :class="$style.detail_row">
-		<Text size="12" weight="600" color="secondary">Available</Text>
-		<span v-if="isLoading" :class="$style.skeleton" />
+		<Text variant="label" color="secondary">Available</Text>
+		<Skeleton v-if="isLoading" />
 		<template v-else-if="method.fpc">
-			<Text size="12" weight="600" color="primary">
+			<Text variant="value" color="primary">
 				{{ privateFeeJuiceFormatted ?? '—' }} FJ
 			</Text>
 		</template>
 		<template v-else>
-			<Text size="12" weight="600" color="secondary">Not available</Text>
+			<Text variant="value" color="secondary">Not available</Text>
 		</template>
 	</Flex>
 </template>
@@ -50,10 +50,6 @@ defineProps({
 <style module>
 .detail_row {
 	composes: detail_row from "./fee-shared.module.css";
-}
-
-.skeleton {
-	composes: skeleton from "./fee-shared.module.css";
 }
 
 </style>

@@ -13,11 +13,16 @@ describe("isCanonical", () => {
 		expect(isCanonical("implementations-plan/p/sub/plan-v2.md")).toBe(true)
 		expect(isCanonical("implementations-plan/p/_brief.md")).toBe(true)
 		expect(isCanonical("implementations-plan/p/eli5.html")).toBe(true)
+		expect(isCanonical("implementations-plan/p/draft-x.md")).toBe(true)
+		expect(isCanonical("implementations-plan/p/outline-a.md")).toBe(true)
+		expect(isCanonical("implementations-plan/p/leg-codex.md")).toBe(true)
+		expect(isCanonical("implementations-plan/p/eli5-v2.html")).toBe(true)
 	})
 
 	test("lessons/ is exempt, as are plan.md and paths outside the plans dir", () => {
 		expect(isCanonical("implementations-plan/p/lessons/audit-x.md")).toBe(false)
 		expect(isCanonical("implementations-plan/p/lessons/deep/eli5.html")).toBe(false)
+		expect(isCanonical("implementations-plan/p/legacy.md")).toBe(false)
 		expect(isCanonical("implementations-plan/p/plan.md")).toBe(false)
 		expect(isCanonical("docs/audit-x.md")).toBe(false)
 	})

@@ -2,7 +2,9 @@
 
 set -euo pipefail
 
-pattern='/Users/[A-Za-z]|/home/[A-Za-z]'
+# A home under a mount (`/mnt/<volume>/<user>`, WSL's `/mnt/c/Users`) counts too, as in the plans
+# gate's LOCAL_PATH_RE; `/root` does not, since the container scripts here use it.
+pattern='/Users/[A-Za-z]|/home/[A-Za-z]|/mnt/[A-Za-z0-9._-]+/[A-Za-z]'
 
 # Vendored upstream noir artifacts are byte-exact (digest-pinned); their file_map embeds
 # Aztec's own public CI build paths, not a local-machine leak.

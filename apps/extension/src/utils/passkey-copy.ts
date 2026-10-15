@@ -89,7 +89,7 @@ export function classifyPasskeyFailure(err: unknown): PasskeyFailure {
  * gets the one toast line. False for any other failure, which the caller words.
  */
 export function handleCancelOrUnconfirmed(err: unknown, openToast: (toast: ToastOptions) => void): boolean {
-	if (err instanceof UserRejectedError) return true
+	if (unwrapPasskeyFailure(err) instanceof UserRejectedError) return true
 	if (classifyPasskeyFailure(err) !== "not-confirmed") return false
 	openToast({ kind: "error", label: PASSKEY_COPY.notConfirmed })
 	return true

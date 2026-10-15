@@ -19,6 +19,7 @@ const importFlow = vi.hoisted(() => ({
 }))
 const backupImport = vi.hoisted(() => ({
 	api: undefined as ReturnType<typeof import("@/composables/useFullBackupImport").useFullBackupImport> | undefined,
+	opts: undefined as Parameters<typeof import("@/composables/useFullBackupImport").useFullBackupImport>[0] | undefined,
 }))
 // The real composable, with a Retry that stays pending: reaching a retryable state for real
 // takes a whole restore, which this page test does not own.
@@ -29,6 +30,7 @@ vi.mock("@/composables/useFullBackupImport", async (importOriginal) => {
 		...mod,
 		useFullBackupImport: (opts: Parameters<typeof mod.useFullBackupImport>[0]) => {
 			const real = mod.useFullBackupImport(opts)
+			backupImport.opts = opts
 			const isRetryingAccountState = ref(false)
 			backupImport.api = {
 				...real,
@@ -196,6 +198,36 @@ describe("onboarding import", () => {
 		expect(button("import-full-backup-continue-btn").attributes("disabled")).toBeDefined()
 		expect(button("import-full-backup-view-errors-btn").attributes("disabled")).toBeDefined()
 		expect(back().attributes("disabled")).toBeDefined()
+	})
+
+	test("the errors notice names the networks that did not finish, and a failed Retry says so above Retry", async () => {
+		const w = await mountImport()
+		importFlow.api!.selectedImportOption.value = "full_backup"
+		const backup = backupImport.api!
+		backup.restoreStatus.value = "finished"
+		backup.restoreErrorLog.value = {
+			"account-state": [
+				{ networkId: "M2", senders: [], contracts: [], restoreError: "Skipped: ran out of time reaching the network" },
+			],
+		}
+		backup.retryFailedAgain.value = true
+		await flushPromises()
+
+		expect(w.get('[data-testid="import-full-backup-retry-result"]').text()).toBe("Retry didn't work · Alpha V5 still not restored")
+
+		backupImport.opts!.showErrorLog!(backup.restoreErrorLog.value, {
+			byNetworkId: new Map([["M2", "Alpha V5"]]),
+			unrestored: ["Alpha V5"],
+		})
+		const { useNotificationStore } = await import("@/stores/notification.store")
+		expect(useNotificationStore().create).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					title: "Import completed with errors",
+					description: "Some entries from the backup couldn't be restored. Alpha V5 didn't finish restoring.",
+				}),
+			}),
+		)
 	})
 
 	test("Continue on the errors screen completes the imported profile and goes on to /onboarding/learn", async () => {

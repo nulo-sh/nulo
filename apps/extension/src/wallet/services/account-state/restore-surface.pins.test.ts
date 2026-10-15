@@ -1,8 +1,8 @@
 /**
- * Pre-extraction pins for restore() branches the PR-b decomposition moves and
- * the existing suite does not fix exactly: the protocol-contract silent skip,
- * the empty-item fast path (which must STAY synchronous under the length-
- * guarded loop extraction), and the deadline restoreError's exact string.
+ * Exact pins for restore() branches the main suite leaves loose: the silent
+ * skip of protocol and preloaded standard contracts, the empty-item fast path
+ * (no registration launched, so nothing awaited), and the deadline
+ * restoreError's exact string.
  */
 import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { beforeEach, describe, expect, test, vi } from "vitest"
@@ -12,6 +12,13 @@ import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { NETWORK_SERVICE_NAME, type Network, NodeStatus } from "@/wallet/services/network/spec"
 import { AccountStateService } from "./service"
+import { FakeFenceProfileService, LIVE_FENCE } from "./fence.fixtures"
+
+// The fixtures carry stub instances and artifacts; the class-id check has its own real-data tests.
+vi.mock("@nulo/aztec-runtime/pxe", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@nulo/aztec-runtime/pxe")>()),
+	assertWireArtifactClassId: vi.fn(async () => undefined),
+}))
 
 class FakeNetworkService implements IService {
 	public static readonly name = NETWORK_SERVICE_NAME
@@ -42,13 +49,14 @@ const NET = {
 	primaryEndpointId: "primary",
 } as Network
 
-describe("restore() pins for the PR-b loop extraction", () => {
+describe("restore() exact-branch pins", () => {
 	let accountStateService: AccountStateService
 	let pxe: FakePxe
 
 	beforeEach(async () => {
 		const services = new ServiceCollection()
 		services.add(new FakeNetworkService())
+		services.add(new FakeFenceProfileService())
 		accountStateService = new AccountStateService(new LoggerStore(new ConfigStore()))
 		services.add(accountStateService)
 		await services.start()
@@ -74,6 +82,7 @@ describe("restore() pins for the PR-b loop extraction", () => {
 				},
 			] as never,
 			[NET],
+			LIVE_FENCE,
 		)
 		expect(pxe.registerContract).toHaveBeenCalledTimes(1)
 		expect(result[0].contracts).toHaveLength(1)
@@ -95,6 +104,7 @@ describe("restore() pins for the PR-b loop extraction", () => {
 				},
 			] as never,
 			[NET],
+			LIVE_FENCE,
 		)
 		expect(pxe.registerContract).toHaveBeenCalledTimes(1)
 		expect(result[0].contracts).toEqual([{ address: realAddr, instance: { i: 2 }, artifact: { a: 2 } }])
@@ -105,6 +115,7 @@ describe("restore() pins for the PR-b loop extraction", () => {
 		const result = await accountStateService.restore(
 			[{ networkId: "net-a", senders: [], contracts: [{ address: "0x05", instance: { i: 1 }, artifact: { a: 1 } }] }] as never,
 			[NET],
+			LIVE_FENCE,
 		)
 		expect(pxe.registerContract).not.toHaveBeenCalled()
 		expect(result[0].contracts).toHaveLength(1)
@@ -112,7 +123,7 @@ describe("restore() pins for the PR-b loop extraction", () => {
 	})
 
 	test("an empty item yields a clean entry with no launches and no restoreError", async () => {
-		const result = await accountStateService.restore([{ networkId: "net-a", senders: [], contracts: [] }] as never, [NET])
+		const result = await accountStateService.restore([{ networkId: "net-a", senders: [], contracts: [] }] as never, [NET], LIVE_FENCE)
 		expect(result).toEqual([{ networkId: "net-a", senders: [], contracts: [] }])
 		expect(pxe.registerSender).not.toHaveBeenCalled()
 		expect(pxe.registerContract).not.toHaveBeenCalled()
@@ -124,6 +135,7 @@ describe("restore() pins for the PR-b loop extraction", () => {
 		const result = await accountStateService.restore(
 			[{ networkId: "net-a", senders: [sender(1), sender(2)], contracts: [] }] as never,
 			[NET],
+			LIVE_FENCE,
 			-5,
 		)
 		expect(pxe.registerSender).not.toHaveBeenCalled()

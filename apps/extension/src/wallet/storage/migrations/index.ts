@@ -5,6 +5,9 @@
  * The launch shape is version 1. Forward migrations are v2, v3, … — one file
  * each (copy `template.ts`), imported into the `migrations` array below. The
  * `version` inside each migration is the source of truth; nothing else to bump.
+ * A shipped migration's `reads`/`writes` never change: the engine resumes an
+ * interrupted journal only when its refs equal the registered footprint, so an
+ * edited footprint strands that journal in a non-retryable recovery state.
  *
  * The pure engine + its crash-safe journal live in `@nulo/wallet-core/migration`;
  * this only supplies the ordered list + the baseline. Wired at boot in

@@ -8,9 +8,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { effect, nextTick, stop } from "vue"
+import { createMemoryHistory, createRouter } from "vue-router"
 import { createAppStoreHarness } from "../../../../../tests/helpers/app-store-harness"
 import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
-import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
+import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
 const H = vi.hoisted(() => {
 	const makeEvent = () => {
@@ -94,7 +95,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: H.quotesUpdated,
 			onConnected: H.priceConnected,
-			refreshIfStale: vi.fn().mockImplementation(async () => H.quotes.current),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
+			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: H.quotes.current, pricedTokens: TEST_PRICED_TOKENS })),
 		}
 	}),
 }))
@@ -127,7 +129,7 @@ function deferred<T>() {
 const CONTRACT = "0xtokenA"
 const balanceRow = (contract = CONTRACT) => ({
 	id: 1,
-	token: { id: 1, chainId: 1, contract, name: "Token A", symbol: "TKA", decimals: 18 },
+	token: { id: 1, chainId: 1, contract, name: "Token A", symbol: "TKA", decimals: 18, hasDecimals: true },
 	account: "0xacct",
 	publicBalance: "1",
 	privateBalance: "0",
@@ -144,6 +146,7 @@ const namedRow = (id: number, symbol: string, over: Partial<{ chainId: number; c
 		name: `${symbol} Token`,
 		symbol,
 		decimals: 18,
+		hasDecimals: true,
 	},
 	publicBalance: over.publicBalance ?? "1",
 })
@@ -243,7 +246,7 @@ describe("TokensView — section refresh dot", () => {
 
 describe("TokensView — Home order and cap", () => {
 	// Test USDC is price-mapped on the testnet; with a `usd-coin` quote seeded it is the one priced row.
-	const TEST_USDC = TESTNET_TOKENS.USDC
+	const TEST_USDC = TEST_TOKENS.USDC
 	const CHAIN = CHAIN_IDS.TESTNET
 
 	beforeEach(() => {
@@ -266,13 +269,20 @@ describe("TokensView — Home order and cap", () => {
 		expect(wrapper.find('[data-testid="tokens-count"]').text()).toBe("4")
 	})
 
-	test("Home shows at most three rows and a View-all link with the overflow", async () => {
+	test("Home shows at most three rows and a View-all link to Holdings with the overflow", async () => {
 		H.getTokenBalances.mockResolvedValue([1, 2, 3, 4, 5].map((i) => namedRow(i, `T${i}`, { chainId: CHAIN })))
-		const wrapper = mount(TokensView, { shallow: true })
+		const router = createRouter({
+			history: createMemoryHistory(),
+			routes: [{ path: "/:pathMatch(.*)*", component: { template: "<div />" } }],
+		})
+		const wrapper = mount(TokensView, { shallow: true, global: { plugins: [router], stubs: { RouterLink: false } } })
 		await flushPromises()
 
 		expect(cardSymbols(wrapper)).toHaveLength(3)
-		expect(wrapper.find('[data-testid="tokens-view-all"]').exists()).toBe(true)
+		const link = wrapper.find('[data-testid="tokens-view-all"]')
+		expect(link.element.tagName).toBe("A")
+		expect(link.attributes("href")).toBe("/popup/holdings")
+		expect(link.text()).toBe("View all")
 	})
 
 	test("three or fewer tokens: every row shows and there is no View-all link", async () => {
@@ -303,6 +313,28 @@ describe("TokensView — Home order and cap", () => {
 		H.journalAdded.emit(op("late-mine", "p1"))
 		await nextTick()
 		expect(rows()).toEqual(["mine", "late-mine"])
+	})
+
+	test("with no active profile a token_import op stamped with one is hidden; it shows once that profile is active", async () => {
+		H.store.current.profile = null
+		H.getOperations.mockResolvedValue([
+			{
+				id: "mine",
+				kind: "token_import",
+				profileId: "p1",
+				accountAddress: H.store.current.account?.address,
+				terminalAt: null,
+				progress: { stage: "pending" },
+			},
+		])
+		const wrapper = mount(TokensView, { shallow: true })
+		await flushPromises()
+		const rows = () => wrapper.findAllComponents({ name: "TokenImportRow" }).map((c) => (c.props("op") as { id: string }).id)
+		expect(rows()).toEqual([])
+
+		H.store.current.profile = { id: "p1" }
+		await flushPromises()
+		expect(rows()).toEqual(["mine"])
 	})
 
 	test("a token_import op from ANOTHER network never shows, not even in a default's slot", async () => {

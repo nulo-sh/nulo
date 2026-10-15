@@ -46,7 +46,11 @@ export const uploadRequest = (zip: Uint8Array, filename: string): ApiRequest => 
 	files: { upload: { filename, bytes: zip, type: "application/zip" } },
 })
 
-export const uploadStatusRequest = (uuid: string): ApiRequest => ({ kind: "json", url: `${AMO_API}/addons/upload/${encodeURIComponent(uuid)}/`, method: "GET" })
+export const uploadStatusRequest = (uuid: string): ApiRequest => ({
+	kind: "json",
+	url: `${AMO_API}/addons/upload/${encodeURIComponent(uuid)}/`,
+	method: "GET",
+})
 
 export const versionRequest = (guid: string, uuid: string, approvalNotes: string): ApiRequest => ({
 	kind: "json",
@@ -71,7 +75,8 @@ export const OWN_ADDONS_MAX_PAGES = 10
 
 export type Verdict<T> = { ok: true; value: T } | { ok: false; reason: string }
 
-const obj = (v: unknown): Record<string, unknown> | null => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null)
+const obj = (v: unknown): Record<string, unknown> | null =>
+	typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null
 export const truncate = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
 export function interpretUploadCreate(json: unknown): Verdict<string> {
@@ -94,7 +99,12 @@ export function interpretUploadStatus(json: unknown): Verdict<UploadStatus> {
 		.map(obj)
 		.filter((m): m is Record<string, unknown> => m !== null && m.type === "error")
 		.slice(0, 10)
-		.map((m) => truncate([m.message, m.description].filter((s): s is string => typeof s === "string").join(" — ") || "error without message", 200))
+		.map((m) =>
+			truncate(
+				[m.message, m.description].filter((s): s is string => typeof s === "string").join(" — ") || "error without message",
+				200,
+			),
+		)
 	return { ok: true, value: { kind: "invalid", errors } }
 }
 
@@ -111,8 +121,10 @@ export function interpretVersion(json: unknown, manifestVersion: string): Verdic
 	if (!o) return { ok: false, reason: "version response is not an object" }
 	const id = typeof o.id === "number" || typeof o.id === "string" ? o.id : null
 	if (id === null || id === "") return { ok: false, reason: "version response carries no id" }
-	if (o.version !== manifestVersion) return { ok: false, reason: `version response is for ${JSON.stringify(o.version ?? null)}, expected ${manifestVersion}` }
-	if (o.channel !== "listed") return { ok: false, reason: `version landed on channel ${JSON.stringify(o.channel ?? null)}, expected listed` }
+	if (o.version !== manifestVersion)
+		return { ok: false, reason: `version response is for ${JSON.stringify(o.version ?? null)}, expected ${manifestVersion}` }
+	if (o.channel !== "listed")
+		return { ok: false, reason: `version landed on channel ${JSON.stringify(o.channel ?? null)}, expected listed` }
 	const file = obj(o.file)
 	const fileStatus = typeof file?.status === "string" ? file.status : "unknown"
 	return { ok: true, value: { id, version: manifestVersion, channel: "listed", fileStatus } }
@@ -125,7 +137,10 @@ export function interpretSource(json: unknown): Verdict<true> {
 	return { ok: true, value: true }
 }
 
-export type OwnAddons = { kind: "found"; status: string } | { kind: "next"; url: string; listed: number } | { kind: "absent"; listed: number }
+export type OwnAddons =
+	| { kind: "found"; status: string }
+	| { kind: "next"; url: string; listed: number }
+	| { kind: "absent"; listed: number }
 
 /** One page of the author-scoped list: our `guid`, or the `next` page to read, or the end of the list. */
 export function interpretOwnAddons(json: unknown, guid: string): Verdict<OwnAddons> {
@@ -165,16 +180,25 @@ export function derivedStoreVersion(version: string): string {
 export function checkFirefoxManifest(manifest: unknown, version: string): Verdict<FirefoxManifestFacts> {
 	const m = obj(manifest)
 	if (!m) return { ok: false, reason: "manifest.json is not an object" }
-	if (m.version_name !== version) return { ok: false, reason: `manifest version_name ${JSON.stringify(m.version_name ?? null)} is not VERSION ${version}` }
+	if (m.version_name !== version)
+		return { ok: false, reason: `manifest version_name ${JSON.stringify(m.version_name ?? null)} is not VERSION ${version}` }
 	const storeVersion = typeof m.version === "string" ? m.version : ""
-	if (!/^\d+\.\d+\.\d+\.\d+$/.test(storeVersion)) return { ok: false, reason: `manifest version ${JSON.stringify(storeVersion)} is not four integers` }
-	if (storeVersion !== derivedStoreVersion(version)) return { ok: false, reason: `manifest version ${storeVersion} is not the ${derivedStoreVersion(version)} that VERSION ${version} derives to` }
+	if (!/^\d+\.\d+\.\d+\.\d+$/.test(storeVersion))
+		return { ok: false, reason: `manifest version ${JSON.stringify(storeVersion)} is not four integers` }
+	if (storeVersion !== derivedStoreVersion(version))
+		return {
+			ok: false,
+			reason: `manifest version ${storeVersion} is not the ${derivedStoreVersion(version)} that VERSION ${version} derives to`,
+		}
 	const gecko = obj(obj(m.browser_specific_settings)?.gecko)
 	if (!gecko) return { ok: false, reason: "the zip carries no browser_specific_settings.gecko: that is not the Firefox build" }
 	if (gecko.id !== GECKO_ID) return { ok: false, reason: `gecko.id ${JSON.stringify(gecko.id ?? null)} is not ${GECKO_ID}` }
 	const required = obj(gecko.data_collection_permissions)?.required
 	if (!Array.isArray(required) || required.length !== DATA_COLLECTION.length || !DATA_COLLECTION.every((c, i) => required[i] === c)) {
-		return { ok: false, reason: `data_collection_permissions.required ${JSON.stringify(required ?? null)} is not the settled ${JSON.stringify(DATA_COLLECTION)}` }
+		return {
+			ok: false,
+			reason: `data_collection_permissions.required ${JSON.stringify(required ?? null)} is not the settled ${JSON.stringify(DATA_COLLECTION)}`,
+		}
 	}
 	return { ok: true, value: { storeVersion } }
 }
@@ -189,14 +213,22 @@ export function checkSourceArchive(entries: readonly string[], sizeBytes: number
 	if (sizeBytes >= SOURCE_MAX_BYTES) return { ok: false, reason: `source archive is ${sizeBytes} bytes, at or over AMO's 200 MB cap` }
 	const present = new Set(entries)
 	const missing = [...requiredSourcePaths(version), sourcePackageJsonPath(version)].filter((p) => !present.has(p))
-	if (missing.length) return { ok: false, reason: `source archive lacks ${missing.join(", ")} (is it git archive --prefix=nulo-${version}/ of the release?)` }
+	if (missing.length)
+		return {
+			ok: false,
+			reason: `source archive lacks ${missing.join(", ")} (is it git archive --prefix=nulo-${version}/ of the release?)`,
+		}
 	let treeVersion: unknown
 	try {
 		treeVersion = obj(JSON.parse(packageJson))?.version
 	} catch {
 		return { ok: false, reason: `${sourcePackageJsonPath(version)} in the source archive is not JSON` }
 	}
-	if (treeVersion !== version) return { ok: false, reason: `the source archive's tree is at version ${JSON.stringify(treeVersion ?? null)}, not ${version}: a reviewer's rebuild would refuse it` }
+	if (treeVersion !== version)
+		return {
+			ok: false,
+			reason: `the source archive's tree is at version ${JSON.stringify(treeVersion ?? null)}, not ${version}: a reviewer's rebuild would refuse it`,
+		}
 	return { ok: true, value: true }
 }
 

@@ -26,8 +26,18 @@ export class WrappedTask {
 		this.taskService.completeTask(this.id, result)
 	}
 
+	/** Records `error` on the task. When the task cannot take it (a profile switch cleared the
+	 *  registry, say), the thrown error carries `error` as its cause, so a caller that rethrows it
+	 *  still lets the failure that ended the work be found. */
 	public fail(error: unknown): void {
-		this.taskService.failTask(this.id, getErrorMessage(error))
+		try {
+			this.taskService.failTask(this.id, getErrorMessage(error))
+		} catch (taskError) {
+			if (taskError instanceof Error && !Object.hasOwn(taskError, "cause")) {
+				Object.defineProperty(taskError, "cause", { value: error, configurable: true, writable: true })
+			}
+			throw taskError
+		}
 	}
 
 	public cancel(): void {

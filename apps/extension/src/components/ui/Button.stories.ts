@@ -20,7 +20,7 @@ const meta: Meta<typeof Button> = {
 	argTypes: {
 		variant: {
 			control: "select",
-			options: ["primary", "primary_outline", "secondary", "ghost", "text", "cta", "cta_outline", "cta_destructive"],
+			options: ["primary", "primary_outline", "secondary", "ghost", "text", "cta", "cta_outline", "cta_destructive", "destructive"],
 		},
 		size: {
 			control: "select",
@@ -48,6 +48,7 @@ export default meta
 type Story = StoryObj<typeof Button>
 
 export const Primary: Story = { args: { variant: "primary" } }
+export const Destructive: Story = { args: { variant: "destructive" } }
 export const PrimaryOutline: Story = { args: { variant: "primary_outline" } }
 export const Secondary: Story = { args: { variant: "secondary" } }
 export const Ghost: Story = { args: { variant: "ghost" } }
@@ -84,6 +85,10 @@ export const VariantMatrix: Story = {
 				<div style="display: flex; align-items: center; gap: 12px;">
 					<code style="min-width: 160px;">primary</code>
 					<Button variant="primary">Action</Button>
+				</div>
+				<div style="display: flex; align-items: center; gap: 12px;">
+					<code style="min-width: 160px;">destructive</code>
+					<Button variant="destructive">Action</Button>
 				</div>
 				<div style="display: flex; align-items: center; gap: 12px;">
 					<code style="min-width: 160px;">primary_outline</code>

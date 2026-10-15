@@ -1,6 +1,6 @@
 import { EncryptionKey } from "@nulo/wallet-crypto"
 import { MaterialIcon } from "@nulo/design"
-import { MAX_BACKUP_FILE_BYTES } from "@/utils/full-backup-helpers"
+import { FULL_BACKUP_V2_TAG, MAX_BACKUP_FILE_BYTES, openFullBackupText } from "@/utils/full-backup-helpers"
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -8,6 +8,7 @@ import { pressOn } from "../../../../../../tests/helpers/press-key"
 import { BUFFER_BINDINGS, withBuffer } from "../../../../../../tests/helpers/shipped-buffer"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import { useAppStore } from "@/stores/app.store"
+import { usePopupStore } from "@/stores/popup.store"
 import FullExportPage from "./full.vue"
 
 /**
@@ -31,8 +32,16 @@ function deferred<T>(): Deferred<T> {
 function sliceClient() {
 	return { backup: vi.fn(async (): Promise<unknown> => []), disconnect: vi.fn() }
 }
+const exportFullBackupKeys = vi.fn<(fence: unknown, password: string) => Promise<unknown>>()
+function accountSliceClient() {
+	return {
+		...sliceClient(),
+		backupImportedKeys: vi.fn(async (): Promise<unknown> => []),
+		exportFullBackupKeys: (fence: unknown, password: string) => exportFullBackupKeys(fence, password),
+	}
+}
 let profileClient = sliceClient()
-let accountClient = { ...sliceClient(), backupImportedKeys: vi.fn(async (): Promise<unknown> => []) }
+let accountClient = accountSliceClient()
 let transactionClient = sliceClient()
 let tokenClient = sliceClient()
 let tokenBalanceClient = sliceClient()
@@ -98,14 +107,21 @@ vi.mock("@/wallet/services/config/client", () => ({
 	}),
 }))
 
-const exportBackupMaterial = vi.fn<(profileId: string, password: string) => Promise<unknown>>()
+const FENCE = { profileId: "p1", epoch: 0, session: 1, incarnation: "worker-1" }
+const captureRunFence = vi.fn(async (): Promise<unknown> => FENCE)
+const assertRunFence = vi.fn(async (_fence: unknown): Promise<void> => undefined)
+const pendingReset = vi.fn(async (): Promise<unknown> => null)
 vi.mock("@/utils/core", () => ({
 	managers: {
+		networkReset: {
+			getPendingReset: () => pendingReset(),
+			onStaleNetworkChanged: { add: vi.fn(), remove: vi.fn() },
+		},
 		profile: {
-			exportBackupMaterial: (profileId: string, password: string) => exportBackupMaterial(profileId, password),
+			captureRunFence: () => captureRunFence(),
+			assertRunFence: (fence: unknown) => assertRunFence(fence),
 			getPasskeyCredentialId: vi.fn(async () => "cred"),
 			exportPlain: vi.fn(async () => "mk"),
-			getProfileDekSealed: vi.fn(async () => "sealed"),
 		},
 	},
 }))
@@ -198,6 +214,19 @@ async function reachBackupReady(wrapper: ReturnType<typeof mountPage>) {
 	await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
 }
 
+const downloadButton = (wrapper: ReturnType<typeof mountPage>) => wrapper.get("[data-testid='download-backup-btn']")
+
+/** A password profile's file, which leaves the page only encrypted, opened as a restore opens it. */
+async function downloadAndOpen(wrapper: ReturnType<typeof mountPage>): Promise<Record<string, unknown>> {
+	await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
+	await vi.waitFor(() => expect(downloadButton(wrapper).attributes("disabled")).toBeUndefined(), { timeout: 10_000 })
+	await downloadButton(wrapper).trigger("click")
+	await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
+	const { data, filename } = downloadFile.mock.calls[0][0]
+	expect(filename).toMatch(/^NuloEncryptedBackup_/)
+	return JSON.parse(await openFullBackupText(data, "pw")) as Record<string, unknown>
+}
+
 /** Holds encryption at its first await: `EncryptionKey.getPasshash` never settles. */
 function holdEncryption() {
 	return vi.spyOn(EncryptionKey, "getPasshash").mockReturnValue(new Promise<never>(() => {}) as never)
@@ -208,12 +237,12 @@ afterEach(() => {
 	for (const w of wrappers.splice(0)) if (!w.vm.$.isUnmounted) w.unmount()
 })
 
-const material = { masterKey: "mk", entropy: "ent", importedKeysDek: "dek" }
+const material = { masterKey: "mk", entropy: "ent", importedKeysKey: "transfer-key", importedKeyRows: [], accounts: [], dekReplaced: false }
 
 beforeEach(() => {
 	vi.clearAllMocks()
 	profileClient = sliceClient()
-	accountClient = { ...sliceClient(), backupImportedKeys: vi.fn(async (): Promise<unknown> => []) }
+	accountClient = accountSliceClient()
 	transactionClient = sliceClient()
 	tokenClient = sliceClient()
 	tokenBalanceClient = sliceClient()
@@ -221,28 +250,30 @@ beforeEach(() => {
 	authRegistryClient = sliceClient()
 	contactClient = sliceClient()
 	configClient = sliceClient()
-	exportBackupMaterial.mockReset()
-	exportBackupMaterial.mockResolvedValue(material)
+	exportFullBackupKeys.mockReset()
+	exportFullBackupKeys.mockResolvedValue(material)
+	captureRunFence.mockResolvedValue(FENCE)
+	assertRunFence.mockResolvedValue(undefined)
 })
 
 describe("export/full.vue — re-entry latch", () => {
 	it("Create Backup unrenders as it starts, so the KDF window runs one export end to end", async () => {
 		const kdf = deferred<typeof material>()
-		exportBackupMaterial.mockReturnValue(kdf.promise)
+		exportFullBackupKeys.mockReturnValue(kdf.promise)
 		const wrapper = mountPage()
 		await reachUnlockAndSubmit(wrapper)
 
 		// The status flipped synchronously, so the CTA is gone before the KDF settles.
 		expect(wrapper.find("[data-testid='unlock-submit-btn']").exists()).toBe(false)
 		await flushPromises()
-		expect(exportBackupMaterial).toHaveBeenCalledTimes(1)
+		expect(exportFullBackupKeys).toHaveBeenCalledTimes(1)
 
 		kdf.resolve(material)
 		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
 		// Single execution end to end: every slice source ran exactly once.
 		expect(profileClient.backup).toHaveBeenCalledTimes(1)
 		expect(configClient.backup).toHaveBeenCalledTimes(1)
-		expect(accountClient.backupImportedKeys).toHaveBeenCalledTimes(1)
+		expect(captureRunFence).toHaveBeenCalledTimes(1)
 	})
 
 	it("two clicks on Protect in one tick start one encryption", async () => {
@@ -268,28 +299,7 @@ describe("export/full.vue — Enter does what the focused control says", () => {
 		pressOn(wrapper.get("[data-testid='subpage-back']").element as HTMLElement, "Enter")
 		await flushPromises()
 		expect(router.push).toHaveBeenCalledWith("/popup/settings/security/export")
-		expect(exportBackupMaterial).not.toHaveBeenCalled()
-	})
-
-	it("at the backup-ready stage, Enter on Download Backup downloads and does not encrypt", async () => {
-		const wrapper = mountPage()
-		await reachBackupReady(wrapper)
-		const passhash = holdEncryption()
-		pressOn(wrapper.get("[data-testid='download-backup-btn']").element as HTMLElement, "Enter")
-		await flushPromises()
-		expect(downloadFile).toHaveBeenCalledTimes(1)
-		expect(downloadFile.mock.calls[0][0].filename).toMatch(/^NuloBackup_/)
-		expect(passhash).not.toHaveBeenCalled()
-	})
-
-	it("at the backup-ready stage, a repeat Enter on Download Backup downloads and encrypts nothing", async () => {
-		const wrapper = mountPage()
-		await reachBackupReady(wrapper)
-		const passhash = holdEncryption()
-		pressOn(wrapper.get("[data-testid='download-backup-btn']").element as HTMLElement, "Enter", { repeat: true })
-		await flushPromises()
-		expect(downloadFile).not.toHaveBeenCalled()
-		expect(passhash).not.toHaveBeenCalled()
+		expect(exportFullBackupKeys).not.toHaveBeenCalled()
 	})
 
 	it("at the backup-ready stage, an Enter with nothing focused starts nothing", async () => {
@@ -301,6 +311,65 @@ describe("export/full.vue — Enter does what the focused control says", () => {
 		await flushPromises()
 		expect(passhash).not.toHaveBeenCalled()
 		expect(downloadFile).not.toHaveBeenCalled()
+	})
+})
+
+describe("export/full.vue — a password profile's file leaves only encrypted", () => {
+	it("Download stays disabled at the backup-ready stage, under the banner that says why, and saves the encrypted file once there is one", async () => {
+		const encrypt = vi.fn(async () => new Uint8Array(29))
+		vi.spyOn(EncryptionKey, "getPasshash").mockResolvedValue(new Uint8Array(32) as never)
+		vi.spyOn(EncryptionKey, "fromPasshash").mockResolvedValue({ encrypt } as never)
+		const wrapper = mountPage()
+		await reachBackupReady(wrapper)
+		expect(downloadButton(wrapper).attributes("disabled")).toBeDefined()
+		expect(wrapper.text()).toContain("Protect your backup")
+		expect(wrapper.text()).toContain("anyone who opens the file controls this profile")
+
+		await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
+		await vi.waitFor(() => expect(downloadButton(wrapper).attributes("disabled")).toBeUndefined())
+		await downloadButton(wrapper).trigger("click")
+		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
+		expect(downloadFile.mock.calls[0][0].filename).toMatch(/^NuloEncryptedBackup_/)
+		expect(usePopupStore().isOpened("confirm")).toBe(false)
+	})
+
+	it("a download that fails is logged under a named key", async () => {
+		const encrypt = vi.fn(async () => new Uint8Array(29))
+		vi.spyOn(EncryptionKey, "getPasshash").mockResolvedValue(new Uint8Array(32) as never)
+		vi.spyOn(EncryptionKey, "fromPasshash").mockResolvedValue({ encrypt } as never)
+		const refusal = new Error("Download canceled by the user")
+		downloadFile.mockRejectedValueOnce(refusal)
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		const wrapper = mountPage()
+		await reachBackupReady(wrapper)
+		await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
+		await vi.waitFor(() => expect(downloadButton(wrapper).attributes("disabled")).toBeUndefined())
+		await downloadButton(wrapper).trigger("click")
+		await vi.waitFor(() =>
+			expect(logged.mock.calls.filter(([m]) => m === "Download failed:")).toEqual([["Download failed:", { error: refusal }]]),
+		)
+	})
+
+	it("a switch to a passkey profile made elsewhere starts the page over instead of offering the password backup", async () => {
+		const wrapper = mountPage()
+		await reachBackupReady(wrapper)
+		useAppStore().profile = { id: "p2", type: "passkey", name: "Other" } as never
+		await flushPromises()
+		expect(wrapper.find("[data-testid='agree-continue-btn']").exists()).toBe(true)
+		expect(wrapper.find("[data-testid='download-backup-btn']").exists()).toBe(false)
+		expect(downloadFile).not.toHaveBeenCalled()
+		expect(usePopupStore().isOpened("confirm")).toBe(false)
+	})
+
+	it("a Download press that reaches the page before encryption writes nothing and asks nothing", async () => {
+		const wrapper = mountPage()
+		await reachBackupReady(wrapper)
+		const button = downloadButton(wrapper).element as HTMLButtonElement
+		button.disabled = false
+		button.click()
+		await flushPromises()
+		expect(downloadFile).not.toHaveBeenCalled()
+		expect(usePopupStore().isOpened("confirm")).toBe(false)
 	})
 })
 
@@ -358,19 +427,13 @@ describe("export/full.vue — error boundary", () => {
 })
 
 describe("export/full.vue — sealed artifact", () => {
-	it("the downloaded pretty file verifies against the import-side recompute", async () => {
+	it("the downloaded file verifies against the import-side recompute", async () => {
 		profileClient.backup.mockResolvedValue([{ id: "p1", type: "password" }])
 		const wrapper = mountPage()
-		await reachUnlockAndSubmit(wrapper)
-		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
+		await reachBackupReady(wrapper)
 
-		await wrapper.find("[data-testid='download-backup-btn']").trigger("click")
-		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
-		const { data, filename } = downloadFile.mock.calls[0][0]
-		expect(filename).toMatch(/^NuloBackup_/)
-
-		// Exactly what the importer does with the downloaded file.
-		const parsed = JSON.parse(data) as Record<string, unknown>
+		// Exactly what the importer does with the opened file.
+		const parsed = await downloadAndOpen(wrapper)
 		const { checksum, ...body } = parsed
 		expect(await EncryptionKey.getHashHex(JSON.stringify(body))).toBe(checksum)
 		expect(parsed["master-key"]).toBe("mk")
@@ -390,23 +453,64 @@ describe("export/full.vue — sealed artifact", () => {
 		profileClient.backup.mockResolvedValue([{ id: "p1", type: "password" }])
 		const wrapper = mountPage()
 		useAppStore().network = { id: "local", chainId: 0 } as never
-		await reachUnlockAndSubmit(wrapper)
-		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
-		await wrapper.find("[data-testid='download-backup-btn']").trigger("click")
-		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
-		const parsed = JSON.parse(downloadFile.mock.calls[0][0].data) as Record<string, unknown>
+		await reachBackupReady(wrapper)
+		const parsed = await downloadAndOpen(wrapper)
 		expect(parsed["active-chain-id"]).toBe(0)
+	})
+})
+
+describe("export/full.vue — the password backup's keys and run fence", () => {
+	const KEY_ROW = { profileId: "p1", chainId: 7, address: "0xabc", encryptedSigningKey: "sealed-under-transfer-key" }
+	const ACCOUNT = { profileId: "p1", chainId: 7, address: "0xabc", index: 0, type: 1, l1ChainId: 1, name: "Imp", visible: true }
+
+	it("the file carries the key export's transfer key, accounts and rows, read once under the run's fence", async () => {
+		exportFullBackupKeys.mockResolvedValue({ ...material, importedKeyRows: [KEY_ROW], accounts: [ACCOUNT] })
+		const wrapper = mountPage()
+		await reachBackupReady(wrapper)
+		const parsed = await downloadAndOpen(wrapper)
+		const data = parsed.data as Record<string, unknown>
+		expect(exportFullBackupKeys).toHaveBeenCalledWith(FENCE, "pw")
+		expect(parsed["imported-keys-dek"]).toBe("transfer-key")
+		expect(data["imported-account-keys"]).toEqual([KEY_ROW])
+		expect(data.account).toEqual([ACCOUNT])
+		expect(accountClient.backup).not.toHaveBeenCalled()
+		expect(accountClient.backupImportedKeys).not.toHaveBeenCalled()
+		expect(assertRunFence).toHaveBeenCalledWith(FENCE)
+	})
+
+	it("a fence that breaks while the slices are read fails the run after the last slice, and publishes nothing", async () => {
+		const slice = deferred<unknown>()
+		tokenClient.backup.mockReturnValue(slice.promise)
+		assertRunFence.mockRejectedValue(new Error("Session ended"))
+		const wrapper = mountPage()
+		await reachUnlockAndSubmit(wrapper)
+		await vi.waitFor(() => expect(tokenClient.backup).toHaveBeenCalledTimes(1))
+		expect(assertRunFence).not.toHaveBeenCalled()
+
+		slice.resolve([])
+		await vi.waitFor(() => expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Failed to create the backup" }))
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='unlock-submit-btn']").exists()).toBe(true))
+		expect(wrapper.find("[data-testid='download-backup-btn']").exists()).toBe(false)
+	})
+
+	it("a run whose active profile is not the page's exports nothing", async () => {
+		captureRunFence.mockResolvedValue({ ...FENCE, profileId: "p2" })
+		const wrapper = mountPage()
+		await reachUnlockAndSubmit(wrapper)
+		await vi.waitFor(() => expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Failed to create the backup" }))
+		expect(exportFullBackupKeys).not.toHaveBeenCalled()
 	})
 })
 
 describe.each(BUFFER_BINDINGS)("export/full.vue — encrypted file encoding (%s Buffer)", (_name, binding) => {
 	afterEach(() => vi.unstubAllGlobals())
 
-	it("downloads the sealed bytes as standard padded base64", async () => {
+	it("downloads the tagged, AAD-bound sealed bytes as standard padded base64", async () => {
 		// 61 bytes of 0xfb: the encoding uses `+`, `/` and `==`.
 		const sealed = new Uint8Array(61).fill(0xfb)
-		vi.spyOn(EncryptionKey, "getPasshash").mockResolvedValue("hash" as never)
-		vi.spyOn(EncryptionKey, "fromPasshash").mockResolvedValue({ encrypt: async () => sealed } as never)
+		const encrypt = vi.fn(async (_payload: Uint8Array, _aad?: Uint8Array) => sealed)
+		vi.spyOn(EncryptionKey, "getPasshash").mockResolvedValue(new Uint8Array(32) as never)
+		vi.spyOn(EncryptionKey, "fromPasshash").mockResolvedValue({ encrypt } as never)
 		const wrapper = mountPage()
 		await reachBackupReady(wrapper)
 		withBuffer(binding)
@@ -416,6 +520,51 @@ describe.each(BUFFER_BINDINGS)("export/full.vue — encrypted file encoding (%s 
 		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
 		const { data, filename } = downloadFile.mock.calls[0][0]
 		expect(filename).toMatch(/^NuloEncryptedBackup_/)
-		expect(data).toBe(`${"+/v7".repeat(20)}+w==`)
+		expect(data).toBe(`${FULL_BACKUP_V2_TAG}:${"+/v7".repeat(20)}+w==`)
+		expect(new TextDecoder().decode(encrypt.mock.calls[0][1])).toBe(FULL_BACKUP_V2_TAG)
+	})
+})
+
+describe("export/full.vue — a reset in progress", () => {
+	it("names the reset above the agreement and keeps Continue disabled until the journal is gone", async () => {
+		const { managers } = await import("@/utils/core")
+		pendingReset.mockResolvedValueOnce({ networkId: "net1", running: false })
+		const wrapper = mountPage()
+		useAppStore().networks = [{ id: "net1", name: "Testnet", chainId: 7 }] as never
+		await flushPromises()
+		const notice = wrapper.get("[data-testid='full-backup-reset-notice']")
+		expect(notice.findAll("span").map((s) => s.text())).toEqual([
+			"FINISH THE TESTNET RESET FIRST",
+			"A backup made now would miss the accounts the reset is moving. Open Testnet to finish the reset, then come back.",
+		])
+		expect(wrapper.get("[data-testid='full-backup-agreement']").attributes("data-blocked")).toBe("true")
+		const agree = wrapper.get("[data-testid='agree-continue-btn']")
+		expect(agree.attributes("disabled")).toBeDefined()
+		;(agree.element as HTMLButtonElement).disabled = false
+		await agree.trigger("click")
+		expect(wrapper.find("[data-testid='unlock-password-input']").exists()).toBe(false)
+
+		const onChanged = vi.mocked(managers.networkReset.onStaleNetworkChanged.add).mock.calls.at(-1)?.[0] as () => Promise<void>
+		await onChanged()
+		await flushPromises()
+		expect(wrapper.find("[data-testid='full-backup-reset-notice']").exists()).toBe(false)
+		expect(wrapper.get("[data-testid='full-backup-agreement']").attributes("data-blocked")).toBe("false")
+		expect(wrapper.get("[data-testid='agree-continue-btn']").attributes("disabled")).toBeUndefined()
+		wrapper.unmount()
+		expect(managers.networkReset.onStaleNetworkChanged.remove).toHaveBeenCalledWith(onChanged)
+	})
+
+	it("a profile switch made elsewhere re-reads the notice, and the previous profile's late answer lands nowhere", async () => {
+		let answerFirst!: (v: unknown) => void
+		pendingReset.mockImplementationOnce(() => new Promise((r) => (answerFirst = r)))
+		const wrapper = mountPage()
+		useAppStore().networks = [{ id: "net1", name: "Testnet", chainId: 7 }] as never
+		useAppStore().profile = { id: "p2", type: "password", name: "Other" } as never
+		await flushPromises()
+		answerFirst({ networkId: "net1", running: false })
+		await flushPromises()
+		expect(wrapper.find("[data-testid='full-backup-reset-notice']").exists()).toBe(false)
+		expect(wrapper.get("[data-testid='agree-continue-btn']").attributes("disabled")).toBeUndefined()
+		wrapper.unmount()
 	})
 })

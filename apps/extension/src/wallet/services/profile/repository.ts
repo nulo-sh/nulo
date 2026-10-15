@@ -29,6 +29,13 @@ export const PROFILE_STORAGE_ROOT = "nulo:core:profiles"
  *  `generateUniqueId` JSDoc for the full contract). */
 const PROFILE_ID_HEX_LENGTH = 8
 
+const GENERATED_PROFILE_ID = new RegExp(`^[0-9a-f]{${PROFILE_ID_HEX_LENGTH}}$`)
+
+/** `true` iff `id` has the exact shape `generateUniqueId` makes. */
+export function isGeneratedProfileId(id: unknown): id is string {
+	return typeof id === "string" && GENERATED_PROFILE_ID.test(id)
+}
+
 export class ProfileRepository {
 	private readonly storage: EntityStorage<Profile>
 

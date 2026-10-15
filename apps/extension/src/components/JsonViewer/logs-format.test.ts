@@ -1,6 +1,17 @@
+import { EditorState } from "@codemirror/state"
 import { describe, expect, test } from "vitest"
 import { LogLevel } from "@/wallet/logger"
-import { formatArg, formatLogData, formatLogs, formatSingleLog, getDisplayName, getLogLevelName } from "./logs-format"
+import {
+	droppedPrefixLength,
+	formatArg,
+	formatLogData,
+	formatLogs,
+	formatSingleLog,
+	getDisplayName,
+	getLogLevelName,
+	type LogEntry,
+	logsDocument,
+} from "./logs-format"
 
 describe("JsonViewer/logs-format", () => {
 	test("getLogLevelName maps LogLevel enum to UPPERCASE strings", () => {
@@ -95,6 +106,20 @@ describe("JsonViewer/logs-format", () => {
 		expect(out).toContain("[b] WARN: y")
 	})
 
+	test("logsDocument ends every line, so a live line appended at its end gets a line of its own", () => {
+		const t = Date.now()
+		const loaded = [
+			{ timestamp: t, source: "a", level: LogLevel.Info, data: ["x"] },
+			{ timestamp: t, source: "b", level: LogLevel.Warn, data: ["y"] },
+		]
+		const live = { timestamp: t, source: "c", level: LogLevel.Error, data: ["z"] }
+		const appendLive = (doc: string) => `${doc}${formatSingleLog(live)}\n`
+
+		expect(appendLive(logsDocument(loaded)).split("\n")).toEqual([...loaded, live].map(formatSingleLog).concat(""))
+		expect(logsDocument([])).toBe("")
+		expect(appendLive(logsDocument([]))).toBe(`${formatSingleLog(live)}\n`)
+	})
+
 	test("getDisplayName('source', value) hyphen-splits and Capitalizes each segment", () => {
 		expect(getDisplayName("source", "wallet-sdk")).toBe("Wallet Sdk")
 		expect(getDisplayName("source", "account-state")).toBe("Account State")
@@ -113,5 +138,38 @@ describe("JsonViewer/logs-format", () => {
 	test("getDisplayName for level lower-cases then capitalizes", () => {
 		expect(getDisplayName("level", "DEBUG")).toBe("Debug")
 		expect(getDisplayName("level", "INFO")).toBe("Info")
+	})
+})
+
+describe("droppedPrefixLength", () => {
+	const t = Date.now()
+	const entry = (data: string): LogEntry => ({ timestamp: t, source: "ui", level: LogLevel.Info, data: [data] })
+	const editorOf = (logs: LogEntry[]) => EditorState.create({ doc: logsDocument(logs) })
+	const lengthOf = (logs: LogEntry[]) => editorOf(logs).doc.length
+
+	test("measures entries as the editor holds their line breaks", () => {
+		const crlf = entry("first\r\nsecond")
+		const lf = entry("third\nfourth")
+		const kept = entry("kept")
+		expect(droppedPrefixLength(editorOf([crlf, lf, kept]), [crlf, lf])).toBe(lengthOf([crlf, lf]))
+	})
+
+	test("skips a dropped entry the document does not hold", () => {
+		const [a, filteredOut, b, kept] = [entry("a"), entry("filtered out"), entry("b"), entry("kept")]
+		expect(droppedPrefixLength(editorOf([a, b, kept]), [a, filteredOut, b])).toBe(lengthOf([a, b]))
+	})
+
+	test("deletes two dropped entries with identical text", () => {
+		const [twin, kept] = [entry("same"), entry("kept")]
+		expect(droppedPrefixLength(editorOf([twin, twin, kept]), [twin, twin])).toBe(lengthOf([twin, twin]))
+	})
+
+	test("keeps a retained entry whose text equals a dropped one", () => {
+		const twin = entry("same")
+		expect(droppedPrefixLength(editorOf([twin, twin]), [twin])).toBe(lengthOf([twin]))
+	})
+
+	test("is zero with nothing dropped", () => {
+		expect(droppedPrefixLength(editorOf([entry("kept")]), [])).toBe(0)
 	})
 })

@@ -11,12 +11,9 @@ import TransactionCardLayout from "./TransactionCardLayout.vue"
 
 const props = defineProps({
 	title: { type: String, default: "Creating transaction" },
-	/** Default kept terse on purpose. The orphan-fallback render paths in
-	 *  `RecentActivityView.vue` mount this card without an explicit subtitle,
-	 *  so the default surfaces to real users. A longer default ("Estimating
-	 *  fees, generating proofs...") overflows the 150px secondary-row text
-	 *  column even before the transfer-direction chip lands next to it. */
-	subtitle: { type: String, default: "Preparing..." },
+	/** The stage line. Null while the card's stage is unknown: the loading skeleton draws in its place,
+	 *  never a guessed stage. */
+	subtitle: { type: String, default: null },
 	/** Origin chip — for dApp-initiated txs, this is the dApp hostname. UI-initiated
 	 *  transfers leave this null and the chip is suppressed. */
 	originLabel: { type: String, default: null },
@@ -46,9 +43,12 @@ const props = defineProps({
 	backend: { type: String as PropType<ProveBackend | null>, default: null },
 	/** A dApp send's queued record has an approval window to show; a queued popup send has none. */
 	hasApprovalWindow: { type: Boolean, default: true },
+	/** A queued send whose fee came out above its cap: this line replaces the stage line, and the row
+	 *  opens its review. */
+	reaskLine: { type: String, default: null },
 })
 
-const emit = defineEmits(["cancel", "focus"])
+const emit = defineEmits(["cancel", "focus", "review"])
 
 /** `queued` is the only stage at which an approval popup can exist. */
 const focusable = computed(() => props.hasApprovalWindow && Boolean(props.jobId) && props.stage === "queued")
@@ -65,10 +65,10 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 			:amountSymbol="amountSymbol"
 			:stage="stage"
 			:backend="backend"
-			:opens="focusable"
+			:opens="focusable || Boolean(reaskLine && jobId)"
 			:actionCount="(focusable ? 1 : 0) + (showCancel ? 1 : 0)"
 			testId="tx-awaiting-card"
-			@activate="emit('focus', jobId)"
+			@activate="reaskLine ? emit('review', jobId) : emit('focus', jobId)"
 		>
 			<template #badge>
 				<Spinner size="10" color="--nulo-accent" />
@@ -80,7 +80,7 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 			</template>
 
 			<template #secondary>
-				<span :class="$style.subtitle" role="status" aria-live="polite" aria-atomic="true" data-testid="tx-awaiting-subtitle">{{ subtitle }}</span>
+				<span :class="$style.subtitle" role="status" aria-live="polite" aria-atomic="true" data-testid="tx-awaiting-subtitle"><template v-if="reaskLine">{{ reaskLine }}</template><template v-else-if="subtitle">{{ subtitle }}</template><Skeleton v-else :width="92" :height="9" /></span>
 			</template>
 
 			<template v-if="focusable || showCancel" #actions>
@@ -118,14 +118,13 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
  * with ellipsis when the chip pushes back. min-width: 0 + flex: 0 1 auto
  * let it shrink below its intrinsic width inside the Flex parent. */
 .subtitle {
+	composes: type--caption from global;
 	flex: 0 1 auto;
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 
-	font-family: var(--font-mono);
-	font-size: 10px;
 	color: var(--nulo-secondary);
 }
 

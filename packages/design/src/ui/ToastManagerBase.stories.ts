@@ -20,6 +20,13 @@ const meta: Meta<typeof ToastManagerBase> = {
 						sub: "250 USDC to 0x8c02…41fa",
 						action: { label: "View", onSelect: () => {} },
 					}),
+				info: () =>
+					openToast({
+						kind: "info",
+						label: "Send not confirmed",
+						sub: "Checking whether it reached the network. Don't send it again yet.",
+						action: { label: "Details", onSelect: () => {} },
+					}),
 				error: () => openToast({ kind: "error", label: "Send failed", sub: "Not enough Fee Juice for the fee" }),
 				long: () =>
 					openToast({
@@ -34,6 +41,7 @@ const meta: Meta<typeof ToastManagerBase> = {
 			<div style="position: relative; min-height: 220px; padding: 24px;">
 				<div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start;">
 					<button @click="success()">Success with View (6 s, held while hovered or focused)</button>
+					<button @click="info()">Info with × (stays until closed)</button>
 					<button @click="error()">Error with × (stays until closed)</button>
 					<button @click="long()">Long wrapped message</button>
 				</div>

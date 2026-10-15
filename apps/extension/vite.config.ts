@@ -109,6 +109,8 @@ export default defineConfig({
 				},
 			],
 			dts: "src/types/auto-imports.d.ts",
+			// The default "append" keeps a removed export's global, so CI's freshness diff never sees it.
+			dtsMode: "overwrite",
 			dirs: ["src/composables/", "src/stores/", "src/utils/", "src/onboarding/composables/"],
 			// Rewrites compiled _ctx.<name> template references to resolve against the
 			// auto-import registry so {{ trimAddress(...) }} works without explicit
@@ -262,7 +264,10 @@ export default defineConfig({
 		// `process.env`. The two would diverge silently. The current
 		// three-layer split is what produces a working browser bundle.
 		nodePolyfills({
-			include: ["buffer", /*"crypto",*/ "net", "path", "stream", "tty", "vm", "util"],
+			// Every builtin the bundle needs at run time (`assert` is @aztec-labs/stdlib's): one
+			// left out silently binds whatever npm package of that name Bun's store fallback
+			// holds, or becomes an empty stub.
+			include: ["assert", "buffer", /*"crypto",*/ "net", "path", "stream", "tty", "vm", "util"],
 			// Make a naked `Buffer` identifier auto-import the polyfill at
 			// build time. Required because wallet-core's serialization.ts
 			// uses naked `Buffer` (no import) — see its docstring for why.

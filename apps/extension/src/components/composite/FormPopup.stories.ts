@@ -27,7 +27,8 @@ const meta: Meta<typeof FormPopup> = {
 	},
 	args: {
 		show: true,
-		displaceIdx: 1,
+		displaceIdx: 0,
+		depth: 1,
 		title: "Add endpoint",
 		submitLabel: "Add endpoint",
 	},

@@ -10,6 +10,7 @@ import packageJson from "./package.json"
  * aliases). Single-owning them here is the fix.
  */
 import RetryErrorReporter from "./tests/e2e/retry-error-reporter"
+import StallWatchdog, { type StallWatchdogOptions } from "./tests/e2e/stall-watchdog"
 
 /**
  * Resolve a file inside an npm package, bypassing its `exports` field.
@@ -24,11 +25,20 @@ export function resolvePackageFile(pkg: string, file: string): string {
 /** Absolute path to `apps/extension/src`. */
 export const srcDir = fileURLToPath(new URL("./src", import.meta.url))
 
-/** The Aztec line the wallet is built against. Presto compares it by exact string equality, so a
- *  missing pin fails the build instead of shipping a version that silently disables native proving. */
+/** The Aztec line the wallet is built against, as About and full backups name it. */
 function aztecVersion(): string {
 	const version: string | undefined = (packageJson.dependencies as Record<string, string | undefined>)["@aztec-labs/pxe"]
 	if (!version) throw new Error('apps/extension/package.json declares no "@aztec-labs/pxe", so __AZTEC_VERSION__ has no value')
+	return version
+}
+
+/** The barretenberg release the Presto SDK proves with, sent as `x-aztec-version`: the exact
+ *  `@aztec-foundation/bb.js` pin, numbered apart from the labs line since 6.0.0-rc.3. Presto compares
+ *  it by exact string equality, so a missing pin fails the build instead of a status that never
+ *  matches. */
+function bbVersion(): string {
+	const version: string | undefined = (packageJson.dependencies as Record<string, string | undefined>)["@aztec-foundation/bb.js"]
+	if (!version) throw new Error('apps/extension/package.json declares no "@aztec-foundation/bb.js", so __BB_VERSION__ has no value')
 	return version
 }
 
@@ -36,6 +46,7 @@ function aztecVersion(): string {
 export const sharedDefine: Record<string, string> = {
 	__VERSION__: JSON.stringify(packageJson.version),
 	__AZTEC_VERSION__: JSON.stringify(aztecVersion()),
+	__BB_VERSION__: JSON.stringify(bbVersion()),
 	__NAME__: JSON.stringify(packageJson.name),
 	__DISPLAY_NAME__: JSON.stringify(packageJson.displayName),
 }
@@ -76,14 +87,17 @@ export const noirAliases: Record<string, string> = {
  * resolved list is empty), so it must be re-added by hand on CI or PR
  * annotations silently disappear. RetryErrorReporter surfaces the retained
  * first-attempt errors of retried passes. `NULO_E2E_RESULTS_FILE` adds the `json`
- * report a canary lane is asserted on (`scripts/ci-cd/assert-canary-results.ts`).
+ * report a canary or chaos lane is asserted on (`scripts/ci-cd/assert-canary-results.ts`).
  */
-export function e2eReporters(): ("default" | "github-actions" | ["json", { outputFile: string }] | RetryErrorReporter)[] {
+export function e2eReporters(
+	options: { stall?: StallWatchdogOptions } = {},
+): ("default" | "github-actions" | ["json", { outputFile: string }] | RetryErrorReporter | StallWatchdog)[] {
 	const resultsFile = process.env.NULO_E2E_RESULTS_FILE
 	return [
 		"default",
 		...(process.env.GITHUB_ACTIONS ? (["github-actions"] as const) : []),
 		...(resultsFile ? [["json", { outputFile: resultsFile }] as ["json", { outputFile: string }]] : []),
 		new RetryErrorReporter(),
+		...(options.stall ? [new StallWatchdog(options.stall)] : []),
 	]
 }

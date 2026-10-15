@@ -17,6 +17,7 @@ import {
 	indexStructureFindings,
 	localPathFindings,
 	nestedIgnoreFindings,
+	retiredFileFindings,
 	trackedArtifactFindings,
 } from "./structure"
 
@@ -37,6 +38,7 @@ export function checkTree(opts: { cwd?: string; env?: Env } = {}): Finding[] {
 		...indexStructureFindings(ctx, docs),
 		...archiveStructureFindings(ctx, docs),
 		...curatedBudgetFindings(ctx, docs, bases),
+		...retiredFileFindings(ctx),
 		...localPathFindings(ctx),
 	]
 	return findings.sort((a, b) => a.rule.localeCompare(b.rule) || a.file.localeCompare(b.file) || a.line - b.line)

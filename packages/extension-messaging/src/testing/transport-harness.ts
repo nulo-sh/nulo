@@ -45,6 +45,9 @@ export const emitPortDisconnect = (service: string) => ports.closeAll(service)
  *  client just sent. Throws if no client has connected yet. */
 export const capturePortMessage = (service: string) => ports.sendMock(service)
 
+/** The registry behind this file's `chrome.runtime.connect`, for tests that hold or count Ready. */
+export const portRegistry = () => ports
+
 // ── Background SERVICE side (chrome.runtime.onConnect) ──────────────────
 const connectListeners = createListenerBag<(port: unknown) => void>()
 
@@ -63,16 +66,17 @@ export interface ServiceClientHandle {
 /**
  * Simulate a client connecting to a Port `Service`: builds a fake client port
  * named `service`, fires every registered `onConnect` listener with it, and
- * returns handles to drive the service and read its responses.
+ * returns handles to drive the service and read its responses. `sender` defaults
+ * to this extension's background context.
  */
-export const connectServiceClient = (service: string): ServiceClientHandle => {
+export const connectServiceClient = (service: string, sender?: chrome.runtime.MessageSender): ServiceClientHandle => {
 	const inbound = createListenerBag<Fn>()
 	const disconnectListeners = createListenerBag<Fn>()
 	const postMessageMock = vi.fn()
 	const port = {
 		name: service,
 		// The service's onConnect authenticates the Port's sender.
-		sender: { id: chrome.runtime.id } as chrome.runtime.MessageSender,
+		sender: sender ?? ({ id: chrome.runtime.id } as chrome.runtime.MessageSender),
 		postMessage: postMessageMock,
 		disconnect: vi.fn(),
 		onMessage: { addListener: inbound.add, removeListener: inbound.removeAll },

@@ -52,12 +52,23 @@ const Sheet = defineComponent({
 			withDirectives(h("div", { "data-testid": "sheet" }, slots.default?.()), [[vSnackSheet, props.order]]),
 })
 
+/** A list's row, read as `Footer` reads its box. */
+const ListedRow = defineComponent({
+	props: { top: { type: Number, required: true }, height: { type: Number, default: 28 } },
+	setup: (props) => () =>
+		withDirectives(h("div", { "data-top": props.top, "data-height": props.height }), [[vSnackFooter, undefined, "", { listed: true }]]),
+})
+
 const base = ref(NAV_BASE)
+const snackHeight = ref(0)
 let inset: { value: number } = { value: -1 }
 
 const Host = defineComponent({
 	setup() {
-		inset = useSnackInset(() => base.value)
+		inset = useSnackInset(
+			() => base.value,
+			() => snackHeight.value,
+		)
 		return () => h("div")
 	},
 })
@@ -69,6 +80,7 @@ let pageLeft = 0
 
 beforeEach(() => {
 	base.value = NAV_BASE
+	snackHeight.value = 0
 	observed = []
 	pageLeft = 0
 	vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(VIEWPORT)
@@ -151,7 +163,44 @@ describe("snackInset", () => {
 	})
 })
 
+describe("snackInset: a listed row", () => {
+	// Home with the nav: a 72px snack rests at 452-524.
+	const SNACK = 72
+	const row = (top: number) => ({ top, bottom: top + 28, listed: true })
+
+	test("moves the snack only while the snack would cover it where it is", () => {
+		expect(snackInset(NAV_BASE, VIEWPORT, [row(433)], SNACK)).toBe(VIEWPORT - 433 + SNACK_GAP)
+		expect(snackInset(NAV_BASE, VIEWPORT, [row(300)], SNACK)).toBe(NAV_BASE)
+		expect(snackInset(NAV_BASE, VIEWPORT, [row(540)], SNACK), "behind the nav").toBe(NAV_BASE)
+		expect(snackInset(NAV_BASE, VIEWPORT, [{ ...row(620), riseToEnd: 400 }], SNACK), "below the fold").toBe(NAV_BASE)
+	})
+
+	test("climbs past a row it would cover once raised", () => {
+		expect(snackInset(NAV_BASE, VIEWPORT, [row(433), row(353)], SNACK)).toBe(VIEWPORT - 353 + SNACK_GAP)
+	})
+
+	test("stays where the footers put it when clearing every row would lift it off the screen", () => {
+		const stacked = [433, 353, 273, 193, 113, 33].map(row)
+		expect(snackInset(NAV_BASE, VIEWPORT, stacked, SNACK)).toBe(NAV_BASE)
+		expect(snackInset(NAV_BASE, VIEWPORT, [...stacked, { top: 500, bottom: 536 }], SNACK)).toBe(VIEWPORT - 500 + SNACK_GAP)
+	})
+})
+
 describe("useSnackInset", () => {
+	test("a listed row is placed with the open snack's height, where it is and not where the page's end takes it", async () => {
+		pageLeft = 400
+		snackHeight.value = 72
+		mount(Host)
+		const wrapper = mount(ListedRow, { props: { top: 433 }, attachTo: document.body })
+		await frame()
+		expect(inset.value).toBe(VIEWPORT - 433 + SNACK_GAP)
+
+		;(wrapper.element as HTMLElement).dataset.top = "700"
+		document.dispatchEvent(new Event("scroll"))
+		await frame()
+		expect(inset.value).toBe(NAV_BASE)
+	})
+
 	test("a page footer raises the snack after the next frame and its removal restores the base", async () => {
 		base.value = SNACK_GAP
 		mount(Host)

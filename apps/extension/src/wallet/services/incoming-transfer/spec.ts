@@ -93,6 +93,9 @@ export type IncomingNoteRecord = IncomingTransferRecordCommon & {
 	noteHash: string
 	/** Note's owner (the user's account at note-encoded time). */
 	owner: string
+	/** Seen at its position on a finalized block at a PXE anchor matching the chain's tip, spent or
+	 *  not: reconciliation never examines the row again. */
+	settled?: true
 }
 
 /** A public `Transfer` event receipt (the new arm). */
@@ -145,6 +148,7 @@ export const IncomingTransferRecordSchema: z.ZodType<IncomingTransferRecord> = z
 		siloedNullifier: z.string(),
 		noteHash: z.string(),
 		owner: z.string(),
+		settled: z.literal(true).optional(),
 	}),
 	z.object({
 		kind: z.literal("public-event"),
@@ -185,13 +189,14 @@ export const IncomingTrustRecordSchema: z.ZodType<IncomingTrustRecord> = z.objec
  * writer, only inside the service lock + epoch check.
  */
 export type PublicScanCursor = {
-	/** Last committed page position; `null` = never scanned (start from `startBlock`). */
+	/** Last committed page position; `null` = nothing committed yet (start just above
+	 *  `lastScanFinalized`, or at `startBlock` before the first scan). */
 	cursor: PublicEventCursor | null
 	/** Reorg anchor — passed as `referenceBlock`; the node throws if this block was reorged out. */
 	lastSyncedBlockHash: string | null
 	/** Rewind FLOOR — the finalized tip AT the last successful scan (NOT the current finalized). */
 	lastScanFinalized: number | null
-	/** Retrofit seam for a future per-token backfill window. `0` in v1. */
+	/** Where history starts: the back-fill's lowest block. `0` in v1. */
 	startBlock: number
 	/**
 	 * Closes the normal-scan record-before-cursor crash window: written BEFORE a page's record
@@ -215,6 +220,13 @@ export type PublicScanCursor = {
 		progress: PublicEventCursor | null
 		seen: Array<[height: number, blockHash: string]>
 	}
+	/**
+	 * History at or below the finalized tip of the first scan, read newest window first: the window
+	 * `[low, high]` is paged upward from `position` (`null` before its first page). Absent once the
+	 * window that starts at `startBlock` is read. Its blocks are final, so a crash between a record
+	 * write and this field's advance only replays a page.
+	 */
+	backfill?: { low: number; high: number; position: PublicEventCursor | null }
 }
 
 /** Build the storage key for a public-scan cursor row. */
@@ -236,6 +248,12 @@ const reconcilingSchema = z.object({
 	seen: z.array(z.tuple([z.number(), z.string()])),
 })
 
+const backfillSchema = z.object({
+	low: z.number(),
+	high: z.number(),
+	position: PublicEventCursorSchema.nullable(),
+})
+
 /** Storage codec row schema — mirrors `PublicScanCursor` exactly. */
 export const PublicScanCursorSchema: z.ZodType<PublicScanCursor> = z.object({
 	cursor: PublicEventCursorSchema.nullable(),
@@ -244,6 +262,7 @@ export const PublicScanCursorSchema: z.ZodType<PublicScanCursor> = z.object({
 	startBlock: z.number(),
 	pendingPage: pendingPageSchema.optional(),
 	reconciling: reconcilingSchema.optional(),
+	backfill: backfillSchema.optional(),
 })
 
 /**
@@ -328,6 +347,9 @@ export type Methods = {
 	 * fee, or the node lookup fails.
 	 */
 	getReceiptFee(id: string): { feeJuice: string } | null
+	/** The fee `getReceiptFee` already fetched this session for the record's current block, or `null`
+	 *  (a note receipt, an unknown id, nothing fetched yet). Never makes a network call. */
+	getCachedReceiptFee(id: string): { feeJuice: string } | null
 	/** Trust state for a (profile, network, contract) triple. Returns
 	 *  `unknown` for contracts that have never received an incoming note. */
 	getTrustState(profileId: string, networkId: string, contract: string): IncomingTrustState
@@ -336,13 +358,13 @@ export type Methods = {
 	getIncomingSyncHealth(networkId: string): IncomingSyncHealth
 	/** Let the network's backed-off scans run now and wait for them. Never resets a failure streak. */
 	retryIncomingScan(networkId: string): void
-	/** User accepted the first-receive prompt: `pending → trusted`. Flips
-	 *  all hidden records for this contract to visible; emits
-	 *  `onIncomingTransferAdded` for each. Returns `false` when the contract
-	 *  no longer has a token registration (stale-popup race: user deleted
-	 *  the token between Pending emit and Allow click), or a lock, a profile
-	 *  switch or the profile's deletion overtook the write — caller should
-	 *  suppress the success toast in that case. */
+	/** User accepted the first-receive prompt: `pending → trusted`. Flips all hidden records for this
+	 *  contract to visible in the same storage write, and emits `onIncomingTransferAdded` for each when
+	 *  visibility is on and the lock ticket is still current. Returns `false`, writing nothing, when the
+	 *  token's registration cannot be verified (deleted between the prompt and the click, or the
+	 *  lookup failed), the trust row is missing or `unknown` (a wipe or token delete reset it), a row
+	 *  delete is still running, or a lock, a profile switch, the profile's deletion or a lock handoff
+	 *  overtook the write — caller should suppress the success toast in that case. */
 	setTrustAllow(profileId: string, networkId: string, contract: string): boolean
 	/** User rejected the first-receive prompt: `pending → blocked`. Same
 	 *  `false`-on-stale-token contract as `setTrustAllow`. */

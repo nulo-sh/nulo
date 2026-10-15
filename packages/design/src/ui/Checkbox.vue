@@ -1,19 +1,32 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup lang="ts">
+import { isRepeatOrComposing } from "../composables/keys"
 import Flex from "../core/Flex.vue"
 import Icon from "../core/Icon.vue"
 
 const props = defineProps(["modelValue", "checked", "disabled"])
 const emit = defineEmits(["update:modelValue"])
+
+function toggle() {
+	if (!props.disabled) emit("update:modelValue", !props.modelValue)
+}
+
+function onKey(e: KeyboardEvent) {
+	if (!isRepeatOrComposing(e)) toggle()
+}
 </script>
 
 <template>
 	<Flex
-		@click="!disabled && emit('update:modelValue', !modelValue)"
-		@keydown.enter="!disabled && emit('update:modelValue', !modelValue)"
+		@click="toggle"
+		@keydown.enter.prevent="onKey"
+		@keydown.space.prevent="onKey"
 		gap="10"
 		align="center"
 		:class="[$style.wrapper, disabled && $style.disabled]"
+		role="checkbox"
+		:aria-checked="Boolean(modelValue || checked)"
+		:aria-disabled="disabled ? 'true' : undefined"
 		tabindex="0"
 	>
 		<Flex align="center" justify="center" :class="[$style.checkbox, (modelValue || checked) && $style.active]">

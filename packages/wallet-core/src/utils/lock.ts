@@ -40,6 +40,11 @@ export class Lock {
 		this.maxHoldMs = maxHoldMs
 	}
 
+	/** Acquisitions queued behind the current holder. */
+	public get waiting(): number {
+		return this.queue.length
+	}
+
 	public async enter(): Promise<LockTicket> {
 		// INVARIANT (hardened): once enter()'s promise resolves, ownership HAS
 		// transferred — that equivalence is what withLock's leave-iff-entered

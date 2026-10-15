@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: the toast timer fix in `packages/design/src/composables/toast.ts`, the fee-estimation failure toast in `apps/extension/src/popup/pages/send.vue` and `apps/extension/src/popup/windows/execute/index.vue`, the header network chip routing in `apps/extension/src/components/Header.vue` with "Set as active network" in `apps/extension/src/popup/pages/settings/networks/[id].vue`, and the circle-outline icon in `apps/extension/src/assets/logo.svg` and `apps/extension/public/logo.svg`.
-- **Open items**: commitlint accepts a subject that `CLAUDE.md` forbids, tracked in [follow-ups](../../follow-ups.md). The document says subjects are lower-case, but the commitlint config extends the conventional preset, whose subject-case rule rejects only sentence, start, pascal and upper case.
+- **Open items**: none. Commitlint accepting a subject that `CLAUDE.md` forbids was closed by supply-chain-release (#63). The document says subjects are lower-case, but the commitlint config extends the conventional preset, whose subject-case rule rejects only sentence, start, pascal and upper case.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

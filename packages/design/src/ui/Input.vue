@@ -9,6 +9,9 @@ import Icon from "../core/Icon.vue"
 import Text from "../core/Text.vue"
 import Tooltip from "./Tooltip.vue"
 
+/** Tokens */
+import type { TypeRole } from "../tokens"
+
 /** Utils */
 import { sanitizeString } from "../internal/sanitize"
 
@@ -91,9 +94,48 @@ const props = defineProps({
 		type: Boolean,
 		default: undefined,
 	},
+	/** The native `<input>`'s `aria-labelledby`, for a field whose visible label sits outside the component. */
+	ariaLabelledby: {
+		type: String,
+		required: false,
+	},
+	/** The native `<input>`'s `role`, `aria-expanded`, `aria-autocomplete`, `aria-activedescendant`
+	 *  and `aria-controls`, for a field that drives a list it does not contain. */
+	role: {
+		type: String,
+		required: false,
+	},
+	ariaExpanded: {
+		type: Boolean,
+		default: undefined,
+	},
+	ariaAutocomplete: {
+		type: String as PropType<"list" | "inline" | "both">,
+		required: false,
+	},
+	ariaActivedescendant: {
+		type: String,
+		required: false,
+	},
+	ariaControls: {
+		type: String,
+		required: false,
+	},
 	/** The native `<input>`'s `data-testid`; a `data-testid` attribute names the root. */
 	inputTestid: {
 		type: String,
+		required: false,
+	},
+	/** The typed text's role: `input-data` for an address, an amount or another value compared glyph by glyph. */
+	textVariant: {
+		type: String as PropType<Extract<TypeRole, "input" | "input-data">>,
+		default: "input",
+		// Validated at run time too: most callers are SFCs without `lang="ts"`, which vue-tsc skips.
+		validator: (value: string) => value === "input" || value === "input-data",
+	},
+	/** Maps the typed text to the text the field keeps, in place of `sanitize`'s built-in filter. */
+	normalize: {
+		type: Function as PropType<(text: string) => string>,
 		required: false,
 	},
 })
@@ -143,7 +185,8 @@ const getInputType = computed(() => {
 const handleInput = (event?: Event) => {
 	if (props.disabled) return
 
-	text.value = props.sanitize ? sanitizeString(text.value as string, props.maxLength) : text.value
+	if (props.normalize) text.value = props.normalize(text.value as string)
+	else if (props.sanitize) text.value = sanitizeString(text.value as string, props.maxLength)
 
 	if (!!props.maxLength) applyMaxLength(props.maxLength)
 
@@ -228,7 +271,9 @@ const handlePaste = (e: ClipboardEvent) => {
 		const end = el.selectionEnd ?? start
 		const before = (text.value as string).slice(0, start)
 		const after = (text.value as string).slice(end)
-		let newText = before + paste + after
+		// Normalized before the cut, so what `normalize` removes never costs a character.
+		let newText = props.normalize ? props.normalize(before + paste + after) : before + paste + after
+		const caret = props.normalize ? props.normalize(before + paste).length : start + paste.length
 
 		if (newText.length > props.maxLength) {
 			newText = newText.slice(0, props.maxLength)
@@ -238,7 +283,7 @@ const handlePaste = (e: ClipboardEvent) => {
 		handleInput()
 
 		nextTick(() => {
-			const pos = Math.min(start + paste.length, props.maxLength as number)
+			const pos = Math.min(caret, props.maxLength as number)
 			el.setSelectionRange(pos, pos)
 		})
 
@@ -258,38 +303,42 @@ const handleClear = () => {
 	<Flex direction="column" gap="8">
 		<Flex v-if="label" align="center" justify="between">
 			<Flex align="center" gap="4">
-				<Text size="13" weight="600" color="secondary">{{ label }}</Text>
+				<Text variant="label" color="secondary">{{ label }}</Text>
 				<slot name="labelSuffix" />
 			</Flex>
 
-			<Transition v-if="warning.show" name="fade">
-				<Tooltip position="end">
-					<Flex align="center" gap="6">
-						<Icon name="warning" size="12" color="yellow" />
-						<Text size="12" color="primary"> Maximum length reached </Text>
-					</Flex>
+			<!-- The caller's message wins: the length note is the fallback, shown only while the slot is
+				 empty, so a caller passes `#right` only while its message shows. -->
+			<slot name="right">
+				<Transition v-if="warning.show" name="fade">
+					<Tooltip position="end">
+						<Flex align="center" gap="6">
+							<Icon name="warning" size="12" color="yellow" />
+							<Text variant="body" color="primary"> Maximum length reached </Text>
+						</Flex>
 
-					<template #content>
-						{{ warning.text }}
-					</template>
-				</Tooltip>
-			</Transition>
-
-			<slot v-else name="right" />
+						<template #content>
+							{{ warning.text }}
+						</template>
+					</Tooltip>
+				</Transition>
+			</slot>
 		</Flex>
 
 		<Flex
 			ref="base"
 			@click="handleClick"
 			gap="12"
+			:data-input-size="size"
 			:class="[$style.base, isFocused && $style.focused, disabled && $style.disabled, error && $style.error, $style[size]]"
 		>
 			<Flex align="center" gap="6" wide :class="$style.left">
 				<Icon v-if="icon" :name="icon" size="16" color="tertiary" />
-				<Text v-if="leftText" size="13" weight="600" color="tertiary">{{ leftText }}</Text>
+				<Text v-if="leftText" variant="value" color="tertiary">{{ leftText }}</Text>
 
 				<input
 					ref="inputEl"
+					:class="`type--${textVariant}`"
 					:type="getInputType"
 					:max="max"
 					v-model="text"
@@ -303,7 +352,13 @@ const handleClear = () => {
 					:autocomplete="autocomplete"
 					:autocapitalize="autocapitalize"
 					:autocorrect="autocorrect"
+					:role="role"
+					:aria-labelledby="ariaLabelledby"
 					:aria-invalid="ariaInvalid"
+					:aria-expanded="ariaExpanded"
+					:aria-autocomplete="ariaAutocomplete"
+					:aria-activedescendant="ariaActivedescendant"
+					:aria-controls="ariaControls"
 					:data-testid="inputTestid"
 				/>
 			</Flex>
@@ -388,9 +443,6 @@ const handleClear = () => {
 	padding: 0;
 	background: transparent;
 
-	font-family: var(--font-body);
-	font-size: 15px;
-	font-weight: 500;
 	color: var(--txt-primary);
 
 	text-overflow: ellipsis;

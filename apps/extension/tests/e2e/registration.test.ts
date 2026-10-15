@@ -1,7 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { expect } from "vitest"
 import { TEST_PASSWORD } from "./fixtures/constants"
-import { test, openPopup, waitForHash, typeIntoInput, clickByTestId, expectNoNameField } from "./fixtures/extension"
+import { test, openPopup, waitForHash, typeIntoInput, clickByTestId, expectNoNameField, waitForServiceReady } from "./fixtures/extension"
 
 test("fresh install shows register page", async ({ extension }) => {
 	const page = await openPopup(extension)
@@ -16,11 +16,7 @@ test("create profile with password", async ({ extension }) => {
 	const page = await openPopup(extension)
 	await waitForHash(page, "#/popup/register")
 
-	// Wait for GlobalLoader to disappear
-	await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), {
-		timeout: 15_000,
-		polling: 500,
-	})
+	await waitForServiceReady(page, 15_000)
 
 	await clickByTestId(page, "register-create-btn")
 

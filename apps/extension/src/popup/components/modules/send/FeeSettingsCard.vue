@@ -8,12 +8,13 @@ import FeeMethodSelector from "./FeeMethodSelector.vue"
 
 /** Vendor */
 import { getRandomHex } from "@/wallet/utils"
-import { getErrorData } from "@nulo/wallet-core/utils"
 import { sameFieldAddress } from "@nulo/wallet-bridge"
-import { UI_STORAGE_KEYS } from "@/popup/constants/storage-keys"
 
 /** Utils */
-import { storageLocalGet, storageLocalSet } from "@/utils/storage"
+import { managers } from "@/utils/core"
+import { storageLocalGet } from "@/utils/storage"
+import { readAppPicks, readSendSlots } from "@/utils/fee-picks"
+import { feePicksKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
 
 /** Services */
 import { FpcServiceClient } from "@/wallet/services/fpc/client"
@@ -24,16 +25,20 @@ import {
 	buildFeeMethods,
 	defaultSponsor,
 	FEE_JUICE_BRIDGE_URL,
+	feeAmountDisplay,
 	feeDisplay,
+	feeInWords,
+	feePayerOf,
 	feeScopeKey,
 	formatGasBalance,
 	isLiveFeeScope,
 	liveFeeScope,
 	resolveSavedSelection,
+	savedSelectionOf,
 	settingsForMethod,
+	shortfallSentence,
 } from "./fee-helpers"
 import { applyFpcEdits, previewForPick, recordOf, resolveSendSelection } from "./fee-privacy"
-import { loadSendSelections, mutateSendSelections, readSendSlots, withSendSlot } from "./fee-send-selection"
 import { usePrices } from "@/composables/usePrices"
 
 /** Composables */
@@ -72,10 +77,16 @@ const props = defineProps({
 	payerNoticeShape: { type: String, default: null },
 	/** The transaction the fee is for, less its fee settings; a change is a new transaction. */
 	txShape: { type: String, default: "" },
+	/** Outside Send: a short sponsor's selection falls to the next payer of Send's public-side walk
+	 *  instead of to nothing. For a transaction whose calls are public, where paying from the
+	 *  account's own Fee Juice publishes nothing new. */
+	fallsBack: { type: Boolean, default: false },
+	/** `{ basis, cap }` in base units while the page offers to queue the send against a cap. */
+	queuedCap: { type: Object, default: null },
 })
 
-const FEE_METHOD_LS_KEY = UI_STORAGE_KEYS.FEE_PAYMENT_METHODS
-const readSavedFeeMethods = async () => (await storageLocalGet(FEE_METHOD_LS_KEY))[FEE_METHOD_LS_KEY] || {}
+const readStored = async (key) => (await storageLocalGet(key))[key]
+const readSavedFeeMethods = async (profileId) => readAppPicks(await readStored(feePicksKey(profileId)))
 
 const settings = defineModel()
 
@@ -92,6 +103,12 @@ const payerOut = defineModel("payer", { default: null })
 /** One-way child→parent: the fee as "You pay" shows it. The review sheet repeats this value rather
  *  than pricing it again, since the page's own price client can hold a different quote. */
 const feeDisplayOut = defineModel("feeDisplay", { default: null })
+
+/** One-way child→parent: the cap as the readout words it, for the review sheet, priced once here. */
+const queuedCapTextOut = defineModel("queuedCapText", { default: null })
+
+/** One-way child→parent: the fee read refused the account because its imported key does not open. */
+const accountUnusableOut = defineModel("accountUnusable", { type: Boolean, default: false })
 
 const methodId = getRandomHex(6)
 
@@ -122,28 +139,45 @@ const setAsideSponsorIds = reactive(new Set())
 const lastVerdict = ref(null)
 /** Outside Send: the sponsor a short verdict dropped the selection of, until the person picks. */
 const droppedForVerdictId = ref(null)
+/** The sponsor paying when the transaction last changed, while it still pays and until the estimate
+ *  for the new transaction ends: its earlier verdict was for another fee limit. Only the paying
+ *  sponsor is read, so no other row can have a read in flight. */
+const recheckFpcId = ref(null)
+const verifyingSponsorId = computed(() => (props.isEstimating ? recheckFpcId.value : null))
+
+/** The FPC list the store has read for the live identity. That read is never forced, so it usually
+ *  lands well before the forced balance read lets the snapshot commit: the sponsor rows answer early. */
+const earlyFpcs = computed(() => {
+	const fpc = balancesStore.entry(liveFeeScope(props))?.fpc
+	return fpc?.status === "ready" && fpc.data ? applyFpcEdits(fpc.data, fpcEdits) : null
+})
 
 /**
- * `methods` is the dropdown list. We pass `gasBalances` only after init
- * completes, so the loading-state items don't briefly flash "no balance"
- * before the first fetch returns.
+ * `methods` is what selections are resolved against. We pass `gasBalances`
+ * only after init completes, so the loading-state items don't briefly flash
+ * "no balance" before the first fetch returns.
  */
 const methods = computed(() =>
 	buildFeeMethods(knownFpcs.value, isInitComplete.value ? gasBalances.value : undefined, {
 		shortSponsorIds,
 		setAsideSponsorIds,
+		verifyingSponsorId: verifyingSponsorId.value,
 	}),
 )
 
-const isCustomMethod = computed(() => settings.value?.paymentMethod?.kind === "embedded")
-const useOwnMethod = ref(false)
-/**
- * Tracks whether settings should resolve to `{ kind: "embedded" }` regardless
- * of `selectedMethod`. Initialized from the parent v-model on mount so we
- * don't clobber an initial-embedded value during init. Toggled by
- * `handleUseEmbedded` / `handleMethodPicked`.
- */
-const useEmbeddedFee = ref(settings.value?.paymentMethod?.kind === "embedded")
+/** The dropdown's rows: `methods` once the live identity's snapshot is in. Before that, rows come
+ *  from that identity's early FPC list alone, never another identity's, and load wherever no read
+ *  has answered them. Display only: no selection is ever resolved against them. */
+const menuMethods = computed(() => {
+	if (snapshotCommitted.value) return methods.value
+	const early = earlyFpcs.value
+	return buildFeeMethods(early ?? [], undefined, {
+		shortSponsorIds,
+		setAsideSponsorIds,
+		balancesPending: snapshotPending.value,
+		fpcsPending: snapshotPending.value && !early,
+	})
+})
 
 const selectedMethod = ref()
 const selectedPriority = ref("normal")
@@ -171,19 +205,32 @@ const privateFeeJuiceFormatted = computed(() =>
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const estimatedFeeDisplay = computed(() => feeDisplay(props.feeEstimate, prices.feeJuiceQuote.value?.usd))
-
-const showMethodSelector = computed(() => {
-	if (!isCustomMethod.value) return true
-	return useOwnMethod.value
+const queuedCapDisplay = computed(() => {
+	if (!props.queuedCap) return null
+	const usd = prices.feeJuiceQuote.value?.usd
+	return { about: feeAmountDisplay(props.queuedCap.basis, usd), cap: feeAmountDisplay(props.queuedCap.cap, usd) }
 })
 
-/** Send's picks, `{ [address]: { private?, public? } }` — keyed by address so nothing crosses accounts. */
+/** Send's picks, `{ [slot]: { private?, public? } }`, one slot per profile and address: storage keeps
+ *  each profile's picks apart, so an account held by two profiles has two picks. */
 const sendPicks = reactive({})
+const pickSlot = (profileId, address) => `${profileId}\n${address}`
+const livePicks = () => sendPicks[pickSlot(props.profile?.id, props.account?.address)]
 
 /** Structured scope of the committed snapshot — the recovery watch's target. */
 const committedScope = ref(null)
 
 const scopeIsLiveIdentity = (scope) => Boolean(scope) && isLiveFeeScope(props, scope)
+
+const snapshotCommitted = computed(() => isInitComplete.value && scopeIsLiveIdentity(committedScope.value))
+
+/** The identity a run is reading for right now, owned by `readingRun`. Rows load only for it: an
+ *  identity no read is coming for, after an init that threw, say, gives today's answers instead. */
+const readingKey = ref(null)
+let readingRun = 0
+
+/** A snapshot for the live identity is on its way. */
+const snapshotPending = computed(() => !snapshotCommitted.value && readingKey.value === feeScopeKey(liveFeeScope(props)))
 
 /**
  * Send's selection is DERIVED, never assigned: a pure function of the live origin, the live
@@ -193,7 +240,7 @@ const scopeIsLiveIdentity = (scope) => Boolean(scope) && isLiveFeeScope(props, s
  */
 const sendSelection = computed(() => {
 	if (props.originPrivacy === null) return null
-	const pick = sendPicks[props.account?.address]?.[props.originPrivacy]
+	const pick = livePicks()?.[props.originPrivacy]
 	if (!isInitComplete.value || !scopeIsLiveIdentity(committedScope.value)) {
 		return { kind: "pending", preview: previewForPick(pick, methods.value) }
 	}
@@ -206,7 +253,7 @@ const sendSelection = computed(() => {
 const sponsorShort = computed(() => {
 	if (props.originPrivacy === null) return droppedForVerdictId.value !== null
 	if (shortSponsorIds.size === 0 || !isInitComplete.value || !scopeIsLiveIdentity(committedScope.value)) return false
-	const pick = sendPicks[props.account?.address]?.[props.originPrivacy]
+	const pick = livePicks()?.[props.originPrivacy]
 	const know = { fpcs: knownFpcs.value, balances: gasBalances.value }
 	const unset = resolveSendSelection(props.originPrivacy, know, pick)
 	return unset.kind === "selected" && unset.method.type === "fpc" && shortSponsorIds.has(unset.method.fpc?.id)
@@ -230,19 +277,29 @@ const nudgeCopy = computed(() =>
 /** What the dropdown trigger shows: the paying method, or the saved pick's row while loading. */
 const displayMethod = computed(() => effectiveMethod.value ?? sendSelection.value?.preview)
 
-/** Who pays the estimate the readout shows. Only Nulo's own sponsor is promised "Nothing"; a
- *  sponsor added by hand can charge the account through an authorization it granted earlier. */
+/** Who pays the estimate the readout shows; the readout draws only while a method is chosen. */
 const feePayer = computed(() => {
 	const m = effectiveMethod.value
-	if (m?.type !== "fpc") return "self"
-	return m.fpc?.isProtocol === true ? "sponsor" : "unvouched"
+	return feePayerOf(m && { type: m.type, isProtocol: m.fpc?.isProtocol }) ?? "self"
 })
 
-const sponsorShortText = computed(() =>
-	effectiveMethod.value
-		? `The sponsor can't cover this fee right now, so ${effectiveMethod.value.title} pays it.`
-		: "The sponsor can't cover this fee right now.",
-)
+const SPONSOR_SHORT = "The sponsor you chose can't cover this fee right now."
+/** The payer that takes over, named by kind: a sponsor's row title can be the short one's too. */
+const takeoverName = (m) => {
+	if (m?.type === "fj") return "Public Fee Juice"
+	if (m?.type === "private_fpc") return "Private FPC"
+	return m?.type === "fpc" && m.fpc?.isProtocol === true ? "The default sponsor" : null
+}
+const sponsorShortText = computed(() => {
+	const name = takeoverName(effectiveMethod.value)
+	return name ? `${SPONSOR_SHORT} ${name} pays it instead.` : SPONSOR_SHORT
+})
+
+/** The account's own Fee Juice, read short of this estimate's fee while it pays. */
+const shortfallText = computed(() => {
+	const shortfall = props.feeEstimate?.feeJuiceShortfall
+	return shortfall && effectiveMethod.value?.type === "fj" ? shortfallSentence(shortfall) : null
+})
 
 /** `short` while the notice shows, `funded` while the sponsor a funded verdict named pays. */
 const sponsorFunding = computed(() => {
@@ -254,15 +311,8 @@ const sponsorFunding = computed(() => {
 /** The dApp-locked method's fresh row from `methods` (balance-aware), never a saved record. */
 const lockedOption = () => methods.value.find((m) => m.type === props.lockedMethod)
 
-/**
- * Pure derivation of settings from current state. Returns `undefined` while
- * init is in flight so the parent's estimation watcher doesn't fire against
- * a partially-resolved snapshot. The embedded short-circuit comes ahead of
- * `isInitComplete` so embedded ops (which skip `runInit` entirely via the
- * early-return at the top of runInit) still emit valid settings.
- */
+/** `undefined` until init commits a whole snapshot, so the parent never estimates against a partial one. */
 const derivedSettings = computed(() => {
-	if (useEmbeddedFee.value) return { paymentMethod: { kind: "embedded" } }
 	if (!isInitComplete.value) return undefined
 	const m = effectiveMethod.value
 	if (!m) return undefined
@@ -274,10 +324,18 @@ const derivedSettings = computed(() => {
 const feeJuiceMissing = computed(() => {
 	// Send: only confirmed exhaustion — every applicable payer read, none can pay — whatever is selected.
 	if (sendSelection.value) return sendSelection.value.kind === "none"
-	return selectedMethodHasNoGas()
+	return selectedMethodHasNoGas() || noPayerCanPay()
 })
+/** Send's public-side walk, with this card's pick standing in for Send's saved one: a hand-added
+ *  sponsor counts only once picked, and an unread balance never counts as empty. */
+const noPayerCanPay = () => {
+	if (props.lockedMethod || !snapshotCommitted.value) return false
+	const know = { fpcs: knownFpcs.value, balances: gasBalances.value, shortSponsorIds, setAsideSponsorIds }
+	const pick = selectedMethod.value ? recordOf(selectedMethod.value) : undefined
+	return resolveSendSelection("public", know, pick).kind === "none"
+}
 const selectedMethodHasNoGas = () => {
-	if (!isInitComplete.value || useEmbeddedFee.value) return false
+	if (!isInitComplete.value) return false
 	// Unknown balances (failed/timed-out read, silent retry pending) never
 	// trigger the nudge — only a confirmed zero does.
 	const balances = gasBalances.value
@@ -315,6 +373,13 @@ watch(
 	{ immediate: true },
 )
 watch(
+	queuedCapDisplay,
+	(d) => {
+		queuedCapTextOut.value = d ? feeInWords(d.cap) : null
+	},
+	{ immediate: true },
+)
+watch(
 	estimatedFeeDisplay,
 	(d) => {
 		feeDisplayOut.value = d
@@ -329,9 +394,8 @@ watch(
  * `onBalanceUpdated`.
  */
 const persistSelection = async (method) => {
-	const fpms = await readSavedFeeMethods()
-	fpms[props.account.address] = method
-	await storageLocalSet({ [FEE_METHOD_LS_KEY]: fpms })
+	const update = { kind: "app", address: props.account.address, pick: savedSelectionOf(method) }
+	await managers.profile.saveFeePick(props.profile.id, update)
 
 	if (method.type === "fpc" || method.type === "private_fpc") {
 		const idx = cacheStore.feePaymentMethods.findIndex((m) => m.id === methodId)
@@ -341,37 +405,34 @@ const persistSelection = async (method) => {
 	}
 }
 
-/** Address and origin are captured before any await: the pick belongs to the account and side it was made on. */
+/** Profile, address and origin are captured before any await: the pick belongs to the account and
+ *  side it was made on. */
 const pickForSend = (m) => {
+	const profileId = props.profile.id
 	const address = props.account.address
 	const origin = props.originPrivacy
 	const record = recordOf(m)
-	sendPicks[address] = { ...sendPicks[address], [origin]: record }
-	mutateSendSelections((raw) => withSendSlot(raw, address, origin, record)).catch((e) =>
-		console.error("Failed to save the send fee selection", getErrorData(e)),
-	)
+	const slot = pickSlot(profileId, address)
+	sendPicks[slot] = { ...sendPicks[slot], [origin]: record }
+	const update = { kind: "send", address, side: origin, pick: record }
+	managers.profile.saveFeePick(profileId, update).catch((e) => console.error("Failed to save the send fee selection", { error: e }))
 }
 
 /** The selection is the card's own default, not a saved or live pick. */
 let chosenUnasked = false
+/** Counts explicit picks: a re-pick of the selected row leaves the reference unchanged. */
+let pickSeq = 0
 
 const handleMethodPicked = (m) => {
+	// A loading row is inert in the menu; this keeps it so for any other path a pick arrives on.
+	if (m.checking) return
 	if (m.type === "fpc" && m.fpc) setAsideSponsorIds.delete(m.fpc.id)
 	droppedForVerdictId.value = null
 	if (props.originPrivacy !== null) return pickForSend(m)
 	selectedMethod.value = m
+	pickSeq++
 	chosenUnasked = false
-	useEmbeddedFee.value = false
-	void persistSelection(m)
-}
-
-const handleUseOwnMethod = () => {
-	useOwnMethod.value = true
-}
-const handleUseEmbedded = () => {
-	useOwnMethod.value = false
-	selectedMethod.value = undefined
-	useEmbeddedFee.value = true
+	persistSelection(m).catch((error) => console.error("Failed to save the fee method", { error }))
 }
 
 const onFpcUpdated = (fpc) => {
@@ -390,15 +451,12 @@ const onFpcUpdated = (fpc) => {
 	}
 }
 const onFpcDeleted = (fpc) => {
-	if (props.originPrivacy !== null) {
-		if (effectiveMethod.value?.fpc?.id === fpc.id) openToast({ kind: "success", label: "Selected FPC was deleted" })
-		fpcEdits.set(fpc.id, null)
-		return
-	}
-	if (selectedMethod.value?.fpc?.id === fpc.id) {
-		selectedMethod.value = undefined
-		openToast({ kind: "success", label: "Selected FPC was deleted" })
-	}
+	const wasSelected = effectiveMethod.value?.fpc?.id === fpc.id
+	// The store's FPC list never hears of a deletion, and the menu offers what that list holds.
+	fpcEdits.set(fpc.id, null)
+	if (!wasSelected) return
+	if (props.originPrivacy === null) selectedMethod.value = undefined
+	openToast({ kind: "success", label: "Selected FPC was deleted" })
 }
 
 const fpcService = new FpcServiceClient()
@@ -415,6 +473,8 @@ let isMounted = true
 // operable meanwhile (sponsored methods stay usable; self-paid methods stay
 // fail-closed until a read succeeds — see settingsForMethod).
 const FEE_DATA_UNAVAILABLE = "Couldn't load fee data. Retrying in the background."
+/** A thrown init never committed, so no store retry can reach it: nothing runs it again on its own. */
+const FEE_INIT_FAILED = "Couldn't load fee data. Close and reopen to try again."
 const PRIVATE_GAS_UNCHECKED = "Couldn't check your private gas. Pick a fee source to continue."
 
 /** The info row's text. A hold with a healthy store is a read that came back without a balance —
@@ -494,12 +554,20 @@ const settledSelection = (savedRecord) => {
 	return preferred ? { ...preferred } : undefined
 }
 
+/** A selection taken as `baseline` has since been picked, or replaced by an FPC edit or deletion. */
+const touchedSince = (baseline) => selectedMethod.value !== baseline.method || pickSeq !== baseline.pick
+
+/** A pick made during init stands, read again from the snapshot's rows: their sponsor metadata is
+ *  current, and a sponsor the snapshot no longer lists is dropped rather than paid through. */
+const snapshotRowFor = (m) => (m ? methods.value.find((x) => x.type === m.type && x.fpc?.id === m.fpc?.id) : undefined)
+
 const reconcileSelection = (savedRecord, baseline) => {
-	const userPickedDuringInit = selectedMethod.value !== baseline
 	if (props.lockedMethod) {
 		selectedMethod.value = lockedOption()
 		chosenUnasked = false
-	} else if (!userPickedDuringInit) {
+	} else if (touchedSince(baseline)) {
+		selectedMethod.value = snapshotRowFor(selectedMethod.value)
+	} else {
 		selectedMethod.value = settledSelection(savedRecord)
 		chosenUnasked = !resolveSavedSelection(savedRecord, methods.value)
 	}
@@ -524,6 +592,7 @@ const commitFromEntry = (scope, reqKey, saved, baseline) => {
 	committedScope.value = scope
 	isInitComplete.value = true
 
+	accountUnusableOut.value = entry.gas.accountUnusable === true
 	const degraded = entry.gas.status === "degraded" || entry.fpc.status === "degraded"
 	if (degraded) {
 		console.error("Fee init degraded", entry.gas.lastError, entry.fpc.lastError)
@@ -533,14 +602,8 @@ const commitFromEntry = (scope, reqKey, saved, baseline) => {
 	}
 }
 
-/** Embedded ops without the "use own method" opt-in render no fee card state. */
-const embeddedHidden = () => isCustomMethod.value && !useOwnMethod.value
-
-/** True when a run no longer owns the card: unmounted, the identity props
- *  (profile/network/chain/account) moved off the snapshot this run targeted,
- *  or the card flipped embedded-visible (its watcher released the lease and
- *  a fresh runInit owns the new state). */
-const identityDrifted = (scope) => !isMounted || !isLiveFeeScope(props, scope) || embeddedHidden()
+/** Unmounting counts: either way the run no longer owns the card. */
+const identityDrifted = (scope) => !isMounted || !isLiveFeeScope(props, scope)
 
 /** The store fetches the legs with per-leg isolation, timeout, and raw-promise
  *  reuse; ensure settles when both requested legs settle, ready OR degraded.
@@ -567,10 +630,11 @@ const ensureLegsSettled = async (scope) => {
 /** The saved selections this card reconciles against. Send reads its own key into `sendPicks`, for
  *  the address it read for and under any pick already made in this mount (which is newer), and
  *  reconciles nothing — so it hands back an empty legacy map. */
-const readSavedSelections = async (address) => {
-	if (props.originPrivacy === null) return readSavedFeeMethods()
-	const slots = readSendSlots(await loadSendSelections(), address)
-	sendPicks[address] = { ...slots, ...sendPicks[address] }
+const readSavedSelections = async ({ profileId, accountAddress: address }) => {
+	if (props.originPrivacy === null) return readSavedFeeMethods(profileId)
+	const slots = readSendSlots(await readStored(sendFeePicksKey(profileId)), address)
+	const slot = pickSlot(profileId, address)
+	sendPicks[slot] = { ...slots, ...sendPicks[slot] }
 	return {}
 }
 
@@ -583,14 +647,27 @@ const prefillSelection = (saved) => {
 	chosenUnasked = false
 }
 
+/** Pre-fills from storage BEFORE the slow fetch, so the trigger shows the last-used method while it
+ *  runs (the `isInitComplete` gate keeps the pre-fill out of settings derivation). Returns the saved
+ *  map and the reconcile baseline, which a later pick moves off. A pick made during the read (an
+ *  early sponsor row) is newer than anything saved, so nothing is pre-filled over it and the
+ *  baseline stays the one from before the read. Null when a newer run owns the card: re-applying
+ *  the pre-fill would clobber that run's reconcile. */
+const readAndPrefill = async (scope, myRun) => {
+	const beforeRead = { method: selectedMethod.value, pick: pickSeq }
+	const saved = await readSavedSelections(scope)
+	if (myRun !== runSeq || !isMounted) return null
+	if (touchedSince(beforeRead)) return { saved, baseline: beforeRead }
+	prefillSelection(saved)
+	return { saved, baseline: { method: selectedMethod.value, pick: pickSeq } }
+}
+
 const runInit = async () => {
 	const myRun = ++runSeq
 	try {
-		if (!props.profile || !props.network || !props.account || embeddedHidden()) {
-			// Embedded ops (and identity-less mounts) hold no subscription: the
-			// release kills the store's retry loop for this key, preserving the
-			// old retry-chain death on this early-return; the useOwnMethod
-			// watcher below is where the chain revives.
+		if (!props.profile || !props.network || !props.account) {
+			// An identity-less mount holds no subscription: the release kills the
+			// store's retry loop for the key it held.
 			releaseSubscription()
 			return
 		}
@@ -611,55 +688,42 @@ const runInit = async () => {
 		// the committed snapshot live (re-arming unconditionally made Confirm
 		// oscillate disabled for the length of every retry's in-flight window).
 		if (committedKey !== reqKey) isInitComplete.value = false
+		readingRun = myRun
+		readingKey.value = reqKey
 
-		// Pre-fill from local storage BEFORE the slow SW fetch so the
-		// dropdown trigger displays the user's last-used method while the
-		// fetch is in flight. The `isInitComplete` gate ensures this
-		// pre-fill doesn't drive settings derivation against stale state.
-		const saved = await readSavedSelections(scope.accountAddress)
-		// A newer run owns the card now: a superseded run resuming from its
-		// storage read must not re-apply the pre-fill (it would clobber the
-		// newer run's reconcile or the user's mid-flight pick).
-		if (myRun !== runSeq || !isMounted) return
-		prefillSelection(saved)
-		// Snapshot the (possibly-prefilled) selection AFTER any pre-fill
-		// assignment. If the user picks something during the ensure await,
-		// `selectedMethod.value` will be a different reactive proxy reference
-		// than `baseline`, and we skip the reconcile path so we don't clobber
-		// their choice.
-		const baseline = selectedMethod.value
+		const read = await readAndPrefill(scope, myRun)
+		if (!read) return
 
 		// Re-validate AFTER the storage await, BEFORE taking the lease: a
-		// mid-await embedded flip (its watcher just released) or identity
-		// change means a fresh runInit owns the new state — subscribing here
-		// would re-lease a key this run no longer represents.
+		// mid-await identity change means a fresh runInit owns the new state —
+		// subscribing here would re-lease a key this run no longer represents.
 		if (identityDrifted(scope)) return
 
 		loadingRun = myRun
 		isLoading.value = true
 		subscribeTo(scope, reqKey)
 		if (!(await ensureLegsSettled(scope))) return
-		// Discard if the profile/network/chain/account switched mid-flight, a
-		// newer run took over, or the card flipped embedded-visible during the
-		// ensure (its watcher released the lease; committing here would open
-		// the gate and let derivedSettings overwrite the dApp's embedded
-		// v-model). Everything past this guard is synchronous (no awaits), so
-		// the commit is atomic against the checked state.
+		// Discard if the profile/network/chain/account switched mid-flight or a
+		// newer run took over. Everything past this guard is synchronous (no
+		// awaits), so the commit is atomic against the checked state.
 		if (myRun !== runSeq || identityDrifted(scope)) return
 
-		commitFromEntry(scope, reqKey, saved, baseline)
+		commitFromEntry(scope, reqKey, read.saved, read.baseline)
 	} catch (e) {
 		// Deliberately does NOT open `isInitComplete`: an exception here may
 		// have fired mid-commit, and deriving settings from a half-written
 		// snapshot would break the resolved-state invariant the gate exists
 		// for. The state is degraded-with-notice, never silently frozen — the
-		// identity/useOwnMethod watchers are the re-entry paths.
-		console.error("Failed to init", getErrorData(e))
-		error.value = FEE_DATA_UNAVAILABLE
+		// identity watcher is the re-entry path. A superseded run's failure
+		// belongs to an identity no longer on screen.
+		console.error("Failed to init", { error: e })
+		if (myRun !== runSeq || !isMounted) return
+		error.value = FEE_INIT_FAILED
 	} finally {
 		// Only the run that owns the loading flag may clear it — a superseded
 		// run's finally must not blank a newer run's in-flight spinner.
 		if (loadingRun === myRun) isLoading.value = false
+		if (readingRun === myRun) readingKey.value = null
 	}
 }
 
@@ -678,22 +742,36 @@ watch(
 	},
 	(next, prev) => {
 		if (next === null || prev === null || next === prev) return
-		recommit().catch((e) => console.error("Fee recovery recommit failed", getErrorData(e)))
+		recommit().catch((e) => console.error("Fee recovery recommit failed", { error: e }))
+	},
+)
+
+/** A background retry that finds the imported key unusable fails, so it bumps no retryVersion and
+ *  commits nothing: its verdict reaches the page here, only while the committed key is still the
+ *  account on screen. */
+watch(
+	() => {
+		const scope = committedScope.value
+		if (!scope || identityDrifted(scope)) return false
+		return balancesStore.entry(scope)?.gas.accountUnusable === true
+	},
+	(unusable) => {
+		if (unusable) accountUnusableOut.value = true
 	},
 )
 
 const recommit = async () => {
 	const scope = committedScope.value
 	if (!scope || !isMounted) return
-	// The recovery targets the committed identity; if props moved on (or the
-	// card is embedded-visible), the identity/useOwnMethod watchers own it.
+	// The recovery targets the committed identity; if props moved on, the
+	// identity watcher owns it.
 	if (!recommitStillValid(scope)) return
 	// Baseline BEFORE the await (same rule as runInit): a user pick landing
-	// while the storage read is pending makes the selection differ from this
-	// baseline, so the reconcile is skipped instead of re-applying a stale
-	// storage snapshot over the pick.
-	const baseline = selectedMethod.value
-	const saved = await readSavedFeeMethods()
+	// while the storage read is pending moves the selection off this
+	// baseline, so the reconcile keeps the pick instead of re-applying a
+	// stale storage snapshot over it.
+	const baseline = { method: selectedMethod.value, pick: pickSeq }
+	const saved = await readSavedFeeMethods(scope.profileId)
 	// Re-validate AFTER the await: an identity switch during the storage read
 	// must not let this late commit re-open the gate with the OLD identity's
 	// data (the switch closed it; only the new identity's init may commit).
@@ -701,15 +779,23 @@ const recommit = async () => {
 	commitFromEntry(scope, feeScopeKey(scope), saved, baseline)
 }
 
+/** The payer Send's public-side walk lands on with this card's verdicts applied, or none. */
+const publicFallback = () => {
+	const know = { fpcs: knownFpcs.value, balances: gasBalances.value, shortSponsorIds, setAsideSponsorIds }
+	const next = resolveSendSelection("public", know, undefined)
+	return next.kind === "selected" ? next.method : undefined
+}
+
 const forgetVerdicts = () => {
 	shortSponsorIds.clear()
 	setAsideSponsorIds.clear()
 	lastVerdict.value = null
 	droppedForVerdictId.value = null
+	recheckFpcId.value = null
 }
 
 const recommitStillValid = (scope) => {
-	if (!props.network || !props.account || (isCustomMethod.value && !useOwnMethod.value)) return false
+	if (!props.network || !props.account) return false
 	return isLiveFeeScope(props, scope)
 }
 
@@ -724,6 +810,7 @@ watch(
 		const row = methods.value.find((m) => m.type === "fpc" && m.fpc?.id === verdict.fpcId)
 		if (!row || !sameFieldAddress(verdict.address, row.fpc.address ?? "")) return
 		lastVerdict.value = { fpcId: verdict.fpcId, funded: verdict.funded }
+		if (recheckFpcId.value === verdict.fpcId) recheckFpcId.value = null
 		if (verdict.funded) {
 			shortSponsorIds.delete(verdict.fpcId)
 			setAsideSponsorIds.delete(verdict.fpcId)
@@ -733,7 +820,8 @@ watch(
 		setAsideSponsorIds.add(verdict.fpcId)
 		// A pick of a contract that cannot pay is dropped too; its saved record stays.
 		if (props.originPrivacy === null && selectedMethod.value?.fpc?.id === verdict.fpcId) {
-			selectedMethod.value = undefined
+			selectedMethod.value = props.fallsBack ? publicFallback() : undefined
+			chosenUnasked = true
 			droppedForVerdictId.value = verdict.fpcId
 		}
 	},
@@ -741,6 +829,22 @@ watch(
 // A short verdict holds for one fee limit, so a new priority or transaction offers its row again;
 // the fallback's own re-estimate changes neither.
 watch([selectedPriority, () => props.txShape], () => shortSponsorIds.clear())
+watch(effectiveMethod, (m) => {
+	if (m?.fpc?.id !== recheckFpcId.value) recheckFpcId.value = null
+})
+watch(
+	() => props.txShape,
+	() => {
+		const m = effectiveMethod.value
+		recheckFpcId.value = m?.type === "fpc" ? (m.fpc?.id ?? null) : null
+	},
+)
+watch(
+	() => props.isEstimating,
+	(estimating) => {
+		if (!estimating) recheckFpcId.value = null
+	},
+)
 watch(
 	() => [props.profile, props.network, props.account],
 	async () => {
@@ -757,31 +861,6 @@ watch(
 		await runInit()
 	},
 )
-watch([isCustomMethod, useOwnMethod], ([custom, own]) => {
-	// Entering the embedded-visible state (a dApp op's v-model flip lands
-	// here without any runInit call) releases the subscription, killing the
-	// store's retry loop for this key — today's retry-chain death when a
-	// retry tick hit the embedded early-return. Bumping runSeq supersedes
-	// any in-flight run at its next checkpoint. The useOwnMethod watcher
-	// below is the revival path.
-	if (custom && !own) {
-		runSeq += 1
-		releaseSubscription()
-	}
-})
-watch(useOwnMethod, async (val) => {
-	// Switching from embedded → "use my own" needs to load balances/fpcs
-	// for the dropdown. Pre-#fix this was broken: clicking "Override with
-	// my method" on an embedded op never triggered the fetch pipeline.
-	// Also re-init on a DEGRADED snapshot (`error` set): while embedded the
-	// card holds no subscription (runInit's early-return released it), so the
-	// store's retry loop is dead — this is where the chain revives, so a
-	// degraded state can't become permanently stuck.
-	if (val && (error.value || !isInitComplete.value)) {
-		await runInit()
-	}
-})
-
 onBeforeMount(async () => {
 	console.debug(`[fee:${methodId}] mounting`)
 	fpcService.connect()
@@ -809,103 +888,101 @@ onBeforeUnmount(() => {
 		:data-origin="originPrivacy"
 		:data-sponsor-funding="sponsorFunding"
 	>
-		<!-- Embedded fee override banner -->
-		<template v-if="isCustomMethod && !useOwnMethod">
-			<Flex align="center" justify="between" :class="$style.card" data-testid="send-fee-embedded">
-				<Text size="13" weight="600" color="primary">Fee</Text>
-				<Text size="13" weight="600" color="primary">Embedded payload</Text>
-			</Flex>
-			<Flex direction="column" gap="8" :class="$style.detail_row">
-				<Text size="12" weight="600" color="secondary">
-					The app includes fee payment in the transaction.
-				</Text>
-				<Flex @click="handleUseOwnMethod" align="center" gap="4" :class="$style.link" data-testid="send-fee-override">
-					<Text size="12" weight="600" color="primary">Override with my method</Text>
-					<Icon name="arrow-right" size="10" color="primary" />
-				</Flex>
-			</Flex>
-		</template>
+		<!-- A method the dApp asked for: shown, never a choice. -->
+		<Flex v-if="lockedMethod" align="center" justify="between" :class="$style.card" data-testid="send-fee-locked">
+			<Text variant="label" color="primary">Fee</Text>
+			<Text variant="name" color="primary" :class="$style.method_size">Public Fee Juice · set by the app</Text>
+		</Flex>
+		<FeeMethodSelector
+			v-else
+			:modelValue="displayMethod"
+			@update:modelValue="handleMethodPicked"
+			:methods="menuMethods"
+			:payerNoticeShape="payerNoticeShape"
+			@open="isMethodsDropdownOpen = true"
+			@close="isMethodsDropdownOpen = false"
+		/>
 
-		<!-- Method selector -->
-		<template v-if="showMethodSelector">
-			<!-- A method the dApp asked for: shown, never a choice. -->
-			<Flex v-if="lockedMethod" align="center" justify="between" :class="$style.card" data-testid="send-fee-locked">
-				<Text size="13" weight="600" color="primary">Fee</Text>
-				<Text size="13" weight="600" color="primary">Public Fee Juice · set by the app</Text>
-			</Flex>
-			<FeeMethodSelector
-				v-else
-				:modelValue="displayMethod"
-				@update:modelValue="handleMethodPicked"
-				:methods="methods"
-				:payerNoticeShape="payerNoticeShape"
-				@open="isMethodsDropdownOpen = true"
-				@close="isMethodsDropdownOpen = false"
-			/>
-
-			<!-- Back to embedded link -->
+		<!-- Mounted empty with the card, so a notice that lands in it is announced. -->
+		<div role="status" aria-live="polite" aria-atomic="true" data-testid="fee-init-degraded-live">
 			<Flex
-				v-if="isCustomMethod && useOwnMethod"
-				align="center"
-				justify="end"
+				v-if="statusNotice"
+				align="start"
+				gap="6"
+				wide
 				:class="$style.detail_row"
-				:style="{ padding: '6px 12px' }"
+				data-testid="fee-init-degraded"
 			>
-				<Flex @click="handleUseEmbedded" align="center" gap="4" :class="$style.link" data-testid="send-fee-back-embedded">
-					<Icon name="arrow-right" size="10" color="primary" style="transform: rotate(180deg)" />
-					<Text size="12" weight="600" color="primary">Use app's payment</Text>
-				</Flex>
-			</Flex>
-
-			<!-- Degraded fee data (silent retry pending) -->
-			<Flex v-if="statusNotice" align="start" gap="6" wide :class="$style.detail_row" data-testid="fee-init-degraded">
-				<Icon name="info" size="14" color="primary" />
-				<Text size="12" weight="600" color="secondary" :style="{ paddingTop: '1px' }">
+				<Icon name="info" size="14" color="primary" aria-hidden="true" />
+				<Text variant="body" color="secondary" :style="{ paddingTop: '1px' }">
 					{{ statusNotice }}
 				</Text>
 			</Flex>
+		</div>
 
-			<FeeMethodRow
-				v-else
-				:method="effectiveMethod"
-				:isLoading="isLoading"
-				:feeJuiceBalanceFormatted="feeJuiceBalanceFormatted"
-				:privateFeeJuiceFormatted="privateFeeJuiceFormatted"
-			/>
+		<FeeMethodRow
+			v-if="!statusNotice"
+			:method="effectiveMethod"
+			:isLoading="isLoading"
+			:feeJuiceBalanceFormatted="feeJuiceBalanceFormatted"
+			:privateFeeJuiceFormatted="privateFeeJuiceFormatted"
+		/>
 
-			<Flex v-if="sponsorShort" align="start" gap="6" wide :class="$style.detail_row" data-testid="fee-sponsor-short">
-				<Icon name="info" size="14" color="primary" />
-				<Text size="12" weight="600" color="secondary" :style="{ paddingTop: '1px' }">
+		<!-- Mounted with the card in every state: a region created with its text in place may go unannounced. -->
+		<div role="status" aria-live="polite" aria-atomic="true" data-testid="fee-sponsor-live">
+			<Flex
+				v-if="sponsorShort"
+				align="start"
+				gap="6"
+				wide
+				:class="$style.detail_row"
+				data-testid="fee-sponsor-short"
+			>
+				<Icon name="info" size="14" color="primary" aria-hidden="true" />
+				<Text variant="body" color="secondary" :style="{ paddingTop: '1px' }">
 					{{ sponsorShortText }}
 				</Text>
 			</Flex>
-
-			<!-- Get-fee-juice nudge: the selected method has no fee juice to pay with. -->
-			<Flex v-if="feeJuiceMissing" align="center" gap="8" :class="$style.detail_row" data-testid="send-fee-nudge">
-				<Icon name="warning" size="14" color="secondary" />
-				<Flex direction="column" gap="2" :style="{ flex: 1, minWidth: 0 }">
-					<Text size="12" weight="600" color="primary">{{ nudgeCopy.title }}</Text>
-					<Text size="11" weight="500" color="tertiary">{{ nudgeCopy.body }}</Text>
-				</Flex>
-				<a
-					:href="FEE_JUICE_BRIDGE_URL"
-					target="_blank"
-					rel="noopener noreferrer"
-					:class="$style.get_fee_juice"
-					data-testid="send-fee-get-juice"
-				>{{ nudgeCopy.link }}</a>
+			<Flex
+				v-if="shortfallText"
+				align="start"
+				gap="6"
+				wide
+				:class="$style.detail_row"
+				data-testid="fee-juice-shortfall"
+			>
+				<Icon name="warning" size="14" color="secondary" aria-hidden="true" />
+				<Text variant="body" color="secondary" :style="{ paddingTop: '1px' }">
+					{{ shortfallText }}
+				</Text>
 			</Flex>
+		</div>
 
-			<FeeCostReadout
-				v-if="effectiveMethod && !feeJuiceMissing"
-				:estimate="estimatedFeeDisplay"
-				:isEstimating="isEstimating"
-				:isQueued="isQueued"
-				:payer="feePayer"
-			/>
+		<Flex v-if="feeJuiceMissing" align="center" gap="8" :class="$style.detail_row" data-testid="send-fee-nudge">
+			<Icon name="warning" size="14" color="secondary" />
+			<Flex direction="column" gap="2" :style="{ flex: 1, minWidth: 0 }">
+				<Text variant="value" color="primary">{{ nudgeCopy.title }}</Text>
+				<Text variant="caption" color="tertiary">{{ nudgeCopy.body }}</Text>
+			</Flex>
+			<a
+				:href="FEE_JUICE_BRIDGE_URL"
+				target="_blank"
+				rel="noopener noreferrer"
+				:class="$style.get_fee_juice"
+				data-testid="send-fee-get-juice"
+			>{{ nudgeCopy.link }}</a>
+		</Flex>
 
-			<FeePriorityRow v-if="effectiveMethod && !feeJuiceMissing" v-model="selectedPriority" />
-		</template>
+		<FeeCostReadout
+			v-if="effectiveMethod && !feeJuiceMissing"
+			:estimate="estimatedFeeDisplay"
+			:isEstimating="isEstimating"
+			:isQueued="isQueued"
+			:payer="feePayer"
+			:queuedCap="queuedCapDisplay"
+		/>
+
+		<FeePriorityRow v-if="effectiveMethod && !feeJuiceMissing" v-model="selectedPriority" />
 	</Flex>
 </template>
 
@@ -923,35 +1000,16 @@ onBeforeUnmount(() => {
 	padding: 12px;
 }
 
+.method_size {
+	font-size: 13px;
+}
+
 .detail_row {
 	composes: detail_row from "./fee-shared.module.css";
 }
 
-.link {
-	cursor: pointer;
-
-	& span,
-	& svg {
-		transition: all 0.2s var(--bezier);
-	}
-
-	&:hover {
-		& span {
-			color: var(--txt-primary);
-		}
-
-		& svg {
-			fill: var(--txt-primary);
-		}
-	}
-}
-
 .get_fee_juice {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
+	composes: type--label from global;
 	color: var(--nulo-accent);
 	white-space: nowrap;
 	cursor: pointer;

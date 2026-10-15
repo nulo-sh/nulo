@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: the session fence on every send, in `apps/extension/src/wallet/services/execution/` (see its `README.md`), the auto-lock deferral in `apps/extension/src/wallet/services/profile/session-manager.ts`, and the lock confirmation in `apps/extension/src/components/Header.vue`.
-- **Open items**: Storybook misrenders the extension's components, because the `unplugin-vue-components` directory resolves from the Vite root and the `chrome` stub is skipped under Chromium, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: Storybook misrenders the extension's components, because the `unplugin-vue-components` directory resolves from the Vite root and the `chrome` stub is skipped under Chromium; it was closed by a later plan before `follow-ups.md` was retired. None is open.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

@@ -20,7 +20,7 @@ import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/service"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { recordWrites } from "../storage-write-log"
-import { DappSessionService } from "./service"
+import { AccessLevel, DappSessionService } from "./service"
 import { RecoveryModeError } from "@nulo/extension-messaging/errors"
 import { asImportedKeysDek, asMasterSecretBytes, deriveDappSessionMacKey } from "@nulo/wallet-crypto"
 import { signDappSession } from "./integrity"
@@ -252,6 +252,68 @@ describe("applyCapabilityDecision requiresGrant", () => {
 	})
 })
 
+describe("stored grants are read and written through the projection", () => {
+	const authWit = { capability: { type: "accounts", canGet: true, canCreateAuthWit: true }, grantedAt: 1 }
+	const sendAny = { capability: { type: "transaction", scope: "*", extra: 1 }, grantedAt: 2 }
+	const sendAnyProjected = { capability: { type: "transaction", scope: "*" }, grantedAt: 2 }
+	const noCapability: [string, unknown] = ["a record with no capability", { grantedAt: 1 }]
+	const unprojectable: [string, unknown] = ["a transaction grant with no scope", { capability: { type: "transaction" }, grantedAt: 1 }]
+	const replaceSends = (grantRecords: unknown[]): CapabilityDecision => ({
+		addAccounts: [],
+		aliasPatch: {},
+		grantRecords: grantRecords as GrantedCapabilityRecord[],
+		replaceTypes: ["transaction"],
+		approvedTypes: ["transaction"],
+		rejectedTypes: [],
+	})
+
+	async function holding(grants: unknown[]) {
+		const made = await makeService()
+		const row = { ...rowFor("p1"), capabilityGrants: grants } as DappSession
+		await plantRowSignedBy(made.browserApi, row, "p1")
+		const key = `${ROW_ROOT}@${row.id}`
+		const raw = async () => (await made.browserApi.storage.local.get(key))[key]
+		return { svc: made.service, id: row.id, raw }
+	}
+
+	test.each<[string, unknown]>([["a record that is not an object", "transaction"], noCapability, unprojectable])(
+		"a writer given %s refuses with ValidationError and leaves the row byte-identical",
+		async (_name, record) => {
+			const { svc, id, raw } = await holding([authWit])
+			const before = await raw()
+			await expect(svc.setCapabilityGrants(id, [record as never])).rejects.toBeInstanceOf(ValidationError)
+			await expect(svc.applyCapabilityDecision(id, replaceSends([record]))).rejects.toBeInstanceOf(ValidationError)
+			expect(await raw()).toBe(before)
+		},
+	)
+
+	test("a writer stores the projection of a well-formed record", async () => {
+		const { svc, id } = await holding([authWit])
+		expect((await svc.setCapabilityGrants(id, [sendAny as never])).capabilityGrants).toEqual([sendAnyProjected])
+		expect((await svc.applyCapabilityDecision(id, replaceSends([sendAny]))).capabilityGrants).toEqual([sendAnyProjected])
+	})
+
+	test.each([noCapability, unprojectable])(
+		"a row holding %s refuses every deciding read with ValidationError, and Off still succeeds",
+		async (_name, record) => {
+			const { svc, id, raw } = await holding([authWit, sendAny, record])
+			const before = await raw()
+			await expect(svc.setAuthorizationsWithoutAsking(id, true, true)).rejects.toBeInstanceOf(ValidationError)
+			await expect(svc.applyCapabilityDecision(id, replaceSends([]))).rejects.toBeInstanceOf(ValidationError)
+			await expect(svc.getCapabilityGrants(id)).rejects.toBeInstanceOf(ValidationError)
+			expect(await raw()).toBe(before)
+			await expect(svc.setAuthorizationsWithoutAsking(id, false, false)).resolves.toMatchObject({ id })
+		},
+	)
+
+	test("the same reads succeed on a well-formed row and answer the projection", async () => {
+		const { svc, id } = await holding([authWit, sendAny])
+		expect(await svc.getCapabilityGrants(id)).toEqual([authWit, sendAnyProjected])
+		expect((await svc.setAuthorizationsWithoutAsking(id, true, true)).authorizationsWithoutAsking).toEqual({ broad: true })
+		expect((await svc.applyCapabilityDecision(id, replaceSends([]))).capabilityGrants).toEqual([authWit])
+	})
+})
+
 describe("tryGetDappSessionByOriginAndChain anchoring", () => {
 	test("forProfileId filters to the given profile and bypasses the live-profile read (silently revertible without this pin)", async () => {
 		const { service: svc, profileStub } = await makeService()
@@ -456,5 +518,145 @@ describe("the authorizations consent", () => {
 		await collection.start()
 		const row = await reader.getDappSession(id)
 		expect(row.capabilityGrants?.slice(1)).toEqual(projected)
+	})
+})
+
+describe("refuseVerification", () => {
+	const ORIGIN = "https://dapp.example"
+	const TUPLE = { origin: ORIGIN, chainId: "1", profileId: "p1" }
+
+	/** As the real provider: no key while locked, for a profile that is not the active one, or in
+	 *  recovery mode. */
+	async function makeLockAwareService() {
+		const made = await makeService()
+		made.profileStub.deriveDappSessionMacKey.mockImplementation(async (profileId: string) => {
+			if (recoveryProfiles.has(profileId)) throw new RecoveryModeError()
+			if (activeProfile?.id !== profileId) throw new Error("Wallet locked")
+			return realMacKey(profileId)
+		})
+		const refused: unknown[] = []
+		const deleted: Array<{ id: string }> = []
+		made.service.onVerificationRefused.add((tuple) => refused.push(tuple))
+		made.service.onDappSessionDeleted.add((row) => deleted.push(row))
+		const stored = async () =>
+			Object.keys((await made.browserApi.storage.local.get(null)) as Record<string, unknown>)
+				.filter((k) => k.startsWith(`${ROW_ROOT}@`))
+				.sort()
+		return { ...made, refused, deleted, stored }
+	}
+
+	test.each([
+		["the row is stored", false, "revoked"],
+		["nothing of the app is stored", true, "absent"],
+	] as const)("ends the app's live channels when %s", async (_, empty, result) => {
+		const svc = await makeLockAwareService()
+		if (!empty) await plantRowSignedBy(svc.browserApi, rowFor("p1"), "p1")
+		expect(await svc.service.refuseVerification(TUPLE)).toBe(result)
+		expect(svc.refused).toEqual([TUPLE])
+	})
+
+	test("a delete that fails answers unavailable and ends the channels again after it", async () => {
+		const svc = await makeLockAwareService()
+		await plantRowSignedBy(svc.browserApi, rowFor("p1"), "p1")
+		const order: string[] = []
+		svc.service.onVerificationRefused.add(() => order.push("refused"))
+		svc.browserApi.storage.local.remove = async () => {
+			order.push("remove")
+			throw new Error("quota")
+		}
+		expect(await svc.service.refuseVerification(TUPLE)).toBe("unavailable")
+		expect(order).toEqual(["refused", "remove", "refused"])
+	})
+
+	test.each([
+		["locked", () => undefined],
+		["another profile active", () => ({ id: "p2" })],
+		["in recovery mode", () => ({ id: "p1" })],
+	])("%s, every row of the app under the window's profile is deleted, each by its storage key", async (state, active) => {
+		const svc = await makeLockAwareService()
+		await plantRowSignedBy(svc.browserApi, rowFor("p1"), "p1")
+		await plantRowSignedBy(svc.browserApi, { ...rowFor("p1"), id: "duplicate" }, "p1")
+		activeProfile = active()
+		if (state === "in recovery mode") recoveryProfiles.add("p1")
+		expect(await svc.service.refuseVerification(TUPLE)).toBe("revoked")
+		expect(await svc.stored()).toEqual([])
+		expect(svc.deleted.map((row) => row.id).sort()).toEqual(["duplicate", "p1-row"])
+	})
+
+	test("a replacement row of the app is deleted too, and other apps, chains and profiles are kept", async () => {
+		const svc = await makeLockAwareService()
+		await plantRowSignedBy(svc.browserApi, { ...rowFor("p1"), id: "replacement" }, "p1")
+		await plantRowSignedBy(svc.browserApi, { ...rowFor("p1"), id: "other-chain", chainId: "2" }, "p1")
+		await plantRowSignedBy(svc.browserApi, { ...rowFor("p1"), id: "other-app", dappMetadata: { url: "https://other.example" } }, "p1")
+		await plantRowSignedBy(svc.browserApi, rowFor("p2"), "p2")
+		// A signed row moved to another key: deleted at the key it lives under, and named by it.
+		const moved = (await svc.browserApi.storage.local.get(`${ROW_ROOT}@replacement`)) as Record<string, unknown>
+		await svc.browserApi.storage.local.set({ [`${ROW_ROOT}@moved`]: moved[`${ROW_ROOT}@replacement`] })
+		expect(await svc.service.refuseVerification(TUPLE)).toBe("revoked")
+		expect(await svc.stored()).toEqual([`${ROW_ROOT}@other-app`, `${ROW_ROOT}@other-chain`, `${ROW_ROOT}@p2-row`])
+		expect(svc.deleted.map((row) => row.id).sort()).toEqual(["moved", "replacement"])
+	})
+
+	test.each([
+		["no profile id", { ...TUPLE, profileId: "" }],
+		["no origin", { ...TUPLE, origin: undefined }],
+	])("refuses a target with %s before ending anything", async (_, bad) => {
+		const svc = await makeLockAwareService()
+		await expect(svc.service.refuseVerification(bad as never)).rejects.toBeInstanceOf(ValidationError)
+		expect(svc.refused).toEqual([])
+	})
+})
+
+describe("confirmVerification", () => {
+	const HASH = "3c".repeat(32)
+
+	test("a check's hash is relayed to the listeners before the call answers", async () => {
+		const { service } = await makeService()
+		const confirmed: unknown[] = []
+		service.onVerificationConfirmed.add((payload) => confirmed.push(payload))
+		const answered = service.confirmVerification(HASH)
+		expect(confirmed).toEqual([{ verificationHash: HASH }])
+		await expect(answered).resolves.toBeUndefined()
+	})
+
+	test.each([
+		["upper-case hex", HASH.toUpperCase()],
+		["63 characters", HASH.slice(1)],
+		["a non-string", 7],
+	])("refuses %s and relays nothing", async (_, bad) => {
+		const { service } = await makeService()
+		const confirmed: unknown[] = []
+		service.onVerificationConfirmed.add((payload) => confirmed.push(payload))
+		await expect(service.confirmVerification(bad as never)).rejects.toBeInstanceOf(ValidationError)
+		expect(confirmed).toEqual([])
+	})
+})
+
+describe("purgeForChain", () => {
+	test("only the given profile's sessions on the given chain go, with their delete events", async () => {
+		const logger = new LoggerStore(new ConfigStore())
+		const browserApi = new FakeBrowserApi()
+		browserApi.reset()
+		const collection = new ServiceCollection()
+		collection.add(makeProfileStub() as never)
+		const service = new DappSessionService(logger, browserApi)
+		collection.add(service)
+		await collection.start()
+		const kept = await service.addDappSession({ url: "https://a.example" }, [], [], AccessLevel.Transactions, "2")
+		await service.addDappSession({ url: "https://a.example" }, [], [], AccessLevel.Transactions, "1")
+		await service.addDappSession({ url: "https://b.example" }, [], [], AccessLevel.Transactions, "1")
+		activeProfile = { id: "p2" }
+		const other = await service.addDappSession({ url: "https://a.example" }, [], [], AccessLevel.Transactions, "1")
+		const deleted: string[] = []
+		service.onDappSessionDeleted.add(async (row) => {
+			deleted.push(row.chainId)
+		})
+
+		await service.purgeForChain("p1", 1)
+
+		expect(deleted).toEqual(["1", "1"])
+		expect((await service.getDappSessions()).map((s) => s.id)).toEqual([other.id])
+		activeProfile = { id: "p1" }
+		expect((await service.getDappSessions()).map((s) => s.id)).toEqual([kept.id])
 	})
 })

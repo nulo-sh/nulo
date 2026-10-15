@@ -6,11 +6,13 @@ of this repository. While any survives, `nulo.sh/terms` and `/privacy` carry a *
 
 Find every one: `git grep -n "«FILL" -- legal/`. What each one needs is described in
 [`legal/README.md` § Placeholders](./legal/README.md#placeholders). This file is the schedule.
+Accepted code work that blocks launch is not listed here: it is the
+[`v1.0.0` milestone](https://github.com/nulo-sh/nulo/milestone/1).
 
 ## 1. Any time before v1.0.0 — look these up, do not guess
 
-**Done** for the privacy policy, every row below; the Terms carry the same security URL and Presto
-links. Each filled fact reads in place in `legal/privacy.md` and `legal/terms.md`.
+**Done** for the privacy policy, every row below but the last; the Terms carry the same security
+URL and Presto links. Each filled fact reads in place in `legal/privacy.md` and `legal/terms.md`.
 
 | Fill | Where | How to find it |
 |---|---|---|
@@ -23,6 +25,7 @@ links. Each filled fact reads in place in `legal/privacy.md` and `legal/terms.md
 | EU/UK Article 27 representative | `legal/privacy.md` § 10 | Only if required. **Delete the line** if not; never leave it blank |
 | Security-reporting URL | `legal/terms.md` § 24, `legal/privacy.md` § 13 | A URL that resolves for a reader outside the repo (`SECURITY.md` is a repo path) |
 | Presto's own licence + privacy links | `legal/terms.md` § 7, `legal/privacy.md` § 5.8 | Published by the Presto native app |
+| Re-read what the Cloudflare dashboard exposes, now with `tokens.nulo.sh` | `legal/privacy.md` §§ 5.5, 5.11 | Once the `nulo-tokens` Worker serves that domain: open the zone's request sample filtered to the hostname and confirm § 5.5's list still holds. Workers Logs stays off (`infra/token-list/wrangler.jsonc`) |
 
 ## 2. When the store listings exist
 
@@ -31,19 +34,30 @@ links. Each filled fact reads in place in `legal/privacy.md` and `legal/terms.md
 | ~~Chrome Web Store listing URL~~ | `legal/terms.md` § 1 — done |
 | ~~Firefox Add-ons listing URL~~ | `legal/terms.md` § 1 — done |
 
+The store launch left two owner steps in the dashboards
+([record](./implementations-plan/archive/nulo-v6/plan.md#store-upload)):
+
+- [ ] Chrome: publish the staged V6 submission from the dashboard once Google approves it, before
+      the approval lapses (30 days). The item stays Unlisted until a `/harden security` pass and
+      the owner decides on Public.
+- [ ] AMO: the listing still carries the "This add-on is experimental" flag (owner decision);
+      Mozilla may review the live version later, the modified-library rule being the open risk.
+
 Also at this point, not a placeholder but the same deadline: the **Chrome trader disclosure**
 ([`legal/README.md`](./legal/README.md), blocker 5) is declared non-trader; it must be re-declared
 before any funding, revenue or entity. If the trader path applies, Chrome displays a verified address
 and phone number publicly, and no clause can waive that.
 
 The store dashboards are filled from `apps/extension/store/listing.md` (one source for both stores;
-`scripts/store-listing.test.ts` holds it to the manifests and to the privacy policy). Before the
-first submission the privacy page must have lost its DRAFT banner, which takes two things: every
-`«FILL»` in § 1 above is filled (a reviewer who opens `nulo.sh/privacy` reads them), **and the
-privacy policy's effective date is set to the planned submission day** — the banner stays while
-any placeholder survives, and the date is one. Set it in the three places tests hold together:
+`apps/extension/scripts/store-listing.test.ts` holds it to the manifests and to the privacy
+policy). Before the first submission the privacy page must have lost its DRAFT banner, which takes
+two things: every `«FILL»` in § 1 above is filled (a reviewer who opens `nulo.sh/privacy` reads
+them), **and the privacy policy's effective date is set to the planned submission day** — the
+banner stays while any placeholder survives, and the date is one. Set it in three places, two in
+`legal/privacy.md` (tests hold the version line to the manifest, not the history row's date):
 
-- [x] `legal/privacy.md` — the version line at the top, and the 1.0 row of the history table
+- [x] `legal/privacy.md` — the version line at the top (1.0's now lives in
+      `legal/archive/privacy-1.0.md`), and the 1.0 row of the history table
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.0
 
 The Terms' listing URLs were filled once both first submissions existed. Their
@@ -61,16 +75,18 @@ loading remote scripts".
 ## 3. The day v1.0.0 ships — in the `release: promote dev → main` PR that carries it
 
 The Terms' **effective date** is the date the 1.0 listing goes live (privacy 1.0's is already set,
-§ 2). It appears in three places that tests hold in agreement, so change them
-together:
+§ 2). It appears in three places, two in `legal/terms.md` (tests hold the version line to the
+manifest, not the history row's date), so change them together:
 
 - [ ] `legal/terms.md` — the version line at the top, and the 1.0 row of the history table
 - [ ] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.0 (currently `null`)
-- [ ] `legal/privacy.md` + its manifest entries — 1.0 already dated, confirm unchanged; 1.1 per § 4
+- [ ] `legal/privacy.md` + its manifest entries — 1.0 and 1.1 already dated, confirm unchanged;
+      1.1.1 per § 4
 
 Then:
 
-- [ ] `git grep -n "«FILL" -- legal/` prints nothing
+- [ ] `git grep -n "«FILL" -- legal/terms.md legal/privacy.md` prints nothing (`legal/README.md`
+      names the placeholder in prose). The `launch-legal` check refuses the 1.0.0 Release PR until it does
 - [ ] Both listing URLs in `legal/terms.md` § 1 open the live listings (a store serves an item's
       public page only once it has published it)
 - [ ] `bun run --cwd packages/legal test` and `bun run --cwd apps/landing test` are green
@@ -94,8 +110,38 @@ archived, versioned and effective 6 October 2026:
 - [ ] After the deploy, `nulo.sh/privacy` shows no DRAFT banner, and AMO's Privacy policy field
   carries the 1.1.1 text (`apps/extension/store/listing.md` § Privacy policy text)
 
+**Due at the release that carries the Privacy page:** privacy § 5.3 says the explorer "can be
+disabled in Settings → Advanced". That control now lives in Settings → Privacy. Ship a new privacy
+version before that release reaches users (procedure above):
+
+- [x] `legal/privacy.md` — § 5.3 reads "Settings → Privacy"; the version line and a new history
+      row, effective the day it is published (1.2.1, 15 October 2026)
+- [x] `packages/legal/src/manifest.ts` — the new `privacy` entry, `material: false`, same date
+- [ ] After the deploy, AMO's Privacy policy field carries the new text
+      (`apps/extension/store/listing.md` § Privacy policy text)
+
+**Due at the release that first uploads an Aztec 6.0.0-rc.3 build to a store** (owner's call,
+2026-10-14; [aztec-rc3](./implementations-plan/archive/aztec-rc3/plan.md) OA-1, D9):
+
+- [ ] The wallet's in-place reset of a stale network (planned as `stale-network-reset`) is on `dev`:
+      until it is, an rc.3 update shows a store-installed V6 account the integrity barrier
+- [ ] The owner sends from that build on the live Testnet, which no e2e suite reaches (they run
+      against a local sandbox)
+
 ## Not legal text, same deadline
 
 - Firefox `data_collection_permissions` (`financialAndPaymentInfo`) and the Firefox 153 minimum
   are settled and pinned by `apps/extension/src/manifest.test.ts`; the reasoning is in
   `apps/extension/store/listing.md` § Data collection declaration.
+- **Open security issues.** Before the `release: promote dev → main` PR that carries v1.0.0, every
+  [open issue labelled `security`](https://github.com/nulo-sh/nulo/issues?q=is%3Aopen+label%3Asecurity)
+  is closed, or carries a written disposition in which the owner accepts the remaining risk by
+  name. Draft security advisories follow
+  [`SECURITY.md` § How findings are tracked](./SECURITY.md#how-findings-are-tracked) and are not
+  listed here.
+  Owner's call, 2026-10-11, decision page 0 (C7 note).
+- **A stable Aztec line.** v1.0.0 ships on a stable `6.0.0` of the Aztec packages, never a release
+  candidate. The bump follows the [`aztec-update` skill](./.claude/skills/aztec-update/SKILL.md),
+  and the version is read from the pinned `@aztec-labs/*` line in `apps/extension/package.json` at
+  promote time.
+  Owner's call, 2026-10-11, decision page 0 (C7 note).

@@ -46,6 +46,7 @@ import { AlarmDispatcher } from "@nulo/wallet-core/utils"
 import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@nulo/wallet-core/logger"
 import type { OperationJournalService, OperationRecord } from "./service"
+import { OPERATION_JOURNAL_SERVICE_NAME } from "./spec"
 
 export const JOURNAL_REAPER_ALARM_NAME = "nulo:journal:reap"
 
@@ -81,7 +82,7 @@ const STAGE_GRACE_MS: Readonly<Record<ActiveStage, number>> = {
 	submitting: 5 * 60_000,
 }
 
-const LOG_SOURCE = "JournalReaper"
+const LOG_SOURCE = OPERATION_JOURNAL_SERVICE_NAME
 
 /**
  * Watches the operation journal for non-terminal records that have

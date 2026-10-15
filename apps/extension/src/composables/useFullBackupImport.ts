@@ -10,7 +10,7 @@ import { CONFIG_SERVICE_NAME } from "@/wallet/services/config/spec"
 import { ContactServiceClient } from "@/wallet/services/contact/client"
 import { CONTACT_SERVICE_NAME } from "@/wallet/services/contact/spec"
 import { NetworkServiceClient } from "@/wallet/services/network/client"
-import { ProfileServiceClient, type RestoreSecret } from "@/wallet/services/profile/client"
+import { type ProfileInfo, ProfileServiceClient, type RestoreSecret } from "@/wallet/services/profile/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { TOKEN_BALANCE_SERVICE_NAME } from "@/wallet/services/token-balance/spec"
 import { TransactionServiceClient } from "@/wallet/services/transaction/client"
@@ -18,17 +18,29 @@ import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import type { PasskeyRequest } from "@/wallet/services/passkey/spec"
 import type { ToastOptions } from "@/composables/toast"
-import { type BackupSelection, collectRestoreErrors, normalizeAllIds, readBackupFile } from "@/utils/full-backup-helpers"
+import { FilePickCanceledError } from "@/utils/files"
+import {
+	type BackupSelection,
+	collectRestoreErrors,
+	normalizeAllIds,
+	openEncryptedBackup,
+	readBackupFile,
+} from "@/utils/full-backup-helpers"
 import { BACKUP_SCHEMA_VERSION_FIELD, COMPAT_EPOCH_FIELD, isSupportedCompatEpoch } from "@/wallet/services/backup/backup-migration-registry"
 import { maxBackupSchemaVersion, migrateBackupData } from "@/wallet/services/backup/backup-migrator"
+import { armRestoreOutcome } from "@/utils/restore-outcome"
 import {
+	accountStateNetworkIds,
 	type AccountStateRetryContext,
 	applyOutcome,
+	type BackupProfile,
 	buildRestoreSecret,
 	type RestoreData,
 	type RestoreIo,
+	type RestoreRun,
 	type RestoreScratch,
 	resolvePasskeyCredential,
+	type RestoredNetwork,
 	restoreAccountStateStage,
 	restoreAccountsStage,
 	restoreActiveNetworkPointer,
@@ -45,7 +57,6 @@ import {
 export type { RestoreStage, RestoreStatus } from "./full-backup-restore"
 import type { RestoreStage, RestoreStatus } from "./full-backup-restore"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
-import { fromBase64 } from "@/wallet/utils"
 import { isNewPasswordValid } from "@/utils/password"
 
 /** The full-backup envelope: the checksum + the checksum-covered body. */
@@ -60,11 +71,40 @@ export type FullBackupEnvelope = {
 
 /** The checksum-stripped body + the migrated slices that survive stage 1. */
 type ValidatedBackup = {
-	data: RestoreData
+	data: RestoreData & { profile: BackupProfile }
 	backup: Omit<FullBackupEnvelope, "checksum">
+	/** The verified checksum: it names this exact backup. */
+	checksum: string
 }
 
 type ValidateAndMigrateResult = ({ kind: "ok" } & ValidatedBackup) | { kind: "rejected"; title: string; message: string }
+
+/** A picked file that is no backup the wallet reads. */
+export const UNRECOGNIZED_BACKUP = {
+	title: "Unrecognized Backup File",
+	message: "The selected file is not a valid backup. Please select a correct backup file.",
+} as const
+
+export const DECRYPTION_FAILED = {
+	title: "Decryption Failed",
+	message:
+		"The provided password is incorrect or the backup file is corrupted. Please try again with the correct password or select another file.",
+} as const
+
+/** What a backup that is not the one the wallet exported shows, whichever check refused it. */
+const INTEGRITY_REFUSAL = {
+	kind: "rejected",
+	title: "Backup Integrity Check Failed",
+	message: "The backup file appears to be corrupted or has been tampered with. Please ensure you have the correct backup file.",
+} as const
+
+/** The restore reads `type` and `name` as the wallet wrote them; `id` is replaced by the service
+ *  whenever the wallet would not have generated it. */
+function isBackupProfile(profile: unknown): profile is BackupProfile {
+	if (typeof profile !== "object" || profile === null || Array.isArray(profile)) return false
+	const { type, name } = profile as Record<string, unknown>
+	return (type === "password" || type === "passkey") && typeof name === "string"
+}
 
 /**
  * Stage 1 of the full-backup restore — integrity + compatibility gate,
@@ -86,13 +126,7 @@ export async function validateAndMigrateBackup(fullBackup: FullBackupEnvelope): 
 	// accidental-integrity detection only — a plain backup's checksum is
 	// attacker-recomputable, so nothing downstream may treat it as authentication.
 	const comparisonChecksum = await EncryptionKey.getHashHex(JSON.stringify(backup))
-	if (checksum !== comparisonChecksum) {
-		return {
-			kind: "rejected",
-			title: "Backup Integrity Check Failed",
-			message: "The backup file appears to be corrupted or has been tampered with. Please ensure you have the correct backup file.",
-		}
-	}
+	if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL
 
 	// A pre-baseline blob (the legacy conflated `schema-version: 2`, no
 	// `compat-epoch`) fails this gate too — intended fail-closed.
@@ -140,7 +174,9 @@ export async function validateAndMigrateBackup(fullBackup: FullBackupEnvelope): 
 		}
 	}
 
-	return { kind: "ok", data: migrationResult.data as ValidatedBackup["data"], backup }
+	const data = migrationResult.data as RestoreData
+	if (!isBackupProfile(data.profile)) return INTEGRITY_REFUSAL
+	return { kind: "ok", data: data as ValidatedBackup["data"], backup, checksum: comparisonChecksum }
 }
 
 export interface UseFullBackupImportOptions {
@@ -167,7 +203,7 @@ export interface UseFullBackupImportOptions {
 	 * it to a simpler notification. Defaults to console.error so the
 	 * composable stays usable from any shell.
 	 */
-	showErrorLog?: (errors: Record<string, unknown[]>) => void
+	showErrorLog?: (errors: Record<string, unknown[]>, networks: RestoreErrorNetworks) => void
 	/**
 	 * The name the restored profile gets, asked inside the restore's latch once the backup is
 	 * validated. `backupName` is the validated backup's own name, sanitized (`null` when it has
@@ -190,6 +226,13 @@ export interface UseFullBackupImportOptions {
 	confirmDuplicate?: <T>(run: () => Promise<T>) => Promise<T | undefined>
 }
 
+/** What an error surface needs to name networks: the restored ones by id, and the names of those a
+ *  Retry would replay. */
+export interface RestoreErrorNetworks {
+	byNetworkId: ReadonlyMap<string, string>
+	unrestored: string[]
+}
+
 export interface UseFullBackupImportResult {
 	selectedBackup: Ref<BackupSelection | null>
 	decryptionPassword: Ref<string>
@@ -210,6 +253,8 @@ export interface UseFullBackupImportResult {
 	canRetryAccountState: Ref<boolean>
 	/** The seeded names of the networks a Retry replays, in seed order; empty while none can. */
 	unrestoredNetworkNames: Ref<string[]>
+	/** The last Retry left a network a Retry would replay again. */
+	retryFailedAgain: Ref<boolean>
 	/** The error log holds a row that no Retry replaces. */
 	hasOtherRestoreErrors: Ref<boolean>
 	/** A Retry is running; Continue and View Errors wait for it. */
@@ -241,26 +286,6 @@ function sanitizedBackupName(raw: unknown): string | null {
 	return cleaned.length > 0 ? cleaned : null
 }
 
-/** The KDF + decrypt + parse chain of decryptBackup, stale-fenced between every await:
- *  a re-pick (or the too-large clear) during the KDF awaits must not have its error wiped
- *  or its selection resurrected by a late publication. */
-async function openEncryptedBackup(
-	sealed: string,
-	password: string,
-	isStale: () => boolean,
-): Promise<{ kind: "stale" } | { kind: "ok"; backupObject: { data?: { profile?: { type?: string; name?: string } } } }> {
-	const passhash = await EncryptionKey.getPasshash(password)
-	if (isStale()) return { kind: "stale" }
-	const key = await EncryptionKey.fromPasshash(passhash)
-	if (isStale()) return { kind: "stale" }
-	// The detector accepted `sealed.trim()`; decode the same bytes (a saved file may carry padding).
-	const encryptedBytes = fromBase64(sealed.trim())
-	const decryptedBytes = await key.decrypt(encryptedBytes)
-	if (isStale()) return { kind: "stale" }
-	const decodedJson = new TextDecoder().decode(decryptedBytes)
-	return { kind: "ok", backupObject: JSON.parse(decodedJson) as { data?: { profile?: { type?: string; name?: string } } } }
-}
-
 /** The post-token slice clients, constructed up-front for the whole-loop finally. */
 function buildSliceClients(): Array<{ name: string; client: SliceRestoreClient }> {
 	return [
@@ -282,7 +307,7 @@ function buildSliceClients(): Array<{ name: string; client: SliceRestoreClient }
  * commit).
  */
 async function restoreProfileStep(
-	profile: { id: string; name: string; type: "password" | "passkey" },
+	profile: BackupProfile,
 	name: string,
 	restoreSecret: RestoreSecret,
 	credentialData: PasskeyCredentialData | undefined,
@@ -290,7 +315,8 @@ async function restoreProfileStep(
 	io: RestoreIo,
 ): Promise<{ id: string; restoreError?: unknown } | null> {
 	const { profileService, opts } = deps
-	const profileForRestore = { ...profile, name }
+	// The service judges the unchecked fields: the type against the restore secret, the id's shape.
+	const profileForRestore = { ...profile, name } as ProfileInfo
 	const runRestore = () =>
 		profileService.restore(profileForRestore, restoreSecret, opts.password.value, credentialData, opts.allowDuplicate?.value)
 	const newProfile = opts.confirmDuplicate ? await opts.confirmDuplicate(runRestore) : await runRestore()
@@ -305,6 +331,23 @@ async function restoreProfileStep(
 	return newProfile
 }
 
+/** Arming is best effort: a failure costs only the reminder. The tail runs under the fence
+ *  finalize returns. */
+async function finalizeWithReminder(
+	validated: ValidatedBackup,
+	profileId: string,
+	deps: { profileService: ProfileServiceClient; opts: UseFullBackupImportOptions },
+): Promise<RestoreRun> {
+	let run: string | undefined
+	try {
+		run = await armRestoreOutcome(profileId, validated.checksum, accountStateNetworkIds(validated.data))
+	} catch (error) {
+		console.warn("[restore-outcome] the reminder could not be armed", { error })
+	}
+	const { fence } = await deps.profileService.finalizeRestore(profileId, deps.opts.password.value || undefined)
+	return { fence, run }
+}
+
 /**
  * The staged restore sequence between the validate gate and completion — the order-of-restore
  * law lives here (see full-backup-restore.ts for each stage's own invariants). Returns the
@@ -317,11 +360,15 @@ async function executeRestore(
 	scratch: RestoreScratch,
 	io: RestoreIo,
 	deps: { profileService: ProfileServiceClient; networkService: NetworkServiceClient; opts: UseFullBackupImportOptions },
-): Promise<{ profile: { id: string; restoreError?: unknown }; accountStateRetry?: AccountStateRetryContext } | null> {
+): Promise<{
+	profile: { id: string; restoreError?: unknown }
+	networks: RestoredNetwork[]
+	accountStateRetry?: AccountStateRetryContext
+} | null> {
 	const { data, backup } = validated
 	const { profileService, networkService, opts } = deps
 	const masterKey = backup["master-key"] as string
-	const profile = data.profile as { id: string; name: string; type: "password" | "passkey" }
+	const profile = data.profile
 
 	// Before the passkey ceremony, so a name the user must fix never costs a ceremony.
 	const name = await opts.resolveProfileName(sanitizedBackupName(profile.name))
@@ -408,8 +455,9 @@ async function executeRestore(
 	// see the imported data, not an empty profile that needs default seeding.
 	scratch.finalizeStarted = true
 	io.setStage("finalizing")
+	let restoreRun: RestoreRun
 	try {
-		await profileService.finalizeRestore(newProfile.id, opts.password.value || undefined)
+		restoreRun = await finalizeWithReminder(validated, newProfile.id, deps)
 	} catch (err) {
 		applyOutcome(io, {
 			kind: "fail",
@@ -420,8 +468,8 @@ async function executeRestore(
 	}
 
 	io.setStage("restoring:account-state")
-	const accountStateRetry = await restoreAccountStateStage(data, nets.seeded, networkService, io)
-	return { profile: newProfile, accountStateRetry }
+	const tail = await restoreAccountStateStage(data, nets.seeded, networkService, io, restoreRun, profileService)
+	return { profile: newProfile, networks: nets.seeded, accountStateRetry: tail.retry }
 }
 
 /** The composable's reactive state, bundled for the module-level flow functions. */
@@ -433,6 +481,9 @@ interface ImportRefs {
 	restoreErrorLog: Ref<Record<string, unknown[]>>
 	importedProfile: Ref<unknown>
 	parsedBackupName: Ref<string | null>
+	/** The networks the last restore seeded; error surfaces name rows by them. */
+	restoredNetworks: ShallowRef<RestoredNetwork[]>
+	retryFailedAgain: Ref<boolean>
 	/** What a Retry replays; a reset, a new import and an unmount drop it. */
 	accountStateRetry: ShallowRef<AccountStateRetryContext | null>
 	/** The context a running Retry replays; a Retry whose context was dropped writes nothing. */
@@ -442,6 +493,7 @@ interface ImportRefs {
 function dropAccountStateRetry(state: ImportRefs) {
 	state.accountStateRetry.value = null
 	state.retryingAccountState.value = null
+	state.retryFailedAgain.value = false
 }
 
 /**
@@ -454,7 +506,7 @@ async function completeAfterRestore(opts: UseFullBackupImportOptions, profile: u
 	try {
 		await opts.completeImport(profile)
 	} catch (err) {
-		console.error("completeImport failed after a successful restore:", (err as Error)?.message || err)
+		console.error("completeImport failed after a successful restore:", { error: err })
 	}
 }
 
@@ -482,11 +534,7 @@ async function runPickBackupFile(state: ImportRefs, opts: UseFullBackupImportOpt
 			return
 		}
 		if (selection.type === "unknown" || (selection.type === "plain" && !selection.profileType)) {
-			opts.fillError(
-				"full_backup",
-				"Unrecognized Backup File",
-				"The selected file is not a valid backup. Please select a correct backup file.",
-			)
+			opts.fillError("full_backup", UNRECOGNIZED_BACKUP.title, UNRECOGNIZED_BACKUP.message)
 			return
 		}
 		// Surface the backup-embedded profile name as soon as it's available so the parent
@@ -502,8 +550,10 @@ async function runPickBackupFile(state: ImportRefs, opts: UseFullBackupImportOpt
 		state.decryptionPassword.value = ""
 		opts.clearError()
 	} catch (err) {
+		// A closed chooser keeps the chosen backup, its name and its Retry.
+		if (err instanceof FilePickCanceledError) return
 		opts.fillError("full_backup", "Failed to read the backup file")
-		console.error("Failed to read backup file:", (err as Error)?.message || err)
+		console.error("Failed to read backup file:", { error: err })
 	}
 }
 
@@ -536,11 +586,7 @@ async function runDecryptBackup(state: ImportRefs, opts: UseFullBackupImportOpti
 		opts.clearError()
 	} catch {
 		if (state.selectedBackup.value !== target) return
-		opts.fillError(
-			"full_backup",
-			"Decryption Failed",
-			"The provided password is incorrect or the backup file is corrupted. Please try again with the correct password or select another file.",
-		)
+		opts.fillError("full_backup", DECRYPTION_FAILED.title, DECRYPTION_FAILED.message)
 	}
 }
 
@@ -598,11 +644,13 @@ async function runRestoreBackup(
 
 	try {
 		state.restoreErrorLog.value = {}
+		state.restoredNetworks.value = []
 		const restored = await executeRestore(validated, scratch, io, { profileService, networkService, opts })
 		if (!restored) return
 
 		state.restoreStatus.value = "finished"
 		state.restoreStage.value = "finished"
+		state.restoredNetworks.value = restored.networks
 		if (!guards.hasErrors()) {
 			await completeAfterRestore(opts, restored.profile)
 			return
@@ -631,14 +679,17 @@ async function runRetryAccountState(
 	const live = () => state.accountStateRetry.value === ctx
 	let next: AccountStateRetryContext | undefined
 	try {
-		next = await retryAccountStateStage(ctx, (serviceName, stale, data) =>
-			live() ? deps.replaceRestoreErrors(serviceName, stale, data) : [],
-		)
+		next = (
+			await retryAccountStateStage(ctx, (serviceName, stale, data) =>
+				live() ? deps.replaceRestoreErrors(serviceName, stale, data) : [],
+			)
+		).retry
 	} finally {
 		if (state.retryingAccountState.value === ctx) state.retryingAccountState.value = null
 	}
 	if (!live()) return
 	state.accountStateRetry.value = next ?? null
+	state.retryFailedAgain.value = next !== undefined
 	if (!deps.hasErrors()) await completeAfterRestore(opts, state.importedProfile.value)
 }
 
@@ -648,7 +699,7 @@ function retryNetworkNames(ctx: AccountStateRetryContext): string[] {
 }
 
 /** Whether `log` holds a row a Retry of `ctx` would not replace; with no context, any row. */
-function hasRowsBeyondRetry(log: Record<string, unknown[]>, ctx: AccountStateRetryContext | null): boolean {
+export function hasRowsBeyondRetry(log: Record<string, unknown[]>, ctx: AccountStateRetryContext | null): boolean {
 	const replaced = new Set(ctx ? retryReplacedRows(ctx) : [])
 	// Rows read back through the reactive log are proxies: compare the raw rows.
 	return Object.values(log).some((rows) => rows.some((row) => !replaced.has(toRaw(row))))
@@ -666,13 +717,14 @@ function retryWarningRefs(state: ImportRefs) {
 
 function reportRestoreErrors(serviceName: string, data: unknown): unknown[] {
 	const errors = collectRestoreErrors(serviceName, data) ?? []
-	// Names the service that gates the Continue screen. Without it a degraded import is
-	// only visible as "some slice failed", with the reasons stranded in the RPC result.
-	if (errors.length) console.warn(`[full-backup-import] ${serviceName} reported ${errors.length} restore error(s)`, errors)
+	// Names the service and the count only: the rows carry network ids and addresses, which stay
+	// in the error viewer and never reach the exportable log.
+	if (errors.length) console.warn(`[full-backup-import] ${serviceName} reported ${errors.length} restore error(s)`)
 	return errors
 }
 
-function errorLogWriters(restoreErrorLog: Ref<Record<string, unknown[]>>) {
+/** The error log's two writers: a stage's append, and a Retry's swap of the rows it replaces. */
+export function errorLogWriters(restoreErrorLog: Ref<Record<string, unknown[]>>) {
 	function recordRestoreErrors(serviceName: string, data: unknown): unknown[] {
 		const errors = reportRestoreErrors(serviceName, data)
 		// APPEND, not assign: some services already have entries recorded before
@@ -695,16 +747,37 @@ function errorLogWriters(restoreErrorLog: Ref<Record<string, unknown[]>>) {
 	return { recordRestoreErrors, replaceRestoreErrors }
 }
 
+function createImportRefs(): ImportRefs {
+	return {
+		selectedBackup: ref<BackupSelection | null>(null),
+		decryptionPassword: ref(""),
+		restoreStatus: ref<RestoreStatus>(""),
+		restoreStage: ref<RestoreStage>(""),
+		restoreErrorLog: ref<Record<string, unknown[]>>({}),
+		importedProfile: ref<unknown>(null),
+		parsedBackupName: ref<string | null>(null),
+		restoredNetworks: shallowRef<RestoredNetwork[]>([]),
+		retryFailedAgain: ref(false),
+		accountStateRetry: shallowRef<AccountStateRetryContext | null>(null),
+		retryingAccountState: shallowRef<AccountStateRetryContext | null>(null),
+	}
+}
+
 export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBackupImportResult {
-	const selectedBackup = ref<BackupSelection | null>(null)
-	const decryptionPassword = ref("")
-	const restoreStatus = ref<RestoreStatus>("")
-	const restoreStage = ref<RestoreStage>("")
-	const restoreErrorLog = ref<Record<string, unknown[]>>({})
-	const importedProfile = ref<unknown>(null)
-	const parsedBackupName = ref<string | null>(null)
-	const accountStateRetry = shallowRef<AccountStateRetryContext | null>(null)
-	const retryingAccountState = shallowRef<AccountStateRetryContext | null>(null)
+	const state = createImportRefs()
+	const {
+		selectedBackup,
+		decryptionPassword,
+		restoreStatus,
+		restoreStage,
+		restoreErrorLog,
+		importedProfile,
+		parsedBackupName,
+		restoredNetworks,
+		retryFailedAgain,
+		accountStateRetry,
+		retryingAccountState,
+	} = state
 
 	const isRestoreHasErrors = computed(() => Object.keys(restoreErrorLog.value).length > 0)
 	const canRetryAccountState = computed(() => restoreStatus.value === "finished" && accountStateRetry.value !== null)
@@ -723,17 +796,6 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 
 	const { recordRestoreErrors, replaceRestoreErrors } = errorLogWriters(restoreErrorLog)
 
-	const state: ImportRefs = {
-		selectedBackup,
-		decryptionPassword,
-		restoreStatus,
-		restoreStage,
-		restoreErrorLog,
-		importedProfile,
-		parsedBackupName,
-		accountStateRetry,
-		retryingAccountState,
-	}
 	const { unrestoredNetworkNames, hasOtherRestoreErrors } = retryWarningRefs(state)
 	const pickBackupFile = () => runPickBackupFile(state, opts)
 	const decryptBackup = () => runDecryptBackup(state, opts)
@@ -753,7 +815,8 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 	function showRestoreErrorLog() {
 		if (!isRestoreHasErrors.value) return
 		if (opts.showErrorLog) {
-			opts.showErrorLog(restoreErrorLog.value)
+			const byNetworkId = new Map(restoredNetworks.value.map((network) => [network.id, network.name]))
+			opts.showErrorLog(restoreErrorLog.value, { byNetworkId, unrestored: unrestoredNetworkNames.value })
 		} else {
 			console.error("Restore errors:", restoreErrorLog.value)
 		}
@@ -766,6 +829,7 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 		restoreErrorLog.value = {}
 		importedProfile.value = null
 		parsedBackupName.value = null
+		restoredNetworks.value = []
 		dropAccountStateRetry(state)
 	}
 
@@ -781,6 +845,7 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 		parsedBackupName,
 		canRetryAccountState,
 		unrestoredNetworkNames,
+		retryFailedAgain,
 		hasOtherRestoreErrors,
 		isRetryingAccountState,
 		retryAccountState,

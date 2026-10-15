@@ -90,6 +90,11 @@ describe("hasInFlightSend", () => {
 		expect(hasInFlightSend([op({ networkId: undefined, stage: "proving" })], VIEWING)).toBe(true)
 	})
 
+	test("with no network active, a send stamped with one does not block: no card shows it", () => {
+		expect(hasInFlightSend([op({ stage: "proving" })], { ...VIEWING, networkId: undefined })).toBe(false)
+		expect(hasInFlightSend([op({ networkId: undefined, stage: "proving" })], { ...VIEWING, networkId: undefined })).toBe(true)
+	})
+
 	test("false once every send has finished", () => {
 		expect(hasInFlightSend([op({ stage: "succeeded" }), op({ stage: "cancelled" })], VIEWING)).toBe(false)
 	})

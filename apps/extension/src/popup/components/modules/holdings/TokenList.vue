@@ -2,7 +2,8 @@
 /**
  * The full token list: search, value/name sort, pinned rows above a rule, the rest in order, and
  * one fold that hides empty and under-dust rows. Presentational — the page owns the clients and
- * hands in rows, prices, the dust threshold and the pinned set. Local state resets on every mount.
+ * hands in rows, prices, the dust threshold and the pinned set, and handles `addToken`. Local state
+ * resets on every mount.
  */
 import type { PropType } from "vue"
 import { computed, ref } from "vue"
@@ -10,8 +11,9 @@ import { SectionLabel } from "@nulo/design"
 import ListStatusMessage from "@/components/composite/ListStatusMessage.vue"
 import SearchField from "@/components/composite/SearchField.vue"
 import TokenCard from "@/popup/components/modules/general/TokenCard.vue"
+import { isValidAztecAddress } from "@/utils/aztec-address"
 import { usdThresholdToMicro } from "@/utils/incoming-dust"
-import { stringCompare } from "@/utils/string"
+import { stringCompare, trimAddress } from "@/utils/string"
 import { foldLabel, isHiddenHolding } from "@/utils/token-fold"
 import { type OrderCtx, type OrderableRow, classifyRow, orderTokenRows } from "@/utils/token-order"
 import { matchesQuery } from "@/utils/token-search"
@@ -22,6 +24,7 @@ type Row = OrderableRow & { id: number | string }
 // biome-ignore lint/suspicious/noExplicitAny: variance escape hatch at the prop boundary; the template only reads OrderableRow fields.
 type RowFn<R> = (tb: any) => R
 
+const emit = defineEmits<{ addToken: [address: string] }>()
 const props = defineProps({
 	rows: { type: Array as PropType<Row[]>, required: true },
 	pinnedContracts: { type: Object as PropType<ReadonlySet<string>>, default: () => new Set<string>() },
@@ -78,6 +81,12 @@ const label = computed(() =>
 	}),
 )
 const showDivider = computed(() => partition.value.pinned.length > 0 && partition.value.rest.length > 0)
+/** A pasted address no row matches. Stricter than the New token popup's hex check: a value that is
+ *  no curve point gets the no-results line, never an add offer. */
+const addCandidate = computed(() => {
+	const q = query.value.trim()
+	return matching.value.length === 0 && isValidAztecAddress(q) ? q : undefined
+})
 const noResults = computed(() => query.value.trim() !== "" && matching.value.length === 0)
 const visibleCount = computed(() => matching.value.length)
 
@@ -100,7 +109,10 @@ const toggleSort = () => {
 		</Flex>
 
 		<Flex direction="column" :class="$style.list">
-			<ListStatusMessage v-if="noResults" variant="no-results" testid="holdings-no-results" />
+			<Button v-if="addCandidate" wide variant="secondary" data-testid="holdings-add-token" @click="emit('addToken', addCandidate)">
+				<span>Add token <span class="type--data" data-testid="holdings-add-token-address">{{ trimAddress(addCandidate, 4, 2, "…") }}</span></span>
+			</Button>
+			<ListStatusMessage v-else-if="noResults" variant="no-results" testid="holdings-no-results" />
 			<template v-else>
 				<TokenCard v-for="tb in partition.pinned" :key="tb.id" :tokenBalance="tb" />
 				<div v-if="showDivider" :class="$style.divider" data-testid="token-list-divider" />
@@ -135,14 +147,11 @@ const toggleSort = () => {
 }
 
 .sort {
+	composes: type--label from global;
 	height: 20px;
 	padding: 0 8px;
 	background: var(--nulo-surface-high);
 
-	font-family: var(--font-mono);
-	font-size: 10px;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
 	color: var(--txt-primary);
 	cursor: pointer;
 }
@@ -157,6 +166,7 @@ const toggleSort = () => {
 }
 
 .fold {
+	composes: type--label from global;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -168,10 +178,6 @@ const toggleSort = () => {
 	cursor: pointer;
 	text-align: left;
 
-	font-family: var(--font-mono);
-	font-size: 10px;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
 
 	transition: color 0.2s var(--bezier);

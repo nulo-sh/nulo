@@ -22,7 +22,9 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Page } from "puppeteer"
 import { afterEach, expect } from "vitest"
-import type { AztecTestConfig } from "../fixtures/aztec"
+import { queuedFeeCap } from "@/wallet/services/execution/queued-fee-cap"
+import { type AztecTestConfig, waitForTxMined } from "../fixtures/aztec"
+import { stopBackground } from "../fixtures/browser"
 import { type Burst, aztecConfig, burstTest as test, expectLedger, raw, reopen, settle } from "../fixtures/burst-account"
 import { TEST_PASSWORD } from "../fixtures/constants"
 import {
@@ -43,12 +45,16 @@ import {
 	navigateByHash,
 	readSessionRow,
 	switchToLocalNetwork,
+	unlockAfterBackgroundDeath,
 	unlockProfile,
 	waitForProfilePurged,
 } from "../fixtures/helpers"
+import { shotSend, waitForReview, waitForReviewReady, waitForSendGone } from "../fixtures/send-page"
+import { pointerClick } from "../helpers/legal-drivers"
 import { readDappExecuteRecords, waitForDappExecuteStagesPresent } from "../fixtures/journal"
-import { holdMining, releaseMining, waitForEmptyMempool } from "../fixtures/mining-hold"
-import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { holdMining, pendingTxCount, releaseMining, waitForEmptyMempool } from "../fixtures/mining-hold"
+import { assertPgOk, openPlayground, type PgResult, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { reconnectPlayground } from "../fixtures/send"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { holdAccountRegistration, releaseAccountRegistration } from "../fixtures/projection-gate"
 import { holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
@@ -57,13 +63,16 @@ import {
 	confirmSend,
 	expectEstimateQueued,
 	expectStageHeld,
+	readTransferRows,
 	readTxStatuses,
 	startSend,
+	type TransferRow,
 	waitForEstimate,
 	waitForTransferStage,
 	waitForTransfersTerminal,
 	waitForTxsMined,
 } from "../fixtures/send-burst"
+import { readScopeIdentity, seedTransaction } from "../helpers/activity-seeds"
 import { deleteProfile, exportBackup, waitForHeldProjection } from "../helpers/handshake-import"
 import { importFullBackup, POPUP_IMPORT_SHELL } from "../helpers/import-drivers"
 
@@ -168,8 +177,9 @@ const HELD_MS = 15_000
  * queued and Send stays disabled (never the failure toast, never a fee). Lifting the hold mines A;
  * B's estimate then lands, B confirms, and both succeed.
  */
-async function expectQueued(burst: Burst, a: BurstSend, b: BurstSend): Promise<void> {
+async function expectQueued(burst: Burst, a: BurstSend, b: BurstSend, afterA?: (burst: Burst) => Promise<void>): Promise<void> {
 	const aHash = await fireIntoHeldWindow(burst, a)
+	await afterA?.(burst)
 	const { page } = burst
 	await startSend(page, b)
 	await expectEstimateQueued(page, HELD_MS)
@@ -240,6 +250,27 @@ test.skipIf(!hasConfig)(
 	},
 )
 
+/** Ends the background under the held send, so all that orders the next one is A's stored tx row. */
+async function restartBackground(burst: Burst): Promise<void> {
+	await burst.page.close()
+	await stopBackground(burst.ctx)
+	burst.page = await openPopup(burst.ctx)
+	await unlockAfterBackgroundDeath(burst.page)
+}
+
+test.skipIf(!hasConfig)(
+	"after a background restart, a send on the same private fee contract waits for the pending one",
+	{ timeout: 600_000, retry: 0 },
+	async ({ burst }) => {
+		await expectQueued(
+			burst,
+			{ token: "TST", from: "public", to: "public", amount: "31", destination: to(), fee: "private" },
+			{ token: "TST", from: "public", to: "public", amount: "32", destination: to(), fee: "private" },
+			restartBackground,
+		)
+	},
+)
+
 test.skipIf(!hasConfig)(
 	"first private sends of two tokens to a new recipient: the second waits",
 	{ timeout: 600_000, retry: 0 },
@@ -254,19 +285,44 @@ test.skipIf(!hasConfig)(
 	},
 )
 
-/** The awaiting card of the only send in flight: its stage, subtitle and whether it offers focus. */
-async function readAwaitingCard(page: Page) {
-	await page.waitForSelector('[data-testid="tx-awaiting-card"]', { timeout: 30_000 })
-	return page.evaluate(() => {
-		const cards = document.querySelectorAll('[data-testid="tx-awaiting-card"]')
-		const card = cards[0]
-		return {
-			count: cards.length,
-			stage: card?.getAttribute("data-stage") ?? null,
-			subtitle: card?.querySelector('[data-testid="tx-awaiting-subtitle"]')?.textContent?.trim() ?? null,
-			focus: Boolean(card?.querySelector('[data-testid="tx-awaiting-focus"]')),
-		}
-	})
+interface AwaitingCard {
+	stage: string | null
+	subtitle: string | null
+	focus: boolean
+	cancel: boolean
+}
+
+async function readAwaitingCards(page: Page): Promise<AwaitingCard[]> {
+	return page.evaluate(() =>
+		[...document.querySelectorAll('[data-testid="tx-awaiting-card"]')].map((card) => ({
+			stage: card.getAttribute("data-stage"),
+			subtitle: card.querySelector('[data-testid="tx-awaiting-subtitle"]')?.textContent?.trim() ?? null,
+			focus: Boolean(card.querySelector('[data-testid="tx-awaiting-focus"]')),
+			cancel: Boolean(card.querySelector('[data-testid="tx-awaiting-cancel"]')),
+		})),
+	)
+}
+
+/**
+ * The only awaiting card, at `stage` with its cancel control. A reopened popup can first render a
+ * stage-less card (the executing-task snapshot lands before the journal's); only that is waited
+ * through, and a second card or any other stage fails at once.
+ */
+async function waitForAwaitingCard(page: Page, stage: string): Promise<AwaitingCard> {
+	const appearBy = Date.now() + 30_000
+	let settleBy: number | undefined
+	for (;;) {
+		const cards = await readAwaitingCards(page)
+		const sampledAt = Date.now()
+		const seen = JSON.stringify(cards)
+		if (cards.length > 1) throw new Error(`${cards.length} awaiting cards for one send: ${seen}`)
+		if (sampledAt > (settleBy ?? appearBy)) throw new Error(`no awaiting card reached ${stage} in time: ${seen}`)
+		const [card] = cards
+		if (card?.stage === stage && card.cancel) return card
+		if (card?.stage) throw new Error(`the awaiting card is not at ${stage} with a cancel control: ${seen}`)
+		if (card) settleBy ??= sampledAt + 10_000
+		await new Promise((r) => setTimeout(r, 250))
+	}
 }
 
 /**
@@ -301,7 +357,13 @@ test.skipIf(!hasConfig)(
 		await tab.close()
 		await reopen(burst)
 		await expectStageHeld(burst.page, raw(b.amount), "queued", 5_000)
-		expect(await readAwaitingCard(burst.page)).toEqual({ count: 1, stage: "queued", subtitle: "Queued...", focus: false })
+		expect(await waitForAwaitingCard(burst.page, "queued")).toEqual({
+			stage: "queued",
+			subtitle: "Waiting for your earlier send",
+			focus: false,
+			cancel: true,
+		})
+		await shotSend(burst.page, "home-queued-send", "tx-awaiting-card")
 		await releaseMining()
 		await expectBothSucceed(burst, a, b)
 	},
@@ -317,7 +379,8 @@ test.skipIf(!hasConfig)(
 		const tab = await confirmInTwoWindows(burst.ctx, burst.page, a, b)
 		await tab.close()
 		await reopen(burst)
-		expect((await readAwaitingCard(burst.page)).stage).toBe("queued")
+		await waitForTransferStage(burst.page, raw(b.amount), ["queued"], 5_000)
+		await waitForAwaitingCard(burst.page, "queued")
 		await clickByTestId(burst.page, "tx-awaiting-cancel")
 		const cancelled = await waitForTransferStage(burst.page, raw(b.amount), ["cancelled", "failed", "succeeded"])
 		expect([cancelled.stage, cancelled.txHash]).toEqual(["cancelled", undefined])
@@ -330,19 +393,35 @@ test.skipIf(!hasConfig)(
 	},
 )
 
+/** Whether this file's browser has approved the playground's origin: the burst fixture is file-scoped. */
+let playgroundApproved = false
+
+/** The playground with the matrix account granted. Once the origin is approved, a new page's
+ *  discovery is automatic and only the emoji check asks. */
+async function matrixPlayground(burst: Burst): Promise<Page> {
+	if (playgroundApproved) {
+		const playground = await openPlayground(burst.ctx)
+		await reconnectPlayground(burst.ctx, playground, "transaction", "same-token-concurrent-sends:reconnect")
+		return playground
+	}
+	const playground = await connectPlayground(burst.ctx)
+	await grantCapBundle(burst.ctx, playground, "transaction", async (ids) => {
+		const mine = ids.find((id) => id?.toLowerCase() === burst.account.toLowerCase())
+		if (!mine) throw new Error("the capabilities popup does not offer the matrix account")
+		return [mine]
+	})
+	playgroundApproved = true
+	return playground
+}
+
 test.skipIf(!hasConfig)(
 	"a Send-page send confirmed while a dApp send proves waits at queued, then both succeed",
 	{ timeout: 600_000, retry: 0 },
 	async ({ burst }) => {
 		const config = aztecConfig as AztecTestConfig
 		await reopen(burst)
-		const playground = await connectPlayground(burst.ctx)
+		const playground = await matrixPlayground(burst)
 		try {
-			await grantCapBundle(burst.ctx, playground, "transaction", async (ids) => {
-				const mine = ids.find((id) => id?.toLowerCase() === burst.account.toLowerCase())
-				if (!mine) throw new Error("the capabilities popup does not offer the matrix account")
-				return [mine]
-			})
 			const b: BurstSend = { token: "TST", from: "private", to: "private", amount: "29", destination: to(), fee: "sponsored" }
 			await waitForEmptyMempool(config.nodeUrl)
 			await startSend(burst.page, b)
@@ -374,6 +453,73 @@ test.skipIf(!hasConfig)(
 			expect([row.stage, row.error]).toEqual(["succeeded", undefined])
 			await waitForTxsMined(burst.page, [row.txHash as string])
 			await settle(burst, [b])
+			burst.ledger.TST.publicRaw -= 1n
+			await expectLedger(burst, ["TST"])
+		} finally {
+			await playground.close()
+		}
+	},
+)
+
+/** The hash a NO_WAIT `sendTx` answered with: the answer comes at submission, not inclusion. */
+function dappTxHash(result: PgResult): string {
+	const txHash = (result.resultJson as { txHash?: string }).txHash
+	if (typeof txHash !== "string") throw new Error(`no txHash in ${JSON.stringify(result.resultJson)}`)
+	return txHash
+}
+
+/** The dApp send recorded after `known` keeps reading `stage` for `windowMs`: its build has not started. */
+async function expectDappRecordHeld(page: Page, known: ReadonlySet<string>, stage: string, windowMs: number): Promise<void> {
+	const fresh = async () => (await readDappExecuteRecords(page)).filter((r) => !known.has(r.id))
+	const recorded = Date.now() + 30_000
+	while ((await fresh()).length === 0) {
+		if (Date.now() > recorded) throw new Error("the dApp send was never recorded")
+		await new Promise((r) => setTimeout(r, 250))
+	}
+	const deadline = Date.now() + windowMs
+	while (Date.now() < deadline) {
+		const stages = (await fresh()).map((r) => r.stage)
+		if (stages.length !== 1 || stages[0] !== stage)
+			throw new Error(`the dApp send was expected to wait at ${stage}, but reads ${JSON.stringify(stages)}`)
+		await new Promise((r) => setTimeout(r, 250))
+	}
+}
+
+test.skipIf(!hasConfig)(
+	"a Send-page send held unmined, then a dApp send of the same account: the dApp send waits at queued, then both succeed",
+	{ timeout: 600_000, retry: 0 },
+	async ({ burst }) => {
+		const config = aztecConfig as AztecTestConfig
+		await reopen(burst)
+		const playground = await matrixPlayground(burst)
+		try {
+			// A private send on a sponsor: it shares nothing with the dApp's public transfer, so only the
+			// opaque wait (a dApp send's spends are unknown before its build) can hold the dApp send.
+			const a: BurstSend = { token: "TST", from: "private", to: "private", amount: "33", destination: to(), fee: "sponsored" }
+			const aHash = await fireIntoHeldWindow(burst, a)
+
+			await playground.bringToFront()
+			await setPgInput(playground, "tokenAddress", config.tokenAddress)
+			await setPgInput(playground, "recipient", config.minterAddress)
+			await setPgInput(playground, "amount", "1")
+			const known = new Set((await readDappExecuteRecords(burst.page)).map((r) => r.id))
+			const seq = await snapshotResultSeq(playground)
+			const approvalP = waitForPopup(burst.ctx, "execute", { timeout: 60_000 })
+			await clickByTestId(playground, "pg-btn-sendTx-default")
+			const approval = await approvalP
+			await waitForExecuteContent(approval, 60_000)
+			await approveExecute(approval, { feeMethod: "sponsored", approvableTimeoutMs: 120_000 })
+			await expectDappRecordHeld(burst.page, known, "queued", HELD_MS)
+			expect((await readTxStatuses(burst.page, [aHash]))[aHash], "A is still unmined while the dApp send waits").toBe(0)
+
+			await releaseMining()
+			const sent = await waitForPgResult(playground, "sendTx", seq, 300_000)
+			await assertPgOk(playground, sent, "dApp send behind a held transfer")
+			await waitForTxMined(config, dappTxHash(sent))
+			const row = (await waitForTransfersTerminal(burst.page)).find((r) => r.amount === raw(a.amount))
+			expect([row?.stage, row?.error]).toEqual(["succeeded", undefined])
+			await waitForTxsMined(burst.page, [aHash])
+			await settle(burst, [a])
 			burst.ledger.TST.publicRaw -= 1n
 			await expectLedger(burst, ["TST"])
 		} finally {
@@ -457,5 +603,128 @@ baseTest.skipIf(!hasConfig)(
 			if (page) await releaseAccountRegistration(page).catch(() => {})
 			rmSync(dir, { recursive: true, force: true })
 		}
+	},
+)
+
+type Asking = TransferRow & { reask: { fee: string; cap: string } }
+
+const BEFORE_PROOF = new Set(["pending", "queued", "simulating"])
+
+/** Waits for a re-ask held to `cap` (any, before the first accept) or, after an accept, for proof
+ *  progress; fails on a terminal failure, or on proof progress before any accept. */
+async function waitForAskOrSent(page: Page, amountRaw: string, cap?: string): Promise<Asking | "sent"> {
+	const deadline = Date.now() + 180_000
+	for (;;) {
+		const row = (await readTransferRows(page)).find((r) => r.amount === amountRaw)
+		if (row?.stage === "queued" && row.reask && (cap === undefined || row.reask.cap === cap)) return row as Asking
+		if (row?.stage && !BEFORE_PROOF.has(row.stage)) {
+			if (cap === undefined || !["proving", "submitting", "succeeded"].includes(row.stage)) {
+				throw new Error(`transfer ${amountRaw} left the queue without an accept: ${JSON.stringify(row)}`)
+			}
+			return "sent"
+		}
+		if (Date.now() > deadline) throw new Error(`transfer ${amountRaw} never asked again: ${JSON.stringify(row)}`)
+		await new Promise((r) => setTimeout(r, 250))
+	}
+}
+
+async function readReaskSheet(page: Page): Promise<{ line: string; button: string }> {
+	await waitForReview(page, true)
+	await waitForReviewReady(page)
+	return page.evaluate(() => ({
+		line: document.querySelector('[data-testid="send-review-fee-reask"]')?.textContent?.trim() ?? "",
+		button: document.querySelector('[data-testid="send-review-submit"]')?.textContent?.trim() ?? "",
+	}))
+}
+
+async function readRecordedFee(page: Page, hash: string): Promise<string | undefined> {
+	return page.evaluate(async (h: string) => {
+		const value = (await chrome.storage.local.get(`nulo:core:txs@${h}`))[`nulo:core:txs@${h}`]
+		const row = (typeof value === "string" ? JSON.parse(value) : value) as { estimatedFee?: string } | undefined
+		return row?.estimatedFee
+	}, hash)
+}
+
+/** Seeds a finalized private send of TST an hour old, paid from public Fee Juice at Urgent, whose
+ *  fee is 4/5 of the recorded fee of `hash`; returns that fee. */
+async function seedUrgentSend(burst: Burst, hash: string): Promise<string> {
+	const fee = await readRecordedFee(burst.page, hash)
+	if (fee === undefined) throw new Error(`no recorded fee for ${hash}`)
+	const estimatedFee = ((BigInt(fee) * 4n) / 5n).toString()
+	const token = { contract: burst.tokens.TST, name: "TestToken", symbol: "TST", decimals: 18 }
+	const scope = { ...(await readScopeIdentity(burst.page)), token }
+	const seed = { hash: `0x${"5e".repeat(32)}`, amount: raw("1"), at: Date.now() - 3_600_000, transferType: 0 }
+	await seedTransaction(burst.page, scope, { ...seed, estimatedFee, feePaymentMethod: 1, priorityLevel: "urgent" })
+	return estimatedFee
+}
+
+/** The case's bound on re-asks: each needs a price move between an accept and its build. */
+const MAX_ASKS = 3
+
+test.skipIf(!hasConfig)(
+	"a private send at Fast held unmined; a second at Urgent is queued against the cap of an older Urgent send, asked again after the release, accepted from Home, and goes out once",
+	{ timeout: 600_000, retry: 0 },
+	async ({ burst }) => {
+		const { nodeUrl } = aztecConfig as AztecTestConfig
+		// Both speeds are explicit: Normal prices at the build's default multiplier, which the e2e build
+		// widens above Urgent's. B's basis is the older Urgent send, never A at Fast: seeded at 4/5 of A's
+		// fee, its cap is about A's fee, below B at Urgent, whose multiplier is 5/3 of Fast's in every build.
+		const a: BurstSend = { token: "TST", from: "private", to: "private", amount: "9", destination: to(), fee: "public", speed: "fast" }
+		const b: BurstSend = { ...a, amount: "10", speed: "urgent" }
+		const basis = await seedUrgentSend(burst, await fireIntoHeldWindow(burst, a))
+		const { page } = burst
+
+		await startSend(page, b)
+		await expectEstimateQueued(page, 3_000)
+		await page.waitForSelector('[data-testid="fee-estimate-queued-cap-line"]', { timeout: 5_000 })
+		await shotSend(page, "4-send-queued-cap", "fee-settings-card")
+		await pointerClick(page, "send-submit")
+		await waitForReview(page, true)
+		await waitForReviewReady(page)
+		expect(await page.$eval('[data-testid="send-review-submit"]', (el) => el.textContent?.trim())).toBe("Queue send")
+		await shotSend(page, "4-review-queued-cap", "send-review-fee")
+		await pointerClick(page, "send-review-submit")
+		await waitForSendGone(page, 30_000)
+
+		await expectStageHeld(page, raw(b.amount), "queued", HELD_MS)
+		expect(await pendingTxCount(nodeUrl), "while A is held the node holds A alone").toBe(1)
+		expect((await waitForAwaitingCard(page, "queued")).subtitle).toBe("Waiting for your earlier send")
+		await shotSend(page, "4-home-waiting", "tx-awaiting-card")
+		await releaseMining()
+
+		let accepted: string | undefined
+		const caps: string[] = []
+		for (let asks = 1; ; asks++) {
+			const asking = await waitForAskOrSent(burst.page, raw(b.amount), accepted)
+			if (asking === "sent") break
+			if (asks > MAX_ASKS) throw new Error(`asked again ${asks} times: ${JSON.stringify(asking)}`)
+			caps.push(asking.reask.cap)
+			console.log(`[same-token] re-ask ${asks} over a ${basis} basis: ${JSON.stringify(asking.reask)}`)
+			expect(BigInt(asking.reask.fee) > BigInt(asking.reask.cap), "a re-ask names a fee above its cap").toBe(true)
+			expect(await pendingTxCount(nodeUrl), "the node holds no tx of B before the accept").toBe(0)
+			if (asks === 1) await reopen(burst)
+			expect((await waitForAwaitingCard(burst.page, "queued")).subtitle).toBe("Fee went up. Review")
+			if (asks === 1) await shotSend(burst.page, "4-home-reask-row", "tx-awaiting-card")
+			await pointerClick(burst.page, "tx-awaiting-card")
+			const sheet = await readReaskSheet(burst.page)
+			expect(sheet.line).toMatch(/^Fee is now [\d.]+ FJ( \(.+\))?, above the [\d.]+ FJ you accepted\.$/)
+			expect(sheet.button).toMatch(/^Send for [\d.]+ FJ$/)
+			if (asks === 1) await shotSend(burst.page, "4-reask-sheet", "send-review-fee")
+			await pointerClick(burst.page, "send-review-submit")
+			accepted = asking.reask.fee
+		}
+
+		expect(caps[0], "the first re-ask holds B to the like send's cap").toBe(queuedFeeCap(basis))
+		await expectBothSucceed(burst, a, b)
+		const sent = (await readTransferRows(burst.page)).filter((r) => r.amount === raw(b.amount))
+		expect(
+			sent.map((r) => r.stage),
+			"B goes out once",
+		).toEqual(["succeeded"])
+		const fee = await readRecordedFee(burst.page, sent[0].txHash as string)
+		expect(
+			BigInt(fee ?? "0") > 0n && BigInt(fee ?? "0") <= BigInt(accepted as string),
+			`B's fee ${fee} is at most the accepted ${accepted}`,
+		).toBe(true)
 	},
 )

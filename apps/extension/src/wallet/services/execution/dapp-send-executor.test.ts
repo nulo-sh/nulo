@@ -21,15 +21,17 @@ import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
-import { JobCancelledError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import { JobCancelledError, RpcTimeoutError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/spec"
 import { DappSendExecutor, type DappSendExecutorDeps } from "./dapp-send-executor"
+import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
 import type { ProveAndSendContext } from "./execution-coordinator"
 import { AUTHWITS_CHANGED_MESSAGE, ESTIMATE_INCOMPLETE_MESSAGE, PREVIEW_FOREIGN_MESSAGE, PreviewSnapshots } from "./preview-snapshots"
 import { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { fingerprintOperation } from "./operation-fingerprint"
+import { MAX_WAIT_MS, SendSequencer } from "./send-sequencer"
 import { ExecutionService } from "./service"
 
 // A pass-through spy: the extraction itself is aztec.js's; its arguments are the executor's.
@@ -77,6 +79,17 @@ vi.mock("@aztec-labs/protocol-contracts/fee-juice", async (importOriginal) => {
 
 const ORIGIN: LocalTxOrigin = { type: OriginType.DAPP, name: "test-dapp" }
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
+
+/** The lane's earlier-sends seams for a send that never has to wait. */
+const clearLine = () => ({
+	parkSlot: vi.fn(async () => {
+		throw new Error("a clear send never parks")
+	}),
+	joinOriginLine: vi.fn(() => ({ behind: () => false, earlierDone: async () => true, leave: vi.fn() })),
+	failUnclaimed: vi.fn(async () => {}),
+})
+const EXPIRY = { timestamp: 1_750_003_600, nullifier: `0x${"02".padStart(64, "0")}` }
+
 /** A popup approval envelope carrying a reuse id; the producer mints `previewId = estimateId`
  *  for a bound standard estimate, so a real approval always pairs the two equal. */
 const APPROVAL = (estimateId: string) => ({ interactionId: "i-1", index: 0, estimateId, previewId: estimateId })
@@ -89,6 +102,7 @@ function makeTxRequest() {
 				gasLimits: { daGas: 100, l2Gas: 200 },
 				teardownGasLimits: { daGas: 10, l2Gas: 20 },
 				maxFeesPerGas: { feePerDaGas: 2n, feePerL2Gas: 3n },
+				maxPriorityFeesPerGas: { feePerDaGas: 0n, feePerL2Gas: 0n },
 			},
 		},
 	} as never
@@ -171,6 +185,7 @@ function makeHarness(
 			beginJournal: vi.fn(async () => "j1"),
 			markJournal: vi.fn(async () => {}),
 			commitJournal: vi.fn(async () => {}),
+			...clearLine(),
 		},
 		operationEstimateReuse: { tryConsume: vi.fn(async () => undefined), stash: vi.fn(), evict: vi.fn() } as never,
 		previewSnapshots: new PreviewSnapshots(),
@@ -183,11 +198,13 @@ function makeHarness(
 		getPXE: vi.fn(() => pxe as never),
 		getAccountContract: vi.fn(async () => account as never),
 		getPendingForAccount: vi.fn(() => [] as { hash: string }[]),
-		getFpcInfo: vi.fn(async () => ({ id: "fpc-1", type: 2, address: "0xfpc", chainId: 7, isProtocol: true }) as never),
+		sequenceEpoch: vi.fn(() => 0),
 		buildAndEstimateValidated,
 		addTransaction: vi.fn(async () => ({}) as never),
 		recordPendingAuthwits: vi.fn(async () => {}),
 		noteSent: vi.fn(),
+		sequencer: new SendSequencer({ pendingTxs: () => [], sleep: async () => {}, now: () => 0 }),
+		chainTip: { unconfirmed: () => false, wait: async () => "confirmed" },
 		logDebug: vi.fn(),
 		readPublicStorageOnce: vi.fn(async () => new Fr(0n)),
 		...overrides,
@@ -302,6 +319,31 @@ describe("DappSendExecutor.executeSendTransaction", () => {
 		expect(call[4]).toBe("https://dapp.example")
 	})
 
+	const SEND_OP = {
+		kind: "send_transaction",
+		networkId: "net-1",
+		accountAddress: "0xacct",
+		feeSettings: { paymentMethod: { kind: "fj" } },
+		actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+	} as never
+
+	test("names the claimed journal record to onJournalCreated once, before the send leaves", async () => {
+		const { executor, deps } = makeHarness()
+		const onJournalCreated = vi.fn(() => expect(deps.lane.markJournal).not.toHaveBeenCalled())
+		await executor.executeSendTransaction(SEND_OP, ORIGIN, undefined, FENCE, { onJournalCreated })
+		expect(onJournalCreated.mock.calls).toEqual([["j1"]])
+	})
+
+	test("a send whose journal claim fails names no record", async () => {
+		const { executor, deps } = makeHarness()
+		;(deps.lane.claimOrCreateJournal as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("claim broke"))
+		const onJournalCreated = vi.fn()
+		await expect(executor.executeSendTransaction(SEND_OP, ORIGIN, undefined, FENCE, { onJournalCreated })).rejects.toThrow(
+			"claim broke",
+		)
+		expect(onJournalCreated).not.toHaveBeenCalled()
+	})
+
 	test("records the SUBMITTING network's primary endpoint URL (recording-site pin)", async () => {
 		// addTransaction's submittedEndpointUrl (arg 7) must come from the network the
 		// executor built+submitted against — NOT re-derived from active-profile state,
@@ -334,6 +376,7 @@ describe("DappSendExecutor.executeSendTransaction", () => {
 			"j1",
 			{ stage: "failed" },
 			expect.objectContaining({ message: expect.stringContaining("build broke") }),
+			undefined,
 		)
 		expect(deps.lane.deleteController).toHaveBeenCalledWith("j1")
 	})
@@ -418,7 +461,7 @@ describe("DappSendExecutor.executeAztecSendTx (standard path)", () => {
 		const { executor, deps, releaseSlot } = makeHarness()
 		const op = makeAztecOp({ opts: { from: addr("0xother"), additionalScopes: [], wait: "NO_WAIT" } })
 		await expect(executor.executeAztecSendTx(op, ORIGIN, undefined, undefined, FENCE)).rejects.toThrow("Invalid `opts.from`")
-		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, expect.anything())
+		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, expect.anything(), undefined)
 		expect(releaseSlot).toHaveBeenCalledTimes(1)
 		expect(deps.lane.deleteController).toHaveBeenCalledWith("j1")
 	})
@@ -434,6 +477,7 @@ describe("DappSendExecutor.executeAztecSendTx (standard path)", () => {
 				beginJournal: vi.fn(),
 				markJournal: vi.fn(async () => {}),
 				commitJournal: vi.fn(async () => {}),
+				...clearLine(),
 			},
 		})
 		await expect(executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)).rejects.toBeInstanceOf(
@@ -444,6 +488,15 @@ describe("DappSendExecutor.executeAztecSendTx (standard path)", () => {
 		// This harness's release spy is local to the lane override.
 		expect(releaseSlot).not.toHaveBeenCalled()
 		expect((deps.lane.acquireSlot as ReturnType<typeof vi.fn>).mock.results.length).toBe(1)
+	})
+
+	test("an embedded confirm builds with the app's fee settings, its priority fee included", async () => {
+		const fee = { embeddedFeePayment: "fpc", maxPriorityFeesPerGas: { feePerDaGas: "7", feePerL2Gas: "8" } }
+		const h = makeHarness({
+			planner: { processAztecJsPayload: vi.fn(async () => ({ actions: [], feePaymentMethod: undefined, feeOptions: fee })) } as never,
+		})
+		await h.executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
+		expect((h.buildAndEstimateValidated.mock.calls[0] as unknown[])[0]).toMatchObject({ fee })
 	})
 
 	test("embedded fee payment skips authwit discovery; non-embedded runs it", async () => {
@@ -514,7 +567,7 @@ describe("DappSendExecutor: the submitting commit", () => {
 		const { executor, deps, proveAndSend } = makeHarness()
 		proveAndSend.mockImplementationOnce(async (ctx) => {
 			const bound = ctx as unknown as ProveAndSendContext
-			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: bound.submittedEndpointUrl })
+			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: bound.submittedEndpointUrl, expiry: EXPIRY })
 			return { txHash: { toString: () => "0xhash" }, offchainOutput: {} }
 		})
 		await run(executor)
@@ -522,6 +575,7 @@ describe("DappSendExecutor: the submitting commit", () => {
 			stage: "submitting",
 			txHash: "0xhash",
 			submittedEndpointUrl: "https://rpc.submit",
+			expiry: EXPIRY,
 		})
 	})
 })
@@ -534,6 +588,23 @@ describe("DappSendExecutor.executeNoFromSendTx (via default_entrypoint)", () => 
 			...overrides,
 		})
 	}
+
+	test("the app's cap and priority fee reach the embedded cap as the wire carries them", async () => {
+		collectOffchainEffectsMock.mockReturnValue([])
+		const { executor } = makeHarness()
+		// As the wire carries them: the wallet-sdk serializes each bigint as a decimal string.
+		const gasSettings = {
+			maxFeesPerGas: { feePerDaGas: "5", feePerL2Gas: "6" },
+			maxPriorityFeesPerGas: { feePerDaGas: "7", feePerL2Gas: "8" },
+		}
+		const op = makeNoFromOp({ opts: { from: addr("0xacct"), additionalScopes: [], wait: "NO_WAIT", fee: { gasSettings } } })
+		await executor.executeAztecSendTx(op, ORIGIN, undefined, undefined, FENCE)
+		expect(vi.mocked(applyEmbeddedFpcGasCap).mock.calls.at(-1)?.[1]).toMatchObject({
+			embeddedFeePayment: "fpc",
+			maxFeesPerGas: { feePerDaGas: "5", feePerL2Gas: "6" },
+			maxPriorityFeesPerGas: { feePerDaGas: "7", feePerL2Gas: "8" },
+		})
+	})
 
 	test("non-embedded fee payment rejected before any slot work", async () => {
 		const { executor, deps } = makeHarness()
@@ -654,7 +725,7 @@ describe("DappSendExecutor.estimateOperationFee", () => {
 		const foldedOp = (buildAndEstimateFolded.mock.calls[0] as unknown[])[0] as { actions: unknown[] }
 		expect(foldedOp.actions).toEqual(originalActions)
 		expect(foldedOp.actions).not.toBe(originalActions)
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect("estimateId" in result && result.estimateId).toBeFalsy()
 	})
 
@@ -678,7 +749,7 @@ describe("DappSendExecutor.estimateOperationFee", () => {
 			actions: unknown[]
 		}
 		expect(builtOp.actions).toEqual([...originalActions, extraAction])
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect("estimateId" in result && result.estimateId).toBeFalsy()
 	})
 })
@@ -733,7 +804,7 @@ describe("DappSendExecutor — slot-scaffold oracle (ordering + no-leak on every
 			} as never,
 		})
 		await expect(executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)).rejects.toThrow("prove broke")
-		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, expect.anything())
+		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, expect.anything(), undefined)
 		expect(deps.lane.deleteController).toHaveBeenCalledWith("j1")
 		expect(releaseSlot).toHaveBeenCalledTimes(1)
 	})
@@ -763,6 +834,7 @@ describe("DappSendExecutor — slot-scaffold oracle (ordering + no-leak on every
 				beginJournal: vi.fn(),
 				markJournal: vi.fn(async () => {}),
 				commitJournal: vi.fn(async () => {}),
+				...clearLine(),
 			},
 		})
 		await expect(executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)).rejects.toThrow("claim broke")
@@ -802,6 +874,7 @@ describe("DappSendExecutor — slot-scaffold oracle (ordering + no-leak on every
 			claimOrCreateJournal: vi.fn(async () => claimBehavior(map)),
 			beginJournal: vi.fn(),
 			markJournal: vi.fn(async () => {}),
+			...clearLine(),
 		}
 		return { lane, map, releaseLocal, order }
 	}
@@ -872,7 +945,7 @@ describe("DappSendExecutor — slot-scaffold oracle (ordering + no-leak on every
 			} as never,
 		})
 		await expect(executor.executeAztecSendTx(makeNoFromOp(), ORIGIN, undefined, undefined, FENCE)).rejects.toThrow("prove broke")
-		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, expect.anything())
+		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, expect.anything(), undefined)
 		expect(deps.lane.deleteController).toHaveBeenCalledWith("j1")
 		expect(releaseSlot).toHaveBeenCalledTimes(1)
 	})
@@ -893,6 +966,165 @@ describe("DappSendExecutor — slot-scaffold oracle (ordering + no-leak on every
 		await expect(executor.executeAztecSendTx(op as never, ORIGIN, undefined, undefined, FENCE)).rejects.toThrow("calls boom")
 		expect(deps.lane.acquireSlot).toHaveBeenCalledTimes(1)
 		expect(releaseSlot).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("DappSendExecutor: a dApp send waits outside the slot for its accounts' earlier sends", () => {
+	const HOOKS = { queuedJournalId: "q-1", originKey: "https://dapp.example" } as never
+	const tick = () => new Promise<void>((r) => setTimeout(r, 0))
+	const ticks = async () => {
+		for (let i = 0; i < 5; i++) await tick()
+	}
+	type Row = { hash: string; chainId: number; account: string; calls: object[]; createdAt: number }
+	const row = (account = "0xacct"): Row => ({ hash: "0xprev", chainId: 7, account, calls: [], createdAt: 0 })
+	const withExtra = () => makeAztecOp({ opts: { from: addr("0xacct"), additionalScopes: [addr("0xextra")], wait: "NO_WAIT" } })
+
+	/** A real sequencer over `pending`, and a park that gives the slot back, waits, and is granted a fresh one. */
+	function parked(chainTip?: DappSendExecutorDeps["chainTip"]) {
+		const pending: Row[] = []
+		const clock = { now: 0 }
+		const sequencer = new SendSequencer({
+			pendingTxs: (account) => pending.filter((r) => r.account.toLowerCase() === account.toLowerCase()) as never,
+			sleep: tick,
+			now: () => clock.now,
+		})
+		const h = makeHarness({ sequencer, ...(chainTip && { chainTip }) })
+		const preController = new AbortController()
+		const granted = vi.fn()
+		const regranted = vi.fn()
+		const lane = h.deps.lane
+		lane.acquireSlot = vi.fn(async () => ({ release: granted, preController }))
+		lane.parkSlot = vi.fn(async (release: () => void, ...rest: unknown[]) => {
+			release()
+			await (rest.at(-1) as () => Promise<void>)()
+			return regranted
+		})
+		const run = (op = makeAztecOp()) => h.executor.executeAztecSendTx(op, ORIGIN, undefined, HOOKS, FENCE)
+		return { ...h, pending, clock, sequencer, preController, granted, regranted, lane, run }
+	}
+
+	test("behind an unmined send of its account, neither the claim nor the build starts until it settles; then each once", async () => {
+		const clear = parked()
+		await clear.run()
+		expect(clear.lane.parkSlot).not.toHaveBeenCalled()
+
+		const h = parked()
+		h.pending.push(row())
+		const run = h.run()
+		await ticks()
+		expect(h.granted).toHaveBeenCalledTimes(1)
+		expect(h.lane.claimOrCreateJournal).not.toHaveBeenCalled()
+		expect(h.buildAndEstimateFolded).not.toHaveBeenCalled()
+		h.pending.length = 0
+		await run
+		expect(h.lane.parkSlot).toHaveBeenCalledTimes(1)
+		expect(h.lane.claimOrCreateJournal).toHaveBeenCalledTimes(1)
+		expect(h.buildAndEstimateFolded).toHaveBeenCalledTimes(1)
+		expect(h.regranted).toHaveBeenCalledTimes(1)
+	})
+
+	test("it waits in the line of every account it may spend from, and for the tip in each", async () => {
+		const h = parked()
+		h.pending.push(row("0xExtra"))
+		const run = h.run(withExtra())
+		await ticks()
+		expect(h.lane.claimOrCreateJournal).not.toHaveBeenCalled()
+		h.pending.length = 0
+		await run
+		expect(h.lane.claimOrCreateJournal).toHaveBeenCalledTimes(1)
+
+		const lagging = new Set(["0xextra"])
+		const chainTip = {
+			unconfirmed: vi.fn((scope: { account: string }) => lagging.has(scope.account)),
+			wait: vi.fn(async (scope: { account: string }) => {
+				while (lagging.has(scope.account)) await tick()
+				return "confirmed" as const
+			}),
+		}
+		const tip = parked(chainTip)
+		const behindTip = tip.run(withExtra())
+		await ticks()
+		expect(tip.lane.claimOrCreateJournal).not.toHaveBeenCalled()
+		lagging.clear()
+		await behindTip
+		expect(chainTip.wait.mock.calls.map((c) => c.slice(0, 3))).toEqual([
+			[{ chainId: 7, account: "0xacct" }, undefined, "net-1"],
+			[{ chainId: 7, account: "0xextra" }, undefined, "net-1"],
+		])
+		expect(tip.lane.claimOrCreateJournal).toHaveBeenCalledTimes(1)
+	})
+
+	test("a cancel while parked rejects as cancelled, claiming and building nothing", async () => {
+		const h = parked()
+		h.pending.push(row())
+		const run = h.run()
+		await ticks()
+		h.preController.abort()
+		await expect(run).rejects.toBeInstanceOf(JobCancelledSentinel)
+		expect(h.lane.claimOrCreateJournal).not.toHaveBeenCalled()
+		expect(h.buildAndEstimateFolded).not.toHaveBeenCalled()
+		expect(h.regranted).not.toHaveBeenCalled()
+	})
+
+	test("past the waiters' limit it runs once, unordered", async () => {
+		const h = parked()
+		h.sequencer.enter({ chainId: 7, account: "0xacct" }, new Set(["seq:0xt:0xbob"]))
+		const run = h.run()
+		await ticks()
+		expect(h.lane.claimOrCreateJournal).not.toHaveBeenCalled()
+		h.clock.now = MAX_WAIT_MS
+		await run
+		expect(h.deps.logDebug).toHaveBeenCalledWith("dApp send reached its wait limit for earlier sends; running unordered")
+		expect(h.lane.parkSlot).toHaveBeenCalledTimes(1)
+		expect(h.lane.claimOrCreateJournal).toHaveBeenCalledTimes(1)
+		expect(h.proveAndSend).toHaveBeenCalledTimes(1)
+	})
+
+	test("a wallet send (Settings) never waits: it claims at once behind an unmined send", async () => {
+		const h = parked()
+		h.pending.push(row())
+		await h.executor.executeAztecSendTx(makeAztecOp(), { type: OriginType.UI } as never, undefined, HOOKS, FENCE)
+		expect(h.lane.parkSlot).not.toHaveBeenCalled()
+		expect(h.lane.joinOriginLine).not.toHaveBeenCalled()
+		expect(h.lane.claimOrCreateJournal).toHaveBeenCalledTimes(1)
+	})
+
+	test("a throw while reading its scopes leaves no place behind in its origin's line", async () => {
+		const h = parked()
+		const places: { left: boolean }[] = []
+		h.lane.joinOriginLine = vi.fn(() => {
+			const place = { left: false }
+			places.push(place)
+			const leave = () => {
+				place.left = true
+			}
+			return { behind: () => false, earlierDone: async () => true, leave }
+		})
+		const op = makeAztecOp() as { opts: object }
+		Object.defineProperty(op.opts, "additionalScopes", {
+			get() {
+				throw new Error("scopes boom")
+			},
+		})
+		await expect(h.run(op as never)).rejects.toThrow("scopes boom")
+		expect(places.filter((p) => !p.left)).toEqual([])
+		expect(h.lane.failUnclaimed).toHaveBeenCalledWith("q-1", expect.objectContaining({ message: "scopes boom" }))
+	})
+
+	test("a throw before the claim fails the unclaimed record; a claimed send's failure leaves that to its catch", async () => {
+		const h = parked()
+		h.pending.push(row())
+		const broke = new Error("re-entry broke")
+		h.lane.parkSlot = vi.fn(async () => {
+			throw broke
+		})
+		await expect(h.run()).rejects.toBe(broke)
+		expect(h.lane.failUnclaimed).toHaveBeenCalledWith("q-1", broke)
+
+		const claimed = parked()
+		const op = makeAztecOp({ opts: { from: addr("0xother"), additionalScopes: [], wait: "NO_WAIT" } })
+		await expect(claimed.run(op)).rejects.toThrow("Invalid `opts.from`")
+		expect(claimed.lane.failUnclaimed).not.toHaveBeenCalled()
 	})
 })
 
@@ -917,6 +1149,51 @@ describe("DappSendExecutor estimate→confirm reuse (aztec_sendTx)", () => {
 			txCalls: built.txCalls,
 			pendingPublicAuthwits: built.pendingPublicAuthwits,
 		})
+	})
+
+	test("an estimate built while a settled predecessor's block is past the node's tip is never stashed for reuse", async () => {
+		const unconfirmed = vi.fn(() => true)
+		const lagging = makeHarness({ chainTip: { unconfirmed, wait: async () => "confirmed" } })
+		const result = await lagging.executor.estimateOperationFee(makeAztecOp(), { paymentMethod: { kind: "fj" } } as never)
+		expect(unconfirmed).toHaveBeenCalledWith({ chainId: 7, account: "0xacct" }, undefined, "net-1")
+		expect(result.estimateId).toBeUndefined()
+		expect(result.maxFee).toBeDefined()
+		expect(lagging.deps.operationEstimateReuse.stash).not.toHaveBeenCalled()
+	})
+
+	test("the stash records the account's send epoch as it was before the build, not after", async () => {
+		let epoch = 4
+		const { executor, deps, built, buildAndEstimateValidated, buildAndEstimateFolded } = makeHarness({
+			sequenceEpoch: vi.fn(() => epoch),
+		})
+		const bumping = async () => {
+			// A send of the account reaches the node while this estimate builds.
+			epoch = 5
+			return built as never
+		}
+		buildAndEstimateValidated.mockImplementation(bumping)
+		buildAndEstimateFolded.mockImplementation(bumping)
+		await executor.estimateOperationFee(makeAztecOp(), { paymentMethod: { kind: "fj" } } as never)
+		expect(epoch).toBe(5)
+		expect(deps.sequenceEpoch).toHaveBeenCalledWith(7, "0xacct")
+		const stash = (deps.operationEstimateReuse.stash as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]
+		expect(stash[1]).toMatchObject({ sequenceEpoch: 4 })
+	})
+
+	test("the stash records the account's pending set as it was before the build: a send settling during it is a miss", async () => {
+		let pending = [{ hash: "0xprev" }]
+		const { executor, deps, built, buildAndEstimateValidated, buildAndEstimateFolded } = makeHarness({
+			getPendingForAccount: vi.fn(() => pending),
+		})
+		const settling = async () => {
+			pending = []
+			return built as never
+		}
+		buildAndEstimateValidated.mockImplementation(settling)
+		buildAndEstimateFolded.mockImplementation(settling)
+		await executor.estimateOperationFee(makeAztecOp(), { paymentMethod: { kind: "fj" } } as never)
+		const stash = (deps.operationEstimateReuse.stash as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]
+		expect(stash[1]).toMatchObject({ pendingHashes: ["0xprev"] })
 	})
 
 	test("embedded payment method: no stash, estimateId undefined", async () => {
@@ -1111,7 +1388,7 @@ describe("DappSendExecutor — the authorizing session", () => {
 		).rejects.toBeInstanceOf(SessionEndedError)
 		expect(deps.getAccountContract).not.toHaveBeenCalled()
 		expect(proveAndSend).not.toHaveBeenCalled()
-		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, sessionEnded)
+		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, sessionEnded, undefined)
 	})
 
 	test("the session ending while a reused build resolves its account: no send, failed/session_ended", async () => {
@@ -1130,7 +1407,7 @@ describe("DappSendExecutor — the authorizing session", () => {
 		).rejects.toBeInstanceOf(SessionEndedError)
 		expect(isFenceLive).toHaveBeenCalledWith(FENCE)
 		expect(proveAndSend).not.toHaveBeenCalled()
-		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, sessionEnded)
+		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, sessionEnded, undefined)
 	})
 
 	test("tryConsume refusing another profile's entry: the fresh build is never attempted, failed/session_ended", async () => {
@@ -1148,7 +1425,7 @@ describe("DappSendExecutor — the authorizing session", () => {
 		expect(buildAndEstimateFolded).not.toHaveBeenCalled()
 		expect(deps.buildAndEstimateValidated).not.toHaveBeenCalled()
 		expect(proveAndSend).not.toHaveBeenCalled()
-		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, sessionEnded)
+		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, sessionEnded, undefined)
 	})
 
 	type Harness = ReturnType<typeof makeHarness>
@@ -1511,7 +1788,7 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 				accountService: {},
 				transactionService: {},
 				fpcService: {},
-				pxeService: {},
+				pxeService: { offscreenSettled: () => undefined },
 				resolver: {},
 				logger: {},
 				ensureInitialized: async () => {},
@@ -1548,6 +1825,39 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			await self.cancelEstimate("tok-late")
 			expect(self.previewSnapshots.take(result.previewId, identity)).toEqual({ kind: "missing" })
 		})
+
+		test.each(["previewOperationAuthwits", "estimateOperationFee"] as const)(
+			"%s: a simulation that timed out keeps the estimate's place until its offscreen record ends",
+			async (entry) => {
+				const { self, pxe, buildAndEstimateValidated, buildAndEstimateFolded } = rpc()
+				const timeout = new RpcTimeoutError("timed out", { requestId: 7, methodName: "simulateTx" })
+				let end = () => {}
+				const offscreen = new Promise<void>((resolve) => {
+					end = resolve
+				})
+				Object.assign(self, { pxeService: { offscreenSettled: (e: unknown) => (e === timeout ? offscreen : undefined) } })
+				// Discovery simulates on the PXE here; the fee estimate simulates inside its strategy,
+				// whose rethrow of the same object `fee/strategies-lifecycle.test.ts` pins.
+				const simulations =
+					entry === "previewOperationAuthwits" ? [pxe.simulateTx] : [buildAndEstimateValidated, buildAndEstimateFolded]
+				for (const simulate of simulations) simulate.mockRejectedValueOnce(timeout)
+				const call =
+					entry === "previewOperationAuthwits"
+						? self.previewOperationAuthwits("i-1", 0, "tok-slow", "op")
+						: (self as unknown as { estimateOperationFee: (...a: unknown[]) => Promise<unknown> }).estimateOperationFee(
+								"i-1",
+								0,
+								{ paymentMethod: { kind: "embedded" } },
+								"tok-slow",
+								"op",
+							)
+				await expect(call).rejects.toBe(timeout)
+				expect(self.estimateCancel.unsettledCount("p1")).toBe(1)
+				end()
+				await offscreen
+				expect(self.estimateCancel.unsettledCount("p1")).toBe(0)
+			},
+		)
 
 		test("cancelling during discovery aborts the RPC with the structured error and stashes nothing", async () => {
 			collectOffchainEffectsMock.mockReturnValue([effect("n")])
@@ -1651,6 +1961,82 @@ describe("DappSendExecutor.estimateOperationFee sponsor funding", () => {
 	})
 })
 
+describe("DappSendExecutor.estimateOperationFee: an operation the app pays for", () => {
+	const APP_PAYER = AztecAddress.fromNumberUnsafe(0xa9)
+	const EMBEDDED = { paymentMethod: { kind: "embedded" } } as never
+
+	function appPaidHarness(callsFeeJuice: boolean) {
+		const readPublicStorageOnce = vi.fn(async () => new Fr(0n))
+		const h = makeHarness({
+			readPublicStorageOnce,
+			planner: {
+				processAztecJsPayload: vi.fn(async () => ({
+					actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+					feePaymentMethod: undefined,
+					feeOptions: { embeddedFeePayment: "fpc" },
+				})),
+			} as never,
+		})
+		const gasSettings = new GasSettings(new Gas(100, 200), new Gas(10, 20), new GasFees(2n, 3n), new GasFees(0n, 0n))
+		Object.assign(h.built, {
+			txRequest: { authWitnesses: [], txContext: { gasSettings } },
+			appPayer: { address: APP_PAYER, callsFeeJuice },
+		})
+		return { ...h, readPublicStorageOnce }
+	}
+
+	test.each([
+		[false, true],
+		[true, false],
+	])(
+		"skips discovery, as its confirm does, and reads the app's fee contract (calls Fee Juice: %s)",
+		async (callsFeeJuice, provenShort) => {
+			const { executor, authwit, buildAndEstimateValidated, buildAndEstimateFolded } = appPaidHarness(callsFeeJuice)
+
+			const result = await executor.estimateOperationFee(makeAztecOp({ feeSettings: EMBEDDED }), EMBEDDED)
+
+			expect(authwit.discoverPrivateAuthwits).not.toHaveBeenCalled()
+			expect(buildAndEstimateFolded).not.toHaveBeenCalled()
+			expect((buildAndEstimateValidated.mock.calls[0] as unknown[])[0]).toMatchObject({ fee: { embeddedFeePayment: "fpc" } })
+			expect(result.appPayerFunding).toEqual({ address: APP_PAYER.toString(), funded: false, provenShort })
+			expect(result).not.toHaveProperty("sponsorFunding")
+			expect(result.estimateId).toBeUndefined()
+		},
+	)
+
+	test("the priority part of the figure is set, with its formatted pair, only when it shows as more than zero", async () => {
+		const { executor, built } = appPaidHarness(true)
+		const op = () => makeAztecOp({ feeSettings: EMBEDDED })
+		const plain = await executor.estimateOperationFee(op(), EMBEDDED)
+		expect(plain).not.toHaveProperty("priorityFee")
+		expect(plain).not.toHaveProperty("priorityFeeFormatted")
+
+		// 100 · 2e12 + 200 · 3e12 = 8e14 (0.0008 FJ), of which 100 · 1e12 + 200 · 1e12 = 3e14 is priority.
+		const gasSettings = new GasSettings(
+			new Gas(100, 200),
+			new Gas(10, 20),
+			new GasFees(2_000_000_000_000n, 3_000_000_000_000n),
+			new GasFees(1_000_000_000_000n, 1_000_000_000_000n),
+		)
+		Object.assign(built, { txRequest: { authWitnesses: [], txContext: { gasSettings } } })
+		const result = await executor.estimateOperationFee(op(), EMBEDDED)
+		expect([result.maxFee, result.maxFeeFormatted]).toEqual(["800000000000000", "0.0008"])
+		expect([result.priorityFee, result.priorityFeeFormatted]).toEqual(["300000000000000", "0.0003"])
+
+		// 300 · 1e9 = 3e11 rounds to "0" at six decimals: the row would read "includes a 0 FJ priority fee".
+		const tiny = new GasSettings(
+			new Gas(100, 200),
+			new Gas(10, 20),
+			gasSettings.maxFeesPerGas,
+			new GasFees(1_000_000_000n, 1_000_000_000n),
+		)
+		Object.assign(built, { txRequest: { authWitnesses: [], txContext: { gasSettings: tiny } } })
+		const rounded = await executor.estimateOperationFee(op(), EMBEDDED)
+		expect(rounded).not.toHaveProperty("priorityFee")
+		expect(rounded).not.toHaveProperty("priorityFeeFormatted")
+	})
+})
+
 describe("DappSendExecutor: the activity record, field by field", () => {
 	const GAS_DETAILS = {
 		l2GasLimit: 200,
@@ -1682,7 +2068,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			feePaymentMethod: { kind: "fee_juice" },
 			hash: "0xhash",
 			submittedEndpointUrl: "https://rpc.submit",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
@@ -1701,7 +2087,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			feePaymentMethod: { kind: "fee_juice" },
 			hash: "0xhash",
 			submittedEndpointUrl: "https://rpc.submit",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
@@ -1735,7 +2121,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
 			hash: "0xhash",
 			submittedEndpointUrl: "https://rpc.live",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-1",
@@ -1755,7 +2141,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
 			hash: "0xhash",
 			submittedEndpointUrl: "https://rpc.submit",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
@@ -1798,6 +2184,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 	const NOW = 1_700_000_000_000
 	const FPC_SETTINGS = { paymentMethod: { kind: "fpc", fpcId: "fpc-1" } }
+	const FPC_ROW = { id: "fpc-1", type: 2, address: "0xfpc", chainId: 7, isProtocol: true }
 	const PRIMARY_SECOND = {
 		id: "net-1",
 		chainId: 7,
@@ -1819,10 +2206,11 @@ describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 	const stashed = (deps: DappSendExecutorDeps) =>
 		(deps.operationEstimateReuse.stash as ReturnType<typeof vi.fn>).mock.calls as unknown[][]
 
-	test("the entry: the built fee and chain pair, the primary by id, the active profile, the FPC row", async () => {
+	test("the entry: the built fee, chain pair and FPC row, the primary by id, the active profile", async () => {
 		vi.useFakeTimers({ now: NOW, toFake: ["Date"] })
 		try {
 			const { executor, deps, built } = snapshotHarness()
+			Object.assign(built, { fpcIdentity: FPC_ROW })
 			const result = await executor.estimateOperationFee(makeAztecOp(), FPC_SETTINGS as never)
 			const fingerprint = fingerprintOperation({
 				networkId: "net-1",
@@ -1843,11 +2231,12 @@ describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 						feeSettings: FPC_SETTINGS,
 						profileId: "p-active",
 						chainIdentity: { l1ChainId: 1, rollupVersion: 6 },
-						baseFeeFingerprint: "7:11",
+						builtCap: { feePerDaGas: 7n, feePerL2Gas: 11n },
 						primaryEndpointId: "ep2",
 						primaryEndpointUrl: "https://primary",
 						pendingHashes: [],
-						fpcIdentity: { id: "fpc-1", type: 2, address: "0xfpc", chainId: 7, isProtocol: true },
+						sequenceEpoch: 0,
+						fpcIdentity: FPC_ROW,
 						txRequest: built.txRequest,
 						initializesAccount: true,
 						nonce: built.nonce,
@@ -1864,23 +2253,22 @@ describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 		}
 	})
 
-	test("an fpc entry: a pending tx that lands during the FPC read is in the snapshot", async () => {
+	test("the snapshot is the pending set before the build: a tx landing during the profile read is a change the confirm sees", async () => {
 		const pending: { hash: string }[] = [{ hash: "0xpending" }]
 		const { executor, deps } = snapshotHarness({
 			getPendingForAccount: vi.fn(() => [...pending]),
-			getFpcInfo: vi.fn(async () => {
+			getActiveProfile: vi.fn(async () => {
 				pending.push({ hash: "0xraced" })
-				return { id: "fpc-1", type: 2, address: "0xfpc", chainId: 7, isProtocol: true } as never
+				return { id: "p-active" }
 			}),
 		})
 		await executor.estimateOperationFee(makeAztecOp(), FPC_SETTINGS as never)
-		expect((stashed(deps)[0][1] as { pendingHashes: string[] }).pendingHashes).toEqual(["0xpending", "0xraced"])
+		expect((stashed(deps)[0][1] as { pendingHashes: string[] }).pendingHashes).toEqual(["0xpending"])
 	})
 
-	test("an fj entry reads no FPC row and carries no fpcIdentity", async () => {
+	test("an fj entry carries no fpcIdentity", async () => {
 		const { executor, deps } = snapshotHarness()
 		await executor.estimateOperationFee(makeAztecOp(), { paymentMethod: { kind: "fj" } } as never)
-		expect(deps.getFpcInfo).not.toHaveBeenCalled()
 		expect((stashed(deps)[0][1] as { fpcIdentity?: unknown }).fpcIdentity).toBeUndefined()
 	})
 
@@ -1899,6 +2287,7 @@ describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 		["default_entrypoint (not embedded)", () => makeAztecOp({ executionMode: "default_entrypoint" }), {}, "fj"],
 		["a detected embedded fee", () => makeAztecOp(), payload({ embeddedFeePayment: "fpc" }), "fj"],
 		["a dApp maxFeesPerGas", () => makeAztecOp(), payload({ maxFeesPerGas: { feePerDaGas: 5, feePerL2Gas: 6 } }), "fj"],
+		["a dApp maxPriorityFeesPerGas", () => makeAztecOp(), payload({ maxPriorityFeesPerGas: { feePerDaGas: 7, feePerL2Gas: 8 } }), "fj"],
 		["the fjwc kind", () => makeAztecOp(), {}, "fjwc"],
 		["the embedded kind", () => makeAztecOp(), {}, "embedded"],
 		["a non-fingerprintable operation", () => makeAztecOp(), payload({}, [() => 1]), "fj"],
@@ -2111,47 +2500,50 @@ describe("DappSendExecutor: each estimate cancel checkpoint", () => {
 	})
 })
 
+/** A real reuse cache over the harness's own lookups, whose node's min-fee prediction rejects and
+ *  whose sponsor read returns `row`, the live row the build's snapshot copied. The folded pipeline
+ *  (fpc's discovery) reports `0xa` at the estimate and `confirmDiscovered` on the rebuild. */
+function realReuseHarness(confirmDiscovered: string[]) {
+	const row = { id: "fpc-1", type: 2, address: "0xfpc", chainId: 7, isProtocol: true }
+	const reuseLog = vi.fn()
+	const feeNode = {
+		getPredictedMinFees: vi.fn(async () => {
+			throw new Error("block not found")
+		}),
+		getCurrentMinFees: vi.fn(),
+	}
+	const deps: { current?: DappSendExecutorDeps } = {}
+	const reuse = new OperationEstimateReuse({
+		getNetwork: (id) => (deps.current as DappSendExecutorDeps).getNetwork(id),
+		getNode: async () => feeNode as never,
+		getLiveChainIdentity: async () => ({ l1ChainId: 1, rollupVersion: 6 }),
+		getFpcInfo: async () => row as never,
+		getPendingForAccount: (account) => (deps.current as DappSendExecutorDeps).getPendingForAccount(account),
+		sequenceEpoch: (chainId, account) => (deps.current as DappSendExecutorDeps).sequenceEpoch(chainId, account),
+		logDebug: reuseLog,
+	})
+	const built: { current?: unknown } = {}
+	const perBuild = [["0xa"], confirmDiscovered]
+	const buildAndEstimateFolded = vi.fn(async (...args: unknown[]) => {
+		const probe = args[3] as { collected: unknown[]; discovered: unknown[] }
+		for (const messageHash of perBuild.shift() ?? []) {
+			probe.collected.push({ kind: "add_private_authwit", content: { kind: "message_hash", messageHash } })
+			probe.discovered.push({ messageHash })
+		}
+		return built.current
+	})
+	const h = makeHarness({ operationEstimateReuse: reuse, buildAndEstimateFolded })
+	deps.current = h.deps
+	built.current = Object.assign(h.built, { chainIdentity: { l1ChainId: 1, rollupVersion: 6 }, fpcIdentity: { ...row } })
+	return { ...h, feeNode, reuseLog, row }
+}
+
 describe("DappSendExecutor — a confirm whose reuse fee read fails", () => {
 	const FPC_SETTINGS = { paymentMethod: { kind: "fpc", fpcId: "fpc-1" } }
 	const PREVIEW = { interactionId: "i-1", index: 0 }
 
-	/** A real reuse cache over the harness's own lookups, whose node's min-fee prediction rejects. The
-	 *  folded pipeline (fpc's discovery) reports `0xa` at the estimate and `confirmDiscovered` on the rebuild. */
-	function failingReadHarness(confirmDiscovered: string[]) {
-		const reuseLog = vi.fn()
-		const feeNode = {
-			getPredictedMinFees: vi.fn(async () => {
-				throw new Error("block not found")
-			}),
-			getCurrentMinFees: vi.fn(),
-		}
-		const deps: { current?: DappSendExecutorDeps } = {}
-		const reuse = new OperationEstimateReuse({
-			getNetwork: (id) => (deps.current as DappSendExecutorDeps).getNetwork(id),
-			getNode: async () => feeNode as never,
-			getLiveChainIdentity: async () => ({ l1ChainId: 1, rollupVersion: 6 }),
-			getFpcInfo: (id) => (deps.current as DappSendExecutorDeps).getFpcInfo(id),
-			getPendingForAccount: (account) => (deps.current as DappSendExecutorDeps).getPendingForAccount(account),
-			logDebug: reuseLog,
-		})
-		const built: { current?: unknown } = {}
-		const perBuild = [["0xa"], confirmDiscovered]
-		const buildAndEstimateFolded = vi.fn(async (...args: unknown[]) => {
-			const probe = args[3] as { collected: unknown[]; discovered: unknown[] }
-			for (const messageHash of perBuild.shift() ?? []) {
-				probe.collected.push({ kind: "add_private_authwit", content: { kind: "message_hash", messageHash } })
-				probe.discovered.push({ messageHash })
-			}
-			return built.current
-		})
-		const h = makeHarness({ operationEstimateReuse: reuse, buildAndEstimateFolded })
-		deps.current = h.deps
-		built.current = Object.assign(h.built, { chainIdentity: { l1ChainId: 1, rollupVersion: 6 } })
-		return { ...h, feeNode, reuseLog }
-	}
-
 	test("the read rejects: the reuse misses, and the confirm rebuilds through discovery and sends", async () => {
-		const h = failingReadHarness(["0xa"])
+		const h = realReuseHarness(["0xa"])
 		const op = () => makeAztecOp({ feeSettings: FPC_SETTINGS })
 		const { estimateId } = await h.executor.estimateOperationFee(op(), FPC_SETTINGS as never, undefined, PREVIEW as never)
 		expect(estimateId).toBeDefined()
@@ -2166,7 +2558,7 @@ describe("DappSendExecutor — a confirm whose reuse fee read fails", () => {
 	})
 
 	test("the rebuild is held to the preview: an authorization the preview never showed is refused unsent", async () => {
-		const h = failingReadHarness(["0xa", "0xb"])
+		const h = realReuseHarness(["0xa", "0xb"])
 		const op = () => makeAztecOp({ feeSettings: FPC_SETTINGS })
 		const { estimateId } = await h.executor.estimateOperationFee(op(), FPC_SETTINGS as never, undefined, PREVIEW as never)
 
@@ -2177,5 +2569,31 @@ describe("DappSendExecutor — a confirm whose reuse fee read fails", () => {
 		expect(h.reuseLog.mock.calls).toEqual([["operation estimate reuse rejected: base fee fetch failed"]])
 		expect(h.proveAndSend).not.toHaveBeenCalled()
 		expect(h.deps.addTransaction).not.toHaveBeenCalled()
+	})
+})
+
+describe("DappSendExecutor — a sponsor row edited after the build read it", () => {
+	const FPC_SETTINGS = { paymentMethod: { kind: "fpc", fpcId: "fpc-1" } }
+	const PREVIEW = { interactionId: "i-1", index: 0 }
+
+	test("the entry keeps the row the build paid with, so the confirm misses on the edit and rebuilds", async () => {
+		const h = realReuseHarness(["0xa"])
+		const build = h.buildAndEstimateFolded.getMockImplementation() as (...args: unknown[]) => Promise<unknown>
+		h.buildAndEstimateFolded.mockImplementationOnce(async (...args: unknown[]) => {
+			const built = await build(...args)
+			h.row.address = "0xedited"
+			return built
+		})
+		const stash = vi.spyOn(h.deps.operationEstimateReuse, "stash")
+		const op = () => makeAztecOp({ feeSettings: FPC_SETTINGS })
+		const { estimateId } = await h.executor.estimateOperationFee(op(), FPC_SETTINGS as never, undefined, PREVIEW as never)
+		expect((stash.mock.calls[0][1] as { fpcIdentity?: { address: string } }).fpcIdentity?.address).toBe("0xfpc")
+
+		await h.executor.executeAztecSendTx(op(), ORIGIN, undefined, undefined, FENCE, APPROVAL(estimateId as string))
+
+		expect(h.reuseLog.mock.calls).toEqual([["operation estimate reuse rejected: fpc identity drift"]])
+		expect(h.feeNode.getPredictedMinFees).not.toHaveBeenCalled()
+		expect(h.buildAndEstimateFolded).toHaveBeenCalledTimes(2)
+		expect(h.proveAndSend).toHaveBeenCalledTimes(1)
 	})
 })

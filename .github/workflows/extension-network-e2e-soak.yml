@@ -89,8 +89,6 @@ jobs:
       proverless: ${{ inputs.proverless }}
       disable_presto: ${{ inputs.disable_presto }}
       retry: ${{ inputs.retry }}
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   status:
     name: Status

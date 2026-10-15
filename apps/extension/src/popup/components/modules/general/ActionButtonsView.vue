@@ -1,7 +1,13 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 /** Store */
+import { useAppStore } from "@/stores/app.store"
 import { usePopupStore } from "@/stores/popup.store"
+
+/** Utils */
+import { accountStateOf } from "@/components/header-account"
+
+const appStore = useAppStore()
 const popupStore = usePopupStore()
 
 const router = useRouter()
@@ -13,7 +19,12 @@ const props = defineProps({
 	},
 })
 
+// Until a switched-to network's account loads, the store still holds the previous network's,
+// whose address Receive would show under the new network's name.
+const accountReady = () => accountStateOf(appStore) === "shown"
+
 const handleSend = () => {
+	if (!accountReady()) return
 	// Thread the token via query — tokens/[id] clears cacheStore.activeTokenIdx
 	// on unmount, so the cache store alone can't carry the preselection across
 	// navigation. Home has no token context; no query → send page picks tokens[0].
@@ -21,6 +32,7 @@ const handleSend = () => {
 }
 
 const handleReceive = () => {
+	if (!accountReady()) return
 	popupStore.open("receive")
 }
 </script>
@@ -69,11 +81,7 @@ const handleReceive = () => {
 }
 
 .label {
-	font-family: var(--font-headline);
-	font-weight: 700;
-	font-size: 14px;
-	letter-spacing: 0.2em;
-	text-transform: uppercase;
+	composes: type--button from global;
 }
 
 .primary .label {

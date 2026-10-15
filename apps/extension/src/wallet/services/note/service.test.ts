@@ -1,7 +1,7 @@
 /**
  * Coverage focus: a single malformed note must NOT blank out the entire list.
  * The failure mode under test is the silent-render symptom the user reported
- * on `Settings → Advanced → Account State → Notes` — fetch succeeded with
+ * on `Settings → Developer → Account State → Notes` — fetch succeeded with
  * non-empty results, but no cards rendered. Root cause class: `parseNote`
  * throwing on one entry crashed the whole list. Fix: per-note try/catch
  * surfacing the bad entry as `renderError`.
@@ -9,7 +9,9 @@
 
 import { describe, expect, test, vi } from "vitest"
 import { LoggerStore } from "@/wallet/logger"
+import { loggedAfter } from "../../../../tests/helpers/logged"
 import { ConfigStore } from "@/wallet/config"
+import { NoteStatus } from "@aztec-labs/stdlib/note"
 import { NoteService } from "./service"
 import type { Note } from "./spec"
 
@@ -52,6 +54,7 @@ function brokenNoteDao(): unknown {
 
 type ServiceHooks = {
 	service: NoteService
+	logger: LoggerStore
 	setNotes: (n: unknown[]) => void
 	setSchemas: (s: Record<string, Record<string, unknown>>) => void
 	setClassIdForContract: (contract: string, classId: string | undefined) => void
@@ -94,6 +97,7 @@ function makeService(): ServiceHooks {
 
 	return {
 		service,
+		logger,
 		setNotes: (n) => {
 			noteList.length = 0
 			noteList.push(...n)
@@ -138,7 +142,7 @@ describe("NoteService.getNotes", () => {
 	})
 
 	test("malformed entry preserves contract/slot/tx fields when those parse ok", async () => {
-		const { service, setNotes } = makeService()
+		const { service, logger, setNotes } = makeService()
 		setNotes([brokenNoteDao()])
 
 		const result = await service.getNotes("n", "0x0000000000000000000000000000000000000000000000000000000000000001")
@@ -148,6 +152,7 @@ describe("NoteService.getNotes", () => {
 		expect(result[0].storageSlot).toBe("0x9")
 		expect(result[0].txHash).toBe("0xff")
 		expect(result[0].renderError).toBeDefined()
+		expect(loggedAfter(logger, "Failed to parse note")).toEqual([{ error: { name: "Error", message: "decode failed" } }])
 	})
 
 	test("propagates errors from the upstream PXE fetch", async () => {
@@ -159,6 +164,31 @@ describe("NoteService.getNotes", () => {
 		await expect(service.getNotes("n", "0x0000000000000000000000000000000000000000000000000000000000000001")).rejects.toThrow(
 			/PXE request failed/,
 		)
+	})
+})
+
+describe("NoteService reads for incoming reconciliation", () => {
+	const acc = "0x0000000000000000000000000000000000000000000000000000000000000001"
+	const contract = "0x0000000000000000000000000000000000000000000000000000000000000002"
+	const pxeOf = (service: NoteService) =>
+		(service as unknown as { pxeService: { getNotes: ReturnType<typeof vi.fn>; getSyncedBlockHeader?: unknown } }).pxeService
+
+	test("getNotesRaw reads unspent notes by default and spent ones too on request", async () => {
+		const { service } = makeService()
+		await service.getNotesRaw("n", acc, contract)
+		await service.getNotesRaw("n", acc, contract, "active-or-nullified")
+		const statuses = pxeOf(service).getNotes.mock.calls.map(([, filter]) => (filter as { status: NoteStatus }).status)
+		expect(statuses).toEqual([NoteStatus.ACTIVE, NoteStatus.ACTIVE_OR_NULLIFIED])
+	})
+
+	test("getSyncedBlock returns the synced header's number and hash", async () => {
+		const { service } = makeService()
+		const hash = `0x${"ab".repeat(32)}`
+		pxeOf(service).getSyncedBlockHeader = vi.fn(async () => ({
+			getBlockNumber: () => 42,
+			hash: async () => ({ toString: () => hash }),
+		}))
+		expect(await service.getSyncedBlock("n")).toEqual({ number: 42, hash })
 	})
 })
 

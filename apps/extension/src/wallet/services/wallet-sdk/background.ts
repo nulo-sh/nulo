@@ -49,7 +49,7 @@ import {
 	wireProfileSwitchTeardown,
 } from "./profile-switch-teardown"
 
-import type { ServiceCollection } from "@/wallet/base"
+import type { IService, ServiceCollection } from "@/wallet/base"
 import { NetworkService } from "@/wallet/services/network/service"
 import { AccountService } from "@/wallet/services/account/service"
 import { ExecutionService } from "@/wallet/services/execution/service"
@@ -57,6 +57,7 @@ import { ProfileService } from "@/wallet/services/profile/service"
 import { DappInteractionService } from "@/wallet/services/dapp-interaction/service"
 import { TokenService } from "@/wallet/services/token/service"
 import { LegalAcceptanceService, type LegalAdmission } from "@/wallet/services/legal/service"
+import { NETWORK_RESET_SERVICE_NAME, type ResetRunGate } from "@/wallet/services/network-reset/spec"
 import type { DiscoveryParams } from "@/wallet/services/dapp-interaction/spec"
 import { DappSessionService, AccessLevel, type DappMetadata, type DappSession } from "@/wallet/services/dapp-session/service"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
@@ -68,24 +69,31 @@ import {
 	type DispatchHooks,
 	DiscoveryQueue,
 	isDiscoveryExpired,
+	type INetworkReader,
 	type SessionContext,
 	WalletSdkDispatcher,
 } from "@nulo/wallet-bridge"
 import type { ClockPort, WindowPort } from "@nulo/wallet-core/ports"
 import {
 	ChainNotSupportedError,
+	InvalidWalletArgumentsError,
 	ScopeViolationError,
 	TermsAcceptanceRequiredError,
+	TooManyPendingError,
+	UnsupportedMethodError,
 	isReceiverGoneRejection,
 } from "@nulo/extension-messaging/errors"
 import { KeyedLock, deferred } from "@nulo/wallet-core/utils"
 import { admitAsync, VerifyAdmissionGate, type WindowReservation } from "./verify-admission"
 import { approveOrRollbackDiscoverySession } from "./discovery-approval"
-import { failQueuedForError, failQueuedIfUnclaimed, tryCreateQueuedJournal } from "./queued-journal"
+import { failQueuedForError, failQueuedIfUnclaimed, type QueuedFailureKind, tryCreateQueuedJournal } from "./queued-journal"
 import { chainSendTxWithVouching } from "./queued-wait-vouching"
 import { createSessionBaton } from "./session-baton"
 import { chainInfoToChainId, handleSessionEstablished } from "./session-established"
+import { wireSessionTeardown } from "./session-revocation"
 import { wireTabLifecycle } from "./tab-lifecycle"
+import { bindLiveSession, type LiveSession } from "./live-session"
+import { MAX_PENDING_PER_SESSION, type VerificationHold, VerificationHolds, wireVerificationHold } from "./verification-hold"
 import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@/wallet/logger"
 
@@ -103,6 +111,9 @@ declare const __VERSION__: string
  * or popup compromise. Build-time keeps the policy immutable per release.
  */
 const NULO_ALLOW_IFRAME_DAPPS: boolean = import.meta.env?.VITE_NULO_ALLOW_IFRAME_DAPPS === "1"
+
+/** A queued row's developer line when its call's session ended before the call ran. */
+const SESSION_NO_LONGER_VALID = "Session no longer valid — reconnect"
 
 /**
  * Initialize the wallet-sdk BackgroundConnectionHandler and wire it
@@ -138,8 +149,19 @@ export function initWalletSdkHandler(
 	// A verify window's slot is freed only when the window itself is gone.
 	ports.windows.onRemoved((windowId) => state.admission.windowRemoved(windowId))
 
-	serializeDecryption(handler, state.decryptLocks)
-	wireSessionTeardown(handler, deps.dappSessionService, logger)
+	serializeDecryption(handler, state.decryptLocks, logger)
+	// The wallet's decision to end a session drops its held calls before the transport is told: a
+	// termination that throws leaves the session live, and its calls must not wait on it.
+	const endSession = (sessionId: string) => {
+		state.holds.get(sessionId)?.drop("wallet_refused")
+		handler.terminateSession(sessionId)
+	}
+	wireSessionTeardown(
+		{ getActiveSessions: () => handler.getActiveSessions(), terminateSession: endSession },
+		deps.dappSessionService,
+		state,
+		logger,
+	)
 
 	// Profile-bound channel teardown: a switch disconnects every live session
 	// stamped to another profile (and unstamped debris) BEFORE the discovery
@@ -150,6 +172,13 @@ export function initWalletSdkHandler(
 		onActiveProfileChanged: deps.profileService.onActiveProfileChanged,
 		getActiveSessions: () => handler.getActiveSessions(),
 		sessionProfiles: state.sessionProfiles,
+		terminateSession: endSession,
+		logger,
+	})
+	wireVerificationHold({
+		holds: state.holds,
+		onActiveProfileChanged: deps.profileService.onActiveProfileChanged,
+		onVerificationConfirmed: deps.dappSessionService.onVerificationConfirmed,
 		terminateSession: (sessionId) => handler.terminateSession(sessionId),
 		logger,
 	})
@@ -161,7 +190,7 @@ export function initWalletSdkHandler(
 	wireTabLifecycle({
 		onTabTeardown: (tabId) => tearDownTabAttempts(state, tabId),
 		terminateForTab: (tabId) => handler.terminateForTab(tabId),
-		terminateSession: (sessionId) => handler.terminateSession(sessionId),
+		terminateSession: endSession,
 		getActiveSessions: () => handler.getActiveSessions(),
 		logger,
 	})
@@ -182,8 +211,20 @@ type SdkDeps = {
 	operationJournal: OperationJournalService
 	tokenService: TokenService
 	legal: LegalAdmission
+	resetRun: ResetRunGate
 	dispatcher: WalletSdkDispatcher
 	logger: ILogger
+}
+
+/** The dispatcher's one network read. A quarantined chain resolves to no network, so every dApp
+ *  call on it gets `CHAIN_NOT_SUPPORTED` and the dApp learns nothing of the stale chain. */
+export function dispatcherNetworks(networkService: Pick<NetworkService, "getNetworksRaw" | "isChainQuarantined">): INetworkReader {
+	return {
+		getNetworksRaw: async (profileId, chainId) => {
+			if (chainId !== undefined && (await networkService.isChainQuarantined(profileId, chainId))) return []
+			return networkService.getNetworksRaw(profileId, chainId)
+		},
+	}
 }
 
 function resolveSdkDeps(services: ServiceCollection, logger: ILogger): SdkDeps {
@@ -196,9 +237,10 @@ function resolveSdkDeps(services: ServiceCollection, logger: ILogger): SdkDeps {
 	const operationJournal: OperationJournalService = services.get(OperationJournalService.name)
 	const tokenService: TokenService = services.get(TokenService.name)
 	const legal: LegalAcceptanceService = services.get(LegalAcceptanceService.name)
+	const resetRun = services.get<IService & ResetRunGate>(NETWORK_RESET_SERVICE_NAME)
 
 	const dispatcher = new WalletSdkDispatcher(
-		networkService,
+		dispatcherNetworks(networkService),
 		accountService,
 		executionService,
 		dappInteractionService,
@@ -223,6 +265,7 @@ function resolveSdkDeps(services: ServiceCollection, logger: ILogger): SdkDeps {
 		operationJournal,
 		tokenService,
 		legal,
+		resetRun,
 		dispatcher,
 		logger,
 	}
@@ -272,7 +315,9 @@ type SdkHandlerState = {
 	 * torn down. Resolves `true` when established, `false` when terminated.
 	 */
 	establishmentStatus: Map<string, Promise<boolean>>
-	/** Per-session decryption serializer (see `serializeDecryption`). */
+	/** Per-session gate on dispatch until the person confirms the session's check (see `verification-hold.ts`). */
+	holds: VerificationHolds
+	/** Per-session decrypt lane, which also carries refusal replies (see `serializeDecryption`). */
 	decryptLocks: KeyedLock
 	/** Per-origin reconnect throttle and verify-window budget (see `verify-admission.ts`). */
 	admission: VerifyAdmissionGate
@@ -299,11 +344,15 @@ function createSdkHandlerState(ports: { windows: WindowPort; clock: ClockPort })
 		pendingDiscoveryPromises: new Map(),
 		sessionQueues: new Map(),
 		establishmentStatus: new Map(),
+		holds: new VerificationHolds(),
 		// maxHoldMs: null — the prior hand-rolled decrypt chain had no watchdog.
 		decryptLocks: new KeyedLock({ maxHoldMs: null }),
 		admission: new VerifyAdmissionGate(ports.clock, {
 			closeWindow,
-			// A marker still waiting when its slot is given back is tombstoned: that id can no longer establish.
+			navigateWindow: (windowId, url) => ports.windows.navigate(windowId, url),
+			// A marker still waiting when its slot is given back, or when its reservation expires with the
+			// window kept open, is tombstoned: that id can no longer establish.
+			expired: (id) => cancelPendingVerification(pendingVerification, id),
 			released: (id) => cancelPendingVerification(pendingVerification, id),
 		}),
 		dedupeWaiters: new Map(),
@@ -388,7 +437,7 @@ function admitContentMessage(
 		// through, so this remains an upstream coordination item.
 		if (NULO_ALLOW_IFRAME_DAPPS !== true && isSubframeSender(sender)) {
 			logger.log(
-				"wallet-sdk-bg",
+				"wallet-sdk",
 				LogLevel.Debug,
 				// The tab and sender URLs are the user's browsing history, and any subframe on any
 				// page can trigger this line. The frame identity is what diagnoses the rejection.
@@ -405,7 +454,7 @@ function admitContentMessage(
 		// malformed envelopes early with a structured debug log.
 		const verdict = validateContentScriptMessage(message)
 		if (verdict.kind === "invalid") {
-			logger.log("wallet-sdk-bg", LogLevel.Debug, "Dropping malformed content-script envelope", verdict.reason)
+			logger.log("wallet-sdk", LogLevel.Debug, "Dropping malformed content-script envelope", verdict.reason)
 			return undefined
 		}
 		if (verdict.kind === "valid" && replyIfStale(verdict.message, sender.tab?.id, deps)) return undefined
@@ -425,7 +474,7 @@ function replyIfStale(envelope: ContentScriptMessageEnvelope, tabId: number | un
 	if (stale === "forward") return false
 	// A connected page repeats this every heartbeat until it reconnects; debug keeps it out of
 	// every user's log buffer.
-	deps.logger.log("wallet-sdk-bg", LogLevel.Debug, "Answering a message for a session the sender's tab does not hold", {
+	deps.logger.log("wallet-sdk", LogLevel.Debug, "Answering a message for a session the sender's tab does not hold", {
 		type: envelope.type,
 		session: describeExternalId(stale.sessionId),
 	})
@@ -445,22 +494,34 @@ function buildHandlerCallbacks(
 
 		onSessionEstablished: (session) => {
 			const handler = state.late.handler!
+			// Upstream calls this synchronously after posting the key-exchange response, and a message
+			// needs a round trip and a decrypt to arrive, so the hold exists before any message does.
+			const hold = state.holds.open(session.sessionId, session.verificationHash)
+			// Liveness and termination read this session object, not its id: an establishment paused
+			// across its own end and a same-id re-key must neither proceed on nor end the successor.
+			const live = bindLiveSession(handler, session)
 			// Record the validation promise SYNCHRONOUSLY (before its first await)
 			// so onWalletMessage can gate on it even if a message arrives in the
 			// gap between the SDK's key-exchange response and this validation.
 			const validated = handleSessionEstablished(session, {
 				dappSessionService: deps.dappSessionService,
-				terminateSession: (sessionId) => handler.terminateSession(sessionId),
+				terminateSession: () => live.terminate(),
 				pendingVerification: state.pendingVerification,
 				stampSessionProfile: (sessionId, profileId) =>
 					stampSessionProfileGuarded(state.sessionProfiles, sessionId, profileId, (id) =>
 						handler.getActiveSessions().some((s) => s.sessionId === id),
 					),
-				isSessionLive: (sessionId) => handler.getActiveSessions().some((s) => s.sessionId === sessionId),
+				isSessionLive: () => live.isLive(),
 				windows,
 				reservations: state.admission,
+				hold,
 				logger: deps.logger,
 			})
+			// A failed establishment ends without a termination when its id was taken over meanwhile.
+			void validated.then(
+				(ok) => ok || hold.drop("wallet_refused"),
+				() => hold.drop("wallet_refused"),
+			)
 			state.establishmentStatus.set(session.sessionId, validated)
 			return validated.then(() => undefined)
 		},
@@ -471,6 +532,7 @@ function buildHandlerCallbacks(
 			state.sessionQueues.delete(sessionId)
 			state.decryptLocks.delete(sessionId)
 			state.establishmentStatus.delete(sessionId)
+			state.holds.end(sessionId, "wallet_refused")
 		},
 
 		onWalletMessage: (session, message) => onWalletMessage(session, message, deps, state),
@@ -479,6 +541,34 @@ function buildHandlerCallbacks(
 
 function onWalletMessage(session: ActiveSession, message: WalletMessage, deps: SdkDeps, state: SdkHandlerState): void {
 	const key = session.sessionId
+	// Upstream passes whatever the ciphertext's JSON decoded to. A non-object has no id to answer, and
+	// reading one past the admission below would throw before its slot could be released.
+	if (typeof message !== "object" || message === null) {
+		deps.logger.log(
+			"wallet-sdk",
+			LogLevel.Debug,
+			`Dropping a decrypted message that is not an object, session ${describeExternalId(key)}`,
+		)
+		return
+	}
+	const live = bindLiveSession(state.late.handler!, session)
+	// Captured once, on arrival. Upstream reads the session before it awaits the decrypt, so a message
+	// whose session ended meanwhile arrives with the old object: it must not capture a successor's
+	// hold under the same id, and it has nowhere to be answered.
+	const hold = live.isLive() ? state.holds.get(key) : undefined
+	if (hold === undefined) {
+		deps.logger.log(
+			"wallet-sdk",
+			LogLevel.Debug,
+			`Dropping ${describeWireMethod(message.type)}: its session ${describeExternalId(key)} ended`,
+		)
+		return
+	}
+	const release = hold.admit()
+	if (release === undefined) {
+		refuseOverPendingCap(live, key, message, state.decryptLocks, deps.logger)
+		return
+	}
 	const prev = state.sessionQueues.get(key) ?? Promise.resolve()
 
 	// Baton-based FIFO (see `session-baton.ts` for mechanics).
@@ -505,12 +595,9 @@ function onWalletMessage(session: ActiveSession, message: WalletMessage, deps: S
 	)
 
 	// Queued journal is created on arrival (concurrent across siblings),
-	// gated on establishment. Only top-level `sendTx` gets a pre-allocated
-	// record — `batch` is excluded by design: the recursive dispatch in
-	// WalletSdkDispatcher.handleBatch can't safely route hooks per-leg, so
-	// we'd end up with a batch-level record no inner leg knows to claim.
-	// TODO(queued-visibility-for-batch): batched sendTx legs currently
-	// bypass the queued-record creation path.
+	// gated on establishment. Only a top-level `sendTx` gets one: the
+	// dispatcher refuses a batch holding a `sendTx` leg before any leg runs,
+	// so no batched send ever waits to be shown.
 	const queuedJournalIdPromise: Promise<string | undefined> =
 		message.type === "sendTx"
 			? establishedPromise.then((ok) => createQueuedJournalIfStamped(ok, message, session, deps, state))
@@ -521,13 +608,16 @@ function onWalletMessage(session: ActiveSession, message: WalletMessage, deps: S
 	// the reaper's grace cannot distinguish from a lost handler. The
 	// begin/end PLACEMENT invariants live (unit-pinned) in
 	// `queued-wait-vouching.ts`.
+	// The slot frees when the call's handling settles, not at the FIFO release: a send past its
+	// baton still holds its arguments until it is answered.
 	chainSendTxWithVouching({
 		queuedJournalIdPromise,
 		prev,
 		vouch: deps.executionService,
 		releaseFifo,
-		run: (queuedJournalId) => runEstablishedMessage(queuedJournalId, establishedPromise, releaseFifo, session, message, deps, state),
-	})
+		run: (queuedJournalId) =>
+			runEstablishedMessage(queuedJournalId, establishedPromise, releaseFifo, { session, live, hold }, message, deps, state),
+	}).then(release, release)
 	state.sessionQueues.set(
 		key,
 		baton.catch(() => {}),
@@ -561,30 +651,79 @@ function createQueuedJournalIfStamped(
 		: undefined
 }
 
+/** Refused at arrival, before any row or FIFO slot: `MAX_PENDING_PER_SESSION` of the session's
+ *  calls already wait or run. The reply rides the session's decrypt lane, so the lane's depth bounds
+ *  owed replies with its decrypts; it is enqueued and never awaited, since this runs inside the lane. */
+function refuseOverPendingCap(
+	live: LiveSession,
+	sessionId: string,
+	message: WalletMessage,
+	decryptLocks: KeyedLock,
+	logger: ILogger,
+): void {
+	logger.log("wallet-sdk", LogLevel.Debug, `Refusing ${describeWireMethod(message.type)}: too many of the session's calls are pending`)
+	const response: WalletResponse = {
+		messageId: message.messageId,
+		walletId: "nulo",
+		error: toWalletResponseError(new TooManyPendingError()),
+	}
+	decryptLocks
+		.withLock(sessionId, () => live.respond(response))
+		.catch((error: unknown) => {
+			logger.log("wallet-sdk", LogLevel.Error, `Failed to send response for ${describeWireMethod(message.type)}`, { error })
+		})
+}
+
+/** A call whose session ended before it ran: nothing is sent, and its queued row fails as `kind`. */
+async function dropUnrunMessage(
+	message: WalletMessage,
+	sessionId: string,
+	queuedJournalId: string | undefined,
+	kind: QueuedFailureKind,
+	operationJournal: OperationJournalService,
+	logger: ILogger,
+): Promise<void> {
+	logger.log(
+		"wallet-sdk",
+		LogLevel.Debug,
+		`Dropping ${describeWireMethod(message.type)} for session ${describeExternalId(sessionId)}: the session ended before it ran`,
+	)
+	if (queuedJournalId) await failQueuedIfUnclaimed(operationJournal, queuedJournalId, SESSION_NO_LONGER_VALID, logger, kind)
+}
+
 async function runEstablishedMessage(
 	queuedJournalId: string | undefined,
 	establishedPromise: Promise<boolean>,
 	releaseFifo: ReturnType<typeof createSessionBaton>["releaseFifo"],
-	session: ActiveSession,
+	call: { session: ActiveSession; live: LiveSession; hold: VerificationHold },
 	message: WalletMessage,
 	deps: SdkDeps,
 	state: SdkHandlerState,
 ): Promise<void> {
+	const { session, live } = call
 	// Re-gate execution behind the baton. A session that
 	// failed/lost establishment must not execute either — not just skip
 	// its journal. Same promise as the journal gate, so it resolves once.
 	if (!(await establishedPromise)) {
 		deps.logger.log(
-			"wallet-sdk-bg",
+			"wallet-sdk",
 			LogLevel.Warn,
 			`Dropping message for session ${describeExternalId(session.sessionId)}: failed/lost establishment validation`,
 		)
 		return
 	}
+	// Behind the FIFO, so the calls a check held run in arrival order once it is confirmed. A call
+	// parked here keeps its settled gates: a session that ended meanwhile, whatever now holds its id,
+	// runs nothing of it.
+	const outcome = await call.hold.outcome
+	if (outcome !== "released" || !live.isLive()) {
+		const kind = outcome === "released" ? "wallet_refused" : outcome
+		return dropUnrunMessage(message, session.sessionId, queuedJournalId, kind, deps.operationJournal, deps.logger)
+	}
 	return handleWalletMessage(
 		session,
 		message,
-		state.late.handler!,
+		live,
 		deps.dispatcher,
 		deps.profileService,
 		deps.operationJournal,
@@ -603,6 +742,7 @@ async function runEstablishedMessage(
 			onExecutionEnqueued: releaseFifo,
 			queuedJournalId,
 		},
+		deps.resetRun,
 	)
 }
 
@@ -610,52 +750,25 @@ async function runEstablishedMessage(
  * Serialize decryption per-session to prevent message reordering.
  * The wallet-sdk uses `void this.handleEncryptedMessage(...)` (fire-and-forget),
  * so two messages can have their decryptions race.
+ * A message that finds `MAX_PENDING_PER_SESSION` operations queued in its session's lane is dropped
+ * unanswered: its id is inside the ciphertext, so nothing can be refused before the decrypt.
  * TODO: Remove this monkey-patch if wallet-sdk adds a proper serialization API.
  */
-function serializeDecryption(handler: BackgroundConnectionHandler, decryptLocks: KeyedLock): void {
+function serializeDecryption(handler: BackgroundConnectionHandler, decryptLocks: KeyedLock, logger: ILogger): void {
 	// biome-ignore lint/suspicious/noExplicitAny: monkey-patching private method on BackgroundConnectionHandler to serialize decryption
 	const origDecrypt = (handler as any).handleEncryptedMessage.bind(handler)
 	// biome-ignore lint/suspicious/noExplicitAny: monkey-patching private method on BackgroundConnectionHandler to serialize decryption
-	;(handler as any).handleEncryptedMessage = (sessionId: string, encrypted: unknown) =>
-		decryptLocks.withLock(sessionId, () => origDecrypt(sessionId, encrypted))
-}
-
-/** When a stored DappSession is deleted (settings disconnect OR
- *  TTL expiry — both emit the same event), tear down every matching
- *  live wallet-sdk ActiveSession so the dApp can't keep calling
- *  network-only methods over the still-open channel.
- *
- *  Tuple-match by `(origin, chainId)`, NOT a single
- *  `walletSdkSessionId` field, because a single
- *  stored DappSession may correspond to MULTIPLE live ActiveSessions
- *  (multi-tab same dApp). O(n) iteration where n is bounded by tabs-with-
- *  dApp-loaded — typically <10. */
-function wireSessionTeardown(handler: BackgroundConnectionHandler, dappSessionService: DappSessionService, logger: ILogger): void {
-	dappSessionService.onDappSessionDeleted.add((deleted) => {
-		try {
-			const origin = deleted.dappMetadata?.url
-			const chainId = deleted.chainId
-			if (!origin || !chainId) {
-				logger.log(
-					"wallet-sdk-bg",
-					LogLevel.Warn,
-					`DappSession deleted with missing origin/chainId — cannot match active sessions; skipping teardown`,
-				)
-				return
-			}
-			const matches = handler.getActiveSessions().filter((s) => s.origin === origin && String(chainInfoToChainId(s)) === chainId)
-			for (const match of matches) {
-				logger.log(
-					"wallet-sdk-bg",
-					LogLevel.Info,
-					`Terminating live session ${describeExternalId(match.sessionId)} on chain ${chainId} — dApp access revoked`,
-				)
-				handler.terminateSession(match.sessionId)
-			}
-		} catch (err) {
-			logger.log("wallet-sdk-bg", LogLevel.Error, `Failed to terminate live sessions on dapp-session-deleted: ${err}`)
+	;(handler as any).handleEncryptedMessage = (sessionId: string, encrypted: unknown) => {
+		if (decryptLocks.waiting(sessionId) >= MAX_PENDING_PER_SESSION) {
+			logger.log(
+				"wallet-sdk",
+				LogLevel.Debug,
+				`Dropping a secure message for session ${describeExternalId(sessionId)}: its lane is full`,
+			)
+			return Promise.resolve()
 		}
-	})
+		return decryptLocks.withLock(sessionId, () => origDecrypt(sessionId, encrypted))
+	}
 }
 
 /** On unlock, drain any queued discovery requests */
@@ -688,13 +801,14 @@ async function drainQueuedDiscovery(discovery: PendingDiscovery, deps: SdkDeps, 
 type DiscoveryDeps = {
 	handler: BackgroundConnectionHandler
 	profileService: ProfileService
-	networkService: Pick<NetworkService, "servesChain">
+	networkService: Pick<NetworkService, "servesChain" | "servesLiveChain">
 	dappInteractionService: DappInteractionService
 	dappSessionService: DappSessionService
 	pendingVerification: Map<string, PendingVerificationEntry>
 	pendingDiscoveryPromises: Map<string, Promise<void>>
 	discoveryQueue: DiscoveryQueue
 	legal: LegalAdmission
+	resetRun: ResetRunGate
 	admission: VerifyAdmissionGate
 	dedupeWaiters: Map<string, number>
 	handedOver: SdkHandlerState["handedOver"]
@@ -714,6 +828,7 @@ function discoveryDeps(deps: SdkDeps, state: SdkHandlerState): DiscoveryDeps {
 		pendingDiscoveryPromises: state.pendingDiscoveryPromises,
 		discoveryQueue: state.late.discoveryQueue!,
 		legal: deps.legal,
+		resetRun: deps.resetRun,
 		admission: state.admission,
 		dedupeWaiters: state.dedupeWaiters,
 		handedOver: state.handedOver,
@@ -759,6 +874,9 @@ async function handleDiscovery(discovery: PendingDiscovery, deps: DiscoveryDeps)
 		// popup caps below all key on `(origin,chainId)`, not just the
 		// auto-approve lookup and new-session creation.
 		const chainId = String(chainInfoToChainId(discovery))
+		// While a reset runs, a discovery waits for it before any read below, so the profile, the
+		// Terms and the session it then reads are the ones the reset left.
+		await deps.resetRun.waitForRunEnd()
 
 		// Captured BEFORE the profile read, as `handleWalletMessage` does: a switch landing inside any
 		// read below registers as a bump after this baseline.
@@ -781,7 +899,7 @@ async function handleDiscovery(discovery: PendingDiscovery, deps: DiscoveryDeps)
 		// Both read BEFORE the session lookup, never after it: the lookup must stay the last yield
 		// ahead of the popup-promise registration below.
 		const legalCurrent = await isLegalCurrent(deps.legal)
-		const served = await deps.networkService.servesChain(profile.id, Number(chainId))
+		const served = await deps.networkService.servesLiveChain(profile.id, Number(chainId))
 
 		// Check for existing valid session (returning user on this chain → auto-approve).
 		// Lookup is by `(origin, chainId)` so a session remembered on testnet does
@@ -837,11 +955,17 @@ async function handleDiscovery(discovery: PendingDiscovery, deps: DiscoveryDeps)
 
 		if (served) await runDiscoveryPopup(discovery, chainId, dedupeKey, profile.id, deps)
 		else await runNetworkUnavailableNotice(discovery, chainId, dedupeKey, { staleSession: existingSession, entryEpoch }, deps)
-	} catch {
-		// User rejected or popup was closed
-		handler.rejectDiscovery(discovery.requestId)
-		logger.log("wallet-sdk", LogLevel.Warn, `Discovery rejected for request ${describeExternalId(discovery.requestId)}`)
+	} catch (error) {
+		rejectFailedDiscovery(discovery, error, deps)
 	}
+}
+
+/** The person declined or closed the window, or the app sent a `chainInfo` that does not decode,
+ *  which it can repeat at will and so logs at `debug`. */
+function rejectFailedDiscovery(discovery: PendingDiscovery, error: unknown, deps: DiscoveryDeps): void {
+	deps.handler.rejectDiscovery(discovery.requestId)
+	const level = error instanceof InvalidWalletArgumentsError ? LogLevel.Debug : LogLevel.Warn
+	deps.logger.log("wallet-sdk", level, `Discovery rejected for request ${describeExternalId(discovery.requestId)}`)
 }
 
 /** Reject an approval the dApp can no longer receive. The drain-gate
@@ -1023,7 +1147,7 @@ async function runDiscoveryPopup(
 	deps: DiscoveryDeps,
 ): Promise<void> {
 	const { handler, pendingDiscoveryPromises, logger } = deps
-	const params: DiscoveryParams = { dappMetadata: discoveryDappMetadata(discovery) }
+	const params: DiscoveryParams = { dappMetadata: discoveryDappMetadata(discovery), chainId }
 
 	// Store a promise that resolves when the popup completes so duplicate
 	// discoveries can await it.
@@ -1055,7 +1179,7 @@ async function runDiscoveryPopup(
 		if (rejectIfNotAdmitted(discovery, deps, admitted)) return
 		if (waitingWindow !== undefined) {
 			// A window closed while its Allow was queued fails the attach: its removal was buffered.
-			if (!admitted?.attach(waitingWindow)) {
+			if (!admitted?.attach(waitingWindow, result.expiredUrl)) {
 				rejectThrottled(discovery, deps, "its connect window closed while waiting for a verify-window slot")
 				return
 			}
@@ -1151,7 +1275,7 @@ async function persistAndApprove(
 		// The connect window opened on a served chain, and its network can be removed while it is up:
 		// a row written then could only serve refusals. Removal after the write is the 4901 case.
 		// Read before the profile check, which must stay the last await ahead of the write.
-		if (!(await deps.networkService.servesChain(profileId, Number(chainId)))) {
+		if (!(await deps.networkService.servesLiveChain(profileId, Number(chainId)))) {
 			rejectThrottled(discovery, deps, "its chain lost its network while the connect window was open")
 			return
 		}
@@ -1212,6 +1336,8 @@ async function persistAndApprove(
  *
  * Dispatches the method call to the WalletSdkDispatcher, then encrypts
  * and sends the response back through the BackgroundConnectionHandler.
+ * Every send and termination goes through `live`, so a call whose session
+ * ended mid-flight never reaches a successor under the same id.
  *
  * `hooks` is the wallet-bridge `DispatchHooks` contract (imported, not a
  * local mirror) so the `onExecutionEnqueued` baton wiring is type-checked
@@ -1224,7 +1350,7 @@ async function persistAndApprove(
 export async function handleWalletMessage(
 	session: ActiveSession,
 	message: WalletMessage,
-	handler: BackgroundConnectionHandler,
+	live: LiveSession,
 	dispatcher: WalletSdkDispatcher,
 	profileService: ProfileService,
 	operationJournal: OperationJournalService,
@@ -1233,6 +1359,7 @@ export async function handleWalletMessage(
 	logger: ILogger,
 	legal: LegalAdmission,
 	hooks?: DispatchHooks,
+	resetRun?: ResetRunGate,
 ): Promise<void> {
 	const response: WalletResponse = {
 		messageId: message.messageId,
@@ -1266,9 +1393,9 @@ export async function handleWalletMessage(
 			sessionProfiles,
 			respond: () => {
 				response.error = SESSION_INVALID_ERROR
-				return handler.sendResponse(session.sessionId, response)
+				return live.respond(response)
 			},
-			terminateSession: (sessionId) => handler.terminateSession(sessionId),
+			terminateSession: () => live.terminate(),
 			logger,
 		})
 		if (!mayProceed) {
@@ -1276,7 +1403,7 @@ export async function handleWalletMessage(
 			// pre-created queued record here too, or it sits at "Queued..."
 			// until the reaper's stuck sweep.
 			if (hooks?.queuedJournalId) {
-				await failQueuedIfUnclaimed(operationJournal, hooks.queuedJournalId, "Session no longer valid — reconnect", logger)
+				await failQueuedIfUnclaimed(operationJournal, hooks.queuedJournalId, SESSION_NO_LONGER_VALID, logger, "wallet_refused")
 			}
 			return
 		}
@@ -1292,7 +1419,15 @@ export async function handleWalletMessage(
 		// Once per top-level request, before the dispatcher sees a method name: no dApp request is
 		// served without a current Terms acceptance. The catch below answers with the typed envelope
 		// and closes any queued journal row, exactly as for every other refusal.
+		// A request that arrives while a network reset runs waits for it, at most a bounded time;
+		// the per-chain guards still decide what it may do once admitted.
+		await resetRun?.waitForRunEnd()
 		await legal.assertCurrent()
+		// The last await before the dispatch: the session can end, and its id re-key, inside any of
+		// the reads above.
+		if (!live.isLive()) {
+			return dropUnrunMessage(message, session.sessionId, hooks?.queuedJournalId, "wallet_refused", operationJournal, logger)
+		}
 
 		// Hooks ride as an internal 4th arg — deliberately NOT on `ctx` so
 		// `dispatch("batch", ...)`'s recursive ctx forwarding can't leak them
@@ -1343,7 +1478,7 @@ export async function handleWalletMessage(
 	}
 
 	try {
-		await handler.sendResponse(session.sessionId, response)
+		await live.respond(response)
 	} catch (sendError) {
 		// The error goes as an OBJECT, not interpolated: this is an internal transport failure worth
 		// diagnosing, and passing it whole lets the logger's projection scrub and cap it.
@@ -1351,8 +1486,15 @@ export async function handleWalletMessage(
 	}
 }
 
-/** A refusal a connected dApp can repeat on every poll, so it logs at `debug`: an `error` line lands
- *  in every user's log buffer. */
+/** A refusal a connected dApp can repeat on every poll, or with silent sends over the waiting-sends
+ *  cap, so it logs at `debug`: an `error` line lands in every user's log buffer. */
 function isExpectedRefusal(error: unknown): boolean {
-	return error instanceof TermsAcceptanceRequiredError || error instanceof ScopeViolationError || error instanceof ChainNotSupportedError
+	return (
+		error instanceof TermsAcceptanceRequiredError ||
+		error instanceof ScopeViolationError ||
+		error instanceof ChainNotSupportedError ||
+		error instanceof InvalidWalletArgumentsError ||
+		error instanceof UnsupportedMethodError ||
+		error instanceof TooManyPendingError
+	)
 }

@@ -1,8 +1,9 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 import { FieldWarning } from "@nulo/design"
+
 /** Utils */
-import { findPrimaryEndpoint } from "@/wallet/services/network/spec"
+import { sameStoredName, storedNameKey } from "@/utils/account-name"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -13,7 +14,7 @@ const { openToast } = useToast()
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
 const appStore = useAppStore()
-const { order } = usePopupStack("edit_network")
+const { order, depth } = usePopupStack("edit_network")
 const cacheStore = useCacheStore()
 
 const emit = defineEmits(["onClose"])
@@ -28,18 +29,14 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v.length) return null
-			const conflicting = appStore.networks.find((n) => n.name === v && n.id !== networkToEdit.value?.id)
+			const conflicting = appStore.networks.find((n) => sameStoredName(n.name, v) && n.id !== networkToEdit.value?.id)
 			if (conflicting) return "Already exists"
 			return null
 		},
 	},
-	/** Vestigial — kept for the URL input that's now read-only. Endpoint URL
-	 *  editing lives in the per-`Network` detail page. */
-	url: { initial: "" },
 })
 
 const nameTerm = form.fields.name.value
-const urlTerm = form.fields.url.value
 
 const isStartedEditingName = form.fields.name.isDirty
 const isNameAlreadyExist = computed(() => form.fields.name.error.value === "Already exists" && isStartedEditingName.value)
@@ -48,17 +45,16 @@ const isAvailableToUpdateNetwork = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
 	// route (button, Enter, future callers) — not just the pointer path.
 	if (isNetworkUpdateInProgress.value) return false
-	if (!nameTerm.value.length) return false
-	if (nameTerm.value === networkToEdit.value?.name) return false
+	if (!storedNameKey(nameTerm.value)) return false
+	if (storedNameKey(nameTerm.value) === networkToEdit.value?.name) return false
 	if (form.fields.name.error.value) return false
 	return true
 })
 
 const handleFillFieldsWithDefaultValues = () => {
-	const primary = networkToEdit.value && findPrimaryEndpoint(networkToEdit.value)
 	// rebase() loads values + sets the dirty-baseline so `field.isDirty` drives
 	// the "Already exists" warning gating (isStartedEditingName) above.
-	form.rebase({ name: networkToEdit.value?.name ?? "", url: primary?.rpcUrl ?? "" })
+	form.rebase({ name: networkToEdit.value?.name ?? "" })
 }
 
 const isNetworkUpdateInProgress = ref(false)
@@ -72,7 +68,7 @@ const handleUpdateNetwork = async () => {
 	// feedback; the family's standard error toast handles it.
 	isNetworkUpdateInProgress.value = true
 	try {
-		await appStore.renameNetwork(cacheStore.networkToEditIdx, nameTerm.value)
+		await appStore.renameNetwork(cacheStore.networkToEditIdx, storedNameKey(nameTerm.value))
 	} catch {
 		openToast({ kind: "error", label: "Something went wrong" })
 		return
@@ -97,6 +93,7 @@ usePopupEntity(() => props.show, {
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		title="Edit network"
 		submitLabel="Update"
 		:submitDisabled="!isAvailableToUpdateNetwork || !isStartedEditingName"
@@ -123,10 +120,8 @@ usePopupEntity(() => props.show, {
 			:maxLength="25"
 			data-testid="network-name-input"
 		>
-			<template #right>
-				<Transition name="fade">
-					<FieldWarning v-if="isNameAlreadyExist"> Already exists </FieldWarning>
-				</Transition>
+			<template v-if="isNameAlreadyExist" #right>
+				<FieldWarning> Already exists </FieldWarning>
 			</template>
 		</Input>
 
@@ -134,7 +129,7 @@ usePopupEntity(() => props.show, {
 			<Button @click="handleFillFieldsWithDefaultValues" wide variant="primary_outline" size="medium">
 				Reset changes
 			</Button>
-			<Text size="12" weight="500" color="tertiary" height="140" align="center" style="padding: 8px 20px 0">
+			<Text variant="body" color="tertiary" height="140" align="center" style="padding: 8px 20px 0">
 				Endpoint URLs are managed in the per-network detail page.
 			</Text>
 		</template>

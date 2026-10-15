@@ -18,13 +18,14 @@
  * Every stage asserts an exact outcome — no ok-or-error tolerances in this file. Run it
  * prover-ON per bump, on Chrome and on Firefox: `bun run e2e:agent
  * tests/e2e/network/frozen-account-canary.test.ts` (see the aztec-update skill; a red canary on
- * either browser BLOCKS the bump — hold the line, or ship a new extension major as a deliberate
- * rotation).
+ * either browser BLOCKS the bump — hold the line, or rotate the address regime as a deliberate
+ * act, never as a fix).
  */
 import { Buffer } from "node:buffer"
 import { describe, expect, inject } from "vitest"
 import { backgroundAlive, stopBackground } from "../fixtures/browser"
 import { createAztecNodeClient } from "@aztec-labs/aztec.js/node"
+import type { ILogger } from "@nulo/wallet-core/logger"
 import { mintPublicTokensForAccount, waitForTxMined, type AztecTestConfig } from "../fixtures/aztec"
 import { clickByTestId, openPopup, test, waitForHash, type ExtensionContext } from "../fixtures/extension"
 import { ensureUnlocked, getAccountAddress, readLivenessBaseline, revealSeedPhrase, waitForWorkerLiveness } from "../fixtures/helpers"
@@ -126,7 +127,8 @@ describe("frozen-account canary — the execution gate every @aztec bump runs, o
 			const derived = await Promise.all(
 				[0, 1].map(async (index) => {
 					const seed = poseidon2Hash([new Fr(NULO_ACCOUNT_SEED_SEP), master, new Fr(LOCAL_L1_CHAIN_ID), new Fr(0), new Fr(index)])
-					const account = await NuloAccount.new(seed, logger)
+					// Aztec's Logger has no `log`; NuloAccount calls it only from its PXE and transaction methods.
+					const account = await NuloAccount.new(seed, logger as unknown as ILogger, "account")
 					const instance = (account as unknown as { instance: { initializationHash: InstanceType<typeof Fr> } }).instance
 					const initNullifier = await computeSiloedPrivateInitializationNullifier(account.address, instance.initializationHash)
 					return { index, address: account.address.toString(), initNullifier }
@@ -134,7 +136,7 @@ describe("frozen-account canary — the execution gate every @aztec bump runs, o
 			)
 			// Order-independent set match, then map granted → derived so later stages use exact pairs.
 			expect(new Set(derived.map((d) => d.address))).toEqual(new Set(accountAddresses))
-			const byAddress = new Map(derived.map((d) => [d.address, d]))
+			const byAddress = new Map<string, (typeof derived)[number]>(derived.map((d) => [d.address, d]))
 			const [ownerA, callerB] = accountAddresses as [string, string]
 			const derivedA = byAddress.get(ownerA)
 			const derivedB = byAddress.get(callerB)

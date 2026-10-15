@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: a retention gate and an error-safe redactor in `apps/extension/src/wallet/logger/`, allowlisted transport and restore-error logging, and the call-site guard `apps/extension/src/utils/log-payload-ban.test.ts`; the policy is the Logging policy section of [`CLAUDE.md`](../../../CLAUDE.md).
-- **Open items**: the home-path guard runs only as a local hook, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: none. The home-path guard running only as a local hook was closed by supply-chain-release (#63): CI runs it through `test:ci-gating`.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

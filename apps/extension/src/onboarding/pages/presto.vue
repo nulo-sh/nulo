@@ -29,7 +29,8 @@ const isPitch = computed(() => isPitchKind(state.value.kind))
 const isProbing = computed(() => state.value.kind === "detecting")
 const canContinue = computed(() => state.value.kind === "available" || state.value.kind === "downloading")
 const diagnosis = computed(() => (state.value.kind === "secure-connection-unavailable" ? state.value.diagnosis : undefined))
-// app.vue resolves the config's theme (system → light/dark) onto `<html theme>` before any page mounts.
+// The theme painted at mount: the stored one once onboarding's first Config read has landed, else the
+// pre-paint hint, which that read may still change. The banner keeps it.
 const bannerTheme = document.documentElement.getAttribute("theme") === "light" ? "light" : "dark"
 
 const pitchRef = useTemplateRef<HTMLDivElement>("pitchRef")
@@ -73,7 +74,7 @@ onBeforeUnmount(() => {
 		<Flex direction="column" gap="16" :class="$style.hero">
 			<BrutalistTitle main="Speed up" sub="Proving" />
 			<div :class="$style.hero_bar" />
-			<Text size="14" color="secondary" height="150">
+			<Text variant="body" color="secondary" height="150">
 				Proofs in your browser take about 30 seconds. With Presto they take a few.
 				Optional, but strongly recommended.
 			</Text>
@@ -108,7 +109,7 @@ onBeforeUnmount(() => {
 				@retry="retry"
 			/>
 		</Flex>
-		<Text v-if="state.kind === 'available'" size="12" color="support" height="150">
+		<Text v-if="state.kind === 'available'" variant="body" color="support" height="150">
 			Presto will ask you to allow Nulo the first time you send.
 		</Text>
 

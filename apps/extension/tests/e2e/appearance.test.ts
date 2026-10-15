@@ -1,12 +1,13 @@
 import { expect } from "vitest"
-import { test, openPopup, waitForHash, clickByTestId } from "./fixtures/extension"
+import { extensionUrl, gotoExtensionPage, newPage } from "./fixtures/browser"
+import { test, openPopup, waitForHash, clickByTestId, patchPagePolling, recordPageErrors } from "./fixtures/extension"
 import { navigateByHash, navigateToSettings, setTheme } from "./fixtures/helpers"
 
 test("cycle theme system → light → dark verifies html[theme=…] each step", async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
-	await navigateToSettings(page, "appearance")
+	await navigateToSettings(page, "display")
 
 	await setTheme(page, "system")
 	const systemTheme = await page.evaluate(() => document.documentElement.getAttribute("theme"))
@@ -26,7 +27,7 @@ test("animations toggle persists across navigation", async ({ registeredExtensio
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
-	await navigateToSettings(page, "appearance")
+	await navigateToSettings(page, "display")
 	await page.waitForSelector('[data-testid="animations-toggle"]', { visible: true, timeout: 5_000 })
 
 	// `data-toggle-active` reflects the Toggle's modelValue directly — a stable
@@ -49,17 +50,13 @@ test("animations toggle persists across navigation", async ({ registeredExtensio
 	expect(after).not.toBe(before)
 
 	// Navigate away and back. Use `/about` — a real sibling settings page.
-	// (Previously navigated to `/privacy`, but `src/popup/pages/settings/`
-	// has no `privacy.vue`, so the hash never settled and waitForFunction
-	// timed out at 5s. about.vue exists, has no auto-redirect, and is
-	// already exercised by `navigation.test.ts`.)
 	await navigateByHash(page, "#/popup/settings/about")
-	// The hash wait proves nothing about RENDERING — until the appearance
+	// The hash wait proves nothing about RENDERING — until the Display
 	// component actually unmounts, the later waitForSelector could satisfy
 	// itself on the same mounted toggle and the "persisted" read would prove
 	// nothing. Gate on the toggle leaving the DOM first.
 	await page.waitForFunction(() => !document.querySelector('[data-testid="animations-toggle"]'), { timeout: 5_000, polling: 100 })
-	await navigateByHash(page, "#/popup/settings/appearance")
+	await navigateByHash(page, "#/popup/settings/display")
 	await page.waitForSelector('[data-testid="animations-toggle"]', { visible: true, timeout: 5_000 })
 
 	// The remount's `getProps` RPC resolves BEFORE the toggle renders (the
@@ -79,18 +76,56 @@ test.skip("theme persists across navigation away and back", async ({ registeredE
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
-	await navigateToSettings(page, "appearance")
+	await navigateToSettings(page, "display")
 	await setTheme(page, "light")
 
 	// Navigate to a different settings page and back. Uses `/about` — a real
-	// sibling settings page. (Previously `/privacy`, which has no `.vue`
-	// page; vue-router never settles the hash there.)
+	// sibling settings page.
 	await navigateByHash(page, "#/popup/settings/about")
 	expect(await page.evaluate(() => document.documentElement.getAttribute("theme"))).toBe("light")
 
-	await navigateByHash(page, "#/popup/settings/appearance")
+	await navigateByHash(page, "#/popup/settings/display")
 	expect(await page.evaluate(() => document.documentElement.getAttribute("theme"))).toBe("light")
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
+})
+
+type HintProbe = Window & { __hintWrites?: string[] }
+
+// An explicit choice, never `system`: Firefox cannot emulate the OS scheme.
+test("onboarding paints the stored theme over a pre-paint hint that disagrees, and never hints another", async ({
+	registeredExtension: ctx,
+}) => {
+	const popup = await openPopup(ctx)
+	await waitForHash(popup, "#/popup/general")
+	await navigateToSettings(popup, "display")
+	await setTheme(popup, "dark")
+	// The hint a reset leaves behind: chrome.storage is cleared, the page's localStorage is not. The
+	// popup stays open to hear, through `storage` events, every hint the onboarding page writes.
+	await popup.evaluate(async () => {
+		localStorage.setItem("nulo:theme", "light")
+		const w = window as HintProbe
+		w.__hintWrites = []
+		window.addEventListener("storage", (event) => {
+			if (event.key === "nulo:theme") w.__hintWrites?.push(String(event.newValue))
+		})
+		await chrome.storage.local.set({ "nulo:onboarding:completed": false })
+	})
+
+	const page = await newPage(ctx.browser)
+	patchPagePolling(page)
+	recordPageErrors(ctx, page)
+	await gotoExtensionPage(page, extensionUrl(ctx.extensionId, "/src/onboarding/index.html#/onboarding/welcome"))
+	await page.waitForFunction(
+		() => document.documentElement.getAttribute("theme") === "dark" && localStorage.getItem("nulo:theme") === "dark",
+		{ timeout: 15_000, polling: 50 },
+	)
+	await popup.waitForFunction(() => ((window as HintProbe).__hintWrites ?? []).length > 0, { timeout: 5_000, polling: 50 })
+	expect(await popup.evaluate(() => (window as HintProbe).__hintWrites)).toEqual(["dark"])
+
+	expect(ctx.consoleErrors).toEqual([])
+	expect(ctx.pageErrors).toEqual([])
+	await page.close()
+	await popup.close()
 })

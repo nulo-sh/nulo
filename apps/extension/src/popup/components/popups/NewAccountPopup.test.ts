@@ -153,3 +153,30 @@ describe("NewAccountPopup — submit re-entrancy latch", () => {
 		await dispose(w)
 	})
 })
+
+describe("NewAccountPopup — duplicate names", () => {
+	async function typeName(w: VueWrapper, name: string) {
+		await w.find('input[data-testid="account-name-input"]').setValue(name)
+		await flushPromises()
+		return {
+			warns: w.text().includes("Already exist"),
+			disabled: w.find('[data-testid="form-submit"]').attributes("disabled") !== undefined,
+		}
+	}
+
+	test("a saved name with outer spaces added warns and keeps Create disabled; another case does not", async () => {
+		appStoreState.accounts = [{ name: "Alice", address: "0xa" }]
+		const w = await mountShown()
+		expect(await typeName(w, "Alice ")).toEqual({ warns: true, disabled: true })
+		expect(await typeName(w, " Alice")).toEqual({ warns: true, disabled: true })
+		expect(await typeName(w, "alice")).toEqual({ warns: false, disabled: false })
+	})
+
+	test("a name of only spaces counts as empty: Create stays disabled and Enter creates nothing", async () => {
+		const w = await mountShown()
+		expect(await typeName(w, "   ")).toEqual({ warns: false, disabled: true })
+		pressEnterOnInput()
+		await flushPromises()
+		expect(createAccountMock).not.toHaveBeenCalled()
+	})
+})

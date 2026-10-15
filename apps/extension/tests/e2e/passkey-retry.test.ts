@@ -9,13 +9,14 @@ import { expect } from "vitest"
 import { PASSKEY_COPY } from "@/utils/passkey-copy"
 import { extensionUrl, gotoExtensionPage } from "./fixtures/browser"
 import { clickByTestId, type ExtensionContext, expectNoNameField, openPopup, test, waitForHash } from "./fixtures/extension"
-import { navigateByHash, waitForToastGone } from "./fixtures/helpers"
+import { navigateByHash, waitForToast, waitForToastGone } from "./fixtures/helpers"
 import {
 	holdNextPasskeyRequest,
 	openPasskeyRegister,
 	refusePasskeyStep,
 	registerPasskeyProfile,
 	setupPasskeyVirtualAuth,
+	withholdCreatePrf,
 } from "./fixtures/passkey"
 import { completeResetRitual } from "./helpers/crash-truth"
 import {
@@ -155,6 +156,25 @@ for (const { where, reach, control, finished } of STEPS) {
 		}
 	}, 240_000)
 }
+
+test("the popup's new passkey profile: a passkey created but not confirmed is confirmed on retry, never created again", async ({
+	freshExtensionPerTest: ctx,
+}) => {
+	const page = await openPopup(ctx)
+	const auth = await setupPasskeyVirtualAuth(ctx.browser, page)
+	try {
+		await openPasskeyRegister(page)
+		const creates = await withholdCreatePrf(page)
+		await clickByTestId(page, "register-submit-btn")
+		await waitForToast(page, PASSKEY_COPY.notConfirmed, 30_000, { kind: "error" })
+		expect(await creates()).toBe(1)
+		await retryWithTheToastGone(page, "register-submit-btn")
+		await waitForHash(page, "#/popup/general", 60_000)
+		expect(await creates()).toBe(1)
+	} finally {
+		await auth.cleanup()
+	}
+}, 240_000)
 
 for (const { where, shell, to } of [
 	{ where: "the popup's full-backup restore", shell: POPUP_IMPORT_SHELL, to: toPopupImport },

@@ -43,7 +43,6 @@ import { FROZEN_INSTANTIATION_DESCRIPTOR, buildFrozenConstructorCall, frozenCons
 import type { IAccountContract } from "."
 
 export class NuloAccount implements IAccountContract {
-	public readonly name = "nulo-v1"
 	public readonly address: AztecAddress
 	public readonly artifact: ContractArtifact = FrozenSchnorrAccountArtifact
 
@@ -58,17 +57,18 @@ export class NuloAccount implements IAccountContract {
 		private readonly completeAddress: CompleteAddress,
 		private readonly signingAccountContract: SchnorrAccountContract,
 		private readonly logger: ILogger,
+		private readonly logSource: string,
 	) {
 		this.address = instance.address
 		this.authWitnessProvider = signingAccountContract.getAuthWitnessProvider(completeAddress)
 		this.entrypoint = new DefaultAccountEntrypoint(this.address, this.authWitnessProvider)
 	}
 
-	public static async new(seed: Fr, logger: ILogger): Promise<NuloAccount> {
+	public static async new(seed: Fr, logger: ILogger, logSource: string): Promise<NuloAccount> {
 		// Signing-key-root model (NULO-ACCOUNT-KDF v2): the seed derives the signing key (the
 		// ownership root); the privacy secret derives one-way FROM the signing key.
 		const { signingKey, secretKey } = await deriveNuloAccountKeys(seed)
-		return NuloAccount.fromKeys(signingKey, secretKey, logger)
+		return NuloAccount.fromKeys(signingKey, secretKey, logger, logSource)
 	}
 
 	/**
@@ -79,14 +79,14 @@ export class NuloAccount implements IAccountContract {
 	 * downstream. The frozen artifact/descriptor still fix every non-key input, so the address is
 	 * a pure function of the signing key.
 	 */
-	public static async fromSigningKey(signingKey: GrumpkinScalar, logger: ILogger): Promise<NuloAccount> {
+	public static async fromSigningKey(signingKey: GrumpkinScalar, logger: ILogger, logSource: string): Promise<NuloAccount> {
 		const secretKey = await deriveSecretKeyFromSigningKey(signingKey)
-		return NuloAccount.fromKeys(signingKey, secretKey, logger)
+		return NuloAccount.fromKeys(signingKey, secretKey, logger, logSource)
 	}
 
 	/** The key-material-agnostic tail shared by `new` (seed-derived) and `fromSigningKey`
 	 *  (imported): keys → frozen instance → complete address → account. */
-	private static async fromKeys(signingKey: GrumpkinScalar, secretKey: Fr, logger: ILogger): Promise<NuloAccount> {
+	private static async fromKeys(signingKey: GrumpkinScalar, secretKey: Fr, logger: ILogger, logSource: string): Promise<NuloAccount> {
 		const keys = await deriveKeys(secretKey)
 		const accountContract = new SchnorrAccountContract(signingKey)
 		// Every non-key instantiation input comes from the frozen descriptor — the same source the
@@ -101,13 +101,13 @@ export class NuloAccount implements IAccountContract {
 			deployer: FROZEN_INSTANTIATION_DESCRIPTOR.deployer,
 		})
 		const completeAddress = await CompleteAddress.fromSecretKeyAndInstance(secretKey, instance)
-		return new NuloAccount(secretKey, instance, completeAddress, accountContract, logger)
+		return new NuloAccount(secretKey, instance, completeAddress, accountContract, logger, logSource)
 	}
 
 	public async ensureRegistered(pxe: IPXE): Promise<void> {
 		const accounts = await pxe.getRegisteredAccounts()
 		if (!accounts.find((x) => x.address.toString() === this.address.toString())) {
-			this.logger.log(this.name, LogLevel.Debug, "register account...")
+			this.logger.log(this.logSource, LogLevel.Debug, "register account...")
 			const registered = await pxe.registerAccount(this.secretKey, await computePartialAddress(this.instance))
 			if (!registered.address.equals(this.address)) {
 				throw new Error(
@@ -126,7 +126,7 @@ export class NuloAccount implements IAccountContract {
 		// the node where rc.2 returned the instance directly — pxeOnly restores the offline-safe behavior.
 		const instance = await pxe.getContractInstance(this.address, { pxeOnly: true })
 		if (!instance) {
-			this.logger.log(this.name, LogLevel.Debug, "register contract...")
+			this.logger.log(this.logSource, LogLevel.Debug, "register contract...")
 			await pxe.registerContract({ instance: this.instance, artifact: this.artifact })
 		}
 	}
@@ -148,15 +148,8 @@ export class NuloAccount implements IAccountContract {
 		gasSettingsRPC?: PartialGasSettingsRPC,
 		outMeta?: { initializesAccount?: boolean },
 	): Promise<TxExecutionRequest> {
-		// Use the shared `completeFeeOptions` translator so both the
-		// standard and fast paths produce identical `GasSettings` for
-		// identical inputs. Mirrors upstream
-		// `BaseWallet.completeFeeOptions({forEstimation:true, ...})`
-		// byte-for-byte:
-		//   - `maxFeesPerGas` defaults from `node.getCurrentMinFees() * 1.5`
-		//   - `maxPriorityFeesPerGas` defaults to `GasFees.empty()`
-		// Hardcoded `1e18 / 1e18` constants are not used — drift between
-		// fast and standard paths is eliminated.
+		// The shared translator, so the standard and fast paths complete identical inputs to
+		// identical `GasSettings`.
 		const gasSettings = await completeFeeOptions({
 			node,
 			gasSettings: gasSettingsRPC,
@@ -176,7 +169,11 @@ export class NuloAccount implements IAccountContract {
 		const initNullifier = await computeSiloedPrivateInitializationNullifier(this.address, this.instance.initializationHash)
 		const initWitness = await node.getNullifierMembershipWitness("latest", initNullifier)
 		if (!initWitness) {
-			this.logger.log(this.name, LogLevel.Debug, "init nullifier NOT found, wrapping deploy + entrypoint via MulticallEntrypoint")
+			this.logger.log(
+				this.logSource,
+				LogLevel.Debug,
+				"init nullifier NOT found, wrapping deploy + entrypoint via MulticallEntrypoint",
+			)
 			// Provenance for the send-path classifier: an existing-nullifier
 			// rejection is only "duplicate initialization" when THIS build
 			// wrapped the ctor — the same text on a non-initializing tx is an

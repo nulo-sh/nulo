@@ -36,7 +36,6 @@ import {
 	navigateByHash,
 	navigateToSettings,
 	openNetworkDetail,
-	PXE_ANCHOR_SYNC_WORKAROUND_MS,
 	seedUsdQuoteAndReload,
 	selectFeeMethod,
 	selectSendToken,
@@ -52,7 +51,7 @@ import {
 } from "../fixtures/helpers"
 import { openPlayground } from "../fixtures/playground"
 import { approveConnect, approveVerify, waitForPopup } from "../fixtures/popups"
-import { openSend, submitSend, waitForFee, waitForSendGone } from "../fixtures/send-page"
+import { assertPublishInvariant, openSend, readSendView, submitSend, waitForFee, waitForSendGone } from "../fixtures/send-page"
 import { gotoPopupImport, importSeed, POPUP_IMPORT_SHELL, TEST_PASSWORD, waitForActiveAccount } from "../helpers/import-drivers"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -126,7 +125,7 @@ async function stageWallet(page: Page, chain: Chain): Promise<void> {
 	await importSeed(page, chain.words.join(" "), TEST_PASSWORD, POPUP_IMPORT_SHELL)
 	await switchToLocalNetwork(page)
 	await waitForActiveAccount(page, chain.account, 60_000)
-	await navigateToSettings(page, "appearance")
+	await navigateToSettings(page, "display")
 	await setTheme(page, "dark")
 	await renameNetwork(page, "Testnet", "Aztec Testnet")
 	await renameNetwork(page, "Local Network", "Testnet")
@@ -184,11 +183,8 @@ async function fillPrivateSend(page: Page, chain: Chain, amount: string, fee: Fe
 	// The blur is what turns a typed contact address into the contact's card.
 	await setInputAndBlur(page, '[data-testid="send-destination-field"] input', chain.alice)
 	await page.waitForSelector(`[data-testid="recipient-card"][data-address="${chain.alice}"]`, { visible: true, timeout: 10_000 })
-	await selectFeeMethod(page, fee, { mountTimeoutMs: 30_000 })
-	expect(await waitForFee(page, "private", fee)).toMatchObject({
-		action: "send",
-		strip: { you: "hidden", to: "hidden", amount: "hidden" },
-	})
+	await selectFeeMethod(page, fee)
+	await waitForFee(page, "private", fee)
 	await page.waitForFunction(
 		() => {
 			const submit = document.querySelector<HTMLElement>('[data-testid="send-submit"]')
@@ -196,13 +192,20 @@ async function fillPrivateSend(page: Page, chain: Chain, amount: string, fee: Fe
 		},
 		{ timeout: 180_000, polling: 1_000 },
 	)
+	// The trigger names a pick before the card has resolved who pays for it, and the strip reads "—"
+	// until it has; an armed send is the page's own word that the payer is settled.
+	expect(assertPublishInvariant(await readSendView(page))).toMatchObject({
+		origin: "private",
+		method: fee,
+		action: "send",
+		strip: { you: "hidden", to: "hidden", amount: "hidden" },
+	})
 }
 
 /** A real private send of 50 USDC to the contact, for History's outgoing row. The sponsor pays, so
  *  both Fee Juice balances stay round. */
 async function sendToContact(page: Page, chain: Chain): Promise<void> {
 	await fillPrivateSend(page, chain, "50", "sponsored")
-	await new Promise((r) => setTimeout(r, PXE_ANCHOR_SYNC_WORKAROUND_MS))
 	await submitSend(page, { expect: "send" })
 	await waitForToast(page, "Transaction submitted", 120_000)
 	await waitForSendGone(page)
@@ -290,24 +293,27 @@ function revealCutActivityRow(): Fit {
 
 /**
  * In-page, on Send: the least scroll that lifts the amount's conversion line clear of the sticky
- * footer while the transfer-type labels stay below the sticky header.
+ * footer, measured again once scrolled, so a fit that returns `scrolled` leaves the line clear. The
+ * transfer-type labels may pass under the sticky header.
  */
 function clearAmountLine(): Fit {
 	const footer = document.querySelector<HTMLElement>('[data-testid="send-footer"]')
-	// The header bar and the type labels carry no test id: the back button's and the toggle's parents
-	// are their boxes.
-	const header = document.querySelector('[data-testid="subpage-back"]')?.parentElement?.getBoundingClientRect()
-	const labels = document.querySelector('[data-testid="send-from-type"]')?.parentElement?.getBoundingClientRect()
 	let scroller = footer?.parentElement ?? null
 	while (scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement
-	const line = ["send-amount-meta", "send-amount-balance", "send-amount-max"]
-		.map((id) => document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect().bottom)
-		.filter((bottom): bottom is number => bottom !== undefined)
-	if (!footer || !header || !labels || !scroller || !line.length) return { error: "Send has no footer, header, types or amount line" }
-	const need = Math.max(0, Math.ceil(Math.max(...line) + 4 - footer.getBoundingClientRect().top))
-	const room = Math.floor(labels.top - header.bottom)
-	if (need > room) return { error: `the amount line needs ${need}px of scroll, and Send has ${room}px` }
+	const lineBottom = () =>
+		Math.max(
+			...["send-amount-meta", "send-amount-balance", "send-amount-max"]
+				.map((id) => document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect().bottom)
+				.filter((bottom): bottom is number => bottom !== undefined),
+		)
+	if (!footer || !scroller || lineBottom() === Number.NEGATIVE_INFINITY)
+		return { error: "Send has no footer, scroll container or amount line" }
+	const overlap = () => Math.ceil(lineBottom() + 4 - footer.getBoundingClientRect().top)
+	const need = Math.max(0, overlap())
+	const reach = Math.floor(scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop)
+	if (need > reach) return { error: `the amount line needs ${need}px of scroll, and Send can scroll ${reach}px` }
 	scroller.scrollTop += need
+	if (overlap() > 0) return { error: `the amount line still meets the footer after ${need}px of scroll` }
 	return { scrolled: need }
 }
 
@@ -354,7 +360,7 @@ async function captureHistory(page: Page): Promise<void> {
 }
 
 async function captureSecurity(page: Page): Promise<void> {
-	await navigateToSettings(page, "security")
+	await navigateToSettings(page, "lock")
 	await page.waitForSelector('[data-testid="setting-strict-security-mode"]', { visible: true, timeout: 15_000 })
 	await capture(page, "security")
 }

@@ -5,8 +5,8 @@ import { scanTree } from "../complexity-baseline/scan"
 
 // Every accepted complexity directive's stamp must EQUAL its function's observed value — a raised
 // stamp is an unreviewed ceiling, a lowered one a function that grew, a stale one a directive that
-// outlived its function. CLAUDE.md § Complexity budgets. `bun run baseline:rescore` is the same
-// audit on demand; this is the CI gate.
+// outlived its function (`.claude/skills/complexity-budgets/SKILL.md`). `bun run baseline:rescore`
+// is the same audit on demand; this is the CI gate.
 
 const IGNORE = "// biome-ignore"
 const rule = "noExcessiveCognitiveComplexity" as const
@@ -18,7 +18,22 @@ const anchor = "export function f"
 function fixture(accepted: number, deep: boolean): { file: string; line: number } {
 	const file = `scripts/ci-cd/test-soak/rescore-fixture-${process.pid}.ts`
 	const body = deep
-		? ["export function f(a: number, b: number): number {", "\tlet n = 0", "\tfor (let i = 0; i < a; i++) {", "\t\tif (i % 2 === 0 && b > 1) {", "\t\t\tif (i % 3 === 0 || b > 2) {", "\t\t\t\tif (i % 5 === 0 && b > 3) {", "\t\t\t\t\tif (i % 7 === 0 || b > 4) n += i", "\t\t\t\t\telse n -= 1", "\t\t\t\t}", "\t\t\t}", "\t\t}", "\t}", "\treturn n", "}"]
+		? [
+				"export function f(a: number, b: number): number {",
+				"\tlet n = 0",
+				"\tfor (let i = 0; i < a; i++) {",
+				"\t\tif (i % 2 === 0 && b > 1) {",
+				"\t\t\tif (i % 3 === 0 || b > 2) {",
+				"\t\t\t\tif (i % 5 === 0 && b > 3) {",
+				"\t\t\t\t\tif (i % 7 === 0 || b > 4) n += i",
+				"\t\t\t\t\telse n -= 1",
+				"\t\t\t\t}",
+				"\t\t\t}",
+				"\t\t}",
+				"\t}",
+				"\treturn n",
+				"}",
+			]
 		: ["export function f(a: number): number {", "\treturn a + 1", "}"]
 	const directive = `${IGNORE} lint/complexity/${rule}: accepted at score ${accepted} — ${sentence}`
 	writeFileSync(file, `${[directive, ...body].join("\n")}\n`, { flag: "wx" })

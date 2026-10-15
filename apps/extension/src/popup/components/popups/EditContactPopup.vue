@@ -2,8 +2,9 @@
 <script setup>
 /** Utils */
 import { isValidAztecAddress } from "@/utils/aztec-address"
-import { CONTACT_EXISTS, canonicalContactAddress, sameContactAddress, sameContactName } from "@/utils/contact-rules"
-import { withoutId } from "@/utils/entity-list"
+import { CONTACT_EXISTS, canonicalContactAddress, sameContactAddress } from "@/utils/contact-rules"
+import { isEmptyContactName, sameContactName, sanitizeContactName } from "@/utils/contact-name"
+import { contactListReducers } from "@/utils/entity-list"
 
 /** Components */
 import ContactFormFields from "@/popup/components/modules/settings/contacts/ContactFormFields.vue"
@@ -22,46 +23,42 @@ const { openToast } = useToast()
 /** Store */
 import { useCacheStore } from "@/stores/cache.store"
 const cacheStore = useCacheStore()
-const { order } = usePopupStack("edit_contact")
+const { order, depth } = usePopupStack("edit_contact")
 
 const emit = defineEmits(["onClose"])
 const props = defineProps({
 	show: Boolean,
 })
 
-const contactService = new ContactServiceClient()
-contactService.onContactAdded.add(onContactAdded)
-contactService.onContactUpdated.add(onContactUpdated)
-contactService.onContactDeleted.add(onContactDeleted)
-
-function onContactAdded(contact) {
-	contacts.value.push(contact)
-}
-function onContactUpdated(contact) {
-	const idx = contacts.value.findIndex((c) => c.id === contact.id)
-	if (idx !== -1) {
-		// External update to the contact being edited (another window, an
-		// import): refresh the draft + the dirty baseline so a later submit
-		// doesn't overwrite the external change with stale fields. (This
-		// branch was dead in the original — it compared against the ref
-		// object instead of its value.)
-		if (cacheStore.contactToEditIdx && contact.id === contactToEdit.value?.id) {
-			contactToEdit.value = contact
-			nameTerm.value = contact.name
-			contactAddressTerm.value = contact.address
-			return
-		}
-		contacts.value[idx] = contact
-	} else {
-		contacts.value.push(contact)
-	}
-}
-function onContactDeleted(contact) {
-	contacts.value = withoutId(contacts.value, contact)
-}
-
 const contactToEdit = ref(null)
 const contacts = ref([])
+
+const contactService = new ContactServiceClient()
+const contactList = contactListReducers(contacts)
+contactService.onContactAdded.add(contactList.onAdded)
+contactService.onContactUpdated.add(onContactUpdated)
+contactService.onContactDeleted.add(contactList.onDeleted)
+
+function onContactUpdated(contact) {
+	// An outside update to the listed contact being edited (another window, an import) refreshes
+	// the draft and the dirty baseline, so a later submit cannot overwrite it with stale fields.
+	const listed = contacts.value.some((c) => c.id === contact.id)
+	if (listed && cacheStore.contactToEditIdx && contact.id === contactToEdit.value?.id) {
+		contactToEdit.value = contact
+		nameTerm.value = storedNameOf(contact)
+		contactAddressTerm.value = contact.address
+		return
+	}
+	contactList.onUpdated(contact)
+}
+
+/** The saved contact this form edits: its own row, or the one an import row would write. Its own
+ *  name and address are never duplicates. */
+const isEditedContact = (c) => c.id === (contactToEdit.value?.id ?? contactToEdit.value?.targetId)
+
+/** A name saved by older code can hold what is no longer stored; the field shows it as a save would
+ *  store it, so an edit never saves a name other than the one on screen. */
+const storedNameOf = (contact) => sanitizeContactName(contact?.name ?? "")
 
 /** Name + address managed by useFormState. The "already exist" check
  *  filters out the contact-being-edited so saving with the SAME name/
@@ -70,8 +67,9 @@ const form = useFormState({
 	name: {
 		initial: "",
 		validate: (v) => {
-			if (!v.replace(/\s/g, "").length) return null
-			const conflicting = contacts.value.find((c) => sameContactName(c, v) && c.id !== contactToEdit.value?.id)
+			if (isEmptyContactName(v)) return null
+			// The name as it would be stored: the cut can make a longer draft another contact's name.
+			const conflicting = contacts.value.find((c) => sameContactName(c.name, sanitizeContactName(v)) && !isEditedContact(c))
 			if (conflicting) return CONTACT_EXISTS
 			return null
 		},
@@ -82,7 +80,7 @@ const form = useFormState({
 			if (!v) return null
 			if (!isValidAztecAddress(v)) return "Invalid address"
 			// Case-insensitive: hex casing doesn't make a different address.
-			const conflicting = contacts.value.find((c) => sameContactAddress(c, v) && c.id !== contactToEdit.value?.id)
+			const conflicting = contacts.value.find((c) => sameContactAddress(c, v) && !isEditedContact(c))
 			if (conflicting) return CONTACT_EXISTS
 			return null
 		},
@@ -96,7 +94,9 @@ const contactAddressTerm = form.fields.address.value
 // loaded contact. Used to gate the Update button's "anything changed?"
 // check and the "Already exist" warnings, which stay hidden on the
 // unchanged row.
-const isStartedEditingName = computed(() => Boolean(contactToEdit.value) && nameTerm.value?.trim() !== contactToEdit.value?.name)
+const isStartedEditingName = computed(
+	() => Boolean(contactToEdit.value) && sanitizeContactName(nameTerm.value ?? "") !== storedNameOf(contactToEdit.value),
+)
 const isStartedEditingAddress = computed(() => Boolean(contactToEdit.value) && contactAddressTerm.value !== contactToEdit.value?.address)
 const isStartedEditing = computed(() => isStartedEditingName.value || isStartedEditingAddress.value)
 
@@ -109,7 +109,7 @@ const isAvailableToUpdateContact = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
 	// route (button, Enter, future callers) — not just the pointer path.
 	if (isLoading.value) return false
-	if (!nameTerm.value?.replace(/\s/g, "").length) return false
+	if (isEmptyContactName(nameTerm.value ?? "")) return false
 	if (!isValidAddress.value) return false
 	if (form.fields.name.error.value) return false
 	if (form.fields.address.error.value) return false
@@ -124,7 +124,7 @@ const processingError = ref({
 })
 
 function handleFillFieldsWithDefaultValues() {
-	nameTerm.value = contactToEdit.value?.name ?? ""
+	nameTerm.value = storedNameOf(contactToEdit.value)
 	contactAddressTerm.value = contactToEdit.value?.address ?? ""
 }
 
@@ -141,7 +141,8 @@ const handleUpdateContact = async () => {
 		if (cacheStore.importContact) {
 			cacheStore.importContact = {
 				...contactToEdit.value,
-				name: nameTerm.value.trim(),
+				// Staged as the import would store it, so the row shows the name it writes.
+				name: sanitizeContactName(nameTerm.value),
 				// Same canonical-lowercase rule as the direct-save path below —
 				// staged rows feed addContact/addSender downstream.
 				address: canonicalContactAddress(contactAddressTerm.value),
@@ -181,7 +182,7 @@ usePopupEntity(
 			contactToEdit.value = cacheStore.importContact
 				? cacheStore.importContact
 				: contacts.value.find((c) => c.id === cacheStore.contactToEditIdx)
-			nameTerm.value = contactToEdit.value?.name ?? ""
+			nameTerm.value = storedNameOf(contactToEdit.value)
 			contactAddressTerm.value = contactToEdit.value?.address ?? ""
 		},
 		onHide: () => {
@@ -214,6 +215,7 @@ watch(
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		title="Edit contact"
 		submitLabel="Update contact"
 		:submitDisabled="

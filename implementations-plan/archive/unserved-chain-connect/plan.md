@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: A dApp asking to connect on a chain the active profile has no network for now gets silence and a "Network not available" notice (`apps/extension/src/popup/windows/network-unavailable/index.vue`) instead of a connect window, and a session whose network later disappears gets a typed `CHAIN_NOT_SUPPORTED` error. The gate is in `apps/extension/src/wallet/services/wallet-sdk/background.ts` and `NetworkService.servesChain` in `apps/extension/src/wallet/services/network/service.ts`.
-- **Open items**: the playground's `balance_of_public` utility button that can never succeed, and a deleted dApp-session row tearing down another profile's live channel on the same origin and chain, both tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the playground's `balance_of_public` utility button that can never succeed, and a deleted dApp-session row tearing down another profile's live channel on the same origin and chain, both tracked in #128 and #228.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

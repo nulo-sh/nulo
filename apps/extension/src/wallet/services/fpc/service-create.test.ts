@@ -202,6 +202,13 @@ describe("FpcService.getFpcImpl — only the protocol PrivateFPC can pay", () =>
 		expect(fpc.infoData.isProtocol).toBe(true)
 	})
 
+	test("the genuine sponsor resolves as protocol on a COLD cache, so a send through it names no spender", async () => {
+		const h = await makeHarness()
+		await plant(h, row("f-sp", FpcType.DefaultSponsoredFpc, "0xsponsored"))
+		const fpc = await h.service.getFpcImpl("f-sp")
+		expect(fpc.infoData.isProtocol).toBe(true)
+	})
+
 	test("a PrivateFPC row at any other address is refused", async () => {
 		const h = await makeHarness()
 		await plant(h, row("f-bad", FpcType.PrivateFpc, "0xdead"))

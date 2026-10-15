@@ -33,11 +33,7 @@ const type = defineModel("type", { type: String, default: "password" })
 }
 
 .section_label {
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.18em;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
@@ -48,13 +44,9 @@ const type = defineModel("type", { type: String, default: "password" })
 }
 
 .tab {
+	composes: type--segment from global;
 	position: relative;
 
-	font-family: var(--font-headline);
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: 0.2em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
 
 	background: transparent;
@@ -72,6 +64,10 @@ const type = defineModel("type", { type: String, default: "password" })
 
 .tab_active {
 	color: var(--txt-primary);
+}
+
+.tab.tab_active {
+	font-weight: 700;
 }
 
 .tab_active::after {

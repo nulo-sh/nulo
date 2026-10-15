@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: The standard Token's four transfers read as the approval card's transfer row (From, To, Amount in the token's units) in a transaction payload, an authorization request and a discovered authorization, in `apps/extension/src/utils/token-transfer-vocabulary.ts`, `apps/extension/src/popup/windows/execute/call-surface.ts` and `apps/extension/src/popup/windows/execute/CallArguments.vue`, with one network e2e, `apps/extension/tests/e2e/network/tx-transfer-row.test.ts`.
-- **Open items**: the playground's multicall nonces, a node test running the real selector hash with the decoder and `callSurface` together, a discovered-authorization e2e and a private-transfer e2e, all tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the playground's multicall nonces, a node test running the real selector hash with the decoder and `callSurface` together, a discovered-authorization e2e and a private-transfer e2e, all tracked in #164 and #165. The node test of the real selector hash was closed by a later plan before `follow-ups.md` was retired.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

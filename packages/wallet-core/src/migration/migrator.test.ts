@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest"
+import { afterEach, describe, expect, test, vi } from "vitest"
 import { EntityStorage } from "../storage/entity_storage"
 import { MemoryStorageArea } from "../storage/memory-storage-area"
 import { Migrator, RESERVED_KEYS, SCHEMA_RUNNING_KEY, SCHEMA_VERSION_KEY } from "./migrator"
@@ -14,13 +14,19 @@ class MemStore extends MemoryStorageArea {
 	failRemoveKeysOnce?: Set<string>
 	/** If true, the next `get()` throws (simulates a read failure at boot). */
 	failNextGet = false
+	/** If set, the next `get()` reads the store, then waits for this before answering. */
+	parkNextGet?: Promise<void>
 
 	override async get(keys?: string | string[]): Promise<Record<string, unknown>> {
 		if (this.failNextGet) {
 			this.failNextGet = false
 			throw new Error("injected get failure")
 		}
-		return super.get(keys)
+		const park = this.parkNextGet
+		this.parkNextGet = undefined
+		const out = await super.get(keys)
+		if (park) await park
+		return out
 	}
 
 	override async set(items: Record<string, unknown>): Promise<void> {
@@ -286,7 +292,13 @@ describe("Migrator — crash-safe journal", () => {
 			.seed(ver(0))
 			.seed(row("newroot", "orphan", { half: true })) // created by the interrupted run
 			.seed(journal(1, [rootRef("acct"), rootRef("newroot")], {})) // newroot had NO rows pre-migration
-		const noop = defineMigration({ version: 1, description: "n", reads: [], writes: [], up: async () => {} })
+		const noop = defineMigration({
+			version: 1,
+			description: "n",
+			reads: [rootRef("acct"), rootRef("newroot")],
+			writes: [],
+			up: async () => {},
+		})
 		await new Migrator({ store, migrations: [noop] }).run()
 		expect(store.obj("newroot", "orphan")).toBeUndefined()
 	})
@@ -299,7 +311,13 @@ describe("Migrator — crash-safe journal", () => {
 			.seed({ "nulo:ui:pref@p1": JSON.stringify({ v: "post" }) })
 			.seed({ "nulo:ui:pref@p2": JSON.stringify({ v: "sibling" }) })
 			.seed(journal(1, [{ kind: "value", key: "nulo:ui:pref@p1" }], { "nulo:ui:pref@p1": JSON.stringify({ v: "pre" }) }))
-		const noop = defineMigration({ version: 1, description: "n", reads: [], writes: [], up: async () => {} })
+		const noop = defineMigration({
+			version: 1,
+			description: "n",
+			reads: [{ kind: "value", key: "nulo:ui:pref@p1" }],
+			writes: [],
+			up: async () => {},
+		})
 		await new Migrator({ store, migrations: [noop] }).run()
 		expect(JSON.parse(store.data.get("nulo:ui:pref@p1") as string)).toEqual({ v: "pre" }) // restored
 		expect(JSON.parse(store.data.get("nulo:ui:pref@p2") as string)).toEqual({ v: "sibling" }) // untouched
@@ -383,20 +401,199 @@ describe("Migrator — crash-safe journal", () => {
 		const r2 = await mk().run()
 		expect(r2).toMatchObject({ kind: "needs-recovery", retryable: false }) // bound hit: terminal
 	})
+})
 
-	test("restore does not write engine-namespace keys from a crafted backup", async () => {
-		const store = new MemStore().seed(ver(0)).seed(
-			journal(1, [rootRef("acct")], {
-				...row("acct", "a", { n: 0 }),
-				"nulo:schema:version": 99, // crafted: must be filtered, never restored
-			}),
-		)
-		const noop = defineMigration({ version: 1, description: "n", reads: [], writes: [], up: async () => {} })
-		const mk = () => new Migrator({ store, migrations: [noop] })
-		await mk().run() // resume counts the interruption + stands down
-		expect(store.data.get(SCHEMA_VERSION_KEY)).toBe(0) // crafted 99 NEVER restored
-		await mk().run() // fresh authorization completes the migration
-		expect(store.data.get(SCHEMA_VERSION_KEY)).toBe(1) // stamped by the run, not the crafted 99
+describe("Migrator — resume refuses a journal its registry did not write", () => {
+	/** A refused resume writes and removes nothing: the whole store, journal included, is as seeded. */
+	async function expectRefused(store: MemStore, migrator: Migrator) {
+		const before = structuredClone(store.data)
+		const r = await migrator.run()
+		expect(r).toEqual({
+			kind: "needs-recovery",
+			reason: "interrupted migration journal has an invalid backup payload",
+			retryable: false,
+		})
+		expect(store.data).toEqual(before)
+		expect(store.has(BACKUP_KEY)).toBe(true)
+	}
+	const contacts = rootRef("contacts")
+	const twoRoots = defineMigration({
+		version: 1,
+		description: "t",
+		reads: [rootRef("acct")],
+		writes: [rootRef("acct"), contacts],
+		up: async () => {},
+	})
+
+	test("a version in range that names no registered migration", async () => {
+		const store = new MemStore()
+			.seed(ver(2))
+			.seed(row("acct", "a", { n: 5 }))
+			.seed(journal(3, [rootRef("acct")], {}))
+		await expectRefused(store, new Migrator({ store, migrations: [patchRows(2, "acct", {})], baselineVersion: 3 }))
+	})
+
+	test.each([
+		["an extra root", [rootRef("acct"), contacts, rootRef("profiles")]],
+		["a declared root missing", [rootRef("acct")]],
+	])("refs that differ from the declared footprint: %s", async (_, refs) => {
+		const store = new MemStore()
+			.seed(ver(0))
+			.seed(row("acct", "a", { n: 5 }))
+			.seed(row("contacts", "c", { name: "x" }))
+			.seed(row("profiles", "p", { id: "p" }))
+			.seed(journal(1, refs, {}))
+		await expectRefused(store, new Migrator({ store, migrations: [twoRoots] }))
+	})
+
+	test.each([
+		["a user key outside the refs", row("profiles", "p", { id: "forged" })],
+		["an engine key", { [SCHEMA_VERSION_KEY]: 99 }],
+	])("an entry outside the declared footprint: %s", async (_, foreign) => {
+		const store = new MemStore()
+			.seed(ver(0))
+			.seed(row("acct", "a", { n: 5 }))
+			.seed(row("profiles", "p", { id: "p" }))
+			.seed(journal(1, [rootRef("acct")], { ...row("acct", "a", { n: 0 }), ...foreign }))
+		await expectRefused(store, new Migrator({ store, migrations: [patchRows(1, "acct", {})] }))
+	})
+
+	test("a journal the engine itself wrote passes, restores and resumes", async () => {
+		// Captured from a real run, so its refs carry the engine's own shape (reads then writes, duplicates kept).
+		const written = new MemStore().seed(ver(0)).seed(row("acct", "a", { n: 0 }))
+		let journaled: unknown
+		const capture = defineMigration({
+			version: 1,
+			description: "capture",
+			reads: [rootRef("acct")],
+			writes: [rootRef("acct")],
+			up: async () => {
+				journaled = (await written.get(BACKUP_KEY))[BACKUP_KEY]
+				throw new Error("killed")
+			},
+		})
+		await new Migrator({ store: written, migrations: [capture] }).run()
+		expect(journaled).toMatchObject({ version: 1, refs: [rootRef("acct"), rootRef("acct")] })
+
+		const store = new MemStore()
+			.seed(ver(0))
+			.seed(row("acct", "a", { n: 0, x: 1 }))
+			.seed({ [SCHEMA_RUNNING_KEY]: 1, [BACKUP_KEY]: journaled })
+		const mk = () => new Migrator({ store, migrations: [patchRows(1, "acct", { x: 1 })] })
+		expect(await mk().run()).toMatchObject({
+			kind: "needs-recovery",
+			reason: expect.stringContaining("restored cleanly"),
+			retryable: true,
+		})
+		expect(store.obj("acct", "a")).toEqual({ n: 0 })
+		expect(await mk().run()).toEqual({ kind: "migrated", from: 0, to: 1 })
+	})
+
+	test("a forged journal whose refs match is trusted: it empties its footprint and nothing outside it", async () => {
+		const store = new MemStore()
+			.seed(ver(0))
+			.seed(row("acct", "a", { n: 5 }))
+			.seed(row("profiles", "p", { id: "p" }))
+			.seed(journal(1, [rootRef("acct")], {}))
+		const r = await new Migrator({ store, migrations: [patchRows(1, "acct", {})] }).run()
+		expect(r).toMatchObject({ kind: "needs-recovery", reason: "migration 1 was interrupted mid-write (restored cleanly)" })
+		expect(store.has("acct@a")).toBe(false)
+		expect(store.obj("profiles", "p")).toEqual({ id: "p" })
+	})
+})
+
+describe("Migrator — a stuck up() fails at the watchdog bound", () => {
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	const INTERRUPTED = "migration 1 was interrupted mid-write (restored cleanly)"
+	const seeded = () => new MemStore().seed(ver(0)).seed(row("acct", "a", { n: 0 }))
+	const stuck = (up: Migration["up"]): Migration => defineMigration({ ...patchRows(1, "acct", {}), up })
+
+	test("an up() that never settles fails at 60 s: footprint intact, one attempt, barrier cleared", async () => {
+		vi.useFakeTimers()
+		const store = seeded()
+		const migration = stuck(async (ctx) => {
+			await ctx.local.setRows("acct", [["a", { n: 9 }]])
+			await new Promise(() => {})
+		})
+		let settled = false
+		const run = new Migrator({ store, migrations: [migration] }).run().finally(() => {
+			settled = true
+		})
+		await vi.advanceTimersByTimeAsync(59_999)
+		expect(settled).toBe(false)
+		await vi.advanceTimersByTimeAsync(1)
+		expect(await run).toEqual({ kind: "failed", version: 1, breaking: true, reason: INTERRUPTED, attempts: 1, terminal: false })
+		expect(store.obj("acct", "a")).toEqual({ n: 0 })
+		expect([store.has(SCHEMA_RUNNING_KEY), store.has(BACKUP_KEY)]).toEqual([false, false])
+		expect((await store.get(ATTEMPTS_KEY))[ATTEMPTS_KEY]).toEqual({ version: 1, phase: "up", count: 1 })
+		expect(vi.getTimerCount()).toBe(0)
+	})
+
+	test("a restore that fails after the bound never claims a clean restore", async () => {
+		vi.useFakeTimers()
+		const store = seeded()
+		const run = new Migrator({ store, migrations: [stuck(() => new Promise(() => {}))] }).run()
+		store.failSetKeys = new Set(["acct@a"])
+		await vi.advanceTimersByTimeAsync(60_000)
+		expect(await run).toEqual({
+			kind: "needs-recovery",
+			reason: "failed to restore after migration 1 failed: injected set failure: acct@a (migration error: migration 1 was interrupted mid-write)",
+			retryable: true,
+		})
+	})
+
+	test("after the bound the abandoned up() reads and writes nothing, a parked read included", async () => {
+		vi.useFakeTimers()
+		const store = seeded()
+		let release!: () => void
+		const gate = new Promise<void>((r) => {
+			release = r
+		})
+		const outcomes: string[] = []
+		let finished!: () => void
+		const done = new Promise<void>((r) => {
+			finished = r
+		})
+		const record = async (label: string, call: () => Promise<unknown>) => {
+			await call().then(
+				() => outcomes.push(`${label}: ok`),
+				(err: Error) => outcomes.push(`${label}: ${err.message}`),
+			)
+		}
+		const migration = stuck(async (ctx) => {
+			store.parkNextGet = gate
+			await record("parked read", () => ctx.local.value("acct@a"))
+			await record("read", () => ctx.local.rows("acct"))
+			await record("write", () => ctx.local.setRows("acct", [["a", { n: 9 }]]))
+			finished()
+		})
+		const run = new Migrator({ store, migrations: [migration], upTimeoutMs: 1_000 }).run()
+		await vi.advanceTimersByTimeAsync(1_000)
+		expect(await run).toMatchObject({ kind: "failed", reason: INTERRUPTED })
+		const after = structuredClone(store.data)
+		release()
+		await done
+		const revoked = "migration staging area revoked"
+		expect(outcomes).toEqual([`parked read: ${revoked}`, `read: ${revoked}`, `write: ${revoked}`])
+		expect(store.data).toEqual(after)
+		expect(store.obj("acct", "a")).toEqual({ n: 0 })
+	})
+
+	test("(control) an up() that settles inside the bound commits", async () => {
+		vi.useFakeTimers()
+		const store = seeded()
+		const migration = stuck(async (ctx) => {
+			await new Promise((r) => setTimeout(r, 30_000))
+			await ctx.local.setRows("acct", [["a", { n: 9 }]])
+		})
+		const run = new Migrator({ store, migrations: [migration] }).run()
+		await vi.advanceTimersByTimeAsync(30_000)
+		expect(await run).toEqual({ kind: "migrated", from: 0, to: 1 })
+		expect(store.obj("acct", "a")).toEqual({ n: 9 })
+		expect(vi.getTimerCount()).toBe(0)
 	})
 })
 

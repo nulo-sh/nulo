@@ -15,10 +15,13 @@
  * await.
  */
 import { createRunFence } from "@/composables/runFence"
+import { runsUnattended } from "@/composables/useStaleNetwork"
 import { AccountType, DEFAULT_ACCOUNT_NAME } from "@/wallet/services/account/client"
+import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
 
 export interface NetworkSwitchScope {
 	profileId: string
+	networkId: string
 	chainId: number
 }
 
@@ -39,6 +42,41 @@ export interface NetworkSwitchDeps {
 	setAccounts: (accounts: unknown[]) => void
 	setupActiveAccount: () => Promise<void>
 	syncTransactions: () => Promise<void>
+	/** Reads the target's stale view into the store; null when it is live. */
+	syncStaleNetwork: (networkId: string) => Promise<StaleNetworkView | null>
+	/** Empties the account list and the active account; the durable pointer stays. */
+	clearAccounts: () => void
+	/** Resets a network the profile never opened, then re-assigns the re-keyed row (A2) while
+	 *  `live` holds. */
+	resetUnattended: (view: StaleNetworkView, live: () => boolean) => Promise<void>
+}
+
+/**
+ * Re-fetch accounts for the new chain, and auto-create a default if the chain has NO accounts
+ * yet. Auto-create otherwise lives ONLY in `initAccount()` (duplicate-account race during initial
+ * profile load); the empty-list guard preserves that property — when `initAccount()` already
+ * created the default for this chain, `getAccounts()` returns non-empty and the second
+ * `ensureDefaultAccount` is skipped. Without the auto-create, a freshly-switched chain strands the
+ * popup with `account = undefined` and every reader of `appStore.account.address` silently fails.
+ */
+async function loadAccounts(deps: NetworkSwitchDeps, scope: NetworkSwitchScope, guard: () => boolean): Promise<void> {
+	const client = deps.replaceAccountClient()
+	let accounts = await client.getAccounts(scope.profileId, scope.chainId, true)
+	if (!guard()) return
+	deps.setAccounts(accounts)
+	if (accounts.length === 0) {
+		await client.ensureDefaultAccount(scope.profileId, scope.chainId, AccountType.Nulo_v1, DEFAULT_ACCOUNT_NAME)
+		if (!guard()) return
+		accounts = await client.getAccounts(scope.profileId, scope.chainId, true)
+		if (!guard()) return
+		deps.setAccounts(accounts)
+	}
+	await deps.setupActiveAccount()
+	// Belt before the tail — syncTransactions is internally scope-fenced
+	// (compare-and-commit in the store), but a superseded run should not
+	// even start it.
+	if (!guard()) return
+	await deps.syncTransactions()
 }
 
 export function createNetworkSwitchHandler(deps: NetworkSwitchDeps): () => Promise<void> {
@@ -54,31 +92,15 @@ export function createNetworkSwitchHandler(deps: NetworkSwitchDeps): () => Promi
 
 		deps.syncNetworkStatus()
 
-		// Re-fetch accounts for the new chain, and auto-create a default if
-		// the chain has NO accounts yet. Auto-create otherwise lives ONLY in
-		// `initAccount()` (duplicate-account race during initial profile
-		// load); the empty-list guard preserves that property — when
-		// `initAccount()` already created the default for this chain,
-		// `getAccounts()` returns non-empty and the second
-		// `ensureDefaultAccount` is skipped. Without the auto-create, a
-		// freshly-switched chain strands the popup with `account = undefined`
-		// and every reader of `appStore.account.address` silently fails.
-		const client = deps.replaceAccountClient()
-		let accounts = await client.getAccounts(scope.profileId, scope.chainId, true)
+		// A quarantined chain's accounts are never loaded: the Header empties and the takeover shows.
+		const stale = await deps.syncStaleNetwork(scope.networkId)
 		if (!guard()) return
-		deps.setAccounts(accounts)
-		if (accounts.length === 0) {
-			await client.ensureDefaultAccount(scope.profileId, scope.chainId, AccountType.Nulo_v1, DEFAULT_ACCOUNT_NAME)
-			if (!guard()) return
-			accounts = await client.getAccounts(scope.profileId, scope.chainId, true)
-			if (!guard()) return
-			deps.setAccounts(accounts)
+		if (stale) {
+			deps.clearAccounts()
+			if (runsUnattended(stale)) await deps.resetUnattended(stale, guard)
+			return
 		}
-		await deps.setupActiveAccount()
-		// Belt before the tail — syncTransactions is internally scope-fenced
-		// (compare-and-commit in the store), but a superseded run should not
-		// even start it.
-		if (!guard()) return
-		await deps.syncTransactions()
+
+		await loadAccounts(deps, scope, guard)
 	}
 }

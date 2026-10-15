@@ -4,7 +4,7 @@ The checklist for bumping the Aztec / Noir dependency line. **`@aztec-labs/*` an
 
 > **Convention:** any code that types against an Aztec package's shape (a PXE method signature, a wire type, an artifact field) MUST add an entry to **§ Types coupled to Aztec shapes** below, with `file:line`, so the next bump has a checklist.
 
-Current line: **`@aztec-labs/*` and `@aztec-foundation/*` = 6.0.0-rc.1**, with `@aztec-foundation/aztec-standards`, `@alejoamiras/private-fee-juice` and `@alejoamiras/presto` on the same line (Noir wasm packages `noir-acvm_js` / `noir-noirc_abi` carry Bun patches — see below). The 5.2.0 → 6.0.0-rc.1 bump, a scope move with a network reset and a new address regime, is `implementations-plan/archive/nulo-v6/`.
+Current line: **`@aztec-labs/*` = 6.0.0-rc.3**, with the `@aztec-foundation/*` toolchain it requires at **6.0.0-rc.6** (that scope numbers its releases apart), and `@aztec-foundation/aztec-standards`, `@alejoamiras/private-fee-juice` and `@alejoamiras/presto` at 6.0.0-rc.3 (Noir wasm packages `noir-acvm_js` / `noir-noirc_abi` carry Bun patches — see below). The 6.0.0-rc.1 → rc.3 bump followed a network reset and re-pinned the account artifact in place. The 5.2.0 → 6.0.0-rc.1 bump, a scope move with a network reset and a new address regime, is `implementations-plan/archive/nulo-v6/`.
 
 ## Before you bump
 1. Read the upstream `@aztec-labs/aztec.js` + `@aztec-labs/pxe` changelog for the target version — note any renamed/removed exports, PXE method signature changes, or artifact-format changes.
@@ -12,13 +12,13 @@ Current line: **`@aztec-labs/*` and `@aztec-foundation/*` = 6.0.0-rc.1**, with `
 3. Also bump the `packageManager` Bun version drift check if the upgrade requires it.
 
 ## Coupling points to re-verify (the re-check list)
-1. **Bun patches on Noir wasm** — `patches/@aztec-foundation%2Fnoir-acvm_js@<ver>.patch` + `patches/@aztec-foundation%2Fnoir-noirc_abi@<ver>.patch`. The patch filenames pin the version; on bump they must be re-generated/re-verified against the new package or they silently stop applying. Confirm `bun install` still applies them.
+1. **Bun patches** — `patches/@aztec-foundation%2Fnoir-acvm_js@<ver>.patch` + `patches/@aztec-foundation%2Fnoir-noirc_abi@<ver>.patch` on Noir wasm, and `patches/@aztec-labs%2Fpxe@<ver>.patch` on `registerAccount` (delete it once upstream reaches the address write on its own; the `aztec-update` skill has the steps). The patch filenames pin the version; on bump they must be re-generated/re-verified against the new package or they silently stop applying. Confirm `bun install` still applies them.
 2. **Noir WASM resolution (darwin arm64 + browser)** — `apps/extension/vite.shared.ts:69` aliases `@aztec-foundation/noir-acvm_js` to the package's `nodejs/` entry (fixes `__wbindgen_malloc undefined`); `apps/extension/vite.config.ts:84` `dedupe` + `:300` `optimizeDeps.exclude` list the noir/bb wasm packages. If the package's internal entry layout changes, these paths break — re-check the `nodejs/` path exists.
-3. **On-chain identity invariants** — `packages/aztec-runtime/src/pxe/artifact-class-id.ts` (class-id derivation) + the deferred class-id + address invariant fixture. A protocol-version bump can change contract class ids / addresses for NON-account contracts; re-derive and update THOSE fixtures, and confirm the token artifacts still resolve. **EXCEPTION — the Nulo ACCOUNT artifact + derived account addresses are FROZEN and are NEVER re-derived here** (see coupling 7): the account KAT (`derivation-vectors.test.ts`) + the freeze tests must stay green with ZERO vector/pin edits. A red account KAT means new-major territory, not a re-pin.
+3. **On-chain identity invariants** — `packages/aztec-runtime/src/pxe/artifact-class-id.ts` (class-id derivation) + the deferred class-id + address invariant fixture. A protocol-version bump can change contract class ids / addresses for NON-account contracts; re-derive and update THOSE fixtures, and confirm the token artifacts still resolve. **EXCEPTION — the Nulo ACCOUNT artifact + derived account addresses are FROZEN and are NEVER re-derived here** (see coupling 7): the account KAT (`derivation-vectors.test.ts`) + the freeze tests must stay green with ZERO vector/pin edits. A red account KAT stops the bump: hold it, or rotate the regime on the owner's recorded decision (CLAUDE.md § Account-address freeze).
 4. **`WalletSchema` runtime patch** — `packages/wallet-sdk-schema-patch/src/{apply,register}.ts` extends `@aztec-labs/wallet-sdk`'s `WalletSchema` with `registerToken` / `isTokenRegistered` / `grantPublicAuthwit`. If upstream changes `WalletSchema`'s shape or those method names, `apply.test.ts` + the wallet-bridge reachability pin (`packages/wallet-bridge/src/dispatcher.test.ts`) will catch it — but re-check the patch still composes.
 5. **PXE seam** — `packages/aztec-runtime` PXE factory + client. PXE method signatures are an Aztec coupling surface; see § Types coupled to Aztec shapes.
 6. **Native proving (Presto)** — the network-e2e installs the headless `presto-server` (tarball + binary SHA-256-pinned in `.github/workflows/_extension-network-e2e.yml`); `@alejoamiras/presto` exact-pins its own Aztec line, so it moves WITH the bump, and a headless-server bump may follow. `VITE_NULO_PRESTO_REQUIRED=1` makes a silent WASM fallback a hard fail.
-7. **Frozen account surface — NOT bumped with the line** — `packages/aztec-runtime/src/account/artifacts/SchnorrAccount.json` (vendored, digest-pinned), `frozen-artifact.ts` (sha256 + class-id pins), `instantiation-descriptor.ts` (frozen ctor name/args/salt/immutablesHash/deployer + digest), `address-freeze.ts` (append-only regime record + paired hardcoded test). A bump must leave the KAT (`derivation-vectors.test.ts`) and every freeze test green with ZERO vector or pin edits; the two **execution canaries** (`apps/extension/tests/e2e/network/frozen-account-canary.test.ts` and `passkey-execution-canary.test.ts`, run prover-ON via `bun run e2e:agent` on Chrome and on Firefox) are a MANDATORY bump gate — a red canary on either browser blocks the bump (see the `aztec-update` skill + CLAUDE.md "Account-address freeze").
+7. **Frozen account surface — NOT bumped with the line** — `packages/aztec-runtime/src/account/artifacts/SchnorrAccount.json` (vendored, digest-pinned), `frozen-artifact.ts` (sha256 + class-id pins), `instantiation-descriptor.ts` (frozen ctor name/args/salt/immutablesHash/deployer + digest), `address-freeze.ts` (append-only regime record + paired hardcoded test). A bump must leave the KAT (`derivation-vectors.test.ts`) and every freeze test green with ZERO vector or pin edits, unless the owner decided a regime rotation (CLAUDE.md § Account-address freeze); the two **execution canaries** (`apps/extension/tests/e2e/network/frozen-account-canary.test.ts` and `passkey-execution-canary.test.ts`, run prover-ON via `bun run e2e:agent` on Chrome and on Firefox) are a MANDATORY bump gate — a red canary on either browser blocks the bump (see the `aztec-update` skill + CLAUDE.md "Account-address freeze").
 
 ## Types coupled to Aztec shapes
 > Append here whenever you type against an Aztec package's type. Format: `- <type/signature> — <file:line> — <what breaks if the upstream shape changes>`.
@@ -110,11 +110,33 @@ Current line: **`@aztec-labs/*` and `@aztec-foundation/*` = 6.0.0-rc.1**, with `
 - **Preloaded protocol contracts.** `createPXE`'s default provider registers MultiCall,
   AuthRegistry (moved address) and HandshakeRegistry; `pxe-provided.ts` follows it.
 
+## 6.0.0-rc.3 couplings (the address separator)
+
+- **Two numberings.** `@aztec-labs/*@6.0.0-rc.3` depends on the `@aztec-foundation/*` toolchain at
+  `6.0.0-rc.6`; the residue check keeps one line per numbering (and one for `aztec-standards`),
+  and the patch file names follow the package each patches.
+- **Every derived address moves.** The preaddress separator is `CONTRACT_ADDRESS_V3`, so the account
+  KAT (regime `nulo-v6.1`), the SponsoredFPC, the PrivateFPC and upstream's standard contracts
+  (`STANDARD_AUTH_REGISTRY_ADDRESS`) all moved; protocol contracts keep their magic addresses.
+- **The PXE refuses another oracle major** (`utility_execution_oracle.js`): every artifact the
+  wallet runs (the vendored SchnorrAccount, the PrivateFPC, the standards Token) must be an rc.3
+  build.
+- **Exact-version peers do not re-bind.** Under the isolated linker a package whose Aztec peers are
+  pinned at another version (`@alejoamiras/private-fee-juice`) nests a second generation beneath
+  it, so it moves with the line like presto.
+- **`getBlockHashMembershipWitness`** needs a reference block the node holds and throws when the
+  node's archive at that height differs; `probeAncestryWitness`
+  (`packages/aztec-runtime/src/pxe/public-events.ts`) passes a held block hash, and both failures
+  land in its one failure path.
+- **Standard contracts on a fresh network.** Test environments seed them at genesis; a live network
+  serves them only once someone publishes them (`getPublishableStandardContracts`), so a new
+  Testnet can answer `null` for AuthRegistry, PublicChecks and HandshakeRegistry.
+
 ## Bridge couplings — in `alejoamiras/unleashed`
 
 The any-ERC-20 bridge's Aztec couplings live with the bridge in [`alejoamiras/unleashed`](https://github.com/alejoamiras/unleashed): hub ↔ factory, `tokenClassId` ↔ the standards `Token` artifact, hub → `ContractInstanceRegistry`, the split JS/Noir toolchain, token-list origin ↔ CSP, the `txe-server` lockfile and per-token wallet grants, plus the PrivateFPC deploy descriptor, its node-compat map and the deploy-intent tooling.
 
-The wallet's testnet seeds (`TESTNET_TOKENS` in `default-tokens.ts`, which `price-map.ts` prices from) mirror unleashed's `tokens[].l2Token` for its current testnet generation, one per token, and the `aztec-update` skill's reset step re-points every one; changing a seed is an owner UI decision (CLAUDE.md § UI changes need explicit owner sign-off).
+The wallet's default tokens are the signed token list's entries (`infra/token-list/list.source.json`, with their price ids). They mirror unleashed's `tokens[].l2Token` for its current testnet generation, one per token, and the `aztec-update` skill's reset step publishes a list keyed on the new chainId; changing a seed is an owner UI decision (CLAUDE.md § UI changes need explicit owner sign-off).
 
 ## After you bump — validation gate
 - `bun run typecheck:all` (exit 0 — verify by exit code + grep, not `| tail`).

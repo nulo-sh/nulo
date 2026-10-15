@@ -1,6 +1,5 @@
 import { CLIENT_DISCONNECTED_MESSAGE } from "@nulo/extension-messaging/errors"
 import { consoleMethods, LogLevel } from "@nulo/wallet-core/logger"
-import { getErrorData } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 const { log, documentLogger } = vi.hoisted(() => {
@@ -51,8 +50,8 @@ describe("installConsoleForwarding", () => {
 		const otherEvent = { reason: other, preventDefault: vi.fn() } as unknown as PromiseRejectionEvent
 		self.onunhandledrejection?.(disconnectEvent)
 		self.onunhandledrejection?.(otherEvent)
-		expect(log).toHaveBeenNthCalledWith(1, "ui", LogLevel.Debug, getErrorData(disconnect))
-		expect(log).toHaveBeenNthCalledWith(2, "ui", LogLevel.Error, getErrorData(other))
+		expect(log).toHaveBeenNthCalledWith(1, "ui", LogLevel.Debug, "unhandled rejection", { error: disconnect })
+		expect(log).toHaveBeenNthCalledWith(2, "ui", LogLevel.Error, "unhandled rejection", { error: other })
 		expect(disconnectEvent.preventDefault).toHaveBeenCalledTimes(1)
 		expect(otherEvent.preventDefault).not.toHaveBeenCalled()
 	})

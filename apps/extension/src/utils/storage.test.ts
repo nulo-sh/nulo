@@ -1,5 +1,6 @@
 import { SCHEMA_RUNNING_KEY } from "@nulo/wallet-core/migration"
 import { describe, expect, test, vi } from "vitest"
+import { reactive } from "vue"
 import { installChromeStorage } from "../../tests/helpers/chrome-storage-mock"
 import { migrationIdle, storageLocalGet, storageLocalRemove, storageLocalSet } from "./storage"
 
@@ -19,19 +20,22 @@ describe("migration-aware storage facade", () => {
 		expect("nulo:ui:pref" in s.data).toBe(false)
 	})
 
-	test("a write BLOCKS while a migration is running and completes once it clears", async () => {
+	test("a write BLOCKS while a migration is running and completes once it clears, with the value as it was at the call", async () => {
 		const s = installChromeStorage({ [SCHEMA_RUNNING_KEY]: 2 })
+		const pref = { level: 9, tags: ["a"] }
 		let done = false
-		const p = storageLocalSet({ "nulo:ui:pref": 9 }).then(() => {
+		const p = storageLocalSet({ "nulo:ui:pref": pref }).then(() => {
 			done = true
 		})
 		await vi.waitFor(() => expect(s.listeners.length).toBeGreaterThan(0))
+		pref.level = 10
+		pref.tags.push("b")
 		expect(done).toBe(false)
 		expect(s.set).not.toHaveBeenCalled() // nothing written mid-migration
 		s.clearRunning(SCHEMA_RUNNING_KEY)
 		await p
 		expect(done).toBe(true)
-		expect(s.data["nulo:ui:pref"]).toBe(9)
+		expect(s.data["nulo:ui:pref"]).toEqual({ level: 9, tags: ["a"] })
 	})
 
 	test("a read BLOCKS while running, resolves after clear", async () => {
@@ -97,6 +101,28 @@ describe("migration-aware storage facade", () => {
 		gate.release()
 		expect(await p).toBe(false)
 		expect(s.set).not.toHaveBeenCalled()
+	})
+
+	test("a reactive Proxy, which Chrome's storage would serialise and Firefox's refuses, is refused before any write", async () => {
+		const s = installChromeStorage({})
+		await expect(storageLocalSet({ "nulo:ui:pref": { pick: reactive({ id: "s1" }) } })).rejects.toMatchObject({
+			name: "DataCloneError",
+		})
+		expect(s.set).not.toHaveBeenCalled()
+	})
+
+	test("the refusal does not wait on `unless`: a write that would be skipped refuses a Proxy too", async () => {
+		const s = installChromeStorage({})
+		const skipped = storageLocalSet({ "nulo:ui:pref": { pick: reactive({ id: "s1" }) } }, { unless: () => true })
+		await expect(skipped).rejects.toMatchObject({ name: "DataCloneError" })
+		expect(s.set).not.toHaveBeenCalled()
+	})
+
+	test("a plain nested value is written deep-equal to what was handed in", async () => {
+		const s = installChromeStorage({})
+		const pref = { pick: { type: "fpc", fpc: { id: "s1", isProtocol: true } }, order: [3, 1, 2], none: null }
+		expect(await storageLocalSet({ "nulo:ui:pref": pref })).toBe(true)
+		expect(s.data["nulo:ui:pref"]).toEqual(pref)
 	})
 
 	test("a guarded write whose predicate stays false writes and reports true; the plain call is unchanged", async () => {

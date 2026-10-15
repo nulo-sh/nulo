@@ -10,6 +10,13 @@ export type Methods = {
 	 * @param source Log source (service name)
 	 * @param level Log level
 	 * @param data Data
+	 * @returns The worker's minimum level when it took the line, so a document can stop sending
+	 * lines the worker would drop.
 	 */
-	log(context: string | undefined, source: string, level: LogLevel, ...data: unknown[]): void
+	log(context: string | undefined, source: string, level: LogLevel, ...data: unknown[]): LogLevel
+}
+
+export type Events = {
+	/** The worker's new minimum level, sent to every logger port after `debugMode` moves it. */
+	onLevel: LogLevel
 }

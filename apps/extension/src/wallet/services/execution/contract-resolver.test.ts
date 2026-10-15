@@ -17,7 +17,7 @@ import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
 import type { ConfigProp, IConfig } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import type { IPXE } from "@nulo/aztec-runtime/pxe"
-import { ContractNotRegisteredError } from "@nulo/extension-messaging/errors"
+import { ContractNotRegisteredError, ScopeViolationError } from "@nulo/extension-messaging/errors"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { Action } from "./spec"
 import { ContractResolver, ensureRegistered } from "./contract-resolver"
@@ -189,8 +189,18 @@ describe("ContractResolver.resolveArtifacts", () => {
 
 // ── Function lookups + ensure-registered ─────────────────────────────────
 
-import { findFunctionByName, findFunctionBySelector } from "./contract-resolver"
-import { FunctionSelector } from "@aztec-labs/stdlib/abi"
+import {
+	AUTHWIT_CALL_BINDING,
+	assertSelectorBinding,
+	CALL_BINDING,
+	findFunctionByName,
+	findFunctionBySelector,
+	NAMED_CALL_BINDING,
+	refusalTitleOf,
+	type SelectorBindingPolicy,
+} from "./contract-resolver"
+import { normalizeError } from "@nulo/wallet-core/jobs"
+import { type FunctionAbi, FunctionSelector } from "@aztec-labs/stdlib/abi"
 
 // Selector derivation hits Barretenberg's poseidon hash, which isn't
 // booted in the unit environment. Stub ONLY fromNameAndParameters with a
@@ -322,5 +332,79 @@ describe("ensureRegistered", () => {
 		} as unknown as IPXE
 		await ensureRegistered(pxe, "0xexisting", instance, artifact)
 		expect(registerContract).not.toHaveBeenCalled()
+	})
+})
+
+describe("assertSelectorBinding: a refusal names the policy, never the call", () => {
+	const fn = fakeFn("transfer_public_to_public") as unknown as FunctionAbi
+	const to = `0x${"2f".repeat(32)}`
+
+	function refusalOf(claim: { name?: string; to: string }, policy: SelectorBindingPolicy): Error {
+		try {
+			assertSelectorBinding(fn, claim, policy)
+		} catch (error) {
+			return error as Error
+		}
+		throw new Error("expected a refusal")
+	}
+
+	test.each([
+		["a call", CALL_BINDING, "balance_of_public", "Scope violation: call name does not match selector's function"],
+		[
+			"an authwit call",
+			AUTHWIT_CALL_BINDING,
+			"balance_of_public",
+			"Scope violation: authwit call name does not match selector's function",
+		],
+		["a fast-path call", NAMED_CALL_BINDING, "balance_of_public", "Scope violation: call name does not match selector's function"],
+		["a fast-path call without a name", NAMED_CALL_BINDING, undefined, "Scope violation: call name does not match selector's function"],
+	])("%s: the refusal is the fixed text", (_label, policy, name, text) => {
+		const refused = refusalOf({ name, to }, policy)
+		expect(refused.constructor).toBe(ScopeViolationError)
+		expect(refused.message).toBe(text)
+		for (const value of [String(name), fn.name, to, to.slice(2)]) expect(refused.message).not.toContain(value)
+	})
+
+	test("a matching name, or an absent one where the policy allows it, returns the selector's function", () => {
+		expect(assertSelectorBinding(fn, { name: fn.name }, NAMED_CALL_BINDING)).toBe(fn)
+		expect(assertSelectorBinding(fn, {}, CALL_BINDING)).toBe(fn)
+	})
+})
+
+describe("assertSelectorBinding: the title a refusal gives its record", () => {
+	const fn = fakeFn("transfer_public_to_public") as unknown as FunctionAbi
+
+	function thrown(resolved: FunctionAbi | undefined, policy: SelectorBindingPolicy): unknown {
+		try {
+			assertSelectorBinding(resolved, { name: "balance_of_public" }, policy)
+		} catch (error) {
+			return error
+		}
+		throw new Error("expected a refusal")
+	}
+
+	test.each([
+		["a call", CALL_BINDING],
+		["a fast-path call", NAMED_CALL_BINDING],
+	])("%s: a mismatch is titled by the resolved function, an unresolved selector by Transaction", (_label, policy) => {
+		expect(refusalTitleOf(thrown(fn, policy))).toBe("transfer_public_to_public")
+		expect(refusalTitleOf(thrown(undefined, policy))).toBe("Transaction")
+	})
+
+	test("an authwit's inner call never titles the record", () => {
+		expect(refusalTitleOf(thrown(fn, AUTHWIT_CALL_BINDING))).toBeUndefined()
+		expect(refusalTitleOf(thrown(undefined, AUTHWIT_CALL_BINDING))).toBeUndefined()
+	})
+
+	test("the title never rides the error: not its payload, its keys, its serialization or its journal envelope", () => {
+		const refused = thrown(fn, CALL_BINDING) as ScopeViolationError
+		expect(refusalTitleOf(refused)).toBe("transfer_public_to_public")
+		const carriers = [
+			JSON.stringify(refused.toPayload()),
+			JSON.stringify(Object.keys(refused)),
+			JSON.stringify(refused),
+			JSON.stringify(normalizeError(refused, "scope_refused")),
+		]
+		for (const carrier of carriers) expect(carrier).not.toContain("transfer_public_to_public")
 	})
 })

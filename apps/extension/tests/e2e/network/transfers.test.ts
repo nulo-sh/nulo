@@ -194,7 +194,7 @@ test.skipIf(!hasConfig)(
 			await clickByTestId(page, "send-from-type")
 			const hasAmountInput = await page.evaluate(() => !!document.querySelector('[data-testid="send-amount-input"]'))
 			expect(hasAmountInput).toBe(true)
-			const bodyText = await page.evaluate(() => document.body.innerText)
+			const bodyText = await page.evaluate(() => document.body.textContent ?? "")
 			expect(bodyText).not.toContain("No available tokens")
 			console.log("✓ Send from token detail page loads token correctly")
 			await page.keyboard.press("Escape")

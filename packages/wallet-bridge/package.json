@@ -5,22 +5,24 @@
 	"license": "Apache-2.0",
 	"type": "module",
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./testing": "./src/testing/wire.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",
 		"test": "bun --bun vitest run"
 	},
 	"dependencies": {
-		"@aztec-labs/aztec.js": "6.0.0-rc.1",
-		"@aztec-labs/foundation": "6.0.0-rc.1",
-		"@aztec-labs/stdlib": "6.0.0-rc.1",
-		"@aztec-labs/wallet-sdk": "6.0.0-rc.1",
+		"@aztec-labs/aztec.js": "6.0.0-rc.3",
+		"@aztec-labs/foundation": "6.0.0-rc.3",
+		"@aztec-labs/stdlib": "6.0.0-rc.3",
+		"@aztec-labs/wallet-sdk": "6.0.0-rc.3",
 		"@nulo/extension-messaging": "workspace:*",
-		"@nulo/wallet-core": "workspace:*"
+		"@nulo/wallet-core": "workspace:*",
+		"@nulo/wallet-sdk-schema-patch": "workspace:*"
 	},
 	"devDependencies": {
-		"@nulo/wallet-sdk-schema-patch": "workspace:*",
+		"@types/node": "^24.13.2",
 		"chrome-types": "^0.1.429",
 		"typescript": "^6.0.3",
 		"vitest": "^4.1.9"

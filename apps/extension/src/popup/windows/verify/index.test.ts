@@ -20,6 +20,7 @@ const NETWORKS = [row(CHAIN_IDS.TESTNET, "Testnet"), row(0, "Local Network")]
 
 let routeQuery: Record<string, string> = {}
 let sessionRow: Record<string, unknown> = {}
+let readSession: () => Promise<unknown> = async () => sessionRow
 const accountsByAddress: Record<string, { name: string; chainId: number; address: string }> = {}
 
 vi.mock("vue-router", async (importOriginal) => {
@@ -32,7 +33,7 @@ vi.mock("@/wallet/services/dapp-session/client", () => ({
 		return {
 			connect: () => {},
 			disconnect: () => {},
-			getDappSession: async () => sessionRow,
+			getDappSession: () => readSession(),
 			setTrustedVerification: async () => undefined,
 		}
 	}),
@@ -89,15 +90,17 @@ async function mountCheck(query: Record<string, string> = {}) {
 	return w
 }
 const header = (w: ReturnType<typeof mount>) => w.findComponent(IdentityStrip).text()
-const okButton = (w: ReturnType<typeof mount>) => w.get('[data-testid="verify-confirm-btn"]').element as HTMLButtonElement
+const button = (w: ReturnType<typeof mount>, testid: string) => w.get(`[data-testid="${testid}"]`).element as HTMLButtonElement
 
 beforeEach(() => {
 	sessionRow = newConnectionRow()
+	readSession = async () => sessionRow
 	// biome-ignore lint/suspicious/noExplicitAny: chrome runtime stub for tests
 	;(globalThis as any).chrome = { windows: { getCurrent: () => {}, remove: () => {} } }
 })
 afterEach(() => {
 	for (const w of wrappers.splice(0)) w.unmount()
+	vi.useRealTimers()
 	for (const key of Object.keys(accountsByAddress)) delete accountsByAddress[key]
 })
 
@@ -149,16 +152,24 @@ describe("windows/verify — the grid and the keyboard", () => {
 		expect(keyListeners).toEqual([])
 	})
 
-	test.each([
-		["a repeat", false, { repeat: true }],
-		["a composing", false, { isComposing: true }],
-		["an IME boundary", false, { keyCode: 229 }],
-		["a plain", true, {}],
-	] as const)("%s Enter on OK goes through: %s", async (_, goesThrough, init) => {
+	test.each(
+		["verify-mismatch-btn", "verify-confirm-btn"].flatMap((testid) =>
+			(
+				[
+					["a repeat", false, { repeat: true }],
+					["a composing", false, { isComposing: true }],
+					["an IME boundary", false, { keyCode: 229 }],
+					["a plain", true, {}],
+				] as const
+			).map(([kind, goesThrough, init]) => [kind, testid, goesThrough, init] as const),
+		),
+	)("%s Enter on %s goes through: %s", async (_, testid, goesThrough, init) => {
 		const w = await mountCheck()
-		const ok = okButton(w)
-		ok.focus()
-		expect(ok.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init }))).toBe(goesThrough)
+		const control = button(w, testid)
+		control.focus()
+		expect(control.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init }))).toBe(
+			goesThrough,
+		)
 	})
 })
 
@@ -168,5 +179,70 @@ describe("windows/verify — the connect step bar", () => {
 		expect(fresh.get('[data-testid="connect-step-bar"]').attributes("data-step")).toBe("2")
 		const reconnect = await mountCheck({ isReconnect: "true" })
 		expect(reconnect.find('[data-testid="connect-step-bar"]').exists()).toBe(false)
+	})
+})
+
+const CHECK_ANNOUNCEMENT =
+	"Connection check. Check that the app shows these same emojis in the same order. If they differ, the connection may not be safe. Choose They don't match."
+const LOOKALIKE_WARNING =
+	"This hostname contains non-ASCII or punycoded characters. Verify carefully. Some characters can imitate Latin letters."
+
+describe("windows/verify — the swap to the check is announced", () => {
+	const region = (w: ReturnType<typeof mount>) => w.get('[data-testid="verify-announce"]')
+	const said = (w: ReturnType<typeof mount>) => region(w).element.textContent
+	const leaksTheApp = (text: string) =>
+		["Phishy", "Dapp", "Vault", "dapp.example", "exmple", "xn--"].filter((part) => text.includes(part))
+	const unmountNow = (w: ReturnType<typeof mount>) => {
+		wrappers.splice(wrappers.indexOf(w), 1)
+		w.unmount()
+	}
+	const CHECKS = [
+		["a new connection's", "false"],
+		["a reconnect's", "true"],
+	] as const
+
+	test.each(CHECKS)(
+		"%s polite region mounts empty, and 300 ms after the grid shows it reads the window's own words; nothing takes the focus",
+		async (_, isReconnect) => {
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+			const w = await mountCheck({ isReconnect })
+			expect(region(w).attributes()).toMatchObject({ role: "status", "aria-live": "polite", "aria-atomic": "true" })
+			expect(said(w)).toBe("")
+
+			await vi.advanceTimersByTimeAsync(299)
+			expect(said(w)).toBe("")
+			await vi.advanceTimersByTimeAsync(1)
+			expect(said(w)).toBe(CHECK_ANNOUNCEMENT)
+			expect(leaksTheApp(said(w) ?? "")).toEqual([])
+			expect([document.body, null]).toContain(document.activeElement)
+		},
+	)
+
+	test.each(CHECKS)(
+		"on %s check, a look-alike hostname adds the window's warning to the announcement, still naming nothing of the app",
+		async (_, isReconnect) => {
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+			sessionRow = newConnectionRow({ dappMetadata: { name: HOSTILE_NAME, url: "https://xn--exmple-cua.com" } })
+			const w = await mountCheck({ isReconnect })
+			await vi.advanceTimersByTimeAsync(300)
+			expect(said(w)).toBe(`${CHECK_ANNOUNCEMENT} ${LOOKALIKE_WARNING}`)
+			expect(leaksTheApp(said(w) ?? "")).toEqual([])
+		},
+	)
+
+	test("an unmount before the 300 ms, or before the session read answers, leaves no timer behind", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		const early = await mountCheck()
+		await vi.advanceTimersByTimeAsync(100)
+		unmountNow(early)
+		expect(vi.getTimerCount()).toBe(0)
+
+		let answer!: (row: unknown) => void
+		readSession = () => new Promise((resolve) => (answer = resolve))
+		const pending = await mountCheck()
+		unmountNow(pending)
+		answer(sessionRow)
+		await flushPromises()
+		expect(vi.getTimerCount()).toBe(0)
 	})
 })

@@ -7,17 +7,29 @@
  */
 
 import type { TxExecutionRequest } from "@aztec-labs/stdlib/tx"
-import { computeMaxFee } from "@/utils/fee-estimation"
 import type { TxGasDetails } from "@/wallet/services/transaction/spec"
 
-/** Extract estimated fee from finalized gas settings on a TxExecutionRequest. */
+/** The most the transaction can cost, gas limits × cap: the fee limit the node checks the payer's
+ *  balance against (`GasSettings.getFeeLimit`). The gas limits already include teardown. */
+export function feeLimitOf(txRequest: TxExecutionRequest): bigint {
+	const { gasLimits, maxFeesPerGas } = txRequest.txContext.gasSettings
+	return BigInt(gasLimits.daGas) * maxFeesPerGas.feePerDaGas + BigInt(gasLimits.l2Gas) * maxFeesPerGas.feePerL2Gas
+}
+
+/** The priority allowance inside the fee limit: gas limits × the priority, each per-gas priority
+ *  bounded by the cap. What is paid is bounded by the headroom above the base fee instead, so this is
+ *  an upper bound, never above `feeLimitOf`. */
+export function priorityFeeOf(txRequest: TxExecutionRequest): bigint {
+	const { gasLimits, maxFeesPerGas, maxPriorityFeesPerGas } = txRequest.txContext.gasSettings
+	const min = (a: bigint, b: bigint) => (a < b ? a : b)
+	return (
+		BigInt(gasLimits.daGas) * min(maxPriorityFeesPerGas.feePerDaGas, maxFeesPerGas.feePerDaGas) +
+		BigInt(gasLimits.l2Gas) * min(maxPriorityFeesPerGas.feePerL2Gas, maxFeesPerGas.feePerL2Gas)
+	)
+}
+
 export function getEstimatedFee(txRequest: TxExecutionRequest): string {
-	const gs = txRequest.txContext.gasSettings
-	return computeMaxFee(
-		{ daGas: gs.gasLimits.daGas, l2Gas: gs.gasLimits.l2Gas },
-		{ daGas: gs.teardownGasLimits.daGas, l2Gas: gs.teardownGasLimits.l2Gas },
-		{ feePerDaGas: gs.maxFeesPerGas.feePerDaGas, feePerL2Gas: gs.maxFeesPerGas.feePerL2Gas },
-	).toString()
+	return feeLimitOf(txRequest).toString()
 }
 
 /** Extract gas breakdown from finalized gas settings. */

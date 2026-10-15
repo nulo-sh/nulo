@@ -4,10 +4,8 @@
  * These tests pin CURRENT behavior of facade internals that later phases
  * extract (estimate-reuse cache, gas-balance cache, cancelJob). They are
  * deliberately byte-precise where downstream contracts depend on exact
- * strings: `TransferEstimateReuseEntry.baseFeeFingerprint` is compared
- * against a freshly-computed fingerprint at consume time, so the
- * fingerprint FORMAT is load-bearing — an extraction that changes it
- * invalidates every cached estimate silently.
+ * values: `TransferEstimateReuseEntry.builtCap` is compared against a
+ * freshly computed cap at consume time.
  *
  * Tests bypass ServiceCollection.start() via the private-field-injection
  * pattern from `feesettings-invariant.test.ts`: construct the service,
@@ -17,6 +15,7 @@
 import { describe, expect, test, vi } from "vitest"
 import { OriginType } from "@/wallet/services/transaction/spec"
 import { DappSendExecutor } from "./dapp-send-executor"
+import { SendSequencer } from "./send-sequencer"
 import { ExecutionLane } from "./execution-lane"
 
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
@@ -114,7 +113,12 @@ describe("slot-for-executeSendTransaction", () => {
 				beginJournal: beginJournal as never,
 				markJournal: vi.fn(async () => {}),
 				commitJournal: vi.fn(async () => {}),
+				parkSlot: vi.fn() as never,
+				joinOriginLine: vi.fn(() => ({ behind: () => false, earlierDone: async () => true, leave: () => {} })),
+				failUnclaimed: vi.fn(async () => {}),
 			},
+			sequencer: new SendSequencer({ pendingTxs: () => [], sleep: async () => {}, now: () => 0 }),
+			chainTip: { unconfirmed: () => false, wait: async () => "confirmed" },
 			buildAndEstimateValidated: vi.fn(async () => ({
 				txRequest: { txContext: { gasSettings } },
 				node: {},
@@ -135,13 +139,13 @@ describe("slot-for-executeSendTransaction", () => {
 			captureExecutionFence: vi.fn(async () => FENCE),
 			assertFence: vi.fn(async () => {}),
 			isFenceLive: vi.fn(() => true),
-			getNetwork: vi.fn() as never,
+			getNetwork: vi.fn(async () => ({ chainId: 0 })) as never,
 			getNode: vi.fn() as never,
 			readPublicStorageOnce: vi.fn() as never,
 			getPXE: vi.fn() as never,
 			getAccountContract: vi.fn() as never,
 			getPendingForAccount: vi.fn(() => []) as never,
-			getFpcInfo: vi.fn() as never,
+			sequenceEpoch: vi.fn(() => 0) as never,
 			logDebug: () => {},
 		})
 

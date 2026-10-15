@@ -108,7 +108,7 @@ onBeforeUnmount(() => {
 			/>
 
 			<Flex direction="column" gap="12">
-				<Text size="11" weight="700" color="secondary" :class="$style.section_label">How you'll unlock Nulo</Text>
+				<Text variant="label-section" color="secondary">How you'll unlock Nulo</Text>
 				<AuthMethodTabs
 					v-model="authMethod"
 					:class="$style.tabs"
@@ -122,7 +122,7 @@ onBeforeUnmount(() => {
 
 			<Flex v-if="authMethod === 'password'" direction="column" gap="12">
 				<Flex direction="column" gap="8">
-					<Text size="11" weight="700" color="secondary" :class="$style.section_label">Password</Text>
+					<Text variant="label-section" color="secondary">Password</Text>
 					<Input
 						v-model="password"
 						type="password"
@@ -134,7 +134,7 @@ onBeforeUnmount(() => {
 					/>
 				</Flex>
 				<Flex direction="column" gap="8">
-					<Text size="11" weight="700" color="secondary" :class="$style.section_label">Confirm password</Text>
+					<Text variant="label-section" color="secondary">Confirm password</Text>
 					<Input
 						v-model="confirm"
 						type="password"
@@ -145,13 +145,13 @@ onBeforeUnmount(() => {
 						inputTestid="onboarding-password-confirm-input"
 					/>
 				</Flex>
-				<Text v-if="passwordStrengthHint" size="12" color="secondary" height="150">
+				<Text v-if="passwordStrengthHint" variant="body" color="secondary" height="150">
 					{{ passwordStrengthHint }}
 				</Text>
 			</Flex>
 
 			<div v-else :class="$style.passkeyInfo">
-				<Text size="13" color="secondary" height="150">
+				<Text variant="body" color="secondary" height="150">
 					Your passkey replaces a password. Touch ID, Windows Hello, or
 					a hardware key, whichever your device supports.
 				</Text>
@@ -197,12 +197,6 @@ onBeforeUnmount(() => {
 	gap: 24px;
 }
 
-.section_label {
-	text-transform: uppercase;
-	letter-spacing: 0.18em;
-	font-family: var(--font-headline);
-}
-
 .tabs {
 	display: flex;
 	border: 1px solid var(--nulo-outline);
@@ -211,14 +205,10 @@ onBeforeUnmount(() => {
 }
 
 .tab {
+	composes: type--segment from global;
 	background: transparent;
 	border: none;
 	color: var(--txt-secondary);
-	font-family: var(--font-headline);
-	font-size: 12px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.12em;
 	padding: 10px 20px;
 	cursor: pointer;
 	transition: background 0.15s var(--bezier), color 0.15s var(--bezier);
@@ -238,8 +228,18 @@ onBeforeUnmount(() => {
 	color: var(--app-bg);
 }
 
+.tab.tabActive {
+	font-weight: 700;
+}
+
 .tabActive:hover {
 	color: var(--app-bg);
+}
+
+/* The focused tab is always the filled one, where an accent ring would vanish into the fill. */
+.tabActive:focus-visible {
+	outline: 2px solid var(--app-bg);
+	outline-offset: -5px;
 }
 
 .passkeyInfo {

@@ -2,7 +2,7 @@
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { CapabilityNotGrantedError, ValidationError } from "@nulo/extension-messaging/errors"
-import { coversAnyContract, readConsent } from "@nulo/wallet-bridge"
+import { coversAnyContract, projectStoredGrants, readConsent } from "@nulo/wallet-bridge"
 import type { ILogger } from "@/wallet/logger"
 import { ProfileService } from "@/wallet/services/profile/service"
 import { type ExecutionFence, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
@@ -26,21 +26,21 @@ import {
 	type AccessLevel,
 	type Methods,
 	type Events,
+	type VerificationRefusal,
+	type VerificationRefusalTarget,
 	DappSessionSchema,
 } from "./spec"
 
 export * from "./spec"
 
-function holdsCanCreateAuthWit(session: DappSession): boolean {
-	return (session.capabilityGrants ?? []).some(
-		(g) => g.capability.type === "accounts" && (g.capability as AccountsCapability).canCreateAuthWit === true,
-	)
+function holdsCanCreateAuthWit(grants: readonly GrantedCapabilityRecord[]): boolean {
+	return grants.some((g) => g.capability.type === "accounts" && (g.capability as AccountsCapability).canCreateAuthWit === true)
 }
 
 /** The consent goes with `canCreateAuthWit`, so a later re-grant starts from asking; every grant
- *  writer applies it after writing. */
+ *  writer applies it after writing, so it reads grants the writer has just projected. */
 function dropConsentWithoutAuthWit(session: DappSession): void {
-	if (!holdsCanCreateAuthWit(session)) session.authorizationsWithoutAsking = undefined
+	if (!holdsCanCreateAuthWit(session.capabilityGrants ?? [])) session.authorizationsWithoutAsking = undefined
 }
 
 /** An object sets the consent, `null` deletes it, `undefined` keeps it; anything unreadable is
@@ -56,6 +56,20 @@ function consentAfter(
 	return consent
 }
 
+/** A key exchange's verification hash: HMAC-SHA-256, lower-case hex. */
+const VERIFICATION_HASH = /^[0-9a-f]{64}$/
+
+function readRefusalTarget(target: VerificationRefusalTarget): VerificationRefusalTarget {
+	const { origin, chainId, profileId } = (target ?? {}) as Partial<Record<keyof VerificationRefusalTarget, unknown>>
+	if (typeof profileId !== "string" || profileId === "") {
+		throw new ValidationError("refuseVerification needs the row's profile id")
+	}
+	if (typeof origin !== "string" || typeof chainId !== "string") {
+		throw new ValidationError("refuseVerification needs the app's origin and chain id")
+	}
+	return { origin, chainId, profileId }
+}
+
 export class DappSessionService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"getDappSessions",
@@ -63,6 +77,8 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		"addDappSession",
 		"updateDappSession",
 		"deleteDappSession",
+		"refuseVerification",
+		"confirmVerification",
 		"setVerificationHash",
 		"setTrustedVerification",
 		"setAuthorizationsWithoutAsking",
@@ -78,6 +94,8 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 	public readonly onDappSessionAdded = new EventHandler<DappSession>()
 	public readonly onDappSessionUpdated = new EventHandler<DappSession>()
 	public readonly onDappSessionDeleted = new EventHandler<DappSession>()
+	public readonly onVerificationRefused = new EventHandler<{ origin: string; chainId: string; profileId: string }>()
+	public readonly onVerificationConfirmed = new EventHandler<{ verificationHash: string }>()
 
 	private readonly storage: DappSessionMacStorage
 	private readonly lock = new Lock()
@@ -288,9 +306,13 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 			throw new ValidationError("setAuthorizationsWithoutAsking takes two booleans")
 		}
 		return await this.patchSession(sessionId, (session) => {
-			if (on && !holdsCanCreateAuthWit(session)) throw new CapabilityNotGrantedError("accounts")
-			const grants = (session.capabilityGrants ?? []).map((g) => g.capability)
-			session.authorizationsWithoutAsking = on ? { broad: shownBroad && coversAnyContract(grants) } : undefined
+			if (!on) {
+				session.authorizationsWithoutAsking = undefined
+				return
+			}
+			const grants = projectStoredGrants(session.capabilityGrants)
+			if (!holdsCanCreateAuthWit(grants)) throw new CapabilityNotGrantedError("accounts")
+			session.authorizationsWithoutAsking = { broad: shownBroad && coversAnyContract(grants.map((g) => g.capability)) }
 		})
 	}
 
@@ -302,7 +324,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 
 	public async setCapabilityGrants(sessionId: string, grants: GrantedCapabilityRecord[]): Promise<DappSession> {
 		return await this.patchSession(sessionId, (session) => {
-			session.capabilityGrants = grants
+			session.capabilityGrants = projectStoredGrants(grants)
 			dropConsentWithoutAuthWit(session)
 		})
 	}
@@ -310,7 +332,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 	public async getCapabilityGrants(sessionId: string): Promise<GrantedCapabilityRecord[]> {
 		const session = await this.storage.get(sessionId)
 		if (!session) throw new Error("Invalid id")
-		return session.capabilityGrants ?? []
+		return projectStoredGrants(session.capabilityGrants)
 	}
 
 	public async setCapabilityRejections(sessionId: string, rejections: RejectedCapabilityRecord[]): Promise<DappSession> {
@@ -345,9 +367,13 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 			if (!session) throw new Error("Invalid id")
 			const now = Date.now()
 
+			// Both sides are projected before any write: a malformed held grant refuses the decision
+			// rather than narrowing, and the records any extension page sends are validated here.
+			const heldGrants = projectStoredGrants(session.capabilityGrants)
+			const newGrants = projectStoredGrants(decision.grantRecords)
 			// A widening adds accounts to a grant the popup was opened against; revoked meanwhile,
 			// the addition would land on a session without the grant — refuse before any write.
-			const held = new Set((session.capabilityGrants ?? []).map((g) => g.capability.type))
+			const held = new Set(heldGrants.map((g) => g.capability.type))
 			const revoked = (decision.requiresGrant ?? []).find((type) => !held.has(type as never))
 			if (revoked !== undefined) throw new CapabilityNotGrantedError(revoked)
 			const consent = consentAfter(session.authorizationsWithoutAsking, decision.authorizations)
@@ -363,10 +389,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 			// existing grant — a denied widening (a re-consent the user declined) must
 			// preserve the older, narrower grant, never revoke it.
 			const replaceSet = new Set(decision.replaceTypes)
-			session.capabilityGrants = [
-				...(session.capabilityGrants ?? []).filter((g) => !replaceSet.has(g.capability.type)),
-				...decision.grantRecords,
-			]
+			session.capabilityGrants = [...heldGrants.filter((g) => !replaceSet.has(g.capability.type)), ...newGrants]
 
 			// Preserve rejections for types this decision didn't touch; an approval
 			// clears its type's prior rejection (only rejectedTypes get re-recorded).
@@ -397,6 +420,50 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		})
 	}
 
+	/**
+	 * The emoji check's refusal. The app's live channels end first, on every path; then every row of
+	 * the app under the window's profile is deleted, read raw and by storage key as the profile
+	 * purge does, so neither a lock, another active profile nor recovery mode can hide one.
+	 * `unavailable` means the channels ended but a row could not be deleted.
+	 */
+	public async refuseVerification(target: VerificationRefusalTarget): Promise<VerificationRefusal> {
+		const { origin, chainId, profileId } = readRefusalTarget(target)
+		await this.ensureInitialized()
+		return await this.lock.withLock(async () => {
+			this.emit("onVerificationRefused", { origin, chainId, profileId })
+			try {
+				const rows = (await this.storage.rowsForProfile(profileId)).filter(
+					({ row }) => row.dappMetadata?.url === origin && row.chainId === chainId,
+				)
+				await purgeRows(
+					rows,
+					({ storageId }) => this.storage.delete(storageId),
+					({ storageId, row }) => this.emit("onDappSessionDeleted", { ...row, id: storageId }),
+				)
+				return rows.length > 0 ? "revoked" : "absent"
+			} catch (err) {
+				// No delete event will follow, and an establishment that read the row before the lock
+				// may have stamped its channel since the first event: end the channels again.
+				this.emit("onVerificationRefused", { origin, chainId, profileId })
+				this.logWarn("refuseVerification: the app's channels ended but its rows could not be deleted", err)
+				return "unavailable"
+			}
+		})
+	}
+
+	/**
+	 * The emoji check's They match, reported with the hash the window showed. The service worker's own
+	 * listeners run before this returns, so the session it names is released by the time the window
+	 * closes. Only extension pages reach a service port, and the hash binds the report to the one key
+	 * exchange the person compared.
+	 */
+	public async confirmVerification(verificationHash: string): Promise<void> {
+		if (typeof verificationHash !== "string" || !VERIFICATION_HASH.test(verificationHash)) {
+			throw new ValidationError("confirmVerification needs the check's verification hash")
+		}
+		this.emit("onVerificationConfirmed", { verificationHash })
+	}
+
 	public async isExpired(session: DappSession): Promise<boolean> {
 		if (session.expiry < Date.now()) {
 			await this.lock.withLock(async () => {
@@ -422,6 +489,21 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 					return this.storage.delete(session.id)
 				},
 				(session) => this.emit("onDappSessionDeleted", session),
+			)
+		})
+	}
+
+	/** Every session of `profileId` on `chainId`, read raw like `purgeForProfile`, so a lock or
+	 *  recovery mode cannot hide one. Not part of the chain purge: a deleted network's sessions stay
+	 *  until the next connect drops them, so a network added back on that chain keeps them. */
+	public async purgeForChain(profileId: string, chainId: number): Promise<void> {
+		await this.ensureInitialized()
+		await this.lock.withLock(async () => {
+			const rows = (await this.storage.rowsForProfile(profileId)).filter(({ row }) => Number(row.chainId) === chainId)
+			await purgeRows(
+				rows,
+				({ storageId }) => this.storage.delete(storageId),
+				({ row }) => this.emit("onDappSessionDeleted", row),
 			)
 		})
 	}

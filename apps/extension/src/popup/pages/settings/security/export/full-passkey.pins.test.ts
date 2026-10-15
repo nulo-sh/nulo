@@ -1,15 +1,19 @@
 /**
- * Pre-extraction pins for the passkey-acquisition and wrong-password branches
- * of handleBackup — the stages the PR-b decomposition moves and the main
- * suite's password-path tests don't fix: silent ceremony cancel (agreement
- * gate reset, NO toast/navigation), acquisition failure (toast + back-nav),
- * and the wrong-password flag on the discriminated export. Scaffolding
- * mirrors full.test.ts (client modules mocked at the import level).
+ * Pins for full.vue's passkey path (ceremony cancel, refusal and failure,
+ * own-window handling, the sealed DEK, the confirmation before a plain
+ * download) and its password-export edge cases (recovery mode, wrong
+ * password), which the main suite's password-path tests don't fix.
+ * Scaffolding mirrors full.test.ts (client modules mocked at the import level).
  */
 import { UserRejectedError } from "@nulo/extension-messaging/errors"
+import { EncryptionKey } from "@nulo/wallet-crypto"
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { pressOn } from "../../../../../../tests/helpers/press-key"
+import { useAppStore } from "@/stores/app.store"
+import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
 import FullExportPage from "./full.vue"
 
 function sliceClient() {
@@ -37,7 +41,12 @@ vi.mock("@/wallet/services/account/client", () => ({
 	ACCOUNT_SERVICE_NAME: "account",
 	IMPORTED_KEYS_SERVICE_NAME: "imported-account-keys",
 	AccountServiceClient: vi.fn(function () {
-		return { ...named("account"), backupImportedKeys: vi.fn(async () => []) }
+		return {
+			...named("account"),
+			backupImportedKeys: vi.fn(async () => []),
+			exportFullBackupKeys: (fence: unknown, password: string) => exportFullBackupKeys(fence, password),
+			exportPasskeyBackupKeys: (fence: unknown, credentialData: unknown) => exportPasskeyBackupKeys(fence, credentialData),
+		}
 	}),
 }))
 vi.mock("@/wallet/services/transaction/client", () => ({
@@ -89,21 +98,49 @@ vi.mock("@/wallet/services/config/client", () => ({
 	}),
 }))
 
-const exportBackupMaterial = vi.fn<(profileId: string, password: string) => Promise<unknown>>()
-const getPasskeyCredentialId = vi.fn(async (_id: string) => "cred-1")
-const exportPasskeyBackupMaterial = vi.fn(async (_id: string, _credentialData: unknown) => ({
+const exportFullBackupKeys = vi.hoisted(() => vi.fn<(fence: unknown, password: string) => Promise<unknown>>())
+const PASSKEY_KEYS = {
 	credentialId: "cred-1",
 	dekSealed: "sealed",
 	dekReplaced: false,
-}))
+	unopenedImportedKeys: 0,
+	importedKeyRows: [] as unknown[],
+	accounts: [] as unknown[],
+}
+const exportPasskeyBackupKeys = vi.hoisted(() =>
+	vi.fn(
+		async (_fence: unknown, _credentialData: unknown): Promise<Record<string, unknown>> => ({
+			credentialId: "cred-1",
+			dekSealed: "sealed",
+			dekReplaced: false,
+			unopenedImportedKeys: 0,
+			importedKeyRows: [],
+			accounts: [],
+		}),
+	),
+)
+const FENCE = { profileId: "p1", epoch: 0, session: 1, incarnation: "worker-1" }
+const captureRunFence = vi.hoisted(() => vi.fn<() => Promise<unknown>>())
+const getPasskeyCredentialId = vi.fn(async (_id: string) => "cred-1")
 vi.mock("@/utils/core", () => ({
 	managers: {
+		networkReset: {
+			getPendingReset: async () => null,
+			onStaleNetworkChanged: { add: () => undefined, remove: () => undefined },
+		},
 		profile: {
-			exportBackupMaterial: (profileId: string, password: string) => exportBackupMaterial(profileId, password),
+			captureRunFence: () => captureRunFence(),
+			assertRunFence: async () => undefined,
 			getPasskeyCredentialId: (id: string) => getPasskeyCredentialId(id),
-			exportPasskeyBackupMaterial: (id: string, credentialData: unknown) => exportPasskeyBackupMaterial(id, credentialData),
 		},
 	},
+}))
+
+type DownloadArgs = { data: string; filename: string; compressionFormat?: string }
+const downloadFile = vi.hoisted(() => vi.fn<(opts: DownloadArgs) => Promise<void>>(async () => undefined))
+vi.mock("@/utils", async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	downloadFile: (opts: DownloadArgs) => downloadFile(opts),
 }))
 
 const openToast = vi.fn()
@@ -127,12 +164,13 @@ vi.mock("@/utils/own-window", async (importOriginal) => ({
 }))
 
 const runCeremony = vi.fn<() => Promise<unknown>>()
+const rejectCeremony = vi.fn()
 vi.mock("@/composables/usePasskeyCeremony", () => ({
 	usePasskeyCeremony: () => ({
 		request: { value: null },
 		runCeremony: (...args: unknown[]) => runCeremony(...(args as [])),
 		onResolve: vi.fn(),
-		onReject: vi.fn(),
+		onReject: (err: Error) => rejectCeremony(err),
 	}),
 }))
 
@@ -143,6 +181,8 @@ beforeEach(() => {
 		c.storage.onChanged = { addListener: vi.fn(), removeListener: vi.fn() }
 	}
 	vi.clearAllMocks()
+	captureRunFence.mockReset()
+	captureRunFence.mockResolvedValue(FENCE)
 	surface.needsOwnWindow.mockReturnValue(false)
 	surface.ownRoute.mockReturnValue(undefined)
 })
@@ -171,7 +211,11 @@ function mountPage(profileType: "passkey" | "password", recoveryMode = false) {
 				Flex: { template: "<div><slot /></div>" },
 				Text: { template: "<span><slot /></span>" },
 				Spinner: true,
-				Input: true,
+				Input: {
+					props: ["modelValue"],
+					emits: ["update:modelValue"],
+					template: "<input :value='modelValue' @input=\"$emit('update:modelValue', $event.target.value)\" />",
+				},
 				Transition: false,
 			},
 		},
@@ -188,7 +232,7 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 		expect(wrapper.find("[data-testid='agree-continue-btn']").exists()).toBe(true)
 		expect(openToast).not.toHaveBeenCalled()
 		expect(routerGo).not.toHaveBeenCalled()
-		expect(exportPasskeyBackupMaterial).not.toHaveBeenCalled()
+		expect(exportPasskeyBackupKeys).not.toHaveBeenCalled()
 	})
 
 	it("an unconfirmed prompt resets the agreement and says so, without navigating", async () => {
@@ -199,7 +243,7 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 		expect(wrapper.find("[data-testid='agree-continue-btn']").exists()).toBe(true)
 		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Passkey not confirmed. Try again." })
 		expect(routerGo).not.toHaveBeenCalled()
-		expect(exportPasskeyBackupMaterial).not.toHaveBeenCalled()
+		expect(exportPasskeyBackupKeys).not.toHaveBeenCalled()
 	})
 
 	it("ceremony failure toasts the generic passkey copy and navigates back", async () => {
@@ -209,7 +253,7 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 		await flushPromises()
 		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Failed to authenticate by passkey" })
 		expect(routerGo).toHaveBeenCalledWith(-1)
-		expect(exportPasskeyBackupMaterial).not.toHaveBeenCalled()
+		expect(exportPasskeyBackupKeys).not.toHaveBeenCalled()
 	})
 
 	it("in an own window, a failed passkey step resets to the agreement with its toast instead of going back", async () => {
@@ -235,11 +279,11 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 
 	it("a passkey export carries the service's sealed DEK (fresh or stored) into the file and names the loss only when it was replaced", async () => {
 		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
-		exportPasskeyBackupMaterial.mockResolvedValueOnce({ credentialId: "cred-1", dekSealed: "fresh-sealed", dekReplaced: true })
+		exportPasskeyBackupKeys.mockResolvedValueOnce({ ...PASSKEY_KEYS, dekSealed: "fresh-sealed", dekReplaced: true })
 		const wrapper = mountPage("passkey")
 		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
 		await flushPromises()
-		expect(exportPasskeyBackupMaterial).toHaveBeenCalledWith("p1", { id: "cred-1" })
+		expect(exportPasskeyBackupKeys).toHaveBeenCalledWith(FENCE, { id: "cred-1" })
 		// The local Banner stub drops attrs, so assert on the copy the loss banner renders once
 		// the assembly settles (real assembleFullBackup runs over the stubbed slice clients).
 		await vi.waitFor(() => expect(wrapper.text()).toContain("Imported keys are not in this backup"))
@@ -250,7 +294,7 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 
 		// A healthy slot: no loss banner.
 		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
-		exportPasskeyBackupMaterial.mockResolvedValueOnce({ credentialId: "cred-1", dekSealed: "stored-sealed", dekReplaced: false })
+		exportPasskeyBackupKeys.mockResolvedValueOnce({ ...PASSKEY_KEYS, dekSealed: "stored-sealed" })
 		const healthy = mountPage("passkey")
 		await healthy.find("[data-testid='agree-continue-btn']").trigger("click")
 		await vi.waitFor(() => expect(healthy.find("[data-testid='protect-password-btn']").exists()).toBe(true))
@@ -258,7 +302,14 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 	})
 
 	it("a password export in recovery mode with an INTACT slot names only the omitted chain state — never a key loss", async () => {
-		exportBackupMaterial.mockResolvedValueOnce({ masterKey: "mk", entropy: "en", importedKeysDek: "dk", dekReplaced: false })
+		exportFullBackupKeys.mockResolvedValueOnce({
+			masterKey: "mk",
+			entropy: "en",
+			importedKeysKey: "dk",
+			importedKeyRows: [],
+			accounts: [],
+			dekReplaced: false,
+		})
 		const wrapper = mountPage("password", true)
 		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
 		await wrapper.find("[data-testid='unlock-password-input']").setValue("pass1234")
@@ -268,7 +319,7 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 	})
 
 	it("a failed discriminated export on a password profile flags wrong-password, no toast/navigation", async () => {
-		exportBackupMaterial.mockRejectedValueOnce(new Error("Invalid profile old password"))
+		exportFullBackupKeys.mockRejectedValueOnce(new Error("Invalid profile old password"))
 		const wrapper = mountPage("password")
 		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
 		await wrapper.find("[data-testid='unlock-password-input']").setValue("wrong")
@@ -277,5 +328,247 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 		expect(wrapper.find("[data-testid='unlock-password-input']").attributes("data-error")).toBe("true")
 		expect(openToast).not.toHaveBeenCalled()
 		expect(routerGo).not.toHaveBeenCalled()
+	})
+})
+
+describe("export/full.vue — imported accounts that will not restore", () => {
+	const UNOPENED = "Some imported accounts are not in this backup"
+	const LOST = "Imported keys are not in this backup"
+
+	async function passwordExport(material: Record<string, unknown>) {
+		exportFullBackupKeys.mockResolvedValueOnce({
+			masterKey: "mk",
+			entropy: "en",
+			importedKeysKey: "dk",
+			importedKeyRows: [],
+			accounts: [],
+			dekReplaced: false,
+			unopenedImportedKeys: 0,
+			...material,
+		})
+		const wrapper = mountPage("password")
+		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await wrapper.find("[data-testid='unlock-password-input']").setValue("pass1234")
+		await wrapper.find("[data-testid='unlock-submit-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
+		return wrapper
+	}
+
+	async function passkeyExport(material: Record<string, unknown>) {
+		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
+		exportPasskeyBackupKeys.mockResolvedValueOnce({ ...PASSKEY_KEYS, ...material })
+		const wrapper = mountPage("passkey")
+		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
+		return wrapper
+	}
+
+	it.each([
+		["password", passwordExport],
+		["passkey", passkeyExport],
+	] as const)("a %s export names one, three or no unopened imported accounts", async (_kind, run) => {
+		const one = await run({ unopenedImportedKeys: 1 })
+		expect(one.text()).toContain(UNOPENED)
+		expect(one.text()).toContain("1 imported account could not be opened, so they will not be restored.")
+		expect(one.text()).toContain("Import their keys again after the restore.")
+
+		const three = await run({ unopenedImportedKeys: 3 })
+		expect(three.text()).toContain("3 imported accounts could not be opened")
+
+		expect((await run({ unopenedImportedKeys: 0 })).text()).not.toContain(UNOPENED)
+	})
+
+	it.each([
+		["password", passwordExport],
+		["passkey", passkeyExport],
+	] as const)("a %s export whose DEK was replaced shows only that loss", async (_kind, run) => {
+		const wrapper = await run({ dekReplaced: true, unopenedImportedKeys: 2 })
+		expect(wrapper.text()).toContain(LOST)
+		expect(wrapper.text()).not.toContain(UNOPENED)
+	})
+
+	it("a passkey file carries the account and key rows the count was made over", async () => {
+		const rows = [{ profileId: "p1", chainId: 0, address: "0xaa", encryptedSigningKey: "sealed-row" }]
+		const accounts = [{ profileId: "p1", chainId: 0, address: "0xaa", name: "Imp" }]
+		const wrapper = await passkeyExport({ unopenedImportedKeys: 1, importedKeyRows: rows, accounts })
+		await wrapper.get("[data-testid='download-backup-btn']").trigger("click")
+		;(useCacheStore().confirm as { callback: () => void }).callback()
+		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
+		const { data } = JSON.parse(downloadFile.mock.calls[0][0].data) as { data: Record<string, unknown> }
+		expect(data["imported-account-keys"]).toEqual(rows)
+		expect(data.account).toEqual(accounts)
+		expect(clients.account?.backup).not.toHaveBeenCalled()
+	})
+})
+
+describe("export/full.vue — a passkey profile's plain download asks first", () => {
+	type Wrapper = ReturnType<typeof mountPage>
+	const downloadButton = (wrapper: Wrapper) => wrapper.get("[data-testid='download-backup-btn']")
+
+	async function reachBackupReady(): Promise<Wrapper> {
+		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
+		const wrapper = mountPage("passkey")
+		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
+		return wrapper
+	}
+
+	/** What ConfirmPopup does on Cancel: close, without the callback, and clear the request. */
+	function cancelConfirm() {
+		usePopupStore().close("confirm")
+		useCacheStore().confirm = {}
+	}
+
+	/** A passkey profile's encryption: the first Protect reveals the password fields, the second seals. */
+	async function encrypt(wrapper: Wrapper) {
+		await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
+		await wrapper.find("[data-testid='backup-encrypt-password-input']").setValue("pass1234")
+		await wrapper.find("[data-testid='backup-encrypt-password-confirm-input']").setValue("pass1234")
+		await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.text()).toContain("Backup is successfully encrypted"))
+	}
+
+	afterEach(() => vi.restoreAllMocks())
+
+	it("Download opens the confirmation that names what the file exposes; Cancel writes nothing, Download anyway writes the plain file", async () => {
+		const wrapper = await reachBackupReady()
+		expect(downloadButton(wrapper).attributes("disabled")).toBeUndefined()
+		expect(wrapper.text()).toContain("Without a password, the file is saved in plain text.")
+
+		await downloadButton(wrapper).trigger("click")
+		expect(usePopupStore().isOpened("confirm")).toBe(true)
+		expect(useCacheStore().confirm).toMatchObject({
+			pre_title: "Not encrypted",
+			title: "Download without a password?",
+			description:
+				"This file will show your accounts, contacts and activity to anyone who opens it. It holds no key that can move funds without your passkey.",
+			confirm_color: "red",
+			confirm_variant: "destructive",
+			confirm_text: "Download anyway",
+		})
+		cancelConfirm()
+		await flushPromises()
+		expect(downloadFile).not.toHaveBeenCalled()
+
+		await downloadButton(wrapper).trigger("click")
+		;(useCacheStore().confirm as { callback: () => void }).callback()
+		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
+		const { data, filename } = downloadFile.mock.calls[0][0]
+		expect(filename).toMatch(/^NuloBackup_/)
+		expect((JSON.parse(data) as Record<string, unknown>)["master-key"]).toBe("cred-1")
+	})
+
+	it("a confirmation answered after the page left writes nothing", async () => {
+		const wrapper = await reachBackupReady()
+		await downloadButton(wrapper).trigger("click")
+		const { callback } = useCacheStore().confirm as { callback: () => void }
+		wrapper.unmount()
+		callback()
+		await flushPromises()
+		expect(downloadFile).not.toHaveBeenCalled()
+	})
+
+	it("a confirmation answered after the page switched to a password profile writes nothing", async () => {
+		const wrapper = await reachBackupReady()
+		await downloadButton(wrapper).trigger("click")
+		const { callback } = useCacheStore().confirm as { callback: () => void }
+		useAppStore().profile = { id: "p2", type: "password", name: "Other" } as never
+		callback()
+		await flushPromises()
+		expect(downloadFile).not.toHaveBeenCalled()
+	})
+
+	it("a confirmation from before a switch writes nothing, even once the new profile's backup is ready", async () => {
+		const wrapper = await reachBackupReady()
+		await downloadButton(wrapper).trigger("click")
+		const { callback } = useCacheStore().confirm as { callback: () => void }
+		useAppStore().profile = { id: "p2", type: "passkey", name: "Other" } as never
+		await flushPromises()
+		captureRunFence.mockResolvedValueOnce({ ...FENCE, profileId: "p2", session: 2 })
+		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
+		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
+		callback()
+		await flushPromises()
+		expect(downloadFile).not.toHaveBeenCalled()
+
+		await downloadButton(wrapper).trigger("click")
+		;(useCacheStore().confirm as { callback: () => void }).callback()
+		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
+	})
+
+	it("a switch during the passkey prompt ends that prompt, and the new profile's backup runs", async () => {
+		let endPrompt: (err: Error) => void = () => undefined
+		runCeremony.mockReturnValueOnce(
+			new Promise<never>((_resolve, reject) => {
+				endPrompt = reject
+			}),
+		)
+		rejectCeremony.mockImplementationOnce((err: Error) => endPrompt(err))
+		const wrapper = mountPage("passkey")
+		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await vi.waitFor(() => expect(runCeremony).toHaveBeenCalledTimes(1))
+		expect(rejectCeremony).not.toHaveBeenCalled()
+
+		useAppStore().profile = { id: "p2", type: "passkey", name: "Other" } as never
+		expect(rejectCeremony).toHaveBeenCalledTimes(1)
+		await flushPromises()
+		// The ended prompt's run is stale: it toasts nothing and leaves the new agreement step alone.
+		expect(openToast).not.toHaveBeenCalled()
+		expect(routerGo).not.toHaveBeenCalled()
+		captureRunFence.mockResolvedValueOnce({ ...FENCE, profileId: "p2", session: 2 })
+		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
+		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
+	})
+
+	it("a confirmation answered after the file was encrypted writes nothing", async () => {
+		vi.spyOn(EncryptionKey, "getPasshash").mockResolvedValue(new Uint8Array(32) as never)
+		vi.spyOn(EncryptionKey, "fromPasshash").mockResolvedValue({ encrypt: async () => new Uint8Array(29) } as never)
+		const wrapper = await reachBackupReady()
+		await downloadButton(wrapper).trigger("click")
+		const { callback } = useCacheStore().confirm as { callback: () => void }
+		await encrypt(wrapper)
+		callback()
+		await flushPromises()
+		expect(downloadFile).not.toHaveBeenCalled()
+	})
+
+	it("Enter on Download asks instead of downloading, and a repeat Enter does neither", async () => {
+		const wrapper = await reachBackupReady()
+		pressOn(downloadButton(wrapper).element as HTMLElement, "Enter", { repeat: true })
+		await flushPromises()
+		expect(usePopupStore().isOpened("confirm")).toBe(false)
+
+		pressOn(downloadButton(wrapper).element as HTMLElement, "Enter")
+		await flushPromises()
+		expect(usePopupStore().isOpened("confirm")).toBe(true)
+		expect(downloadFile).not.toHaveBeenCalled()
+	})
+
+	it("once the file is encrypted, Download saves it without asking", async () => {
+		vi.spyOn(EncryptionKey, "getPasshash").mockResolvedValue(new Uint8Array(32) as never)
+		vi.spyOn(EncryptionKey, "fromPasshash").mockResolvedValue({ encrypt: async () => new Uint8Array(29) } as never)
+		const wrapper = await reachBackupReady()
+		await encrypt(wrapper)
+
+		await downloadButton(wrapper).trigger("click")
+		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
+		expect(downloadFile.mock.calls[0][0].filename).toMatch(/^NuloEncryptedBackup_/)
+		expect(usePopupStore().isOpened("confirm")).toBe(false)
+	})
+})
+
+describe("export/full.vue — the encrypt pair", () => {
+	it("asks a password manager for a new password on both fields", async () => {
+		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
+		const wrapper = mountPage("passkey")
+		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
+		await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
+
+		for (const id of ["backup-encrypt-password-input", "backup-encrypt-password-confirm-input"]) {
+			expect(wrapper.get(`[data-testid='${id}']`).attributes("autocomplete")).toBe("new-password")
+		}
 	})
 })

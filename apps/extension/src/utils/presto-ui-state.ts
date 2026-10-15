@@ -2,9 +2,10 @@
  * Presto status → what a Nulo surface shows. Pure: the SDK status comes in,
  * a state plus copy comes out. The state names are the banner package's own
  * (`stateFromStatus`), so the `<presto-banner>` card and Nulo's status card
- * always agree on which situation the user is in; the copy is Presto's
- * canonical strings where a state has one, extended with Nulo's numbered
- * recovery steps.
+ * always agree on which situation the user is in. Titles are Presto's
+ * canonical strings, extended with Nulo's numbered recovery steps, except
+ * the pitch states (`idle`, `detecting`, `offline`), a remembered denial and
+ * the settings page's compact `permission-blocked` title, which are Nulo's own.
  */
 import { type BannerState, STRINGS, stateFromStatus } from "@alejoamiras/presto-banners"
 import type { PrestoStatus, SecureConnectionDiagnosis } from "@alejoamiras/presto-core"
@@ -197,7 +198,7 @@ export function copyFor(state: PrestoUiState, last?: LastProveOutcome | null, su
 				tone: "warn",
 				title: STRINGS["version-mismatch"].title,
 				detail: state.info.nativeAztecVersion
-					? `Presto runs Aztec ${state.info.nativeAztecVersion}; Nulo needs ${__AZTEC_VERSION__}. ${STRINGS["version-mismatch"].support}.`
+					? `Presto runs Aztec ${state.info.nativeAztecVersion}; Nulo needs ${__BB_VERSION__}. ${STRINGS["version-mismatch"].support}.`
 					: `${STRINGS["version-mismatch"].support}.`,
 				retry: "Retry",
 			}

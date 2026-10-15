@@ -2,11 +2,13 @@
 import { Comment, type PropType, ref, useId, useSlots } from "vue"
 import type { JobStage, ProveBackend } from "@nulo/wallet-core/jobs"
 import RowTarget from "@/components/ui/RowTarget.vue"
+import { vSnackFooter } from "@/composables/snackInset"
 /**
  * The one layout every activity card composes, so field positions stay identical across the
  * lifecycle: [activity icon + badge] [title (+ trailing) / secondary] [amount column], with an
- * optional `#actions` corner. It owns the row's interactivity: with `to` the row is a link, with
- * `opens` a button whose press emits `activate`, otherwise it is inert.
+ * optional `#actions` corner, which an open snack keeps clear of where the screen has room. It owns
+ * the row's interactivity: with `to` the row is a link, with `opens` a button whose press emits
+ * `activate`, otherwise it is inert.
  *
  * `txAmountDisplay` / `txTransferTypeLabel` / `txStatus` / `txHash` bind as `data-tx-*` on the
  * root and `stage` / `backend` as `data-stage` / `data-backend`, the facts e2e waits on; Vue omits
@@ -126,7 +128,7 @@ function hasActionsContent() {
 			</span>
 		</Flex>
 
-		<div v-if="hasActionsContent()" :class="$style.actions">
+		<div v-if="hasActionsContent()" v-snack-footer.listed :class="$style.actions">
 			<slot name="actions" />
 		</div>
 	</Flex>
@@ -218,10 +220,8 @@ function hasActionsContent() {
 }
 
 .title {
-	font-family: var(--font-headline);
-	font-weight: 700;
+	composes: type--row-title from global;
 	font-size: 14px;
-	letter-spacing: -0.02em;
 	color: var(--txt-primary);
 }
 
@@ -230,8 +230,8 @@ function hasActionsContent() {
 }
 
 .amount_fiat {
-	font-family: var(--font-mono);
-	font-size: 9px;
+	composes: type--fiat from global;
+	font-size: 11px;
 	color: var(--nulo-secondary);
 }
 
@@ -240,15 +240,12 @@ function hasActionsContent() {
 }
 
 .amount {
-	font-family: var(--font-mono);
-	font-size: 14px;
-	font-weight: 500;
+	composes: type--amount-row from global;
 	color: var(--txt-primary);
 }
 
 .amount_symbol {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--meta from global;
 	color: var(--nulo-outline);
 }
 

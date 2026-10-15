@@ -17,6 +17,7 @@
 
 /** Components */
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
+import TxHashRow from "@/popup/components/modules/tx/TxHashRow.vue"
 
 /** Vendor */
 import { DateTime } from "luxon"
@@ -34,6 +35,9 @@ import { humanizeMethodName, formatTransferType } from "@/utils/tx-enrichment"
 import { usePrices } from "@/composables/usePrices"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { balanceFormatted } from "@/utils/amount.js"
+import { knownDecimals } from "@/utils/token-amount"
+import { copyWithToast } from "@/utils/clipboard"
+import { getAccountExplorerUrl, getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -76,8 +80,9 @@ const title = computed(() => {
 })
 
 const amountDisplay = computed(() => {
-	if (!isTransfer.value || !op.value?.amountRaw || !token.value) return null
-	return balanceFormatted(op.value.amountRaw, token.value.decimals ?? 0, 8, { compact: true }).value
+	const decimals = knownDecimals(token.value)
+	if (!isTransfer.value || !op.value?.amountRaw || decimals === null) return null
+	return balanceFormatted(op.value.amountRaw, decimals, 8, { compact: true }).value
 })
 
 const transferTypeLabel = computed(() => {
@@ -115,6 +120,25 @@ const originChip = computed(() => {
 	if (op.value?.kind !== "dapp_execute") return null
 	return sanitizeJournalSubtitle(op.value.subtitle)
 })
+
+const txHash = computed(() => op.value?.progress?.txHash ?? null)
+
+// Only a record that names the active network places its hash or recipient on a chain; a legacy record names none.
+const onActiveNetwork = computed(() => Boolean(appStore.network) && op.value?.networkId === appStore.network.id)
+const explorerUrl = computed(() => {
+	if (!txHash.value || !onActiveNetwork.value) return null
+	return getTransactionExplorerUrl(appStore.network.chainId, appStore.defaultExplorer, txHash.value)
+})
+const recipientUrl = computed(() => {
+	const r = op.value?.recipientAddress
+	if (!r || !onActiveNetwork.value) return null
+	return getAccountExplorerUrl(appStore.network.chainId, appStore.defaultExplorer, r)
+})
+const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === appStore.defaultExplorer)?.name ?? "explorer")
+
+const handleCopy = (target) => {
+	void copyWithToast(target, openToast, "Successfully copied")
+}
 
 const errorMessage = computed(() => op.value?.error?.message ?? null)
 const errorNormalizedRaw = computed(() => op.value?.error?.normalizedRaw ?? null)
@@ -220,15 +244,26 @@ onBeforeUnmount(() => {
 		<SubPageHeader :title="title" :backTo="'/popup/activity'" />
 
 		<Flex v-if="op && display" wide direction="column" gap="20" :class="$style.content">
-			<!-- Hero meta: the record's terminal time in tx/[id].vue's tx_time slot, with no
-				 explorer link. -->
 			<Flex align="center" justify="center" gap="8" :class="$style.hero_meta">
 				<span v-if="terminalAtLabel" :class="$style.tx_time">{{ terminalAtLabel }}</span>
+				<span v-if="terminalAtLabel && explorerUrl" :class="$style.meta_sep">·</span>
+				<a
+					v-if="explorerUrl"
+					:href="explorerUrl"
+					target="_blank"
+					rel="noopener noreferrer"
+					@click.stop
+					:class="$style.hero_link"
+					data-testid="journal-detail-explorer-link"
+				>
+					<span>View on {{ explorerName }}</span>
+					<Icon name="external-link" size="10" color="tertiary" />
+				</a>
 			</Flex>
 
 			<!-- Transfer amount block (transfer kind only) -->
 			<Flex v-if="isTransfer && amountDisplay" align="center" direction="column" gap="6">
-				<span :class="$style.amount_value">
+				<span :class="$style.amount_value" data-testid="journal-detail-amount">
 					{{ amountDisplay }}
 					<span v-if="token?.symbol" :class="$style.amount_symbol">{{ token.symbol }}</span>
 				</span>
@@ -251,6 +286,15 @@ onBeforeUnmount(() => {
 					<span :class="$style.detail_context" data-testid="journal-detail-context">{{ category.context }}</span>
 				</Flex>
 
+				<TxHashRow
+					v-if="txHash"
+					:hash="txHash"
+					:explorerUrl="explorerUrl"
+					linkTestid="journal-detail-tx-hash-link"
+					copyTestid="journal-detail-tx-hash-copy"
+					@copy="handleCopy"
+				/>
+
 				<Flex v-if="originChip" wide justify="between" align="center">
 					<span :class="$style.detail_key">App</span>
 					<span :class="$style.detail_value_mono" data-testid="journal-detail-origin">{{ originChip }}</span>
@@ -263,7 +307,16 @@ onBeforeUnmount(() => {
 
 				<Flex v-if="recipientLabel" wide justify="between" align="center">
 					<span :class="$style.detail_key">To</span>
-					<span :class="$style.detail_value_mono" data-testid="journal-detail-recipient">{{ recipientLabel }}</span>
+					<a
+						v-if="recipientUrl"
+						:href="recipientUrl"
+						target="_blank"
+						rel="noopener noreferrer"
+						data-testid="journal-detail-recipient-link"
+						:class="$style.recipient_link"
+						>{{ recipientLabel }}</a
+					>
+					<span v-else :class="$style.detail_value_mono" data-testid="journal-detail-recipient">{{ recipientLabel }}</span>
 				</Flex>
 
 				<Flex v-if="showOutcome" wide justify="between" align="center">
@@ -314,11 +367,10 @@ onBeforeUnmount(() => {
 <style module>
 .wrapper {
 	composes: wrapper from "../detail-page.module.css";
-	padding-bottom: var(--nav-clearance);
 }
 
 .content {
-	padding: 4px 20px 24px 20px;
+	composes: content from "../detail-page.module.css";
 }
 
 .hero_meta {
@@ -327,6 +379,14 @@ onBeforeUnmount(() => {
 
 .tx_time {
 	composes: tx_time from "../detail-page.module.css";
+}
+
+.meta_sep {
+	composes: meta_sep from "../detail-page.module.css";
+}
+
+.hero_link {
+	composes: hero_link from "../detail-page.module.css";
 }
 
 .amount_value {
@@ -357,9 +417,14 @@ onBeforeUnmount(() => {
 	composes: detail_value_mono from "../detail-page.module.css";
 }
 
+/* TxHashRow's link, so both linked values in Details read alike. */
+.recipient_link {
+	composes: detail_value_mono from "../detail-page.module.css";
+	composes: detail_link from "../detail-page.module.css";
+}
+
 .detail_context {
-	font-family: var(--font-body);
-	font-size: 12px;
+	composes: type--body from global;
 	line-height: 1.5;
 	color: var(--txt-primary);
 }
@@ -369,8 +434,7 @@ onBeforeUnmount(() => {
 }
 
 .code_block {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--meta from global;
 	background: var(--nulo-surface-low);
 	padding: 8px 12px;
 	border: 1px solid var(--nulo-border);

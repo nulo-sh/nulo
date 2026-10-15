@@ -26,9 +26,15 @@ export const LOG_SOURCES: string[] = [
 	"transaction",
 	"wallet-sdk",
 	"passkey",
+	"price",
+	"incoming-transfer",
+	"operation-journal",
+	"legal-acceptance",
+	"token-list",
+	"network-reset",
 ]
 	.flatMap((x) => [x, `${x}-client`])
-	.concat(["wallet", "ui"])
+	.concat(["account-integrity-coordinator", "profile-deletion-coordinator", "wallet", "ui"])
 
 export const LOG_LEVELS = ["DEBUG", "INFO", "WARN", "ERROR"]
 

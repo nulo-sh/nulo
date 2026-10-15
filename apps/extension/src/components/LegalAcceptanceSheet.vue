@@ -96,11 +96,11 @@ onBeforeUnmount(() => {
 			<!-- Everything to read, then the control that agrees to it, in one scroll. -->
 			<Flex direction="column" gap="16" :class="$style.body" data-testid="legal-sheet-body">
 				<Flex direction="column" gap="8">
-					<Text size="10" color="secondary" mono :class="$style.eyebrow" data-testid="legal-sheet-version">Terms v{{ termsVersion }}</Text>
-					<Text id="legal-sheet-title" size="18" color="primary" weight="700" :class="$style.title" data-testid="legal-sheet-title">
+					<Text variant="label-section" color="secondary" data-testid="legal-sheet-version">Terms v{{ termsVersion }}</Text>
+					<Text id="legal-sheet-title" variant="title-page" color="primary" data-testid="legal-sheet-title">
 						{{ isReacceptance ? "The terms have changed" : "Review the terms" }}
 					</Text>
-					<Text v-if="isReacceptance" size="13" color="secondary" height="150" data-testid="legal-sheet-since">
+					<Text v-if="isReacceptance" variant="body" color="secondary" height="150" data-testid="legal-sheet-since">
 						Here is what changed since the version you accepted on {{ acceptedOn }}.
 					</Text>
 				</Flex>
@@ -124,7 +124,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
-/* Below GlobalLoader (9999) and the barriers (10000): a migration or integrity block outranks this. */
+/* Below the start-up bar (9999) and the barriers (10000): a migration or integrity block outranks this. */
 .backdrop {
 	position: fixed;
 	inset: 0;
@@ -156,24 +156,10 @@ onBeforeUnmount(() => {
 	border-top: 1px solid var(--nulo-border);
 }
 
-.eyebrow {
-	letter-spacing: 0.16em;
-	text-transform: uppercase;
-}
-
-.title {
-	font-family: var(--font-headline);
-	letter-spacing: -0.02em;
-	text-transform: uppercase;
-}
-
 .later {
+	composes: type--label from global;
 	padding: 6px 12px;
 
-	font-family: var(--font-mono);
-	font-size: 11px;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
 	color: var(--txt-secondary);
 
 	background: transparent;

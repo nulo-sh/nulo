@@ -11,10 +11,10 @@
 
 import { mount } from "@vue/test-utils"
 import { describe, expect, test, vi } from "vitest"
-import { OriginType, TransferType, TxStatus } from "@/wallet/services/transaction/spec"
+import { OriginType, TransferType, TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { flushPromises } from "@vue/test-utils"
-import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
+import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
 // Bypass the real Pinia app store + its chrome.storage subscriptions —
 // TransactionCard only reads `network.chainId` + `defaultExplorer` for the
@@ -31,7 +31,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: { add: vi.fn(), remove: vi.fn() },
 			onConnected: { add: vi.fn(), remove: vi.fn() },
-			refreshIfStale: vi.fn().mockImplementation(async () => mockQuotes),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
+			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: mockQuotes, pricedTokens: TEST_PRICED_TOKENS })),
 		}
 	}),
 }))
@@ -71,8 +72,9 @@ const STUBS = {
 	},
 }
 
+const TX_HASH = `0x${"abcd1234".repeat(8)}`
 const dappTransferTx = {
-	hash: "0xabcd1234abcd1234",
+	hash: TX_HASH,
 	status: TxStatus.Proposed,
 	calls: [
 		{
@@ -97,6 +99,16 @@ const mountCard = (tx: Record<string, unknown>, props: Record<string, unknown> =
 	mount(TransactionCard, { props: { tx, ...props }, global: { stubs: STUBS, components: { RowAction } } })
 
 describe("modules/activity/TransactionCard (settled)", () => {
+	test.each([
+		["mined", { status: TxStatus.Proposed, executionResult: TxExecutionResult.Success }, "check-circle", "txt-success"],
+		["reverted", { status: TxStatus.Proposed, executionResult: TxExecutionResult.AppLogicReverted }, "close-circle", "txt-danger"],
+		["dropped", { status: TxStatus.Dropped }, "close-circle", "txt-danger"],
+		["pending", { status: TxStatus.Pending }, "clock-circle", "gray"],
+	])("a %s tx's status icon fills with its state's status text token", (_label, over, name, fill) => {
+		const icon = mountCard({ ...dappTransferTx, ...over }).find(`[data-testid="activity-status-icon"][data-name="${name}"]`)
+		expect(icon.attributes("data-color")).toBe(fill)
+	})
+
 	test("dApp-initiated transfer renders BOTH transferTypeLabel and originLabel chips (regression pin)", () => {
 		const w = mountCard(dappTransferTx)
 		// transferTypeLabel from call.transfers[0].type
@@ -110,13 +122,23 @@ describe("modules/activity/TransactionCard (settled)", () => {
 		const field = (n: bigint) => `0x${n.toString(16).padStart(64, "0")}`
 		const TOKEN = `0x${"0a".repeat(32)}`
 		const RECIPIENT = `0x${"0c".repeat(32)}`
+		const CLASS = field(0xc1a55n)
 		const tokens = [
-			{ id: 1, chainId: CHAIN_IDS.TESTNET, contract: TOKEN, name: "Test", symbol: "TST", decimals: 18, hasDecimals: true },
+			{
+				id: 1,
+				chainId: CHAIN_IDS.TESTNET,
+				contract: TOKEN,
+				classId: CLASS,
+				name: "Test",
+				symbol: "TST",
+				decimals: 18,
+				hasDecimals: true,
+			},
 		]
 		const mintTx = (...amounts: bigint[]) => ({
 			hash: "0xmint1",
 			status: TxStatus.Proposed,
-			calls: amounts.map((a) => ({ contract: TOKEN, method: "mint_to_public", args: [RECIPIENT, field(a)] })),
+			calls: amounts.map((a) => ({ contract: TOKEN, method: "mint_to_public", args: [RECIPIENT, field(a)], classId: CLASS })),
 			origin: { type: OriginType.DAPP, name: "example.dapp.io" },
 		})
 
@@ -143,17 +165,17 @@ describe("modules/activity/TransactionCard (settled)", () => {
 	})
 
 	test("`to` reaches the layout, and the explorer link is a named action opening a new tab", () => {
-		const w = mountCard(dappTransferTx, { to: "/popup/tx/0xabcd1234abcd1234" })
-		expect(w.findComponent(STUBS.TransactionCardLayout).props("to")).toBe("/popup/tx/0xabcd1234abcd1234")
+		const w = mountCard(dappTransferTx, { to: `/popup/tx/${TX_HASH}` })
+		expect(w.findComponent(STUBS.TransactionCardLayout).props("to")).toBe(`/popup/tx/${TX_HASH}`)
 		const explorer = w.find('a[aria-label="Open in block explorer"]')
 		expect(explorer.attributes("target")).toBe("_blank")
 		expect(explorer.attributes("rel")).toBe("noopener noreferrer")
-		expect(explorer.attributes("href")).toContain("0xabcd1234abcd1234")
+		expect(explorer.attributes("href")).toContain(TX_HASH)
 	})
 })
 
 describe("TransactionCard fiat (D2 activity rows)", () => {
-	const TEST_USDC = TESTNET_TOKENS.USDC
+	const TEST_USDC = TEST_TOKENS.USDC
 	const mkTransferTx = (contract: string) =>
 		({
 			hash: "0xfiat1",

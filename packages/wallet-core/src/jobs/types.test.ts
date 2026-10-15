@@ -1,12 +1,13 @@
 import { describe, expect, test } from "vitest"
 
-import { KNOWN_JOB_ERROR_KINDS } from "./types"
+import { isFeeAmount, KNOWN_JOB_ERROR_KINDS } from "./types"
 
 describe("KNOWN_JOB_ERROR_KINDS (drift guard)", () => {
 	test("contains every literal a producer actually emits", () => {
 		// If a producer emits a kind absent here, the open union silently loses
 		// its known-set value for that kind. Sources: normalizeError literals,
-		// wallet-sdk popup_bound and scope_refused, the reaper, and classifyTokenImportError.
+		// wallet-sdk popup_bound, scope_refused, malformed_request, terms_refused and wallet_refused, execution's
+		// session_ended, the reaper, and classifyTokenImportError.
 		const produced = [
 			"transfer",
 			"dapp_execute",
@@ -16,6 +17,10 @@ describe("KNOWN_JOB_ERROR_KINDS (drift guard)", () => {
 			"unknown",
 			"popup_bound",
 			"scope_refused",
+			"malformed_request",
+			"terms_refused",
+			"wallet_refused",
+			"session_ended",
 			"sw_restart_post_prove",
 			"stuck_proving",
 			"stuck_queued",
@@ -30,5 +35,15 @@ describe("KNOWN_JOB_ERROR_KINDS (drift guard)", () => {
 	test("is non-empty and deduplicated (satisfies-table mirror is well-formed)", () => {
 		expect(KNOWN_JOB_ERROR_KINDS.length).toBeGreaterThan(0)
 		expect(new Set(KNOWN_JOB_ERROR_KINDS).size).toBe(KNOWN_JOB_ERROR_KINDS.length)
+	})
+})
+
+describe("isFeeAmount", () => {
+	test("takes a positive integer of at most 39 digits, nothing else", () => {
+		expect(isFeeAmount("1")).toBe(true)
+		expect(isFeeAmount("9".repeat(39))).toBe(true)
+		for (const refused of ["0", "01", "1.5", "-1", "1e3", "", " 1", "9".repeat(40), 1, null]) {
+			expect(isFeeAmount(refused), String(refused)).toBe(false)
+		}
 	})
 })

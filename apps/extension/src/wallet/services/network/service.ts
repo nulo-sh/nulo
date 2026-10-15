@@ -22,16 +22,21 @@ import { Lock } from "@/wallet/utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
-import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID, walletChainId } from "@/utils/chain-ids"
-import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import { walletChainId } from "@/utils/chain-ids"
+import { hasNetworkCause } from "@/wallet/services/stale-network/classify"
+import { quarantinedBy, StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
+import { ERR_NOT_RESETTABLE, ERR_STALE_CHANGED, type ProbedEndpoint } from "@/wallet/services/stale-network/types"
+import { DEFAULT_SEEDS, type DefaultSeed, LOCAL_NETWORK_RPC_URL, PRIMARY_SEED, SEED_L1_BY_KIND, seedForKind } from "./seeds"
 import {
 	type ChainKind,
 	ERR_ACTIVE_NETWORK,
+	ERR_CHAIN_QUARANTINED,
 	ERR_DUPLICATE_CHAIN,
 	ERR_DUPLICATE_ENDPOINT,
 	ERR_ENDPOINT_CHAIN_MISMATCH,
 	ERR_LAST_ENDPOINT,
 	ERR_PRIMARY_ENDPOINT,
+	ERR_RESET_RUNNING,
 	ERR_UNATTENDED_LIVE_CHECK,
 	type Events,
 	findPrimaryEndpoint,
@@ -49,6 +54,7 @@ import {
 } from "./spec"
 
 export * from "./spec"
+export { LOCAL_NETWORK_RPC_URL } from "./seeds"
 
 /**
  * Per-profile active-network pointer. The service owns this state (vs. v0
@@ -57,67 +63,6 @@ export * from "./spec"
  */
 const ACTIVE_KEY_PREFIX = "nulo:core:active-network@"
 const activeKey = (profileId: string) => `${ACTIVE_KEY_PREFIX}${profileId}`
-
-/** Immutable L1 identities for the seeded kinds — the trust root `getL1ChainIdStored` validates
- *  seeded rows against (a row is mutable storage; these constants ship in code). Custom/devnet
- *  kinds have no constant and are probe-verified at account creation instead. */
-const SEED_L1_BY_KIND: Partial<Record<ChainKind, number>> = {
-	mainnet: MAINNET_L1_CHAIN_ID,
-	testnet: TESTNET_L1_CHAIN_ID,
-	local: LOCAL_L1_CHAIN_ID,
-}
-
-interface DefaultSeed {
-	name: string
-	rpcUrl: string
-	chainId: number
-	/** Hardcoded L1 identity — NEVER probed at seed time (seeding is offline-safe and
-	 *  load-bearing for fresh profiles with the node down). Key derivation consumes it. */
-	l1ChainId: number
-	kind: ChainKind
-	isPrimaryActive: boolean
-	/** Provider label stamped on the seeded endpoint (Settings shows it instead of the raw URL). */
-	endpointLabel?: string
-}
-
-/**
- * RPC URL stamped into the "Local Network" preset at build time. Defaults
- * to `http://localhost:8080`; e2e runs override via `VITE_LOCAL_NETWORK_RPC_URL`
- * so each parallel agent's wallet build talks to its own aztec sandbox.
- *
- * The chainId-zero check below also normalizes against this value so that
- * if a user (or test fixture) edits the seed's endpoint URL via the
- * settings UI, the chainId resolution still recognizes it as Local Network.
- * For the structural path, callers that already know they're touching a
- * `kind === "local"` network pass `kindHint` to `_getChainId` and bypass
- * the URL comparison entirely.
- */
-export const LOCAL_NETWORK_RPC_URL: string = (import.meta.env.VITE_LOCAL_NETWORK_RPC_URL as string | undefined) ?? "http://localhost:8080"
-
-const DEFAULT_SEEDS: DefaultSeed[] = [
-	{
-		name: "Testnet",
-		rpcUrl: TESTNET_RPC_URL,
-		chainId: CHAIN_IDS.TESTNET, // (TESTNET_L1_CHAIN_ID ^ TESTNET_ROLLUP_VERSION) >>> 0 — single-sourced in @/utils/chain-ids
-		l1ChainId: TESTNET_L1_CHAIN_ID,
-		kind: "testnet",
-		isPrimaryActive: true,
-		endpointLabel: "dRPC",
-	},
-	{
-		name: "Local Network",
-		rpcUrl: LOCAL_NETWORK_RPC_URL,
-		chainId: 0,
-		l1ChainId: LOCAL_L1_CHAIN_ID,
-		kind: "local",
-		isPrimaryActive: false,
-	},
-]
-
-/** The one seed marked `isPrimaryActive` (Testnet). Single source
- *  for the primary/default network — consumed by `getOrInitNetworks` (fresh seed) AND
- *  `getPrimaryNetwork` (the import/bootstrap fallback), so the two can't disagree. */
-const PRIMARY_SEED = DEFAULT_SEEDS.find((s) => s.isPrimaryActive)
 
 /**
  * Strict RPC-URL equality that tolerates trailing-slash and casing differences
@@ -159,6 +104,45 @@ function assertSameChainIdentity(probed: { chainId: number; l1ChainId: number },
 		)
 	}
 }
+
+/** Whether `rpcUrl` is `seed`'s endpoint, with Local Network's tolerance for an edited URL. */
+export function isSeedEndpointUrl(seed: DefaultSeed, rpcUrl: string): boolean {
+	return rpcUrl === normalizeRpcUrl(seed.rpcUrl) || (seed.kind === "local" && sameLocalNetworkUrl(rpcUrl, seed.rpcUrl))
+}
+
+/** Whether the row's primary is no longer the one the reset's view decided on. A view that probed
+ *  nothing saw the seed's endpoint primary, or none; a user primary set since was never checked
+ *  against the new chain, and the rewrite would replace it with the seed's unannounced. */
+function primaryMoved(row: Network, check: { chainId: number; toChainId: number; primary: ProbedEndpoint | null }): boolean {
+	const primary = findPrimaryEndpoint(row)
+	if (check.primary) return primary?.id !== check.primary.id || primary.rpcUrl !== check.primary.url
+	if (check.chainId === check.toChainId || !primary) return false
+	const seed = seedForKind(row.kind)
+	return !seed || !isSeedEndpointUrl(seed, primary.rpcUrl)
+}
+
+/** One in-place reset of a network row, as the reset journal names it. */
+export type ChainResetRequest = {
+	profileId: string
+	networkId: string
+	fromChainId: number
+	toChainId: number
+	purged: boolean
+	switchToSeedNode: boolean
+	probedEndpoint: ProbedEndpoint | null
+}
+
+/** The reset's own steps around the chain purge. */
+export type ChainResetHooks = {
+	/** Under the reservation, before anything is deleted. */
+	beforePurge(): Promise<void>
+	/** Under the reservation, after `purgeChain`: the caller's chain-scoped purges. */
+	afterPurge(): Promise<void>
+	/** After the reservation is released and before the rewrite: makes the purge durable. */
+	onPurged(): Promise<void>
+}
+
+const notResettable = (why: string) => new Error(`${ERR_NOT_RESETTABLE}: ${why}`)
 
 function trimmedLabel(label: string | undefined): string | undefined {
 	return label?.trim() || undefined
@@ -211,6 +195,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	public readonly onChainPurged = new EventHandler<{ profileId: string; chainId: number }>()
 
 	private readonly storage: EntityStorage<Network>
+	private readonly staleNetworks: StaleNetworkRepository
 	private readonly nodes = new Map<number, AztecNode>()
 	/** URL-keyed transient cache for pending-tx polling pin. */
 	private readonly transientNodes = new Map<string, { node: AztecNode; failures: number }>()
@@ -229,6 +214,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	) {
 		super(NETWORK_SERVICE_NAME, logger)
 		this.storage = new EntityStorage<Network>(NETWORK_STORAGE_ROOT, browserApi.storage.local, (raw) => NetworkRowSchema.parse(raw))
+		this.staleNetworks = new StaleNetworkRepository(browserApi.storage.local)
 		// Watchdog DISABLED: deleteNetwork legitimately holds this lock across
 		// purgeChain → clearChainState, which rides the 30-minute prove-tx
 		// envelope (it drains behind an in-flight proof). A force-release would
@@ -474,9 +460,10 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		validateParams(NetworkMethodSchemas.getPrimaryNetwork.params, [], "getPrimaryNetwork")
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
-		if (!PRIMARY_SEED) return null
+		const primary = PRIMARY_SEED
+		if (!primary) return null
 		const rows = (await this.storage.getValues()).filter((n) => n.profileId === profile.id)
-		return rows.find((n) => n.chainId === PRIMARY_SEED.chainId) ?? null
+		return rows.find((n) => n.chainId === primary.chainId) ?? null
 	}
 
 	public async setActiveForProfile(profileId: string, networkId: string): Promise<string> {
@@ -506,6 +493,9 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			const sameChain = existingForProfile.find((n) => n.chainId === chainId)
 			if (sameChain) {
 				throw new Error(`${ERR_DUPLICATE_CHAIN}: A network for chain ${chainId} already exists in this profile.`)
+			}
+			if (await this.isChainQuarantined(fence.profileId, chainId)) {
+				throw new Error(`${ERR_CHAIN_QUARANTINED}: A reset of another network is moving to chain ${chainId}.`)
 			}
 			if (existingForProfile.some((n) => n.name === name)) {
 				throw new Error(`Name '${name}' already in use.`)
@@ -549,12 +539,23 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			if (activeId === id) {
 				throw new Error(`${ERR_ACTIVE_NETWORK}: Cannot delete the active network. Switch to another chain first.`)
 			}
+			if (this.resetRunning(id)) {
+				throw new Error(`${ERR_RESET_RUNNING}: This network is being reset. Try again when the reset ends.`)
+			}
 			// Reserve BEFORE the cascade: the network row deliberately survives
 			// until the cascade finishes, so "row exists" alone would admit a
 			// journal create landing between its sweep and the row delete. The
 			// reservation makes `isNetworkLive` refuse for the whole window.
 			this.deletingNetworks.add(id)
+			this.reservations.set(id, (this.reservations.get(id) ?? 0) + 1)
 			try {
+				// The way out of a reset that cannot finish: its journal and verdict go with the row.
+				await this.staleNetworks.withLock(profile.id, async () => {
+					if ((await this.staleNetworks.getJournal(profile.id))?.networkId === id) {
+						await this.staleNetworks.deleteJournalLocked(profile.id)
+					}
+					await this.staleNetworks.removeEntryLocked(profile.id, id)
+				})
 				// Purge chain-scoped state via the awaited coordinator
 				await this.purgeChain(profile.id, network.chainId, network.id)
 				await this.storage.delete(id)
@@ -569,16 +570,28 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 
 	/** Network ids whose delete cascade is in progress — see `isNetworkLive`. */
 	private readonly deletingNetworks = new Set<string>()
+	/** Reservations ever made per network id, never decremented: a reservation that began and ended
+	 *  during a liveness read still moves its count. */
+	private readonly reservations = new Map<string, number>()
+
+	/** A reservation is open now, or one began since `countBefore` was read. */
+	private reservedSince(networkId: string, countBefore: number): boolean {
+		return this.deletingNetworks.has(networkId) || (this.reservations.get(networkId) ?? 0) !== countBefore
+	}
 
 	/**
 	 * Whether a network row exists AND is not mid-deletion. In-memory only:
 	 * a SW restart kills both the flag and any stale creator closure that
-	 * captured the network, so cross-restart staleness cannot occur.
+	 * captured the network, so cross-restart staleness cannot occur. A read
+	 * that a reservation overlapped answers false: its cascade may already have
+	 * swept what the caller is about to treat as live.
 	 */
 	public async isNetworkLive(networkId: string): Promise<boolean> {
 		await this.ensureInitialized()
+		const countBefore = this.reservations.get(networkId) ?? 0
 		if (this.deletingNetworks.has(networkId)) return false
-		return (await this.storage.get(networkId)) !== undefined
+		const row = await this.storage.get(networkId)
+		return row !== undefined && !this.reservedSince(networkId, countBefore)
 	}
 
 	/** Chain-keyed variant of {@link isNetworkLive} for writers that carry only
@@ -588,8 +601,10 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	 *  on why the sweep/create ordering depends on that). */
 	public async isChainLive(profileId: string, chainId: number): Promise<boolean> {
 		await this.ensureInitialized()
+		// Copied before the read: the network it resolves is known only after.
+		const countsBefore = new Map(this.reservations)
 		const network = (await this.storage.getValues()).find((n) => n.profileId === profileId && n.chainId === chainId)
-		return network !== undefined && !this.deletingNetworks.has(network.id)
+		return network !== undefined && !this.reservedSince(network.id, countsBefore.get(network.id) ?? 0)
 	}
 
 	/** {@link isChainLive} for a dApp asking to connect, where a profile with no network rows, or one
@@ -604,6 +619,24 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		if (seeding && DEFAULT_SEEDS.some((seed) => seed.chainId === chainId)) return true
 		const network = rows.find((n) => n.chainId === chainId)
 		return network !== undefined && !this.deletingNetworks.has(network.id)
+	}
+
+	/** {@link servesChain} for a chain the dApp may also use now: a quarantined chain keeps its row
+	 *  (so its sessions are not dropped) but serves no new connection. */
+	public async servesLiveChain(profileId: string, chainId: number): Promise<boolean> {
+		return (await this.servesChain(profileId, chainId)) && !(await this.isChainQuarantined(profileId, chainId))
+	}
+
+	/**
+	 * Whether `chainId` must not be used in `profileId`: a stale-network record entry names it, a
+	 * reset journal starts or ends on it, or a seeded row on it is behind this build's seed. The
+	 * last is read from the row, so it holds before any classification lands. Lock-free.
+	 */
+	public async isChainQuarantined(profileId: string, chainId: number): Promise<boolean> {
+		await this.ensureInitialized()
+		const [state, rows] = await Promise.all([this.staleNetworks.readQuarantineState(profileId), this.storage.getValues()])
+		if (quarantinedBy(state, chainId)) return true
+		return rows.some((n) => n.profileId === profileId && n.chainId === chainId && hasNetworkCause(n))
 	}
 
 	public async setActiveNetwork(id: string): Promise<Network> {
@@ -742,8 +775,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		const primary = findPrimaryEndpoint(network)
 		if (!primary) return NodeStatus.Inactive
 		try {
-			// No kind hint, unlike probeNodeStatus: a local network off the seed URL reads InvalidChain.
-			const probedChainId = await this._getChainId(primary.rpcUrl)
+			const probedChainId = await this._getChainId(primary.rpcUrl, network.kind)
 			if (probedChainId !== network.chainId) return NodeStatus.InvalidChain
 			return NodeStatus.Active
 		} catch {
@@ -855,11 +887,134 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		return networkInfoFrom(await this.getNetwork(networkId))
 	}
 
+	// ── Stale-network reset ──────────────────────────────────────────────
+
+	private resetRunning: (networkId: string) => boolean = () => false
+
+	/** Set by the reset service, which owns the run lock: `deleteNetwork` refuses a network it names. */
+	public setResetRunProbe(probe: (networkId: string) => boolean): void {
+		this.resetRunning = probe
+	}
+
+	/** One identity read of `rpcUrl` whose request dies with `timeoutMs` and is never retried. */
+	public async probeIdentityOnce(
+		rpcUrl: string,
+		kind: ChainKind | undefined,
+		timeoutMs: number,
+	): Promise<{ chainId: number; l1ChainId: number }> {
+		const info = await this.nodeFactory.createSingleAttemptNode(rpcUrl, timeoutMs).getNodeInfo()
+		if (isLocalNetworkTarget(rpcUrl, kind)) return { chainId: 0, l1ChainId: info.l1ChainId }
+		return { chainId: walletChainId(info.l1ChainId, info.rollupVersion), l1ChainId: info.l1ChainId }
+	}
+
+	/**
+	 * Runs `write` under the network lock while the row is still on `chainId`, not being deleted,
+	 * no other row holds `toChainId`, and, when `primary` is given, its primary endpoint still has
+	 * that id and URL. A reset's capture commits its journal here, so a change that landed after the
+	 * popup's view refuses; once the journal exists, `addNetwork` refuses `toChainId` itself.
+	 */
+	public async commitResetCapture(
+		profileId: string,
+		networkId: string,
+		check: { chainId: number; toChainId: number; primary: ProbedEndpoint | null },
+		write: () => Promise<void>,
+	): Promise<void> {
+		await this.ensureInitialized()
+		await this.lock.withLock(async () => {
+			const row = await this.storage.get(networkId)
+			if (row?.profileId !== profileId || row.chainId !== check.chainId || this.deletingNetworks.has(networkId)) {
+				throw notResettable("the network changed before the reset began")
+			}
+			const rows = await this.storage.getValues()
+			if (rows.some((n) => n.profileId === profileId && n.id !== networkId && n.chainId === check.toChainId)) {
+				throw notResettable("another network holds the new chain")
+			}
+			if (primaryMoved(row, check)) throw new Error(`${ERR_STALE_CHANGED}: the network's node changed before the reset began`)
+			await write()
+		})
+	}
+
+	/**
+	 * The network half of an in-place reset. Unless `purged`, reserves the row as `deleteNetwork`
+	 * does, releases the lock, and purges under the reservation, so other chains' `getNode` never
+	 * waits on this chain's PXE drain. Then, when the row is not on `toChainId`, rewrites its chain
+	 * identity from the build's seed under the lock, keeping its id, name and active pointer. A
+	 * failed purge step throws with the row untouched.
+	 */
+	public async resetChainInPlace(req: ChainResetRequest, hooks: ChainResetHooks): Promise<Network> {
+		await this.ensureInitialized()
+		if (!req.purged) {
+			await this.lock.withLock(async () => {
+				const row = await this.storage.get(req.networkId)
+				if (row?.profileId !== req.profileId || row.chainId !== req.fromChainId) {
+					throw notResettable("the network is not on the chain the reset purges")
+				}
+				this.deletingNetworks.add(req.networkId)
+				this.reservations.set(req.networkId, (this.reservations.get(req.networkId) ?? 0) + 1)
+			})
+			try {
+				await hooks.beforePurge()
+				await this.purgeChain(req.profileId, req.fromChainId, req.networkId)
+				await hooks.afterPurge()
+			} finally {
+				this.deletingNetworks.delete(req.networkId)
+			}
+			await hooks.onPurged()
+		}
+		return await this.lock.withLock(() => this.rewriteForResetLocked(req))
+	}
+
+	/** Caller holds the network lock. Idempotent: a row already on `toChainId` is returned as is. */
+	private async rewriteForResetLocked(req: ChainResetRequest): Promise<Network> {
+		const row = await this.storage.get(req.networkId)
+		if (row?.profileId !== req.profileId) throw notResettable("the network is gone")
+		if (row.chainId === req.toChainId) return row
+		const seed = seedForKind(row.kind)
+		if (row.chainId !== req.fromChainId || seed?.chainId !== req.toChainId) {
+			throw notResettable("the network's chain is not the reset's")
+		}
+		const rows = await this.storage.getValues()
+		if (rows.some((n) => n.profileId === req.profileId && n.id !== row.id && n.chainId === req.toChainId)) {
+			throw notResettable("another network holds the new chain")
+		}
+		const primaryBefore = row.primaryEndpointId
+		row.chainId = seed.chainId
+		row.l1ChainId = seed.l1ChainId
+		this.applyResetEndpoint(row, seed, req)
+		await this.storage.set(row.id, row)
+		this.nodes.delete(req.fromChainId)
+		this.nodes.delete(req.toChainId)
+		if (row.primaryEndpointId !== primaryBefore) {
+			this.emit("onPrimaryEndpointChanged", { networkId: row.id, endpointId: row.primaryEndpointId })
+		}
+		this.emit("onNetworkUpdated", row)
+		return row
+	}
+
+	/** The user's primary survives only while it is the endpoint the popup probed and found serving
+	 *  the new chain; otherwise the seed's endpoint, added if missing, becomes primary. */
+	private applyResetEndpoint(row: Network, seed: DefaultSeed, req: ChainResetRequest): void {
+		const primary = findPrimaryEndpoint(row)
+		const probed = req.probedEndpoint
+		if (!req.switchToSeedNode && probed && primary?.id === probed.id && primary.rpcUrl === probed.url) return
+		let endpoint = row.endpoints.find((e) => isSeedEndpointUrl(seed, e.rpcUrl))
+		if (!endpoint) {
+			endpoint = {
+				id: this._fresh8(row.endpoints.map((e) => e.id)),
+				rpcUrl: normalizeRpcUrl(seed.rpcUrl),
+				label: trimmedLabel(seed.endpointLabel),
+			}
+			row.endpoints.push(endpoint)
+		}
+		row.primaryEndpointId = endpoint.id
+	}
+
 	// ── Cascade coordinator ──────────────────────────────────────────────
 
 	/**
 	 * Awaited purge of all chain-scoped state for `(profileId, chainId)`.
-	 * Called by `deleteNetwork` and `onProfileDeleted`.
+	 * Called by `deleteNetwork` and `purgeForProfile` under the network lock, and by
+	 * `resetChainInPlace` under a reservation only.
 	 *
 	 * Pipeline:
 	 *  1. SW-side subscribers (registered via `registerChainPurgeSubscriber`
@@ -875,16 +1030,13 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	 *     PXE resets, otherwise SW services could read against a fresh
 	 *     empty IDB and get inconsistent state.
 	 *
-	 * Subscriber failures are logged but don't abort the cascade — chain
-	 * cleanup is best-effort across boundaries. PXE clear is similarly
-	 * best-effort. The Network row is deleted by the caller (`deleteNetwork`)
-	 * only after this method resolves.
+	 * Every step runs even when an earlier one fails, and any failure then
+	 * rejects the purge, so no caller treats a partial purge as complete. The
+	 * Network row is deleted by the caller (`deleteNetwork`) only after this
+	 * method resolves.
 	 */
 	public async purgeChain(profileId: string, chainId: number, networkId: string): Promise<void> {
-		// FAIL-FAST: run every step best-effort so a
-		// single failure doesn't strand the others, but PROPAGATE if ANY failed —
-		// the deletion coordinator must keep the tombstone + retry (idempotent), not
-		// treat a swallowed subscriber/PXE failure as "chain erased".
+		// The deletion coordinator keeps its tombstone and retries (idempotent) on a rejection.
 		const errors: unknown[] = []
 		for (const subscriber of this.chainPurgeSubscribers) {
 			try {

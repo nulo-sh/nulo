@@ -55,7 +55,7 @@ describe("seed status — derivation", () => {
 		expect(deriveSeedStatus({ attempts: 0, outcome: "deleted" }, VERSION, false)).toBeUndefined()
 	})
 
-	test("getStatus carries the compiled-in literals; a seeded default stays listed, a deleted one does not", async () => {
+	test("getStatus carries the list's literals; a seeded default stays listed, a deleted one does not", async () => {
 		const { seeder } = makeSeeder()
 		const literals = { chainId: CHAIN_ID, contract: CONTRACT, symbol: "cUSD", displayName: "Compressed USD" }
 		expect(await entriesOf(seeder)).toEqual([{ ...literals, status: "pending" }])
@@ -230,7 +230,7 @@ describe("continuation — a failed attempt retries by itself", () => {
 		const logged = vi.spyOn(logger, "log")
 		await writeMarker({ [KEY]: { attempts: 1, nextAttemptAt: Date.now() - 1 } })
 		await seeder.run()
-		expect(logged).toHaveBeenCalledWith("TokenSeeder", LogLevel.Warn, "seed pass threw", { category: "unknown" })
+		expect(logged).toHaveBeenCalledWith("token", LogLevel.Warn, "seed pass threw", { category: "unknown" })
 
 		await vi.advanceTimersByTimeAsync(59_000)
 		expect(isTokenPresent).toHaveBeenCalledTimes(1)

@@ -10,10 +10,12 @@ const mocks = vi.hoisted(() => ({
 	getDappSession: vi.fn(),
 	setAuthorizationsWithoutAsking: vi.fn(),
 	updated: [] as Array<(session: unknown) => void>,
+	deleted: [] as Array<(session: unknown) => void>,
+	routerGo: vi.fn(),
 }))
 
 vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast: mocks.openToast }) }))
-vi.mock("vue-router", () => ({ useRoute: () => ({ params: { id: "s1" } }), useRouter: () => ({ push: vi.fn(), go: vi.fn() }) }))
+vi.mock("vue-router", () => ({ useRoute: () => ({ params: { id: "s1" } }), useRouter: () => ({ push: vi.fn(), go: mocks.routerGo }) }))
 vi.mock("@aztec-labs/wallet-sdk/crypto", () => ({ hashToEmoji: () => "" }))
 vi.mock("@/wallet/services/account/client", () => ({ AccountServiceClient: vi.fn() }))
 vi.mock("@/wallet/services/network/client", () => ({ NetworkServiceClient: vi.fn() }))
@@ -24,7 +26,7 @@ vi.mock("@/wallet/services/dapp-session/client", () => ({
 			setAuthorizationsWithoutAsking: mocks.setAuthorizationsWithoutAsking,
 			disconnect: vi.fn(),
 			onDappSessionUpdated: { add: (fn: (session: unknown) => void) => mocks.updated.push(fn) },
-			onDappSessionDeleted: { add: vi.fn() },
+			onDappSessionDeleted: { add: (fn: (session: unknown) => void) => mocks.deleted.push(fn) },
 		}
 	}),
 }))
@@ -48,6 +50,7 @@ afterEach(() => {
 	vi.unstubAllGlobals()
 	vi.clearAllMocks()
 	mocks.updated.length = 0
+	mocks.deleted.length = 0
 })
 
 // Wire-shaped: 0x + 64 hex, below the field modulus.
@@ -164,5 +167,15 @@ describe("Settings › Connected app › If you allow, it can", () => {
 		expect(toggle(w).attributes("aria-checked")).toBe("true")
 		expect(line(w)).toBe("Nulo signs its authorizations without asking.")
 		expect(mocks.openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't save this setting" })
+	})
+})
+
+describe("Settings › Connected app › its row deleted elsewhere", () => {
+	test("a delete naming another row keeps the page; one naming this row leaves it", async () => {
+		await mountPage(session([accounts(false)]))
+		for (const fn of mocks.deleted) fn({ id: "s2" })
+		expect(mocks.routerGo).not.toHaveBeenCalled()
+		for (const fn of mocks.deleted) fn({ id: "s1" })
+		expect(mocks.routerGo).toHaveBeenCalledWith(-1)
 	})
 })

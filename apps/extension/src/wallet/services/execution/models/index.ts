@@ -28,6 +28,8 @@ export type {
 	GasBalances,
 	PriorityLevel,
 	SponsorFunding,
+	AppPayerFunding,
+	FeeJuiceShortfall,
 	TransferFeeEstimate,
 	DiscoveredAuthwit,
 	OperationAuthwitPreview,

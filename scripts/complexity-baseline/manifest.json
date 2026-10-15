@@ -1,11 +1,11 @@
 {
 	"biomeVersion": "2.5.13",
-	"generated": "2026-09-24",
+	"generated": "2026-10-13",
 	"rules": {
 		"noExcessiveCognitiveComplexity": {
 			"apps/extension/src/popup/components/modules/send/FeeSettingsCard.test.ts": 1,
 			"apps/extension/src/utils/amount.ts": 1,
-			"apps/extension/src/utils/log-payload-ban.test.ts": 2,
+			"apps/extension/src/utils/log-payload-ban.test.ts": 1,
 			"apps/extension/src/wallet/logger/utils.ts": 1,
 			"apps/extension/src/wallet/services/backup/footprint-coverage.test.ts": 1,
 			"apps/extension/src/wallet/services/backup/row-map-migration.ts": 3,
@@ -16,7 +16,7 @@
 			"apps/extension/tests/e2e/fixtures/journal.ts": 3,
 			"packages/wallet-core/src/base/topology.ts": 1,
 			"packages/wallet-core/src/utils/serialization.ts": 1,
-			"scripts/ci-cd/test-soak/cli.ts": 3,
+			"scripts/ci-cd/test-soak/cli.ts": 2,
 			"scripts/ci-cd/test-soak/lib.ts": 1
 		},
 		"noExcessiveLinesPerFunction": {
@@ -38,13 +38,6 @@
 			"anchor": "export const formatBaseUnits = (units: bigint | string | null | undefined, decimals: number, opts: FormatBaseUnitsOpts = {}): string => {",
 			"accepted": 22,
 			"sentence": "sign, truncation, padding, zero trimming and separators ARE the integer-formatting algorithm"
-		},
-		{
-			"file": "apps/extension/src/utils/log-payload-ban.test.ts",
-			"rule": "noExcessiveCognitiveComplexity",
-			"anchor": "function findLoggedSecrets(files: Array<{ path: string; content: string }>): string[] {",
-			"accepted": 17,
-			"sentence": "one scan preserves per-file lexical state, source offsets, call windows and deduplication"
 		},
 		{
 			"file": "apps/extension/src/utils/log-payload-ban.test.ts",
@@ -150,13 +143,6 @@
 			"anchor": "return JSON.stringify(obj, (_key, value) => {",
 			"accepted": 23,
 			"sentence": "upstream-compatible replacer dispatch defines the JSON wire form of each supported runtime type"
-		},
-		{
-			"file": "scripts/ci-cd/test-soak/cli.ts",
-			"rule": "noExcessiveCognitiveComplexity",
-			"anchor": "async function soak(argv: string[]): Promise<number> {",
-			"accepted": 16,
-			"sentence": "one coordinator binds two launch modes to provenance capture and summary emission"
 		},
 		{
 			"file": "scripts/ci-cd/test-soak/cli.ts",

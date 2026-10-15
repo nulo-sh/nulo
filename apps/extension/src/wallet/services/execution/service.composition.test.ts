@@ -21,7 +21,11 @@
  * marker in `dist/`; it must be absent).
  */
 import { describe, expect, test, vi } from "vitest"
+import { BlockNumber } from "@aztec-labs/foundation/branded-types"
+import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { BlockHash } from "@aztec-labs/stdlib/block"
 import { Gas } from "@aztec-labs/stdlib/gas"
+import { BlockHeader, GlobalVariables } from "@aztec-labs/stdlib/tx"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { JobCancelledError, JournaledRejection, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { EventHandler } from "@nulo/wallet-core/utils"
@@ -42,7 +46,7 @@ import { TransactionService, TransferType } from "@/wallet/services/transaction/
 import { OriginType } from "@/wallet/services/transaction/spec"
 import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
-import { TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
+import { InvalidWalletArgumentsError, TermsAcceptanceRequiredError, TooManyPendingError } from "@nulo/extension-messaging/errors"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import { SEND_CHECK_TICK_MS, SendCheck } from "@/wallet/services/operation-journal/send-check"
 import { TaskService } from "@/wallet/services/task/service"
@@ -58,9 +62,10 @@ import type { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { fingerprintOperation } from "./operation-fingerprint"
 import type { OperationPlanner } from "./operation-planner"
 import type { PreviewSnapshots } from "./preview-snapshots"
-import { fingerprintBaseFee } from "./estimate-reuse-shared"
+import type { SendSequencer } from "./send-sequencer"
 import { fingerprintFeeSettings, type TransferEstimateReuse, type TransferEstimateReuseEntry } from "./transfer-estimate-reuse"
 import { ExecutionService } from "./service"
+import { assertSelectorBinding, CALL_BINDING } from "./contract-resolver"
 import type { FeeSettings } from "./models"
 
 // ── Controllable proof gate: holds proveTxTask until release() ──────────────
@@ -88,14 +93,28 @@ const MIN_FEES = { feePerDaGas: 1n, feePerL2Gas: 1n }
 const ACCOUNT = AztecAddress.fromNumberUnsafe(0x1234)
 const NETWORK = {
 	id: "net1",
+	// The node's pair below: (5 ^ 4) >>> 0 === 1.
 	chainId: 1,
+	l1ChainId: 5,
 	primaryEndpointId: "ep1",
 	endpoints: [{ id: "ep1", rpcUrl: "http://fake" }],
 }
 
+const SPONSOR = { id: "fpc-1", type: 1, isProtocol: true, chainId: NETWORK.chainId, address: "0xsponsor" }
+
 function svc(name: string, methods: Record<string, unknown>) {
 	return { name, dependencies: [], async start() {}, ...methods } as never
 }
+
+/** A proven tx as `proveAndSend` reads it: its hash, and the expiry part of its kernel outputs. */
+function provenTx(hash: string) {
+	const anchorBlockHeader = BlockHeader.empty({ globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(5) }) })
+	return {
+		getTxHash: () => ({ toString: (): string => hash }),
+		data: { constants: { anchorBlockHeader }, expirationTimestamp: 1_750_003_600n, getNonEmptyNullifiers: () => [new Fr(2n)] },
+	}
+}
+const RECORDED_EXPIRY = { timestamp: 1_750_003_600, nullifier: new Fr(2n).toString() }
 
 async function makeHarness() {
 	// Per-harness state — no module-level mutable singletons, so the rollout can
@@ -104,8 +123,12 @@ async function makeHarness() {
 	const sendTx = vi.fn(async () => {})
 	// proveTx returns a stub TxProvingResult whose `toTx` is spied: the post-prove
 	// cancel checkpoint must drop the proof BEFORE `toTx`, so `toTx` proves submission.
-	const toTx = vi.fn(async () => ({ getTxHash: () => ({ toString: (): string => "0xhash" }) }))
-	const fakeNode = { getCurrentMinFees: async () => MIN_FEES, sendTx } as unknown as never
+	const toTx = vi.fn(async () => provenTx("0xhash"))
+	const fakeNode = {
+		getCurrentMinFees: async () => MIN_FEES,
+		getNodeInfo: async () => ({ l1ChainId: 5, rollupVersion: 4 }),
+		sendTx,
+	} as unknown as never
 	const proveTx = vi.fn(async () => ({ toTx }))
 	const fakeIPXE = { proveTx } as unknown as ReturnType<PxeServiceClient["getPXE"]>
 	const fakePxeClient = { getPXE: () => fakeIPXE, onProvePhase: { add: () => {} } } as unknown as PxeServiceClient
@@ -214,7 +237,8 @@ async function makeHarness() {
 		svc(FpcService.name, {
 			onFpcUpdated: { add: () => {} },
 			onFpcDeleted: { add: () => {} },
-			getFpc: async () => ({ type: 1, isProtocol: true, chainId: NETWORK.chainId, address: "0xsponsor" }),
+			getFpc: async () => ({ ...SPONSOR }),
+			getFpcImpl: async () => ({ infoData: { ...SPONSOR } }),
 		}),
 	)
 	collection.add(svc(ContactService.name, {}))
@@ -233,7 +257,7 @@ async function makeHarness() {
 	await collection.start()
 
 	// Seed the reuse cache so executeTransfer takes the fast path (skips build).
-	const feeSettings = { paymentMethod: { kind: "fpc" } } as unknown as FeeSettings
+	const feeSettings: FeeSettings = { paymentMethod: { kind: "fpc", fpcId: SPONSOR.id } }
 	const req = {
 		networkId: NETWORK.id,
 		accountAddress: ACCOUNT.toString(),
@@ -253,10 +277,12 @@ async function makeHarness() {
 		amount: req.amount,
 		feeSettingsHash: fingerprintFeeSettings(feeSettings),
 		profileId: "p1",
-		baseFeeFingerprint: fingerprintBaseFee({
+		chainIdentity: { l1ChainId: 5, rollupVersion: 4 },
+		fpcIdentity: SPONSOR,
+		builtCap: {
 			feePerDaGas: MIN_FEES.feePerDaGas * BigInt(DEFAULT_FEE_MULTIPLIER),
 			feePerL2Gas: MIN_FEES.feePerL2Gas * BigInt(DEFAULT_FEE_MULTIPLIER),
-		}),
+		},
 		primaryEndpointId: "ep1",
 		primaryEndpointUrl: "http://fake",
 		pendingHashes: [],
@@ -286,6 +312,7 @@ async function makeHarness() {
 		ctrl,
 		req,
 		estimateId: "estimate-1",
+		entry,
 		journal,
 		stages,
 		sendTx,
@@ -715,7 +742,7 @@ describe("ExecutionService composition — work runs only while the session that
 		h.toTx.mockImplementationOnce(async () => {
 			void h.service.cancelJob(h.getJournalId())
 			await waitFor(cancelWrite.isParked)
-			return { getTxHash: () => ({ toString: () => "0xhash" }) }
+			return provenTx("0xhash")
 		})
 		const run = transfer(h)
 		await waitFor(() => h.ctrl.entered)
@@ -1004,6 +1031,29 @@ describe("ExecutionService composition — fee-strategy map through real init (p
 	})
 })
 
+describe("ExecutionService composition — a confirm reads the sponsor row as the build decorated it", () => {
+	test("getFpc's cold protocol cache (another profile's purge emptied it) does not miss the reuse", async () => {
+		const h = await makeHarness()
+		const internals = h.service as unknown as {
+			fpcService: { getFpc: () => Promise<unknown> }
+			estimateReuse: TransferEstimateReuse
+			operationEstimateReuse: OperationEstimateReuse
+		}
+		internals.fpcService.getFpc = async () => ({ ...SPONSOR, isProtocol: false })
+		const consume = vi.spyOn(internals.estimateReuse, "tryConsume")
+
+		const p = transfer(h)
+		await waitFor(() => consume.mock.results.length > 0)
+		expect(await consume.mock.results[0]?.value).toBeDefined()
+		await waitFor(() => h.ctrl.entered)
+		h.ctrl.release()
+		expect(await p).toBe("0xhash")
+		const operationLookup = (internals.operationEstimateReuse as unknown as { deps: { getFpcInfo: (id: string) => Promise<unknown> } })
+			.deps
+		expect(await operationLookup.getFpcInfo(SPONSOR.id)).toEqual(SPONSOR)
+	})
+})
+
 describe("ExecutionService composition — nothing is broadcast without a current Terms acceptance", () => {
 	const transfer = (h: Harness) =>
 		h.service
@@ -1046,17 +1096,94 @@ describe("ExecutionService composition — nothing is broadcast without a curren
 	})
 })
 
+describe("ExecutionService composition — a refused operation logs at the level its reach allows", () => {
+	const bindingRefusal = () => {
+		try {
+			assertSelectorBinding({ name: "transfer" } as never, { name: "balance_of_public" }, CALL_BINDING)
+		} catch (error) {
+			return error
+		}
+		throw new Error("expected a refusal")
+	}
+
+	test.each([
+		["a selector-binding refusal", bindingRefusal, "refused: outside its grant"],
+		["a Terms refusal", () => new TermsAcceptanceRequiredError(), "refused: terms not accepted"],
+		["an argument refusal", () => InvalidWalletArgumentsError.forMethod("executeUtility"), "refused: invalid arguments"],
+		["a capacity refusal", () => new TooManyPendingError(), "refused: too many pending"],
+		["an unclassified failure", () => new Error("boom"), undefined],
+	])("%s", async (_label, makeError, debugReason) => {
+		const h = await makeHarness()
+		const service = h.service as unknown as {
+			dispatchOperation: () => Promise<unknown>
+			logDebug: (...args: unknown[]) => void
+			logError: (...args: unknown[]) => void
+		}
+		vi.spyOn(service, "dispatchOperation").mockRejectedValueOnce(makeError())
+		const logDebug = vi.spyOn(service, "logDebug")
+		const logError = vi.spyOn(service, "logError")
+
+		const [result] = await h.service.executeOperations([{ kind: "register_contract" } as never], { type: OriginType.UI } as never)
+
+		expect(result.status).toBe("failed")
+		const outcomeLines = (spy: typeof logDebug) =>
+			spy.mock.calls.map(([line]) => String(line)).filter((line) => / register_contract (refused|failed)/.test(line))
+		if (debugReason === undefined) {
+			expect(outcomeLines(logDebug)).toEqual([])
+			expect(logError).toHaveBeenCalledWith(expect.stringMatching(/executeOperations: register_contract failed:$/), "boom")
+		} else {
+			expect(outcomeLines(logDebug)).toEqual([
+				expect.stringMatching(new RegExp(`executeOperations: register_contract ${debugReason}$`)),
+			])
+			expect(outcomeLines(logError)).toEqual([])
+		}
+	})
+})
+
+describe("ExecutionService composition — a refused dApp call is titled by what it really runs", () => {
+	test("a call-binding refusal after the claim persists the resolved function as the record's title", async () => {
+		const h = await makeHarness()
+		const fence = await h.captureExecutionFence()
+		const queued = await h.journal.createOperation({
+			kind: "dapp_execute",
+			origin: "dapp",
+			profileId: "p1",
+			sessionId: "sess-1",
+			title: "balance_of_public",
+			initialStage: { stage: "queued" },
+		})
+		const planner = (h.service as unknown as { planner: OperationPlanner }).planner
+		vi.spyOn(planner, "processAztecJsPayload").mockImplementationOnce(async () => {
+			assertSelectorBinding({ name: "transfer_public_to_public" } as never, { name: "balance_of_public" }, CALL_BINDING)
+			throw new Error("expected a refusal")
+		})
+		const send = { ...(dappSend() as object), opts: { from: ACCOUNT } } as never
+
+		const [result] = await h.service.executeOperations([send], DAPP_ORIGIN, undefined, { queuedJournalId: queued.id }, undefined, fence)
+
+		const record = await h.journal.getOperation(queued.id)
+		expect({ status: result.status, stage: record?.progress.stage, kind: record?.error?.kind, title: record?.title }).toEqual({
+			status: "failed",
+			stage: "failed",
+			kind: "scope_refused",
+			title: "transfer_public_to_public",
+		})
+	}, 15_000)
+})
+
 describe("ExecutionService composition — a send whose answer was lost is checked on the network", () => {
 	test("sendTx reached the node, its answer did not: the row fails from submitting, then the check reads it sent", async () => {
 		const h = await makeHarness()
 		const hash = `0x${"1e".repeat(32)}`
-		h.toTx.mockResolvedValueOnce({ getTxHash: () => ({ toString: () => hash }) })
+		h.toTx.mockResolvedValueOnce(provenTx(hash))
 		h.sendTx.mockRejectedValueOnce(new TypeError("fetch failed"))
+		const blockHash = `0x${"0b".repeat(32)}`
 		const getTxReceipt = vi.fn(async (_hash: { toString(): string }) => ({
 			txHash: hash,
 			status: "proven",
 			executionResult: "success",
 			transactionFee: 1234n,
+			blockHash: BlockHash.fromString(blockHash),
 			blockNumber: 42,
 		}))
 		const network = { getSingleAttemptNodeForUrl: vi.fn(async (_url: string) => ({ getTxReceipt }) as never) }
@@ -1090,7 +1217,13 @@ describe("ExecutionService composition — a send whose answer was lost is check
 
 		expect(h.sendTx).toHaveBeenCalledTimes(1)
 		const failed = await h.journal.getOperation(h.getJournalId())
-		expect(failed?.progress).toEqual({ stage: "failed", from: "submitting", txHash: hash, submittedEndpointUrl: "http://fake" })
+		expect(failed?.progress).toEqual({
+			stage: "failed",
+			from: "submitting",
+			txHash: hash,
+			submittedEndpointUrl: "http://fake",
+			expiry: RECORDED_EXPIRY,
+		})
 
 		clock.advance(SEND_CHECK_TICK_MS)
 		await waitFor(() => balances.refreshAccountBalances.mock.calls.length > 0)
@@ -1098,7 +1231,7 @@ describe("ExecutionService composition — a send whose answer was lost is check
 		expect(network.getSingleAttemptNodeForUrl).toHaveBeenCalledWith("http://fake")
 		expect(getTxReceipt.mock.calls[0]?.[0].toString()).toBe(hash)
 		const answered = await h.journal.getOperation(h.getJournalId())
-		expect(answered?.progress).toEqual({ ...failed?.progress, check: "sent" })
+		expect(answered?.progress).toEqual({ ...failed?.progress, check: "sent", inclusion: { block: 42, hash: blockHash } })
 		const card = answered && buildJournalTerminalCardProps(answered, { tokenById: () => undefined })
 		expect(card).toMatchObject({ state: "sent", subtitle: "Sent", color: "green" })
 		expect(balances.refreshAccountBalances).toHaveBeenCalledWith(h.req.accountAddress)
@@ -1109,7 +1242,7 @@ describe("ExecutionService composition — a send whose answer was lost is check
 	test("a sendTx the node refused reads 'Not confirmed yet' too: a retried POST can come back refused after an accepted attempt", async () => {
 		const h = await makeHarness()
 		const hash = `0x${"2f".repeat(32)}`
-		h.toTx.mockResolvedValueOnce({ getTxHash: () => ({ toString: () => hash }) })
+		h.toTx.mockResolvedValueOnce(provenTx(hash))
 		// As the SDK client throws a node's per-call JSON-RPC error: an HTTP 200, so never retried itself.
 		const refusal = "Invalid tx: Insufficient fee payer balance"
 		h.sendTx.mockRejectedValueOnce(new Error(refusal, { cause: { code: -32702, message: refusal } }))
@@ -1131,7 +1264,120 @@ describe("ExecutionService composition — a send whose answer was lost is check
 		expect(await p).toStrictEqual(recorded(h, expect.any(Error)))
 
 		const failed = await h.journal.getOperation(h.getJournalId())
-		expect(failed?.progress).toEqual({ stage: "failed", from: "submitting", txHash: hash, submittedEndpointUrl: "http://fake" })
+		expect(failed?.progress).toEqual({
+			stage: "failed",
+			from: "submitting",
+			txHash: hash,
+			submittedEndpointUrl: "http://fake",
+			expiry: RECORDED_EXPIRY,
+		})
 		expect(failed && sendOutcome(failed)).toBe("checking")
+	})
+})
+
+describe("ExecutionService composition — a send queued against a fee cap asks again above it", () => {
+	// The seeded request's fee, gas limits × cap with teardown counted once inside them: 100×2 + 200×3 = 800.
+	// A cap one below it asks.
+	const FEE = "800"
+	const CAP = "799"
+	const queuedTransfer = (h: Harness) =>
+		h.service
+			.executeTransfer(
+				h.req.networkId,
+				h.req.accountAddress,
+				h.req.tokenId,
+				h.req.transferType,
+				h.req.recipientAddress,
+				h.req.amount,
+				h.req.feeSettings,
+				h.estimateId,
+				CAP,
+			)
+			.catch((e) => e)
+	const asking = async (h: Harness) => {
+		await waitFor(() => h.stages.includes("queued"))
+		return h.getJournalId()
+	}
+	/** The proof gate is opened at the end, so a proof that was going to run would be counted. */
+	const settled = async (h: Harness, run: Promise<unknown>) => {
+		h.ctrl.release()
+		return run
+	}
+
+	test("the control: the seeded request is consumed, asked about, stashed again as it was, accepted, then proved and sent once", async () => {
+		const h = await makeHarness()
+		const stash = vi.spyOn((h.service as unknown as { estimateReuse: TransferEstimateReuse }).estimateReuse, "stash")
+		const run = queuedTransfer(h)
+		const id = await asking(h)
+		expect((await h.journal.getOperation(id))?.progress).toEqual({
+			stage: "queued",
+			reask: { fee: FEE, cap: CAP, payer: { type: "fpc", fpcId: SPONSOR.id, isProtocol: true } },
+		})
+		expect(stash.mock.calls[0][1]).toBe(h.entry)
+		expect(h.proveTx).not.toHaveBeenCalled()
+
+		expect(await h.service.acceptQueuedFee(id, FEE)).toBe(true)
+		await waitFor(() => h.ctrl.entered)
+		expect(await settled(h, run)).toBe("0xhash")
+		expect(h.proveTx).toHaveBeenCalledTimes(1)
+		expect((h.proveTx.mock.calls[0] as unknown[])[0]).toBe(h.entry.txRequest)
+		expect(h.sendTx).toHaveBeenCalledTimes(1)
+		expect(h.stages).toEqual(["simulating", "queued", "pending", "simulating", "proving", "submitting", "succeeded"])
+		expect(await h.service.acceptQueuedFee(id, FEE)).toBe(false)
+	})
+
+	test("a second accept resumes nothing: one proof, one broadcast", async () => {
+		const h = await makeHarness()
+		const run = queuedTransfer(h)
+		const id = await asking(h)
+		const answers = await Promise.all([h.service.acceptQueuedFee(id, FEE), h.service.acceptQueuedFee(id, FEE)])
+		expect(answers.filter(Boolean)).toHaveLength(1)
+		await waitFor(() => h.ctrl.entered)
+		expect(await settled(h, run)).toBe("0xhash")
+		expect(h.proveTx).toHaveBeenCalledTimes(1)
+		expect(h.sendTx).toHaveBeenCalledTimes(1)
+	})
+
+	test.each([
+		{ label: "× then accept", cancelFirst: true },
+		{ label: "accept then ×", cancelFirst: false },
+	])("$label in the same tick ends cancelled, never proved", async ({ cancelFirst }) => {
+		const h = await makeHarness()
+		const run = queuedTransfer(h)
+		const id = await asking(h)
+		const cancel = () => h.service.cancelJob(id)
+		const accept = () => h.service.acceptQueuedFee(id, FEE)
+		await Promise.all(cancelFirst ? [cancel(), accept()] : [accept(), cancel()])
+		expect(await settled(h, run)).toBeInstanceOf(JobCancelledError)
+		expect(await stageOf(h, id)).toBe("cancelled")
+		expect(h.proveTx).not.toHaveBeenCalled()
+		expect(await accept()).toBe(false)
+	})
+
+	test("an accept racing a session end ends cancelled, never proved", async () => {
+		const h = await makeHarness()
+		const run = queuedTransfer(h)
+		const id = await asking(h)
+		const accept = h.service.acceptQueuedFee(id, FEE)
+		h.session.setActive(undefined)
+		h.session.fireChanged()
+		await accept
+		expect(await settled(h, run)).toBeInstanceOf(JobCancelledError)
+		expect(await stageOf(h, id)).toBe("cancelled")
+		expect(h.proveTx).not.toHaveBeenCalled()
+	})
+
+	test("an accept once the send's deadline has passed resumes nothing: the question ended cancelled", async () => {
+		const h = await makeHarness()
+		const sequencer = (h.service as unknown as { sendSequencer: SendSequencer }).sendSequencer
+		const enter = sequencer.enter.bind(sequencer)
+		vi.spyOn(sequencer, "enter").mockImplementation((scope, keys) => enter(scope, keys, Date.now() + 200))
+		const run = queuedTransfer(h)
+		const id = await asking(h)
+		await waitFor(() => h.stages.includes("cancelled"))
+		expect(await h.service.acceptQueuedFee(id, FEE)).toBe(false)
+		expect(await settled(h, run)).toBeInstanceOf(JobCancelledError)
+		expect(await stageOf(h, id)).toBe("cancelled")
+		expect(h.proveTx).not.toHaveBeenCalled()
 	})
 })

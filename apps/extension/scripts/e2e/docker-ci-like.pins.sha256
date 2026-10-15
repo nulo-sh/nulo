@@ -1,0 +1,9 @@
+# SHA-256 of each archive docker-ci-like.sh downloads, keyed <tool>/<version>/<asset>:
+#   bun/<version>/bun-linux-x64.zip, from the oven-sh/bun release bun-v<version>
+#   node/<version>/node-<version>-linux-x64.tar.xz, from https://nodejs.org/dist/<version>/
+# Each hash equals the publisher's SHASUMS256.txt entry and the artifact's own sha256sum; the Bun
+# one also equals the release asset's GitHub digest. Checked 2026-10-09.
+# The Bun version is package.json#packageManager's: a Bun bump re-pins it and the script's
+# BUN_VERSION in the same commit (scripts/ci-cd/docker-ci-like-pins.test.ts fails until it does).
+36368faef7527875d5ffa52e53cd48021741f2a83eb6208a8dd64068d422a913  bun/1.4.2/bun-linux-x64.zip
+d804845d34eddc21dc1092b519d643ef40b1f58ec5dec5c22b1f4bd8fabde6c9  node/v24.16.0/node-v24.16.0-linux-x64.tar.xz

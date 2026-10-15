@@ -6,10 +6,14 @@ import {
 	defaultSponsor,
 	FEE_JUICE_BRIDGE_URL,
 	type FeeMethodOption,
+	feeAmountDisplay,
 	feeDisplay,
+	feeInWords,
 	feeLine,
+	feePayerOf,
 	feeScopeKey,
 	formatGasBalance,
+	shortfallSentence,
 	isLiveFeeScope,
 	liveFeeScope,
 	menuOrder,
@@ -314,6 +318,57 @@ describe("fee-helpers — sponsors a verdict found short", () => {
 	})
 })
 
+describe("fee-helpers/buildFeeMethods — rows whose read has not landed", () => {
+	const PRIVATE = { id: "p1", type: FpcType.PrivateFpc, name: "Private Fee Juice", isProtocol: true }
+	const NULO_SPONSOR = { id: "s1", type: FpcType.DefaultSponsoredFpc, name: "Sponsored", isProtocol: true }
+	const HAND_ADDED = { id: "s2", type: FpcType.DefaultSponsoredFpc, name: "Dev sponsor", isProtocol: false }
+	const NEITHER = { balancesPending: true, fpcsPending: true }
+	const BALANCES = { balancesPending: true, fpcsPending: false }
+
+	test("with neither read in, every row loads with its title alone, and Nulo's sponsor holds its place", () => {
+		expect(buildFeeMethods([], undefined, NEITHER)).toEqual([
+			{ type: "fj", title: "Public Fee Juice", subtitle: "public", checking: true },
+			{ type: "private_fpc", title: "Private Fee Juice", subtitle: "private", fpc: null, checking: true },
+			{ type: "fpc", title: "Sponsored", subtitle: "sponsored", fpc: null, checking: true },
+		])
+	})
+
+	test("a list handed in while the FPC read is pending loads too, and needs no placeholder once it names Nulo's sponsor", () => {
+		const m = buildFeeMethods([PRIVATE, HAND_ADDED, NULO_SPONSOR], undefined, NEITHER)
+		expect(m.every((row) => row.checking && row.spend === undefined && row.disabled === undefined)).toBe(true)
+		expect(m.map((row) => row.fpc?.id ?? null)).toEqual([null, "p1", "s2", "s1"])
+	})
+
+	test("with the FPC list in, sponsors are answered and only the balance rows load", () => {
+		const m = buildFeeMethods([PRIVATE, NULO_SPONSOR, HAND_ADDED], undefined, BALANCES)
+		expect(m.map(({ type, checking, spend }) => ({ type, checking: checking === true, spend }))).toEqual([
+			{ type: "fj", checking: true, spend: undefined },
+			{ type: "private_fpc", checking: true, spend: undefined },
+			{ type: "fpc", checking: false, spend: "free" },
+			{ type: "fpc", checking: false, spend: "—" },
+		])
+	})
+
+	test("a list without the PrivateFPC has answered its row: not available, not loading", () => {
+		const priv = buildFeeMethods([NULO_SPONSOR], undefined, BALANCES).find((m) => m.type === "private_fpc")
+		expect(priv).toMatchObject({ disabled: true, disabledReason: "not available" })
+		expect(priv?.checking).toBeUndefined()
+	})
+
+	test("a loading sponsor is never the default; an answered one is", () => {
+		expect(defaultSponsor(buildFeeMethods([NULO_SPONSOR], undefined, NEITHER))).toBeUndefined()
+		expect(defaultSponsor(buildFeeMethods([NULO_SPONSOR], undefined, BALANCES))?.fpc?.id).toBe("s1")
+	})
+})
+
+describe("fee-helpers/shortfallSentence", () => {
+	test("the cost rounds up and the balance down, so a shortfall never reads as enough", () => {
+		expect(shortfallSentence({ maxFee: "2100000000000001", balance: "2099999999999999" })).toBe(
+			"This send can cost up to 0.002101 FJ. You have 0.002099 FJ.",
+		)
+	})
+})
+
 describe("fee-helpers/FEE_JUICE_BRIDGE_URL", () => {
 	test("defaults to unleashed's testnet app", () => {
 		expect(FEE_JUICE_BRIDGE_URL).toBe("https://testnet.app.unleashed.systems")
@@ -423,5 +478,28 @@ describe("fee-helpers/fee scope", () => {
 		const live = { profile: { id: "p1" }, network: { id: "n1", chainId: 7 }, account: { address: "0xabc" } }
 		const scope = { profileId: "p1", networkId: "n1", chainId: "7" as unknown as number, accountAddress: "0xabc" }
 		expect(isLiveFeeScope(live, scope)).toBe(false)
+	})
+})
+
+describe("fee-helpers/feeInWords", () => {
+	test("the amount, then the dollars when priced", () => {
+		expect(feeInWords({ amount: "4.47228", usd: "$0.269" })).toBe("4.47228 FJ ($0.269)")
+		expect(feeInWords({ amount: "4.47228", usd: null })).toBe("4.47228 FJ")
+		expect(feeInWords(feeAmountDisplay("4472280000000000000", undefined))).toBe("4.47228 FJ")
+	})
+})
+
+describe("fee-helpers/feePayerOf", () => {
+	test("Fee Juice, public or private, is the person's; a sponsor pays only when it is Nulo's own", () => {
+		expect(feePayerOf({ type: "fj" })).toBe("self")
+		expect(feePayerOf({ type: "private_fpc", isProtocol: true })).toBe("self")
+		expect(feePayerOf({ type: "fpc", isProtocol: true })).toBe("sponsor")
+		expect(feePayerOf({ type: "fpc", isProtocol: false })).toBe("unvouched")
+		expect(feePayerOf({ type: "fpc" })).toBe("unvouched")
+	})
+
+	test("nobody pays while no method is chosen", () => {
+		expect(feePayerOf(null)).toBeNull()
+		expect(feePayerOf(undefined)).toBeNull()
 	})
 })

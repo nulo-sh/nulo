@@ -76,7 +76,8 @@ export class BalanceRepository {
 	public async purgeMalformed(
 		matchesRaw: (raw: Record<string, unknown>, storageId: string) => boolean,
 		onPurged?: (storageId: string) => void,
+		onMatch?: (storageId: string) => void,
 	): Promise<number> {
-		return purgeMalformedRows(this.storage, matchesRaw, onPurged)
+		return purgeMalformedRows(this.storage, matchesRaw, onPurged, onMatch)
 	}
 }

@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: The execute window names a scope difference and, on approval, moves the wallet to the transaction's network and account (`apps/extension/src/popup/windows/execute/scope-mismatch.ts`, `apps/extension/src/popup/windows/execute/scope-follow.ts`); the in-flight send guard covers only the wallet's own sends (`apps/extension/src/utils/in-flight-send.ts`); authwit signing runs under the authorizing fence (`apps/extension/src/wallet/services/execution/service.ts`).
-- **Open items**: Home's `activity-feed-root` never renders for an empty account, and the e2e gotchas the lessons rewrite retired still need routing into the `e2e-testing` skill, both tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the e2e gotchas the lessons rewrite retired still need routing into the `e2e-testing` skill, tracked in #185. Home's `activity-feed-root` never rendering for an empty account was closed by a later plan before `follow-ups.md` was retired.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

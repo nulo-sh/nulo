@@ -1,8 +1,9 @@
 # Bun configuration. Docs: https://bun.com/docs/runtime/bunfig
 
 [install]
-# Isolated linker: per-workspace symlinked node_modules + a .bun store. Kills phantom
-# dependencies (a workspace resolves ONLY what it declares). The old hoisting assumptions
+# Isolated linker: per-workspace symlinked node_modules + a .bun store. A workspace's source
+# resolves what it declares plus the root devDependencies; only store packages also reach the
+# store fallback (CLAUDE.md, the linker rule). The old hoisting assumptions
 # (resolvePackageFile walkers) were made layout-agnostic first via @nulo/resolve-asset; the
 # executable guarantee is apps/extension/scripts/layout-identity.test.ts.
 # `globalStore` is DELIBERATELY unset (defaults off): the committed layout uses per-project
@@ -11,6 +12,12 @@
 # user-level ~/.bunfig.toml. Evidence + posture memo:
 # implementations-plan/archive/isolated-linker-store/plan.md#global-store.
 linker = "isolated"
+
+# With no node_modules (a job that installs nothing), Bun's default fetches a bare import from npm
+# at run time, past bun.lock's hashes and the age gate below. Bun reads this file from its working
+# directory only, so a job that runs Bun elsewhere, or another revision's code, passes --no-install;
+# scripts/ci-cd/release-integrity.test.ts pins both.
+auto = "disable"
 
 # Supply-chain defense: block packages published in the last 7 days.
 # Recent npm token-compromise attacks (axios, chalk/debug)

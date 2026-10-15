@@ -1,16 +1,39 @@
 /**
- * `sendTx` variants: default, `NoFrom`, `feePayer`, multicall, chunked,
- * reject, sponsored.
+ * `sendTx` variants: default (its transfer function picked by `pg-select-transferFn`), `NoFrom`
+ * (a public call, which the wallet refuses), `NoFrom` sponsored, `feePayer`, app-sponsored,
+ * multicall, chunked, delegated.
  *
  * Each variant constructs an `ExecutionPayload` and calls
- * `wallet.sendTx()`. `sendTx` ALWAYS opens `/windows/execute`
+ * `wallet.sendTx()` with the app's own fee settings when `pg-input-maxFeesPerGas` or
+ * `pg-input-maxPriorityFeesPerGas` is set. `sendTx` ALWAYS opens `/windows/execute`
  * (`Transactions=5 >= confirmationLevel=5`); tests drive the popup via
  * `approveExecute()` / `rejectExecute()`.
  */
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses"
+import { getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts"
+import { SponsoredFeePaymentMethod } from "@aztec-labs/aztec.js/fee"
+import { Fr } from "@aztec-labs/aztec.js/fields"
+import { mergeExecutionPayloads } from "@aztec-labs/aztec.js/tx"
+import { GasFees } from "@aztec-labs/stdlib/gas"
 import { getWallet } from "../lib/wallet"
 import { logCall } from "../lib/log"
 import { getInput, getState, setState } from "../state"
+
+const TRANSFER_FNS = [
+	"transfer_public_to_public",
+	"transfer_private_to_private",
+	"transfer_private_to_public",
+	"transfer_public_to_private",
+] as const
+type TransferFn = (typeof TRANSFER_FNS)[number]
+
+function selectedTransferFn(): TransferFn {
+	const value = getInput("transferFn")
+	if (value === "") return TRANSFER_FNS[0]
+	const fn = TRANSFER_FNS.find((f) => f === value)
+	if (!fn) throw new Error(`transferFn must be one of ${TRANSFER_FNS.join(", ")}`)
+	return fn
+}
 
 export function renderTransactions(): string {
 	const s = getState()
@@ -22,11 +45,19 @@ export function renderTransactions(): string {
 				<label>Recipient: <input data-testid="pg-input-recipient" name="recipient" type="text" placeholder="0x..." /></label>
 				<label>Amount: <input data-testid="pg-input-amount" name="amount" type="number" placeholder="100" /></label>
 				<label>FeePayer (FPC addr): <input data-testid="pg-input-feePayer" name="feePayer" type="text" placeholder="0x... (defaults to recipient)" /></label>
+				<label>App sponsor salt: <input data-testid="pg-input-sponsorSalt" name="sponsorSalt" type="number" placeholder="0" /></label>
+				<label>App max fees per gas: <input data-testid="pg-input-maxFeesPerGas" name="maxFeesPerGas" type="text" placeholder="da,l2" /></label>
+				<label>App priority fees per gas: <input data-testid="pg-input-maxPriorityFeesPerGas" name="maxPriorityFeesPerGas" type="text" placeholder="da,l2" /></label>
+				<label>Default transfer: <select data-testid="pg-select-transferFn" name="transferFn">
+					${TRANSFER_FNS.map((fn) => `<option value="${fn}">${fn}</option>`).join("")}
+				</select></label>
 			</div>
 			<div class="pg-row">
 				<button data-testid="pg-btn-sendTx-default" type="button" ${dis}>sendTx default</button>
 				<button data-testid="pg-btn-sendTx-noFrom" type="button" ${dis}>sendTx NoFrom</button>
+				<button data-testid="pg-btn-sendTx-noFrom-sponsored" type="button" ${dis}>sendTx NoFrom (sponsored)</button>
 				<button data-testid="pg-btn-sendTx-feePayer" type="button" ${dis}>sendTx feePayer</button>
+				<button data-testid="pg-btn-sendTx-appSponsored" type="button" ${dis}>sendTx app-sponsored</button>
 				<button data-testid="pg-btn-sendTx-multicall" type="button" ${dis}>sendTx multicall</button>
 				<button data-testid="pg-btn-sendTx-multicall-chunked" type="button" ${dis}>sendTx multicall &gt;5</button>
 			</div>
@@ -40,7 +71,24 @@ export function renderTransactions(): string {
 	`
 }
 
-async function buildTransferExec(callCount = 1) {
+/** A "da,l2" fee input in base units, as `GasFees`; absent when the input is empty. */
+function gasFeesInput(name: "maxFeesPerGas" | "maxPriorityFeesPerGas"): GasFees | undefined {
+	const value = getInput(name).trim()
+	if (value === "") return undefined
+	const parts = value.split(",").map((part) => part.trim())
+	if (parts.length !== 2 || parts.some((part) => !/^\d+$/.test(part))) throw new Error(`${name} must be "da,l2" in base units`)
+	return new GasFees(BigInt(parts[0]), BigInt(parts[1]))
+}
+
+/** The options every `sendTx` button passes: the app's own fee settings only when one is set. */
+function sendOpts<F>(from: F) {
+	const maxFeesPerGas = gasFeesInput("maxFeesPerGas")
+	const maxPriorityFeesPerGas = gasFeesInput("maxPriorityFeesPerGas")
+	const gasSettings = { ...(maxFeesPerGas && { maxFeesPerGas }), ...(maxPriorityFeesPerGas && { maxPriorityFeesPerGas }) }
+	return { from, wait: "NO_WAIT" as const, ...(Object.keys(gasSettings).length > 0 && { fee: { gasSettings } }) }
+}
+
+async function buildTransferExec(callCount = 1, fn: TransferFn = "transfer_public_to_public") {
 	const tokenAddress = getInput("tokenAddress")
 	const recipient = getInput("recipient")
 	const amount = getInput("amount") || "1"
@@ -59,12 +107,29 @@ async function buildTransferExec(callCount = 1) {
 
 	// Build N transfer calls. For the chunked variant (callCount > 5) we issue
 	// N independent BatchCall.request() requests and concat their calls arrays.
+	// Nonce 0 on every call: `from` is the sending account, and the Token refuses any other nonce then.
 	const calls: unknown[] = []
 	for (let i = 0; i < callCount; i++) {
-		const exec = await token.methods.transfer_public_to_public(fromAddr, toAddr, BigInt(amount), BigInt(i)).request()
+		const exec = await token.methods[fn](fromAddr, toAddr, BigInt(amount), 0n).request()
 		calls.push(...(exec.calls ?? []))
 	}
 	return { exec: { calls, authWitnesses: [], capsules: [], extraHashedArgs: [] }, fromAddr }
+}
+
+/** The app pays through a SponsoredFPC of its own (salt `sponsorSalt`), the way aztec.js sends with
+ *  `SponsoredFeePaymentMethod`: the payment's call goes first and names the payer. */
+async function sendAppSponsored() {
+	const wallet = getWallet()!
+	const { exec, fromAddr } = await buildTransferExec(1)
+	const { SponsoredFPCContract } = await import("@aztec-labs/noir-contracts.js/SponsoredFPC")
+	const salt = new Fr(BigInt(getInput("sponsorSalt") || "0"))
+	const instance = await getContractInstanceFromInstantiationParams(SponsoredFPCContract.artifact, { salt })
+	await wallet.registerContract(instance, SponsoredFPCContract.artifact)
+	const fee = await new SponsoredFeePaymentMethod(instance.address).getExecutionPayload()
+	// biome-ignore lint/suspicious/noExplicitAny: the transfer payload is built structurally
+	const payload = mergeExecutionPayloads([fee, exec as any])
+	// biome-ignore lint/suspicious/noExplicitAny: SendOptions structural cast
+	return wallet.sendTx(payload, sendOpts(fromAddr) as any)
 }
 
 function safe<T>(method: string, fn: () => Promise<T>): () => Promise<void> {
@@ -94,9 +159,9 @@ export function bindTransactions(root: HTMLElement): void {
 		"click",
 		safe("sendTx", async () => {
 			const wallet = getWallet()!
-			const { exec, fromAddr } = await buildTransferExec(1)
+			const { exec, fromAddr } = await buildTransferExec(1, selectedTransferFn())
 			// biome-ignore lint/suspicious/noExplicitAny: ExecutionPayload + SendOptions structural cast
-			return wallet.sendTx(exec as any, { from: fromAddr, wait: "NO_WAIT" } as any)
+			return wallet.sendTx(exec as any, sendOpts(fromAddr) as any)
 		}),
 	)
 
@@ -107,7 +172,22 @@ export function bindTransactions(root: HTMLElement): void {
 			const { exec } = await buildTransferExec(1)
 			// The wallet sends `from: "NO_FROM"` through the default entrypoint, not the account contract.
 			// biome-ignore lint/suspicious/noExplicitAny: NO_FROM is a sentinel string the SDK doesn't type
-			return wallet.sendTx(exec as any, { from: "NO_FROM", wait: "NO_WAIT" } as any)
+			return wallet.sendTx(exec as any, sendOpts("NO_FROM") as any)
+		}),
+	)
+
+	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-noFrom-sponsored"]')?.addEventListener(
+		"click",
+		safe("sendTx", async () => {
+			// The default entrypoint runs one private call with no caller, which must pay its own fee:
+			// the canonical sponsor's `sponsor_unconditionally` reads no sender and makes itself the payer.
+			const wallet = getWallet()!
+			const { SponsoredFPCContract } = await import("@aztec-labs/noir-contracts.js/SponsoredFPC")
+			const instance = await getContractInstanceFromInstantiationParams(SponsoredFPCContract.artifact, { salt: new Fr(0n) })
+			await wallet.registerContract(instance, SponsoredFPCContract.artifact)
+			const sponsor = SponsoredFPCContract.at(instance.address, wallet)
+			const exec = await sponsor.methods.sponsor_unconditionally().request()
+			return wallet.sendTx(exec, sendOpts("NO_FROM"))
 		}),
 	)
 
@@ -126,8 +206,13 @@ export function bindTransactions(root: HTMLElement): void {
 			// biome-ignore lint/suspicious/noExplicitAny: ExecutionPayload doesn't include feePayer in this version's types
 			const execWithFeePayer: any = { ...exec, feePayer }
 			// biome-ignore lint/suspicious/noExplicitAny: SendOptions structural cast
-			return wallet.sendTx(execWithFeePayer, { from: fromAddr, wait: "NO_WAIT" } as any)
+			return wallet.sendTx(execWithFeePayer, sendOpts(fromAddr) as any)
 		}),
+	)
+
+	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-appSponsored"]')?.addEventListener(
+		"click",
+		safe("sendTx", sendAppSponsored),
 	)
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-multicall"]')?.addEventListener(
@@ -136,7 +221,7 @@ export function bindTransactions(root: HTMLElement): void {
 			const wallet = getWallet()!
 			const { exec, fromAddr } = await buildTransferExec(3)
 			// biome-ignore lint/suspicious/noExplicitAny: structural cast
-			return wallet.sendTx(exec as any, { from: fromAddr, wait: "NO_WAIT" } as any)
+			return wallet.sendTx(exec as any, sendOpts(fromAddr) as any)
 		}),
 	)
 
@@ -174,7 +259,7 @@ export function bindTransactions(root: HTMLElement): void {
 			const crowdfunding: any = await CrowdfundingContract.at(AztecAddress.fromStringUnsafe(consumer), wallet as any)
 			const exec = await crowdfunding.methods.donate(BigInt(amount)).request()
 			// biome-ignore lint/suspicious/noExplicitAny: ExecutionPayload + SendOptions structural cast
-			return wallet.sendTx(exec as any, { from: fromAddr, wait: "NO_WAIT" } as any)
+			return wallet.sendTx(exec as any, sendOpts(fromAddr) as any)
 		}),
 	)
 
@@ -185,7 +270,7 @@ export function bindTransactions(root: HTMLElement): void {
 			// >5 calls triggers nulo-account.ts recursive chunking (CLAUDE.md mentions this).
 			const { exec, fromAddr } = await buildTransferExec(7)
 			// biome-ignore lint/suspicious/noExplicitAny: structural cast
-			return wallet.sendTx(exec as any, { from: fromAddr, wait: "NO_WAIT" } as any)
+			return wallet.sendTx(exec as any, sendOpts(fromAddr) as any)
 		}),
 	)
 }

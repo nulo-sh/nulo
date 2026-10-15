@@ -2,6 +2,7 @@ export {
 	KNOWN_JOB_ERROR_KINDS,
 	NORMALIZED_RAW_MAX_CHARS,
 	TERMINAL_STAGES,
+	isFeeAmount,
 	isTerminal,
 	type ActiveStage,
 	type JobError,
@@ -10,7 +11,11 @@ export {
 	type JobStage,
 	type KnownJobErrorKind,
 	type ProveBackend,
+	type QueuedFeePayer,
+	type QueuedFeeReask,
 	type SendCheckOutcome,
+	type SendExpiry,
+	type SendInclusion,
 	type TerminalStage,
 } from "./types"
 

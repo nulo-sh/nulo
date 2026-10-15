@@ -37,11 +37,14 @@
 import {
 	ContractNotRegisteredError,
 	DuplicateInitializationError,
+	InvalidWalletArgumentsError,
 	JobCancelledError,
 	PxeScopeUnregisteredError,
 	PxeStaleAnchorError,
+	ScopeViolationError,
 	SessionEndedError,
 	TermsAcceptanceRequiredError,
+	TooManyPendingError,
 } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 
@@ -87,17 +90,18 @@ export function classifyOperationCatch(error: unknown, task: CancellableTask, er
 	task.fail(error)
 	// Only failures whose dApp discrimination is a ratified contract AND whose
 	// reconstruction is lossless from the message alone ride the code channel.
-	// A blanket WalletError pass-through would be unsound — e.g.
-	// TooManyPendingError deliberately reconstructs as base WalletError, and
-	// detail-dependent classes lose their details through this message-only
-	// channel.
+	// A blanket WalletError pass-through would be unsound: detail-dependent
+	// classes lose their details through this message-only channel.
 	const ridesCodeChannel =
 		error instanceof DuplicateInitializationError ||
 		error instanceof PxeStaleAnchorError ||
 		error instanceof PxeScopeUnregisteredError ||
 		error instanceof ContractNotRegisteredError ||
 		error instanceof SessionEndedError ||
-		error instanceof TermsAcceptanceRequiredError
+		error instanceof TermsAcceptanceRequiredError ||
+		error instanceof ScopeViolationError ||
+		error instanceof InvalidWalletArgumentsError ||
+		error instanceof TooManyPendingError
 	return {
 		status: "failed",
 		error: errorMessage(error),

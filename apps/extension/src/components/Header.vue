@@ -6,9 +6,13 @@ import { LogViewerServiceClient } from "@/wallet/services/log-viewer/client"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { TaskServiceClient } from "@/wallet/services/task/client"
 
+/** Composables */
+import { useLockWallet } from "@/composables/useLockWallet"
+
 /** Utils */
 import { managers } from "@/utils/core"
 import { copyAddressToClipboard } from "./header-copy-address"
+import { accountStateOf } from "./header-account"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -19,60 +23,10 @@ const appStore = useAppStore()
 const cacheStore = useCacheStore()
 const popupStore = usePopupStore()
 
+const { lock: handleLockWallet, dispose: disposeLockWallet } = useLockWallet(managers.profile)
+
 const route = useRoute()
 const router = useRouter()
-
-const lockWallet = (handle) => {
-	if (!appStore.isLogined) return
-	appStore.isLogined = false
-	managers.profile.lockActiveProfile(handle)
-}
-
-/** Locking is a security action: a read that answers late or never locks without asking. */
-const LOCK_READ_BUDGET_MS = 3_000
-
-const readForLock = () => {
-	let timer
-	const expired = new Promise((resolve) => {
-		timer = setTimeout(() => resolve({ answered: false }), LOCK_READ_BUDGET_MS)
-	})
-	const read = Promise.all([managers.profile.getSessionHandle(), appStore.refreshInFlight()]).then(
-		([handle]) => ({ answered: true, handle }),
-		() => ({ answered: false }),
-	)
-	return Promise.race([read, expired]).finally(() => clearTimeout(timer))
-}
-
-// A lock decided before a session change or a dropped worker connection is abandoned; the worker
-// also refuses to close any session but the one the decision named.
-let sessionChanges = 0
-let confirmLock
-const onSessionChanged = () => {
-	sessionChanges++
-	if (confirmLock && cacheStore.confirm.callback === confirmLock) popupStore.close("confirm")
-}
-managers.profile.onActiveProfileChanged.add(onSessionChanged)
-managers.profile.onDisconnected.add(onSessionChanged)
-
-const handleLockWallet = async () => {
-	if (!appStore.isLogined) return
-	const changesBefore = sessionChanges
-	const { answered, handle } = await readForLock()
-	if (sessionChanges !== changesBefore) return
-	const running = answered ? appStore.approvedSendsInFlight : 0
-	if (running === 0) return lockWallet(handle)
-	confirmLock = () => lockWallet(handle)
-	cacheStore.confirm.pre_title = "Running transactions"
-	cacheStore.confirm.title = "Lock wallet?"
-	cacheStore.confirm.description =
-		running === 1
-			? "1 transaction is still running. Locking cancels it."
-			: `${running} transactions are still running. Locking cancels them.`
-	cacheStore.confirm.confirm_text = "Lock anyway"
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.callback = confirmLock
-	popupStore.open("confirm")
-}
 
 const logViewerService = new LogViewerServiceClient()
 logViewerService.onLog.add(onLogAdded)
@@ -83,6 +37,8 @@ configService.onUpdate.add(onSettingUpdate)
 const defaultConfig = makeDefaultConfig()
 const indicateFailures = ref(defaultConfig.indicateFailures)
 const showNode = ref(defaultConfig.showNode)
+const networkStatusKey = computed(() => appStore.networkStatus?.toLowerCase())
+const accountState = computed(() => accountStateOf(appStore))
 
 const HEADER_INDICATION_DURATION = 5_000
 let headerIndicateFailureTimer = null
@@ -256,11 +212,10 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-	managers.profile.onActiveProfileChanged.remove(onSessionChanged)
-	managers.profile.onDisconnected.remove(onSessionChanged)
 	configService.disconnect()
 	logViewerService.disconnect()
 	taskService.disconnect()
+	disposeLockWallet()
 })
 </script>
 
@@ -269,7 +224,7 @@ onBeforeUnmount(() => {
 		<!-- The switcher owns TWO explicit affordances (avatar + name) while the address is a
 		     one-click copy target — no popup detour. `account-selector` stays on the name button so
 		     every existing e2e switching flow passes unchanged (testid-preservation contract). -->
-		<Flex v-if="appStore.isLogined" align="center" gap="10" :class="$style.account_group">
+		<Flex v-if="appStore.isLogined && accountState === 'shown'" align="center" gap="10" :class="$style.account_group">
 			<button
 				type="button"
 				@click="handleOpenPopup('accounts')"
@@ -280,15 +235,17 @@ onBeforeUnmount(() => {
 				<AccountAvatar :name="appStore.account?.name || 'Primary Account'" :address="appStore.account?.address" :size="32" />
 			</button>
 			<Flex direction="column" gap="2" :class="$style.account_col">
-				<button
-					type="button"
-					@click="handleOpenPopup('accounts')"
-					data-testid="account-selector"
-					aria-label="Switch account"
-					:class="$style.account_label"
-				>
-					{{ appStore.account?.name?.toUpperCase() || "PRIMARY ACCOUNT" }}
-				</button>
+				<div :class="$style.name_slot">
+					<button
+						type="button"
+						@click="handleOpenPopup('accounts')"
+						data-testid="account-selector"
+						aria-label="Switch account"
+						:class="$style.account_label"
+					>
+						{{ appStore.account?.name?.toUpperCase() || "PRIMARY ACCOUNT" }}
+					</button>
+				</div>
 				<button
 					type="button"
 					@click="handleCopyAddress"
@@ -296,25 +253,40 @@ onBeforeUnmount(() => {
 					aria-label="Copy address"
 					:class="$style.account_address"
 				>
-					<span :class="$style.address_text">
+					<span :class="$style.address_text" data-testid="account-address-text">
 						{{ appStore.account?.address ? trimAddress(appStore.account.address, 6, 4, "...") : "" }}
 						<span :class="$style.copy_reveal"><Icon name="copy" size="12" /></span>
 					</span>
 				</button>
 			</Flex>
 		</Flex>
+		<Flex
+			v-else-if="appStore.isLogined && accountState === 'loading'"
+			align="center"
+			gap="10"
+			:class="$style.account_group"
+			data-testid="header-account-loading"
+		>
+			<Skeleton :width="32" :height="32" />
+			<Flex direction="column" gap="6">
+				<Skeleton :width="90" :height="12" />
+				<Skeleton :width="110" :height="12" />
+			</Flex>
+		</Flex>
+		<div v-else-if="appStore.isLogined" :class="$style.account_group" />
 
-		<Flex align="center" gap="8">
+		<Flex align="center" gap="8" :class="$style.actions">
 			<button
 				v-if="appStore.isLogined && appStore.network?.name"
 				type="button"
 				@click="handleOpenNetworks"
 				data-testid="network-button"
+				:data-status="networkStatusKey"
 				:aria-label="`Manage networks (currently ${appStore.network.name})`"
 				:class="$style.network_chip"
 			>
 				<span :class="$style.network_label">{{ appStore.network.name }}</span>
-				<div :class="[$style.status_dot, $style[String(appStore.networkStatus).toLowerCase()]]" />
+				<div :class="[$style.status_dot, $style[networkStatusKey]]" />
 			</button>
 
 			<button
@@ -323,6 +295,7 @@ onBeforeUnmount(() => {
 				@click="handleLockWallet"
 				data-testid="header-lock"
 				aria-label="Lock wallet"
+				:disabled="appStore.lockHeldByImport"
 				:class="$style.lock_chip"
 			>
 				<MaterialIcon name="lock" :size="15" color="primary" />
@@ -347,14 +320,25 @@ onBeforeUnmount(() => {
 	background: var(--app-bg);
 }
 
+/* The name claims no width of its own, so the group's minimum is the avatar and the address: when
+ * the row runs short, the network chip truncates before the address can slide under it. */
 .account_group {
-	min-width: 0;
-	flex-shrink: 1;
+	flex-grow: 1;
 }
 
 .account_col {
-	min-width: 0;
+	flex-grow: 1;
 	align-items: flex-start;
+}
+
+.name_slot {
+	display: flex;
+	align-self: stretch;
+	contain: inline-size;
+}
+
+.actions {
+	min-width: 0;
 }
 
 .avatar_btn {
@@ -370,6 +354,7 @@ onBeforeUnmount(() => {
 }
 
 .account_label {
+	composes: type--name-tag from global;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -381,11 +366,6 @@ onBeforeUnmount(() => {
 	cursor: pointer;
 	text-align: left;
 
-	font-family: var(--font-headline);
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: -0.04em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
 
 	transition: color 0.2s var(--bezier);
@@ -405,22 +385,20 @@ onBeforeUnmount(() => {
 }
 
 .account_address {
-	padding: 0;
+	/* Room for the copy icon revealed past the address, so it never lands on the chip. */
+	padding: 0 6px 0 0;
 	background: transparent;
 	border: none;
 	cursor: pointer;
 	text-align: left;
 
-	font-family: var(--font-headline);
-	font-size: 14px;
-	font-weight: 700;
-	letter-spacing: -0.02em;
 	color: var(--txt-primary);
 }
 
 /* Hover/focus underlines the address and reveals the copy icon — the icon is absolutely
  * positioned in the free space to its right, so nothing shifts and no target shrinks. */
 .address_text {
+	composes: type--data-lead from global;
 	position: relative;
 	display: inline-flex;
 	align-items: center;
@@ -480,15 +458,11 @@ onBeforeUnmount(() => {
 }
 
 .network_label {
+	composes: type--tag from global;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 
-	font-family: var(--font-mono);
-	font-size: 10px;
-	font-weight: 500;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
 }
 
@@ -508,21 +482,22 @@ onBeforeUnmount(() => {
 
 	transition: background 0.2s var(--bezier);
 
-	&:hover {
+	&:hover:not(:disabled) {
 		background: var(--nulo-surface-low);
 	}
 
-	&:active {
+	&:active:not(:disabled) {
 		opacity: 0.8;
+	}
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: default;
 	}
 }
 
 .lock_label {
-	font-family: var(--font-mono);
-	font-size: 10px;
-	font-weight: 500;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
+	composes: type--tag from global;
 	color: var(--nulo-secondary);
 }
 

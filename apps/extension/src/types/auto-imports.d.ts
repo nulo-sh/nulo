@@ -13,25 +13,32 @@ declare global {
   const ARRIVALS_KEY: typeof import('../composables/useArrivals').ARRIVALS_KEY
   const ARRIVAL_WINDOW_MS: typeof import('../composables/useArrivals').ARRIVAL_WINDOW_MS
   const AccessLevel: typeof import('../utils/confirmation-policies').AccessLevel
+  const ActivationSupersededError: typeof import('../composables/unlockWait').ActivationSupersededError
   const AssemblyAbortedError: typeof import('../utils/full-backup-helpers').AssemblyAbortedError
   const BootstrapFailedError: typeof import('../composables/unlockWait').BootstrapFailedError
   const CHAIN_IDS: typeof import('../utils/chain-ids').CHAIN_IDS
   const CLEANUP_PENDING_MESSAGE: typeof import('../composables/full-backup-restore').CLEANUP_PENDING_MESSAGE
   const CONTACT_EXISTS: typeof import('../utils/contact-rules').CONTACT_EXISTS
+  const CONTACT_NAME_MAX: typeof import('../utils/contact-name').CONTACT_NAME_MAX
+  const DECRYPTION_FAILED: typeof import('../composables/useFullBackupImport').DECRYPTION_FAILED
   const EffectScope: typeof import('vue').EffectScope
   const EnsureSuperseded: typeof import('../stores/balances.store').EnsureSuperseded
   const EstimateRequeue: typeof import('../utils/estimate-when-clear').EstimateRequeue
   const FEE_JUICE_DECIMALS: typeof import('../utils/fee-estimation').FEE_JUICE_DECIMALS
   const FEE_METHODS: typeof import('../utils/tx-enrichment').FEE_METHODS
   const FIRST_PROFILE_NAME: typeof import('../utils/profile-name').FIRST_PROFILE_NAME
+  const FULL_BACKUP_V2_TAG: typeof import('../utils/full-backup-helpers').FULL_BACKUP_V2_TAG
   const FULL_SIZE: typeof import('../utils/hero-fit').FULL_SIZE
+  const FilePickCanceledError: typeof import('../utils/files').FilePickCanceledError
   const FileTooLargeError: typeof import('../utils/files').FileTooLargeError
   const GLOSSARY: typeof import('../utils/glossary').GLOSSARY
   const GLOSSARY_SECTIONS: typeof import('../utils/glossary').GLOSSARY_SECTIONS
   const HERO_MIN_SCALE: typeof import('../utils/hero-fit').HERO_MIN_SCALE
   const HOME_TOKEN_ROWS: typeof import('../utils/token-order').HOME_TOKEN_ROWS
+  const HOSTNAME_WARNING: typeof import('../composables/useDappHostname').HOSTNAME_WARNING
   const IMPORT_ACTIVATION_TIMEOUT_MS: typeof import('../composables/completeImportWithRecovery').IMPORT_ACTIVATION_TIMEOUT_MS
   const IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS: typeof import('../composables/importChainSync').IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS
+  const IMPORT_LOCK_HOLD_MS: typeof import('../stores/contact-import-guard').IMPORT_LOCK_HOLD_MS
   const IMPORT_PREFLIGHT_BUDGET_MS: typeof import('../composables/importChainSync').IMPORT_PREFLIGHT_BUDGET_MS
   const IMPORT_REGISTRATION_BUDGET_MS: typeof import('../composables/importChainSync').IMPORT_REGISTRATION_BUDGET_MS
   const INIT_FETCH_TIMEOUT_MS: typeof import('../stores/balances.store').INIT_FETCH_TIMEOUT_MS
@@ -50,9 +57,11 @@ declare global {
   const PINNED_TOKENS_MAX: typeof import('../composables/usePinnedTokens').PINNED_TOKENS_MAX
   const PINNED_TOKENS_MAX_CHAINS: typeof import('../composables/usePinnedTokens').PINNED_TOKENS_MAX_CHAINS
   const PROFILE_UI_KEY_PREFIXES: typeof import('../utils/profile-ui-keys').PROFILE_UI_KEY_PREFIXES
+  const RESTORE_OUTCOME_LEASE_MS: typeof import('../utils/restore-outcome').RESTORE_OUTCOME_LEASE_MS
   const REVIEW_ARM_MS: typeof import('../composables/useSendReview').REVIEW_ARM_MS
   const SEED_STATUS_RETRY_MS: typeof import('../composables/useSeedStatus').SEED_STATUS_RETRY_MS
   const SNACK_GAP: typeof import('../composables/snackInset').SNACK_GAP
+  const STALE_NETWORK_KEY: typeof import('../composables/useStaleNetwork').STALE_NETWORK_KEY
   const STALLED_MIN_DISPLAY_MS: typeof import('../composables/useIncomingSyncHealth').STALLED_MIN_DISPLAY_MS
   const SUCCESS_TOAST_MS: typeof import('../composables/toast.js').SUCCESS_TOAST_MS
   const TESTNET_L1_CHAIN_ID: typeof import('../utils/chain-ids').TESTNET_L1_CHAIN_ID
@@ -61,15 +70,23 @@ declare global {
   const THIRD_PARTY_NOTICES_FILE: typeof import('../utils/legal-links').THIRD_PARTY_NOTICES_FILE
   const TRANSFER_LABELS: typeof import('../utils/token-transfer-vocabulary').TRANSFER_LABELS
   const TRANSFER_SIGNATURES: typeof import('../utils/token-transfer-vocabulary').TRANSFER_SIGNATURES
+  const UNRECOGNIZED_BACKUP: typeof import('../composables/useFullBackupImport').UNRECOGNIZED_BACKUP
   const UnlockTimeoutError: typeof import('../composables/unlockWait').UnlockTimeoutError
   const VOCABULARY_SELECTORS: typeof import('../utils/token-transfer-vocabulary').VOCABULARY_SELECTORS
   const abiNameFitsRole: typeof import('../utils/token-transfer-vocabulary').abiNameFitsRole
   const abortableSleep: typeof import('../utils/abortable-sleep').abortableSleep
+  const accountStateNetworkIds: typeof import('../composables/full-backup-restore').accountStateNetworkIds
   const activateNetworkGuarded: typeof import('../utils/guarded-network-activation').activateNetworkGuarded
+  const activationFailureReason: typeof import('../composables/unlockWait').activationFailureReason
   const activityRowRoute: typeof import('../utils/activity-rows').activityRowRoute
+  const addressChangeText: typeof import('../utils/contact-import-rows').addressChangeText
+  const admitRestoreOutcome: typeof import('../utils/restore-outcome').admitRestoreOutcome
   const aggregateFiat: typeof import('../utils/token-aggregate').aggregateFiat
+  const applyFeePickUpdate: typeof import('../utils/fee-picks').applyFeePickUpdate
   const applyOutcome: typeof import('../composables/full-backup-restore').applyOutcome
+  const applyThemeChoice: typeof import('../utils/general').applyThemeChoice
   const approvedSendsInFlight: typeof import('../utils/in-flight-send').approvedSendsInFlight
+  const armRestoreOutcome: typeof import('../utils/restore-outcome').armRestoreOutcome
   const arrivalAmount: typeof import('../composables/useArrivals').arrivalAmount
   const arrivalChipLabel: typeof import('../composables/useArrivals').arrivalChipLabel
   const assembleFullBackup: typeof import('../utils/full-backup-helpers').assembleFullBackup
@@ -86,11 +103,14 @@ declare global {
   const capRecords: typeof import('../utils/full-backup-helpers').capRecords
   const capTokenRows: typeof import('../utils/token-order').capTokenRows
   const capitalize: typeof import('../utils/string').capitalize
+  const cappedBackupPick: typeof import('../composables/useProfileImportFlow').cappedBackupPick
   const captureOwnWindow: typeof import('../utils/own-window').captureOwnWindow
   const categoricalLabel: typeof import('../utils/journal-state').categoricalLabel
   const clampDecimals: typeof import('../utils/amount').clampDecimals
+  const classifyImportRow: typeof import('../utils/contact-import-rows').classifyImportRow
   const classifyPasskeyFailure: typeof import('../utils/passkey-copy').classifyPasskeyFailure
   const classifyRow: typeof import('../utils/token-order').classifyRow
+  const clearRestoreOutcome: typeof import('../utils/restore-outcome').clearRestoreOutcome
   const closeCurrentWindow: typeof import('../utils/close-current-window').closeCurrentWindow
   const closeOwnWindow: typeof import('../utils/own-window').closeOwnWindow
   const coalesce: typeof import('../utils/coalesce').coalesce
@@ -98,13 +118,16 @@ declare global {
   const compareTokenRows: typeof import('../utils/token-order').compareTokenRows
   const completeImportWithRecovery: typeof import('../composables/completeImportWithRecovery').completeImportWithRecovery
   const compressData: typeof import('../utils/files').compressData
-  const computeMaxFee: typeof import('../utils/fee-estimation').computeMaxFee
   const computed: typeof import('vue').computed
+  const confirmationOf: typeof import('../composables/useStaleNetwork').confirmationOf
   const confirmationPolicies: typeof import('../utils/confirmation-policies').confirmationPolicies
+  const contactListReducers: typeof import('../utils/entity-list').contactListReducers
+  const contactNameKey: typeof import('../utils/contact-name').contactNameKey
   const copyFor: typeof import('../utils/presto-ui-state').copyFor
   const copyToClipboard: typeof import('../utils/clipboard').copyToClipboard
   const copyWithToast: typeof import('../utils/clipboard').copyWithToast
   const createApp: typeof import('vue').createApp
+  const createContactImportGuard: typeof import('../stores/contact-import-guard').createContactImportGuard
   const createRunFence: typeof import('../composables/runFence').createRunFence
   const customRef: typeof import('vue').customRef
   const debounce: typeof import('../utils/general').debounce
@@ -117,14 +140,18 @@ declare global {
   const displaySymbol: typeof import('../utils/tx-amount').displaySymbol
   const downloadFile: typeof import('../utils/files').downloadFile
   const effectScope: typeof import('vue').effectScope
+  const errorLogWriters: typeof import('../composables/useFullBackupImport').errorLogWriters
   const estimateWhenClear: typeof import('../utils/estimate-when-clear').estimateWhenClear
   const feeJuicePricingFromUsd: typeof import('../utils/fee-estimation').feeJuicePricingFromUsd
+  const feePicksKey: typeof import('../utils/profile-ui-keys').feePicksKey
   const feeToUsd: typeof import('../utils/fee-estimation').feeToUsd
   const fiatHeroCandidates: typeof import('../utils/hero-fit').fiatHeroCandidates
   const findMintSignature: typeof import('../utils/token-transfer-vocabulary').findMintSignature
   const findTransferSignature: typeof import('../utils/token-transfer-vocabulary').findTransferSignature
+  const finishRestoreOutcome: typeof import('../utils/restore-outcome').finishRestoreOutcome
   const fitHero: typeof import('../utils/hero-fit').fitHero
   const foldLabel: typeof import('../utils/token-fold').foldLabel
+  const followOwnRoute: typeof import('../utils/own-window').followOwnRoute
   const forChain: typeof import('../utils/token-order').forChain
   const formatBaseUnits: typeof import('../utils/amount').formatBaseUnits
   const formatFeeJuice: typeof import('../utils/fee-estimation').formatFeeJuice
@@ -151,20 +178,25 @@ declare global {
   const handleCancelOrUnconfirmed: typeof import('../utils/passkey-copy').handleCancelOrUnconfirmed
   const hasInFlightSend: typeof import('../utils/in-flight-send').hasInFlightSend
   const hasReachedPresto: typeof import('../utils/presto-ui-state').hasReachedPresto
+  const hasRowsBeyondRetry: typeof import('../composables/useFullBackupImport').hasRowsBeyondRetry
   const heroRoom: typeof import('../utils/hero-ruler').heroRoom
   const holdHeroFit: typeof import('../utils/hero-fit').holdHeroFit
+  const hubValues: typeof import('../utils/settings-labels').hubValues
   const humanizeErrorKind: typeof import('../utils/journal-state').humanizeErrorKind
   const humanizeMethodName: typeof import('../utils/tx-enrichment').humanizeMethodName
   const incomingInScope: typeof import('../utils/activity-rows').incomingInScope
   const incomingRow: typeof import('../utils/activity-rows').incomingRow
+  const indexSavedContacts: typeof import('../utils/contact-import-rows').indexSavedContacts
   const initAppServiceContext: typeof import('../utils/core').initAppServiceContext
   const initTransactionService: typeof import('../utils/core').initTransactionService
   const inject: typeof import('vue').inject
   const inputRoom: typeof import('../utils/hero-ruler').inputRoom
+  const isActivatingOtherThan: typeof import('../composables/useProfileBootstrap').isActivatingOtherThan
   const isActiveScopeRow: typeof import('../utils/token-order').isActiveScopeRow
   const isAmountAboveDustThreshold: typeof import('../utils/incoming-dust').isAmountAboveDustThreshold
   const isApprovedSendInFlight: typeof import('../utils/in-flight-send').isApprovedSendInFlight
-  const isBackgroundConnected: typeof import('../utils/core').isBackgroundConnected
+  const isComposing: typeof import('../composables/usePopupEntity').isComposing
+  const isEmptyContactName: typeof import('../utils/contact-name').isEmptyContactName
   const isFirefox: typeof import('../utils/browser-surface').isFirefox
   const isForeignProfile: typeof import('../utils/activity-rows').isForeignProfile
   const isHiddenHolding: typeof import('../utils/token-fold').isHiddenHolding
@@ -179,6 +211,7 @@ declare global {
   const isReadonly: typeof import('vue').isReadonly
   const isRef: typeof import('vue').isRef
   const isRepeatOrComposing: typeof import('../composables/usePopupEntity').isRepeatOrComposing
+  const isServiceReady: typeof import('../utils/core').isServiceReady
   const isShallow: typeof import('vue').isShallow
   const isUnknownParsedRow: typeof import('../utils/token-amount').isUnknownParsedRow
   const isUnknownRow: typeof import('../utils/token-amount').isUnknownRow
@@ -189,19 +222,23 @@ declare global {
   const journalCardOriginLabel: typeof import('../utils/journal-state').journalCardOriginLabel
   const journalCardTitle: typeof import('../utils/journal-state').journalCardTitle
   const journalCardTransferTypeLabel: typeof import('../utils/journal-state').journalCardTransferTypeLabel
+  const journalRecordInScope: typeof import('../utils/activity-rows').journalRecordInScope
   const journalTerminalDisplay: typeof import('../utils/journal-state').journalTerminalDisplay
   const knownDecimals: typeof import('../utils/token-amount').knownDecimals
   const legalAboutRow: typeof import('../utils/legal-about').legalAboutRow
   const managers: typeof import('../utils/core').managers
   const markRaw: typeof import('vue').markRaw
+  const matchSavedContacts: typeof import('../utils/contact-import-rows').matchSavedContacts
   const matchesQuery: typeof import('../utils/token-search').matchesQuery
   const migrationIdle: typeof import('../utils/storage').migrationIdle
   const moveToOwnWindow: typeof import('../utils/own-window').moveToOwnWindow
+  const neverOpened: typeof import('../composables/useStaleNetwork').neverOpened
   const newPasswordHint: typeof import('../utils/password').newPasswordHint
   const nextAccountName: typeof import('../utils/account-name').nextAccountName
   const nextTick: typeof import('vue').nextTick
   const normalizeAllIds: typeof import('../utils/full-backup-helpers').normalizeAllIds
   const normalizeAmount: typeof import('../utils/amount').normalizeAmount
+  const normalizeImportRows: typeof import('../utils/contact-import-rows').normalizeImportRows
   const normalizeProfileName: typeof import('../utils/profile-name').normalizeProfileName
   const onActivated: typeof import('vue').onActivated
   const onBeforeMount: typeof import('vue').onBeforeMount
@@ -219,12 +256,16 @@ declare global {
   const onUnmounted: typeof import('vue').onUnmounted
   const onUpdated: typeof import('vue').onUpdated
   const onWatcherCleanup: typeof import('vue').onWatcherCleanup
+  const openEncryptedBackup: typeof import('../utils/full-backup-helpers').openEncryptedBackup
+  const openFullBackupText: typeof import('../utils/full-backup-helpers').openFullBackupText
   const openLegalDocument: typeof import('../utils/legal-links').openLegalDocument
   const openThirdPartyNotices: typeof import('../utils/legal-links').openThirdPartyNotices
   const orderTokenRows: typeof import('../utils/token-order').orderTokenRows
   const ownWindowRoute: typeof import('../utils/own-window').ownWindowRoute
   const parseAmountToBaseUnits: typeof import('../utils/amount').parseAmountToBaseUnits
   const parseContactsExport: typeof import('../utils/contacts-export-format').parseContactsExport
+  const parseEncryptedBackup: typeof import('../utils/full-backup-helpers').parseEncryptedBackup
+  const parseFeePickUpdate: typeof import('../utils/fee-picks').parseFeePickUpdate
   const parseRawBalance: typeof import('../utils/token-amount').parseRawBalance
   const parseTransferIntent: typeof import('../utils/transfer-intent').parseTransferIntent
   const passkeyFailureCopy: typeof import('../utils/passkey-copy').passkeyFailureCopy
@@ -236,16 +277,22 @@ declare global {
   const pickPrimaryMethod: typeof import('../utils/tx-enrichment').pickPrimaryMethod
   const pinScopeOf: typeof import('../composables/usePinnedTokens').pinScopeOf
   const pinnedTokensKey: typeof import('../utils/profile-ui-keys').pinnedTokensKey
+  const planImportWrites: typeof import('../utils/contact-import-rows').planImportWrites
+  const planRestoreAgain: typeof import('../composables/full-backup-restore').planRestoreAgain
   const postAuthRoute: typeof import('../utils/own-window').postAuthRoute
   const preflightNetworkConnectivity: typeof import('../composables/importPreflight').preflightNetworkConnectivity
+  const profileTypeLabel: typeof import('../utils/settings-labels').profileTypeLabel
   const profileUiKeys: typeof import('../utils/profile-ui-keys').profileUiKeys
   const projectArgument: typeof import('../utils/transfer-intent').projectArgument
   const provide: typeof import('vue').provide
   const purgeNumber: typeof import('../utils/amount').purgeNumber
   const reactive: typeof import('vue').reactive
   const readAmountText: typeof import('../utils/amount').readAmountText
+  const readAppPicks: typeof import('../utils/fee-picks').readAppPicks
   const readBackupFile: typeof import('../utils/full-backup-helpers').readBackupFile
   const readLiveness: typeof import('../utils/background-liveness').readLiveness
+  const readRestoreOutcome: typeof import('../utils/restore-outcome').readRestoreOutcome
+  const readSendSlots: typeof import('../utils/fee-picks').readSendSlots
   const readonly: typeof import('vue').readonly
   const receivedLabel: typeof import('../utils/received-display').receivedLabel
   const ref: typeof import('vue').ref
@@ -262,31 +309,40 @@ declare global {
   const resolveFromDisplay: typeof import('../utils/received-display').resolveFromDisplay
   const resolvePasskeyCredential: typeof import('../composables/full-backup-restore').resolvePasskeyCredential
   const resolveReceivedType: typeof import('../utils/received-display').resolveReceivedType
-  const resolveRestoredActiveNetworkId: typeof import('../utils/full-backup-helpers').resolveRestoredActiveNetworkId
   const resolveRestoredActiveNetworkIdByChain: typeof import('../utils/full-backup-helpers').resolveRestoredActiveNetworkIdByChain
   const restoreAccountStateStage: typeof import('../composables/full-backup-restore').restoreAccountStateStage
   const restoreAccountsAndFilterOwnedSlices: typeof import('../composables/full-backup-restore').restoreAccountsAndFilterOwnedSlices
   const restoreAccountsStage: typeof import('../composables/full-backup-restore').restoreAccountsStage
   const restoreActiveNetworkPointer: typeof import('../composables/full-backup-restore').restoreActiveNetworkPointer
   const restoreCtaBlocked: typeof import('../utils/full-backup-ctas').restoreCtaBlocked
-  const restoreNetworksStage: typeof import('../composables/full-backup-restore').restoreNetworksStage
+  const restoreOutcomeKey: typeof import('../utils/profile-ui-keys').restoreOutcomeKey
   const restoreServiceSlices: typeof import('../composables/full-backup-restore').restoreServiceSlices
   const restoreTokensStage: typeof import('../composables/full-backup-restore').restoreTokensStage
+  const restoredNetworkIds: typeof import('../composables/full-backup-restore').restoredNetworkIds
   const retryAccountStateStage: typeof import('../composables/full-backup-restore').retryAccountStateStage
   const retryReplacedRows: typeof import('../composables/full-backup-restore').retryReplacedRows
   const rollbackCreatedProfile: typeof import('../composables/full-backup-restore').rollbackCreatedProfile
   const rowDescriptionFor: typeof import('../utils/presto-ui-state').rowDescriptionFor
+  const rowOnToken: typeof import('../utils/activity-rows').rowOnToken
   const rulerWidth: typeof import('../utils/hero-ruler').rulerWidth
+  const runFenceLive: typeof import('../composables/full-backup-restore').runFenceLive
   const runImportChainSync: typeof import('../composables/importChainSync').runImportChainSync
+  const runResetToEnd: typeof import('../composables/useStaleNetwork').runResetToEnd
   const runRestoreFailurePath: typeof import('../composables/full-backup-restore').runRestoreFailurePath
+  const runUnattended: typeof import('../composables/useStaleNetwork').runUnattended
+  const runsUnattended: typeof import('../composables/useStaleNetwork').runsUnattended
   const safeFiatOf: typeof import('../utils/token-amount').safeFiatOf
   const sameContactAddress: typeof import('../utils/contact-rules').sameContactAddress
-  const sameContactName: typeof import('../utils/contact-rules').sameContactName
+  const sameContactName: typeof import('../utils/contact-name').sameContactName
+  const sameStoredName: typeof import('../utils/account-name').sameStoredName
+  const sanitizeContactName: typeof import('../utils/contact-name').sanitizeContactName
   const sanitizeJournalSubtitle: typeof import('../utils/journal-state').sanitizeJournalSubtitle
   const sanitizePinMap: typeof import('../composables/usePinnedTokens').sanitizePinMap
   const sanitizeString: typeof import('../utils/string').sanitizeString
   const scopedTxRows: typeof import('../utils/activity-rows').scopedTxRows
   const scrubUrls: typeof import('../utils/scrub-urls').scrubUrls
+  const sealFullBackupText: typeof import('../utils/full-backup-helpers').sealFullBackupText
+  const sendFeePicksKey: typeof import('../utils/profile-ui-keys').sendFeePicksKey
   const sendOutcome: typeof import('../utils/journal-state').sendOutcome
   const setLastActiveProfileId: typeof import('../utils/lastActiveProfile').setLastActiveProfileId
   const shallowReactive: typeof import('vue').shallowReactive
@@ -300,10 +356,13 @@ declare global {
   const snackInset: typeof import('../composables/snackInset').snackInset
   const stageSubtitle: typeof import('../utils/card-subtitle').stageSubtitle
   const stepFailedTitle: typeof import('../utils/passkey-copy').stepFailedTitle
+  const stillAsShown: typeof import('../utils/contact-import-rows').stillAsShown
   const storageLocalGet: typeof import('../utils/storage').storageLocalGet
   const storageLocalRemove: typeof import('../utils/storage').storageLocalRemove
   const storageLocalSet: typeof import('../utils/storage').storageLocalSet
+  const storedNameKey: typeof import('../utils/account-name').storedNameKey
   const stringCompare: typeof import('../utils/string').stringCompare
+  const supersedeProfileActivations: typeof import('../composables/useProfileBootstrap').supersedeProfileActivations
   const toRaw: typeof import('vue').toRaw
   const toRef: typeof import('vue').toRef
   const toRefs: typeof import('vue').toRefs
@@ -317,7 +376,9 @@ declare global {
   const trustRestoredTokens: typeof import('../composables/full-backup-restore').trustRestoredTokens
   const txAmount: typeof import('../utils/tx-amount').txAmount
   const txBelongsToScope: typeof import('../stores/activity.store').txBelongsToScope
+  const txOnToken: typeof import('../utils/activity-rows').txOnToken
   const txScope: typeof import('../stores/activity.store').txScope
+  const typedContactName: typeof import('../utils/contact-name').typedContactName
   const uiStateFromStatus: typeof import('../utils/presto-ui-state').uiStateFromStatus
   const unref: typeof import('vue').unref
   const untilSessionChecked: typeof import('../composables/useDappApprovalWindow').untilSessionChecked
@@ -330,6 +391,7 @@ declare global {
   const useAuthRegistryStatus: typeof import('../composables/useAuthRegistryStatus').useAuthRegistryStatus
   const useBalancesStore: typeof import('../stores/balances.store').useBalancesStore
   const useCacheStore: typeof import('../stores/cache.store').useCacheStore
+  const useConfigRead: typeof import('../composables/useConfigRead').useConfigRead
   const useCssModule: typeof import('vue').useCssModule
   const useCssVars: typeof import('vue').useCssVars
   const useDappApprovalWindow: typeof import('../composables/useDappApprovalWindow').useDappApprovalWindow
@@ -343,11 +405,13 @@ declare global {
   const useFullBackupImport: typeof import('../composables/useFullBackupImport').useFullBackupImport
   const useFullscreenPopupSetting: typeof import('../composables/fullscreenPopupSetting').useFullscreenPopupSetting
   const useId: typeof import('vue').useId
+  const useImportErrorState: typeof import('../composables/useProfileImportFlow').useImportErrorState
   const useIncomingSyncHealth: typeof import('../composables/useIncomingSyncHealth').useIncomingSyncHealth
   const useIncomingTransfers: typeof import('../composables/useIncomingTransfers').useIncomingTransfers
   const useIncomingTrustPrompts: typeof import('../composables/useIncomingTrustPrompts').useIncomingTrustPrompts
   const useLegalAcceptance: typeof import('../composables/useLegalAcceptance').useLegalAcceptance
   const useLink: typeof import('vue-router').useLink
+  const useLockWallet: typeof import('../composables/useLockWallet').useLockWallet
   const useModel: typeof import('vue').useModel
   const useNetworkActivation: typeof import('../composables/useNetworkActivation').useNetworkActivation
   const useNotificationStore: typeof import('../stores/notification.store').useNotificationStore
@@ -365,6 +429,8 @@ declare global {
   const useProfileImportFlow: typeof import('../composables/useProfileImportFlow').useProfileImportFlow
   const useProfileNameDefault: typeof import('../composables/useProfileNameDefault').useProfileNameDefault
   const useProfileNameField: typeof import('../composables/useProfileNameField').useProfileNameField
+  const useReceiptFee: typeof import('../composables/useReceiptFee').useReceiptFee
+  const useRestoreAgain: typeof import('../composables/useRestoreAgain').useRestoreAgain
   const useRoute: typeof import('vue-router').useRoute
   const useRouter: typeof import('vue-router').useRouter
   const useScopedTokens: typeof import('../composables/useScopedTokens').useScopedTokens
@@ -372,18 +438,22 @@ declare global {
   const useSecretCountdown: typeof import('../composables/useSecretCountdown').useSecretCountdown
   const useSeedStatus: typeof import('../composables/useSeedStatus').useSeedStatus
   const useSendReview: typeof import('../composables/useSendReview').useSendReview
+  const useSendStageLine: typeof import('../composables/useSendStageLine').useSendStageLine
   const useSlots: typeof import('vue').useSlots
   const useSnackInset: typeof import('../composables/snackInset').useSnackInset
+  const useStaleNetwork: typeof import('../composables/useStaleNetwork').useStaleNetwork
   const useSyncedRef: typeof import('../composables/syncedRef.js').useSyncedRef
   const useTemplateRef: typeof import('vue').useTemplateRef
   const useTicker: typeof import('../composables/ticker').useTicker
   const useToast: typeof import('../composables/toast.js').useToast
   const useTokenBalanceSnapshot: typeof import('../composables/useTokenBalanceSnapshot').useTokenBalanceSnapshot
+  const useWalletTxEstimates: typeof import('../composables/useWalletTxEstimates').useWalletTxEstimates
   const vSnackFooter: typeof import('../composables/snackInset').vSnackFooter
   const vSnackSheet: typeof import('../composables/snackInset').vSnackSheet
   const validateAndMigrateBackup: typeof import('../composables/useFullBackupImport').validateAndMigrateBackup
   const vocabularySelector: typeof import('../utils/token-transfer-vocabulary').vocabularySelector
   const waitForProfileActive: typeof import('../composables/waitForProfileActive').waitForProfileActive
+  const waitForServiceReady: typeof import('../utils/core').waitForServiceReady
   const walletChainId: typeof import('../utils/chain-ids').walletChainId
   const watch: typeof import('vue').watch
   const watchEffect: typeof import('vue').watchEffect
@@ -401,7 +471,7 @@ declare global {
   export type { ImportCompletionDeps, ImportCompletionOutcome } from '../composables/completeImportWithRecovery'
   import('../composables/completeImportWithRecovery')
   // @ts-ignore
-  export type { RestoreIo, StageFail, StageOutcome, RestoreScratch, ProfileRestoreClient, NetworkRestoreClient, AccountRestoreClient, RestoredNetwork, RestoreData, SliceRestoreClient, AccountStateRetryContext } from '../composables/full-backup-restore'
+  export type { RestoreIo, StageFail, StageOutcome, RestoreScratch, ProfileRestoreClient, RunFenceClient, NetworkRestoreClient, AccountRestoreClient, TailNetwork, RestoredNetwork, RestoreData, BackupProfile, SliceRestoreClient, AccountStateTail, RestoreRun, AccountStateRetryContext } from '../composables/full-backup-restore'
   import('../composables/full-backup-restore')
   // @ts-ignore
   export type { ImportChainSyncDeps } from '../composables/importChainSync'
@@ -416,7 +486,7 @@ declare global {
   export type { FooterBox } from '../composables/snackInset'
   import('../composables/snackInset')
   // @ts-ignore
-  export type { UnlockTimeoutError, BootstrapFailedError, ProfileActivationWithFailureSubject } from '../composables/unlockWait'
+  export type { UnlockTimeoutError, BootstrapFailedError, ActivationSupersededError, ProfileActivationWithFailureSubject, ActivationWaitOptions } from '../composables/unlockWait'
   import('../composables/unlockWait')
   // @ts-ignore
   export type { ArrivalToken, ArrivalChip, ArrivalsServiceLike, UseArrivalsOptions, Arrivals } from '../composables/useArrivals'
@@ -440,7 +510,7 @@ declare global {
   export type { FieldDef, FieldHandle, FormState } from '../composables/useFormState'
   import('../composables/useFormState')
   // @ts-ignore
-  export type { FullBackupEnvelope, UseFullBackupImportOptions, UseFullBackupImportResult, RestoreStage, RestoreStatus } from '../composables/useFullBackupImport'
+  export type { FullBackupEnvelope, UseFullBackupImportOptions, RestoreErrorNetworks, UseFullBackupImportResult, RestoreStage, RestoreStatus } from '../composables/useFullBackupImport'
   import('../composables/useFullBackupImport')
   // @ts-ignore
   export type { IncomingSyncScope, UseIncomingSyncHealthDeps, UseIncomingSyncHealth } from '../composables/useIncomingSyncHealth'
@@ -451,6 +521,9 @@ declare global {
   // @ts-ignore
   export type { LegalViewStatus } from '../composables/useLegalAcceptance'
   import('../composables/useLegalAcceptance')
+  // @ts-ignore
+  export type { LockProfileClient } from '../composables/useLockWallet'
+  import('../composables/useLockWallet')
   // @ts-ignore
   export type { UseNetworkActivationOptions } from '../composables/useNetworkActivation'
   import('../composables/useNetworkActivation')
@@ -464,6 +537,9 @@ declare global {
   export type { PrestoCheckConfig } from '../composables/usePrestoCheck'
   import('../composables/usePrestoCheck')
   // @ts-ignore
+  export type { PricedToken } from '../composables/usePrices'
+  import('../composables/usePrices')
+  // @ts-ignore
   export type { UseProfileCreateFlowOptions } from '../composables/useProfileCreateFlow'
   import('../composables/useProfileCreateFlow')
   // @ts-ignore
@@ -475,6 +551,12 @@ declare global {
   // @ts-ignore
   export type { ProfileNameFieldOptions, ValidateOptions, ProfileNameField } from '../composables/useProfileNameField'
   import('../composables/useProfileNameField')
+  // @ts-ignore
+  export type { ReceiptFeeState, ReceiptFeeService, UseReceiptFeeResult } from '../composables/useReceiptFee'
+  import('../composables/useReceiptFee')
+  // @ts-ignore
+  export type { RestoreAgainProfileClient, UseRestoreAgainOptions, UseRestoreAgainResult } from '../composables/useRestoreAgain'
+  import('../composables/useRestoreAgain')
   // @ts-ignore
   export type { TokenScope, UseScopedTokensOptions, UseScopedTokensResult } from '../composables/useScopedTokens'
   import('../composables/useScopedTokens')
@@ -488,8 +570,17 @@ declare global {
   export type { SubmitSource, SendReview } from '../composables/useSendReview'
   import('../composables/useSendReview')
   // @ts-ignore
+  export type { SendStageLineDeps, SendStageLine } from '../composables/useSendStageLine'
+  import('../composables/useSendStageLine')
+  // @ts-ignore
+  export type { StaleNetworkClient, StaleNetworkDeps, StaleNetwork } from '../composables/useStaleNetwork'
+  import('../composables/useStaleNetwork')
+  // @ts-ignore
   export type { TokenBalanceSnapshotState } from '../composables/useTokenBalanceSnapshot'
   import('../composables/useTokenBalanceSnapshot')
+  // @ts-ignore
+  export type { WalletTxEstimatesDeps } from '../composables/useWalletTxEstimates'
+  import('../composables/useWalletTxEstimates')
   // @ts-ignore
   export type { ProfileActivationSubject } from '../composables/waitForProfileActive'
   import('../composables/waitForProfileActive')
@@ -515,6 +606,9 @@ declare global {
   export type { ConfirmationPolicy } from '../utils/confirmation-policies'
   import('../utils/confirmation-policies')
   // @ts-ignore
+  export type { ImportRow, SavedContactIndex, ContactMatchKind, ContactMatch, ImportRowKind, ClassifiedImportRow, ReviewedImportRow, ImportWrite } from '../utils/contact-import-rows'
+  import('../utils/contact-import-rows')
+  // @ts-ignore
   export type { ImportedContactV1, ImportedContactV2, ParsedExport } from '../utils/contacts-export-format'
   import('../utils/contacts-export-format')
   // @ts-ignore
@@ -527,7 +621,10 @@ declare global {
   export type { AssetPricing } from '../utils/fee-estimation'
   import('../utils/fee-estimation')
   // @ts-ignore
-  export type { FileTooLargeError } from '../utils/files'
+  export type { FeePickType, FeeSide, SendPick, SendSlots, AppPick, FeePickUpdate } from '../utils/fee-picks'
+  import('../utils/fee-picks')
+  // @ts-ignore
+  export type { FileTooLargeError, FilePickCanceledError } from '../utils/files'
   import('../utils/files')
   // @ts-ignore
   export type { FullBackupCtaSource } from '../utils/full-backup-ctas'
@@ -569,6 +666,12 @@ declare global {
   export type { ReceivedType, FromDisplay } from '../utils/received-display'
   import('../utils/received-display')
   // @ts-ignore
+  export type { RestoreOutcome } from '../utils/restore-outcome'
+  import('../utils/restore-outcome')
+  // @ts-ignore
+  export type { HubConfig, HubValues } from '../utils/settings-labels'
+  import('../utils/settings-labels')
+  // @ts-ignore
   export type { Aggregate } from '../utils/token-aggregate'
   import('../utils/token-aggregate')
   // @ts-ignore
@@ -598,25 +701,32 @@ declare module 'vue' {
     readonly ARRIVALS_KEY: UnwrapRef<typeof import('../composables/useArrivals')['ARRIVALS_KEY']>
     readonly ARRIVAL_WINDOW_MS: UnwrapRef<typeof import('../composables/useArrivals')['ARRIVAL_WINDOW_MS']>
     readonly AccessLevel: UnwrapRef<typeof import('../utils/confirmation-policies')['AccessLevel']>
+    readonly ActivationSupersededError: UnwrapRef<typeof import('../composables/unlockWait')['ActivationSupersededError']>
     readonly AssemblyAbortedError: UnwrapRef<typeof import('../utils/full-backup-helpers')['AssemblyAbortedError']>
     readonly BootstrapFailedError: UnwrapRef<typeof import('../composables/unlockWait')['BootstrapFailedError']>
     readonly CHAIN_IDS: UnwrapRef<typeof import('../utils/chain-ids')['CHAIN_IDS']>
     readonly CLEANUP_PENDING_MESSAGE: UnwrapRef<typeof import('../composables/full-backup-restore')['CLEANUP_PENDING_MESSAGE']>
     readonly CONTACT_EXISTS: UnwrapRef<typeof import('../utils/contact-rules')['CONTACT_EXISTS']>
+    readonly CONTACT_NAME_MAX: UnwrapRef<typeof import('../utils/contact-name')['CONTACT_NAME_MAX']>
+    readonly DECRYPTION_FAILED: UnwrapRef<typeof import('../composables/useFullBackupImport')['DECRYPTION_FAILED']>
     readonly EffectScope: UnwrapRef<typeof import('vue')['EffectScope']>
     readonly EnsureSuperseded: UnwrapRef<typeof import('../stores/balances.store')['EnsureSuperseded']>
     readonly EstimateRequeue: UnwrapRef<typeof import('../utils/estimate-when-clear')['EstimateRequeue']>
     readonly FEE_JUICE_DECIMALS: UnwrapRef<typeof import('../utils/fee-estimation')['FEE_JUICE_DECIMALS']>
     readonly FEE_METHODS: UnwrapRef<typeof import('../utils/tx-enrichment')['FEE_METHODS']>
     readonly FIRST_PROFILE_NAME: UnwrapRef<typeof import('../utils/profile-name')['FIRST_PROFILE_NAME']>
+    readonly FULL_BACKUP_V2_TAG: UnwrapRef<typeof import('../utils/full-backup-helpers')['FULL_BACKUP_V2_TAG']>
     readonly FULL_SIZE: UnwrapRef<typeof import('../utils/hero-fit')['FULL_SIZE']>
+    readonly FilePickCanceledError: UnwrapRef<typeof import('../utils/files')['FilePickCanceledError']>
     readonly FileTooLargeError: UnwrapRef<typeof import('../utils/files')['FileTooLargeError']>
     readonly GLOSSARY: UnwrapRef<typeof import('../utils/glossary')['GLOSSARY']>
     readonly GLOSSARY_SECTIONS: UnwrapRef<typeof import('../utils/glossary')['GLOSSARY_SECTIONS']>
     readonly HERO_MIN_SCALE: UnwrapRef<typeof import('../utils/hero-fit')['HERO_MIN_SCALE']>
     readonly HOME_TOKEN_ROWS: UnwrapRef<typeof import('../utils/token-order')['HOME_TOKEN_ROWS']>
+    readonly HOSTNAME_WARNING: UnwrapRef<typeof import('../composables/useDappHostname')['HOSTNAME_WARNING']>
     readonly IMPORT_ACTIVATION_TIMEOUT_MS: UnwrapRef<typeof import('../composables/completeImportWithRecovery')['IMPORT_ACTIVATION_TIMEOUT_MS']>
     readonly IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS: UnwrapRef<typeof import('../composables/importChainSync')['IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS']>
+    readonly IMPORT_LOCK_HOLD_MS: UnwrapRef<typeof import('../stores/contact-import-guard')['IMPORT_LOCK_HOLD_MS']>
     readonly IMPORT_PREFLIGHT_BUDGET_MS: UnwrapRef<typeof import('../composables/importChainSync')['IMPORT_PREFLIGHT_BUDGET_MS']>
     readonly IMPORT_REGISTRATION_BUDGET_MS: UnwrapRef<typeof import('../composables/importChainSync')['IMPORT_REGISTRATION_BUDGET_MS']>
     readonly INIT_FETCH_TIMEOUT_MS: UnwrapRef<typeof import('../stores/balances.store')['INIT_FETCH_TIMEOUT_MS']>
@@ -635,9 +745,11 @@ declare module 'vue' {
     readonly PINNED_TOKENS_MAX: UnwrapRef<typeof import('../composables/usePinnedTokens')['PINNED_TOKENS_MAX']>
     readonly PINNED_TOKENS_MAX_CHAINS: UnwrapRef<typeof import('../composables/usePinnedTokens')['PINNED_TOKENS_MAX_CHAINS']>
     readonly PROFILE_UI_KEY_PREFIXES: UnwrapRef<typeof import('../utils/profile-ui-keys')['PROFILE_UI_KEY_PREFIXES']>
+    readonly RESTORE_OUTCOME_LEASE_MS: UnwrapRef<typeof import('../utils/restore-outcome')['RESTORE_OUTCOME_LEASE_MS']>
     readonly REVIEW_ARM_MS: UnwrapRef<typeof import('../composables/useSendReview')['REVIEW_ARM_MS']>
     readonly SEED_STATUS_RETRY_MS: UnwrapRef<typeof import('../composables/useSeedStatus')['SEED_STATUS_RETRY_MS']>
     readonly SNACK_GAP: UnwrapRef<typeof import('../composables/snackInset')['SNACK_GAP']>
+    readonly STALE_NETWORK_KEY: UnwrapRef<typeof import('../composables/useStaleNetwork')['STALE_NETWORK_KEY']>
     readonly STALLED_MIN_DISPLAY_MS: UnwrapRef<typeof import('../composables/useIncomingSyncHealth')['STALLED_MIN_DISPLAY_MS']>
     readonly SUCCESS_TOAST_MS: UnwrapRef<typeof import('../composables/toast.js')['SUCCESS_TOAST_MS']>
     readonly TESTNET_L1_CHAIN_ID: UnwrapRef<typeof import('../utils/chain-ids')['TESTNET_L1_CHAIN_ID']>
@@ -646,15 +758,23 @@ declare module 'vue' {
     readonly THIRD_PARTY_NOTICES_FILE: UnwrapRef<typeof import('../utils/legal-links')['THIRD_PARTY_NOTICES_FILE']>
     readonly TRANSFER_LABELS: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['TRANSFER_LABELS']>
     readonly TRANSFER_SIGNATURES: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['TRANSFER_SIGNATURES']>
+    readonly UNRECOGNIZED_BACKUP: UnwrapRef<typeof import('../composables/useFullBackupImport')['UNRECOGNIZED_BACKUP']>
     readonly UnlockTimeoutError: UnwrapRef<typeof import('../composables/unlockWait')['UnlockTimeoutError']>
     readonly VOCABULARY_SELECTORS: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['VOCABULARY_SELECTORS']>
     readonly abiNameFitsRole: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['abiNameFitsRole']>
     readonly abortableSleep: UnwrapRef<typeof import('../utils/abortable-sleep')['abortableSleep']>
+    readonly accountStateNetworkIds: UnwrapRef<typeof import('../composables/full-backup-restore')['accountStateNetworkIds']>
     readonly activateNetworkGuarded: UnwrapRef<typeof import('../utils/guarded-network-activation')['activateNetworkGuarded']>
+    readonly activationFailureReason: UnwrapRef<typeof import('../composables/unlockWait')['activationFailureReason']>
     readonly activityRowRoute: UnwrapRef<typeof import('../utils/activity-rows')['activityRowRoute']>
+    readonly addressChangeText: UnwrapRef<typeof import('../utils/contact-import-rows')['addressChangeText']>
+    readonly admitRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['admitRestoreOutcome']>
     readonly aggregateFiat: UnwrapRef<typeof import('../utils/token-aggregate')['aggregateFiat']>
+    readonly applyFeePickUpdate: UnwrapRef<typeof import('../utils/fee-picks')['applyFeePickUpdate']>
     readonly applyOutcome: UnwrapRef<typeof import('../composables/full-backup-restore')['applyOutcome']>
+    readonly applyThemeChoice: UnwrapRef<typeof import('../utils/general')['applyThemeChoice']>
     readonly approvedSendsInFlight: UnwrapRef<typeof import('../utils/in-flight-send')['approvedSendsInFlight']>
+    readonly armRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['armRestoreOutcome']>
     readonly arrivalAmount: UnwrapRef<typeof import('../composables/useArrivals')['arrivalAmount']>
     readonly arrivalChipLabel: UnwrapRef<typeof import('../composables/useArrivals')['arrivalChipLabel']>
     readonly assembleFullBackup: UnwrapRef<typeof import('../utils/full-backup-helpers')['assembleFullBackup']>
@@ -671,11 +791,14 @@ declare module 'vue' {
     readonly capRecords: UnwrapRef<typeof import('../utils/full-backup-helpers')['capRecords']>
     readonly capTokenRows: UnwrapRef<typeof import('../utils/token-order')['capTokenRows']>
     readonly capitalize: UnwrapRef<typeof import('../utils/string')['capitalize']>
+    readonly cappedBackupPick: UnwrapRef<typeof import('../composables/useProfileImportFlow')['cappedBackupPick']>
     readonly captureOwnWindow: UnwrapRef<typeof import('../utils/own-window')['captureOwnWindow']>
     readonly categoricalLabel: UnwrapRef<typeof import('../utils/journal-state')['categoricalLabel']>
     readonly clampDecimals: UnwrapRef<typeof import('../utils/amount')['clampDecimals']>
+    readonly classifyImportRow: UnwrapRef<typeof import('../utils/contact-import-rows')['classifyImportRow']>
     readonly classifyPasskeyFailure: UnwrapRef<typeof import('../utils/passkey-copy')['classifyPasskeyFailure']>
     readonly classifyRow: UnwrapRef<typeof import('../utils/token-order')['classifyRow']>
+    readonly clearRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['clearRestoreOutcome']>
     readonly closeCurrentWindow: UnwrapRef<typeof import('../utils/close-current-window')['closeCurrentWindow']>
     readonly closeOwnWindow: UnwrapRef<typeof import('../utils/own-window')['closeOwnWindow']>
     readonly coalesce: UnwrapRef<typeof import('../utils/coalesce')['coalesce']>
@@ -683,13 +806,16 @@ declare module 'vue' {
     readonly compareTokenRows: UnwrapRef<typeof import('../utils/token-order')['compareTokenRows']>
     readonly completeImportWithRecovery: UnwrapRef<typeof import('../composables/completeImportWithRecovery')['completeImportWithRecovery']>
     readonly compressData: UnwrapRef<typeof import('../utils/files')['compressData']>
-    readonly computeMaxFee: UnwrapRef<typeof import('../utils/fee-estimation')['computeMaxFee']>
     readonly computed: UnwrapRef<typeof import('vue')['computed']>
+    readonly confirmationOf: UnwrapRef<typeof import('../composables/useStaleNetwork')['confirmationOf']>
     readonly confirmationPolicies: UnwrapRef<typeof import('../utils/confirmation-policies')['confirmationPolicies']>
+    readonly contactListReducers: UnwrapRef<typeof import('../utils/entity-list')['contactListReducers']>
+    readonly contactNameKey: UnwrapRef<typeof import('../utils/contact-name')['contactNameKey']>
     readonly copyFor: UnwrapRef<typeof import('../utils/presto-ui-state')['copyFor']>
     readonly copyToClipboard: UnwrapRef<typeof import('../utils/clipboard')['copyToClipboard']>
     readonly copyWithToast: UnwrapRef<typeof import('../utils/clipboard')['copyWithToast']>
     readonly createApp: UnwrapRef<typeof import('vue')['createApp']>
+    readonly createContactImportGuard: UnwrapRef<typeof import('../stores/contact-import-guard')['createContactImportGuard']>
     readonly createRunFence: UnwrapRef<typeof import('../composables/runFence')['createRunFence']>
     readonly customRef: UnwrapRef<typeof import('vue')['customRef']>
     readonly debounce: UnwrapRef<typeof import('../utils/general')['debounce']>
@@ -702,14 +828,18 @@ declare module 'vue' {
     readonly displaySymbol: UnwrapRef<typeof import('../utils/tx-amount')['displaySymbol']>
     readonly downloadFile: UnwrapRef<typeof import('../utils/files')['downloadFile']>
     readonly effectScope: UnwrapRef<typeof import('vue')['effectScope']>
+    readonly errorLogWriters: UnwrapRef<typeof import('../composables/useFullBackupImport')['errorLogWriters']>
     readonly estimateWhenClear: UnwrapRef<typeof import('../utils/estimate-when-clear')['estimateWhenClear']>
     readonly feeJuicePricingFromUsd: UnwrapRef<typeof import('../utils/fee-estimation')['feeJuicePricingFromUsd']>
+    readonly feePicksKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['feePicksKey']>
     readonly feeToUsd: UnwrapRef<typeof import('../utils/fee-estimation')['feeToUsd']>
     readonly fiatHeroCandidates: UnwrapRef<typeof import('../utils/hero-fit')['fiatHeroCandidates']>
     readonly findMintSignature: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['findMintSignature']>
     readonly findTransferSignature: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['findTransferSignature']>
+    readonly finishRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['finishRestoreOutcome']>
     readonly fitHero: UnwrapRef<typeof import('../utils/hero-fit')['fitHero']>
     readonly foldLabel: UnwrapRef<typeof import('../utils/token-fold')['foldLabel']>
+    readonly followOwnRoute: UnwrapRef<typeof import('../utils/own-window')['followOwnRoute']>
     readonly forChain: UnwrapRef<typeof import('../utils/token-order')['forChain']>
     readonly formatBaseUnits: UnwrapRef<typeof import('../utils/amount')['formatBaseUnits']>
     readonly formatFeeJuice: UnwrapRef<typeof import('../utils/fee-estimation')['formatFeeJuice']>
@@ -736,20 +866,25 @@ declare module 'vue' {
     readonly handleCancelOrUnconfirmed: UnwrapRef<typeof import('../utils/passkey-copy')['handleCancelOrUnconfirmed']>
     readonly hasInFlightSend: UnwrapRef<typeof import('../utils/in-flight-send')['hasInFlightSend']>
     readonly hasReachedPresto: UnwrapRef<typeof import('../utils/presto-ui-state')['hasReachedPresto']>
+    readonly hasRowsBeyondRetry: UnwrapRef<typeof import('../composables/useFullBackupImport')['hasRowsBeyondRetry']>
     readonly heroRoom: UnwrapRef<typeof import('../utils/hero-ruler')['heroRoom']>
     readonly holdHeroFit: UnwrapRef<typeof import('../utils/hero-fit')['holdHeroFit']>
+    readonly hubValues: UnwrapRef<typeof import('../utils/settings-labels')['hubValues']>
     readonly humanizeErrorKind: UnwrapRef<typeof import('../utils/journal-state')['humanizeErrorKind']>
     readonly humanizeMethodName: UnwrapRef<typeof import('../utils/tx-enrichment')['humanizeMethodName']>
     readonly incomingInScope: UnwrapRef<typeof import('../utils/activity-rows')['incomingInScope']>
     readonly incomingRow: UnwrapRef<typeof import('../utils/activity-rows')['incomingRow']>
+    readonly indexSavedContacts: UnwrapRef<typeof import('../utils/contact-import-rows')['indexSavedContacts']>
     readonly initAppServiceContext: UnwrapRef<typeof import('../utils/core')['initAppServiceContext']>
     readonly initTransactionService: UnwrapRef<typeof import('../utils/core')['initTransactionService']>
     readonly inject: UnwrapRef<typeof import('vue')['inject']>
     readonly inputRoom: UnwrapRef<typeof import('../utils/hero-ruler')['inputRoom']>
+    readonly isActivatingOtherThan: UnwrapRef<typeof import('../composables/useProfileBootstrap')['isActivatingOtherThan']>
     readonly isActiveScopeRow: UnwrapRef<typeof import('../utils/token-order')['isActiveScopeRow']>
     readonly isAmountAboveDustThreshold: UnwrapRef<typeof import('../utils/incoming-dust')['isAmountAboveDustThreshold']>
     readonly isApprovedSendInFlight: UnwrapRef<typeof import('../utils/in-flight-send')['isApprovedSendInFlight']>
-    readonly isBackgroundConnected: UnwrapRef<typeof import('../utils/core')['isBackgroundConnected']>
+    readonly isComposing: UnwrapRef<typeof import('../composables/usePopupEntity')['isComposing']>
+    readonly isEmptyContactName: UnwrapRef<typeof import('../utils/contact-name')['isEmptyContactName']>
     readonly isFirefox: UnwrapRef<typeof import('../utils/browser-surface')['isFirefox']>
     readonly isForeignProfile: UnwrapRef<typeof import('../utils/activity-rows')['isForeignProfile']>
     readonly isHiddenHolding: UnwrapRef<typeof import('../utils/token-fold')['isHiddenHolding']>
@@ -764,6 +899,7 @@ declare module 'vue' {
     readonly isReadonly: UnwrapRef<typeof import('vue')['isReadonly']>
     readonly isRef: UnwrapRef<typeof import('vue')['isRef']>
     readonly isRepeatOrComposing: UnwrapRef<typeof import('../composables/usePopupEntity')['isRepeatOrComposing']>
+    readonly isServiceReady: UnwrapRef<typeof import('../utils/core')['isServiceReady']>
     readonly isShallow: UnwrapRef<typeof import('vue')['isShallow']>
     readonly isUnknownParsedRow: UnwrapRef<typeof import('../utils/token-amount')['isUnknownParsedRow']>
     readonly isUnknownRow: UnwrapRef<typeof import('../utils/token-amount')['isUnknownRow']>
@@ -774,19 +910,23 @@ declare module 'vue' {
     readonly journalCardOriginLabel: UnwrapRef<typeof import('../utils/journal-state')['journalCardOriginLabel']>
     readonly journalCardTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCardTitle']>
     readonly journalCardTransferTypeLabel: UnwrapRef<typeof import('../utils/journal-state')['journalCardTransferTypeLabel']>
+    readonly journalRecordInScope: UnwrapRef<typeof import('../utils/activity-rows')['journalRecordInScope']>
     readonly journalTerminalDisplay: UnwrapRef<typeof import('../utils/journal-state')['journalTerminalDisplay']>
     readonly knownDecimals: UnwrapRef<typeof import('../utils/token-amount')['knownDecimals']>
     readonly legalAboutRow: UnwrapRef<typeof import('../utils/legal-about')['legalAboutRow']>
     readonly managers: UnwrapRef<typeof import('../utils/core')['managers']>
     readonly markRaw: UnwrapRef<typeof import('vue')['markRaw']>
+    readonly matchSavedContacts: UnwrapRef<typeof import('../utils/contact-import-rows')['matchSavedContacts']>
     readonly matchesQuery: UnwrapRef<typeof import('../utils/token-search')['matchesQuery']>
     readonly migrationIdle: UnwrapRef<typeof import('../utils/storage')['migrationIdle']>
     readonly moveToOwnWindow: UnwrapRef<typeof import('../utils/own-window')['moveToOwnWindow']>
+    readonly neverOpened: UnwrapRef<typeof import('../composables/useStaleNetwork')['neverOpened']>
     readonly newPasswordHint: UnwrapRef<typeof import('../utils/password')['newPasswordHint']>
     readonly nextAccountName: UnwrapRef<typeof import('../utils/account-name')['nextAccountName']>
     readonly nextTick: UnwrapRef<typeof import('vue')['nextTick']>
     readonly normalizeAllIds: UnwrapRef<typeof import('../utils/full-backup-helpers')['normalizeAllIds']>
     readonly normalizeAmount: UnwrapRef<typeof import('../utils/amount')['normalizeAmount']>
+    readonly normalizeImportRows: UnwrapRef<typeof import('../utils/contact-import-rows')['normalizeImportRows']>
     readonly normalizeProfileName: UnwrapRef<typeof import('../utils/profile-name')['normalizeProfileName']>
     readonly onActivated: UnwrapRef<typeof import('vue')['onActivated']>
     readonly onBeforeMount: UnwrapRef<typeof import('vue')['onBeforeMount']>
@@ -804,12 +944,16 @@ declare module 'vue' {
     readonly onUnmounted: UnwrapRef<typeof import('vue')['onUnmounted']>
     readonly onUpdated: UnwrapRef<typeof import('vue')['onUpdated']>
     readonly onWatcherCleanup: UnwrapRef<typeof import('vue')['onWatcherCleanup']>
+    readonly openEncryptedBackup: UnwrapRef<typeof import('../utils/full-backup-helpers')['openEncryptedBackup']>
+    readonly openFullBackupText: UnwrapRef<typeof import('../utils/full-backup-helpers')['openFullBackupText']>
     readonly openLegalDocument: UnwrapRef<typeof import('../utils/legal-links')['openLegalDocument']>
     readonly openThirdPartyNotices: UnwrapRef<typeof import('../utils/legal-links')['openThirdPartyNotices']>
     readonly orderTokenRows: UnwrapRef<typeof import('../utils/token-order')['orderTokenRows']>
     readonly ownWindowRoute: UnwrapRef<typeof import('../utils/own-window')['ownWindowRoute']>
     readonly parseAmountToBaseUnits: UnwrapRef<typeof import('../utils/amount')['parseAmountToBaseUnits']>
     readonly parseContactsExport: UnwrapRef<typeof import('../utils/contacts-export-format')['parseContactsExport']>
+    readonly parseEncryptedBackup: UnwrapRef<typeof import('../utils/full-backup-helpers')['parseEncryptedBackup']>
+    readonly parseFeePickUpdate: UnwrapRef<typeof import('../utils/fee-picks')['parseFeePickUpdate']>
     readonly parseRawBalance: UnwrapRef<typeof import('../utils/token-amount')['parseRawBalance']>
     readonly parseTransferIntent: UnwrapRef<typeof import('../utils/transfer-intent')['parseTransferIntent']>
     readonly passkeyFailureCopy: UnwrapRef<typeof import('../utils/passkey-copy')['passkeyFailureCopy']>
@@ -821,16 +965,22 @@ declare module 'vue' {
     readonly pickPrimaryMethod: UnwrapRef<typeof import('../utils/tx-enrichment')['pickPrimaryMethod']>
     readonly pinScopeOf: UnwrapRef<typeof import('../composables/usePinnedTokens')['pinScopeOf']>
     readonly pinnedTokensKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['pinnedTokensKey']>
+    readonly planImportWrites: UnwrapRef<typeof import('../utils/contact-import-rows')['planImportWrites']>
+    readonly planRestoreAgain: UnwrapRef<typeof import('../composables/full-backup-restore')['planRestoreAgain']>
     readonly postAuthRoute: UnwrapRef<typeof import('../utils/own-window')['postAuthRoute']>
     readonly preflightNetworkConnectivity: UnwrapRef<typeof import('../composables/importPreflight')['preflightNetworkConnectivity']>
+    readonly profileTypeLabel: UnwrapRef<typeof import('../utils/settings-labels')['profileTypeLabel']>
     readonly profileUiKeys: UnwrapRef<typeof import('../utils/profile-ui-keys')['profileUiKeys']>
     readonly projectArgument: UnwrapRef<typeof import('../utils/transfer-intent')['projectArgument']>
     readonly provide: UnwrapRef<typeof import('vue')['provide']>
     readonly purgeNumber: UnwrapRef<typeof import('../utils/amount')['purgeNumber']>
     readonly reactive: UnwrapRef<typeof import('vue')['reactive']>
     readonly readAmountText: UnwrapRef<typeof import('../utils/amount')['readAmountText']>
+    readonly readAppPicks: UnwrapRef<typeof import('../utils/fee-picks')['readAppPicks']>
     readonly readBackupFile: UnwrapRef<typeof import('../utils/full-backup-helpers')['readBackupFile']>
     readonly readLiveness: UnwrapRef<typeof import('../utils/background-liveness')['readLiveness']>
+    readonly readRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['readRestoreOutcome']>
+    readonly readSendSlots: UnwrapRef<typeof import('../utils/fee-picks')['readSendSlots']>
     readonly readonly: UnwrapRef<typeof import('vue')['readonly']>
     readonly receivedLabel: UnwrapRef<typeof import('../utils/received-display')['receivedLabel']>
     readonly ref: UnwrapRef<typeof import('vue')['ref']>
@@ -853,23 +1003,34 @@ declare module 'vue' {
     readonly restoreAccountsStage: UnwrapRef<typeof import('../composables/full-backup-restore')['restoreAccountsStage']>
     readonly restoreActiveNetworkPointer: UnwrapRef<typeof import('../composables/full-backup-restore')['restoreActiveNetworkPointer']>
     readonly restoreCtaBlocked: UnwrapRef<typeof import('../utils/full-backup-ctas')['restoreCtaBlocked']>
+    readonly restoreOutcomeKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['restoreOutcomeKey']>
     readonly restoreServiceSlices: UnwrapRef<typeof import('../composables/full-backup-restore')['restoreServiceSlices']>
     readonly restoreTokensStage: UnwrapRef<typeof import('../composables/full-backup-restore')['restoreTokensStage']>
+    readonly restoredNetworkIds: UnwrapRef<typeof import('../composables/full-backup-restore')['restoredNetworkIds']>
     readonly retryAccountStateStage: UnwrapRef<typeof import('../composables/full-backup-restore')['retryAccountStateStage']>
     readonly retryReplacedRows: UnwrapRef<typeof import('../composables/full-backup-restore')['retryReplacedRows']>
     readonly rollbackCreatedProfile: UnwrapRef<typeof import('../composables/full-backup-restore')['rollbackCreatedProfile']>
     readonly rowDescriptionFor: UnwrapRef<typeof import('../utils/presto-ui-state')['rowDescriptionFor']>
+    readonly rowOnToken: UnwrapRef<typeof import('../utils/activity-rows')['rowOnToken']>
     readonly rulerWidth: UnwrapRef<typeof import('../utils/hero-ruler')['rulerWidth']>
+    readonly runFenceLive: UnwrapRef<typeof import('../composables/full-backup-restore')['runFenceLive']>
     readonly runImportChainSync: UnwrapRef<typeof import('../composables/importChainSync')['runImportChainSync']>
+    readonly runResetToEnd: UnwrapRef<typeof import('../composables/useStaleNetwork')['runResetToEnd']>
     readonly runRestoreFailurePath: UnwrapRef<typeof import('../composables/full-backup-restore')['runRestoreFailurePath']>
+    readonly runUnattended: UnwrapRef<typeof import('../composables/useStaleNetwork')['runUnattended']>
+    readonly runsUnattended: UnwrapRef<typeof import('../composables/useStaleNetwork')['runsUnattended']>
     readonly safeFiatOf: UnwrapRef<typeof import('../utils/token-amount')['safeFiatOf']>
     readonly sameContactAddress: UnwrapRef<typeof import('../utils/contact-rules')['sameContactAddress']>
-    readonly sameContactName: UnwrapRef<typeof import('../utils/contact-rules')['sameContactName']>
+    readonly sameContactName: UnwrapRef<typeof import('../utils/contact-name')['sameContactName']>
+    readonly sameStoredName: UnwrapRef<typeof import('../utils/account-name')['sameStoredName']>
+    readonly sanitizeContactName: UnwrapRef<typeof import('../utils/contact-name')['sanitizeContactName']>
     readonly sanitizeJournalSubtitle: UnwrapRef<typeof import('../utils/journal-state')['sanitizeJournalSubtitle']>
     readonly sanitizePinMap: UnwrapRef<typeof import('../composables/usePinnedTokens')['sanitizePinMap']>
     readonly sanitizeString: UnwrapRef<typeof import('../utils/string')['sanitizeString']>
     readonly scopedTxRows: UnwrapRef<typeof import('../utils/activity-rows')['scopedTxRows']>
     readonly scrubUrls: UnwrapRef<typeof import('../utils/scrub-urls')['scrubUrls']>
+    readonly sealFullBackupText: UnwrapRef<typeof import('../utils/full-backup-helpers')['sealFullBackupText']>
+    readonly sendFeePicksKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['sendFeePicksKey']>
     readonly sendOutcome: UnwrapRef<typeof import('../utils/journal-state')['sendOutcome']>
     readonly setLastActiveProfileId: UnwrapRef<typeof import('../utils/lastActiveProfile')['setLastActiveProfileId']>
     readonly shallowReactive: UnwrapRef<typeof import('vue')['shallowReactive']>
@@ -883,10 +1044,13 @@ declare module 'vue' {
     readonly snackInset: UnwrapRef<typeof import('../composables/snackInset')['snackInset']>
     readonly stageSubtitle: UnwrapRef<typeof import('../utils/card-subtitle')['stageSubtitle']>
     readonly stepFailedTitle: UnwrapRef<typeof import('../utils/passkey-copy')['stepFailedTitle']>
+    readonly stillAsShown: UnwrapRef<typeof import('../utils/contact-import-rows')['stillAsShown']>
     readonly storageLocalGet: UnwrapRef<typeof import('../utils/storage')['storageLocalGet']>
     readonly storageLocalRemove: UnwrapRef<typeof import('../utils/storage')['storageLocalRemove']>
     readonly storageLocalSet: UnwrapRef<typeof import('../utils/storage')['storageLocalSet']>
+    readonly storedNameKey: UnwrapRef<typeof import('../utils/account-name')['storedNameKey']>
     readonly stringCompare: UnwrapRef<typeof import('../utils/string')['stringCompare']>
+    readonly supersedeProfileActivations: UnwrapRef<typeof import('../composables/useProfileBootstrap')['supersedeProfileActivations']>
     readonly toRaw: UnwrapRef<typeof import('vue')['toRaw']>
     readonly toRef: UnwrapRef<typeof import('vue')['toRef']>
     readonly toRefs: UnwrapRef<typeof import('vue')['toRefs']>
@@ -900,7 +1064,9 @@ declare module 'vue' {
     readonly trustRestoredTokens: UnwrapRef<typeof import('../composables/full-backup-restore')['trustRestoredTokens']>
     readonly txAmount: UnwrapRef<typeof import('../utils/tx-amount')['txAmount']>
     readonly txBelongsToScope: UnwrapRef<typeof import('../stores/activity.store')['txBelongsToScope']>
+    readonly txOnToken: UnwrapRef<typeof import('../utils/activity-rows')['txOnToken']>
     readonly txScope: UnwrapRef<typeof import('../stores/activity.store')['txScope']>
+    readonly typedContactName: UnwrapRef<typeof import('../utils/contact-name')['typedContactName']>
     readonly uiStateFromStatus: UnwrapRef<typeof import('../utils/presto-ui-state')['uiStateFromStatus']>
     readonly unref: UnwrapRef<typeof import('vue')['unref']>
     readonly untilSessionChecked: UnwrapRef<typeof import('../composables/useDappApprovalWindow')['untilSessionChecked']>
@@ -913,6 +1079,7 @@ declare module 'vue' {
     readonly useAuthRegistryStatus: UnwrapRef<typeof import('../composables/useAuthRegistryStatus')['useAuthRegistryStatus']>
     readonly useBalancesStore: UnwrapRef<typeof import('../stores/balances.store')['useBalancesStore']>
     readonly useCacheStore: UnwrapRef<typeof import('../stores/cache.store')['useCacheStore']>
+    readonly useConfigRead: UnwrapRef<typeof import('../composables/useConfigRead')['useConfigRead']>
     readonly useCssModule: UnwrapRef<typeof import('vue')['useCssModule']>
     readonly useCssVars: UnwrapRef<typeof import('vue')['useCssVars']>
     readonly useDappApprovalWindow: UnwrapRef<typeof import('../composables/useDappApprovalWindow')['useDappApprovalWindow']>
@@ -926,11 +1093,13 @@ declare module 'vue' {
     readonly useFullBackupImport: UnwrapRef<typeof import('../composables/useFullBackupImport')['useFullBackupImport']>
     readonly useFullscreenPopupSetting: UnwrapRef<typeof import('../composables/fullscreenPopupSetting')['useFullscreenPopupSetting']>
     readonly useId: UnwrapRef<typeof import('vue')['useId']>
+    readonly useImportErrorState: UnwrapRef<typeof import('../composables/useProfileImportFlow')['useImportErrorState']>
     readonly useIncomingSyncHealth: UnwrapRef<typeof import('../composables/useIncomingSyncHealth')['useIncomingSyncHealth']>
     readonly useIncomingTransfers: UnwrapRef<typeof import('../composables/useIncomingTransfers')['useIncomingTransfers']>
     readonly useIncomingTrustPrompts: UnwrapRef<typeof import('../composables/useIncomingTrustPrompts')['useIncomingTrustPrompts']>
     readonly useLegalAcceptance: UnwrapRef<typeof import('../composables/useLegalAcceptance')['useLegalAcceptance']>
     readonly useLink: UnwrapRef<typeof import('vue-router')['useLink']>
+    readonly useLockWallet: UnwrapRef<typeof import('../composables/useLockWallet')['useLockWallet']>
     readonly useModel: UnwrapRef<typeof import('vue')['useModel']>
     readonly useNetworkActivation: UnwrapRef<typeof import('../composables/useNetworkActivation')['useNetworkActivation']>
     readonly useNotificationStore: UnwrapRef<typeof import('../stores/notification.store')['useNotificationStore']>
@@ -948,6 +1117,8 @@ declare module 'vue' {
     readonly useProfileImportFlow: UnwrapRef<typeof import('../composables/useProfileImportFlow')['useProfileImportFlow']>
     readonly useProfileNameDefault: UnwrapRef<typeof import('../composables/useProfileNameDefault')['useProfileNameDefault']>
     readonly useProfileNameField: UnwrapRef<typeof import('../composables/useProfileNameField')['useProfileNameField']>
+    readonly useReceiptFee: UnwrapRef<typeof import('../composables/useReceiptFee')['useReceiptFee']>
+    readonly useRestoreAgain: UnwrapRef<typeof import('../composables/useRestoreAgain')['useRestoreAgain']>
     readonly useRoute: UnwrapRef<typeof import('vue-router')['useRoute']>
     readonly useRouter: UnwrapRef<typeof import('vue-router')['useRouter']>
     readonly useScopedTokens: UnwrapRef<typeof import('../composables/useScopedTokens')['useScopedTokens']>
@@ -955,18 +1126,22 @@ declare module 'vue' {
     readonly useSecretCountdown: UnwrapRef<typeof import('../composables/useSecretCountdown')['useSecretCountdown']>
     readonly useSeedStatus: UnwrapRef<typeof import('../composables/useSeedStatus')['useSeedStatus']>
     readonly useSendReview: UnwrapRef<typeof import('../composables/useSendReview')['useSendReview']>
+    readonly useSendStageLine: UnwrapRef<typeof import('../composables/useSendStageLine')['useSendStageLine']>
     readonly useSlots: UnwrapRef<typeof import('vue')['useSlots']>
     readonly useSnackInset: UnwrapRef<typeof import('../composables/snackInset')['useSnackInset']>
+    readonly useStaleNetwork: UnwrapRef<typeof import('../composables/useStaleNetwork')['useStaleNetwork']>
     readonly useSyncedRef: UnwrapRef<typeof import('../composables/syncedRef.js')['useSyncedRef']>
     readonly useTemplateRef: UnwrapRef<typeof import('vue')['useTemplateRef']>
     readonly useTicker: UnwrapRef<typeof import('../composables/ticker')['useTicker']>
     readonly useToast: UnwrapRef<typeof import('../composables/toast.js')['useToast']>
     readonly useTokenBalanceSnapshot: UnwrapRef<typeof import('../composables/useTokenBalanceSnapshot')['useTokenBalanceSnapshot']>
+    readonly useWalletTxEstimates: UnwrapRef<typeof import('../composables/useWalletTxEstimates')['useWalletTxEstimates']>
     readonly vSnackFooter: UnwrapRef<typeof import('../composables/snackInset')['vSnackFooter']>
     readonly vSnackSheet: UnwrapRef<typeof import('../composables/snackInset')['vSnackSheet']>
     readonly validateAndMigrateBackup: UnwrapRef<typeof import('../composables/useFullBackupImport')['validateAndMigrateBackup']>
     readonly vocabularySelector: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['vocabularySelector']>
     readonly waitForProfileActive: UnwrapRef<typeof import('../composables/waitForProfileActive')['waitForProfileActive']>
+    readonly waitForServiceReady: UnwrapRef<typeof import('../utils/core')['waitForServiceReady']>
     readonly walletChainId: UnwrapRef<typeof import('../utils/chain-ids')['walletChainId']>
     readonly watch: UnwrapRef<typeof import('vue')['watch']>
     readonly watchEffect: UnwrapRef<typeof import('vue')['watchEffect']>

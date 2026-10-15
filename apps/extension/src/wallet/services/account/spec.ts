@@ -1,6 +1,8 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { z } from "zod"
 import type { Restored } from "@/wallet/base"
+import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
+import type { RunFence } from "@/wallet/services/profile/spec"
 
 export const ACCOUNT_SERVICE_NAME = "account"
 
@@ -35,8 +37,6 @@ export function accountRowIdOf(account: Pick<Account, "profileId" | "chainId" | 
 /**
  * Whether the row read from `accountRowId(profileId, chainId, address)` agrees with that key on
  * every identity field: a row transplanted under another key must not redirect signing or export.
- * RPC arguments are not validated, so with `profileId` omitted and no row the second read throws
- * the engine's TypeError, which names this parameter.
  */
 export function rowMatchesKey<T extends Pick<Account, "profileId" | "chainId" | "address">>(
 	account: T | undefined,
@@ -83,20 +83,7 @@ export function parseAccountRowId(id: string): { profileId: string; chainId: num
 	return { profileId, chainId, address }
 }
 
-/**
- * An imported account's stored key is unusable (missing, un-decryptable, or its recomputed
- * address no longer matches the stored row). Fail-closed for THAT account only — never a
- * profile-wide block (imported key material is external). The UI surfaces
- * this and offers delete + re-import as the repair.
- */
-export class ImportedAccountUnusableError extends Error {
-	public readonly address: string
-	public constructor(address: string, reason: string) {
-		super(`Imported account ${address} is unusable: ${reason}`)
-		this.name = "ImportedAccountUnusableError"
-		this.address = address
-	}
-}
+export { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
 
 export enum AccountType {
 	// SECURITY: Numeric value is used in poseidon2Hash for key derivation. NEVER change it.
@@ -155,6 +142,43 @@ export type Account = {
 	visible: boolean
 }
 
+/** A password profile's full-backup key material, read in one authenticated pass. */
+export type FullBackupKeys = {
+	/** Base64 master secret, the file's `master-key`. */
+	masterKey: string
+	/** Base64 recovery-phrase entropy. */
+	entropy: string
+	/** Base64 key made for this one backup, the file's `imported-keys-dek`: the key its imported-key
+	 *  rows open under, never the profile's long-lived DEK. */
+	importedKeysKey: string
+	/** The imported-keys slice, re-sealed under `importedKeysKey`. A row that did not open travels
+	 *  as it was stored. */
+	importedKeyRows: ImportedAccountKey[]
+	/** The account slice, read before the key rows. */
+	accounts: Account[]
+	/** The stored DEK no longer opens, so no imported key survives the restore. */
+	dekReplaced: boolean
+	/** Imported-key rows that did not open, so travel as stored and will not restore; 0 when the
+	 *  DEK was replaced. */
+	unopenedImportedKeys: number
+}
+
+/** A passkey profile's full-backup key material and the slices it was counted over, read once. */
+export type PasskeyBackupKeys = {
+	/** The file's `master-key`. */
+	credentialId: string
+	/** The file's `imported-keys-dek-sealed`: the stored DEK, or a fresh one when it no longer opens. */
+	dekSealed: string
+	dekReplaced: boolean
+	/** Imported-key rows of `importedKeyRows` that do not open under the stored DEK; 0 when it was
+	 *  replaced. */
+	unopenedImportedKeys: number
+	/** The imported-keys slice the file carries, as stored. */
+	importedKeyRows: ImportedAccountKey[]
+	/** The account slice, read before the key rows. */
+	accounts: Account[]
+}
+
 /** Storage codec row schema — mirrors `Account` exactly. */
 export const AccountSchema: z.ZodType<Account> = z.object({
 	profileId: z.string(),
@@ -165,7 +189,7 @@ export const AccountSchema: z.ZodType<Account> = z.object({
 	// Fr construction, or one near 2^53 where `max + 1 === max` silently wedges new-account creation.
 	// Bound it to a nonnegative safe integer whose `+ 1` is still exactly representable.
 	index: z.number().int().nonnegative().lt(Number.MAX_SAFE_INTEGER),
-	type: z.nativeEnum(AccountType),
+	type: z.enum(AccountType),
 	// Derivation chain input — canonical u32, bounded like `index` (a hostile backup must not
 	// smuggle a value the derivation would reject or truncate).
 	l1ChainId: z.number().int().nonnegative().max(0xffffffff),
@@ -200,10 +224,10 @@ export type Methods = {
 	createAccount(profileId: string, chainId: number, type: AccountType, name: string): Account
 
 	/**
-	 * Idempotent default-account provisioning. Returns the lowest-index existing
-	 * account for `(profileId, chainId)` if one exists, otherwise creates the
-	 * index-0 account and returns it. Serialized per-tuple — concurrent callers
-	 * resolve to the same account, never to a duplicate.
+	 * Idempotent default-account provisioning. Returns the lowest-index derived account for
+	 * `(profileId, chainId)`; with none, creates the first derived account whose address no row
+	 * holds. Serialized per-tuple — concurrent callers resolve to the same account, never to a
+	 * duplicate.
 	 */
 	ensureDefaultAccount(profileId: string, chainId: number, type: AccountType, name: string): Account
 
@@ -238,7 +262,7 @@ export type Methods = {
 	 * the envelope (regime digests, canonical signing key, checksum), recomputes the address from
 	 * the signing key and requires it to equal `expectedAddress` (the address the UI showed the
 	 * user for confirmation), rejects a duplicate, seals the signing key, and writes the row.
-	 * `password` decrypts an encrypted file (omit/empty for plaintext).
+	 * `password` decrypts an encrypted file (empty for plaintext).
 	 */
 	importAccount(profileId: string, chainId: number, fileBody: string, expectedAddress: string, password: string, name?: string): Account
 
@@ -249,6 +273,20 @@ export type Methods = {
 	 */
 	previewImportAccount(fileBody: string, password: string): string
 
+	/**
+	 * A password profile's full-backup key material from one authenticated pass: master, entropy,
+	 * the account slice, and the imported-key rows re-sealed under a fresh per-backup key. Throws
+	 * unless `fence` names the open session both before the first read and after the last seal.
+	 */
+	exportFullBackupKeys(fence: RunFence, password: string): FullBackupKeys
+
+	/**
+	 * A passkey profile's full-backup key material from the in-page ceremony's `credentialData`, with
+	 * the account and imported-key slices it was counted over. Throws unless `fence` names the open
+	 * session both before the first read and after the count.
+	 */
+	exportPasskeyBackupKeys(fence: RunFence, credentialData: PasskeyCredentialData): PasskeyBackupKeys
+
 	/** Backup the active profile's imported-account encrypted key rows (the dedicated slice). */
 	backupImportedKeys(): ImportedAccountKey[]
 
@@ -258,6 +296,34 @@ export type Methods = {
 	/** At restore finalize: drop imported Account rows with no matching key row; returns their addresses. */
 	reconcileImportedAccounts(profileId: string): AccountScope[]
 }
+
+const RunFenceParamSchema = z.object({ profileId: z.string(), epoch: z.number(), session: z.number(), incarnation: z.string() })
+
+/**
+ * The argument tuple of every account RPC, checked at the port before the method runs. A trailing
+ * `.optional()` member also matches an omitted argument: the transport keeps `undefined` holes.
+ * Imported-key rows are only checked to be an array: the restore records each bad row as its own
+ * error.
+ */
+export const AccountMethodSchemas = {
+	getAccounts: z.tuple([z.string(), z.number(), z.boolean().optional()]),
+	getAccount: z.tuple([z.string(), z.number(), z.string()]),
+	createAccount: z.tuple([z.string(), z.number(), z.enum(AccountType), z.string()]),
+	ensureDefaultAccount: z.tuple([z.string(), z.number(), z.enum(AccountType), z.string()]),
+	changeAccountName: z.tuple([z.string(), z.number(), z.string(), z.string()]),
+	changeAccountVisibility: z.tuple([z.string(), z.number(), z.string(), z.boolean()]),
+	exportAccount: z.tuple([z.string(), z.number(), z.string(), z.string(), z.boolean()]),
+	importAccount: z.tuple([z.string(), z.number(), z.string(), z.string(), z.string(), z.string().optional()]),
+	previewImportAccount: z.tuple([z.string(), z.string()]),
+	exportFullBackupKeys: z.tuple([RunFenceParamSchema, z.string()]),
+	exportPasskeyBackupKeys: z.tuple([
+		RunFenceParamSchema,
+		z.object({ id: z.string(), prf: z.string(), userHandle: z.string().optional() }),
+	]),
+	backupImportedKeys: z.tuple([]),
+	restoreImportedKeys: z.tuple([z.array(z.unknown())]),
+	reconcileImportedAccounts: z.tuple([z.string()]),
+} satisfies Record<keyof Methods, z.ZodType<unknown[]>>
 
 export type Events = {
 	/** Emitted when a new account is created */

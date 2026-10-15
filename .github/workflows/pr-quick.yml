@@ -9,16 +9,14 @@ on:
     # the PRs sat with no checks at all rather than with red ones. Gating every PR
     # regardless of base costs CI minutes and makes each arc independently
     # verifiable; a bad middle arc is otherwise invisible until it reaches dev.
-    # `ready_for_review` so a draft marked ready WITHOUT a new push still re-runs
-    # CI — otherwise the required `… / Status` checks never report on the PR and
-    # hang "Expected" forever → mergeStateStatus=BLOCKED.
+    # `ready_for_review` gives a draft marked ready a fresh run on its head. Nothing
+    # here reads the draft flag, so the head normally has a result already; the
+    # fresh run can replace one that failed, was cancelled or never started.
     #
-    # NO `labeled`/`unlabeled`: nothing in this workflow reads labels, so for a
-    # SHA this workflow has already covered a label event only re-does that work
-    # — cancelling the in-flight run (whose `quality-status` then concludes
-    # FAILURE via `always()` + the cancelled-is-failure branch, leaving a
-    # duplicate FAILURE check-run behind) or re-running everything from
-    # scratch. It can
+    # NO `labeled`/`unlabeled`: the one label read here, `baseline:move-approved`,
+    # is read live by the unit-tests job on each of its runs, so for a SHA this
+    # workflow has already covered a label event would only queue a second
+    # identical run: apply the label, then re-run the failed job. It could
     # incidentally recover a head with no run of its own, which is why the gap
     # below matters. The label-gated suites keep both types: their gates read
     # labels.
@@ -26,16 +24,16 @@ on:
     # Gap: a PR RETARGETED to dev/main fires `edited`, not listed here, so a head
     # that never got a run can sit at required `quality-status: Expected`
     # forever. `edited` is not the fix — it also fires on every title/body edit,
-    # so unrelated edits would re-run the full suite and cancel in-flight runs,
-    # manufacturing exactly the duplicate churn this line removes. Recover with
-    # `gh workflow run pr-quick.yml --ref <branch>`, where <branch> still
-    # resolves to the PR's current head, then confirm `quality-status` reported
-    # on that exact SHA.
+    # so each unrelated edit would queue a full re-run. Recover by closing and
+    # reopening the PR or by pushing a commit: the checks of a
+    # `workflow_dispatch` run never count toward a pull request's required checks.
     types: [opened, reopened, synchronize, ready_for_review]
 
 concurrency:
-  group: pr-quick-${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  # One queue per head commit, so a late run of an older push can neither cancel nor replace the
+  # current head's run; pr-supersede.yml cancels the runs of heads the pull request moved past.
+  group: pr-quick-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
 
 permissions:
   contents: read
@@ -45,7 +43,7 @@ jobs:
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     outputs:
       core-foundation: ${{ steps.override.outputs.full || steps.filter.outputs.core-foundation }}
       aztec-runtime: ${{ steps.override.outputs.full || steps.filter.outputs.aztec-runtime }}
@@ -57,6 +55,7 @@ jobs:
       root-config: ${{ steps.override.outputs.full || steps.filter.outputs.root-config }}
       needs-extension-build: ${{ steps.compute.outputs.needs-extension-build }}
       needs-landing-build: ${{ steps.compute.outputs.needs-landing-build }}
+      audit-mode: ${{ steps.audit-mode.outputs.audit-mode }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -101,6 +100,8 @@ jobs:
               # The licence texts and the expected-minimum list are build inputs too.
               - 'packages/third-party-notices/src/**'
               - 'packages/third-party-notices/package.json'
+              - 'packages/token-list/src/**'
+              - 'packages/token-list/package.json'
               - 'packages/third-party-notices/texts/**'
               - 'packages/third-party-notices/bin/**'
               - 'packages/third-party-notices/expected-minimum.txt'
@@ -127,10 +128,36 @@ jobs:
               - '.commitlintrc.json'
               - '.githooks/**'
               - 'patches/**'
+            # What decides the audit gate's mode; scripts/ci-cd/audit-gate.ts reads the same set.
+            deps:
+              - 'bun.lock'
+              - 'bunfig.toml'
+              - 'scripts/ci-cd/audit-acks.json'
+              - '**/package.json'
       - name: Override for manual dispatch
         if: github.event_name == 'workflow_dispatch'
         id: override
         run: echo "full=true" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/setup-bun
+        if: github.event_name == 'pull_request' && steps.filter.outputs.deps == 'true'
+        with:
+          cache: "false"
+          install: "false"
+      # A pull request that changes dependencies beyond version lines must leave no advisory
+      # unacknowledged; a Release PR, the main → dev sync and every other run only report.
+      - name: Choose the audit mode
+        id: audit-mode
+        env:
+          EVENT: ${{ github.event_name }}
+          DEPS: ${{ steps.filter.outputs.deps }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ] && [ "$DEPS" = true ]; then
+            bun scripts/ci-cd/audit-gate.ts mode --base "$BASE_SHA" --head "$HEAD_SHA"
+          else
+            echo "audit-mode=report" >> "$GITHUB_OUTPUT"
+          fi
       - name: Compute downstream flags
         id: compute
         env:
@@ -174,10 +201,10 @@ jobs:
         run: |
           if [ "$BASE_REF" = "main" ]; then
             # Skip on promote / Release PRs to main. The two kinds of main PR:
-            #  - the promote PR, whose merge subject is an intentionally
-            #    NON-conventional, >100-char "release: promote dev -> main (...)"
-            #    release-note line (mandated by CLAUDE.md) — it cannot pass
-            #    commitlint by design (no 'release' type; over the header cap);
+            #  - the promote PR, whose merge subject is a
+            #    "release: promote dev -> main (...)" release-note line (mandated
+            #    by CLAUDE.md) — `release` is an allowed type, but the line can
+            #    run past the 100-char header cap;
             #  - the bot Release PR, whose "chore(main): release X.Y.Z" is
             #    reliably conventional anyway.
             # And the dev squash subjects in base..head are already-merged +
@@ -204,6 +231,7 @@ jobs:
     uses: ./.github/workflows/_lint-and-typecheck.yml
     with:
       ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      audit_mode: ${{ needs.changes.outputs.audit-mode }}
 
   unit-tests:
     name: Unit tests
@@ -284,10 +312,11 @@ jobs:
           CHROME_URL: ${{ needs.build-chrome.outputs.chrome_artifact_url }}
           FIREFOX_RESULT: ${{ needs.build-firefox.result }}
           FIREFOX_URL: ${{ needs.build-firefox.outputs.firefox_artifact_url }}
+        # The head's bunfig.toml is not checked out, and may predate its auto-install refusal anyway.
         run: |
-          PREVIEW_VERSION="$(bun -e "console.log(require('./apps/extension/package.json').version)")-pr.${PR_NUMBER}"
+          PREVIEW_VERSION="$(bun --no-install -e "console.log(require('./apps/extension/package.json').version)")-pr.${PR_NUMBER}"
           export PREVIEW_VERSION
-          bun scripts/ci-cd/preview-comment.ts
+          bun --no-install scripts/ci-cd/preview-comment.ts
 
   # The landing deploys from Cloudflare's own Git integration, so without this job the first
   # build of a change is the production one. `bun run build` is the production build: `prebuild`
@@ -313,6 +342,42 @@ jobs:
             test -s "dist/$f" || { echo "::error::missing dist/$f"; exit 1; }
           done
 
+  # Every story lives under the extension build's filter, so that flag decides this job too.
+  build-storybook:
+    name: Build Storybook
+    needs: changes
+    if: needs.changes.outputs.needs-extension-build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - uses: ./.github/actions/setup-bun
+      - name: Build
+        env:
+          STORYBOOK_DISABLE_TELEMETRY: "1"
+        run: bun run --cwd apps/extension build-storybook
+
+  # A stable release at or above 1.0.0 is a launch: a promote or Release PR into main at such a version
+  # must leave no «FILL» in the legal documents, while dev stays open to legal drafts. A retarget
+  # starts no run here, so auto-unstick repeats the check before it creates a stable tag.
+  launch-legal:
+    name: Launch legal check
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: ./.github/actions/setup-bun
+      - name: Refuse a launch with a blank in the legal documents
+        working-directory: packages/legal
+        env:
+          NULO_LAUNCH_GATE: "1"
+        run: bun run test src/launch.test.ts
+
   # Extension smoke e2e lives in its own pr-extension-smoke-e2e.yml workflow:
   # auto-runs on PRs to main, on changes within the `smoke-surface`
   # filter, or via the `e2e:extension-smoke` label. Mirrors pr-extension-network-e2e.yml.
@@ -320,24 +385,55 @@ jobs:
   status:
     name: quality-status
     if: always()
-    needs: [changes, commitlint, lint-and-typecheck, unit-tests, build-chrome, build-firefox, build-landing]
+    needs: [changes, commitlint, lint-and-typecheck, unit-tests, build-chrome, build-firefox, build-landing, build-storybook, launch-legal]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Aggregate results
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          EXTENSION_BUILD: ${{ needs.changes.outputs.needs-extension-build }}
+          LANDING_BUILD: ${{ needs.changes.outputs.needs-landing-build }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          COMMITLINT_RESULT: ${{ needs.commitlint.result }}
+          LINT_AND_TYPECHECK_RESULT: ${{ needs.lint-and-typecheck.result }}
+          UNIT_TESTS_RESULT: ${{ needs.unit-tests.result }}
+          BUILD_CHROME_RESULT: ${{ needs.build-chrome.result }}
+          BUILD_FIREFOX_RESULT: ${{ needs.build-firefox.result }}
+          BUILD_LANDING_RESULT: ${{ needs.build-landing.result }}
+          BUILD_STORYBOOK_RESULT: ${{ needs.build-storybook.result }}
+          LAUNCH_LEGAL_RESULT: ${{ needs.launch-legal.result }}
         run: |
-          for r in \
-            "${{ needs.changes.result }}" \
-            "${{ needs.commitlint.result }}" \
-            "${{ needs.lint-and-typecheck.result }}" \
-            "${{ needs.unit-tests.result }}" \
-            "${{ needs.build-chrome.result }}" \
-            "${{ needs.build-firefox.result }}" \
-            "${{ needs.build-landing.result }}" \
-          ; do
-            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
-              echo "::error::A required job failed or was cancelled: $r"
+          # An exact state machine, not a denylist: each gate must end as its own `if:` says,
+          # `success` where it held and `skipped` where it did not, so a gate that never ran
+          # (skipped for the wrong reason, cancelled before a runner, an empty result) fails here.
+          expect() {
+            if [ "$2" != "$3" ]; then
+              echo "::error::$1 is '$2', expected '$3'"
               exit 1
             fi
-          done
-          echo "All required gates passed (or were skipped because their filter did not trip)."
+          }
+          bool() {
+            case "$2" in
+              true | false) ;;
+              *) echo "::error::$1 is not true/false: '$2'"; exit 1 ;;
+            esac
+          }
+          ran() { if [ "$1" = true ]; then echo success; else echo skipped; fi }
+          expect changes "$CHANGES_RESULT" success
+          bool needs-extension-build "$EXTENSION_BUILD"
+          bool needs-landing-build "$LANDING_BUILD"
+          pull_request=false
+          if [ "$EVENT" = pull_request ]; then pull_request=true; fi
+          into_main=false
+          if [ "$pull_request" = true ] && [ "$BASE_REF" = main ]; then into_main=true; fi
+          expect commitlint "$COMMITLINT_RESULT" "$(ran "$pull_request")"
+          expect lint-and-typecheck "$LINT_AND_TYPECHECK_RESULT" success
+          expect unit-tests "$UNIT_TESTS_RESULT" success
+          expect build-chrome "$BUILD_CHROME_RESULT" "$(ran "$EXTENSION_BUILD")"
+          expect build-firefox "$BUILD_FIREFOX_RESULT" "$(ran "$EXTENSION_BUILD")"
+          expect build-landing "$BUILD_LANDING_RESULT" "$(ran "$LANDING_BUILD")"
+          expect build-storybook "$BUILD_STORYBOOK_RESULT" "$(ran "$EXTENSION_BUILD")"
+          expect launch-legal "$LAUNCH_LEGAL_RESULT" "$(ran "$into_main")"
+          echo "Every gate ended as its condition asks (a build whose filter did not trip is skipped)."

@@ -28,7 +28,10 @@ const KEY_B64 = "+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/s="
 const KEY_LAST = new Uint8Array(32).fill(0xfb).map((b, i) => (i === 31 ? 0xfa : b))
 const KEY_LAST_B64 = btoa(String.fromCharCode(...KEY_LAST))
 
-type Internals = { storeKeys: Map<string, Uint8Array>; profileLifecycles: Map<string, { kind: string; gen: string }> }
+type Internals = {
+	storeKeys: Map<string, Uint8Array>
+	profileLifecycles: Map<string, { current?: { kind: string; gen: string }; dead: Set<string> }>
+}
 
 function makeService(): PxeService {
 	const factory: PxeFactory = {
@@ -63,7 +66,7 @@ describe("provisionChainStoreKey: wire-key decode", () => {
 		const service = makeService()
 		await service.provisionChainStoreKey("p1", wire, GEN_1)
 		expect([...(internals(service).storeKeys.get("p1") ?? [])]).toEqual([...KEY])
-		expect(internals(service).profileLifecycles.get("p1")).toEqual({ kind: "live", gen: GEN_1 })
+		expect(internals(service).profileLifecycles.get("p1")).toEqual({ current: { kind: "live", gen: GEN_1 }, dead: new Set() })
 	})
 
 	test.each([
@@ -79,7 +82,7 @@ describe("provisionChainStoreKey: wire-key decode", () => {
 		expect(internals(service).profileLifecycles.has("p1")).toBe(false)
 		// A lifecycle set before the decode would refuse a successor generation here.
 		await service.provisionChainStoreKey("p1", KEY_B64, GEN_2)
-		expect(internals(service).profileLifecycles.get("p1")).toEqual({ kind: "live", gen: GEN_2 })
+		expect(internals(service).profileLifecycles.get("p1")).toEqual({ current: { kind: "live", gen: GEN_2 }, dead: new Set() })
 	})
 
 	test.each([
@@ -95,7 +98,7 @@ describe("provisionChainStoreKey: wire-key decode", () => {
 
 	test("a malformed key is refused by the decode before a refusing lifecycle is consulted", async () => {
 		const service = makeService()
-		internals(service).profileLifecycles.set("p1", { kind: "deleting", gen: GEN_1 })
+		internals(service).profileLifecycles.set("p1", { current: { kind: "deleting", gen: GEN_1 }, dead: new Set() })
 		await expect(service.provisionChainStoreKey("p1", `${KEY_B64}!`, GEN_1)).rejects.toMatchObject({ name: "InvalidCharacterError" })
 		await expect(service.provisionChainStoreKey("p1", KEY_B64, GEN_1)).rejects.toThrow(
 			"provisionChainStoreKey: profile p1 is being deleted — provision rejected",

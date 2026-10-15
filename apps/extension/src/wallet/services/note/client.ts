@@ -18,4 +18,4 @@ export class NoteServiceClient extends ServiceClient<Methods> implements Service
 }
 // Every client method is a pure request-passthrough; the installer's
 // signature checks the name list in both directions against `Methods`.
-definePassthroughsExhaustive<Methods>()(NoteServiceClient.prototype, ["getNotes", "getNotesRaw", "getBlockTimestamp"])
+definePassthroughsExhaustive<Methods>()(NoteServiceClient.prototype, ["getNotes", "getNotesRaw", "getBlockTimestamp", "getSyncedBlock"])

@@ -29,11 +29,8 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 	let deletionState: ProfileDeletionState
 	let api: FakeBrowserApi
 
-	beforeEach(async () => {
-		vi.useFakeTimers()
-		api = new FakeBrowserApi()
-		api.reset()
-		deletionState = new ProfileDeletionState()
+	/** A service over `api`'s storage, as a worker (re)start builds it. */
+	async function start(): Promise<TransactionService> {
 		const services = new ServiceCollection()
 		services.add(svc(PROFILE_SERVICE_NAME, { getActiveProfile: async () => ({ id: "p1" }), getDeletionState: () => deletionState }))
 		services.add(
@@ -55,16 +52,25 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 			}),
 		)
 		services.add(svc(NETWORK_SERVICE_NAME, {}))
-		service = new TransactionService(new LoggerStore(new ConfigStore()), api)
-		services.add(service)
+		const started = new TransactionService(new LoggerStore(new ConfigStore()), api)
+		services.add(started)
 		await services.start()
+		return started
+	}
+
+	beforeEach(async () => {
+		vi.useFakeTimers()
+		api = new FakeBrowserApi()
+		api.reset()
+		deletionState = new ProfileDeletionState()
+		service = await start()
 	})
 
 	afterEach(() => {
 		vi.useRealTimers()
 	})
 
-	const add = (hash: string, fence?: ExecutionFence, networkId?: string) =>
+	const add = (hash: string, fence?: ExecutionFence, networkId?: string, feeSpender?: string, priorityLevel?: "urgent") =>
 		service.addTransaction({
 			origin: { type: 0 } as never,
 			chainId: 1,
@@ -76,6 +82,8 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 			submittedEndpointUrl: undefined,
 			estimatedFee: undefined,
 			gasDetails: undefined,
+			feeSpender,
+			priorityLevel,
 			fence,
 			networkId,
 		})
@@ -90,6 +98,17 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 
 		const remaining = (await service.getTransactions(ACCOUNT)).map((t) => t.hash)
 		expect(remaining).toEqual(["0xp2-tx"])
+	})
+
+	test("an account deleted on one chain keeps the same address's history on another chain", async () => {
+		await add("0xchain1", { profileId: "p1", epoch: deletionState.capture("p1"), session: 1 }, "net-1")
+		const row = await service.getTransaction("0xchain1")
+		await api.storage.local.set({ "nulo:core:txs@0xchain2": JSON.stringify({ ...row, hash: "0xchain2", chainId: 2 }) })
+		const onAccountDeleted = Reflect.get(service, "onAccountDeleted") as (a: object) => Promise<void>
+
+		await onAccountDeleted({ profileId: "p1", chainId: 1, address: ACCOUNT })
+
+		expect((await service.getTransactions(ACCOUNT)).map((t) => t.hash)).toEqual(["0xchain2"])
 	})
 
 	test("purgeForAccounts removes a malformed row scoped to the deleted profile; spares the survivor's and multi-owner unscoped ones", async () => {
@@ -135,6 +154,17 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 		// It must not be among the rows a restart would put back into the poller,
 		// which would run against whichever profile is active now.
 		expect(marked.map((tx) => tx.hash)).not.toContain("0xmarked")
+	})
+
+	test("the fee spender and the speed are stored and re-armed with their pending row after a restart; a row without them carries none", async () => {
+		const fence = { profileId: "p1", epoch: deletionState.capture("p1"), session: 1 }
+		await add("0xpaid", fence, "net-1", "0xF", "urgent")
+		await add("0xplain", fence, "net-1")
+		const restarted = await start()
+		const pending = restarted.getPendingForAccount(ACCOUNT)
+		expect(pending.find((tx) => tx.hash === "0xpaid")).toMatchObject({ feeSpender: "0xF", priorityLevel: "urgent" })
+		expect(pending.find((tx) => tx.hash === "0xplain")).not.toHaveProperty("feeSpender")
+		expect(pending.find((tx) => tx.hash === "0xplain")).not.toHaveProperty("priorityLevel")
 	})
 
 	test("stamps the owning profile and network so history can be scoped", async () => {

@@ -43,19 +43,18 @@ defineProps({
 }
 
 .title {
-	font-family: var(--font-headline);
-	font-weight: 700;
+	composes: type--row-title from global;
 	font-size: 14px;
 	color: var(--txt-primary);
 }
 
 .sub {
-	font-size: 12px;
+	composes: type--body from global;
 	color: var(--txt-secondary);
 }
 
 .detail {
-	font-size: 10px;
+	composes: type--caption from global;
 	color: var(--txt-tertiary);
 	word-break: break-word;
 }

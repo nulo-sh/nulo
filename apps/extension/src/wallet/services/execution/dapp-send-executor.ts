@@ -18,6 +18,11 @@
  *   - `acquireSlot` BEFORE the journal claim and any PXE-touching work.
  *     The session-FIFO baton releases inside the slot acquisition (via
  *     `onExecutionEnqueued`) the instant we're enqueued.
+ *   - Between the grant and the claim, a send whose origin has an earlier
+ *     send still waiting, or whose account has an earlier send unmined (its
+ *     spends are unknown before the build), parks outside the slot and comes
+ *     back; nothing is claimed, built or awaited on the network under the
+ *     slot before that check passes.
  *   - `journalId` hoisted outside the try so catch (mark failed) +
  *     finally (controller cleanup + slot release) run even if the claim
  *     or the post-claim cancel-check throws on a raced cancel —
@@ -41,20 +46,23 @@ import { findPrimaryEndpoint, primaryEndpointUrl } from "@/wallet/services/netwo
 import type { ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
 import type { WrappedTask } from "@/wallet/services/task/service"
 import type { AddTransactionInput, LocalTxOrigin, TransactionService, Tx } from "@/wallet/services/transaction/service"
+import { OriginType } from "@/wallet/services/transaction/spec"
 import type { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import type { Network } from "@/wallet/services/network/service"
-import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
 import type { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
 import { type ExecutionCoordinator, type ProveAndSendContext, fenceChecks } from "./execution-coordinator"
-import { fingerprintBaseFee } from "./estimate-reuse-shared"
+import { builtCapOf } from "./estimate-reuse-shared"
+import type { ChainTipGate } from "./chain-tip-gate"
+import type { OriginTurn } from "./execution-lane"
 import type { ExecutionMutexRelease } from "./execution-mutex"
-import type { OperationEstimateReuse, OperationEstimateReuseEntry } from "./operation-estimate-reuse"
+import type { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { fingerprintNoFromInputs, fingerprintOperation, type OperationFingerprintInput } from "./operation-fingerprint"
 import { PREVIEW_FOREIGN_MESSAGE, type PreviewLookup, type PreviewSnapshots, assertWithinPreview } from "./preview-snapshots"
 import { decodeAuthwitEffects } from "./decode-authwit-effects"
 import { throwIfAborted } from "./rpc-cancel"
-import { probeSponsorFunding } from "./sponsor-funding"
+import type { SendSequencer, SequenceScope, SequenceTicket } from "./send-sequencer"
+import { probeAppPayerFunding, probeOwnFeeJuice, probeSponsorFunding } from "./sponsor-funding"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { type FeeEstimate, finalizeGasLimits, suggestGasLimits } from "./fee/fee-strategy"
 import type { OperationPlanner } from "./operation-planner"
@@ -73,7 +81,7 @@ import type {
 } from "./spec"
 import type { TxRequestBuilder } from "./tx-request-builder"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
-import { getEstimatedFee, getGasDetails } from "./tx-fee-details"
+import { getEstimatedFee, getGasDetails, priorityFeeOf } from "./tx-fee-details"
 import { detectEmbeddedFeePayment } from "./utils/fee-detection"
 
 /** Project an `Action[]` (a discriminated union with non-call variants like
@@ -118,8 +126,27 @@ export interface DappSendExecutorLane {
 		calls?: { method?: string }[],
 		fence?: ExecutionFence,
 	): Promise<string | undefined>
-	markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null): Promise<void>
+	markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null, failedTitle?: string): Promise<void>
 	commitJournal(journalId: string | undefined, progress: JobProgress): Promise<void>
+	parkSlot(
+		release: ExecutionMutexRelease,
+		networkId: string,
+		queuedJournalId: string | undefined,
+		fence: ExecutionFence,
+		preController: AbortController | undefined,
+		originKey: string | undefined,
+		wait: () => Promise<void>,
+	): Promise<ExecutionMutexRelease>
+	joinOriginLine(fence: ExecutionFence, chainId: number, originKey: string | undefined): OriginTurn
+	failUnclaimed(journalId: string | undefined, error: unknown): Promise<void>
+}
+
+/** Where a granted dApp send stands until it starts: its origin's line, and a waiter in the line of
+ *  each account it may spend from. */
+interface DappSendLine {
+	turn: OriginTurn
+	scopes: SequenceScope[]
+	waiters: SequenceTicket[]
 }
 
 /** What the post-send record needs from a built send, whichever arm built it. */
@@ -162,8 +189,8 @@ export interface DappSendExecutorDeps {
 	getPXE(network: Network): FeeEstimate["pxe"]
 	getAccountContract(profileId: string, chainId: number, accountAddress: string): Promise<FeeEstimate["account"]>
 	getPendingForAccount(account: string): { hash: string }[]
-	/** Fresh decorated FPC row — identity snapshot for fpc-kind reuse entries. */
-	getFpcInfo(fpcId: string): Promise<FpcInfo>
+	/** The account's send epoch (`SendSequencer.epoch`). */
+	sequenceEpoch(chainId: number, account: string): number
 	/** The probe-free validated pipeline (the service's strategy map). */
 	buildAndEstimateValidated(
 		inputOp: { networkId: string; accountAddress: string; actions: Action[]; fee?: FeeOptions },
@@ -181,6 +208,8 @@ export interface DappSendExecutorDeps {
 	/** The account's tx reached the node: Send-page sends sharing its calls' state wait for its
 	 *  receipt, and a transfer estimate built before it is stale. */
 	noteSent(chainId: number, account: string, txHash: string, calls: Tx["calls"]): void
+	sequencer: Pick<SendSequencer, "enterWaiter">
+	chainTip: Pick<ChainTipGate, "unconfirmed" | "wait">
 	logDebug(msg: string, ...rest: unknown[]): void
 }
 
@@ -196,6 +225,8 @@ export class DappSendExecutor {
 	 * Frozen ordering (do not reorder — see execution-lane.ts header):
 	 *   - `acquireSlot` BEFORE the journal claim and any PXE work (the
 	 *     session-FIFO baton releases inside acquisition via `onEnqueued`).
+	 *   - the earlier-sends wait between the grant and the claim; whichever
+	 *     slot it holds last is the one `finally` releases.
 	 *   - `journalId` hoisted OUTSIDE the try so catch (mark failed) +
 	 *     finally (controller cleanup + slot release) run even if the claim
 	 *     or the post-claim cancel-check throws on a raced cancel — otherwise
@@ -224,6 +255,8 @@ export class DappSendExecutor {
 			// enqueue (letting a later request overtake) and move any throw out
 			// of the acquire-protected try. Evaluated below, inside the try.
 			getCalls: () => { method?: string }[] | undefined
+			/** The dApp's `additionalScopes`, a thunk for the same reason as `getCalls`. */
+			getAdditionalScopes: () => unknown
 		},
 		run: (ctx: {
 			journalId: string | undefined
@@ -232,16 +265,21 @@ export class DappSendExecutor {
 			commitSubmitting: ProveAndSendContext["commitSubmitting"]
 		}) => Promise<T>,
 	): Promise<T> {
-		const { release: releaseSlot, preController } = await this.deps.lane.acquireSlot(
+		const { release, preController } = await this.deps.lane.acquireSlot(
 			params.networkId,
 			params.hooks?.queuedJournalId,
 			params.fence,
 			params.hooks?.onExecutionEnqueued,
 			params.hooks?.originKey,
 		)
-
+		const slot = { release }
+		let line: DappSendLine | undefined
 		let journalId: string | undefined
 		try {
+			// A wallet send (Settings) has no record before its claim, so a wait would show nothing.
+			line = params.origin.type === OriginType.DAPP ? await this.joinLines(params) : undefined
+			if (line) await this.waitForEarlierSends(params, preController, line, slot)
+			line?.turn.leave()
 			const claimed = await this.deps.lane.claimOrCreateJournal(
 				params.networkId,
 				params.accountAddress,
@@ -252,6 +290,7 @@ export class DappSendExecutor {
 				params.fence,
 			)
 			journalId = claimed.journalId
+			if (journalId) params.hooks?.onJournalCreated?.(journalId)
 			const controller = claimed.controller
 			const checkCancelled = (): void => {
 				if (controller?.signal.aborted) throw new JobCancelledSentinel(journalId ?? "")
@@ -266,8 +305,12 @@ export class DappSendExecutor {
 			})
 		} catch (error) {
 			await markFailedUnlessCancelled(error, journalId, this.deps.lane)
+			// Nothing names the record before the claim; left `queued` or `pending`, it would wait for the reaper.
+			if (!journalId) await this.deps.lane.failUnclaimed(params.hooks?.queuedJournalId, error)
 			throw error
 		} finally {
+			line?.turn.leave()
+			for (const waiter of line?.waiters ?? []) waiter.release()
 			if (journalId) this.deps.lane.deleteController(journalId)
 			// A pre-claim throw leaves `journalId` unset while `acquireSlot`
 			// already registered the pre-controller under `queuedJournalId`;
@@ -276,8 +319,82 @@ export class DappSendExecutor {
 			// the slot release, matching the slot-scaffold ordering contract.
 			const queuedKey = params.hooks?.queuedJournalId
 			if (queuedKey && queuedKey !== journalId) this.deps.lane.deleteController(queuedKey)
-			releaseSlot()
+			slot.release()
 		}
+	}
+
+	/** Joins its origin's line and, with a waiter, the line of every account the send may spend from.
+	 *  Called holding the slot, so both places are the grant order. */
+	private async joinLines(params: {
+		networkId: string
+		accountAddress: string
+		hooks: ExecutionHooks | undefined
+		fence: ExecutionFence
+		getAdditionalScopes: () => unknown
+	}): Promise<DappSendLine> {
+		const { chainId } = await this.deps.getNetwork(params.networkId)
+		const scopes = spendAccounts(params.accountAddress, params.getAdditionalScopes()).map((account) => ({ chainId, account }))
+		const waiters = scopes.map((scope) => this.deps.sequencer.enterWaiter(scope))
+		// Last: a throw after it would leave a place in the origin's line that no `finally` frees.
+		return { turn: this.deps.lane.joinOriginLine(params.fence, chainId, params.hooks?.originKey), scopes, waiters }
+	}
+
+	/**
+	 * Parks outside the slot while an earlier send of the origin has not started, a waiter is
+	 * blocked, or the PXE's node lacks a settled predecessor's block in one of its accounts, and
+	 * re-checks under the slot, synchronously, each time it comes back. Past the waiters' 60 minutes
+	 * the send runs unordered, the sequencer's degraded mode: the chain still refuses a real conflict.
+	 */
+	private async waitForEarlierSends(
+		params: { networkId: string; hooks: ExecutionHooks | undefined; fence: ExecutionFence },
+		preController: AbortController | undefined,
+		line: DappSendLine,
+		slot: { release: ExecutionMutexRelease },
+	): Promise<void> {
+		// A send with no record has no cancel to answer while it waits.
+		const signal = preController?.signal ?? new AbortController().signal
+		const journalId = params.hooks?.queuedJournalId
+		let unordered = false
+		const held = () =>
+			!unordered &&
+			(line.waiters.some((w) => w.blocked()) ||
+				line.scopes.some((s) => this.deps.chainTip.unconfirmed(s, undefined, params.networkId)))
+		while (line.turn.behind() || held()) {
+			slot.release = await this.deps.lane.parkSlot(
+				slot.release,
+				params.networkId,
+				journalId,
+				params.fence,
+				preController,
+				params.hooks?.originKey,
+				async () => {
+					if (!(await line.turn.earlierDone(signal))) throw new JobCancelledSentinel(journalId ?? "")
+					unordered ||= await this.waitForEarlier(line, params.networkId, signal, journalId)
+				},
+			)
+		}
+	}
+
+	/** The waiters' turns, then the tip in each account; `true` once their deadline has passed. */
+	private async waitForEarlier(
+		line: DappSendLine,
+		networkId: string,
+		signal: AbortSignal,
+		journalId: string | undefined,
+	): Promise<boolean> {
+		for (const waiter of line.waiters) {
+			const turn = await waiter.waitTurn(signal)
+			if (turn === "aborted") throw new JobCancelledSentinel(journalId ?? "")
+			if (turn === "expired") {
+				this.deps.logDebug("dApp send reached its wait limit for earlier sends; running unordered")
+				return true
+			}
+		}
+		for (const scope of line.scopes) {
+			const tip = await this.deps.chainTip.wait(scope, undefined, networkId, signal, line.waiters[0].remainingMs())
+			if (tip === "aborted") throw new JobCancelledSentinel(journalId ?? "")
+		}
+		return false
 	}
 
 	/** `preview` names the popup interaction this estimate belongs to; when set,
@@ -312,30 +429,32 @@ export class DappSendExecutor {
 		// Reuse fingerprints bind the POST-PLANNER, PRE-DISCOVERY action set —
 		// the consume side re-derives the same normalization point.
 		const preDiscoveryActions = [...actions]
+		// Read before the build: a send that reaches the node, or settles, during it may hold this build's notes.
+		const { chainId } = await this.deps.getNetwork(operation.networkId)
+		const sequenceEpoch = this.deps.sequenceEpoch(chainId, operation.accountAddress)
+		const pendingHashes = this.deps.getPendingForAccount(operation.accountAddress).map((tx) => tx.hash)
+		// A settled predecessor's block the node lacks: neither the epoch nor the pending set changes
+		// once it lands, so a build simulated without it must not be reused.
+		const lagging = this.deps.chainTip.unconfirmed({ chainId, account: operation.accountAddress }, undefined, operation.networkId)
 
 		// Discover-then-estimate via the decorator (the single owner of that
 		// choreography for dApp sends; stage-boundary cancellation preserved
 		// inside it).
 		throwIfAborted(signal)
-		const { built, discovered } = await this.deps.estimateWithDiscovery.estimate(
-			operation,
-			actions,
-			detectedFee,
-			feeSettings,
-			fence,
-			undefined,
-			signal,
-		)
+		const { built, discovered } = await this.buildForEstimate(operation, actions, detectedFee, feeSettings, fence, signal)
 		const { txRequest } = built
 		throwIfAborted(signal)
-		const sponsorFunding = await probeSponsorFunding(built, this.deps.readPublicStorageOnce, (msg, data) =>
-			this.deps.logDebug(msg, data),
-		)
+		const log = (msg: string, data: object) => this.deps.logDebug(msg, data)
+		const sponsorFunding = await probeSponsorFunding(built, this.deps.readPublicStorageOnce, log)
+		const appPayerFunding = await probeAppPayerFunding(built, this.deps.readPublicStorageOnce, log)
+		const feeJuiceShortfall = await probeOwnFeeJuice(built, this.deps.readPublicStorageOnce, log)
 		throwIfAborted(signal)
 
 		const identity = fingerprintInputFor(operation, feeSettings, detectedFee, preDiscoveryActions)
 		const discoveredHashes = discovered.map((d) => d.messageHash)
-		const estimateId = await this.stashOperationEstimate(operation, identity, detectedFee, built, discoveredHashes)
+		const estimateId = lagging
+			? undefined
+			: await this.stashOperationEstimate(operation, identity, detectedFee, built, discoveredHashes, { sequenceEpoch, pendingHashes })
 		// `send_transaction`'s confirm skips discovery, so listing what THIS estimate
 		// found would show authorizations confirm never adds.
 		const bound = operation.kind === "aztec_sendTx"
@@ -343,15 +462,38 @@ export class DappSendExecutor {
 			bound && preview ? this.writePreview(preview, fingerprintOperation(identity), discoveredHashes, estimateId) : undefined
 
 		const maxFeeRaw = BigInt(getEstimatedFee(txRequest))
+		const priorityFee = priorityFeeOf(txRequest)
+		const priorityFeeFormatted = formatFeeJuice(priorityFee)
 		return {
 			maxFee: maxFeeRaw.toString(),
 			maxFeeFormatted: formatFeeJuice(maxFeeRaw),
+			...(priorityFeeFormatted !== "0" ? { priorityFee: priorityFee.toString(), priorityFeeFormatted } : {}),
 			gasDetails: getGasDetails(txRequest),
 			estimateId,
 			previewId,
 			...(bound ? { discoveredAuthwits: discovered } : {}),
 			...(sponsorFunding ? { sponsorFunding } : {}),
+			...(appPayerFunding ? { appPayerFunding } : {}),
+			...(feeJuiceShortfall ? { feeJuiceShortfall } : {}),
 		}
+	}
+
+	/** An embedded fee payment skips discovery, as its confirm does: the app's own fee calls conflict
+	 *  with the discovery simulation's dummy fee method. */
+	private async buildForEstimate(
+		operation: Operation,
+		actions: Action[],
+		detectedFee: FeeOptions | undefined,
+		feeSettings: FeeSettings,
+		fence: ExecutionFence,
+		signal?: AbortSignal,
+	): Promise<{ built: FeeEstimate; discovered: readonly DiscoveredAuthwit[] }> {
+		const fee = detectedFee ?? (operation as SendTransactionOperation).fee
+		if (!fee?.embeddedFeePayment) {
+			return this.deps.estimateWithDiscovery.estimate(operation, actions, detectedFee, feeSettings, fence, undefined, signal)
+		}
+		const op = { ...(operation as SendTransactionOperation), actions: [...actions], fee }
+		return { built: await this.deps.buildAndEstimateValidated(op, feeSettings, fence, undefined, signal), discovered: [] }
 	}
 
 	/**
@@ -445,6 +587,7 @@ export class DappSendExecutor {
 		detectedFee: FeeOptions | undefined,
 		built: FeeEstimate,
 		discoveredHashes: readonly string[],
+		before: { sequenceEpoch: number; pendingHashes: readonly string[] },
 	): Promise<string | undefined> {
 		const { feeSettings } = identity
 		const kind = feeSettings.paymentMethod.kind
@@ -452,11 +595,11 @@ export class DappSendExecutor {
 			operation.kind === "aztec_sendTx" &&
 			((operation as AztecSendTxOperation).executionMode ?? "standard") !== "default_entrypoint" &&
 			!detectedFee?.embeddedFeePayment &&
-			// A dApp-supplied fee cap makes the built request's maxFees diverge
-			// from the predicted-worst basis the consume ladder re-derives, so
-			// such an entry would ALWAYS miss on "base fee drift" — stashing it
-			// only parks an unusable signed request for the TTL.
+			// A dApp-supplied fee cap or priority fee makes the built request's
+			// maxFees diverge from the predicted-worst basis the consume ladder
+			// re-derives, which carries neither.
 			!detectedFee?.maxFeesPerGas &&
+			!detectedFee?.maxPriorityFeesPerGas &&
 			(kind === "fj" || kind === "fpc")
 		if (!eligible) return undefined
 		try {
@@ -466,18 +609,7 @@ export class DappSendExecutor {
 			if (!primary) return undefined
 			const profile = await this.deps.getActiveProfile()
 			if (!profile) return undefined
-			let fpcIdentity: OperationEstimateReuseEntry["fpcIdentity"]
-			if (feeSettings.paymentMethod.kind === "fpc") {
-				const info = await this.deps.getFpcInfo(feeSettings.paymentMethod.fpcId)
-				fpcIdentity = {
-					id: info.id,
-					type: info.type,
-					address: info.address,
-					chainId: info.chainId,
-					isProtocol: info.isProtocol ?? false,
-				}
-			}
-			const builtFees = built.txRequest.txContext.gasSettings.maxFeesPerGas
+			const builtCap = builtCapOf(built.txRequest)
 			const estimateId = crypto.randomUUID()
 			this.deps.operationEstimateReuse.stash(estimateId, {
 				fingerprint,
@@ -489,14 +621,11 @@ export class DappSendExecutor {
 				// an endpoint flip would snapshot a chain this request was not
 				// signed under (consume would then compare live-vs-live).
 				chainIdentity: built.chainIdentity,
-				baseFeeFingerprint: fingerprintBaseFee({
-					feePerDaGas: builtFees.feePerDaGas,
-					feePerL2Gas: builtFees.feePerL2Gas,
-				}),
+				builtCap,
 				primaryEndpointId: primary.id,
 				primaryEndpointUrl: primary.rpcUrl,
-				pendingHashes: this.deps.getPendingForAccount(operation.accountAddress).map((tx) => tx.hash),
-				fpcIdentity,
+				...before,
+				fpcIdentity: built.fpcIdentity,
 				txRequest: built.txRequest,
 				initializesAccount: built.initializesAccount,
 				nonce: built.nonce,
@@ -577,6 +706,7 @@ export class DappSendExecutor {
 				hooks,
 				fence,
 				getCalls: () => (primaryMethod ? [{ method: primaryMethod }] : undefined),
+				getAdditionalScopes: () => undefined,
 			},
 			async ({ checkCancelled, markJournal, commitSubmitting, journalId }) => {
 				// Enter `simulating` BEFORE the build/estimate work — fee
@@ -671,6 +801,7 @@ export class DappSendExecutor {
 				hooks,
 				fence,
 				getCalls: () => primaryMethodCalls(op),
+				getAdditionalScopes: () => op.opts?.additionalScopes,
 			},
 			async ({ checkCancelled, markJournal, commitSubmitting, journalId }) => {
 				if (op.accountAddress !== op.opts?.from?.toString()) {
@@ -751,7 +882,7 @@ export class DappSendExecutor {
 	/**
 	 * Resolve the standard path's build: consume a still-valid precomputed estimate
 	 * (tryConsume validates the full drift ladder — fingerprint at the same
-	 * pre-discovery normalization point, endpoint, pending set, chain identity,
+	 * pre-discovery normalization point, endpoint, pending set, sequencer epoch, chain identity,
 	 * FPC identity, base fee — and refuses another profile's entry outright),
 	 * else fall through to the full build —
 	 * probe-free for embedded fee payments (the dApp's own fee calls conflict with
@@ -860,6 +991,7 @@ export class DappSendExecutor {
 				hooks,
 				fence,
 				getCalls: () => primaryMethodCalls(op),
+				getAdditionalScopes: () => op.opts?.additionalScopes,
 			},
 			async ({ checkCancelled, markJournal, commitSubmitting, journalId }) => {
 				await markJournal({ stage: "simulating" })
@@ -936,12 +1068,19 @@ export class DappSendExecutor {
 		// set explicitly here (the planner-built path infers it) — that is what
 		// gates `applyEmbeddedFpcGasCap`; see the helper's JSDoc for the cap rationale.
 		const maxFeesUpstream = op.opts.fee?.gasSettings?.maxFeesPerGas
+		const maxPriorityFeesUpstream = op.opts.fee?.gasSettings?.maxPriorityFeesPerGas
 		const feeOpts: FeeOptions = {
 			embeddedFeePayment: detectEmbeddedFeePayment(op.exec?.feePayer, op.opts.from, op.exec?.calls) ?? "fpc",
 			gasLimits: op.opts.fee?.gasSettings?.gasLimits,
 			teardownGasLimits: op.opts.fee?.gasSettings?.teardownGasLimits,
 			maxFeesPerGas: maxFeesUpstream
 				? { feePerDaGas: maxFeesUpstream.feePerDaGas.toString(), feePerL2Gas: maxFeesUpstream.feePerL2Gas.toString() }
+				: undefined,
+			maxPriorityFeesPerGas: maxPriorityFeesUpstream
+				? {
+						feePerDaGas: maxPriorityFeesUpstream.feePerDaGas.toString(),
+						feePerL2Gas: maxPriorityFeesUpstream.feePerL2Gas.toString(),
+					}
 				: undefined,
 			gasPadding: 1,
 		}
@@ -1002,6 +1141,15 @@ export class DappSendExecutor {
 			d.txRequest.authWitnesses.push(await d.account.createAuthWit(messageHash))
 		}
 	}
+}
+
+/** The send's account, then each additional scope the build reads notes for, once each. */
+function spendAccounts(account: string, additionalScopes: unknown): string[] {
+	const accounts = new Map<string, string>()
+	for (const address of [account, ...(Array.isArray(additionalScopes) ? additionalScopes.map(String) : [])]) {
+		if (!accounts.has(address.toLowerCase())) accounts.set(address.toLowerCase(), address)
+	}
+	return [...accounts.values()]
 }
 
 /** The shared picker, not the raw first call: it skips a leading self-pay fee payload, so the proving

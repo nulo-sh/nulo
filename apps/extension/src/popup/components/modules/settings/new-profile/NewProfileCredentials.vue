@@ -40,7 +40,7 @@ const isPasswordType = ref(true)
 				<template #bottom>
 					<Flex align="center" gap="6" :class="$style.hint_row">
 						<MaterialIcon name="lock" :size="12" color="tertiary" />
-						<Text size="12" weight="600" color="tertiary">{{ strengthHint }}</Text>
+						<Text variant="body" color="tertiary">{{ strengthHint }}</Text>
 					</Flex>
 				</template>
 			</Input>
@@ -65,11 +65,7 @@ const isPasswordType = ref(true)
 }
 
 .section_label {
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.18em;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 

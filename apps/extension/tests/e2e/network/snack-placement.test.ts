@@ -4,10 +4,12 @@
  *  that fails once its record is written offers Details, which opens that record. */
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
+import { TRANSACTION_STORAGE_ROOT, type Tx, TxStatus } from "@/wallet/services/transaction/spec"
 import {
 	type AztecTestConfig,
 	createSponsoredFeeOptions,
 	createTestWallet,
+	finalizeThrough,
 	mintPublicTokens,
 	spendPublicAuthwit,
 	waitForTxMined,
@@ -15,6 +17,7 @@ import {
 import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "../fixtures/extension"
 import {
 	captureBalanceBaseline,
+	enterSendForm,
 	fillSendForm,
 	importToken,
 	navigateByHash,
@@ -26,7 +29,8 @@ import {
 } from "../fixtures/helpers"
 import { readSendRecords, waitForBalanceQueueIdle } from "../fixtures/journal"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
-import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
+import { shotSend } from "../fixtures/send-page"
+import { approveExecute, rejectExecute, waitForExecuteContent, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -162,9 +166,63 @@ async function hitsAfterScroll(page: Page, testids: string[]): Promise<Hit[]> {
 	)
 }
 
+type Box = { top: number; bottom: number; left: number; right: number }
+type ControlPlacement = { at: string; hit: string; covered: boolean; snack: Box; control: Box; viewport: number }
+
+/** Scrolls `testid` to `at` (the end of the container that scrolls it, or centred) and waits for the
+ *  snack to measure again. */
+async function scrollControl(page: Page, testid: string, at: "rest" | "end" | "centre"): Promise<void> {
+	await page.evaluate(
+		async (id: string, where: string) => {
+			const el = document.querySelector(`[data-testid="${id}"]`)
+			if (!el) throw new Error(`${id} not found`)
+			let scroller = el.parentElement
+			while (scroller && !["auto", "scroll"].includes(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement
+			if (where === "end") (scroller ?? document.scrollingElement ?? document.documentElement).scrollTop = Number.MAX_SAFE_INTEGER
+			if (where === "centre") el.scrollIntoView({ block: "center" })
+			await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+		},
+		testid,
+		at,
+	)
+}
+
+/** `testid` where the page rests, with the container that scrolls it at its end, then centred, each
+ *  read once the snack has measured again: what a click at its centre hits, whether any part of it is
+ *  under the snack, and where both are. */
+async function placementsAtRestAndScrolled(page: Page, testid: string): Promise<ControlPlacement[]> {
+	const placements: ControlPlacement[] = []
+	for (const at of ["rest", "end", "centre"] as const) {
+		await scrollControl(page, testid, at)
+		const placement = await page.evaluate(
+			(s: string, id: string, where: string) => {
+				const box = document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect()
+				const card = document.querySelector(s)?.getBoundingClientRect()
+				if (!box || !card) throw new Error("no control or no snack")
+				const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+				return {
+					at: where,
+					hit: hit?.closest("[data-testid]")?.getAttribute("data-testid") ?? hit?.tagName ?? "none",
+					covered: card.top < box.bottom && card.bottom > box.top && card.left < box.right && card.right > box.left,
+					snack: { top: card.top, bottom: card.bottom, left: card.left, right: card.right },
+					control: { top: box.top, bottom: box.bottom, left: box.left, right: box.right },
+					viewport: window.innerHeight,
+				}
+			},
+			SNACK,
+			testid,
+			at,
+		)
+		placements.push(placement)
+	}
+	return placements
+}
+
 type DrainCtx = ExtensionContext & { playgroundPage: Page; accountAddress: string }
 
 const DRAINED = 10n * 10n ** 18n
+/** Two of the worker's once-a-minute finality reads, each a single attempt that can fail, and margin. */
+const FINAL_READ_MS = 180_000
 
 async function storedValue<T>(page: Page, key: string): Promise<T | undefined> {
 	const raw = await page.evaluate(async (k: string) => (await chrome.storage.local.get(k))[k], key)
@@ -224,24 +282,83 @@ async function grantSpender(ctx: DrainCtx, page: Page, spender: string, nonce: b
 	const grantHash = String(granted.resultJson).replace(/^"(.*)"$/, "$1")
 	await waitForTxMined(config, grantHash)
 	await waitFor("the wallet never saw its grant mined", async () => {
-		const tx = await storedValue<{ status?: number }>(page, `nulo:core:txs@${grantHash}`)
-		return tx !== undefined && tx.status !== 0
+		const tx = await storedValue<Tx>(page, `${TRANSACTION_STORAGE_ROOT}@${grantHash}`)
+		return tx !== undefined && tx.status !== TxStatus.Pending
 	})
 	return grantHash
 }
 
+type TxNode = Awaited<ReturnType<typeof createTestWallet>>["node"]
+
+async function accountTxRows(page: Page, account: string): Promise<Tx[]> {
+	const raws = await page.evaluate(async (root: string) => {
+		const all = await chrome.storage.local.get(null)
+		return Object.entries(all)
+			.filter(([k]) => k.startsWith(`${root}@`))
+			.map(([, v]) => v)
+	}, TRANSACTION_STORAGE_ROOT)
+	return raws
+		.map((v) => (typeof v === "string" ? JSON.parse(v) : v) as Tx)
+		.filter((tx) => tx.account?.toLowerCase() === account.toLowerCase())
+}
+
+/** The account's rows, which must be exactly the grant: any other row could owe a write of its own. */
+async function soleGrantRow(page: Page, account: string, grantHash: string): Promise<Tx> {
+	const rows = await accountTxRows(page, account)
+	const [grant] = rows
+	if (rows.length !== 1 || grant?.hash !== grantHash) {
+		throw new Error(`expected the grant ${grantHash} as the account's only tx row: ${JSON.stringify(rows)}`)
+	}
+	return grant
+}
+
+/**
+ * Drives the grant's block final and waits for the balance write the wallet owes for it. The worker
+ * commits the row Finalized, then emits the update its balance subscriber answers with a refresh it
+ * does not await, so the row alone proves nothing. The grant still awaits finality once its mined
+ * write has settled, so the final commit follows that write; with the mint's receipt settled the final
+ * refresh is the only one left to enqueue, so a write newer than the commit is its write, and the idle
+ * queue after it ends it.
+ */
+async function settledGrantFinality(page: Page, node: TxNode, account: string, grantHash: string, publicRaw: string): Promise<void> {
+	const mined = await soleGrantRow(page, account, grantHash)
+	const block = mined.block?.number
+	if (block === undefined || !Number.isFinite(block) || !mined.awaitingFinality) {
+		throw new Error(`expected the grant mined below Finalized, its final read still owed: ${JSON.stringify(mined)}`)
+	}
+	const started = Date.now()
+	await finalizeThrough(node, block)
+	const chainFinal = Date.now()
+	let grant = await soleGrantRow(page, account, grantHash)
+	const deadline = chainFinal + FINAL_READ_MS
+	while (grant.status !== TxStatus.Finalized || grant.awaitingFinality) {
+		if (Date.now() > deadline) {
+			throw new Error(`the wallet never read its grant final within ${FINAL_READ_MS} ms: ${JSON.stringify(grant)}`)
+		}
+		await new Promise((r) => setTimeout(r, 500))
+		grant = await soleGrantRow(page, account, grantHash)
+	}
+	console.log(
+		`[snack-placement] grant block ${block}: chain final in ${chainFinal - started} ms, wallet final ${Date.now() - chainFinal} ms later`,
+	)
+	await settledBalanceWrite(page, account, publicRaw, grant.updatedAt)
+}
+
 /**
  * Leaves the wallet showing a public balance the chain no longer holds, as when a dApp spends a
- * public approval: the account grants the sandbox's first account a public authwit for
- * {@link DRAINED}, receives that much, and the spender takes it all. A balance refreshes only on the
- * wallet's own transactions, receipts to its accounts and a manual refresh, and the spend is none
- * of them. Nothing here asks for a refresh, so each balance write has one known cause, and the
- * balance queue is idle before the spend.
+ * public approval: the account receives {@link DRAINED}, grants the sandbox's first account a
+ * public authwit for it, and the spender takes it all; `beforeGrant` runs once the wallet shows the
+ * balance. A balance refreshes only on a token import, the wallet's own transactions, receipts to
+ * its accounts and a manual refresh, and the spend is none of them. A wallet transaction first seen
+ * mined below Finalized refreshes balances twice, when mined and when the worker reads its block
+ * final; one first seen Finalized refreshes once; each move or prune of its block can add another.
+ * A receipt to the account refreshes it once. Nothing here asks for a refresh, so each write has
+ * one known cause, and none is owed at the spend.
  */
-async function balanceDrainedBehindTheWallet(ctx: DrainCtx): Promise<Page> {
+async function balanceDrainedBehindTheWallet(ctx: DrainCtx, beforeGrant?: (page: Page) => Promise<void>): Promise<Page> {
 	const config = aztecConfig as AztecTestConfig
 	const account = ctx.accountAddress
-	const { wallet, accounts, cleanup } = await createTestWallet(config.nodeUrl)
+	const { wallet, accounts, node, cleanup } = await createTestWallet(config.nodeUrl)
 	try {
 		const spender = accounts[0]?.toString()
 		if (!spender) throw new Error("expected at least one sandbox-deployed test account")
@@ -257,12 +374,6 @@ async function balanceDrainedBehindTheWallet(ctx: DrainCtx): Promise<Page> {
 		await importToken(page, config.tokenAddress)
 		await settledBalanceWrite(page, account, "0", baseline)
 
-		// The grant leaving Pending refreshes the account's balances once.
-		const nonce = BigInt(Math.floor(Math.random() * 2 ** 48))
-		baseline = await captureBalanceBaseline(page, account, config.tokenAddress)
-		await grantSpender(ctx, page, spender, nonce)
-		await settledBalanceWrite(page, account, "0", baseline)
-
 		// The mint's receipt refreshes the balance once, and its outbox row clears after that.
 		baseline = await captureBalanceBaseline(page, account, config.tokenAddress)
 		const minted = await mintPublicTokens(wallet, config.tokenAddress, account, DRAINED, config.minterAddress, fee)
@@ -275,6 +386,15 @@ async function balanceDrainedBehindTheWallet(ctx: DrainCtx): Promise<Page> {
 		})
 		await waitFor("the wallet never settled the mint's receipt", () => receiptSettled(page, minted))
 		await waitForBalanceQueueIdle(page)
+		await beforeGrant?.(page)
+
+		// The grant leaving Pending refreshes the account's balances once.
+		const nonce = BigInt(Math.floor(Math.random() * 2 ** 48))
+		baseline = await captureBalanceBaseline(page, account, config.tokenAddress)
+		const grantHash = await grantSpender(ctx, page, spender, nonce)
+		await settledBalanceWrite(page, account, DRAINED.toString(), baseline)
+		// The grant read final refreshes them again.
+		await settledGrantFinality(page, node, account, grantHash, DRAINED.toString())
 
 		await spendPublicAuthwit(wallet, config.tokenAddress, account, spender, DRAINED, nonce, fee)
 		return page
@@ -283,21 +403,66 @@ async function balanceDrainedBehindTheWallet(ctx: DrainCtx): Promise<Page> {
 	}
 }
 
-/** On Send: 1 token, public to public, to the sandbox minter, from a balance the chain no longer
- *  holds, until the estimate has failed. */
-async function sendFromDrainedBalance(page: Page): Promise<void> {
+const ONE_TO_MINTER = () => ({ amount: "1", destination: (aztecConfig as AztecTestConfig).minterAddress })
+
+async function openPublicSend(page: Page): Promise<void> {
 	await navigateByHash(page, "#/popup/send", 10_000)
 	await page.waitForSelector(sel("send-from-type"), { timeout: 10_000 })
 	await setActiveSendType(page, "send-from-type", "public")
 	await setActiveSendType(page, "send-to-type", "public")
-	await fillSendForm(page, { amount: "1", destination: (aztecConfig as AztecTestConfig).minterAddress })
+}
+
+/** On Send: 1 token, public to public, to the sandbox minter, from a balance the chain no longer
+ *  holds, until the estimate has failed. Nothing goes out on a fee the person has not seen, so the
+ *  footer stays off. */
+async function sendFromDrainedBalance(page: Page): Promise<void> {
+	await openPublicSend(page)
+	await enterSendForm(page, ONE_TO_MINTER())
 	await waitForToast(page, "Couldn't estimate fee", 120_000, { kind: "error" })
+	expect(await page.$eval(sel("send-submit"), (el) => getComputedStyle(el).pointerEvents)).toBe("none")
+}
+
+/**
+ * On Send, while the chain still holds the balance: the same transfer, until its estimate lands.
+ * Confirm reuses that estimate's build without simulating it again unless a send of the account
+ * reached the node since; the grant that follows is one, so Confirm builds afresh against the
+ * balance the chain holds then.
+ */
+async function estimateOnSend(page: Page): Promise<void> {
+	await openPublicSend(page)
+	await fillSendForm(page, ONE_TO_MINTER())
+}
+
+/** A drained send whose estimate landed before the grant: Confirm builds again, so it fails once its
+ *  record is written. */
+async function confirmDrainedSend(page: Page): Promise<void> {
+	await page.bringToFront()
+	// A public origin needs no review, so the footer sends at once.
+	expect(await page.$eval(sel("send-submit"), (el) => el.getAttribute("data-action"))).toBe("send")
+	await clickByTestId(page, "send-submit")
+}
+
+/** Asks, through the playground, for a public transfer of 1,000,000 base units from an account that
+ *  holds none, and returns the execute window it opens; its estimate fails. */
+async function openUnfundedDappSend(ctx: ExtensionContext & { playgroundPage: Page }): Promise<Page> {
+	const config = aztecConfig as AztecTestConfig
+	const pg = ctx.playgroundPage
+	await setPgInput(pg, "tokenAddress", config.tokenAddress)
+	await setPgInput(pg, "recipient", config.minterAddress)
+	await setPgInput(pg, "amount", "1000000")
+	const execute = waitForPopup(ctx, "execute", { timeout: 60_000 })
+	await clickByTestId(pg, "pg-btn-sendTx-default")
+	return execute
 }
 
 test.skipIf(!hasConfig)(
 	"Send: a fee-estimate error sits 12px above the footer and follows it when it grows",
 	{ timeout: 420_000 },
 	async ({ dappConnectedExtensionWithTransactionCap }) => {
+		// `openPopup` restarts the arrays, so what came since the last one is asserted before the drain
+		// opens one: here the fixture's setup popup and its connect and grant windows.
+		expect(dappConnectedExtensionWithTransactionCap.consoleErrors).toEqual([])
+		expect(dappConnectedExtensionWithTransactionCap.pageErrors).toEqual([])
 		const page = await balanceDrainedBehindTheWallet(dappConnectedExtensionWithTransactionCap)
 		await sendFromDrainedBalance(page)
 
@@ -311,6 +476,7 @@ test.skipIf(!hasConfig)(
 		expect(grown.footerTop - grown.snackBottom).toBeGreaterThanOrEqual(11.5)
 		expect(grown.footerTop - grown.snackBottom).toBeLessThanOrEqual(12.5)
 
+		expect(dappConnectedExtensionWithTransactionCap.consoleErrors).toEqual([])
 		expect(dappConnectedExtensionWithTransactionCap.pageErrors).toEqual([])
 	},
 )
@@ -319,11 +485,10 @@ test.skipIf(!hasConfig)(
 	"Send: a send that fails once its record is written offers Details, which opens that record",
 	{ timeout: 420_000 },
 	async ({ dappConnectedExtensionWithTransactionCap }) => {
-		const page = await balanceDrainedBehindTheWallet(dappConnectedExtensionWithTransactionCap)
-		await sendFromDrainedBalance(page)
-		// A public origin needs no review, so the footer sends at once.
-		expect(await page.$eval(sel("send-submit"), (el) => el.getAttribute("data-action"))).toBe("send")
-		await clickByTestId(page, "send-submit")
+		expect(dappConnectedExtensionWithTransactionCap.consoleErrors).toEqual([])
+		expect(dappConnectedExtensionWithTransactionCap.pageErrors).toEqual([])
+		const page = await balanceDrainedBehindTheWallet(dappConnectedExtensionWithTransactionCap, estimateOnSend)
+		await confirmDrainedSend(page)
 
 		const card = await waitForToast(page, "Send failed", 180_000, { kind: "error" })
 		expect(await card.$eval(sel("snackbar-action"), (el) => el.textContent?.trim())).toBe("Details")
@@ -341,6 +506,7 @@ test.skipIf(!hasConfig)(
 		await page.waitForFunction((s: string) => document.querySelector(s) === null, { timeout: 5_000, polling: 50 }, SNACK)
 		expect(await page.$(SNACK)).toBeNull()
 
+		expect(dappConnectedExtensionWithTransactionCap.consoleErrors).toEqual([])
 		expect(dappConnectedExtensionWithTransactionCap.pageErrors).toEqual([])
 	},
 )
@@ -350,26 +516,7 @@ test.skipIf(!hasConfig)(
 	{ timeout: 300_000 },
 	async ({ dappConnectedExtensionWithTransactionCap }) => {
 		const ctx = dappConnectedExtensionWithTransactionCap
-		const config = aztecConfig as AztecTestConfig
-		const pg = ctx.playgroundPage
-		// A public transfer of 1,000,000 base units from an account that holds none fails the estimate.
-		await pg.evaluate(
-			({ token, recipient }: { token: string; recipient: string }) => {
-				const setVal = (s: string, v: string) => {
-					const input = document.querySelector<HTMLInputElement>(s)
-					if (!input) return
-					Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(input, v)
-					input.dispatchEvent(new Event("input", { bubbles: true }))
-				}
-				setVal('[data-testid="pg-input-tokenAddress"]', token)
-				setVal('[data-testid="pg-input-recipient"]', recipient)
-				setVal('[data-testid="pg-input-amount"]', "1000000")
-			},
-			{ token: config.tokenAddress, recipient: config.minterAddress },
-		)
-		const executeP = waitForPopup(ctx, "execute", { timeout: 60_000 })
-		await clickByTestId(pg, "pg-btn-sendTx-default")
-		const execute = await executeP
+		const execute = await openUnfundedDappSend(ctx)
 		await waitForToast(execute, "Couldn't estimate fee", 180_000, { kind: "error" })
 
 		const at = await placement(execute, sel("dapp-approval-footer"))
@@ -409,6 +556,56 @@ test.skipIf(!hasConfig)(
 		expect(linedHits.map((h) => h.covered)).toEqual([false, false])
 		expect(linedHits[0]?.hit).toBe("execute-reject-btn")
 
+		await rejectExecute(execute)
+		await waitForPopupClosed(execute)
+		expect(ctx.consoleErrors).toEqual([])
+		expect(ctx.pageErrors).toEqual([])
+	},
+)
+
+test.skipIf(!hasConfig)(
+	"Home: an error snack covers no part of an awaiting send's Cancel, at rest or scrolled",
+	{ timeout: 480_000 },
+	async ({ dappConnectedExtensionWithTransactionCap }) => {
+		const ctx = dappConnectedExtensionWithTransactionCap
+		expect(ctx.consoleErrors).toEqual([])
+		expect(ctx.pageErrors).toEqual([])
+		const page = await balanceDrainedBehindTheWallet(ctx, estimateOnSend)
+		await confirmDrainedSend(page)
+		await waitForHash(page, "#/popup/general", 10_000)
+		await waitForToast(page, "Send failed", 180_000, { kind: "error" })
+
+		// A dApp send waiting on its approval window keeps its Cancel; the failure snack stays until closed.
+		const execute = await openUnfundedDappSend(ctx)
+		await waitForExecuteContent(execute)
+		await page.bringToFront()
+		await page.waitForSelector(`${sel("tx-awaiting-card")}[data-stage="queued"] ${sel("tx-awaiting-cancel")}`, { timeout: 60_000 })
+		await waitForToast(page, "Send failed", 5_000, { kind: "error" })
+		// The snack measures again on the frame after the card arrives.
+		await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+		await settledCard(page)
+
+		const placed = await placementsAtRestAndScrolled(page, "tx-awaiting-cancel")
+		console.log(`[snack-placement] Home, Cancel at rest, at the scroll's end and centred: ${JSON.stringify(placed)}`)
+		for (const p of placed) {
+			expect([p.at, p.covered, p.hit], "Cancel is clear of the snack and takes the click").toEqual([
+				p.at,
+				false,
+				"tx-awaiting-cancel",
+			])
+			expect(p.snack.top >= 0 && p.snack.bottom <= p.viewport, `${p.at}: the snack is wholly on screen`).toBe(true)
+		}
+		// Clear of the Cancel, the snack rests 12px above the 64px nav rather than above where the row was.
+		expect(placed.slice(1).map((p) => p.viewport - p.snack.bottom)).toEqual([76, 76])
+		await page.evaluate(async () => {
+			window.scrollTo(0, 0)
+			await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+		})
+		await shotSend(page, "home-snack-above-cancel", "tx-awaiting-card")
+
+		await rejectExecute(execute)
+		await waitForPopupClosed(execute)
+		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
 	},
 )

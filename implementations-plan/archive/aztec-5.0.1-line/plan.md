@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: The wallet client moved to the 5.0.1 Aztec packages, import recovery after a worker restart (`apps/extension/src/composables/completeImportWithRecovery.ts`), the profile-deletion fence (`apps/extension/src/wallet/services/profile-deletion/coordinator.ts`), refuse-and-preserve PXE stores (`packages/aztec-runtime/src/pxe/opfs-store.ts`) and struct-path-tolerant token descriptors (`apps/extension/src/wallet/services/token/functions/descriptors.ts`).
-- **Open items**: route the unknown-address lookup to the `aztec-update` skill, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: route the unknown-address lookup to the `aztec-update` skill, tracked in #185.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

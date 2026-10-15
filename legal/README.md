@@ -47,8 +47,8 @@ These are **not** fixed by editing the documents.
 
    Blockers 1–3 are recorded in `implementations-plan/archive/legal-terms/`.
 4. ~~**Verify the Presto MIT relicense reached the bundled artifacts.**~~ — done. The lockfile
-   resolves MIT versions (`@alejoamiras/presto@6.0.0-rc.1`, `presto-core@1.2.1` and
-   `presto-banners@1.1.0`), `apps/extension/src/presto/presto-licence.test.ts` reds if a bump pulls an
+   resolves MIT versions (`@alejoamiras/presto@6.0.0-rc.3`, `presto-core@1.2.1` and
+   `presto-banners@1.2.0`), `apps/extension/src/presto/presto-licence.test.ts` reds if a bump pulls an
    AGPL-declared version back in, and every build emits `THIRD-PARTY-NOTICES.txt` into the
    extension root, carrying each bundled component's own copyright and permission notice
    (`packages/third-party-notices/`; Settings → About → Open-source licences opens it). The build
@@ -56,7 +56,9 @@ These are **not** fixed by editing the documents.
    bundled fonts are listed, each bound to its file by hash. **Stated limit:** the barretenberg and
    noir wasm are attributed to the projects that publish them, under their licences; what they
    compile in is not itemised, because upstream publishes no inventory (the notices file says so,
-   and `implementations-plan/follow-ups.md` records what would reopen it).
+   and the third-party notices record's
+   [Declined items](../implementations-plan/archive/third-party-notices/plan.md#declined-items) name
+   what would reopen it).
 5. **Chrome trader disclosure — declared non-trader.** The developer account answered
    Chrome's trader question as a non-trader (no revenue, no entity, no professional activity), so the
    listing shows no address or phone number. A natural person acting professionally can still be a

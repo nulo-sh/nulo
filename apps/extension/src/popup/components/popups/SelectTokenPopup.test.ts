@@ -8,7 +8,7 @@ import { flushPromises, mount } from "@vue/test-utils"
 import { effect, nextTick, stop } from "vue"
 import { createAppStoreHarness } from "../../../../tests/helpers/app-store-harness"
 import { installChromeStorage } from "../../../../tests/helpers/chrome-storage-mock"
-import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
+import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
 const H = vi.hoisted(() => {
 	const makeEvent = () => {
@@ -58,7 +58,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: H.priceDisconnect,
 			onQuotesUpdated: H.quotesUpdated,
 			onConnected: H.priceConnected,
-			refreshIfStale: vi.fn().mockImplementation(async () => H.quotes.current),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
+			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: H.quotes.current, pricedTokens: TEST_PRICED_TOKENS })),
 		}
 	}),
 }))
@@ -93,7 +94,7 @@ const STUBS = {
 
 const CHAIN = CHAIN_IDS.TESTNET
 // Test USDC is price-mapped on the testnet; with a `usd-coin` quote seeded it is the one priced row.
-const TEST_USDC = TESTNET_TOKENS.USDC
+const TEST_USDC = TEST_TOKENS.USDC
 const ACCOUNT = `0x${"a".repeat(64)}`
 const OTHER_ACCOUNT = `0x${"b".repeat(64)}`
 
@@ -112,6 +113,7 @@ const row = (
 		name: `${symbol} Token`,
 		symbol,
 		decimals: 18,
+		hasDecimals: true,
 	},
 	publicBalance: over.publicBalance ?? "1",
 	privateBalance: "0",

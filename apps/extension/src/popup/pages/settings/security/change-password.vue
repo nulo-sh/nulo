@@ -37,7 +37,9 @@ const currentPassword = ref("")
 const newPassword = ref("")
 const repeatedNewPassword = ref("")
 const maxPasswordLength = 128
-const isPasswordType = ref(true)
+// The current password has its own eye, so revealing the new pair never shows it.
+const isCurrentPasswordHidden = ref(true)
+const isNewPasswordHidden = ref(true)
 
 /**
  * Split error state: `isWrongCurrentPassword` drives the lock-screen
@@ -64,7 +66,7 @@ const isAllowedToChange = computed(
 
 const isLoading = ref(false)
 const handleChangePassword = async () => {
-	if (!isAllowedToChange.value) return
+	if (!isAllowedToChange.value || isLoading.value) return
 
 	isLoading.value = true
 	try {
@@ -102,14 +104,14 @@ onBeforeUnmount(() => {
 		heroMain="Change"
 		heroSub="Password"
 		collapsingLabel="Change Password"
-		backTo="/popup/settings/profile"
+		backTo="/popup/settings"
 		@keydown="onKeydown"
 	>
 		<!-- Profile -->
 		<div :class="$style.section">
 			<span :class="$style.section_label">Profile</span>
 			<ItemsContainer flat>
-				<SettingItem :title="appStore.profile?.name ?? ''" icon="user" raw />
+				<SettingItem :title="appStore.profile?.name ?? ''" titleVariant="name" icon="user" raw />
 			</ItemsContainer>
 		</div>
 
@@ -121,7 +123,7 @@ onBeforeUnmount(() => {
 					v-model="currentPassword"
 					:error="isWrongCurrentPassword"
 					:ariaInvalid="isWrongCurrentPassword"
-					:type="isPasswordType ? 'password' : 'text'"
+					:type="isCurrentPasswordHidden ? 'password' : 'text'"
 					@input="handlePasswordInput"
 					placeholder="Enter current password"
 					autocomplete="current-password"
@@ -130,9 +132,9 @@ onBeforeUnmount(() => {
 				>
 					<template #suffix>
 						<PasswordVisibilityToggle
-							:hidden="isPasswordType"
+							:hidden="isCurrentPasswordHidden"
 							data-testid="current-password-input-visibility-toggle"
-							@toggle="isPasswordType = !isPasswordType"
+							@toggle="isCurrentPasswordHidden = !isCurrentPasswordHidden"
 						/>
 					</template>
 				</Input>
@@ -155,7 +157,7 @@ onBeforeUnmount(() => {
 			<Flex direction="column" gap="12">
 				<Input
 					v-model="newPassword"
-					:type="isPasswordType ? 'password' : 'text'"
+					:type="isNewPasswordHidden ? 'password' : 'text'"
 					@input="handlePasswordInput"
 					:maxLength="maxPasswordLength"
 					placeholder="Enter new password"
@@ -164,22 +166,22 @@ onBeforeUnmount(() => {
 				>
 					<template #suffix>
 						<PasswordVisibilityToggle
-							:hidden="isPasswordType"
+							:hidden="isNewPasswordHidden"
 							data-testid="new-password-input-visibility-toggle"
-							@toggle="isPasswordType = !isPasswordType"
+							@toggle="isNewPasswordHidden = !isNewPasswordHidden"
 						/>
 					</template>
 					<template #bottom>
 						<Flex align="center" gap="6" :class="$style.hint_row">
 							<MaterialIcon name="lock" :size="12" color="tertiary" />
-							<Text size="12" weight="600" color="tertiary">{{ passwordHint }}</Text>
+							<Text variant="body" color="tertiary">{{ passwordHint }}</Text>
 						</Flex>
 					</template>
 				</Input>
 				<Input
 					v-model="repeatedNewPassword"
 					data-testid="new-password-repeat-input"
-					:type="isPasswordType ? 'password' : 'text'"
+					:type="isNewPasswordHidden ? 'password' : 'text'"
 					@input="handlePasswordInput"
 					:maxLength="maxPasswordLength"
 					placeholder="Repeat new password"
@@ -196,8 +198,7 @@ onBeforeUnmount(() => {
 			>
 				<Icon name="info" size="14" color="red" />
 				<Text
-					size="12"
-					weight="600"
+					variant="body"
 					height="120"
 					color="red"
 					data-testid="error-text-unexpected"
@@ -241,11 +242,7 @@ onBeforeUnmount(() => {
 }
 
 .section_label {
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.18em;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
@@ -254,8 +251,7 @@ onBeforeUnmount(() => {
 }
 
 .error_text {
-	font-family: var(--font-body);
-	font-size: 12px;
+	composes: type--body from global;
 	color: var(--red);
 	margin-top: 4px;
 	display: block;

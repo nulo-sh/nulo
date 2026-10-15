@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: Containment of cross-account state on an account switch, in `apps/extension/src/composables/useIncomingTransfers.ts`, `apps/extension/src/stores/app.store.ts`, `apps/extension/src/utils/activity-rows.ts` and `apps/extension/src/wallet/services/incoming-transfer/service.ts`, proven by `apps/extension/tests/e2e/network/account-switch-isolation.test.ts`.
-- **Open items**: the structural slices for journal, incoming, task and cancel state were not built, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the structural slices for journal, incoming, task and cancel state were not built, tracked in #152.
 - **Seeds retired**: the plan's goal and loop seeds are spent and must never be pasted.
 
 ## Decision

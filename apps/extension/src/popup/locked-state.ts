@@ -4,10 +4,11 @@ export interface LockedStateShell<P> {
 	closePopups: () => void
 	/** Bumps the scope epoch and closes any snack. */
 	onLocked: () => void
-	/** Clears the shell's logged-in mark. */
+	/** Clears the shell's logged-in mark, and supersedes every activation in flight so none sets it again. */
 	markLocked: () => void
 	clearActivity: () => void
 	resetInFlight: () => void
+	resetContactImports: () => void
 	cachedProfiles: () => P[]
 	setProfiles: (profiles: P[]) => void
 	route: (path: string) => void
@@ -25,6 +26,7 @@ export function createLockedState<P>(shell: LockedStateShell<P>) {
 		// The lock cancels the running sends, but the cancel events do not reach this popup; left
 		// in place, the rows would refuse every pick on the lock screen.
 		shell.resetInFlight()
+		shell.resetContactImports()
 	}
 	const land = (profiles: P[]) => {
 		shell.setProfiles(profiles)
@@ -52,13 +54,17 @@ export function createLockedState<P>(shell: LockedStateShell<P>) {
 		land(profiles)
 	}
 
-	return { enter, onLockEvent }
+	/** A session opened without a lock before it (a password change re-opens one). An import fenced to
+	 *  the session it replaced may still await the PXE, and must not hold Lock in this one. */
+	const onSessionOpened = () => shell.resetContactImports()
+
+	return { enter, onLockEvent, onSessionOpened }
 }
 
-/** The header marks the popup locked before the worker answers its Lock, and the snack and the
- *  epoch go with that mark: `flush: "sync"`, so nothing settling in the next microtask sees either.
- *  Under a lock event's seal it runs a second time, which changes nothing: the epoch only has to
- *  move, and the snack is already closed. */
+/** A lock control (the header chip or Lock now) marks the popup locked before the worker answers its
+ *  Lock, and the snack and the epoch go with that mark: `flush: "sync"`, so nothing settling in the
+ *  next microtask sees either. Under a lock event's seal it runs a second time, which changes
+ *  nothing: the epoch only has to move, and the snack is already closed. */
 export function watchLockStart(isLogined: () => boolean, onLocked: () => void) {
 	return watch(
 		isLogined,

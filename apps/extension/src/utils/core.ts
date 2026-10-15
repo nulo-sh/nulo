@@ -7,7 +7,7 @@
  * which made the module impossible to import in tests without a live SW and
  * caused phantom ports when multiple popup surfaces loaded the bundle.
  *
- * The public shape (`managers`, `isBackgroundConnected`, `initTransactionService`,
+ * The public shape (`managers`, `isServiceReady`, `initTransactionService`,
  * `refreshBalances`) is preserved — every existing consumer keeps working
  * unchanged. Under the hood:
  *   1. `managers` is a Proxy; client construction is deferred until first
@@ -24,16 +24,38 @@ import type { AccountServiceClient } from "@/wallet/services/account/client"
 import { ContactServiceClient } from "@/wallet/services/contact/client"
 import { LegalAcceptanceServiceClient } from "@/wallet/services/legal/client"
 import type { NetworkServiceClient } from "@/wallet/services/network/client"
+import { NetworkResetServiceClient } from "@/wallet/services/network-reset/client"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import type { Tx } from "@/wallet/services/transaction/spec"
 import { TransactionServiceClient } from "@/wallet/services/transaction/client"
 
-/** Reactive: true when the long-lived port to the service worker is open. */
-export const isBackgroundConnected = ref(false)
+/** Reactive: true once the background has said Ready on the profile port, false when that port drops. */
+export const isServiceReady = ref(false)
+
+/** Resolves true once the service is Ready, or false after `ms`. */
+export function waitForServiceReady(ms: number): Promise<boolean> {
+	if (isServiceReady.value) return Promise.resolve(true)
+	return new Promise((resolve) => {
+		const timer = setTimeout(() => {
+			stop()
+			resolve(false)
+		}, ms)
+		const stop = watch(
+			isServiceReady,
+			(ready) => {
+				if (!ready) return
+				clearTimeout(timer)
+				stop()
+				resolve(true)
+			},
+			{ flush: "sync" },
+		)
+	})
+}
 
 /**
- * Service-client container. `profile`, `contact` and `legal` are populated eagerly by
+ * Service-client container. `profile`, `contact`, `legal` and `networkReset` are populated eagerly by
  * `initAppServiceContext()` (called at popup boot). `network`, `transaction`,
  * `account` are LAZY: `null` until the popup's unlock flow assigns them (after
  * `bootstrapActiveProfile()` resolves the active profile/network/account).
@@ -55,16 +77,17 @@ export interface AppServices {
 	account: AccountServiceClient | null
 	contact: ContactServiceClient
 	legal: LegalAcceptanceServiceClient
+	networkReset: NetworkResetServiceClient
 }
 
 let appServices: AppServices | undefined
 
 function createAppServices(): AppServices {
 	const onConnected = () => {
-		isBackgroundConnected.value = true
+		isServiceReady.value = true
 	}
 	const onDisconnected = () => {
-		isBackgroundConnected.value = false
+		isServiceReady.value = false
 	}
 
 	const profileService = new ProfileServiceClient()
@@ -78,6 +101,9 @@ function createAppServices(): AppServices {
 	const legalService = new LegalAcceptanceServiceClient()
 	legalService.connect()
 
+	const networkResetService = new NetworkResetServiceClient()
+	networkResetService.connect()
+
 	// `network`, `transaction`, `account` remain `null` until the popup's unlock
 	// flow sets them (see AppServices jsdoc + the require*/get* accessors).
 	return {
@@ -87,6 +113,7 @@ function createAppServices(): AppServices {
 		account: null,
 		contact: contactService,
 		legal: legalService,
+		networkReset: networkResetService,
 	}
 }
 

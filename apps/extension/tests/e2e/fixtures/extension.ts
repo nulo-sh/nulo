@@ -1,8 +1,12 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { existsSync, readdirSync } from "node:fs"
 import { TimeoutError, type Browser, type Page, type ConsoleMessage } from "puppeteer"
-import { test as base, inject } from "vitest"
+import { test as base, expect, inject } from "vitest"
+import path from "node:path"
+import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import {
+	type LaunchedBrowser,
+	browserTraffic,
 	discoverExtensionId,
 	extensionUrl,
 	gotoExtensionPage,
@@ -12,21 +16,37 @@ import {
 	openScratchPage,
 	pickFile,
 	prepareClick,
+	stopBackground,
 } from "./browser"
 import {
 	captureBalanceBaseline,
 	createAccount,
 	getAccountAddress,
 	importToken,
+	readLivenessBaseline,
 	switchToLocalNetwork,
 	waitForFreshBalanceRow,
+	waitForWorkerLiveness,
 } from "./helpers"
-import { type PgBundle, selectPgBundle, snapshotResultSeq, waitForPgResult } from "./playground"
-import { waitForPopup, approveCapabilities } from "./popups"
+import { assertPgOk, type PgBundle, selectPgBundle, snapshotResultSeq, waitForPgResult } from "./playground"
+import { waitForPopup, waitForPopupClosed, approveCapabilities } from "./popups"
 import { TEST_PASSWORD } from "./constants"
 import type { AztecTestConfig } from "./aztec"
 import { PRESTO_HTTP_HEALTH_URL, PRESTO_HTTPS_HEALTH_URL } from "./presto"
 import { LEGAL_ACCEPTANCE_KEY, type LegalSeed, legalSeedValue } from "./legal"
+import { assertNoCspViolations, CSP_REPORT_ARMED, closeAfterCspCheck, readCspViolations } from "./csp-violations"
+import {
+	type EgressCanary,
+	type EgressGuard,
+	type HeldNode,
+	LIVE_LIST_HOST,
+	LIVE_NODE_HOST,
+	guardArmed,
+	ownGuardedLaunch,
+} from "./egress-guard"
+import { holdNodeStub } from "./node-stub"
+import { pageErrorOf } from "./page-errors"
+import { heldListStorage } from "./token-list"
 
 export interface ExtensionContext {
 	browser: Browser
@@ -36,6 +56,12 @@ export interface ExtensionContext {
 	/** Tear the launch down through this, never through `browser.close()`: a driver may own a
 	 *  WebDriver process and a profile directory that closing the browser does not release. */
 	close(): Promise<void>
+	/** Check this launch's recorded CSP violations now rather than at `close`. A test calls it
+	 *  before it reloads the extension, which discards the record; `close` then only closes. */
+	checkCspViolations(): Promise<void>
+	/** The smoke suite's egress guard, canary and stand-in Testnet node for this launch; absent where
+	 *  no guard is armed, and no stand-in in a `live` launch. */
+	egress?: { guard: EgressGuard; canary: EgressCanary; node: HeldNode | undefined }
 }
 
 /**
@@ -68,9 +94,23 @@ function isPrestoProbeNoise(msg: ConsoleMessage): boolean {
  *  `current`, so a spec that is not about the gate never meets it; a reused profile defaults to
  *  `keep`, so whatever the previous launch left is what the relaunch boots over.
  *
- *  `fixedWindowSize: false` launches without the driver's fixed window size (`LaunchOptions`). */
+ *  `fixedWindowSize: false` launches without the driver's fixed window size (`LaunchOptions`).
+ *
+ *  `live: true` sends the Testnet node's host and the token list's host direct instead of holding
+ *  the stand-in, and fails the close if the guard sees either. Only a run that provides `liveLeg` may
+ *  ask: elsewhere the launch would make a gate depend on a live host.
+ *
+ *  `tokenList: "held"` boots the worker a second time over a stored signed list (`token-list.ts`),
+ *  before any profile exists, so the list's price ids and, in an artifact run, its defaults apply. */
 export async function launchExtension(
-	opts: { userDataDir?: string; waitForLiveness?: boolean; legal?: LegalSeed; fixedWindowSize?: boolean } = {},
+	opts: {
+		userDataDir?: string
+		waitForLiveness?: boolean
+		legal?: LegalSeed
+		fixedWindowSize?: boolean
+		live?: true
+		tokenList?: "held"
+	} = {},
 ): Promise<ExtensionContext> {
 	const { userDataDir, waitForLiveness = true, fixedWindowSize } = opts
 	const extensionPath = inject("extensionPath")
@@ -81,19 +121,104 @@ export async function launchExtension(
 
 	// HEADLESS=0 flips to windowed mode for local debugging.
 	const headless: boolean = process.env.HEADLESS !== "0"
-	const { browser, close } = await launchBrowser({ extensionPath, userDataDir, headless, fixedWindowSize })
-
-	try {
-		const extensionId = await settleLaunchedExtension(browser, {
+	const launch = (egress?: { guardPort: number; liveHosts?: readonly string[] }) =>
+		launchBrowser({ extensionPath, userDataDir, headless, fixedWindowSize, egress })
+	const settle = (browser: Browser) =>
+		settleLaunchedExtension(browser, {
 			freshProfile,
 			waitForLiveness,
 			legal: opts.legal ?? (freshProfile ? "current" : "keep"),
+			holdTokenList: opts.tokenList === "held",
 		})
-		return { browser, extensionId, consoleErrors: [], pageErrors: [], close }
+	if (opts.live && inject("liveLeg") !== true) {
+		throw new Error("a live launch reaches the live Testnet node and list host, which only an artifact run's live spec may do")
+	}
+	const liveHosts = opts.live ? [LIVE_NODE_HOST, LIVE_LIST_HOST] : undefined
+	if (guardArmed(inject("egressGuard"))) return launchBehindEgressGuard(launch, settle, liveHosts)
+
+	const { browser, close: closeBrowser } = await launch()
+	try {
+		const extensionId = await settle(browser)
+		return { browser, extensionId, consoleErrors: [], pageErrors: [], ...cspLatch(browser, extensionId, closeBrowser) }
 	} catch (err) {
 		// Nothing else holds this launch yet; an escaping error would strand its browser.
-		await close().catch(() => {})
+		await closeBrowser().catch(() => {})
 		throw err
+	}
+}
+
+/** Every launch, a spec's own included, answers once for the violations recorded while it ran; a
+ *  second close is the plain teardown it always was. */
+function cspLatch(
+	browser: Browser,
+	extensionId: string,
+	closeBrowser: () => Promise<void>,
+): Pick<ExtensionContext, "close" | "checkCspViolations"> {
+	let checked = !CSP_REPORT_ARMED
+	const read = () => readCspViolations(browser, extensionId)
+	return {
+		checkCspViolations: async () => {
+			if (checked) return
+			checked = true
+			await assertNoCspViolations(read)
+		},
+		close: () => {
+			if (checked) return closeBrowser()
+			checked = true
+			return closeAfterCspCheck(closeBrowser, read)
+		},
+	}
+}
+
+async function launchBehindEgressGuard(
+	launch: (egress: { guardPort: number; liveHosts?: readonly string[] }) => Promise<LaunchedBrowser>,
+	settle: (browser: Browser) => Promise<string>,
+	liveHosts: readonly string[] | undefined,
+): Promise<ExtensionContext> {
+	const guarded = await ownGuardedLaunch({
+		label: launchLabel(),
+		traffic: browserTraffic,
+		liveHosts,
+		launch: async (egress) => {
+			const launched = await launch(egress)
+			return { value: launched.browser, close: launched.close }
+		},
+		settle,
+		probeCanary: fireCanary,
+		wrapClose: (closeBrowser, browser, extensionId) => cspLatch(browser, extensionId, closeBrowser),
+		holdNode: liveHosts === undefined ? (browser, extensionId) => holdNodeStub(browser, extensionId, TESTNET_RPC_URL) : undefined,
+	})
+	const { value: browser, settled: extensionId, wrapped, guard, canary, node } = guarded
+	return {
+		browser,
+		extensionId,
+		consoleErrors: [],
+		pageErrors: [],
+		close: guarded.close,
+		checkCspViolations: wrapped.checkCspViolations,
+		egress: { guard, canary, node },
+	}
+}
+
+/** The file alone: vitest keeps the last test's name through a later hook, and a file-scoped
+ *  fixture outlives the test that first asked for it. */
+function launchLabel(): string {
+	const { testPath } = expect.getState()
+	return testPath ? path.basename(testPath) : "an e2e launch"
+}
+
+/** Starts a request for `url` from an extension page, under the extension's own CSP, and waits for
+ *  the guard to record it. The page stays open until then: closing it could cancel the request. */
+async function fireCanary(browser: Browser, extensionId: string, url: string, recorded: () => boolean, budgetMs: number): Promise<void> {
+	const page = await openScratchPage(browser, extensionId)
+	try {
+		await page.evaluate((target: string) => {
+			fetch(target, { mode: "no-cors", cache: "no-store" }).catch(() => {})
+		}, url)
+		const deadline = Date.now() + budgetMs
+		while (!recorded() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100))
+	} finally {
+		await page.close().catch(() => {})
 	}
 }
 
@@ -101,7 +226,12 @@ export async function launchExtension(
  *  complete. Returns the extension id. */
 async function settleLaunchedExtension(
 	browser: Browser,
-	{ freshProfile, waitForLiveness, legal }: { freshProfile: boolean; waitForLiveness: boolean; legal: LegalSeed },
+	{
+		freshProfile,
+		waitForLiveness,
+		legal,
+		holdTokenList,
+	}: { freshProfile: boolean; waitForLiveness: boolean; legal: LegalSeed; holdTokenList: boolean },
 ): Promise<string> {
 	const extensionId = await discoverExtensionId(browser)
 
@@ -180,10 +310,37 @@ async function settleLaunchedExtension(
 		await chrome.storage.local.set({ "nulo:onboarding:completed": true })
 	})
 	if (legal !== "keep") await seedLegalAcceptance(blankPage, legal)
+	if (holdTokenList) blankPage = await rebootOverHeldList(browser, extensionId, blankPage)
 
 	await blankPage.close()
 
 	return extensionId
+}
+
+/**
+ * The worker reads its stored list once, at start, so the list is written and the worker stopped
+ * and woken again. Firefox ends its event page only while no extension page is open, so the scratch
+ * page closes first, and wakes it only on an add-on event: the popup, whose service clients connect,
+ * is what wakes it. The stored deadline keeps that boot from fetching.
+ */
+async function rebootOverHeldList(browser: Browser, extensionId: string, scratch: Page): Promise<Page> {
+	const { local, session } = await heldListStorage()
+	await scratch.evaluate(
+		async (l: Record<string, string>, s: Record<string, unknown>) => {
+			await chrome.storage.local.set(l)
+			await chrome.storage.session.set(s)
+		},
+		local,
+		session,
+	)
+	const baseline = await readLivenessBaseline(scratch)
+	await scratch.close()
+	await stopBackground({ browser, extensionId })
+	const next = await newPage(browser)
+	patchPagePolling(next)
+	await gotoExtensionPage(next, extensionUrl(extensionId, "/src/popup/index.html"))
+	await waitForWorkerLiveness(next, baseline)
+	return next
 }
 
 /** Put the acceptance record in the named state, from any extension page. The service reads storage
@@ -227,40 +384,7 @@ export async function openOnboarding(ctx: ExtensionContext, opts: { legal?: Excl
 	ctx.consoleErrors = []
 	ctx.pageErrors = []
 
-	page.on("console", (msg: ConsoleMessage) => {
-		// "Client disconnected" is the benign SW-port-close cascade — pending
-		// background-port RPCs reject en-masse when the SW restarts (e.g. during
-		// account switch). Prod already treats it as benign (the shared
-		// `isClientDisconnectRejection`); filter it here too so the `consoleErrors`
-		// assertions only catch UNEXPECTED errors, not this known noise.
-		// STRUCTURAL BLIND SPOT — root-caused + probe-verified (permanent by
-		// design; see implementations-plan/archive/e2e-deflake/plan.md, Console errors): the console-sniffer
-		// (`utils/console-sniffer.ts`, first module script in the popup/
-		// onboarding/offscreen entry pages — the setup page carries no sniffer)
-		// reroutes app `console.*` over LoggerService RPC to the SW realm;
-		// the native page console never fires on the success path, so CDP's
-		// consoleAPICalled never emits and this listener structurally cannot see
-		// app console output. Browser-emitted entries (e.g. "Unchecked
-		// runtime.lastError") bypass the patch and DO arrive. App-log evidence
-		// channel: `fixtures/journal.ts` readSwLogTrail (SW session-storage
-		// ring, 2s flush debounce). `pageerror` below IS reliable for uncaught
-		// throws + unhandled rejections (probe-verified) — an error the app
-		// catches and merely logs is invisible to BOTH fixture arrays
-		// (`consoleErrors` AND `pageErrors`; it does reach the SW log ring);
-		// prefer DOM/storage/stage evidence for app-level failures.
-		if (msg.type() === "error" && !msg.text().includes("Client disconnected") && !isPrestoProbeNoise(msg)) {
-			ctx.consoleErrors.push(msg.text())
-		}
-	})
-	page.on("pageerror", (err: Error) => {
-		// Mirror the consoleErrors filter above: the benign SW-port-close
-		// cascade also surfaces as an UNHANDLED REJECTION (pageerror) when a
-		// fire-and-forget RPC (e.g. app.vue's account-switch syncTransactions)
-		// is in flight during an MV3 service-worker restart. Same known noise,
-		// same filter — everything else still fails the assertion.
-		if (err.message?.includes("Client disconnected")) return
-		ctx.pageErrors.push(err)
-	})
+	recordPageErrors(ctx, page)
 
 	const url = extensionUrl(ctx.extensionId, "/src/onboarding/index.html#/onboarding/welcome")
 	await gotoExtensionPage(page, url)
@@ -277,11 +401,7 @@ export async function registerProfile(ctx: ExtensionContext): Promise<void> {
 
 	await waitForHash(page, "#/popup/register")
 
-	// Wait for GlobalLoader to disappear (SW must connect first)
-	await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), {
-		timeout: 30_000,
-		polling: 500,
-	})
+	await waitForServiceReady(page, 30_000)
 
 	await clickByTestId(page, "register-create-btn")
 
@@ -407,7 +527,7 @@ async function setupConnectedPlayground(
 
 /** Drive the playground's requestCapabilities flow for `bundle`, then approve
  *  the cap popup for whichever accounts `pick` selects; returns the granted
- *  addresses. All timeouts match the cold-shard budget (60s for the popup
+ *  addresses once the popup has closed. All timeouts match the cold-shard budget (60s for the popup
  *  target + the account-row render — chrome.windows.create + SW handler boot +
  *  loadInteractionPayload's PXE/accountService warmup can each exceed 30s on a
  *  cold CI runner; 30s for the dApp result). `pick` owns the per-fixture
@@ -429,7 +549,9 @@ export async function grantCapBundle(
 	)
 	const granted = await pick(accountIds, capPopup)
 	await approveCapabilities(capPopup, { accounts: granted })
-	await waitForPgResult(playgroundPage, "requestCapabilities", seqGrant, 30_000)
+	await assertPgOk(playgroundPage, await waitForPgResult(playgroundPage, "requestCapabilities", seqGrant, 30_000), "grantCapBundle")
+	// The window resolves the request before it closes, so the dApp's answer can precede its teardown.
+	await waitForPopupClosed(capPopup, 10_000)
 	return granted
 }
 
@@ -465,7 +587,7 @@ function dumpAccountAndNetworkRows(popup: Page): Promise<string> {
  *  first two accounts the cap popup exposes. */
 function firstTwoAccountsFixture(label: string, bundle: "transaction" | "transaction-contracts") {
 	// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
-	return async ({}: Record<string, never>, use: (v: TwoAccountDapp) => Promise<void>) => {
+	return async ({}: object, use: (v: TwoAccountDapp) => Promise<void>) => {
 		// Captured in the second-account setup step and referenced by the
 		// cap-pick failure message below, so a "<2 accounts exposed" failure
 		// discriminates wrong-chain creation from popup-side filtering.
@@ -524,6 +646,10 @@ export const test = base.extend<{
 	 *  for tests that wipe profile/account state mid-flow (reset-profile,
 	 *  destructive recovery flows) so the wipe doesn't leak into siblings. */
 	registeredExtensionPerTest: ExtensionContext
+	/** `registeredExtension` over a held signed list, whose price ids price its tokens. */
+	listedExtension: ExtensionContext
+	/** `registeredExtensionPerTest` over a held signed list. */
+	listedExtensionPerTest: ExtensionContext
 	/** Registered extension + Local Network + dapp connected via @nulo/playground.
 	 *  File-scoped: shared across tests in the same file. Use `dappConnectedExtensionPerTest`
 	 *  for parameterized files where each case needs a clean session. */
@@ -617,6 +743,28 @@ export const test = base.extend<{
 		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
 		async ({}, use) => {
 			const ctx = await launchExtension()
+			await registerProfile(ctx)
+			await use(ctx)
+			await ctx.close()
+		},
+		{ scope: "test" },
+	],
+
+	listedExtension: [
+		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
+		async ({}, use) => {
+			const ctx = await launchExtension({ tokenList: "held" })
+			await registerProfile(ctx)
+			await use(ctx)
+			await ctx.close()
+		},
+		{ scope: "file" },
+	],
+
+	listedExtensionPerTest: [
+		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
+		async ({}, use) => {
+			const ctx = await launchExtension({ tokenList: "held" })
 			await registerProfile(ctx)
 			await use(ctx)
 			await ctx.close()
@@ -917,10 +1065,7 @@ export const test = base.extend<{
 			const page = await openPopup(ctx)
 
 			await waitForHash(page, "#/popup/register", 30_000)
-			await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), {
-				timeout: 30_000,
-				polling: 500,
-			})
+			await waitForServiceReady(page, 30_000)
 
 			// Navigate to import page (the register page has an "Import" link, but
 			// direct hash nav is simpler for tests).
@@ -1146,7 +1291,35 @@ async function openPopupOnce(ctx: ExtensionContext): Promise<Page> {
 	}
 }
 
-async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> {
+const recorded = new WeakSet<Page>()
+
+/** Records `page`'s errors into the launch's arrays from now on, once however often it is asked:
+ *  `asPage()` hands every caller resolving one target the same `Page`. */
+export function recordPageErrors(ctx: ExtensionContext, page: Page): void {
+	if (recorded.has(page)) return
+	recorded.add(page)
+	const onConsole = (msg: ConsoleMessage) => {
+		// "Client disconnected" is the benign port-close cascade: pending RPCs reject en masse when the
+		// background restarts, and production treats it as benign too (`isClientDisconnectRejection`).
+		// App `console.*` never reaches this listener on the success path: the console sniffer reroutes
+		// it to the background's log ring (`fixtures/journal.ts` readSwLogTrail). Browser-emitted entries
+		// do ("Unchecked runtime.lastError", on Chrome). `pageerror` holds every uncaught throw and
+		// unhandled rejection on both browsers, Firefox's through the driver's relay (FIREFOX.md). An
+		// error the app catches and logs reaches neither array: prefer DOM, storage or stage evidence.
+		if (msg.type() === "error" && !msg.text().includes("Client disconnected") && !isPrestoProbeNoise(msg)) {
+			ctx.consoleErrors.push(msg.text())
+		}
+	}
+	const onPageError = (payload: unknown) => {
+		const err = pageErrorOf(payload)
+		if (err) ctx.pageErrors.push(err)
+	}
+	page.on("console", onConsole)
+	page.on("pageerror", onPageError)
+}
+
+/** Loads the popup into `page` and records its errors, leaving the arrays as they are. */
+async function loadPopup(ctx: ExtensionContext, page: Page): Promise<void> {
 	patchPagePolling(page)
 	await page.setViewport({ width: 360, height: 600 })
 	// Bring the new page to the front so the tab is "focused" — defense in
@@ -1154,64 +1327,52 @@ async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> 
 	// backgrounding` it prevents Chrome from suspending the offscreen
 	// renderer.
 	await page.bringToFront()
+	recordPageErrors(ctx, page)
+	await gotoExtensionPage(page, extensionUrl(ctx.extensionId, "/src/popup/index.html"))
+}
 
+/** Puppeteer's BiDi `close()` swallows a failed close, so only the `close` event proves one. */
+async function closeConfirmed(page: Page): Promise<void> {
+	const closed = new Promise<void>((resolve) => page.once("close", () => resolve()))
+	let timer: ReturnType<typeof setTimeout> | undefined
+	const refused = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => reject(new Error("openPopup: the slow popup tab did not close within 10 s")), 10_000)
+	})
+	try {
+		await Promise.race([page.close().then(() => closed), refused])
+	} finally {
+		clearTimeout(timer)
+	}
+}
+
+/** Until the shell has heard the background's Ready: before it, every call the page makes waits. */
+export async function waitForServiceReady(page: Page, timeout = 30_000): Promise<void> {
+	await page.waitForSelector('[data-service-ready="true"]', { timeout })
+}
+
+const popupReady = (page: Page, timeout: number, polling: number) =>
+	page.waitForFunction(
+		() => window.location.hash !== "#/" && window.location.hash !== "" && document.querySelector('[data-service-ready="true"]'),
+		{ timeout, polling },
+	)
+
+async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> {
 	ctx.consoleErrors = []
 	ctx.pageErrors = []
 
-	page.on("console", (msg: ConsoleMessage) => {
-		// "Client disconnected" is the benign SW-port-close cascade — pending
-		// background-port RPCs reject en-masse when the SW restarts (e.g. during
-		// account switch). Prod already treats it as benign (the shared
-		// `isClientDisconnectRejection`); filter it here too so the `consoleErrors`
-		// assertions only catch UNEXPECTED errors, not this known noise.
-		// STRUCTURAL BLIND SPOT — root-caused + probe-verified (permanent by
-		// design; see implementations-plan/archive/e2e-deflake/plan.md, Console errors): the console-sniffer
-		// (`utils/console-sniffer.ts`, first module script in the popup/
-		// onboarding/offscreen entry pages — the setup page carries no sniffer)
-		// reroutes app `console.*` over LoggerService RPC to the SW realm;
-		// the native page console never fires on the success path, so CDP's
-		// consoleAPICalled never emits and this listener structurally cannot see
-		// app console output. Browser-emitted entries (e.g. "Unchecked
-		// runtime.lastError") bypass the patch and DO arrive. App-log evidence
-		// channel: `fixtures/journal.ts` readSwLogTrail (SW session-storage
-		// ring, 2s flush debounce). `pageerror` below IS reliable for uncaught
-		// throws + unhandled rejections (probe-verified) — an error the app
-		// catches and merely logs is invisible to BOTH fixture arrays
-		// (`consoleErrors` AND `pageErrors`; it does reach the SW log ring);
-		// prefer DOM/storage/stage evidence for app-level failures.
-		if (msg.type() === "error" && !msg.text().includes("Client disconnected") && !isPrestoProbeNoise(msg)) {
-			ctx.consoleErrors.push(msg.text())
-		}
-	})
-
-	page.on("pageerror", (err: Error) => {
-		// Mirror the consoleErrors filter above: the benign SW-port-close
-		// cascade also surfaces as an UNHANDLED REJECTION (pageerror) when a
-		// fire-and-forget RPC (e.g. app.vue's account-switch syncTransactions)
-		// is in flight during an MV3 service-worker restart. Same known noise,
-		// same filter — everything else still fails the assertion.
-		if (err.message?.includes("Client disconnected")) return
-		ctx.pageErrors.push(err)
-	})
-
-	const popupUrl = extensionUrl(ctx.extensionId, "/src/popup/index.html")
 	// Fast-path-then-fallback for the SW-handshake workaround.
 	//
 	// Background: the SW's FIRST popup connection on a brand-new tab can
 	// lose the wallet-bridge handshake (popup logs "Client disconnected"
 	// from `client-*.js` and Vue never mounts; hash stays at "#/" with an
 	// empty body). The historical workaround was an unconditional
-	// triple-nav (popup → about:blank → popup) — the second load sees a
-	// fully-warm SW.
+	// triple-nav (popup → about:blank → popup); it now loads the popup again in
+	// a fresh tab — the second load sees a fully-warm SW.
 	//
-	// Readiness predicate: hash leaves "#/"
-	// AND the GlobalLoader is gone. The hash redirect alone fires too
-	// early — `app.vue` pushes `/popup/auth` BEFORE `initNetworks()` /
-	// `initAccount()` complete, so a fast-path that resolved on hash
-	// only would return a popup whose wallet-bridge isn't fully connected
-	// yet. `GlobalLoader.vue:14` renders `[data-testid="global-loader"]`
-	// when `!isBackgroundConnected`; its absence is the correct
-	// "bridge ready" signal.
+	// Readiness predicate: hash leaves "#/" AND the shell has heard the
+	// background's Ready (`data-service-ready`). The hash alone fires too
+	// early: past the start grace the guard routes before the service
+	// answers, and a route decided then is replayed once Ready comes.
 	//
 	// Budget: 2s is provisional and tuned for the prewarmed SW that
 	// `launchExtension()` produces (the SW liveness wait at line 70-80
@@ -1229,28 +1390,27 @@ async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> 
 	// counting fallback occurrences in CI artifacts).
 	const FAST_PATH_BUDGET_MS = 2_000
 	const t0 = Date.now()
-	await gotoExtensionPage(page, popupUrl)
-	let path: "fast" | "fallback" = "fast"
+	await loadPopup(ctx, page)
 	try {
-		await page.waitForFunction(
-			() => window.location.hash !== "#/" && window.location.hash !== "" && !document.querySelector('[data-testid="global-loader"]'),
-			{ timeout: FAST_PATH_BUDGET_MS, polling: 100 },
-		)
+		await popupReady(page, FAST_PATH_BUDGET_MS, 100)
+		if (process.env.NULO_E2E_OPENPOPUP_LOG === "1") console.log(`[openPopup] path=fast totalMs=${Date.now() - t0}`)
+		return page
 	} catch (err) {
 		if (!(err instanceof TimeoutError)) throw err
-		path = "fallback"
-		await page.goto("about:blank")
-		await gotoExtensionPage(page, popupUrl)
-		await page.waitForFunction(
-			() => window.location.hash !== "#/" && window.location.hash !== "" && !document.querySelector('[data-testid="global-loader"]'),
-			{ timeout: 30_000, polling: 200 },
-		)
 	}
-	if (process.env.NULO_E2E_OPENPOPUP_LOG === "1") {
-		console.log(`[openPopup] path=${path} totalMs=${Date.now() - t0}`)
+	// Closing a tab raises nothing from it, imports in flight included, while a navigation would make
+	// Firefox reject the left document's in-flight imports from it; the tab stays recorded until gone.
+	await closeConfirmed(page)
+	const fresh = await newPage(ctx.browser)
+	try {
+		await loadPopup(ctx, fresh)
+		await popupReady(fresh, 30_000, 200)
+	} catch (err) {
+		await fresh.close().catch(() => {})
+		throw err
 	}
-
-	return page
+	if (process.env.NULO_E2E_OPENPOPUP_LOG === "1") console.log(`[openPopup] path=fallback totalMs=${Date.now() - t0}`)
+	return fresh
 }
 
 /** Wait for Vue hash router to reach the expected hash.

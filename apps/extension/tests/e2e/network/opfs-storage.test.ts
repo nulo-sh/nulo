@@ -1,6 +1,6 @@
 /**
- * The Phase-3 storage spike, committed as permanent regression coverage: proves the encrypted
- * per-(profile, chain) SQLite-OPFS PXE stores against the PRODUCTION-built extension.
+ * Regression coverage for the encrypted per-(profile, chain) SQLite-OPFS PXE stores, run against
+ * the PRODUCTION-built extension.
  *
  * OPFS is ORIGIN-scoped, so the popup page sees the same tree the offscreen document writes —
  * every assertion here runs through `page.evaluate` on the popup, no offscreen attachment needed.
@@ -12,9 +12,7 @@
  * seeded sibling profile's dir survives (the isolation negative-control), and sweeps the
  * profile's legacy IndexedDB debris.
  *
- * Residual (documented in the plan's lessons): cross-RESTART persistence isn't driven here — the
- * bytes land in OPFS and reopen-compat within a session is exercised by every other network spec
- * (chain runtimes dispose/reinit on network switches); a full browser-restart harness would be
+ * Residual: cross-RESTART persistence isn't driven here; a full browser-restart harness would be
  * new infrastructure for standard sqlite durability.
  */
 import { inject, expect } from "vitest"

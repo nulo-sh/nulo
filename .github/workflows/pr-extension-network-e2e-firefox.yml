@@ -14,8 +14,10 @@ on:
     types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review]
 
 concurrency:
-  group: pr-extension-network-e2e-firefox-${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  # One queue per head commit, so a late run of an older push can neither cancel nor replace the
+  # current head's run; pr-supersede.yml cancels the runs of heads the pull request moved past.
+  group: pr-extension-network-e2e-firefox-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
 
 permissions:
   contents: read
@@ -31,10 +33,22 @@ jobs:
       pull-requests: read
     outputs:
       extension-network: ${{ steps.override.outputs.full || steps.filter.outputs.extension-network }}
+      label-hit: ${{ steps.live.outputs.label-hit }}
+      base: ${{ steps.live.outputs.base }}
+      read-attempt: ${{ steps.live.outputs.read-attempt }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - name: Read the live labels and head
+        id: live
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/ci-cd/live-labels.sh e2e:extension-network e2e:network
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
@@ -55,6 +69,8 @@ jobs:
               - 'packages/resolve-asset/package.json'
               - 'packages/third-party-notices/src/**'
               - 'packages/third-party-notices/package.json'
+              - 'packages/token-list/src/**'
+              - 'packages/token-list/package.json'
               - 'packages/wallet-bridge/src/**'
               - 'packages/wallet-bridge/package.json'
               - 'packages/wallet-core/src/**'
@@ -91,15 +107,19 @@ jobs:
       - id: gate
         env:
           EVENT: ${{ github.event_name }}
-          BASE: ${{ github.base_ref }}
-          DRAFT: ${{ github.event.pull_request.draft }}
+          BASE: ${{ needs.changes.outputs.base }}
           NETWORK: ${{ needs.changes.outputs.extension-network }}
-          LABEL_HIT: ${{ contains(github.event.pull_request.labels.*.name, 'e2e:extension-network') || contains(github.event.pull_request.labels.*.name, 'e2e:network') }}
+          LABEL_HIT: ${{ needs.changes.outputs.label-hit }}
         run: |
-          # A draft has nothing to say to this lane, and its aggregator passes when skipped; `ready_for_review` re-runs it.
-          if [ "$DRAFT" = "true" ]; then
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          elif [ "$EVENT" = "workflow_dispatch" ] \
+          case "$LABEL_HIT" in
+            true | false) ;;
+            *) echo "::error::changes.outputs.label-hit is not true/false: '$LABEL_HIT'"; exit 1 ;;
+          esac
+          if [ "$EVENT" = pull_request ] && [ -z "$BASE" ]; then
+            echo "::error::changes.outputs.base is empty"
+            exit 1
+          fi
+          if [ "$EVENT" = "workflow_dispatch" ] \
              || [ "$BASE" = "main" ] \
              || [ "$LABEL_HIT" = "true" ] \
              || [ "$NETWORK" = "true" ]; then
@@ -128,10 +148,8 @@ jobs:
       shard: ${{ matrix.shard.id }}
       shard_label: ${{ matrix.shard.label }}
       retry: "0"
-      exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+      exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
       proverless: true
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   network-e2e-heavy:
     name: Run / heavy / fee-methods + selfpay-phase
@@ -145,8 +163,6 @@ jobs:
       retry: "0"
       test_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts"
       proverless: true
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   network-e2e-heavy-concurrent:
     name: Run / heavy / concurrent-confirm
@@ -160,8 +176,19 @@ jobs:
       retry: "0"
       test_files: "tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
       proverless: true
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
+
+  network-e2e-heavy-long:
+    name: Run / heavy / snack-placement + failed-send-check
+    needs: decide
+    if: needs.decide.outputs.run == 'true'
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      browser: firefox
+      shard_label: "heavy-long"
+      retry: "0"
+      test_files: "tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
+      proverless: true
 
   network-e2e-canary:
     name: Run / canary / real-proving
@@ -175,13 +202,32 @@ jobs:
       retry: "0"
       test_files: "tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts"
       disable_presto: ${{ github.event.inputs.disable_presto == 'true' || vars.NULO_E2E_DISABLE_PRESTO == '1' }}
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
+
+  network-e2e-chaos:
+    name: Run / chaos / seed ${{ matrix.seed }}
+    needs: decide
+    if: needs.decide.outputs.run == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        seed:
+          - "1095865833"
+          - "1960252198"
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      browser: firefox
+      shard_label: chaos-${{ matrix.seed }}
+      retry: "0"
+      test_files: "tests/e2e/network/send-chaos.test.ts"
+      proverless: true
+      chaos: true
+      chaos_seed: ${{ matrix.seed }}
 
   status:
     name: extension-network-e2e-firefox-status
     if: always()
-    needs: [changes, decide, network-e2e, network-e2e-heavy, network-e2e-heavy-concurrent, network-e2e-canary]
+    needs: [changes, decide, network-e2e, network-e2e-heavy, network-e2e-heavy-concurrent, network-e2e-heavy-long, network-e2e-canary, network-e2e-chaos]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -199,11 +245,19 @@ jobs:
             false) want="skipped" ;;
             *) echo "::error::decide.outputs.run is not true/false: '$RUN'"; exit 1 ;;
           esac
+          # A partial re-run carries an earlier attempt's gate over, so a skip stands only on labels
+          # read in this attempt.
+          if [ "$RUN" = false ] && [ "${{ needs.changes.outputs.read-attempt }}" != "${{ github.run_attempt }}" ]; then
+            echo "::error::the suites were skipped on labels read at attempt '${{ needs.changes.outputs.read-attempt }}', not this one: re-run all jobs"
+            exit 1
+          fi
           for r in \
             "${{ needs.network-e2e.result }}" \
             "${{ needs.network-e2e-heavy.result }}" \
             "${{ needs.network-e2e-heavy-concurrent.result }}" \
+            "${{ needs.network-e2e-heavy-long.result }}" \
             "${{ needs.network-e2e-canary.result }}" \
+            "${{ needs.network-e2e-chaos.result }}" \
           ; do
             if [ "$r" != "$want" ]; then
               echo "::error::gate said run=$RUN, so every suite job must be '$want' — got '$r'"

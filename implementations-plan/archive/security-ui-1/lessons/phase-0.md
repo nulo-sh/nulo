@@ -1,0 +1,9 @@
+# Phase 0: planning
+
+## Consults
+
+- **Codex account name.** The lane brief's `CODEX_ACCOUNT=gmail` does not resolve on this host (`run-codex.sh` exits with "cannot resolve CODEX_ACCOUNT=gmail"); the roster names are `alejo-gmail` and `alejo-icloud` (`codex-usage list`). Every consult in this lane runs on `CODEX_ACCOUNT=alejo-gmail`, the account the brief meant.
+- **Codex round 1** (session `01a11bf6-5294-7162-a664-14c41632ce88`): `reject`, two blocking findings (a refusal that could report success while the wallet is locked; no profile-incarnation fence across export assembly) and eight more. All ten accepted after checking them against the tree; resolutions are in plan.md § Audit verdicts. One reasoning point rejected: trial decryption does not keep older readers compatible.
+- **Opus Plan audit, round 1:** `conditional approve`, one High (the same fail-open refusal Codex found, with a stronger fix: delete raw so a lock cannot hide the row) and eleven more. The panel split on whether the transfer key helps passkey profiles; decided for Opus (it does not), so Phase 1.1 covers password profiles only. Recorded in plan.md § Audit verdicts.
+- **Codex final fresh pass, round 1** (session `01a11c08-79b1-73e1-bcd5-c0671515b083`): `reject`, two blocking findings (the export's final active-id check passed a switch A→B→A; a refusal could still report success after a failed termination or a lock during the fallback lookup) and three more. All five accepted; the run now carries one execution fence end to end, and the refusal unstamps channels before terminating them.
+- **Codex final fresh pass, round 2** (same session, resumed): `conditional approve`, one condition: a popup-held fence must not survive a service-worker restart, since serials and deletion epochs live in memory. Met by a per-instance incarnation id on the RPC fence (`RunFence`) and test (k).

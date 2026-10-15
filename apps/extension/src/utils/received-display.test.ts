@@ -109,6 +109,12 @@ describe("tokenForReceipt + buildIncomingCardProps", () => {
 		expect(fiatLabel).not.toHaveBeenCalled()
 	})
 
+	test("a token with no decimals getter gives the card no decimals, so it draws no amount", () => {
+		const props = buildIncomingCardProps(noteRec(), [token({ decimals: 0, hasDecimals: false })], fiatLabel)
+		expect(props).toMatchObject({ tokenSymbol: "TST", tokenDecimals: null })
+		expect(buildIncomingCardProps(noteRec(), [token({ decimals: 0 })], fiatLabel).tokenDecimals).toBe(0)
+	})
+
 	test("a tokenId gone stale (the token removed and re-added) matches by contract", () => {
 		const readded = token({ id: 12 })
 		expect(tokenForReceipt([readded], noteRec())).toBe(readded)

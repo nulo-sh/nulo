@@ -26,8 +26,9 @@ import {
 	test,
 	waitForHash,
 	pickFileByTestId,
+	waitForServiceReady,
 } from "./fixtures/extension"
-import { acceptConfirmPopup, closeStuckPopup, navigateByHash, reopenAndRecoverAfterImport } from "./fixtures/helpers"
+import { acceptConfirmPopup, closeStuckPopup, navigateByHash, readSessionRow, reopenAndRecoverAfterImport } from "./fixtures/helpers"
 import {
 	confirmImport,
 	exportAccountBody,
@@ -36,7 +37,7 @@ import {
 	gotoAccounts,
 	previewImport,
 } from "./helpers/account-io"
-import { armBackupDownloadCapture, readCapturedBackupDownload } from "./helpers/backup-export"
+import { downloadEncryptedBackup, openEncryptedBackup } from "./helpers/backup-export"
 import { writeBackupToTemp } from "./helpers/import-drivers"
 
 /** The restored profile gets its own password — distinct on purpose, so an assertion passing
@@ -69,36 +70,23 @@ test("a full backup carries an imported account; restoring it (dup-confirmed) re
 	await gotoAccounts(page)
 	await page.waitForSelector('[data-testid="account-imported-badge"]', { visible: true, timeout: 20_000 })
 
-	// ── Stage 2: export a PLAIN full backup (the imported-key slice rides along) ──
+	// ── Stage 2: export the full backup (the imported-key slice rides along) and open it ──
 	await navigateByHash(page, "#/popup/settings/security/export/full")
 	await clickByTestId(page, "agree-continue-btn")
 	await page.waitForSelector('[data-testid="unlock-password-input"]', { visible: true, timeout: 10_000 })
 	await replaceInputValue(page, '[data-testid="unlock-password-input"]', TEST_PASSWORD)
 	await clickByTestId(page, "unlock-submit-btn")
-	// The multi-service backup chain is slow on hosted runners (same budget as
-	// backup-roundtrip.test.ts).
-	await page.waitForFunction(
-		() => {
-			const btn = document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')
-			return !!btn && !btn.disabled
-		},
-		{ timeout: 120_000, polling: 250 },
-	)
-	await armBackupDownloadCapture(page)
-	await clickByTestId(page, "download-backup-btn")
-	const backupJson = await readCapturedBackupDownload(page)
-	expect(backupJson.trim().startsWith("{")).toBe(true)
+	const parsedBackup = await openEncryptedBackup(await downloadEncryptedBackup(page))
 	// The backup genuinely carries the imported-key slice — without this, the restore stages
 	// below would "pass" by restoring nothing.
-	const parsedBackup = JSON.parse(backupJson) as { data?: Record<string, unknown> }
 	expect(Array.isArray(parsedBackup.data?.["imported-account-keys"])).toBe(true)
 	expect((parsedBackup.data?.["imported-account-keys"] as unknown[] | undefined)?.length).toBe(1)
 
-	const filePath = writeBackupToTemp(backupJson, "backup-with-imported-account.json")
+	const filePath = writeBackupToTemp(JSON.stringify(parsedBackup), "backup-with-imported-account.json")
 	try {
 		// ── Stage 3: import the backup into the SAME extension → dup-phrase warn → confirm ──
 		await navigateByHash(page, "#/popup/import", 15_000)
-		await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), { timeout: 15_000, polling: 300 })
+		await waitForServiceReady(page, 15_000)
 		await page.waitForSelector('[data-testid="import-option-full-backup"]', { visible: true, timeout: 15_000 })
 		await clickByTestId(page, "import-option-full-backup")
 		await pickFileByTestId(page, "import-full-backup-pick-file", filePath)
@@ -158,6 +146,36 @@ test("a full backup carries an imported account; restoring it (dup-confirmed) re
 		const reExported = await exportImportedAccountBody(page, false, RESTORE_PASSWORD)
 		const reviewed = await previewImport(page, reExported)
 		expect(reviewed).toBe(importedAddress)
+
+		// ── Stage 6: a key row that no longer opens is named on the export page, which still
+		// gives out the file ──
+		const restoredProfile = (await readSessionRow(page))?.profile
+		const corrupted = await page.evaluate(async (profileId) => {
+			const all = await chrome.storage.local.get(null)
+			const garbage = btoa(String.fromCharCode(...new Uint8Array(45).fill(1)))
+			let count = 0
+			for (const [key, raw] of Object.entries(all)) {
+				if (!key.startsWith("nulo:core:imported-account-keys@")) continue
+				const row = JSON.parse(raw as string) as { profileId: string; encryptedSigningKey: string }
+				if (row.profileId !== profileId) continue
+				await chrome.storage.local.set({ [key]: JSON.stringify({ ...row, encryptedSigningKey: garbage }) })
+				count++
+			}
+			return count
+		}, restoredProfile)
+		expect(corrupted).toBe(1)
+		await navigateByHash(page, "#/popup/settings/security/export/full")
+		await clickByTestId(page, "agree-continue-btn")
+		await page.waitForSelector('[data-testid="unlock-password-input"]', { visible: true, timeout: 10_000 })
+		await replaceInputValue(page, '[data-testid="unlock-password-input"]', RESTORE_PASSWORD)
+		await clickByTestId(page, "unlock-submit-btn")
+		await page.waitForSelector('[data-testid="backup-imported-unopened-banner"]', { visible: true, timeout: 120_000 })
+		expect(await page.$eval('[data-testid="backup-imported-unopened-banner"]', (el) => (el as HTMLElement).innerText)).toContain(
+			"1 imported account could not be opened, so they will not be restored.",
+		)
+		expect(await page.$('[data-testid="backup-keys-lost-banner"]')).toBeNull()
+		const withUnopened = await openEncryptedBackup(await downloadEncryptedBackup(page), RESTORE_PASSWORD)
+		expect((withUnopened.data?.["imported-account-keys"] as unknown[] | undefined)?.length).toBe(1)
 	} finally {
 		rmSync(filePath, { force: true })
 	}

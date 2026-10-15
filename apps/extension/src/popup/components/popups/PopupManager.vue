@@ -23,7 +23,6 @@ import NewSenderPopup from "./NewSenderPopup.vue"
 import NewTokenPopup from "./NewTokenPopup.vue"
 import ReceivePopup from "./ReceivePopup.vue"
 import RevokeAuthwitsPopup from "./RevokeAuthwitsPopup.vue"
-import SelectNetworksPopup from "./SelectNetworksPopup.vue"
 import SelectProfilePopup from "./SelectProfilePopup.vue"
 import SelectTokenPopup from "./SelectTokenPopup.vue"
 import TokenMetadataPopup from "./TokenMetadataPopup.vue"
@@ -87,7 +86,6 @@ onBeforeUnmount(() => {
 	<EditNetworkPopup :show="popupStore.isOpened('edit_network')" @onClose="popupStore.close('edit_network')" />
 	<NewEndpointPopup :show="popupStore.isOpened('new_endpoint')" @onClose="popupStore.close('new_endpoint')" />
 	<EditEndpointPopup :show="popupStore.isOpened('edit_endpoint')" @onClose="popupStore.close('edit_endpoint')" />
-	<SelectNetworksPopup :show="popupStore.isOpened('select_network')" @onClose="popupStore.close('select_network')" />
 
 	<AccountsPopup :show="popupStore.isOpened('accounts')" @onClose="popupStore.close('accounts')" />
 	<NewAccountPopup :show="popupStore.isOpened('new_account')" @onClose="popupStore.close('new_account')" />

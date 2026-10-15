@@ -35,7 +35,9 @@ export type Tombstone = z.infer<typeof TombstoneSchema>
  * hiding alone still disqualifies it here.) This
  * repo NEVER removes a row it can't decode: `reservedIds()` derives ids from
  * RAW keys (no decode), so a corrupt tombstone still reserves its id; only
- * `validPayloads()` (valid rows) drive cleanup.
+ * `validPayloads()` (valid rows) drive cleanup. A row is valid only when its
+ * `profileId` equals the id in its key: a misfiled row is corrupt, reserved
+ * under its key's id and never steering a deletion of the id it names.
  */
 export class TombstoneRepository {
 	public constructor(private readonly storage: StorageArea) {}
@@ -48,17 +50,25 @@ export class TombstoneRepository {
 		await this.storage.set({ [this.key(t.profileId)]: JSON.stringify(t) })
 	}
 
-	public async get(id: string): Promise<Tombstone | undefined> {
-		const res = await this.storage.get(this.key(id))
-		const row = decodeRow(TombstoneSchema, res[this.key(id)])
-		return row.kind === "valid" ? row.value : undefined
+	private decode(id: string, raw: unknown): Tombstone | undefined {
+		const row = decodeRow(TombstoneSchema, raw)
+		return row.kind === "valid" && row.value.profileId === id ? row.value : undefined
 	}
 
-	/** Clear ONLY if the live tombstone still matches the epoch we wrote — a
-	 *  concurrent re-deletion (new epoch) must not have its marker dropped. */
-	public async clearIfSame(id: string, epoch: number): Promise<void> {
-		const t = await this.get(id)
-		if (t && t.epoch === epoch) await this.storage.remove(this.key(id))
+	public async get(id: string): Promise<Tombstone | undefined> {
+		return this.decode(id, (await this.storage.get(this.key(id)))[this.key(id)])
+	}
+
+	/** Removes the row only if it is valid and of `epoch` (a concurrent re-deletion's
+	 *  marker survives). Resolves `true` iff no row remains under `id`'s key, the one
+	 *  condition under which its reservation may be released: every boot re-reserves
+	 *  from the raw keys, so a kept corrupt row must keep the id reserved now too. */
+	public async clearIfSame(id: string, epoch: number): Promise<boolean> {
+		const raw = (await this.storage.get(this.key(id)))[this.key(id)]
+		if (raw === undefined) return true
+		if (this.decode(id, raw)?.epoch !== epoch) return false
+		await this.storage.remove(this.key(id))
+		return true
 	}
 
 	/** RESERVED ids from RAW keys — NEVER decodes, so a corrupt tombstone still
@@ -71,9 +81,9 @@ export class TombstoneRepository {
 	 *  NEVER removes it (it stays reserved + surfaces "deletion pending"). */
 	public async validPayloads(): Promise<Tombstone[]> {
 		const out: Tombstone[] = []
-		for (const [, , v] of prefixedEntries(await this.storage.get(), `${PROFILE_TOMBSTONE_ROOT}@`)) {
-			const row = decodeRow(TombstoneSchema, v)
-			if (row.kind === "valid") out.push(row.value)
+		for (const [, id, v] of prefixedEntries(await this.storage.get(), `${PROFILE_TOMBSTONE_ROOT}@`)) {
+			const t = this.decode(id, v)
+			if (t) out.push(t)
 		}
 		return out
 	}
@@ -87,7 +97,7 @@ export class TombstoneRepository {
 	 *  + reopening the id for reuse. */
 	public async corruptIds(): Promise<string[]> {
 		return prefixedEntries(await this.storage.get(), `${PROFILE_TOMBSTONE_ROOT}@`)
-			.filter(([, , v]) => decodeRow(TombstoneSchema, v).kind !== "valid")
+			.filter(([, id, v]) => this.decode(id, v) === undefined)
 			.map(([, id]) => id)
 	}
 }

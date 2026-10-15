@@ -4,7 +4,7 @@ import type { TokenBalanceRaw } from "./spec"
 
 /**
  * The row↔token identity invariant: the row's FK and its stamped identity triple both
- * match the token. The triple is immutable on tokens (`updateToken` rejects any change),
+ * match the token. The triple is immutable on tokens (a token row is written once, at a fresh id),
  * so a mismatch proves the row belongs to a dead incarnation or a foreign owner — never
  * a legitimate drift. The FK equality is part of the predicate on purpose: most callers
  * resolve `token` via `tokens.get(row.token)` making it implicit, but the invariant must

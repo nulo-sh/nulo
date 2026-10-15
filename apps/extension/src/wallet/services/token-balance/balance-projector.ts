@@ -27,7 +27,7 @@ import { PxeStaleAnchorError } from "@nulo/extension-messaging/errors"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { buildViewCall, type ViewFn } from "@/wallet/utils/fn"
 import { rowMatchesToken } from "./balance-identity"
-import type { TokenBalanceRaw } from "./spec"
+import { BALANCE_BATCH_SIZE, TOKEN_BALANCE_SERVICE_NAME, type TokenBalanceRaw } from "./spec"
 
 /** Per-balance projection outcome. `transient` marks a failure the chain state itself may
  *  clear shortly (the PXE's anchor lagging a reorg) — the queue retries those, bounded. */
@@ -46,8 +46,6 @@ type ArmJob = {
 	index: number
 }
 
-const BATCH_SIZE = 12
-
 type GroupKey = string // `${account}:${chainId}`
 type BalanceGroup = { account: string; chainId: number; balances: TokenBalanceRaw[] }
 
@@ -60,7 +58,6 @@ export class BalanceProjector {
 		private readonly accounts: AccountService,
 		private readonly pxeService: PxeServiceClient,
 		private readonly logger?: ILogger,
-		private readonly logSource: string = "balance-projector",
 		private readonly projectionGate: ProjectionGate = NOOP_PROJECTION_GATE,
 	) {}
 
@@ -81,7 +78,7 @@ export class BalanceProjector {
 			// Identity guard, not just resolution: a dead incarnation's row at a reused
 			// id must not trigger PXE/network work against the id-holder's contract.
 			if (!token || !rowMatchesToken(balance, token)) {
-				this.logger?.log(this.logSource, LogLevel.Error, `Unknown token #${balance.token}`)
+				this.logger?.log(TOKEN_BALANCE_SERVICE_NAME, LogLevel.Error, `Unknown token #${balance.token}`)
 				results.push({ kind: "error", id: balance.id, error: `Unknown token #${balance.token}`, transient: false })
 				continue
 			}
@@ -101,9 +98,8 @@ export class BalanceProjector {
 		}
 
 		for (const group of groups.values()) {
-			// Chunk into batches of 12 inside the group.
-			for (let offset = 0; offset < group.balances.length; offset += BATCH_SIZE) {
-				const chunk = group.balances.slice(offset, offset + BATCH_SIZE)
+			for (let offset = 0; offset < group.balances.length; offset += BALANCE_BATCH_SIZE) {
+				const chunk = group.balances.slice(offset, offset + BALANCE_BATCH_SIZE)
 				const chunkResults = await this.projectChunk(group.account, group.chainId, chunk)
 				results.push(...chunkResults)
 			}
@@ -161,7 +157,7 @@ export class BalanceProjector {
 			// The stale-anchor class survives the offscreen port (typed payload), so this is the
 			// one failure the queue may retry: the offscreen already resynced and retried once.
 			const transient = err instanceof PxeStaleAnchorError
-			this.logger?.log(this.logSource, LogLevel.Error, `Failed to sync chunk: ${errorMessage}`)
+			this.logger?.log(TOKEN_BALANCE_SERVICE_NAME, LogLevel.Error, "Failed to sync chunk", { error: err })
 			return balances.map((b) => ({ kind: "error" as const, id: b.id, error: errorMessage, transient }))
 		}
 	}

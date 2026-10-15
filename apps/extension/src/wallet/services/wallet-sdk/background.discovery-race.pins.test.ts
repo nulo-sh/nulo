@@ -58,7 +58,7 @@ function makeServices(popup: Promise<{ approved: boolean }>, timedLookup: Promis
 	let lookups = 0
 	const timedLookupRequested = deferred<void>()
 	const stubs: Record<string, unknown> = {
-		network: { servesChain: async () => true },
+		network: { servesChain: async () => true, servesLiveChain: async () => true },
 		account: {},
 		execution: {},
 		profile: { onActiveProfileChanged: new EventHandler<unknown>(), getActiveProfile: async () => ({ id: "p1" }) },
@@ -70,6 +70,8 @@ function makeServices(popup: Promise<{ approved: boolean }>, timedLookup: Promis
 		},
 		"dapp-session": {
 			onDappSessionDeleted: new EventHandler<unknown>(),
+			onVerificationRefused: new EventHandler<unknown>(),
+			onVerificationConfirmed: new EventHandler<unknown>(),
 			// The SECOND lookup is the one the test times (discovery B's up-front one);
 			// every other lookup (A's, B's post-popup re-check) resolves at once.
 			tryGetDappSessionByOriginAndChain: () => {
@@ -87,6 +89,7 @@ function makeServices(popup: Promise<{ approved: boolean }>, timedLookup: Promis
 		"operation-journal": {},
 		token: { getTokens: async () => [] },
 		"legal-acceptance": { assertCurrent: async () => undefined },
+		"network-reset": { waitForRunEnd: async () => undefined },
 	}
 	return { services: { get: (name: string) => stubs[name] } as never, timedLookupRequested: timedLookupRequested.promise }
 }

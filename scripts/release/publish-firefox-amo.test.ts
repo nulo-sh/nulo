@@ -29,7 +29,9 @@ import {
 const FIREFOX_MANIFEST = {
 	version: "0.27.0.0",
 	version_name: "0.27.0",
-	browser_specific_settings: { gecko: { id: GECKO_ID, strict_min_version: "153.0", data_collection_permissions: { required: ["financialAndPaymentInfo"] } } },
+	browser_specific_settings: {
+		gecko: { id: GECKO_ID, strict_min_version: "153.0", data_collection_permissions: { required: ["financialAndPaymentInfo"] } },
+	},
 }
 
 describe("jwt", () => {
@@ -38,7 +40,10 @@ describe("jwt", () => {
 		expect(token).toBe(
 			"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ1c2VyOjEyMzo0NTYiLCJqdGkiOiJqdGktMSIsImlhdCI6MTcwMDAwMDAwMCwiZXhwIjoxNzAwMDAwMDYwfQ.kakMVRNcZxWmS1yokOKzypCgZjcZgHJ88hYIs9UHH_w",
 		)
-		const [header, payload] = token.split(".").slice(0, 2).map((p) => JSON.parse(Buffer.from(p, "base64url").toString()))
+		const [header, payload] = token
+			.split(".")
+			.slice(0, 2)
+			.map((p) => JSON.parse(Buffer.from(p, "base64url").toString()))
 		expect(header).toEqual({ alg: "HS256", typ: "JWT" })
 		expect(payload.exp - payload.iat).toBe(JWT_LIFETIME_SEC)
 		expect(JWT_LIFETIME_SEC).toBeLessThanOrEqual(300)
@@ -75,7 +80,11 @@ describe("interpreters", () => {
 	test("upload status: processing, valid, invalid with bounded errors", () => {
 		expect(interpretUploadStatus({ processed: false })).toEqual({ ok: true, value: { kind: "processing" } })
 		expect(interpretUploadStatus({ processed: true, valid: true })).toEqual({ ok: true, value: { kind: "valid" } })
-		const messages = Array.from({ length: 14 }, (_, i) => ({ type: i % 2 ? "warning" : "error", message: `m${i}`, description: "x".repeat(300) }))
+		const messages = Array.from({ length: 14 }, (_, i) => ({
+			type: i % 2 ? "warning" : "error",
+			message: `m${i}`,
+			description: "x".repeat(300),
+		}))
 		const r = interpretUploadStatus({ processed: true, valid: false, validation: { messages } })
 		expect(r.ok && r.value.kind === "invalid" && r.value.errors.length).toBe(7)
 		expect(r.ok && r.value.kind === "invalid" && r.value.errors.every((e) => e.length <= 200)).toBe(true)
@@ -85,7 +94,10 @@ describe("interpreters", () => {
 
 	test("version: id, the manifest's numeric version and channel listed are all required", () => {
 		const good = { id: 7, version: "0.27.0.0", channel: "listed", file: { status: "unreviewed" } }
-		expect(interpretVersion(good, "0.27.0.0")).toEqual({ ok: true, value: { id: 7, version: "0.27.0.0", channel: "listed", fileStatus: "unreviewed" } })
+		expect(interpretVersion(good, "0.27.0.0")).toEqual({
+			ok: true,
+			value: { id: 7, version: "0.27.0.0", channel: "listed", fileStatus: "unreviewed" },
+		})
 		expect(interpretVersion({ ...good, id: undefined }, "0.27.0.0").ok).toBe(false)
 		expect(interpretVersion({ ...good, version: "0.27.0" }, "0.27.0.0").ok).toBe(false)
 		expect(interpretVersion({ ...good, channel: "unlisted" }, "0.27.0.0").ok).toBe(false)
@@ -95,18 +107,32 @@ describe("interpreters", () => {
 	test("source and own-add-ons", () => {
 		expect(interpretSource({ source: "https://addons.mozilla.org/x/source.zip" }).ok).toBe(true)
 		expect(interpretSource({ source: null }).ok).toBe(false)
-		expect(interpretOwnAddons({ results: [{ guid: "other@x" }, { guid: GECKO_ID, status: "incomplete" }] }, GECKO_ID)).toEqual({ ok: true, value: { kind: "found", status: "incomplete" } })
-		expect(interpretOwnAddons({ results: [{ guid: "other@x" }], next: null }, GECKO_ID)).toEqual({ ok: true, value: { kind: "absent", listed: 1 } })
+		expect(interpretOwnAddons({ results: [{ guid: "other@x" }, { guid: GECKO_ID, status: "incomplete" }] }, GECKO_ID)).toEqual({
+			ok: true,
+			value: { kind: "found", status: "incomplete" },
+		})
+		expect(interpretOwnAddons({ results: [{ guid: "other@x" }], next: null }, GECKO_ID)).toEqual({
+			ok: true,
+			value: { kind: "absent", listed: 1 },
+		})
 		const next = "https://addons.mozilla.org/api/v5/addons/addon/?page=2&page_size=50"
-		expect(interpretOwnAddons({ results: [{ guid: "other@x" }], next }, GECKO_ID)).toEqual({ ok: true, value: { kind: "next", url: next, listed: 1 } })
-		expect(interpretOwnAddons({ results: [], next: "https://evil.example/steal" }, GECKO_ID)).toEqual({ ok: true, value: { kind: "absent", listed: 0 } })
+		expect(interpretOwnAddons({ results: [{ guid: "other@x" }], next }, GECKO_ID)).toEqual({
+			ok: true,
+			value: { kind: "next", url: next, listed: 1 },
+		})
+		expect(interpretOwnAddons({ results: [], next: "https://evil.example/steal" }, GECKO_ID)).toEqual({
+			ok: true,
+			value: { kind: "absent", listed: 0 },
+		})
 		expect(interpretOwnAddons({ detail: "Authentication credentials were not provided." }, GECKO_ID).ok).toBe(false)
 		expect(ownAddonsRequest().url).toBe("https://addons.mozilla.org/api/v5/addons/addon/?page_size=50")
 		expect(ownAddonsRequest(next).url).toBe(next)
 	})
 
 	test("apiError keeps strings and string arrays only, truncated", () => {
-		expect(apiError({ detail: "Version 0.27.0.0 already exists.", upload: ["a", "b"], nested: { x: 1 } })).toBe("detail: Version 0.27.0.0 already exists. | upload: a; b")
+		expect(apiError({ detail: "Version 0.27.0.0 already exists.", upload: ["a", "b"], nested: { x: 1 } })).toBe(
+			"detail: Version 0.27.0.0 already exists. | upload: a; b",
+		)
 		expect(apiError({ detail: "x".repeat(500) }).length).toBe(200)
 		expect(apiError("text")).toBe("no error detail")
 	})
@@ -119,7 +145,10 @@ describe("checkFirefoxManifest", () => {
 
 	test("refuses a Chrome zip, a wrong gecko id, an unsettled declaration and a version mismatch", () => {
 		const gecko = FIREFOX_MANIFEST.browser_specific_settings.gecko
-		const bss = (over: Record<string, unknown>) => ({ ...FIREFOX_MANIFEST, browser_specific_settings: { gecko: { ...gecko, ...over } } })
+		const bss = (over: Record<string, unknown>) => ({
+			...FIREFOX_MANIFEST,
+			browser_specific_settings: { gecko: { ...gecko, ...over } },
+		})
 		const cases: [unknown, string][] = [
 			[{ version: "0.27.0.0", version_name: "0.27.0" }, "browser_specific_settings"],
 			[bss({ id: "other@nulo.sh" }), "gecko.id"],
@@ -153,9 +182,15 @@ describe("checkSourceArchive", () => {
 	const paths = [...requiredSourcePaths("0.27.0"), sourcePackageJsonPath("0.27.0")]
 	const pkg = JSON.stringify({ name: "@nulo/extension", version: "0.27.0" })
 	test("needs the prefixed paths, a tree at VERSION, and stays under 200 MB", () => {
-		expect(paths).toEqual(["nulo-0.27.0/apps/extension/store/SOURCE-BUILD.md", "nulo-0.27.0/bun.lock", "nulo-0.27.0/apps/extension/package.json"])
+		expect(paths).toEqual([
+			"nulo-0.27.0/apps/extension/store/SOURCE-BUILD.md",
+			"nulo-0.27.0/bun.lock",
+			"nulo-0.27.0/apps/extension/package.json",
+		])
 		expect(checkSourceArchive([...paths, "nulo-0.27.0/README.md"], 30e6, "0.27.0", pkg)).toEqual({ ok: true, value: true })
-		expect(checkSourceArchive(["apps/extension/store/SOURCE-BUILD.md", "bun.lock", "apps/extension/package.json"], 30e6, "0.27.0", pkg).ok).toBe(false)
+		expect(
+			checkSourceArchive(["apps/extension/store/SOURCE-BUILD.md", "bun.lock", "apps/extension/package.json"], 30e6, "0.27.0", pkg).ok,
+		).toBe(false)
 		expect(checkSourceArchive([paths[0], paths[2]], 30e6, "0.27.0", pkg).ok).toBe(false)
 		expect(checkSourceArchive(paths, SOURCE_MAX_BYTES, "0.27.0", pkg).ok).toBe(false)
 	})
@@ -170,7 +205,10 @@ describe("checkSourceArchive", () => {
 
 describe("reviewerNotes", () => {
 	test("returns the trimmed block between the markers, and refuses a missing or empty one", () => {
-		expect(reviewerNotes(`# x\n${NOTES_START}\n\nHello reviewer.\n\n${NOTES_END}\nrest`)).toEqual({ ok: true, value: "Hello reviewer." })
+		expect(reviewerNotes(`# x\n${NOTES_START}\n\nHello reviewer.\n\n${NOTES_END}\nrest`)).toEqual({
+			ok: true,
+			value: "Hello reviewer.",
+		})
 		expect(reviewerNotes("# x\nno block").ok).toBe(false)
 		expect(reviewerNotes(`${NOTES_START}\n\n${NOTES_END}`).ok).toBe(false)
 		expect(reviewerNotes(`${NOTES_END}\n${NOTES_START}`).ok).toBe(false)

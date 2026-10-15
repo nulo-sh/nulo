@@ -15,6 +15,8 @@ export type Token = {
 
 	chainId: number
 	contract: string
+	/** Absent on a row added before classes were recorded. */
+	classId?: string
 
 	name: string
 	symbol: string
@@ -41,6 +43,7 @@ export const TokenSchema: z.ZodType<Token> = z.object({
 	profileId: z.string(),
 	chainId: z.number(),
 	contract: z.string(),
+	classId: z.string().optional(),
 	name: z.string(),
 	symbol: z.string(),
 	decimals: z.number(),
@@ -62,6 +65,11 @@ export type TokenInfo = {
 	chainId: number
 	/** Token contract address. */
 	contract: string
+	/**
+	 * The class the wallet resolved when the token was added: trust on first use, unauthenticated
+	 * when restored, so a reader compares it only as a field element.
+	 */
+	classId?: string
 	/** Token name. */
 	name: string
 	/** Token symbol. */
@@ -89,6 +97,8 @@ export type TokenInterface = {
 	chainId: number
 	/** Contract address. */
 	contract: string
+	/** The contract's original class, as the parse resolved it; a pinned parse refuses any other. */
+	classId: string
 
 	/** Function to get token name. */
 	getNameFn?: FnImpl
@@ -147,7 +157,7 @@ export type TokenInterface = {
  */
 export type SeedStatus = "pending" | "seeding" | "failed" | "rejected" | "seeded"
 
-/** One default the user has not deleted. `symbol` and `displayName` are compiled-in literals, never chain data. */
+/** One default the user has not deleted. `symbol` and `displayName` come from the signed list, never chain data. */
 export type SeedStatusEntry = {
 	chainId: number
 	contract: string
@@ -190,16 +200,6 @@ export type Methods = {
 		tokenInterface: TokenInterface,
 		opContext: OperationContext,
 	): TokenInfo
-
-	/**
-	 * Updates token and returns it.
-	 * @param profileId Profile id.
-	 * @param networkId Network id.
-	 * @param accountAddress Account address.
-	 * @param tokenId Token id.
-	 * @param tokenInterface Token interface, determining token's functionality.
-	 */
-	updateToken(profileId: string, networkId: string, accountAddress: string, tokenId: number, tokenInterface: TokenInterface): TokenInfo
 
 	/**
 	 * Deletes token with the specified id and returns it.
@@ -277,8 +277,6 @@ export type TokenAdded = TokenInfo & { profileId: string }
 export type Events = {
 	/** Emitted when a new token is created */
 	onTokenAdded: TokenAdded
-	/** Emitted when an existing token is updated */
-	onTokenUpdated: TokenInfo
 	/** Emitted when an existing token is deleted */
 	onTokenDeleted: TokenDeleted
 	/** A default's status changed in this scope. An invalidation: consumers refetch `getSeedStatus`. */

@@ -82,10 +82,11 @@ export function usedSequences(history: readonly Tx[], me: string): Set<string> {
  * Keys of a submitted tx known only from its record, read conservatively: it may be the account's
  * first tx, its handshakes are assumed first use, and a call with no transfers (a dApp tx, or the
  * fee call in its calls) may use any sequence of its contract or spend the payer's notes through it.
- * A popup transfer's record names no fee contract.
+ * A popup transfer records only its transfer call, so its fee contract comes from `feeSpender`.
  */
-export function recordedTxKeys(tx: Pick<Tx, "account" | "calls">): Set<SequenceKey> {
+export function recordedTxKeys(tx: Pick<Tx, "account" | "calls" | "feeSpender">): Set<SequenceKey> {
 	const keys = new Set<SequenceKey>(["init"])
+	if (tx.feeSpender) keys.add(`fpc:${lower(tx.feeSpender)}`)
 	for (const call of tx.calls) {
 		if (!call.transfers?.length) {
 			keys.add(`seq:${lower(call.contract)}:*`)

@@ -72,7 +72,7 @@ describe("change password — Enter does what the focused control says", () => {
 		expect(window.history.length).toBe(1)
 		pressOn(w.get('[data-testid="subpage-back"]').element as HTMLElement, "Enter")
 		await flushPromises()
-		expect(router.push).toHaveBeenCalledWith("/popup/settings/profile")
+		expect(router.push).toHaveBeenCalledWith("/popup/settings")
 		expect(profileClient.changeProfilePassword).not.toHaveBeenCalled()
 	})
 
@@ -97,6 +97,24 @@ describe("change password — Enter does what the focused control says", () => {
 		field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }))
 		await flushPromises()
 		expect(profileClient.changeProfilePassword).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("change password — one change per press", () => {
+	test("two same-tick clicks, before the disabled state renders, send one change", async () => {
+		const w = await mountWithValidFields()
+		submit(w).click()
+		submit(w).click()
+		await flushPromises()
+		expect(profileClient.changeProfilePassword).toHaveBeenCalledTimes(1)
+	})
+
+	test("(control) one click sends one change", async () => {
+		const w = await mountWithValidFields()
+		submit(w).click()
+		await flushPromises()
+		expect(profileClient.changeProfilePassword).toHaveBeenCalledTimes(1)
+		expect(profileClient.changeProfilePassword).toHaveBeenCalledWith("p1", "old-password", "new-password-1")
 	})
 })
 
@@ -125,11 +143,22 @@ describe("change password — the credential fields' controls", () => {
 		return w
 	}
 
-	test.each([
-		["current-password-input-visibility-toggle", "current-password-input"],
-		["new-password-input-visibility-toggle", "new-password-input"],
-	])("%s masks the current, new and repeat fields together", async (toggle, field) => {
-		await expectMaskToggle(await mountEmpty(), { toggle, field, drives: FIELDS })
+	test("the current-password eye unmasks the current field only, never the new pair", async () => {
+		await expectMaskToggle(await mountEmpty(), {
+			toggle: "current-password-input-visibility-toggle",
+			field: FIELDS[0],
+			drives: [FIELDS[0]],
+			others: FIELDS.slice(1),
+		})
+	})
+
+	test("the new-password eye unmasks the new pair only, never the current field", async () => {
+		await expectMaskToggle(await mountEmpty(), {
+			toggle: "new-password-input-visibility-toggle",
+			field: FIELDS[1],
+			drives: FIELDS.slice(1),
+			others: [FIELDS[0]],
+		})
 	})
 
 	test("the current field is focused on mount; autofill names each field's role", async () => {

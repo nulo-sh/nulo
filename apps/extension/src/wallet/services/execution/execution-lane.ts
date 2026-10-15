@@ -26,6 +26,7 @@
  */
 
 import { JobCancelledSentinel, type JobError, type JobProgress, normalizeError } from "@nulo/wallet-core/jobs"
+import { deferred } from "@nulo/wallet-core/utils"
 import { SessionEndedError, TooManyPendingError } from "@nulo/extension-messaging/errors"
 import { pickPrimaryMethod } from "@/utils/primary-method"
 import type { LocalTxOrigin } from "@/wallet/services/transaction/service"
@@ -42,6 +43,7 @@ import {
 	ExecutionMutexCapacityError,
 	type ExecutionMutexRelease,
 } from "./execution-mutex"
+import { failureKind } from "./mark-failed-unless-cancelled"
 
 export interface ExecutionLaneDeps {
 	operationJournal: OperationJournalService
@@ -65,6 +67,22 @@ const PRE_SUBMIT_STAGES = ["queued", "pending", "simulating", "proving"] as cons
 
 /** Popup transfers' bucket in the slot's per-origin cap; no dApp origin can take this form. */
 const POPUP_ORIGIN_KEY = "__popup__"
+/** Keeps an unexpected absent dApp origin capped under one bucket rather than bypassing the cap. */
+const NO_ORIGIN_KEY = "__no_origin__"
+
+/**
+ * A dApp send's place among its origin's sends in one lane, from its first grant until it starts
+ * or ends. A send parked outside the slot can be overtaken at the mutex, so this, not the mutex,
+ * keeps one origin's sends in their enqueue order (a session belongs to one origin).
+ */
+export interface OriginTurn {
+	/** An earlier send of the origin has neither started nor ended. */
+	behind(): boolean
+	/** Resolves once every earlier send of the origin has started or ended; `false` if `signal` aborts first. */
+	earlierDone(signal: AbortSignal): Promise<boolean>
+	/** Started or ended. Idempotent. */
+	leave(): void
+}
 
 export class ExecutionLane {
 	/** Cancel surface: jobId → AbortController, tagged with the serial of the
@@ -109,6 +127,9 @@ export class ExecutionLane {
 
 	private static readonly EXECUTION_ORIGIN_CAP = 8
 	private static readonly EXECUTION_LANE_CAP = 32
+
+	/** Per `${lane}|${origin}`, the dApp sends between their first grant and their start, in grant order. */
+	private readonly originLines = new Map<string, { done: Promise<void> }[]>()
 
 	public constructor(private readonly deps: ExecutionLaneDeps) {}
 
@@ -300,13 +321,8 @@ export class ExecutionLane {
 			await this.deps.assertFence(fence)
 			const mutexKey = await this.resolveExecutionMutexKey(fence, networkId)
 			// Per-origin + total-lane backpressure cap. `originKey` is the canonical
-			// dApp origin (threaded from ctx.origin); the sentinel keeps an unexpected
-			// absent origin capped under one bucket rather than bypassing the cap.
-			const caps: AcquireCaps = {
-				originKey: originKey ?? "__no_origin__",
-				maxOriginDepth: ExecutionLane.EXECUTION_ORIGIN_CAP,
-				maxLaneDepth: ExecutionLane.EXECUTION_LANE_CAP,
-			}
+			// dApp origin (threaded from ctx.origin).
+			const caps = this.capsFor(originKey ?? NO_ORIGIN_KEY)
 			// `acquire` installs this request as the FIFO tail SYNCHRONOUSLY, before
 			// its first await (execution-mutex.ts). The instant we've called it we
 			// are enqueued ahead of anyone who calls `acquire` later. Fire the baton
@@ -323,32 +339,113 @@ export class ExecutionLane {
 			const release = await acquirePromise
 			return { release, preController }
 		} catch (err) {
-			// Clean the pre-acquire controller for any non-grant exit.
-			if (queuedJournalId) this.activeControllers.delete(queuedJournalId)
-			if (err instanceof ExecutionMutexCapacityError) {
-				// Lane/origin backpressure. Terminalize the journal record HERE: the
-				// caller's claim never runs, and the background safety-net only
-				// terminalizes records still at `queued` — but the silent path
-				// fast-forwards to `pending` before executing, so without this an
-				// over-cap silent sendTx would leave a stuck `pending` card until the
-				// reaper grace expires. Surface to the dApp as -32005.
-				await this.markJournal(queuedJournalId, { stage: "failed" }, normalizeError(err, "dapp_execute"))
-				throw new TooManyPendingError()
-			}
-			if (err instanceof SessionEndedError) {
-				await this.markSessionEnded(queuedJournalId)
-				throw err
-			}
-			// Aborted while waiting (user cancelled the Queued record) — surface via
-			// the cancelled pipeline.
-			if (err instanceof ExecutionMutexAbortError) throw new JobCancelledSentinel(queuedJournalId ?? "")
-			throw err
+			return await this.refuseSlot(err, queuedJournalId)
 		} finally {
 			// Wait is over (granted, aborted, or capacity-rejected). A holder no
 			// longer needs the heartbeat — its stage transitions bump updatedAt;
 			// proving grace is 35 min.
 			if (queuedJournalId) this.endExecutionWait(queuedJournalId)
 		}
+	}
+
+	/**
+	 * Hands a granted dApp send's slot on while `wait` runs, then re-enters at the tail in the
+	 * origin's bucket with the place it was admitted under, so no re-entry is refused for capacity.
+	 * The record stays vouched for and keeps the controller `acquireSlot` registered; a silent-path
+	 * record reads `queued` while it waits. Errors map as `acquireSlot`'s.
+	 */
+	public async parkSlot(
+		release: ExecutionMutexRelease,
+		networkId: string,
+		queuedJournalId: string | undefined,
+		fence: ExecutionFence,
+		preController: AbortController | undefined,
+		originKey: string | undefined,
+		wait: () => Promise<void>,
+	): Promise<ExecutionMutexRelease> {
+		const reservation = this.executionMutex.keep(release)
+		if (queuedJournalId) this.beginExecutionWait(queuedJournalId)
+		try {
+			if (queuedJournalId) await this.requeue(queuedJournalId)
+			await wait()
+			await this.deps.assertFence(fence)
+			const mutexKey = await this.resolveExecutionMutexKey(fence, networkId)
+			return await this.executionMutex.acquire(mutexKey, preController?.signal, this.capsFor(originKey ?? NO_ORIGIN_KEY), reservation)
+		} catch (err) {
+			reservation.drop()
+			return await this.refuseSlot(err, queuedJournalId)
+		} finally {
+			if (queuedJournalId) this.endExecutionWait(queuedJournalId)
+		}
+	}
+
+	/** Joins the origin's line in the `(profile, chain)` lane; call while holding the slot, so the
+	 *  place is the grant order. */
+	public joinOriginLine(fence: ExecutionFence, chainId: number, originKey: string | undefined): OriginTurn {
+		const key = `${fence.profileId}:${chainId}|${originKey ?? NO_ORIGIN_KEY}`
+		const line = this.originLines.get(key) ?? []
+		this.originLines.set(key, line)
+		const { promise: done, resolve } = deferred()
+		const entry = { done }
+		line.push(entry)
+		let left = false
+		return {
+			behind: () => !left && line.indexOf(entry) > 0,
+			earlierDone: (signal) =>
+				untilOrAborted(Promise.all(line.slice(0, Math.max(0, line.indexOf(entry))).map((e) => e.done)), signal),
+			leave: () => {
+				if (left) return
+				left = true
+				line.splice(line.indexOf(entry), 1)
+				if (line.length === 0) this.originLines.delete(key)
+				resolve()
+			},
+		}
+	}
+
+	/** Fails a send's record no claim took: still `queued`, or `pending` on the silent path. A
+	 *  cancel already ended it; a record past those stages belongs to its claim. */
+	public async failUnclaimed(journalId: string | undefined, error: unknown): Promise<void> {
+		if (!journalId || error instanceof JobCancelledSentinel) return
+		try {
+			const failure = normalizeError(error, failureKind(error, "dapp_execute"))
+			await this.deps.operationJournal.transitionIfStage(journalId, ["queued", "pending"], { stage: "failed" }, failure)
+		} catch (err) {
+			this.deps.logError("Failed to update journal operation", { error: err })
+		}
+	}
+
+	/** A silent-path record reads `pending` before it runs; it reads `queued` while it waits, and
+	 *  the claim takes it back. A `queued` or ended record is left as it is. */
+	private async requeue(journalId: string): Promise<void> {
+		try {
+			await this.deps.operationJournal.transitionIfStage(journalId, ["pending"], { stage: "queued" })
+		} catch (error) {
+			this.deps.logError("Failed to move a waiting dApp send back to queued", { error })
+		}
+	}
+
+	/** Any exit from a slot wait but the grant. Always throws. */
+	private async refuseSlot(err: unknown, queuedJournalId: string | undefined): Promise<never> {
+		if (queuedJournalId) this.activeControllers.delete(queuedJournalId)
+		if (err instanceof ExecutionMutexCapacityError) {
+			// No claim follows, and the reaper's safety net never fails the silent path's `pending`
+			// record, so the refusal fails it here. The dApp sees -32005.
+			await this.markJournal(queuedJournalId, { stage: "failed" }, normalizeError(err, "dapp_execute"))
+			throw new TooManyPendingError()
+		}
+		if (err instanceof SessionEndedError) {
+			await this.markSessionEnded(queuedJournalId)
+			throw err
+		}
+		// Aborted while waiting (user cancelled the Queued record) — surface via
+		// the cancelled pipeline.
+		if (err instanceof ExecutionMutexAbortError) throw new JobCancelledSentinel(queuedJournalId ?? "")
+		throw err
+	}
+
+	private capsFor(originKey: string): AcquireCaps {
+		return { originKey, maxOriginDepth: ExecutionLane.EXECUTION_ORIGIN_CAP, maxLaneDepth: ExecutionLane.EXECUTION_LANE_CAP }
 	}
 
 	/** Whether a send holds (or waits for) the `(profileId, chainId)` slot right now. */
@@ -363,33 +460,29 @@ export class ExecutionLane {
 	public tryTakeSlot(profileId: string, chainId: number): Promise<ExecutionMutexRelease> | undefined {
 		const key = `${profileId}:${chainId}`
 		if (this.executionMutex.isLocked(key)) return undefined
-		return this.executionMutex.acquire(key, undefined, {
-			originKey: POPUP_ORIGIN_KEY,
-			maxOriginDepth: ExecutionLane.EXECUTION_ORIGIN_CAP,
-			maxLaneDepth: ExecutionLane.EXECUTION_LANE_CAP,
-		})
+		return this.executionMutex.acquire(key, undefined, this.capsFor(POPUP_ORIGIN_KEY))
 	}
 
 	/**
 	 * The dApp sends' slot for a popup transfer, in its own origin bucket. The transfer already owns
 	 * its controller, so this registers none: `signal` is that controller's, and an abort ends the
-	 * wait as the cancel sentinel. Call `release` in `finally`.
+	 * wait as the cancel sentinel. `onWait` runs once, synchronously, when another send holds or
+	 * awaits the slot as this one joins the line. Call `release` in `finally`.
 	 */
 	public async acquireTransferSlot(
 		networkId: string,
 		journalId: string,
 		fence: ExecutionFence,
 		signal: AbortSignal,
+		onWait?: () => void,
 	): Promise<ExecutionMutexRelease> {
 		this.beginExecutionWait(journalId)
 		try {
 			await this.deps.assertFence(fence)
 			const mutexKey = await this.resolveExecutionMutexKey(fence, networkId)
-			return await this.executionMutex.acquire(mutexKey, signal, {
-				originKey: POPUP_ORIGIN_KEY,
-				maxOriginDepth: ExecutionLane.EXECUTION_ORIGIN_CAP,
-				maxLaneDepth: ExecutionLane.EXECUTION_LANE_CAP,
-			})
+			// Nothing is awaited between the check and the enqueue, so the check is the line as joined.
+			if (this.executionMutex.isLocked(mutexKey)) onWait?.()
+			return await this.executionMutex.acquire(mutexKey, signal, this.capsFor(POPUP_ORIGIN_KEY))
 		} catch (err) {
 			if (err instanceof ExecutionMutexCapacityError) throw new TooManyPendingError()
 			if (err instanceof ExecutionMutexAbortError) throw new JobCancelledSentinel(journalId)
@@ -535,10 +628,15 @@ export class ExecutionLane {
 		)
 	}
 
-	public async markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null): Promise<void> {
+	public async markJournal(
+		journalId: string | undefined,
+		progress: JobProgress,
+		error?: JobError | null,
+		failedTitle?: string,
+	): Promise<void> {
 		if (!journalId) return
 		try {
-			await this.deps.operationJournal.transitionOperation(journalId, progress, error)
+			await this.deps.operationJournal.transitionOperation(journalId, progress, error, failedTitle)
 		} catch (err) {
 			this.deps.logError("Failed to update journal operation", err)
 		}
@@ -549,4 +647,17 @@ export class ExecutionLane {
 		if (!journalId) throw new Error("journal write refused: the operation has no record")
 		await this.deps.operationJournal.transitionOperation(journalId, progress)
 	}
+}
+
+/** `true` once `promise` fulfills, `false` if `signal` aborts first. */
+function untilOrAborted(promise: Promise<unknown>, signal: AbortSignal): Promise<boolean> {
+	if (signal.aborted) return Promise.resolve(false)
+	return new Promise<boolean>((resolve) => {
+		const onAbort = () => resolve(false)
+		signal.addEventListener("abort", onAbort, { once: true })
+		promise.then(() => {
+			signal.removeEventListener("abort", onAbort)
+			resolve(true)
+		})
+	})
 }

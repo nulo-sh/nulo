@@ -34,36 +34,42 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import { fakeBrowser } from "@webext-core/fake-browser"
 import { TokenService } from "./service"
 import { PinMismatchError, TokenSeeder, type TokenSeederDeps } from "./seeder"
-import { DEFAULT_TOKEN_SEEDS } from "./default-tokens"
+import { TOKEN_LIST_SERVICE_NAME, type TokenListSnapshot } from "@/wallet/services/token-list/spec"
 import type { Token, TokenInterface } from "./spec"
+import { txAmount } from "@/utils/tx-amount"
 
-/** The shipped seed list can be empty, so the default-token paths run against a fixture seed. */
-const FIXTURE_SEED = vi.hoisted(() => ({
+/** The default-token paths run against a fixture list entry, served by a stubbed token list. */
+const FIXTURE_SEED = {
 	chainId: 2,
 	contract: `0x${"0c".repeat(32)}`,
 	expectedClassId: "0xc1a55",
 	expectedSymbol: "cUSD",
 	expectedDecimals: 6,
 	displayName: "Compressed USD",
-}))
-vi.mock("./default-tokens", () => {
-	const seeds = [FIXTURE_SEED]
-	return {
-		DEFAULT_TOKEN_SEEDS: seeds,
-		seedsForChain: (chainId: number) => seeds.filter((s) => s.chainId === chainId),
-		findSeed: (chainId: number, contract: string) =>
-			seeds.find((s) => s.chainId === chainId && s.contract.toLowerCase() === contract.toLowerCase()),
-	}
-})
+}
+const FIXTURE_LIST: TokenListSnapshot = {
+	sequence: 1,
+	keyId: "nulo-ci-1",
+	entries: [
+		{
+			chainId: FIXTURE_SEED.chainId,
+			address: FIXTURE_SEED.contract,
+			classId: FIXTURE_SEED.expectedClassId,
+			symbol: FIXTURE_SEED.expectedSymbol,
+			decimals: FIXTURE_SEED.expectedDecimals,
+			name: FIXTURE_SEED.displayName,
+		},
+	],
+}
 
 const NETWORK = { id: "net1", chainId: 1, primaryEndpointId: "ep1", endpoints: [{ id: "ep1", rpcUrl: "http://fake" }] }
 const CONTRACT = AztecAddress.fromNumberUnsafe(0x1234).toString()
-const CLASS_ID = "0xc1a55"
+const CLASS_ID = `0x${"c1a55".padStart(64, "0")}`
 
 /** Hardcoded fake instance — deriving a real one needs the bb WASM (not loaded in vitest). */
-function fakeTokenInstance(): ContractInstanceWithAddress {
+function fakeTokenInstance(contract = CONTRACT): ContractInstanceWithAddress {
 	return {
-		address: AztecAddress.fromStringUnsafe(CONTRACT),
+		address: AztecAddress.fromStringUnsafe(contract),
 		currentContractClassId: { toString: () => CLASS_ID } as unknown as Fr,
 	} as unknown as ContractInstanceWithAddress
 }
@@ -98,6 +104,7 @@ async function makeHarness(fakeConfig?: ShallowPxeFakeConfig) {
 			registerChainPurgeSubscriber: () => {},
 			onActiveNetworkChanged: new EventHandler(),
 			isNetworkLive: async () => true,
+			isChainQuarantined: async () => false,
 			isChainLive: async () => true,
 		}),
 	)
@@ -105,6 +112,7 @@ async function makeHarness(fakeConfig?: ShallowPxeFakeConfig) {
 	const startNewTask = vi.fn(() => fakeTask)
 	collection.add(svc(TaskService.name, { startNewTask }))
 	collection.add(svc(OperationJournalService.name, {}))
+	collection.add(svc(TOKEN_LIST_SERVICE_NAME, { getSnapshot: () => undefined, onListChanged: new EventHandler() }))
 	const tokenService = new TokenService(logger, api, () => fake.client)
 	collection.add(tokenService)
 	await collection.start()
@@ -134,6 +142,23 @@ describe("TokenService composition — in-process, no sandbox", () => {
 
 		await tokenService.parseTokenInterface(NETWORK.id, CONTRACT)
 		expect(fake.registerCalls).toHaveLength(0) // getContracts() already lists it → no register
+	})
+
+	test("an address typed in upper case parses to the spelling a dApp call records, so its mint reads", async () => {
+		const lettered = AztecAddress.fromNumberUnsafe(0xabcdef).toString()
+		const { tokenService, fake } = await makeHarness({
+			instances: new Map([[lettered, fakeTokenInstance(lettered)]]),
+			artifacts: new Map([[CLASS_ID, TokenContractArtifact]]),
+			registered: [AztecAddress.fromStringUnsafe(lettered)],
+		})
+
+		const ti = await tokenService.parseTokenInterface(NETWORK.id, `0x${lettered.slice(2).toUpperCase()}`)
+
+		expect(ti.contract).toBe(lettered)
+		expect(fake.registerCalls).toHaveLength(0)
+		const token = { contract: ti.contract, classId: ti.classId, decimals: 6, symbol: "TST", hasDecimals: true }
+		const mint = { contract: lettered, method: "mint_to_public", args: [CONTRACT, "1000000"], classId: CLASS_ID }
+		expect(txAmount([mint], [token])).toEqual({ units: 1_000_000n, decimals: 6, symbol: "TST" })
 	})
 })
 
@@ -177,7 +202,9 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 	// composition. This slice drives the REAL graph for everything else:
 	// register-free pin reads, the seed-only persist path + journal labeling,
 	// tombstone-on-delete, and the three seed-trigger hooks.
-	const CUSD = DEFAULT_TOKEN_SEEDS[0].contract
+	const CUSD = FIXTURE_SEED.contract
+	/** Chains the harness's network service reports quarantined. */
+	const quarantined = new Set<number>()
 
 	async function seedHarness(seederOverrides?: ConstructorParameters<typeof TokenService>[3]) {
 		const fake = makeShallowPxeFake({
@@ -194,6 +221,7 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 		const onActiveProfileChanged = new EventHandler<{ id: string } | undefined>()
 		const onActiveNetworkChanged = new EventHandler<unknown>()
 		const onAccountAdded = new EventHandler<unknown>()
+		const onListChanged = new EventHandler<TokenListSnapshot>()
 		const journal = {
 			createOperation: vi.fn(async (input: Record<string, unknown>) => ({ id: "op1", ...input })),
 			transitionOperation: vi.fn(async () => {}),
@@ -218,16 +246,18 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 				registerChainPurgeSubscriber: () => {},
 				onActiveNetworkChanged,
 				isNetworkLive: async () => true,
+				isChainQuarantined: async (_p: string, chainId: number) => quarantined.has(chainId),
 				isChainLive: async () => true,
 			}),
 		)
 		collection.add(svc(AccountService.name, { getAccounts: async () => [{ address: "0xacc1" }], onAccountAdded }))
 		collection.add(svc(TaskService.name, { startNewTask: () => fakeTask }))
 		collection.add(svc(OperationJournalService.name, journal))
+		collection.add(svc(TOKEN_LIST_SERVICE_NAME, { getSnapshot: () => FIXTURE_LIST, onListChanged }))
 		const tokenService = new TokenService(logger, api, () => fake.client, seederOverrides)
 		collection.add(tokenService)
 		await collection.start()
-		return { tokenService, fake, api, journal, onActiveProfileChanged, onActiveNetworkChanged, onAccountAdded }
+		return { tokenService, fake, api, journal, onActiveProfileChanged, onActiveNetworkChanged, onAccountAdded, onListChanged }
 	}
 
 	const seedIface = (chainId: number, contract: string) => ({ chainId, contract, isComplete: true }) as unknown as TokenInterface
@@ -237,6 +267,23 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 		const ti = await tokenService.parseTokenInterface(NETWORK.id, CONTRACT, undefined, CLASS_ID)
 		expect(ti.contract).toBe(CONTRACT)
 		expect(fake.registerCalls).toHaveLength(1)
+	})
+
+	test("a seeded add stores the class its pinned parse matched", async () => {
+		const { tokenService } = await seedHarness()
+		const tokenInterface = await tokenService.parseTokenInterface(NETWORK.id, CONTRACT, undefined, CLASS_ID)
+
+		await tokenService.addSeededToken({
+			profileId: "p1",
+			networkId: NETWORK.id,
+			accountAddress: "0xacc1",
+			tokenInterface,
+			name: "Compressed USD",
+			symbol: "cUSD",
+			decimals: 6,
+		})
+
+		expect((await tokenService.getTokensRaw("p1", NETWORK.chainId))[0].classId).toBe(CLASS_ID)
 	})
 
 	test("pinned parse: class-id mismatch throws PinMismatchError BEFORE any PXE registration", async () => {
@@ -350,7 +397,7 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 		expect(marker[`${FIXTURE_SEED.chainId}:${CUSD.toLowerCase()}`].outcome).toBe("deleted")
 	})
 
-	test("deleting a NON-default token writes no marker", async () => {
+	test("deleting a NON-default token tombstones it too, so a later list cannot seed it", async () => {
 		const { tokenService } = await seedHarness()
 		const info = await tokenService.addSeededToken({
 			profileId: "p1",
@@ -363,17 +410,38 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 		})
 		await tokenService.deleteToken(info.id)
 		const res = await fakeBrowser.storage.local.get("nulo:core:token-seeded@p1")
-		expect(res["nulo:core:token-seeded@p1"]).toBeUndefined()
+		const marker = JSON.parse(res["nulo:core:token-seeded@p1"] as string)
+		expect(marker[`${NETWORK.chainId}:${CONTRACT.toLowerCase()}`].outcome).toBe("deleted")
 	})
 
-	test("an unarmed TokenService seeds from the SHIPPED list, not an injected one", async () => {
+	test("an unarmed TokenService seeds from the signed list, and an armed source that wrote nothing defers to it", async () => {
 		// Every other seeding test injects `getSeeds` or drives the armed e2e
 		// reader, so all of them would stay green if the production fallback
 		// regressed to `async () => []` — which would silently stop seeding
 		// defaults in a shipped wallet.
-		const { tokenService } = await seedHarness()
-		const { seeder } = tokenService as unknown as { seeder: { deps: TokenSeederDeps } }
-		expect(await seeder.deps.getSeeds()).toBe(DEFAULT_TOKEN_SEEDS)
+		for (const overrides of [undefined, { getSeeds: async () => undefined }]) {
+			const { tokenService } = await seedHarness(overrides)
+			const { seeder } = tokenService as unknown as { seeder: { deps: TokenSeederDeps } }
+			expect(await seeder.deps.getSeeds()).toEqual([FIXTURE_SEED])
+		}
+	})
+
+	test("a new list fences the seeder, and the seed version moves with the list's sequence", async () => {
+		const listChanged = vi.spyOn(TokenSeeder.prototype, "listChanged").mockResolvedValue(undefined)
+		vi.stubGlobal("chrome", { ...chrome, runtime: { ...chrome.runtime, getManifest: () => ({ version: "6.1.0" }) } })
+		try {
+			const { tokenService, onListChanged } = await seedHarness()
+			const { seeder } = tokenService as unknown as { seeder: { getVersion: () => string } }
+			expect(seeder.getVersion()).toBe("6.1.0+1")
+			FIXTURE_LIST.sequence = 2
+			onListChanged.invoke(FIXTURE_LIST)
+			expect(listChanged).toHaveBeenCalledTimes(1)
+			expect(seeder.getVersion()).toBe("6.1.0+2")
+		} finally {
+			FIXTURE_LIST.sequence = 1
+			vi.unstubAllGlobals()
+			listChanged.mockRestore()
+		}
 	})
 
 	test("unlock + active-network-change + account-added all trigger a seed pass through the REAL init wiring", async () => {
@@ -401,7 +469,7 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 		// The previous service worker recorded an attempt and its retry time, then
 		// died. Nothing but the boot-time resume exists in this one: no popup RPC, no
 		// profile/network/account event.
-		const seed = { ...DEFAULT_TOKEN_SEEDS[0], chainId: NETWORK.chainId }
+		const seed = { ...FIXTURE_SEED, chainId: NETWORK.chainId }
 		const markerKey = "nulo:core:token-seeded@p1"
 		const seedKey = `${seed.chainId}:${seed.contract}`
 		// The metadata read is simulate-backed (deep): stubbed at the service seam.
@@ -425,6 +493,33 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 			const { seeder } = tokenService as unknown as { seeder: TokenSeeder }
 			seeder.dispose()
 		} finally {
+			vi.useRealTimers()
+			preview.mockRestore()
+		}
+	})
+
+	test("a quarantined chain reads as one with no accounts: a due retry burns no attempt and runs nothing", async () => {
+		const seed = { ...FIXTURE_SEED, chainId: NETWORK.chainId }
+		const markerKey = "nulo:core:token-seeded@p1"
+		const seedKey = `${seed.chainId}:${seed.contract}`
+		const preview = vi.spyOn(TokenService.prototype, "previewTokenMetadata").mockRejectedValue(new Error("rpc down"))
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })
+		quarantined.add(NETWORK.chainId)
+		try {
+			const { tokenService } = await seedHarness({ getSeeds: async () => [seed], getVersion: () => "1.0.0" })
+			await fakeBrowser.storage.local.set({
+				[markerKey]: JSON.stringify({ [seedKey]: { attempts: 1, nextAttemptAt: Date.now() - 1 } }),
+			})
+			await tokenService.resumeSeeding()
+			await tokenService.ensureSeeding()
+			await vi.advanceTimersByTimeAsync(120_000)
+			expect(preview).not.toHaveBeenCalled()
+			const stored = (await fakeBrowser.storage.local.get(markerKey))[markerKey] as string
+			expect(JSON.parse(stored)[seedKey].attempts).toBe(1)
+			const { seeder } = tokenService as unknown as { seeder: TokenSeeder }
+			seeder.dispose()
+		} finally {
+			quarantined.clear()
 			vi.useRealTimers()
 			preview.mockRestore()
 		}

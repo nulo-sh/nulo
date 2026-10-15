@@ -109,8 +109,8 @@ one Vite served from cache stays.
 - Third-party source copied into a first-party directory is invisible to any module walk. It is
   recorded by hand in `DERIVED`, whose entries render in every build and meet the same source, text
   and licence rules as a `VENDORED` component.
-- What is deliberately not covered, and what would reopen each item, is in
-  `implementations-plan/follow-ups.md`.
+- What is deliberately not covered, and what would reopen each item, is in the archived plan's
+  [Declined items](../../implementations-plan/archive/third-party-notices/plan.md#declined-items).
 
 ## Fonts
 

@@ -1,8 +1,9 @@
 /**
  * The incarnation-fence matrix: a deleted profile's PXE can never be
  * resurrected in the same offscreen incarnation. The fence is the per-profile
- * lifecycle (unseen → live(gen) → deleting(gen) → deleted(gen)) gating
- * `provisionChainStoreKey`, `clearProfileState`, and generation-carrying ops.
+ * record (a current live(gen) or deleting(gen), plus every generation this
+ * document erased) gating `provisionChainStoreKey`, `clearProfileState`, and
+ * generation-carrying ops.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
@@ -12,6 +13,11 @@ vi.mock("./known-artifacts", () => ({
 }))
 vi.mock("./note-schemas", () => ({
 	loadProductionNoteSchemas: async () => new Map<string, unknown>(),
+}))
+const removeProfileStoreDirs = vi.fn(async (_profileId: string) => {})
+vi.mock("./opfs-store", async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	removeProfileStoreDirs: (profileId: string) => removeProfileStoreDirs(profileId),
 }))
 
 import type { PXE } from "@aztec-labs/pxe/client/bundle"
@@ -29,6 +35,7 @@ const noopProfiles: IProfileReader = {
 const KEY_B64 = btoa(String.fromCharCode(...new Uint8Array(32)))
 const GEN_1 = "11111111111111111111111111111111"
 const GEN_2 = "22222222222222222222222222222222"
+const GEN_3 = "33333333333333333333333333333333"
 
 const net = (pxeGeneration?: string): NetworkInfo => ({ profileId: "p1", chainId: 31337, rpcUrl: "http://n/1", pxeGeneration })
 
@@ -71,6 +78,7 @@ describe("incarnation fence", () => {
 	})
 	afterEach(() => {
 		vi.unstubAllGlobals()
+		removeProfileStoreDirs.mockClear()
 	})
 
 	test("provision requires a generation", async () => {
@@ -297,17 +305,86 @@ describe("incarnation fence", () => {
 		// rebind block is the registry miss itself: erase + re-provision there.
 		const svc = service as unknown as {
 			registry: { peekMatching: (n: NetworkInfo) => unknown }
-			profileLifecycles: Map<string, { kind: string; gen: string }>
+			profileLifecycles: Map<string, { current?: { kind: string; gen: string }; dead: Set<string> }>
 			storeKeys: Map<string, Uint8Array>
 			withPxeRead: (l: string, n: NetworkInfo, fn: () => Promise<string>) => Promise<string>
 		}
 		vi.spyOn(svc.registry, "peekMatching").mockImplementationOnce(() => {
-			svc.profileLifecycles.set("p1", { kind: "live", gen: GEN_2 })
+			svc.profileLifecycles.set("p1", { current: { kind: "live", gen: GEN_2 }, dead: new Set() })
 			svc.storeKeys.set("p1", new Uint8Array(32))
 			return undefined
 		})
 
 		await expect(svc.withPxeRead.call(service, "t", net(GEN_1), async () => "ok")).rejects.toThrow(/stale/)
 		expect(factoryCalls).toBe(0)
+	})
+
+	describe("dead generations and joined clears", () => {
+		const read = (service: PxeService, gen: string) =>
+			(service as unknown as { withPxeRead: (l: string, n: NetworkInfo, fn: () => Promise<string>) => Promise<string> }).withPxeRead(
+				"t",
+				net(gen),
+				async () => "ok",
+			)
+
+		test("after an erase, the next generation's clear needs no provision first", async () => {
+			const { service } = makeService()
+			await service.provisionChainStoreKey("p1", KEY_B64, GEN_1)
+			await service.clearProfileState("p1", GEN_1)
+
+			// A same-id re-import whose key this document never received is still deletable.
+			await service.clearProfileState("p1", GEN_2)
+			await expect(service.provisionChainStoreKey("p1", KEY_B64, GEN_2)).rejects.toThrow(/stale provision rejected/)
+		})
+
+		test("every erased generation stays refused however many deletions follow, and a fresh one is admitted", async () => {
+			const { service } = makeService()
+			await service.provisionChainStoreKey("p1", KEY_B64, GEN_1)
+			await service.clearProfileState("p1", GEN_1)
+			await service.provisionChainStoreKey("p1", KEY_B64, GEN_2)
+			await service.clearProfileState("p1", GEN_2)
+
+			await expect(service.provisionChainStoreKey("p1", KEY_B64, GEN_1)).rejects.toThrow(/stale provision rejected/)
+			await expect(read(service, GEN_1)).rejects.toThrow(/capture is stale/)
+			await expect(read(service, GEN_1)).rejects.not.toThrow(/PXE_STORE_KEY_MISSING/)
+			// A successor with no key yet falls through to the missing-key path, then goes live.
+			await expect(read(service, GEN_3)).rejects.toThrow(/PXE_STORE_KEY_MISSING/)
+			await service.provisionChainStoreKey("p1", KEY_B64, GEN_3)
+			expect(await read(service, GEN_3)).toBe("ok")
+		})
+
+		test("two clears of one generation started together erase once, and both resolve", async () => {
+			const { service } = makeService()
+			await service.provisionChainStoreKey("p1", KEY_B64, GEN_1)
+			expect(await read(service, GEN_1)).toBe("ok")
+			const dispose = vi.spyOn(
+				(service as unknown as { registry: { disposeProfile: (id: string) => Promise<void> } }).registry,
+				"disposeProfile",
+			)
+
+			await Promise.all([service.clearProfileState("p1", GEN_1), service.clearProfileState("p1", GEN_1)])
+
+			expect(dispose).toHaveBeenCalledTimes(1)
+			expect(removeProfileStoreDirs).toHaveBeenCalledTimes(1)
+		})
+
+		test("a failed erase rejects every caller that joined it, and the retry runs one fresh erase", async () => {
+			const { service } = makeService()
+			await service.provisionChainStoreKey("p1", KEY_B64, GEN_1)
+			removeProfileStoreDirs.mockRejectedValueOnce(new Error("opfs busy"))
+
+			const outcomes = await Promise.allSettled([service.clearProfileState("p1", GEN_1), service.clearProfileState("p1", GEN_1)])
+
+			expect(outcomes.map((o) => (o.status === "rejected" ? (o.reason as Error).message : o.status))).toEqual([
+				"opfs busy",
+				"opfs busy",
+			])
+			expect(removeProfileStoreDirs).toHaveBeenCalledTimes(1)
+			await expect(service.provisionChainStoreKey("p1", KEY_B64, GEN_1)).rejects.toThrow(/being deleted/)
+
+			await service.clearProfileState("p1", GEN_1)
+			expect(removeProfileStoreDirs).toHaveBeenCalledTimes(2)
+			await expect(service.provisionChainStoreKey("p1", KEY_B64, GEN_1)).rejects.toThrow(/stale provision rejected/)
+		})
 	})
 })

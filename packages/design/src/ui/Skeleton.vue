@@ -50,4 +50,8 @@ const styles = computed(() => ({ width: toLength(props.width), height: toLength(
 		animation: none;
 	}
 }
+
+:global(.noanimations) .skeleton {
+	animation: none;
+}
 </style>

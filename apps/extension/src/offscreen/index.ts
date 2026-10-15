@@ -1,14 +1,17 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import "@/utils/zod-jitless"
 import { PRESTO_HOST, PRESTO_HTTPS_PORT, PRESTO_PORT, PRESTO_REQUIRED, PRESTO_REQUIRED_BUILD_STAMP } from "@/presto/config"
 import { E2E_PROVERLESS, E2E_PROVERLESS_BUILD_STAMP } from "@/e2e/config"
+import { recordCspViolationsInPage } from "@/e2e/csp-report"
 import { consoleMethods, LogLevel } from "@/wallet/logger"
 import { documentLogger } from "@/wallet/services/logger/client"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
 import { createPxeOffscreen } from "@nulo/aztec-runtime/offscreen/entry"
 import { ProductionPxeFactory, createProvePhaseSink } from "@nulo/aztec-runtime/pxe"
-import { getErrorData } from "@nulo/wallet-core/utils"
 import { OFFSCREEN_READY_MESSAGE, OFFSCREEN_PONG, shouldRespondPong } from "@/wallet/utils/offscreen"
 import { isClientDisconnectRejection } from "@nulo/extension-messaging/errors"
+
+if (import.meta.env.VITE_NULO_E2E_CSP_REPORT === "1") recordCspViolationsInPage()
 
 // A PONG must mean "PXE services are up", not just "document loaded". The
 // listener is registered early (so a ping is never dropped for lack of a
@@ -44,7 +47,7 @@ self.onunhandledrejection = (e: PromiseRejectionEvent) => {
 			logger.log("pxe", LogLevel.Debug, "background port closed; pending RPC rejected (benign cascade)")
 			return
 		}
-		logger.log("pxe", LogLevel.Error, getErrorData(e.reason))
+		logger.log("pxe", LogLevel.Error, "unhandled rejection", { error: e.reason })
 	} catch {
 		// Logger itself may fail if SW is dead — don't cascade
 	}

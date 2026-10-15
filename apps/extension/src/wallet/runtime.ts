@@ -28,12 +28,13 @@ import { ContactService } from "./services/contact/service"
 import { DappInteractionService } from "./services/dapp-interaction/service"
 import { DappSessionService } from "./services/dapp-session/service"
 import { ExecutionService } from "./services/execution/service"
-import { E2E_PROVERLESS, E2E_TOKEN_SEEDS, E2E_TOKEN_SEEDS_BUILD_STAMP } from "@/e2e/config"
+import { E2E_PROVERLESS, E2E_TOKEN_LIST, E2E_TOKEN_LIST_BUILD_STAMP, E2E_TOKEN_SEEDS, E2E_TOKEN_SEEDS_BUILD_STAMP } from "@/e2e/config"
 import { ChromeStorageProofGate } from "@/e2e/chrome-storage-proof-gate"
 import { ChromeStorageRestoreGate } from "@/e2e/chrome-storage-restore-gate"
 import { ChromeStorageIncomingPollGate } from "@/e2e/chrome-storage-incoming-poll-gate"
 import { ChromeStorageProjectionGate } from "@/e2e/chrome-storage-projection-gate"
 import { ChromeStorageTokenSeeds } from "@/e2e/chrome-storage-token-seeds"
+import { ChromeStorageTokenListSource } from "@/e2e/chrome-storage-token-list"
 import { FpcService } from "./services/fpc/service"
 import { LogViewerService } from "./services/log-viewer/service"
 import { LoggerService } from "./services/logger/service"
@@ -46,10 +47,13 @@ import { SendCheck } from "./services/operation-journal/send-check"
 import { PasskeyService } from "./services/passkey/service"
 import { ProfileDeletionCoordinator } from "./services/profile-deletion/coordinator"
 import { AccountIntegrityCoordinator } from "./services/account-integrity/coordinator"
+import { NetworkResetService } from "./services/network-reset/service"
 import { PriceService } from "./services/price/service"
+import { TokenListService } from "./services/token-list/service"
 import { ProfileService } from "./services/profile/service"
 import {
 	registerPxeGenerationProvider,
+	registerPxeChainGuard,
 	registerPxeRecoveryGuard,
 	registerPxeScopeRegistrar,
 	registerPxeStoreKeyProvider,
@@ -391,7 +395,7 @@ async function persistBlockedOutcome(
 	deps: WalletRuntimeDeps,
 ): Promise<never> {
 	const { browserApi, clock, logger, manifestVersion } = deps
-	logger.log("wallet", LogLevel.Error, `Storage migration blocked boot (${migration.kind}): ${migration.reason}`)
+	logger.log("wallet", LogLevel.Error, "Storage migration blocked boot", { kind: migration.kind })
 	// A `spentAttempt: false` result recorded NOTHING on the durable
 	// counter (the engine's outer catch — a free transient failure), so
 	// charging the episode's retry allowance for it would park a healthy
@@ -430,7 +434,9 @@ async function persistBlockedOutcome(
  *  then arrive instantly terminal with zero gestures. */
 async function persistDegradedOutcome(migration: Extract<MigrationResult, { kind: "failed" }>, deps: WalletRuntimeDeps): Promise<void> {
 	const { browserApi, logger } = deps
-	logger.log("wallet", LogLevel.Warn, `Storage migration failed on an additive migration; booting degraded: ${migration.reason}`)
+	logger.log("wallet", LogLevel.Warn, "Storage migration failed on an additive migration; booting degraded", {
+		version: migration.version,
+	})
 	const degraded: MigrationDegradedStatus = { version: migration.version, error: migration.reason }
 	await browserApi.storage.local.set({ [SCHEMA_DEGRADED_KEY]: degraded })
 	await browserApi.storage.local.remove([SCHEMA_BLOCKED_KEY, SCHEMA_ATTEMPTS_KEY])
@@ -507,9 +513,17 @@ function registerServices(services: ServiceCollection, deps: WalletRuntimeDeps):
 	const networkService = new NetworkService(logger, browserApi)
 	services.add(networkService)
 	registerPxeScopeRegistrar(createScopeRegistrar(accountService, networkService))
+	registerPxeChainGuard((profileId, chainId) => networkService.isChainQuarantined(profileId, chainId))
 	services.add(new NoteService(logger))
 	services.add(new OperationJournalService(logger, browserApi))
 	services.add(new PriceService(logger, browserApi))
+	// E2E_TOKEN_LIST swaps the endpoint and the pinned keys for a localhost list the running test
+	// signs; with no source written the fetcher is off. Tree-shaken from prod like the seed source.
+	if (E2E_TOKEN_LIST_BUILD_STAMP) {
+		;(globalThis as { __NULO_E2E_TOKEN_LIST_BUILD_STAMP__?: string }).__NULO_E2E_TOKEN_LIST_BUILD_STAMP__ = E2E_TOKEN_LIST_BUILD_STAMP
+	}
+	const tokenListSource = E2E_TOKEN_LIST ? new ChromeStorageTokenListSource() : undefined
+	services.add(new TokenListService(logger, browserApi, tokenListSource ? { getSource: () => tokenListSource.get() } : {}))
 	// Passing `browserApi` threads the storage port into ProfileService AND, because the port
 	// carries alarms, ACTIVATES SessionManager's proactive TTL auto-lock (dormant pre-arc when the
 	// composition root passed no port — see session-manager.ts "proactive TTL lights up once the
@@ -553,6 +567,8 @@ function registerServices(services: ServiceCollection, deps: WalletRuntimeDeps):
 	// Also last-phase: registers as ProfileService's pre-open address verifier + AccountService's
 	// operation-time mismatch sink (the address-freeze runtime guard).
 	services.add(new AccountIntegrityCoordinator(logger, browserApi))
+	// The proverless-only restore gate carries the reset's hold points, under the same key.
+	services.add(new NetworkResetService(logger, browserApi, restoreGate))
 	return { deletionCoordinator }
 }
 

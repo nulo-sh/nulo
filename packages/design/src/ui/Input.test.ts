@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
+import { defineComponent, h, nextTick } from "vue"
 import Input from "./Input.vue"
 
 const STUBS = {
@@ -70,6 +71,38 @@ describe("Input", () => {
 		expect(mountInput().get("input").attributes("data-testid")).toBeUndefined()
 	})
 
+	test("the combo box attributes land on the native <input>, and none is set when not given", async () => {
+		const w = mountInput({
+			role: "combobox",
+			ariaLabelledby: "label-1",
+			ariaExpanded: false,
+			ariaAutocomplete: "list",
+			ariaActivedescendant: "opt-2",
+			ariaControls: "list-1",
+		})
+		const attributes = {
+			role: "combobox",
+			"aria-labelledby": "label-1",
+			"aria-expanded": "false",
+			"aria-autocomplete": "list",
+			"aria-activedescendant": "opt-2",
+			"aria-controls": "list-1",
+		}
+		expect(w.get("input").attributes()).toMatchObject(attributes)
+		await w.setProps({ ariaExpanded: true })
+		expect(w.get("input").attributes("aria-expanded")).toBe("true")
+
+		const bare = mountInput().get("input").attributes()
+		for (const name of Object.keys(attributes)) expect(bare[name], name).toBeUndefined()
+	})
+
+	test.each([
+		[undefined, "type--input"],
+		["input-data", "type--input-data"],
+	])("textVariant %s puts %s on the native <input>", (textVariant, role) => {
+		expect(mountInput({ textVariant }).get("input").classes()).toEqual([role])
+	})
+
 	test("type prop maps to the native input type", () => {
 		expect(mountInput({ type: "password" }).find("input").attributes("type")).toBe("password")
 	})
@@ -106,11 +139,84 @@ describe("Input", () => {
 		expect(emits?.[emits.length - 1]).toEqual(["12345"])
 	})
 
+	test("normalize decides what the field keeps and emits, in place of sanitize's filter", async () => {
+		const w = mountInput({ sanitize: true, normalize: (text: string) => text.toUpperCase().replace(/\s+/g, "_") })
+		await w.find("input").setValue("a b!")
+		expect(w.emitted("update:modelValue")?.at(-1)).toEqual(["A_B!"])
+		expect((w.find("input").element as HTMLInputElement).value).toBe("A_B!")
+	})
+
+	test("a paste is normalized before maxLength cuts it", () => {
+		const w = mountInput({ maxLength: 3, normalize: (text: string) => text.replace(/_/g, "") })
+		const paste = new Event("paste", { cancelable: true }) as Event & { clipboardData: unknown }
+		paste.clipboardData = { getData: () => "_a_b_c_d" }
+		w.find("input").element.dispatchEvent(paste)
+		expect(w.emitted("update:modelValue")?.at(-1)).toEqual(["abc"])
+	})
+
+	test("a paste over a selection replaces it, normalized, and leaves the caret after the pasted text", async () => {
+		const w = mountInput({ maxLength: 10, normalize: (text: string) => text.replace(/_/g, "") })
+		const el = w.find("input").element as HTMLInputElement
+		await w.find("input").setValue("Alxxce")
+		el.setSelectionRange(2, 4)
+		const paste = new Event("paste", { cancelable: true }) as Event & { clipboardData: unknown }
+		paste.clipboardData = { getData: () => "_i_" }
+		el.dispatchEvent(paste)
+		await nextTick()
+		expect(el.value).toBe("Alice")
+		expect([el.selectionStart, el.selectionEnd]).toEqual([3, 3])
+	})
+
 	test("maxLength reaching the limit emits maxLengthReached(true)", async () => {
 		const w = mountInput({ maxLength: 3 })
 		await w.find("input").setValue("abc")
 		const emits = w.emitted("maxLengthReached")
 		expect(emits?.[emits.length - 1]).toEqual([true])
+	})
+
+	// A host passes `#right` only while its message shows, as every capped name field does.
+	const Host = defineComponent({
+		props: { duplicate: { type: Boolean, default: false } },
+		setup(props) {
+			return () =>
+				h(
+					Input,
+					{ label: "Name", placeholder: "Name", maxLength: 3 },
+					props.duplicate ? { right: () => h("span", { "data-testid": "duplicate" }, "Already exist") } : {},
+				)
+		},
+	})
+	const mountHost = () => mount(Host, { global: { stubs: STUBS } })
+	const shows = (w: ReturnType<typeof mountHost>) => ({
+		duplicate: w.find('[data-testid="duplicate"]').exists(),
+		note: w.text().includes("Maximum length reached"),
+	})
+
+	test("at the cap the caller's message shows and the length note does not; when the message goes, the note takes the slot", async () => {
+		const w = mountHost()
+		await w.setProps({ duplicate: true })
+		await w.find("input").setValue("abc")
+		expect(shows(w)).toEqual({ duplicate: true, note: false })
+		await w.setProps({ duplicate: false })
+		expect(shows(w)).toEqual({ duplicate: false, note: true })
+		await w.setProps({ duplicate: true })
+		expect(shows(w)).toEqual({ duplicate: true, note: false })
+	})
+
+	test("below the cap the caller's message shows and no note; with no message, nothing", async () => {
+		const w = mountHost()
+		await w.setProps({ duplicate: true })
+		await w.find("input").setValue("ab")
+		expect(shows(w)).toEqual({ duplicate: true, note: false })
+		await w.setProps({ duplicate: false })
+		expect(shows(w)).toEqual({ duplicate: false, note: false })
+	})
+
+	test("a right slot that renders only a comment counts as empty: at the cap the note shows", async () => {
+		const w = mountInput({ label: "Name", maxLength: 3 }, { right: '<span v-if="false">Already exist</span>' })
+		await w.find("input").setValue("abc")
+		expect(w.text()).toContain("Maximum length reached")
+		expect(w.text()).not.toContain("Already exist")
 	})
 
 	test("(BUG PIN) subtype='int' emits parseInt of the RAW text (stops at first non-digit), not the cleaned digits", async () => {

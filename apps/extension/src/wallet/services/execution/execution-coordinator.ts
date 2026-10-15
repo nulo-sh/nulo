@@ -1,36 +1,30 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 /**
  * `ExecutionCoordinator` — owns the shared prove → send → record →
- * journal pipeline that would otherwise be duplicated across
- * `executeTransfer`, `executeSendTransaction`, `executeAztecSendTx`,
- * and `executeNoFromSendTx` in `ExecutionService`.
+ * journal pipeline that would otherwise be duplicated across the four
+ * send paths: `executeTransfer`, `executeSendTransaction`,
+ * `executeAztecSendTx` and `executeNoFromSendTx`.
  *
  * ## Scope (deliberately narrow)
  *
- * This PR does NOT move the `executeOperations` dispatcher or the 22
- * per-operation-kind handlers off the facade — each handler is RPC
- * surface + has unique op-specific plumbing that doesn't fit a generic
- * coordinator shape. What DOES move:
+ * The `executeOperations` dispatcher and the per-operation-kind handlers
+ * stay off the coordinator — each handler is RPC surface + has unique
+ * op-specific plumbing that doesn't fit a generic coordinator shape. It
+ * owns:
  *
  *   - `simulateTxTask` / `proveTxTask` / `sendTxTask` — the 3 task-
- *     lifecycle wrappers. Used by every handler + FeeStrategy impls
- *     (via the simulate callback).
- *   - `proveAndSend` — the shared "prove → toTx → send → addTransaction →
- *     mark journal submitted" sequence, called 4 times in the facade
- *     with minor op-specific variation.
- *
- * Future work:
- *   - Move the `executeOperations` dispatcher + per-kind handlers.
- *   - Fold in `GasBalanceCache` (facade-owned today — coordinator only
- *     shares / invalidates, never owns).
- *   - `AuthwitDiscoverer.trackAuthwit` post-send flush (requires the
- *     coordinator to own the send-complete point).
+ *     lifecycle wrappers. Fee strategies reach `simulateTxTask` through
+ *     their simulate callback.
+ *   - `proveAndSend` — the shared prove → toTx → commit `submitting` →
+ *     send → record → journal `succeeded` sequence (full order on the
+ *     method). Per-path variation arrives as data in
+ *     {@link ProveAndSendContext}, never as op-kind branches.
  *
  * ## Coordinator does NOT own the RPC surface
  *
  * Facade still owns `ensureInitialized`, RPC binding, and the RPC
- * methods on `Methods`. Coordinator is a pure collaborator — injected
- * via ctor, called by facade methods, no `Service<Methods>` base.
+ * methods on `Methods`. Coordinator is a pure collaborator — built by the
+ * facade, handed to its executors, no `Service<Methods>` base.
  */
 
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
@@ -45,7 +39,7 @@ import { StepContent, type TaskService, type WrappedTask } from "@/wallet/servic
 import type { LegalAdmission } from "@/wallet/services/legal/spec"
 import { type ProofGate, NOOP_PROOF_GATE } from "@/e2e/proof-gate"
 import { DuplicateInitializationError, SessionEndedError } from "@nulo/extension-messaging/errors"
-import type { ProveBackend } from "@nulo/wallet-core/jobs"
+import type { ProveBackend, SendExpiry } from "@nulo/wallet-core/jobs"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 import type { LastProveOutcome, ProveOutcomeHint, ProvePhaseName } from "./models"
 
@@ -122,7 +116,7 @@ export interface ProveAndSendContext<TOffchain = unknown> {
 	 *  divergent by design). */
 	markJournal: (patch: ProveAndSendJournalPatch) => Promise<unknown>
 	/** Writes `submitting`; rejects unless the row now durably holds it. The send never runs otherwise. */
-	commitSubmitting: (patch: { txHash: string; submittedEndpointUrl: string | undefined }) => Promise<void>
+	commitSubmitting: (patch: { txHash: string; submittedEndpointUrl: string | undefined; expiry: SendExpiry | undefined }) => Promise<void>
 	/** The primary endpoint of the network the tx was built against, recorded with `submitting`. */
 	submittedEndpointUrl: string | undefined
 	/** Offchain-output extraction hook. Runs BETWEEN prove and `toTx()` —
@@ -348,7 +342,7 @@ export class ExecutionCoordinator {
 		const tx = await provedTx.toTx()
 		const txHash = tx.getTxHash()
 		await ctx
-			.commitSubmitting({ txHash: txHash.toString(), submittedEndpointUrl: ctx.submittedEndpointUrl })
+			.commitSubmitting({ txHash: txHash.toString(), submittedEndpointUrl: ctx.submittedEndpointUrl, expiry: sendExpiryOf(tx) })
 			.catch((error: unknown) => {
 				// A cancel that reached the journal first is what refused the write: report the cancel.
 				ctx.checkCancelled()
@@ -360,4 +354,16 @@ export class ExecutionCoordinator {
 		await ctx.markJournal({ stage: "succeeded", txHash: txHash.toString() })
 		return { txHash, offchainOutput }
 	}
+}
+
+/** The expiry the chain enforces on `tx`, with its first nullifier, which is non-revertible: every
+ *  inclusion inserts it, reverted or not. None when the anchor is the genesis block, since the first
+ *  block is built without the expiry rule. */
+export function sendExpiryOf(tx: Tx): SendExpiry | undefined {
+	const { data } = tx
+	if (data.constants.anchorBlockHeader.getBlockNumber() === 0) return undefined
+	const nullifier = data.getNonEmptyNullifiers()[0]
+	const timestamp = Number(data.expirationTimestamp)
+	if (nullifier === undefined || !Number.isSafeInteger(timestamp)) return undefined
+	return { timestamp, nullifier: nullifier.toString() }
 }

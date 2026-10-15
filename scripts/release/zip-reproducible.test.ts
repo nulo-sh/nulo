@@ -35,7 +35,13 @@ const unzip = (...args: string[]) => Bun.spawnSync(["unzip", ...args]).stdout.to
 
 describe("zip-reproducible", () => {
 	test("lists regular files in code-unit order, without directories", () => {
-		expect(listFiles(tree("reverse", EPOCH))).toEqual(["Zeta.txt", "assets/a.js", "assets/b.js", "assets/icons/16.png", "manifest.json"])
+		expect(listFiles(tree("reverse", EPOCH))).toEqual([
+			"Zeta.txt",
+			"assets/a.js",
+			"assets/b.js",
+			"assets/icons/16.png",
+			"manifest.json",
+		])
 	})
 
 	test("two trees with the same content, in other write orders and mtimes, zip to the same bytes", () => {
@@ -44,7 +50,13 @@ describe("zip-reproducible", () => {
 		zipReproducible(tree("forward", EPOCH - 86_400), zipA, EPOCH)
 		zipReproducible(tree("reverse", EPOCH + 86_400), zipB, EPOCH)
 		expect(sha256(zipA)).toBe(sha256(zipB))
-		expect(unzip("-Z1", zipA).trim().split("\n")).toEqual(["Zeta.txt", "assets/a.js", "assets/b.js", "assets/icons/16.png", "manifest.json"])
+		expect(unzip("-Z1", zipA).trim().split("\n")).toEqual([
+			"Zeta.txt",
+			"assets/a.js",
+			"assets/b.js",
+			"assets/icons/16.png",
+			"manifest.json",
+		])
 	})
 
 	test("every entry carries the epoch as its timestamp, in UTC", () => {

@@ -20,6 +20,7 @@ describe("PortRegistry — the guarantees port-client tests lean on", () => {
 		registry.remoteClose(a)
 		registry.remoteClose(a)
 		expect(onA).toHaveBeenCalledTimes(1)
+		expect(onA).toHaveBeenCalledWith(a)
 		expect(onB).not.toHaveBeenCalled()
 		expect([...(registry.live.get(NAME) ?? [])]).toEqual([b])
 

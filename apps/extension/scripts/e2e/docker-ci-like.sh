@@ -9,19 +9,20 @@
 #     -v "$PWD":/work -w /work \
 #     -v nulo-bun-cache:/root/.bun/install/cache \
 #     -v nulo-aztec:/root/.aztec \
-#     -v nulo-foundry:/root/.foundry \
+#     -e NULO_E2E_PROVERLESS=1 \
 #     ubuntu:24.04 \
 #     bash -lc './apps/extension/scripts/e2e/docker-ci-like.sh 5/5'
 #
 # `--cpus` + `--memory` constraints are deliberately tight to approximate the
 # GitHub-hosted ubuntu-latest runner profile (4 vCPU, 16GB; we leave 4GB headroom
 # for the macOS host's hypervisor). `--shm-size` matters for Chrome (default 64MB
-# is way too small for headless puppeteer + multiple tabs).
+# is way too small for headless puppeteer + multiple tabs). `NULO_E2E_PROVERLESS=1`
+# mirrors CI's proverless pool: e2e:agent judges the whole selection before
+# sharding, so an unarmed shard run is refused.
 #
 # Named volumes:
 #   nulo-bun-cache    — preserves bun's npm cache across runs (~few minutes saved)
 #   nulo-aztec        — preserves aztec CLI install (~5 minutes saved)
-#   nulo-foundry      — preserves foundry/anvil install
 #
 # Arg 1: vitest --shard expression (e.g. "5/5"). Default "5/5" (the shard that
 #        hits the connectPlayground:awaitVerifyPopup failure deterministically).
@@ -42,42 +43,48 @@ apt-get install -y --no-install-recommends \
 	>/dev/null
 echo "::endgroup::"
 
-echo "::group::bun + node 24"
-if ! command -v bun >/dev/null; then
-	curl -fsSL https://bun.sh/install | bash >/dev/null
+echo "::group::bun + node (pinned)"
+# The pinned archives are always installed and put first on PATH, so a bun or node already in the
+# image never stands in for them. Both are checked against their pin before either is extracted.
+if [ "$(uname -m)" != x86_64 ]; then
+	echo "::error::docker-ci-like.sh pins only linux x64 Bun and Node: run the container with --platform=linux/amd64 (this is $(uname -m))." >&2
+	exit 1
 fi
+BUN_VERSION=1.4.2
+# Aztec's installer requires Node >= 24.12.0.
+NODE_VERSION=v24.16.0
+PINS="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/docker-ci-like.pins.sha256"
+TOOLS=/opt/docker-ci-like
+DOWNLOADS=$(mktemp -d)
+trap 'rm -rf "$DOWNLOADS"' EXIT
+
+fetch_pinned() {
+	local key="$1" url="$2"
+	mkdir -p "$DOWNLOADS/$(dirname "$key")"
+	curl -fsSL --proto '=https' --proto-redir '=https' --retry 5 --retry-delay 2 --retry-max-time 120 \
+		--retry-all-errors -o "$DOWNLOADS/$key" "$url"
+	# A key with no pin line gives sha256sum nothing to check, which it reports as a failure.
+	(cd "$DOWNLOADS" && awk -v key="$key" '$2 == key' "$PINS" | sha256sum -c --strict)
+}
+
+BUN_KEY="bun/$BUN_VERSION/bun-linux-x64.zip"
+NODE_KEY="node/$NODE_VERSION/node-$NODE_VERSION-linux-x64.tar.xz"
+fetch_pinned "$BUN_KEY" "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-x64.zip"
+fetch_pinned "$NODE_KEY" "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-linux-x64.tar.xz"
+
+rm -rf "$TOOLS"
+mkdir -p "$TOOLS/bun/bin" "$TOOLS/node"
+unzip -q -j "$DOWNLOADS/$BUN_KEY" bun-linux-x64/bun -d "$TOOLS/bun/bin"
+ln -s bun "$TOOLS/bun/bin/bunx"
+tar -xJf "$DOWNLOADS/$NODE_KEY" -C "$TOOLS/node" --strip-components=1
+# The bun cache volume mounts at $BUN_INSTALL/install/cache.
 export BUN_INSTALL=/root/.bun
-export PATH="$BUN_INSTALL/bin:$PATH"
-bun --version
-
-if ! command -v node >/dev/null; then
-	# Retry-on-network-blip + arch detection (linux/amd64 emulation on macOS).
-	# Pin to v24.16.0 (latest 24.x LTS as of bootstrap). Aztec's install script
-	# requires Node >= 24.12.0; 24.4.0 (default in setup-node@v6) is too old.
-	NODE_VERSION="${NODE_VERSION:-v24.16.0}"
-	ARCH=$(uname -m); case "$ARCH" in x86_64) ARCH=x64;; aarch64) ARCH=arm64;; esac
-	for attempt in 1 2 3; do
-		if curl -fsSL --retry 5 --retry-delay 2 --retry-max-time 120 \
-				"https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-${ARCH}.tar.xz" \
-				-o /tmp/node.tar.xz; then
-			break
-		fi
-		echo "Node download attempt $attempt failed; retrying in 5s..."
-		sleep 5
-	done
-	mkdir -p /opt/node && tar -xJf /tmp/node.tar.xz -C /opt/node --strip-components=1
-	export PATH="/opt/node/bin:$PATH"
+export PATH="$TOOLS/bun/bin:$TOOLS/node/bin:$PATH"
+if [ "$(bun --version)" != "$BUN_VERSION" ] || [ "$(node --version)" != "$NODE_VERSION" ]; then
+	echo "::error::the pinned archives did not install Bun $BUN_VERSION and Node $NODE_VERSION." >&2
+	exit 1
 fi
-node --version
-echo "::endgroup::"
-
-echo "::group::foundry"
-if [ ! -x /root/.foundry/bin/anvil ]; then
-	curl -L https://foundry.paradigm.xyz | bash
-	/root/.foundry/bin/foundryup
-fi
-export PATH="/root/.foundry/bin:$PATH"
-anvil --version || true
+echo "bun: $(command -v bun) ($(bun --version)); node: $(command -v node) ($(node --version))"
 echo "::endgroup::"
 
 echo "::group::bun install"
@@ -88,32 +95,22 @@ echo "::group::aztec cli"
 AZTEC_VERSION=$(bun -e "console.log(JSON.parse(require('fs').readFileSync('apps/extension/package.json','utf8')).dependencies['@aztec-labs/aztec.js'])")
 echo "Aztec version: $AZTEC_VERSION"
 echo "node: $(command -v node) ($(node --version))"
-echo "anvil: $(command -v anvil) ($(anvil --version 2>&1 | head -1))"
-# Force re-install if the bin dir is empty (previous failed installs left
-# stub directories that pass `-d` but contain no binaries).
-AZTEC_BIN_DIR="/root/.aztec/versions/$AZTEC_VERSION/bin"
-if [ ! -x "$AZTEC_BIN_DIR/aztec-anvil" ]; then
-	echo "::warning::aztec install absent or stale at $AZTEC_BIN_DIR; reinstalling"
-	rm -rf "/root/.aztec/versions/$AZTEC_VERSION"
-	export CI=1
-	export FOUNDRY_DIR="$HOME/.foundry"
-	curl -fsSL "https://install.aztec.network/${AZTEC_VERSION}/install" | VERSION="$AZTEC_VERSION" bash
+# The CI action's install script, keyed like its cache: a volume installed under other pins, an
+# older lockfile or an older install.sh, or missing a tool global-setup.ts needs, is reinstalled.
+SETUP_AZTEC=.github/actions/setup-aztec
+STAMP=$(find "$SETUP_AZTEC" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
+AZTEC_VERSION_DIR="/root/.aztec/versions/$AZTEC_VERSION"
+TOOLS_PRESENT=1
+for tool in node_modules/.bin/aztec bin/aztec-anvil internal-bin/forge internal-bin/anvil; do
+	[ -x "$AZTEC_VERSION_DIR/$tool" ] || TOOLS_PRESENT=0
+done
+if [ "$TOOLS_PRESENT" = 0 ] || [ "$(cat "$AZTEC_VERSION_DIR/.setup-aztec-stamp" 2>/dev/null)" != "$STAMP" ]; then
+	echo "::warning::aztec install absent or from other pins at $AZTEC_VERSION_DIR; reinstalling"
+	rm -rf "$AZTEC_VERSION_DIR"
+	AZTEC_VERSION="$AZTEC_VERSION" bash "$SETUP_AZTEC/install.sh"
+	echo "$STAMP" > "$AZTEC_VERSION_DIR/.setup-aztec-stamp"
 fi
-# global-setup.ts looks at ~/.aztec/current/bin/aztec-anvil exactly (5.0 renamed the bundled
-# bare `anvil` to `aztec-anvil`). The aztec installer SHOULD have put it there; if it didn't
-# (foundry already in PATH, or partial install), symlink foundry's anvil so the test stack finds it.
-if [ ! -x "$AZTEC_BIN_DIR/aztec-anvil" ]; then
-	if [ -x /root/.foundry/bin/anvil ]; then
-		echo "::warning::aztec install didn't place anvil; symlinking foundry's"
-		mkdir -p "$AZTEC_BIN_DIR"
-		ln -sfn /root/.foundry/bin/anvil "$AZTEC_BIN_DIR/aztec-anvil"
-	else
-		echo "::error::no anvil available anywhere"
-		exit 2
-	fi
-fi
-ln -sfn "/root/.aztec/versions/${AZTEC_VERSION}" /root/.aztec/current
-ls -la "$AZTEC_BIN_DIR/" || true
+ln -sfn "$AZTEC_VERSION_DIR" /root/.aztec/current
 export PATH="/root/.aztec/current/bin:/root/.aztec/current/node_modules/.bin:$PATH"
 echo "::endgroup::"
 

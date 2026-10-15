@@ -3,7 +3,7 @@
 import { FieldWarning } from "@nulo/design"
 /** Utils */
 import { AccountType } from "@/wallet/services/account/client"
-import { nextAccountName } from "@/utils/account-name"
+import { nextAccountName, sameStoredName, storedNameKey } from "@/utils/account-name"
 import { managers } from "@/utils/core"
 import { storageLocalSet } from "@/utils/storage"
 
@@ -17,7 +17,7 @@ const { openToast } = useToast()
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
-const { order } = usePopupStack("new_account")
+const { order, depth } = usePopupStack("new_account")
 
 const emit = defineEmits(["onClose"])
 const props = defineProps({
@@ -31,7 +31,7 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v.length) return null
-			if (appStore.accounts.find((a) => a.name === v)) return "Already exist"
+			if (appStore.accounts.some((a) => sameStoredName(a.name, v))) return "Already exist"
 			return null
 		},
 	},
@@ -46,7 +46,7 @@ const isAvailableToCreateAccount = computed(() => {
 	// is synchronous against a post-await push, so two concurrent invocations
 	// could otherwise both pass it and create two same-named accounts.
 	if (isCreatingAccount.value) return false
-	if (!name.value.length) return false
+	if (!storedNameKey(name.value)) return false
 	if (form.fields.name.error.value) return false
 	return true
 })
@@ -110,6 +110,7 @@ usePopupEntity(() => props.show, {
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		title="New account"
 		submitLabel="Create"
 		:submitDisabled="!isAvailableToCreateAccount"
@@ -126,15 +127,13 @@ usePopupEntity(() => props.show, {
 			data-testid="account-name-input"
 			v-model="name"
 		>
-			<template #right>
-				<Transition name="fade">
-					<FieldWarning v-if="isAlreadyExist"> Already exist </FieldWarning>
-				</Transition>
+			<template v-if="isAlreadyExist" #right>
+				<FieldWarning> Already exist </FieldWarning>
 			</template>
 		</Input>
 
 		<template #belowSubmit>
-			<Text size="12" weight="500" color="tertiary" height="140" align="center" style="padding: 0 20px">
+			<Text variant="body" color="tertiary" height="140" align="center" style="padding: 0 20px">
 				New accounts do not require the creation of a new recovery phrase
 			</Text>
 		</template>

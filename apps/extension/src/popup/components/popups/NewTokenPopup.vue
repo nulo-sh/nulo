@@ -19,10 +19,9 @@ const { openToast } = useToast()
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
-import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 const appStore = useAppStore()
 const cacheStore = useCacheStore()
-const { order } = usePopupStack("new_token")
+const { order, depth } = usePopupStack("new_token")
 
 const props = defineProps({
 	show: Boolean,
@@ -42,7 +41,8 @@ const form = useFormState({
 		validate: (v) => {
 			if (!v?.length) return null
 			if (!isValidHex(v)) return "Invalid address"
-			if (tokens.value.some((t) => t.contract === v)) return "Already exist"
+			// Hex is case-insensitive: another spelling of a listed contract is that token.
+			if (tokens.value.some((t) => t.contract.toLowerCase() === v.toLowerCase())) return "Already exist"
 			return null
 		},
 	},
@@ -253,7 +253,9 @@ const handleAddToken = async () => {
 				break
 		}
 	} catch (err) {
-		error.value = errorMessageFromUnknown(err)
+		// Nothing that lands here has copy of its own; its text is a developer's, for the log.
+		error.value = "Something went wrong. Try again."
+		console.debug("[new-token] add refused", { reason: err })
 		balanceWait?.abort()
 	} finally {
 		activeBalanceWait = null
@@ -295,6 +297,7 @@ usePopupEntity(
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		title="New token"
 		:submitLabel="submitLabel"
 		:submitDisabled="!isAvailableToCreateToken"
@@ -307,6 +310,8 @@ usePopupEntity(
 			label="Contract address"
 			placeholder="0x"
 			data-testid="token-address-input"
+			inputTestid="token-address-field"
+			textVariant="input-data"
 			autofocus
 			sanitize
 			:disabled="isBusy"
@@ -318,20 +323,20 @@ usePopupEntity(
 				<Transition name="fade">
 					<Flex v-if="isAlreadyExist" align="center" gap="4" role="alert" data-testid="error-text">
 						<Icon name="warning" size="12" color="orange" />
-						<Text size="12" weight="600" color="primary"> Already exist </Text>
+						<Text variant="body" color="primary"> Already exist </Text>
 					</Flex>
 					<Flex v-else-if="isInvalidAddress" align="center" gap="4" role="alert" data-testid="error-text">
 						<Icon name="close-circle" size="12" color="red" />
-						<Text size="12" weight="600" color="primary"> Invalid address </Text>
+						<Text variant="body" color="primary"> Invalid address </Text>
 					</Flex>
 				</Transition>
 			</template>
 		</Input>
 
 		<template v-if="error" #belowSubmit>
-			<Flex align="center" gap="6" :class="$style.error_row">
+			<Flex align="center" gap="6" :class="$style.error_row" data-testid="new-token-error">
 				<Icon name="info" size="12" color="red" />
-				<Text size="12" weight="500" color="secondary" :style="{ lineHeight: '1.4' }">
+				<Text variant="body" color="secondary" :style="{ lineHeight: '1.4' }">
 					{{ error }}
 				</Text>
 			</Flex>

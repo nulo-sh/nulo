@@ -53,17 +53,17 @@ const cancel = async () => {
                         color="orange"
                     />
 
-                    <Text size="16" weight="600" color="primary">
+                    <Text variant="title-page" color="primary">
                         {{ notification.payload.title }}
                     </Text>
                 </Flex>
 
-                <Text size="14" weight="500" color="body" height="140" align="center">
+                <Text variant="body" color="body" height="140" align="center" data-testid="notification-description">
                     {{ notification.payload.description }}
                 </Text>
 
-                <Text v-if="notification.payload.note" size="13" weight="500" color="secondary" height="140" align="center" style="font-style: italic;">
-                    <Text weight="600">Note: </Text>
+                <Text v-if="notification.payload.note" variant="body" color="secondary" height="140" align="center" style="font-style: italic;">
+                    <Text variant="value">Note: </Text>
                     {{ notification.payload.note }}
                 </Text>
 

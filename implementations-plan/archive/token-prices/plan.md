@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: A background price service fetches fiat quotes and feeds fiat lines across the popup, and the wallet seeds a per-network default token list after unlock (`apps/extension/src/wallet/services/price/`, `apps/extension/src/wallet/services/token/seeder.ts`).
-- **Open items**: a deleted default token returns after a full-backup restore on a fresh install, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: a deleted default token returns after a full-backup restore on a fresh install, tracked in #98.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

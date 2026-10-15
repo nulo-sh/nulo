@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: four tabs in the popup, a Holdings page in `apps/extension/src/popup/pages/holdings.vue` over `apps/extension/src/popup/components/modules/holdings/TokenList.vue`, shared token ordering in `apps/extension/src/utils/token-order.ts`, pins in `apps/extension/src/composables/usePinnedTokens.ts`, and the "Pin to Home" item in `apps/extension/src/popup/pages/tokens/[id].vue`.
-- **Open items**: pasting a token address into the Holdings search to add it, tracked in [follow-ups](../../follow-ups.md). The search filters loaded rows only, and adding a token stays on Home's menu, the Send picker and Settings → Tokens.
+- **Open items**: pasting a token address into the Holdings search to add it, tracked in #134. The search filters loaded rows only, and adding a token stays on Home's menu, the Send picker and Settings → Tokens.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

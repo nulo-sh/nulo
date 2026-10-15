@@ -12,7 +12,11 @@ const cacheStoreState: {
 	importPromise: { resolve: (rows: unknown[]) => void; reject: (v: unknown) => void } | null
 } = { importContacts: [], importPromise: null }
 
-vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
+// The run fence the profile service hands the import; every contact call of the run must carry it.
+const RUN_FENCE = vi.hoisted(() => ({ profileId: "p1", epoch: 0, session: 1, incarnation: "w1" }))
+// The clients the import opens for itself: the services each test builds.
+const importClients = vi.hoisted(() => ({ contact: {} as object, accountState: {} as object }))
+vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn(), updateToast: vi.fn() }) }))
 vi.mock("@/utils", async (importOriginal) => {
 	const real = await importOriginal<typeof import("@/utils")>()
 	return {
@@ -24,17 +28,43 @@ vi.mock("@/utils", async (importOriginal) => {
 })
 vi.mock("@/wallet/services/profile/client", () => ({
 	ProfileServiceClient: vi.fn(function () {
-		return { connect: vi.fn(), disconnect: vi.fn(), getActiveProfile: vi.fn().mockResolvedValue({ name: "p" }) }
+		return {
+			connect: vi.fn(),
+			disconnect: vi.fn(),
+			getActiveProfile: vi.fn().mockResolvedValue({ name: "p" }),
+			captureRunFence: vi.fn().mockResolvedValue(RUN_FENCE),
+			assertRunFence: vi.fn().mockResolvedValue(undefined),
+		}
 	}),
 }))
-vi.mock("@/stores/app.store", () => ({ useAppStore: () => ({ network: { id: "net-1", name: "Testnet" } }) }))
+vi.mock("@/wallet/services/contact/client", () => ({
+	ContactServiceClient: vi.fn(function () {
+		return { ...importClients.contact, disconnect: vi.fn() }
+	}),
+}))
+vi.mock("@/wallet/services/account-state/client", () => ({
+	AccountStateServiceClient: vi.fn(function () {
+		return { ...importClients.accountState, disconnect: vi.fn() }
+	}),
+}))
+vi.mock("@/stores/app.store", () => ({
+	useAppStore: () => ({ network: { id: "net-1", name: "Testnet" }, beginContactImport: () => () => {}, contactImports: new Set() }),
+}))
 vi.mock("@/stores/cache.store", () => ({ useCacheStore: () => cacheStoreState }))
 vi.mock("@/stores/popup.store", () => ({ usePopupStore: () => ({ open: vi.fn() }) }))
 
+import { classifyImportRow, indexSavedContacts } from "@/utils/contact-import-rows"
 import { useContactImportExport } from "./useContactImportExport"
 
-const ADDR_A = `0x${"a".repeat(64)}`
-const ADDR_B = `0x${"b".repeat(64)}`
+/** The rows as the selection popup hands them back: each carries the decision it was shown with. */
+function reviewed(rows: unknown[], saved: Array<{ id: string; name: string; address: string }> = []) {
+	const index = indexSavedContacts(saved)
+	return (rows as Array<{ name: string; address: string }>).map((r) => ({ ...r, ...classifyImportRow(r, index) }))
+}
+
+// Wire-shaped: 0x + 64 hex, valid Aztec addresses.
+const ADDR_A = "0x01904dba18e847d163097ce15dcd8597e763fb11fe19ef1273d266d6e959ec4a"
+const ADDR_B = "0x047bb28204a2545c566dff691c298d2023fe7cad44bb6468e3f7f1e633f8f7d2"
 
 beforeEach(() => {
 	cacheStoreState.importContacts = []
@@ -45,22 +75,52 @@ afterEach(() => {
 })
 
 describe("importContacts — a file name differing from a saved one by outer spaces", () => {
-	test("stages untrimmed and commits as a new contact beside the saved one", async () => {
+	test("stages trimmed and commits as the saved contact's new address, not a second contact", async () => {
 		const raw = JSON.stringify({ version: 2, contacts: [{ name: "Alice ", address: ADDR_B }] })
 		pickFileMock.mockResolvedValueOnce({ size: raw.length, text: async () => raw })
-		const contactService = { addContact: vi.fn(async () => {}), updateContact: vi.fn(async () => {}) }
 		const accountStateService = { addSender: vi.fn(), getSendersAcrossActiveNetworks: vi.fn().mockResolvedValue([]) }
 		const contacts = ref([{ id: "c1", name: "Alice", address: ADDR_A }])
 
-		const done = useContactImportExport({ contacts, contactService, accountStateService } as never).importContacts()
+		const contactService = {
+			getContacts: vi.fn(async () => contacts.value),
+			addContact: vi.fn(async () => {}),
+			updateContact: vi.fn(async () => {}),
+		}
+		importClients.contact = contactService
+		importClients.accountState = accountStateService
+		const done = useContactImportExport({ contacts, accountStateService } as never).importContacts()
 		await vi.waitFor(() => {
 			if (!cacheStoreState.importPromise) throw new Error("selection gate not reached")
 		})
-		expect(cacheStoreState.importContacts.map((c) => c.name)).toEqual(["Alice "])
-		cacheStoreState.importPromise?.resolve([...cacheStoreState.importContacts])
+		expect(cacheStoreState.importContacts.map((c) => c.name)).toEqual(["Alice"])
+		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts, contacts.value))
 		await done
 
-		expect(contactService.addContact).toHaveBeenCalledWith("Alice ", ADDR_B)
-		expect(contactService.updateContact).not.toHaveBeenCalled()
+		expect(contactService.updateContact).toHaveBeenCalledWith("c1", "Alice", ADDR_B, RUN_FENCE)
+		expect(contactService.addContact).not.toHaveBeenCalled()
+	})
+
+	test("a saved name stored with outer spaces still matches its trimmed file name", async () => {
+		const raw = JSON.stringify({ version: 2, contacts: [{ name: "Alice", address: ADDR_B }] })
+		pickFileMock.mockResolvedValueOnce({ size: raw.length, text: async () => raw })
+		const accountStateService = { addSender: vi.fn(), getSendersAcrossActiveNetworks: vi.fn().mockResolvedValue([]) }
+		const contacts = ref([{ id: "c1", name: " Alice ", address: ADDR_A }])
+
+		const contactService = {
+			getContacts: vi.fn(async () => contacts.value),
+			addContact: vi.fn(async () => {}),
+			updateContact: vi.fn(async () => {}),
+		}
+		importClients.contact = contactService
+		importClients.accountState = accountStateService
+		const done = useContactImportExport({ contacts, accountStateService } as never).importContacts()
+		await vi.waitFor(() => {
+			if (!cacheStoreState.importPromise) throw new Error("selection gate not reached")
+		})
+		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts, contacts.value))
+		await done
+
+		expect(contactService.updateContact).toHaveBeenCalledWith("c1", "Alice", ADDR_B, RUN_FENCE)
+		expect(contactService.addContact).not.toHaveBeenCalled()
 	})
 })

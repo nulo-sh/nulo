@@ -1,11 +1,11 @@
 /**
- * Pre-extraction pins for the contacts import flow, complementing the sibling
- * suite (which already proves the byte cap, minimal rows, dedupe and adds-only senders):
+ * Pins for the contacts import flow, complementing the sibling suite (which already proves the
+ * byte cap, minimal rows, dedupe and adds-only senders):
  *   - the selection promise's CONTROLS are registered on the cache store BEFORE the popup opens, with
  *     the staged rows already in place, and settling through those controls settles the import;
- *   - per row the contact upsert settles before that row's sender attempt, which is counted even
- *     when the upsert failed;
- *   - every early exit clears the cache store's staging + controls;
+ *   - per row the sender registration settles before that row's contact upsert, and a contact that
+ *     then fails is reported as before;
+ *   - an early exit leaves the selection slot as it found it, since another selection may own it;
  *   - the toast ladder: contact errors (logged in order with the ORIGINAL error objects) win over
  *     sender failures; partial and total sender failures read differently.
  */
@@ -15,19 +15,29 @@ import { ref } from "vue"
 
 const openToastMock = vi.fn()
 const pickFileMock = vi.fn()
+const RUN_FENCE = vi.hoisted(() => ({ profileId: "p1", epoch: 0, session: 1, incarnation: "w1" }))
+const assertRunFenceMock = vi.hoisted(() => vi.fn())
+const captureRunFenceMock = vi.hoisted(() => vi.fn())
 const popupOpenMock = vi.fn()
 const trace: string[] = []
 
-const appStoreState: { network: { id: string; name: string } | null } = { network: { id: "net-1", name: "Testnet" } }
+const appStoreState = {
+	network: { id: "net-1", name: "Testnet" } as { id: string; name: string } | null,
+	beginContactImport: () => () => {},
+	contactImports: new Set<symbol>(),
+}
+// The clients the import opens for itself: the services each test builds.
+const importClients = vi.hoisted(() => ({ contact: {} as object, accountState: {} as object }))
 const cacheStoreState: {
 	importContacts: unknown[]
 	importPromise: { resolve: (rows: unknown[]) => void; reject: (v: unknown) => void } | null
 } = { importContacts: [], importPromise: null }
 
 vi.mock("@/composables/toast", () => ({
-	useToast: () => ({ openToast: openToastMock }),
+	useToast: () => ({ openToast: openToastMock, updateToast: vi.fn() }),
 }))
 vi.mock("@/utils", () => ({
+	FilePickCanceledError: class FilePickCanceledError extends Error {},
 	FileTooLargeError: class FileTooLargeError extends Error {},
 	downloadFile: vi.fn(),
 	pickFile: (...args: unknown[]) => pickFileMock(...args),
@@ -38,29 +48,55 @@ vi.mock("@/utils", () => ({
 }))
 vi.mock("@/wallet/services/profile/client", () => ({
 	ProfileServiceClient: vi.fn(function () {
-		return { connect: vi.fn(), disconnect: vi.fn(), getActiveProfile: vi.fn().mockResolvedValue({ name: "p" }) }
+		return {
+			connect: vi.fn(),
+			disconnect: vi.fn(),
+			getActiveProfile: vi.fn().mockResolvedValue({ name: "p" }),
+			captureRunFence: (...args: unknown[]) => captureRunFenceMock(...args),
+			assertRunFence: (...args: unknown[]) => assertRunFenceMock(...args),
+		}
+	}),
+}))
+vi.mock("@/wallet/services/contact/client", () => ({
+	ContactServiceClient: vi.fn(function () {
+		return { ...importClients.contact, disconnect: vi.fn() }
+	}),
+}))
+vi.mock("@/wallet/services/account-state/client", () => ({
+	AccountStateServiceClient: vi.fn(function () {
+		return { ...importClients.accountState, disconnect: vi.fn() }
 	}),
 }))
 vi.mock("@/stores/app.store", () => ({ useAppStore: () => appStoreState }))
 vi.mock("@/stores/cache.store", () => ({ useCacheStore: () => cacheStoreState }))
 vi.mock("@/stores/popup.store", () => ({ usePopupStore: () => ({ open: (...args: unknown[]) => popupOpenMock(...args) }) }))
 
-import { FileTooLargeError } from "@/utils"
+import { CLIENT_DISCONNECTED_MESSAGE, RpcTimeoutError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import { FilePickCanceledError, FileTooLargeError } from "@/utils"
 import { MAX_CONTACT_IMPORT_BYTES } from "@/utils/contacts-export-format"
+import { classifyImportRow, indexSavedContacts } from "@/utils/contact-import-rows"
 import { useContactImportExport } from "./useContactImportExport"
 
-const ADDR_A = `0x${"a".repeat(64)}`
-const ADDR_B = `0x${"b".repeat(64)}`
+/** The rows as the selection popup hands them back: each carries the decision it was shown with. */
+function reviewed(rows: unknown[], saved: Array<{ id: string; name: string; address: string }> = []) {
+	const index = indexSavedContacts(saved)
+	return (rows as Array<{ name: string; address: string }>).map((r) => ({ ...r, ...classifyImportRow(r, index) }))
+}
+
+// Wire-shaped: 0x + 64 hex, valid Aztec addresses.
+const ADDR_A = "0x01904dba18e847d163097ce15dcd8597e763fb11fe19ef1273d266d6e959ec4a"
+const ADDR_B = "0x047bb28204a2545c566dff691c298d2023fe7cad44bb6468e3f7f1e633f8f7d2"
 
 function makeServices() {
 	const contactService = {
+		getContacts: vi.fn(async () => []),
 		addContact: vi.fn(async (name: string) => {
 			trace.push(`add:${name}`)
 		}),
 		updateContact: vi.fn(async () => {}),
 	}
 	const accountStateService = {
-		addSender: vi.fn(async (_net: string, address: string) => {
+		addSender: vi.fn(async (_net: string, address: string, _fence?: unknown) => {
 			trace.push(`sender:${address === ADDR_A ? "A" : "B"}`)
 		}),
 		getSendersAcrossActiveNetworks: vi.fn().mockResolvedValue([]),
@@ -73,7 +109,11 @@ function fileWith(payload: unknown, size?: number) {
 	pickFileMock.mockResolvedValueOnce({ size: size ?? raw.length, text: async () => raw })
 }
 
-const api = (services = makeServices(), contacts = ref([])) => useContactImportExport({ contacts, ...services } as never)
+function api(services: { contactService: object; accountStateService: object } = makeServices(), contacts = ref([])) {
+	importClients.contact = services.contactService
+	importClients.accountState = services.accountStateService
+	return useContactImportExport({ contacts, accountStateService: services.accountStateService } as never)
+}
 
 async function untilSelectionGate() {
 	await vi.waitFor(() => {
@@ -92,6 +132,8 @@ const twoSenders = {
 beforeEach(() => {
 	vi.clearAllMocks()
 	popupOpenMock.mockReset()
+	assertRunFenceMock.mockReset().mockResolvedValue(undefined)
+	captureRunFenceMock.mockReset().mockResolvedValue(RUN_FENCE)
 	trace.length = 0
 	appStoreState.network = { id: "net-1", name: "Testnet" }
 	cacheStoreState.importContacts = []
@@ -114,42 +156,56 @@ describe("importContacts — selection gate", () => {
 		const done = api().importContacts()
 		await untilSelectionGate()
 		expect(trace).toEqual(["open:import_contacts:controls-ready:2"])
-		cacheStoreState.importPromise?.resolve([...(cacheStoreState.importContacts as never[])])
+		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts))
 		await done
 		expect(openToastMock).toHaveBeenLastCalledWith({ kind: "success", label: "Contacts imported · 2 senders registered" })
 	})
 })
 
 describe("importContacts — per-row order and early exits", () => {
-	test("a row's contact upsert settles BEFORE its sender attempt; the attempt is counted even when the upsert failed", async () => {
+	test("a row's sender settles BEFORE its contact upsert; a contact that then fails is reported as before", async () => {
 		const services = makeServices()
 		let releaseA: () => void = () => {}
-		services.contactService.addContact.mockImplementationOnce(
+		services.accountStateService.addSender.mockImplementationOnce(
 			() =>
-				new Promise<void>((_, reject) => {
+				new Promise<void>((resolve) => {
 					releaseA = () => {
-						trace.push("add:A:rejected")
-						reject(new Error("row A failed"))
+						trace.push("sender:A")
+						resolve()
 					}
 				}),
 		)
+		services.contactService.addContact.mockImplementationOnce(async () => {
+			trace.push("add:A:rejected")
+			throw new Error("row A failed")
+		})
 		fileWith(twoSenders)
 		const done = api(services).importContacts()
 		await untilSelectionGate()
-		cacheStoreState.importPromise?.resolve([...(cacheStoreState.importContacts as never[])])
-		await vi.waitFor(() => expect(services.contactService.addContact).toHaveBeenCalledTimes(1))
-		expect(trace).toEqual([]) // row A's sender attempt waits for its upsert to settle
+		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts))
+		await vi.waitFor(() => expect(services.accountStateService.addSender).toHaveBeenCalledTimes(1))
+		expect(services.contactService.addContact).not.toHaveBeenCalled() // row A's contact waits for its sender
 		releaseA()
 		await done
-		expect(trace).toEqual(["add:A:rejected", "sender:A", "add:B", "sender:B"])
-		expect(services.accountStateService.addSender).toHaveBeenCalledTimes(2)
+		expect(trace).toEqual(["sender:A", "add:A:rejected", "sender:B", "add:B"])
 		// Contact errors win the toast and are logged with the ORIGINAL error object.
 		expect(openToastMock).toHaveBeenLastCalledWith({ kind: "error", label: "Import ended with errors" })
-		expect(console.error).toHaveBeenCalledWith("Failed to create a contact", expect.objectContaining({ message: "row A failed" }))
+		expect(console.error).toHaveBeenCalledWith("Failed to create a contact", {
+			error: expect.objectContaining({ message: "row A failed" }),
+		})
 	})
 
 	test.each<[string, () => void, string | null]>([
 		["no file picked", () => pickFileMock.mockResolvedValueOnce(null), null],
+		["chooser closed", () => pickFileMock.mockRejectedValueOnce(new FilePickCanceledError()), null],
+		[
+			"the run fence cannot be captured",
+			() => {
+				fileWith(twoSenders)
+				captureRunFenceMock.mockRejectedValueOnce(new Error("Wallet locked"))
+			},
+			"Error occurred during import",
+		],
 		["file over the byte cap", () => fileWith(twoSenders, MAX_CONTACT_IMPORT_BYTES + 1), "Contacts file is too large"],
 		[
 			"picker threw FileTooLargeError",
@@ -157,6 +213,16 @@ describe("importContacts — per-row order and early exits", () => {
 			"Contacts file is too large",
 		],
 		["no rows in the file", () => fileWith({ version: 2, contacts: [] }), "No contacts found in file"],
+		[
+			"a format this wallet does not know",
+			() => fileWith({ version: 3, contacts: twoSenders.contacts }),
+			"Error occurred during import",
+		],
+		[
+			"no row with a usable name and address",
+			() => fileWith([1, "x", null, [], { name: ["A"], address: { x: 1 } }, { address: ADDR_A }]),
+			"No contacts found in file",
+		],
 		[
 			"read threw",
 			() =>
@@ -168,14 +234,34 @@ describe("importContacts — per-row order and early exits", () => {
 				}),
 			"Error occurred during import",
 		],
-	])("early exit (%s) clears the staging + controls", async (_label, arrange, toast) => {
-		// Leftover staging from an interrupted earlier run must be wiped by this run's `finally` too.
-		cacheStoreState.importContacts = ["stale-staging"]
+	])("early exit (%s) leaves the selection slot as it was", async (_label, arrange, toast) => {
+		// The slot is the selection's, so a run that never staged leaves another selection's rows and
+		// controls alone (a run a lock released can end while the next run's selection is open).
+		const other = { resolve: vi.fn(), reject: vi.fn() }
+		cacheStoreState.importContacts = ["other selection's row"]
+		cacheStoreState.importPromise = other
 		arrange()
-		await api().importContacts()
-		expect(cacheStoreState.importContacts).toEqual([])
-		expect(cacheStoreState.importPromise).toBeNull()
+		const services = makeServices()
+		await api(services).importContacts()
+		expect(popupOpenMock).not.toHaveBeenCalled()
+		expect(services.contactService.getContacts).not.toHaveBeenCalled()
+		expect(cacheStoreState.importContacts).toEqual(["other selection's row"])
+		expect(cacheStoreState.importPromise).toBe(other)
 		if (toast) expect(openToastMock.mock.calls.map((c) => (c[0] as { label: string }).label)).toContain(toast)
+		else expect(openToastMock).not.toHaveBeenCalled()
+	})
+
+	test("a file that is not JSON logs the failure's kind, never the parser's message quoting the file", async () => {
+		const raw = `Alice,${ADDR_A}\nBob,${ADDR_B}`
+		expect(() => JSON.parse(raw)).toThrow(/Alice/)
+		pickFileMock.mockResolvedValueOnce({ size: raw.length, text: async () => raw })
+		const logged = vi.mocked(console.error)
+
+		await api().importContacts()
+
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Error occurred during import" })
+		expect(logged).toHaveBeenCalledWith("Error occurred during import", "SyntaxError")
+		expect(JSON.stringify(logged.mock.calls)).not.toMatch(/Alice|0x01904d/)
 	})
 
 	test.each<[string, (c: typeof cacheStoreState.importPromise) => void, string]>([
@@ -200,7 +286,7 @@ describe("importContacts — sender-failure toasts", () => {
 		fileWith(twoSenders)
 		const done = api(services).importContacts()
 		await untilSelectionGate()
-		cacheStoreState.importPromise?.resolve([...(cacheStoreState.importContacts as never[])])
+		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts))
 		await done
 		expect(openToastMock).toHaveBeenLastCalledWith({ kind: "error", label: "Contacts imported · 1 of 2 senders registered" })
 	})
@@ -211,8 +297,137 @@ describe("importContacts — sender-failure toasts", () => {
 		fileWith(twoSenders)
 		const done = api(services).importContacts()
 		await untilSelectionGate()
-		cacheStoreState.importPromise?.resolve([...(cacheStoreState.importContacts as never[])])
+		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts))
 		await done
 		expect(openToastMock).toHaveBeenLastCalledWith({ kind: "error", label: "Contacts imported · sender registration failed" })
+	})
+})
+
+describe("importContacts — a session that ends mid-import", () => {
+	const ADDR_C = "0x048b29517cddb7566a05a2a292624eb2c5350dbe44350763cefe4c9207344c10"
+	const ADDR_OLD = "0x02056523b85ea4e550facca78516f7270f18bddb0f5474177d406f6bf0e58617"
+	const saved = [{ id: "c1", name: "B", address: ADDR_OLD }]
+	// A is added (sender), B moves saved contact c1 to a new address, C is added (sender).
+	const threeRows = {
+		version: 2,
+		contacts: [
+			{ name: "A", address: ADDR_A, isSender: true },
+			{ name: "B", address: ADDR_B },
+			{ name: "C", address: ADDR_C, isSender: true },
+		],
+	}
+	const ended = () => new SessionEndedError()
+
+	function stopServices() {
+		const contactService = {
+			getContacts: vi.fn(async (..._fence: unknown[]) => saved),
+			addContact: vi.fn(async (name: string, ..._rest: unknown[]) => {
+				trace.push(`add:${name}`)
+			}),
+			updateContact: vi.fn(async (id: string, ..._rest: unknown[]) => {
+				trace.push(`update:${id}`)
+			}),
+		}
+		const accountStateService = {
+			addSender: vi.fn(async (_net: string, address: string, _fence?: unknown) => {
+				trace.push(`sender:${address === ADDR_A ? "A" : "C"}`)
+			}),
+			getSendersAcrossActiveNetworks: vi.fn().mockResolvedValue([]),
+		}
+		return { contactService, accountStateService }
+	}
+
+	async function run(services: ReturnType<typeof stopServices>, file: unknown = threeRows) {
+		fileWith(file)
+		const done = api(services).importContacts()
+		await untilSelectionGate()
+		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts, saved))
+		await done
+		return openToastMock.mock.calls.at(-1)?.[0]
+	}
+
+	test.each<[string, (s: ReturnType<typeof stopServices>) => void, string[], number]>([
+		["the plan read", (s) => s.contactService.getContacts.mockRejectedValueOnce(ended()), [], 0],
+		["a row's sender", (s) => s.accountStateService.addSender.mockRejectedValueOnce(ended()), [], 0],
+		[
+			"the re-read between a row's sender and its contact",
+			(s) => s.contactService.getContacts.mockResolvedValueOnce(saved).mockResolvedValueOnce(saved).mockRejectedValueOnce(ended()),
+			["sender:A"],
+			0,
+		],
+		[
+			"a later row's re-read",
+			(s) =>
+				s.contactService.getContacts
+					.mockResolvedValueOnce(saved)
+					.mockResolvedValueOnce(saved)
+					.mockResolvedValueOnce(saved)
+					.mockRejectedValueOnce(ended()),
+			["sender:A", "add:A"],
+			1,
+		],
+		["an add", (s) => s.contactService.addContact.mockRejectedValueOnce(ended()), ["sender:A"], 0],
+		["an update", (s) => s.contactService.updateContact.mockRejectedValueOnce(ended()), ["sender:A", "add:A"], 1],
+		[
+			"a write cut off by a dropped connection",
+			(s) =>
+				s.contactService.addContact
+					.mockImplementationOnce(async () => {
+						trace.push("add:A")
+					})
+					.mockRejectedValueOnce(new Error(CLIENT_DISCONNECTED_MESSAGE)),
+			["sender:A", "add:A", "update:c1", "sender:C"],
+			2,
+		],
+		[
+			"a write that fails, then a check that cannot reach the wallet",
+			(s) => {
+				s.contactService.addContact
+					.mockImplementationOnce(async () => {
+						trace.push("add:A")
+					})
+					.mockRejectedValueOnce(new Error("write failed"))
+				assertRunFenceMock.mockRejectedValue(new RpcTimeoutError("RPC 'assertRunFence' timed out after 60000ms"))
+			},
+			["sender:A", "add:A", "update:c1", "sender:C"],
+			2,
+		],
+	])("a stop at %s writes and registers nothing after it, and reports what was written", async (_at, fail, expected, written) => {
+		assertRunFenceMock.mockRejectedValue(ended())
+		const services = stopServices()
+		fail(services)
+		const toast = await run(services)
+		expect(trace).toEqual(expected)
+		expect(toast).toEqual({ kind: "error", label: `Import incomplete · ${written} of 3 contacts written` })
+		expect(assertRunFenceMock).toHaveBeenCalledWith(RUN_FENCE)
+		const { getContacts, addContact, updateContact } = services.contactService
+		const calls = [
+			...getContacts.mock.calls,
+			...addContact.mock.calls,
+			...updateContact.mock.calls,
+			...services.accountStateService.addSender.mock.calls,
+		]
+		expect(calls.every((args) => args.at(-1) === RUN_FENCE)).toBe(true)
+	})
+
+	test("a stop in a one-contact import counts it in the singular", async () => {
+		assertRunFenceMock.mockRejectedValue(ended())
+		const services = stopServices()
+		services.contactService.addContact.mockRejectedValueOnce(ended())
+		const toast = await run(services, { version: 2, contacts: [{ name: "A", address: ADDR_A }] })
+		expect(toast).toEqual({ kind: "error", label: "Import incomplete · 0 of 1 contact written" })
+	})
+
+	test("control: a write that fails while the session holds is counted, and the import goes on", async () => {
+		const services = stopServices()
+		services.contactService.addContact
+			.mockImplementationOnce(async () => {
+				trace.push("add:A")
+			})
+			.mockRejectedValueOnce(new Error("write failed"))
+		const toast = await run(services)
+		expect(trace).toEqual(["sender:A", "add:A", "update:c1", "sender:C"])
+		expect(toast).toEqual({ kind: "error", label: "Import ended with errors" })
+		expect(assertRunFenceMock).toHaveBeenCalledTimes(1)
 	})
 })

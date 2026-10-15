@@ -11,6 +11,9 @@
  * `cancel-mid-prove` pins end-to-end; here it's pinned at unit level.
  */
 
+import { BlockNumber } from "@aztec-labs/foundation/branded-types"
+import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { BlockHeader, GlobalVariables } from "@aztec-labs/stdlib/tx"
 import { describe, expect, test, vi } from "vitest"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
@@ -35,10 +38,19 @@ function makeCoordinator(legal: LegalAdmission = ACCEPTED) {
 	return new ExecutionCoordinator(tasks, new LoggerStore(new ConfigStore()), legal)
 }
 
+/** The part of `Tx.data` a send's expiry is read from. Real kernel outputs need hashing, which
+ *  this environment cannot run: `execution-coordinator.real.test.ts` reads those. */
+const txData = (anchor: number) => ({
+	constants: { anchorBlockHeader: BlockHeader.empty({ globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(anchor) }) }) },
+	expirationTimestamp: 1_750_003_600n,
+	getNonEmptyNullifiers: () => [new Fr(2n), new Fr(3n)],
+})
+
 function makeHarness(overrides: Partial<ProveAndSendContext> = {}) {
 	const calls: string[] = []
 	const tx = {
 		getTxHash: () => ({ toString: () => "0xhash" }),
+		data: txData(0),
 	}
 	const provedTx = {
 		toTx: vi.fn(async () => {
@@ -175,8 +187,23 @@ describe("proveAndSend: the submitting write is the send's precondition", () => 
 	test("submitting is committed with the hash and the context's endpoint, never through markJournal", async () => {
 		const { ctx } = makeHarness()
 		await makeCoordinator().proveAndSend(ctx)
-		expect(ctx.commitSubmitting).toHaveBeenCalledWith({ txHash: "0xhash", submittedEndpointUrl: "https://rpc.submit" })
+		expect(ctx.commitSubmitting).toHaveBeenCalledWith({
+			txHash: "0xhash",
+			submittedEndpointUrl: "https://rpc.submit",
+			expiry: undefined,
+		})
 		expect(ctx.markJournal).not.toHaveBeenCalledWith(expect.objectContaining({ stage: "submitting" }))
+	})
+
+	test("submitting carries the expiry the tx's own data names", async () => {
+		const { ctx, provedTx } = makeHarness()
+		provedTx.toTx.mockResolvedValueOnce({ getTxHash: () => ({ toString: () => "0xhash" }), data: txData(5) })
+		await makeCoordinator().proveAndSend(ctx)
+		expect(ctx.commitSubmitting).toHaveBeenCalledWith({
+			txHash: "0xhash",
+			submittedEndpointUrl: "https://rpc.submit",
+			expiry: { timestamp: 1_750_003_600, nullifier: new Fr(2n).toString() },
+		})
 	})
 
 	/** A real journal row at `simulating`, bound the way the executors bind it: `markJournal`
@@ -248,7 +275,7 @@ describe("proveAndSend: the submitting write is the send's precondition", () => 
 		provedTx.toTx.mockImplementationOnce(async () => {
 			await journal.transitionOperation(id, { stage: "cancelled" })
 			controller.abort()
-			return { getTxHash: () => ({ toString: () => "0xhash" }) }
+			return { getTxHash: () => ({ toString: () => "0xhash" }), data: txData(0) }
 		})
 		await expect(makeCoordinator().proveAndSend(ctx)).rejects.toBeInstanceOf(JobCancelledSentinel)
 		expect(node.sendTx).not.toHaveBeenCalled()
@@ -351,6 +378,15 @@ describe("proveAndSend: the session checks", () => {
 		await expect(run).resolves.toMatchObject({})
 		expect(calls.slice(-2)).toEqual(["record", "journal:succeeded"])
 		expect(ctx.assertLive).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("simulateTxTask", () => {
+	test("a simulation's rejection fails the task and rethrows the same object", async () => {
+		const timeout = new Error("timed out")
+		const pxe = { simulateTx: vi.fn(async () => Promise.reject(timeout)) } as unknown as IPXE
+		await expect(makeCoordinator().simulateTxTask(pxe, {} as never, {} as never)).rejects.toBe(timeout)
+		expect(fakeTask.fail).toHaveBeenCalledWith(timeout)
 	})
 })
 

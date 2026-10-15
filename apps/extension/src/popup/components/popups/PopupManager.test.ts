@@ -866,7 +866,7 @@ describe("PopupManager — listener lifecycle", () => {
 		expect(incomingConnectedHandlers).toHaveLength(1)
 	})
 
-	test("an unmount before the seed settles still registers the config listener afterwards (pinned drift)", async () => {
+	test("an unmount before the seed settles registers nothing afterwards", async () => {
 		let resolveGet: (v: boolean) => void = () => {}
 		configGetValueImpl = () =>
 			new Promise<boolean>((r) => {
@@ -877,15 +877,8 @@ describe("PopupManager — listener lifecycle", () => {
 		w.unmount()
 		resolveGet(true)
 		await flushPromises()
-		expect(calls).toEqual([
-			"config.remove",
-			"trustChanged.remove",
-			"pending.remove",
-			"incoming.disconnect",
-			"config.disconnect",
-			"config.add",
-		])
-		expect(configUpdateHandlers).toHaveLength(1)
+		expect(calls).toEqual(["config.remove", "trustChanged.remove", "pending.remove", "incoming.disconnect", "config.disconnect"])
+		expect(configUpdateHandlers).toHaveLength(0)
 	})
 })
 

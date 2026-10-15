@@ -43,6 +43,9 @@ vi.mock("@aztec-labs/stdlib/abi", async (importOriginal) => {
 
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { PxeStaleAnchorError } from "@nulo/extension-messaging/errors"
+import { ConfigStore } from "@/wallet/config"
+import { LoggerStore } from "@/wallet/logger"
+import { loggedAfter } from "../../../../tests/helpers/logged"
 import { BalanceProjector } from "./balance-projector"
 import type { TokenBalanceRaw } from "./spec"
 import type { Token } from "@/wallet/services/token/service"
@@ -78,7 +81,7 @@ function balance(id: number, tokenId: number, account = ACCOUNT_A): TokenBalance
 	}
 }
 
-function makeProjector(opts: { tokens: Token[]; getNetworkResult?: { id: string; chainId: number } }) {
+function makeProjector(opts: { tokens: Token[]; getNetworkResult?: { id: string; chainId: number }; logger?: LoggerStore }) {
 	const tokensById = new Map(opts.tokens.map((t) => [t.id, t]))
 	const tokenService = {
 		getTokenRaw: vi.fn(async (id: number) => {
@@ -104,7 +107,15 @@ function makeProjector(opts: { tokens: Token[]; getNetworkResult?: { id: string;
 	const accountService = {} as never
 	const pxeService = {} as never
 
-	const projector = new BalanceProjector(executionService, networkService, tokenService, profileService, accountService, pxeService)
+	const projector = new BalanceProjector(
+		executionService,
+		networkService,
+		tokenService,
+		profileService,
+		accountService,
+		pxeService,
+		opts.logger,
+	)
 	return projector
 }
 
@@ -184,7 +195,7 @@ describe("BalanceProjector", () => {
 		expect(batchedViewSimulationMock).toHaveBeenCalledTimes(2)
 	})
 
-	test("15 tokens in one group → chunked into 12 + 3 (BATCH_SIZE = 12 regression)", async () => {
+	test("15 tokens in one group → chunked into 12 + 3 (BALANCE_BATCH_SIZE = 12 regression)", async () => {
 		const tokens = Array.from({ length: 15 }, (_, i) => token(i + 1))
 		const projector = makeProjector({ tokens })
 		// 12 tokens × 2 fns = 24 results in batch 1; 3 tokens × 2 fns = 6 in batch 2
@@ -209,11 +220,13 @@ describe("BalanceProjector", () => {
 
 	test("batchedViewSimulation throws → one error per input balance, message preserved", async () => {
 		const t = token(1)
-		const projector = makeProjector({ tokens: [t] })
+		const logger = new LoggerStore(new ConfigStore())
+		const projector = makeProjector({ tokens: [t], logger })
 		batchedViewSimulationMock.mockRejectedValueOnce(new Error("PXE went away"))
 		const result = await projector.project([balance(1, 1), balance(2, 1)])
 		expect(result).toHaveLength(2)
 		expect(result.every((r) => r.kind === "error" && r.error === "PXE went away" && !r.transient)).toBe(true)
+		expect(loggedAfter(logger, "Failed to sync chunk")).toEqual([{ error: { name: "Error", message: "PXE went away" } }])
 	})
 
 	test("only a PxeStaleAnchorError marks the chunk's errors transient", async () => {

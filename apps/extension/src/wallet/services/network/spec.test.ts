@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest"
-import { type Network, networkInfoFrom, primaryEndpointUrl, RpcUrlSchema } from "./spec"
+import { type Network, NodeStatus, NodeStatusSchema, networkInfoFrom, primaryEndpointUrl, RpcUrlSchema } from "./spec"
 
 // The schema's acceptance set is a security boundary: these rows pin it input by input. The
 // adapter's own table (aztec-node-factory-adapter.test.ts) covers the same inputs, so a row whose
-// verdict differs between the two files is a deliberate policy difference (userinfo, Unicode space).
+// verdict differs between the two files is a deliberate policy difference (Unicode space, which the
+// schema trims).
 const ACCEPTED = [
 	"https://rpc.example.com",
 	"HTTPS://RPC.EXAMPLE.COM/Path?Q=1",
@@ -75,6 +76,13 @@ const network = (over: Partial<Network> = {}): Network => ({
 	],
 	kind: "custom",
 	...over,
+})
+
+describe("NodeStatusSchema", () => {
+	test("accepts a member and refuses the reverse-mapped key name of a numeric enum", () => {
+		expect(NodeStatusSchema.safeParse(NodeStatus.InvalidChain)).toEqual({ success: true, data: NodeStatus.InvalidChain })
+		expect(NodeStatusSchema.safeParse("Active").success).toBe(false)
+	})
 })
 
 describe("networkInfoFrom", () => {

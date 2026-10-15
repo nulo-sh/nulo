@@ -1,6 +1,7 @@
 import { expect, inject } from "vitest"
 import { openPopup, test, waitForHash } from "../fixtures/extension"
 import type { AztecTestConfig } from "../fixtures/aztec"
+import { INCOMING_SCAN_INTERVAL_MS, getAccountAddress, lockWallet, switchToLocalNetwork, unlockUntilIncomingRow } from "../fixtures/helpers"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -8,8 +9,8 @@ const hasConfig = aztecConfig !== undefined
 /**
  * Runtime wiring smoke for incoming transfers. It proves two things and only two: the popup's
  * activity page mounts on a fresh profile without a runtime error, and the
- * `IncomingTransferServiceClient` connects (explicit connect() in onMounted — a ServiceClient never
- * auto-connects on listener registration) and renders an empty incoming feed. No receive, no
+ * `IncomingTransferServiceClient` connects (through its first `getIncomingTransfers` request; a
+ * ServiceClient never connects on listener registration) and renders an empty incoming feed. No receive, no
  * outgoing hash and no self-mint is created, so neither the receive path nor the dedupe is
  * exercised here.
  *
@@ -33,11 +34,10 @@ test.skipIf(!hasConfig)(
 		})
 		await waitForHash(page, "#/popup/activity", 10_000)
 
-		// Allow the page to mount + the IncomingTransferServiceClient to
-		// connect + the initial getIncomingTransfers request to return.
-		// A regression in the ServiceClient connect wiring would manifest
-		// as a hung request, surfacing here when nothing renders.
-		await new Promise((r) => setTimeout(r, 3_000))
+		// The attribute appears only once a getIncomingTransfers read for this account has landed, so a
+		// hung or rejected request fails here instead of letting the zero-card check pass on a feed
+		// that never loaded.
+		await page.waitForSelector('[data-testid="activity-feed-root"][data-incoming-loaded="true"]', { timeout: 30_000 })
 
 		// A fresh profile has nothing incoming; any card here is a spurious row.
 		const incomingCards = await page.$$('[data-testid="tx-incoming-card"]')
@@ -47,6 +47,34 @@ test.skipIf(!hasConfig)(
 		expect(onActivityPage).toBe(true)
 
 		await page.close()
+	},
+)
+
+test.skipIf(!hasConfig)(
+	"a private receipt sent while the wallet is locked shows sooner after the unlock than one scan interval",
+	{ timeout: 600_000 },
+	async ({ tokenReadyExtension }) => {
+		if (!aztecConfig) throw new Error("unreachable — skipIf guards")
+		const page = await openPopup(tokenReadyExtension)
+		await waitForHash(page, "#/popup/general", 30_000)
+		await switchToLocalNetwork(page)
+		const walletAddress = await getAccountAddress(page)
+		const { createTestWallet, createSponsoredFeeOptions, mintPrivateTokens, transferPrivateTokens } = await import("../fixtures/aztec")
+		const { wallet, node, cleanup } = await createTestWallet(aztecConfig.nodeUrl)
+		try {
+			const feeOptions = await createSponsoredFeeOptions(wallet)
+			const minter = aztecConfig.minterAddress
+			await mintPrivateTokens(wallet, node, aztecConfig.tokenAddress, minter, 9n * 10n ** 18n, minter, feeOptions)
+			await lockWallet(page)
+			await transferPrivateTokens(wallet, node, aztecConfig.tokenAddress, minter, walletAddress, 9n * 10n ** 18n, feeOptions)
+
+			const elapsed = await unlockUntilIncomingRow(page, "Received privately", "+9")
+			console.log(`[install-run] private receipt shown ${elapsed} ms after the unlock`)
+			expect(elapsed).toBeLessThan(INCOMING_SCAN_INTERVAL_MS)
+		} finally {
+			await cleanup()
+			await page.close()
+		}
 	},
 )
 

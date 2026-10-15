@@ -1,5 +1,9 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
+import { FieldWarning } from "@nulo/design"
+/** Utils */
+import { sameStoredName, storedNameKey } from "@/utils/account-name"
+
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useFormState } from "@/composables/useFormState"
@@ -11,7 +15,7 @@ const { openToast } = useToast()
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
 const appStore = useAppStore()
-const { order } = usePopupStack("edit_account")
+const { order, depth } = usePopupStack("edit_account")
 const cacheStore = useCacheStore()
 
 const emit = defineEmits(["onClose"])
@@ -22,7 +26,11 @@ const props = defineProps({
 const accountToEdit = computed(() => appStore.accounts.find((n) => n.address === cacheStore.accountToEditIdx))
 
 const form = useFormState({
-	name: { initial: "" },
+	name: {
+		initial: "",
+		validate: (v) =>
+			appStore.accounts.some((a) => a.address !== accountToEdit.value?.address && sameStoredName(a.name, v)) ? "Already exist" : null,
+	},
 	address: { initial: "" },
 })
 
@@ -31,11 +39,13 @@ const addressTerm = form.fields.address.value
 
 const isStartedEditing = computed(() => Boolean(accountToEdit.value) && nameTerm.value !== accountToEdit.value?.name)
 
+const isAlreadyExist = computed(() => form.fields.name.error.value === "Already exist")
 const isAvailableToUpdateAccount = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
 	// route (button, Enter, future callers) — not just the pointer path.
 	if (isAccountUpdateInProgress.value) return false
-	if (!nameTerm.value.length) return false
+	if (!storedNameKey(nameTerm.value)) return false
+	if (form.fields.name.error.value) return false
 	if (!addressTerm.value.length) return false
 	return true
 })
@@ -56,7 +66,7 @@ const handleUpdateAccount = async () => {
 	// feedback; the family's standard error toast handles it.
 	isAccountUpdateInProgress.value = true
 	try {
-		await appStore.updateAccount(cacheStore.accountToEditIdx, nameTerm.value)
+		await appStore.updateAccount(cacheStore.accountToEditIdx, nameTerm.value.trim())
 	} catch {
 		openToast({ kind: "error", label: "Something went wrong" })
 		return
@@ -81,6 +91,7 @@ usePopupEntity(() => props.show, {
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		title="Edit account"
 		submitLabel="Update account"
 		:submitDisabled="!isAvailableToUpdateAccount"
@@ -96,7 +107,11 @@ usePopupEntity(() => props.show, {
 			sanitize
 			:maxLength="25"
 			data-testid="account-name-input"
-		/>
+		>
+			<template v-if="isAlreadyExist" #right>
+				<FieldWarning> Already exist </FieldWarning>
+			</template>
+		</Input>
 
 		<template #belowSubmit>
 			<Button @click="handleFillFieldsWithDefaultValues" wide variant="primary_outline" size="medium">

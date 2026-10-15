@@ -1,9 +1,12 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
+/** Composables */
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
+
 /** Utils */
 import { clampDecimals, formatBaseUnits, readAmountText } from "@/utils/amount"
 import { fitHero } from "@/utils/hero-fit"
-import { inputRoom, rulerWidth } from "@/utils/hero-ruler"
+import { heroRoom, inputRoom, rulerWidth } from "@/utils/hero-ruler"
 import { usdToTokenAmount, tokenAmountToUsdMicro, formatUsdMicro, usdMicroToPlainString } from "@/wallet/services/price/convert"
 import { caretAfter, nextAmountText, restingAmount } from "./amount-field"
 
@@ -49,6 +52,9 @@ let lastText = String(model.value ?? "")
 
 const inputEl = useTemplateRef("inputEl")
 const fieldRuler = useTemplateRef("fieldRuler")
+const amountRow = useTemplateRef("amountRow")
+const conversionEl = useTemplateRef("conversionEl")
+const derivedRuler = useTemplateRef("derivedRuler")
 
 const tokenDecimals = computed(() => (typeof props.token?.decimals === "number" ? props.token.decimals : undefined))
 
@@ -63,8 +69,8 @@ const readHint = ref(null)
 
 onMounted(() => {
 	if (props.tokenBalanceByType) inputEl.value.focus()
-	fitField()
-	document.fonts?.addEventListener("loadingdone", fitField)
+	fitLines()
+	document.fonts?.addEventListener("loadingdone", fitLines)
 })
 
 /** Every write of the token amount goes through here, so the next edit starts from it. */
@@ -147,17 +153,49 @@ const handleAmountBlur = () => {
 	writeAmount(rest, { atRest: true, point: commaPoint && rest.includes(".") })
 }
 
-/** The token field's type as a fraction of its 40 px: full with focus, and at rest the largest
- *  that shows the whole amount, however small. */
+const handleFiatBlur = () => {
+	isFocused.value = false
+}
+
+/** The amount field's type, token or USD, as a fraction of its 40 px: full with focus, and at rest
+ *  the largest that shows the whole amount, however small. */
 const fieldScale = ref(1)
 function fitField() {
 	const input = inputEl.value
 	const form = fieldRuler.value
-	if (fiatMode.value || !input || !form) return
-	// Both: the fiat input sets `isFocused` and never clears it, and a window losing focus blurs the
-	// field while leaving it the document's active element.
+	if (!input || !form) return
+	// Both: `isFocused` can outlive a field the unit switch or a lost quote swapped out, and a window
+	// losing focus blurs the field while leaving it the document's active element.
 	const typing = isFocused.value && document.activeElement === input
 	fieldScale.value = typing ? 1 : fitHero(1, (_, scale) => rulerWidth(form, scale), inputRoom(input)).scale
+}
+
+/** `.derived_type`'s full size, and the type scale's smallest step. */
+const DERIVED_PX = 11
+const DERIVED_MIN_PX = 8
+
+/** The derived token line's type as a fraction of its 11 px: the largest that keeps it on one line
+ *  beside the balance and Max or, where that is under 8 px, in its own row under the amount. */
+const derivedScale = ref(1)
+const derivedOwnRow = ref(false)
+/** Neither room depends on where the line is drawn, so a move never feeds back into the decision. */
+function fitDerived() {
+	const form = derivedRuler.value
+	const beside = conversionEl.value
+	const row = amountRow.value?.wrapper
+	if (!form || !beside || !row) return
+	const full = heroRoom(row)
+	if (!(full > 0)) return
+	const widthAt = (_, scale) => rulerWidth(form, scale)
+	const room = heroRoom(beside)
+	const besideScale = room > 0 ? fitHero(1, widthAt, room).scale : 0
+	derivedOwnRow.value = besideScale * DERIVED_PX < DERIVED_MIN_PX
+	derivedScale.value = derivedOwnRow.value ? fitHero(1, widthAt, full).scale : besideScale
+}
+
+function fitLines() {
+	fitField()
+	fitDerived()
 }
 
 // ── Fiat-denominated input ──────────────────────────────────────────
@@ -312,8 +350,13 @@ watch(
 watch(canUseFiatInput, (can) => {
 	if (!can && fiatMode.value) exitFiatMode({ clearAmount: true })
 })
-// After the render, so the ruler holds what the field shows; the fiat toggle takes the field's width.
-watch([model, isFocused, fiatMode, canUseFiatInput], fitField, { flush: "post" })
+// After the render, so each ruler holds what its line shows; the unit switch takes the field's width,
+// the balance corner the derived line's.
+watch(
+	[model, fiatTerm, isFocused, fiatMode, canUseFiatInput, derivedTokenLabel, balanceSegment, () => fiatGuard.value?.converting],
+	fitLines,
+	{ flush: "post" },
+)
 /**
  * Watch-driven exits are FAIL-CLOSED: they also clear the amount. Leaving the
  * fiat-derived token amount sendable after the session's basis vanished (quote
@@ -340,11 +383,11 @@ const refreezeQuote = () => {
 	// Handed over, not written first: `fiatGuard.value` reads the page's old quote until it re-renders.
 	scheduleConvert({ frozenUsd: props.liveQuote.usd, frozenAt: Date.now(), converting: false })
 }
-defineExpose({ refreezeQuote })
+defineExpose({ refreezeQuote, focusAmount: () => handleFocus() })
 
 onBeforeUnmount(() => {
 	clearTimeout(convertTimer)
-	document.fonts?.removeEventListener("loadingdone", fitField)
+	document.fonts?.removeEventListener("loadingdone", fitLines)
 })
 
 const handleFocus = () => {
@@ -381,7 +424,7 @@ const handleFiatBalanceAction = (divisor) => {
 <template>
 	<Flex @click="handleFocus" gap="8" direction="column" :class="$style.wrapper">
 		<Flex direction="column" gap="4">
-			<Flex gap="8" justify="between" data-testid="send-amount-row">
+			<Flex ref="amountRow" gap="8" justify="between" data-testid="send-amount-row">
 				<div :class="$style.field_line">
 					<input
 						v-if="fiatMode"
@@ -389,10 +432,12 @@ const handleFiatBalanceAction = (divisor) => {
 						v-model="fiatTerm"
 						@input="handleFiatInput"
 						@focus="handleAmountFocus"
+						@blur="handleFiatBlur"
 						:disabled="!tokenBalanceByType"
 						placeholder="0.00"
 						data-testid="send-amount-fiat-input"
 						:class="[$style.input_field, $style.field_type]"
+						:style="{ '--hero-scale': fieldScale }"
 					/>
 					<input
 						v-else
@@ -408,11 +453,13 @@ const handleFiatBalanceAction = (divisor) => {
 						:style="{ '--hero-scale': fieldScale }"
 					/>
 					<!-- The fit's ruler: it shares the field's `field_type` class, or the two widths part. -->
-					<span aria-hidden="true" :class="$style.field_ruler"><span ref="fieldRuler" :class="$style.field_type">{{ model }}</span></span>
+					<span aria-hidden="true" :class="$style.ruler"><span ref="fieldRuler" :class="$style.field_type">{{ fiatMode ? fiatTerm : model }}</span></span>
 				</div>
-				<span
+				<button
 					v-if="canUseFiatInput"
+					type="button"
 					@click.stop="toggleFiatMode"
+					@keydown.enter="refuseRepeatEnter"
 					data-testid="send-amount-fiat-toggle"
 					:title="fiatMode ? `Type in ${token?.symbol || 'token'}` : 'Type in USD'"
 					:class="$style.unit_pair"
@@ -420,16 +467,27 @@ const handleFiatBalanceAction = (divisor) => {
 					<span :class="!fiatMode && $style.unit_on">{{ token?.symbol || "Token" }}</span>
 					<span :class="$style.unit_sep">/</span>
 					<span :class="fiatMode && $style.unit_on">USD</span>
-				</span>
+				</button>
 			</Flex>
 
+			<span v-if="fiatMode && derivedOwnRow" :class="$style.conversion">
+				<Skeleton v-if="fiatGuard?.converting" :width="72" :height="10" data-testid="send-amount-converting" />
+				<span v-else-if="derivedTokenLabel" :title="conversionTitle" data-testid="send-amount-derived" :class="$style.derived_type" :style="{ '--hero-scale': derivedScale }">{{
+					derivedTokenLabel
+				}}</span>
+			</span>
+
 			<Flex align="center" justify="between" gap="8">
-				<span :class="$style.conversion" data-testid="send-amount-meta">
+				<span ref="conversionEl" :class="[$style.conversion, fiatMode && $style.conversion_fit]" data-testid="send-amount-meta">
 					<template v-if="fiatMode">
-						<span v-if="fiatGuard?.converting" :class="$style.skeleton" data-testid="send-amount-converting" />
-						<span v-else-if="derivedTokenLabel" :title="conversionTitle" data-testid="send-amount-derived">{{
-							derivedTokenLabel
-						}}</span>
+						<template v-if="!derivedOwnRow">
+							<Skeleton v-if="fiatGuard?.converting" :width="72" :height="10" data-testid="send-amount-converting" />
+							<span v-else-if="derivedTokenLabel" :title="conversionTitle" data-testid="send-amount-derived" :class="$style.derived_type" :style="{ '--hero-scale': derivedScale }">{{
+								derivedTokenLabel
+							}}</span>
+						</template>
+						<!-- Here wherever the line is drawn, in the meta line's own mono 11 px, so a shortened line is fitted again. -->
+						<span v-if="derivedTokenLabel" aria-hidden="true" :class="$style.ruler"><span ref="derivedRuler" :class="$style.derived_type">{{ derivedTokenLabel }}</span></span>
 					</template>
 					<template v-else>
 						<span v-if="tokenModeFiatLabel" :title="conversionTitle" data-testid="send-amount-fiat-label">{{
@@ -440,7 +498,15 @@ const handleFiatBalanceAction = (divisor) => {
 
 				<Flex align="center" gap="8" style="flex: none">
 					<span v-if="balanceSegment" data-testid="send-amount-balance" :class="$style.balance_corner">{{ balanceSegment }}</span>
-					<span @click.stop="handleMax" data-testid="send-amount-max" :class="$style.action_link">Max</span>
+					<button
+						type="button"
+						:disabled="!tokenBalanceByType"
+						@click.stop="handleMax"
+						data-testid="send-amount-max"
+						:class="$style.action_link"
+					>
+						Max
+					</button>
 				</Flex>
 			</Flex>
 
@@ -469,6 +535,7 @@ const handleFiatBalanceAction = (divisor) => {
 /* The line keeps the full size's height and baseline while the amount's type shrinks, so nothing
  * below it moves. */
 .field_line {
+	composes: type--amount-hero from global;
 	position: relative;
 	flex: 1;
 	min-width: 0;
@@ -476,9 +543,9 @@ const handleFiatBalanceAction = (divisor) => {
 	white-space: nowrap;
 }
 
-/* A zero-width strut in the full type, with the input's vertical padding. The unit toggle holds
+/* A zero-width strut at the full size, with the input's vertical padding. The unit toggle holds
  * one too, so its label sits on the amount's baseline and its box, the press target, still fills
- * the row. */
+ * the row. Face and weight come from the two hosts' roles. */
 .field_line::after,
 .unit_pair::before {
 	content: "\200b";
@@ -486,9 +553,7 @@ const handleFiatBalanceAction = (divisor) => {
 	width: 0;
 	padding-block: 1px;
 
-	font-family: var(--font-headline);
 	font-size: 40px;
-	font-weight: 700;
 }
 
 .input_field {
@@ -504,13 +569,11 @@ const handleFiatBalanceAction = (divisor) => {
 }
 
 .field_type {
-	font-family: var(--font-headline);
+	composes: type--amount-hero from global;
 	font-size: calc(40px * var(--hero-scale, 1));
-	font-weight: 700;
-	letter-spacing: -0.04em;
 }
 
-.field_ruler {
+.ruler {
 	position: absolute;
 	width: 0;
 	height: 0;
@@ -519,16 +582,15 @@ const handleFiatBalanceAction = (divisor) => {
 	pointer-events: none;
 }
 
-.field_ruler > span {
+.ruler > span {
 	position: absolute;
 }
 
 .unit_pair {
+	composes: type--label from global;
 	flex: none;
-	font-family: var(--font-headline);
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: 0.06em;
+	line-height: inherit;
+	background: none;
 	color: var(--txt-tertiary);
 	cursor: pointer;
 	user-select: none;
@@ -545,54 +607,36 @@ const handleFiatBalanceAction = (divisor) => {
 }
 
 .balance_corner {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 }
 
 .conversion {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 }
 
-.skeleton {
-	display: inline-block;
-	width: 72px;
-	height: 10px;
-	background: linear-gradient(90deg, var(--nulo-surface-high) 25%, var(--nulo-surface) 50%, var(--nulo-surface-high) 75%);
-	background-size: 200% 100%;
-	animation: shimmer 1.5s infinite;
+/* The derived line's room is all the row leaves beside the balance and Max, drawn there or not. */
+.conversion_fit {
+	flex: 1;
+	min-width: 0;
 }
 
-@keyframes shimmer {
-	0% {
-		background-position: 200% 0;
-	}
-	100% {
-		background-position: -200% 0;
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.skeleton {
-		animation: none;
-	}
+.derived_type {
+	font-size: calc(11px * var(--hero-scale, 1));
+	white-space: nowrap;
 }
 
 .clamp_hint {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 	padding-top: 4px;
 }
 
 .action_link {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
+	composes: type--label from global;
+	line-height: inherit;
+	background: none;
 	color: var(--nulo-accent);
 	cursor: pointer;
 
@@ -601,6 +645,12 @@ const handleFiatBalanceAction = (divisor) => {
 	&:hover {
 		text-decoration: underline;
 	}
+}
+
+.unit_pair:focus-visible,
+.action_link:focus-visible {
+	outline: 2px solid var(--nulo-accent);
+	outline-offset: 2px;
 }
 
 </style>

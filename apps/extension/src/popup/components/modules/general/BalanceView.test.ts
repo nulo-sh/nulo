@@ -9,7 +9,7 @@
 import { flushPromises, mount } from "@vue/test-utils"
 import { createTestingPinia } from "@pinia/testing"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
+import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
 let deletedHandler: ((tb: unknown) => void) | undefined
 let addedHandler: ((tb: unknown) => void) | undefined
@@ -17,20 +17,20 @@ let updatedHandler: ((tb: unknown) => void) | undefined
 let configHandler: ((prop: { key: string; value: unknown }) => void) | undefined
 let connectedHandler: (() => void) | undefined
 
-const TEST_USDC = TESTNET_TOKENS.USDC
+const TEST_USDC = TEST_TOKENS.USDC
 // tok-1 is price-mapped (the testnet Test USDC row); tok-2 is deliberately unmapped.
 const SEED = [
 	{
 		id: "b1",
 		account: "0xacct",
-		token: { id: "tok-1", symbol: "AAA", decimals: 6, chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC },
+		token: { id: "tok-1", symbol: "AAA", decimals: 6, hasDecimals: true, chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC },
 		publicBalance: (250n * 10n ** 6n).toString(),
 		privateBalance: (1_000n * 10n ** 6n).toString(),
 	},
 	{
 		id: "b2",
 		account: "0xacct",
-		token: { id: "tok-2", symbol: "BBB", decimals: 18, chainId: CHAIN_IDS.TESTNET, contract: "0xunmapped" },
+		token: { id: "tok-2", symbol: "BBB", decimals: 18, hasDecimals: true, chainId: CHAIN_IDS.TESTNET, contract: "0xunmapped" },
 		publicBalance: (5n * 10n ** 18n).toString(),
 		privateBalance: "0",
 	},
@@ -100,7 +100,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: { add: vi.fn(), remove: vi.fn() },
 			onConnected: { add: vi.fn(), remove: vi.fn() },
-			refreshIfStale: vi.fn().mockImplementation(() => answerQuotes()),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
+			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: await answerQuotes(), pricedTokens: TEST_PRICED_TOKENS })),
 		}
 	}),
 }))
@@ -259,7 +260,7 @@ describe("BalanceView — Home aggregate", () => {
 			{
 				id: "b9",
 				account: "0xacct",
-				token: { id: "tok-9", symbol: "ZZZ", decimals: 18, chainId: CHAIN_IDS.TESTNET, contract: "0xunmapped9" },
+				token: { id: "tok-9", symbol: "ZZZ", decimals: 18, hasDecimals: true, chainId: CHAIN_IDS.TESTNET, contract: "0xunmapped9" },
 				publicBalance: "0",
 				privateBalance: "0",
 			},
@@ -432,6 +433,17 @@ describe("BalanceView — Home hero while the total is still moving", () => {
 		expect(amount(failed.wrapper).text()).toContain("$")
 	})
 
+	test("a late add event for a row already shown holds nothing once that row's update lands", async () => {
+		seedRows = neverSynced as never
+		const { wrapper } = await mountView()
+		expect(isSkeleton(wrapper)).toBe(true)
+		addedHandler?.(neverSynced[0])
+		updatedHandler?.({ ...neverSynced[0], updatedAt: 1 })
+		await flushPromises()
+		expect(isSkeleton(wrapper)).toBe(false)
+		expect(amount(wrapper).text()).toContain("$1,249.82")
+	})
+
 	test("a failed or rejected default does not hold the figure: nothing more is coming", async () => {
 		const { wrapper } = await mountView({ seedEntries: [seedEntry("failed"), seedEntry("rejected")], seedReady: true })
 		expect(isSkeleton(wrapper)).toBe(false)
@@ -597,6 +609,15 @@ describe("BalanceView — token hero (tokenBalance prop)", () => {
 
 		const bad = await mountView({ tokenBalance: { ...SEED[0], token: { ...SEED[0].token, decimals: 500 } } })
 		expect(bad.wrapper.find('[data-testid="balance-amount"]').text()).toContain("—")
+	})
+
+	test("a token whose decimals the wallet does not know renders dashes and no fiat, never a figure", async () => {
+		mockQuotes = FRESH()
+		const { wrapper } = await mountView({ tokenBalance: { ...SEED[0], token: { ...SEED[0].token, decimals: 0, hasDecimals: false } } })
+		expect(wrapper.find('[data-testid="balance-amount"]').text()).toContain("—")
+		expect(wrapper.find('[data-testid="private-balance-value"]').text()).toBe("—")
+		expect(wrapper.find('[data-testid="public-balance-value"]').text()).toBe("—")
+		expect(wrapper.find('[data-testid="balance-fiat"]').exists()).toBe(false)
 	})
 
 	test("a priced token shows its amount, the ≈ fiat line and the lock/globe split", async () => {

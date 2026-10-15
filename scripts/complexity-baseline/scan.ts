@@ -65,20 +65,29 @@ export function classifySuppressionLine(line: string): Classified {
 function classifyAcceptedForm(line: string, rule: BaselinedRule): Classified {
 	const reason = line.slice(line.indexOf(":") + 1).trim()
 	if (reason.startsWith(LEGACY_PREFIX)) {
-		return { kind: "forbidden", why: "legacy `baseline (…)` text — replace with `accepted at score N — <why>` (or `N lines`) or refactor" }
+		return {
+			kind: "forbidden",
+			why: "legacy `baseline (…)` text — replace with `accepted at score N — <why>` (or `N lines`) or refactor",
+		}
 	}
 	if (reason.startsWith(MARKER_PREFIX)) {
 		return { kind: "forbidden", why: "generator marker — a human must justify (`accepted at … — <why>`) or refactor this function" }
 	}
 	const m = line.match(ACCEPTED_RE)
 	if (!m) {
-		return { kind: "forbidden", why: "reason must be a whole `//` comment reading `accepted at score N — <one specific sentence>` (or `accepted at N lines — …`)" }
+		return {
+			kind: "forbidden",
+			why: "reason must be a whole `//` comment reading `accepted at score N — <one specific sentence>` (or `accepted at N lines — …`)",
+		}
 	}
 	const [, matchedRule, score, lines, sentence] = m
 	if (matchedRule !== rule) return { kind: "forbidden", why: "suppression rule and accepted form disagree" }
 	const unitIsScore = score !== undefined
 	if (unitIsScore !== (rule === "noExcessiveCognitiveComplexity")) {
-		return { kind: "forbidden", why: `${rule} takes \`accepted at ${rule === "noExcessiveCognitiveComplexity" ? "score N" : "N lines"} — …\`` }
+		return {
+			kind: "forbidden",
+			why: `${rule} takes \`accepted at ${rule === "noExcessiveCognitiveComplexity" ? "score N" : "N lines"} — …\``,
+		}
 	}
 	if (sentence.length < MIN_SENTENCE || PLACEHOLDER_RE.test(sentence)) {
 		return { kind: "forbidden", why: "the accepted sentence must say why THIS function's complexity is essential (no placeholders)" }
@@ -90,18 +99,7 @@ function classifyAcceptedForm(line: string, rule: BaselinedRule): Classified {
  * Lintable-source pathspecs. `*.d.ts` is excluded to mirror Biome's scope — the
  * generated types headers carry sanctioned bare-lint suppressions Biome never reads.
  */
-const SOURCE_PATHSPECS = [
-	"*.ts",
-	"*.mts",
-	"*.cts",
-	"*.tsx",
-	"*.js",
-	"*.mjs",
-	"*.cjs",
-	"*.jsx",
-	"*.vue",
-	":(exclude)*.d.ts",
-]
+const SOURCE_PATHSPECS = ["*.ts", "*.mts", "*.cts", "*.tsx", "*.js", "*.mjs", "*.cjs", "*.jsx", "*.vue", ":(exclude)*.d.ts"]
 
 /** The manifest's per-acceptance record. Identity is (file, rule, anchor) — `anchor` is the
  *  declaration line under the directive, which must be unique in its file — and the pinned
@@ -157,7 +155,11 @@ export function scanTree(opts: { staged?: boolean } = {}): ScanResult {
 		}
 		const anchor = anchorFor(parsed, hit.file, hit.line)
 		if (anchor === undefined) {
-			forbidden.push({ file: hit.file, line: hit.line, why: `no declaration within ${ANCHOR_LOOKAHEAD} lines below the directive — an acceptance sits directly above the function it covers` })
+			forbidden.push({
+				file: hit.file,
+				line: hit.line,
+				why: `no declaration within ${ANCHOR_LOOKAHEAD} lines below the directive — an acceptance sits directly above the function it covers`,
+			})
 			continue
 		}
 		accepted.push({ file: hit.file, line: hit.line, rule: c.rule, accepted: c.accepted, sentence: c.sentence, anchor })
@@ -239,7 +241,12 @@ export function ambiguousAnchors(accepted: AcceptedDirective[], staged = false):
 		const trimmed = fileLines(file, staged).map((l) => l.trim())
 		for (const d of list) {
 			const n = trimmed.filter((l) => l === d.anchor).length
-			if (n > 1) out.push({ file, line: d.line, why: `the declaration line under the directive occurs ${n}× in this file — an acceptance anchors to a unique declaration (name it, or move the directive onto the named one)` })
+			if (n > 1)
+				out.push({
+					file,
+					line: d.line,
+					why: `the declaration line under the directive occurs ${n}× in this file — an acceptance anchors to a unique declaration (name it, or move the directive onto the named one)`,
+				})
 		}
 	}
 	return out
@@ -359,7 +366,8 @@ export function ratchetViolations(diff: EntryDiff, opts: { movesApproved?: boole
 	const out = diff.added.map((e) => `+ ${entryKey(e)} (accepted at ${e.accepted})`)
 	for (const r of diff.restamped) if (r.to > r.from) out.push(`↑ ${r.key}: ${r.from} → ${r.to}`)
 	if (opts.movesApproved !== true) {
-		for (const m of diff.moved) out.push(`→ ${entryKey(m.from)}  ⇒  ${entryKey(m.to)} (a move needs the \`${MOVE_APPROVED_LABEL}\` label on the PR)`)
+		for (const m of diff.moved)
+			out.push(`→ ${entryKey(m.from)}  ⇒  ${entryKey(m.to)} (a move needs the \`${MOVE_APPROVED_LABEL}\` label on the PR)`)
 	}
 	return out
 }

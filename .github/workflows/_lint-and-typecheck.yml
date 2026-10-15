@@ -8,6 +8,13 @@ on:
         required: false
         type: string
         default: ""
+      audit_mode:
+        description: |
+          "enforce" fails the job on an advisory scripts/ci-cd/audit-acks.json does not acknowledge,
+          or on an acknowledgement no advisory matches; "report" only writes the step summary.
+        required: false
+        type: string
+        default: report
 
 # Read-only job: it lints, typechecks, and audits — it never writes to the repo,
 # so the token gets the least-privilege default explicitly.
@@ -94,49 +101,23 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$code"
 
-      # `bun audit` is advisory: surfaces npm advisories in the step summary
-      # but does not block the PR. Bun 1.4 DOES exit 1 on findings (1.3.x
-      # always exited 0), so exit-code gating is now possible — staying
-      # advisory is a deliberate choice until the pre-existing advisory
-      # backlog (all dev/tooling-side, see SECURITY.md) is triaged to zero;
-      # only then does a blocking flip produce signal instead of noise.
-      #
-      # We capture the exit code explicitly so a *tool* failure (segfault,
-      # missing arg, network) is distinguishable from a clean run with
-      # findings — the `|| true` pattern would have masked both.
-      - name: bun audit (advisory)
+      # Every severity counts. In `enforce` mode, which only pr-quick's `changes` job selects, an
+      # advisory that scripts/ci-cd/audit-acks.json does not acknowledge, or an acknowledgement no
+      # advisory matches, fails the job; every other run only reports. The gate passes the audit's
+      # exit code in, so a tool failure is never read as a clean result.
+      - name: bun audit
         if: always()
+        env:
+          AUDIT_MODE: ${{ inputs.audit_mode }}
         run: |
           set +e
-          bun audit --audit-level=moderate > /tmp/audit.txt 2>&1
+          bun audit --audit-level=low --json > audit.json
           code=$?
           set -e
-          {
-            echo "## bun audit (advisory, exit=$code)"
-            echo ""
-            echo '```'
-            cat /tmp/audit.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$code" -ne 0 ] && [ "$code" -ne 1 ]; then
-            echo "::warning::bun audit exited with unexpected code $code (advisory step; not failing the job)"
-          fi
+          bun scripts/ci-cd/audit-gate.ts audit.json --exit-code "$code" --mode "$AUDIT_MODE"
 
-      - name: Generate bun audit JSON
-        if: always()
-        id: audit-json
-        run: |
-          set +e
-          bun audit --audit-level=low --json > audit.json 2>/tmp/audit-err.txt
-          code=$?
-          set -e
-          echo "exit=$code" >> "$GITHUB_OUTPUT"
-          if [ "$code" -ne 0 ] && [ "$code" -ne 1 ]; then
-            echo "::warning::bun audit --json exited with unexpected code $code"
-            cat /tmp/audit-err.txt || true
-          fi
       - name: Upload bun audit JSON
-        if: always() && steps.audit-json.outputs.exit != ''
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bun-audit

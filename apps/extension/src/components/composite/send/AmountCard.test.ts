@@ -1,15 +1,26 @@
 import { afterEach, describe, expect, test, beforeEach, vi } from "vitest"
 import { mount } from "@vue/test-utils"
+import { Skeleton } from "@nulo/design"
 import { nextTick } from "vue"
 import { validateSendAmount } from "@/popup/pages/send-amount"
 import { parseAmountToBaseUnits } from "@/utils/amount"
 import AmountCard from "./AmountCard.vue"
 
 const STUBS = {
-	Flex: { template: '<div :class="$attrs.class" v-bind="$attrs"><slot /></div>', inheritAttrs: false },
+	Flex: {
+		template: '<div :class="$attrs.class" v-bind="$attrs"><slot /></div>',
+		inheritAttrs: false,
+		expose: ["wrapper"],
+		computed: {
+			wrapper(this: { $el: Element }) {
+				return this.$el
+			},
+		},
+	},
 	Text: { template: "<span><slot /></span>" },
 	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
 	Tooltip: { template: '<span><slot /><slot name="content" /></span>' },
+	Skeleton,
 }
 
 const mountCard = (props: Record<string, unknown> = {}) =>
@@ -82,12 +93,6 @@ describe("composite/AmountCard", () => {
 		["no decimals", { token: { symbol: "TST" }, balanceRawByType: "250" }],
 	])("token-mode Max with %s fills nothing", async (_name, props) => {
 		const w = mountCard({ tokenBalanceByType: 250, modelValue: "", ...props })
-		await w.find("[data-testid='send-amount-max']").trigger("click")
-		expect(w.emitted("update:modelValue")).toBeUndefined()
-	})
-
-	test("Use Maximum is a no-op when tokenBalanceByType is 0/falsy (disabled balance)", async () => {
-		const w = mountCard({ tokenBalanceByType: 0, modelValue: "" })
 		await w.find("[data-testid='send-amount-max']").trigger("click")
 		expect(w.emitted("update:modelValue")).toBeUndefined()
 	})
@@ -294,7 +299,7 @@ describe("composite/AmountCard — C3 fiat input", () => {
 
 	test("skeleton shows while converting; derived line after", async () => {
 		const w = mountFiat({ fiatMode: true, fiatGuard: { frozenUsd: 1, frozenAt: Date.now(), converting: true } })
-		expect(w.find("[data-testid='send-amount-converting']").exists()).toBe(true)
+		expect(w.get("[data-testid='send-amount-converting']").attributes("style")).toBe("width: 72px; height: 10px;")
 
 		await w.setProps({ fiatGuard: { frozenUsd: 1, frozenAt: Date.now(), converting: false }, modelValue: "125.017875" })
 		const derived = w.find("[data-testid='send-amount-derived']")
@@ -516,11 +521,14 @@ describe("composite/AmountCard — fiat mode", () => {
 	})
 })
 
-// jsdom has no layout: a stand-in font measures the field's amount at its full 40 px (digits 20 px,
-// separators 10 px), and `room` is the width the field gives its text.
+// jsdom has no layout: a stand-in font measures a line at its full size (separators 10 px, every
+// other character 20 px), and `room` is the width the field gives its text and the derived line has,
+// unless `rooms` names the measured element's test id.
 let room = 10_000
+let rooms: Record<string, number> = {}
 const standInWidth = (text: string) => [...text].reduce((w, c) => w + (c === "," || c === "." ? 10 : 20), 0)
 vi.mock("@/utils/hero-ruler", () => ({
+	heroRoom: (el: Element) => rooms[el.getAttribute("data-testid") ?? ""] ?? room,
 	inputRoom: () => room,
 	rulerWidth: (el: Element, scale: number) => standInWidth(el.textContent ?? "") * scale,
 }))
@@ -534,8 +542,9 @@ describe("composite/AmountCard — the field at rest shows the whole amount", ()
 			attachTo: document.body,
 		})
 	type Field = ReturnType<typeof mountField>
-	const fieldOf = (w: Field) => w.get("[data-testid='send-amount-input']").element as HTMLInputElement
-	const scaleOf = (w: Field) => fieldOf(w).style.getPropertyValue("--hero-scale")
+	const fieldOf = (w: Field, testid = "send-amount-input") => w.get(`[data-testid='${testid}']`).element as HTMLInputElement
+	const scaleOf = (w: Field, testid = "send-amount-input") => fieldOf(w, testid).style.getPropertyValue("--hero-scale")
+	const QUOTE = { usd: 1, fetchedAt: Date.now() }
 	// "1,234,567.123456789012345678": 25 digits and 3 separators, 530 px at full size.
 	const LONG = "1234567.123456789012345678"
 
@@ -588,6 +597,97 @@ describe("composite/AmountCard — the field at rest shows the whole amount", ()
 		await nextTick()
 		expect(scaleOf(w)).toBe("1")
 		w.unmount()
+	})
+
+	test.each([
+		["a long figure, once left, draws at the largest scale that shows all of it", "123456789012.34", "0.68"],
+		["$25.00 keeps 40 px", "25.00", "1"],
+	])("in USD %s; focus brings back 40 px", async (_, typed, scale) => {
+		const USD = "send-amount-fiat-input"
+		const w = mountField({ liveQuote: QUOTE })
+		await w.get("[data-testid='send-amount-fiat-toggle']").trigger("click")
+		fieldOf(w, USD).focus()
+		await w.get(`[data-testid='${USD}']`).setValue(typed)
+		expect(scaleOf(w, USD)).toBe("1")
+		fieldOf(w, USD).blur()
+		await nextTick()
+		expect(fieldOf(w, USD).value).toBe(typed)
+		expect(scaleOf(w, USD)).toBe(scale)
+		fieldOf(w, USD).focus()
+		await nextTick()
+		expect(scaleOf(w, USD)).toBe("1")
+		w.unmount()
+	})
+
+	describe("in USD, the derived token line", () => {
+		const DERIVED = "[data-testid='send-amount-derived']"
+		const CONVERTING = "[data-testid='send-amount-converting']"
+		// "≈ 1,234,567.123456789012345678 TST" is 650 px at full size in the stand-in font, one fraction
+		// digit fewer 630 px: 470 px beside the balance draws them at 0.72 (7.92 px) and 0.74 (8.14 px).
+		const mountUsd = (props: Record<string, unknown> = {}) =>
+			mountField({
+				fiatMode: true,
+				fiatGuard: { frozenUsd: 1, frozenAt: Date.now(), converting: false },
+				liveQuote: QUOTE,
+				modelValue: LONG,
+				...props,
+			})
+		type Usd = ReturnType<typeof mountUsd>
+		const scaleOfLine = (w: Usd) => (w.get(DERIVED).element as HTMLElement).style.getPropertyValue("--hero-scale")
+		const placeOf = (w: Usd, sel = DERIVED) => {
+			const parent = w.get(sel).element.parentElement
+			if (parent === w.get("[data-testid='send-amount-meta']").element) return "beside"
+			return parent === w.get("[data-testid='send-amount-row']").element.nextElementSibling ? "own row" : "elsewhere"
+		}
+
+		beforeEach(() => {
+			rooms = { "send-amount-row": 600, "send-amount-meta": 470 }
+		})
+		afterEach(() => {
+			rooms = {}
+		})
+
+		test("below 8 px beside the balance it takes its own row at the full width's scale, and returns once it fits", async () => {
+			const w = mountUsd()
+			await nextTick()
+			expect(w.get(DERIVED).text()).toBe("≈ 1,234,567.123456789012345678 TST")
+			expect([placeOf(w), scaleOfLine(w)]).toEqual(["own row", "0.92"])
+			await w.setProps({ modelValue: "1234567.12345678901234567" })
+			expect([placeOf(w), scaleOfLine(w)]).toEqual(["beside", "0.74"])
+			await w.setProps({ modelValue: "25" })
+			expect(w.get(DERIVED).text()).toBe("≈ 25 TST")
+			expect([placeOf(w), scaleOfLine(w)]).toEqual(["beside", "1"])
+			w.unmount()
+		})
+
+		test("a row not laid out changes nothing; the next fit once it is moves the line", async () => {
+			rooms["send-amount-row"] = 0
+			const w = mountUsd()
+			await nextTick()
+			expect([placeOf(w), scaleOfLine(w)]).toEqual(["beside", "1"])
+			rooms["send-amount-row"] = 600
+			await w.setProps({ balanceRawByType: "100000000000000000000" })
+			expect([placeOf(w), scaleOfLine(w)]).toEqual(["own row", "0.92"])
+			w.unmount()
+		})
+
+		test("with no room beside the balance even a short line takes its own row", async () => {
+			rooms["send-amount-meta"] = 0
+			const w = mountUsd({ modelValue: "25" })
+			await nextTick()
+			expect([placeOf(w), scaleOfLine(w)]).toEqual(["own row", "1"])
+			w.unmount()
+		})
+
+		test("while the conversion is pending its skeleton holds the line's own row", async () => {
+			const w = mountUsd({ fiatGuard: { frozenUsd: 1, frozenAt: Date.now(), converting: true } })
+			await nextTick()
+			expect(w.find(DERIVED).exists()).toBe(false)
+			expect(placeOf(w, CONVERTING)).toBe("own row")
+			await w.setProps({ fiatGuard: { frozenUsd: 1, frozenAt: Date.now(), converting: false } })
+			expect([w.find(CONVERTING).exists(), placeOf(w)]).toEqual([false, "own row"])
+			w.unmount()
+		})
 	})
 
 	test("a font load, or the fiat toggle taking width, fits the field again; unmounting stops listening", async () => {
@@ -866,5 +966,51 @@ describe("composite/AmountCard — the field reads its text whole", () => {
 			expect(await typeKeys(w, ".", USD)).toEqual(["1.234"])
 			expect(await converted(w)).toBe("1.234")
 		})
+	})
+})
+
+describe("composite/AmountCard — the unit switch and Max by keyboard", () => {
+	const TOKEN = { symbol: "cUSD", decimals: 6 }
+	const QUOTE = { usd: 0.999857, fetchedAt: Date.now() }
+	const mountPriced = (props: Record<string, unknown> = {}) =>
+		mountCard({ token: TOKEN, tokenBalanceByType: 1000, balanceRawByType: "1000000000", liveQuote: QUOTE, modelValue: "", ...props })
+	const enter = (init: KeyboardEventInit = {}) => new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init })
+
+	test("the unit switch and Max are buttons in the Tab path", () => {
+		const w = mountPriced()
+		for (const id of ["send-amount-fiat-toggle", "send-amount-max"]) {
+			const el = w.get(`[data-testid='${id}']`)
+			expect(el.element.tagName, id).toBe("BUTTON")
+			expect(el.attributes("type"), id).toBe("button")
+			expect(el.attributes("tabindex"), id).toBeUndefined()
+		}
+	})
+
+	test("Max is disabled with no balance to fill and enabled with one", () => {
+		expect(mountPriced({ tokenBalanceByType: 0 }).get("[data-testid='send-amount-max']").attributes("disabled")).toBeDefined()
+		expect(mountPriced().get("[data-testid='send-amount-max']").attributes("disabled")).toBeUndefined()
+	})
+
+	test("a repeated Enter on the unit switch is refused and a plain one is not", () => {
+		const toggle = mountPriced().get("[data-testid='send-amount-fiat-toggle']").element
+		const held = enter({ repeat: true })
+		toggle.dispatchEvent(held)
+		expect(held.defaultPrevented).toBe(true)
+		const plain = enter()
+		toggle.dispatchEvent(plain)
+		expect(plain.defaultPrevented).toBe(false)
+	})
+
+	test("focusAmount focuses the visible amount input in both modes", async () => {
+		const focus = vi.mocked(HTMLInputElement.prototype.focus)
+		const w = mountPriced()
+		focus.mockClear()
+		;(w.vm as unknown as { focusAmount: () => void }).focusAmount()
+		expect(focus.mock.contexts).toEqual([w.get("[data-testid='send-amount-input']").element])
+
+		await w.get("[data-testid='send-amount-fiat-toggle']").trigger("click")
+		focus.mockClear()
+		;(w.vm as unknown as { focusAmount: () => void }).focusAmount()
+		expect(focus.mock.contexts).toEqual([w.get("[data-testid='send-amount-fiat-input']").element])
 	})
 })

@@ -11,7 +11,10 @@
  *    import's pre-finalize per-service loop;
  *  - `"account-state"` — inside `AccountStateService.restore`, which only
  *    runs after `finalizeRestore`, so a hold here is post-finalize by
- *    construction.
+ *    construction;
+ *  - `"network-reset-purging"`, `"network-reset-purged"`, `"network-reset-account"` — inside a
+ *    network reset: under the purge's reservation before anything is deleted, after `purged` is
+ *    durable and before the row is rewritten, and after the first account is re-created.
  *
  * Protocol (three states, so "armed" is never mistaken for "reached"): the
  * test ARMS by writing `{ at }`; the matching handler ACKNOWLEDGES by
@@ -20,7 +23,12 @@
  * own safety timer runs inside the worker being killed, so it cannot be
  * relied on for cleanup.
  */
-export type RestoreGateHoldPoint = "service-restore" | "account-state"
+export type RestoreGateHoldPoint =
+	| "service-restore"
+	| "account-state"
+	| "network-reset-purging"
+	| "network-reset-purged"
+	| "network-reset-account"
 
 export interface RestoreGate {
 	/** Resolves when the restore step at `at` may proceed. Default: immediately. */

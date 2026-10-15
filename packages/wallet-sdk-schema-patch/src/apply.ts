@@ -24,7 +24,7 @@
  * If a future upstream `@aztec-labs/wallet-sdk` ships its own `registerToken` (etc.),
  * we throw rather than silently no-op. The guard checks arg types + output type
  * (not just arity), so a same-arity-but-different-shape upstream method is caught.
- * Pinned upstream version: `@aztec-labs/wallet-sdk == 6.0.0-rc.1`; revisit on bump.
+ * Pinned upstream version: `@aztec-labs/wallet-sdk == 6.0.0-rc.3`; revisit on bump.
  */
 
 import { schemas } from "@aztec-labs/stdlib/schemas"
@@ -35,8 +35,8 @@ const PATCHED_SCHEMA = z.function({ input: z.tuple([schemas.AztecAddress, schema
 const REGISTERED_QUERY_SCHEMA = z.function({ input: z.tuple([schemas.AztecAddress]), output: z.boolean() })
 
 const GRANT_CONTENT_SCHEMA = z.object({
-	caller: z.string(),
-	contract: z.string(),
+	caller: schemas.AztecAddress,
+	contract: schemas.AztecAddress,
 	method: z.string(),
 	args: z.array(z.unknown()),
 })
@@ -45,7 +45,7 @@ const GRANT_AUTHWIT_SCHEMA = z.function({ input: z.tuple([schemas.AztecAddress, 
 const WALLET_FEATURES_SCHEMA = z.function({ input: z.tuple([]), output: z.array(z.string()) })
 
 /**
- * Mutate `schema` (the wallet-sdk `WalletSchema` singleton) in place, adding the
+ * Mutate `schema` (the wallet-sdk `WalletSchema` singleton, or a private copy of it) in place, adding the
  * four Nulo-custom method entries. Idempotent when the entries already match our
  * shape; throws when an upstream entry of the same name has a different signature.
  */
@@ -106,12 +106,22 @@ function isWalletFeaturesShape(existing: SchemaEntry): boolean {
 	)
 }
 
+const GRANT_CONTENT_KEYS = Object.keys(GRANT_CONTENT_SCHEMA.shape)
+
+/** The content object must declare every key the handler reads, and its two addresses by the
+ *  address schema itself: an existing entry is kept as it is, so a looser one would let content
+ *  through that this patch refuses. */
 function isGrantAuthwitShape(existing: SchemaEntry): boolean {
 	const items = existing?.def?.input?.def?.items
+	const content = items?.[1]?.def
+	const shape = content?.shape ?? {}
 	return (
 		items?.length === 2 &&
 		items[0] === schemas.AztecAddress &&
-		items[1]?.def?.type === "object" &&
+		content?.type === "object" &&
+		GRANT_CONTENT_KEYS.every((key) => Object.hasOwn(shape, key)) &&
+		shape.caller === schemas.AztecAddress &&
+		shape.contract === schemas.AztecAddress &&
 		existing?.def?.output?.def?.type === "string"
 	)
 }

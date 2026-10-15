@@ -10,6 +10,17 @@ Use GitHub's private vulnerability reporting:
 <https://github.com/nulo-sh/nulo/security/advisories/new>. Do not file public
 issues for security bugs.
 
+### How findings are tracked
+
+A suspected exploitable weakness, whoever finds it, is a private draft security
+advisory, never a public issue. Until the advisory is published its finding
+appears in no committed plan, PR body or test name: a plan records only
+"tracked privately: GHSA-…", and the fix's PR and tests describe the change,
+not the weakness. The advisory is published once its fix ships in a tagged
+release, with no CVE request unless store-installed users must be notified, or
+it is closed with a written disposition. Everything else, hardening with no
+exploit path included, is a GitHub issue.
+
 ## Crypto-bound invariants (never change without a migration)
 
 These values are cryptographically bound. Changing any of them invalidates
@@ -61,7 +72,9 @@ existing keys and profiles.
   `packages/aztec-runtime/src/account/artifacts/SchnorrAccount.json` and pinned by digest +
   class id, precisely so that bumping `@aztec-labs/accounts` (which rebuilds its own copy on any
   toolchain change) cannot move a derived address. Editing those bytes rotates the address
-  regime and ships only as a new extension major.
+  regime: on the owner's recorded decision, as an appended regime entry with the artifact's
+  provenance and regenerated vectors, shipped in place off Mainnet and only as a new extension
+  major on Mainnet (CLAUDE.md § Account-address freeze).
 
 Any PR that touches these must include:
 1. Explicit mention of the invariant being changed.
@@ -90,7 +103,7 @@ This matches passkey profile behavior (which always requires fresh auth on
 SW death — see below): in strict mode both profile types behave the same way
 on SW death.
 
-**Opt-out: lenient mode** — Settings → Security → "Strict security mode" →
+**Opt-out: lenient mode** — Settings → Lock → "Strict security mode" →
 toggle OFF (with a confirm dialog). A password-profile session opened from
 then on also persists a silent-restore bearer (`SessionSecretBox`,
 `packages/wallet-crypto/src/session-secret-box.ts`):
@@ -190,6 +203,17 @@ SDK. The upstream handler:
 - Filters incoming events by `event.source !== window` (rejects
   cross-frame spoofing via the synchronous same-origin check).
 - Never reads or writes page DOM state.
+
+The script is built as one self-contained file
+(`apps/extension/scripts/content-script-isolation.ts`), which the browser
+injects directly, so the built manifest lists no web-accessible file. A file
+that is listed can be fetched by any page the entry matches, and on Chrome the
+extension's origin is fixed by its store id, so one fetch tells a page the
+wallet is installed (Firefox's origin is random per install). Chrome's
+`use_dynamic_url` cannot stand in for this: the loader crxjs uses for a
+multi-chunk script imports sibling chunks by relative URL, which Chrome
+resolves against the fixed origin and refuses. The smoke suite fetches every
+injected file from a web page on both browsers (`tests/e2e/security.test.ts`).
 
 ### Content-script boundary (defense-in-depth)
 
@@ -315,12 +339,14 @@ patch.
 ### External price feed (CoinGecko)
 
 While a profile session is unlocked (and `showFiatValues` is on — the default,
-toggleable in Settings → Appearance), the wallet fetches USD quotes from
+toggleable in Settings → Privacy), the wallet fetches USD quotes from
 CoinGecko's keyless public API every ~3 minutes. Privacy posture:
 
-- The request is ONE batched query for a FIXED id set compiled into the build
-  (`price-map.ts`) — it never varies with the user's holdings, accounts, or
-  activity, so nothing user-specific is inferable from the query string.
+- The request is ONE batched query for the FIXED id table compiled into the
+  build (`PRICE_IDS` in `@nulo/token-list`) — it never varies with the user's
+  holdings, accounts, activity or the token list, so nothing user-specific is
+  inferable from the query string. The signed list only says which token an id
+  prices.
 - No fetch is ever triggered by transaction activity (fee-USD reads are
   cache-or-nothing), so request timing does not correlate with transactions.
 - What CoinGecko (and any on-path observer) does learn: an IP address running
@@ -363,14 +389,63 @@ lockfile entries inside the window. **On Bun 1.4 that bug is fixed** — a
 Widening to 14 days is viable; it is a deliberate policy change to make
 on its own PR, not a side effect of a toolchain bump.
 
-**`bun audit`** runs as an advisory step in `_lint-and-typecheck.yml`. It
-surfaces npm advisories in the GitHub Action step summary but does not
-block PRs (today). Bun 1.4 exits 1 on findings (1.3.x always exited 0),
-so exit-code gating is mechanically possible — the step stays advisory
-deliberately: the existing backlog (every HIGH chain classified as
-dev/build/test tooling or the exact-pinned `@aztec` line, none
-extension-bundle-reachable; the moderate and low ones not individually
-classified) must be triaged to zero first, or a blocking flip is pure noise.
+**No install at run time.** With no `node_modules`, Bun's default fetches a
+bare import from npm while a script runs, past `bun.lock`'s hashes and the
+age gate; the CI jobs that hold a release credential install nothing, so a
+stray import in one of their scripts would run unpinned code beside it.
+`bunfig.toml` sets `install.auto = "disable"`, and Bun reads that file only
+from its working directory, so it covers every Bun call made from the root
+of the workflow's own revision. The jobs that run another revision's code
+(the two store publishers, the preview comment) pass `bun --no-install`.
+`scripts/ci-cd/release-integrity.test.ts` pins that every Bun call in a job
+that installs nothing is reached by one of the two, and proves Bun refuses
+under the committed file. `bunx`, `bun x` and `bun create` fetch whatever
+the file says, so that test counts them as installs, and the jobs that tag
+or publish refuse them. A fresh clone refuses the same way until
+`bun install`.
+
+**Dependabot** updates the GitHub Actions that the workflows and composite
+actions use: one grouped pull request a week, after a 7-day cooldown
+(`.github/dependabot.yml`). It cannot read Bun's lockfile, so npm
+dependencies are updated by hand, under the age gate above.
+
+**`bun audit`** runs at every severity in `_lint-and-typecheck.yml`, through
+`scripts/ci-cd/audit-gate.ts`. Each advisory it reports must have an entry in
+`scripts/ci-cd/audit-acks.json` with the same id, package, affected range and
+severity; the entry says whether the extension zips contain the package
+(decided by the build's `THIRD-PARTY-NOTICES.txt`, not by reading dependency
+trees), why the advisory cannot reach a user, and the event that reopens it.
+An entry no advisory matches any more is stale and must be deleted, and a
+report the gate cannot read, or an exit code other than 0 or 1, is a failure
+rather than a clean result.
+
+- **When it blocks.** On a pull request whose `bun.lock`, `package.json`,
+  `bunfig.toml` or ack-file diff is more than `"version"` lines, an
+  unacknowledged, stale or unreadable result fails `quality-status`. Release
+  PRs and the `main → dev` sync change only version lines, so they, and every
+  push, nightly and release run, report in the step summary without failing.
+  The cost: a new advisory blocks the next dependency change, a promote PR
+  included, until it is fixed or acknowledged on `dev`, and a release can ship
+  while one is open.
+- **Acknowledging.** Fix it first (`bun audit fix --dry-run`, then a bump
+  reviewed as below). Only an advisory that cannot move and cannot reach a
+  user is acknowledged, in a reviewed PR. A bundled one needs a reason that
+  says why the extension cannot reach it; without one it is not acknowledged.
+
+What is acknowledged today (41 advisories; the ack file holds each one):
+
+| Package | Advisories | Comes in through | Reopens at |
+|---|---|---|---|
+| `undici` 5.29.0, `@fastify/busboy` 2.1.1 | 15 (4 high) | `@aztec-labs/foundation` | the next Aztec bump |
+| `ws` 8.18.3 | 2 (1 high) | `@aztec/viem` 2.38.3, an exact pin | the next Aztec bump |
+| `uuid` 9.0.1 | 1 | `@aztec-labs/stdlib`'s Google Cloud Storage client | the next Aztec bump |
+| `@opentelemetry/core`, `@opentelemetry/propagator-jaeger` 1.x, `systeminformation` 5.23.8 | 7 (6 high) | `@aztec-labs/telemetry-client`, which nothing here imports | the next Aztec bump |
+| `undici` 7.29.0, `sharp` 0.35.2 | 12 (4 high) | miniflare, wrangler's local simulator (`apps/landing`, `infra/passkey-rp`) | the next wrangler bump |
+| `vitest`, `@vitest/mocker` 4.1.10 | 2 | the test runner; 4.1.11 needs the soak matrix | the next vitest bump |
+| `braces` 3.0.3 | 1 (high) | build-time globbing (micromatch, chokidar 3) | a fixed release (none exists) |
+| `elliptic` 6.6.1 | 1 (low) | `vite-plugin-node-polyfills`' crypto-browserify | a fixed release (none exists) |
+
+None of them is in either extension zip.
 
 **Bun pinned** to a specific patch version in `package.json#packageManager`
 and in `setup-bun/action.yml`, plus the five `bun-version:` literals in jobs
@@ -387,6 +462,12 @@ development requires bun ≥1.4 (`bun run --parallel` scripts), and
   On a checked-out bump branch the lockfile already holds the NEW
   version, so the unqualified `bun pm diff <pkg>` form (lock → latest)
   reviews the wrong or an empty delta — always name both versions.
+- Raising a range's floor (`^3.5.41` → `^3.5.42`) locks the newest
+  version the age gate allows, which can be releases past the one
+  reviewed. To land exactly one version: `bun add <pkg>@<version>` in
+  the workspace, restore the manifest it rewrote (exact pins, re-sorted
+  keys), raise the floor by hand, `bun install`, then read `bun.lock`
+  for nested copies still on the old version (Bun 1.4.2).
 - `bun audit fix --dry-run` for advisory triage — shows the in-range
   upgrade set without touching anything; `--latest` previews
   cross-major fixes.
@@ -422,6 +503,36 @@ content-addressed, so an upgrade is a reviewed line in a PR.
 - **The 7-day age gate applies here too.** Pin the newest release at least
   7 days old, not what the major tag currently points at; the two differ
   whenever an action shipped this week.
+
+## Release integrity
+
+One path makes an extension release: `release.yml`'s `attach-assets` job, and `nightly.yml`'s `publish-nightly`, which runs the same `scripts/release/attach-assets-run.ts`. It creates the GitHub Release as a draft, uploads the two zips and `SHASUMS256.txt`, reads every asset's digest back, attests the three files, writes the notes, publishes, and reads the digests and the tag back once more. It publishes only when the run's commit is the commit the tag names, and a published release is never uploaded to again.
+
+- **Build-provenance attestations.** Every asset published by that path carries a SLSA build-provenance attestation from `actions/attest-build-provenance` (SHA-pinned), signed through Sigstore's public-good instance and stored by GitHub. It binds the file's digest to this repository, the workflow file and the commit. The release notes print the check with the commit filled in:
+  ```bash
+  shasum -a 256 -c SHASUMS256.txt
+  gh attestation verify nulo-chrome-X.Y.Z.zip --repo nulo-sh/nulo \
+    --signer-workflow nulo-sh/nulo/.github/workflows/release.yml \
+    --source-digest <the tag's commit> --deny-self-hosted-runners
+  ```
+  A nightly names `nightly.yml`. `--signer-workflow` matches that workflow on any ref; `--source-digest` is what pins the commit. An attestation proves where and from which commit a zip was built, not that the commit is benign: a malicious commit merged to `main` gets a valid one. Releases published before this path existed (`v0.30.2` and its nightlies) carry none, so a store submission through the workflow refuses them.
+- **Digest read-back.** The first read-back keeps a draft that changed after upload from being published. The second reports a change that another holder of `contents: write` made between that check and the publish; GitHub has no compare-and-publish call, so it cannot prevent one.
+- **Store submissions ship the published bytes.** A dispatch on a published release downloads its assets, checks them against `SHASUMS256.txt` and their attestation, and hands those bytes to the store jobs. A rebuild that differs is only a warning: zip bytes depend on the runner's `zip`.
+- **Tags.** `auto-unstick` is the only workflow that creates a stable tag, through the REST API with its own App token, and only at the merge commit of the Release PR the run was triggered by; release-please runs with `skip-github-release: true`. A tag ruleset (`release tags: no deletion or update`, no bypass actor) stops anyone from deleting or moving a `v*` tag; it does not stop an admin, who can disable it, or a stolen owner credential. A second ruleset limiting who may create a stable or rc tag (the release App and the owner) is planned but not yet applied.
+- **Store copies are compared with the release.** `verify-store-copies.yml` (weekly, and on dispatch) downloads what the Chrome Web Store and Firefox Add-ons serve to the public, takes the version from its `manifest.json`, verifies that version's release zip and `SHASUMS256.txt` through the publish path's own digest and attestation checks, and compares the two file for file. Each store may add only its own exact entries (Chrome's `_metadata/verified_contents.json` and `update_url`, AMO's `META-INF/` signature); anything else, a missing copy, a served version with no release, or a failed check, reds the run. `v0.30.2` predates attestations and is checked by digest and `SHASUMS256.txt` only. It samples what a store serves once a week; it cannot see what one served to a single user.
+
+- **Immutable releases** are planned but not yet applied. Once on, a published release's assets and tag can no longer change, and each release gets a GitHub release attestation, checked with `gh release verify vX.Y.Z --repo nulo-sh/nulo`; no release carries one yet. Titles and notes stay editable, which is why the check is the attestation and not the notes.
+- **The jobs that tag or publish** install no dependency, check out the workflow's own revision without persisted credentials, set `GH_TOKEN` per step and run no third-party action but `oven-sh/setup-bun`, which gets no token; git-cliff, whose action downloads its binary at run time, runs in read-only notes jobs. Every App token names its permission set, so a permission later granted to the App reaches no token. `scripts/ci-cd/release-integrity.test.ts` pins all of it. Accepted residuals: a compromised `oven-sh/setup-bun`; `GITHUB_TOKEN` keeps `contents: write` in the two publish jobs; and a release published before this path stays mutable, and a dispatch with such a tag as `--ref` runs that tag's old workflow, which replaces assets. Only accounts with write access can dispatch, and the runbook forbids it.
+
+## Token list signing
+
+The wallet's default tokens come from `https://tokens.nulo.sh/v1/list.json`, an Ed25519-signed list (format: `infra/token-list/FORMAT.md`). A wallet accepts a list only when its signature verifies against a key pinned in `packages/token-list/src/keys.ts` and its sequence is above the last list it accepted; DNS, Cloudflare, the deploy and the host are not trusted.
+
+- **The signer is the asset.** A forged list can seed a real standard Token deployed with the attacker's supply, named "USDC" and priced as `usd-coin`. What bounds it: an entry must run a Token class the wallet bundles; its price id must be in the compiled table, under that id's sanity band; at most 16 entries per chain; the wallet names an entry as known only after the seeder verified its class, symbol and decimals on chain; a list carries no endpoint, chain, fee payer or code. Delisting stops seeding but keeps rows a user already has, by owner decision, so rows a sequence of forged lists seeded stay until each user deletes them.
+- **Custody.** Both keys are 32-byte seeds generated by 1Password in `Keyed-Runs/Nulo-TokenList` and installed by a keyed run (`infra/token-list/keys.env.example`): the CI seed becomes the `token-list` environment secret over stdin, and only public keys are printed. `nulo-recovery-1` never leaves 1Password. No agent and no file holds either. Keeping the CI key in an environment secret is an owner decision (2026-10-13) that bends the keyed-run rule.
+- **Signer code.** The `token-list` environment (owner reviewer, branch `dev`) approves a run, not its code, and `dev` needs no approving review, so a merged change to the workflow or the signer runs on the next approval. `publish-token-list.yml`'s `prepare` job shows every signing-relevant change since the last publish before that approval; `sign` installs nothing, runs `bun --no-install` over a signer whose import closure `packages/token-list/src/import-closure.test.ts` pins, and holds the secret in one step; `scripts/ci-cd/release-integrity.test.ts` counts any job that reads a custom secret as credentialed and pins it, and `behavior-gating.test.ts` pins the command. The trust root is the owner's GitHub account and that approval, as for the store-publish environments.
+- **Rotation.** Delete the `TOKEN_LIST_SIGNING_KEY` secret; sign the current source with the recovery key as a keyed run (`infra/token-list/recovery.env.example`) and publish it; install a new CI key; release the wallet with the leaked key removed from `keys.ts`. A stored list signed by a key no longer pinned is discarded at the next start, so a forged maximum sequence cannot freeze updates after that release. **Until the release, the leaked key verifies.**
+- **Rollback and freeze.** Sequences are the signing time in seconds, so two signings never share one. A host that serves the last good list forever withholds corrections; a host that serves an older signed list to a fresh install restores entries delisted since. Both are accepted limits until delisting carries a compiled sequence floor.
 
 ## Binary dependencies
 
@@ -466,6 +577,44 @@ composite action. Trust posture:
   single-maintainer repo. The maintainer is the same person who owns
   Nulo, so the trust model is what it is. Defense: pinning + per-bump
   PR review.
+
+The Aztec toolchain (the `aztec` CLI and its npm tree, Foundry's `forge`,
+`cast`, `anvil` and `chisel`, noir's `nargo`) is installed on every runner
+that boots a local network by
+[`setup-aztec`](./.github/actions/setup-aztec/action.yml)'s `install.sh`,
+which the local Docker runner (`docker-ci-like.sh`) runs too:
+
+- **Every download is SHA-256-pinned** in `installer-pins.sha256` and checked
+  before use: the per-version installer and its `versions` manifest, and the
+  noir and Foundry release tarballs that manifest names. The Foundry tarball
+  must hold exactly its four tools, as regular files. Its pin equals the
+  release asset's GitHub digest, and the binaries match Foundry's
+  build-provenance attestation, checked once at pin time (the pin file's
+  header names the signer); CI does not re-check the attestation.
+- **The installer runs from the verified file with two steps replaced.** Its
+  Foundry step (`foundryup` from `foundry.paradigm.xyz`) becomes a copy of
+  the verified binaries, and its lockfile-less `npm install` becomes
+  `npm ci --ignore-scripts` against the committed `cli/package-lock.json`,
+  every entry of which is a registry tarball with a sha512
+  (`scripts/ci-cd/setup-aztec-pins.test.ts`). An installer whose shape no
+  longer fits the replacement fails the install.
+- **One install script runs**: `bcrypto`'s, which `@aztec-labs/aztec-node`
+  needs to load. It compiles the package's bundled C sources against the
+  running Node's headers, with no header download.
+- **What stays trusted**: the npm registry when the lockfile is generated
+  (`lock.sh`, under the 7-day gate with the Aztec scopes exempt; each Aztec
+  bump's lockfile diff is reviewed), Aztec's install host and the noir and
+  Foundry release pipelines when they are pinned, Node from
+  `actions/setup-node`, and a restored toolchain cache, checked only by
+  `--version` probes. A run restores caches written on its own ref or on
+  `dev`, the default branch; a pull request also restores its base branch's
+  and writes only its own, so poisoning what `dev` or `main` restores takes
+  code merged to one of them.
+
+The Docker runner's own Bun and Node come only from the x64 archives
+`apps/extension/scripts/e2e/docker-ci-like.pins.sha256` pins, each checked
+before extraction and put first on `PATH`; a Bun bump that leaves that pin
+behind fails `scripts/ci-cd/docker-ci-like-pins.test.ts`.
 
 `geckodriver` (Linux x86_64, from
 [`mozilla/geckodriver`](https://github.com/mozilla/geckodriver) releases) is

@@ -350,8 +350,11 @@ describe.skipIf(isFirefox)(CHROME_ONLY.backgroundKillUnderPage, () => {
 				expect(ctx2.pageErrors).toEqual([])
 			} finally {
 				if (gate.page) await clearRestoreGate(gate.page).catch(() => {})
-				await ctx2.close().catch(() => {})
-				rmSync(profileDir, { recursive: true, force: true })
+				try {
+					await ctx2.close()
+				} finally {
+					rmSync(profileDir, { recursive: true, force: true })
+				}
 			}
 		},
 	)
@@ -469,8 +472,11 @@ describe.skipIf(isFirefox)(CHROME_ONLY.backgroundKillUnderPage, () => {
 				await waitForTokenCardAmount(page3, "1,000", "TST")
 			} finally {
 				if (gatePage) await clearRestoreGate(gatePage).catch(() => {})
-				await ctx2.close().catch(() => {})
-				rmSync(profileDir, { recursive: true, force: true })
+				try {
+					await ctx2.close()
+				} finally {
+					rmSync(profileDir, { recursive: true, force: true })
+				}
 			}
 		},
 	)

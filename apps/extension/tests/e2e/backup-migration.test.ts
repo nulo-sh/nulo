@@ -25,6 +25,7 @@ import {
 	readActiveAccount,
 	TEST_PASSWORD,
 	writeBackupToTemp,
+	SYNTHETIC_PROFILE_ID,
 } from "./helpers/import-drivers"
 
 const HAS_FIXTURE = process.env.NULO_E2E_MIGRATION_FIXTURE === "1"
@@ -59,7 +60,7 @@ test.skipIf(!HAS_FIXTURE)(
 					contact: [
 						{
 							id: "syn-contact-1",
-							profileId: "syn-profile-id",
+							profileId: SYNTHETIC_PROFILE_ID,
 							address: `0x${"02".repeat(32)}`,
 							legacyName: "Migrated Ali",
 							abbr: "MA",

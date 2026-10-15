@@ -11,9 +11,15 @@
  * - `searchTerm` — what the user typed (the address-like text in the
  *   field)
  * - `selectedContact` — the candidate object once they pick one
+ *
+ * A mouse or pen press that takes the focus from the field holds the typed view (and the
+ * suggestions) until the press ends: the card is taller than the field, so swapping at the blur
+ * would move whatever the press is on before its click lands.
  */
+import { isComposing } from "@/composables/usePopupEntity"
 import { trimAddress } from "@/utils/string"
 import { isValidAztecAddress } from "@/utils/aztec-address"
+import { matchRecipients } from "./recipient-search"
 
 const props = defineProps({
 	candidates: { type: Array, default: () => [] },
@@ -24,19 +30,27 @@ const selectedContact = defineModel("selectedContact", { default: null })
 
 const isSearchInputFocused = ref(false)
 const justCleared = ref(false)
+/** Escape closed the suggestions; the next input or focus opens them again. */
+const dismissed = ref(false)
+/** The suggestion Down and Up moved to, or null: none until an arrow is pressed. Held by identity,
+ *  so a row that loads in ahead of it does not move the highlight onto another destination. */
+const activeRow = shallowRef(null)
+const listId = useId()
+const labelId = `${listId}-label`
+const optionId = (i) => `${listId}-${i}`
+const fieldEl = useTemplateRef("fieldEl")
+/** The field shows the typed text while the press that blurred it is still down. */
+const holdView = ref(false)
+/** The `pointerId` of the primary mouse or pen press now down, or null. */
+let pressId = null
+let closeTimer
+let releaseTimer
 
-const filteredContacts = computed(() => {
-	if (!searchTerm.value) return []
-	const lowTerm = searchTerm.value?.toLowerCase() || ""
-	return [...props.candidates].filter(
-		// Address compare is case-insensitive: contacts are stored lowercase
-		// (canonical-on-save), but a user may re-paste the mixed-case string
-		// they originally typed — same address, same contact.
-		(c) => c.name?.toLowerCase().includes(lowTerm) || c.address?.toLowerCase() === lowTerm || c.abbr?.toLowerCase() === lowTerm,
-	)
-})
+const filteredContacts = computed(() => matchRecipients(props.candidates, searchTerm.value))
 
-const showSuggestions = computed(() => filteredContacts.value?.length && isSearchInputFocused.value)
+const showSuggestions = computed(() => Boolean(filteredContacts.value?.length && isSearchInputFocused.value && !dismissed.value))
+const activeIndex = computed(() => (showSuggestions.value ? filteredContacts.value.indexOf(activeRow.value) : -1))
+const activeId = computed(() => (activeIndex.value >= 0 ? optionId(activeIndex.value) : undefined))
 const showInvalidHint = computed(() => !isSearchInputFocused.value && !isValidAztecAddress(searchTerm.value) && searchTerm.value.length > 0)
 
 const handleSelectContact = (contact) => {
@@ -56,50 +70,154 @@ const handleSearchBlur = () => {
 		const contact = props.candidates.find((c) => c.address === searchTerm.value)
 		if (contact) handleSelectContact(contact)
 	}
-	setTimeout(() => {
+	clearTimeout(closeTimer)
+	if (pressId !== null) {
+		clearTimeout(releaseTimer)
+		holdView.value = true
+		return
+	}
+	closeTimer = setTimeout(() => {
 		isSearchInputFocused.value = false
 	}, 250)
+}
+
+const handleSearchFocus = () => {
+	clearTimeout(closeTimer)
+	dismissed.value = false
+	if (holdView.value) {
+		clearTimeout(releaseTimer)
+		holdView.value = false
+		selectedContact.value = null
+	}
+	isSearchInputFocused.value = true
+}
+
+const endHold = () => {
+	clearTimeout(releaseTimer)
+	holdView.value = false
+	isSearchInputFocused.value = false
+}
+
+const onPointerDown = (e) => {
+	if (!e.isPrimary || e.button !== 0 || (e.pointerType !== "mouse" && e.pointerType !== "pen")) return
+	// The press holding the field stays the one whose release ends the hold.
+	if (holdView.value && pressId !== null) return
+	pressId = e.pointerId
+	// A press that starts before the last one's release ran keeps the field held through itself.
+	clearTimeout(releaseTimer)
+}
+
+const onPointerUp = (e) => {
+	if (e.pointerId !== pressId) return
+	pressId = null
+	if (!holdView.value) return
+	// A browser dispatches a press's pointerup, mouseup and click in one task: the click lands first.
+	releaseTimer = setTimeout(endHold, 0)
+}
+
+// A native click runs the microtasks between its listeners, so the card renders before the click
+// reaches its target: a menu that measures its trigger on that click sees where the trigger now is.
+const onClickCapture = (e) => {
+	if (!holdView.value || pressId !== null || fieldEl.value?.contains(e.target)) return
+	endHold()
+}
+
+const onPointerCancel = (e) => {
+	if (e.pointerId !== pressId) return
+	pressId = null
+	if (holdView.value) endHold()
+}
+
+const onWindowBlur = () => {
+	pressId = null
+	if (holdView.value) endHold()
 }
 
 watch(
 	() => searchTerm.value,
 	(val) => {
+		dismissed.value = false
 		if (selectedContact.value && val !== selectedContact.value.address) {
 			selectedContact.value = null
 		}
 	},
 )
 
+watch([filteredContacts, showSuggestions], () => {
+	if (activeIndex.value < 0) activeRow.value = null
+})
+
+const ARROW_STEPS = { ArrowDown: 1, ArrowUp: -1 }
+
+const moveHighlight = (e, step) => {
+	e.preventDefault()
+	const rows = filteredContacts.value
+	const at = activeIndex.value
+	const next = at < 0 && step < 0 ? rows.length - 1 : (at + step + rows.length) % rows.length
+	activeRow.value = rows[next]
+	document.getElementById(optionId(next))?.scrollIntoView({ block: "nearest" })
+}
+
+// With no row highlighted, Enter keeps its typed-name shortcut: the first suggestion.
+const pickHighlighted = (e) => {
+	if (e.repeat) return
+	e.preventDefault()
+	handleSelectContact(filteredContacts.value[Math.max(activeIndex.value, 0)])
+	e.target.blur()
+}
+
+// Marked handled: Chrome closes the toolbar popup on an Escape the page leaves unhandled.
+const dismiss = (e) => {
+	e.preventDefault()
+	dismissed.value = true
+}
+
+// Only the field's own input may pick: the suggestions outlive its blur, and an Enter meant for
+// another control must never set where the money goes.
 const onKeydown = (e) => {
-	if (e.key === "Enter" && showSuggestions.value) {
-		handleSelectContact(filteredContacts.value[0])
-		document.activeElement?.blur()
-	}
+	if (e.defaultPrevented || isComposing(e) || !showSuggestions.value) return
+	if (!(e.target instanceof HTMLInputElement) || !fieldEl.value?.contains(e.target)) return
+	if (e.key in ARROW_STEPS) moveHighlight(e, ARROW_STEPS[e.key])
+	else if (e.key === "Enter") pickHighlighted(e)
+	else if (e.key === "Escape") dismiss(e)
 }
 
 onMounted(() => {
 	document.addEventListener("keydown", onKeydown)
+	// Capture: the press must be recorded before its mousedown moves the focus and blurs the field.
+	document.addEventListener("pointerdown", onPointerDown, true)
+	document.addEventListener("pointerup", onPointerUp, true)
+	document.addEventListener("pointercancel", onPointerCancel, true)
+	document.addEventListener("click", onClickCapture, true)
+	window.addEventListener("blur", onWindowBlur)
 })
 
 onBeforeUnmount(() => {
 	document.removeEventListener("keydown", onKeydown)
+	document.removeEventListener("pointerdown", onPointerDown, true)
+	document.removeEventListener("pointerup", onPointerUp, true)
+	document.removeEventListener("pointercancel", onPointerCancel, true)
+	document.removeEventListener("click", onClickCapture, true)
+	window.removeEventListener("blur", onWindowBlur)
+	clearTimeout(closeTimer)
+	clearTimeout(releaseTimer)
 })
 </script>
 
 <template>
 	<div :class="$style.recipient_section">
 		<Flex align="center" justify="between">
-			<span :class="$style.section_label">Recipient Address</span>
+			<span :id="labelId" :class="$style.section_label">Recipient Address</span>
 			<Transition name="fade">
 				<Flex v-if="showInvalidHint" align="center" gap="6" data-testid="recipient-invalid-hint">
 					<Icon name="warning" size="12" color="red" />
-					<Text size="12" weight="600" color="primary">Invalid address</Text>
+					<Text variant="body" color="primary">Invalid address</Text>
 				</Flex>
 			</Transition>
 		</Flex>
-		<div data-testid="send-destination-field" :class="$style.recipient_wrap">
+		<div ref="fieldEl" data-testid="send-destination-field" :class="$style.recipient_wrap">
 			<RecipientCard
-				v-if="selectedContact"
+				v-if="selectedContact && !holdView"
 				:name="selectedContact.name"
 				:address="selectedContact.address"
 				@change="handleChange"
@@ -109,26 +227,47 @@ onBeforeUnmount(() => {
 				<AddressInput
 					v-model="searchTerm"
 					:autofocus="justCleared"
-					@focus="isSearchInputFocused = true"
+					role="combobox"
+					:ariaLabelledby="labelId"
+					:ariaExpanded="showSuggestions"
+					ariaAutocomplete="list"
+					:ariaActivedescendant="activeId"
+					:ariaControls="showSuggestions ? listId : undefined"
+					@focus="handleSearchFocus"
 					@blur="handleSearchBlur()"
 					placeholder="0x... or contact name"
 				/>
 
+				<!-- A list that scrolls is a Tab stop unless it opts out; the field keeps the keyboard. -->
 				<Transition name="fade">
-					<Flex v-if="showSuggestions" align="center" direction="column" wide :class="$style.contacts_wrapper">
+					<Flex
+						v-if="showSuggestions"
+						align="center"
+						direction="column"
+						wide
+						:class="$style.contacts_wrapper"
+						:id="listId"
+						role="listbox"
+						tabindex="-1"
+						:aria-labelledby="labelId"
+						data-testid="send-destination-suggestions"
+					>
 						<Flex
-							v-for="c in filteredContacts"
+							v-for="(c, i) in filteredContacts"
 							@click="handleSelectContact(c)"
 							align="center"
 							gap="10"
-							:class="$style.contact"
+							:class="[$style.contact, i === activeIndex && $style.active]"
 							wide
+							:id="optionId(i)"
+							role="option"
+							:aria-selected="i === activeIndex"
 						>
-							<AccountAvatar :name="c.name" :address="c.address" :size="28" />
+							<AccountAvatar :name="c.name" :address="c.address" :size="28" aria-hidden="true" />
 
 							<Flex direction="column" gap="4" wide>
-								<Text size="14" weight="600" color="primary" :class="$style.title">{{ c.name }}</Text>
-								<Text size="12" weight="500" color="tertiary" :class="$style.description">
+								<Text variant="name" color="primary" :class="[$style.title, $style.name_size]">{{ c.name }}</Text>
+								<Text variant="data" color="tertiary" data-testid="recipient-suggestion-address" :class="$style.description">
 									{{ trimAddress(c.address) }}
 								</Text>
 							</Flex>
@@ -149,23 +288,12 @@ onBeforeUnmount(() => {
 }
 
 .section_label {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
 .recipient_wrap {
 	position: relative;
-}
-
-/* Restore the recipient field's monospace 14px style — the
- * migration to <Input> shifted it to body-font 15px. */
-.recipient_wrap :global(input) {
-	font-family: var(--font-mono);
-	font-size: 14px;
 }
 
 .recipient_wrap :global(input::placeholder) {
@@ -192,7 +320,8 @@ onBeforeUnmount(() => {
 		padding: 10px 14px;
 		transition: all 0.2s var(--bezier);
 
-		&:hover {
+		&:hover,
+		&.active {
 			background: var(--nulo-surface-low);
 		}
 
@@ -222,5 +351,9 @@ onBeforeUnmount(() => {
 			white-space: nowrap;
 		}
 	}
+}
+
+.name_size {
+	font-size: 14px;
 }
 </style>

@@ -76,6 +76,7 @@ const definition = computed(() => GLOSSARY[props.term]?.definition ?? "")
 /* The padding makes the hit area 24px tall and the margin gives it back, so the label sits where
    the drawing puts the text. */
 .action {
+	composes: type--label from global;
 	display: block;
 
 	padding: 7px 0;
@@ -85,13 +86,8 @@ const definition = computed(() => GLOSSARY[props.term]?.definition ?? "")
 	cursor: pointer;
 	outline: none;
 
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
 	line-height: normal;
-	letter-spacing: 0.1em;
 	text-align: left;
-	text-transform: uppercase;
 	color: var(--nulo-accent);
 }
 

@@ -56,7 +56,7 @@ defineExpose({
 </script>
 
 <template>
-	<Input ref="inputRef" :placeholder="placeholder" v-bind="$attrs" @blur="emit('blur')" @focus="emit('focus')">
+	<Input ref="inputRef" :placeholder="placeholder" textVariant="input-data" v-bind="$attrs" @blur="emit('blur')" @focus="emit('focus')">
 		<template v-for="(_, name) in $slots" #[name]="scope">
 			<slot :name="name" v-bind="scope" />
 		</template>

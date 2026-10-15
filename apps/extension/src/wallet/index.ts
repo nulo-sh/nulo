@@ -13,16 +13,20 @@
  */
 
 import "@/utils/console-sniffer"
+import "@/utils/zod-jitless"
 import { RealChromeBrowserApi, SystemClock } from "@/core/adapters"
 import { ConfigStore } from "./config"
 import { consoleMethods, LoggerStore, LogLevel } from "./logger"
 import { createWalletRuntime } from "./runtime"
 import { registerContentMessageRelay } from "./services/wallet-sdk/content-message-relay"
 import { PRICE_REFRESH_ALARM_NAME, PriceService } from "./services/price/service"
+import { TOKEN_LIST_REFRESH_ALARM_NAME, TokenListService } from "./services/token-list/service"
 import { isClientDisconnectRejection, isReceiverGoneRejection } from "@nulo/extension-messaging/errors"
-import { getErrorData } from "@nulo/wallet-core/utils"
 import { openOrFocusOnboardingTab } from "./utils/onboarding-tab"
 import { armPopupReturn, registerToolbarPopupMessage } from "./utils/toolbar-popup"
+import { recordCspViolationsInBackground } from "@/e2e/csp-report"
+
+if (import.meta.env.VITE_NULO_E2E_CSP_REPORT === "1") recordCspViolationsInBackground()
 
 // MV3: onInstalled fires once, synchronously, when the SW boots after install.
 // Late addListener calls miss the historic event. Register at top level BEFORE
@@ -66,7 +70,7 @@ for (const [method, level] of consoleMethods) {
 self.onunhandledrejection = (e: PromiseRejectionEvent) => {
 	const expected = isClientDisconnectRejection(e.reason) || isReceiverGoneRejection(e.reason)
 	if (expected) e.preventDefault()
-	logger.log("wallet", expected ? LogLevel.Debug : LogLevel.Error, getErrorData(e.reason))
+	logger.log("wallet", expected ? LogLevel.Debug : LogLevel.Error, "unhandled rejection", { error: e.reason })
 }
 
 logger.log("wallet", LogLevel.Info, "Runtime configured")
@@ -84,16 +88,21 @@ const runtime = createWalletRuntime({
 // at module scope receive the triggering event — a listener added inside
 // `runtime.start()` (after awaited config/BB/migration work) would miss it,
 // and with it every price tick of that SW lifetime. This shim is the SINGLE
-// dispatch path for the price alarm: it ensures startup completed (start()
-// is idempotent) and forwards the tick into the service, which does NOT
-// subscribe to alarms itself (no double dispatch).
+// dispatch path for the price and token-list alarms: it ensures startup
+// completed (start() is idempotent) and forwards the tick into the service,
+// which does NOT subscribe to alarms itself (no double dispatch).
+const ALARM_SERVICES: Record<string, string> = {
+	[PRICE_REFRESH_ALARM_NAME]: PriceService.name,
+	[TOKEN_LIST_REFRESH_ALARM_NAME]: TokenListService.name,
+}
 chrome.alarms.onAlarm.addListener((alarm) => {
-	if (alarm.name !== PRICE_REFRESH_ALARM_NAME) return
+	const service = ALARM_SERVICES[alarm.name]
+	if (!service) return
 	runtime
 		.start()
-		.then(() => (runtime.services.get(PriceService.name) as PriceService).onAlarmTick())
+		.then(() => (runtime.services.get(service) as PriceService | TokenListService).onAlarmTick())
 		.catch((error) => {
-			logger.log("wallet", LogLevel.Error, "price alarm dispatch failed", getErrorData(error))
+			logger.log("wallet", LogLevel.Error, "alarm dispatch failed", { alarm: alarm.name, error })
 		})
 })
 
@@ -105,6 +114,6 @@ logger
 	.then(() => {
 		logger.log("wallet", LogLevel.Info, "Service worker started")
 		runtime.start().catch((error) => {
-			logger.log("wallet", LogLevel.Error, "Runtime start failed", getErrorData(error))
+			logger.log("wallet", LogLevel.Error, "Runtime start failed", { error })
 		})
 	})

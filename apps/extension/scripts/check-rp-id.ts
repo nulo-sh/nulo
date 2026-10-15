@@ -31,6 +31,11 @@ let failed = false
 
 console.log("[check-rp-id] verifying RP_ID =", JSON.stringify(RP_ID))
 
+// crxjs also accepts a function or a promise here; this gate reads only a literal manifest.
+if (typeof ManifestConfig === "function" || ManifestConfig instanceof Promise) {
+	console.error("[check-rp-id] manifest.config.ts must export a literal manifest")
+	process.exit(1)
+}
 const manifestResult = validateHostPermissions(ManifestConfig, RP_ID)
 if (!manifestResult.ok) {
 	console.error("[check-rp-id] manifest mismatch:", manifestResult.error)

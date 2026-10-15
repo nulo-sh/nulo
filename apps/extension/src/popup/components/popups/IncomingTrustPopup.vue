@@ -27,13 +27,16 @@ import { usePopupStack } from "@/composables/usePopupStack"
 const { openToast } = useToast()
 
 /** Store */
+import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store.ts"
 
 /** Utils */
 import { copyToClipboard } from "@/utils/clipboard"
 import { trimAddress } from "@/utils/string"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
+import { getContractExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
 
+const appStore = useAppStore()
 const cacheStore = useCacheStore()
 const { order, depth } = usePopupStack("incoming_trust")
 
@@ -46,6 +49,12 @@ const props = defineProps({
 const tokenSymbol = computed(() => sanitizeWireString(cacheStore.incomingTrust.tokenSymbol ?? "Token", 32))
 const contractFull = computed(() => cacheStore.incomingTrust.contract ?? "")
 const contractSlice = computed(() => (contractFull.value ? trimAddress(contractFull.value, 6, 4) : ""))
+// A prompt only ever shows for the active network; the check keeps a stale one off another chain's explorer.
+const contractUrl = computed(() => {
+	if (!appStore.network || cacheStore.incomingTrust.networkId !== appStore.network.id) return null
+	return getContractExplorerUrl(appStore.network.chainId, appStore.defaultExplorer, contractFull.value)
+})
+const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === appStore.defaultExplorer)?.name ?? "explorer")
 
 // Verification surface: keyboard-reachable expand toggle + copy. Without
 // these as real <button> elements, a keyboard-only user couldn't get to
@@ -139,7 +148,7 @@ watch(
 					<Icon name="download" size="20" color="primary" />
 					<span :class="$style.pre_title">First receive</span>
 					<h2 :class="$style.title">Allow {{ tokenSymbol }}?</h2>
-					<Text size="13" weight="500" color="body" height="150" align="center">
+					<Text variant="body" color="body" height="150" align="center">
 						You received <strong>{{ tokenSymbol }}</strong> from a contract you haven't seen before.
 					</Text>
 				</Flex>
@@ -182,9 +191,20 @@ watch(
 							<Icon name="copy" size="14" color="primary" />
 						</button>
 					</div>
+					<a
+						v-if="contractUrl"
+						:href="contractUrl"
+						target="_blank"
+						rel="noopener noreferrer"
+						:class="$style.contract_link"
+						data-testid="incoming-trust-contract-link"
+					>
+						<span>View contract on {{ explorerName }}</span>
+						<Icon name="external-link" size="10" color="tertiary" />
+					</a>
 				</Flex>
 
-				<Text size="11" color="tertiary" height="150" align="center" :class="$style.warning">
+				<Text variant="body" color="tertiary" height="150" align="center" :class="$style.warning">
 					A contract you don't recognize could be a scam token with a familiar-looking symbol. Verify the contract address before allowing.
 				</Text>
 
@@ -234,15 +254,11 @@ watch(
 	background: var(--nulo-surface-low);
 }
 .contract_label {
-	font-family: var(--font-mono);
-	font-size: 9px;
-	font-weight: 600;
-	letter-spacing: 0.14em;
+	composes: type--label from global;
 	color: var(--txt-tertiary);
 }
 .contract_value {
-	font-family: var(--font-mono);
-	font-size: 12px;
+	composes: type--data from global;
 	color: var(--txt-primary);
 	word-break: break-all;
 }
@@ -269,9 +285,8 @@ watch(
 	border-top: 1px solid var(--nulo-border);
 }
 .contract_full {
+	composes: type--data from global;
 	flex: 1;
-	font-family: var(--font-mono);
-	font-size: 11px;
 	color: var(--txt-primary);
 	word-break: break-all;
 	line-height: 1.5;
@@ -287,6 +302,10 @@ watch(
 .copy_button:focus-visible {
 	outline: 2px solid var(--nulo-accent);
 	outline-offset: 2px;
+}
+.contract_link {
+	composes: hero_link from "../../pages/detail-page.module.css";
+	align-self: flex-start;
 }
 .warning {
 	padding: 0 8px;

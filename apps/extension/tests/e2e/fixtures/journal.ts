@@ -22,7 +22,7 @@
  * closures because those run in the browser and cannot close over module scope.
  */
 import { execSync } from "node:child_process"
-import type { Page } from "puppeteer"
+import type { EvaluateFunc, Page } from "puppeteer"
 import { EXTENSION_SCHEME } from "./browser"
 import { type TickState, TICK_STATE_CAUSE, tickStateBefore } from "./balance-queue-trail"
 
@@ -60,6 +60,45 @@ export async function readDappExecuteRecords(page: Page): Promise<DappExecuteVie
 		}
 		return out
 	})
+}
+
+export type DappExecuteOutcome = { id: string; stage: string; failure?: string }
+
+/** Every `dapp_execute` row's stage and, once it failed, its failure kind (`error.kind`). */
+export async function readDappExecuteOutcomes(page: Page): Promise<DappExecuteOutcome[]> {
+	const outcomes = await page.evaluate(async () => {
+		type Row = { id?: string; kind?: string; progress?: { stage?: string }; error?: { kind?: string } }
+		const parse = (raw: unknown): Row | undefined => {
+			try {
+				return (typeof raw === "string" ? JSON.parse(raw) : raw) as Row
+			} catch {
+				return undefined
+			}
+		}
+		const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
+		return Object.entries(all)
+			.filter(([key]) => key.startsWith("nulo:journal@"))
+			.map(([, raw]) => parse(raw))
+			.filter((row): row is Row => row?.kind === "dapp_execute")
+			.map((row) => ({ id: row.id ?? "", stage: row.progress?.stage ?? "?", failure: row.error?.kind }))
+	})
+	return outcomes
+}
+
+/** Polls the `dapp_execute` rows until `holds` accepts them; a timeout names the last read. */
+export async function waitForDappExecuteOutcomes(
+	page: Page,
+	what: string,
+	holds: (rows: DappExecuteOutcome[]) => boolean,
+	timeout = 30_000,
+): Promise<DappExecuteOutcome[]> {
+	const deadline = Date.now() + timeout
+	for (;;) {
+		const rows = await readDappExecuteOutcomes(page)
+		if (holds(rows)) return rows
+		if (Date.now() > deadline) throw new Error(`waitForDappExecuteOutcomes: ${what} within ${timeout}ms; rows: ${JSON.stringify(rows)}`)
+		await new Promise((resolve) => setTimeout(resolve, 200))
+	}
 }
 
 /** A send's record: its owner and how far it got. `enteredProveAt` is stamped just before a held
@@ -112,7 +151,11 @@ export async function waitForSendRecord(
  * where `chrome.storage` is undefined — and because the SW survives a wedged
  * playground renderer (F1). Returns a marker string if there's no live SW worker.
  */
-async function swEvaluate<A extends unknown[], R>(page: Page, fn: (...a: A) => R | Promise<R>, ...args: A): Promise<R | string> {
+async function swEvaluate<A extends unknown[], F extends EvaluateFunc<A>>(
+	page: Page,
+	fn: F,
+	...args: A
+): Promise<Awaited<ReturnType<F>> | string> {
 	const target = page
 		.browser()
 		.targets()
@@ -136,7 +179,11 @@ async function swEvaluate<A extends unknown[], R>(page: Page, fn: (...a: A) => R
  * popup) -> any other ext-page target -> SW worker (last resort; its own failure is
  * a service-worker-liveness signal, surfaced separately by the sw-liveness probe).
  */
-async function extCtxEvaluate<A extends unknown[], R>(page: Page, fn: (...a: A) => R | Promise<R>, ...args: A): Promise<R | string> {
+async function extCtxEvaluate<A extends unknown[], F extends EvaluateFunc<A>>(
+	page: Page,
+	fn: F,
+	...args: A
+): Promise<Awaited<ReturnType<F>> | string> {
 	const isExtCtx = (p: Page): Promise<boolean> =>
 		p.evaluate(() => typeof chrome !== "undefined" && typeof chrome.storage?.local !== "undefined").catch(() => false)
 	if (await isExtCtx(page)) {
@@ -297,9 +344,10 @@ export async function readSwLogTrail(page: Page, opts: { limit?: number; match?:
  * included, before its last line, and the marker arriving proves every earlier line still retained
  * is stored. A trail with no tick line before the marker proves nothing, so it never reads idle:
  * missing history times out rather than passes. It cannot see a balance enqueued but not yet ticked,
- * so call it once the write that proves the enqueue ran has landed. Needs Developer Mode (the trail
- * is stored) and Debug Mode (the tick lines are debug). Logs how many lines sat between that tick's
- * end and the marker, the margin left before the trail would drop it.
+ * nor a refresh the transaction worker still owes, so call it once the write that proves the enqueue
+ * ran has landed. Needs Developer Mode (the trail is stored) and Debug Mode (the tick lines are
+ * debug). Logs how many lines sat between that tick's end and the marker, the margin left before the
+ * trail would drop it.
  */
 export async function waitForBalanceQueueIdle(page: Page, timeoutMs = 60_000): Promise<void> {
 	const deadline = Date.now() + timeoutMs

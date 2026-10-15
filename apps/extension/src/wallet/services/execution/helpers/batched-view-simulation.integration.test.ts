@@ -44,7 +44,8 @@ describe.skipIf(!ENABLE)("batchedViewSimulation — integration (real PXE)", () 
 
 	test.todo("private return: origin !== account.address → uses .nested[1].nested")
 
-	// Fast-path parity contracts (added by fast-path-internal-views PR):
+	// Fast-path parity: the fast arm must yield the same encoded values as a
+	// pxe.simulateTx run of the same calls.
 
 	test.todo(
 		"fast arm — pure PUBLIC+isStatic batch: balance_of_public on N accounts via simulateViaNode " +

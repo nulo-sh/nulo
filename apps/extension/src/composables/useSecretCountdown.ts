@@ -13,6 +13,7 @@ export function useSecretCountdown(options: UseSecretCountdownOptions) {
 	const now = ref(Date.now())
 	let closeTimeout: ReturnType<typeof setTimeout> | undefined
 	let tickInterval: ReturnType<typeof setInterval> | undefined
+	let disposed = false
 
 	const countdownLabel = computed(() => {
 		if (!closeDeadline.value) return ""
@@ -23,7 +24,10 @@ export function useSecretCountdown(options: UseSecretCountdownOptions) {
 		return `${min}:${sec.toString().padStart(2, "0")}`
 	})
 
+	// A second start replaces the first countdown: a leftover close timer would fire after "keep open".
 	const start = () => {
+		clear()
+		if (disposed) return
 		closeDeadline.value = Date.now() + options.autoCloseMs
 		now.value = Date.now()
 		closeTimeout = setTimeout(() => {
@@ -47,7 +51,10 @@ export function useSecretCountdown(options: UseSecretCountdownOptions) {
 		isAutoCloseDisabled.value = true
 	}
 
-	onScopeDispose(clear)
+	onScopeDispose(() => {
+		disposed = true
+		clear()
+	})
 
 	return {
 		closeDeadline,

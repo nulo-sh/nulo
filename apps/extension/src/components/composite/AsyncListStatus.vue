@@ -12,7 +12,7 @@ const emit = defineEmits(["retry"])
 	<LoadingState v-if="loading" :label="label" />
 
 	<Tooltip v-else-if="error" wide>
-		<Banner :action="{ name: 'Try again', callback: () => emit('retry') }" variant="error" wide>
+		<Banner :action="{ name: 'Try again', callback: () => emit('retry'), testId: 'async-list-retry' }" variant="error" wide>
 			Something went wrong
 		</Banner>
 		<template #content>{{ error }}</template>

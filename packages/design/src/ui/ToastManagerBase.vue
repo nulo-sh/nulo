@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** Vendor */
-import { onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue"
 
 /** Composables */
 import { type ToastState, useToast } from "../composables/toast"
@@ -20,6 +20,10 @@ withDefaults(defineProps<{ teleportTo?: string; bottomInset?: number; inColumn?:
 })
 
 const { toast, closeToast, holdToast } = useToast()
+
+const wrap = useTemplateRef<HTMLElement>("wrap")
+/** The open snack's drawn height, 0 while none is open, for a host that places it clear of the page. */
+defineExpose({ snackHeight: () => wrap.value?.getBoundingClientRect().height ?? 0 })
 
 /** The snack the regions render: a copy of the shared toast that lags it while a card is leaving. */
 const shown = ref<ToastState | null>(null)
@@ -45,9 +49,15 @@ const trackPointer = (event: PointerEvent) => {
 
 watch([hovered, focusWithin], ([h, f]) => holdToast(h || f))
 
+// A relabel keeps its id and its card, so the pointer and focus the card holds stay as they are.
+// Any other change takes the card away, so focus inside it goes back to where it came from.
 const show = (next: ToastState | null) => {
-	hovered.value = false
-	focusWithin.value = false
+	if (next?.id !== shown.value?.id) {
+		const target = focusWithin.value ? returnFocusTo : null
+		hovered.value = false
+		focusWithin.value = false
+		if (target instanceof HTMLElement && target.isConnected) target.focus()
+	}
 	shown.value = next
 }
 
@@ -93,10 +103,7 @@ const onFocusOut = (event: FocusEvent) => {
 // A leaving card keeps its listeners while `shown` already holds its successor, so each control is
 // bound at render to the snack its card shows and does nothing once that snack is gone.
 const closeFor = (id: number) => () => {
-	if (shown.value?.id !== id) return
-	const target = focusWithin.value ? returnFocusTo : null
-	closeToast()
-	if (target instanceof HTMLElement && target.isConnected) target.focus()
+	if (shown.value?.id === id) closeToast()
 }
 
 const selectFor = (id: number) => () => {
@@ -118,7 +125,7 @@ onBeforeUnmount(() => {
 
 <template>
 	<Teleport :to="teleportTo" defer>
-		<div :class="[$style.wrap, inColumn && $style.in_column]" :style="{ bottom: `${bottomInset}px` }">
+		<div ref="wrap" :class="[$style.wrap, inColumn && $style.in_column]" :style="{ bottom: `${bottomInset}px` }">
 			<div role="status" aria-live="polite" aria-atomic="true" :class="$style.region">
 				<Transition
 					mode="out-in"
@@ -160,17 +167,18 @@ onBeforeUnmount(() => {
 					@after-leave="onAfterLeave"
 				>
 					<div
-						v-if="shown && shown.kind === 'error'"
+						v-if="shown && shown.kind !== 'success'"
 						:key="shown.id"
-						:class="[$style.card, $style.error]"
+						:class="[$style.card, shown.kind === 'error' && $style.error]"
 						data-testid="snackbar"
-						data-kind="error"
+						:data-kind="shown.kind"
 						@pointermove="onPointerMove"
 						@mouseleave="hovered = false"
 						@focusin="onFocusIn"
 						@focusout="onFocusOut"
 					>
-						<Icon name="close-circle" size="16" color="red" aria-hidden="true" />
+						<Icon v-if="shown.kind === 'info'" name="clock-circle" size="16" color="secondary" aria-hidden="true" />
+						<Icon v-else name="close-circle" size="16" color="red" aria-hidden="true" />
 						<div :class="$style.text">
 							<span :class="$style.title" data-testid="snackbar-title">{{ shown.label }}</span>
 							<span v-if="shown.sub" :class="$style.sub" data-testid="snackbar-sub">{{ shown.sub }}</span>
@@ -236,26 +244,18 @@ onBeforeUnmount(() => {
 }
 
 .title {
-	font-family: var(--font-headline);
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
+	composes: type--label-section from global;
 }
 
 .sub {
-	font-size: 11px;
+	composes: type--caption from global;
 	color: var(--nulo-secondary);
 }
 
 .action {
+	composes: type--label from global;
 	flex: none;
 	padding: 6px 4px;
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
 	color: var(--nulo-accent);
 	background: none;
 	border: 0;

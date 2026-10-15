@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: `clearProfileState` in `packages/aztec-runtime/src/pxe/service.ts` no longer deletes `keyval-store`, the IndexedDB database where bb.js caches its public CRS, so deleting a profile right after an in-browser proof succeeds. `apps/extension/tests/e2e/network/delete-after-prove.test.ts` covers it with real proving, in the canary job of all four network lanes.
-- **Open items**: the legacy boot sweep's own reclaim of the CRS cache, and a standing CI job that proves in browser WASM, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the legacy boot sweep's own reclaim of the CRS cache, and a standing CI job that proves in browser WASM, tracked in #195. The boot sweep's CRS-cache reclaim was closed by a later plan before `follow-ups.md` was retired.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

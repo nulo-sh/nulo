@@ -16,6 +16,7 @@
  */
 
 import { flushPromises, mount } from "@vue/test-utils"
+import { createPinia, setActivePinia } from "pinia"
 import { nextTick, ref } from "vue"
 import { createMemoryHistory, createRouter } from "vue-router"
 import { beforeEach, describe, expect, test, vi } from "vitest"
@@ -51,6 +52,8 @@ const H = vi.hoisted(() => {
 		retryIncomingScan: vi.fn(),
 		incomingConnect: vi.fn(),
 		configConnect: vi.fn(),
+		acceptQueuedFee: vi.fn(),
+		refreshPrices: vi.fn(),
 		// event emitters (the mocked clients don't fire them; tests emit explicitly)
 		journalAdded: makeEvent(),
 		journalUpdated: makeEvent(),
@@ -131,6 +134,19 @@ vi.mock("@/wallet/services/execution/client", () => ({
 		return {
 			disconnect: vi.fn(),
 			cancelJob: vi.fn().mockResolvedValue(undefined),
+			acceptQueuedFee: H.acceptQueuedFee,
+		}
+	}),
+}))
+
+vi.mock("@/wallet/services/price/client", () => ({
+	PriceServiceClient: vi.fn(function () {
+		return {
+			disconnect: vi.fn(),
+			onQuotesUpdated: H.makeEvent(),
+			onConnected: H.makeEvent(),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
+			refreshIfStale: H.refreshPrices,
 		}
 	}),
 }))
@@ -163,6 +179,8 @@ vi.mock("@/stores/app.store", () => ({ useAppStore: () => H.store.current }))
 // ── Fixtures + helpers ────────────────────────────────────────────────────────
 
 import { ARRIVALS_KEY } from "@/composables/useArrivals"
+import { REVIEW_ARM_MS } from "@/composables/useSendReview"
+import { usePopupStore } from "@/stores/popup.store"
 import RecentActivityView from "./RecentActivityView.vue"
 
 const makeRouter = () =>
@@ -182,6 +200,7 @@ function deferred<T>() {
 
 const inFlightTransferOp = (account: string, id = "op-a") => ({
 	id,
+	profileId: "p1",
 	accountAddress: account,
 	networkId: "net-1",
 	kind: "transfer",
@@ -236,6 +255,8 @@ beforeEach(() => {
 	H.retryIncomingScan.mockReset().mockResolvedValue(undefined)
 	H.incomingConnect.mockReset().mockResolvedValue(undefined)
 	H.configConnect.mockReset().mockResolvedValue(undefined)
+	H.acceptQueuedFee.mockReset().mockResolvedValue(true)
+	H.refreshPrices.mockReset().mockResolvedValue({ quotes: {}, pricedTokens: {} })
 	for (const ev of [
 		H.journalAdded,
 		H.journalUpdated,
@@ -255,6 +276,7 @@ beforeEach(() => {
 		ev.handlers.clear()
 	}
 	H.store.current = createAppStoreHarness()
+	setActivePinia(createPinia())
 })
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -559,14 +581,19 @@ describe("RecentActivityView — rows link to their detail routes", () => {
 })
 
 describe("RecentActivityView — its header", () => {
-	test("the account feed reads 'Recent activity' with a 'View history' that opens History; the empty token feed keeps the title", async () => {
+	test("the account feed reads 'Recent activity' with a 'View history' link that opens History; the empty token feed keeps the title", async () => {
 		H.store.current.transactions = [{ hash: "0xh1", account: ACCT_A, chainId: 1, updatedAt: 3000, calls: [] } as never]
 		const router = makeRouter()
-		const feed = mount(RecentActivityView, { shallow: true, global: { plugins: [router], stubs: { SectionLabel: false } } })
+		const feed = mount(RecentActivityView, {
+			shallow: true,
+			global: { plugins: [router], stubs: { SectionLabel: false, RouterLink: false } },
+		})
 		await flushPromises()
 		expect(feed.text()).toContain("Recent activity")
 		const link = feed.find('[data-testid="activity-view-all"]')
 		expect(link.text()).toBe("View history")
+		expect(link.element.tagName).toBe("A")
+		expect(link.attributes("href")).toBe("/popup/activity")
 		await link.trigger("click")
 		await flushPromises()
 		expect(router.currentRoute.value.fullPath).toBe("/popup/activity")
@@ -579,6 +606,24 @@ describe("RecentActivityView — its header", () => {
 		await flushPromises()
 		expect(empty.text()).toContain("NOTHING HERE YET")
 		expect(empty.text()).toContain("Recent activity")
+	})
+
+	test("a token page's 'View history' opens History filtered to that token", async () => {
+		H.store.current.transactions = [
+			{ hash: "0xh1", account: ACCT_A, chainId: 1, updatedAt: 3000, calls: [{ contract: "0xtok" }] } as never,
+		]
+		const router = makeRouter()
+		const feed = mount(RecentActivityView, {
+			shallow: true,
+			props: { token: { id: 4, contract: "0xtok", symbol: "TOK" } },
+			global: { plugins: [router], stubs: { RouterLink: false } },
+		})
+		await flushPromises()
+		const link = feed.find('[data-testid="activity-view-all"]')
+		expect(link.attributes("href")).toBe("/popup/activity?token=4")
+		await link.trigger("click")
+		await flushPromises()
+		expect(router.currentRoute.value.fullPath).toBe("/popup/activity?token=4")
 	})
 })
 
@@ -687,6 +732,13 @@ describe("RecentActivityView — stalled incoming scan line", () => {
 		expect(w.find("[data-testid='activity-feed-root']").exists()).toBe(true)
 		expect(line(w).text()).toContain("Older incoming transfers may be missing")
 		expect(retry(w).text()).toBe("Retry")
+	})
+
+	test("the stalled-sync Retry carries the label role", async () => {
+		H.getIncomingSyncHealth.mockResolvedValue({ stalled: true, since: 1 })
+		const w = mountFeed()
+		await flushPromises()
+		expect(retry(w).classes()).toContain("type--label")
 	})
 
 	test("a token lookup that rejects at mount does not abort the rest of mount — the health is still read", async () => {
@@ -835,8 +887,9 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 
 	test("each in-flight op's card reads its title, icon, chips and amount from the record and its token", async () => {
 		H.getTokens.mockResolvedValue([
-			{ id: 42, symbol: "USDC", decimals: 6 },
-			{ id: 43, symbol: "", decimals: 6 },
+			{ id: 42, symbol: "USDC", decimals: 6, hasDecimals: true },
+			{ id: 43, symbol: "", decimals: 6, hasDecimals: true },
+			{ id: 44, symbol: "RAW", decimals: 0, hasDecimals: false },
 		])
 		// Newest first: the table's order is the cards' order.
 		const table: [Record<string, unknown>, Record<(typeof FIELDS)[number], unknown>][] = [
@@ -857,8 +910,19 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 					title: "USDC",
 					icon: "arrow-narrow-up-right",
 					originLabel: null,
-					amount: "0",
+					amount: null,
 					amountSymbol: "USDC",
+					transferTypeLabel: null,
+				},
+			],
+			[
+				{ kind: "transfer", tokenId: 44, amountRaw: "2000000" },
+				{
+					title: "RAW",
+					icon: "arrow-narrow-up-right",
+					originLabel: null,
+					amount: null,
+					amountSymbol: "RAW",
 					transferTypeLabel: null,
 				},
 			],
@@ -951,5 +1015,402 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 		})
 		await flushPromises()
 		expect(w.findAllComponents({ name: "TransactionAwaitingCard" }).map((c) => c.props("jobId"))).toEqual(["mine"])
+	})
+})
+
+describe("RecentActivityView — hydration order", () => {
+	// The executing-task snapshot lands before the journal's, so a queued send first draws with no stage known.
+	const cards = (w: ReturnType<typeof mountView>) =>
+		w
+			.findAllComponents({ name: "TransactionAwaitingCard" })
+			.map((c) => ({ stage: c.props("stage"), subtitle: c.props("subtitle"), cancellable: c.props("cancellable") }))
+
+	test("a queued send's card draws at once with no stage line until the journal snapshot lands, then reads queued", async () => {
+		const ops = deferred<unknown[]>()
+		H.getTasks.mockResolvedValue([uiTransferTask(ACCT_A)])
+		H.getOperations.mockReturnValue(ops.promise)
+		const w = mountView()
+		await flushPromises()
+		expect(vmOf(w).hasOrphanExecutingTask).toBe(true)
+		expect(cards(w)).toEqual([{ stage: null, subtitle: null, cancellable: false }])
+
+		ops.resolve([{ ...inFlightTransferOp(ACCT_A), progress: { stage: "queued" } }])
+		await flushPromises()
+		expect(vmOf(w).hasOrphanExecutingTask).toBe(false)
+		expect(cards(w)).toEqual([{ stage: "queued", subtitle: "Waiting for your earlier send", cancellable: true }])
+	})
+
+	test("a Send-page task with no running step and no record yet draws no stage line, before or after the snapshot", async () => {
+		const ops = deferred<unknown[]>()
+		H.getTasks.mockResolvedValue([uiTransferTask(ACCT_A)])
+		H.getOperations.mockReturnValue(ops.promise)
+		const w = mountView()
+		await flushPromises()
+		expect(cards(w)).toEqual([{ stage: null, subtitle: null, cancellable: false }])
+
+		ops.resolve([])
+		await flushPromises()
+		expect(cards(w)).toEqual([{ stage: null, subtitle: null, cancellable: false }])
+
+		const created = { ...inFlightTransferOp(ACCT_A), progress: { stage: "queued" } }
+		H.journalAdded.emit(created)
+		await flushPromises()
+		expect(cards(w)).toEqual([{ stage: "queued", subtitle: "Waiting for your earlier send", cancellable: true }])
+	})
+
+	test("a snapshot that fails while the port stays up is retried, and a scope switch drops the retry", async () => {
+		vi.useFakeTimers()
+		try {
+			H.getTasks.mockResolvedValue([uiTransferTask(ACCT_A)])
+			H.getOperations.mockRejectedValueOnce(new Error("service busy"))
+			const w = mountView()
+			await flushPromises()
+			expect(cards(w)).toEqual([{ stage: null, subtitle: null, cancellable: false }])
+
+			H.getOperations.mockResolvedValueOnce([{ ...inFlightTransferOp(ACCT_A), progress: { stage: "queued" } }])
+			await vi.advanceTimersByTimeAsync(2_000)
+			expect(cards(w)).toEqual([{ stage: "queued", subtitle: "Waiting for your earlier send", cancellable: true }])
+
+			H.getOperations.mockRejectedValueOnce(new Error("service busy"))
+			H.store.current.account = { address: ACCT_B }
+			await flushPromises()
+			const reads = H.getOperations.mock.calls.length
+			H.store.current.account = { address: ACCT_A }
+			await flushPromises()
+			await vi.advanceTimersByTimeAsync(2_000)
+			expect(H.getOperations.mock.calls.length, "only the current scope's read runs").toBe(reads + 1)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("an unmount while the mount awaits its task snapshot reads no journal and schedules no retry", async () => {
+		vi.useFakeTimers()
+		try {
+			const tasks = deferred<unknown[]>()
+			H.getTasks.mockReturnValue(tasks.promise)
+			H.getOperations.mockRejectedValue(new Error("disconnected"))
+			const w = mountView()
+			await flushPromises()
+			w.unmount()
+			tasks.resolve([])
+			await flushPromises()
+			await vi.advanceTimersByTimeAsync(10_000)
+			expect(H.getOperations).not.toHaveBeenCalled()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("a recent terminal record that lands before its task clears the task when the task lands", async () => {
+		const w = mountView()
+		await flushPromises()
+		const tasks = deferred<unknown[]>()
+		H.getTasks.mockReturnValue(tasks.promise)
+		H.getOperations.mockResolvedValue([{ ...inFlightTransferOp(ACCT_B), progress: { stage: "cancelled" }, terminalAt: Date.now() }])
+		H.store.current.account = { address: ACCT_B }
+		await flushPromises()
+
+		tasks.resolve([uiTransferTask(ACCT_B, "task-b")])
+		await flushPromises()
+		expect(vmOf(w).executingTask).toBeNull()
+		expect(cards(w)).toEqual([])
+	})
+
+	// An earlier send of the same token ended moments before a later one started: same kind and token.
+	const earlierEnded = (account: string) => ({
+		...inFlightTransferOp(account, "op-earlier"),
+		createdAt: 1,
+		progress: { stage: "succeeded" },
+		terminalAt: Date.now(),
+	})
+	const laterTask = (account: string) => ({ ...uiTransferTask(account, "task-later"), createdAt: 2 })
+
+	test("an earlier send's terminal record leaves a later send's task, whichever snapshot lands second", async () => {
+		H.getTasks.mockResolvedValue([laterTask(ACCT_A)])
+		H.getOperations.mockResolvedValue([earlierEnded(ACCT_A)])
+		const w = mountView()
+		await flushPromises()
+		expect(vmOf(w).executingTask?.id, "journal second").toBe("task-later")
+
+		const tasks = deferred<unknown[]>()
+		H.getTasks.mockReturnValue(tasks.promise)
+		H.getOperations.mockResolvedValue([earlierEnded(ACCT_B)])
+		H.store.current.account = { address: ACCT_B }
+		await flushPromises()
+		tasks.resolve([laterTask(ACCT_B)])
+		await flushPromises()
+		expect(vmOf(w).executingTask?.id, "task second").toBe("task-later")
+	})
+
+	test("an earlier send's record turning terminal leaves a later send's task", async () => {
+		H.getTasks.mockResolvedValue([laterTask(ACCT_A)])
+		const w = mountView()
+		await flushPromises()
+		H.journalUpdated.emit(earlierEnded(ACCT_A))
+		await flushPromises()
+		expect(vmOf(w).executingTask?.id).toBe("task-later")
+	})
+
+	test("a running step names itself before the snapshot lands", async () => {
+		const ops = deferred<unknown[]>()
+		const task = { ...uiTransferTask(ACCT_A), subtasks: [{ status: H.TaskStatus.Processing, content: { label: "Generating proof" } }] }
+		H.getTasks.mockResolvedValue([task])
+		H.getOperations.mockReturnValue(ops.promise)
+		const w = mountView()
+		await flushPromises()
+		expect(cards(w)).toEqual([{ stage: null, subtitle: "Generating proof...", cancellable: false }])
+	})
+})
+
+describe("RecentActivityView — a journal record of another scope runs no side effect", () => {
+	const TOK = { id: 7, contract: "0xtok", symbol: "TOK", decimals: 18, hasDecimals: true }
+	/** A cancelled transfer of TOK to 0xrcpt: it matches the placeholder and the task below by account and token alone. */
+	const terminal = (over: Record<string, unknown> = {}) => ({
+		id: "op-done",
+		accountAddress: ACCT_A,
+		profileId: "p1",
+		networkId: "net-1",
+		kind: "transfer",
+		tokenId: TOK.id,
+		recipientAddress: "0xrcpt",
+		amountRaw: "1",
+		createdAt: 1,
+		terminalAt: Date.now(),
+		progress: { stage: "cancelled" },
+		...over,
+	})
+	const transferTask = {
+		...uiTransferTask(ACCT_A),
+		content: { kind: H.ContentKind.Transfer, senderAddress: ACCT_A, tokenId: TOK.id, amount: "1" },
+	}
+
+	/** The current scope's placeholder, executing task and pending cancel, all of which a terminal record of TOK clears. */
+	async function mountWithState() {
+		H.getTokens.mockResolvedValue([TOK])
+		H.getTasks.mockResolvedValue([transferTask])
+		const remove = vi.fn()
+		Object.assign(H.store.current, {
+			awaitingTransactions: [{ id: "ph-1", account: ACCT_A, destination: "0xrcpt", contract: TOK.contract }],
+			removeAwaitingTransaction: remove,
+		})
+		const w = mountView()
+		await flushPromises()
+		const vm = vmOf(w)
+		vm.pendingCancelJobIds.add("op-done")
+		return { vm, remove }
+	}
+
+	test.each([
+		["another profile", { profileId: "p2" }],
+		["another network", { networkId: "net-2" }],
+		["another account", { accountAddress: ACCT_FOREIGN }],
+	])("%s, through either event: the placeholder, task and cancel state stay, and nothing is held", async (_label, over) => {
+		for (const event of [H.journalAdded, H.journalUpdated]) {
+			const { vm, remove } = await mountWithState()
+			expect(vm.executingTask).not.toBeNull()
+			event.emit(terminal(over))
+			await flushPromises()
+			expect(remove).not.toHaveBeenCalled()
+			expect(vm.executingTask).not.toBeNull()
+			expect(vm.pendingCancelJobIds.has("op-done")).toBe(true)
+			expect(vm.journalOps).toEqual([])
+		}
+	})
+
+	test("the same record in scope clears them, through either event", async () => {
+		for (const event of [H.journalAdded, H.journalUpdated]) {
+			const { vm, remove } = await mountWithState()
+			expect(vm.executingTask).not.toBeNull()
+			event.emit(terminal())
+			await flushPromises()
+			expect(remove).toHaveBeenCalledWith("ph-1")
+			expect(vm.executingTask).toBeNull()
+			expect(vm.pendingCancelJobIds.has("op-done")).toBe(false)
+			expect(vm.journalOps.map((op: { id: string }) => op.id)).toEqual(["op-done"])
+		}
+	})
+
+	test("with no active profile a stamped record is taken in by neither the snapshot nor an event; with one it is", async () => {
+		H.store.current.profile = null
+		H.getOperations.mockResolvedValue([inFlightTransferOp(ACCT_A)])
+		const w = mountView()
+		await flushPromises()
+		H.journalAdded.emit(inFlightTransferOp(ACCT_A, "op-b"))
+		expect(vmOf(w).journalOps).toEqual([])
+
+		H.store.current.profile = { id: "p1" }
+		await flushPromises()
+		H.journalAdded.emit(inFlightTransferOp(ACCT_A, "op-b"))
+		expect(vmOf(w).journalOps.map((op: { id: string }) => op.id)).toEqual(["op-b", "op-a"])
+	})
+
+	test("a record taken in before a scope switch is gone after it", async () => {
+		const w = mountView()
+		await flushPromises()
+		H.journalAdded.emit(inFlightTransferOp(ACCT_A))
+		expect(vmOf(w).journalOps).toHaveLength(1)
+		H.store.current.network = { id: "net-2", chainId: 2 }
+		expect(vmOf(w).journalOps).toEqual([])
+	})
+
+	test("on mount and on reconnect, a recent terminal row of another network leaves the task; an in-scope one clears it", async () => {
+		H.getOperations.mockResolvedValue([terminal({ networkId: "net-2" })])
+		const { vm } = await mountWithState()
+		expect(vm.executingTask).not.toBeNull()
+		H.journalConnected.emit()
+		await flushPromises()
+		expect(vm.executingTask).not.toBeNull()
+		H.getOperations.mockResolvedValue([terminal()])
+		H.journalConnected.emit()
+		await flushPromises()
+		expect(vm.executingTask).toBeNull()
+
+		const remounted = await mountWithState()
+		expect(remounted.vm.executingTask).toBeNull()
+	})
+})
+
+describe("RecentActivityView — a queued send that asks again", () => {
+	/** 0.88 FJ found at the turn, above the 0.8 FJ the person accepted. */
+	const FEE = "880000000000000000"
+	const CAP = "800000000000000000"
+	const PRIVATE_FJ = { type: "private_fpc", fpcId: "fpc-1", isProtocol: true }
+	const PUBLIC_FJ = { type: "fj", isProtocol: false }
+	const RECIPIENT = `0x${"b".repeat(64)}`
+	const asking = (over: Record<string, unknown> = {}, reask: Record<string, unknown> = {}) => ({
+		id: "op-r",
+		profileId: "p1",
+		accountAddress: ACCT_A,
+		networkId: "net-1",
+		kind: "transfer",
+		tokenId: 42,
+		amountRaw: "1500000",
+		transferType: 0,
+		recipientAddress: RECIPIENT,
+		terminalAt: null,
+		createdAt: 1,
+		progress: { stage: "queued", reask: { fee: FEE, cap: CAP, payer: PRIVATE_FJ, ...reask } },
+		...over,
+	})
+
+	const card = (w: ReturnType<typeof mountView>, id = "op-r") =>
+		w.findAllComponents({ name: "TransactionAwaitingCard" }).find((c) => c.props("jobId") === id)
+	const sheet = (w: ReturnType<typeof mountView>) => w.findComponent({ name: "SendReviewSheet" })
+
+	async function openReview(ops: unknown[] = [asking()]) {
+		H.getTokens.mockResolvedValue([{ id: 42, symbol: "USDC", decimals: 6, hasDecimals: true }])
+		H.getOperations.mockResolvedValue(ops)
+		const w = mountView()
+		await flushPromises()
+		card(w)?.vm.$emit("review", "op-r")
+		await flushPromises()
+		return w
+	}
+
+	test("a queued Send-page transfer waits on the send before it; a queued dApp record keeps its stage line", async () => {
+		H.getOperations.mockResolvedValue([
+			{ ...asking(), id: "op-t", progress: { stage: "queued" } },
+			{ ...asking(), id: "op-d", kind: "dapp_execute", progress: { stage: "queued" } },
+		])
+		const w = mountView()
+		await flushPromises()
+		expect(card(w, "op-t")?.props()).toMatchObject({ subtitle: "Waiting for your earlier send", reaskLine: null })
+		expect(card(w, "op-d")?.props()).toMatchObject({ subtitle: "Queued...", reaskLine: null })
+		expect(sheet(w).exists()).toBe(false)
+	})
+
+	test("a re-ask row reads its line, and its review opens the sheet with the new fee against the accepted one", async () => {
+		H.refreshPrices.mockResolvedValue({
+			quotes: { aztec: { coingeckoId: "aztec", usd: 0.0147, fetchedAt: Date.now(), providerUpdatedAt: null } },
+			pricedTokens: {},
+		})
+		H.getTokens.mockResolvedValue([{ id: 42, symbol: "USDC", decimals: 6, hasDecimals: true }])
+		H.getOperations.mockResolvedValue([asking()])
+		const w = mountView()
+		await flushPromises()
+		expect(card(w)?.props("reaskLine")).toBe("Fee went up. Review")
+		expect(sheet(w).exists()).toBe(false)
+
+		card(w)?.vm.$emit("review", "op-r")
+		await flushPromises()
+		expect(sheet(w).props()).toMatchObject({
+			show: true,
+			amount: "1.5",
+			symbol: "USDC",
+			recipientAddress: RECIPIENT,
+			canSend: true,
+			sending: false,
+			reask: { now: "0.88 FJ ($0.013)", nowAmount: "0.88", capAmount: "0.8" },
+		})
+	})
+
+	test("Send accepts the fee the sheet opened with once, a double press included, then closes", async () => {
+		const answer = deferred<boolean>()
+		H.acceptQueuedFee.mockReturnValue(answer.promise)
+		const w = await openReview()
+		sheet(w).vm.$emit("send")
+		sheet(w).vm.$emit("send")
+		await flushPromises()
+		expect(sheet(w).props("sending")).toBe(true)
+		answer.resolve(true)
+		await flushPromises()
+		expect(H.acceptQueuedFee.mock.calls).toEqual([["op-r", FEE]])
+		expect(sheet(w).props("show"), "closed, and still mounted so focus returns to the row").toBe(false)
+		sheet(w).vm.$emit("send")
+		await flushPromises()
+		expect(H.acceptQueuedFee).toHaveBeenCalledTimes(1)
+	})
+
+	test("a refused accept closes the sheet and leaves the row reading its record", async () => {
+		H.acceptQueuedFee.mockRejectedValue(new Error("port closed"))
+		const w = await openReview()
+		sheet(w).vm.$emit("send")
+		await flushPromises()
+		expect(sheet(w).props("show")).toBe(false)
+		expect(card(w)?.props("reaskLine")).toBe("Fee went up. Review")
+	})
+
+	test.each([
+		["its fee changes", { stage: "queued", reask: { fee: "890000000000000000", cap: CAP, payer: PRIVATE_FJ } }],
+		["it leaves the re-ask state", { stage: "pending" }],
+	])("the sheet closes when %s, so no press accepts a figure it did not open with", async (_name, progress) => {
+		const w = await openReview()
+		H.journalUpdated.emit({ ...asking(), progress })
+		await flushPromises()
+		expect(sheet(w).props("show")).toBe(false)
+		expect(usePopupStore().isOpened("send_reask_review"), "the slot leaves the popup stack with it").toBe(false)
+		sheet(w).vm.$emit("send")
+		await flushPromises()
+		expect(H.acceptQueuedFee).not.toHaveBeenCalled()
+	})
+
+	test("a review of a record it cannot draw opens nothing; a scope switch drops the sheet", async () => {
+		const w = await openReview([asking({ transferType: undefined })])
+		expect(sheet(w).exists()).toBe(false)
+		expect(usePopupStore().len).toBe(0)
+
+		const shown = await openReview()
+		H.store.current.account = { address: ACCT_B }
+		await flushPromises()
+		expect(sheet(shown).exists()).toBe(false)
+		expect(usePopupStore().isOpened("send_reask_review")).toBe(false)
+	})
+
+	test.each([
+		["Private Fee Juice", PRIVATE_FJ, "contract", "hidden"],
+		["Public Fee Juice", PUBLIC_FJ, "account", "exposed"],
+	])("%s draws its facts as Send drew them, and the button arms only after the usual pause", async (_name, payer, payerKind, you) => {
+		vi.useFakeTimers()
+		try {
+			const w = await openReview([asking({}, { payer })])
+			expect(sheet(w).props()).toMatchObject({ payerKind, payerType: payer.type, facts: { you }, ready: false })
+			await vi.advanceTimersByTimeAsync(REVIEW_ARM_MS - 1)
+			expect(sheet(w).props("ready")).toBe(false)
+			await vi.advanceTimersByTimeAsync(1)
+			expect(sheet(w).props("ready")).toBe(true)
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 })

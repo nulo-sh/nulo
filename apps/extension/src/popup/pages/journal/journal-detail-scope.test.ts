@@ -71,6 +71,16 @@ describe("readJournalDetail", () => {
 		expect(await readJournalDetail(journalHolding(failedSend(overrides)), ID, () => SCOPE)).toBeUndefined()
 	})
 
+	test("with no active profile or network a record stamped with them is not shown", async () => {
+		expect(await readJournalDetail(journalHolding(failedSend()), ID, () => ({ ...SCOPE, profileId: undefined }))).toBeUndefined()
+		expect(await readJournalDetail(journalHolding(failedSend()), ID, () => ({ ...SCOPE, networkId: undefined }))).toBeUndefined()
+	})
+
+	test("a record with no network stamp is shown on the active network, as in the feeds", async () => {
+		const record = failedSend({ networkId: undefined })
+		expect(await readJournalDetail(journalHolding(record), ID, () => SCOPE)).toBe(record)
+	})
+
 	test("a read that returns after a scope switch is judged against the new scope", async () => {
 		let answer: (record: OperationRecord) => void = () => {}
 		const client = { getOperation: vi.fn(() => new Promise<OperationRecord | undefined>((resolve) => (answer = resolve))) }

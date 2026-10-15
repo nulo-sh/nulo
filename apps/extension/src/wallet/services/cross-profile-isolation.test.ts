@@ -21,7 +21,7 @@ import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { PROFILE_SERVICE_NAME, type ProfileInfo } from "@/wallet/services/profile/spec"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
-import { svc } from "./composition-harness"
+import { svc, tokenListStub } from "./composition-harness"
 import { ContactService } from "./contact/service"
 import { FpcService } from "./fpc/service"
 import { AuthRegistryService } from "./auth-registry/service"
@@ -166,6 +166,7 @@ describe("cross-profile isolation (standing gate)", () => {
 			)
 			services.add(svc(TaskService.name, {}))
 			services.add(svc(OperationJournalService.name, { purgeForProfile: async () => {} }))
+			services.add(tokenListStub())
 			tokens = new TokenService(mkLogger(), api)
 			services.add(tokens)
 			await services.start()
@@ -232,7 +233,6 @@ describe("cross-profile isolation (standing gate)", () => {
 			services.add(
 				svc(TokenService.name, {
 					onTokenAdded: new EventHandler(),
-					onTokenUpdated: new EventHandler(),
 					onTokenDeleted: new EventHandler(),
 					getTokensRaw: async (pid: string) => (pid === p1.id ? [mkToken(1, p1.id)] : pid === p2.id ? [mkToken(2, p2.id)] : []),
 				}),

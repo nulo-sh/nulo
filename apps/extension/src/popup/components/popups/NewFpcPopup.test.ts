@@ -12,15 +12,18 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
+import { holdReads, liveBus } from "../../../../tests/helpers/held-read"
 
 const fpcServiceMock = {
 	addFpc: vi.fn(),
 	getFpcs: vi.fn(),
 	disconnect: vi.fn(),
-	onFpcAdded: { add: vi.fn(), remove: vi.fn() },
-	onFpcUpdated: { add: vi.fn(), remove: vi.fn() },
-	onFpcDeleted: { add: vi.fn(), remove: vi.fn() },
+	onFpcAdded: liveBus(),
+	onFpcUpdated: liveBus(),
+	onFpcDeleted: liveBus(),
 }
+/** A component never removes its handlers, so each test gets buses no earlier mount registered on. */
+const freshBuses = () => Object.assign(fpcServiceMock, { onFpcAdded: liveBus(), onFpcUpdated: liveBus(), onFpcDeleted: liveBus() })
 const openToastMock = vi.fn()
 
 // Vitest requires `function` expressions (not arrows) for mocks used with `new`.
@@ -90,6 +93,7 @@ async function fillForm(w: VueWrapper) {
 }
 
 beforeEach(() => {
+	freshBuses()
 	fpcServiceMock.getFpcs.mockResolvedValue([])
 	fpcServiceMock.addFpc.mockResolvedValue(undefined)
 })
@@ -179,5 +183,58 @@ describe("NewFpcPopup — the processing error note", () => {
 		expect(w.text()).toContain("Failed to add FPC.")
 		expect(w.find("i[data-name='info']").attributes("data-color")).toBe("red")
 		expect(w.emitted("onClose")).toBeFalsy()
+	})
+})
+
+describe("NewFpcPopup — duplicate names", () => {
+	async function typeName(w: VueWrapper, name: string) {
+		await w.findAll("input")[0].setValue(name)
+		await flushPromises()
+		return {
+			warns: w.text().includes("Already exist"),
+			disabled: w.find('[data-testid="form-submit"]').attributes("disabled") !== undefined,
+		}
+	}
+
+	test("a saved name with outer spaces added warns and keeps Add disabled; another case or an unnamed FPC does not", async () => {
+		fpcServiceMock.getFpcs.mockResolvedValue([
+			{ id: "f1", name: "Alice", address: `0x${"1".repeat(64)}` },
+			{ id: "f2", address: `0x${"2".repeat(64)}` },
+		])
+		const w = await mountShown()
+		await w.findAll("input")[1].setValue(VALID_HEX)
+		expect(await typeName(w, "Alice ")).toEqual({ warns: true, disabled: true })
+		expect(await typeName(w, " Alice")).toEqual({ warns: true, disabled: true })
+		expect(await typeName(w, "alice")).toEqual({ warns: false, disabled: false })
+		expect(await typeName(w, "Bob ")).toEqual({ warns: false, disabled: false })
+		pressEnterOnInput()
+		await flushPromises()
+		expect(fpcServiceMock.addFpc).toHaveBeenCalledWith("net-1", "default_sponsored", VALID_HEX, "Bob ")
+	})
+})
+
+describe("NewFpcPopup — the list under a held read", () => {
+	test("(BUG PIN) an FPC added while the read is out is dropped, so its name does not warn; one added after it does", async () => {
+		// Today's behaviour, kept until the owner decides: getFpcs answers after work that follows its
+		// storage read, so an FPC added during that work is missing until the popup reopens.
+		const reads = holdReads<unknown[]>(fpcServiceMock.getFpcs)
+		const w = mount(NewFpcPopup, { props: { show: false }, global: { stubs: STUBS, components: { ProcessingErrorNote } } })
+		wrappers.push(w)
+		await w.setProps({ show: true })
+		const alice = { id: "f2", name: "Alice", address: `0x${"2".repeat(64)}` }
+		const warns = async () => {
+			await w.findAll("input")[0].setValue("Alice")
+			await flushPromises()
+			return w.text().includes("Already exist")
+		}
+
+		fpcServiceMock.onFpcAdded.invoke(alice)
+		expect(reads).toHaveLength(1)
+		reads[0]?.resolve([{ id: "f1", name: "Sponsor", address: `0x${"1".repeat(64)}` }])
+		await flushPromises()
+		expect(await warns()).toBe(false)
+
+		fpcServiceMock.onFpcAdded.invoke(alice)
+		expect(await warns()).toBe(true)
 	})
 })

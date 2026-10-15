@@ -1,0 +1,20 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "nulo-tokens",
+	"compatibility_date": "2026-09-01",
+	"account_id": "0f1688fc6a4b6acf3fa55cf71e1bed26",
+	// Static assets only, no Worker script: the host serves the signed envelope and nothing it computes.
+	// The headers live in public/_headers, which wrangler parses and never serves.
+	"assets": {
+		"directory": "./public",
+		"not_found_handling": "none",
+		"html_handling": "none"
+	},
+	// tokens.nulo.sh is attached as a Custom Domain outside this file, as for the landing: the Workers
+	// Builds token holds no zone permission, and wrangler leaves an attached domain alone while
+	// `routes` names none. No workers.dev or preview origin: wallets read one name only.
+	"workers_dev": false,
+	"preview_urls": false,
+	// Privacy Policy § 5.5 lists every request record the Developer can see; Workers Logs is not one.
+	"observability": { "enabled": false }
+}

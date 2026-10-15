@@ -1,0 +1,15 @@
+# Status: chain-endpoints
+
+- 2026-10-10: worktree adopted and registered; seven issues read; recon done (3 sonnet explorers); recon.md written. #171's "seeds" claim does not hold (the RPC traffic is the node-status read and the Home gas read); #101's viewers have no shadow root yet.
+- 2026-10-10: plan.md (arc 1 decision-free; arc 2 waits on page 12, R2, R3, R5), OWNER-ASKS.md (OA-1 to OA-6) drafted; dual audit round 1 started (Codex gpt-6.1-sol high, Opus Plan).
+- 2026-10-10: round 1: Codex reject (14 findings), Opus conditional approve; all accepted. plan.md v2 (arc 2 split into 2a/2b/2c), OWNER-ASKS OA-5 rewritten and OA-7 added, recon citations fixed. Codex round 2 (resume) next.
+- 2026-10-10: round 2 (Codex resume): reject, 9 findings, all accepted (2 in part); canary and link-local probes on both browsers; plan v3. Final fresh Codex pass next.
+- 2026-10-10: final fresh Codex pass: reject (arc 2a's connect-src blocks arc 1's http canary), 7 findings, all accepted; plan v4. Confirmation resume running.
+- 2026-10-10: confirmation resume: approve (one Low accepted). Panel converged; plan committed on the worktree branch, awaiting the orchestrator.
+- 2026-10-10: approved by the orchestrator (D-orch-1 to D-orch-3: no stack, arc 1 only, D7 asked first); merged dev 6201f8b (#267's host-registry runner, D9 satisfied). Arc 1 phase 1.1 starting.
+- 2026-10-10: phase 1.1 gate (Fast: lint, typecheck:all, test 726 files) pass; guard + 17 unit cases.
+- 2026-10-10: phase 1.2 STOP RULE: whole smoke on Chrome behind the guard fails 10 tests in 6 files; same files pass unguarded and fail with only lb.drpc.live refused in-browser (lessons/phase-1.md). Codex r1 reject (5 findings, Q1/Q2 yes), Opus approve (7 Low, Q1/Q2 yes); fixes in 6de2f34. Panel consulted on the stop rule.
+- 2026-10-10: Firefox whole smoke behind the guard: the same 10 node-bound failures plus 3 in `passkey-toolbar-panel` (passes unguarded). Local 400-stub probe passes Opus's conditions on both browsers (31/32 Firefox, 26/27 Chrome, only the fee picker). Codex, re-consulted with the probe: option 2 plus a seeded-sponsor fixture for the picker (5/5 on both browsers). Decision D23-D25; building option 2.
+- 2026-10-10: option 2 built (stand-in node, one interception per origin, seeded sponsor). Codex r2 and r3 reject, Opus r2 reject, Opus checks of the r3 fix and of the kill fix approve; every finding fixed or dispositioned in plan.md. Merged dev 236a2cd (#270).
+- 2026-10-10: whole smoke on the merged tree found a Chrome-only regression: the stand-in's DevTools session parked the killed service worker's host (sw-resilience, 2 tests, 3/3 runs). Fixed by suspending held interceptions for a kill (D26).
+- 2026-10-10: phase 1.2 gate pass: six whole-smoke runs at retry 0 (Chrome 206/206 x3, Firefox 207/207 x3), canary zero on every launch, no undeclared host. Phase 1.3: negative proof fails "went direct" on both browsers and passes restored; unshare refused by the host's AppArmor userns restriction; network files 5/5 on both browsers. PR next.

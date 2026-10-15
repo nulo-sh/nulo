@@ -14,8 +14,10 @@ import { ServiceCollection, type IService } from "@/wallet/base"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { LoggerStore } from "@/wallet/logger"
 import { ConfigStore } from "@/wallet/config"
-import { PROFILE_SERVICE_NAME, type ProfileInfo } from "@/wallet/services/profile/spec"
+import { PROFILE_SERVICE_NAME, type ProfileInfo, type RunFence } from "@/wallet/services/profile/spec"
+import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import { recordWrites } from "../storage-write-log"
+import { getInitials } from "@/utils"
 import { ContactService } from "./service"
 
 /**
@@ -30,6 +32,10 @@ class FakeProfileService implements IService {
 	public readonly onProfileDeleted = new EventHandler<ProfileInfo>()
 	private readonly deletionState = new ProfileDeletionState()
 	private active: ProfileInfo | undefined
+	/** The live session's serial; every `setActiveProfile` ends the session, as a lock and unlock do. */
+	private session = 0
+	/** Runs once a run fence has passed `assertRunFence`, where a test lands a racing switch. */
+	public afterAssert: (() => void) | undefined
 
 	public async start(): Promise<void> {}
 
@@ -46,8 +52,29 @@ class FakeProfileService implements IService {
 		return { profileId: this.active.id, epoch: this.deletionState.capture(this.active.id) }
 	}
 
+	public async captureRunFence(): Promise<RunFence> {
+		return { ...(await this.captureExecutionFence()), session: this.session, incarnation: "w1" }
+	}
+
+	public async assertRunFence(fence: RunFence): Promise<void> {
+		if (fence?.incarnation !== "w1" || fence.session !== this.session || fence.profileId !== this.active?.id) {
+			throw new SessionEndedError()
+		}
+		this.deletionState.assertCurrent(fence.profileId, fence.epoch)
+		this.afterAssert?.()
+	}
+
+	public isFenceLive(fence: RunFence): boolean {
+		return (
+			fence.session === this.session &&
+			fence.profileId === this.active?.id &&
+			this.deletionState.isCurrent(fence.profileId, fence.epoch)
+		)
+	}
+
 	public setActiveProfile(profile: ProfileInfo | undefined): void {
 		this.active = profile
+		this.session++
 	}
 }
 
@@ -132,6 +159,13 @@ describe("ContactService (port-migrated)", () => {
 			const c = await contactService.addContact("Alice", "0xa")
 			expect(c.abbr).toBe("AL")
 		})
+
+		test("stores the name as the shared sanitizer returns it, and refuses one with nothing visible without writing", async () => {
+			const c = await contactService.addContact(" \u3164ALI\u200Bce\u00A0 Smith ", "0xa")
+			expect([c.name, c.abbr]).toEqual(["ALIce Smith", getInitials("ALIce Smith")])
+			await expect(contactService.addContact("\u3164\u200B ", "0xb")).rejects.toThrow("contact name has no visible characters")
+			expect((await contactService.getContacts()).map((x) => x.name)).toEqual(["ALIce Smith"])
+		})
 	})
 
 	describe("updateContact", () => {
@@ -147,6 +181,13 @@ describe("ContactService (port-migrated)", () => {
 			const c = await contactService.addContact("Alice", "0xa")
 			profile.setActiveProfile(profileB)
 			await expect(contactService.updateContact(c.id, "X", "0xX")).rejects.toThrow(/invalid id/i)
+		})
+
+		test("stores a new name as the shared sanitizer returns it, refuses one with nothing visible, and keeps the name when none is given", async () => {
+			const c = await contactService.addContact("Alice", "0xa")
+			expect((await contactService.updateContact(c.id, "  BOB\u3164 ")).name).toBe("BOB")
+			await expect(contactService.updateContact(c.id, "\u3164")).rejects.toThrow("contact name has no visible characters")
+			expect((await contactService.updateContact(c.id, undefined, "0xb")).name).toBe("BOB")
 		})
 
 		test("emits onContactUpdated", async () => {
@@ -190,30 +231,20 @@ describe("ContactService (port-migrated)", () => {
 		})
 	})
 
-	describe("import/export", () => {
-		test("exports and reimports round-trip", async () => {
+	describe("export", () => {
+		test("exports every contact's name and address", async () => {
 			await contactService.addContact("Alice", "0xaaaa")
 			await contactService.addContact("Bob", "0xbbbb")
-			const json = await contactService.exportContacts()
 
-			// Wipe and reimport into a fresh profile's context.
-			profile.setActiveProfile(profileB)
-			const restored = await contactService.importContacts(json)
+			const exported = JSON.parse(await contactService.exportContacts())
 
-			expect(restored).toHaveLength(2)
-			const all = await contactService.getContacts()
-			expect(all.map((c) => c.name).sort()).toEqual(["Alice", "Bob"])
-		})
-
-		test("import merges duplicate addresses by updating the existing entry", async () => {
-			const original = await contactService.addContact("Alice", "0xsame")
-			const json = JSON.stringify([{ name: "Alicia", address: "0xsame" }])
-			await contactService.importContacts(json)
-
-			const all = await contactService.getContacts()
-			expect(all).toHaveLength(1)
-			expect(all[0].id).toBe(original.id)
-			expect(all[0].name).toBe("Alicia")
+			expect(exported).toHaveLength(2)
+			expect(exported).toEqual(
+				expect.arrayContaining([
+					{ name: "Alice", address: "0xaaaa" },
+					{ name: "Bob", address: "0xbbbb" },
+				]),
+			)
 		})
 	})
 
@@ -290,6 +321,34 @@ describe("ContactService (port-migrated)", () => {
 			expect(all.map((c) => c.name)).toEqual(["Alice", "Alice"])
 		})
 
+		test("restore keeps a name the form can save (25 characters) and trims its outer spaces, like the import", async () => {
+			await contactService.addContact("Alice", "0xa")
+			const [genuine] = await contactService.backup()
+			const full = "Bartholomew Featherstones"
+			expect(full).toHaveLength(25)
+			const doctored = [
+				{ ...genuine, id: "c-full", name: `  ${full}  ` },
+				{ ...genuine, id: "c-long", name: `${full}yz` },
+			]
+			const restored = await contactService.restore(doctored)
+			expect(restored.map((c) => c.name)).toEqual([full, full])
+		})
+
+		test("restore removes invisible characters from a name, keeps its visible spelling with a matching abbreviation, and refuses a name with nothing visible", async () => {
+			await contactService.addContact("Alice", "0xa")
+			const [genuine] = await contactService.backup()
+			const restored = await contactService.restore([
+				{ ...genuine, id: "c-inv", name: "\u3164ALI\u200Bce\u00A0Smith\uFFA0 ", abbr: "XX" },
+				{ ...genuine, id: "c-blank", name: "\u3164\u200B " },
+			])
+			expect(restored.map((c) => [c.name, c.abbr, typeof c.restoreError])).toEqual([
+				["ALIce Smith", getInitials("ALIce Smith"), "undefined"],
+				["\u3164\u200B ", genuine.abbr, "string"],
+			])
+			const raw = await api.storage.local.get(null)
+			expect(Object.keys(raw).some((k) => k.includes("c-blank"))).toBe(false)
+		})
+
 		test("a failed item stores the normalized error MESSAGE string, not the raw error", async () => {
 			// Like every other service, contact normalizes the error through
 			// `toRestoreError`, so a failed restore carries the message STRING,
@@ -309,16 +368,18 @@ describe("ContactService (port-migrated)", () => {
 			// written by a `restore` that skipped parse-before-write and then KEPT-but-hidden by
 			// EntityStorage.decodeRow — codec-hidden private data that survives a
 			// later cleanup's getValues(). Parse-before-write records it instead.
-			const bad = [{ id: "bad-1", profileId: "p1", name: 123, address: "0xa", abbr: "AL" }] as unknown as Parameters<
-				typeof contactService.restore
-			>[0]
+			// A string name passes the sanitizer, so only the schema parse can stop this row.
+			const rows = [
+				{ id: "bad-1", profileId: profileA.id, name: "Ali", address: 123, abbr: "AL" },
+				{ id: "good-1", profileId: profileA.id, name: "Bob", address: "0xb", abbr: "BO" },
+			] as unknown as Parameters<typeof contactService.restore>[0]
 
-			const restored = await contactService.restore(bad)
-			expect(restored).toHaveLength(1)
-			expect(restored[0].restoreError).toBeDefined()
+			const restored = await contactService.restore(rows)
+			expect(restored.map((r) => typeof r.restoreError)).toEqual(["string", "undefined"])
 
 			const raw = await api.storage.local.get(null)
 			expect(Object.keys(raw).some((k) => k.includes("bad-1"))).toBe(false)
+			expect((await contactService.getContacts()).map((c) => c.name)).toEqual(["Bob"])
 		})
 	})
 
@@ -474,6 +535,68 @@ describe("ContactService (port-migrated)", () => {
 			expect(writes.log[1]).toBe(writes.log[0]?.replace(/^set:/, "remove:"))
 			expect(await contactRowCount()).toBe(0)
 			expect(emitted).toHaveLength(0)
+		})
+	})
+
+	describe("run fence", () => {
+		const ADDR = "0xaaaa"
+		const contactWrites = () => recordWrites(api.storage.local, "nulo:core:contacts@")
+
+		test.each<[string, (savedId: string, fence: RunFence) => Promise<unknown>]>([
+			["addContact", (_id, fence) => contactService.addContact("Bob", "0xbbbb", fence)],
+			["updateContact", (id, fence) => contactService.updateContact(id, "Alicia", undefined, fence)],
+		])("a switch after the fence check refuses %s's write and stores nothing", async (_method, write) => {
+			const saved = await contactService.addContact("Alice", ADDR)
+			const fence = await profile.captureRunFence()
+			let switched = false
+			profile.afterAssert = () => {
+				profile.afterAssert = undefined
+				profile.setActiveProfile(profileB)
+				switched = true
+			}
+			const writes = contactWrites()
+			await expect(write(saved.id, fence)).rejects.toBeInstanceOf(SessionEndedError)
+			writes.restore()
+			expect(switched).toBe(true)
+			expect(writes.log).toEqual([])
+			profile.setActiveProfile(profileA)
+			expect((await contactService.getContacts()).map((c) => c.name)).toEqual(["Alice"])
+		})
+
+		test.each<[string, (live: RunFence) => unknown]>([
+			[
+				"a fence whose session ended",
+				(live) => {
+					profile.setActiveProfile(profileA)
+					return live
+				},
+			],
+			["a fence another worker issued", (live) => ({ ...live, incarnation: "w0" })],
+			["a string", () => profileA.id],
+		])("%s is refused by every fenced method, and nothing is written", async (_label, forge) => {
+			const saved = await contactService.addContact("Alice", ADDR)
+			const fence = forge(await profile.captureRunFence()) as RunFence
+			const writes = contactWrites()
+			await expect(contactService.getContacts(fence)).rejects.toBeInstanceOf(SessionEndedError)
+			await expect(contactService.addContact("Bob", "0xbbbb", fence)).rejects.toBeInstanceOf(SessionEndedError)
+			await expect(contactService.updateContact(saved.id, "Alicia", undefined, fence)).rejects.toBeInstanceOf(SessionEndedError)
+			writes.restore()
+			expect(writes.log).toEqual([])
+		})
+
+		test("null is no fence: the active profile's book, as when the argument is omitted", async () => {
+			const added = await contactService.addContact("Alice", ADDR, null)
+			expect(added.profileId).toBe(profileA.id)
+			expect(await contactService.updateContact(added.id, "Alicia", undefined, null)).toMatchObject({ name: "Alicia" })
+			expect(await contactService.getContacts(null)).toEqual(await contactService.getContacts())
+		})
+
+		test("a live fence acts for its profile", async () => {
+			const fence = await profile.captureRunFence()
+			const added = await contactService.addContact("Alice", ADDR, fence)
+			expect(added.profileId).toBe(fence.profileId)
+			expect(await contactService.updateContact(added.id, "Alicia", undefined, fence)).toMatchObject({ name: "Alicia" })
+			expect((await contactService.getContacts(fence)).map((c) => c.name)).toEqual(["Alicia"])
 		})
 	})
 })

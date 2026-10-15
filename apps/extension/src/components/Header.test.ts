@@ -2,10 +2,12 @@
  * Narrow integration test for the header — deliberately NOT a full Header suite (L4+ convention:
  * e2e owns the header). It pins the wiring unit tests cannot see: the address button hands the FULL
  * active address (not the truncated display text) to the clipboard, both switcher affordances open
- * the accounts popup, and the lock button decides between locking and asking on a fresh count.
+ * the accounts popup, the lock chip runs the shared lock (its behavior: `useLockWallet.test.ts`), and
+ * the network chip's `data-status` follows the store's status.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
+import { nextTick, reactive } from "vue"
 
 const H = vi.hoisted(() => ({
 	openPopup: vi.fn(),
@@ -75,6 +77,7 @@ const STUBS = {
 	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
 	MaterialIcon: { template: '<span data-testid="stub-material" :data-name="name" />', props: ["name", "size", "color"] },
 	AccountAvatar: { template: '<span data-testid="stub-avatar" />', props: ["name", "address", "size"] },
+	Skeleton: { template: '<span data-testid="stub-skeleton" :data-width="width" :data-height="height" />', props: ["width", "height"] },
 }
 
 function mountHeader() {
@@ -90,15 +93,19 @@ beforeEach(() => {
 	H.disconnectListeners.clear()
 	H.getSessionHandle.mockReset().mockResolvedValue("session-1")
 	H.lockActiveProfile.mockClear()
-	H.app = {
+	H.app = reactive({
 		isLogined: true,
 		_isHomeScreenOpened: false,
-		account: { name: "Primary Account", address: FULL_ADDRESS },
-		network: { name: "Alpha V5" },
+		profile: { id: "p1" },
+		account: { name: "Primary Account", address: FULL_ADDRESS, profileId: "p1", chainId: 1 },
+		network: { id: "n1", name: "Alpha V5", chainId: 1 },
+		staleNetwork: null,
 		networkStatus: "Active",
 		approvedSendsInFlight: 0,
 		refreshInFlight: vi.fn(async () => {}),
-	}
+		lockHeldByImport: false,
+		contactImports: new Set(),
+	})
 	H.cache = { failureLog: null, activeTasksCount: null, confirm: {} }
 })
 
@@ -136,99 +143,70 @@ describe("Header — lock", () => {
 		expect(lock.attributes("type")).toBe("button")
 	})
 
-	async function clickLock() {
+	test("a click locks through the shared lock, and unmount releases its session listeners", async () => {
 		const w = mountHeader()
+		expect(H.profileListeners.size + H.disconnectListeners.size).toBe(2)
+
 		await w.find('[data-testid="header-lock"]').trigger("click")
 		await flushPromises()
-	}
-
-	test("nothing running after a fresh journal read: it locks at once", async () => {
-		await clickLock()
-		expect(H.app.refreshInFlight).toHaveBeenCalledTimes(1)
 		expect(H.lockActiveProfile).toHaveBeenCalledExactlyOnceWith("session-1")
 		expect(H.app.isLogined).toBe(false)
-		expect(H.openPopup).not.toHaveBeenCalled()
+
+		w.unmount()
+		expect(H.profileListeners.size + H.disconnectListeners.size).toBe(0)
 	})
 
-	test.each([
-		{ running: 1, description: "1 transaction is still running. Locking cancels it." },
-		{ running: 3, description: "3 transactions are still running. Locking cancels them." },
-	])("$running running: it asks, and locks only when the dialog confirms", async ({ running, description }) => {
-		// The count before the read is 0, so asking proves the decision waited for the read.
-		H.app.refreshInFlight = vi.fn(async () => {
-			H.app.approvedSendsInFlight = running
-		})
-		await clickLock()
+	test("is disabled while a contacts import holds Lock, and enabled once the hold ends", async () => {
+		H.app = reactive({ ...H.app, lockHeldByImport: true })
+		const w = mountHeader()
+		await w.get('[data-testid="header-lock"]').trigger("click")
+		await flushPromises()
+		expect(w.get('[data-testid="header-lock"]').attributes()).toHaveProperty("disabled")
+		expect(H.getSessionHandle).not.toHaveBeenCalled()
 
-		expect(H.openPopup).toHaveBeenCalledWith("confirm")
-		expect(H.cache.confirm).toMatchObject({
-			pre_title: "Running transactions",
-			title: "Lock wallet?",
-			description,
-			confirm_text: "Lock anyway",
-			confirm_color: "red",
-		})
-		expect(H.lockActiveProfile).not.toHaveBeenCalled()
-		expect(H.app.isLogined).toBe(true)
+		H.app.lockHeldByImport = false
+		await nextTick()
+		expect(w.get('[data-testid="header-lock"]').attributes()).not.toHaveProperty("disabled")
+	})
+})
 
-		const confirm = H.cache.confirm.callback as () => void
-		confirm()
-		expect(H.lockActiveProfile).toHaveBeenCalledExactlyOnceWith("session-1")
-		expect(H.app.isLogined).toBe(false)
+describe("Header — network status", () => {
+	test("the network chip's data-status names the store's status", () => {
+		expect(mountHeader().get('[data-testid="network-button"]').attributes("data-status")).toBe("active")
+		H.app.networkStatus = "InvalidChain"
+		expect(mountHeader().get('[data-testid="network-button"]').attributes("data-status")).toBe("invalidchain")
+	})
+})
+
+describe("Header — the account group follows the active scope", () => {
+	const group = (w: ReturnType<typeof mountHeader>) => ({
+		shown: w.find('[data-testid="account-address-copy"]').exists(),
+		skeleton: w.findAll('[data-testid="stub-skeleton"]').map((el) => `${el.attributes("data-width")}x${el.attributes("data-height")}`),
 	})
 
-	test("a journal read that outlasts the budget locks without asking, and its late answer changes nothing", async () => {
-		vi.useFakeTimers()
-		try {
-			// Events had counted a send before the click; an unanswered read must not ask on that count.
-			H.app.approvedSendsInFlight = 1
-			let answer: () => void = () => {}
-			H.app.refreshInFlight = vi.fn(
-				() =>
-					new Promise<void>((resolve) => {
-						answer = () => {
-							H.app.approvedSendsInFlight = 1
-							resolve()
-						}
-					}),
-			)
-			await clickLock()
-			expect(H.lockActiveProfile).not.toHaveBeenCalled()
-
-			await vi.advanceTimersByTimeAsync(3_000)
-			expect(H.lockActiveProfile).toHaveBeenCalledExactlyOnceWith(undefined)
-
-			answer()
-			await flushPromises()
-			expect(H.openPopup).not.toHaveBeenCalled()
-			expect(H.lockActiveProfile).toHaveBeenCalledTimes(1)
-		} finally {
-			vi.useRealTimers()
-		}
+	test("a quarantined active network hides the group with no skeleton, and a runtime quarantine hides it at once", async () => {
+		const w = mountHeader()
+		expect(group(w)).toEqual({ shown: true, skeleton: [] })
+		H.app.staleNetwork = { networkId: "n1" }
+		await nextTick()
+		expect(group(w)).toEqual({ shown: false, skeleton: [] })
+		expect(w.find('[data-testid="header-account-loading"]').exists()).toBe(false)
 	})
 
-	test.each(["profileListeners", "disconnectListeners"] as const)("an event from %s closes the lock dialog it raised", async (source) => {
-		H.app.refreshInFlight = vi.fn(async () => {
-			H.app.approvedSendsInFlight = 1
-		})
-		await clickLock()
-		expect(H.openPopup).toHaveBeenCalledWith("confirm")
-
-		for (const listener of H[source]) listener()
-		expect(H.closePopup).toHaveBeenCalledWith("confirm")
-		expect(H.lockActiveProfile).not.toHaveBeenCalled()
+	test("another network's stale view leaves the active account shown", () => {
+		H.app.staleNetwork = { networkId: "n2" }
+		expect(group(mountHeader())).toEqual({ shown: true, skeleton: [] })
 	})
 
-	test("a session change during the read abandons the lock: no second read, no dialog, no lock", async () => {
-		let changed = false
-		H.app.refreshInFlight = vi.fn(async () => {
-			if (!changed) for (const listener of H.profileListeners) listener()
-			changed = true
-		})
-		await clickLock()
-
-		expect(H.app.refreshInFlight).toHaveBeenCalledTimes(1)
-		expect(H.openPopup).not.toHaveBeenCalled()
-		expect(H.lockActiveProfile).not.toHaveBeenCalled()
+	test("an account of the previous chain or profile never shows: the skeleton holds its footprint", async () => {
+		H.app.account = { name: "Old", address: FULL_ADDRESS, profileId: "p1", chainId: 7 }
+		const w = mountHeader()
+		expect(group(w)).toEqual({ shown: false, skeleton: ["32x32", "90x12", "110x12"] })
+		H.app.account = { name: "Other", address: FULL_ADDRESS, profileId: "p2", chainId: 1 }
+		await nextTick()
+		expect(group(w).shown).toBe(false)
+		H.app.account = undefined
+		await nextTick()
+		expect(w.find('[data-testid="header-account-loading"]').exists()).toBe(true)
 	})
 })

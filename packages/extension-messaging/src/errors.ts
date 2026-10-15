@@ -193,9 +193,9 @@ export class CapabilityNotGrantedError extends WalletError {
 
 /**
  * A dApp request asked for a contract, call, class, account or flag its stored grant does not
- * cover. Raised by the grant check before any window opens or anything runs. The message names the
- * method and the scope field, never a request value, and never reaches a dApp: its envelope is a
- * constant.
+ * cover. Raised by the grant check, or at execution when a call's selector does not run the
+ * function its name claims. The message names only the policy (the method and scope field, or
+ * the binding), never a request value, and never reaches a dApp: its envelope is a constant.
  */
 export class ScopeViolationError extends WalletError {
 	public static readonly CODE = "SCOPE_VIOLATION"
@@ -208,8 +208,10 @@ export class ScopeViolationError extends WalletError {
 /**
  * Raised when a dApp's sendTx is refused because the per-(profileId, chainId)
  * execution lane is at capacity — either the dApp's own per-origin pending cap
- * or the coarse total-lane cap (see `ExecutionMutex`). Backpressure, NOT a
- * permanent failure: the dApp should retry once its in-flight sendTx settle.
+ * or the coarse total-lane cap (see `ExecutionMutex`) — or when any call
+ * arrives while a session's unanswered emoji check already holds its cap of
+ * waiting calls. Backpressure, NOT a permanent failure: the dApp should retry
+ * once its in-flight calls settle.
  *
  * Maps to JSON-RPC code -32005 ("Limit exceeded") when surfaced to dApps, with
  * `data.walletErrorCode = "TOO_MANY_PENDING"`. The message is a stable public
@@ -272,6 +274,25 @@ export class UnsupportedMethodError extends WalletError {
 				? methodName
 				: `${methodName.slice(0, UnsupportedMethodError.MAX_NAME_CHARS)}…`
 		return new UnsupportedMethodError(`Unsupported wallet method: ${shown}`)
+	}
+}
+
+/**
+ * A dApp call whose arguments the wallet API's schema refuses, raised before any scope check,
+ * handler or window reads them. The message names only the method, never an argument value: a
+ * schema transform's own error quotes the value, and this message reaches log lines and journal
+ * rows. The dApp envelope replaces it with a constant.
+ */
+export class InvalidWalletArgumentsError extends WalletError {
+	public static readonly CODE = "INVALID_PARAMS"
+
+	public constructor(message: string, details?: unknown) {
+		super(InvalidWalletArgumentsError.CODE, message, details, "InvalidWalletArgumentsError")
+	}
+
+	/** The method has already passed `assertKnownMethod`, so it is a registry name, not wire text. */
+	public static forMethod(methodName: string): InvalidWalletArgumentsError {
+		return new InvalidWalletArgumentsError(`Invalid arguments for wallet method: ${methodName}`)
 	}
 }
 
@@ -388,6 +409,24 @@ export class OperationNotRecordedError extends WalletError {
 	}
 }
 
+/**
+ * An imported account's stored key is missing, does not open, or derives another address than its
+ * row. Fail-closed for that account only, never a profile-wide block: imported key material is
+ * external. Typed so the popup can say so; a dApp's envelope for it is the unclassified constant.
+ * Its message never names the account: it reaches log lines in the worker and the popup.
+ */
+export class ImportedAccountUnusableError extends WalletError {
+	public static readonly CODE = "IMPORTED_ACCOUNT_UNUSABLE"
+
+	public constructor(message: string, details?: unknown) {
+		super(ImportedAccountUnusableError.CODE, message, details, "ImportedAccountUnusableError")
+	}
+
+	public static because(reason: string): ImportedAccountUnusableError {
+		return new ImportedAccountUnusableError(`Imported account is unusable: ${reason}`)
+	}
+}
+
 /** Request payload failed validation at the RPC boundary. */
 export class ValidationError extends WalletError {
 	public static readonly CODE = "VALIDATION"
@@ -492,8 +531,8 @@ export class RecoveryModeError extends WalletError {
 }
 
 /**
- * Every class a wire `code` rebuilds as. Two subclasses are absent on purpose: `TooManyPendingError`
- * rebuilds as the base `WalletError`, and `RpcConnectError` never crosses the wire.
+ * Every class a wire `code` rebuilds as. `RpcConnectError` is absent on purpose: it never crosses
+ * the wire.
  */
 const REBUILT_AS = [
 	RpcTimeoutError,
@@ -502,6 +541,7 @@ const REBUILT_AS = [
 	JobCancelledError,
 	CapabilityNotGrantedError,
 	ScopeViolationError,
+	TooManyPendingError,
 	ValidationError,
 	InvalidPasswordError,
 	AccountAddressInconsistencyError,
@@ -511,6 +551,7 @@ const REBUILT_AS = [
 	DuplicateWalletError,
 	DuplicateInitializationError,
 	UnsupportedMethodError,
+	InvalidWalletArgumentsError,
 	PxeStaleAnchorError,
 	ContractNotRegisteredError,
 	ChainNotSupportedError,
@@ -519,6 +560,7 @@ const REBUILT_AS = [
 	SessionEndedError,
 	TermsAcceptanceRequiredError,
 	OperationNotRecordedError,
+	ImportedAccountUnusableError,
 ] as const
 
 /** A `Map`, not an object, so a code such as `"constructor"` resolves to nothing. */

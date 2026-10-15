@@ -17,6 +17,7 @@
  */
 
 import { EntityStorage } from "@/wallet/storage"
+import type { MinimalStorageArea } from "@nulo/wallet-core/storage"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import {
 	type IncomingBalanceOutboxRow,
@@ -46,6 +47,7 @@ export function trustKey(profileId: string, networkId: string, contract: string)
 }
 
 export class IncomingTransferRepository {
+	private readonly local: MinimalStorageArea
 	private readonly records: EntityStorage<IncomingTransferRecord>
 	private readonly trust: EntityStorage<IncomingTrustRecord>
 	private readonly cursors: EntityStorage<PublicScanCursor>
@@ -53,6 +55,7 @@ export class IncomingTransferRepository {
 	private readonly arrivals: EntityStorage<ArrivalRow>
 
 	public constructor(browserApi: BrowserApi) {
+		this.local = browserApi.storage.local
 		this.records = new EntityStorage<IncomingTransferRecord>(RECORDS_KEY, browserApi.storage.local, (raw) =>
 			IncomingTransferRecordSchema.parse(raw),
 		)
@@ -148,6 +151,14 @@ export class IncomingTransferRepository {
 		if (floor.arrivalFloor !== undefined) record.arrivalFloor = floor.arrivalFloor
 		if (floor.pending) record.arrivalFloorPending = true
 		await this.trust.set(trustKey(profileId, networkId, contract), record)
+	}
+
+	/** Writes `trust` and every record in ONE `storage.local.set` call, dispatched before this returns.
+	 *  The area applies one call as one batch, so a rejected write leaves none of the rows written. */
+	public commitAcceptance(trust: IncomingTrustRecord, records: IncomingTransferRecord[]): Promise<void> {
+		const items = this.trust.item(trustKey(trust.profileId, trust.networkId, trust.contract), trust)
+		for (const record of records) Object.assign(items, this.records.item(record.id, record))
+		return this.local.set(items)
 	}
 
 	public async listTrust(): Promise<IncomingTrustRecord[]> {

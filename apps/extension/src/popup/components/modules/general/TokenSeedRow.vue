@@ -1,8 +1,8 @@
 <script setup>
 /**
  * A default token that is not a token row yet. Inert on purpose: there is no token id to open,
- * so it is a `div` — never a link, never a picker option. Every string it shows is a compiled-in
- * literal from the seed list; chain data only ever reaches the real `TokenCard`.
+ * so it is a `div` — never a link, never a picker option. Every string it shows comes from the
+ * signed token list; chain data only ever reaches the real `TokenCard`.
  */
 
 /** Components */
@@ -59,10 +59,8 @@ const reason = computed(() => (isFailed.value ? "Couldn't set up" : "Couldn't ve
 }
 
 .symbol {
-	font-family: var(--font-headline);
-	font-weight: 700;
+	composes: type--row-title from global;
 	font-size: 14px;
-	letter-spacing: -0.02em;
 	color: var(--txt-primary);
 }
 
@@ -71,14 +69,12 @@ const reason = computed(() => (isFailed.value ? "Couldn't set up" : "Couldn't ve
 }
 
 .sub {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--caption from global;
 	color: var(--nulo-secondary);
 }
 
 .reason {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--caption from global;
 	color: var(--red);
 }
 
@@ -87,15 +83,12 @@ const reason = computed(() => (isFailed.value ? "Couldn't set up" : "Couldn't ve
 }
 
 .retry {
+	composes: type--label from global;
 	height: 28px;
 	padding: 0 12px;
 	background: transparent;
 	box-shadow: inset 0 0 0 1px var(--nulo-outline);
 
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
 	color: var(--nulo-accent);
 	cursor: pointer;
 

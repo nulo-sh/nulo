@@ -24,7 +24,13 @@ describe("settings/glossary", () => {
 		expect(sections.map((s) => s.get("span").text())).toEqual(["Balances", "Fees", "Apps", "Transactions"])
 		expect(sections.map((s) => s.findAll('[data-testid^="glossary-entry-"]').map((e) => e.attributes("data-testid")))).toEqual([
 			["glossary-entry-private-balance", "glossary-entry-public-balance"],
-			["glossary-entry-fee-juice", "glossary-entry-public-fee-juice", "glossary-entry-private-fee-juice", "glossary-entry-sponsored"],
+			[
+				"glossary-entry-fee-juice",
+				"glossary-entry-public-fee-juice",
+				"glossary-entry-private-fee-juice",
+				"glossary-entry-sponsored",
+				"glossary-entry-priority-fee",
+			],
 			["glossary-entry-authorization", "glossary-entry-name-for-this-app"],
 			["glossary-entry-proving"],
 		])
@@ -37,6 +43,12 @@ describe("settings/glossary", () => {
 		["public-fee-juice", "Public Fee Juice", "Paying a fee with it shows your address.", "Home · fee menu"],
 		["private-fee-juice", "Private Fee Juice", "Paying a fee with it keeps your address hidden.", "Home · fee menu"],
 		["sponsored", "Sponsored", "Someone else pays the network fee for you.", "Fee menu"],
+		[
+			"priority-fee",
+			"Priority fee",
+			"An extra the app asks you to pay the network for faster inclusion, up to the cap shown.",
+			"Approval window",
+		],
 		["authorization", "Authorization", "Lets a contract do one specific thing for you, once.", "Permission window · Connected apps"],
 		["name-for-this-app", "Name for this app", "A private name for this account visible only to this app.", "Permission window"],
 		[

@@ -15,6 +15,7 @@ import { OperationJournalServiceClient } from "@/wallet/services/operation-journ
 import { PriceServiceClient } from "@/wallet/services/price/client"
 
 /** Utils */
+import { journalRecordInScope } from "@/utils/activity-rows"
 import { stringCompare } from "@/utils/string"
 import { parseRawBalance, safeFiatOf } from "@/utils/token-amount"
 import { orderTokenRows } from "@/utils/token-order"
@@ -59,16 +60,11 @@ const tokenImports = ref([])
 // row visibly disappears even if no new journal event fires.
 const tickNow = useTicker(5_000)
 const visibleTokenImports = computed(() => {
-	const account = appStore.account?.address
+	const scope = { accountAddress: appStore.account?.address, profileId: appStore.profile?.id, networkId: appStore.network?.id }
 	const now = tickNow.value ?? Date.now()
 	return tokenImports.value.filter((op) => {
 		if (op.kind !== TOKENS_VIEW_KIND) return false
-		if (op.accountAddress !== account) return false
-		// Two profiles can hold the SAME address (one mnemonic imported twice): the profile
-		// compare keeps one profile's import from rendering under the other.
-		if (op.profileId && appStore.profile?.id && op.profileId !== appStore.profile.id) return false
-		// The same address exists on every network, and so can a contract address.
-		if (op.networkId && op.networkId !== appStore.network?.id) return false
+		if (!journalRecordInScope(op, scope)) return false
 		// In-flight
 		if (op.terminalAt === null) return true
 		// Recently-failed retention window so the user sees the reason.
@@ -197,15 +193,14 @@ let scopeGen = 0
 const withTaskFlags = (tb) => ({
 	...tb,
 	isUpdating: tasks.value.some((t) => t.content.tbId === tb.id && !t.finishedAt),
-	isMinting: tasks.value.some((t) => t.content.name === tb.token.name && t.content.symbol === tb.token.symbol && !t.finishedAt),
 })
 
 const tokenBalanceService = new TokenBalanceServiceClient()
 const {
 	fetchTokenBalances,
-	markDirty,
-	inActiveScope,
+	onBalanceAdded,
 	onBalanceUpdated,
+	onBalanceDeleted,
 	dispose: disposeBalances,
 } = useTokenBalanceSnapshot({
 	client: tokenBalanceService,
@@ -221,20 +216,6 @@ const {
 tokenBalanceService.onTokenBalanceAdded.add(onBalanceAdded)
 tokenBalanceService.onTokenBalanceUpdated.add(onBalanceUpdated)
 tokenBalanceService.onTokenBalanceDeleted.add(onBalanceDeleted)
-function onBalanceAdded(tb) {
-	if (!inActiveScope(tb)) return
-	markDirty()
-	if (tokenBalances.value.some((_tb) => _tb.id === tb.id)) return
-
-	tokenBalances.value.push(withTaskFlags(tb))
-}
-function onBalanceDeleted(tb) {
-	if (inActiveScope(tb)) markDirty()
-	const idx = tokenBalances.value.findIndex((_tb) => _tb.id === tb.id)
-	if (idx !== -1) {
-		tokenBalances.value.splice(idx, 1)
-	}
-}
 
 const journalService = new OperationJournalServiceClient()
 journalService.onOperationAdded.add(onJournalAdded)
@@ -366,7 +347,7 @@ onBeforeUnmount(() => {
 	<Flex direction="column" gap="12" :class="$style.wrapper">
 		<Flex align="end" justify="between" :class="$style.section_header">
 			<Flex align="center" gap="8">
-				<SectionLabel label="Holdings" :count="homeLayout.slots.length || null" countTestid="tokens-count" />
+				<SectionLabel label="Holdings" :count="homeLayout.slots.length || null" countTestid="tokens-count" data-testid="holdings-section-label" />
 				<!-- The ONE refresh-activity signal for the whole list (per-row indication is deliberately
 				     silent — batch refreshes would animate every row). Same vocabulary as the gas card's
 				     activity dot: grey pulse = a shown value being re-verified. -->
@@ -374,12 +355,7 @@ onBeforeUnmount(() => {
 			</Flex>
 
 			<Flex align="center" gap="10">
-				<span
-					v-if="overflowCount > 0"
-					@click="router.push('/popup/holdings')"
-					data-testid="tokens-view-all"
-					:class="$style.view_all"
-				>View all</span>
+				<RouterLink v-if="overflowCount > 0" to="/popup/holdings" data-testid="tokens-view-all" :class="$style.view_all">View all</RouterLink>
 				<Dropdown>
 					<Button variant="secondary" size="micro" data-testid="tokens-menu-trigger">
 						<Icon name="dots" size="12" color="secondary" />
@@ -491,18 +467,18 @@ onBeforeUnmount(() => {
 }
 
 .view_all {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
-	color: var(--nulo-outline);
-	cursor: pointer;
+	composes: type--label from global;
+	color: var(--nulo-secondary);
 
 	transition: color 0.2s var(--bezier);
 
 	&:hover {
 		color: var(--nulo-accent);
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
 	}
 }
 

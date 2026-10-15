@@ -78,8 +78,8 @@ export const FONT_ASSET = /\.(woff2?|ttf|otf|eot)$/i
 
 export const FONT_ALLOWED: ReadonlySet<string> = new Set(["OFL-1.1", "Apache-2.0"])
 
-const AZTEC_NODE_TAG = "https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0-rc.1"
-const AZTEC_PACKAGES_TAG = "https://github.com/AztecProtocol/aztec-packages/blob/v6.0.0-rc.1"
+const AZTEC_NODE_TAG = "https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0-rc.3"
+const AZTEC_PACKAGES_TAG = "https://github.com/AztecProtocol/aztec-packages/blob/v6.0.0-rc.6"
 const NOIR_COMMIT = "https://github.com/noir-lang/noir/blob/5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 const SQLITE3MC_TAG = "https://github.com/utelle/SQLite3MultipleCiphers/blob/v2.3.5"
 
@@ -87,6 +87,13 @@ const SQLITE3MC_NOTE =
 	"SQLite3 Multiple Ciphers 2.3.5 over SQLite 3.53.2, compiled with Emscripten 6.0.0. The shipped sqlite3.wasm and sqlite3-opfs-async-proxy.js are byte-identical to the upstream release archive sqlite3mc-2.3.5-sqlite-3.53.2-wasm.zip (sha256 3d0d5ebe4c54a9a22012410726ecef711e4e3e15ec11dffddf09488c72a10670), which @aztec-labs/sqlite3mc-wasm repackages unmodified. SQLite itself is in the public domain; the bundle header reproduced below is upstream's own statement of that and of the Emscripten runtime's terms. Upstream builds it from the sqlite3mc amalgamation with the default cipher set and none of the optional extensions (no miniz). Of the code that amalgamation compiles in, what is neither sqlite3mc's own MIT code nor public domain or CC0 has its own entry: sha2, libaegis and Argon2. The Emscripten runtime links musl libc, whose notice follows Emscripten's."
 
 const SQLITE3MC_TEXTS = ["sqlite3mc.MIT.txt", "sqlite-wasm-bundle-header.txt", "emscripten.MIT.txt", "musl.MIT.txt"] as const
+
+const AZTEC_NODE_LICENCE = {
+	reviewedVersion: "6.0.0-rc.3",
+	license: "Apache-2.0",
+	source: `${AZTEC_NODE_TAG}/LICENSE`,
+	texts: ["aztec-node.Apache-2.0.txt"],
+} as const
 
 export const OVERRIDES: readonly Override[] = [
 	{
@@ -104,21 +111,22 @@ export const OVERRIDES: readonly Override[] = [
 			"@aztec-labs/noir-contracts.js",
 			"@aztec-labs/noir-protocol-circuits-types",
 			"@aztec-labs/protocol-contracts",
-			"@aztec-labs/pxe",
 			"@aztec-labs/simulator",
 			"@aztec-labs/standard-contracts",
 			"@aztec-labs/stdlib",
 			"@aztec-labs/wallet-sdk",
 		],
-		reviewedVersion: "6.0.0-rc.1",
-		license: "Apache-2.0",
-		source: `${AZTEC_NODE_TAG}/LICENSE`,
-		texts: ["aztec-node.Apache-2.0.txt"],
+		...AZTEC_NODE_LICENCE,
 		note: "Published from the aztec-node repository with no licence field and no licence file; the repository root LICENSE at the release tag governs the tree these packages are built from.",
 	},
 	{
+		names: ["@aztec-labs/pxe"],
+		...AZTEC_NODE_LICENCE,
+		note: "Published from the aztec-node repository with no licence field and no licence file; the repository root LICENSE at the release tag governs the tree this package is built from. Nulo modifies dest/pxe.js, marked in the file: registerAccount always reaches its address write, so an account whose keys were stored without its address is completed by the next registration.",
+	},
+	{
 		names: ["@aztec-foundation/bb.js"],
-		reviewedVersion: "6.0.0-rc.1",
+		reviewedVersion: "6.0.0-rc.6",
 		license: "Apache-2.0",
 		declared: "MIT",
 		source: `${AZTEC_PACKAGES_TAG}/barretenberg/LICENSE`,
@@ -127,7 +135,7 @@ export const OVERRIDES: readonly Override[] = [
 	},
 	{
 		names: ["@aztec-foundation/l1-artifacts"],
-		reviewedVersion: "6.0.0-rc.1",
+		reviewedVersion: "6.0.0-rc.6",
 		license: "Apache-2.0",
 		source: `${AZTEC_PACKAGES_TAG}/LICENSE`,
 		texts: ["aztec-packages.Apache-2.0.txt"],
@@ -135,23 +143,23 @@ export const OVERRIDES: readonly Override[] = [
 	},
 	{
 		names: ["@aztec-foundation/noir-acvm_js"],
-		reviewedVersion: "6.0.0-rc.1",
+		reviewedVersion: "6.0.0-rc.6",
 		license: "MIT",
 		source: `${NOIR_COMMIT}/LICENSE-MIT`,
 		texts: ["noir.MIT.txt"],
-		note: "Built from the noir submodule commit aztec-packages v6.0.0-rc.1 pins; the package ships no licence file. The wasm binary is attributed to this project as a whole: the third-party components compiled into it are not itemised here, because upstream publishes no inventory of them.",
+		note: "Built from the noir submodule commit aztec-packages v6.0.0-rc.6 pins; the package ships no licence file. The wasm binary is attributed to this project as a whole: the third-party components compiled into it are not itemised here, because upstream publishes no inventory of them.",
 	},
 	{
 		names: ["@aztec-foundation/noir-noirc_abi"],
-		reviewedVersion: "6.0.0-rc.1",
+		reviewedVersion: "6.0.0-rc.6",
 		license: "(MIT OR Apache-2.0)",
 		source: `${NOIR_COMMIT}/LICENSE-MIT`,
 		texts: ["noir.MIT.txt", "noir.Apache-2.0.txt"],
-		note: "Built from the noir submodule commit aztec-packages v6.0.0-rc.1 pins; the package ships no licence file. The wasm binary is attributed to this project as a whole: the third-party components compiled into it are not itemised here, because upstream publishes no inventory of them.",
+		note: "Built from the noir submodule commit aztec-packages v6.0.0-rc.6 pins; the package ships no licence file. The wasm binary is attributed to this project as a whole: the third-party components compiled into it are not itemised here, because upstream publishes no inventory of them.",
 	},
 	{
 		names: ["@aztec-labs/sqlite3mc-wasm"],
-		reviewedVersion: "6.0.0-rc.1",
+		reviewedVersion: "6.0.0-rc.3",
 		license: "MIT",
 		source: `${SQLITE3MC_TAG}/LICENSE`,
 		texts: SQLITE3MC_TEXTS,
@@ -196,7 +204,7 @@ export const VENDORED: readonly Vendored[] = [
 		],
 	},
 	{
-		trigger: { package: "@aztec-foundation/l1-artifacts", reviewedVersion: "6.0.0-rc.1" },
+		trigger: { package: "@aztec-foundation/l1-artifacts", reviewedVersion: "6.0.0-rc.6" },
 		components: [
 			{
 				name: "@aztec/l1-contracts",
@@ -246,15 +254,6 @@ export const VENDORED: readonly Vendored[] = [
 		generated: {
 			by: "@crxjs/vite-plugin's service-worker loader",
 			content: /^import '\.\/assets\/[\w.-]+\.js';\s*$/,
-		},
-	},
-	{
-		trigger: { asset: /^assets\/[\w.-]+-loader-[\w-]+\.js$/ },
-		components: [],
-		generated: {
-			by: "@crxjs/vite-plugin's content-script loader",
-			content:
-				/^\(function \(\) \{\s*'use strict';\s*const injectTime = performance\.now\(\);\s*\(async \(\) => \{\s*const \{ onExecute \} = await import\(\s*\/\* @vite-ignore \*\/\s*chrome\.runtime\.getURL\("assets\/[\w.-]+\.js"\)\s*\);\s*onExecute\?\.\(\{ perf: \{ injectTime, loadTime: performance\.now\(\) - injectTime \} \}\);\s*\}\)\(\)\.catch\(console\.error\);\s*\}\)\(\);\s*$/,
 		},
 	},
 	{

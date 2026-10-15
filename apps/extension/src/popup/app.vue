@@ -3,32 +3,39 @@
 /** Components */
 import PopupManager from "./components/popups/PopupManager.vue"
 import Navigation from "./components/Navigation.vue"
+import StaleNetworkTakeover from "@/components/stale-network/StaleNetworkTakeover.vue"
 
 /** Utils */
-import { managers, isBackgroundConnected } from "@/utils/core"
-import { isPrefersDarkScheme, persistThemeHint } from "@/utils/general"
+import { managers, isServiceReady } from "@/utils/core"
+import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { ownWindowRoute, postAuthRoute } from "@/utils/own-window"
 import { shouldAdvanceToGeneral } from "./should-advance-to-general"
 import { resolveBootSession } from "./boot-session"
-import { decideLockLanding, decideUnreachableLanding } from "./lock-landing"
+import { decideLockLanding, decideUnreachableLanding, isEstablishedAtDecision } from "./lock-landing"
 import { reconcileLockedBoot } from "./reconcile-locked-boot"
 import { applyBootOutcome } from "./apply-boot-outcome"
 import { applyRootFlags } from "./root-flags"
 import { defaultConfig } from "@/wallet/config"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { createNetworkSwitchHandler } from "@/popup/network-switch"
+import { createResetCompletion } from "@/popup/reset-completion"
 import { runFencedBootstrap } from "@/popup/profile-bootstrap"
 import { createScopeEpochHandlers } from "@/popup/scope-epoch"
 import { createLockedState, watchLockStart } from "@/popup/locked-state"
+import { createBootTriggers } from "@/popup/boot-triggers"
+import { START_GRACE_KEY } from "@/popup/start-grace"
+import { isDappWindow, takeoverView } from "@/popup/stale-takeover"
+import { readyToast } from "@/components/stale-network/copy"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { IncomingTransferServiceClient } from "@/wallet/services/incoming-transfer/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
 
 /** Composables */
-import { useProfileBootstrap } from "@/composables/useProfileBootstrap"
+import { supersedeProfileActivations, useProfileBootstrap } from "@/composables/useProfileBootstrap"
 import { ARRIVALS_KEY, useArrivals } from "@/composables/useArrivals"
+import { runUnattended, STALE_NETWORK_KEY, useStaleNetwork } from "@/composables/useStaleNetwork"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -69,7 +76,8 @@ configService.onUpdate.add(applySetting)
 const arrivalsIncoming = new IncomingTransferServiceClient()
 const arrivalsTokens = new TokenServiceClient()
 const arrivalsPrices = new PriceServiceClient()
-// Opened before the coordinator listens, so only a reconnect reads through `onConnected`.
+// Opened before the coordinator listens. Its first Ready reaches the coordinator too, whose read
+// waits for an open profile's scope.
 void arrivalsIncoming.connect()
 void arrivalsPrices.connect()
 const arrivals = useArrivals({
@@ -84,8 +92,8 @@ const arrivals = useArrivals({
 	routeName: () => route.name,
 	lookupToken: async (record) => {
 		if (record.tokenId === undefined) return undefined
-		const { symbol, decimals } = await arrivalsTokens.getToken(record.tokenId)
-		return { symbol, decimals }
+		const { symbol, decimals, hasDecimals } = await arrivalsTokens.getToken(record.tokenId)
+		return { symbol, decimals, hasDecimals }
 	},
 	accountName: () => appStore.account?.name ?? "",
 	openToast,
@@ -100,12 +108,7 @@ const legalSheetShown = ref(false)
 const settingHandlers = {
 	theme(value) {
 		theme.value = value
-		persistThemeHint(value)
-		if (value === "system") {
-			root.setAttribute("theme", isPrefersDarkScheme() ? "dark" : "light")
-		} else {
-			root.setAttribute("theme", value)
-		}
+		applyThemeChoice(root, value)
 	},
 	disableAnimations(value) {
 		root.classList.toggle("noanimations", Boolean(value))
@@ -145,28 +148,102 @@ watch(
 	},
 )
 
+// The switch handler's latest run, which a completed reset awaits before it routes and announces.
+let switchRun = Promise.resolve()
+const { reloadNetwork, completeReset } = createResetCompletion({
+	activeNetworkId: () => appStore.network?.id,
+	getNetworks: () => managers.network.getNetworks(),
+	setNetworks: (networks) => {
+		appStore.networks = networks
+	},
+	setNetwork: (network) => {
+		appStore.network = network
+	},
+	accountLoaded: async () => {
+		await nextTick()
+		await switchRun
+	},
+	ownsRoute: () => !isDappWindow(route.name),
+	toHome: () => router.push(postAuthRoute()),
+})
+
+const stale = useStaleNetwork({
+	client: managers.networkReset,
+	scope: () =>
+		appStore.isLogined && appStore.profile && appStore.network && !isDappWindow(route.name)
+			? { profileId: appStore.profile.id, networkId: appStore.network.id }
+			: undefined,
+	syncActive: (networkId) => appStore.syncStaleNetwork(networkId),
+	staleActive: () => appStore.staleNetwork,
+	onCompleted: completeReset,
+	announce: (notice) => {
+		const name = appStore.networks.find((n) => n.id === notice.networkId)?.name
+		if (name) openToast({ kind: "success", ...readyToast(name, notice.addressesMoved) })
+	},
+})
+provide(STALE_NETWORK_KEY, stale)
+
+const takeover = computed(() =>
+	takeoverView({
+		logined: appStore.isLogined,
+		route: { name: route.name, path: route.path },
+		networkId: appStore.network?.id,
+		stale: appStore.staleNetwork,
+		running: stale.running.value,
+	}),
+)
+watch(
+	() => appStore.networks,
+	() => void stale.refresh(),
+)
+watch(
+	() => appStore.isLogined && appStore.profile?.id,
+	(active) => {
+		stale.clear()
+		if (active && !isDappWindow(route.name)) void stale.resume(active)
+	},
+)
+
 // Identity-fenced network-switch orchestration — the body lives in
 // `network-switch.ts` so its fence is unit-testable (this shell has no
 // harness). The factory owns run invalidation, scope capture, and the
 // generation+live-scope guard at every await boundary.
+const switchNetwork = createNetworkSwitchHandler({
+	getScope: () =>
+		appStore.network && appStore.profile
+			? { profileId: appStore.profile.id, networkId: appStore.network.id, chainId: appStore.network.chainId }
+			: undefined,
+	liveScopeMatches: (scope) =>
+		appStore.profile?.id === scope.profileId && appStore.network?.id === scope.networkId && appStore.network?.chainId === scope.chainId,
+	syncNetworkStatus: () => appStore.syncNetworkStatus(),
+	replaceAccountClient: () => {
+		managers.account?.disconnect()
+		managers.account = new AccountServiceClient()
+		return managers.account
+	},
+	setAccounts: (accounts) => {
+		appStore.accounts = accounts
+	},
+	setupActiveAccount: () => appStore.setupActiveAccount(),
+	syncTransactions: () => appStore.syncTransactions(),
+	syncStaleNetwork: (networkId) => appStore.syncStaleNetwork(networkId),
+	clearAccounts: () => {
+		appStore.accounts = []
+		appStore.account = undefined
+	},
+	resetUnattended: async (view, live) => {
+		// The loader drops once the store holds the row's view: R1 for a failed run's journal, or none,
+		// and the Header's skeleton while the re-keyed row's account loads.
+		await runUnattended(managers.networkReset, view, async (completed) => {
+			if (completed ? await reloadNetwork(view.networkId, live) : live()) await appStore.syncStaleNetwork(view.networkId)
+		})
+	},
+})
 watch(
 	() => appStore.network,
-	createNetworkSwitchHandler({
-		getScope: () =>
-			appStore.network && appStore.profile ? { profileId: appStore.profile.id, chainId: appStore.network.chainId } : undefined,
-		liveScopeMatches: (scope) => appStore.profile?.id === scope.profileId && appStore.network?.chainId === scope.chainId,
-		syncNetworkStatus: () => appStore.syncNetworkStatus(),
-		replaceAccountClient: () => {
-			managers.account?.disconnect()
-			managers.account = new AccountServiceClient()
-			return managers.account
-		},
-		setAccounts: (accounts) => {
-			appStore.accounts = accounts
-		},
-		setupActiveAccount: () => appStore.setupActiveAccount(),
-		syncTransactions: () => appStore.syncTransactions(),
-	}),
+	() => {
+		switchRun = switchNetwork()
+	},
 )
 
 // `flush: "sync"`: a send settling in the next microtask must already see the new epoch.
@@ -179,10 +256,12 @@ const lockedState = createLockedState({
 	closePopups: () => popupStore.closeAll(),
 	onLocked,
 	markLocked: () => {
+		supersedeProfileActivations()
 		appStore.isLogined = false
 	},
 	clearActivity: () => appStore.clearActivity(),
 	resetInFlight: () => appStore.resetInFlight(),
+	resetContactImports: () => appStore.resetContactImports(),
 	cachedProfiles: () => appStore.profiles,
 	setProfiles: (profiles) => {
 		appStore.profiles = profiles
@@ -200,8 +279,9 @@ let profileEventSeq = 0
 const onActiveProfileChanged = async (profile) => {
 	const seq = ++profileEventSeq
 	if (profile) {
-		// bootstrapActiveProfile carries its own lock-wins guard: a stale profile event whose
-		// session was already locked re-checks getActiveProfile() before flipping isLogined.
+		lockedState.onSessionOpened()
+		// bootstrapActiveProfile carries its own lock-wins guard: it flips isLogined only if its
+		// re-read of getActiveProfile() still finds the profile and no lock has superseded its run.
 		// The wrap is load-bearing: an emitter-callback rejection would otherwise become an
 		// unhandled rejection that silently starves the unlock flow's activation wait. The
 		// identity-keyed failure record releases that waiter IMMEDIATELY (never the full
@@ -290,18 +370,19 @@ const lockLandingActions = {
 	},
 }
 
-// Generation fence for loadProfile: mount and every background reconnect start a run, and a
-// run that awaited past a newer one must not commit — its push or marker would land on top of
-// the newer run's (or the user's own unlock's) state.
+// Generation fence for loadProfile: mount and every drop of a Ready port start a run
+// (`boot-triggers.ts`), and a run that awaited past a newer one must not commit — its push or
+// marker would land on top of the newer run's (or the user's own unlock's) state.
 let loadProfileSeq = 0
 
 const loadProfile = async ({ reconnect = false } = {}) => {
 	const seq = ++loadProfileSeq
 	// A reconnect over a resolved route reaches a mounted page that owns its flow; a reconnect
-	// before the router resolved is the only boot this popup will get (the mount-time run was
-	// lost when a disconnect rejected the guard's first read) and must still land somewhere.
+	// before the router resolved has no page yet and must still land somewhere.
 	// An own window's page owns its flow from its first boot.
 	const pageEstablished = (reconnect && route.matched.length > 0) || ownWindowRoute() !== undefined
+	const pathAtStart = route.matched.length > 0 ? route.fullPath : undefined
+	const establishedNow = () => isEstablishedAtDecision(pageEstablished, pathAtStart, route.fullPath)
 	const isCurrent = () => seq === loadProfileSeq
 	// A new run supersedes any earlier give-up: it may well succeed this time. A retry of a
 	// FAILED boot keeps the auth form withheld until a run DECIDES — latched, not recomputed:
@@ -322,13 +403,15 @@ const loadProfile = async ({ reconnect = false } = {}) => {
 				lastActiveProfileId: getLastActiveProfileId,
 				isCurrent,
 			}),
-		decide: (locked) => decideLockLanding(lockLandingState(locked, pageEstablished)),
+		decide: (locked) => decideLockLanding(lockLandingState(locked, establishedNow())),
 		act: lockLandingActions,
 	})
 	// The core fenced itself before resolving; this caller resumes a microtask later, and a
 	// reconnect can bump the sequence in between — fence again here, never on the core's word.
 	if (!isCurrent()) return
-	applyBootOutcome(result, bootOutcomeShell(pageEstablished))
+	applyBootOutcome(result, bootOutcomeShell(establishedNow()))
+	// A worker restart drops a running reset without a word; its journal resumes here.
+	if (reconnect && appStore.isLogined && appStore.profile && !isDappWindow(route.name)) void stale.resume(appStore.profile.id)
 }
 
 /** The shell as `applyBootOutcome` drives it. */
@@ -351,11 +434,9 @@ const bootOutcomeShell = (pageEstablished) => ({
 	},
 })
 
-onBeforeMount(async () => {
-	await router.isReady()
-
-	// Settings are cosmetic (theme, links…): a read that rejects during a service-worker
-	// restart keeps the defaults and must never keep the session check from running.
+// Settings are cosmetic (theme, links…): a read that rejects during a service-worker restart
+// keeps the defaults and must never keep the session check from running.
+const readSettings = async () => {
 	try {
 		const settings = await configService.getProps()
 		for (const setting of settings) {
@@ -369,9 +450,18 @@ onBeforeMount(async () => {
 	} catch (error) {
 		console.error("settings read failed at boot; defaults kept", { error })
 	}
+}
 
-	await loadProfile()
+const startGrace = inject(START_GRACE_KEY, undefined)
+const bootTriggers = createBootTriggers({
+	client: managers.profile,
+	routerReady: () => router.isReady(),
+	readSettings,
+	runBoot: (opts) => loadProfile(opts),
+	replay: () => startGrace?.replay(),
 })
+
+onBeforeMount(() => bootTriggers.mount())
 
 onMounted(async () => {
 	/** DevTools Warnings -> Logo + Scam Prevention */
@@ -423,26 +513,15 @@ watch(
 	},
 )
 
-// `flush: "sync"` is load-bearing: the port client reconnects synchronously inside its own
-// disconnect callback (a dead worker is woken by `chrome.runtime.connect`, which returns at
-// once), so the flag goes false → true in ONE tick and a batched watcher sees no change at all.
-// Every worker restart under an open popup must start a boot run, or the shell keeps a session
-// that no longer exists.
-watch(
-	() => isBackgroundConnected.value,
-	(connected) => {
-		if (connected) loadProfile({ reconnect: true })
-	},
-	{ flush: "sync" },
-)
-
 onBeforeUnmount(() => {
+	bootTriggers.dispose()
 	clearInterval(intervalId.value)
 	configService.disconnect()
 	arrivalsIncoming.disconnect()
 	arrivalsTokens.disconnect()
 	arrivalsPrices.disconnect()
 	arrivals.dispose()
+	stale.dispose()
 })
 </script>
 
@@ -453,6 +532,7 @@ onBeforeUnmount(() => {
 		:class="$style.wrapper"
 		:data-boot-outcome="bootOutcome || undefined"
 		:data-session-checked="appStore.isSessionChecked ? 'true' : undefined"
+		:data-service-ready="isServiceReady ? 'true' : undefined"
 		:data-arrivals-seeded="arrivalsSeeded ? 'true' : undefined"
 	>
 		<!-- Popup Teleport -->
@@ -465,16 +545,18 @@ onBeforeUnmount(() => {
 			<PopupManager />
 			<ToastManager />
 			<NotificationManager />
-			<GlobalLoader />
 			<MigrationBarrier />
 			<AccountIntegrityBarrier />
-			<LegalAcceptanceSheet @visibility="legalSheetShown = $event" />
+			<LegalAcceptanceSheet v-if="!takeover" @visibility="legalSheetShown = $event" />
 		</div>
 
-		<Header />
+		<StartBar :boot-outcome="bootOutcome" />
+
+		<StaleNetworkTakeover v-if="takeover" :view="takeover" />
+		<Header v-else />
 
 		<Banner v-if="bootOutcome || bootRetrying" variant="warning" direction="vertical" data-testid="boot-outcome-banner">
-			<Text size="13" weight="500">
+			<Text>
 				{{
 					bootRetrying
 						? "Retrying…"
@@ -483,16 +565,18 @@ onBeforeUnmount(() => {
 							: "The wallet service could not be reached."
 				}}
 			</Text>
-			<button type="button" :class="$style.retry" data-testid="boot-retry" :disabled="bootRetrying" @click="loadProfile()">RETRY</button>
+			<button type="button" :class="$style.retry" class="type--button-md" data-testid="boot-retry" :disabled="bootRetrying" @click="bootTriggers.retry()">RETRY</button>
 		</Banner>
 
-		<RouterView v-slot="{ Component }">
-			<component :is="Component"></component>
-		</RouterView>
+		<template v-if="!takeover">
+			<RouterView v-slot="{ Component }">
+				<component :is="Component"></component>
+			</RouterView>
 
-		<Navigation v-if="$route.meta.showBottomNav" />
+			<Navigation v-if="$route.meta.showBottomNav" />
+		</template>
 
-		<div id="toast" data-testid="toast-root" :class="legalSheetShown && $style.toast_over_sheet" />
+		<div id="toast" data-testid="toast-root" :class="legalSheetShown && !takeover && $style.toast_over_sheet" />
 	</Flex>
 </template>
 
@@ -509,21 +593,20 @@ onBeforeUnmount(() => {
 	min-height: 0;
 }
 
-/* While the Terms sheet (9000) shows, the snack draws over it, still under the loader and the barriers. */
+/* While the Terms sheet (9000) shows, the snack draws over it, still under the start-up bar and the barriers. */
 .toast_over_sheet {
 	position: relative;
 	z-index: 9500;
 }
 
+/* Its own line under the message, however short the message runs. */
 .retry {
+	display: block;
 	align-self: flex-start;
 	margin-top: 8px;
 	padding: 4px 10px;
-	font: inherit;
-	font-size: 12px;
-	font-weight: 600;
-	letter-spacing: 0.04em;
 	color: inherit;
+	line-height: inherit;
 	background: transparent;
 	border: 1px solid currentColor;
 	border-radius: 4px;

@@ -35,7 +35,8 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { DappInteractionService } from "./service"
 import type { CapabilityPayload, DappInteraction, DiscoveryResult, ExecutionHooks, OperationRequest } from "./spec"
-import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
+import { TEST_LIST_ENTRIES, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import { seedsFromList } from "@/wallet/services/token/default-tokens"
 
 const noopLogger: ILogger = { log: () => {} }
 
@@ -543,12 +544,14 @@ describe("DappInteractionService when the Terms acceptance lapses after the requ
 		)
 
 		expect(transitionOperation).toHaveBeenCalledWith("journal-1", { stage: "pending" })
-		// Stage-guarded to `pending`: a record execution did claim is its owner's to settle.
+		// Stage-guarded to `pending`: a record execution did claim is its owner's to settle. Filed as
+		// the Terms refusal it is and titled "Transaction": nothing resolved the call's selector.
 		expect(transitionIfStage).toHaveBeenCalledWith(
 			"journal-1",
 			["pending"],
 			{ stage: "failed" },
-			expect.objectContaining({ message: TermsAcceptanceRequiredError.MESSAGE }),
+			{ kind: "terms_refused", message: TermsAcceptanceRequiredError.MESSAGE, normalizedRaw: null },
+			{ failedTitle: "Transaction" },
 		)
 	})
 
@@ -611,6 +614,7 @@ describe("DappInteractionService — a confirmation window never falls back to s
 		collection.add(stub(ExecutionService.name, { executeOperations }))
 		collection.add(stub(OperationJournalService.name, { onOperationUpdated: new EventHandler() }))
 		collection.add(stub(FpcService.name, {}))
+		collection.add(stub(TokenService.name, {}))
 		collection.add(dapp)
 		await collection.start()
 		const creates = vi.spyOn(api.windows, "create")
@@ -661,6 +665,17 @@ describe("DappInteractionService — a confirmation window never falls back to s
 		await expect(h.dapp.approveInteraction(window.id, [{}])).rejects.toThrow("Invalid id")
 		await flush()
 		expect(h.executeOperations).not.toHaveBeenCalled()
+	})
+
+	test("array-like deltas are refused like a count mismatch, and the row survives for a real approval", async () => {
+		const h = await windowHarness()
+		const window = await h.open()
+		const arrayLike = { 0: { feeSettings: { paymentMethod: { kind: "fj" }, priorityLevel: "bogus" } }, length: 1 }
+		await expect(h.dapp.approveInteraction(window.id, arrayLike as never)).rejects.toThrow("Invalid id")
+		expect(h.executeOperations).not.toHaveBeenCalled()
+		await h.dapp.approveInteraction(window.id, [{}])
+		await expect.poll(() => window.outcome.settled).toBe(true)
+		expect(h.executeOperations).toHaveBeenCalledTimes(1)
 	})
 
 	test("two windows for one row: approving one signs only it, the other stays pending until its own close", async () => {
@@ -725,8 +740,12 @@ describe("DappInteractionService — the capability window's known contracts", (
 				],
 			}),
 		)
+		const getVerifiedDefaults = vi.fn(async () => seedsFromList({ sequence: 1, keyId: "k", entries: TEST_LIST_ENTRIES }))
 		collection.add(
-			stub(TokenService.name, { getTokens: async () => [{ id: 1, chainId: CHAIN_IDS.TESTNET, contract: TOKEN, name: "Fee Juice" }] }),
+			stub(TokenService.name, {
+				getTokens: async () => [{ id: 1, chainId: CHAIN_IDS.TESTNET, contract: TOKEN, name: "Fee Juice" }],
+				getVerifiedDefaults,
+			}),
 		)
 		collection.add(
 			stub(ContactService.name, {
@@ -753,12 +772,13 @@ describe("DappInteractionService — the capability window's known contracts", (
 			{ address: `0x${"0".repeat(63)}3`, name: "Fee Juice" },
 			{ address: SPONSORED, name: "Sponsored fee payer" },
 			{ address: PRIVATE, name: "Private fee payer" },
-			{ address: "0x1ec33912c9f14470513e0eb23db81ddb2aa1ae3395e6ab4d3cba383f68dec3c5", name: "Auth registry" },
-			{ address: TESTNET_TOKENS.USDC, name: "Test USDC" },
-			{ address: TESTNET_TOKENS.USDT, name: "Test USDT" },
-			{ address: TESTNET_TOKENS.EURC, name: "Test EURC" },
-			{ address: TESTNET_TOKENS.GBPC, name: "Test GBPC" },
+			{ address: "0x2ba8714679fbee823f108f366f878ce3249861637de705b0ac7cfbd0f81b3a9c", name: "Auth registry" },
+			{ address: TEST_TOKENS.USDC, name: "Test USDC" },
+			{ address: TEST_TOKENS.USDT, name: "Test USDT" },
+			{ address: TEST_TOKENS.EURC, name: "Test EURC" },
+			{ address: TEST_TOKENS.GBPC, name: "Test GBPC" },
 		])
+		expect(getVerifiedDefaults).toHaveBeenCalledWith("p1", CHAIN_IDS.TESTNET)
 	})
 })
 
@@ -769,6 +789,7 @@ describe("DappInteractionService — an approved connect window is handed to the
 	function handOverHarness() {
 		const api = new FakeBrowserApi()
 		api.reset()
+		vi.mocked(chrome.runtime.getURL).mockImplementation((path) => `chrome-extension://nulo/${path}`)
 		const clock = new MockClock()
 		const dapp = new DappInteractionService(noopLogger, new WindowManager(api.windows, clock, noopLogger))
 		const creates = vi.spyOn(api.windows, "create")
@@ -780,19 +801,21 @@ describe("DappInteractionService — an approved connect window is handed to the
 			await expect.poll(() => creates.mock.results.length).toBe(1)
 			const created = (await creates.mock.results[0]?.value) as { id: number }
 			await flush()
-			return { pending, windowId: created.id, id: [...storage.keys()][0] as string }
+			const url = creates.mock.calls[0]?.[0].url as string
+			return { pending, windowId: created.id, url, id: [...storage.keys()][0] as string }
 		}
 		const closeByUser = (windowId: number) => (api.windows as unknown as { closeByUser: (id: number) => void }).closeByUser(windowId)
 		return { dapp, clock, removes, open, interaction, closeByUser }
 	}
 
-	test("an approved discovery resolves with the handle's window id, never the page's, and the window stays open", async () => {
+	test("an approved discovery resolves with the handle's window id and its own page marked expired, never the page's values, and the window stays open", async () => {
 		const h = handOverHarness()
-		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA }))
+		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA, chainId: "1" }))
 
-		await h.dapp.resolveInteraction(w.id, { approved: true, windowId: 999 } as DiscoveryResult)
+		await h.dapp.resolveInteraction(w.id, { approved: true, windowId: 999, expiredUrl: "https://evil.example" } as DiscoveryResult)
 
-		await expect(w.pending).resolves.toEqual({ approved: true, windowId: w.windowId })
+		expect(w.url).toContain(`#/windows/discover?requestId=${w.id}`)
+		await expect(w.pending).resolves.toEqual({ approved: true, windowId: w.windowId, expiredUrl: `${w.url}&expired=1` })
 		expect(w.windowId).not.toBe(999)
 		// Nothing watches the window now: its later close and the old timeout settle nothing.
 		h.closeByUser(w.windowId)
@@ -802,7 +825,7 @@ describe("DappInteractionService — an approved connect window is handed to the
 
 	test("a discovery answer other than approved: true is a denial and closes the window", async () => {
 		const h = handOverHarness()
-		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA }))
+		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA, chainId: "1" }))
 
 		await h.dapp.resolveInteraction(w.id, { approved: "yes", windowId: 999 } as unknown as DiscoveryResult)
 
@@ -812,7 +835,7 @@ describe("DappInteractionService — an approved connect window is handed to the
 
 	test("a denied discovery settles and closes the window", async () => {
 		const h = handOverHarness()
-		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA }))
+		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA, chainId: "1" }))
 
 		await h.dapp.resolveInteraction(w.id, { approved: false })
 

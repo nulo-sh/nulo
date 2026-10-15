@@ -25,6 +25,7 @@ import { OWN_WINDOW_ROUTES, closeOwnWindow, moveToOwnWindow, releaseOwnWindow } 
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
 import { redirectToOnboardingTabIfNeeded } from "@/wallet/utils/onboarding-tab"
 import { resolveFullBackupEnterAction } from "./import-helpers"
+import { retryResultText, withNetworkNames } from "@/components/composite/import/restore-warning"
 
 /** Stores */
 import { useAppStore } from "@/stores/app.store"
@@ -116,6 +117,7 @@ const {
 	isRestoreHasErrors,
 	canRetryAccountState,
 	unrestoredNetworkNames,
+	retryFailedAgain,
 	hasOtherRestoreErrors,
 	isRetryingAccountState,
 	retryAccountState,
@@ -134,10 +136,10 @@ const {
 } = useProfileImportFlow({
 	completeImport,
 	// Popup error-log surface: open the data-viewer overlay.
-	showErrorLog: (errors) => {
+	showErrorLog: (errors, { byNetworkId }) => {
 		const cacheStore = useCacheStore()
 		const popupStore = usePopupStore()
-		cacheStore.viewerData = errors
+		cacheStore.viewerData = withNetworkNames(errors, byNetworkId)
 		popupStore.open("data_viewer")
 	},
 	notifyImportFailed: () => {
@@ -192,12 +194,7 @@ const fullBackupCta = readonly({
 /** Listeners — popup-only full-backup Enter shortcut. */
 const onKeydown = (e) => {
 	if (e.defaultPrevented || !isPopupSubmitKey(e)) return
-	const action = resolveFullBackupEnterAction({
-		selectedBackup: selectedBackup.value,
-		restoreStatus: restoreStatus.value,
-		isRestoreHasErrors: isRestoreHasErrors.value,
-		isRetrying: isRetryingAccountState.value,
-	})
+	const action = resolveFullBackupEnterAction(fullBackupCta)
 	if (action === "decrypt") decryptBackup()
 	else if (action === "restore") restoreBackup()
 	else if (action === "continue") continueImport()
@@ -249,6 +246,7 @@ onBeforeUnmount(() => {
 			:isRestoreHasErrors="isRestoreHasErrors"
 			:unrestoredNetworks="unrestoredNetworkNames"
 			:hasOtherErrors="hasOtherRestoreErrors"
+			:retryFailedAgain="retryFailedAgain"
 			:error="error"
 			:isCopied="isCopied"
 			:maxPasswordLength="maxPasswordLength"
@@ -306,6 +304,15 @@ onBeforeUnmount(() => {
 					>
 						Finishing import…
 					</Button>
+					<Text
+						v-if="retryFailedAgain"
+						variant="body"
+						height="120"
+						color="txt-warning"
+						data-testid="import-full-backup-retry-result"
+					>
+						{{ retryResultText(unrestoredNetworkNames) }}
+					</Text>
 					<Button
 						v-if="canRetryAccountState"
 						@click="retryAccountState"
@@ -373,11 +380,7 @@ onBeforeUnmount(() => {
 }
 
 .section_label {
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.18em;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 </style>

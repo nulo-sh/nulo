@@ -96,6 +96,8 @@ describe("OperationPlanner.buildTransferOperation", () => {
 		expect(op.networkId).toBe("net-1")
 		expect(op.accountAddress).toBe("0xabc")
 		expect(op.feeSettings).toEqual(DEFAULT_FEE_SETTINGS)
+		// No `fee`: the strategies then commit the wallet's cap, never an app-style one.
+		expect(op).not.toHaveProperty("fee")
 		expect(op.actions).toHaveLength(1)
 		expect(op.actions[0].kind).toBe("encoded_call")
 		expect(op.actions[0]).toMatchObject({ to: token.contract, name: fn.name })

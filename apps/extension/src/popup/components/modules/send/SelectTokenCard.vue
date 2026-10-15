@@ -151,6 +151,12 @@ onBeforeUnmount(() => {
 	&:hover {
 		background: color-mix(in srgb, var(--nulo-surface-low) 50%, transparent);
 	}
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: -2px;
+		background: color-mix(in srgb, var(--nulo-surface-low) 50%, transparent);
+	}
 }
 
 .wrapper_loading {
@@ -176,8 +182,7 @@ onBeforeUnmount(() => {
 }
 
 .token_initial {
-	font-family: var(--font-headline);
-	font-weight: 700;
+	composes: type--row-title from global;
 	font-size: 16px;
 	color: var(--txt-inverse);
 }
@@ -193,34 +198,23 @@ onBeforeUnmount(() => {
 }
 
 .token_symbol {
-	font-family: var(--font-headline);
-	font-weight: 700;
+	composes: type--row-title from global;
 	font-size: 16px;
 	color: var(--txt-primary);
 }
 
 .token_name {
-	font-family: var(--font-mono);
-	font-size: 10px;
-	text-transform: uppercase;
+	composes: type--caption from global;
 	color: var(--nulo-secondary);
 }
 
 .empty_label {
-	font-family: var(--font-headline);
-	font-size: 13px;
-	font-weight: 700;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
+	composes: type--title-page from global;
 	color: var(--nulo-secondary);
 }
 
 .import_link {
-	font-family: var(--font-headline);
-	font-size: 12px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
+	composes: type--label from global;
 	color: var(--nulo-accent);
 }
 </style>

@@ -32,10 +32,11 @@ import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { type ILogger, LogLevel } from "@/wallet/logger"
 import type { IPXE } from "@nulo/aztec-runtime/pxe"
-import { ContractNotRegisteredError } from "@nulo/extension-messaging/errors"
+import { ContractNotRegisteredError, ScopeViolationError } from "@nulo/extension-messaging/errors"
 import type { Action, AddPrivateAuthwitAction, AddPublicAuthwitAction, CallAuthwitContent, EncodedCallAuthwitContent } from "./spec"
+import { EXECUTION_SERVICE_NAME } from "./spec"
 
-const LOG_SOURCE = "ContractResolver"
+const LOG_SOURCE = EXECUTION_SERVICE_NAME
 
 /** Guard ladder over pre-resolved maps; the error strings are frozen by their call sites. */
 export function requireArtifact(
@@ -74,31 +75,53 @@ export async function findFunctionBySelector(artifact: ContractArtifact, selecto
 	return undefined
 }
 
-/** How a site words a name/selector mismatch, and whether it lets a call without a name through.
- *  Only `undefined` is absent: `""` is a name, and a mismatched one. */
+/** How a site words a name/selector mismatch, whether it lets a call without a name through, and
+ *  whether its refusal retitles the record it fails (the outer call's does; an authwit's inner call
+ *  never names the row). Only `undefined` is absent: `""` is a name, and a mismatched one. */
 export type SelectorBindingPolicy = {
 	readonly label: "call name" | "authwit call name"
 	readonly absentName: "allowed" | "refused"
+	readonly titlesRow: boolean
 }
-export const CALL_BINDING: SelectorBindingPolicy = { label: "call name", absentName: "allowed" }
-export const AUTHWIT_CALL_BINDING: SelectorBindingPolicy = { label: "authwit call name", absentName: "allowed" }
+export const CALL_BINDING: SelectorBindingPolicy = { label: "call name", absentName: "allowed", titlesRow: true }
+export const AUTHWIT_CALL_BINDING: SelectorBindingPolicy = { label: "authwit call name", absentName: "allowed", titlesRow: false }
 /** For the fast path, whose scope check authorized the call by its name alone. */
-export const NAMED_CALL_BINDING: SelectorBindingPolicy = { label: "call name", absentName: "refused" }
+export const NAMED_CALL_BINDING: SelectorBindingPolicy = { label: "call name", absentName: "refused", titlesRow: true }
+
+/** Kept beside the error, never on it, so no payload, log projection or serialization can carry
+ *  the resolved name out of the process. */
+const refusalTitles = new WeakMap<Error, string>()
+
+/** The title a binding refusal gives the record it fails: the function the selector resolved to,
+ *  or "Transaction" when it resolved to none. `undefined` for any other error. */
+export function refusalTitleOf(error: unknown): string | undefined {
+	return error instanceof Error ? refusalTitles.get(error) : undefined
+}
+
+function titled<E extends Error>(error: E, policy: SelectorBindingPolicy, title: string): E {
+	if (policy.titlesRow) refusalTitles.set(error, title)
+	return error
+}
+
+/** The refusal names the policy only: the claimed name, the resolved function and the target are
+ *  request values, and the message reaches records and log lines that no redactor can scrub. */
+function selectorBindingRefusal(policy: SelectorBindingPolicy): ScopeViolationError {
+	return new ScopeViolationError(`Scope violation: ${policy.label} does not match selector's function`)
+}
 
 /** Scope checks authorize a dApp call by its name, execution dispatches its selector: refuse
- *  unless the selector resolved (`fn`) to the function the name claims. `claim.to` appears in the
- *  message exactly as the caller passes it. */
+ *  unless the selector resolved (`fn`) to the function the name claims. */
 export function assertSelectorBinding(
 	fn: FunctionAbi | undefined,
-	claim: { readonly name?: string; readonly to: { toString(): string } },
+	claim: { readonly name?: string },
 	policy: SelectorBindingPolicy,
 ): FunctionAbi {
 	if (!fn) {
-		throw new Error("Method not found")
+		throw titled(new Error("Method not found"), policy, "Transaction")
 	}
 	const absentAllowed = policy.absentName === "allowed" && claim.name === undefined
 	if (!absentAllowed && claim.name !== fn.name) {
-		throw new Error(`Scope violation: ${policy.label} "${claim.name}" does not match selector's function "${fn.name}" on ${claim.to}`)
+		throw titled(selectorBindingRefusal(policy), policy, fn.name)
 	}
 	return fn
 }

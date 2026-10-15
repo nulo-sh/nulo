@@ -26,6 +26,7 @@
  * peer: `AddressDisplay.vue`.
  */
 import { onMounted } from "vue"
+import { isRepeatOrComposing } from "@/composables/usePopupEntity"
 import { copyWithToast } from "@/utils/clipboard"
 import { managers } from "@/utils/core"
 import { trimAddress } from "@/utils/string"
@@ -52,6 +53,10 @@ function handleClick() {
 	// what the user pastes.
 	void copyWithToast(props.address, openToast, "Address is copied", { sanitize: true })
 }
+
+function onKey(e: KeyboardEvent) {
+	if (!isRepeatOrComposing(e)) handleClick()
+}
 </script>
 
 <template>
@@ -59,12 +64,13 @@ function handleClick() {
 		data-testid="scope-address"
 		:data-scope-addr="address"
 		@click="handleClick"
-		@keydown.enter="handleClick"
+		@keydown.enter.prevent="onKey"
+		@keydown.space.prevent="onKey"
 		role="button"
 		tabindex="0"
 		:class="$style.row"
 	>
-		<span :class="$style.addr">{{ sanitizeWireString(trimAddress(address), 128) }}</span>
+		<span :class="$style.addr" data-testid="scope-address-value">{{ sanitizeWireString(trimAddress(address), 128) }}</span>
 		<span v-if="contactName" :class="$style.contact">(@{{ contactName }})</span>
 	</span>
 </template>
@@ -89,13 +95,12 @@ function handleClick() {
 }
 
 .addr {
-	font-family: var(--font-mono);
-	font-size: 12px;
+	composes: type--data from global;
 	color: var(--nulo-secondary);
 }
 
 .contact {
-	font-family: var(--font-mono);
+	composes: type--name from global;
 	font-size: 11px;
 	color: var(--nulo-secondary);
 }

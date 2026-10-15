@@ -19,6 +19,12 @@ const emit = defineEmits(["update:modelValue", "open", "close"])
 const TAG_GLYPH = publishGlyph("exposed")
 
 const menu = computed(() => menuOrder(props.methods))
+
+/** A checking row answers nothing yet; the click stops here so the menu stays open. */
+const onRowClick = (method, event) => {
+	if (method.checking) return event?.stopPropagation()
+	if (!method.disabled) emit("update:modelValue", method)
+}
 </script>
 
 <template>
@@ -38,15 +44,18 @@ const menu = computed(() => menuOrder(props.methods))
 		<Dropdown @onOpen="emit('open')" @onClose="emit('close')">
 			<template #trigger>
 				<Flex
+					tag="button"
+					type="button"
 					align="center"
 					justify="between"
 					class="clickable"
+					:class="$style.trigger"
 					data-testid="send-fee-method-trigger"
 					:data-fee-method="modelValue?.subtitle"
 				>
 					<span v-if="modelValue" :class="$style.fee_value">{{ modelValue.title }}</span>
 					<span v-else :class="[$style.fee_value, $style.fee_placeholder]">Select method</span>
-					<MaterialIcon name="expand_more" :size="16" color="secondary" />
+					<MaterialIcon name="expand_more" :size="16" color="secondary" aria-hidden="true" />
 				</Flex>
 			</template>
 
@@ -54,17 +63,24 @@ const menu = computed(() => menuOrder(props.methods))
 				<DropdownItem
 					v-for="method in menu"
 					:key="method.fpc?.id ?? method.type"
-					:class="$style.method"
-					:disabled="method.disabled"
+					:class="[$style.method, method.checking && $style.checking]"
+					:disabled="method.disabled || method.checking"
 					:data-testid="`send-fee-method-${method.subtitle}`"
 					:data-fpc-id="method.fpc?.id"
-					@click="!method.disabled && emit('update:modelValue', method)"
+					:data-checking="method.checking ? 'true' : undefined"
+					:data-verifying="method.verifying ? 'true' : undefined"
+					:aria-busy="method.checking || method.verifying ? 'true' : undefined"
+					@click="onRowClick(method, $event)"
 				>
 					<Flex align="center" justify="between" gap="8" wide>
-						<Text size="13" weight="600" :color="method.disabled ? 'tertiary' : 'primary'">
+						<Text variant="name" :class="$style.method_title" :color="method.disabled || method.checking ? 'tertiary' : 'primary'">
 							{{ method.title }}
 						</Text>
-						<Text size="11" color="tertiary">
+						<template v-if="method.checking || method.verifying">
+							<Skeleton />
+							<span :class="$style.visually_hidden">Checking</span>
+						</template>
+						<Text v-else variant="caption" color="tertiary">
 							{{ method.disabled && method.disabledReason ? method.disabledReason : method.spend }}
 						</Text>
 					</Flex>
@@ -79,12 +95,28 @@ const menu = computed(() => menuOrder(props.methods))
 	padding: 12px;
 }
 
+.method_title {
+	font-size: 13px;
+}
+
 .fee_label {
 	composes: fee_label from "./fee-shared.module.css";
 }
 
+.trigger {
+	width: 100%;
+	font: inherit;
+	color: inherit;
+	background: none;
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
+	}
+}
+
 .fee_value {
-	font-family: var(--font-mono);
+	composes: type--name from global;
 	font-size: 12px;
 	color: var(--txt-primary);
 }
@@ -99,15 +131,22 @@ const menu = computed(() => menuOrder(props.methods))
 	opacity: 1;
 }
 
+/* A checking row takes its click so the menu does not close on it, and does not light up as a choice. */
+.method.method.checking {
+	pointer-events: auto;
+	cursor: default;
+	background: transparent;
+}
+
+.visually_hidden {
+	composes: visually_hidden from "./fee-shared.module.css";
+}
+
 .tag {
+	composes: type--tag from global;
 	display: inline-flex;
 	align-items: center;
 	gap: 5px;
-
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
 	white-space: nowrap;
 }
 </style>

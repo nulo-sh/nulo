@@ -124,7 +124,7 @@ usePopupEntity(() => props.show, {
 		<PopupCard :displaceIdx="depth">
 			<PopupHeader @onClose="emit('onClose')" closable>
 				<template #title>
-					<Text size="14" weight="600" color="primary">Edit profile</Text>
+					<Text variant="title-page" color="primary">Edit profile</Text>
 				</template>
 			</PopupHeader>
 
@@ -133,6 +133,7 @@ usePopupEntity(() => props.show, {
 					<SettingItem
 						size="large"
 						:title="appStore.profile?.name"
+						titleVariant="name"
 						description="Profile for editing"
 						icon="user"
 						raw
@@ -149,11 +150,9 @@ usePopupEntity(() => props.show, {
 					@input="isStartedEditing = true"
 					data-testid="profile-name-input"
 				>
-					<template #right>
-						<Transition name="fade">
-							<FieldWarning v-if="isCollision"> Name in use </FieldWarning>
-							<FieldWarning v-else-if="isUnchanged"> Already exist </FieldWarning>
-						</Transition>
+					<template v-if="isCollision || isUnchanged" #right>
+						<FieldWarning v-if="isCollision"> Name in use </FieldWarning>
+						<FieldWarning v-else> Already exist </FieldWarning>
 					</template>
 				</Input>
 

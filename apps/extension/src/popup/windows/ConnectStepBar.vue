@@ -22,7 +22,7 @@ defineProps<{ step: 1 | 2 }>()
 .segment {
 	flex: 1;
 	height: 2px;
-	background: var(--nulo-border);
+	background: var(--nulo-track);
 }
 
 .filled {

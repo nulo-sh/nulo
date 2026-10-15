@@ -7,9 +7,12 @@
  */
 
 import { expect, inject } from "vitest"
-import { test as base, openPopup, waitForHash, clickByTestId } from "../fixtures/extension"
+import { prepareKeys } from "../fixtures/browser"
+import { test as base, openPopup, waitForHash } from "../fixtures/extension"
 import { extraTokensFixture } from "../fixtures/extra-tokens"
 import { seedUsdQuoteAndReload } from "../fixtures/helpers"
+import { shotSend } from "../fixtures/send-page"
+import { focusRing, tabAround, tabTo, tokenColor, waitForFocus } from "../helpers/pointer-probes"
 import type { AztecTestConfig } from "../fixtures/aztec"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -30,7 +33,7 @@ const homeSymbols = (page: Awaited<ReturnType<typeof openPopup>>) =>
 	page.$$eval('[data-testid="tokens-card"] [data-testid="token-symbol"]', (els) => els.map((el) => (el as HTMLElement).dataset.symbol))
 
 test.skipIf(!hasConfig)(
-	"home caps at three value-ordered rows and links to Holdings when more exist",
+	"home caps at three value-ordered rows and links to Holdings by keyboard when more exist",
 	{ timeout: 420_000 },
 	async ({ tokenReadyExtension, extraTokens: _extraTokens }) => {
 		const page = await openPopup(tokenReadyExtension)
@@ -48,8 +51,18 @@ test.skipIf(!hasConfig)(
 		expect(await homeSymbols(page)).toEqual(["BIG", "TST", "MID"])
 		expect(await page.$eval('[data-testid="tokens-count"]', (el) => el.textContent?.trim())).toBe("4")
 
-		// The link opens Holdings; the fourth token lives there.
-		await clickByTestId(page, "tokens-view-all")
+		await prepareKeys(page)
+		await tabTo(page, "tokens-view-all")
+		await shotSend(page, "home-cap-view-all-focused", "tokens-view-all")
+		const viewAll = '[data-testid="tokens-view-all"]'
+		expect(await page.$eval(viewAll, (el) => getComputedStyle(el).color)).toBe(await tokenColor(page, "--nulo-secondary"))
+		expect(await focusRing(page, "tokens-view-all")).toEqual({ ring: "solid 2px 2px", color: await tokenColor(page, "--nulo-accent") })
+		expect(await tabAround(page, 1)).toEqual(["tokens-menu-trigger"])
+		await page.keyboard.down("Shift")
+		await page.keyboard.press("Tab")
+		await page.keyboard.up("Shift")
+		await waitForFocus(page, "tokens-view-all")
+		await page.keyboard.press("Enter")
 		await waitForHash(page, "#/popup/holdings")
 		await page.waitForSelector('[data-testid="holdings-page"] [data-testid="token-symbol"][data-symbol="TINY"]', {
 			visible: true,

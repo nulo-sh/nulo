@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: A full-backup import that skips what every PXE rebuilds, runs each network on its own pipeline, and offers a Retry for the networks that did not restore: `apps/extension/src/composables/importChainSync.ts`, `apps/extension/src/composables/useFullBackupImport.ts` and `apps/extension/src/components/composite/import/ImportFullBackupForm.vue`, proven by `apps/extension/tests/e2e/network/backup-import-stalled-network.test.ts` and `apps/extension/tests/e2e/import-errors-scroll.test.ts`.
-- **Open items**: the import warning's light-theme contrast, a Retry that fails again looking unchanged, the error viewer and onboarding notice not naming networks, the export duplicating contracts every PXE rebuilds, skipping the profile's own account contracts, and a popup closed during the tail losing its outcome, each tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the import warning's light-theme contrast, a Retry that fails again looking unchanged, the error viewer and onboarding notice not naming networks, the export duplicating contracts every PXE rebuilds, skipping the profile's own account contracts, and a popup closed during the tail losing its outcome, each tracked in #189, #191, #192 and #221.
 - **Seeds retired**: the plan's goal and loop seeds are spent; nothing to resume.
 
 ## Decision

@@ -1,5 +1,7 @@
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 const profileApi = vi.hoisted(() => ({
@@ -213,5 +215,16 @@ describe("onboarding create — Enter does what the focused control says, with a
 		const field = w.get('[data-testid="onboarding-password-confirm"] input').element
 		const repeat = new KeyboardEvent("keydown", { key: "Enter", repeat: true, bubbles: true, cancelable: true })
 		expect(field.dispatchEvent(repeat)).toBe(false)
+	})
+})
+
+describe("onboarding create — the focused method tab's ring", () => {
+	/** Test runs answer every CSS-module name with a class, so a missing focus rule shows only here. */
+	const SOURCE = readFileSync(resolve(__dirname, "create.vue"), "utf8")
+
+	test("the filled tab's ring is in the page colour, inside its fill, and outranks the unfilled tab's by source order", () => {
+		expect(SOURCE).toMatch(
+			/\.tab:focus-visible \{[^}]*\}[\s\S]*\.tabActive:focus-visible \{\s*outline: 2px solid var\(--app-bg\);\s*outline-offset: -5px;\s*\}/,
+		)
 	})
 })

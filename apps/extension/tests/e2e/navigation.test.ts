@@ -1,7 +1,7 @@
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
-import { test, openPopup, waitForHash } from "./fixtures/extension"
-import { clickNavTab, openHoldings, seedUsdQuoteAndReload } from "./fixtures/helpers"
+import { clickByTestId, test, openPopup, waitForHash } from "./fixtures/extension"
+import { clickNavTab, openDropdown, openHoldings, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { readActivityScope, seedTransaction } from "./helpers/activity-seeds"
 import { tabAround } from "./helpers/pointer-probes"
 
@@ -14,14 +14,12 @@ test("settings page shows all sections", async ({ registeredExtension }) => {
 
 	// Assert core settings destinations exist by testid. Route segments are
 	// the stable contract even when section labels get reorganized.
-	for (const segment of ["profile", "accounts", "security", "networks", "tokens"]) {
+	for (const segment of ["profile", "accounts", "lock", "networks", "tokens", "privacy", "display", "developer", "about"]) {
 		await page.waitForSelector(`[data-testid="setting-nav-${segment}"]`, {
 			visible: true,
 			timeout: 5_000,
 		})
 	}
-	// About is a footer link with a real href (not a SettingItem)
-	await page.waitForSelector('a[href="#/popup/settings/about"]', { visible: true, timeout: 5_000 })
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
@@ -66,11 +64,7 @@ test("about page shows version info", async ({ registeredExtension }) => {
 	await clickNavTab(page, "settings")
 	await waitForHash(page, "#/popup/settings")
 
-	// Jump directly via router rather than clicking the below-the-fold footer link
-	await page.evaluate(() => {
-		const link = document.querySelector<HTMLAnchorElement>('a[href="#/popup/settings/about"]')
-		link?.click()
-	})
+	await clickByTestId(page, "setting-nav-about")
 
 	await waitForHash(page, "#/popup/settings/about")
 
@@ -78,6 +72,71 @@ test("about page shows version info", async ({ registeredExtension }) => {
 	// fixed labels, safe to text-match.
 	await page.waitForSelector("text/Wallet version", { visible: true, timeout: 5_000 })
 	await page.waitForSelector("text/Aztec version", { visible: true, timeout: 5_000 })
+
+	expect(registeredExtension.consoleErrors).toEqual([])
+	expect(registeredExtension.pageErrors).toEqual([])
+})
+
+test("the dropdown opener waits for a trigger that is not mounted yet and leaves an open menu open", async ({ registeredExtension }) => {
+	const page = await openPopup(registeredExtension)
+	await waitForHash(page, "#/popup/general")
+	await clickNavTab(page, "settings")
+	await waitForHash(page, "#/popup/settings")
+
+	// The opener's own first look for the trigger, made on Settings where Home's trigger is absent,
+	// releases the navigation to Home: the ordering is observed, never left to a clock.
+	await page.evaluate(() => {
+		const probe: { firstFoundNothing?: boolean; navigated?: boolean } = {}
+		const query = Document.prototype.querySelector
+		const queryAll = Document.prototype.querySelectorAll
+		const observe = (selector: string, foundNothing: boolean) => {
+			if (probe.firstFoundNothing !== undefined || !selector.includes("tokens-menu-trigger")) return
+			probe.firstFoundNothing = foundNothing
+			setTimeout(() => {
+				probe.navigated = true
+				window.location.hash = "/popup/general"
+			})
+		}
+		Document.prototype.querySelector = function (this: Document, selector: string) {
+			const found = query.call(this, selector)
+			observe(selector, found === null)
+			return found
+		} as Document["querySelector"]
+		Document.prototype.querySelectorAll = function (this: Document, selector: string) {
+			const found = queryAll.call(this, selector)
+			observe(selector, found.length === 0)
+			return found
+		} as Document["querySelectorAll"]
+		Object.assign(window, {
+			__openerProbe: probe,
+			__restoreQueries: () => {
+				Document.prototype.querySelector = query
+				Document.prototype.querySelectorAll = queryAll
+			},
+		})
+	})
+	const readProbe = () =>
+		page.evaluate(() => ({
+			...(window as unknown as { __openerProbe: { firstFoundNothing?: boolean; navigated?: boolean } }).__openerProbe,
+			hash: window.location.hash,
+		}))
+	try {
+		await openDropdown(page, "tokens-menu-trigger")
+		expect(await readProbe()).toEqual({ firstFoundNothing: true, navigated: true, hash: "#/popup/general" })
+		await page.waitForSelector('[data-testid="tokens-menu-import"]', { visible: true, timeout: 2_000 })
+
+		await openDropdown(page, "tokens-menu-trigger")
+		const menuOpen = await page.evaluate(() =>
+			document
+				.querySelector('[data-testid="tokens-menu-trigger"]')
+				?.closest("[data-dropdown-open]")
+				?.getAttribute("data-dropdown-open"),
+		)
+		expect(menuOpen, "a second open must not toggle the menu closed").toBe("true")
+		await page.waitForSelector('[data-testid="tokens-menu-import"]', { visible: true, timeout: 2_000 })
+	} finally {
+		await page.evaluate(() => (window as unknown as { __restoreQueries: () => void }).__restoreQueries())
+	}
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
@@ -167,6 +226,11 @@ async function scrollAndSettle(page: Page, wrapperTestid: string, to: "top" | "e
 
 const SETTINGS_ROW = "setting-nav-networks"
 
+/** Hub rows that kept their ids from the pages they left, so they sit outside `setting-nav-`. */
+const HUB_ROWS_OUTSIDE_PREFIX = ["delete-profile-link-btn", "backup-link-btn", "change-password-link-btn"]
+/** Every hub row, matched in one query so the result is in DOM order. */
+const HUB_ROWS = ['[data-testid^="setting-nav-"]', ...HUB_ROWS_OUTSIDE_PREFIX.map((id) => `[data-testid="${id}"]`)].join(", ")
+
 /** Puts a Settings row under the shown bar's bottom edge, clicks 2px below that edge and returns
  *  what the pointer met there and the hash the click led to. */
 async function clickBelowBar(page: Page): Promise<{ hit: string; hash: string }> {
@@ -254,8 +318,8 @@ test("History's and Settings' titles sit 10px below the header with 28px under t
 	const lap = walk.slice(start, end)
 	console.log(`[titles] Settings' Tab lap: ${lap.join(" → ")}`)
 	expect(lap.filter((stop) => stop.startsWith("page-"))).toEqual([])
-	const rows = await page.$$eval('[data-testid^="setting-nav-"]', (els) => els.map((el) => el.getAttribute("data-testid")))
-	expect(lap.filter((stop) => stop.startsWith("setting-nav-"))).toEqual(rows)
+	const rows = await page.$$eval(HUB_ROWS, (els) => els.map((el) => el.getAttribute("data-testid")))
+	expect(lap.filter((stop) => stop.startsWith("setting-nav-") || HUB_ROWS_OUTSIDE_PREFIX.includes(stop))).toEqual(rows)
 
 	const below = await clickBelowBar(page)
 	console.log(`[titles] a click 2px under the shown bar met ${below.hit} and led to ${below.hash}`)

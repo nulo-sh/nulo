@@ -1,5 +1,6 @@
 import {
 	CLIENT_DISCONNECTED_MESSAGE,
+	ImportedAccountUnusableError,
 	JobCancelledError,
 	OperationNotRecordedError,
 	RpcDisconnectedError,
@@ -10,6 +11,7 @@ import {
 } from "@nulo/extension-messaging/errors"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { ref } from "vue"
+import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
 import type { ToastState } from "@/composables/toast"
 import { createScopeEpochHandlers } from "@/popup/scope-epoch"
 import {
@@ -138,7 +140,17 @@ describe("send-submit", () => {
 		const { deps } = harness()
 		const id = submitTransfer(deps, SNAP)
 		expect(deps.awaiting.add).toHaveBeenCalledWith({ id, account: "0xacct", destination: DESTINATION, contract: "0xtoken" })
-		expect(deps.executeTransfer).toHaveBeenCalledWith("n1", "0xacct", 7, 0, DESTINATION, SNAP.amount, SNAP.feeSettings, "est-1")
+		expect(deps.executeTransfer).toHaveBeenCalledWith(
+			"n1",
+			"0xacct",
+			7,
+			0,
+			DESTINATION,
+			SNAP.amount,
+			SNAP.feeSettings,
+			"est-1",
+			undefined,
+		)
 		expect(submitTransfer(deps, SNAP)).not.toBe(id)
 	})
 
@@ -195,6 +207,16 @@ describe("send-submit", () => {
 		await flush()
 		expect(deps.openToast).toHaveBeenCalledWith({ kind: "error", label: "Send failed", sub: TRANSFER_TERMS_COPY })
 		expect(console.debug).toHaveBeenCalledWith("[send] executeTransfer refused:", expect.any(TermsAcceptanceRequiredError))
+		expect(console.error).not.toHaveBeenCalled()
+	})
+
+	test("an imported account whose key does not open: A10, logged at debug only", async () => {
+		const { deps, settle } = harness()
+		submitTransfer(deps, SNAP)
+		settle().reject(ImportedAccountUnusableError.because("address mismatch"))
+		await flush()
+		expect(deps.openToast).toHaveBeenCalledWith(expect.objectContaining(IMPORTED_UNUSABLE_TOAST))
+		expect(console.debug).toHaveBeenCalledWith("[send] executeTransfer refused:", expect.any(ImportedAccountUnusableError))
 		expect(console.error).not.toHaveBeenCalled()
 	})
 
@@ -284,7 +306,7 @@ describe("send-submit: Details on a failed send", () => {
 		["a failure of its own", "transfer"],
 		["a send the reaper declared lost", "stale_on_resume"],
 		["a first send the node answered as already initialized", "duplicate_initialization"],
-	])("a record that failed at submitting with its hash (%s): Send not confirmed, with Details", async (_name, kind) => {
+	])("a record that failed at submitting with its hash (%s): Send not confirmed, an info with Details", async (_name, kind) => {
 		const { deps, settle } = harness()
 		vi.mocked(deps.readJournal).mockResolvedValue(
 			failedRecord({ progress: MAYBE_SENT, error: { kind, message: "fetch failed", normalizedRaw: null } }),
@@ -293,7 +315,7 @@ describe("send-submit: Details on a failed send", () => {
 		settle().reject(fromWire(new Error("fetch failed"), JOURNAL_ID))
 		await flush()
 		expect(deps.openToast).toHaveBeenCalledWith({
-			kind: "error",
+			kind: "info",
 			label: "Send not confirmed",
 			sub: TRANSFER_NOT_CONFIRMED_COPY,
 			action: { label: "Details", onSelect: expect.any(Function) },

@@ -6,9 +6,10 @@
  * will actually send from — any divergence files the operation under the wrong
  * account:
  *
- *   1. An omitted / NO_FROM `from` resolves to the first WALLET-ordered account
- *      that the session authorizes. Wallet order is `getAccounts`' index sort,
- *      NOT the order the addresses happen to appear in `session.accounts`.
+ *   1. A NO_FROM `from` resolves to the first WALLET-ordered account that the
+ *      session authorizes. Wallet order is `getAccounts`' index sort, NOT the
+ *      order the addresses happen to appear in `session.accounts`. An omitted
+ *      `from` never reaches selection: the schema parse refuses it.
  *   2. An explicit `from` resolves to exactly that account, and an address
  *      outside the session is refused rather than silently downgraded to the
  *      default.
@@ -18,6 +19,7 @@
  */
 
 import { beforeAll, describe, expect, test } from "vitest"
+import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import type { Capability } from "./capabilities"
 import { WalletSdkDispatcher } from "./dispatcher"
@@ -30,14 +32,15 @@ import type {
 	INetworkReader,
 } from "./services-contract"
 import type { IDappSessionRef, INetworkRef } from "./session-types"
+import { wireAddress, wirePayload } from "./testing/wire"
 
 beforeAll(() => {
 	;(globalThis as { __VERSION__?: string }).__VERSION__ = "test"
 })
 
 const CHAIN = 0
-const ADDR_A = `0x${"a".repeat(64)}`
-const ADDR_B = `0x${"b".repeat(64)}`
+const ADDR_A = wireAddress("0a")
+const ADDR_B = wireAddress("0b")
 const caip = (addr: string) => `aztec:${CHAIN}:${addr}`
 
 const ctx = { chainId: CHAIN, profileId: "profile-1", origin: "https://dapp.example", sessionId: "session-1" }
@@ -102,33 +105,32 @@ describe("dispatcher send-account selection — characterization", () => {
 	test("NO_FROM resolves to the first WALLET-ordered session account, not the first session-listed one", async () => {
 		const { dispatcher, sent } = makeDispatcher()
 
-		await dispatcher.dispatch("sendTx", [{ calls: [] }, { from: "NO_FROM" }], ctx)
+		await dispatcher.dispatch("sendTx", [wirePayload([]), { from: "NO_FROM" }], ctx)
 
 		// Session lists B first; wallet order is [A, B] — A must win.
 		expect(sent()).toBe(caip(ADDR_A))
 	})
 
-	test("an omitted `from` behaves identically to NO_FROM", async () => {
+	test("an omitted `from` is refused before any account is selected", async () => {
 		const { dispatcher, sent } = makeDispatcher()
 
-		await dispatcher.dispatch("sendTx", [{ calls: [] }, {}], ctx)
-
-		expect(sent()).toBe(caip(ADDR_A))
+		await expect(dispatcher.dispatch("sendTx", [wirePayload([]), {}], ctx)).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
+		expect(sent()).toBeUndefined()
 	})
 
 	test("an explicit session-authorized `from` wins over the wallet-order default", async () => {
 		const { dispatcher, sent } = makeDispatcher()
 
-		await dispatcher.dispatch("sendTx", [{ calls: [] }, { from: ADDR_B }], ctx)
+		await dispatcher.dispatch("sendTx", [wirePayload([]), { from: ADDR_B }], ctx)
 
 		expect(sent()).toBe(caip(ADDR_B))
 	})
 
 	test("an explicit `from` outside the session is refused, never downgraded to the default", async () => {
 		const { dispatcher, sent } = makeDispatcher()
-		const stranger = `0x${"c".repeat(64)}`
+		const stranger = wireAddress("0c")
 
-		await expect(dispatcher.dispatch("sendTx", [{ calls: [] }, { from: stranger }], ctx)).rejects.toThrow(/not authorized/)
+		await expect(dispatcher.dispatch("sendTx", [wirePayload([]), { from: stranger }], ctx)).rejects.toThrow(/not authorized/)
 		expect(sent()).toBeUndefined()
 	})
 })

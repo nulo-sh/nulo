@@ -11,6 +11,8 @@
 /** Components */
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import TxFeeRow from "@/popup/components/modules/tx/TxFeeRow.vue"
+import TxHashRow from "@/popup/components/modules/tx/TxHashRow.vue"
+import AddressCardLink from "@/popup/components/modules/tx/AddressCardLink.vue"
 import TxDebugPanel from "@/popup/components/modules/tx/TxDebugPanel.vue"
 
 /** Vendor */
@@ -37,7 +39,7 @@ import {
 } from "@/utils/tx-enrichment"
 import { formatFeeJuice, feeToUsd, feeJuicePricingFromUsd } from "@/utils/fee-estimation"
 import { PriceServiceClient } from "@/wallet/services/price/client"
-import { getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
+import { getAccountExplorerUrl, getBlockExplorerUrl, getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
 import { buildGasBreakdown, computeFeeSavings, describeFeePaymentMethod } from "@/popup/components/modules/tx/tx-detail-helpers"
 
 /** Composables */
@@ -126,6 +128,17 @@ const explorerUrl = computed(() => {
 	return getTransactionExplorerUrl(appStore.network.chainId, appStore.defaultExplorer, tx.value.hash)
 })
 const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === appStore.defaultExplorer)?.name ?? "explorer")
+const blockUrl = computed(() =>
+	tx.value?.block ? getBlockExplorerUrl(appStore.network?.chainId, appStore.defaultExplorer, tx.value.block.hash) : null,
+)
+const fromUrl = computed(() =>
+	transfer.value ? getAccountExplorerUrl(appStore.network?.chainId, appStore.defaultExplorer, transfer.value.from) : null,
+)
+const toUrl = computed(() =>
+	transfer.value ? getAccountExplorerUrl(appStore.network?.chainId, appStore.defaultExplorer, transfer.value.to) : null,
+)
+const fromLabelId = useId()
+const toLabelId = useId()
 
 /** User-facing calls list — excludes fee/entrypoint infrastructure. An ALL-infra tx (e.g. a
  *  sponsored authorization: [sponsor_unconditionally, set_authorized]) falls back to the full list —
@@ -228,12 +241,19 @@ onBeforeUnmount(() => {
 					>
 						<AddressDisplay
 							static
-							size="13"
-							weight="600"
+							data-testid="tx-from-address"
+							lead
 							:address="transfer.from"
 							:formatter="(addr) => trimAddress(addr, 6, 4)"
 						/>
-						<span :class="$style.address_label">From</span>
+						<span :id="fromLabelId" :class="$style.address_label">From</span>
+						<AddressCardLink
+							v-if="fromUrl"
+							:href="fromUrl"
+							:label="`View on ${explorerName}`"
+							:aria-describedby="fromLabelId"
+							data-testid="tx-from-explorer-link"
+						/>
 					</Flex>
 
 					<Flex
@@ -245,12 +265,19 @@ onBeforeUnmount(() => {
 					>
 						<AddressDisplay
 							static
-							size="13"
-							weight="600"
+							data-testid="tx-to-address"
+							lead
 							:address="transfer.to"
 							:formatter="(addr) => trimAddress(addr, 6, 4)"
 						/>
-						<span :class="$style.address_label">To</span>
+						<span :id="toLabelId" :class="$style.address_label">To</span>
+						<AddressCardLink
+							v-if="toUrl"
+							:href="toUrl"
+							:label="`View on ${explorerName}`"
+							:aria-describedby="toLabelId"
+							data-testid="tx-to-explorer-link"
+						/>
 					</Flex>
 				</Flex>
 			</Flex>
@@ -259,22 +286,7 @@ onBeforeUnmount(() => {
 				<SectionLabel label="Details" />
 
 				<Flex wide direction="column" gap="10" :class="$style.details_box">
-					<Flex v-if="tx?.hash" wide justify="between" align="center">
-						<span :class="$style.detail_key">Tx hash</span>
-						<a
-							v-if="explorerUrl"
-							:href="explorerUrl"
-							target="_blank"
-							rel="noopener noreferrer"
-							data-testid="tx-hash-link"
-							:class="[$style.detail_value_mono, $style.detail_link]"
-						>{{ trimAddress(tx.hash, 6, 4) }}</a>
-						<span
-							v-else
-							@click="handleCopy(tx.hash)"
-							:class="[$style.detail_value_mono, 'copyable']"
-						>{{ trimAddress(tx.hash, 6, 4) }}</span>
-					</Flex>
+					<TxHashRow v-if="tx?.hash" :hash="tx.hash" :explorerUrl="explorerUrl" linkTestid="tx-hash-link" copyTestid="tx-hash" @copy="handleCopy" />
 
 					<Flex v-if="originLabel" wide justify="between" align="center">
 						<span :class="$style.detail_key">App</span>
@@ -312,7 +324,16 @@ onBeforeUnmount(() => {
 						<span :class="$style.detail_key">Block</span>
 						<Flex align="center" gap="6">
 							<span :class="$style.detail_value_mono">#{{ tx.block.number }}</span>
-							<span @click="handleCopy(tx.block.hash)" :class="[$style.detail_value_aux, 'copyable']">
+							<a
+								v-if="blockUrl"
+								:href="blockUrl"
+								target="_blank"
+								rel="noopener noreferrer"
+								data-testid="tx-block-link"
+								:class="[$style.detail_value_aux, $style.detail_link]"
+								>{{ trimAddress(tx.block.hash, 6, 4) }}</a
+							>
+							<span v-else data-testid="tx-block-hash" @click="handleCopy(tx.block.hash)" :class="[$style.detail_value_aux, 'copyable']">
 								{{ trimAddress(tx.block.hash, 6, 4) }}
 							</span>
 						</Flex>
@@ -320,7 +341,7 @@ onBeforeUnmount(() => {
 
 					<Flex v-if="tx?.nonce" wide justify="between" align="center">
 						<span :class="$style.detail_key">Nonce</span>
-						<span @click="handleCopy(tx.nonce)" :class="[$style.detail_value_mono, 'copyable']">
+						<span data-testid="tx-nonce" @click="handleCopy(tx.nonce)" :class="[$style.detail_value_mono, 'copyable']">
 							{{ trimAddress(tx.nonce, 6, 4) }}
 						</span>
 					</Flex>
@@ -339,7 +360,7 @@ onBeforeUnmount(() => {
 						:class="[$style.call_row, idx > 0 && $style.call_row_divider]"
 					>
 						<span :class="$style.call_method">{{ humanizeMethodName(c.method) || "Call" }}</span>
-						<span @click="handleCopy(c.contract)" :class="[$style.call_contract, 'copyable']">
+						<span data-testid="tx-call-contract" @click="handleCopy(c.contract)" :class="[$style.call_contract, 'copyable']">
 							{{ trimAddress(c.contract, 6, 4) }}
 						</span>
 					</Flex>
@@ -385,11 +406,6 @@ onBeforeUnmount(() => {
 	composes: hero_link from "../detail-page.module.css";
 }
 
-.detail_link {
-	composes: detail_link from "../detail-page.module.css";
-	color: var(--txt-secondary);
-}
-
 .amount_value {
 	composes: amount_value from "../detail-page.module.css";
 }
@@ -423,9 +439,7 @@ onBeforeUnmount(() => {
 }
 
 .detail_value {
-	font-family: var(--font-body);
-	font-size: 12px;
-	font-weight: 600;
+	composes: type--value from global;
 	color: var(--txt-primary);
 
 	text-align: right;
@@ -433,11 +447,17 @@ onBeforeUnmount(() => {
 }
 
 .detail_value_mono {
-	composes: detail_value_mono from "../detail-page.module.css";
+	composes: type--data from global;
+	color: var(--txt-primary);
 }
 
 .detail_value_aux {
-	composes: detail_value_aux from "../detail-page.module.css";
+	composes: type--meta from global;
+	color: var(--nulo-outline);
+}
+
+.detail_link {
+	composes: detail_link from "../detail-page.module.css";
 }
 
 .calls_box {
@@ -458,18 +478,15 @@ onBeforeUnmount(() => {
 }
 
 .call_method {
-	font-family: var(--font-headline);
+	composes: type--row-title from global;
 	font-size: 13px;
-	font-weight: 700;
-	letter-spacing: 0.01em;
 	color: var(--txt-primary);
 
 	word-break: break-word;
 }
 
 .call_contract {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--data from global;
 	color: var(--nulo-secondary);
 }
 

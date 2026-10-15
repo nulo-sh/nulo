@@ -5,6 +5,7 @@
  * impersonate a familiar name via Unicode tricks.
  */
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
+import { HOSTNAME_WARNING } from "@/composables/useDappHostname"
 
 const props = defineProps({
 	/** From useDappInteractionPayload.dapp; reads `loadingLogo`,
@@ -20,6 +21,7 @@ const props = defineProps({
 	 *  per window (e.g. "discover-hostname", "capabilities-hostname"). */
 	hostnameTestId: { type: String, default: undefined },
 	nameTestId: { type: String, default: undefined },
+	actionTestId: { type: String, default: undefined },
 })
 
 const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(props.dapp.name, 64) : ""))
@@ -39,12 +41,10 @@ const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(prop
 			</Flex>
 			<Flex v-if="hostnameSuspicious" align="start" gap="6" data-testid="dapp-hostname-warning">
 				<Icon name="warning" size="12" color="orange" aria-hidden="true" :class="$style.warning_icon" />
-				<span :class="$style.warning_text">
-					This hostname contains non-ASCII or punycoded characters. Verify carefully. Some characters can imitate Latin letters.
-				</span>
+				<span :class="$style.warning_text">{{ HOSTNAME_WARNING }}</span>
 			</Flex>
 			<span v-if="sanitizedName" :data-testid="nameTestId" :class="$style.dapp_name">{{ sanitizedName }}</span>
-			<span :class="$style.dapp_action">{{ actionLabel }}</span>
+			<span :data-testid="actionTestId" :class="$style.dapp_action">{{ actionLabel }}</span>
 		</Flex>
 	</Flex>
 </template>
@@ -81,10 +81,7 @@ const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(prop
 }
 
 .dapp_hostname {
-	font-family: var(--font-headline);
-	font-size: 14px;
-	font-weight: 700;
-	letter-spacing: 0.01em;
+	composes: type--data-lead from global;
 	color: var(--txt-primary);
 
 	overflow: hidden;
@@ -97,15 +94,13 @@ const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(prop
 }
 
 .warning_text {
-	font-size: 12px;
-	font-weight: 500;
+	composes: type--body from global;
 	line-height: 1.3;
 	color: var(--orange);
 }
 
 .dapp_name {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--caption from global;
 	color: var(--nulo-secondary);
 
 	overflow: hidden;
@@ -114,8 +109,7 @@ const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(prop
 }
 
 .dapp_action {
-	font-family: var(--font-body);
-	font-size: 12px;
+	composes: type--body from global;
 	color: var(--nulo-secondary);
 }
 </style>

@@ -28,6 +28,8 @@ function makeInput(overrides: Partial<OperationFingerprintInput> = {}): Operatio
 }
 
 const FPC_SNAPSHOT = { id: "fpc-1", type: 2, address: "0xfpc", chainId: 7, isProtocol: true } as const
+/** What a Fee Juice build commits at the default level: predictedWorst(2,3) × 2. */
+const FJ_CAP = { feePerDaGas: 4n, feePerL2Gas: 6n }
 
 function makeEntry(overrides: Partial<OperationEstimateReuseEntry> = {}): OperationEstimateReuseEntry {
 	return {
@@ -37,8 +39,8 @@ function makeEntry(overrides: Partial<OperationEstimateReuseEntry> = {}): Operat
 		networkId: "net-1",
 		feeSettings: makeInput().feeSettings,
 		profileId: "p1",
-		// predictedWorst(2,3) × default multiplier 2 → "4:6".
-		baseFeeFingerprint: "4:6",
+		// The snapshot is private fee juice: predictedWorst(2,3) × 1.2, rounded up, at every level.
+		builtCap: { feePerDaGas: 3n, feePerL2Gas: 4n },
 		primaryEndpointId: "e1",
 		primaryEndpointUrl: "http://primary",
 		pendingHashes: ["0xpending"],
@@ -50,6 +52,7 @@ function makeEntry(overrides: Partial<OperationEstimateReuseEntry> = {}): Operat
 		txCalls: [{ contract: "0xc", method: "m", args: [] }] as never,
 		pendingPublicAuthwits: [{ account: "0xacc", hash: "0xh", content: { kind: "message_hash", messageHash: "0xm" } }] as never,
 		discoveredHashes: [],
+		sequenceEpoch: 0,
 		builtAt: Date.now(),
 		...overrides,
 	}
@@ -69,6 +72,7 @@ function makeReuse(depOverrides: Partial<OperationEstimateReuseDeps> = {}) {
 		getLiveChainIdentity: vi.fn(async () => ({ l1ChainId: 1, rollupVersion: 4 })),
 		getFpcInfo: vi.fn(async () => ({ ...FPC_SNAPSHOT }) as never),
 		getPendingForAccount: vi.fn(() => [{ hash: "0xpending" }]),
+		sequenceEpoch: vi.fn(() => 0),
 		logDebug: vi.fn(),
 		...depOverrides,
 	}
@@ -97,12 +101,12 @@ describe("OperationEstimateReuse.tryConsume — the drift ladder", () => {
 		const feeJuice = { paymentMethod: { kind: "fj" } } as never
 		const selfPay = makeInput({ fee: { requestedPayment: "fj", gasPadding: 1 }, feeSettings: feeJuice })
 		const picked = makeInput({ fee: { gasPadding: 1 }, feeSettings: feeJuice })
-		reuse.stash("self", makeEntry({ fingerprint: fingerprintOperation(selfPay)!, feeSettings: feeJuice }))
-		reuse.stash("picked", makeEntry({ fingerprint: fingerprintOperation(picked)!, feeSettings: feeJuice }))
+		reuse.stash("self", makeEntry({ fingerprint: fingerprintOperation(selfPay)!, feeSettings: feeJuice, builtCap: FJ_CAP }))
+		reuse.stash("picked", makeEntry({ fingerprint: fingerprintOperation(picked)!, feeSettings: feeJuice, builtCap: FJ_CAP }))
 		expect(await reuse.tryConsume("self", picked, FENCE)).toBeUndefined()
 		expect(await reuse.tryConsume("picked", selfPay, FENCE)).toBeUndefined()
 		// Single-shot: the misses above consumed both slots; the same shape, re-stashed, comes back.
-		reuse.stash("self-again", makeEntry({ fingerprint: fingerprintOperation(selfPay)!, feeSettings: feeJuice }))
+		reuse.stash("self-again", makeEntry({ fingerprint: fingerprintOperation(selfPay)!, feeSettings: feeJuice, builtCap: FJ_CAP }))
 		expect(await reuse.tryConsume("self-again", selfPay, FENCE)).toBeDefined()
 	})
 
@@ -159,6 +163,18 @@ describe("OperationEstimateReuse.tryConsume — the drift ladder", () => {
 		expect(await reuse.tryConsume("id-2", makeInput(), FENCE)).toBeUndefined()
 	})
 
+	test("a send of the account that reached the node and left the pending set since the estimate misses; an unchanged epoch reuses", async () => {
+		// Same pending set as at the estimate: the send already settled, only the epoch records it.
+		const moved = makeReuse({ sequenceEpoch: vi.fn(() => 1) })
+		moved.reuse.stash("id-1", makeEntry())
+		expect(await moved.reuse.tryConsume("id-1", makeInput(), FENCE)).toBeUndefined()
+		expect(moved.deps.sequenceEpoch).toHaveBeenCalledWith(7, "0xacc")
+		const still = makeReuse({ sequenceEpoch: vi.fn(() => 1) })
+		const entry = makeEntry({ sequenceEpoch: 1 })
+		still.reuse.stash("id-1", entry)
+		expect(await still.reuse.tryConsume("id-1", makeInput(), FENCE)).toBe(entry)
+	})
+
 	test("CHAIN-IDENTITY drift: the composite assert throwing fails closed to a miss", async () => {
 		const { reuse } = makeReuse({
 			getLiveChainIdentity: vi.fn(async () => {
@@ -197,12 +213,43 @@ describe("OperationEstimateReuse.tryConsume — the drift ladder", () => {
 		expect(await reuse.tryConsume("id-1", makeInput(), FENCE)).toBeUndefined()
 	})
 
+	describe("a cap committed above the one a fresh build would commit", () => {
+		const fjInput = () => makeInput({ feeSettings: { paymentMethod: { kind: "fj" } } as never })
+		const fjEntry = (builtCap: { feePerDaGas: bigint; feePerL2Gas: bigint }) =>
+			makeEntry({
+				fpcIdentity: undefined,
+				fingerprint: fingerprintOperation(fjInput())!,
+				feeSettings: fjInput().feeSettings,
+				builtCap,
+			})
+
+		test.each([
+			["above on both gas types", { feePerDaGas: 9n, feePerL2Gas: 9n }, true],
+			["above on one, below on the other", { feePerDaGas: 9n, feePerL2Gas: 5n }, false],
+		])("Fee Juice, %s: reused only while it covers both", async (_case, builtCap, reused) => {
+			const { reuse } = makeReuse()
+			reuse.stash("id-1", fjEntry(builtCap))
+			expect((await reuse.tryConsume("id-1", fjInput(), FENCE)) !== undefined).toBe(reused)
+		})
+
+		test("private fee juice charges the cap, so only the exact one is reused", async () => {
+			const { reuse } = makeReuse()
+			reuse.stash("id-1", makeEntry({ builtCap: { feePerDaGas: 4n, feePerL2Gas: 5n } }))
+			expect(await reuse.tryConsume("id-1", makeInput(), FENCE)).toBeUndefined()
+		})
+	})
+
 	test("fj entries carry no fpcIdentity and skip the FPC step", async () => {
 		const { reuse, deps } = makeReuse()
 		const fjInput = makeInput({ feeSettings: { paymentMethod: { kind: "fj" } } as never })
 		reuse.stash(
 			"id-1",
-			makeEntry({ fpcIdentity: undefined, fingerprint: fingerprintOperation(fjInput)!, feeSettings: fjInput.feeSettings }),
+			makeEntry({
+				fpcIdentity: undefined,
+				fingerprint: fingerprintOperation(fjInput)!,
+				feeSettings: fjInput.feeSettings,
+				builtCap: FJ_CAP,
+			}),
 		)
 		expect(await reuse.tryConsume("id-1", fjInput, FENCE)).toBeDefined()
 		expect(deps.getFpcInfo).not.toHaveBeenCalled()
@@ -210,7 +257,7 @@ describe("OperationEstimateReuse.tryConsume — the drift ladder", () => {
 
 	test("base-fee drift misses (predicted-worst product changed)", async () => {
 		const { reuse } = makeReuse()
-		reuse.stash("id-1", makeEntry({ baseFeeFingerprint: "999:999" }))
+		reuse.stash("id-1", makeEntry({ builtCap: { feePerDaGas: 1n, feePerL2Gas: 1n } }))
 		expect(await reuse.tryConsume("id-1", makeInput(), FENCE)).toBeUndefined()
 	})
 

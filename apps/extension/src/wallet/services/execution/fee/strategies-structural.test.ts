@@ -218,6 +218,7 @@ describe("FpcStrategy structural parity (two-pass choreography — byte-parity c
 	function makeFpc() {
 		const feePayloadAction = { kind: "call", contract: "0xfpc", method: "pay_fee", args: [] } as unknown as Action
 		return {
+			infoData: { id: "fpc-1", profileId: "p1", chainId: 7, type: FpcType.PrivateFpc, address: "0xfpc", isProtocol: true },
 			getTotalGas: () => new Gas(1_000, 2_000),
 			getTeardownGas: () => new Gas(100, 200),
 			getFeePayload: vi.fn(() => [feePayloadAction]),
@@ -253,15 +254,16 @@ describe("FpcStrategy structural parity (two-pass choreography — byte-parity c
 		// Result carries the SECOND pass's identities.
 		expect(result.txRequest).toBe(builtB.txRequest)
 		expect(result.feePaymentMethod).toBe(AccountFeePaymentMethodOptions.EXTERNAL)
+		expect(result.fpcIdentity).toEqual({ id: "fpc-1", type: FpcType.PrivateFpc, address: "0xfpc", chainId: 7, isProtocol: true })
 
 		// Final action shape: fee payload first, then originals (splice pin).
 		expect(ctx.op.actions[0]).toBe(fpc.feePayloadAction)
 		expect(ctx.op.actions[1]).toBe(originalAction)
 		expect(ctx.op.actions).toHaveLength(2)
 
-		// Fees finalized from baseFees = min × multiplier(2): 1_110/1_332.
+		// A PrivateFPC row: baseFees = min × 1.2, rounded up, whatever the multiplier: 666/800.
 		const s = shape(result.txRequest)
-		expect([s.feeDa, s.feeL2]).toEqual([1_110n, 1_332n])
+		expect([s.feeDa, s.feeL2]).toEqual([666n, 800n])
 		// Limits from finalize: second sim × padding 1.
 		expect([s.gasDa, s.gasL2]).toEqual([31_000, 32_000])
 	})
@@ -271,7 +273,14 @@ describe("FpcStrategy canonical-Sponsored fast path (single-pass)", () => {
 	function makeSponsoredFpc(overrides: Partial<{ type: FpcType; isProtocol: boolean }> = {}) {
 		const feePayloadAction = { kind: "call", contract: "0xsfpc", method: "sponsor_unconditionally", args: [] } as unknown as Action
 		return {
-			infoData: { type: FpcType.DefaultSponsoredFpc, isProtocol: true, ...overrides },
+			infoData: {
+				id: "fpc-1",
+				profileId: "p1",
+				address: "0xsfpc",
+				type: FpcType.DefaultSponsoredFpc,
+				isProtocol: true as boolean | undefined,
+				...overrides,
+			},
 			getTotalGas: () => new Gas(1_000, 2_000),
 			getTeardownGas: () => new Gas(100, 200),
 			getFeePayload: vi.fn(() => [feePayloadAction]),
@@ -310,6 +319,7 @@ describe("FpcStrategy canonical-Sponsored fast path (single-pass)", () => {
 		expect((buildStandard.mock.calls[0] as unknown[])[2]).toBe(AccountFeePaymentMethodOptions.EXTERNAL)
 		expect(simulateTxTask).toHaveBeenCalledTimes(1)
 		expect(result.feePaymentMethod).toBe(AccountFeePaymentMethodOptions.EXTERNAL)
+		expect(result.fpcIdentity).toEqual({ id: "fpc-1", type: FpcType.DefaultSponsoredFpc, address: "0xsfpc", isProtocol: true })
 
 		// Final action shape identical to the two-pass output: payload first,
 		// then originals, nothing else.
@@ -326,6 +336,19 @@ describe("FpcStrategy canonical-Sponsored fast path (single-pass)", () => {
 			feeDa: 1_110n,
 			feeL2: 1_332n,
 		})
+	})
+
+	test("a row the caller pinned is paid with as given: the strategy reads no row itself", async () => {
+		const pinned = makeSponsoredFpc()
+		const { deps, buildStandard } = makeFpcDeps(makeSponsoredFpc({ isProtocol: false }))
+		const ctx = { ...makeFpcCtx(), fpc: pinned as never }
+
+		const result = await new FpcStrategy(deps).buildAndEstimate(ctx)
+
+		expect(deps.fpcService.getFpcImpl).not.toHaveBeenCalled()
+		expect(buildStandard).toHaveBeenCalledTimes(1)
+		expect(ctx.op.actions[0]).toBe(pinned.feePayloadAction)
+		expect(result.fpcIdentity?.isProtocol).toBe(true)
 	})
 
 	test("dApp-supplied custom gas limits force the two-pass path", async () => {
@@ -386,8 +409,7 @@ describe("FpcStrategy canonical-Sponsored fast path (single-pass)", () => {
 	})
 
 	test("undecorated FPC shape (cold protocol cache) fails safe to two-pass", async () => {
-		const fpc = makeSponsoredFpc()
-		;(fpc as { infoData?: unknown }).infoData = undefined
+		const fpc = makeSponsoredFpc({ isProtocol: undefined })
 		const { deps, buildStandard } = makeFpcDeps(fpc)
 
 		await new FpcStrategy(deps).buildAndEstimate(makeFpcCtx())
@@ -625,13 +647,13 @@ describe("FpcStrategy folded (probed) runs — discovery collapses into the firs
 
 	test("ADVERSARIAL (standalone inner-hash class): folded estimate SUCCEEDS where validated fails — failure moves to prove time", async () => {
 		// Models a contract that asserts an intent-hash authwit via
-		// `assert_inner_hash_valid_authwit`: it emits NO offchain effect (Noir
-		// fact 12), so discovery cannot see the need. A VALIDATED sim dies in
-		// the account's verify (authwit oracle throw); a STUBBED sim completes
-		// with zero effects. The folded pipeline therefore returns an estimate
-		// (and the tx later fails at PROVE time, pre-broadcast) — the
-		// owner-accepted Ask-1 trade. The classic probe-free run of the same op
-		// keeps failing at estimate time.
+		// `assert_inner_hash_valid_authwit`: it emits NO offchain effect, so
+		// discovery cannot see the need. A VALIDATED sim dies in the account's
+		// verify (authwit oracle throw); a STUBBED sim completes with zero
+		// effects. The folded pipeline therefore returns an estimate (and the
+		// tx later fails at PROVE time, pre-broadcast), an accepted trade-off.
+		// The classic probe-free run of the same op keeps failing at estimate
+		// time.
 		const innerHashSim = (opts: { stubAccountAddresses?: string[] }) => {
 			if (opts.stubAccountAddresses?.length) return Promise.resolve(sentinelSim())
 			return Promise.reject(new Error("Unknown auth witness for message hash 0xdeadbeef"))

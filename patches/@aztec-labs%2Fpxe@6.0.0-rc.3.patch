@@ -1,0 +1,13 @@
+diff --git a/dest/pxe.js b/dest/pxe.js
+index 26fe161a43a75dbac46e8aec212945934103ee93..24f8d7b647d51c9b476fb756f659643e5d005a8c 100644
+--- a/dest/pxe.js
++++ b/dest/pxe.js
+@@ -361,7 +361,7 @@ import { persistSenderTaggingIndexRangesForTx } from './tagging/index.js';
+         const accountCompleteAddress = await this.keyStore.addAccount(keys, partialAddress);
+         if (accounts.some((a)=>a.equals(accountCompleteAddress.address))) {
+             this.log.info(`Account:\n "${accountCompleteAddress.address.toString()}"\n already registered.`);
+-            return accountCompleteAddress;
++            // Modified by Nulo: falls through to the idempotent address write, so keys stored without their address heal.
+         } else {
+             this.log.info(`Registered account ${accountCompleteAddress.address.toString()}`);
+             this.log.debug(`Registered account\n ${accountCompleteAddress.toReadableString()}`);

@@ -85,6 +85,8 @@
 	--nulo-outline: #4a463f;
 	--nulo-border: #231f1c;
 	--nulo-secondary: #999187;
+	/* A graphic's empty track: 3:1 on the page, unlike --nulo-border, and apart from the accent in both themes. */
+	--nulo-track: #68625a;
 }
 
 /* The dark palette, declared once: an unthemed root (the landing) and an explicit dark theme share
@@ -119,6 +121,10 @@
 	--txt-support: rgba(245, 240, 230, 54%);
 	--txt-white: rgba(255, 255, 255, 95%);
 	--txt-inverse: rgba(0, 0, 0, 90%);
+	--txt-warning: var(--yellow);
+	/* Lighter than --red so it reads 4.5:1 on a pressed row (--nulo-surface-high), hovered and on the page. */
+	--txt-danger: #ff534b;
+	--txt-success: var(--green);
 
 	--white: #fff;
 	--black: #000;
@@ -129,6 +135,7 @@
 	--orange: #ff5500;
 	--yellow: #e6c525;
 	--red: #f03c3c;
+	--btn-destructive: #c62828;
 	--purple: #5856de;
 	--gray: #8e8e93;
 	--sand: #b88555;
@@ -157,6 +164,7 @@
 	--nulo-outline: #c9c5bd;
 	--nulo-border: #d8d4cc;
 	--nulo-secondary: #6b655c;
+	--nulo-track: #8f8a82;
 
 	/* Explicit values — replaces the bug-on-bug `var(--nulo-surface-highest)` alias (a DARK token). */
 	--border: rgba(124, 116, 104, 0.3);
@@ -176,6 +184,10 @@
 	--txt-support: rgba(0, 0, 0, 56%);
 	--txt-white: rgba(255, 255, 255, 95%);
 	--txt-inverse: rgba(255, 255, 255, 90%);
+	/* The status colours are too light for text on a light page; these are their AA text shades. */
+	--txt-warning: #7f6200;
+	--txt-danger: #b3261e;
+	--txt-success: #11733d;
 
 	--white: #fff;
 	--black: #000;
@@ -186,6 +198,7 @@
 	--orange: #ff5500;
 	--yellow: #e6c525;
 	--red: #f03c3c;
+	--btn-destructive: #c62828;
 	--purple: #5856de;
 	--gray: #8e8e93;
 	--sand: #b88555;
@@ -361,10 +374,6 @@ body {
 	cursor: pointer;
 }
 
-.capitalize {
-	text-transform: capitalize;
-}
-
 .noanimations * {
 	/* biome-ignore lint/complexity/noImportantStyles: deliberate animation kill-switch toggled at runtime (verbatim from _base.scss) */
 	transition: none !important;
@@ -372,34 +381,6 @@ body {
 
 .no-wrap {
 	white-space: nowrap;
-}
-
-.mono {
-	font-family: var(--font-mono);
-}
-
-.font-headline {
-	font-family: var(--font-headline);
-}
-
-.font-mono {
-	font-family: var(--font-mono);
-}
-
-.uppercase {
-	text-transform: uppercase;
-}
-
-.tracking-wide {
-	letter-spacing: 0.05em;
-}
-
-.tracking-widest {
-	letter-spacing: 0.1em;
-}
-
-.tabular {
-	font-variant: tabular-nums;
 }
 
 .selectable {

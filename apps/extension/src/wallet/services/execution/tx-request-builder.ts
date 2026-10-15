@@ -45,7 +45,7 @@ import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { encodeArguments, FunctionCall, FunctionSelector, FunctionType, getFunctionReturnType } from "@aztec-labs/stdlib/abi"
 import { AuthWitness } from "@aztec-labs/stdlib/auth-witness"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
-import { Gas, GasSettings } from "@aztec-labs/stdlib/gas"
+import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { Capsule, ExecutionPayload, HashedValues, TxContext, TxExecutionRequest } from "@aztec-labs/stdlib/tx"
 import type { ILogger } from "@/wallet/logger"
@@ -73,8 +73,9 @@ import {
 } from "./contract-resolver"
 import { fenceChecks } from "./execution-coordinator"
 import type { Action, AuthwitContent, AztecSendTxOperation } from "./spec"
+import { EXECUTION_SERVICE_NAME } from "./spec"
 
-const LOG_SOURCE = "TxRequestBuilder"
+const LOG_SOURCE = EXECUTION_SERVICE_NAME
 
 export interface BuiltStandardTx {
 	txRequest: TxExecutionRequest
@@ -193,7 +194,12 @@ export class TxRequestBuilder {
 						const fn = resolveCallFn(action, instances, artifacts)
 						const fnSelector = await FunctionSelector.fromNameAndParameters(fn.name, fn.parameters)
 						collected.calls.push(newCallFunctionCall(action, fn, fnSelector))
-						collected.txCalls.push({ contract: action.contract, method: action.method, args: action.args })
+						collected.txCalls.push({
+							contract: action.contract,
+							method: action.method,
+							args: action.args,
+							classId: await calledClassId(ctx, action.contract),
+						})
 						this.log("Call enqueued.")
 						break
 					}
@@ -201,7 +207,12 @@ export class TxRequestBuilder {
 						const artifact = requireArtifact(instances, artifacts, action.to)
 						const fn = validateEncodedCallFn(action, await findFunctionBySelector(artifact, action.selector))
 						collected.calls.push(newEncodedCallFunctionCall(action, fn))
-						collected.txCalls.push({ contract: action.to, method: fn.name, args: action.args })
+						collected.txCalls.push({
+							contract: action.to,
+							method: fn.name,
+							args: action.args,
+							classId: await calledClassId(ctx, action.to),
+						})
 						this.log("EncodedCall enqueued.")
 						break
 					}
@@ -344,11 +355,7 @@ export class TxRequestBuilder {
 		}
 		const call = await FunctionCall.schema.parseAsync(rawCalls[0])
 		const noFromArtifact = requireArtifact(instances, artifacts, call.to.toString())
-		const noFromFn = assertSelectorBinding(
-			await findFunctionBySelector(noFromArtifact, call.selector.toString()),
-			{ name: call.name, to: call.to.toString() },
-			CALL_BINDING,
-		)
+		const noFromFn = assertSelectorBinding(await findFunctionBySelector(noFromArtifact, call.selector.toString()), call, CALL_BINDING)
 		if (noFromFn.functionType !== FunctionType.PRIVATE) {
 			throw new Error("DefaultEntrypoint only supports private functions")
 		}
@@ -404,6 +411,9 @@ export class TxRequestBuilder {
 
 			// Register account in PXE (needed for scopes)
 			await account.ensureRegistered(pxe)
+			// Discovery stubs this account, and the run executes it to check any authorization, both by
+			// its registered instance, which otherwise only a standard build registers.
+			await account.ensureContractRegistered(pxe)
 			this.log("buildNoFrom: account registered in PXE")
 
 			// Register contracts referenced in the payload (same pattern as buildStandard)
@@ -427,9 +437,12 @@ export class TxRequestBuilder {
 
 			const hashedArguments = [await HashedValues.fromArgs(call.args)]
 			const currentMinFees = await node.getCurrentMinFees()
+			const appPriority = op.opts.fee?.gasSettings?.maxPriorityFeesPerGas
 			// 5.0: `fallback` requires explicit gasLimits — fill the network's per-tx admission limit.
+			// The cap is a placeholder the embedded cap overwrites; the app's priority fee is committed.
 			const gasSettings = GasSettings.fallback({
 				maxFeesPerGas: currentMinFees,
+				maxPriorityFeesPerGas: appPriority ? GasFees.from(appPriority) : undefined,
 				gasLimits: new Gas(nodeInfo.txsLimits.gas.daGas, nodeInfo.txsLimits.gas.l2Gas),
 			})
 			const txRequest = new TxExecutionRequest(
@@ -552,6 +565,19 @@ async function buildSetAuthorizedCall(messageHash: Fr): Promise<{ functionCall: 
 	return {
 		functionCall,
 		txCall: { contract: getAuthRegistryAddress().toString(), method: fn.name, args: [messageHash, true] },
+	}
+}
+
+/**
+ * The node's current class, else the original one `instances` holds, as the PXE resolves a call to
+ * run it, read at build time. A failed lookup records none, which only withholds a mint figure.
+ */
+async function calledClassId(ctx: BuildContext, contract: string): Promise<string | undefined> {
+	try {
+		const live = await ctx.node.getContract(AztecAddress.fromStringUnsafe(contract))
+		return (live ?? ctx.instances.get(contract))?.currentContractClassId.toString()
+	} catch {
+		return undefined
 	}
 }
 

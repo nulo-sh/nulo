@@ -35,25 +35,34 @@
  * a numeric multiplier via `PRIORITY_MULTIPLIERS` in `@nulo/wallet-bridge`.
  * All strategies get the pre-computed `feeMultiplier` in the context.
  * FJ / FJWC pass it to `finalizeGasLimits`; Embedded commits its capped
- * fee instead, so no multiplier applies there. FPC applies it to
- * `baseFees` BEFORE computing maxFee for the fee-payload actions.
+ * fee instead, so no multiplier applies there. A sponsor row applies it to
+ * `baseFees` BEFORE computing maxFee for the fee-payload actions; private
+ * fee juice ignores it. Every cap comes from `feeCapFor` (`./fee-cap`).
+ *
+ * ## The app's priority fee
+ *
+ * Every build commits the app's `maxPriorityFeesPerGas` (`appPriorityOf`); every later rewrite of the
+ * gas settings copies the build's priority through, and `feeCapFor` makes room for it in the cap.
  */
 
 import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from "@aztec-labs/constants"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
-import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
+import { Gas, type GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
-import { predictedWorstMinFees } from "@nulo/aztec-runtime/fee-juice"
 import type { TxExecutionRequest, TxSimulationResult } from "@aztec-labs/stdlib/tx"
 import type { ILogger } from "@/wallet/logger"
 import type { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
+import type { Fpc } from "@/wallet/services/fpc/fpc"
 import type { FpcService } from "@/wallet/services/fpc/service"
+import type { FpcIdentitySnapshot } from "@/wallet/services/fpc/spec"
 import type { IPXE } from "@/wallet/services/pxe/client"
 import { StepContent, type TaskService, type WrappedTask } from "@/wallet/services/task/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import type { DiscoveryProbe } from "../discovery-aware-estimator"
 import type { Action, FeeOptions, FeeSettings } from "../spec"
 import type { BuiltStandardTx, TxRequestBuilder } from "../tx-request-builder"
+import type { PartialGasSettingsRPC } from "@nulo/aztec-runtime/account"
+import { feeCapFor } from "./fee-cap"
 
 /** Default multiplier for `maxFeesPerGas`. Production default is `2`.
  *  Overridable at build time via `VITE_NULO_FEE_MULTIPLIER` so e2e CI can
@@ -75,6 +84,12 @@ export interface FeeEstimate extends BuiltStandardTx {
 	/** Set only when a sponsor row pays and the final simulation's kernel names that row's own
 	 *  address as fee payer: the account whose Fee Juice the node's admission check reads. */
 	sponsor?: { fpcId: string; address: AztecAddress }
+	/** The sponsor row this build paid with, as it read it: a reuse entry binds to this, never to a
+	 *  later read, which an edit during the build would have moved. Set by every `fpc` build. */
+	fpcIdentity?: FpcIdentitySnapshot
+	/** Set only when the app's own fee contract pays: the address the final simulation's kernel names
+	 *  as fee payer, and whether the transaction calls Fee Juice, which alone could credit it. */
+	appPayer?: { address: AztecAddress; callsFeeJuice: boolean }
 }
 
 /** Simulate callback — facade owns the TaskService wrapping so that
@@ -110,8 +125,7 @@ export type FeeStrategyContext = {
 	/** The authorization every build in the strategy runs under. */
 	fence: ExecutionFence
 	feeSettings: FeeSettings
-	/** Pre-computed from feeSettings.priorityLevel. Undefined if the
-	 *  caller didn't set one (falls back to DEFAULT_FEE_MULTIPLIER). */
+	/** `feeMultiplierFor(feeSettings.priorityLevel)`; unset falls back to `DEFAULT_FEE_MULTIPLIER`. */
 	feeMultiplier?: number
 	/** From op.fee?.gasPadding, defaulted to 1.05 by caller. */
 	gasPadding: number
@@ -127,6 +141,9 @@ export type FeeStrategyContext = {
 	 *  into one sim. Absent on every non-dApp path (transfer, send,
 	 *  embedded), which therefore keep byte-identical sim options. */
 	probe?: DiscoveryProbe
+	/** The validated `fpc` row a caller ordered the send against: the build pays with it, never with a
+	 *  later read an edit may have moved. Absent, the strategy resolves the row itself. */
+	fpc?: Fpc
 }
 
 /** Dependencies injected once at construction. */
@@ -182,6 +199,12 @@ export function validatedSimOpts(scope: AztecAddress): Parameters<SimulateTxFn>[
  *  here. RPC-free. */
 export function isInitWrapped(built: { txRequest: TxExecutionRequest; account: { address: AztecAddress } }): boolean {
 	return built.txRequest.origin?.toString() !== built.account.address.toString()
+}
+
+/** The gas settings a build starts from: the app's priority fee when it set one. The cap stays the
+ *  build's placeholder until a strategy sets it (`feeCapFor`). */
+export function appPriorityOf(fee?: FeeOptions): PartialGasSettingsRPC | undefined {
+	return fee?.maxPriorityFeesPerGas ? { maxPriorityFeesPerGas: fee.maxPriorityFeesPerGas } : undefined
 }
 
 /** Override gas limits on a pre-built tx request from a pending FeeOptions
@@ -262,8 +285,7 @@ export function assertCustomGasLimitsWithinCap(fee: FeeOptions | undefined, txsL
  *  - dApp `customLimits` over the cap ⇒ THROW, never silently capped (a
  *    dApp-visible behavior contract; capping silently would commit different
  *    bytes than the dApp signed off on).
- *  Absent (defensive), behavior is unchanged. NO_FROM builds never reach this
- *  function — their gasSettings are capped by construction in the builder. */
+ *  Absent (defensive), behavior is unchanged. */
 export async function finalizeGasLimits(
 	node: AztecNode,
 	txRequest: TxExecutionRequest,
@@ -276,24 +298,18 @@ export async function finalizeGasLimits(
 ): Promise<void> {
 	const multiplier = feeMultiplier ?? DEFAULT_FEE_MULTIPLIER
 	if (!maxFeesPerGas) {
-		if (customLimits?.maxFeesPerGas) {
-			maxFeesPerGas = new GasFees(BigInt(customLimits.maxFeesPerGas.feePerDaGas), BigInt(customLimits.maxFeesPerGas.feePerL2Gas))
-		} else if (customLimits?.embeddedFeePayment) {
-			// Embedded-FPC payments are pre-capped by `applyEmbeddedFpcGasCap` (to the dApp-supplied fee or
-			// `getCurrentMinFees()`), and the FPC asserts `gasLimits·maxFeesPerGas <= budget`. Refetching +
-			// re-multiplying here would commit a DIFFERENT ceiling than the one the FPC budget was reasoned
-			// against — a post-simulation drift that can push the committed cost past the budgeted amount.
-			// Reuse the already-committed cap verbatim. Non-embedded paths keep the refetch + general default.
-			maxFeesPerGas = txRequest.txContext.gasSettings.maxFeesPerGas
-		} else {
-			// Inclusion-safe basis: the worst predicted min fee across upcoming slots, not the
-			// current block's — a tx is proven seconds-to-minutes after estimation, and a cap
-			// priced off a momentarily low current-min gets the tx dropped when the base fee
-			// ticks up in that window. `maxFeesPerGas` is a cap, so the padding costs nothing
-			// unless the base fee actually rises.
-			maxFeesPerGas = await predictedWorstMinFees(node)
-			maxFeesPerGas = maxFeesPerGas.mul(multiplier)
-		}
+		// An embedded payment's own cap was set before the simulation, and an app's fee contract may
+		// have checked a budget against it there: a refetch would commit a different cap than the one
+		// it simulated under.
+		maxFeesPerGas =
+			customLimits?.embeddedFeePayment !== undefined
+				? txRequest.txContext.gasSettings.maxFeesPerGas
+				: await feeCapFor(node, {
+						payer: "account",
+						multiplier,
+						appCap: customLimits?.maxFeesPerGas,
+						appPriority: customLimits?.maxPriorityFeesPerGas,
+					})
 	}
 
 	const cap = admissionCap(txsLimits)

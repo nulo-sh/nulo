@@ -121,6 +121,17 @@ describe("runImportChainSync", () => {
 		expect(harness.records).toEqual([result])
 	})
 
+	test("a restore that wins its race leaves no timer behind", async () => {
+		const result = [{ networkId: "n1", senders: [sender()], contracts: [] }]
+		const { deps, harness } = makeDeps({
+			slice: [{ networkId: "n1", senders: [sender()], contracts: [] }],
+			restoreImpl: async () => result,
+		})
+		await runImportChainSync(deps)
+		expect(harness.records).toEqual([result])
+		expect(vi.getTimerCount()).toBe(0)
+	})
+
 	test("unreachable network: skip record with the constant copy, restore NOT called", async () => {
 		const { deps, harness } = makeDeps({
 			slice: [{ networkId: "n1", senders: [sender()], contracts: [] }],

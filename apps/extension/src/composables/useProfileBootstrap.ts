@@ -17,6 +17,7 @@ import type { ProfileInfo } from "@/wallet/services/profile/client"
 import { useAppStore } from "@/stores/app.store"
 import { createRunFence } from "@/composables/runFence"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
+import { runsUnattended, runUnattended } from "@/composables/useStaleNetwork"
 
 /**
  * Single-flight the activation core per profile id, module-level so it
@@ -35,7 +36,7 @@ const inFlightBootstraps = new Map<string, { isCurrent: () => boolean; promise: 
  * Generation fence: per-id single-flight covers same-profile recovery,
  * but a DIFFERENT profile activating mid-bootstrap (a rapid switch) would still
  * run its own init and stomp the shared clients while the older run continues.
- * Every new bootstrap bumps this counter, and `initNetworks`/`initAccount` fence
+ * Every new bootstrap and every lock bump this counter, and `initNetworks`/`initAccount` fence
  * EACH shared-state mutation on it — a superseded run stops before disconnecting/
  * replacing the winner's dynamically-referenced `managers.*` client or writing
  * stale network/account state. Joining also requires the in-flight run to still
@@ -43,6 +44,74 @@ const inFlightBootstraps = new Map<string, { isCurrent: () => boolean; promise: 
  * fresh rather than adopting an aborted run.
  */
 const bootstrapFence = createRunFence()
+
+/** Counts `supersedeProfileActivations` calls. The shell fences a failure's publication on its own
+ *  event sequence, which a supersede does not move. */
+let supersessions = 0
+
+/** After this, no activation whose core run started or was joined earlier sets `isLogined`,
+ *  whatever its last read of the session answered, and those runs abandon their network and
+ *  account setup. An event-driven one that then fails resolves `false` instead of reporting it. */
+export function supersedeProfileActivations(): void {
+	bootstrapFence.invalidate()
+	supersessions++
+}
+
+/** Profile ids of the event-driven activations (`bootstrapActiveProfile`), counted from entry to
+ *  settlement. `inFlightBootstraps` cannot answer this: it clears before the final session read. */
+const activating = new Map<string, number>()
+
+async function trackActivation(profileId: string, run: () => Promise<boolean>): Promise<boolean> {
+	const epoch = supersessions
+	activating.set(profileId, (activating.get(profileId) ?? 0) + 1)
+	try {
+		return await run()
+	} catch (err) {
+		if (supersessions !== epoch) return false
+		throw err
+	} finally {
+		const left = (activating.get(profileId) ?? 1) - 1
+		if (left > 0) activating.set(profileId, left)
+		else activating.delete(profileId)
+	}
+}
+
+/** Whether an event-driven activation of a profile other than `profileId` is still running. */
+export function isActivatingOtherThan(profileId: string): boolean {
+	for (const id of activating.keys()) if (id !== profileId) return true
+	return false
+}
+
+/** A quarantined chain's rows are never shown or used: the takeover owns the screen. */
+function clearQuarantinedAccounts(appStore: ReturnType<typeof useAppStore>): void {
+	appStore.accounts = []
+	appStore.account = undefined
+}
+
+/** Persists the resolved active network (the restored-active and fallback branches alike), then
+ *  reads its stale view. A network the profile never opened resets here, behind the unlock, and
+ *  the re-keyed row replaces the stale one (A2). */
+async function settleActiveNetwork(
+	appStore: ReturnType<typeof useAppStore>,
+	network: NetworkServiceClient,
+	networkId: string,
+	isCurrent: () => boolean,
+): Promise<void> {
+	await network.setActiveNetwork(networkId)
+	if (!isCurrent()) return
+	const view = await appStore.syncStaleNetwork(networkId)
+	if (!view || !runsUnattended(view) || !isCurrent()) return
+	const completed = await runUnattended(managers.networkReset, view)
+	if (!isCurrent()) return
+	if (completed) {
+		const nets = await network.getNetworks()
+		if (!isCurrent()) return
+		appStore.networks = nets
+		appStore.network = nets.find((n) => n.id === networkId) ?? appStore.network
+	}
+	// A failed run leaves its journal, which R1 shows.
+	await appStore.syncStaleNetwork(networkId)
+}
 
 export function useProfileBootstrap() {
 	const appStore = useAppStore()
@@ -71,9 +140,8 @@ export function useProfileBootstrap() {
 		if (resolved === "superseded" || !isCurrent()) return
 		appStore.network = resolved
 
-		// Persist the resolved active network (covers both the restored-active and fallback branches).
 		if (appStore.network) {
-			await network.setActiveNetwork(appStore.network.id)
+			await settleActiveNetwork(appStore, network, appStore.network.id, isCurrent)
 			if (!isCurrent()) return
 		}
 		appStore.syncNetworkStatus()
@@ -103,6 +171,7 @@ export function useProfileBootstrap() {
 		managers.account?.disconnect()
 		const account = new AccountServiceClient()
 		managers.account = account
+		if (appStore.staleNetwork?.networkId === appStore.network.id) return clearQuarantinedAccounts(appStore)
 		await account.ensureDefaultAccount(profileId, chainId, AccountType.Nulo_v1, DEFAULT_ACCOUNT_NAME)
 		if (!isCurrent()) return
 		const accounts = await account.getAccounts(profileId, chainId, true)
@@ -117,12 +186,12 @@ export function useProfileBootstrap() {
 	 * (recovery vs. the original event bootstrap) joins the in-flight run rather
 	 * than kicking off a second one that replaces the shared managers mid-use.
 	 */
-	const runBootstrapCore = (profileId: string): Promise<void> => {
+	const runBootstrapCore = (profileId: string): { isCurrent: () => boolean; promise: Promise<void> } => {
 		const existing = inFlightBootstraps.get(profileId)
 		// Join only a STILL-CURRENT same-profile run (same-profile recovery). A run
 		// that a newer activation already superseded is aborting, so re-activating
 		// this profile must start fresh rather than adopt it.
-		if (existing?.isCurrent()) return existing.promise
+		if (existing?.isCurrent()) return existing
 		// A new bootstrap supersedes any older in-flight one (of ANY profile).
 		const isCurrent = bootstrapFence.begin()
 		const promise = (async () => {
@@ -136,8 +205,9 @@ export function useProfileBootstrap() {
 			// Identity-guard: only clear the slot if it still holds THIS run.
 			if (inFlightBootstraps.get(profileId)?.promise === promise) inFlightBootstraps.delete(profileId)
 		})
-		inFlightBootstraps.set(profileId, { isCurrent, promise })
-		return promise
+		const run = { isCurrent, promise }
+		inFlightBootstraps.set(profileId, run)
+		return run
 	}
 
 	/**
@@ -145,7 +215,9 @@ export function useProfileBootstrap() {
 	 * popup/app.vue's `onActiveProfileChanged(profile)` — minus the routing
 	 * decisions and `popupStore.closeAll()` which stay in the calling shell.
 	 */
-	const bootstrapActiveProfile = async (profile: ProfileInfo): Promise<boolean> => {
+	const bootstrapActiveProfile = (profile: ProfileInfo): Promise<boolean> => trackActivation(profile.id, () => runActivation(profile))
+
+	const runActivation = async (profile: ProfileInfo): Promise<boolean> => {
 		appStore.profile = profile
 		// Supersede at entry: kick off / join the core SYNCHRONOUSLY, before
 		// the getProfiles await, so this activation's generation is bumped up front
@@ -159,14 +231,12 @@ export function useProfileBootstrap() {
 		// and updates (rename).
 		appStore.profiles = await managers.profile.getProfiles()
 
-		await core
+		await core.promise
 
-		// The lock must win: if the active session was cleared or switched while
-		// this bootstrap awaited (e.g. a lock fired right after a password change),
-		// do NOT flip isLogined back on. getActiveProfile() runs under the same
-		// profile-service runExclusive mutex as lockActiveProfile(), so this re-read
-		// observes the completed lock rather than the stale pre-lock session.
-		const stillActive = (await managers.profile.getActiveProfile())?.id === profile.id
+		// The lock must win. The re-read sees a lock that completed before it ran; the fence covers
+		// the one that ran right after it: the service mutex orders the calls, not when the popup
+		// receives their results, so its "active" can arrive after the lock event sealed the popup.
+		const stillActive = (await managers.profile.getActiveProfile())?.id === profile.id && core.isCurrent()
 		if (stillActive) {
 			// Unlocking the same profile changes no profile id, so nothing else
 			// re-reads the in-flight rows the lock emptied.
@@ -182,8 +252,8 @@ export function useProfileBootstrap() {
 	/**
 	 * Initial load of an already-active profile. Mirrors the
 	 * `getActiveProfile()` branch of `loadProfile()` in popup/app.vue.
-	 * Returns the active profile if one exists (and was bootstrapped),
-	 * or null if there's no active profile to hydrate.
+	 * Returns the active profile if one exists (and was bootstrapped), or null if
+	 * there is none or a lock or a newer activation superseded the run.
 	 */
 	const hydrateKnownProfile = async (): Promise<ProfileInfo | null> => {
 		const activeProfile = await managers.profile.getActiveProfile()
@@ -192,18 +262,21 @@ export function useProfileBootstrap() {
 		appStore.profile = activeProfile
 		// Join the in-flight event-driven bootstrap for this profile instead
 		// of racing a second network/account init that replaces its clients.
-		await runBootstrapCore(activeProfile.id)
+		const core = runBootstrapCore(activeProfile.id)
+		await core.promise
 
 		// Same lock-wins guard as bootstrapActiveProfile: don't flip isLogined if the
 		// session was cleared/switched mid-hydrate. isSessionChecked is set either way
 		// (the session WAS checked); a stale isLogined=true is the only harmful write.
-		if ((await managers.profile.getActiveProfile())?.id === activeProfile.id) {
+		const stillActive = (await managers.profile.getActiveProfile())?.id === activeProfile.id
+		const current = core.isCurrent()
+		if (current && stillActive) {
 			void appStore.refreshInFlight({ invalidate: true })
 			appStore.isLogined = true
 		}
 		appStore.isSessionChecked = true
 
-		return activeProfile
+		return current ? activeProfile : null
 	}
 
 	return { bootstrapActiveProfile, hydrateKnownProfile, initNetworks, initAccount }

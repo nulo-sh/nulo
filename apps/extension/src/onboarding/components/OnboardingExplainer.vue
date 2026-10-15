@@ -21,16 +21,16 @@ const emit = defineEmits(["continue", "skip"])
 		<Flex direction="column" gap="16" :class="$style.hero">
 			<BrutalistTitle :main="titleMain" :sub="titleSub" />
 			<div :class="$style.hero_bar" />
-			<Text size="14" color="secondary" height="150">
+			<Text variant="body" color="secondary" height="150">
 				{{ lede }}
 			</Text>
 		</Flex>
 
 		<div :class="$style.grid">
 			<article v-for="card in cards" :key="card.title" :class="$style.card">
-				<Text size="11" mono color="secondary" :class="$style.card_num">{{ card.number }}</Text>
-				<Text size="16" weight="700" color="primary" :class="$style.card_title">{{ card.title }}</Text>
-				<Text size="13" color="secondary" height="150">{{ card.body }}</Text>
+				<Text variant="meta" color="secondary">{{ card.number }}</Text>
+				<Text variant="row-title" color="primary" :class="$style.card_title">{{ card.title }}</Text>
+				<Text variant="body" color="secondary" height="150">{{ card.body }}</Text>
 			</article>
 		</div>
 
@@ -79,13 +79,8 @@ const emit = defineEmits(["continue", "skip"])
 	background: var(--card-bg);
 }
 
-.card_num {
-	letter-spacing: 0.12em;
-	font-weight: 600;
-}
-
 .card_title {
-	font-family: var(--font-headline);
+	font-size: 16px;
 }
 
 .actions {

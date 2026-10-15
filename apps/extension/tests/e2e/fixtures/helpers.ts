@@ -3,7 +3,7 @@ import { wrapParams } from "@nulo/extension-messaging/utils"
 import type { ElementHandle, Page } from "puppeteer"
 import { defaultProfileName } from "@/utils/profile-name"
 import { pinnedTokensKey } from "@/utils/profile-ui-keys"
-import { reloadExtensionPage } from "./browser"
+import { prepareClick, reloadExtensionPage } from "./browser"
 import { TEST_PASSWORD } from "./constants"
 import { clickByTestId, clickSelector, expectNameFieldPrefill, replaceInputValue, waitForHash, withTimeoutMessage } from "./extension"
 import { type SendAction, submitSend } from "./send-page"
@@ -24,30 +24,16 @@ import { type SendAction, submitSend } from "./send-page"
  * `role="alert"`. Avoid asserting on copy.
  */
 
-/**
- * Pinned workaround for a wallet bug: the simulate→prove pipeline doesn't
- * gate proveTx on PXE's anchor block having caught up to simulate's anchor.
- * Same race appears in dApp send paths (ExecutionService +
- * DappInteractionService). Real fix lives in the wallet — a shared
- * anchor-freshness gate factored as a pure helper. Until that lands, e2e
- * tests sleep here to let PXE catch up so proveTx doesn't fail on a stale
- * anchor. Renamed from a bare `setTimeout(5_000)` so the intent is
- * visible at every call site.
- */
-export const PXE_ANCHOR_SYNC_WORKAROUND_MS = 5_000
-
 // ── Auth ───────────────────────────────────────────────────────────────
 
-/** Lock the wallet via the Header lock button. Navigates to auth page.
+/** Lock the wallet via the Header lock button, then wait for the lock screen.
  *
  *  Only for a wallet with no approved send running: with one running, the
  *  button asks first, and the test drives that dialog itself.
  *
- *  The handler awaits one journal read, then sets `appStore.isLogined = false`
- *  and fires `managers.profile.lockActiveProfile()` without awaiting it; an
- *  app.vue watcher reacts to the isLogined change and pushes the router.
- *  Under vitest worker pressure the SW round-trip can take 5-10s before
- *  the navigation lands. */
+ *  The chip awaits the session handle and a read of the running sends, marks the popup locked and
+ *  sends the lock without awaiting it; the background's lock event then routes the popup to
+ *  `/popup/auth`. */
 export async function lockWallet(page: Page): Promise<void> {
 	// Wait for the lock control to be mounted BEFORE clicking — a bare
 	// `querySelector(...)?.click()` silently no-ops if the header hasn't
@@ -83,15 +69,10 @@ export async function lockThroughConfirmDialog(page: Page): Promise<ConfirmDialo
 
 /** Wait for a lock, however it was triggered, to land: the session record gone, then the popup on `/popup/auth`. */
 export async function waitForLockScreen(page: Page, timeoutMs = 60_000): Promise<void> {
-	// Assert the AUTHORITATIVE lock — the session record removed from
-	// chrome.storage.session (frozen key SESSION_STORAGE_ROOT) — not the UI
-	// auto-redirect. The redirect is event-driven (onActiveProfileChanged(undefined)
-	// → app.vue → router.push("/popup/auth")) and can be bounced by the route
-	// guard when a stale post-password-change `bootstrapActiveProfile` flips
-	// `isLogined` back to true AFTER the lock. That's a real product race (the
-	// session IS cleared, only the UI redirect loses the race), to be fixed in the auth/session
-	// code; do NOT paper over it in product code from here. Waiting on storage is strictly
-	// stronger than the redirect check.
+	// The session record leaving chrome.storage.session is the authoritative lock; the popup lands
+	// after it, routed by the lock event or, on a page opened after the lock, by its boot.
+	// Observed, never forced: a reload would abandon that route's load in flight, which Firefox
+	// rejects, and would pass a redirect that never lands.
 	await page.waitForFunction(
 		async () => {
 			const r = await chrome.storage.session.get("nulo:core:session")
@@ -99,11 +80,6 @@ export async function waitForLockScreen(page: Page, timeoutMs = 60_000): Promise
 		},
 		{ timeout: timeoutMs },
 	)
-	// If the redirect lost the race, reload: a fresh popup derives the locked
-	// state from storage and routes to /popup/auth (the real reopen path).
-	if (!(await page.evaluate(() => window.location.hash.includes("/popup/auth")))) {
-		await reloadExtensionPage(page)
-	}
 	await page.waitForFunction(() => window.location.hash.includes("/popup/auth"), { timeout: 15_000 })
 }
 
@@ -156,8 +132,8 @@ export async function ensureUnlocked(
 	// from a lone DOM marker — each of those lies in one direction. `app.vue`
 	// pushes `/popup/auth` BEFORE `initNetworks()`/`initAccount()` finish and
 	// `openPopup` returns inside that window, so an UNLOCKED wallet transiently
-	// renders the password field; `header-lock` tracks `isLogined`, which
-	// lockWallet documents as stale-TRUE after an authoritative lock.
+	// renders the password field; `header-lock` tracks `isLogined`, which the
+	// lock chip clears before the background drops the session.
 	//
 	// The record's mere PRESENCE is not enough either: `SessionManager.restore`
 	// deliberately leaves it in place for a passkey profile (WebAuthn needs a
@@ -324,17 +300,15 @@ export async function ensureUnlocked(
 }
 
 /**
- * Model the realistic post-import recovery. The P0-proven wedge: an MV3 service
- * worker restart mid-import drops the in-memory master secret, so in strict mode
- * (the default) the just-imported profile is locked until the user reopens and
- * unlocks. This reproduces that recovery deterministically:
+ * Model the realistic post-import recovery: an MV3 service worker restart mid-import
+ * drops the in-memory master secret, so in strict mode (the default) the just-imported
+ * profile is locked until the user reopens and unlocks. This reproduces that recovery
+ * deterministically, in one document:
  *
- *   lock  — drops the session record from chrome.storage.session, exactly as a
- *           worker restart drops the in-memory master;
- *   reopen via the auth route (lockWallet reloads a fresh popup that derives the
- *           locked state from storage — the real reopen path);
- *   unlock — re-derives the master, which re-provisions the encrypted per-chain
- *           PXE store key and boots the chain runtime.
+ *   lock   — drops the session record from chrome.storage.session, exactly as a
+ *            worker restart drops the in-memory master;
+ *   unlock — on the auth screen the lock lands on: re-derives the master, which
+ *            re-provisions the encrypted per-chain PXE store key and boots the chain runtime.
  *
  * Asserts the wallet lands back on /popup/general. Callers then do a
  * store-dependent read (account address / on-chain balance) to prove the
@@ -491,6 +465,17 @@ export async function peekSession(page: Page): Promise<{ id: string } | undefine
 	return callService(page, "profile", "getActiveProfile")
 }
 
+/** Locks the wallet as another window's Lock does: through the profile service, so this page learns
+ *  of it only from the lock event. */
+export async function lockFromAnotherWindow(page: Page): Promise<void> {
+	await callService(page, "profile", "lockActiveProfile")
+}
+
+/** Every sender the active profile has registered on its active networks, as the PXE reports them. */
+export async function registeredSenders(page: Page): Promise<string[]> {
+	return callService(page, "account-state", "getSendersAcrossActiveNetworks", [], 60_000)
+}
+
 /** Set the auto-lock TTL in milliseconds through the config service (the settings page offers whole
  *  minutes only), and return the session row once it carries the new deadline. The deadline is
  *  recomputed from `since`, and one older than `ms` would lock the wallet on the spot, so the
@@ -587,6 +572,16 @@ export async function navigateToSettings(page: Page, ...segments: string[]): Pro
 		// wasted on every fast path. Confirmed safe across 26 smoke call
 		// sites + 6 network sites.
 	}
+}
+
+/** Open Settings → Developer → Account State → `section`. Account State keeps its
+ *  `setting-nav-advanced-account-state-*` ids, which `navigateToSettings` cannot build. */
+export async function openAccountState(page: Page, section: "notes" | "authwits" | "contracts" | "senders"): Promise<void> {
+	await navigateToSettings(page, "developer")
+	await clickByTestId(page, "setting-nav-advanced-account-state")
+	await waitForHash(page, "#/popup/settings/developer/account-state", 5_000)
+	await clickByTestId(page, `setting-nav-advanced-account-state-${section}`)
+	await waitForHash(page, `#/popup/settings/developer/account-state/${section}`, 5_000)
 }
 
 // ── Network ────────────────────────────────────────────────────────────
@@ -832,19 +827,25 @@ export async function createSecondAccount(page: Page, name = "Second"): Promise<
 
 // ── Contact ────────────────────────────────────────────────────────────
 
+/** The contacts list's row for `name`, as the row states its own name. */
+export const contactRow = (name: string) => `[data-testid="contact-row"][data-contact-name="${name}"]`
+/** The sender chip on the contacts list's row for `name`. */
+export const senderChip = (name: string) => `${contactRow(name)} [data-testid="contact-sender-chip"]`
+
+/** Opens the NewContactPopup from the Contacts page and types `name` and `address`, without saving. */
+export async function fillNewContactForm(page: Page, name: string, address: string): Promise<void> {
+	await clickByTestId(page, "contacts-new-btn")
+	await page.waitForSelector('[data-testid="contact-name-input"]', { visible: true, timeout: 5_000 })
+	await replaceInputValue(page, '[data-testid="contact-name-input"]', name)
+	await page.waitForSelector('[data-testid="contact-address-input"]', { visible: true, timeout: 5_000 })
+	await replaceInputValue(page, '[data-testid="contact-address-input"]', address)
+}
+
 /** Add a contact via the NewContactPopup. Saving a contact touches the
  *  contact service only — sender registration is a separate concern
- *  (Settings → Advanced → Account State → Senders). */
+ *  (Settings → Developer → Account State → Senders). */
 export async function addContact(page: Page, name: string, address: string): Promise<void> {
-	await clickByTestId(page, "contacts-new-btn")
-
-	// Wait for form inputs to mount
-	await page.waitForSelector('input[placeholder="New contact"]', { visible: true, timeout: 5_000 })
-	await replaceInputValue(page, 'input[placeholder="New contact"]', name)
-
-	await page.waitForSelector('input[placeholder*="0x15c4"]', { visible: true, timeout: 5_000 })
-	await replaceInputValue(page, 'input[placeholder*="0x15c4"]', address)
-
+	await fillNewContactForm(page, name, address)
 	await clickByTestId(page, "new-contact-submit")
 
 	// Deterministic post-mutation signal — wait for the new contact row to
@@ -854,11 +855,7 @@ export async function addContact(page: Page, name: string, address: string): Pro
 	// --disable-renderer-backgrounding flag — the wallet popup ends up
 	// `slide-enter-from slide-enter-active` indefinitely even though
 	// popupStore.popups is empty). Closing via Escape force-unmounts.
-	await page.waitForFunction(
-		(n: string) => !!document.querySelector(`[data-testid="contact-row"][data-contact-name="${n}"]`),
-		{ timeout: 10_000, polling: 200 },
-		name,
-	)
+	await page.waitForFunction((s: string) => !!document.querySelector(s), { timeout: 10_000, polling: 200 }, contactRow(name))
 
 	await closeStuckPopup(page)
 }
@@ -883,9 +880,9 @@ export async function closeStuckPopup(page: Page): Promise<void> {
 
 /** Delete a contact by name (assumes contacts page is open). Deleting a
  *  contact never touches sender registration — senders are managed only
- *  in Settings → Advanced → Account State → Senders. */
+ *  in Settings → Developer → Account State → Senders. */
 export async function deleteContact(page: Page, name: string): Promise<void> {
-	const rowSelector = `[data-testid="contact-row"][data-contact-name="${name}"]`
+	const rowSelector = contactRow(name)
 	await page.waitForSelector(rowSelector, { visible: true, timeout: 5_000 })
 
 	// Synthesize a hover so the action icons (revealed via :hover CSS) are
@@ -899,11 +896,11 @@ export async function deleteContact(page: Page, name: string): Promise<void> {
 	}, rowSelector)
 
 	// Click the scoped delete icon within this specific row
-	await page.evaluate((n: string) => {
-		const row = document.querySelector(`[data-testid="contact-row"][data-contact-name="${n}"]`)
+	await page.evaluate((s: string) => {
+		const row = document.querySelector(s)
 		const del = row?.querySelector<HTMLElement>('[data-testid="contact-delete"]')
 		del?.click()
-	}, name)
+	}, rowSelector)
 
 	// Confirm deletion via ConfirmPopup
 	await page.waitForSelector('[data-testid="confirm-submit"]', {
@@ -917,28 +914,89 @@ export async function deleteContact(page: Page, name: string): Promise<void> {
 	await page.waitForFunction((sel: string) => !document.querySelector(sel), { timeout: 5_000 }, rowSelector)
 }
 
+// ── Dropdown ───────────────────────────────────────────────────────────
+
+/**
+ * Opens the dropdown whose trigger carries `triggerTestId` and resolves once the dropdown's own
+ * state (`data-dropdown-open`) reads open. It waits for a visible trigger and clicks at most once:
+ * `DropdownRoot` toggles on every trigger click, so a second click would close the menu, and a menu
+ * already open is left open.
+ */
+export async function openDropdown(page: Page, triggerTestId: string): Promise<void> {
+	await prepareClick(page)
+	await withTimeoutMessage(page.waitForFunction(openTrigger, { timeout: 10_000 }, triggerTestId, true), () =>
+		dropdownDiagnostic(page, triggerTestId, "no visible trigger"),
+	)
+	await withTimeoutMessage(page.waitForFunction(openTrigger, { timeout: 5_000 }, triggerTestId, false), () =>
+		dropdownDiagnostic(page, triggerTestId, "the menu never read open"),
+	)
+}
+
+/** Page side: the state read and the click pick one trigger by `clickByTestId`'s rule, so they never disagree. */
+function openTrigger(id: string, click: boolean): boolean {
+	const trigger = [...document.querySelectorAll<HTMLElement>(`[data-testid="${id}"]`)]
+		.filter((el) => {
+			if ((el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true") return false
+			const style = window.getComputedStyle(el)
+			if (style.display === "none" || style.visibility === "hidden") return false
+			const rect = el.getBoundingClientRect()
+			return rect.width > 0 && rect.height > 0
+		})
+		.at(-1)
+	if (!trigger) return false
+	const open = trigger.closest("[data-dropdown-open]")?.getAttribute("data-dropdown-open") === "true"
+	if (click && !open) trigger.click()
+	return click || open
+}
+
+/** The page's state at a dropdown wait's timeout, so a red names which stage stalled and why. */
+async function dropdownDiagnostic(page: Page, triggerTestId: string, stage: string): Promise<string> {
+	const state = await page.evaluate((id: string) => {
+		const triggers = [...document.querySelectorAll(`[data-testid="${id}"]`)]
+		return {
+			triggers: triggers.length,
+			open: triggers.map((el) => el.closest("[data-dropdown-open]")?.getAttribute("data-dropdown-open") ?? null),
+			hash: window.location.hash,
+			visibility: document.visibilityState,
+			focused: document.hasFocus(),
+		}
+	}, triggerTestId)
+	return `${triggerTestId}: ${stage}: ${JSON.stringify(state)}`
+}
+
 // ── Token ──────────────────────────────────────────────────────────────
 
 /** Import a token by contract address via the NewTokenPopup. */
 export async function importToken(page: Page, contractAddress: string): Promise<void> {
-	// Open tokens dropdown menu
-	await page.evaluate(() => {
-		;(document.querySelector('[data-testid="tokens-menu-trigger"]') as HTMLElement)?.click()
-	})
-	// The "Import token" item teleports into the dropdown layer after the
-	// menu opens; wait for it before clicking so we don't no-op on an
-	// unmounted target.
-	await page.waitForSelector('[data-testid="tokens-menu-import"]', { visible: true, timeout: 2_000 })
-
-	// Click "Import token"
-	await page.evaluate(() => {
-		;(document.querySelector('[data-testid="tokens-menu-import"]') as HTMLElement)?.click()
-	})
+	await clickTokensMenuItem(page, "tokens-menu-import")
 
 	// Enter contract address
 	await page.waitForSelector('[data-testid="token-address-input"]', { visible: true, timeout: 5_000 })
 	await replaceInputValue(page, '[data-testid="token-address-input"]', contractAddress)
+	await submitNewTokenPopup(page)
+}
 
+export async function waitForNewTokenAddress(page: Page, address: string): Promise<void> {
+	await page.waitForFunction(
+		(want: string) => document.querySelector<HTMLInputElement>('[data-testid="token-address-field"]')?.value === want,
+		{ timeout: 5_000 },
+		address,
+	)
+}
+
+/** Submits the open New token popup, its address already entered, and waits for the success toast. */
+export async function submitNewTokenPopup(page: Page): Promise<void> {
+	await clickNewTokenSubmit(page)
+
+	// Wait for success toast. The popup now blocks until the active account's
+	// initial balance projection completes (or 30s timeout in the popup
+	// itself), then fires the toast. Generous timeout because under sustained
+	// network-suite load the flow goes through PXE metadata fetch + storage
+	// write before the projector run.
+	await waitForToast(page, "Token added", 60_000)
+}
+
+export async function clickNewTokenSubmit(page: Page): Promise<void> {
 	// Wait for parsing to complete (button text changes from "Awaiting..." to
 	// "Import new token"). The wallet calls PXE to fetch token metadata,
 	// which is slow under sustained network-suite load — 60s is the safe
@@ -955,13 +1013,6 @@ export async function importToken(page: Page, contractAddress: string): Promise<
 	// Click import
 	await page.waitForSelector('[data-testid="import-token-button"]', { visible: true })
 	await clickByTestId(page, "import-token-button")
-
-	// Wait for success toast. The popup now blocks until the active account's
-	// initial balance projection completes (or 30s timeout in the popup
-	// itself), then fires the toast. Generous timeout because under sustained
-	// network-suite load the flow goes through PXE metadata fetch + storage
-	// write before the projector run.
-	await waitForToast(page, "Token added", 60_000)
 }
 
 /** Click "Refresh balances" from the token dropdown menu.
@@ -972,13 +1023,15 @@ export async function importToken(page: Page, contractAddress: string): Promise<
  *  (e.g. the fixture loops in extension.ts and the input-enabled wait inside
  *  sendTransfer), so we don't add a defensive trailing sleep here. */
 export async function refreshBalances(page: Page): Promise<void> {
-	await page.evaluate(() => {
-		;(document.querySelector('[data-testid="tokens-menu-trigger"]') as HTMLElement)?.click()
-	})
-	await page.waitForSelector('[data-testid="tokens-menu-refresh"]', { visible: true, timeout: 2_000 })
-	await page.evaluate(() => {
-		;(document.querySelector('[data-testid="tokens-menu-refresh"]') as HTMLElement)?.click()
-	})
+	await clickTokensMenuItem(page, "tokens-menu-refresh")
+}
+
+/** Opens Home's tokens menu and clicks `item`, which teleports into the dropdown layer once open. */
+async function clickTokensMenuItem(page: Page, item: string): Promise<void> {
+	await openDropdown(page, "tokens-menu-trigger")
+	await withTimeoutMessage(clickByTestId(page, item, 2_000), () =>
+		dropdownDiagnostic(page, "tokens-menu-trigger", `${item} never showed`),
+	)
 }
 
 /** Read the displayed balance text from BalanceView. */
@@ -1039,13 +1092,15 @@ export async function importTokenAndWaitForBalance(
 	})
 }
 
-/** Seed a fresh $1 USDC quote (the agent build maps every sandbox contract to `usd-coin`) and
- *  remount the popup so the stale-on-connect read adopts it. Resolves on Home. */
-export async function seedUsdQuoteAndReload(page: Page): Promise<void> {
-	await page.evaluate(() => {
-		const state = { "usd-coin": { coingeckoId: "usd-coin", usd: 1.0, fetchedAt: Date.now(), providerUpdatedAt: null } }
+/** Seed a fresh $1 quote for `priceId` (USDC by default) and remount the popup so the
+ *  stale-on-connect read adopts it. Resolves on Home. The quote prices a token only through a
+ *  mapping: the agent build maps every sandbox contract to `usd-coin`, and a smoke launch needs a
+ *  held list (`listedExtension`), whose priced token `readActivityScope(page, { priced: true })` names. */
+export async function seedUsdQuoteAndReload(page: Page, priceId = "usd-coin"): Promise<void> {
+	await page.evaluate((id: string) => {
+		const state = { [id]: { coingeckoId: id, usd: 1.0, fetchedAt: Date.now(), providerUpdatedAt: null } }
 		return chrome.storage.local.set({ "nulo:core:token-prices": JSON.stringify(state) })
-	})
+	}, priceId)
 	await reloadExtensionPage(page)
 	await page.waitForFunction(() => window.location.hash === "#/popup/general", { timeout: 15_000 })
 }
@@ -1199,8 +1254,8 @@ export async function sendTransfer(page: Page, opts: SendTransferOptions): Promi
 	await page.waitForFunction(() => !document.querySelector('[data-testid="send-destination-field"]'), { timeout: 10_000 })
 }
 
-/** Fills the open Send form and waits until the footer is clickable — the fee estimate landed. */
-export async function fillSendForm(page: Page, opts: { amount: string; destination: string }): Promise<void> {
+/** Types the amount and destination into the open Send form, once its amount field takes input. */
+export async function enterSendForm(page: Page, opts: { amount: string; destination: string }): Promise<void> {
 	// Wait for amount input to become ENABLED
 	// AmountCard has :disabled="!tokenBalanceByType" — disabled when balance for selected type is 0/loading
 	await page.waitForFunction(
@@ -1215,6 +1270,11 @@ export async function fillSendForm(page: Page, opts: { amount: string; destinati
 	// triple-click + type is unreliable on our custom Input wrapper.
 	await replaceInputValue(page, '[data-testid="send-amount-input"]', opts.amount)
 	await replaceInputValue(page, '[data-testid="send-destination-field"] input', opts.destination)
+}
+
+/** Fills the open Send form and waits until the footer is clickable — the fee estimate landed. */
+export async function fillSendForm(page: Page, opts: { amount: string; destination: string }): Promise<void> {
+	await enterSendForm(page, opts)
 
 	// Wait for send button to become clickable (pointer-events != none)
 	// This means fee estimation (which triggers simulateTx → PXE sync) completed.
@@ -1245,8 +1305,6 @@ export async function fillSendForm(page: Page, opts: { amount: string; destinati
 		console.error("[sendTransfer] submit never became enabled. Snapshot:", JSON.stringify(snapshot, null, 2))
 		throw e
 	}
-
-	await new Promise((r) => setTimeout(r, PXE_ANCHOR_SYNC_WORKAROUND_MS))
 }
 
 /** Map a (fromType, toType) pair to the user-visible transfer-type label
@@ -1344,38 +1402,49 @@ export async function hasTxCardByHash(page: Page, hash: string): Promise<boolean
  *  the fourth rendered entry ("coming soon") is disabled by design. */
 export type FeeMethodSubtitle = "sponsored" | "public" | "private"
 
+/** How long a fee row can stay loading on Send: the forced balance read waits out a read already in
+ *  flight, then runs its own, each bounded by the balances store's 20s fetch timeout. */
+export const FEE_ROW_READY_MS = 45_000
+
 /** Select a fee payment method in the shared FeeSettingsCard dropdown (the
  *  send flow AND the dApp execute/authwit popups embed the same card).
- *  `mountTimeoutMs` exists because the card mounts only after FPC
- *  auto-discovery — an async service round-trip that can take seconds on a
- *  cold path. */
+ *  `mountTimeoutMs` bounds every wait. The card can mount late, and its rows
+ *  stay loading (aria-disabled, inert) until the read that answers them lands:
+ *  the sponsor rows with the FPC list, the Fee Juice rows with the balance read,
+ *  which is forced on every Send mount and takes seconds on a cold path. So the
+ *  row is clicked only once it is enabled, and the default wait covers that read. */
 export async function selectFeeMethod(
 	page: Page,
 	methodSubtitle: FeeMethodSubtitle,
 	opts: { mountTimeoutMs?: number } = {},
 ): Promise<void> {
-	const mountTimeoutMs = opts.mountTimeoutMs ?? 2_000
+	const mountTimeoutMs = opts.mountTimeoutMs ?? FEE_ROW_READY_MS
 	await page.waitForSelector('[data-testid="send-fee-method-trigger"]', { visible: true, timeout: mountTimeoutMs })
 	// Open the fee method dropdown (items teleport to #dropdown)
 	await page.evaluate(() => {
 		;(document.querySelector('[data-testid="send-fee-method-trigger"]') as HTMLElement)?.click()
 	})
 
-	// Wait for the target item to teleport into the dropdown layer.
-	const testid = `send-fee-method-${methodSubtitle}`
-	await page.waitForSelector(`[data-testid="${testid}"]`, { visible: true, timeout: mountTimeoutMs })
-
-	// Click the method by data-testid on the teleported DropdownItem
-	await page.evaluate((id: string) => {
-		;(document.querySelector(`[data-testid="${id}"]`) as HTMLElement)?.click()
-	}, testid)
+	const row = `send-fee-method-${methodSubtitle}`
+	await withTimeoutMessage(clickByTestId(page, row, mountTimeoutMs), async () => {
+		const state = await page.evaluate((id: string) => {
+			const el = document.querySelector(`[data-testid="${id}"]`)
+			if (!el) return "absent"
+			return el.getAttribute("aria-disabled") === "true" ? "disabled" : "enabled"
+		}, row)
+		return `selectFeeMethod: ${row} was not selectable within ${mountTimeoutMs}ms (now ${state})`
+	})
 
 	// The trigger exposes `data-fee-method` once the selection commits;
 	// wait for it to match instead of guessing at Vue's render timing.
-	await page.waitForFunction(
-		(want: string) => document.querySelector('[data-testid="send-fee-method-trigger"]')?.getAttribute("data-fee-method") === want,
-		{ timeout: 2_000, polling: 50 },
-		methodSubtitle,
+	await withTimeoutMessage(
+		page.waitForFunction(
+			(want: string) => document.querySelector('[data-testid="send-fee-method-trigger"]')?.getAttribute("data-fee-method") === want,
+			{ timeout: mountTimeoutMs, polling: 50 },
+			methodSubtitle,
+		),
+		async () =>
+			`selectFeeMethod: picked ${methodSubtitle}, but the trigger read ${await getSelectedFeeMethod(page)} after ${mountTimeoutMs}ms`,
 	)
 }
 
@@ -1396,7 +1465,7 @@ export async function waitForToast(
 	page: Page,
 	text: string,
 	timeout = 5_000,
-	opts: { kind?: "success" | "error" } = {},
+	opts: { kind?: "success" | "info" | "error" } = {},
 ): Promise<ElementHandle<Element>> {
 	const handle = await page.waitForFunction(
 		(t: string, kind: string | null) => {
@@ -1412,7 +1481,7 @@ export async function waitForToast(
 		text,
 		opts.kind ?? null,
 	)
-	const element = handle.asElement()
+	const element = handle.asElement() as ElementHandle<Element> | null
 	if (!element) throw new Error(`the snack containing "${text}" left between the wait and the read`)
 	return element
 }
@@ -1487,25 +1556,7 @@ export async function setInputAndBlur(page: Page, selector: string, value: strin
  *  and then waits on an option that is about to disappear. Gate on the
  *  dropdown's OWN state (`data-dropdown-open`, synchronous with `isOpen`). */
 export async function setTheme(page: Page, mode: "system" | "light" | "dark"): Promise<void> {
-	const readOpen = () =>
-		page.evaluate(
-			() =>
-				document
-					.querySelector('[data-testid="theme-trigger"]')
-					?.closest("[data-dropdown-open]")
-					?.getAttribute("data-dropdown-open") === "true",
-		)
-	if (!(await readOpen())) {
-		await clickByTestId(page, "theme-trigger")
-		await page.waitForFunction(
-			() =>
-				document
-					.querySelector('[data-testid="theme-trigger"]')
-					?.closest("[data-dropdown-open]")
-					?.getAttribute("data-dropdown-open") === "true",
-			{ timeout: 5_000 },
-		)
-	}
+	await openDropdown(page, "theme-trigger")
 	await clickByTestId(page, `theme-${mode}-btn`)
 	if (mode === "system") {
 		// system mode resolves to either "dark" or "light" via prefers-color-scheme
@@ -1583,6 +1634,30 @@ export async function navigateByHash(page: Page, hash: string, timeout = 5_000):
 	// an element on the destination page (or asserts on a globally-stable
 	// document attribute like `theme`). If a new caller doesn't, it should
 	// add its own state-driven wait, not bring the sleep back.
+}
+
+/** The incoming scheduler's tick interval: a receipt shown sooner after an unlock came from the
+ *  unlock's own scan, not from a tick. */
+export const INCOMING_SCAN_INTERVAL_MS = 30_000
+
+/** Unlock a locked wallet, then wait on History for an incoming row whose kind chip reads `label`
+ *  and amount reads `amount`. Resolves the time from helper entry to the row. */
+export async function unlockUntilIncomingRow(page: Page, label: string, amount: string, timeout = 180_000): Promise<number> {
+	const unlockedFrom = Date.now()
+	await ensureUnlocked(page, TEST_PASSWORD)
+	await waitForHash(page, "#/popup/general", 60_000)
+	await navigateByHash(page, "#/popup/activity")
+	await page.waitForFunction(
+		([lbl, amt]) =>
+			[...document.querySelectorAll('[data-testid="tx-incoming-card"]')].some(
+				(card) =>
+					(card.querySelector('[data-testid="tx-incoming-kind-chip"]')?.textContent || "").trim() === lbl &&
+					(card.querySelector('[data-testid="activity-amount"]')?.textContent || "").trim() === amt,
+			),
+		{ timeout, polling: 500 },
+		[label, amount] as const,
+	)
+	return Date.now() - unlockedFrom
 }
 
 /** Drive the change-password form. Assumes you're on `/popup/settings/profile`
@@ -2078,7 +2153,7 @@ export async function waitForWorkerLiveness(page: Page, afterTs: number, opts: {
 	)
 }
 
-/** Set Developer Mode from Settings → Advanced, wait for the write to land, and return to the
+/** Set Developer Mode from Settings → Developer, wait for the write to land, and return to the
  *  general tab (the settings subpages hide the nav tabs the other helpers click). */
 export async function setDeveloperMode(page: Page, on: boolean): Promise<void> {
 	await setAdvancedToggle(page, "developerMode", on)
@@ -2091,7 +2166,7 @@ export async function setDebugMode(page: Page, on: boolean): Promise<void> {
 }
 
 async function setAdvancedToggle(page: Page, key: "developerMode" | "debugMode", on: boolean): Promise<void> {
-	await navigateByHash(page, "#/popup/settings/advanced")
+	await navigateByHash(page, "#/popup/settings/developer")
 	const toggle = `[data-testid="settings-toggle-${key}"]`
 	await page.waitForSelector(toggle, { visible: true, timeout: 30_000 })
 	const isOn = async () => (await page.$eval(toggle, (el) => el.getAttribute("aria-checked"))) === "true"

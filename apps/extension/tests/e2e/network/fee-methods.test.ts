@@ -1,7 +1,6 @@
 import { inject, expect } from "vitest"
 import { test, openPopup, waitForHash, replaceInputValue, clickByTestId } from "../fixtures/extension"
 import {
-	PXE_ANCHOR_SYNC_WORKAROUND_MS,
 	fillSendForm,
 	refreshBalances,
 	sendTransfer,
@@ -124,8 +123,6 @@ test.skipIf(!hasConfig)("transfer with public Fee Juice", { timeout: 300_000 }, 
 		{ timeout: 120_000, polling: 3_000 },
 	)
 
-	await new Promise((r) => setTimeout(r, PXE_ANCHOR_SYNC_WORKAROUND_MS))
-
 	// Submit
 	await page.waitForSelector('[data-testid="send-submit"]', { visible: true })
 	await page.evaluate(() => document.querySelector('[data-testid="send-submit"]')?.scrollIntoView({ block: "center" }))
@@ -173,7 +170,9 @@ test.skipIf(!hasConfig)("transfer with private Fee Juice", { timeout: 300_000 },
 	await replaceInputValue(page, '[data-testid="send-destination-field"] input', feeJuiceImportedExtension.accountAddress)
 
 	// Switch fee method to Private Fee Juice — exercises FpcStrategy paying
-	// via PrivateFPC.pay_fee using the FPC's internal balance.
+	// via PrivateFPC.pay_fee using the FPC's internal balance. The amount input
+	// enables on the token balance alone, so the fee card's first FPC and
+	// balance read, which the row waits on, can still be in flight here.
 	await selectFeeMethod(page, "private")
 	console.log("[fee-methods] Switched to Fee Juice (private)")
 
@@ -186,8 +185,6 @@ test.skipIf(!hasConfig)("transfer with private Fee Juice", { timeout: 300_000 },
 		},
 		{ timeout: 180_000, polling: 3_000 },
 	)
-
-	await new Promise((r) => setTimeout(r, PXE_ANCHOR_SYNC_WORKAROUND_MS))
 
 	await page.waitForSelector('[data-testid="send-submit"]', { visible: true })
 	await page.evaluate(() => document.querySelector('[data-testid="send-submit"]')?.scrollIntoView({ block: "center" }))
@@ -246,14 +243,23 @@ test.skipIf(!hasConfig)("gas balance card shows non-zero FeeJuice", { timeout: 1
 // the footer's action and the strip's `you` must agree (`waitForFee` / `waitForTag`) — and every
 // send names what the footer must offer, so a real send is also a check on the gate.
 
-const SEND_PICKS_KEY = "nulo:ui:sendFeePaymentMethods"
+/** Send's picks live under the profile's own key; each fixture holds one profile. */
+const SEND_PICKS_PREFIX = "nulo:ui:sendFeePaymentMethods@"
 
 async function clearSendPicks(page: Page): Promise<void> {
-	await page.evaluate((key: string) => chrome.storage.local.remove(key), SEND_PICKS_KEY)
+	await page.evaluate(async (prefix: string) => {
+		const keys = Object.keys(await chrome.storage.local.get(null)).filter((key) => key.startsWith(prefix))
+		await chrome.storage.local.remove(keys)
+	}, SEND_PICKS_PREFIX)
 }
 
 async function readSendPicks(page: Page): Promise<unknown> {
-	return page.evaluate(async (key: string) => (await chrome.storage.local.get(key))[key], SEND_PICKS_KEY)
+	return page.evaluate(async (prefix: string) => {
+		const stored = await chrome.storage.local.get(null)
+		const keys = Object.keys(stored).filter((key) => key.startsWith(prefix))
+		if (keys.length > 1) throw new Error(`expected one profile's Send picks, found ${keys.length}`)
+		return keys.length ? stored[keys[0]] : undefined
+	}, SEND_PICKS_PREFIX)
 }
 
 async function fillAndSubmit(page: Page, destination: string, amount: string, expect: SendAction): Promise<void> {

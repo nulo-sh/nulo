@@ -104,13 +104,10 @@ on:
         required: false
         type: string
         default: chrome
-    secrets:
-      SPONSORED_FPC_SALT:
-        required: false
 
 jobs:
   network-e2e:
-    name: ${{ inputs.shard && format('Aztec agent (shard {0})', inputs.shard) || 'Aztec agent' }}
+    name: ${{ inputs.shard && format('network suite (shard {0})', inputs.shard) || 'network suite' }}
     runs-on: ubuntu-latest
     # Per-shard wall-time worst case is ~20m (9 files + cold-start ~5m). 30m
     # budget gives headroom without masking real hangs. Was 60m for the single
@@ -119,7 +116,6 @@ jobs:
     env:
       NULO_E2E_BROWSER: ${{ inputs.browser }}
       AZTEC_NODE_URL: ${{ inputs.aztec_node_url }}
-      SPONSORED_FPC_SALT: ${{ !contains(inputs.aztec_node_url, 'localhost') && secrets.SPONSORED_FPC_SALT || '' }}
       # Baked into the wallet build at `bun run build:chrome` time (via the
       # agent.sh subprocess). When "1", `apps/extension/src/presto/config.ts`
       # sets `PRESTO_REQUIRED=true`, which makes the offscreen factory
@@ -265,8 +261,7 @@ jobs:
           EXCLUDE_FILES: ${{ inputs.exclude_files }}
           TEST_FILES: ${{ inputs.test_files }}
           SHARD: ${{ inputs.shard }}
-          # A canary lane writes vitest's json report for the results assertion below.
-          NULO_E2E_RESULTS_FILE: ${{ startsWith(inputs.shard_label, 'canary') && format('{0}/canary-results.json', runner.temp) || '' }}
+          NULO_E2E_RESULTS_FILE: ${{ (inputs.chaos || startsWith(inputs.shard_label, 'canary')) && format('{0}/canary-results.json', runner.temp) || '' }}
         run: |
           # Use bash arrays + read -ra so word-splitting is explicit + scoped
           # (avoids shellcheck SC2086 noise on intentional split-into-flags).
@@ -312,12 +307,13 @@ jobs:
           fi
           exit "$CODE"
 
-      # A canary lane is evidence only if every file it was given ran and its substantive test
-      # passed. The exit code and the file count cannot see a skipped describe, a missing sandbox
+      # A canary or chaos lane is evidence only if every file it was given ran and its substantive
+      # test passed. The exit code and the file count cannot see a skipped describe, a missing sandbox
       # config or a deleted test — each canary file also carries a setup-contract test that keeps
-      # passing on its own — so the json report is read back against canary-expectations.json.
+      # passing on its own, and the chaos file skips its one test unless armed — so the json report
+      # is read back against canary-expectations.json.
       - name: Assert canary results
-        if: ${{ always() && !cancelled() && startsWith(inputs.shard_label, 'canary') }}
+        if: ${{ always() && !cancelled() && (inputs.chaos || startsWith(inputs.shard_label, 'canary')) }}
         shell: bash
         env:
           TEST_FILES: ${{ inputs.test_files }}

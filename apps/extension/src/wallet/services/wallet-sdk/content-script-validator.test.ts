@@ -1,5 +1,14 @@
+// @vitest-environment node
+// Node, not jsdom: the compatibility pin encrypts with WebCrypto, as the page's SDK does.
+import { readdirSync, readFileSync } from "node:fs"
+import { join } from "node:path"
+import { jsonStringify } from "@aztec-labs/foundation/json-rpc"
+import { loadContractArtifact } from "@aztec-labs/stdlib/abi"
+import { encrypt } from "@aztec-labs/wallet-sdk/crypto"
+import { wireInstance } from "@nulo/wallet-bridge/testing"
+import { resolvePackageRoot } from "@nulo/resolve-asset"
 import { describe, expect, it } from "vitest"
-import { isSubframeSender, validateContentScriptMessage } from "./content-script-validator"
+import { MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS, isSubframeSender, validateContentScriptMessage } from "./content-script-validator"
 
 describe("isSubframeSender (defense-in-depth)", () => {
 	it("returns false for top-frame messages (frameId === 0)", () => {
@@ -125,7 +134,7 @@ describe("validateContentScriptMessage", () => {
 			origin: "content-script",
 			type: "secure-message",
 			sessionId: 12345, // attacker tries to inject a non-string
-			content: {},
+			content: { iv: "", ciphertext: "" },
 		})
 		expect(result.kind).toBe("invalid")
 	})
@@ -144,4 +153,64 @@ describe("validateContentScriptMessage", () => {
 		})
 		expect(result.kind).toBe("invalid")
 	})
+})
+
+describe("validateContentScriptMessage — a secure message's content", () => {
+	const secure = (content: unknown) => ({ origin: "content-script", type: "secure-message", sessionId: "sess-1", content })
+	const IV = "A".repeat(16)
+
+	it("admits a ciphertext at the budget and refuses one a character over it", () => {
+		const atBudget = "A".repeat(MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS)
+		expect(validateContentScriptMessage(secure({ iv: IV, ciphertext: atBudget })).kind).toBe("valid")
+		expect(validateContentScriptMessage(secure({ iv: IV, ciphertext: `${atBudget}A` })).kind).toBe("invalid")
+	})
+
+	it.each<[string, unknown]>([
+		["an iv over 32 characters", { iv: "A".repeat(33), ciphertext: "" }],
+		["a ciphertext that is not a string", { iv: IV, ciphertext: ["A"] }],
+		["no content", undefined],
+		["content that is not an object", "A"],
+		["a key beside iv and ciphertext", { iv: IV, ciphertext: "", padding: "A" }],
+		["an own __proto__ key beside iv and ciphertext", JSON.parse(`{"iv":"${IV}","ciphertext":"","__proto__":"A"}`)],
+	])("refuses %s", (_label, content) => {
+		expect(validateContentScriptMessage(secure(content)).kind).toBe("invalid")
+	})
+})
+
+describe("MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS — every bundled artifact's registration fits", () => {
+	/** Every artifact JSON the wallet bundles; a bump can change which is largest, so all are read. */
+	const artifactFiles = [
+		["@aztec-labs/noir-contracts.js", "artifacts"],
+		["@aztec-foundation/aztec-standards", "target"],
+	].flatMap(([pkg, dir]) => {
+		const root = join(resolvePackageRoot(pkg, { from: import.meta.url }), dir)
+		return readdirSync(root)
+			.filter((name) => name.endsWith(".json"))
+			.map((name) => join(root, name))
+	})
+
+	it("each call validates and the largest is at most half the budget", async () => {
+		const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt"])
+		let largest = 0
+		for (const file of artifactFiles) {
+			const artifact = loadContractArtifact(JSON.parse(readFileSync(file, "utf8")))
+			// As the SDK's `ExtensionWallet` wraps and encrypts a `registerContract` call.
+			const call = {
+				type: "registerContract",
+				args: [wireInstance(`0x${"0b".repeat(32)}`), artifact],
+				messageId: crypto.randomUUID(),
+				chainInfo: { chainId: "1", version: "1" },
+				appId: "test-dapp",
+				walletId: "nulo",
+			}
+			const content = await encrypt(key, jsonStringify(call))
+			expect(validateContentScriptMessage({ origin: "content-script", type: "secure-message", sessionId: "s", content }).kind).toBe(
+				"valid",
+			)
+			largest = Math.max(largest, content.ciphertext.length)
+		}
+		expect(artifactFiles.length).toBeGreaterThanOrEqual(40)
+		expect(2 * largest).toBeLessThanOrEqual(MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS)
+		// A fixed scan over about 100 MB of artifacts takes 3 to 6 s, past the 5 s default.
+	}, 60_000)
 })

@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: Journal-truth stage assertions in `apps/extension/tests/e2e/fixtures/journal.ts`, a failure-classifying instrument for wait timeouts, a repeat-run soak workflow `.github/workflows/extension-network-e2e-soak.yml`, a pinned proverless safety test in `apps/extension/src/e2e/config.test.ts`, and a re-scoped `apps/extension/tests/e2e/network/concurrent-sendtx-confirm.test.ts`.
-- **Open items**: the same-source concurrent send limit, the missing Node-side stall watchdog and per-fork memory cap, and the dead sponsored-FPC salt in the PR gate, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the same-source concurrent send limit (#218); the missing Node-side stall watchdog and per-fork memory cap, and the dead sponsored-FPC salt in the PR gate (#155).
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

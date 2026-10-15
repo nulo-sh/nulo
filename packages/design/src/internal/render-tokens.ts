@@ -1,4 +1,4 @@
-import { durations, fontSizes, fontWeights, lineHeights, tokenGroups } from "../token-contract"
+import { durations, fontSizes, fontWeights, lineHeights, MIN_MONO_PX, MIN_TEXT_PX, tokenGroups, typeRoles } from "../token-contract"
 
 /**
  * Pure renderer: turns the token contract into the exact source of `src/tokens.ts`.
@@ -26,6 +26,26 @@ function renderConst(name: string, members: Record<string, string | number>, quo
 	return `export const ${name} = {\n${body}\n} as const`
 }
 
+const LINE_WIDTH = 140
+
+/** One line when it fits Biome's line width, otherwise one item per line, as Biome formats it. */
+function renderStringList(name: string, items: readonly string[]): string {
+	const quoted = items.map((item) => JSON.stringify(item))
+	const line = `export const ${name} = [${quoted.join(", ")}] as const`
+	if (line.length <= LINE_WIDTH) return line
+	return `export const ${name} = [\n${quoted.map((item) => `\t${item},`).join("\n")}\n] as const`
+}
+
+function renderTypeRoles(): string {
+	const body = Object.entries(typeRoles)
+		.map(([name, spec]) => {
+			const fields = Object.entries(spec).map(([k, v]) => `${k}: ${typeof v === "string" ? JSON.stringify(v) : String(v)}`)
+			return `\t${renderKey(name)}: { ${fields.join(", ")} },`
+		})
+		.join("\n")
+	return `export const typeRoles = {\n${body}\n} as const`
+}
+
 export function renderTokensModule(): string {
 	const blocks: string[] = [HEADER]
 
@@ -37,6 +57,17 @@ export function renderTokensModule(): string {
 	blocks.push(`export const fontWeights = [${(fontWeights as readonly number[]).join(", ")}] as const`)
 	blocks.push(renderConst("lineHeights", lineHeights as Record<string, number>, false))
 	blocks.push(renderConst("durations", durations as Record<string, string>, true))
+	blocks.push(`export const MIN_TEXT_PX = ${MIN_TEXT_PX}\nexport const MIN_MONO_PX = ${MIN_MONO_PX}`)
+	blocks.push(renderTypeRoles())
+	blocks.push(renderStringList("typeRoleNames", Object.keys(typeRoles)))
+	blocks.push(
+		renderStringList(
+			"siteSizedTypeRoles",
+			Object.entries(typeRoles)
+				.filter(([, spec]) => spec.size === null)
+				.map(([name]) => name),
+		),
+	)
 
 	blocks.push(
 		// biome-ignore lint/suspicious/noTemplateCurlyInString: emits the literal cssVar source, which must contain ${...} placeholders
@@ -53,6 +84,7 @@ export function renderTokensModule(): string {
 			"export type FontSize = (typeof fontSizes)[number]",
 			"export type FontWeight = (typeof fontWeights)[number]",
 			"export type LineHeight = keyof typeof lineHeights",
+			"export type TypeRole = (typeof typeRoleNames)[number]",
 		].join("\n"),
 	)
 

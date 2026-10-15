@@ -12,7 +12,6 @@ const H = vi.hoisted(() => ({
 }))
 
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: H.openToast }) }))
-vi.mock("@/stores/app.store", () => ({ useAppStore: () => ({ profile: { id: "p1" } }) }))
 vi.mock("@/stores/cache.store", () => ({ useCacheStore: () => H.store.current }))
 vi.mock("@/stores/popup.store", () => ({ usePopupStore: () => ({ len: 1, popups: { confirm: { order: 1 } } }) }))
 
@@ -36,9 +35,9 @@ const STUBS = {
 		template: `<input data-testid="confirm-input" :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" />`,
 	},
 	Button: {
-		props: ["type", "disabled"],
+		props: ["type", "variant", "size", "disabled"],
 		emits: ["click"],
-		template: `<button :data-type="type" :disabled="disabled" @click="$emit('click')"><slot /></button>`,
+		template: `<button :data-type="type" :data-variant="variant" :data-size="size" :disabled="disabled" @click="$emit('click')"><slot /></button>`,
 	},
 }
 
@@ -50,7 +49,6 @@ async function open(wrapper: ReturnType<typeof mount>, confirm: Record<string, u
 
 describe("ConfirmPopup — single-action mode", () => {
 	beforeEach(() => {
-		vi.stubGlobal("managers", { profile: { confirmProfileOperation: vi.fn() } })
 		H.store.current = reactive({ confirm: {} })
 	})
 
@@ -101,7 +99,6 @@ describe("ConfirmPopup — single-action mode", () => {
 
 describe("ConfirmPopup — pre-title", () => {
 	beforeEach(() => {
-		vi.stubGlobal("managers", { profile: { confirmProfileOperation: vi.fn() } })
 		H.store.current = reactive({ confirm: {} })
 	})
 
@@ -127,5 +124,27 @@ describe("ConfirmPopup — pre-title", () => {
 		await nextTick()
 		await open(wrapper, { confirm_color: "red" })
 		expect(wrapper.find('[data-testid="confirm-pre-title"]').text()).toBe("Irreversible")
+	})
+})
+
+describe("ConfirmPopup — the confirm button's variant", () => {
+	beforeEach(() => {
+		H.store.current = reactive({ confirm: {} })
+	})
+
+	test("a caller's variant reaches the confirm button only, at Cancel's size, and clears on close", async () => {
+		const wrapper = mount(ConfirmPopup, { props: { show: false }, global: { stubs: STUBS } })
+		await open(wrapper, { confirm_color: "red", confirm_variant: "destructive" })
+		const submit = wrapper.find('[data-testid="confirm-submit"]')
+		const cancel = wrapper.find('[data-testid="confirm-cancel"]')
+		expect(submit.attributes("data-variant")).toBe("destructive")
+		expect(cancel.attributes("data-variant")).toBe("primary_outline")
+		expect(submit.attributes("data-size")).toBe("medium")
+		expect(submit.attributes("data-size")).toBe(cancel.attributes("data-size"))
+
+		await wrapper.setProps({ show: false })
+		await nextTick()
+		await open(wrapper, { confirm_color: "red" })
+		expect(wrapper.find('[data-testid="confirm-submit"]').attributes("data-variant")).toBeUndefined()
 	})
 })

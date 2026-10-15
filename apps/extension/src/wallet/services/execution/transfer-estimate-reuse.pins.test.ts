@@ -34,7 +34,9 @@ vi.mock("./fee/fee-strategy", async (importOriginal) => ({ ...(await importOrigi
 const predicted = vi.mocked(predictedWorstMinFees)
 const REASON = "tryConsumeTransferEstimate est-1: "
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
-const FULL_LADDER = ["getNetwork", "getNode", "predictedWorstMinFees", "getPendingForAccount"]
+const FULL_LADDER = ["getNetwork", "getLiveChainIdentity", "getNode", "predictedWorstMinFees", "getPendingForAccount"]
+const FPC: FeeSettings = { paymentMethod: { kind: "fpc", fpcId: "fpc-1" } }
+const SPONSOR = { id: "fpc-1", type: 1, address: "0xsponsor", chainId: 7, isProtocol: true } as const
 
 function request(feeSettings: FeeSettings = { paymentMethod: { kind: "fj" } }, overrides: Partial<TransferRequest> = {}): TransferRequest {
 	return {
@@ -60,8 +62,10 @@ function entry(feeSettings: FeeSettings = { paymentMethod: { kind: "fj" } }, ove
 		amount: r.amount,
 		feeSettingsHash: fingerprintFeeSettings(feeSettings),
 		profileId: "p1",
+		chainIdentity: { l1ChainId: 1, rollupVersion: 6 },
+		...(feeSettings.paymentMethod.kind === "fpc" ? { fpcIdentity: { ...SPONSOR } } : {}),
 		// (2,3) × the mocked default 7.
-		baseFeeFingerprint: "14:21",
+		builtCap: { feePerDaGas: 14n, feePerL2Gas: 21n },
 		primaryEndpointId: "e1",
 		primaryEndpointUrl: "http://primary",
 		pendingHashes: ["0xpending"],
@@ -91,6 +95,14 @@ function harness(o: { network?: Network; deps?: Partial<TransferEstimateReuseDep
 			calls.push("getNode")
 			return { marker: "node" } as never
 		}),
+		getLiveChainIdentity: vi.fn(async () => {
+			calls.push("getLiveChainIdentity")
+			return { l1ChainId: 1, rollupVersion: 6 }
+		}),
+		getFpcInfo: vi.fn(async () => {
+			calls.push("getFpcInfo")
+			return { ...SPONSOR, profileId: "p1" } as never
+		}),
 		getPendingForAccount: vi.fn(() => {
 			calls.push("getPendingForAccount")
 			return [{ hash: "0xpending" }]
@@ -109,16 +121,6 @@ async function consumeOnce(reuse: TransferEstimateReuse, e: TransferEstimateReus
 	return result
 }
 
-/** The error a bare expression throws, so a pinned message is the engine's own on every engine. */
-function thrown(f: () => unknown): Error {
-	try {
-		f()
-	} catch (error) {
-		return error as Error
-	}
-	throw new Error("expected a throw")
-}
-
 beforeEach(() => {
 	calls.length = 0
 	predicted.mockClear()
@@ -133,6 +135,14 @@ describe("the ladder's order and reasons", () => {
 		const e = entry()
 		expect(await consumeOnce(reuse, e, request())).toBe(e)
 		expect(calls).toEqual(FULL_LADDER)
+		expect(logDebug).not.toHaveBeenCalled()
+	})
+
+	test("an fpc hit reads the sponsor row after the chain and before the node", async () => {
+		const { reuse, logDebug } = harness()
+		const e = entry(FPC)
+		expect(await consumeOnce(reuse, e, request(FPC))).toBe(e)
+		expect(calls).toEqual(["getNetwork", "getLiveChainIdentity", "getFpcInfo", ...FULL_LADDER.slice(2)])
 		expect(logDebug).not.toHaveBeenCalled()
 	})
 
@@ -193,20 +203,21 @@ describe("the ladder's order and reasons", () => {
 
 	test("base fee changed stops before the pending read", async () => {
 		const { reuse, logDebug } = harness()
-		expect(await consumeOnce(reuse, entry(undefined, { baseFeeFingerprint: "999:999" }), request())).toBeUndefined()
-		expect(calls).toEqual(FULL_LADDER.slice(0, 3))
+		expect(await consumeOnce(reuse, entry(undefined, { builtCap: { feePerDaGas: 1n, feePerL2Gas: 1n } }), request())).toBeUndefined()
+		expect(calls).toEqual(FULL_LADDER.slice(0, 4))
 		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee changed`]])
 	})
 
-	test("a rejecting fee read misses with its message, before the pending read", async () => {
-		predicted.mockRejectedValueOnce(new Error("block not found"))
+	test("a rejecting fee read misses with a fixed reason, before the pending read", async () => {
+		predicted.mockRejectedValueOnce(new Error("fetch failed: https://rpc.example/v1/k3y"))
 		const { reuse, logDebug } = harness()
 		expect(await consumeOnce(reuse, entry(), request())).toBeUndefined()
-		expect(calls).toEqual(["getNetwork", "getNode"])
-		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee fetch failed: block not found`]])
+		expect(calls).toEqual(FULL_LADDER.slice(0, 3))
+		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee fetch failed`]])
+		expect(JSON.stringify(logDebug.mock.calls)).not.toMatch(/rpc\.example|k3y/)
 	})
 
-	test("getNode sits outside the fee catch: its rejection propagates", async () => {
+	test("the fee step's getNode sits outside its catch: a rejection there propagates", async () => {
 		const down = new Error("node down")
 		const { reuse } = harness({
 			deps: {
@@ -218,7 +229,7 @@ describe("the ladder's order and reasons", () => {
 		})
 		reuse.stash("est-1", entry())
 		await expect(reuse.tryConsume("est-1", request(), FENCE)).rejects.toBe(down)
-		expect(calls).toEqual(["getNetwork", "getNode"])
+		expect(calls).toEqual(FULL_LADDER.slice(0, 3))
 	})
 
 	test("a changed pending set is the last step", async () => {
@@ -248,40 +259,42 @@ describe("the TTL guard", () => {
 
 describe("the multiplier per priority", () => {
 	test.each([
-		[undefined, "14:21"],
-		["", "14:21"],
-		["normal", "4:6"],
-		["fast", "6:9"],
-		["urgent", "10:15"],
-	])("priority %j commits basis (2,3) × its multiplier: %s", async (priorityLevel, expected) => {
+		[undefined, 14n, 21n],
+		["", 14n, 21n],
+		["normal", 4n, 6n],
+		["fast", 6n, 9n],
+		["urgent", 10n, 15n],
+	])("priority %j commits basis (2,3) × its multiplier: %s:%s", async (priorityLevel, da, l2) => {
 		const fs = { paymentMethod: { kind: "fj" }, priorityLevel } as FeeSettings
 		const { reuse } = harness()
-		expect(await consumeOnce(reuse, entry(fs, { baseFeeFingerprint: expected }), request(fs))).toBeDefined()
+		expect(await consumeOnce(reuse, entry(fs, { builtCap: { feePerDaGas: da, feePerL2Gas: l2 } }), request(fs))).toBeDefined()
 		const { reuse: other } = harness()
-		expect(await consumeOnce(other, entry(fs, { baseFeeFingerprint: "0:0" }), request(fs))).toBeUndefined()
+		expect(await consumeOnce(other, entry(fs, { builtCap: { feePerDaGas: 0n, feePerL2Gas: 0n } }), request(fs))).toBeUndefined()
 	})
 })
+
+/** The real fee read against a node that answers `reply`: a null-like answer is refused there. */
+async function realRead(reply: unknown): Promise<GasFees> {
+	const actual = await vi.importActual<typeof import("@nulo/aztec-runtime/fee-juice")>("@nulo/aztec-runtime/fee-juice")
+	return actual.predictedWorstMinFees({ getCurrentMinFees: async () => reply as never })
+}
 
 describe("an unknown priority or a null-like reply misses softly", () => {
 	test.each([
 		["bogus", undefined],
 		["constructor", PRIORITY_MULTIPLIERS["constructor" as never]],
-	])("priority %j: the reason carries .mul's own message", async (priorityLevel, multiplier) => {
-		const expected = thrown(() => new GasFees(2n, 3n).mul(multiplier as never))
+	])("priority %j misses with a fixed reason", async (priorityLevel, multiplier) => {
+		expect(() => new GasFees(2n, 3n).mul(multiplier as never)).toThrow()
 		const fs = { paymentMethod: { kind: "fj" }, priorityLevel } as unknown as FeeSettings
 		const { reuse, logDebug } = harness()
 		expect(await consumeOnce(reuse, entry(fs), request(fs))).toBeUndefined()
-		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee fetch failed: ${expected.message}`]])
+		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee fetch failed`]])
 	})
 
-	test.each([undefined, null])("a %s reply: the reason carries the basis read's own message", async (reply) => {
-		const expected = thrown(() => {
-			const basis = reply as unknown as { feePerDaGas: bigint }
-			return basis.feePerDaGas
-		})
-		predicted.mockResolvedValueOnce(reply as never)
+	test.each([undefined, null])("a %s node reply misses with a fixed reason", async (reply) => {
+		predicted.mockImplementationOnce(() => realRead(reply))
 		const { reuse, logDebug } = harness()
 		expect(await consumeOnce(reuse, entry(), request())).toBeUndefined()
-		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee fetch failed: ${expected.message}`]])
+		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee fetch failed`]])
 	})
 })

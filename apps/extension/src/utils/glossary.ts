@@ -40,6 +40,11 @@ export const GLOSSARY = {
 		definition: "Someone else pays the network fee for you.",
 		where: "Fee menu",
 	},
+	"priority-fee": {
+		term: "Priority fee",
+		definition: "An extra the app asks you to pay the network for faster inclusion, up to the cap shown.",
+		where: "Approval window",
+	},
 	authorization: {
 		term: "Authorization",
 		definition: "Lets a contract do one specific thing for you, once.",
@@ -62,7 +67,7 @@ export type GlossaryKey = keyof typeof GLOSSARY
 
 export const GLOSSARY_SECTIONS = [
 	{ title: "Balances", keys: ["private-balance", "public-balance"] },
-	{ title: "Fees", keys: ["fee-juice", "public-fee-juice", "private-fee-juice", "sponsored"] },
+	{ title: "Fees", keys: ["fee-juice", "public-fee-juice", "private-fee-juice", "sponsored", "priority-fee"] },
 	{ title: "Apps", keys: ["authorization", "name-for-this-app"] },
 	{ title: "Transactions", keys: ["proving"] },
 ] as const satisfies ReadonlyArray<{ title: string; keys: ReadonlyArray<GlossaryKey> }>

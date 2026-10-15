@@ -24,6 +24,7 @@ import { MessageType } from "../messages"
 import { wrapParams } from "../utils"
 import { connectServiceClient, silentLogger } from "../testing/transport-harness"
 import { Service } from "./service"
+import { DEFAULT_INIT_TIMEOUT_MS } from "../core/initialization"
 
 const SERVICE = "test-svc"
 
@@ -145,10 +146,33 @@ describe("envelope validation", () => {
 
 	test("only the service whose name matches accepts the connection", () => {
 		new TestService()
-		// A port named for a different service must not be adopted.
+		// A port named for a different service must not be adopted, and must stay open: every
+		// service sees every connection, so the one it names may still take it.
 		const other = connectServiceClient("some-other-service")
 		other.sendToService(request(1, "echo", ["hi"]))
 		expect(other.captureResponse()).not.toHaveBeenCalled()
+		expect((other.port as { disconnect: () => void }).disconnect).not.toHaveBeenCalled()
+	})
+
+	test("a port from an untrusted sender is closed at once and never served", async () => {
+		const svc = new TestService()
+		const trusted = connectServiceClient(SERVICE)
+		const foreign = connectServiceClient(SERVICE, { id: "another-extension" })
+
+		expect((foreign.port as { disconnect: () => void }).disconnect).toHaveBeenCalledTimes(1)
+		foreign.sendToService(request(1, "echo", ["hi"]))
+		svc.emitPing(1)
+		await flush()
+		expect(foreign.captureResponse()).not.toHaveBeenCalled()
+
+		// The trusted port beside it is untouched: served, sent the event, left open.
+		trusted.sendToService(request(2, "echo", ["hi"]))
+		await flush()
+		expect(trusted.captureResponse().mock.calls.map(([message]) => (message as { type: number }).type)).toEqual([
+			MessageType.Event,
+			MessageType.Response,
+		])
+		expect((trusted.port as { disconnect: () => void }).disconnect).not.toHaveBeenCalled()
 	})
 })
 
@@ -347,6 +371,53 @@ describe("ensureInitialized", () => {
 			const err = await p
 			expect(err).toBeInstanceOf(Error)
 			expect((err as Error).message).toBe("Service not initialized")
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+})
+
+// ── Ready ─────────────────────────────────────────────────────────────
+
+describe("Ready", () => {
+	const types = (handle: ReturnType<typeof connectServiceClient>) =>
+		handle.captureResponse().mock.calls.map(([message]) => (message as { type: number }).type)
+	const disconnect = (handle: ReturnType<typeof connectServiceClient>) => (handle.port as { disconnect: () => void }).disconnect
+
+	test("a trusted port hears Ready once the whole collection has started, not at connect or at its own start", async () => {
+		const svc = new TestService()
+		const early = connectServiceClient(SERVICE)
+		await flush()
+		await svc.start({} as unknown as ServiceCollection)
+		await flush()
+		expect(types(early)).toEqual([])
+
+		svc.collectionStarted()
+		await flush()
+		expect(types(early)).toEqual([MessageType.Ready])
+
+		const late = connectServiceClient(SERVICE)
+		await flush()
+		expect(types(late)).toEqual([MessageType.Ready])
+		expect(types(early)).toEqual([MessageType.Ready])
+	})
+
+	test("a port still waiting at the init bound hears no Ready and is closed; an untrusted port hears nothing", async () => {
+		vi.useFakeTimers()
+		try {
+			const svc = new TestService()
+			const waiting = connectServiceClient(SERVICE)
+			const foreign = connectServiceClient(SERVICE, { id: "another-extension" })
+			await vi.advanceTimersByTimeAsync(DEFAULT_INIT_TIMEOUT_MS - 1)
+			expect(disconnect(waiting)).not.toHaveBeenCalled()
+			await vi.advanceTimersByTimeAsync(1)
+			expect(disconnect(waiting)).toHaveBeenCalledTimes(1)
+
+			svc.collectionStarted()
+			svc.emitPing(1)
+			await vi.advanceTimersByTimeAsync(0)
+			expect(types(waiting)).toEqual([])
+			expect(types(foreign)).toEqual([])
 		} finally {
 			vi.useRealTimers()
 		}

@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: Cancelling a queued transaction from Activity closes the approval popup and rejects the dApp with a structured cancel error. The popup opens centred on the active display and the Queued card refocuses it (`apps/extension/src/wallet/services/dapp-interaction/service.ts`, `apps/extension/src/wallet/services/window-manager/window-manager.ts`).
-- **Open items**: whether the Queued card switches macOS Spaces, which no headless run can observe, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: whether the Queued card switches macOS Spaces, which no headless run can observe, tracked in #154.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

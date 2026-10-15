@@ -6,6 +6,7 @@ import TransactionAwaitingCard from "@/components/composite/activity/Transaction
 import TransactionTerminalCard from "@/components/composite/activity/TransactionTerminalCard.vue"
 import TransactionIncomingCard from "@/components/composite/activity/TransactionIncomingCard.vue"
 import TransactionCard from "../activity/TransactionCard.vue"
+import SendReviewSheet from "../send/SendReviewSheet.vue"
 
 /** Vendor */
 
@@ -25,8 +26,9 @@ import { createRunFence } from "@/composables/runFence"
 /** Utils */
 import { usePrices } from "@/composables/usePrices"
 import { balanceFormatted } from "@/utils/amount.js"
+import { knownDecimals } from "@/utils/token-amount"
 import { stageSubtitle } from "@/utils/card-subtitle"
-import { activityRowRoute } from "@/utils/activity-rows"
+import { activityRowRoute, journalRecordInScope, txOnToken } from "@/utils/activity-rows"
 import {
 	ACTIVITY_FEED_KINDS,
 	buildJournalTerminalCardProps,
@@ -39,26 +41,34 @@ import {
 } from "@/utils/journal-state"
 import { humanizeMethodName } from "@/utils/tx-enrichment"
 import { buildIncomingCardProps } from "@/utils/received-display"
-import { buildCancelHandler, buildFocusHandler, filterPendingDoubleRender, isMatchingTask } from "./recent-activity-handlers"
+import {
+	buildCancelHandler,
+	buildFocusHandler,
+	filterPendingDoubleRender,
+	isMatchingTask,
+	isOwnTerminalRecord,
+} from "./recent-activity-handlers"
 import { buildRecentActivityRows, remainingRowSlots } from "./recent-activity-rows"
+import { reaskReview } from "./reask-review"
 
 /** Composables */
 import { ARRIVALS_KEY } from "@/composables/useArrivals"
 import { useIncomingSyncHealth } from "@/composables/useIncomingSyncHealth"
 import { useIncomingTransfers } from "@/composables/useIncomingTransfers"
 import { useScopedTokens } from "@/composables/useScopedTokens"
+import { useSendReview } from "@/composables/useSendReview"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
+import { usePopupStore } from "@/stores/popup.store"
 const appStore = useAppStore()
+const popupStore = usePopupStore()
 
 const props = defineProps({
 	token: {
 		type: Object,
 	},
 })
-
-const router = useRouter()
 
 /** Terminal journal records (cancelled / interrupted / failed) have no age
  *  cutoff: like settled chain txs, they persist across browser restarts.
@@ -69,10 +79,12 @@ const router = useRouter()
  *  for any kind (`recentActivityRows`). */
 const ROW_BUDGET = 5
 
+const historyRoute = computed(() =>
+	props.token ? { path: "/popup/activity", query: { token: String(props.token.id) } } : "/popup/activity",
+)
+
 const filteredRecentTransactions = computed(() => {
-	const source = props.token
-		? appStore.transactions.filter((t) => t.calls?.some((c) => c.contract === props.token?.contract))
-		: appStore.transactions
+	const source = props.token ? appStore.transactions.filter((t) => txOnToken(t, props.token.contract)) : appStore.transactions
 	// Per-hash pending suppression — journal-first. Suppress a pending
 	// chain tx only if its hash matches an in-flight journal record in
 	// the `submitting` stage (the one stage carrying a txHash). All
@@ -179,7 +191,9 @@ const executingProgressTitle = computed(() => {
 })
 const executingProgressSubtitle = computed(() => {
 	const active = executingSubtasks.value.find((s) => s.status === TaskStatus.Processing)
-	return active ? `${active.content.label}...` : "Preparing..."
+	if (active) return `${active.content.label}...`
+	// The task starts before its record exists, so only a running step or the record names the stage.
+	return null
 })
 /** dApp identity chip for the in-flight card — same chip the settled
  *  `TransactionCard` shows via `getOriginLabel`. UI-initiated transfers
@@ -194,9 +208,9 @@ const executingOriginLabel = computed(() => {
 })
 const executingAmount = computed(() => {
 	if (!isUiTransfer.value) return null
-	const token = tokenById(executingTask.value.content.tokenId)
-	if (!token) return null
-	return balanceFormatted(String(executingTask.value.content.amount), token.decimals || 0, 8, { compact: true }).value
+	const decimals = knownDecimals(tokenById(executingTask.value.content.tokenId))
+	if (decimals === null) return null
+	return balanceFormatted(String(executingTask.value.content.amount), decimals, 8, { compact: true }).value
 })
 const executingAmountSymbol = computed(() => {
 	if (!isUiTransfer.value) return null
@@ -214,6 +228,9 @@ taskService.onTaskDeleted.add(onExecutingTaskDeleted)
  *  off automatically. */
 const journalService = new OperationJournalServiceClient()
 const journalOps = ref([])
+/** A snapshot that fails while the port stays up has no reconnect to retry it. */
+const JOURNAL_RETRY_MS = 2_000
+let journalRetry
 
 /** Third source for the activity-row merge: incoming-receive records from
  *  trusted fungible-token contracts. Filtered at the service layer
@@ -271,19 +288,20 @@ const onCancelInFlight = buildCancelHandler(executionService, (jobId) => pending
 const dappInteractionService = new DappInteractionServiceClient()
 const onFocusInFlight = buildFocusHandler(dappInteractionService)
 
-/** Shared account / network / token scoping for journal-record filters.
- *  Same rules apply to in-flight and recently-terminal surfaces. */
-function journalRecordInScope(op) {
-	if (op.accountAddress !== appStore.account?.address) return false
-	// Profile scoping: two profiles can hold the SAME account address (the same
-	// mnemonic imported twice), so account + network alone would let one
-	// profile's operations render under the other.
-	if (op.profileId && appStore.profile?.id && op.profileId !== appStore.profile.id) return false
-	// Network scoping (multi-network profiles): a tx
-	// fired on chain A shouldn't surface in the activity feed for chain B.
-	// Records before the journal carried `networkId` may have it
-	// undefined — show those everywhere so we don't strand legacy ops.
-	if (op.networkId && appStore.network?.id && op.networkId !== appStore.network.id) return false
+/** Whether a record belongs to the active account, profile and network.
+ *  Journal state holds only such records, and only they run a journal side effect: the clears
+ *  below match on account and token alone, so another scope's terminal record would remove this
+ *  scope's card. The scope watcher empties the state synchronously on a switch. */
+function journalRecordInActiveScope(op) {
+	return journalRecordInScope(op, {
+		accountAddress: appStore.account?.address,
+		profileId: appStore.profile?.id,
+		networkId: appStore.network?.id,
+	})
+}
+
+function journalRecordOnThisView(op) {
+	if (!journalRecordInActiveScope(op)) return false
 	if (props.token && op.tokenId !== props.token.id) return false
 	return true
 }
@@ -297,7 +315,7 @@ const inFlightJournalOps = computed(() =>
 		// `utils/journal-state.ts` so future kinds opt in (or stay routed to
 		// their own home surface) by one set update, not scattered if-chains.
 		if (!ACTIVITY_FEED_KINDS.has(op.kind)) return false
-		return journalRecordInScope(op)
+		return journalRecordOnThisView(op)
 	}),
 )
 
@@ -312,7 +330,7 @@ const recentlyTerminalJournalOps = computed(() => {
 			// and render via TransactionCard.
 			if (op.progress?.stage === "succeeded") return false
 			if (!ACTIVITY_FEED_KINDS.has(op.kind)) return false
-			return journalRecordInScope(op)
+			return journalRecordOnThisView(op)
 		})
 		.sort((a, b) => (b.terminalAt ?? 0) - (a.terminalAt ?? 0))
 })
@@ -343,15 +361,14 @@ const showJournalAwaiting = computed(() => inFlightJournalOps.value.length > 0)
  *  is independent. */
 const renderedInFlightOps = computed(() => [...inFlightJournalOps.value].sort((a, b) => b.createdAt - a.createdAt))
 
-/** The awaiting card's amount, gated unlike the terminal card's: an empty `amountRaw` still shows
- *  (as 0). Null while the token is unknown or for dApp ops. */
+/** The awaiting card's amount, gated as the terminal card's is: null for an empty `amountRaw`, while
+ *  the token or its decimals are unknown, and for dApp ops. */
 function cardAmountFor(op) {
 	if (op?.kind !== "transfer") return null
-	if (op.amountRaw === undefined) return null
-	if (op.tokenId === undefined) return null
-	const token = tokenById(op.tokenId)
-	if (!token) return null
-	return balanceFormatted(op.amountRaw, token.decimals || 0, 8, { compact: true }).value
+	if (!op.amountRaw || op.tokenId === undefined) return null
+	const decimals = knownDecimals(tokenById(op.tokenId))
+	if (decimals === null) return null
+	return balanceFormatted(op.amountRaw, decimals, 8, { compact: true }).value
 }
 
 /** The awaiting card's symbol: set whenever the token is known, amount or not. */
@@ -359,6 +376,65 @@ function cardAmountSymbolFor(op) {
 	if (op?.kind !== "transfer") return null
 	if (op.tokenId === undefined) return null
 	return tokenById(op.tokenId)?.symbol || null
+}
+
+const isQueuedTransfer = (op) => op?.kind === "transfer" && op.progress?.stage === "queued"
+
+function awaitingSubtitleFor(op) {
+	return isQueuedTransfer(op) ? "Waiting for your earlier send" : cardSubtitleFor(op)
+}
+
+const reaskLineFor = (op) => (isQueuedTransfer(op) && op.progress.reask ? "Fee went up. Review" : null)
+
+/** A queued send that asked again is answered from a review sheet over this feed. The sheet draws
+ *  what it opened with and stays mounted after it closes, so it leaves the way it came and focus
+ *  returns to its row; a changed figure closes it rather than move under the finger. */
+const REASK_KEY = "send_reask_review"
+const reaskOpen = computed(() => popupStore.isOpened(REASK_KEY))
+const reaskOrder = computed(() => popupStore.popups[REASK_KEY]?.order ?? 0)
+const reaskDepth = computed(() => popupStore.len - reaskOrder.value)
+const reaskOpened = ref(null)
+const reaskSending = ref(false)
+const liveReaskFee = (id) => {
+	const op = renderedInFlightOps.value.find((x) => x.id === id)
+	return isQueuedTransfer(op) ? op.progress.reask?.fee : undefined
+}
+// Its subject is a higher fee, so its button arms after the usual pause whatever the facts say.
+const { ready: reaskReady } = useSendReview({
+	isGated: () => true,
+	isOpen: () => reaskOpen.value,
+	isTop: () => reaskOrder.value === popupStore.len - 1,
+})
+
+function onReviewInFlight(jobId) {
+	const op = renderedInFlightOps.value.find((x) => x.id === jobId)
+	const sheet = op && reaskReview(op, incomingPrices.feeJuiceQuote.value?.usd)
+	if (!sheet) return
+	reaskOpened.value = {
+		id: jobId,
+		fee: op.progress.reask.fee,
+		sheet,
+		amount: cardAmountFor(op) ?? undefined,
+		symbol: cardAmountSymbolFor(op) ?? undefined,
+		recipientAddress: op.recipientAddress,
+	}
+	if (!reaskOpen.value) popupStore.open(REASK_KEY)
+}
+
+const closeReask = () => popupStore.close(REASK_KEY)
+
+async function sendReask() {
+	const opened = reaskOpened.value
+	if (!opened || !reaskOpen.value || reaskSending.value) return
+	reaskSending.value = true
+	try {
+		await executionService.acceptQueuedFee(opened.id, opened.fee)
+	} catch {
+		// A refusal changes nothing; the row goes on reading the record.
+	} finally {
+		reaskSending.value = false
+		closeReask()
+	}
 }
 
 /** Compute card props for a terminal journal record. Thin wrapper over
@@ -420,30 +496,17 @@ const hasOrphanExecutingTask = computed(() => {
 })
 
 /**
- * When a journal record turns terminal and matches
- * the current executingTask, clear executingTask in the same tick so the
- * stale awaiting card disappears immediately alongside the terminal card
- * appearing. Without this, TaskService's eventual onTaskUpdated (after
- * the SW's catch block runs) leaves a brief duplicate-render window.
- *
- * Two call shapes, because terminal records never age out and a scan of
- * all of them would let an old cancelled record matching by kind+tokenId
- * clear a fresh executingTask:
- *
- * - **Event path** (`onJournalAdded`/`Updated`): we already know which op
- *   just changed; check only that op. No scan; can't false-match an
- *   ancient terminal.
- * - **Snapshot path** (`onMounted` + `resnapshotJournal`): no incoming
- *   op; scan with a 30-second `terminalAt` window. Catches the
- *   close-popup-mid-cancel-and-reopen race without sweeping in week-old
- *   terminals.
+ * The executingTask's own record turning terminal clears the task in the same tick, so its awaiting
+ * card leaves as the terminal card arrives instead of waiting for TaskService's update. The event
+ * path checks the record that changed; a snapshot has no such record, so it scans records that ended
+ * in the last 30 s (a popup closed mid-cancel and reopened), never older ones. `isOwnTerminalRecord`
+ * refuses a record created before the task, an earlier send of the same kind and token.
  */
 const SNAPSHOT_TERMINAL_WINDOW_MS = 30_000
 
 function clearExecutingTaskIfThisIsTerminalMatch(op) {
 	if (!executingTask.value) return
-	if (op.terminalAt === null) return
-	if (!isMatchingTask(executingTask.value, op, appStore.account?.address)) return
+	if (!isOwnTerminalRecord(executingTask.value, op, appStore.account?.address)) return
 	executingTask.value = null
 	executingSubtasks.value = []
 }
@@ -452,9 +515,7 @@ function clearExecutingTaskIfRecentTerminalMatch() {
 	if (!executingTask.value) return
 	const account = appStore.account?.address
 	const cutoff = Date.now() - SNAPSHOT_TERMINAL_WINDOW_MS
-	const match = journalOps.value.find(
-		(op) => op.terminalAt !== null && op.terminalAt >= cutoff && isMatchingTask(executingTask.value, op, account),
-	)
+	const match = journalOps.value.find((op) => isOwnTerminalRecord(executingTask.value, op, account) && op.terminalAt >= cutoff)
 	if (match) {
 		executingTask.value = null
 		executingSubtasks.value = []
@@ -512,12 +573,14 @@ function clearAwaitingTransactionFallback(op) {
 }
 
 function onJournalAdded(op) {
+	if (!journalRecordInActiveScope(op)) return
 	journalOps.value = [op, ...journalOps.value.filter((x) => x.id !== op.id)]
 	clearExecutingTaskIfPendingCancelTerminal(op)
 	clearExecutingTaskIfThisIsTerminalMatch(op)
 	clearAwaitingTransactionFallback(op)
 }
 function onJournalUpdated(op) {
+	if (!journalRecordInActiveScope(op)) return
 	const idx = journalOps.value.findIndex((x) => x.id === op.id)
 	if (idx !== -1) journalOps.value[idx] = op
 	else journalOps.value = [op, ...journalOps.value]
@@ -544,6 +607,8 @@ journalService.onOperationDeleted.add(onJournalDeleted)
  * terminal transitions during SW down windows.
  */
 async function resnapshotJournal(isCurrent = journalFence.begin()) {
+	// A stale run reads nothing: after unmount the read would reconnect the client.
+	if (!isCurrent()) return
 	try {
 		// Generation guard (not captured-equality): equality re-validates on
 		// A→B→A, letting the ABA run's stale snapshot land. Every trigger is a
@@ -553,14 +618,17 @@ async function resnapshotJournal(isCurrent = journalFence.begin()) {
 		const captured = appStore.account?.address
 		const ops = await journalService.getOperations({ accountAddress: captured })
 		if (!isCurrent() || captured !== appStore.account?.address) return
-		journalOps.value = ops.sort((a, b) => b.createdAt - a.createdAt)
+		// The read filters by account and profile, not network.
+		journalOps.value = ops.filter(journalRecordInActiveScope).sort((a, b) => b.createdAt - a.createdAt)
 		// v4 cancel-dupe (snapshot path): catches close-popup-mid-cancel-and-
 		// reopen + SW disconnect mid-cancel. Uses 30s window to avoid
 		// sweeping in old terminals that don't actually correspond to the
 		// current executingTask.
 		clearExecutingTaskIfRecentTerminalMatch()
 	} catch {
-		// Reconnect may race the port — next event or the next reconnect retries.
+		if (!isCurrent()) return
+		clearTimeout(journalRetry)
+		journalRetry = setTimeout(() => isCurrent() && resnapshotJournal(isCurrent), JOURNAL_RETRY_MS)
 	}
 }
 journalService.onConnected.add(resnapshotJournal)
@@ -642,6 +710,8 @@ async function loadExecutingTaskSnapshot(isCurrent = taskFence.begin()) {
 			executingTask.value = activeExec
 			executingSubtasks.value = activeExec.subtasks || []
 		}
+		// The journal snapshot may land first; whichever lands second reconciles the two.
+		clearExecutingTaskIfRecentTerminalMatch()
 	} catch {
 		// Non-fatal; a later task event or reconnect re-snapshots.
 	}
@@ -677,11 +747,20 @@ watch(
 		executingTask.value = null
 		executingSubtasks.value = []
 		pendingCancelJobIds.value = new Set()
+		closeReask()
+		reaskOpened.value = null
 		if (!nv) return
 		resnapshotJournal(journalRun)
 		loadExecutingTaskSnapshot(taskRun)
 	},
 	{ flush: "sync" },
+)
+
+watch(
+	() => reaskOpened.value && liveReaskFee(reaskOpened.value.id),
+	(fee) => {
+		if (reaskOpened.value && fee !== reaskOpened.value.fee) closeReask()
+	},
 )
 
 // Token mode is part of the scope: leaving it changes neither profile nor network, yet the account feed
@@ -708,6 +787,8 @@ watch(
 defineExpose({ journalOps, executingTask, executingSubtasks, pendingCancelJobIds, hasOrphanExecutingTask, recentActivityRows, tokens })
 
 onMounted(async () => {
+	// Begun before the awaits below, so an unmount during them leaves this run stale.
+	const journalRun = journalFence.begin()
 	await scopedTokens.reload()
 
 	// ServiceClient doesn't auto-connect on listener registration — make
@@ -733,9 +814,10 @@ onMounted(async () => {
 	// Load persisted in-flight ops for the active account (captured-account
 	// guarded). `resnapshotJournal` also runs the v4 cancel-dupe mount check
 	// (`clearExecutingTaskIfRecentTerminalMatch`, 30s window) after assigning.
-	await resnapshotJournal()
+	await resnapshotJournal(journalRun)
 })
 onBeforeUnmount(() => {
+	closeReask()
 	taskService.disconnect()
 	tokenService.disconnect()
 	journalService.disconnect()
@@ -748,6 +830,8 @@ onBeforeUnmount(() => {
 	disposeIncomingTransfers()
 	syncHealth.dispose()
 	scopedTokens.dispose()
+	journalFence.invalidate()
+	clearTimeout(journalRetry)
 })
 </script>
 
@@ -760,9 +844,9 @@ onBeforeUnmount(() => {
 		data-testid="activity-feed-root"
 		:data-active-account="appStore.account?.address"
 	>
-		<Flex align="end" justify="between" :class="$style.section_header">
+		<Flex align="end" justify="between">
 			<SectionLabel label="Recent activity" />
-			<span @click="router.push('/popup/activity')" :class="$style.archive_link" data-testid="activity-view-all">View history</span>
+			<RouterLink :to="historyRoute" :class="$style.archive_link" data-testid="activity-view-all">View history</RouterLink>
 		</Flex>
 
 		<div v-if="showStalledLine" :class="$style.stalled_line" data-testid="incoming-sync-stalled">
@@ -770,6 +854,7 @@ onBeforeUnmount(() => {
 			<span aria-hidden="true">·</span>
 			<button
 				type="button"
+				class="type--label"
 				:class="$style.stalled_retry"
 				:disabled="syncHealth.retrying.value"
 				data-testid="incoming-sync-retry"
@@ -788,7 +873,8 @@ onBeforeUnmount(() => {
 				v-for="op in renderedInFlightOps"
 				:key="`awaiting:${op.id}`"
 				:title="journalCardTitle(op, tokenById)"
-				:subtitle="cardSubtitleFor(op)"
+				:subtitle="awaitingSubtitleFor(op)"
+				:reaskLine="reaskLineFor(op)"
 				:icon="journalCardIcon(op)"
 				:originLabel="journalCardOriginLabel(op)"
 				:amount="cardAmountFor(op)"
@@ -801,6 +887,7 @@ onBeforeUnmount(() => {
 				:hasApprovalWindow="op.kind === 'dapp_execute'"
 				@cancel="onCancelInFlight"
 				@focus="onFocusInFlight"
+				@review="onReviewInFlight"
 			/>
 			<!-- Orphan executingTask fallback: an active TaskService entry
 			     with no matching journal record (rare; legacy paths /
@@ -835,7 +922,7 @@ onBeforeUnmount(() => {
 		</div>
 	</Flex>
 	<Flex v-else-if="token" direction="column" gap="16" data-testid="activity-feed-root" :data-active-account="appStore.account?.address">
-		<Flex align="end" justify="between" :class="$style.section_header">
+		<Flex align="end" justify="between">
 			<SectionLabel label="Recent activity" />
 		</Flex>
 
@@ -844,31 +931,45 @@ onBeforeUnmount(() => {
 			<span :class="$style.empty_sub">Send or receive {{ token.symbol }} to see activity here.</span>
 		</div>
 	</Flex>
+	<SendReviewSheet
+		v-if="reaskOpened"
+		:show="reaskOpen"
+		:order="reaskOrder"
+		:depth="reaskDepth"
+		:facts="reaskOpened.sheet.facts"
+		:amount="reaskOpened.amount"
+		:symbol="reaskOpened.symbol"
+		:recipientAddress="reaskOpened.recipientAddress"
+		:payerKind="reaskOpened.sheet.payerKind"
+		:payerType="reaskOpened.sheet.payerType"
+		:canSend="true"
+		:sending="reaskSending"
+		:ready="reaskReady"
+		:reask="reaskOpened.sheet.reask"
+		@close="closeReask"
+		@send="sendReask"
+	/>
 </template>
 
 <style module>
-.section_header {
-	padding-bottom: 8px;
-	border-bottom: 1px solid var(--hairline-soft);
-}
-
 .archive_link {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
-	color: var(--nulo-outline);
-	cursor: pointer;
+	composes: type--label from global;
+	color: var(--nulo-secondary);
 
 	transition: color 0.2s var(--bezier);
 
 	&:hover {
 		color: var(--nulo-accent);
 	}
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
+	}
 }
 
 .stalled_line {
+	composes: type--meta from global;
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -876,8 +977,6 @@ onBeforeUnmount(() => {
 	padding: 8px 12px;
 	border: 1px dashed var(--nulo-border);
 
-	font-family: var(--font-mono);
-	font-size: 11px;
 	line-height: 1.4;
 	color: var(--nulo-outline);
 }
@@ -887,11 +986,8 @@ onBeforeUnmount(() => {
 	border: 0;
 	background: none;
 
-	font: inherit;
-	font-weight: 700;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
+	line-height: inherit;
 	cursor: pointer;
 
 	transition: color 0.2s var(--bezier);

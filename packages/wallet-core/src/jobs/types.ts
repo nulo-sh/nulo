@@ -44,10 +44,32 @@ export function isTerminal(stage: JobStage): stage is TerminalStage {
 }
 
 /** What the network answered for a failed send that may have reached it. `unconfirmed`: no
- *  answer within the check's window. */
-export type SendCheckOutcome = "sent" | "reverted" | "unconfirmed"
+ *  answer within the check's window. `expired`: the finalized chain is past the send's expiry and
+ *  holds none of it. */
+export type SendCheckOutcome = "sent" | "reverted" | "unconfirmed" | "expired"
+
+/** What proves a send can never be included: its expiry in chain seconds, and its first
+ *  nullifier, which every block that includes it inserts, reverted or not. */
+export type SendExpiry = { timestamp: number; nullifier: string }
+
+/** The block a `sent` or `reverted` answer was read in, kept until the finalized chain holds it. */
+export type SendInclusion = { block: number; hash: string }
 
 export type ProveBackend = "presto" | "browser"
+
+/** Who pays a queued send's fee, in the Send page's terms: Fee Juice from the account, or a fee
+ *  contract by its row. */
+export type QueuedFeePayer = { type: "fj" | "private_fpc" | "fpc"; fpcId?: string; isProtocol: boolean }
+
+/** A queued send whose build came out above its cap and waits for the person: `fee` is that
+ *  build's fee and `cap` the one it was held to, both in base units. */
+export type QueuedFeeReask = { fee: string; cap: string; payer: QueuedFeePayer }
+
+/** A positive integer in base units of at most 39 digits, the width of a u128: no sign, point,
+ *  exponent or leading zero. */
+export function isFeeAmount(value: unknown): value is string {
+	return typeof value === "string" && /^[1-9]\d{0,38}$/.test(value)
+}
 
 /**
  * Progress payload, discriminated by stage. Adding fields per stage variant
@@ -65,12 +87,13 @@ export type ProveBackend = "presto" | "browser"
  * `updateProvingBackend` seam only.
  */
 export type JobProgress =
-	| { stage: "queued" }
+	| { stage: "queued"; reask?: QueuedFeeReask }
 	| { stage: "pending" }
 	| { stage: "simulating" }
 	| { stage: "proving"; enteredProveAt: number; backend?: ProveBackend }
-	/** `submittedEndpointUrl`: the endpoint the send goes out through, where a lost answer is checked. */
-	| { stage: "submitting"; txHash?: string; submittedEndpointUrl?: string }
+	/** `submittedEndpointUrl`: the endpoint the send goes out through, where a lost answer is checked.
+	 *  `expiry` is absent when the tx cannot carry one the chain enforces. */
+	| { stage: "submitting"; txHash?: string; submittedEndpointUrl?: string; expiry?: SendExpiry }
 	/**
 	 * `txHash` is present for on-chain ops (`transfer`, `dapp_execute`) and
 	 * absent for non-tx ops (`token_import`, future imports). The journal
@@ -79,10 +102,21 @@ export type JobProgress =
 	 */
 	| { stage: "succeeded"; txHash?: string }
 	/**
-	 * Every field is the journal's own: `from` is the stage the row left, the hash and endpoint
-	 * are carried from `submitting`, and `check` is the network's answer. A caller's are discarded.
+	 * Every field is the journal's own: `from` is the stage the row left, the hash, endpoint and
+	 * expiry are carried from `submitting`, and `check` is the network's answer. A caller's are
+	 * discarded. `inclusion` rides a `sent` or `reverted` answer until its block is final;
+	 * `checkSince` restarts the check's window when that block was pruned.
 	 */
-	| { stage: "failed"; from?: ActiveStage; txHash?: string; submittedEndpointUrl?: string; check?: SendCheckOutcome }
+	| {
+			stage: "failed"
+			from?: ActiveStage
+			txHash?: string
+			submittedEndpointUrl?: string
+			expiry?: SendExpiry
+			check?: SendCheckOutcome
+			inclusion?: SendInclusion
+			checkSince?: number
+	  }
 	| { stage: "cancelled" }
 
 /**
@@ -92,7 +126,9 @@ export type JobProgress =
  * autocomplete + the runtime drift guard, NOT for compiler exhaustiveness.
  *
  * Producers: `normalizeError(…, "transfer" | "dapp_execute" | "prover" |
- * "network" | "unknown")`, `popup_bound` and `scope_refused` (wallet-sdk), the reaper
+ * "network" | "unknown")`, `popup_bound`, `scope_refused`, `malformed_request`, `terms_refused` and
+ * `wallet_refused` (wallet-sdk; `scope_refused` also from execution's `markFailedUnlessCancelled`,
+ * `terms_refused` also from the dApp interaction service), the reaper
  * (`sw_restart_post_prove` | `stuck_proving` | `stuck_queued` | `stale_on_resume`),
  * and `classifyTokenImportError` (`network_unreachable` | `contract_invalid` |
  * `metadata_fetch` | `unknown`). `user_rejected` | `network` | `simulation` are
@@ -102,6 +138,9 @@ export type KnownJobErrorKind =
 	| "user_rejected"
 	| "popup_bound"
 	| "scope_refused"
+	| "malformed_request"
+	| "terms_refused"
+	| "wallet_refused"
 	| "sw_restart_post_prove"
 	| "stale_on_resume"
 	| "stuck_proving"
@@ -131,6 +170,9 @@ const KNOWN_JOB_ERROR_KIND_TABLE = {
 	user_rejected: true,
 	popup_bound: true,
 	scope_refused: true,
+	malformed_request: true,
+	terms_refused: true,
+	wallet_refused: true,
 	sw_restart_post_prove: true,
 	stale_on_resume: true,
 	stuck_proving: true,

@@ -23,7 +23,6 @@ import {
 	skippedNetworkRecord,
 } from "@/wallet/services/account-state/normalize"
 import type { NodeStatus } from "@/wallet/services/network/spec"
-import { sleep } from "@nulo/wallet-core/utils"
 import { preflightNetworkConnectivity } from "./importPreflight"
 
 /** The whole tail (preflight + registrations) shares this wall-clock budget. */
@@ -113,7 +112,11 @@ async function registerOneNetwork(
 	if (remaining === 0) return skipOutcome(item, ACCOUNT_STATE_SKIP_DEADLINE, true)
 	// Raced at the EXACT remainder: the deadline is absolute (the service enforces its own copy per
 	// launch, so nothing useful runs past it). A rejection's message never reaches a record.
-	const result = await Promise.race([deps.restore([item], remaining).catch(() => undefined), sleep(remaining).then(() => undefined)])
+	let timer: ReturnType<typeof setTimeout> | undefined
+	const deadline = new Promise<undefined>((resolve) => {
+		timer = setTimeout(() => resolve(undefined), remaining)
+	})
+	const result = await Promise.race([deps.restore([item], remaining).catch(() => undefined), deadline]).finally(() => clearTimeout(timer))
 	if (!Array.isArray(result)) return skipOutcome(item, ACCOUNT_STATE_SKIP_DEADLINE, true)
 	return { item, records: result, retryable: result.some(reportsNetworkFailure) }
 }

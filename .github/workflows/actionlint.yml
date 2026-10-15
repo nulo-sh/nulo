@@ -6,8 +6,10 @@ on:
     branches: [main, dev]
 
 concurrency:
-  group: actionlint-${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  # One queue per head commit, so a late run of an older push can neither cancel nor replace the
+  # current head's run; pr-supersede.yml cancels the runs of heads the pull request moved past.
+  group: actionlint-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
 
 permissions:
   contents: read
@@ -56,7 +58,7 @@ jobs:
       # Replaces the prior `bash <(curl -fsSL ...download-actionlint.bash)` —
       # SHA-pinned Marketplace action eliminates the curl|bash supply-chain
       # surface. The action handles caching internally.
-      - uses: reviewdog/action-actionlint@8b682e1e7e512151d73a6b9449cbff173846226e # v1.74.0
+      - uses: reviewdog/action-actionlint@1758727be30241166609dad4c97588b6ad411f32 # v1.79.1
         with:
           fail_on_error: true
 
@@ -87,15 +89,31 @@ jobs:
     timeout-minutes: 2
     steps:
       - name: Check results
+        env:
+          WORKFLOWS: ${{ needs.changes.outputs.workflows }}
+          SHELL_FILES: ${{ needs.changes.outputs.shell }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          ACTIONLINT_RESULT: ${{ needs.actionlint.result }}
+          SHELLCHECK_RESULT: ${{ needs.shellcheck.result }}
         run: |
-          for r in \
-            "${{ needs.changes.result }}" \
-            "${{ needs.actionlint.result }}" \
-            "${{ needs.shellcheck.result }}" \
-          ; do
-            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
-              echo "::error::A required job failed or was cancelled: $r"
+          # An exact state machine, not a denylist: a linter whose filter tripped must succeed and
+          # one whose filter did not must be skipped, so a linter that never ran fails here.
+          expect() {
+            if [ "$2" != "$3" ]; then
+              echo "::error::$1 is '$2', expected '$3'"
               exit 1
             fi
-          done
-          echo "All checks passed (or skipped — no relevant changes)."
+          }
+          bool() {
+            case "$2" in
+              true | false) ;;
+              *) echo "::error::$1 is not true/false: '$2'"; exit 1 ;;
+            esac
+          }
+          ran() { if [ "$1" = true ]; then echo success; else echo skipped; fi }
+          expect changes "$CHANGES_RESULT" success
+          bool workflows "$WORKFLOWS"
+          bool shell "$SHELL_FILES"
+          expect actionlint "$ACTIONLINT_RESULT" "$(ran "$WORKFLOWS")"
+          expect shellcheck "$SHELLCHECK_RESULT" "$(ran "$SHELL_FILES")"
+          echo "Every linter ended as its filter asks (skipped when nothing it reads changed)."

@@ -126,6 +126,10 @@ export const ERR_PRIMARY_ENDPOINT = "PRIMARY_ENDPOINT"
 export const ERR_ACTIVE_NETWORK = "ACTIVE_NETWORK"
 /** An unattended caller asked to verify a network whose L1 identity needs a live endpoint probe. */
 export const ERR_UNATTENDED_LIVE_CHECK = "UNATTENDED_LIVE_CHECK"
+/** A stale-network verdict or a reset journal names this chain, so no new row may take it. */
+export const ERR_CHAIN_QUARANTINED = "CHAIN_QUARANTINED"
+/** A reset of this network is running: deleting it would race the reset's purge. */
+export const ERR_RESET_RUNNING = "RESET_RUNNING"
 
 // ── Zod schemas for the RPC boundary ─────────────────────────────────
 
@@ -133,8 +137,8 @@ export const ChainKindSchema: z.ZodType<ChainKind> = z.enum(["mainnet", "testnet
 
 /**
  * An RPC URL the wallet may treat as its chain authority: the transport rule
- * (`rpcTransportVerdict`), and no userinfo, which only this schema refuses.
- * zod trims the string before the refine sees it.
+ * (`rpcTransportVerdict`), userinfo refused. zod trims the string before the
+ * refine sees it.
  *
  * Runs on the popup client's params and results (`network/client.ts`), on the
  * service's params, and on the backup-restore network filter
@@ -153,9 +157,6 @@ export const RpcUrlSchema = z
 			} catch {
 				return false
 			}
-			// WHATWG parses `https://user@evil.com@safe.com` as username `user@evil.com` on host
-			// `safe.com`: the userinfo is the part a person reads, so it is a phishing vector.
-			if (parsed.username !== "" || parsed.password !== "") return false
 			return rpcTransportVerdict(parsed).allowed
 		},
 		{ message: "RPC URL must use https:// or http://localhost / http://127.0.0.1 / http://[::1] and contain no userinfo" },
@@ -178,15 +179,7 @@ export const NetworkSchema: z.ZodType<Network> = z.object({
 	kind: ChainKindSchema.optional(),
 })
 
-export const NodeStatusSchema: z.ZodType<NodeStatus> = z.nativeEnum(NodeStatus)
-
-/** `getNetworkInfo` synthesized struct — opaque to the wire validator,
- *  but carrying the same fields the PXE adapter expects. */
-export const NetworkInfoSchema: z.ZodType<NetworkInfo> = z.object({
-	profileId: z.string(),
-	chainId: z.number(),
-	rpcUrl: RpcUrlSchema,
-})
+export const NodeStatusSchema: z.ZodType<NodeStatus> = z.enum(NodeStatus)
 
 /**
  * Per-method schemas. Tuples preserve positional-param ordering (our wire

@@ -5,7 +5,7 @@ import { MAX_WAIT_MS, SendSequencer, SUBMITTED_HOLD_MS } from "./send-sequencer"
 const SCOPE = { chainId: 1, account: "0xMe" }
 const K = (...k: string[]) => new Set(k)
 
-type PendingRow = { hash: string; chainId: number; account: string; calls: never[] | object[]; createdAt: number }
+type PendingRow = { hash: string; chainId: number; account: string; calls: never[] | object[]; createdAt: number; feeSpender?: string }
 
 /** A sequencer on a manual clock: every sleep advances it by the requested time. */
 function harness() {
@@ -69,6 +69,22 @@ describe("SendSequencer", () => {
 		expect(sequencer.isBlocked(SCOPE, K("seq:0xt:0xbob"))).toBe(false)
 		clock.now = SUBMITTED_HOLD_MS
 		expect(sequencer.isBlocked(SCOPE, K("seq:0xt:0xme"))).toBe(false)
+	})
+
+	test("after a restart, a pending row that names its fee spender holds a send through that contract only", () => {
+		const { sequencer, pending } = harness()
+		const transfers = [{ type: TransferType.Public, from: "0xme", to: "0xbob" }]
+		pending.push({ hash: "0xp", chainId: 1, account: "0xme", calls: [{ contract: "0xT", transfers }], createdAt: 0, feeSpender: "0xF" })
+		expect(sequencer.enter(SCOPE, K("fpc:0xf")).blocked()).toBe(true)
+		expect(sequencer.enter(SCOPE, K("fpc:0xg")).blocked()).toBe(false)
+	})
+
+	test("a ticket entered with an earlier deadline keeps it; none outlives its cap from enter", () => {
+		const { sequencer, clock } = harness()
+		clock.now = 1_000
+		expect(sequencer.enter(SCOPE, K("init"), 5_000).deadline).toBe(5_000)
+		expect(sequencer.enter(SCOPE, K("init"), 10 * MAX_WAIT_MS).deadline).toBe(1_000 + MAX_WAIT_MS)
+		expect(sequencer.enter(SCOPE, K("init")).deadline).toBe(1_000 + MAX_WAIT_MS)
 	})
 
 	test("an estimate's hold delays later sends, never estimates, and is refused while blocked", async () => {
@@ -156,5 +172,71 @@ describe("SendSequencer", () => {
 		expect(second.blocked()).toBe(false)
 		pending.push({ hash: "0xd", chainId: 1, account: "0xme", calls: [{ contract: "t" }], createdAt: 0 })
 		expect(second.blocked()).toBe(true)
+	})
+})
+
+describe("SendSequencer.enterWaiter: a dApp send before its build", () => {
+	const row = (over: Partial<PendingRow> = {}): PendingRow => ({
+		hash: "0xp",
+		chainId: 1,
+		account: "0xme",
+		calls: [],
+		createdAt: 0,
+		...over,
+	})
+
+	test("waits behind an earlier ticket and any pending row of its account, whatever they share", async () => {
+		const { sequencer, pending } = harness()
+		const earlier = sequencer.enter(SCOPE, K("seq:0xt:0xbob"))
+		const waiter = sequencer.enterWaiter(SCOPE)
+		expect(waiter.blocked()).toBe(true)
+		earlier.release()
+		expect(waiter.blocked()).toBe(false)
+		pending.push(row())
+		expect(waiter.blocked()).toBe(true)
+		pending.length = 0
+		expect(await waiter.waitTurn(live())).toBe("turn")
+	})
+
+	test("waits behind a sent tx still holding, its own or a dApp's, wherever it entered", () => {
+		const { sequencer } = harness()
+		const waiter = sequencer.enterWaiter(SCOPE)
+		const later = sequencer.enter(SCOPE, K("fpc:0xf"))
+		expect(waiter.blocked()).toBe(false)
+		later.sent("0xLATER")
+		later.release()
+		expect(waiter.blocked()).toBe(true)
+		sequencer.settled("0xlater")
+		expect(waiter.blocked()).toBe(false)
+		sequencer.externalSent(SCOPE, "0xDAPP", K())
+		expect(waiter.blocked()).toBe(true)
+		sequencer.settled("0xdapp")
+		expect(waiter.blocked()).toBe(false)
+	})
+
+	test("another account's or chain's sends, a later unsent ticket and a row past the hold leave it free", () => {
+		const { sequencer, pending, clock } = harness()
+		const waiter = sequencer.enterWaiter(SCOPE)
+		sequencer.enter(SCOPE, K("seq:0xt:0xbob"))
+		sequencer.enter({ chainId: 1, account: "0xother" }, K("seq:0xt:0xbob"))
+		sequencer.enter({ chainId: 2, account: "0xme" }, K("seq:0xt:0xbob"))
+		pending.push(row({ chainId: 2 }))
+		expect(waiter.blocked()).toBe(false)
+		pending.push(row({ createdAt: clock.now }))
+		clock.now += SUBMITTED_HOLD_MS
+		expect(waiter.blocked()).toBe(false)
+	})
+
+	test("no ticket, estimate or keyless send ever waits behind a waiter, nor does a later waiter", () => {
+		const { sequencer } = harness()
+		const ALL = K("seq:0xt:0xbob", "fpc:0xf", "init")
+		sequencer.enterWaiter(SCOPE)
+		expect(sequencer.enterWaiter(SCOPE).blocked()).toBe(false)
+		expect(sequencer.isBlocked(SCOPE, ALL)).toBe(false)
+		const estimate = sequencer.beginEstimate(SCOPE, ALL)
+		expect(estimate).toBeDefined()
+		estimate?.end()
+		expect(sequencer.enter(SCOPE, K()).blocked()).toBe(false)
+		expect(sequencer.enter(SCOPE, ALL).blocked()).toBe(false)
 	})
 })

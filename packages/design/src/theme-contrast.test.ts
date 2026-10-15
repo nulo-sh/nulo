@@ -92,6 +92,26 @@ for (const theme of ["light", "dark"] as const) {
 	})
 }
 
+// The red buttons' label at rest and hovered; the hover is the expression Button.vue's red variants use.
+const DESTRUCTIVE_HOVER = "color-mix(in srgb, var(--btn-destructive), black 18%)"
+for (const theme of ["light", "dark"] as const) {
+	describe(`theme contrast — ${theme} red buttons (required)`, () => {
+		test(`${theme}: the label on --btn-destructive >= ${AA_TEXT}:1`, () => {
+			expect(contrast("--txt-white", "--btn-destructive", theme)).toBeGreaterThanOrEqual(AA_TEXT)
+		})
+		test(`${theme}: the label on the hover >= ${AA_TEXT}:1`, () => {
+			expect(contrast("--txt-white", DESTRUCTIVE_HOVER, theme)).toBeGreaterThanOrEqual(AA_TEXT)
+		})
+	})
+}
+
+describe("resolveColor color-mix toward black", () => {
+	test("keeps 82% of each channel at 18%, and refuses a translucent color", () => {
+		expect(resolveColor(DESTRUCTIVE_HOVER, { "--btn-destructive": "#c62828" })).toEqual({ r: 162, g: 33, b: 33, a: 1 })
+		expect(() => resolveColor("color-mix(in srgb, rgba(0, 0, 0, 0.5), black 18%)", {})).toThrow(/opaque/)
+	})
+})
+
 // Regression: resolveColor must tolerate both comma and CSS Color 4 space-separated rgb() syntax.
 describe("resolveColor rgb() parsing", () => {
 	test("parses comma and space-separated rgb/rgba", () => {
@@ -168,4 +188,60 @@ describe("light palette landed (was the root cause)", () => {
 	test("--border is an explicit light value, not the --nulo-surface-highest alias", () => {
 		expect(resolveColor("--border", themeMap("light")).r).toBeGreaterThan(100) // rgba(124,116,104,.3)
 	})
+})
+
+// A focus ring or a graphic needs 3:1 against what it sits on (WCAG 1.4.11), link text 4.5:1.
+describe("theme contrast — home links, focus rings and the step bar (required)", () => {
+	const AA_NON_TEXT = 3
+	const pairs: Pair[] = [
+		{ fg: "--nulo-secondary", bg: "--app-bg", min: AA_TEXT, label: "a view link on the page" },
+		{ fg: "--nulo-accent", bg: "--app-bg", min: AA_NON_TEXT, label: "the accent ring on the page" },
+		{ fg: "--nulo-accent", bg: "--nulo-surface-low", min: AA_NON_TEXT, label: "the accent ring on a row's hover tint" },
+		{ fg: "--nulo-accent", bg: "--nulo-surface-high", min: AA_NON_TEXT, label: "the accent ring on a row's pressed tint" },
+		{ fg: "--app-bg", bg: "--nulo-accent", min: AA_NON_TEXT, label: "a page-coloured ring on an accent fill" },
+		{ fg: "--nulo-track", bg: "--app-bg", min: AA_NON_TEXT, label: "a step bar's empty track on the page" },
+	]
+	for (const theme of ["dark", "light"] as const) {
+		for (const p of pairs) {
+			test(`${theme}: ${p.label} (${p.fg} on ${p.bg}) >= ${p.min}:1`, () => {
+				expect(contrast(p.fg, p.bg, theme)).toBeGreaterThanOrEqual(p.min)
+			})
+		}
+	}
+})
+
+// Status text on a row at rest (the page), hovered (--nulo-surface-low) and pressed (--nulo-surface-high).
+// Light has its own darker values; dark keeps the status colours it always drew, but for a red lightened
+// just enough to read on a pressed row.
+describe("theme contrast — status text (required)", () => {
+	const ROW = ["--app-bg", "--nulo-surface-low", "--nulo-surface-high"]
+	for (const fg of ["--txt-warning", "--txt-danger", "--txt-success"]) {
+		for (const bg of ROW) {
+			test(`light: ${fg} on ${bg} >= ${AA_TEXT}:1`, () => {
+				expect(contrast(fg, bg, "light")).toBeGreaterThanOrEqual(AA_TEXT)
+			})
+		}
+	}
+	for (const bg of ROW) {
+		test(`dark: --txt-danger on ${bg} >= ${AA_TEXT}:1`, () => {
+			expect(contrast("--txt-danger", bg, "dark")).toBeGreaterThanOrEqual(AA_TEXT)
+		})
+	}
+	for (const [fg, status] of Object.entries({ "--txt-warning": "--yellow", "--txt-success": "--green" })) {
+		test(`dark: ${fg} is ${status}`, () => {
+			expect(resolveColor(fg, themeMap("dark"))).toEqual(resolveColor(status, themeMap("dark")))
+		})
+	}
+})
+
+// An activity card's status icon fills with its state's status text token, and a graphic needs 3:1
+// against the page (WCAG 1.4.11).
+describe("theme contrast — status icons (required)", () => {
+	for (const theme of ["dark", "light"] as const) {
+		for (const fg of ["--txt-warning", "--txt-danger", "--txt-success"]) {
+			test(`${theme}: a ${fg} icon on --app-bg >= 3:1`, () => {
+				expect(contrast(fg, "--app-bg", theme)).toBeGreaterThanOrEqual(3)
+			})
+		}
+	}
 })

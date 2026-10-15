@@ -73,7 +73,9 @@ const handleManageAccounts = () => {
 						v-for="acc in accounts"
 						@click="handleSelectAccount(acc)"
 						:title="acc.name"
+						titleVariant="name"
 						:description="trimAddress(acc.address, 6, 4, '...')"
+						descriptionVariant="data"
 						:icon="account.address === acc.address ? 'check-circle' : 'circle'"
 						:iconFillColor="account.address === acc.address ? 'primary' : 'tertiary'"
 						data-testid="account-item"
@@ -126,12 +128,7 @@ const handleManageAccounts = () => {
 }
 
 .title {
-	font-family: var(--font-headline);
-	font-size: 14px;
-	font-weight: 700;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-
+	composes: type--title-page from global;
 	color: var(--txt-primary);
 }
 </style>

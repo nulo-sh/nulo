@@ -41,7 +41,7 @@ export abstract class ServiceClient<
 		// Default to LoggingTelemetrySink so production offscreen clients emit
 		// observable terminal-status events without each caller wiring a sink.
 		// Tests pass MemoryTelemetrySink / NoopTelemetrySink explicitly.
-		this.telemetry = telemetry ?? new LoggingTelemetrySink(logger)
+		this.telemetry = telemetry ?? new LoggingTelemetrySink(logger, this.clientName)
 	}
 
 	public connect() {

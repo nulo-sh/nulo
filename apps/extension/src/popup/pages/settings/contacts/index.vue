@@ -108,11 +108,7 @@ accountStateService.onSenderAdded.add(onSenderAdded)
 accountStateService.onSenderDeleted.add(onSenderDeleted)
 watch(() => appStore.network?.id, syncSenders)
 
-const { exportContacts, importContacts } = useContactImportExport({
-	contacts,
-	contactService,
-	accountStateService,
-})
+const { exportContacts, importContacts } = useContactImportExport({ contacts, accountStateService })
 
 const handleCopyContactAddress = (contact) => {
 	void copyWithToast(contact.address, openToast, "Address is copied")
@@ -123,7 +119,7 @@ function handleEditContact(contact) {
 }
 function handleDeleteContact(contact) {
 	// Deleting a contact never touches sender registration — sender rows are
-	// independent PXE state, managed only in Settings → Advanced → Senders.
+	// independent PXE state, managed only in Settings → Developer → Account State → Senders.
 	cacheStore.confirm.confirm_color = "red"
 	cacheStore.confirm.confirm_text = "Yes, delete contact"
 	cacheStore.confirm.description = `Delete contact "${contact.name}"?`
@@ -148,18 +144,18 @@ onBeforeUnmount(() => {
 	<SettingsPageShell title="Contacts" :backTo="'/popup/settings'" gap="12">
 		<template #trailing>
 			<Dropdown>
-				<button type="button" :class="$style.icon_btn" aria-label="Contact actions">
+				<button type="button" :class="$style.icon_btn" aria-label="Contact actions" data-testid="contacts-menu-trigger">
 					<MaterialIcon name="more_vert" :size="18" color="secondary" />
 				</button>
 
 				<template #popup>
-					<DropdownItem @click="importContacts">
+					<DropdownItem @click="importContacts" :disabled="appStore.contactImports.size > 0" data-testid="contacts-menu-import">
 						<Flex align="center" gap="8">
 							<Icon name="upload-outline" size="14" color="secondary" />
 							Import contacts
 						</Flex>
 					</DropdownItem>
-					<DropdownItem @click="exportContacts" :disabled="!contacts.length">
+					<DropdownItem @click="exportContacts" :disabled="!contacts.length" data-testid="contacts-menu-export">
 						<Flex align="center" gap="8">
 							<Icon name="download-outline" size="14" color="secondary" />
 							Export contacts

@@ -1,20 +1,18 @@
 /**
- * Static price mapping: which CoinGecko id prices which asset, per chain.
+ * Price mapping: which CoinGecko id prices which asset, per chain.
  *
- * Aztec-native tokens are too new to be indexed anywhere, so each entry
- * maps to an Ethereum-side proxy ticker (Test USDC → USDC, Fee Juice → AZTEC).
- * The wallet always fetches the FULL id set in one batched request — the
- * query never varies with holdings, so the request reveals nothing about
- * what the user owns.
+ * Aztec-native tokens are too new to be indexed anywhere, so each priced token maps to an
+ * Ethereum-side proxy ticker (Test USDC → USDC, Fee Juice → AZTEC). The ids, bands and tickers are
+ * the one table in `@nulo/token-list`; which token carries which id comes from the signed list
+ * (`pricedTokensOf`). The wallet always fetches the FULL id table in one batched request, so the
+ * query never varies with holdings or with the list.
  *
- * `sanity` is a hard accept-band in USD. Quotes outside it are rejected at
- * write AND read time — a poisoned or garbage response can never enter (or
- * survive in) the cache. Bands are per-id because "absurd" differs by four
- * orders of magnitude between a stablecoin and AZTEC.
+ * `sanity` is a hard accept-band in USD. Quotes outside it are rejected at write AND read time — a
+ * poisoned or garbage response can never enter (or survive in) the cache. Bands are per-id because
+ * "absurd" differs by four orders of magnitude between a stablecoin and AZTEC.
  */
 
-import { CHAIN_IDS } from "@/utils/chain-ids"
-import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
+import { PRICE_IDS, type TokenListEntry } from "@nulo/token-list"
 
 export type PriceMapEntry = {
 	coingeckoId: string
@@ -22,74 +20,54 @@ export type PriceMapEntry = {
 	sanity: { min: number; max: number }
 }
 
-const USDC: PriceMapEntry = {
-	coingeckoId: "usd-coin",
-	// A stablecoin quote outside [0.20, 5] is provider garbage, not a depeg.
-	sanity: { min: 0.2, max: 5 },
+/** `${chainId}:${lower-case contract}` → the price id the signed list names for that token. */
+export type PricedTokens = Readonly<Record<string, string>>
+
+function entryFor(coingeckoId: string): PriceMapEntry | undefined {
+	return Object.hasOwn(PRICE_IDS, coingeckoId) ? { coingeckoId, sanity: PRICE_IDS[coingeckoId].sanity } : undefined
 }
 
-const USDT: PriceMapEntry = { coingeckoId: "tether", sanity: USDC.sanity }
-
-const EURC: PriceMapEntry = { coingeckoId: "euro-coin", sanity: USDC.sanity }
-
-/** Fee Juice is priced as AZTEC on every chain (1 FJ = 1 AZTEC, per plan Ask 3). */
-export const FEE_JUICE_ENTRY: PriceMapEntry = {
-	coingeckoId: "aztec",
-	sanity: { min: 0.000_1, max: 100 },
-}
+/** Fee Juice is priced as AZTEC on every chain (1 FJ = 1 AZTEC). */
+export const FEE_JUICE_ENTRY: PriceMapEntry = { coingeckoId: "aztec", sanity: PRICE_IDS.aztec.sanity }
 
 /**
  * E2E-ONLY sandbox rule: with `VITE_NULO_E2E_PRICE_MAP=1` (set exclusively by
  * the network-e2e agent build), EVERY contract on the sandbox chain (id 0)
- * prices as USDC — sandbox token addresses are minted per run, so a
- * build-time address map can't cover them. Statically false in prod builds →
+ * prices as USDC — sandbox token addresses are minted per run, so no signed
+ * list can cover them. Statically false in prod builds →
  * the branch and its build stamp are DCE-stripped (same discipline as
  * E2E_PROVERLESS; `_build-extension.yml` greps release bundles for the stamp).
  */
 const E2E_SANDBOX_PRICE_MAP = (import.meta.env.VITE_NULO_E2E_PRICE_MAP ?? "") === "1"
 
-/** (chainId, lowercase contract address) → price-map entry. The e2e sandbox rule above prices
- *  through the USDC row too: `allCoingeckoIds()` and `getSanityBand()` read ids and bands here. */
-const TOKEN_ENTRIES: ReadonlyMap<string, PriceMapEntry> = new Map([
-	[`${CHAIN_IDS.TESTNET}:${TESTNET_TOKENS.USDC.toLowerCase()}`, USDC],
-	[`${CHAIN_IDS.TESTNET}:${TESTNET_TOKENS.USDT.toLowerCase()}`, USDT],
-	[`${CHAIN_IDS.TESTNET}:${TESTNET_TOKENS.EURC.toLowerCase()}`, EURC],
-])
+export function pricedTokensOf(entries: readonly TokenListEntry[]): PricedTokens {
+	return Object.fromEntries(entries.flatMap((e) => (e.priceId === undefined ? [] : [[`${e.chainId}:${e.address}`, e.priceId]])))
+}
 
-export function getPriceMapEntry(chainId: number, contract: string): PriceMapEntry | undefined {
+export function getPriceMapEntry(priced: PricedTokens, chainId: number, contract: string): PriceMapEntry | undefined {
 	if (E2E_SANDBOX_PRICE_MAP && chainId === 0) {
 		// The stamp is LIVE DATA on the returned entry — an unused export gets
 		// tree-shaken even in ARMED builds, which made the release grep a
 		// false-negative guard. Inside the kept branch, the string survives
 		// exactly when the rule does; `_build-extension.yml` greps for it AND
 		// fails fast if the env var is set at all.
-		return { ...USDC, e2eStamp: "NULO_E2E_PRICE_MAP_BUILD_STAMP" } as PriceMapEntry
+		return { ...entryFor("usd-coin"), e2eStamp: "NULO_E2E_PRICE_MAP_BUILD_STAMP" } as PriceMapEntry
 	}
-	return TOKEN_ENTRIES.get(`${chainId}:${contract.toLowerCase()}`)
+	const key = `${chainId}:${contract.toLowerCase()}`
+	return Object.hasOwn(priced, key) ? entryFor(priced[key]) : undefined
 }
 
 /** Human ticker for the proxy pricing an id represents — powers the explicit
  *  `via USDC` labeling everywhere a proxy quote drives UI. */
 export function proxyTickerFor(coingeckoId: string): string | undefined {
-	return { "usd-coin": "USDC", tether: "USDT", "euro-coin": "EURC", aztec: "AZTEC" }[coingeckoId]
+	return Object.hasOwn(PRICE_IDS, coingeckoId) ? PRICE_IDS[coingeckoId].ticker : undefined
 }
 
 export function getSanityBand(coingeckoId: string): { min: number; max: number } | undefined {
-	if (coingeckoId === FEE_JUICE_ENTRY.coingeckoId) return FEE_JUICE_ENTRY.sanity
-	for (const entry of TOKEN_ENTRIES.values()) {
-		if (entry.coingeckoId === coingeckoId) return entry.sanity
-	}
-	return undefined
+	return entryFor(coingeckoId)?.sanity
 }
 
-/**
- * The full batched query set: every mapped id, deduped and sorted so the
- * request string is stable across refreshes and installs.
- */
+/** The full batched query set: every id in the table, sorted so the request string is stable. */
 export function allCoingeckoIds(): string[] {
-	const ids = new Set<string>([FEE_JUICE_ENTRY.coingeckoId])
-	for (const entry of TOKEN_ENTRIES.values()) {
-		ids.add(entry.coingeckoId)
-	}
-	return [...ids].sort()
+	return Object.keys(PRICE_IDS).sort()
 }

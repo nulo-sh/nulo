@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process"
 import { readdirSync, statSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { runOnce } from "./cli"
+import { launchPlan, runOnce } from "./cli"
 import { isFailedRun, parseFlippedScript } from "./lib"
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -48,11 +48,36 @@ test("no fixture file can be discovered by `bun test` (a crash or hang fixture w
 	expect(discoverable).toEqual([])
 })
 
+test("the node reference excludes its workspace's Bun-only files; the candidate runs the script as it is", () => {
+	const args = { cwd: "ws", script: "test", runtime: "node" as const, runs: 1, out: "o.json", timeoutMin: 1, filters: ["a.test.ts"] }
+	const scripts = { test: "bun --bun vitest run" }
+	expect(launchPlan(args, "/ws", "apps/extension", scripts).launcher).toEqual([
+		...["bun", "--no-install", "run", "--cwd", "/ws", "vitest", "run"],
+		...["--exclude", "scripts/store-icons.test.ts", "--exclude", "src/popup/windows/json/index.test.ts"],
+		...["--exclude", "src/popup/windows/logger/index.test.ts", "a.test.ts"],
+	])
+	expect(launchPlan(args, "/ws", "apps/landing", scripts).launcher).toEqual([
+		"bun",
+		"--no-install",
+		"run",
+		"--cwd",
+		"/ws",
+		"vitest",
+		"run",
+		"a.test.ts",
+	])
+	expect(launchPlan({ ...args, runtime: "script" }, "/ws", "apps/extension", scripts).launcher).toEqual([
+		...["bun", "--no-install", "run", "--cwd", "/ws", "test", "--", "a.test.ts"],
+	])
+})
+
 test("the node reference mode only accepts the flipped script shape", () => {
 	expect(parseFlippedScript("bun --bun vitest run")).toEqual([])
 	expect(parseFlippedScript("vitest run")).toBeNull()
 })
 
+// Each case runs a vitest subprocess, which can outlast bun test's 5 s default on a loaded host; 90 s
+// sits above runFixture's 60 s, so a hung fixture ends as the tool's timed-out run, not bun's.
 for (const engine of ["node", "bun"] as const) {
 	describe(`fixtures on ${engine}`, () => {
 		test("passing: zero failed runs and the engine is recorded per run", async () => {
@@ -65,13 +90,13 @@ for (const engine of ["node", "bun"] as const) {
 			expect(run.skipped).toBe(1)
 			expect(run.todo).toBe(1)
 			expect(statuses.get("passing.fixture.ts :: passes")).toBe("passed")
-		})
+		}, 90_000)
 
 		test("crash: a killed worker is a failed run", async () => {
 			const { run } = await runFixture(engine, "crash")
 			expect(isFailedRun(run)).toBe(true)
 			expect(run.exitCode === 0).toBe(false)
-		})
+		}, 90_000)
 
 		test("hang: the tool's timeout kills the process group, marks the run timed out, leaves no survivor", async () => {
 			const { run } = await runFixture(engine, "hang", 8_000)
@@ -87,20 +112,20 @@ for (const engine of ["node", "bun"] as const) {
 			expect(run.missingJson).toBe(true)
 			expect(run.timedOut).toBe(false)
 			expect(isFailedRun(run)).toBe(true)
-		})
+		}, 90_000)
 
 		test("unhandled rejection: the exit code carries it (vitest's JSON `success` does not)", async () => {
 			const { run } = await runFixture(engine, "unhandled-rejection")
 			expect(run.exitCode).not.toBe(0)
 			expect(run.success).toBe(true)
 			expect(isFailedRun(run)).toBe(true)
-		})
+		}, 90_000)
 
 		test("sourcemap: the failure names the exact source line", async () => {
 			const { run } = await runFixture(engine, "sourcemap")
 			expect(isFailedRun(run)).toBe(true)
 			expect(run.failing).toEqual(["sourcemap.fixture.ts :: fails on a known line"])
 			expect(run.failureMessages["sourcemap.fixture.ts :: fails on a known line"]).toContain("sourcemap.fixture.ts:5")
-		})
+		}, 90_000)
 	})
 }

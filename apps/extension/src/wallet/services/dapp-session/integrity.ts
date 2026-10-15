@@ -55,12 +55,9 @@ export async function signDappSession(key: CryptoKey, row: SignableDappSession):
 
 /** Constant-time (WebCrypto `verify`) check of a row against its stored MAC. */
 export async function verifyDappSession(key: CryptoKey, row: SignableDappSession, mac: string): Promise<boolean> {
-	let macBytes: Uint8Array<ArrayBuffer>
-	try {
-		macBytes = new Uint8Array(fromBase64Lenient(mac))
-	} catch {
-		return false
-	}
+	// The MAC comes from a stored row, so its type is unchecked; the lenient decode never throws on text.
+	if (typeof mac !== "string") return false
+	const macBytes = new Uint8Array(fromBase64Lenient(mac))
 	if (macBytes.length === 0) return false
 	try {
 		return await crypto.subtle.verify("HMAC", key, macBytes, canonicalizeDappSession(row))

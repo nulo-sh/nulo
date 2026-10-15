@@ -1,11 +1,22 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
-import type { Ref } from "vue"
+import { type Ref, toRaw } from "vue"
 import { useToast } from "@/composables/toast"
-import { FileTooLargeError, downloadFile, pickFile, sanitizeString } from "@/utils"
+import { FilePickCanceledError, FileTooLargeError, downloadFile, pickFile } from "@/utils"
+import {
+	type ImportRow,
+	type ImportWrite,
+	type ReviewedImportRow,
+	type SavedContactIndex,
+	indexSavedContacts,
+	normalizeImportRows,
+	planImportWrites,
+	stillAsShown,
+} from "@/utils/contact-import-rows"
 import { MAX_CONTACT_IMPORT_BYTES, parseContactsExport } from "@/utils/contacts-export-format"
-import type { AccountStateServiceClient } from "@/wallet/services/account-state/client"
-import type { ContactServiceClient } from "@/wallet/services/contact/client"
+import { AccountStateServiceClient } from "@/wallet/services/account-state/client"
+import { ContactServiceClient } from "@/wallet/services/contact/client"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
+import type { RunFence } from "@/wallet/services/profile/spec"
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStore } from "@/stores/popup.store"
@@ -18,51 +29,70 @@ interface ContactRecord {
 
 export interface UseContactImportExportOptions {
 	contacts: Ref<ContactRecord[]>
-	contactService: ContactServiceClient
+	/** The export's; an import opens its own clients, so leaving the page never cuts one off. */
 	accountStateService: AccountStateServiceClient
 }
 
 /**
  * Encapsulates the contacts page import/export flows: sender-union resolution
- * for export, file pick + parse + per-row upsert + sender restoration for
- * import, and the aggregate user-facing toasts.
+ * for export, file pick + parse + per-row sender registration then upsert
+ * for import, and the aggregate user-facing toasts.
  */
 export function useContactImportExport(opts: UseContactImportExportOptions) {
-	const { contacts, contactService, accountStateService } = opts
-	const { openToast } = useToast()
-	const deps: ContactIoDeps = {
+	const { contacts, accountStateService } = opts
+	const { openToast, updateToast } = useToast()
+	const deps: ContactIoServices = {
 		contacts,
-		contactService,
 		accountStateService,
 		openToast,
+		updateToast,
 		appStore: useAppStore(),
 		cacheStore: useCacheStore(),
 		popupStore: usePopupStore(),
 	}
-	return { exportContacts: () => exportContacts(deps), importContacts: () => importContacts(deps) }
+	return {
+		exportContacts: () => exportContacts(deps),
+		// One import per window, so its one selection slot has one owner; the menu's disabled item is
+		// this rule's visible part.
+		importContacts: () => (deps.appStore.contactImports.size > 0 ? Promise.resolve() : importContacts(deps)),
+	}
 }
 
-interface ContactIoDeps {
+interface ContactIoServices {
 	contacts: Ref<ContactRecord[]>
-	contactService: ContactServiceClient
 	accountStateService: AccountStateServiceClient
 	openToast: ReturnType<typeof useToast>["openToast"]
+	updateToast: ReturnType<typeof useToast>["updateToast"]
 	appStore: ReturnType<typeof useAppStore>
 	cacheStore: ReturnType<typeof useCacheStore>
 	popupStore: ReturnType<typeof usePopupStore>
 }
 
-type ImportRow = { name: string; address: string; isSender: boolean }
-type SelectedRow = ContactRecord & { isSender?: boolean }
+/** The session an import's rows were shown in, and the client that asks whether it still holds. */
+interface ImportRun {
+	fence: RunFence
+	profileService: ProfileServiceClient
+}
+
+/** One import's dependencies: its own clients, and the run's fence on every call it makes. */
+type ContactIoDeps = ContactIoServices & { contactService: ContactServiceClient; run: ImportRun }
+
+type SelectedRow = ReviewedImportRow
 type UpsertError = { name: string; address: string; operation: string; error: unknown }
 interface ImportTally {
 	errors: UpsertError[]
+	/** Writes the wallet confirmed. */
+	written: number
+	/** The run's session ended, or could not be confirmed, before its last row was written. */
+	stopped: boolean
 	senderTotal: number
 	senderOk: number
 	senderSkippedNoNetwork: number
 }
 
-async function exportContacts(deps: ContactIoDeps): Promise<void> {
+const STOPPED = Symbol("import stopped")
+
+async function exportContacts(deps: ContactIoServices): Promise<void> {
 	const { contacts, accountStateService, openToast } = deps
 	// `downloads` is a required manifest permission (always granted), so no runtime prompt/gesture
 	// dance is needed — the download just happens.
@@ -102,7 +132,7 @@ async function exportContacts(deps: ContactIoDeps): Promise<void> {
 			await downloadFile({ data: JSON.stringify(exportPayload, null, 2), filename })
 			openToast({ kind: "success", label: "Contacts exported successfully" })
 		} catch (err) {
-			console.error("Export failed:", (err as Error)?.message || err)
+			console.error("Export failed:", { error: err })
 			openToast({ kind: "error", label: "Failed to export contacts" })
 		}
 	} catch (err) {
@@ -112,8 +142,11 @@ async function exportContacts(deps: ContactIoDeps): Promise<void> {
 	}
 }
 
-async function importContacts(deps: ContactIoDeps): Promise<void> {
-	const { openToast, cacheStore, popupStore } = deps
+async function importContacts(deps: ContactIoServices): Promise<void> {
+	const { openToast } = deps
+	const profileService = new ProfileServiceClient()
+	const contactService = new ContactServiceClient()
+	const accountStateService = new AccountStateServiceClient()
 	try {
 		// The `.json` accept filter is UI guidance, not a boundary — a
 		// `.gz`-named pick still auto-decompresses inside pickFile, so the
@@ -138,9 +171,15 @@ async function importContacts(deps: ContactIoDeps): Promise<void> {
 			return
 		}
 
+		// Captured before the rows are shown, so the import writes to the session they were reviewed in.
+		profileService.connect()
+		const run: ImportRun = { fence: await profileService.captureRunFence(), profileService }
+
+		const selection = openImportSelection(deps, importedContacts)
+		if (!selection) return
 		let res: SelectedRow[]
 		try {
-			res = await openImportSelection(cacheStore, popupStore, importedContacts)
+			res = await selection
 		} catch {
 			openToast({ kind: "success", label: "Contact import canceled" })
 			return
@@ -151,139 +190,214 @@ async function importContacts(deps: ContactIoDeps): Promise<void> {
 			return
 		}
 
-		const tally = await applyImportRows(deps, res)
-		toastImportOutcome(openToast, tally)
+		await applyHoldingLock({ ...deps, contactService, accountStateService, run }, res)
 	} catch (err) {
+		if (err instanceof FilePickCanceledError) return
 		if (err instanceof FileTooLargeError) {
 			openToast({ kind: "error", label: "Contacts file is too large" })
 			return
 		}
-		console.error("Error occurred during import", (err as Error)?.message || (err as Error)?.stack || err)
+		// The message can quote the file (JSON.parse does), and the file holds names and addresses.
+		console.error("Error occurred during import", err instanceof Error ? err.name : typeof err)
 		openToast({ kind: "error", label: "Error occurred during import" })
 	} finally {
-		cacheStore.importContacts = []
-		cacheStore.importPromise = null
+		profileService.disconnect()
+		contactService.disconnect()
+		accountStateService.disconnect()
 	}
 }
 
-/** Construct MINIMAL rows — never spread the hostile input object (arbitrary extra properties
- *  would ride along into staging and storage). Non-string name/address fields become "" (a single
- *  malformed row must not abort the whole import); whitespace-only names are dropped
- *  (sanitizeString keeps spaces). Addresses are lowercased: hex is case-insensitive and the wallet
- *  emits lowercase, so canonicalizing here keeps dedup and duplicate-contact matching sound against
- *  mixed-case files. Per-address dedup (first row wins): duplicate addresses in a hostile file would
- *  multiply storage upserts and PXE sender registrations for the same target. */
-function normalizeImportRows(rawContacts: Array<Record<string, unknown>>): ImportRow[] {
-	const seenAddresses = new Set<string>()
-	return rawContacts
-		.map((c) => ({
-			name: typeof c?.name === "string" ? sanitizeString(c.name, 20) : "",
-			address: typeof c?.address === "string" ? sanitizeString(c.address, 66).toLowerCase() : "",
-			isSender: c?.isSender === true,
-		}))
-		.filter((c) => !!c.name.trim() && !!c.address.trim())
-		.filter((c) => {
-			if (seenAddresses.has(c.address)) return false
-			seenAddresses.add(c.address)
-			return true
-		})
-}
-
-/** Stage the rows, create the selection promise, REGISTER its controls on the cache store and open
- *  the popup — one synchronous unit; the caller awaits the returned promise (reject = canceled). */
+/** Opens the selection, which rejects on cancel, or returns `undefined` while an import runs or
+ *  another selection is open: two runs can both pass the entry check while they await their file
+ *  and fence, and the later one must not replace the open selection. */
 function openImportSelection(
-	cacheStore: ContactIoDeps["cacheStore"],
-	popupStore: ContactIoDeps["popupStore"],
+	{ appStore, cacheStore, popupStore }: ContactIoServices,
 	rows: ImportRow[],
-): Promise<SelectedRow[]> {
-	for (const _c of rows) (cacheStore.importContacts as unknown[]).push(_c)
+): Promise<SelectedRow[]> | undefined {
+	const slot = cacheStore as unknown as { importContacts: unknown[]; importPromise: unknown }
+	if (appStore.contactImports.size > 0 || slot.importPromise) return undefined
+	slot.importContacts = [...rows]
 
+	let controls: unknown
 	const importPromise = new Promise<SelectedRow[]>((resolve, reject) => {
-		;(cacheStore as unknown as { importPromise: unknown }).importPromise = { resolve, reject }
+		controls = { resolve, reject }
+		slot.importPromise = controls
 	})
 	popupStore.open("import_contacts")
-	return importPromise
+	// The slot is this selection's until it settles, and no run's `finally` touches it, so a run a
+	// lock released cannot clear the next one's. Compared raw: the store hands back a proxy.
+	return importPromise.finally(() => {
+		if (toRaw(slot.importPromise) !== controls) return
+		slot.importPromise = null
+		slot.importContacts = []
+	})
 }
 
-/** Upsert every selected row, then register its sender intent. Import is adds-only toward sender
+async function applyHoldingLock(deps: ContactIoDeps, res: SelectedRow[]): Promise<void> {
+	const endHold = deps.appStore.beginContactImport()
+	try {
+		const tally = await applyImportRows(deps, res, showProgress(deps, res.length))
+		if (tally.stopped) toastStoppedImport(deps.openToast, tally, res.length)
+		else toastImportOutcome(deps.openToast, tally)
+	} finally {
+		endHold()
+	}
+}
+
+/** Opens the running import's snack and returns what moves its count; the count is the incomplete
+ *  toast's, written of selected, and a snack the person closed stays closed. */
+function showProgress({ openToast, updateToast }: ContactIoDeps, selected: number): (written: number) => void {
+	const label = (written: number) => `Importing contacts · ${written} of ${selected}`
+	const id = openToast({ kind: "info", label: label(0) })
+	return (written) => updateToast(id, label(written))
+}
+
+/** Register each selected row's sender intent, then upsert the row. Import is adds-only toward sender
  *  state: rows explicitly carrying `isSender: true` (from a previous deliberate export) get registered
  *  on the active network. It never deletes or migrates registrations — those live in
- *  Settings → Advanced → Senders. */
-async function applyImportRows(deps: ContactIoDeps, res: SelectedRow[]): Promise<ImportTally> {
-	// Address keys are lowercased to match the canonicalized import rows —
-	// an existing contact saved with mixed-case hex must merge, not
-	// duplicate. (Name keys stay case-sensitive: names are labels.)
-	const contactsByAddress = new Map<string, ContactRecord>()
-	const contactsByName = new Map<string, ContactRecord>()
-	for (const c of deps.contacts.value) {
-		contactsByAddress.set(c.address.toLowerCase(), c)
-		contactsByName.set(c.name, c)
-	}
-
-	// Snapshot active network ONCE so a network swap mid-loop can't split
-	// sender registrations across chains. Null-safe: if no network is
-	// selected, isSender:true rows produce a per-row sender failure.
+ *  Settings → Developer → Account State → Senders. */
+async function applyImportRows(deps: ContactIoDeps, res: SelectedRow[], onWritten: (written: number) => void): Promise<ImportTally> {
+	// Snapshot active network ONCE, before the first await, so it is the network the confirmed banner
+	// named and a swap mid-loop can't split sender registrations across chains. Null-safe: if no
+	// network is selected, isSender:true rows produce a per-row sender failure.
 	const activeNetworkId = deps.appStore.network?.id ?? null
 
-	const tally: ImportTally = { errors: [], senderTotal: 0, senderOk: 0, senderSkippedNoNetwork: 0 }
-	for (const _c of res) {
-		const existingByAddress = contactsByAddress.get(_c.address.toLowerCase())
-		const existingByName = contactsByName.get(_c.name)
-		const error = await upsertOneContact(deps.contactService, _c, existingByAddress, existingByName)
-		if (error) tally.errors.push(error)
+	// The book is read from the service each time, never from the page's list: that copy refreshes
+	// asynchronously and keeps its last state when a refresh fails. A failed read aborts the import.
+	const book = () => fenced(deps.run, async () => indexSavedContacts(await deps.contactService.getContacts(deps.run.fence)))
+	const tally: ImportTally = { errors: [], written: 0, stopped: false, senderTotal: 0, senderOk: 0, senderSkippedNoNetwork: 0 }
+	const saved = await book()
+	if (saved === STOPPED) return { ...tally, stopped: true }
+	const { admitted, refused } = planImportWrites(res, saved)
 
-		// Sender registration is INDEPENDENT of the contact upsert's
-		// outcome (decoupled state): an explicit isSender intent is
-		// attempted — and counted — even when the address-book row
-		// failed, so the toast accounting never silently drops it.
-		if (_c.isSender) {
-			tally.senderTotal++
-			if (activeNetworkId) {
-				try {
-					await deps.accountStateService.addSender(activeNetworkId, _c.address)
-					tally.senderOk++
-				} catch (err) {
-					// The counterparty address is PII and this fires per failed row; the counts below carry
-					// the diagnosis.
-					console.warn("Failed to register a sender", err)
-				}
-			} else {
-				tally.senderSkippedNoNetwork++
-				console.warn("Skipping sender registration: no active network")
-			}
-		}
+	// A refused row writes nothing and registers no sender.
+	tally.errors = refused.map(refusal)
+	const pass: ImportPass = { deps, tally, book, activeNetworkId }
+	for (const write of admitted) {
+		const before = tally.written
+		tally.stopped = (await importRow(pass, write)) === STOPPED
+		if (tally.stopped) break
+		if (tally.written !== before) onWritten(tally.written)
 	}
 	return tally
 }
 
-async function upsertOneContact(
-	contactService: ContactServiceClient,
-	row: SelectedRow,
-	existingByAddress: ContactRecord | undefined,
-	existingByName: ContactRecord | undefined,
-): Promise<UpsertError | null> {
-	try {
-		if (existingByAddress) {
-			await contactService.updateContact(existingByAddress.id, row.name, row.address)
-		} else if (existingByName) {
-			await contactService.updateContact(existingByName.id, row.name, row.address)
-		} else {
-			await contactService.addContact(row.name, row.address)
+interface ImportPass {
+	deps: ContactIoDeps
+	tally: ImportTally
+	book: () => Promise<SavedContactIndex | typeof STOPPED>
+	activeNetworkId: string | null
+}
+
+async function importRow(pass: ImportPass, { row, targetId }: ImportWrite<SelectedRow>): Promise<typeof STOPPED | undefined> {
+	const { deps, tally } = pass
+	const shown = await stillShownInBook(pass, row)
+	if (shown !== true) return shown
+	// The sender goes first, so a stop between the two writes never leaves a contact saved without
+	// its sender, and a re-run lists the row as new. A failed registration still writes its contact.
+	if (row.isSender) {
+		const sender = await registerSender(deps, tally, pass.activeNetworkId, row.address)
+		if (sender === STOPPED) return STOPPED
+		// A registration waits on the PXE, long enough for another window to change the book.
+		if (sender !== "skipped") {
+			const again = await stillShownInBook(pass, row)
+			if (again !== true) return again
 		}
-		return null
-	} catch (err) {
-		return { name: row.name, address: row.address, operation: existingByAddress || existingByName ? "update" : "create", error: err }
 	}
+	const error = await upsertOneContact(deps, row, targetId)
+	if (error === STOPPED) return STOPPED
+	if (error) tally.errors.push(error)
+	else tally.written++
+}
+
+/** Reads the book and checks the row against it: the book can change while earlier rows are written
+ *  (another window). A row no longer as shown is refused and counted. */
+async function stillShownInBook(pass: ImportPass, row: SelectedRow): Promise<true | typeof STOPPED | undefined> {
+	const saved = await pass.book()
+	if (saved === STOPPED) return STOPPED
+	if (stillAsShown(row, saved)) return true
+	pass.tally.errors.push(refusal(row))
+}
+
+/** A fenced call that rejects asks the fence: a session the wallet no longer confirms, ended or
+ *  unreachable, stops the run; a live one hands the rejection back. */
+async function fenced<T>(run: ImportRun, call: () => Promise<T>): Promise<T | typeof STOPPED> {
+	try {
+		return await call()
+	} catch (err) {
+		const ended = await run.profileService.assertRunFence(run.fence).then(
+			() => false,
+			() => true,
+		)
+		if (ended) return STOPPED
+		throw err
+	}
+}
+
+function refusal(row: SelectedRow): UpsertError {
+	return { name: row.name, address: row.address, operation: "import", error: new Error("row refused") }
+}
+
+async function registerSender(
+	{ accountStateService, run }: ContactIoDeps,
+	tally: ImportTally,
+	activeNetworkId: string | null,
+	address: string,
+): Promise<"registered" | "failed" | "skipped" | typeof STOPPED> {
+	tally.senderTotal++
+	if (!activeNetworkId) {
+		tally.senderSkippedNoNetwork++
+		console.warn("Skipping sender registration: no active network")
+		return "skipped"
+	}
+	try {
+		if ((await fenced(run, () => accountStateService.addSender(activeNetworkId, address, run.fence))) === STOPPED) return STOPPED
+		tally.senderOk++
+		return "registered"
+	} catch (error) {
+		// The counterparty address is PII and this fires per failed row; the counts below carry
+		// the diagnosis.
+		console.warn("Failed to register a sender", { error })
+		return "failed"
+	}
+}
+
+async function upsertOneContact(
+	{ contactService, run }: ContactIoDeps,
+	row: SelectedRow,
+	targetId: string | null,
+): Promise<UpsertError | typeof STOPPED | null> {
+	const name = row.name.trim()
+	const write = targetId
+		? () => contactService.updateContact(targetId, name, row.address, run.fence)
+		: () => contactService.addContact(name, row.address, run.fence)
+	try {
+		return (await fenced(run, write)) === STOPPED ? STOPPED : null
+	} catch (err) {
+		return { name, address: row.address, operation: targetId ? "update" : "create", error: err }
+	}
+}
+
+function logImportErrors(errors: UpsertError[]): void {
+	for (const e of errors) {
+		// The contact's name and address are PII; the operation and the error are the
+		// diagnosis, and the toast already tells the user the import had failures.
+		console.error(`Failed to ${e.operation} a contact`, { error: e.error })
+	}
+}
+
+/** `written` counts confirmed writes, so a write whose reply the stop cut off may be saved uncounted.
+ *  `selected` counts every row the person chose, refused ones included. */
+function toastStoppedImport(openToast: ContactIoDeps["openToast"], tally: ImportTally, selected: number): void {
+	logImportErrors(tally.errors)
+	const noun = selected === 1 ? "contact" : "contacts"
+	openToast({ kind: "error", label: `Import incomplete · ${tally.written} of ${selected} ${noun} written` })
 }
 
 function toastImportOutcome(openToast: ContactIoDeps["openToast"], tally: ImportTally): void {
 	const { errors, senderTotal, senderOk, senderSkippedNoNetwork } = tally
 	if (errors.length) {
-		for (const e of errors) {
-			// The contact's name and address are PII; the operation and the error are the
-			// diagnosis, and the toast below already tells the user the import had failures.
-			console.error(`Failed to ${e.operation} a contact`, e.error)
-		}
+		logImportErrors(errors)
 		openToast({ kind: "error", label: "Import ended with errors" })
 	} else if (senderTotal > 0 && senderOk < senderTotal) {
 		// "Skipped" ≠ "failed": the no-network case was announced as a

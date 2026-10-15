@@ -1,5 +1,7 @@
 import { FpcType } from "@/wallet/services/fpc/client"
-import { feeJuicePricingFromUsd, feeToUsd, formatGasBalance } from "@/utils/fee-estimation"
+import { FEE_JUICE_DECIMALS, feeJuicePricingFromUsd, feeToUsd, formatFeeJuice, formatGasBalance } from "@/utils/fee-estimation"
+import { formatBaseUnits } from "@/utils/amount"
+import type { AppPick } from "@/utils/fee-picks"
 
 export { formatGasBalance }
 
@@ -20,10 +22,29 @@ export function feeDisplay(
 	}
 }
 
+export function feeInWords(display: FeeDisplay): string {
+	return display.usd ? `${display.amount} FJ (${display.usd})` : `${display.amount} FJ`
+}
+
 /** The fee card's "You pay" value as one string, in the card's words. */
 export function feeLine(display: FeeDisplay | null): string | undefined {
-	if (!display) return undefined
-	return display.usd ? `~${display.amount} FJ (${display.usd})` : `~${display.amount} FJ`
+	return display ? `~${feeInWords(display)}` : undefined
+}
+
+/** A fee in base units as the card writes it. */
+export function feeAmountDisplay(raw: string, usdPerFeeJuice: number | undefined): FeeDisplay {
+	return feeDisplay({ maxFee: raw, maxFeeFormatted: formatFeeJuice(BigInt(raw)) }, usdPerFeeJuice) as FeeDisplay
+}
+
+export type FeePayer = "self" | "sponsor" | "unvouched"
+
+/** Who pays the chosen method's fee; none until one is chosen. Only Nulo's own sponsor is promised
+ *  "Nothing": a sponsor added by hand can charge the account through an authorization it granted
+ *  earlier. Fee Juice, public or private, is the person's own. */
+export function feePayerOf(method: { type: FeeMethodOption["type"]; isProtocol?: boolean } | null | undefined): FeePayer | null {
+	if (!method) return null
+	if (method.type !== "fpc") return "self"
+	return method.isProtocol === true ? "sponsor" : "unvouched"
 }
 
 export interface FeeMethodOption {
@@ -40,6 +61,11 @@ export interface FeeMethodOption {
 	/** What the method can spend, for the menu's right column: a balance, "— FJ" while
 	 *  balances are unknown, "free" for Nulo's own sponsor, "—" for one added by hand. */
 	spend?: string
+	/** The read that answers this row has not landed: it is drawn loading and is never picked. */
+	checking?: boolean
+	/** A sponsor whose funding read for the current transaction is in flight: drawn loading, and it
+	 *  can still be picked. */
+	verifying?: boolean
 	fpc?: { id: string; type: FpcType; name?: string; isProtocol?: boolean; address?: string } | null
 }
 
@@ -48,7 +74,18 @@ export interface FeeMethodOption {
  *  drifted only by luck). `null` on either leg = UNKNOWN (read failed):
  *  fail closed for gating, render as an em dash for display. */
 export type { GasBalances } from "@/wallet/services/execution/models"
-import type { GasBalances } from "@/wallet/services/execution/models"
+import type { FeeJuiceShortfall, GasBalances } from "@/wallet/services/execution/models"
+
+const SHORTFALL_DECIMALS = 6
+
+/** The refusal for a balance short of the fee. The cost rounds up and the balance down at the same
+ *  precision, so the two figures never read equal. */
+export function shortfallSentence({ maxFee, balance }: FeeJuiceShortfall): string {
+	const step = 10n ** BigInt(FEE_JUICE_DECIMALS - SHORTFALL_DECIMALS)
+	const cost = ((BigInt(maxFee) + step - 1n) / step) * step
+	const options = { maxDecimals: SHORTFALL_DECIMALS }
+	return `This send can cost up to ${formatBaseUnits(cost, FEE_JUICE_DECIMALS, options)} FJ. You have ${formatBaseUnits(BigInt(balance), FEE_JUICE_DECIMALS, options)} FJ.`
+}
 
 export interface BuildSettingsInput {
 	paymentMethod: { kind: string; fpcId?: string } | undefined
@@ -167,20 +204,31 @@ export function resolveSavedSelection(
 	}
 }
 
+/** A picked row as plain values, without the row's `fpc` itself: that is the card's reactive state,
+ *  and it carries fields no reader of the record uses. */
+export function savedSelectionOf({ type, title, subtitle, fpc }: FeeMethodOption): AppPick {
+	return fpc ? { type, title, subtitle, fpc: { id: fpc.id, isProtocol: fpc.isProtocol } } : { type, title, subtitle }
+}
+
 export interface FeeMethodsOptions {
 	/** Sponsors a verdict found short on the current transaction: their rows are disabled. */
 	shortSponsorIds?: ReadonlySet<string>
 	/** Sponsors a verdict found short on this card: their rows are set aside. */
 	setAsideSponsorIds?: ReadonlySet<string>
+	/** The live identity's balances are unread: the Fee Juice rows are `checking`. */
+	balancesPending?: boolean
+	/** Its FPC list is unread too: every row is `checking`. */
+	fpcsPending?: boolean
+	/** The sponsor whose funding read is in flight: its row is `verifying`. */
+	verifyingSponsorId?: string | null
 }
 
 /**
  * Build the dropdown's method list. When `gasBalances` is provided,
  * `fj` and `private_fpc` get marked `disabled` with a "no balance" /
  * "couldn't check balance" / "not available" hint so the user can't
- * select a method whose simulation would fail. `gasBalances` is optional so callers can keep
- * building the list before balances arrive (everything stays enabled
- * during load; balances flip the disabled state once fetched).
+ * select a method whose simulation would fail. Without balances the Fee Juice rows carry no
+ * verdict: `balancesPending` draws them loading, and outside a pending read they read "— FJ".
  */
 export function buildFeeMethods(
 	registeredFpcs: RegisteredFpc[],
@@ -202,7 +250,26 @@ export function buildFeeMethods(
 		}
 	}
 
-	return base
+	return options?.balancesPending || options?.fpcsPending ? withLoadingRows(base, options) : base
+}
+
+const SPONSOR_TITLE = "Sponsored"
+
+/** A loading row keeps its title and gives no answer: no spend, no reason, no verdict. */
+const loadingRow = ({ type, title, subtitle, fpc }: FeeMethodOption): FeeMethodOption => ({ type, title, subtitle, fpc, checking: true })
+
+/** A Fee Juice row waits on its balance; a list without the PrivateFPC has already answered its row. */
+const waitsOnBalance = (m: FeeMethodOption) => m.type === "fj" || (m.type === "private_fpc" && Boolean(m.fpc))
+
+/** With the FPC list unread every row loads, and Nulo's sponsor, which the wallet registers on every
+ *  chain, holds its place until the list names it. With only balances unread, sponsors are answered. */
+function withLoadingRows(methods: FeeMethodOption[], { balancesPending, fpcsPending }: FeeMethodsOptions): FeeMethodOption[] {
+	if (!fpcsPending) return methods.map((m) => (balancesPending && waitsOnBalance(m) ? loadingRow(m) : m))
+	const rows = methods.map(loadingRow)
+	if (!rows.some((m) => m.type === "fpc" && m.fpc?.isProtocol === true)) {
+		rows.push({ type: "fpc", title: SPONSOR_TITLE, subtitle: "sponsored", fpc: null, checking: true })
+	}
+	return rows
 }
 
 function sponsorOption(fpc: RegisteredFpc, options: FeeMethodsOptions | undefined): FeeMethodOption {
@@ -210,12 +277,13 @@ function sponsorOption(fpc: RegisteredFpc, options: FeeMethodsOptions | undefine
 	// sponsorship conditional on a call from the account and then spend a token
 	// authorization the account granted it earlier.
 	const spend = fpc.isProtocol === true ? "free" : "—"
-	const option: FeeMethodOption = { type: "fpc", title: fpc.name || "Sponsored", subtitle: "sponsored", spend, fpc }
+	const option: FeeMethodOption = { type: "fpc", title: fpc.name || SPONSOR_TITLE, subtitle: "sponsored", spend, fpc }
 	if (options?.shortSponsorIds?.has(fpc.id)) {
 		option.disabled = true
 		option.disabledReason = "can't pay now"
 	}
 	if (options?.setAsideSponsorIds?.has(fpc.id)) option.setAside = true
+	if (!option.disabled && !option.setAside && options?.verifyingSponsorId === fpc.id) option.verifying = true
 	return option
 }
 
@@ -229,9 +297,9 @@ export function menuOrder(methods: FeeMethodOption[]): FeeMethodOption[] {
 }
 
 /** The only sponsor a card picks unasked: Nulo's own, by its derived identity. One a verdict set
- *  aside reads as missing. */
+ *  aside, or one still loading, reads as missing. */
 export function defaultSponsor(methods: FeeMethodOption[]): FeeMethodOption | undefined {
-	return methods.find((m) => m.type === "fpc" && m.fpc?.isProtocol === true && !m.disabled && !m.setAside)
+	return methods.find((m) => m.type === "fpc" && m.fpc?.isProtocol === true && !m.disabled && !m.setAside && !m.checking)
 }
 
 /** `undefined` (balances not known yet) and `null` (the leg's read failed) are never printed as a

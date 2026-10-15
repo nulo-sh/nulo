@@ -1,7 +1,7 @@
 /**
  * Pins the coordinator's PRODUCTION default deriver to the ONE shared formula.
  *
- * The R1 audits' bricking class: the default `DeriveAddress` silently re-implementing the
+ * The bricking class it guards: the default `DeriveAddress` silently re-implementing the
  * account-seed formula and drifting from AccountService's (every unlock then false-blocks).
  * The other coordinator tests inject fake derivers and can never catch that, and jsdom cannot
  * run the real poseidon (bb.js). So this test mocks the two module boundaries and asserts the
@@ -40,6 +40,7 @@ import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { AccountService, AccountType, type Account } from "@/wallet/services/account/service"
+import { NetworkService } from "@/wallet/services/network/service"
 import { ProfileService } from "@/wallet/services/profile/service"
 import { svc } from "../composition-harness"
 import { AccountIntegrityCoordinator } from "./coordinator"
@@ -70,7 +71,8 @@ async function buildWithDefaultDeriver(rows: Account[]) {
 			getProfileSecret: async () => Fr.fromBuffer(Buffer.from(MASTER)),
 		}),
 	)
-	services.add(svc(AccountService.name, { getAccountsRaw: async () => rows }))
+	services.add(svc(AccountService.name, { getAccountsRaw: async () => rows, setRuntimeMismatchDelegate: () => {} }))
+	services.add(svc(NetworkService.name, { getNetworksRaw: async () => [] }))
 	// NO injected deriver — the production default is the code under test.
 	const coordinator = new AccountIntegrityCoordinator(new LoggerStore(new ConfigStore()), api)
 	services.add(coordinator)

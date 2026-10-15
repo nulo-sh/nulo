@@ -46,6 +46,7 @@ onUnmounted(() => {
 		direction="column"
 		justify="start"
 		gap="12"
+		data-testid="logger-window"
 		:class="[$style.wrapper, $style.json_viewer]"
 	>
          <LogsViewer />

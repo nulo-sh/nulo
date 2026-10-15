@@ -13,7 +13,7 @@ const { openToast } = useToast()
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
 const appStore = useAppStore()
-const { order } = usePopupStack("edit_endpoint")
+const { order, depth } = usePopupStack("edit_endpoint")
 const cacheStore = useCacheStore()
 
 const emit = defineEmits(["onClose"])
@@ -85,6 +85,7 @@ usePopupEntity(() => props.show, {
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		submitLabel="Save"
 		:submitDisabled="!isAvailableToSave"
 		:submitLoading="isSubmitting"
@@ -92,9 +93,9 @@ usePopupEntity(() => props.show, {
 		@submit="handleSave"
 	>
 		<template #title>
-			<Text size="14" weight="600" color="primary">
+			<Text variant="title-page" color="primary">
 				Edit endpoint
-				<Text v-if="network" size="14" weight="600" color="tertiary"> · {{ network.name }}</Text>
+				<Text v-if="network" color="tertiary"> · {{ network.name }}</Text>
 			</Text>
 		</template>
 

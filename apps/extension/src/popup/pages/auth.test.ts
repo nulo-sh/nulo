@@ -6,10 +6,13 @@ import { Flex, Input, MaterialIcon, Text } from "@nulo/design"
 import { expectMaskToggle, expectNativeAttrs, nativeInput, typeNow } from "../../../tests/helpers/credential-pins"
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { useAppStore } from "@/stores/app.store"
+import { useToast } from "@/composables/toast"
 import { managers } from "@/utils/core"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
 import { captureOwnWindow, releaseOwnWindow } from "@/utils/own-window"
+import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
+import type { ProfileInfo } from "@/wallet/services/profile/spec"
 import Auth from "./auth.vue"
 
 const unlockProfile = vi.fn()
@@ -46,9 +49,22 @@ vi.mock("@/utils/core", () => ({
 	initTransactionService: (...args: unknown[]) => initTransactionServiceMock(...(args as [])),
 	refreshBalances: vi.fn(async () => undefined),
 }))
-vi.mock("@/composables/toast", () => ({
-	useToast: () => ({ openToast: openToastMock }),
-}))
+vi.mock("@/composables/toast", async (importOriginal) => {
+	const real = await importOriginal<typeof import("@/composables/toast")>()
+	return {
+		...real,
+		useToast: () => {
+			const toast = real.useToast()
+			return {
+				...toast,
+				openToast: (options: Parameters<typeof toast.openToast>[0]) => {
+					openToastMock(options)
+					toast.openToast(options)
+				},
+			}
+		},
+	}
+})
 vi.mock("@/composables/usePasskeyCeremony", () => ({
 	usePasskeyCeremony: () => ({
 		request: { value: null },
@@ -76,6 +92,7 @@ beforeEach(() => {
 	runCeremony.mockReset()
 	vi.mocked(passkeyNeedsOwnWindow).mockReturnValue(false)
 	openToastMock.mockReset()
+	useToast().closeToast()
 	initTransactionServiceMock.mockReset()
 	setLastActiveProfileIdMock.mockReset()
 	setLastActiveProfileIdMock.mockResolvedValue(undefined)
@@ -139,6 +156,7 @@ describe("auth.vue — torn-import unlock refusal", () => {
 		expect(torn.exists()).toBe(true)
 		expect(torn.text()).toContain("didn't finish")
 		expect(wrapper.find('[data-testid="error-text"]').exists()).toBe(false)
+		expect(openToastMock).not.toHaveBeenCalled()
 		expect(routerPush).not.toHaveBeenCalled()
 	})
 
@@ -351,6 +369,50 @@ describe("auth.vue — bounded activation wait", () => {
 	})
 })
 
+describe("auth.vue — the mount's last-active lookup", () => {
+	const A = { id: "pA", name: "A", type: "password" } as ProfileInfo
+	const B = { id: "pB", name: "B", type: "password" } as ProfileInfo
+
+	/** Mounts with nothing selected and holds the profile list until the returned release. */
+	async function mountWithHeldLookup() {
+		vi.mocked(getLastActiveProfileId).mockResolvedValueOnce("pA")
+		let release!: () => void
+		vi.mocked(managers.profile.getProfiles).mockReturnValueOnce(
+			new Promise((resolve) => {
+				release = () => resolve([A, B])
+			}),
+		)
+		const mounted = mountAuth()
+		mounted.appStore.profile = undefined
+		await flushPromises()
+		return { ...mounted, release }
+	}
+
+	test("selects the last active profile when nothing changed meanwhile", async () => {
+		const { appStore, release } = await mountWithHeldLookup()
+		release()
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pA")
+	})
+
+	test("a profile opened while the list loads stays selected", async () => {
+		const { appStore, release } = await mountWithHeldLookup()
+		appStore.profile = B
+		appStore.isLogined = true
+		release()
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pB")
+	})
+
+	test("a list that answers after the page left selects nothing", async () => {
+		const { wrapper, appStore, release } = await mountWithHeldLookup()
+		wrapper.unmount()
+		release()
+		await flushPromises()
+		expect(appStore.profile).toBeUndefined()
+	})
+})
+
 describe("auth.vue — the account client survives an unlock", () => {
 	test("a successful unlock keeps the account client the wallet already holds and still runs its continuation", async () => {
 		const existing = { getAccounts: vi.fn() }
@@ -407,6 +469,47 @@ describe("auth.vue — what a failed unlock says", () => {
 		return wrapper
 	}
 
+	async function failPasswordUnlock(error: unknown) {
+		unlockProfile.mockRejectedValue(error)
+		const { wrapper } = mountAuth()
+		await flushPromises()
+		await wrapper.find("[data-stub-input]").setValue("pass1234")
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+		return wrapper
+	}
+
+	test("a password unlock that fails for an unlisted reason says so, without the error's text, and stops the spinner", async () => {
+		const wrapper = await failPasswordUnlock(new Error("Invalid profile id"))
+		expect(openToastMock).toHaveBeenCalledTimes(1)
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Something went wrong", sub: "Try unlocking again." })
+		expect(wrapper.find('[data-testid="error-text"]').exists()).toBe(false)
+		// The latch is released: the next submit reaches the service again.
+		await wrapper.find("form").trigger("submit")
+		expect(unlockProfile).toHaveBeenCalledTimes(2)
+	})
+
+	test("Continue again closes the last failure's toast before the new attempt; another surface's toast stays", async () => {
+		const { toast, openToast } = useToast()
+		const wrapper = await failPasswordUnlock(new Error("Invalid profile id"))
+		expect(toast.value).toMatchObject({ label: "Something went wrong", sub: "Try unlocking again." })
+
+		let answer!: (profile: unknown) => void
+		unlockProfile.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+		await wrapper.find("form").trigger("submit")
+		expect(unlockProfile).toHaveBeenCalledTimes(2)
+		expect(toast.value).toBeNull()
+		answer(undefined)
+		await flushPromises()
+
+		const handOff = { kind: "error", label: "Something went wrong", sub: "Open the wallet again to unlock your new profile." } as const
+		openToast(handOff)
+		unlockProfile.mockReturnValueOnce(new Promise(() => {}))
+		await wrapper.find("form").trigger("submit")
+		expect(unlockProfile).toHaveBeenCalledTimes(3)
+		expect(toast.value).toMatchObject(handOff)
+	})
+
 	test("a wrong password keeps its inline error and gets no toast", async () => {
 		unlockProfile.mockRejectedValue(new InvalidPasswordError())
 		const { wrapper } = mountAuth()
@@ -430,6 +533,7 @@ describe("auth.vue — what a failed unlock says", () => {
 
 	test("any other passkey failure gets the generic line", async () => {
 		await failPasskeyUnlock(new Error("authenticator exploded"))
+		expect(openToastMock).toHaveBeenCalledTimes(1)
 		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Couldn't unlock. Try again." })
 	})
 
@@ -440,7 +544,8 @@ describe("auth.vue — what a failed unlock says", () => {
 })
 
 describe("auth.vue — the password field's controls, real Input", () => {
-	const mountReal = () => {
+	/** `known: false` mounts before the service has named the profile. */
+	const mountReal = ({ known = true } = {}) => {
 		const wrapper = mount(Auth, {
 			attachTo: document.body,
 			global: {
@@ -455,10 +560,16 @@ describe("auth.vue — the password field's controls, real Input", () => {
 				},
 			},
 		})
-		useAppStore().profile = { id: "p1", name: "P", type: "password" } as never
+		if (known) useAppStore().profile = { id: "p1", name: "P", type: "password" } as never
 		return wrapper
 	}
 	const FIELD = "auth-password-input"
+	// jsdom applies no module CSS, so this reads the class; the held-boot e2e reads the computed visibility.
+	const hidden = (testid: string) =>
+		(wrapper as NonNullable<typeof wrapper>)
+			.get(`[data-testid="${testid}"]`)
+			.classes()
+			.some((name) => /unknown/.test(name))
 	let wrapper: ReturnType<typeof mountReal> | undefined
 	afterEach(() => {
 		wrapper?.unmount()
@@ -492,5 +603,42 @@ describe("auth.vue — the password field's controls, real Input", () => {
 		await flushPromises()
 		expect(unlockProfile).toHaveBeenCalledTimes(1)
 		expect(shaker().className).toMatch(/shake/)
+	})
+
+	test("before the profile is known, the heading, its line and the form keep their place hidden and the field takes no focus", async () => {
+		wrapper = mountReal({ known: false })
+		await flushPromises()
+		expect(hidden("auth-heading")).toBe(true)
+		expect(hidden("auth-form")).toBe(true)
+		expect(document.activeElement).not.toBe(nativeInput(wrapper, FIELD))
+	})
+
+	test("a password profile known later shows the form and takes focus from the page, never from a control", async () => {
+		wrapper = mountReal({ known: false })
+		await flushPromises()
+		useAppStore().profile = { id: "p1", name: "P", type: "password" } as never
+		await flushPromises()
+		expect(hidden("auth-heading")).toBe(false)
+		expect(hidden("auth-form")).toBe(false)
+		expect(document.activeElement).toBe(nativeInput(wrapper, FIELD))
+		wrapper.unmount()
+
+		wrapper = mountReal({ known: false })
+		await flushPromises()
+		const reset = wrapper.get('[data-testid="auth-reset"]').element as HTMLButtonElement
+		reset.focus()
+		useAppStore().profile = { id: "p1", name: "P", type: "password" } as never
+		await flushPromises()
+		expect(document.activeElement).toBe(reset)
+	})
+
+	test("a passkey profile known later shows the passkey form and never the password field", async () => {
+		wrapper = mountReal({ known: false })
+		await flushPromises()
+		useAppStore().profile = { id: "k1", name: "K", type: "passkey" } as never
+		await flushPromises()
+		expect(hidden("auth-form")).toBe(false)
+		expect(wrapper.find(`[data-testid="${FIELD}"]`).exists()).toBe(false)
+		expect(wrapper.get("h1").text()).toBe("Passkey required")
 	})
 })

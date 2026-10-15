@@ -1,4 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
+
 export type FeePaymentMethod = FeeJuicePaymentMethod | FeeJuiceWithClaimPaymentMethod | FpcPaymentMethod | CustomPaymentMethod
 
 export type FeeJuicePaymentMethod = {
@@ -34,6 +36,36 @@ export type FeeSettings = {
 	readonly priorityLevel?: PriorityLevel
 }
 
+/** True only for a speed level `PRIORITY_MULTIPLIERS` defines itself, never an inherited name. */
+export function isPriorityLevel(value: unknown): value is PriorityLevel {
+	return typeof value === "string" && Object.hasOwn(PRIORITY_MULTIPLIERS, value)
+}
+
+/** Refuses fee settings that name a speed level other than the three; an absent level is the
+ *  default, and a value that is not an object passes so the method's own failure stays the one
+ *  the caller sees. */
+export function refuseUnknownPriority(method: string, feeSettings: unknown): void {
+	if (typeof feeSettings !== "object" || feeSettings === null) return
+	const level = (feeSettings as { priorityLevel?: unknown }).priorityLevel
+	if (level !== undefined && !isPriorityLevel(level)) throw InvalidWalletArgumentsError.forMethod(method)
+}
+
+/** Per RPC, the fee settings its arguments carry. Typed against the method's parameters, so a
+ *  changed signature fails to compile; a reader never throws on a malformed call. */
+export type FeeSettingsReaders<M> = {
+	[K in keyof M]?: M[K] extends (...args: infer A) => unknown ? (args: A) => readonly (FeeSettings | undefined)[] : never
+}
+
+/** Refuses the call before it runs when any fee settings it carries fail `refuseUnknownPriority`. */
+export function refuseUnknownPriorities(
+	readers: { readonly [method: string]: ((args: never) => readonly unknown[]) | undefined },
+	method: string,
+	params: unknown[],
+): void {
+	const read = Object.hasOwn(readers, method) ? (readers[method] as (args: unknown[]) => readonly unknown[]) : undefined
+	for (const feeSettings of read?.(params) ?? []) refuseUnknownPriority(method, feeSettings)
+}
+
 export type GasBalances = {
 	/** Public FeeJuice balance (raw, 18 decimals). Null = UNKNOWN (the read
 	 *  failed or timed out) — never a fabricated zero. Consumers must fail
@@ -49,6 +81,10 @@ export type TransferFeeEstimate = {
 	readonly maxFee: string
 	/** Human-readable fee amount, e.g. "0.000123" */
 	readonly maxFeeFormatted: string
+	/** The part of `maxFee` an app's priority fee may take (raw), and its human-readable form; set
+	 *  together, only when the formatted form is not "0". */
+	readonly priorityFee?: string
+	readonly priorityFeeFormatted?: string
 	/** Gas breakdown */
 	readonly gasDetails: {
 		l2GasLimit: number
@@ -78,6 +114,12 @@ export type TransferFeeEstimate = {
 	 *  absent means unknown, which must never disable a sponsor, since a failed read is not an
 	 *  empty one. */
 	readonly sponsorFunding?: SponsorFunding
+	/** Set only when the app's own fee contract, at `address`, pays and its balance was read; absent
+	 *  means unknown. */
+	readonly appPayerFunding?: AppPayerFunding
+	/** Set only when the account pays from its own public Fee Juice and the balance read short of
+	 *  `maxFee`; absent means covered or unknown. */
+	readonly feeJuiceShortfall?: FeeJuiceShortfall
 }
 
 /** `funded`: the sponsor's public Fee Juice covers the estimate's fee limit. */
@@ -85,6 +127,22 @@ export type SponsorFunding = {
 	readonly fpcId: string
 	readonly address: string
 	readonly funded: boolean
+}
+
+/** `funded`: the app's fee contract's public Fee Juice covers the estimate's fee limit. `provenShort`:
+ *  it does not, and nothing in the transaction can credit it, since only a private call to Fee Juice
+ *  can and the transaction makes none. */
+export type AppPayerFunding = {
+	readonly address: string
+	readonly funded: boolean
+	readonly provenShort: boolean
+}
+
+/** The account's own public Fee Juice, read below the most the transaction can cost; both in base
+ *  units. The node refuses such a transaction at submission. */
+export type FeeJuiceShortfall = {
+	readonly maxFee: string
+	readonly balance: string
 }
 
 /** One private authorization discovered by simulation: the call it authorizes,

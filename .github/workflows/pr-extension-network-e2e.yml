@@ -13,13 +13,16 @@ on:
     # so a stacked PR targeting its parent feature branch got no CI whatsoever.
     # `labeled` so adding `e2e:extension-network` (`e2e:network` is honored as an alias) after open triggers a fresh run;
     # `unlabeled` so removing it re-evaluates the gate instead of leaving
-    # a stale failing result; `ready_for_review` so a draft marked ready
-    # (without a new push) re-runs CI instead of hanging the required check.
+    # a stale failing result; `ready_for_review` gives a draft marked ready a fresh
+    # run on its head (no gate reads the draft flag, so the head normally has a run
+    # already; this one can replace a run that failed, was cancelled or never started).
     types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review]
 
 concurrency:
-  group: pr-extension-network-e2e-${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  # One queue per head commit, so a late run of an older push can neither cancel nor replace the
+  # current head's run; pr-supersede.yml cancels the runs of heads the pull request moved past.
+  group: pr-extension-network-e2e-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
 
 permissions:
   contents: read
@@ -32,6 +35,9 @@ jobs:
     timeout-minutes: 2
     outputs:
       extension-network: ${{ steps.override.outputs.full || steps.filter.outputs.extension-network }}
+      label-hit: ${{ steps.live.outputs.label-hit }}
+      base: ${{ steps.live.outputs.base }}
+      read-attempt: ${{ steps.live.outputs.read-attempt }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,6 +47,15 @@ jobs:
           # whenever the merge-base sits beyond the initial depth (structural on
           # long-running branches ~100+ commits from the base).
           fetch-depth: 0
+      - name: Read the live labels and head
+        id: live
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/ci-cd/live-labels.sh e2e:extension-network e2e:network
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
@@ -67,6 +82,8 @@ jobs:
               - 'packages/resolve-asset/package.json'
               - 'packages/third-party-notices/src/**'
               - 'packages/third-party-notices/package.json'
+              - 'packages/token-list/src/**'
+              - 'packages/token-list/package.json'
               - 'packages/wallet-bridge/src/**'
               - 'packages/wallet-bridge/package.json'
               - 'packages/wallet-core/src/**'
@@ -104,10 +121,18 @@ jobs:
       - id: gate
         env:
           EVENT: ${{ github.event_name }}
-          BASE: ${{ github.base_ref }}
+          BASE: ${{ needs.changes.outputs.base }}
           NETWORK: ${{ needs.changes.outputs.extension-network }}
-          LABEL_HIT: ${{ contains(github.event.pull_request.labels.*.name, 'e2e:extension-network') || contains(github.event.pull_request.labels.*.name, 'e2e:network') }}
+          LABEL_HIT: ${{ needs.changes.outputs.label-hit }}
         run: |
+          case "$LABEL_HIT" in
+            true | false) ;;
+            *) echo "::error::changes.outputs.label-hit is not true/false: '$LABEL_HIT'"; exit 1 ;;
+          esac
+          if [ "$EVENT" = pull_request ] && [ -z "$BASE" ]; then
+            echo "::error::changes.outputs.base is empty"
+            exit 1
+          fi
           # The paths filter already answers "does this diff touch the surface?" — gating it on
           # the base branch as well only creates a hole, because a stacked PR's `github.base_ref`
           # is the branch below it. Only the bottom arc of a stack targets `dev`; every arc above
@@ -132,7 +157,7 @@ jobs:
       # shard failing or is the suite broadly broken?"
       fail-fast: false
       matrix:
-        # N=5 splits the lightweight network test files into ~9-per-shard.
+        # N=5 splits the lightweight network test files into ~21-per-shard.
         # N=5 (not N=4) because vitest's deterministic SHA-1-of-file-path
         # sharder puts the two known slow files (multi-account-from,
         # tx-sendTx-multicall) into the same shard at N=4; N=5 separates
@@ -162,16 +187,12 @@ jobs:
       # retry would re-mask app flakes; pure infra-boot flakes are handled by the
       # agent's exit-86 sentinel (one infra-retry in _extension-network-e2e.yml).
       retry: "0"
-      # Proverless shard pool (fast, Presto OFF). Exclude, on top of the
-      # fee-methods + concurrent-confirm heavy jobs (which run proverless too),
-      # the prover-ON canary files transfers + tx-sendTx-default +
-      # frozen-account-canary + passkey-execution-canary — they run with REAL
-      # proving in network-e2e-canary. The partition is pinned by
-      # scripts/ci-cd/behavior-gating.test.ts.
-      exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+      # Proverless shard pool (fast, Presto OFF). Exclude every file a dedicated
+      # job below runs: the three heavy jobs' files (proverless too), the five
+      # prover-ON files, which run with REAL proving in network-e2e-canary, and
+      # the chaos file. The partition is pinned by scripts/ci-cd/behavior-gating.test.ts.
+      exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
       proverless: true
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   network-e2e-heavy:
     name: Run / heavy / fee-methods + selfpay-phase
@@ -195,8 +216,6 @@ jobs:
       # fee-methods is PLAIN proverless (no barrier; the fee flows don't depend
       # on prove duration). Proverless implies Presto OFF.
       proverless: true
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   network-e2e-heavy-concurrent:
     name: Run / heavy / concurrent-confirm
@@ -218,8 +237,20 @@ jobs:
       # STUB + barrier: proverless makes prove sub-second, so the test holds T1
       # at `proving` via the ProofGate to keep the ordering assert deterministic.
       proverless: true
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
+
+  network-e2e-heavy-long:
+    name: Run / heavy / snack-placement + failed-send-check
+    needs: decide
+    if: needs.decide.outputs.run == 'true'
+    # Two files of about 8 and 4.5 minutes on Firefox. The SHA-1 sharder weighs no runtime, and the
+    # shard that drew both reached its 30-minute job limit with every test green.
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      shard_label: "heavy-long"
+      retry: "0"
+      test_files: "tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
+      proverless: true
 
   network-e2e-canary:
     name: Run / canary / real-proving
@@ -239,7 +270,9 @@ jobs:
     #   - passkey-execution-canary: the passkey analog (PRF ceremony → frozen
     #     ctor → authwit consume → background-restart ceremony re-unlock), the
     #     KDF-change execution gate; real proving for the same reason.
-    # The same four files run on Firefox (pr-extension-network-e2e-firefox.yml);
+    #   - delete-after-prove: deleting the profile that just proved and sent a
+    #     transaction, while bb.js holds its CRS store open in IndexedDB.
+    # The same five files run on Firefox (pr-extension-network-e2e-firefox.yml);
     # a red canary on either browser holds an @aztec bump.
     # Dedicated runner with presto-server (proverless: false default).
     uses: ./.github/workflows/_extension-network-e2e.yml
@@ -250,13 +283,33 @@ jobs:
       test_files: "tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts"
       # Real proving — Presto ON unless the emergency kill switch is set.
       disable_presto: ${{ github.event.inputs.disable_presto == 'true' || vars.NULO_E2E_DISABLE_PRESTO == '1' }}
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
+
+  network-e2e-chaos:
+    name: Run / chaos / seed ${{ matrix.seed }}
+    needs: decide
+    if: needs.decide.outputs.run == 'true'
+    # Fixed send-chaos seeds, each beside the nightly run it comes from; the red-seed and rotation
+    # rules are in CI.md, § pr-extension-network-e2e.yml.
+    strategy:
+      fail-fast: false
+      matrix:
+        seed:
+          - "1095865833" # nightly run 37607270016 (2026-10-07), its Firefox chaos job
+          - "1960252198" # nightly run 37765624647 (2026-10-08), its Chrome chaos job
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      shard_label: chaos-${{ matrix.seed }}
+      retry: "0"
+      test_files: "tests/e2e/network/send-chaos.test.ts"
+      proverless: true
+      chaos: true
+      chaos_seed: ${{ matrix.seed }}
 
   status:
     name: extension-network-e2e-status
     if: always()
-    needs: [changes, decide, network-e2e, network-e2e-heavy, network-e2e-heavy-concurrent, network-e2e-canary]
+    needs: [changes, decide, network-e2e, network-e2e-heavy, network-e2e-heavy-concurrent, network-e2e-heavy-long, network-e2e-canary, network-e2e-chaos]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -280,11 +333,19 @@ jobs:
             false) want="skipped" ;;
             *) echo "::error::decide.outputs.run is not true/false: '$RUN'"; exit 1 ;;
           esac
+          # A partial re-run carries an earlier attempt's gate over, so a skip stands only on labels
+          # read in this attempt.
+          if [ "$RUN" = false ] && [ "${{ needs.changes.outputs.read-attempt }}" != "${{ github.run_attempt }}" ]; then
+            echo "::error::the suites were skipped on labels read at attempt '${{ needs.changes.outputs.read-attempt }}', not this one: re-run all jobs"
+            exit 1
+          fi
           for r in \
             "${{ needs.network-e2e.result }}" \
             "${{ needs.network-e2e-heavy.result }}" \
             "${{ needs.network-e2e-heavy-concurrent.result }}" \
+            "${{ needs.network-e2e-heavy-long.result }}" \
             "${{ needs.network-e2e-canary.result }}" \
+            "${{ needs.network-e2e-chaos.result }}" \
           ; do
             if [ "$r" != "$want" ]; then
               echo "::error::gate said run=$RUN, so every suite job must be '$want' — got '$r'"

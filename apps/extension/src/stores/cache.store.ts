@@ -21,8 +21,6 @@ export const useCacheStore = defineStore("cache", () => {
 	const preselectedTokenAddressToAdd = ref()
 	const preselectedAuthwits = ref([])
 
-	const proposedNetworks = ref([])
-	const selectedNetwork = ref()
 	const feePaymentMethods = ref([])
 
 	const importType = ref("")
@@ -45,8 +43,6 @@ export const useCacheStore = defineStore("cache", () => {
 		contactToEditIdx,
 		fpcToEditIdx,
 		activeTokenIdx,
-		proposedNetworks,
-		selectedNetwork,
 		preselectedBalanceType,
 		preselectedTokenAddressToAdd,
 		preselectedAuthwits,

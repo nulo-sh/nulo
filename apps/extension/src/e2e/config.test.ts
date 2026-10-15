@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
+// Each case pays a fresh module import, which has outlasted the 5 s default under a full parallel run.
+const FRESH_IMPORT = { timeout: 30_000 }
+
 /**
  * Pins the LOAD-BEARING proverless guard (layer 1, see config.ts): proverless
  * must be OFF by default and arm ONLY when BOTH double-opt-in flags are set;
@@ -10,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
  * The guard runs at module-evaluation time (top-level `if (...) throw`), so each
  * case stubs `import.meta.env` then re-imports a fresh module instance.
  */
-describe("e2e-proverless config (layer-1 fail-closed guard)", () => {
+describe("e2e-proverless config (layer-1 fail-closed guard)", FRESH_IMPORT, () => {
 	beforeEach(() => {
 		vi.resetModules()
 	})
@@ -50,11 +53,11 @@ describe("e2e-proverless config (layer-1 fail-closed guard)", () => {
 
 /**
  * Same fail-closed shape for the token-seed source, and for a sharper reason
- * than the migration fixture's single flag: an armed build REPLACES
- * `DEFAULT_TOKEN_SEEDS`, so a stray single flag would not be inert — it would
+ * than the migration fixture's single flag: an armed build REPLACES the
+ * token list, so a stray single flag would not be inert — it would
  * ship a wallet that silently stops seeding default tokens.
  */
-describe("e2e-token-seeds config (layer-1 fail-closed guard)", () => {
+describe("e2e-token-seeds config (layer-1 fail-closed guard)", FRESH_IMPORT, () => {
 	beforeEach(() => {
 		vi.resetModules()
 	})

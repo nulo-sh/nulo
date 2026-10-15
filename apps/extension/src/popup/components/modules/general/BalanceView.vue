@@ -8,13 +8,12 @@ import GasBalanceCard from "./GasBalanceCard.vue"
 /** Services */
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
-import { getPriceMapEntry } from "@/wallet/services/price/price-map"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 
 /** Utils */
 import { balanceFormatted } from "@/utils/amount.js"
 import { copyWithToast } from "@/utils/clipboard"
-import { isValidDecimals, parseRawBalance, safeFiatOf } from "@/utils/token-amount"
+import { knownDecimals, parseRawBalance, safeFiatOf } from "@/utils/token-amount"
 import { aggregateFiat } from "@/utils/token-aggregate"
 import { storageLocalGet, storageLocalSet } from "@/utils/storage"
 import { createBalanceCount } from "./balance-count"
@@ -61,14 +60,15 @@ const tokenBalances = ref([])
 
 const tokenToDisplay = computed(() => props.tokenBalance?.token)
 const showFullBalance = ref(false)
-/** The token hero reads a stored row: a malformed side or invalid decimals renders a dash, never throws. */
+/** The token hero reads a stored row: a malformed side or unknown decimals renders a dash, never throws. */
 const heroSides = computed(() => {
 	const tb = props.tokenBalance
-	if (!tb || !isValidDecimals(tb.token?.decimals)) return undefined
+	const decimals = knownDecimals(tb?.token)
+	if (!tb || decimals === null) return undefined
 	const publicRaw = parseRawBalance({ publicBalance: tb.publicBalance })
 	const privateRaw = parseRawBalance({ privateBalance: tb.privateBalance })
 	if (publicRaw === undefined || privateRaw === undefined) return undefined
-	return { publicRaw, privateRaw, decimals: tb.token.decimals }
+	return { publicRaw, privateRaw, decimals }
 })
 const totalTokenBalance = computed(() => {
 	if (!props.tokenBalance) return { value: 0 }
@@ -203,7 +203,8 @@ function restartCap() {
 	}, HERO_PENDING_CAP_MS)
 }
 /** A price-mapped holding counts as $0.00 until its quote lands, so a wallet holding one waits for
- *  the first price answer; an empty or unpriced wallet has none to wait for. */
+ *  the first price answer; an empty or unpriced wallet has none to wait for. Before the mapping
+ *  arrives, any holding may be priced. */
 const awaitingQuotes = computed(
 	() =>
 		showFiatValues.value &&
@@ -212,7 +213,7 @@ const awaitingQuotes = computed(
 			(tb) =>
 				typeof tb.token?.contract === "string" &&
 				(parseRawBalance(tb) ?? 0n) > 0n &&
-				getPriceMapEntry(tb.token.chainId, tb.token.contract) !== undefined,
+				(!prices.mapped.value || prices.isPriced(tb.token.chainId, tb.token.contract)),
 		),
 )
 const heroPending = computed(() => (isTotalUnsettled.value || awaitingQuotes.value) && !capElapsed.value)
@@ -223,23 +224,14 @@ const isTotalKnown = computed(() => balancesState.value === "loaded")
 const tokenBalanceService = new TokenBalanceServiceClient()
 const {
 	fetchTokenBalances,
-	markDirty,
-	inActiveScope,
+	onBalanceAdded,
 	onBalanceUpdated,
+	onBalanceDeleted,
 	dispose: disposeBalances,
 } = useTokenBalanceSnapshot({ client: tokenBalanceService, live: appStore, rows: tokenBalances, state: balancesState })
 tokenBalanceService.onTokenBalanceAdded.add(onBalanceAdded)
 tokenBalanceService.onTokenBalanceUpdated.add(onBalanceUpdated)
 tokenBalanceService.onTokenBalanceDeleted.add(onBalanceDeleted)
-function onBalanceAdded(tb) {
-	if (!inActiveScope(tb)) return
-	tokenBalances.value.push(tb)
-	markDirty()
-}
-function onBalanceDeleted(tb) {
-	tokenBalances.value = tokenBalances.value.filter((_tb) => _tb.id !== tb.id)
-	if (inActiveScope(tb)) markDirty()
-}
 
 /** A new scope owes nothing to the previous one: its rows, its loaded state and its cap all restart. */
 function enterScope() {
@@ -401,10 +393,8 @@ onBeforeUnmount(() => {
 }
 
 .balance_amount {
-	font-family: var(--font-headline);
+	composes: type--amount-hero from global;
 	font-size: 48px;
-	font-weight: 700;
-	letter-spacing: -0.04em;
 	color: var(--txt-primary);
 	cursor: pointer;
 
@@ -416,8 +406,8 @@ onBeforeUnmount(() => {
 
 /* The figure's type scales down from the hero's size, while its line keeps the full size's height. */
 .hero_fit {
+	composes: type--amount-hero from global;
 	font-size: calc(1em * var(--hero-scale, 1));
-	letter-spacing: -0.04em;
 }
 
 .hero_ruler {
@@ -440,6 +430,7 @@ onBeforeUnmount(() => {
 }
 
 .arrival_chip {
+	composes: type--tag from global;
 	position: absolute;
 	left: 50%;
 	top: -18px;
@@ -449,9 +440,6 @@ onBeforeUnmount(() => {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	padding: 3px 8px;
-	font-family: var(--font-mono);
-	font-size: 11px;
-	font-weight: 600;
 	color: var(--green);
 	background: color-mix(in srgb, var(--green), transparent 88%);
 	border: 1px solid color-mix(in srgb, var(--green), transparent 55%);
@@ -508,17 +496,14 @@ onBeforeUnmount(() => {
 }
 
 .fiat_line {
-	font-family: var(--font-mono);
+	composes: type--fiat from global;
 	font-size: 13px;
 	color: var(--nulo-secondary);
 	margin-top: 4px;
 }
 
 .fiat_partial {
-	font-family: var(--font-mono);
-	font-size: 10px;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
+	composes: type--meta from global;
 	color: var(--nulo-outline);
 	margin-top: 4px;
 }
@@ -528,13 +513,10 @@ onBeforeUnmount(() => {
 }
 
 .breakdown_item {
+	composes: type--meta from global;
 	display: flex;
 	align-items: center;
 	gap: 6px;
-
-	font-family: var(--font-mono);
-	font-size: 11px;
-	letter-spacing: 0.02em;
 	color: var(--nulo-secondary);
 }
 

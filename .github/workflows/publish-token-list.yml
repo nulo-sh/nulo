@@ -1,0 +1,127 @@
+name: publish-token-list
+run-name: "publish-token-list ← ${{ github.event_name }} at ${{ github.sha }}"
+
+# Signs infra/token-list/list.source.json into the envelope tokens.nulo.sh serves, and opens the PR
+# that commits it; Workers Builds deploys it once the owner merges.
+# - `prepare` holds no secret: it runs the tree invariants and writes the review summary (token diff,
+#   the tokens digest `sign` will hold to, and every signing-relevant change since the last publish).
+#   The `token-list` environment approves a run, not its code: read the summary before approving.
+# - `sign` runs in the `token-list` environment (owner reviewer, branch `dev`), reads its secret in
+#   one step, installs nothing and runs the signer with `bun --no-install`; the signer's import
+#   closure is pinned to `node:` and its own package. It refuses any token set but the summary's,
+#   a sequence not above the served one, and a key that is not the pinned `nulo-ci-1`.
+# - `publish-pr` mints the release App token (contents and pull-requests write), commits the envelope
+#   on `token-list-publish-<sequence>` through createCommitOnBranch (GitHub-signed, so the PR's CI
+#   runs and re-verifies it), opens the PR into dev and closes older publish PRs.
+#
+# `gh workflow run publish-token-list.yml --ref dev`
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - infra/token-list/list.source.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-token-list
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: tree check and review summary
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tokens_sha256: ${{ steps.summary.outputs.tokens_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+        with:
+          cache: "false"
+      - name: Tree invariants
+        run: bun run --cwd infra/token-list check
+      - name: Review summary
+        id: summary
+        run: bun infra/token-list/scripts/summary.ts >> "$GITHUB_STEP_SUMMARY"
+
+  sign:
+    name: sign (owner approval)
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: token-list
+    permissions:
+      contents: read
+    outputs:
+      sequence: ${{ steps.sign.outputs.sequence }}
+      payload_sha256: ${{ steps.sign.outputs.payloadSha256 }}
+      tokens_sha256: ${{ steps.sign.outputs.tokensSha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+        with:
+          cache: "false"
+          install: "false"
+      - name: Sign the list
+        id: sign
+        env:
+          TOKEN_LIST_SIGNING_KEY: ${{ secrets.TOKEN_LIST_SIGNING_KEY }}
+          EXPECT_TOKENS: ${{ needs.prepare.outputs.tokens_sha256 }}
+        run: |
+          mkdir -p dist
+          bun --no-install packages/token-list/src/sign-cli.ts --source infra/token-list/list.source.json --published infra/token-list/public/v1/list.json --out dist/list.json --expect-tokens-sha256 "$EXPECT_TOKENS" | tee -a "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: token-list-envelope
+          path: dist/list.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-pr:
+    name: open the publish PR
+    needs: sign
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+        with:
+          cache: "false"
+          install: "false"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: token-list-envelope
+          path: dist
+      - name: Mint the publish token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Open the publish PR
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          ENVELOPE_FILE: dist/list.json
+          BASE_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PAYLOAD_SHA256: ${{ needs.sign.outputs.payload_sha256 }}
+          TOKENS_SHA256: ${{ needs.sign.outputs.tokens_sha256 }}
+        run: bun --no-install infra/token-list/scripts/open-publish-pr.ts

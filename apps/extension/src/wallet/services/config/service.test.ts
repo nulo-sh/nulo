@@ -52,6 +52,17 @@ describe("ConfigService.restore — backup allowlist", () => {
 		expect(result.map((r) => r.key)).toEqual(["theme"])
 	})
 
+	test("a backup never switches privacy mode, whichever way it points", async () => {
+		const { config, store } = makeStore()
+		const svc = new ConfigService(store, noopLogger)
+		await svc.restore([prop("privacyMode", true), prop("theme", "dark")])
+		expect(config.privacyMode).toBe(false)
+		expect(config.theme).toBe("dark")
+		config.privacyMode = true
+		await svc.restore([prop("privacyMode", false)])
+		expect(config.privacyMode).toBe(true)
+	})
+
 	test("a backup of only allowlisted prefs restores fully", async () => {
 		const { config, store } = makeStore()
 		const svc = new ConfigService(store, noopLogger)

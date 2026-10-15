@@ -272,13 +272,13 @@ async function openPopupAt(page: Page, extensionId: string, hash: string): Promi
 	await page.setViewport({ width: 360, height: 600 })
 	await page.bringToFront()
 	await gotoExtensionPage(page, extensionUrl(extensionId, `/src/popup/index.html${hash}`))
-	await page.waitForFunction(() => window.location.hash !== "#/" && !document.querySelector('[data-testid="global-loader"]'), {
+	await page.waitForFunction(() => window.location.hash !== "#/" && document.querySelector('[data-service-ready="true"]'), {
 		timeout: 30_000,
 	})
 }
 
 async function setAnimationsDisabled(page: Page, disabled: boolean): Promise<void> {
-	await navigateToSettings(page, "appearance")
+	await navigateToSettings(page, "display")
 	await page.waitForSelector(sel("animations-toggle"), { visible: true, timeout: 10_000 })
 	const active = await page.evaluate(() =>
 		document.querySelector('[data-testid="animations-toggle"]')?.getAttribute("data-toggle-active"),

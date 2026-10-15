@@ -33,7 +33,6 @@ onBeforeUnmount(dispose)
 		direction="column"
 		:class="[$style.wrapper, large && $style.large, displaceIdx > 1 && $style.displace]"
 		:style="{
-			'--displace': displaceIdx - 1,
 			flex: fills ? '10' : null,
 		}"
 	>

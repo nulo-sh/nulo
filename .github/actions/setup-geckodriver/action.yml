@@ -121,4 +121,5 @@ runs:
       run: |
         echo "GECKODRIVER=${BIN_DIR}/geckodriver" >> "$GITHUB_ENV"
         echo "${BIN_DIR}" >> "$GITHUB_PATH"
-        "${BIN_DIR}/geckodriver" --version | head -1
+        # sed reads to EOF; head exits after one line and geckodriver panics on the broken pipe (pipefail).
+        "${BIN_DIR}/geckodriver" --version | sed -n 1p

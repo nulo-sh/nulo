@@ -144,6 +144,7 @@ vi.mock("@/wallet/services/account/spec", () => ({
 	IMPORTED_KEYS_SERVICE_NAME: "imported-account-keys",
 	IMPORTED_KEYS_STORAGE_ROOT: "nulo:core:imported-account-keys",
 	accountRowId: (profileId: string, chainId: number, address: string) => JSON.stringify(["account", profileId, chainId, address]),
+	accountScopeKey: (chainId: number, address: string) => `${chainId}:${address}`,
 }))
 vi.mock("@/wallet/services/account-state/spec", () => ({ ACCOUNT_STATE_SERVICE_NAME: "account-state" }))
 vi.mock("@/utils/background-liveness", () => ({
@@ -191,6 +192,7 @@ vi.mock("@/wallet/storage/migrations", async () => {
 // Imported AFTER mocks are registered.
 import { useFullBackupImport } from "./useFullBackupImport"
 import { readLiveness } from "@/utils/background-liveness"
+import { FilePickCanceledError } from "@/utils/files"
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -524,9 +526,17 @@ describe("stage/status matrix on the failure paths", () => {
 
 	it("a PRE-finalize mid-flight throw rolls back the created profile (createdProfileId was already visible)", async () => {
 		happyWiring()
-		tokenClient.restore.mockRejectedValue(new Error("boom"))
+		const boom = new Error("boom")
+		tokenClient.restore.mockRejectedValue(boom)
 		const { c } = await mountWithBackup()
-		await c.restoreBackup()
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			await c.restoreBackup()
+			const message = "[full-backup] restore failed:"
+			expect(logged.mock.calls.filter(([m]) => m === message)).toEqual([[message, { error: boom }]])
+		} finally {
+			logged.mockRestore()
+		}
 		expect(profileClient.deleteProfile).toHaveBeenCalledWith("new-id")
 		expect(c.restoreStage.value).toBe("rolled-back")
 	})
@@ -546,10 +556,18 @@ describe("stage/status matrix on the failure paths", () => {
 
 	it("liveness-gate read failure fails CLOSED to cleanup-pending", async () => {
 		happyWiring()
-		tokenClient.restore.mockRejectedValue(new RpcDisconnectedError("gone"))
+		const gone = new RpcDisconnectedError("gone")
+		tokenClient.restore.mockRejectedValue(gone)
 		vi.mocked(readLiveness).mockRejectedValueOnce(new Error("storage read failed"))
 		const { c, opts } = await mountWithBackup()
-		await c.restoreBackup()
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			await c.restoreBackup()
+			const message = "[full-backup] restore failed; rollback incomplete:"
+			expect(logged.mock.calls.filter(([m]) => m === message)).toEqual([[message, { error: gone }]])
+		} finally {
+			logged.mockRestore()
+		}
 		expect(c.restoreStage.value).toBe("rollback-failed")
 		expect(opts.fillError).toHaveBeenCalledWith(
 			"full_backup",
@@ -595,6 +613,19 @@ describe("pickBackupFile / decryptBackup behavior pins", () => {
 		expect(c.selectedBackup.value).toBeNull()
 	})
 
+	it("a closed chooser keeps the chosen backup and shows no error", async () => {
+		const opts = makeOpts()
+		opts.pickFile.mockRejectedValue(new FilePickCanceledError())
+		const c = useFullBackupImport(opts)
+		const chosen = { name: "old.json", backup: {}, type: "plain" as const, profileType: "password" }
+		c.selectedBackup.value = chosen
+		c.parsedBackupName.value = "Old"
+		await c.pickBackupFile()
+		expect(c.selectedBackup.value).toStrictEqual(chosen)
+		expect(c.parsedBackupName.value).toBe("Old")
+		expect(opts.fillError).not.toHaveBeenCalled()
+	})
+
 	it("a plain pick publishes the SANITIZED embedded name and clears the password fields", async () => {
 		const opts = makeOpts()
 		const body = JSON.stringify({ data: { profile: { name: "Nice\u202Ename", type: "password" } } })
@@ -610,9 +641,16 @@ describe("pickBackupFile / decryptBackup behavior pins", () => {
 
 	it("a throwing pick surfaces the read-failure copy", async () => {
 		const opts = makeOpts()
-		opts.pickFile.mockRejectedValue(new Error("io"))
+		const io = new Error("io")
+		opts.pickFile.mockRejectedValue(io)
 		const c = useFullBackupImport(opts)
-		await c.pickBackupFile()
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			await c.pickBackupFile()
+			expect(logged.mock.calls).toEqual([["Failed to read backup file:", { error: io }]])
+		} finally {
+			logged.mockRestore()
+		}
 		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Failed to read the backup file")
 	})
 

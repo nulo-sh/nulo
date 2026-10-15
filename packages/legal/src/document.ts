@@ -1,5 +1,6 @@
+import { PLACEHOLDER } from "./launch"
+
 const HEADER_PATTERN = /^\*\*Version (\d+\.\d+(?:\.\d+)?) — effective (.+?)\*\*\s*$/
-const PLACEHOLDER = "«FILL"
 
 export interface DocumentHeader {
 	readonly version: string

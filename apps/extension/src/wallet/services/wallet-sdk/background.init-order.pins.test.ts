@@ -73,7 +73,7 @@ function makeServices(discoverImpl: () => Promise<{ approved: boolean }>) {
 	}) as never
 	const sessions = new Map<string, { id: string; profileId: string }>()
 	const stubs: Record<string, unknown> = {
-		network: { servesChain: async () => true },
+		network: { servesChain: async () => true, servesLiveChain: async () => true },
 		account: {},
 		execution: {},
 		profile: { onActiveProfileChanged, getActiveProfile: async () => ({ id: "p1" }) },
@@ -85,6 +85,8 @@ function makeServices(discoverImpl: () => Promise<{ approved: boolean }>) {
 		},
 		"dapp-session": {
 			onDappSessionDeleted,
+			onVerificationRefused: new EventHandler<unknown>(),
+			onVerificationConfirmed: new EventHandler<unknown>(),
 			tryGetDappSessionByOriginAndChain: async () => undefined,
 			addDappSession: async () => {
 				const s = { id: `s${sessions.size + 1}`, profileId: "p1" }
@@ -101,6 +103,7 @@ function makeServices(discoverImpl: () => Promise<{ approved: boolean }>) {
 		"operation-journal": {},
 		token: { getTokens: async () => [] },
 		"legal-acceptance": { assertCurrent: async () => undefined },
+		"network-reset": { waitForRunEnd: async () => undefined },
 	}
 	const services = { get: (name: string) => stubs[name] } as never
 	return { services, sessions }
@@ -131,8 +134,9 @@ describe("initWalletSdkHandler install order", () => {
 		expect(log.at(-1)).toBe("handler:initialize")
 		expect(log.indexOf("tabs:wire")).toBe(log.length - 2)
 		expect(log.indexOf("sessionDeleted:add")).toBeLessThan(log.indexOf("profile:add"))
-		// Three profile subscriptions: switch-epoch tracker, teardown, the drain.
-		expect(log.filter((l) => l === "profile:add")).toHaveLength(3)
+		// Four profile subscriptions: switch-epoch tracker, teardown, the lock's end of unconfirmed
+		// sessions, the drain.
+		expect(log.filter((l) => l === "profile:add")).toHaveLength(4)
 		expect(captured).toBeDefined()
 	})
 })

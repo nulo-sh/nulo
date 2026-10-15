@@ -10,8 +10,9 @@
  *
  * Coverage:
  *   1. Export full backup as a passkey profile — modal appears, virtual
- *      authenticator completes, CTAs become available. Locks in the
- *      `usePasskeyCeremony` wiring on the export page.
+ *      authenticator completes, CTAs become available, and an unencrypted
+ *      download passes the confirmation that names what the file exposes.
+ *      Locks in the `usePasskeyCeremony` wiring on the export page.
  *   2. Export cancel UX — Escape during the modal is marked handled and
  *      returns the user to the agreement gate (`isAgreed = false`), NOT a
  *      dead form or a toast+bounce.
@@ -21,9 +22,11 @@
  */
 import { expect } from "vitest"
 import type { Page } from "puppeteer"
-import { clickByTestId, expectNoNameField, openPopup, waitForHash, test } from "./fixtures/extension"
+import { clickByTestId, expectNoNameField, openPopup, waitForHash, test, waitForServiceReady } from "./fixtures/extension"
 import { getActiveProfileName } from "./fixtures/helpers"
 import { setupPasskeyVirtualAuth, stallNextPasskeyCeremony } from "./fixtures/passkey"
+import { shotSend } from "./fixtures/send-page"
+import { armBackupDownloadCapture, downloadPlainPasskeyBackup } from "./helpers/backup-export"
 import {
 	buildSyntheticPasskeyBackup,
 	readActiveAccount,
@@ -33,7 +36,7 @@ import {
 } from "./helpers/import-drivers"
 import { pressEscape } from "./helpers/pointer-probes"
 
-/** Reset the wallet via the in-app reset flow (settings → security → reset).
+/** Reset the wallet via the in-app reset flow (Settings → Delete profile).
  *  Cascades through every service (NetworkService.onProfileDeleted, etc.) so
  *  storage AND in-memory SW state are properly cleaned — a plain
  *  `chrome.storage.local.clear()` would leave the SW's cached account map
@@ -67,10 +70,7 @@ async function resetWallet(page: Page): Promise<void> {
 	)
 	await clickByTestId(page, "reset-submit-btn")
 	await waitForHash(page, "#/popup/register", 10_000)
-	await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), {
-		timeout: 15_000,
-		polling: 500,
-	})
+	await waitForServiceReady(page, 15_000)
 }
 
 /** Drive the passkey-register flow on a fresh extension at /popup/register.
@@ -78,10 +78,7 @@ async function resetWallet(page: Page): Promise<void> {
  *  /popup/general. */
 async function registerPasskeyProfile(page: Page): Promise<void> {
 	await waitForHash(page, "#/popup/register", 15_000)
-	await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), {
-		timeout: 15_000,
-		polling: 500,
-	})
+	await waitForServiceReady(page, 15_000)
 	await clickByTestId(page, "register-create-btn")
 
 	// A fresh install's first profile has no name field; it is created as "Main".
@@ -101,132 +98,147 @@ async function importPasskeyFullBackup(page: Page, filePath: string): Promise<vo
 	await submitPasskeyFullBackup(page, filePath)
 }
 
-// Env-gate to local-only. The 11-service backup chain + SHA hash is 5-10×
-// slower on hosted GitHub Actions runners than local (15-22s local, 96-180s+
-// per attempt on hosted under cumulative load — confirmed empirically,
-// repeatedly, even after bumping the inner wait to 180s). Locally
-// the coverage stays full; hosted CI loses this test until we either profile
-// the chain, accept a larger runner (requires an org/enterprise plan), or get a deterministic completion signal we can wait on.
-test.skipIf(process.env.CI === "true")(
-	"passkey full-backup export: modal appears + status card + CTAs become available",
-	{ timeout: 240_000 },
-	async ({ freshExtensionPerTest }) => {
-		const page = await openPopup(freshExtensionPerTest)
-		const auth = await setupPasskeyVirtualAuth(freshExtensionPerTest.browser, page)
+/**
+ * A poll can miss the progress card between two ticks. Each callback reads the live DOM, so a card
+ * inserted and removed within one batch leaves the flag unset: the observer can miss, never pass
+ * falsely. The export awaits worker calls between the two, so they never share a batch.
+ */
+async function armProgressObserver(page: Page): Promise<void> {
+	await page.evaluate(() => {
+		const w = window as unknown as { __backupProgressSeen?: boolean }
+		w.__backupProgressSeen = false
+		const observer = new MutationObserver(() => {
+			const card = document.querySelector('[data-testid="backup-status-card"]')
+			const download = document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')
+			if (
+				(card?.textContent ?? "").includes("Creating your backup") &&
+				download?.disabled === true &&
+				/Creating Backup/i.test(download.textContent ?? "")
+			) {
+				w.__backupProgressSeen = true
+				observer.disconnect()
+			}
+		})
+		observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true })
+	})
+}
 
-		try {
-			await registerPasskeyProfile(page)
+test("passkey full-backup export: modal appears + status card + CTAs become available", { timeout: 240_000 }, async ({
+	freshExtensionPerTest,
+}) => {
+	const page = await openPopup(freshExtensionPerTest)
+	const auth = await setupPasskeyVirtualAuth(freshExtensionPerTest.browser, page)
 
-			// Navigate to the full-backup export page.
-			await page.evaluate(() => {
-				window.location.hash = "#/popup/settings/security/export/full"
-			})
-			await waitForHash(page, "#/popup/settings/security/export/full", 5_000)
+	try {
+		await registerPasskeyProfile(page)
 
-			// Tick the agreement gate. For passkey profiles, agreement
-			// auto-fires `handleBackup` → opens the modal (see `handleAgree`
-			// in export/full.vue:73). No "Create Backup" button for passkey.
-			await page.waitForSelector('[data-testid="agree-continue-btn"]', { visible: true, timeout: 5_000 })
-			await clickByTestId(page, "agree-continue-btn")
+		// Navigate to the full-backup export page.
+		await page.evaluate(() => {
+			window.location.hash = "#/popup/settings/security/export/full"
+		})
+		await waitForHash(page, "#/popup/settings/security/export/full", 5_000)
 
-			// After modal resolves, backupStatus flips to "progress" and the
-			// inline status card mounts. Polling-based assertion catches the
-			// intermediate state — without it, the existing CTA-enabled assert
-			// would still pass if the body regressed to blank during progress.
-			// Assert the card's expected copy ("Creating your backup") too so
-			// a future copy regression is caught at the e2e level.
-			await page.waitForFunction(
-				() => {
-					const card = document.querySelector('[data-testid="backup-status-card"]')
-					return card !== null && (card.textContent ?? "").includes("Creating your backup")
-				},
-				{ timeout: 15_000, polling: 100 },
-			)
+		// Tick the agreement gate. For passkey profiles, agreement
+		// auto-fires `handleBackup` → opens the modal (see `handleAgree`
+		// in export/full.vue:73). No "Create Backup" button for passkey.
+		await page.waitForSelector('[data-testid="agree-continue-btn"]', { visible: true, timeout: 5_000 })
+		// Without the progress state, the CTA-enabled wait below would pass on a body left blank
+		// during the export.
+		await armProgressObserver(page)
+		await clickByTestId(page, "agree-continue-btn")
 
-			// Bottom CTAs are disabled while the card is visible — codify the
-			// "no action available right now" invariant.
-			const ctaState = await page.evaluate(() => {
+		// The card unmounts and both CTAs enable once the status reads "finished"; 180 s leaves a
+		// loaded hosted runner room without masking a deadlock.
+		await page.waitForFunction(
+			() => {
+				const protect = document.querySelector<HTMLButtonElement>('[data-testid="protect-password-btn"]')
 				const download = document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')
-				return { disabled: download?.disabled ?? false, label: download?.textContent?.trim() ?? "" }
-			})
-			expect(ctaState.disabled).toBe(true)
-			expect(ctaState.label).toMatch(/Creating Backup/i)
+				return !!protect && !protect.disabled && !!download && !download.disabled
+			},
+			{ timeout: 180_000, polling: 250 },
+		)
+		expect(
+			await page.evaluate(() => (window as unknown as { __backupProgressSeen?: boolean }).__backupProgressSeen),
+			"the export never showed its in-progress card with a disabled Creating Backup CTA",
+		).toBe(true)
+		await shotSend(page, "export-full-ready-passkey", "backup-ready-banner")
 
-			// 11-service backup() loop + SHA hash. Once the status flips to
-			// "finished", the card unmounts and the terminal CTAs become enabled.
-			// 30s suffices locally on a fast machine, but the hosted GitHub
-			// Actions runner regularly takes 45–55s for the full chain — and
-			// occasionally 90-120s under cumulative load (real observation on
-			// a hosted run: 96s/attempt × 3 retries blew past the prior
-			// 90s budget). 180s gives enough headroom for the slow path
-			// without masking a genuine deadlock.
-			await page.waitForFunction(
-				() => {
-					const protect = document.querySelector<HTMLButtonElement>('[data-testid="protect-password-btn"]')
-					const download = document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')
-					return !!protect && !protect.disabled && !!download && !download.disabled
-				},
-				{ timeout: 180_000, polling: 250 },
-			)
+		// An unencrypted download asks first: Cancel writes nothing, Download anyway writes the
+		// plain file, whose master-key field is only the passkey's credential id.
+		await armBackupDownloadCapture(page)
+		await clickByTestId(page, "download-backup-btn")
+		await page.waitForSelector('[data-testid="confirm-submit"]', { visible: true, timeout: 5_000 })
+		expect(await page.$eval('[data-testid="confirm-title"]', (el) => el.textContent?.trim())).toBe("Download without a password?")
+		await shotSend(page, "export-full-confirm-passkey", "confirm-submit")
+		await clickByTestId(page, "confirm-cancel")
+		await page.waitForFunction(() => !document.querySelector('[data-testid="confirm-submit"]'), { timeout: 5_000 })
+		const afterCancel = await page.evaluate(() =>
+			Promise.race([
+				(window as unknown as { __backupCapture: Promise<string> }).__backupCapture.then(() => "downloaded"),
+				new Promise<string>((resolve) => setTimeout(() => resolve("nothing"), 1_000)),
+			]),
+		)
+		expect(afterCancel).toBe("nothing")
+		const plain = JSON.parse(await downloadPlainPasskeyBackup(page)) as Record<string, unknown>
+		expect(plain["master-key"]).toBe((await readRegisteredPasskey(page)).credentialId)
+		expect("entropy" in plain).toBe(false)
 
-			// Drive the encryption path so the second status card variant
-			// ("Encrypting your backup") is exercised too. For passkey profiles
-			// the "Protect with Password" CTA is a two-click flow:
-			//   1st click → clears `showRecommendation` and exposes the password
-			//     fields (the `handleEncrypt` passkey branch sets
-			//     `showRecommendation = false` then returns early on empty
-			//     password).
-			//   2nd click → with password + repeat filled, actually runs the
-			//     PBKDF2 + AES-GCM encryption.
-			// Order matters: the password fields are only mounted when
-			// `!showRecommendation`, so we have to click first to reveal them.
-			const ENCRYPT_PASSWORD = "EncryptPassword123!"
-			await clickByTestId(page, "protect-password-btn")
-			await page.waitForSelector('[data-testid="backup-encrypt-password-input"]', { visible: true, timeout: 5_000 })
-			await page.evaluate((pwd: string) => {
-				const setVal = (sel: string, v: string) => {
-					const input = document.querySelector<HTMLInputElement>(`${sel} input`)
-					if (!input) throw new Error(`input not found: ${sel}`)
-					const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
-					setter?.call(input, v)
-					input.dispatchEvent(new Event("input", { bubbles: true }))
-				}
-				setVal('[data-testid="backup-encrypt-password-input"]', pwd)
-				setVal('[data-testid="backup-encrypt-password-confirm-input"]', pwd)
-			}, ENCRYPT_PASSWORD)
-			await clickByTestId(page, "protect-password-btn")
+		// Drive the encryption path so the second status card variant
+		// ("Encrypting your backup") is exercised too. For passkey profiles
+		// the "Protect with Password" CTA is a two-click flow:
+		//   1st click → clears `showRecommendation` and exposes the password
+		//     fields (the `handleEncrypt` passkey branch sets
+		//     `showRecommendation = false` then returns early on empty
+		//     password).
+		//   2nd click → with password + repeat filled, actually runs the
+		//     PBKDF2 + AES-GCM encryption.
+		// Order matters: the password fields are only mounted when
+		// `!showRecommendation`, so we have to click first to reveal them.
+		const ENCRYPT_PASSWORD = "EncryptPassword123!"
+		await clickByTestId(page, "protect-password-btn")
+		await page.waitForSelector('[data-testid="backup-encrypt-password-input"]', { visible: true, timeout: 5_000 })
+		await page.evaluate((pwd: string) => {
+			const setVal = (sel: string, v: string) => {
+				const input = document.querySelector<HTMLInputElement>(`${sel} input`)
+				if (!input) throw new Error(`input not found: ${sel}`)
+				const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
+				setter?.call(input, v)
+				input.dispatchEvent(new Event("input", { bubbles: true }))
+			}
+			setVal('[data-testid="backup-encrypt-password-input"]', pwd)
+			setVal('[data-testid="backup-encrypt-password-confirm-input"]', pwd)
+		}, ENCRYPT_PASSWORD)
+		await clickByTestId(page, "protect-password-btn")
 
-			// Encrypting card mounts briefly (~1s PBKDF2 + AES-GCM). Same race-
-			// tolerant pattern: poll for the card with its expected copy.
-			await page.waitForFunction(
-				() => {
-					const card = document.querySelector('[data-testid="backup-status-card"]')
-					return card !== null && (card.textContent ?? "").includes("Encrypting your backup")
-				},
-				{ timeout: 10_000, polling: 100 },
-			)
+		// Encrypting card mounts briefly (~1s PBKDF2 + AES-GCM). Same race-
+		// tolerant pattern: poll for the card with its expected copy.
+		await page.waitForFunction(
+			() => {
+				const card = document.querySelector('[data-testid="backup-status-card"]')
+				return card !== null && (card.textContent ?? "").includes("Encrypting your backup")
+			},
+			{ timeout: 10_000, polling: 100 },
+		)
 
-			// Then the "encrypted" banner appears and Download Backup is enabled.
-			await page.waitForFunction(
-				() => {
-					const download = document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')
-					const body = document.body.textContent ?? ""
-					return !!download && !download.disabled && body.includes("Backup is successfully encrypted")
-				},
-				{ timeout: 15_000, polling: 250 },
-			)
+		// Then the "encrypted" banner appears and Download Backup is enabled.
+		await page.waitForFunction(
+			() => {
+				const download = document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')
+				const body = document.body.textContent ?? ""
+				return !!download && !download.disabled && body.includes("Backup is successfully encrypted")
+			},
+			{ timeout: 15_000, polling: 250 },
+		)
 
-			// Filter the benign "Client disconnected" cascade that can fire when
-			// the export's loop disconnects each backup service client.
-			const nonBenign = freshExtensionPerTest.pageErrors.filter((e) => !e.message.includes("Client disconnected"))
-			expect(nonBenign).toEqual([])
-		} finally {
-			await auth.cleanup()
-			await page.close()
-		}
-	},
-	120_000,
-)
+		// Filter the benign "Client disconnected" cascade that can fire when
+		// the export's loop disconnects each backup service client.
+		const nonBenign = freshExtensionPerTest.pageErrors.filter((e) => !e.message.includes("Client disconnected"))
+		expect(nonBenign).toEqual([])
+	} finally {
+		await auth.cleanup()
+		await page.close()
+	}
+})
 
 test("passkey full-backup export: Escape during modal resets agreement gate", async ({ freshExtensionPerTest }) => {
 	const page = await openPopup(freshExtensionPerTest)

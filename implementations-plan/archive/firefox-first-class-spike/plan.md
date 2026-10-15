@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: A browser seam under the e2e fixtures in `apps/extension/tests/e2e/fixtures/browser/`, the Firefox smoke and network lanes in `.github/workflows/pr-extension-smoke-e2e-firefox.yml` and `.github/workflows/pr-extension-network-e2e-firefox.yml`, the passkey fallback in `apps/extension/src/wallet/utils/passkey-ceremony.ts`, and the Firefox manifest items in `apps/extension/manifest/manifest.firefox.config.ts`; the browser differences are written up in `apps/extension/tests/e2e/FIREFOX.md`.
-- **Open items**: the Firefox lanes' post-merge checklist is met in CI and the staged switch it unlocks is undecided, and the two local-run skills disagree on concurrent network runs; both tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the Firefox lanes' post-merge checklist is met in CI and the staged switch it unlocks is undecided, and the two local-run skills disagree on concurrent network runs; both were closed by a later plan before `follow-ups.md` was retired. None is open.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

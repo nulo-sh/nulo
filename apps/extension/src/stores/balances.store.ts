@@ -46,6 +46,7 @@ import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import { TransactionServiceClient } from "@/wallet/services/transaction/client"
 import { TxStatus } from "@/wallet/services/transaction/spec"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
+import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
 
 export type BalanceScope = ActivityScope
 export type SliceStatus = "idle" | "fetching" | "ready" | "degraded"
@@ -61,6 +62,8 @@ export interface GasSlice {
 	forcedVersion: number
 	retryDebt: boolean
 	lastError?: string
+	/** The last read failed because this imported account's stored key does not open, which no retry fixes. */
+	accountUnusable?: boolean
 }
 
 export interface FpcSlice {
@@ -178,11 +181,12 @@ function gasSuccessEntry(entry: BalanceEntry, opts: FetchOpts, result: GasBalanc
 			// and wakes the degraded card's recovery watch.
 			retryDebt: opts.cause === "retry" ? false : entry.gas.retryDebt,
 			lastError: undefined,
+			accountUnusable: false,
 		},
 	}
 }
 
-function gasFailureEntry(entry: BalanceEntry, opts: FetchOpts, failed: string | undefined): BalanceEntry {
+function gasFailureEntry(entry: BalanceEntry, opts: FetchOpts, failed: string | undefined, accountUnusable: boolean): BalanceEntry {
 	return {
 		...entry,
 		gas: {
@@ -193,6 +197,7 @@ function gasFailureEntry(entry: BalanceEntry, opts: FetchOpts, failed: string | 
 			// A tx-refresh failure creates no retry debt (D11).
 			retryDebt: opts.cause === "forced" ? entry.gas.retryDebt : true,
 			lastError: failed,
+			accountUnusable,
 		},
 	}
 }
@@ -483,6 +488,7 @@ class BalancesCore {
 		})
 		let result: GasBalances | undefined
 		let failed: string | undefined
+		let accountUnusable = false
 		try {
 			if (opts.cause === "forced") {
 				// Never join a raw flight that predates the trigger: wait it
@@ -512,6 +518,7 @@ class BalancesCore {
 			)
 		} catch (err) {
 			failed = errorMessageFromUnknown(err)
+			accountUnusable = err instanceof ImportedAccountUnusableError
 		}
 		if (this.isGasRunStale(key, scope, epoch, opts, mySeq)) return
 		const entry = this.entries.value[key]
@@ -520,7 +527,7 @@ class BalancesCore {
 			key,
 			result !== undefined
 				? gasSuccessEntry(entry, opts, result, this.forcedGasPending.has(key))
-				: gasFailureEntry(entry, opts, failed),
+				: gasFailureEntry(entry, opts, failed, accountUnusable),
 		)
 	}
 
@@ -575,13 +582,9 @@ class BalancesCore {
 		return { scope, epoch, gas: { verified: entry.gas.verified }, fpc: { data: entry.fpc.data }, degraded }
 	}
 
-	/** Debt follows the OBSERVING cause, not the flight's: an ensure that
-	 *  JOINED a failing forced flight (whose own failure creates no debt —
-	 *  D11) still has a retry-capable stake in the outcome. Without this,
-	 *  the degraded card would paint its retrying notice while no loop runs
-	 *  and retryVersion never bumps to wake its recovery watch. Gas-only:
-	 *  the fpc leg has no forced cause, so every degraded fpc already
-	 *  carries its debt from the failure commit. */
+	/** Debt follows the observer, not the flight: a forced failure owes nothing by itself, but an
+	 *  ensure that joined it, or a retry-capable subscriber when a tx-settle read fails, does: without
+	 *  it the card paints a retrying notice no loop serves. Gas-only: a degraded fpc always owes. */
 	private adoptGasRetryDebt(key: string, entry: BalanceEntry, legs: BalanceLeg[]): void {
 		if (legs.includes("gas") && entry.gas.status === "degraded" && !entry.gas.retryDebt) {
 			this.commitEntry(key, { ...entry, gas: { ...entry.gas, retryDebt: true } })
@@ -655,8 +658,22 @@ class BalancesCore {
 			if (!anyTxRefresh) continue
 			const scope = [...subs.values()][0]?.scope
 			if (!scope || scope.accountAddress !== tx.account) continue
-			void this.fetchGas(key, scope, this.epochOf(scope.profileId), { cause: "forced", forceRefresh: true })
+			const epoch = this.epochOf(scope.profileId)
+			void this.fetchGas(key, scope, epoch, { cause: "forced", forceRefresh: true }).then(() =>
+				this.adoptForRetrySubscribers(key, scope, epoch),
+			)
 		}
+	}
+
+	/** Reads the subscribers when the forced read settles, not when it fires: one released in
+	 *  flight leaves nothing owed. */
+	private adoptForRetrySubscribers(key: string, scope: BalanceScope, epoch: number): void {
+		if (this.epochOf(scope.profileId) !== epoch) return
+		const union = this.capsUnion(key)
+		const entry = this.entries.value[key]
+		if (!union.retry || !entry) return
+		this.adoptGasRetryDebt(key, entry, union.legs)
+		this.scheduleRetry(key, scope)
 	}
 
 	entry(scope: BalanceScope): BalanceEntry | undefined {

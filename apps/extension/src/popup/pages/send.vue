@@ -31,14 +31,16 @@ import { TransferType } from "@/wallet/services/transaction/client"
 import { managers } from "@/utils/core"
 import { LEGAL_DISMISSED_KEY } from "@/utils/legal-sheet"
 import { isValidAztecAddress } from "@/utils/aztec-address"
-import { withoutId } from "@/utils/entity-list"
+import { contactListReducers } from "@/utils/entity-list"
 import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
-import { FEE_JUICE_BRIDGE_URL, feeLine } from "@/popup/components/modules/send/fee-helpers"
+import { FEE_JUICE_BRIDGE_URL, feeLine, feePayerOf } from "@/popup/components/modules/send/fee-helpers"
 import { validateSendAmount } from "@/popup/pages/send-amount"
 import { applyBalanceAdd, applyBalanceUpdate } from "@/popup/pages/send-balance-events"
-import { evaluateFiatGate } from "@/popup/pages/send-fiat-gate"
+import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
 import { submitTransfer } from "@/popup/pages/send-submit"
 import { NO_FACTS, payerKindOf, publishFacts } from "@/components/composite/send/publish-facts"
+import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
+import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
@@ -80,6 +82,19 @@ const payer = ref(null)
  *  shows the explainer banner (A). */
 const needsFeeJuice = ref(false)
 const feeDisplay = ref(null)
+/** The fee card's wording of the queued cap, for the review sheet. */
+const queuedCapText = ref(null)
+/** Set by FeeSettingsCard when the fee read refused the account: its imported key does not open. */
+const accountUnusable = ref(false)
+
+/** No send can leave an account whose key does not open, so Send closes onto Home and says why. */
+let leftUnusable = false
+function leaveUnusable() {
+	if (leftUnusable) return
+	leftUnusable = true
+	openToast({ kind: "error", ...IMPORTED_UNUSABLE_TOAST })
+	router.replace("/popup/general")
+}
 
 /** Open the fee-juice bridge in a new tab. */
 const openFeeJuiceBridge = () => {
@@ -116,12 +131,11 @@ const onReadFailed = (error) => console.debug("send page read failed", { error }
 function onTokenDeleted(token) {
 	const idx = tokens.value.findIndex((t) => t.id === token.id)
 	if (idx === -1) return
-
+	const wasActive = activeToken.value?.id === token.id
 	tokens.value.splice(idx, 1)
+	if (!wasActive) return
 
-	if (activeToken.value?.id !== token.id) return
-
-	if (tokens.value?.length) {
+	if (tokens.value.length) {
 		cacheStore.activeTokenIdx = tokens.value[0].id
 		return
 	}
@@ -192,26 +206,13 @@ const initReceiverType = () => {
 	}
 }
 
-const contactService = new ContactServiceClient()
-contactService.onContactAdded.add(onContactAdded)
-contactService.onContactUpdated.add(onContactUpdated)
-contactService.onContactDeleted.add(onContactDeleted)
-function onContactAdded(contact) {
-	contacts.value.push(contact)
-}
-function onContactUpdated(contact) {
-	const idx = contacts.value.findIndex((c) => c.id === contact.id)
-	if (idx !== -1) {
-		contacts.value[idx] = contact
-	} else {
-		contacts.value.push(contact)
-	}
-}
-function onContactDeleted(contact) {
-	contacts.value = withoutId(contacts.value, contact)
-}
-
 const contacts = ref([])
+const contactService = new ContactServiceClient()
+const contactList = contactListReducers(contacts)
+contactService.onContactAdded.add(contactList.onAdded)
+contactService.onContactUpdated.add(contactList.onUpdated)
+contactService.onContactDeleted.add(contactList.onDeleted)
+
 const selectedContact = ref()
 const searchTerm = ref("")
 const recipientCandidates = computed(() => [...contacts.value, ...appStore.accounts])
@@ -277,23 +278,38 @@ const fiatGate = computed(() =>
 const fiatQuoteBlocked = computed(() => !fiatGate.value.ok)
 /** Distinguishes "needs explicit re-confirmation" from "just converting". */
 const fiatNeedsRequote = computed(() => !fiatGate.value.ok && fiatGate.value.requote)
-const handleRequote = () => {
+const fiatQuoteMoved = computed(() => requoteReason(fiatGuard.value?.frozenUsd, liveQuote.value?.usd) === "moved")
+const handleRequote = (e) => {
 	// Re-freezes at the current quote and re-derives the token amount — the
 	// user sees the NEW derived amount on the card before confirming.
 	amountCardRef.value?.refreezeQuote()
+	// With a live quote the re-freeze unmounts the button: a keyboard user keeps their place in the amount.
+	if (liveQuote.value && e.currentTarget.matches(":focus-visible")) amountCardRef.value?.focusAmount()
 }
 
 /** The wallet answered that an earlier send holds this transfer's chain state; set until a real
  *  estimate lands, fails or stops, so nothing goes out on a fee the user has not seen. */
 const feeQueued = ref(false)
+/** The cap the queued answer offered (`{ basis, cap }`), or null when it offered none. */
+const queuedCap = ref(null)
+const clearQueued = () => {
+	feeQueued.value = false
+	queuedCap.value = null
+}
+/** Queued against the cap: only a fee the person pays, and nothing goes out above the cap shown. */
+const queueCap = computed(() => (feeQueued.value && feePayerOf(payer.value) === "self" ? queuedCap.value : null))
 
 const isAllowedToSend = computed(() => {
 	if (!legal.isCurrent.value) return false
-	if (feeQueued.value) return false
+	if (feeQueued.value && !queueCap.value) return false
 	if (!amountTerm.value) return false
 	if (isBlockedTransfer.value) return false
 	if (!isValidAddress.value) return false
 	if (!feeSettings.value) return false
+	// Nothing goes out on a fee the person has not seen: a failed estimate leaves this off too. A
+	// queued send's figure is the cap the card shows, and nothing goes out above it.
+	if (!queueCap.value && !feeEstimate.value) return false
+	if (feeEstimate.value?.feeJuiceShortfall) return false
 	if (fiatQuoteBlocked.value) return false
 	return amountValidation.value.valid
 })
@@ -380,8 +396,11 @@ const {
 				executionService.estimateTransferFee(networkId, accountAddress, tokenId, tt, destination, amount, settings, estimateToken),
 			signal,
 			{
-				onQueued: () => {
-					if (!signal.aborted) feeQueued.value = true
+				onQueued: (answer) => {
+					if (signal.aborted) return
+					feeQueued.value = true
+					// A spent token's answer carries no cap; the requeue's own answer will.
+					if (!answer.tokenSpent) queuedCap.value = answer.cap ?? null
 				},
 			},
 		)
@@ -392,7 +411,8 @@ const {
 	onError: (err) => {
 		// Rescheduled before the engine's settle clears `isEstimating`, so the queued row never drops.
 		if (err instanceof EstimateRequeue) return scheduleFeeEstimate(lastEstimateParams)
-		feeQueued.value = false
+		clearQueued()
+		if (err instanceof ImportedAccountUnusableError) return leaveUnusable()
 		console.error(`[send:${sendInstanceId}] estimateTransferFee failed:`, err)
 		openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
 	},
@@ -451,7 +471,8 @@ function snapshotTransfer() {
 	// Only when a consumable id exists: handing off a still-in-flight
 	// estimate would orphan its eventual stash (nobody consumes, nobody can
 	// cancel) for the full TTL.
-	const precomputedEstimateId = feeEstimate.value?.estimateId
+	const feeCap = queueCap.value?.cap
+	const precomputedEstimateId = feeCap ? undefined : feeEstimate.value?.estimateId
 	if (precomputedEstimateId) handoffFeeEstimate()
 	return {
 		networkId: appStore.network.id,
@@ -462,6 +483,7 @@ function snapshotTransfer() {
 		amount: amountValidation.value.integerized,
 		feeSettings: feeSettings.value,
 		precomputedEstimateId,
+		feeCap,
 		contract: activeToken.value.contract,
 		symbol: activeToken.value.symbol,
 		decimals: activeToken.value.decimals,
@@ -491,9 +513,13 @@ const submitDeps = {
 	},
 }
 
+watch(accountUnusable, (unusable) => {
+	if (unusable) leaveUnusable()
+})
+
 // The queued flag outlives requeues (the engine stays estimating) but never the estimate itself.
 watch(isEstimating, (estimating) => {
-	if (!estimating) feeQueued.value = false
+	if (!estimating) clearQueued()
 })
 
 watch(
@@ -518,8 +544,20 @@ watch(
 	{ deep: true },
 )
 
+// Every input the estimate is asked with is a source here, so a landed estimate is always the
+// current input's: each change re-asks (clearing the result) or cancels.
 watch(
-	[amountTerm, searchTerm, selectedSendType, selectedReceiverType, () => feeSettings.value, () => legal.isCurrent.value],
+	[
+		amountTerm,
+		searchTerm,
+		selectedSendType,
+		selectedReceiverType,
+		() => feeSettings.value,
+		() => legal.isCurrent.value,
+		() => activeToken.value?.id,
+		() => appStore.network?.id,
+		() => appStore.account?.address,
+	],
 	() => {
 		// An estimate simulates against the node: no work for a send the wall would refuse.
 		if (!legal.isCurrent.value) {
@@ -538,7 +576,7 @@ watch(
 		}
 
 		// New input asks a new question: it is queued only once the wallet says so again.
-		feeQueued.value = false
+		clearQueued()
 		scheduleFeeEstimate({
 			networkId: appStore.network.id,
 			accountAddress: appStore.account.address,
@@ -719,10 +757,7 @@ onBeforeUnmount(() => {
 
 				<!-- Section: Select Asset -->
 				<div :class="$style.section">
-					<Flex align="center" justify="between">
-						<span :class="$style.section_label">Select Asset</span>
-						<span :class="$style.section_meta">Network: {{ getChainName(appStore.network?.chainId) }}</span>
-					</Flex>
+					<span :class="$style.section_label">Select Asset</span>
 					<SelectTokenCard :token="activeToken" :loading="tokensLoading" :failed="tokensFailed" @retry="retryTokens" />
 				</div>
 
@@ -743,10 +778,12 @@ onBeforeUnmount(() => {
 					/>
 					<Flex v-if="fiatNeedsRequote" align="center" gap="6" :class="$style.requote_notice">
 						<Icon name="warning" size="12" color="tertiary" />
-						<Text size="11" weight="500" color="tertiary">
-							{{ liveQuote ? "The price moved since you started typing." : "The price quote went stale." }}
+						<Text variant="caption" color="tertiary">
+							{{ fiatQuoteMoved ? "The price moved since you started typing." : "The price quote went stale." }}
 						</Text>
-						<span @click="handleRequote" data-testid="send-fiat-requote" :class="$style.requote_action">Refresh quote</span>
+						<button type="button" @click="handleRequote" data-testid="send-fiat-requote" :class="$style.requote_action">
+							Refresh quote
+						</button>
 					</Flex>
 				</div>
 
@@ -759,6 +796,7 @@ onBeforeUnmount(() => {
 						:feeEstimate="feeEstimate"
 						:isEstimating="isEstimating"
 						:isQueued="feeQueued"
+						:queuedCap="queueCap"
 						:originPrivacy="selectedSendType"
 						:destinationPrivacy="selectedReceiverType"
 						:payerNoticeShape="facts.noticeShape"
@@ -767,6 +805,8 @@ onBeforeUnmount(() => {
 						v-model:needsFeeJuice="needsFeeJuice"
 						v-model:payer="payer"
 						v-model:feeDisplay="feeDisplay"
+						v-model:queuedCapText="queuedCapText"
+						v-model:accountUnusable="accountUnusable"
 					/>
 				</div>
 			</Flex>
@@ -792,7 +832,7 @@ onBeforeUnmount(() => {
 					:disabled="!isAllowedToSend || isSending"
 					:loading="isSending"
 				>
-					{{ isSending ? "CONFIRMING" : facts.requiresReview ? "Review send" : "Confirm Transaction" }}
+					{{ isSending ? "CONFIRMING" : facts.requiresReview ? "Review send" : queueCap ? "Queue send" : "Confirm Transaction" }}
 				</Button>
 			</Flex>
 		</Flex>
@@ -812,6 +852,7 @@ onBeforeUnmount(() => {
 			:canSend="isAllowedToSend"
 			:sending="isSending"
 			:ready="reviewReady"
+			:queuedCapText="queueCap ? queuedCapText : undefined"
 			@close="closeReview"
 			@send="submit('review')"
 		/>
@@ -853,17 +894,7 @@ onBeforeUnmount(() => {
 }
 
 .section_label {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
-	color: var(--nulo-secondary);
-}
-
-.section_meta {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
@@ -883,16 +914,19 @@ onBeforeUnmount(() => {
 }
 
 .requote_action {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
+	composes: type--label from global;
+	line-height: inherit;
+	background: none;
 	color: var(--nulo-accent);
 	cursor: pointer;
 
 	&:hover {
 		text-decoration: underline;
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
 	}
 }
 </style>

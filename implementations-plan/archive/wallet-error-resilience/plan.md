@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: Typed stale-anchor and unregistered-contract errors with resync-and-retry-once (`packages/extension-messaging/src/errors.ts`, `packages/aztec-runtime/src/pxe/stale-anchor.ts`), a balance queue that reschedules transient failures instead of marking the row failed (`apps/extension/src/wallet/services/token-balance/balance-job-queue.ts`), and four fewer console noise sources. The tools-app half lives in the unleashed repository.
-- **Open items**: the `sim-methods` case for `executeUtility` never exercises a success, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the `sim-methods` case for `executeUtility` never exercises a success; it was closed by a later plan before `follow-ups.md` was retired. None is open.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

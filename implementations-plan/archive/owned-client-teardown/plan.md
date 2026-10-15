@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: `documentLogger` in `apps/extension/src/wallet/services/logger/client.ts`, which gives each extension document one shared logger connection, a port-count test in `apps/extension/src/wallet/services/logger/client.ports.test.ts`, and port fixes for three account clients in `apps/extension/src/popup/pages/auth.vue`, `apps/extension/src/popup/pages/profile/new-profile-helpers.ts` and `apps/extension/src/composables/useFullBackupImport.ts`.
-- **Open items**: profile creation waits for activation with no identity check or deadline, and document log lines are not level-gated on the client, both tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: profile creation waits for activation with no identity check or deadline, and document log lines are not level-gated on the client, both tracked in #100 and #184.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

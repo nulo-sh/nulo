@@ -1,6 +1,6 @@
 /**
  * Network-suite coverage for the Advanced senders surface (Settings →
- * Advanced → Account State → Senders) — the ONE place sender registrations
+ * Developer → Account State → Senders) — the ONE place sender registrations
  * are managed now that contacts are decoupled — plus the decoupling pins:
  * adding a contact registers nothing, deleting a contact unregisters
  * nothing, and the contact-row chip is a read-only view of PXE truth.
@@ -11,15 +11,34 @@
  * attempts' contacts/senders still present — file-scoped constants turn
  * every retry into a duplicate-validation wall.
  */
-import { expect, inject } from "vitest"
+import { afterAll, expect, inject } from "vitest"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "../fixtures/extension"
-import { addContact, closeStuckPopup, navigateByHash, navigateToSettings, waitForToast } from "../fixtures/helpers"
+import {
+	addContact,
+	closeStuckPopup,
+	contactRow,
+	navigateByHash,
+	navigateToSettings,
+	openAccountState,
+	senderChip,
+	waitForToast,
+} from "../fixtures/helpers"
 import type { AztecTestConfig } from "../fixtures/aztec"
+import {
+	closeImportWith,
+	contactsFiles,
+	exportContactsFile,
+	listedAsSender,
+	pickContactsFile,
+	refuseTestnet,
+	senderLine,
+	toastAfter,
+} from "../helpers/contacts"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
-const SENDERS_HASH = "#/popup/settings/advanced/account-state/senders"
+const SENDERS_HASH = "#/popup/settings/developer/account-state/senders"
 const CONTACTS_HASH = "#/popup/settings/contacts"
 
 /** Valid (on-curve) random address + a name tied to it, fresh per call. */
@@ -69,12 +88,7 @@ test.skipIf(!hasConfig)(
 		// A freshly-added contact must NOT be registered as a sender.
 		await navigateToSettings(page, "contacts")
 		await addContact(page, name, address)
-		const chipBefore = await page.evaluate(
-			(n: string) =>
-				!!document.querySelector(`[data-testid="contact-row"][data-contact-name="${n}"] [data-testid="contact-sender-chip"]`),
-			name,
-		)
-		expect(chipBefore).toBe(false)
+		expect(await listedAsSender(page, name)).toBe(false)
 
 		// Register the SAME address through the Advanced surface. Before
 		// registering, assert the SETTLED sender list has no row for the
@@ -90,10 +104,7 @@ test.skipIf(!hasConfig)(
 
 		// Back on contacts, the chip reflects the PXE registration.
 		await gotoContacts(page)
-		await page.waitForSelector(`[data-testid="contact-row"][data-contact-name="${name}"] [data-testid="contact-sender-chip"]`, {
-			visible: true,
-			timeout: 10_000,
-		})
+		await page.waitForSelector(senderChip(name), { visible: true, timeout: 10_000 })
 
 		// Delete the sender from Advanced — the chip clears; the contact stays.
 		await gotoSenders(page)
@@ -113,16 +124,8 @@ test.skipIf(!hasConfig)(
 		await closeStuckPopup(page)
 
 		await gotoContacts(page)
-		await page.waitForSelector(`[data-testid="contact-row"][data-contact-name="${name}"]`, {
-			visible: true,
-			timeout: 10_000,
-		})
-		await page.waitForFunction(
-			(n: string) =>
-				!document.querySelector(`[data-testid="contact-row"][data-contact-name="${n}"] [data-testid="contact-sender-chip"]`),
-			{ timeout: 10_000 },
-			name,
-		)
+		await page.waitForSelector(contactRow(name), { visible: true, timeout: 10_000 })
+		await page.waitForFunction((s: string) => !document.querySelector(s), { timeout: 10_000 }, senderChip(name))
 	},
 )
 
@@ -137,20 +140,17 @@ test.skipIf(!hasConfig)(
 		// Register a sender via Advanced, then add a contact with that address.
 		// Same settle rule as gotoSenders: don't act on the list mid-fetch —
 		// the initial snapshot could overwrite the add-event's row render.
-		await navigateToSettings(page, "advanced", "account-state", "senders")
+		await openAccountState(page, "senders")
 		await page.waitForSelector('[data-testid="senders-add-btn"]', { visible: true, timeout: 10_000 })
 		await page.waitForFunction(() => !document.querySelector('[data-testid="loading-state"]'), { timeout: 15_000, polling: 100 })
 		await addSenderViaAdvanced(page, address)
 
 		await gotoContacts(page)
 		await addContact(page, name, address)
-		await page.waitForSelector(`[data-testid="contact-row"][data-contact-name="${name}"] [data-testid="contact-sender-chip"]`, {
-			visible: true,
-			timeout: 10_000,
-		})
+		await page.waitForSelector(senderChip(name), { visible: true, timeout: 10_000 })
 
 		// Delete the contact. The confirm offers NO sender option.
-		const rowSelector = `[data-testid="contact-row"][data-contact-name="${name}"]`
+		const rowSelector = contactRow(name)
 		await page.evaluate((sel: string) => {
 			const row = document.querySelector<HTMLElement>(sel)
 			row?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))
@@ -172,5 +172,47 @@ test.skipIf(!hasConfig)(
 			visible: true,
 			timeout: 10_000,
 		})
+	},
+)
+
+const files = contactsFiles()
+afterAll(files.cleanup)
+
+test.skipIf(!hasConfig)(
+	"a sender row imported from a contacts file registers on the active network: its chip lights, Senders lists it, and the export marks it",
+	{ timeout: 180_000 },
+	async ({ localNetworkExtension }) => {
+		const sender = await freshIdentity("Imp")
+		const plain = await freshIdentity("Pln")
+		// The export asks every network for its senders; Testnet must not answer from the public endpoint.
+		const refusal = await refuseTestnet(localNetworkExtension)
+		try {
+			const page = await openPopup(localNetworkExtension)
+			await waitForHash(page, "#/popup/general")
+			await gotoContacts(page)
+
+			await pickContactsFile(page, files.write({ version: 2, contacts: [{ ...sender, isSender: true }, plain] }))
+			expect(await senderLine(page)).toBe("1 sender will be registered on Local Network.")
+			// Registration waits on the local node.
+			await toastAfter(page, () => closeImportWith(page, "import-contacts-submit"), "Contacts imported · 1 sender registered", 60_000)
+			await page.waitForSelector(senderChip(sender.name), { visible: true, timeout: 10_000 })
+			expect(await listedAsSender(page, plain.name)).toBe(false)
+
+			await gotoSenders(page)
+			await page.waitForSelector(`[data-testid="sender-row"][data-sender-address="${sender.address}"]`, {
+				visible: true,
+				timeout: 10_000,
+			})
+			expect(await page.$(`[data-testid="sender-row"][data-sender-address="${plain.address}"]`)).toBeNull()
+
+			await gotoContacts(page)
+			const exported = JSON.parse(await exportContactsFile(page)) as { contacts: Array<{ address: string; isSender: boolean }> }
+			const flag = (address: string) => exported.contacts.find((c) => c.address === address)?.isSender
+			expect(flag(sender.address)).toBe(true)
+			expect(flag(plain.address)).toBe(false)
+			expect(await refusal.failures()).toEqual([])
+		} finally {
+			await refusal.stop()
+		}
 	},
 )

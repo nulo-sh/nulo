@@ -10,8 +10,8 @@ const PACKAGE = /.*node_modules\/((?:@[^/]+\/)?[^/]+)\/(.+)$/
 const HEAVY_PREFIXES = ["@aztec-labs/", "@aztec-foundation/", "@aztec/viem", "@noir-lang/", "@alejoamiras/"]
 
 /**
- * Whatever chunk holds `@aztec-labs/wallet-sdk` is web-accessible to every page, because the content
- * script imports it — regrouping it would change what any site can read.
+ * The content script reaches `@aztec-labs/wallet-sdk` and must stay one self-contained file
+ * (`content-script-isolation.ts`); a group would move its copy into a chunk it then imports.
  */
 const NEVER_GROUPED = new Set(["@aztec-labs/wallet-sdk"])
 

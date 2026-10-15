@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: the shared primary-method helper `apps/extension/src/utils/primary-method.ts`, the onboarding fees step `apps/extension/src/onboarding/pages/fees.vue`, the journal detail page `apps/extension/src/popup/pages/journal/[id].vue`, and incoming receives in history through `apps/extension/src/wallet/services/incoming-transfer/service.ts` and `apps/extension/src/popup/components/popups/IncomingTrustPopup.vue`.
-- **Open items**: the first-receive trust prompt shows the contract address (expand, copy) but no explorer link, since the old blocker, a payload with no network, is gone and the explorer URLs exist; a link is new UI, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the first-receive trust prompt shows the contract address (expand, copy) but no explorer link, since the old blocker, a payload with no network, is gone and the explorer URLs exist; a link is new UI, tracked in #97.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

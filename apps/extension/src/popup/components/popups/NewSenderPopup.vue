@@ -96,7 +96,7 @@ usePopupEntity(() => props.show, {
 		<PopupCard :displaceIdx="depth">
 			<PopupHeader @onClose="emit('onClose')" closable>
 				<template #title>
-					<Text size="14" weight="600" color="primary">New sender</Text>
+					<Text variant="title-page" color="primary">New sender</Text>
 				</template>
 			</PopupHeader>
 
@@ -108,6 +108,7 @@ usePopupEntity(() => props.show, {
 					sanitize
 					v-model="senderAddress"
 					data-testid="new-sender-address-input"
+					textVariant="input-data"
 				>
 					<template #right>
 						<Transition name="fade">
@@ -132,13 +133,13 @@ usePopupEntity(() => props.show, {
 									color="red"
 								/>
 
-								<Text size="12" weight="600" color="secondary">
+								<Text variant="body" color="secondary">
 									{{ error.title }}
 								</Text>
 							</Flex>
 
 							<template #content>
-								<Text size="12" color="secondary">
+								<Text color="secondary">
 									{{ error.tooltip }}
 								</Text>
 							</template>
@@ -186,5 +187,15 @@ usePopupEntity(() => props.show, {
 	75% {
 		transform: translateX(-2px);
 	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.shake {
+		animation: none;
+	}
+}
+
+:global(.noanimations) .shake {
+	animation: none;
 }
 </style>

@@ -6,6 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
+import { holdReads, liveBus } from "../../../../tests/helpers/held-read"
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -13,10 +14,13 @@ const contactServiceMock = {
 	getContacts: vi.fn(),
 	addContact: vi.fn(),
 	disconnect: vi.fn(),
-	onContactAdded: { add: vi.fn(), remove: vi.fn() },
-	onContactUpdated: { add: vi.fn(), remove: vi.fn() },
-	onContactDeleted: { add: vi.fn(), remove: vi.fn() },
+	onContactAdded: liveBus(),
+	onContactUpdated: liveBus(),
+	onContactDeleted: liveBus(),
 }
+/** A component never removes its handlers, so each test gets buses no earlier mount registered on. */
+const freshBuses = () =>
+	Object.assign(contactServiceMock, { onContactAdded: liveBus(), onContactUpdated: liveBus(), onContactDeleted: liveBus() })
 
 const openToastMock = vi.fn()
 
@@ -95,6 +99,8 @@ async function fill(w: ReturnType<typeof mount>, name: string, address: string) 
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	contactServiceMock.getContacts.mockReset()
+	freshBuses()
 })
 afterEach(() => {
 	// Guaranteed net: unmount every tracked wrapper (scope cleanup removes the
@@ -270,16 +276,15 @@ describe("NewContactPopup — contact list reducers and duplicate rules", () => 
 		expect(await nameWarns(w, "Bob")).toBe(true)
 	})
 
-	test("the name check compares trimmed names, so an outer space on either side is a duplicate", async () => {
+	test("a name stored as a saved one, differing only by case, spacing, invisible characters or what the cut drops, is a duplicate; another letter is not", async () => {
 		const w = await mountAndOpen([
 			{ id: "c1", name: "Alice", address: addr("a") },
 			{ id: "c2", name: "Bob ", address: addr("c") },
+			{ id: "c3", name: "Abcdefghijklmnopqrstuvwxy", address: addr("d") },
 		])
-		expect(await nameWarns(w, "Alice")).toBe(true)
-		expect(await nameWarns(w, "Alice ")).toBe(true)
-		expect(await nameWarns(w, " Alice")).toBe(true)
-		expect(await nameWarns(w, "Bob")).toBe(true)
-		expect(await nameWarns(w, "alice")).toBe(false)
+		for (const name of ["Alice", "Alice ", " alice", "ALI\u3164CE\u200B", "Bob", "bob", "abcdefghijklmnopqrstuvwxyz"])
+			expect(await nameWarns(w, name)).toBe(true)
+		for (const name of ["Al ice", "Alicia", "\u0410lice"]) expect(await nameWarns(w, name)).toBe(false)
 	})
 
 	test("a name that matches only once trimmed blocks the submit, by click and by Enter", async () => {
@@ -303,13 +308,17 @@ describe("NewContactPopup — contact list reducers and duplicate rules", () => 
 		expect(contactServiceMock.addContact).toHaveBeenCalledWith("Carol", addr("b"))
 	})
 
-	test("a whitespace-only name never warns and keeps submit disabled; case and inner spaces stay distinct", async () => {
-		const w = await mountAndOpen([{ id: "c1", name: "Alice", address: addr("a") }])
-		expect(await nameWarns(w, "   ")).toBe(false)
-		await fill(w, "   ", addr("b"))
-		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("true")
-		expect(await nameWarns(w, "alice ")).toBe(false)
-		expect(await nameWarns(w, "Al ice")).toBe(false)
+	test("a name with nothing visible, whitespace or invisible characters only, never warns and keeps submit disabled", async () => {
+		// The second row is older data: a saved name of invisible characters only.
+		const w = await mountAndOpen([
+			{ id: "c1", name: "Alice", address: addr("a") },
+			{ id: "c2", name: "\u3164", address: addr("c") },
+		])
+		for (const name of ["   ", "\u3164\u200B "]) {
+			expect(await nameWarns(w, name)).toBe(false)
+			await fill(w, name, addr("b"))
+			expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("true")
+		}
 	})
 
 	test("the address check ignores hex case", async () => {
@@ -318,5 +327,27 @@ describe("NewContactPopup — contact list reducers and duplicate rules", () => 
 		expect(w.text()).toContain("Already exist")
 		await fill(w, "Bob", addr("b"))
 		expect(w.text()).not.toContain("Already exist")
+	})
+})
+
+describe("NewContactPopup — the list under a held read", () => {
+	const row = (id: string, name: string, c: string) => ({ id, name, address: `0x2${c.repeat(63)}` })
+	const names = (w: ReturnType<typeof mount>) => (w.vm as unknown as { contacts: { name: string }[] }).contacts.map((c) => c.name)
+
+	test("the read's answer replaces the list: an add that lands while it is out is dropped, one after it is kept", async () => {
+		const reads = holdReads<unknown[]>(contactServiceMock.getContacts)
+		const w = mount(NewContactPopup, { props: { show: false }, global: { stubs: STUBS } })
+		trackedWrappers.push(w)
+		await w.setProps({ show: true })
+		contactServiceMock.onContactAdded.invoke(row("c2", "Bob", "b"))
+		expect(names(w)).toEqual(["Bob"])
+
+		expect(reads).toHaveLength(1)
+		reads[0]?.resolve([row("c1", "Alice", "a")])
+		await flushPromises()
+		expect(names(w)).toEqual(["Alice"])
+
+		contactServiceMock.onContactAdded.invoke(row("c2", "Bob", "b"))
+		expect(names(w)).toEqual(["Alice", "Bob"])
 	})
 })

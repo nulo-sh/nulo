@@ -21,7 +21,6 @@ import AccountSelectRow from "./AccountSelectRow.vue"
 import PermissionGroup from "./PermissionGroup.vue"
 
 /** Utils */
-import { getErrorData } from "@nulo/wallet-core/utils"
 import { JobCancelledError } from "@nulo/extension-messaging/errors"
 import { formatCaipAccount } from "@/wallet/utils/caip"
 import { requireNetwork } from "@/utils/core"
@@ -175,7 +174,7 @@ const init = async () => {
 		// or the popup is cancelled mid-flight, the approve gate stays closed.
 		initComplete.value = true
 	} catch (error) {
-		console.error(getErrorData(error))
+		console.error("Capabilities window init failed", { error })
 		setError("Something went wrong")
 	}
 }
@@ -330,7 +329,7 @@ const approve = async () => {
 			// the refusal IS the cancelled state — overlay, not an error banner.
 			isInteractionCancelled.value = true
 		} else {
-			console.error(getErrorData(error))
+			console.error("Capabilities approve failed", { error })
 			setError("Something went wrong")
 		}
 	} finally {
@@ -384,6 +383,7 @@ onUnmounted(disposeWindow)
 				:dapp="dapp"
 				:hostname="dappHostname"
 				:hostnameSuspicious="hostnameHasNonAscii"
+				hostnameTestId="capabilities-hostname"
 				:actionLabel="asksForMore ? `wants more permissions on ${chainName}` : `wants to connect on ${chainName}`"
 			/>
 
@@ -494,11 +494,11 @@ onUnmounted(disposeWindow)
 }
 
 .note {
+	composes: type--body from global;
 	padding: 10px 12px;
 	border: 1px solid var(--nulo-border);
 	background: var(--nulo-surface-low);
 
-	font-size: 11.5px;
 	line-height: 1.45;
 	color: var(--nulo-secondary);
 }

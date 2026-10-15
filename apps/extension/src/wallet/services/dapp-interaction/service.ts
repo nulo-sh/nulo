@@ -8,6 +8,7 @@ import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-
 import { NetworkService } from "@/wallet/services/network/service"
 import { AccountService } from "@/wallet/services/account/service"
 import { FpcService } from "@/wallet/services/fpc/service"
+import { TokenService } from "@/wallet/services/token/service"
 import { DappSessionService, AccessLevel, type DappSession } from "@/wallet/services/dapp-session/service"
 import {
 	ExecutionService,
@@ -25,7 +26,7 @@ import { Lock } from "@/wallet/utils"
 import type { WindowManager } from "@/wallet/services/window-manager/window-manager"
 import { parseCaipAccount, parseCaipChain, resolveNetworkByChainId } from "@/wallet/utils/caip"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { isSelfPay } from "@nulo/wallet-bridge"
+import { type FeeSettingsReaders, isSelfPay, refuseUnknownPriorities } from "@nulo/wallet-bridge"
 import { assertSilentExecutable, materializeRequest, type MaterializeDeps } from "./materialize"
 import { knownContracts } from "./known-contracts"
 import { applyFeeSelection, type OperationApprovalDelta } from "./approval-delta"
@@ -79,6 +80,10 @@ function isDiscoveryPayload(payload: DappInteraction["payload"]): payload is Dis
 	return !("session" in payload) && !isNoticePayload(payload)
 }
 
+function windowUrl(type: string, id: string): string {
+	return chrome.runtime.getURL(`src/popup/index.html#/windows/${type}?requestId=${id}`)
+}
+
 /** The confirmation gate keys off the strongest level in a batch; a kind missing here is a
  *  compile error, never a silent AccessLevel.None. */
 const OPERATION_ACCESS_LEVEL: Record<OperationKind, AccessLevel> = {
@@ -104,6 +109,11 @@ const OPERATION_ACCESS_LEVEL: Record<OperationKind, AccessLevel> = {
 	aztec_createAuthWit: AccessLevel.Transactions,
 }
 
+/** The popup's fee settings, one per approved operation. */
+const FEE_SETTINGS_OF = {
+	approveInteraction: ([, deltas]) => (Array.isArray(deltas) ? deltas.map((delta) => delta?.feeSettings) : []),
+} satisfies FeeSettingsReaders<Methods>
+
 export class DappInteractionService extends Service<Methods, Events> implements ServiceSpec<Methods, Events>, InteractionOperationSource {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"getInteractionPayload",
@@ -127,12 +137,19 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	private executionService: ExecutionService = null!
 	private operationJournal: OperationJournalService = null!
 	private fpcService: FpcService = null!
+	private tokenService: TokenService = null!
 
 	public constructor(
 		logger: ILogger,
 		private readonly windowManager: WindowManager,
 	) {
 		super(DAPP_INTERACTION_SERVICE_NAME, logger)
+	}
+
+	/** An unknown speed level is refused before the method runs; fee math never reads one. */
+	protected override invoke(method: string, params: unknown[]): unknown {
+		refuseUnknownPriorities(FEE_SETTINGS_OF, method, params)
+		return super.invoke(method, params)
 	}
 
 	protected async init(services: ServiceCollection) {
@@ -143,6 +160,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		this.executionService = services.get(ExecutionService.name)
 		this.operationJournal = services.get(OperationJournalService.name)
 		this.fpcService = services.get(FpcService.name)
+		this.tokenService = services.get(TokenService.name)
 		// A feed cancel lands in the journal only (`cancelJob` → queued → cancelled);
 		// the open approval popup and the dApp's pending promise learn of it here.
 		this.operationJournal.onOperationUpdated.add((record) => {
@@ -190,7 +208,13 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		// Only an execution interaction is approvable through this route; a
 		// capability or discovery id must not be claimable here, and the record
 		// survives so `resolveInteraction` can still settle it. Non-disclosing.
-		if (!interaction || !isExecutionPayload(interaction.payload) || deltas.length !== interaction.payload.params.operations.length) {
+		// `deltas` must be a real array: the port's fee-settings check reads only arrays.
+		if (
+			!interaction ||
+			!isExecutionPayload(interaction.payload) ||
+			!Array.isArray(deltas) ||
+			deltas.length !== interaction.payload.params.operations.length
+		) {
 			throw new Error("Invalid id")
 		}
 		// First service claim wins — service acceptance is the commit point, not
@@ -232,7 +256,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		// with settle if it arrives first.
 		this.windowManager.detach(interactionRequest.handleId)
 		if (isDiscoveryPayload(interactionRequest.payload)) {
-			this.settleDiscovery(interactionRequest.handleId, result)
+			this.settleDiscovery(interactionRequest.handleId, id, result)
 			return
 		}
 		this.windowManager.settle(interactionRequest.handleId, result)
@@ -240,9 +264,10 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 
 	/** An approved connect window stays open to show the emoji check, and its id comes from the
 	 *  handle, never the page. Any other answer is a denial and closes the window. */
-	private settleDiscovery(handleId: string, result: unknown): void {
+	private settleDiscovery(handleId: string, id: string, result: unknown): void {
 		if ((result as Partial<DiscoveryResult> | null | undefined)?.approved === true) {
-			this.windowManager.handOver(handleId, (windowId): DiscoveryOutcome => ({ approved: true, windowId }))
+			const expiredUrl = `${windowUrl("discover", id)}&expired=1`
+			this.windowManager.handOver(handleId, (windowId): DiscoveryOutcome => ({ approved: true, windowId, expiredUrl }))
 			return
 		}
 		this.windowManager.settle<DiscoveryOutcome>(handleId, { approved: false })
@@ -446,7 +471,10 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		await this.ensureInitialized()
 		const session = await this.dappSessionService.getDappSession(params.sessionId)
 		const chainId = Number(session.chainId)
-		const known = knownContracts(chainId, await this.fpcService.getOrComputeProtocolAddresses(chainId))
+		const known = knownContracts(
+			await this.fpcService.getOrComputeProtocolAddresses(chainId),
+			await this.tokenService.getVerifiedDefaults(session.profileId, chainId),
+		)
 		const payload: CapabilityPayload = { params: { ...params, knownContracts: known }, session }
 		return (await this.interaction("capabilities", payload, cancellationToken)) as CapabilityResult
 	}
@@ -484,7 +512,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 			const id = randomIdNotIn((candidate) => this.storage.has(candidate), 16)
 
 			const handle = this.windowManager.openAndAwait<ExecutionResult | CapabilityResult | DiscoveryResult>({
-				url: chrome.runtime.getURL(`src/popup/index.html#/windows/${type}?requestId=${id}`),
+				url: windowUrl(type, id),
 				width: 400,
 				height: 800,
 				timeoutMs: INTERACTION_TIMEOUT_MS,
@@ -597,7 +625,8 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	/**
 	 * A Terms refusal at execution's entry throws before anything claims the record this path just
 	 * advanced to `pending`, and the ingress safety net only closes `queued` ones. Stage-guarded, so a
-	 * record execution did claim (refused later, at the broadcast line) is left to its owner.
+	 * record execution did claim (refused later, at the broadcast line) is left to its owner. Retitled
+	 * "Transaction" like every refusal no selector resolution reached.
 	 */
 	private async settleUnclaimedAfterTermsRefusal(error: unknown, journalId: string | undefined): Promise<void> {
 		if (!journalId || !(error instanceof TermsAcceptanceRequiredError)) return
@@ -606,7 +635,8 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 				journalId,
 				["pending"],
 				{ stage: "failed" },
-				{ kind: "popup_bound", message: error.message, normalizedRaw: null },
+				{ kind: "terms_refused", message: error.message, normalizedRaw: null },
+				{ failedTitle: "Transaction" },
 			)
 			.catch((err) => this.logDebug("could not settle a pending record after a terms refusal", err))
 	}

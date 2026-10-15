@@ -1,0 +1,7 @@
+# Phase 8 — #32 account writes fenced on chain liveness
+
+- `createAccountInternal` and `importAccount` refuse with `"network deleted"` before their epoch assert when `isChainLive` is false, and after the row write run liveness, then the synchronous epoch check, then the emit with no await between. A failing post-write check removes the row through `unwrite` (under the row lock, then throws the refusal); import's existing `catch` still removes the key row.
+- Complexity: the combined `!chainLive || !isCurrent` form put import's serialized callback at 19, then 16. Two early refusals plus moving the key sealing into a module-level `sealSigningKey` brought it under 15 with no suppression. The plaintext key bytes still die in the helper's `finally`.
+- `reconcileImportedAccounts` runs the key re-check and the delete inside the row lock; the emit stays outside it, as in `clearChainState`.
+- `cross-profile-isolation.test.ts` builds an `AccountService` only for the chain-purge cascade, which never calls `isChainLive`; its stub needed no change (the plan listed it). The seven `account/` stubs gained `isChainLive: async () => true`.
+- Tests: create and import each get the pre-write refusal, the reservation during the row write, and a profile deletion landing during the post-write liveness read (row gone, nothing emitted; import's log shows both compensations). The reconcile test parks a rename on the keyless row's read. All seven fail on e6d524c's `service.ts`. The create control now also asserts its one `onAccountAdded`.

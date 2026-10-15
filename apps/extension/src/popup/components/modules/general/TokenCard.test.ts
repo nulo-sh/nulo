@@ -5,7 +5,8 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import type { PriceState } from "@/wallet/services/price/spec"
 import TokenCard from "./TokenCard.vue"
-import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
+import { boundAttr, declarationsOf, elementByTestid, parseSource, walkElements } from "../../../../../scripts/type-roles/source-scan"
+import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
 // TokenCard imports useAppStore but never reads from it. The store body calls
 // syncedRef which touches chrome.storage.local — not stubbed in vitest.setup.ts.
@@ -22,7 +23,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: new EventHandler(),
 			onConnected: new EventHandler(),
-			refreshIfStale: vi.fn().mockImplementation(async () => mockQuotes),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
+			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: mockQuotes, pricedTokens: TEST_PRICED_TOKENS })),
 		}
 	}),
 }))
@@ -37,7 +39,7 @@ const STUBS = {
 const makeRouter = () =>
 	createRouter({ history: createMemoryHistory(), routes: [{ path: "/:pathMatch(.*)*", component: { template: "<div />" } }] })
 
-const TEST_USDC = TESTNET_TOKENS.USDC
+const TEST_USDC = TEST_TOKENS.USDC
 
 const tokenInfo = {
 	id: 1,
@@ -46,6 +48,7 @@ const tokenInfo = {
 	name: "Test Token",
 	symbol: "TST",
 	decimals: 18,
+	hasDecimals: true,
 }
 
 const factory = (overrides: Record<string, unknown> = {}, tokenOverrides: Record<string, unknown> = {}) => {
@@ -57,7 +60,6 @@ const factory = (overrides: Record<string, unknown> = {}, tokenOverrides: Record
 		privateBalance: "0",
 		updatedAt: 0,
 		isUpdating: false,
-		isMinting: false,
 		...overrides,
 	}
 	return mount(TokenCard, {
@@ -255,6 +257,17 @@ describe("TokenCard — hostile rows", () => {
 		expect(w.find('[data-testid="token-fiat"]').exists()).toBe(false)
 	})
 
+	test("a token whose decimals the wallet does not know shows a dash and no fiat, never a figure", async () => {
+		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+		const w = factory(
+			{ updatedAt: 1, publicBalance: "1" },
+			{ chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC, decimals: 0, hasDecimals: false },
+		)
+		await flushPromises()
+		expect(w.find('[data-malformed="true"]').text()).toBe("—")
+		expect(w.find('[data-testid="token-fiat"]').exists()).toBe(false)
+	})
+
 	test("a malformed row that never synced shows the dash, not the loading block", async () => {
 		const w = factory({ updatedAt: 0, publicBalance: "1.5", privateBalance: "0" })
 		await flushPromises()
@@ -314,5 +327,20 @@ describe("TokenCard — R5 layout (subtitle left, lock/globe split right)", () =
 		expect(icons.map((i) => i.attributes("data-name"))).toEqual(["lock", "globe"])
 		expect(w.text()).toContain("7")
 		expect(w.text()).toContain("3")
+	})
+})
+
+describe("TokenCard — the subtitle's overflow", () => {
+	const parsed = parseSource("apps/extension/src/popup/components/modules/general/TokenCard.vue")
+
+	test("a priced figure wraps rather than hide digits; a contract-supplied name stays clipped to one line", () => {
+		const fiat = elementByTestid(parsed, "token-fiat")?.node
+		expect(fiat && boundAttr(fiat, "class")).toBe("[$style.fiat, $style.fiat_figure]")
+		expect(declarationsOf(parsed, ".fiat_figure")).toEqual({ "white-space": "normal", "overflow-wrap": "break-word" })
+		expect(declarationsOf(parsed, ".fiat")).toMatchObject({ "max-width": "160px", overflow: "hidden", "white-space": "nowrap" })
+		const subtitles: string[] = []
+		if (parsed.template)
+			walkElements(parsed.template, (node) => void (node.tag === "span" && subtitles.push(boundAttr(node, "class") ?? "")))
+		expect(subtitles.filter((cls) => cls.includes("$style.fiat"))).toEqual(["[$style.fiat, $style.fiat_figure]", "$style.fiat"])
 	})
 })

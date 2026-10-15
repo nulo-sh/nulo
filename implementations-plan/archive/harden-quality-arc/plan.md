@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: The twenty-two findings of a whole-extension quality audit, less the sub-parts listed under Not done: twenty-one in a first pass, then a follow-on pass that finished most deferrals the first had parked, including the last finding. Live across `packages/wallet-core/src/utils/`, `packages/wallet-crypto/src/secret-types.ts`, `packages/wallet-bridge/src/` (`method-descriptors.ts`, `dispatcher.ts`), `packages/wallet-sdk-schema-patch/`, `packages/aztec-runtime/src/pxe/descriptors.ts` and `apps/extension/src/`.
-- **Open items**: first-party service methods that trust a caller's profile id, such as `TokenService.updateToken` (it checks the row against its `profileId` argument) and the account service's public methods. None is dApp-reachable; deriving the profile in the background on the extension's own RPC is an open call, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: one, tracked privately: GHSA-hwrf-v993-jrv9.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { ExecutionMutex, ExecutionMutexAbortError, ExecutionMutexCapacityError } from "./execution-mutex"
+import { ExecutionMutex, ExecutionMutexAbortError, ExecutionMutexCapacityError, type SlotReservation } from "./execution-mutex"
 
 /** Microtask flush helper — lets queued `.then` callbacks run. */
 const tick = () => new Promise<void>((r) => setTimeout(r, 0))
@@ -286,5 +286,101 @@ describe("ExecutionMutex — backpressure cap", () => {
 		r1()
 		;(await p2)()
 		expect(m.isLocked("L")).toBe(false)
+	})
+})
+
+describe("ExecutionMutex.keep: a parked holder keeps its place under the caps", () => {
+	const CAPS = { originKey: "https://a.example", maxOriginDepth: 8, maxLaneDepth: 32 }
+	const OTHER = { ...CAPS, originKey: "https://b.example" }
+	const depthOf = (m: ExecutionMutex) => {
+		const d = m as unknown as { laneDepth: Map<string, number>; originDepth: Map<string, number> }
+		return { lane: d.laneDepth.get("L") ?? 0, origin: d.originDepth.get(`L|${CAPS.originKey}`) ?? 0 }
+	}
+
+	test("eight parked or holding requests of one origin refuse a ninth; another origin is admitted; re-entry is never refused", async () => {
+		const m = new ExecutionMutex()
+		const parked = []
+		for (let i = 0; i < 7; i++) parked.push(m.keep(await m.acquire("L", undefined, CAPS)))
+		const holder = await m.acquire("L", undefined, CAPS)
+		expect(depthOf(m)).toEqual({ lane: 8, origin: 8 })
+		await expect(m.acquire("L", undefined, CAPS)).rejects.toBeInstanceOf(ExecutionMutexCapacityError)
+		const other = m.acquire("L", undefined, OTHER)
+		const back = m.acquire("L", undefined, CAPS, parked[0])
+		expect(depthOf(m)).toEqual({ lane: 9, origin: 8 })
+		holder()
+		;(await other)()
+		;(await back)()
+		for (const r of parked) r.drop()
+		expect(depthOf(m)).toEqual({ lane: 0, origin: 0 })
+	})
+
+	test("a drop and an aborted re-entry each give the place back once; a used or dropped reservation is refused", async () => {
+		const m = new ExecutionMutex()
+		const dropped = m.keep(await m.acquire("L", undefined, CAPS))
+		expect(depthOf(m).origin).toBe(1)
+		dropped.drop()
+		dropped.drop()
+		expect(depthOf(m).origin).toBe(0)
+
+		const kept = m.keep(await m.acquire("L", undefined, CAPS))
+		const holder = await m.acquire("L", undefined, CAPS)
+		const abort = new AbortController()
+		const reentry = m.acquire("L", abort.signal, CAPS, kept)
+		abort.abort()
+		await expect(reentry).rejects.toBeInstanceOf(ExecutionMutexAbortError)
+		kept.drop()
+		expect(depthOf(m).origin).toBe(2)
+		holder()
+		holder()
+		await tick()
+		expect(depthOf(m)).toEqual({ lane: 0, origin: 0 })
+
+		for (const r of [kept, dropped]) await expect(m.acquire("L", undefined, CAPS, r)).rejects.toThrow(/re-enters once/)
+		const elsewhere = m.keep(await m.acquire("L", undefined, CAPS))
+		await expect(m.acquire("L", undefined, OTHER, elsewhere)).rejects.toThrow(/re-enters once/)
+		await expect(m.acquire("M", undefined, CAPS, elsewhere)).rejects.toThrow(/re-enters once/)
+		elsewhere.drop()
+		expect(() => m.keep(holder)).toThrow(/once/)
+		expect(depthOf(m)).toEqual({ lane: 0, origin: 0 })
+	})
+
+	test("a successor behind an aborted re-entry still waits for the real holder (H, R, S)", async () => {
+		const m = new ExecutionMutex()
+		const kept = m.keep(await m.acquire("L", undefined, CAPS))
+		const holder = await m.acquire("L", undefined, CAPS)
+		const abort = new AbortController()
+		const reentry = m.acquire("L", abort.signal, CAPS, kept).catch((e: unknown) => e)
+		const order: string[] = []
+		const successor = m.acquire("L", undefined, CAPS).then((release) => {
+			order.push("S")
+			return release
+		})
+		abort.abort()
+		expect(await reentry).toBeInstanceOf(ExecutionMutexAbortError)
+		await tick()
+		expect(order).toEqual([])
+		holder()
+		;(await successor)()
+		expect(order).toEqual(["S"])
+		expect(m.isLocked("L")).toBe(false)
+	})
+
+	test("keep hands the slot to the next in line, and a re-entry queues at the tail", async () => {
+		const m = new ExecutionMutex()
+		const first = await m.acquire("L", undefined, CAPS)
+		const order: string[] = []
+		const grant = (name: string, reservation?: SlotReservation) =>
+			m.acquire("L", undefined, CAPS, reservation).then((release) => {
+				order.push(name)
+				release()
+			})
+		const b = grant("B")
+		const c = grant("C")
+		const kept = m.keep(first)
+		const a = grant("A", kept)
+		await Promise.all([a, b, c])
+		expect(order).toEqual(["B", "C", "A"])
+		expect(m.isLocked("L")).toBe(false)
+		expect(() => m.keep(first)).toThrow(/once/)
 	})
 })

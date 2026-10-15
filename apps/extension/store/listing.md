@@ -28,7 +28,7 @@ PRIVATE BY DEFAULT
 
 YOURS ALONE
 • Your keys stay on your device, behind your password or passkey.
-• No Nulo server, no account, no telemetry.
+• No account, no telemetry.
 • Back up your profile whenever you want.
 
 APPS HAVE TO ASK
@@ -53,6 +53,7 @@ destination the user chooses (the node) or installs (the local prover) is still 
 | Proving inputs (witnesses) | Process memory | Only with the optional local prover installed | `127.0.0.1` (`legal/privacy.md` § 5.8) |
 | Public proving parameters | Browser cache | Downloaded, never uploaded | `crs.aztec-cdn.foundation`, fallback `crs.aztec-labs.com` (§ 5.9) |
 | Token prices | Extension local storage (cache) | A request naming the tokens, no address | CoinGecko, unless fiat display is off (§ 5.2) |
+| Token list (default tokens, their price ids) | Extension local storage, device-wide, outside every backup | Downloaded, never uploaded; the request carries no address, cookie or referrer | `tokens.nulo.sh`, once the Terms are accepted, then about daily (§ 5.11) |
 | Contacts (name, address), profile names | Extension local storage, `wallet/services/contact/spec.ts:10-18` | Only when the user exports contacts, a backup file, or an account file, whose file name carries the profile name | The file the user saves (`downloads`) |
 | Connected-app origins, names, icons, URLs, grants | Extension local storage, `wallet/services/dapp-session/spec.ts:36-51` | Only an app's name, which each transaction it sent records, in a backup file the user exports; app names and origins can also appear in diagnostic logs the user exports | The file the user saves (`downloads`) |
 | Diagnostic logs | Memory; session storage with Developer Mode on | Only when the user exports them | The file the user saves |
@@ -75,10 +76,11 @@ private file system and grows with use; the default quota would evict it.
 
 #### `alarms`
 
-Schedules three jobs: the token-price refresh while the wallet is unlocked and fiat display is on,
-the session auto-lock timer, and the activity journal's upkeep, which settles operations left in
-flight and prunes old records (`wallet/index.ts:90-91`, `wallet/services/profile/session-manager.ts:78`,
-`wallet/runtime.ts:632`, `:645`).
+Schedules four jobs: the token-price refresh while the wallet is unlocked and fiat display is on,
+the token list's daily refresh once the Terms are accepted, the session auto-lock timer, and the
+activity journal's upkeep, which settles operations left in flight and prunes old records
+(`wallet/index.ts:94-97`, `wallet/services/token-list/service.ts:128-130`,
+`wallet/services/profile/session-manager.ts:194`, `wallet/runtime.ts:656`, `:669`).
 
 #### `offscreen`
 
@@ -221,9 +223,10 @@ tagged commit. `apps/extension/store/SOURCE-BUILD.md` inside it names the exact 
 one script to run; the output must match `dist/firefox` byte for byte.
 
 Modifications to third-party code, stated exactly:
-- `@aztec-foundation/noir-noirc_abi` and `@aztec-foundation/noir-acvm_js` (one version each, 6.0.0-rc.1, `patches/`): the
-  `package.json` `module` entry is replaced with an `exports` map so bundlers pick the web build.
-  Only package resolution metadata changes; no JavaScript or WASM is altered.
+- `patches/`: in `@aztec-foundation/noir-noirc_abi` and `@aztec-foundation/noir-acvm_js` (6.0.0-rc.6)
+  the `package.json` `module` entry is replaced with an `exports` map so bundlers pick the web build
+  (no JavaScript or WASM changes); in `@aztec-labs/pxe` (6.0.0-rc.3), one `return` in `dest/pxe.js`
+  `registerAccount` becomes a comment.
 - `detect-node` is aliased to a module that exports `false` (`apps/extension/vite.config.ts:56-60`)
   so `@aztec-labs/foundation`'s logger uses its browser transport.
 - `function-bind` is aliased to a stub that delegates to the native `Function.prototype.bind`
@@ -242,12 +245,13 @@ runtime (`insertStaticContent`) and by the `@alejoamiras/presto-banners` banner 
 own template (its link is normalized to an http(s) URL; variant and state come from fixed lists).
 `Function` and `eval` appear in zod's eval-capability probe, msgpackr's record decoder and
 get-intrinsic's constructor probe, each inside try/catch with a non-evaluating fallback, and in
-get-intrinsic's intrinsics table, which references `eval` without calling it; the extension CSP (`script-src 'self' 'wasm-unsafe-eval'`) forbids
+get-intrinsic's intrinsics table, which references `eval` without calling it; the extension CSP forbids
 evaluating strings, so none of them evaluates one. `UNSUPPORTED_API` is `chrome.offscreen` and
 `chrome.sidePanel`, both feature-gated and never called on Firefox.
 
 Remote code: the package loads no code from the network. Applications send contract artifacts
 (ACIR and Brillig bytecode with an ABI) as data over the wallet-sdk channel; a bundled WASM virtual
-machine interprets them and can reach nothing outside the wallet's own oracle callbacks. The full
-account is `apps/extension/store/remote-code.md` in the attached source.
+machine interprets them and can reach nothing outside the wallet's own oracle callbacks. The token
+list from tokens.nulo.sh is signed data, verified before use. Full account:
+`apps/extension/store/remote-code.md`.
 <!-- reviewer-notes:end -->

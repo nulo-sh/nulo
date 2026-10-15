@@ -1,5 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
-import { TxHash } from "@aztec-labs/stdlib/tx"
+import { TxHash, type TxReceipt } from "@aztec-labs/stdlib/tx"
 import { assertRestoreEpoch, captureRestoreEpochs, requireRestoreProfileId } from "@/wallet/services/restore-fence"
 import { restoreRows } from "@/wallet/services/restore-rows"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
@@ -14,6 +14,7 @@ import { StepContent, type WrappedTask } from "@/wallet/services/task/service"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { EntityStorage } from "@/wallet/storage"
 import { Lock, sleep } from "@/wallet/utils"
+import type { PriorityLevel } from "@nulo/wallet-bridge"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
@@ -30,7 +31,8 @@ import {
 	TxSchema,
 	TxConfirmationTimeoutError,
 } from "./spec"
-import { executionResultFromReceipt, txStatusFromReceipt } from "./receipt-status"
+import { FINALITY_READ_INTERVAL_MS, proveFinal } from "./inclusion"
+import { MINED_STATUSES, executionResultFromReceipt, txStatusFromReceipt } from "./receipt-status"
 import type { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 
 export * from "./spec"
@@ -68,6 +70,10 @@ export type AddTransactionInput = {
 	submittedEndpointUrl: string | undefined
 	estimatedFee?: string
 	gasDetails?: TxGasDetails
+	/** See {@link Tx.feeSpender}. */
+	feeSpender?: string
+	/** See {@link Tx.priorityLevel}. */
+	priorityLevel?: PriorityLevel
 	fence?: ExecutionFence
 	/** Owning network row id. Together with the fence's profile this is the
 	 *  row's activity scope — without it, two profiles holding the same
@@ -94,6 +100,10 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	// `submittedEndpointUrl` must not get the sync worker dialing it again.
 	private readonly droppedWatch = new Map<string, Tx>()
 	private readonly droppedNextCheckAt = new Map<string, number>()
+	// Mined rows below Finalized, read until the finalized chain proves their block final or
+	// pruned. Re-armed on init only from the marker this worker sets (see `Tx.awaitingFinality`).
+	private readonly finalityWatch = new Map<string, Tx>()
+	private readonly finalityNextCheckAt = new Map<string, number>()
 	// Serializes restore's read-modify-write (contains → set) so two concurrent
 	// imports can't both pass the create-only check for the same hash.
 	private readonly lock = new Lock()
@@ -129,20 +139,16 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		// chain-purge path (best-effort). PROFILE deletion no longer relies on it:
 		// the ProfileDeletionCoordinator now calls the AWAITED `purgeForAccounts`
 		// directly with the tombstone's address snapshot, and the worker's write is
-		// fenced (see `updateTx`) so a mid-poll tx can't resurrect (finding D).
+		// fenced (see `updateTx`) so a mid-poll tx can't resurrect.
 		this.accountService.onAccountDeleted.add(this.onAccountDeleted)
 
-		// Only Pending rows are re-armed. Dropped rows are NOT added to the
-		// resurrection watch across restarts: rows can enter storage via backup
-		// restore, and their `submittedEndpointUrl` is backup-controlled — the
-		// worker must never dial it for a row this session didn't transition
-		// itself (D16 parity; see `restore`).
-		for (const tx of (await this.txs.getValues()).filter((x) => x.status === TxStatus.Pending && !x.ambiguous)) {
-			// `ambiguous` rows are excluded here too, not just when they are marked:
-			// otherwise a restart puts them straight back into the poller, against
-			// whichever profile is now active.
-			this.pending.set(tx.hash, tx)
-		}
+		// Only Pending rows and rows carrying the finality marker are re-armed: a restored row's
+		// `submittedEndpointUrl` is backup-controlled, so the worker never dials it for a row it did
+		// not transition itself (`restore` refuses Pending and strips the marker). `ambiguous` rows
+		// stay out, or a restart would poll them against whichever profile is now active.
+		const rows = (await this.txs.getValues()).filter((x) => !x.ambiguous)
+		for (const tx of rows.filter((x) => x.status === TxStatus.Pending)) this.pending.set(tx.hash, tx)
+		for (const tx of rows.filter((x) => x.awaitingFinality)) this.finalityWatch.set(tx.hash, tx)
 
 		this.runWorker()
 	}
@@ -184,6 +190,8 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			submittedEndpointUrl,
 			estimatedFee,
 			gasDetails,
+			feeSpender,
+			priorityLevel,
 			fence,
 			networkId,
 		} = input
@@ -229,6 +237,8 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 				status: TxStatus.Pending,
 				estimatedFee,
 				gasDetails,
+				...(feeSpender ? { feeSpender } : {}),
+				...(priorityLevel ? { priorityLevel } : {}),
 				submittedEndpointUrl,
 			}
 			await this.txs.set(tx.hash, tx)
@@ -290,7 +300,9 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	}
 
 	private readonly onAccountDeleted = async (account: Account) => {
-		await this.purgeForAccounts([account.address], account.profileId)
+		// Chain-scoped: an address is the same on every chain with one L1, and deleting an account
+		// on one chain must keep its history on the others.
+		await this.purgeForAccounts([account.address], account.profileId, account.chainId)
 	}
 
 	/**
@@ -313,12 +325,14 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	}
 
 	/** Awaited tx purge for a SET of accounts — called by the deletion coordinator
-	 *  with the tombstone's authoritative address snapshot (finding D). Runs under
+	 *  with the tombstone's authoritative address snapshot. Runs under
 	 *  the tx lock; idempotent. `onAccountDeleted` delegates here so the single-
-	 *  account (deleteNetwork chain-purge) path shares one implementation. */
-	public async purgeForAccounts(addresses: readonly string[], profileId?: string): Promise<void> {
+	 *  account (deleteNetwork chain-purge) path shares one implementation. `chainId` limits the
+	 *  purge to that chain's rows. */
+	public async purgeForAccounts(addresses: readonly string[], profileId?: string, chainId?: number): Promise<void> {
 		await this.ensureInitialized()
 		const set = new Set(addresses)
+		const onChain = (rowChainId: unknown) => chainId === undefined || rowChainId === chainId
 		await this.lock.withLock(async () => {
 			// Two profiles built from one mnemonic own the same address, so an
 			// address-only match deletes the OTHER profile's history too. When the
@@ -328,7 +342,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			const soleOwner = profileId !== undefined ? await this.isSoleOwner(addresses, profileId) : true
 			const all = await this.txs.getValues()
 			const txs = all.filter((x) => {
-				if (!set.has(x.account)) return false
+				if (!set.has(x.account) || !onChain(x.chainId)) return false
 				if (profileId === undefined) return true
 				if (x.profileId !== undefined) return x.profileId === profileId
 				return soleOwner
@@ -339,25 +353,18 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			// silently become theirs. Mark it instead, permanently.
 			if (profileId !== undefined && !soleOwner) {
 				for (const tx of all) {
-					if (!set.has(tx.account) || tx.profileId !== undefined || tx.ambiguous) continue
-					this.pending.delete(tx.hash)
-					// A marked row must also leave the dropped-resurrection state:
-					// leaving it in `droppedWatch` would keep polling it AND let a
-					// late-mine write (built from the pre-mark in-memory object)
-					// silently erase the `ambiguous` flag.
-					this.droppedStreaks.delete(tx.hash)
-					this.droppedWatch.delete(tx.hash)
-					this.droppedNextCheckAt.delete(tx.hash)
+					if (!set.has(tx.account) || !onChain(tx.chainId) || tx.profileId !== undefined || tx.ambiguous) continue
+					// A marked row must leave every watch: one left watched would keep
+					// being polled AND let a later write (built from the pre-mark
+					// in-memory object) silently erase the `ambiguous` flag.
+					this.unwatch(tx.hash)
 					await this.txs.set(tx.hash, { ...tx, ambiguous: true })
 				}
 			}
 			await purgeRows(
 				txs,
 				(tx) => {
-					this.pending.delete(tx.hash)
-					this.droppedStreaks.delete(tx.hash)
-					this.droppedWatch.delete(tx.hash)
-					this.droppedNextCheckAt.delete(tx.hash)
+					this.unwatch(tx.hash)
 					return this.txs.delete(tx.hash)
 				},
 				(tx) => this.emit("onTransactionDeleted", tx),
@@ -371,7 +378,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			await purgeMalformedRows(
 				this.txs,
 				(raw) => {
-					if (typeof raw.account !== "string" || !set.has(raw.account)) return false
+					if (typeof raw.account !== "string" || !set.has(raw.account) || !onChain(raw.chainId)) return false
 					if (profileId === undefined) return true
 					if (raw.profileId !== undefined) return raw.profileId === profileId
 					return soleOwner
@@ -381,16 +388,26 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		})
 	}
 
+	private unwatch(hash: string): void {
+		this.pending.delete(hash)
+		this.droppedStreaks.delete(hash)
+		this.droppedWatch.delete(hash)
+		this.droppedNextCheckAt.delete(hash)
+		this.finalityWatch.delete(hash)
+		this.finalityNextCheckAt.delete(hash)
+	}
+
 	private async runWorker() {
 		while (true) {
 			const due = [...this.pending.values(), ...this.collectDroppedDue()]
-			if (due.length) {
+			const finalityDue = this.collectFinalityDue()
+			if (due.length || finalityDue.length) {
 				const activeProfile = await this.profileService.getActiveProfile()
 				if (activeProfile) {
 					try {
-						this.logDebug(`Sync ${due.length} transactions...`)
+						this.logDebug(`Sync ${due.length + finalityDue.length} transactions...`)
 						const start = Date.now()
-						await Promise.allSettled(due.map((x) => this.updateTx(x)))
+						await Promise.allSettled([...due.map((x) => this.updateTx(x)), ...finalityDue.map((x) => this.checkFinality(x))])
 						const end = Date.now()
 						this.logDebug(`Transactions synced in ${end - start}ms`)
 					} catch (error) {
@@ -417,6 +434,17 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 				this.droppedNextCheckAt.set(hash, now + DROPPED_RECHECK_INTERVAL_MS)
 				due.push(tx)
 			}
+		}
+		return due
+	}
+
+	private collectFinalityDue(): Tx[] {
+		const now = Date.now()
+		const due: Tx[] = []
+		for (const [hash, tx] of this.finalityWatch) {
+			if ((this.finalityNextCheckAt.get(hash) ?? 0) > now) continue
+			this.finalityNextCheckAt.set(hash, now + FINALITY_READ_INTERVAL_MS)
+			due.push(tx)
 		}
 		return due
 	}
@@ -486,41 +514,60 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		// The node fetch above ran UNLOCKED (network I/O). Re-check + persist UNDER
 		// the tx lock: a concurrent profile-delete purge (`purgeForAccounts`, same
 		// lock) removes this tx from `this.pending` + storage. Without the guarded
-		// re-check, the worker's stale write would RESURRECT a deleted profile's tx
-		// (finding D — in-flight-write fencing). The fence is on OBJECT IDENTITY,
-		// not hash membership: after a purge, `addTransaction` may legitimately
-		// re-create the same hash as a NEW row (ABA) — a stale poll's `has(hash)`
-		// would pass and overwrite it, while `get(hash) !== tx` cannot.
+		// re-check, the worker's stale write would RESURRECT a deleted profile's tx.
+		// The fence is on OBJECT IDENTITY, not hash membership: after a purge,
+		// `addTransaction` may legitimately re-create the same hash as a NEW row
+		// (ABA) — a stale poll's `has(hash)` would pass and overwrite it, while
+		// `get(hash) !== tx` cannot.
 		await this.lock.withLock(async () => {
 			if (this.pending.get(tx.hash) !== tx && this.droppedWatch.get(tx.hash) !== tx) return
-			tx.updatedAt = Date.now()
-			tx.status = status
-			tx.executionResult = executionResult
-			tx.block =
-				receipt.blockHash && receipt.blockNumber ? { hash: receipt.blockHash.toString(), number: receipt.blockNumber } : undefined
-			tx.fee = receipt.transactionFee?.toString()
-			tx.error = receipt.error
-
-			await this.txs.set(tx.hash, tx)
-			this.emit("onTransactionUpdated", tx)
-			// Map membership is canonical from the NEW status: Pending → polled
-			// every tick (this is how a watched-Dropped tx whose receipt reads
-			// pending again re-arms instead of stranding unpolled in neither map),
-			// Dropped → slow-cadence watch, mined → neither.
-			if (tx.status === TxStatus.Pending) {
-				this.pending.set(tx.hash, tx)
-			} else {
-				this.pending.delete(tx.hash)
-			}
-			if (tx.status === TxStatus.Dropped) {
-				this.droppedWatch.set(tx.hash, tx)
-				this.droppedNextCheckAt.set(tx.hash, Date.now() + DROPPED_RECHECK_INTERVAL_MS)
-			} else {
-				this.droppedWatch.delete(tx.hash)
-				this.droppedNextCheckAt.delete(tx.hash)
-			}
+			applyReceipt(tx, receipt)
+			await this.commit(tx)
 			this.logDebug(`Tx ${tx.hash.slice(0, 8)} ${receipt.status}`)
 		})
+	}
+
+	/**
+	 * Proves a mined row's block against the finalized chain, through a node that dials once and
+	 * logs nothing: final writes it Finalized; a block pruned writes the fresh receipt, or Pending
+	 * with its block, result and fee cleared, after which it is polled as any submitted tx is.
+	 */
+	private async checkFinality(tx: Tx): Promise<void> {
+		const { submittedEndpointUrl: url, block } = tx
+		if (!url || !block) return
+		const watched = () => this.finalityWatch.get(tx.hash) === tx
+		const node = await this.networkService.getSingleAttemptNodeForUrl(url)
+		const proof = await proveFinal(node, tx.hash, { block: block.number, hash: block.hash }, watched)
+		if (proof.kind === "unsettled" || proof.kind === "unknown") return
+		await this.lock.withLock(async () => {
+			if (!watched()) return
+			if (proof.kind === "final") tx.status = TxStatus.Finalized
+			else if (proof.kind === "moved") applyReceipt(tx, proof.receipt)
+			else clearInclusion(tx)
+			await this.commit(tx)
+			this.logDebug("Tx finality settled", { outcome: proof.kind })
+		})
+	}
+
+	/** Persists a row the worker moved and files it under the one watch its new status needs:
+	 *  Pending every tick, Dropped on the resurrection cadence, mined below Finalized until its
+	 *  block is final. Under the tx lock. */
+	private async commit(tx: Tx): Promise<void> {
+		const now = Date.now()
+		tx.updatedAt = now
+		tx.awaitingFinality = awaitsFinality(tx) || undefined
+		await this.txs.set(tx.hash, tx)
+		this.emit("onTransactionUpdated", tx)
+		this.unwatch(tx.hash)
+		if (tx.status === TxStatus.Pending) {
+			this.pending.set(tx.hash, tx)
+		} else if (tx.status === TxStatus.Dropped) {
+			this.droppedWatch.set(tx.hash, tx)
+			this.droppedNextCheckAt.set(tx.hash, now + DROPPED_RECHECK_INTERVAL_MS)
+		} else if (tx.awaitingFinality) {
+			this.finalityWatch.set(tx.hash, tx)
+			this.finalityNextCheckAt.set(tx.hash, now + FINALITY_READ_INTERVAL_MS)
+		}
 	}
 
 	public async backup(): Promise<Tx[] | undefined> {
@@ -537,7 +584,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			const accounts = await this.accountService.getAccounts(profile.id, n.chainId)
 			for (const acc of accounts) {
 				const mine = (await this.getTransactions(acc.address)).filter((tx) => exportableTx(tx, profile.id, n.chainId))
-				txs.push(...mine)
+				txs.push(...mine.map(unmarked))
 			}
 		}
 
@@ -577,7 +624,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 				}
 				// H: validate + canonicalize the persisted shape (mirror the read
 				// codec) so a malformed row is recorded, not written + codec-hidden.
-				const row = TxSchema.parse(tx)
+				const row = unmarked(TxSchema.parse(tx))
 				assertRestoreEpoch(deletion, epochs, profileId)
 				await this.txs.set(row.hash, row)
 				return row
@@ -593,4 +640,30 @@ function exportableTx(tx: Tx, profileId: string, chainId: number): boolean {
 	if (tx.ambiguous) return false
 	if (tx.profileId !== undefined && tx.profileId !== profileId) return false
 	return tx.chainId === chainId
+}
+
+function applyReceipt(tx: Tx, receipt: TxReceipt): void {
+	tx.status = txStatusFromReceipt(receipt.status)
+	tx.executionResult = executionResultFromReceipt(receipt.executionResult)
+	tx.block = receipt.blockHash && receipt.blockNumber ? { hash: receipt.blockHash.toString(), number: receipt.blockNumber } : undefined
+	tx.fee = receipt.transactionFee?.toString()
+	tx.error = receipt.error
+}
+
+function clearInclusion(tx: Tx): void {
+	tx.status = TxStatus.Pending
+	tx.executionResult = undefined
+	tx.block = undefined
+	tx.fee = undefined
+	tx.error = undefined
+}
+
+/** Mined below Finalized, with the endpoint and block that can prove it final. */
+function awaitsFinality(tx: Tx): boolean {
+	return MINED_STATUSES.has(tx.status) && tx.status !== TxStatus.Finalized && !!tx.submittedEndpointUrl && tx.block !== undefined
+}
+
+function unmarked(tx: Tx): Tx {
+	const { awaitingFinality: _, ...row } = tx
+	return row
 }

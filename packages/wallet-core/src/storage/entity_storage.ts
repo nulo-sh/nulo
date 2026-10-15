@@ -187,7 +187,13 @@ export class EntityStorage<T> {
 	}
 
 	public set(id: string, entity: T): Promise<void> {
-		return this.storage.set({ [`${this.root}@${id}`]: JSON.stringify(entity) })
+		return this.storage.set(this.item(id, entity))
+	}
+
+	/** The `{ key: serialized row }` pair `set` writes, for a caller that commits rows of several
+	 *  roots in one storage call. */
+	public item(id: string, entity: T): Record<string, string> {
+		return { [`${this.root}@${id}`]: JSON.stringify(entity) }
 	}
 
 	public delete(id: string): Promise<void> {

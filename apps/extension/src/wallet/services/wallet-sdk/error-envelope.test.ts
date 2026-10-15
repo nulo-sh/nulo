@@ -14,12 +14,14 @@ import {
 } from "@nulo/extension-messaging/errors"
 import {
 	ContractNotRegisteredError,
+	InvalidWalletArgumentsError,
 	DuplicateInitializationError,
 	PxeScopeUnregisteredError,
 	PxeStaleAnchorError,
 	UnsupportedMethodError,
 } from "@nulo/extension-messaging/errors"
 import { unwrapOperationResult } from "@nulo/wallet-bridge"
+import { assertSelectorBinding, CALL_BINDING } from "@/wallet/services/execution/contract-resolver"
 import { classifyOperationCatch } from "@/wallet/services/execution/rpc-cancel"
 import { SCOPE_VIOLATION_ENVELOPE, toWalletResponseError, UNCLASSIFIED_ERROR_MESSAGE } from "./error-envelope"
 
@@ -224,6 +226,16 @@ describe("stale-anchor and unregistered-contract arms", () => {
 		expect((env as { message: string }).message.toLowerCase()).toContain("not registered")
 	})
 
+	test("InvalidWalletArgumentsError → {code:-32602, INVALID_PARAMS} with a constant message naming no method", () => {
+		const env = toWalletResponseError(InvalidWalletArgumentsError.forMethod("sendTx"))
+		expect(env).toEqual({
+			code: -32602,
+			message: "The request's arguments do not match the wallet API.",
+			data: { walletErrorCode: "INVALID_PARAMS" },
+		})
+		expect(JSON.stringify(env)).not.toContain("sendTx")
+	})
+
 	test("each survives the REAL production chain: classify → unwrap → envelope", () => {
 		const task = { cancel: () => {}, fail: () => {} }
 		const errorMessage = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -252,6 +264,15 @@ describe("stale-anchor and unregistered-contract arms", () => {
 			message: PxeScopeUnregisteredError.MESSAGE,
 			data: { walletErrorCode: "PXE_SCOPE_UNREGISTERED" },
 		})
+
+		const bindingRefusal = (() => {
+			try {
+				return assertSelectorBinding({ name: "transfer" } as never, { name: "balance_of_public" }, CALL_BINDING)
+			} catch (e) {
+				return e
+			}
+		})()
+		expect(toWalletResponseError(rethrown(bindingRefusal))).toBe(SCOPE_VIOLATION_ENVELOPE)
 	})
 })
 

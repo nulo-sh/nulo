@@ -32,11 +32,11 @@ const handleReview = async () => {
 <template>
 	<Flex direction="column" gap="20" wide :class="$style.page" data-testid="legal-declined">
 		<Flex direction="column" gap="8">
-			<Text size="10" color="secondary" mono :class="$style.eyebrow" data-testid="legal-declined-version">
+			<Text variant="label-section" color="secondary" data-testid="legal-declined-version">
 				Terms v{{ termsVersion }} not accepted
 			</Text>
-			<Text size="20" color="primary" weight="700" :class="$style.title">Your keys are still yours</Text>
-			<Text size="13" color="secondary" height="150">
+			<Text variant="title-hero" color="primary" :class="$style.title">Your keys are still yours</Text>
+			<Text variant="body" color="secondary" height="150">
 				Declining new Terms never locks you out of your own wallet. Here is exactly what changes.
 			</Text>
 		</Flex>
@@ -44,15 +44,15 @@ const handleReview = async () => {
 		<Flex direction="column" :class="$style.card">
 			<Flex v-for="line in STILL_YOURS" :key="line" gap="10" align="center" :class="$style.row" data-testid="legal-declined-kept">
 				<MaterialIcon name="check" :size="16" color="green" />
-				<Text size="13" color="primary">{{ line }}</Text>
+				<Text variant="body" color="primary">{{ line }}</Text>
 			</Flex>
 			<Flex v-for="line in PAUSED" :key="line" gap="10" align="center" :class="$style.row" data-testid="legal-declined-paused">
 				<MaterialIcon name="close" :size="16" color="red" />
-				<Text size="13" color="secondary">{{ line }}</Text>
+				<Text variant="body" color="secondary">{{ line }}</Text>
 			</Flex>
 		</Flex>
 
-		<Text size="12" color="secondary" height="150">
+		<Text variant="body" color="secondary" height="150">
 			Only the actions that need an agreement are paused. Everything that is simply yours stays available.
 		</Text>
 
@@ -72,15 +72,8 @@ const handleReview = async () => {
 	overflow-y: auto;
 }
 
-.eyebrow {
-	letter-spacing: 0.16em;
-	text-transform: uppercase;
-}
-
 .title {
-	font-family: var(--font-headline);
-	letter-spacing: -0.02em;
-	text-transform: uppercase;
+	font-size: 20px;
 }
 
 .card {

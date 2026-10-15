@@ -45,7 +45,20 @@ export default {
 	],
 	permissions: ["alarms", "offscreen", "storage", "sidePanel", "unlimitedStorage", "downloads"],
 	content_security_policy: {
-		extension_pages: "script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data: blob:",
+		extension_pages: [
+			"default-src 'self'",
+			"script-src 'self' 'wasm-unsafe-eval'",
+			"img-src 'self' data: blob:",
+			// Every node URL the network form accepts: any HTTPS host, and plain HTTP on localhost,
+			// 127.0.0.1 and [::1]. Both browsers ignore an `http://[::1]:*` source, so plain HTTP is
+			// allowed by scheme, and `rpcTransportVerdict` (the form and the node factory) is what
+			// refuses a remote one. Firefox checks `downloads.download` of a blob URL against this.
+			"connect-src 'self' blob: https: http:",
+			// CodeMirror (the logs and JSON viewers) generates its theme into a `<style>` element and
+			// rewrites it as themes mount, so no hash can name it; a hash would also switch
+			// 'unsafe-inline' off for the Presto banner's inline stylesheet.
+			"style-src 'self' 'unsafe-inline'",
+		].join("; "),
 	},
 	cross_origin_embedder_policy: {
 		value: "require-corp",

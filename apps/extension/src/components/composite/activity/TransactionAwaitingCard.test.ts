@@ -7,6 +7,7 @@ const STUBS = {
 	Text: { template: "<span><slot /></span>" },
 	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
 	Spinner: { template: '<span data-testid="stub-spinner" />' },
+	Skeleton: { template: '<i data-testid="stub-skeleton" :data-width="width" :data-height="height" />', props: ["width", "height"] },
 	TransactionCardLayout: {
 		template: `
 			<div :data-testid="testId" :data-stage="stage" :data-backend="backend">
@@ -31,9 +32,16 @@ describe("composite/TransactionAwaitingCard", () => {
 		expect(w.text()).toContain("Creating transaction")
 	})
 
-	test("renders the default subtitle 'Preparing...'", () => {
-		const w = mountCard()
-		expect(w.text()).toContain("Preparing...")
+	test("with no stage known, the stage line is the loading skeleton, never a guessed stage", () => {
+		const line = mountCard().find("[data-testid='tx-awaiting-subtitle']")
+		expect(line.text()).toBe("")
+		expect(line.find("[data-testid='stub-skeleton']").attributes()).toMatchObject({ "data-width": "92", "data-height": "9" })
+	})
+
+	test("a stage line replaces the skeleton", () => {
+		const line = mountCard({ subtitle: "Queued..." }).find("[data-testid='tx-awaiting-subtitle']")
+		expect(line.text()).toBe("Queued...")
+		expect(line.find("[data-testid='stub-skeleton']").exists()).toBe(false)
 	})
 
 	test("custom title prop overrides the default", () => {
@@ -206,6 +214,30 @@ describe("composite/TransactionAwaitingCard", () => {
 			expect(w.find('[title="Show the approval window"]').exists()).toBe(false)
 			expect(w.find('[data-testid="tx-awaiting-cancel"]').exists()).toBe(true)
 			await w.trigger("click")
+			expect(w.emitted("focus")).toBeUndefined()
+			expect(w.emitted("review")).toBeUndefined()
+		})
+
+		test("a re-ask line replaces the stage line and the row opens its review; the × still cancels", async () => {
+			const w = real({
+				cancellable: true,
+				jobId: "abc123",
+				stage: "queued",
+				hasApprovalWindow: false,
+				subtitle: "Waiting for your earlier send",
+				reaskLine: "Fee went up. Review",
+			})
+			expect(w.get('[data-testid="tx-awaiting-subtitle"]').text()).toBe("Fee went up. Review")
+			expect(w.find('[data-testid="tx-awaiting-focus"]').exists()).toBe(false)
+			expect(w.find('[title="Show the approval window"]').exists()).toBe(false)
+			const target = w.get("[data-row-target]")
+			expect(target.element.tagName).toBe("BUTTON")
+			expect(nests(w)).toBe(false)
+
+			await target.trigger("click")
+			await w.get('[data-testid="tx-awaiting-cancel"]').trigger("click")
+			expect(w.emitted("review")).toEqual([["abc123"]])
+			expect(w.emitted("cancel")).toEqual([["abc123"]])
 			expect(w.emitted("focus")).toBeUndefined()
 		})
 

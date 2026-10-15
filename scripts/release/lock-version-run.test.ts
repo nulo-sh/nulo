@@ -11,6 +11,7 @@ const pkg = (version: string) => JSON.stringify({ name: "@nulo/extension", versi
 function harness(heads: { packageVersion: string; lockVersion: string }[]) {
 	const calls: string[] = []
 	const commits: { expectedHead: string; text: string; message: string }[] = []
+	const logs: string[] = []
 	let attempts = 0
 	const io: LockIO = {
 		async head(branch) {
@@ -29,9 +30,9 @@ function harness(heads: { packageVersion: string; lockVersion: string }[]) {
 			commits.push({ expectedHead, text, message })
 			return true
 		},
-		log: () => {},
+		log: (message) => logs.push(message),
 	}
-	return { io, calls, commits }
+	return { io, calls, commits, logs }
 }
 
 describe("runLockVersion", () => {
@@ -69,6 +70,15 @@ describe("runLockVersion", () => {
 		expect(await runLockVersion(PR, garbled.io)).toBe(1)
 		expect(garbled.commits).toEqual([])
 	})
+})
+
+test("a refusal prints the branch it names as escaped command data", async () => {
+	const branch = harness([{ packageVersion: "0.31.0", lockVersion: "0.30.0" }])
+	expect(await runLockVersion(JSON.stringify({ headBranchName: "x\n::warning::y##[error]z" }), branch.io)).toBe(1)
+	const physical = branch.logs.flatMap((l) => l.split(/\r\n|\r|\n/))
+	expect(physical).toHaveLength(1)
+	expect(physical[0]).toStartWith("::error::")
+	expect(physical[0]).not.toContain("##[")
 })
 
 const stale = { type: "STALE_DATA", message: 'Expected branch to point to "h0" but it did not. Pull and try again.' }

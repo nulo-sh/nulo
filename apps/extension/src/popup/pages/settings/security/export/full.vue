@@ -28,15 +28,14 @@ import { TOKEN_BALANCE_SERVICE_NAME, TokenBalanceServiceClient } from "@/wallet/
 import { TRANSACTION_SERVICE_NAME, TransactionServiceClient } from "@/wallet/services/transaction/client"
 import { BACKUP_SCHEMA_VERSION_FIELD, COMPAT_EPOCH_FIELD, CURRENT_COMPAT_EPOCH } from "@/wallet/services/backup/backup-migration-registry"
 import { CURRENT_BACKUP_SCHEMA_VERSION } from "@/wallet/services/backup/backup-migrator"
-import { EncryptionKey } from "@nulo/wallet-crypto"
 
 /** Utils */
 import { downloadFile } from "@/utils"
-import { MAX_BACKUP_FILE_BYTES, assembleFullBackup } from "@/utils/full-backup-helpers"
+import { MAX_BACKUP_FILE_BYTES, assembleFullBackup, sealFullBackupText } from "@/utils/full-backup-helpers"
 import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow, ownWindowRoute } from "@/utils/own-window"
 import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
-import { toBase64 } from "@nulo/wallet-core/utils"
+import { backupNotice } from "@/components/stale-network/copy"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
@@ -51,11 +50,13 @@ const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onR
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
+import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
 const appStore = useAppStore()
+const cacheStore = useCacheStore()
+const popupStore = usePopupStore()
 
 const router = useRouter()
-
-const backupHelpUrl = "https://nulo.sh/help/wallet-setup/backup-methods"
 
 // Sealed artifact strings, published only by a completed run — never a mutable
 // draft object. `payloadPretty` is the plain download body, `payloadCompact`
@@ -134,14 +135,34 @@ const showRecommendation = ref(false)
 // (a corrupt envelope MAC alone lands here) and travels in the file.
 const dekReplaced = ref(false)
 const chainStateOmitted = ref(false)
+/** Imported-key rows that did not open, so travel as stored and will not restore. A replaced DEK
+ *  has its own warning, which covers them. */
+const unopenedImportedKeys = ref(0)
+
+/** A reset in progress: its journal holds accounts a backup made now would miss. */
+const pendingReset = ref(null)
+let pendingReads = 0
+const syncPendingReset = async () => {
+	const read = ++pendingReads
+	const pending = await managers.networkReset.getPendingReset()
+	if (read !== pendingReads) return
+	pendingReset.value = pending ? backupNotice(appStore.networks.find((n) => n.id === pending.networkId)?.name ?? "") : null
+}
+managers.networkReset.onStaleNetworkChanged.add(syncPendingReset)
+void syncPendingReset()
 
 const isAgreed = ref(false)
 const handleAgree = () => {
+	if (pendingReset.value) return
 	isAgreed.value = true
 	if (isPasskeyProfile.value) handleBackup()
 }
 
 const backupStatus = ref("")
+// A password profile's unencrypted file holds its master secret and every key, so only its encrypted
+// file leaves the page. A passkey profile's plain file reaches no funds without the passkey, so it
+// may leave once the person confirms what it exposes.
+const canDownload = computed(() => backupStatus.value === "encrypted" || (isPasskeyProfile.value && backupStatus.value === "finished"))
 
 /** After a failed passkey step: back, or in an own window, which has no page behind it, the
  *  agreement step. */
@@ -183,26 +204,32 @@ async function acquirePasskeyCredential(gen) {
 /** Stage 2: the authenticated key-material export, discriminated per profile
  *  type. Returns "handled" when the failure UI already resolved (wrong
  *  password / passkey failure / superseded run). */
-async function exportKeyMaterial(gen, credentialData) {
+async function exportKeyMaterial(gen, fence, credentialData, accountClient) {
 	try {
 		if (isPasskeyProfile.value) {
 			// Passkey blobs carry the credentialId as `master-key` and NEVER an entropy field —
 			// the master re-derives from the passkey PRF at restore. The imported-keys DEK travels
 			// as a SEALED blob (the restore ceremony's wrap key opens it) — the stored one, or a
-			// fresh one when the stored slot no longer opens.
-			const passkeyMaterial = await managers.profile.exportPasskeyBackupMaterial(appStore.profile.id, credentialData)
+			// fresh one when the stored slot no longer opens. The file carries the key rows it counted.
+			const passkeyKeys = await accountClient.exportPasskeyBackupKeys(fence, credentialData)
 			if (gen !== generation) return "handled"
-			return { key: passkeyMaterial.credentialId, dekSealedB64: passkeyMaterial.dekSealed, dekReplaced: passkeyMaterial.dekReplaced }
+			return {
+				key: passkeyKeys.credentialId,
+				dekSealedB64: passkeyKeys.dekSealed,
+				dekReplaced: passkeyKeys.dekReplaced,
+				unopenedImportedKeys: passkeyKeys.unopenedImportedKeys,
+				heldSlices: { [ACCOUNT_SERVICE_NAME]: passkeyKeys.accounts, [IMPORTED_KEYS_SERVICE_NAME]: passkeyKeys.importedKeyRows },
+			}
 		}
-		// Atomic discriminated export: master + recovery-phrase entropy + imported-keys DEK
-		// from ONE authenticated pass, so the backup fields can never come from different
-		// row states.
-		const material = await managers.profile.exportBackupMaterial(appStore.profile.id, password.value)
+		// The file carries a key made for this backup alone, never the profile's imported-keys DEK.
+		const material = await accountClient.exportFullBackupKeys(fence, password.value)
 		return {
 			key: material.masterKey,
 			entropyB64: material.entropy,
-			dekB64: material.importedKeysDek,
+			dekB64: material.importedKeysKey,
 			dekReplaced: material.dekReplaced,
+			unopenedImportedKeys: material.unopenedImportedKeys,
+			heldSlices: { [ACCOUNT_SERVICE_NAME]: material.accounts, [IMPORTED_KEYS_SERVICE_NAME]: material.importedKeyRows },
 		}
 	} catch (error) {
 		if (gen !== generation) return "handled"
@@ -237,10 +264,11 @@ function buildBackupEnvelope({ key, entropyB64, dekB64, dekSealedB64 }) {
 		// by JSON.stringify). Restore verifies PBKDF2(words(entropy)) == master-key before
 		// sealing either.
 		entropy: entropyB64,
-		// Imported-keys DEK carriers (epoch-4 REQUIRED, per profile type; the other stays
-		// undefined → dropped): plaintext beside the plaintext master for password blobs — the
-		// same trust envelope — and the sealed row blob for passkey blobs. Restore feeds it
-		// ONLY into the rewrap context (the restored row mints a FRESH dek — clone divergence).
+		// Imported-keys key carriers (epoch-4 REQUIRED, per profile type; the other stays
+		// undefined → dropped): for password blobs, plaintext beside the plaintext master, the key
+		// made for this backup alone that its imported-key rows open under; for passkey blobs, the
+		// profile's sealed DEK. Restore feeds it ONLY into the rewrap context (the restored row
+		// mints a FRESH dek — clone divergence).
 		"imported-keys-dek": dekB64,
 		"imported-keys-dek-sealed": dekSealedB64,
 		// The active-network preference names a CHAIN (row ids are per install and the backup
@@ -275,6 +303,27 @@ function reportAssemblyFailure(gen, err) {
 	openToast({ kind: "error", label: "Failed to create the backup" })
 }
 
+function backupSources(runClients, heldSlices = {}) {
+	return runClients.map(({ name, client }) => ({
+		name,
+		backup: name in heldSlices ? async () => heldSlices[name] : () => client.backup(),
+	}))
+}
+
+/** Stage 1: the run's fence, then a passkey profile's credential. Slices resolve the active
+ *  profile on their own and a profile switch updates this page in place, so the run is bound to
+ *  one session of one profile in one worker: a lock, a switch (even away and back) or a worker
+ *  restart before publication fails it. Returns "handled" when the run already ended. */
+async function openRun(gen) {
+	const fence = await managers.profile.captureRunFence()
+	if (gen !== generation) return "handled"
+	if (fence.profileId !== appStore.profile.id) throw new Error("The active profile is not the one being backed up")
+	if (!isPasskeyProfile.value) return { fence }
+	const acquired = await acquirePasskeyCredential(gen)
+	if (acquired === "handled" || gen !== generation) return "handled"
+	return { fence, credentialData: acquired.credentialData }
+}
+
 async function handleBackup() {
 	// Re-entry latch: closes synchronously, BEFORE the ceremony/KDF awaits —
 	// the empty-status window during PBKDF2 was where double-fires slipped in.
@@ -284,23 +333,22 @@ async function handleBackup() {
 	backupStatus.value = "progress"
 	let runClients = null
 	try {
-		let credentialData
-		if (isPasskeyProfile.value) {
-			const acquired = await acquirePasskeyCredential(gen)
-			if (acquired === "handled" || gen !== generation) return
-			credentialData = acquired.credentialData
-		}
-
-		const material = await exportKeyMaterial(gen, credentialData)
-		if (material === "handled" || gen !== generation) return
-		dekReplaced.value = !!material.dekReplaced
-		chainStateOmitted.value = !!appStore.profile.recoveryMode
-		const envelope = buildBackupEnvelope(material)
+		const run = await openRun(gen)
+		if (run === "handled") return
 
 		runClients = buildBackupServices()
 		activeRunClients = runClients
-		const sources = runClients.map(({ name, client }) => ({ name, backup: () => client.backup() }))
-		const result = await assembleFullBackup(envelope, sources, () => gen === generation)
+		const accountClient = runClients.find(({ name }) => name === ACCOUNT_SERVICE_NAME).client
+		const { fence, credentialData } = run
+		const material = await exportKeyMaterial(gen, fence, credentialData, accountClient)
+		if (material === "handled" || gen !== generation) return
+		dekReplaced.value = !!material.dekReplaced
+		unopenedImportedKeys.value = material.dekReplaced ? 0 : (material.unopenedImportedKeys ?? 0)
+		chainStateOmitted.value = !!appStore.profile.recoveryMode
+		const envelope = buildBackupEnvelope(material)
+
+		const result = await assembleFullBackup(envelope, backupSources(runClients, material.heldSlices), () => gen === generation)
+		await managers.profile.assertRunFence(fence)
 		// Fence first: a superseded run must not run the oversize UI writes.
 		if (gen !== generation || rejectOversizedBackup(result.pretty)) return
 
@@ -348,15 +396,11 @@ async function handleEncrypt() {
 	showRecommendation.value = false
 
 	try {
-		const passhash = await EncryptionKey.getPasshash(password.value)
+		const sealed = await sealFullBackupText(plaintext, password.value)
 		if (gen !== generation) return
-		const key = await EncryptionKey.fromPasshash(passhash)
-		if (gen !== generation) return
-		const sealed = toBase64(await key.encrypt(new TextEncoder().encode(plaintext)))
-		if (gen !== generation) return
-		// Encrypted-side half of the shared size invariant (base64 + AES-GCM
+		// Encrypted-side half of the shared size invariant (the tag, base64 and AES-GCM
 		// overhead could in principle cross the line a plain file sits under).
-		// Base64 is pure ASCII, so string length IS the byte count here.
+		// The text is pure ASCII, so string length IS the byte count here.
 		if (sealed.length > MAX_BACKUP_FILE_BYTES) {
 			backupStatus.value = "finished"
 			openToast({ kind: "error", label: "Backup is too large to create" })
@@ -374,14 +418,16 @@ async function handleEncrypt() {
 	}
 }
 
-async function handleDownloadBackup() {
+async function downloadBackup(isEncrypted) {
 	if (isDownloading.value || isBusy.value) return
+	// `canDownload`'s rule, held again where the file is written.
+	if (!isEncrypted && !isPasskeyProfile.value) return
+	const fileContent = isEncrypted ? encryptedB64 : payloadPretty
+	if (!fileContent) return
 	isDownloading.value = true
 	const gen = generation
-	const isEncrypted = backupStatus.value === "encrypted"
 	let filename = `_${appStore.profile.name.replace(" ", "_")}_${Math.floor(Date.now() / 1000)}`
 	filename = isEncrypted ? `NuloEncryptedBackup${filename}.txt` : `NuloBackup${filename}.json`
-	const fileContent = isEncrypted ? encryptedB64 : payloadPretty
 
 	try {
 		await downloadFile({ data: fileContent, filename, compressionFormat: "gzip" })
@@ -389,11 +435,52 @@ async function handleDownloadBackup() {
 		openToast({ kind: "success", label: "Backup downloaded successfully" })
 	} catch (err) {
 		if (gen !== generation) return
-		console.error("Download failed:", err.message || err)
+		console.error("Download failed:", { error: err })
 		openToast({ kind: "error", label: "Failed to download backup" })
 	} finally {
 		if (gen === generation) isDownloading.value = false
 	}
+}
+
+/** ConfirmPopup runs its callback without awaiting it, and the page may have moved on by then:
+ *  the callback downloads only the plain file of the run the person was warned about. */
+function confirmPlainDownload() {
+	const gen = generation
+	cacheStore.confirm = {
+		pre_title: "Not encrypted",
+		title: "Download without a password?",
+		description:
+			"This file will show your accounts, contacts and activity to anyone who opens it. It holds no key that can move funds without your passkey.",
+		confirm_color: "red",
+		confirm_variant: "destructive",
+		confirm_text: "Download anyway",
+		callback: () => {
+			if (gen === generation && backupStatus.value === "finished") void downloadBackup(false)
+		},
+	}
+	popupStore.open("confirm")
+}
+
+function handleDownloadClick() {
+	if (backupStatus.value === "encrypted") void downloadBackup(true)
+	else if (canDownload.value) confirmPlainDownload()
+}
+
+/** Ends the run and drops what it made. Fence first so no in-flight continuation can publish or
+ *  resurrect state; then services (cleanup-order rule), then the secret scrub: the payload strings
+ *  hold the plaintext master, entropy and imported-keys key (best-effort: references cleared;
+ *  pending operations keep what they captured until they settle). */
+function discardRun() {
+	generation++
+	if (activeRunClients) {
+		disconnectAll(activeRunClients)
+		activeRunClients = null
+	}
+	payloadPretty = null
+	payloadCompact = null
+	encryptedB64 = null
+	password.value = null
+	repeatedPassword.value = null
 }
 
 const onKeydown = (e) => {
@@ -406,13 +493,36 @@ const onKeydown = (e) => {
 			handleEncrypt()
 			break
 		case "encrypted":
-			handleDownloadBackup()
+			downloadBackup(true)
 			break
 		default:
 			// "progress" / "encrypting": a run is in flight, so Enter starts nothing.
 			break
 	}
 }
+
+// A profile switch made elsewhere updates this page in place. A backup it holds is the previous
+// profile's, and the download rule would read the new profile's type, so the page starts over.
+watch(
+	() => appStore.profile?.id,
+	() => {
+		discardRun()
+		onCeremonyReject(new Error("The active profile changed"))
+		isBusy.value = false
+		isDownloading.value = false
+		isAgreed.value = false
+		backupStatus.value = ""
+		showRecommendation.value = false
+		isWrongPassword.value = false
+		isPasswordMismatch.value = false
+		dekReplaced.value = false
+		unopenedImportedKeys.value = 0
+		chainStateOmitted.value = false
+		pendingReset.value = null
+		void syncPendingReset()
+	},
+	{ flush: "sync" },
+)
 
 // Firefox's toolbar panel closes under the passkey prompt this page runs, so a passkey export moves
 // to its own window first. A failed move keeps the page where it is.
@@ -421,21 +531,8 @@ onBeforeMount(() => {
 })
 
 onBeforeUnmount(() => {
-	// Fence first so no in-flight continuation can publish or resurrect state;
-	// then services (cleanup-order rule), then the secret scrub — the payload
-	// strings hold the plaintext master/entropy/DEK and must not outlive the
-	// page (best-effort: references cleared; in-flight closures die with the
-	// aborted run).
-	generation++
-	if (activeRunClients) {
-		disconnectAll(activeRunClients)
-		activeRunClients = null
-	}
-	payloadPretty = null
-	payloadCompact = null
-	encryptedB64 = null
-	password.value = null
-	repeatedPassword.value = null
+	managers.networkReset.onStaleNetworkChanged.remove(syncPendingReset)
+	discardRun()
 })
 </script>
 
@@ -449,22 +546,28 @@ onBeforeUnmount(() => {
 	>
 		<!-- Agreement gate -->
 		<template v-if="!isAgreed">
-			<div class="export_section_last">
-				<span class="export_section_label">Before you continue</span>
+			<div v-if="pendingReset" :class="$style.reset_notice" data-testid="full-backup-reset-notice">
+				<span :class="$style.reset_notice_label">{{ pendingReset.label }}</span>
+				<span :class="$style.reset_notice_text">{{ pendingReset.text }}</span>
+			</div>
+			<div
+				class="export_section_last"
+				:class="pendingReset && $style.agreement_blocked"
+				:data-blocked="pendingReset ? 'true' : 'false'"
+				data-testid="full-backup-agreement"
+			>
+				<span class="export_section_label type--label-section">Before you continue</span>
 				<Flex direction="column" gap="8">
-					<Text size="13" height="150" color="body">
+					<Text variant="body" height="150" color="body">
 						Backup provides direct, unrestricted access to your entire profile.
 					</Text>
-					<Text size="13" height="150" color="body">
+					<Text variant="body" height="150" color="body">
 						Ensure that your backup is stored securely and never shared with anyone.
 					</Text>
-					<Text size="13" height="150" color="body">
+					<Text variant="body" height="150" color="body">
 						By continuing you agree to all risks and responsibilities.
 					</Text>
 				</Flex>
-				<a :href="backupHelpUrl" target="_blank" rel="noopener noreferrer" class="export_learn_link">
-					Read more about backups
-				</a>
 			</div>
 		</template>
 
@@ -531,7 +634,7 @@ onBeforeUnmount(() => {
 				</div>
 
 				<div v-else class="export_section">
-					<span class="export_section_label">Backup</span>
+					<span class="export_section_label type--label-section">Backup</span>
 					<Banner v-if="dekReplaced" variant="warning" direction="vertical" data-testid="backup-keys-lost-banner">
 						<template #title> Imported keys are not in this backup </template>
 						<template #description>
@@ -549,6 +652,20 @@ onBeforeUnmount(() => {
 							</Text>
 						</template>
 					</Banner>
+					<Banner
+						v-if="unopenedImportedKeys > 0"
+						variant="warning"
+						direction="vertical"
+						data-testid="backup-imported-unopened-banner"
+					>
+						<template #title> Some imported accounts are not in this backup </template>
+						<template #description>
+							<Text color="secondary" height="140">
+								{{ unopenedImportedKeys === 1 ? "1 imported account" : `${unopenedImportedKeys} imported accounts` }}
+								could not be opened, so they will not be restored. Import their keys again after the restore.
+							</Text>
+						</template>
+					</Banner>
 					<Banner v-if="chainStateOmitted" variant="warning" direction="vertical" data-testid="backup-chain-state-omitted-banner">
 						<template #title> Local chain data is not in this backup </template>
 						<template #description>
@@ -559,11 +676,16 @@ onBeforeUnmount(() => {
 							</Text>
 						</template>
 					</Banner>
-					<Banner v-if="showRecommendation" variant="info" direction="vertical">
-						<template #title> Backup is ready </template>
+					<Banner v-if="showRecommendation" variant="info" direction="vertical" data-testid="backup-ready-banner">
+						<template #title> {{ isPasskeyProfile ? "Backup is ready" : "Protect your backup" }} </template>
 						<template #description>
-							<Text height="140">
-								You can download it right now, but we strongly recommend to encrypt it before downloading.
+							<Text v-if="isPasskeyProfile" height="140">
+								Protect it with a password before you download it. Without a password, the file is saved in
+								plain text.
+							</Text>
+							<Text v-else height="140">
+								Encrypt the file with your profile password before you download it. Without a password, anyone
+								who opens the file controls this profile.
 							</Text>
 						</template>
 					</Banner>
@@ -585,7 +707,7 @@ onBeforeUnmount(() => {
 					v-if="!showRecommendation && isPasskeyProfile && backupStatus === 'finished'"
 					class="export_section_last"
 				>
-					<span class="export_section_label">Encrypt with password</span>
+					<span class="export_section_label type--label-section">Encrypt with password</span>
 					<Flex direction="column" gap="12">
 						<div :class="[isPasswordMismatch && $style.shake]">
 							<Input
@@ -597,6 +719,7 @@ onBeforeUnmount(() => {
 								type="password"
 								label="Password"
 								placeholder="Enter password"
+								autocomplete="new-password"
 								autofocus
 								:disabled="backupStatus === 'encrypting'"
 								data-testid="backup-encrypt-password-input"
@@ -610,6 +733,7 @@ onBeforeUnmount(() => {
 							@input="isPasswordMismatch = false"
 							type="password"
 							placeholder="Repeat password"
+							autocomplete="new-password"
 							:disabled="backupStatus === 'encrypting'"
 							data-testid="backup-encrypt-password-confirm-input"
 						/>
@@ -630,7 +754,7 @@ onBeforeUnmount(() => {
 
 		<!-- Bottom CTAs -->
 		<template #bottom>
-			<Button v-if="!isAgreed" @click="handleAgree" variant="cta" data-testid="agree-continue-btn">
+			<Button v-if="!isAgreed" @click="handleAgree" variant="cta" :disabled="!!pendingReset" data-testid="agree-continue-btn">
 				Agree &amp; Continue
 			</Button>
 
@@ -661,9 +785,9 @@ onBeforeUnmount(() => {
 					{{ backupStatus === 'encrypting' ? 'Encrypting…' : 'Protect with Password' }}
 				</Button>
 				<Button
-					@click="handleDownloadBackup"
+					@click="handleDownloadClick"
 					@keydown.enter="refuseRepeatEnter"
-					:disabled="!backupStatus || backupStatus === 'progress' || backupStatus === 'encrypting' || isDownloading"
+					:disabled="!canDownload || isDownloading"
 					:variant="backupStatus !== 'encrypted' ? 'cta_outline' : 'cta'"
 					data-testid="download-backup-btn"
 				>
@@ -709,16 +833,13 @@ onBeforeUnmount(() => {
 }
 
 .status_title {
-	font-family: var(--font-headline);
+	composes: type--row-title from global;
 	font-size: 16px;
-	font-weight: 700;
-	letter-spacing: -0.01em;
 	color: var(--txt-primary);
 }
 
 .status_subtitle {
-	font-family: var(--font-body);
-	font-size: 13px;
+	composes: type--body from global;
 	line-height: 1.5;
 	color: var(--nulo-secondary);
 	margin: 0;
@@ -726,27 +847,38 @@ onBeforeUnmount(() => {
 }
 
 .error_text {
-	font-family: var(--font-body);
-	font-size: 12px;
+	composes: type--body from global;
 	color: var(--red);
 	margin-top: 4px;
 	display: block;
 }
 
-@keyframes shakeInput {
-	0% { transform: translateX(0); }
-	20% { transform: translateX(-4px); }
-	40% { transform: translateX(4px); }
-	60% { transform: translateX(-3px); }
-	80% { transform: translateX(2px); }
-	100% { transform: translateX(0); }
+.shake {
+	composes: shake_password from "../../../../../components/composite/shake.module.css";
 }
 
-.shake { animation: shakeInput 0.3s ease; }
+.agreement_blocked {
+	opacity: 0.38;
+}
 
-@media (prefers-reduced-motion: reduce) {
-	.shake {
-		animation: none;
-	}
+.reset_notice {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-bottom: 20px;
+	padding: 14px 12px;
+	background: color-mix(in srgb, var(--yellow) 7%, transparent);
+	border: 1px solid color-mix(in srgb, var(--yellow) 45%, transparent);
+}
+
+.reset_notice_label {
+	composes: type--meta from global;
+	color: var(--txt-warning);
+}
+
+.reset_notice_text {
+	composes: type--body from global;
+	line-height: 1.5;
+	color: var(--txt-primary);
 }
 </style>

@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: Most of the duplication a whole-codebase quality audit found, folded into shared helpers without changing behaviour, which cut duplicated production lines by about a quarter, plus two bug fixes the refactors reached and four invisible, strictly safer fixes. New shared homes include `packages/wallet-core/src/utils/serial.ts`, `apps/extension/src/wallet/services/profile/profile-row.ts` and `apps/extension/src/composables/usePopupStack.ts`.
-- **Open items**: deferred deduplications, robustness leads pinned as today's behaviour, and visible drift left for owner calls, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: deferred deduplications, robustness leads pinned as today's behaviour, and visible drift left for owner calls, tracked in #196, #197, #198, #199, #200, #201, #202, #203, #204, #205, #206, #207, #208, #209, #210, #211, #212, #222, #223, #224, #225, #226 and #227. The import-contacts sheet's EXISTING tag is done (#36).
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

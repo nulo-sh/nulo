@@ -5,6 +5,18 @@ import Icon from "../core/Icon.vue"
 import Spinner from "./Spinner.vue"
 import type { TextColorName } from "../color-names"
 
+type Variant = "primary" | "primary_outline" | "secondary" | "ghost" | "text" | "cta" | "cta_outline" | "cta_destructive" | "destructive"
+
+/** The module class carrying each variant's type role; `secondary`, `ghost` and `text` take none. */
+const ROLE_CLASSES: Partial<Record<Variant, "cta_type" | "md_type">> = {
+	cta: "cta_type",
+	cta_outline: "cta_type",
+	cta_destructive: "cta_type",
+	primary: "md_type",
+	primary_outline: "md_type",
+	destructive: "md_type",
+}
+
 defineEmits(["onKeybind"])
 const props = defineProps({
 	size: {
@@ -21,11 +33,10 @@ const props = defineProps({
 	 *   cta                 — full-width brutalist big CTA
 	 *   cta_outline         — outline-style CTA (transparent + outline)
 	 *   cta_destructive     — red-bg CTA (destructive action confirmation)
+	 *   destructive         — primary's type on red, at the regular sizes (a CTA clips in a half-width row)
 	 */
 	variant: {
-		type: String as PropType<
-			"primary" | "primary_outline" | "secondary" | "ghost" | "text" | "cta" | "cta_outline" | "cta_destructive"
-		>,
+		type: String as PropType<Variant>,
 		default: "primary",
 	},
 	wide: {
@@ -75,10 +86,12 @@ const style = useCssModule()
 
 const getStyles = () => {
 	const hasCorrectSize = ["large", "medium", "compact", "small", "mini", "dynamic", "micro"].includes(props.size)
+	const roleClass = ROLE_CLASSES[props.variant]
 
 	return [
 		style.wrapper,
 		style[props.variant],
+		roleClass && style[roleClass],
 		props.wide && style.wide,
 		hasCorrectSize && style[props.size],
 		props.disabled && style.disabled,
@@ -150,7 +163,6 @@ const rel = computed(() => {
 	background-clip: padding-box !important;
 
 	color: var(--txt-primary);
-	font-weight: 600;
 	white-space: nowrap;
 
 	transition: all 0.2s ease;
@@ -183,27 +195,21 @@ const rel = computed(() => {
 
 .wrapper.large {
 	height: 48px;
-	font-size: 14px;
 	line-height: 1;
 	border-radius: 0;
-	letter-spacing: 0.05em;
 	padding: 0 16px;
 }
 
 .wrapper.medium {
 	min-height: 40px;
 	gap: 8px;
-	font-size: 13px;
 	border-radius: 0;
 	padding: 0 14px;
-	letter-spacing: 0.03em;
 }
 
-/* A 44 px touch target with small type; on a CTA it keeps the contract's tracking. */
 .wrapper.compact {
 	min-height: 44px;
 	gap: 8px;
-	font-size: 12px;
 	border-radius: 0;
 	padding: 0 16px;
 }
@@ -219,7 +225,6 @@ const rel = computed(() => {
 	height: 26px;
 	gap: 6px;
 	border-radius: 0;
-	font-size: 12px;
 	padding: 0 10px;
 }
 
@@ -227,37 +232,76 @@ const rel = computed(() => {
 	height: 20px;
 	gap: 6px;
 	border-radius: 0;
-	font-size: 11px;
 	padding: 0 8px;
 }
 
+/* The variants without a type role keep a size per step; a role sets the others' type at every size. */
+.wrapper:is(.secondary, .ghost, .text) {
+	font-weight: 600;
+}
+
+.wrapper:is(.secondary, .ghost, .text).large {
+	font-size: 14px;
+}
+
+.wrapper:is(.secondary, .ghost, .text).medium {
+	font-size: 13px;
+}
+
+.wrapper:is(.secondary, .ghost, .text).compact {
+	font-size: 12px;
+}
+
+.wrapper:is(.secondary, .ghost, .text).mini {
+	font-size: 12px;
+}
+
+.wrapper:is(.secondary, .ghost, .text).micro {
+	font-size: 11px;
+}
+
 /** VARIANTS */
+.cta_type {
+	composes: type--button from global;
+}
+
+/** One type for `primary`, `primary_outline` and `destructive`, so the red twin cannot drift from primary. */
+.md_type {
+	composes: type--button-md from global;
+}
+
+.wrapper.primary:active:not(.disabled):not(.loading),
+.wrapper.destructive:active:not(.disabled):not(.loading) {
+	transform: scale(0.98);
+}
+
 .wrapper.primary {
 	background: var(--nulo-accent);
 	color: var(--txt-inverse);
 	fill: var(--txt-inverse);
-	font-family: var(--font-headline);
-	font-weight: 700;
-	text-transform: uppercase;
 }
 .wrapper.primary:hover:not(.disabled):not(.loading) {
 	background: color-mix(in srgb, var(--nulo-accent), var(--txt-primary) 18%);
 }
-.wrapper.primary:active:not(.disabled):not(.loading) {
-	transform: scale(0.98);
+
+.wrapper.destructive {
+	background: var(--btn-destructive);
+	color: var(--txt-white);
+	fill: var(--txt-white);
+}
+/* Toward black in both themes: a mix toward the text colour lightens it in the dark one, below AA. */
+.wrapper.destructive:hover:not(.disabled):not(.loading),
+.wrapper.cta_destructive:hover:not(.disabled):not(.loading) {
+	background: color-mix(in srgb, var(--btn-destructive), black 18%);
 }
 
-/** Brutalist outlined variant — same typographic weight as primary
- *  (font-headline + uppercase) but transparent bg with a 2px architectural
- *  edge. Used for second-tier actions where a soft --nulo-surface-high
- *  chip would fight the brutalist CTA language. */
+/** Brutalist outlined variant — primary's type on a transparent bg with a
+ *  2px architectural edge. Used for second-tier actions where a soft
+ *  --nulo-surface-high chip would fight the brutalist CTA language. */
 .wrapper.primary_outline {
 	background: transparent;
 	color: var(--txt-primary);
 	fill: var(--txt-primary);
-	font-family: var(--font-headline);
-	font-weight: 700;
-	text-transform: uppercase;
 	border: 2px solid var(--nulo-outline);
 }
 .wrapper.primary_outline:hover:not(.disabled):not(.loading) {
@@ -307,26 +351,20 @@ const rel = computed(() => {
 	line-height: 1;
 }
 
-/** Shared CTA typography contract — ONE source for all three variants
- *  (a CTA-wide tracking/size/height change is a single edit; a fourth
- *  variant inherits it by joining this selector list). Variants below
- *  keep only their colors, border, and interaction states. */
+/** Shared CTA box — ONE source for all three variants, whose type is
+ *  `.cta_type`. It must stay a compound rule after the size rules, or
+ *  their padding wins. Variants below keep only their colors, border,
+ *  and interaction states. */
 .wrapper.cta,
 .wrapper.cta_outline,
 .wrapper.cta_destructive {
 	width: 100%;
-	font-family: var(--font-headline);
-	font-weight: 700;
-	font-size: 14px;
-	letter-spacing: 0.2em;
-	text-transform: uppercase;
 	padding: 20px 0;
 }
 
 .wrapper.cta.compact,
 .wrapper.cta_outline.compact,
 .wrapper.cta_destructive.compact {
-	font-size: 12px;
 	padding: 14px 0;
 }
 
@@ -364,13 +402,10 @@ const rel = computed(() => {
 /** Destructive CTA flavor — red bg + white text. Reserved for
  *  irreversible actions (Delete Profile, Wipe Wallet). */
 .wrapper.cta_destructive {
-	background: var(--red);
+	background: var(--btn-destructive);
 	color: var(--txt-white);
 	fill: var(--txt-white);
 	border: none;
-}
-.wrapper.cta_destructive:hover:not(.disabled):not(.loading) {
-	opacity: 0.9;
 }
 
 /** OTHER */

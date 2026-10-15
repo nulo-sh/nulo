@@ -25,12 +25,12 @@ Both suites run on Chrome by default and on Firefox with `NULO_E2E_BROWSER=firef
 
 Internally `scripts/e2e/agent.sh`:
 
-1. Calls `scripts/e2e/resolve-ports.ts` to allocate five ephemeral TCP ports (anvil, aztec, aztec admin, aztec p2p, playground) and persists them to `.e2e-state/ports.json`.
+1. Calls `scripts/e2e/resolve-ports.ts` to draw five TCP ports (anvil, aztec, aztec admin, aztec p2p, playground), claim them in the host registry `~/.agents/ports.md` under a run id, and persist them with the run id and a run marker to `.e2e-state/ports.json`. The claim is released when the run ends.
 2. Builds the extension for the run's browser with `VITE_LOCAL_NETWORK_RPC_URL=http://localhost:<aztec port>` so the wallet's "Local Network" preset talks to this run's sandbox.
 3. Greps the bundle for the URL — fails fast if the vite env didn't propagate.
 4. Runs the network suite with `ANVIL_URL` / `ANVIL_PORT` / `AZTEC_NODE_URL` / `AZTEC_PORT` / `AZTEC_ADMIN_PORT` / `AZTEC_P2P_PORT` / `PLAYGROUND_URL` / `PLAYGROUND_PORT` in env.
 
-`global-setup.ts` reads those env vars, spawns anvil + aztec + playground (each with the assigned port) and writes an ownership lockfile at `.e2e-state/owned.json`. Its `setup` is a short coordinator whose ORDER is the contract — orphan reap + build guard → `reconcilePriorLock` (reuse a healthy pack, or reap a stale one) → provisional lock → `markBootStarted()` (the exit-86 window opens here, AFTER the build/env checks that must never be retried) → `ensureAnvil` → `ensureAztecNode` → `ensureDevServer` (playground) → `finishBoot` (provide URLs, deploy, `markBootReady()`). Each stage probes first and adopts an already-running service; a stage detects a permissive failure and returns `"skip"` (the strict-mode `E2E_REQUIRE_SETUP=1` throws stay inside it), and the coordinator owns the exit (`provideWithoutSandbox` + `return`), so a lost or doubled `provide` is visible in one place. Process handles and the `weStarted*` flags stay module-level, shared with `teardown` and the signal hooks.
+`global-setup.ts` reads those env vars, spawns anvil + aztec + playground (each with the assigned port and its own launch marker) and writes an ownership lockfile at `.e2e-state/owned.json`. Its `setup` is a short coordinator whose ORDER is the contract — build guard → under the worktree's reconcile lock, `reconcilePriorLock` (refuse a live owner, reuse a healthy pack on a bare run, or reap a stale one by marker) and the provisional lock → the dead-run sweep → `markBootStarted()` (the exit-86 window opens here, AFTER the build/env checks that must never be retried) → on an agent run, a bind test of the claimed pack → `ensureAnvil` → `ensureAztecNode` → `ensureDevServer` (playground) → `finishBoot` (provide URLs, deploy, `markBootReady()`). On a bare run each stage probes first and adopts an already-running service; an agent run adopts nothing. A stage detects a permissive failure and returns `"skip"` (the strict-mode `E2E_REQUIRE_SETUP=1` throws stay inside it), and the coordinator owns the exit (`provideWithoutSandbox` + `return`), so a lost or doubled `provide` is visible in one place. Process handles and the `weStarted*` flags stay module-level, shared with `teardown` and the signal hooks.
 
 ### Presto: local vs CI
 
@@ -56,9 +56,50 @@ The terminology gap matters: **Presto** is the desktop app a user installs; **pr
 
 `NULO_E2E_PROVERLESS=1 bun run e2e:agent <file>` builds the wallet with `proverEnabled:false` (skips BB-SNARK generation; kernel simulation + on-chain submission stay real — the local node accepts the fake proof). Much faster than real proving, and Presto-independent (it's forced off). The agent arms the double-opt-in flags + asserts the proverless build stamp. Most CI shards run this way.
 
-The **default-token seeding** spec (`network/default-token-seeding.test.ts`) needs a seed entry for the sandbox, which mints a fresh token address every run — so no build-time list can name it. `VITE_NULO_E2E_TOKEN_SEEDS` + `VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM` (double opt-in, fail-closed; set by `agent.sh`) swap `TokenSeederDeps.getSeeds()` for a `chrome.storage.session` reader on key `nulo:e2e:token-seeds`, written via `seedSandboxDefaultToken` in `fixtures/token-seeds.ts`. The reader **replaces** the shipped seed list and accepts exactly one `chainId: 0` entry with canonical hex fields, pinning `expectedSymbol` to `"TST"`, `expectedDecimals` to 18 and the placeholder label `displayName` to `"TestToken"` itself — the label is rendered before the chain answers, so storage must not be able to supply it. The spec also traces, from inside the popup, that the `token-seed-row` placeholder shows before the `tokens-card` and that `tokens-empty-import-link` never appears in between. Replacement is deliberate: every profile registration triggers a seed pass, so with a shipped Testnet seed an augmenting list would have each e2e profile calling the public dRPC endpoint. `_extension-smoke-e2e.yml` arms the same pair with **no** key (empty list) on its source build for that reason. Artifact-mode smoke runs the shipped list as built: its browser blackholes only the price host (`NULO_E2E_ARTIFACT_RUN` in `fixtures/browser/`), so each of its profiles seeds the shipped Testnet tokens through dRPC. That is accepted: it is the one run of the shipped list against the live chain before a release. A spec that measures anything below Home's token list first waits for `tokens-list` to carry `data-settled="true"` with nothing in it loading (`waitForSettledTokens` in `rows.test.ts`). Both literals are in the `_build-extension.yml` negative grep, and `agent.sh` + `_extension-smoke-e2e.yml` grep for them positively — an unused export can tree-shake away even in an armed build, which would make the release guard a false negative.
+The **default-token seeding** spec (`network/default-token-seeding.test.ts`) needs a seed entry for the sandbox, which mints a fresh token address every run — so no build-time list can name it. `VITE_NULO_E2E_TOKEN_SEEDS` + `VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM` (double opt-in, fail-closed; set by `agent.sh`) swap `TokenSeederDeps.getSeeds()` for a `chrome.storage.session` reader on key `nulo:e2e:token-seeds`, written via `seedSandboxDefaultToken` in `fixtures/token-seeds.ts`. The reader **replaces** the signed list's seeds when its key is present and accepts exactly one `chainId: 0` entry with canonical hex fields, pinning `expectedSymbol` to `"TST"`, `expectedDecimals` to 18 and the placeholder label `displayName` to `"TestToken"` itself — the label is rendered before the chain answers, so storage must not be able to supply it. Any other value, an empty array included, seeds nothing; an absent key lets the list apply. The spec also traces, from inside the popup, that the `token-seed-row` placeholder shows before the `tokens-card` and that `tokens-empty-import-link` never appears in between. Both literals are in the `_build-extension.yml` negative grep, and `agent.sh` + `_extension-smoke-e2e.yml` grep for them positively — an unused export can tree-shake away even in an armed build, which would make the release guard a false negative.
 
-The **STUB** tests (`cancel-mid-prove`, `concurrent-sendtx-{approve,confirm}`, `lock-cancels-dapp-send`, `auto-lock-defers-while-proving`, `profile-switch-sweeps-transfer`) hold the tx at `proving` via a `ProofGate` barrier (`holdProofGate`/`releaseProofGate` in `fixtures/proof-gate.ts`, backed by `chrome.storage.session` key `nulo:e2e:proof-gate`) so the sub-second proverless prove still gives a deterministic window. Real BB proving is guarded by the prover-ON `network-e2e-canary` CI job (`transfers` + `tx-sendTx-default`); see [CI.md § Proverless network e2e](../../../../CI.md). Full design: [`implementations-plan/archive/e2e-proverless-stub/`](../../../../implementations-plan/archive/e2e-proverless-stub/plan.md).
+**The signed token list.** Defaults and price ids come from the list `TokenListService` keeps. The same double opt-in arms a second reader, `nulo:e2e:token-list` in `chrome.storage.session` (`{ url, publicKey }`, `http://localhost` only), which replaces `tokens.nulo.sh` and the pinned keys; with no key the armed build fetches nothing. The worker fetches when the Terms are accepted, at boot with them accepted, and on its daily alarm, and a launch's seeded acceptance is a storage write that no listener hears, so no smoke launch holds a list by default, in either run kind, and no profile shows defaults. Three ways to give one a list, all in `fixtures/token-list.ts`:
+
+- **Held** — `launchExtension({ tokenList: "held" })`, or the `listedExtension` / `listedExtensionPerTest` fixtures: before any profile exists, the launch stores a signed envelope and restarts the worker, which loads it at start. A source run signs a fixed two-token Testnet list (`E2E_LIST_TOKENS`) with a per-process key and writes the reader's key plus an empty seed list, so the list prices its tokens and seeds nothing, whatever the owner lists. An artifact run stores the published `infra/token-list/public/v1/list.json`, the only list a release build's pinned keys accept, so there its Testnet entries also seed and end `failed` against the stand-in about 75 s later. A spec that prices a row takes the held list's priced token (`readActivityScope(page, { priced: true })`, then `seedUsdQuoteAndReload(page, scope.token.priceId)`) and skips through `skipUnlessListPrices` when the list prices none, which is valid; every other spec names fixture tokens.
+- **Served** — `serveTokenList()`, a loopback host on a registry port with the Worker's `_headers`; `token-list.test.ts` points the reader at it, accepts the Terms through onboarding (`createProfileAcceptingTerms`), and brings the refresh forward with the alarm (`requestListRefresh`).
+- **Live** — `shipped-token-list.test.ts`, artifact runs only: its launch sends the Testnet node and `tokens.nulo.sh` direct, accepts the Terms through onboarding, verifies the stored list against the release's pinned keys, and requires every bundled-class Testnet entry to land as a stored token with its contract, symbol and decimals.
+
+A spec that measures anything below Home's token list first waits for `tokens-list` to carry `data-settled="true"` with nothing in it loading (`waitForSettledTokens` in `rows.test.ts`).
+
+The **STUB** tests (`cancel-mid-prove`, `concurrent-sendtx-{approve,confirm}`, `lock-cancels-dapp-send`, `auto-lock-defers-while-proving`, `profile-switch-sweeps-transfer`, `failed-send-check`, `in-flight-send-guard`, `inflight-call-background-death`, `same-token-concurrent-sends`, `tx-sendTx-noFrom`) hold the tx at `proving` via a `ProofGate` barrier (`holdProofGate`/`releaseProofGate` in `fixtures/proof-gate.ts`, backed by `chrome.storage.session` key `nulo:e2e:proof-gate`) so the sub-second proverless prove still gives a deterministic window. Real BB proving is guarded by the prover-ON `network-e2e-canary` CI job (`transfers`, `tx-sendTx-default`, `frozen-account-canary`, `passkey-execution-canary`, `delete-after-prove`); see [CI.md § Proverless network e2e](../../../../CI.md). Full design: [`implementations-plan/archive/e2e-proverless-stub/`](../../../../implementations-plan/archive/e2e-proverless-stub/plan.md).
+
+### CSP violations
+
+Every launch answers for the Content-Security-Policy violations recorded while it ran. `VITE_NULO_E2E_CSP_REPORT=1` (set by `agent.sh` and by the source build in `_extension-smoke-e2e.yml`) builds in `src/e2e/csp-report.ts`: the background and every document listen for `securitypolicyviolation`, the documents forward theirs over `runtime.sendMessage`, and the background alone appends them to `chrome.storage.session` key `nulo:e2e:csp-violations`, which it creates as an empty list when it loads. With `NULO_E2E_CSP_REPORT=1` at run time, `launchExtension`'s `close` flushes the background, reads the list from a scratch page, closes the browser, and then fails the launch on a missing list (a build without the recorder) or on any entry, printing each one's context, directive, blocked origin and source line. A test that reloads the extension calls `ctx.checkCspViolations()` first, since the reload discards the record; `close` then only closes. A close that throws inside a test's `finally` replaces the test's own error: when a red run names only the CSP check, rerun with `NULO_E2E_CSP_REPORT` unset to see what the test itself reported. A local smoke run needs both flags. An artifact run sets neither: a release build refuses the flag, and `_build-extension.yml` greps release bundles for the key.
+
+What it hears, probed on both browsers by raising a violation in each context: the background at startup and in a successor after `stopBackground`, the popup, the onboarding page, the setup page, and the offscreen document (on Firefox, the background page's frame). What it does not: a violation raised while a document parses, before its entry module runs (the built pages load only their own scripts and stylesheets then, and Chrome lets an extension's own resources past its page CSP anyway); one in a dedicated worker a library starts (bb.js, the sqlite OPFS proxy); one a document reports as `close` reads; and a write that failed in a background that then stopped, since its successor confirms the flush without knowing. Those fail only through the functional assertions.
+
+### Egress guard (smoke)
+
+A smoke run opens no HTTP, HTTPS or WebSocket connection to a host outside the machine. `global-setup-smoke.ts` arms the guard on every run, and outside an artifact run (`NULO_E2E_ARTIFACT_RUN=1`) refuses a dist without `NULO_E2E_TOKEN_SEEDS_BUILD_STAMP`, naming the armed build command. Only an artifact run provides `liveLeg`, which lets the live spec's one launch (`launchExtension({ live: true })`) send the Testnet node's host, `LIVE_NODE_HOST`, and the token list's, `LIVE_LIST_HOST`, direct: Chrome bypasses the proxy for those exact names and resolves them, Firefox's PAC answers them `DIRECT`. That launch holds no stand-in, and a guard record for either host fails its close. The exception covers each host on every scheme and port, and it is URL routing for HTTP(S) and WebSocket, not a network boundary. The network setup provides nothing, so network runs and `test:e2e:all` launch unguarded. On a guarded run each `launchExtension` owns, through `ownGuardedLaunch` in `fixtures/egress-guard.ts`, two loopback listeners whose ports are claimed in `~/.agents/ports.md` (`nulo-e2e-egress-*`) for the launch's life:
+
+- **The guard**, which the browser sends every request for an outside host to: Chrome through `--proxy-server`, `--proxy-bypass-list=<-loopback>;localhost;127.0.0.1;[::1]` (without `<-loopback>`, Chrome sends link-local addresses direct) and resolver rules that resolve no outside name; Firefox through a `data:` PAC with no `DIRECT` after the proxy and `network.proxy.failover_direct: false`. It answers `403`, records the host and port (never a path, so a provider key in a URL is never stored), and keeps one count per `host:port`: Firefox retries each refusal in bursts.
+- **The canary**, which only a direct path reaches: `egress-canary.test` resolves to loopback for a direct connection only. Once the launch settles, an extension page requests it over HTTPS (HTTPS because the extension's `connect-src` may narrow plain HTTP to loopback); the guard must record it and the canary must count nothing, or the launch fails before any test runs.
+- **The stand-in node** (`fixtures/node-stub.ts`), armed in every launch but the live spec's once the canary has proven the routing: the browser's interception (`holdRpcInterception`) sends every request for the Testnet node's origin to a third loopback listener, which answers HTTP 400 with a JSON-RPC error. The node client stops at a 4xx with a readable body; refused, it retries each call for about six seconds, and smoke's resets, profile deletions, settings pages and passkey imports ran out their waits on it. A spec that arms its own `interceptRpc` on that origin, to prove the offline case (`send-fee-privacy`, `contacts-import`), replaces the stand-in until its `stop()`. `stopBackground` also lets go of it for the kill and re-arms it after: on Chrome, a DevTools session attached to the stopping service worker keeps its host for the successor, which then never starts clean (`sw-resilience`'s lock and liveness waits time out).
+
+`close` reads the stand-in's interception failures, runs the CSP check, closes the browser, stops the listeners and then fails the launch, naming the file, on a canary connection, on any host that no list declares, or on an arm or reply the stand-in's interception failed or a spec's interception left unstopped. A node request the interception never saw still reaches the guard, which refuses it: no failure, only the slowness of a refused node. `tests/e2e/egress-guard.test.ts` proves the routing on each browser: from the background (HTTPS refused, loopback direct, the Testnet node answered by the stand-in's 400) and from an ordinary page the spec serves on loopback (plain HTTP and WebSocket refused, IPv6 loopback direct, link-local refused), then stops the guard and shows that neither falls back to a direct path.
+
+What the smoke build does instead of each outside host:
+
+| Host | Tried by | With the guard |
+|---|---|---|
+| `lb.drpc.live` | the background's node-status read at popup start; the offscreen PXE on Home | answered by the stand-in node's 400 once the launch settles, refused at the guard before; direct in the live spec's launch; a spec that needs a node-read value seeds it (the fee picker's sponsors: `helpers/fpc-seeds.ts`) |
+| `api.coingecko.com` | the price fetch | refused; a spec that needs a quote seeds one into storage |
+| the browser's own hosts | Chrome's updater and sign-in services, Firefox's remote settings | refused; listed per driver, so not a failure |
+| loopback (`localhost`, `127.0.0.1`, `[::1]`) | the Presto probe, a spec's own server | direct |
+
+**When a launch fails with "egress guard"**, the message lists each host no list declares:
+
+- A host the wallet or a spec now tries: add it to `DECLARED_REFUSALS` in `fixtures/egress-guard.ts` with one line of why, in the change that adds the call.
+- A host the browser reaches on its own: first look for a flag or pref that stops it at its source; failing that, add the exact name to that driver's `ownHosts` (`CHROME_OWN_HOSTS` in `fixtures/browser/chrome.ts`, `FIREFOX_OWN_HOSTS` in `fixtures/browser/firefox.ts`) with why. Never a domain suffix: a wallet dependency that calls a new host under a vendor's domain must stay red.
+- `the canary request went direct` or `never reached the guard`: the browser's routing changed (a flag, a pref, a browser bump); the launch proved nothing, so fix the routing, never the check.
+
+Not covered: UDP and WebRTC, which the wallet does not use. The stand-in answers every node call with an error, so no smoke spec but the live one sees a node that answers: a value only a node gives is seeded, or proven in the network suite. A host on a driver's `ownHosts` that the wallet starts calling is refused but does not fail the run; reviewing a new list entry is what catches that.
 
 ### Store captures (opt-in)
 
@@ -76,7 +117,7 @@ cd apps/extension && bun scripts/store-art.ts
 
 ## Running multiple agents in parallel
 
-Open one terminal per worktree and run `bun run e2e:agent` in each. Each agent allocates fresh ports and owns its own anvil + aztec + playground:
+Open one terminal per worktree and run `bun run e2e:agent` in each. Each run claims its own ports in the host registry and owns its own anvil + aztec + playground:
 
 ```bash
 # terminal 1 — worktree A
@@ -86,24 +127,24 @@ bun run e2e:agent
 bun run e2e:agent
 ```
 
-Verify with `lsof`:
+What keeps them apart:
 
-```bash
-lsof -iTCP -sTCP:LISTEN -P | grep -E "anvil|node"
-```
+- **Ports.** `resolve-ports.ts` skips every port `~/.agents/ports.md` lists and claims its pack there (`nulo-e2e-<service>` rows, owner `agent.sh`'s pid) under the file's lock, which other tools on the host share (`tests/e2e/port-registry.ts` states the contract). `cat ~/.agents/ports.md` shows who holds what. Under a run id, setup bind-tests the pack after `markBootStarted()` and never adopts a listener on it. Every readiness wait fails once the child it spawned exits, even with a probe still pending, and on Linux accepts an answer only from a socket a process carrying the service's marker holds, so a stranger on a claimed port is a boot failure (exit 86), not a sandbox.
+- **Processes.** Each service carries a launch marker and its owner in its environment, and every process of an agent run (forks, Firefox, geckodriver) inherits the run's marker, owner and worktree (`tests/e2e/owned-processes.ts`). Chrome inherits them too but overwrites its environ region with its process title, in the browser and every child, so no Chrome ever shows a marker: Chromes are found by the extension path on their command line instead. Teardown stops a service's group, then every process with its marker, a leaderless group's included. An orphan sweep stops a process only when the owner named in its own environment is dead, so a run never signals another's processes, whatever a lock or record on disk says.
+- **Data.** The node's run dir sits on real disk under `~/.cache/nulo-e2e`, stamped with its marker, and is deleted only directly under that root.
 
-You should see two of each, on different ports. The Chrome processes are scoped via `--load-extension=$EXTENSION_PATH` so the orphan-cleanup `pkill` in setup only kills *this* worktree's chromes.
+A run killed with `kill -9` leaves its sandbox and browsers running: `bun run e2e:reap` in that worktree stops them by marker once the run's owner is gone, removes its run dir and drops its registry rows. The next run in the worktree does the same at setup.
 
 ### Verified concurrent run
 
-Two-worktree proof of isolation:
+Two worktrees of one branch, started 4 s apart, each running `networks`, `connect-deny` and `sim-methods` on Chrome at retry 0:
 
-| Worktree | Port pack (anvil, aztec, admin, p2p, pg) | Token contract deployed |
-|---|---|---|
-| worktree A   | `49522, 49523, 49524, 49525, 49526` | `0x0693fd819c9dd798…` |
-| worktree B   | `49527, 49528, 49529, 49530, 49531` | `0x1c477acbeea157c9…` |
+| Worktree | Port pack (anvil, aztec, admin, p2p, pg) | Token contract deployed | Result |
+|---|---|---|---|
+| worktree A | `21158, 31227, 31616, 26260, 13424` | `0x125a8b9b6fdeb6be…` | 8/8 |
+| worktree B | `15368, 30475, 20912, 13758, 15914` | `0x05e5d43a988b2340…` | 8/8 |
 
-Both ran `bun run e2e:agent tests/e2e/network/meta-getChainInfo.test.ts` simultaneously. Both passed `1/1` in ~40s wall. The distinct token-contract addresses prove the runs deployed against independent PXE state.
+Both packs were listed in `~/.agents/ports.md` under their run ids for the whole run and released at its end. Killing worktree B's `agent.sh` and vitest with `kill -9` mid-run left worktree A green; `bun run e2e:reap` in B then stopped B's orphaned sandbox and dropped its rows, leaving no process with B's markers.
 
 ## Single-worktree fast iteration
 
@@ -114,21 +155,21 @@ If you `bun run vitest run --config vitest.e2e.network.config.ts` directly with 
 - the recorded PIDs must still be alive
 - the candidate sandbox must report the same L1 contract addresses recorded post-deploy (proves we're talking to *our* sandbox, not a stranger that drifted onto the same port)
 
-If any check fails, setup reaps the stale children and cold-starts a fresh stack. `bun run e2e:agent` always allocates fresh ports, so it never hits the reuse path — the lockfile only serves orphan cleanup there.
+If any check fails, setup reaps the stale children by marker and cold-starts a fresh stack. A reuse rewrites the lock's owner to the reusing run, so no reap touches the sandbox while that run lives. A bare run also adopts any service already answering on its ports (an anvil on chain 31337 is trusted to run with `--slots-in-an-epoch 1`). `bun run e2e:agent` always allocates fresh ports and never reuses or adopts — the lockfile only serves orphan cleanup there.
 
 ## CI sharding (5-way matrix)
 
 CI runs the network suite as a **5-shard GitHub Actions matrix** (`.github/workflows/pr-extension-network-e2e.yml`). Each shard:
 
 - Is its own ubuntu-latest VM — own anvil, own aztec node, own playground vite, own Chrome
-- Gets roughly a fifth of the network test files (80 files today, 1 of them an env-gated probe skipped by default), assigned deterministically by vitest's `--shard=N/M` (SHA-1 hash of filename); the six files with a dedicated lane (`fee-methods`, `selfpay-phase`, `concurrent-sendtx-confirm`, `transfers`, `tx-sendTx-default`, `frozen-account-canary`) are excluded from the pool — `scripts/ci-cd/behavior-gating.test.ts` pins that list against the lanes
+- Gets roughly a fifth of the shard pool, assigned deterministically by vitest's `--shard=N/M` (SHA-1 hash of filename). The pool is every network test file but the twelve with a dedicated job (`fee-methods`, `selfpay-phase`, `concurrent-sendtx-confirm`, `same-token-concurrent-sends`, `snack-placement`, `failed-send-check`, `transfers`, `tx-sendTx-default`, `frozen-account-canary`, `passkey-execution-canary`, `delete-after-prove`, `send-chaos`): 109 of the suite's 121 files today, some of which skip themselves unless an env flag arms them (the `_probe-*` file and `store-captures` among them). `scripts/ci-cd/behavior-gating.test.ts` pins the pool's exclusions to the dedicated jobs' files
 - Runs in parallel with the other 4 shards
 
-**Wall time**: ~10–15 min (vs ~35–45 min unsharded). CPU minutes: ~25% more than serial (each shard pays the ~30s anvil+aztec boot cost), but the wall-time win is dramatic.
+**Wall time**: ~10–20 min per shard (vs ~35–45 min unsharded). CPU minutes: ~25% more than serial (each shard pays the ~30s anvil+aztec boot cost), but the wall-time win is dramatic.
 
 **Why N=5 and not N=4 or N=9**: legacy reasoning from when `tx-sendTx-multicall` and `multi-account-from` were collision-sensitive under WASM proving. N=4 collided them on the same shard, blowing the shard timeout; N=5 separated them. With the accelerator the per-prove time is bounded enough that the collision concern no longer holds — N=5 is preserved for now as the stable shape, but could be tuned in a future PR.
 
-**Dedicated heavy jobs**: a few files run OUTSIDE the shard pool on their own runner (`test_files` on a dedicated job, mirrored in the pool's `exclude_files` — `scripts/ci-cd/behavior-gating.test.ts` pins the two lists equal): `fee-methods` + `selfpay-phase` (`Run / heavy`), `concurrent-sendtx-confirm` (`Run / heavy / concurrent-confirm`), and the prover-ON canary files. `selfpay-phase` is the wallet's setup-phase / account-identity gate: `Token.mint_to_private` (the bridge hub claim's inner call — a private call enqueueing a non-allow-listed public finalisation) simulated and sent as each of two granted accounts, never-sent and deployed, self-paid from public Fee Juice and via the PrivateFPC (fuel, then credit), with the node's tx validation ON, plus a negative control that must draw the node's `Setup function not on allow list`. Its cheap sibling `sim-from-selfpay` (one self-paid simulate as the second granted account) stays in the shard pool. Both run at `retry: "0"`; both are driven through the playground's `Simulation` and `Self-pay phase` sections, whose simulate results are projected by `apps/playground/src/lib/simulation-summary.ts` (fee payer, private frames, public calls per phase) because the raw kernel output is not feed-readable.
+**Dedicated heavy jobs**: a few files run OUTSIDE the shard pool on their own runner (`test_files` on a dedicated job, mirrored in the pool's `exclude_files` — `scripts/ci-cd/behavior-gating.test.ts` pins the two lists equal): `fee-methods` + `selfpay-phase` (`Run / heavy / fee-methods + selfpay-phase`), `concurrent-sendtx-confirm` + `same-token-concurrent-sends` (`Run / heavy / concurrent-confirm`), `snack-placement` + `failed-send-check` (`Run / heavy / snack-placement + failed-send-check`: two long files the runtime-blind sharder put on one shard, which then reached its 30-minute job limit), and the five prover-ON canary files (`Run / canary / real-proving`). `selfpay-phase` is the wallet's setup-phase / account-identity gate: `Token.mint_to_private` (the bridge hub claim's inner call — a private call enqueueing a non-allow-listed public finalisation) simulated and sent as each of two granted accounts, never-sent and deployed, self-paid from public Fee Juice and via the PrivateFPC (fuel, then credit), with the node's tx validation ON, plus a negative control that must draw the node's `Setup function not on allow list`. Its cheap sibling `sim-from-selfpay` (one self-paid simulate as the second granted account) stays in the shard pool. Both run at `retry: "0"`; both are driven through the playground's `Simulation` and `Self-pay phase` sections, whose simulate results are projected by `apps/playground/src/lib/simulation-summary.ts` (fee payer, private frames, public calls per phase) because the raw kernel output is not feed-readable.
 
 **Failing shard logs**: each shard uploads its own artifact (`network-e2e-logs-<N>-of-5`) containing `.e2e-state`, `aztec-*.log`, `anvil-*.log`, `presto-server.log`, `presto-health.json` on failure.
 
@@ -140,7 +181,9 @@ bun run e2e:agent --shard=5/5                                  # just the files 
 
 Vitest's deterministic SHA-1-of-filename sharder picks the same files locally as in CI, so this is the fastest way to reproduce a shard-specific failure (e.g. "register-token only fails on shard 1"). Each invocation still starts its own anvil + aztec + playground; running multiple shards in parallel needs multiple worktrees (see "Running multiple agents in parallel" above).
 
-**Slow-prove tests**: `tx-sendTx-default`, `multi-account-from` and `tx-sendTx-multicall` run on CI even though the WASM kernel-prove tail can exceed puppeteer's 300s `protocolTimeout` on slow runners: those tests and the `tx-sendTx-{noFrom,feePayer,sponsoredFpc}` siblings assert on the wallet's journal `proving` stage via `waitForSendTxActiveStage()` instead of waiting on the dApp's full sendTx promise. See `implementations-plan/archive/journal-stage-restructure/`.
+**Slow-prove tests**: `tx-sendTx-default` and `multi-account-from` run on CI even though the WASM kernel-prove tail can exceed puppeteer's 300s `protocolTimeout` on slow runners: those tests and the `tx-sendTx-{feePayer,sponsoredFpc}` siblings assert that the wallet's journal reached real work via `waitForDappExecuteWorked()` (`fixtures/journal.ts`). `tx-sendTx-multicall` and `tx-sendTx-noFrom` run proverless and wait for the outcome itself: the dApp's sendTx result, a `succeeded` record and a mined receipt. See `implementations-plan/archive/journal-stage-restructure/`.
+
+**Smoke shards**: both PR smoke lanes (`pr-extension-smoke-e2e*.yml`) run the smoke suite as a 3-shard matrix, split by the same SHA-1 rule, because a whole Firefox run neared its 30-minute job limit. `bun run test:e2e --shard=2/3` reproduces one shard; a failing shard's logs upload as `smoke-e2e-logs[-firefox]-<N>-of-3`. The nightly and release smokes of the built zips stay unsharded.
 
 **Known limitation: cold-shard rotation.** Each shard starts with a fresh anvil + aztec + playground + Chrome + extension. The FIRST capability-popup-driven test in shard 1 (whichever file the SHA-1 sharder puts first) pays a cold-SW penalty — `chrome.windows.create` + bb.js init + PXE warmup can push that test past its budget. Quarantining the offender just exposes the next file as the new "first" victim. The structural fix is a fixture-level warm-up tap or pre-grant-capability fixture, which is not built yet. Single-shard re-runs (or local repro via `--shard=N/5`) usually pass green once the SW is warm; `extension-network-e2e-status` is a required check on `dev` and `main`, so a cold-shard red is re-run, never neutralized.
 
@@ -152,9 +195,23 @@ Vitest's deterministic SHA-1-of-filename sharder picks the same files locally as
 
 **`prior sandbox identity mismatch — tearing down and starting fresh`** — a previous run's sandbox died and a foreign process took over its port. Setup detects this via the L1-contract-address check and recovers automatically.
 
-**`reaped orphan <name> pid=<n>`** — a previous agent run left children alive (Ctrl-C, OOM). Setup found them through the lockfile and reaped them. No action needed.
+**`another run in this worktree holds the sandbox`** — `owned.json` names a live owner: two runs in one worktree. Wait for it to finish.
 
-**Manual cleanup of stale state.** Delete `.e2e-state/` in the worktree, then `pkill -f "anvil.*--port"` and `pkill -f "aztec.*start.*--local-network"` if you suspect leftover processes.
+**`another run in this worktree is reconciling its sandbox`** — `.e2e-state/reconcile.lock` names a live process. Setup, and `e2e:reap`, hold it while they read `owned.json`, reap or adopt what it names and write their own owner into it, so two of them cannot act on the same dead owner. A dead holder's lock is broken on its own, by one waiter only (it holds `reconcile.lock.break-<hash>` while it does); delete the lock and any break file beside it only if no run or reap is in progress.
+
+**`the prior run's sandbox could not be reaped: …`** — a service of the previous run did not stop (`retained`), could not be read (`unknown`), or the lock names no owner (written before markers, or on a host without `/proc`) and records live pids. Those pids may since belong to unrelated processes: stop them only if they are this worktree's sandbox, else delete `.e2e-state/owned.json`. Otherwise run `bun run e2e:reap` once the owner is gone.
+
+**`<what>: answered by a listener this run did not start`** — on Linux, the socket listening on a service's port is not held by a process carrying that service's marker: something bound the port before the service did. A boot failure (exit 86), retried on fresh ports.
+
+**`<service>'s claimed port <n> is already in use`** — something listens on a port this run just claimed. The run fails as a boot failure (exit 86) and CI retries on fresh ports.
+
+**`~/.agents/ports.md.lock stayed held`** — another registry writer holds the lock, or one died holding it. The other writers break a lock older than 15 s; this client never does. If no writer is running, delete the lock.
+
+**`[stall-watchdog] no progress for 600.0 s`** — no file, test, hook or console event for `STALL_MS` (`tests/e2e/run-limits.ts`). `.e2e-state/stalled` names the running tests (only the file when the fork's event loop is blocked); the run is cancelled and fails, its forks are killed 30 s later, and teardown stops the sandbox. A test that legitimately waits that long without logging needs a progress line. Every run's last lines print its longest silence, the figure `STALL_MS` is set from.
+
+**`this fork's V8 heap limit is … MiB, not the 2048 MiB cap`** — the network config's `execArgv` (`--max-old-space-size=FORK_HEAP_MIB`) did not reach the fork, or V8 sized the young generation differently: check a vitest or Node bump.
+
+**Manual cleanup of stale state.** `bun run e2e:reap` in the worktree. It stops processes carrying this worktree's markers whose owner is dead and, while no run of this worktree is live, the Chromes loading this worktree's build (Chrome shows no environment, so its exact `--load-extension` path stands in). Never a process by name, which on a shared host would take down another agent's run.
 
 ## Terms-acceptance state
 
@@ -163,7 +220,7 @@ Vitest's deterministic SHA-1-of-filename sharder picks the same files locally as
 (default on a reused `userDataDir`, so a relaunch keeps what the last launch left).
 `openOnboarding(ctx, { legal: "missing" })` gives the gate's specs a real fresh install, and
 `reloadWithLegalState(page, seed)` flips a running wallet. The scenarios live in
-`legal-acceptance.test.ts` (S1–S9) and `network/legal-acceptance-wall.test.ts` (N1).
+`legal-acceptance.test.ts` (S1–S11) and `network/legal-acceptance-wall.test.ts` (N1).
 
 ## Helper conventions (CDP regression workarounds)
 
@@ -172,6 +229,7 @@ A Puppeteer/Chrome interaction layer regressed somewhere between sandbox ABI ver
 | Helper | Use it instead of | Why |
 |---|---|---|
 | `clickByTestId(page, id)` / `clickSelector(page, sel)` | `(await page.waitForSelector(...))!.click()` and `handle.click()` | The CDP element-handle click hangs with `Runtime.callFunctionOn timed out`. Synthetic in-page click via `page.evaluate(() => el.click())` bypasses the broken protocol path. |
+| `openDropdown(page, triggerTestId)` | `querySelector(trigger)?.click()`, or clicking the trigger again when the menu does not show | A click on a trigger not mounted yet does nothing, and `DropdownRoot` toggles on every click, so a second one closes an open menu. The helper waits for the trigger, clicks it only while its `data-dropdown-open` reads closed, then waits for it to read open, naming the page's state on a timeout. |
 | `typeIntoInput` / `replaceInputValue` | `handle.type(text)` | Same CDP path, same hang. The helper sets `value` via the prototype setter and dispatches `input` events. |
 | `patchPagePolling(page)` (auto-applied by `launchExtension`, `openPopup`, `openPlayground`, `waitForPopup`) | manually configuring polling on every `page.waitForFunction` call | Default `'raf'` polling is throttled in offscreen / unfocused tabs. Patch defaults to `polling: 200`. `waitForSelector` (CSS-only) is rerouted through the patched `waitForFunction` for the same reason; prefixed selectors (`text/`, `xpath/`, `aria/`, `pierce/`) are left alone. |
 | `pointerClick(page, testid, { last? })` (`helpers/legal-drivers.ts`) | `clickByTestId` when the assertion is "nothing covers this control" | An in-page click reaches a covered element. This one hit-tests the control's centre, fails naming whatever sits on top, then clicks through `page.mouse` (`Input.dispatchMouseEvent`, not the hanging element-handle path). `last` picks the last match — the control of the popup on top of a stack. |
@@ -191,6 +249,7 @@ Feature helpers in `fixtures/helpers.ts` (all `data-testid`-driven; reuse them r
 | `pinFromTokenPage(page)` / `readPinState(page)` | Token page "⋯" menu: toggle Pin to Home; read the item's `data-pinned`. |
 | `deployExtraTokensForAccount(config, account, [{ symbol, amount }])` (`fixtures/aztec.ts`) | Deploys and mints extra sandbox tokens for multi-token scenarios. |
 | `readPublicTokenBalance` / `readPublicFeeJuice(wallet, from, …)` (`fixtures/aztec.ts`) | Chain-side balance reads through the script wallet — the postcondition for "executed as account X" (the token moved from X, nobody else's balances moved), since receipts carry no sender. |
+| `finalizeThrough(node, block)` (`fixtures/aztec.ts`) | Mines empty L1 blocks on the run's anvil until the node's finalized block reaches `block`: the local anvil mines only on a transaction, so a quiet chain's finalized tip stands still. The wallet's worker then reads a mined row final at its next once-a-minute read (a minute after the mined commit) and refreshes the account's balances again. |
 | `grantCapBundle(ctx, page, bundle, pick)` + `approveCapabilities(popup, { accounts })` | Drives the capability popup. On a repeat `accounts` request for a session that already holds accounts, held rows render `data-granted="true"`, pre-selected and locked (a click is ignored); `approveCapabilities` only clicks rows that are not yet selected, so pass the NEW addresses. |
 | `requestPgBundle(page, bundle, { tokenAddress })` + `readCapabilitySwitch(popup, rowKey)` / `approveCapabilities(popup, { switches })` / `setConnectedAppAuthorizations(page, host, on)` (`fixtures/playground.ts`, `fixtures/popups.ts`) | The consent switches. A scoped bundle names the contract in `tokenAddress` (without one it carries `"0x0"`, which the wallet refuses). A new card's switch is found by its `data-cap-row` (`authorizations`, `address-book`, `private-events`, `unknown`); an "Already granted" card has none. The Settings helper finds the app by the host its session was made on, then reopens the page to prove the stored state. `readStoredCapability(ctx, origin, type)` (`fixtures/dappSession.ts`) reads what the grant stored. |
 | `lockWallet(page)` / `lockThroughConfirmDialog(page)` / `waitForLockScreen(page)` | Lock from the header. `lockWallet` expects no approved send running; with one running the button asks first, and `lockThroughConfirmDialog` confirms that dialog and returns its copy. Both wait for the session record to go, then for `/popup/auth`. |
@@ -219,13 +278,13 @@ The network suite is a required PR gate at retry 0 (`extension-network-e2e-statu
 
 | Resource | Per-worktree isolated? | How |
 |---|---|---|
-| Anvil PID | Yes | spawned by setup; tracked in lockfile |
-| Aztec sandbox PID | Yes | spawned by setup; tracked in lockfile; data dir `~/.cache/nulo-e2e/nulo-aztec-<pid>-<ts>` on real disk (NOT tmpfs — see `lockfile.ts` `E2E_DATA_ROOT`; override `NULO_E2E_DATA_ROOT`). Reap leftovers with `bun run e2e:reap`. |
-| Playground vite PID | Yes | spawned by setup; tracked in lockfile |
-| Ports | Yes | bind-and-release via `resolve-ports.ts`; spawn re-binds |
+| Anvil, aztec, playground | Yes | spawned by setup with a launch marker and owner in their environment, recorded in the lockfile; stopped by group, then by marker |
+| Aztec run dir | Yes | `~/.cache/nulo-e2e/nulo-aztec-<pid>-<ts>` on real disk (NOT tmpfs — see `lockfile.ts` `E2E_DATA_ROOT`; override `NULO_E2E_DATA_ROOT`), stamped with the node's marker; the node writes `<dir>/data` |
+| Ports | Yes | claimed in `~/.agents/ports.md` under the run id before the build; bind-tested again at boot |
+| Forks, Firefox | Yes | inherit the run marker; a dead run's forks are stopped by `e2e:reap` and the next run's setup, its Firefox launches by the next Firefox launch or `e2e:reap` |
 | Wallet build artifact | Yes | `dist/chrome/` lives inside the worktree |
 | Chrome user-data-dir | Yes | Puppeteer creates a fresh `/tmp` dir per `launch()` |
-| Chrome orphan cleanup | Yes | `pkill -f "chrome.*--load-extension=$EXTENSION_PATH"` is path-scoped |
+| Chrome orphan cleanup | Yes | `pkill -f "chrome.*--load-extension=$EXTENSION_PATH"`, path-scoped, at every run's setup and teardown, and in `e2e:reap` while no run of the worktree is live (Chrome shows no marker) |
 | `.test-config.json` | Yes | per worktree |
 | `.e2e-state/` lockfile | Yes | per worktree |
 | EmbeddedWallet PXE temp dir | Yes | random `tmpdir()/nulo-e2e-<8hex>` per call |

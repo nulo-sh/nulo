@@ -4,8 +4,10 @@
  * request. The passkey window (PATH B) runs the same `runPasskeyCeremony`.
  *
  * Escape, Cancel and unmount abort one controller, and only that abort is a cancel: it rejects
- * with `UserRejectedError`, so callers stay silent. Any other failure, a dismissed or timed-out
- * prompt included, is emitted as is for callers to word through `classifyPasskeyFailure`.
+ * with `UserRejectedError`, so callers stay silent, still wrapped in a `PasskeyUnconfirmedError`
+ * when a credential was already minted, so a retry confirms it rather than minting another. Any
+ * other failure, a dismissed or timed-out prompt included, is emitted as is for callers to word
+ * through `classifyPasskeyFailure`.
  */
 import { computed, onBeforeUnmount, onMounted, useTemplateRef } from "vue"
 import { createFocusTrap, type FocusTrap } from "focus-trap"
@@ -13,6 +15,7 @@ import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import type { PasskeyRequest } from "@/wallet/services/passkey/spec"
 import { UserRejectedError } from "@nulo/extension-messaging/errors"
 import { runPasskeyCeremony } from "@/wallet/utils/passkey-ceremony"
+import { PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
 import { isPasskeyCancel, PASSKEY_COPY, passkeyTag } from "@/utils/passkey-copy"
 import PasskeyScreen from "@/components/composite/PasskeyScreen.vue"
 
@@ -65,7 +68,13 @@ onMounted(async () => {
 	} catch (err) {
 		settled = true
 		if (isPasskeyCancel(err)) {
-			emit("reject", new UserRejectedError("User cancelled passkey ceremony"))
+			const cancelled = new UserRejectedError("User cancelled passkey ceremony")
+			emit(
+				"reject",
+				err instanceof PasskeyUnconfirmedError
+					? new PasskeyUnconfirmedError(err.credentialId, err.userHandle, cancelled)
+					: cancelled,
+			)
 		} else {
 			emit("reject", err instanceof Error || err instanceof DOMException ? err : new Error(String(err)))
 		}

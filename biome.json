@@ -8,9 +8,8 @@
 			"infra/**",
 			"packages/**",
 			"vitest.base.ts",
-			"scripts/ci-cd/test-soak/**",
+			"scripts/**",
 			"!scripts/ci-cd/test-soak/baselines",
-			"scripts/ci-cd/plans/**",
 			"!**/node_modules",
 			"!**/dist",
 			"!**/target",
@@ -90,6 +89,16 @@
 			}
 		},
 		{
+			"includes": ["scripts/ci-cd/**/*.test.ts"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noTemplateCurlyInString": "off"
+					}
+				}
+			}
+		},
+		{
 			"includes": ["packages/design/src/**"],
 			"linter": {
 				"rules": {
@@ -110,6 +119,34 @@
 							"options": {
 								"deniedGlobals": {
 									"chrome": "@nulo/design is platform-agnostic — no chrome.*"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"includes": ["packages/token-list/src/**", "!packages/token-list/src/**/*.test.ts"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedImports": {
+							"level": "error",
+							"options": {
+								"patterns": [
+									{
+										"group": ["@nulo/*", "@aztec-labs/*", "@aztec-foundation/*", "zod"],
+										"message": "@nulo/token-list is a dependency-free leaf: its signer runs with bun --no-install, and the extension pins its Aztec-derived constants"
+									}
+								]
+							}
+						},
+						"noRestrictedGlobals": {
+							"level": "error",
+							"options": {
+								"deniedGlobals": {
+									"chrome": "@nulo/token-list runs in CI and in the wallet — no chrome.*"
 								}
 							}
 						}

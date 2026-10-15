@@ -62,10 +62,7 @@ const steps: Array<{ num: string; label: string }> = [
 }
 
 .num {
-	font-family: var(--font-mono);
-	font-size: 10px;
-	font-weight: 600;
-	letter-spacing: 0.08em;
+	composes: type--meta from global;
 	color: var(--txt-tertiary);
 	transition: color 0.2s var(--bezier);
 }
@@ -79,11 +76,7 @@ const steps: Array<{ num: string; label: string }> = [
 }
 
 .label {
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.16em;
-	text-transform: uppercase;
+	composes: type--label-section from global;
 	color: var(--txt-tertiary);
 	transition: color 0.2s var(--bezier);
 }

@@ -70,19 +70,13 @@ const emit = defineEmits(["click"])
 }
 
 .profile_label {
-	font-family: var(--font-mono);
-	font-size: 9px;
-	font-weight: 500;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
+	composes: type--label from global;
 	color: var(--nulo-secondary);
 }
 
 .profile_name {
-	font-family: var(--font-headline);
+	composes: type--name from global;
 	font-size: 14px;
-	font-weight: 500;
-	letter-spacing: -0.02em;
 	color: var(--txt-primary);
 	max-width: 180px;
 

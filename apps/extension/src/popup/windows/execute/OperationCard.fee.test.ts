@@ -6,14 +6,19 @@
 import { config, flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { createPinia } from "pinia"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import DottedTerm from "@/components/composite/DottedTerm.vue"
+import { GLOSSARY } from "@/utils/glossary"
 import OperationCard from "./OperationCard.vue"
 
 const mocks = vi.hoisted(() => ({
 	getGasBalances: vi.fn(),
 	getFpcs: vi.fn(),
 	storageSet: vi.fn(async (_items: Record<string, unknown>) => {}),
+	saveFeePick: vi.fn(async () => true),
 	feeJuiceUsd: undefined as number | undefined,
 }))
+
+vi.mock("@/utils/core", () => ({ managers: { profile: { saveFeePick: mocks.saveFeePick } } }))
 
 // Vitest 4 requires `function` expressions for mocks instantiated with `new`.
 vi.mock("@/wallet/services/execution/client", () => ({
@@ -130,8 +135,6 @@ const mountCard = async (op: unknown, dapp?: { name: string }) => {
 }
 /** The fee settings the card last handed the window. */
 const lastSettings = (w: VueWrapper) => w.emitted<[number, unknown]>("updateFeeSettings")?.at(-1)?.[1]
-const FEE_PICKS_KEY = "nulo:ui:feePaymentMethods"
-const savedKeys = () => mocks.storageSet.mock.calls.flatMap(([items]) => Object.keys(items))
 
 /** The text a screen reader reaches in `el`: every text node outside an `aria-hidden` subtree. */
 function spokenText(el: Element): string {
@@ -144,6 +147,13 @@ function spokenText(el: Element): string {
 		if (text) parts.push(text)
 	}
 	return parts.join(" ")
+}
+
+/** The text a sighted person reads in `el`: a dotted term's always-mounted definition is `hidden`. */
+function shownText(el: Element): string {
+	const clone = el.cloneNode(true) as Element
+	for (const node of clone.querySelectorAll("[hidden]")) node.remove()
+	return clone.textContent?.replace(/\s+/g, " ").trim() ?? ""
 }
 
 const fee = (w: VueWrapper) => w.find('[data-testid="fee-settings-card"]')
@@ -217,7 +227,7 @@ describe("OperationCard — the sponsor a wire-shaped transaction defaults to", 
 		mocks.getFpcs.mockResolvedValue(fpcs)
 		const w = await mountCard(sendTx(exec), dapp)
 		expect(lastSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
-		expect(savedKeys()).not.toContain(FEE_PICKS_KEY)
+		expect(mocks.saveFeePick).not.toHaveBeenCalled()
 	})
 })
 
@@ -225,7 +235,7 @@ describe("OperationCard — a sponsor that can't cover a wire-shaped transaction
 	const SPONSOR_AT = field(0x0a11ce5c0ffeen)
 	const NULO_ROW = { ...NULO_SPONSOR, address: SPONSOR_AT }
 	const withVerdict = (funded: boolean) => ({ ...ESTIMATE, sponsorFunding: { fpcId: "s1", address: SPONSOR_AT, funded } })
-	const NO_PAYER = "The sponsor can't cover this fee right now."
+	const NO_PAYER = "The sponsor you chose can't cover this fee right now."
 	const notice = (w: VueWrapper) => w.find('[data-testid="fee-sponsor-short"]')
 
 	test("short: the card withdraws the sponsor and says why, and the pick that replaces it is what it hands the window", async () => {
@@ -266,7 +276,7 @@ describe("OperationCard — a sponsor that can't cover a wire-shaped transaction
 		})
 		const w = await mountCard(
 			{ ...op, sponsorFunding: lure, opts: { ...op.opts, sponsorFunding: lure } },
-			{ name: "The sponsor can't cover this fee right now, so Evil pays it." },
+			{ name: "The sponsor you chose can't cover this fee right now. Evil pays it instead." },
 		)
 		await w.setProps({ feeEstimate: withVerdict(true) })
 		await flushPromises()
@@ -278,4 +288,84 @@ describe("OperationCard — a sponsor that can't cover a wire-shaped transaction
 		await flushPromises()
 		expect(notice(w).text()).toBe(NO_PAYER)
 	})
+})
+
+describe("OperationCard — a wire-shaped transaction whose fee the app pays", () => {
+	const APP_FPC = field(0x2f1e0d9c8b7a69584736251403f2e1d0c9b8a7968574635241302f1e0d9c8b7an)
+	// The app's own fee settings as the wallet-sdk serializes them: each bigint a decimal string.
+	const GAS_SETTINGS = {
+		maxFeesPerGas: { feePerDaGas: "1200000000", feePerL2Gas: "1200000000" },
+		maxPriorityFeesPerGas: { feePerDaGas: "300000000", feePerL2Gas: "300000000" },
+	}
+	const appPaid = () => ({
+		...sendTx({ feePayer: APP_FPC }),
+		opts: { from: OWNER, fee: { gasSettings: GAS_SETTINGS } },
+		feeSettings: { paymentMethod: { kind: "embedded" } },
+	})
+	const mountWith = async (feeEstimate: unknown) => {
+		const w = mount(OperationCard, {
+			props: {
+				op: appPaid() as never,
+				index: 0,
+				profile: { id: "p1", name: "Main" } as never,
+				feeEstimate: feeEstimate as never,
+				dapp: { name: "Swap" },
+			},
+			// The real term, so the test reads its markup: the key, the Tab stop, the hidden definition.
+			global: { stubs, components: { DottedTerm } },
+		})
+		mounted = w
+		await flushPromises()
+		return w
+	}
+	const region = (w: VueWrapper) => w.get('[data-testid="execute-op-app-payer-live"]')
+	const row = (w: VueWrapper) => w.get('[data-testid="execute-op-fee-set-badge"]')
+	const covered = { address: APP_FPC, funded: true, provenShort: false }
+
+	test("no estimate has landed: the row names the app, its region empty", async () => {
+		const w = await mountWith(undefined)
+		expect(row(w).text()).toBe("Fee payment method set by Swap")
+		expect(w.find('[data-testid="execute-op-app-fee"]').exists()).toBe(false)
+		expect(region(w).attributes()).toMatchObject({ role: "status", "aria-live": "polite" })
+		expect(region(w).text()).toBe("")
+		expect(fee(w).exists()).toBe(false)
+	})
+
+	test("the estimate lands: the row reads the fee limit, and no priority part when the app set none", async () => {
+		const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered })
+		expect(row(w).text()).toBe("Fee up to 3.577824 FJ")
+		expect(w.get('[data-testid="execute-op-app-fee"]').text()).toBe("Fee up to 3.577824 FJ")
+		expect(region(w).text()).toBe("")
+		expect(w.findAllComponents(DottedTerm)).toHaveLength(0)
+	})
+
+	// An approval window carries one operation and nothing else on it is dotted, so the card's
+	// dotted terms are the screen's, which the glossary rule caps at two.
+	test("the app asked for a priority fee: one sentence, its priority fee the screen's one dotted term, defined by the glossary", async () => {
+		const w = await mountWith({
+			...ESTIMATE,
+			maxFee: "16000000000000000",
+			maxFeeFormatted: "0.016",
+			priorityFee: "4000000000000000",
+			priorityFeeFormatted: "0.004",
+			appPayerFunding: covered,
+		})
+		expect(shownText(row(w).element)).toBe("Fee up to 0.016 FJ, includes a 0.004 FJ priority fee the app asked for")
+		expect(w.findAllComponents(DottedTerm).map((t) => t.props("term"))).toEqual(["priority-fee"])
+		const term = w.get('[data-testid="execute-op-priority-term"]')
+		expect(term.text()).toBe("priority fee")
+		expect(term.attributes("tabindex")).toBe("0")
+		const description = row(w).element.querySelector(`[id="${term.attributes("aria-describedby")}"]`)
+		expect(description?.hasAttribute("hidden")).toBe(true)
+		expect(description?.textContent).toBe(GLOSSARY["priority-fee"].definition)
+	})
+
+	test.each([true, false])(
+		"the app's fee contract reads short (proven: %s): the figure stays and the hedged notice shows under the row",
+		async (provenShort) => {
+			const w = await mountWith({ ...ESTIMATE, appPayerFunding: { address: APP_FPC, funded: false, provenShort } })
+			expect(row(w).text()).toBe("Fee up to 3.577824 FJ")
+			expect(region(w).text()).toBe("This app's fee contract may not cover this fee right now.")
+		},
+	)
 })

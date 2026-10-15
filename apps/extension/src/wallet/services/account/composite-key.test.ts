@@ -54,7 +54,13 @@ describe("AccountService — composite storage key", () => {
 		services.add(
 			svc(PROFILE_SERVICE_NAME, { onProfileDeleted: new EventHandler(), getDeletionState: () => new ProfileDeletionState() }),
 		)
-		services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {}, getL1ChainIdStored: async () => 1 }))
+		services.add(
+			svc(NETWORK_SERVICE_NAME, {
+				registerChainPurgeSubscriber: () => {},
+				isChainLive: async () => true,
+				getL1ChainIdStored: async () => 1,
+			}),
+		)
 		accountService = new AccountService(new LoggerStore(new ConfigStore()), api)
 		services.add(accountService)
 		await services.start()

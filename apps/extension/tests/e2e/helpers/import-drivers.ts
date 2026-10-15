@@ -15,6 +15,7 @@ import { basename, join } from "node:path"
 import { type Page, TimeoutError } from "puppeteer"
 import { expect } from "vitest"
 import { defaultProfileName } from "@/utils/profile-name"
+import type { ILogger } from "@nulo/wallet-core/logger"
 import type { VirtualAuthenticator } from "../fixtures/browser"
 import {
 	clickByTestId,
@@ -26,6 +27,7 @@ import {
 	waitForHash,
 	withTimeoutMessage,
 	pickFileByTestId,
+	waitForServiceReady,
 } from "../fixtures/extension"
 import { expectNewProfileNamed, readProfileNames } from "../fixtures/helpers"
 import { refusePasskeyStep } from "../fixtures/passkey"
@@ -169,11 +171,11 @@ export async function submitWhenEnabled(page: Page, testId: string): Promise<voi
 	await clickByTestId(page, testId)
 }
 
-/** Open the popup and land on `/popup/import` (waits for register + global-loader to clear). */
+/** Open the popup and land on `/popup/import` (waits for register and the service's Ready). */
 export async function gotoPopupImport(ctx: ExtensionContext): Promise<Page> {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/register", 15_000)
-	await page.waitForFunction(() => !document.querySelector('[data-testid="global-loader"]'), { timeout: 15_000, polling: 500 })
+	await waitForServiceReady(page, 15_000)
 	await page.evaluate(() => {
 		window.location.hash = "#/popup/import"
 	})
@@ -398,7 +400,8 @@ export async function deriveNuloAccountAddress(masterBase64: string, l1ChainId: 
 	const { createLogger } = await import("@aztec-labs/foundation/log")
 	const master = Fr.fromBuffer(Buffer.from(masterBase64, "base64"))
 	const seed = await deriveAccountSeed(master, l1ChainId, 0, index) // AccountType.Nulo_v1 = 0
-	const account = await NuloAccount.new(seed, createLogger("import-drivers"))
+	// Aztec's Logger has no `log`; NuloAccount calls it only from its PXE and transaction methods.
+	const account = await NuloAccount.new(seed, createLogger("import-drivers") as unknown as ILogger, "account")
 	return account.address.toString()
 }
 
@@ -422,6 +425,11 @@ export interface SyntheticBackupOpts {
 	 *  that to build pre-baseline (legacy `schema-version`) blobs. */
 	bodyOverrides?: Record<string, unknown>
 }
+
+/** The synthetic backup's profile id. It has the shape the wallet generates (8 hex chars) because a
+ *  restore keeps a backup's id only when it does; a leg that re-imports the same file and expects the
+ *  same profile id (the tombstone successor in profile-reimport-matrix) depends on that reuse. */
+export const SYNTHETIC_PROFILE_ID = "e2e5a1d0"
 
 /** Build a minimum-viable full-backup payload (current metadata fields + valid SHA-256
  *  checksum) the importer accepts: profile + one network + one account + empty
@@ -448,12 +456,12 @@ export function buildSyntheticBackup({
 		// for a synthetic backup with no imported-key rows).
 		"imported-keys-dek": Buffer.from(new Uint8Array(32).fill(0x33)).toString("base64"),
 		data: {
-			profile: { id: "syn-profile-id", name: profileName, type: "password" },
+			profile: { id: SYNTHETIC_PROFILE_ID, name: profileName, type: "password" },
 			// No network slice: the import reseeds the built-in networks and binds rows by chainId.
 			account: [
 				{
 					address: accountAddress ?? `0x${"01".repeat(32)}`,
-					profileId: "syn-profile-id",
+					profileId: SYNTHETIC_PROFILE_ID,
 					chainId: 0,
 					l1ChainId,
 					name: "Account",
@@ -514,8 +522,8 @@ export function buildSyntheticPasskeyBackup(passkey: RegisteredPasskey, profileN
 		"master-key": passkey.credentialId,
 		"imported-keys-dek-sealed": passkey.dekSealed,
 		data: {
-			profile: { id: "syn-profile-id", name: profileName, type: "passkey" },
-			account: [{ ...passkey.account, profileId: "syn-profile-id", name: "Account", visible: true }],
+			profile: { id: SYNTHETIC_PROFILE_ID, name: profileName, type: "passkey" },
+			account: [{ ...passkey.account, profileId: SYNTHETIC_PROFILE_ID, name: "Account", visible: true }],
 			token: [],
 			// Present though empty: the e2e builds' backup migration reads this slice.
 			contact: [],

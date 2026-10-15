@@ -16,6 +16,7 @@ import { TokenServiceClient } from "@/wallet/services/token/client"
 import BalanceView from "../components/modules/general/BalanceView.vue"
 import RecentActivityView from "../components/modules/general/RecentActivityView.vue"
 import RecoveryModeBanner from "../components/modules/general/RecoveryModeBanner.vue"
+import RestoreOutcomeBanner from "../components/modules/general/RestoreOutcomeBanner.vue"
 import TokensView from "../components/modules/general/TokensView.vue"
 
 /** Composables */
@@ -56,6 +57,7 @@ onBeforeUnmount(() => {
 
 		<Flex direction="column" gap="16" :class="$style.content">
 			<RecoveryModeBanner />
+			<RestoreOutcomeBanner />
 			<TokensView :seedEntries="seed.entries.value" :seedReady="seed.ready.value" @retry-seed="seed.retry" />
 			<RecentActivityView />
 		</Flex>

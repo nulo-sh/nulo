@@ -23,8 +23,8 @@ const props = defineProps({
 <template>
 	<Flex align="center" justify="center" gap="16" :class="[$style.wrapper, disabled && $style.disabled]">
 		<Flex direction="column" gap="6" wide>
-			<Text size="12" weight="600" color="secondary">{{ label }}</Text>
-			<Text size="13" weight="600" color="primary" :class="$style.value">{{ value }}</Text>
+			<Text variant="label" color="secondary">{{ label }}</Text>
+			<Text variant="name" color="primary" :class="[$style.value, $style.value_size]">{{ value }}</Text>
 		</Flex>
 
 		<Icon v-if="icon" :name="icon" size="14" color="secondary" />
@@ -73,5 +73,9 @@ const props = defineProps({
 	text-overflow: ellipsis;
 
 	white-space: nowrap;
+}
+
+.value_size {
+	font-size: 13px;
 }
 </style>

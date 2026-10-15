@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: The repo half of both store submissions: the icon set and listing assets under `apps/extension/store/`, a Firefox reviewer source package (`apps/extension/store/SOURCE-BUILD.md`, `.github/workflows/source-rebuild.yml`), and opt-in publish jobs for both stores (`scripts/release/publish-chrome-store.ts`, `scripts/release/publish-firefox-amo.ts`, `.github/workflows/release.yml`, `.github/workflows/store-check.yml`).
-- **Open items**: the account-side store steps (publishing the staged Chrome review once approved, the call to make the listing public after a security pass, and Mozilla's possible later review), tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the account-side store steps (publishing the staged Chrome review once approved, the call to make the listing public after a security pass, and Mozilla's possible later review), now in `BEFORE-LAUNCH.md` § 2.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

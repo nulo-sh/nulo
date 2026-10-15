@@ -8,6 +8,14 @@ import { initStoreVersionStamp, listChainStoreDirs, PxeStoreVersionMismatch, PXE
 
 const nullLog = { warn: () => {}, info: () => {}, debug: () => {}, error: () => {}, verbose: () => {}, fatal: () => {} } as never
 
+/** A `Logger` whose `warn` records its arguments: the browser logger hands that `data` to the redactor as is. */
+function spyLog() {
+	const warn = vi.fn()
+	return { warn, log: { ...(nullLog as object), warn } as never }
+}
+
+const REFUSAL = "PXE store version mismatch — refusing to open (preserving data)"
+
 /** Fake store whose `dbVersion` singleton returns a preset stamp; records clear()/set() calls. */
 function fakeStore(storedStamp: string | undefined) {
 	const calls = { cleared: false, set: undefined as string | undefined }
@@ -65,22 +73,33 @@ describe("initStoreVersionStamp — refuse-and-preserve on mismatch (D-B2v3, 5.0
 
 	it("THROWS (never wipes) on a schema-version mismatch", async () => {
 		const { store, calls } = fakeStore(stampFor(PXE_DATA_SCHEMA_VERSION_PIN - 1, ROLLUP))
-		await expect(initStoreVersionStamp(store, ROLLUP, nullLog)).rejects.toBeInstanceOf(PxeStoreVersionMismatch)
+		const { warn, log } = spyLog()
+		await expect(initStoreVersionStamp(store, ROLLUP, log)).rejects.toBeInstanceOf(PxeStoreVersionMismatch)
 		expect(calls.cleared).toBe(false)
 		expect(calls.set).toBeUndefined()
+		const detail = `schema version changed (stored ${PXE_DATA_SCHEMA_VERSION_PIN - 1} != current ${PXE_DATA_SCHEMA_VERSION_PIN})`
+		expect(warn.mock.calls).toEqual([[REFUSAL, { detail }]])
 	})
 
 	it("THROWS (never wipes) on a rollup-address mismatch", async () => {
 		const otherRollup = "0x00000000000000000000000000000000000000bb"
 		const { store, calls } = fakeStore(stampFor(PXE_DATA_SCHEMA_VERSION_PIN, otherRollup))
-		await expect(initStoreVersionStamp(store, ROLLUP, nullLog)).rejects.toBeInstanceOf(PxeStoreVersionMismatch)
+		const { warn, log } = spyLog()
+		await expect(initStoreVersionStamp(store, ROLLUP, log)).rejects.toBeInstanceOf(PxeStoreVersionMismatch)
 		expect(calls.cleared).toBe(false)
+		const [stored, current] = [otherRollup, ROLLUP].map((address) => EthAddress.fromString(address).toString())
+		expect(warn.mock.calls).toEqual([[REFUSAL, { detail: `rollup address changed (stored ${stored} != current ${current})` }]])
 	})
 
 	it("THROWS (never wipes) on an unparseable stamp — a hostile/corrupt blob is refused, not wiped", async () => {
 		const { store, calls } = fakeStore("not-a-valid-database-version-stamp")
-		await expect(initStoreVersionStamp(store, ROLLUP, nullLog)).rejects.toBeInstanceOf(PxeStoreVersionMismatch)
+		const { warn, log } = spyLog()
+		const refused = initStoreVersionStamp(store, ROLLUP, log)
+		await expect(refused).rejects.toBeInstanceOf(PxeStoreVersionMismatch)
+		await expect(refused).rejects.toThrow("stamp failed to parse (")
 		expect(calls.cleared).toBe(false)
+		// The parser's message quotes the stored bytes, which the log line must never carry.
+		expect(warn.mock.calls).toEqual([[REFUSAL, { reason: "stamp failed to parse" }]])
 	})
 })
 

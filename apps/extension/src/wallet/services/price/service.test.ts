@@ -12,11 +12,14 @@ import { fakeBrowser } from "@webext-core/fake-browser"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { ServiceCollection } from "@/wallet/base"
-import { LoggerStore, LogLevel } from "@/wallet/logger"
+import { tokenListStub } from "@/wallet/services/composition-harness"
+import { LoggerStore } from "@/wallet/logger"
 import { ConfigStore } from "@/wallet/config"
 import { CONFIG_SERVICE_NAME } from "@/wallet/services/config/spec"
 import { PROFILE_SERVICE_NAME, type ProfileInfo } from "@/wallet/services/profile/spec"
-import { PRICE_REFRESH_ALARM_NAME, PriceService, QUOTE_TTL_MS, type PriceState } from "./service"
+import { TEST_LIST_ENTRIES, TEST_PRICED_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import { TOKEN_LIST_SERVICE_NAME, type TokenListSnapshot } from "@/wallet/services/token-list/spec"
+import { PRICE_REFRESH_ALARM_NAME, PriceService, QUOTE_TTL_MS, type PriceSnapshot, type PriceState } from "./service"
 
 type FetchResponse = { ok: boolean; status: number; json(): Promise<unknown> }
 
@@ -41,6 +44,7 @@ async function harness(opts?: { enabled?: boolean; profile?: ProfileInfo | undef
 		body: opts?.body ?? goodBody(1_000_000),
 		fetchCalls: [] as string[],
 		fetchImpl: undefined as undefined | (() => Promise<FetchResponse>),
+		list: { sequence: 1, keyId: "nulo-ci-1", entries: TEST_LIST_ENTRIES } as TokenListSnapshot | undefined,
 	}
 
 	const fakeConfig = {
@@ -56,6 +60,13 @@ async function harness(opts?: { enabled?: boolean; profile?: ProfileInfo | undef
 		getActiveProfile: async () => state.profile,
 	}
 
+	const fakeTokenList = {
+		name: TOKEN_LIST_SERVICE_NAME,
+		start: async () => {},
+		onListChanged: new EventHandler<TokenListSnapshot>(),
+		getSnapshot: () => state.list,
+	}
+
 	const fetchFn = vi.fn(async (url: string): Promise<FetchResponse> => {
 		state.fetchCalls.push(url)
 		if (state.fetchImpl) return state.fetchImpl()
@@ -69,12 +80,14 @@ async function harness(opts?: { enabled?: boolean; profile?: ProfileInfo | undef
 	services.add(fakeConfig as any)
 	// biome-ignore lint/suspicious/noExplicitAny: minimal IService fakes at the collection seam
 	services.add(fakeProfile as any)
+	// biome-ignore lint/suspicious/noExplicitAny: minimal IService fakes at the collection seam
+	services.add(fakeTokenList as any)
 	services.add(service)
 	if (opts?.start !== false) {
 		await services.start()
 	}
 
-	return { service, services, state, fetchFn, fakeConfig, fakeProfile, browserApi }
+	return { service, services, state, fetchFn, fakeConfig, fakeProfile, fakeTokenList, browserApi }
 }
 
 async function alarmExists(): Promise<boolean> {
@@ -89,7 +102,7 @@ beforeEach(() => {
 describe("PriceService — refresh pipeline", () => {
 	test("fetches the full mapped id set in one batched, stable request", async () => {
 		const { service, state } = await harness()
-		const quotes = await service.refreshIfStale()
+		const { quotes } = await service.refreshIfStale()
 		expect(state.fetchCalls).toHaveLength(1)
 		expect(state.fetchCalls[0]).toContain("ids=aztec,euro-coin,tether,usd-coin")
 		expect(state.fetchCalls[0]).toContain("vs_currencies=usd")
@@ -101,10 +114,25 @@ describe("PriceService — refresh pipeline", () => {
 	test("emits onQuotesUpdated after a successful refresh", async () => {
 		const { service } = await harness()
 		const seen: PriceState[] = []
-		service.onQuotesUpdated.add((s) => seen.push(s))
+		service.onQuotesUpdated.add((s) => seen.push(s.quotes))
 		await service.refreshIfStale()
 		expect(seen).toHaveLength(1)
 		expect(Object.keys(seen[0]).sort()).toEqual(["aztec", "usd-coin"])
+	})
+
+	test("quotes carry the list's mapping, and a new list re-emits them with its own, fetching nothing", async () => {
+		const { service, state, fakeTokenList } = await harness()
+		expect((await service.refreshIfStale()).pricedTokens).toEqual(TEST_PRICED_TOKENS)
+		const seen: PriceSnapshot[] = []
+		service.onQuotesUpdated.add((s) => seen.push(s))
+
+		state.list = { sequence: 2, keyId: "nulo-ci-1", entries: TEST_LIST_ENTRIES.filter((e) => e.symbol !== "USDC") }
+		fakeTokenList.onListChanged.invoke(state.list)
+		await vi.waitFor(() => expect(seen).toHaveLength(1))
+
+		expect(Object.values(seen[0].pricedTokens).sort()).toEqual(["euro-coin", "tether"])
+		expect(Object.keys(seen[0].quotes).sort()).toEqual(["aztec", "usd-coin"])
+		expect(state.fetchCalls).toHaveLength(1)
 	})
 
 	test("fresh cache short-circuits: second refreshIfStale does not fetch", async () => {
@@ -148,7 +176,7 @@ describe("PriceService — refresh pipeline", () => {
 		const { service, state } = await harness({
 			body: { aztec: { usd: "not-a-number" }, "usd-coin": { usd: -3 } },
 		})
-		const quotes = await service.refreshIfStale()
+		const { quotes } = await service.refreshIfStale()
 		expect(quotes).toEqual({})
 		// Failure set a backoff window: an immediate retry must not fetch.
 		await service.refreshIfStale()
@@ -159,7 +187,7 @@ describe("PriceService — refresh pipeline", () => {
 		const { service } = await harness({
 			body: { aztec: { usd: 0.0147 }, "usd-coin": { usd: 50 } }, // USDC at $50 is provider garbage.
 		})
-		const quotes = await service.refreshIfStale()
+		const { quotes } = await service.refreshIfStale()
 		expect(quotes.aztec).toBeDefined()
 		expect(quotes["usd-coin"]).toBeUndefined()
 	})
@@ -167,7 +195,7 @@ describe("PriceService — refresh pipeline", () => {
 	test("HTTP failure backs off, then retries after the window", async () => {
 		const { service, state } = await harness()
 		state.fetchImpl = async () => ({ ok: false, status: 429, json: async () => ({}) })
-		expect(await service.refreshIfStale()).toEqual({})
+		expect((await service.refreshIfStale()).quotes).toEqual({})
 		expect(state.fetchCalls).toHaveLength(1)
 
 		// Within the backoff window: suppressed.
@@ -177,7 +205,7 @@ describe("PriceService — refresh pipeline", () => {
 		// Past the (jittered ≤ 1.25×base) window: retried.
 		state.nowMs += 60_000
 		state.fetchImpl = undefined
-		const quotes = await service.refreshIfStale()
+		const { quotes } = await service.refreshIfStale()
 		expect(state.fetchCalls).toHaveLength(2)
 		expect(quotes.aztec).toBeDefined()
 	})
@@ -185,7 +213,7 @@ describe("PriceService — refresh pipeline", () => {
 	test("a newer stored quote is never overwritten by an older response (monotonic)", async () => {
 		const { service, state } = await harness()
 		await service.refreshIfStale()
-		const first = await service.getQuotes()
+		const { quotes: first } = await service.getQuotes()
 
 		// Simulate a late response: rewind the clock so the incoming quote is older.
 		state.nowMs -= 5_000
@@ -195,7 +223,7 @@ describe("PriceService — refresh pipeline", () => {
 		await service.onAlarmTick()
 		state.nowMs += 5_000
 
-		const after = await service.getQuotes()
+		const { quotes: after } = await service.getQuotes()
 		expect(after.aztec?.usd).toBe(first.aztec?.usd)
 	})
 })
@@ -205,7 +233,7 @@ describe("PriceService — staleness", () => {
 		const { service, state } = await harness()
 		await service.refreshIfStale()
 		state.nowMs += QUOTE_TTL_MS + 1
-		expect(await service.getQuotes()).toEqual({})
+		expect((await service.getQuotes()).quotes).toEqual({})
 	})
 
 	test("provider-stale data (old last_updated_at) is treated as stale", async () => {
@@ -217,7 +245,7 @@ describe("PriceService — staleness", () => {
 			},
 		})
 		state.nowMs = nowSec * 1000
-		const quotes = await service.refreshIfStale()
+		const { quotes } = await service.refreshIfStale()
 		expect(quotes.aztec).toBeUndefined()
 		expect(quotes["usd-coin"]).toBeDefined()
 	})
@@ -226,8 +254,8 @@ describe("PriceService — staleness", () => {
 describe("PriceService — kill switch (showFiatValues)", () => {
 	test("disabled: getQuotes is empty and nothing is fetched", async () => {
 		const { service, state } = await harness({ enabled: false })
-		expect(await service.getQuotes()).toEqual({})
-		expect(await service.refreshIfStale()).toEqual({})
+		expect((await service.getQuotes()).quotes).toEqual({})
+		expect((await service.refreshIfStale()).quotes).toEqual({})
 		expect(state.fetchCalls).toHaveLength(0)
 	})
 
@@ -237,14 +265,14 @@ describe("PriceService — kill switch (showFiatValues)", () => {
 		expect(await alarmExists()).toBe(true)
 
 		const seen: PriceState[] = []
-		service.onQuotesUpdated.add((s) => seen.push(s))
+		service.onQuotesUpdated.add((s) => seen.push(s.quotes))
 		state.enabled = false
 		fakeConfig.onUpdate.invoke({ key: "showFiatValues", value: false })
 		await vi.waitFor(() => {
 			expect(seen.at(-1)).toEqual({})
 		})
 		expect(await alarmExists()).toBe(false)
-		expect(await service.getQuotes()).toEqual({})
+		expect((await service.getQuotes()).quotes).toEqual({})
 	})
 
 	test("a late in-flight response cannot repopulate a cleared cache", async () => {
@@ -267,18 +295,18 @@ describe("PriceService — kill switch (showFiatValues)", () => {
 		release?.()
 		await pending
 		state.enabled = true
-		expect(await service.getQuotes()).toEqual({})
+		expect((await service.getQuotes()).quotes).toEqual({})
 	})
 
 	test("a failed transition is logged as a warning, and the next flip still runs behind it", async () => {
 		const { service, state, fakeConfig, fetchFn, browserApi } = await harness()
 		await service.refreshIfStale()
 		// biome-ignore lint/suspicious/noExplicitAny: spying on the protected BaseService log seam
-		const log = vi.spyOn(service as any, "log")
+		const log = vi.spyOn(service as any, "logWarn")
 		const remove = vi.spyOn(browserApi.storage.local, "remove").mockRejectedValueOnce(new Error("quota"))
 		state.enabled = false
 		fakeConfig.onUpdate.invoke({ key: "showFiatValues", value: false })
-		await vi.waitFor(() => expect(log).toHaveBeenCalledWith(LogLevel.Warn, "config-change handling failed", expect.any(Error)))
+		await vi.waitFor(() => expect(log).toHaveBeenCalledWith("config-change handling failed", expect.any(Error)))
 		expect(remove).toHaveBeenCalledTimes(1)
 
 		fetchFn.mockClear()
@@ -298,7 +326,7 @@ describe("PriceService — kill switch (showFiatValues)", () => {
 			expect(await alarmExists()).toBe(true)
 			expect(fetchFn).toHaveBeenCalled()
 		})
-		expect(Object.keys(await service.getQuotes())).toHaveLength(2)
+		expect(Object.keys((await service.getQuotes()).quotes)).toHaveLength(2)
 	})
 })
 
@@ -331,6 +359,7 @@ describe("PriceService — unlock-gated alarm lifecycle", () => {
 		services.add(fakeConfig as any)
 		// biome-ignore lint/suspicious/noExplicitAny: minimal IService fakes at the collection seam
 		services.add(fakeProfile as any)
+		services.add(tokenListStub())
 		services.add(service)
 		await services.start()
 		expect(await alarmExists()).toBe(false)
@@ -381,7 +410,7 @@ describe("PriceService — SW-side reads", () => {
 				bogus: { coingeckoId: "bogus", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null },
 			}),
 		})
-		const quotes = await service.getQuotes()
+		const { quotes } = await service.getQuotes()
 		expect(quotes.aztec).toBeUndefined()
 		expect(quotes.bogus).toBeUndefined()
 	})
@@ -401,7 +430,7 @@ describe("PriceService — race pins", () => {
 			await new Promise((r) => setTimeout(r, 5))
 			return value
 		}
-		const quotes = await service.refreshIfStale()
+		const { quotes } = await service.refreshIfStale()
 		expect(quotes).toEqual({})
 		expect(fetchFn).not.toHaveBeenCalled()
 	})
@@ -445,7 +474,7 @@ describe("PriceService — race pins", () => {
 		const flush = () => new Promise((r) => setTimeout(r, 0))
 		const { service, fakeConfig } = await harness()
 		const seen: PriceState[] = []
-		service.onQuotesUpdated.add((s) => seen.push(s))
+		service.onQuotesUpdated.add((s) => seen.push(s.quotes))
 		// Park the disable inside its cache.delete so the re-enable's fresh write can
 		// race it under the UNSERIALIZED code (the disable's late {} emit would then
 		// land after the enable's fresh quotes and blank the UI).
@@ -503,10 +532,10 @@ describe("PriceService — race pins", () => {
 				},
 			}),
 		})
-		expect(await service.getQuotes()).toEqual({})
+		expect((await service.getQuotes()).quotes).toEqual({})
 		// A refresh repairs the cache: the merge must not let the planted
 		// future rows win on their fetchedAt.
-		const quotes = await service.refreshIfStale()
+		const { quotes } = await service.refreshIfStale()
 		expect(quotes.aztec?.usd).toBe(0.0147)
 		expect(quotes["usd-coin"]?.usd).toBe(0.9998)
 	})

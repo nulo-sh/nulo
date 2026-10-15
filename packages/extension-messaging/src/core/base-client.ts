@@ -63,6 +63,8 @@ interface PendingEntry {
 	startedAtMs: number
 	timeoutHandle?: ReturnType<typeof setTimeout>
 	warnHandle?: ReturnType<typeof setTimeout>
+	/** `requestTag`'s value, handed back to `onTerminal`. */
+	tag: unknown
 }
 
 /** Minimal shape of a response envelope's `content` the dispatch reads. */
@@ -78,7 +80,7 @@ export interface ResponseContentLike {
 export abstract class BaseServiceClient<TRequests extends MethodsMap, TEvents extends EventsMap = Record<string, never>> {
 	protected readonly service: string
 	protected readonly logger: ILogger
-	private readonly clientName: string
+	protected readonly clientName: string
 	private readonly defaultTimeoutMs: number
 	private readonly warnAfterMs?: number
 
@@ -121,12 +123,16 @@ export abstract class BaseServiceClient<TRequests extends MethodsMap, TEvents ex
 		// synchronous-send timing the Port transport always had.
 		const ready = this.ensureTransportReady()
 		if (ready) await this.awaitReadyWithinDeadline(ready, deadline, requestId, methodName, timeoutMs)
-		const startedAtMs = Date.now()
 		const content = {
 			requestId,
 			method,
 			params: jsonSanitize(wrapParams(params)) as unknown as Parameters<TRequests[T]>,
 		}
+		// A continuation can run after its deadline (a busy page, a suspended tab, a large payload's
+		// serialization): a caller that gave up must not have its request run. Nothing is awaited from
+		// here to the send.
+		if (Date.now() >= deadline) throw this.makeTimeoutError({ requestId, methodName, timeoutMs })
+		const startedAtMs = Date.now()
 		this.logDebug(`→ ${methodName}`)
 
 		const promise = new Promise<Awaited<ReturnType<TRequests[T]>>>((resolve, reject) => {
@@ -149,6 +155,7 @@ export abstract class BaseServiceClient<TRequests extends MethodsMap, TEvents ex
 				startedAtMs,
 				timeoutHandle,
 				warnHandle,
+				tag: this.requestTag(methodName, params),
 			})
 		})
 
@@ -167,6 +174,10 @@ export abstract class BaseServiceClient<TRequests extends MethodsMap, TEvents ex
 				// catch below; a sync throw is caught by the enclosing try. `settle` is
 				// idempotent, so a disconnect that raced the timeout simply loses.
 				void sent.catch((cause) => {
+					if (!this.pending.has(requestId)) {
+						this.onLateSendFailure(requestId)
+						return
+					}
 					this.settle(
 						requestId,
 						{ reject: this.makeSendFailureError({ requestId, methodName, cause }) },
@@ -195,7 +206,7 @@ export abstract class BaseServiceClient<TRequests extends MethodsMap, TEvents ex
 	protected handleResponse(content: ResponseContentLike): void {
 		const entry = this.pending.get(content.requestId)
 		if (!entry) {
-			this.logWarn("Invalid response received", summarizeContent(content))
+			this.onUnmatchedResponse(content)
 			return
 		}
 		if (content.error !== undefined || content.errorPayload !== undefined) {
@@ -273,7 +284,7 @@ export abstract class BaseServiceClient<TRequests extends MethodsMap, TEvents ex
 		const endedAtMs = Date.now()
 		if ("resolve" in outcome) entry.resolve(outcome.resolve)
 		else entry.reject(outcome.reject)
-		this.onTerminal({ requestId, method: entry.method, startedAtMs: entry.startedAtMs, endedAtMs, status, detail })
+		this.onTerminal({ requestId, method: entry.method, startedAtMs: entry.startedAtMs, endedAtMs, status, detail }, entry.tag)
 		this.logDebug(`← ${entry.method} (${endedAtMs - entry.startedAtMs}ms)`, "pending:", this.pending.size)
 	}
 
@@ -357,8 +368,24 @@ export abstract class BaseServiceClient<TRequests extends MethodsMap, TEvents ex
 	}
 
 	/** Terminal observability. Default no-op; the offscreen subclass records
-	 *  telemetry. Always called exactly once per request. */
-	protected onTerminal(_record: TerminalRecord): void {
+	 *  telemetry. Always called exactly once per request, in the same task that
+	 *  settled the caller's promise, so it runs before any of the caller's handlers. */
+	protected onTerminal(_record: TerminalRecord, _tag?: unknown): void {
+		// no-op by default
+	}
+
+	/** A value kept with the request from just before its wire send to `onTerminal`; never sent. */
+	protected requestTag(_method: string, _params: readonly unknown[]): unknown {
+		return undefined
+	}
+
+	/** A response whose request is no longer pending: late, duplicate or forged. */
+	protected onUnmatchedResponse(content: ResponseContentLike): void {
+		this.logWarn("Invalid response received", summarizeContent(content))
+	}
+
+	/** The wire send failed after the request had already ended, so the receiver never got it. */
+	protected onLateSendFailure(_requestId: number): void {
 		// no-op by default
 	}
 

@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: a pure migration engine in `packages/wallet-core/src/migration/migrator.ts`, the extension registry in `apps/extension/src/wallet/storage/migrations/index.ts` with its `template.ts`, the migration-aware storage facade `apps/extension/src/utils/storage.ts` and the UI barrier `apps/extension/src/components/MigrationBarrier.vue`.
-- **Open items**: the engine has no watchdog on a migration's `up()`, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the engine has no watchdog on a migration's `up()`, tracked in #146.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

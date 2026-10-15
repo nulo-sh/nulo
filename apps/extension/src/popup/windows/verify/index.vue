@@ -4,17 +4,22 @@ import EmojiGrid from "@/components/composite/general/EmojiGrid.vue"
 import ConnectStepBar from "../ConnectStepBar.vue"
 
 /** Vendor */
-import { onMounted, onUnmounted } from "vue"
+import { onMounted, onUnmounted, watch } from "vue"
 import { hashToEmoji } from "@aztec-labs/wallet-sdk/crypto"
 
 /** Composables */
 import { vSnackFooter } from "@/composables/snackInset"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
-import { useDappHostname } from "@/composables/useDappHostname"
+import { HOSTNAME_WARNING, useDappHostname } from "@/composables/useDappHostname"
 import { untilSessionChecked } from "@/composables/useDappApprovalWindow"
 
 /** Services */
-import { DappSessionServiceClient, type DappSession, type DappMetadata } from "@/wallet/services/dapp-session/client"
+import {
+	DappSessionServiceClient,
+	type DappSession,
+	type DappMetadata,
+	type VerificationRefusal,
+} from "@/wallet/services/dapp-session/client"
 import { type Account, AccountServiceClient } from "@/wallet/services/account/client"
 import { NetworkServiceClient, type Network } from "@/wallet/services/network/client"
 import { parseCaipAccount, resolveNetworkByChainId } from "@/wallet/utils/caip"
@@ -26,6 +31,12 @@ import { verifyHeaderLabels } from "./header-labels"
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
+
+const CHECK_LABEL = "Connection check"
+const CHECK_INSTRUCTION =
+	"Check that the app shows these same emojis in the same order. If they differ, the connection may not be safe. Choose They don't match."
+/** A polite region given its text as it mounts may stay silent, so the text follows it. */
+const ANNOUNCE_DELAY_MS = 300
 
 type UIDappMetadata = DappMetadata & {
 	loadingLogo?: boolean
@@ -39,6 +50,14 @@ const dapp = ref<UIDappMetadata>()
 const emojis = ref("")
 const isReconnect = ref(false)
 const alwaysTrust = ref(false)
+/** The key exchange's hash, as the service worker wrote it into the URL; an open without one reports nothing. */
+const checkHash = ref<string>()
+/** One answer per window: either control locks both, released only when that answer fails. */
+const isBusy = ref(false)
+const refusalError = ref<"unremoved" | "failed">()
+/** Fixed wallet copy only: the app's name or hostname never reaches a screen reader through it. */
+const announcement = ref("")
+let announceTimer: ReturnType<typeof setTimeout> | undefined
 
 const signerAccounts = ref<Account[]>([])
 const header = computed(() =>
@@ -57,8 +76,44 @@ const { hostname: dappHostname, isSuspicious: hostnameHasNonAscii } = useDappHos
 const dappSessionService = new DappSessionServiceClient()
 
 const handleConfirm = async () => {
-	if (alwaysTrust.value && session.value) {
-		await dappSessionService.setTrustedVerification(session.value.id, true)
+	if (isBusy.value) return
+	isBusy.value = true
+	try {
+		if (alwaysTrust.value && session.value) {
+			await dappSessionService.setTrustedVerification(session.value.id, true)
+		}
+		// The app's calls wait for this report. Only the URL's hash names this window's key exchange: the
+		// row's may belong to another session of the same app.
+		if (checkHash.value) await dappSessionService.confirmVerification(checkHash.value)
+	} catch (err) {
+		isBusy.value = false
+		throw err
+	}
+	closeCurrentWindow()
+}
+
+/** The window closes only once the app's channels have ended and its rows are known to be gone. */
+const handleRefuse = async () => {
+	const row = session.value
+	if (isBusy.value || !row) return
+	isBusy.value = true
+	refusalError.value = undefined
+	let result: VerificationRefusal
+	try {
+		result = await dappSessionService.refuseVerification({
+			origin: row.dappMetadata?.url ?? "",
+			chainId: row.chainId,
+			profileId: row.profileId,
+		})
+	} catch {
+		refusalError.value = "failed"
+		isBusy.value = false
+		return
+	}
+	if (result === "unavailable") {
+		refusalError.value = "unremoved"
+		isBusy.value = false
+		return
 	}
 	closeCurrentWindow()
 }
@@ -92,6 +147,16 @@ async function resolveSigners() {
 	}
 }
 
+// The watcher stops at unmount, so a session read that answers later starts no timer.
+watch(emojis, (shown) => {
+	if (!shown) return
+	announceTimer = setTimeout(() => {
+		const words = [`${CHECK_LABEL}.`, CHECK_INSTRUCTION]
+		if (hostnameHasNonAscii.value) words.push(HOSTNAME_WARNING)
+		announcement.value = words.join(" ")
+	}, ANNOUNCE_DELAY_MS)
+})
+
 onMounted(async () => {
 	dappSessionService.connect()
 
@@ -104,6 +169,7 @@ onMounted(async () => {
 	// hash, so the trust-decision emojis MUST derive from THIS session's own hash, not
 	// the row's. The row hash is only a legacy fallback for opens without the param.
 	const snapshotHash = router.currentRoute.value.query.verificationHash as string | undefined
+	checkHash.value = snapshotHash
 	isReconnect.value = router.currentRoute.value.query.isReconnect === "true"
 
 	if (!sessionId) {
@@ -135,6 +201,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+	clearTimeout(announceTimer)
 	dappSessionService.disconnect()
 })
 </script>
@@ -153,13 +220,11 @@ onUnmounted(() => {
 				:actionLabel="isReconnect ? 'Reconnected' : 'Connection established'"
 			/>
 			<Flex v-if="emojis" direction="column" gap="12" :class="$style.verification">
-				<SectionLabel label="Connection verification" />
+				<SectionLabel :label="CHECK_LABEL" />
 
 				<Flex direction="column" align="center" gap="12">
 					<div data-testid="verify-emoji-grid"><EmojiGrid :emojis="emojis" /></div>
-					<Text size="12" color="secondary" :style="{ textAlign: 'center', lineHeight: '1.4' }">
-						Verify these emojis match what the app displays to confirm a secure connection
-					</Text>
+					<Text variant="body" color="secondary" :style="{ textAlign: 'center', lineHeight: '1.4' }">{{ CHECK_INSTRUCTION }}</Text>
 				</Flex>
 			</Flex>
 		</Flex>
@@ -167,24 +232,48 @@ onUnmounted(() => {
 		<Flex v-snack-footer direction="column" gap="12" :class="$style.footer">
 			<Flex align="center" justify="between" gap="12" wide>
 				<Flex direction="column" gap="4">
-					<Text size="13" weight="600" color="primary">Always trust</Text>
-					<Text size="12" weight="500" color="tertiary">Skip verification on reconnect</Text>
+					<Text variant="row-title" color="primary" :class="$style.skip_title_size">Skip this check next time</Text>
+					<Text variant="caption" color="tertiary">Only for this app on this network.</Text>
 				</Flex>
 				<div data-testid="verify-always-trust-toggle"><Toggle :modelValue="alwaysTrust" @update:modelValue="(v: boolean) => (alwaysTrust = v)" /></div>
 			</Flex>
 
-			<Button
-				data-testid="verify-confirm-btn"
-				@click="handleConfirm"
-				@keydown.enter="refuseRepeatEnter"
-				wide
-				variant="primary"
-				size="medium"
-				:disabled="!session"
-			>
-				<Text size="13" color="inverse">OK</Text>
-			</Button>
+			<Flex align="center" justify="between" gap="12" wide>
+				<Button
+					data-testid="verify-mismatch-btn"
+					@click="handleRefuse"
+					@keydown.enter="refuseRepeatEnter"
+					wide
+					variant="primary_outline"
+					size="medium"
+					:disabled="!session || isBusy"
+				>
+					They don't match
+				</Button>
+				<Button
+					data-testid="verify-confirm-btn"
+					@click="handleConfirm"
+					@keydown.enter="refuseRepeatEnter"
+					wide
+					variant="primary"
+					size="medium"
+					:disabled="!session || isBusy"
+				>
+					They match
+				</Button>
+			</Flex>
+			<Text v-if="refusalError" variant="body" color="red" role="alert" data-testid="verify-mismatch-error">
+				{{
+					refusalError === "unremoved"
+						? "The connection ended, but this app could not be removed. Remove it in Settings, Connected apps."
+						: "Couldn't disconnect this app. Disconnect it in Settings, Connected apps."
+				}}
+			</Text>
 		</Flex>
+
+		<p :class="$style.visually_hidden" role="status" aria-live="polite" aria-atomic="true" data-testid="verify-announce">
+			{{ announcement }}
+		</p>
 	</Flex>
 </template>
 
@@ -207,5 +296,13 @@ onUnmounted(() => {
 
 .footer {
 	composes: footer from "../window-shell.module.css";
+}
+
+.skip_title_size {
+	font-size: 13px;
+}
+
+.visually_hidden {
+	composes: visually_hidden from "../../components/modules/send/fee-shared.module.css";
 }
 </style>

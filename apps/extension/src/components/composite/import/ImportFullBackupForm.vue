@@ -17,6 +17,12 @@ const props = defineProps({
 	/** Names of the networks a Retry replays; the warning names them. */
 	unrestoredNetworks: { type: Array, default: () => [] },
 	hasOtherErrors: { type: Boolean, default: false },
+	/** Replaces the warning the form words from `unrestoredNetworks` and `hasOtherErrors`. */
+	warningText: { type: String, default: undefined },
+	/** The failed-Retry line the page adds above its buttons, which raises their edge again. */
+	retryFailedAgain: { type: Boolean, default: false },
+	/** Restoring into a new profile asks for its password; restoring into the open one does not. */
+	askNewPassword: { type: Boolean, default: true },
 	error: { type: Object, default: () => ({ type: "", title: "", tooltip: "" }) },
 	isCopied: { type: Boolean, default: false },
 	maxPasswordLength: { type: Number, default: 128 },
@@ -36,13 +42,13 @@ const warningRef = useTemplateRef("warningRef")
 
 const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeatedPassword.value ?? ""))
 const showWarning = computed(() => props.restoreStatus === "finished" && props.isRestoreHasErrors)
-const warningText = computed(() => restoreWarningText(props.unrestoredNetworks, props.hasOtherErrors))
+const shownWarning = computed(() => props.warningText ?? restoreWarningText(props.unrestoredNetworks, props.hasOtherErrors))
 
 // The errors screen's footer buttons appear with the warning and shorten the popup's scroller,
-// which leaves the warning below its edge.
+// which leaves the warning below its edge; the failed-Retry line shortens it once more.
 watch(
-	showWarning,
-	(shown) => {
+	[showWarning, () => props.retryFailedAgain],
+	([shown]) => {
 		const el = shown ? warningRef.value?.$el : null
 		if (!el) return
 		if (hero) hero.reveal(el)
@@ -79,11 +85,11 @@ watch(
 		>
 			<Flex align="center" gap="8" :class="$style.error_title_wrapper">
 				<span :class="$style.error_tag">Error</span>
-				<Text size="12" weight="600" color="red" :class="$style.error_title">{{ error.title }}</Text>
+				<Text variant="body" color="red" :class="$style.error_title">{{ error.title }}</Text>
 				<Icon :name="isCopied ? 'check' : 'copy'" size="13" color="red" />
 			</Flex>
 			<Flex v-if="error.tooltip" align="start" :class="$style.error_description_wrapper" wide>
-				<Text size="12" height="120" color="red" :class="$style.error_description">{{ error.tooltip }}</Text>
+				<Text variant="body" height="120" color="red" :class="$style.error_description">{{ error.tooltip }}</Text>
 			</Flex>
 		</Flex>
 
@@ -99,7 +105,7 @@ watch(
 		>
 			<Flex align="center" gap="8">
 				<span :class="[$style.error_tag, $style.error_tag_warning]">Warning</span>
-				<Text size="12" weight="600" height="120" color="yellow">{{ warningText }}</Text>
+				<Text variant="body" height="120" color="txt-warning">{{ shownWarning }}</Text>
 			</Flex>
 		</Flex>
 	</div>
@@ -110,6 +116,7 @@ watch(
 			v-model="decryptionPassword"
 			:type="isDecryptionPasswordType ? 'password' : 'text'"
 			placeholder="Enter the password used to encrypt this backup"
+			autocomplete="current-password"
 			autofocus
 			data-testid="import-full-backup-decrypt-password-input"
 		>
@@ -123,7 +130,7 @@ watch(
 		</Input>
 	</div>
 
-	<div v-if="selectedBackup?.profileType === 'password' && !restoreStatus" :class="$style.section">
+	<div v-if="askNewPassword && selectedBackup?.profileType === 'password' && !restoreStatus" :class="$style.section">
 		<span :class="$style.section_label">New Password</span>
 		<Flex direction="column" gap="12">
 			<Input
@@ -145,7 +152,7 @@ watch(
 				<template #bottom>
 					<Flex align="center" gap="6" :class="$style.hint_row">
 						<MaterialIcon name="lock" :size="12" color="tertiary" />
-						<Text size="12" weight="600" color="tertiary">{{ passwordHint }}</Text>
+						<Text variant="body" color="tertiary">{{ passwordHint }}</Text>
 					</Flex>
 				</template>
 			</Input>
@@ -158,7 +165,7 @@ watch(
 				autocomplete="new-password"
 				data-testid="import-full-backup-password-confirm-input"
 			/>
-			<Text size="12" weight="500" color="tertiary" height="150">
+			<Text variant="body" color="tertiary" height="150">
 				Create a new password that will be used to log in to your profile in the future
 			</Text>
 		</Flex>
@@ -182,11 +189,7 @@ watch(
 }
 
 .error_tag {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.2em;
-	text-transform: uppercase;
+	composes: type--tag from global;
 	color: var(--red);
 	border: 1px solid var(--red);
 	padding: 2px 6px;
@@ -194,7 +197,7 @@ watch(
 }
 
 .error_tag_warning {
-	color: var(--yellow);
+	color: var(--txt-warning);
 	border-color: var(--yellow);
 }
 

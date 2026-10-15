@@ -1,16 +1,14 @@
+import { once } from "node:events"
+import { createServer } from "node:http"
+import type { AddressInfo } from "node:net"
 import { expect } from "vitest"
+import { extensionUrl, newPage } from "./fixtures/browser"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
 import { changePassword, lockWallet, navigateByHash, waitForToast } from "./fixtures/helpers"
 
 const ORIGINAL_PASSWORD = TEST_PASSWORD
 const NEW_PASSWORD = "NewTestPassword456!"
-
-/** During a password rotation the SW re-issues the session encryption key,
- *  which forcibly disconnects every open service client. Each pending or
- *  near-pending request rejects with "Client disconnected" — that surfaces
- *  in `consoleErrors`. The cascade is expected behavior, not a regression. */
-const isBenignPasswordChangeError = (msg: string): boolean => msg.includes("Client disconnected")
 
 test("change password rejects too-short and mismatched inputs", async ({ registeredExtensionPerTest }) => {
 	const page = await openPopup(registeredExtensionPerTest)
@@ -73,10 +71,8 @@ test("change password succeeds and unlocks with new password", { timeout: 120_00
 
 	await page2.waitForFunction(() => !window.location.hash.includes("/popup/auth"), { timeout: 10_000 })
 
-	const nonBenignConsoleErrors = registeredExtensionPerTest.consoleErrors.filter((e) => !isBenignPasswordChangeError(e))
-	const nonBenignPageErrors = registeredExtensionPerTest.pageErrors.filter((e) => !isBenignPasswordChangeError(e.message))
-	expect(nonBenignConsoleErrors).toEqual([])
-	expect(nonBenignPageErrors).toEqual([])
+	expect(registeredExtensionPerTest.consoleErrors).toEqual([])
+	expect(registeredExtensionPerTest.pageErrors).toEqual([])
 	await page2.close()
 })
 
@@ -84,7 +80,7 @@ test("auto-lock TTL change persists across navigation", async ({ registeredExten
 	const page = await openPopup(registeredExtensionPerTest)
 	await waitForHash(page, "#/popup/general")
 
-	await navigateByHash(page, "#/popup/settings/security")
+	await navigateByHash(page, "#/popup/settings/lock")
 	await page.waitForSelector('[data-testid="auto-lock-input"]', { visible: true, timeout: 5_000 })
 
 	// Targets the descendant <input> of the wrapper that received the testid
@@ -96,11 +92,8 @@ test("auto-lock TTL change persists across navigation", async ({ registeredExten
 	await waitForToast(page, "Auto-lock timeout updated")
 
 	// Navigate away and back. Uses `/about` — a real sibling settings page.
-	// (Previously `/privacy`, which has no `.vue` page in
-	// `src/popup/pages/settings/`; vue-router never settled the hash there
-	// and waitForFunction timed out at 5s.)
 	await navigateByHash(page, "#/popup/settings/about")
-	await navigateByHash(page, "#/popup/settings/security")
+	await navigateByHash(page, "#/popup/settings/lock")
 
 	await page.waitForSelector('[data-testid="auto-lock-input"]', { visible: true, timeout: 5_000 })
 
@@ -111,8 +104,50 @@ test("auto-lock TTL change persists across navigation", async ({ registeredExten
 	})
 	expect(persistedValue).toBe("45")
 
-	const nonBenignConsoleErrors = registeredExtensionPerTest.consoleErrors.filter((e) => !isBenignPasswordChangeError(e))
-	const nonBenignPageErrors = registeredExtensionPerTest.pageErrors.filter((e) => !isBenignPasswordChangeError(e.message))
-	expect(nonBenignConsoleErrors).toEqual([])
-	expect(nonBenignPageErrors).toEqual([])
+	expect(registeredExtensionPerTest.consoleErrors).toEqual([])
+	expect(registeredExtensionPerTest.pageErrors).toEqual([])
+})
+
+// A file a page can fetch at the extension's fixed URL tells it the wallet is installed, so no file
+// is web-accessible; the content script is injected as one self-contained file and needs none.
+test("a web page can fetch no extension file, the injected content script included", async ({ extension }) => {
+	const popup = await openPopup(extension)
+	const { exposed, injected } = await popup.evaluate(() => {
+		const manifest = chrome.runtime.getManifest()
+		return {
+			exposed: manifest.web_accessible_resources,
+			injected: (manifest.content_scripts ?? []).flatMap(({ js }: { js?: string[] }) => js ?? []),
+		}
+	})
+	expect(exposed ?? []).toEqual([])
+	const files = [...injected, ...(exposed ?? []).flatMap(({ resources }: { resources: string[] }) => resources)]
+	const urls = files.map((file) => extensionUrl(extension.extensionId, `/${file}`))
+	expect(urls.length).toBeGreaterThan(0)
+
+	const fetchAll = (list: string[]) =>
+		Promise.all(
+			list.map((url) =>
+				fetch(url).then(
+					(res) => res.status,
+					() => "refused" as const,
+				),
+			),
+		)
+	// Control: the URLs are right, so a refusal below is the page being refused, not a typo.
+	expect(new Set(await popup.evaluate(fetchAll, urls))).toEqual(new Set([200]))
+	await popup.close()
+
+	const server = createServer((_, res) => res.end("<!doctype html><title>dapp</title>")).listen(0, "127.0.0.1")
+	try {
+		await once(server, "listening")
+		const page = await newPage(extension.browser)
+		try {
+			await page.goto(`http://127.0.0.1:${(server.address() as AddressInfo).port}/`)
+			expect(new Set(await page.evaluate(fetchAll, urls))).toEqual(new Set(["refused"]))
+		} finally {
+			await page.close()
+		}
+	} finally {
+		server.close()
+	}
 })

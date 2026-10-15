@@ -1,4 +1,5 @@
 import type { IEventHandler } from "@nulo/wallet-core/utils"
+import { journalRecordInScope } from "@/utils/activity-rows"
 import { ACTIVITY_FEED_KINDS } from "@/utils/journal-state"
 import type { OperationJournalServiceClient } from "@/wallet/services/operation-journal/client"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
@@ -28,9 +29,7 @@ export async function readJournalDetail(
 ): Promise<OperationRecord | undefined> {
 	const record = await client.getOperation(id)
 	if (!record || !ACTIVITY_FEED_KINDS.has(record.kind) || record.terminalAt === null) return undefined
-	const { profileId, networkId, accountAddress } = scope()
-	const inScope = record.profileId === profileId && record.networkId === networkId && record.accountAddress === accountAddress
-	return inScope ? record : undefined
+	return journalRecordInScope(record, scope()) ? record : undefined
 }
 
 /**

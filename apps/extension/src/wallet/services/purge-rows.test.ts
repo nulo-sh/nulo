@@ -96,6 +96,74 @@ describe("purgeMalformedRows", () => {
 		expect((await api.storage.local.get("t:rows@num"))["t:rows@num"]).toBeDefined()
 	})
 
+	test("a syntax-broken row is deleted when attributeByKey claims its key, and left when it does not", async () => {
+		const { api, storage } = makeStore()
+		await api.storage.local.set({ "t:rows@mine": "{not json", "t:rows@theirs": "{not json" })
+		const purgedIds: string[] = []
+		const purged = await purgeMalformedRows(
+			storage,
+			() => true,
+			(id) => purgedIds.push(id),
+			undefined,
+			(id) => id === "mine",
+		)
+		expect(purged).toBe(1)
+		expect(purgedIds).toEqual(["mine"])
+		const raw = await api.storage.local.get(null)
+		expect(raw["t:rows@mine"]).toBeUndefined()
+		expect(raw["t:rows@theirs"]).toBe("{not json")
+	})
+
+	test("non-object values are deleted when attributeByKey claims their keys", async () => {
+		const { api, storage } = makeStore()
+		await api.storage.local.set({ "t:rows@num": "42", "t:rows@null": "null" })
+		expect(
+			await purgeMalformedRows(
+				storage,
+				() => true,
+				undefined,
+				undefined,
+				() => true,
+			),
+		).toBe(2)
+		expect(await api.storage.local.get(null)).toEqual({})
+	})
+
+	test("guarded re-read: a key-attributed broken row rewritten after the snapshot is kept", async () => {
+		const { api, storage } = makeStore()
+		await api.storage.local.set({ "t:rows@aliased": "{not json" })
+		const staleSnapshot = await storage.rawStringEntries()
+		await storage.set("aliased", { id: "aliased", profileId: "p2", name: "fresh" })
+		const purged = await purgeMalformedRows(
+			{
+				rawStringEntries: async () => staleSnapshot,
+				rawValue: (id) => storage.rawValue(id),
+				delete: (id) => storage.delete(id),
+			},
+			() => false,
+			undefined,
+			undefined,
+			() => true,
+		)
+		expect(purged).toBe(0)
+		expect(await storage.get("aliased")).toEqual({ id: "aliased", profileId: "p2", name: "fresh" })
+	})
+
+	test("a parseable row is judged by its value alone, whatever attributeByKey says of its key", async () => {
+		const { api, storage } = makeStore()
+		await api.storage.local.set({ "t:rows@valid": JSON.stringify({ profileId: "p2", junk: 1 }) })
+		expect(
+			await purgeMalformedRows(
+				storage,
+				(raw) => raw.profileId === "p1",
+				undefined,
+				undefined,
+				() => true,
+			),
+		).toBe(0)
+		expect((await api.storage.local.get("t:rows@valid"))["t:rows@valid"]).toBeDefined()
+	})
+
 	test("the predicate receives the TRUE storage id (key-attribution surface)", async () => {
 		const { api, storage } = makeStore()
 		await api.storage.local.set({
@@ -129,6 +197,36 @@ describe("purgeMalformedRows", () => {
 		)
 		expect(purged).toBe(0)
 		expect(await storage.get("aliased")).toEqual({ id: "aliased", profileId: "p2", name: "fresh" })
+	})
+
+	test("onMatch runs for each matched row before its bytes re-check, a spared row included", async () => {
+		const { api, storage } = makeStore()
+		await api.storage.local.set({
+			"t:rows@changed": JSON.stringify({ profileId: "p1", junk: 1 }),
+			"t:rows@stale": JSON.stringify({ profileId: "p1", junk: 2 }),
+			"t:rows@other": JSON.stringify({ profileId: "p2", junk: 3 }),
+		})
+		const snapshot = await storage.rawStringEntries()
+		await api.storage.local.set({ "t:rows@changed": JSON.stringify({ profileId: "p1", junk: 4 }) })
+		const calls: string[] = []
+		const purged = await purgeMalformedRows(
+			{
+				rawStringEntries: async () => snapshot,
+				rawValue: (id) => {
+					calls.push(`reread ${id}`)
+					return storage.rawValue(id)
+				},
+				delete: (id) => {
+					calls.push(`delete ${id}`)
+					return storage.delete(id)
+				},
+			},
+			(raw) => raw.profileId === "p1",
+			undefined,
+			(id) => calls.push(`match ${id}`),
+		)
+		expect(purged).toBe(1)
+		expect(calls).toEqual(["match changed", "reread changed", "match stale", "reread stale", "delete stale"])
 	})
 
 	test("run AFTER a typed purge, it removes exactly the codec-invisible leftovers (valid rows already gone)", async () => {

@@ -255,8 +255,7 @@ onBeforeUnmount(() => {
 }
 
 .text {
-	font-size: 12px;
-	font-weight: 600;
+	composes: type--body from global;
 	color: var(--txt-primary);
 	overflow-wrap: anywhere;
 }

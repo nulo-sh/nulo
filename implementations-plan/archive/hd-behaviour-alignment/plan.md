@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed in part.
 - **Shipped**: Four of the five behaviour changes the [harden-dedupe](../harden-dedupe/plan.md) program left to the owner, and the deletion of a never-wired activity protocol: History scoped by network (`apps/extension/src/utils/activity-rows.ts`), contact-name uniqueness on the trimmed name (`apps/extension/src/utils/contact-rules.ts`), `new-password` autocomplete on two password pairs, and reduced motion with a visible toolbar focus ring (`apps/extension/src/popup/pages/toolbar-button.module.css`).
-- **Open items**: an edited Local Network that reads "InvalidChain" and drops out of full backups, plus the smaller neighbours found along the way, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: an edited Local Network that reads "InvalidChain" and drops out of full backups, plus the smaller neighbours found along the way, tracked in #147, #213, #214, #215 and #216.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

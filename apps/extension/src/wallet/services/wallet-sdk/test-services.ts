@@ -27,17 +27,33 @@ export function fakeSdkServices(
 		notice?: (params: { dappMetadata: { name: string; url: string } }) => Promise<void>
 		/** Whether the profile has a network for a chain; every chain by default. */
 		served?: (chainId: number) => boolean | Promise<boolean>
+		/** Whether a served chain is quarantined; none by default. */
+		quarantined?: (chainId: number) => boolean
 		legal?: () => Promise<void>
+		/** The reset run lock's wait; resolves at once by default. */
+		resetRun?: () => Promise<void>
 		/** What `getActiveProfile` answers; `p1` by default. */
 		activeProfile?: () => Promise<{ id: string } | undefined>
 		/** The approval's second durable write; resolves at once by default. */
 		setCapabilityGrants?: () => Promise<unknown>
+		/** Establishment's write of the session's hash to its row; resolves at once by default. */
+		setVerificationHash?: () => Promise<unknown>
 		/** The operation journal; empty by default. */
 		operationJournal?: Record<string, unknown>
 	} = {},
-): { services: never; rows: Map<string, FakeDappSessionRow>; onActiveProfileChanged: EventHandler<unknown> } {
+): {
+	services: never
+	rows: Map<string, FakeDappSessionRow>
+	onActiveProfileChanged: EventHandler<unknown>
+	onDappSessionDeleted: EventHandler<unknown>
+	onVerificationRefused: EventHandler<unknown>
+	onVerificationConfirmed: EventHandler<{ verificationHash: string }>
+} {
 	const rows = new Map<string, FakeDappSessionRow>()
 	const onActiveProfileChanged = new EventHandler<unknown>()
+	const onDappSessionDeleted = new EventHandler<unknown>()
+	const onVerificationRefused = new EventHandler<unknown>()
+	const onVerificationConfirmed = new EventHandler<{ verificationHash: string }>()
 	let rowSeq = 0
 	const getActiveProfile = opts.activeProfile ?? (async () => ({ id: "p1" }))
 	if (opts.remembered)
@@ -53,6 +69,9 @@ export function fakeSdkServices(
 				network: {
 					getNetworksRaw: async () => [{ id: "net-1" }],
 					servesChain: async (_profileId: string, chainId: number) => opts.served?.(chainId) ?? true,
+					servesLiveChain: async (_profileId: string, chainId: number) =>
+						((await opts.served?.(chainId)) ?? true) && !opts.quarantined?.(chainId),
+					isChainQuarantined: async (_profileId: string, chainId: number) => opts.quarantined?.(chainId) ?? false,
 				},
 				account: { getAccounts: async () => [{ address: FAKE_SENDER }] },
 				execution: { beginQueuedWait: () => {}, endQueuedWait: () => {} },
@@ -71,7 +90,9 @@ export function fakeSdkServices(
 					notifyNetworkUnavailable: opts.notice ?? (async () => undefined),
 				},
 				"dapp-session": {
-					onDappSessionDeleted: new EventHandler<unknown>(),
+					onDappSessionDeleted,
+					onVerificationRefused,
+					onVerificationConfirmed,
 					tryGetDappSessionByOriginAndChain: async (origin: string, chainId: string) => rows.get(`${origin}|${chainId}`),
 					addDappSession: async (metadata: { url: string }, _p: unknown, _a: unknown, _l: unknown, chainId: string) => {
 						const row = { id: `row-${++rowSeq}`, profileId: "p1", chainId, trustedVerification: false }
@@ -82,12 +103,13 @@ export function fakeSdkServices(
 					deleteDappSession: async (id: string) => {
 						for (const [key, row] of rows) if (row.id === id) rows.delete(key)
 					},
-					setVerificationHash: async () => undefined,
+					setVerificationHash: opts.setVerificationHash ?? (async () => undefined),
 				},
 				"operation-journal": opts.operationJournal ?? {},
 				token: { getTokens: async () => [] },
 				"legal-acceptance": { assertCurrent: opts.legal ?? (async () => undefined) },
+				"network-reset": { waitForRunEnd: opts.resetRun ?? (async () => undefined) },
 			})[name],
 	} as never
-	return { services, rows, onActiveProfileChanged }
+	return { services, rows, onActiveProfileChanged, onDappSessionDeleted, onVerificationRefused, onVerificationConfirmed }
 }

@@ -16,7 +16,8 @@ const nullLogger: ILogger = { log: () => {} }
 /**
  * Pins for the vendored account artifact. A red run here means the address-bearing artifact (or
  * upstream's interpretation of it) moved — that changes every derived account address. Never
- * re-pin to make it green: rotation ships only as a new extension major (regime record).
+ * re-pin to make it green: only a regime rotation, appended to `address-freeze.ts` on the owner's
+ * recorded decision, moves these pins.
  */
 describe("frozen account artifact pins", () => {
 	test("vendored SchnorrAccount.json bytes match FROZEN_ARTIFACT_SHA256", () => {
@@ -38,7 +39,7 @@ describe("frozen account artifact pins", () => {
 	//    longer match the frozen descriptor (the init-hash tie to the emitted ctor call is the
 	//    complementary binding in instantiation-descriptor.test.ts).
 	test("the live NuloAccount factory is bound to the V6_REGIME artifact + descriptor", async () => {
-		const account = await NuloAccount.new(Fr.fromHexString("0x01"), nullLogger)
+		const account = await NuloAccount.new(Fr.fromHexString("0x01"), nullLogger, "account")
 		const producedClass = await getContractClassFromArtifact(account.artifact)
 		expect(producedClass.id.toString()).toBe(V6_REGIME.classId)
 		expect(V6_REGIME.classId).toBe(FROZEN_ACCOUNT_CLASS_ID)

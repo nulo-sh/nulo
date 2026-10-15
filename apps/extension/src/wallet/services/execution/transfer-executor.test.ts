@@ -8,18 +8,30 @@
  * fence every stage answers to.
  */
 
+import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { describe, expect, test, vi } from "vitest"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
-import { JobCancelledError, JournaledRejection, OperationNotRecordedError, SessionEndedError } from "@nulo/extension-messaging/errors"
-import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
+import {
+	JobCancelledError,
+	JournaledRejection,
+	OperationNotRecordedError,
+	RpcTimeoutError,
+	SessionEndedError,
+} from "@nulo/extension-messaging/errors"
+import { IllegalTransitionError, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { OriginType, TransferType } from "@/wallet/services/transaction/service"
 import type { ProveAndSendContext } from "./execution-coordinator"
 import type { TransferRequest } from "./operation-planner"
+import { ChainTipGate } from "./chain-tip-gate"
+import { DEFAULT_FEE_MULTIPLIER } from "./fee/fee-strategy"
 import { MAX_WAIT_MS, SendSequencer } from "./send-sequencer"
 import type { TransferFeeEstimate } from "./spec"
+import { QueuedFeeAnswers } from "./queued-fee-cap"
+import { TransferEstimateReuse } from "./transfer-estimate-reuse"
 import { TransferExecutor, type TransferExecutorDeps } from "./transfer-executor"
+import { getEstimatedFee } from "./tx-fee-details"
 import { FpcType } from "@/wallet/services/fpc/spec"
 
 // The balance slot's poseidon2 runs Barretenberg WASM, which crashes under jsdom; the slot itself is
@@ -32,6 +44,7 @@ vi.mock("@aztec-labs/protocol-contracts/fee-juice", async (importOriginal) => {
 const TOKEN = { contract: "0xtoken", name: "Test", symbol: "TST", decimals: 18 }
 const FEE_SETTINGS = { paymentMethod: { kind: "fj" } } as never
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
+const EXPIRY = { timestamp: 1_750_003_600, nullifier: `0x${"02".padStart(64, "0")}` }
 
 function makeTxRequest() {
 	return {
@@ -44,7 +57,7 @@ function makeTxRequest() {
 		},
 	} as never
 }
-// maxFee for the fixture: (100+10)*2 + (200+20)*3 = 880.
+// maxFee for the fixture, gas limits × cap with teardown counted once inside them: 100*2 + 200*3 = 800.
 
 function makeReq(overrides: Partial<TransferRequest> = {}): TransferRequest {
 	return {
@@ -57,6 +70,21 @@ function makeReq(overrides: Partial<TransferRequest> = {}): TransferRequest {
 		feeSettings: FEE_SETTINGS,
 		...overrides,
 	}
+}
+
+/** A real gate over `readTip`, on a clock frozen at 0 whose sleeps only yield a macrotask. */
+function tipGate(readTip: () => Promise<number>) {
+	const reads = { count: 0 }
+	const gate = new ChainTipGate({
+		readTip: () => {
+			reads.count += 1
+			return readTip()
+		},
+		sleep: () => new Promise((r) => setTimeout(r, 0)),
+		now: () => 0,
+		logDebug: vi.fn(),
+	})
+	return { gate, reads }
 }
 
 function makeHarness(overrides: Partial<TransferExecutorDeps> = {}) {
@@ -94,7 +122,10 @@ function makeHarness(overrides: Partial<TransferExecutorDeps> = {}) {
 		estimateReuse: { tryConsume: vi.fn(async () => undefined), stash: vi.fn() } as never,
 		coordinator: { proveAndSend } as never,
 		sequencer: new SendSequencer({ pendingTxs: () => [], sleep: () => new Promise((r) => setTimeout(r, 5)), now: () => 0 }),
-		getFpc: vi.fn(async () => ({ type: FpcType.DefaultSponsoredFpc, isProtocol: true, chainId: 7, address: "0xsponsor" }) as never),
+		chainTip: tipGate(async () => 0).gate,
+		getFpcImpl: vi.fn(
+			async () => ({ infoData: { type: FpcType.DefaultSponsoredFpc, isProtocol: true, chainId: 7, address: "0xsponsor" } }) as never,
+		),
 		getTokenContract: vi.fn(async () => "0xtoken"),
 		// One mined tx: the account is initialized.
 		getTransactions: vi.fn(async () => [{ chainId: 7, status: 2, executionResult: 0, calls: [] }] as never),
@@ -120,6 +151,7 @@ function makeHarness(overrides: Partial<TransferExecutorDeps> = {}) {
 		buildAndEstimate: vi.fn(async () => built as never),
 		createJournalOperation: vi.fn(async (input) => ({ id: "j1", ...input }) as never),
 		transitionJournal: vi.fn(async () => ({})),
+		answers: new QueuedFeeAnswers(),
 		logDebug: vi.fn(),
 		logError: vi.fn(),
 		readPublicStorageOnce: vi.fn(async () => new Fr(0n)),
@@ -141,6 +173,8 @@ const RECORD_FIELDS = [
 	"gasDetails",
 	"fence",
 	"networkId",
+	"feeSpender",
+	"priorityLevel",
 ] as const
 
 /** The activity record `addTransaction` received, by field name. */
@@ -296,7 +330,7 @@ describe("TransferExecutor.execute", () => {
 		proveAndSend.mockImplementationOnce(async (ctx) => {
 			const bound = ctx as unknown as ProveAndSendContext
 			expect(bound.submittedEndpointUrl).toBe("http://primary")
-			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: bound.submittedEndpointUrl })
+			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: bound.submittedEndpointUrl, expiry: EXPIRY })
 			throw new Error("unreachable: the refused write must reject")
 		})
 		await expect(executor.execute(makeReq(), undefined, FENCE)).rejects.toStrictEqual(new JournaledRejection(refused, "j1"))
@@ -304,6 +338,7 @@ describe("TransferExecutor.execute", () => {
 			stage: "submitting",
 			txHash: "0xhash",
 			submittedEndpointUrl: "http://primary",
+			expiry: EXPIRY,
 		})
 		expect(deps.logError).not.toHaveBeenCalledWith("Failed to update journal operation", refused)
 	})
@@ -447,7 +482,7 @@ describe("TransferExecutor: the authorizing session", () => {
 		const req = makeReq()
 		await executor.execute(req, "est-1", fence)
 
-		expect(deps.estimateReuse.tryConsume).toHaveBeenCalledWith("est-1", req, fence)
+		expect(deps.estimateReuse.tryConsume).toHaveBeenCalledWith("est-1", req, fence, undefined)
 		expect(deps.getAccountContract).toHaveBeenCalledWith("p-fence", 7, "0xme")
 		expect(order(deps.assertFence)).toBeLessThan(order(deps.getAccountContract))
 	})
@@ -507,11 +542,17 @@ describe("TransferExecutor: the authorizing session", () => {
 })
 
 describe("TransferExecutor.estimateFee", () => {
+	test("a simulation that timed out rejects the estimate with the same object, so its offscreen record is found", async () => {
+		const timeout = new RpcTimeoutError("timed out", { requestId: 7, methodName: "simulateTx" })
+		const { executor } = makeHarness({ buildAndEstimate: vi.fn(async () => Promise.reject(timeout)) })
+		await expect(executor.estimateFee(makeReq())).rejects.toBe(timeout)
+	})
+
 	test("fj: stash written, estimateId returned, fee projected from finalized gas settings", async () => {
 		const { executor, deps } = makeHarness()
 		const result = (await executor.estimateFee(makeReq())) as TransferFeeEstimate
 
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect(result.estimateId).toBeDefined()
 		expect(deps.estimateReuse.stash).toHaveBeenCalledTimes(1)
 		const stashed = (deps.estimateReuse.stash as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]
@@ -520,7 +561,7 @@ describe("TransferExecutor.estimateFee", () => {
 			profileId: "p1",
 			primaryEndpointId: "e1",
 			pendingHashes: ["0xpending"],
-			baseFeeFingerprint: "2:3",
+			builtCap: { feePerDaGas: 2n, feePerL2Gas: 3n },
 			// The stash persists the BUILD's provenance (the harness build
 			// sets true) — a hardcoded false here would strip classification
 			// from every estimate→confirm transfer.
@@ -535,7 +576,7 @@ describe("TransferExecutor.estimateFee", () => {
 			makeReq({ feeSettings: { paymentMethod: { kind: "embedded" } } as never }),
 		)) as TransferFeeEstimate
 
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect(result.estimateId).toBeUndefined()
 		expect(deps.estimateReuse.stash).not.toHaveBeenCalled()
 	})
@@ -551,7 +592,7 @@ describe("TransferExecutor.estimateFee", () => {
 		})
 		const result = (await executor.estimateFee(makeReq())) as TransferFeeEstimate
 
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect(result.estimateId).toBeUndefined()
 	})
 })
@@ -620,12 +661,25 @@ describe("TransferExecutor.estimateFee sponsor funding", () => {
 		const result = (await executor.estimateFee(makeReq({ feeSettings: FPC_SETTINGS }))) as TransferFeeEstimate
 
 		expect(result.sponsorFunding).toEqual({ fpcId: "fpc-9", address: SPONSOR.toString(), funded: false })
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect(result.estimateId).toBeDefined()
 		expect(readPublicStorageOnce).toHaveBeenCalledTimes(1)
 		expect((readPublicStorageOnce.mock.calls[0] as unknown[])[0]).toBe(built.network)
 		expect(node.getPublicStorageAt).not.toHaveBeenCalled()
 		expect(deps.logDebug).toHaveBeenCalledWith("sponsor probe", { outcome: "short" })
+	})
+
+	test("a build paying from the account's own Fee Juice carries the shortfall the node would refuse", async () => {
+		const { executor, built } = sponsorHarness({ named: false, balance: 799n })
+		Object.assign(built, {
+			account: { address: SPONSOR },
+			feePaymentMethod: AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE,
+		})
+
+		const result = (await executor.estimateFee(makeReq())) as TransferFeeEstimate
+
+		expect(result.feeJuiceShortfall).toEqual({ maxFee: "800", balance: "799" })
+		expect(result.maxFee).toBe("800")
 	})
 
 	test.each([
@@ -637,7 +691,7 @@ describe("TransferExecutor.estimateFee sponsor funding", () => {
 		const result = (await executor.estimateFee(makeReq({ feeSettings: FPC_SETTINGS }))) as TransferFeeEstimate
 
 		expect(result).not.toHaveProperty("sponsorFunding")
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect(result.estimateId).toBeDefined()
 		expect(readPublicStorageOnce).toHaveBeenCalledTimes(reads)
 	})
@@ -696,11 +750,23 @@ describe("TransferExecutor: the activity record, field by field", () => {
 			feePaymentMethod: { kind: "fee_juice" },
 			hash: "0xhash",
 			submittedEndpointUrl: "http://submitted",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-built",
+			feeSpender: undefined,
+			priorityLevel: "normal",
 		})
+	})
+
+	test("the record carries the speed the send was priced at", async () => {
+		const h = makeHarness()
+		await h.executor.execute(
+			makeReq({ feeSettings: { paymentMethod: { kind: "fj" }, priorityLevel: "urgent" } as never }),
+			undefined,
+			FENCE,
+		)
+		expect(recordedTx(h.deps).priorityLevel).toBe("urgent")
 	})
 
 	test("a reused estimate records the entry's provenance and the re-resolved network's id", async () => {
@@ -730,10 +796,12 @@ describe("TransferExecutor: the activity record, field by field", () => {
 			feePaymentMethod: { kind: "reused" },
 			hash: "0xhash",
 			submittedEndpointUrl: "http://live",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-live",
+			feeSpender: undefined,
+			priorityLevel: "normal",
 		})
 	})
 })
@@ -754,13 +822,13 @@ describe("TransferExecutor.estimateFee: the reuse snapshot", () => {
 		const h = makeHarness({ getActiveProfile: vi.fn(async () => ({ id: "p-active" }) as never), ...overrides })
 		const txRequest = makeTxRequest() as { txContext: { gasSettings: { maxFeesPerGas: object } } }
 		txRequest.txContext.gasSettings.maxFeesPerGas = { feePerDaGas: 7n, feePerL2Gas: 11n }
-		Object.assign(h.built, { network, txRequest })
+		Object.assign(h.built, { network, txRequest, chainIdentity: { l1ChainId: 1, rollupVersion: 6 } })
 		return h
 	}
 
 	const stashed = (deps: TransferExecutorDeps) => (deps.estimateReuse.stash as ReturnType<typeof vi.fn>).mock.calls as unknown[][]
 
-	test("the entry: the built fee, the primary by id, the active profile, the pending set, the build", async () => {
+	test("the entry: the built fee and chain pair, the primary by id, the active profile, the pending set, the build", async () => {
 		vi.useFakeTimers({ now: NOW, toFake: ["Date"] })
 		try {
 			const { executor, deps, built } = snapshotHarness()
@@ -778,8 +846,10 @@ describe("TransferExecutor.estimateFee: the reuse snapshot", () => {
 						feeSettingsHash: "fj|default",
 						// The active profile at stash time, not the fence's p1.
 						profileId: "p-active",
+						chainIdentity: { l1ChainId: 1, rollupVersion: 6 },
+						fpcIdentity: undefined,
 						// The built request's maxFeesPerGas; the node is never asked.
-						baseFeeFingerprint: "7:11",
+						builtCap: { feePerDaGas: 7n, feePerL2Gas: 11n },
 						primaryEndpointId: "e2",
 						primaryEndpointUrl: "http://primary",
 						pendingHashes: ["0xpending"],
@@ -800,6 +870,14 @@ describe("TransferExecutor.estimateFee: the reuse snapshot", () => {
 		} finally {
 			vi.useRealTimers()
 		}
+	})
+
+	test("an fpc entry carries the sponsor row the build paid with", async () => {
+		const row = { id: "fpc-1", type: 1, address: "0xsponsor", chainId: 7, isProtocol: true }
+		const { executor, deps, built } = snapshotHarness()
+		Object.assign(built, { fpcIdentity: row })
+		await executor.estimateFee(makeReq({ feeSettings: { paymentMethod: { kind: "fpc", fpcId: "fpc-1" } } }))
+		expect((stashed(deps)[0][1] as { fpcIdentity?: unknown }).fpcIdentity).toBe(row)
 	})
 
 	test("a pending tx that lands during the profile read is in the snapshot", async () => {
@@ -900,6 +978,97 @@ describe("TransferExecutor.estimateFee: each cancel checkpoint", () => {
 	})
 })
 
+describe("TransferExecutor: a predecessor's block the PXE's node does not have yet", () => {
+	/** A tx of the token settled at `block`: it shares a key with every `makeReq()` send. */
+	const settledAt = (block: number) => ({
+		hash: `0xtx${block}`,
+		chainId: 7,
+		account: "0xme",
+		networkId: "net-1",
+		block: { number: block, hash: `0xb${block}` },
+		calls: [{ contract: "0xtoken", method: "swap", args: [] }],
+	})
+	const settle = () => new Promise((r) => setTimeout(r, 0))
+
+	test("starts queued and takes no slot, heartbeated, until the tip reads the block", async () => {
+		const node = { tip: 6 }
+		const { gate, reads } = tipGate(async () => node.tip)
+		gate.observe(settledAt(7))
+		await settle()
+		const { executor, deps } = makeHarness({ chainTip: gate })
+		const run = executor.execute(makeReq(), undefined, FENCE)
+		await vi.waitFor(() => expect(reads.count).toBeGreaterThan(2))
+		expect(deps.createJournalOperation).toHaveBeenCalledWith(expect.objectContaining({ initialStage: { stage: "queued" } }))
+		expect(deps.lane.acquireTransferSlot).not.toHaveBeenCalled()
+		expect(deps.lane.beginQueuedWait).toHaveBeenCalledWith("j1")
+		expect(deps.lane.endQueuedWait).not.toHaveBeenCalled()
+		node.tip = 7
+		await run
+		expect(deps.lane.endQueuedWait).toHaveBeenCalledWith("j1")
+		expect(deps.lane.acquireTransferSlot).toHaveBeenCalledTimes(1)
+		expect((deps.transitionJournal as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1].stage).slice(0, 2)).toEqual([
+			"pending",
+			"simulating",
+		])
+	})
+
+	test("a block the tip already reached, or another token's, holds nothing", async () => {
+		const reached = tipGate(async () => 7)
+		reached.gate.observe(settledAt(7))
+		const other = tipGate(async () => 0)
+		other.gate.observe({ ...settledAt(7), calls: [{ contract: "0xother", method: "swap", args: [] }] })
+		await settle()
+		for (const { gate } of [reached, other]) {
+			const { executor, deps } = makeHarness({ chainTip: gate })
+			await executor.execute(makeReq(), undefined, FENCE)
+			expect(deps.createJournalOperation).toHaveBeenCalledWith(expect.objectContaining({ initialStage: { stage: "pending" } }))
+		}
+	})
+
+	test("a predecessor that settles while the send takes the slot: the slot goes back with no read awaited under it", async () => {
+		// Tip reads hang and no sleep ends until the test says so: a read awaited under the slot would hold it.
+		const sleeps: (() => void)[] = []
+		const gate = new ChainTipGate({
+			readTip: () => new Promise<number>(() => {}),
+			sleep: (_ms, signal) =>
+				new Promise<void>((resolve) => {
+					sleeps.push(resolve)
+					signal.addEventListener("abort", () => resolve())
+				}),
+			now: () => 0,
+			logDebug: vi.fn(),
+		})
+		const { executor, deps } = makeHarness({ chainTip: gate })
+		const releases: ReturnType<typeof vi.fn>[] = []
+		;(deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+			if (releases.length === 0) gate.observe(settledAt(8))
+			const release = vi.fn()
+			releases.push(release)
+			return release
+		})
+		const run = executor.execute(makeReq(), undefined, FENCE)
+		await vi.waitFor(() => expect(releases[0]).toHaveBeenCalled())
+		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
+		// The hung read times out, which lets the send run unordered.
+		let finished = false
+		void run.then(
+			() => {
+				finished = true
+			},
+			() => {
+				finished = true
+			},
+		)
+		while (!finished) {
+			for (const wake of sleeps.splice(0)) wake()
+			await settle()
+		}
+		await run
+		expect(releases).toHaveLength(2)
+		expect(deps.buildAndEstimate).toHaveBeenCalledTimes(1)
+	})
+})
+
 describe("TransferExecutor: sends that share chain state take turns", () => {
 	const SCOPE = { chainId: 7, account: "0xme" }
 	/** Private TST from 0xme to 0xyou, first use: what `makeReq()` holds. */
@@ -940,7 +1109,10 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 		expect((busy.deps.transitionJournal as ReturnType<typeof vi.fn>).mock.calls[0][1]).toEqual({ stage: "pending" })
 	})
 
-	test("a dApp tx that shares a key and is pending once the slot frees: the slot goes back and the send waits again", async () => {
+	const stages = (deps: { transitionJournal: unknown }) =>
+		(deps.transitionJournal as ReturnType<typeof vi.fn>).mock.calls.map((c) => (c[1] as { stage: string }).stage)
+
+	test("a dApp tx that shares a key and is pending once the slot frees: the slot goes back and the send waits again at queued", async () => {
 		const pending: { hash: string; chainId: number; account: string; calls: unknown[]; createdAt: number }[] = []
 		const sequencer = new SendSequencer({
 			pendingTxs: () => pending as never,
@@ -959,12 +1131,63 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 		})
 		const run = executor.execute(makeReq(), undefined, FENCE)
 		await vi.waitFor(() => expect(releases[0]).toHaveBeenCalled())
+		expect(deps.createJournalOperation).toHaveBeenCalledWith(expect.objectContaining({ initialStage: { stage: "pending" } }))
+		await vi.waitFor(() => expect(stages(deps)).toEqual(["queued"]))
 		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
 		pending.length = 0
 		await run
 		expect(releases).toHaveLength(2)
 		expect(deps.buildAndEstimate).toHaveBeenCalled()
 		expect(releases[1]).toHaveBeenCalled()
+		expect(stages(deps).slice(0, 3)).toEqual(["queued", "pending", "simulating"])
+		expect(stages(deps).filter((stage) => stage === "queued")).toHaveLength(1)
+	})
+
+	test("a slot another send takes after the row was created: the row reads queued for that wait, then is claimed", async () => {
+		const { executor, deps } = makeHarness({ sequencer: sequencerOnPendingMap() })
+		let grant!: () => void
+		;(deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockImplementation(
+			async (_n: string, _j: string, _f: unknown, _s: AbortSignal, onWait?: () => void) => {
+				onWait?.()
+				await new Promise<void>((resolve) => {
+					grant = resolve
+				})
+				return () => {}
+			},
+		)
+		const run = executor.execute(makeReq(), undefined, FENCE)
+		await vi.waitFor(() => expect(stages(deps)).toEqual(["queued"]))
+		expect(deps.createJournalOperation).toHaveBeenCalledWith(expect.objectContaining({ initialStage: { stage: "pending" } }))
+		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
+		grant()
+		await run
+		expect(stages(deps).slice(0, 3)).toEqual(["queued", "pending", "simulating"])
+	})
+
+	test("a cancel that wins the move back to queued ends the wait as cancelled, with nothing built", async () => {
+		let registered: AbortController | undefined
+		const { executor, deps } = makeHarness({ sequencer: sequencerOnPendingMap() })
+		;(deps.lane.registerInFlight as ReturnType<typeof vi.fn>).mockImplementation((_id: string, _s: number, c: AbortController) => {
+			registered = c
+			return { live: true }
+		})
+		;(deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockImplementation(
+			(_n: string, journalId: string, _f: unknown, signal: AbortSignal, onWait?: () => void) => {
+				onWait?.()
+				return new Promise((_resolve, reject) =>
+					signal.addEventListener("abort", () => reject(new JobCancelledSentinel(journalId))),
+				)
+			},
+		)
+		;(deps.transitionJournal as ReturnType<typeof vi.fn>).mockImplementation(async (_id: string, progress: { stage: string }) => {
+			if (progress.stage !== "queued") return {}
+			// The cancel's own transition lands first, then it aborts.
+			await Promise.resolve()
+			registered?.abort()
+			throw new Error("illegal transition cancelled -> queued")
+		})
+		await expect(executor.execute(makeReq(), undefined, FENCE)).rejects.toBeInstanceOf(JobCancelledError)
+		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
 	})
 
 	test("a cancel that wins the claim ends the send as cancelled and frees the slot", async () => {
@@ -1143,7 +1366,7 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 		const sponsor = makeHarness()
 		expect([...(await sponsor.executor.sequence(fpcReq)).keys]).toEqual([])
 		const privateFpc = makeHarness({
-			getFpc: vi.fn(async () => ({ type: FpcType.PrivateFpc, chainId: 7, address: "0xPRIV" }) as never),
+			getFpcImpl: vi.fn(async () => ({ infoData: { type: FpcType.PrivateFpc, chainId: 7, address: "0xPRIV" } }) as never),
 		})
 		expect([...(await privateFpc.executor.sequence(fpcReq)).keys]).toEqual(["fpc:0xpriv"])
 	})
@@ -1151,5 +1374,369 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 	test("until a tx of the account is mined, every send may initialize it", async () => {
 		const fresh = makeHarness({ getTransactions: vi.fn(async () => []) })
 		expect([...(await fresh.executor.sequence(makeReq({ transferType: TransferType.Public }))).keys]).toEqual(["init"])
+	})
+})
+
+describe("TransferExecutor: the fee contract a send is ordered against", () => {
+	const SCOPE = { chainId: 7, account: "0xme" }
+	/** A public send paid through FPC `f`: on an initialized account its only key is the fee contract's. */
+	const FPC_REQ = makeReq({ transferType: TransferType.Public, feeSettings: { paymentMethod: { kind: "fpc", fpcId: "f" } } as never })
+	const sponsorRow = (address: string) => ({
+		infoData: { id: "f", type: FpcType.DefaultSponsoredFpc, chainId: 7, address, isProtocol: false },
+	})
+	const sequencerAt = (now: () => number) =>
+		new SendSequencer({ pendingTxs: () => [], sleep: () => new Promise((r) => setTimeout(r, 0)), now })
+	const buildFpc = (deps: TransferExecutorDeps, call = 0) =>
+		(deps.buildAndEstimate as ReturnType<typeof vi.fn>).mock.calls[call][5] as { infoData: { address: string } } | undefined
+
+	/** The sponsor row's address reads `0xA` until the first grant, `0xB` from then on: an edit landing during the wait. */
+	function editedDuringWait(overrides: Partial<TransferExecutorDeps> = {}) {
+		let address = "0xA"
+		const h = makeHarness({ getFpcImpl: vi.fn(async () => sponsorRow(address) as never), ...overrides })
+		const releases: ReturnType<typeof vi.fn>[] = []
+		;(h.deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+			address = "0xB"
+			const release = vi.fn()
+			releases.push(release)
+			return release
+		})
+		return { ...h, releases }
+	}
+
+	test("the build pays with the row the send was re-checked against, and the row records its address", async () => {
+		const pinned = sponsorRow("0xF")
+		// The first read orders the send; the second, under the slot, is the one the build must use.
+		const getFpcImpl = vi.fn(async () => pinned as never).mockResolvedValueOnce(sponsorRow("0xF") as never)
+		const { executor, deps } = makeHarness({ getFpcImpl })
+		await executor.execute(FPC_REQ, undefined, FENCE)
+		expect(getFpcImpl).toHaveBeenCalledTimes(2)
+		expect(buildFpc(deps)).toBe(pinned)
+		expect(recordedTx(deps).feeSpender).toBe("0xF")
+	})
+
+	test("fee juice and the protocol sponsor record no spender", async () => {
+		const fj = makeHarness()
+		await fj.executor.execute(makeReq({ transferType: TransferType.Public }), undefined, FENCE)
+		expect(fj.deps.getFpcImpl).not.toHaveBeenCalled()
+		expect(recordedTx(fj.deps).feeSpender).toBeUndefined()
+		const sponsor = makeHarness()
+		await sponsor.executor.execute(FPC_REQ, undefined, FENCE)
+		expect(recordedTx(sponsor.deps).feeSpender).toBeUndefined()
+		expect(buildFpc(sponsor.deps)?.infoData).toMatchObject({ isProtocol: true, address: "0xsponsor" })
+	})
+
+	test("a row forged during the wait is refused at the re-check: the slot goes back and nothing builds; a clean re-check keeps it", async () => {
+		const forged = makeHarness({
+			getFpcImpl: vi
+				.fn(async () => Promise.reject(new Error("PrivateFPC row is not the protocol contract")))
+				.mockResolvedValueOnce(sponsorRow("0xF") as never),
+		})
+		const release = vi.fn()
+		;(forged.deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockResolvedValue(release)
+		await expect(forged.executor.execute(FPC_REQ, undefined, FENCE)).rejects.toBeInstanceOf(JournaledRejection)
+		expect(release).toHaveBeenCalled()
+		expect(forged.deps.buildAndEstimate).not.toHaveBeenCalled()
+		expect(forged.deps.transitionJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, expect.anything())
+
+		const clean = makeHarness({ getFpcImpl: vi.fn(async () => sponsorRow("0xF") as never) })
+		const kept = vi.fn()
+		;(clean.deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockResolvedValue(kept)
+		await clean.executor.execute(FPC_REQ, undefined, FENCE)
+		const built = (clean.deps.buildAndEstimate as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]
+		expect(built).toBeLessThan(kept.mock.invocationCallOrder[0])
+	})
+
+	test("an address edited during the wait: the send gives the slot back and waits in line under the new key, never building with the old", async () => {
+		const sequencer = sequencerAt(() => 0)
+		const earlierOnB = sequencer.enter(SCOPE, new Set(["fpc:0xb"]))
+		const { executor, deps, releases } = editedDuringWait({ sequencer })
+		const run = executor.execute(FPC_REQ, undefined, FENCE)
+		await vi.waitFor(() => expect(releases[0]).toHaveBeenCalled())
+		await new Promise((r) => setTimeout(r, 20))
+		expect(releases).toHaveLength(1)
+		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
+		earlierOnB.release()
+		await run
+		expect(releases).toHaveLength(2)
+		expect(deps.buildAndEstimate).toHaveBeenCalledOnce()
+		expect(buildFpc(deps)?.infoData.address).toBe("0xB")
+		expect(recordedTx(deps).feeSpender).toBe("0xB")
+		expect(sequencer.isBlocked(SCOPE, new Set(["fpc:0xb"]))).toBe(true)
+		expect(sequencer.isBlocked(SCOPE, new Set(["fpc:0xa"]))).toBe(false)
+	})
+
+	test("an unedited row is taken once: one ticket, one grant, one build", async () => {
+		const sequencer = sequencerAt(() => 0)
+		const enter = vi.spyOn(sequencer, "enter")
+		const { executor, deps } = makeHarness({ sequencer, getFpcImpl: vi.fn(async () => sponsorRow("0xA") as never) })
+		await executor.execute(FPC_REQ, undefined, FENCE)
+		expect(enter).toHaveBeenCalledOnce()
+		expect(deps.lane.acquireTransferSlot).toHaveBeenCalledOnce()
+		expect(deps.buildAndEstimate).toHaveBeenCalledOnce()
+	})
+
+	test("a re-entered ticket keeps the first ticket's deadline", async () => {
+		let t = 0
+		const sequencer = sequencerAt(() => t)
+		const enter = vi.spyOn(sequencer, "enter")
+		const { executor, deps } = editedDuringWait({ sequencer })
+		;(deps.lane.endQueuedWait as ReturnType<typeof vi.fn>).mockImplementation(() => {
+			t += 60_000
+		})
+		await executor.execute(FPC_REQ, undefined, FENCE)
+		const deadlines = enter.mock.results.map((r) => (r.value as { deadline: number }).deadline)
+		expect(deadlines).toEqual([MAX_WAIT_MS, MAX_WAIT_MS])
+	})
+
+	test("a reused estimate is judged against the row the send was ordered against", async () => {
+		const pinned = sponsorRow("0xF")
+		const getFpcImpl = vi.fn(async () => pinned as never)
+		const { executor, deps } = makeHarness({ getFpcImpl })
+		await executor.execute(FPC_REQ, "est-1", FENCE)
+		expect(deps.estimateReuse.tryConsume).toHaveBeenCalledWith("est-1", FPC_REQ, FENCE, pinned)
+	})
+})
+
+describe("TransferExecutor: a queued send against a fee cap", () => {
+	const SCOPE = { chainId: 7, account: "0xme" }
+	/** Private TST from 0xme to 0xyou, first use: what `makeReq()` holds. */
+	const REQ_KEYS = new Set(["seq:0xtoken:0xyou", "seq:0xtoken:0xme", "handshake:0xyou", "handshake:0xme"])
+	const CHAIN = { l1ChainId: 1, rollupVersion: 6 }
+	const MIN_FEES = new GasFees(1n, 2n)
+
+	/** A build at the node's minimum fee × the default multiplier, as reuse expects; `l2Gas` moves its fee. */
+	function request(l2Gas = 200) {
+		const fees = MIN_FEES.mul(DEFAULT_FEE_MULTIPLIER)
+		return {
+			txContext: {
+				gasSettings: {
+					gasLimits: { daGas: 100, l2Gas },
+					teardownGasLimits: { daGas: 10, l2Gas: 20 },
+					maxFeesPerGas: { feePerDaGas: fees.feePerDaGas, feePerL2Gas: fees.feePerL2Gas },
+				},
+			},
+		} as never
+	}
+	const FEE = getEstimatedFee(request())
+	const BELOW = (BigInt(FEE) - 1n).toString()
+
+	function capHarness(now: () => number = () => 0) {
+		const sequencer = new SendSequencer({ pendingTxs: () => [], sleep: () => new Promise((r) => setTimeout(r, 0)), now })
+		const answers = new QueuedFeeAnswers()
+		const h0 = makeHarness()
+		const reuse = new TransferEstimateReuse({
+			sequenceEpoch: (chainId, account) => sequencer.epoch({ chainId, account }),
+			getNetwork: async () => h0.built.network,
+			getNode: async () => ({ getCurrentMinFees: async () => MIN_FEES }),
+			getLiveChainIdentity: async () => CHAIN,
+			getFpcInfo: vi.fn(),
+			getPendingForAccount: () => [],
+			logDebug: vi.fn(),
+		})
+		vi.spyOn(reuse, "stash")
+		vi.spyOn(reuse, "evict")
+		const releases: ReturnType<typeof vi.fn>[] = []
+		let controller: AbortController | undefined
+		const h = makeHarness({ sequencer, answers, estimateReuse: reuse, getPendingForAccount: vi.fn(() => []) })
+		Object.assign(h.built, { txRequest: request(), chainIdentity: CHAIN })
+		;(h.deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+			const release = vi.fn()
+			releases.push(release)
+			return release
+		})
+		;(h.deps.lane.registerInFlight as ReturnType<typeof vi.fn>).mockImplementation((_id: string, _s: number, c: AbortController) => {
+			controller = c
+			return { live: true }
+		})
+		const asked = () =>
+			(h.deps.transitionJournal as ReturnType<typeof vi.fn>).mock.calls
+				.map((c) => c[1] as { stage: string; reask?: { fee: string; cap: string } })
+				.filter((p) => p.reask)
+				.map((p) => p.reask)
+		const stages = () => (h.deps.transitionJournal as ReturnType<typeof vi.fn>).mock.calls.map((c) => (c[1] as { stage: string }).stage)
+		const stashIds = () => (reuse.stash as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0] as string)
+		return { ...h, sequencer, answers, reuse, releases, asked, stages, stashIds, abort: () => controller?.abort() }
+	}
+
+	test("a fee equal to the cap proves once and never asks; with no cap any fee proves", async () => {
+		const { executor, proveAndSend, stages, reuse } = capHarness()
+		await executor.execute(makeReq(), undefined, FENCE, FEE)
+		expect(proveAndSend).toHaveBeenCalledTimes(1)
+		expect(stages()).not.toContain("queued")
+		expect(reuse.stash).not.toHaveBeenCalled()
+
+		const uncapped = capHarness()
+		await uncapped.executor.execute(makeReq(), undefined, FENCE)
+		expect(uncapped.proveAndSend).toHaveBeenCalledTimes(1)
+	})
+
+	test("a fee above the cap is never proved: the slot is free before the question, the ticket still holds", async () => {
+		const { executor, deps, proveAndSend, sequencer, releases, asked, stages, abort } = capHarness()
+		const run = executor.execute(makeReq(), undefined, FENCE, BELOW)
+		await vi.waitFor(() => expect(asked()).toHaveLength(1))
+		expect(asked()[0]).toEqual({ fee: FEE, cap: BELOW, payer: { type: "fj", isProtocol: false } })
+		expect(stages()).toEqual(["simulating", "queued"])
+		const publication = (deps.transitionJournal as ReturnType<typeof vi.fn>).mock.invocationCallOrder[1]
+		expect(releases[0].mock.invocationCallOrder[0]).toBeLessThan(publication)
+		expect(deps.lane.beginQueuedWait).toHaveBeenCalledWith("j1")
+		expect(sequencer.enter(SCOPE, REQ_KEYS).blocked()).toBe(true)
+		abort()
+		await expect(run).rejects.toBeInstanceOf(JobCancelledError)
+		expect(proveAndSend).not.toHaveBeenCalled()
+	})
+
+	test("an accept within the TTL proves the stashed build once and records its fee", async () => {
+		const { executor, deps, built, proveAndSend, answers, asked, stages } = capHarness()
+		const run = executor.execute(makeReq(), undefined, FENCE, BELOW)
+		await vi.waitFor(() => expect(asked()).toHaveLength(1))
+		expect(answers.accept("j1", FEE)).toBe(true)
+		await run
+		expect(deps.buildAndEstimate).toHaveBeenCalledTimes(1)
+		expect(proveAndSend).toHaveBeenCalledTimes(1)
+		expect((proveAndSend.mock.calls[0] as unknown as [{ txRequest: unknown }])[0].txRequest).toBe(built.txRequest)
+		expect(recordedTx(deps).estimatedFee).toBe(FEE)
+		expect(stages()).toEqual(["simulating", "queued", "pending", "simulating"])
+	})
+
+	test("a reused build above the cap is stashed again with its builtAt, so an accept past builtAt + TTL rebuilds", async () => {
+		const T0 = 1_700_000_000_000
+		vi.useFakeTimers({ now: T0, toFake: ["Date"] })
+		try {
+			const { executor, deps, proveAndSend, answers, asked, reuse } = capHarness()
+			const estimate = (await executor.estimateFee(makeReq(), undefined, await executor.sequence(makeReq()))) as TransferFeeEstimate
+			vi.setSystemTime(T0 + 100_000)
+			const run = executor.execute(makeReq(), estimate.estimateId, FENCE, BELOW)
+			await vi.waitFor(() => expect(asked()).toHaveLength(1))
+			expect(deps.buildAndEstimate).toHaveBeenCalledTimes(1)
+			const restashed = (reuse.stash as ReturnType<typeof vi.fn>).mock.calls[1][1] as { builtAt: number }
+			expect(restashed.builtAt).toBe(T0)
+			vi.setSystemTime(T0 + 121_000)
+			answers.accept("j1", FEE)
+			await run
+			expect(deps.buildAndEstimate).toHaveBeenCalledTimes(2)
+			expect(proveAndSend).toHaveBeenCalledTimes(1)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("an accept after a send reached the node rebuilds: at or under the accepted fee it sends, above it asks again", async () => {
+		const settle = async (rebuilt: string) => {
+			const h = capHarness()
+			;(h.deps.buildAndEstimate as ReturnType<typeof vi.fn>)
+				.mockResolvedValueOnce(h.built as never)
+				.mockResolvedValueOnce({ ...h.built, txRequest: request(Number(rebuilt)) } as never)
+			const run = h.executor.execute(makeReq(), undefined, FENCE, BELOW)
+			await vi.waitFor(() => expect(h.asked()).toHaveLength(1))
+			h.sequencer.externalSent(SCOPE, "0xdapp", new Set())
+			h.answers.accept("j1", FEE)
+			return { ...h, run }
+		}
+		const under = await settle("199")
+		await under.run
+		expect(under.deps.buildAndEstimate).toHaveBeenCalledTimes(2)
+		expect(BigInt(recordedTx(under.deps).estimatedFee as string)).toBeLessThan(BigInt(FEE))
+
+		const over = await settle("201")
+		await vi.waitFor(() => expect(over.asked()).toHaveLength(2))
+		expect(over.asked()[1]).toMatchObject({ fee: getEstimatedFee(request(201)), cap: FEE })
+		expect(over.proveAndSend).not.toHaveBeenCalled()
+		over.abort()
+		await expect(over.run).rejects.toBeInstanceOf(JobCancelledError)
+	})
+
+	test("a × ends the question as cancelled: nothing proved, the stashed build evicted", async () => {
+		const { executor, proveAndSend, asked, reuse, stashIds, abort } = capHarness()
+		const run = executor.execute(makeReq(), undefined, FENCE, BELOW)
+		await vi.waitFor(() => expect(asked()).toHaveLength(1))
+		abort()
+		await expect(run).rejects.toBeInstanceOf(JobCancelledError)
+		expect(proveAndSend).not.toHaveBeenCalled()
+		expect(reuse.evict).toHaveBeenCalledWith(stashIds()[0])
+		expect(await reuse.tryConsume(stashIds()[0], makeReq(), FENCE)).toBeUndefined()
+	})
+
+	test("the send's own deadline ends an unanswered question as cancelled, nothing proved, the build evicted", async () => {
+		let t = 0
+		const { executor, deps, proveAndSend, stages, reuse, stashIds } = capHarness(() => t)
+		;(deps.buildAndEstimate as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+			t = MAX_WAIT_MS - 5
+			return { ...(await makeHarness().built), txRequest: request(), chainIdentity: CHAIN } as never
+		})
+		await expect(executor.execute(makeReq(), undefined, FENCE, BELOW)).rejects.toBeInstanceOf(JobCancelledError)
+		expect(stages()).toEqual(["simulating", "queued", "cancelled"])
+		expect(proveAndSend).not.toHaveBeenCalled()
+		expect(reuse.evict).toHaveBeenCalledWith(stashIds()[0])
+	})
+
+	test("a question that cannot be published leaves no waiter and fails the send", async () => {
+		const { executor, deps, answers, stages, proveAndSend } = capHarness()
+		;(deps.transitionJournal as ReturnType<typeof vi.fn>).mockImplementation(async (_id: string, progress: { reask?: unknown }) => {
+			if (progress.reask) throw new Error("storage write failed")
+			return {}
+		})
+		await expect(executor.execute(makeReq(), undefined, FENCE, BELOW)).rejects.toBeInstanceOf(JournaledRejection)
+		expect(answers.accept("j1", FEE)).toBe(false)
+		expect(stages()).toEqual(["simulating", "queued", "failed"])
+		expect(proveAndSend).not.toHaveBeenCalled()
+	})
+
+	test("a signal aborted before the question is asked answers at once", async () => {
+		const h = capHarness()
+		;(h.deps.buildAndEstimate as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+			h.abort()
+			return h.built as never
+		})
+		await expect(h.executor.execute(makeReq(), undefined, FENCE, BELOW)).rejects.toBeInstanceOf(JobCancelledError)
+		expect(h.proveAndSend).not.toHaveBeenCalled()
+	})
+
+	test("a throw on the pass after an accept releases that pass's slot", async () => {
+		const sessionEnd = capHarness()
+		const run = sessionEnd.executor.execute(makeReq(), undefined, FENCE, BELOW)
+		await vi.waitFor(() => expect(sessionEnd.asked()).toHaveLength(1))
+		vi.spyOn(sessionEnd.reuse, "tryConsume").mockRejectedValueOnce(new SessionEndedError())
+		sessionEnd.answers.accept("j1", FEE)
+		await expect(run).rejects.toBeInstanceOf(JournaledRejection)
+		expect(sessionEnd.releases).toHaveLength(2)
+		expect(sessionEnd.releases[1]).toHaveBeenCalled()
+
+		const buildError = capHarness()
+		;(buildError.deps.buildAndEstimate as ReturnType<typeof vi.fn>)
+			.mockResolvedValueOnce(buildError.built as never)
+			.mockRejectedValueOnce(new Error("simulation failed"))
+		const failing = buildError.executor.execute(makeReq(), undefined, FENCE, BELOW)
+		await vi.waitFor(() => expect(buildError.asked()).toHaveLength(1))
+		buildError.sequencer.externalSent(SCOPE, "0xdapp", new Set())
+		buildError.answers.accept("j1", FEE)
+		await expect(failing).rejects.toBeInstanceOf(JournaledRejection)
+		expect(buildError.releases[1]).toHaveBeenCalled()
+	})
+
+	test.each([
+		["the publication", "queued", false],
+		["the accept's claim", "pending", true],
+		["the deadline's cancel", "cancelled", false],
+	] as const)("%s losing to a × ends cancelled, never failed", async (_name, losing, accept) => {
+		let t = 0
+		const h = capHarness(() => t)
+		if (losing === "cancelled") {
+			;(h.deps.buildAndEstimate as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+				t = MAX_WAIT_MS - 5
+				return h.built as never
+			})
+		}
+		;(h.deps.transitionJournal as ReturnType<typeof vi.fn>).mockImplementation(async (_id: string, progress: { stage: string }) => {
+			if (progress.stage === losing) throw new IllegalTransitionError("cancelled", progress.stage as never)
+			return {}
+		})
+		const run = h.executor.execute(makeReq(), undefined, FENCE, BELOW)
+		if (accept) {
+			await vi.waitFor(() => expect(h.deps.lane.beginQueuedWait).toHaveBeenCalled())
+			h.answers.accept("j1", FEE)
+		}
+		await expect(run).rejects.toBeInstanceOf(JobCancelledError)
+		expect(h.stages()).not.toContain("failed")
+		expect(h.proveAndSend).not.toHaveBeenCalled()
 	})
 })

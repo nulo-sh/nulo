@@ -73,6 +73,14 @@ export function isMatchingTask(task: any, op: OperationRecord, activeAccount: st
 	return false
 }
 
+/** Whether `op` is `task`'s own record, ended. A task's record is written after the task starts, so a
+ *  record created earlier belongs to an earlier send that `isMatchingTask` cannot tell apart. */
+// biome-ignore lint/suspicious/noExplicitAny: TaskService spec is JS, as for `isMatchingTask`.
+export function isOwnTerminalRecord(task: any, op: OperationRecord, activeAccount: string | undefined): boolean {
+	if (op.terminalAt === null || typeof task?.createdAt !== "number" || op.createdAt < task.createdAt) return false
+	return isMatchingTask(task, op, activeAccount)
+}
+
 /**
  * Build a cancel handler. Wired to `<TransactionAwaitingCard @cancel="...">`,
  * which now emits the card's `jobId` as a payload so multi-card render

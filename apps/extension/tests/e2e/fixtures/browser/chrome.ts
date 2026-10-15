@@ -4,6 +4,7 @@ import puppeteer from "puppeteer"
 import { cdpInterceptRpc } from "./chrome-rpc-intercept"
 import { cdpVirtualAuthenticator } from "./chrome-webauthn"
 import type { BrowserDriver, LaunchOptions, LaunchedBrowser, PxeHostState } from "./index"
+import { EGRESS_CANARY_HOST } from "../egress-guard"
 
 const SCHEME = "chrome-extension://"
 
@@ -25,7 +26,25 @@ async function pxeHostState(page: Page): Promise<PxeHostState> {
 	return { count, visibility }
 }
 
-async function launch({ extensionPath, userDataDir, headless, fixedWindowSize = true }: LaunchOptions): Promise<LaunchedBrowser> {
+/**
+ * Every request for an outside host goes to the guard, and Chrome resolves no outside name.
+ * `<-loopback>` drops Chrome's implicit bypasses, link-local addresses among them, and the entries
+ * after it put loopback back on the direct path. `MAP *` also captures IP literals, the guard's own
+ * address included, hence the excludes; `::1` matches only unbracketed. The canary name resolves to
+ * loopback, which only a direct path would use. Each live host is bypassed and excluded by its
+ * exact name, so the live hosts alone of the outside names go direct and resolve.
+ */
+export function egressGuardArgs(guardPort: number, liveHosts: readonly string[] = []): string[] {
+	const bypass = liveHosts.map((host) => `;${host}`).join("")
+	const exclude = liveHosts.map((host) => `, EXCLUDE ${host}`).join("")
+	return [
+		`--proxy-server=http://127.0.0.1:${guardPort}`,
+		`--proxy-bypass-list=<-loopback>;localhost;127.0.0.1;[::1]${bypass}`,
+		`--host-resolver-rules=MAP ${EGRESS_CANARY_HOST} 127.0.0.1, MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1, EXCLUDE ::1${exclude}`,
+	]
+}
+
+async function launch({ extensionPath, userDataDir, headless, fixedWindowSize = true, egress }: LaunchOptions): Promise<LaunchedBrowser> {
 	// Headless `true` supports MV3 extensions — offscreen documents, the service worker,
 	// `chrome.storage` and `chrome.runtime.Port` all work.
 	const browser = await puppeteer.launch({
@@ -46,11 +65,7 @@ async function launch({ extensionPath, userDataDir, headless, fixedWindowSize = 
 			"--disable-renderer-backgrounding",
 			"--disable-backgrounding-occluded-windows",
 			"--disable-features=CalculateNativeWinOcclusion",
-			// Artifact mode runs the production bundle, where token seeds resolve for real and a
-			// resolved quote would break `fiat-display`'s "no fiat on a fresh wallet". Block the
-			// price host only: blocking RPC makes the node client retry, which pushes profile
-			// deletion past the reset specs' waits and fails three of them.
-			...(process.env.NULO_E2E_ARTIFACT_RUN === "1" ? ["--host-resolver-rules=MAP api.coingecko.com 127.0.0.1:1"] : []),
+			...(egress ? egressGuardArgs(egress.guardPort, egress.liveHosts) : []),
 		],
 		ignoreDefaultArgs: ["--disable-extensions"],
 		// The default 180s is not enough for a cold first run: argon2 unlock plus the bb.js wasm
@@ -202,10 +217,20 @@ async function discoverExtensionId(browser: Browser): Promise<string> {
 	return new URL(worker.url()).hostname
 }
 
+/** Seen at the egress guard on every launch, with or without `--disable-component-update`. */
+export const CHROME_OWN_HOSTS: ReadonlyMap<string, string> = new Map([
+	["accounts.google.com", "account sign-in state"],
+	["android.clients.google.com", "device check-in"],
+	["clients2.google.com", "extension and component update checks"],
+	["update.googleapis.com", "the component updater"],
+	["www.google.com", "the default search provider's preconnect"],
+])
+
 export const chromeDriver: BrowserDriver = {
 	kind: "chrome",
 	scheme: SCHEME,
 	credentialOutlivesPage: false,
+	ownHosts: CHROME_OWN_HOSTS,
 	launch,
 	extensionUrl: (extensionId, path) => `${SCHEME}${extensionId}${path}`,
 	newPage: (browser) => browser.newPage(),
@@ -217,16 +242,14 @@ export const chromeDriver: BrowserDriver = {
 		await page.reload({ waitUntil: "domcontentloaded" })
 	},
 	waitForTarget: (browser, predicate, timeout) => browser.waitForTarget(predicate, { timeout }),
-	waitForOpenedUrl: async (browser, url, timeout) => {
-		await browser.waitForTarget((target) => target.type() === "page" && target.url() === url, { timeout })
-	},
 	waitForNewTab: async (browser, open, timeout) => {
 		const before = new Set(browser.targets())
 		await open()
 		const target = await browser.waitForTarget((t) => t.type() === "page" && !before.has(t), { timeout })
 		return { close: async () => (await target.asPage()).close() }
 	},
-	interceptRpc: (browser, extensionId, fromOrigin, mode) => cdpInterceptRpc(browser, `${SCHEME}${extensionId}/`, fromOrigin, mode),
+	interceptRpc: (browser, extensionId, fromOrigin, mode, backgroundDown) =>
+		cdpInterceptRpc(browser, `${SCHEME}${extensionId}/`, fromOrigin, mode, backgroundDown),
 	// Chrome treats evaluated script as a user gesture and has no focused-window precondition.
 	prepareClick: async () => {},
 	// Chrome runs a key's default action on the page the key is sent to, focused or not.

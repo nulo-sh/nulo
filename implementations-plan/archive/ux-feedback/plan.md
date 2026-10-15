@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: first run without a name field (`apps/extension/src/utils/profile-name.ts`), dApp windows opened at the browser window's top-right (`apps/extension/src/wallet/services/window-manager/window-manager.ts`), a bounded tooltip and the glossary (`packages/design/src/ui/Tooltip.vue`, `apps/extension/src/utils/glossary.ts`), the snackbar, one-target rows and once-per-receipt arrivals (`packages/design/src/ui/ToastManagerBase.vue`, `apps/extension/src/components/ui/RowTarget.vue`, `apps/extension/src/composables/useArrivals.ts`), and the redrawn permission window (`apps/extension/src/popup/windows/capabilities/index.vue`).
-- **Open items**: Firefox prover-on `imported-account-execution` overran the 300 s toast wait once Firefox's protocol timeout was raised to match Chrome's, a slow WASM-proved transfer whose cause is not established (the shared extension process or host load), so it is still to be rechecked, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: Firefox prover-on `imported-account-execution` overran the 300 s toast wait once Firefox's protocol timeout was raised to match Chrome's, a slow WASM-proved transfer whose cause is not established (the shared extension process or host load); it was closed by a later plan before `follow-ups.md` was retired. Still open: #129.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

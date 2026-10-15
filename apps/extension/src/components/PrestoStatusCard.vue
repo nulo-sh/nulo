@@ -27,7 +27,7 @@ const stepNumber = (index: number) => String(index + 1).padStart(2, "0")
 		<div :class="$style.head">
 			<span :class="[$style.dot, props.copy.tone === 'pending' && $style.pulse]" />
 			<div :class="$style.body">
-				<span :class="$style.title">{{ props.copy.title }}</span>
+				<span :class="[$style.title, props.compact && $style.title_compact]">{{ props.copy.title }}</span>
 				<span v-if="props.copy.detail" :class="$style.detail">{{ props.copy.detail }}</span>
 				<button
 					v-if="props.compact && props.copy.retry"
@@ -141,37 +141,29 @@ const stepNumber = (index: number) => String(index + 1).padStart(2, "0")
 }
 
 .title {
-	font-family: var(--font-headline);
+	composes: type--row-title from global;
 	font-size: 15px;
-	font-weight: 700;
 	line-height: 1.25;
 	color: var(--txt-primary);
 }
 
-.compact .title {
+.title_compact {
+	composes: type--row-title from global;
 	font-size: 14px;
 }
 
 .detail {
-	font-size: 13px;
+	composes: type--body from global;
 	line-height: 1.5;
 	color: var(--txt-secondary);
 }
 
-.compact .detail {
-	font-size: 12px;
-}
-
 .retry {
+	composes: type--label from global;
 	margin-left: auto;
 	background: transparent;
 	border: 1px solid var(--nulo-outline);
 	color: var(--txt-secondary);
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
 	padding: 8px 14px;
 	cursor: pointer;
 	transition:
@@ -215,17 +207,14 @@ const stepNumber = (index: number) => String(index + 1).padStart(2, "0")
 }
 
 .step_num {
-	font-family: var(--font-mono);
-	font-size: 10px;
-	font-weight: 600;
-	letter-spacing: 0.08em;
+	composes: type--meta from global;
 	color: var(--nulo-outline);
 	padding-top: 3px;
 	flex-shrink: 0;
 }
 
 .step_text {
-	font-size: 13px;
+	composes: type--body from global;
 	line-height: 1.5;
 	color: var(--txt-primary);
 }

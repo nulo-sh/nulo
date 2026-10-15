@@ -4,8 +4,9 @@ import type { EventsMap, MethodsMap } from "@nulo/wallet-core/base"
 import { BaseService } from "../core/base-service"
 import { isTrustedInternalSender } from "../core/sender-auth"
 import { summarizeMessage } from "../core/envelope-summary"
+import { DEFAULT_INIT_TIMEOUT_MS } from "../core/initialization"
 import type { ResponseContentLike } from "../core/base-client"
-import { MessageType, type EventMessage, type RequestMessage } from "../messages"
+import { MessageType, type EventMessage, type ReadyMessage, type RequestMessage } from "../messages"
 
 /**
  * Popup ↔ service-worker server over `chrome.runtime.Port`. The request
@@ -44,24 +45,59 @@ export abstract class Service<TRequests extends MethodsMap, TEvents extends Even
 		// content-script sender).
 		if (!isTrustedInternalSender(client.sender)) {
 			this.logWarn(`Rejected Port from untrusted sender (id=${client.sender?.id ?? "?"})`)
+			// Closing it from this end fires nothing here, and the opener learns at once instead of
+			// holding a port no service will ever answer.
+			client.disconnect()
 			return
 		}
 		client.onDisconnect.addListener(this.onDisconnect)
 		client.onMessage.addListener(this.onMessage)
 		this.clients.push(client)
 		this.logDebug(`Client connected. Total: ${this.clients.length}`)
+		void this.announceReady(client)
+	}
+
+	/**
+	 * Tells the page the wallet has started, so its calls never meet a half-started collection.
+	 * A port still waiting at the init bound is closed: its page opens another, and a boot that
+	 * never finishes leaves no port open.
+	 */
+	private async announceReady(client: chrome.runtime.Port): Promise<void> {
+		let timer: ReturnType<typeof setTimeout> | undefined
+		const bound = new Promise<"bound">((resolve) => {
+			timer = setTimeout(() => resolve("bound"), DEFAULT_INIT_TIMEOUT_MS)
+		})
+		const outcome = await Promise.race([this.whenCollectionStarted().then(() => "started" as const), bound])
+		clearTimeout(timer)
+		if (!this.clients.includes(client)) return
+		if (outcome === "started") {
+			try {
+				client.postMessage({ type: MessageType.Ready } satisfies ReadyMessage)
+			} catch {
+				// The port closed under the post; its onDisconnect drops it.
+			}
+			return
+		}
+		this.logDebug("No Ready within the init bound; closing the port", { boundMs: DEFAULT_INIT_TIMEOUT_MS })
+		this.dropClient(client)
+		client.disconnect()
 	}
 
 	private readonly onDisconnect = (client: chrome.runtime.Port) => {
-		client.onDisconnect.removeListener(this.onDisconnect)
-		client.onMessage.removeListener(this.onMessage)
-		const index = this.clients.indexOf(client)
-		if (index === -1) {
+		if (!this.dropClient(client)) {
 			this.logWarn("Unknown client disconnected")
 			return
 		}
-		this.clients.splice(index, 1)
 		this.logDebug(`Client disconnected. Total: ${this.clients.length}`)
+	}
+
+	private dropClient(client: chrome.runtime.Port): boolean {
+		client.onDisconnect.removeListener(this.onDisconnect)
+		client.onMessage.removeListener(this.onMessage)
+		const index = this.clients.indexOf(client)
+		if (index === -1) return false
+		this.clients.splice(index, 1)
+		return true
 	}
 
 	private readonly onMessage = (message: RequestMessage<TRequests>, client: chrome.runtime.Port) => {

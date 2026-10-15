@@ -190,7 +190,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 	>
 		<Flex :class="$style.op_body" direction="column" wide>
 			<Flex wide justify="between" align="center" gap="8">
-				<Text size="14" color="primary">{{ humanizeOperationKind(op.kind) }}</Text>
+				<Text variant="row-title" color="primary" :class="$style.title_size">{{ humanizeOperationKind(op.kind) }}</Text>
 			</Flex>
 			<Flex
 				data-testid="execute-op-from-account"
@@ -198,21 +198,21 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 				:data-account-address="op.account!.address"
 				:class="$style.prop"
 			>
-				<Text size="12" color="secondary">From account:</Text>
-				<Text size="12" color="primary">
+				<Text variant="label" color="secondary">From account:</Text>
+				<Text variant="name" color="primary" :class="$style.name_size">
 					{{ op.account!.name }}
-					<Text color="secondary">({{ trimAddress(op.account!.address) }})</Text>
+					<Text variant="data" color="secondary" data-testid="execute-op-account">({{ trimAddress(op.account!.address) }})</Text>
 				</Text>
 			</Flex>
 			<!-- send_transaction has actions[]; aztec_sendTx has exec.calls[] -->
 			<Flex v-if="op.kind === 'send_transaction'" :class="$style.prop">
-				<Text size="12" color="secondary">Payload:</Text>
-				<Flex direction="column" gap="4">
+				<Text variant="label" color="secondary">Payload:</Text>
+				<Flex direction="column" gap="4" :class="$style.payload">
 					<OperationActionRow v-for="(action, j) in op.actions" :key="`${index}:${j}`" :action="action" />
 				</Flex>
 			</Flex>
 			<template v-else-if="op.kind === 'aztec_sendTx'">
-				<Flex :class="$style.group"><Text size="12" color="secondary">Payload</Text></Flex>
+				<Flex :class="$style.group"><Text variant="label" color="secondary">Payload</Text></Flex>
 				<Flex v-for="({ call, surface }, j) in sendTxCalls(op)" :key="`${index}:${j}`" direction="column" gap="4" :class="$style.call">
 					<Flex
 						data-testid="execute-op-payload-row"
@@ -221,10 +221,10 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 						:data-intent-kind="surface.kind"
 						justify="between"
 						align="center"
-						:class="$style.row"
+						:class="[$style.row, $style.call_row]"
 					>
-						<Text size="12" weight="600" color="primary">{{ callName(call, surface) }}</Text>
-						<Text size="11" color="secondary">on <AddressDisplay :address="call.to" size="11" /></Text>
+						<Text variant="data" color="primary">{{ callName(call, surface) }}</Text>
+						<Text variant="caption" color="secondary">on <AddressDisplay :address="call.to" data-testid="execute-op-call-to" /></Text>
 					</Flex>
 					<CallArguments :surface="surface" :contract="call.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-op" json-view />
 				</Flex>
@@ -236,7 +236,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 				gap="4"
 				:class="$style.group"
 			>
-				<Text size="12" color="secondary">Authorizations the wallet will sign (found during estimation)</Text>
+				<Text variant="label" color="secondary">Authorizations the wallet will sign (found during estimation)</Text>
 				<Flex
 					v-for="(a, k) in authwits.authwits"
 					:key="`${index}:authwit:${k}`"
@@ -247,16 +247,16 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 					:class="$style.structured_args"
 				>
 					<Flex justify="between" :class="$style.row">
-						<Text size="11" color="secondary">Consumer:</Text>
-						<AddressDisplay :address="a.consumer" size="11" />
+						<Text variant="label" color="secondary">Consumer:</Text>
+						<AddressDisplay :address="a.consumer" data-testid="execute-discovered-consumer" />
 					</Flex>
 					<Flex justify="between" :class="$style.row">
-						<Text size="11" color="secondary">Authorizes:</Text>
-						<AddressDisplay :address="a.caller" size="11" />
+						<Text variant="label" color="secondary">Authorizes:</Text>
+						<AddressDisplay :address="a.caller" data-testid="execute-discovered-caller" />
 					</Flex>
 					<Flex justify="between" :class="$style.row">
-						<Text size="11" color="secondary">Function:</Text>
-						<Text size="11" color="primary" data-testid="execute-discovered-authwit-function">{{ authwitFunction(a) }}</Text>
+						<Text variant="label" color="secondary">Function:</Text>
+						<Text variant="data" color="primary" data-testid="execute-discovered-authwit-function">{{ authwitFunction(a) }}</Text>
 					</Flex>
 					<button
 						type="button"
@@ -266,38 +266,51 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 						@click="toggleAuthwit(a)"
 					>
 						<Icon name="chevron-right" size="10" color="secondary" :class="[$style.chevron, isAuthwitOpen(a) && $style.chevron_open]" />
-						<Text size="11" color="secondary">{{ isAuthwitOpen(a) ? "Hide details" : "Show details" }}</Text>
+						<Text variant="label" color="secondary">{{ isAuthwitOpen(a) ? "Hide details" : "Show details" }}</Text>
 					</button>
 					<Flex v-if="isAuthwitOpen(a)" data-testid="execute-discovered-authwit-details" direction="column" gap="2">
 						<CallArguments :surface="authwitArgs(a)" :contract="a.consumer" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-discovered-authwit" />
 						<Flex justify="between" :class="$style.row">
-							<Text size="11" color="secondary">Inner hash:</Text>
-							<Text size="11" color="primary" mono :title="safeWire(a.innerHash, 80)">{{ trimAddress(safeWire(a.innerHash, 80), 10, 6) }}</Text>
+							<Text variant="label" color="secondary">Inner hash:</Text>
+							<Text variant="data" color="primary" :title="safeWire(a.innerHash, 80)" data-testid="execute-discovered-inner-hash">{{ trimAddress(safeWire(a.innerHash, 80), 10, 6) }}</Text>
 						</Flex>
 					</Flex>
 				</Flex>
 			</Flex>
 			<Flex v-else-if="authwits.kind === 'pending'" :class="$style.prop">
-				<Text size="12" color="secondary" data-testid="execute-op-authwits-pending">Checking authorizations…</Text>
+				<Text variant="body" color="secondary" data-testid="execute-op-authwits-pending">Checking authorizations…</Text>
 			</Flex>
 		</Flex>
 
 		<div :class="$style.op_divider" />
 
-		<Flex
-			v-if="isEmbeddedFeePayment(op)"
-			data-testid="execute-op-fee-set-badge"
-			align="center"
-			gap="8"
-			wide
-			:class="$style.op_fee_set"
-		>
-			<Icon name="check-circle" size="14" color="green" />
-			<Text size="13" weight="500" color="secondary">
-				Fee payment method set by
-				<Text size="13" weight="600" color="primary">{{ safeWire(dapp?.name, 64) || 'the app' }}</Text>
-			</Text>
-		</Flex>
+		<template v-if="isEmbeddedFeePayment(op)">
+			<Flex data-testid="execute-op-fee-set-badge" align="center" gap="8" wide :class="$style.op_fee_set">
+				<Icon name="check-circle" size="14" color="green" />
+				<Text v-if="feeEstimate" variant="body" color="secondary" data-testid="execute-op-app-fee">
+					Fee up to
+					<Text variant="name" color="primary" :class="$style.name_size">{{ feeEstimate.maxFeeFormatted }} FJ</Text><template v-if="feeEstimate.priorityFeeFormatted">, includes a {{ feeEstimate.priorityFeeFormatted }} FJ <DottedTerm term="priority-fee" testid="execute-op-priority-term">priority fee</DottedTerm> the app asked for</template>
+				</Text>
+				<Text v-else variant="body" color="secondary">
+					Fee payment method set by
+					<Text variant="name" color="primary" :class="$style.name_size">{{ safeWire(dapp?.name, 64) || 'the app' }}</Text>
+				</Text>
+			</Flex>
+			<!-- Mounted with the row: a region created with its text in place may go unannounced. -->
+			<div role="status" aria-live="polite" aria-atomic="true" data-testid="execute-op-app-payer-live">
+				<Flex
+					v-if="feeEstimate?.appPayerFunding?.funded === false"
+					align="start"
+					gap="6"
+					wide
+					:class="$style.op_fee_set"
+					data-testid="execute-op-app-payer-short"
+				>
+					<Icon name="info" size="14" color="primary" aria-hidden="true" />
+					<Text variant="body" color="secondary">This app's fee contract may not cover this fee right now.</Text>
+				</Flex>
+			</div>
+		</template>
 
 		<FeeSettingsCard
 			v-else
@@ -323,34 +336,34 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 		wide
 	>
 		<Flex wide justify="between">
-			<Text data-testid="execute-op-title" size="14" color="primary">{{ opTitle(op.kind) }}</Text>
+			<Text data-testid="execute-op-title" variant="row-title" color="primary" :class="$style.title_size">{{ opTitle(op.kind) }}</Text>
 		</Flex>
 
 		<Flex v-if="op.account" :class="$style.prop">
-			<Text size="12" color="secondary">From account:</Text>
-			<Text size="12" color="primary">
+			<Text variant="label" color="secondary">From account:</Text>
+			<Text variant="name" color="primary" :class="$style.name_size">
 				{{ op.account!.name }}
-				<Text color="secondary">({{ trimAddress(op.account!.address) }})</Text>
+				<Text variant="data" color="secondary" data-testid="execute-op-account">({{ trimAddress(op.account!.address) }})</Text>
 			</Text>
 		</Flex>
 
 		<template v-if="op.kind === 'register_contract'">
 			<Flex :class="$style.prop">
-				<Text size="12" color="secondary">Contract address:</Text>
-				<AddressDisplay :address="op.address" />
+				<Text variant="label" color="secondary">Contract address:</Text>
+				<AddressDisplay :address="op.address" data-testid="execute-register-contract-address" />
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'register_sender'">
 			<Flex :class="$style.prop">
-				<Text size="12" color="secondary">Sender address:</Text>
-				<AddressDisplay :address="op.address" />
+				<Text variant="label" color="secondary">Sender address:</Text>
+				<AddressDisplay :address="op.address" data-testid="execute-register-sender-address" />
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'register_token'">
 			<template v-if="tokenMetadataLoading">
 				<Flex :class="$style.prop" align="center" gap="6">
 					<Spinner size="14" color="--txt-inverse" />
-					<Text size="12" color="secondary">Loading token metadata…</Text>
+					<Text variant="body" color="secondary">Loading token metadata…</Text>
 				</Flex>
 			</template>
 			<template v-else-if="tokenMetadata">
@@ -361,159 +374,159 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 				     attacker-controllable. Name is hidden when it duplicates
 				     the symbol (e.g. test USDC where both equal "USDC"). -->
 				<Flex :class="$style.prop">
-					<Flex justify="between" :class="$style.row">
-						<Text size="14" weight="600" color="primary" data-testid="register-token-symbol">
+					<Flex justify="between" :class="[$style.row, $style.token_meta]">
+						<Text variant="row-title" color="primary" :class="[$style.title_size, $style.token_meta]" data-testid="register-token-symbol">
 							{{ safeWire(tokenMetadata.symbol, 32) }}
 						</Text>
 						<Text
 							v-if="tokenMetadata.name && tokenMetadata.name.toLowerCase() !== tokenMetadata.symbol.toLowerCase()"
-							size="12"
+							variant="caption"
 							color="secondary"
 							data-testid="register-token-name"
 						>
 							· {{ safeWire(tokenMetadata.name, 64) }}
 						</Text>
 					</Flex>
-					<Text size="12" color="tertiary" data-testid="register-token-decimals">
+					<Text variant="meta" color="tertiary" data-testid="register-token-decimals">
 						{{ tokenMetadata.decimals }} decimals
 					</Text>
 				</Flex>
 			</template>
 			<template v-else-if="tokenMetadataError">
 				<Flex :class="$style.prop" direction="column" gap="2">
-					<Text size="12" color="orange" data-testid="register-token-meta-error">
+					<Text variant="body" color="orange" data-testid="register-token-meta-error">
 						Couldn't resolve token metadata
 					</Text>
-					<Text size="11" color="tertiary">Verify the contract address before approving.</Text>
+					<Text variant="body" color="tertiary">Verify the contract address before approving.</Text>
 				</Flex>
 			</template>
 
 			<Flex :class="$style.prop">
-				<Text size="12" color="secondary">Contract address:</Text>
+				<Text variant="label" color="secondary">Contract address:</Text>
 				<AddressDisplay :address="op.address" data-testid="register-token-address" />
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'simulate_transaction'">
 			<Flex :class="$style.prop">
-				<Text size="12" color="secondary">Payload:</Text>
-				<Flex direction="column" gap="4">
+				<Text variant="label" color="secondary">Payload:</Text>
+				<Flex direction="column" gap="4" :class="$style.payload">
 					<OperationActionRow v-for="(action, j) in op.actions" :key="`${index}:${j}`" :action="action" />
 				</Flex>
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'simulate_utility'">
 			<Flex :class="$style.prop">
-				<Text size="12" color="secondary">Contract address:</Text>
-				<AddressDisplay :address="op.contract" />
+				<Text variant="label" color="secondary">Contract address:</Text>
+				<AddressDisplay :address="op.contract" data-testid="execute-utility-contract" />
 			</Flex>
 			<Flex :class="$style.prop">
-				<Text size="12" color="secondary">Function:</Text>
-				<Text size="12" weight="600" color="primary">{{ humanizeMethodName(safeWire(op.method, 64)) }}</Text>
+				<Text variant="label" color="secondary">Function:</Text>
+				<Text variant="data" color="primary">{{ humanizeMethodName(safeWire(op.method, 64)) }}</Text>
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'aztec_getContractClassMetadata'">
 			<Flex :class="$style.prop">
-				<Text size="12" color="secondary">Class id:</Text>
-				<Text size="12" color="primary">{{ trimAddress(op.id.toString()) }}</Text>
+				<Text variant="label" color="secondary">Class id:</Text>
+				<Text variant="data" color="primary" data-testid="execute-op-class-id">{{ trimAddress(op.id.toString()) }}</Text>
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'aztec_getContractMetadata'">
 			<Flex :class="$style.prop">
-				<Text size="12" color="secondary">Contract address:</Text>
-				<AddressDisplay :address="op.address.toString()" />
+				<Text variant="label" color="secondary">Contract address:</Text>
+				<AddressDisplay :address="op.address.toString()" data-testid="execute-contract-metadata-address" />
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'aztec_getPrivateEvents'">
 			<Flex :class="$style.prop">
-				<Text size="12" color="secondary">Contract address:</Text>
-				<AddressDisplay :address="op.eventFilter.contractAddress.toString()" />
+				<Text variant="label" color="secondary">Contract address:</Text>
+				<AddressDisplay :address="op.eventFilter.contractAddress.toString()" data-testid="execute-private-events-contract" />
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'aztec_registerSender'">
 			<Flex :class="$style.prop">
-				<Text size="12" color="secondary">Sender address:</Text>
-				<AddressDisplay :address="op.address.toString()" />
+				<Text variant="label" color="secondary">Sender address:</Text>
+				<AddressDisplay :address="op.address.toString()" data-testid="execute-sdk-register-sender-address" />
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'aztec_simulateTx' || op.kind === 'aztec_profileTx'">
 			<Flex :key="op.kind" :class="$style.prop">
-				<Text size="12" color="secondary">Payload:</Text>
-				<Flex direction="column" gap="4">
+				<Text variant="label" color="secondary">Payload:</Text>
+				<Flex direction="column" gap="4" :class="$style.payload">
 					<Text
 						v-for="(call, j) in op.exec.calls"
 						:key="`${index}:${j}`"
 						data-testid="execute-op-payload-row"
 						:data-call-name="call.name ?? ''"
 						:data-call-to="call.to?.toString() ?? ''"
-						size="12"
+						variant="body"
 						color="primary"
 					>
-						<Text weight="600">{{ humanizeMethodName(safeWire(call.name ?? call.selector, 64), wire(call.to, 80)) }}</Text>
+						<Text variant="data">{{ humanizeMethodName(safeWire(call.name ?? call.selector, 64), wire(call.to, 80)) }}</Text>
 						<Text color="secondary"> on </Text>
-						<AddressDisplay :address="call.to" />
+						<AddressDisplay :address="call.to" data-testid="execute-op-call-to" />
 					</Text>
 				</Flex>
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'aztec_executeUtility'">
 			<Flex :class="$style.prop">
-				<Text size="12" color="secondary">Contract address:</Text>
-				<AddressDisplay :address="op.call.to.toString()" />
+				<Text variant="label" color="secondary">Contract address:</Text>
+				<AddressDisplay :address="op.call.to.toString()" data-testid="execute-utility-call-to" />
 			</Flex>
 			<Flex :class="$style.prop">
-				<Text size="12" color="secondary">Function:</Text>
-				<Text size="12" weight="600" color="primary">
+				<Text variant="label" color="secondary">Function:</Text>
+				<Text variant="data" color="primary">
 					{{ humanizeMethodName(safeWire(op.call.name ?? op.call.selector.toString(), 64)) }}
 				</Text>
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'aztec_registerContract'">
 			<Flex :class="$style.prop">
-				<Text size="12" color="secondary">Contract address:</Text>
-				<AddressDisplay :address="op.instance.address.toString()" />
+				<Text variant="label" color="secondary">Contract address:</Text>
+				<AddressDisplay :address="op.instance.address.toString()" data-testid="execute-register-contract-instance" />
 			</Flex>
 			<Flex v-if="op.artifact" :class="$style.prop">
-				<Text size="12" color="secondary">Artifact:</Text>
-				<Text size="12" color="primary">{{ safeWire(op.artifact.name, 64) || "(custom)" }}</Text>
+				<Text variant="label" color="secondary">Artifact:</Text>
+				<Text variant="value" color="primary">{{ safeWire(op.artifact.name, 64) || "(custom)" }}</Text>
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'aztec_createAuthWit'">
 			<template v-for="s in [createAuthwitSurface(op.messageHashOrIntent)]" :key="op.kind">
 				<Flex :class="$style.prop">
-					<Text size="12" color="secondary">Message type:</Text>
-					<Text size="12" weight="600" color="primary">{{ s.kind === "hash" ? "Inner hash" : "Call intent" }}</Text>
+					<Text variant="label" color="secondary">Message type:</Text>
+					<Text variant="value" color="primary">{{ s.kind === "hash" ? "Inner hash" : "Call intent" }}</Text>
 				</Flex>
 				<template v-if="s.kind === 'call'">
 					<!-- The delegate is the party this signature lets act as the account; it is the
 					     field a phishing intent hides. -->
 					<Flex data-testid="execute-authwit-caller" :class="$style.prop">
-						<Text size="12" color="secondary">Authorizes:</Text>
-						<AddressDisplay :address="s.caller" />
+						<Text variant="label" color="secondary">Authorizes:</Text>
+						<AddressDisplay :address="s.caller" data-testid="execute-authwit-caller-address" />
 					</Flex>
 					<Flex :class="$style.prop">
-						<Text size="12" color="secondary">Target contract:</Text>
-						<AddressDisplay :address="s.to" />
+						<Text variant="label" color="secondary">Target contract:</Text>
+						<AddressDisplay :address="s.to" data-testid="execute-authwit-target" />
 					</Flex>
 					<Flex :class="$style.prop">
-						<Text size="12" color="secondary">Function:</Text>
-						<Text size="12" weight="600" color="primary" data-testid="execute-authwit-function">{{ callName(s.call, s.args) }}</Text>
+						<Text variant="label" color="secondary">Function:</Text>
+						<Text variant="data" color="primary" data-testid="execute-authwit-function">{{ callName(s.call, s.args) }}</Text>
 					</Flex>
 					<Flex data-testid="execute-authwit-args" direction="column" gap="4" :class="$style.group">
-						<Text size="12" color="secondary">Arguments</Text>
+						<Text variant="label" color="secondary">Arguments</Text>
 						<CallArguments :surface="s.args" :contract="s.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-authwit" json-view />
 					</Flex>
 				</template>
 				<template v-else>
 					<Flex :class="$style.prop">
-						<Text size="12" color="secondary">Consumer contract:</Text>
-						<AddressDisplay :address="s.consumer" />
+						<Text variant="label" color="secondary">Consumer contract:</Text>
+						<AddressDisplay :address="s.consumer" data-testid="execute-authwit-consumer" />
 					</Flex>
 					<Flex data-testid="execute-authwit-inner-hash" :class="$style.prop">
-						<Text size="12" color="secondary">Inner hash:</Text>
-						<Text size="11" color="primary" mono :title="s.innerHash">{{ trimAddress(s.innerHash, 10, 6) }}</Text>
+						<Text variant="label" color="secondary">Inner hash:</Text>
+						<Text variant="data" color="primary" :title="s.innerHash" data-testid="execute-authwit-inner-hash-value">{{ trimAddress(s.innerHash, 10, 6) }}</Text>
 					</Flex>
 					<Flex :class="$style.prop">
-						<Text size="11" color="orange" data-testid="execute-authwit-opaque-warning">
+						<Text variant="body" color="orange" data-testid="execute-authwit-opaque-warning">
 							Opaque authorization. The wallet cannot show what this hash authorizes
 						</Text>
 					</Flex>
@@ -572,8 +585,26 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 
 	> :last-child {
 		min-width: 0;
+		overflow-wrap: anywhere;
 		text-align: right;
 	}
+}
+
+/* A dApp names the call and its contract; a long unbroken name must break inside the card, not push the address out. */
+.call_row > * {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.payload {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+/* A token's contract names its symbol and name; the row and its symbol break inside the card. */
+.token_meta {
+	min-width: 0;
+	overflow-wrap: anywhere;
 }
 
 .structured_args {
@@ -600,6 +631,14 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 	transform: rotate(90deg);
 }
 
+.title_size {
+	font-size: 14px;
+}
+
+.name_size {
+	font-size: 12px;
+}
+
 .prop {
 	width: 100%;
 	justify-content: space-between;
@@ -607,6 +646,12 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 
 	:last-child {
 		text-align: right;
+	}
+
+	/* A dApp names the function and the artifact a row shows; a long unbroken name breaks inside the card. */
+	> :last-child {
+		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 }
 </style>

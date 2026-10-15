@@ -23,7 +23,7 @@ Depends on `wallet-core` and `extension-messaging`. Does **not** depend on `wall
 | `src/pxe/known-artifacts.ts`, `note-schemas.ts`, `schemas.ts` | Compiled-in artifacts the wallet trusts by default. |
 | `src/account/nulo-account.ts` | `NuloAccount` — thin adapter over `@aztec-labs/accounts/schnorr`. Owns signing-key derivation, multicall wrapping, recursive payload chunking, deterministic salt. |
 | `src/account/fee-options.ts` | Helpers for fee-payment selection at tx-construction time. |
-| `src/fee-juice.ts` | `predictedWorstMinFees` — the inclusion-safe worst-case min fee across predicted slots; falls back to the current min fee when the node lacks the method or predicts no slots; other RPC errors propagate. |
+| `src/fee-juice.ts` | `predictedWorstMinFees` — the inclusion-safe worst-case min fee across predicted slots; falls back to the current min fee when the node lacks the method or predicts no slots; other RPC errors propagate, and a reply without integer fee components (a null-like result) throws a fixed error. |
 | `src/adapters/aztec-node-factory-adapter.ts` | The `AztecNodeFactory` adapter — single entry point for constructing `AztecNode` instances. |
 | `src/ports/node-factory-port.ts` | Port abstraction the adapter implements. |
 | `src/utils/fetch.ts` | Tiny fetch wrapper used by chain-runtime boot. |
@@ -61,4 +61,4 @@ Colocated `*.test.ts`. The end-to-end account behavior is exercised by the exten
 - **Class-id verification is required.** `artifact-registry.ts` refuses to trust an artifact whose class-id doesn't equal the canonical hash. Treat that as a security gate, not a debuggability aid.
 - **Payload chunking is recursive.** Payloads with more than 5 calls are split: each chunk is wrapped via `entrypoint.wrapExecutionPayload()` so every nesting layer gets its own outer-authwit hash. Chunk-size changes ripple through authwit signing — don't tune without re-testing.
 - **PXE state is per-chain.** Adding a chain spins up a new chain-runtime; removing a chain tears down its PXE and wipes its IndexedDB. `chain-coordinator` events propagate this across the SW.
-- **Pinned aztec versions.** Every `@aztec-labs/*` and `@aztec-foundation/*` dep is at the same version (currently `6.0.0-rc.1`). Mismatched versions cause hard-to-debug failures inside `bb.js` proof generation.
+- **Pinned aztec versions.** Every `@aztec-labs/*` dep is at one version, and every `@aztec-foundation/*` toolchain dep at the one that line requires (currently `6.0.0-rc.3` and `6.0.0-rc.6`). Mismatched versions cause hard-to-debug failures inside `bb.js` proof generation.

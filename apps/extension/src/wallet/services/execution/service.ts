@@ -15,6 +15,7 @@ import z from "zod"
 import { NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
 import type { Network } from "@/wallet/services/network/spec"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
+import { offscreenEpoch, onOffscreenRetired } from "@/wallet/utils/offscreen"
 import { AccountService } from "@/wallet/services/account/service"
 import { ContactService } from "@/wallet/services/contact/service"
 import { ProfileService } from "@/wallet/services/profile/service"
@@ -23,6 +24,8 @@ import { requireActiveProfile } from "@/wallet/services/profile/require-active-p
 import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import { TokenService } from "@/wallet/services/token/service"
 import { FpcService, FpcType } from "@/wallet/services/fpc/service"
+import type { FpcInfo } from "@/wallet/services/fpc/spec"
+import type { Fpc } from "@/wallet/services/fpc/fpc"
 import { TransactionService, OriginType, type TransferType, type LocalTxOrigin, TxStatus } from "@/wallet/services/transaction/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
@@ -35,17 +38,21 @@ import type { ILogger } from "@/wallet/logger"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { type CancelOrFailResult, classifyOperationCatch } from "./rpc-cancel"
-import { EstimateCancelRegistry } from "./estimate-cancel-registry"
+import { ESTIMATE_JOB_TTL_MS, EstimateCancelRegistry } from "./estimate-cancel-registry"
 import {
 	ContractNotRegisteredError,
+	InvalidWalletArgumentsError,
 	JobCancelledError,
+	ScopeViolationError,
 	SessionEndedError,
 	TermsAcceptanceRequiredError,
+	TooManyPendingError,
 } from "@nulo/extension-messaging/errors"
-import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
+import { isFeeAmount, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { assertLiveChainIdentity, liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { assertArtifactClassId } from "@nulo/aztec-runtime/pxe"
+import { type FeeSettingsReaders, refuseUnknownPriorities } from "@nulo/wallet-bridge"
 import {
 	EXECUTION_SERVICE_NAME,
 	type Methods,
@@ -56,7 +63,6 @@ import {
 	type OperationResult,
 	type Action,
 	type FeeSettings,
-	PRIORITY_MULTIPLIERS,
 	type AztecRegisterSenderOperation,
 	type AztecRegisterContractOperation,
 	type AztecCreateAuthWitOperation,
@@ -72,13 +78,16 @@ import {
 } from "./spec"
 import type { LastProveOutcome } from "./models"
 import { SendSequencer } from "./send-sequencer"
+import { ChainTipGate } from "./chain-tip-gate"
 import { recordedTxKeys } from "./transfer-sequence-keys"
 import { coerceAmount } from "./coerce-amount"
-import { OperationPlanner } from "./operation-planner"
+import { OperationPlanner, type TransferRequest } from "./operation-planner"
+import { type QueuedFeeCap, QueuedFeeAnswers, queuedFeeBasis, queuedFeeCap, sendShapeOf } from "./queued-fee-cap"
 import { TransferEstimateReuse } from "./transfer-estimate-reuse"
+import { type ChainIdentity, feeMultiplierFor } from "./estimate-reuse-shared"
 import { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { PreviewSnapshots } from "./preview-snapshots"
-import { TransferExecutor } from "./transfer-executor"
+import { TransferExecutor, type TransferSequence } from "./transfer-executor"
 import { DappSendExecutor } from "./dapp-send-executor"
 import { DiscoveryAwareEstimator, type DiscoveryProbe } from "./discovery-aware-estimator"
 import { ViewExecutor } from "./view-executor"
@@ -90,6 +99,7 @@ import { getViewSimulationDeps } from "./helpers/get-view-simulation-deps"
 import { AuthwitDiscoverer } from "./authwit-discoverer"
 import { TxRequestBuilder } from "./tx-request-builder"
 import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee/fee-strategy"
+import { appPriorityOf } from "./fee/fee-strategy"
 import { buildFeeStrategies } from "./fee/build-fee-strategies"
 import { ExecutionCoordinator } from "./execution-coordinator"
 import { type ProofGate, NOOP_PROOF_GATE } from "@/e2e/proof-gate"
@@ -106,8 +116,17 @@ export interface InteractionOperationSource {
 
 /** Default PXE-client factory: the real RPC-backed client. Exported so the
  *  construction seam (real client vs the composition-test fake) is unit-testable
- *  without spinning up `init()` + a full ServiceCollection. */
-export const DEFAULT_PXE_CLIENT_FACTORY = (logger: ILogger): PxeServiceClient => new PxeServiceClient(logger)
+ *  without spinning up `init()` + a full ServiceCollection.
+ *
+ *  It tracks this service's timed-out simulations so an estimate keeps its admission place while
+ *  one still runs offscreen. A record lives as long as an estimate entry and starts after the entry
+ *  it holds, so it never ends a hold before the registry's TTL would. */
+export const DEFAULT_PXE_CLIENT_FACTORY = (logger: ILogger): PxeServiceClient => {
+	const client = new PxeServiceClient(logger)
+	client.setDocumentEpochProvider(offscreenEpoch, ESTIMATE_JOB_TTL_MS)
+	onOffscreenRetired((epoch) => client.retireEpochsThrough(epoch))
+	return client
+}
 
 /** A popup decodes one approval window at a time; anything past this is not a display request. */
 const MAX_DISPLAY_CALLS = 64
@@ -127,6 +146,17 @@ const FENCED_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set([
 	"aztec_createAuthWit",
 ])
 
+/** The popup's fee settings: one per transfer or estimate, one per broadcasting operation. */
+const FEE_SETTINGS_OF = {
+	executeTransfer: ([, , , , , , feeSettings]) => [feeSettings],
+	estimateTransferFee: ([, , , , , , feeSettings]) => [feeSettings],
+	estimateOperationFee: ([, , feeSettings]) => [feeSettings],
+	executeOperations: ([operations]) =>
+		Array.isArray(operations)
+			? operations.flatMap((op) => (op?.kind === "send_transaction" || op?.kind === "aztec_sendTx" ? [op.feeSettings] : []))
+			: [],
+} satisfies FeeSettingsReaders<Methods>
+
 export class ExecutionService extends Service<Methods> implements ServiceSpec<Methods> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"executeTransfer",
@@ -138,6 +168,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		"previewOperationAuthwits",
 		"decodeCallsForDisplay",
 		"cancelJob",
+		"acceptQueuedFee",
 		"cancelEstimate",
 		"getLastProveOutcome",
 	)
@@ -202,6 +233,13 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		sleep: abortableSleep,
 		now: () => Date.now(),
 	})
+	private readonly queuedFeeAnswers = new QueuedFeeAnswers()
+	private readonly chainTipGate = new ChainTipGate({
+		readTip: (networkId) => this.readChainTip(networkId),
+		sleep: abortableSleep,
+		now: () => Date.now(),
+		logDebug: (msg) => this.logDebug(msg),
+	})
 	private dappSendExecutor: DappSendExecutor = null!
 	private viewExecutor: ViewExecutor = null!
 	private lane: ExecutionLane = null!
@@ -219,6 +257,12 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		private readonly pxeClientFactory: (logger: ILogger) => PxeServiceClient = DEFAULT_PXE_CLIENT_FACTORY,
 	) {
 		super(EXECUTION_SERVICE_NAME, logger)
+	}
+
+	/** An unknown speed level is refused before the method runs; fee math never reads one. */
+	protected override invoke(method: string, params: unknown[]): unknown {
+		refuseUnknownPriorities(FEE_SETTINGS_OF, method, params)
+		return super.invoke(method, params)
 	}
 
 	protected async init(services: ServiceCollection) {
@@ -293,6 +337,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		this.estimateReuse = new TransferEstimateReuse({
 			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
 			getNode: (chainId) => this.networkService.getNode(chainId),
+			getLiveChainIdentity: (network) => this.liveChainIdentity(network),
+			getFpcInfo: (fpcId) => this.sponsorRow(fpcId),
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
 			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
 			logDebug: (msg) => this.logDebug(msg),
@@ -300,14 +346,10 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		this.operationEstimateReuse = new OperationEstimateReuse({
 			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
 			getNode: (chainId) => this.networkService.getNode(chainId),
-			getLiveChainIdentity: async (network) => {
-				const node = await this.networkService.getNode(network.chainId)
-				const info = await node.getNodeInfo()
-				assertLiveChainIdentity(network, info)
-				return { l1ChainId: info.l1ChainId, rollupVersion: info.rollupVersion }
-			},
-			getFpcInfo: (fpcId) => this.fpcService.getFpc(fpcId),
+			getLiveChainIdentity: (network) => this.liveChainIdentity(network),
+			getFpcInfo: (fpcId) => this.sponsorRow(fpcId),
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
+			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
 			logDebug: (msg) => this.logDebug(msg),
 		})
 		this.previewSnapshots = new PreviewSnapshots()
@@ -320,6 +362,20 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			},
 			logDebug: (msg) => this.logDebug(msg),
 		})
+	}
+
+	/** The sponsor row decorated as a build decorates it (`getFpcImpl` derives the protocol
+	 *  addresses; `getFpc` reads a cache a purge of the same chain id in another profile empties). */
+	private async sponsorRow(fpcId: string): Promise<FpcInfo> {
+		return (await this.fpcService.getFpcImpl(fpcId)).infoData
+	}
+
+	/** The live pair, asserted against the network row: what a reused request skipped at build. */
+	private async liveChainIdentity(network: Network): Promise<ChainIdentity> {
+		const node = await this.networkService.getNode(network.chainId)
+		const info = await node.getNodeInfo()
+		assertLiveChainIdentity(network, info)
+		return { l1ChainId: info.l1ChainId, rollupVersion: info.rollupVersion }
 	}
 
 	private wireExecutors(): void {
@@ -351,12 +407,13 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 				endQueuedWait: (journalId) => this.lane.endQueuedWait(journalId),
 				isSlotBusy: (profileId, chainId) => this.lane.isSlotBusy(profileId, chainId),
 				tryTakeSlot: (profileId, chainId) => this.lane.tryTakeSlot(profileId, chainId),
-				acquireTransferSlot: (networkId, journalId, fence, signal) =>
-					this.lane.acquireTransferSlot(networkId, journalId, fence, signal),
+				acquireTransferSlot: (networkId, journalId, fence, signal, onWait) =>
+					this.lane.acquireTransferSlot(networkId, journalId, fence, signal, onWait),
 			},
 			sequencer: this.sendSequencer,
+			chainTip: this.chainTipGate,
 			getTokenContract: async (tokenId) => (await this.tokenService.getTokenRaw(tokenId)).contract,
-			getFpc: (fpcId) => this.fpcService.getFpc(fpcId),
+			getFpcImpl: (fpcId) => this.fpcService.getFpcImpl(fpcId),
 			getTransactions: (account) => this.transactionService.getTransactions(account),
 			getActiveProfile: () => this.profileService.getActiveProfile(),
 			captureExecutionFence: () => this.captureFence(),
@@ -370,10 +427,11 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			getAccountContract: (profileId, chainId, address) => this.accountService.getAccountContract(profileId, chainId, address),
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
 			addTransaction: (...args) => this.transactionService.addTransaction(...args),
-			buildAndEstimate: (op, feeSettings, fence, parentTask, signal) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal),
+			buildAndEstimate: (op, feeSettings, fence, parentTask, signal, fpc) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, fpc),
 			createJournalOperation: (input) => this.operationJournal.createOperation(input),
 			transitionJournal: (journalId, progress, error) => this.operationJournal.transitionOperation(journalId, progress, error),
+			answers: this.queuedFeeAnswers,
 			logDebug: (msg, ...rest) => this.logDebug(msg, ...rest),
 			logError: (msg, ...rest) => this.logError(msg, ...rest),
 		})
@@ -398,10 +456,14 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			buildAndEstimateFolded: (op, feeSettings, fence, probe, parentTask, signal) =>
 				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, probe),
 			buildForDiscovery: async (op, method, fence) => {
+				const sendOp = op as SendTransactionOperation
+				// An app's private call may read its gas settings, so discovery simulates with its priority too.
 				const { txRequest, node, pxe, account, network } = await this.txBuilder.buildStandard(
-					op as SendTransactionOperation,
+					sendOp,
 					fence,
 					method,
+					undefined,
+					appPriorityOf(sendOp.fee),
 				)
 				return { txRequest, node, pxe, account, network }
 			},
@@ -424,7 +486,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			getPXE: (network) => this.pxeService.getPXE(networkInfoFrom(network)),
 			getAccountContract: (profileId, chainId, address) => this.accountService.getAccountContract(profileId, chainId, address),
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
-			getFpcInfo: (fpcId) => this.fpcService.getFpc(fpcId),
+			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
 			lane: {
 				deleteController: (journalId) => this.lane.deleteController(journalId),
 				acquireSlot: (networkId, queuedJournalId, fence, onEnqueued, originKey) =>
@@ -433,9 +495,15 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 					this.lane.claimOrCreateJournal(networkId, accountAddress, origin, calls, hooks, reuseController, fence),
 				beginJournal: (networkId, accountAddress, origin, calls, fence) =>
 					this.lane.beginJournal(networkId, accountAddress, origin, calls, fence),
-				markJournal: (journalId, progress, error) => this.lane.markJournal(journalId, progress, error),
+				markJournal: (journalId, progress, error, failedTitle) => this.lane.markJournal(journalId, progress, error, failedTitle),
 				commitJournal: (journalId, progress) => this.lane.commitJournal(journalId, progress),
+				parkSlot: (release, networkId, queuedJournalId, fence, preController, originKey, wait) =>
+					this.lane.parkSlot(release, networkId, queuedJournalId, fence, preController, originKey, wait),
+				joinOriginLine: (fence, chainId, originKey) => this.lane.joinOriginLine(fence, chainId, originKey),
+				failUnclaimed: (journalId, error) => this.lane.failUnclaimed(journalId, error),
 			},
+			sequencer: this.sendSequencer,
+			chainTip: this.chainTipGate,
 			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal) =>
 				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal),
 			addTransaction: (...args) => this.transactionService.addTransaction(...args),
@@ -464,6 +532,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			if (tx.status !== TxStatus.Pending) {
 				this.gasBalances.invalidateAccount(tx.account)
 				this.sendSequencer.settled(tx.hash)
+				this.chainTipGate.observe(tx)
 			}
 		})
 
@@ -487,6 +556,15 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		this.fpcService.onFpcDeleted.add(invalidateOnPrivateFpc)
 	}
 
+	/** The proposed tip of the node the network's PXE syncs from (its primary endpoint), read past the
+	 *  PXE's chain guard, which would wait behind a proof, through a node that dials once and logs
+	 *  nothing. */
+	private async readChainTip(networkId: string): Promise<number> {
+		const network = await this.networkService.getNetwork(networkId)
+		const node = await this.networkService.getSingleAttemptNodeForUrl(networkInfoFrom(network).rpcUrl)
+		return Number(await node.getBlockNumber())
+	}
+
 	/** Capture the {profileId, epoch, session} fence at execution AUTHORIZATION (before the
 	 *  slow prove) so `addTransaction` can reject a completing prove whose profile
 	 *  was deleted meanwhile. Delegates to ProfileService so the active-read +
@@ -505,8 +583,10 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		amount: bigint,
 		feeSettings: FeeSettings,
 		precomputedEstimateId?: string,
+		feeCap?: string,
 	): Promise<string> {
 		await this.ensureInitialized()
+		if (feeCap !== undefined && !isFeeAmount(feeCap)) throw InvalidWalletArgumentsError.forMethod("executeTransfer")
 		// Early refusal only — the wall is in the coordinator. This spares the user a proof.
 		await this.legal.assertCurrent()
 		amount = coerceAmount(amount)
@@ -515,6 +595,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			{ networkId, accountAddress, tokenId, transferType, recipientAddress, amount, feeSettings },
 			precomputedEstimateId,
 			fence,
+			feeCap,
 		)
 	}
 
@@ -537,8 +618,27 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		// would wait behind that proof anyway, past its RPC deadline on a real prover.
 		const profile = await requireActiveProfile(this.profileService, "Wallet locked")
 		const slotBusy = this.lane.isSlotBusy(profile.id, sequence.scope.chainId)
-		if (slotBusy || this.sendSequencer.isBlocked(sequence.scope, sequence.keys)) return { queued: true, tokenSpent: false }
+		const lagging = this.chainTipGate.unconfirmed(sequence.scope, sequence.keys, networkId)
+		// The popup asks again every 2 s; the read it starts is what lets that answer change.
+		if (lagging) void this.chainTipGate.refresh(networkId)
+		if (slotBusy || lagging || this.sendSequencer.isBlocked(sequence.scope, sequence.keys)) {
+			const cap = await this.queuedFeeCapFor(req, profile.id, sequence)
+			return { queued: true, tokenSpent: false, ...(cap ? { cap } : {}) }
+		}
 		return this.withEstimateAdmission(estimateToken, "send", (signal) => this.transferExecutor.estimateFee(req, signal, sequence))
+	}
+
+	/** The cap a queued transfer is offered, read from stored rows only: nothing on the network. */
+	private async queuedFeeCapFor(req: TransferRequest, profileId: string, sequence: TransferSequence): Promise<QueuedFeeCap | undefined> {
+		const shape = sendShapeOf(req.feeSettings, req.transferType, sequence.feeSpender)
+		if (!shape) return undefined
+		const [token, rows] = await Promise.all([
+			this.tokenService.getTokenRaw(req.tokenId),
+			this.transactionService.getTransactions(req.accountAddress),
+		])
+		const basis = queuedFeeBasis(rows, profileId, sequence.scope.chainId, token.contract, shape, Date.now())
+		const cap = basis ? queuedFeeCap(basis) : undefined
+		return basis && cap ? { basis, cap } : undefined
 	}
 
 	/** Admission + cancellation envelope for the estimate entry points.
@@ -555,26 +655,35 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	): Promise<T> {
 		if (!estimateToken) return run()
 		const profile = await requireActiveProfile(this.profileService, "Wallet locked")
-		let admitted = false
+		let admission: AbortSignal | undefined
 		let estimateId: string | undefined
+		let offscreenWork: Promise<void> | undefined
 		try {
 			// Inside the try: a parked admission rejected by supersede/cancel
 			// throws the internal sentinel too, and it must cross the RPC
 			// boundary as the structured error like every other cancel.
-			const signal = await this.estimateCancel.admit(estimateToken, profile.id, flowKey)
-			admitted = true
-			const result = await run(signal)
+			admission = await this.estimateCancel.admit(estimateToken, profile.id, flowKey)
+			const result = await run(admission)
 			// One id evicts every cache: a standard estimate's preview id IS its
 			// estimate id, and a preview-only result has nothing else stashed.
 			if (!("queued" in result)) estimateId = result.previewId ?? result.estimateId
 			return result
 		} catch (error) {
+			if (admission) offscreenWork = this.pxeService.offscreenSettled(error)
 			if (error instanceof JobCancelledSentinel) {
 				throw new JobCancelledError(undefined, { jobId: estimateToken })
 			}
 			throw error
 		} finally {
-			if (admitted) this.estimateCancel.settle(estimateToken, estimateId)
+			// A simulation that timed out still runs in the PXE's queue, so its estimate keeps its
+			// place until that simulation ends offscreen; the client bounds the wait.
+			if (admission && offscreenWork) {
+				this.logDebug("estimate held until its timed-out simulation ends offscreen")
+				const held = admission
+				void offscreenWork.then(() => this.estimateCancel.settle(estimateToken, undefined, held))
+			} else if (admission) {
+				this.estimateCancel.settle(estimateToken, estimateId, admission)
+			}
 		}
 	}
 
@@ -599,6 +708,17 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		return this.lane.cancelJob(jobId)
 	}
 
+	/** Applies `cancelJob`'s ownership gate (the active profile's own record, nothing disclosed
+	 *  about any other), then resumes only a transfer waiting at `queued` with exactly this fee. */
+	public async acceptQueuedFee(jobId: string, fee: string): Promise<boolean> {
+		await this.ensureInitialized()
+		if (typeof jobId !== "string" || !isFeeAmount(fee)) throw InvalidWalletArgumentsError.forMethod("acceptQueuedFee")
+		const [record, profile] = await Promise.all([this.operationJournal.getOperation(jobId), this.profileService.getActiveProfile()])
+		if (!record || !profile || record.profileId !== profile.id || record.kind !== "transfer") return false
+		if (record.progress.stage !== "queued" || record.progress.reask?.fee !== fee) return false
+		return this.queuedFeeAnswers.accept(jobId, fee)
+	}
+
 	/** Start pre-claim liveness vouching for a queued journal record — see
 	 *  {@link ExecutionLane.beginQueuedWait}. Called by the wallet-sdk handler
 	 *  at queued-record creation; SW-internal, never RPC-exposed. */
@@ -610,6 +730,19 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	 *  normal removal is the ownership migration at mutex enqueue. */
 	public endQueuedWait(journalId: string): void {
 		this.lane.endQueuedWait(journalId)
+	}
+
+	/** A wallet-built transaction's fee, estimated where it was built: the operation never crosses an
+	 *  RPC boundary, so no popup can supply one. */
+	public async estimateSendTransactionFee(
+		operation: SendTransactionOperation,
+		estimateToken?: string,
+		flowKey?: string,
+	): Promise<TransferFeeEstimate> {
+		await this.ensureInitialized()
+		return this.withEstimateAdmission(estimateToken, flowKey ?? "wallet", (signal) =>
+			this.dappSendExecutor.estimateOperationFee(operation, operation.feeSettings, signal),
+		)
 	}
 
 	public async estimateOperationFee(
@@ -731,13 +864,19 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		return results
 	}
 
-	/** Level by reach: a Terms refusal is expected and a connected dApp retries, so at `error` it
-	 *  would fill every user's log buffer. */
+	/** Level by reach: a Terms, scope, argument or capacity refusal is expected, and a connected dApp
+	 *  can repeat any of them, so at `error` they would fill every user's log buffer. */
 	private logOperationOutcome(traceId: string, kind: Operation["kind"], classified: CancelOrFailResult): void {
 		if (classified.status === "cancelled") {
 			this.logInfo(`[${traceId}] executeOperations: ${kind} cancelled by user`)
 		} else if (classified.code === TermsAcceptanceRequiredError.CODE) {
 			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: terms not accepted`)
+		} else if (classified.code === ScopeViolationError.CODE) {
+			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: outside its grant`)
+		} else if (classified.code === InvalidWalletArgumentsError.CODE) {
+			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: invalid arguments`)
+		} else if (classified.code === TooManyPendingError.CODE) {
+			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: too many pending`)
 		} else {
 			this.logError(`[${traceId}] executeOperations: ${kind} failed:`, classified.error)
 		}
@@ -1098,13 +1237,14 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		parentTask?: WrappedTask,
 		signal?: AbortSignal,
 		probe?: DiscoveryProbe,
+		fpc?: Fpc,
 	): Promise<FeeEstimate> {
 		// Clone the op + its actions array. fjwc / fpc branches mutate
 		// `op.actions` (unshift / splice) to prepend fee payloads; leaking
 		// those mutations back to the caller breaks repeat estimates and
 		// any caller that keeps a reference to the array.
 		const op = { ...inputOp, actions: [...inputOp.actions] }
-		const feeMultiplier = feeSettings.priorityLevel ? PRIORITY_MULTIPLIERS[feeSettings.priorityLevel] : undefined
+		const feeMultiplier = feeMultiplierFor(feeSettings.priorityLevel)
 		const gasPadding = op.fee?.gasPadding ?? 1.05
 		const strategy = this.feeStrategies.get(feeSettings.paymentMethod.kind)
 		if (!strategy) {
@@ -1119,6 +1259,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			parentTask,
 			signal,
 			probe,
+			fpc,
 		}
 		return strategy.buildAndEstimate(ctx)
 	}

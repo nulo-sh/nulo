@@ -147,7 +147,7 @@ describe("ArtifactRegistry.resolve — class-id trust enforcement", () => {
 		expect(got).toBeUndefined()
 	})
 
-	test("verifier cache: repeat resolve of same classId does NOT recompute", async () => {
+	test("verifier cache: repeat resolve of the same artifact object does NOT recompute", async () => {
 		const classId = new Fr(123)
 		const { verifier, calls } = makeRecordingVerifier()
 		const reg = new ArtifactRegistry(emptyLoader, { verifier })
@@ -156,12 +156,56 @@ describe("ArtifactRegistry.resolve — class-id trust enforcement", () => {
 		const first = await reg.resolve(classId, pxeLookup)
 		const second = await reg.resolve(classId, pxeLookup)
 
-		expect((first as { name: string }).name).toBe("pxe-hit")
-		expect((second as { name: string }).name).toBe("pxe-hit")
-		// Verifier called exactly once — second resolve hit the
-		// `verifiedClassIds` cache.
+		expect(second).toBe(first)
 		expect(calls).toHaveLength(1)
 		expect(calls[0].expected).toBe(classId.toString())
+	})
+
+	test("a class id verified in one store does not vouch for another store's object", async () => {
+		const classId = new Fr(77)
+		const verified = makeArtifact("store-a")
+		const forged = makeArtifact("store-b")
+		const seen: ContractArtifact[] = []
+		const verifier: ArtifactClassIdVerifier = {
+			verify: async (artifact) => {
+				seen.push(artifact)
+				return artifact === forged ? undefined : artifact
+			},
+		}
+		const reg = new ArtifactRegistry(emptyLoader, { verifier })
+
+		await expect(reg.resolve(classId, async () => verified, { pxeOnly: true })).resolves.toBe(verified)
+		await expect(reg.resolve(classId, async () => forged, { pxeOnly: true })).resolves.toBeUndefined()
+		expect(seen).toEqual([verified, forged])
+	})
+
+	test("a verifier that returns another object leaves nothing cached", async () => {
+		const input = makeArtifact("input")
+		const returned = makeArtifact("returned")
+		const seen: ContractArtifact[] = []
+		const verifier: ArtifactClassIdVerifier = {
+			verify: async (artifact) => {
+				seen.push(artifact)
+				return artifact === input ? returned : artifact
+			},
+		}
+		const reg = new ArtifactRegistry(emptyLoader, { verifier })
+
+		await expect(reg.resolve(new Fr(5), async () => input)).resolves.toBe(returned)
+		await expect(reg.resolve(new Fr(5), async () => input)).resolves.toBe(returned)
+		await expect(reg.resolve(new Fr(5), async () => returned)).resolves.toBe(returned)
+		expect(seen).toEqual([input, input, returned])
+	})
+
+	test("the same artifact object under another class id is verified again", async () => {
+		const artifact = makeArtifact("pxe-hit")
+		const { verifier, calls } = makeRecordingVerifier()
+		const reg = new ArtifactRegistry(emptyLoader, { verifier })
+
+		await reg.resolve(new Fr(1), async () => artifact)
+		await reg.resolve(new Fr(2), async () => artifact)
+
+		expect(calls.map((call) => call.expected)).toEqual([new Fr(1).toString(), new Fr(2).toString()])
 	})
 
 	test("known branch does NOT recompute (already keyed by load-time class id)", async () => {

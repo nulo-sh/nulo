@@ -1,9 +1,9 @@
 /**
  * The stack position each registry popup hands its shell: `Popup` takes the popup's order (its
- * z-index), `PopupCard` the depth `len - order` (whether it sits back), and a `FormPopup` consumer
- * hands its one value, the raw order, to both. Pinned for all 25 live popups against a store whose
- * order and depth are distinct numbers, so a swapped pair, a wrong key or a consumer handed the
- * wrong value reds.
+ * z-index) and `PopupCard` the depth `len - order` (whether it sits back); a `FormPopup` consumer
+ * hands both, and `FormPopup` forwards each to its own shell. Pinned for all 25 live popups against
+ * a store whose order and depth are distinct numbers, so a swapped pair, a wrong key or a consumer
+ * handed the wrong value reds.
  */
 import { mount } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
@@ -135,7 +135,10 @@ const FORM_POPUPS: [string, unknown][] = [
 const STUBS = {
 	Popup: { props: ["show", "displaceIdx"], template: '<div data-shell="popup" :data-value="String(displaceIdx)"><slot /></div>' },
 	PopupCard: { props: ["displaceIdx"], template: '<div data-shell="card" :data-value="String(displaceIdx)" />' },
-	FormPopup: { props: ["show", "displaceIdx"], template: '<div data-shell="form" :data-value="String(displaceIdx)" />' },
+	FormPopup: {
+		props: ["show", "displaceIdx", "depth"],
+		template: `<div data-shell="form" :data-value="String(displaceIdx) + '|' + String(depth)" />`,
+	},
 }
 
 function shells(component: unknown): Record<string, string | undefined> {
@@ -175,14 +178,20 @@ describe("popup stack position", () => {
 		expect(shells(component)).toEqual({ popup: "1", card: "2", form: undefined })
 	})
 
-	test.each(FORM_POPUPS)("%s: FormPopup gets the raw order", (key, component) => {
+	test.each(FORM_POPUPS)("%s: FormPopup gets the order and the depth", (key, component) => {
 		stackAt(key)
-		expect(shells(component)).toEqual({ popup: undefined, card: undefined, form: "1" })
+		expect(shells(component)).toEqual({ popup: undefined, card: undefined, form: "1|2" })
 	})
 
 	test.each(DEPTH_POPUPS)("%s: a closed key hands undefined and NaN", (_key, component) => {
 		H.popups = { other: { order: 0 } }
 		H.len = 1
 		expect(shells(component)).toEqual({ popup: "undefined", card: "NaN", form: undefined })
+	})
+
+	test.each(FORM_POPUPS)("%s: a closed key hands undefined and NaN", (_key, component) => {
+		H.popups = { other: { order: 0 } }
+		H.len = 1
+		expect(shells(component)).toEqual({ popup: undefined, card: undefined, form: "undefined|NaN" })
 	})
 })

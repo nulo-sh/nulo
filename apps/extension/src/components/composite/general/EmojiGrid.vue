@@ -22,7 +22,7 @@ const rows = computed(() => {
 				justify="center"
 				:class="$style.cell"
 			>
-				<Text size="24">{{ emoji }}</Text>
+				<Text>{{ emoji }}</Text>
 			</Flex>
 		</Flex>
 	</Flex>
@@ -36,6 +36,7 @@ const rows = computed(() => {
 .cell {
 	width: 48px;
 	height: 48px;
+	font-size: 24px;
 
 	border-radius: 0;
 	background: var(--nulo-surface-low);

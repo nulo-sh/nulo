@@ -46,7 +46,7 @@ vi.mock("./content-message-relay", () => ({ attachContentListener: () => {} }))
 vi.mock("./tab-lifecycle", () => ({ wireTabLifecycle: () => {} }))
 vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
 
-import { initWalletSdkHandler } from "./background"
+import { dispatcherNetworks, initWalletSdkHandler } from "./background"
 import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN as ORIGIN, fakeSdkServices } from "./test-services"
 
@@ -301,5 +301,54 @@ describe("discovery for a chain the profile serves", () => {
 
 		expect(approved()).toEqual(["again-1"])
 		expect(popup).not.toHaveBeenCalled()
+	})
+})
+
+describe("a quarantined chain keeps its network row but serves no dApp", () => {
+	test("a remembered row neither reconnects nor is dropped; the notice opens and no session is written", async () => {
+		const popup = vi.fn(async () => ({ approved: true }))
+		const notice = vi.fn(async (_p: NoticeParams) => {})
+		const { discover, rows } = boot({ remembered: { trusted: true }, popup, notice, quarantined: (chain) => chain === 0 })
+
+		discover("q1", 0)
+		await flush()
+
+		expect(rejected()).toEqual(["q1"])
+		expect(approved()).toEqual([])
+		expect(popup).not.toHaveBeenCalled()
+		expect(notice).toHaveBeenCalledTimes(1)
+		expect([...rows.keys()]).toEqual([`${ORIGIN}|0`])
+	})
+
+	test("a chain quarantined while its connect window is open: Allow writes no row and the dApp is refused", async () => {
+		const window = held()
+		let quarantinedNow = false
+		const popup = vi.fn(() => window.promise.then(() => ({ approved: true })))
+		const { discover, rows } = boot({ popup, quarantined: () => quarantinedNow })
+
+		discover("q2", 0)
+		await flush()
+		expect(popup).toHaveBeenCalledTimes(1)
+		quarantinedNow = true
+		window.release()
+		await flush()
+
+		expect(approved()).toEqual([])
+		expect(rejected()).toEqual(["q2"])
+		expect(rows.size).toBe(0)
+	})
+
+	test("the dispatcher's network read resolves no network on a quarantined chain and passes every other read through", async () => {
+		const reads: Array<[string, number | undefined]> = []
+		const networks = dispatcherNetworks({
+			isChainQuarantined: async (_p, chainId) => chainId === 5,
+			getNetworksRaw: async (profileId, chainId) => {
+				reads.push([profileId, chainId])
+				return [{ id: `net-${chainId}` }] as never
+			},
+		})
+		expect(await networks.getNetworksRaw("p1", 5)).toEqual([])
+		expect(await networks.getNetworksRaw("p1", 6)).toEqual([{ id: "net-6" }])
+		expect(reads).toEqual([["p1", 6]])
 	})
 })

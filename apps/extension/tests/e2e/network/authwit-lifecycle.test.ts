@@ -1,6 +1,6 @@
 import { expect, inject } from "vitest"
 import { clickByTestId, openPopup, test } from "../fixtures/extension"
-import { navigateToSettings, switchAccountByAddress } from "../fixtures/helpers"
+import { openAccountState, switchAccountByAddress } from "../fixtures/helpers"
 import { assertPgOk, formatPgMismatch, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveExecute, pickFeeAndSubmitAuthwitPopup, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { mintPublicTokensForAccount, waitForTxMined, type AztecTestConfig } from "../fixtures/aztec"
@@ -91,7 +91,7 @@ test.skipIf(!hasConfig)(
 		// `from: B`, so this genuinely exercises A's public authwit. Asserts the MINED outcome
 		// — a revoked/blocked consume reverts at sequencing; the NO_WAIT dApp result is
 		// `{ txHash, ... }`, so pull the hash out of either shape.
-		const consume = async (nonce: string): Promise<"ok" | "error"> => {
+		const consume = async (nonce: string): Promise<"ok" | `error: ${string}`> => {
 			await selectPgAccount(callerB)
 			await setInputs(nonce)
 			const seq = await snapshotResultSeq(page)
@@ -121,7 +121,7 @@ test.skipIf(!hasConfig)(
 		const settingsAction = async (actionTestId: string, submitTestId: string) => {
 			const walletPopup = await openPopup(ctx)
 			await switchAccountByAddress(walletPopup, ownerA) // view the GRANTER's registry (ownerA = accountAddresses[0])
-			await navigateToSettings(walletPopup, "advanced", "account-state", "authwits")
+			await openAccountState(walletPopup, "authwits")
 			await clickByTestId(walletPopup, "authwits-actions-btn")
 			// revoke-all is gated on the async authwit list (`:disabled="!authwits.length"`);
 			// clickByTestId waits out aria-disabled, so this auto-waits for the list to load.

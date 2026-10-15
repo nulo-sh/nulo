@@ -30,7 +30,7 @@ const cells = computed(() => CELLS.map((c) => ({ ...c, glyph: publishGlyph(props
 		<span v-for="{ cell, name, attr, glyph } in cells" :key="cell" :class="[$style.cell, mark[facts[cell]]]" :data-cell="attr">
 			<Icon v-if="glyph" :name="glyph" size="10" aria-hidden="true" />
 			<b :class="$style.name">{{ name }}</b>
-			<span :class="$style.word">{{ factWord(cell, facts) }}</span>
+			<span>{{ factWord(cell, facts) }}</span>
 		</span>
 		<span :class="$style.chevron" aria-hidden="true">
 			<MaterialIcon name="chevron_right" :size="15" color="secondary" />
@@ -65,6 +65,7 @@ const cells = computed(() => CELLS.map((c) => ({ ...c, glyph: publishGlyph(props
 }
 
 .cell {
+	composes: type--tag from global;
 	flex: 1 1 auto;
 	display: flex;
 	align-items: center;
@@ -74,22 +75,12 @@ const cells = computed(() => CELLS.map((c) => ({ ...c, glyph: publishGlyph(props
 	padding: 6px 2px;
 	border-right: 1px solid var(--nulo-border);
 
-	font-family: var(--font-mono);
-	font-size: 8.5px;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
 	white-space: nowrap;
 }
 
 .name {
-	font-family: var(--font-headline);
-	font-weight: 700;
-	letter-spacing: 0.1em;
+	composes: type--tag-name from global;
 	color: var(--nulo-secondary);
-}
-
-.word {
-	font-weight: 500;
 }
 
 .chevron {

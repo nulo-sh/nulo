@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: A stale-session reply that rejects a dApp call within seconds when the background died (`apps/extension/src/wallet/services/wallet-sdk/stale-session.ts`), and both execution canaries running prover-on on Chrome and Firefox, with CI reading their results back (`scripts/ci-cd/assert-canary-results.ts`, `scripts/ci-cd/canary-expectations.json`).
-- **Open items**: whether the dApp SDK should refuse a discovery request id that collides with a live session, an upstream question tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: whether the dApp SDK should refuse a discovery request id that collides with a live session, an upstream question tracked in #127.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

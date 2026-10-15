@@ -78,21 +78,21 @@ watch(
 	<Popup :show="show && !!token" @onClose="emit('onClose')" :displaceIdx="order">
 		<PopupCard :displaceIdx="depth">
 			<Flex wide direction="column" gap="20" :class="$style.wrapper">
-				<Text size="14" weight="600" color="primary"> Token Metadata </Text>
+				<Text variant="title-page" color="primary"> Token Metadata </Text>
 
 				<Flex direction="column" gap="16">
 					<Flex align="center" justify="between">
-						<Text size="12" weight="600" color="tertiary"> Id </Text>
+						<Text variant="label" color="tertiary"> Id </Text>
 
-						<Text size="12" weight="600" color="secondary">
+						<Text variant="data" color="secondary" data-testid="token-metadata-id">
 							{{ token?.id }}
 						</Text>
 					</Flex>
 
 					<Flex align="center" justify="between">
-						<Text size="12" weight="600" color="tertiary"> Contract Address </Text>
+						<Text variant="label" color="tertiary"> Contract Address </Text>
 
-						<Text @click="handleCopyAddress" size="12" weight="600" color="secondary" class="copyable">
+						<Text @click="handleCopyAddress" variant="data" color="secondary" class="copyable" data-testid="token-metadata-address">
 							{{ token.contract.slice(0, 6) }}
 							<Text color="tertiary">•••</Text>
 							{{ token.contract.slice(-4) }}
@@ -100,27 +100,27 @@ watch(
 					</Flex>
 
 					<Flex align="center" justify="between">
-						<Text size="12" weight="600" color="tertiary"> Name </Text>
+						<Text variant="label" color="tertiary"> Name </Text>
 
-						<Text size="12" weight="600" color="secondary">
+						<Text variant="value" color="secondary">
 							{{ token.name }}
 						</Text>
 					</Flex>
 
 					<Flex align="center" justify="between">
-						<Text size="12" weight="600" color="tertiary"> Symbol </Text>
+						<Text variant="label" color="tertiary"> Symbol </Text>
 
-						<Text size="12" weight="600" color="secondary">
+						<Text variant="value" color="secondary">
 							{{ token.symbol }}
 						</Text>
 					</Flex>
 
 					<Flex align="center" justify="between">
-						<Text size="12" weight="600" color="tertiary"> Chain ID </Text>
+						<Text variant="label" color="tertiary"> Chain ID </Text>
 
 						<Tooltip position="end">
 							<Flex align="center" gap="4">
-								<Text size="12" weight="600" color="secondary">
+								<Text variant="data" color="secondary" data-testid="token-metadata-chain-id">
 									{{ token.chainId }}
 								</Text>
 								<Icon name="info" size="12" color="secondary" />
@@ -135,13 +135,13 @@ watch(
 
 					<template v-for="section in capabilitySections" :key="section.title">
 						<Flex align="center" gap="6" style="margin-top: 10px">
-							<Text size="12" weight="600" color="secondary">{{ section.title }}</Text>
+							<Text variant="label-section" color="secondary">{{ section.title }}</Text>
 						</Flex>
 
 						<Flex v-for="row in section.rows" :key="row.key" align="center" justify="between">
 							<Flex direction="column" gap="6">
-								<Text size="12" weight="600" color="tertiary"> {{ row.label }} </Text>
-								<Text size="11" weight="600" color="secondary" mono> {{ row.key }} </Text>
+								<Text variant="label" color="tertiary"> {{ row.label }} </Text>
+								<Text variant="data" color="secondary"> {{ row.key }} </Text>
 							</Flex>
 
 							<Icon :name="token[row.key] ? 'check-circle' : 'close-circle'" size="12" :color="token[row.key] ? 'green' : 'red'" />

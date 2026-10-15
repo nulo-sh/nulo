@@ -9,13 +9,15 @@ import { join } from "node:path"
 import { randomBytes } from "node:crypto"
 import { rmSync } from "node:fs"
 
-import { createAztecNodeClient, waitForNode } from "@aztec-labs/aztec.js/node"
-import { TxHash } from "@aztec-labs/stdlib/tx"
+import { createAztecNodeClient, waitForNode, waitForTx } from "@aztec-labs/aztec.js/node"
+import { type ExecutionPayload, TxHash, TxStatus } from "@aztec-labs/stdlib/tx"
+import { TimeoutError } from "@aztec-labs/foundation/error"
 import { GasFees } from "@aztec-labs/stdlib/gas"
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses"
 import { Fr } from "@aztec-labs/aztec.js/fields"
-import { getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts"
+import { NO_WAIT, type NoWait, getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts"
 import { EmbeddedWallet } from "@aztec-labs/wallets/embedded"
+import { BaseWallet } from "@aztec-labs/wallet-sdk/base-wallet"
 import { registerInitialLocalNetworkAccountsInWallet } from "@aztec-labs/wallets/testing"
 import { SponsoredFeePaymentMethod } from "@aztec-labs/aztec.js/fee"
 import { L1FeeJuicePortalManager } from "@aztec-labs/aztec.js/ethereum"
@@ -24,6 +26,9 @@ import { ProtocolContractAddress } from "@aztec-labs/aztec.js/protocol"
 import { createExtendedL1Client } from "@aztec-labs/ethereum/client"
 import { SponsoredFPCContractArtifact } from "@aztec-labs/noir-contracts.js/SponsoredFPC"
 import { TokenContract } from "@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js"
+import type { Logger } from "@aztec-labs/foundation/log"
+import type { ILogger } from "@nulo/wallet-core/logger"
+import type { Chain } from "@aztec/viem"
 
 /**
  * Aztec L2 node URL. Defaults to http://localhost:8080 (the standard sandbox port).
@@ -110,6 +115,16 @@ class FrozenArtifactWallet extends EmbeddedWallet {
 			createStubAccount: (a, t) => accountContracts.createStubAccount(a, t),
 		}
 		super(pxe, node, walletDB, frozen, log)
+	}
+
+	/** Proves and sends with no pre-simulation, as a wallet without one would, so the node includes a
+	 *  call the simulation refuses. Syncs first as `EmbeddedWallet.sendTx` does: auto-sync is off, so
+	 *  the proof would otherwise anchor wherever an earlier call left the PXE. */
+	async sendUnsimulated(payload: ExecutionPayload, from: AztecAddress): Promise<TxHash> {
+		await this.pxe.sync()
+		const send = BaseWallet.prototype.sendTx<NoWait>
+		const { txHash } = await send.call(this, payload, { from, fee: { gasSettings: E2E_FEE_GAS }, wait: NO_WAIT })
+		return txHash
 	}
 }
 
@@ -427,7 +442,8 @@ const ANVIL_MNEMONIC = "test test test test test test test test test test test j
  *  Note: the L1 FeeAssetHandler has a fixed mint amount of 1000 FJ per call. */
 export async function bridgeFeeJuice(node: ReturnType<typeof createAztecNodeClient>, toAddress: string, amount = 1000n * 10n ** 18n) {
 	const nodeInfo = await node.getNodeInfo()
-	const l1Client = createExtendedL1Client([ANVIL_URL], ANVIL_MNEMONIC, { id: nodeInfo.l1ChainId, name: "anvil" })
+	const l1Client = createExtendedL1Client([ANVIL_URL], ANVIL_MNEMONIC, { id: nodeInfo.l1ChainId, name: "anvil" } as Chain)
+	// Console stand-ins for the only part of a Logger the portal manager reads: its level methods.
 	const logger = {
 		info: console.log,
 		debug: console.log,
@@ -435,7 +451,7 @@ export async function bridgeFeeJuice(node: ReturnType<typeof createAztecNodeClie
 		error: console.error,
 		verbose: console.log,
 		trace: () => {},
-	}
+	} as unknown as Logger
 	const portalManager = await L1FeeJuicePortalManager.new(node, l1Client, logger)
 	const claim = await portalManager.bridgeTokensPublic(AztecAddress.fromStringUnsafe(toAddress), amount, true)
 	console.log(`[bridgeFeeJuice] Bridged ${amount} FJ to ${toAddress}, messageHash: ${claim.messageHash}`)
@@ -575,7 +591,8 @@ export async function setupPreFundedAccount(
 
 	// Sanity check the derived address against NuloAccount's path so the fixture
 	// fails fast if the frozen-artifact account below and NuloAccount ever disagree.
-	const nuloAccountContract = await NuloAccount.new(accountSeed, logger)
+	// Aztec's Logger has no `log`; NuloAccount calls it only from its PXE and transaction methods.
+	const nuloAccountContract = await NuloAccount.new(accountSeed, logger as unknown as ILogger, "account")
 	const expectedAddress = nuloAccountContract.address
 	logger.info(`Expected derived address: ${expectedAddress.toString()}`)
 
@@ -804,29 +821,71 @@ export async function deployDelegatedPullRig(
 	}
 }
 
-/** Poll the node until a tx (by hash string, as returned to the dApp) is
- *  MINED successfully. Needed when a flow's NEXT step reads on-chain state
- *  the tx wrote (e.g. a public-authwit grant's `set_authorized` must be
- *  mined before a consume's public simulation can see it) — the wallet's
- *  `send_transaction` path resolves the dApp promise at SUBMIT, not at
- *  mine. Throws on revert/drop so failures attribute to the right tx. */
+/**
+ * Publishes the standard `PublicChecks` contract at its canonical address, which the local network
+ * leaves unpublished (it publishes only the standard AuthRegistry, by the same two steps, and seeds
+ * neither at genesis). The Crowdfunding consumer of `deployDelegatedPullRig` calls it, so its pull
+ * cannot simulate, and no authwit is discovered, until it exists. Idempotent.
+ */
+export async function ensureStandardPublicChecks(aztecConfig: AztecTestConfig): Promise<void> {
+	const { publishContractClass, publishInstance } = await import("@aztec-labs/aztec.js/deployment")
+	const { PublicChecksArtifact, getStandardPublicChecks } = await import("@aztec-labs/standard-contracts/public-checks")
+	const { instance, contractClass } = await getStandardPublicChecks()
+	const { wallet, cleanup } = await createTestWallet(aztecConfig.nodeUrl)
+	try {
+		const from = AztecAddress.fromStringUnsafe(aztecConfig.minterAddress)
+		const fee = { ...(await createSponsoredFeeOptions(wallet)), gasSettings: E2E_FEE_GAS }
+		const send = { from, fee, wait: { timeout: 120 } } as never
+		if (!(await wallet.getContractClassMetadata(contractClass.id)).isContractClassPubliclyRegistered) {
+			await (await publishContractClass(wallet as never, PublicChecksArtifact)).send(send)
+		}
+		if (!(await wallet.getContractMetadata(instance.address)).isContractPublished) {
+			await publishInstance(wallet as never, instance).send(send)
+		}
+	} finally {
+		await cleanup()
+	}
+}
+
+/** Wait until the node reports `txHash` proven or finalized with a successful execution: a flow's
+ *  next step may read state the tx wrote, and the wallet resolves a dApp's send at submission.
+ *  Rejects when the node reports it dropped, when its public execution reverted, when a receipt read
+ *  fails, or after `timeoutMs`. */
 export async function waitForTxMined(aztecConfig: AztecTestConfig, txHash: string, timeoutMs = 120_000): Promise<void> {
 	const node = createAztecNodeClient(aztecConfig.nodeUrl)
+	const hash = TxHash.fromString(txHash)
+	try {
+		await waitForTx(node, hash, { waitForStatus: TxStatus.PROVEN, timeout: timeoutMs / 1000, ignoreDroppedReceiptsFor: 0 })
+	} catch (err) {
+		if (!(err instanceof TimeoutError)) throw err
+		const status = await node.getTxReceipt(hash).then(
+			(receipt) => receipt.status,
+			() => "unavailable",
+		)
+		throw new Error(`waitForTxMined: tx ${txHash} not proven within ${timeoutMs}ms (status ${status})`, { cause: err })
+	}
+}
+
+async function mineL1Blocks(count: number): Promise<void> {
+	const res = await fetch(ANVIL_URL, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "anvil_mine", params: [`0x${count.toString(16)}`] }),
+	})
+	const body = (await res.json()) as { error?: { message: string } }
+	if (body.error) throw new Error(`anvil_mine: ${body.error.message}`)
+}
+
+/** Mines empty L1 blocks until the node's finalized L2 block reaches `block`. The local anvil mines
+ *  only on a transaction, so on a quiet chain the finalized tip stands still. */
+export async function finalizeThrough(node: ReturnType<typeof createAztecNodeClient>, block: number, timeoutMs = 180_000): Promise<void> {
 	const deadline = Date.now() + timeoutMs
 	for (;;) {
-		const receipt = await node.getTxReceipt(TxHash.fromString(txHash)).catch(() => undefined)
-		const status = receipt ? String(receipt.status) : undefined
-		// Aztec terminal-success statuses: "success" (mined) and "finalized"
-		// / "proven" (block settled). Any of them means the tx's public
-		// effects (e.g. a set_authorized write) are live and readable.
-		if (status === "success" || status === "finalized" || status === "proven") return
-		if (status === "app_logic_reverted" || status === "teardown_reverted" || status === "dropped" || status === "reverted") {
-			throw new Error(`waitForTxMined: tx ${txHash} terminal as "${status}"`)
-		}
-		if (Date.now() > deadline) {
-			throw new Error(`waitForTxMined: timeout waiting for ${txHash} (last status: ${status ?? "pending"})`)
-		}
-		await new Promise((r) => setTimeout(r, 1_000))
+		const finalized = await node.getBlockData("finalized")
+		if ((finalized?.header.getBlockNumber() ?? 0) >= block) return
+		if (Date.now() > deadline) throw new Error(`finalizeThrough: the finalized block stayed below ${block} for ${timeoutMs} ms`)
+		await mineL1Blocks(3)
+		await new Promise((resolve) => setTimeout(resolve, 2_000))
 	}
 }
 

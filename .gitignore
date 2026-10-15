@@ -31,6 +31,9 @@ apps/extension/tests/e2e/.test-config.json
 # E2E parallel-agent state (port pack, ownership lockfile, child logs)
 apps/extension/.e2e-state/
 
+# Opt-in e2e screenshots (STALE_NETWORK_CAPTURES=1), reviewed by hand and never committed
+apps/extension/tests/e2e/.captures/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

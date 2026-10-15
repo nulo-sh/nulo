@@ -11,7 +11,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: { add: vi.fn(), remove: vi.fn() },
 			onConnected: { add: vi.fn(), remove: vi.fn() },
-			refreshIfStale: vi.fn().mockResolvedValue({}),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
+			refreshIfStale: vi.fn().mockResolvedValue({ quotes: {}, pricedTokens: {} }),
 		}
 	}),
 }))
@@ -65,7 +66,7 @@ describe("modules/activity/TransactionsList", () => {
 	})
 
 	test("a settled row, a transfer row and a received row take their token from `tokens`", () => {
-		const token = { id: 7, contract: "0xc", symbol: "TST", decimals: 6 }
+		const token = { id: 7, contract: "0xc", symbol: "TST", decimals: 6, hasDecimals: true }
 		const op = {
 			id: "op-2",
 			kind: "transfer",

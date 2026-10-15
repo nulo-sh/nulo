@@ -75,7 +75,7 @@ const startRename = async () => {
 					<span v-else :class="$style.chain_label">{{ getChainName(account.chainId).toUpperCase() }}</span>
 				</Flex>
 				<Flex align="center" justify="between" gap="8" wide>
-					<span :class="$style.row_address">{{ trimAddress(account.address, 6, 4, "...") }}</span>
+					<span data-testid="account-select-address" :class="$style.row_address">{{ trimAddress(account.address, 6, 4, "...") }}</span>
 					<DottedTerm
 						v-if="canRename && !renaming"
 						term="name-for-this-app"
@@ -174,9 +174,8 @@ const startRename = async () => {
 }
 
 .row_name {
-	font-family: var(--font-body);
+	composes: type--name from global;
 	font-size: 14px;
-	font-weight: 600;
 	color: var(--txt-primary);
 	line-height: 20px;
 
@@ -186,8 +185,7 @@ const startRename = async () => {
 }
 
 .row_address {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--data from global;
 	color: var(--nulo-secondary);
 	line-height: 16px;
 
@@ -197,12 +195,9 @@ const startRename = async () => {
 }
 
 .chain_label {
+	composes: type--meta from global;
 	flex-shrink: 0;
 
-	font-family: var(--font-mono);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.08em;
 	color: var(--nulo-secondary);
 }
 
@@ -215,27 +210,22 @@ const startRename = async () => {
 }
 
 .alias_label {
+	composes: type--label from global;
 	display: flex;
 	align-items: center;
 	gap: 4px;
 
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
 }
 
 .alias_input {
+	composes: type--input from global;
 	width: 100%;
 
 	padding: 8px 10px;
 	border: 1px solid var(--nulo-border);
 	background: var(--nulo-surface-low);
 	color: var(--txt-primary);
-	font-size: 13px;
-	font-family: inherit;
 	outline: none;
 
 	transition: border-color 0.2s ease;

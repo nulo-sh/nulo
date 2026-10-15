@@ -4,6 +4,7 @@
  * something else and fails.
  */
 import { flushPromises, mount } from "@vue/test-utils"
+import { createPinia } from "pinia"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { createMemoryHistory, createRouter } from "vue-router"
 
@@ -41,7 +42,13 @@ vi.mock("@/wallet/services/token/client", () => ({
 }))
 vi.mock("@/wallet/services/price/client", () => ({
 	PriceServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onQuotesUpdated: H.event(), onConnected: H.event(), refreshIfStale: vi.fn().mockResolvedValue({}) }
+		return {
+			disconnect: vi.fn(),
+			onQuotesUpdated: H.event(),
+			onConnected: H.event(),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
+			refreshIfStale: vi.fn().mockResolvedValue({ quotes: {}, pricedTokens: {} }),
+		}
 	}),
 }))
 vi.mock("@/wallet/services/incoming-transfer/client", () => ({
@@ -128,7 +135,7 @@ const router = () =>
 	createRouter({ history: createMemoryHistory(), routes: [{ path: "/:pathMatch(.*)*", component: { template: "<div />" } }] })
 
 async function mountHome() {
-	const w = mount(RecentActivityView, { shallow: true, global: { plugins: [router()], stubs: STUBS } })
+	const w = mount(RecentActivityView, { shallow: true, global: { plugins: [router(), createPinia()], stubs: STUBS } })
 	await flushPromises()
 	for (const read of [...H.incomingConnected.handlers]) read()
 	await flushPromises()

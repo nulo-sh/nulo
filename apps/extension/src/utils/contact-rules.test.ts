@@ -1,21 +1,9 @@
 import { describe, expect, test } from "vitest"
-import { CONTACT_EXISTS, canonicalContactAddress, sameContactAddress, sameContactName } from "./contact-rules"
+import { CONTACT_EXISTS, canonicalContactAddress, sameContactAddress } from "./contact-rules"
 
 const A = `0x${"ab".repeat(32)}`
 
 describe("contact rules", () => {
-	test.each([
-		["Alice", "Alice", true],
-		["Alice", "Alice ", true],
-		["Alice", " Alice", true],
-		["Alice ", "Alice", true],
-		["Alice", "alice", false],
-		["Alice", "alice ", false],
-		["Alice", "Al ice", false],
-	])("name %j against typed %j → %s", (name, typed, expected) => {
-		expect(sameContactName({ name }, typed)).toBe(expected)
-	})
-
 	test.each([
 		[A, A, true],
 		[A, A.toUpperCase().replace("0X", "0x"), true],

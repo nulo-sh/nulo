@@ -25,7 +25,7 @@ const fontSize = computed(() => Math.max(9, Math.round(sizePx.value * 0.4)))
 		data-testid="account-avatar"
 		:data-initials="initials"
 	>
-		<Text color="primary" weight="600" :style="{ fontSize: `${fontSize}px`, lineHeight: 1 }">{{ initials }}</Text>
+		<Text color="primary" :class="$style.initials" :style="{ fontSize: `${fontSize}px`, lineHeight: 1 }">{{ initials }}</Text>
 	</Flex>
 </template>
 
@@ -34,5 +34,9 @@ const fontSize = computed(() => Math.max(9, Math.round(sizePx.value * 0.4)))
 	flex-shrink: 0;
 	background: var(--nulo-surface-high);
 	user-select: none;
+}
+
+.initials {
+	font-weight: 600;
 }
 </style>

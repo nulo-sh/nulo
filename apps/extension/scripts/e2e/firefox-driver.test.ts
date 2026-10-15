@@ -1,20 +1,74 @@
+import { runInNewContext } from "node:vm"
 import { describe, expect, test, vi } from "vitest"
 import {
 	type BackgroundStopper,
 	FIREFOX_LAUNCH_PREFS,
 	type SilentCloseWatch,
 	abandonSession,
+	egressGuardPrefs,
 	firefoxDirFor,
 	silentlyClosed,
 	stopBackgroundWith,
 	uuidFromPrefs,
+	withInventory,
 } from "../../tests/e2e/fixtures/browser/firefox"
+import { trackContexts } from "../../tests/e2e/fixtures/browser/bidi-attach"
+import {
+	RELAY_HELPERS,
+	checkPageErrorRelay,
+	errorFrames,
+	kindOf,
+	recentExceptions,
+	relayVerdict,
+} from "../../tests/e2e/fixtures/browser/firefox-page-errors"
+import type { WebDriverSession } from "../../tests/e2e/fixtures/browser/webdriver-classic"
 
 /** The PXE host is placed where Firefox's timer throttling cannot reach it; the suite must run under
  *  that throttling, as its users do, so a regression shows as a slow send rather than staying hidden. */
 describe("launch prefs", () => {
 	test("no pref masks timer throttling", () => {
 		expect(Object.keys(FIREFOX_LAUNCH_PREFS).filter((key) => /timeout|throttl/i.test(key))).toEqual([])
+	})
+})
+
+describe("egress guard prefs", () => {
+	const findProxyOf = (prefs: ReturnType<typeof egressGuardPrefs>) => {
+		const pac = decodeURIComponent(String(prefs["network.proxy.autoconfig_url"]).replace(/^data:text\/javascript,/, ""))
+		return new Function(`${pac}; return FindProxyForURL`)() as (url: string, host: string) => string
+	}
+	const prefs = egressGuardPrefs(4321)
+	const findProxy = findProxyOf(prefs)
+
+	test("route by PAC with no fail-over to direct, and resolve only the canary name locally", () => {
+		expect(prefs).toEqual({
+			"network.proxy.type": 2,
+			"network.proxy.autoconfig_url": expect.stringMatching(/^data:text\/javascript,/),
+			"network.proxy.failover_direct": false,
+			"network.dns.localDomains": "egress-canary.test",
+		})
+	})
+
+	test("send loopback direct and every other host to the guard, with nothing after it", () => {
+		for (const host of ["localhost", "127.0.0.1", "::1", "[::1]"]) expect(findProxy(`http://${host}/`, host)).toBe("DIRECT")
+		for (const host of ["lb.drpc.live", "egress-canary.test", "169.254.0.1", "[fe80::1]"]) {
+			expect(findProxy(`https://${host}/`, host)).toBe("PROXY 127.0.0.1:4321")
+		}
+	})
+
+	test("stay out of the prefs users run with", () => {
+		expect(Object.keys(FIREFOX_LAUNCH_PREFS).filter((key) => key.startsWith("network."))).toEqual([])
+	})
+
+	test("the live hosts, alone of the outside names, go direct", () => {
+		const live = egressGuardPrefs(4321, ["lb.drpc.live", "tokens.nulo.sh"])
+		const findLive = findProxyOf(live)
+		expect(findLive("https://lb.drpc.live/", "lb.drpc.live")).toBe("DIRECT")
+		expect(findLive("https://tokens.nulo.sh/v1/list.json", "tokens.nulo.sh")).toBe("DIRECT")
+		for (const host of ["localhost", "127.0.0.1", "::1", "[::1]"]) expect(findLive(`http://${host}/`, host)).toBe("DIRECT")
+		for (const host of ["rpc.lb.drpc.live", "lb.drpc.live.evil.test", "nulo.sh", "egress-canary.test", "api.coingecko.com"]) {
+			expect(findLive(`https://${host}/`, host)).toBe("PROXY 127.0.0.1:4321")
+		}
+		expect({ ...live, "network.proxy.autoconfig_url": "" }).toEqual({ ...prefs, "network.proxy.autoconfig_url": "" })
 	})
 })
 
@@ -124,6 +178,93 @@ describe("silent window closes", () => {
 		silentlyClosed(watch, ["a"], new Set())
 		expect(silentlyClosed(watch, ["a"], new Set(["a"]))).toEqual([])
 		expect(silentlyClosed(watch, ["a"], new Set())).toEqual([])
+	})
+})
+
+/** Firefox sends an add-on page no `domContentLoaded` or `load`, so its commit supplies its URL when
+ *  its own script writes no history. */
+describe("an add-on page's URL in targets()", () => {
+	const event = (method: string, params: Record<string, unknown>) => JSON.stringify({ type: "event", method, params })
+	const created = (context: string, parent: string | null = null) =>
+		event("browsingContext.contextCreated", { context, parent, url: "about:blank", children: [] })
+	const committed = (context: string, url: string) =>
+		event("browsingContext.navigationCommitted", { context, navigation: "n-1", timestamp: 1_000, url })
+	const page = "moz-extension://5c9e/src/popup/index.html#/windows/capabilities?requestId=r1"
+
+	test("a top-level window's add-on page commit is followed by a history update carrying its URL", () => {
+		const open = new Set<string>()
+		trackContexts(created("w"), open, new Set())
+		const commit = committed("w", page)
+		const handed = trackContexts(commit, open, new Set())
+		expect(handed[0]).toBe(commit)
+		expect(handed.slice(1).map((raw) => JSON.parse(raw))).toEqual([
+			{ type: "event", method: "browsingContext.historyUpdated", params: { context: "w", timestamp: 1_000, url: page } },
+		])
+	})
+
+	test("a web page's commit, a frame's and a closed window's are handed on alone", () => {
+		const open = new Set<string>()
+		const closed = new Set<string>()
+		trackContexts(created("w"), open, closed)
+		trackContexts(created("f", "w"), open, closed)
+		const web = committed("w", "http://127.0.0.1:5173/#/windows/capabilities?requestId=r1")
+		expect(trackContexts(web, open, closed)).toEqual([web])
+		const frame = committed("f", page)
+		expect(trackContexts(frame, open, closed)).toEqual([frame])
+		trackContexts(event("browsingContext.contextDestroyed", { context: "w", parent: null }), open, closed)
+		const late = committed("w", page)
+		expect(trackContexts(late, open, closed)).toEqual([late])
+	})
+
+	test("a real destroy arriving after the one the driver reported is not handed on", () => {
+		const open = new Set(["w"])
+		const destroyed = event("browsingContext.contextDestroyed", { context: "w", parent: null })
+		expect(trackContexts(destroyed, open, new Set(["w"]))).toEqual([])
+		expect(trackContexts(destroyed, new Set(["v"]), new Set())).toEqual([destroyed])
+	})
+})
+
+/** A failed wait reports what Firefox had, but the report is a diagnosis: it never stands in for the failure. */
+describe("a failed wait's report", () => {
+	test("follows the failure", async () => {
+		expect(await withInventory("no matching target", async () => "Firefox's windows: none", 1_000)).toBe(
+			"no matching target; Firefox's windows: none",
+		)
+	})
+
+	test("never holds the failure past its budget, nor replaces it when the read fails", async () => {
+		expect(await withInventory("no matching target", () => new Promise<string>(() => {}), 20)).toBe(
+			"no matching target; no inventory within 20ms",
+		)
+		expect(await withInventory("no matching target", () => Promise.reject(new Error("session closed")), 1_000)).toBe(
+			"no matching target; inventory failed: session closed",
+		)
+	})
+})
+
+describe("a page error's location", () => {
+	const reported = { sourceName: "moz-extension://5c9e/assets/creator.js", lineNumber: 5, columnNumber: 812 }
+
+	test("an error with no saved stack names the location it reports", () => {
+		expect(errorFrames([], reported)).toEqual([{ filename: reported.sourceName, functionName: "", lineNumber: 5, columnNumber: 812 }])
+	})
+
+	test("a saved stack is kept as it is, and an error with neither has no frame", () => {
+		const saved = [{ filename: "moz-extension://5c9e/assets/popup.js", functionName: "mount", lineNumber: 18, columnNumber: 3 }]
+		expect(errorFrames(saved, reported)).toBe(saved)
+		expect(errorFrames([], { sourceName: "", lineNumber: 0, columnNumber: 0 })).toEqual([])
+	})
+
+	test("the close reports each recent exception with its context and first frame, 1-based as Firefox prints a stack", () => {
+		const frame = { url: reported.sourceName, functionName: "", lineNumber: 4, columnNumber: 811 }
+		const recent = [
+			{ context: "w1", text: "InternalError: too much recursion", frame },
+			{ context: null, text: "TypeError: x is undefined", frame: null },
+		]
+		expect(recentExceptions({ state: JSON.stringify({ recent }), live: [] })).toEqual([
+			`w1: InternalError: too much recursion at ${reported.sourceName}:5:812`,
+			"no context: TypeError: x is undefined",
+		])
 	})
 })
 
@@ -261,5 +402,122 @@ describe("stopping the background", () => {
 		await expect(stopBackgroundWith(stopper({ terminate, identity: async () => undefined }))).rejects.toThrow(/runs no background page/)
 		expect(terminate).not.toHaveBeenCalled()
 		await expect(stopBackgroundWith(stopper({ terminate }))).rejects.toThrow(/did not terminate the background page \(no-extension\)/)
+	})
+})
+
+/** Serialised source as Firefox receives it, run alone: a dependency left behind throws here. The
+ *  value crosses as JSON, as the relay's entry crosses the BiDi socket. */
+function runSerialised(source: string, call: string, bindings: Record<string, unknown>): unknown {
+	return JSON.parse(JSON.stringify(runInNewContext(`${source}\n${call}`, bindings) ?? null))
+}
+
+describe("the page-error relay", () => {
+	test("an exception is a page error and any other error-level message a console error, as on Chrome", () => {
+		const kind = (hasException: boolean) => runSerialised(String(kindOf), "kindOf(message)", { message: { hasException } })
+		expect(kind(true)).toBe("javascript")
+		expect(kind(false)).toBe("console")
+	})
+
+	describe("the entry relayed for a record", () => {
+		const frame = { url: "moz-extension://uuid/assets/popup.js", functionName: "boot", lineNumber: 0, columnNumber: 4 }
+		const record = { kind: "javascript", topId: 7, text: "Error: boom", args: [], timeStamp: 1700, callFrames: [frame] }
+		const entryFor = (r: unknown, context = "ctx-1") =>
+			runSerialised(RELAY_HELPERS, "logEntryFor(record, context)", { record: r, context })
+		const common = { level: "error", source: { realm: "", context: "ctx-1" }, timestamp: 1700, stackTrace: { callFrames: [frame] } }
+
+		test("a page error is a javascript entry of its page's context", () => {
+			expect(entryFor(record)).toEqual({ type: "javascript", text: "Error: boom", ...common })
+		})
+
+		test("a console error carries the method and its arguments as string values", () => {
+			expect(entryFor({ ...record, kind: "console", text: "a b", args: ["a", "b"] })).toEqual({
+				type: "console",
+				method: "error",
+				args: [
+					{ type: "string", value: "a" },
+					{ type: "string", value: "b" },
+				],
+				text: "a b",
+				...common,
+			})
+		})
+
+		test.each([
+			["a record that is no object", null, "ctx-1"],
+			["kind", { ...record, kind: "warning" }, "ctx-1"],
+			["topId", { ...record, topId: "7" }, "ctx-1"],
+			["timeStamp", { ...record, timeStamp: undefined }, "ctx-1"],
+			["text", { ...record, text: 42 }, "ctx-1"],
+			["args", { ...record, args: [1] }, "ctx-1"],
+			["callFrames", { ...record, callFrames: [{ ...frame, lineNumber: "0" }] }, "ctx-1"],
+			["context", record, ""],
+		])("is refused for a malformed %s", (_field, malformed, context) => {
+			expect(entryFor(malformed, context)).toBeNull()
+		})
+	})
+
+	describe("the close verdict", () => {
+		const extension = (childId: number) => ({ childId, remoteType: "extension" })
+		const web = (childId: number) => ({ childId, remoteType: "web" })
+		const parent = { childId: 0, remoteType: null }
+		const read = (state: object, live: object[]) => ({
+			state: JSON.stringify({ faultCount: 0, faults: [], extensionProcesses: [3], ...state }),
+			live,
+		})
+
+		test("is clean when nothing faulted and the live extension process reported ready", () => {
+			expect(relayVerdict(read({ ready: [extension(3), web(4)] }, [parent, extension(3), web(4)]))).toBeUndefined()
+		})
+
+		test("stays clean once a ready extension process has exited", () => {
+			expect(relayVerdict(read({ ready: [extension(3)] }, [parent, web(4)]))).toBeUndefined()
+		})
+
+		test("fails on a fault, with its reason", () => {
+			expect(relayVerdict(read({ faultCount: 1, faults: ["relay: boom"], ready: [extension(3)] }, [extension(3)]))).toBe(
+				"it faulted 1 time(s): relay: boom",
+			)
+		})
+
+		test("fails on a live extension process that never reported ready", () => {
+			expect(relayVerdict(read({ ready: [extension(3)] }, [extension(3), extension(5)]))).toBe(
+				"extension process(es) 5 ran without the listener",
+			)
+		})
+
+		test("fails on an extension process that exited without reporting ready", () => {
+			expect(relayVerdict(read({ ready: [extension(3)], extensionProcesses: [3, 5] }, [parent, extension(3)]))).toBe(
+				"extension process(es) 5 ran without the listener",
+			)
+		})
+
+		test("fails when no extension process ever reported ready, even with none live", () => {
+			expect(relayVerdict(read({ ready: [web(4)], extensionProcesses: [] }, [parent, web(4)]))).toBe(
+				"no extension process reported the listener ready",
+			)
+		})
+
+		test("fails on a read that came back malformed", () => {
+			const state = { faultCount: 0, faults: [], ready: [extension(3)], extensionProcesses: [3] }
+			const badReady = JSON.stringify({ ...state, ready: [{ childId: "3", remoteType: "extension" }] })
+			const badSeen = JSON.stringify({ ...state, extensionProcesses: ["3"] })
+			const unseen = JSON.stringify({ faultCount: 0, faults: [], ready: [extension(3)] })
+			for (const bad of [
+				undefined,
+				{ state: null, live: [] },
+				{ state: "{", live: [] },
+				...[badReady, badSeen, unseen].map((s) => ({ state: s, live: [] })),
+			]) {
+				expect(relayVerdict(bad)).toMatch(/^its state could not be read/)
+			}
+		})
+
+		test("fails, without rejecting, on a read that failed", async () => {
+			const session = { chromeScript: () => Promise.reject(new Error("no such window")) } as unknown as WebDriverSession
+			await expect(checkPageErrorRelay(session)).resolves.toEqual({
+				verdict: "its state could not be read (no such window)",
+				exceptions: [],
+			})
+		})
 	})
 })

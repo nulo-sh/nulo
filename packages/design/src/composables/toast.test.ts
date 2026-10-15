@@ -60,6 +60,17 @@ describe("useToast", () => {
 		expect(toast.value).toMatchObject({ kind: "error", label: "Failed" })
 	})
 
+	it("an info keeps its kind and, like an error, stays after any time, held or not", () => {
+		const { toast, openToast, holdToast } = useToast()
+		openToast({ kind: "info", label: "Checking" })
+		expect(toast.value?.kind).toBe("info")
+		vi.advanceTimersByTime(600_000)
+		holdToast(true)
+		holdToast(false)
+		vi.advanceTimersByTime(600_000)
+		expect(toast.value).toMatchObject({ kind: "info", label: "Checking" })
+	})
+
 	it("a missing or unknown kind is an error", () => {
 		const { toast, openToast } = useToast()
 		openToast({ label: "Unknown" } as unknown as ToastOptions)
@@ -106,6 +117,29 @@ describe("useToast", () => {
 		expect(toast.value).toMatchObject({ label: "Y" })
 		vi.advanceTimersByTime(1)
 		expect(toast.value).toBeNull()
+	})
+
+	it("an update relabels the open snack in place: same id, kind and timer", () => {
+		const { toast, openToast, updateToast } = useToast()
+		const id = openToast({ kind: "success", label: "One" })
+		expect(toast.value?.id).toBe(id)
+		vi.advanceTimersByTime(5_000)
+		updateToast(id, "Two")
+		expect(toast.value).toMatchObject({ id, kind: "success", label: "Two" })
+		vi.advanceTimersByTime(1_000)
+		expect(toast.value).toBeNull()
+	})
+
+	it("an update after a close or a replacement changes nothing and opens nothing", () => {
+		const { toast, openToast, updateToast, closeToast } = useToast()
+		const closed = openToast({ kind: "info", label: "Importing" })
+		closeToast()
+		updateToast(closed, "Importing again")
+		expect(toast.value).toBeNull()
+		const replaced = openToast({ kind: "info", label: "Importing" })
+		const next = openToast({ kind: "success", label: "Copied" })
+		updateToast(replaced, "Importing again")
+		expect(toast.value).toMatchObject({ id: next, label: "Copied" })
 	})
 
 	it("carries the sub line and the action through", () => {

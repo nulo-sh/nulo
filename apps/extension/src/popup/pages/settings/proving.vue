@@ -74,12 +74,12 @@ onBeforeUnmount(() => {
 		<ItemsContainer v-else title="Details">
 			<SettingItem v-for="row in rows" :key="row.title" :title="row.title" :description="row.description" :materialIcon="row.icon" raw>
 				<template #right>
-					<Text size="13" weight="600" color="primary">{{ row.value }}</Text>
+					<Text variant="value" color="primary">{{ row.value }}</Text>
 				</template>
 			</SettingItem>
 		</ItemsContainer>
 
-		<Text size="12" weight="500" color="support" height="150">
+		<Text variant="body" color="support" height="150">
 			Proofs are always generated on your machine. Presto runs them natively; without it, Nulo proves inside the
 			browser, which is slower.
 		</Text>

@@ -70,7 +70,7 @@ export function makeDappSessionStub(opts: { name?: string | null } = { name: "Ex
 		// biome-ignore lint/suspicious/noExplicitAny: test stub
 		tryGetDappSessionByOriginAndChain: vi.fn<() => Promise<any>>(async () => ({
 			accounts: ["aztec:1338:0xabc"],
-			capabilityGrants: [{ capability: { type: "transaction" } }, { capability: { type: "accounts" } }],
+			capabilityGrants: [{ capability: { type: "transaction", scope: "*" } }, { capability: { type: "accounts" } }],
 			dappMetadata: metadata,
 		})),
 	}

@@ -22,6 +22,7 @@ import { managers } from "@/utils/core"
 /** Composables */
 import { useToast } from "@/composables/toast.js"
 import { isPopupSubmitKey, refuseRepeatEnter } from "@/composables/usePopupEntity"
+import { createRunFence } from "@/composables/runFence"
 import { useSecretClipboardCopy } from "@/composables/useSecretClipboardCopy"
 import { useSecretCountdown } from "@/composables/useSecretCountdown"
 const { openToast } = useToast()
@@ -32,7 +33,6 @@ const appStore = useAppStore()
 
 const router = useRouter()
 
-const backupHelpUrl = "https://nulo.sh/help/wallet-setup/backup-methods"
 const AUTO_CLOSE_MS = 60_000 * 5
 
 const isStarted = ref(false)
@@ -40,6 +40,9 @@ const isUnlocked = ref(false)
 const password = ref()
 const isWrongPassword = ref(false)
 const phrase = ref("Try harder")
+// Not template state: a pointer double-click must decrypt the phrase once, with nothing re-rendered.
+let isRetrieving = false
+const retrieveFence = createRunFence()
 
 const handleClose = () => {
 	phrase.value = null
@@ -53,16 +56,21 @@ const handleStart = () => {
 }
 
 const handleUnlock = async () => {
-	if (!password.value) return
+	if (!password.value || isRetrieving) return
 
+	isRetrieving = true
+	const isCurrent = retrieveFence.begin()
 	try {
 		const mnemonic = await managers.profile.exportMnemonic(appStore.profile.id, password.value)
+		if (!isCurrent()) return
 		phrase.value = mnemonic.join(" ")
 		password.value = null
 		isUnlocked.value = true
 		countdown.start()
 	} catch (error) {
-		isWrongPassword.value = true
+		if (isCurrent()) isWrongPassword.value = true
+	} finally {
+		isRetrieving = false
 	}
 }
 
@@ -77,6 +85,7 @@ const onKeydown = (e) => {
 }
 
 onBeforeUnmount(() => {
+	retrieveFence.invalidate()
 	// The clipboard scrub timer deliberately outlives the page (useSecretClipboardCopy says why).
 	phrase.value = null
 })
@@ -93,27 +102,19 @@ onBeforeUnmount(() => {
 		<!-- Agreement gate -->
 		<template v-if="!isStarted">
 			<div class="export_section">
-				<span class="export_section_label">Before you continue</span>
+				<span class="export_section_label type--label-section">Before you continue</span>
 				<Flex direction="column" gap="8">
-					<Text size="13" height="150" color="body">
+					<Text variant="body" height="150" color="body">
 						Your recovery phrase is direct and full access to your entire profile, once you lose it you will not
 						be able to regain access to your profile.
 					</Text>
-					<Text size="13" height="150" color="body">
+					<Text variant="body" height="150" color="body">
 						Ensure that your recovery phrase is securely stored.
 					</Text>
-					<Text size="13" height="150" color="body">
+					<Text variant="body" height="150" color="body">
 						By continuing you agree to all risks and responsibilities.
 					</Text>
 				</Flex>
-				<a
-					:href="backupHelpUrl"
-					target="_blank"
-					rel="noopener noreferrer"
-					class="export_learn_link"
-				>
-					Read more about backups
-				</a>
 			</div>
 		</template>
 
@@ -128,7 +129,7 @@ onBeforeUnmount(() => {
 		<!-- Revealed phrase -->
 		<template v-else>
 			<div class="export_section">
-				<span class="export_section_label">Your recovery phrase</span>
+				<span class="export_section_label type--label-section">Your recovery phrase</span>
 				<SecretRevealCard
 					:value="phrase"
 					label="Recovery Phrase"
@@ -139,25 +140,25 @@ onBeforeUnmount(() => {
 			</div>
 
 			<div class="export_section_last">
-				<span class="export_section_label">Keep in mind</span>
+				<span class="export_section_label type--label-section">Keep in mind</span>
 				<Flex direction="column" gap="10">
 					<Flex gap="8">
 						<Icon name="warning" size="12" color="tertiary" style="height: 18px; flex-shrink: 0" />
-						<Text size="12" weight="500" height="150" color="tertiary">
+						<Text variant="body" height="150" color="tertiary">
 							Some applications on your PC can have access to your clipboard and read a recovery phrase
 						</Text>
 					</Flex>
 
 					<Flex gap="8">
 						<Icon name="warning" size="12" color="tertiary" style="height: 18px; flex-shrink: 0" />
-						<Text size="12" weight="500" height="150" color="tertiary">
+						<Text variant="body" height="150" color="tertiary">
 							Storing a text file with sensitive information like a recovery phrase can be dangerous
 						</Text>
 					</Flex>
 
 					<Flex gap="8">
 						<Icon name="warning" size="12" color="tertiary" style="height: 18px; flex-shrink: 0" />
-						<Text size="12" weight="500" height="150" color="tertiary">
+						<Text variant="body" height="150" color="tertiary">
 							Storing a recovery phrase in your notebook or in any other physical form can be considered one of
 							the safest methods, but a paper can be easily lost or destroyed (by water or fire)
 						</Text>

@@ -43,6 +43,18 @@ describe("stores/popup", () => {
 		expect(store.isOpened("b")).toBe(false)
 	})
 
+	test("re-opening an open popup puts it on top with no gap, so a later close and open never share an order", () => {
+		const store = usePopupStore()
+		store.open("a", "first")
+		store.open("b")
+		store.open("a", "second")
+		expect(orders(store)).toEqual({ b: 0, a: 1 })
+		expect(store.getPayload("a")).toBe("second")
+		store.close("a")
+		store.open("c")
+		expect(orders(store)).toEqual({ b: 0, c: 1 })
+	})
+
 	test("closeAll empties the stack", () => {
 		const store = usePopupStore()
 		store.open("a")

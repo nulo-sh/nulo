@@ -3,10 +3,13 @@ import { getErrorMessage } from "@nulo/wallet-core/utils"
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { toRestoreError } from "@/utils/restore-error"
 import type { BrowserApi, StorageArea } from "@nulo/wallet-core/ports"
+import { feePicksKey, profileUiKeys, sendFeePicksKey } from "@/utils/profile-ui-keys"
+import { applyFeePickUpdate, type FeePickUpdate, parseFeePickUpdate } from "@/utils/fee-picks"
+import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import type { IConfig } from "@/wallet/config"
 import { LogLevel, type ILogger } from "@/wallet/logger"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
-import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
+import { DEFAULT_INIT_TIMEOUT_MS, Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import {
 	AccountAddressInconsistencyError,
 	DuplicateWalletError,
@@ -17,9 +20,9 @@ import {
 	SessionEndedError,
 } from "@nulo/extension-messaging/errors"
 import { fromBase64Lenient, Lock } from "@/wallet/utils"
-import { ProfileRepository } from "./repository"
+import { isGeneratedProfileId, ProfileRepository } from "./repository"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { array_equals, canonicalizeMnemonic, getEntropy, getMnemonic, toBase64 } from "@nulo/wallet-core/utils"
+import { array_equals, canonicalizeMnemonic, deferred, getEntropy, getMnemonic, toBase64 } from "@nulo/wallet-core/utils"
 import {
 	asBase64Ciphertext,
 	asImportedKeysDek,
@@ -52,15 +55,22 @@ import {
 	type Profile,
 	type ProfileType,
 	type Events,
+	type FinalizedRestore,
 	type Methods,
+	type PasskeyBackupMaterial,
 	type RestoreSecret,
+	type RunFence,
+	toProfileInfo,
 } from "./spec"
+import { probeDekAndCount, type SealedImportedKey } from "./imported-key-count"
 import { RestorePendingRepository } from "./restore-pending-repository"
 import { TombstoneRepository } from "./tombstone-repository"
 import { ProfileDeletionState, type ExecutionFence } from "./profile-deletion-state"
+import { WalletLockedError } from "./wallet-locked-error"
 import type { ProfileDeletionDelegate } from "../profile-deletion/types"
 import { AccountIntegrityBlockedRepository, AccountIntegrityVerifiedStampRepository } from "../account-integrity/blocked-repository"
 import type { AccountIntegrityBlocked, AccountIntegrityDelegate } from "../account-integrity/types"
+import { StaleNetworkRepository } from "../stale-network/repository"
 
 export * from "./spec"
 
@@ -85,18 +95,18 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		"unlockPasskeyProfile",
 		"getPasskeyCredentialId",
 		"getSessionHandle",
+		"captureRunFence",
+		"assertRunFence",
 		"lockActiveProfile",
 		"refreshSession",
 		"changeProfileName",
+		"saveFeePick",
 		"changeProfilePassword",
 		"confirmProfileOperation",
 		"deleteProfile",
 		"importPasskey",
 		"importMnemonic",
 		"exportPlain",
-		"exportBackupMaterial",
-		"exportPasskeyBackupMaterial",
-		"getProfileDekSealed",
 		"exportMnemonic",
 		"restore",
 		"finalizeRestore",
@@ -227,6 +237,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	/** Lazily injected by the last-started ProfileDeletionCoordinator — the purge
 	 *  executor. Never a topological dependency (would be a cycle). */
 	private deletionDelegate: ProfileDeletionDelegate | null = null
+	/** Settles on the first injection; this service answers RPCs from start phases before the
+	 *  coordinator's. */
+	private readonly deletionDelegateInjected = deferred()
 	/** Lazily injected by the last-started AccountIntegrityCoordinator — the pre-open address
 	 *  verifier. Never a topological dependency (would be a cycle, same as the deletion delegate). */
 	private integrityDelegate: AccountIntegrityDelegate | null = null
@@ -236,8 +249,11 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	private readonly integrityBlocked: AccountIntegrityBlockedRepository
 	/** Deletion-time cleanup of the coordinator's per-profile verified stamps. */
 	private readonly integrityStamps: AccountIntegrityVerifiedStampRepository
+	/** Deletion-time cleanup of the stale-network record, reset journal and reset notice. */
+	private readonly staleNetworks: StaleNetworkRepository
 	/** Restore-in-progress markers (torn-import detection at the unlock gate). */
 	private readonly restorePending: RestorePendingRepository
+	private readonly local: StorageArea
 
 	/**
 	 * @param browserApi Optional. Tests pass `FakeBrowserApi` so the
@@ -248,12 +264,12 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	public constructor(config: IConfig, logger: ILogger, browserApi?: BrowserApi) {
 		super(PROFILE_SERVICE_NAME, logger)
 		this.repo = new ProfileRepository(browserApi)
-		this.tombstones = new TombstoneRepository((browserApi?.storage.local ?? chrome.storage.local) as StorageArea)
-		this.integrityBlocked = new AccountIntegrityBlockedRepository((browserApi?.storage.local ?? chrome.storage.local) as StorageArea)
-		this.integrityStamps = new AccountIntegrityVerifiedStampRepository(
-			(browserApi?.storage.local ?? chrome.storage.local) as StorageArea,
-		)
-		this.restorePending = new RestorePendingRepository((browserApi?.storage.local ?? chrome.storage.local) as StorageArea)
+		this.local = (browserApi?.storage.local ?? chrome.storage.local) as StorageArea
+		this.tombstones = new TombstoneRepository(this.local)
+		this.integrityBlocked = new AccountIntegrityBlockedRepository(this.local)
+		this.integrityStamps = new AccountIntegrityVerifiedStampRepository(this.local)
+		this.staleNetworks = new StaleNetworkRepository(this.local)
+		this.restorePending = new RestorePendingRepository(this.local)
 		this.secretBox = new PasswordSecretBox()
 		this.sessionManager = new SessionManager(
 			config,
@@ -276,7 +292,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  op. A future facade-locked write of `sessionTtl` would re-enter via
 	 *  `applyTtlChange` and deadlock — keep `sessionTtl` writes off the locked
 	 *  paths. */
-	private async runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+	private async runExclusive<T>(fn: (isCurrent: () => boolean) => Promise<T>): Promise<T> {
 		return this.lock.withLock(fn)
 	}
 
@@ -505,13 +521,15 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  lock acquisitions would let a delete slip between them. */
 	public async captureExecutionFence(): Promise<ExecutionFence> {
 		await this.ensureInitialized()
-		return this.runExclusive(async () => {
-			const session = await this.sessionManager.getActive()
-			if (!session || this.deletionState.isReserved(session.profile.id)) {
-				throw new Error("Wallet locked")
-			}
-			return { profileId: session.profile.id, epoch: this.deletionState.capture(session.profile.id), session: session.serial }
-		})
+		return this.runExclusive(() => this.captureExecutionFenceHoldingLock())
+	}
+
+	private async captureExecutionFenceHoldingLock(): Promise<ExecutionFence> {
+		const session = await this.sessionManager.getActive()
+		if (!session) throw new WalletLockedError()
+		// A profile whose deletion has begun answers as locked to every caller, but it is not a lock.
+		if (this.deletionState.isReserved(session.profile.id)) throw new Error("Wallet locked")
+		return { profileId: session.profile.id, epoch: this.deletionState.capture(session.profile.id), session: session.serial }
 	}
 
 	/** Throws {@link SessionEndedError} unless the session `fence` was captured under is still the
@@ -526,6 +544,20 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			}
 			this.deletionState.assertCurrent(fence.profileId, fence.epoch)
 		})
+	}
+
+	/** {@link captureExecutionFence} for a popup run that spans several RPCs, stamped with this
+	 *  worker's id: a restarted worker can re-issue the same serial and epoch to the same profile. */
+	public async captureRunFence(): Promise<RunFence> {
+		return { ...(await this.captureExecutionFence()), incarnation: this.workerId }
+	}
+
+	/** {@link assertFence} for a {@link RunFence}; a fence another worker issued is refused first. */
+	public async assertRunFence(fence: RunFence): Promise<void> {
+		if (fence?.incarnation !== this.workerId) {
+			throw new SessionEndedError()
+		}
+		await this.assertFence(fence)
 	}
 
 	/** {@link assertFence}'s question answered synchronously from memory — no lock, no lazy expiry
@@ -595,7 +627,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 				await this.openSessionVerified(profile, secret, passhash, dek)
 
-				return profile
+				return this.getProfileInfo(profile)
 			})
 		} finally {
 			// zero secret + entropy + dek + passhash after sessionManager has copied
@@ -735,7 +767,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 					await this.openSessionVerified(profile, recovery.secret, undefined, dek)
 
-					return profile
+					return this.getProfileInfo(profile)
 				})
 			})
 		} finally {
@@ -939,19 +971,26 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	}
 
 	/**
-	 * Persist an integrity block record — but ONLY if the profile still exists and isn't being
-	 * deleted. The two OFF-LOCK integrity writers (the coordinator's boot re-verify, AccountService's
-	 * operation-time mismatch) route through here so a `deleteProfile` racing them (whose own
-	 * block-CLEAR runs under this same lock) can't be followed by an orphan write: the write either
-	 * lands before the delete's clear (then the delete clears it) or is skipped here because the
-	 * profile is gone/reserved. Prevents an unclearable block record for a deleted profile.
+	 * Run an integrity verdict write — but ONLY if the profile still exists and isn't being
+	 * deleted. The OFF-LOCK integrity writers (the coordinator's boot re-verify and its
+	 * operation-time classification, AccountService's operation-time block) route through here so
+	 * a `deleteProfile` racing them (whose own clears run under this same lock) can't be followed
+	 * by an orphan write: the write either lands before the delete's clear (then the delete clears
+	 * it) or is skipped here because the profile is gone/reserved. Prevents an unclearable block,
+	 * stamp or stale-network record for a deleted profile.
+	 * @returns `write`'s result, or undefined when it was skipped.
 	 */
-	public async persistIntegrityBlockIfLive(record: AccountIntegrityBlocked): Promise<void> {
+	public async persistIntegrityVerdictIfLive<T>(profileId: string, write: () => Promise<T>): Promise<T | undefined> {
 		await this.ensureInitialized()
 		return this.runExclusive(async () => {
-			if (this.deletionState.isReserved(record.profileId) || !(await this.repo.get(record.profileId))) return
-			await this.integrityBlocked.set(record)
+			if (this.deletionState.isReserved(profileId) || !(await this.repo.get(profileId))) return undefined
+			return write()
 		})
+	}
+
+	/** {@link persistIntegrityVerdictIfLive} for the profile block. */
+	public async persistIntegrityBlockIfLive(record: AccountIntegrityBlocked): Promise<void> {
+		await this.persistIntegrityVerdictIfLive(record.profileId, () => this.integrityBlocked.set(record))
 	}
 
 	/**
@@ -992,6 +1031,25 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		})
 	}
 
+	/** The fee picks' one writer. Deletion reserves the id under this lock before its purge removes the
+	 *  keys, so a write either lands before the purge or is refused. A section the lock's watchdog has
+	 *  displaced issues no write: the check sits right before the call. */
+	public async saveFeePick(profileId: string, update: FeePickUpdate): Promise<boolean> {
+		await this.ensureInitialized()
+		const parsed = parseFeePickUpdate(update)
+		if (typeof profileId !== "string" || !parsed) throw InvalidWalletArgumentsError.forMethod("saveFeePick")
+		return this.runExclusive(async (isCurrent) => {
+			if (this.deletionState.isReserved(profileId) || !(await this.repo.get(profileId))) return false
+			const keys = { app: feePicksKey(profileId), send: sendFeePicksKey(profileId) }
+			const stored = await this.local.get([keys.app, keys.send])
+			const next = applyFeePickUpdate({ app: stored[keys.app], send: stored[keys.send] }, parsed)
+			const writes = { ...(next.app && { [keys.app]: next.app }), ...(next.send && { [keys.send]: next.send }) }
+			if (!isCurrent()) return false
+			await this.local.set(writes)
+			return true
+		})
+	}
+
 	public async changeProfileName(id: string, newName: string): Promise<ProfileInfo> {
 		await this.ensureInitialized()
 		return this.runExclusive(async () => {
@@ -1004,7 +1062,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 			this.sessionManager.patchActiveProfile(id, profile)
 
-			return profile
+			return this.getProfileInfo(profile)
 		})
 	}
 
@@ -1055,7 +1113,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  transplanted `dekSealed` (re-MACing would launder it into a freshly-valid envelope)
 	 *  from corruption of the MAC field alone (DEK intact, keys recoverable). The
 	 *  non-destructive repair is export a full backup (deliberately still works in recovery
-	 *  mode — see `exportBackupMaterial`) and restore it. Caller MUST hold the facade lock
+	 *  mode — see `openBackupTransfer`) and restore it. Caller MUST hold the facade lock
 	 *  and OWNS the returned dek + oldPasshash; on a throw after allocation they are zeroized
 	 *  here before the rethrow. */
 	private async rekeyedDekForPasswordChangeHoldingLock(
@@ -1170,7 +1228,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				zeroize(resealed.passhash)
 			}
 
-			return profile
+			return this.getProfileInfo(profile)
 		})
 	}
 
@@ -1230,9 +1288,31 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		}
 	}
 
-	/** Injected by the last-started ProfileDeletionCoordinator (finding D). */
+	/** Injected by the last-started ProfileDeletionCoordinator. */
 	public setDeletionDelegate(delegate: ProfileDeletionDelegate): void {
 		this.deletionDelegate = delegate
+		this.deletionDelegateInjected.resolve()
+	}
+
+	/**
+	 * Waits for init and then for the coordinator's start, both inside one init budget, so a delete
+	 * waits no longer before its first write than any RPC waits for init. Holds no lock. The budget
+	 * runs on the monotonic clock: a wall-clock change must neither stretch nor cut it.
+	 */
+	private async awaitDeletionDelegate(): Promise<ProfileDeletionDelegate> {
+		const deadline = performance.now() + DEFAULT_INIT_TIMEOUT_MS
+		await this.ensureInitialized()
+		if (!this.deletionDelegate) {
+			let timer: ReturnType<typeof setTimeout> | undefined
+			const bound = new Promise<void>((resolve) => {
+				timer = setTimeout(resolve, Math.max(0, deadline - performance.now()))
+			})
+			await Promise.race([this.deletionDelegateInjected.promise, bound])
+			clearTimeout(timer)
+		}
+		const delegate = this.deletionDelegate
+		if (!delegate) throw new Error("deletion coordinator not ready")
+		return delegate
 	}
 
 	/** Injected by the last-started AccountIntegrityCoordinator. */
@@ -1404,8 +1484,16 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  the call site: restore's late-activation paths commit without opening. Caller
 	 *  MUST hold the facade lock. */
 	private async persistNewProfileHoldingLock(profile: Profile): Promise<void> {
+		await this.dropUiKeysBeforeAdoption(profile.id)
 		await this.repo.set(profile.id, profile)
 		this.emit("onProfileAdded", this.getProfileInfo(profile))
+	}
+
+	/** A restore that keeps its backup's id and a passkey import that takes its `userHandle` adopt
+	 *  an id used before; a key written under it since its purge belongs to no profile yet. A
+	 *  rejected removal fails the commit before anything is written. */
+	private async dropUiKeysBeforeAdoption(id: string): Promise<void> {
+		await this.local.remove(profileUiKeys(id))
 	}
 
 	/** Marker BEFORE row (fail-closed): a crash between the two writes leaves an orphan
@@ -1414,6 +1502,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  it cannot brand a future same-id profile. No emit here — the restore branches
 	 *  announce AFTER this bracket. Caller MUST hold the facade lock. */
 	private async writeMarkerThenRowHoldingLock(id: string, newProfile: Profile): Promise<void> {
+		await this.dropUiKeysBeforeAdoption(id)
 		await this.restorePending.write({ profileId: id, pxeGeneration: newProfile.pxeGeneration, at: Date.now() })
 		try {
 			await this.repo.set(id, newProfile)
@@ -1430,15 +1519,13 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *     writes) → delete the profile row → close the session → UI-only emit.
 	 *  2. OUTSIDE the lock: the coordinator's awaited purge of EVERY profile-bearing
 	 *     root. A failure leaves the tombstone → resume retries; the id stays reserved.
-	 *  3. UNDER the lock: clear the tombstone (epoch-guarded) + release the reservation.
+	 *  3. UNDER the lock: clear the tombstone (epoch-guarded); release the reservation once its key is gone.
 	 *
 	 * `tornGuard` (torn-import sweep only): phase 1 refuses unless the observed
 	 * generation + marker tuple are unchanged — see `assertTornGuardUnchangedHoldingLock`.
 	 */
 	public async deleteProfile(id: string, tornGuard?: { pxeGeneration: string; markerAt: number }): Promise<ProfileInfo> {
-		await this.ensureInitialized()
-		const delegate = this.deletionDelegate
-		if (!delegate) throw new Error("deletion coordinator not ready")
+		const delegate = await this.awaitDeletionDelegate()
 
 		const { profile, epoch, snapshot } = await this.runExclusive(async () => {
 			this.sweepStalePendingRestore(Date.now())
@@ -1476,6 +1563,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// same-id re-import skip its first boot verification.
 			await this.integrityBlocked.clear(id)
 			await this.integrityStamps.clear(id)
+			await this.staleNetworks.clearProfile(id)
 			// The restore-pending marker clears LAST among the fallible cleanups —
 			// session close + pending-secret zeroization above must never be
 			// skipped by a rejecting storage remove. A failure here leaves the
@@ -1496,14 +1584,11 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		// + release there. Cost: the id stays reserved until that boot — a dead
 		// import's id, unreused for one SW lifetime.
 		if (tornGuard !== undefined) {
-			return profile
+			return this.getProfileInfo(profile)
 		}
 
-		await this.runExclusive(async () => {
-			await this.tombstones.clearIfSame(id, epoch)
-			this.deletionState.release(id)
-		})
-		return profile
+		await this.runExclusive(() => this.clearTombstoneAndRelease(id, epoch))
+		return this.getProfileInfo(profile)
 	}
 
 	/**
@@ -1562,6 +1647,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 					// profile can't leave an orphan block/stamp behind.
 					await this.integrityBlocked.clear(t.profileId)
 					await this.integrityStamps.clear(t.profileId)
+					await this.staleNetworks.clearProfile(t.profileId)
 				})
 				await delegate.runFor(t.profileId, {
 					addresses: t.addresses,
@@ -1569,14 +1655,17 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 					networkIds: t.networkIds,
 					pxeGeneration: t.pxeGeneration,
 				})
-				await this.runExclusive(async () => {
-					await this.tombstones.clearIfSame(t.profileId, t.epoch)
-					this.deletionState.release(t.profileId)
-				})
+				await this.runExclusive(() => this.clearTombstoneAndRelease(t.profileId, t.epoch))
 			} catch (err) {
 				this.logError(`resume deletion failed for ${t.profileId}`, err)
 			}
 		}
+	}
+
+	/** Phase 3 of a deletion, under the facade lock. A tombstone left in place (corrupt,
+	 *  or another epoch's) keeps the id reserved, as every later boot would. */
+	private async clearTombstoneAndRelease(id: string, epoch: number): Promise<void> {
+		if (await this.tombstones.clearIfSame(id, epoch)) this.deletionState.release(id)
 	}
 
 	/** The torn-import sweep body — see `resumePendingDeletions`' doc for the
@@ -1707,24 +1796,26 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	}
 
 	/**
-	 * The passkey arm of `exportPlain` / `exportPasskeyBackupMaterial`: the credentialId plus the
-	 * sealed DEK blob the backup carries. The popup ran the in-page WebAuthn ceremony and hands
-	 * over the credential data; it is materialized SW-side and bound to THIS profile's
-	 * credentialId — without that check a popup bug could supply data for a different key and
-	 * the wrong credential would be exported.
+	 * The passkey arm of `exportPlain` / `exportPasskeyBackupKeys`: the credentialId plus the
+	 * sealed DEK blob the backup carries, and with `rows` how many of them do not open. The popup
+	 * ran the in-page WebAuthn ceremony and hands over the credential data; it is materialized
+	 * SW-side and bound to THIS profile's credentialId — without that check a popup bug could
+	 * supply data for a different key and the wrong credential would be exported.
 	 */
 	private async exportPasskeyCredential(
 		id: string,
 		profile: Extract<Profile, { type: "passkey" }>,
 		capturedEpoch: number,
 		credentialData?: PasskeyCredentialData,
-	): Promise<{ credentialId: string; dekSealed: string; dekReplaced: boolean }> {
+		rows?: readonly SealedImportedKey[],
+	): Promise<PasskeyBackupMaterial> {
 		if (!credentialData) {
 			throw new Error("credentialData is required for passkey profile")
 		}
 		const recovery = await this.passkeyCoordinator.recoverFromCredentialData(credentialData)
 		let dekSealed = profile.dekSealed
 		let dekReplaced = false
+		let unopened = 0
 		try {
 			if (recovery.credentialId !== profile.credentialId) {
 				throw new Error("Invalid profile id")
@@ -1740,15 +1831,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// under that same key: a passkey profile has no recovery phrase, so this backup IS its
 			// repair path in recovery mode. The stored row is never touched; the caller names the
 			// loss (imported keys, local chain state).
-			let probe: ImportedKeysDek | null = null
-			try {
-				probe = await unsealDekUnderWrapKey(recovery.dekWrapKey, profile.dekSealed)
-			} catch {
-				probe = null
-			} finally {
-				zeroize(probe)
-			}
-			if (!probe) {
+			const probed = await probeDekAndCount(recovery.dekWrapKey, profile.dekSealed, rows)
+			unopened = probed.unopened
+			if (!probed.opens) {
 				this.logger.log(this.name, LogLevel.Warn, "imported-keys DEK unrecoverable at passkey export — exporting a fresh one", id)
 				const fresh = generateImportedKeysDek()
 				try {
@@ -1781,27 +1866,30 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		) {
 			throw new Error("Invalid profile id")
 		}
-		return { credentialId: current.credentialId, dekSealed, dekReplaced }
+		return { credentialId: current.credentialId, dekSealed, dekReplaced, unopened }
 	}
 
 	/**
-	 * Atomic paired export for the Full-Backup builder: master + entropy from ONE unseal, so
-	 * the two backup fields can never come from different row states. Password
-	 * profiles only — passkey backups carry the credentialId via `exportPlain` and re-derive
-	 * the master from the passkey PRF at restore.
+	 * A password profile's full-backup secrets from ONE unseal, so master and entropy can never
+	 * come from different row states, plus a fresh per-backup transfer key. The caller re-seals the
+	 * imported-key rows from `sourceDek` to `transferKey` and the file carries only the transfer
+	 * key: the long-lived DEK would open every key imported after the export too, and a password
+	 * change rewraps it rather than rotating it. `sourceDek` is null when the stored slot no longer
+	 * opens. In-process only. From the return on the caller owns and zeroizes both keys.
 	 */
-	public async exportBackupMaterial(
+	public async openBackupTransfer(
 		id: string,
 		password: string,
-	): Promise<{ masterKey: string; entropy: string; importedKeysDek: string; dekReplaced: boolean }> {
+	): Promise<{ masterKey: string; entropy: string; sourceDek: ImportedKeysDek | null; transferKey: ImportedKeysDek }> {
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
 		if (profile.type === "passkey") {
 			throw new Error("Operation not supported for passkey profile")
 		}
 		const unsealed = await this.secretBox.unseal(password, this.sealedTriple(profile))
-		let dek: ImportedKeysDek | null = null
+		let sourceDek: ImportedKeysDek | null = null
 		let passhash: Passhash | null = null
+		let handedOver = false
 		try {
 			if (!unsealed) {
 				throw new InvalidPasswordError()
@@ -1812,81 +1900,50 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// Pairing check before EXPORT: a backup built from a tampered/
 			// transplanted row would otherwise report success with an unrestorable pair.
 			await this.assertEntropyMasterPair(unsealed.secret, unsealed.entropy)
-			// The DEK travels plaintext beside the already-plaintext master (same trust envelope;
-			// any backup already carries jointly-sufficient material). An unrecoverable slot
-			// exports a FRESH DEK (below) — with the DEK keying the PXE store and every session
-			// tag, a password change can no longer mint one, so this export is the repair path.
-			//
-			// KNOWN LIMITATION, accepted: this is the LONG-LIVED profile DEK, not a per-backup
-			// transfer key, and a password change rewraps rather than rotates it. So a backup
-			// grants FORWARD reach — whoever holds it can decrypt imported-key rows created after
-			// the export, given access to those rows' ciphertext later. Scope it honestly:
-			//   - It needs later ciphertext access, but that is NOT a separate compromise for the
-			//     storage-reader this design targets — an ongoing reader already has it.
-			//   - It is narrower than what the same blob already gives up: the plaintext master =
-			//     every derived account plus every imported key existing at export time.
-			//   - It does NOT reach the sibling this DEK exists to stop — a profile created by
-			//     re-importing the recovery PHRASE never sees this key. A clone created by
-			//     RESTORING this backup does, because the blob hands it over by construction.
-			//   - Passkey blobs resist a blob-only thief (the DEK travels sealed under the PRF wrap
-			//     key), but not an authorized clone, which unseals and can retain it.
-			// Closing it means a per-backup transfer key: rewrap every row at export under a fresh
-			// key and carry THAT, which the restore side would consume exactly where it consumes
-			// the source DEK today. That needs export-time ProfileService↔AccountService
-			// coordination and crash consistency — a separate change, not a patch here.
 			passhash = await EncryptionKey.getPasshash(password)
-			dek = await this.unsealDekWithPasshash(passhash, profile.dekSealed)
-			// DELIBERATELY exports even when the envelope MAC no longer covers the row, unlike
-			// every path that puts the DEK to work. Exporting cannot leak: a planted DEK is the
-			// attacker's own key, and a genuine one makes the backup correct — while refusing
-			// would strand a MAC-corrupted profile with no non-destructive repair at all (backup
-			// + restore is precisely the repair `changeProfilePassword` points at). If the DEK
-			// does turn out to be foreign, its rows simply fail into the restore-side orphan
-			// taxonomy, which is a handled, visible outcome rather than a silent one.
-			const dekReplaced = dek === null
-			if (!dek) {
-				this.logger.log(this.name, LogLevel.Warn, "imported-keys DEK unrecoverable at export — exporting a fresh one", id)
-				dek = generateImportedKeysDek()
+			// DELIBERATELY opens the slot even when the envelope MAC no longer covers the row, unlike
+			// every path that puts the DEK to work: a planted DEK opens none of this profile's rows,
+			// which then travel unopened into the restore's orphan taxonomy, while refusing would
+			// strand a MAC-corrupted profile whose only non-destructive repair is this backup.
+			sourceDek = await this.unsealDekWithPasshash(passhash, profile.dekSealed)
+			if (!sourceDek) {
+				this.logger.log(this.name, LogLevel.Warn, "imported-keys DEK unrecoverable at export — rows travel unopened", id)
 			}
-			return {
+			const material = {
 				masterKey: toBase64(unsealed.secret),
 				entropy: toBase64(unsealed.entropy),
-				importedKeysDek: toBase64(dek),
-				dekReplaced,
+				sourceDek,
+				transferKey: generateImportedKeysDek(),
 			}
+			handedOver = true
+			return material
 		} finally {
 			if (unsealed) {
 				zeroize(unsealed.secret)
 				zeroize(unsealed.entropy)
 			}
-			zeroize(dek)
+			if (!handedOver) zeroize(sourceDek)
 			zeroize(passhash)
 		}
 	}
 
-	public async exportPasskeyBackupMaterial(
+	/**
+	 * A passkey profile's full-backup material, proven as `exportPlain`'s passkey arm proves it, plus
+	 * how many of `rows` do not open under the stored DEK. That DEK is opened with the credential's
+	 * wrap key, never the session's, and never leaves this service. In-process only: `AccountService`
+	 * reads the rows the file carries and asserts the run's fence around this call.
+	 */
+	public async exportPasskeyBackupKeys(
 		id: string,
 		credentialData: PasskeyCredentialData,
-	): Promise<{ credentialId: string; dekSealed: string; dekReplaced: boolean }> {
+		rows: readonly SealedImportedKey[],
+	): Promise<PasskeyBackupMaterial> {
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
 		if (profile.type !== "passkey") {
 			throw new Error("Operation not supported for password profile")
 		}
-		return this.exportPasskeyCredential(id, profile, capturedEpoch, credentialData)
-	}
-
-	/** The SEALED imported-keys DEK blob, verbatim — ciphertext, safe to hand out. Passkey full
-	 *  backups carry this as `imported-keys-dek-sealed`; the restore ceremony's wrap key opens it. */
-	public async getProfileDekSealed(id: string): Promise<string> {
-		await this.ensureInitialized()
-		return this.runExclusive(async () => {
-			const profile = await this.repo.get(id)
-			if (!profile || this.deletionState.isReserved(id)) {
-				throw new Error("Invalid profile id")
-			}
-			return profile.dekSealed
-		})
+		return this.exportPasskeyCredential(id, profile, capturedEpoch, credentialData, rows)
 	}
 
 	/** Fresh-auth DEK unseal for the account-export path (mirrors `exportPlain`'s posture:
@@ -1910,7 +1967,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			}
 			passhash = await EncryptionKey.getPasshash(password)
 			const dek = await this.unsealDekWithPasshash(passhash, profile.dekSealed)
-			// No MAC gate here either, for `exportBackupMaterial`'s reason: a foreign DEK cannot
+			// No MAC gate here either, for `openBackupTransfer`'s reason: a foreign DEK cannot
 			// unseal this profile's rows, so the account export fails loudly at the unseal instead
 			// of emitting anything — and gating would deny the single-account escape hatch to a
 			// profile whose DEK is merely MAC-corrupted.
@@ -2113,7 +2170,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		entropy: Uint8Array<ArrayBuffer>,
 		passhash: Passhash,
 		allowDuplicate = false,
-	): Promise<Profile> {
+	): Promise<ProfileInfo> {
 		const dek = generateImportedKeysDek()
 		try {
 			return await this.runExclusive(async () => {
@@ -2126,7 +2183,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				const profile = await newPasswordRow({ id, name, slots: encrypted, dekSealed, walletFingerprint }, secret, dek)
 				await this.persistNewProfileHoldingLock(profile)
 				await this.openSessionVerified(profile, secret, passhash, dek)
-				return profile
+				return this.getProfileInfo(profile)
 			})
 		} finally {
 			zeroize(secret)
@@ -2147,7 +2204,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		dekWrapKey: CryptoKey,
 		userHandle?: string,
 		allowDuplicate = false,
-	): Promise<Profile> {
+	): Promise<ProfileInfo> {
 		const dek = generateImportedKeysDek()
 		try {
 			const dekSealed = await sealDekUnderWrapKey(dekWrapKey, dek)
@@ -2173,7 +2230,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				const profile = newPasskeyRow({ id: userHandle, name, dekSealed, walletFingerprint, credentialId })
 				await this.persistNewProfileHoldingLock(profile)
 				await this.openSessionVerified(profile, secret, undefined, dek)
-				return profile
+				return this.getProfileInfo(profile)
 			})
 		} finally {
 			zeroize(secret)
@@ -2182,15 +2239,13 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	}
 
 	private getProfileInfo(profile: Profile): ProfileInfo {
-		const info: ProfileInfo = { id: profile.id, name: profile.name, type: profile.type }
-		if (this.sessionManager.isRecoveryMode(profile.id)) info.recoveryMode = true
-		return info
+		return toProfileInfo(profile, this.sessionManager.isRecoveryMode(profile.id))
 	}
 
 	/** The persisted identity only: `recoveryMode` is a live-session projection and never travels. */
 	public async backup(): Promise<ProfileInfo | undefined> {
 		const active = await this.getActiveProfile()
-		return active && { id: active.id, name: active.name, type: active.type }
+		return active && toProfileInfo(active, false)
 	}
 
 	public async restore(
@@ -2346,7 +2401,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			scratch.destinationDek = destinationDek
 			const dekSealed = await this.sealDekWithPasshash(sealed.passhash, destinationDek)
 
-			let id = profile.id
+			// The backup's id names this profile's storage keys, so only a generated-shaped one is kept.
+			let id = isGeneratedProfileId(profile.id) ? profile.id : await this.repo.generateUniqueId()
 			while ((await this.repo.contains(id)) || this.deletionState.isReserved(id)) {
 				id = await this.repo.generateUniqueId()
 			}
@@ -2569,10 +2625,25 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 * Idempotent in spirit: if the session is already active for this profile,
 	 * skips the re-open (the no-op case after a second `finalizeRestore` call).
 	 */
-	public async finalizeRestore(id: string, password?: string): Promise<ProfileInfo> {
+	public async finalizeRestore(id: string, password?: string): Promise<FinalizedRestore> {
 		await this.ensureInitialized()
 
 		return this.runExclusive(async () => {
+			const profile = await this.finalizeRestoreHoldingLock(id, password)
+			const fence = await this.captureExecutionFenceHoldingLock()
+			if (fence.profileId !== id) throw new SessionEndedError()
+			return { profile, fence: { ...fence, incarnation: this.workerId } }
+		})
+	}
+
+	private async finalizeRestoreHoldingLock(id: string, password: string | undefined): Promise<ProfileInfo> {
+		// Finalize is the last reader of both restore stashes for its id, so every path wipes what it
+		// did not take: a leftover rewrap context is the empty-slice case (nothing consumed it). The
+		// identity checks spare entries a later restore stashed after the lock's hold watchdog
+		// released this call.
+		const seen = this.pendingRestoreSecrets.get(id)
+		const seenRewrap = this.pendingDekRewraps.get(id)
+		try {
 			// Sweep stale entries but never the id being finalized here.
 			this.sweepStalePendingRestore(Date.now(), id)
 			const profile = await this.repo.get(id)
@@ -2594,11 +2665,6 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// unlock-later recovery instead of branding them torn.
 			await this.restorePending.delete(id)
 
-			// Zeroize any LEFTOVER rewrap context for this id — the empty-slice case
-			// (`restoreImportedKeys` never ran, so nothing consumed it) and any abandoned
-			// re-restore of the same id. Consumed contexts are already gone.
-			this.pendingDekRewraps.drop(id)
-
 			// If the session is already active for this profile, treat as
 			// no-op. Defensive against double-finalize.
 			if (this.sessionManager.isActive(id)) {
@@ -2606,12 +2672,15 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			}
 
 			if (profile.type === "password") {
-				return this.finalizePasswordRestoreHoldingLock(id, profile, password)
+				return await this.finalizePasswordRestoreHoldingLock(id, profile, password)
 			}
 			// This dispatch falls through to the passkey branch for ANY non-password
 			// type — an edited `type` field must not select it; the branch re-checks.
-			return this.finalizePasskeyRestoreHoldingLock(id, profile)
-		})
+			return await this.finalizePasskeyRestoreHoldingLock(id, profile)
+		} finally {
+			if (this.pendingRestoreSecrets.get(id) === seen) this.pendingRestoreSecrets.drop(id)
+			if (this.pendingDekRewraps.get(id) === seenRewrap) this.pendingDekRewraps.drop(id)
+		}
 	}
 
 	/** Password-side finalize: re-derive from the supplied password (PBKDF2 paid again —

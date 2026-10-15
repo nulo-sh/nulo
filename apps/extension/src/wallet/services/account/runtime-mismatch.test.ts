@@ -4,7 +4,7 @@
  * WASM). Pins the fail-closed contract: durable block persisted + the MISMATCHING profile's session
  * closed + the typed error thrown, all delegate-independently.
  */
-import { AccountAddressInconsistencyError } from "@nulo/extension-messaging/errors"
+import { AccountAddressInconsistencyError, ChainNotSupportedError } from "@nulo/extension-messaging/errors"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { describe, expect, test } from "vitest"
 import { ServiceCollection } from "@/wallet/base"
@@ -13,10 +13,11 @@ import { LoggerStore } from "@/wallet/logger"
 import { AccountIntegrityBlockedRepository } from "@/wallet/services/account-integrity/blocked-repository"
 import { NetworkService } from "@/wallet/services/network/service"
 import { ProfileService } from "@/wallet/services/profile/service"
+import { loggedAfter } from "../../../../tests/helpers/logged"
 import { svc } from "../composition-harness"
 import { AccountService } from "./service"
 
-async function build(opts: { failBlockWrite?: boolean } = {}) {
+async function build(opts: { failBlockWrite?: boolean; closeError?: Error } = {}) {
 	const api = new FakeBrowserApi()
 	api.reset()
 	if (opts.failBlockWrite) {
@@ -35,13 +36,17 @@ async function build(opts: { failBlockWrite?: boolean } = {}) {
 	const services = new ServiceCollection()
 	services.add(
 		svc(ProfileService.name, {
-			lockProfileIfActive: async (id: string) => void locked.push(id),
+			lockProfileIfActive: async (id: string) => {
+				locked.push(id)
+				if (opts.closeError) throw opts.closeError
+			},
 			// Stands in for the real locked, still-exists-guarded writer (the profile is "live" here).
 			persistIntegrityBlockIfLive: async (record: Parameters<typeof repo.set>[0]) => repo.set(record),
 		}),
 	)
-	services.add(svc(NetworkService.name, { registerChainPurgeSubscriber: () => {} }))
-	const accounts = new AccountService(new LoggerStore(new ConfigStore()), api)
+	services.add(svc(NetworkService.name, { registerChainPurgeSubscriber: () => {}, isChainLive: async () => true }))
+	const logger = new LoggerStore(new ConfigStore())
+	const accounts = new AccountService(logger, api)
 	services.add(accounts)
 	await services.start()
 	// biome-ignore lint/suspicious/noExplicitAny: reach the extracted private handler under test
@@ -52,7 +57,7 @@ async function build(opts: { failBlockWrite?: boolean } = {}) {
 		s: string,
 		d: string,
 	) => Promise<never>
-	return { raise, repo, locked }
+	return { raise, repo, locked, logger, accounts }
 }
 
 describe("AccountService runtime mismatch (raiseRuntimeMismatch)", () => {
@@ -65,16 +70,54 @@ describe("AccountService runtime mismatch (raiseRuntimeMismatch)", () => {
 		expect(record?.derivedAddress).toBe("0xderived")
 		expect(record?.chainId).toBe(3)
 		expect(record?.accountIndex).toBe(2)
-		expect(record?.regimeId).toBe("nulo-v6")
+		expect(record?.regimeId).toBe("nulo-v6.1")
 		// Closed exactly the mismatching profile.
 		expect(locked).toEqual(["p1"])
 	})
 
 	test("fail-closed: even when the block PERSIST fails, the throw + session close still happen", async () => {
-		const { raise, locked } = await build({ failBlockWrite: true })
+		const { raise, locked, logger } = await build({ failBlockWrite: true })
 		await expect(raise("p9", 0, 0, "0xa", "0xb")).rejects.toBeInstanceOf(AccountAddressInconsistencyError)
 		// The persist failure is logged and swallowed, but the session close still runs and the
 		// typed error still propagates — the caller can never end up with a usable mismatched session.
 		expect(locked).toEqual(["p9"])
+		expect(loggedAfter(logger, "integrity block persist failed")).toEqual([{ error: { name: "Error", message: "storage full" } }])
+	})
+
+	test("fail-closed: a session close that throws is logged as the error's projection, and the typed error still propagates", async () => {
+		const { raise, repo, locked, logger } = await build({ closeError: new Error("session store unavailable") })
+		await expect(raise("p9", 0, 0, "0xa", "0xb")).rejects.toBeInstanceOf(AccountAddressInconsistencyError)
+		expect(await repo.isBlocked("p9")).toBe(true)
+		expect(locked).toEqual(["p9"])
+		expect(loggedAfter(logger, "integrity session close failed")).toEqual([
+			{ error: { name: "Error", message: "session store unavailable" } },
+		])
+	})
+})
+
+describe("AccountService runtime mismatch with the coordinator's delegate", () => {
+	test("a chain the delegate confines throws CHAIN_NOT_SUPPORTED with no block and no close", async () => {
+		const { raise, repo, locked, accounts } = await build()
+		const asked: Array<[string, number]> = []
+		accounts.setRuntimeMismatchDelegate({
+			classifyRuntimeMismatch: async (p, c) => {
+				asked.push([p, c])
+				return true
+			},
+		})
+		await expect(raise("p1", 3, 2, "0xstored", "0xderived")).rejects.toBeInstanceOf(ChainNotSupportedError)
+		expect(asked).toEqual([["p1", 3]])
+		expect(await repo.isBlocked("p1")).toBe(false)
+		expect(locked).toEqual([])
+	})
+
+	test("a chain the delegate cannot confine, or a delegate that throws, still blocks and closes", async () => {
+		for (const classify of [async () => false, async () => Promise.reject(new Error("locked"))]) {
+			const { raise, repo, locked, accounts } = await build()
+			accounts.setRuntimeMismatchDelegate({ classifyRuntimeMismatch: classify })
+			await expect(raise("p1", 3, 2, "0xstored", "0xderived")).rejects.toBeInstanceOf(AccountAddressInconsistencyError)
+			expect(await repo.isBlocked("p1")).toBe(true)
+			expect(locked).toEqual(["p1"])
+		}
 	})
 })

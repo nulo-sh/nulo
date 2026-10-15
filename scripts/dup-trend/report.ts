@@ -45,44 +45,62 @@ export interface JscpdReport {
 	}
 }
 
-/** Renders the jscpd JSON report as the markdown trend summary. */
-export function formatDupReport(report: JscpdReport): string {
-	const t = report.statistics.total
-	let prod = 0
-	let prodLines = 0
-	let test = 0
-	let testLines = 0
-	let mixed = 0
-	const prodPairs = new Map<string, { clones: number; lines: number }>()
-	const prodFormats = new Map<string, { clones: number; lines: number }>()
-	for (const c of report.duplicates) {
+interface Tally {
+	clones: number
+	lines: number
+}
+
+const tally = (): Tally => ({ clones: 0, lines: 0 })
+
+function count(into: Tally, lines: number): void {
+	into.clones++
+	into.lines += lines
+}
+
+function countIn(map: Map<string, Tally>, key: string, lines: number): void {
+	const entry = map.get(key) ?? tally()
+	count(entry, lines)
+	map.set(key, entry)
+}
+
+interface DupSplit {
+	prod: Tally
+	test: Tally
+	mixed: number
+	prodFormats: Map<string, Tally>
+	prodPairs: Map<string, Tally>
+}
+
+/** Splits clones by whether each side is a test file; only production↔production clones are ranked. */
+function splitDuplicates(duplicates: JscpdReport["duplicates"]): DupSplit {
+	const split: DupSplit = { prod: tally(), test: tally(), mixed: 0, prodFormats: new Map(), prodPairs: new Map() }
+	for (const c of duplicates) {
 		const a = c.firstFile.name
 		const b = c.secondFile.name
 		const aTest = TEST_PATH_RE.test(a)
-		const bTest = TEST_PATH_RE.test(b)
-		if (aTest && bTest) {
-			test++
-			testLines += c.lines
-		} else if (!aTest && !bTest) {
-			prod++
-			prodLines += c.lines
-			const f = prodFormats.get(c.format) ?? { clones: 0, lines: 0 }
-			f.clones++
-			f.lines += c.lines
-			prodFormats.set(c.format, f)
-			// html-format clones over Vue templates are tokenizer noise (whole-template
-			// vocabulary matches with wildly unequal spans), so they stay out of the
-			// actionable pair ranking; the per-format split above still counts them.
-			if (c.format === "html") continue
-			const key = a === b ? `${a} (internal)` : [a, b].sort().join(" ↔ ")
-			const e = prodPairs.get(key) ?? { clones: 0, lines: 0 }
-			e.clones++
-			e.lines += c.lines
-			prodPairs.set(key, e)
-		} else {
-			mixed++
+		if (aTest !== TEST_PATH_RE.test(b)) {
+			split.mixed++
+			continue
 		}
+		if (aTest) {
+			count(split.test, c.lines)
+			continue
+		}
+		count(split.prod, c.lines)
+		countIn(split.prodFormats, c.format, c.lines)
+		// html-format clones over Vue templates are tokenizer noise (whole-template
+		// vocabulary matches with wildly unequal spans), so they stay out of the
+		// actionable pair ranking; the per-format split above still counts them.
+		if (c.format === "html") continue
+		countIn(split.prodPairs, a === b ? `${a} (internal)` : [a, b].sort().join(" ↔ "), c.lines)
 	}
+	return split
+}
+
+/** Renders the jscpd JSON report as the markdown trend summary. */
+export function formatDupReport(report: JscpdReport): string {
+	const t = report.statistics.total
+	const { prod, test, mixed, prodFormats, prodPairs } = splitDuplicates(report.duplicates)
 	const formats = [...prodFormats.entries()].sort((x, y) => y[1].lines - x[1].lines)
 	const top = [...prodPairs.entries()].sort((x, y) => y[1].lines - x[1].lines).slice(0, 10)
 	const out: string[] = []
@@ -95,11 +113,11 @@ export function formatDupReport(report: JscpdReport): string {
 	)
 	out.push("")
 	out.push(
-		`Split: **production ${prod} clones / ${prodLines} lines** · test↔test ${test} / ${testLines} · mixed ${mixed}.`,
+		`Split: **production ${prod.clones} clones / ${prod.lines} lines** · test↔test ${test.clones} / ${test.lines} · mixed ${mixed}.`,
 	)
 	out.push("")
 	if (formats.length > 0) {
-		out.push("Production by format: " + formats.map(([f, e]) => `${f} ${e.clones} / ${e.lines}`).join(" · ") + ".")
+		out.push(`Production by format: ${formats.map(([f, e]) => `${f} ${e.clones} / ${e.lines}`).join(" · ")}.`)
 		out.push("")
 	}
 	out.push("### Top production clone pairs (html excluded — Vue-template tokenizer noise)")

@@ -6,8 +6,8 @@
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { JobCancelledError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { ImportedAccountUnusableError, JobCancelledError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
+import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from "vitest"
 import { nextTick, reactive } from "vue"
 
 const ACCOUNT = "0xacct"
@@ -39,6 +39,8 @@ const mocks = vi.hoisted(() => ({
 	routerReplace: vi.fn(),
 	routerPush: vi.fn(),
 	legalStatus: vi.fn(async () => "current"),
+	refreezeQuote: vi.fn(),
+	focusAmount: vi.fn(),
 }))
 
 vi.mock("@/wallet/services/execution/client", () => ({
@@ -54,7 +56,7 @@ vi.mock("@/wallet/services/execution/client", () => ({
 }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onTokenAdded: new EventHandler(), onTokenDeleted: new EventHandler(), getTokens: mocks.getTokens }
+		return { disconnect: vi.fn(), onTokenAdded: liveBus(), onTokenDeleted: liveBus(), getTokens: mocks.getTokens }
 	}),
 }))
 vi.mock("@/wallet/services/token-balance/client", () => ({
@@ -71,9 +73,9 @@ vi.mock("@/wallet/services/contact/client", () => ({
 	ContactServiceClient: vi.fn(function () {
 		return {
 			disconnect: vi.fn(),
-			onContactAdded: new EventHandler(),
-			onContactUpdated: new EventHandler(),
-			onContactDeleted: new EventHandler(),
+			onContactAdded: liveBus(),
+			onContactUpdated: liveBus(),
+			onContactDeleted: liveBus(),
 			getContacts: mocks.getContacts,
 		}
 	}),
@@ -84,7 +86,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: new EventHandler(),
 			onConnected: new EventHandler(),
-			refreshIfStale: vi.fn(async () => ({})),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
+			refreshIfStale: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
 		}
 	}),
 }))
@@ -115,7 +118,11 @@ vi.mock("vue-router", () => ({
 }))
 
 import { REVIEW_ARM_MS } from "@/composables/useSendReview"
+import { CHAIN_IDS } from "@/utils/chain-ids"
+import { PriceServiceClient } from "@/wallet/services/price/client"
+import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 import { TRANSFER_STATUS_UNKNOWN_COPY, TRANSFER_TERMS_COPY } from "@/popup/utils/transfer-failure-copy"
+import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStore } from "@/stores/popup.store"
@@ -124,6 +131,7 @@ import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/clien
 import { TokenServiceClient } from "@/wallet/services/token/client"
 import { TransferType } from "@/wallet/services/transaction/client"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
+import { held, holdReads, liveBus } from "../../../tests/helpers/held-read"
 import Send from "./send.vue"
 
 const STUBS = {
@@ -151,11 +159,12 @@ const STUBS = {
 		emits: ["update:searchTerm", "update:selectedContact"],
 	},
 	AmountCard: {
+		name: "AmountCard",
 		template:
 			'<input data-testid="stub-amount" :data-token="token?.symbol" :data-balance="tokenBalanceByType" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
 		props: ["modelValue", "fiatMode", "fiatGuard", "token", "tokenBalanceByType", "balanceRawByType", "liveQuote", "proxyTicker"],
 		emits: ["update:modelValue", "update:fiatMode", "update:fiatGuard"],
-		methods: { refreezeQuote() {} },
+		methods: { refreezeQuote: mocks.refreezeQuote, focusAmount: mocks.focusAmount },
 	},
 	FeeSettingsCard: {
 		name: "FeeSettingsCard",
@@ -172,8 +181,9 @@ const STUBS = {
 			"modelValue",
 			"needsFeeJuice",
 			"payer",
+			"accountUnusable",
 		],
-		emits: ["update:modelValue", "update:needsFeeJuice", "update:payer"],
+		emits: ["update:modelValue", "update:needsFeeJuice", "update:payer", "update:accountUnusable"],
 	},
 	// The popup family under the real review sheet: what the sheet hands it, without trap or teleport.
 	Popup: {
@@ -204,7 +214,19 @@ function setIdentity(appStore: ReturnType<typeof useAppStore>) {
 	appStore.account = { address: ACCOUNT } as never
 }
 
-async function mountSend(opts: { errorHandler?: (error: unknown) => void; realTokenCard?: boolean; cold?: boolean } = {}) {
+/** What a landed estimate answers when a test names none. */
+const LANDED = { maxFee: "1000", maxFeeFormatted: "0.000000000000001", gasDetails: {} }
+
+/** The page debounces its estimate by 800 ms; this lets the current input's estimate land. */
+async function estimateLands() {
+	await vi.advanceTimersByTimeAsync(800)
+	await flushPromises()
+}
+
+async function mountSend(
+	opts: { errorHandler?: (error: unknown) => void; realTokenCard?: boolean; realAmountCard?: boolean; cold?: boolean } = {},
+) {
+	vi.useFakeTimers()
 	installChromeStorage()
 	const pinia = createTestingPinia({ stubActions: false })
 	const appStore = useAppStore(pinia)
@@ -216,8 +238,7 @@ async function mountSend(opts: { errorHandler?: (error: unknown) => void; realTo
 		attachTo: document.body,
 		global: {
 			plugins: [pinia],
-			stubs: opts.realTokenCard ? { ...STUBS, SelectTokenCard: false } : STUBS,
-			mocks: { getChainName: () => "Test" },
+			stubs: { ...STUBS, ...(opts.realTokenCard && { SelectTokenCard: false }), ...(opts.realAmountCard && { AmountCard: false }) },
 			config: opts.errorHandler ? { errorHandler: opts.errorHandler } : {},
 		},
 	})
@@ -238,6 +259,7 @@ async function fillForm(w: W, method: { settings: unknown; payer: unknown } | nu
 	await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
 	await w.get('[data-testid="stub-amount"]').setValue("1.5")
 	await feeCard(w, method)
+	await estimateLands()
 }
 
 const submit = (w: W) => w.get('[data-testid="send-submit"]')
@@ -265,6 +287,7 @@ beforeEach(() => {
 	mocks.getTokens.mockResolvedValue([TOKEN])
 	mocks.getTokenBalances.mockResolvedValue([BALANCE])
 	mocks.executeTransfer.mockResolvedValue(undefined)
+	mocks.estimateTransferFee.mockResolvedValue(LANDED)
 	mocks.legalStatus.mockResolvedValue("current")
 	vi.spyOn(console, "error").mockImplementation(() => {})
 	vi.spyOn(console, "debug").mockImplementation(() => {})
@@ -295,6 +318,7 @@ describe("send page — the submit tail", () => {
 			1_500_000n,
 			SPONSOR.settings,
 			undefined,
+			undefined,
 		)
 		expect(appStore.awaitingTransactions).toHaveLength(1)
 		expect(appStore.awaitingTransactions[0]).toMatchObject({ account: ACCOUNT, destination: DESTINATION, contract: TOKEN.contract })
@@ -308,6 +332,7 @@ describe("send page — the submit tail", () => {
 		const { w } = await mountSend()
 		await fillForm(w)
 		await w.get('[data-testid="stub-amount"]').setValue("1,234,567.123456")
+		await estimateLands()
 		await strip(w).trigger("click")
 		expect(w.get('[data-testid="send-review-amount"]').text()).toBe("1,234,567.123456TST")
 		await sendNow(w).trigger("click")
@@ -319,6 +344,7 @@ describe("send page — the submit tail", () => {
 			DESTINATION,
 			1_234_567_123_456n,
 			SPONSOR.settings,
+			undefined,
 			undefined,
 		)
 		w.unmount()
@@ -433,6 +459,17 @@ describe("send page — the submit tail", () => {
 	})
 })
 
+describe("send page — the asset section", () => {
+	test("renders its label without a render error and names no network", async () => {
+		const errors: unknown[] = []
+		const { w } = await mountSend({ errorHandler: (error) => errors.push(error) })
+		expect(errors).toEqual([])
+		expect(w.text()).toContain("Select Asset")
+		expect(w.text()).not.toContain("Network:")
+		w.unmount()
+	})
+})
+
 describe("send page — the footer", () => {
 	test("no settings from the card: nothing is sendable", async () => {
 		const { w } = await mountSend()
@@ -444,18 +481,44 @@ describe("send page — the footer", () => {
 	})
 
 	test("a well-formed recipient off the curve is never estimated or sent; one on it is", async () => {
-		vi.useFakeTimers()
 		const { w } = await mountSend()
 		await fillForm(w)
+		mocks.estimateTransferFee.mockClear()
 		await w.get('[data-testid="stub-recipient"]').setValue("0x24f20fb6e501242936eb1f47e2f51610f15e6c07486ed62012774e5f14ebd583")
-		await vi.advanceTimersByTimeAsync(800)
+		await estimateLands()
 		expect(mocks.estimateTransferFee).not.toHaveBeenCalled()
 		expect(submit(w).attributes("disabled")).toBeDefined()
 
 		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
-		await vi.advanceTimersByTimeAsync(800)
+		await estimateLands()
 		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
 		expect(submit(w).attributes("disabled")).toBeUndefined()
+		w.unmount()
+	})
+
+	test("an account whose imported key does not open closes Send onto Home with the A10 toast, once", async () => {
+		const { w } = await mountSend()
+		const card = w.findComponent({ name: "FeeSettingsCard" }).vm
+		card.$emit("update:accountUnusable", true)
+		await nextTick()
+		card.$emit("update:accountUnusable", false)
+		await nextTick()
+		card.$emit("update:accountUnusable", true)
+		await nextTick()
+		expect(mocks.openToast).toHaveBeenCalledTimes(1)
+		expect(mocks.openToast).toHaveBeenCalledWith({ kind: "error", ...IMPORTED_UNUSABLE_TOAST })
+		expect(mocks.routerReplace).toHaveBeenCalledTimes(1)
+		expect(mocks.routerReplace).toHaveBeenCalledWith("/popup/general")
+		w.unmount()
+	})
+
+	test("a fee estimate refused for the imported key closes Send the same way, not with the estimate toast", async () => {
+		mocks.estimateTransferFee.mockRejectedValue(ImportedAccountUnusableError.because("signing key missing"))
+		const { w } = await mountSend()
+		await fillForm(w)
+		expect(mocks.openToast).toHaveBeenCalledTimes(1)
+		expect(mocks.openToast).toHaveBeenCalledWith({ kind: "error", ...IMPORTED_UNUSABLE_TOAST })
+		expect(mocks.routerReplace).toHaveBeenCalledWith("/popup/general")
 		w.unmount()
 	})
 
@@ -581,6 +644,7 @@ describe("send page — consent", () => {
 		expect(sendNow(w).attributes("data-ready")).toBe("false")
 
 		await feeCard(w, SPONSOR)
+		await estimateLands()
 		expect(sendNow(w).attributes("data-ready")).toBe("true")
 		await sendNow(w).trigger("click")
 		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
@@ -723,6 +787,7 @@ describe("send page — the sheet on the popup stack", () => {
 		const { w } = await mountSend()
 		await fillForm(w, FJ)
 		await w.get('[data-testid="send-to-type"]').trigger("click")
+		await estimateLands()
 		await submit(w).trigger("click")
 		expect(sheetOpen(w)).toBe(true)
 		await close(w)
@@ -784,26 +849,7 @@ describe("send page — the token card while the tokens load", () => {
 	/** Another chain's token that carries the id the page keeps selected. */
 	const FOREIGN = { ...TOKEN, chainId: 999, contract: `0x${"f".repeat(64)}`, symbol: "FRN" }
 
-	type Held = { promise: Promise<unknown[]>; resolve: (tokens: unknown[]) => void; reject: (error: unknown) => void }
-	function held(): Held {
-		let resolve!: Held["resolve"]
-		let reject!: Held["reject"]
-		const promise = new Promise<unknown[]>((res, rej) => {
-			resolve = res
-			reject = rej
-		})
-		return { promise, resolve, reject }
-	}
-	/** Every getTokens call waits for the test: `reads[n]` settles the n-th. */
-	function holdTokenReads(): Held[] {
-		const reads: Held[] = []
-		mocks.getTokens.mockImplementation(() => {
-			const read = held()
-			reads.push(read)
-			return read.promise
-		})
-		return reads
-	}
+	const holdTokenReads = () => holdReads<unknown[]>(mocks.getTokens)
 	const lastClient = <T>(ctor: unknown) => (ctor as { mock: { results: { value: T }[] } }).mock.results.at(-1)?.value as T
 	const tokenAdded = () => lastClient<{ onTokenAdded: EventHandler<unknown> }>(TokenServiceClient).onTokenAdded
 	const balanceAdded = () => lastClient<{ onTokenBalanceAdded: EventHandler<unknown> }>(TokenBalanceServiceClient).onTokenBalanceAdded
@@ -1073,7 +1119,7 @@ describe("send page — the token card while the tokens load", () => {
 	})
 
 	test("a token added for this identity during the load is in the loaded list", async () => {
-		const first = held()
+		const first = held<unknown[]>()
 		mocks.getTokens.mockReturnValueOnce(first.promise).mockResolvedValue([TOKEN, OTHER])
 		const { w, cacheStore } = await mountSend()
 		tokenAdded().invoke(OTHER)
@@ -1084,6 +1130,74 @@ describe("send page — the token card while the tokens load", () => {
 		cacheStore.activeTokenIdx = OTHER.id
 		await nextTick()
 		expect(card(w)).toEqual({ loading: "false", symbol: "OTH" })
+		w.unmount()
+	})
+
+	const tokenDeleted = () => lastClient<{ onTokenDeleted: EventHandler<unknown> }>(TokenServiceClient).onTokenDeleted
+	const listed = (w: W) => (w.vm as unknown as { tokens: { symbol: string }[] }).tokens.map((t) => t.symbol)
+
+	test("(BUG PIN) a token deleted after the token answer, while the contacts read is out, stays listed and active; one deleted after the load is dropped", async () => {
+		// Today's behaviour, kept until the owner decides: the delete finds no row in the list the load
+		// cleared, and the token answer, applied only once the other reads answer, brings it back.
+		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
+		const contactReads = holdReads<unknown[]>(mocks.getContacts)
+		onTestFinished(() => {
+			mocks.getContacts.mockReset()
+		})
+		const { w } = await mountSend()
+		tokenDeleted().invoke(TOKEN)
+		expect(contactReads).toHaveLength(1)
+		contactReads[0]?.resolve([])
+		await flushPromises()
+		expect(listed(w)).toEqual(["TST", "OTH"])
+		expect(card(w)).toEqual({ loading: "false", symbol: "TST" })
+
+		tokenDeleted().invoke(OTHER)
+		await flushPromises()
+		expect(listed(w)).toEqual(["TST"])
+		w.unmount()
+	})
+
+	const navigations = () => mocks.routerBack.mock.calls.length + mocks.routerReplace.mock.calls.length
+
+	test("deleting the active token selects the first remaining token", async () => {
+		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
+		const { w, cacheStore } = await mountSend()
+		expect(card(w).symbol).toBe("TST")
+		tokenDeleted().invoke(TOKEN)
+		await flushPromises()
+		expect(listed(w)).toEqual(["OTH"])
+		expect(cacheStore.activeTokenIdx).toBe(OTHER.id)
+		expect(card(w)).toEqual({ loading: "false", symbol: "OTH" })
+		expect(mocks.openToast).not.toHaveBeenCalled()
+		expect(navigations()).toBe(0)
+		w.unmount()
+	})
+
+	test("deleting the last token toasts once and leaves Send", async () => {
+		mocks.getTokens.mockResolvedValue([TOKEN])
+		const { w } = await mountSend()
+		expect(card(w).symbol).toBe("TST")
+		tokenDeleted().invoke(TOKEN)
+		await flushPromises()
+		expect(listed(w)).toEqual([])
+		expect(mocks.openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "The last token has just been deleted" })
+		expect(navigations()).toBe(1)
+		w.unmount()
+	})
+
+	test("deleting another token keeps the selection", async () => {
+		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
+		const { w, cacheStore } = await mountSend()
+		const selected = cacheStore.activeTokenIdx
+		expect(card(w).symbol).toBe("TST")
+		tokenDeleted().invoke(OTHER)
+		await flushPromises()
+		expect(listed(w)).toEqual(["TST"])
+		expect(cacheStore.activeTokenIdx).toBe(selected)
+		expect(card(w)).toEqual({ loading: "false", symbol: "TST" })
+		expect(mocks.openToast).not.toHaveBeenCalled()
+		expect(navigations()).toBe(0)
 		w.unmount()
 	})
 
@@ -1120,7 +1234,11 @@ describe("send page — the contact list reducers", () => {
 	const row = (id: string, name: string, c: string): Row => ({ id, name, address: `0x2${c.repeat(63)}` })
 	const contactClient = () => {
 		const results = vi.mocked(ContactServiceClient).mock.results
-		return results[results.length - 1].value as { onContactUpdated: EventHandler<Row>; onContactDeleted: EventHandler<Row> }
+		return results[results.length - 1].value as {
+			onContactAdded: EventHandler<Row>
+			onContactUpdated: EventHandler<Row>
+			onContactDeleted: EventHandler<Row>
+		}
 	}
 	const vmContacts = (w: W) => (w.vm as unknown as { contacts: Row[] }).contacts
 	const candidateNames = (w: W) => (w.findComponent(STUBS.RecipientField).props("candidates") as Row[]).map((c) => c.name)
@@ -1139,6 +1257,120 @@ describe("send page — the contact list reducers", () => {
 		expect(vmContacts(w)).not.toBe(before)
 		expect(vmContacts(w).map((c) => c.name)).toEqual(["Dave"])
 		expect(candidateNames(w)[0]).toBe("Dave")
+		w.unmount()
+	})
+
+	test("(BUG PIN) a contact added after the contacts answer, while the token read is out, is dropped; one added after the load is kept", async () => {
+		// Today's behaviour, kept until the owner decides: the contacts answer is applied only once the
+		// token and balance reads answer too, and it replaces the list an add already reached.
+		mocks.getContacts.mockResolvedValueOnce([row("c1", "Alice", "a")])
+		const tokenReads = holdReads<unknown[]>(mocks.getTokens)
+		const { w } = await mountSend()
+		contactClient().onContactAdded.invoke(row("c2", "Bob", "b"))
+		expect(tokenReads).toHaveLength(1)
+		tokenReads[0]?.resolve([TOKEN])
+		await flushPromises()
+		expect(vmContacts(w).map((c) => c.name)).toEqual(["Alice"])
+
+		contactClient().onContactAdded.invoke(row("c2", "Bob", "b"))
+		await flushPromises()
+		expect(vmContacts(w).map((c) => c.name)).toEqual(["Alice", "Bob"])
+		w.unmount()
+	})
+})
+
+describe("send page — Refresh quote by keyboard", () => {
+	/** In fiat mode with no live quote: the gate asks for a requote, which a re-freeze cannot answer. */
+	async function showRequote(w: W) {
+		const amount = w.findComponent({ name: "AmountCard" })
+		amount.vm.$emit("update:fiatMode", true)
+		amount.vm.$emit("update:fiatGuard", { frozenUsd: 1, frozenAt: Date.now(), converting: false })
+		await nextTick()
+		return w.get('[data-testid="send-fiat-requote"]')
+	}
+	const asKeyboardFocus = (el: Element) => {
+		const matches = el.matches.bind(el)
+		vi.spyOn(el, "matches").mockImplementation((selector) => selector === ":focus-visible" || matches(selector))
+	}
+
+	test("Refresh quote is a button; a pointer press re-freezes the quote and moves no focus", async () => {
+		const { w } = await mountSend()
+		const requote = await showRequote(w)
+		expect(requote.element.tagName).toBe("BUTTON")
+		expect(requote.attributes("type")).toBe("button")
+		await requote.trigger("click")
+		expect(mocks.refreezeQuote).toHaveBeenCalledTimes(1)
+		expect(mocks.focusAmount).not.toHaveBeenCalled()
+		w.unmount()
+	})
+
+	test("with no live quote a keyboard press leaves the focus on Refresh quote, which stays", async () => {
+		const { w } = await mountSend()
+		const requote = await showRequote(w)
+		asKeyboardFocus(requote.element)
+		await requote.trigger("click")
+		expect(mocks.refreezeQuote).toHaveBeenCalledTimes(1)
+		expect(mocks.focusAmount).not.toHaveBeenCalled()
+		expect(w.find('[data-testid="send-fiat-requote"]').exists()).toBe(true)
+		w.unmount()
+	})
+
+	test("the notice says the price moved only when the live quote differs from the snapshot", async () => {
+		const chainId = CHAIN_IDS.TESTNET
+		const priced = { ...TOKEN, chainId, contract: TEST_TOKENS.USDC, symbol: "USDC" }
+		mocks.getTokens.mockResolvedValue([priced])
+		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token: priced }])
+		const { w } = await mountSend()
+		const price = vi.mocked(PriceServiceClient).mock.results.at(-1)?.value as { onQuotesUpdated: { invoke: (s: unknown) => void } }
+		const quote = (usd: number) => ({
+			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd, fetchedAt: Date.now(), providerUpdatedAt: null } },
+			pricedTokens: TEST_PRICED_TOKENS,
+		})
+		const notice = () => w.get('[data-testid="send-fiat-requote"]').element.parentElement?.textContent ?? ""
+
+		price.onQuotesUpdated.invoke(quote(1))
+		const amount = w.findComponent({ name: "AmountCard" })
+		amount.vm.$emit("update:fiatMode", true)
+		// Frozen at today's price, but past the snapshot's age limit.
+		amount.vm.$emit("update:fiatGuard", { frozenUsd: 1, frozenAt: Date.now() - 16 * 60_000, converting: false })
+		await nextTick()
+		expect(notice()).toContain("The price quote went stale.")
+		expect(notice()).not.toContain("moved")
+
+		price.onQuotesUpdated.invoke(quote(1.05))
+		await nextTick()
+		expect(notice()).toContain("The price moved since you started typing.")
+		w.unmount()
+	})
+
+	test("on the real card a moved quote is refreshed by keyboard: the amount re-derives and the USD field holds the focus", async () => {
+		const chainId = CHAIN_IDS.TESTNET
+		const priced = { ...TOKEN, chainId, contract: TEST_TOKENS.USDC, symbol: "USDC" }
+		mocks.getTokens.mockResolvedValue([priced])
+		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token: priced }])
+		const { w } = await mountSend({ realAmountCard: true })
+		const price = vi.mocked(PriceServiceClient).mock.results.at(-1)?.value as { onQuotesUpdated: { invoke: (s: unknown) => void } }
+		const quote = (usd: number) => ({
+			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd, fetchedAt: Date.now(), providerUpdatedAt: null } },
+			pricedTokens: TEST_PRICED_TOKENS,
+		})
+
+		price.onQuotesUpdated.invoke(quote(1))
+		await nextTick()
+		await w.get('[data-testid="send-amount-fiat-toggle"]').trigger("click")
+		await w.get('[data-testid="send-amount-fiat-input"]').setValue("2")
+		await vi.waitFor(() => expect(w.get('[data-testid="send-amount-derived"]').text()).toBe("≈ 2 USDC"))
+
+		price.onQuotesUpdated.invoke(quote(1.05))
+		await nextTick()
+		const requote = w.get('[data-testid="send-fiat-requote"]')
+		;(requote.element as HTMLButtonElement).focus()
+		asKeyboardFocus(requote.element)
+		await requote.trigger("click")
+
+		await vi.waitFor(() => expect(w.get('[data-testid="send-amount-derived"]').text()).toBe("≈ 1.904761 USDC"))
+		expect(w.find('[data-testid="send-fiat-requote"]').exists()).toBe(false)
+		expect(document.activeElement).toBe(w.get('[data-testid="send-amount-fiat-input"]').element)
 		w.unmount()
 	})
 })

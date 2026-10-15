@@ -6,9 +6,9 @@ import { EXECUTION_SERVICE_NAME, type Methods } from "./spec"
 
 export * from "./spec"
 
-/** A transport deadline for a transfer whose outcome the popup cannot know sooner: proving in the
+/** A transport deadline for a send whose outcome the popup cannot know sooner: proving in the
  *  browser can take minutes. Past it the journal still holds the answer. */
-const EXECUTE_TRANSFER_TIMEOUT_MS = 60 * 60_000
+export const EXECUTE_SEND_TIMEOUT_MS = 60 * 60_000
 
 // Declaration-merge the passthrough signatures onto the class type. Bodies are
 // installed at runtime by `definePassthroughs`; this is what satisfies
@@ -21,7 +21,7 @@ export class ExecutionServiceClient extends ServiceClient<Methods> implements Se
 	}
 
 	protected override getRequestTimeoutMs(method: keyof Methods): number {
-		return method === "executeTransfer" ? EXECUTE_TRANSFER_TIMEOUT_MS : super.getRequestTimeoutMs(method)
+		return method === "executeTransfer" ? EXECUTE_SEND_TIMEOUT_MS : super.getRequestTimeoutMs(method)
 	}
 }
 // Every client method is a pure request-passthrough; the installer's
@@ -36,6 +36,7 @@ definePassthroughsExhaustive<Methods>()(ExecutionServiceClient.prototype, [
 	"previewOperationAuthwits",
 	"decodeCallsForDisplay",
 	"cancelJob",
+	"acceptQueuedFee",
 	"cancelEstimate",
 	"getLastProveOutcome",
 ])

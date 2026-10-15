@@ -1,0 +1,354 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<route lang="json">
+{
+	"meta": {
+		"isAuthRequired": true
+	}
+}
+</route>
+
+<script setup>
+/** Components */
+import { Dropdown } from "@/components/ui/Dropdown"
+
+/** Utils */
+import { defaultConfig as makeDefaultConfig } from "@/wallet/config"
+import { ConfigServiceClient } from "@/wallet/services/config/client"
+
+/** Composables */
+import { useToast } from "@/composables/toast"
+import { useConfigRead } from "@/composables/useConfigRead"
+const { openToast } = useToast()
+
+const configService = new ConfigServiceClient()
+configService.onUpdate.add(onSettingUpdate)
+const displayRead = useConfigRead(configService, () => configService.getProps(), landDisplayConfig)
+
+const isLoading = ref(true)
+const defaultConfig = makeDefaultConfig()
+const theme = ref(defaultConfig.theme)
+const isSidePanelEnabled = ref(defaultConfig.sidePanel)
+const isShowNodeNameEnabled = ref(defaultConfig.showNode)
+const isShowPopupFullscreen = ref(defaultConfig.showPopupFullscreen)
+const isAnimationsDisabled = ref(defaultConfig.disableAnimations)
+const isIncomingTransfersVisible = ref(defaultConfig.incomingTransfersVisible)
+// D8 dust filter — a NUMBER, not a toggle, so it lives outside the `settings` toggle map.
+const dustThreshold = ref(String(defaultConfig.incomingDustUsdThreshold))
+const settings = {
+	theme: {
+		title: "",
+		description: "",
+		model: theme,
+	},
+	// Chrome-only: Firefox has no side panel, so the row is not offered there.
+	...(chrome.sidePanel
+		? {
+				sidePanel: {
+					title: "Open as Side Panel",
+					description: "Open as side panel instead of popup",
+					model: isSidePanelEnabled,
+				},
+			}
+		: {}),
+	showNode: {
+		title: "Show network name",
+		description: "Always show network name in the header",
+		model: isShowNodeNameEnabled,
+	},
+	showPopupFullscreen: {
+		title: "Full-height popups",
+		description: "Open popups to the full height",
+		model: isShowPopupFullscreen,
+	},
+	disableAnimations: {
+		title: "Disable animations",
+		description: "Minimize the use of animations",
+		model: isAnimationsDisabled,
+	},
+	incomingTransfersVisible: {
+		title: "Show incoming transfers",
+		description:
+			"Hide if you run the same recovery phrase on multiple devices and don't want one device's outgoing to appear as incoming here",
+		model: isIncomingTransfersVisible,
+	},
+}
+
+async function updateDustThreshold(event) {
+	const el = event.target
+	const raw = el.value.trim()
+	// Strict decimal parse: reject "1,000", "0,5", "1.2junk", "abc", "" rather than coercing them — the old
+	// parseFloat clamp turned "0,5" into 0, silently DISABLING the filter. On invalid input, snap the field
+	// back to the last saved value and change nothing.
+	if (!/^(\d+\.?\d*|\.\d+)$/.test(raw) || !Number.isFinite(Number(raw))) {
+		el.value = dustThreshold.value
+		return
+	}
+	const value = Number(raw)
+	try {
+		await configService.setValue("incomingDustUsdThreshold", value)
+		dustThreshold.value = String(value)
+		el.value = dustThreshold.value // normalize the display (e.g. "1.50" → "1.5")
+	} catch (err) {
+		// A failed write stores nothing, but the field still holds the typed text, which an unchanged
+		// ref never re-renders: put the stored value back, unless the field already holds a newer edit.
+		if (el.value.trim() === raw) el.value = dustThreshold.value
+		openToast({ kind: "error", label: "Failed to update setting" })
+	}
+}
+
+async function updateSetting(key, value) {
+	if (!settings[key]) return
+	if (settings[key].model.value === value) return
+
+	try {
+		await configService.setValue(key, value)
+		applySetting(key, value)
+	} catch (err) {
+		openToast({ kind: "error", label: "Failed to update setting" })
+	}
+}
+
+async function applySetting(key, value) {
+	settings[key].model.value = value
+
+	switch (key) {
+		case "sidePanel":
+			if (value) {
+				const currentWindow = await chrome.windows.getCurrent()
+				chrome.sidePanel.open({
+					windowId: currentWindow.id,
+				})
+			}
+
+			window.close()
+			break
+
+		default:
+			break
+	}
+}
+
+function onSettingUpdate(setting) {
+	if (setting.key === "incomingDustUsdThreshold") {
+		dustThreshold.value = String(setting.value)
+		return
+	}
+	if (settings[setting.key]) {
+		if (settings[setting.key].model.value !== setting.value) {
+			applySetting(setting.key, setting.value)
+		}
+	}
+}
+
+// Copies the values only: `applySetting` would open the side panel and close the window on a reread.
+function landDisplayConfig(_settings, updatedSince) {
+	_settings.forEach((s) => {
+		if (updatedSince(s.key)) return
+		if (s.key === "incomingDustUsdThreshold") {
+			dustThreshold.value = String(s.value)
+			return
+		}
+		if (settings[s.key]) {
+			settings[s.key].model.value = s.value
+		}
+	})
+
+	isLoading.value = false
+}
+
+onMounted(() => {
+	void displayRead.read()
+})
+
+onBeforeUnmount(() => {
+	configService.disconnect()
+	displayRead.dispose()
+})
+</script>
+
+<template>
+	<Flex direction="column" :class="$style.wrapper">
+		<SubPageHeader title="Display" :backTo="'/popup/settings'" />
+
+		<Flex v-if="!isLoading" direction="column" gap="24" :class="$style.content">
+			<Flex justify="between">
+				<Flex direction="column" gap="6">
+					<Text variant="row-title" :class="$style.title_size" color="primary"> Theme </Text>
+					<Text variant="caption" color="tertiary"> Application theme </Text>
+				</Flex>
+
+				<Dropdown>
+					<template #trigger>
+						<DropdownTrigger data-testid="theme-trigger">
+							<Icon
+								:name="
+									(theme === 'dark' && 'moon') ||
+									(theme === 'light' && 'sun') ||
+									(theme === 'system' && 'settings')
+								"
+								size="14"
+								color="primary"
+							/>
+							<Text variant="value" color="primary">
+								<span style="text-transform: capitalize">{{ theme }}</span>
+							</Text>
+						</DropdownTrigger>
+					</template>
+
+					<template #popup>
+						<DropdownItem @click="updateSetting('theme', 'dark')" data-testid="theme-dark-btn">
+							<Flex align="center" gap="8">
+								<Icon :name="theme === 'dark' ? 'check' : ''" size="14" color="primary" />
+								Dark
+							</Flex>
+						</DropdownItem>
+						<DropdownItem @click="updateSetting('theme', 'light')" data-testid="theme-light-btn">
+							<Flex align="center" gap="8">
+								<Icon :name="theme === 'light' ? 'check' : ''" size="14" color="primary" />
+								Light
+							</Flex>
+						</DropdownItem>
+						<DropdownItem @click="updateSetting('theme', 'system')" data-testid="theme-system-btn">
+							<Flex align="center" gap="8">
+								<Icon :name="theme === 'system' ? 'check' : ''" size="14" color="primary" />
+								System
+							</Flex>
+						</DropdownItem>
+					</template>
+				</Dropdown>
+			</Flex>
+
+			<Flex v-for="sk in Object.keys(settings).filter(sk => sk !== 'theme' && sk !== 'incomingTransfersVisible')" justify="between">
+				<Flex direction="column" gap="6">
+					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ settings[sk].title }} </Text>
+					<Text variant="caption" color="tertiary"> {{ settings[sk].description }} </Text>
+				</Flex>
+
+				<Toggle
+					@update:modelValue="updateSetting(sk, $event)"
+					:modelValue="settings[sk].model.value"
+					:data-testid="(sk === 'disableAnimations' && 'animations-toggle') || null"
+				/>
+			</Flex>
+
+			<SectionLabel label="Lists" />
+
+			<Flex justify="between">
+				<Flex direction="column" gap="6">
+					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ settings.incomingTransfersVisible.title }} </Text>
+					<Text variant="caption" color="tertiary"> {{ settings.incomingTransfersVisible.description }} </Text>
+				</Flex>
+
+				<Toggle
+					@update:modelValue="updateSetting('incomingTransfersVisible', $event)"
+					:modelValue="settings.incomingTransfersVisible.model.value"
+				/>
+			</Flex>
+
+			<!-- One dust threshold for the wallet: the activity feed's receipts AND the Holdings fold. -->
+			<Flex justify="between" align="center" gap="12">
+				<Flex direction="column" gap="6">
+					<Text variant="row-title" :class="$style.title_size" color="primary"> Hide dust </Text>
+					<Text variant="caption" color="tertiary">Hide receipts and holdings below this value. 0 turns it off.</Text>
+				</Flex>
+
+				<!-- type="text" (not number) so there are no spinner arrows widening the field; the $ prefix
+				     lives in the wrapper and updateDustThreshold parseFloat-normalizes any input on change. -->
+				<label :class="$style.dust_field">
+					<span :class="$style.dust_prefix">$</span>
+					<input
+						:class="$style.dust_input"
+						type="text"
+						inputmode="decimal"
+						data-testid="dust-threshold-input"
+						:value="dustThreshold"
+						@change="updateDustThreshold($event)"
+					/>
+				</label>
+			</Flex>
+		</Flex>
+
+	</Flex>
+</template>
+
+<style module>
+.wrapper {
+	composes: wrapper from "../../../components/composite/settings-page.module.css";
+}
+
+.content {
+	composes: content from "../../../components/composite/settings-page.module.css";
+}
+
+.item {
+	border-radius: 0;
+	border: 1px solid var(--nulo-border);
+	cursor: pointer;
+
+	padding: 12px;
+
+	transition: all 0.2s var(--bezier);
+
+	&:hover {
+		background: var(--nulo-surface-low);
+
+		& .item_icon {
+			transform: rotate(-90deg) translateY(3px);
+		}
+	}
+
+	&:active {
+		background: var(--nulo-surface-high);
+	}
+}
+
+.item_icon {
+	transform: rotate(-90deg);
+
+	transition: transform 0.2s var(--bezier);
+}
+
+.dust_field {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+
+	width: 72px;
+	padding: 6px 8px;
+
+	background: var(--nulo-surface-low);
+	border: 1px solid var(--nulo-border);
+
+	transition: border-color 0.2s var(--bezier);
+
+	&:focus-within {
+		border-color: var(--nulo-outline);
+	}
+}
+
+.dust_prefix {
+	composes: type--input-data from global;
+	color: var(--nulo-secondary);
+}
+
+.dust_input {
+	composes: type--input-data from global;
+	width: 100%;
+	min-width: 0;
+	text-align: right;
+
+	color: var(--txt-primary);
+
+	background: transparent;
+	border: none;
+	padding: 0;
+
+	&:focus {
+		outline: none;
+	}
+}
+
+.title_size {
+	font-size: 13px;
+}
+</style>

@@ -1,5 +1,6 @@
 export * from "./client"
 export * from "./service"
 export * from "./telemetry"
+export type { RequestErrorMeta, ResponseContentLike, TerminalRecord } from "../core/base-client"
 export { defineRpcMethods } from "../core/rpc-methods"
 export { isBackgroundSender, isSenderAtUrl, isTrustedInternalSender } from "../core/sender-auth"

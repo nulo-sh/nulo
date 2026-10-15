@@ -8,6 +8,5 @@
 }
 
 .mono {
-	font-family: var(--font-mono);
-	letter-spacing: 0.04em;
+	composes: type--data from global;
 }

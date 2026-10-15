@@ -21,7 +21,7 @@ export const ConfigSchema = z.object({
 	sessionTtl: z.number().default(1_800_000), // 30 minutes.
 	// When ON (default), password profiles do not cache the
 	// passhash in `chrome.storage.session`. SW death → re-auth required.
-	// Opt OUT in Settings → Security. The default is FROZEN by
+	// Opt OUT in Settings → Lock. The default is FROZEN by
 	// `config.test.ts` — flipping it to `false` is an explicit security
 	// regression that requires audit / security sign-off.
 	strictSecurityMode: z.boolean().default(true),
@@ -33,6 +33,9 @@ export const ConfigSchema = z.object({
 	// fiat values across the UI. OFF disables all price fetching and hides
 	// every fiat surface — the privacy kill-switch.
 	showFiatValues: z.boolean().default(true),
+	// When ON, a lookup that names one transaction to a node runs only on a tap. OFF (default) keeps
+	// it automatic. A backup never restores it: an import must not switch a privacy setting.
+	privacyMode: z.boolean().default(false),
 
 	// Activity
 	// When OFF, IncomingTransferService records are still persisted but

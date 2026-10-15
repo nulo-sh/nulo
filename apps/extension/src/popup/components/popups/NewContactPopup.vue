@@ -2,8 +2,9 @@
 <script setup>
 /** Utils */
 import { isValidAztecAddress } from "@/utils/aztec-address"
-import { CONTACT_EXISTS, canonicalContactAddress, sameContactAddress, sameContactName } from "@/utils/contact-rules"
-import { withoutId } from "@/utils/entity-list"
+import { CONTACT_EXISTS, canonicalContactAddress, sameContactAddress } from "@/utils/contact-rules"
+import { isEmptyContactName, sameContactName, sanitizeContactName } from "@/utils/contact-name"
+import { contactListReducers } from "@/utils/entity-list"
 
 /** Components */
 import ContactFormFields from "@/popup/components/modules/settings/contacts/ContactFormFields.vue"
@@ -18,41 +19,28 @@ import { useFormState } from "@/composables/useFormState"
 import { usePopupEntity } from "@/composables/usePopupEntity"
 import { usePopupStack } from "@/composables/usePopupStack"
 const { openToast } = useToast()
-const { order } = usePopupStack("new_contact")
+const { order, depth } = usePopupStack("new_contact")
 
 const emit = defineEmits(["onClose"])
 const props = defineProps({
 	show: Boolean,
 })
 
-const contactService = new ContactServiceClient()
-contactService.onContactAdded.add(onContactAdded)
-contactService.onContactUpdated.add(onContactUpdated)
-contactService.onContactDeleted.add(onContactDeleted)
-
-function onContactAdded(contact) {
-	contacts.value.push(contact)
-}
-function onContactUpdated(contact) {
-	const idx = contacts.value.findIndex((c) => c.id === contact.id)
-	if (idx !== -1) {
-		contacts.value[idx] = contact
-	} else {
-		contacts.value.push(contact)
-	}
-}
-function onContactDeleted(contact) {
-	contacts.value = withoutId(contacts.value, contact)
-}
-
 const contacts = ref([])
+
+const contactService = new ContactServiceClient()
+const contactList = contactListReducers(contacts)
+contactService.onContactAdded.add(contactList.onAdded)
+contactService.onContactUpdated.add(contactList.onUpdated)
+contactService.onContactDeleted.add(contactList.onDeleted)
 
 const form = useFormState({
 	name: {
 		initial: "",
 		validate: (v) => {
-			if (!v.replace(/\s/g, "").length) return null // empty is "not yet valid", not an error to display
-			if (contacts.value.some((c) => sameContactName(c, v))) return CONTACT_EXISTS
+			if (isEmptyContactName(v)) return null // empty is "not yet valid", not an error to display
+			// The name as it would be stored: the cut can make a longer draft another contact's name.
+			if (contacts.value.some((c) => sameContactName(c.name, sanitizeContactName(v)))) return CONTACT_EXISTS
 			return null
 		},
 	},
@@ -83,7 +71,7 @@ const isAvailableToAddContact = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
 	// route (button, Enter, future callers) — not just the pointer path.
 	if (isLoading.value) return false
-	if (!nameTerm.value.replace(/\s/g, "").length) return false
+	if (isEmptyContactName(nameTerm.value)) return false
 	if (!isValidAddress.value) return false
 	if (form.fields.name.error.value) return false
 	if (form.fields.address.error.value) return false
@@ -158,6 +146,7 @@ watch(
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		title="New contact"
 		submitLabel="Add contact"
 		:submitDisabled="!isAvailableToAddContact || processingError.show"

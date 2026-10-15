@@ -10,6 +10,7 @@ import { PRIVATE_ADDRESS_MAGIC_VALUE } from "@nulo/aztec-runtime/pxe/public-even
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { IncomingTransferRecord } from "@/wallet/services/incoming-transfer/spec"
 import type { TokenInfo } from "@/wallet/services/token/spec"
+import { knownDecimals } from "./token-amount"
 
 const ZERO_ADDRESS = AztecAddress.ZERO.toString().toLowerCase()
 const MAGIC = PRIVATE_ADDRESS_MAGIC_VALUE.toLowerCase()
@@ -78,7 +79,7 @@ export function buildIncomingCardProps(
 	return {
 		tokenSymbol: token?.symbol || "Token",
 		amountRaw: inc.amountRaw,
-		tokenDecimals: token?.decimals ?? null,
+		tokenDecimals: knownDecimals(token),
 		txHash: inc.txHash,
 		amountFiat: token ? (fiatLabel(token, BigInt(inc.amountRaw || 0)) ?? null) : null,
 		receivedLabel: receivedLabel(resolveReceivedType(inc)),

@@ -18,7 +18,10 @@ import {
 
 const ITEM = "abcdefghijklmnopabcdefghijklmnop"
 
-const BROAD_HOST = { reason: "BROAD_HOST_USAGE", description: "Your item is requesting broad host permissions which may require an in-depth review." }
+const BROAD_HOST = {
+	reason: "BROAD_HOST_USAGE",
+	description: "Your item is requesting broad host permissions which may require an in-depth review.",
+}
 
 /** The refusal `blockOnWarnings: true` produces, detail for detail as the store sent it. */
 function refusal(warnings: unknown[] = [BROAD_HOST], over: { reason?: string; itemId?: string; extra?: unknown[]; status?: string } = {}) {
@@ -28,9 +31,21 @@ function refusal(warnings: unknown[] = [BROAD_HOST], over: { reason?: string; it
 			message: "Validation warnings were encountered that require confirmation.",
 			status: over.status ?? "FAILED_PRECONDITION",
 			details: [
-				{ "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: over.reason ?? "MANUAL_CONFIRMATION_REQUIRED", domain: "chromewebstore.googleapis.com", metadata: { itemId: over.itemId ?? ITEM, publisherId: "pub" } },
-				{ "@type": "type.googleapis.com/google.rpc.LocalizedMessage", locale: "en-US", message: "Validation warnings were encountered that require confirmation." },
-				{ "@type": "type.googleapis.com/google.rpc.Help", links: [{ description: "Edit Item Link", url: "https://chrome.google.com/webstore/devconsole/pub/item/edit/package" }] },
+				{
+					"@type": "type.googleapis.com/google.rpc.ErrorInfo",
+					reason: over.reason ?? "MANUAL_CONFIRMATION_REQUIRED",
+					domain: "chromewebstore.googleapis.com",
+					metadata: { itemId: over.itemId ?? ITEM, publisherId: "pub" },
+				},
+				{
+					"@type": "type.googleapis.com/google.rpc.LocalizedMessage",
+					locale: "en-US",
+					message: "Validation warnings were encountered that require confirmation.",
+				},
+				{
+					"@type": "type.googleapis.com/google.rpc.Help",
+					links: [{ description: "Edit Item Link", url: "https://chrome.google.com/webstore/devconsole/pub/item/edit/package" }],
+				},
 				{ "@type": "type.googleapis.com/google.chrome.webstore.v2.WarningsInfo", warnings },
 				...(over.extra ?? []),
 			],
@@ -44,11 +59,17 @@ describe("requests", () => {
 		expect(up.url).toBe(`https://chromewebstore.googleapis.com/upload/v2/publishers/pub/items/${ITEM}:upload`)
 		expect(up.headers["Content-Type"]).toBe("application/zip")
 		expect(up.headers.Authorization).toBe("Bearer tok")
-		expect(statusRequest("pub", ITEM, "tok")).toMatchObject({ method: "GET", url: `https://chromewebstore.googleapis.com/v2/publishers/pub/items/${ITEM}:fetchStatus` })
+		expect(statusRequest("pub", ITEM, "tok")).toMatchObject({
+			method: "GET",
+			url: `https://chromewebstore.googleapis.com/v2/publishers/pub/items/${ITEM}:fetchStatus`,
+		})
 		const pub = publishRequest("pub", ITEM, "tok", "STAGED_PUBLISH")
 		expect(pub.url.endsWith(":publish")).toBe(true)
 		expect(JSON.parse(pub.body as string)).toEqual({ publishType: "STAGED_PUBLISH", blockOnWarnings: true })
-		expect(JSON.parse(publishRequest("pub", ITEM, "tok", "STAGED_PUBLISH", false).body as string)).toEqual({ publishType: "STAGED_PUBLISH", blockOnWarnings: false })
+		expect(JSON.parse(publishRequest("pub", ITEM, "tok", "STAGED_PUBLISH", false).body as string)).toEqual({
+			publishType: "STAGED_PUBLISH",
+			blockOnWarnings: false,
+		})
 	})
 })
 
@@ -73,8 +94,14 @@ describe("preflight", () => {
 	})
 
 	test("refuses a wrong itemId, a taken-down item and a pending review", () => {
-		expect(interpretPreflight(status({ itemId: "other" }), ITEM, ours)).toMatchObject({ ok: false, reason: expect.stringContaining("expected") })
-		expect(interpretPreflight(status({ takenDown: true }), ITEM, ours)).toMatchObject({ ok: false, reason: expect.stringContaining("taken down") })
+		expect(interpretPreflight(status({ itemId: "other" }), ITEM, ours)).toMatchObject({
+			ok: false,
+			reason: expect.stringContaining("expected"),
+		})
+		expect(interpretPreflight(status({ takenDown: true }), ITEM, ours)).toMatchObject({
+			ok: false,
+			reason: expect.stringContaining("taken down"),
+		})
 		expect(interpretPreflight(status({ submittedItemRevisionStatus: { state: "PENDING_REVIEW" } }), ITEM, ours)).toMatchObject({
 			ok: false,
 			reason: expect.stringContaining("pending review"),
@@ -83,26 +110,55 @@ describe("preflight", () => {
 
 	test("refuses a not-lower version in any distribution channel of either revision", () => {
 		const published = { state: "PUBLISHED", distributionChannels: [{ crxVersion: "0.26.0.0" }, { crxVersion: "0.27.0.0" }] }
-		expect(interpretPreflight(status({ publishedItemRevisionStatus: published }), ITEM, ours)).toMatchObject({ ok: false, reason: expect.stringContaining("not lower") })
-		const staged = { state: "STAGED", distributionChannels: [{ crxVersion: "0.10.0.0" }] }
-		expect(interpretPreflight(status({ submittedItemRevisionStatus: staged }), ITEM, "0.9.0.0")).toMatchObject({ ok: false })
-		expect(interpretPreflight(status({ submittedItemRevisionStatus: staged }), ITEM, "0.11.0.0")).toMatchObject({ ok: true })
+		expect(interpretPreflight(status({ publishedItemRevisionStatus: published }), ITEM, ours)).toMatchObject({
+			ok: false,
+			reason: expect.stringContaining("not lower"),
+		})
+		const rejected = { state: "REJECTED", distributionChannels: [{ crxVersion: "0.10.0.0" }] }
+		expect(interpretPreflight(status({ submittedItemRevisionStatus: rejected }), ITEM, "0.9.0.0")).toMatchObject({ ok: false })
+		expect(interpretPreflight(status({ submittedItemRevisionStatus: rejected }), ITEM, "0.11.0.0")).toMatchObject({ ok: true })
+	})
+
+	test("refuses a staged submission at any version, which the store would refuse at upload", () => {
+		for (const crxVersion of ["0.26.0.0", "0.28.0.0"]) {
+			const staged = { state: "STAGED", distributionChannels: [{ crxVersion }] }
+			expect(interpretPreflight(status({ submittedItemRevisionStatus: staged }), ITEM, ours)).toMatchObject({
+				ok: false,
+				reason: expect.stringContaining("publish or cancel it in the dashboard first"),
+			})
+		}
+		const published = { state: "PUBLISHED", distributionChannels: [{ crxVersion: "0.26.0.0" }] }
+		expect(interpretPreflight(status({ publishedItemRevisionStatus: published }), ITEM, ours)).toMatchObject({ ok: true })
 	})
 
 	test("refuses a present revision with a missing, undocumented, unspecified or malformed state", () => {
-		expect(interpretPreflight(status({ publishedItemRevisionStatus: {} }), ITEM, ours)).toMatchObject({ ok: false, reason: expect.stringContaining("unknown state") })
+		expect(interpretPreflight(status({ publishedItemRevisionStatus: {} }), ITEM, ours)).toMatchObject({
+			ok: false,
+			reason: expect.stringContaining("unknown state"),
+		})
 		for (const state of ["SOMETHING_NEW", "DEPLOYING", "UNPUBLISHED", "TAKEN_DOWN", "ITEM_STATE_UNSPECIFIED"]) {
 			expect(interpretPreflight(status({ submittedItemRevisionStatus: { state } }), ITEM, ours).ok, state).toBe(false)
 		}
 		expect(interpretPreflight(status({ publishedItemRevisionStatus: null }), ITEM, ours)).toMatchObject({ ok: false })
-		expect(interpretPreflight(status({ publishedItemRevisionStatus: { state: "PUBLISHED", distributionChannels: [null] } }), ITEM, ours)).toMatchObject({ ok: false })
+		expect(
+			interpretPreflight(status({ publishedItemRevisionStatus: { state: "PUBLISHED", distributionChannels: [null] } }), ITEM, ours),
+		).toMatchObject({ ok: false })
 		// A present non-array must not be read as "no channels": that would let a higher version through.
 		const object = { state: "PUBLISHED", distributionChannels: { crxVersion: "99.0.0.0" } }
-		expect(interpretPreflight(status({ publishedItemRevisionStatus: object }), ITEM, ours)).toMatchObject({ ok: false, reason: expect.stringContaining("distributionChannels") })
-		expect(interpretPreflight(status({ submittedItemRevisionStatus: { state: "STAGED", distributionChannels: "0.26.0.0" } }), ITEM, ours)).toMatchObject({ ok: false })
+		expect(interpretPreflight(status({ publishedItemRevisionStatus: object }), ITEM, ours)).toMatchObject({
+			ok: false,
+			reason: expect.stringContaining("distributionChannels"),
+		})
+		expect(
+			interpretPreflight(
+				status({ submittedItemRevisionStatus: { state: "REJECTED", distributionChannels: "0.26.0.0" } }),
+				ITEM,
+				ours,
+			),
+		).toMatchObject({ ok: false, reason: expect.stringContaining("distributionChannels") })
 	})
 
-	test("accepts every documented non-pending state at a lower version", () => {
+	test("accepts every documented state of the published revision at a lower version", () => {
 		for (const state of ["STAGED", "PUBLISHED", "PUBLISHED_TO_TESTERS", "REJECTED", "CANCELLED"]) {
 			const revision = { state, distributionChannels: [{ crxVersion: "0.26.0.0" }] }
 			expect(interpretPreflight(status({ publishedItemRevisionStatus: revision }), ITEM, ours).ok, state).toBe(true)
@@ -112,9 +168,15 @@ describe("preflight", () => {
 
 describe("upload", () => {
 	test("SUCCEEDED is done only for our item at our version", () => {
-		expect(interpretUpload({ uploadState: "SUCCEEDED", itemId: ITEM, crxVersion: "0.27.0.0" }, ITEM, "0.27.0.0")).toEqual({ kind: "done" })
-		expect(interpretUpload({ uploadState: "SUCCEEDED", itemId: ITEM, crxVersion: "0.26.0.0" }, ITEM, "0.27.0.0")).toMatchObject({ kind: "fail" })
-		expect(interpretUpload({ uploadState: "SUCCEEDED", itemId: "x", crxVersion: "0.27.0.0" }, ITEM, "0.27.0.0")).toMatchObject({ kind: "fail" })
+		expect(interpretUpload({ uploadState: "SUCCEEDED", itemId: ITEM, crxVersion: "0.27.0.0" }, ITEM, "0.27.0.0")).toEqual({
+			kind: "done",
+		})
+		expect(interpretUpload({ uploadState: "SUCCEEDED", itemId: ITEM, crxVersion: "0.26.0.0" }, ITEM, "0.27.0.0")).toMatchObject({
+			kind: "fail",
+		})
+		expect(interpretUpload({ uploadState: "SUCCEEDED", itemId: "x", crxVersion: "0.27.0.0" }, ITEM, "0.27.0.0")).toMatchObject({
+			kind: "fail",
+		})
 	})
 
 	test("both in-progress spellings poll; FAILED, NOT_FOUND, unspecified and unknown fail", () => {
@@ -158,7 +220,12 @@ describe("publish", () => {
 		expect(reason).toContain("blocked on warnings")
 		expect(reason).toContain("ICON")
 		// A refusal's warnings are listed by reason, so a second reason is never lost to the per-entry truncation.
-		const listed = collectWarnings(refusal([{ ...BROAD_HOST, description: "x".repeat(300) }, { reason: "LARGE_ICON", description: "icon" }]))
+		const listed = collectWarnings(
+			refusal([
+				{ ...BROAD_HOST, description: "x".repeat(300) },
+				{ reason: "LARGE_ICON", description: "icon" },
+			]),
+		)
 		expect(listed.some((w) => w.startsWith("BROAD_HOST_USAGE: xxx"))).toBe(true)
 		expect(listed).toContain("LARGE_ICON: icon")
 	})
@@ -197,10 +264,18 @@ describe("accepted warnings", () => {
 		expect(acceptedWarnings(refusal([BROAD_HOST], { reason: "SOMETHING_ELSE" }), 400, ITEM)).toBeNull()
 		expect(acceptedWarnings(refusal([BROAD_HOST], { itemId: "other" }), 400, ITEM)).toBeNull()
 		expect(acceptedWarnings(refusal([BROAD_HOST], { status: "INVALID_ARGUMENT" }), 400, ITEM)).toBeNull()
-		expect(acceptedWarnings(refusal([BROAD_HOST], { extra: [{ "@type": "type.googleapis.com/google.rpc.PreconditionFailure", violations: [] }] }), 400, ITEM)).toBeNull()
+		expect(
+			acceptedWarnings(
+				refusal([BROAD_HOST], { extra: [{ "@type": "type.googleapis.com/google.rpc.PreconditionFailure", violations: [] }] }),
+				400,
+				ITEM,
+			),
+		).toBeNull()
 		expect(acceptedWarnings(refusal([BROAD_HOST], { extra: [{ reason: "BROAD_HOST_USAGE" }] }), 400, ITEM)).toBeNull()
 		expect(acceptedWarnings(refusal(), 403, ITEM)).toBeNull()
-		expect(acceptedWarnings({ error: { code: 400, status: "FAILED_PRECONDITION", details: [{ reason: "BROAD_HOST_USAGE" }] } }, 400, ITEM)).toBeNull()
+		expect(
+			acceptedWarnings({ error: { code: 400, status: "FAILED_PRECONDITION", details: [{ reason: "BROAD_HOST_USAGE" }] } }, 400, ITEM),
+		).toBeNull()
 		expect(acceptedWarnings({ error: { code: 400, status: "FAILED_PRECONDITION" } }, 400, ITEM)).toBeNull()
 		expect(acceptedWarnings({ state: "PENDING_REVIEW" }, 200, ITEM)).toBeNull()
 		// A refusal that also carries the success envelope's fields is a shape the script does not know.
@@ -229,16 +304,30 @@ describe("accepted warnings", () => {
 	})
 
 	test("the retry's verdict fails once the store lists a warning it was not licensed to ignore", () => {
-		expect(interpretAcceptedPublish({ state: "PENDING_REVIEW", warningInfo: { warnings: [BROAD_HOST] } }, 200)).toMatchObject({ ok: true })
+		expect(interpretAcceptedPublish({ state: "PENDING_REVIEW", warningInfo: { warnings: [BROAD_HOST] } }, 200)).toMatchObject({
+			ok: true,
+		})
 		expect(interpretAcceptedPublish({ state: "PENDING_REVIEW", warningInfo: {} }, 200)).toMatchObject({ ok: true })
 		expect(interpretAcceptedPublish({ state: "STAGED" }, 200)).toMatchObject({ ok: true })
-		const stranger = interpretAcceptedPublish({ state: "PENDING_REVIEW", warningInfo: { warnings: [BROAD_HOST, { reason: "LARGE_ICON" }] } }, 200)
+		const stranger = interpretAcceptedPublish(
+			{ state: "PENDING_REVIEW", warningInfo: { warnings: [BROAD_HOST, { reason: "LARGE_ICON" }] } },
+			200,
+		)
 		const reason = stranger.ok ? "" : stranger.reason
 		expect(reason).toContain("LARGE_ICON")
 		expect(reason).toContain("dashboard")
-		expect(interpretAcceptedPublish({ state: "PENDING_REVIEW", warningInfo: { warnings: "none" } }, 200)).toMatchObject({ ok: false, reason: expect.stringContaining("unreadable") })
-		expect(interpretAcceptedPublish({ state: "PENDING_REVIEW", warningInfo: { warnings: {} } }, 200)).toMatchObject({ ok: false, reason: expect.stringContaining("unreadable") })
-		expect(interpretAcceptedPublish({ state: "PENDING_REVIEW", warningInfo: [{ reason: "LARGE_ICON" }] }, 200)).toMatchObject({ ok: false, reason: expect.stringContaining("unreadable") })
+		expect(interpretAcceptedPublish({ state: "PENDING_REVIEW", warningInfo: { warnings: "none" } }, 200)).toMatchObject({
+			ok: false,
+			reason: expect.stringContaining("unreadable"),
+		})
+		expect(interpretAcceptedPublish({ state: "PENDING_REVIEW", warningInfo: { warnings: {} } }, 200)).toMatchObject({
+			ok: false,
+			reason: expect.stringContaining("unreadable"),
+		})
+		expect(interpretAcceptedPublish({ state: "PENDING_REVIEW", warningInfo: [{ reason: "LARGE_ICON" }] }, 200)).toMatchObject({
+			ok: false,
+			reason: expect.stringContaining("unreadable"),
+		})
 		expect(interpretAcceptedPublish(refusal(), 400)).toMatchObject({ ok: false, reason: expect.stringContaining("refused") })
 	})
 })

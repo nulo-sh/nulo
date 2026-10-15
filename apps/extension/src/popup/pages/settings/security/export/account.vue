@@ -176,11 +176,14 @@ const fileName = computed(() => {
 	// subdirectory; "../" is refused outright).
 	const profile = (appStore.profile?.name ?? "profile").replace(/[^\p{L}\p{N}_-]+/gu, "_") || "profile"
 	const addr = selectedAddress.value.slice(0, 10)
-	return fileStatus.value === "protected" ? `NuloEncryptedAccount_${profile}_${addr}.txt` : `NuloAccount_${profile}_${addr}.json`
+	return `NuloEncryptedAccount_${profile}_${addr}.txt`
 })
 
+/** Only the password-protected file leaves the page: the plain body Create fetched is spendable. */
+const canDownload = computed(() => fileStatus.value === "protected")
+
 const handleDownload = async () => {
-	if (isDownloading.value || isBusy.value) return
+	if (!canDownload.value || isDownloading.value || isBusy.value) return
 	isDownloading.value = true
 	const gen = generation
 	try {
@@ -189,7 +192,7 @@ const handleDownload = async () => {
 		openToast({ kind: "success", label: "Account file downloaded" })
 	} catch (err) {
 		if (gen !== generation) return
-		console.error("Download failed:", err?.message || err)
+		console.error("Download failed:", { error: err })
 		openToast({ kind: "error", label: "Failed to download the file" })
 	} finally {
 		if (gen === generation) isDownloading.value = false
@@ -221,7 +224,7 @@ onBeforeUnmount(() => {
 		<!-- Step 1: account picker (skipped when deep-linked with a preselected address) -->
 		<template v-if="!selectedAddress">
 			<div class="export_section_last">
-				<span class="export_section_label">Select account</span>
+				<span class="export_section_label type--label-section">Select account</span>
 				<ItemsContainer flat>
 					<SettingItem
 						v-for="account in accounts"
@@ -229,7 +232,9 @@ onBeforeUnmount(() => {
 						@click="handleSelect(account)"
 						size="large"
 						:title="account.name"
+						titleVariant="name"
 						:description="trimAddress(account.address, 6, 4, '...')"
+						descriptionVariant="data"
 						icon="user"
 						chevron
 						data-testid="export-account-row"
@@ -243,13 +248,13 @@ onBeforeUnmount(() => {
 		<!-- Step 2: agree gate -->
 		<template v-else-if="!isAgreed">
 			<div class="export_section_last">
-				<span class="export_section_label">Before you continue</span>
+				<span class="export_section_label type--label-section">Before you continue</span>
 				<Flex direction="column" gap="8">
-					<Text size="13" height="150" color="body"> This file gives full control of one account. </Text>
-					<Text size="13" height="150" color="body">
+					<Text variant="body" height="150" color="body"> This file gives full control of one account. </Text>
+					<Text variant="body" height="150" color="body">
 						Anyone holding the plain file can spend from this account. Store it as carefully as your recovery phrase.
 					</Text>
-					<Text size="13" height="150" color="body"> By continuing you accept these risks. </Text>
+					<Text variant="body" height="150" color="body"> By continuing you accept these risks. </Text>
 				</Flex>
 			</div>
 		</template>
@@ -265,12 +270,15 @@ onBeforeUnmount(() => {
 		<!-- Steps 4/5: file ready / protected -->
 		<template v-else>
 			<div class="export_section_last">
-				<span class="export_section_label">File</span>
+				<span class="export_section_label type--label-section">File</span>
 				<Flex direction="column" gap="12">
 					<Banner v-if="fileStatus === 'ready'" variant="info" direction="vertical" data-testid="account-file-ready-banner">
-						<template #title> Account file is ready </template>
+						<template #title> Protect your account file </template>
 						<template #description>
-							<Text height="140"> You can download it now. We strongly recommend protecting it with your password first. </Text>
+							<Text height="140">
+								Encrypt the file with your profile password before you download it. Without a password, anyone who opens the
+								file controls this account.
+							</Text>
 						</template>
 					</Banner>
 
@@ -283,7 +291,7 @@ onBeforeUnmount(() => {
 
 					<Flex v-if="selectedAccount?.type === AccountType.Imported" gap="8">
 						<Icon name="warning" size="12" color="tertiary" style="height: 18px; flex-shrink: 0" />
-						<Text size="12" weight="500" height="150" color="tertiary">
+						<Text variant="body" height="150" color="tertiary">
 							This account is not covered by your recovery phrase. This file is its only backup.
 						</Text>
 					</Flex>
@@ -312,7 +320,14 @@ onBeforeUnmount(() => {
 				<Button @click="handleProtect" :disabled="isBusy || isDownloading" variant="cta" data-testid="account-protect-btn">
 					{{ isBusy ? "Protecting" : "Protect with Password" }}
 				</Button>
-				<Button @click="handleDownload" :disabled="isBusy || isDownloading" variant="cta_outline" data-testid="account-download-btn"> Download File </Button>
+				<Button
+					@click="handleDownload"
+					:disabled="!canDownload || isBusy || isDownloading"
+					variant="cta_outline"
+					data-testid="account-download-btn"
+				>
+					Download File
+				</Button>
 			</Flex>
 
 			<Button v-else-if="fileStatus === 'protected'" @click="handleDownload" :disabled="isDownloading" variant="cta" data-testid="account-download-btn">

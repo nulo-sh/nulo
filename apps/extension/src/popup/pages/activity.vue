@@ -22,7 +22,8 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 
 /** Utils */
-import { buildActivityRows } from "@/utils/activity-rows"
+import { buildActivityRows, rowOnToken } from "@/utils/activity-rows"
+import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 
 /** Composables */
 import { ARRIVALS_KEY } from "@/composables/useArrivals"
@@ -34,6 +35,9 @@ import { useAppStore } from "@/stores/app.store"
 
 const appStore = useAppStore()
 
+const route = useRoute()
+const router = useRouter()
+
 /** Service clients */
 const transactionService = new TransactionServiceClient()
 /** Journal terminal records (cancel / interrupted / failed paths that never produced an on-chain
@@ -44,7 +48,7 @@ const scopedTokens = useScopedTokens({
 	tokenService,
 	scope: () => (appStore.profile && appStore.network ? { profileId: appStore.profile.id, chainId: appStore.network.chainId } : undefined),
 })
-const { tokens } = scopedTokens
+const { tokens, loaded: tokensLoaded, tokenById } = scopedTokens
 
 /** Incoming-receive surface — third source for the activity row merge.
  *  Filtered by trust state at the service layer; only visible (trusted)
@@ -56,6 +60,7 @@ const incomingPriceService = new PriceServiceClient()
 const arrivals = inject(ARRIVALS_KEY, undefined)
 const {
 	incomingTransfers,
+	loaded: incomingLoaded,
 	refresh: loadIncomingTransfers,
 	dispose: disposeIncomingTransfers,
 } = useIncomingTransfers({
@@ -119,19 +124,51 @@ const activityRows = computed(() =>
 	}),
 )
 
+/** Opened from a token page: `?token=` is one string of digits naming a positive safe integer, or no
+ *  filter at all. It names a token of the active scope or none, and it only ever removes rows. */
+const filterId = computed(() => {
+	const raw = route.query.token
+	if (typeof raw !== "string" || !/^\d+$/.test(raw)) return undefined
+	const id = Number(raw)
+	return Number.isSafeInteger(id) && id > 0 ? id : undefined
+})
+// Until the scope's tokens are read, an id names nothing yet: no list and no empty state paints.
+const filterPending = computed(() => filterId.value !== undefined && !tokensLoaded.value)
+const filterToken = computed(() => (filterId.value !== undefined && tokensLoaded.value ? tokenById(filterId.value) : undefined))
+const filterSymbol = computed(() => (filterToken.value ? sanitizeWireString(filterToken.value.symbol, 32) : ""))
+const visibleRows = computed(() => {
+	if (filterPending.value) return []
+	const token = filterToken.value
+	return token ? activityRows.value.filter((row) => rowOnToken(row, token)) : activityRows.value
+})
+
+const titleRef = useTemplateRef("titleRef")
+
 /** Hero visibility → compact sticky title fade */
 const heroRef = useTemplateRef("heroRef")
 const heroVisible = ref(true)
 let heroObserver = null
 
-watch(activityRows, (rows) => arrivals?.present(rows.filter((row) => row.type === "incoming").map((row) => row.inc)), { flush: "post" })
+/** The chip leaves with the focused control, so focus moves to the title rather than the page. */
+async function clearTokenFilter() {
+	await router.replace({ path: "/popup/activity" })
+	titleRef.value?.focus()
+}
+
+watch(visibleRows, (rows) => arrivals?.present(rows.filter((row) => row.type === "incoming").map((row) => row.inc)), { flush: "post" })
+// A token the scope does not hold (removed, another network's, or a list that could not be read)
+// filters nothing, so History shows everything without a chip.
+watch([filterId, tokensLoaded, filterToken], ([id, loaded, token]) => {
+	if (id !== undefined && loaded && !token) void router.replace({ path: "/popup/activity" })
+})
 
 /** Lifecycle hooks */
 onMounted(async () => {
 	if (heroRef.value) {
+		// One delivery batches every change since the last, oldest first: only the newest is current.
 		heroObserver = new IntersectionObserver(
-			([entry]) => {
-				heroVisible.value = entry.isIntersecting
+			(entries) => {
+				heroVisible.value = entries.at(-1).isIntersecting
 			},
 			{ threshold: 0 },
 		)
@@ -171,29 +208,38 @@ onBeforeUnmount(() => {
 		:class="$style.wrapper"
 		data-testid="activity-feed-root"
 		:data-active-account="appStore.account?.address"
+		:data-incoming-loaded="incomingLoaded ? 'true' : undefined"
 	>
-		<div :class="[$style.page_title_bar, !heroVisible && $style.page_title_bar_visible]">
+		<!-- The hero's h1 names the page for a screen reader; this bar repeats it for sight only. -->
+		<div :class="[$style.page_title_bar, !heroVisible && $style.page_title_bar_visible]" aria-hidden="true">
 			<span :class="$style.page_title_label" data-testid="page-title-bar">HISTORY</span>
 		</div>
 
 		<div ref="heroRef">
 			<Flex direction="column" align="center" gap="16" :class="$style.hero" data-testid="page-hero">
-				<h1 :class="$style.hero_title" data-testid="page-hero-title">HISTORY</h1>
+				<h1 ref="titleRef" tabindex="-1" :class="$style.hero_title" data-testid="page-hero-title">HISTORY</h1>
 				<div :class="$style.hero_bar" />
+				<Badge v-if="filterToken" :class="$style.filter_chip" data-testid="activity-token-filter">
+					<span :class="$style.filter_label" data-testid="activity-token-filter-symbol">{{ filterSymbol }}</span>
+					<RowAction label="Show all activity" data-testid="activity-token-filter-clear" @click="clearTokenFilter">
+						<MaterialIcon name="close" :size="14" color="secondary" />
+					</RowAction>
+				</Badge>
 			</Flex>
 		</div>
 
 		<Flex direction="column" gap="24" :class="$style.content">
 			<!-- Mixed activity list (chain tx + journal terminal records) -->
-			<TransactionsList v-if="activityRows.length" :rows="activityRows" :tokens="tokens" :isArriving="arrivals?.isArriving" />
+			<TransactionsList v-if="visibleRows.length" :rows="visibleRows" :tokens="tokens" :isArriving="arrivals?.isArriving" />
 
 			<!-- Empty state -->
 			<Flex
-				v-else
+				v-else-if="!filterPending"
 				direction="column"
 				align="center"
 				gap="12"
 				:class="$style.empty_banner"
+				data-testid="activity-empty"
 			>
 				<MaterialIcon name="history" :size="32" color="secondary" />
 				<span :class="$style.empty_title">No transactions yet</span>
@@ -233,6 +279,11 @@ onBeforeUnmount(() => {
 
 .hero_title {
 	composes: hero_title from "./tab-hero.module.css";
+
+	/* Focus lands here only after the token filter is cleared; it is not a control. */
+	&:focus {
+		outline: none;
+	}
 }
 
 .hero_bar {
@@ -243,6 +294,21 @@ onBeforeUnmount(() => {
 	padding: 0 24px;
 }
 
+.filter_chip {
+	max-width: 100%;
+	min-width: 0;
+	padding: 2px 2px 2px 10px;
+}
+
+/* The sanitizer caps code points, not width: a wide symbol ends in an ellipsis inside the hero. */
+.filter_label {
+	composes: type--label-section from global;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .empty_banner {
 	max-width: 280px;
 	margin: 48px auto 0 auto;
@@ -250,16 +316,12 @@ onBeforeUnmount(() => {
 }
 
 .empty_title {
-	font-family: var(--font-headline);
-	font-size: 14px;
-	font-weight: 600;
-	letter-spacing: -0.02em;
+	composes: type--title-page from global;
 	color: var(--txt-primary);
 }
 
 .empty_description {
-	font-family: var(--font-body);
-	font-size: 12px;
+	composes: type--body from global;
 	line-height: 1.5;
 	color: var(--nulo-secondary);
 }

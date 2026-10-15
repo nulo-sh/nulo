@@ -3,6 +3,7 @@ import {
 	AccountAddressInconsistencyError,
 	ChainNotSupportedError,
 	DuplicateWalletError,
+	ImportedAccountUnusableError,
 	RecoveryModeError,
 	RestoreTornError,
 	CapabilityNotGrantedError,
@@ -10,6 +11,7 @@ import {
 	ContractNotRegisteredError,
 	DuplicateInitializationError,
 	InvalidPasswordError,
+	InvalidWalletArgumentsError,
 	isClientDisconnectRejection,
 	isReceiverGoneRejection,
 	RECEIVER_GONE_MESSAGE,
@@ -173,7 +175,7 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			make: () => new TooManyPendingError(),
 			name: "TooManyPendingError",
 			code: "TOO_MANY_PENDING",
-			rebuild: base,
+			rebuild: { kind: "drop-details" },
 		},
 		{
 			ctor: DuplicateInitializationError,
@@ -187,6 +189,13 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			make: () => UnsupportedMethodError.forMethod("m"),
 			name: "UnsupportedMethodError",
 			code: "UNSUPPORTED_METHOD",
+			rebuild: pass,
+		},
+		{
+			ctor: InvalidWalletArgumentsError,
+			make: () => InvalidWalletArgumentsError.forMethod("sendTx"),
+			name: "InvalidWalletArgumentsError",
+			code: "INVALID_PARAMS",
 			rebuild: pass,
 		},
 		{
@@ -279,6 +288,13 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			rebuild: pass,
 		},
 		{ ctor: RecoveryModeError, make: () => new RecoveryModeError(), name: "RecoveryModeError", code: "RECOVERY_MODE", rebuild: pass },
+		{
+			ctor: ImportedAccountUnusableError,
+			make: () => ImportedAccountUnusableError.because("address mismatch"),
+			name: "ImportedAccountUnusableError",
+			code: "IMPORTED_ACCOUNT_UNUSABLE",
+			rebuild: pass,
+		},
 	]
 
 	function expected(row: Row, payload: WalletErrorPayload): Expected {
@@ -408,11 +424,9 @@ describe("every WalletError subclass: identity and wire shape", () => {
 		expect(rebuilt.details).toBe(details)
 	})
 
-	test("(BUG PIN) TOO_MANY_PENDING reconstructs as base WalletError, not TooManyPendingError", () => {
-		// Port consumers receive the base class today, so rebuilding this one would change their behaviour.
+	test("TOO_MANY_PENDING rebuilds as TooManyPendingError with its message", () => {
 		const rebuilt = walletErrorFromPayload(new TooManyPendingError().toPayload())
-		expect(rebuilt.constructor).toBe(WalletError)
-		expect(rebuilt).not.toBeInstanceOf(TooManyPendingError)
+		expect(rebuilt.constructor).toBe(TooManyPendingError)
 		expect(rebuilt.code).toBe(TooManyPendingError.CODE)
 		expect(rebuilt.message).toBe("Too many pending transactions; retry after the in-flight ones settle.")
 	})

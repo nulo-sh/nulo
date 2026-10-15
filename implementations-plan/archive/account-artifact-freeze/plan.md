@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: the vendored account artifact and its pins in `packages/aztec-runtime/src/account/artifacts/` and `packages/aztec-runtime/src/account/frozen-artifact.ts`, the frozen descriptor in `packages/aztec-runtime/src/account/instantiation-descriptor.ts`, the regime record in `packages/aztec-runtime/src/account/address-freeze.ts`, the integrity coordinator in `apps/extension/src/wallet/services/account-integrity/`, and the execution canary `apps/extension/tests/e2e/network/frozen-account-canary.test.ts`.
-- **Open items**: accounts deployed under an older artifact than the wallet's aztec.js, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: none. Accounts deployed under an older artifact than the wallet's aztec.js are the designed state, not open work: every Aztec bump must pass both execution canaries (`CLAUDE.md` § Account-address freeze).
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

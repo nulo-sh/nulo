@@ -5,6 +5,7 @@ import { FieldWarning } from "@nulo/design"
 import { FpcServiceClient, FpcType } from "@/wallet/services/fpc/client"
 
 /** Utils */
+import { sameStoredName } from "@/utils/account-name"
 import { copyWithToast } from "@/utils/clipboard"
 import { isValidHex } from "@/utils/string"
 
@@ -20,7 +21,7 @@ import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 const appStore = useAppStore()
-const { order } = usePopupStack("edit_fpc")
+const { order, depth } = usePopupStack("edit_fpc")
 const cacheStore = useCacheStore()
 
 const emit = defineEmits(["onClose"])
@@ -37,7 +38,7 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v?.length) return null
-			const conflicting = fpcs.value.find((f) => f.name === v && f.id !== fpcToEdit.value?.id)
+			const conflicting = fpcs.value.find((f) => sameStoredName(f.name, v) && f.id !== fpcToEdit.value?.id)
 			if (conflicting) return "Already exist"
 			return null
 		},
@@ -202,6 +203,7 @@ watch(
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		title="Edit FPC"
 		submitLabel="Update"
 		:submitDisabled="!isAvailableToUpdateFpc || processingError.show"
@@ -211,8 +213,10 @@ watch(
 	>
 		<ItemsContainer>
 			<SettingItem
+				data-testid="edit-fpc-header-row"
 				size="large"
 				:title="fpcToEdit?.name || fpcToEdit?.address"
+				:titleVariant="fpcToEdit?.name ? 'row-title' : 'data'"
 				:description="typeDescription"
 				icon="fpc"
 				raw
@@ -246,10 +250,8 @@ watch(
 			:disabled="isProtocol"
 			data-testid="fpc-name-input"
 		>
-			<template #right>
-				<Transition name="fade">
-					<FieldWarning v-if="isAlreadyExist"> Already exist </FieldWarning>
-				</Transition>
+			<template v-if="isAlreadyExist" #right>
+				<FieldWarning> Already exist </FieldWarning>
 			</template>
 		</Input>
 
@@ -260,6 +262,7 @@ watch(
 			sanitize
 			:disabled="isPrivateFpc"
 			data-testid="edit-fpc-address-input"
+			textVariant="input-data"
 		>
 			<template #right>
 				<Transition name="fade">

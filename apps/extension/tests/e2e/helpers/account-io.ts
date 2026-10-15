@@ -3,9 +3,10 @@
  * to hold died with the popups in the account-file UX redesign).
  *
  * Export drives `settings/security/export/account`: picker (or the Manage Accounts deep-link that
- * skips it), agree gate, unlock, then the ready stage where the file is DOWNLOADED, never shown.
- * The body is captured in-page with the same `chrome.downloads` stub the backup suites use —
- * account files are uncompressed, so the capture reads the blob as plain text.
+ * skips it), agree gate, unlock, protect, then the file is DOWNLOADED, never shown. The page gives
+ * out only the password-protected file, so a caller asking for the plain body gets that file
+ * decrypted here. The body is captured in-page with the same `chrome.downloads` stub the backup
+ * suites use: account files are uncompressed, so the capture reads the blob as plain text.
  *
  * Import drives `settings/accounts/import`: the file picker row (the page is file-only — bodies
  * are delivered by writing a temp file and accepting it through the chooser), the protected-file
@@ -92,8 +93,9 @@ async function readAccountDownloadCapture(page: Page): Promise<string> {
 	return await page.evaluate(() => (window as unknown as { __accountCapture: Promise<string> }).__accountCapture)
 }
 
-/** Drive the export page from its unlock stage to a captured file body. Assumes the page is
- *  already showing the agree gate (account selected). */
+/** Drive the export page from its unlock stage to a captured file body: the protected file, or with
+ *  `encrypt` false its plain content. Assumes the page is already showing the agree gate (account
+ *  selected). */
 async function runExportStages(page: Page, encrypt: boolean, password: string): Promise<string> {
 	await page.waitForSelector('[data-testid="agree-continue-btn"]', { visible: true, timeout: 15_000 })
 	await clickByTestId(page, "agree-continue-btn")
@@ -112,16 +114,16 @@ async function runExportStages(page: Page, encrypt: boolean, password: string): 
 	const wrongPassword = await page.evaluate(() => !!document.querySelector('[data-testid="unlock-error-text"]'))
 	if (wrongPassword) throw new Error("export unlock rejected the password")
 
-	if (encrypt) {
-		await clickByTestId(page, "account-protect-btn")
-		await page.waitForSelector('[data-testid="account-file-protected-banner"]', { visible: true, timeout: 30_000 })
-	}
+	await clickByTestId(page, "account-protect-btn")
+	await page.waitForSelector('[data-testid="account-file-protected-banner"]', { visible: true, timeout: 30_000 })
 
 	await armAccountDownloadCapture(page)
 	await clickByTestId(page, "account-download-btn")
 	const body = await readAccountDownloadCapture(page)
 	expect(body.length).toBeGreaterThan(0)
-	return body
+	if (encrypt) return body
+	const { decryptAccountExport } = await import("@nulo/aztec-runtime/account")
+	return decryptAccountExport(body, password)
 }
 
 /** Every network's first derived account is named this (`DEFAULT_ACCOUNT_NAME`). */

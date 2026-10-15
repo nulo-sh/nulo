@@ -14,12 +14,16 @@ import { describe, expect, test, vi, beforeEach, afterEach } from "vitest"
 import { config, flushPromises, mount } from "@vue/test-utils"
 import { createPinia } from "pinia"
 import { reactive } from "vue"
+import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
 
 const mocks = vi.hoisted(() => ({
 	getGasBalances: vi.fn(),
 	getTokenBalances: vi.fn(),
 	getFpcs: vi.fn(),
+	saveFeePick: vi.fn(),
 }))
+
+vi.mock("@/utils/core", () => ({ managers: { profile: { saveFeePick: mocks.saveFeePick } } }))
 
 // Vitest 4 requires `function` expressions (not arrow functions) for mocks
 // instantiated with `new`. Arrow factories error: "() => ... is not a constructor".
@@ -79,6 +83,8 @@ vi.mock("@/stores/app.store", () => ({
 }))
 
 import FeeSettingsCard from "./FeeSettingsCard.vue"
+import { applyFeePickUpdate, type FeePickUpdate } from "@/utils/fee-picks"
+import { feePicksKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { INIT_FETCH_TIMEOUT_MS, INIT_RETRY_BACKOFF_MS, useBalancesStore } from "@/stores/balances.store"
 
 const STUBS = {
@@ -101,6 +107,8 @@ const STUBS = {
 					:data-testid="'pick-' + m.type"
 					:data-fpc-id="m.fpc?.id"
 					:data-disabled="m.disabled ? 'true' : 'false'"
+					:data-checking="m.checking ? 'true' : 'false'"
+					:data-verifying="m.verifying ? 'true' : 'false'"
 					:data-reason="m.disabledReason"
 					:data-spend="m.spend"
 					@click="!m.disabled && $emit('update:modelValue', m)"
@@ -121,7 +129,7 @@ const STUBS = {
 	},
 }
 
-const FEE_METHOD_LS_KEY = "nulo:ui:feePaymentMethods"
+const FEE_METHOD_LS_KEY = feePicksKey("p1")
 
 const profile = { id: "p1", name: "Profile 1" }
 const network = { id: "n1", chainId: 11155111 }
@@ -141,7 +149,8 @@ const baseProps = (over: Record<string, unknown> = {}) => ({
 let storageBacking: Record<string, unknown>
 
 /** Stub `chrome.storage.local`. The global setup at tests/vitest.setup.ts:88
- *  only stubs `chrome.runtime`; storage requires per-suite shimming. */
+ *  only stubs `chrome.runtime`; storage requires per-suite shimming. Values cross it as clones, as
+ *  in a browser: a write refuses what Firefox refuses, and no caller holds the backing's objects. */
 function stubChromeStorage() {
 	const local = {
 		QUOTA_BYTES: 10485760,
@@ -155,10 +164,10 @@ function stubChromeStorage() {
 			} else if (Array.isArray(keys)) {
 				for (const k of keys) if (k in storageBacking) result[k] = storageBacking[k]
 			}
-			return result
+			return structuredClone(result)
 		},
 		set: async (items: Record<string, unknown>) => {
-			for (const [k, v] of Object.entries(items)) storageBacking[k] = v
+			for (const [k, v] of Object.entries(structuredClone(items))) storageBacking[k] = v
 		},
 		remove: async (keys: string | string[]) => {
 			const list = Array.isArray(keys) ? keys : [keys]
@@ -201,6 +210,15 @@ beforeEach(() => {
 	mocks.getGasBalances.mockReset()
 	mocks.getTokenBalances.mockReset()
 	mocks.getFpcs.mockReset()
+	mocks.saveFeePick.mockReset()
+	// The profile service's writer, over this suite's storage: the real reducer, no lock.
+	mocks.saveFeePick.mockImplementation(async (profileId: string, update: FeePickUpdate) => {
+		const keys = { app: feePicksKey(profileId), send: sendFeePicksKey(profileId) }
+		const next = applyFeePickUpdate({ app: storageBacking[keys.app], send: storageBacking[keys.send] }, update)
+		if (next.app) storageBacking[keys.app] = next.app
+		if (next.send) storageBacking[keys.send] = next.send
+		return true
+	})
 	// Defaults — individual tests override.
 	mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: null })
 	mocks.getTokenBalances.mockResolvedValue([])
@@ -216,6 +234,16 @@ const lastEmittedSettings = (w: ReturnType<typeof mount>) => {
 	const events = w.emitted<unknown[]>("update:modelValue")
 	if (!events?.length) return undefined
 	return events[events.length - 1][0]
+}
+
+/** Fires an FPC service event at the most recently mounted card. */
+const fpcEvent = async (name: "onFpcDeleted" | "onFpcUpdated", payload: unknown) => {
+	const { FpcServiceClient } = await import("@/wallet/services/fpc/client")
+	const results = vi.mocked(FpcServiceClient).mock.results
+	const instance = results[results.length - 1].value as Record<string, { add: ReturnType<typeof vi.fn> }>
+	const handler = instance[name].add.mock.calls[0]?.[0] as ((f: unknown) => void) | undefined
+	if (!handler) throw new Error(`the card never subscribed to ${name}`)
+	handler(payload)
 }
 
 describe("FeeSettingsCard — bug pins (init race)", () => {
@@ -318,25 +346,6 @@ describe("FeeSettingsCard — mounting & init contract", () => {
 		await flushPromises()
 
 		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
-	})
-
-	test("mount with parent v-model = embedded settings: derivedSettings short-circuits to embedded, init early-returns", async () => {
-		const w = mount(FeeSettingsCard, {
-			props: { ...baseProps(), modelValue: { paymentMethod: { kind: "embedded" } } },
-			global: { stubs: STUBS },
-		})
-		await flushPromises()
-
-		const banner = w.find('[data-testid="send-fee-embedded"]')
-		expect(banner.findAll("span").map((n) => n.text())).toEqual(["Fee", "Embedded payload"])
-		// runInit early-returns when isCustomMethod && !useOwnMethod, so no SW calls.
-		expect(mocks.getGasBalances).not.toHaveBeenCalled()
-		expect(mocks.getTokenBalances).not.toHaveBeenCalled()
-		expect(mocks.getFpcs).not.toHaveBeenCalled()
-		// Parent's initial value is preserved — no clobbering update emitted.
-		const events = w.emitted<unknown[]>("update:modelValue") ?? []
-		const nonEmbedded = events.filter((ev) => (ev[0] as { paymentMethod?: { kind?: string } })?.paymentMethod?.kind !== "embedded")
-		expect(nonEmbedded).toEqual([])
 	})
 })
 
@@ -557,6 +566,124 @@ describe("FeeSettingsCard — user actions", () => {
 	})
 })
 
+describe("FeeSettingsCard — the saved pick, outside Send", () => {
+	const NULO = { id: "s1", type: 1, name: "Sponsored", isProtocol: true }
+	const HAND_ADDED = { id: "s2", type: 1, name: "Dev sponsor", isProtocol: false }
+	const HELD = { publicFeeJuice: "1000000000000000000", privateFeeJuice: null }
+	const pickSponsor = (w: ReturnType<typeof mount>, id: string) =>
+		w.find(`[data-testid="pick-fpc"][data-fpc-id="${id}"]`).trigger("click")
+	const savedFor = (address: string) => (storageBacking[FEE_METHOD_LS_KEY] as Record<string, unknown> | undefined)?.[address]
+	const selector = (w: ReturnType<typeof mount>) => w.find('[data-testid="fee-method-selector"]')
+	const lastPayer = (w: ReturnType<typeof mount>) => w.emitted<unknown[]>("update:payer")?.at(-1)?.[0]
+
+	test("a hand-added sponsor's pick is saved as plain data and is what the next card opens on", async () => {
+		const { useCacheStore } = await import("@/stores/cache.store")
+		mocks.getFpcs.mockResolvedValue([NULO, HAND_ADDED])
+		mocks.getGasBalances.mockResolvedValue(HELD)
+		const first = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		await pickSponsor(first, "s2")
+		await flushPromises()
+
+		expect(savedFor(account.address)).toEqual({
+			type: "fpc",
+			title: "Dev sponsor",
+			subtitle: "sponsored",
+			fpc: { id: "s2", isProtocol: false },
+		})
+		expect((useCacheStore().feePaymentMethods as Array<{ fpc?: { id?: string } }>).map((m) => m.fpc?.id)).toEqual(["s2"])
+		first.unmount()
+
+		// A fresh store has no FPC list to answer early, so only the saved record can name the sponsor.
+		config.global.plugins = [createPinia()]
+		const fpcs = deferred<unknown>()
+		mocks.getFpcs.mockReturnValueOnce(fpcs.promise)
+		const next = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		expect(selector(next).attributes("data-active-title")).toBe("Dev sponsor")
+
+		fpcs.resolve([NULO, HAND_ADDED])
+		await flushPromises()
+		expect(selector(next).attributes("data-active-type")).toBe("fpc")
+		expect(lastEmittedSettings(next)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s2" } })
+		next.unmount()
+	})
+
+	test.each([
+		{ fpc: NULO, payer: "sponsor" },
+		{ fpc: HAND_ADDED, payer: "unvouched" },
+	])(
+		"a same-identity re-run pays through the saved $fpc.name as the pick did, before and after its reads land",
+		async ({ fpc, payer }) => {
+			mocks.getFpcs.mockResolvedValue([NULO, HAND_ADDED])
+			mocks.getGasBalances.mockResolvedValue(HELD)
+			const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+			await flushPromises()
+			await pickSponsor(w, fpc.id)
+			await flushPromises()
+
+			// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
+			const savedReads = vi.spyOn((globalThis as any).chrome.storage.local, "get")
+			const before = {
+				gas: mocks.getGasBalances.mock.calls.length,
+				fpcs: mocks.getFpcs.mock.calls.length,
+				payers: w.emitted("update:payer")?.length ?? 0,
+			}
+			const gas = deferred<unknown>()
+			const fpcs = deferred<unknown>()
+			mocks.getGasBalances.mockReturnValueOnce(gas.promise)
+			mocks.getFpcs.mockReturnValueOnce(fpcs.promise)
+			await w.setProps({ profile: { ...profile } })
+			await flushPromises()
+			expect(savedReads.mock.calls.filter(([keys]) => keys === FEE_METHOD_LS_KEY)).toHaveLength(1)
+			expect(mocks.getGasBalances.mock.calls.length).toBe(before.gas + 1)
+			expect(mocks.getFpcs.mock.calls.length).toBe(before.fpcs + 1)
+			expect(w.emitted("update:payer")?.length ?? 0).toBeGreaterThan(before.payers)
+
+			const paysThroughSponsor = () => {
+				expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: fpc.id } })
+				expect(lastPayer(w)).toEqual({ type: "fpc", fpcId: fpc.id, isProtocol: fpc.isProtocol })
+				expect(w.find('[data-testid="fee-cost-readout"]').attributes("data-payer")).toBe(payer)
+			}
+			paysThroughSponsor()
+
+			gas.resolve(HELD)
+			fpcs.resolve([NULO, HAND_ADDED])
+			await flushPromises()
+			paysThroughSponsor()
+			w.unmount()
+		},
+	)
+
+	test("a failed save is logged once under a named key and leaves the pick, the saved map and the cache as they were", async () => {
+		const { useCacheStore } = await import("@/stores/cache.store")
+		const otherAccount = { "0xother": { type: "fj", title: "Public Fee Juice", subtitle: "public" } }
+		storageBacking[FEE_METHOD_LS_KEY] = structuredClone(otherAccount)
+		mocks.getFpcs.mockResolvedValue([NULO, HAND_ADDED])
+		mocks.getGasBalances.mockResolvedValue(HELD)
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+
+		const refusal = new Error("QUOTA_BYTES quota exceeded")
+		mocks.saveFeePick.mockRejectedValueOnce(refusal)
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			await pickSponsor(w, "s2")
+			await flushPromises()
+			expect(logged.mock.calls.filter(([message]) => message === "Failed to save the fee method")).toEqual([
+				["Failed to save the fee method", { error: refusal }],
+			])
+		} finally {
+			logged.mockRestore()
+		}
+		expect(storageBacking[FEE_METHOD_LS_KEY]).toEqual(otherAccount)
+		expect(useCacheStore().feePaymentMethods).toEqual([])
+		expect(selector(w).attributes("data-active-title")).toBe("Dev sponsor")
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s2" } })
+		w.unmount()
+	})
+})
+
 describe("FeeSettingsCard — reactivity & lifecycle", () => {
 	test("FPC deletion clears selectedMethod: settings re-emits as undefined", async () => {
 		const { FpcServiceClient } = await import("@/wallet/services/fpc/client")
@@ -613,14 +740,12 @@ describe("FeeSettingsCard — reactivity & lifecycle", () => {
 		expect(JSON.stringify(storageBacking[FEE_METHOD_LS_KEY])).toBe(initialStorageSnapshot)
 	})
 
-	test("user picks during init: their selection is preserved through the late reconciliation", async () => {
-		// Saved is a sponsored fpc; user picks `fj` mid-init. The async resolver
-		// should see selectedMethod has changed since the snapshot taken after
-		// pre-fill, and skip the resolveSavedSelection / auto-select branch.
-		// Note: only `fj` is enabled during the loading window (private_fpc /
-		// fpc / token_fpc need fpcs to be loaded first to be selectable).
+	test("user picks during init: a sponsor the early FPC list answered survives the late reconciliation", async () => {
+		// Saved is Fee Juice. The FPC list lands before the balance read, so the sponsor row is
+		// answered mid-init; the resolver sees selectedMethod moved off the pre-fill snapshot and
+		// skips the saved-selection branch.
 		storageBacking[FEE_METHOD_LS_KEY] = {
-			[account.address]: { type: "fpc", fpc: { id: "s1", type: 1, name: "Sponsor" } },
+			[account.address]: { type: "fj", title: "Public Fee Juice", subtitle: "public" },
 		}
 		const gas = deferred<{ publicFeeJuice: string; privateFeeJuice: string | null }>()
 		mocks.getGasBalances.mockReturnValueOnce(gas.promise)
@@ -628,16 +753,36 @@ describe("FeeSettingsCard — reactivity & lifecycle", () => {
 
 		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
 		await flushPromises()
-		// User picks fj before init completes (only fj is enabled during loading).
-		await w.find('[data-testid="pick-fj"]').trigger("click")
+		expect(w.find('[data-testid="pick-fpc"]').attributes("data-checking")).toBe("false")
+		await w.find('[data-testid="pick-fpc"]').trigger("click")
 		await flushPromises()
 
-		// Now finish init.
 		gas.resolve({ publicFeeJuice: "1000000000000000000", privateFeeJuice: null })
 		await flushPromises()
 
-		// User's pick survives: settings reflects fj, NOT the saved sponsored.
-		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+	})
+
+	test("a loading row is not a pick: Fee Juice clicked before its balance lands leaves the saved selection", async () => {
+		storageBacking[FEE_METHOD_LS_KEY] = {
+			[account.address]: { type: "fpc", fpc: { id: "s1", type: 1, name: "Sponsor" } },
+		}
+		const saved = JSON.stringify(storageBacking[FEE_METHOD_LS_KEY])
+		const gas = deferred<{ publicFeeJuice: string; privateFeeJuice: string | null }>()
+		mocks.getGasBalances.mockReturnValueOnce(gas.promise)
+		mocks.getFpcs.mockResolvedValue([{ id: "s1", type: 1, name: "Sponsor" }])
+
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		expect(w.find('[data-testid="pick-fj"]').attributes("data-checking")).toBe("true")
+		await w.find('[data-testid="pick-fj"]').trigger("click")
+		await flushPromises()
+		expect(JSON.stringify(storageBacking[FEE_METHOD_LS_KEY])).toBe(saved)
+
+		gas.resolve({ publicFeeJuice: "1000000000000000000", privateFeeJuice: null })
+		await flushPromises()
+
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
 	})
 
 	test("account prop change re-runs init for the new account's saved record", async () => {
@@ -659,56 +804,266 @@ describe("FeeSettingsCard — reactivity & lifecycle", () => {
 	})
 })
 
-describe("FeeSettingsCard — embedded ↔ manual switching", () => {
-	test("handleUseEmbedded after a manual selection: emits embedded settings, persistSelection NOT called", async () => {
-		mocks.getFpcs.mockResolvedValue([])
-		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "1000000000000000000", privateFeeJuice: null })
+describe("FeeSettingsCard — rows while the read is in flight", () => {
+	const PRIVATE_FPC = { id: "p1", type: 2, name: "Private Fee Juice", isProtocol: true }
+	const SPONSOR = { id: "s1", type: 1, name: "Sponsored", isProtocol: true }
+	const HELD = "1000000000000000000"
+	const rowState = (w: ReturnType<typeof mount>) =>
+		w.findAll('[data-testid="fee-method-selector"] [data-testid^="pick-"]').map((b) => ({
+			type: b.attributes("data-testid")?.slice(5),
+			fpc: b.attributes("data-fpc-id") ?? null,
+			checking: b.attributes("data-checking") === "true",
+			spend: b.attributes("data-spend") ?? null,
+		}))
+	/** Holds the card's next read of its saved selection until the returned release. The value is
+	 *  read before the hold and handed back as a clone, as chrome does. */
+	const holdSavedSelectionRead = () => {
+		const gate = deferred<void>()
+		// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
+		const local = (globalThis as any).chrome.storage.local
+		const plainGet = local.get
+		let held = false
+		local.get = async (keys: string | string[] | null | undefined) => {
+			const value = structuredClone(await plainGet(keys))
+			if (keys === FEE_METHOD_LS_KEY && !held) {
+				held = true
+				await gate.promise
+			}
+			return value
+		}
+		return () => gate.resolve()
+	}
+	const SAVED_FJ = { type: "fj", title: "Public Fee Juice", subtitle: "public" }
 
+	test("every row loads until the FPC list lands, which answers the sponsors before the balances do", async () => {
+		const fpcs = deferred<unknown>()
+		const gas = deferred<unknown>()
+		mocks.getFpcs.mockReturnValue(fpcs.promise)
+		mocks.getGasBalances.mockReturnValue(gas.promise)
 		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
 		await flushPromises()
-		await w.find('[data-testid="pick-fj"]').trigger("click")
+		expect(rowState(w)).toEqual([
+			{ type: "fj", fpc: null, checking: true, spend: null },
+			{ type: "private_fpc", fpc: null, checking: true, spend: null },
+			{ type: "fpc", fpc: null, checking: true, spend: null },
+		])
+
+		fpcs.resolve([PRIVATE_FPC, SPONSOR])
 		await flushPromises()
-		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
+		expect(rowState(w)).toEqual([
+			{ type: "fj", fpc: null, checking: true, spend: null },
+			{ type: "private_fpc", fpc: "p1", checking: true, spend: null },
+			{ type: "fpc", fpc: "s1", checking: false, spend: "free" },
+		])
+		expect(w.emitted("update:modelValue")).toBeUndefined()
 
-		const storageAfterPick = JSON.stringify(storageBacking[FEE_METHOD_LS_KEY])
-
-		// Trigger handleUseEmbedded via the back link. The link only renders when
-		// isCustomMethod && useOwnMethod, which requires settings to be embedded
-		// already. So we simulate by setting the v-model first, then clicking the
-		// back link in a later test if visible. For this test, just assert via
-		// component vm method invocation since handleUseEmbedded is internal.
-		// We can simulate by setting v-model from outside (parent route) → but
-		// that's complex. Instead drive via the back-embedded testid only when it
-		// renders. Skip that path — the next test covers the full embedded flow.
-		// Just assert no extra storage writes happened.
-		expect(JSON.stringify(storageBacking[FEE_METHOD_LS_KEY])).toBe(storageAfterPick)
+		gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: HELD })
+		await flushPromises()
+		expect(rowState(w).map(({ checking, spend }) => ({ checking, spend }))).toEqual([
+			{ checking: false, spend: "1 FJ" },
+			{ checking: false, spend: "1 FJ" },
+			{ checking: false, spend: "free" },
+		])
+		w.unmount()
 	})
 
-	test("handleMethodPicked after embedded mount: useEmbeddedFee flips false, settings emits the picked method", async () => {
-		mocks.getFpcs.mockResolvedValue([])
-		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "1000000000000000000", privateFeeJuice: null })
+	test("an identity switch never draws the previous identity's FPC rows while the new reads are pending", async () => {
+		mocks.getFpcs.mockResolvedValue([SPONSOR])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: HELD, privateFeeJuice: null })
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		expect(rowState(w).find((r) => r.type === "fpc")).toMatchObject({ fpc: "s1", checking: false })
 
-		// Mount with parent v-model = embedded. runInit early-returns; useOwnMethod
-		// remains false; banner renders.
-		const w = mount(FeeSettingsCard, {
-			props: { ...baseProps(), modelValue: { paymentMethod: { kind: "embedded" } } },
-			global: { stubs: STUBS },
-		})
+		const fpcs = deferred<unknown>()
+		mocks.getFpcs.mockReturnValue(fpcs.promise)
+		mocks.getGasBalances.mockReturnValue(new Promise(() => {}))
+		await w.setProps({ account: { id: "a2", address: "0xother" } })
+		await flushPromises()
+		expect(rowState(w)).toEqual([
+			{ type: "fj", fpc: null, checking: true, spend: null },
+			{ type: "private_fpc", fpc: null, checking: true, spend: null },
+			{ type: "fpc", fpc: null, checking: true, spend: null },
+		])
+
+		fpcs.resolve([{ ...SPONSOR, id: "s9" }])
+		await flushPromises()
+		expect(rowState(w).find((r) => r.type === "fpc")).toMatchObject({ fpc: "s9", checking: false })
+		w.unmount()
+	})
+
+	test("a snapshot is reconciled against its own rows: a retained FPC list still gives the default sponsor when its refresh fails", async () => {
+		mocks.getFpcs.mockResolvedValue([SPONSOR])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: HELD, privateFeeJuice: null })
+		const holder = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
 		await flushPromises()
 
-		// Click "Override with my method" → useOwnMethod=true → init triggers.
-		await w.find('[data-testid="send-fee-override"]').trigger("click")
+		mocks.getFpcs.mockRejectedValue(new Error("fpc read failed"))
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		expect(w.find('[data-testid="fee-init-degraded"]').exists()).toBe(true)
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+		w.unmount()
+		holder.unmount()
+	})
+
+	test("a sponsor picked while the saved selection is still being read is not overwritten by it", async () => {
+		mocks.getFpcs.mockResolvedValue([SPONSOR])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: HELD, privateFeeJuice: null })
+		const holder = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
 		await flushPromises()
 
-		// SW fetches now happen.
-		expect(mocks.getGasBalances).toHaveBeenCalled()
+		storageBacking[FEE_METHOD_LS_KEY] = { [account.address]: SAVED_FJ }
+		const release = holdSavedSelectionRead()
+		const gas = deferred<unknown>()
+		mocks.getGasBalances.mockReturnValue(gas.promise)
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		expect(rowState(w).find((r) => r.type === "fpc")).toMatchObject({ fpc: "s1", checking: false })
+		await w.find('[data-testid="pick-fpc"]').trigger("click")
 
-		// Pick fj from the now-visible dropdown.
-		await w.find('[data-testid="pick-fj"]').trigger("click")
+		release()
+		await flushPromises()
+		gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: null })
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+		w.unmount()
+		holder.unmount()
+	})
+
+	test("an early pick of a sponsor the refreshed list no longer has is dropped, not paid through", async () => {
+		const GONE = { id: "s2", type: 1, name: "Gone", isProtocol: false }
+		mocks.getFpcs.mockResolvedValue([SPONSOR, GONE])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: HELD, privateFeeJuice: null })
+		const holder = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
 		await flushPromises()
 
-		// Settings flips from embedded to fj.
-		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
+		mocks.getFpcs.mockResolvedValue([SPONSOR])
+		const release = holdSavedSelectionRead()
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		await w.find('[data-testid="pick-fpc"][data-fpc-id="s2"]').trigger("click")
+
+		release()
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toBeUndefined()
+		w.unmount()
+		holder.unmount()
+	})
+
+	test("a re-pick of the selected row during a refresh's read is a pick: another card's save does not replace it", async () => {
+		mocks.getFpcs.mockResolvedValue([SPONSOR])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: HELD, privateFeeJuice: null })
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		// A pick from the menu makes the selection the very row the re-pick hands back.
+		await w.find('[data-testid="pick-fpc"]').trigger("click")
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+
+		storageBacking[FEE_METHOD_LS_KEY] = { [account.address]: SAVED_FJ }
+		const release = holdSavedSelectionRead()
+		await w.setProps({ account: { ...account } })
+		await flushPromises()
+		await w.find('[data-testid="pick-fpc"]').trigger("click")
+
+		release()
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+		w.unmount()
+	})
+
+	test("a sponsor deleted before the balances land leaves the dApp menu and stays gone after the commit", async () => {
+		const CUSTOM = { id: "s2", type: 1, name: "Custom", isProtocol: false }
+		const gas = deferred<unknown>()
+		mocks.getFpcs.mockResolvedValue([SPONSOR, CUSTOM])
+		mocks.getGasBalances.mockReturnValue(gas.promise)
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		const listsCustom = () => rowState(w).some((r) => r.fpc === "s2")
+		expect(listsCustom()).toBe(true)
+
+		await fpcEvent("onFpcDeleted", { id: "s2" })
+		await flushPromises()
+		expect(listsCustom()).toBe(false)
+		gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: null })
+		await flushPromises()
+		expect(listsCustom()).toBe(false)
+		w.unmount()
+	})
+
+	test("an identity changed in place, which no read is coming for, does not load forever", async () => {
+		mocks.getFpcs.mockResolvedValue([SPONSOR])
+		const gas = deferred<unknown>()
+		mocks.getGasBalances.mockReturnValueOnce(gas.promise)
+		const live = { profile: reactive({ ...profile }), network: reactive({ ...network }), account: reactive({ ...account }) }
+		const w = mount(FeeSettingsCard, { props: baseProps(live), global: { stubs: STUBS } })
+		await flushPromises()
+		expect(rowState(w).some((r) => r.checking)).toBe(true)
+
+		live.account.address = "0xother"
+		gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: null })
+		await flushPromises()
+		expect(rowState(w).some((r) => r.checking)).toBe(false)
+		w.unmount()
+	})
+
+	test("an init that throws stops the rows loading, gives today's answers, and never claims a retry", async () => {
+		vi.useFakeTimers()
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
+			const local = (globalThis as any).chrome.storage.local
+			const refusal = new Error("storage unavailable")
+			local.get = vi.fn().mockRejectedValue(refusal)
+			const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+			await vi.advanceTimersByTimeAsync(0)
+			expect(logged.mock.calls.filter(([message]) => message === "Failed to init")).toEqual([["Failed to init", { error: refusal }]])
+
+			expect(rowState(w)).toEqual([
+				{ type: "fj", fpc: null, checking: false, spend: "— FJ" },
+				{ type: "private_fpc", fpc: null, checking: false, spend: "— FJ" },
+			])
+			expect(w.find('[data-testid="pick-private_fpc"]').attributes("data-reason")).toBe("not available")
+			expect(w.find('[data-testid="fee-init-degraded"]').text()).toBe("Couldn't load fee data. Close and reopen to try again.")
+
+			// Nothing runs the init again on its own: no read is ever issued.
+			await vi.advanceTimersByTimeAsync(INIT_RETRY_BACKOFF_MS.reduce((a, b) => a + b, 0) + INIT_FETCH_TIMEOUT_MS)
+			expect(mocks.getGasBalances).not.toHaveBeenCalled()
+			expect(w.find('[data-testid="fee-init-degraded"]').text()).toBe("Couldn't load fee data. Close and reopen to try again.")
+			w.unmount()
+		} finally {
+			logged.mockRestore()
+			vi.useRealTimers()
+		}
+	})
+})
+
+describe("FeeSettingsCard — the load error's live region", () => {
+	test("a held, then refused, read lands its notice in a polite region mounted empty with the card", async () => {
+		vi.useFakeTimers()
+		try {
+			let refuseGas!: (e: Error) => void
+			let refuseFpcs!: (e: Error) => void
+			mocks.getGasBalances.mockImplementationOnce(() => new Promise((_, reject) => (refuseGas = reject)))
+			mocks.getFpcs.mockImplementationOnce(() => new Promise((_, reject) => (refuseFpcs = reject)))
+			mocks.getGasBalances.mockRejectedValue(new Error("PXE unreachable"))
+			mocks.getFpcs.mockRejectedValue(new Error("PXE unreachable"))
+			const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+			await vi.advanceTimersByTimeAsync(0)
+			const live = w.get('[data-testid="fee-init-degraded-live"]')
+			expect(live.attributes()).toMatchObject({ role: "status", "aria-live": "polite", "aria-atomic": "true" })
+			expect(live.text()).toBe("")
+
+			refuseGas(new Error("PXE unreachable"))
+			refuseFpcs(new Error("PXE unreachable"))
+			await vi.advanceTimersByTimeAsync(0)
+			expect(w.get('[data-testid="fee-init-degraded-live"]').element).toBe(live.element)
+			expect(live.text()).toBe("Couldn't load fee data. Retrying in the background.")
+			expect(w.find('[data-testid="fee-method-row"]').exists()).toBe(false)
+			w.unmount()
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 })
 
@@ -826,14 +1181,83 @@ describe("FeeSettingsCard — init failure resilience (degraded settings + silen
 		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
 		await flushPromises()
 
-		expect(w.find('[data-testid="fee-init-degraded"]').exists()).toBe(true)
+		expect(w.find('[data-testid="fee-init-degraded"]').text()).toBe("Couldn't load fee data. Retrying in the background.")
 		const row = (type: string) => w.find(`[data-testid="pick-${type}"]`)
 		for (const type of ["fj", "private_fpc"]) {
+			expect(row(type).attributes("data-checking")).toBe("false")
 			expect(row(type).attributes("data-disabled")).toBe("false")
 			expect(row(type).attributes("data-spend")).toBe("— FJ")
 		}
 		expect(row("fpc").attributes("data-spend")).toBe("free")
+		// A failure that is not the account's own key leaves Send open.
+		expect(w.emitted("update:accountUnusable")).toBeUndefined()
 		w.unmount()
+	})
+
+	test("a read refused because the imported key does not open tells the page", async () => {
+		mocks.getGasBalances.mockRejectedValue(ImportedAccountUnusableError.because("signing key missing"))
+		mocks.getFpcs.mockResolvedValue([{ id: "s1", type: 1, name: "Sponsored", isProtocol: true }])
+
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+
+		expect(w.emitted<unknown[]>("update:accountUnusable")?.at(-1)).toEqual([true])
+		w.unmount()
+	})
+
+	test("a background retry that finds the imported key unusable tells the page", async () => {
+		vi.useFakeTimers()
+		try {
+			mocks.getGasBalances.mockRejectedValueOnce(new Error("boom"))
+			mocks.getGasBalances.mockRejectedValue(ImportedAccountUnusableError.because("signing key missing"))
+			mocks.getFpcs.mockResolvedValue([{ id: "s1", type: 1, name: "Sponsor", isProtocol: true }])
+
+			const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+			await vi.advanceTimersByTimeAsync(0)
+			expect(w.find('[data-testid="fee-init-degraded"]').exists()).toBe(true)
+			expect(w.emitted("update:accountUnusable")).toBeUndefined()
+
+			await vi.advanceTimersByTimeAsync(INIT_RETRY_BACKOFF_MS[0])
+			await vi.advanceTimersByTimeAsync(0)
+			expect(mocks.getGasBalances).toHaveBeenCalledTimes(2)
+			expect(w.emitted<unknown[]>("update:accountUnusable")?.at(-1)).toEqual([true])
+			w.unmount()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("a retry's key refusal for an account the card no longer shows leaves Send open", async () => {
+		vi.useFakeTimers()
+		try {
+			let refuse!: (error: unknown) => void
+			const retry = new Promise<never>((_, reject) => {
+				refuse = reject
+			})
+			let reads = 0
+			mocks.getGasBalances.mockImplementation((_networkId: string, address: string) => {
+				if (address !== account.address) return new Promise(() => {})
+				reads++
+				return reads === 1 ? Promise.reject(new Error("boom")) : retry
+			})
+			mocks.getFpcs.mockResolvedValue([{ id: "s1", type: 1, name: "Sponsor", isProtocol: true }])
+
+			const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+			await vi.advanceTimersByTimeAsync(0)
+			expect(w.find('[data-testid="fee-init-degraded"]').exists()).toBe(true)
+			await vi.advanceTimersByTimeAsync(INIT_RETRY_BACKOFF_MS[0])
+			expect(reads).toBe(2)
+
+			// The retry is in flight when the page moves to another account, whose read never lands.
+			await w.setProps({ account: { id: "a2", address: "0xother" } })
+			await vi.advanceTimersByTimeAsync(0)
+			refuse(ImportedAccountUnusableError.because("signing key missing"))
+			await vi.advanceTimersByTimeAsync(0)
+			expect(w.emitted("update:accountUnusable")).toBeUndefined()
+			w.unmount()
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 
 	test("(BUG PIN) getGasBalances rejects with saved fj: fails closed without a nudge, sponsored still pickable", async () => {
@@ -1054,36 +1478,6 @@ describe("FeeSettingsCard — init failure resilience (degraded settings + silen
 		}
 	})
 
-	test("returning from embedded mode revives a dead retry chain", async () => {
-		// A retry that fires while the card is in embedded mode hits runInit's
-		// early-return and dies. Flipping back to "use my own method" must
-		// re-init when the last snapshot was degraded — otherwise the card is
-		// permanently stuck on it.
-		vi.useFakeTimers()
-		try {
-			mocks.getGasBalances.mockRejectedValueOnce(new Error("boom"))
-			mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "1000000000000000000", privateFeeJuice: null })
-			mocks.getFpcs.mockRejectedValueOnce(new Error("boom"))
-			mocks.getFpcs.mockResolvedValue([{ id: "s1", type: 1, name: "Sponsor", isProtocol: true }])
-
-			const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
-			await vi.advanceTimersByTimeAsync(0)
-			expect(w.find('[data-testid="fee-init-degraded"]').exists()).toBe(true)
-
-			// dApp op flips the card to app-embedded fee before the retry fires.
-			await w.setProps({ modelValue: { paymentMethod: { kind: "embedded" } } })
-			await vi.advanceTimersByTimeAsync(INIT_RETRY_BACKOFF_MS[0])
-
-			// Back to own method — the degraded snapshot must trigger a fresh init.
-			await w.find('[data-testid="send-fee-override"]').trigger("click")
-			await vi.advanceTimersByTimeAsync(0)
-			expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
-			w.unmount()
-		} finally {
-			vi.useRealTimers()
-		}
-	})
-
 	test("an account switch releases the old key — its retry loop dies with the lease", async () => {
 		// Release-before-subscribe: after A→B the old key must not stay
 		// subscribed and store-retrying. Discriminated by args: a leaked lease
@@ -1162,70 +1556,6 @@ describe("FeeSettingsCard — init failure resilience (degraded settings + silen
 			resolveOldGas({ publicFeeJuice: "1000000000000000000", privateFeeJuice: null })
 			await vi.advanceTimersByTimeAsync(0)
 			expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s-new" } })
-			w.unmount()
-		} finally {
-			vi.useRealTimers()
-		}
-	})
-
-	test("an embedded flip during runInit's storage await aborts the run before it takes the lease", async () => {
-		// The [isCustomMethod, useOwnMethod] watcher released; a run resuming
-		// from its storage await must re-validate instead of re-subscribing —
-		// else the card renders the embedded banner while holding a
-		// retry-capable subscription.
-		// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
-		const chromeAny = (globalThis as any).chrome
-		const origGet = chromeAny.storage.local.get
-		let release!: () => void
-		const gate = new Promise<void>((r) => {
-			release = r
-		})
-		chromeAny.storage.local.get = async (keys: unknown) => {
-			await gate
-			return origGet(keys)
-		}
-		try {
-			const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
-			await w.setProps({ modelValue: { paymentMethod: { kind: "embedded" } } })
-			release()
-			await flushPromises()
-			// The aborted run never subscribed, so no fetch ever fired.
-			expect(mocks.getGasBalances).not.toHaveBeenCalled()
-			expect(w.find('[data-testid="send-fee-override"]').exists()).toBe(true)
-			w.unmount()
-		} finally {
-			chromeAny.storage.local.get = origGet
-		}
-	})
-
-	test("an embedded flip during a held-open ensure never overwrites the dApp's embedded settings", async () => {
-		// A second same-profile subscriber prevents the release fence, so the
-		// old run's ensure resolves normally — its commit must still be
-		// discarded, or derivedSettings would replace the embedded v-model
-		// with a self-paid method.
-		vi.useFakeTimers()
-		try {
-			let resolveGas!: (v: unknown) => void
-			mocks.getGasBalances.mockImplementationOnce(() => new Promise((r) => (resolveGas = r)))
-			mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "1000000000000000000", privateFeeJuice: null })
-			mocks.getFpcs.mockResolvedValue([{ id: "s1", type: 1, name: "Sponsor" }])
-
-			const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
-			await vi.advanceTimersByTimeAsync(0)
-			const holder = useBalancesStore().subscribe(
-				{ profileId: profile.id, networkId: network.id, chainId: network.chainId, accountAddress: account.address },
-				{ legs: ["gas"], retry: false, txRefresh: false, peek: false },
-			)
-
-			await w.setProps({ modelValue: { paymentMethod: { kind: "embedded" } } })
-			await vi.advanceTimersByTimeAsync(0)
-			const emitted = (w.emitted<unknown[]>("update:modelValue") ?? []).length
-
-			resolveGas({ publicFeeJuice: "1000000000000000000", privateFeeJuice: null })
-			await vi.advanceTimersByTimeAsync(0)
-			// The superseded run committed nothing: no further v-model pushes.
-			expect((w.emitted<unknown[]>("update:modelValue") ?? []).length).toBe(emitted)
-			holder.release()
 			w.unmount()
 		} finally {
 			vi.useRealTimers()
@@ -1329,6 +1659,35 @@ describe("FeeSettingsCard — init failure resilience (degraded settings + silen
 			expect((w.emitted<unknown[]>("update:modelValue") ?? []).length).toBe(emitted)
 			w.unmount()
 		} finally {
+			chromeAny.storage.local.get = origGet
+			vi.useRealTimers()
+		}
+	})
+
+	test("a recovery recommit whose storage read fails is logged under a named key", async () => {
+		vi.useFakeTimers()
+		// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
+		const chromeAny = (globalThis as any).chrome
+		const origGet = chromeAny.storage.local.get
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			mocks.getGasBalances.mockRejectedValueOnce(new Error("boom"))
+			mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "1000000000000000000", privateFeeJuice: null })
+			mocks.getFpcs.mockResolvedValue([{ id: "s1", type: 1, name: "Sponsor" }])
+			const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+			await vi.advanceTimersByTimeAsync(0)
+			expect(w.find('[data-testid="fee-init-degraded"]').exists()).toBe(true)
+
+			const refusal = new Error("storage unavailable")
+			chromeAny.storage.local.get = vi.fn().mockRejectedValue(refusal)
+			// Retry recovers → recovery watch → recommit's read rejects.
+			await vi.advanceTimersByTimeAsync(INIT_RETRY_BACKOFF_MS[0] + 50)
+			expect(logged.mock.calls.filter(([message]) => message === "Fee recovery recommit failed")).toEqual([
+				["Fee recovery recommit failed", { error: refusal }],
+			])
+			w.unmount()
+		} finally {
+			logged.mockRestore()
 			chromeAny.storage.local.get = origGet
 			vi.useRealTimers()
 		}
@@ -1474,7 +1833,7 @@ describe("FeeSettingsCard — null public balance (unknown wire slot)", () => {
  * committed snapshot and the account's own pick — see `fee-privacy.ts` for the rule itself.
  */
 describe("FeeSettingsCard — Send: the fee source follows the transfer's origin", () => {
-	const SEND_KEY = "nulo:ui:sendFeePaymentMethods"
+	const SEND_KEY = sendFeePicksKey("p1")
 	const HELD = "1000000000000000000"
 	const PRIVATE_FPC = { id: "p1", type: 2, name: "Private FPC", isProtocol: true }
 	const SPONSOR = { id: "s1", type: 1, name: "Sponsor", isProtocol: true }
@@ -1505,14 +1864,6 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 	const degradedText = (w: ReturnType<typeof mount>) => {
 		const row = w.find('[data-testid="fee-init-degraded"]')
 		return row.exists() ? row.text() : null
-	}
-	const fpcEvent = async (name: "onFpcDeleted" | "onFpcUpdated", payload: unknown) => {
-		const { FpcServiceClient } = await import("@/wallet/services/fpc/client")
-		const results = vi.mocked(FpcServiceClient).mock.results
-		const instance = results[results.length - 1].value as Record<string, { add: ReturnType<typeof vi.fn> }>
-		const handler = instance[name].add.mock.calls[0]?.[0] as ((f: unknown) => void) | undefined
-		if (!handler) throw new Error(`the card never subscribed to ${name}`)
-		handler(payload)
 	}
 
 	describe("the default, by knowledge state", () => {
@@ -1653,7 +2004,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			const gas = deferred<unknown>()
 			mocks.getFpcs.mockResolvedValue([PRIVATE_FPC, SPONSOR])
 			mocks.getGasBalances.mockReturnValue(gas.promise)
-			storageBacking["nulo:ui:sendFeePaymentMethods"] = {
+			storageBacking[sendFeePicksKey("p1")] = {
 				[account.address]: { private: { type: "fpc", fpc: { id: "s1", name: "Sponsor" } } },
 			}
 			const w = mountSend()
@@ -1767,6 +2118,25 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			expect(lastEmittedSettings(again)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
 		})
 
+		test("a pick whose save fails is logged under a named key", async () => {
+			allPayers()
+			const w = mountSend()
+			await flushPromises()
+			const refusal = new Error("QUOTA_BYTES quota exceeded")
+			mocks.saveFeePick.mockRejectedValueOnce(refusal)
+			const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+			try {
+				await w.find('[data-testid="pick-fj"]').trigger("click")
+				await flushPromises()
+				expect(logged.mock.calls.filter(([message]) => message === "Failed to save the send fee selection")).toEqual([
+					["Failed to save the send fee selection", { error: refusal }],
+				])
+			} finally {
+				logged.mockRestore()
+			}
+			w.unmount()
+		})
+
 		test("a legacy-key pick does not govern Send", async () => {
 			allPayers()
 			storageBacking[FEE_METHOD_LS_KEY] = { [account.address]: { type: "fpc", fpc: SPONSOR } }
@@ -1820,6 +2190,22 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
 		})
 
+		test("one account's pick in one profile never governs it in another, and switching back restores it", async () => {
+			allPayers()
+			const w = mountSend()
+			await flushPromises()
+			await w.find('[data-testid="pick-fj"]').trigger("click")
+			expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
+
+			await w.setProps({ profile: { id: "p2", name: "Profile 2" } })
+			await flushPromises()
+			expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "p1" } })
+
+			await w.setProps({ profile })
+			await flushPromises()
+			expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
+		})
+
 		test("account A's balances never produce settings for account B, not even for the tick of the switch", async () => {
 			mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
 			mocks.getGasBalances.mockResolvedValueOnce({ publicFeeJuice: HELD, privateFeeJuice: HELD })
@@ -1844,22 +2230,6 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			await w.setProps({ account: accountB })
 			storageGate.resolve()
 			storageGate = undefined
-			await flushPromises()
-			expect(storageBacking[SEND_KEY]).toEqual({ [account.address]: { private: { type: "fj" } } })
-		})
-
-		test("a pick racing an FPC prune: both effects are persisted", async () => {
-			allPayers()
-			storageBacking[SEND_KEY] = { [accountB.address]: { public: { type: "fpc", fpc: { id: "s1" } } } }
-			const { mutateSendSelections, withoutFpc } = await import("./fee-send-selection")
-			const w = mountSend()
-			await flushPromises()
-			storageGate = deferred<void>()
-			await w.find('[data-testid="pick-fj"]').trigger("click")
-			const prune = mutateSendSelections((raw) => withoutFpc(raw, "s1"))
-			storageGate.resolve()
-			storageGate = undefined
-			await prune
 			await flushPromises()
 			expect(storageBacking[SEND_KEY]).toEqual({ [account.address]: { private: { type: "fj" } } })
 		})
@@ -1996,8 +2366,8 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			...FEE,
 			sponsorFunding: { fpcId: "s1", address: NULO_AT, funded, ...over },
 		})
-		const PAYS_PUBLIC = "The sponsor can't cover this fee right now, so Public Fee Juice pays it."
-		const NO_PAYER = "The sponsor can't cover this fee right now."
+		const PAYS_PUBLIC = "The sponsor you chose can't cover this fee right now. Public Fee Juice pays it instead."
+		const NO_PAYER = "The sponsor you chose can't cover this fee right now."
 		const picked = (origin: string, id = "s1") => ({ [account.address]: { [origin]: { type: "fpc", fpc: { id } } } })
 		const row = (w: ReturnType<typeof mount>, id: string) => w.get(`[data-testid="pick-fpc"][data-fpc-id="${id}"]`)
 		const notice = (w: ReturnType<typeof mount>) => {
@@ -2061,6 +2431,17 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			expect(row(w, "s1").attributes()).toMatchObject({ "data-disabled": "true", "data-reason": "can't pay now" })
 			expect(funding(w)).toBe("short")
 			expect(w.find('[data-testid="send-fee-nudge"]').exists()).toBe(type === undefined)
+		})
+
+		test("the notice lands in a polite region that was there, empty, before it", async () => {
+			const w = await pickedWithGas()
+			const live = w.get('[data-testid="fee-sponsor-live"]')
+			expect(live.attributes()).toMatchObject({ role: "status", "aria-live": "polite", "aria-atomic": "true" })
+			expect(live.text()).toBe("")
+			await short(w)
+			expect(w.get('[data-testid="fee-sponsor-live"]').element).toBe(live.element)
+			expect(live.text()).toBe(PAYS_PUBLIC)
+			expect(live.get('[data-testid="fee-sponsor-short"] i').attributes("aria-hidden")).toBe("true")
 		})
 
 		test("funded: marked funded, and nothing else moves", async () => {
@@ -2160,6 +2541,69 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			expect(lastEmittedSettings(w)).toMatchObject({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
 		})
 
+		describe("a transaction change while the sponsor pays", () => {
+			const verifying = (w: ReturnType<typeof mount>) => row(w, "s1").attributes("data-verifying")
+			const changedWhilePaying = async () => {
+				const w = await pickedWithGas({ txShape: "t1" })
+				await w.setProps({ feeEstimate: verdict(true) })
+				await w.setProps({ txShape: "t2", feeEstimate: null, isEstimating: true })
+				await flushPromises()
+				return w
+			}
+
+			test("its row loads, still pickable, until its verdict lands", async () => {
+				const w = await changedWhilePaying()
+				expect(verifying(w)).toBe("true")
+				expect(row(w, "s1").attributes("data-disabled")).toBe("false")
+				expect(activeType(w)).toBe("fpc")
+
+				await w.setProps({ feeEstimate: verdict(true), isEstimating: false })
+				await flushPromises()
+				expect(verifying(w)).toBe("false")
+			})
+
+			test("an estimate that ends without a verdict ends the loading", async () => {
+				const w = await changedWhilePaying()
+				await w.setProps({ feeEstimate: null, isEstimating: false })
+				await flushPromises()
+				expect(verifying(w)).toBe("false")
+			})
+
+			test.each([
+				["no estimate runs", { txShape: "t2" }],
+				["the priority changed instead", { isEstimating: true }],
+			])("%s: no read is in flight for the row, so it never loads", async (_case, props) => {
+				const w = await pickedWithGas({ txShape: "t1" })
+				await w.setProps({ feeEstimate: verdict(true) })
+				if (!("txShape" in props)) await w.get('[data-testid="pick-fast"]').trigger("click")
+				await w.setProps(props)
+				await flushPromises()
+				expect(verifying(w)).toBe("false")
+			})
+
+			test("another payer is picked during the read: the sponsor's row stops loading", async () => {
+				const w = await changedWhilePaying()
+				await w.get('[data-testid="pick-fj"]').trigger("click")
+				await flushPromises()
+				expect(activeType(w)).toBe("fj")
+				expect(verifying(w)).toBe("false")
+			})
+		})
+
+		test("a hand-added sponsor short, Nulo's takes over: the notice names the default sponsor", async () => {
+			mocks.getFpcs.mockResolvedValue([PRIVATE_FPC, NULO, HAND])
+			mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: "0" })
+			storageBacking[SEND_KEY] = picked("public", "s2")
+			const w = mountSend({ originPrivacy: "public" })
+			await flushPromises()
+			expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s2" } })
+
+			await w.setProps({ feeEstimate: verdict(false, { fpcId: "s2", address: HAND_AT }) })
+			await flushPromises()
+			expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+			expect(notice(w)).toBe("The sponsor you chose can't cover this fee right now. The default sponsor pays it instead.")
+		})
+
 		test("an identity switch forgets the verdict; a replaced profile object with the same key does not", async () => {
 			const w = await pickedWithGas()
 			await short(w)
@@ -2186,7 +2630,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			await flushPromises()
 			await short(w)
 			expect(activeType(w)).toBe("private_fpc")
-			expect(notice(w)).toBe("The sponsor can't cover this fee right now, so Private FPC pays it.")
+			expect(notice(w)).toBe("The sponsor you chose can't cover this fee right now. Private FPC pays it instead.")
 
 			await w.setProps({ originPrivacy: "private" })
 			await flushPromises()
@@ -2238,7 +2682,7 @@ describe("FeeSettingsCard — a sponsor that can't cover this fee, outside Send"
 			await vi.advanceTimersByTimeAsync(0)
 			expect(lastEmittedSettings(w)).toBeUndefined()
 			expect(active()).toBeUndefined()
-			expect(notice().text()).toBe("The sponsor can't cover this fee right now.")
+			expect(notice().text()).toBe("The sponsor you chose can't cover this fee right now.")
 			expect(storageBacking[FEE_METHOD_LS_KEY]).toEqual(saved ? { [account.address]: saved } : undefined)
 
 			await vi.advanceTimersByTimeAsync(INIT_RETRY_BACKOFF_MS[0])
@@ -2252,6 +2696,121 @@ describe("FeeSettingsCard — a sponsor that can't cover this fee, outside Send"
 		} finally {
 			vi.useRealTimers()
 		}
+	})
+})
+
+describe("FeeSettingsCard — a card that falls back on a short sponsor", () => {
+	const NULO = { id: "s1", type: 1, name: "Sponsored", isProtocol: true, address: `0x${"0a".repeat(32)}` }
+	const SHORT = {
+		maxFee: "1000",
+		maxFeeFormatted: "0.000000000000001",
+		sponsorFunding: { fpcId: "s1", address: NULO.address, funded: false },
+	}
+
+	test.each([
+		{
+			case: "public Fee Juice held",
+			gas: { publicFeeJuice: "5", privateFeeJuice: null },
+			kind: "fj",
+			text: "The sponsor you chose can't cover this fee right now. Public Fee Juice pays it instead.",
+		},
+		{
+			case: "nothing else can pay",
+			gas: { publicFeeJuice: "0", privateFeeJuice: null },
+			kind: undefined,
+			text: "The sponsor you chose can't cover this fee right now.",
+		},
+	])("$case: the selection moves along Send's public walk, unsaved, and the notice names who pays", async ({ gas, kind, text }) => {
+		mocks.getFpcs.mockResolvedValue([NULO])
+		mocks.getGasBalances.mockResolvedValue(gas)
+		const w = mount(FeeSettingsCard, { props: { ...baseProps(), fallsBack: true }, global: { stubs: STUBS } })
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+
+		await w.setProps({ feeEstimate: SHORT })
+		await flushPromises()
+		expect((lastEmittedSettings(w) as { paymentMethod?: { kind: string } } | undefined)?.paymentMethod?.kind).toBe(kind)
+		expect(w.get('[data-testid="fee-sponsor-short"]').text()).toBe(text)
+		expect(mocks.saveFeePick).not.toHaveBeenCalled()
+		w.unmount()
+	})
+})
+
+describe("FeeSettingsCard — the fee-juice nudge outside Send", () => {
+	const NULO = { id: "s1", type: 1, name: "Sponsored", isProtocol: true, address: `0x${"0a".repeat(32)}` }
+	const HAND = { id: "s2", type: 1, name: "Dev sponsor", isProtocol: false, address: `0x${"0b".repeat(32)}` }
+	const PRIVATE_FPC = { id: "p1", type: 2, name: "Private FPC", isProtocol: true }
+	const SHORT = {
+		maxFee: "1000",
+		maxFeeFormatted: "0.000000000000001",
+		sponsorFunding: { fpcId: "s1", address: NULO.address, funded: false },
+	}
+	const nudge = (w: ReturnType<typeof mount>) => w.find('[data-testid="send-fee-nudge"]')
+
+	test.each([
+		{ case: "both balances read empty", gas: { publicFeeJuice: "0", privateFeeJuice: "0" }, shows: true },
+		{ case: "the private balance unread", gas: { publicFeeJuice: "0", privateFeeJuice: null }, shows: false },
+	])("$case, Nulo's sponsor set aside by its check: the nudge shows only on confirmed empties", async ({ gas, shows }) => {
+		mocks.getFpcs.mockResolvedValue([PRIVATE_FPC, NULO])
+		mocks.getGasBalances.mockResolvedValue(gas)
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		expect(nudge(w).exists()).toBe(false)
+
+		await w.setProps({ feeEstimate: SHORT })
+		await flushPromises()
+		expect(nudge(w).exists()).toBe(shows)
+		if (shows) expect(nudge(w).text()).toContain("You have no fee juice yet")
+		w.unmount()
+	})
+
+	test("a sponsor added by hand stops the nudge only once picked", async () => {
+		mocks.getFpcs.mockResolvedValue([HAND])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: null })
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		expect(nudge(w).exists()).toBe(true)
+
+		await w.get('[data-testid="pick-fpc"][data-fpc-id="s2"]').trigger("click")
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s2" } })
+		expect(nudge(w).exists()).toBe(false)
+		w.unmount()
+	})
+})
+
+describe("FeeSettingsCard — the account's own Fee Juice short of the fee", () => {
+	const NULO = { id: "s1", type: 1, name: "Sponsored", isProtocol: true, address: `0x${"0a".repeat(32)}` }
+	const SHORT = {
+		maxFee: "2100000000000000",
+		maxFeeFormatted: "0.0021",
+		feeJuiceShortfall: { maxFee: "2100000000000000", balance: "1500000000000000" },
+	}
+	const shortfall = (w: ReturnType<typeof mount>) => w.find('[data-testid="fee-juice-shortfall"]')
+
+	test("named in the live region, with both figures, while Fee Juice pays", async () => {
+		mocks.getFpcs.mockResolvedValue([])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "1500000000000000", privateFeeJuice: null })
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		await w.get('[data-testid="pick-fj"]').trigger("click")
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
+
+		await w.setProps({ feeEstimate: SHORT })
+		await flushPromises()
+		expect(w.get('[data-testid="fee-sponsor-live"]').text()).toBe("This send can cost up to 0.0021 FJ. You have 0.0015 FJ.")
+		w.unmount()
+	})
+
+	test("never while another payer pays", async () => {
+		mocks.getFpcs.mockResolvedValue([NULO])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: null })
+		const w = mount(FeeSettingsCard, { props: baseProps({ feeEstimate: SHORT }), global: { stubs: STUBS } })
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+		expect(shortfall(w).exists()).toBe(false)
+		w.unmount()
 	})
 })
 
@@ -2364,7 +2923,7 @@ describe("FeeSettingsCard — Send: the payer model", () => {
 	test("a hand-added sponsor, once picked, is reported unvouched; an identity switch withdraws the payer until the new read lands", async () => {
 		// It pays only once picked: both accounts saved it for a private send.
 		const picked = { private: { type: "fpc", fpc: { id: "s2" } } }
-		storageBacking["nulo:ui:sendFeePaymentMethods"] = { [account.address]: picked, [accountB.address]: picked }
+		storageBacking[sendFeePicksKey("p1")] = { [account.address]: picked, [accountB.address]: picked }
 		mocks.getFpcs.mockResolvedValue([PRIVATE_FPC, HAND_ADDED])
 		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: "0" })
 		const w = mountSend()
@@ -2504,48 +3063,6 @@ describe("FeeSettingsCard — the identity guards, field by field", () => {
 		expect(degraded(w)).toBe(true)
 	})
 
-	test("a switch to an embedded payment during a recovery recommit discards the late commit", async () => {
-		let before = 0
-		let holder: { release: () => void } | undefined
-		let mounted: ReturnType<typeof mount> | undefined
-		try {
-			const w = await recommitAcross(async (_live, card) => {
-				before = settingsEmitted(card).length
-				// Another subscriber on the key (a second operation card, say) keeps the recovered entry
-				// alive after this card releases its lease.
-				holder = useBalancesStore().subscribe(
-					{ profileId: profile.id, networkId: network.id, chainId: network.chainId, accountAddress: account.address },
-					{ legs: ["gas"], retry: false, txRefresh: false, peek: false },
-				)
-				await card.setProps({ modelValue: { paymentMethod: { kind: "embedded" } } })
-				await vi.advanceTimersByTimeAsync(0)
-			})
-			mounted = w
-			expect(w.find('[data-testid="send-fee-embedded"]').exists()).toBe(true)
-			expect(settingsEmitted(w).slice(before)).toEqual([])
-			// The failed read below arms the card's retry; fake timers keep it from outliving the test.
-			vi.useFakeTimers()
-			// Still degraded, so opting out of the embedded payment reads afresh; that read fails here.
-			const reads = mocks.getGasBalances.mock.calls.length
-			mocks.getGasBalances.mockRejectedValue(new Error("still down"))
-			// A native click: test-utils' `trigger` on this wrapper left `useOwnMethod` unset.
-			;(w.get('[data-testid="send-fee-override"]').element as HTMLElement).click()
-			await vi.advanceTimersByTimeAsync(0)
-			expect(mocks.getGasBalances.mock.calls.length).toBe(reads + 1)
-			expect(degraded(w)).toBe(true)
-			expect(vi.getTimerCount()).toBeGreaterThan(0)
-			w.unmount()
-			mounted = undefined
-			holder?.release()
-			holder = undefined
-			expect(vi.getTimerCount()).toBe(0)
-		} finally {
-			mounted?.unmount()
-			holder?.release()
-			vi.useRealTimers()
-		}
-	})
-
 	test("Send: a pending selection keeps its cached result while unread identity fields change", async () => {
 		let live: Identity | undefined
 		const w = await sendAcross((i) => {
@@ -2597,7 +3114,7 @@ describe("FeeSettingsCard — the identity guards, field by field", () => {
 	const shortSponsor = async () => {
 		mocks.getFpcs.mockResolvedValue([PRIVATE_FPC, NULO])
 		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: HELD, privateFeeJuice: "0" })
-		storageBacking["nulo:ui:sendFeePaymentMethods"] = { [account.address]: { public: { type: "fpc", fpc: { id: "s1" } } } }
+		storageBacking[sendFeePicksKey("p1")] = { [account.address]: { public: { type: "fpc", fpc: { id: "s1" } } } }
 		const w = mount(FeeSettingsCard, {
 			props: baseProps({ originPrivacy: "public", destinationPrivacy: "private" }),
 			global: { stubs: STUBS },

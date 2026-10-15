@@ -6,6 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
+import { holdReads, liveBus } from "../../../../tests/helpers/held-read"
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -13,10 +14,13 @@ const contactServiceMock = {
 	getContacts: vi.fn(),
 	updateContact: vi.fn(),
 	disconnect: vi.fn(),
-	onContactAdded: { add: vi.fn(), remove: vi.fn() },
-	onContactUpdated: { add: vi.fn(), remove: vi.fn() },
-	onContactDeleted: { add: vi.fn(), remove: vi.fn() },
+	onContactAdded: liveBus(),
+	onContactUpdated: liveBus(),
+	onContactDeleted: liveBus(),
 }
+/** A component never removes its handlers, so each test gets buses no earlier mount registered on. */
+const freshBuses = () =>
+	Object.assign(contactServiceMock, { onContactAdded: liveBus(), onContactUpdated: liveBus(), onContactDeleted: liveBus() })
 
 const openToastMock = vi.fn()
 
@@ -102,6 +106,8 @@ async function mountAndOpen(contacts = [CONTACT], editId = "c1") {
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	contactServiceMock.getContacts.mockReset()
+	freshBuses()
 	cacheStoreState.contactToEditIdx = ""
 	cacheStoreState.importContact = null
 })
@@ -256,7 +262,7 @@ describe("EditContactPopup — contact delete reducer and duplicate rules", () =
 		expect(w.text()).not.toContain("Already exist")
 	})
 
-	test("another contact's name, trimmed, and its address in any case, read as duplicates", async () => {
+	test("another contact's name, whatever its case, spacing or invisible characters, and its address in any case, read as duplicates", async () => {
 		const w = await mountAndOpen([CONTACT, BOB])
 		await w.find('[data-testid="name-input"]').setValue("Bob ")
 		await flushPromises()
@@ -265,17 +271,23 @@ describe("EditContactPopup — contact delete reducer and duplicate rules", () =
 		await w.find('[data-testid="name-input"]').setValue("Bob")
 		await flushPromises()
 		expect(w.text()).toContain("Already exist")
+		await w.find('[data-testid="name-input"]').setValue("BOB\u3164 ")
+		await flushPromises()
+		expect(w.text()).toContain("Already exist")
 		await w.find('[data-testid="name-input"]').setValue("Alicia")
 		await w.find('[data-testid="address-input"]').setValue(addr("B"))
 		await flushPromises()
 		expect(w.text()).toContain("Already exist")
 	})
 
-	test("a stored name with an outer space beside the same name warns on open and blocks an address-only edit", async () => {
+	test("a stored name with an outer space beside the same name opens as it would be stored and blocks an address-only edit", async () => {
 		const spaced = { id: "c2", name: "Alice ", address: addr("c") }
 		const w = await mountAndOpen([CONTACT, spaced], "c2")
-		expect(w.text()).toContain("Already exist")
+		expect((w.find('[data-testid="name-input"]').element as HTMLInputElement).value).toBe("Alice")
+		expect(w.text()).not.toContain("Already exist")
 		await w.find('[data-testid="address-input"]').setValue(NEW_ADDRESS)
+		await flushPromises()
+		expect(w.text()).toContain("Already exist")
 		await flushPromises()
 		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("true")
 		await w.find('[data-testid="form-submit"]').trigger("click")
@@ -306,6 +318,89 @@ describe("EditContactPopup — contact delete reducer and duplicate rules", () =
 		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("true")
 	})
 
+	test("two saved names that differ only by case: an edit of one is blocked until its name is distinct, then saves", async () => {
+		const w = await mountAndOpen([CONTACT, { id: "c2", name: "alice", address: addr("c") }], "c2")
+		expect(fieldText(w, "name-input")).toBe("")
+		await w.find('[data-testid="address-input"]').setValue(NEW_ADDRESS)
+		await flushPromises()
+		expect(fieldText(w, "name-input")).toBe("Already exist")
+		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("true")
+
+		await w.find('[data-testid="name-input"]').setValue("Alice Brown")
+		await flushPromises()
+		expect(fieldText(w, "name-input")).toBe("")
+		await w.find('[data-testid="form-submit"]').trigger("click")
+		await flushPromises()
+		expect(contactServiceMock.updateContact).toHaveBeenCalledWith("c2", "Alice Brown", NEW_ADDRESS)
+	})
+
+	test("a name that would be stored as another contact's name is blocked, whether saved by older code or typed", async () => {
+		// The second row is older data: a 26-character name, which saving cuts to the first row's name.
+		const first = { id: "c1", name: "Abcdefghijklmnopqrstuvwxy", address: OLD_ADDRESS }
+		const w = await mountAndOpen([first, { id: "c2", name: "Abcdefghijklmnopqrstuvwxyz", address: addr("c") }], "c2")
+		await w.find('[data-testid="address-input"]').setValue(NEW_ADDRESS)
+		await flushPromises()
+		expect(fieldText(w, "name-input")).toBe("Already exist")
+		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("true")
+
+		const typed = await mountAndOpen([first, BOB], "c2")
+		await typed.find('[data-testid="name-input"]').setValue("Abcdefghijklmnopqrstuvwxyz")
+		await flushPromises()
+		expect(fieldText(typed, "name-input")).toBe("Already exist")
+	})
+
+	test("a name saved by older code shows as it would be stored on open, on reset and after an outside update, and an address-only edit saves the name shown", async () => {
+		const w = await mountAndOpen([{ id: "c1", name: " Bob\u3164  Stone ", address: OLD_ADDRESS }])
+		const shownName = () => (w.find('[data-testid="name-input"]').element as HTMLInputElement).value
+		expect(shownName()).toBe("Bob Stone")
+		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("true")
+
+		await w.find('[data-testid="name-input"]').setValue("Robert")
+		await w
+			.findAll("button")
+			.find((b) => b.text() === "Reset changes")
+			?.trigger("click")
+		expect(shownName()).toBe("Bob Stone")
+
+		const onUpdated = contactServiceMock.onContactUpdated.add.mock.calls[0][0] as (c: unknown) => void
+		onUpdated({ id: "c1", name: "Bob\u200B  Stone", address: OLD_ADDRESS })
+		await flushPromises()
+		expect(shownName()).toBe("Bob Stone")
+
+		await w.find('[data-testid="address-input"]').setValue(NEW_ADDRESS)
+		await w.find('[data-testid="form-submit"]').trigger("click")
+		await flushPromises()
+		expect(contactServiceMock.updateContact).toHaveBeenCalledWith("c1", "Bob Stone", NEW_ADDRESS)
+	})
+
+	test("a name with nothing visible keeps submit disabled and never warns", async () => {
+		// The third row is older data: a saved name of invisible characters only.
+		const w = await mountAndOpen([CONTACT, BOB, { id: "c3", name: "\u3164", address: addr("d") }])
+		await w.find('[data-testid="name-input"]').setValue("\u3164\u200B ")
+		await flushPromises()
+		expect(fieldText(w, "name-input")).toBe("")
+		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("true")
+	})
+
+	test("import mode: the saved contact a row would write is not its duplicate, and the name is staged as the import stores it", async () => {
+		cacheStoreState.importContact = { idx: "0", name: "Alice", address: NEW_ADDRESS, kind: "address-change", targetId: "c1" }
+		const w = await mountAndOpen([CONTACT, BOB], "")
+		await w.find('[data-testid="address-input"]').setValue(OLD_ADDRESS)
+		await w.find('[data-testid="name-input"]').setValue(" ALI\u3164CE  ")
+		await flushPromises()
+		expect(fieldText(w, "name-input")).toBe("")
+		expect(fieldText(w, "address-input")).toBe("")
+		await w.find('[data-testid="form-submit"]').trigger("click")
+		await flushPromises()
+		expect(cacheStoreState.importContact).toMatchObject({ name: "ALICE", address: OLD_ADDRESS, targetId: "c1", updated: true })
+
+		cacheStoreState.importContact = { idx: "0", name: "Alice", address: NEW_ADDRESS, kind: "address-change", targetId: "c1" }
+		const again = await mountAndOpen([CONTACT, BOB], "")
+		await again.find('[data-testid="name-input"]').setValue("bob")
+		await flushPromises()
+		expect(fieldText(again, "name-input")).toBe("Already exist")
+	})
+
 	test("import mode stores the address lowercased", async () => {
 		cacheStoreState.importContact = { id: "", name: "Staged", address: OLD_ADDRESS }
 		const w = await mountAndOpen([], "")
@@ -314,5 +409,29 @@ describe("EditContactPopup — contact delete reducer and duplicate rules", () =
 		await w.find('[data-testid="form-submit"]').trigger("click")
 		await flushPromises()
 		expect((cacheStoreState.importContact as { address: string }).address).toBe(addr("d"))
+	})
+})
+
+describe("EditContactPopup — the list under a held read", () => {
+	test("the read's answer replaces the list and the draft: an outside edit that lands while it is out is dropped, one after it is kept", async () => {
+		const reads = holdReads<unknown[]>(contactServiceMock.getContacts)
+		cacheStoreState.contactToEditIdx = "c1"
+		const w = mount(EditContactPopup, { props: { show: false }, global: { stubs: STUBS } })
+		trackedWrappers.push(w)
+		await w.setProps({ show: true })
+		const shownName = () => (w.find('[data-testid="name-input"]').element as HTMLInputElement).value
+		const listed = () => (w.vm as unknown as { contacts: { name: string }[] }).contacts.map((c) => c.name)
+
+		contactServiceMock.onContactUpdated.invoke({ ...CONTACT, name: "Alicia" })
+		expect(listed()).toEqual(["Alicia"])
+		expect(reads).toHaveLength(1)
+		reads[0]?.resolve([CONTACT])
+		await flushPromises()
+		expect(listed()).toEqual(["Alice"])
+		expect(shownName()).toBe("Alice")
+
+		contactServiceMock.onContactUpdated.invoke({ ...CONTACT, name: "Alicia" })
+		await flushPromises()
+		expect(shownName()).toBe("Alicia")
 	})
 })

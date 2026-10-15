@@ -8,15 +8,30 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { createApp, h, nextTick, ref } from "vue"
+import { EventHandler } from "@nulo/wallet-core/utils"
 import { usePopupEntity } from "@/composables/usePopupEntity"
+import type { SendStarted } from "@/wallet/services/auth-registry/spec"
+import { heldJobSubscription, LIVE_STAGES, record } from "../../../../tests/helpers/held-job-subscription"
 import { pressOn } from "../../../../tests/helpers/press-key"
 
 const authwitsServiceMock = {
 	getRegistryEnabled: vi.fn(),
 	revokeAuthwits: vi.fn(),
+	estimateRevokeFee: vi.fn(),
+	cancelFeeEstimate: vi.fn(),
 	disconnect: vi.fn(),
 	onRegistryEnabled: { add: vi.fn(), remove: vi.fn() },
 	onRegistryDisabled: { add: vi.fn(), remove: vi.fn() },
+	onSendStarted: new EventHandler<SendStarted>(),
+}
+
+const journalMock = { subscribeJob: vi.fn(), disconnect: vi.fn() }
+
+const ESTIMATE = { maxFee: "1000", maxFeeFormatted: "0.000000000000001", gasDetails: {} }
+/** The popup debounces each estimate by 500 ms. */
+async function estimatesLand() {
+	await vi.advanceTimersByTimeAsync(500)
+	await flushPromises()
 }
 
 const openToastMock = vi.fn()
@@ -29,6 +44,12 @@ vi.mock("@/wallet/services/auth-registry/client", () => ({
 		return authwitsServiceMock
 	}),
 	MAX_REVOKES_PER_TX: 8,
+}))
+
+vi.mock("@/wallet/services/operation-journal/client", () => ({
+	OperationJournalServiceClient: vi.fn(function () {
+		return journalMock
+	}),
 }))
 
 vi.mock("@/popup/utils/cancellable-rejection", () => ({
@@ -68,11 +89,19 @@ const STUBS = {
 	},
 	Banner: { template: "<div />" },
 	FeeSettingsCard: {
-		props: ["profile", "network", "account", "modelValue"],
+		props: {
+			profile: Object,
+			network: Object,
+			account: Object,
+			modelValue: Object,
+			feeEstimate: Object,
+			isEstimating: Boolean,
+			fallsBack: Boolean,
+		},
 		emits: ["update:modelValue"],
 		setup: () => ({ feeControlClick }),
 		// Single button per chunk that emits a fee. Tests can target by index.
-		template: `<button class="set-fee" @click="feeControlClick(); $emit('update:modelValue', { gasLimit: 100 })">fee</button>`,
+		template: `<button class="set-fee" :data-estimate="feeEstimate?.maxFee" :data-falls-back="String(fallsBack)" @click="feeControlClick(); $emit('update:modelValue', { gasLimit: 100 })">fee</button>`,
 	},
 	Button: {
 		props: ["loading", "disabled"],
@@ -130,6 +159,7 @@ async function mountAndOpen(authwits: { id: string; content: string }[] = [{ id:
 async function setAllFees(w: ReturnType<typeof mount>) {
 	const feeBtns = w.findAll(".set-fee")
 	for (const btn of feeBtns) await btn.trigger("click")
+	await estimatesLand()
 }
 
 const submitButton = (w: ReturnType<typeof mount>) => w.get('[data-testid="revoke-authwits-submit"]').element as HTMLElement
@@ -137,7 +167,11 @@ const submitButton = (w: ReturnType<typeof mount>) => w.get('[data-testid="revok
 beforeEach(() => {
 	authwitsServiceMock.getRegistryEnabled.mockReset()
 	authwitsServiceMock.revokeAuthwits.mockReset().mockResolvedValue(undefined)
+	authwitsServiceMock.estimateRevokeFee.mockReset().mockResolvedValue(ESTIMATE)
+	authwitsServiceMock.cancelFeeEstimate.mockReset().mockResolvedValue(undefined)
+	vi.useFakeTimers()
 	authwitsServiceMock.disconnect.mockReset()
+	journalMock.subscribeJob.mockReset()
 	openToastMock.mockReset()
 	popupOpenMock.mockReset()
 	feeControlClick.mockReset()
@@ -154,6 +188,7 @@ afterEach(async () => {
 	wrappers.length = 0
 	for (const c of cleanups.splice(0)) c()
 	document.body.innerHTML = ""
+	vi.useRealTimers()
 })
 
 describe("RevokeAuthwitsPopup — the content button", () => {
@@ -271,6 +306,21 @@ describe("RevokeAuthwitsPopup — the Revoke button", () => {
 		resolveRevoke()
 	})
 
+	test("one chunk whose estimate finds the account's own Fee Juice short keeps every revoke off", async () => {
+		// Nine authwits make two chunks; only the second, a single revoke, is short.
+		authwitsServiceMock.estimateRevokeFee.mockImplementation(async (_n: unknown, _a: unknown, ids: string[]) =>
+			ids.length === 1 ? { ...ESTIMATE, feeJuiceShortfall: { maxFee: "800", balance: "799" } } : ESTIMATE,
+		)
+		const many = Array.from({ length: 9 }, (_, i) => ({ id: `aw-${i}`, content: `c${i}` }))
+		const w = await mountAndOpen(many)
+		await setAllFees(w)
+		expect(new Set(authwitsServiceMock.estimateRevokeFee.mock.calls.map((c) => c[2].length))).toEqual(new Set([8, 1]))
+		expect(w.find('[data-testid="revoke-authwits-submit"]').attributes("disabled")).toBeDefined()
+		pressOn(submitButton(w), "Enter")
+		await flushPromises()
+		expect(authwitsServiceMock.revokeAuthwits).not.toHaveBeenCalled()
+	})
+
 	test("a press before every chunk has a fee revokes nothing", async () => {
 		const w = await mountAndOpen()
 		pressOn(submitButton(w), "Enter")
@@ -321,5 +371,125 @@ describe("RevokeAuthwitsPopup — the Revoke button", () => {
 		await w.find('[data-testid="revoke-authwits-submit"]').trigger("click")
 		await flushPromises()
 		expect(authwitsServiceMock.revokeAuthwits).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("RevokeAuthwitsPopup — the send's stage line", () => {
+	const stageLine = (w: ReturnType<typeof mount>) => w.get('[data-testid="authwit-stage-line"]').text()
+
+	/** Starts a send that stays in flight and returns the key it carried. */
+	async function startSend() {
+		authwitsServiceMock.revokeAuthwits.mockReturnValueOnce(new Promise(() => {}))
+		const w = await mountAndOpen()
+		await setAllFees(w)
+		await w.get('[data-testid="revoke-authwits-submit"]').trigger("click")
+		await flushPromises()
+		const correlation = authwitsServiceMock.revokeAuthwits.mock.calls[0]?.[4] as string
+		return { w, correlation }
+	}
+
+	test("follows this popup's revoke through each live stage and clears when it ends", async () => {
+		const job = heldJobSubscription(journalMock.subscribeJob)
+		const { w, correlation } = await startSend()
+		expect(correlation).toMatch(/^[0-9a-f]{16}$/)
+		authwitsServiceMock.onSendStarted.invoke({ correlation, journalId: "j1" })
+		expect(journalMock.subscribeJob).toHaveBeenCalledWith("j1", expect.any(Function))
+		for (const [progress, line] of LIVE_STAGES) {
+			job.show(record(progress))
+			await nextTick()
+			expect(stageLine(w)).toBe(line)
+		}
+		job.show(record({ stage: "succeeded" }, 9))
+		await nextTick()
+		expect(stageLine(w)).toBe("")
+	})
+
+	test("another popup's send is ignored", async () => {
+		const { w } = await startSend()
+		authwitsServiceMock.onSendStarted.invoke({ correlation: "0xsomeone-else", journalId: "j2" })
+		await nextTick()
+		expect(journalMock.subscribeJob).not.toHaveBeenCalled()
+		expect(stageLine(w)).toBe("")
+	})
+
+	test("hidden before the record's snapshot lands: the subscription is released and nothing renders", async () => {
+		const job = heldJobSubscription(journalMock.subscribeJob)
+		const { w, correlation } = await startSend()
+		authwitsServiceMock.onSendStarted.invoke({ correlation, journalId: "j1" })
+		await w.setProps({ show: false })
+		await flushPromises()
+		job.land()
+		await flushPromises()
+		expect(job.release).toHaveBeenCalledTimes(1)
+		authwitsServiceMock.getRegistryEnabled.mockResolvedValueOnce(true)
+		await w.setProps({ show: true })
+		await flushPromises()
+		job.show(record({ stage: "simulating" }))
+		await nextTick()
+		expect(stageLine(w)).toBe("")
+	})
+})
+
+describe("RevokeAuthwitsPopup — the fee check before proving", () => {
+	// MAX_REVOKES_PER_TX is mocked to 8.
+	const TWO_CHUNKS = Array.from({ length: 10 }, (_, i) => ({ id: `aw-${i}`, content: `c${i}` }))
+	const disabled = (w: ReturnType<typeof mount>) => w.get('[data-testid="revoke-authwits-submit"]').attributes("disabled") !== undefined
+	const clickFees = async (w: ReturnType<typeof mount>) => {
+		for (const btn of w.findAll(".set-fee")) await btn.trigger("click")
+	}
+
+	test("Revoke stays off until every chunk's estimate lands, and each card is handed its own", async () => {
+		const w = await mountAndOpen(TWO_CHUNKS)
+		await clickFees(w)
+		expect(disabled(w)).toBe(true)
+		pressOn(submitButton(w), "Enter")
+		await flushPromises()
+		expect(authwitsServiceMock.revokeAuthwits).not.toHaveBeenCalled()
+
+		await estimatesLand()
+		const calls = authwitsServiceMock.estimateRevokeFee.mock.calls
+		expect(calls.map((c) => [c[0], c[1], (c[2] as string[]).length, c[3]])).toEqual([
+			["net-1", "0xacct", 8, { gasLimit: 100 }],
+			["net-1", "0xacct", 2, { gasLimit: 100 }],
+		])
+		expect(w.findAll(".set-fee").map((b) => [b.attributes("data-estimate"), b.attributes("data-falls-back")])).toEqual([
+			["1000", "true"],
+			["1000", "true"],
+		])
+		expect(disabled(w)).toBe(false)
+		await w.get('[data-testid="revoke-authwits-submit"]').trigger("click")
+		await flushPromises()
+		expect(authwitsServiceMock.revokeAuthwits).toHaveBeenCalledTimes(2)
+	})
+
+	test("new fee settings on a chunk, a speed change or a fallback, turn Revoke off until their estimate lands", async () => {
+		const w = await mountAndOpen()
+		await setAllFees(w)
+		expect(disabled(w)).toBe(false)
+		await w.get(".set-fee").trigger("click")
+		expect(disabled(w)).toBe(true)
+		pressOn(submitButton(w), "Enter")
+		await flushPromises()
+		expect(authwitsServiceMock.revokeAuthwits).not.toHaveBeenCalled()
+		await estimatesLand()
+		expect(disabled(w)).toBe(false)
+	})
+
+	test("a failed estimate keeps Revoke off and says so", async () => {
+		authwitsServiceMock.estimateRevokeFee.mockRejectedValueOnce(new Error("node down"))
+		const w = await mountAndOpen()
+		await setAllFees(w)
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Couldn't estimate fee. Try again." })
+		expect(disabled(w)).toBe(true)
+	})
+
+	test("hiding the popup cancels the estimate in flight", async () => {
+		authwitsServiceMock.estimateRevokeFee.mockReturnValueOnce(new Promise(() => {}))
+		const w = await mountAndOpen()
+		await setAllFees(w)
+		const token = authwitsServiceMock.estimateRevokeFee.mock.calls[0]?.[4]
+		await w.setProps({ show: false })
+		await flushPromises()
+		expect(authwitsServiceMock.cancelFeeEstimate).toHaveBeenCalledWith(token)
 	})
 })

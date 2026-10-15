@@ -5,6 +5,7 @@ import type { Ref } from "vue"
 
 import type { Account } from "@/wallet/services/account/client"
 import type { Network } from "@/wallet/services/network/client"
+import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
 import { NodeStatus } from "@/wallet/services/network/client"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import type { Tx } from "@/wallet/services/transaction/spec"
@@ -20,6 +21,7 @@ import { type AwaitingTx, txBelongsToScope, txScope, useActivityStore } from "@/
 import { approvedSendsInFlight as countApprovedSendsInFlight, hasInFlightSend as inFlightHasSend } from "@/utils/in-flight-send"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import { OperationJournalServiceClient } from "@/wallet/services/operation-journal/client"
+import { createContactImportGuard } from "./contact-import-guard"
 
 /**
  * The setup is a coordinator: it owns the plain refs and composes module-level factories in the
@@ -55,16 +57,18 @@ export const useAppStore = defineStore("app", () => {
 	const network = ref<Network>()
 	const networkStatus = ref<string>()
 	const networks = ref<Network[]>([])
+	const stale = createStaleNetworkState()
 
 	const activity = useActivityStore()
 	const inFlight = createInFlightTracker({ profile, account, network })
 	const accountActions = createAccountActions({ profile, network, account, accounts, commitScopeChange: inFlight.commitScopeChange })
 	const networkActions = createNetworkActions({ network, networkStatus, networks })
 	const feed = createActivityBridge({ activity, profile, profiles, network, account })
+	const contactImports = createContactImportGuard()
 
 	const dappSessions = ref([])
-	const isPrivacyModeEnabled = ref(false)
-	const defaultExplorer = ref<BlockExplorerType | null>("aztecscan")
+	// Null until the shell applies the stored choice, so a failed settings read shows no explorer link.
+	const defaultExplorer = ref<BlockExplorerType | null>(null)
 	const loggerWindowId = useSyncedRef("loggerWindowId", null)
 
 	return {
@@ -89,6 +93,8 @@ export const useAppStore = defineStore("app", () => {
 		networkStatus,
 		syncNetworkStatus: networkActions.syncNetworkStatus,
 		networks,
+		staleNetwork: stale.staleNetwork,
+		syncStaleNetwork: stale.syncStaleNetwork,
 		dappSessions,
 		renameNetwork: networkActions.renameNetwork,
 		removeNetwork: networkActions.removeNetwork,
@@ -99,6 +105,10 @@ export const useAppStore = defineStore("app", () => {
 		refreshInFlight: inFlight.refreshInFlight,
 		resetInFlight: inFlight.resetInFlight,
 		commitScopeChange: inFlight.commitScopeChange,
+		contactImports: contactImports.contactImports,
+		lockHeldByImport: contactImports.lockHeldByImport,
+		beginContactImport: contactImports.beginContactImport,
+		resetContactImports: contactImports.resetContactImports,
 		/** @deprecated Prefer `commitScopeChange`; an async apply reopens the race. */
 		withScopeChangeAllowed: inFlight.commitScopeChange,
 		addAwaitingTransaction: feed.addAwaitingTransaction,
@@ -107,7 +117,6 @@ export const useAppStore = defineStore("app", () => {
 		onTxAdded: feed.onTxAdded,
 		onTxUpdated: feed.onTxUpdated,
 		syncTransactions: feed.syncTransactions,
-		isPrivacyModeEnabled,
 		defaultExplorer,
 		loggerWindowId,
 		onboardingCompleted: onboarding.onboardingCompleted,
@@ -115,6 +124,24 @@ export const useAppStore = defineStore("app", () => {
 		setOnboardingCompleted: onboarding.setOnboardingCompleted,
 	}
 })
+
+// ---------------------------------------------------------------------------------------------
+// Stale network
+// ---------------------------------------------------------------------------------------------
+
+/** The active network's stale view; null while it is live. A read commits only if no newer read
+ *  started, so a quick switch never lands the previous network's view. */
+function createStaleNetworkState() {
+	const staleNetwork = ref<StaleNetworkView | null>(null)
+	let reads = 0
+	const syncStaleNetwork = async (networkId: string): Promise<StaleNetworkView | null> => {
+		const read = ++reads
+		const view = await managers.networkReset.getStaleNetwork(networkId)
+		if (read === reads) staleNetwork.value = view
+		return view
+	}
+	return { staleNetwork, syncStaleNetwork }
+}
 
 // ---------------------------------------------------------------------------------------------
 // Onboarding flag

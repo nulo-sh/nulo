@@ -136,6 +136,11 @@ describe("journalTerminalDisplay — Failed state (catch-all + per-kind subtitle
 		expect(journalTerminalDisplay(op)?.subtitle).toBe("Transaction failed")
 	})
 
+	test("error.kind === 'malformed_request' → 'Couldn't read request', its outcome label", () => {
+		const op = recordWith({ error: { kind: "malformed_request", message: "...", normalizedRaw: null } })
+		expect(journalTerminalDisplay(op)?.subtitle).toBe("Couldn't read request")
+	})
+
 	test("error.kind === 'scope_refused' → 'Not allowed', on the red failed card", () => {
 		const op = recordWith({ error: { kind: "scope_refused", message: "...", normalizedRaw: null } })
 		expect(journalTerminalDisplay(op)).toEqual({ state: "failed", subtitle: "Not allowed", icon: "close-circle", color: "red" })
@@ -208,7 +213,11 @@ describe("ACTIVITY_FEED_KINDS classification", () => {
 // ── buildJournalTerminalCardProps ─────────────────────────────────────
 
 const TEST_TOKEN_BY_ID = (id: number) =>
-	id === 42 ? { symbol: "USDC", decimals: 6 } : id === 7 ? { symbol: "ETH", decimals: 18 } : undefined
+	id === 42
+		? { symbol: "USDC", decimals: 6, hasDecimals: true }
+		: id === 7
+			? { symbol: "ETH", decimals: 18, hasDecimals: true }
+			: undefined
 const TEST_CTX = { tokenById: TEST_TOKEN_BY_ID }
 
 function transferRecord(overrides: Partial<OperationRecord> = {}): OperationRecord {
@@ -335,13 +344,20 @@ describe("buildJournalTerminalCardProps", () => {
 		expect(props).toMatchObject({ title: "Swap", amount: null, amountSymbol: null, transferTypeLabel: null })
 	})
 
+	test("a token whose decimals the wallet does not know shows no amount and no symbol; known, it shows both", () => {
+		const unknown = { tokenById: () => ({ symbol: "USDC", decimals: 0, hasDecimals: false }) }
+		expect(buildJournalTerminalCardProps(transferRecord(), unknown)).toMatchObject({ title: "USDC", amount: null, amountSymbol: null })
+		const known = { tokenById: () => ({ symbol: "USDC", decimals: 6, hasDecimals: true }) }
+		expect(buildJournalTerminalCardProps(transferRecord(), known)).toMatchObject({ amount: "1.5", amountSymbol: "USDC" })
+	})
+
 	test("an empty amount shows no amount and no symbol", () => {
 		const props = buildJournalTerminalCardProps(transferRecord({ amountRaw: "" }), TEST_CTX)
 		expect(props).toMatchObject({ title: "USDC", amount: null, amountSymbol: null })
 	})
 
 	test("a token whose symbol is empty titles the card 'Transfer' and keeps the empty symbol beside the amount", () => {
-		const props = buildJournalTerminalCardProps(transferRecord(), { tokenById: () => ({ symbol: "", decimals: 6 }) })
+		const props = buildJournalTerminalCardProps(transferRecord(), { tokenById: () => ({ symbol: "", decimals: 6, hasDecimals: true }) })
 		expect(props).toMatchObject({ title: "Transfer", amount: "1.5", amountSymbol: "" })
 	})
 
@@ -404,6 +420,15 @@ const CHECKED: [SendOutcome, SendCheckOutcome | undefined, JournalTerminalDispla
 		{
 			label: "Unconfirmed",
 			context: "Your wallet couldn't confirm this. It may still go through, so check History before sending it again.",
+		},
+	],
+	[
+		"expired",
+		"expired",
+		{ state: "failed", subtitle: "Won't go through", icon: "close-circle", color: "red" },
+		{
+			label: "Won't go through",
+			context: "This transaction expired before the network included it. No fee was paid, and you can send it again.",
 		},
 	],
 ]
@@ -479,7 +504,10 @@ describe("a failed send its record proves never left the wallet", () => {
 			icon: "close-circle",
 			color: "red",
 		})
-		expect(categoricalLabel(op)).toEqual({ label: "Error", context: "Something went wrong with this transaction." })
+		expect(categoricalLabel(op)).toEqual({
+			label: "Stopped when the wallet locked",
+			context: "The wallet locked while this was in progress.",
+		})
 	})
 })
 
@@ -619,6 +647,51 @@ describe("humanizeErrorKind — JobError.kind → user-facing label", () => {
 	})
 })
 
+/**
+ * A dApp send refused before any window or proof, as the ingress files it: wire-shaped account, the
+ * record failed from `queued` and retitled "Transaction".
+ */
+describe("refusals filed before any window: card and detail", () => {
+	const ACCOUNT = "0x0a6f1ec15b4e4c5f6c9d9a1e0e4f7b2c3d4e5f60718293a4b5c6d7e8f9012345"
+	function refused(kind: string): OperationRecord {
+		return recordWith({
+			accountAddress: ACCOUNT,
+			title: "Transaction",
+			progress: { stage: "failed", from: "queued" },
+			error: { kind, message: "", normalizedRaw: null },
+		})
+	}
+
+	test.each([
+		["terms_refused", "Terms not accepted", "Accept Nulo's Terms to let apps send. Nothing was sent."],
+		["wallet_refused", "Refused before sending", "The wallet refused this request before anything was signed. Nothing was sent."],
+		["scope_refused", "Not allowed", "The app asked for more than you allowed. Nothing was sent."],
+	])("%s reads %s on the card and in the detail", (kind, label, context) => {
+		const op = refused(kind)
+		expect(categoricalLabel(op)).toEqual({ label, context })
+		expect(buildJournalTerminalCardProps(op, { tokenById: () => undefined })).toMatchObject({
+			title: "Transaction",
+			state: "failed",
+			subtitle: label,
+		})
+	})
+
+	test("session_ended reads the lock on the card and in the detail", () => {
+		const op = refused("session_ended")
+		expect(categoricalLabel(op)).toEqual({
+			label: "Stopped when the wallet locked",
+			context: "The wallet locked while this was in progress.",
+		})
+		expect(journalTerminalDisplay(op)?.subtitle).toBe("Stopped when the wallet locked")
+	})
+
+	test("popup_bound still reads the popup (control)", () => {
+		const op = refused("popup_bound")
+		expect(categoricalLabel(op).label).toBe("Popup closed early")
+		expect(journalTerminalDisplay(op)?.subtitle).toBe("Transaction failed")
+	})
+})
+
 describe("categoricalLabel — B2 failure category + context for journal/[id].vue", () => {
 	/** No `from`: the record does not say which stage failed, so it proves neither outcome. */
 	function failed(kind: string): OperationRecord {
@@ -637,6 +710,18 @@ describe("categoricalLabel — B2 failure category + context for journal/[id].vu
 		expect(categoricalLabel(failed("scope_refused"))).toEqual({
 			label: "Not allowed",
 			context: "The app asked for more than you allowed. Nothing was sent.",
+		})
+	})
+	test("malformed_request → 'Couldn't read request', saying nothing was sent", () => {
+		expect(categoricalLabel(failed("malformed_request"))).toEqual({
+			label: "Couldn't read request",
+			context: "The app sent a request the wallet could not read. Nothing was sent.",
+		})
+	})
+	test("session_ended → the card's words, never saying nothing was sent", () => {
+		expect(categoricalLabel(failed("session_ended"))).toEqual({
+			label: "Stopped when the wallet locked",
+			context: "The wallet locked while this was in progress.",
 		})
 	})
 	test("simulation / prover / stuck_proving / stuck_queued → 'Stopped before broadcast'", () => {

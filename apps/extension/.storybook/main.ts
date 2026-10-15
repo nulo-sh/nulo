@@ -13,11 +13,12 @@ import useAutoImport from "unplugin-auto-import/vite"
 import useComponents from "unplugin-vue-components/vite"
 // Storybook v10's main.ts loader requires explicit .ts extensions on relative imports.
 import { nuloDesignResolver } from "../scripts/design-resolver.ts"
-import { resolvePackageAsset } from "@nulo/resolve-asset"
+import { resolvePackageAsset, resolvePackageRoot } from "@nulo/resolve-asset"
 
 const config: StorybookConfig = {
 	framework: {
-		name: "@storybook/vue3-vite",
+		// Storybook resolves a bare framework name from its own package, which declares none.
+		name: resolvePackageRoot("@storybook/vue3-vite", { from: import.meta.url }),
 		options: {},
 	},
 	stories: [
@@ -55,6 +56,7 @@ const config: StorybookConfig = {
 			__VERSION__: JSON.stringify("story"),
 			__SENTINEL__: JSON.stringify("0"),
 			__AZTEC_VERSION__: JSON.stringify("story"),
+			__BB_VERSION__: JSON.stringify("story"),
 			__NAME__: JSON.stringify("@nulo/extension"),
 			__DISPLAY_NAME__: JSON.stringify("Nulo (story)"),
 		}
@@ -80,7 +82,8 @@ const config: StorybookConfig = {
 				dts: false,
 			}),
 			useComponents({
-				dirs: ["../src/components"],
+				// Resolved against the Vite root, which Storybook sets to this app's directory.
+				dirs: ["src/components"],
 				resolvers: [nuloDesignResolver()],
 				dts: false,
 			}),

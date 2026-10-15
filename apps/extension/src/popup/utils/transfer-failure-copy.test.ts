@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest"
-import { OperationNotRecordedError, TermsAcceptanceRequiredError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
+import {
+	ImportedAccountUnusableError,
+	OperationNotRecordedError,
+	TermsAcceptanceRequiredError,
+	walletErrorFromPayload,
+} from "@nulo/extension-messaging/errors"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import { transferFailureLogLevel, transferFailureSnack } from "./transfer-failure-copy"
 
@@ -28,6 +33,17 @@ function failed(progress: OperationRecord["progress"]): OperationRecord {
 }
 
 describe("transferFailureSnack", () => {
+	test("an imported account whose key does not open says so and points at another account, with no details", () => {
+		const overTheWire = walletErrorFromPayload(ImportedAccountUnusableError.because("the key does not open").toPayload())
+		expect(transferFailureSnack(overTheWire, undefined)).toEqual({
+			checking: false,
+			label: "Cannot send from this account",
+			sub: "Nulo cannot use this imported account’s key. Send from another account.",
+			details: false,
+		})
+		expect(transferFailureLogLevel(overTheWire)).toBe("debug")
+	})
+
 	test("a refusal that crossed the RPC boundary reads as not started, in the owner-approved words", () => {
 		const overTheWire = walletErrorFromPayload(new OperationNotRecordedError().toPayload())
 		expect(transferFailureSnack(overTheWire, undefined)).toMatchObject({
@@ -39,6 +55,7 @@ describe("transferFailureSnack", () => {
 	test("a Terms refusal says what the Send banner says whatever its record holds, and is not an error-level event", () => {
 		const overTheWire = walletErrorFromPayload(new TermsAcceptanceRequiredError().toPayload())
 		expect(transferFailureSnack(overTheWire, failed(MAYBE_SENT))).toEqual({
+			checking: false,
 			label: "Send failed",
 			sub: "Accept the Terms to send",
 			details: true,
@@ -51,6 +68,7 @@ describe("transferFailureSnack", () => {
 		[
 			"a send that may have reached the node",
 			failed(MAYBE_SENT),
+			true,
 			"Send not confirmed",
 			"Checking whether it reached the network. Don't send it again yet.",
 			true,
@@ -58,6 +76,7 @@ describe("transferFailureSnack", () => {
 		[
 			"a send that failed before broadcast",
 			failed({ stage: "failed", from: "simulating" }),
+			false,
 			"Send failed",
 			"Nothing was sent. You can try again.",
 			true,
@@ -65,12 +84,13 @@ describe("transferFailureSnack", () => {
 		[
 			"a record with no recorded stage",
 			failed({ stage: "failed" }),
+			false,
 			"Send status unknown",
 			"Check History before sending it again.",
 			false,
 		],
-		["no record", undefined, "Send status unknown", "Check History before sending it again.", false],
-	])("any other failure reads from its record: %s", (_name, record, label, sub, details) => {
-		expect(transferFailureSnack(new Error("boom"), record)).toEqual({ label, sub, details })
+		["no record", undefined, false, "Send status unknown", "Check History before sending it again.", false],
+	])("any other failure reads from its record: %s", (_name, record, checking, label, sub, details) => {
+		expect(transferFailureSnack(new Error("boom"), record)).toEqual({ checking, label, sub, details })
 	})
 })

@@ -11,7 +11,8 @@ run-name: "publish-packages → ${{ inputs.version }}${{ inputs.dry_run && ' (dr
 # - `publish` holds the only `id-token: write`, runs in the `npm-publish` environment (owner approval;
 #   its deployment branches, dev and main, bound the ref) and runs no repository code: one data file,
 #   Node, the artifact, npm.
-# - `verify` re-reads what the registry serves: each version's SLSA provenance must be signed by this
+# - `verify` waits, for up to 15 minutes, until the registry lists every version and serves every
+#   tarball, then re-reads what it serves: each version's SLSA provenance must be signed by this
 #   workflow on dev or main (the Sigstore certificate identity) and name these bytes, and
 #   `npm audit signatures` must accept it. That also covers a re-run that skipped a version.
 # `test` runs beside `pack` and holds the same artifact runtime token, so the later jobs download
@@ -216,7 +217,7 @@ jobs:
     needs: [pack, publish]
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -242,6 +243,43 @@ jobs:
         run: |
           [ "$(jq -r length <<< "$DIGESTS")" = "$(find . -maxdepth 1 -type f | wc -l)" ] || { echo "::error::the downloaded files differ from pack's"; exit 1; }
           jq -r 'to_entries[] | "\(.value)  \(.key)"' <<< "$DIGESTS" | sha256sum -c --strict -
+
+      - name: Wait until the registry serves every version
+        working-directory: ${{ runner.temp }}/tgz
+        env:
+          REGISTRY: https://registry.npmjs.org
+          WAIT_SECONDS: 900
+          POLL_SECONDS: 20
+        run: |
+          # Same URL and Accept value as npm install and npm's signature audit, which both read this full
+          # document: the registry's CDN caches it per Accept value for up to five minutes.
+          deadline=$((SECONDS + WAIT_SECONDS))
+          while :; do
+            missing=()
+            for tgz in *.tgz; do
+              manifest=$(tar -xOzf "$tgz" package/package.json)
+              name=$(jq -r .name <<< "$manifest")
+              version=$(jq -r .version <<< "$manifest")
+              if ! doc=$(curl -fsS --max-time 10 -H 'Accept: application/json' "$REGISTRY/${name/\//%2f}") ||
+                ! tarball=$(jq -er --arg v "$version" '.versions[$v].dist.tarball | strings' <<< "$doc"); then
+                missing+=("$name@$version is not in the registry document")
+                continue
+              fi
+              code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 --url "$tarball") || code+=", curl exit $?"
+              [ "$code" = 200 ] || missing+=("$name@$version: $tarball answers $code")
+            done
+            [ "${#missing[@]}" = 0 ] && break
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              for m in "${missing[@]}"; do
+                echo "::error::$m after $SECONDS s; re-run this job once the registry serves it"
+              done
+              exit 1
+            fi
+            echo "after $SECONDS s, still waiting:"
+            printf '  %s\n' "${missing[@]}"
+            sleep "$POLL_SECONDS"
+          done
+          echo "the registry serves every version after $SECONDS s"
 
       - name: Verify each version's provenance and its signer
         working-directory: ${{ runner.temp }}/tgz

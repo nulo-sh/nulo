@@ -1,0 +1,7 @@
+# Phase 2: one release owner
+
+- **GitHub's REST through `fetch`, not `gh api`.** `attach-assets-run.ts` calls the REST API with `fetch` and `GH_TOKEN`, as `lock-version-run.ts` already does: binary uploads to `uploads.github.com` and asset downloads are plain requests there, and nothing depends on the runner's `gh` version. Only `gh attestation verify` needs the CLI.
+- **Asset downloads redirect to signed storage.** `GET /releases/assets/{id}` with `Accept: application/octet-stream` answers 302 to a pre-signed URL that refuses a second credential, so the runner fetches with `redirect: "manual"` and follows the `Location` without the token.
+- **Digests may lag an upload.** The read-back of a just-filled draft retries up to three reads, two seconds apart, while any asset reports no digest; a digest that never appears refuses the publish, and a re-run replaces the assets.
+- **Keeping `attach-assets`' guard reviewable.** The new `needs.release-notes.result == 'success' &&` line sits right after `always() && !cancelled() &&`, so every pre-existing `if:` line stays byte-identical; `git diff` still shows the job as moved because the new `release-notes` job is inserted above it, so the check was a YAML compare.
+- **Deviations from the plan's interface.** `plan` writes only `action` (`create_draft` and `release_id` had no reader; `apply` re-reads the state anyway). `PlanInput` carries the tag, for the refusal messages. Same-name assets on a reused draft are deleted before upload; an asset of another name still refuses at the read-back.

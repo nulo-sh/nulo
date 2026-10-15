@@ -1,4 +1,5 @@
-import { OperationNotRecordedError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
+import { ImportedAccountUnusableError, OperationNotRecordedError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
+import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
 import { isSendCheckable, type OperationRecord, wasNeverSent } from "@/wallet/services/operation-journal/spec"
 
 export const TRANSFER_NOT_STARTED_COPY = "Couldn't start this transaction. Nothing was sent. Try again."
@@ -8,10 +9,15 @@ export const TRANSFER_NOTHING_SENT_COPY = "Nothing was sent. You can try again."
 export const TRANSFER_NOT_CONFIRMED_COPY = "Checking whether it reached the network. Don't send it again yet."
 export const TRANSFER_STATUS_UNKNOWN_COPY = "Check History before sending it again."
 
-/** `details`: the snack may offer the send's record page. */
-export type TransferFailureSnack = { label: string; sub: string; details: boolean }
+/** `details`: the snack may offer the send's record page. `checking`: the outcome is still open. */
+export type TransferFailureSnack = { checking: boolean; label: string; sub: string; details: boolean }
 
-const STATUS_UNKNOWN: TransferFailureSnack = { label: "Send status unknown", sub: TRANSFER_STATUS_UNKNOWN_COPY, details: false }
+const STATUS_UNKNOWN: TransferFailureSnack = {
+	checking: false,
+	label: "Send status unknown",
+	sub: TRANSFER_STATUS_UNKNOWN_COPY,
+	details: false,
+}
 
 /**
  * The Send screen's failure snack. The wallet's own refusals keep their words; any other failure
@@ -19,15 +25,18 @@ const STATUS_UNKNOWN: TransferFailureSnack = { label: "Send status unknown", sub
  * record (a timeout or a dropped port never names one) the status is unknown.
  */
 export function transferFailureSnack(err: unknown, record: OperationRecord | undefined): TransferFailureSnack {
-	if (err instanceof TermsAcceptanceRequiredError) return { label: "Send failed", sub: TRANSFER_TERMS_COPY, details: true }
-	if (err instanceof OperationNotRecordedError) return { label: "Send failed", sub: TRANSFER_NOT_STARTED_COPY, details: true }
+	if (err instanceof TermsAcceptanceRequiredError)
+		return { checking: false, label: "Send failed", sub: TRANSFER_TERMS_COPY, details: true }
+	if (err instanceof OperationNotRecordedError)
+		return { checking: false, label: "Send failed", sub: TRANSFER_NOT_STARTED_COPY, details: true }
+	if (err instanceof ImportedAccountUnusableError) return { checking: false, ...IMPORTED_UNUSABLE_TOAST, details: false }
 	if (record === undefined) return STATUS_UNKNOWN
-	if (isSendCheckable(record)) return { label: "Send not confirmed", sub: TRANSFER_NOT_CONFIRMED_COPY, details: true }
-	if (wasNeverSent(record)) return { label: "Send failed", sub: TRANSFER_NOTHING_SENT_COPY, details: true }
+	if (isSendCheckable(record)) return { checking: true, label: "Send not confirmed", sub: TRANSFER_NOT_CONFIRMED_COPY, details: true }
+	if (wasNeverSent(record)) return { checking: false, label: "Send failed", sub: TRANSFER_NOTHING_SENT_COPY, details: true }
 	return STATUS_UNKNOWN
 }
 
 /** `console.error` is captured for every user; an expected refusal belongs at `debug`. */
 export function transferFailureLogLevel(err: unknown): "debug" | "error" {
-	return err instanceof TermsAcceptanceRequiredError ? "debug" : "error"
+	return err instanceof TermsAcceptanceRequiredError || err instanceof ImportedAccountUnusableError ? "debug" : "error"
 }

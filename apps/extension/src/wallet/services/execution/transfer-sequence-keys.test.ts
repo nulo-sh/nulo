@@ -49,6 +49,11 @@ describe("recordedTxKeys and keysIntersect", () => {
 		expect([...recordedTxKeys(tx(TransferType.PublicToPrivate))]).toEqual(["init", "seq:0xtst:0xbob", "handshake:0xbob"])
 	})
 
+	test("a recorded transfer holds its fee spender's key; with none, no fee contract", () => {
+		expect(keysIntersect(recordedTxKeys(tx(TransferType.Public, { feeSpender: "0xFPC" })), new Set(["fpc:0xfpc"]))).toBe(true)
+		expect([...recordedTxKeys(tx(TransferType.Public))].some((k) => k.startsWith("fpc:"))).toBe(false)
+	})
+
 	test("any recorded tx may be the account's first, so it holds an initializing send", () => {
 		expect(keysIntersect(recordedTxKeys(tx(TransferType.Public)), new Set(["init"]))).toBe(true)
 	})

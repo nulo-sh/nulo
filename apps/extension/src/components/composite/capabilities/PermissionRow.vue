@@ -100,8 +100,8 @@ const hasSub = computed(() => line.value !== undefined || slots.sub !== undefine
 }
 
 .title {
+	composes: type--row-title from global;
 	font-size: 13px;
-	font-weight: 600;
 	line-height: 1.35;
 	color: var(--txt-primary);
 }
@@ -111,9 +111,9 @@ const hasSub = computed(() => line.value !== undefined || slots.sub !== undefine
 }
 
 .sub {
+	composes: type--caption from global;
 	margin-top: 2px;
 
-	font-size: 11.5px;
 	line-height: 1.4;
 	color: var(--nulo-secondary);
 }
@@ -129,16 +129,11 @@ const hasSub = computed(() => line.value !== undefined || slots.sub !== undefine
 .badge {
 	align-items: center;
 	gap: 4px;
-
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
 }
 
 /* Block-level, so its line carries no strut from the inherited font. */
 .chip {
+	composes: type--tag from global;
 	display: flex;
 	width: fit-content;
 	margin-top: 3px;
@@ -146,6 +141,7 @@ const hasSub = computed(() => line.value !== undefined || slots.sub !== undefine
 }
 
 .badge {
+	composes: type--tag from global;
 	display: inline-flex;
 	color: var(--txt-secondary);
 }

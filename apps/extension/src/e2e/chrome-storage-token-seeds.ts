@@ -28,10 +28,11 @@ const FIELD_RE = /^0x[0-9a-f]{64}$/
 /**
  * Reads the e2e seed list from `chrome.storage.session`.
  *
- * Armed builds REPLACE the production list with this, so an absent or
- * malformed blob yields an empty list — never a fallback to
- * `DEFAULT_TOKEN_SEEDS`. That is what keeps the e2e suites off the public RPC
- * endpoints the real seeds point at.
+ * An absent key yields `undefined`, so the seeder falls through to the token
+ * list, which an armed build also reads from a test-written source (and from
+ * nowhere when the test wrote none). A malformed blob yields an empty list.
+ * Neither ever reaches the production list, which is what keeps the e2e suites
+ * off the public RPC endpoints the real seeds point at.
  *
  * The blob is attacker-shaped by construction (any trusted extension page can
  * write session storage), so it is validated to exactly one sandbox-chain
@@ -41,13 +42,14 @@ const FIELD_RE = /^0x[0-9a-f]{64}$/
  * `E2E_TOKEN_SEEDS` and the negative grep in `_build-extension.yml`.
  */
 export class ChromeStorageTokenSeeds {
-	public async get(): Promise<readonly DefaultTokenSeed[]> {
+	public async get(): Promise<readonly DefaultTokenSeed[] | undefined> {
 		let raw: unknown
 		try {
 			raw = (await chrome.storage.session.get(TOKEN_SEEDS_KEY))[TOKEN_SEEDS_KEY]
 		} catch {
 			return []
 		}
+		if (raw === undefined) return undefined
 		if (!Array.isArray(raw) || raw.length !== 1) return []
 		const entry = raw[0] as Partial<DefaultTokenSeed> | null
 		if (!entry || typeof entry !== "object") return []

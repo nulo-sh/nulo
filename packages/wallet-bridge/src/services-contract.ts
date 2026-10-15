@@ -73,6 +73,8 @@ export interface IExecutionHooks {
 	onExecutionEnqueued?: () => void
 	queuedJournalId?: string
 	originKey?: string
+	/** Called once, when the send's journal record exists. */
+	onJournalCreated?: (journalId: string) => void
 }
 
 export interface IExecutionRunner {

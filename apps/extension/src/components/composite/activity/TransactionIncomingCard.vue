@@ -9,6 +9,7 @@
  * amount carries a "+" so the feed scans without reading direction.
  */
 
+import { STATUS_ICON_FILL } from "./status-icon-fill"
 import TransactionCardLayout from "./TransactionCardLayout.vue"
 
 import { balanceFormatted } from "@/utils/amount.js"
@@ -59,7 +60,7 @@ const hashSlice = computed(() => {
 		testId="tx-incoming-card"
 	>
 		<template #badge>
-			<Icon name="check-circle" size="12" color="green" />
+			<Icon name="check-circle" size="12" :color="STATUS_ICON_FILL.green" data-testid="activity-status-icon" />
 		</template>
 
 		<template #title-trailing>
@@ -68,7 +69,7 @@ const hashSlice = computed(() => {
 		</template>
 
 		<template #secondary>
-			<span v-if="hashSlice" :class="$style.hash">{{ hashSlice }}</span>
+			<span v-if="hashSlice" data-testid="activity-incoming-hash" :class="$style.hash">{{ hashSlice }}</span>
 		</template>
 	</TransactionCardLayout>
 </template>
@@ -79,12 +80,10 @@ const hashSlice = computed(() => {
 }
 
 .chip {
+	composes: type--tag from global;
 	flex-shrink: 0;
 	white-space: nowrap;
 
-	font-family: var(--font-mono);
-	font-size: 8px;
-	text-transform: uppercase;
 	color: var(--green, var(--nulo-accent));
 	background: var(--nulo-surface-low);
 	border: 1px solid var(--hairline-soft);
@@ -92,9 +91,7 @@ const hashSlice = computed(() => {
 }
 
 .hash {
-	font-family: var(--font-mono);
-	font-size: 9px;
-	text-transform: uppercase;
+	composes: type--meta from global;
 	color: var(--nulo-outline);
 }
 </style>

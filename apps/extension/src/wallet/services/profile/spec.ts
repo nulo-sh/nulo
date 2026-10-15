@@ -9,10 +9,28 @@ import type {
 	SessionWrappedSecret,
 } from "@nulo/wallet-crypto"
 import type { Restored } from "@/wallet/base"
+import type { ExecutionFence } from "./profile-deletion-state"
+import type { FeePickUpdate } from "@/utils/fee-picks"
 
 export const PROFILE_SERVICE_NAME = "profile"
 
 export type ProfileType = "password" | "passkey"
+
+/** An {@link ExecutionFence} a popup holds across several RPCs. Serials and deletion epochs restart
+ *  with the service worker, so the fence also names the worker that issued it. */
+export type RunFence = ExecutionFence & { incarnation: string }
+
+/**
+ * Passkey full-backup material from ONE authenticated ceremony: the credentialId (the backup's
+ * `master-key`) and the SEALED imported-keys DEK blob the backup carries verbatim. When the stored
+ * slot no longer opens under the ceremony's wrap key, a FRESH DEK is sealed under that key and
+ * carried instead (`dekReplaced: true`); the stored row is never modified. `unopened` counts the
+ * imported-key rows that do not open under the stored DEK, and is 0 when it was replaced.
+ */
+export type PasskeyBackupMaterial = { credentialId: string; dekSealed: string; dekReplaced: boolean; unopened: number }
+
+/** A finalized restore: the opened profile, and the fence of the session its finalize opened. */
+export type FinalizedRestore = { profile: ProfileInfo; fence: RunFence }
 
 /**
  * The secret half of a full-backup `restore()`, discriminated by profile type.
@@ -101,6 +119,14 @@ export type Profile = Omit<ProfileInfo, "recoveryMode"> & {
 				credentialId: string
 		  }
 	)
+
+/** What the profile RPCs return, never the stored row: a row carries sealed key material.
+ *  `recoveryMode` is present only when true, so a persisted identity never carries the key. */
+export function toProfileInfo(profile: Pick<ProfileInfo, "id" | "name" | "type">, recoveryMode: boolean): ProfileInfo {
+	const info: ProfileInfo = { id: profile.id, name: profile.name, type: profile.type }
+	if (recoveryMode) info.recoveryMode = true
+	return info
+}
 
 /** Mint a fresh 128-bit Web-Crypto incarnation generation (32 hex chars). */
 export function mintPxeGeneration(): string {
@@ -240,6 +266,18 @@ export type Methods = {
 	getSessionHandle(): string | undefined
 
 	/**
+	 * Captures the fence of the open session, for a popup run that spans several RPCs. Throws
+	 * "Wallet locked" while no session is open or its profile is being deleted.
+	 */
+	captureRunFence(): RunFence
+
+	/**
+	 * Throws `SessionEndedError` unless `fence` names the open session of this worker, and
+	 * the deletion error once a delete of its profile has begun.
+	 */
+	assertRunFence(fence: RunFence): void
+
+	/**
 	 * Locks active profile, closing active session. Given a `handle`, closes nothing while a
 	 * different session is open.
 	 */
@@ -256,6 +294,12 @@ export type Methods = {
 	 * @param newName New display name.
 	 */
 	changeProfileName(id: string, newName: string): ProfileInfo
+
+	/**
+	 * Saves one fee-method pick, or drops every pick naming a deleted FPC, in the profile's own keys.
+	 * Resolves `false`, writing nothing, once the profile is gone or its deletion has begun.
+	 */
+	saveFeePick(profileId: string, update: FeePickUpdate): boolean
 
 	/**
 	 * Changes profile password and returns the updated profile.
@@ -319,42 +363,6 @@ export type Methods = {
 	exportPlain(id: string, password?: string, credentialData?: PasskeyCredentialData): string
 
 	/**
-	 * Atomic discriminated export for the Full-Backup builder: master key, recovery-phrase
-	 * entropy, AND the imported-keys DEK from ONE authenticated pass, so the backup fields can
-	 * never come from different row states (no cross-call races). Password profiles only. An
-	 * unrecoverable DEK slot exports a FRESH DEK (`dekReplaced: true`): imported keys and local
-	 * chain state are lost, but the backup stays the repair path for a profile in recovery mode.
-	 * @param id Profile id.
-	 * @param password Password to decrypt the secrets.
-	 */
-	exportBackupMaterial(
-		id: string,
-		password: string,
-	): { masterKey: string; entropy: string; importedKeysDek: string; dekReplaced: boolean }
-
-	/**
-	 * Passkey counterpart of `exportBackupMaterial`: the credentialId (the backup's `master-key`)
-	 * and the SEALED imported-keys DEK blob the backup carries verbatim, from ONE authenticated
-	 * ceremony. When the stored slot no longer opens under the ceremony's wrap key, a FRESH DEK
-	 * is sealed under that key and carried instead (`dekReplaced: true`); the stored row is never
-	 * modified.
-	 * @param id Profile id.
-	 * @param credentialData The in-page WebAuthn ceremony's result for this profile's credential.
-	 */
-	exportPasskeyBackupMaterial(
-		id: string,
-		credentialData: PasskeyCredentialData,
-	): { credentialId: string; dekSealed: string; dekReplaced: boolean }
-
-	/**
-	 * The profile's SEALED imported-keys DEK blob, verbatim (ciphertext — safe to hand out).
-	 * Passkey full backups carry THIS as their `imported-keys-dek-sealed` field; the restore
-	 * ceremony re-derives the same PRF wrap key to open it.
-	 * @param id Profile id.
-	 */
-	getProfileDekSealed(id: string): string
-
-	/**
 	 * Returns the 24-word recovery phrase, re-encoded from the profile's stored entropy after
 	 * the words↔master pairing check (fails closed on a tampered row).
 	 * @param id Profile id.
@@ -404,11 +412,13 @@ export type Methods = {
 	 *
 	 * Emits `onActiveProfileChanged` once the session is up. Idempotent: if
 	 * the session is already active for `id`, returns without re-opening.
+	 * The fence is captured under the same lock hold that opened the session, so it can only
+	 * name this restore's profile, never a same-id successor.
 	 *
 	 * @param id Profile id (from the `restore` return value).
 	 * @param password Password (password profiles only).
 	 */
-	finalizeRestore(id: string, password?: string): ProfileInfo
+	finalizeRestore(id: string, password?: string): FinalizedRestore
 }
 
 export type Events = {

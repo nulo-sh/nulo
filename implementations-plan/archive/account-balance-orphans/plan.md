@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: Token-balance rows carry their token's identity triple, one shared predicate gates every raw-row decision, and account removal purges balances through a registered awaited subscriber. Live in `apps/extension/src/wallet/services/token-balance/` (`balance-identity.ts`, `service.ts`, `reconcile-pairs.ts`) and `apps/extension/src/wallet/services/account/service.ts`.
-- **Open items**: route the `svc()` `as never` gotcha to `apps/extension/tests/COMPOSITION-TESTS.md`, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: route the `svc()` `as never` gotcha to `apps/extension/tests/COMPOSITION-TESTS.md`, tracked in #185.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

@@ -5,6 +5,8 @@ import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue
 
 /** Utils */
 import { AuthRegistryServiceClient, MAX_REVOKES_PER_TX } from "@/wallet/services/auth-registry/client"
+import { OperationJournalServiceClient } from "@/wallet/services/operation-journal/client"
+import { getRandomHex } from "@/wallet/utils"
 import { classifyCancellableRejection } from "@/popup/utils/cancellable-rejection"
 
 /** Composables */
@@ -13,6 +15,8 @@ import { useToast } from "@/composables/toast"
 import { useAuthRegistryStatus } from "@/composables/useAuthRegistryStatus"
 import { refuseRepeatEnter, usePopupEntity } from "@/composables/usePopupEntity"
 import { usePopupStack } from "@/composables/usePopupStack"
+import { useSendStageLine } from "@/composables/useSendStageLine"
+import { useWalletTxEstimates } from "@/composables/useWalletTxEstimates"
 const { openToast } = useToast()
 
 /** Store */
@@ -36,12 +40,37 @@ const registry = useAuthRegistryStatus(authwitsService, () =>
 		: undefined,
 )
 const { isRegistryEnabled, isLoading, error } = registry
-onBeforeUnmount(() => registry.dispose())
+const journalService = new OperationJournalServiceClient()
+const stage = useSendStageLine({ sendStarted: authwitsService.onSendStarted, journal: journalService })
+const stageLine = stage.line
 
 const authwits = ref([])
 const chunkedAuthwits = ref([])
 const chunksCount = computed(() => chunkedAuthwits.value.length)
 const isErrorOccurred = computed(() => !!error.value)
+
+const estimates = useWalletTxEstimates({
+	estimate: (p, token, flowKey) => authwitsService.estimateRevokeFee(p.networkId, p.account, p.ids, p.feeSettings, token, flowKey),
+	cancel: (token) => authwitsService.cancelFeeEstimate(token),
+	paramsOf: (i) => {
+		const ch = chunkedAuthwits.value[i]
+		if (!props.show || !ch?.feeSettings || !appStore.network || !appStore.account) return undefined
+		return { networkId: appStore.network.id, account: appStore.account.address, ids: ch.ids, feeSettings: ch.feeSettings }
+	},
+	keys: () => chunkedAuthwits.value.map((_, i) => i),
+	scope: () => appStore.scopeEpoch,
+	onError: (err) => {
+		console.error("Revoke fee estimate failed", { error: err })
+		openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
+	},
+})
+const { results: feeEstimates, estimating: estimatingFees } = estimates
+
+/** Synchronous with the input: Confirm never reads an estimate made for the settings just replaced. */
+function setChunkFee(i, settings) {
+	chunkedAuthwits.value[i].feeSettings = settings
+	estimates.refresh(i)
+}
 
 function chunkAuthwits() {
 	chunkedAuthwits.value = authwits.value
@@ -60,11 +89,7 @@ function chunkAuthwits() {
 		}))
 }
 
-const isAllowedToExecute = computed(() => {
-	if (chunkedAuthwits.value.filter((ch) => !ch.feeSettings).length) return
-
-	return true
-})
+const isAllowedToExecute = computed(() => chunkedAuthwits.value.every((ch) => ch.feeSettings) && estimates.landed() && !estimates.short())
 
 async function handleRevokeAuthwits() {
 	// Full-lifetime submit latch, handler-owned: every route (click, any future caller) self-checks
@@ -76,6 +101,7 @@ async function handleRevokeAuthwits() {
 	try {
 		await revokeChunks()
 	} finally {
+		stage.stop()
 		isLoading.value = false
 	}
 
@@ -98,7 +124,9 @@ async function revokeChunks() {
 	for (const ch of chunkedAuthwits.value) {
 		try {
 			ch.status = "progress"
-			await authwitsService.revokeAuthwits(appStore.network.id, appStore.account.address, ch.ids, ch.feeSettings)
+			const correlation = getRandomHex(16)
+			stage.follow(correlation)
+			await authwitsService.revokeAuthwits(appStore.network.id, appStore.account.address, ch.ids, ch.feeSettings, correlation)
 			ch.status = "success"
 		} catch (err) {
 			if (classifyCancellableRejection(err) === "silent") {
@@ -128,12 +156,22 @@ usePopupEntity(() => props.show, {
 		chunkAuthwits()
 	},
 	onHide: () => {
+		estimates.cancelAll()
 		authwits.value = []
 		chunkedAuthwits.value = []
 		registry.reset()
+		stage.stop()
 
 		authwitsService.disconnect()
+		journalService.disconnect()
 	},
+})
+
+onBeforeUnmount(() => {
+	registry.dispose()
+	stage.dispose()
+	estimates.dispose()
+	journalService.disconnect()
 })
 </script>
 
@@ -142,7 +180,7 @@ usePopupEntity(() => props.show, {
 		<PopupCard :displaceIdx="depth">
 			<PopupHeader @onClose="emit('onClose')" closable>
 				<template #title>
-					<Text size="14" weight="600" color="primary">Revoke authwits</Text>
+					<Text variant="title-page" color="primary">Revoke authwits</Text>
 				</template>
 			</PopupHeader>
 
@@ -182,9 +220,9 @@ usePopupEntity(() => props.show, {
 					>
 						<Flex align="center" justify="between" wide :class="$style.header">
 							<Flex align="end" gap="4">
-								<Text v-if="chunksCount > 1" size="13" color="primary"> {{ `#${i + 1}` }} </Text>
-								<Text size="13" color="primary">Revoke authwits</Text>
-								<Text v-if="ch.count > 1" size="12" color="tertiary"> {{ `(${ch.count})` }} </Text>
+								<Text v-if="chunksCount > 1" variant="row-title" color="primary" :class="$style.chunk_title_size"> {{ `#${i + 1}` }} </Text>
+								<Text variant="row-title" color="primary" :class="$style.chunk_title_size">Revoke authwits</Text>
+								<Text v-if="ch.count > 1" variant="meta" color="tertiary"> {{ `(${ch.count})` }} </Text>
 							</Flex>
 							<Tooltip position="end">
 								<RowAction
@@ -196,7 +234,7 @@ usePopupEntity(() => props.show, {
 								</RowAction>
 
 								<template #content>
-									<Text size="12" color="secondary">View authwits content</Text>
+									<Text color="secondary">View authwits content</Text>
 								</template>
 							</Tooltip>
 							
@@ -206,12 +244,11 @@ usePopupEntity(() => props.show, {
 							:profile="appStore.profile"
 							:network="appStore.network"
 							:account="appStore.account"
+							:feeEstimate="feeEstimates[i] ?? null"
+							:isEstimating="!!estimatingFees[i]"
+							fallsBack
 							:modelValue="ch.feeSettings"
-							@update:modelValue="
-								$event => {
-									ch.feeSettings = $event
-								}
-							"
+							@update:modelValue="($event) => setChunkFee(i, $event)"
 						/>
 
 						<div v-if="ch.status === 'progress'" :class="[$style.status_line, $style.runner]" />
@@ -230,7 +267,7 @@ usePopupEntity(() => props.show, {
 					<Tooltip v-if="ch.error && chunksCount > 1" side="top">
 						<Flex align="center" gap="6" style="margin-top: -8px;">
 							<Icon name="info" size="12" color="red" />
-							<Text size="12" weight="500" color="secondary">
+							<Text variant="body" color="secondary">
 								Finished with an error
 							</Text>
 						</Flex>
@@ -255,10 +292,14 @@ usePopupEntity(() => props.show, {
 						Revoke
 					</Button>
 
+					<div role="status" aria-live="polite" data-testid="authwit-stage-line">
+						<Text v-if="stageLine" variant="body" color="secondary">{{ stageLine }}</Text>
+					</div>
+
 					<Tooltip v-if="isErrorOccurred" side="top" wide>
 						<Flex align="center" justify="start" gap="6" wide>
 							<Icon name="info" size="12" color="red" />
-							<Text size="12" weight="500" color="secondary">
+							<Text variant="body" color="secondary">
 								An error occurred
 							</Text>
 						</Flex>
@@ -286,6 +327,10 @@ usePopupEntity(() => props.show, {
 	.header {
 		padding: 12px;
 	}
+}
+
+.chunk_title_size {
+	font-size: 13px;
 }
 
 .status_line {

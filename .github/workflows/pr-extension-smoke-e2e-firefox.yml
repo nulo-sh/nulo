@@ -8,8 +8,10 @@ on:
     types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review]
 
 concurrency:
-  group: pr-extension-smoke-e2e-firefox-${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  # One queue per head commit, so a late run of an older push can neither cancel nor replace the
+  # current head's run; pr-supersede.yml cancels the runs of heads the pull request moved past.
+  group: pr-extension-smoke-e2e-firefox-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
 
 permissions:
   contents: read
@@ -25,10 +27,22 @@ jobs:
       pull-requests: read
     outputs:
       smoke-surface: ${{ steps.override.outputs.full || steps.filter.outputs.smoke-surface }}
+      label-hit: ${{ steps.live.outputs.label-hit }}
+      base: ${{ steps.live.outputs.base }}
+      read-attempt: ${{ steps.live.outputs.read-attempt }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - name: Read the live labels and head
+        id: live
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/ci-cd/live-labels.sh e2e:extension-smoke e2e:smoke
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
@@ -48,6 +62,8 @@ jobs:
               - 'packages/resolve-asset/package.json'
               - 'packages/third-party-notices/src/**'
               - 'packages/third-party-notices/package.json'
+              - 'packages/token-list/src/**'
+              - 'packages/token-list/package.json'
               - 'packages/third-party-notices/texts/**'
               - 'packages/wallet-bridge/src/**'
               - 'packages/wallet-bridge/package.json'
@@ -84,15 +100,19 @@ jobs:
       - id: gate
         env:
           EVENT: ${{ github.event_name }}
-          BASE: ${{ github.base_ref }}
-          DRAFT: ${{ github.event.pull_request.draft }}
+          BASE: ${{ needs.changes.outputs.base }}
           SMOKE: ${{ needs.changes.outputs.smoke-surface }}
-          LABEL_HIT: ${{ contains(github.event.pull_request.labels.*.name, 'e2e:extension-smoke') || contains(github.event.pull_request.labels.*.name, 'e2e:smoke') }}
+          LABEL_HIT: ${{ needs.changes.outputs.label-hit }}
         run: |
-          # A draft has nothing to say to this lane, and its aggregator passes when skipped; `ready_for_review` re-runs it.
-          if [ "$DRAFT" = "true" ]; then
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          elif [ "$EVENT" = "workflow_dispatch" ] \
+          case "$LABEL_HIT" in
+            true | false) ;;
+            *) echo "::error::changes.outputs.label-hit is not true/false: '$LABEL_HIT'"; exit 1 ;;
+          esac
+          if [ "$EVENT" = pull_request ] && [ -z "$BASE" ]; then
+            echo "::error::changes.outputs.base is empty"
+            exit 1
+          fi
+          if [ "$EVENT" = "workflow_dispatch" ] \
              || [ "$BASE" = "main" ] \
              || [ "$LABEL_HIT" = "true" ] \
              || [ "$SMOKE" = "true" ]; then
@@ -102,12 +122,21 @@ jobs:
           fi
 
   smoke:
-    name: Run
+    name: Run / shard ${{ matrix.shard.id }}
     needs: [decide]
     if: needs.decide.outputs.run == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - { id: "1/3", label: "1-of-3" }
+          - { id: "2/3", label: "2-of-3" }
+          - { id: "3/3", label: "3-of-3" }
     uses: ./.github/workflows/_extension-smoke-e2e.yml
     with:
       ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      shard: ${{ matrix.shard.id }}
+      shard_label: ${{ matrix.shard.label }}
       browser: firefox
 
   status:
@@ -131,6 +160,12 @@ jobs:
             false) want="skipped" ;;
             *) echo "::error::decide.outputs.run is not true/false: '$RUN'"; exit 1 ;;
           esac
+          # A partial re-run carries an earlier attempt's gate over, so a skip stands only on labels
+          # read in this attempt.
+          if [ "$RUN" = false ] && [ "${{ needs.changes.outputs.read-attempt }}" != "${{ github.run_attempt }}" ]; then
+            echo "::error::the suites were skipped on labels read at attempt '${{ needs.changes.outputs.read-attempt }}', not this one: re-run all jobs"
+            exit 1
+          fi
           if [ "${{ needs.smoke.result }}" != "$want" ]; then
             echo "::error::gate said run=$RUN, so the smoke suite must be '$want' — got '${{ needs.smoke.result }}'"
             exit 1
