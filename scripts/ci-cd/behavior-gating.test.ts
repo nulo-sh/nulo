@@ -223,7 +223,6 @@ describe("PR concurrency", () => {
 		).toEqual(PR_WORKFLOWS.map((file) => `.github/workflows/${file}`).sort())
 	})
 
-	// The other: it acts on a base change alone, and only on the e2e lanes' runs of the event's head.
 	test("pr-retarget.yml re-runs the e2e lanes from one script-only job with exactly the scope it needs", () => {
 		const wf = workflow("pr-retarget.yml")
 		expect(wf.on).toEqual({ pull_request: { types: ["edited"] } })
@@ -234,8 +233,7 @@ describe("PR concurrency", () => {
 		expect(job.if).toBe(
 			"github.event.changes.base && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'",
 		)
-		// Two base changes in a row each re-run what they list; a group would let a skipped job of a
-		// title edit replace a waiting one.
+		// A concurrency group would let a title edit's run replace a waiting retarget run.
 		expect(wf.concurrency).toBeUndefined()
 		expect(job.concurrency).toBeUndefined()
 		expect(job.steps).toHaveLength(1)

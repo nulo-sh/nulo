@@ -55,7 +55,6 @@ jobs:
               sleep "$RETRY_PAUSE"
             done
           }
-          # Prints "<attempt> <status>".
           read_run() {
             local run
             run=$(api "repos/$REPO/actions/runs/$1") || return 1

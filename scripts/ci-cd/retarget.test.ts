@@ -46,7 +46,6 @@ interface Scenario {
 	rawLists?: Record<string, string>
 }
 
-/** The `gh` shim: answers from files in its own directory and appends each call to `calls`. */
 const SHIM = String.raw`#!/usr/bin/env bash
 dir=$(dirname "$0")
 call="$*"

@@ -174,6 +174,10 @@ One PR from `worktree-ci-followups-5` against `dev`; `code_review: off`. Merge `
 | OP2 | `CI.md` said the job "goes red naming the run"; on a timeout the final summary never prints | Fixed: the text names the `cancelled <id> <file>` lines for that case |
 | OP3 | A listing that trails a re-run started before the base change would count that stale attempt as done (plausible-unverified, the I4 class) | Known limit, folded into the close-out issue; no code |
 
+**Round 2 (Codex resume, verify).** **Approve**, no findings: CX1's disposition holds under `strict: true` (no merge path into `main` keeps the old checks); the four tests and the doc fixes hold.
+
+**Round 3 (Codex resume).** Rounds 1-2 omitted the comment-audit rule of [§ Post-implementation standard](../README.md#post-implementation-standard), so round 3 carried both rules verbatim. **Approve with fixes**, comments only; no correctness or security finding. Accepted: the harness header (the shim lives in, not runs from, a fresh directory), the narrating `read_run` and shim comments and B1's lead comment deleted, B1's concurrency comment cut to its reason. Rejected: replacing the `api()` comment (it decodes the retry regex and mirrors supersede's deliberate copy), the test-file headers (the repo's convention for these files), the pre-existing supersede comment, and a reword of `E2E_LANES`'s doc of equal length. The loop stops here: three rounds, no material finding left.
+
 ## Seeds (drafts; the orchestrator runs the implementer)
 
 `/goal Phases 1-2 of implementations-plan/ci-followups-5/plan.md marked ✓, each backed by its gate's output in the transcript; the Codex loop converged; the PR exists with the close-out as its final commits; bun run test:ci-gating and bun run lint exit 0.`

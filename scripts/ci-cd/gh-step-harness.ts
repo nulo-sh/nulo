@@ -1,7 +1,7 @@
 /**
  * Runs a workflow step's inline script the way the runner does (`bash -e -o pipefail`), with `gh`
- * replaced by a shim. The shim runs from a fresh directory that `setup` fills with its answers, and
- * must log each call to `calls` there.
+ * replaced by a shim placed in a fresh directory that `setup` fills with its answers. The shim must
+ * log each call, one per line, to `calls` beside it.
  */
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
