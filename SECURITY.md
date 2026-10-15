@@ -72,7 +72,9 @@ existing keys and profiles.
   `packages/aztec-runtime/src/account/artifacts/SchnorrAccount.json` and pinned by digest +
   class id, precisely so that bumping `@aztec-labs/accounts` (which rebuilds its own copy on any
   toolchain change) cannot move a derived address. Editing those bytes rotates the address
-  regime and ships only as a new extension major.
+  regime: on the owner's recorded decision, as an appended regime entry with the artifact's
+  provenance and regenerated vectors, shipped in place off Mainnet and only as a new extension
+  major on Mainnet (CLAUDE.md § Account-address freeze).
 
 Any PR that touches these must include:
 1. Explicit mention of the invariant being changed.

@@ -161,6 +161,16 @@ describe("AccountService import/export", () => {
 		expect(body).toContain("nulo-account-export")
 	})
 
+	test("export refuses an imported account its key no longer derives, as after a regime rotation", async () => {
+		const { NuloAccount } = await import("@nulo/aztec-runtime/account")
+		const { account } = await build()
+		await account.importAccount("p1", CHAIN, exportFile(), addrFor(SK), "")
+		vi.mocked(NuloAccount.fromSigningKey).mockResolvedValueOnce({ address: { toString: () => "0xROTATED" } } as never)
+		const refusal = account.exportAccount("p1", CHAIN, addrFor(SK), "correct-pass", false)
+		await expect(refusal).rejects.toBeInstanceOf(ImportedAccountUnusableError)
+		await expect(refusal).rejects.toThrow(/address mismatch/)
+	})
+
 	test("the key row is purged when its chain is cleared", async () => {
 		const { api, account } = await build()
 		await account.importAccount("p1", CHAIN, exportFile(), addrFor(SK), "")
