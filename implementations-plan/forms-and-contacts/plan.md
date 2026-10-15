@@ -484,6 +484,7 @@ Each entry: the choice, the rejected alternatives and why. "C" is Codex, "O" the
 - D-arc3b-4 (#216): each call site passes `#right` under `v-if`, without its Transition; `Input` renders the note as the fallback. Rejected: dropping only the Transition and keeping the inner `v-if` (works through the comment-only fallback, but rests on how Vue judges an empty slot rather than on whether one is passed); filtering slot vnodes (D14).
 - D-arc3b-5 (#229): the token sits in the `colors` group, so the existing parity, palette-drift and Colors-story lists carry it with no list edit; `theme-contrast.ts` learns the toward-black mix so the test resolves `Button.vue`'s hover text, not a hand-computed hex.
 - D-arc3b-6 (#211): the grey P11-04 removes moved with #426 from the tx page into `TxHashRow`, so that is where it goes; the journal's To link copies it by page 4's OA-6 A ("exactly as the Tx hash row in Details"), so it follows, composing `detail_value_mono` for its primary (R3b-C2). Rejected: leaving the To link grey (breaks OA-6 A's signed equality on the journal).
+- D-arc3b-7 (close-out merge of `dev`): #439 added a source pin that every Details link composes `hero_link` or `detail_link` on a `composes:` line of its own, so the journal's To link composes its two shared classes on two lines; the rendered classes are the same. The ring itself (`:focus-visible`, accent) now draws on the To link too.
 
 ### Competing outline (cheapest-first), sent to both audits
 
