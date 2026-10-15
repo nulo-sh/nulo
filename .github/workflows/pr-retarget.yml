@@ -108,7 +108,9 @@ jobs:
               continue
             fi
             # A run in flight may have read the old base. HTTP 409: it finished meanwhile.
-            if ! api -X POST "repos/$REPO/actions/runs/$id/cancel" >/dev/null && ! grep -q 'HTTP 409' "$err"; then
+            if api -X POST "repos/$REPO/actions/runs/$id/cancel" >/dev/null; then
+              echo "cancelled $id $file"
+            elif ! grep -q 'HTTP 409' "$err"; then
               fail "could not cancel run $id ($file)" "$id $file"
               continue
             fi

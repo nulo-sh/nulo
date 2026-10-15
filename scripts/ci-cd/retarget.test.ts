@@ -227,5 +227,11 @@ describe("pr-retarget.yml", () => {
 		})
 		expect(result.code).toBe(0)
 		expect(result.posts).toEqual(["cancel 10", "cancel 30", "rerun 30", "rerun 10"])
+		expect(result.stdout.split("\n").filter((line) => /^(cancelled|re-ran) /.test(line))).toEqual([
+			`cancelled 10 ${SMOKE}`,
+			`cancelled 30 ${NETWORK}`,
+			`re-ran 30 ${NETWORK}`,
+			`re-ran 10 ${SMOKE}`,
+		])
 	})
 })
