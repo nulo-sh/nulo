@@ -1,8 +1,8 @@
 ---
 plan: forms-and-contacts
 tier: mid
-status: approved; arcs 1 and 2 merged (#255, #282); arc 3a building after page 11; arc 3b waits on the page 11 re-asks
-issues: "#184, #205, #210, #212, #214 (arc 1); #224, #225 (arc 2); #151, #215, #210 (FA-8), #214 (FA-10) (arc 3a); #151, #211, #216, #229 (arc 3b)"
+status: completed; arcs 1, 2 and 3a merged (#255, #282, #435), arc 3b and the close-out in #452
+issues: "#184, #205, #210, #212, #214 (arc 1); #224, #225 (arc 2); #151, #215, #210 (FA-8), #214 (FA-10) (arc 3a); #151, #428, #211, #216, #229 (arc 3b)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -13,6 +13,26 @@ budget: recon 3 explorers (sonnet); dual audit (Codex gpt-6.1-sol high + one Opu
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-15.
+- **Status:** completed in four PRs against `dev`: arc 1 [#255](https://github.com/nulo-sh/nulo/pull/255), arc 2 [#282](https://github.com/nulo-sh/nulo/pull/282), arc 3a [#435](https://github.com/nulo-sh/nulo/pull/435), arc 3b with this close-out [#452](https://github.com/nulo-sh/nulo/pull/452), awaiting the orchestrator's merge; that merge closes this plan.
+- **Shipped:**
+  - Arc 1 (#255): the logger level gate (#184), config persist order (#205), form popup depth (#210), the logs newline (#212), trimmed account and FPC name checks (#214).
+  - Arc 2 (#282): held-read pins for the six list reducers and one shared contact reducer (#224); the shared loader scrim and shake (#225); no visible change, proven per shell.
+  - Arc 3a (#435): the import's fenced sender, its own clients and a two-minute Lock hold with the "Lock anyway" confirm (#151); shakes and shimmers stop under Disable animations and reduced motion (#215); a re-opened popup on top (#210, FA-8 A); trimmed network names (#214, FA-10 A).
+  - Arc 3b (#452): "Importing contacts · N of M", one snack relabelled in place through `updateToast` (#151, P11-06b A); a second import refused, the menu item disabled, the selection slot owned by its selection (#428, P11-07b C); one message at a time at a name cap on eight fields (#216, P11-02b A); `--btn-destructive` #c62828 with an 18% hover toward black, 5.19:1 and 6.96:1 in both themes (#229, P11-10b A); the Tx hash and To links in the primary colour and one bottom space on the three detail pages (#211); a replaced snack hands keyboard focus back (A3b-O1).
+  - `lessons.md`: one line promoted, CodeQL's ReDoS query (it bit arc 3a's test and this arc's contrast helper); the Pinia proxy lesson stays in [lessons/phase-3.md](lessons/phase-3.md), the file being near its budget.
+- **Orchestrator records:** D-orch-1 to D-orch-7 (§ Decision ledger).
+- **Dropped, rejected, superseded:**
+  - #210's per-owner reducer policies and #224's race: kept as they are by the owner (FA-9 B, P11-15); pinned.
+  - FA-1, FA-1b, FA-4 and P11-02's first picks: superseded by the re-asks' answers (D-orch-7).
+  - #205's three hand-copied toggle bindings stay separate (D6).
+  - P11-13b's two-imports wording: unreachable in one window since P11-07b C; the code keeps its plural branch.
+- **Known limits:** #447 (a late stop snack from an import a lock released can replace the next import's line).
+- **Open items:** #448 (FA-12), #449 (FA-13), #450 (FA-14) and #451 (P11-13b), each `owner-decision`, shipped in its "what ships now" form. The issues earlier arcs filed (#256 to #259, #283, #284) are closed.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
+
 # Forms and contacts: validators, stack depth, logger, toggles, shells, contacts import, motion
 
 Twelve issues on popup forms, contacts and presentation primitives, in three arcs and a close-out, as the lane map groups them.
@@ -20,7 +40,7 @@ Twelve issues on popup forms, contacts and presentation primitives, in three arc
 - **Arc 1 (no owner decision; ships first, as its own PR, once the orchestrator records its three visible corrections as it recorded #210).** Pages stop sending debug log lines the worker would drop (#184). A failed config write leaves memory, listeners and the toggle on the stored value (#205). Form popups give their card its depth (#210). The logs viewer ends every line with a newline, so the first live line gets its own line (#212). Account and FPC name checks compare names without their outer spaces (#214).
 - **Arc 2 (decision-free; waits on `account-session-life` arc 3 for `export/full.vue`).** A test helper holds a list read and injects service events; all six reducers are exercised at that seam with today's behaviour pinned, and the three identical contact reducers become one (#224). `GlobalLoader` uses the scrim token it duplicates and the export page's shake uses the shared shake; the snack card stays local because no shared primitive matches it (#225). No visible change, proven.
 - **Arc 3a (page 11 signed 2026-10-14; D-orch-6).** A contacts import a person cannot interrupt by accident, minus its progress line (#151, P11-01 with FA-2 A, FA-3 A, FA-7 B, FA-11 A); shakes and shimmers stop under Disable animations and reduced motion (#215, P11-05, FA-6 A); a re-opened popup goes on top and every popup under it sits back (#210, FA-8 A); network names follow the accounts and FPCs trim rule (#214, FA-10 A).
-- **Arc 3b (waits on the page 11 re-asks P11-02b, P11-06b, P11-07b, P11-10b and on `incoming-transfers` arc 3a).** The import's progress line and the rule for two imports at once (#151); the name field at the cap (#216); a darker red for the destructive buttons (#229); one link colour and one bottom spacing on detail pages (#211, measurements re-checked after the font remake).
+- **Arc 3b (re-asks answered, D-orch-7; `incoming-transfers` arc 3a is in).** The import's progress snack, updated in place, and a second import refused while one runs (#151, P11-06b A, P11-07b C; closes #428); one message at a time at the name cap (#216, P11-02b A); a darker red with a hover 18% toward black (#229, P11-10b A); one Tx hash link colour and one bottom spacing on detail pages (#211, re-checked after the font remake). The close-out rides in the same PR.
 
 Recon: [recon.md](recon.md). Owner questions beyond page 11: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
@@ -47,9 +67,9 @@ Recon: [recon.md](recon.md). Owner questions beyond page 11: [OWNER-ASKS.md](OWN
 | P11-01; FA-2 A, FA-3 A, FA-7 B, FA-11 A (P11-08, -09, -13, -17) | 3a: 3.2-3.3 (#151, the running state and its e2e) | signed; the confirm's import wording is P11-13b (OWNER-ASKS.md, shipped as recommended) |
 | P11-05 veto list, FA-6 A (P11-12) | 3a: 3.7 (#215) | signed |
 | FA-8 A, FA-10 A (P11-14, P11-16) | 3a: 3.8 (#210), 3.9 (#214) | signed |
-| P11-06b, P11-07b (re-asks of FA-1, FA-1b) | 3b: the progress line, the overlap rule | re-ask open |
-| P11-02b, P11-10b (re-asks of P11-02, FA-4) | 3b: 3.4 (#216), 3.5 (#229) | re-ask open |
-| P11-04 approve, with its font re-check; `incoming-transfers` arc 3a | 3b: 3.6 (#211) | sibling arc |
+| P11-06b A, P11-07b C (re-asks of FA-1, FA-1b) | 3b: 3.10 the snack, 3.11 the refusal | signed 2026-10-14 22:01Z (D-orch-7) |
+| P11-02b A, P11-10b A (re-asks of P11-02, FA-4) | 3b: 3.4 (#216), 3.5 (#229) | signed 2026-10-14 22:01Z (D-orch-7) |
+| P11-04 approve, with its font re-check; `incoming-transfers` arc 3a | 3b: 3.6 (#211) | signed; #426 on dev (b886fda6) |
 | FA-9 B (P11-15) | nothing; SR3 comment | signed |
 
 Sibling gates: phase 3.6 starts on a base that contains `send-queue-activity` arc 3 (R1, `journal/[id].vue`) and `incoming-transfers` arc 3a (#142's detail rows). Arc 2's and R3's gates were met (D-orch-4; #255).
@@ -103,6 +123,14 @@ Sibling gates: phase 3.6 starts on a base that contains `send-queue-activity` ar
 - F28. G1 (#169) merged 2026-10-10: `e2e:agent` is parallel-safe across worktrees, so the host `flock` is no longer needed.
 - F30. `Skeleton.vue` (`packages/design/src/ui/Skeleton.vue:24-50`) and the AmountCard and fee-shared `.skeleton` rules share gradient, `200% 100%` size and `1.5s infinite`; `Skeleton` adds `flex-shrink: 0` and `aria-hidden`, and the resolver already serves it (`apps/extension/scripts/design-resolver.ts:29`; `TokenCard`, `TokensView` use it).
 - F29. Settings → Lock's "Lock now" is a `SettingItem`, which has a `disabled` prop (opacity 0.5, inert; `SettingItem.vue:51, 184-187`); the header chip is a bare `<button>` with no disabled style (`Header.vue:276-286, 453-475`).
+
+**Arc 3b re-check at `21d806e3` (the tree wins; also in `lessons/phase-3.md`).**
+- F31. The toast API cannot update a snack in place: `openToast` always mints a new id (`packages/design/src/composables/toast.ts:60-65`) and `ToastManagerBase` keys its card by id (`ToastManagerBase.vue:137, 168`), so a re-open replays the entrance (the shots worker's finding). Its `show()` clears the hover and focus flags on every toast change (`:52-56`), and × returns focus only while `focusWithin` holds (`:99-104`). An info snack sits in the `role="alert"` region with a × (`:157-189`).
+- F32. #428 holds: "Import contacts" has no `disabled` (`settings/contacts/index.vue:152`); `importContacts`'s `finally` nulls `cacheStore.importPromise` (`useContactImportExport.ts:194-200`), the one slot `ImportContactsPopup` settles (`ImportContactsPopup.vue:113-119`); the popup's close clears the staged rows (`:138-145`). The lock seal and an opened session clear the guard (`locked-state.ts:29, 59`) while a released run may still await the PXE, so with only a disabled item that run's `finally` can still null the next run's slot after an unlock.
+- F33. `DropdownItem`'s `disabled` sets `aria-disabled`, drops `data-dropdown-item` and the tab stop, and draws at opacity 0.5 with `pointer-events: none` (`components/ui/Dropdown/DropdownItem.vue:9-14, 45-49`); "Export contacts" uses it.
+- F34 (#216). Eight capped name fields pass a message in `Input`'s right slot inside an always-present `<Transition name="fade">`: Contact (`ContactFormFields.vue:34-41`), New and Edit account (`NewAccountPopup.vue:130-134`, `EditAccountPopup.vue:111-115`), New and Edit FPC (`NewFpcPopup.vue:155-159`, `EditFpcPopup.vue:253-257`), New and Edit network (`NewNetworkPopup.vue:167-171`, `EditNetworkPopup.vue:123-127`) and Edit profile (`EditProfilePopup.vue:153-158`, two messages). The endpoint labels and the account import's name are capped with no right slot; the password fields and `ProfileNameField` have no label row. `Input.vue:310-323` renders the note `v-if` and the slot `v-else`. Vue renders a slot's fallback when the slot is absent or renders only comments, so a Transition-wrapped slot is never empty and D14's fallback alone would hide the note on all eight (the shots worker's finding 1).
+- F35 (#229). `.wrapper.destructive`'s hover mixes `--red` 18% toward `--txt-primary` (`Button.vue:292-294`), which lightens it in the dark theme; `cta_destructive`'s hover is `opacity: 0.9` (`:408-410`); `--red` is `#f03c3c` in both theme blocks (`base.css:137, 199`). `theme-contrast.ts` resolves only the `color-mix(…, transparent)` idiom (`:62`). Label contrast (95% white, measured by the shots worker): today 3.63:1 at rest; `#c62828` 5.20:1; `#a22121` 6.94:1.
+- F36 (#211). Since #426 the Tx hash row is `TxHashRow.vue`, shared by the tx and journal pages, and the grey lives there (`TxHashRow.vue:50-53`, `--txt-secondary` over `detail_value_mono`'s primary); `tx/[id].vue`'s `.detail_link` sets no colour now (`:459-461`). The journal's To link copies that grey (`journal/[id].vue:421-426`), as page 4's OA-6 A signed: "The value is the link, exactly as the Tx hash row in Details". Received draws its Tx hash link in primary (`received/[id].vue:303-311`). The journal's bottom is `.wrapper`'s `padding-bottom: var(--nav-clearance)` plus its own `.content`'s 24 px (`journal/[id].vue:368-375`); tx and received compose the shared `.content` (`padding-bottom: var(--nav-clearance)`, `detail-page.module.css:61-63`). 3.6 measures all of it in the browser before it changes anything.
 
 ### Inferences (unverified; audits attack these)
 
@@ -165,15 +193,24 @@ Sibling gates: phase 3.6 starts on a base that contains `send-queue-activity` ar
 
 **#214 (FA-10 A).** New and Edit network compare with `sameStoredName` (Edit excludes the network being edited) and save `storedNameKey(name)`; Save stays disabled while the name trims to nothing (F25's precedent: it would save an empty name), and Edit's "unchanged" test compares the key with the stored name. The worker is unchanged, as for accounts: the popup is the only place a typed name enters. `account-name.ts`'s doc names networks too.
 
-### Arc 3b (waits on the re-asks; planned, not built)
+### Arc 3b (D-orch-7: P11-02b A, P11-06b A, P11-07b C, P11-10b A)
 
-The progress line (P11-06b) and the overlap rule (P11-07b) extend the guard's entries; 3.4 #216 (P11-02b: A, B or C), 3.5 #229 (P11-10b) and 3.6 #211 are as below, revised at 3b's start against the answers and the tree.
+**#151, the progress snack (P11-06b A).** The import drives its own snack; the guard keeps its symbol set.
+- `useToast().openToast` returns the new snack's id. New `updateToast(id, label)` replaces the label only while that id is the open snack, keeping the id, so the card is patched in place and never replays its entrance; on a closed or replaced snack it does nothing, so a closed snack stays closed and nothing re-shows it. `ToastManagerBase`'s `show()` clears the hover and focus flags only when the id changes, so an update never drops a focused × out of its focus return (F31).
+- `applyHoldingLock` opens `{ kind: "info", label: "Importing contacts · 0 of M" }` right after `beginContactImport()`, before the first row, and after each row whose contact write the wallet confirmed calls `updateToast(id, "Importing contacts · N of M")`. N is `tally.written` and M the rows the person selected: the incomplete toast's own N and M (D-arc3b-2). The result snack (or the stop or error snack) is an ordinary `openToast`, so it replaces the line; a lock closes it first (`scope-epoch.ts`), and a later update finds it gone.
+- Shows on every page: the snack is the shell's (`ToastManager` in `app.vue`), and the import outlives the page (FA-3 A).
 
-**#216 (P11-02).** Option A: the length warning moves into the right slot's fallback, `<slot name="right"><Transition v-if="warning.show">…</Transition></slot>`. Vue renders the fallback when the slot is absent or renders only comments, so a `v-if`'d duplicate warning wins when it shows and the length note shows otherwise. Option B: the right slot always renders; the warning icon and "Maximum length reached" leave the `Tooltip` for a helper row under the field (`Text` size 12, colour secondary, `data-testid="input-max-length-note"`), as shot `o-216-B` shows; FA-5 decides which fields. As is: no change; #216 closes as not planned (SR3).
+**#151 and #428, a second import refused (P11-07b C).**
+- "Import contacts" takes `:disabled="appStore.contactImports.size > 0"`, today's label and icon (F33); `importContacts` returns at once in the same state, before the file picker.
+- One selection at a time: immediately before staging, in the same task, a run refuses (silently, it is a race no person can reach through the disabled item) when an entry exists or the selection slot holds another run's live controls, since two runs can both pass the first check while each awaits its file and its fence (R3b-C1). Staging replaces `cacheStore.importContacts` instead of appending to it.
+- The slot is released by the selection that installed it, when that selection settles and only if the slot still holds its controls; the run's `finally` no longer touches `cacheStore` (the popup's close already clears the staged rows). A run a lock released, still awaiting the PXE after an unlock, can then neither cancel nor empty the next run's selection (F32), so #428's silent loss is impossible within a session and across a lock.
+- The guard keeps one entry per import (its shape since 3a); nothing new is stored.
 
-**#229 (P11-03).** One new design token `--btn-destructive: #c62828` in both themes (through `token-contract.ts` and the generated `tokens.ts`); `.wrapper.destructive` and `.wrapper.cta_destructive` use it, and their hover is `color-mix(in srgb, var(--btn-destructive), black N%)` with N from FA-4 (the idiom `Button.vue:263` already uses). `--red` is not changed. `base.css.test.ts`'s hash and `Button.test.ts`'s red-fill assertion move in the same commit.
+**#216 (P11-02b A).** `Input` renders the length note as the right slot's fallback, `<slot name="right"><Transition v-if="warning.show" name="fade">…</Transition></slot>`: a slot that renders a message wins, and the note shows when there is none. Each of the eight call sites (F34) passes its slot only while its message shows, `<template v-if="<cond>" #right><FieldWarning>…</FieldWarning></template>`, with no Transition, so each loses its fade (the page's stated cost). Edit profile's condition is `isCollision || isUnchanged`, with its two messages inside. Below the cap nothing changes; fields with no right slot keep today's note.
 
-**#211 (P11-04).** `tx/[id].vue` drops its `.detail_link` colour override; `journal/[id].vue` drops `.wrapper`'s `padding-bottom` and composes the shared `.content`. Received stays as it draws.
+**#229 (P11-03, P11-10b A).** `--btn-destructive: #c62828` in both theme blocks of `base.css`, declared in `token-contract.ts`'s `colors` group (so the parity, palette-drift and Colors-story lists carry it) and the generated `tokens.ts`. `.wrapper.destructive` and `.wrapper.cta_destructive` fill with it, and both hover to `color-mix(in srgb, var(--btn-destructive), black 18%)` (#a22121); `cta_destructive` loses `opacity: 0.9`. `--red` is unchanged. `theme-contrast.ts` resolves the toward-black mix too, so the test checks the hover expression `Button.vue` uses.
+
+**#211 (P11-04).** The tx page's grey is now `TxHashRow`'s (F36): `TxHashRow` drops `color: var(--txt-secondary)`, so the Tx hash link takes `detail_value_mono`'s primary on tx and journal, as received already draws it. The journal's To link drops the same copied grey and composes the shared `detail_value_mono` (primary, `type--data`), since OA-6 A signed it "exactly as the Tx hash row" (D-arc3b-6); without a colour of its own it would take the base `a { color: var(--blue) }` (R3b-C2). The journal's `.wrapper` drops `padding-bottom` and its `.content` composes the shared `.content`. Received is untouched.
 
 ### File-level change map
 
@@ -199,7 +236,10 @@ The progress line (P11-06b) and the overlap rule (P11-07b) extend the guard's en
 | 3a | `shake.module.css`, `AmountCard.vue`, `fee-shared.module.css`, `FeeCostReadout.vue`, `FeeMethodRow.vue`, `FeeMethodSelector.vue`, `NewSenderPopup.vue`, `packages/design/src/ui/Skeleton.vue` (+ test), `received/[id].vue`, `a11y-css.test.ts` | #215 |
 | 3a | `SRC/stores/popup.store.ts`, `popup.store.test.ts`, `usePopupStack.test.ts` | #210 FA-8 |
 | 3a | `NewNetworkPopup.vue`, `EditNetworkPopup.vue` + tests; `utils/account-name.ts` (doc) | #214 FA-10 |
-| 3b | `packages/design/src/ui/Input.vue` (+ test, stories); `packages/design/src/{token-contract.ts,tokens.ts,base.css,base.css.test.ts}`, `ui/Button.vue` (+ test); `SRC/popup/pages/{tx,journal}/[id].vue`; the progress line's surface | #216, #229, #211, #151's line |
+| 3b | `packages/design/src/composables/toast.ts` (+ test), `ui/ToastManagerBase.vue` (+ test); `useContactImportExport.ts` + its tests; `settings/contacts/index.vue` (+ a page test); `tests/e2e/contacts-import.test.ts` | #151 snack, #428 |
+| 3b | `packages/design/src/ui/Input.vue` (+ test); the eight call sites of F34 (+ their tests where a message is asserted) | #216 |
+| 3b | `packages/design/src/{token-contract.ts,tokens.ts,base.css,base.css.test.ts,theme-contrast.ts,theme-contrast.test.ts}`, `ui/Button.vue` (+ test) | #229 |
+| 3b | `SRC/popup/components/modules/tx/TxHashRow.vue`, `SRC/popup/pages/journal/[id].vue` (+ a style pin) | #211 |
 
 ### Algorithms and non-obvious mechanics
 
@@ -228,10 +268,12 @@ See the decision ledger and the competing outline it was argued against.
   - P11-05 with FA-6 A: "Shakes and shimmers stop when Settings' Disable animations is on or the system asks for reduced motion, through one shared class." "Shakes and shimmers only, as P11-05 says; spinners, pulses and the countdown bar keep moving."
   - FA-8 A: "Close the gap: the re-opened popup is on top and every popup under it sits back, like any other stack."
   - FA-10 A: "Same rule as accounts and FPCs: "Testnet " shows "Already exists" when "Testnet" exists, and a saved name drops its outer spaces." A name of only spaces keeps Create and Update disabled, as for accounts (F25). Screenshot: the New network name field's "Already exists".
-- **Arc 3b** (held; quoted for the record):
-  - P11-02 A: "The right slot wins at the cap: a duplicate warning shows; the length note shows only when the slot is empty." B: "Both show: the duplicate warning stays at the right; "Maximum length reached" moves to visible text under the field, with no tooltip."
-  - P11-03: "Both red buttons use a darker red in both themes (#c62828: 5.62:1 with the white label) with a hover that darkens instead of lightening, so every state passes AA. The emoji check's wording stays as signed." The hover amount: FA-4.
-  - P11-04: "The tx page drops its local grey link colour and the journal page its local padding, so all three use the shared module: the Tx hash link in the primary text colour, the same bottom spacing. Received keeps its from-text as it draws it."
+- **Arc 3b** (quoting the re-signed page 11, 2026-10-14 22:01Z; the PR attaches both themes of each changed surface):
+  - P11-06b A: "A snack at the bottom, like the other import messages: 'Importing contacts · 120 of 500' counts up until the result snack replaces it. Shows on every page, so it is still there after leaving and returning. Nothing moves. The snack keeps its close button"; D-orch-7: "closed stays closed, no re-show", "The toast must update in place, not replay". N and M are the incomplete toast's (D-arc3b-2). Screenshots: the snack on Contacts and on Settings.
+  - P11-07b C: "A second import is refused while one runs: 'Import contacts' in the menu is disabled with today's label". Screenshot: the open menu during an import.
+  - P11-02b A: "One message at a time, the duplicate first: at the cap the right slot shows 'Already exist' and hides the length note; once the duplicate clears, 'Maximum length reached' takes the slot. Cost: every capped field that can show a message (about ten: contact, account, endpoint, FPC, network and profile names) passes its message only while it shows, and each loses its fade-out" (#216's decision block). Each field keeps its own words ("Already exists" on the network fields, "Name in use" on Edit profile); the endpoint labels show no message, so they keep today's note. Screenshots: the contact, network and FPC name fields at the cap, with and without a duplicate.
+  - P11-03 with P11-10b A: "Both red buttons use a darker red in both themes (#c62828 …) with a hover that darkens instead of lightening, so every state passes AA"; "18% toward black on hover: at rest the darker red #c62828 reads 5.2:1 in both themes, hovered #a22121 reads 6.9:1." Screenshots: rest and hovered, both themes.
+  - P11-04: "The tx page drops its local grey link colour and the journal page its local padding, so all three use the shared module: the Tx hash link in the primary text colour, the same bottom spacing. Received keeps its from-text as it draws it." The grey now sits in `TxHashRow`, shared by tx and journal (F36), and the journal's To link follows the Tx hash row by page 4's OA-6 A ("exactly as the Tx hash row in Details"), so it turns primary with it (OWNER-ASKS.md, for the record). Screenshots: the three pages full height.
 
 ## Security & Adversarial Considerations
 
@@ -243,7 +285,9 @@ See the decision ledger and the competing outline it was argued against.
   - 2.1-2.2 (#224): tests and an identical-behaviour fold; no data path.
   - 2.3 (#225): CSS only.
   - 3.1-3.3 (#151): disabling Lock is a security trade the owner signed (P11-01), bounded by FA-7 B: Lock is never held for more than two minutes in a row, however imports overlap, after which Lock works behind the confirm; `lockWallet` re-checks at the confirm, so the hold cannot be raced open or kept past its timer. Auto-lock, other windows (FA-2 A), the integrity coordinator, deletion and a worker restart still end the session, and the run fence stays the guarantee. The guard holds no secret and nothing persisted; a window's guard dies with it. Logging: the import logs no contact name or address (today's lines keep their categories); the fenced `addSender`'s stop is a typed refusal, never an Error line. The fenced `addSender` stops a registration from starting after the import's session ended (one already awaiting the PXE may finish in its own profile); the fence check sits outside `viaPxe`, so a stop logs nothing at Error. H6: a call-site pin keeps `setExpiryDeferral`'s one caller. The lock seal clears every import entry, so a session that ended cannot leave Lock disabled in the next one. A row's contact is refused, not overwritten, when another window changed it while its registration waited.
-  - 3.7: CSS only. 3.8: popup order only. 3.9: changes only which network names the check refuses and how a typed name is saved. 3b's 3.4-3.6: CSS and design tokens only; #229 raises contrast.
+  - 3.7: CSS only. 3.8: popup order only. 3.9: changes only which network names the check refuses and how a typed name is saved.
+  - 3.10-3.11 (#151, #428): the snack carries two counts, never a name or address; the import logs nothing new. A refused second import reads nothing and writes nothing. A run's selection slot is released only by the selection that installed it, so a run a lock released cannot cancel the next one's selection (F32). Lock's hold and the run fence are unchanged.
+  - 3.4-3.6: CSS and one design token; #229 raises contrast in every state.
 - **Least privilege, crypto, supply chain.** No new dependency, permission, credential or cryptographic code. Frozen lockfile unchanged.
 
 ## Phases
@@ -352,22 +396,49 @@ Every command runs from the worktree root unless it says otherwise. "Fast layers
 
 **Arc 3a gate.** Arc 1's commands, the full smoke suite on both browsers, and the network file from 3.3. Screenshots, both themes: the chip disabled, "Lock now" disabled, the import's confirm, New network's "Already exists".
 
-### Arc 3b: the re-asks (planned; revised at its start)
+### Arc 3b: the re-asks (D-orch-7)
 
-**3.4 #216, the option the page picks.** Build what P11-02b picks; for B, FA-5's scope.
-- Tests in `Input.test.ts` with the real slot: at the cap with a `right` slot whose warning appears and disappears reactively, A shows the warning and hides the note, then shows the note when the warning goes; an empty fragment counts as empty; B shows both, the note as visible text with `input-max-length-note`; below the cap both show the slot.
-- Validation gate: fast layers on `Input.test.ts`; `bun run --cwd apps/extension build-storybook` exits 0; screenshots of the contact, network and FPC name fields at the cap, both themes.
+Order: 3.10, 3.11, 3.4, 3.5, 3.6, each committed with its gate green before the next.
 
-**3.5 #229, the darker red.** Waits on P11-10b.
-- Tests: `Button.test.ts` asserts both variants use the token and a hover that mixes toward black; a contrast unit test computes ≥ 4.5:1 for the drawn label on the rest and hover colours in both themes.
-- Validation gate: fast layers; `base.css.test.ts` with its new hash; storybook build; screenshots at rest and hovered, both themes.
+**3.10 #151, the progress snack (P11-06b A).** ✓
+1. `toast.ts`: `openToast` returns the id; `updateToast(id, label)`. `ToastManagerBase`: `show()` clears hover and focus only on a new id.
+2. `applyHoldingLock` opens the line and updates it per confirmed write.
+3. Tests:
+   - `toast.test.ts`: an update keeps the id and the kind and changes the label; after a close, or after another snack replaced it, an update changes nothing and opens nothing (never-happens), with the open-snack update as the control.
+   - `ToastManagerBase.test.ts`: an update patches the same card element (no enter class, the element identity holds), and × focused before the update still returns focus after it; a new id still replaces the card (control, the existing "opened twice" case).
+   - `useContactImportExport.test.ts`: the line opens at "0 of M" before the first row, reads "N of M" after each confirmed write (a refused row moves nothing), and the result, stop and error snacks are ordinary opens after it; a closed line receives no further open (never-happens). The Lock trace test becomes progress → row → result, held throughout (R3b-C3); every import test's `useToast` mock gains `updateToast`.
+4. Smoke, `contacts-import.test.ts`'s hold scenario (no new scenario): once rows are stored, the snack reads "Importing contacts · N of 500" with N > 0; after leaving Contacts for Settings the same card element shows a larger N with no enter class; "Import completed successfully" then replaces it. Proves the built shell's region receiving the import's updates through the extension's re-export shim, across a real route unmount; the unit layers mock `useToast` or mount the region alone (whose test already runs real transitions). Estimate +1 s per browser, measured at the gate.
+- Validation gate: fast layers on those files (design package and extension); smoke, both browsers, on `contacts-import.test.ts`.
 
-**3.6 #211, detail pages.** Starts on a base with R1 and `incoming-transfers` arc 3a in; every measurement re-checked after the font remake.
-- Validation gate: fast layers on the three pages' tests; smoke, both browsers, on `rows.test.ts`; screenshots of the three pages full height, both themes.
+**3.11 #151 and #428, a second import refused (P11-07b C).** ✓
+1. The menu item's `disabled`; `importContacts` returns at once while an entry exists.
+2. The staging-time refusal; staging replaces the rows; the slot released on settle by its owner; the run's `finally` stops clearing `cacheStore`.
+3. Tests:
+   - A page test for `settings/contacts/index.vue`: "Import contacts" is `aria-disabled` while the guard holds an entry and enabled when it holds none (control).
+   - `useContactImportExport.test.ts`, #428's path: with import A writing (a held contact write), a second `importContacts()` opens no file picker and stages nothing (never-happens), and A ends with its own result snack; after A ends a new import opens the picker (control). Two runs past the first check (A's fence answered, B's held): A's selection opens, B's late fence finds the slot taken and stages nothing, and A's confirm writes A's rows (never-happens, R3b-C1). Across a lock: A's registration is held, the guard is reset, B's selection opens; A's late stop leaves B's slot and rows in place and B's confirm writes its rows (never-happens), with A's slot released on its own settle as the control.
+   - `useContactImportExport.pins.test.ts`: the early-exit matrix now pins that an early exit leaves another selection's rows and controls as they were, and that a settled selection leaves the slot empty (R3b-C3).
+4. Smoke, the same hold scenario: before leaving Contacts, the open menu's `contacts-menu-import` is `aria-disabled="true"`. Proves the real binding to the real guard. Estimate +1 s.
+- Validation gate: fast layers on those files and the four import test files; smoke, both browsers, on `contacts-import.test.ts`; network (Chrome) on `contacts-import-stop`, since the import's snack sequence changed.
 
-**The progress line and the overlap rule (#151).** Built as P11-06b and P11-07b answer, on the guard's per-import entries.
+**3.4 #216 (P11-02b A).** ✓
+1. `Input.vue`: the note becomes the right slot's fallback.
+2. The eight call sites (F34) pass `#right` only while their message shows, without the Transition.
+- Tests in `Input.test.ts` with the real slot (a host component whose message appears and disappears reactively): at the cap, the message shows and the note does not; when the message goes, the note takes the slot; a slot that renders only a comment counts as empty; below the cap the message shows and no note. The existing popup tests that assert a message keep passing; one call-site test (the contact form) proves the note at the cap with no duplicate and the duplicate at the cap.
+- Validation gate: fast layers on `Input.test.ts` and the eight call sites' tests; `bun run --cwd apps/extension build-storybook` exits 0; screenshots of the contact, network and FPC name fields at the cap, with and without a duplicate, both themes.
 
-**Arc 3b gate.** Arc 1's commands and the full smoke suite on both browsers.
+**3.5 #229 (P11-10b A).** ✓
+1. The token in `token-contract.ts`, `bun run --cwd packages/design gen:tokens`, the two `base.css` blocks; `Button.vue`'s two variants.
+2. `theme-contrast.ts` resolves `color-mix(in srgb, <color>, black <p>%)`.
+- Tests: `Button.test.ts` asserts both variants fill with `var(--btn-destructive)` and hover to the 18% toward-black mix, and that `cta_destructive` has no opacity hover; `theme-contrast.test.ts` asserts the label (`--txt-white`) at ≥ 4.5:1 on the rest colour and on that hover expression in both themes, plus a resolver case for the new mix; `base.css.test.ts` takes the new hash.
+- Validation gate: fast layers on the design package; storybook build; screenshots at rest and hovered (Delete profile's `cta_destructive`, and a `destructive`), both themes.
+
+**3.6 #211 (P11-04).** ✓
+1. A Chrome probe on the parent build measures each page's Tx hash link colour, the journal's To link colour, received's from-text colour and the space under the last box to the scroll end, both themes (`lessons/phase-3.md`), re-checking F36 after the font remake.
+2. `TxHashRow.vue` and the journal's To link drop the grey; the journal's `.wrapper` drops `padding-bottom` and `.content` composes the shared one.
+3. A style pin (source read, `a11y-css.test.ts`'s shape): `TxHashRow` and the journal set no link colour of their own, and the journal's content composes `detail-page.module.css`'s `.content` with no padding of its own. The probe again on the new build: the three Tx hash links and the journal's To link in `--txt-primary` with the accent hover, the same bottom space on all three, received unchanged.
+- Validation gate: fast layers on the three pages' tests and the pin; smoke, both browsers, on `rows.test.ts`; screenshots of the three pages full height, both themes.
+
+**Arc 3b gate.** Arc 1's commands, the full smoke suite on both browsers (retry 0), the network file from 3.11. Then close-out in the same PR (§ Delivery).
 
 ## Delivery
 
@@ -378,11 +449,10 @@ No stack (D-orch-1): one plain PR per arc against `dev`, each opened only after 
 | 1 | `worktree-forms-and-contacts` | 1.1-1.5 | merged as #255 | closed #184, #205, #210, #212, #214 | off |
 | 2 | `forms-and-contacts-arc-2` | 2.1-2.3 | merged as #282 | closed #224, #225 | off |
 | 3a | `forms-and-contacts-arc-3a` off `origin/dev` | 3.1-3.3, 3.7-3.9 | `feat(contacts): fence the import's sender, hold lock while it runs; honour reduced motion` (commitlint's subject-case refuses "Lock") | `Refs #151`, `Closes #215`, `Refs #210`, `Refs #214` | off |
-| 3b | `forms-and-contacts-arc-3b` | 3.4-3.6, the line, the overlap rule | set at its start | #151, #211, #216, #229 | off |
-| close-out | `forms-and-contacts-close-out` | close-out | `docs(plans): close forms-and-contacts` | — | off |
+| 3b + close-out | `forms-and-contacts-arc-3b` off `origin/dev` | 3.10, 3.11, 3.4-3.6, then the close-out commits | `feat(contacts): import progress snack, refuse a second import; capped-name queue, darker red` (92 chars) | `Closes #151`, `Closes #428`, `Closes #216`, `Closes #229`, `Closes #211` | off |
 
 - Open each PR without labels, then add `e2e:extension-smoke` or `e2e:extension-network` only when the path filter would skip a suite the arc needs.
-- PR body: what changed and why, the validation runs with outcomes, each browser's e2e wall-clock before and after, the issue lines above, screenshots of every changed popup surface in both themes, and each disposition: #151's line and overlap rule wait for 3b; FA-9 B (P11-15) builds nothing.
+- PR body: what changed and why, the validation runs with outcomes, each browser's e2e wall-clock before and after, the issue lines above, screenshots of every changed popup surface in both themes, and each disposition (arc 3a: #151's line and overlap rule wait for 3b; FA-9 B builds nothing; arc 3b: the asks it shipped in their "what ships now" form).
 - An issue whose fix is left out or did not hold gets a comment with the reason and stays open (a struck or "As is" page-11 item closes as not planned per SR3).
 
 ## Decision ledger
@@ -426,7 +496,15 @@ Each entry: the choice, the rejected alternatives and why. "C" is Codex, "O" the
 - D-arc3-4 (#151, the chip): a disabled header chip takes `SettingItem`'s disabled look (opacity 0.5, no hover, default cursor), the existing convention for a disabled row; shown in the PR's screenshots under P11-01's "Lock … disabled".
 - D-arc3-5 (#214, FA-10 A): the popups trim and compare by `storedNameKey`; the worker keeps its exact check, as for accounts. A spaces-only name keeps Save disabled (F25), since it would otherwise save an empty name.
 - D-arc3-7 (#215): the AmountCard and fee skeletons render the design package's `Skeleton` instead of composing a new `shimmer.module.css`. The tree already holds the shared shimmer (F30), so a new module would have been a third copy; the 3.7 probe proves the computed look unchanged. `Skeleton`'s `flex-shrink: 0` matters only if a fee row overflowed, which none does at the popup's width; its `aria-hidden` hides an empty decorative span.
-- D-arc3-6 (plan size): this plan is over the mid target (≈ 550 lines against 350) because it carries three arcs' records; the Post-implementation section now cites `implementations-plan/README.md` § Post-implementation standard at `175d8268` instead of restating it.
+- D-arc3-6 (plan size): this plan is over the mid target (≈ 640 lines against 350 after the 3b revision) because it carries four arcs' records; the Post-implementation section now cites `implementations-plan/README.md` § Post-implementation standard at `175d8268` instead of restating it.
+- D-orch-7 (orchestrator, 2026-10-14 22:04Z; page 11 re-signed 22:01Z): P11-02b A (one message at a time, the duplicate first; every capped field that can show a message passes it only while it shows and loses its fade), P11-06b A (the snack at the bottom, updated in place; closed stays closed), P11-07b C (a second import refused while one runs: "Import contacts" disabled with today's label; closes #428; one guard entry per import stays), P11-10b A (18% toward black: rest #c62828 5.2:1, hovered #a22121 6.9:1). P11-13b shipped in 3a. Arc 3b builds the snack, the refusal, 3.4, 3.5 and 3.6 on `forms-and-contacts-arc-3b` off `origin/dev` (21d806e3), and the close-out rides in its PR.
+- D-arc3b-1 (#151, the snack): the import opens its line and patches it through a new `updateToast(id, label)` that acts only on its own open snack. Rejected: the count in the guard's entries driving the snack from an `app.vue` watcher (the shots' mock): the watcher must remember a close or it re-opens the snack on the next row, a second state for one caller, and the guard would become a progress store; re-opening per row (replays the entrance, which D-orch-7 rules out).
+- D-arc3b-2 (#151, the count): N counts confirmed contact writes and M the selected rows, the incomplete toast's N and M, so a stop reads the numbers the line last showed. Rejected: rows handled (a refused or failed row would read as imported).
+- D-arc3b-3 (#151, #428): the disabled item, a refusal in `importContacts`, a second refusal at staging time when an entry exists or the slot holds another run's live controls (R3b-C1), and the slot released on settle only by the selection that installed it. Rejected: one promise per import (#428's A and B path; C needs no second run); a "still running" set the seal does not clear (new state for one path, and Lock's hold must still end at the seal).
+- D-arc3b-4 (#216): each call site passes `#right` under `v-if`, without its Transition; `Input` renders the note as the fallback. Rejected: dropping only the Transition and keeping the inner `v-if` (works through the comment-only fallback, but rests on how Vue judges an empty slot rather than on whether one is passed); filtering slot vnodes (D14).
+- D-arc3b-5 (#229): the token sits in the `colors` group, so the existing parity, palette-drift and Colors-story lists carry it with no list edit; `theme-contrast.ts` learns the toward-black mix so the test resolves `Button.vue`'s hover text, not a hand-computed hex.
+- D-arc3b-6 (#211): the grey P11-04 removes moved with #426 from the tx page into `TxHashRow`, so that is where it goes; the journal's To link copies it by page 4's OA-6 A ("exactly as the Tx hash row in Details"), so it follows, composing `detail_value_mono` for its primary (R3b-C2). Rejected: leaving the To link grey (breaks OA-6 A's signed equality on the journal).
+- D-arc3b-7 (close-out merge of `dev`): #439 added a source pin that every Details link composes `hero_link` or `detail_link` on a `composes:` line of its own, so the journal's To link composes its two shared classes on two lines; the rendered classes are the same. The ring itself (`:focus-visible`, accent) now draws on the To link too.
 
 ### Competing outline (cheapest-first), sent to both audits
 
@@ -559,12 +637,41 @@ Outcome: the plan kept its #184, #205, #210 and #151 shapes; it took the outline
 
 **Codex round 3 (resumed): approve, no new material findings.**
 
+### Arc 3b plan revision (2026-10-14): Codex (gpt-6.1-sol, high), session `01a13c9d`
+
+**Conditional approve** (blocking R3b-C1 and R3b-C2). F31-F36 and the eight #216 call sites confirmed; D-arc3b-1, -2, -4, -5 judged small; the new string authorized. Three findings, all verified and accepted:
+- R3b-C1 [High] the entry-only refusal leaves a selection-overwrite race: two runs pass it while each awaits its file and fence, and the later one replaces the slot the open popup confirms into (reproduced in memory). A staging-time refusal when an entry exists or the slot holds another run's live controls; staging replaces the rows; the slot is released on settle, so a run a lock released never blocks the next.
+- R3b-C2 [Medium] the journal's To link has no colour under its grey, so removing it shows the base `a { color: var(--blue) }`: it composes `detail_value_mono`; the probe measures it.
+- R3b-C3 [Low] the early-exit cleanup pins and the Lock trace test contradict the revised contract: both rewritten as the new contract; every import test's toast mock gains `updateToast`. The e2e rationale corrected (the region's component test already runs real transitions).
+
+### Arc 3b implementation (2026-10-15): Codex (gpt-6.1-sol, high), session `01a13cd8`; one Opus 5.5 review
+
+**Codex round 1: approve** (high confidence). Three Low findings, all verified and accepted:
+- A3b-C1 [Low] `logImportErrors` passed the caught error bare (present before this arc): it goes under `{ error }`, the named key the logging policy asks for; the pin follows.
+- A3b-C2 [Low] the hold scenario's result read matched any card in the DOM: it now also requires the result snack settled on screen (`shownToast`); its comment says the menu item is disabled, not that a second import is tried.
+- A3b-C3 [Low] `openImportSelection`'s doc narrated its steps: one sentence keeps the race it guards.
+
+**Opus 5.5 review, beside round 1: approve** (moderate to high). Four Low findings:
+- A3b-O1 [Low, accepted] a result snack replacing a focused progress snack took the focused × away and focus fell to the body (the region's reset predates the arc; a line open for minutes makes it likely): `show()` hands focus back to where it came from on any change of card, as × did, and `closeFor` drops its copy; red without the change, both kinds.
+- A3b-O2 [Low, accepted] the slot's release comment named a path that cannot occur (a selection holds the slot until it settles); it now says what does protect the next run: no run's `finally` touches the slot.
+- A3b-O3 [Low, accepted] the style pin's header claimed real-browser coverage the repo does not keep: the clause is gone.
+- A3b-O4 [Low, known limit] a late stop snack from a run a lock released can replace the next import's line: #447, closed as a `known-limit`.
+- Nits applied: a comment wrapped mid-sentence and an unused type in the e2e. Kept: the comment-only slot case in `Input.test.ts`, a fallback check rather than before/after proof.
+
+**Codex round 2 (resumed): approve, no new findings.** A3b-C1..C3 and A3b-O1..O3 verified; the focus hand-back runs only on a change of card while focus is inside it, clears the flag before `focus()` (no focusout loop), and timeout and lock closes take the same guarded path. Loop converged.
+
+### Final cross-arc pass (2026-10-15): Codex (gpt-6.1-sol, high), fresh session `01a13ceb`
+
+**Approve** (high confidence), over the lane's net diff (#255, #282, #435 and this arc). No cross-arc behavioural defect; two Low comment findings, both accepted:
+- X-1 [Low] the import pins' header still said every early exit clears the selection slot, which arc 3b reversed: it now says an early exit leaves the slot as it found it.
+- X-2 [Low] `useLockWallet.ts`'s read-budget comment promised a lock without asking when the read never answers, but a running import still asks (arc 3a's confirm): it now states only the bound.
+
 ## Post-implementation
 
 `implementations-plan/README.md` § Post-implementation standard, read at `175d8268`, binds; what is specific to this plan:
 
 - Step 1 is absent (`code_review: off`). Step 2's reviewer: `env -u CODEX_ACCOUNT ~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol` (on a quota or 401 error, retry once with `CODEX_ACCOUNT=alejo-icloud`); resume with `resume-codex.sh`. One Opus 5.5 review of the arc's diff runs beside the first round. Placement: per arc against its PR base (no stack); the final cross-arc pass runs over the lane's net diff once 3b lands.
-- Delivery as § Delivery. Close-out per step 4, after arc 3b; every FA-n still unanswered then is an `owner-decision` issue. Teardown per step 5 with slug `forms-and-contacts` and `--trunk dev`.
+- Delivery as § Delivery. Close-out per step 4 as arc 3b's final commits (D-orch-7), after the arc gate and the cross-arc pass; every ask still open then (OWNER-ASKS.md) is an `owner-decision` issue. Teardown per step 5 with slug `forms-and-contacts` and `--trunk dev`.
 
 ## Seeds
 

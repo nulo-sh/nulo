@@ -164,10 +164,8 @@ usePopupEntity(() => props.show, {
 			v-model="nameTerm"
 			data-testid="network-name-input"
 		>
-			<template #right>
-				<Transition name="fade">
-					<FieldWarning v-if="isNameAlreadyExist"> Already exists </FieldWarning>
-				</Transition>
+			<template v-if="isNameAlreadyExist" #right>
+				<FieldWarning> Already exists </FieldWarning>
 			</template>
 		</Input>
 

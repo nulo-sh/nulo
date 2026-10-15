@@ -333,6 +333,59 @@ describe("ToastManagerBase", () => {
 		}
 	})
 
+	test("an update relabels the same card: it neither leaves nor enters", async () => {
+		stubTransitionDuration()
+		mountRegion()
+		const id = open({ kind: "info", label: "Importing contacts · 0 of 3" })
+		await stepUntil(entered("0 of 3"))
+		const first = card()
+		useToast().updateToast(id, "Importing contacts · 1 of 3")
+		await nextTick()
+		expect(card()).toBe(first)
+		expect(first?.className).not.toMatch(/enter|leave/)
+		expect(first?.textContent).toContain("1 of 3")
+	})
+
+	test("× focused before an update still returns focus after it", async () => {
+		mountRegion()
+		const origin = document.createElement("button")
+		document.body.appendChild(origin)
+		try {
+			const id = open({ kind: "info", label: "Importing contacts · 0 of 3" })
+			await settle()
+			origin.focus()
+			const close = card()?.querySelector<HTMLButtonElement>('[data-testid="snackbar-close"]')
+			close?.focus()
+			useToast().updateToast(id, "Importing contacts · 1 of 3")
+			await nextTick()
+			close?.click()
+			await settle()
+			expect(document.activeElement).toBe(origin)
+		} finally {
+			origin.remove()
+		}
+	})
+
+	test.each([
+		["of another kind", "success"],
+		["of the same kind", "info"],
+	] as const)("a snack %s replacing the focused one returns focus to where focus came from", async (_, kind) => {
+		mountRegion()
+		const origin = document.createElement("button")
+		document.body.appendChild(origin)
+		try {
+			open({ kind: "info", label: "Importing contacts · 1 of 3" })
+			await settle()
+			origin.focus()
+			card()?.querySelector<HTMLButtonElement>('[data-testid="snackbar-close"]')?.focus()
+			open({ kind, label: "Import completed successfully" })
+			await settle()
+			expect(document.activeElement).toBe(origin)
+		} finally {
+			origin.remove()
+		}
+	})
+
 	test("a click on the card leaves the timer armed", async () => {
 		mountRegion()
 		open({ kind: "success", label: "Disposable" })

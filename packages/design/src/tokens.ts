@@ -60,6 +60,7 @@ export const colors = {
 	orange: "--orange",
 	yellow: "--yellow",
 	red: "--red",
+	btnDestructive: "--btn-destructive",
 	purple: "--purple",
 	gray: "--gray",
 	sand: "--sand",

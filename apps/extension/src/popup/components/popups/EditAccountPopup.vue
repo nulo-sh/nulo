@@ -108,10 +108,8 @@ usePopupEntity(() => props.show, {
 			:maxLength="25"
 			data-testid="account-name-input"
 		>
-			<template #right>
-				<Transition name="fade">
-					<FieldWarning v-if="isAlreadyExist"> Already exist </FieldWarning>
-				</Transition>
+			<template v-if="isAlreadyExist" #right>
+				<FieldWarning> Already exist </FieldWarning>
 			</template>
 		</Input>
 

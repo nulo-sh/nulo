@@ -200,10 +200,16 @@ describe("Button destructive variant (the regular button in red)", () => {
 		for (const r of own) expect(r.body).not.toMatch(/font-size|letter-spacing|padding|height/)
 	})
 
-	test("fills red with white text", () => {
-		const fill = rules.find((r) => r.selectors.length === 1 && r.selectors[0] === ".wrapper.destructive")
-		expect(fill?.body).toMatch(/background:\s*var\(--red\)/)
-		expect(fill?.body).toMatch(/color:\s*var\(--txt-white\)/)
+	test("both red variants fill with the destructive token, a white label, and hover 18% toward black", () => {
+		for (const variant of ["destructive", "cta_destructive"]) {
+			const fill = rules.find(
+				(r) => r.selectors.length === 1 && r.selectors[0] === `.wrapper.${variant}` && /background/.test(r.body),
+			)
+			expect(fill?.body).toMatch(/background:\s*var\(--btn-destructive\)/)
+			expect(fill?.body).toMatch(/color:\s*var\(--txt-white\)/)
+			const hover = rulesOf(new RegExp(`^\\.wrapper\\.${variant}:hover`))
+			expect(hover.map((r) => r.body.trim())).toEqual(["background: color-mix(in srgb, var(--btn-destructive), black 18%);"])
+		}
 	})
 
 	test("its hover and press never answer a disabled or loading button", () => {

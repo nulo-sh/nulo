@@ -56,10 +56,10 @@ vi.mock("@/utils", async (importOriginal) => ({
 	},
 }))
 vi.mock("@/composables/toast", () => ({
-	useToast: () => ({ openToast: (toast: { kind: string; label: string }) => boundary.toasts.push(toast) }),
+	useToast: () => ({ openToast: (toast: { kind: string; label: string }) => boundary.toasts.push(toast), updateToast: () => {} }),
 }))
 vi.mock("@/stores/app.store", () => ({
-	useAppStore: () => ({ network: { id: "net-1", name: "Testnet" }, beginContactImport: () => () => {} }),
+	useAppStore: () => ({ network: { id: "net-1", name: "Testnet" }, beginContactImport: () => () => {}, contactImports: new Set() }),
 }))
 vi.mock("@/stores/cache.store", async () => {
 	const { reactive } = await import("vue")
