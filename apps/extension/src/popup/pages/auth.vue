@@ -120,11 +120,6 @@ const unlockActiveProfile = async () => {
 	return managers.profile.unlockProfile(appStore.profile.id, password.value)
 }
 
-const openFailureToast = (options) => {
-	openToast(options)
-	failureToastId = toast.value?.id
-}
-
 /** The unlock failure ladder — one synchronous pass, in this order, on the original error. */
 const handleUnlockError = (error, activeProfileId, isPasskeyAttempt) => {
 	// Service throws `InvalidPasswordError` (a WalletError subclass).
@@ -151,7 +146,7 @@ const handleUnlockError = (error, activeProfileId, isPasskeyAttempt) => {
 		// live and a "try again" toast would race a successful
 		// navigation. Otherwise the wait genuinely expired: say so.
 		if (appStore.isLogined && appStore.profile?.id !== activeProfileId) return
-		openFailureToast({ kind: "error", label: "Unlock timed out. Please try again" })
+		openToast({ kind: "error", label: "Unlock timed out. Please try again" })
 		return
 	}
 	if (error instanceof BootstrapFailedError) {
@@ -160,11 +155,11 @@ const handleUnlockError = (error, activeProfileId, isPasskeyAttempt) => {
 		return
 	}
 	if (isPasskeyAttempt) {
-		openFailureToast({ kind: "error", label: passkeyFailureCopy(error, PASSKEY_COPY.unlockFailed) })
+		openToast({ kind: "error", label: passkeyFailureCopy(error, PASSKEY_COPY.unlockFailed) })
 		return
 	}
 	// The error's text never reaches the toast: it can name internals.
-	openFailureToast({ kind: "error", label: "Something went wrong", sub: "Try unlocking again." })
+	openToast({ kind: "error", label: "Something went wrong", sub: "Try unlocking again." })
 }
 
 const handleUnlockWallet = async () => {
@@ -192,7 +187,10 @@ const handleUnlockWallet = async () => {
 			// the analogous import handshake allows 30 s).
 			await awaitProfileActivation(appStore, activeProfile.id, UNLOCK_WAIT_MS)
 		} catch (error) {
+			// The ladder runs synchronously, so a toast that appears during it is its own.
+			const shown = toast.value?.id
 			handleUnlockError(error, activeProfile?.id, isPasskeyAttempt)
+			if (toast.value && toast.value.id !== shown) failureToastId = toast.value.id
 			return
 		} finally {
 			isAwaitingResponse.value = false

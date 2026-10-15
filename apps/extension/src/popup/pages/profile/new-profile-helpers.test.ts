@@ -76,7 +76,7 @@ function deferred<T>() {
 
 /** Starts the helper and records how it settled without awaiting it. */
 function start(store: ReturnType<typeof makeAppStore>, selectedOnEntry?: string) {
-	const router = { push: vi.fn() }
+	const router = { push: vi.fn(), currentRoute: { value: { name: "popup-profile-new" as string } } }
 	const openToast = vi.fn()
 	const state: { outcome: unknown } = { outcome: "pending" }
 	const deps = { appStore: store as unknown as AppStoreLike, router: router as unknown as RouterLike, openToast, selectedOnEntry }
@@ -94,6 +94,7 @@ function start(store: ReturnType<typeof makeAppStore>, selectedOnEntry?: string)
 /** The unlock-screen hand-off: the created profile selected and recorded as last active. */
 function expectUnlockHandOff(store: ReturnType<typeof makeAppStore>, router: { push: unknown }, openToast: unknown) {
 	expect(store.profile).toEqual(created)
+	expect(supersedeProfileActivations).toHaveBeenCalledTimes(1)
 	expect(setLastActiveProfileId).toHaveBeenCalledWith("created", { unless: expect.any(Function) })
 	expect(router.push).toHaveBeenCalledTimes(1)
 	expect(router.push).toHaveBeenCalledWith("/popup/auth")
@@ -171,7 +172,7 @@ describe("activateCreatedProfile (popup manual sequence)", () => {
 		expectUnlockHandOff(store, router, openToast)
 	})
 
-	test("a slow start: 60 s after the create returns, the unlock screen; the activation finishing later routes nowhere", async () => {
+	test("a slow start: 60 s after the create returns, the unlock screen", async () => {
 		const store = makeAppStore()
 		const { router, openToast, state } = start(store)
 		store.profile = created
@@ -181,10 +182,21 @@ describe("activateCreatedProfile (popup manual sequence)", () => {
 
 		expect(state.outcome).toBe("resolved")
 		expectUnlockHandOff(store, router, openToast)
-		store.isLogined = true
-		await vi.advanceTimersByTimeAsync(60_000)
-		expect(router.push).toHaveBeenCalledTimes(1)
-		expect(accountInstance.getAccounts).not.toHaveBeenCalled()
+	})
+
+	test("a person who left the page meanwhile is not moved: no route, toast, pointer or supersede", async () => {
+		const store = makeAppStore()
+		const { router, openToast, state } = start(store)
+		router.currentRoute.value.name = "popup-send"
+		store.profile = created
+		store.bootstrapFailure = { profileId: "created", message: "boom" }
+		await vi.advanceTimersByTimeAsync(0)
+
+		expect(state.outcome).toBe("resolved")
+		expect(router.push).not.toHaveBeenCalled()
+		expect(openToast).not.toHaveBeenCalled()
+		expect(setLastActiveProfileId).not.toHaveBeenCalled()
+		expect(supersedeProfileActivations).not.toHaveBeenCalled()
 	})
 
 	test("another profile open when the created one never starts: its home and the toast, nothing recorded", async () => {

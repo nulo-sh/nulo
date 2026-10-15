@@ -75,8 +75,7 @@ async function trackActivation(profileId: string, run: () => Promise<boolean>): 
 	}
 }
 
-/** Whether an event-driven activation of a profile other than `profileId` may still set
- *  `isLogined`. */
+/** Whether an event-driven activation of a profile other than `profileId` is still running. */
 export function isActivatingOtherThan(profileId: string): boolean {
 	for (const id of activating.keys()) if (id !== profileId) return true
 	return false

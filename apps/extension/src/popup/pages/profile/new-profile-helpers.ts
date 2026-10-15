@@ -20,12 +20,6 @@ export const CREATE_START_WAIT_MS = 30_000
  *  steps before (naming it, the create call, a passkey prompt) are not the start-up. */
 export const CREATE_ACTIVATION_LIMIT_MS = 60_000
 
-const HAND_OFF_TOAST: ToastOptions = {
-	kind: "error",
-	label: "Something went wrong",
-	sub: "Open the wallet again to unlock your new profile.",
-}
-
 export interface CreateActivationDeps {
 	appStore: AppStore
 	router: Router
@@ -91,9 +85,10 @@ async function openCreatedProfile(profile: ProfileInfo, { appStore, router }: Cr
 }
 
 /**
- * The created profile exists but did not open in this popup. While no profile is open or opening
- * here, the popup goes to the unlock screen with the created profile selected; otherwise it stays
- * on the open profile and goes to its home. Either way the toast says how to reach the new one.
+ * The created profile exists but did not open in this popup. While the page still shows and no
+ * profile is open or opening here, the popup goes to the unlock screen with the created profile
+ * selected; otherwise it stays on the open profile and goes to its home. Either way the toast
+ * says how to reach the new one.
  *
  * Earlier activations are superseded first, so one that finishes later cannot move the screen;
  * the pointer write and the route then re-check, since another profile may open meanwhile. The
@@ -102,6 +97,9 @@ async function openCreatedProfile(profile: ProfileInfo, { appStore, router }: Cr
  */
 async function handOffCreatedProfile(profile: ProfileInfo, deps: CreateActivationDeps, failure: unknown): Promise<void> {
 	const { appStore, router, openToast, selectedOnEntry } = deps
+	console.warn("created profile did not open", { reason: activationFailureReason(failure) })
+	// A person who left the page meanwhile is not moved: the shell places the activation's outcome.
+	if (router.currentRoute.value.name !== "popup-profile-new") return
 	const anotherOpens = () =>
 		appStore.isLogined ||
 		isActivatingOtherThan(profile.id) ||
@@ -115,10 +113,9 @@ async function handOffCreatedProfile(profile: ProfileInfo, deps: CreateActivatio
 			target = "/popup/auth"
 		}
 	}
-	console.warn("created profile did not open", { reason: activationFailureReason(failure) })
 	// Awaited: until the page has left, the caller's latch must hold, or Create could run again.
 	const leaving = await router.push(target)
-	openToast(HAND_OFF_TOAST)
+	openToast({ kind: "error", label: "Something went wrong", sub: "Open the wallet again to unlock your new profile." })
 	if (leaving) throw leaving
 }
 
