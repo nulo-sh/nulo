@@ -92,8 +92,9 @@ contract-address domain separator did): STOP and re-gate. Hold the bump, or rota
 the owner's recorded decision: append a `REGIMES` entry the build binds (the last one), re-vendor
 the artifact byte-exact with its `PROVENANCE.md`, add a `reference/<regime>/` generator with its
 own lockfile, regenerate the vectors twice with an empty diff, and move the tests to the new
-truth. Off Mainnet that ships in place as an update; a Mainnet-serving build rotates only as a new
-extension major (CLAUDE.md "Account-address freeze"). Worked example:
+truth. Off Mainnet that ships in place as an update, and a profile holding the earlier regime's
+addresses meets the takeover's address-change reset (Branch B, step 2); a Mainnet-serving build
+rotates only as a new extension major (CLAUDE.md "Account-address freeze"). Worked example:
 `implementations-plan/archive/aztec-rc3/plan.md` (`nulo-v6.1`).
 
 **The scope guard's coverage.** `PxeService` refuses to sync a scope the PXE holds no keys for,
