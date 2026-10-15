@@ -29,7 +29,7 @@ import {
 	waitForLockScreen,
 	waitForToast,
 } from "../fixtures/helpers"
-import { armRestoreGate, clearRestoreGate, waitForRestoreGateHeld } from "../fixtures/restore-gate"
+import { armRestoreGate, clearRestoreGate, readRestoreGate, waitForRestoreGateHeld } from "../fixtures/restore-gate"
 import { TEST_PASSWORD } from "../helpers/import-drivers"
 import {
 	PREVIOUS_TESTNET_CHAIN_ID,
@@ -59,11 +59,13 @@ async function startHeld(page: Page, screen: string, at: RestoreGateHoldPoint): 
 
 /** Closes every page, stops the background, and reopens a popup at the lock screen with the hold
  *  cleared, so the resumed run passes the step the dead one stopped at. */
-async function killAndReopen(ctx: ExtensionContext, page: Page): Promise<Page> {
+async function killAndReopen(ctx: ExtensionContext, page: Page, at: RestoreGateHoldPoint): Promise<Page> {
 	await page.close()
 	await stopBackground(ctx)
 	const popup = await openPopup(ctx)
 	await waitForLockScreen(popup, 60_000)
+	// Still held: the run was parked at `at` when the background died, so what follows is a resume.
+	expect(await readRestoreGate(popup)).toEqual({ at, held: true })
 	await clearRestoreGate(popup)
 	return popup
 }
@@ -97,7 +99,7 @@ describe("stale network reset after a background death", () => {
 				await ensureUnlocked(page)
 				await startHeld(page, "network-reset", "network-reset-purged")
 				await storeActiveNetwork(page, "local")
-				page = await killAndReopen(ctx, page)
+				page = await killAndReopen(ctx, page, "network-reset-purged")
 				await traceTakeover(page)
 				await ensureUnlocked(page, TEST_PASSWORD, { decisionBudgetMs: 120_000 })
 				await waitForToast(page, "Your accounts have new addresses.", 120_000, { kind: "success" })
@@ -118,7 +120,7 @@ describe("stale network reset after a background death", () => {
 				await storeActiveNetwork(page, "testnet")
 				await ensureUnlocked(page)
 				await startHeld(page, "new-addresses", "network-reset-account")
-				page = await killAndReopen(ctx, page)
+				page = await killAndReopen(ctx, page, "network-reset-account")
 				await ensureUnlocked(page, TEST_PASSWORD, { decisionBudgetMs: 120_000 })
 				await waitForToast(page, "Your accounts have new addresses.", 120_000, { kind: "success" })
 				expect((await readAccounts(page, CHAIN_IDS.TESTNET)).map(identity)).toEqual(testnetBefore)

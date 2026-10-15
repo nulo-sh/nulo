@@ -10,13 +10,12 @@
 import type { Page } from "puppeteer"
 import { describe, expect, inject } from "vitest"
 import { CHAIN_IDS } from "@/utils/chain-ids"
-import { type AztecTestConfig, mintPublicTokensForAccount } from "../fixtures/aztec"
-import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
+import { type AztecTestConfig, mintPublicTokensForAccount, waitForTxMined } from "../fixtures/aztec"
+import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "../fixtures/extension"
 import { ensureUnlocked, lockWallet } from "../fixtures/helpers"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
-import { armRestoreGate, clearRestoreGate, waitForRestoreGateHeld } from "../fixtures/restore-gate"
-import { RESTORE_GATE_KEY } from "@/e2e/chrome-storage-restore-gate"
+import { armRestoreGate, clearRestoreGate, readRestoreGate, waitForRestoreGateHeld } from "../fixtures/restore-gate"
 import { SESSION_KEY_PREFIX } from "../fixtures/dappSession"
 import {
 	PREVIOUS_TESTNET_CHAIN_ID,
@@ -57,8 +56,9 @@ async function settledSince(page: Page, method: string, fromSeq: number): Promis
 	)
 }
 
-async function gateRecord(page: Page): Promise<unknown> {
-	return page.evaluate(async (key: string) => (await chrome.storage.session.get(key))[key] ?? null, RESTORE_GATE_KEY)
+/** Execute windows open now. A window counts from its target's creation, before it renders. */
+function executeWindows(ctx: ExtensionContext): number {
+	return ctx.browser.targets().filter((t) => t.type() === "page" && t.url().includes("#/windows/execute")).length
 }
 
 describe("stale network beside a live one", () => {
@@ -97,7 +97,9 @@ describe("stale network beside a live one", () => {
 				await clickByTestId(page, "stale-confirm-submit")
 				await waitForRestoreGateHeld(page, "network-reset-purging", 30_000)
 
-				// A dApp request that arrives during the run waits for it.
+				// A dApp request that arrives during the run waits for it: no window and no answer until the
+				// release, checked after the wait and again just before it.
+				expect(executeWindows(ctx)).toBe(0)
 				const seq = await snapshotResultSeq(pg)
 				const executeP = waitForPopup(ctx, "execute", { timeout: 180_000 })
 				executeP.catch(() => {})
@@ -107,6 +109,7 @@ describe("stale network beside a live one", () => {
 					new Promise((r) => setTimeout(() => r("waiting"), WAIT_WINDOW_MS)),
 				])
 				expect(early).toBe("waiting")
+				expect(executeWindows(ctx)).toBe(0)
 				expect(await settledSince(pg, "sendTx", seq)).toEqual([])
 
 				// Every popup shows A4 while a run holds the lock, whatever network is active.
@@ -114,8 +117,10 @@ describe("stale network beside a live one", () => {
 				second = await openPopup(ctx)
 				await traceTakeover(second)
 				expect(await takeoverScreen(second, "progress", 15_000)).toBe("progress")
-				// Both checks ran inside the hold: its safety timer had not released it.
-				expect(await gateRecord(page)).toEqual({ at: "network-reset-purging", held: true })
+				// Every check ran inside the hold: its safety timer had not released it.
+				expect(executeWindows(ctx)).toBe(0)
+				expect(await settledSince(pg, "sendTx", seq)).toEqual([])
+				expect(await readRestoreGate(page)).toEqual({ at: "network-reset-purging", held: true })
 
 				await clearRestoreGate(page)
 				const execute = await executeP
@@ -123,7 +128,12 @@ describe("stale network beside a live one", () => {
 				// The run is over and the held send not yet approved: Local's rows are exactly as before.
 				expect(await snapshotChain(page, local.chainId, local.id)).toEqual(localBefore)
 				await approveExecute(execute, { approvableTimeoutMs: 120_000 })
-				await assertPgOk(pg, await waitForPgResult(pg, "sendTx", seq, 300_000), "stale-network-chaos:held-send")
+				const sent = await waitForPgResult(pg, "sendTx", seq, 300_000)
+				await assertPgOk(pg, sent, "stale-network-chaos:held-send")
+				// The dApp is answered at submission; the send lands only once the node proves it.
+				const txHash = (sent.resultJson as { txHash?: string }).txHash
+				if (typeof txHash !== "string") throw new Error(`held send: no txHash in ${JSON.stringify(sent.resultJson)}`)
+				await waitForTxMined(aztecConfig!, txHash)
 			} finally {
 				await clearRestoreGate(page)
 			}

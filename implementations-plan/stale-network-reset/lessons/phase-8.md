@@ -16,6 +16,16 @@
 - The restore gate's record lives in `chrome.storage.session`, which survives a background death; a resumed run passing the same hold point would park again. N3 clears it from the reopened popup before unlocking; the resume starts only after the unlock.
 - `[aztec-node] Error: Address already in use` at boot is the aztec CLI's own anvil colliding with the one the runner started; the runner says so on the line before.
 
+## Arc 3 Codex fix loop (gpt-6.1-sol, high)
+
+**Round 1 (fresh): 3 material test gaps**, all verified and accepted.
+
+1. N2 looked for the execute window only during the first 4 s, through a promise that resolves after the window renders: it now counts execute-window targets before the send, after the wait and again just before the release.
+2. N3 cleared the hold after the kill without checking it had survived, so a run its 20 s safety timer released could finish before the kill and pass as a resume. It now requires the hold record, still held, at the reopen.
+3. N2 accepted the dApp's answer, given at submission: it now waits for the node to prove the held send.
+
+The fixes broke into the gate's second Chrome run, which was stopped; the gate restarted from the first run.
+
 ## Runtimes (scratch runs at retry 0, Chrome / Firefox; final versions)
 
 - N1: 26.3 s / 34.5 s (plan estimate 150 s).
