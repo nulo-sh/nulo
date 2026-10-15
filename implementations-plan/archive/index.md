@@ -46,6 +46,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [ci-followups-2](ci-followups-2/plan.md) — completed — nightly's Firefox jobs and both send-chaos runs gate the nightly release (#220), two fixed chaos seeds gate every network PR, chaos jobs asserted like canaries
 - [ci-followups-3](ci-followups-3/plan.md) — completed — a draft release keeps its tag through every edit (#309), a malformed chaos seed is refused (#305), release's opt-in network run replays the PR chaos seeds (#306)
 - [ci-followups-4](ci-followups-4/plan.md) — completed — the first-party imports the store fallback hid, declared (#172 a known limit: six upstream gaps), the raw call field's e2e case (#365), a lessons retirement pass
+- [ci-followups-5](ci-followups-5/plan.md) — completed — the e2e lanes re-run after a pull request's base changes (#251); `pr-quick` left as it is; #483 a known limit
 - [ci-gates](ci-gates/plan.md) — completed — fail-closed CI aggregators, and no PR run cancels another on its own head
 - [ci-release-supply](ci-release-supply/plan.md) — completed — Storybook in quality-status, live e2e labels and per-head queues, the shard-fold probe, the launch «FILL» gate, store-copy checks, plans ignore shapes, presto's blocked-access title, an advisory in-browser nightly leg, nightly retention at fourteen
 - [code-followups-1](code-followups-1/plan.md) — completed — prune resolved follow-ups, ship 14 small code-only ones in three arcs, settle the boot-line flake
