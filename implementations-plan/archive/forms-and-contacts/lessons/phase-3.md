@@ -73,4 +73,5 @@ The tree wins; each disagreement is also in `plan.md` (§ Assumptions, "Arc 3b r
 - Opus 5.5 review beside round 1: approve; A3b-O1..O3 accepted, A3b-O4 filed as #447 (`known-limit`, closed). The snack region reset focus on every change of card, so a replaced snack dropped keyboard focus to the body; restoring it where `show()` changes the card covers ×, a replacement and a timeout alike.
 - The before-suite ran this arc's test files against the base build, so the hold scenario, whose progress assertions need this arc's code, fails there by design (30 s wait); every other file passed.
 - Codex round 2 (resumed): approve, no new findings. Final cross-arc pass (fresh session `01a13ceb`): approve, two stale comments from earlier arcs fixed (plan § Audit verdicts, X-1, X-2).
+- CodeQL on #452 flagged `theme-contrast.ts`'s `color-mix(…, black P%)` pattern (`js/polynomial-redos`, high): a lazy free-form colour beside `\s*` backtracks on a run of spaces, the same rule as arc 3a's test pattern. The mix is now split at its first and last commas, each part matched by an anchored pattern. Local gates never see it.
 

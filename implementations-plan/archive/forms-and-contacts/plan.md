@@ -22,7 +22,7 @@ post_implementation_hardening: not scheduled
   - Arc 2 (#282): held-read pins for the six list reducers and one shared contact reducer (#224); the shared loader scrim and shake (#225); no visible change, proven per shell.
   - Arc 3a (#435): the import's fenced sender, its own clients and a two-minute Lock hold with the "Lock anyway" confirm (#151); shakes and shimmers stop under Disable animations and reduced motion (#215); a re-opened popup on top (#210, FA-8 A); trimmed network names (#214, FA-10 A).
   - Arc 3b (#452): "Importing contacts · N of M", one snack relabelled in place through `updateToast` (#151, P11-06b A); a second import refused, the menu item disabled, the selection slot owned by its selection (#428, P11-07b C); one message at a time at a name cap on eight fields (#216, P11-02b A); `--btn-destructive` #c62828 with an 18% hover toward black, 5.19:1 and 6.96:1 in both themes (#229, P11-10b A); the Tx hash and To links in the primary colour and one bottom space on the three detail pages (#211); a replaced snack hands keyboard focus back (A3b-O1).
-  - `lessons.md`: one line promoted (a Pinia store's proxy and `toRaw`); the CodeQL lesson (its ReDoS query reads test files) stays in [lessons/phase-3.md](lessons/phase-3.md): the file has 42 bytes left under its budget.
+  - `lessons.md`: one line promoted, CodeQL's ReDoS query (it bit arc 3a's test and this arc's contrast helper); the Pinia proxy lesson stays in [lessons/phase-3.md](lessons/phase-3.md), the file being near its budget.
 - **Orchestrator records:** D-orch-1 to D-orch-7 (§ Decision ledger).
 - **Dropped, rejected, superseded:**
   - #210's per-owner reducer policies and #224's race: kept as they are by the owner (FA-9 B, P11-15); pinned.
