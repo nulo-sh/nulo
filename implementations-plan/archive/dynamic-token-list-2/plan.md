@@ -182,7 +182,7 @@ Title: `feat(token-list): flag a token and refuse a list below a compiled floor`
 
 ## Post-implementation
 
-Follows [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `116974dc`. Specific to this plan:
+Follows [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `116974dc`. Specific to this plan:
 
 - **Review loop:** `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol` over the net diff from `116974dc`, resumed with `resume-codex.sh`, at most three rounds. `code_review: off`.
 - **Delivery:** `gh pr create --base dev`, then `gh pr checks <n> --watch`.
