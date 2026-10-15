@@ -20,7 +20,7 @@ post_implementation_hardening: not scheduled
 - **Shipped:**
   - Arc 1 (#99, #100, #159, #198, #158): one critical section per account address; a bounded, identity-checked profile activation; the passkey retry confirms its saved credential; account RPC params refused as `INVALID_PARAMS`; ConfirmPopup's dead branch deleted.
   - Arc 2 (part of #157): the port client reads `lastError`, an untrusted port is closed, `deleteProfile` waits for its delegate inside one 30 s budget, the PXE fence keeps every dead generation.
-  - Arc 3 (#24 not planned under P7-01, #137, #208's reveal): the unlock failure toast; one eye per change-password field.
+  - Arc 3 (#24 not planned under P7-01, #137, #208's reveal): the unlock failure toast; on Change password, the current password's own eye beside the new pair's shared one.
   - Arc 4 (#157, #421): Ready after the whole service collection started, the 250 ms pre-Ready retry and the send check; the unlock frame with the start bar (P7-08b = C) and the provisional route replayed at Ready; GlobalLoader removed; Delete Profile's own 30.5-minute client (P7-09).
   - Arc 5 (P7-05 to P7-07, P7-10, P7-12): Create account skips an occupied address; a new profile that does not open says so and hands off; the passkey window starts over after no PRF; Continue closes the unlock screen's own failure toast.
   - Close-out PR (#208): `autocomplete` on the backup decrypt field and the full export's encrypt pair (P7-04). From the final cross-arc pass: the unlock screen's last-active lookup leaves a profile opened meanwhile, and a page reached during the start-up stays where the person took it.
@@ -580,7 +580,7 @@ Sign-off: each line rides the record it quotes; OA-7 and OA-8 were signed on pag
 | X3, X4 Comments (Codex) | The default-account docs still promised index 0; the activation doc said it opens the session | FIXED d51d3111 |
 | X5 Comment (Opus) | `handleCreate`'s failure category is always "other" since arc 5's hand-off classifies its own; a garbled `openPort` docblock | FIXED 4f39285f: one fixed warn line; the sentence repaired |
 
-Round 2 (Codex, resumed): `APPROVE`, X1 to X5 verified, no new finding. The loop closes at its second round.
+Round 2 (Codex, resumed): `APPROVE`, X1 to X5 verified, no new finding. Round 3 (Codex, resumed over the close-out commits): `CHANGES`, four Lows, all text and each checked at the tree: the Outcome's arc 3 line overstated the reveal; #458 took a proof's 30-minute bound for the drain's and promised the deletion completes; #462 lacked the prerequisite that starts a hydrate (only an import's timeout recovery calls it); #465 dated the field to #454. All corrected; the code is as round 2 approved it.
 
 ### Deviations from the plan text (the tree wins)
 
