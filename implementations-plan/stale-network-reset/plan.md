@@ -452,7 +452,7 @@ NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent <files>   # builds its 
 
 **Validation gate:** the armed smoke build, then `tests/e2e/stale-network.test.ts` and the full smoke suite on both browsers at retry 0 (§ Running the gates), then `STALE_NETWORK_CAPTURES=1 NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension test:e2e tests/e2e/stale-network-captures.test.ts`. Pass: both browsers green; every capture produced and none tracked by git; the owner's sign-off quoted.
 
-### Phase 7. Docs
+### Phase 7. Docs ✓
 
 1. Rewrite the `CLAUDE.md`, `ARCHITECTURE.md` and Branch B text.
 2. Dedupe, then file each known limit as a closed `known-limit` issue.
@@ -579,7 +579,7 @@ Follow [`implementations-plan/README.md` § Post-implementation standard](../REA
 - Step 1 is absent (`code_review: off`).
 - Step 2 runs per arc while that arc is the stack tip: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. The prompt carries the arc map, this plan and its ledger, the adversarial ask, the two rules verbatim, and a UI-fidelity check against § UI fidelity. A final fresh session covers the net diff from `1ba770cf`.
 - Approval boundaries: a change to the record or journal shape, a new guard surface, or any copy change is a plan change that stops for the owner.
-- Known limits, each a closed `known-limit` issue: imported-only chains, and the refused re-import of an old key file after an address change (A10, D46); codec-hidden rows on a reset chain; the lenient-mode boot bounce (I2); custom-network node reset not detected; a corrupt journal after the purge; one journal per profile (R3); a full backup whose reads straddle a whole reset (A11); an imported key that does not open is dropped (A14).
+- Known limits, each a closed `known-limit` issue: imported-only chains, and the refused re-import of an old key file after an address change (A10, D46); codec-hidden rows on a reset chain; the lenient-mode boot bounce (I2); custom-network node reset not detected; a corrupt journal after the purge; one journal per profile (R3); a full backup whose reads straddle a whole reset (A11); an imported key that does not open is dropped (A14). Filed as #468–#475, with #476 for D51's lost toast; #427 already held the imported-only half of the first.
 - #262 stays closed; its admission rules are unchanged, which a review confirms.
 - Close-out on `stale-network-reset-close-out`: merge `origin/dev`, reconcile `index.md` and `lessons.md` by reading them, write the Outcome, promote lessons, file open items, `git mv` into `archive/` in its own commit, `bun run check:plans` green. Then report and wait: merging is the owner's call.
 - Teardown after the merge: once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/stale-network-reset/plan.md` succeeds, `ExitWorktree` with `keep` (when entered through `EnterWorktree`), then `agent-worktree done stale-network-reset --merged`. A `/loop` session checks on every firing; a `/goal` session arms one background wait after its wrap-up report.
