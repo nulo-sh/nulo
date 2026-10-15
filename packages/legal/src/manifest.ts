@@ -38,6 +38,12 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 				"The wallet now downloads its list of default tokens from tokens.nulo.sh, a host I operate. The request carries no wallet data. Cloudflare, which hosts it, receives your IP address and browser headers (§ 5.11).",
 			],
 		},
+		{
+			version: "1.2.1",
+			effective: "15 October 2026",
+			material: false,
+			changes: ["The explorer is disabled in Settings → Privacy, not Settings → Advanced (§ 5.3)."],
+		},
 	],
 }
 

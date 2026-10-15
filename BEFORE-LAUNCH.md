@@ -114,9 +114,9 @@ archived, versioned and effective 6 October 2026:
 disabled in Settings → Advanced". That control now lives in Settings → Privacy. Ship a new privacy
 version before that release reaches users (procedure above):
 
-- [ ] `legal/privacy.md` — § 5.3 reads "Settings → Privacy"; the version line and a new history
-      row, effective the day it is published
-- [ ] `packages/legal/src/manifest.ts` — the new `privacy` entry, `material: false`, same date
+- [x] `legal/privacy.md` — § 5.3 reads "Settings → Privacy"; the version line and a new history
+      row, effective the day it is published (1.2.1, 15 October 2026)
+- [x] `packages/legal/src/manifest.ts` — the new `privacy` entry, `material: false`, same date
 - [ ] After the deploy, AMO's Privacy policy field carries the new text
       (`apps/extension/store/listing.md` § Privacy policy text)
 
