@@ -18,6 +18,8 @@ Locates files inside installed packages, including files a package does **not** 
 
 ESM only. Node or Bun: it imports `node:fs`, `node:module`, `node:path` and `node:url`, so it runs in build tooling and tests, not in a browser. No dependencies.
 
+No Aztec dependency, so any Aztec line works. Its version moves in lockstep with the other `@nulo-sh/*` packages, so a release may change nothing here.
+
 ## Provenance
 
 Built from `packages/resolve-asset` in [nulo-sh/nulo](https://github.com/nulo-sh/nulo) by `.github/workflows/publish-packages.yml` and published with npm provenance. `npm audit signatures` verifies the attestation.
