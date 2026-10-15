@@ -341,7 +341,7 @@ Trunk `dev`. `code_review` is `off` on every arc.
 
 ## Post-implementation
 
-Follow [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `d3dc4415`. Plan-specific settings:
+Follow [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `d3dc4415`. Plan-specific settings:
 
 - Step 1 is absent (`code_review: off`).
 - Step 2 per arc while it is the stack tip: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. Arc 1: once over P1-P3, then one resumed round per fill-in commit. Arc map: "arc 1 of 2 moves the line; arc 3 prepares the npm release on it". A final fresh session covers the net diff from `d3dc4415`. Hard stop at three rounds.

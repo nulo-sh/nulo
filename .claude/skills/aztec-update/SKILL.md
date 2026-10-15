@@ -94,7 +94,7 @@ the artifact byte-exact with its `PROVENANCE.md`, add a `reference/<regime>/` ge
 own lockfile, regenerate the vectors twice with an empty diff, and move the tests to the new
 truth. Off Mainnet that ships in place as an update; a Mainnet-serving build rotates only as a new
 extension major (CLAUDE.md "Account-address freeze"). Worked example:
-`implementations-plan/aztec-rc3/` (`nulo-v6.1`).
+`implementations-plan/archive/aztec-rc3/plan.md` (`nulo-v6.1`).
 
 **The scope guard's coverage.** `PxeService` refuses to sync a scope the PXE holds no keys for,
 because the HandshakeRegistry sync would move that account's cursor past its handshakes for good
