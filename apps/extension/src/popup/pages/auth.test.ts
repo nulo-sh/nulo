@@ -489,25 +489,28 @@ describe("auth.vue — what a failed unlock says", () => {
 		expect(unlockProfile).toHaveBeenCalledTimes(2)
 	})
 
-	test("Continue again closes the last failure's toast before the new attempt; another surface's toast stays", async () => {
+	test("Continue closes whatever error toast shows before the new attempt; an info toast stays", async () => {
 		const { toast, openToast } = useToast()
 		const wrapper = await failPasswordUnlock(new Error("Invalid profile id"))
 		expect(toast.value).toMatchObject({ label: "Something went wrong", sub: "Try unlocking again." })
+		/** Submits an attempt and reads the toast while it is in flight. */
+		const retry = async () => {
+			let answer!: (profile: unknown) => void
+			unlockProfile.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+			await wrapper.find("form").trigger("submit")
+			const shown = toast.value
+			answer(undefined)
+			await flushPromises()
+			return shown
+		}
 
-		let answer!: (profile: unknown) => void
-		unlockProfile.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
-		await wrapper.find("form").trigger("submit")
-		expect(unlockProfile).toHaveBeenCalledTimes(2)
-		expect(toast.value).toBeNull()
-		answer(undefined)
-		await flushPromises()
-
-		const handOff = { kind: "error", label: "Something went wrong", sub: "Open the wallet again to unlock your new profile." } as const
-		openToast(handOff)
-		unlockProfile.mockReturnValueOnce(new Promise(() => {}))
-		await wrapper.find("form").trigger("submit")
-		expect(unlockProfile).toHaveBeenCalledTimes(3)
-		expect(toast.value).toMatchObject(handOff)
+		expect(await retry()).toBeNull()
+		openToast({ kind: "error", label: "Something went wrong", sub: "Open the wallet again to unlock your new profile." })
+		expect(await retry()).toBeNull()
+		const info = { kind: "info", label: "Importing" } as const
+		openToast(info)
+		expect(await retry()).toMatchObject(info)
+		expect(unlockProfile).toHaveBeenCalledTimes(4)
 	})
 
 	test("a wrong password keeps its inline error and gets no toast", async () => {
