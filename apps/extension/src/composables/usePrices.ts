@@ -15,13 +15,13 @@ import { knownDecimals } from "@/utils/token-amount"
 export type PricedToken = { chainId?: number; contract?: string; decimals?: number; hasDecimals?: boolean }
 
 /** Orders price answers against broadcasts, so a slow answer never overwrites a newer one: an answer
- *  takes its number when it is requested, a broadcast when it arrives. */
+ *  takes its number when it is requested, a broadcast when it arrives. Dropping a late answer loses
+ *  nothing only because the worker broadcasts every change of its failure state. */
 function latestWins() {
 	let issued = 0
 	let applied = 0
 	return {
 		issue: () => ++issued,
-		/** True when `seq` is newer than every number applied so far; it then becomes the newest. */
 		admit(seq: number): boolean {
 			if (seq <= applied) return false
 			applied = seq
@@ -50,8 +50,8 @@ export function usePrices(priceService: PriceServiceClient) {
 	const mapped = ref(false)
 	/** The first price answer has arrived: a refresh result or failure, or a broadcast. */
 	const settled = ref(false)
-	/** The latest price answer says no fetch could succeed: the worker's last fetch failed, or the
-	 *  request itself did. Usable quotes held beside it stay usable. */
+	/** The worker's latest fetch failed, or this composable's request to it did. Usable quotes held
+	 *  beside it stay usable. */
 	const unavailable = ref(false)
 	const now = useTicker(30_000)
 

@@ -639,13 +639,20 @@ describe("BalanceView — Home hero when prices could not be fetched", () => {
 		expect(unavailableCaption(wrapper).exists()).toBe(false)
 	})
 
-	test("an empty wallet still reads $0.00, with no caption", async () => {
+	test("an empty wallet still reads $0.00, and one holding only unpriced tokens keeps 'priced assets only'", async () => {
 		mockRefreshFailed = true
 		seedRows = [{ ...SEED[0], publicBalance: "0", privateBalance: "0" }] as typeof SEED
+		const empty = await mountView()
+		expect(amount(empty.wrapper).text()).toContain("$0.00")
+		expect(unavailableCaption(empty.wrapper).exists()).toBe(false)
+		expect(partialCaption(empty.wrapper).exists()).toBe(false)
+		empty.wrapper.unmount()
+
+		seedRows = [SEED[1]] as typeof SEED
 		const { wrapper } = await mountView()
 		expect(amount(wrapper).text()).toContain("$0.00")
+		expect(partialCaption(wrapper).exists()).toBe(true)
 		expect(unavailableCaption(wrapper).exists()).toBe(false)
-		expect(partialCaption(wrapper).exists()).toBe(false)
 	})
 
 	test("a failed refresh while Home is open replaces the figure, and a clean one brings it back", async () => {
@@ -970,6 +977,21 @@ describe("BalanceView — an arrival on Home", () => {
 		updatedHandler?.(row(LARGE + 2n * 10n ** 12n))
 		await flushPromises()
 		configHandler?.({ key: "showFiatValues", value: true })
+		await flushPromises()
+		expect(hero(wrapper)).toBe(shown)
+	})
+
+	test("while prices are unavailable nothing counts: their return shows the aggregate's own string at once", async () => {
+		const shown = await ownString([row(LARGE + 10n ** 12n)])
+		const { wrapper } = await settledHome()
+		quotesHandler?.({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, lastRefreshFailed: true })
+		await flushPromises()
+		expect(hero(wrapper)).toBe("—")
+
+		await wrapper.setProps({ arrival: { id: "r1", label: "+1 AAA" } })
+		updatedHandler?.(row(LARGE + 10n ** 12n))
+		await flushPromises()
+		quotesHandler?.({ quotes: USD_1(), pricedTokens: TEST_PRICED_TOKENS, lastRefreshFailed: false })
 		await flushPromises()
 		expect(hero(wrapper)).toBe(shown)
 	})

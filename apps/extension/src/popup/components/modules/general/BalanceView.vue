@@ -210,12 +210,10 @@ const isPriceableHolding = (tb) =>
 /** A price-mapped holding counts as $0.00 until its quote lands, so a wallet holding one waits for
  *  the first price answer; an empty or unpriced wallet has none to wait for. */
 const awaitingQuotes = computed(() => showFiatValues.value && !prices.settled.value && tokenBalances.value.some(isPriceableHolding))
-/** Prices could not be fetched and nothing held that a price could cover has one: the total would be a
- *  $0.00 the wallet does not hold. */
 const pricesUnavailable = computed(() => {
 	if (!showFiatValues.value || !prices.unavailable.value) return false
 	const holdings = tokenBalances.value.filter(isPriceableHolding)
-	return holdings.length > 0 && holdings.every((tb) => !prices.quoteFor(tb.token.chainId, tb.token.contract))
+	return holdings.length > 0 && holdings.every((tb) => fiatOf(tb) === undefined)
 })
 const heroPending = computed(() => (isTotalUnsettled.value || awaitingQuotes.value) && !capElapsed.value)
 /** After the cap one question decides the figure: did ANY snapshot succeed for this scope? A loaded

@@ -277,7 +277,7 @@ describe("composables/usePrices", () => {
 			expect(api.unavailable.value).toBe(true)
 		})
 
-		test("a slow answer never overrides a broadcast or an answer newer than its request", async () => {
+		test("a slow answer never overrides a newer broadcast or a newer request's answer", async () => {
 			const open = held()
 			const client = fakeClient()
 			client.refreshIfStale.mockReturnValue(open.promise)

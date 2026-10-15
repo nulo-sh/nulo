@@ -24,7 +24,7 @@ test.skipIf(!aztecConfig)(
 		let ctx: ExtensionContext | undefined
 		try {
 			ctx = await launchExtension()
-			await interceptRpc(ctx.browser, ctx.extensionId, "https://api.coingecko.com", { kind: "refuse" })
+			const refused = await interceptRpc(ctx.browser, ctx.extensionId, "https://api.coingecko.com", { kind: "refuse" })
 			const page = await gotoPopupImport(ctx)
 			await importFullBackup(page, filePath, TEST_PASSWORD, POPUP_IMPORT_SHELL)
 			await switchToLocalNetwork(page)
@@ -34,9 +34,10 @@ test.skipIf(!aztecConfig)(
 			const hero = await page.$eval('[data-testid="balance-amount"]', (el) => el.textContent?.trim() ?? "")
 			expect(hero).toBe("—")
 			expect(await page.$('[data-testid="balance-fiat-partial"]')).toBeNull()
-			// The token row keeps its balance and shows no dollar figure.
 			await waitForTokenCardAmount(page, "1,000", "TST")
 			expect(await page.$('[data-testid="token-fiat"]')).toBeNull()
+			expect(await refused.hits(), "price requests refused").toBeGreaterThan(0)
+			expect(await refused.failures(), "price interception failures").toEqual([])
 			await shotSend(page, "hero-prices-unavailable", "balance-amount")
 		} finally {
 			await ctx?.close()

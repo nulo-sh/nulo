@@ -53,7 +53,7 @@ export type Methods = {
 }
 
 export type Events = {
-	/** Emitted after every fetch, failed or not, and every new token list, and with no quotes when
-	 *  fiat display is disabled. */
+	/** Emitted after every fetch no fiat-display flip superseded, failed or not, after every new token
+	 *  list, and with no quotes when fiat display is disabled. */
 	onQuotesUpdated: PriceSnapshot
 }
