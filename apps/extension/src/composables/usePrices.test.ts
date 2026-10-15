@@ -16,7 +16,11 @@ import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/li
 
 const TEST_USDC = TEST_TOKENS.USDC
 
-const snap = (quotes: PriceState): PriceSnapshot => ({ quotes, pricedTokens: TEST_PRICED_TOKENS })
+const snap = (quotes: PriceState, lastRefreshFailed = false): PriceSnapshot => ({
+	quotes,
+	pricedTokens: TEST_PRICED_TOKENS,
+	lastRefreshFailed,
+})
 
 function quoteState(now: number, overrides?: Partial<PriceState>): PriceState {
 	return {
@@ -227,5 +231,81 @@ describe("composables/usePrices", () => {
 
 		expect(api.quoteFor(CHAIN_IDS.TESTNET, TEST_USDC)).toBeUndefined()
 		expect(api.usableQuotes.value["usd-coin"]).toBeDefined()
+	})
+
+	describe("unavailable", () => {
+		const failed = (quotes: PriceState = {}) => snap(quotes, true)
+		const held = () => {
+			let answer: (s: PriceSnapshot) => void = () => {}
+			let fail: (e: Error) => void = () => {}
+			const promise = new Promise<PriceSnapshot>((resolve, reject) => {
+				answer = resolve
+				fail = reject
+			})
+			return { promise, answer: (s: PriceSnapshot) => answer(s), fail: () => fail(new Error("no answer")) }
+		}
+		const reconnect = (client: ReturnType<typeof fakeClient>) =>
+			(client as unknown as { onConnected: EventHandler<void> }).onConnected.invoke()
+
+		test("follows the answer and every later broadcast, whatever quotes they carry", async () => {
+			const client = fakeClient()
+			client.refreshIfStale.mockResolvedValue(failed(quoteState(Date.now())))
+			const { api } = await withPrices(client)
+			expect(api.unavailable.value).toBe(true)
+			expect(api.usableQuotes.value["usd-coin"]).toBeDefined()
+
+			client.onQuotesUpdated.invoke(snap({}))
+			expect(api.unavailable.value).toBe(false)
+			client.onQuotesUpdated.invoke(failed())
+			expect(api.unavailable.value).toBe(true)
+		})
+
+		test("a request the background never answers sets it; a clean answer on reconnect clears it", async () => {
+			const client = fakeClient()
+			client.refreshIfStale.mockRejectedValue(new Error("no answer"))
+			const { api } = await withPrices(client)
+			expect(api.unavailable.value).toBe(true)
+
+			client.refreshIfStale.mockResolvedValue(snap(quoteState(Date.now())))
+			reconnect(client)
+			await flushPromises()
+			expect(api.unavailable.value).toBe(false)
+
+			client.refreshIfStale.mockResolvedValue(failed())
+			reconnect(client)
+			await flushPromises()
+			expect(api.unavailable.value).toBe(true)
+		})
+
+		test("a slow answer never overrides a newer broadcast or a newer request's answer", async () => {
+			const open = held()
+			const client = fakeClient()
+			client.refreshIfStale.mockReturnValue(open.promise)
+			const { api } = await withPrices(client)
+			client.onQuotesUpdated.invoke(snap({}))
+			open.answer(failed())
+			await flushPromises()
+			expect(api.unavailable.value).toBe(false)
+
+			const slow = held()
+			client.refreshIfStale.mockReturnValueOnce(slow.promise).mockResolvedValueOnce(snap({}))
+			reconnect(client)
+			reconnect(client)
+			await flushPromises()
+			slow.fail()
+			await flushPromises()
+			expect(api.unavailable.value).toBe(false)
+		})
+
+		test("nothing moves it after dispose", async () => {
+			const open = held()
+			const client = fakeClient()
+			client.refreshIfStale.mockReturnValue(open.promise)
+			const { api } = await withPrices(client)
+			api.dispose()
+			open.answer(failed())
+			await flushPromises()
+			expect(api.unavailable.value).toBe(false)
+		})
 	})
 })

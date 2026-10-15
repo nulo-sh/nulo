@@ -4,6 +4,21 @@ Decision page 12 (Network, prices and privacy) carries this lane's calls, P12-01
 
 Arc 1 (#171) changes nothing a person sees in a shipped build and has no ask.
 
+## Answers (pages 12 and 18, 2026-10-15)
+
+| Ask | Answer | Ships in |
+|---|---|---|
+| OA-1 | **B** | arc 2a |
+| OA-2 | **A** | arc 2a |
+| OA-3 | **A** | arc 2a |
+| OA-4 | **B**, no words given | arc 2a ships the example as recommended: "Use http://localhost instead of http://[::1]." |
+| OA-5 | **A** | arc 2a |
+| OA-6 | **B** | arc 2c |
+| OA-7 | **B** | arc 2c |
+| P12-01 / P12-11 | P18-01 **A**: "—" and "Prices unavailable" | arc 2c |
+
+**A wording the owner may still change:** OA-4's line, "Use http://localhost instead of http://[::1].", shown under the RPC URL field when a person types plain HTTP to `[::1]` (`ERR_RPC_URL_IPV6_LOOPBACK` in `apps/extension/src/wallet/services/network/spec.ts`). A new wording is a one-line change there plus the popup test rows that quote it.
+
 ## OA-1. #200: which characters count as "hidden"
 
 **Surface:** Settings → Networks, the RPC URL field (add network, add endpoint, edit endpoint).
@@ -117,3 +132,18 @@ P12-01 names one case: a funded wallet whose first price fetch failed and nothin
 **Recommendation:** the first three as shipped now; the last two show "—" and "Prices unavailable" as well, since each shows a $0.00 the person did not earn (charter C9 A).
 
 **What ships now:** the third column.
+
+## OA-8. #116: a price answer that leaves out what the wallet holds
+
+**Surface:** the Home hero.
+
+Arc 2c switches the hero to "—" / "Prices unavailable" when a fetch fails (P18-01 A, OA-6 B, OA-7 B). An answer that arrives but leaves one token out is not a failed fetch. The provider may drop the token, or its price may fall outside the wallet's sanity band, as in a depeg. Once that token's last price expires after 15 minutes, a wallet holding only it reads $0.00 with "priced assets only".
+
+| Option | A wallet holding only USDC, whose price the provider stopped returning |
+|---|---|
+| **A. As shipped** | $0.00 with "priced assets only" once the cached price expires |
+| **B. A missing price reads as unavailable** | "—" with "Prices unavailable", as after a failed fetch |
+
+**Recommendation: B.** The $0.00 is again a figure the person did not earn (charter C9 A). B is a smaller rule than the one shipped: it drops the failed-fetch condition from the hero's test.
+
+**What ships now: A.**
