@@ -5,13 +5,14 @@
  *
  * The token-ready profile's funded account is exported and imported into a second profile, and its
  * stored key there is made unreadable once the fee is estimated: the estimate needs the key too, and
- * stops the form before any send when the key never opens.
+ * stops the form before any send when the key never opens. Send opened again reads the fee afresh,
+ * which needs the key, so it closes onto Home with the same toast (A10b).
  */
 import { describe, expect, inject } from "vitest"
 import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { isFirefox } from "../fixtures/browser"
-import { launchExtension, openPopup, registerProfile, test, waitForHash } from "../fixtures/extension"
+import { clickByTestId, launchExtension, openPopup, registerProfile, test, waitForHash } from "../fixtures/extension"
 import {
 	fillSendForm,
 	importToken,
@@ -20,6 +21,7 @@ import {
 	switchAccountByAddress,
 	switchToLocalNetwork,
 	waitForToast,
+	waitForToastGone,
 } from "../fixtures/helpers"
 import { submitSend } from "../fixtures/send-page"
 import { confirmImport, exportAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "../helpers/account-io"
@@ -59,6 +61,15 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox || aztecConfig === undefined)("st
 			await submitSend(page, { expect: "send" })
 			await waitForToast(page, IMPORTED_UNUSABLE_TOAST.label, 60_000, { kind: "error" })
 			await capture(page, "A10-imported-unusable")
+
+			// An error snack stays until closed, and the second one would find it still up.
+			await clickByTestId(page, "snackbar-close")
+			await waitForToastGone(page, IMPORTED_UNUSABLE_TOAST.label, 10_000)
+			await navigateByHash(page, "#/popup/general", 15_000)
+			await page.evaluate(() => (document.querySelector('[data-testid="actions-send"]') as HTMLElement | null)?.click())
+			await waitForToast(page, IMPORTED_UNUSABLE_TOAST.label, 60_000, { kind: "error" })
+			await waitForHash(page, "#/popup/general", 15_000)
+			await capture(page, "A10b-send-closed")
 		} finally {
 			await ctx.close()
 		}
