@@ -1,0 +1,7 @@
+# ui-followups-p18: status
+
+- 2026-10-15 phase 0: briefs read; worktree adopted at d59459ab. #363 page-18 C read from the decision record (icons keep outline); #451 found signed (page 17 A, the shipped wording); #364's flag is `STORE_CAPTURES`, not `CAPTURES_ENABLED`.
+- 2026-10-15 draft: recon (2 Sonnet explorers), plan, OWNER-ASKS (SA-1), recon.md written; panel round 1 next.
+- 2026-10-15 panel round 1: Codex conditional approve (5 accepted, 1 refuted); Opus pending.
+- 2026-10-15 panel round 1: Opus conditional approve (11 accepted, 1 rejected); plan revised (140 lines); Codex resume next.
+- 2026-10-15 panel round 2-3: Codex r2 conditional (3 accepted), r3 approve. Plan committed; awaiting the orchestrator's approval.
