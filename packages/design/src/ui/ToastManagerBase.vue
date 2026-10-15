@@ -27,6 +27,8 @@ defineExpose({ snackHeight: () => wrap.value?.getBoundingClientRect().height ?? 
 
 /** The snack the regions render: a copy of the shared toast that lags it while a card is leaving. */
 const shown = ref<ToastState | null>(null)
+/** The shown card was relabelled in place: its open was announced, and its later text is not. */
+const relabelled = ref(false)
 let leaveWaiting = false
 
 // One card at a time, across both regions: when the old card must leave before the new one rises
@@ -58,6 +60,7 @@ const show = (next: ToastState | null) => {
 		focusWithin.value = false
 		if (target instanceof HTMLElement && target.isConnected) target.focus()
 	}
+	relabelled.value = next !== null && next.id === shown.value?.id
 	shown.value = next
 }
 
@@ -148,7 +151,7 @@ onBeforeUnmount(() => {
 					>
 						<Icon name="check-circle" size="16" color="green" aria-hidden="true" />
 						<div :class="$style.text">
-							<span :class="$style.title" data-testid="snackbar-title">{{ shown.label }}</span>
+							<span :class="$style.title" data-testid="snackbar-title" :aria-live="relabelled ? 'off' : undefined">{{ shown.label }}</span>
 							<span v-if="shown.sub" :class="$style.sub" data-testid="snackbar-sub">{{ shown.sub }}</span>
 						</div>
 						<button v-if="shown.action" type="button" :class="$style.action" data-testid="snackbar-action" :onClick="selectFor(shown.id)">
@@ -180,7 +183,7 @@ onBeforeUnmount(() => {
 						<Icon v-if="shown.kind === 'info'" name="clock-circle" size="16" color="secondary" aria-hidden="true" />
 						<Icon v-else name="close-circle" size="16" color="red" aria-hidden="true" />
 						<div :class="$style.text">
-							<span :class="$style.title" data-testid="snackbar-title">{{ shown.label }}</span>
+							<span :class="$style.title" data-testid="snackbar-title" :aria-live="relabelled ? 'off' : undefined">{{ shown.label }}</span>
 							<span v-if="shown.sub" :class="$style.sub" data-testid="snackbar-sub">{{ shown.sub }}</span>
 						</div>
 						<button v-if="shown.action" type="button" :class="$style.action" data-testid="snackbar-action" :onClick="selectFor(shown.id)">
