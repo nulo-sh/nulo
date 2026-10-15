@@ -1,3 +1,4 @@
+import "./client"
 import { readFileSync } from "node:fs"
 import { PrestoClient } from "@alejoamiras/presto-core"
 import { resolvePackageAsset } from "@nulo/resolve-asset"
@@ -7,7 +8,7 @@ type ClientModule = typeof import("./client")
 let first: ClientModule
 let second: ClientModule
 
-// Loading is not the behaviour under test, so it runs in the hook, not on a test's own budget.
+// Loaded during collection, so each case's re-import only re-evaluates it.
 beforeEach(async () => {
 	vi.resetModules()
 	first = await import("./client")

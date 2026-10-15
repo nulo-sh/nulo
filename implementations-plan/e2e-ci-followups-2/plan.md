@@ -38,7 +38,7 @@ Three CI bugs, one arc, one PR against `dev`: unit tests that time out on a modu
 
 ## Phases
 
-### Phase 1: first loads off the timed budgets (#500)
+### Phase 1: first loads off the timed budgets (#500) ✓
 
 Change map:
 - `apps/extension/src/utils/zod-jitless.test.ts`: `import "./zod-jitless"`, then `import { z } from "zod"`, in that order; the body only asserts.

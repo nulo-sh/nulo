@@ -6,3 +6,4 @@
 - 2026-10-15 22:25Z phase 1: plan drafted (139 lines); `check:plans` 0 findings; Codex (Sol, high) and Opus audits started.
 - 2026-10-15 22:30Z phase 1: Codex round 1 and Opus round 1 both `conditional approve`; every finding adopted (ledger in plan.md); Codex round 2 running.
 - 2026-10-15 22:40Z approval gate: Codex round 2 `approve`; plan committed, awaiting the orchestrator's approval.
+- 2026-10-15 23:29Z arc1 phase 1 gate PASS: reproducer red at base (ext 3, bridge 2, both engines) and green at head; five files Bun+Node green; bridge test green; extension suite Bun exit 0, Node exit 0 with the 3 BUN_ONLY_FILES excluded (they red on Node at base too); lint, typecheck:all exit 0.
