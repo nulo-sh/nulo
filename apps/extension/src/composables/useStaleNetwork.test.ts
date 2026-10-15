@@ -337,6 +337,51 @@ describe("useStaleNetwork", () => {
 		expect(order).toEqual(["loaded", "toast"])
 	})
 
+	test("a completion both the event and the catch-up see runs once, whichever comes first", async () => {
+		for (const eventFirst of [true, false]) {
+			const w = fakeWorker()
+			const booted = view({ reset: { running: true, purged: true, doneCount: 0 } })
+			let release!: (v: StaleNetworkView | null) => void
+			const parked = new Promise<StaleNetworkView | null>((r) => (release = r))
+			;(w.client.getStaleNetwork as ReturnType<typeof vi.fn>).mockImplementationOnce(() => parked)
+			const { stale, deps } = harness(w, { scope: () => ({ profileId: "p1", networkId: "tn" }), staleActive: () => booted })
+			const resumed = stale.resume("p1")
+			await settle()
+			if (eventFirst) w.complete("tn", null)
+			release(null)
+			await settle()
+			if (!eventFirst) w.complete("tn", null)
+			await resumed
+			await settle()
+			expect(deps.onCompleted).toHaveBeenCalledTimes(1)
+		}
+	})
+
+	test("an ended session's automatic run, still settling, covers nothing of the next, which sees a resumed run", async () => {
+		const w = fakeWorker()
+		const target = view({ accounts: [] })
+		w.views.set("tn", target)
+		const { stale } = harness(w, { scope: () => ({ profileId: "p1", networkId: "tn" }) })
+		let settled!: () => void
+		const run = runUnattended(w.client, target, () => new Promise<void>((r) => (settled = r)))
+		try {
+			w.complete("tn", null)
+			await settle()
+			expect(stale.running.value).toBe(target)
+			stale.clear()
+			expect(stale.running.value).toBeNull()
+			const resumed = view({ accounts: [], reset: { running: true, purged: false, doneCount: 0 } })
+			w.views.set("tn", resumed)
+			w.state.pending = { networkId: "tn", running: true }
+			w.emit({ networkId: "tn", running: true })
+			await settle()
+			expect(stale.running.value).toEqual(resumed)
+		} finally {
+			settled()
+			await run
+		}
+	})
+
 	test("the resume finishes nothing while the active network is still stale, or was live at the bootstrap", async () => {
 		const w = fakeWorker()
 		w.views.set("tn", view())

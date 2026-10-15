@@ -82,6 +82,13 @@ Over `010586a4..aacbed3e`, fresh. **Round 1: 3 material findings**, all verified
 
 Low: A1 and A3's type roles differ from the references (phase 6 lists them for the sign-off); the completion helper's header named its extraction history.
 
+`audit:vue` then failed the type-role inventory: its sites are keyed by their template branch, and the loader's `v-if` renamed the four branches after it. Re-keyed in `identifier-sites.expected.json`.
+
+**Round 2 (resumed): 2 material findings**, both verified and accepted; 5 mutants, all killed.
+
+1. An automatic run's entry is module-wide, and `clear()` did not end it: a run still settling after a lock kept the next session behind its loader. `clear()` now marks every entry it finds as ended, and only the others count as this session's runs (for the loader and for skipping events), so a resumed run of the same network shows again.
+2. The catch-up and the completion event could both run one completion: two network reloads, two routes to Home. Each session now lets one of them claim a network's completion; the other skips it.
+
 ## Gate
 
 At the Phase 5 commit, retry 0: `bun run audit:vue` exit 0 (typecheck, lint, 776 test files passed and 3 skipped, 12368 tests, build); `bun run --cwd apps/extension build-storybook` exit 0. The copy, order, phishing and keyboard pins are in the unit run.
