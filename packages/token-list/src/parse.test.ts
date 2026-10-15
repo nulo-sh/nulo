@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest"
 import { BUNDLED_TOKEN_CLASS_IDS } from "./class-ids"
+import { signEnvelope } from "./envelope"
+import { readTokenList } from "./index"
 import {
 	BN254_FR_MODULUS,
 	checkPayload,
@@ -10,6 +12,7 @@ import {
 	selectEntries,
 	type TokenListEntry,
 } from "./parse"
+import { freshKey } from "./test-keys"
 
 const CLASS = BUNDLED_TOKEN_CLASS_IDS[0]
 const hex64 = (n: bigint) => `0x${n.toString(16).padStart(64, "0")}`
@@ -102,6 +105,14 @@ describe("payload", () => {
 		const seventeen = Array.from({ length: MAX_ENTRIES_PER_CHAIN + 1 }, (_, i) => entry(i))
 		expect(refusedAt(payload(seventeen), "strict")).toBe(`payload.tokens[${MAX_ENTRIES_PER_CHAIN}].chainId`)
 		expect(checkPayload(payload(seventeen), "wallet").tokens).toHaveLength(MAX_ENTRIES_PER_CHAIN + 1)
+	})
+
+	test("a signed list carrying a flagged set verifies and parses", async () => {
+		const { privateKey, pinned } = await freshKey()
+		const flagged = payload([entry(0)], { sequence: 1_792_100_000, flagged: [{ chainId: 7, address: hex64(9n) }] })
+		const bytes = new TextEncoder().encode(JSON.stringify(flagged))
+		const list = await readTokenList(JSON.stringify(await signEnvelope(bytes, privateKey, pinned.keyId)), [pinned])
+		expect(list).toMatchObject({ sequence: 1_792_100_000, entries: [expect.objectContaining({ symbol: "T0" })] })
 	})
 
 	test("the source holds tokens only, under strict rules", () => {
