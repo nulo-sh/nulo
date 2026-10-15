@@ -1,7 +1,7 @@
 ---
 plan: stale-network-reset
 tier: deep
-status: approved 2026-10-14; implementing
+status: completed; a stack of three arcs plus this close-out against dev, whose merge closes the plan
 issues: "refs #324 (first consumer); refs #277 (shares the purge path); #262 stays closed"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,16 @@ base: origin/dev at d01569a2 (facts and line refs); implementation branches from
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-15. Approved 2026-10-14, delivered 2026-10-15.
+- **Status:** delivered as a `gh stack` against `dev`: `stale-network-reset-1-quarantine`, `-2-takeover`, `-3-e2e` and this close-out, `stale-network-reset-close-out`, merged together; that merge closes the plan.
+- **Shipped:** an update that leaves a network behind (its chain identity, every derived address, or both) quarantines only that chain; every service chokepoint refuses it, and a mismatch it cannot confine still blocks the profile. `NetworkResetService` resets a non-Mainnet stale network in place after unlock, without the recovery phrase: a journal written before any delete, the purge, the row re-keyed to the build's seed, the accounts re-created with their names, indexes and visibility, imported keys resealed, resumable after a worker kill, with a run lock that holds dApp requests for at most 60 s. Layout A's takeover (A1–A6, A10/A10b, A11, A15, R1–R4) as signed off by the owner (A17). Mainnet is quarantined with no reset. #431's rc.3 rotation is its first consumer (D66).
+- **Dropped, rejected, superseded:** D54's bare spinner is superseded by A4c's "Opening …" (D63); a guard on transaction polling of a quarantined chain was rejected as a new guard surface (arc 1 loop); every other disposition is in § Decision ledger and § Audit verdicts. No `lessons.md` promotion: the curated layer is at 8190 of its 8192 bytes, and this plan's cross-task gotcha (a clean rebase is not a reviewed one: search the incoming commits for each path the change guards) stays in `lessons/phase-4.md`.
+- **Known limits:** #468, #469, #470, #471, #472, #473, #474, #475, #476, #478; #427 (filed with #431) narrows to a chain that holds only imported accounts.
+- **Open items:** #277 stays open; its comment says the reset inherits its stall for the stale chain only.
+- **Seeds retired:** the `/goal` and `/loop` seeds are retired and removed; this plan is a record, not a task list.
 
 # stale-network-reset: reset one network in place when an update leaves it behind
 
@@ -617,25 +627,4 @@ Follow [`implementations-plan/README.md` § Post-implementation standard](../REA
 
 ## Seeds
 
-ELI5: https://claude.ai/artifact/YFVfFHJm7zTeQsZQ94uqK1 (private), published from the local, gitignored `implementations-plan/stale-network-reset/eli5.html`. Use exactly one seed per session, inside this worktree (`agent-worktree resume stale-network-reset`).
-
-**Recommended, `/goal`:**
-
-```
-/goal All eight phases marked ✓ in implementations-plan/stale-network-reset/plan.md (the phase headers in the file, not the chat or the task list), each ✓ backed by its phase's validation gate, as plan.md defines it, reported passing in the transcript at retry 0; for each phase the agent has printed `LESSONS_FILE=implementations-plan/stale-network-reset/lessons/phase-N.md` in the transcript; `/code-review` was NOT run (plan.md says code_review: off); the codex fix loop (gpt-6.1-sol, high) converged at each of the three arc boundaries and in the final cross-arc pass, each convergence evidenced by a resumed codex pass reporting no new material findings, quoted in the transcript; the arc 2 PR body shows every capture beside its ui-spec reference and quotes the owner's sign-off naming each surface; the stack of three arcs plus the close-out exists on GitHub, created only AFTER all loops converged (`gh stack view` output in the transcript), including the close-out that archived the plan (`git show --stat` of the archive-move commit in the transcript); `bun run test` and `bun run lint` both report exit 0 in the transcript. Never merge: merging is the owner's call.
-```
-
-**Fallback, `/loop`:**
-
-```
-/loop 15m Drive implementations-plan/stale-network-reset forward. Never idle waiting for my input. Each firing:
-1. **Reality check**: read implementations-plan/stale-network-reset/plan.md and lessons/ (authoritative state, not the chat), including its Outcome & Quality Bar and UI fidelity sections: every step is judged against those, not just against "it runs". On the stack, read them from the TOP layer (`gh stack view` names it; `git show <top-branch>:<path>`), never from a lower arc's checkout. If that path is gone, the close-out has run: `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/stale-network-reset/plan.md` succeeds → it merged and the plan is done: run the teardown now, without asking — `ExitWorktree` (`keep`) if this session entered the worktree through `EnterWorktree`, then `agent-worktree done stale-network-reset --merged` — report what it removed or, if it refused, its output verbatim (never force past a refusal), clear this loop and STOP. Fails → delivered and awaiting my merge: babysit only (CI per step 2, fixes on the arc they belong to then `gh stack sync`, keep the Outcome true), never resume a phase or read the archived plan as a task list; once every PR is green, report that once and STOP. A live plan.md that already carries an `## Outcome` block means a close-out was interrupted: finish it. Otherwise, native task list empty? rebuild it from plan.md, one task per remaining step; run `git status` and `git log --oneline -5`. If a PR exists, `gh stack view` and `gh pr view --json statusCheckRollup` (no --watch). Without a PR, `gh run list --branch $(git branch --show-current) --limit 1 --json status,databaseId`.
-2. **Waiting on CI is fine**: confirm it is progressing (`gh run watch <run-id>` up to 10 minutes; stuck past that → inspect logs, log it as blocked in lessons). Use the wait: review the diff, prep the next phase, strengthen tests. Don't start work that would conflict with the in-flight change.
-3. **No task in hand?** Pick the next pending step from plan.md and start it. After each meaningful edit run `bun run lint` + the touched package's tests. Then commit → `gh stack push` (`gh stack sync` if dev or a lower arc moved).
-4. **Stuck, or facing a decision you'd normally bring to me?** Call `/codex high` (gpt-6.1-sol) with full context and go back and forth until you reach a defensible decision, then act. Log every consult + verdict in lessons/phase-N.md. Hard limits stay hard: never merge, never publish or deploy, never expand scope beyond plan.md, and any change to copy, screen layout, the record or journal shape, or a new guard surface stops for the owner (plan.md § Post-implementation).
-5. **Same step failed 5 times?** Stop retrying; reassess with codex, then continue down the agreed path.
-6. **Phase green?** Green means THE PHASE'S VALIDATION GATE as written in plan.md passes at retry 0 (smoke e2e needs the armed build after `audit:vue`; see plan.md § Running the gates). Paste the result, mark ✓ in plan.md, file the lessons entry, print `LESSONS_FILE=implementations-plan/stale-network-reset/lessons/phase-N.md`, advance. Arc boundary crossed (phases 4, 7, 8)? Run the codex loop on the arc diff with the arc map, plan.md's ledger and the no-over-engineering + comment-quality rules until a round yields nothing material, THEN `gh stack add <next-arc-branch>`. Phase 6 needs my sign-off on the captures: ask once, keep working on phase 7 while waiting.
-7. **All phases ✓?** Run the final cross-arc pass: FRESH codex session over the net diff from 1ba770cf + cross-arc ask (seams, duplication, plan drift, UI fidelity) + the two rules, same loop-until-clean. Then `gh stack sync` → `gh stack submit --auto` + `gh pr edit` bodies per plan.md § Delivery. Then the close-out: `gh stack add stale-network-reset-close-out`, its commits per plan.md § Post-implementation, `gh stack submit --auto`. Then `gh pr checks --watch`. Then the wrap-up report: what shipped, every contentious decision codex and I debated, each with ELI5 context, and open items by issue number. Surface and stop; merging is my call.
-
-Keep the native task list current (`TaskUpdate`); plan.md stays the source of truth.
-```
+Retired at close-out (§ Outcome). ELI5: https://claude.ai/artifact/YFVfFHJm7zTeQsZQ94uqK1 (private).
