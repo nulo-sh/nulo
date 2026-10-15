@@ -46,7 +46,7 @@ Q1 of the aztec-update skill is answered by the owner's decision record (F1-F4):
 
 **Good enough:** a developer profile from rc.1 meets today's integrity barrier until stale-network-reset ships its reset screen (M4). Testnet shows no default tokens until unleashed's rc.3 generation exists. Store art and listing text do not change.
 
-**UI impact** (each forced by the reset; the token-list state is the owner's choice, F4): Settings → About shows `Aztec version - 6.0.0-rc.3`. Testnet shows no default token rows. Fee settings' Sponsored and Private rows name new addresses. An rc.1 developer profile shows the existing `AccountIntegrityBarrier`. No layout, copy or component changes.
+**UI impact** (each forced by the reset; the token-list state is the owner's choice, F4): Settings → About shows `Aztec version - 6.0.0-rc.3`. Testnet shows no default token rows. Fee settings' Sponsored and Private rows name new addresses. An rc.1 developer profile shows the existing `AccountIntegrityBarrier`. Presto's version-mismatch line names the bb release the prover requests (`6.0.0-rc.6`; one number until rc.3) where it named the labs line (OA-6). No layout, copy or component changes.
 
 ## Assumptions
 

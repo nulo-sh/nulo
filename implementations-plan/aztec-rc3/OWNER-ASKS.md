@@ -35,3 +35,11 @@ Each ask names the surface, the options, what ships now without waiting, and the
 - **Raised only if** P3's probe finds no SponsoredFPC instance at the rc.3 address.
 - **Surface:** Fee settings' default Sponsored row; sends that use it would fail.
 - **Ships now:** nothing is pinned; arc 1 stops at P3 until you answer.
+
+## OA-6. The version Presto's mismatch line names
+
+- **Surface:** Onboarding and Settings → Proving, the version-mismatch card: "Presto runs Aztec <its version>; Nulo needs <version>."
+- **What changed:** since rc.3, the Presto SDK asks Presto for the bb release, `6.0.0-rc.6`, by its `@aztec-foundation/bb.js` pin, while the labs line is `6.0.0-rc.3`; before, both were one number. The status check had been asking about `6.0.0-rc.3`, so it reported a pending download that never cleared. It now asks about `6.0.0-rc.6`, and the card names that number: the one Presto reports and must have. The copy is unchanged; About still shows `6.0.0-rc.3`.
+- **Options:** (a) keep: the card names `6.0.0-rc.6`; (b) name the labs line instead, which would show "Presto runs Aztec 6.0.0-rc.6; Nulo needs 6.0.0-rc.3" on a mismatch; (c) new copy that names both, as a separate change.
+- **Ships now:** (a).
+- **Recommendation:** (a). It keeps the card's statement true and matches what Presto shows.
