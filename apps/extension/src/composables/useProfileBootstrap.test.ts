@@ -171,7 +171,7 @@ describe("useProfileBootstrap", () => {
 		expect(reset.resetStaleNetwork).not.toHaveBeenCalled()
 	})
 
-	test("a network cause with nothing to move resets behind the loader, and the re-keyed row loads its accounts", async () => {
+	test("a network never opened resets behind A4c, and the re-keyed row loads its accounts", async () => {
 		reset.getStaleNetwork.mockResolvedValueOnce(staleView({ accounts: [] })).mockResolvedValue(null)
 		reset.resetStaleNetwork.mockImplementationOnce(async (networkId: string) => {
 			queueMicrotask(() =>

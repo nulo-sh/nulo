@@ -68,8 +68,8 @@ export function runResetToEnd(client: StaleNetworkClient, view: StaleNetworkView
 const unattended = shallowReactive<StaleNetworkView[]>([])
 
 /**
- * A network cause with nothing to move: reset behind the loader, with no other screen and no toast.
- * `settle` runs once the run ends, the loader still up, so the route never shows the stale row.
+ * A network the profile never opened: reset behind A4c, with no other screen and no toast.
+ * `settle` runs once the run ends, A4c still up, so the route never shows the stale row.
  */
 export async function runUnattended(
 	client: StaleNetworkClient,

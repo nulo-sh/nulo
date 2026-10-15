@@ -201,8 +201,8 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 		await takeoverScreen(page, "blocked")
 		await capture(page, "A6-mainnet-blocked")
 
-		// A4c, then A15b: the first switch to Local, still stale from R3 and with no account, resets
-		// it behind the loader, then is held while it creates Local's default account.
+		// A4c, then A15b: the first switch to Local, still stale from R3 and never opened, resets it
+		// behind A4c, then is held while it creates Local's default account.
 		await clickByTestId(page, "stale-network-switch")
 		await waitForHash(page, "#/popup/settings/networks")
 		await armHold(ctx, "purged")
