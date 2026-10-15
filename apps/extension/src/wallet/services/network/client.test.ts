@@ -33,3 +33,32 @@ describe("NetworkServiceClient — schema validation on both directions", () => 
 		await expect(promise).rejects.toBeInstanceOf(ValidationError)
 	})
 })
+
+describe("NetworkServiceClient — a stored URL a later rule refuses still reads", () => {
+	const endpoint = { id: "e1", rpcUrl: "http://[::1]:8080" }
+	const network = { id: "n1", profileId: "p1", chainId: 42, l1ChainId: 0, name: "V6", primaryEndpointId: "e1", endpoints: [endpoint] }
+
+	async function answer(promise: Promise<unknown>, result: unknown): Promise<unknown> {
+		await drain()
+		const calls = capturePortMessage(NETWORK_SERVICE_NAME).mock.calls
+		const requestId = (calls[calls.length - 1][0] as { content: { requestId: number } }).content.requestId
+		emitPortMessage(NETWORK_SERVICE_NAME, {
+			type: MessageType.Response,
+			content: { requestId, result },
+		} as ResponseMessage<{ [k: string]: () => unknown }>)
+		return promise
+	}
+
+	test.each([
+		["getOrInitNetworks", (c: NetworkServiceClient) => c.getOrInitNetworks(), [network]],
+		["setActiveNetwork", (c: NetworkServiceClient) => c.setActiveNetwork("n1"), network],
+		["deleteEndpoint", (c: NetworkServiceClient) => c.deleteEndpoint("n1", "e1"), endpoint],
+	] as const)("%s", async (_, call, result) => {
+		await expect(answer(call(new NetworkServiceClient()), result)).resolves.toEqual(result)
+	})
+
+	test("the rest of the network's shape is still checked", async () => {
+		const client = new NetworkServiceClient()
+		await expect(answer(client.setActiveNetwork("n1"), { ...network, l1ChainId: -1 })).rejects.toBeInstanceOf(ValidationError)
+	})
+})
