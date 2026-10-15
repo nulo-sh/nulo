@@ -16,16 +16,21 @@ verifier are [`@nulo/token-list`](../../packages/token-list/README.md).
 | `scripts/check.ts` | The tree invariants (`bun run check`); `test/tree.test.ts` asserts them. |
 | `scripts/summary.ts` | The `prepare` job's review summary and tokens digest. |
 | `scripts/open-publish-pr.ts` | The `publish-pr` job: branch, commit, PR, close older publish PRs. |
+| `scripts/floor.ts` | When a list raises the compiled floor (`packages/token-list/src/floor.json`), and that file's canonical form. |
 
 ## Invariants
 
 - **The wallet trusts the signature and the sequence, never the host.** DNS, Cloudflare, a deploy or a
   bad commit can serve anything; a wallet accepts only a list signed by a pinned key, with a sequence
-  above the last it accepted.
+  above the last it accepted and at or above the floor its release compiles.
+- **A delisting or a flag raises the floor.** The publish PR of a list that drops a served token or
+  flags a new pair also sets `packages/token-list/src/floor.json` to its sequence, so every release
+  built after it refuses an older list. That file is under the extension e2e lanes' path filters,
+  so such a PR runs them. The tree tests refuse a floor below 1 or above the committed list.
 - **The tree tests are strict** (`bun run test`, in `test:all`): the source passes the strict rules in
   canonical form; every pinned key is real (a placeholder fails) and is the one `FORMAT.md` publishes;
   `public/` holds `_headers` and `v1/list.json` only; a committed envelope is canonical, verifies and
-  parses strictly.
+  parses strictly; the floor is canonical, at least 1 and at most the committed list's sequence.
 - **One name.** `tokens.nulo.sh` only: no workers.dev origin, no preview URLs, no route in the file.
 
 ## Publishing a change
@@ -35,8 +40,9 @@ verifier are [`@nulo/token-list`](../../packages/token-list/README.md).
 2. The push runs `.github/workflows/publish-token-list.yml`. Read the `prepare` summary: the token and
    flag diffs, the digest of both, and every signing-relevant change since the last publish.
 3. Approve `sign` in the `token-list` environment.
-4. Merge the `chore(token-list): publish sequence <n>` PR the release App opens. Workers Builds deploys
-   `dev`; the nightly `token-list-host-live` job checks the served list.
+4. Merge the `chore(token-list): publish sequence <n>` PR the release App opens; when the list delists
+   or flags, it also raises the floor and says so. Workers Builds deploys `dev`; the nightly
+   `token-list-host-live` job checks the served list.
 
 `gh workflow run publish-token-list.yml --ref dev` re-signs the current source with a new sequence.
 
@@ -51,7 +57,8 @@ file ever holds one.
   two public keys, which go into `packages/token-list/src/keys.ts` and the table in `FORMAT.md`.
 - **Rotation** after a suspected leak: delete the `TOKEN_LIST_SIGNING_KEY` secret; sign the current
   source with the recovery key as a keyed run (`sign-cli.ts --key-id nulo-recovery-1 --seed-env
-  TOKEN_LIST_RECOVERY_SEED`) and commit the envelope; generate a new CI key; ship a wallet release whose
+  TOKEN_LIST_RECOVERY_SEED`) and commit the envelope, with `floor.json` set to its sequence when it
+  delists or flags against the served list (`raisesFloor` in `scripts/floor.ts`); generate a new CI key; ship a wallet release whose
   `keys.ts` drops the leaked key. Until that release, the leaked key still verifies (`SECURITY.md`).
 
 ## Cloudflare (owner steps, outside this file)

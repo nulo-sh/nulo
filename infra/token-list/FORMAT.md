@@ -65,7 +65,7 @@ The payload is a UTF-8 JSON object:
 
 | Field | Rule |
 |---|---|
-| `sequence` | Integer, 1 to 2^53 − 1: the signing time in seconds. Accept a list only if its `sequence` is above the last one you accepted. |
+| `sequence` | Integer, 1 to 2^53 − 1: the signing time in seconds. Accept a list only if its `sequence` is above the last one you accepted. Nulo also refuses one below the floor its release compiles ([`floor.json`](../../packages/token-list/src/floor.json)), the sequence of the last list that delisted or flagged a token. |
 | `issuedAt` | ISO 8601 UTC instant of the signing. |
 | `chainId` | Unsigned 32-bit integer: the Aztec wallet chain id, `(l1ChainId ^ rollupVersion) >>> 0`. |
 | `address`, `classId` | `0x` + 64 lower-case hex digits, below the BN254 scalar field modulus `0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001`. Other spellings are refused, never normalized. |

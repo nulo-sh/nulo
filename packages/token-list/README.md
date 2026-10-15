@@ -14,7 +14,8 @@ and no `node_modules`.
 |---|---|
 | `src/envelope.ts` | Envelope encode, sign and verify (Ed25519, domain prefix `nulo-token-list/1\n`), canonical base64url, seed import. |
 | `src/parse.ts` | Payload and source validation in `wallet` and `strict` modes, the `flagged` set included; `selectEntries` (bundled class, first 16 per chain, known price id). |
-| `src/index.ts` | `readTokenList(text, keys)`: verify, then parse, then select. The wallet's one entry point. |
+| `src/index.ts` | `readTokenList(text, keys, floor)`: verify, then parse, then refuse a sequence below the floor, then select. The wallet's one entry point. |
+| `src/floor.json` | The compiled sequence floor, `SEQUENCE_FLOOR`: the last list that delisted or flagged a token. Raised by that list's publish PR. |
 | `src/keys.ts` | The pinned public keys, `nulo-ci-1` and `nulo-recovery-1`. |
 | `src/class-ids.ts` | Token classes the wallet bundles an artifact for. |
 | `src/price-ids.ts` | The single price table: CoinGecko id, USD sanity band, proxy ticker. |
