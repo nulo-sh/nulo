@@ -1,7 +1,8 @@
 /**
- * Turns `list.source.json` into a signed envelope. The signer refuses everything a wallet would
- * refuse, so a published list never fails verification or parsing for a reason the signer could
- * have caught.
+ * Turns `list.source.json` into a signed envelope. The signer refuses every payload a wallet would
+ * fail to verify or parse, so a published list never fails either for a reason the signer could
+ * have caught. It never checks the compiled floor: its sequence is above the published one, which
+ * the tree check holds at or above the floor.
  */
 
 import { decodeBase64Url, importSeed, type PinnedKey, PAYLOAD_FORMAT, publicKeyOf, signEnvelope, verifyEnvelope } from "./envelope"
@@ -15,10 +16,11 @@ export type SignInput = {
 	keyId: string
 	nowMs: number
 	keys: readonly PinnedKey[]
-	/** The tokens digest the approver was shown; signing refuses any other token set. */
+	/** The `listSha256` digest the approver was shown; signing refuses any other tokens or flags. */
 	expectTokensSha256?: string
 }
 
+/** `tokensSha256` is the `listSha256` digest, under the output name `publish-token-list.yml` reads. */
 export type SignResult = { envelopeText: string; sequence: number; payloadSha256: string; tokensSha256: string; tokenCount: number }
 
 export async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
@@ -26,9 +28,9 @@ export async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string>
 	return Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("")
 }
 
-/** The digest of a token array as the payload serializes it. `prepare` shows it; `sign` checks it. */
-export function tokensSha256(tokens: TokenListPayload["tokens"]): Promise<string> {
-	return sha256Hex(new TextEncoder().encode(JSON.stringify(tokens)))
+/** The digest of the tokens and the flags as the payload serializes them. `prepare` shows it; `sign` checks it. */
+export function listSha256({ tokens, flagged }: Pick<TokenListPayload, "tokens" | "flagged">): Promise<string> {
+	return sha256Hex(new TextEncoder().encode(JSON.stringify({ tokens, flagged })))
 }
 
 /** The sequence of the published envelope, read without verifying: it only sets a floor, and a key
@@ -54,16 +56,17 @@ async function signingKey(input: SignInput): Promise<CryptoKey> {
 }
 
 export async function signList(input: SignInput): Promise<SignResult> {
-	const { tokens } = checkSource(JSON.parse(input.sourceText))
-	const digest = await tokensSha256(tokens)
+	const { tokens, flagged = [] } = checkSource(JSON.parse(input.sourceText))
+	const digest = await listSha256({ tokens, flagged })
 	if (input.expectTokensSha256 !== undefined && input.expectTokensSha256 !== digest) {
-		throw new Error("the tokens differ from the ones the approver was shown")
+		throw new Error("the tokens and flags differ from the ones the approver was shown")
 	}
 	const sequence = Math.floor(input.nowMs / 1000)
 	if (sequence <= publishedSequence(input.publishedText)) {
 		throw new Error("the signing clock is not above the published sequence")
 	}
-	const payload: TokenListPayload = { format: PAYLOAD_FORMAT, sequence, issuedAt: new Date(sequence * 1000).toISOString(), tokens }
+	const issuedAt = new Date(sequence * 1000).toISOString()
+	const payload: TokenListPayload = { format: PAYLOAD_FORMAT, sequence, issuedAt, tokens, flagged }
 	const bytes = new TextEncoder().encode(JSON.stringify(payload))
 	parsePayload(bytes, "strict")
 	const envelope = await signEnvelope(bytes, await signingKey(input), input.keyId)

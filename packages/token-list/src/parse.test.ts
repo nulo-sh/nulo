@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest"
 import { BUNDLED_TOKEN_CLASS_IDS } from "./class-ids"
+import { signEnvelope } from "./envelope"
+import { readTokenList, SEQUENCE_FLOOR } from "./index"
 import {
 	BN254_FR_MODULUS,
 	checkPayload,
@@ -10,6 +12,7 @@ import {
 	selectEntries,
 	type TokenListEntry,
 } from "./parse"
+import { freshKey } from "./test-keys"
 
 const CLASS = BUNDLED_TOKEN_CLASS_IDS[0]
 const hex64 = (n: bigint) => `0x${n.toString(16).padStart(64, "0")}`
@@ -23,6 +26,7 @@ const entry = (n: number, over: Partial<Record<keyof TokenListEntry, unknown>> =
 	priceId: "usd-coin",
 	...over,
 })
+const flag = (n: bigint, over: Record<string, unknown> = {}) => ({ chainId: 1, address: hex64(n), ...over })
 const payload = (tokens: unknown[], over: Record<string, unknown> = {}) => ({
 	format: "nulo-token-list/1",
 	sequence: 1_760_000_000,
@@ -104,8 +108,36 @@ describe("payload", () => {
 		expect(checkPayload(payload(seventeen), "wallet").tokens).toHaveLength(MAX_ENTRIES_PER_CHAIN + 1)
 	})
 
-	test("the source holds tokens only, under strict rules", () => {
-		expect(checkSource({ tokens: [entry(0)] }).tokens).toHaveLength(1)
+	test("a signed list carrying a flagged set verifies and parses", async () => {
+		const { privateKey, pinned } = await freshKey()
+		const flagged = payload([entry(0)], { sequence: SEQUENCE_FLOOR, flagged: [{ chainId: 7, address: hex64(9n) }] })
+		const bytes = new TextEncoder().encode(JSON.stringify(flagged))
+		const list = await readTokenList(JSON.stringify(await signEnvelope(bytes, privateKey, pinned.keyId)), [pinned])
+		expect(list).toMatchObject({ sequence: SEQUENCE_FLOOR, entries: [expect.objectContaining({ symbol: "T0" })] })
+	})
+
+	test("both modes parse a flagged set alike, and read an absent one as empty", () => {
+		const flagged = [flag(9n), flag(9n, { chainId: 2 })]
+		expect(checkPayload(payload([entry(0)], { flagged }), "strict").flagged).toEqual(flagged)
+		expect(checkPayload(payload([entry(0)], { flagged }), "wallet")).toEqual(checkPayload(payload([entry(0)], { flagged }), "strict"))
+		expect(checkPayload(payload([entry(0)]), "wallet").flagged).toEqual([])
+	})
+
+	test("refuses an upper-case, repeated or listed flag in both modes, and an unknown key in a flag in strict", () => {
+		for (const mode of ["wallet", "strict"] as const) {
+			const upper = flag(0xabcn, { address: hex64(0xabcn).replace("abc", "ABC") })
+			expect(refusedAt(payload([], { flagged: [upper] }), mode)).toBe("payload.flagged[0].address")
+			expect(refusedAt(payload([], { flagged: [flag(9n), flag(9n)] }), mode)).toBe("payload.flagged[1]")
+			expect(refusedAt(payload([entry(0)], { flagged: [flag(1n)] }), mode)).toBe("payload.flagged[0]")
+		}
+		const extended = payload([], { flagged: [flag(9n, { reason: "scam" })] })
+		expect(refusedAt(extended, "strict")).toBe("payload.flagged[0].reason")
+		expect(checkPayload(extended, "wallet").flagged).toEqual([flag(9n)])
+	})
+
+	test("the source holds tokens and optional flags, under strict rules", () => {
+		expect(checkSource({ tokens: [entry(0)] })).toEqual({ tokens: [entry(0)] })
+		expect(checkSource({ tokens: [], flagged: [flag(9n)] })).toEqual({ tokens: [], flagged: [flag(9n)] })
 		expect(() => checkSource({ tokens: [entry(0)], sequence: 5 })).toThrow(PayloadError)
 		expect(() => checkSource({ tokens: [entry(0, { priceId: "dogecoin" })] })).toThrow(PayloadError)
 	})
