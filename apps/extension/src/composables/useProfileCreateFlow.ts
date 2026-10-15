@@ -1,7 +1,6 @@
 import { computed, ref } from "vue"
 import type { ToastOptions } from "@/composables/toast"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
-import { activationFailureReason } from "@/composables/unlockWait"
 import { useProfileNameDefault } from "@/composables/useProfileNameDefault"
 import { useProfileNameField } from "@/composables/useProfileNameField"
 import { managers } from "@/utils/core"
@@ -130,8 +129,8 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 		// would make a second one.
 		try {
 			await opts.onCreated(profile)
-		} catch (e) {
-			console.warn("profile activation failed", { reason: activationFailureReason(e) })
+		} catch {
+			console.warn("profile activation failed")
 			return
 		}
 		isCreating.value = false

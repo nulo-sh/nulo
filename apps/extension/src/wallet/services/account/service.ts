@@ -239,9 +239,9 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	}
 
 	/**
-	 * Idempotent default-account provisioning. If a visible-or-hidden account
-	 * already exists for the `(profileId, chainId)` tuple, returns the
-	 * lowest-index one. Otherwise creates the index-0 account and returns it.
+	 * Idempotent default-account provisioning. Returns the lowest-index derived account of the
+	 * `(profileId, chainId)` tuple, visible or hidden; with none, creates the first derived account
+	 * whose address no row holds.
 	 *
 	 * The whole sequence runs under the same per-tuple serialization as
 	 * `createAccount`, so concurrent callers (the popup's activation bootstrap,

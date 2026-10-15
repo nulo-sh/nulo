@@ -691,6 +691,7 @@ onBeforeUnmount(discardRun)
 								type="password"
 								label="Password"
 								placeholder="Enter password"
+								autocomplete="new-password"
 								autofocus
 								:disabled="backupStatus === 'encrypting'"
 								data-testid="backup-encrypt-password-input"
@@ -704,6 +705,7 @@ onBeforeUnmount(discardRun)
 							@input="isPasswordMismatch = false"
 							type="password"
 							placeholder="Repeat password"
+							autocomplete="new-password"
 							:disabled="backupStatus === 'encrypting'"
 							data-testid="backup-encrypt-password-confirm-input"
 						/>

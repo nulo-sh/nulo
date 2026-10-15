@@ -11,7 +11,7 @@ import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { ownWindowRoute, postAuthRoute } from "@/utils/own-window"
 import { shouldAdvanceToGeneral } from "./should-advance-to-general"
 import { resolveBootSession } from "./boot-session"
-import { decideLockLanding, decideUnreachableLanding } from "./lock-landing"
+import { decideLockLanding, decideUnreachableLanding, isEstablishedAtDecision } from "./lock-landing"
 import { reconcileLockedBoot } from "./reconcile-locked-boot"
 import { applyBootOutcome } from "./apply-boot-outcome"
 import { applyRootFlags } from "./root-flags"
@@ -302,6 +302,8 @@ const loadProfile = async ({ reconnect = false } = {}) => {
 	// before the router resolved has no page yet and must still land somewhere.
 	// An own window's page owns its flow from its first boot.
 	const pageEstablished = (reconnect && route.matched.length > 0) || ownWindowRoute() !== undefined
+	const pathAtStart = route.matched.length > 0 ? route.fullPath : undefined
+	const establishedNow = () => isEstablishedAtDecision(pageEstablished, pathAtStart, route.fullPath)
 	const isCurrent = () => seq === loadProfileSeq
 	// A new run supersedes any earlier give-up: it may well succeed this time. A retry of a
 	// FAILED boot keeps the auth form withheld until a run DECIDES — latched, not recomputed:
@@ -322,13 +324,13 @@ const loadProfile = async ({ reconnect = false } = {}) => {
 				lastActiveProfileId: getLastActiveProfileId,
 				isCurrent,
 			}),
-		decide: (locked) => decideLockLanding(lockLandingState(locked, pageEstablished)),
+		decide: (locked) => decideLockLanding(lockLandingState(locked, establishedNow())),
 		act: lockLandingActions,
 	})
 	// The core fenced itself before resolving; this caller resumes a microtask later, and a
 	// reconnect can bump the sequence in between — fence again here, never on the core's word.
 	if (!isCurrent()) return
-	applyBootOutcome(result, bootOutcomeShell(pageEstablished))
+	applyBootOutcome(result, bootOutcomeShell(establishedNow()))
 }
 
 /** The shell as `applyBootOutcome` drives it. */

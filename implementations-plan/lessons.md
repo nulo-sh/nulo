@@ -21,7 +21,7 @@
 
 ## Extension runtime
 
-- A popup-to-background call rejects after 60 s unless its client overrides `getRequestTimeoutMs`: one awaiting a proof fails while the send lands. [Evidence](archive/e2e-reliability-fixes/plan.md#rpc-60s)
+- A popup call waits for the worker's Ready (all services up) and fails 60 s after it began unless its client sets `requestTimeoutMs`, so one awaiting a proof fails as the send lands; a dropped port replays nothing: read config via `useConfigRead`. [Evidence](archive/e2e-reliability-fixes/plan.md#rpc-60s), [more](archive/account-session-life/lessons/phase-4.md), [more](archive/wallet-followups/lessons/phase-4.md)
 - `PopupManager` mounts every popup at start for good: gate setup on `show` or `v-if`. A profile switch elsewhere updates open pages in place: reset held secrets on a profile-id change. [Evidence](archive/home-holdings-pin/plan.md#popup-mounts), [more](archive/security-ui-1/lessons/phase-2.md)
 - `EventHandler.invoke` drops an async handler's promise: awaiting it waits for nothing, and a rejection escapes. [Evidence](archive/backup-restore-corruption-fix/plan.md#async-events)
 - A typed error survives only hops that name it (`walletErrorFromPayload`, `classifyOperationCatch`, `toWalletResponseError`); `viaPxe` rethrows `Error`. [Evidence](archive/harden-security-prerelease/plan.md#typed-errors)
@@ -31,7 +31,6 @@
 - Classify a dApp call by address, selector and arguments, never its name; validate both sides before comparing normalised keys. [Evidence](archive/dapp-preexisting-fee/plan.md#classify), [more](archive/grant-check-address-case/plan.md#normalise)
 - A MAC binds only what it names: key it on the storage key (a stored `id` moves with its row); refuse on failure, never self-heal. An address binds its original class: check artifacts against it; the PXE reports that class, a call runs the node's current one (`node.getContract`). [Evidence](archive/mac-identity-binding/plan.md#mac-scope), [more](archive/security-fixes-1/lessons/phase-6.md), [more](archive/tokens-and-balances/lessons/phase-3.md)
 - CSS Modules refuse `composes` in `:global()`; `text-transform` changes `innerText`, not `textContent`; Firefox lays out in 1/60 px. [Evidence](archive/type-roles/plan.md#lessons)
-- A dropped port reconnects under a mounted page and replays nothing: read config through `useConfigRead`. [Evidence](archive/wallet-followups/lessons/phase-4.md)
 - A session id re-keys after its session ends: code paused across an await checks its own `ActiveSession` object, not the id. [Evidence](archive/dapp-dispatch-hold/plan.md#mechanics-that-are-not-obvious)
 - A `Lock` watchdog handoff admits a successor but never stops the displaced holder, which keeps writing: a current ticket proves no wipe ran only beside a count of deleters still running. [Evidence](archive/incoming-transfers/decisions.md#decision-ledger)
 - A C1 hook's `dispose()` must be terminal: a run fence that only drops answers in flight lets a continuation released after unmount start a new call. [Evidence](archive/incoming-transfers/lessons/phase-3.md)

@@ -11,6 +11,8 @@ import { managers } from "@/utils/core"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
 import { captureOwnWindow, releaseOwnWindow } from "@/utils/own-window"
+import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
+import type { ProfileInfo } from "@/wallet/services/profile/spec"
 import Auth from "./auth.vue"
 
 const unlockProfile = vi.fn()
@@ -364,6 +366,50 @@ describe("auth.vue — bounded activation wait", () => {
 		releaseSetLast()
 		await flushPromises()
 		expect(initTransactionServiceMock).not.toHaveBeenCalled() // second check stood down
+	})
+})
+
+describe("auth.vue — the mount's last-active lookup", () => {
+	const A = { id: "pA", name: "A", type: "password" } as ProfileInfo
+	const B = { id: "pB", name: "B", type: "password" } as ProfileInfo
+
+	/** Mounts with nothing selected and holds the profile list until the returned release. */
+	async function mountWithHeldLookup() {
+		vi.mocked(getLastActiveProfileId).mockResolvedValueOnce("pA")
+		let release!: () => void
+		vi.mocked(managers.profile.getProfiles).mockReturnValueOnce(
+			new Promise((resolve) => {
+				release = () => resolve([A, B])
+			}),
+		)
+		const mounted = mountAuth()
+		mounted.appStore.profile = undefined
+		await flushPromises()
+		return { ...mounted, release }
+	}
+
+	test("selects the last active profile when nothing changed meanwhile", async () => {
+		const { appStore, release } = await mountWithHeldLookup()
+		release()
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pA")
+	})
+
+	test("a profile opened while the list loads stays selected", async () => {
+		const { appStore, release } = await mountWithHeldLookup()
+		appStore.profile = B
+		appStore.isLogined = true
+		release()
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pB")
+	})
+
+	test("a list that answers after the page left selects nothing", async () => {
+		const { wrapper, appStore, release } = await mountWithHeldLookup()
+		wrapper.unmount()
+		release()
+		await flushPromises()
+		expect(appStore.profile).toBeUndefined()
 	})
 })
 

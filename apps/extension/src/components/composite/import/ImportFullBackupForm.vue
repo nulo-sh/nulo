@@ -116,6 +116,7 @@ watch(
 			v-model="decryptionPassword"
 			:type="isDecryptionPasswordType ? 'password' : 'text'"
 			placeholder="Enter the password used to encrypt this backup"
+			autocomplete="current-password"
 			autofocus
 			data-testid="import-full-backup-decrypt-password-input"
 		>

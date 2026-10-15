@@ -29,15 +29,8 @@ export interface CreateActivationDeps {
 }
 
 /**
- * Popup-only activation of a freshly created profile.
- *
- * The popup relies on `popup/app.vue`'s `onActiveProfileChanged` listener to
- * run the heavy bootstrap and flip `appStore.isLogined`; this waits for that
- * handshake, then loads accounts, wires the transaction service, persists the
- * active account, and opens the session. This is intentionally DISTINCT from
- * `useProfileBootstrap.bootstrapActiveProfile` (which onboarding uses and which
- * does strictly more) — do NOT merge the two. Extracted from the page so the
- * call ordering is unit-testable.
+ * Popup-only activation of a freshly created profile, whose session the create call opened: it
+ * waits for the shell's bootstrap of that profile (`isLogined`), then lands on its home.
  *
  * Another window can open another profile at any await, so nothing is written or routed unless
  * the created profile is still the active, bootstrapped one right after each await. A created

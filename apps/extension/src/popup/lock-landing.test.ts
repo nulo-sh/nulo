@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { decideLockLanding, decideUnreachableLanding } from "./lock-landing"
+import { decideLockLanding, decideUnreachableLanding, isEstablishedAtDecision } from "./lock-landing"
 
 const base = { hasProfile: false, onAuthRequiredRoute: false, isPasskeyRoute: false, hasCandidate: true, pageEstablished: false }
 
@@ -35,6 +35,24 @@ describe("decideLockLanding", () => {
 
 	test("a reconnect whose mount-time boot was lost (no route resolved yet) still lands on auth", () => {
 		expect(decideLockLanding({ ...base, pageEstablished: false })).toBe("select-and-auth")
+	})
+})
+
+describe("isEstablishedAtDecision", () => {
+	test("a page the person reached while the run waited keeps its flow, whatever the run finds", () => {
+		const pageEstablished = isEstablishedAtDecision(false, "/popup/auth", "/popup/profile/new?from=/popup/auth")
+		expect(decideLockLanding({ ...base, pageEstablished })).toBe("settle")
+		expect(decideUnreachableLanding({ hasProfile: false, hasCandidate: true, pageEstablished })).toBe("stay")
+	})
+
+	test("the page the run started on, replayed in place, still gets the candidate", () => {
+		const pageEstablished = isEstablishedAtDecision(false, "/popup/auth", "/popup/auth")
+		expect(decideLockLanding({ ...base, pageEstablished })).toBe("select-and-auth")
+	})
+
+	test("a run that began before any route resolved compares nothing; one established at its start stays so", () => {
+		expect(isEstablishedAtDecision(false, undefined, "/popup/auth")).toBe(false)
+		expect(isEstablishedAtDecision(true, "/popup/import", "/popup/import")).toBe(true)
 	})
 })
 
