@@ -25,6 +25,7 @@ import { OWN_WINDOW_ROUTES, closeOwnWindow, moveToOwnWindow, releaseOwnWindow } 
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
 import { redirectToOnboardingTabIfNeeded } from "@/wallet/utils/onboarding-tab"
 import { resolveFullBackupEnterAction } from "./import-helpers"
+import { retryResultText, withNetworkNames } from "@/components/composite/import/restore-warning"
 
 /** Stores */
 import { useAppStore } from "@/stores/app.store"
@@ -116,6 +117,7 @@ const {
 	isRestoreHasErrors,
 	canRetryAccountState,
 	unrestoredNetworkNames,
+	retryFailedAgain,
 	hasOtherRestoreErrors,
 	isRetryingAccountState,
 	retryAccountState,
@@ -134,10 +136,10 @@ const {
 } = useProfileImportFlow({
 	completeImport,
 	// Popup error-log surface: open the data-viewer overlay.
-	showErrorLog: (errors) => {
+	showErrorLog: (errors, { byNetworkId }) => {
 		const cacheStore = useCacheStore()
 		const popupStore = usePopupStore()
-		cacheStore.viewerData = errors
+		cacheStore.viewerData = withNetworkNames(errors, byNetworkId)
 		popupStore.open("data_viewer")
 	},
 	notifyImportFailed: () => {
@@ -244,6 +246,7 @@ onBeforeUnmount(() => {
 			:isRestoreHasErrors="isRestoreHasErrors"
 			:unrestoredNetworks="unrestoredNetworkNames"
 			:hasOtherErrors="hasOtherRestoreErrors"
+			:retryFailedAgain="retryFailedAgain"
 			:error="error"
 			:isCopied="isCopied"
 			:maxPasswordLength="maxPasswordLength"
@@ -301,6 +304,15 @@ onBeforeUnmount(() => {
 					>
 						Finishing import…
 					</Button>
+					<Text
+						v-if="retryFailedAgain"
+						variant="body"
+						height="120"
+						color="txt-warning"
+						data-testid="import-full-backup-retry-result"
+					>
+						{{ retryResultText(unrestoredNetworkNames) }}
+					</Text>
 					<Button
 						v-if="canRetryAccountState"
 						@click="retryAccountState"

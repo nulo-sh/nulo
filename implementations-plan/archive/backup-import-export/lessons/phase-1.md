@@ -49,3 +49,30 @@
 - First CI run (d6e291e): smoke green on both browsers; network Chrome red on one leg, `profile-reimport-matrix` "delete → full-backup re-import in one session: the same-id successor boots past the tombstone" (`expected '5c6b2e09' to be 'e91364e0'`); the Firefox network run was cancelled. Cause: the restored-id rule (#226) rerolls the synthetic fixture's `"syn-profile-id"`, so the second import no longer reuses the first import's id. The arc's gates named no network spec, and the Opus review read the fixture id as unasserted; it is asserted by that network leg.
 - Fix e00665f (pushed by the orchestrator session into this branch): the synthetic backups carry `SYNTHETIC_PROFILE_ID = "e2e5a1d0"`, generated-shaped, so the same-id leg holds. A file the wallet exports always carries a generated id, so the product behaviour stands.
 - Lesson: a change to which ids or keys a restore keeps reaches the network fixtures that re-import one file; grep the e2e helpers for the literal before choosing the arc's e2e set.
+
+## Decisions (moved from plan.md at the arc 3 revision, 2026-10-14)
+
+| # | Decision | Alternatives | Panel | Why |
+|---|---|---|---|---|
+| D-orch-1 | No stack: arc 1 opens its own PR against `dev` (`gh pr create --base dev`), titled per the Delivery table; arc 1b and later arcs branch from arc 1's branch and rebase onto `dev` after it lands | the Delivery section's `gh stack` | orchestrator decision (overrides Delivery) | The orchestrator merges each arc in order; a plain PR per arc keeps that merge independent of the stack tooling. |
+| D-arc1-1 | The synthetic e2e backups carry a generated-shaped profile id (`SYNTHETIC_PROFILE_ID`) | keep `"syn-profile-id"` and relax the same-id leg | found by CI (network `profile-reimport-matrix`); fixed by the orchestrator session | The id rule (#226) is the product behaviour; the fixture, not the leg, was out of shape. |
+| D-orch-2 | Arc 1 only: nothing of 1b, 2 or 3 is built in arc 1's run; OA-6 and OA-9 ship as the plan states (the watchdog with the engine's existing sentence; the profile-id rule with no new words) | build 1b alongside | orchestrator decision | The orchestrator decides A1 (arc 1b's PXE patch) separately; arcs 2 and 3 wait on decision page 1. OA-6 and OA-9 are information with a veto on that page; a strike reaches the next arc through the orchestrator. |
+| D-orch-3 | A1 answered: arc 1b ships the one-line `@aztec-labs/pxe` patch as planned (D7) | drop arc 1b and leave all of #148 to the upstream report | orchestrator decision | Only a patch heals an account already left half-registered; #148 stays open for the upstream report. |
+| D-orch-4 | After a squash merge, an arc branches from `dev`, not from the merged arc's branch: arc 1b is `backup-import-export-arc-1b` off `origin/dev` ed59711 and opens against `dev` | branch from `worktree-backup-import-export` and rebase (D-orch-1) | orchestrator decision | The squash leaves the arc branch's commits off `dev`'s history; branching from `dev` avoids replaying them. D-orch-1 and D-orch-2 stand. |
+
+## Review findings (moved from plan.md at the arc 3 revision)
+
+
+- **Codex round 1 (gpt-6.1-sol, high, read-only; session 01a122d2-e279-78a3-9a87-a042b147ef6d): approve with fixes.** It probed the watchdog (rollback, one counted attempt, revoked reads and writes, no unhandled late rejection, no fake-timer conflict), the wipe paths, the hex decoder's legitimate inputs, the profile-id rule and the Enter states, and found no functional or security defect.
+- **Opus 5.5 diff review (alongside round 1): approve, three Lows.**
+
+| # | Source | Sev | Finding | Disposition |
+|---|---|---|---|---|
+| A1-1 | Codex | Low | Two new test comments narrate (`runTwice`'s body, `at`'s defaults) | Accepted: `at`'s removed, `runTwice`'s cut to its return contract. |
+| A1-2 | Opus | Low | A timeout whose restore then fails reads "failed to restore … (migration error: … interrupted mid-write (restored cleanly))" on the recovery screen | Accepted: the watchdog throws `UpTimeoutError` ("interrupted mid-write"); the `failed` return maps it to the "(restored cleanly)" sentence only after the restore succeeded. No new words. Test added. |
+| A1-3 | Opus | Low | The resolver's doc says Enter acts only on an enabled button, false for Decrypt; `BackupProfile`'s doc names selection as the type check | Accepted: both reworded (Decrypt refuses an empty password itself; "the entry gates"). |
+| A1-4 | Opus | Low | The registry test now needs a seed per migration and the template does not say so; its comment cited step 6 for colocated tests (step 9) | Accepted: template step 5 names the `SEEDS` entry; reference fixed. |
+
+None rejected.
+
+- **Codex round 2 (resumed session): clean.** It re-probed both timeout outcomes (a clean restore reports the "(restored cleanly)" sentence; a failed one keeps the journal and the barrier and says only "interrupted mid-write") and found nothing further in the arc. The loop converged in two rounds.

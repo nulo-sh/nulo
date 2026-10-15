@@ -42,7 +42,9 @@ import {
 	EncryptionKey,
 	IMPORTED_DEK_AAD,
 	PasswordSecretBox,
+	generateImportedKeysDek,
 	sealDekUnderWrapKey,
+	sealImportedSigningKeyV2,
 	type PasskeyCredential,
 	type PasskeyCredentialData,
 	type SessionWrappedSecret,
@@ -774,7 +776,7 @@ describe("ProfileService integration", () => {
 			service.onImportedKeysDegraded.add(() => {
 				degraded = true
 			})
-			const info = await service.finalizeRestore(out.id)
+			const { profile: info } = await service.finalizeRestore(out.id)
 			expect(info.id).toBe(out.id)
 			expect(degraded).toBe(true)
 			expect(await service.getProfileDek(out.id)).toBeUndefined()
@@ -1479,11 +1481,45 @@ describe("ProfileService integration", () => {
 			// No emit happened during restore — sanity-check before finalize.
 			expect(events).toEqual([])
 
-			const active = await service.finalizeRestore(out.id, "pass1234")
+			const { profile: active, fence } = await service.finalizeRestore(out.id, "pass1234")
 			expect(active.id).toBe(out.id)
+			await expect(service.assertRunFence(fence)).resolves.toBeUndefined()
+			expect(service.isFenceLive(fence)).toBe(true)
 			expect((await service.getActiveProfile())?.id).toBe(out.id)
 			expect(events.length).toBe(1)
 			expect(events[0]?.id).toBe(out.id)
+		}, 30_000)
+
+		test("finalizeRestore() returns the fence of the session it opened, which a same-id successor ends", async () => {
+			const { service } = await makeService()
+			const out = await service.restore({ id: "ignored", name: "P", type: "password" }, await restoreSecretFor(11), "pass1234")
+			const { fence } = await service.finalizeRestore(out.id, "pass1234")
+			expect(fence.profileId).toBe(out.id)
+			expect(service.isFenceLive(fence)).toBe(true)
+
+			await service.lockActiveProfile()
+			await service.deleteProfile(out.id)
+			const again = await service.restore({ id: out.id, name: "P", type: "password" }, await restoreSecretFor(12), "pass1234")
+			expect(again.id).toBe(out.id)
+			const { fence: successor } = await service.finalizeRestore(again.id, "pass1234")
+
+			expect(service.isFenceLive(fence)).toBe(false)
+			await expect(service.assertRunFence(fence)).rejects.toThrow()
+			expect(service.isFenceLive(successor)).toBe(true)
+		}, 30_000)
+
+		test("finalizeRestore() captures its fence in the hold that opened the session: a lock queued behind it ends that fence", async () => {
+			const { service } = await makeService()
+			const out = await service.restore({ id: "ignored", name: "P", type: "password" }, await restoreSecretFor(11), "pass1234")
+			const finalizing = service.finalizeRestore(out.id, "pass1234")
+			const locking = service.lockActiveProfile()
+
+			const { fence } = await finalizing
+			await locking
+
+			expect(fence.profileId).toBe(out.id)
+			expect(service.isFenceLive(fence)).toBe(false)
+			await expect(service.assertRunFence(fence)).rejects.toBeInstanceOf(SessionEndedError)
 		}, 30_000)
 
 		test("finalizeRestore() with wrong password throws InvalidPasswordError; profile stays in storage", async () => {
@@ -3302,17 +3338,17 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			const p = await service.createPasskeyProfile("PK")
 			const credentialId = await service.getPasskeyCredentialId(p.id)
 			const credData = fakeCredentialData(credentialId, p.id)
-			const intact = await service.exportPasskeyBackupMaterial(p.id, credData)
-			expect(intact).toEqual({ credentialId, dekSealed: (await readRow(api, p.id)).dekSealed, dekReplaced: false })
+			const intact = await service.exportPasskeyBackupKeys(p.id, credData, [])
+			expect(intact).toEqual({ credentialId, dekSealed: (await readRow(api, p.id)).dekSealed, dekReplaced: false, unopened: 0 })
 
 			await service.lockActiveProfile()
 			await corruptDekSlot(api, p.id)
 			const before = await readRow(api, p.id)
 			// Credential and fingerprint checks still reject BEFORE any tolerance applies.
-			await expect(service.exportPasskeyBackupMaterial(p.id, fakeCredentialData("cred-other", p.id))).rejects.toThrow(
+			await expect(service.exportPasskeyBackupKeys(p.id, fakeCredentialData("cred-other", p.id), [])).rejects.toThrow(
 				/Invalid profile id/,
 			)
-			const material = await service.exportPasskeyBackupMaterial(p.id, credData)
+			const material = await service.exportPasskeyBackupKeys(p.id, credData, [])
 			expect(material.credentialId).toBe(credentialId)
 			expect(material.dekReplaced).toBe(true)
 			expect(material.dekSealed).not.toBe(CORRUPT_SLOT)
@@ -3331,6 +3367,50 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			await service.finalizeRestore(restored.id)
 			expect(service.isRecoveryMode(restored.id)).toBe(false)
 			expect(await service.getProfileDek(restored.id)).toBeDefined()
+		}, 30_000)
+
+		test("the passkey backup counts the rows that do not open under the stored DEK, with no session open", async () => {
+			const { service } = await makeService()
+			const p = await service.createPasskeyProfile("PK")
+			const credentialId = await service.getPasskeyCredentialId(p.id)
+			const credData = fakeCredentialData(credentialId, p.id)
+			const dek = await service.getProfileDek(p.id)
+			const sk = new Uint8Array(32).fill(7)
+			const opens = { chainId: 1, address: "0xaa", encryptedSigningKey: await sealImportedSigningKeyV2(dek!, 1, "0xaa", sk) }
+			const foreign = {
+				chainId: 1,
+				address: "0xbb",
+				encryptedSigningKey: await sealImportedSigningKeyV2(generateImportedKeysDek(), 1, "0xbb", sk),
+			}
+			const transplanted = { ...opens, chainId: 2 }
+			await service.lockActiveProfile()
+
+			expect(await service.exportPasskeyBackupKeys(p.id, credData, [opens])).toMatchObject({ dekReplaced: false, unopened: 0 })
+			expect(await service.exportPasskeyBackupKeys(p.id, credData, [opens, foreign, transplanted])).toMatchObject({
+				dekReplaced: false,
+				unopened: 2,
+			})
+			// A row no store could hold aborts the count, and with it the export: nothing is reported.
+			await expect(service.exportPasskeyBackupKeys(p.id, credData, [opens, null as never])).rejects.toThrow(TypeError)
+		}, 30_000)
+
+		test("a replaced DEK counts nothing: no stored row opens under the fresh one", async () => {
+			const { api, service } = await makeService()
+			const p = await service.createPasskeyProfile("PK")
+			const credentialId = await service.getPasskeyCredentialId(p.id)
+			const dek = await service.getProfileDek(p.id)
+			const row = {
+				chainId: 1,
+				address: "0xaa",
+				encryptedSigningKey: await sealImportedSigningKeyV2(dek!, 1, "0xaa", new Uint8Array(32)),
+			}
+			await service.lockActiveProfile()
+			await corruptDekSlot(api, p.id)
+
+			expect(await service.exportPasskeyBackupKeys(p.id, fakeCredentialData(credentialId, p.id), [row])).toMatchObject({
+				dekReplaced: true,
+				unopened: 0,
+			})
 		}, 30_000)
 
 		test("passkey restore tolerates an UNOPENABLE dekSealed: the row mints a fresh dek, no rewrap context, finalize is non-degraded", async () => {
@@ -3502,7 +3582,7 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			await api.storage.local.set({ [key]: JSON.stringify(row) })
 
 			// The credentialId export never touched the DEK, so it is unaffected; the sealed-blob
-			// tolerance lives in `exportPasskeyBackupMaterial` (covered in the DEK-lifecycle block).
+			// tolerance lives in `exportPasskeyBackupKeys` (covered in the DEK-lifecycle block).
 			expect(await service.exportPlain(p.id, undefined, fakeCredentialData(credentialId, "uh-x"))).toBe(credentialId)
 		})
 
@@ -4150,14 +4230,14 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			const { api, service, id, info } = await restoredPassword()
 			const dek = await unsealPasswordDek(await readRawRow(api, id), "pass1234")
 			const seen = observe(service)
-			await expectHealthy(service, seen, await service.finalizeRestore(id, "pass1234"), info, dek)
+			await expectHealthy(service, seen, (await service.finalizeRestore(id, "pass1234")).profile, info, dek)
 		}, 30_000)
 
 		test("finalizeRestore (password): a corrupted envelopeMac opens derived-only and warns once", async () => {
 			const { api, service, id, info } = await restoredPassword()
 			await writeRawRow(api, id, { ...(await readRawRow(api, id)), envelopeMac: Buffer.alloc(32, 0xee).toString("base64") })
 			const seen = observe(service)
-			await expectDegraded(service, seen, await service.finalizeRestore(id, "pass1234"), info)
+			await expectDegraded(service, seen, (await service.finalizeRestore(id, "pass1234")).profile, info)
 		}, 30_000)
 
 		async function restoredPasskey() {
@@ -4175,14 +4255,14 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			const { api, service, id, info } = await restoredPasskey()
 			const dek = await unsealDekUnderWrapKey(await fakeWrapKey("cred-fin"), (await readRawRow(api, id)).dekSealed)
 			const seen = observe(service)
-			await expectHealthy(service, seen, await service.finalizeRestore(id), info, dek)
+			await expectHealthy(service, seen, (await service.finalizeRestore(id)).profile, info, dek)
 		}, 30_000)
 
 		test("finalizeRestore (passkey): a swapped DEK slot opens derived-only and warns once", async () => {
 			const { api, service, id, info } = await restoredPasskey()
 			await writeRawRow(api, id, { ...(await readRawRow(api, id)), dekSealed: await fakeDekSealedFor("cred-other") })
 			const seen = observe(service)
-			await expectDegraded(service, seen, await service.finalizeRestore(id), info)
+			await expectDegraded(service, seen, (await service.finalizeRestore(id)).profile, info)
 		}, 30_000)
 	})
 
@@ -4212,7 +4292,10 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			["a row turned password", (r) => editRowType(r, "password"), "Password is required for password profile"],
 			[
 				"the already-active return",
-				({ internals, id }) => vi.spyOn(internals.sessionManager, "isActive").mockImplementation((p) => p === id),
+				({ internals, id }) => {
+					vi.spyOn(internals.sessionManager, "isActive").mockImplementation((p) => p === id)
+					vi.spyOn(internals.sessionManager, "getActive").mockResolvedValue({ profile: { id }, serial: 1 })
+				},
 				undefined,
 			],
 			["a missing row", ({ api, id }) => api.storage.local.remove(profileRowKey(id)), "Invalid profile id"],
@@ -4229,7 +4312,7 @@ describe("credential rows, degraded opens and the restore stash", () => {
 				await arrange(restored)
 				const finalized = service.finalizeRestore(id)
 				if (refusal) await expect(finalized).rejects.toThrow(refusal)
-				else await expect(finalized).resolves.toMatchObject({ id })
+				else await expect(finalized).resolves.toMatchObject({ profile: { id }, fence: { profileId: id, session: 1 } })
 				expect(internals.pendingRestoreSecrets.has(id)).toBe(false)
 				expect(internals.pendingDekRewraps.has(id)).toBe(false)
 				expect(buffers.every(allZero)).toBe(true)

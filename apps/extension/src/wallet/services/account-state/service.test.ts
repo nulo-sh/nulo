@@ -23,11 +23,9 @@ import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { LOCAL_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { ACCOUNT_STATE_CAPS, normalizeAccountStateSlice } from "./normalize"
 import { AccountStateService } from "./service"
+import { FakeFenceProfileService, LIVE_FENCE } from "./fence.fixtures"
 import { svc } from "@/wallet/services/composition-harness"
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
-
-/** The profile service a fence-free call never asks. */
-const profileStub = () => svc(PROFILE_SERVICE_NAME, {})
 
 // The fixtures carry stub instances and artifacts; the class-id check has its own real-data tests.
 vi.mock("@nulo/aztec-runtime/pxe", async (importOriginal) => ({
@@ -69,8 +67,8 @@ describe("AccountStateService.backup", () => {
 	test("the contracts every PXE boot registers are left out before their instance or artifact is read; a custom one is kept", async () => {
 		const networkService = new FakeNetworkService()
 		const services = new ServiceCollection()
-		services.add(profileStub())
 		services.add(networkService)
+		services.add(new FakeFenceProfileService())
 		const accountStateService = new AccountStateService(new LoggerStore(new ConfigStore()))
 		services.add(accountStateService)
 		await services.start()
@@ -97,8 +95,8 @@ describe("AccountStateService.backup", () => {
 	test("each item names its chain beside the network id — the import rebinds by chain, never by the exported id", async () => {
 		const networkService = new FakeNetworkService()
 		const services = new ServiceCollection()
-		services.add(profileStub())
 		services.add(networkService)
+		services.add(new FakeFenceProfileService())
 		const accountStateService = new AccountStateService(new LoggerStore(new ConfigStore()))
 		services.add(accountStateService)
 		await services.start()
@@ -117,8 +115,8 @@ describe("AccountStateService.backup", () => {
 	test("recovery mode OMITS the network's PXE state (injected at the PXE client, through the real viaPxe wrapper); any other PXE failure still aborts", async () => {
 		const networkService = new FakeNetworkService()
 		const services = new ServiceCollection()
-		services.add(profileStub())
 		services.add(networkService)
+		services.add(new FakeFenceProfileService())
 		const accountStateService = new AccountStateService(new LoggerStore(new ConfigStore()))
 		services.add(accountStateService)
 		await services.start()
@@ -173,8 +171,8 @@ describe("AccountStateService.backup over the network service's own status check
 			"nulo:core:networks@cust": JSON.stringify(row("cust", "custom", 7)),
 		})
 		const services = new ServiceCollection()
-		services.add(profileStub())
 		services.add(new FakeNetworkService())
+		services.add(new FakeFenceProfileService())
 		const accountStateService = new AccountStateService(new LoggerStore(new ConfigStore()))
 		services.add(accountStateService)
 		await services.start()
@@ -191,8 +189,8 @@ describe("AccountStateService.backup over the network service's own status check
 async function backupSizedTo(units: number) {
 	const networkService = new FakeNetworkService()
 	const services = new ServiceCollection()
-	services.add(profileStub())
 	services.add(networkService)
+	services.add(new FakeFenceProfileService())
 	const accountStateService = new AccountStateService(new LoggerStore(new ConfigStore()))
 	services.add(accountStateService)
 	await services.start()
@@ -243,8 +241,8 @@ describe("AccountStateService.getSendersAcrossActiveNetworks", () => {
 		logger = new LoggerStore(new ConfigStore())
 
 		services = new ServiceCollection()
-		services.add(profileStub())
 		services.add(networkService)
+		services.add(new FakeFenceProfileService())
 		accountStateService = new AccountStateService(logger)
 		services.add(accountStateService)
 		await services.start()
@@ -336,8 +334,8 @@ describe("AccountStateService.restore (nested restoreError normalization)", () =
 
 	beforeEach(async () => {
 		services = new ServiceCollection()
-		services.add(profileStub())
 		services.add(new FakeNetworkService())
+		services.add(new FakeFenceProfileService())
 		accountStateService = new AccountStateService(new LoggerStore(new ConfigStore()))
 		services.add(accountStateService)
 		await services.start()
@@ -357,7 +355,7 @@ describe("AccountStateService.restore (nested restoreError normalization)", () =
 			},
 		] as unknown as Parameters<typeof accountStateService.restore>[0]
 
-		const restored = await accountStateService.restore(backup, [])
+		const restored = await accountStateService.restore(backup, [], LIVE_FENCE)
 		const item = restored.find((r) => r.networkId === "missing")
 		expect(item?.senders[0]?.restoreError).toBe("Network not found")
 		expect(item?.contracts[0]?.restoreError).toBe("Network not found")
@@ -370,7 +368,7 @@ describe("AccountStateService.restore (nested restoreError normalization)", () =
 			typeof accountStateService.restore
 		>[0]
 
-		const restored = await accountStateService.restore(backup, [])
+		const restored = await accountStateService.restore(backup, [], LIVE_FENCE)
 		expect(restored.find((r) => r.networkId === "missing")?.senders[0]?.restoreError).toBe("Network not found")
 		const registrationLines = warn.mock.calls.filter(([line]) => String(line).startsWith("restore: registration failed"))
 		expect(registrationLines).toHaveLength(1)
@@ -391,7 +389,7 @@ describe("AccountStateService.restore (nested restoreError normalization)", () =
 			{ networkId: "n2", senders: [], contracts: undefined },
 		] as unknown as Parameters<typeof accountStateService.restore>[0]
 
-		const restored = await accountStateService.restore(backup, [])
+		const restored = await accountStateService.restore(backup, [], LIVE_FENCE)
 		const violations = restored.filter(
 			(r) => typeof r.restoreError === "string" && /malformed account-state item/.test(String(r.restoreError)),
 		)
@@ -437,8 +435,8 @@ describe("AccountStateService.restore (bounded)", () => {
 		networkService = new FakeNetworkService()
 		logger = new LoggerStore(new ConfigStore())
 		const services = new ServiceCollection()
-		services.add(profileStub())
 		services.add(networkService)
+		services.add(new FakeFenceProfileService())
 		accountStateService = new AccountStateService(logger)
 		services.add(accountStateService)
 		await services.start()
@@ -450,7 +448,7 @@ describe("AccountStateService.restore (bounded)", () => {
 	})
 
 	test("registers every sender/contract when nothing fails and no deadline is set", async () => {
-		const result = await accountStateService.restore([item([sender(1), sender(2)])], [NET])
+		const result = await accountStateService.restore([item([sender(1), sender(2)])], [NET], LIVE_FENCE)
 		expect(pxe.registerSender).toHaveBeenCalledTimes(2)
 		expect(result).toHaveLength(1)
 		expect(result[0].restoreError).toBeUndefined()
@@ -462,7 +460,7 @@ describe("AccountStateService.restore (bounded)", () => {
 			await new Promise((r) => setTimeout(r, 30))
 			return addr
 		})
-		const result = await accountStateService.restore([item([sender(1), sender(2), sender(3)])], [NET], 10)
+		const result = await accountStateService.restore([item([sender(1), sender(2), sender(3)])], [NET], LIVE_FENCE, 10)
 		expect(pxe.registerSender).toHaveBeenCalledTimes(1)
 		expect(result[0].senders).toHaveLength(1)
 		expect(result[0].restoreError).toContain("ran out of time")
@@ -470,7 +468,7 @@ describe("AccountStateService.restore (bounded)", () => {
 	})
 
 	test("deadline clamp floor: a hostile negative deadline skips everything without launching", async () => {
-		const result = await accountStateService.restore([item([sender(1)])], [NET], -5)
+		const result = await accountStateService.restore([item([sender(1)])], [NET], LIVE_FENCE, -5)
 		expect(pxe.registerSender).not.toHaveBeenCalled()
 		expect(result[0].restoreError).toContain("ran out of time")
 	})
@@ -486,6 +484,7 @@ describe("AccountStateService.restore (bounded)", () => {
 				},
 			] as never,
 			[NET],
+			LIVE_FENCE,
 		)
 		expect(pxe.registerSender).toHaveBeenCalledTimes(1)
 		expect(pxe.registerContract).not.toHaveBeenCalled()
@@ -496,14 +495,18 @@ describe("AccountStateService.restore (bounded)", () => {
 
 	test("a payload-shaped failure does NOT fail-fast the rest", async () => {
 		pxe.registerSender.mockRejectedValueOnce(new Error("Invalid artifact: missing function abi"))
-		const result = await accountStateService.restore([item([sender(1), sender(2)])], [NET])
+		const result = await accountStateService.restore([item([sender(1), sender(2)])], [NET], LIVE_FENCE)
 		expect(pxe.registerSender).toHaveBeenCalledTimes(2)
 		expect(result[0].senders[0].restoreError).toContain("Invalid artifact")
 		expect(result[0].senders[1].restoreError).toBeUndefined()
 	})
 
 	test("malformed slice content becomes bounded violation records, never a throw", async () => {
-		const result = await accountStateService.restore([null, { networkId: "net-a", senders: null, contracts: [] }] as never, [NET])
+		const result = await accountStateService.restore(
+			[null, { networkId: "net-a", senders: null, contracts: [] }] as never,
+			[NET],
+			LIVE_FENCE,
+		)
 		expect(result.some((r) => String(r.restoreError).includes("malformed"))).toBe(true)
 		expect(pxe.registerSender).not.toHaveBeenCalled()
 	})
@@ -513,9 +516,11 @@ describe("AccountStateService.restore (bounded)", () => {
 		const contract = (b: string) => ({ address: `0x${b.repeat(32)}`, instance: { i: b }, artifact: { a: b } })
 		const [crafted, genuine] = [contract("07"), contract("08")]
 		vi.mocked(assertWireArtifactClassId).mockRejectedValueOnce(new Error(MISMATCH))
-		const result = await accountStateService.restore([{ networkId: "net-a", senders: [], contracts: [crafted, genuine] }] as never, [
-			NET,
-		])
+		const result = await accountStateService.restore(
+			[{ networkId: "net-a", senders: [], contracts: [crafted, genuine] }] as never,
+			[NET],
+			LIVE_FENCE,
+		)
 		expect(vi.mocked(assertWireArtifactClassId).mock.calls).toStrictEqual([
 			[crafted.instance, crafted.artifact],
 			[genuine.instance, genuine.artifact],
@@ -529,10 +534,113 @@ describe("AccountStateService.restore (bounded)", () => {
 		const result = await accountStateService.restore(
 			[{ networkId: "ghost", senders: [sender(1), sender(2)], contracts: [] }] as never,
 			[NET],
+			LIVE_FENCE,
 		)
 		expect(pxe.registerSender).not.toHaveBeenCalled()
 		expect(result.at(-1)?.senders).toHaveLength(2)
 		expect(result.at(-1)?.senders.every((s) => String(s.restoreError).includes("Network not found"))).toBe(true)
+	})
+})
+
+describe("AccountStateService.restore (run fence)", () => {
+	let profiles: FakeFenceProfileService
+	let accountStateService: AccountStateService
+	let pxe: { registerSender: ReturnType<typeof vi.fn>; registerContract: ReturnType<typeof vi.fn> }
+
+	const NET = {
+		id: "net-a",
+		profileId: "p1",
+		chainId: 1,
+		l1ChainId: 1,
+		name: "Net net-a",
+		endpoints: [{ id: "primary", rpcUrl: "http://localhost:9" }],
+		primaryEndpointId: "primary",
+	} as Network
+	const SUCCESSOR = { ...LIVE_FENCE, epoch: 1, session: 2 }
+	const sender = (i: number) => ({ address: `0x${String(i).padStart(2, "0").repeat(32)}` })
+	const contract = { address: `0x${"07".repeat(32)}`, instance: { i: 1 }, artifact: { a: 1 } }
+
+	beforeEach(async () => {
+		const services = new ServiceCollection()
+		services.add(new FakeNetworkService())
+		profiles = new FakeFenceProfileService()
+		services.add(profiles)
+		accountStateService = new AccountStateService(new LoggerStore(new ConfigStore()))
+		services.add(accountStateService)
+		await services.start()
+		pxe = {
+			registerSender: vi.fn(async (_info: unknown, addr: unknown) => addr),
+			registerContract: vi.fn(async () => undefined),
+		}
+		;(accountStateService as unknown as { pxeService: typeof pxe }).pxeService = pxe
+	})
+
+	test("a live fence registers, every call carrying the incarnation read under it", async () => {
+		const result = await accountStateService.restore(
+			[{ networkId: "net-a", senders: [sender(1)], contracts: [contract] }] as never,
+			[NET],
+			LIVE_FENCE,
+		)
+		expect(result[0]).toEqual({ networkId: "net-a", senders: [sender(1)], contracts: [contract] })
+		expect(pxe.registerSender.mock.calls[0][0]).toMatchObject({ profileId: "p1", chainId: 1, pxeGeneration: "gen-1" })
+		expect(pxe.registerContract.mock.calls[0][0]).toMatchObject({ profileId: "p1", pxeGeneration: "gen-1" })
+	})
+
+	test("a network row of another profile is treated as absent", async () => {
+		const result = await accountStateService.restore(
+			[{ networkId: "net-a", senders: [sender(1)], contracts: [] }] as never,
+			[{ ...NET, profileId: "p2" }],
+			LIVE_FENCE,
+		)
+		expect(pxe.registerSender).not.toHaveBeenCalled()
+		expect(result[0].senders[0].restoreError).toBe("Network not found")
+	})
+
+	test("a same-id successor restored after the fence was issued gets nothing", async () => {
+		profiles.live = SUCCESSOR
+		profiles.generation = "gen-2"
+		await expect(
+			accountStateService.restore([{ networkId: "net-a", senders: [sender(1)], contracts: [] }] as never, [NET], LIVE_FENCE),
+		).rejects.toThrow(SessionEndedError)
+		expect(pxe.registerSender).not.toHaveBeenCalled()
+	})
+
+	test("a fence that dies mid-run refuses every later launch and records it", async () => {
+		pxe.registerSender.mockImplementationOnce(async (_info: unknown, addr: unknown) => {
+			profiles.live = undefined
+			return addr
+		})
+		const result = await accountStateService.restore(
+			[{ networkId: "net-a", senders: [sender(1), sender(2)], contracts: [] }] as never,
+			[NET],
+			LIVE_FENCE,
+		)
+		expect(pxe.registerSender).toHaveBeenCalledTimes(1)
+		expect(result[0].senders[0]).toEqual(sender(1))
+		expect(result[0].senders[1].restoreError).toBe(new SessionEndedError().message)
+	})
+
+	test("a delete and same-id re-import during the artifact check sends nothing under the successor", async () => {
+		let release = () => {}
+		vi.mocked(assertWireArtifactClassId).mockImplementationOnce(
+			() =>
+				new Promise<void>((resolve) => {
+					release = resolve
+				}),
+		)
+		const running = accountStateService.restore(
+			[{ networkId: "net-a", senders: [], contracts: [contract] }] as never,
+			[NET],
+			LIVE_FENCE,
+		)
+		await vi.waitFor(() => expect(assertWireArtifactClassId).toHaveBeenCalled())
+		profiles.live = SUCCESSOR
+		profiles.generation = "gen-2"
+		release()
+
+		const result = await running
+		expect(pxe.registerContract).not.toHaveBeenCalled()
+		expect(result[0].contracts[0].restoreError).toBe(new SessionEndedError().message)
 	})
 })
 

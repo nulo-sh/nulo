@@ -55,11 +55,14 @@ import {
 	type Profile,
 	type ProfileType,
 	type Events,
+	type FinalizedRestore,
 	type Methods,
+	type PasskeyBackupMaterial,
 	type RestoreSecret,
 	type RunFence,
 	toProfileInfo,
 } from "./spec"
+import { probeDekAndCount, type SealedImportedKey } from "./imported-key-count"
 import { RestorePendingRepository } from "./restore-pending-repository"
 import { TombstoneRepository } from "./tombstone-repository"
 import { ProfileDeletionState, type ExecutionFence } from "./profile-deletion-state"
@@ -103,7 +106,6 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		"importPasskey",
 		"importMnemonic",
 		"exportPlain",
-		"exportPasskeyBackupMaterial",
 		"exportMnemonic",
 		"restore",
 		"finalizeRestore",
@@ -515,13 +517,15 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  lock acquisitions would let a delete slip between them. */
 	public async captureExecutionFence(): Promise<ExecutionFence> {
 		await this.ensureInitialized()
-		return this.runExclusive(async () => {
-			const session = await this.sessionManager.getActive()
-			if (!session) throw new WalletLockedError()
-			// A profile whose deletion has begun answers as locked to every caller, but it is not a lock.
-			if (this.deletionState.isReserved(session.profile.id)) throw new Error("Wallet locked")
-			return { profileId: session.profile.id, epoch: this.deletionState.capture(session.profile.id), session: session.serial }
-		})
+		return this.runExclusive(() => this.captureExecutionFenceHoldingLock())
+	}
+
+	private async captureExecutionFenceHoldingLock(): Promise<ExecutionFence> {
+		const session = await this.sessionManager.getActive()
+		if (!session) throw new WalletLockedError()
+		// A profile whose deletion has begun answers as locked to every caller, but it is not a lock.
+		if (this.deletionState.isReserved(session.profile.id)) throw new Error("Wallet locked")
+		return { profileId: session.profile.id, epoch: this.deletionState.capture(session.profile.id), session: session.serial }
 	}
 
 	/** Throws {@link SessionEndedError} unless the session `fence` was captured under is still the
@@ -1779,24 +1783,26 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	}
 
 	/**
-	 * The passkey arm of `exportPlain` / `exportPasskeyBackupMaterial`: the credentialId plus the
-	 * sealed DEK blob the backup carries. The popup ran the in-page WebAuthn ceremony and hands
-	 * over the credential data; it is materialized SW-side and bound to THIS profile's
-	 * credentialId — without that check a popup bug could supply data for a different key and
-	 * the wrong credential would be exported.
+	 * The passkey arm of `exportPlain` / `exportPasskeyBackupKeys`: the credentialId plus the
+	 * sealed DEK blob the backup carries, and with `rows` how many of them do not open. The popup
+	 * ran the in-page WebAuthn ceremony and hands over the credential data; it is materialized
+	 * SW-side and bound to THIS profile's credentialId — without that check a popup bug could
+	 * supply data for a different key and the wrong credential would be exported.
 	 */
 	private async exportPasskeyCredential(
 		id: string,
 		profile: Extract<Profile, { type: "passkey" }>,
 		capturedEpoch: number,
 		credentialData?: PasskeyCredentialData,
-	): Promise<{ credentialId: string; dekSealed: string; dekReplaced: boolean }> {
+		rows?: readonly SealedImportedKey[],
+	): Promise<PasskeyBackupMaterial> {
 		if (!credentialData) {
 			throw new Error("credentialData is required for passkey profile")
 		}
 		const recovery = await this.passkeyCoordinator.recoverFromCredentialData(credentialData)
 		let dekSealed = profile.dekSealed
 		let dekReplaced = false
+		let unopened = 0
 		try {
 			if (recovery.credentialId !== profile.credentialId) {
 				throw new Error("Invalid profile id")
@@ -1812,15 +1818,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// under that same key: a passkey profile has no recovery phrase, so this backup IS its
 			// repair path in recovery mode. The stored row is never touched; the caller names the
 			// loss (imported keys, local chain state).
-			let probe: ImportedKeysDek | null = null
-			try {
-				probe = await unsealDekUnderWrapKey(recovery.dekWrapKey, profile.dekSealed)
-			} catch {
-				probe = null
-			} finally {
-				zeroize(probe)
-			}
-			if (!probe) {
+			const probed = await probeDekAndCount(recovery.dekWrapKey, profile.dekSealed, rows)
+			unopened = probed.unopened
+			if (!probed.opens) {
 				this.logger.log(this.name, LogLevel.Warn, "imported-keys DEK unrecoverable at passkey export — exporting a fresh one", id)
 				const fresh = generateImportedKeysDek()
 				try {
@@ -1853,7 +1853,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		) {
 			throw new Error("Invalid profile id")
 		}
-		return { credentialId: current.credentialId, dekSealed, dekReplaced }
+		return { credentialId: current.credentialId, dekSealed, dekReplaced, unopened }
 	}
 
 	/**
@@ -1914,16 +1914,23 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		}
 	}
 
-	public async exportPasskeyBackupMaterial(
+	/**
+	 * A passkey profile's full-backup material, proven as `exportPlain`'s passkey arm proves it, plus
+	 * how many of `rows` do not open under the stored DEK. That DEK is opened with the credential's
+	 * wrap key, never the session's, and never leaves this service. In-process only: `AccountService`
+	 * reads the rows the file carries and asserts the run's fence around this call.
+	 */
+	public async exportPasskeyBackupKeys(
 		id: string,
 		credentialData: PasskeyCredentialData,
-	): Promise<{ credentialId: string; dekSealed: string; dekReplaced: boolean }> {
+		rows: readonly SealedImportedKey[],
+	): Promise<PasskeyBackupMaterial> {
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
 		if (profile.type !== "passkey") {
 			throw new Error("Operation not supported for password profile")
 		}
-		return this.exportPasskeyCredential(id, profile, capturedEpoch, credentialData)
+		return this.exportPasskeyCredential(id, profile, capturedEpoch, credentialData, rows)
 	}
 
 	/** Fresh-auth DEK unseal for the account-export path (mirrors `exportPlain`'s posture:
@@ -2605,55 +2612,62 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 * Idempotent in spirit: if the session is already active for this profile,
 	 * skips the re-open (the no-op case after a second `finalizeRestore` call).
 	 */
-	public async finalizeRestore(id: string, password?: string): Promise<ProfileInfo> {
+	public async finalizeRestore(id: string, password?: string): Promise<FinalizedRestore> {
 		await this.ensureInitialized()
 
 		return this.runExclusive(async () => {
-			// Finalize is the last reader of both restore stashes for its id, so every path wipes what it
-			// did not take: a leftover rewrap context is the empty-slice case (nothing consumed it). The
-			// identity checks spare entries a later restore stashed after the lock's hold watchdog
-			// released this call.
-			const seen = this.pendingRestoreSecrets.get(id)
-			const seenRewrap = this.pendingDekRewraps.get(id)
-			try {
-				// Sweep stale entries but never the id being finalized here.
-				this.sweepStalePendingRestore(Date.now(), id)
-				const profile = await this.repo.get(id)
-				if (!profile) {
-					throw new Error("Invalid profile id")
-				}
-				// A tombstoned profile (SW died mid-delete: row still present, id
-				// reserved) must not open a session — it is being erased. Gate here as
-				// well as at row-read so a delete that began mid-restore is caught.
-				if (this.deletionState.isReserved(id)) {
-					throw new Error("Invalid profile id")
-				}
-
-				// Clear the restore-in-progress marker at ENTRY: being called at all
-				// proves the storage-slice phase completed (the import flow only
-				// finalizes after every slice restore). Clearing on entry — not on
-				// session-open success — keeps finalize-throw survivors (wrong
-				// password, lost passkey pending-secret) on their documented
-				// unlock-later recovery instead of branding them torn.
-				await this.restorePending.delete(id)
-
-				// If the session is already active for this profile, treat as
-				// no-op. Defensive against double-finalize.
-				if (this.sessionManager.isActive(id)) {
-					return this.getProfileInfo(profile)
-				}
-
-				if (profile.type === "password") {
-					return await this.finalizePasswordRestoreHoldingLock(id, profile, password)
-				}
-				// This dispatch falls through to the passkey branch for ANY non-password
-				// type — an edited `type` field must not select it; the branch re-checks.
-				return await this.finalizePasskeyRestoreHoldingLock(id, profile)
-			} finally {
-				if (this.pendingRestoreSecrets.get(id) === seen) this.pendingRestoreSecrets.drop(id)
-				if (this.pendingDekRewraps.get(id) === seenRewrap) this.pendingDekRewraps.drop(id)
-			}
+			const profile = await this.finalizeRestoreHoldingLock(id, password)
+			const fence = await this.captureExecutionFenceHoldingLock()
+			if (fence.profileId !== id) throw new SessionEndedError()
+			return { profile, fence: { ...fence, incarnation: this.workerId } }
 		})
+	}
+
+	private async finalizeRestoreHoldingLock(id: string, password: string | undefined): Promise<ProfileInfo> {
+		// Finalize is the last reader of both restore stashes for its id, so every path wipes what it
+		// did not take: a leftover rewrap context is the empty-slice case (nothing consumed it). The
+		// identity checks spare entries a later restore stashed after the lock's hold watchdog
+		// released this call.
+		const seen = this.pendingRestoreSecrets.get(id)
+		const seenRewrap = this.pendingDekRewraps.get(id)
+		try {
+			// Sweep stale entries but never the id being finalized here.
+			this.sweepStalePendingRestore(Date.now(), id)
+			const profile = await this.repo.get(id)
+			if (!profile) {
+				throw new Error("Invalid profile id")
+			}
+			// A tombstoned profile (SW died mid-delete: row still present, id
+			// reserved) must not open a session — it is being erased. Gate here as
+			// well as at row-read so a delete that began mid-restore is caught.
+			if (this.deletionState.isReserved(id)) {
+				throw new Error("Invalid profile id")
+			}
+
+			// Clear the restore-in-progress marker at ENTRY: being called at all
+			// proves the storage-slice phase completed (the import flow only
+			// finalizes after every slice restore). Clearing on entry — not on
+			// session-open success — keeps finalize-throw survivors (wrong
+			// password, lost passkey pending-secret) on their documented
+			// unlock-later recovery instead of branding them torn.
+			await this.restorePending.delete(id)
+
+			// If the session is already active for this profile, treat as
+			// no-op. Defensive against double-finalize.
+			if (this.sessionManager.isActive(id)) {
+				return this.getProfileInfo(profile)
+			}
+
+			if (profile.type === "password") {
+				return await this.finalizePasswordRestoreHoldingLock(id, profile, password)
+			}
+			// This dispatch falls through to the passkey branch for ANY non-password
+			// type — an edited `type` field must not select it; the branch re-checks.
+			return await this.finalizePasskeyRestoreHoldingLock(id, profile)
+		} finally {
+			if (this.pendingRestoreSecrets.get(id) === seen) this.pendingRestoreSecrets.drop(id)
+			if (this.pendingDekRewraps.get(id) === seenRewrap) this.pendingDekRewraps.drop(id)
+		}
 	}
 
 	/** Password-side finalize: re-derive from the supplied password (PBKDF2 paid again —

@@ -12,11 +12,7 @@ import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { NETWORK_SERVICE_NAME, type Network, NodeStatus } from "@/wallet/services/network/spec"
 import { AccountStateService } from "./service"
-import { svc } from "@/wallet/services/composition-harness"
-import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
-
-/** The profile service a fence-free call never asks. */
-const profileStub = () => svc(PROFILE_SERVICE_NAME, {})
+import { FakeFenceProfileService, LIVE_FENCE } from "./fence.fixtures"
 
 // The fixtures carry stub instances and artifacts; the class-id check has its own real-data tests.
 vi.mock("@nulo/aztec-runtime/pxe", async (importOriginal) => ({
@@ -59,8 +55,8 @@ describe("restore() exact-branch pins", () => {
 
 	beforeEach(async () => {
 		const services = new ServiceCollection()
-		services.add(profileStub())
 		services.add(new FakeNetworkService())
+		services.add(new FakeFenceProfileService())
 		accountStateService = new AccountStateService(new LoggerStore(new ConfigStore()))
 		services.add(accountStateService)
 		await services.start()
@@ -86,6 +82,7 @@ describe("restore() exact-branch pins", () => {
 				},
 			] as never,
 			[NET],
+			LIVE_FENCE,
 		)
 		expect(pxe.registerContract).toHaveBeenCalledTimes(1)
 		expect(result[0].contracts).toHaveLength(1)
@@ -107,6 +104,7 @@ describe("restore() exact-branch pins", () => {
 				},
 			] as never,
 			[NET],
+			LIVE_FENCE,
 		)
 		expect(pxe.registerContract).toHaveBeenCalledTimes(1)
 		expect(result[0].contracts).toEqual([{ address: realAddr, instance: { i: 2 }, artifact: { a: 2 } }])
@@ -117,6 +115,7 @@ describe("restore() exact-branch pins", () => {
 		const result = await accountStateService.restore(
 			[{ networkId: "net-a", senders: [], contracts: [{ address: "0x05", instance: { i: 1 }, artifact: { a: 1 } }] }] as never,
 			[NET],
+			LIVE_FENCE,
 		)
 		expect(pxe.registerContract).not.toHaveBeenCalled()
 		expect(result[0].contracts).toHaveLength(1)
@@ -124,7 +123,7 @@ describe("restore() exact-branch pins", () => {
 	})
 
 	test("an empty item yields a clean entry with no launches and no restoreError", async () => {
-		const result = await accountStateService.restore([{ networkId: "net-a", senders: [], contracts: [] }] as never, [NET])
+		const result = await accountStateService.restore([{ networkId: "net-a", senders: [], contracts: [] }] as never, [NET], LIVE_FENCE)
 		expect(result).toEqual([{ networkId: "net-a", senders: [], contracts: [] }])
 		expect(pxe.registerSender).not.toHaveBeenCalled()
 		expect(pxe.registerContract).not.toHaveBeenCalled()
@@ -136,6 +135,7 @@ describe("restore() exact-branch pins", () => {
 		const result = await accountStateService.restore(
 			[{ networkId: "net-a", senders: [sender(1), sender(2)], contracts: [] }] as never,
 			[NET],
+			LIVE_FENCE,
 			-5,
 		)
 		expect(pxe.registerSender).not.toHaveBeenCalled()

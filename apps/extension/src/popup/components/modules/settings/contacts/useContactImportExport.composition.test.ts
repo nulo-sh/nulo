@@ -33,7 +33,7 @@ import { svc } from "@/wallet/services/composition-harness"
 import { ContactService } from "@/wallet/services/contact/service"
 import { type Contact, CONTACT_SERVICE_NAME, CONTACT_STORAGE_ROOT } from "@/wallet/services/contact/spec"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
-import { PROFILE_SERVICE_NAME, type RunFence } from "@/wallet/services/profile/spec"
+import { PROFILE_SERVICE_NAME, type RunFence, toProfileInfo } from "@/wallet/services/profile/spec"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
 
 const boundary = vi.hoisted(() => ({
@@ -604,7 +604,10 @@ describe("import composition — the released full backup", () => {
 		await seedReleasedBook(api)
 		const assembled = await assembleFullBackup(
 			{ [COMPAT_EPOCH_FIELD]: CURRENT_COMPAT_EPOCH, [BACKUP_SCHEMA_VERSION_FIELD]: CURRENT_BACKUP_SCHEMA_VERSION },
-			[{ name: CONTACT_SERVICE_NAME, backup: () => contacts.backup() }],
+			[
+				{ name: PROFILE_SERVICE_NAME, backup: async () => toProfileInfo({ id: "p1", name: "Main", type: "password" }, false) },
+				{ name: CONTACT_SERVICE_NAME, backup: () => contacts.backup() },
+			],
 		)
 		expectFixture(CURRENT_BACKUP_FIXTURE, assembled.pretty)
 

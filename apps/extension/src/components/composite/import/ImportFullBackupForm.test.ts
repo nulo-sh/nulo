@@ -124,6 +124,33 @@ describe("ImportFullBackupForm", () => {
 		expect(wrapper.text()).toContain("import completed with some errors")
 	})
 
+	it("writes the warning in the theme's warning text colour", () => {
+		const wrapper = mount(ImportFullBackupForm, {
+			props: baseProps({ restoreStatus: "finished", isRestoreHasErrors: true, unrestoredNetworks: ["Testnet"] }),
+			global: { stubs: { ...stubs, Text } },
+		})
+		const sentence = wrapper.get("[data-testid=import-full-backup-warning]").findAllComponents(Text).at(-1)
+		expect(sentence?.classes()).toContain("color--txt-warning")
+		expect(sentence?.classes()).not.toContain("color--yellow")
+	})
+
+	it("a page restoring into the open profile asks for no new password", () => {
+		const props = baseProps({ selectedBackup: { name: "x.json", backup: {}, type: "plain", profileType: "password" } })
+		expect(mount(ImportFullBackupForm, { props, global: { stubs } }).text()).toContain("New Password")
+		const own = mount(ImportFullBackupForm, { props: { ...props, askNewPassword: false }, global: { stubs } })
+		expect(own.text()).not.toContain("New Password")
+		expect(own.find("[data-testid=import-full-backup-password-input]").exists()).toBe(false)
+	})
+
+	it("a page's own warning replaces the worded one", () => {
+		const wrapper = mount(ImportFullBackupForm, {
+			props: baseProps({ restoreStatus: "finished", isRestoreHasErrors: true, warningText: "Testnet couldn't be restored." }),
+			global: { stubs },
+		})
+		expect(wrapper.get("[data-testid=import-full-backup-warning]").text()).toContain("Testnet couldn't be restored.")
+		expect(wrapper.text()).not.toContain("import completed with some errors")
+	})
+
 	it("names the networks a Retry replays in the warning", () => {
 		const wrapper = mount(ImportFullBackupForm, {
 			props: baseProps({
@@ -174,6 +201,19 @@ describe("ImportFullBackupForm", () => {
 		} finally {
 			scroll.mockRestore()
 		}
+	})
+
+	it("reveals the warning again when a failed Retry adds its line above the buttons", async () => {
+		const reveal = vi.fn()
+		const wrapper = mount(ImportFullBackupForm, {
+			props: baseProps({ restoreStatus: "finished", isRestoreHasErrors: true }),
+			global: { stubs, provide: { [COLLAPSING_HERO as symbol]: { reveal } } },
+		})
+		reveal.mockClear()
+
+		await wrapper.setProps({ retryFailedAgain: true })
+
+		expect(reveal).toHaveBeenCalledExactlyOnceWith(wrapper.get("[data-testid=import-full-backup-warning]").element)
 	})
 })
 

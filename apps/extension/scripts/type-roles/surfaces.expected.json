@@ -522,6 +522,15 @@
 			"suite": "smoke"
 		},
 		{
+			"id": "popup-restore-again",
+			"name": "Restore again",
+			"kind": "route",
+			"source": "apps/extension/src/popup/pages/restore-again.vue",
+			"reach": "#/popup/restore-again",
+			"states": ["a backup to choose", "a Retry that failed again"],
+			"suite": "smoke"
+		},
+		{
 			"id": "popup-holdings",
 			"name": "Holdings",
 			"kind": "route",

@@ -58,7 +58,7 @@ const cancel = async () => {
                     </Text>
                 </Flex>
 
-                <Text variant="body" color="body" height="140" align="center">
+                <Text variant="body" color="body" height="140" align="center" data-testid="notification-description">
                     {{ notification.payload.description }}
                 </Text>
 

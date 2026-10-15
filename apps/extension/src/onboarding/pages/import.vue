@@ -14,6 +14,7 @@ import { useToast } from "@/composables/toast"
 /** Utils */
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
+import { restoreNoticeText, retryResultText } from "@/components/composite/import/restore-warning"
 
 /** Stores */
 import { useAppStore } from "@/stores/app.store"
@@ -77,6 +78,7 @@ const {
 	isRestoreHasErrors,
 	canRetryAccountState,
 	unrestoredNetworkNames,
+	retryFailedAgain,
 	hasOtherRestoreErrors,
 	isRetryingAccountState,
 	retryAccountState,
@@ -95,17 +97,16 @@ const {
 } = useProfileImportFlow({
 	completeImport,
 	// Onboarding error-log surface: notify-based, not a popup dialog.
-	showErrorLog: (errors) => {
+	showErrorLog: (_errors, { unrestored }) => {
 		notificationStore.create({
 			type: "warning",
 			payload: {
 				title: "Import completed with errors",
-				description: "Some entries from the backup couldn't be restored. Check the developer console for details.",
+				description: restoreNoticeText(unrestored),
 				confirmText: "OK",
 				onConfirm: () => {},
 			},
 		})
-		console.error("Restore errors:", errors)
 	},
 	notifyImportFailed: () => {
 		notificationStore.create({
@@ -176,6 +177,7 @@ onBeforeUnmount(() => {
 			:isRestoreHasErrors="isRestoreHasErrors"
 			:unrestoredNetworks="unrestoredNetworkNames"
 			:hasOtherErrors="hasOtherRestoreErrors"
+			:retryFailedAgain="retryFailedAgain"
 			:error="error"
 			:isCopied="isCopied"
 			:maxPasswordLength="maxPasswordLength"
@@ -219,6 +221,15 @@ onBeforeUnmount(() => {
 				>
 					{{ restoreStatus === "progress" ? "Importing..." : "Import profile" }}
 				</Button>
+				<Text
+					v-if="retryFailedAgain"
+					variant="body"
+					height="120"
+					color="txt-warning"
+					data-testid="import-full-backup-retry-result"
+				>
+					{{ retryResultText(unrestoredNetworkNames) }}
+				</Text>
 				<Button
 					v-if="canRetryAccountState"
 					variant="cta_outline"

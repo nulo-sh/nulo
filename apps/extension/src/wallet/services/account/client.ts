@@ -34,6 +34,7 @@ definePassthroughsExhaustive<Methods>()(AccountServiceClient.prototype, [
 	"importAccount",
 	"previewImportAccount",
 	"exportFullBackupKeys",
+	"exportPasskeyBackupKeys",
 	"backupImportedKeys",
 	"restoreImportedKeys",
 	"reconcileImportedAccounts",
