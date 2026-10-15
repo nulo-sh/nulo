@@ -117,3 +117,18 @@ P12-01 names one case: a funded wallet whose first price fetch failed and nothin
 **Recommendation:** the first three as shipped now; the last two show "—" and "Prices unavailable" as well, since each shows a $0.00 the person did not earn (charter C9 A).
 
 **What ships now:** the third column.
+
+## OA-8. #116: a price answer that leaves out what the wallet holds
+
+**Surface:** the Home hero.
+
+Arc 2c switches the hero to "—" / "Prices unavailable" when a fetch fails (P18-01 A, OA-6 B, OA-7 B). An answer that arrives but leaves one token out is not a failed fetch. The provider may drop the token, or its price may fall outside the wallet's sanity band, as in a depeg. Once that token's last price expires after 15 minutes, a wallet holding only it reads $0.00 with "priced assets only".
+
+| Option | A wallet holding only USDC, whose price the provider stopped returning |
+|---|---|
+| **A. As shipped** | $0.00 with "priced assets only" once the cached price expires |
+| **B. A missing price reads as unavailable** | "—" with "Prices unavailable", as after a failed fetch |
+
+**Recommendation: B.** The $0.00 is again a figure the person did not earn (charter C9 A). B is a smaller rule than the one shipped: it drops the failed-fetch condition from the hero's test.
+
+**What ships now: A.**

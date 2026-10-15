@@ -474,7 +474,7 @@ Validation gate: Fast; `bun run test:all`; the armed smoke builds; whole smoke o
 
 Warning: start only after send-queue-activity arc 3 (#103) merges.
 
-#### Phase 2c: the hero state
+#### Phase 2c: the hero state ✓
 
 1. Return `{ quotes, lastRefreshFailed }` from `refreshIfStale` in the service, spec and client.
 2. Expose `unavailable` from `usePrices` with the rules in § Architecture: sequence-fenced, set only by the first request's answer, cleared by an applied event or a later clean answer, untouched by a rejection, frozen after `dispose`.
@@ -503,6 +503,13 @@ Warning: start only after send-queue-activity arc 3 (#103) merges.
 9. Capture the hero in both themes for the PR.
 
 Validation gate: Fast; `bun run test:all`; the armed smoke builds; `tests/e2e/fiat-display.test.ts` on both browsers; network `hero-prices-unavailable.test.ts` and `fiat-send.test.ts` on both browsers. Pass: exit 0. Layers: lint, typecheck, unit, component, smoke e2e, network e2e.
+
+Outcome (2026-10-15): local gate passed. `test:all`, lint and `typecheck:all` exit 0. `test:all` was rerun once after a 5-second timeout in `zod-jitless.test.ts`, a cold `zod` import under parallel load; it passed alone and on the rerun. At retry 0: network `hero-prices-unavailable` (new, about 41 s per browser) and `fiat-send` 2/2 on Chrome and on Firefox; smoke `fiat-display` 2/2 on both. Deviations, all from D-orch-9:
+- Any answer, a rejected request and every broadcast may move `unavailable`, not only the open answer, and a rejection sets it.
+- The worker broadcasts a failed fetch, which § Arc 2c did not need while only the open answer counted: a popup open across the three-minute refresh has no request of its own.
+- Step 5's cases follow those rules. Step 7's pin now reads "—" and "Prices unavailable".
+- The failure bookkeeping moved into `recordFailure` to keep `doRefresh` within the complexity budget.
+- The hero asks what the total sums (`fiatOf`), not `quoteFor` (Opus round 1, finding 7).
 
 ## Decision ledger
 
@@ -730,6 +737,35 @@ Verdict: **approve**. All 16 kill sites go through the exported `stopBackground`
 | 2 | Low. A kill while a spec's stop is still re-arming skips that origin, so the re-arm lands during the kill | Rejected: no file uses both `interceptRpc` and `stopBackground`, and a spec awaits its stop before anything else |
 | 3 | Info. The refusal and the unstopped-read messages name only a spec, while a kill now takes the origin too | Accepted: both are worded for either holder |
 | 4 | Info. Three comments still describe only a spec's suspension, and the kill hazard is Chrome's | Accepted |
+
+### Arc 2c, round 1, Codex (gpt-6.1-sol, high; session `01a14161-87d9-7fb3-9e5c-80858eb400e5`), 2026-10-15
+
+Verdict: **approve**. Three Low findings, no runtime defect. I1, I3 and I4 hold. On I4: `return await` now runs `finally` after the failure bookkeeping, which is harmless.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Low. The e2e drops the interception handle, so a caption caused some other way would pass | Accepted: it asserts `hits() > 0` and `failures()` empty |
+| 2 | Low. No control for a wallet holding only unpriced tokens after a failed fetch | Accepted: a case asserts $0.00 with "priced assets only" |
+| 3 | Low. The `admit` and `pricesUnavailable` docs restate their code | Accepted: deleted |
+
+### Arc 2c, round 1, Opus (general-purpose, read-only), 2026-10-15
+
+Verdict: **approve with small fixes**. No correctness bug. I2 was wrong as stated: mount's request and the first `onConnected` request can be answered out of order. It is harmless by I1.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Low. `unavailable`'s doc overclaims | Accepted: reworded |
+| 2 | Low. The `Events` doc says every fetch, but a superseded one emits nothing | Accepted |
+| 3 | Low. The fence relies on the worker broadcasting every change of its failure state, and no comment says so | Accepted: one clause on `latestWins` |
+| 4 | Low. The balance-count guard is untested | Accepted: a case in "an arrival on Home"; it fails with the guard removed |
+| 5 | Low. The 12-second hero cap can elapse before the 10-second abort on a cold worker, showing $0.00 "priced assets only" for seconds | Rejected: the cap is an existing trade-off, and the state is transient |
+| 6 | Low, owner's call. A partial provider answer is a success, so a wallet holding only a dropped token reads $0.00 once its quote expires | Outside the signed trigger, a failed fetch: OWNER-ASKS OA-8 |
+| 7 | Nit. The hero's test (`quoteFor`) and the total (`tokenFiatMicro`, which needs known decimals) disagree | Accepted: the hero asks `fiatOf` |
+| 8 | Nits: an e2e comment, a test name, the moved `logWarn`'s bare error | First two accepted; the third predates the arc |
+
+### Arc 2c, round 2, Codex (session `01a14161-87d9-7fb3-9e5c-80858eb400e5` resumed), 2026-10-15
+
+Verdict: **approve**, no new findings; the loop converged. The interception assertions prove the refusal path, the unpriced-only and balance-count cases test what they name, and `fiatOf` aligns the hero with the total.
 
 ## Delivery
 
