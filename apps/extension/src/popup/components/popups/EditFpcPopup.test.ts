@@ -217,6 +217,57 @@ describe("EditFpcPopup — duplicate names", () => {
 	})
 })
 
+describe("EditFpcPopup — duplicate addresses", () => {
+	const OTHER = `0x2a${"cf".repeat(31)}`
+	const FRESH = `0x${"b".repeat(64)}`
+
+	async function addressState(w: VueWrapper, address: string) {
+		const input = w.find('input[data-input-label="Address"]')
+		await input.setValue(address)
+		await flushPromises()
+		return {
+			warns: input.element.parentElement?.textContent?.includes("Already added"),
+			disabled: w.find('[data-testid="form-submit"]').attributes("disabled") !== undefined,
+		}
+	}
+
+	beforeEach(() => {
+		fpcServiceMock.getFpcs.mockResolvedValue([{ ...FPC }, { ...FPC, id: "fpc-2", name: "Other", address: OTHER }])
+	})
+
+	test("another row's address pasted in upper case warns beside the address, keeps Save disabled, and Enter updates nothing", async () => {
+		const w = await mountShown()
+		expect(
+			await addressState(
+				w,
+				OTHER.replace(/[a-f]/g, (c) => c.toUpperCase()),
+			),
+		).toEqual({ warns: true, disabled: true })
+		pressEnterOnInput()
+		await flushPromises()
+		expect(fpcServiceMock.updateFpcAddress).not.toHaveBeenCalled()
+	})
+
+	test("an address no other row holds saves on Enter", async () => {
+		const w = await mountShown()
+		expect(await addressState(w, FRESH)).toEqual({ warns: false, disabled: false })
+		pressEnterOnInput()
+		await flushPromises()
+		expect(fpcServiceMock.updateFpcAddress).toHaveBeenCalledWith("fpc-1", FRESH)
+	})
+
+	test("a rename beside an untouched address another row also holds saves", async () => {
+		fpcServiceMock.getFpcs.mockResolvedValue([{ ...FPC }, { ...FPC, id: "fpc-2", name: "Other" }])
+		const w = await mountShown()
+		await typeName(w, "Renamed")
+		expect(w.text()).not.toContain("Already added")
+		pressEnterOnInput()
+		await flushPromises()
+		expect(fpcServiceMock.updateFpc).toHaveBeenCalledWith("fpc-1", "Renamed")
+		expect(fpcServiceMock.updateFpcAddress).not.toHaveBeenCalled()
+	})
+})
+
 describe("EditFpcPopup — the list under a held read", () => {
 	test("(BUG PIN) an FPC added while the read is out is dropped, so its name does not warn; one added after it does", async () => {
 		// Today's behaviour, kept until the owner decides: getFpcs answers after work that follows its

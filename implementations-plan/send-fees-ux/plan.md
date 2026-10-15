@@ -42,7 +42,7 @@ For a person sending on Testnet and approving app transactions in the popup. Exc
 
 Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: each exits 0. A phase is ✓ only when its gate passes. Each phase logs to `lessons/phase-N.md`.
 
-1. **#316.** Change: `EditFpcPopup.vue`, `NewFpcPopup.vue` and its "duplicate addresses" pins. A new `EditFpcPopup.test.ts` block. Never: another row's address, pasted in upper case, warns "Already added", disables Save, and Enter calls no `updateFpcAddress`. Controls: a new address saves, and a rename beside an untouched address that another row also holds saves. UI impact: P18-09 A, "'Already added' on both forms". Gate: `F`.
+1. ✓ **#316.** Change: `EditFpcPopup.vue`, `NewFpcPopup.vue` and its "duplicate addresses" pins. A new `EditFpcPopup.test.ts` block. Never: another row's address, pasted in upper case, warns "Already added", disables Save, and Enter calls no `updateFpcAddress`. Controls: a new address saves, and a rename beside an untouched address that another row also holds saves. UI impact: P18-09 A, "'Already added' on both forms". Gate: `F`.
    **1b, on OA-4 B only.** The own address re-cased reads as no change: Save stays disabled and nothing is called. Test beside phase 1's. UI impact: OA-4 B.
 2. **#340.** Change: `journal-state.ts`, `journal-state.test.ts:688-712` (header comment and expectations). The `test.each` over `pending` and `queued` expects the new label and line on the detail page and "Refused before sending" on the card. Control: a `wallet_refused` record keeps its own line. UI impact: P18-11 A, "Refused before sending" / "Too many sends were already waiting. Nothing was sent.". Gate: `F`.
 3. **#504, measure (no code lands).**

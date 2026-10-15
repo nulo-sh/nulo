@@ -5,3 +5,4 @@
 - 2026-10-15: round 1: Codex conditional approve (7), Opus conditional approve (16); all accepted. The #504 preview moved into OA-2 C; phase 3 measures opens during a proof; OA-3 B gains a fail-closed payer rule; edit-form rule limited to a changed address. Codex resume next.
 - 2026-10-15: round 2 (Codex resume): conditional approve (5), all accepted: phase 3 collection and a prover-on run, per-attempt bound, OA-2 wording, payer rule in buildPass keyed on entry with Nulo's sponsor, re-cased own address now OA-4. Final fresh Codex pass next.
 - 2026-10-15: round 3 (Codex resume, confirmation): approve. Plan committed; awaiting the orchestrator's approval and OA-1 to OA-4.
+- 2026-10-15: arc1 started; merged origin/dev (4edf2c8f). Phase 1 (#316) gate F pass: lint, typecheck:all, test (795 files).
