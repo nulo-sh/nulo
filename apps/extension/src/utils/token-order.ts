@@ -1,12 +1,12 @@
 /**
  * One ordering for every token list in the popup (Home, Holdings, the Send picker):
- * pinned → held and priced (fiat desc) → held and unpriced → malformed → nothing held (never
- * synced or empty), names inside a class. Emptiness is decided before price so a priced token with
+ * pinned → held and priced (fiat desc) → held and unpriced → unknown (malformed, or held in
+ * decimals the wallet does not know) → nothing held (never synced or empty), names inside a class. Emptiness is decided before price so a priced token with
  * nothing in it never outranks a funded token the price feed does not know. Pin membership is
  * decided before the row's numbers are parsed, so a malformed pinned row keeps its slot.
  */
 import { stringCompare } from "@/utils/string"
-import { type FiatOf, isUnknownRow, parseRawBalance } from "@/utils/token-amount"
+import { type FiatOf, isUnknownRow, knownDecimals, parseRawBalance } from "@/utils/token-amount"
 
 /** Home's row budget AND the pin cap — one number by design. */
 export const HOME_TOKEN_ROWS = 3
@@ -24,6 +24,8 @@ export type OrderCtx<T extends OrderableRow = OrderableRow> = {
 	fiatOf: FiatOf<T>
 }
 
+/** `unknown` holds a malformed row and a held one whose decimals the wallet does not know: neither
+ *  has a figure to rank by. */
 export type RowClass = "pinned" | "held-priced" | "held-unpriced" | "unsynced" | "unknown" | "empty"
 
 /** A never-synced row ranks with the empty ones: ranked above them, every first sync reshuffles the
@@ -41,7 +43,10 @@ export function classifyRow<T extends OrderableRow>(tb: T, ctx: OrderCtx<T>): Ro
 	if (ctx.pinnedContracts.has(tb.token.contract.toLowerCase())) return "pinned"
 	if (isUnknownRow(tb)) return "unknown"
 	const raw = parseRawBalance(tb) as bigint
-	if (raw > 0n) return ctx.fiatOf(tb) === undefined ? "held-unpriced" : "held-priced"
+	if (raw > 0n) {
+		if (knownDecimals(tb.token) === null) return "unknown"
+		return ctx.fiatOf(tb) === undefined ? "held-unpriced" : "held-priced"
+	}
 	return tb.updatedAt === 0 ? "unsynced" : "empty"
 }
 
