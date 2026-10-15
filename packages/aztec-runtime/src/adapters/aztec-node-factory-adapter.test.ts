@@ -167,8 +167,11 @@ describe("AztecNodeFactoryAdapter.createSingleAttemptNode", () => {
 const OK = { ok: true } as const
 const USERINFO = { ok: false, reason: "userinfo is not permitted in an RPC URL" }
 const INVALID = { ok: false, reason: "not a valid URL" }
-const scheme = (s: string) => ({ ok: false, reason: `scheme "${s}:" not in allowlist (only https: and http://loopback are permitted)` })
-const loopbackOnly = (host: string) => ({ ok: false, reason: `http: only permitted for loopback hosts (got host="${host}")` })
+const scheme = (s: string) => ({
+	ok: false,
+	reason: `scheme "${s}:" not in allowlist (only https: and http: to localhost or 127.0.0.1 are permitted)`,
+})
+const localOnly = (host: string) => ({ ok: false, reason: `http: only permitted for localhost and 127.0.0.1 (got host="${host}")` })
 const ALLOWLIST: [string, unknown][] = [
 	["https://rpc.example.com", OK],
 	["HTTPS://RPC.EXAMPLE.COM/Path?Q=1", OK],
@@ -182,8 +185,8 @@ const ALLOWLIST: [string, unknown][] = [
 	["http://LOCALHOST:8080", OK],
 	["http://127.0.0.1:8080", OK],
 	["http://127.1:8080", OK],
-	["http://[::1]:8080", OK],
-	["http://[0:0:0:0:0:0:0:1]:8080", OK],
+	["http://[::1]:8080", localOnly("[::1]")],
+	["http://[0:0:0:0:0:0:0:1]:8080", localOnly("[::1]")],
 	["https://[2001:db8::1]:8443", OK],
 	["https://exämple.com", OK],
 	[" https://rpc.example.com", OK],
@@ -191,11 +194,11 @@ const ALLOWLIST: [string, unknown][] = [
 	["https://rpc.example.com/?q=x ", OK],
 	["https:rpc.example.com", OK],
 	["http://localhost\\@evil.com", OK],
-	["http://localhost.:8080", loopbackOnly("localhost.")],
-	["http://sub.localhost:8080", loopbackOnly("sub.localhost")],
-	["http://127.0.0.2:8080", loopbackOnly("127.0.0.2")],
-	["http://0.0.0.0:8080", loopbackOnly("0.0.0.0")],
-	["http://[::ffff:127.0.0.1]:8080", loopbackOnly("[::ffff:7f00:1]")],
+	["http://localhost.:8080", localOnly("localhost.")],
+	["http://sub.localhost:8080", localOnly("sub.localhost")],
+	["http://127.0.0.2:8080", localOnly("127.0.0.2")],
+	["http://0.0.0.0:8080", localOnly("0.0.0.0")],
+	["http://[::ffff:127.0.0.1]:8080", localOnly("[::ffff:7f00:1]")],
 	["https://rpc.example.com:65536", INVALID],
 	["https://user:hunter2@rpc.example.com:65536", INVALID],
 	["", INVALID],

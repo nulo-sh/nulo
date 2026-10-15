@@ -4,6 +4,7 @@
  * superseded/drifted run commits NOTHING past that point.
  */
 import { describe, expect, test, vi } from "vitest"
+import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
 import { createNetworkSwitchHandler, type NetworkSwitchDeps, type NetworkSwitchScope } from "./network-switch"
 
 function _deferred<T = void>() {
@@ -16,30 +17,51 @@ function _deferred<T = void>() {
 
 const ACCOUNT = { address: "0xa" }
 
+const staleView = (over: Partial<StaleNetworkView> = {}): StaleNetworkView => ({
+	networkId: "n1",
+	name: "Testnet",
+	cause: { networkReset: true, addressesMoved: false },
+	blocked: false,
+	accounts: [{ name: "Account 1", address: `0x${"1".repeat(64)}` }],
+	unmovable: [],
+	switchToSeedNode: false,
+	probedEndpoint: null,
+	...over,
+})
+
 function makeDeps(over: Partial<NetworkSwitchDeps> = {}) {
-	let scope: NetworkSwitchScope | undefined = { profileId: "p1", chainId: 1 }
-	let live: NetworkSwitchScope = { profileId: "p1", chainId: 1 }
+	let scope: NetworkSwitchScope | undefined = { profileId: "p1", networkId: "n1", chainId: 1 }
+	let live: NetworkSwitchScope = { profileId: "p1", networkId: "n1", chainId: 1 }
 	const setAccounts = vi.fn()
 	const setupActiveAccount = vi.fn(async () => {})
 	const syncTransactions = vi.fn(async () => {})
 	const syncNetworkStatus = vi.fn()
+	const syncStaleNetwork = vi.fn(async (_networkId: string): Promise<StaleNetworkView | null> => null)
+	const clearAccounts = vi.fn()
+	const resetUnattended = vi.fn(async (_view: StaleNetworkView, _live: () => boolean) => {})
 	const client = {
 		getAccounts: vi.fn(async () => [ACCOUNT]),
 		ensureDefaultAccount: vi.fn(async () => ({})),
 	}
 	const deps: NetworkSwitchDeps = {
 		getScope: () => scope,
-		liveScopeMatches: (s) => live.profileId === s.profileId && live.chainId === s.chainId,
+		liveScopeMatches: (s) => live.profileId === s.profileId && live.networkId === s.networkId && live.chainId === s.chainId,
 		syncNetworkStatus,
 		replaceAccountClient: vi.fn(() => client),
 		setAccounts,
 		setupActiveAccount,
 		syncTransactions,
+		syncStaleNetwork,
+		clearAccounts,
+		resetUnattended,
 		...over,
 	}
 	return {
 		deps,
 		client,
+		syncStaleNetwork,
+		clearAccounts,
+		resetUnattended,
 		setAccounts,
 		setupActiveAccount,
 		syncTransactions,
@@ -110,8 +132,7 @@ describe("createNetworkSwitchHandler", () => {
 		h.client.ensureDefaultAccount.mockReturnValueOnce(gate.promise as never)
 		const handler = createNetworkSwitchHandler(h.deps)
 		const run1 = handler() // parks at ensureDefaultAccount
-		await Promise.resolve()
-		await Promise.resolve()
+		await vi.waitFor(() => expect(h.client.ensureDefaultAccount).toHaveBeenCalled())
 		const run2gate = _deferred<Array<typeof ACCOUNT>>()
 		h.client.getAccounts.mockReturnValueOnce(run2gate.promise)
 		const run2 = handler()
@@ -130,9 +151,7 @@ describe("createNetworkSwitchHandler", () => {
 		h.client.getAccounts.mockReturnValueOnce(gate.promise)
 		const handler = createNetworkSwitchHandler(h.deps)
 		const run1 = handler() // set([]) lands, parks at the re-fetch
-		await Promise.resolve()
-		await Promise.resolve()
-		await Promise.resolve()
+		await vi.waitFor(() => expect(h.client.getAccounts).toHaveBeenCalledTimes(2))
 		expect(h.setAccounts).toHaveBeenCalledTimes(1)
 		const run2gate = _deferred<Array<typeof ACCOUNT>>()
 		h.client.getAccounts.mockReturnValueOnce(run2gate.promise)
@@ -150,8 +169,7 @@ describe("createNetworkSwitchHandler", () => {
 		h.setupActiveAccount.mockReturnValueOnce(gate.promise)
 		const handler = createNetworkSwitchHandler(h.deps)
 		const run1 = handler() // parks in setupActiveAccount
-		await Promise.resolve()
-		await Promise.resolve()
+		await vi.waitFor(() => expect(h.setupActiveAccount).toHaveBeenCalled())
 		const run2gate = _deferred<Array<typeof ACCOUNT>>()
 		h.client.getAccounts.mockReturnValueOnce(run2gate.promise)
 		const run2 = handler()
@@ -168,7 +186,7 @@ describe("createNetworkSwitchHandler", () => {
 		const gate = _deferred<Array<typeof ACCOUNT>>()
 		h.client.getAccounts.mockReturnValueOnce(gate.promise)
 		const run = createNetworkSwitchHandler(h.deps)()
-		h.setLive({ profileId: "p2", chainId: 1 }) // drift — no second handler call
+		h.setLive({ profileId: "p2", networkId: "n1", chainId: 1 }) // drift — no second handler call
 		gate.resolve([ACCOUNT])
 		await run
 		expect(h.setAccounts).not.toHaveBeenCalled()
@@ -182,7 +200,7 @@ describe("createNetworkSwitchHandler", () => {
 		// getScope now returns a DIFFERENT scope mid-run while the LIVE scope still
 		// matches the captured one — a live re-read would leak p9/9 into the calls;
 		// the guard must not trip (it compares live against the CAPTURED scope).
-		h.setScope({ profileId: "p9", chainId: 9 })
+		h.setScope({ profileId: "p9", networkId: "n9", chainId: 9 })
 		gate.resolve([]) // empty chain → the post-await calls carry the scope values
 		await run
 		expect(h.client.ensureDefaultAccount).toHaveBeenCalledWith("p1", 1, expect.anything(), "Account 1")
@@ -197,6 +215,7 @@ describe("createNetworkSwitchHandler", () => {
 		h.client.getAccounts.mockReturnValueOnce(g1.promise).mockReturnValueOnce(g2.promise)
 		const handler = createNetworkSwitchHandler(h.deps)
 		const run1 = handler()
+		await vi.waitFor(() => expect(h.client.getAccounts).toHaveBeenCalledTimes(1))
 		const run2 = handler()
 		g2.resolve([ACCOUNT]) // second finishes FIRST
 		await run2
@@ -205,5 +224,62 @@ describe("createNetworkSwitchHandler", () => {
 		await run1
 		expect(h.setAccounts).toHaveBeenCalledTimes(1) // stale set never landed
 		expect(h.setAccounts).toHaveBeenCalledWith([ACCOUNT])
+	})
+
+	test("a quarantined target loads no account: the list empties and no account client is made", async () => {
+		const h = makeDeps()
+		h.syncStaleNetwork.mockResolvedValueOnce(staleView())
+		await createNetworkSwitchHandler(h.deps)()
+		expect(h.syncStaleNetwork).toHaveBeenCalledWith("n1")
+		expect(h.clearAccounts).toHaveBeenCalledTimes(1)
+		expect(h.deps.replaceAccountClient).not.toHaveBeenCalled()
+		expect(h.setAccounts).not.toHaveBeenCalled()
+		expect(h.resetUnattended).not.toHaveBeenCalled()
+		expect(h.syncTransactions).not.toHaveBeenCalled()
+	})
+
+	test("a network never opened resets unattended; a node switch waits for the user", async () => {
+		const h = makeDeps()
+		const quiet = staleView({ accounts: [] })
+		h.syncStaleNetwork.mockResolvedValueOnce(quiet).mockResolvedValueOnce(staleView({ accounts: [], switchToSeedNode: true }))
+		const handler = createNetworkSwitchHandler(h.deps)
+		await handler()
+		expect(h.resetUnattended).toHaveBeenCalledWith(quiet, expect.any(Function))
+		const live = h.resetUnattended.mock.calls[0][1]
+		expect(live()).toBe(true)
+		h.setLive({ profileId: "p1", networkId: "n2", chainId: 2 })
+		expect(live()).toBe(false)
+		h.setLive({ profileId: "p1", networkId: "n1", chainId: 1 })
+		await handler()
+		expect(h.resetUnattended).toHaveBeenCalledTimes(1)
+		expect(h.clearAccounts).toHaveBeenCalledTimes(2)
+	})
+
+	test("switched away while the target's stale view is read: the stale run commits nothing, the live one loads", async () => {
+		const h = makeDeps()
+		const gate = _deferred<StaleNetworkView | null>()
+		h.syncStaleNetwork.mockReturnValueOnce(gate.promise)
+		const handler = createNetworkSwitchHandler(h.deps)
+		const run1 = handler()
+		h.setScope({ profileId: "p1", networkId: "n2", chainId: 2 })
+		h.setLive({ profileId: "p1", networkId: "n2", chainId: 2 })
+		await handler()
+		gate.resolve(staleView({ accounts: [] }))
+		await run1
+		expect(h.clearAccounts).not.toHaveBeenCalled()
+		expect(h.resetUnattended).not.toHaveBeenCalled()
+		expect(h.setAccounts).toHaveBeenCalledTimes(1)
+		expect(h.client.getAccounts).toHaveBeenCalledWith("p1", 2, true)
+	})
+
+	test("a reset re-keys the network under a running switch: the old chain's run abandons", async () => {
+		const h = makeDeps()
+		const gate = _deferred<Array<typeof ACCOUNT>>()
+		h.client.getAccounts.mockReturnValueOnce(gate.promise)
+		const run = createNetworkSwitchHandler(h.deps)()
+		h.setLive({ profileId: "p1", networkId: "n1", chainId: 7 })
+		gate.resolve([ACCOUNT])
+		await run
+		expect(h.setAccounts).not.toHaveBeenCalled()
 	})
 })

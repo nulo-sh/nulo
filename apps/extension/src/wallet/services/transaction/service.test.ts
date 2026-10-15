@@ -100,6 +100,17 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 		expect(remaining).toEqual(["0xp2-tx"])
 	})
 
+	test("an account deleted on one chain keeps the same address's history on another chain", async () => {
+		await add("0xchain1", { profileId: "p1", epoch: deletionState.capture("p1"), session: 1 }, "net-1")
+		const row = await service.getTransaction("0xchain1")
+		await api.storage.local.set({ "nulo:core:txs@0xchain2": JSON.stringify({ ...row, hash: "0xchain2", chainId: 2 }) })
+		const onAccountDeleted = Reflect.get(service, "onAccountDeleted") as (a: object) => Promise<void>
+
+		await onAccountDeleted({ profileId: "p1", chainId: 1, address: ACCOUNT })
+
+		expect((await service.getTransactions(ACCOUNT)).map((t) => t.hash)).toEqual(["0xchain2"])
+	})
+
 	test("purgeForAccounts removes a malformed row scoped to the deleted profile; spares the survivor's and multi-owner unscoped ones", async () => {
 		await api.storage.local.set({
 			"nulo:core:txs@badp1": JSON.stringify({ account: ACCOUNT, profileId: "p1", junk: 1 }),

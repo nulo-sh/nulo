@@ -260,6 +260,7 @@ function makeNetworkStub(
 			return networks.filter((n) => n.chainId === chainId)
 		}),
 		getNetwork: vi.fn().mockImplementation(async (id: string) => networks.find((n) => n.id === id)),
+		isChainQuarantined: async () => false,
 		registerChainPurgeSubscriber(sub: typeof purgeSub) {
 			purgeSub = sub
 		},
@@ -7267,5 +7268,45 @@ describe("IncomingTransferService — note reconciliation on the real cadence", 
 		expect(records.has(row.id)).toBe(true)
 		await tick()
 		expect(records.has(row.id)).toBe(false)
+	})
+})
+
+describe("IncomingTransferService — quarantined chain", () => {
+	async function bootOn(quarantined: boolean) {
+		const network = Object.assign(makeNetworkStub([{ id: "n1", chainId: 1 }]), {
+			isChainQuarantined: async () => quarantined,
+		})
+		const account = makeAccountStub([{ profileId: "p1", chainId: 1, address: "0xa" }])
+		const noteSvc = makeNoteStub({ [tokenA.contract]: [] })
+		const warn = vi.spyOn(IncomingTransferService.prototype as unknown as { logWarn: (...a: unknown[]) => void }, "logWarn")
+		const { service } = await bootService({ network, account, token: makeTokenStub([tokenA]), note: noteSvc })
+		const poll = Reflect.get(service, "poll") as (p: string, n: string, a: string, f: boolean) => Promise<void>
+		await poll.call(service, "p1", "n1", "0xa", true)
+		await flushPromises()
+		return { noteSvc, warn }
+	}
+
+	afterEach(() => vi.restoreAllMocks())
+
+	test("a poll on a quarantined chain reads no notes and logs no warning", async () => {
+		const { noteSvc, warn } = await bootOn(true)
+		expect(noteSvc.getNotesRaw).not.toHaveBeenCalled()
+		expect(warn).not.toHaveBeenCalled()
+	})
+
+	test("control: the same poll on a live chain reads its notes", async () => {
+		const { noteSvc } = await bootOn(false)
+		expect(noteSvc.getNotesRaw).toHaveBeenCalled()
+	})
+
+	test("a public poll on a quarantined chain reads no tips and no events; on a live chain it does", async () => {
+		for (const quarantined of [true, false]) {
+			const { reader, state } = makePublicReader()
+			const network = Object.assign(makeNetworkStub([{ id: "n1", chainId: 1 }]), { isChainQuarantined: async () => quarantined })
+			const { service } = await bootPublic(reader, state, { network })
+			const pollPublic = Reflect.get(service, "pollPublic") as (key: string, force: boolean) => Promise<void>
+			await pollPublic.call(service, `n1|${tokenA.contract}`, true)
+			expect([quarantined, state.tipsCalls > 0, state.fetchArgs.length > 0]).toEqual([quarantined, !quarantined, !quarantined])
+		}
 	})
 })

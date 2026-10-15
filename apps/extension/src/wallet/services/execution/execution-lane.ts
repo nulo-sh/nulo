@@ -431,7 +431,7 @@ export class ExecutionLane {
 		if (err instanceof ExecutionMutexCapacityError) {
 			// No claim follows, and the reaper's safety net never fails the silent path's `pending`
 			// record, so the refusal fails it here. The dApp sees -32005.
-			await this.markJournal(queuedJournalId, { stage: "failed" }, normalizeError(err, "dapp_execute"))
+			await this.markJournal(queuedJournalId, { stage: "failed" }, normalizeError(err, "too_many_pending"))
 			throw new TooManyPendingError()
 		}
 		if (err instanceof SessionEndedError) {

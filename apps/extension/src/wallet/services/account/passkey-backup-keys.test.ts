@@ -69,7 +69,7 @@ async function build(count: (rows: readonly ImportedAccountKey[]) => Promise<Pas
 		}
 		await new EntityStorage<Account>(ACCOUNT_STORAGE_ROOT, api.storage.local).set(accountRowId("p1", 0, address), row)
 	}
-	return { account, profile, steps, endSession: () => (live = false) }
+	return { api, account, profile, steps, endSession: () => (live = false) }
 }
 
 describe("exportPasskeyBackupKeys", () => {
@@ -96,6 +96,34 @@ describe("exportPasskeyBackupKeys", () => {
 			return MATERIAL
 		})
 		await expect(env.account.exportPasskeyBackupKeys(FENCE, CREDENTIAL)).rejects.toBeInstanceOf(SessionEndedError)
+	})
+
+	test("refuses while a reset journal exists, before any row is counted, and when one appears during the count", async () => {
+		const key = "nulo:core:network-reset@p1"
+		const journal = JSON.stringify({
+			profileId: "p1",
+			networkId: "n1",
+			fromChainId: 1,
+			toChainId: 2,
+			l1ChainId: 31337,
+			cause: { networkReset: true, addressesMoved: false },
+			purged: false,
+			switchToSeedNode: false,
+			probedEndpoint: null,
+			accounts: [],
+		})
+		let appears = false
+		const env = await build(async () => {
+			if (appears) await env.api.storage.local.set({ [key]: journal })
+			return MATERIAL
+		})
+		await env.api.storage.local.set({ [key]: journal })
+		await expect(env.account.exportPasskeyBackupKeys(FENCE, CREDENTIAL)).rejects.toThrow(/^ERR_RESET_PENDING/)
+		expect(env.profile.exportPasskeyBackupKeys).not.toHaveBeenCalled()
+
+		await env.api.storage.local.remove(key)
+		appears = true
+		await expect(env.account.exportPasskeyBackupKeys(FENCE, CREDENTIAL)).rejects.toThrow(/^ERR_RESET_PENDING/)
 	})
 
 	test("a count that throws aborts the export", async () => {

@@ -3,11 +3,13 @@ import {
 	AccountAddressInconsistencyError,
 	ChainNotSupportedError,
 	DuplicateWalletError,
+	ImportedAccountUnusableError,
 	RecoveryModeError,
 	RestoreTornError,
 	CapabilityNotGrantedError,
 	CLIENT_DISCONNECTED_MESSAGE,
 	ContractNotRegisteredError,
+	ContractNotFoundError,
 	DuplicateInitializationError,
 	InvalidPasswordError,
 	InvalidWalletArgumentsError,
@@ -212,6 +214,13 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			rebuild: pass,
 		},
 		{
+			ctor: ContractNotFoundError,
+			make: () => new ContractNotFoundError(),
+			name: "ContractNotFoundError",
+			code: "CONTRACT_NOT_FOUND",
+			rebuild: { kind: "constant", message: "contract instance not found" },
+		},
+		{
 			ctor: ChainNotSupportedError,
 			make: () => new ChainNotSupportedError(),
 			name: "ChainNotSupportedError",
@@ -287,6 +296,13 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			rebuild: pass,
 		},
 		{ ctor: RecoveryModeError, make: () => new RecoveryModeError(), name: "RecoveryModeError", code: "RECOVERY_MODE", rebuild: pass },
+		{
+			ctor: ImportedAccountUnusableError,
+			make: () => ImportedAccountUnusableError.because("address mismatch"),
+			name: "ImportedAccountUnusableError",
+			code: "IMPORTED_ACCOUNT_UNUSABLE",
+			rebuild: pass,
+		},
 	]
 
 	function expected(row: Row, payload: WalletErrorPayload): Expected {

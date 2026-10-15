@@ -6,7 +6,7 @@
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { JobCancelledError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
+import { ImportedAccountUnusableError, JobCancelledError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
 import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from "vitest"
 import { nextTick, reactive } from "vue"
 
@@ -122,6 +122,7 @@ import { CHAIN_IDS } from "@/utils/chain-ids"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 import { TRANSFER_STATUS_UNKNOWN_COPY, TRANSFER_TERMS_COPY } from "@/popup/utils/transfer-failure-copy"
+import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStore } from "@/stores/popup.store"
@@ -180,8 +181,9 @@ const STUBS = {
 			"modelValue",
 			"needsFeeJuice",
 			"payer",
+			"accountUnusable",
 		],
-		emits: ["update:modelValue", "update:needsFeeJuice", "update:payer"],
+		emits: ["update:modelValue", "update:needsFeeJuice", "update:payer", "update:accountUnusable"],
 	},
 	// The popup family under the real review sheet: what the sheet hands it, without trap or teleport.
 	Popup: {
@@ -491,6 +493,32 @@ describe("send page — the footer", () => {
 		await estimateLands()
 		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
 		expect(submit(w).attributes("disabled")).toBeUndefined()
+		w.unmount()
+	})
+
+	test("an account whose imported key does not open closes Send onto Home with the A10 toast, once", async () => {
+		const { w } = await mountSend()
+		const card = w.findComponent({ name: "FeeSettingsCard" }).vm
+		card.$emit("update:accountUnusable", true)
+		await nextTick()
+		card.$emit("update:accountUnusable", false)
+		await nextTick()
+		card.$emit("update:accountUnusable", true)
+		await nextTick()
+		expect(mocks.openToast).toHaveBeenCalledTimes(1)
+		expect(mocks.openToast).toHaveBeenCalledWith({ kind: "error", ...IMPORTED_UNUSABLE_TOAST })
+		expect(mocks.routerReplace).toHaveBeenCalledTimes(1)
+		expect(mocks.routerReplace).toHaveBeenCalledWith("/popup/general")
+		w.unmount()
+	})
+
+	test("a fee estimate refused for the imported key closes Send the same way, not with the estimate toast", async () => {
+		mocks.estimateTransferFee.mockRejectedValue(ImportedAccountUnusableError.because("signing key missing"))
+		const { w } = await mountSend()
+		await fillForm(w)
+		expect(mocks.openToast).toHaveBeenCalledTimes(1)
+		expect(mocks.openToast).toHaveBeenCalledWith({ kind: "error", ...IMPORTED_UNUSABLE_TOAST })
+		expect(mocks.routerReplace).toHaveBeenCalledWith("/popup/general")
 		w.unmount()
 	})
 

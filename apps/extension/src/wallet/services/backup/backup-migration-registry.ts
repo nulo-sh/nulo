@@ -64,9 +64,12 @@ export const COMPAT_EPOCH_FIELD = "compat-epoch"
 export const BACKUP_SCHEMA_VERSION_FIELD = "backup-schema-version"
 
 /** The account-contract generation this build produces and accepts.
- *  Epoch 5 = the nulo-v6 account regime: the same KDF and the same blob shape as epoch 4 (the
+ *  Epoch 5 = the V6 account regimes: the same KDF and the same blob shape as epoch 4 (the
  *  "epoch-4 shape" elsewhere), but the V6 account artifact moved every derived address, so an
- *  epoch-4 backup carries V5 addresses this build cannot reproduce.
+ *  epoch-4 backup carries V5 addresses this build cannot reproduce. `nulo-v6.1` re-pinned the
+ *  artifact in place within this epoch: a `nulo-v6` backup's rows on a chain whose id did not move
+ *  restore, then the integrity check quarantines that chain (derived rows) or use refuses the account
+ *  (imported rows); none is used under an address this build does not derive.
  *  Epoch 4 = NULO-ACCOUNT-KDF v2 (the recovery-phrase-centric key model): real BIP-39 PBKDF2
  *  mnemonic→master, l1ChainId-keyed account seeds under dedicated Nulo domain separators, and
  *  the store-both (entropy + master) profile row — every derived address changed AND password

@@ -107,6 +107,9 @@ const feeDisplayOut = defineModel("feeDisplay", { default: null })
 /** One-way child→parent: the cap as the readout words it, for the review sheet, priced once here. */
 const queuedCapTextOut = defineModel("queuedCapText", { default: null })
 
+/** One-way child→parent: the fee read refused the account because its imported key does not open. */
+const accountUnusableOut = defineModel("accountUnusable", { type: Boolean, default: false })
+
 const methodId = getRandomHex(6)
 
 /**
@@ -589,6 +592,7 @@ const commitFromEntry = (scope, reqKey, saved, baseline) => {
 	committedScope.value = scope
 	isInitComplete.value = true
 
+	accountUnusableOut.value = entry.gas.accountUnusable === true
 	const degraded = entry.gas.status === "degraded" || entry.fpc.status === "degraded"
 	if (degraded) {
 		console.error("Fee init degraded", entry.gas.lastError, entry.fpc.lastError)
@@ -739,6 +743,20 @@ watch(
 	(next, prev) => {
 		if (next === null || prev === null || next === prev) return
 		recommit().catch((e) => console.error("Fee recovery recommit failed", { error: e }))
+	},
+)
+
+/** A background retry that finds the imported key unusable fails, so it bumps no retryVersion and
+ *  commits nothing: its verdict reaches the page here, only while the committed key is still the
+ *  account on screen. */
+watch(
+	() => {
+		const scope = committedScope.value
+		if (!scope || identityDrifted(scope)) return false
+		return balancesStore.entry(scope)?.gas.accountUnusable === true
+	},
+	(unusable) => {
+		if (unusable) accountUnusableOut.value = true
 	},
 )
 

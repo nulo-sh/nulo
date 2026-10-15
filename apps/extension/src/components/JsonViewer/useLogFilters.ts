@@ -2,6 +2,9 @@
 import { computed, reactive, ref } from "vue"
 import { type LogEntry, getLogLevelName } from "./logs-format"
 
+/** Services with no popup client, so no `-client` row: the scan test refuses a row nothing logs under. */
+const NO_CLIENT = new Set(["wallet-sdk", "token-list"])
+
 export const LOG_SOURCES: string[] = [
 	"account",
 	"account-state",
@@ -11,7 +14,6 @@ export const LOG_SOURCES: string[] = [
 	"dapp-interaction",
 	"dapp-session",
 	"execution",
-	"faucet",
 	"fpc",
 	"log-viewer",
 	"logger",
@@ -19,7 +21,6 @@ export const LOG_SOURCES: string[] = [
 	"note",
 	"profile",
 	"pxe",
-	"rpc",
 	"task",
 	"token",
 	"token-balance",
@@ -31,8 +32,9 @@ export const LOG_SOURCES: string[] = [
 	"operation-journal",
 	"legal-acceptance",
 	"token-list",
+	"network-reset",
 ]
-	.flatMap((x) => [x, `${x}-client`])
+	.flatMap((x) => (NO_CLIENT.has(x) ? [x] : [x, `${x}-client`]))
 	.concat(["account-integrity-coordinator", "profile-deletion-coordinator", "wallet", "ui"])
 
 export const LOG_LEVELS = ["DEBUG", "INFO", "WARN", "ERROR"]

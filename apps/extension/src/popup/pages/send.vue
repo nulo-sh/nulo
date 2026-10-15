@@ -39,6 +39,8 @@ import { applyBalanceAdd, applyBalanceUpdate } from "@/popup/pages/send-balance-
 import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
 import { submitTransfer } from "@/popup/pages/send-submit"
 import { NO_FACTS, payerKindOf, publishFacts } from "@/components/composite/send/publish-facts"
+import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
+import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
@@ -82,6 +84,17 @@ const needsFeeJuice = ref(false)
 const feeDisplay = ref(null)
 /** The fee card's wording of the queued cap, for the review sheet. */
 const queuedCapText = ref(null)
+/** Set by FeeSettingsCard when the fee read refused the account: its imported key does not open. */
+const accountUnusable = ref(false)
+
+/** No send can leave an account whose key does not open, so Send closes onto Home and says why. */
+let leftUnusable = false
+function leaveUnusable() {
+	if (leftUnusable) return
+	leftUnusable = true
+	openToast({ kind: "error", ...IMPORTED_UNUSABLE_TOAST })
+	router.replace("/popup/general")
+}
 
 /** Open the fee-juice bridge in a new tab. */
 const openFeeJuiceBridge = () => {
@@ -399,6 +412,7 @@ const {
 		// Rescheduled before the engine's settle clears `isEstimating`, so the queued row never drops.
 		if (err instanceof EstimateRequeue) return scheduleFeeEstimate(lastEstimateParams)
 		clearQueued()
+		if (err instanceof ImportedAccountUnusableError) return leaveUnusable()
 		console.error(`[send:${sendInstanceId}] estimateTransferFee failed:`, err)
 		openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
 	},
@@ -498,6 +512,10 @@ const submitDeps = {
 		disconnectExecution()
 	},
 }
+
+watch(accountUnusable, (unusable) => {
+	if (unusable) leaveUnusable()
+})
 
 // The queued flag outlives requeues (the engine stays estimating) but never the estimate itself.
 watch(isEstimating, (estimating) => {
@@ -788,6 +806,7 @@ onBeforeUnmount(() => {
 						v-model:payer="payer"
 						v-model:feeDisplay="feeDisplay"
 						v-model:queuedCapText="queuedCapText"
+						v-model:accountUnusable="accountUnusable"
 					/>
 				</div>
 			</Flex>

@@ -2,7 +2,7 @@
 
 Account-key derivation and password-based encryption from the [Nulo wallet](https://github.com/nulo-sh/nulo), published so other projects derive the same signing and account secret keys and read the same ciphertexts as the wallet.
 
-Keys are not addresses. A Nulo account's address also depends on the wallet's frozen Schnorr account artifact and its instantiation descriptor, which this package does not ship. The artifact in the `@aztec-labs/accounts` peer has a different contract class id, so an account built from these keys with it gets a different address from the wallet's.
+Keys are not addresses. A Nulo account's address also depends on the wallet's frozen Schnorr account artifact and its instantiation descriptor, which this package does not ship.
 
 ## Exports
 
@@ -18,6 +18,7 @@ Nothing else from the wallet's crypto layer is published.
 ## Requirements
 
 - ESM only.
+- Aztec line: `@aztec-labs/*` `6.0.0-rc.3`.
 - The `@aztec-labs/*` packages are exact **peer dependencies**. Install the same versions, and make sure a single copy of each is installed: `Fr` and `GrumpkinScalar` values are only interchangeable within one copy.
 - WebCrypto (`globalThis.crypto.subtle`): current browsers, Node 20 or later, and Bun.
 - TypeScript 5.7 or later for the declarations.

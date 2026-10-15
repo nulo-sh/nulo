@@ -20,6 +20,7 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
 import { TokenContractArtifact } from "@aztec-labs/noir-contracts.js/Token"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
+import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { ServiceCollection } from "@/wallet/base"
@@ -104,6 +105,7 @@ async function makeHarness(fakeConfig?: ShallowPxeFakeConfig) {
 			registerChainPurgeSubscriber: () => {},
 			onActiveNetworkChanged: new EventHandler(),
 			isNetworkLive: async () => true,
+			isChainQuarantined: async () => false,
 			isChainLive: async () => true,
 		}),
 	)
@@ -130,6 +132,21 @@ describe("TokenService composition — in-process, no sandbox", () => {
 		expect(ti.transferPublicFnCandidates.length).toBeGreaterThan(0)
 		// getContracts() returned [] → the contract was registered exactly once.
 		expect(fake.registerCalls).toHaveLength(1)
+	})
+
+	test("an address the PXE and the node hold no instance at refuses as ContractNotFoundError, before any registration", async () => {
+		const { tokenService, fake } = await makeHarness({ instances: new Map(), artifacts: new Map(), registered: [] })
+		await expect(tokenService.parseTokenInterface(NETWORK.id, CONTRACT)).rejects.toBeInstanceOf(ContractNotFoundError)
+		expect(fake.registerCalls).toHaveLength(0)
+	})
+
+	test("a lookup the node could not answer keeps its own error, never ContractNotFoundError", async () => {
+		const { tokenService, fake } = await makeHarness()
+		const unreachable = new Error("fetch failed")
+		fake.pxe.getContractInstance = async () => Promise.reject(unreachable)
+		const refused = await tokenService.parseTokenInterface(NETWORK.id, CONTRACT).catch((err: unknown) => err)
+		expect(refused).toBe(unreachable)
+		expect(refused).not.toBeInstanceOf(ContractNotFoundError)
 	})
 
 	test("parseTokenInterface skips registration when already registered (dedup)", async () => {
@@ -202,6 +219,8 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 	// register-free pin reads, the seed-only persist path + journal labeling,
 	// tombstone-on-delete, and the three seed-trigger hooks.
 	const CUSD = FIXTURE_SEED.contract
+	/** Chains the harness's network service reports quarantined. */
+	const quarantined = new Set<number>()
 
 	async function seedHarness(seederOverrides?: ConstructorParameters<typeof TokenService>[3]) {
 		const fake = makeShallowPxeFake({
@@ -243,6 +262,7 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 				registerChainPurgeSubscriber: () => {},
 				onActiveNetworkChanged,
 				isNetworkLive: async () => true,
+				isChainQuarantined: async (_p: string, chainId: number) => quarantined.has(chainId),
 				isChainLive: async () => true,
 			}),
 		)
@@ -489,6 +509,33 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 			const { seeder } = tokenService as unknown as { seeder: TokenSeeder }
 			seeder.dispose()
 		} finally {
+			vi.useRealTimers()
+			preview.mockRestore()
+		}
+	})
+
+	test("a quarantined chain reads as one with no accounts: a due retry burns no attempt and runs nothing", async () => {
+		const seed = { ...FIXTURE_SEED, chainId: NETWORK.chainId }
+		const markerKey = "nulo:core:token-seeded@p1"
+		const seedKey = `${seed.chainId}:${seed.contract}`
+		const preview = vi.spyOn(TokenService.prototype, "previewTokenMetadata").mockRejectedValue(new Error("rpc down"))
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })
+		quarantined.add(NETWORK.chainId)
+		try {
+			const { tokenService } = await seedHarness({ getSeeds: async () => [seed], getVersion: () => "1.0.0" })
+			await fakeBrowser.storage.local.set({
+				[markerKey]: JSON.stringify({ [seedKey]: { attempts: 1, nextAttemptAt: Date.now() - 1 } }),
+			})
+			await tokenService.resumeSeeding()
+			await tokenService.ensureSeeding()
+			await vi.advanceTimersByTimeAsync(120_000)
+			expect(preview).not.toHaveBeenCalled()
+			const stored = (await fakeBrowser.storage.local.get(markerKey))[markerKey] as string
+			expect(JSON.parse(stored)[seedKey].attempts).toBe(1)
+			const { seeder } = tokenService as unknown as { seeder: TokenSeeder }
+			seeder.dispose()
+		} finally {
+			quarantined.clear()
 			vi.useRealTimers()
 			preview.mockRestore()
 		}

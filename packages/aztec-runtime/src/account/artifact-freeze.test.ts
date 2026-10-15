@@ -16,7 +16,8 @@ const nullLogger: ILogger = { log: () => {} }
 /**
  * Pins for the vendored account artifact. A red run here means the address-bearing artifact (or
  * upstream's interpretation of it) moved — that changes every derived account address. Never
- * re-pin to make it green: rotation ships only as a new extension major (regime record).
+ * re-pin to make it green: only a regime rotation, appended to `address-freeze.ts` on the owner's
+ * recorded decision, moves these pins.
  */
 describe("frozen account artifact pins", () => {
 	test("vendored SchnorrAccount.json bytes match FROZEN_ARTIFACT_SHA256", () => {

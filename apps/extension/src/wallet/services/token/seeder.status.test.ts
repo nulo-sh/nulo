@@ -8,6 +8,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { fakeBrowser } from "@webext-core/fake-browser"
 import { LogLevel } from "@nulo/wallet-core/logger"
+import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
 import { PinMismatchError, SEED_ATTEMPT_CAP, type SeedPreview, deriveSeedStatus } from "./seeder"
 import { CHAIN_ID, CONTRACT, KEY, SEED, disposeSeeders, goodPreview, makeSeeder, readMarker, writeMarker } from "./seeder.harness"
 
@@ -236,6 +237,16 @@ describe("continuation — a failed attempt retries by itself", () => {
 		expect(isTokenPresent).toHaveBeenCalledTimes(1)
 		await vi.advanceTimersByTimeAsync(1_000)
 		expect(isTokenPresent).toHaveBeenCalledTimes(2)
+	})
+
+	test.each([
+		["a missing contract", () => new ContractNotFoundError(), "ContractNotFoundError"],
+		["a plain error", () => new Error("rpc down"), "Error"],
+	])("a preview refused by %s logs the category %s", async (_case, refusal, category) => {
+		const { seeder, logger } = makeSeeder({ preview: vi.fn(async (): Promise<SeedPreview> => Promise.reject(refusal())) })
+		const logged = vi.spyOn(logger, "log")
+		await seeder.run()
+		expect(logged).toHaveBeenCalledWith("token", LogLevel.Warn, "seed attempt failed", { seedKey: KEY, attempts: 1, category })
 	})
 
 	test("a zero-account pass arms nothing — and neither does a marker that is due with no account", async () => {

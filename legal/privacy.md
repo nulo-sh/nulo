@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.2 — effective 13 October 2026**
+**Version 1.2.1 — effective 15 October 2026**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -146,7 +146,7 @@ Transaction execution reads cached prices and never triggers a fetch.
 **What it reveals:** nothing until you click. When you click, the explorer sees your IP address and
 the transaction hash you opened, like any website you visit.
 
-**Your control:** the explorer can be disabled in Settings → Advanced, which removes the links.
+**Your control:** the explorer can be disabled in Settings → Privacy, which removes the links.
 
 ### 5.4 `passkey.nulo.sh` — the passkey relying-party domain
 
@@ -446,3 +446,4 @@ described in § 5.
 | 1.1 | 6 October 2026 | Names the site the "Get Fee Juice" and "Get private gas" links open (§ 5.10). |
 | 1.1.1 | 6 October 2026 | Updated the address for reporting security vulnerabilities. |
 | 1.2 | 13 October 2026 | The wallet downloads its list of default tokens from `tokens.nulo.sh` (§ 5.11). |
+| 1.2.1 | 15 October 2026 | The explorer is disabled in Settings → Privacy, not Settings → Advanced (§ 5.3). |

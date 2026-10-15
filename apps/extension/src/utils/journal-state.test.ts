@@ -692,6 +692,28 @@ describe("refusals filed before any window: card and detail", () => {
 	})
 })
 
+/**
+ * The waiting-sends cap fails the row before `submitting`: from `pending` on the silent path, from
+ * `queued` once a window approved it. Either way it reads exactly as the app send it refused.
+ */
+describe("a send the waiting-sends cap refused: card and detail", () => {
+	test.each(["pending", "queued"] as const)("failed from %s, it reads as a send stopped before broadcast", (from) => {
+		const op = recordWith({
+			progress: { stage: "failed", from },
+			error: { kind: "too_many_pending", message: 'ExecutionMutex capacity reached for key "p1|1"', normalizedRaw: null },
+		})
+		expect(sendOutcome(op)).toBe("nothing_sent")
+		expect(categoricalLabel(op)).toEqual({
+			label: "Stopped before broadcast",
+			context: "Your wallet caught this before reaching the network. Often balance, fees, or invalid call.",
+		})
+		expect(buildJournalTerminalCardProps(op, { tokenById: () => undefined })).toMatchObject({
+			state: "failed",
+			subtitle: "Transaction failed",
+		})
+	})
+})
+
 describe("categoricalLabel — B2 failure category + context for journal/[id].vue", () => {
 	/** No `from`: the record does not say which stage failed, so it proves neither outcome. */
 	function failed(kind: string): OperationRecord {

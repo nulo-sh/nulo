@@ -3,7 +3,7 @@ import type { ILogger } from "@nulo/wallet-core/logger"
 import { deriveAccountSeed, deriveMasterFromMnemonic } from "@nulo/wallet-crypto"
 import { describe, expect, test } from "vitest"
 import referenceVectors from "../../../../reference/key-model-v2/vectors.json"
-import v6Vectors from "../../../../reference/nulo-v6/vectors.json"
+import v6Vectors from "../../../../reference/nulo-v6.1/vectors.json"
 import { NuloAccount } from "./nulo-account"
 
 /**
@@ -11,8 +11,8 @@ import { NuloAccount } from "./nulo-account"
  * the account-seed fan-out (`deriveAccountSeed`, the formula whose silent duplication or drift
  * bricks accounts) and the FULL words→address chain. Vectors are
  * REFERENCE-GENERATED (`reference/key-model-v2/derive-vectors.ts`,
- * published 5.0.1 tarballs + node:crypto PBKDF2); the address is the nulo-v6 regime's, from the
- * same script on the published 6.0.0-rc.1 packages (`reference/nulo-v6/`). Never re-pin from the
+ * published 5.0.1 tarballs + node:crypto PBKDF2); the address is the nulo-v6.1 regime's, from the
+ * same script on the published 6.0.0-rc.3 packages (`reference/nulo-v6.1/`). Never re-pin from the
  * implementation.
  */
 const nullLogger: ILogger = { log: () => {} }

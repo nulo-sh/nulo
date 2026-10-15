@@ -96,6 +96,14 @@ const AGGREGATOR_CHECKS: Record<string, string> = {
 	"pr-extension-network-e2e-firefox.yml": "extension-network-e2e-firefox-status",
 }
 
+/** The four e2e lanes, each with the labels that force it to run (the second an alias). */
+const E2E_LANES = {
+	"pr-extension-smoke-e2e.yml": ["e2e:extension-smoke", "e2e:smoke"],
+	"pr-extension-smoke-e2e-firefox.yml": ["e2e:extension-smoke", "e2e:smoke"],
+	"pr-extension-network-e2e.yml": ["e2e:extension-network", "e2e:network"],
+	"pr-extension-network-e2e-firefox.yml": ["e2e:extension-network", "e2e:network"],
+}
+
 describe("CI aggregator check names", () => {
 	test("each PR workflow's status job produces its documented check-run name", () => {
 		for (const [file, name] of Object.entries(AGGREGATOR_CHECKS)) {
@@ -170,6 +178,10 @@ describe("PR concurrency", () => {
 	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
 	const workflow = (file: string): any => Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8"))
 	const PR_WORKFLOWS = [...Object.keys(AGGREGATOR_CHECKS), "actionlint.yml"]
+	const workflowFiles = (): string[] =>
+		readdirSync(join(ROOT, ".github/workflows"))
+			.filter((name) => name.endsWith(".yml"))
+			.sort()
 
 	// The number keeps same-named branches of two forks apart; the head commit keeps two heads of one
 	// pull request apart, so a late run of an older push can neither cancel nor replace the current
@@ -185,8 +197,8 @@ describe("PR concurrency", () => {
 		}
 	})
 
-	// The one job in the repository that may cancel runs: it runs nothing it fetched, reads every input
-	// from env, and skips the tokens that could not cancel anyway.
+	// One of the two jobs in the repository that may cancel runs: it runs nothing it fetched, reads every
+	// input from env, and skips the tokens that could not cancel anyway.
 	test("pr-supersede.yml cancels from one script-only job with exactly the scope it needs", () => {
 		const wf = workflow("pr-supersede.yml")
 		expect(wf.on).toEqual({ pull_request: { types: ["synchronize"] } })
@@ -211,22 +223,56 @@ describe("PR concurrency", () => {
 		).toEqual(PR_WORKFLOWS.map((file) => `.github/workflows/${file}`).sort())
 	})
 
+	test("pr-retarget.yml re-runs the e2e lanes from one script-only job with exactly the scope it needs", () => {
+		const wf = workflow("pr-retarget.yml")
+		expect(wf.on).toEqual({ pull_request: { types: ["edited"] } })
+		expect(wf.permissions).toEqual({})
+		expect(Object.keys(wf.jobs)).toEqual(["rerun-e2e"])
+		const job = wf.jobs["rerun-e2e"]
+		expect(job.permissions).toEqual({ actions: "write" })
+		expect(job.if).toBe(
+			"github.event.changes.base && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'",
+		)
+		// A concurrency group would let a title edit's run replace a waiting retarget run.
+		expect(wf.concurrency).toBeUndefined()
+		expect(job.concurrency).toBeUndefined()
+		expect(job.steps).toHaveLength(1)
+		const [step] = job.steps
+		expect(step.uses).toBeUndefined()
+		expect(step.run).not.toContain("${{")
+		const listed = /WORKFLOWS=\(\n([\s\S]*?)\n\s*\)/.exec(step.run)?.[1]
+		expect(
+			String(listed)
+				.split("\n")
+				.map((line) => line.trim())
+				.sort(),
+		).toEqual(Object.keys(E2E_LANES).sort())
+	})
+
+	// Every title or body edit fires `edited` as well, so a lane listening to it would re-run its
+	// suites on each one.
+	test("only pr-retarget.yml subscribes to `edited`", () => {
+		const listeners = workflowFiles().filter((file) => {
+			const on = workflow(file).on
+			return ["pull_request", "pull_request_target"].some((event) => on?.[event]?.types?.includes("edited"))
+		})
+		expect(listeners).toEqual(["pr-retarget.yml"])
+	})
+
 	test("no other workflow can cancel or re-run a run", () => {
-		for (const file of readdirSync(join(ROOT, ".github/workflows")).filter((name) => name.endsWith(".yml"))) {
-			if (file === "pr-supersede.yml") continue
+		const writers = workflowFiles().filter((file) => {
 			const wf = workflow(file)
 			const scopes = [wf.permissions, ...Object.values(wf.jobs ?? {}).map((job) => (job as { permissions?: unknown }).permissions)]
-			for (const scope of scopes) {
-				expect(
+			return scopes.some(
+				(scope) =>
 					scope === "write-all" ||
-						(typeof scope === "object" &&
-							scope !== null &&
-							"actions" in scope &&
-							(scope as Record<string, unknown>).actions === "write"),
-					file,
-				).toBe(false)
-			}
-		}
+					(typeof scope === "object" &&
+						scope !== null &&
+						"actions" in scope &&
+						(scope as Record<string, unknown>).actions === "write"),
+			)
+		})
+		expect(writers).toEqual(["pr-retarget.yml", "pr-supersede.yml"])
 	})
 })
 
@@ -239,12 +285,6 @@ describe("PR concurrency", () => {
 describe("live labels", () => {
 	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
 	const workflow = (file: string): any => Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8"))
-	const LANES = {
-		"pr-extension-smoke-e2e.yml": ["e2e:extension-smoke", "e2e:smoke"],
-		"pr-extension-smoke-e2e-firefox.yml": ["e2e:extension-smoke", "e2e:smoke"],
-		"pr-extension-network-e2e.yml": ["e2e:extension-network", "e2e:network"],
-		"pr-extension-network-e2e-firefox.yml": ["e2e:extension-network", "e2e:network"],
-	}
 	const SCRIPT = "bash scripts/ci-cd/live-labels.sh"
 	const snapshotReads = (text: string): string[] =>
 		text.split("\n").filter((line) => /github\.event\.(pull_request\.labels|label)\b/.test(line))
@@ -264,7 +304,7 @@ describe("live labels", () => {
 	})
 
 	test("every lane reads its own two labels live and decides from that output alone", () => {
-		for (const [file, labels] of Object.entries(LANES)) {
+		for (const [file, labels] of Object.entries(E2E_LANES)) {
 			const { changes, decide } = workflow(file).jobs
 			const live = changes.steps.find((step: { id?: string }) => step.id === "live")
 			expect(live?.run, file).toBe(`${SCRIPT} ${labels.join(" ")}`)
@@ -358,7 +398,7 @@ describe("live labels", () => {
 	})
 	const outputs = (hit: boolean, base: string) => `label-hit=${hit}\nbase=${base}\nread-attempt=2`
 
-	test.each(Object.entries(LANES))("%s: the live labels and base decide, read once from the pull request", (_, labels) => {
+	test.each(Object.entries(E2E_LANES))("%s: the live labels and base decide, read once from the pull request", (_, labels) => {
 		const alias = runLive(labels, pr, { bodies: [body(["docs", labels[1]])] })
 		expect([alias.code, alias.output, alias.calls]).toEqual([0, outputs(true, "main"), ["api repos/nulo-sh/nulo/pulls/7"]])
 		const unrelated = runLive(labels, pr, { bodies: [body(["docs", "e2e:other"])] })
@@ -368,7 +408,7 @@ describe("live labels", () => {
 	})
 
 	test("a run whose head the pull request moved past stops, whatever its labels, after one late read", () => {
-		const labels = LANES["pr-extension-smoke-e2e.yml"]
+		const labels = E2E_LANES["pr-extension-smoke-e2e.yml"]
 		const moved = runLive(labels, pr, { bodies: [body(["e2e:smoke"], "b".repeat(40))] })
 		expect([moved.code === 0, moved.output, moved.calls.length]).toEqual([false, "", 2])
 		expect(moved.stdout).toContain(`superseded by ${"b".repeat(40)}`)
@@ -381,7 +421,7 @@ describe("live labels", () => {
 	})
 
 	test("an unreadable pull request fails closed: one retry for a rate limit or server error, none for a refusal", () => {
-		const labels = LANES["pr-extension-network-e2e.yml"]
+		const labels = E2E_LANES["pr-extension-network-e2e.yml"]
 		for (const failure of ["API rate limit exceeded (HTTP 403)", "HTTP 502: Bad Gateway", "connection reset by peer"]) {
 			const run = runLive(labels, pr, { failure })
 			expect([run.code === 0, run.output, run.calls.length], failure).toEqual([false, "", 2])

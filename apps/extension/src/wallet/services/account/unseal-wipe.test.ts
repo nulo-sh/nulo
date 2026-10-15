@@ -102,7 +102,13 @@ async function makeHarness(over: { skFill?: number; unsealFails?: boolean; addre
 			exportPlain: async () => Buffer.from(new Uint8Array(32).fill(9)).toString("base64"),
 		}),
 	)
-	services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {}, isChainLive: async () => true }))
+	services.add(
+		svc(NETWORK_SERVICE_NAME, {
+			registerChainPurgeSubscriber: () => {},
+			isChainLive: async () => true,
+			isChainQuarantined: async () => false,
+		}),
+	)
 	const service = new AccountService(new LoggerStore(new ConfigStore()), api)
 	services.add(service)
 	await services.start()
@@ -131,14 +137,14 @@ describe("signing load: wipes DEK, plaintext, copy before the contract is constr
 
 	test("an address mismatch has already wiped all three", async () => {
 		const service = await makeHarness({ address: "0xB" })
-		await expect(service.getAccountContract("p1", 1, "0xA")).rejects.toThrow(/^Imported account 0xA is unusable: address mismatch$/)
+		await expect(service.getAccountContract("p1", 1, "0xA")).rejects.toThrow(/^Imported account is unusable: address mismatch$/)
 		expect(state.log).toEqual([...ALL_WIPED, "construct", "constructed"])
 	})
 
 	test("a non-canonical scalar never constructs and still wipes all three", async () => {
 		const service = await makeHarness({ skFill: 0xff })
 		await expect(service.getAccountContract("p1", 1, "0xA")).rejects.toThrow(
-			/^Imported account 0xA is unusable: signing key could not be recovered$/,
+			/^Imported account is unusable: signing key could not be recovered$/,
 		)
 		expect(state.log).toEqual(ALL_WIPED)
 	})
@@ -146,7 +152,7 @@ describe("signing load: wipes DEK, plaintext, copy before the contract is constr
 	test("an unseal rejection wipes the DEK, the only buffer that exists", async () => {
 		const service = await makeHarness({ unsealFails: true })
 		await expect(service.getAccountContract("p1", 1, "0xA")).rejects.toThrow(
-			/^Imported account 0xA is unusable: signing key could not be recovered$/,
+			/^Imported account is unusable: signing key could not be recovered$/,
 		)
 		expect(state.log).toEqual(["unseal", "wipe:dek"])
 	})
@@ -156,7 +162,7 @@ describe("account export: the same wipes, before the envelope is built", () => {
 	test("success wipes all three before the envelope is built", async () => {
 		const service = await makeHarness()
 		expect(await service.exportAccount("p1", 1, "0xA", "pw", false)).toBe("body")
-		expect(state.log).toEqual([...ALL_WIPED, "build"])
+		expect(state.log).toEqual([...ALL_WIPED, "construct", "constructed", "build"])
 	})
 
 	test("a non-canonical scalar propagates the field error raw, after the same wipes", async () => {

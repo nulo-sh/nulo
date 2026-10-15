@@ -17,6 +17,7 @@ import type { ProfileInfo } from "@/wallet/services/profile/client"
 import { useAppStore } from "@/stores/app.store"
 import { createRunFence } from "@/composables/runFence"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
+import { runsUnattended, runUnattended } from "@/composables/useStaleNetwork"
 
 /**
  * Single-flight the activation core per profile id, module-level so it
@@ -81,6 +82,37 @@ export function isActivatingOtherThan(profileId: string): boolean {
 	return false
 }
 
+/** A quarantined chain's rows are never shown or used: the takeover owns the screen. */
+function clearQuarantinedAccounts(appStore: ReturnType<typeof useAppStore>): void {
+	appStore.accounts = []
+	appStore.account = undefined
+}
+
+/** Persists the resolved active network (the restored-active and fallback branches alike), then
+ *  reads its stale view. A network the profile never opened resets here, behind the unlock, and
+ *  the re-keyed row replaces the stale one (A2). */
+async function settleActiveNetwork(
+	appStore: ReturnType<typeof useAppStore>,
+	network: NetworkServiceClient,
+	networkId: string,
+	isCurrent: () => boolean,
+): Promise<void> {
+	await network.setActiveNetwork(networkId)
+	if (!isCurrent()) return
+	const view = await appStore.syncStaleNetwork(networkId)
+	if (!view || !runsUnattended(view) || !isCurrent()) return
+	const completed = await runUnattended(managers.networkReset, view)
+	if (!isCurrent()) return
+	if (completed) {
+		const nets = await network.getNetworks()
+		if (!isCurrent()) return
+		appStore.networks = nets
+		appStore.network = nets.find((n) => n.id === networkId) ?? appStore.network
+	}
+	// A failed run leaves its journal, which R1 shows.
+	await appStore.syncStaleNetwork(networkId)
+}
+
 export function useProfileBootstrap() {
 	const appStore = useAppStore()
 
@@ -108,9 +140,8 @@ export function useProfileBootstrap() {
 		if (resolved === "superseded" || !isCurrent()) return
 		appStore.network = resolved
 
-		// Persist the resolved active network (covers both the restored-active and fallback branches).
 		if (appStore.network) {
-			await network.setActiveNetwork(appStore.network.id)
+			await settleActiveNetwork(appStore, network, appStore.network.id, isCurrent)
 			if (!isCurrent()) return
 		}
 		appStore.syncNetworkStatus()
@@ -140,6 +171,7 @@ export function useProfileBootstrap() {
 		managers.account?.disconnect()
 		const account = new AccountServiceClient()
 		managers.account = account
+		if (appStore.staleNetwork?.networkId === appStore.network.id) return clearQuarantinedAccounts(appStore)
 		await account.ensureDefaultAccount(profileId, chainId, AccountType.Nulo_v1, DEFAULT_ACCOUNT_NAME)
 		if (!isCurrent()) return
 		const accounts = await account.getAccounts(profileId, chainId, true)

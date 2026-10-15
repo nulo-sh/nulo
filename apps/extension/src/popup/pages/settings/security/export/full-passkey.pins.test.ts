@@ -124,6 +124,10 @@ const captureRunFence = vi.hoisted(() => vi.fn<() => Promise<unknown>>())
 const getPasskeyCredentialId = vi.fn(async (_id: string) => "cred-1")
 vi.mock("@/utils/core", () => ({
 	managers: {
+		networkReset: {
+			getPendingReset: async () => null,
+			onStaleNetworkChanged: { add: () => undefined, remove: () => undefined },
+		},
 		profile: {
 			captureRunFence: () => captureRunFence(),
 			assertRunFence: async () => undefined,
@@ -365,11 +369,11 @@ describe("export/full.vue — imported accounts that will not restore", () => {
 	] as const)("a %s export names one, three or no unopened imported accounts", async (_kind, run) => {
 		const one = await run({ unopenedImportedKeys: 1 })
 		expect(one.text()).toContain(UNOPENED)
-		expect(one.text()).toContain("1 imported account could not be opened, so they will not be restored.")
+		expect(one.text()).toContain("1 imported account could not be opened, so it will not be restored.")
 		expect(one.text()).toContain("Import their keys again after the restore.")
 
 		const three = await run({ unopenedImportedKeys: 3 })
-		expect(three.text()).toContain("3 imported accounts could not be opened")
+		expect(three.text()).toContain("3 imported accounts could not be opened, so they will not be restored.")
 
 		expect((await run({ unopenedImportedKeys: 0 })).text()).not.toContain(UNOPENED)
 	})

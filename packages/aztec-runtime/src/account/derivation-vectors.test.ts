@@ -4,7 +4,7 @@ import { deriveNuloAccountKeys, deriveSigningKeyFromSeed } from "@nulo/wallet-cr
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { describe, expect, test } from "vitest"
 import referenceVectors from "../../../../reference/key-model-v2/vectors.json"
-import v6Vectors from "../../../../reference/nulo-v6/vectors.json"
+import v6Vectors from "../../../../reference/nulo-v6.1/vectors.json"
 import { NuloAccount } from "./nulo-account"
 
 /**
@@ -14,8 +14,8 @@ import { NuloAccount } from "./nulo-account"
  * repo's helpers; the address comes from upstream's own `getSchnorrAccountContractAddress` oracle.
  * Key-level values come from the published 5.0.1 packages (`reference/key-model-v2/
  * derive-vectors.ts`; the v1 predecessor vectors stay in `reference/aztec-5.0.0-stable/`), so this
- * stays a cross-version KAT. Address-level values come from the nulo-v6 regime's copy of that
- * script on the published 6.0.0-rc.1 packages (`reference/nulo-v6/`). Equality is the gate — a
+ * stays a cross-version KAT. Address-level values come from the nulo-v6.1 regime's copy of that
+ * script on the published 6.0.0-rc.3 packages (`reference/nulo-v6.1/`). Equality is the gate — a
  * mismatch means OUR derivation diverged; stop and investigate, never re-pin from the
  * implementation under test.
  */
@@ -27,7 +27,7 @@ const keyLevel = (vectors: unknown): unknown =>
 	JSON.parse(JSON.stringify(vectors), (key, value) => (NOT_KEY_LEVEL.has(key) ? undefined : value))
 
 describe("NULO-ACCOUNT-KDF v2 — full chain vs the reference vectors", () => {
-	test("the nulo-v6 reference derives every key-level value the key-model-v2 reference does", () => {
+	test("the nulo-v6.1 reference derives every key-level value the key-model-v2 reference does", () => {
 		expect(keyLevel(v6Vectors)).toEqual(keyLevel(referenceVectors))
 	})
 
@@ -64,7 +64,7 @@ describe("NULO-ACCOUNT-KDF v2 — full chain vs the reference vectors", () => {
 		})
 
 		test(`seed ${vector.seed.slice(0, 10)}… NuloAccount derives the reference address`, async () => {
-			if (!v6) throw new Error(`reference/nulo-v6 has no signing-chain row for seed ${vector.seed}`)
+			if (!v6) throw new Error(`reference/nulo-v6.1 has no signing-chain row for seed ${vector.seed}`)
 			const account = await NuloAccount.new(seed, nullLogger, "account")
 			expect(account.address.toString()).toBe(v6.address)
 			const complete = await account.getCompleteAddress()

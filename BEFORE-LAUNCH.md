@@ -114,11 +114,19 @@ archived, versioned and effective 6 October 2026:
 disabled in Settings → Advanced". That control now lives in Settings → Privacy. Ship a new privacy
 version before that release reaches users (procedure above):
 
-- [ ] `legal/privacy.md` — § 5.3 reads "Settings → Privacy"; the version line and a new history
-      row, effective the day it is published
-- [ ] `packages/legal/src/manifest.ts` — the new `privacy` entry, `material: false`, same date
+- [x] `legal/privacy.md` — § 5.3 reads "Settings → Privacy"; the version line and a new history
+      row, effective the day it is published (1.2.1, 15 October 2026)
+- [x] `packages/legal/src/manifest.ts` — the new `privacy` entry, `material: false`, same date
 - [ ] After the deploy, AMO's Privacy policy field carries the new text
       (`apps/extension/store/listing.md` § Privacy policy text)
+
+**Due at the release that first uploads an Aztec 6.0.0-rc.3 build to a store** (owner's call,
+2026-10-14; [aztec-rc3](./implementations-plan/archive/aztec-rc3/plan.md) OA-1, D9):
+
+- [ ] The wallet's in-place reset of a stale network (planned as `stale-network-reset`) is on `dev`:
+      until it is, an rc.3 update shows a store-installed V6 account the integrity barrier
+- [ ] The owner sends from that build on the live Testnet, which no e2e suite reaches (they run
+      against a local sandbox)
 
 ## Not legal text, same deadline
 

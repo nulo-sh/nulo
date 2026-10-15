@@ -20,6 +20,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [aztec-5.0.0-stable](aztec-5.0.0-stable/plan.md) — superseded by aztec-5.2.0-js-line — Aztec 5.0.0 stable and the signing-key-root account model under a frozen derivation spec
 - [aztec-5.0.1-line](aztec-5.0.1-line/plan.md) — completed — client bump to Aztec 5.0.1 with the restore-boot fix and a deletion fence for per-profile PXE stores
 - [aztec-5.2.0-js-line](aztec-5.2.0-js-line/plan.md) — completed — a version-only bump of the Aztec JS packages to 5.2.0, with the Noir toolchain held
+- [aztec-rc3](aztec-rc3/plan.md) — completed — Aztec 6.0.0-rc.3 and the reset Testnet: the line, an in-place account re-pin, the empty Testnet list, the @nulo-sh 0.2.0 release prep
 - [backup-import](backup-import/plan.md) — completed — a full-backup import that one slow public node cannot stall
 - [backup-import-decomposition](backup-import-decomposition/plan.md) — completed — the full-backup restore stages split into plain functions behind a short orchestrator
 - [backup-import-export](backup-import-export/plan.md) — completed — one key-unseal wipe order, strict hex, migration watchdog; a slimmer account-state slice; restore outcomes and a partial restore, protected exports
@@ -45,6 +46,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [ci-followups-2](ci-followups-2/plan.md) — completed — nightly's Firefox jobs and both send-chaos runs gate the nightly release (#220), two fixed chaos seeds gate every network PR, chaos jobs asserted like canaries
 - [ci-followups-3](ci-followups-3/plan.md) — completed — a draft release keeps its tag through every edit (#309), a malformed chaos seed is refused (#305), release's opt-in network run replays the PR chaos seeds (#306)
 - [ci-followups-4](ci-followups-4/plan.md) — completed — the first-party imports the store fallback hid, declared (#172 a known limit: six upstream gaps), the raw call field's e2e case (#365), a lessons retirement pass
+- [ci-followups-5](ci-followups-5/plan.md) — completed — the e2e lanes re-run after a pull request's base changes (#251); `pr-quick` left as it is; #483 a known limit
 - [ci-gates](ci-gates/plan.md) — completed — fail-closed CI aggregators, and no PR run cancels another on its own head
 - [ci-release-supply](ci-release-supply/plan.md) — completed — Storybook in quality-status, live e2e labels and per-head queues, the shard-fold probe, the launch «FILL» gate, store-copy checks, plans ignore shapes, presto's blocked-access title, an advisory in-browser nightly leg, nightly retention at fourteen
 - [code-followups-1](code-followups-1/plan.md) — completed — prune resolved follow-ups, ship 14 small code-only ones in three arcs, settle the boot-line flake
@@ -130,6 +132,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [fix-transport-sessions](fix-transport-sessions/plan.md) — completed — transport and dApp-session fixes, each proved by a failing test
 - [fix-ui-storage](fix-ui-storage/plan.md) — completed — UI, storage and composable fixes, each proved by a failing test
 - [followups-6](followups-6/plan.md) — completed — every smoke run behind the egress guard with one declared live spec for the shipped token list (#317); a fixed log category for an unparseable PXE stamp (#315)
+- [followups-p15](followups-p15/plan.md) — completed — decision page 15: dead log rows, sponsor and import name checks, the PXE stamp row, two refusals, Unconfirmed to Sent, unknown-decimals figure and order, the move label
 - [forms-and-contacts](forms-and-contacts/plan.md) — completed — a contacts import a lock cannot break, counted on one snack, one at a time; one message at a name cap, a darker red, shared detail links, motion stops, trimmed names, the logger gate
 - [frontend-ux-fixes](frontend-ux-fixes/plan.md) — completed — six reported UX fixes in one batch, ordered by risk
 - [furthering-non-network-e2e](furthering-non-network-e2e/plan.md) — completed — the fast non-network e2e suite grown in seven mergeable steps
@@ -254,6 +257,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [simulate-fast-path](simulate-fast-path/plan.md) — completed — a dApp simulateTx serves a public-static prefix directly on the node
 - [single-sim-estimates](single-sim-estimates/plan.md) — completed — fewer simulations per dApp sendTx estimate, after proving identical gas
 - [stable-release](stable-release/plan.md) — completed — the stable release cut as a short, repeatable procedure
+- [stale-network-reset](stale-network-reset/plan.md) — completed — an update that leaves a network behind quarantines only that network; layout A offers an in-place reset (Mainnet blocked), resumable after a worker kill
 - [storage-migration-backup](storage-migration-backup/plan.md) — completed — imported backups migrate through the same migrations as live storage
 - [storage-migration-framework](storage-migration-framework/plan.md) — completed — persisted storage shapes transformed in place on update, never wiped
 - [supply-chain-release](supply-chain-release/plan.md) — completed — release zips attested and published through a draft, a pinned CI toolchain, an import-free content script, a blocking audit gate (#21 #12 #22 #20)
@@ -269,6 +273,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [unserved-chain-connect](unserved-chain-connect/plan.md) — completed — a connection to a chain the profile has no network for is refused, and the wallet says so
 - [ux-cleanup-arc](ux-cleanup-arc/plan.md) — completed in part — five small fixes for user-facing rough edges
 - [ux-feedback](ux-feedback/plan.md) — completed — a user-testing proposal built as five batches on one stack
+- [ux-followups-p17](ux-followups-p17/plan.md) — completed — decision page 17: a Details link underlines on hover, the import line comes back and is read once, Send focus after a keyboard pick, meta text to secondary, singular banners
 - [ux-owner-picks](ux-owner-picks/plan.md) — completed — five UI decisions from the feedback follow-ups, each signed off once built
 - [vitest-on-bun](vitest-on-bun/plan.md) — completed — the workspace Vitest suites run on Bun (all but resolve-asset), shown to be no flakier than Node
 - [vitest-vite-bumps](vitest-vite-bumps/plan.md) — completed — vitest 4 everywhere, and Vite 8 with its polyfill plugin in lockstep

@@ -902,6 +902,15 @@
 			"suite": "smoke"
 		},
 		{
+			"id": "overlay:StaleNetworkTakeover",
+			"name": "Stale network takeover",
+			"kind": "overlay",
+			"source": "apps/extension/src/components/stale-network/StaleNetworkTakeover.vue",
+			"reach": "seedStaleNetwork from the unlocked popup (tests/e2e/stale-network.test.ts)",
+			"states": ["A1 network reset", "A2 new addresses", "A3 confirm", "A4 progress"],
+			"suite": "smoke"
+		},
+		{
 			"id": "overlay:LegalAcceptanceSheet",
 			"name": "Legal sheet",
 			"kind": "overlay",

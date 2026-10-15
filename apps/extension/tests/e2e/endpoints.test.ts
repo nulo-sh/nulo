@@ -1,6 +1,6 @@
 import { expect } from "vitest"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
-import { navigateToSettings, openNetworkDetail } from "./fixtures/helpers"
+import { captureSoleProfileId, navigateToSettings, openNetworkDetail } from "./fixtures/helpers"
 
 // Scope note: `addEndpoint` / `updateEndpoint` probe the candidate URL
 // via Aztec `getNodeInfo()` and reject on chainId mismatch — the
@@ -206,4 +206,38 @@ test("seeded dRPC endpoint row is titled 'dRPC', never the raw provider URL", as
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
+})
+
+// A stored URL the transport rule refuses (plain HTTP to [::1]) must not stop the popup from
+// starting: the person fixes it in Settings, which they could not reach otherwise.
+test("a saved http://[::1] node URL leaves the popup starting and the endpoint listed", async ({ registeredExtensionPerTest }) => {
+	const first = await openPopup(registeredExtensionPerTest)
+	await waitForHash(first, "#/popup/general")
+	const profileId = await captureSoleProfileId(first)
+	const rewritten = await first.evaluate(async (pid: string) => {
+		const all = await chrome.storage.local.get(null)
+		const key = `nulo:core:networks@${all[`nulo:core:active-network@${pid}`]}`
+		const row = JSON.parse(all[key] as string) as {
+			name: string
+			primaryEndpointId: string
+			endpoints: { id: string; rpcUrl: string }[]
+		}
+		const primary = row.endpoints.find((e) => e.id === row.primaryEndpointId)
+		if (!primary) return null
+		primary.rpcUrl = "http://[::1]:8080"
+		await chrome.storage.local.set({ [key]: JSON.stringify(row) })
+		return row.name
+	}, profileId)
+	expect(rewritten).toBeTruthy()
+	await first.close()
+
+	const page = await openPopup(registeredExtensionPerTest)
+	await waitForHash(page, "#/popup/general")
+	await navigateToSettings(page, "networks")
+	await openNetworkDetail(page, rewritten as string)
+	await page.waitForSelector('[data-testid="endpoint-row"]', { visible: true, timeout: 5_000 })
+	const rows = await page.evaluate(() => [...document.querySelectorAll('[data-testid="endpoint-row"]')].map((r) => r.textContent ?? ""))
+	expect(rows.some((text) => text.includes("http://[::1]:8080"))).toBe(true)
+
+	expect(registeredExtensionPerTest.pageErrors).toEqual([])
 })

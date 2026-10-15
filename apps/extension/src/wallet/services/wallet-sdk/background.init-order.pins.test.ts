@@ -73,7 +73,7 @@ function makeServices(discoverImpl: () => Promise<{ approved: boolean }>) {
 	}) as never
 	const sessions = new Map<string, { id: string; profileId: string }>()
 	const stubs: Record<string, unknown> = {
-		network: { servesChain: async () => true },
+		network: { servesChain: async () => true, servesLiveChain: async () => true },
 		account: {},
 		execution: {},
 		profile: { onActiveProfileChanged, getActiveProfile: async () => ({ id: "p1" }) },
@@ -103,6 +103,7 @@ function makeServices(discoverImpl: () => Promise<{ approved: boolean }>) {
 		"operation-journal": {},
 		token: { getTokens: async () => [] },
 		"legal-acceptance": { assertCurrent: async () => undefined },
+		"network-reset": { waitForRunEnd: async () => undefined },
 	}
 	const services = { get: (name: string) => stubs[name] } as never
 	return { services, sessions }

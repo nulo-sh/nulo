@@ -20,7 +20,7 @@ import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/service"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { recordWrites } from "../storage-write-log"
-import { DappSessionService } from "./service"
+import { AccessLevel, DappSessionService } from "./service"
 import { RecoveryModeError } from "@nulo/extension-messaging/errors"
 import { asImportedKeysDek, asMasterSecretBytes, deriveDappSessionMacKey } from "@nulo/wallet-crypto"
 import { signDappSession } from "./integrity"
@@ -629,5 +629,34 @@ describe("confirmVerification", () => {
 		service.onVerificationConfirmed.add((payload) => confirmed.push(payload))
 		await expect(service.confirmVerification(bad as never)).rejects.toBeInstanceOf(ValidationError)
 		expect(confirmed).toEqual([])
+	})
+})
+
+describe("purgeForChain", () => {
+	test("only the given profile's sessions on the given chain go, with their delete events", async () => {
+		const logger = new LoggerStore(new ConfigStore())
+		const browserApi = new FakeBrowserApi()
+		browserApi.reset()
+		const collection = new ServiceCollection()
+		collection.add(makeProfileStub() as never)
+		const service = new DappSessionService(logger, browserApi)
+		collection.add(service)
+		await collection.start()
+		const kept = await service.addDappSession({ url: "https://a.example" }, [], [], AccessLevel.Transactions, "2")
+		await service.addDappSession({ url: "https://a.example" }, [], [], AccessLevel.Transactions, "1")
+		await service.addDappSession({ url: "https://b.example" }, [], [], AccessLevel.Transactions, "1")
+		activeProfile = { id: "p2" }
+		const other = await service.addDappSession({ url: "https://a.example" }, [], [], AccessLevel.Transactions, "1")
+		const deleted: string[] = []
+		service.onDappSessionDeleted.add(async (row) => {
+			deleted.push(row.chainId)
+		})
+
+		await service.purgeForChain("p1", 1)
+
+		expect(deleted).toEqual(["1", "1"])
+		expect((await service.getDappSessions()).map((s) => s.id)).toEqual([other.id])
+		activeProfile = { id: "p1" }
+		expect((await service.getDappSessions()).map((s) => s.id)).toEqual([kept.id])
 	})
 })

@@ -33,6 +33,15 @@ describe("the detail pages share one look", () => {
 		},
 	)
 
+	test("a Details link underlines on hover only, so the dark accent is never its sole cue", () => {
+		const shared = readFileSync(resolve(__dirname, "detail-page.module.css"), "utf8")
+			.replace(/\/\*[\s\S]*?\*\//g, "")
+			.replace(/\s+/g, " ")
+		expect(shared).toContain(
+			".detail_link { text-decoration: none; cursor: pointer; transition: color 0.2s var(--bezier); &:hover { color: var(--nulo-accent); text-decoration: underline; } }",
+		)
+	})
+
 	test("journal: the To link draws as the shared mono value, as the Tx hash link does", () => {
 		expect(rules("journal/[id].vue").get(".recipient_link")).toBe(
 			'composes: detail_value_mono from "../detail-page.module.css"; composes: detail_link from "../detail-page.module.css";',

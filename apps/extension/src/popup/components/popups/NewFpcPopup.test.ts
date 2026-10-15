@@ -213,6 +213,45 @@ describe("NewFpcPopup — duplicate names", () => {
 	})
 })
 
+describe("NewFpcPopup — duplicate addresses", () => {
+	const STORED = `0x2a${"cf".repeat(31)}`
+
+	async function typeAddress(w: VueWrapper, address: string) {
+		await w.findAll("input")[0].setValue("Mine")
+		await w.find('input[data-input-label="Address"]').setValue(address)
+		await flushPromises()
+		return {
+			warns: w.find('input[data-input-label="Address"]').element.parentElement?.textContent?.includes("Already exist"),
+			disabled: w.find('[data-testid="form-submit"]').attributes("disabled") !== undefined,
+		}
+	}
+
+	beforeEach(() => {
+		fpcServiceMock.getFpcs.mockResolvedValue([{ id: "p1", name: "Sponsored", address: STORED }])
+	})
+
+	test("a stored address pasted in upper case warns beside the address, keeps Add disabled, and Enter adds nothing", async () => {
+		const w = await mountShown()
+		expect(
+			await typeAddress(
+				w,
+				STORED.replace(/[a-f]/g, (c) => c.toUpperCase()),
+			),
+		).toEqual({ warns: true, disabled: true })
+		pressEnterOnInput()
+		await flushPromises()
+		expect(fpcServiceMock.addFpc).not.toHaveBeenCalled()
+	})
+
+	test("an address no row holds submits on Enter", async () => {
+		const w = await mountShown()
+		expect(await typeAddress(w, VALID_HEX)).toEqual({ warns: false, disabled: false })
+		pressEnterOnInput()
+		await flushPromises()
+		expect(fpcServiceMock.addFpc).toHaveBeenCalledWith("net-1", "default_sponsored", VALID_HEX, "Mine")
+	})
+})
+
 describe("NewFpcPopup — the list under a held read", () => {
 	test("(BUG PIN) an FPC added while the read is out is dropped, so its name does not warn; one added after it does", async () => {
 		// Today's behaviour, kept until the owner decides: getFpcs answers after work that follows its
