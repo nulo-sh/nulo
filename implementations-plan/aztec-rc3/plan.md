@@ -29,18 +29,15 @@ post_implementation_hardening: not scheduled
     - The empty Testnet list shipped first, as #429 (publish #434).
   - Arc 3: `@nulo-sh/*` `0.2.0` prepared. The READMEs name the Aztec line and drop F16's false claim; the three digests are approved and a clean tree reproduces them (`lessons/phase-8.md`); the schema patch also carries #335 (D13).
   - Docs: `lessons.md` gains the rc.3 numbering and the oracle-major refusal, and its quiet-blocks entry moves to the `e2e-testing` skill to stay within budget. The `aztec-update` skill gains the `@nulo-sh/*` release and the token-class publishing order.
-- **Owner steps (no issue: each is the owner's act, not open work):**
-  - P8 step 3: dispatch `publish-packages.yml` (dry run, then `dry_run=false` and the `npm-publish` approval).
-  - D9: the live Testnet send before release.
-  - OA-1 (a): no store upload of an rc.3 build before stale-network-reset's reset screen is on `dev`.
+- **Owner step:** P8 step 3, dispatch `publish-packages.yml` (dry run, then `dry_run=false` and the `npm-publish` approval). The live Testnet send (D9) and OA-1 (a), no store upload of an rc.3 build before stale-network-reset's reset screen is on `dev`, gate the first store upload of an rc.3 build: `BEFORE-LAUNCH.md` § 4.
 - **Live standard contracts:** on the reset Testnet, AuthRegistry is published as of 2026-10-15 block 3737; PublicChecks and HandshakeRegistry are not. The wallet calls no public function on either. #430's thread has the probe.
 - **Dropped, rejected, superseded:**
   - `nulo-v7`, a new major and a compat-epoch move: the owner (F2). Amending `nulo-v6`: rejected (F5).
   - An rc.3 presto-server release: not needed, since 1.1.3 fetches and checks the bb the SDK names (P6).
-  - The live private-fee `blocked:external` note: withdrawn by the owner. Nothing deploys the initializerless PrivateFPC.
+  - A live private-fee `blocked:external` note on an unleashed deploy: not filed. The owner, 2026-10-14: the PrivateFPC "doesn't get deployed, it's a fully private smart contract", so P5's pin enables the live path.
   - OA-2 (a), OA-3 (a), OA-4 `nulo-v6.1`, OA-5 not raised, OA-6 (a).
 - **Known limits:** #427, #430.
-- **Open items:** #479 (Testnet default tokens, `blocked:external` on unleashed's rc.3 generation), #480 (nightly `token-list-host-live` red until then).
+- **Open items:** #479 (Testnet default tokens, `blocked:external` on unleashed's rc.3 generation), #480 (nightly `token-list-host-live` red until then); `BEFORE-LAUNCH.md` § 4 (the first store upload of an rc.3 build).
 - **Seeds retired:** the `/goal` and `/loop` drafts are retired and removed; this plan is a record, not a task list.
 
 # aztec-rc3: Aztec 6.0.0-rc.3, the reset Testnet, an in-place account re-pin
@@ -319,6 +316,10 @@ All three take `0.2.0`, one lockstep version (F15). `wallet-crypto` changes only
 - **Codex (gpt-6.1-sol, high), fresh session `01a13ca0`: approve with fixes.** Three findings, verified. The pages' Presto status asked about the labs line (`6.0.0-rc.3`) while the prover requests bb `6.0.0-rc.6`, so a cached rc.6 read as a pending download (fixed: `__BB_VERSION__` from the exact `@aztec-foundation/bb.js` pin feeds the status client, the mismatch copy and the e2e health fixture; About and backups keep `__AZTEC_VERSION__`; a test holds the status client to the Presto SDK's own pin, red with the old constant). `reference/nulo-v6.1/bunfig.toml` claims an age-gated resolve that P2's excludes bypassed, and the reference lock's third-party moves have no disposition (accepted: P7 re-resolves it without excludes once the last Aztec name clears the gate, requires identical vectors and dispositions each move).
 - **Codex, resumed round 2: the Presto fix complete, the reference plan sound.** One stale clause in the aztec-update skill's Presto bullet (fixed).
 - **Codex, resumed round 3 (the re-resolved reference lock and the `dev` merge at `9e905c9b`): converged.** Findings 2 and 3 are closed by the re-resolve and its dispositions. The merge does not clash: both export actions still pass the address gate, import still re-derives, and the new paths stamp no regime and key on no chain literal. One wording fix in the lessons (made).
+
+### Implementation review, arc 3 and close-out, 2026-10-15
+
+- **Codex (gpt-6.1-sol, high), fresh session `01a14009`: approve with fixes.** Three findings, verified and accepted: D9 and OA-1 get a home (`BEFORE-LAUNCH.md` § 4), two more paths are repaired at the archive move, and the #324 comment is posted. **Opus (general-purpose), fresh:** six accepted (STATUS.md, the lessons wording, a later-version rehearsal in `scripts/publish/README.md`, the private-fee note's source, two skill words, the `BEFORE-LAUNCH.md` section) and one nit rejected (`lessons/phase-8.md`).
 
 ## Delivery
 

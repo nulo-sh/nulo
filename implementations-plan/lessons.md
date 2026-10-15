@@ -37,7 +37,7 @@
 
 ## Aztec
 
-- 6.0.0-rc.3 split the line (`@aztec-foundation/*` rc.6, the bb.js pin Presto proves); the PXE refuses other oracle majors: rebuild each vendored artifact. [Evidence](archive/aztec-rc3/plan.md#phase-0-classification)
+- 6.0.0-rc.3 split the line (`@aztec-foundation/*` toolchain rc.6, the bb.js pin Presto proves); the PXE refuses other oracle majors: run only rc.3 builds. [Evidence](archive/aztec-rc3/plan.md#phase-0-classification)
 - Blocks above the proven tip can be pruned and a symbolic tag can name another fork per call: pin reads to one block hash; reconcile records above the tip. [Evidence](archive/incoming-public-transfers/plan.md#pruning)
 - The node client retries a failed POST but not a 4xx refusal, so a refused retry can hide a send that landed (6.0.0-rc.1). [Evidence](archive/failed-send-check/plan.md#node-retries)
 - HandshakeRegistry (6.0.0-rc.1): a pair's first send uses it for every token; the PXE takes a note's index (per token, sender, recipient) at proving: two such sends in flight collide. [Evidence](archive/hd-same-token-concurrent-sends/plan.md#note-index)

@@ -36,3 +36,18 @@
 - `bun scripts/publish/check-digests.ts 0.2.0 <second-pack dir>`: exit 0.
 - `bun run lint`: exit 0.
 - Staged peers: every `@aztec-*` entry in the three staged manifests, and in each packed `package/package.json`, is exactly `6.0.0-rc.3` (exit 0). resolve-asset declares none.
+
+## Review loop
+
+- Round 1, Codex (`gpt-6.1-sol`, high, fresh session `01a14009`), over `479ba56d..6f253449`: **approve with fixes**. The digests, READMEs, lessons and skill notes were checked independently. Three findings, all verified and accepted:
+  - D9 and OA-1 had no durable home. Both now sit in `BEFORE-LAUNCH.md` § 4, as a due-at item for the first store upload of an rc.3 build, and the Outcome names that item.
+  - The archive move must repair two more paths: the plan's `../README.md` and the skill's worked example.
+  - The #324 follow-up comment was still owed; it is posted after the PR opens, so it can name the PR.
+- Round 1, Opus (general-purpose), alongside. It reproduced the three digests under npm 11.6.2 and under npm 11.19.0, and diffed the published 0.1.0 tarballs file by file. Accepted:
+  - STATUS.md must go: it is deleted at the archive move.
+  - The lessons line misnamed aztec-standards as rc.6 and said "rebuild": it now says the toolchain is rc.6 and that only rc.3 artifacts run.
+  - The skill pointed at a rehearsal procedure `scripts/publish/README.md` lacked. That README now has § A later version, which also says a `dev` change to a staged input makes the dispatch refuse.
+  - The withdrawn private-fee note had no source: the Outcome now quotes the owner.
+  - The skill's token-class sentence now reads "can" and names emptying the list as an owner UI decision.
+  - The `BEFORE-LAUNCH.md` item first sat under the v1.0.0 section, which an rc.3 build can never be; it now sits in § 4.
+- Rejected, Opus finding 6: drop "No Aztec dependency, so any Aztec line works" from resolve-asset's README as a repeat of "No dependencies". That sentence is the line the plan asks for, and it tells a consumer bumping Aztec what "No dependencies" does not. Changing it would also move the approved digest.
