@@ -1,8 +1,8 @@
 ---
 plan: account-session-life
 tier: mid
-status: arcs 1 to 4 merged (#253, #266, #422, #445); arc 5 built 2026-10-15 at dev 1a8b2b6d (P7-05 to P7-07, P7-10, P7-12); 3.4 waits on backup-import-export arc 3
-issues: "#99, #100, #159, #198, #158 (arc 1, merged); #157 part (arc 2, merged); #24, #137, #208 reveal (arc 3, merged); #157, #421 (arc 4); #99, #100, #159, #137 page 7 picks (arc 5); #208 autocomplete (3.4, deferred)"
+status: completed; arcs 1 to 5 merged (#253, #266, #422, #445, #453); phase 3.4, the cross-arc fixes and this close-out in the close-out PR
+issues: "#99, #100, #159, #198, #158 (arc 1); #157 part (arc 2); #24, #137, #208 reveal (arc 3); #157, #421 (arc 4); #99, #100, #159, #137 page 7 picks (arc 5); #208 autocomplete (3.4, close-out PR)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -13,14 +13,34 @@ budget: recon 3 explorers (sonnet), plus 2 for the arc 4 revision; dual audit (C
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-15. Planned 2026-10-10; arcs merged on 2026-10-10 (1, 2), 2026-10-14 (3) and 2026-10-15 (4, 5).
+- **Status:** delivered in five PRs against `dev`, [#253](https://github.com/nulo-sh/nulo/pull/253), [#266](https://github.com/nulo-sh/nulo/pull/266), [#422](https://github.com/nulo-sh/nulo/pull/422), [#445](https://github.com/nulo-sh/nulo/pull/445) and [#453](https://github.com/nulo-sh/nulo/pull/453), then the close-out PR from `account-session-life-closeout` (phase 3.4, the final cross-arc pass's fixes, this close-out). Merging it closes the plan.
+- **Shipped:**
+  - Arc 1 (#99, #100, #159, #198, #158): one critical section per account address; a bounded, identity-checked profile activation; the passkey retry confirms its saved credential; account RPC params refused as `INVALID_PARAMS`; ConfirmPopup's dead branch deleted.
+  - Arc 2 (part of #157): the port client reads `lastError`, an untrusted port is closed, `deleteProfile` waits for its delegate inside one 30 s budget, the PXE fence keeps every dead generation.
+  - Arc 3 (#24 not planned under P7-01, #137, #208's reveal): the unlock failure toast; one eye per change-password field.
+  - Arc 4 (#157, #421): Ready after the whole service collection started, the 250 ms pre-Ready retry and the send check; the unlock frame with the start bar (P7-08b = C) and the provisional route replayed at Ready; GlobalLoader removed; Delete Profile's own 30.5-minute client (P7-09).
+  - Arc 5 (P7-05 to P7-07, P7-10, P7-12): Create account skips an occupied address; a new profile that does not open says so and hands off; the passkey window starts over after no PRF; Continue closes the unlock screen's own failure toast.
+  - Close-out PR (#208): `autocomplete` on the backup decrypt field and the full export's encrypt pair (P7-04). From the final cross-arc pass: the unlock screen's last-active lookup leaves a profile opened meanwhile, and a page reached during the start-up stays where the person took it.
+  - `lessons.md`: the popup port's Ready joins the popup-call entry, merged with the dropped-port entry to stay within the budget.
+- **Dropped, rejected, superseded:**
+  - #24's strict-mode recovery bearer: not planned (P7-01). OA-1 to OA-3's and OA-6 to OA-8's "what ships now" forms: superseded by page 7 and its re-signing.
+  - P7-05's slow-start second line ("The wallet is taking long to start."), offered in chat: no answer, so the recorded words ship.
+  - Every other alternative a decision rejected is in § Trade-offs and § Decision ledger.
+- **Known limits:** #458 (P7-09 across two chains), #459 (O-R14, a service that never starts), #460 (O-R14, a crash loop after Ready), #461 (O-R11), #462 (a hydrate-only activation), #463 (account reads and edits without a session).
+- **Open items:** #464 (`confirmProfileOperation` without a caller), #465 (the account-file password's autocomplete), #466 (OA-9, `owner-decision`).
+- **Seeds retired:** the `/goal` and `/loop` drafts are retired and removed; this plan is a record, not a task list.
+
 # Account, profile and session lifecycle: races, retry, the port handshake, unlock and credentials
 
-Nine issues and page 7's picks on how accounts, profiles and sessions start, wait and end, in five arcs and a close-out. Size: the orchestrator set this five-arc plan a 600-line target; shipped arcs keep their evidence in short form.
+Nine issues and page 7's picks on how accounts, profiles and sessions start, wait and end, in five arcs and a close-out. Size: the orchestrator set this five-arc plan a 600-line target; shipped arcs keep their evidence in short form, and the Outcome and the cross-arc verdicts take it about 20 lines over.
 
 - **Arcs 1 to 3 (merged).** Arc 1 (#253): one critical section per account address (#99), a bounded, identity-checked profile activation (#100), the passkey retry confirms its saved credential (#159), account RPC params (#198), ConfirmPopup's dead branch (#158). Arc 2 (#266): the half of #157 no person sees. Arc 3 (#422): #24 closed as not planned (P7-01), the unlock toast (#137, P7-02), the split reveal (#208, P7-03).
 - **Arc 4.** The Ready handshake (#157, P7-08 = C): a popup call waits until the service says it has started. The start-up moment as P7-08b = C draws it: the unlock screen, and a 2 px bar along the top edge until Ready. The boot check stops depending on a connection, so a service that never starts ends in the banner and the reconnect storm stops (#421). Delete Profile gets the time its page promises (P7-09).
 - **Arc 5.** Page 7's picks for arc 1's surfaces: Create account skips an imported account's address (P7-06, #99); a new profile that does not open says so and goes to the unlock screen, or to the open profile's home when another profile took over (P7-05, P7-12, #100); the passkey window starts over after an authenticator with no PRF (P7-07, #159); Continue closes the last unlock failure's toast (P7-10, #137).
-- **Phase 3.4** (#208's autocomplete, P7-04) waits on backup-import-export arc 3, which rewrites both files first. It joins this lane's first arc after that merges; nothing is planned for it now.
+- **Phase 3.4** (#208's autocomplete, P7-04) waited on backup-import-export arc 3 (#454), which rewrote both files first; it ships in the close-out PR.
 
 Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md) (first plan), [lessons/phase-4.md](lessons/phase-4.md) (this revision).
 
@@ -30,7 +50,7 @@ Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Co
 
 **Out:**
 - A strict-mode recovery bearer (#24, closed under P7-01).
-- `confirmProfileOperation` and the recovery coordinator's `confirm`, which lost their popup caller in arc 1; session checks on account reads and metadata edits (`getAccounts`, `getAccount`, `changeAccountName`, `changeAccountVisibility`). The close-out files both (dedupe first).
+- `confirmProfileOperation` and the recovery coordinator's `confirm`, which lost their popup caller in arc 1; session checks on account reads and metadata edits (`getAccounts`, `getAccount`, `changeAccountName`, `changeAccountVisibility`). Filed at the close-out: #464, and #463 as a known limit.
 - Fee-map cleanup on profile deletion (#91, fees-and-sponsors arc 2): arc 2's R4 seam stands.
 - `restore()`'s account writes (backup-import-export owns them).
 - OA-9 (which toasts Continue closes on the unlock screen): ships its "what ships now" form. OA-6 to OA-8 were signed on page 7's re-signing.
@@ -551,6 +571,17 @@ Sign-off: each line rides the record it quotes; OA-7 and OA-8 were signed on pag
 
 **Arc 5 review, rounds 2 and 3** (Codex, resumed): round 2 `CHANGES`, round 1's six verified; one Low, demonstrated: a person who pressed Back during the hand-off's pointer write still got the created profile selected, the unlock screen and the toast. FIXED 3e190ed7 (leaving joins the write's `unless` and ends the hand-off); proof red before. Round 3 `APPROVE`, no findings.
 
+**Final cross-arc pass** (the six lane commits from `643c0c9` plus phase 3.4, read at `14236008`; Codex `01a13d90-…` gpt-6.1-sol high, and one Opus agent alongside). Round 1: Codex `CHANGES`, Opus `CHANGES`; each item checked at the tree:
+
+| # | Finding | Disposition |
+|---|---|---|
+| X1 Medium (Codex) | `auth.vue`'s mount lookup waits for the service since arc 4, then selects the last active profile over one an activation opened meanwhile, or after the page left; demonstrated with HEAD's callback | FIXED d51d3111: it assigns only while mounted, locked and with the selection it started from; two proofs red on base, one control |
+| X2 Medium (Opus) | Arc 4's unlock frame offers New profile, Import and Delete profile before the mount's boot run decides; that run then moved the person to the unlock screen (`select-and-auth`), losing what they typed. X1's fix removed the late lookup that hid it. Plausible but unverified | FIXED 5e060510: `isEstablishedAtDecision` compares the route at decision time with the one the run started on. Opus's route-name list rejected: it misses the reset page and restates the guard's exemptions |
+| X3, X4 Comments (Codex) | The default-account docs still promised index 0; the activation doc said it opens the session | FIXED d51d3111 |
+| X5 Comment (Opus) | `handleCreate`'s failure category is always "other" since arc 5's hand-off classifies its own; a garbled `openPort` docblock | FIXED 4f39285f: one fixed warn line; the sentence repaired |
+
+Round 2 (Codex, resumed): `APPROVE`, X1 to X5 verified, no new finding. The loop closes at its second round.
+
 ### Deviations from the plan text (the tree wins)
 
 - **Arc 2.** One deadline taken at entry covers the init and the delegate waits; `DEFAULT_INIT_TIMEOUT_MS` is exported from `background/index.ts`; three more PXE test files moved to the record shape; the shared `PortRegistry` fake passes the port to `onDisconnect`.
@@ -561,6 +592,7 @@ Sign-off: each line rides the record it quotes; OA-7 and OA-8 were signed on pag
   - "The loader keeps today's timing under C" became the loader's removal, because Ready makes the flag false at every start (F24).
   - I3 is demonstrated (F19, #421). The send boundary became a deadline check before the post and a `Connected` check in `sendEnvelope`, which leave the offscreen transport alone (F18). Ready comes after the whole collection started, not from the 500 ms poll (F20) or one service's start (F35). `sw-resilience.test.ts` gains a held-boot case instead of the first plan's base-evidence case, because arc 2 already reads `lastError`.
 - **Arc 5 build** (details in `lessons/phase-5.md`): P7-12 = B replaces the superseded and tail-failure rethrows with the open profile's home; the selection is captured when the page opens; the in-flight predicate counts the event-driven activations only (the 80-line budget; the hydrate-only case is a deep edge); P7-10 is phase 5.4; `activationFailureReason` moved to `unlockWait.ts`.
+- **Phase 3.4 and the close-out** (details in `lessons/phase-6.md`): the fields stood where the plan names them after #454; the export pair's assertion sits in `full-passkey.pins.test.ts`, since the pair renders for passkey profiles only. The unchecked account reads and edits, listed as an item to file, are a known limit (#463): every extension page reaches those rows through `chrome.storage.local` directly, so a session check guards nothing. The hydrate-only activation case is a known limit too (#462). The account-file import's password field, outside P7-04, is #465.
 - **Arc 4 build.** `reset.vue` disconnects its client on unmount only when no call runs, else when the call settles: a disconnect at unmount dropped the rest of a reset the lock had routed away from (O1). The type-roles surface inventory swaps `overlay:GlobalLoader` for `overlay:StartBar`.
 
 ## Delivery
@@ -572,8 +604,9 @@ No stack (D-orch-1, D-orch-4): each arc opens one PR against `dev` (`gh pr creat
 | 1 to 3 | (merged) | 1.1 to 3.3 | `dev` | #253, #266, #422 | closed or referenced |
 | 4 | `account-session-life-arc-4` (this branch) | 4.1 to 4.5 | `dev` `15881c7d` | `fix(messaging): calls wait for the background's ready, the popup opens on the unlock screen` | `Closes #157`, `Closes #421` |
 | 5 | `account-session-life-arc-5` | 5.1 to 5.4 | `dev` `1a8b2b6d` | `feat(profile): create skips a taken address; a new profile that does not open says so` | `Closes #99, #100, #159`, `Refs #137` (D-orch-10) |
+| 3.4, close-out | `account-session-life-closeout` | 3.4, cross-arc pass, close-out | `dev` `0266d1b2` | `feat(backup): password autocomplete on the backup forms; close account-session-life` | `Closes #208` |
 
-- The close-out rides the last built arc as its final commits (`implementations-plan/README.md` § Portable rules, rule 5). If 3.4 is still blocked then, the Outcome names #208 as its open item.
+- The close-out rides the last built change, phase 3.4, as its final commits (`implementations-plan/README.md` § Portable rules, rule 5).
 - Each PR body says what changed and why, the validation runs with outcomes, the per-browser suite wall-clock before and after when it adds an e2e scenario, the records it quotes, and the screenshots. Merging is the orchestrator's call.
 
 ## Post-implementation
@@ -582,17 +615,5 @@ The execution contract is this plan plus `implementations-plan/README.md` § Pos
 
 - **Review loop** per arc at its boundary, before its PR: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, hard stop at three rounds (then `ARC_FAILED`). Arc map: "this is arc N of 5; arcs 1 to 3 are merged; arc 4 builds the Ready handshake and the start-up moment; arc 5 builds page 7's picks for arc 1's surfaces". Log each round in `lessons/phase-N.md` and § Audit verdicts.
 - **Final cross-arc pass** after the last built arc: a fresh Codex session over the net diff from `643c0c9`, asking for seams between arcs, duplication across arcs and drift from this plan, in the same loop.
-- **Close-out.** Merge `origin/dev` in and read what changed in `index.md` and `lessons.md` first. Known items to file (dedupe first): the unchecked account reads and edits; `confirmProfileOperation` without a caller; and as closed `known-limit` issues: the deletion behind proofs on two chains (P7-09), a never-starting service holding `reset.vue` for 30.5 minutes, a worker that crash-loops after Ready superseding every boot run, and a keyless imported row whose index reconcile frees for good (O-R11). Comment on any lane issue whose fix was left out, with the reason. Then the Outcome block, the lessons promotion, `STATUS.md` deleted and the `git mv` into `archive/` in its own commit.
+- **Close-out** ✓: the items it filed are on the Outcome's `Known limits:` and `Open items:` lines; #137 carries a comment for OA-9.
 - **Teardown** after the close-out merges: `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/account-session-life/plan.md`, then `agent-worktree done account-session-life --merged`. This session did not enter through `EnterWorktree`; relay a refusal and stop.
-
-## Seeds
-
-Not run by this planner (orchestrator-owned). Drafts:
-
-```
-/goal Arcs 4 and 5 of implementations-plan/account-session-life/plan.md are marked ✓, each phase ✓ backed by its validation gate reported passing in the transcript, each phase's LESSONS_FILE=implementations-plan/account-session-life/lessons/phase-N.md printed; /code-review was NOT run (code_review: off); the Codex fix loop converged for each built arc and for the final cross-arc pass, each convergence quoted from a resumed Codex pass reporting no new material findings; each arc's PR was opened against dev only after its loop converged, with the screenshots and the per-browser suite wall-clock in its body; phase 3.4 is built only if STATUS.md records backup-import-export arc 3 as merged; `bun run test` and `bun run lint` both report exit 0 in the transcript.
-```
-
-```
-/loop 15m Drive implementations-plan/account-session-life forward. Never idle waiting for input. Each firing: 1. Reality check: read plan.md, STATUS.md and lessons/ (the authority, not the chat), including the Outcome & Quality Bar. If plan.md is gone from the live path, check `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/account-session-life/plan.md`: success → run `agent-worktree done account-session-life --merged`, report, clear this loop and stop; failure → babysit delivery only. 2. Waiting on CI is fine; confirm it progresses. 3. No task in hand → take the next pending step of plan.md; after each edit run `bun run lint` and the phase's unit command; commit. Never run two e2e:agent runs in this worktree. 4. Stuck or facing a decision → consult `/codex high` on gpt-6.1-sol and log it in lessons/phase-N.md; anything a person would see goes to OWNER-ASKS.md, never decided here. 5. Same step failed 3 times → stop and report ARC_FAILED. 6. Phase green = its validation gate passes; mark ✓, write lessons, advance; at an arc boundary run the arc's Codex loop, then open that arc's PR against dev. Phase 3.4 waits for backup-import-export arc 3. 7. All buildable arcs ✓ → final cross-arc pass, then the close-out per plan.md; report and stop: merging is the orchestrator's call.
-```
