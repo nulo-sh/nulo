@@ -7,7 +7,7 @@ import StaleNetworkConfirm from "./StaleNetworkConfirm.vue"
 import { useLockWallet } from "@/composables/useLockWallet"
 import { useNetworkActivation } from "@/composables/useNetworkActivation"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
-import { STALE_NETWORK_KEY } from "@/composables/useStaleNetwork"
+import { neverOpened, STALE_NETWORK_KEY } from "@/composables/useStaleNetwork"
 
 /** Utils */
 import { managers } from "@/utils/core"
@@ -54,10 +54,10 @@ const SWITCH = { text: copy.SWITCH_NETWORK, testid: "stale-network-switch", acti
 const accountLine = (view) =>
 	view.accounts.length > 0 ? [{ mark: "check", text: copy.accountLine(view.name, view.accounts.length, view.cause.addressesMoved) }] : []
 
-const causeEyebrow = (view) =>
-	view.cause.networkReset
-		? { icon: "reset", text: copy.networkReset(view.name).eyebrow }
-		: { icon: "warning", text: copy.newAddresses(view.name).eyebrow }
+const causeEyebrow = (view) => ({
+	icon: "reset",
+	text: (view.cause.networkReset ? copy.networkReset(view.name) : copy.newAddresses(view.name)).eyebrow,
+})
 
 const SCREENS = {
 	"network-reset": (view) => cause(view),
@@ -113,7 +113,7 @@ const SCREENS = {
 	"node-down": (view) => {
 		const c = copy.nodeDown(view.name)
 		return {
-			eyebrow: { icon: "no-signal", text: c.eyebrow },
+			eyebrow: { icon: "no-signal", text: causeEyebrow(view).text },
 			title: c.title,
 			body: c.body,
 			note: c.note,
@@ -123,7 +123,8 @@ const SCREENS = {
 	},
 }
 
-/** A1, A2, or both causes: A1 with the address line and no notice. */
+/** A1, A2, or both causes: A1 with the address line and no notice. A network the profile never
+ *  opened lists only what changes: its node, since it holds no account, token or history. */
 function cause(view) {
 	const { networkReset } = view.cause
 	const c = networkReset ? copy.networkReset(view.name) : copy.newAddresses(view.name)
@@ -139,7 +140,7 @@ function cause(view) {
 				...accountLine(view),
 				...node,
 				{ mark: "check", text: copy.KEEP_LINE },
-				{ mark: "cross", text: copy.removeLine(view.name) },
+				...(neverOpened(view) ? [] : [{ mark: "cross", text: copy.removeLine(view.name) }]),
 			],
 		},
 		note: networkReset ? copy.NO_PHRASE_NOTE : undefined,
@@ -185,15 +186,18 @@ onBeforeUnmount(() => {
 <template>
 	<Flex
 		v-if="screen === 'loading'"
-		align="center"
-		justify="center"
-		:class="$style.loading"
-		role="status"
+		direction="column"
+		:class="$style.progress"
 		aria-busy="true"
 		data-testid="stale-network-takeover"
 		data-screen="loading"
 	>
-		<Spinner size="24" color="--txt-primary" />
+		<Flex direction="column" gap="8">
+			<span :class="$style.eyebrow_text">{{ copy.opening(view.name).preTitle }}</span>
+			<h1 :class="$style.title_progress" data-testid="stale-network-title">{{ copy.opening(view.name).title }}</h1>
+			<p :class="$style.body">{{ copy.opening(view.name).body }}</p>
+		</Flex>
+		<div :class="$style.opening_spinner"><Spinner size="22" color="--txt-primary" /></div>
 	</Flex>
 
 	<Flex v-else-if="screen === 'progress'" direction="column" :class="$style.progress" data-testid="stale-network-takeover" data-screen="progress">
@@ -262,12 +266,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
-.loading {
-	flex: 1;
-	min-height: 0;
-	background: var(--app-bg);
-}
-
 .screen {
 	flex: 1;
 	min-height: 0;
@@ -459,6 +457,10 @@ onBeforeUnmount(() => {
 	gap: 22px;
 	padding: 0 28px;
 	background: var(--app-bg);
+}
+
+.opening_spinner {
+	display: flex;
 }
 
 .steps {

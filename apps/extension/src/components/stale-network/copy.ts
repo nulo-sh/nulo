@@ -33,7 +33,7 @@ export const networkReset = (name: string) => ({
 })
 
 export const newAddresses = (name: string) => ({
-	eyebrow: "WALLET UPDATE",
+	eyebrow: "NETWORK UPGRADE",
 	title: "New account addresses",
 	body: `This version of Nulo gives ${name} accounts new addresses. Your current ${name} accounts do not work with it.`,
 	notice: "Tokens at your old addresses stay there. This version cannot reach them.",
@@ -81,7 +81,6 @@ export const oneAtATime = (name: string, pending: string) => ({
 })
 
 export const nodeDown = (name: string) => ({
-	eyebrow: "WALLET UPDATE",
 	title: `Cannot reach ${name}`,
 	body: "Nulo checks the network’s node before it removes anything. The node did not answer, so nothing was removed.",
 	note: "Check that the node is running, then try again.",
@@ -89,15 +88,22 @@ export const nodeDown = (name: string) => ({
 })
 
 function confirmThen(name: string, n: number, addressesMoved: boolean): string {
+	if (n === 0) return ""
 	if (addressesMoved)
 		return n === 1 ? "Then it creates this account again at a new address." : "Then it creates these accounts again at new addresses."
 	return n === 1 ? `Then it moves this account to the new ${name}.` : `Then it moves these accounts to the new ${name}.`
 }
 
-export const confirm = (name: string, n: number, addressesMoved: boolean) => ({
+/** `nodeOnly`: a network the profile never opened, whose reset changes nothing of the user's but
+ *  the node. */
+export const confirm = (name: string, n: number, addressesMoved: boolean, nodeOnly = false) => ({
 	preTitle: upper(name),
 	title: `Reset ${name}?`,
-	body: `Nulo removes your ${name} tokens and history from this device. ${confirmThen(name, n, addressesMoved)} You cannot undo this.`,
+	body: nodeOnly
+		? `${name} will use Nulo’s node, because yours is not serving the new ${name}. You can change the node again in Networks.`
+		: [`Nulo removes your ${name} tokens and history from this device.`, confirmThen(name, n, addressesMoved), "You cannot undo this."]
+				.filter(Boolean)
+				.join(" "),
 	cancel: "CANCEL",
 	submit: "RESET",
 })
@@ -119,6 +125,13 @@ export const progress = (name: string) => ({
 	footer: "If you close the window, Nulo finishes the reset the next time you open it.",
 	removing: "Removing old data",
 	removed: "Removed old data",
+})
+
+/** A4c: the run of a network the profile never opened, which has nothing of the user's to reset. */
+export const opening = (name: string) => ({
+	preTitle: upper(name),
+	title: `Opening ${name}`,
+	body: "This takes a few seconds.",
 })
 
 export const accountStep = (account: string, done: boolean, addressesMoved: boolean) =>

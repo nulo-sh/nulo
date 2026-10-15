@@ -28,19 +28,15 @@ export const confirmationOf = (view: StaleNetworkView): ResetConfirmation => ({
 	probedEndpoint: view.probedEndpoint,
 })
 
-/** A network cause with nothing to move resets with no screen and no toast (A2). Never one that
- *  would switch the user's own node to Nulo's: only A1, confirmed, may do that. */
+/** No account row on the chain, hidden or imported: the profile never opened the network, since
+ *  opening one creates Account 1 and accounts can only be hidden, so nothing of the user's is on it. */
+export const neverOpened = (view: StaleNetworkView): boolean => view.accounts.length === 0 && view.unmovable.length === 0
+
+/** A never-opened network resets behind A4c with no toast, whatever the cause: it has no address
+ *  to warn about. Never one that would switch the user's own node to Nulo's: only A1, confirmed,
+ *  may do that. */
 export function runsUnattended(view: StaleNetworkView): boolean {
-	return (
-		view.cause.networkReset &&
-		!view.switchToSeedNode &&
-		!view.blocked &&
-		!view.reset &&
-		view.accounts.length === 0 &&
-		view.unmovable.length === 0 &&
-		!view.heldBy &&
-		!view.otherPending
-	)
+	return neverOpened(view) && !view.switchToSeedNode && !view.blocked && !view.reset && !view.heldBy && !view.otherPending
 }
 
 const errorCode = (error: unknown) => (error instanceof Error ? error.message.split(":")[0] : "")

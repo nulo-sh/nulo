@@ -556,11 +556,14 @@ describe("runResetToEnd", () => {
 })
 
 describe("runsUnattended", () => {
-	test("only a network cause with nothing to move, no journal, no conflict and no node switch", () => {
+	test("only a network never opened, whatever the cause, with no journal, no conflict and no node switch", () => {
 		expect(runsUnattended(view({ accounts: [] }))).toBe(true)
+		expect(runsUnattended(view({ accounts: [], cause: { networkReset: false, addressesMoved: true } }))).toBe(true)
 		expect(runsUnattended(view())).toBe(false)
 		expect(runsUnattended(view({ accounts: [], unmovable: ["Imported 1"] }))).toBe(false)
-		expect(runsUnattended(view({ accounts: [], cause: { networkReset: false, addressesMoved: true } }))).toBe(false)
+		expect(
+			runsUnattended(view({ accounts: [], unmovable: ["Imported 1"], cause: { networkReset: false, addressesMoved: true } })),
+		).toBe(false)
 		expect(runsUnattended(view({ accounts: [], blocked: true }))).toBe(false)
 		expect(runsUnattended(view({ accounts: [], reset: { running: false, purged: false, doneCount: 0 } }))).toBe(false)
 		expect(runsUnattended(view({ accounts: [], heldBy: { name: "X" } }))).toBe(false)

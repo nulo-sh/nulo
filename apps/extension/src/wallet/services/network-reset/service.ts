@@ -327,7 +327,7 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 
 	/**
 	 * The network cause is recomputed from the row and the build, never read from the record, so a
-	 * forged record cannot start the unattended run of a network with no accounts. Each imported
+	 * forged record cannot move a network to another chain or node. Each imported
 	 * key on the chain is opened: one that does not open is `unmovable`, one that derives another
 	 * address moves the addresses, so the screen never promises an address that will change.
 	 */

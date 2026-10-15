@@ -60,6 +60,7 @@ describe("takeoverView", () => {
 
 	test("a network cause with nothing to move shows no screen while it resets by itself", () => {
 		expect(takeoverView(input({ stale: view({ accounts: [] }) }))).toBeNull()
+		expect(takeoverView(input({ stale: view({ accounts: [], cause: { networkReset: false, addressesMoved: true } }) }))).toBeNull()
 		expect(takeoverView(input({ stale: view({ accounts: [], unmovable: ["Imported 1"] }) }))?.networkId).toBe("tn")
 		expect(takeoverView(input({ stale: view({ accounts: [], switchToSeedNode: true }) }))?.networkId).toBe("tn")
 	})

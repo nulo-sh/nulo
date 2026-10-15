@@ -1,6 +1,7 @@
 <script setup>
 /** Composables */
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
+import { neverOpened } from "@/composables/useStaleNetwork"
 
 /** Utils */
 import { trimAddress } from "@/utils/string"
@@ -13,7 +14,14 @@ const props = defineProps({
 })
 const emit = defineEmits(["onClose", "confirm"])
 
-const c = computed(() => copy.confirm(props.view.name, props.view.accounts.length, props.view.cause.addressesMoved))
+const c = computed(() =>
+	copy.confirm(
+		props.view.name,
+		props.view.accounts.length,
+		props.view.cause.addressesMoved,
+		props.view.switchToSeedNode && neverOpened(props.view),
+	),
+)
 const notice = computed(() =>
 	props.view.unmovable.length > 0 ? copy.unmovableNotice(props.view.unmovable, props.view.cause.addressesMoved) : undefined,
 )

@@ -124,6 +124,22 @@ describe("StaleNetworkConfirm", () => {
 		expect(accounts.at(-1)!.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 	})
 
+	test("a network never opened: the node alone on its own node, and no account sentence without accounts", async () => {
+		await open(view({ accounts: [], switchToSeedNode: true }))
+		expect(lines(q("stale-confirm")!)).toEqual([
+			"TESTNET",
+			"Reset Testnet?",
+			"Testnet will use Nulo’s node, because yours is not serving the new Testnet. You can change the node again in Networks.",
+			"CANCEL",
+			"RESET",
+		])
+		document.body.innerHTML = '<div id="popup"></div>'
+		await open(view({ accounts: [], unmovable: ["Imported 1"], switchToSeedNode: true }))
+		expect(q("stale-confirm")!.querySelector("p")!.textContent).toBe(
+			"Nulo removes your Testnet tokens and history from this device. You cannot undo this.",
+		)
+	})
+
 	test("CANCEL, either close area and Escape cancel; CANCEL takes the first focus", async () => {
 		const wrapper = await open()
 		expect(traps.at(-1)?.options.initialFocus).toBe("[data-testid='stale-confirm-cancel']")
