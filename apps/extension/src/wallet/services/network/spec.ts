@@ -1,5 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
-import { rpcTransportVerdict } from "@nulo/wallet-core/utils"
+import { hasHiddenUrlCharacter, rpcTransportVerdict } from "@nulo/wallet-core/utils"
 import { z } from "zod"
 
 export const NETWORK_SERVICE_NAME = "network"
@@ -56,9 +56,9 @@ const NetworkEndpointRowSchema: z.ZodType<NetworkEndpoint> = z.object({
 })
 
 /** STORAGE codec row schema — structural only, deliberately LAXER than the wire
- *  `NetworkSchema` below (no `RpcUrlSchema` refine, no `.min(1)`): a legacy row
- *  written before a value-constraint was tightened must still LOAD (the strict
- *  rules keep applying at the add/update/restore boundaries). The `kind` enum
+ *  `NetworkSchema` below (no `.min(1)`): a legacy row written before a
+ *  value-constraint was tightened must still LOAD (the strict rules keep applying
+ *  at the add/update/restore boundaries). The `kind` enum
  *  list MUST stay in sync with `ChainKind` above: a new kind written before it
  *  is added here would make those rows unreadable (kept, but hidden) on read. */
 export const NetworkRowSchema: z.ZodType<Network> = z.object({
@@ -130,44 +130,46 @@ export const ERR_UNATTENDED_LIVE_CHECK = "UNATTENDED_LIVE_CHECK"
 export const ERR_CHAIN_QUARANTINED = "CHAIN_QUARANTINED"
 /** A reset of this network is running: deleting it would race the reset's purge. */
 export const ERR_RESET_RUNNING = "RESET_RUNNING"
+/** The RPC URL field's own lines, matched by the popups in the validation error's message. */
+export const ERR_RPC_URL_HIDDEN_CHARACTERS = "RPC URL can't contain spaces or hidden characters."
+export const ERR_RPC_URL_IPV6_LOOPBACK = "Use http://localhost instead of http://[::1]."
+const ERR_RPC_URL_TRANSPORT = "RPC URL must use https:// or http://localhost / http://127.0.0.1 and contain no userinfo"
 
 // ── Zod schemas for the RPC boundary ─────────────────────────────────
 
 export const ChainKindSchema: z.ZodType<ChainKind> = z.enum(["mainnet", "testnet", "devnet", "local", "custom"])
 
 /**
- * An RPC URL the wallet may treat as its chain authority: the transport rule
- * (`rpcTransportVerdict`), userinfo refused. zod trims the string before the
- * refine sees it.
+ * An RPC URL the wallet may treat as its chain authority: no hidden character
+ * inside it, then the transport rule (`rpcTransportVerdict`), userinfo refused.
+ * zod's `.url()` returns the trimmed string, so a caller stores the parsed value,
+ * never its own argument.
  *
- * Runs on the popup client's params and results (`network/client.ts`), on the
- * service's params, and on the backup-restore network filter
- * (`account-state/service.ts`); not in the lax storage row codec. The
- * node-factory adapter applies the transport rule on its own to every URL it
- * dials.
+ * Runs on every input URL: the params of the popup client (`network/client.ts`)
+ * and of the service. A stored URL is never re-judged by it (see `NetworkSchema`);
+ * the node-factory adapter applies the transport rule to every URL it dials.
  */
 export const RpcUrlSchema = z
 	.string()
 	.url()
-	.refine(
-		(url) => {
-			let parsed: URL
-			try {
-				parsed = new URL(url)
-			} catch {
-				return false
-			}
-			return rpcTransportVerdict(parsed).allowed
-		},
-		{ message: "RPC URL must use https:// or http://localhost / http://127.0.0.1 / http://[::1] and contain no userinfo" },
-	)
+	.refine((url) => !hasHiddenUrlCharacter(url), { message: ERR_RPC_URL_HIDDEN_CHARACTERS, abort: true })
+	.superRefine((url, ctx) => {
+		let parsed: URL
+		try {
+			parsed = new URL(url)
+		} catch {
+			ctx.addIssue({ code: "custom", message: ERR_RPC_URL_TRANSPORT })
+			return
+		}
+		const verdict = rpcTransportVerdict(parsed)
+		if (verdict.allowed) return
+		const ipv6Loopback = verdict.refusal === "http-host" && verdict.host === "[::1]"
+		ctx.addIssue({ code: "custom", message: ipv6Loopback ? ERR_RPC_URL_IPV6_LOOPBACK : ERR_RPC_URL_TRANSPORT })
+	})
 
-export const NetworkEndpointSchema: z.ZodType<NetworkEndpoint> = z.object({
-	id: z.string(),
-	rpcUrl: RpcUrlSchema,
-	label: z.string().optional(),
-})
-
+/** A network as storage holds it, every field checked except each endpoint's URL, which is read as
+ *  the row codec reads it: a URL saved before a rule tightened (an `http://[::1]` node) must still
+ *  list and restore, so the person can switch or delete it. */
 export const NetworkSchema: z.ZodType<Network> = z.object({
 	id: z.string(),
 	profileId: z.string(),
@@ -175,7 +177,7 @@ export const NetworkSchema: z.ZodType<Network> = z.object({
 	l1ChainId: z.number().int().nonnegative().max(0xffffffff),
 	name: z.string(),
 	primaryEndpointId: z.string(),
-	endpoints: z.array(NetworkEndpointSchema).min(1),
+	endpoints: z.array(NetworkEndpointRowSchema).min(1),
 	kind: ChainKindSchema.optional(),
 })
 
@@ -232,15 +234,15 @@ export const NetworkMethodSchemas = {
 	},
 	addEndpoint: {
 		params: z.tuple([z.string().min(1), z.string().optional(), RpcUrlSchema]),
-		result: NetworkEndpointSchema,
+		result: NetworkEndpointRowSchema,
 	},
 	updateEndpoint: {
 		params: z.tuple([z.string().min(1), z.string().min(1), z.string().optional(), RpcUrlSchema]),
-		result: NetworkEndpointSchema,
+		result: NetworkEndpointRowSchema,
 	},
 	deleteEndpoint: {
 		params: z.tuple([z.string().min(1), z.string().min(1)]),
-		result: NetworkEndpointSchema,
+		result: NetworkEndpointRowSchema,
 	},
 	setPrimaryEndpoint: {
 		params: z.tuple([z.string().min(1), z.string().min(1)]),

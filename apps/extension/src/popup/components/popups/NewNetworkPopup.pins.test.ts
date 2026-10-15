@@ -133,12 +133,23 @@ describe("NewNetworkPopup — activation outcomes", () => {
 })
 
 describe("NewNetworkPopup — failures and refusals", () => {
-	test.each(["Failed to fetch node info", "Failed to fetch network info"])("'%s' marks the URL field, no toast", async (msg) => {
+	test.each([
+		["Failed to fetch node info", "Failed to fetch network info"],
+		["Failed to fetch network info", "Failed to fetch network info"],
+		[
+			"Invalid params for addNetwork: 1: RPC URL can't contain spaces or hidden characters.",
+			"RPC URL can't contain spaces or hidden characters.",
+		],
+		[
+			"Invalid params for addNetwork: 1: Use http://localhost instead of http://[::1].",
+			"Use http://localhost instead of http://[::1].",
+		],
+	])("'%s' shows %j under the URL field, no toast", async (msg, line) => {
 		addNetworkMock.mockRejectedValueOnce(new Error(msg))
 		const w = await mountFilled()
 		await submit(w)
 		expect(openToastMock).not.toHaveBeenCalled()
-		expect((w.vm as unknown as { isUrlHasError: boolean }).isUrlHasError).toBe(true)
+		expect(w.find("label:has([data-input-label='RPC Link'])").text()).toBe(line)
 		expect(trace).toEqual([])
 	})
 

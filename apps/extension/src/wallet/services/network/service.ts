@@ -7,7 +7,7 @@ import { profileDeletedError } from "@/wallet/services/profile/profile-deletion-
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { validateParams } from "@nulo/extension-messaging/zod"
-import { AztecNodeFactoryAdapter } from "@nulo/aztec-runtime/adapters"
+import { AztecNodeFactoryAdapter, isAllowedRpcUrl } from "@nulo/aztec-runtime/adapters"
 import type { NodeFactory } from "@nulo/aztec-runtime/ports"
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "@nulo/aztec-runtime/utils"
 import type { ILogger } from "@/wallet/logger"
@@ -480,8 +480,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 
 	// ── Network mutations ────────────────────────────────────────────────
 
-	public async addNetwork(name: string, rpcUrl: string): Promise<Network> {
-		validateParams(NetworkMethodSchemas.addNetwork.params, [name, rpcUrl], "addNetwork")
+	public async addNetwork(name: string, rawRpcUrl: string): Promise<Network> {
+		const [, rpcUrl] = validateParams(NetworkMethodSchemas.addNetwork.params, [name, rawRpcUrl], "addNetwork")
 		await this.ensureInitialized()
 		// Atomic read+capture: the RPC probe below can span the profile's
 		// deletion — the commit asserts flush against the write.
@@ -647,8 +647,13 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			const network = requireOwnedRow(await this.storage.get(id), profile.id)
 			await this._writeActive(profile.id, id)
 			const primaryEndpoint = findPrimaryEndpoint(network)
-			if (primaryEndpoint) {
+			// A stored URL the transport rule refuses must fail where an unreachable node fails, at the
+			// first read: thrown here, it would stop popup start before Settings could fix it.
+			if (primaryEndpoint && isAllowedRpcUrl(primaryEndpoint.rpcUrl).ok) {
 				this.nodes.set(network.chainId, this.nodeFactory.createNode(primaryEndpoint.rpcUrl))
+			} else if (primaryEndpoint) {
+				this.nodes.delete(network.chainId)
+				this.logDebug("active network's primary endpoint refused by the transport rule")
 			}
 			this.emit("onActiveNetworkChanged", network)
 			return network
@@ -657,8 +662,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 
 	// ── Endpoint mutations ───────────────────────────────────────────────
 
-	public async addEndpoint(networkId: string, label: string | undefined, rpcUrl: string): Promise<NetworkEndpoint> {
-		validateParams(NetworkMethodSchemas.addEndpoint.params, [networkId, label, rpcUrl], "addEndpoint")
+	public async addEndpoint(networkId: string, label: string | undefined, rawRpcUrl: string): Promise<NetworkEndpoint> {
+		const [, , rpcUrl] = validateParams(NetworkMethodSchemas.addEndpoint.params, [networkId, label, rawRpcUrl], "addEndpoint")
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
 		// Peek the network's kind unlocked so the chainId probe can short-circuit
@@ -689,9 +694,13 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		networkId: string,
 		endpointId: string,
 		label: string | undefined,
-		rpcUrl: string,
+		rawRpcUrl: string,
 	): Promise<NetworkEndpoint> {
-		validateParams(NetworkMethodSchemas.updateEndpoint.params, [networkId, endpointId, label, rpcUrl], "updateEndpoint")
+		const [, , , rpcUrl] = validateParams(
+			NetworkMethodSchemas.updateEndpoint.params,
+			[networkId, endpointId, label, rawRpcUrl],
+			"updateEndpoint",
+		)
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
 		const normalized = normalizeRpcUrl(rpcUrl)
