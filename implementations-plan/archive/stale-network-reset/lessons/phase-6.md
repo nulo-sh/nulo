@@ -43,7 +43,7 @@ First review, 2026-10-15, on the 18 captured states: approved A1, A3, A3b, A4, A
 At `3846f020`, arc 2's head after the rebase onto #431, retry 0, in a clean copy:
 
 - Chrome: S1 4 tests passed (58.3 s). Captures 1 test passed (76.1 s): 38 frames (19 states, both themes), none tracked. Full smoke: 56 files passed and 5 skipped, 242 tests passed and 13 skipped, 1795 s.
-- Firefox: S1 4 tests passed (90.5 s). The full suite's result is recorded at close-out.
+- Firefox: S1 4 tests passed (90.5 s). Full smoke: 57 files passed and 3 skipped, 240 tests passed and 14 skipped, 1 failed, 2644 s. The failure was `legal-acceptance.test.ts` S10: its wait for the notices tab timed out at 15 s while the network gate shared the machine. No file it covers changes in this stack, and the file alone passed at retry 0 (14/14). The full Firefox suite re-ran at `5a8244f2`, arc 2's head after the icon's moveto spacing, retry 0: S1 4 tests passed (68.5 s); full smoke 58 files passed and 3 skipped, 241 tests passed and 14 skipped, 2259 s.
 - `bun run lint` exit 0 at this head.
 - The unit gate ran at arc 3's head (`phase-8.md`), whose changes over this arc are e2e files, plan docs, comments and test names.
 
