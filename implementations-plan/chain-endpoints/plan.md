@@ -606,6 +606,8 @@ Validation gate: `bun run check:plans` and `bun run lint` exit 0 on the staged f
 | D36 | `vite serve` alone keeps `style-src 'self' 'unsafe-inline'`, the whole directive replaced, in `manifest.chrome.config.ts`; keyed on `command`, never `mode` | Vite's dev client injects every stylesheet as a `<style>`; beside a hash the keyword is ignored; `dev:firefox` builds in development mode and must get the strict policy. A unit test pins both build modes strict and the serve policy | A fixed dev nonce (configuration for one caller); keying on `mode` (would ship it in development builds) |
 | D37 | The popup focus trap reads open shadow roots (`tabbableOptions.getShadowRoot`) | Without it the trap's tabbable list loses the JSON viewer's editor, which its `contenteditable` content was in before, so Tab no longer reaches it in DataViewerPopup (Codex) | Leaving keyboard entry to the editor broken |
 | D38 | `_build-extension.yml` fails a bundle whose JS or HTML carries `style="`, `style='` or `style=\"` | Vue's compiler stringifies a long static template run into innerHTML, and a constant `style` there would render unstyled under the new `style-src`; the source holds 79 static `style` attributes, so a template edit can bring one back on a page no e2e opens (Opus). Today both bundles hold none | The one-time scan of step 7 only |
+| D39 | `LogsViewer`'s search-panel `focusin` listener sits on the editor's shadow root, not the document; its unit test dispatches with a related target inside the root | Focus moving from the content to the search field stays in one shadow root, and the document drops it (target and related target both retarget to the host), so the follow went on with the panel open; the first smoke run on the arc's build caught it, the base stops (lessons, second smoke run) | `composedPath()` on a document listener, which the event never reaches |
+| D40 | `viewers-csp.test.ts` has no selection case; its follow cases read one new line, "at the end" is under 10px; the inline viewer's copy check waits until the popup holds still | After a mouse selection the base build follows the next line too, so the plan's selection case names behaviour the wallet does not have; the viewer re-arms the follow on any scroll within 20px of the end, which one 18.2px line stays under; a drag measured while the popup animated in landed two lines low on both builds (probes, lessons) | Asserting the base's selection behaviour, which would pin a bug; fixing it, which is a change to the viewer's behaviour outside this arc |
 | D27 | #79 gets no arc. #389 retired the built-in list a day before P12-05's change was recorded; the build compiles only R-F2's minimum, which names no token. The close-out comments the evidence on #79, and its PR says `Refs #79` | R-F1 to R-F6: nothing in the tree is left to move, and the no-list screens are the owner's own "Nothing extra" (R-F5) | A bundled fallback list (the owner rejected it in dynamic-token-list's D5); renaming `default-tokens.ts` (its name already says what it maps) |
 | D28 | Resolved by D-orch-11: `Closes #101` at close-out, with item 15 shipped by arc 2b. The earlier rule: #101 closes with the close-out PR (`Closes #101`) only when the orchestrator's approval carries the owner's veto of P12-03, which the comment quotes; otherwise `Refs #101`, and #101 stays open for item 15 as an Open item | An owner-rejected item is a disposition, not open work, but #101's signed record reads "accepted from the veto list" (not struck), so closing it needs the veto's own record; D-orch-7 held the same line | Closing on the brief's word alone (Codex: justified by the supplied veto; Opus: the record contradicts it, High; the conditional settles both); closing by hand before the PR exists |
 | D29 | A5 runs as written, made exact: the guard armed for the network suite by a local, uncommitted `provide`, the whole record printed (declared hosts included), two files on each browser at retry 0, and an issue only for a wallet or spec host | Without the print, a declared host such as `api.coingecko.com` passes the close silently, and declared hosts are what the sample is for | Arming the network suite's guard in CI (the e2e harness's scope, and a sample is not that proof); skipping the sample |
@@ -882,6 +884,28 @@ Verdict: **conditional approve (with conditions: before #101 is closed, quote th
 ### Close-out revision, Codex round 2 (session `01a144eb-44d0-7853-84dd-8b13853d5cfe` resumed), 2026-10-16
 
 Verdict: **approve**. All five round-1 findings resolved; D28's condition, D31 and the Outcome fields verified; no regression and no new material finding. One Low accepted: the OWNER-ASKS note says "a new contract class", since a new token on the bundled class needs only the list.
+
+### Arc 2b, round 1, Codex (gpt-6.1-sol, high, read-only; session `01a1455f-a401-74f0-9b60-afb170596547`), 2026-10-16
+
+Verdict: **approve with fixes**. No production or CSP defect; two reliability findings in the new smoke spec, which had not run yet.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Medium. `viewers-csp.test.ts` drags the middle of the rendered `.cm-line`s, which CodeMirror keeps rendered above the visible area, so the drag can land outside the editor and select nothing | Accepted: the drag picks a line inside the scroller and asserts a non-empty selection first |
+| 2 | Low. The `count * 10` growth wait returns before every line has landed, so a late line overlaps the next read | Accepted: the wait is the measured line height times the count, then 300 ms without a height change |
+
+### Arc 2b, round 1, Opus (general-purpose, read-only), 2026-10-16
+
+Verdict: **approve with fixes**. Its items 1 and 2 are Codex's 1 and 2, the first rated High (by the third case the middle rendered line sits about 480px above the scroller).
+
+| # | Finding | Disposition |
+|---|---|---|
+| 3 | Low. Ctrl+F reaches CodeMirror's `Mod-f`, which is Cmd on macOS | Accepted: F3, whose command opens the panel while there is no query |
+| 4 | Low. The build guard's `style="` also matches `font-style="`, an SVG attribute CSP allows | Accepted: each marker starts with a space |
+| 5 | Low. CLAUDE.md still names `waitForToast` the one selector exception | Accepted: the rule names the viewers' exception too |
+| 6 | Nit. "would copy the whole line" holds only when CodeMirror's selection is empty | Accepted: "would copy nothing, or the whole line" |
+| 7 | Nit. `editor-shadow.test.ts`'s list comment tells history, and the copy leaves out `.noanimations *` | Accepted: the comment states the list and why that rule is out (it only removes transitions; every editor element computes `transition-duration: 0s` and no animation in all 20 style dumps) |
+| - | Noted, no change: a page's Enter shortcut now sees the viewer's host, not CodeMirror's search `<input>`, so Enter in that field no longer reaches a page shortcut | Recorded in the PR body |
 
 ## Delivery
 

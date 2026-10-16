@@ -243,9 +243,10 @@ onMounted(async () => {
 		if (selection && !selection.isCollapsed) disableAutoScroll()
 	})
 
-	// The editor sits in a shadow root, which retargets `e.target` to its host.
-	document.addEventListener("focusin", (e) => {
-		if (e.composedPath()[0]?.closest?.(".cm-panel.cm-search")) disableAutoScroll()
+	// On the shadow root, not the document: focus moving inside the root, as from the content to the
+	// search panel, never leaves it, its target and related target both retargeting to the host.
+	editorRef.value.shadowRoot.addEventListener("focusin", (e) => {
+		if (e.target.closest?.(".cm-panel.cm-search")) disableAutoScroll()
 	})
 
 	const params = new URLSearchParams(window.location.search)

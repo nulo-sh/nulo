@@ -24,3 +24,5 @@
 - 2026-10-16: 2b.4-5 code in place (shadow roots, style-src hash, manifest + seam + focus tests, unit green); 2b.7 scan clean on both dists; e2e waits for load1 < 150 (389).
 - 2026-10-16: 2b.1 probe pass (both browsers), 2b.3/2b.9 shots: 12 pairs, 0 differing pixels; computed styles identical but for one unpainted Chrome ::selection report.
 - 2026-10-16: test:ci-gating, lint:actions, typecheck:all, lint: exit 0 (lint warnings are elsewhere, none in the arc's files).
+- 2026-10-16: 2b.6 dev server: styled and zero violations with the serve branch; unstyled and one violation without it (D36 holds).
+- 2026-10-16: smoke runs 1-2 on Chrome: the search-panel follow regressed (D39, fixed); selection case dropped (D40); import-errors launch timeouts under load.

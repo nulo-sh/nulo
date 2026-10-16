@@ -15,7 +15,8 @@ const rulesOf = (css: string): string[] => {
 	return [...sheet.cssRules].map((rule) => rule.cssText)
 }
 
-/** What the editors' elements matched in the document before the move, measured in both browsers. */
+/** The page rules the editors' elements match, measured in both browsers. `.noanimations *` is left
+ *  out: it only removes transitions, and no editor element has one. */
 const MATCHED_SELECTORS = ["*,\n*::before,\n*::after", "*", "*::-webkit-scrollbar", "button", "input", "::selection"]
 
 const cleanups: (() => void)[] = []

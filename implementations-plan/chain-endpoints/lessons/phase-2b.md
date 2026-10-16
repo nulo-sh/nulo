@@ -33,3 +33,23 @@ A scratch harness outside the repo ran the e2e fixtures against cached armed dis
 - Tab order in DataViewerPopup, base: editor ↔ Close. The arc's build matches with the trap fix (D37).
 - `innerText` of the `data-viewer` testid no longer includes the editor's text (Chrome returned only "CLOSE"), so both specs that read it now read the editor's content inside its shadow root.
 - The JSON window's payload was answered by a page-level fake of the background port in the harness only; Firefox ignored a preload script there, so the harness patches both `chrome.runtime` and `browser.runtime` after load and routes by hash.
+
+## Dev server (2b.6; 2026-10-16)
+
+`bun run dev` on Chrome, the popup opened from the served extension with a `securitypolicyviolation` listener: with the serve branch the served manifest carries `style-src 'self' 'unsafe-inline'`, the popup renders in IBM Plex Sans and nothing is recorded. With the branch disabled for one run the served manifest carries the hash, the popup falls back to DejaVu Sans and one `style-src-elem` violation is recorded. So D36's branch is needed, and `manifest.test.ts` pins both build modes strict.
+
+## Round 1 and the first smoke run (2026-10-16)
+
+- Codex (session `01a1455f-a401-74f0-9b60-afb170596547`) and Opus: approve with fixes, all accepted (plan § Audit verdicts). Popup `console.info` does reach the logs viewer: `installConsoleForwarding` sends it under source `ui`.
+- First Chrome run of the new smoke cases, three failures, none from the arc. A drag probe on the base and the arc's build (scratch, Chrome) gave the same results on both:
+  - After a mouse selection, `selectionchange` fires on the document with a non-collapsed selection in both builds, yet three new lines are still followed (gap 0). So "selecting stops the follow", read over several lines, does not hold on the base either. The spec reads the follow off one new line.
+  - In DataViewerPopup, a drag over `"account-state"` copies exactly that token in both builds once the popup has settled. The spec had measured while the popup was still animating in, and its copy ran two lines past the token. The spec now waits until the editor's box is still for five frames.
+  - The logs window rested 2px from the end once (`< 2` failed); "at the end" is now under 10px, below one line (18.2px).
+- A dispatched `ClipboardEvent` replaces `execCommand("copy")`: CodeMirror 6.43.9 fills `clipboardData` from its own selection and checks neither `isTrusted` nor user activation.
+
+## The second smoke run: a regression the unit test could not see (2026-10-16)
+
+- Opening the logs search panel stopped the follow on the base build (one new line: gap 47px, scroll button shown) and not on the arc's (gap 1px). The document's `focusin` log showed why: the base heard `cm-textfield`, the arc only `cm-content`. Focus moving from the content to the search field stays inside one shadow root, and at the document the target and the related target both retarget to the host, so the spec drops the event there before the document hears it. The fix listens on the shadow root, which hears the true target.
+- The unit test dispatched `focusin` with no related target, which the document hears either way, so it passed on the broken code. It now dispatches with a related target inside the root; jsdom truncates the path as browsers do, and the document listener fails it (negative control run).
+- After a mouse selection, the base build follows the next line too (gap 0px, no scroll button), as the arc does. The plan's "selecting log text stops auto-scroll" is behaviour the wallet does not have, so the arc cannot regress it.
+- The two import-errors cases that failed in this run timed out in `settleLaunchedExtension`, at launch, before any step of theirs ran, with load rising from 139.

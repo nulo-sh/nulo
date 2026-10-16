@@ -166,7 +166,8 @@ jobs:
           fail=0
           for d in apps/extension/dist/chrome apps/extension/dist/firefox; do
             [ -d "$d" ] || continue
-            for marker in 'style="' "style='" 'style=\"'; do
+            # The leading space keeps `font-style="` and other `*-style` attributes, which CSP allows, out.
+            for marker in ' style="' " style='" ' style=\"'; do
               hits=$(grep -rlF --include='*.js' --include='*.html' "$marker" "$d" || true)
               if [ -n "$hits" ]; then
                 echo "::error::markup with an inline style attribute ($marker) in: $hits" >&2

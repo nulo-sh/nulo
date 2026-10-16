@@ -1,16 +1,19 @@
 /**
  * The logs window's editor under `style-src` without `'unsafe-inline'`: its styles reach it in its
- * shadow root, and the root's retargeting of focus and selection leaves the follow of new lines as
- * it was. The launch's CSP recorder fails the file on a blocked style. Each case starts at the end
- * of a window with more lines than it shows, so a scroll of its own cannot stop the follow first.
+ * shadow root, and focus moving inside the root still stops the follow of new lines. The launch's
+ * CSP recorder fails the file on a blocked style. Each case starts at the end of a window with more
+ * lines than it shows, so a scroll of its own cannot stop the follow first, and reads the follow off
+ * one new line: the viewer re-arms it on any scroll that ends within 20px of the end.
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
-import { extensionUrl, gotoExtensionPage, newPage, prepareClick } from "./fixtures/browser"
+import { extensionUrl, gotoExtensionPage, newPage } from "./fixtures/browser"
 import { readEditorStyles } from "./fixtures/code-editor"
 import { type ExtensionContext, test } from "./fixtures/extension"
 
 const HOST = "logs-editor"
+/** Under one line's height: at the end, or a line short of it. */
+const AT_END = 10
 
 /** The scroller's geometry, read once the frames after a change have run. */
 async function scroller(page: Page): Promise<{ height: number; gapToEnd: number }> {
@@ -22,20 +25,35 @@ async function scroller(page: Page): Promise<{ height: number; gapToEnd: number 
 	}, HOST)
 }
 
-/** Logs `count` lines from the window and waits until the editor's document has grown by them. */
+/**
+ * Logs `count` lines from the window, then waits until the editor has grown by that many lines and
+ * stayed still long enough for any line still in flight, and CodeMirror's scroll after it, to land.
+ */
 async function logLines(page: Page, count: number): Promise<void> {
 	const { height } = await scroller(page)
+	const lineHeight = await page.evaluate((id) => {
+		const line = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.querySelector(".cm-line")
+		if (!(line instanceof HTMLElement)) throw new Error("the logs editor rendered no line")
+		return line.getBoundingClientRect().height
+	}, HOST)
 	await page.evaluate((n) => {
 		for (let i = 0; i < n; i++) console.info(`viewer probe ${i}`)
 	}, count)
 	await page.waitForFunction(
 		(id, min) => {
 			const el = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.querySelector(".cm-scroller")
-			return el instanceof HTMLElement && el.scrollHeight >= min
+			if (!(el instanceof HTMLElement)) return false
+			const w = window as unknown as { __probeHeight?: number; __probeSince?: number }
+			if (el.scrollHeight !== w.__probeHeight) {
+				w.__probeHeight = el.scrollHeight
+				w.__probeSince = performance.now()
+				return false
+			}
+			return el.scrollHeight >= min && performance.now() - (w.__probeSince ?? 0) >= 300
 		},
 		{ timeout: 10_000, polling: 50 },
 		HOST,
-		height + count * 10,
+		height + count * lineHeight - 1,
 	)
 }
 
@@ -55,7 +73,7 @@ async function openLogs(ctx: ExtensionContext): Promise<Page> {
 async function filledLogs(ctx: ExtensionContext): Promise<Page> {
 	const page = await openLogs(ctx)
 	await logLines(page, 60)
-	expect((await scroller(page)).gapToEnd).toBeLessThan(2)
+	expect((await scroller(page)).gapToEnd).toBeLessThan(AT_END)
 	return page
 }
 
@@ -65,28 +83,10 @@ test("the logs editor takes its styles from its shadow root", async ({ registere
 	await page.close()
 })
 
-test("with nothing selected and the search panel closed, new lines are followed", async ({ registeredExtension: ctx }) => {
+test("with the search panel closed, new lines are followed", async ({ registeredExtension: ctx }) => {
 	const page = await filledLogs(ctx)
-	await logLines(page, 3)
-	expect((await scroller(page)).gapToEnd).toBeLessThan(2)
-	await page.close()
-})
-
-test("selecting log text stops the follow", async ({ registeredExtension: ctx }) => {
-	const page = await filledLogs(ctx)
-	const line = await page.evaluate((id) => {
-		const lines = [...(document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.querySelectorAll(".cm-line") ?? [])]
-		const box = lines[Math.floor(lines.length / 2)]?.getBoundingClientRect()
-		if (!box) throw new Error("the logs editor rendered no line")
-		return { left: box.left + 2, right: box.left + Math.min(box.width - 4, 300), y: box.top + box.height / 2 }
-	}, HOST)
-	await prepareClick(page)
-	await page.mouse.move(line.left, line.y)
-	await page.mouse.down()
-	await page.mouse.move(line.right, line.y, { steps: 5 })
-	await page.mouse.up()
-	await logLines(page, 3)
-	expect((await scroller(page)).gapToEnd).toBeGreaterThan(20)
+	await logLines(page, 1)
+	expect((await scroller(page)).gapToEnd).toBeLessThan(AT_END)
 	await page.close()
 })
 
@@ -97,9 +97,8 @@ test("focusing the search panel stops the follow", async ({ registeredExtension:
 		if (!(content instanceof HTMLElement)) throw new Error("the logs editor has no content")
 		content.focus({ preventScroll: true })
 	}, HOST)
-	await page.keyboard.down("Control")
-	await page.keyboard.press("f")
-	await page.keyboard.up("Control")
+	// F3 opens the panel while there is no query, on every platform; Mod-F is Cmd on macOS.
+	await page.keyboard.press("F3")
 	await page.waitForFunction(
 		(id) => !!document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.activeElement?.closest(".cm-panel.cm-search"),
 		{
@@ -108,7 +107,7 @@ test("focusing the search panel stops the follow", async ({ registeredExtension:
 		},
 		HOST,
 	)
-	await logLines(page, 3)
-	expect((await scroller(page)).gapToEnd).toBeGreaterThan(20)
+	await logLines(page, 1)
+	expect((await scroller(page)).gapToEnd).toBeGreaterThan(AT_END)
 	await page.close()
 })

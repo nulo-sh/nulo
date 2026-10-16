@@ -137,11 +137,24 @@ const deepFocus = (page: Page) =>
 
 /**
  * The inline JSON viewer, in its shadow root: styled; a token the mouse selects is exactly what a
- * copy carries (a selection CodeMirror failed to read would copy the whole line); and the popup's
+ * copy carries (a selection CodeMirror failed to read would copy nothing, or the whole line); and the popup's
  * focus trap keeps the editor in its Tab cycle.
  */
 async function expectViewerUsable(page: Page): Promise<void> {
 	expect(await readEditorStyles(page, "json-editor")).toEqual({ display: "flex", fontSize: "14px", scrollbarWidth: "none" })
+	// The popup animates in, and a drag measured mid-motion ends lines below where it aimed.
+	await page.waitForFunction(
+		() => {
+			const box = document.querySelector('[data-testid="json-editor"]')?.getBoundingClientRect()
+			if (!box) return false
+			const w = window as unknown as { __viewerBox?: string; __viewerStill?: number }
+			const key = `${box.left},${box.top},${box.width},${box.height}`
+			w.__viewerStill = key === w.__viewerBox ? (w.__viewerStill ?? 0) + 1 : 0
+			w.__viewerBox = key
+			return w.__viewerStill >= 5
+		},
+		{ timeout: 10_000, polling: "raf" },
+	)
 	const token = await page.evaluate(() => {
 		const lines = document.querySelector('[data-testid="json-editor"]')?.shadowRoot?.querySelectorAll(".cm-line") ?? []
 		for (const line of lines) {
