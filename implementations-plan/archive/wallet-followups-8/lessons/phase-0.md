@@ -1,0 +1,8 @@
+# Phase 0: planning log
+
+- 2026-10-15: recon, three Sonnet explorers (#277 teardown path; #498 popup start and PR #506; one batched sweep over #464, #465, #338, #339, #432). Findings in `recon.md`.
+- 2026-10-15: the lane brief places #432 and #112 in arc 1, but each issue's latest `## Decision` says nothing is built (page 17 option B; page 15 OA-6 option A). The decisions bind; both are no-arc.
+- 2026-10-15: panel round 1. Codex (gpt-6.1-sol, high, session 01a1418f, on the alejo-icloud account): reject. The incoming scan holds its lock across a PXE block-time read that `clearProfile` waits on (confirmed in code); a failed node call need not fail its PXE op (`L2BlockStream`); test gaps. Opus 5.5 (Plan): conditional approve. A token add holds the token lock across a network-service node read; the #464 gate contradicted its own comment rule; arm T4 before `openPopup`; end the backoff instead of rewrapping the error. All accepted except a production-PXE regression (T4 covers it); decisions D2 and D4.
+- 2026-10-15: the lane brief's addendum (decision page 19) adds #466 to "this lane's first arc"; the plan builds the popup set first, so it is arc 1.
+- 2026-10-15: panel round 2 (Codex resumed): conditional approve. Reproduced on the installed SDK that `retry` sleeps and then calls the attempt without asking the generator, so a generator-only stop still dispatches one retry: the wrapper checks again before each retry. KL-4 widened to any running token add; OA-1 separates the popup's 60 s call deadline from the background retries. All applied. Round 3: approve, no new finding.
+- 2026-10-15: the Codex runs used the `alejo-icloud` roster account (the session's `CODEX_ACCOUNT=best` picked it); no quota or auth error.

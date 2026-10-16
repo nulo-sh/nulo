@@ -1,6 +1,10 @@
 import { expect } from "vitest"
+import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import { interceptRpc } from "./fixtures/browser"
 import { test, openPopup, waitForHash } from "./fixtures/extension"
 import { captureSoleProfileId, resetProfile, waitForProfilePurged } from "./fixtures/helpers"
+
+const TESTNET_RPC_ORIGIN = new URL(TESTNET_RPC_URL).origin
 
 // Reset deletes the only profile and lands on /popup/register. A file-scoped
 // fixture would leak that wiped state into any subsequent test; use the
@@ -26,4 +30,25 @@ test("reset profile wipes state and routes to register", async ({ registeredExte
 	await page.waitForFunction(() => window.location.hash.includes("/popup/register"), { timeout: 10_000 })
 
 	expect(registeredExtensionPerTest.pageErrors).toEqual([])
+}, 60_000)
+
+// Only the production PXE makes the boot, sync and op node calls a purge drains, so only a browser
+// proves no retry of theirs still holds it. Same 15 s purge budget as the reachable case.
+test("reset purges within the same budget while the node refuses connections", async ({ registeredExtensionPerTest: ctx }) => {
+	const node = await interceptRpc(ctx.browser, ctx.extensionId, TESTNET_RPC_ORIGIN, { kind: "refuse" })
+	try {
+		const page = await openPopup(ctx)
+		await waitForHash(page, "#/popup/general")
+
+		const profileId = await captureSoleProfileId(page)
+		await resetProfile(page)
+		await waitForProfilePurged(page, profileId, { timeoutMs: 15_000 })
+		await page.waitForFunction(() => window.location.hash.includes("/popup/register"), { timeout: 10_000 })
+
+		expect(await node.failures()).toEqual([])
+		expect(await node.hits()).toBeGreaterThan(0)
+		expect(ctx.pageErrors).toEqual([])
+	} finally {
+		await node.stop()
+	}
 }, 60_000)

@@ -9,6 +9,7 @@ import type { ProveBackend } from "@nulo/wallet-core/jobs"
 import { PxeStoreKeyMissingError } from "@nulo/extension-messaging/errors"
 import { AztecNodeFactoryAdapter } from "../adapters/aztec-node-factory-adapter"
 import type { NodeFactory } from "../ports/node-factory-port"
+import type { RetryOptions } from "../utils/fetch"
 import { chainDataDir, chainRegistryKey, chainRegistryKeyPrefix } from "./chain-coordinates"
 import { openChainStore } from "./opfs-store"
 
@@ -142,7 +143,7 @@ export class ChainRuntime {
  *  running real PXE init. `storeKey` is the per-profile 32-byte store
  *  encryption key (required by the production factory; fakes ignore it). */
 export interface PxeFactory {
-	createChainRuntime(network: NetworkInfo, storeKey?: Uint8Array): Promise<ChainRuntime>
+	createChainRuntime(network: NetworkInfo, storeKey?: Uint8Array, retries?: RetryOptions): Promise<ChainRuntime>
 }
 
 export class ProductionPxeFactory implements PxeFactory {
@@ -167,7 +168,7 @@ export class ProductionPxeFactory implements PxeFactory {
 		this.onProvePhase = options?.provingMode === "proverless" ? undefined : options?.onProvePhase
 	}
 
-	public async createChainRuntime(network: NetworkInfo, storeKey?: Uint8Array): Promise<ChainRuntime> {
+	public async createChainRuntime(network: NetworkInfo, storeKey?: Uint8Array, retries?: RetryOptions): Promise<ChainRuntime> {
 		// Fail-closed: PXE state is encrypted at rest, so a chain runtime cannot boot without the
 		// profile's store key (provisioned by the SW after unlock; re-provisioned on demand when
 		// the offscreen restarts — the client recognizes this class and retries once). This is the
@@ -176,7 +177,7 @@ export class ProductionPxeFactory implements PxeFactory {
 		if (!storeKey) {
 			throw new PxeStoreKeyMissingError(`${PXE_STORE_KEY_MISSING}: no store key provisioned for profile ${network.profileId}`)
 		}
-		const node = this.nodeFactory.createNode(network.rpcUrl)
+		const node = this.nodeFactory.createNode(network.rpcUrl, retries)
 		const config = {
 			...getPXEConfig(),
 			dataDirectory: chainDataDir(network),
@@ -325,6 +326,9 @@ export function advanceProve(active: ActiveProve, phase: PrestoPhase): ProvePhas
  */
 export class ChainRuntimeRegistry {
 	private readonly runtimes = new Map<string, ChainRuntime>()
+	/** Scopes whose node calls no longer retry, counted per raise: a registry key, or a profile's
+	 *  key prefix. */
+	private readonly retriesStopped = new Map<string, number>()
 
 	public constructor(private readonly factory: PxeFactory) {}
 
@@ -371,9 +375,30 @@ export class ChainRuntimeRegistry {
 			await existing.dispose()
 			this.runtimes.delete(k)
 		}
-		const runtime = await this.factory.createChainRuntime(network, storeKey)
+		const prefix = chainRegistryKeyPrefix(network.profileId)
+		const retryWhile = () => !this.retriesStopped.has(k) && !this.retriesStopped.has(prefix)
+		const runtime = await this.factory.createChainRuntime(network, storeKey, { retryWhile })
 		this.runtimes.set(k, runtime)
 		return runtime
+	}
+
+	/**
+	 * Stop retrying failed node calls for one runtime (`chainId` given) or for every runtime of
+	 * `profileId`, built or still to be built, until the returned release runs. Each call still
+	 * makes its first attempt, so a reachable node keeps serving the work a teardown drains; an
+	 * unreachable one no longer holds that drain for its backoff.
+	 */
+	public stopRetries(profileId: string, chainId?: number): () => void {
+		const scope = chainId === undefined ? chainRegistryKeyPrefix(profileId) : this.key(profileId, chainId)
+		this.retriesStopped.set(scope, (this.retriesStopped.get(scope) ?? 0) + 1)
+		let released = false
+		return () => {
+			if (released) return
+			released = true
+			const left = (this.retriesStopped.get(scope) ?? 1) - 1
+			if (left > 0) this.retriesStopped.set(scope, left)
+			else this.retriesStopped.delete(scope)
+		}
 	}
 
 	/**

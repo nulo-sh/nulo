@@ -990,28 +990,15 @@ describe("IncomingTransferService — account lifecycle", () => {
 
 describe("IncomingTransferService — scanContract dedup + emit semantics", () => {
 	test("a watchdog handoff mid-park lets onTokenDeleted wipe — the revoked CS writes nothing", async () => {
-		// The production hazard end-to-end: the note-CS parks on its PXE-bound
-		// blockTimestamp await while HOLDING the serviceLock; the queued
-		// onTokenDeleted (which bumps the lifecycle epoch FIRST inside the
-		// lock) cannot run until the lock's 5-minute watchdog hands over; the
-		// revoked CS then resumes with a moved epoch and must write NOTHING —
-		// no record resurrection, no outbox row, no Added emit. Trust is
-		// pre-seeded `trusted` so every pre-park branch is quiet and the
-		// assertions are pure post-handoff effects (an unknown-trust write
-		// lands BEFORE the park and could never discriminate the re-check).
+		// Trust is pre-seeded `trusted` so nothing is written before the park: an unknown-trust
+		// write would land before it and could never discriminate the post-handoff re-check.
 		vi.useFakeTimers()
 		try {
 			const network = makeNetworkStub([{ id: "n1", chainId: 1 }])
 			const token = makeTokenStub([tokenA])
-			const noteSvc = makeNoteStub({ [tokenA.contract]: [note()] })
-			let releaseTimestamp!: () => void
-			noteSvc.getBlockTimestamp.mockImplementation(
-				() =>
-					new Promise<number>((resolve) => {
-						releaseTimestamp = () => resolve(1_234)
-					}),
-			)
+			const noteSvc = makeNoteStub({ [tokenA.contract]: [note()] }, { 100: 1_234 })
 			const { service } = await bootService({ network, token, note: noteSvc })
+			const trustRead = holdCall(internals(service).repo, "getTrust", 1, "after")
 			trust.set(trustKey("p1", "n1", tokenA.contract), {
 				profileId: "p1",
 				networkId: "n1",
@@ -1022,8 +1009,8 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 			const added = vi.fn()
 			service.onIncomingTransferAdded.add(added)
 
-			const scanP = scan(service) // parks at blockTimestampFor, serviceLock held
-			await vi.advanceTimersByTimeAsync(0)
+			const scanP = scan(service)
+			await untilReached(trustRead.held)
 			// The deletion queues BEHIND the parked CS (its epoch bump is inside
 			// the same lock) — nothing has been wiped or written yet.
 			token.onTokenDeleted.invoke({ ...tokenA, profileId: "p1" })
@@ -1035,7 +1022,7 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 			await vi.advanceTimersByTimeAsync(5 * 60_000 + 1)
 
 			// The revoked CS resumes — its post-park re-check must stand down.
-			releaseTimestamp()
+			trustRead.release()
 			await scanP
 			await vi.advanceTimersByTimeAsync(0)
 
@@ -1049,24 +1036,18 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 
 	test("a handoff mid-park cannot resurrect an existing record via the timestamp backfill", async () => {
 		// Same watchdog-handoff composition as the new-record pin, driven down
-		// the EXISTING-record branch: the CS parks on the backfill's
-		// blockTimestamp await; the queued deletion wipes the record; the
-		// revoked CS's backfill upsert must stand down (its re-check), never
-		// re-add the wiped record.
+		// the EXISTING-record branch: the CS parks on its record read; the
+		// queued deletion wipes the record; the revoked CS's backfill upsert
+		// must stand down (its re-check), never re-add the wiped record.
 		vi.useFakeTimers()
 		try {
 			const network = makeNetworkStub([{ id: "n1", chainId: 1 }])
 			const token = makeTokenStub([tokenA])
 			const n = note()
-			const noteSvc = makeNoteStub({ [tokenA.contract]: [n] })
-			let releaseTimestamp!: () => void
-			noteSvc.getBlockTimestamp.mockImplementation(
-				() =>
-					new Promise<number>((resolve) => {
-						releaseTimestamp = () => resolve(1_234)
-					}),
-			)
+			const noteSvc = makeNoteStub({ [tokenA.contract]: [n] }, { 100: 1_234 })
 			const { service } = await bootService({ network, token, note: noteSvc })
+			// The first record read is the one before the lock.
+			const recordRead = holdCall(internals(service).repo, "getRecord", 2, "after")
 			// Existing record for the SAME nullifier, timestamp missing → the
 			// scan takes the backfill branch and parks.
 			seedNote({
@@ -1077,14 +1058,14 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 			})
 
 			const scanP = scan(service)
-			await vi.advanceTimersByTimeAsync(0)
+			await untilReached(recordRead.held)
 			token.onTokenDeleted.invoke({ ...tokenA, profileId: "p1" })
 			await vi.advanceTimersByTimeAsync(0)
 
 			await vi.advanceTimersByTimeAsync(5 * 60_000 + 1) // handoff → wipe
 			expect(records.size).toBe(0)
 
-			releaseTimestamp()
+			recordRead.release()
 			await scanP
 			await vi.advanceTimersByTimeAsync(0)
 
@@ -5831,8 +5812,11 @@ function collaboratorTarget(f: ReceiptFixture, owner: keyof ReceiptFixture | "re
 	return f[owner] as unknown as CollaboratorMap
 }
 
-/** Logs every receipt collaborator call and emit; the first `hold` call parks after it returns. */
+/** Logs every receipt collaborator call and emit; the `hold` call parks after it returns. `hold` is
+ *  a label, or `label#n` for its n-th call. */
 function instrumentReceipt(f: ReceiptFixture, hold?: string) {
+	const [holdLabel, holdNth = "1"] = (hold ?? "").split("#")
+	const calls = new Map<string, number>()
 	const log: string[] = []
 	let release!: () => void
 	const gate = new Promise<void>((resolve) => {
@@ -5845,8 +5829,10 @@ function instrumentReceipt(f: ReceiptFixture, hold?: string) {
 		target[method] = async (...args: unknown[]) => {
 			if (label === "visibility" && args[0] !== "incomingTransfersVisible") return real(...args)
 			log.push(label)
+			calls.set(label, (calls.get(label) ?? 0) + 1)
+			const nth = calls.get(label)
 			const out = await real(...args)
-			if (label === hold && !parked.reached) {
+			if (label === holdLabel && nth === Number(holdNth) && !parked.reached) {
 				parked.reached = true
 				await gate
 			}
@@ -5961,14 +5947,26 @@ function receiptFlags(log: string[], recordId: string, fixture: string): string 
 
 /** Both arms' locked head: one order, pinned for both by the matrices below. */
 const RECEIPT_HEAD = ["tokens", "getRecord", "outgoing", "inflight"]
+/** A new note's block time is read before the lock, behind the head's own local reads. */
+const NOTE_TIME_READ = ["getRecord", "outgoing", "inflight", "timestamp"]
 const NOTE_PROMOTION = ["getTrust", "setTrust", "trustRead", "trustChanged", "visibility", "pending"]
-const NOTE_UNKNOWN = ["notes", ...RECEIPT_HEAD, ...NOTE_PROMOTION, "timestamp", "setOutbox", "upsert"]
-const NOTE_TRUSTED = ["notes", ...RECEIPT_HEAD, "getTrust", "timestamp", "setOutbox", "upsert", "visibility", "added"]
-/** `log` with `marker` after the first `label` and everything past `stop` dropped. */
-const bumpedAfter = (log: string[], label: string, stop = log[log.length - 1], marker = "BUMP") => {
-	const end = log.indexOf(stop) + 1
-	const cut = log.slice(0, end)
-	const at = cut.indexOf(label) + 1
+const NOTE_UNKNOWN = ["notes", ...NOTE_TIME_READ, ...RECEIPT_HEAD, ...NOTE_PROMOTION, "setOutbox", "upsert"]
+const NOTE_TRUSTED = ["notes", ...NOTE_TIME_READ, ...RECEIPT_HEAD, "getTrust", "setOutbox", "upsert", "visibility", "added"]
+/** Index of `label` in `log`, or of its n-th occurrence for `label#n`. */
+const nthIndex = (log: string[], label: string) => {
+	const [name, nth = "1"] = label.split("#")
+	let seen = 0
+	return log.findIndex((entry) => entry === name && ++seen === Number(nth))
+}
+/** `log` with `marker` after `label` and everything past `stop` dropped; both take `label#n`. */
+const bumpedAfter = (
+	log: string[],
+	label: string,
+	stop = `${log[log.length - 1]}#${log.filter((e) => e === log[log.length - 1]).length}`,
+	marker = "BUMP",
+) => {
+	const cut = log.slice(0, nthIndex(log, stop) + 1)
+	const at = nthIndex(cut, label) + 1
 	return [...cut.slice(0, at), marker, ...cut.slice(at)]
 }
 /** `log` cut after `label`, where the watchdog handed the lock over. */
@@ -5979,15 +5977,15 @@ describe("IncomingTransferService — note receipt epoch re-check matrix", () =>
 		["control, unknown trust", "unknown", "none", NOTE_UNKNOWN, "111110"],
 		["N0 stale entry: nothing inside the section runs", "unknown", "notes", ["notes", "BUMP"], "000000"],
 		["N1 token read", "unknown", "tokens", bumpedAfter(NOTE_UNKNOWN, "tokens", "tokens"), "000000"],
-		["N2 record read", "unknown", "getRecord", bumpedAfter(NOTE_UNKNOWN, "getRecord", "getRecord"), "000000"],
+		["N2 record read", "unknown", "getRecord#2", bumpedAfter(NOTE_UNKNOWN, "getRecord#2", "getRecord#2"), "000000"],
 		[
 			"N3 outgoing read (miss): the journal is still read, then the note stands down",
 			"unknown",
-			"outgoing",
-			bumpedAfter(NOTE_UNKNOWN, "outgoing", "inflight"),
+			"outgoing#2",
+			bumpedAfter(NOTE_UNKNOWN, "outgoing#2", "inflight#2"),
 			"000000",
 		],
-		["N4 in-flight read", "unknown", "inflight", bumpedAfter(NOTE_UNKNOWN, "inflight", "inflight"), "000000"],
+		["N4 in-flight read", "unknown", "inflight#2", bumpedAfter(NOTE_UNKNOWN, "inflight#2", "inflight#2"), "000000"],
 		["N5 trust read", "unknown", "getTrust", bumpedAfter(NOTE_UNKNOWN, "getTrust", "getTrust"), "000000"],
 		[
 			"N6 bare bump after the trust write: the prompt still emits",
@@ -6004,11 +6002,11 @@ describe("IncomingTransferService — note receipt epoch re-check matrix", () =>
 			"111000",
 		],
 		[
-			"N8 timestamp read: the record stands down",
+			"N8 timestamp read, before the lock: nothing inside the section runs",
 			"unknown",
 			"timestamp",
 			bumpedAfter(NOTE_UNKNOWN, "timestamp", "timestamp"),
-			"111000",
+			"000000",
 		],
 		["N9 outbox write: the record stands down", "unknown", "setOutbox", bumpedAfter(NOTE_UNKNOWN, "setOutbox", "setOutbox"), "111100"],
 		["N10 record write", "unknown", "upsert", bumpedAfter(NOTE_UNKNOWN, "upsert"), "111110"],
@@ -6020,15 +6018,21 @@ describe("IncomingTransferService — note receipt epoch re-check matrix", () =>
 			"control, existing record without a timestamp",
 			"existing",
 			"none",
-			["notes", "tokens", "getRecord", "timestamp", "upsert"],
+			["notes", "getRecord", "timestamp", "tokens", "getRecord", "upsert"],
 			"000010",
 		],
-		["N2 record read, existing: the backfill stands down", "existing", "getRecord", ["notes", "tokens", "getRecord", "BUMP"], "000000"],
 		[
-			"N4b backfill timestamp read: the backfill stands down",
+			"N2 record read, existing: the backfill stands down",
+			"existing",
+			"getRecord#2",
+			["notes", "getRecord", "timestamp", "tokens", "getRecord", "BUMP"],
+			"000000",
+		],
+		[
+			"N4b backfill timestamp read, before the lock: nothing inside the section runs",
 			"existing",
 			"timestamp",
-			["notes", "tokens", "getRecord", "timestamp", "BUMP"],
+			["notes", "getRecord", "timestamp", "BUMP"],
 			"000000",
 		],
 	])("%s", async (_name, fixture, hold, expectedLog, expectedFlags) => {
@@ -6054,10 +6058,10 @@ describe("IncomingTransferService — note receipt epoch re-check matrix", () =>
 			"110000",
 		],
 		[
-			"N8h handoff in the timestamp read: no outbox row and no record",
+			"N8h a watchdog interval in the timestamp read hands nothing over: the lock is not held there",
 			"timestamp",
-			handedOffAfter(NOTE_UNKNOWN, "timestamp"),
-			"111000",
+			bumpedAfter(NOTE_UNKNOWN, "timestamp", undefined, "HANDOFF"),
+			"111110",
 		],
 	])("%s", async (_name, hold, expectedLog, expectedFlags) => {
 		const f = await bootNoteReceipt("unknown")
@@ -6067,19 +6071,76 @@ describe("IncomingTransferService — note receipt epoch re-check matrix", () =>
 		expect(receiptFlags(inst.log, NOTE_ID, "unknown")).toBe(expectedFlags)
 	})
 
-	test("an own outgoing hash: the record is read first and the journal is never read", async () => {
+	test("an own outgoing hash: the record is read first, the journal and the block time never", async () => {
 		const f = await bootNoteReceipt("outgoing-hit")
 		const inst = instrumentReceipt(f)
 		await scan(f.service)
-		expect(inst.log).toEqual(["notes", "tokens", "getRecord", "outgoing"])
+		expect(inst.log).toEqual(["notes", "getRecord", "outgoing", "tokens", "getRecord", "outgoing"])
 	})
 
-	test("an already-recorded note costs the token read and the record read only", async () => {
+	test("an already-recorded note costs a record read before the lock, then the token and record reads", async () => {
 		const f = await bootNoteReceipt("existing")
 		records.set(NOTE_ID, { ...(records.get(NOTE_ID) as IncomingNoteRecord), blockTimestamp: 1_234 })
 		const inst = instrumentReceipt(f)
 		await scan(f.service)
-		expect(inst.log).toEqual(["notes", "tokens", "getRecord"])
+		expect(inst.log).toEqual(["notes", "getRecord", "tokens", "getRecord"])
+	})
+})
+
+describe("IncomingTransferService — a note's block time is read outside the service lock", () => {
+	test("clearProfile settles while a scan's block-time read is pending; released, the read recreates nothing", async () => {
+		const f = await bootNoteReceipt("trusted")
+		const timestamp = holdCall(f.note, "getBlockTimestamp", 1, "before")
+		const receipt = scan(f.service)
+		await vi.waitFor(() => expect(timestamp.held.reached).toBe(true), { interval: 1 })
+
+		let cleared = false
+		void f.service.clearProfile("p1").then(() => {
+			cleared = true
+		})
+		await vi.waitFor(() => expect(cleared).toBe(true), { interval: 1 })
+
+		timestamp.release()
+		await receipt
+		expect(records.has(NOTE_ID)).toBe(false)
+		expect(outbox.size).toBe(0)
+	})
+
+	test("a locked commit whose own-send read disagrees with the one before the lock reads no block time", async () => {
+		const f = await bootNoteReceipt("trusted")
+		f.transaction.getTransactions
+			.mockResolvedValueOnce([{ hash: "0xtx1", account: "0xa", chainId: 1, profileId: "p1", networkId: "n1" }])
+			.mockRejectedValueOnce(new Error("transactions unavailable"))
+		await scan(f.service)
+		expect(f.note.getBlockTimestamp).not.toHaveBeenCalled()
+		expect(records.get(NOTE_ID)).toMatchObject({ blockTimestamp: undefined })
+	})
+
+	test("a new note without an amount, which the commit never records, costs no block-time read", async () => {
+		const f = await bootService({
+			network: makeNetworkStub([{ id: "n1", chainId: 1 }]),
+			token: makeTokenStub([tokenA]),
+			note: makeNoteStub({ [tokenA.contract]: [note({ content: {} })] }, { 100: 1_234 }),
+		})
+		trustedRow()
+		await scan(f.service)
+		expect(f.note.getBlockTimestamp).not.toHaveBeenCalled()
+		expect(records.size).toBe(0)
+	})
+
+	test("a failed block-time read is made once per block per scan, and again by the next scan", async () => {
+		const notes = [note(), note({ siloedNullifier: validNullifier(2), txHash: "0xtx2" })]
+		const f = await bootService({
+			network: makeNetworkStub([{ id: "n1", chainId: 1 }]),
+			token: makeTokenStub([tokenA]),
+			note: makeNoteStub({ [tokenA.contract]: notes }),
+		})
+		trustedRow()
+		await scan(f.service)
+		expect(f.note.getBlockTimestamp).toHaveBeenCalledTimes(1)
+		expect(records.size).toBe(2)
+		await scan(f.service)
+		expect(f.note.getBlockTimestamp).toHaveBeenCalledTimes(2)
 	})
 })
 
@@ -6295,14 +6356,14 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 		})
 		const earlier = seedNote({ siloedNullifier: validNullifier(1), contract: tokenA.contract, hidden: true })
 		const fresh = noteRecordId("p1", "n1", validNullifier(2))
-		const timestamp = holdCall(f.note, "getBlockTimestamp", 1, "after")
+		const trustRead = holdCall(internals(f.service).repo, "getTrust", 1, "after")
 		vi.useFakeTimers()
 		try {
 			const displaced = scan(f.service)
-			await untilReached(timestamp.held)
+			await untilReached(trustRead.held)
 			await vi.advanceTimersByTimeAsync(WATCHDOG_MS)
 			expect(await f.service.setTrustAllow("p1", "n1", tokenA.contract)).toBe(true)
-			timestamp.release()
+			trustRead.release()
 			await vi.advanceTimersByTimeAsync(0)
 			await displaced
 		} finally {
@@ -6413,18 +6474,17 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 		expect(records.get(NOTE_ID)?.hidden).toBe(false)
 	})
 
-	test("a displaced deleter that finishes during a receipt's reads still makes it stand down", async () => {
+	test("a receipt section entered beside a displaced deleter reads nothing, and its row stays gone", async () => {
 		const f = await bootNoteReceipt("existing")
-		const timestamp = holdCall(f.note, "getBlockTimestamp", 1, "after")
 		vi.useFakeTimers()
 		try {
 			const deleter = await displacedDeleter(f, (records.get(NOTE_ID) as IncomingNoteRecord).txHash)
+			const inst = instrumentReceipt(f)
 			const receipt = scan(f.service)
 			await vi.advanceTimersByTimeAsync(0)
-			await deleter.finish()
-			timestamp.release()
-			await vi.advanceTimersByTimeAsync(0)
 			await receipt
+			expect(inst.log).toEqual(["notes", "getRecord", "timestamp"])
+			await deleter.finish()
 		} finally {
 			vi.useRealTimers()
 		}
@@ -7230,7 +7290,8 @@ describe("IncomingTransferService — note rows reconciled against the PXE", () 
 		test.each(decisions)("%s, across a watchdog handoff during its row re-read", async (_name, arrange) => {
 			const f = await bootReconcile()
 			const { id, before } = await arrange(f)
-			const reads = f.pxe.active.length
+			// Each active note's record is read twice, before its lock and inside it.
+			const reads = 2 * f.pxe.active.length
 			const reread = holdCall((f.service as unknown as { repo: object }).repo, "getRecord", reads + 1, "after")
 			vi.useFakeTimers()
 			try {
