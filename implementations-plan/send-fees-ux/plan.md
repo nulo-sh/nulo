@@ -69,7 +69,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
    - `tests/e2e/fixtures/send-burst.ts` (`readEstimateState`, `expectEstimateQueued`: enabled exactly while a cap shows or the payer is Nulo's sponsor) and the spec header of `same-token-concurrent-sends`. One held-send scenario there submits the sponsored send while held and checks its row stays queued until release. Wall-clock before and after.
    - UI impact: OA-3, quoted. Gate: `F`, then `NULO_E2E_PROVERLESS=1` and `same-token-concurrent-sends` once.
 7. **#504 B, on OA-2 B or C.** Change: `FeeSettingsCard.vue`, `FeeMethodSelector.vue` and tests. Pending with no preview shows the skeleton. Control: a hold shows "Select method", never an endless skeleton. UI impact: OA-2 B. Gate: `F`.
-8. **Full gate.**
+8. ✓ **Full gate.**
    - `bun run test:all`, `bun run test:ci-gating`, and `bun run check:plans` after staging.
    - Smoke on Chrome and on Firefox (`NULO_E2E_BROWSER=firefox`): `cd apps/extension && bun run test:e2e -- tests/e2e/<f>.test.ts --retry=0` for `send-fee-privacy`, `send-keyboard`, `send-outcome-rows` and `settings-crud`.
    - Network once on Chrome: `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<f>.test.ts --retry=0` (`agent.sh` hands its arguments to vitest), for `fee-methods`, and `same-token-concurrent-sends` with `NULO_E2E_PROVERLESS=1` (its file requires it, `scripts/e2e/proverless-guard.sh`).

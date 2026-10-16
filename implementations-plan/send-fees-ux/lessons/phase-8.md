@@ -8,3 +8,10 @@
 ## Review round 2 (2026-10-15)
 
 - Codex resume (session `01a141e3`): **approve**. The fixture fix holds (field-valid `OTHER`/`FRESH`, the rename control's rows share `OTHER` through `getFpc` and `getFpcs`); no new material finding, no regression. The loop converged at round 2.
+
+## Full gate (2026-10-15/16)
+
+- `test:all`: first run red on `src/utils/zod-jitless.test.ts` (a 5 s cold-import timeout under host load, the known flake #500; the file alone passes in 0.7 s); rerun green. `test:ci-gating` green; `check:plans` 0 findings; final `lint` and `typecheck:all` 0.
+- Smoke, retry 0, load-gated (load1 < 150): Chrome and Firefox, `send-fee-privacy` 1, `send-keyboard` 5, `send-outcome-rows` 2, `settings-crud` 9, all green.
+- Network, retry 0, through `agent.sh`: `fee-methods` 8/8 (381 s), `NULO_E2E_PROVERLESS=1` `same-token-concurrent-sends` 16/16 (691 s).
+- Screenshots: a throwaway smoke spec outside the repo on the armed Chrome build, both themes; the Send page with no token shows no `send-from-type`, so the fee-field shot waits on `send-fee-method-trigger` instead of `openSend`.
