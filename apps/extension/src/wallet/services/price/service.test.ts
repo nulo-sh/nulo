@@ -29,7 +29,9 @@ import {
 	type PriceState,
 } from "./service"
 
-type FetchResponse = { ok: boolean; status: number; json(): Promise<unknown> }
+type FetchResponse = Response
+
+const reply = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status })
 
 const PROFILE: ProfileInfo = { id: "p1", name: "Test" } as ProfileInfo
 
@@ -78,7 +80,7 @@ async function harness(opts?: { enabled?: boolean; profile?: ProfileInfo | undef
 	const fetchFn = vi.fn(async (url: string): Promise<FetchResponse> => {
 		state.fetchCalls.push(url)
 		if (state.fetchImpl) return state.fetchImpl()
-		return { ok: true, status: 200, json: async () => state.body }
+		return reply(state.body)
 	})
 
 	const service = new PriceService(logger, browserApi, { fetchFn, now: () => state.nowMs })
@@ -203,9 +205,29 @@ describe("PriceService — refresh pipeline", () => {
 		expect(quotes["usd-coin"]).toBeUndefined()
 	})
 
+	test("a reply over the byte budget merges nothing and keeps the stored prices; the same quotes in a normal reply merge", async () => {
+		const { service, state } = await harness()
+		expect((await service.refreshIfStale()).quotes.aztec?.usd).toBe(0.0147)
+		const newer = { aztec: { usd: 0.02, last_updated_at: 1_000_100 } }
+
+		state.nowMs += PRICE_REFRESH_PERIOD_MINUTES * 60_000
+		state.fetchImpl = async () => reply({ ...newer, padding: "x".repeat(16 * 1024) })
+		const refused = await service.refreshIfStale()
+		expect(state.fetchCalls).toHaveLength(2)
+		expect(refused.lastRefreshFailed).toBe(true)
+		expect(refused.quotes.aztec?.usd).toBe(0.0147)
+
+		state.nowMs += 60_000
+		state.fetchImpl = async () => reply(newer)
+		const merged = await service.refreshIfStale()
+		expect(state.fetchCalls).toHaveLength(3)
+		expect(merged.lastRefreshFailed).toBe(false)
+		expect(merged.quotes.aztec?.usd).toBe(0.02)
+	})
+
 	test("HTTP failure backs off, then retries after the window", async () => {
 		const { service, state } = await harness()
-		state.fetchImpl = async () => ({ ok: false, status: 429, json: async () => ({}) })
+		state.fetchImpl = async () => reply({}, 429)
 		expect((await service.refreshIfStale()).quotes).toEqual({})
 		expect(state.fetchCalls).toHaveLength(1)
 
@@ -223,7 +245,7 @@ describe("PriceService — refresh pipeline", () => {
 
 	test("lastRefreshFailed reports this worker's latest fetch, whatever the cache still holds", async () => {
 		const { service, state } = await harness()
-		const failing = async () => ({ ok: false, status: 503, json: async () => ({}) })
+		const failing = async () => reply({}, 503)
 		state.fetchImpl = failing
 		expect(await service.refreshIfStale()).toMatchObject({ quotes: {}, lastRefreshFailed: true })
 		// Suppressed by the backoff: no new attempt, so the last one still stands.
@@ -327,7 +349,7 @@ describe("PriceService — kill switch (showFiatValues)", () => {
 		let release: (() => void) | undefined
 		state.fetchImpl = () =>
 			new Promise((resolve) => {
-				release = () => resolve({ ok: true, status: 200, json: async () => goodBody(1_000_000) })
+				release = () => resolve(reply(goodBody(1_000_000)))
 			})
 
 		const pending = service.refreshIfStale()
@@ -400,7 +422,7 @@ describe("PriceService — unlock-gated alarm lifecycle", () => {
 			onActiveProfileChanged: new EventHandler<ProfileInfo | undefined>(),
 			getActiveProfile: async () => undefined,
 		}
-		const service = new PriceService(logger, browserApi, { fetchFn: async () => ({ ok: true, status: 200, json: async () => ({}) }) })
+		const service = new PriceService(logger, browserApi, { fetchFn: async () => reply({}) })
 		const services = new ServiceCollection()
 		// biome-ignore lint/suspicious/noExplicitAny: minimal IService fakes at the collection seam
 		services.add(fakeConfig as any)
@@ -507,7 +529,7 @@ describe("PriceService — race pins", () => {
 		// Resolve A's now-stale fetch; A bails on the generation check and runs its
 		// finally. It must NOT clear B's inflight/controller (a shared, unconditional
 		// clear would strand B and let a third caller start a duplicate fetch).
-		gates[0]?.({ ok: true, status: 200, json: async () => state.body })
+		gates[0]?.(reply(state.body))
 		await aPromise
 		await flush()
 
