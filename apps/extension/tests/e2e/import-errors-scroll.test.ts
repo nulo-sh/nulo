@@ -167,15 +167,14 @@ async function expectViewerUsable(page: Page): Promise<void> {
 	await page.mouse.down()
 	await page.mouse.move(token.to, token.y, { steps: 5 })
 	await page.mouse.up()
+	// A dispatched copy needs no user activation or clipboard permission; CodeMirror fills its data
+	// from the selection it read, as on a real copy.
 	const copied = await page.evaluate(() => {
-		let text: string | null = null
-		const record = (e: ClipboardEvent) => {
-			text = e.clipboardData?.getData("text/plain") ?? null
-		}
-		document.addEventListener("copy", record)
-		document.execCommand("copy")
-		document.removeEventListener("copy", record)
-		return text
+		const content = document.querySelector('[data-testid="json-editor"]')?.shadowRoot?.querySelector(".cm-content")
+		if (!content) return null
+		const copy = new ClipboardEvent("copy", { clipboardData: new DataTransfer(), bubbles: true, composed: true, cancelable: true })
+		content.dispatchEvent(copy)
+		return copy.clipboardData?.getData("text/plain") ?? null
 	})
 	expect(copied).toBe(token.text)
 

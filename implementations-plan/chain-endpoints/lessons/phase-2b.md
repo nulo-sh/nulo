@@ -21,3 +21,15 @@ Codex (gpt-6.1-sol, high, read-only; session `01a14518-cfde-7880-97bf-c8a82af356
 - Codex: the drift test must pin the exact selector list, not "each carried rule exists somewhere". Accepted.
 - Opus: add the two network files that open a viewer to the gate; the `type-roles` fixture's `.cm-editor` clause is dead (its TreeWalker never enters a shadow root); the build guard D38; one comment on why the helper assigns before the editor mounts; a unit pin of the Chrome wrapper's policy. All accepted.
 - Split on testids (D35): Codex, host testids plus documented `cm-` classes as one exception; Opus, testids through `EditorView.contentAttributes` and `scrollDOM` with only the search panel excepted. Chose Codex's: one rule for the vendor boundary.
+
+## Probe, shots and computed styles (2b.1-2b.3, 2b.9; 2026-10-16)
+
+A scratch harness outside the repo ran the e2e fixtures against cached armed dists: the base (7697c376 merged) and the arc's build, Chrome and Firefox, at load1 < 150 (one Chrome base pass started at 158). Deviation: step 1's probe ran on the arc's own build rather than a separate scratch extension; it was the same change.
+- Positive control (new build, both browsers): the viewers' editors sit in shadow roots with two adopted sheets and no `<style>` in the head; the onboarding's Presto banner paints its hashed `<style>` and it applies (host `display: block`, card radius 20px), with no violation recorded. I6 holds on Firefox.
+- Negative control (both browsers): an unhashed `<style>` in the head, one in a shadow root, and a `style` attribute set by script are each refused, and the recorder lists all three (`style-src-elem` twice, `style-src-attr`).
+- Rules the editors matched in the base build: the `*` reset, `scrollbar-width`, `::-webkit-scrollbar`, JsonViewer.vue's `::selection` (loaded in every popup document, the logs window included), and with the search panel open `button` and `input`. That is `editor-shadow.css`'s list.
+- Shots: logs window, JSON window and DataViewerPopup, both themes, both browsers. Twelve pairs, zero differing pixels. The first data-viewer pair differed in 508 pixels, all in the header's account address behind the scrim (a new random profile each run); the shot is clipped to the viewer since.
+- Computed styles of every editor element (search panel open as well): identical, except the `::selection` colour Chrome reports for the two search-panel containers (`rgb(255,255,255)` after, the editor's grey before). Their own text is the spaces between controls under `user-select: none`; every label, button and input matches. Nothing paints it.
+- Tab order in DataViewerPopup, base: editor ↔ Close. The arc's build matches with the trap fix (D37).
+- `innerText` of the `data-viewer` testid no longer includes the editor's text (Chrome returned only "CLOSE"), so both specs that read it now read the editor's content inside its shadow root.
+- The JSON window's payload was answered by a page-level fake of the background port in the harness only; Firefox ignored a preload script there, so the harness patches both `chrome.runtime` and `browser.runtime` after load and routes by hash.
