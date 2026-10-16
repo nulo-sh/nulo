@@ -1110,6 +1110,20 @@ describe("token-list publish", () => {
 		expect(wf.jobs.prepare.outputs.tokens_sha256).toBe("${{ steps.summary.outputs.tokens_sha256 }}")
 	})
 
+	// The node URL is part of the pinned line: a keyed endpoint would leak at commit, before any run.
+	test("prepare's live check runs after the summary, advisory and bounded, against the keyless public node", () => {
+		const steps = wf.jobs.prepare.steps
+		const at = steps.findIndex((step: { id?: string }) => step.id === "summary")
+		expect(steps.slice(at + 1)).toEqual([
+			{
+				name: "Live check (advisory)",
+				"continue-on-error": true,
+				"timeout-minutes": 5,
+				run: 'bun infra/token-list/scripts/live-check.ts https://aztec-testnet.drpc.org >> "$GITHUB_STEP_SUMMARY"',
+			},
+		])
+	})
+
 	test("the publish PR is opened from the signed commit, by the script, with the App token in that step only", () => {
 		const steps = wf.jobs["publish-pr"].steps
 		const open = steps.at(-1)

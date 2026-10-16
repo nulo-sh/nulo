@@ -65,7 +65,7 @@ export function publishedList(envelopeText: string | undefined): { tokens: Token
 
 // Backslash-escaping every ASCII punctuation mark shows the signed text verbatim: no `<!-- -->` hides
 // part of it, and no `|` or backtick reshapes the table.
-const cell = (text: string) => text.replace(/[!-/:-@[-`{-~]/g, "\\$&")
+export const cell = (text: string) => text.replace(/[!-/:-@[-`{-~]/g, "\\$&")
 const row = (sign: string, t: TokenListEntry) =>
 	`| ${sign} | ${t.chainId} | \`${t.address}\` | ${cell(t.symbol)} | ${cell(t.name)} | ${t.decimals} | ${t.priceId ?? "unpriced"} | \`${t.classId.slice(0, 10)}…\` |`
 

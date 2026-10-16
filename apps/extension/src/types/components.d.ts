@@ -73,6 +73,7 @@ declare module 'vue' {
     Popup: typeof import('./../components/Popup/Popup.vue')['default']
     PopupCard: typeof import('./../components/Popup/PopupCard.vue')['default']
     PopupHeader: typeof import('./../components/ui/Popup/PopupHeader.vue')['default']
+    PrestoPermissionRow: typeof import('./../components/PrestoPermissionRow.vue')['default']
     PrestoStatusCard: typeof import('./../components/PrestoStatusCard.vue')['default']
     ProcessingErrorNote: typeof import('./../components/composite/ProcessingErrorNote.vue')['default']
     ProfileNameField: typeof import('./../components/composite/ProfileNameField.vue')['default']
