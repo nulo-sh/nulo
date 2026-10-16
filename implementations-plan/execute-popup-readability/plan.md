@@ -73,7 +73,7 @@ R1's answer (#508 `## Decision`, decision page 20, 2026-10-16): **A**, part 2 **
 - Add `OperationCard.facts.test.ts`: mount the card, press only `button[aria-expanded="false"]` breadth first, record each fact's depth within its own row (text or `title` attribute), and assert depth ≤ 2. Control: a stub card that drops one row's field fails the same check while the manifest stays fixed. A second fixture variant leaves auth 2 undecoded, so its raw values are counted too.
 - **Gate:** `cd apps/extension && bun --bun vitest run src/popup/windows/execute` green; `bun run lint`; `bun run typecheck:all`. Pass: exit 0; the facts test green against today's card, its control red.
 
-### Phase 2: the signed answer (A, part 2 Yes)
+### Phase 2: the signed answer (A, part 2 Yes) ✓
 
 - Assumes: R1 signed (A); Facts 2, 3, 5 and 6.
 - Build the map above. The existing `OperationCard.*.test.ts` files read today's body, so each mount helper that reads a `aztec_sendTx` body presses `execute-op-details-toggle` first; no assertion is loosened.

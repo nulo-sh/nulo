@@ -67,6 +67,7 @@ const mountCard = async (op: unknown, props: Record<string, unknown> = {}) => {
 		props: { op: op as never, index: 0, tokens: [USDC], ...props },
 		global: { stubs, components: { AddressDisplay } },
 	})
+	await w.get('[data-testid="execute-op-details-toggle"]').trigger("click")
 	await flushPromises()
 	return w
 }

@@ -11,7 +11,7 @@ import type { TokenInfo } from "@/wallet/services/token/client"
 import { formatBaseUnits } from "@/utils/amount"
 import { trimAddress } from "@/utils/string"
 import { abiNameFitsRole, findMintSignature, findTransferSignature, vocabularySelector } from "@/utils/token-transfer-vocabulary"
-import { humanizeMethodName } from "@/utils/tx-enrichment"
+import { humanizeMethodName, plainMethodName, tokenMovementLabel } from "@/utils/tx-enrichment"
 import { parseTransferIntent, projectArgument, smallFieldDecimal } from "@/utils/transfer-intent"
 import { safeWire } from "./humanize"
 
@@ -133,6 +133,27 @@ export const callName = (call: WireCall, surface: CallSurface): string => {
 	const name = "fn" in surface ? safeWire(surface.fn, 64) : wire(call.name ?? call.selector, 64)
 	return humanizeMethodName(name, wire(call.to, 80))
 }
+
+/** A transaction body's title for one call: a transfer or mint label only on a call the wallet read
+ *  as that transfer or mint, any other name that claims one as its contract spells it. */
+export const rowTitle = (call: WireCall, surface: CallSurface): string => {
+	if (surface.kind === "transfer" || surface.kind === "mint") return callName(call, surface)
+	const name = "fn" in surface ? safeWire(surface.fn, 64) : wire(call.name ?? call.selector, 64)
+	return tokenMovementLabel(name) ? plainMethodName(name) : callName(call, surface)
+}
+
+/** A discovered authorization's function: its decoded name under the body's title rule, or the
+ *  selector it carries until the decode lands. */
+export const authwitTitle = (selector: unknown, consumer: unknown, surface: CallSurface): string =>
+	"fn" in surface ? rowTitle({ to: consumer }, surface) : wire(selector, 64)
+
+/** What the summary says an authorization lets its caller do: move tokens only when the wallet read
+ *  the call as a transfer from a named sender; any other call by its title alone. */
+export type AuthwitLine = { kind: "move"; amount: string; from: string; to: string } | { kind: "call"; fn: string }
+export const authwitLine = (surface: CallSurface, fn: string): AuthwitLine =>
+	surface.kind === "transfer" && surface.sender.kind === "explicit"
+		? { kind: "move", amount: surface.amount, from: surface.sender.address, to: surface.to }
+		: { kind: "call", fn }
 
 export type AmountLabel = { text: string; symbol?: string }
 
