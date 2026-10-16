@@ -20,7 +20,9 @@ import { BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useConfigRead } from "@/composables/useConfigRead"
+import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
 const { openToast } = useToast()
+const { vSettingsRow } = useSettingsRowHighlight()
 
 const configService = new ConfigServiceClient()
 configService.onUpdate.add(onSettingUpdate)
@@ -102,7 +104,7 @@ onBeforeUnmount(() => {
 		<LoadingState v-if="isLoading" label="FETCHING SETTINGS" />
 
 		<template v-if="!isLoading">
-			<Flex justify="between" align="center" :data-testid="settings.showFiatValues.testid">
+			<Flex justify="between" align="center" :data-testid="settings.showFiatValues.testid" v-settings-row="settings.showFiatValues.id">
 				<Flex direction="column" gap="6">
 					<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings.showFiatValues.title }}</Text>
 					<Text variant="caption" color="tertiary">{{ settings.showFiatValues.description }}</Text>
@@ -115,7 +117,7 @@ onBeforeUnmount(() => {
 				/>
 			</Flex>
 
-			<Flex justify="between" align="center" :data-testid="settings.defaultExplorer.testid">
+			<Flex justify="between" align="center" :data-testid="settings.defaultExplorer.testid" v-settings-row="settings.defaultExplorer.id">
 				<Flex direction="column" gap="6">
 					<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings.defaultExplorer.title }}</Text>
 					<Text variant="caption" color="tertiary">{{ settings.defaultExplorer.description }}</Text>
@@ -157,7 +159,7 @@ onBeforeUnmount(() => {
 				</Dropdown>
 			</Flex>
 
-			<Flex justify="between" align="center" :data-testid="settings.privacyMode.testid">
+			<Flex justify="between" align="center" :data-testid="settings.privacyMode.testid" v-settings-row="settings.privacyMode.id">
 				<Flex direction="column" gap="6">
 					<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings.privacyMode.title }}</Text>
 					<Text variant="caption" color="tertiary">{{ settings.privacyMode.description }}</Text>

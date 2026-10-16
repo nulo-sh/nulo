@@ -3,7 +3,7 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, expect, test, vi } from "vitest"
 import type { ConfigProp } from "@/wallet/config"
-import { expectOwnedRows, settingsContext } from "../../../../../tests/helpers/settings-rows"
+import { expectOwnedRows, settingsContext, settingsRouter } from "../../../../../tests/helpers/settings-rows"
 import AdvancedSettings from "./index.vue"
 
 const fakes = vi.hoisted(() => ({ config: undefined as unknown }))
@@ -64,7 +64,7 @@ afterEach(() => vi.unstubAllGlobals())
 async function mountAdvanced() {
 	const wrapper = mount(AdvancedSettings, {
 		global: {
-			plugins: [createTestingPinia({ createSpy: vi.fn })],
+			plugins: [settingsRouter(), createTestingPinia({ createSpy: vi.fn })],
 			stubs: {
 				SettingsPageShell: { template: "<div><slot /></div>" },
 				Flex: { template: "<div><slot /></div>" },

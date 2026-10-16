@@ -1,11 +1,10 @@
 import { createTestingPinia } from "@pinia/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { Flex, Icon, MaterialIcon, Spinner, Text } from "@nulo/design"
-import { flushPromises, mount } from "@vue/test-utils"
+import { Flex, Icon, Input, MaterialIcon, Spinner, Text } from "@nulo/design"
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { createMemoryHistory, createRouter } from "vue-router"
 import type { ConfigProp } from "@/wallet/config"
-import { expectOwnedRows, settingsContext } from "../../../../tests/helpers/settings-rows"
+import { expectOwnedRows, settingsContext, settingsRouter } from "../../../../tests/helpers/settings-rows"
 
 const clients = vi.hoisted(() => ({ config: undefined as unknown, execution: undefined as unknown }))
 vi.mock("@/wallet/services/config/client", () => ({
@@ -107,16 +106,18 @@ beforeEach(() => {
 	)
 })
 afterEach(() => vi.unstubAllGlobals())
+enableAutoUnmount(afterEach)
 
 const PASSWORD = { id: "p1", name: "Primary", type: "password" }
 const PASSKEY = { id: "p2", name: "Travel key", type: "passkey" }
 
 async function mountHub(profile = PASSWORD) {
-	const router = createRouter({ history: createMemoryHistory(), routes: [{ path: "/:path(.*)*", component: { render: () => null } }] })
+	const router = settingsRouter()
 	const wrapper = mount(SettingsHub, {
+		attachTo: document.body,
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn, initialState: { app: { isLogined: true, profile } } }), router],
-			components: { AccountAvatar, Flex, Icon, ItemsContainer, MaterialIcon, SettingItem, Spinner, Text },
+			components: { AccountAvatar, Flex, Icon, Input, ItemsContainer, MaterialIcon, SettingItem, Spinner, Text },
 		},
 	})
 	await flushPromises()
@@ -217,6 +218,40 @@ describe("settings hub — rows", () => {
 		const avatar = (await mountHub()).get('[data-testid="profile-card-avatar"]')
 		expect(avatar.attributes("data-initials")).toBe("PR")
 		expect(avatar.text()).toBe("PR")
+	})
+})
+
+describe("settings hub — search", () => {
+	const FOCUSABLE = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])'
+	const search = (w: Hub) => w.get('[data-testid="settings-search-input"]')
+
+	test("the search field is the page's first Tab stop", async () => {
+		const w = await mountHub()
+		expect(w.get('[data-testid="settings-page"]').element.querySelector(FOCUSABLE)).toBe(search(w).element)
+	})
+
+	test("a word in the field replaces the whole list with its results; emptying it brings the list back", async () => {
+		const w = await mountHub()
+		await search(w).setValue("full")
+		expect(rowIds(w)).toEqual([])
+		expect(w.find('[data-testid="setting-nav-profile"]').exists()).toBe(false)
+		expect(w.findAll('[data-testid^="settings-search-result-"]')).toHaveLength(1)
+		await search(w).setValue("")
+		expect(rowIds(w)).toEqual(PASSWORD_ROWS.map(([id]) => id))
+	})
+
+	test("a result for a row of this list empties the field and outlines that row inside its box", async () => {
+		const w = await mountHub()
+		await search(w).setValue("theme")
+		await w.vm.$router.push("/popup/settings?row=hub-display")
+		await flushPromises()
+		expect((search(w).element as HTMLInputElement).value).toBe("")
+		expect(w.get('[data-testid="setting-nav-display"]').attributes()).toMatchObject({
+			"data-settings-row": "hub-display",
+			"data-highlighted": "inset",
+		})
+		expect(w.findAll("[data-highlighted]")).toHaveLength(1)
+		expect(w.vm.$router.currentRoute.value.fullPath).toBe("/popup/settings")
 	})
 })
 

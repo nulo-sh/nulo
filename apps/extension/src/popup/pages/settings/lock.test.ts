@@ -5,7 +5,7 @@ import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { nextTick } from "vue"
 import type { ConfigProp } from "@/wallet/config"
-import { expectOwnedRows, settingsContext } from "../../../../tests/helpers/settings-rows"
+import { expectOwnedRows, settingsContext, settingsRouter } from "../../../../tests/helpers/settings-rows"
 
 const fakes = vi.hoisted(() => ({
 	managerProfile: { name: "managers.profile" },
@@ -55,6 +55,7 @@ async function mountLock(type: "password" | "passkey" = "password") {
 	const wrapper = mount(LockPage, {
 		global: {
 			plugins: [
+				settingsRouter(),
 				createTestingPinia({
 					createSpy: vi.fn,
 					initialState: { app: { isLogined: true, profile: { id: "p1", name: "Primary", type } } },

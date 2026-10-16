@@ -58,7 +58,7 @@ For a person who knows a setting exists but not which page holds it. Excellent: 
 - Unit cases: folding ("THÉME" finds Theme); an inner substring; two terms across title and synonym, ranked by the weaker field; a blank query returns `null`; no match returns `[]`; "full" returns [Full-height popups, Open as Side Panel] with `sidePanel` and [Full-height popups] without; each visibility rule hides its row; ids match the pattern and, like testids, are unique; every `page` resolves to a file under `src/popup/pages`.
 - **Validation gate.** Commands: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/utils/settings-search.test.ts src/popup/pages/settings`. Pass: exit 0. Then bind one row's description into its title slot and confirm `expectOwnedRows` fails; revert. Layers: typecheck/lint, unit, component.
 
-### Phase 2: the field, the results and the highlight
+### Phase 2: the field, the results and the highlight ✓
 
 - Add `SettingsSearch.vue` and its test, `useSettingsRowHighlight.ts` with its stylesheet and test, and the index wiring. Put the directive on every registry row; `expectOwnedRows` also requires `data-settings-row` on the testid's element.
 - Extend `utils/a11y-css.test.ts`: the two `step-end` stops and `animation-fill-mode: none`.

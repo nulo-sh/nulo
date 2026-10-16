@@ -19,7 +19,9 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useConfigRead } from "@/composables/useConfigRead"
+import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
 const { openToast } = useToast()
+const { vSettingsRow } = useSettingsRowHighlight()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -146,7 +148,7 @@ onBeforeUnmount(() => {
 
 		<template v-if="!isLoading">
 			<template v-for="sk in Object.keys(settings)" :key="sk">
-				<Flex v-if="settings[sk].visible.value" align="center" justify="between" :data-testid="settings[sk].testid">
+				<Flex v-if="settings[sk].visible.value" align="center" justify="between" :data-testid="settings[sk].testid" v-settings-row="settings[sk].id">
 					<Flex direction="column" justify="center" gap="6">
 						<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings[sk].title }}</Text>
 						<Text variant="caption" color="tertiary">{{ settings[sk].description }}</Text>
@@ -161,7 +163,7 @@ onBeforeUnmount(() => {
 			</template>
 
 			<!-- Logs (developer mode only) -->
-			<div v-if="isDeveloperModeEnabled" @click="handleOpenLogs" :class="$style.logs_row" :data-testid="logsRow.testid">
+			<div v-if="isDeveloperModeEnabled" @click="handleOpenLogs" :class="$style.logs_row" :data-testid="logsRow.testid" v-settings-row="logsRow.id">
 				<RowTarget :labelledby="logsTitleId" data-testid="settings-logs-open" />
 
 				<Flex justify="between" align="center">
@@ -187,6 +189,7 @@ onBeforeUnmount(() => {
 				to="/popup/settings/developer/account-state"
 				:class="$style.state_link"
 				:data-testid="accountStateRow.testid"
+				v-settings-row="accountStateRow.id"
 			>
 				<Flex justify="between" align="center">
 					<Flex direction="column" gap="6">

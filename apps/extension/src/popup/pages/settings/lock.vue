@@ -28,7 +28,9 @@ const popupStore = usePopupStore()
 import { useToast } from "@/composables/toast"
 import { useConfigRead } from "@/composables/useConfigRead"
 import { useLockWallet } from "@/composables/useLockWallet"
+import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
 const { openToast } = useToast()
+const { vSettingsRow } = useSettingsRowHighlight()
 const { lock: lockNow, dispose: disposeLockWallet } = useLockWallet(managers.profile)
 
 const configService = new ConfigServiceClient()
@@ -179,6 +181,7 @@ onBeforeUnmount(() => {
 				:disabled="appStore.lockHeldByImport"
 				@click="lockNow"
 				v-bind="settingItemProps('lock-now')"
+				v-settings-row.inset="'lock-now'"
 			/>
 		</ItemsContainer>
 
@@ -186,7 +189,7 @@ onBeforeUnmount(() => {
 
 		<template v-if="!isLoading">
 			<!-- Strict Security Mode -->
-			<Flex v-if="!isPasskey" justify="between" align="center" :data-testid="strictRow.testid">
+			<Flex v-if="!isPasskey" justify="between" align="center" :data-testid="strictRow.testid" v-settings-row="strictRow.id">
 				<Flex direction="column" gap="6">
 					<Text variant="row-title" :class="$style.title_size" color="primary">{{ strictRow.title }}</Text>
 					<Text variant="caption" color="tertiary">{{ strictRow.description }}</Text>
@@ -200,7 +203,7 @@ onBeforeUnmount(() => {
 			</Flex>
 
 			<!-- Auto-lock Timeout -->
-			<Flex justify="between" align="center" :data-testid="autoLockRow.testid">
+			<Flex justify="between" align="center" :data-testid="autoLockRow.testid" v-settings-row="autoLockRow.id">
 				<Flex direction="column" gap="6">
 					<Flex align="end" gap="6">
 						<Text variant="row-title" :class="$style.title_size" color="primary">{{ autoLockRow.title }}</Text>

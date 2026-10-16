@@ -6,3 +6,4 @@
 - 2026-10-16: round 2: Codex conditional approve (2 local fixes, accepted): rendered-text checks kept; e2e animation captured by an observer armed before the click.
 - 2026-10-16: round 3: Codex approve. Plan committed for the orchestrator's approval; OA-1 to OA-5 open, each with a what-ships-now default.
 - 2026-10-16: phase 1 gate pass: `bun run lint` 0, `bun run typecheck:all` 0, `bun --bun vitest run src/utils/settings-search.test.ts src/popup/pages/settings` 0 (178 tests); a description bound into Display's title slot failed `expectOwnedRows` as required, reverted.
+- 2026-10-16: phase 2 gate pass: `bun run lint` 0, `bun run typecheck:all` 0 (after a test typed `props()` as never was rewritten to read the field), `bun run test:all` 0 (extension 13096 passed); a mutation that dropped the composing, repeat-Escape and repeat-Enter guards failed 3 `SettingsSearch` cases.

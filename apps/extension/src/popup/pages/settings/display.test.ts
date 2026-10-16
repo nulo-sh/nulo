@@ -2,7 +2,7 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { ConfigProp } from "@/wallet/config"
-import { expectOwnedRows, settingsContext } from "../../../../tests/helpers/settings-rows"
+import { expectOwnedRows, settingsContext, settingsRouter } from "../../../../tests/helpers/settings-rows"
 
 const fakes = vi.hoisted(() => ({ config: undefined as unknown }))
 vi.mock("@/wallet/services/config/client", () => ({
@@ -40,6 +40,7 @@ afterEach(() => vi.restoreAllMocks())
 async function mountDisplay() {
 	const wrapper = mount(DisplayPage, {
 		global: {
+			plugins: [settingsRouter()],
 			stubs: {
 				SubPageHeader: true,
 				SectionLabel: true,

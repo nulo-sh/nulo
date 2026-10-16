@@ -19,7 +19,9 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useConfigRead } from "@/composables/useConfigRead"
+import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
 const { openToast } = useToast()
+const { vSettingsRow } = useSettingsRowHighlight()
 
 const configService = new ConfigServiceClient()
 configService.onUpdate.add(onSettingUpdate)
@@ -148,7 +150,7 @@ onBeforeUnmount(() => {
 		<SubPageHeader title="Display" :backTo="'/popup/settings'" />
 
 		<Flex v-if="!isLoading" direction="column" gap="24" :class="$style.content">
-			<Flex justify="between" :data-testid="settings.theme.testid">
+			<Flex justify="between" :data-testid="settings.theme.testid" v-settings-row="settings.theme.id">
 				<Flex direction="column" gap="6">
 					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ settings.theme.title }} </Text>
 					<Text variant="caption" color="tertiary"> {{ settings.theme.description }} </Text>
@@ -195,7 +197,7 @@ onBeforeUnmount(() => {
 				</Dropdown>
 			</Flex>
 
-			<Flex v-for="sk in Object.keys(settings).filter(sk => sk !== 'theme' && sk !== 'incomingTransfersVisible')" justify="between" :data-testid="settings[sk].testid">
+			<Flex v-for="sk in Object.keys(settings).filter(sk => sk !== 'theme' && sk !== 'incomingTransfersVisible')" justify="between" :data-testid="settings[sk].testid" v-settings-row="settings[sk].id">
 				<Flex direction="column" gap="6">
 					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ settings[sk].title }} </Text>
 					<Text variant="caption" color="tertiary"> {{ settings[sk].description }} </Text>
@@ -210,7 +212,7 @@ onBeforeUnmount(() => {
 
 			<SectionLabel label="Lists" />
 
-			<Flex justify="between" :data-testid="settings.incomingTransfersVisible.testid">
+			<Flex justify="between" :data-testid="settings.incomingTransfersVisible.testid" v-settings-row="settings.incomingTransfersVisible.id">
 				<Flex direction="column" gap="6">
 					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ settings.incomingTransfersVisible.title }} </Text>
 					<Text variant="caption" color="tertiary"> {{ settings.incomingTransfersVisible.description }} </Text>
@@ -223,7 +225,7 @@ onBeforeUnmount(() => {
 			</Flex>
 
 			<!-- One dust threshold for the wallet: the activity feed's receipts AND the Holdings fold. -->
-			<Flex justify="between" align="center" gap="12" :data-testid="dustRow.testid">
+			<Flex justify="between" align="center" gap="12" :data-testid="dustRow.testid" v-settings-row="dustRow.id">
 				<Flex direction="column" gap="6">
 					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ dustRow.title }} </Text>
 					<Text variant="caption" color="tertiary">{{ dustRow.description }}</Text>

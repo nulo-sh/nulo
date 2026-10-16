@@ -385,12 +385,17 @@ function matchRank(row: SettingsRow, terms: string[]): number {
 	return rank
 }
 
+/** The words a search matches, folded; none means no search, and the Settings list shows. */
+export function settingsQueryTerms(query: string): string[] {
+	return fold(query).split(/\s+/).filter(Boolean)
+}
+
 /**
  * The rows every term of `query` finds, grouped under their captions in page order; inside a group,
  * rows found by their titles come first. `null` for a blank query, `[]` when nothing matches.
  */
 export function searchSettings(rows: readonly SettingsRow[], query: string): SettingsResultGroup[] | null {
-	const terms = fold(query).split(/\s+/).filter(Boolean)
+	const terms = settingsQueryTerms(query)
 	if (!terms.length) return null
 	const groups: SettingsResultGroup[] = []
 	const ranks = new Map<SettingsRow, number>()
