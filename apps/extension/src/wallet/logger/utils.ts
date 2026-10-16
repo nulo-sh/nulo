@@ -271,11 +271,15 @@ export const trim = (value: unknown, depth: number = 0): unknown => {
 	return scrubPrimitive(value)
 }
 
-const HEX32 = /0x[0-9a-f]{64,}/gi
+/** A cut message (`projectError`) can end in the prefix of a longer run, so a run before its `…` goes too. */
+const HEX32 = /0x[0-9a-f]{64,}|0x[0-9a-f]+(?=…$)/gi
+/** A field element walked by `trim` is a bigint; one this large is a hash, key or id, not a quantity. */
+const FIELD_SIZED = 2n ** 128n
 
-/** A copy of `trim`'s output with every 32-byte hex run in its strings, keys included, replaced. */
+/** A copy of `trim`'s output with every 32-byte value in it, as hex in strings or keys or as a bigint, replaced. */
 export const scrubHex32 = (value: unknown): unknown => {
-	if (typeof value === "string") return value.replace(HEX32, "[32-byte hex]")
+	if (typeof value === "bigint") return value >= FIELD_SIZED ? "[32 bytes]" : value
+	if (typeof value === "string") return value.replace(HEX32, "[32 bytes]")
 	if (Array.isArray(value)) return value.map(scrubHex32)
 	if (value && typeof value === "object") {
 		return Object.fromEntries(Object.entries(value).map(([key, entry]) => [scrubHex32(key), scrubHex32(entry)]))

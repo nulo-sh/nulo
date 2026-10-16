@@ -310,8 +310,14 @@ describe("scrubHex32", () => {
 	test("replaces every 32-byte or longer hex run in a string, a nested value and a key, in a copy", () => {
 		const longer = `0x${"AB".repeat(32)}${"cd".repeat(32)}`
 		const value = { [HEX32]: [`id ${HEX32}, then ${longer}`] }
-		expect(scrubHex32(value)).toEqual({ "[32-byte hex]": ["id [32-byte hex], then [32-byte hex]"] })
+		expect(scrubHex32(value)).toEqual({ "[32 bytes]": ["id [32 bytes], then [32 bytes]"] })
 		expect(value).toEqual({ [HEX32]: [`id ${HEX32}, then ${longer}`] })
+	})
+
+	test("replaces a hex run cut short by a trailing ellipsis, and a field-sized bigint", () => {
+		expect(scrubHex32(`class 0x${"ab".repeat(20)}…`)).toBe("class [32 bytes]…")
+		expect(scrubHex32({ id: 2n ** 200n, amount: 10n ** 18n })).toEqual({ id: "[32 bytes]", amount: 10n ** 18n })
+		expect(scrubHex32("0x1234…abcd")).toBe("0x1234…abcd")
 	})
 
 	test("passes a shorter hex value, plain text and non-strings unchanged (control)", () => {

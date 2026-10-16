@@ -1,7 +1,7 @@
 /**
  * The `prepare` job's step summary: what the owner approves when the `sign` job asks. It shows the
  * token and flag diffs against the served envelope, the digest of both `sign` will refuse to differ
- * from, and every signing-relevant change since the current list was first published, because the
+ * from, and every signing-relevant change since the list before the current one was first published, because the
  * environment approves a run and does not vet the code that run executes.
  *
  *   bun infra/token-list/scripts/summary.ts   (writes `tokens_sha256` to $GITHUB_OUTPUT when set)
@@ -98,24 +98,33 @@ function git(root: string, args: string[]): string {
 
 const ENVELOPE_PATH = `infra/token-list/${ENVELOPE}`
 
-/**
- * The first commit that carried the envelope bytes HEAD holds, so a later commit that restores
- * them moves nothing; undefined when HEAD has no envelope or that commit has no parent.
- */
-function publishBase(root: string): string | undefined {
-	if (git(root, ["ls-tree", "--name-only", "HEAD", "--", ENVELOPE_PATH]) === "") return undefined
-	const blob = git(root, ["rev-parse", `HEAD:${ENVELOPE_PATH}`])
+function envelopeBlob(root: string, rev: string): string | undefined {
+	if (git(root, ["ls-tree", "--name-only", rev, "--", ENVELOPE_PATH]) === "") return undefined
+	return git(root, ["rev-parse", `${rev}:${ENVELOPE_PATH}`])
+}
+
+/** The first commit, over every branch in ancestry order, whose envelope is `blob`; it must have a parent. */
+function firstCarrier(root: string, blob: string): string | undefined {
 	const introduced = ["log", "--full-history", "--topo-order", "--reverse", "--format=%H", `--find-object=${blob}`]
 	const [first] = git(root, [...introduced, "--", ENVELOPE_PATH]).split("\n")
-	if (!first) return undefined
-	return git(root, ["rev-list", "--max-count=1", "--parents", first]).includes(" ") ? first : undefined
+	return first && git(root, ["rev-list", "--max-count=1", "--parents", first]).includes(" ") ? first : undefined
 }
 
 /**
- * Every signing-path change since the parent of the commit that first published the current list,
- * that commit's own edits included. A first publish lists every such commit.
+ * The first commit that carried the list before the current one. A squash-merged publish's parent is
+ * the trunk at merge time, not the commit its run signed, so the range reaches back one list further
+ * than the current one's publish. Undefined, a first publish, when no such commit has a parent.
  */
+function publishBase(root: string): string | undefined {
+	const current = envelopeBlob(root, "HEAD")
+	const published = current && firstCarrier(root, current)
+	const previous = published && envelopeBlob(root, `${published}^`)
+	return previous ? firstCarrier(root, previous) : undefined
+}
+
+/** Every signing-path change since the parent of `publishBase`; a first publish lists every such commit. */
 export function signingChanges(root: string = REPO_ROOT): string {
+	if (git(root, ["rev-parse", "--is-shallow-repository"]) === "true") throw new Error("signingChanges needs the full history")
 	const base = publishBase(root)
 	if (base === undefined) {
 		const log = git(root, ["log", "--oneline", "--", ...SIGNING_PATHS])
@@ -124,9 +133,10 @@ export function signingChanges(root: string = REPO_ROOT): string {
 	const range = `${base}^..HEAD`
 	const stat = git(root, ["diff", "--stat", range, "--", ...SIGNING_PATHS])
 	const log = git(root, ["log", "--oneline", range, "--", ...SIGNING_PATHS])
-	if (stat === "" && log === "") return `No signing-relevant change since the current list was first published (${base.slice(0, 12)}).\n`
+	const since = `the list before the current one was first published (${base.slice(0, 12)})`
+	if (stat === "" && log === "") return `No signing-relevant change since ${since}.\n`
 	const shown = [stat, log].filter((part) => part !== "").join("\n\n")
-	return `Since the parent of ${base.slice(0, 12)}, which first published the current list:\n\n\`\`\`\n${shown}\n\`\`\`\n`
+	return `Since the parent of ${base.slice(0, 12)}, which first published the list before the current one:\n\n\`\`\`\n${shown}\n\`\`\`\n`
 }
 
 if (import.meta.main) {

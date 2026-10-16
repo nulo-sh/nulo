@@ -18,7 +18,7 @@ import { PAGES_OPTIONS } from "./scripts/pages-options.ts"
 import { parseLimitGuard } from "./scripts/parse-limit-guard.ts"
 import { stripArtifactDebugInfo } from "./scripts/strip-artifact-debug-info.ts"
 import { vendorChunkGroups } from "./scripts/vendor-chunks.ts"
-import { artifactAliases, DEPENDENCY_LOG_LEVEL, debugStrippedArtifacts, resolvePackageFile, sharedDefine, srcDir } from "./vite.shared.ts"
+import { artifactAliases, debugStrippedArtifacts, processEnvDefine, resolvePackageFile, sharedDefine, srcDir } from "./vite.shared.ts"
 
 export default defineConfig({
 	server: {
@@ -311,9 +311,6 @@ export default defineConfig({
 		...sharedDefine,
 		"import.meta.env.HTML_TITLE": JSON.stringify(packageJson.displayName),
 		"process.browser": true,
-		"process.env": JSON.stringify({
-			LOG_LEVEL: DEPENDENCY_LOG_LEVEL,
-			BB_WASM_PATH: "/assets/barretenberg.wasm.gz",
-		}),
+		"process.env": processEnvDefine,
 	},
 })

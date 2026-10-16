@@ -31,5 +31,5 @@ test("the frame's console hooks and the logger its PXE services receive both scr
 	const [method] = consoleMethods[0]
 	;(self as unknown as Record<string, (...data: unknown[]) => void>)[`nuloOn${method}`](`id ${HEX32}`)
 	handed.logger?.log("pxe", LogLevel.Warn, { classId: HEX32 })
-	expect(lines).toEqual([["id [32-byte hex]"], [{ classId: "[32-byte hex]" }]])
+	expect(lines).toEqual([["id [32 bytes]"], [{ classId: "[32 bytes]" }]])
 })

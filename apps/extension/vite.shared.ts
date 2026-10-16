@@ -45,6 +45,9 @@ function bbVersion(): string {
 /** The minimum level of every Aztec dependency logger in the bundle, read from `process.env.LOG_LEVEL`. */
 export const DEPENDENCY_LOG_LEVEL = "warn"
 
+/** The bundle's `process.env`, as the build defines it. */
+export const processEnvDefine = JSON.stringify({ LOG_LEVEL: DEPENDENCY_LOG_LEVEL, BB_WASM_PATH: "/assets/barretenberg.wasm.gz" })
+
 /** Compile-time `define` constants shared by the build + unit configs. */
 export const sharedDefine: Record<string, string> = {
 	__VERSION__: JSON.stringify(packageJson.version),
