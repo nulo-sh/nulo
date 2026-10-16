@@ -570,73 +570,75 @@ describe("DappInteractionService when the Terms acceptance lapses after the requ
 	})
 })
 
-describe("DappInteractionService — a confirmation window never falls back to signing", () => {
-	const ADDRESS = `0x${"0a".repeat(32)}`
-	const ACCOUNT = `aztec:1:${ADDRESS}`
-	const SESSION = {
-		id: "s1",
-		profileId: "p1",
-		chainId: "1",
-		dappMetadata: { name: "dapp.example", url: "https://dapp.example" },
-		permissions: [{ methods: [] }],
-		accounts: [ACCOUNT],
-		confirmationLevel: AccessLevel.Transactions,
-		expiry: Number.MAX_SAFE_INTEGER,
-	}
-	const authwit = {
-		kind: "aztec_createAuthWit",
-		account: ACCOUNT,
-		messageHashOrIntent: { consumer: `0x${"07".repeat(32)}`, innerHash: `0x${"01".repeat(32)}` },
-	} as unknown as OperationRequest
-	const stub = (name: string, methods: Record<string, unknown>) => ({ name, dependencies: [], async start() {}, ...methods }) as never
-	type Outcome = { settled: boolean; ok?: unknown; err?: unknown }
+const ADDRESS = `0x${"0a".repeat(32)}`
+const ACCOUNT = `aztec:1:${ADDRESS}`
+const SESSION = {
+	id: "s1",
+	profileId: "p1",
+	chainId: "1",
+	dappMetadata: { name: "dapp.example", url: "https://dapp.example" },
+	permissions: [{ methods: [] as string[] }],
+	accounts: [ACCOUNT],
+	confirmationLevel: AccessLevel.Transactions,
+	expiry: Number.MAX_SAFE_INTEGER,
+}
+const authwit = {
+	kind: "aztec_createAuthWit",
+	account: ACCOUNT,
+	messageHashOrIntent: { consumer: `0x${"07".repeat(32)}`, innerHash: `0x${"01".repeat(32)}` },
+} as unknown as OperationRequest
+const stub = (name: string, methods: Record<string, unknown>) => ({ name, dependencies: [], async start() {}, ...methods }) as never
+type Outcome = { settled: boolean; ok?: unknown; err?: unknown }
 
-	/** The real interaction path: `execute` opens a window through a real WindowManager on a fake
-	 *  browser, and the only way to a signature is an approval the service accepts. */
-	async function windowHarness() {
-		const api = new FakeBrowserApi()
-		api.reset()
-		const clock = new MockClock()
-		const logger = new LoggerStore(new ConfigStore())
-		const dapp = new DappInteractionService(logger, new WindowManager(api.windows, clock, logger))
-		const executeOperations = vi.fn(async () => [{ status: "ok", result: "0xsigned" }])
-		const collection = new ServiceCollection()
-		collection.add(
-			stub(ProfileService.name, {
-				getActiveProfile: async () => ({ id: "p1" }),
-				refreshSession: async () => {},
-				captureExecutionFence: async () => ({ profileId: "p1", epoch: 0, session: 1 }),
-			}),
+/** The real interaction path: `execute` opens a window through a real WindowManager on a fake
+ *  browser, and the only way to a signature is an approval the service accepts. */
+async function windowHarness(session: typeof SESSION = SESSION) {
+	const api = new FakeBrowserApi()
+	api.reset()
+	const clock = new MockClock()
+	const logger = new LoggerStore(new ConfigStore())
+	const dapp = new DappInteractionService(logger, new WindowManager(api.windows, clock, logger))
+	const executeOperations = vi.fn(async () => [{ status: "ok", result: "0xsigned" }])
+	const collection = new ServiceCollection()
+	const getActiveProfile = vi.fn(async () => ({ id: "p1" }))
+	collection.add(
+		stub(ProfileService.name, {
+			getActiveProfile,
+			refreshSession: async () => {},
+			captureExecutionFence: async () => ({ profileId: "p1", epoch: 0, session: 1 }),
+		}),
+	)
+	collection.add(stub(NetworkService.name, { getNetworks: async () => [{ id: "net-1", chainId: 1 }] }))
+	collection.add(stub(AccountService.name, { getAccount: async () => ({ address: ADDRESS }) }))
+	collection.add(stub(DappSessionService.name, { tryGetDappSession: async () => session }))
+	collection.add(stub(ExecutionService.name, { executeOperations }))
+	collection.add(stub(OperationJournalService.name, { onOperationUpdated: new EventHandler() }))
+	collection.add(stub(FpcService.name, {}))
+	collection.add(stub(TokenService.name, {}))
+	collection.add(dapp)
+	await collection.start()
+	getActiveProfile.mockClear()
+	const creates = vi.spyOn(api.windows, "create")
+	const storage = (dapp as unknown as { storage: Map<string, DappInteraction> }).storage
+
+	const open = async (operations: OperationRequest[] = [authwit]) => {
+		const outcome: Outcome = { settled: false }
+		dapp.execute({ sessionId: session.id, operations }).then(
+			(ok) => Object.assign(outcome, { settled: true, ok }),
+			(err) => Object.assign(outcome, { settled: true, err }),
 		)
-		collection.add(stub(NetworkService.name, { getNetworks: async () => [{ id: "net-1", chainId: 1 }] }))
-		collection.add(stub(AccountService.name, { getAccount: async () => ({ address: ADDRESS }) }))
-		collection.add(stub(DappSessionService.name, { tryGetDappSession: async () => SESSION }))
-		collection.add(stub(ExecutionService.name, { executeOperations }))
-		collection.add(stub(OperationJournalService.name, { onOperationUpdated: new EventHandler() }))
-		collection.add(stub(FpcService.name, {}))
-		collection.add(stub(TokenService.name, {}))
-		collection.add(dapp)
-		await collection.start()
-		const creates = vi.spyOn(api.windows, "create")
-		const storage = (dapp as unknown as { storage: Map<string, DappInteraction> }).storage
-
-		const open = async () => {
-			const outcome: Outcome = { settled: false }
-			dapp.execute({ sessionId: SESSION.id, operations: [authwit] }).then(
-				(ok) => Object.assign(outcome, { settled: true, ok }),
-				(err) => Object.assign(outcome, { settled: true, err }),
-			)
-			await expect.poll(() => creates.mock.results.length).toBeGreaterThan(0)
-			const created = (await creates.mock.results.at(-1)?.value) as { id: number }
-			const windowId = created.id
-			const id = [...storage.keys()].at(-1) as string
-			creates.mockClear()
-			return { outcome, windowId, id }
-		}
-		const closeByUser = (windowId: number) => (api.windows as unknown as { closeByUser: (id: number) => void }).closeByUser(windowId)
-		return { dapp, clock, executeOperations, storage, open, closeByUser }
+		await expect.poll(() => creates.mock.results.length).toBeGreaterThan(0)
+		const created = (await creates.mock.results.at(-1)?.value) as { id: number }
+		const windowId = created.id
+		const id = [...storage.keys()].at(-1) as string
+		creates.mockClear()
+		return { outcome, windowId, id }
 	}
+	const closeByUser = (windowId: number) => (api.windows as unknown as { closeByUser: (id: number) => void }).closeByUser(windowId)
+	return { dapp, clock, executeOperations, getActiveProfile, creates, storage, open, closeByUser }
+}
 
+describe("DappInteractionService — a confirmation window never falls back to signing", () => {
 	test("a window closed before approval rejects the call and nothing signs", async () => {
 		const h = await windowHarness()
 		const window = await h.open()
@@ -694,6 +696,48 @@ describe("DappInteractionService — a confirmation window never falls back to s
 		await expect.poll(() => second.outcome.settled).toBe(true)
 		expect(second.outcome.err).toBeDefined()
 		expect(h.executeOperations).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("DappInteractionService — the session gate refuses what the session does not grant", () => {
+	const sendCall = {
+		kind: "send_transaction",
+		account: ACCOUNT,
+		actions: [{ kind: "call", contract: `0x${"0c".repeat(32)}`, method: "transfer", args: [] }],
+	} as unknown as OperationRequest
+
+	/** A refusal at the gate leaves the call before the confirmation check reads the profile. */
+	async function expectRefused(h: Awaited<ReturnType<typeof windowHarness>>, op: OperationRequest, message: string) {
+		await expect(h.dapp.execute({ sessionId: SESSION.id, operations: [op] })).rejects.toThrow(message)
+		expect(h.getActiveProfile).not.toHaveBeenCalled()
+		expect(h.creates).not.toHaveBeenCalled()
+		expect(h.executeOperations).not.toHaveBeenCalled()
+	}
+
+	test("an operation kind no case names is refused", async () => {
+		const unknownKind = { kind: "aztec_unknownKind", account: ACCOUNT } as unknown as OperationRequest
+		await expectRefused(await windowHarness(), unknownKind, "Unsupported operation kind")
+	})
+
+	test("private events for an address outside the session's accounts are refused", async () => {
+		const events = {
+			kind: "aztec_getPrivateEvents",
+			chain: "aztec:1",
+			eventFilter: { contractAddress: `0x${"0d".repeat(32)}`, scopes: [`0x${"0b".repeat(32)}`] },
+		} as unknown as OperationRequest
+		await expectRefused(await windowHarness(), events, "Unauthorized scopes")
+	})
+
+	test("a send_transaction whose action the session does not grant is refused", async () => {
+		const h = await windowHarness({ ...SESSION, permissions: [{ methods: ["send_transaction"] }] })
+		await expectRefused(h, sendCall, "Unauthorized method")
+	})
+
+	test("the same send_transaction with its action granted opens its confirmation window", async () => {
+		const h = await windowHarness({ ...SESSION, permissions: [{ methods: ["send_transaction", "call"] }] })
+		await h.open([sendCall])
+		expect(h.getActiveProfile).toHaveBeenCalled()
+		expect(h.executeOperations).not.toHaveBeenCalled()
 	})
 })
 

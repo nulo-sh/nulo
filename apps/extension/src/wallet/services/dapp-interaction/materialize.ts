@@ -66,7 +66,8 @@ export async function materializeRequest(request: OperationRequest, deps: Materi
 				accountAddress: account.address,
 			} as DraftOperation
 		}
-		case "aztec_sendTx": {
+		case "aztec_sendTx":
+		case "send_transaction": {
 			const [network, account] = await deps.resolveNetworkAndAccount(request.account)
 			// A requested self-pay (the account named as payer with no fee call) starts with NO
 			// settings: the fee card, locked to Fee Juice, derives them only once a verified balance
@@ -78,17 +79,9 @@ export async function materializeRequest(request: OperationRequest, deps: Materi
 				feeSettings: isEmbeddedFeePayment(request) ? { paymentMethod: { kind: "embedded" } } : undefined,
 			} as DraftOperation
 		}
-		case "send_transaction": {
-			const [network, account] = await deps.resolveNetworkAndAccount(request.account)
-			return {
-				...request,
-				networkId: network.id,
-				accountAddress: account.address,
-				feeSettings: isEmbeddedFeePayment(request) ? { paymentMethod: { kind: "embedded" } } : undefined,
-			} as DraftOperation
-		}
 		default: {
-			throw new Error(`materializeRequest: unknown operation kind: ${(request as { kind?: string }).kind}`)
+			const unhandled: never = request
+			throw new Error(`materializeRequest: unknown operation kind: ${(unhandled as { kind?: string }).kind}`)
 		}
 	}
 }

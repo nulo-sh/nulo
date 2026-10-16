@@ -1,8 +1,8 @@
 ---
 plan: harden-quality-fixes-1
 tier: light (the lane brief's call; one Codex audit, the Opus lens, a fresh Codex final pass)
-status: planned and audited (final Codex approve); awaits the orchestrator's approval and A1, A2
-issues: "#536 step 1 (Refs), #549, #557, #558, #559 (Closes); one arc"
+status: approved 2026-10-16 (A1 refused, A2 accepted); arc 1 in progress
+issues: "#536 step 1 and #549 (Refs; A1 refused), #557, #558, #559 (Closes); one arc"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -48,8 +48,8 @@ One arc, one PR against `dev`, no stack. It removes copies and dead paths the qu
 - I2. Faking only `Date` runs the same eviction path the re-stamp reached; the lock's real timers and WebCrypto are untouched.
 
 **Asks** (the orchestrator answers before phase 2; working assumption in brackets):
-- A1. `popup/windows/execute/index.vue` is in execute-popup-readability's hold. [Edit only `buildOperationsFromPayload` and the `@nulo/wallet-bridge` import at `:23`, about five lines. If refused: drop that hunk and the fee-seed helper, which would then have one caller. The PR says `Refs #549` and comments on #549.]
-- A2. The lane brief says "one exhaustive table" for #549. [Exhaustive switches (D3).]
+- A1. `popup/windows/execute/index.vue` is in execute-popup-readability's hold. **Refused** (orchestrator, 2026-10-16): the window hunk and the fee-seed helper are dropped; the PR says `Refs #549` and names the window's switch as the remaining hunk, routed after #508's PR merges.
+- A2. The lane brief says "one exhaustive table" for #549. **Accepted**: exhaustive switches (D3).
 - OA-1 (owner): the dead "Show network name" toggle. Ships unchanged.
 
 ## Architecture & Implementation
