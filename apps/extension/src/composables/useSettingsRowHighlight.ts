@@ -34,5 +34,5 @@ export function useSettingsRowHighlight() {
 		},
 	}
 
-	return { vSettingsRow, target }
+	return { vSettingsRow }
 }

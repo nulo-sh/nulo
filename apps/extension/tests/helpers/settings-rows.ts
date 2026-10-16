@@ -30,7 +30,6 @@ export function expectOwnedRows(wrapper: VueWrapper, page: string, context: Sett
 			expect(rows, `${id} is hidden`).toHaveLength(0)
 			continue
 		}
-		// Exactly one: a second copy would never receive the outline the first one takes.
 		expect(rows, `${id} renders once`).toHaveLength(1)
 		const [row] = rows
 		if (to !== undefined) {

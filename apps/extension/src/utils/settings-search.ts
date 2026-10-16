@@ -366,13 +366,11 @@ export function settingsRow(id: SettingsRowId, context?: SettingsContext): Setti
 	}
 }
 
-/** A `SettingItem`'s title, description, link and testid for the row `id`. */
 export function settingItemProps(id: SettingsRowId, context?: SettingsContext) {
 	const { title, description, to, testid } = settingsRow(id, context)
 	return { title, description, to, "data-testid": testid }
 }
 
-/** Where a result goes: the row's own link, or its page told which row to outline. */
 export function settingsResultTo(row: SettingsRow): string {
 	return row.to ?? `${row.page}?row=${row.id}`
 }

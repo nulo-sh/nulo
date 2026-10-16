@@ -78,7 +78,6 @@ describe("useSettingsRowHighlight", () => {
 		const { router, replace } = await open(`${PAGE}?row=a`)
 		expect(replace).toHaveBeenCalledExactlyOnceWith({ path: PAGE })
 		expect(router.currentRoute.value.fullPath).toBe(PAGE)
-		expect(highlight.target.value).toBeNull()
 	})
 
 	test("an unknown id outlines nothing, and the query is still dropped", async () => {
@@ -103,7 +102,6 @@ describe("useSettingsRowHighlight", () => {
 
 	test("a row that mounts later, behind a v-if, is outlined when it arrives", async () => {
 		const { el } = await open(`${PAGE}?row=late`)
-		expect(highlight.target.value).toBe("late")
 		late.value = true
 		await nextTick()
 		expect(el("late").dataset.highlighted).toBe("")
