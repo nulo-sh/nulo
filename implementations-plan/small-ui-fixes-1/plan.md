@@ -28,9 +28,10 @@ One arc, one PR against `dev`, no stack, `Closes #577 #565 #566 #567`. Recon: [r
 ## Decisions (owner, quoted) and UI impact
 
 - **#577, P25-09 = B** (page 25, 2026-10-16): "Make it work: off hides the network name in the header chip and keeps the status dot; on shows it, as today; the default stays on."
+- **#577 chip height, OA-1 = P27-01 B** (page 27, 2026-10-16): "The chip keeps its height: the same bordered chip as with the name, at the same height, with only the dot centred inside, so the row of chips stays level."
 - **#565, P25-11 = A** (page 25, 2026-10-16): "As the account export does: spaces and symbols become `_` (`My Main Wallet` becomes `My_Main_Wallet.json`); the three exports then agree."
 - **#566, #567:** bugs with no owner choice; the fix restores what the screen already promises.
-- **UI impact, header chip (#577):** off: the bordered chip holds only the status dot, and the chip loses the label's line box (OA-1 asks whether it keeps its height). On: unchanged. Sign-off: P25-09 B, quoted in the PR body with the shots.
+- **UI impact, header chip (#577):** off: the bordered chip holds only the status dot, centred, at the height the name gives it. On: unchanged. Sign-off: P25-09 B and P27-01 B, quoted in the PR body with the shots.
 - **UI impact, saved file names (#565):** the full-backup and contacts files take the account export's rule. A name with combining marks (an accent typed as its own character, a Hindi vowel sign) gets `_` there too, as the account export does today; the PR body says so.
 - **UI impact, Display (#577), JSON window (#566), duplicate warning (#567):** no visible change beyond the behaviour each screen promises; the Display toggle gains a testid only.
 
@@ -48,14 +49,14 @@ One arc, one PR against `dev`, no stack, `Closes #577 #565 #566 #567`. Recon: [r
 
 **Inferences:**
 - I1. With the toggle off, the name can show for one config read after Header mounts. At first boot that read most likely lands before the boot shows the chip. When the stale-network takeover clears, `<Header v-else />` (`app.vue:556`) remounts under a logged-in shell and the name shows for one read. Close-out files this as a closed `known-limit` issue.
-- I2. Without a height rule the off chip is a small rectangle (6 px dot, 10 px side padding, 6 px top and bottom, 1 px border), shorter than the on chip by the label's line height minus 6 px. Phase 4 measures both browsers for OA-1.
+- I2. Without a height rule the off chip is a small rectangle (6 px dot, 10 px side padding, 6 px top and bottom, 1 px border), shorter than the on chip by the label's line height minus 6 px. P27-01 B ships the rule; the phase 4 scenario asserts equal heights on both browsers.
 
-**Asks:** OA-1 (the off chip's height) goes to the owner through `OWNER-ASKS.md`; the arc ships option A, no height rule.
+**Asks:** OA-1 (the off chip's height), answered P27-01 B; D2's rule ships.
 
 ## Architecture & Implementation
 
 - **D1 (#577).** Header calls `useConfigRead(configService, () => configService.getValue("showNode"), land)` in setup, before any request; `land` sets the ref unless `updatedSince("showNode")`. `void showNodeRead.read()` is the first line of `onMounted`, ahead of the raw `indicateFailures` read; `showNodeRead.dispose()` follows `configService.disconnect()`. `onSettingUpdate` gains the `showNode` case. The name span takes `v-if`. *Rejected:* an `app.vue` setting handler into `appStore` (a store field and its shape pin for one reader); `indicateFailures` on the same read (outside #577).
-- **D2 (#577).** No height rule ships (OA-1 A). If the owner picks B, `.network_chip` composes `type--tag` and takes `min-height: calc(1lh + 14px)`, pinned in `components/header-layout.test.ts`; equal to the on chip for the primary font, not a fallback glyph.
+- **D2 (#577), OA-1 B.** `.network_chip` composes `type--tag` and takes `min-height: calc(1lh + 14px)`, pinned in `components/header-layout.test.ts`; equal to the on chip for the primary font, not a fallback glyph.
 - **D3 (#577).** One smoke scenario in `tests/e2e/appearance.test.ts`. Failure mode: in the shipped bundle the Display write does not reach Header's own config port and template; the Header unit test mocks the client, and the theme e2e proves only `app.vue`'s client. It also drives the shots the UI rule requires, again for OA-1. Estimate 8 s per browser.
 - **D4 (#565).** `profileFileNameSegment(name: string | undefined): string` in `utils/files.ts`, account.vue's rule verbatim: `(name ?? "").replace(/[^\p{L}\p{N}_-]+/gu, "_") || "profile"`. *Rejected:* `sanitizeString` (drops, keeps `.` and spaces); trimming edge `_` or adding `\p{M}` (both change the account export's names, which P25-11 A keeps).
 - **D5 (#566).** Mount order: connect the profile client; `unsubscribe = await subscribeActiveProfile(onActiveProfileChanged)`; add `beforeunload`; read the payload with `.catch(() => undefined)` (a request the worker no longer holds leaves the window empty) and the interaction client closed in `finally`. Cleanup stays on `beforeunload`, as the logger's: the shell's navigation to `/popup/auth` can unmount the page while its profile read or a lock notification is pending, and an unmount cleanup that disconnects the client rejects that read (`emitSnapshot` catches it, `profile/client.ts:79-89`), so the window would stay open on an unlock page. One comment states this invariant, because the client's doc asks for `onBeforeUnmount`. The window's document owns the subscription; the browser closes the port with it.
@@ -123,11 +124,13 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 
 | Codex gpt-6.1-sol high, review round 1 over phases 1-3, session `01a14599-c2a6-79c1-851a-672a118e2627` | **approve**, two P3s, both fixed | Second-warning test asserts the dialog is open and two import calls before confirming; a narrating fake comment removed. [lessons/phase-3.md](lessons/phase-3.md) |
 | Codex, review round 2 (resume, same session) over the fix diff bdaa8dd9 | **approve**, no new material finding | Round converged for phases 1-3. |
+| Codex, review round 3 (resume) over phase 4's diff 12edeaad | changes needed: P2, P3 | P2 fixed in `useConfigRead` (a deviation, below); P3 fixed (the scenario waits for Home's hash). [lessons/phase-4.md](lessons/phase-4.md) |
+| Opus 5.5 general-purpose review of phase 4's diff | request changes: one high, three lows, a nit | H fixed (no bottom nav on Display); fonts awaited before the first height; the `updatedSince` guard gets a Header case (mutation-checked); this plan carries P27-01 B; the CSS comment names the line-height condition. |
 | Opus 5.5 general-purpose review of the same diff | approve, one medium, three lows | M fixed (the fake's disconnect now rejects the held snapshot; a mutation proves the case reds on an unmount disconnect); L1 fixed (doc: each run); L2 rejected (Security accepts the one-read render); L3 a deviation, below. |
 
 Unresolved: none between the legs. Open for the owner: OA-1.
 
-**Deviations from the plan (arc 1).** D5: the window keeps no `unsubscribe`; `onClose`'s `disconnect()` ends the subscription, and nothing reconnects after an explicit disconnect. Phase 2: the control (an open snapshot renders `json-content`, then a live `undefined` removes the window) is the first existing case with a `json-content` assertion added, not a fourth case.
+**Deviations from the plan (arc 1).** `useConfigRead` (round 3, Codex P2): a read rejected by a port that dropped between Ready and its deferred `onConnected` was never retried, so the first delivered open after the reconnect counted as the mount's and the default stayed; the composable now re-reads on that open when the newest read failed (one flag, its own test; the other six consumers change only on that path, by one read). Phase 4's scenario returns to Home with `navigateByHash`: Display renders no bottom nav. D5: the window keeps no `unsubscribe`; `onClose`'s `disconnect()` ends the subscription, and nothing reconnects after an explicit disconnect. Phase 2: the control (an open snapshot renders `json-content`, then a live `undefined` removes the window) is the first existing case with a `json-content` assertion added, not a fourth case.
 
 ## Seeds
 

@@ -1,6 +1,6 @@
 # Owner asks: small-ui-fixes-1
 
-The arc does not wait for any answer here. It ships option A, which adds no layout rule.
+OA-1 is answered (P27-01 B); nothing here is open.
 
 ## OA-1. The header's network chip with "Show network name" off: its height
 
@@ -17,4 +17,4 @@ The arc does not wait for any answer here. It ships option A, which adds no layo
 
 **Recommendation: B.** The row stays level, and switching the setting moves nothing else in the header. It is one style rule, with a test that pins it.
 
-**What ships now: A.** The PR attaches light and dark shots of the chip on and off, and records both chip heights on Chrome and Firefox.
+**Answered:** P27-01 **B** (decision page 27, 2026-10-16). B ships; the PR attaches light and dark shots of the chip on and off.

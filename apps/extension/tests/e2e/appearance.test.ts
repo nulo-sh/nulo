@@ -2,7 +2,7 @@ import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { BROWSER, extensionUrl, gotoExtensionPage, newPage } from "./fixtures/browser"
 import { test, openPopup, waitForHash, clickByTestId, patchPagePolling, recordPageErrors } from "./fixtures/extension"
-import { clickNavTab, navigateByHash, navigateToSettings, setTheme } from "./fixtures/helpers"
+import { navigateByHash, navigateToSettings, setTheme } from "./fixtures/helpers"
 import { shotSend } from "./fixtures/send-page"
 
 test("cycle theme system → light → dark verifies html[theme=…] each step", async ({ registeredExtension }) => {
@@ -146,7 +146,8 @@ async function showNetworkName(page: Page, on: boolean): Promise<void> {
 			String(on),
 		)
 	}
-	await clickNavTab(page, "general")
+	// Display shows no bottom nav.
+	await navigateByHash(page, "#/popup/general")
 	await page.waitForFunction(
 		(want: boolean) =>
 			!!document.querySelector('[data-testid="network-button"]') && !!document.querySelector('[data-testid="network-name"]') === want,
@@ -173,6 +174,8 @@ test("Show network name off hides the name in the header chip, keeps its dot and
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 	await page.waitForSelector('[data-testid="network-name"]', { visible: true, timeout: 10_000 })
+	// A font swapping in after this read would change the height the off chip is compared with.
+	await page.evaluate(() => document.fonts.ready)
 	const shown = await networkChip(page)
 	expect(shown.name).toBeTruthy()
 

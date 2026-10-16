@@ -380,8 +380,8 @@ onBeforeUnmount(() => {
 	color: var(--nulo-accent);
 }
 
-/* The label's role makes `1lh` the label's line, so the chip keeps its height when the name is hidden;
- * 14px is the padding and border. */
+/* With the label's role, `1lh` is the label's line while the label sets no line-height of its own, so
+ * the chip keeps its height when the name is hidden; 14px is the padding and border. */
 .network_chip {
 	composes: type--tag from global;
 	display: inline-flex;

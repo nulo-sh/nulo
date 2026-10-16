@@ -8,3 +8,4 @@
 - 2026-10-16: phase 3 gate (`bun run lint && bun run typecheck:all && bun run test`): **pass** (801 files, 12980 tests); the second-warning case red on the base composable (blank dialog, `title` undefined).
 - 2026-10-16: review round 1 over phases 1-3: Codex **approve** (two P3s fixed), Opus approve (M and L1 fixed, L2 rejected, L3 recorded as a deviation). Targeted tests green.
 - 2026-10-16: Codex round 2 **approve**; phases 1-3 converged. Waiting for harden-quality-fixes-1 on dev (fetch every 10 min, up to 90 min, from 16:51Z).
+- 2026-10-16: harden-quality-fixes-1 on dev (#595, d461b059) at 17:41Z; merged (86fbd673). OA-1 answered: P27-01 **B** (the chip keeps its height). Phase 4 code 12edeaad; `lint`, `typecheck:all`, `test` **pass** (803 files, 13018 tests); the off and flip Header cases red on the merged base Header plus testids. I1 filed as #600 (closed, known-limit). e2e waits for load1 < 150.

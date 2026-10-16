@@ -210,6 +210,17 @@ describe("Header — Show network name", () => {
 		expect(chip(w)).toEqual({ name: "Alpha V5", dot: true, label: "Manage networks (currently Alpha V5)" })
 	})
 
+	test("a change made while the mount's read is in flight outlives that read's older value", async () => {
+		const read = Promise.withResolvers<boolean>()
+		H.config.showNode = read.promise
+		const w = mountHeader()
+		await flushPromises()
+		for (const fn of H.configListeners) fn({ key: "showNode", value: false })
+		read.resolve(true)
+		await flushPromises()
+		expect(chip(w).name).toBeNull()
+	})
+
 	test("a change made in Display reaches the open header", async () => {
 		const w = mountHeader()
 		await flushPromises()
