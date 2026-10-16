@@ -177,7 +177,7 @@ describe("rawRows, tokenAt, amountLabel, valueText, valueTitle", () => {
 		const { rows, hidden } = rawRows([...Array.from({ length: 33 }, (_, i) => field(BigInt(i))), "x"])
 		expect(rows).toHaveLength(32)
 		expect(hidden).toBe(2)
-		expect(rawRows([`a${RLO}b`, {}]).rows).toEqual([{ kind: "text", value: "ab" }, { kind: "opaque" }])
+		expect(rawRows([`a${RLO}b`, {}]).rows).toEqual([{ kind: "text", value: "ab", full: "ab" }, { kind: "opaque" }])
 	})
 
 	test("tokenAt matches contract and chain case-blind", () => {

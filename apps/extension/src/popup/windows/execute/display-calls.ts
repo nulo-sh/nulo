@@ -3,7 +3,7 @@
  * the decoder reads, and the bookkeeping that keeps one decode per discovered authorization.
  */
 
-import type { DecodedCall, DiscoveredAuthwit, DisplayCallInput } from "@/wallet/services/execution/client"
+import type { AuthwitContent, DecodedCall, DiscoveredAuthwit, DisplayCallInput } from "@/wallet/services/execution/client"
 import type { DraftUIOperation } from "./types"
 
 type WireCall = { to?: unknown; name?: unknown; selector?: unknown; args?: unknown }
@@ -39,9 +39,16 @@ export function displayCallsOf(op: DraftUIOperation): DisplayCallInput[] {
 	return []
 }
 
-/** The decoder itself was unreachable: every call reads as undecoded for that reason, so the card
- *  falls back to raw fields instead of waiting forever. */
-export const undecodedAll = (count: number): DecodedCall[] =>
+/** The public grants a `send_transaction` carries, in action order: the card reads each one's
+ *  arguments, and the window confirms only once every one of them decoded. */
+export function grantContentsOf(op: DraftUIOperation): AuthwitContent[] {
+	if (op.kind !== "send_transaction") return []
+	return (op.actions ?? []).flatMap((action) => (action.kind === "add_public_authwit" ? [action.content] : []))
+}
+
+/** The decoder itself was unreachable: every call or grant reads as undecoded for that reason, so the
+ *  card falls back to raw fields instead of waiting forever. */
+export const undecodedAll = (count: number): Extract<DecodedCall, { kind: "undecoded" }>[] =>
 	Array.from({ length: count }, () => ({ kind: "undecoded", reason: "unavailable" }))
 
 /** A discovered authorization decodes on its consumer contract by selector; only records not yet

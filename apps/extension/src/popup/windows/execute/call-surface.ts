@@ -24,7 +24,10 @@ export type TransferSender = { kind: "explicit" | "account"; address: string } |
 
 /** One raw field row: trimmed for the eye, the full value on hover, and its decimal when it is small
  *  enough to be a count or an amount rather than a hash. */
-export type RawRow = { kind: "field"; short: string; full: string; decimal?: string } | { kind: "text"; value: string } | { kind: "opaque" }
+export type RawRow =
+	| { kind: "field"; short: string; full: string; decimal?: string }
+	| { kind: "text"; value: string; full: string }
+	| { kind: "opaque" }
 export type RawRows = { rows: RawRow[]; hidden: number }
 
 export type CallSurface =
@@ -48,7 +51,7 @@ const MAX_INLINE_ITEMS = 8
 const rawRow = (arg: unknown): RawRow => {
 	const p = projectArgument(arg)
 	if (p.kind === "field") return { kind: "field", short: trimAddress(p.value, 10, 6), full: p.value, decimal: smallFieldDecimal(p.value) }
-	if (p.kind === "text") return { kind: "text", value: safeWire(p.value, 64) }
+	if (p.kind === "text") return { kind: "text", value: safeWire(p.value, 64), full: safeWire(p.value, 4096) }
 	return { kind: "opaque" }
 }
 
@@ -220,6 +223,9 @@ export const RAW_NOTICE: Readonly<Record<UndecodedReason, string>> = {
 	arguments: "The arguments don't fit the contract's interface, so Nulo can't read them.",
 	unavailable: "Nulo couldn't read the arguments right now.",
 }
+
+/** The card's notice under unreadable arguments, also the window's refusal of a grant it cannot read. */
+export const rawNotice = (reason: UndecodedReason): string => `${RAW_NOTICE[reason]} Check what the app says this does before approving.`
 
 export const rawToggleLabel = (count: number, open: boolean): string =>
 	open ? "Hide raw values" : `Show ${count} raw value${count === 1 ? "" : "s"}`

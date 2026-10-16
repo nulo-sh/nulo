@@ -19,6 +19,9 @@ const props = defineProps<{
 	prefix: string
 	/** Whether the request's JSON view carries this call, so capped rows can point there. */
 	jsonView?: boolean
+	/** Every value prints whole, an address as its own text with no name in its place. Only a call
+	 *  read without caller context sets it, so no sender reads as `this account`. */
+	full?: boolean
 }>()
 
 const rawOpen = ref(false)
@@ -39,7 +42,7 @@ const nonce = computed(() =>
 		:data-intent-kind="surface.kind"
 		direction="column"
 		gap="2"
-		:class="$style.block"
+		:class="[$style.block, full && $style.full]"
 	>
 		<!-- The sender is rendered even when the call carries none: a dApp can spend from another
 		     account it names, and the entrypoint spends from nobody. -->
@@ -54,12 +57,14 @@ const nonce = computed(() =>
 			</template>
 			<template v-else>
 				<Text variant="label" color="secondary">From:</Text>
-				<AddressDisplay :data-testid="`${prefix}-transfer-sender-address`" :address="surface.sender.address" />
+				<Text v-if="full" :data-testid="`${prefix}-transfer-sender-address`" variant="data" color="primary">{{ surface.sender.address }}</Text>
+				<AddressDisplay v-else :data-testid="`${prefix}-transfer-sender-address`" :address="surface.sender.address" />
 			</template>
 		</Flex>
 		<Flex justify="between" :class="$style.row">
 			<Text variant="label" color="secondary">{{ surface.kind === "mint" ? "Mint to:" : "To:" }}</Text>
-			<AddressDisplay :data-testid="`${prefix}-transfer-to`" :address="surface.to" />
+			<Text v-if="full" :data-testid="`${prefix}-transfer-to`" variant="data" color="primary">{{ surface.to }}</Text>
+			<AddressDisplay v-else :data-testid="`${prefix}-transfer-to`" :address="surface.to" />
 		</Flex>
 		<Flex justify="between" :class="$style.row">
 			<Text variant="label" color="secondary">Amount:</Text>
@@ -77,12 +82,18 @@ const nonce = computed(() =>
 				color="primary"
 				:title="valueTitle(nonce)"
 			>
-				{{ valueText(nonce) }}
+				{{ valueText(nonce, full) }}
 			</Text>
 		</Flex>
 	</Flex>
 
-	<Flex v-else-if="surface.kind === 'decoded'" :data-testid="`${prefix}-decoded-args`" direction="column" gap="2" :class="$style.block">
+	<Flex
+		v-else-if="surface.kind === 'decoded'"
+		:data-testid="`${prefix}-decoded-args`"
+		direction="column"
+		gap="2"
+		:class="[$style.block, full && $style.full]"
+	>
 		<Flex
 			v-for="(p, m) in surface.params"
 			:key="m"
@@ -93,7 +104,7 @@ const nonce = computed(() =>
 			:class="$style.row"
 		>
 			<Text variant="label" color="secondary">{{ safeWire(p.name, 32) }}:</Text>
-			<AddressDisplay v-if="p.value.kind === 'address'" :data-testid="`${prefix}-decoded-param-value`" :address="p.value.value" />
+			<AddressDisplay v-if="p.value.kind === 'address' && !full" :data-testid="`${prefix}-decoded-param-value`" :address="p.value.value" />
 			<Text
 				v-else
 				:data-testid="`${prefix}-decoded-param-value`"
@@ -101,7 +112,7 @@ const nonce = computed(() =>
 				color="primary"
 				:title="valueTitle(p.value)"
 			>
-				{{ valueText(p.value) }}
+				{{ valueText(p.value, full) }}
 			</Text>
 		</Flex>
 	</Flex>
@@ -110,7 +121,14 @@ const nonce = computed(() =>
 		Reading arguments…
 	</Text>
 
-	<Flex v-else :data-testid="`${prefix}-unverified-args`" :data-reason="surface.reason" direction="column" gap="4" :class="$style.block">
+	<Flex
+		v-else
+		:data-testid="`${prefix}-unverified-args`"
+		:data-reason="surface.reason"
+		direction="column"
+		gap="4"
+		:class="[$style.block, full && $style.full]"
+	>
 		<UnreadableArgsNotice :reason="surface.reason" :prefix="prefix" />
 		<DetailsToggle
 			v-if="surface.rows.length"
@@ -123,9 +141,9 @@ const nonce = computed(() =>
 			<Flex v-for="(row, m) in surface.rows" :key="m" :data-testid="`${prefix}-arg`" :data-arg-kind="row.kind" justify="between" :class="$style.row">
 				<Text variant="label" color="secondary">#{{ m }}</Text>
 				<Text v-if="row.kind === 'field'" :data-testid="`${prefix}-arg-field`" variant="data" color="primary" :title="row.full">
-					{{ row.short }}<Text v-if="row.decimal !== undefined" color="tertiary"> = {{ row.decimal }}</Text>
+					{{ full ? row.full : row.short }}<Text v-if="row.decimal !== undefined" color="tertiary"> = {{ row.decimal }}</Text>
 				</Text>
-				<Text v-else-if="row.kind === 'text'" variant="data" color="primary">{{ row.value }}</Text>
+				<Text v-else-if="row.kind === 'text'" variant="data" color="primary">{{ full ? row.full : row.value }}</Text>
 				<Text v-else variant="value" color="tertiary">(unreadable)</Text>
 			</Flex>
 			<Text v-if="surface.hidden" :data-testid="`${prefix}-args-more`" variant="meta" color="tertiary">
@@ -153,5 +171,11 @@ const nonce = computed(() =>
 	> :last-child {
 		text-align: right;
 	}
+}
+
+/* A whole value runs long; its row name keeps one line beside it, and breaks only past half the row. */
+.full .row > :first-child {
+	flex-shrink: 0;
+	max-width: 50%;
 }
 </style>
