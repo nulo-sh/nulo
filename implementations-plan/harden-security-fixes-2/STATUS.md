@@ -21,3 +21,4 @@
 - 2026-10-16: arc 4 (orchestrator-added) started on `harden-security-fixes-2-arc4` (dev `493ff497`). Phase 10 gate F (lint, typecheck:all, test): pass at `02391a30`.
 - 2026-10-16: arc 4 review round 1: Codex approve (3 findings), Opus approve (nits); two test rows and the public call type added, the rest recorded (D31, D34). Round 2 next.
 - 2026-10-16: arc 4 review round 2: Codex approve; the loop converged. Final gates next.
+- 2026-10-16: arc 4 final gates at `7b5e2af2`: lint, typecheck:all, test:all (extension 13118 tests) and check:plans pass; no e2e file touched. Phase 10 ✓; PR next.
