@@ -1,7 +1,7 @@
 ---
 plan: harden-security-fixes-1
 tier: mid
-status: audited (final Codex verdict: approve); awaiting the orchestrator's approval and OA-1
+status: approved by the orchestrator 2026-10-16 (three PRs; OA-1 = A); in progress
 issues: "none open; the sources are tracked privately and the PR carries no Closes for them. Files one closed known-limit issue (C9) at close-out."
 driver: claude-code
 claude_model: opus
@@ -17,7 +17,7 @@ post_implementation_hardening: not scheduled
 
 # harden-security-fixes-1: bounds at trust boundaries, dApp ingress, dependency logs, publish summary
 
-One arc, one PR against `dev`, a phase per change (C1 to C9). Each change states the invariant it adds and nothing else. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+Three PRs against `dev`, a phase per change (C1 to C9): A carries phases 1-3, B phases 4-6, C phases 7-9 with this plan and its close-out. Each change states the invariant it adds and nothing else. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Scope
 
@@ -111,7 +111,7 @@ E2E commands, from the repo root unless noted:
 
    Gate: `F`, then `bun run test:all`.
 9. **C9.** Change: `SECURITY.md`. Gate: `bun run lint`; `scripts/check-no-local-paths.sh`.
-10. **Full gate.** `bun run test:all`, `bun run test:ci-gating`, `bun run lint:actions`, `bun run check:plans` after staging. Armed smoke on Chrome: `backup-roundtrip`, `backup-migration`, `restore-outcome`, `fiat-display`, `token-list`, `observability`, `endpoints`. Network on Chrome: phase 4's and phase 6's files, `tx-sendTx-selfPay`, and `backup-restore-sw-restart` with `NULO_E2E_PROVERLESS=1`. Firefox: phase 4's four. Pass: all green; no e2e scenario is added.
+10. **Full gate**, per PR over its phases' e2e files, on its final head. `bun run test:all`, `bun run test:ci-gating`, `bun run lint:actions`, `bun run check:plans` after staging. Armed smoke on Chrome: `backup-roundtrip`, `backup-migration`, `restore-outcome`, `fiat-display`, `token-list`, `observability`, `endpoints`. Network on Chrome: phase 4's and phase 6's files, `tx-sendTx-selfPay`, and `backup-restore-sw-restart` with `NULO_E2E_PROVERLESS=1`. Firefox: phase 4's four. Pass: all green; no e2e scenario is added.
 
 ## Security & Adversarial Considerations
 
@@ -125,13 +125,13 @@ E2E commands, from the repo root unless noted:
 
 - **Facts.** (1) Sites and sizes: recon.md. (2) `admitContentMessage` runs on every content-script message, buffered ones too (`content-message-relay.ts:117-129`). (3) Only the content script builds envelopes; the page supplies `content`. (4) `normalizeBackupData` runs on every import (`backup-migrator.ts:94`). (5) `vite.shared.ts` is already imported by a unit test (`scripts/strip-artifact-debug-info.test.ts:7`). (6) `PxeService.registerContract` (`pxe/service.ts:435-457`) is the PXE write every contract registration with an artifact uses; `registerContractClass` writes a class alone and has no caller with a provided artifact. (7) Wallet code in the PXE host frame does log full ids today (`pxe/service.ts:354`, `artifact-class-id.ts`), through the logger `createPxeOffscreen` receives; C7's wrapper covers that logger.
 - **Inferences.** I1: no wallet-sdk dApp sends `chainInfo` as numbers (`jsonStringify` of `Fr`); phase 4's e2e prove it. I2: Firefox sets `sender.url` on content-script messages; phase 4's Firefox runs prove it, since a missing one refuses. I3: 32 MiB is far above any reply on the networks Nulo serves; the budget is enforced, the claim is not. I4: no real profile holds over 1024 token rows or 16384 balance rows; export has no such limit (OA-1).
-- **Asks.** A1 (orchestrator): the lane brief expected two or three PRs; this plan follows the later "one arc as one PR" instruction. Its phases split cleanly into three PRs (1-3, 4-6, 7-9) if wanted. A2: residual items of the private sources stay in them; any known-limit issue for them waits until they publish (C9's is owner-cleared now). A3: OA-1.
+- **Asks.** A1 (orchestrator, answered 2026-10-16): three PRs, phases 1-3, 4-6 and 7-9 (D1). A2: residual items of the private sources stay in them; any known-limit issue for them waits until they publish (C9's is owner-cleared now). A3: OA-1, answered A with the limits as written (the owner sees it on a decision page; another pick is a follow-up).
 
 ## Decision ledger
 
 | # | Question | Chosen | Not taken |
 |---|---|---|---|
-| D1 | delivery | one arc, one PR | three PRs (A1); a stack (D-orch-1) |
+| D1 | delivery | three PRs off `dev` (A: 1-3, B: 4-6, C: 7-9 with the plan and close-out), stacked only where two edit one file (orchestrator, 2026-10-16) | one PR (the plan's draft); a stack throughout |
 | D2 | node reply budget | 32 MiB, `NoRetryError` | per-method budgets (one option per caller); no node budget (outline B: the endpoint's reply would stay the only bound on the parse) |
 | D3 | backup bounds | caps on two slices, checks before allocation, one lazy balance key listing | caps alone (each accepted row still lists the whole area); a token key batch (its liveness reads stay per row) |
 | D4 | key exchange | tab id, a known credited origin, and the document's own origin equal to it; plus the document filter | the tab URL's origin alone (round 1 draft, Opus): the document's own origin is what binds the sender document, and equals the tab's for every top frame; `documentId` (absent from the SDK's send) |
@@ -141,11 +141,11 @@ E2E commands, from the repo root unless noted:
 
 ## Delivery
 
-Single arc: branch `worktree-harden-security-fixes-1`, one PR against `dev` with `gh pr create`, opened only after phase 10 and the Codex loop converge. Title: `fix(wallet): bound replies, backup rows and dApp ingress; quieter dependency logs` (81 characters). Body: what changed and why per change, as invariants; the validation runs; "no e2e scenario added"; a `UI impact` line per change (none for conforming input; OA-1's answer for the backup reason); no `Closes` or `Refs` to a private source. Open it without labels; add `e2e:extension-network` and `e2e:extension-smoke` only if the path filter skips a suite. The second of this PR and token-list-live-check's to merge merges `origin/dev` first. No parallel lanes.
+Three PRs against `dev`, each on its own branch off `dev`, opened in order as each converges through its own Codex loop: `harden-security-fixes-1-a` (phases 1-3), `-b` (4-6), `-c` (7-9, this plan, the close-out). A later PR stacks on an earlier one only if both edit one file, and its body says so. Titles at most 93 characters; bodies state each change as its invariant, the validation runs, "no e2e scenario added", a `UI impact` line per change (none for conforming input; OA-1's reason text in A), and no `Closes` or `Refs` to a private source. Open each without labels; add `e2e:extension-network` or `e2e:extension-smoke` only if the path filter skips a suite the change needs. C merges `origin/dev` before its close-out. No parallel lanes.
 
 ## Post-implementation
 
-The steps are `implementations-plan/README.md` § Post-implementation standard at `c5e9c8e8`, single-arc placement. No diff review (`code_review: off`). Loop: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, at most three rounds, logged in `lessons/phase-10.md`. Prompts carry the standard's two rules verbatim, the adversarial ask, and the rule that no committed word describes a weakness. A fix that grows the design stops for the orchestrator; persistence, permissions, public contracts and background work go to the owner. Close-out: the PR's final commits, after merging `origin/dev` and reading `index.md` and `lessons.md`. It files C9's closed `known-limit` issue (five sections, the trust boundary only; reopen when a browser binds PRF evaluation to the calling extension, or the owner adds a second factor to the derivation), puts its number in SECURITY.md and the Outcome's `Known limits:`. Teardown after merge: `agent-worktree done harden-security-fixes-1 --merged`; the delivering session arms the background wait the standard names.
+The steps are `implementations-plan/README.md` § Post-implementation standard at `c5e9c8e8`, multi-arc placement: a loop per PR before it opens, then one fresh session over the net diff from `dev` for cross-arc issues. No diff review (`code_review: off`). Loop: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, at most three rounds, logged in the PR's last phase's `lessons/phase-N.md` (3, 6, 9) and the cross-arc pass in `lessons/phase-10.md`. Prompts carry the standard's two rules verbatim, the adversarial ask, and the rule that no committed word describes a weakness. A fix that grows the design stops for the orchestrator; persistence, permissions, public contracts and background work go to the owner. Close-out: C's final commits, after merging `origin/dev` and reading `index.md` and `lessons.md`. It files C9's closed `known-limit` issue (five sections, the trust boundary only; reopen when a browser binds PRF evaluation to the calling extension, or the owner adds a second factor to the derivation), puts its number in SECURITY.md and the Outcome's `Known limits:`. Teardown after merge: `agent-worktree done harden-security-fixes-1 --merged`; the delivering session arms the background wait the standard names.
 
 ## Audit verdicts
 
