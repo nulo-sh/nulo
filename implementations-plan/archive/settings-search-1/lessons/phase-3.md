@@ -21,3 +21,7 @@ Chrome, 360 × 600 at 2×, light and dark through `prefers-color-scheme` on the 
 
 - Round 1, Codex (session `01a14682…`, gpt-6.1-sol, high, read-only): approve with two P3s, both accepted. A page rendering a registry row twice passed `expectOwnedRows` (it read only the first match), and three comments narrated the code.
 - Round 1, Opus 5.5 (final diff, same time): conditional approve, two findings accepted. Captions and row order were not checked against the registry, so a renamed list caption would leave search showing the old one. The field's keydown also took Shift+ArrowUp and Ctrl+Enter. Mutation checks: dropping the modifier guard fails the new `SettingsSearch` case, and swapping two Display rows in the registry fails both Display ownership cases.
+
+## Final head
+
+On `daa01c1b` (after merging `origin/dev` at `a433c20b`): `bun run lint` 0, `bun run typecheck:all` 0, `bun run test:all` 0 (extension 13117 passed), `bun run check:plans` 0; armed builds and `settings-routes.test.ts --retry=0` 0 on Chrome (scenario 1.46 s, file 12.9 s, load1 107) and on Firefox (scenario 3.09 s, file 20.2 s, load1 121).
