@@ -31,3 +31,9 @@ Arc 2 branches off `dev` after #598 (harden-security-fixes-2 arc 1), #610 (small
 - `useFullBackupImport` gains `embeddedBackupName(backup)`, the one display read of the embedded profile name, used by the plain pick and the decrypt (the decrypt's typed `backupObject` is gone, so it would otherwise need a second copy of the plain path's cast).
 - `import-helpers.ts` needs no edit (it reads the CTA predicates). Test fixtures move from `type` to `kind` by rule: an `encrypted` fixture with a profile type is `opened`, without one `sealed`.
 - Proof, not committed: `git diff -U0` of `export/full.vue` and `export/account.vue` shows only fence substitutions (`let generation` to `runs`, `const gen = generation` to `runs.snapshot()`, each comparison to `isCurrent()`, each bump to `runs.invalidate()`, `() => gen === generation` to `isCurrent`), the import and two comments; no `await` line added or moved.
+
+## Phase 2.3 and review round 1
+
+- Smoke (Chrome, retry 0): `contacts`, `contacts-import`, `duplicate-phrase-import`, `passkey-backup`, `backup-imported-account`, `backup-roundtrip`, `restore-outcome`, `wallet-lock`: 8 files, 24/24 (316 s). The load watcher saw load1 < 150 and the run launched seconds later at 154; later runs check the load in the launching command itself.
+- Round 1: Codex (session `01a146da`) 3 low, the Opus lens 2 low; dispositions in the plan's Audit verdicts. Two of the five were tests that passed vacuously (the copied request, the decrypt publication race), each now proven by a mutant: storing the caller's object, and removing the caller's fence, each fail.
+- A mutant edit of source while `e2e:agent` builds would ship in its bundle: the network run's `dist/chrome/manifest.json` was written at 22:43:14, before the one mutant at 22:44:55, so that run is clean; no mutant runs while an e2e build may.

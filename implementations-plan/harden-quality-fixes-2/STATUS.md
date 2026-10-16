@@ -18,3 +18,5 @@
 - 2026-10-16 arc 2 branched `harden-quality-fixes-2-arc2` off dev `5e2888be`; recon re-verified (moves in lessons/phase-2.md); I2 pins green on the base.
 - 2026-10-16 arc 2 phase 2.1 gate: pass (lint 0, typecheck:all 0, test 808 files / 13120 tests; types diff = useConfirm + ConfirmRequest; ban fails on a reverted site).
 - 2026-10-16 arc 2 phase 2.2 gate: pass (lint 0, typecheck:all 0, test:all 0: extension 809 files / 13135 tests; I2 pins green after the change; export diffs are fence substitutions only).
+- 2026-10-16 arc 2 phase 2.3 smoke (Chrome, retry 0): 8 files, 24/24 pass (316 s). Load read 154 at launch, the watcher had seen < 150 just before; later runs gate on load in the launching command.
+- 2026-10-16 arc 2 review round 1: Codex 3 low + Opus 2 low; 5 accepted (one in part), fixed in 066f90ad; resuming Codex.
