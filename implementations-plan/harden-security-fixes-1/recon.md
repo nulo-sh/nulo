@@ -33,9 +33,9 @@ Three Sonnet Explore agents at `c5e9c8e8` (origin/dev): response bodies and back
 ## Collisions and closed limits
 
 - #432 (closed, `known-limit`): the node client's own retry and failure lines stay at warn and error by the owner's choice; the log-level change leaves them as they are.
-- #355 (closed, `known-limit`): batched artifact registrations over the message bound. Not touched.
-- #371 (closed, `known-limit`): a connected session's pending calls are a count, not a byte budget. Not touched.
-- #127 (open, `blocked:external`): a page-chosen discovery id. Not closed here; the key-exchange check narrows what a reused id can reach.
+- #355 (closed, `known-limit`): not touched.
+- #371 (closed, `known-limit`): not touched.
+- #127 (open, `blocked:external`): not closed here; C4 binds a key exchange to its discovery's tab and document origin.
 - #514 (open, owner decision): titles by name prefix. Not touched; this plan only chooses which wire key feeds the title.
 - Lanes running now: `execute-popup-readability` (`popup/windows/execute/**`: not touched here), `token-list-live-check` (`infra/token-list/**`: the second to merge merges `origin/dev` first), `send-fees-ux` (no overlap).
 
