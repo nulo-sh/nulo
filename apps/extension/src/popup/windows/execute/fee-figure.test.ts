@@ -1,5 +1,6 @@
 import { CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-bridge"
 import { describe, expect, test } from "vitest"
+import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { waitsForFeeFigure } from "./fee-figure"
 import type { DraftUIOperation } from "./types"
 
@@ -27,6 +28,7 @@ describe("waitsForFeeFigure", () => {
 			sendTx({ calls: [], feePayer: APP_FPC }, { fee: { gasSettings: { maxFeesPerGas: {} } } }),
 		],
 		["a send_transaction the wallet pays", { kind: "send_transaction", actions: [] } as unknown as DraftUIOperation],
+		["an app's payment naming the PrivateFPC as payer", sendTx({ calls: [], feePayer: PRIVATE_FPC_ADDRESS })],
 	])("waits for %s", (_case, op) => {
 		expect(waitsForFeeFigure(op)).toBe(true)
 	})

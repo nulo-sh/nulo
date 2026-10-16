@@ -23,6 +23,7 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
 import { JobCancelledError, RpcTimeoutError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
+import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { FpcType } from "@/wallet/services/fpc/spec"
 import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/spec"
 import { DappSendExecutor, type DappSendExecutorDeps } from "./dapp-send-executor"
@@ -2618,7 +2619,16 @@ describe("DappSendExecutor: a popup-approved send whose fee came out above the a
 	const HOOKS = { queuedJournalId: "q-1", originKey: "https://dapp.example" } as never
 	const PRIVATE_ROW = { id: "pfj", type: FpcType.PrivateFpc, address: "0xpfj", chainId: 7, isProtocol: true }
 	const { EXTERNAL, FEE_JUICE_WITH_CLAIM, PREEXISTING_FEE_JUICE } = AccountFeePaymentMethodOptions
-	type Route = { feePaymentMethod: AccountFeePaymentMethodOptions; fpcIdentity?: typeof PRIVATE_ROW }
+	type Route = {
+		feePaymentMethod: AccountFeePaymentMethodOptions
+		fpcIdentity?: typeof PRIVATE_ROW
+		appPayer?: { address: AztecAddress; callsFeeJuice: boolean }
+	}
+	/** An app's own payment, as the final simulation's kernel names its payer. */
+	const appPays = (address: string): Route => ({
+		feePaymentMethod: EXTERNAL,
+		appPayer: { address: AztecAddress.fromStringUnsafe(address), callsFeeJuice: false },
+	})
 	const FJ: Route = { feePaymentMethod: PREEXISTING_FEE_JUICE }
 	const PRIVATE: Route = { feePaymentMethod: EXTERNAL, fpcIdentity: PRIVATE_ROW }
 
@@ -2719,6 +2729,7 @@ describe("DappSendExecutor: a popup-approved send whose fee came out above the a
 		["aztec_sendTx, the account's Fee Juice", FJ, (h) => h.aztec()],
 		["aztec_sendTx, a claim to the account", { feePaymentMethod: FEE_JUICE_WITH_CLAIM }, (h) => h.aztec()],
 		["aztec_sendTx, Private Fee Juice", PRIVATE, (h) => h.aztec()],
+		["aztec_sendTx, an app's payment through the PrivateFPC", appPays(PRIVATE_FPC_ADDRESS), (h) => h.aztec()],
 		["send_transaction, the account's Fee Juice", FJ, (h) => h.sendTx()],
 		["send_transaction, Private Fee Juice", PRIVATE, (h) => h.sendTx()],
 	]
@@ -2809,6 +2820,7 @@ describe("DappSendExecutor: a popup-approved send whose fee came out above the a
 	test.each([
 		["a sponsor", { feePaymentMethod: EXTERNAL, fpcIdentity: { ...PRIVATE_ROW, type: FpcType.DefaultSponsoredFpc } }],
 		["an app's own fee contract", { feePaymentMethod: EXTERNAL }],
+		["an app's own fee contract the kernel names", appPays(`0x${"0f".repeat(32)}`)],
 	] as Array<[string, Route]>)("%s pays from a balance that is not the person's: any figure proves unasked", async (_case, route) => {
 		const h = holding([ROSE], route)
 		await h.aztec(approval({ feeCeiling: undefined }))

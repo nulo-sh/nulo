@@ -1,4 +1,5 @@
 import { classifyFeePayer, isEmbeddedFeePayment } from "@nulo/wallet-bridge"
+import { isPrivateFpc } from "@/wallet/services/fpc/private-fpc-address"
 import type { DraftUIOperation } from "./types"
 
 /** A send whose app set its own cap or priority fee, either of which may raise the charge. */
@@ -10,9 +11,15 @@ function setsOwnFee(op: DraftUIOperation): boolean {
 }
 
 /** An app's own payment that claims Fee Juice to the account, which then pays the fee itself. */
-export function claimsToAccount(op: DraftUIOperation): boolean {
+function claimsToAccount(op: DraftUIOperation): boolean {
 	if (op.kind === "send_transaction") return op.fee?.embeddedFeePayment === "fjwc"
 	return op.kind === "aztec_sendTx" && classifyFeePayer(op.exec?.feePayer, op.opts?.from, op.exec?.calls) === "fjwc"
+}
+
+/** An app's own payment the person pays all the same: a claim to the account, or one naming the
+ *  PrivateFPC as payer, which charges the sender's own Private Fee Juice. */
+export function personPaysAppPayment(op: DraftUIOperation): boolean {
+	return claimsToAccount(op) || (op.kind === "aztec_sendTx" && isPrivateFpc(op.exec?.feePayer))
 }
 
 /**
@@ -23,5 +30,5 @@ export function claimsToAccount(op: DraftUIOperation): boolean {
 export function waitsForFeeFigure(op: DraftUIOperation): boolean {
 	if (op.kind !== "send_transaction" && op.kind !== "aztec_sendTx") return false
 	if (op.kind === "aztec_sendTx" && op.executionMode === "default_entrypoint") return false
-	return !isEmbeddedFeePayment(op) || claimsToAccount(op) || setsOwnFee(op)
+	return !isEmbeddedFeePayment(op) || personPaysAppPayment(op) || setsOwnFee(op)
 }

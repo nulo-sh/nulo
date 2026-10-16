@@ -1,6 +1,8 @@
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { describe, expect, test } from "vitest"
 import { formatFeeJuice } from "@/utils/fee-estimation"
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { FpcType } from "@/wallet/services/fpc/spec"
 import { FEE_RISE_ASKS, feeRiseAsks, personalPayerOf } from "./fee-reask"
 
@@ -52,5 +54,14 @@ describe("personalPayerOf", () => {
 		["an app's own fee contract", undefined],
 	])("%s pays from a balance that is not the person's", (_case, fpcIdentity) => {
 		expect(personalPayerOf({ feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL, fpcIdentity })).toBeUndefined()
+	})
+
+	test("an app's own payment the kernel names the PrivateFPC as payer for is the person's; another contract is not", () => {
+		const external = (address: string) => ({
+			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
+			appPayer: { address: AztecAddress.fromStringUnsafe(address) },
+		})
+		expect(personalPayerOf(external(PRIVATE_FPC_ADDRESS))).toEqual({ type: "private_fpc", isProtocol: true })
+		expect(personalPayerOf(external(`0x${"0f".repeat(32)}`))).toBeUndefined()
 	})
 })

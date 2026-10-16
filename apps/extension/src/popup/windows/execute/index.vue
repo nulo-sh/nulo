@@ -22,7 +22,7 @@ import { requireNetwork } from "@/utils/core"
 import { storageLocalSet } from "@/utils/storage"
 import { isSelfPay } from "@nulo/wallet-bridge"
 import { isEmbeddedFeePayment, requiresFeeSelection } from "./operation-validation"
-import { claimsToAccount, waitsForFeeFigure } from "./fee-figure"
+import { personPaysAppPayment, waitsForFeeFigure } from "./fee-figure"
 import { authwitDisplayCall, pendingAuthwitDecodes, undecodedAll } from "./display-calls"
 import { decodeOperationArguments, readKnownTokens, resolveOperations } from "./operation-display"
 import type { DraftUIOperation } from "./types"
@@ -148,9 +148,9 @@ const {
 	onError: (key, err) => {
 		console.error(`[Execute] Fee estimation failed for op ${key}:`, err)
 		// An app-paid operation's estimate only checks the app's fee contract; a failed check is unknown,
-		// never a refusal. A claim to the account is the account paying, so its Confirm waits on a retry.
+		// never a refusal. A payment the person makes all the same keeps Confirm waiting on a retry.
 		const op = operations.value[key] as unknown as UIOperation
-		if (!isAppPaid(op) || claimsToAccount(op)) openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
+		if (!isAppPaid(op) || personPaysAppPayment(op)) openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
 	},
 })
 

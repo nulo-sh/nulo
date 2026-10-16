@@ -12,6 +12,7 @@ import {
 	type QueuedFeePayer,
 	type QueuedFeeReask,
 } from "@nulo/wallet-core/jobs"
+import { isPrivateFpc } from "@/wallet/services/fpc/private-fpc-address"
 import { FpcType, type FpcIdentitySnapshot } from "@/wallet/services/fpc/spec"
 import type { QueuedFeeAnswers } from "./queued-fee-cap"
 
@@ -28,12 +29,14 @@ export function feeRiseAsks(fee: string, ceiling: string): boolean {
 /**
  * The person's own balance a build pays from, read from the route it took rather than the method
  * asked for: the account's Fee Juice, claimed or not, whoever's request made the claim, and Private
- * Fee Juice, which is told from a sponsor only by the paying row. A sponsor or an app's own fee
- * contract pays from a balance that is not the person's.
+ * Fee Juice, told from a sponsor by the paying row or, for an app's own payment, by the PrivateFPC's
+ * address as the kernel names the payer. A sponsor or an app's own fee contract pays from a balance
+ * that is not the person's.
  */
 export function personalPayerOf(built: {
 	feePaymentMethod: AccountFeePaymentMethodOptions
 	fpcIdentity?: FpcIdentitySnapshot
+	appPayer?: { address: unknown }
 }): QueuedFeePayer | undefined {
 	switch (built.feePaymentMethod) {
 		case AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE:
@@ -41,7 +44,8 @@ export function personalPayerOf(built: {
 			return { type: "fj", isProtocol: false }
 		default: {
 			const row = built.fpcIdentity
-			return row?.type === FpcType.PrivateFpc ? { type: "private_fpc", fpcId: row.id, isProtocol: row.isProtocol } : undefined
+			if (row?.type === FpcType.PrivateFpc) return { type: "private_fpc", fpcId: row.id, isProtocol: row.isProtocol }
+			return isPrivateFpc(built.appPayer?.address) ? { type: "private_fpc", isProtocol: true } : undefined
 		}
 	}
 }

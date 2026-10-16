@@ -256,6 +256,7 @@ type StandardBuild = Pick<
 	| "chainIdentity"
 	| "fpcIdentity"
 	| "initializesAccount"
+	| "appPayer"
 > & {
 	network: Network
 	nonce: { toString(): string }
@@ -1390,7 +1391,7 @@ interface PreparedNoFrom {
 function overCeiling(
 	approval: OperationApprovalEnvelope | undefined,
 	ceiling: string | undefined,
-	built: Pick<FeeEstimate, "txRequest" | "feePaymentMethod" | "fpcIdentity">,
+	built: Pick<FeeEstimate, "txRequest" | "feePaymentMethod" | "fpcIdentity" | "appPayer">,
 ): QueuedFeeReask | undefined {
 	if (!approval) return undefined
 	const payer = personalPayerOf(built)
