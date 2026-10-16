@@ -6,3 +6,4 @@
 - 2026-10-16: final fresh Codex pass: reject (F1-F4), all accepted and folded; re-read by the same session: approve. Awaits the orchestrator's approval.
 - 2026-10-16: arc 2 started in parallel with arc 1 (orchestrator's release). Codex design consult: approve with changes (A-C), all accepted.
 - 2026-10-16: phase 4 gate: lint, typecheck:all, test green; test:all red only on the type-role inventory of phase 5's window, which lands with it.
+- 2026-10-16: phase 5 gate: audit:vue green (804 files, 13,001 tests, build).

@@ -284,7 +284,9 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 
 		<div :class="$style.op_divider" />
 
-		<template v-if="isEmbeddedFeePayment(op)">
+		<!-- A window that only reads the request draws its own fee block in place of the choice. -->
+		<slot v-if="$slots.fee" name="fee" />
+		<template v-else-if="isEmbeddedFeePayment(op)">
 			<Flex data-testid="execute-op-fee-set-badge" align="center" gap="8" wide :class="$style.op_fee_set">
 				<Icon name="check-circle" size="14" color="green" />
 				<Text v-if="feeEstimate" variant="body" color="secondary" data-testid="execute-op-app-fee">
