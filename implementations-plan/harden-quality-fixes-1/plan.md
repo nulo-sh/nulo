@@ -1,7 +1,7 @@
 ---
 plan: harden-quality-fixes-1
 tier: light (the lane brief's call; one Codex audit, the Opus lens, a fresh Codex final pass)
-status: approved 2026-10-16 (A1 refused, A2 accepted); arc 1 in progress
+status: completed 2026-10-16 (A1 refused, A2 accepted); one PR in review
 issues: "#536 step 1 and #549 (Refs; A1 refused), #557, #558, #559 (Closes); one arc"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at c5e9c8e8
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-16
+- **Status:** completed; one PR against `dev`, merging is the owner's call.
+- **Shipped:** #536 step 1 (31 `deferred` copies import the shared helper); #549 except the execute window (`never` defaults in `materializeRequest`, `validateSession`, `dispatchOperation`; the session gate's refusals pinned); #557 (journal metadata and network schemas from one shape each); #558 (the header task pipeline, the unreachable authwit arm, the `chrome.*` fallbacks, the wide session-writer interface, `upgradeDappSession`); #559 (shared contact admission rules).
+- **Dropped:** the fee-seed helper (A1 refused, so it would have had one caller); the brief's single kind table (A2, D3).
+- **Known limits:** none.
+- **Open items:** #536 (its later steps and the three copies in files other lanes held); #549 (the execute window's `buildOperationsFromPayload` switch and fee seed, routed after #508); OA-1 (the "Show network name" setting that already does nothing) with the orchestrator for an owner decision page.
+- **Lessons:** none promoted; the one cross-task gotcha (`identifier-sites.expected.json` pins a hash of `dispatcher.ts`) is named by its own failing test, and `lessons.md` is at its budget.
+- **Seeds:** the `/goal` and `/loop` seeds below are retired.
 
 # harden-quality-fixes-1: the cheap dedupe set of the 2026-10-15 quality harden
 
