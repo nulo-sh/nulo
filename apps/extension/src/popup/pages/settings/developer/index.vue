@@ -12,6 +12,7 @@
 import RowTarget from "@/components/ui/RowTarget.vue"
 
 /** Utils */
+import { settingsRow } from "@/utils/settings-search"
 import { defaultConfig as makeDefaultConfig } from "@/wallet/config"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 
@@ -71,25 +72,16 @@ const isIndicationFailuresEnabled = ref(defaultConfig.indicateFailures)
 const isDebugModeEnabled = ref(defaultConfig.debugMode)
 
 const settings = {
-	developerMode: {
-		title: "Developer Mode",
-		description: "Access to entity metadata, etc",
-		model: isDeveloperModeEnabled,
-		visible: ref(true),
-	},
+	developerMode: { ...settingsRow("developer-mode"), model: isDeveloperModeEnabled, visible: ref(true) },
 	indicateFailures: {
-		title: "Indicate Failures",
-		description: "Highlight errors and warnings in the header",
+		...settingsRow("developer-indicate-failures"),
 		model: isIndicationFailuresEnabled,
 		visible: isDeveloperModeEnabled,
 	},
-	debugMode: {
-		title: "Debug Mode",
-		description: "Collect debug level logs",
-		model: isDebugModeEnabled,
-		visible: isDeveloperModeEnabled,
-	},
+	debugMode: { ...settingsRow("developer-debug"), model: isDebugModeEnabled, visible: isDeveloperModeEnabled },
 }
+const logsRow = settingsRow("developer-logs")
+const accountStateRow = settingsRow("developer-account-state")
 
 async function updateSetting(key, value) {
 	if (!settings[key]) return
@@ -154,7 +146,7 @@ onBeforeUnmount(() => {
 
 		<template v-if="!isLoading">
 			<template v-for="sk in Object.keys(settings)" :key="sk">
-				<Flex v-if="settings[sk].visible.value" align="center" justify="between">
+				<Flex v-if="settings[sk].visible.value" align="center" justify="between" :data-testid="settings[sk].testid">
 					<Flex direction="column" justify="center" gap="6">
 						<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings[sk].title }}</Text>
 						<Text variant="caption" color="tertiary">{{ settings[sk].description }}</Text>
@@ -169,13 +161,13 @@ onBeforeUnmount(() => {
 			</template>
 
 			<!-- Logs (developer mode only) -->
-			<div v-if="isDeveloperModeEnabled" @click="handleOpenLogs" :class="$style.logs_row" data-testid="settings-logs-row">
+			<div v-if="isDeveloperModeEnabled" @click="handleOpenLogs" :class="$style.logs_row" :data-testid="logsRow.testid">
 				<RowTarget :labelledby="logsTitleId" data-testid="settings-logs-open" />
 
 				<Flex justify="between" align="center">
 					<Flex direction="column" gap="6">
 						<Flex align="center" gap="8">
-							<Text :id="logsTitleId" variant="row-title" :class="$style.title_size" color="primary">Logs</Text>
+							<Text :id="logsTitleId" variant="row-title" :class="$style.title_size" color="primary">{{ logsRow.title }}</Text>
 							<div
 								v-if="cacheStore.failureLog?.color"
 								:class="$style.failure_dot"
@@ -183,7 +175,7 @@ onBeforeUnmount(() => {
 							/>
 						</Flex>
 						<Text variant="caption" color="tertiary">
-							{{ cacheStore.failureLog ? '1 recent failure' : 'Open the log viewer window' }}
+							{{ cacheStore.failureLog ? '1 recent failure' : logsRow.description }}
 						</Text>
 					</Flex>
 					<MaterialIcon name="open_in_new" :size="18" color="secondary" />
@@ -194,12 +186,12 @@ onBeforeUnmount(() => {
 			<RouterLink
 				to="/popup/settings/developer/account-state"
 				:class="$style.state_link"
-				data-testid="setting-nav-advanced-account-state"
+				:data-testid="accountStateRow.testid"
 			>
 				<Flex justify="between" align="center">
 					<Flex direction="column" gap="6">
-						<Text variant="row-title" :class="$style.title_size" color="primary">Account State</Text>
-						<Text variant="caption" color="tertiary">Notes, authwits, contracts, senders</Text>
+						<Text variant="row-title" :class="$style.title_size" color="primary">{{ accountStateRow.title }}</Text>
+						<Text variant="caption" color="tertiary">{{ accountStateRow.description }}</Text>
 					</Flex>
 					<MaterialIcon name="chevron_right" :size="18" color="secondary" />
 				</Flex>

@@ -51,7 +51,7 @@ For a person who knows a setting exists but not which page holds it. Excellent: 
 
 ## Phases
 
-### Phase 1: the row registry
+### Phase 1: the row registry ✓
 
 - Add `utils/settings-search.ts` and `utils/settings-search.test.ts`. Bind the five pages' row text and testids to it; add the row-root testids the rows lack (`display-row-<slug>`, `privacy-row-<slug>`, `lock-row-auto-lock`, `developer-row-<slug>`; existing ones stay).
 - Add `apps/extension/tests/helpers/settings-rows.ts`: `expectOwnedRows(wrapper, page, context)` (each visible row's testid renders with its exact title and description; no hidden row's testid renders). Call it in `settings/index.test.ts` (password and passkey), `display.test.ts` (with and without `chrome.sidePanel`), `privacy.test.ts`, `lock.test.ts` (password and passkey) and `developer/index.test.ts` (developer mode off and on).

@@ -5,6 +5,7 @@ import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { nextTick } from "vue"
 import type { ConfigProp } from "@/wallet/config"
+import { expectOwnedRows, settingsContext } from "../../../../tests/helpers/settings-rows"
 
 const fakes = vi.hoisted(() => ({
 	managerProfile: { name: "managers.profile" },
@@ -75,6 +76,10 @@ async function mountLock(type: "password" | "passkey" = "password") {
 }
 
 describe("settings/lock", () => {
+	test.each(["password", "passkey"] as const)("renders the search registry's rows for a %s profile", async (type) => {
+		expectOwnedRows(await mountLock(type), "/popup/settings/lock", settingsContext({ passkey: type === "passkey" }))
+	})
+
 	test("is titled Lock, and Lock now renders while the config reads hang", async () => {
 		fakes.config.getValue.mockReturnValue(new Promise(() => {}))
 		const w = await mountLock()

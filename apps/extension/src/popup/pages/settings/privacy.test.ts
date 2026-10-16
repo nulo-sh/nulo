@@ -3,6 +3,7 @@ import { flushPromises, mount } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { defineComponent } from "vue"
 import type { ConfigProp } from "@/wallet/config"
+import { expectOwnedRows, settingsContext } from "../../../../tests/helpers/settings-rows"
 
 const fakes = vi.hoisted(() => ({ config: undefined as unknown, openToast: vi.fn() }))
 vi.mock("@/wallet/services/config/client", () => ({
@@ -77,6 +78,10 @@ async function mountPrivacy() {
 }
 
 describe("settings/privacy", () => {
+	test("renders the search registry's rows", async () => {
+		expectOwnedRows(await mountPrivacy(), "/popup/settings/privacy", settingsContext())
+	})
+
 	test("is titled Privacy, goes back to Settings, and shows the fiat toggle as read", async () => {
 		const w = await mountPrivacy()
 		expect(w.get("[data-title]").attributes()).toMatchObject({ "data-title": "Privacy", "data-back": "/popup/settings" })

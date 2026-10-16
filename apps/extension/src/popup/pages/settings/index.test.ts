@@ -5,6 +5,7 @@ import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { createMemoryHistory, createRouter } from "vue-router"
 import type { ConfigProp } from "@/wallet/config"
+import { expectOwnedRows, settingsContext } from "../../../../tests/helpers/settings-rows"
 
 const clients = vi.hoisted(() => ({ config: undefined as unknown, execution: undefined as unknown }))
 vi.mock("@/wallet/services/config/client", () => ({
@@ -178,6 +179,14 @@ describe("settings hub — rows", () => {
 		const lock = w.findAllComponents(SettingItem).find((row) => row.attributes("data-testid") === "setting-nav-lock")
 		expect(lock?.props("description")).toBe("Auto-lock")
 		expect(w.get('[data-testid="setting-nav-profile"]').text()).toContain("Passkey profile")
+	})
+
+	test.each([
+		{ profile: PASSWORD, passkey: false },
+		{ profile: PASSKEY, passkey: true },
+	])("renders the search registry's rows for a $profile.type profile", async ({ profile, passkey }) => {
+		const context = settingsContext({ passkey, provingStatus: "Presto · connected" })
+		expectOwnedRows(await mountHub(profile), "/popup/settings", context)
 	})
 
 	test("the rows read as the signed copy", async () => {

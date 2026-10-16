@@ -2,6 +2,7 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { ConfigProp } from "@/wallet/config"
+import { expectOwnedRows, settingsContext } from "../../../../tests/helpers/settings-rows"
 
 const fakes = vi.hoisted(() => ({ config: undefined as unknown }))
 vi.mock("@/wallet/services/config/client", () => ({
@@ -68,6 +69,11 @@ describe("settings/display", () => {
 		await flushPromises()
 		expect(config.getProps).toHaveBeenCalledTimes(2)
 		expect(w.get('[data-testid="theme-trigger"]').text()).toBe("dark")
+	})
+
+	test.each([false, true])("renders the search registry's rows, with a side panel: %s", async (sidePanel) => {
+		if (sidePanel) Object.assign(chrome, { sidePanel: { open: vi.fn() } })
+		expectOwnedRows(await mountDisplay(), "/popup/settings/display", settingsContext({ sidePanel }))
 	})
 
 	test("a reread that finds the side panel setting changed shows it and closes nothing", async () => {

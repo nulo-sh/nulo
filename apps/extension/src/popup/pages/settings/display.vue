@@ -12,6 +12,7 @@
 import { Dropdown } from "@/components/ui/Dropdown"
 
 /** Utils */
+import { settingsRow } from "@/utils/settings-search"
 import { defaultConfig as makeDefaultConfig } from "@/wallet/config"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 
@@ -35,43 +36,19 @@ const isIncomingTransfersVisible = ref(defaultConfig.incomingTransfersVisible)
 // D8 dust filter — a NUMBER, not a toggle, so it lives outside the `settings` toggle map.
 const dustThreshold = ref(String(defaultConfig.incomingDustUsdThreshold))
 const settings = {
-	theme: {
-		title: "",
-		description: "",
-		model: theme,
-	},
+	theme: { ...settingsRow("display-theme"), model: theme },
 	// Chrome-only: Firefox has no side panel, so the row is not offered there.
 	...(chrome.sidePanel
 		? {
-				sidePanel: {
-					title: "Open as Side Panel",
-					description: "Open as side panel instead of popup",
-					model: isSidePanelEnabled,
-				},
+				sidePanel: { ...settingsRow("display-side-panel"), model: isSidePanelEnabled },
 			}
 		: {}),
-	showNode: {
-		title: "Show network name",
-		description: "Always show network name in the header",
-		model: isShowNodeNameEnabled,
-	},
-	showPopupFullscreen: {
-		title: "Full-height popups",
-		description: "Open popups to the full height",
-		model: isShowPopupFullscreen,
-	},
-	disableAnimations: {
-		title: "Disable animations",
-		description: "Minimize the use of animations",
-		model: isAnimationsDisabled,
-	},
-	incomingTransfersVisible: {
-		title: "Show incoming transfers",
-		description:
-			"Hide if you run the same recovery phrase on multiple devices and don't want one device's outgoing to appear as incoming here",
-		model: isIncomingTransfersVisible,
-	},
+	showNode: { ...settingsRow("display-network-name"), model: isShowNodeNameEnabled },
+	showPopupFullscreen: { ...settingsRow("display-full-height"), model: isShowPopupFullscreen },
+	disableAnimations: { ...settingsRow("display-animations"), model: isAnimationsDisabled },
+	incomingTransfersVisible: { ...settingsRow("display-incoming-transfers"), model: isIncomingTransfersVisible },
 }
+const dustRow = settingsRow("display-dust")
 
 async function updateDustThreshold(event) {
 	const el = event.target
@@ -171,10 +148,10 @@ onBeforeUnmount(() => {
 		<SubPageHeader title="Display" :backTo="'/popup/settings'" />
 
 		<Flex v-if="!isLoading" direction="column" gap="24" :class="$style.content">
-			<Flex justify="between">
+			<Flex justify="between" :data-testid="settings.theme.testid">
 				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary"> Theme </Text>
-					<Text variant="caption" color="tertiary"> Application theme </Text>
+					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ settings.theme.title }} </Text>
+					<Text variant="caption" color="tertiary"> {{ settings.theme.description }} </Text>
 				</Flex>
 
 				<Dropdown>
@@ -218,7 +195,7 @@ onBeforeUnmount(() => {
 				</Dropdown>
 			</Flex>
 
-			<Flex v-for="sk in Object.keys(settings).filter(sk => sk !== 'theme' && sk !== 'incomingTransfersVisible')" justify="between">
+			<Flex v-for="sk in Object.keys(settings).filter(sk => sk !== 'theme' && sk !== 'incomingTransfersVisible')" justify="between" :data-testid="settings[sk].testid">
 				<Flex direction="column" gap="6">
 					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ settings[sk].title }} </Text>
 					<Text variant="caption" color="tertiary"> {{ settings[sk].description }} </Text>
@@ -233,7 +210,7 @@ onBeforeUnmount(() => {
 
 			<SectionLabel label="Lists" />
 
-			<Flex justify="between">
+			<Flex justify="between" :data-testid="settings.incomingTransfersVisible.testid">
 				<Flex direction="column" gap="6">
 					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ settings.incomingTransfersVisible.title }} </Text>
 					<Text variant="caption" color="tertiary"> {{ settings.incomingTransfersVisible.description }} </Text>
@@ -246,10 +223,10 @@ onBeforeUnmount(() => {
 			</Flex>
 
 			<!-- One dust threshold for the wallet: the activity feed's receipts AND the Holdings fold. -->
-			<Flex justify="between" align="center" gap="12">
+			<Flex justify="between" align="center" gap="12" :data-testid="dustRow.testid">
 				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary"> Hide dust </Text>
-					<Text variant="caption" color="tertiary">Hide receipts and holdings below this value. 0 turns it off.</Text>
+					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ dustRow.title }} </Text>
+					<Text variant="caption" color="tertiary">{{ dustRow.description }}</Text>
 				</Flex>
 
 				<!-- type="text" (not number) so there are no spinner arrows widening the field; the $ prefix

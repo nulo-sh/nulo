@@ -20,6 +20,7 @@ import { usePrestoCheck } from "@/composables/usePrestoCheck"
 /** Utils */
 import { rowDescriptionFor } from "@/utils/presto-ui-state"
 import { hubValues, profileTypeLabel } from "@/utils/settings-labels"
+import { settingItemProps } from "@/utils/settings-search"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -42,6 +43,14 @@ const executionService = new ExecutionServiceClient()
 const HUB_KEYS = new Set(["sessionTtl", "showFiatValues", "theme", "developerMode"])
 const hubConfig = reactive({})
 const values = computed(() => hubValues(hubConfig))
+
+/** What decides which searchable rows exist here and what two of them say. */
+const searchContext = computed(() => ({
+	sidePanel: Boolean(chrome.sidePanel),
+	passkey: isPasskey.value,
+	developerMode: hubConfig.developerMode === true,
+	provingStatus: provingDescription.value,
+}))
 
 configService.onUpdate.add(onHubUpdate)
 const hubRead = useConfigRead(
@@ -130,62 +139,48 @@ onBeforeUnmount(() => {
 			<ItemsContainer title="Your wallet">
 				<SettingItem
 					to="/popup/settings/accounts"
-					title="Accounts"
-					description="Switch, create, manage"
 					materialIcon="account_balance_wallet"
 					chevron
-					data-testid="setting-nav-accounts"
+					v-bind="settingItemProps('hub-accounts', searchContext)"
 				/>
 				<SettingItem
 					to="/popup/settings/contacts"
-					title="Contacts"
-					description="Saved addresses"
 					materialIcon="group"
 					chevron
-					data-testid="setting-nav-contacts"
+					v-bind="settingItemProps('hub-contacts', searchContext)"
 				/>
 				<SettingItem
 					to="/popup/settings/tokens"
-					title="Tokens"
-					description="Tracked tokens and balances"
 					materialIcon="toll"
 					chevron
-					data-testid="setting-nav-tokens"
+					v-bind="settingItemProps('hub-tokens', searchContext)"
 				/>
 			</ItemsContainer>
 
 			<ItemsContainer title="Apps and networks">
 				<SettingItem
 					to="/popup/settings/connected-apps"
-					title="Connected Apps"
-					description="Apps with granted permissions"
 					materialIcon="extension"
 					chevron
-					data-testid="setting-nav-connected-apps"
+					v-bind="settingItemProps('hub-connected-apps', searchContext)"
 				/>
 				<SettingItem
 					to="/popup/settings/networks"
-					title="Networks"
-					description="Aztec networks and RPCs"
 					materialIcon="hub"
 					chevron
-					data-testid="setting-nav-networks"
+					v-bind="settingItemProps('hub-networks', searchContext)"
 				/>
 				<SettingItem
 					to="/popup/settings/fpcs"
-					title="Fee Payments"
-					description="FPCs and fee methods"
 					materialIcon="local_gas_station"
 					chevron
-					data-testid="setting-nav-fpcs"
+					v-bind="settingItemProps('hub-fpcs', searchContext)"
 				/>
 				<SettingItem
 					to="/popup/settings/proving"
-					title="Proving"
-					:description="provingDescription"
 					materialIcon="speed"
 					chevron
-					data-testid="setting-nav-proving"
+					v-bind="settingItemProps('hub-proving', searchContext)"
 					:data-status="prestoState.kind"
 				/>
 			</ItemsContainer>
@@ -193,82 +188,67 @@ onBeforeUnmount(() => {
 			<ItemsContainer title="Safety">
 				<SettingItem
 					to="/popup/settings/lock"
-					title="Lock"
-					:description="isPasskey ? 'Auto-lock' : 'Auto-lock, strict mode'"
 					materialIcon="lock"
 					:value="values.lock"
 					chevron
-					data-testid="setting-nav-lock"
+					v-bind="settingItemProps('hub-lock', searchContext)"
 				/>
 				<SettingItem
 					to="/popup/settings/security/export"
-					title="Back up profile"
-					description="Keep a copy of this profile"
 					materialIcon="download"
 					chevron
-					data-testid="backup-link-btn"
+					v-bind="settingItemProps('hub-backup', searchContext)"
 				/>
 				<SettingItem
 					v-if="!isPasskey"
 					to="/popup/settings/security/change-password"
-					title="Change password"
 					materialIcon="password"
 					chevron
-					data-testid="change-password-link-btn"
+					v-bind="settingItemProps('hub-change-password', searchContext)"
 				/>
 			</ItemsContainer>
 
 			<ItemsContainer title="Preferences">
 				<SettingItem
 					to="/popup/settings/privacy"
-					title="Privacy"
-					description="Prices, explorer"
 					materialIcon="visibility"
 					:value="values.privacy"
 					chevron
-					data-testid="setting-nav-privacy"
+					v-bind="settingItemProps('hub-privacy', searchContext)"
 				/>
 				<SettingItem
 					to="/popup/settings/display"
-					title="Display"
-					description="Theme, layout"
 					materialIcon="palette"
 					:value="values.display"
 					chevron
-					data-testid="setting-nav-display"
+					v-bind="settingItemProps('hub-display', searchContext)"
 				/>
 				<SettingItem
 					to="/popup/settings/developer"
-					title="Developer"
-					description="Mode, logs, account state"
 					materialIcon="bolt"
 					:value="values.developer"
 					chevron
-					data-testid="setting-nav-developer"
+					v-bind="settingItemProps('hub-developer', searchContext)"
 				/>
 			</ItemsContainer>
 
 			<ItemsContainer title="Help">
 				<SettingItem
 					to="/popup/settings/glossary"
-					title="Glossary"
-					description="What Nulo's words mean"
 					materialIcon="menu_book"
 					chevron
-					data-testid="setting-nav-glossary"
+					v-bind="settingItemProps('hub-glossary', searchContext)"
 				/>
 				<SettingItem
 					to="/popup/settings/about"
-					title="About Nulo"
-					description="Version, contact, legal"
 					materialIcon="info"
 					chevron
-					data-testid="setting-nav-about"
+					v-bind="settingItemProps('hub-about', searchContext)"
 				/>
 			</ItemsContainer>
 
 			<ItemsContainer title="Danger zone" danger>
-				<SettingItem to="/popup/settings/security/reset" title="Delete profile" chevron data-testid="delete-profile-link-btn">
+				<SettingItem to="/popup/settings/security/reset" chevron v-bind="settingItemProps('hub-delete-profile', searchContext)">
 					<template #icon>
 						<span :class="$style.danger_icon">
 							<MaterialIcon name="delete" :size="20" color="red" />
