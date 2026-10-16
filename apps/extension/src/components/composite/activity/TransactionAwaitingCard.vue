@@ -67,6 +67,7 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 			:backend="backend"
 			:opens="focusable || Boolean(reaskLine && jobId)"
 			:actionCount="(focusable ? 1 : 0) + (showCancel ? 1 : 0)"
+			:oneLineTitle="Boolean(originLabel) && !transferTypeLabel"
 			testId="tx-awaiting-card"
 			@activate="reaskLine ? emit('review', jobId) : emit('focus', jobId)"
 		>
@@ -76,7 +77,8 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 
 			<template v-if="transferTypeLabel || originLabel" #title-trailing>
 				<span :class="$style.title_sep">·</span>
-				<span :class="$style.transfer_chip">{{ transferTypeLabel || originLabel }}</span>
+				<span v-if="transferTypeLabel" :class="$style.transfer_chip">{{ transferTypeLabel }}</span>
+				<span v-else :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
 			</template>
 
 			<template #secondary>
@@ -134,6 +136,10 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 
 .transfer_chip {
 	composes: chip from "./activity-card.module.css";
+}
+
+.app_chip {
+	composes: app_chip from "./activity-card.module.css";
 }
 
 .action_btn {

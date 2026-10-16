@@ -20,7 +20,7 @@ const STUBS = {
 				<span class="symbol">{{ amountSymbol }}</span>
 			</div>
 		`,
-		props: ["title", "icon", "amount", "amountSymbol", "testId", "stage", "backend"],
+		props: ["title", "icon", "amount", "amountSymbol", "testId", "stage", "backend", "oneLineTitle"],
 	},
 }
 
@@ -112,21 +112,25 @@ describe("composite/TransactionAwaitingCard", () => {
 		expect(noChip.html()).not.toMatch(/transfer_chip/)
 	})
 
-	// Chip-fit contract: subtitle ellipsis-classes + aria-atomic + the chip
-	// uses the single merged class. transferTypeLabel and originLabel are
-	// mutually exclusive on the chip — transfer ops carry the first, dApp
-	// ops carry the second; the template prefers transferTypeLabel.
-	test("subtitle has chip-fit classes; chip renders for either chip prop", () => {
+	// transferTypeLabel and originLabel are mutually exclusive on the chip: transfer ops carry the
+	// first, dApp ops the second.
+	test("a transfer keeps its whole title and the direction chip; the stage line is cut and atomic", () => {
 		const w = mountCard({ subtitle: "Generating proof...", transferTypeLabel: "Private → Public" })
 		const subtitleSpan = w.find('[role="status"]')
 		expect(subtitleSpan.attributes("class")).toMatch(/subtitle/)
 		expect(subtitleSpan.attributes("aria-atomic")).toBe("true")
 		expect(w.html()).toMatch(/transfer_chip/)
 		expect(w.text()).toContain("Private → Public")
+		expect(w.findComponent(STUBS.TransactionCardLayout).props("oneLineTitle")).toBe(false)
+		expect(w.find('[data-testid="activity-app-chip"]').exists()).toBe(false)
+	})
 
-		const dapp = mountCard({ subtitle: "Generating proof...", originLabel: "example.dapp.io" })
-		expect(dapp.html()).toMatch(/transfer_chip/)
-		expect(dapp.text()).toContain("example.dapp.io")
+	test("a dApp's call: its function title is cut to one line and the host sits in the app chip", () => {
+		const host = "staging-nemi-interface.nemi-e65.workers.dev"
+		const w = mountCard({ title: "Swap Exact Tokens For Tokens Supporting Fee On Transfer Tokens", originLabel: host })
+		expect(w.findComponent(STUBS.TransactionCardLayout).props("oneLineTitle")).toBe(true)
+		expect(w.find('[data-testid="activity-app-chip"]').text()).toBe(host)
+		expect(w.html()).not.toMatch(/transfer_chip/)
 	})
 
 	describe("Cancel button", () => {

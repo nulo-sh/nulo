@@ -17,9 +17,10 @@ import {
 	setTheme,
 } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
+import { shotSend } from "./fixtures/send-page"
 import { waitForPopup } from "./fixtures/popups"
 import { skipUnlessListPrices } from "./fixtures/token-list"
-import { readActivityScope, seedReceipt, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
+import { readActivityScope, seedJournalRecord, seedReceipt, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
 import { pointerClick } from "./helpers/legal-drivers"
 import { coveredAt, pressEscape, tabAround, waitForFocus } from "./helpers/pointer-probes"
 
@@ -564,6 +565,8 @@ type RowLayout = {
 	intrudes: string[]
 	/** The amount's text is wider than its box. */
 	cut: boolean
+	/** The title's text is wider than its box: a send's or a receipt's symbol must never be. */
+	titleCut: boolean
 }
 
 function readRows(page: Page): Promise<RowLayout[]> {
@@ -600,6 +603,10 @@ function readRows(page: Page): Promise<RowLayout[]> {
 					.map(name),
 				intrudes: intruders(row, row.querySelector('[data-testid="activity-amount-col"]')),
 				cut: amount !== null && amount.scrollWidth > amount.clientWidth,
+				titleCut: (() => {
+					const title = row.querySelector('[data-testid="activity-title"]')
+					return title === null || title.scrollWidth > title.clientWidth
+				})(),
 			}
 		})
 	}, ROWS)
@@ -684,7 +691,9 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 			console.log(
 				`[rows] ${theme}, ${surface.name}: heights ${rows.map((r) => (r.bottom - r.top).toFixed(1)).join(", ")}; gaps ${gaps.map((g) => g.toFixed(1)).join(", ")}; amounts ${rows.map((r) => r.amount).join(", ")}`,
 			)
-			expect(rows.filter((r) => r.amount === null || r.cut || r.escapes.length > 0 || r.intrudes.length > 0)).toEqual([])
+			expect(rows.filter((r) => r.amount === null || r.cut || r.titleCut || r.escapes.length > 0 || r.intrudes.length > 0)).toEqual(
+				[],
+			)
 			for (const gap of gaps) expect.soft(gap, `${surface.name}'s row gap`).toBeCloseTo(10, 0)
 			if (surface.name !== "History") continue
 			const clearance = await page.evaluate((rowsSel: string) => {
@@ -696,6 +705,137 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 			expect(clearance).toBeCloseTo(12, 0)
 		}
 	}
+
+	expect(listedExtensionPerTest.consoleErrors).toEqual([])
+	expect(listedExtensionPerTest.pageErrors).toEqual([])
+}, 180_000)
+
+/** A dApp's function name and host at the lengths testers met: the host breaks only at its hyphens. */
+const LONG_METHOD = "swap_exact_tokens_for_tokens_supporting_fee_on_transfer_tokens"
+const LONG_HOST = "staging-nemi-interface.nemi-e65.workers.dev"
+const SHORT_APP = "NEMI"
+const APP_CHIP_CAP = 96
+const DAPP_CALL_HASH = `0x${"6c".repeat(32)}`
+const DAPP_TRANSFER_HASH = `0x${"6d".repeat(32)}`
+
+type NamedRows = {
+	/** Scroll containers and the document that came out wider than their box. */
+	overflowing: string[]
+	/** Per row: its title's line count, whether its text is cut and shown with an ellipsis, its app chip. */
+	rows: Record<string, { lines: number; cut: boolean; ellipsis: boolean; chip: { width: number; cut: boolean } | null }>
+}
+
+/** Reads the three dApp rows once each is drawn and the fonts are in. */
+async function readDappRows(page: Page): Promise<NamedRows> {
+	const rows = {
+		terminal: sel("tx-terminal-card"),
+		call: `${sel("tx-card")}[data-tx-hash="${DAPP_CALL_HASH}"]`,
+		transfer: `${sel("tx-card")}[data-tx-hash="${DAPP_TRANSFER_HASH}"]`,
+	}
+	await page.waitForFunction(
+		(all: string[]) => document.fonts.status === "loaded" && all.every((s) => document.querySelector(s) !== null),
+		{ timeout: 15_000, polling: 100 },
+		Object.values(rows),
+	)
+	return page.evaluate((named: Record<string, string>) => {
+		const lineCount = (el: Element) => {
+			const range = document.createRange()
+			range.selectNodeContents(el)
+			return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size
+		}
+		const widened = (row: Element) => {
+			const found: string[] = []
+			for (let el = row.parentElement; el && el !== document.body; el = el.parentElement) {
+				if (getComputedStyle(el).overflowX !== "visible" && el.scrollWidth > el.clientWidth)
+					found.push(`${el.getAttribute("data-testid") ?? el.tagName} ${el.scrollWidth}>${el.clientWidth}`)
+			}
+			return found
+		}
+		const readRow = (row: Element) => {
+			const title = row.querySelector<HTMLElement>('[data-testid="activity-title"]')
+			if (!title) throw new Error("a row has no title")
+			const chip = row.querySelector<HTMLElement>('[data-testid="activity-app-chip"]')
+			return {
+				lines: lineCount(title),
+				cut: title.scrollWidth > title.clientWidth,
+				ellipsis: getComputedStyle(title).textOverflow === "ellipsis",
+				chip: chip && { width: chip.getBoundingClientRect().width, cut: chip.scrollWidth > chip.clientWidth },
+			}
+		}
+		const overflowing = new Set<string>()
+		const out: NamedRows["rows"] = {}
+		for (const [key, s] of Object.entries(named)) {
+			const row = document.querySelector(s)
+			if (!row) throw new Error(`${key} row missing`)
+			for (const el of widened(row)) overflowing.add(el)
+			out[key] = readRow(row)
+		}
+		if (document.documentElement.scrollWidth > window.innerWidth) overflowing.add("html")
+		return { overflowing: [...overflowing], rows: out }
+	}, rows)
+}
+
+test("a dApp's long function name and host never widen Home or History: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol never cut; the details' App value breaks against the box's right edge", async ({
+	listedExtensionPerTest,
+}) => {
+	const page = await openPopup(listedExtensionPerTest)
+	await waitForHash(page, "#/popup/general")
+	const scope = await readActivityScope(page)
+	const now = Date.now()
+	await seedJournalRecord(page, scope, {
+		id: "d1".repeat(8),
+		kind: "dapp_execute",
+		title: LONG_METHOD,
+		subtitle: LONG_HOST,
+		progress: { stage: "cancelled" },
+		at: now,
+	})
+	await seedTransaction(page, scope, { hash: DAPP_CALL_HASH, amount: "0", method: LONG_METHOD, dapp: SHORT_APP, at: now - 1_000 })
+	await seedTransaction(page, scope, { hash: DAPP_TRANSFER_HASH, amount: "2500000", transferType: 2, dapp: LONG_HOST, at: now - 2_000 })
+	await seedUsdQuoteAndReload(page)
+	await page.bringToFront()
+
+	for (const surface of SURFACES.filter((s) => s.name !== "the token page")) {
+		await openSurface(page, surface.hash)
+		const { overflowing, rows } = await readDappRows(page)
+		console.log(`[rows] ${surface.name}, dApp rows: ${JSON.stringify(rows)}`)
+		await shotSend(page, `dapp-rows-${surface.name.toLowerCase()}`, "tx-terminal-card")
+		expect(overflowing, surface.name).toEqual([])
+		for (const key of ["terminal", "call"])
+			expect(rows[key], `${surface.name}, ${key}`).toMatchObject({ lines: 1, cut: true, ellipsis: true })
+		expect(rows.terminal.chip?.width).toBeLessThanOrEqual(APP_CHIP_CAP + 0.5)
+		expect(rows.terminal.chip?.cut).toBe(true)
+		expect(rows.call.chip?.cut).toBe(false)
+		expect(rows.transfer.cut).toBe(false)
+		expect(rows.transfer.chip?.width).toBeLessThanOrEqual(APP_CHIP_CAP + 0.5)
+	}
+
+	await navigateByHash(page, `#/popup/tx/${DAPP_TRANSFER_HASH}`)
+	await page.waitForSelector(sel("tx-detail-app"), { visible: true, timeout: 15_000 })
+	await shotSend(page, "tx-detail-app", "tx-detail-app")
+	const app = await page.evaluate(() => {
+		const value = document.querySelector('[data-testid="tx-detail-app"]') as HTMLElement
+		const label = document.querySelector('[data-testid="tx-detail-app-label"]') as HTMLElement
+		const box = value.parentElement?.parentElement as HTMLElement
+		const style = getComputedStyle(box)
+		const inner = box.getBoundingClientRect().right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight)
+		const range = document.createRange()
+		range.selectNodeContents(value)
+		const lines = [...range.getClientRects()]
+		return {
+			text: value.textContent?.trim(),
+			lines: new Set(lines.map((r) => Math.round(r.top))).size,
+			lineRights: lines.map((r) => r.right - inner),
+			right: value.getBoundingClientRect().right - inner,
+			gap: value.getBoundingClientRect().left - label.getBoundingClientRect().right,
+		}
+	})
+	console.log(`[rows] the details' App value: ${JSON.stringify(app)}`)
+	expect(app.text).toBe(LONG_HOST)
+	expect(app.lines).toBe(2)
+	expect(Math.abs(app.right)).toBeLessThanOrEqual(0.5)
+	for (const right of app.lineRights) expect(Math.abs(right)).toBeLessThanOrEqual(0.5)
+	expect(app.gap).toBeGreaterThanOrEqual(16 - 0.5)
 
 	expect(listedExtensionPerTest.consoleErrors).toEqual([])
 	expect(listedExtensionPerTest.pageErrors).toEqual([])

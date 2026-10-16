@@ -43,14 +43,23 @@ defineProps({
 </script>
 
 <template>
-	<TransactionCardLayout :title="title" :icon="activityIcon" :amount="amount" :amountSymbol="amountSymbol" :to="to" testId="tx-terminal-card">
+	<TransactionCardLayout
+		:title="title"
+		:icon="activityIcon"
+		:amount="amount"
+		:amountSymbol="amountSymbol"
+		:to="to"
+		:oneLineTitle="Boolean(originLabel) && !transferTypeLabel"
+		testId="tx-terminal-card"
+	>
 		<template #badge>
 			<Icon :name="icon" size="12" :color="STATUS_ICON_FILL[color]" :class="$style.status_icon" :data-color="color" data-testid="activity-status-icon" />
 		</template>
 
 		<template v-if="transferTypeLabel || originLabel" #title-trailing>
 			<span :class="$style.title_sep">·</span>
-			<span :class="$style.chip">{{ transferTypeLabel || originLabel }}</span>
+			<span v-if="transferTypeLabel" :class="$style.chip">{{ transferTypeLabel }}</span>
+			<span v-else :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
 		</template>
 
 		<template #secondary>
@@ -87,5 +96,9 @@ defineProps({
 
 .chip {
 	composes: chip from "./activity-card.module.css";
+}
+
+.app_chip {
+	composes: app_chip from "./activity-card.module.css";
 }
 </style>

@@ -17,3 +17,12 @@
 	border: 1px solid var(--hairline-soft);
 	padding: 1px 4px;
 }
+
+/* The chip that names a dApp: capped and cut at its end, never shrunk below its cap, so a short name
+ * stays whole while the title gives way. */
+.app_chip {
+	composes: chip;
+	max-width: 96px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}

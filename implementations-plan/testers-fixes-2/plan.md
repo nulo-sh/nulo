@@ -1,7 +1,7 @@
 ---
 plan: testers-fixes-2
 tier: light
-status: planned, panel approved (Codex round 3), awaiting the orchestrator's approval
+status: implementing (orchestrator approved 2026-10-16)
 issues: "#583 #592 (the one arc closes both)"
 driver: claude-code
 claude_model: opus
@@ -46,6 +46,7 @@ For a person who uses dApps with long names and function names, on Home, History
   - D4, the layout lives in `general.vue` (see Layout). D5, a template scroll listener. A scroll-driven animation is not in Firefox. `background-attachment: local` draws the shadow under the rows, unlike the mockup. An IntersectionObserver is more code.
   - D6, no `tabindex` on the middle (Codex asked for one; rejected on measurement). Both browsers keep today's Tab and PageDown behaviour inside the scrolling content, and `tabindex` restores none of the cases lost over the hero (recon § Keyboard). Its only effect is a new Chrome Tab stop nobody signed. PageDown and the wheel with focus or the pointer over the fixed hero no longer scroll: that follows from the signed layout (OWNER-ASKS N-1).
   - D7, a prop over a `:has()` selector: the cards already hold the two labels that decide it, and a selector cannot name a class from another CSS module.
+  - D8 (implementation): Phase 1's "NEMI" row is a settled dApp call, seeded through `seedTransaction`'s `method`, which records no transfer for a non-transfer name; the browser test so covers both the terminal and the settled card's one-line path ([lessons/phase-1.md](lessons/phase-1.md)).
 
 ## Security & Adversarial Considerations
 
@@ -68,7 +69,7 @@ For a person who uses dApps with long names and function names, on Home, History
 
 ## Phases
 
-### Phase 1: dApp rows on one line, nothing scrolls sideways, the App row (#583)
+### Phase 1: dApp rows on one line, nothing scrolls sideways, the App row (#583) ✓
 
 Files: as Architecture (rows and App row), and `tests/e2e/helpers/activity-seeds.ts` (`seedJournalRecord` gains a `dapp_execute` form with `title` and `subtitle`; `seedTransaction` gains an optional `method`).
 

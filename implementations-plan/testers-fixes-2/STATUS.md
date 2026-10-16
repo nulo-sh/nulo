@@ -5,3 +5,6 @@
 - 2026-10-16: round 1: Codex reject (8), Opus conditional approve (8). Send rows must not change: the title cut is limited to rows that name an app (measured); `tabindex` and a hero known limit rejected on measurement; OA-1's ship-now reworked, N-1 added; Codex resumed for round 2.
 - 2026-10-17: round 2: Codex conditional approve (4 conditions), all accepted; phases renumbered 1-3; Codex round 3 started.
 - 2026-10-17: round 3: Codex approve. Plan committed; awaiting the orchestrator's approval.
+- 2026-10-16: arc started; merged origin/dev at 3dc5a06a (no file of this arc touched).
+- 2026-10-16: Phase 1 red proof: the new rows.test.ts case fails on the base build (Home's scroller 454>360).
+- 2026-10-16: Phase 1 gate pass: lint, typecheck:all, test (13217 passed); armed Chrome rows + type-roles 17 passed (started at load1 176, above the rule); armed Firefox rows + type-roles 18 passed (load1 140).
