@@ -2,8 +2,8 @@
  * The `prepare` job's advisory live check: every source entry read from a public node for its chain,
  * the way the wallet checks it before seeding (the instance's address and current class, then the
  * symbol and decimals its getters return). A node can lie, so `matches` means only that this node
- * agrees; the wallet checks again on its own node. No node text reaches stdout or stderr: every value
- * is shape-checked before use, and a failure prints as a fixed category.
+ * agrees; the wallet checks again on its own node. No unchecked node text reaches stdout or stderr:
+ * every value is shape-checked before use, and a failure prints as a fixed category.
  *
  *   bun infra/token-list/scripts/live-check.ts <nodeUrl>...   (exits 0 only when there are rows and every one matches)
  */
@@ -19,8 +19,7 @@ const BUDGET_MS = 4 * 60_000
 const MAX_UINT32 = 0xffff_ffff
 const NODE_VERSION = /^[0-9A-Za-z.+-]{1,32}$/
 const PRINTABLE_ASCII = /^[ -~]+$/
-// `ignoreBOM` keeps a leading U+FEFF, as the wallet's Buffer decoding does.
-const UTF8 = new TextDecoder("utf-8", { ignoreBOM: true })
+const UTF8 = new TextDecoder()
 
 export type LiveCheckIO = { fetch: typeof fetch; deadline: AbortSignal }
 

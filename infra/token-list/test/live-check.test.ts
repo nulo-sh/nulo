@@ -143,6 +143,16 @@ describe("the live check", () => {
 		expect(ok).toBe(false)
 	})
 
+	test.each<[string, Answer]>([
+		["an l1ChainId above u32", (c) => (c.method === "aztec_getNodeInfo" ? result({ ...NODE_INFO, l1ChainId: 2 ** 32 }) : undefined)],
+		["a negative rollupVersion", (c) => (c.method === "aztec_getNodeInfo" ? result({ ...NODE_INFO, rollupVersion: -1 }) : undefined)],
+		["a block number as text", (c) => (c.method === "aztec_getBlockNumber" ? result(String(BLOCK)) : undefined)],
+	])("a node identity outside its shape checks nothing: %s", async (_name, answer) => {
+		const { text, results } = await rows([token(1)], node([token(1)], answer))
+		expect(text).toContain("- https\\:\\/\\/node\\.example: not checked: unexpected reply")
+		expect(results).toEqual([`not checked: no node read for chain ${CHAIN}`])
+	})
+
 	test("a node whose info fails checks nothing, and every row says so", async () => {
 		const list = [token(1), token(2)]
 		const n = node(list, (c) => (c.method === "aztec_getNodeInfo" ? ERROR_REPLY : undefined))
