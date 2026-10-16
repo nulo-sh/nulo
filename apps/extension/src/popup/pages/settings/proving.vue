@@ -32,11 +32,20 @@ const copy = computed(() => copyFor(state.value, lastProve.value, "settings"))
 const rows = computed(() => detailRowsFor(state.value))
 const diagnosis = computed(() => (state.value.kind === "secure-connection-unavailable" ? state.value.diagnosis : undefined))
 
+const shellRef = useTemplateRef("shellRef")
+const rowRef = useTemplateRef("rowRef")
+
 const executionService = new ExecutionServiceClient()
 
 function retry() {
 	void check()
 }
+
+// Pre-flush, so the row is still mounted: a grant that takes it away while it holds focus hands
+// focus to the title, not the page.
+watch(permissionMissing, (missing) => {
+	if (!missing && rowRef.value?.$el.contains(document.activeElement)) shellRef.value?.focusTitle()
+})
 
 onBeforeMount(async () => {
 	try {
@@ -56,8 +65,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<SettingsPageShell title="Proving" backTo="/popup/settings" gap="24">
-		<PrestoPermissionRow v-if="permissionMissing" @allow="requestPermission" />
+	<SettingsPageShell ref="shellRef" title="Proving" backTo="/popup/settings" gap="24">
+		<PrestoPermissionRow v-if="permissionMissing" ref="rowRef" @allow="requestPermission" />
 
 		<PrestoStatusCard
 			v-if="!permissionMissing"
