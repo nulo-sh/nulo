@@ -451,7 +451,11 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 				)
 			}
 			if (artifact) {
-				await pxe.registerContractClass(artifact)
+				// A provided artifact serves only a class the wallet has no copy of: its own copy, compiled-in
+				// then stored, is the one written. Resolved on the raw PXE, since the public read would wait
+				// on this write.
+				const own = await this.artifacts.resolve(instance.currentContractClassId, (id) => pxe.getContractArtifact(id))
+				await pxe.registerContractClass(own ?? artifact)
 			}
 			await pxe.registerContract(instance)
 		})

@@ -514,6 +514,36 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 	})
 })
 
+describe("a dApp call is recorded under its function's name, cleaned, or its selector when none is left", () => {
+	const LONG = { ...FN, name: `‮${"n".repeat(70)}` }
+	const BLANK = { ...FN, name: "‮" }
+	const selectorFor = async (fn: typeof FN) => (await FunctionSelector.fromNameAndParameters(fn.name, fn.parameters)).toString()
+
+	beforeEach(() => {
+		const artifact = { functions: [FN, LONG, BLANK], nonDispatchPublicFunctions: [] }
+		h.deps.resolver.resolveArtifacts.mockResolvedValue(new Map([[CLASS_ID.toString(), artifact]]) as never)
+	})
+
+	test("encoded_call: a plain name as it is (control), an overlong one clamped, a blank one as its selector", async () => {
+		const methods: string[] = []
+		for (const fn of [FN, LONG, BLANK]) {
+			const result = await build(h, [{ kind: "encoded_call", to: CONTRACT, selector: await selectorFor(fn), args: [] }])
+			methods.push(result.txCalls[0].method)
+		}
+		expect(methods).toEqual([FN.name, `${"n".repeat(64)}…`, await selectorFor(BLANK)])
+	})
+
+	test("NO_FROM: a plain name as it is (control), an overlong one clamped, a blank one as its selector", async () => {
+		noFromHarness()
+		const methods: string[] = []
+		for (const fn of [FN, LONG, BLANK]) {
+			const result = await buildNoFrom(wireCall({ name: fn.name, selector: await selectorFor(fn) }))
+			methods.push(result.txCalls[0].method)
+		}
+		expect(methods).toEqual([FN.name, `${"n".repeat(64)}…`, await selectorFor(BLANK)])
+	})
+})
+
 describe("NO_FROM account registration", () => {
 	// Authorization discovery stubs the account by its registered instance.
 	test("the account's contract is registered with its keys, before any resolver work", async () => {
