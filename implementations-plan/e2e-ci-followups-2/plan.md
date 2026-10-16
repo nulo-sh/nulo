@@ -11,6 +11,16 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 ---
 
+## Outcome
+
+- **Date**: 2026-10-16
+- **Status**: completed, one arc, all three phases' gates green and the Codex loop converged in two rounds.
+- **Shipped**: five unit-test files load their module under test during collection, off every test and hook timeout, and `config.test.ts` loses its 30 s timeout (#500); `VITE_NULO_FEE_MULTIPLIER` sets Normal's multiplier and scales Fast and Urgent with it, so production stays 2/3/5 and CI prices 10/15/25 (#405); the Firefox relay reports each exception at its first add-on frame (#322's diagnostic).
+- **Known limits**: #322 (the seed replays green; the recursion never recurred).
+- **Open items**: none.
+- **Lessons**: none promoted: `lessons.md` sits at its 8 KiB budget and this plan supersedes none of it; the cold-import shape is commented at each site it fixed and recorded in [`lessons/phase-1.md`](lessons/phase-1.md).
+- **Seeds retired**: the `/goal` and `/loop` drafts under Seeds.
+
 # e2e-ci-followups-2
 
 Three CI bugs, one arc, one PR against `dev`: unit tests that time out on a module's first load (#500), the e2e build's inverted speed ladder (#405), and a Firefox chaos seed that once missed the capabilities window (#322). Evidence: [`recon.md`](recon.md) and [`lessons/phase-0.md`](lessons/phase-0.md).
