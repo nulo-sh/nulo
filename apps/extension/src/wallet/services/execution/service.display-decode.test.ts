@@ -1,15 +1,18 @@
 // @vitest-environment node
 /**
- * The grant decode RPC reads the stored request approval executes, by reference, under the boundary
- * every display decode shares: a bounded batch, on a network the active profile owns, through the
- * PXE's artifact for each contract. Prototype-call with a minimal `this`: the surface is four
- * service clients, so the full ExecutionService init graph is not constructed.
+ * The grant decode RPC reads the stored request approval executes, by reference and before any fee
+ * choice, under the boundary every display decode shares: a bounded batch, on a network the active
+ * profile owns, through the PXE's artifact for each contract. The stored request goes through the
+ * real interaction service; the execution side is prototype-called with a minimal `this`, so the
+ * full ExecutionService init graph is not constructed.
  */
 import { describe, expect, test, vi } from "vitest"
 import { TokenContractArtifact as StandardToken } from "@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js"
 import type { ContractArtifact } from "@aztec-labs/stdlib/abi"
 import type { CallAuthwitContent } from "@nulo/wallet-bridge"
 import { jsonSanitize } from "@nulo/wallet-core/utils"
+import type { WindowManager } from "@/wallet/services/window-manager/window-manager"
+import { DappInteractionService } from "@/wallet/services/dapp-interaction/service"
 import { ExecutionService } from "./service"
 
 const OWNER = "0x0a1b2c0000000000000000000000000000000000000000000000000000009c2d"
@@ -36,38 +39,56 @@ const FLAGS = {
 	nonDispatchPublicFunctions: [],
 } as unknown as ContractArtifact
 
+/** A playground grant as the interaction service stores it: no fee path, so approval needs a choice. */
+const sendRequest = (contents: CallAuthwitContent[]) => ({
+	kind: "send_transaction",
+	account: `aztec:1:${OWNER}`,
+	actions: contents.map((content) => ({ kind: "add_public_authwit", content })),
+})
+
 function makeSelf(contents: CallAuthwitContent[], { networkProfileId = "pA", artifact = StandardToken as ContractArtifact } = {}) {
+	const profileService = { getActiveProfile: vi.fn(async () => ({ id: "pA" })) }
+	const network = {
+		id: "net1",
+		profileId: networkProfileId,
+		chainId: 1,
+		primaryEndpointId: "e1",
+		endpoints: [{ id: "e1", rpcUrl: "http://127.0.0.1:8080" }],
+	}
+	const networkService = { getNetwork: vi.fn(async () => network), getNetworks: vi.fn(async () => [network]) }
+	const interactions = new DappInteractionService({ log: () => {} }, {} as WindowManager)
+	Object.assign(interactions, {
+		profileService,
+		networkService,
+		accountService: { getAccount: async () => ({ address: OWNER, chainId: 1 }) },
+	})
+	const session = { id: "s1", profileId: "pA", dappMetadata: { name: "dapp.example", url: "https://dapp.example" } }
+	;(interactions as unknown as { storage: Map<string, unknown> }).storage.set("req-1", {
+		id: "req-1",
+		payload: { params: { operations: [sendRequest(contents)] }, session },
+		handleId: "h-1",
+		cancellationToken: "req-1",
+	})
 	const getContractInstance = vi.fn(async () => ({ currentContractClassId: { toString: () => "0xc1a55" } }))
-	const materializeStoredOperation = vi.fn(async () => ({
-		kind: "send_transaction",
-		networkId: "net1",
-		actions: contents.map((content) => ({ kind: "add_public_authwit", content })),
-	}))
 	const self = Object.assign(Object.create(ExecutionService.prototype), {
 		ensureInitialized: async () => {},
-		services: { get: () => ({ materializeStoredOperation }) },
-		profileService: { getActiveProfile: vi.fn(async () => ({ id: "pA" })) },
-		networkService: {
-			getNetwork: vi.fn(async () => ({
-				id: "net1",
-				profileId: networkProfileId,
-				chainId: 1,
-				primaryEndpointId: "e1",
-				endpoints: [{ id: "e1", rpcUrl: "http://127.0.0.1:8080" }],
-			})),
-		},
+		services: { get: () => interactions },
+		profileService,
+		networkService,
 		pxeService: { getContractInstance, getContractArtifact: vi.fn(async () => artifact) },
 	}) as ExecutionService
-	return { self, getContractInstance, materializeStoredOperation }
+	return { self, interactions, getContractInstance }
 }
 
 describe("decodeGrantsForDisplay", () => {
-	test("decodes the stored operation's grants, one artifact fetch per contract", async () => {
-		const { self, getContractInstance, materializeStoredOperation } = makeSelf([TRANSFER, TRANSFER])
+	test("decodes the stored operation's grants before a fee is chosen, one artifact fetch per contract", async () => {
+		const { self, interactions, getContractInstance } = makeSelf([TRANSFER, TRANSFER])
+		// Approval still needs the choice the display does not wait for.
+		await expect(interactions.materializeStoredOperation("req-1", 0)).rejects.toThrow("Select a fee payment method")
 		const decoded = await self.decodeGrantsForDisplay("req-1", 0)
-		expect(materializeStoredOperation).toHaveBeenCalledExactlyOnceWith("req-1", 0)
 		expect(decoded.map((d) => d.kind)).toEqual(["decoded", "decoded"])
 		expect(getContractInstance).toHaveBeenCalledTimes(1)
+		await expect(self.decodeGrantsForDisplay("req-1", 1)).rejects.toThrow("Invalid id")
 	})
 
 	test("reads the stored value signing encodes, which the popup's JSON copy rewrites", async () => {

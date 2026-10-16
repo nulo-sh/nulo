@@ -264,4 +264,24 @@ describe("decodeGrantForDisplay over the real Token", () => {
 		const padded = `0x${(2n ** 160n + BigInt(recipient)).toString(16)}`
 		expect(await decodeGrantForDisplay(hub, grant([padded], "exit_to"))).toEqual({ kind: "undecoded", reason: "arguments" })
 	})
+
+	test("a grant reads as the function it encodes for, when an earlier one shares its selector", async () => {
+		const flag = fn("set_flag_1969", [{ name: "flag", type: { kind: "boolean" } }])
+		const value = fn("set_value_243543", [{ name: "value", type: { kind: "field" } }])
+		const selectorOf = (f: FunctionAbi) => FunctionSelector.fromNameAndParameters(f.name, f.parameters)
+		expect((await selectorOf(flag)).toString()).toBe((await selectorOf(value)).toString())
+		const both = lookup({
+			[USDC]: { name: "Twin", functions: [flag, value], nonDispatchPublicFunctions: [] } as unknown as ContractArtifact,
+		})
+		const shown = await decodeGrantForDisplay(both, grant(["2"], value.name))
+		if (shown.kind !== "decoded") throw new Error(`undecoded: ${shown.reason}`)
+		expect(shown.decoded.fn).toBe(value.name)
+		expect(shown.decoded.params).toEqual([{ name: "value", value: { kind: "field", value: `0x${"2".padStart(64, "0")}` } }])
+		// The selector alone resolves to the earlier function, which reads the same field as `true`.
+		expect(await decodeCallForDisplay(both, shown.call)).toMatchObject({
+			kind: "decoded",
+			fn: flag.name,
+			params: [{ name: "flag", value: { kind: "boolean", value: true } }],
+		})
+	})
 })

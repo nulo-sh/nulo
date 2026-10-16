@@ -26,7 +26,7 @@ import { Lock } from "@/wallet/utils"
 import type { WindowManager } from "@/wallet/services/window-manager/window-manager"
 import { parseCaipAccount, parseCaipChain, resolveNetworkByChainId } from "@/wallet/utils/caip"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { type FeeSettingsReaders, isSelfPay, refuseUnknownPriorities } from "@nulo/wallet-bridge"
+import { type DraftOperation, type FeeSettingsReaders, isSelfPay, refuseUnknownPriorities } from "@nulo/wallet-bridge"
 import { assertSilentExecutable, materializeRequest, type MaterializeDeps } from "./materialize"
 import { knownContracts } from "./known-contracts"
 import { applyFeeSelection, type OperationApprovalDelta } from "./approval-delta"
@@ -382,13 +382,19 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	 * against the requested fee path exactly as at approval.
 	 */
 	public async materializeStoredOperation(interactionId: string, index: number, feeSettings?: FeeSettings): Promise<Operation> {
+		return applyFeeSelection(await this.materializeStoredDraft(interactionId, index), feeSettings)
+	}
+
+	/** The same stored request before any fee choice, for a display that reads it while the person
+	 *  is still choosing: a send-like that needs a choice comes back without one. */
+	public async materializeStoredDraft(interactionId: string, index: number): Promise<DraftOperation> {
 		const interaction = this.storage.get(interactionId)
 		if (!interaction || !isExecutionPayload(interaction.payload)) throw new Error("Invalid id")
 		const request = interaction.payload.params.operations[index]
 		if (!request) throw new Error("Invalid id")
 		const profile = await this.profileService.getActiveProfile()
 		if (profile?.id !== interaction.payload.session.profileId) throw new Error("Wallet locked")
-		return applyFeeSelection(await materializeRequest(request, this.materializeDepsFor(profile.id)), feeSettings)
+		return materializeRequest(request, this.materializeDepsFor(profile.id))
 	}
 
 	/** CAIP → row resolution against `profileId` for the shared materializer. */

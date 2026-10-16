@@ -42,9 +42,12 @@ export async function decodeCallForDisplay(lookup: ArtifactLookup, call: Display
 	if (!artifact) return { kind: "undecoded", reason: "unknown-contract" }
 	const fn = await resolveFunction(artifact, call)
 	if (!fn) return { kind: "undecoded", reason: "unknown-function" }
+	return decodeFields(artifact, fn, toFields(call.args))
+}
+
+function decodeFields(artifact: ContractArtifact, fn: FunctionAbi, fields: Fr[] | undefined): DecodedCall {
 	const types = fn.parameters.map((p) => p.type)
 	if (types.reduce((n, t) => n + abiNodes(t), 0) > MAX_DECODED_NODES) return { kind: "undecoded", reason: "unavailable" }
-	const fields = toFields(call.args)
 	if (!fields || fields.length !== countArgumentsSize(fn)) return { kind: "undecoded", reason: "arguments" }
 	try {
 		const values = decodeEachFromAbi(types, fields)
@@ -59,8 +62,9 @@ export async function decodeCallForDisplay(lookup: ArtifactLookup, call: Display
 	}
 }
 
-/** A grant reads from the fields its message hash commits to, decoded back by the same decoder, and
- *  only when that decode encodes back to those fields. Only a `call`-kind content names a function to
+/** A grant reads from the fields its message hash commits to, decoded against the function that
+ *  encoded them (by name, as signing resolves it; another function may share its selector), and only
+ *  when that decode encodes back to those fields. Only a `call`-kind content names a function to
  *  encode for; today's grant producer sends no other. */
 export async function decodeGrantForDisplay(lookup: ArtifactLookup, content: AuthwitContent): Promise<DecodedGrant> {
 	if (content?.kind !== "call" || typeof content.contract !== "string") return { kind: "undecoded", reason: "unavailable" }
@@ -84,7 +88,7 @@ export async function decodeGrantForDisplay(lookup: ArtifactLookup, content: Aut
 	} catch {
 		return { kind: "undecoded", reason: "arguments" }
 	}
-	const decoded = await decodeCallForDisplay(lookup, call)
+	const decoded = decodeFields(artifact, fn, fields)
 	if (decoded.kind !== "decoded") return decoded
 	return encodesBack(fn, fields) ? { kind: "decoded", call, decoded } : { kind: "undecoded", reason: "arguments" }
 }

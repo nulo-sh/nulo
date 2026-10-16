@@ -52,7 +52,7 @@ import { isFeeAmount, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { assertLiveChainIdentity, liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { assertArtifactClassId } from "@nulo/aztec-runtime/pxe"
-import { type FeeSettingsReaders, refuseUnknownPriorities } from "@nulo/wallet-bridge"
+import { type DraftOperation, type FeeSettingsReaders, refuseUnknownPriorities } from "@nulo/wallet-bridge"
 import {
 	EXECUTION_SERVICE_NAME,
 	type Methods,
@@ -109,10 +109,12 @@ export * from "./spec"
 
 /** The dApp-interaction service's SW-internal view of a stored request: the
  *  operation at `(interactionId, index)`, materialized and — when fee settings
- *  are given — completed with a validated fee path. The estimate and preview
- *  entry points read the operation THROUGH this, never from their caller. */
+ *  are given — completed with a validated fee path, or as a draft before any
+ *  fee choice. The estimate, preview and display entry points read the
+ *  operation THROUGH this, never from their caller. */
 export interface InteractionOperationSource {
 	materializeStoredOperation(interactionId: string, index: number, feeSettings?: FeeSettings): Promise<Operation>
+	materializeStoredDraft(interactionId: string, index: number): Promise<DraftOperation>
 }
 
 /** Default PXE-client factory: the real RPC-backed client. Exported so the
@@ -786,7 +788,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	public async decodeGrantsForDisplay(interactionId: string, index: number): Promise<DecodedGrant[]> {
 		await this.ensureInitialized()
 		// The request approval executes, never the popup's copy: its JSON round trip rewrites some values.
-		const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index)
+		// A draft: the window decodes while the fee is still unchosen.
+		const operation = await this.interactionOperations().materializeStoredDraft(interactionId, index)
 		if (operation.kind !== "send_transaction") return []
 		const contents = operation.actions.flatMap((action) => (action.kind === "add_public_authwit" ? [action.content] : []))
 		const lookup = await this.displayArtifactLookup(operation.networkId, contents)
