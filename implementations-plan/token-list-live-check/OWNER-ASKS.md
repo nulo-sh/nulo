@@ -9,3 +9,4 @@ No wallet surface changes. The new text is the `prepare` step summary the owner 
 - **What each looks like:** (a) nothing extra; the first live section appears with the next list change. (b) one run with a pending `sign` approval that the owner rejects; no envelope, no publish PR.
 - **Recommendation:** (b), once, if the owner wants the step proven before a list change depends on it.
 - **What ships now:** the arc ships proven by the unit tests and a local run against the same public node; it does not wait on O1.
+- **Answer:** owner, 2026-10-16, decision page 24: option A, one dispatch on `dev` after the merge, `sign` rejected.

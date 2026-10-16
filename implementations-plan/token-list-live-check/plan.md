@@ -1,7 +1,7 @@
 ---
 plan: token-list-live-check
 tier: light (the lane brief's call; one Codex round-trip plus one Opus Plan lens)
-status: panel-approved (Codex approve, round 2); awaiting the orchestrator
+status: completed (one PR against dev; this close-out is its final commits)
 issues: "#382 (closed by the one arc)"
 driver: claude-code
 claude_model: opus
@@ -14,9 +14,24 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-16.
+- **Status:** delivered in one PR against `dev`, whose final commits are this close-out. That merge closes the plan and #382.
+- **Shipped:**
+  - `TOKEN_METADATA_SLOTS` in `packages/token-list/src/class-ids.ts`, keying `BUNDLED_TOKEN_CLASS_IDS`; the extension pins the slots to the bundled artifact's `storageLayout`.
+  - `infra/token-list/scripts/live-check.ts`, the advisory `prepare` step after the review summary (`continue-on-error`, 5 min), against `https://aztec-testnet.drpc.org`; its step is pinned whole in `behavior-gating.test.ts`, and the publish closure test scans it. Local run, 2026-10-16: chain 3415328944, four rows `matches`, exit 0.
+  - Docs: the host README's publish steps, `CI.md`, `.github/WORKFLOWS.md`, and the `aztec-update` reset runbook.
+  - `lessons.md`: nothing promoted; it sits at its 8 KiB budget, and the one general lesson (a fake that throws its own abort proves nothing about the signal) is its existing success-control line. Detail: [lessons/phase-1.md](lessons/phase-1.md).
+- **Dropped, rejected, superseded:** the planned keys test (the slots now key the class list); the nightly run against the served list (A1, outside option A). Every other alternative is in § Architecture and § Decision ledger.
+- **Known limits:** #562 (K1, the check trusts its one node), #563 (K2, the name bound and invalid UTF-8).
+- **Open items:** none. O1 was answered on decision page 24 (option A): after the merge the owner dispatches `publish-token-list.yml` on `dev` once, reads the live section and rejects `sign`.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
+- **Size:** about 190 lines against light's 150: the Outcome and three implementation review rounds sit inline.
+
 # token-list-live-check: confirm each list entry on its chain before the owner approves a signature
 
-The owner chose option A on decision page 19 (2026-10-15, the `## Decision` block on #382). `publish-token-list.yml`'s `prepare` job gains one advisory step. The step reads each entry of `infra/token-list/list.source.json` from a public node for its chain. It checks that the contract exists, runs the entry's class, and holds the entry's symbol and decimals. It writes the result into the run's step summary, which the owner reads before approving `sign`. It holds no secret, and `sign` never waits on it. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+The owner chose option A on decision page 19 (2026-10-15, the `## Decision` block on #382). `publish-token-list.yml`'s `prepare` job gains one advisory step. The step reads each entry of `infra/token-list/list.source.json` from a public node for its chain. It checks that the contract exists, runs the entry's class, and holds the entry's symbol and decimals. It writes the result into the run's step summary, which the owner reads before approving `sign`. It holds no secret, and no failure of it blocks `sign`. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Outcome & Quality Bar
 
@@ -84,7 +99,7 @@ The owner chose option A on decision page 19 (2026-10-15, the `## Decision` bloc
 - **No keyed endpoint.** The `run:` line, with its keyless origin, is pinned verbatim in `behavior-gating.test.ts`, so a changed node URL is a reviewed edit of a pinned line.
 - **Supply chain.** No new dependency. The publish closure stays `node:` plus `@nulo/token-list`. `live-check.ts` lands under an existing signing path, so later edits show in the summary's signing-relevant changes.
 - **Privacy.** The node learns the runner's address and the listed contract addresses, which are public.
-- **Known limits, filed at close-out as closed `known-limit` issues.** K1: a dishonest or stale node, or a node of another chain that shares the composite chain id, can report `matches`; reopen if a wrong entry ever passes the check and is then refused by the seeder. K2: the check does not read the chain's `name`, so a token with an empty name reads `matches` and is never seeded; reopen if a listed token is ever refused for its name.
+- **Known limits, filed at close-out as closed `known-limit` issues (#562, #563).** K1: a dishonest or stale node, or a node of another chain that shares the composite chain id, can report `matches`; reopen if a wrong entry ever passes the check and is then refused by the seeder. K2: the check's metadata reading is not the seeder's in two corners: it does not read the chain's `name`, so a token with an empty name reads `matches` and is never seeded, and it decodes invalid UTF-8 with fewer U+FFFD than the wallet's `buffer` polyfill; reopen if a listed token is ever refused for its name, or a listed symbol carries U+FFFD.
 
 ## Phase 1: the live check (arc 1)
 
@@ -112,6 +127,15 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 - Steps 3 to 5 as written, with slug `token-list-live-check`, trunk `dev`, `Closes #382`, and K1 and K2 on the Outcome's `Known limits:` line.
 - Log every round in `lessons/phase-1.md`; refresh `agent-worktree status token-list-live-check "<line>"` at each gate.
 
+## Decision ledger (implementation)
+
+- `BUNDLED_TOKEN_CLASS_IDS` is `Object.keys(TOKEN_METADATA_SLOTS)`, so no bundled class can lack slots; this replaces the planned keys test, which would have restated the construction.
+- The unclaimed row reads `not checked: no node read for chain <n>`, not "no node given serves": the same row stands when a given node fails its node-info read.
+- One subprocess test (a local `node:http` node) proves the stdout and stderr claim and `redirect: "error"` end to end; the other cases inject `fetch`.
+- The symbol decoder is a plain `TextDecoder`: `ignoreBOM` was moot, since a field's top byte is at most `0x30` and the list refuses U+FEFF.
+- An empty source exits 1 (implementation round 1): it checks nothing, as the "rows first" rule says.
+- The Codex loop reviews `git diff 5d3c655e..HEAD`: `5d3c655e` merges `origin/dev` at arc start, so the plan's `8459699c...HEAD` would include trunk's changes.
+
 ## Audit verdicts
 
 **Codex** (gpt-6.1-sol, high), round 1: **conditional approve**. Six findings:
@@ -136,6 +160,23 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
   - Decode without `Buffer`: moot, because the decoder is not shared.
 
 **Codex**, round 2 (resumed): **approve**. Both Lows accepted: the symbol tests cover the wallet's decoding (Phase 1), and Outcome (2) is qualified by the job's 10 min timeout.
+
+**Implementation, round 1** (`git diff 5d3c655e..3e4434ed`). Codex (gpt-6.1-sol, high, session `01a144cc-5c8d-7451-baf6-75a809ea8e64`): **conditional approve**, three Lows, all demonstrated and fixed in `d64b0502`:
+
+- IC1: an empty source exited 0. Fixed: `ok` needs a row; test.
+- IC2: "`sign` never waits on it" was false, since `sign` needs `prepare`. Fixed: "no failure of it blocks `sign`, which it delays by at most its 5 min timeout" in the workflow, `CI.md` and the host README.
+- IC3: the deadline test threw its own abort, so it could not fail on the wiring. Fixed: real `fetch` against a local node that never finishes a body, with a 3 s test timeout; red with the deadline unwired.
+
+Opus (general-purpose, diff review): **conditional approve**. Its findings matched IC1 to IC3, plus:
+
+- IO1 Low, plausible-unverified: no test held the u32 checks on `l1ChainId`, `rollupVersion` and the block. Fixed: one table test, red under each mutation.
+- IO2 nit: `ignoreBOM` guarded an impossible case. Dropped.
+- IO3 nit: the header said no node text reaches stdout; the checked values do. Reworded to "no unchecked node text".
+- IO4, needs unsupported conditions: invalid UTF-8 decodes with one U+FFFD in `TextDecoder` and two in the `buffer` polyfill, so a row could disagree with the wallet for a token whose on-chain symbol is invalid UTF-8 and whose listed symbol carries U+FFFD. Folded into K2.
+
+**Implementation, round 2** (resumed): **approve**, no new finding.
+
+**Implementation, round 3** (resumed, the README's two review rules and adversarial ask quoted verbatim over `5d3c655e..HEAD`, since rounds 1 and 2 had paraphrased them): **approve**, no material finding; three comment nits applied in `6fc93556` (the header condensed, the decoder's U+FFFD caveat, the workflow step's comment cut to its constraint). Converged.
 
 **Decisions taken against a reviewer view.**
 
