@@ -36,4 +36,4 @@
 - P25-10 (session `01a146e1-ca86-78b0-bc90-d130aabc712d`): r1 approve, two Low comment and test-name fixes; Opus beside it approve with fixes (two comments, #618 filed, two findings answered in plan § Audit verdicts); 5c9ebe9c; r2 approve. Converged.
 - Close-out loop (session `01a146f6-32cc-7c00-860b-87b7a30141b0`): r1 approve with fixes:
   - one Medium: no committed gate evidence; this section and Phase 3's Outcome line answer it;
-  - three Lows: the stale operative steps, D42's later merge, and #620's overstated Impact. All fixed.
+  - three Lows: the stale operative steps, D42's later merge, and #620's overstated Impact. All fixed. r2 approve. Converged.

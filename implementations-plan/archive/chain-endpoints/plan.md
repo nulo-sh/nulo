@@ -1027,6 +1027,8 @@ Verdict: **approve with fixes**. It confirmed every Open item is an open issue w
 | 3 | Low. D42 omits the later merge of `origin/dev` (84ebd3ec, #613) | Accepted: D42 records it |
 | 4 | Low. #620's Impact says the gates depend on the two services being up; the sample shows the traffic, not the dependence | Accepted: #620's Impact now calls the dependence unverified |
 
+Round 2 (resumed): **approve**, all four fixes verified, no new material finding; the loop converged.
+
 ## Delivery
 
 One `gh stack`, base `dev`, one PR per arc, each opened only after its arc gate passes and its Codex loop converges.
