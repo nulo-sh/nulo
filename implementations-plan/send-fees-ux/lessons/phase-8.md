@@ -25,3 +25,12 @@
 ## Arc 2 review round 2 (2026-10-16)
 
 - Codex resume (session `01a144e6`): **approve**, no new finding. It verified the release assertions, the restored estimate-id line (scheduling clears the result; a landed estimate clears the queued state before another event runs) and the narrowed comment, and found no new evidence on #569. The loop converged at round 2.
+
+## Arc 2 final gates (2026-10-16)
+
+- Smoke, retry 0, Chrome and Firefox: `send-fee-privacy` (1), `send-keyboard` (5), `send-outcome-rows` (2), `settings-crud` (9), all pass.
+- Network, retry 0, Chrome: `fee-sponsor-funding` 4/4 (108 s of tests); `fee-methods` red 4/8 once, every failure in the `feeJuiceImportedExtension` fixture's wait for the Home gas card while host load rose from 145 to 300 (the arc does not touch that path), then 8/8 on the one rerun (430 s of tests, load 121 at start).
+- Network, retry 0, Firefox: `NULO_E2E_PROVERLESS=1` `same-token-concurrent-sends` 16/16 (822 s of tests, 952 s wall; the converted case 49.1 s); `fee-sponsor-funding` 4/4 (133 s), on the head merged with `origin/dev`.
+- `origin/dev` moved twelve commits during the e2e queue, three of them touching files this arc changes (`OperationCard.vue`'s payload rows, `send.vue`'s token events, `send.integration.test.ts`); the merge was clean and changed no dependency. Since CI tests the PR's merge ref, the branch merged it and reran the unit gates there.
+- `type-role-ban.test.ts` hit vitest's 5 s timeout a second time, at load 446 (alone: 2 s). Like #500's cold imports, the budget is the host's, not the test's.
+- The load gate (load1 < 150, polled every 2 minutes) held the eight smoke files for about four hours on this host; gating the builds as well added nothing, since a build is not an e2e run.
