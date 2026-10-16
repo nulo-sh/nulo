@@ -17,15 +17,16 @@
  *     offscreen pings) are passed through untouched — the listener's
  *     receiver does its own filter on `origin === "background"` etc.
  *
- * Apart from the secure-message size bound, which nothing upstream
- * enforces, NOT a security boundary on its own (the upstream handler
- * also filters), just a noise-reduction + invariant check that catches
- * malformed dispatches before they reach the upstream code.
+ * Apart from the secure-message size bound and the discovery shape, which
+ * nothing upstream enforces, NOT a security boundary on its own (the
+ * upstream handler also filters), just a noise-reduction + invariant check
+ * that catches malformed dispatches before they reach the upstream code.
  *
  * Pure function — no chrome.*, no globals. Tested directly with
  * synthetic payloads.
  */
 
+import { WalletMessageType } from "@aztec-labs/wallet-sdk/types"
 import { z } from "zod"
 
 /**
@@ -62,32 +63,54 @@ export const MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS = 16 * 1024 * 1024
 const MAX_SECURE_MESSAGE_IV_CHARS = 32
 
 const SECURE_MESSAGE_CONTENT_KEYS: ReadonlySet<string> = new Set(["iv", "ciphertext"])
+const DISCOVERY_CONTENT_KEYS: ReadonlySet<string> = new Set(["type", "requestId", "appId", "chainInfo"])
+const CHAIN_INFO_KEYS: ReadonlySet<string> = new Set(["chainId", "version"])
+
+/** Keys are read from the raw value: zod's object parse skips an own `__proto__` key, even under
+ *  `strictObject`, and a page's `JSON.parse` makes one an own key. */
+const onlyOwnKeys =
+	(keys: ReadonlySet<string>) =>
+	(value: unknown): boolean =>
+		typeof value === "object" && value !== null && Object.keys(value).every((key) => keys.has(key))
+
+/** Twice a UUID; the session id is the discovery's request id. */
+const MAX_REQUEST_ID_CHARS = 128
 
 const EnvelopeSchema = z.object({
 	origin: z.literal("content-script"),
-	sessionId: z.string().optional(),
+	sessionId: z.string().max(MAX_REQUEST_ID_CHARS).optional(),
 })
 
 const ContentScriptMessageSchema = z.discriminatedUnion("type", [
 	EnvelopeSchema.extend({
 		type: z.literal("secure-message"),
 		// Upstream queues the whole `content` for the session's decrypt, so any other key would carry
-		// data past the bound. Its keys are read from the raw value: zod's object parse skips an own
-		// `__proto__` key, even under `strictObject`.
-		content: z
-			.custom<object>(
-				(value) =>
-					typeof value === "object" && value !== null && Object.keys(value).every((key) => SECURE_MESSAGE_CONTENT_KEYS.has(key)),
-			)
-			.pipe(
-				z.object({
-					iv: z.string().max(MAX_SECURE_MESSAGE_IV_CHARS),
-					ciphertext: z.string().max(MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS),
-				}),
-			),
+		// data past the bound.
+		content: z.custom<object>(onlyOwnKeys(SECURE_MESSAGE_CONTENT_KEYS)).pipe(
+			z.object({
+				iv: z.string().max(MAX_SECURE_MESSAGE_IV_CHARS),
+				ciphertext: z.string().max(MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS),
+			}),
+		),
 	}),
 	EnvelopeSchema.extend({
-		type: z.enum(CONTENT_SCRIPT_MESSAGE_TYPES).exclude(["secure-message"]),
+		type: z.literal("discovery-request"),
+		// The page writes `content` whole and upstream keeps its fields on the pending discovery, so it
+		// passes only in the SDK's shape: the fields `ExtensionProvider.discoverWallets` posts, each
+		// string bounded (a chain field is a 66-character `Fr`).
+		content: z.custom<object>(onlyOwnKeys(DISCOVERY_CONTENT_KEYS)).pipe(
+			z.object({
+				type: z.literal(WalletMessageType.DISCOVERY),
+				requestId: z.string().max(MAX_REQUEST_ID_CHARS),
+				appId: z.string().max(256),
+				chainInfo: z
+					.custom<object>(onlyOwnKeys(CHAIN_INFO_KEYS))
+					.pipe(z.object({ chainId: z.string().max(80), version: z.string().max(80) })),
+			}),
+		),
+	}),
+	EnvelopeSchema.extend({
+		type: z.enum(CONTENT_SCRIPT_MESSAGE_TYPES).exclude(["secure-message", "discovery-request"]),
 		// Its shape varies by `type` and the upstream handler validates it per type.
 		content: z.unknown().optional(),
 	}),
