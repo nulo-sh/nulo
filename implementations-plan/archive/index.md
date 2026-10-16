@@ -89,6 +89,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [e2e-deflake](e2e-deflake/plan.md) — completed — recurring e2e and CI flakes eliminated by root cause, never by budget
 - [e2e-determinism](e2e-determinism/plan.md) — completed — fixed sleeps in the e2e helpers replaced with observable signals
 - [e2e-flake-fixes](e2e-flake-fixes/plan.md) — completed — two CI flakes fixed at their mechanism under a two-core affinity
+- [e2e-harness-gaps](e2e-harness-gaps/plan.md) — completed — e2e runs claim their ports in the host registry and stop only what they started; unproven sleeps and skips gone, a stall watchdog, the e2e tree type-checked; NO_FROM, multicall and private-row coverage; ESM configs proven by the soak matrix
 - [e2e-followups](e2e-followups/plan.md) — completed — proverless guard on vitest's file list, one page-error normaliser, tokens-menu waits on the dropdown state, the stalled-network spec on Firefox, the title bar's newest observer entry
 - [e2e-followups-2](e2e-followups-2/plan.md) — completed — zombie owners are dead, reverted txs fail the mined wait; the Firefox page-error relay was reverted under its stop rule (#297, #281 stays open)
 - [e2e-followups-3](e2e-followups-3/plan.md) — completed — the Firefox page-error relay re-landed (#281); the lock helper observes its redirect, never reloads; `Invalid window ID` filed (#312)
