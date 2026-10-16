@@ -67,25 +67,25 @@ For testers on Chrome and Firefox reading the popup, its approval windows and th
 
 Every gate includes `bun run lint`, `bun run typecheck:all`, `bun run test` and `bun run test:all` (the root `test` runs only `apps/extension`; `packages/design` runs in `test:all`). e2e needs `load1 < 150`, runs at `--retry=0`: smoke from `apps/extension` (`bun run test:e2e -- <file> --retry=0`), network through `agent.sh` (`NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<file>.test.ts`), Firefox with `NULO_E2E_BROWSER=firefox`. A red on the base SHA that the plan does not predict stops the phase: log it, consult Codex, re-plan.
 
-### Phase 1: success toasts close after 2 s (#584)
+### Phase 1: success toasts close after 2 s (#584) ✓
 
 - `packages/design/src/composables/toast.ts:5` to `2_000`. Re-derive the pins in `toast.test.ts` and `ToastManagerBase.test.ts` from the new value, names included; fix `ToastManagerBase.stories.ts:43`.
 - e2e: `snackbar.test.ts:304-330` asserts a life between 1 500 and 2 500 ms; its title and header say 2 s. Fix the comments at `fixtures/helpers.ts:1460`, `helpers/contacts.ts:162`, `network/holdings.test.ts:127`.
 - Read every `waitForToast(` on a success (51 calls, 25 files). One with an awaited step between its trigger and itself is pre-armed: its promise starts before the trigger, its `kind`, sub and handle unchanged. A test that clicks a success's action passes a new `hold` option: `waitForToast`'s in-page predicate focuses the card's action (`preventScroll: true`) as it finds it and fails when focus did not land, a real hold with no round trip. Only tests of an action's destination or content use it; tests of focus, keyboard reach or lifetime never do. No longer timeout anywhere.
 - **Gate.** The fast layers; smoke `snackbar.test.ts` and each smoke file edited; network `fee-methods`, `snack-placement`, `incoming-arrival` and each network file edited; all on Chrome and Firefox. Pass: exit 0 each, `lived` in range.
 
-### Phase 2: the Home hero is display only (#586)
+### Phase 2: the Home hero is display only (#586) ✓
 
 - `BalanceView.vue` per D4.
 - `BalanceView.test.ts`: on the Home shape a click on `balance-amount` writes no clipboard and opens no toast; on the token shape a click copies (the success control), and a click that ends a non-collapsed selection does not.
 - **Gate.** The fast layers. Pass: the new test green, the file's other tests unchanged.
 
-### Phase 3: the done page names no browser (#581)
+### Phase 3: the done page names no browser (#581) ✓
 
 - `onboarding/pages/done.vue:89`: the decided sentence; the second kept.
 - **Gate.** The fast layers (`copy-dash-ban.test.ts` included); smoke `onboarding-tab.test.ts`, Chrome. Pass: exit 0.
 
-### Phase 4: routes keep and reset scroll (#582)
+### Phase 4: routes keep and reset scroll (#582) ✓
 
 - `popup/scroll-memory.ts` and its test (D2): a back restores the offset saved when its entry was left (success control); two entries of one path keep their own offsets; a push to a new page writes nothing (never-happens); a push that reuses the page sets 0, a replace that reuses it writes nothing; `pageScroller` finds the first `overflow-y: auto` descendant and returns null for a comment root.
 - Wire it in `popup/index.ts`; D3's `scrollBehavior` in `onboarding/index.ts`.
@@ -94,7 +94,7 @@ Every gate includes `bun run lint`, `bun run typecheck:all`, `bun run test` and 
 - Run both new checks on the base SHA first. Predicted: the Settings restore and the onboarding reset fail; the Developer page reads 0.
 - **Gate.** The fast layers; smoke `navigation.test.ts` and `onboarding-tab.test.ts`, Chrome and Firefox. Pass: exit 0; the base-SHA run red exactly as predicted.
 
-### Phase 5: content is selectable (#580)
+### Phase 5: content is selectable (#580) ✓
 
 - `base.css` per D1, first without the control rule; update `base.css.test.ts`'s hash and its comment. Per-component rules per D1.
 - `tests/e2e/navigation.test.ts`, new test. Clear the selection before each drag. Each drag starts on selectable text, crosses a control and ends on selectable text, so no control's click fires: across the bottom nav, across a `<button>`, across a Toggle, across the Home address row and its copy icon. Assert each selection holds both texts and leaves out the control's label and `content_copy`. Run it with only the `body` change: it must fail on the labels; then add the control rules. Failure mode: the cascade and selection in both engines, which jsdom applies to neither. Estimate 3 s per browser.
@@ -127,6 +127,19 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 - **Close-out**: the PR's final commits, per the standard's step 4. `Open items:` OA-1 to OA-4's unanswered ones as `owner-decision` issues; each sweep site left to another lane. `STATUS.md` deleted; the folder moved to `archive/` in its own commit.
 - **Teardown**: once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/testers-fixes-1/plan.md` succeeds, `agent-worktree done testers-fixes-1 --merged`.
 
+## Decision ledger
+
+Implementation decisions and deviations; evidence in `lessons/phase-N.md`.
+
+- **I1. Toast waits** (phase 1). The two View presses in `incoming-arrival` and its hostile layout read pass `hold`; `stale-network-resume`'s address-change wait is armed before the unlock that resumes the run. No other success wait had an awaited step between its trigger and itself.
+- **I2. One selection guard** (Codex r1, r2). D4's guard became `utils/selection.ts` `selectedWithin`, shared by the token hero and the scope rows, whose click also copies a value a drag now selects. Round 2 widened it from the anchor to any range (a Shift-click anchors outside); `5bd2d158` then required a selected character, since a range that only reaches the target's edge holds none of it. Enter and Space still copy. The other copy-on-click values keep copying at a drag's end, as their click always did: a follow-up issue, not this arc.
+- **I3. Standalone action links are controls** (Codex r1, the sweep): `.hero_link` (the contract link composes it), register's Terms and Privacy links, Home's "View history" and "View all". Links inside a sentence stay text.
+- **I4. Deviations from D1's list.** `Badge` stays text (no handler). The arrival chip takes `none` though it has no click: faded out it keeps its text, which a drag across the hero would copy. `SettingItem`'s title and description clip instead of hiding (they already carried `min-width: 100%; width: 0`).
+- **I5. Scroll memory** (Opus review). A page that leaves its entry with no scroller clears that entry, so a replaced page's offset never reaches the next page on it.
+- **I6. The drag test** (browser runs). It presses a quarter in from a character's edge: Chrome 152 starts no selection from a press just right of a glyph's middle. The nav and header drags must end on a control and Firefox 153 keeps the text a drag ends on, so they ban only the controls they cross (`tests/e2e/FIREFOX.md`). The header's address is left unpinned: its copy row is a `<button>`, so the control rule takes it, which D1's copy-on-click rule would not; that is the header lane's call, filed at close-out.
+- **I7. Gates.** The per-phase e2e files ran inside phase 6's full suites rather than one by one, on a host shared by several leads; the new navigation checks ran alone first, red on the red dists and green, on both browsers.
+- **I8. Text past an ellipsis.** A selection across an ellipsis box copies the whole DOM text (a long token name on Manage Tokens); the metadata popup wraps the same name, so it shows what it copies. A closed `known-limit` issue at close-out, per § Security.
+
 ## Audit verdicts
 
 | Round | Leg | Verdict | Resolution |
@@ -135,6 +148,10 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | 1 | Opus Plan leg | conditional approve, 8 findings | all accepted: OA-4 with `Closes`/`Refs` (#582); `fee-methods`, `snack-placement` and the full network suite gated, the `hold` option for action clicks; drags that can fail, run red first; navigating rows are whole controls (D1); `overflow: clip` where a drag shifts a box; the base-SHA stop rule and a fixed viewport (D3); other lanes' files recorded, never edited; OA-2's drag conflict (round 2 kept OA-2 A, with a guard) |
 | 2 | Codex resume | conditional approve, 3 findings | all accepted: OA-2 ships A (no sign-off names the token page), with a selection guard on its tap; the false `activity-card` precedent dropped and the hostile-name check moved to a selectable surface; the `hold` option scoped and made to fail when focus does not land. The reused-page reset verified against every self-route push |
 | 3 | Codex resume | approve | the round-2 fixes verified; no new material finding |
+| Code 1 | Codex (gpt-6.1-sol, high), net diff from `5ec3225b` | conditional approve, 3 findings | all accepted (`ce7086e2`): the scope rows' click guard (I2), two action links (I3), a trimmed CSS-pin comment |
+| Code 1 | Opus review | 6 findings | all accepted (`f828405f`): the nav drag's bans, an on-screen guard for drag points, the header address unpinned (I6), `hold` on the hostile layout read (I1), the pointer test aimed at the card's resting box, `leave(null)` (I5) |
+| Code 2 | Codex resume | conditional approve, 2 findings | both accepted (`d917a875`): the guard's Shift-click bypass (I2), one comment removed |
+| Code 3 | Codex resume | approve | the guard's overlap form (`5bd2d158`) and the drag test's browser fixes verified; `77a1a3e0` (the sweep's CSS fixes, I3 and I4) landed after the loop's last round |
 
 ## Seeds
 
