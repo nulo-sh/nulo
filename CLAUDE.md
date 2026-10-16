@@ -221,9 +221,9 @@ Six layers, low → high. A layer can import only from layers below it. Enforced
                        modules/holdings/TokenList — presentational over rows the page hands in.
                        Service-bound. Cannot import L5 pages or L6 windows.
                        Token-row policy lives in pure helpers under src/utils/ (token-amount,
-                       token-order, token-aggregate, token-fold, token-search): Home, Holdings and
-                       the Send picker all order rows through orderTokenRows and never parse a
-                       balance themselves.
+                       token-order, token-aggregate, token-fold, token-search, token-flag): Home,
+                       Holdings and the Send picker all order rows through orderTokenRows and never
+                       parse a balance or match a flagged pair themselves.
 
 [L5] popups + windows  src/popup/components/popups/, src/popup/windows/
                        Orchestration. May own service-client lifecycle.
