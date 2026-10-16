@@ -184,7 +184,7 @@ describe("the fee question window", () => {
 		expect(byId("fee-raised-now").text()).toBe("Now 0.021 FJ")
 		expect(byId("fee-raised-card").text()).toContain("1.25 FJ")
 		expect(byId("fee-raised-priority").text()).toContain("Normal")
-		expect(getGasBalancesMock).toHaveBeenCalledExactlyOnceWith("n1", OWNER)
+		expect(getGasBalancesMock).toHaveBeenCalledExactlyOnceWith("n1", OWNER, true)
 		expect(confirm().text()).toBe("Send for 0.021 FJ")
 		expect(confirm().attributes("disabled")).toBeUndefined()
 	})

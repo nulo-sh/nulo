@@ -155,12 +155,13 @@ async function decodeAuthwits(op: DraftUIOperation | undefined): Promise<void> {
 	decodedAuthwits.value = new Map(listed.map((a, i) => [a.messageHash, decoded[i] ?? { kind: "undecoded", reason: "unavailable" }]))
 }
 
-/** The payer's balance as the readout prints it; a failed read shows none rather than a zero. */
+/** The payer's balance as the readout prints it, read past the cache, which can predate a deposit
+ *  made outside the wallet; a failed read shows none rather than a zero. */
 async function readAvailable(op: DraftUIOperation | undefined): Promise<void> {
 	const payer = question.value?.payer
 	try {
 		if (!op || !payer || !("accountAddress" in op) || setByApp.value) return
-		const balances = await executionService.getGasBalances(op.networkId, op.accountAddress)
+		const balances = await executionService.getGasBalances(op.networkId, op.accountAddress, true)
 		const raw = payer.type === "private_fpc" ? balances.privateFeeJuice : balances.publicFeeJuice
 		available.value = raw === null ? null : formatGasBalance(raw)
 	} catch (error) {
