@@ -133,6 +133,7 @@ onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
 }
 
 .link {
+	user-select: none;
 	color: var(--nulo-secondary);
 	cursor: pointer;
 	border-bottom: 1px solid var(--nulo-border);

@@ -28,6 +28,7 @@
 import { onMounted } from "vue"
 import { isRepeatOrComposing } from "@/composables/usePopupEntity"
 import { copyWithToast } from "@/utils/clipboard"
+import { selectedWithin } from "@/utils/selection"
 import { managers } from "@/utils/core"
 import { trimAddress } from "@/utils/string"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
@@ -54,6 +55,10 @@ function handleClick() {
 	void copyWithToast(props.address, openToast, "Address is copied", { sanitize: true })
 }
 
+function onClick(e: MouseEvent) {
+	if (!selectedWithin(e.currentTarget)) handleClick()
+}
+
 function onKey(e: KeyboardEvent) {
 	if (!isRepeatOrComposing(e)) handleClick()
 }
@@ -63,7 +68,7 @@ function onKey(e: KeyboardEvent) {
 	<span
 		data-testid="scope-address"
 		:data-scope-addr="address"
-		@click="handleClick"
+		@click="onClick"
 		@keydown.enter.prevent="onKey"
 		@keydown.space.prevent="onKey"
 		role="button"

@@ -13,6 +13,7 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 /** Utils */
 import { balanceFormatted } from "@/utils/amount.js"
 import { copyWithToast } from "@/utils/clipboard"
+import { selectedWithin } from "@/utils/selection"
 import { knownDecimals, parseRawBalance, safeFiatOf } from "@/utils/token-amount"
 import { aggregateFiat } from "@/utils/token-aggregate"
 import { storageLocalGet, storageLocalSet } from "@/utils/storage"
@@ -164,10 +165,8 @@ function fitHeroToLine() {
 const handleCopy = (value, label) => {
 	void copyWithToast(value, openToast, `${label} is copied`)
 }
-/** The token hero's tap copies its figure; a drag that selected the figure also ends in a click,
- *  and copies nothing. */
-const handleTokenBalanceClick = async () => {
-	if (window.getSelection()?.isCollapsed === false) return
+const handleTokenBalanceClick = async (event) => {
+	if (selectedWithin(event.currentTarget)) return
 	let balance = totalTokenBalance.value?.value
 	if (totalTokenBalance.value?.slashed || showFullBalance.value) {
 		showFullBalance.value = !showFullBalance.value
