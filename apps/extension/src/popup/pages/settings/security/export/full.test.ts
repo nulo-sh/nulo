@@ -426,6 +426,8 @@ describe("export/full.vue — sealed artifact", () => {
 		const parsed = await downloadAndOpen(wrapper)
 		const { checksum, ...body } = parsed
 		expect(await EncryptionKey.getHashHex(JSON.stringify(body))).toBe(checksum)
+		// A password file carries no passkey check.
+		expect("backup-mac" in parsed).toBe(false)
 		expect(parsed["master-key"]).toBe("mk")
 		expect((parsed.data as Record<string, unknown>).profile).toEqual([{ id: "p1", type: "password" }])
 		// The imported-keys slice key must be the registry's real literal — an

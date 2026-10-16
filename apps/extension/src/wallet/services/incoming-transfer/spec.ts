@@ -369,10 +369,6 @@ export type Methods = {
 	/** User rejected the first-receive prompt: `pending → blocked`. Same
 	 *  `false`-on-stale-token contract as `setTrustAllow`. */
 	setTrustReject(profileId: string, networkId: string, contract: string): boolean
-	/** A full-backup import, before the profile opens: trusts each of its tokens that has no trust
-	 *  row, since every token in a backup was added by the person and adding a token trusts it. The
-	 *  backup carries no trust rows, so without this each restored token's first note asks again. */
-	trustRestoredTokens(profileId: string): void
 	/** Clear all records + trust state for a profile. Called from the
 	 *  profile-delete fanout. */
 	clearProfile(profileId: string): void

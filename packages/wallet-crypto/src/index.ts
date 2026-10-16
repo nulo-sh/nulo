@@ -34,7 +34,8 @@ export {
 } from "./imported-keys-dek-box"
 export { computeWalletFingerprint } from "./wallet-fingerprint"
 export { SessionSecretBox, type SessionWrappedSecret } from "./session-secret-box"
-export { PasskeyCredential, type PasskeyCredentialData } from "./passkey-credential"
+export { PASSKEY_BACKUP_MAC_LABEL, PasskeyCredential, type PasskeyCredentialData } from "./passkey-credential"
+export { computeBackupMac, verifyBackupMac } from "./backup-mac"
 export { PASSKEY_PRF_LABEL } from "./constants"
 export { zeroize } from "./zeroize"
 export {

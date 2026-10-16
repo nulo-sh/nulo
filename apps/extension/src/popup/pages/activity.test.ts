@@ -51,7 +51,7 @@ vi.mock("@/wallet/services/operation-journal/client", () => ({
 }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onTokenAdded: H.tokenAdded, getTokens: H.getTokens }
+		return { disconnect: vi.fn(), onTokenAdded: H.tokenAdded, onTokenUpdated: H.event(), getTokens: H.getTokens }
 	}),
 }))
 vi.mock("@/wallet/services/incoming-transfer/client", () => ({
