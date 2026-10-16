@@ -100,6 +100,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [e2e-followups-6](e2e-followups-6/plan.md) — completed — every window a helper hands back is recorded and each asserting test checks its arrays before a popup clears them (#325); the zombie tests keep their zombie (#326)
 - [e2e-followups-7](e2e-followups-7/plan.md) — completed — snack-placement's drain settles the grant's finality balance write before the mint (#349); #403 a known limit
 - [e2e-network-recovery](e2e-network-recovery/plan.md) — completed — the network e2e suite recovered by probes and root causes
+- [e2e-private-transfer](e2e-private-transfer/plan.md) — completed — the delegated-authwit e2e runs un-gated on both browsers and reads its discovered authwit as the donor's private transfer (#165)
 - [e2e-proverless-stub](e2e-proverless-stub/plan.md) — completed — network e2e skips real proving for most tests and keeps simulation and execution
 - [e2e-reliability-fixes](e2e-reliability-fixes/plan.md) — completed — a wave of test-reliability follow-ups closed at their root causes
 - [e2e-skill-refresh](e2e-skill-refresh/plan.md) — completed — one service-worker kill helper and a procedure-first e2e-testing skill
