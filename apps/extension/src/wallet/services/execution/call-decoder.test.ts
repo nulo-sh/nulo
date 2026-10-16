@@ -175,10 +175,22 @@ describe("decodeCallForDisplay", () => {
 	})
 
 	const memo = fn("set_memo", [{ name: "memo", type: { kind: "string", length: 4 } }])
+	const option = (type: AbiType): AbiType => ({
+		kind: "struct",
+		path: "std::option::Option",
+		fields: [
+			{ name: "_is_some", type: { kind: "boolean" } },
+			{ name: "_value", type },
+		],
+	})
+	const limit = fn("set_limit", [{ name: "limit", type: option(option({ kind: "field" })) }])
 	test.each([
 		["a boolean other than 0 or 1", claim, encoded, 3, word(2n)],
 		["a string character past 16 bits", memo, encodeArguments(memo, ["nulo"]).map(String), 0, word(0x1006en)],
-	])("%s reads as unreadable; the canonical field decodes", async (_class, f, fields, at, wide) => {
+		["an integer past its width", claim, encoded, 1, word(2n ** 128n)],
+		// A Some holding None decodes as the outer None, which encodes to other fields.
+		["a Some holding None", limit, encodeArguments(limit, [0n]).map(String), 1, word(0n)],
+	])("%s reads as unreadable; its control decodes", async (_class, f, fields, at, wide) => {
 		const hub = { name: "BridgeHub", functions: [f], nonDispatchPublicFunctions: [] } as unknown as ContractArtifact
 		const decode = (args: string[]) => decodeCallForDisplay(lookup({ [TOKEN]: hub }), { to: TOKEN, name: f.name, args })
 		expect(await decode(fields)).toMatchObject({ kind: "decoded", fn: f.name })

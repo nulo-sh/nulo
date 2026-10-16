@@ -221,10 +221,13 @@ describe("OperationCard — a call as the wire carries it", () => {
 	test("an L1 exit whose recipient field carries bits past an address shows the notice, not that address", async () => {
 		const L1 = BigInt("0x7c41d2a90b3e85f61c0d7e4b2a9f13c86d5be9f0")
 		const exit = (recipient: bigint) =>
-			mountCard(sendTx(callOf("exit_to_l1_public", [field(recipient), field(5_000_000n), field(L1), field(0n)])), {
-				tokens: [],
-				artifact: TokenBridgeContractArtifact,
-			})
+			mountCard(
+				sendTx(callOf("exit_to_l1_public", [field(recipient), field(5_000_000n), field(L1), field(0n)], { type: "public" })),
+				{
+					tokens: [],
+					artifact: TokenBridgeContractArtifact,
+				},
+			)
 		const canonical = await exit(L1)
 		expect(intentKind(canonical)).toBe("decoded")
 		expect(decodedNames(canonical)).toEqual(["recipient", "amount", "caller_on_l1", "authwit_nonce"])

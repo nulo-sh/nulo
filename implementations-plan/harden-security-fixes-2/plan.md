@@ -17,7 +17,7 @@ post_implementation_hardening: not scheduled
 
 # harden-security-fixes-2: what the person approves is what the wallet restores, pays and signs
 
-Four items the owner decided on decision page 22 (2026-10-16), tracked privately. Arc 1 records the endpoint row's disposition, has a passkey backup carry a check its own passkey makes, and reads restored token metadata from the chain. Arc 2 holds a dApp send's fee to the figure the person approved. Arc 3 shows a public grant's arguments as the wallet signs them. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+Four items the owner decided on decision page 22 (2026-10-16), tracked privately. Arc 1 records the endpoint row's disposition, has a passkey backup carry a check its own passkey makes, and reads restored token metadata from the chain. Arc 2 holds a dApp send's fee to the figure the person approved. Arc 3 shows a public grant's arguments as the wallet signs them. Arc 4, added by the orchestrator after arc 3 merged (D-orch-2), has the transaction card read a dApp call's arguments only when they encode back to its fields. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 | Item | Owner's pick (page 22) | Arc | Issue |
 |---|---|---|---|
@@ -25,6 +25,7 @@ Four items the owner decided on decision page 22 (2026-10-16), tracked privately
 | B. The passkey backup | P22-03 **C**: a check over the backup body, and the chain re-read with no auto-trust | 1 | none public |
 | F. The fee after approval | P22-04 **A**: the shown fee is a ceiling; ask again only when higher | 2 | #416, reopened by arc 2 (its reopening condition: "the owner asks for the figure to bind the confirm") |
 | G. The grant card | P22-01 **A**: decode at open, the argument table, refuse what does not decode (shots `o-grant-a`) | 3 | none public |
+| H. The transaction card's decode | none needed: an existing notice, UI impact none (D-orch-2) | 4 | none public |
 
 ## Outcome & Quality Bar
 
@@ -93,6 +94,11 @@ Four items the owner decided on decision page 22 (2026-10-16), tracked privately
 - **Card, as signed (`o-grant-a`).** `OperationCard.vue` `send_transaction` branch: the action line ("Authorize public spend — spender … for … on …", `OperationActionRow.vue` without its argument text), then an "Arguments" group, testid `execute-grant-args`, laid out as the `aztec_createAuthWit` card's, with `CallArguments` over `callSurface(undefined, grant.call, grant.decoded, isToken(contract))` and prefix `execute-grant`. No caller context: the spender makes the future call, so a transfer reads only an explicit `from`. `CallArguments` gains `full`: every value prints whole (`valueText(v, true)`, addresses as full mono text with no name in their place, in every branch `CallArguments` renders, nonce and structured addresses included), and row names do not wrap. Only the grant card sets it (D17).
 - **Files expected to meet #508:** `OperationCard.vue` (its `<style module>`, the branch beside `op_divider`), `CallArguments.vue` (the `full` prop beside `UnreadableArgsNotice`), `call-surface.ts` (read), `identifier-sites.expected.json`, `type-roles-windows.test.ts`, the `OperationCard.*.test.ts` mounts. Arc 3 branches from `dev` after #508's merge and rereads them.
 
+### Arc 4: the transaction card reads what encodes back (orchestrator-added)
+
+- `execution/call-decoder.ts`: the encode-back check D28 put on the grant path moves into the shared `decodeFields`, over the values it already decoded, so `decodeCallForDisplay` (the transaction card, a discovered authorization) and `decodeGrantForDisplay` run one check (D31). A call whose decode does not encode back reads as `undecoded` with reason `arguments`: the card shows the existing unreadable-arguments notice and its raw fields. Confirm keeps today's rule for an unreadable call (D32).
+- UI impact: none (an existing notice shows for one more input).
+
 ### Trade-offs: the competing outline (worker-centric)
 
 It put every check in the worker: the MAC verified inside `ProfileService.restore`, token decimals re-read before every send, the shown figure recorded per estimate under a new id, grants refused at ingress. Rejected: the popup restores the slices through separate RPCs that a profile-row check would not bind; a per-send re-read adds a node round trip to every send; a worker record needs an id, an expiry and cleanup for estimates that have none (Fact 4); ingress refusal contradicts the signed words. Kept from it: one encoding shared by display and signing.
@@ -143,15 +149,20 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
 
 **Phase 9. Real browsers.** ✓ `type-roles-windows.test.ts`: the grant flow waits for `execute-grant-amount` and sweeps the new rows; `authwit-lifecycle.test.ts`: the grant window shows the decoded amount at rest. No scenario added. Run both, then `authwit-consume-smoke`, `snack-placement`, `frozen-account-canary` and `passkey-execution-canary` (they confirm a grant). Gate: all green; `bun run test:ci-gating`; `bun run check:plans`. Pass: exit 0; wall-clock before and after in `lessons/phase-9.md`.
 
+### Arc 4 (orchestrator-added, from `origin/dev` at `493ff497`)
+
+**Phase 10. The call path's encode-back.** Change `call-decoder.ts`. Tests: `call-decoder.test.ts`, wire-shaped fields (`0x` + 64 hex): the real TokenBridge `exit_to_l1_public` by its real selector decodes its recipient (control) and reads `arguments` under the same last 20 bytes with a set upper bit; a boolean field of 2, a string character past 16 bits, an integer past its width (an encoder refusal) and a Some holding None each read `arguments` beside a control that decodes; the twin-selector grant test takes a field both functions read canonically. `OperationCard.wire.test.ts`: the same exit through `displayCallsOf`, the real decoder and the card shows the notice with reason `arguments` and no decoded row; the canonical exit shows its four rows (control). No e2e scenario: none is added, and the window's lanes run in CI. Gate: `F`; `bun run test:all`. Pass: exit 0; each new case red against `493ff497`'s decoder.
+
 ## Delivery
 
-Three PRs against `dev`, no stack (D-orch-1), each opened after its arc's gates and Codex loop converge. Branches `harden-security-fixes-2-arc1` (from this branch), `-arc2` and `-arc3` (each from `origin/dev` after the previous arc merges). If OA-F1 is still open when #508 merges, arc 3 may ship second and the close-out moves to arc 2.
+Four PRs against `dev`, no stack (D-orch-1), each opened after its arc's gates and Codex loop converge. Branches `harden-security-fixes-2-arc1` (from this branch), `-arc2`, `-arc3` and `-arc4` (each from `origin/dev`; arc 4 after arc 3 merged). If OA-F1 is still open when #508 merges, arc 3 may ship second and the close-out moves to arc 2.
 
 | Arc | Phases | PR title | Body |
 |---|---|---|---|
 | 1 | 1-3 | `feat(backup): bind passkey backups to their passkey; read restored tokens from the chain` (88) | P22-02 B and P22-03 C, the signed words about the change; the known-limit issue; runs |
 | 2 | 4-6 | `feat(execute): ask again when a dApp send's fee rises above the approved figure` (79) | P22-04 A; OA-F1 to OA-F3 with the shots; `Closes #416` |
 | 3 | 7-9 | `feat(execute): show a public grant's arguments as the decoded rows it signs` (75) | P22-01 A and `o-grant-a` as the sign-off; OA-G1; screenshots light and dark |
+| 4 | 10 | `fix(execute): read a dApp call's arguments only when they encode back to their fields` (86) | the change, the tests, `UI impact: none (an existing notice shows for one more input)` |
 
 Each body states what changed and why, the validation runs, and each browser's suite wall-clock before and after for the suites it touched; it names no private record and describes only the change. It ends with the Claude Code line. Labels only after creation, and only when a path filter would skip a needed suite. Parallelism: none; the arcs wait on outside events, not on each other's files.
 
@@ -193,6 +204,11 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 | D28 | A decode that does not encode back (arc 3 review) | on the grant path, it reads as undecoded (`arguments`) | the decoder reads some types narrower than the encoder writes them; arc 3 changes the grant path only |
 | D29 | A value that cannot print whole (arc 3 review) | the grant reads as undecoded (`arguments`), the existing refusal | the signed picture prints every value whole; a stripped value is not the one signed, and a marker would be new UI |
 | D30 | Which function a grant decodes with (arc 3 review) | the one resolved by name and encoded for, as signing resolves it | an artifact may list another function with the same selector, so a selector lookup can read the signed fields through a different interface |
+| D-orch-2 | Arc 4 (orchestrator, after #611 merged) | the transaction card's decode gets D28's check | a review note kept private |
+| D31 | Where arc 4's check runs (implementation) | inside `decodeFields`, over its decoded values | one check for every decode the window shows, and one decode instead of two; every function of the 40 bundled artifacts (`noir-contracts.js`, `aztec-standards`) reads as before under random canonical arguments; what now reads as unreadable is a decode that loses fields (a Some holding None reads as None, a `BoundedVec`'s storage past its length is dropped) or a tuple parameter, which the stdlib encoder does not take and no bundled artifact has |
+| D32 | Confirm for an unreadable dApp call (implementation) | unchanged: the notice, Confirm as today | the notice asks the person to check the app's description before approving; holding Confirm for a call would change what a person can do, an owner decision this arc does not have |
+| D34 | A string the transaction card prints shorter than its characters (arc 4 review) | unchanged in this arc | the card's string print is a display rule outside the decode, and the grant card's whole-print rule would refuse the padding a canonical `str<N>` carries; noted privately |
+| D33 | Where arc 4's card test sits (implementation) | `OperationCard.wire.test.ts`, over the real decoder; the dispatcher test unchanged | the window hands the decode to the card untouched; the dispatcher test pins no decoded shape |
 
 ## Audit verdicts
 
@@ -255,6 +271,17 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 **Arc 3 review, round 2** (2026-10-16). Codex, resumed over `cd3f739e`: **reject**, 2 material findings, both verified and accepted, fixed in `8829a309`: the decode read the completed operation, which refuses a send whose fee is not yet chosen, so every such grant read as undecoded (D27; the service test now drives the real interaction service, red against the round-1 read); and the grant decoded through a selector lookup while its round trip checked the function resolved by name (D30; a test with two functions sharing a selector, red without the fix). The pre-fix Chrome run caught neither, as it built from the popup-copy path; it also showed the lifecycle file's read of a wait's handle, which this suite's fixtures resolve to `null` (fixed in `cd3f739e`).
 
 **Arc 3 review, round 3** (2026-10-16). Codex, resumed over `8829a309`: **approve**, no material findings; it re-ran the transaction card's decoder over its inputs and found its results unchanged. The loop converged.
+
+**Arc 4 review, round 1** (2026-10-16). Codex `gpt-6.1-sol` high, read-only, over `493ff497..02391a30`: **approve**, 3 findings and 2 nits. Opus 5.5 general-purpose, alongside: **approve**, no material finding, 4 nits. Each was checked against the tree.
+
+| Finding | Decided |
+|---|---|
+| A canonical Some holding None now reads as unreadable (Codex) | kept: the decode reads it as None, a reading the fields do not carry; recorded in D31 and pinned by a test row |
+| A string's control characters do not print on the transaction card (Codex) | not in this decode; D34 |
+| An unreadable call's title falls back to the dApp's name or the selector (Codex) | the existing rendering of an unreadable call, and execution refuses a name that does not match the selector; the PR body says so |
+| No case exercised an encoder refusal inside the shared decode (both) | a row: an integer past its width |
+| The public exit was sent as a private call in the card test (Codex) | `type: "public"` |
+| The wire test's TokenBridge selector is not checked against the hash; the card test overlaps the unit test (Opus) | kept: the selector is the real one at 6.0.0-rc.3 and only needs to agree with itself under the stood-in hash; the card test is the decode-to-card chain D33 asks for |
 
 ## Seeds (draft; the orchestrator finalizes after approval)
 
