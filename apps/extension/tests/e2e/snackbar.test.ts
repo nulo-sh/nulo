@@ -364,7 +364,6 @@ test("the pointer resting on the snack keeps it; after leaving, it goes within i
 
 	await clickByTestId(page, COPY)
 	await waitForToast(page, "Address is copied", 5_000, { kind: "success" })
-	// Aimed before the slide settles: a two-second card leaves no time to wait for it.
 	const centre = await restingSnack(page)
 	await page.mouse.move(centre.x, centre.y, { steps: 5 })
 	await sleep(8_000)

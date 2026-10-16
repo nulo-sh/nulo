@@ -550,6 +550,7 @@
     "scopedTxRows": true,
     "scrubUrls": true,
     "sealFullBackupText": true,
+    "selectedWithin": true,
     "sendFeePicksKey": true,
     "sendOutcome": true,
     "setLastActiveProfileId": true,
