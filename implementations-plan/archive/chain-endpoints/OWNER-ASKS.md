@@ -16,8 +16,9 @@ Arc 1 (#171) changes nothing a person sees in a shipped build and has no ask.
 | OA-6 | **B** | arc 2c |
 | OA-7 | **B** | arc 2c |
 | P12-01 / P12-11 | P18-01 **A**: "—" and "Prices unavailable" | arc 2c |
+| OA-8 | P25-10 **B** (page 25, 2026-10-16): "A missing price reads as unavailable" | the close-out PR (plan D43) |
 
-**Open at the close-out revision (2026-10-16):** OA-8 only. If it is still unanswered at close-out, it leaves this file as an `owner-decision` issue (plan D30), and what ships stays A.
+No ask is open.
 
 ## Note, no ask: P12-05 (#79), "Unless I'm missing something obvious"
 
@@ -160,4 +161,4 @@ Arc 2c switches the hero to "—" / "Prices unavailable" when a fetch fails (P18
 
 **Recommendation: B.** The $0.00 is again a figure the person did not earn (charter C9 A). B is a smaller rule than the one shipped: it drops the failed-fetch condition from the hero's test.
 
-**What ships now: A.**
+**Answered 2026-10-16, decision page 25, P25-10: B.** The close-out PR builds it (plan D43). One consequence the signed text implies: a funded wallet whose first price answer has not arrived 12 s after Home opens also reads "—" with "Prices unavailable", where it read $0.00 with "priced assets only"; the amount replaces it when the answer lands.

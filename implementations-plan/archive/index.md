@@ -40,6 +40,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [bundle-fpc-nft](bundle-fpc-nft/plan.md) — completed in part — the PrivateFPC note schema bundled with the wallet; the Wonderland NFT half did not ship
 - [capabilities-popup-quality](capabilities-popup-quality/plan.md) — completed — the capabilities popup and connected-apps page say only what the protocol does
 - [capture-await-write-sweep](capture-await-write-sweep/plan.md) — completed — a hunt for the capture, await, stale-write race shape, with each hit fenced
+- [chain-endpoints](chain-endpoints/plan.md) — completed — a smoke suite that reaches no outside host (#171); hidden characters refused in node URLs, plain HTTP only to this computer and no inline styles in the extension CSP (#200, #101); a missing price reads as unavailable on Home (#116)
 - [chrome-store-launch](chrome-store-launch/plan.md) — completed — every Chrome and Firefox store-submission input built inside the repository
 - [ci-cd](ci-cd/plan.md) — completed — CI bring-up: two long-lived branches with change-detected gates
 - [ci-followups](ci-followups/plan.md) — completed — no Bun auto-install in jobs that install nothing, the move-approval label read live, the Docker Bun pins in the runbook
