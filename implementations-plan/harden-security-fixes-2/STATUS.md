@@ -20,3 +20,4 @@
 - 2026-10-16: phase 6 Firefox: same file at retry 0 exit 0 (new case 140.2 s, file tests 263.7 s). Phase 6 ✓.
 - 2026-10-16: merged origin/dev (6 commits; the card's details toggle needed one test to open it). Final head: lint, typecheck:all, test:all green (extension 13,088 tests); tx-sendTx-default.test.ts at retry 0 exit 0 on Chrome and Firefox; check:plans 0 findings.
 - 2026-10-16: merged origin/dev again (arc 1, #598): plan files only conflicted; arc 2's decisions renumbered D24-D30 after arc 1's D20-D23. Final head: lint, typecheck:all, test:all (extension 13,124), check:plans green; tx-sendTx-default.test.ts at retry 0 exit 0 on Chrome and Firefox.
+- 2026-10-16: PR #607 opened; first CI run red in authwit-lifecycle and scope-refusal on both browsers (sponsored requests refused at the estimate could no longer press Confirm). D27 revised, fixed (`fix(execute): wait for the fee figure only when the person pays the picked fee`); merged origin/dev (#604).

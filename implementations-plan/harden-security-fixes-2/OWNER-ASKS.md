@@ -125,3 +125,8 @@ Confirm is disabled either way; Reject works.
 
 - **Surface:** a dApp send whose request carries its own fee payment ("Fee up to …") naming the Private Fee Juice contract as payer, as the playground's PrivateFPC routes do.
 - That payment charges the account's own Private Fee Juice, so it carries the figure as Private Fee Juice does: Confirm waits for the estimate (and shows "Couldn't estimate fee. Try again." when it fails), and a rise past OA-F3's rule asks in the window, whose fee block reads "Private Fee Juice" with no Available or Priority row, as for an app's claim. An app's own fee contract keeps today's behaviour.
+
+## A consequence of OA-F2 C: a request the estimate refuses, when the person pays (no decision needed unless you object)
+
+- **Surface:** the approval window, its fee block and Confirm, for a send paid from Fee Juice or Private Fee Juice whose estimate the wallet refuses (an out-of-scope call, a consume of a revoked authorization).
+- Confirm stays disabled after the failed estimate, with today's toast "Couldn't estimate fee. Try again.", so the person answers with Reject and the app receives "User rejected" instead of the refusal it receives today. With Nulo's sponsor picked, Confirm does not wait for a figure, and such a request reaches today's refusal ("Not allowed" on Home).
