@@ -4,3 +4,4 @@
 - Tests: `OperationCard.fee.test.ts` § app pays, wire-shaped: estimating (legend, loading line, busy), landed (legend above the figure, not busy), failed and `default_entrypoint` while previewing (legend alone), priority fee (sentence on the figure line), short funding. Mutation checks: the old template reds three cases; dropping the estimating branch reds one.
 - `fee-sponsor-funding.test.ts`: the priority sentence is read from `execute-op-app-fee`, the legend apart.
 - Gate F: lint 0 (27 warnings, none new), typecheck:all 0, test: first run red on `src/utils/type-role-ban.test.ts` (5 s test timeout at host load 215; the file alone passes in 2 s), rerun green (797 files).
+- Network gate (2026-10-16): `fee-sponsor-funding` 4/4 on Chrome, prover on (108 s for the file; the priority-fee case 27 s).

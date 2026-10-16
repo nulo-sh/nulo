@@ -17,3 +17,4 @@
 - 2026-10-16: phase 6 network gate pass: NULO_E2E_PROVERLESS=1 same-token-concurrent-sends 16/16 (875 s wall). Review round 1: Codex conditional approve (2), Opus approve (3 notes); fixes applied; known limit #569.
 - 2026-10-16: arc 2 review round 2 (Codex resume): approve; loop converged.
 - 2026-10-16: phase 8 (arc 2): test:all pass (extension 797 files), test:ci-gating pass (571).
+- 2026-10-16: phase 5 network gate pass: fee-sponsor-funding 4/4 (Chrome). fee-methods (phase 8) red 4/8 in the feeJuiceImportedExtension fixture's Home gas-card wait while host load rose 145 to 300; CI's network suite is green at this base; one rerun queued.
