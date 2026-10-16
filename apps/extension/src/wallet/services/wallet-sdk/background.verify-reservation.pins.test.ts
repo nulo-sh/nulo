@@ -6,6 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { DISCOVERY_STALE_MS, describeExternalId } from "@nulo/wallet-bridge"
+import { deferred } from "@nulo/wallet-core/utils"
 
 type Callbacks = { onPendingDiscovery: (d: unknown) => void }
 let captured: Callbacks | undefined
@@ -70,14 +71,6 @@ function microtaskLadder(): () => number {
 
 const flush = async () => {
 	for (let i = 0; i < 40; i++) await Promise.resolve()
-}
-
-function deferred<T>() {
-	let resolve!: (v: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
 }
 
 const logs: string[] = []

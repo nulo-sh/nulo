@@ -11,3 +11,4 @@
 - 2026-10-16: phase 3 network e2e (Chrome, retry 0): pass. Phases 1-3 ✓; Codex loop converged (reject, reject, approve).
 - 2026-10-16: final gates pass (lint, typecheck:all, test:all, check:plans, smoke on both browsers, network on Chrome); PR next.
 - 2026-10-16: merged `origin/dev` (`63498074`): conflicts in the balance service's imports and the plans index, resolved; lint, typecheck:all and test:all pass on the merge.
+- 2026-10-16: merged `origin/dev` (`5ec3225b`, with the network test fix #601): no conflicts; lint, typecheck:all and the extension's unit tests pass.

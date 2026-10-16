@@ -1,7 +1,12 @@
+import { Flex } from "@nulo/design"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import type { Ref } from "vue"
 
+vi.mock("vue-router", async () => ({
+	...(await vi.importActual<typeof import("vue-router")>("vue-router")),
+	useRouter: () => ({ back: vi.fn(), push: vi.fn() }),
+}))
 vi.mock("@/composables/usePrestoCheck", async () => {
 	const { ref } = await import("vue")
 	const state = ref<{ kind: string; info?: object }>({ kind: "idle" })
@@ -27,6 +32,8 @@ vi.mock("@/wallet/services/execution/client", () => ({
 	}),
 }))
 
+import SettingsPageShell from "@/components/composite/SettingsPageShell.vue"
+import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import * as prestoCheck from "@/composables/usePrestoCheck"
 import * as hostPermission from "@/composables/usePrestoHostPermission"
 import Proving from "./proving.vue"
@@ -34,11 +41,14 @@ import Proving from "./proving.vue"
 const state = (prestoCheck as unknown as { state: Ref<{ kind: string; info?: object }> }).state
 const permission = hostPermission as unknown as { missing: Ref<boolean>; request: ReturnType<typeof vi.fn> }
 
-const mountProving = () =>
+/** `withHeader` renders the real shell and header, attached to the document so focus can land in it. */
+const mountProving = ({ withHeader = false } = {}) =>
 	mount(Proving, {
+		attachTo: withHeader ? document.body : undefined,
 		global: {
+			components: { Flex, SettingsPageShell, SubPageHeader },
 			stubs: {
-				SettingsPageShell: { template: "<div><slot /></div>" },
+				SettingsPageShell: withHeader ? false : { template: "<div><slot /></div>" },
 				PrestoStatusCard: true,
 				PrestoPermissionRow: {
 					emits: ["allow"],
@@ -102,5 +112,40 @@ describe("settings proving", () => {
 		await w.find('[data-testid="presto-permission-allow"]').trigger("click")
 		expect(permission.request).toHaveBeenCalledOnce()
 		w.unmount()
+	})
+
+	describe("focus when a grant takes the row away", () => {
+		const focused = (w: ReturnType<typeof mountProving>, testid: string) => {
+			const el = w.get(`[data-testid="${testid}"]`).element as HTMLElement
+			el.focus()
+			expect(document.activeElement).toBe(el)
+			return el
+		}
+
+		test("from Allow, focus moves to the header's title", async () => {
+			permission.missing.value = true
+			const w = mountProving({ withHeader: true })
+			await flushPromises()
+			focused(w, "presto-permission-allow")
+
+			permission.missing.value = false
+			await flushPromises()
+			expect(document.activeElement?.tagName).toBe("SPAN")
+			expect(document.activeElement?.textContent).toBe("Proving")
+			w.unmount()
+		})
+
+		test("from a control that stays, focus stays on it", async () => {
+			permission.missing.value = true
+			const w = mountProving({ withHeader: true })
+			await flushPromises()
+			const back = focused(w, "subpage-back")
+
+			permission.missing.value = false
+			await flushPromises()
+			expect(w.find('[data-testid="presto-permission-allow"]').exists()).toBe(false)
+			expect(document.activeElement).toBe(back)
+			w.unmount()
+		})
 	})
 })

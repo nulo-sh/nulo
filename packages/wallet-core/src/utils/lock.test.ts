@@ -2,16 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest"
 import { LogLevel } from "../logger/interfaces"
 import type { ILogger } from "../logger/interfaces"
 import { Lock, type LockTicket } from "./lock"
-
-function _deferred<T = void>() {
-	let resolve!: (value: T) => void
-	let reject!: (reason?: unknown) => void
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
-}
+import { deferred } from "./deferred"
 
 const flush = () => new Promise<void>((r) => setTimeout(r, 0))
 
@@ -243,7 +234,7 @@ describe("Lock", () => {
 	test("withLock: two concurrent sections serialize (no overlap)", async () => {
 		const lock = new Lock()
 		const events: string[] = []
-		const gate = _deferred()
+		const gate = deferred()
 		const first = lock.withLock(async () => {
 			events.push("first-in")
 			await gate.promise
@@ -302,7 +293,7 @@ describe("Lock", () => {
 		// enters only when W2's OWN leave runs.
 		vi.useFakeTimers()
 		const lock = new Lock()
-		const gate = _deferred()
+		const gate = deferred()
 		const events: string[] = []
 		const long = lock.withLock(async () => {
 			events.push("long-in")
@@ -341,13 +332,13 @@ describe("Lock", () => {
 		// leave lands, W2's OWN watchdog must still fire and admit W3.
 		vi.useFakeTimers()
 		const lock = new Lock()
-		const gate = _deferred()
+		const gate = deferred()
 		const long = lock.withLock(async () => {
 			await gate.promise
 		})
 		await vi.advanceTimersByTimeAsync(0)
 		vi.advanceTimersByTime(5 * 60_000 + 1) // H1 displaced
-		const w2Entered = _deferred()
+		const w2Entered = deferred()
 		void (async () => {
 			await lock.enter()
 			w2Entered.resolve()

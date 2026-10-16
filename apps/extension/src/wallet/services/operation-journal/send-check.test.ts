@@ -9,7 +9,7 @@ import { BlockHeader, GlobalVariables } from "@aztec-labs/stdlib/tx"
 import { describe, expect, test, vi } from "vitest"
 import type { SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import { MockClock } from "@nulo/wallet-core/testing"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import { DROPPED_RECHECK_INTERVAL_MS, DROPPED_RESURRECTION_WINDOW_MS } from "@/wallet/services/transaction/service"
 import { SEND_CHECK_TICK_MS, SendCheck } from "./send-check"
@@ -86,14 +86,6 @@ const unconfirmedRow = (withExpiry = true) =>
 		},
 	})
 const pending = () => ({ txHash: HASH, status: "pending" })
-
-function deferred<T>() {
-	let resolve: (value: T) => void = () => {}
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
-}
 
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 

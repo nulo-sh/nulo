@@ -19,7 +19,7 @@
  * used so init() runs end-to-end.
  */
 
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { flushPromises } from "@vue/test-utils"
 import { ServiceCollection } from "@/wallet/base"
@@ -5008,14 +5008,6 @@ describe("IncomingTransferService — public-scan health (episodes, backoff, ret
 })
 
 // ── Arrivals ─────────────────────────────────────────────────────────────
-
-function deferred<T>() {
-	let resolve!: (value: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
-}
 
 /** A chain tip the test steers: each read takes the next queued answer (a number, an Error, or a
  *  promise the test settles), then the standing one. */

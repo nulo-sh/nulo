@@ -147,6 +147,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [harden-dedupe](harden-dedupe/plan.md) — completed — a quality audit's duplication folded into shared helpers on one integration branch, with today's behaviour pinned first
 - [harden-findings-remediation](harden-findings-remediation/plan.md) — completed — a whole-codebase security audit remediated as eleven reviewable units
 - [harden-quality-arc](harden-quality-arc/plan.md) — completed — a quality audit's findings landed on one integration branch, tiered by risk
+- [harden-quality-fixes-1](harden-quality-fixes-1/plan.md) — completed — the quality harden's cheap set: one `deferred` test helper, exhaustive operation-kind switches, composed row schemas, four dead paths removed, shared contact rules
 - [harden-security-prerelease](harden-security-prerelease/plan.md) — completed — a security audit's verified findings fixed before the first release, in four batches
 - [hardening-2](hardening-2/plan.md) — completed — every dApp call parsed against the wallet schema, an object-keyed artifact cache, storage fences and a CSP floor
 - [harness-fixtures](harness-fixtures/plan.md) — completed — six complexity suppressions in the e2e harness removed by refactoring
@@ -156,6 +157,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [hd-same-token-concurrent-sends](hd-same-token-concurrent-sends/plan.md) — completed — a popup send that shares chain state with an in-flight send waits for its inclusion instead of failing; every send takes the slot
 - [holdings-loading-sync](holdings-loading-sync/plan.md) — completed — honest Home token loading states and an outcome-based incoming-scan health signal
 - [home-holdings-pin](home-holdings-pin/plan.md) — completed — Home shows three pinned tokens, and a Holdings tab owns the full list
+- [home-onboarding-2](home-onboarding-2/plan.md) — completed — the Firefox Presto permission row in place of the step and Settings → Proving, the optional loopback origins, focus to the page title when the row leaves with it; #132 already shipped
 - [home-onboarding-chrome](home-onboarding-chrome/plan.md) — completed in part — History filtered from a token page, the token page's header, onboarding's stored theme, Account State under Developer, one own window per flow, the store Send frame; the Firefox loopback permission row stopped by its probe
 - [home-refresh](home-refresh/plan.md) — completed — the locked home-screen spec implemented as a light, reversible change
 - [hygiene](hygiene/plan.md) — completed — technical follow-ups that change no screen

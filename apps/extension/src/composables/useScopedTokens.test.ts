@@ -1,4 +1,4 @@
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { reactive } from "vue"
@@ -20,14 +20,6 @@ const token = (id: number, symbol: string): TokenInfo => ({
 	hasPrivateTransfers: true,
 	hasPrivateToPublicTransfers: true,
 })
-
-function deferred<T>() {
-	let resolve!: (value: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
-}
 
 let getTokens: ReturnType<typeof vi.fn>
 let onTokenAdded: EventHandler<TokenInfo>
