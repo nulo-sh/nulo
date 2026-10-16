@@ -102,6 +102,7 @@ const mountCard = async (op: DraftUIOperation, { tokens = [USDC], artifact = TOK
 			components: { AddressDisplay },
 		},
 	})
+	await w.get('[data-testid="execute-op-details-toggle"]').trigger("click")
 	await flushPromises()
 	return w
 }

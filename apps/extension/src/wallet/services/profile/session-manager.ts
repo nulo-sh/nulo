@@ -114,18 +114,18 @@ export class SessionManager {
 	 *  race-free with concurrent toggles — `onConfigUpdated` keeps it in
 	 *  sync. */
 	private strictSecurityMode: boolean
-	private readonly alarms?: AlarmsPort
+	private readonly alarms: AlarmsPort
 	// The named create/clear ritual is owned by the shared AlarmDispatcher.
 	// The listener deliberately does NOT go through `dispatcher.listen()`: the
 	// staleness gate needs `alarm.scheduledTime` (the dispatcher's tick contract
 	// doesn't surface the event), and the handler's fire-and-forget `void`
 	// semantics must stay byte-identical.
-	private readonly dispatcher?: AlarmDispatcher
+	private readonly dispatcher: AlarmDispatcher
 	/** Facade-lock serializer injected by ProfileService. Serializes the
 	 *  alarm-driven TTL close against the facade-locked session writers
 	 *  (refresh/open/unlock) so a racing refresh writeback cannot resurrect a
-	 *  session the alarm just closed. Defaults to a pass-through for the
-	 *  lock-agnostic legacy/test paths (which never wire the alarm). */
+	 *  session the alarm just closed. Defaults to a pass-through when no facade
+	 *  lock is injected. */
 	private readonly runExclusive: <T>(fn: () => Promise<T>) => Promise<T>
 	/** Serializes the session ARTIFACT operations (row write/delete, alarm
 	 *  schedule/clear) across every entry point — including the off-lock
@@ -165,41 +165,29 @@ export class SessionManager {
 	 *                    + error logging (never throws out of SessionManager).
 	 * @param onChange    Callback invoked on open + close transitions. The
 	 *                    facade wires this to `emit("onActiveProfileChanged", …)`.
-	 * @param browserApi  Optional `BrowserApi` port. Tests pass `FakeBrowserApi`
-	 *                    so storage + alarms are in-memory. If omitted, falls
-	 *                    back to `chrome.storage.session` for legacy SW startup
-	 *                    AND skips alarm wiring (proactive TTL relies on the
-	 *                    port; without it, the existing reactive `isExpired`
-	 *                    check still gates `getActive`).
+	 * @param browserApi  Session storage and the alarm behind the proactive TTL lock; the
+	 *                    reactive `isExpired` check in `getActive` stays the safety net.
 	 */
 	public constructor(
 		config: IConfig,
 		private readonly logger: ILogger,
 		onChange: SessionChangeListener,
-		browserApi?: BrowserApi,
+		browserApi: BrowserApi,
 		runExclusive?: <T>(fn: () => Promise<T>) => Promise<T>,
 	) {
 		this.onChange = onChange
 		this.sessionTtl = config.get("sessionTtl")
 		this.strictSecurityMode = config.get("strictSecurityMode")
 		config.onUpdate.add(this.onConfigUpdated)
-		this.session = browserApi
-			? new ValueStorage<Session>(SESSION_STORAGE_ROOT, browserApi.storage.session)
-			: new ValueStorage<Session>(SESSION_STORAGE_ROOT, chrome.storage.session)
-		// Subscribe to `chrome.alarms` only when a port is wired. The
-		// legacy (no-`browserApi`) SW path keeps the reactive `isExpired`
-		// behavior — proactive TTL lights up once the composition root
-		// passes a real `BrowserApi`.
-		this.alarms = browserApi?.alarms
-		this.dispatcher = this.alarms ? new AlarmDispatcher(SESSION_TTL_ALARM_NAME, this.alarms) : undefined
-		// Pass-through default keeps the lock-agnostic contract for callers
-		// that don't wire the alarm (legacy SW path / unit tests).
+		this.session = new ValueStorage<Session>(SESSION_STORAGE_ROOT, browserApi.storage.session)
+		this.alarms = browserApi.alarms
+		this.dispatcher = new AlarmDispatcher(SESSION_TTL_ALARM_NAME, this.alarms)
 		this.runExclusive = runExclusive ?? ((fn) => fn())
 		this.artifactLock = new Lock(LOG_SOURCE, logger, null)
 		// SessionManager has no dispose method (SW-lifetime singleton);
 		// we don't store the unsubscribe handle. If a future teardown
 		// path emerges, capture this return value.
-		this.alarms?.onAlarm(this.onAlarmFired)
+		this.alarms.onAlarm(this.onAlarmFired)
 	}
 
 	/** Returns the active session if one exists and has not yet expired.
@@ -935,14 +923,13 @@ export class SessionManager {
 
 	/**
 	 * Schedule the lock alarm at `lockedAt` (epoch ms). No-op when
-	 * alarms aren't wired, when sessionTtl is 0, or when lockedAt is
-	 * undefined / past.
+	 * sessionTtl is 0, or when lockedAt is undefined / past.
 	 *
 	 * Errors are logged + swallowed; never propagate to callers (the
 	 * reactive `isExpired` check is the safety net).
 	 */
 	private async scheduleLockAlarm(lockedAt: number | undefined): Promise<void> {
-		if (!this.dispatcher || this.sessionTtl === 0 || lockedAt === undefined || lockedAt <= Date.now()) {
+		if (this.sessionTtl === 0 || lockedAt === undefined || lockedAt <= Date.now()) {
 			return
 		}
 		try {
@@ -954,10 +941,9 @@ export class SessionManager {
 
 	/**
 	 * Cancel any pending lock alarm. Idempotent — `clear` returns false
-	 * when no alarm exists. No-op when alarms aren't wired.
+	 * when no alarm exists.
 	 */
 	private async clearLockAlarm(): Promise<void> {
-		if (!this.dispatcher) return
 		try {
 			await this.dispatcher.clear()
 		} catch (error) {

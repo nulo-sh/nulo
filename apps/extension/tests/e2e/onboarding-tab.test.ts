@@ -14,6 +14,7 @@ import { readProfileNames } from "./fixtures/helpers"
 import { waitForPopupClosed } from "./fixtures/popups"
 import { shotSend } from "./fixtures/send-page"
 import { focusRing, tokenColor, waitForFocus } from "./helpers/pointer-probes"
+import { gotoPrestoStep } from "./helpers/presto-step"
 import {
 	interceptHealth,
 	PRESTO_DETAILED_HEALTH,
@@ -23,13 +24,6 @@ import {
 } from "./fixtures/presto"
 
 const TEST_PASSWORD = "OnboardingTest_!23"
-
-async function gotoPrestoStep(page: Page): Promise<void> {
-	await page.evaluate(() => {
-		window.location.hash = "#/onboarding/presto"
-	})
-	await waitForHash(page, "#/onboarding/presto", 10_000)
-}
 
 /** The step probes only on a click, so a test that wants a probe result has to ask for one. */
 async function gotoPrestoStepAndCheck(page: Page): Promise<void> {

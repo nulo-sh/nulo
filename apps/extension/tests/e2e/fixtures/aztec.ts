@@ -15,7 +15,13 @@ import { TimeoutError } from "@aztec-labs/foundation/error"
 import { GasFees } from "@aztec-labs/stdlib/gas"
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses"
 import { Fr } from "@aztec-labs/aztec.js/fields"
-import { NO_WAIT, type NoWait, getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts"
+import {
+	NO_WAIT,
+	type NoWait,
+	type SendInteractionOptions,
+	type WaitOpts,
+	getContractInstanceFromInstantiationParams,
+} from "@aztec-labs/aztec.js/contracts"
 import { EmbeddedWallet } from "@aztec-labs/wallets/embedded"
 import { BaseWallet } from "@aztec-labs/wallet-sdk/base-wallet"
 import { registerInitialLocalNetworkAccountsInWallet } from "@aztec-labs/wallets/testing"
@@ -774,10 +780,10 @@ export async function deployExtraTokensForAccount(
  * Crowdfunding consumer whose `donate` pulls the donor's tokens via
  * `transfer_in_private` (msg.sender = crowdfunding ≠ from = donor), so the
  * token asserts a call authwit against the DONOR's account — the shape the
- * wallet's estimate-time discovery must detect and sign. The donor gets a
- * private balance minted so the pull can execute. Returns the two addresses
- * (instances are fetched from the node by the test driver for dApp-side
- * `registerContract`).
+ * wallet's estimate-time discovery must detect and sign. Publishes the standard
+ * `PublicChecks` contract the consumer calls, then mints the donor a private
+ * balance so the pull can execute. Returns the two addresses (instances are
+ * fetched from the node by the test driver for dApp-side `registerContract`).
  */
 export async function deployDelegatedPullRig(
 	aztecConfig: AztecTestConfig,
@@ -791,6 +797,7 @@ export async function deployDelegatedPullRig(
 		const feeOptions = await createSponsoredFeeOptions(wallet)
 		const minter = AztecAddress.fromStringUnsafe(aztecConfig.minterAddress)
 		const fee = { ...feeOptions, gasSettings: E2E_FEE_GAS }
+		await ensureStandardPublicChecks(wallet, { from: minter, fee, wait: { timeout: 120 } })
 
 		const tokenDeploy = await PullTokenContract.deploy(wallet as never, minter, "PullToken", "PULL", 18).send({
 			from: minter,
@@ -824,26 +831,21 @@ export async function deployDelegatedPullRig(
 /**
  * Publishes the standard `PublicChecks` contract at its canonical address, which the local network
  * leaves unpublished (it publishes only the standard AuthRegistry, by the same two steps, and seeds
- * neither at genesis). The Crowdfunding consumer of `deployDelegatedPullRig` calls it, so its pull
- * cannot simulate, and no authwit is discovered, until it exists. Idempotent.
+ * neither at genesis). The pull cannot simulate, and no authwit is discovered, until it exists.
+ * Check-then-publish is enough: network files run one at a time on a network. Idempotent.
  */
-export async function ensureStandardPublicChecks(aztecConfig: AztecTestConfig): Promise<void> {
+async function ensureStandardPublicChecks(
+	wallet: InstanceType<typeof EmbeddedWallet>,
+	send: SendInteractionOptions<WaitOpts>,
+): Promise<void> {
 	const { publishContractClass, publishInstance } = await import("@aztec-labs/aztec.js/deployment")
 	const { PublicChecksArtifact, getStandardPublicChecks } = await import("@aztec-labs/standard-contracts/public-checks")
 	const { instance, contractClass } = await getStandardPublicChecks()
-	const { wallet, cleanup } = await createTestWallet(aztecConfig.nodeUrl)
-	try {
-		const from = AztecAddress.fromStringUnsafe(aztecConfig.minterAddress)
-		const fee = { ...(await createSponsoredFeeOptions(wallet)), gasSettings: E2E_FEE_GAS }
-		const send = { from, fee, wait: { timeout: 120 } } as never
-		if (!(await wallet.getContractClassMetadata(contractClass.id)).isContractClassPubliclyRegistered) {
-			await (await publishContractClass(wallet as never, PublicChecksArtifact)).send(send)
-		}
-		if (!(await wallet.getContractMetadata(instance.address)).isContractPublished) {
-			await publishInstance(wallet as never, instance).send(send)
-		}
-	} finally {
-		await cleanup()
+	if (!(await wallet.getContractClassMetadata(contractClass.id)).isContractClassPubliclyRegistered) {
+		await (await publishContractClass(wallet, PublicChecksArtifact)).send(send)
+	}
+	if (!(await wallet.getContractMetadata(instance.address)).isContractPublished) {
+		await publishInstance(wallet, instance).send(send)
 	}
 }
 

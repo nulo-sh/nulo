@@ -4,7 +4,6 @@ import { defaultConfig as makeDefaultConfig } from "@/wallet/config"
 import { LogLevel } from "@/wallet/logger"
 import { LogViewerServiceClient } from "@/wallet/services/log-viewer/client"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
-import { TaskServiceClient } from "@/wallet/services/task/client"
 
 /** Composables */
 import { useLockWallet } from "@/composables/useLockWallet"
@@ -36,40 +35,14 @@ configService.onUpdate.add(onSettingUpdate)
 
 const defaultConfig = makeDefaultConfig()
 const indicateFailures = ref(defaultConfig.indicateFailures)
-const showNode = ref(defaultConfig.showNode)
 const networkStatusKey = computed(() => appStore.networkStatus?.toLowerCase())
 const accountState = computed(() => accountStateOf(appStore))
 
 const HEADER_INDICATION_DURATION = 5_000
 let headerIndicateFailureTimer = null
-let headerIndicateTaskTimer = null
 
 const MENU_INDICATION_DURATION = 60_000
 let menuIndicateFailureTimer = null
-let menuIndicateTaskTimer = null
-
-const tasks = ref([])
-const activeTasksCount = ref(0)
-const taskService = new TaskServiceClient()
-taskService.onTaskCreated.add(onTaskCreated)
-taskService.onTaskUpdated.add(onTaskUpdated)
-taskService.onTaskDeleted.add(processTask)
-async function onTaskCreated(task) {
-	if (task.parentId) return
-
-	tasks.value.push(task)
-}
-function processTask(task) {
-	const idx = tasks.value.findIndex((t) => t.id === task.id)
-	if (idx !== -1) {
-		tasks.value.splice(idx, 1)
-	}
-}
-function onTaskUpdated(task) {
-	if (!task.finishedAt || task.parentId) return
-
-	processTask(task)
-}
 
 const currentFailureType = ref("")
 const highlightColor = computed(() => {
@@ -77,8 +50,6 @@ const highlightColor = computed(() => {
 		return "var(--red)"
 	} else if (currentFailureType.value === "warning") {
 		return "var(--yellow)"
-	} else if (activeTasksCount.value) {
-		return "" // "var(--green)"
 	} else {
 		return ""
 	}
@@ -95,8 +66,6 @@ function handleWalletFailure(type, logId) {
 
 	headerIndicateFailureTimer = setTimeout(() => {
 		currentFailureType.value = ""
-		activeTasksCount.value = tasks.value?.length || 0
-		cacheStore.activeTasksCount = activeTasksCount.value
 		headerIndicateFailureTimer = null
 	}, HEADER_INDICATION_DURATION)
 
@@ -135,9 +104,6 @@ function onSettingUpdate(setting) {
 		case "indicateFailures":
 			indicateFailures.value = setting.value
 			break
-		case "showNode":
-			showNode.value = setting.value
-			break
 
 		default:
 			break
@@ -167,44 +133,9 @@ watch(
 		}
 	},
 )
-watch(
-	() => tasks.value?.length,
-	(newValue) => {
-		if (!newValue) {
-			if (headerIndicateTaskTimer) {
-				clearTimeout(headerIndicateTaskTimer)
-				headerIndicateTaskTimer = null
-			}
-
-			headerIndicateTaskTimer = setTimeout(() => {
-				activeTasksCount.value = 0
-				headerIndicateTaskTimer = null
-			}, HEADER_INDICATION_DURATION)
-
-			menuIndicateTaskTimer = setTimeout(() => {
-				cacheStore.activeTasksCount = null
-				menuIndicateTaskTimer = null
-			}, MENU_INDICATION_DURATION)
-
-			return
-		}
-
-		if (menuIndicateTaskTimer) {
-			clearTimeout(menuIndicateTaskTimer)
-			menuIndicateTaskTimer = null
-		}
-
-		activeTasksCount.value = newValue
-		cacheStore.activeTasksCount = newValue
-	},
-)
 
 onMounted(async () => {
 	indicateFailures.value = await configService.getValue("indicateFailures")
-	showNode.value = await configService.getValue("showNode")
-
-	tasks.value = (await taskService.getTasks()).filter((t) => !t.parentId && !t.finishedAt)
-	activeTasksCount.value = tasks.value?.length
 
 	if (indicateFailures.value) {
 		logViewerService.connect()
@@ -214,7 +145,6 @@ onMounted(async () => {
 onBeforeUnmount(() => {
 	configService.disconnect()
 	logViewerService.disconnect()
-	taskService.disconnect()
 	disposeLockWallet()
 })
 </script>

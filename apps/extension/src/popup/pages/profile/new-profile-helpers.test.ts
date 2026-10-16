@@ -1,3 +1,4 @@
+import { deferred } from "@nulo/wallet-core/utils"
 import { reactive } from "vue"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
@@ -64,14 +65,6 @@ function makeAppStore(overrides: Partial<Record<string, unknown>> = {}) {
 function bootstrapped(store: ReturnType<typeof makeAppStore>, id: string) {
 	store.profile = { id }
 	store.isLogined = true
-}
-
-function deferred<T>() {
-	let resolve!: (value: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
 }
 
 /** Starts the helper and records how it settled without awaiting it. */

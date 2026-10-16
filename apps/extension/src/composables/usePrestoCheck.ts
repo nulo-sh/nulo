@@ -22,6 +22,7 @@ export function usePrestoCheck(config: PrestoCheckConfig, options?: { client?: P
 	const presto = usePrestoStatus({ client: options?.client ?? getPrestoClient(), autoDetect: false })
 	/** False until `start()` has read the flag, so a page never flashes the resting copy first. */
 	const started = ref(false)
+	let disposed = false
 
 	const state = computed<PrestoUiState>(() =>
 		started.value || presto.state.value.kind !== "idle" ? presto.state.value : { kind: "detecting" },
@@ -34,6 +35,7 @@ export function usePrestoCheck(config: PrestoCheckConfig, options?: { client?: P
 		} catch {
 			// An unreadable flag is treated as unset: resting costs a click, a wrong probe costs a prompt.
 		}
+		if (disposed) return
 		started.value = true
 		if (reached) await presto.detect()
 	}
@@ -50,5 +52,10 @@ export function usePrestoCheck(config: PrestoCheckConfig, options?: { client?: P
 		}
 	}
 
-	return { state, start, check, dispose: presto.dispose }
+	function dispose(): void {
+		disposed = true
+		presto.dispose()
+	}
+
+	return { state, start, check, dispose }
 }

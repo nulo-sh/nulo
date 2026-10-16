@@ -65,7 +65,13 @@ vi.mock("@/wallet/services/fpc/client", () => ({
 }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onTokenAdded: new EventHandler(), onTokenDeleted: new EventHandler(), getTokens: mocks.getTokens }
+		return {
+			disconnect: vi.fn(),
+			onTokenAdded: new EventHandler(),
+			onTokenUpdated: new EventHandler(),
+			onTokenDeleted: new EventHandler(),
+			getTokens: mocks.getTokens,
+		}
 	}),
 }))
 vi.mock("@/wallet/services/token-balance/client", () => ({

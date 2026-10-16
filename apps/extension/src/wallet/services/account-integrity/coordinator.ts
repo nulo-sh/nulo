@@ -11,7 +11,7 @@ import type { StaleEntry } from "@/wallet/services/stale-network/types"
 import { AccountAddressInconsistencyError } from "@nulo/extension-messaging/errors"
 import { NuloAccount, V6_REGIME } from "@nulo/aztec-runtime/account"
 import { deriveAccountSeed, type MasterSecretBytes } from "@nulo/wallet-crypto"
-import type { BrowserApi, StorageArea } from "@nulo/wallet-core/ports"
+import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { AccountIntegrityBlockedRepository, AccountIntegrityVerifiedStampRepository } from "./blocked-repository"
 import { accountSetDigest } from "./types"
 import type { AccountIntegrityBlocked, AccountIntegrityDelegate, AccountRuntimeMismatchDelegate } from "./types"
@@ -67,7 +67,7 @@ export class AccountIntegrityCoordinator implements IService, AccountIntegrityDe
 
 	public constructor(
 		private readonly logger: ILogger,
-		browserApi?: BrowserApi,
+		browserApi: BrowserApi,
 		private readonly deriveAddress: DeriveAddress = async (master, account) => {
 			// The ONE shared formula (NULO-ACCOUNT-KDF v2), reading the row-carried l1ChainId —
 			// self-contained, so this pre-session-open path needs no network lookup.
@@ -75,7 +75,7 @@ export class AccountIntegrityCoordinator implements IService, AccountIntegrityDe
 			return (await NuloAccount.new(secret, logger, ACCOUNT_INTEGRITY_COORDINATOR_NAME)).address.toString()
 		},
 	) {
-		const storage = (browserApi?.storage.local ?? chrome.storage.local) as StorageArea
+		const storage = browserApi.storage.local
 		this.blocked = new AccountIntegrityBlockedRepository(storage)
 		this.stamps = new AccountIntegrityVerifiedStampRepository(storage)
 		this.staleNetworks = new StaleNetworkRepository(storage)

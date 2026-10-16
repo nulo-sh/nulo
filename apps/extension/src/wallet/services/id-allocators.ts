@@ -16,14 +16,42 @@ import { canonicalNumericStorageId } from "@/wallet/services/purge-rows"
 
 export async function nextNumericId(storage: { getKeys(): Promise<string[]> }): Promise<number> {
 	const keys = await storage.getKeys()
+	const occupied = new Set(keys)
+	return nextIdAbove(maxAllocatableId(keys), (id) => occupied.has(String(id)))
+}
+
+/** Hands out, from one listing of the store's keys, the ids successive `nextNumericId` calls would
+ *  return if each id were written before the next call; `fenced` ids count as occupied keys. */
+export interface NumericIdBatch {
+	next(fenced: ReadonlySet<number>): number
+}
+
+export function numericIdBatch(keys: readonly string[]): NumericIdBatch {
+	const occupied = new Set(keys)
+	let max = maxAllocatableId(keys)
+	return {
+		next(fenced) {
+			const ceiling = Math.max(max, maxAllocatableId([...fenced].map(String)))
+			const id = nextIdAbove(ceiling, (n) => occupied.has(String(n)) || fenced.has(n))
+			occupied.add(String(id))
+			max = Math.max(max, maxAllocatableId([String(id)]))
+			return id
+		},
+	}
+}
+
+function maxAllocatableId(keys: readonly string[]): number {
 	// Hostile keys must not skew the max: bare `+x` let an alias ("0x10", "01")
 	// shift it and a huge junk key pin the allocator onto one forever-colliding
 	// float (1e21 + 1 === 1e21). Canonical round-trip PLUS a safe-integer bound
 	// (canonical-but-unsafe forms — "1e+21", 2^53 — round-trip String() exactly)
 	// keeps only allocatable ids. The bound lives HERE, not in
 	// canonicalNumericStorageId, so purge-classification semantics are untouched.
-	const allocatable = keys.map((x) => canonicalNumericStorageId(x)).filter((n): n is number => n !== undefined && Number.isSafeInteger(n))
-	let candidate = array_max(allocatable) + 1
+	return array_max(keys.map((x) => canonicalNumericStorageId(x)).filter((n): n is number => n !== undefined && Number.isSafeInteger(n)))
+}
+
+function nextIdAbove(max: number, occupied: (id: number) => boolean): number {
+	let candidate = max + 1
 	// The candidate itself must be safe AND physically free: a hostile
 	// MAX_SAFE_INTEGER key would otherwise yield unsafe 2^53, which pins and
 	// overwrites. Clamp and walk down into the first free key — gap-fill reuse
@@ -31,8 +59,7 @@ export async function nextNumericId(storage: { getKeys(): Promise<string[]> }): 
 	// monotonicity). On sane stores the walk never runs: String(max+1) is
 	// canonical, so an equal key would have raised the max instead.
 	if (!Number.isSafeInteger(candidate)) candidate = Number.MAX_SAFE_INTEGER
-	const occupied = new Set(keys)
-	while (occupied.has(String(candidate))) candidate -= 1
+	while (occupied(candidate)) candidate -= 1
 	return candidate
 }
 

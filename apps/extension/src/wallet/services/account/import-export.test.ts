@@ -99,6 +99,7 @@ async function build(withBalances = false) {
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
+				onTokenUpdated: new EventHandler(),
 				getTokensRaw: async (pid: string) => (pid === "p1" ? [BAL_TOKEN] : []),
 			}),
 		)

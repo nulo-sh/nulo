@@ -6,7 +6,7 @@
 
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { ServiceCollection } from "@/wallet/base"
@@ -43,14 +43,6 @@ const readFailsOnSecondCall = (call: number): boolean => {
 }
 
 describe("AccountService.createAccount — deletion fence", () => {
-	function _deferred<T>() {
-		let resolve!: (v: T) => void
-		const promise = new Promise<T>((res) => {
-			resolve = res
-		})
-		return { promise, resolve }
-	}
-
 	async function makeHarness(over: { secret?: Promise<unknown>; probe?: Promise<number>; chainLive?: (call: number) => boolean } = {}) {
 		const api = new FakeBrowserApi()
 		api.reset()
@@ -90,7 +82,7 @@ describe("AccountService.createAccount — deletion fence", () => {
 		// deletion begins AND fully releases while the secret promise is parked,
 		// so a post-await capture would observe the settled post-bump epoch and
 		// pass the pre-write assert — landing the orphan row.
-		const gate = _deferred<unknown>()
+		const gate = deferred<unknown>()
 		const h = await makeHarness({ secret: gate.promise })
 		const run = h.service.createAccount("p1", 1, 0, "A")
 		await new Promise((r) => setTimeout(r, 0)) // the run captures its fence, then parks on the secret
@@ -102,7 +94,7 @@ describe("AccountService.createAccount — deletion fence", () => {
 	})
 
 	test("a deletion beginning during the network probe rejects the write", async () => {
-		const gate = _deferred<number>()
+		const gate = deferred<number>()
 		const h = await makeHarness({ probe: gate.promise })
 		const run = h.service.createAccount("p1", 1, 0, "A")
 		await new Promise((r) => setTimeout(r, 0)) // let the run park on the probe

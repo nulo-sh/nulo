@@ -224,7 +224,7 @@ describe("the prepare summary", () => {
 		const entries = [...readFileSync(join(REPO_ROOT, workflow), "utf8").matchAll(/\b(?:infra|packages)\/[\w./-]+\.ts\b/g)].map(
 			([entry]) => entry,
 		)
-		expect(entries).toContain("infra/token-list/scripts/summary.ts")
+		expect(entries).toEqual(expect.arrayContaining(["infra/token-list/scripts/summary.ts", "infra/token-list/scripts/live-check.ts"]))
 		const resolve = (file: string, specifier: string) => {
 			if (specifier.startsWith(".")) return `${join(dirname(file), specifier)}${extname(specifier) === "" ? ".ts" : ""}`
 			expect(specifier).toMatch(/^@nulo\/token-list(\/[a-z-]+)?$/)

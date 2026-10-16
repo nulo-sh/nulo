@@ -11,7 +11,10 @@ import {
 	getTxCategory,
 	getTxTitle,
 	humanizeMethodName,
+	plainMethodName,
+	tokenMovementLabel,
 } from "./tx-enrichment"
+import { TRANSFER_SIGNATURES } from "./token-transfer-vocabulary"
 
 describe("FEE_METHODS — re-exported from primary-method", () => {
 	test("re-exports the same set instance", () => {
@@ -69,6 +72,31 @@ describe("humanizeMethodName — fallback when no label exists", () => {
 	test("snake_case unknown → title-cased with spaces", () => {
 		expect(humanizeMethodName("drip_to_private")).toBe("Drip To Private")
 		expect(humanizeMethodName("custom_method")).toBe("Custom Method")
+	})
+})
+
+describe("tokenMovementLabel and plainMethodName", () => {
+	test("the six transfer and mint labels, and only they, claim a token movement", () => {
+		const names = [...TRANSFER_SIGNATURES.keys(), "mint_to_private", "mint_to_public"]
+		expect(new Set(names.map(tokenMovementLabel))).toEqual(
+			new Set([
+				"Transfer (private)",
+				"Transfer (public)",
+				"Transfer to public",
+				"Transfer to private",
+				"Mint (private)",
+				"Mint (public)",
+			]),
+		)
+		for (const name of ["shield", "unshield", "redeem_shield", "claim", "claim_and_end_setup", "burn_private"]) {
+			expect(tokenMovementLabel(name)).toBeNull()
+		}
+	})
+
+	test("a name with a wallet label reads as its contract spells it", () => {
+		expect(plainMethodName("transfer_public_to_public")).toBe("Transfer Public To Public")
+		expect(plainMethodName("mint_to_private")).toBe("Mint To Private")
+		expect(plainMethodName("0x1234567890abcdef")).toBe("0x12345678...")
 	})
 })
 

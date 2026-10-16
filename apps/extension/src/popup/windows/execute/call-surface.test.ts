@@ -4,7 +4,19 @@ import { trimAddress } from "@/utils/string"
 import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
 import type { DecodedValue } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
-import { amountLabel, callName, callSurface, nonceValue, rawRows, tokenAt, valueText, valueTitle } from "./call-surface"
+import {
+	amountLabel,
+	authwitLine,
+	authwitTitle,
+	callName,
+	callSurface,
+	nonceValue,
+	rawRows,
+	rowTitle,
+	tokenAt,
+	valueText,
+	valueTitle,
+} from "./call-surface"
 
 const OWNER = `0x${"a".repeat(64)}`
 const TO = `0x${"b".repeat(64)}`
@@ -317,5 +329,59 @@ describe("nonceValue", () => {
 		expect(valueText(a)).toBe("0x0f3c7a91..c07e2a")
 		expect(valueText(b)).toBe(valueText(a))
 		expect(valueTitle(b)).not.toBe(valueTitle(a))
+	})
+})
+
+describe("rowTitle, authwitTitle and authwitLine: the wallet's words only on what it read", () => {
+	const transfer = {
+		kind: "transfer" as const,
+		fn: "transfer_public_to_public",
+		to: TO,
+		amount: "5",
+		sender: { kind: "explicit" as const, address: OWNER },
+	}
+	const decoded = (fn: string) => ({ kind: "decoded" as const, fn, params: [] })
+
+	test("a transfer or mint label names only a call the wallet read as one; the same name read otherwise is its own", () => {
+		const call = { name: "transfer_public_to_public", to: TOKEN, args: [] }
+		expect(rowTitle(call, transfer)).toBe("Transfer (public)")
+		expect(rowTitle(call, decoded("transfer_public_to_public"))).toBe("Transfer Public To Public")
+		expect(rowTitle(call, { kind: "pending" })).toBe("Transfer Public To Public")
+		expect(rowTitle({ name: "mint_to_private", to: TOKEN }, { kind: "raw", reason: "unknown-contract", rows: [], hidden: 0 })).toBe(
+			"Mint To Private",
+		)
+		expect(rowTitle(call, { kind: "mint", fn: "mint_to_private", to: TO, amount: "5" })).toBe("Mint (private)")
+	})
+
+	test("every other name reads as callName gives it", () => {
+		for (const [name, surface] of [
+			["shield", decoded("shield")],
+			["claim", decoded("claim")],
+			["exit_to_l1", decoded("exit_to_l1")],
+			["checkpoint", { kind: "pending" as const }],
+		] as const) {
+			const call = { name, to: TO, args: [] }
+			expect(rowTitle(call, surface)).toBe(callName(call, surface))
+		}
+		expect(rowTitle({ name: "shield", to: TO }, decoded("shield"))).toBe("Shield")
+	})
+
+	test("an authorization is titled by its decoded name under the same rule, by its selector until then", () => {
+		expect(authwitTitle("0x1234abcd", TOKEN, transfer)).toBe("Transfer (public)")
+		expect(authwitTitle("0x1234abcd", TOKEN, decoded("transfer_public_to_public"))).toBe("Transfer Public To Public")
+		expect(authwitTitle("0x1234abcd", TOKEN, decoded("withdraw_for"))).toBe("Withdraw For")
+		expect(authwitTitle(`0x1234${RLO}abcd`, TOKEN, { kind: "pending" })).toBe("0x1234abcd")
+	})
+
+	test("an authorization reads as moving tokens only when the wallet read a transfer from a named sender", () => {
+		expect(authwitLine(transfer, "Transfer (public)")).toEqual({ kind: "move", amount: "5", from: OWNER, to: TO })
+		const others = [
+			{ ...transfer, sender: { kind: "account" as const, address: OWNER } },
+			{ ...transfer, sender: { kind: "none" as const } },
+			{ kind: "mint" as const, fn: "mint_to_private", to: TO, amount: "5" },
+			decoded("withdraw_for"),
+			{ kind: "pending" as const },
+		]
+		for (const surface of others) expect(authwitLine(surface, "F")).toEqual({ kind: "call", fn: "F" })
 	})
 })

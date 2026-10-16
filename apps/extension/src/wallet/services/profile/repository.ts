@@ -39,21 +39,12 @@ export function isGeneratedProfileId(id: unknown): id is string {
 export class ProfileRepository {
 	private readonly storage: EntityStorage<Profile>
 
-	/**
-	 * @param browserApi Optional port for the storage area. Tests pass
-	 *        `FakeBrowserApi` so the repository operates against
-	 *        in-memory state; the composition root passes the real
-	 *        adapter. If omitted, falls back to `chrome.storage.local`
-	 *        for legacy SW startup paths.
-	 */
-	public constructor(browserApi?: BrowserApi) {
+	public constructor(browserApi: BrowserApi) {
 		// Profile rows are the auth-critical root: every sealed-slot/MAC/fingerprint decision
 		// trusts the row fetched BY id. The key-identity guard hides any raw-storage row whose
 		// embedded id disagrees with its storage key, closing the embedded-id transplant bypass.
 		const guard = { requireKeyIdentityMatch: true } as const
-		this.storage = browserApi
-			? new EntityStorage<Profile>(PROFILE_STORAGE_ROOT, browserApi.storage.local, undefined, guard)
-			: new EntityStorage<Profile>(PROFILE_STORAGE_ROOT, chrome.storage.local, undefined, guard)
+		this.storage = new EntityStorage<Profile>(PROFILE_STORAGE_ROOT, browserApi.storage.local, undefined, guard)
 	}
 
 	/** Returns the profile with the given id, or `undefined`. */
