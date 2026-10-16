@@ -9,3 +9,4 @@
 - 2026-10-16: phase 3 gate F and `test:all`: pass (`6da190f6`); its network file waits on host load.
 - 2026-10-16: phase 2 smoke e2e, Chrome and Firefox at retry 0: pass (panel round trip included on Firefox).
 - 2026-10-16: phase 3 network e2e (Chrome, retry 0): pass. Phases 1-3 ✓; Codex loop converged (reject, reject, approve).
+- 2026-10-16: final gates pass (lint, typecheck:all, test:all, check:plans, smoke on both browsers, network on Chrome); PR next.
