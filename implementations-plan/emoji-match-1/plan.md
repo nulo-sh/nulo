@@ -65,7 +65,7 @@ The wallet already shows the check on an untrusted reconnect. The fix deletes th
 ### Phase 1: the sdk side ✓ (done at planning)
 Recon § 1 records the trace. **Gate:** recon.md § 1 exists; its conclusions are Facts 1 and the OA-1 note on the page.
 
-### Phase 2: the check on every connection (wallet side)
+### Phase 2: the check on every connection (wallet side) ✓
 - `wallet-sdk/session-established.ts`: show the check whenever establishment passes its gates; delete `needsVerification`, the `else deps.hold.release()` branch, the `hold` dep and `trustedVerification` from the row type (`:52`); fix the comments at `:84-91`, `:202-203`.
 - `wallet-sdk/background.ts`: `autoApproveExistingSession(discovery, chainId, deps)`; stop passing `hold` to establishment; fix `:1046-1048`.
 - `wallet-sdk/verify-admission.ts` (separate commit): drop `needsWindow`. At `:250, 259, 320, 370` only the `req.needsWindow &&` condition goes: the duplicate-id, capacity and live-id checks run for every request. `:326`'s reservation-free return goes, so `consume`, `AdmissionRun` and `admitAsync` return a `WindowReservation`; so do `approveAdmitted` (`background.ts:996`), `persistAndApprove` (`:1269`) and `admitted?.attach` (`:1183`). `reservation(id)` stays optional, as do establishment's missing-slot throw and its `releaseIfUnstarted` (termination can still leave no slot). Fix `:2-3`. The token tests in `verify-admission.test.ts` free their slots with `releaseIfUnstarted`, which refunds no token.

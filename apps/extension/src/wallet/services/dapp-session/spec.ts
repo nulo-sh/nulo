@@ -88,6 +88,8 @@ export const DappSessionSchema: z.ZodType<DappSession> = z.object({
 	confirmationLevel: z.enum(AccessLevel),
 	expiry: z.number(),
 	verificationHash: z.string().optional(),
+	/** Read by nothing; kept because the row MAC covers every parsed key, so dropping it would
+	 *  delete each row that carries it. */
 	trustedVerification: z.boolean().optional(),
 	accountAliases: z.record(z.string(), z.string()).optional(),
 	capabilityGrants: z.array(z.custom<GrantedCapabilityRecord>(tolerantRecord)).optional(),
@@ -126,7 +128,6 @@ export type Methods = {
 	refuseVerification(target: VerificationRefusalTarget): VerificationRefusal
 	confirmVerification(verificationHash: string): void
 	setVerificationHash(sessionId: string, verificationHash: string): DappSession
-	setTrustedVerification(sessionId: string, trusted: boolean): DappSession
 	setAuthorizationsWithoutAsking(sessionId: string, on: boolean, shownBroad: boolean): DappSession
 	setAccountAliases(sessionId: string, aliases: Record<string, string>): DappSession
 	setCapabilityGrants(sessionId: string, grants: GrantedCapabilityRecord[]): DappSession

@@ -34,7 +34,6 @@ vi.mock("@/wallet/services/dapp-session/client", () => ({
 			connect: () => {},
 			disconnect: () => {},
 			getDappSession: () => readSession(),
-			setTrustedVerification: async () => undefined,
 		}
 	}),
 }))
