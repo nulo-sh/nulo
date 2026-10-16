@@ -1,7 +1,7 @@
 ---
 plan: ui-followups-p18
 tier: light (the orchestrator's call; the panel of two still argues each decision)
-status: planned; panel approved (Codex r3); awaiting the orchestrator's approval
+status: arc 1 done (phases 1-2 green, Codex loop converged, PR open against dev); arc 2 waits on SA-1; SA-2 open
 issues: "#363 (arc 1), #451 (arc 1, no code change), #364 (arc 2, after SA-1)"
 driver: claude-code
 claude_model: opus
@@ -62,13 +62,13 @@ No trust boundary, input, storage or permission moves; arc 1 is CSS and tests. T
 
 Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test && bun run --cwd packages/design test`. Pass: each exits 0.
 
-### Phase 1: the 28 rules, the guard and the pin
+### Phase 1: the 28 rules, the guard and the pin (done)
 - Change: the 21 files in recon.md; `src/utils/a11y-css.test.ts`; `apps/extension/scripts/type-roles/source-scan.ts` (header only); `packages/design/src/theme-contrast.test.ts`.
 - Add the sweep first. Run it: it fails and lists 30 keys. Edit the 28 rules. Run it again: it passes.
 - UI impact: P18-06 C, "B plus every other outline text rule (16 more: placeholders, the Presto step numbers, the incoming card's hash, the loading line, the glossary, connected apps, the notes viewer); after it no text uses --nulo-outline." Surfaces: the tx and received detail pages; every dApp window's identity strip (connect, discover, network-unavailable, execute, verify) and Settings → Networks; the connect window's Details; empty states; search and input placeholders; Proving in Settings and onboarding; Glossary; Connected apps; Developer → Notes and authwits; register's terms line; Home's stalled line.
 - Gate: `F`. `git grep -n -E "^\s*color:\s*var\(--nulo-outline\)" -- apps packages` prints only the two DetailsTable icon lines.
 
-### Phase 2: arc gate
+### Phase 2: arc gate (done)
 - Run `bun run test:all`, `bun run test:ci-gating` and `bun run check:plans`.
 - Wait for `load1 < 60` or 23:00Z. Then, per browser `B` (`chrome`, then `firefox`), build the armed bundle: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:B`.
 - Run the full smoke suite: `cd apps/extension && NULO_E2E_BROWSER=B NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- --retry=0`.

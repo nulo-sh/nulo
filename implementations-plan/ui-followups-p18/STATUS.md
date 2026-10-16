@@ -12,3 +12,4 @@
 - 2026-10-15 Codex arc-1 r3: approve; loop converged at three rounds.
 - 2026-10-15 final head 1b40c67a: lint, typecheck:all, test:all, design test, check:plans, test:ci-gating green. Shots taken (smoke spec + connect window via e2e:agent proverless, retry 0).
 - 2026-10-15 phase 2 smoke Firefox (armed, retry 0): 243 passed, 14 skipped, 0 failed, 2650 s. Phase 2 gate green.
+- 2026-10-16 arc 1 pushed and PR opened against dev (see the PR list for worktree-ui-followups-p18).
