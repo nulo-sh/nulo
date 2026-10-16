@@ -7,3 +7,5 @@
 - 2026-10-16: arc 1 started on `harden-security-fixes-2-arc1` (dev 7697c376 merged in). Phase 1 gate F: pass; #570 filed and closed as a known limit.
 - 2026-10-16: phase 2 gate F and `test:all`: pass (`24c1cc67`); its three smoke files wait on host load.
 - 2026-10-16: phase 3 gate F and `test:all`: pass (`6da190f6`); its network file waits on host load.
+- 2026-10-16: phase 2 smoke e2e, Chrome and Firefox at retry 0: pass (panel round trip included on Firefox).
+- 2026-10-16: phase 3 network e2e (Chrome, retry 0): pass. Phases 1-3 ✓; Codex loop converged (reject, reject, approve).

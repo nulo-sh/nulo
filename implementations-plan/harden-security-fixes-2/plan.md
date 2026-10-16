@@ -112,15 +112,15 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
 
 ### Arc 1
 
-**Phase 1. E.** Search first: `gh issue list --state all --label known-limit --search "endpoint provider"`. File and close the issue; write its number on the Outcome's `Known limits:` line at close-out. Correct the `seeds.ts:23` comment. UI impact: none. Gate: `F`. Pass: exit 0; the issue closed with `known-limit`.
+**Phase 1. E.** ✓ Search first: `gh issue list --state all --label known-limit --search "endpoint provider"`. File and close the issue; write its number on the Outcome's `Known limits:` line at close-out. Correct the `seeds.ts:23` comment. UI impact: none. Gate: `F`. Pass: exit 0; the issue closed with `known-limit`.
 
-**Phase 2. B: the check.**
+**Phase 2. B: the check.** ✓
 - Change the files listed under Arc 1. E2E: `buildSyntheticPasskeyBackup` (`tests/e2e/helpers/import-drivers.ts:516`) adds the MAC with `computeBackupMac`, fed by a PRF the test reads through an in-page `get` on the same virtual authenticator with the wallet's PRF input (`PASSKEY_PRF_LABEL`); its three callers (`passkey-backup.test.ts:328`, `passkey-retry.test.ts:37`, `passkey-toolbar-panel.test.ts:544`) keep their flows. Estimate: +2 s per call.
 - Tests: `backup-mac.test.ts` (a known-answer vector; true on the same body; false on another checksum, another credential, a malformed MAC); `key-vectors.test.ts` pins the label; `full-backup-helpers.test.ts` (the MAC sits outside the checksum preimage; no callback, no field); `useFullBackupImport.test.ts` (a true passkey body restores; each refused class above returns its refusal and `profileService.restore` is never called; a missing MAC never prompts; a password body without the field restores).
 - UI impact: the two existing refusals also answer a passkey body whose check fails or is missing (OWNER-ASKS, consequences; P22-03 C, words verbatim).
 - Gate: `F`; `bun run test:all`; the three smoke files at retry 0 on Chrome and under `NULO_E2E_BROWSER=firefox` (WebAuthn, a fixture change); the Firefox panel round trip (`passkey-toolbar-panel.test.ts`, its real export and import, 96-180 s) locally. Pass: exit 0; each file's wall-clock before and after per browser in `lessons/phase-2.md`.
 
-**Phase 3. B: the re-read and the trust.**
+**Phase 3. B: the re-read and the trust.** ✓
 - Change: `token/{service,spec,client}.ts`, `useFullBackupImport.ts`, `importChainSync.ts`, `full-backup-restore.ts`, `incoming-transfer/{service,spec,client}.ts`, `send.vue`, `useScopedTokens.ts`, `settings/tokens/index.vue`, and the tests that pinned `trustRestoredTokens` (`useFullBackupImport.test.ts:642`, `incoming-transfer/service.scenarios.test.ts`).
 - Tests: a row whose decimals, symbol or class differ from the chain's is updated (never: the row keeps them), with no `onTokenAdded`; an agreeing chain writes nothing (control); a failed read, and a read that never settles, return by the deadline, keep the row and write nothing later; each changed row emits `onTokenUpdated` once and `incoming-transfer` ignores it; a Send page mounted before the update integerizes "1" with the updated decimals (`send-amount.test.ts`); `useScopedTokens` re-reads on it; another profile's rows and a token deleted during the read are never written; `importChainSync` honours a passed deadline. `incoming-transfer`: a restored token's first note is `pending` (control: an added token's note is visible).
 - Network e2e: `tests/e2e/network/backup-restore-integrity.test.ts` gains one case: a backup whose token row disagrees with the chain restores with the chain's metadata on Home. Failure mode: the read after finalize against a real PXE and node, which no mocked layer reaches. Estimate +20 s.
@@ -231,6 +231,8 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 | One out-of-scope question (Opus) | sent to the lane's private record; no change in this arc |
 
 **Arc 1 review, round 2** (2026-10-16). Codex, resumed over `90137f90`: **reject**, 1 material finding, verified and accepted: the capability watcher re-ran the full selection, so gaining private transfers replaced a valid public choice with the preselected kind. It now moves only a selection the token can no longer transfer (D23); a mounted-page test pins the kept choice and is red against the round-1 watcher.
+
+**Arc 1 review, round 3** (2026-10-16). Codex, resumed over `cd9c8be5`: **approve**, no new findings. The loop converged.
 
 ## Seeds (draft; the orchestrator finalizes after approval)
 
