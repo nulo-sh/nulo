@@ -541,7 +541,10 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			const control = await openPopup(ctx)
 			await waitForHash(control, "#/popup/general")
 			const address = await createPasskeyProfile(control)
-			const file = writeBackupToTemp(buildSyntheticPasskeyBackup(await readRegisteredPasskey(control)), "passkey-backup.json")
+			const file = writeBackupToTemp(
+				await buildSyntheticPasskeyBackup(control, await readRegisteredPasskey(control)),
+				"passkey-backup.json",
+			)
 			await navigateByHash(control, "#/popup/settings/security/reset")
 			await completeResetRitual(control, "#/popup/auth")
 

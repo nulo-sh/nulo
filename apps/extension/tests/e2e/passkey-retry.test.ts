@@ -34,7 +34,7 @@ import {
 async function backUpAndDeletePasskeyProfile(page: Page): Promise<{ file: string; address: string }> {
 	await registerPasskeyProfile(page)
 	const passkey = await readRegisteredPasskey(page)
-	const file = writeBackupToTemp(buildSyntheticPasskeyBackup(passkey), "passkey-backup.json")
+	const file = writeBackupToTemp(await buildSyntheticPasskeyBackup(page, passkey), "passkey-backup.json")
 	await navigateByHash(page, "#/popup/settings/security/reset")
 	await completeResetRitual(page, "#/popup/register")
 	return { file, address: passkey.account.address }

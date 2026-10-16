@@ -56,7 +56,9 @@ export async function readEstimateState(page: Page): Promise<EstimateState> {
 			if (`${title} ${sub}`.toLowerCase().includes("estimate fee")) return "failed"
 		}
 		if (document.querySelector('[data-testid="fee-estimate"]')) return "ready"
-		const queued = document.querySelector('[data-testid="fee-estimate-queued"], [data-testid="fee-estimate-queued-cap"]')
+		const queued = document.querySelector(
+			'[data-testid="fee-estimate-queued"], [data-testid="fee-estimate-queued-cap"], [data-testid="fee-estimate-queued-sponsored"]',
+		)
 		return queued ? "queued" : "estimating"
 	})
 }
@@ -71,17 +73,19 @@ export async function waitForEstimate(page: Page, timeout = 120_000): Promise<Es
 	}
 }
 
-/** Whether Send is enabled, and whether the queued row offers a fee cap to queue against; `null`
- *  when there is no Send button. */
+/** Whether Send is enabled, and whether the queued row offers to queue: against a fee cap, or with
+ *  Nulo's sponsor paying; `null` when there is no Send button. */
 const readQueueOffer = (page: Page) =>
 	page.evaluate(() => {
 		const send = document.querySelector<HTMLButtonElement>('[data-testid="send-submit"]')
-		const capped = Boolean(document.querySelector('[data-testid="fee-estimate-queued-cap-line"]'))
-		return send ? { enabled: !send.disabled, capped } : null
+		const queueable = Boolean(
+			document.querySelector('[data-testid="fee-estimate-queued-cap-line"], [data-testid="fee-estimate-queued-sponsored-line"]'),
+		)
+		return send ? { enabled: !send.disabled, queueable } : null
 	})
 
 /** Fails unless the fee row turns queued and stays queued for the whole window, with Send enabled
- *  exactly while it offers a cap. */
+ *  exactly while it offers to queue. */
 export async function expectEstimateQueued(page: Page, windowMs: number): Promise<void> {
 	const settle = Date.now() + 30_000
 	while ((await readEstimateState(page)) === "estimating") {
@@ -94,7 +98,8 @@ export async function expectEstimateQueued(page: Page, windowMs: number): Promis
 		if (state !== "queued") throw new Error(`the estimate was expected to stay queued, but it is ${state}`)
 		const offer = await readQueueOffer(page)
 		if (!offer) throw new Error("Send is missing while the estimate is queued")
-		if (offer.enabled !== offer.capped) throw new Error(`Send must be enabled exactly while a cap shows: ${JSON.stringify(offer)}`)
+		if (offer.enabled !== offer.queueable)
+			throw new Error(`Send must be enabled exactly while the row offers to queue: ${JSON.stringify(offer)}`)
 		await new Promise((r) => setTimeout(r, 250))
 	}
 }

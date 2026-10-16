@@ -107,6 +107,8 @@ type Request = {
 	contained?: true
 	/** A send: its value rows open under the summary before `ready` is awaited. */
 	details?: true
+	/** Light and dark shots of the window, focused on this testid, when `NULO_E2E_SHOT_DIR` is set. */
+	shot?: { name: string; focus: string }
 }
 
 function requests({ tokenAddress, minterAddress }: AztecTestConfig): Request[] {
@@ -134,13 +136,15 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig): Request[] {
 			states: ["an aztec_createAuthWit request for a call (network)"],
 		},
 		{
-			// Its hex arguments are the longest unbroken strings a generic dApp puts in the payload.
+			// The token is not imported, so the grant reads as its decoded parameters, each printed
+			// whole: two addresses and a 32-byte nonce, the longest unbroken strings the card holds.
 			method: "grantPublicAuthwit",
 			button: "pg-btn-grantPublicAuthwit",
 			inputs: { tokenAddress, authwitCaller: minterAddress, authwitAmount: "1", authwitNonce: "7" },
-			ready: sel("execute-authwit-args"),
+			ready: `${sel("execute-grant-decoded-param")}[data-param="amount"] ${sel("execute-grant-decoded-param-value")}`,
 			states: ["a grantPublicAuthwit request (network)"],
 			contained: true,
+			shot: { name: "grant", focus: "execute-grant-args" },
 		},
 	]
 }
@@ -152,6 +156,7 @@ const PAYLOAD_TEXT = [
 	"execute-op-decoded-param",
 	"execute-op-arg",
 	"execute-op-transfer-nonce",
+	"execute-grant-decoded-param",
 ].map(sel)
 
 /** How far the payload's text reaches past the card's right edge, in px; 0 or less is inside. */
@@ -190,6 +195,7 @@ async function stretchPayload(win: Page): Promise<void> {
 		set('[data-testid="execute-op-summary-call-to"]', "W".repeat(25))
 		set('[data-testid="execute-op-decoded-param"] > :first-child', `${"W".repeat(32)}:`)
 		set('[data-testid="execute-op-decoded-param-value"]', "i".repeat(64))
+		set('[data-testid="execute-grant-decoded-param"] > :first-child', `${"W".repeat(32)}:`)
 	})
 }
 async function openExecute(ctx: Connected, { button, inputs, ready, details }: Request): Promise<Page> {
@@ -224,6 +230,7 @@ test.skipIf(!hasConfig)(
 			const win = await openExecute(ctx, request)
 			try {
 				const observations = await sweepWindow(win, "windows-execute", request.states)
+				if (request.shot) await shotSend(win, request.shot.name, request.shot.focus)
 				if (request.contained) {
 					expect(await payloadPastCard(win)).toBeLessThanOrEqual(0)
 					await stretchPayload(win)

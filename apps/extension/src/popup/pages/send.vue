@@ -105,15 +105,17 @@ const openFeeJuiceBridge = () => {
 const awaitingNewToken = ref(false)
 
 const tokenService = new TokenServiceClient()
-tokenService.onTokenAdded.add(onTokenAdded)
+tokenService.onTokenAdded.add(onTokensChanged)
+tokenService.onTokenUpdated.add(onTokensChanged)
 tokenService.onTokenDeleted.add(onTokenDeleted)
-let tokenAddedDuringLoad = false
-/** Fires for any profile's or chain's add, so it re-reads the current identity's tokens rather
- *  than appending one; an add during an identity fetch makes that fetch read them again, and one
- *  after a refused fetch retries it, since its balances and contacts are missing too. */
-function onTokenAdded() {
+let tokensChangedDuringLoad = false
+/** Fires for any profile's or chain's add or update, so it re-reads the current identity's tokens
+ *  rather than patching one: an amount integerizes with the decimals the list holds. A change during
+ *  an identity fetch makes that fetch read them again, and one after a refused fetch retries it,
+ *  since its balances and contacts are missing too. */
+function onTokensChanged() {
 	if (tokensLoading.value) {
-		tokenAddedDuringLoad = true
+		tokensChangedDuringLoad = true
 		return
 	}
 	if (tokensFailed.value) return retryTokens()
@@ -289,7 +291,7 @@ const handleRequote = (e) => {
 }
 
 /** The wallet answered that an earlier send holds this transfer's chain state; set until a real
- *  estimate lands, fails or stops, so nothing goes out on a fee the user has not seen. */
+ *  estimate lands, fails or stops, so nothing the person pays goes out on a fee they have not seen. */
 const feeQueued = ref(false)
 /** The cap the queued answer offered (`{ basis, cap }`), or null when it offered none. */
 const queuedCap = ref(null)
@@ -299,17 +301,22 @@ const clearQueued = () => {
 }
 /** Queued against the cap: only a fee the person pays, and nothing goes out above the cap shown. */
 const queueCap = computed(() => (feeQueued.value && feePayerOf(payer.value) === "self" ? queuedCap.value : null))
+/** Queued with Nulo's sponsor paying: the person pays nothing, so there is no cap to hold it to. A
+ *  sponsor added by hand can charge the account, so it never queues. */
+const queuedSponsored = computed(() => feeQueued.value && feePayerOf(payer.value) === "sponsor")
+const queueMode = computed(() => Boolean(queueCap.value) || queuedSponsored.value)
 
 const isAllowedToSend = computed(() => {
 	if (!legal.isCurrent.value) return false
-	if (feeQueued.value && !queueCap.value) return false
+	if (feeQueued.value && !queueMode.value) return false
 	if (!amountTerm.value) return false
 	if (isBlockedTransfer.value) return false
 	if (!isValidAddress.value) return false
 	if (!feeSettings.value) return false
 	// Nothing goes out on a fee the person has not seen: a failed estimate leaves this off too. A
-	// queued send's figure is the cap the card shows, and nothing goes out above it.
-	if (!queueCap.value && !feeEstimate.value) return false
+	// queued send's figure is the cap the card shows, and nothing goes out above it; Nulo's sponsor
+	// charges the person nothing.
+	if (!queueMode.value && !feeEstimate.value) return false
 	if (feeEstimate.value?.feeJuiceShortfall) return false
 	if (fiatQuoteBlocked.value) return false
 	return amountValidation.value.valid
@@ -534,6 +541,14 @@ watch(
 	},
 )
 
+// A re-read of the same token can take away the transfer kind the page has selected; a kind it
+// still supports stays selected.
+watch([() => activeToken.value?.hasPrivateTransfers, () => activeToken.value?.hasPublicTransfers], ([canPrivate, canPublic]) => {
+	if (!activeToken.value) return
+	if (!canPrivate) selectedSendType.value = selectedReceiverType.value = "public"
+	if (!canPublic) selectedSendType.value = selectedReceiverType.value = "private"
+})
+
 watch(
 	() => tokens.value,
 	() => {
@@ -631,7 +646,7 @@ async function refetchIdentityScopedState() {
 	tokens.value = []
 	tokenBalances.value = []
 	tokensLoading.value = true
-	tokenAddedDuringLoad = false
+	tokensChangedDuringLoad = false
 	try {
 		const [first, tb, c] = await Promise.all([
 			tokenService.getTokens(profileId, chainId),
@@ -639,8 +654,8 @@ async function refetchIdentityScopedState() {
 			contactService.getContacts(),
 		])
 		let t = first
-		while (tokenAddedDuringLoad && isCurrent()) {
-			tokenAddedDuringLoad = false
+		while (tokensChangedDuringLoad && isCurrent()) {
+			tokensChangedDuringLoad = false
 			t = await tokenService.getTokens(profileId, chainId)
 		}
 		if (!isCurrent()) return
@@ -834,7 +849,7 @@ onBeforeUnmount(() => {
 					:disabled="!isAllowedToSend || isSending"
 					:loading="isSending"
 				>
-					{{ isSending ? "CONFIRMING" : facts.requiresReview ? "Review send" : queueCap ? "Queue send" : "Confirm Transaction" }}
+					{{ isSending ? "CONFIRMING" : facts.requiresReview ? "Review send" : queueMode ? "Queue send" : "Confirm Transaction" }}
 				</Button>
 			</Flex>
 		</Flex>
@@ -855,6 +870,7 @@ onBeforeUnmount(() => {
 			:sending="isSending"
 			:ready="reviewReady"
 			:queuedCapText="queueCap ? queuedCapText : undefined"
+			:queuedSponsored="queuedSponsored"
 			@close="closeReview"
 			@send="submit('review')"
 		/>

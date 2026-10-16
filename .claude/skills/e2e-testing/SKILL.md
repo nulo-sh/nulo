@@ -39,16 +39,18 @@ Every suite runs on Chrome (default) and on Firefox (`NULO_E2E_BROWSER=firefox`)
 
 | Suite | Config | Includes | Global setup | Timeouts (test/hook) | Retry |
 |---|---|---|---|---|---|
-| smoke | `vitest.e2e.config.ts` | `tests/e2e/*.test.ts` | `global-setup-smoke.ts` (no sandbox) | 60s / 90s | 2 in config (three attempts); `--retry=0` on the CLI to override |
+| smoke | `vitest.e2e.config.ts` | `tests/e2e/*.test.ts` | `global-setup-smoke.ts` (no sandbox) | 60s / 90s | `NULO_E2E_RETRY` ?? 2 (three attempts) |
 | network | `vitest.e2e.network.config.ts` | `tests/e2e/network/**` | `global-setup.ts` (anvil + aztec node + playground) | 30s / 300s | `NULO_E2E_RETRY` ?? 2 (three attempts) |
 | all | `vitest.e2e.all.config.ts` | both | `global-setup.ts` | 30s / 300s | `NULO_E2E_RETRY` ?? 2 |
 
-All three run `pool: "forks"`, `isolate: true`, `fileParallelism: false` — one Chrome per file,
-files sequential. All three take `reporters: e2eReporters()` from `vite.shared.ts`: an explicit
-reporters array suppresses vitest's automatic `github-actions` annotator, so that function re-adds it
-and appends `RetryErrorReporter` (prints the first-attempt errors of a test that passed on retry).
-Never inline a reporters array in a config.
-The network and `all` configs also pass `{ stall: { stallMs: STALL_MS } }`, adding
+All three spread `e2eIsolation` from `vite.shared.ts` (`pool: "forks"`, `isolate: true`,
+`fileParallelism: false` — one Chrome per file, files sequential) and read their retry through
+`e2eRetry(2)`, which refuses a malformed `NULO_E2E_RETRY` at config load. All three take
+`reporters: e2eReporters()`: an explicit reporters array suppresses vitest's automatic
+`github-actions` annotator, so that function re-adds it and appends `RetryErrorReporter` (prints the
+first-attempt errors of a test that passed on retry, and on Actions appends `N passed on retry`, by
+name, to the job summary, 0 included). Never inline a reporters array in a config.
+The network and `all` configs also spread `networkRunner()`, whose reporters pass `{ stall: { stallMs: STALL_MS } }`, adding
 `StallWatchdog` (`tests/e2e/stall-watchdog.ts`): after 10 min with no reporter event it writes
 `.e2e-state/stalled` naming the running tests, fails and cancels the run, and 30 s later kills this
 vitest's fork workers (children whose argv is vitest's fork entry, never by name). Every run prints its
@@ -184,7 +186,7 @@ runtime env var can never arm a build-time flag.
 | Var | Meaning |
 |---|---|
 | `HEADLESS=0` | windowed Chrome; default is headless (`launchExtension`) |
-| `NULO_E2E_RETRY` | vitest `retry` for the network and all configs (default 2); smoke ignores it — pass `--retry=0` |
+| `NULO_E2E_RETRY` | vitest `retry` for every e2e config (default 2); the reusable workflows' `retry` input sets it; `--retry=N` on the CLI wins |
 | `E2E_REQUIRE_SETUP=1` | sandbox/deploy failures are fatal (set by `agent.sh`) |
 | `NULO_E2E_PROVERLESS=1` | `agent.sh` arms the proverless build pair |
 | `NULO_E2E_MIGRATION_FIXTURE=1` | runtime declaration that the dist carries the migration fixture |
@@ -444,7 +446,9 @@ assertion; drive the rest of the flow with the ordinary helpers.
   spot: reach a control with `tabTo` and assert the next stop, never a walk from the page top. Read
   a ring with `focusRing`, which waits for the control's transitions (a shot taken sooner shows the
   ring mid-fade); on Firefox call `prepareKeys` first, since an unfocused page matches no
-  `:focus-visible`. Prove `aria-hidden` or a live region from CDP's `Accessibility.getFullAXTree`
+  `:focus-visible`. A click ends keyboard modality, so a script focus after it draws no ring
+  whatever the CSS: prove a no-ring rule after a keyed activation
+  (`implementations-plan/archive/home-onboarding-2/lessons/phase-4.md`). Prove `aria-hidden` or a live region from CDP's `Accessibility.getFullAXTree`
   with `DOM.resolveNode` (Chrome): `page.accessibility.snapshot()` gives no ignored flag and no
   element (`implementations-plan/archive/accessibility-1/lessons/`).
 

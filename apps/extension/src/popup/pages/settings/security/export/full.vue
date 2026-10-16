@@ -30,8 +30,8 @@ import { BACKUP_SCHEMA_VERSION_FIELD, COMPAT_EPOCH_FIELD, CURRENT_COMPAT_EPOCH }
 import { CURRENT_BACKUP_SCHEMA_VERSION } from "@/wallet/services/backup/backup-migrator"
 
 /** Utils */
-import { downloadFile } from "@/utils"
-import { MAX_BACKUP_FILE_BYTES, assembleFullBackup, sealFullBackupText } from "@/utils/full-backup-helpers"
+import { downloadFile, profileFileNameSegment } from "@/utils"
+import { MAX_BACKUP_FILE_BYTES, assembleFullBackup, passkeyBackupAuthenticator, sealFullBackupText } from "@/utils/full-backup-helpers"
 import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow, ownWindowRoute } from "@/utils/own-window"
 import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
@@ -347,7 +347,9 @@ async function handleBackup() {
 		chainStateOmitted.value = !!appStore.profile.recoveryMode
 		const envelope = buildBackupEnvelope(material)
 
-		const result = await assembleFullBackup(envelope, backupSources(runClients, material.heldSlices), () => gen === generation)
+		const authenticate = credentialData ? passkeyBackupAuthenticator(credentialData) : undefined
+		const sources = backupSources(runClients, material.heldSlices)
+		const result = await assembleFullBackup(envelope, sources, () => gen === generation, authenticate)
 		await managers.profile.assertRunFence(fence)
 		// Fence first: a superseded run must not run the oversize UI writes.
 		if (gen !== generation || rejectOversizedBackup(result.pretty)) return
@@ -426,7 +428,7 @@ async function downloadBackup(isEncrypted) {
 	if (!fileContent) return
 	isDownloading.value = true
 	const gen = generation
-	let filename = `_${appStore.profile.name.replace(" ", "_")}_${Math.floor(Date.now() / 1000)}`
+	let filename = `_${profileFileNameSegment(appStore.profile.name)}_${Math.floor(Date.now() / 1000)}`
 	filename = isEncrypted ? `NuloEncryptedBackup${filename}.txt` : `NuloBackup${filename}.json`
 
 	try {

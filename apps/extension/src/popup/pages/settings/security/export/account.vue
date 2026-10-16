@@ -17,7 +17,7 @@ import SecretUnlockSection from "@/components/composite/SecretUnlockSection.vue"
 import { managers } from "@/utils/core"
 
 /** Utils */
-import { downloadFile } from "@/utils"
+import { downloadFile, profileFileNameSegment } from "@/utils"
 import { trimAddress } from "@/utils/string"
 
 /** Composables */
@@ -171,10 +171,7 @@ const handleProtect = async () => {
 }
 
 const fileName = computed(() => {
-	// The profile name is user-typed: strip path separators and anything else
-	// `chrome.downloads.download` can reject or misroute (a "foo/bar" name would create a
-	// subdirectory; "../" is refused outright).
-	const profile = (appStore.profile?.name ?? "profile").replace(/[^\p{L}\p{N}_-]+/gu, "_") || "profile"
+	const profile = profileFileNameSegment(appStore.profile?.name)
 	const addr = selectedAddress.value.slice(0, 10)
 	return `NuloEncryptedAccount_${profile}_${addr}.txt`
 })

@@ -955,8 +955,18 @@
 		{
 			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
 			"expression": "surface.sender.address",
-			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && surface.kind === 'transfer' && !(surface.sender.kind === 'none' || surface.sender.kind === 'account')",
+			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && surface.kind === 'transfer' && !(surface.sender.kind === 'none' || surface.sender.kind === 'account') && full",
 			"ordinal": 1,
+			"role": "data",
+			"selector": "[data-testid=\"execute-grant-transfer-sender-address\"]",
+			"surface": "windows-execute",
+			"state": "a grant on a registered token (network)"
+		},
+		{
+			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
+			"expression": "surface.sender.address",
+			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && surface.kind === 'transfer' && !(surface.sender.kind === 'none' || surface.sender.kind === 'account') && !(full)",
+			"ordinal": 2,
 			"role": "data",
 			"selector": "[data-testid=\"execute-op-transfer-sender-address\"]",
 			"surface": "windows-execute",
@@ -965,8 +975,18 @@
 		{
 			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
 			"expression": "surface.to",
-			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint')",
+			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && full",
 			"ordinal": 0,
+			"role": "data",
+			"selector": "[data-testid=\"execute-grant-transfer-to\"]",
+			"surface": "windows-execute",
+			"state": "a grant on a registered token (network)"
+		},
+		{
+			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
+			"expression": "surface.to",
+			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && !(full)",
+			"ordinal": 1,
 			"role": "data",
 			"selector": "[data-testid=\"execute-op-transfer-to\"]",
 			"surface": "windows-execute",
@@ -974,7 +994,7 @@
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
-			"expression": "valueText(nonce)",
+			"expression": "valueText(nonce, full)",
 			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && nonce",
 			"ordinal": 0,
 			"role": "data",
@@ -985,7 +1005,7 @@
 		{
 			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
 			"expression": "p.value.value",
-			"branch": "surface.kind === 'decoded' && p.value.kind === 'address'",
+			"branch": "surface.kind === 'decoded' && p.value.kind === 'address' && !full",
 			"ordinal": 0,
 			"role": "data",
 			"selector": "[data-testid=\"execute-op-decoded-param-value\"]",
@@ -994,8 +1014,8 @@
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
-			"expression": "valueText(p.value)",
-			"branch": "surface.kind === 'decoded' && !(p.value.kind === 'address')",
+			"expression": "valueText(p.value, full)",
+			"branch": "surface.kind === 'decoded' && !(p.value.kind === 'address' && !full)",
 			"ordinal": 0,
 			"role": "data",
 			"selector": "[data-testid=\"execute-op-decoded-param-value\"]",
@@ -1026,7 +1046,7 @@
 		{
 			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
 			"expression": "valueTitle(p.value)",
-			"branch": "surface.kind === 'decoded' && !(p.value.kind === 'address')",
+			"branch": "surface.kind === 'decoded' && !(p.value.kind === 'address' && !full)",
 			"ordinal": 0,
 			"role": "none",
 			"selector": "",

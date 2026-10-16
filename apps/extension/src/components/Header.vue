@@ -6,6 +6,7 @@ import { LogViewerServiceClient } from "@/wallet/services/log-viewer/client"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 
 /** Composables */
+import { useConfigRead } from "@/composables/useConfigRead"
 import { useLockWallet } from "@/composables/useLockWallet"
 
 /** Utils */
@@ -35,6 +36,14 @@ configService.onUpdate.add(onSettingUpdate)
 
 const defaultConfig = makeDefaultConfig()
 const indicateFailures = ref(defaultConfig.indicateFailures)
+const showNode = ref(defaultConfig.showNode)
+const showNodeRead = useConfigRead(
+	configService,
+	() => configService.getValue("showNode"),
+	(value, updatedSince) => {
+		if (!updatedSince("showNode")) showNode.value = value
+	},
+)
 const networkStatusKey = computed(() => appStore.networkStatus?.toLowerCase())
 const accountState = computed(() => accountStateOf(appStore))
 
@@ -104,6 +113,9 @@ function onSettingUpdate(setting) {
 		case "indicateFailures":
 			indicateFailures.value = setting.value
 			break
+		case "showNode":
+			showNode.value = setting.value
+			break
 
 		default:
 			break
@@ -135,6 +147,7 @@ watch(
 )
 
 onMounted(async () => {
+	void showNodeRead.read()
 	indicateFailures.value = await configService.getValue("indicateFailures")
 
 	if (indicateFailures.value) {
@@ -144,6 +157,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
 	configService.disconnect()
+	showNodeRead.dispose()
 	logViewerService.disconnect()
 	disposeLockWallet()
 })
@@ -215,8 +229,8 @@ onBeforeUnmount(() => {
 				:aria-label="`Manage networks (currently ${appStore.network.name})`"
 				:class="$style.network_chip"
 			>
-				<span :class="$style.network_label">{{ appStore.network.name }}</span>
-				<div :class="[$style.status_dot, $style[networkStatusKey]]" />
+				<span v-if="showNode" data-testid="network-name" :class="$style.network_label">{{ appStore.network.name }}</span>
+				<div data-testid="network-status-dot" :class="[$style.status_dot, $style[networkStatusKey]]" />
 			</button>
 
 			<button
@@ -366,7 +380,10 @@ onBeforeUnmount(() => {
 	color: var(--nulo-accent);
 }
 
+/* With the label's role, `1lh` is the label's line while the label sets no line-height of its own, so
+ * the chip keeps its height when the name is hidden; 14px is the padding and border. */
 .network_chip {
+	composes: type--tag from global;
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
@@ -374,6 +391,7 @@ onBeforeUnmount(() => {
 	max-width: 120px;
 	flex-shrink: 1;
 	min-width: 0;
+	min-height: calc(1lh + 14px);
 
 	padding: 6px 10px;
 	background: transparent;

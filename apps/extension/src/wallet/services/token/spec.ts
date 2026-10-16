@@ -2,6 +2,7 @@
 import { z } from "zod"
 import type { FnImpl } from "@/wallet/utils/fn"
 import type { OperationContext } from "@/wallet/services/operation-journal/spec"
+import type { RunFence } from "@/wallet/services/profile/spec"
 
 export const TOKEN_SERVICE_NAME = "token"
 
@@ -261,6 +262,14 @@ export type Methods = {
 	 * network's seed list, or a retry already accepted for the same default.
 	 */
 	retrySeed(chainId: number, contract: string): boolean
+
+	/**
+	 * After a full-backup restore, reads each token of `fence`'s profile from its chain and keeps
+	 * the chain's class, interface, name, symbol and decimals where the row differs. It updates and
+	 * never adds, so no trust follows. A token whose read fails or ends after `deadlineAt` (epoch
+	 * ms) keeps the backup's values.
+	 */
+	refreshRestoredTokens(fence: RunFence, deadlineAt: number): void
 }
 
 /**
@@ -274,11 +283,15 @@ export type TokenDeleted = TokenInfo & { profileId: string }
 /** `onTokenAdded` payload, carrying `profileId` too: an add can finish after a profile switch. */
 export type TokenAdded = TokenInfo & { profileId: string }
 
+export type TokenUpdated = TokenInfo & { profileId: string }
+
 export type Events = {
 	/** Emitted when a new token is created */
 	onTokenAdded: TokenAdded
 	/** Emitted when an existing token is deleted */
 	onTokenDeleted: TokenDeleted
+	/** An existing token's metadata changed. Not an add: nothing trusts the token on it. */
+	onTokenUpdated: TokenUpdated
 	/** A default's status changed in this scope. An invalidation: consumers refetch `getSeedStatus`. */
 	onSeedStatusChanged: SeedScope
 }

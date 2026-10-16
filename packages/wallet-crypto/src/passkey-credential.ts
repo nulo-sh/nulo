@@ -34,6 +34,9 @@ const PASSKEY_MASTER_LABEL = te.encode("nulo:master:v1")
 // a DISTINCT expand, so the wrap key never coincides with (or leaks) the master derivation.
 const PASSKEY_DEK_WRAP_LABEL = te.encode("nulo:dek-wrap:v1")
 
+export const PASSKEY_BACKUP_MAC_LABEL = "nulo:backup-mac:v1"
+const PASSKEY_BACKUP_MAC_INFO = te.encode(PASSKEY_BACKUP_MAC_LABEL)
+
 export class PasskeyCredential {
 	public readonly id: Base64CredentialId
 	public readonly userHandle?: HexUserHandle
@@ -114,6 +117,18 @@ export class PasskeyCredential {
 			{ name: "AES-GCM", length: 256 },
 			false,
 			["encrypt", "decrypt"],
+		)
+	}
+
+	/** The HMAC-SHA256 key a backup of this profile is checked under. Same extract, its own expand,
+	 *  so it never coincides with the master or the wrap key; the same credential reproduces it. */
+	public async deriveBackupMacKey(): Promise<CryptoKey> {
+		return globalThis.crypto.subtle.deriveKey(
+			{ name: "HKDF", hash: "SHA-256", salt: this.salt, info: PASSKEY_BACKUP_MAC_INFO },
+			this.baseKey,
+			{ name: "HMAC", hash: "SHA-256" },
+			false,
+			["sign", "verify"],
 		)
 	}
 }

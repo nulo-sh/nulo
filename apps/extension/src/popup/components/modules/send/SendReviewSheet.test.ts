@@ -64,6 +64,7 @@ type SheetProps = {
 	sending: boolean
 	ready: boolean
 	queuedCapText?: string
+	queuedSponsored?: boolean
 	reask?: { now: string; nowAmount: string; capAmount: string }
 }
 const BASE: SheetProps = {
@@ -259,6 +260,16 @@ describe("modules/send/SendReviewSheet", () => {
 		w = mountSheet()
 		expect(w.find('[data-testid="send-review-fee-cap"]').exists()).toBe(false)
 		expect(submit(w).text()).toBe("Send now")
+	})
+
+	test("queued with Nulo's sponsor paying: the fee line says it goes out after the earlier send, paid by the sponsor, and the button queues", async () => {
+		w = mountSheet({ payerKind: "contract", payerType: "fpc", queuedSponsored: true })
+		const fee = w.get('[data-testid="send-review-fee"]')
+		expect(fee.get('[data-testid="send-review-fee-queued"]').text()).toBe("Fee · Goes out after your earlier send.")
+		expect(fee.get("b").text()).toBe("paid by the sponsor")
+		expect(submit(w).text()).toBe("Queue send")
+		await submit(w).trigger("click")
+		expect(w.emitted("send")).toEqual([[]])
 	})
 
 	test("a re-ask: the fee line sets the new fee against the accepted one, and the button sends at it", async () => {

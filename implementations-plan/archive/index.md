@@ -157,6 +157,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [hd-same-token-concurrent-sends](hd-same-token-concurrent-sends/plan.md) — completed — a popup send that shares chain state with an in-flight send waits for its inclusion instead of failing; every send takes the slot
 - [holdings-loading-sync](holdings-loading-sync/plan.md) — completed — honest Home token loading states and an outcome-based incoming-scan health signal
 - [home-holdings-pin](home-holdings-pin/plan.md) — completed — Home shows three pinned tokens, and a Holdings tab owns the full list
+- [home-onboarding-2](home-onboarding-2/plan.md) — completed — the Firefox Presto permission row in place of the step and Settings → Proving, the optional loopback origins, focus to the page title when the row leaves with it; #132 already shipped
 - [home-onboarding-chrome](home-onboarding-chrome/plan.md) — completed in part — History filtered from a token page, the token page's header, onboarding's stored theme, Account State under Developer, one own window per flow, the store Send frame; the Firefox loopback permission row stopped by its probe
 - [home-refresh](home-refresh/plan.md) — completed — the locked home-screen spec implemented as a light, reversible change
 - [hygiene](hygiene/plan.md) — completed — technical follow-ups that change no screen
@@ -261,6 +262,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [shell-identity-fences](shell-identity-fences/plan.md) — completed — identity-safe popup shell continuations, and two retired pieces removed
 - [simulate-fast-path](simulate-fast-path/plan.md) — completed — a dApp simulateTx serves a public-static prefix directly on the node
 - [single-sim-estimates](single-sim-estimates/plan.md) — completed — fewer simulations per dApp sendTx estimate, after proving identical gas
+- [small-ui-fixes-1](small-ui-fixes-1/plan.md) — completed — Show network name hides the chip's name at its height, one export file-name rule, the JSON window closes on lock, a second duplicate warning
 - [stable-release](stable-release/plan.md) — completed — the stable release cut as a short, repeatable procedure
 - [stale-network-reset](stale-network-reset/plan.md) — completed — an update that leaves a network behind quarantines only that network; layout A offers an in-place reset (Mainnet blocked), resumable after a worker kill
 - [storage-migration-backup](storage-migration-backup/plan.md) — completed — imported backups migrate through the same migrations as live storage

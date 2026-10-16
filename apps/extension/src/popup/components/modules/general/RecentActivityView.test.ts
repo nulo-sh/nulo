@@ -70,6 +70,7 @@ const H = vi.hoisted(() => {
 		taskUpdated: makeEvent(),
 		taskDeleted: makeEvent(),
 		tokenAdded: makeEvent(),
+		tokenUpdated: makeEvent(),
 		// mutable reactive-store holder (set in beforeEach)
 		store: { current: null as unknown as ReturnType<typeof createAppStoreHarness> },
 	}
@@ -158,6 +159,7 @@ vi.mock("@/wallet/services/token/client", () => ({
 			disconnect: vi.fn(),
 			getTokens: H.getTokens,
 			onTokenAdded: H.tokenAdded,
+			onTokenUpdated: H.tokenUpdated,
 		}
 	}),
 }))
@@ -265,6 +267,7 @@ beforeEach(() => {
 		H.taskUpdated,
 		H.taskDeleted,
 		H.tokenAdded,
+		H.tokenUpdated,
 	]) {
 		ev.handlers.clear()
 	}
