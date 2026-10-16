@@ -264,27 +264,6 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		})
 	}
 
-	public async upgradeDappSession(sessionId: string, newSessionId: string, newExpiry: number): Promise<DappSession> {
-		return await this.lock.withLock(async () => {
-			if (await this.storage.contains(newSessionId)) {
-				throw new Error("Invalid new id")
-			}
-
-			const oldSession = await this.storage.get(sessionId)
-			if (!oldSession) {
-				throw new Error("Invalid id")
-			}
-			await this.storage.delete(oldSession.id)
-			this.emit("onDappSessionDeleted", oldSession)
-
-			const newSession = { ...oldSession, id: newSessionId, expiry: newExpiry }
-			await this.storage.set(newSession.id, newSession)
-			this.emit("onDappSessionAdded", newSession)
-
-			return newSession
-		})
-	}
-
 	public async setVerificationHash(sessionId: string, verificationHash: string): Promise<DappSession> {
 		return await this.patchSession(sessionId, (session) => {
 			session.verificationHash = verificationHash

@@ -9,7 +9,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { nextTick, reactive, ref } from "vue"
 import { useToast as useRealToast } from "@nulo/design/composables/toast.ts"
-import { held as deferred } from "../../../../../../tests/helpers/held-read"
+import { deferred } from "@nulo/wallet-core/utils"
 
 // ── Mocks ────────────────────────────────────────────────────────────
 

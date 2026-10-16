@@ -2,12 +2,13 @@
  * Narrow integration test for the header — deliberately NOT a full Header suite (L4+ convention:
  * e2e owns the header). It pins the wiring unit tests cannot see: the address button hands the FULL
  * active address (not the truncated display text) to the clipboard, both switcher affordances open
- * the accounts popup, the lock chip runs the shared lock (its behavior: `useLockWallet.test.ts`), and
- * the network chip's `data-status` follows the store's status.
+ * the accounts popup, the lock chip runs the shared lock (its behavior: `useLockWallet.test.ts`), the
+ * network chip's `data-status` follows the store's status, and a failure log marks the settings badge.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { nextTick, reactive } from "vue"
+import { LogLevel } from "@/wallet/logger"
 
 const H = vi.hoisted(() => ({
 	openPopup: vi.fn(),
@@ -18,6 +19,7 @@ const H = vi.hoisted(() => ({
 	getSessionHandle: vi.fn(),
 	profileListeners: new Set<() => void>(),
 	disconnectListeners: new Set<() => void>(),
+	logListeners: new Set<(log: { level: number; id: string }) => void>(),
 	app: {} as Record<string, unknown>,
 	cache: {} as { confirm: Record<string, unknown> } & Record<string, unknown>,
 }))
@@ -26,7 +28,14 @@ const FULL_ADDRESS = "0x018d47f656a0d242e28e5d15b5c965f39529bd860f2eaae947527b50
 
 vi.mock("@/wallet/services/log-viewer/client", () => ({
 	LogViewerServiceClient: vi.fn(function () {
-		return { connect: vi.fn(), disconnect: vi.fn(), onLog: H.noopEvent }
+		return {
+			connect: vi.fn(),
+			disconnect: vi.fn(),
+			onLog: {
+				add: (fn: (log: { level: number; id: string }) => void) => H.logListeners.add(fn),
+				remove: (fn: (log: { level: number; id: string }) => void) => H.logListeners.delete(fn),
+			},
+		}
 	}),
 }))
 vi.mock("@/wallet/services/config/client", () => ({
@@ -34,18 +43,7 @@ vi.mock("@/wallet/services/config/client", () => ({
 		return { disconnect: vi.fn(), onUpdate: H.noopEvent, getValue: vi.fn().mockResolvedValue(false) }
 	}),
 }))
-vi.mock("@/wallet/services/task/client", () => ({
-	TaskServiceClient: vi.fn(function () {
-		return {
-			disconnect: vi.fn(),
-			getTasks: vi.fn().mockResolvedValue([]),
-			onTaskCreated: H.noopEvent,
-			onTaskUpdated: H.noopEvent,
-			onTaskDeleted: H.noopEvent,
-		}
-	}),
-}))
-vi.mock("@/wallet/config", () => ({ defaultConfig: () => ({ indicateFailures: false, showNode: false }) }))
+vi.mock("@/wallet/config", () => ({ defaultConfig: () => ({ indicateFailures: false }) }))
 vi.mock("@/utils/core", () => ({
 	managers: {
 		profile: {
@@ -91,6 +89,7 @@ beforeEach(() => {
 	H.openToast.mockClear()
 	H.profileListeners.clear()
 	H.disconnectListeners.clear()
+	H.logListeners.clear()
 	H.getSessionHandle.mockReset().mockResolvedValue("session-1")
 	H.lockActiveProfile.mockClear()
 	H.app = reactive({
@@ -106,7 +105,7 @@ beforeEach(() => {
 		lockHeldByImport: false,
 		contactImports: new Set(),
 	})
-	H.cache = { failureLog: null, activeTasksCount: null, confirm: {} }
+	H.cache = { failureLog: null, confirm: {} }
 })
 
 describe("Header — avatar/name/address split", () => {
@@ -208,5 +207,27 @@ describe("Header — the account group follows the active scope", () => {
 		H.app.account = undefined
 		await nextTick()
 		expect(w.find('[data-testid="header-account-loading"]').exists()).toBe(true)
+	})
+})
+
+describe("Header — failure indication", () => {
+	test("an error log marks the failure badge red, a warning yellow, and the mark clears after a minute", () => {
+		vi.useFakeTimers()
+		try {
+			mountHeader()
+			const log = (level: LogLevel, id: string) => {
+				for (const fn of H.logListeners) fn({ level, id })
+			}
+			log(LogLevel.Info, "log-0")
+			expect(H.cache.failureLog).toBeNull()
+			log(LogLevel.Error, "log-1")
+			expect(H.cache.failureLog).toEqual({ id: "log-1", color: "var(--red)" })
+			log(LogLevel.Warn, "log-2")
+			expect(H.cache.failureLog).toEqual({ id: "log-2", color: "var(--yellow)" })
+			vi.advanceTimersByTime(60_000)
+			expect(H.cache.failureLog).toBeNull()
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 })

@@ -508,6 +508,12 @@ export async function waitForExecuteContent(page: Page, timeout = 30_000): Promi
 	await page.waitForSelector('[data-testid="execute-op-item"]', { visible: true, timeout })
 }
 
+/** Opens a send card's value rows under its summary ("Show all details"), closed at rest. */
+export async function openExecuteDetails(page: Page, timeout = 10_000): Promise<void> {
+	await clickByTestId(page, "execute-op-details-toggle")
+	await page.waitForSelector('[data-testid="execute-op-details"]', { visible: true, timeout })
+}
+
 /** Read the visible op cards: returns `{ id, kind }[]`. Waits for at least one
  *  op-item to render — the popup's mount is async. */
 export async function getExecuteOps(page: Page): Promise<Array<{ id: string; kind: string }>> {

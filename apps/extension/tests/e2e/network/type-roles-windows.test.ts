@@ -1,9 +1,11 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
-import { type AztecTestConfig, deployDelegatedPullRig, ensureStandardPublicChecks } from "../fixtures/aztec"
+import { type AztecTestConfig, deployDelegatedPullRig } from "../fixtures/aztec"
 import { clickByTestId, type ExtensionContext, grantCapBundle, test } from "../fixtures/extension"
 import { requestPgBundle, setPgInput, setPgTextarea, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { shotSend } from "../fixtures/send-page"
 import {
+	openExecuteDetails,
 	rejectCapabilities,
 	rejectExecute,
 	waitCapabilitiesReady,
@@ -11,6 +13,7 @@ import {
 	waitForPopup,
 	waitForPopupClosed,
 } from "../fixtures/popups"
+import { serializeInstance } from "../fixtures/selfpay-phase"
 import {
 	expectSitesClean,
 	expectSweepClean,
@@ -102,6 +105,8 @@ type Request = {
 	states: readonly string[]
 	/** The payload must stay inside the card and every hex string in a mono role. */
 	contained?: true
+	/** A send: its value rows open under the summary before `ready` is awaited. */
+	details?: true
 }
 
 function requests({ tokenAddress, minterAddress }: AztecTestConfig): Request[] {
@@ -113,8 +118,13 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig): Request[] {
 			button: "pg-btn-sendTx-default",
 			inputs: { tokenAddress, recipient: minterAddress, amount: AMOUNT },
 			ready: `${sel("execute-op-decoded-param-value")}[data-address-shows="name"]`,
-			states: ["an aztec_sendTx request (network)", "a decoded call with an address parameter (network)"],
+			states: [
+				"an aztec_sendTx request (network)",
+				"an aztec_sendTx request with all details open (network)",
+				"a decoded call with an address parameter (network)",
+			],
 			contained: true,
+			details: true,
 		},
 		{
 			method: "createAuthWit",
@@ -135,8 +145,14 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig): Request[] {
 	]
 }
 
-/** Every element that holds dApp-supplied payload text: the call or action rows and the argument rows. */
-const PAYLOAD_TEXT = ["execute-op-payload-row", "execute-op-decoded-param", "execute-op-arg", "execute-op-transfer-nonce"].map(sel)
+/** Every element that holds dApp-supplied payload text: the summary's calls, the call or action rows and the argument rows. */
+const PAYLOAD_TEXT = [
+	"execute-op-summary-call",
+	"execute-op-payload-row",
+	"execute-op-decoded-param",
+	"execute-op-arg",
+	"execute-op-transfer-nonce",
+].map(sel)
 
 /** How far the payload's text reaches past the card's right edge, in px; 0 or less is inside. */
 async function payloadPastCard(win: Page): Promise<number> {
@@ -169,12 +185,14 @@ async function stretchPayload(win: Page): Promise<void> {
 			for (const el of document.querySelectorAll(selector)) el.textContent = text
 		}
 		set('[data-testid="execute-op-payload-row"] > :first-child', `I${"i".repeat(63)}`)
+		set('[data-testid="execute-op-summary-call-title"]', `I${"i".repeat(63)}`)
 		set('[data-testid="execute-op-call-to"]', "W".repeat(25))
+		set('[data-testid="execute-op-summary-call-to"]', "W".repeat(25))
 		set('[data-testid="execute-op-decoded-param"] > :first-child', `${"W".repeat(32)}:`)
 		set('[data-testid="execute-op-decoded-param-value"]', "i".repeat(64))
 	})
 }
-async function openExecute(ctx: Connected, { button, inputs, ready }: Request): Promise<Page> {
+async function openExecute(ctx: Connected, { button, inputs, ready, details }: Request): Promise<Page> {
 	for (const [name, value] of Object.entries(inputs)) await setPgInput(ctx.playgroundPage, name, value)
 	const opened = waitForPopup(ctx, "execute", { timeout: 60_000 })
 	await clickByTestId(ctx.playgroundPage, button)
@@ -182,6 +200,11 @@ async function openExecute(ctx: Connected, { button, inputs, ready }: Request): 
 	try {
 		await win.setViewport(WINDOW)
 		await waitForExecuteContent(win, 60_000)
+		if (details) {
+			await win.waitForSelector(sel("execute-op-summary"), { visible: true, timeout: 60_000 })
+			expect(await win.$(sel("execute-op-details"))).toBeNull()
+			await openExecuteDetails(win)
+		}
 		await win.waitForSelector(ready, { visible: true, timeout: 60_000 })
 	} catch (err) {
 		await dismiss(win, rejectExecute)
@@ -225,18 +248,13 @@ async function instanceJson(address: string): Promise<string> {
 	const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses")
 	const instance = await createAztecNodeClient(aztecConfig!.nodeUrl).getContract(AztecAddress.fromStringUnsafe(address))
 	if (!instance) throw new Error(`no contract instance at ${address}`)
-	return JSON.stringify(instance, (_k, x) => {
-		if (typeof x === "bigint") return x.toString()
-		const ctor = x && typeof x === "object" ? Object.getPrototypeOf(x)?.constructor?.name : undefined
-		return ctor === "Fr" || ctor === "AztecAddress" || ctor === "EthAddress" ? x.toString() : x
-	})
+	return serializeInstance(instance)
 }
 
 /** Fills the playground's delegated send but leaves the consumer instance unset: registering it is what lets the wallet decode the call. */
 async function rigDelegatedSend(ctx: Connected): Promise<{ consumerAddress: string }> {
 	const pg = ctx.playgroundPage
 	const [account] = await grantCapBundle(ctx, pg, "transaction-contracts", async (ids) => [ids[0]!])
-	await ensureStandardPublicChecks(aztecConfig!)
 	const { pullTokenAddress, consumerAddress } = await deployDelegatedPullRig(aztecConfig!, account!)
 	await setPgInput(pg, "consumerAddress", consumerAddress)
 	await setPgInput(pg, "amount", "100")
@@ -256,19 +274,28 @@ test.skipIf(!hasConfig)(
 			method: "sendTx",
 			button: "pg-btn-sendTx-delegated",
 			inputs: {},
-			ready: sel("execute-discovered-caller"),
+			ready: sel("execute-discovered-line-consumer"),
 			states: [],
 		})
+		const assertedIn = (observation: IdentifierObservation | undefined) =>
+			observation!.sites.filter(({ mode }) => mode === "asserted").map(({ site }) => site.selector)
 		try {
-			const [observation] = await sweepWindow(win, "windows-execute", ["a send with a discovered authwit (network)"])
-			const asserted = observation!.sites.filter(({ mode }) => mode === "asserted").map(({ site }) => site.selector)
-			expect(asserted).toEqual(expect.arrayContaining([sel("execute-discovered-consumer"), sel("execute-discovered-caller")]))
-			await clickByTestId(win, "execute-discovered-authwit-toggle")
-			await win.waitForSelector(sel("execute-discovered-authwit-details"), { visible: true, timeout: 10_000 })
-			const [open] = await sweepWindow(win, "windows-execute", ["a discovered authwit with its details open (network)"])
-			expect(open!.sites.filter(({ mode }) => mode === "asserted").map(({ site }) => site.selector)).toContain(
-				sel("execute-discovered-inner-hash"),
+			// At rest the summary names who the authorization lets act, and on what, before any press.
+			expect(await win.$(sel("execute-op-details"))).toBeNull()
+			const [rest] = await sweepWindow(win, "windows-execute", ["a send with a discovered authwit (network)"])
+			expect(assertedIn(rest)).toEqual(
+				expect.arrayContaining([sel("execute-discovered-line-caller"), sel("execute-discovered-line-consumer")]),
 			)
+			await shotSend(win, "authwit-summary", "execute-op-summary-authwits-section")
+			await openExecuteDetails(win)
+			await win.waitForSelector(sel("execute-discovered-authwit-details"), { visible: true, timeout: 10_000 })
+			await shotSend(win, "authwit-details", "execute-op-discovered-authwits")
+			const [rows, open] = await sweepWindow(win, "windows-execute", [
+				"a send with a discovered authwit, all details open (network)",
+				"a discovered authwit with its details open (network)",
+			])
+			expect(assertedIn(rows)).toEqual(expect.arrayContaining([sel("execute-discovered-consumer"), sel("execute-discovered-caller")]))
+			expect(assertedIn(open)).toContain(sel("execute-discovered-inner-hash"))
 		} finally {
 			await dismiss(win, rejectExecute)
 		}
@@ -290,6 +317,7 @@ test.skipIf(!hasConfig)(
 			inputs: {},
 			ready: sel("execute-op-raw-toggle"),
 			states: [],
+			details: true,
 		})
 		try {
 			await clickByTestId(win, "execute-op-raw-toggle")

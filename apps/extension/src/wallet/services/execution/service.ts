@@ -982,6 +982,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 				return this.executeAztecCreateAuthWit(operation, authorizedFence)
 			}
 			default: {
+				const _unhandled: never = operation
 				throw new Error("Invalid operation")
 			}
 		}

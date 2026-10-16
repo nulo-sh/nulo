@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** Vendor */
-import type { PropType } from "vue"
+import { type PropType, useTemplateRef } from "vue"
 
 /** Components */
 import Flex from "../core/Flex.vue"
@@ -29,6 +29,9 @@ defineProps({
 		default: "secondary",
 	},
 })
+const titleEl = useTemplateRef<HTMLSpanElement>("titleEl")
+/** Focuses the default title; a no-op under a `title` slot or with no title. */
+defineExpose({ focusTitle: () => titleEl.value?.focus() })
 </script>
 
 <template>
@@ -48,7 +51,7 @@ defineProps({
 		<Flex align="center" justify="center" gap="8" :class="$style.title_wrapper">
 			<slot name="title">
 				<MaterialIcon v-if="leadingIcon && title" :name="leadingIcon" :size="18" :color="leadingIconColor" />
-				<span v-if="title" :class="$style.title">{{ title }}</span>
+				<span v-if="title" ref="titleEl" tabindex="-1" :class="$style.title">{{ title }}</span>
 			</slot>
 		</Flex>
 
@@ -113,6 +116,11 @@ defineProps({
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+
+	/* A focus target, not a control: no ring. */
+	&:focus {
+		outline: none;
+	}
 }
 
 .trailing {

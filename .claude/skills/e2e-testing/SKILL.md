@@ -195,7 +195,6 @@ runtime env var can never arm a build-time flag.
 | `NULO_E2E_STAGE_LOG=1` (+`_OUT`) | append per-import stage-trajectory records (`helpers/import-stage-timing.ts`) |
 | `NULO_E2E_OPENPOPUP_LOG=1` | log `openPopup`'s fast-path/fallback timing |
 | `NULO_E2E_CONSOLE_PROBE=1`, `NULO_E2E_PROBE=1` | enable the two `_probe-*` files (skipped by default; probes, not gates) |
-| `NULO_E2E_STANDARD_CONTRACTS=1` | opt `tx-sendTx-delegated-authwit` into the standard-contracts variant |
 | `ANVIL_URL`, `AZTEC_NODE_URL`, `PLAYGROUND_URL`, `*_PORT` | the port pack (`agent.sh` exports them from `ports.json`) |
 | `VITE_NULO_FEE_MULTIPLIER` | build-time fee envelope widening; CI sets `10` to absorb devnet base-fee drift. It is Normal's multiplier and scales Fast and Urgent with it (CI prices 10, 15, 25), so the speeds keep their order |
 
@@ -445,7 +444,9 @@ assertion; drive the rest of the flow with the ordinary helpers.
   spot: reach a control with `tabTo` and assert the next stop, never a walk from the page top. Read
   a ring with `focusRing`, which waits for the control's transitions (a shot taken sooner shows the
   ring mid-fade); on Firefox call `prepareKeys` first, since an unfocused page matches no
-  `:focus-visible`. Prove `aria-hidden` or a live region from CDP's `Accessibility.getFullAXTree`
+  `:focus-visible`. A click ends keyboard modality, so a script focus after it draws no ring
+  whatever the CSS: prove a no-ring rule after a keyed activation
+  (`implementations-plan/archive/home-onboarding-2/lessons/phase-4.md`). Prove `aria-hidden` or a live region from CDP's `Accessibility.getFullAXTree`
   with `DOM.resolveNode` (Chrome): `page.accessibility.snapshot()` gives no ignored flag and no
   element (`implementations-plan/archive/accessibility-1/lessons/`).
 
