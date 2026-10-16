@@ -468,6 +468,7 @@ onBeforeUnmount(() => {
 
 .view_all {
 	composes: type--label from global;
+	user-select: none;
 	color: var(--nulo-secondary);
 
 	transition: color 0.2s var(--bezier);

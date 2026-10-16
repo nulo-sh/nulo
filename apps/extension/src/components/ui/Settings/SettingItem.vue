@@ -289,7 +289,8 @@ const Root = (_, { slots }) => {
 	line-height: 20px !important;
 
 	text-overflow: ellipsis;
-	overflow: hidden;
+	/* Not `hidden`: a hidden box scrolls its text under a drag that selects past its edge. */
+	overflow: clip;
 	white-space: nowrap;
 
 	&.titleWithSuffix {
@@ -309,7 +310,7 @@ const Root = (_, { slots }) => {
 	line-height: 16px !important;
 
 	text-overflow: ellipsis;
-	overflow: hidden;
+	overflow: clip;
 	white-space: nowrap;
 }
 </style>
