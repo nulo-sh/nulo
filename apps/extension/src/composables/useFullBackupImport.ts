@@ -20,6 +20,7 @@ import type { PasskeyRequest } from "@/wallet/services/passkey/spec"
 import type { ToastOptions } from "@/composables/toast"
 import { FilePickCanceledError } from "@/utils/files"
 import {
+	BACKUP_MAC_FIELD,
 	type BackupSelection,
 	collectRestoreErrors,
 	normalizeAllIds,
@@ -48,20 +49,25 @@ import {
 	restoreServiceSlices,
 	type SliceRestoreClient,
 	restoreTokensStage,
-	trustRestoredTokens,
+	refreshRestoredTokensStage,
 	retryAccountStateStage,
 	retryReplacedRows,
 	runRestoreFailurePath,
+	verifyPasskeyBody,
+	INTEGRITY_FAILED,
 } from "./full-backup-restore"
+
+import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS } from "./importChainSync"
 
 export type { RestoreStage, RestoreStatus } from "./full-backup-restore"
 import type { RestoreStage, RestoreStatus } from "./full-backup-restore"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 import { isNewPasswordValid } from "@/utils/password"
 
-/** The full-backup envelope: the checksum + the checksum-covered body. */
+/** The full-backup envelope: the checksum, a passkey body's MAC of it, and the checksum-covered body. */
 export type FullBackupEnvelope = {
 	checksum?: string
+	[BACKUP_MAC_FIELD]?: unknown
 	"compat-epoch"?: unknown
 	"backup-schema-version"?: unknown
 	"master-key"?: string
@@ -72,9 +78,11 @@ export type FullBackupEnvelope = {
 /** The checksum-stripped body + the migrated slices that survive stage 1. */
 type ValidatedBackup = {
 	data: RestoreData & { profile: BackupProfile }
-	backup: Omit<FullBackupEnvelope, "checksum">
+	backup: Omit<FullBackupEnvelope, "checksum" | typeof BACKUP_MAC_FIELD>
 	/** The verified checksum: it names this exact backup. */
 	checksum: string
+	/** A passkey body's MAC of the checksum, verified once the passkey answers. */
+	mac?: string
 }
 
 type ValidateAndMigrateResult = ({ kind: "ok" } & ValidatedBackup) | { kind: "rejected"; title: string; message: string }
@@ -91,11 +99,13 @@ export const DECRYPTION_FAILED = {
 		"The provided password is incorrect or the backup file is corrupted. Please try again with the correct password or select another file.",
 } as const
 
-/** What a backup that is not the one the wallet exported shows, whichever check refused it. */
-const INTEGRITY_REFUSAL = {
+const INTEGRITY_REFUSAL = { kind: "rejected", ...INTEGRITY_FAILED } as const
+
+const INCOMPATIBLE_BACKUP = {
 	kind: "rejected",
-	title: "Backup Integrity Check Failed",
-	message: "The backup file appears to be corrupted or has been tampered with. Please ensure you have the correct backup file.",
+	title: "Incompatible backup",
+	message:
+		"This backup was created by an incompatible wallet version and cannot be imported. Re-export a backup from a current version of the wallet.",
 } as const
 
 /** The restore reads `type` and `name` as the wallet wrote them; `id` is replaced by the service
@@ -117,7 +127,7 @@ function isBackupProfile(profile: unknown): profile is BackupProfile {
  * the caller.
  */
 export async function validateAndMigrateBackup(fullBackup: FullBackupEnvelope): Promise<ValidateAndMigrateResult> {
-	const { checksum, ...backup } = fullBackup
+	const { checksum, [BACKUP_MAC_FIELD]: mac, ...backup } = fullBackup
 
 	// Trust-gate order is deliberate: integrity FIRST — re-serialized exactly as
 	// the exporter hashed it (the exporter also hashed JSON.stringify of the
@@ -130,14 +140,7 @@ export async function validateAndMigrateBackup(fullBackup: FullBackupEnvelope): 
 
 	// A pre-baseline blob (the legacy conflated `schema-version: 2`, no
 	// `compat-epoch`) fails this gate too — intended fail-closed.
-	if (!isSupportedCompatEpoch(backup[COMPAT_EPOCH_FIELD])) {
-		return {
-			kind: "rejected",
-			title: "Incompatible backup",
-			message:
-				"This backup was created by an incompatible wallet version and cannot be imported. Re-export a backup from a current version of the wallet.",
-		}
-	}
+	if (!isSupportedCompatEpoch(backup[COMPAT_EPOCH_FIELD])) return INCOMPATIBLE_BACKUP
 
 	const backupSchemaVersion = backup[BACKUP_SCHEMA_VERSION_FIELD]
 	if (typeof backupSchemaVersion !== "number" || !Number.isInteger(backupSchemaVersion) || backupSchemaVersion < 1) {
@@ -176,7 +179,15 @@ export async function validateAndMigrateBackup(fullBackup: FullBackupEnvelope): 
 
 	const data = migrationResult.data as RestoreData
 	if (!isBackupProfile(data.profile)) return INTEGRITY_REFUSAL
-	return { kind: "ok", data: data as ValidatedBackup["data"], backup, checksum: comparisonChecksum }
+	// A passkey body exported before it carried a check is refused before any passkey prompt.
+	if (data.profile.type === "passkey" && typeof mac !== "string") return INCOMPATIBLE_BACKUP
+	return {
+		kind: "ok",
+		data: data as ValidatedBackup["data"],
+		backup,
+		checksum: comparisonChecksum,
+		mac: typeof mac === "string" ? mac : undefined,
+	}
 }
 
 export interface UseFullBackupImportOptions {
@@ -381,6 +392,8 @@ async function executeRestore(
 		applyOutcome(io, cred)
 		return null
 	}
+	const checked = await verifyPasskeyBody(profile, cred.credentialData, validated.checksum, validated.mac)
+	if (applyOutcome(io, checked)) return null
 	const secretOut = buildRestoreSecret(profile, backup as Record<string, unknown>, masterKey)
 	if (secretOut.kind !== "proceed") {
 		applyOutcome(io, secretOut)
@@ -420,7 +433,6 @@ async function executeRestore(
 
 	io.setStage("restoring:tokens")
 	await restoreTokensStage(data, accounts.importedChainAddress, io)
-	await trustRestoredTokens(newProfile.id)
 
 	const sliceClients = buildSliceClients()
 	// The profile restore above always ran first; its id is the fence key every slice
@@ -468,7 +480,10 @@ async function executeRestore(
 	}
 
 	io.setStage("restoring:account-state")
-	const tail = await restoreAccountStateStage(data, nets.seeded, networkService, io, restoreRun, profileService)
+	// One deadline for the whole tail: the token reads get what the registrations leave.
+	const tailDeadlineAt = Date.now() + IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS
+	const tail = await restoreAccountStateStage(data, nets.seeded, networkService, io, restoreRun, profileService, tailDeadlineAt)
+	await refreshRestoredTokensStage(restoreRun.fence, tailDeadlineAt)
 	return { profile: newProfile, networks: nets.seeded, accountStateRetry: tail.retry }
 }
 

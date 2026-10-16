@@ -12,6 +12,7 @@ vi.mock("@/wallet/services/token/client", async () => {
 			return {
 				getTokens: vi.fn(async () => [{ id: "t", symbol: "TST", name: "Test token" }]),
 				onTokenAdded: new EventHandler(),
+				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
 				deleteToken: vi.fn(),
 				disconnect: vi.fn(),

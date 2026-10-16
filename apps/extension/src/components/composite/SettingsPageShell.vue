@@ -5,11 +5,13 @@ defineProps({
 	/** Forwarded to the content column; absent means no gap class. */
 	gap: { type: [String, Number], default: undefined },
 })
+const header = useTemplateRef("header")
+defineExpose({ focusTitle: () => header.value?.focusTitle() })
 </script>
 
 <template>
 	<Flex direction="column" :class="$style.wrapper">
-		<SubPageHeader :title="title" :backTo="backTo">
+		<SubPageHeader ref="header" :title="title" :backTo="backTo">
 			<template v-if="$slots.trailing" #trailing><slot name="trailing" /></template>
 		</SubPageHeader>
 
