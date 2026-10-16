@@ -119,7 +119,7 @@ Single arc on `worktree-small-ui-fixes-1`. No PR until the pre-delivery gate pas
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 7697c376. Plan-specific values:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 7697c376. Plan-specific values:
 
 - Comments to the comment bar while coding; attempts in `lessons/phase-N.md`; `agent-worktree status small-ui-fixes-1 "phase N green: <next>"` at each gate. Three failures on one step: stop and reassess.
 - Step 1 is absent (`code_review: off`).
