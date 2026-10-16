@@ -277,6 +277,7 @@ declare global {
   const pickFile: typeof import('../utils/files').pickFile
   const pickPrimaryIndex: typeof import('../utils/primary-method').pickPrimaryIndex
   const pickPrimaryMethod: typeof import('../utils/tx-enrichment').pickPrimaryMethod
+  const pickPrimaryWireMethod: typeof import('../utils/primary-method').pickPrimaryWireMethod
   const pinScopeOf: typeof import('../composables/usePinnedTokens').pinScopeOf
   const pinnedTokensKey: typeof import('../utils/profile-ui-keys').pinnedTokensKey
   const planImportWrites: typeof import('../utils/contact-import-rows').planImportWrites
@@ -462,6 +463,7 @@ declare global {
   const watchEffect: typeof import('vue').watchEffect
   const watchPostEffect: typeof import('vue').watchPostEffect
   const watchSyncEffect: typeof import('vue').watchSyncEffect
+  const wireTitle: typeof import('../utils/primary-method').wireTitle
   const withTimeout: typeof import('../stores/balances.store').withTimeout
   const withoutId: typeof import('../utils/entity-list').withoutId
 }
@@ -971,6 +973,7 @@ declare module 'vue' {
     readonly pickFile: UnwrapRef<typeof import('../utils/files')['pickFile']>
     readonly pickPrimaryIndex: UnwrapRef<typeof import('../utils/primary-method')['pickPrimaryIndex']>
     readonly pickPrimaryMethod: UnwrapRef<typeof import('../utils/tx-enrichment')['pickPrimaryMethod']>
+    readonly pickPrimaryWireMethod: UnwrapRef<typeof import('../utils/primary-method')['pickPrimaryWireMethod']>
     readonly pinScopeOf: UnwrapRef<typeof import('../composables/usePinnedTokens')['pinScopeOf']>
     readonly pinnedTokensKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['pinnedTokensKey']>
     readonly planImportWrites: UnwrapRef<typeof import('../utils/contact-import-rows')['planImportWrites']>
@@ -1156,6 +1159,7 @@ declare module 'vue' {
     readonly watchEffect: UnwrapRef<typeof import('vue')['watchEffect']>
     readonly watchPostEffect: UnwrapRef<typeof import('vue')['watchPostEffect']>
     readonly watchSyncEffect: UnwrapRef<typeof import('vue')['watchSyncEffect']>
+    readonly wireTitle: UnwrapRef<typeof import('../utils/primary-method')['wireTitle']>
     readonly withTimeout: UnwrapRef<typeof import('../stores/balances.store')['withTimeout']>
     readonly withoutId: UnwrapRef<typeof import('../utils/entity-list')['withoutId']>
   }
