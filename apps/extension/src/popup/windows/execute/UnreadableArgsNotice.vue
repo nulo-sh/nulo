@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** Why the wallet shows a call's arguments as raw fields, and what the person should check instead. */
 import type { UndecodedReason } from "@/wallet/services/execution/client"
-import { RAW_NOTICE } from "./call-surface"
+import { rawNotice } from "./call-surface"
 
 defineProps<{
 	reason: UndecodedReason
@@ -15,5 +15,5 @@ defineProps<{
 		<Icon name="warning" size="12" color="orange" />
 		<Text :data-testid="`${prefix}-unverified-warning`" variant="body" color="orange">Can't read the arguments</Text>
 	</Flex>
-	<Text variant="body" color="tertiary">{{ RAW_NOTICE[reason] }} Check what the app says this does before approving.</Text>
+	<Text variant="body" color="tertiary">{{ rawNotice(reason) }}</Text>
 </template>

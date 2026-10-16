@@ -1,8 +1,8 @@
 ---
 plan: send-fees-ux
 tier: light
-status: audited (Codex approve, round 3); awaits the orchestrator's approval and OA-1 to OA-4
-issues: "#316 #340 (closes); #503 #504 #505 (close once OA-1, OA-2 and OA-3 have answers the arc carries)"
+status: arc 1 merged (#532); arc 2 in progress (page 20: OA-1 B, OA-3 B, OA-4 B; OA-2 B waits on the skeleton mockup)
+issues: "#316 #340 (closed by arc 1); #503 #505 (arc 2 closes); #504 (open: OA-2 waits on the owner's skeleton mockup)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -43,7 +43,7 @@ For a person sending on Testnet and approving app transactions in the popup. Exc
 Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: each exits 0. A phase is ✓ only when its gate passes. Each phase logs to `lessons/phase-N.md`.
 
 1. ✓ **#316.** Change: `EditFpcPopup.vue`, `NewFpcPopup.vue` and its "duplicate addresses" pins. A new `EditFpcPopup.test.ts` block. Never: another row's address, pasted in upper case, warns "Already added", disables Save, and Enter calls no `updateFpcAddress`. Controls: a new address saves, and a rename beside an untouched address that another row also holds saves. UI impact: P18-09 A, "'Already added' on both forms". Gate: `F`.
-   **1b, on OA-4 B only.** The own address re-cased reads as no change: Save stays disabled and nothing is called. Test beside phase 1's. UI impact: OA-4 B.
+   ✓ **1b, on OA-4 B only (arc 2).** The own address re-cased reads as no change: Save stays disabled and nothing is called. Test beside phase 1's. UI impact: OA-4 B.
 2. ✓ **#340.** Change: `journal-state.ts`, `journal-state.test.ts:688-712` (header comment and expectations). The `test.each` over `pending` and `queued` expects the new label and line on the detail page and "Refused before sending" on the card. Control: a `wallet_refused` record keeps its own line. UI impact: P18-11 A, "Refused before sending" / "Too many sends were already waiting. Nothing was sent.". Gate: `F`.
 3. ✓ **#504, measure (no code lands).** Numbers: [lessons/phase-3.md](lessons/phase-3.md); posted on #504.
    - Probe: temporary `console.info("[fee-timing]", { stage, ms })` lines with numbers only. Mark them in `FeeSettingsCard` (mount, prefill read, FPC leg ready, gas leg ready, commit, and whether `peekGasBalances` hit and was stale) and in `balances.store.ts` (the wait for an earlier attempt, the new attempt, a timeout).
@@ -52,7 +52,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
    - Record per open, in `lessons/phase-3.md`: the time to each marker, the wait for an earlier attempt, any timeout or "Couldn't load fee data", the peek hit, and whether the default from the peek matches the committed one. Then revert.
    - Pass: the numbers are recorded, `git diff --stat -- apps` is empty, and a comment on #504 gives them.
    - Stop: a timeout or degraded commit while a proof runs, or most warm opens missing the peek, goes to the panel. Fixing that cause is a plan change.
-4. **#504 C, on OA-2 C only.** Change: `fee-privacy.ts`, `balances.store.ts` (`peekGas` writes no entry; header comment), `FeeSettingsCard.vue`, `tests/e2e/fixtures/send-page.ts` (`waitForFee` waits on `data-fee-settled`; its comment and `helpers.ts:1438`'s). Unit tests for the helper's precedence. `FeeSettingsCard.test.ts` cases, with the peek and the FPC list landing in either order:
+4. **Not taken (OA-2 = B).** **#504 C, on OA-2 C only.** Change: `fee-privacy.ts`, `balances.store.ts` (`peekGas` writes no entry; header comment), `FeeSettingsCard.vue`, `tests/e2e/fixtures/send-page.ts` (`waitForFee` waits on `data-fee-settled`; its comment and `helpers.ts:1438`'s). Unit tests for the helper's precedence. `FeeSettingsCard.test.ts` cases, with the peek and the FPC list landing in either order:
    - the preview before the read, and no settings or payer emitted (never), then the commit (control);
    - a peek that misses, rejects or never answers: no default preview (phase 7 owns what shows), and the commit is not delayed;
    - an A→B→A switch whose first peek answers last is ignored;
@@ -62,13 +62,13 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
    - a fresh read that chooses another method replaces the preview.
 
    UI impact: OA-2 C. Gate: `F`, then `fee-methods` and `send-fee-privacy` once.
-5. **#503, on OA-1 B or C only.** Change: `OperationCard.vue`, `OperationCard.fee.test.ts:326-367` (wire-shaped). It covers estimating (legend and loading line), landed (legend and figure), failed (legend only), a priority fee, and a `default_entrypoint` control with no loading line. `fee-sponsor-funding.test.ts:255-260` waits for the landed figure (`execute-op-app-fee`), matches its exact pattern on that element, and checks the legend apart. UI impact: OA-1, quoted. Gate: `F`, then that network spec once.
-6. **#505, on OA-3 B only.**
+5. ✓ **#503, on OA-1 B (arc 2).** Change: `OperationCard.vue`, `OperationCard.fee.test.ts:326-367` (wire-shaped). It covers estimating (legend and loading line), landed (legend and figure), failed (legend only), a priority fee, and a `default_entrypoint` control with no loading line. `fee-sponsor-funding.test.ts:255-260` waits for the landed figure (`execute-op-app-fee`), matches its exact pattern on that element, and checks the legend apart. UI impact: OA-1, quoted. Gate: `F`, then that network spec once.
+6. ✓ **#505, on OA-3 B (arc 2).**
    - Change: `send.vue`, `FeeCostReadout.vue`, `SendReviewSheet.vue` and their tests. `send.integration.test.ts:732` becomes: a queued send that Nulo's sponsor pays shows the answered row and "Queue send", and sends no cap and no estimate id. Never: a hand-added sponsor stays disabled.
    - `transfer-executor.test.ts`, at the unit layer because the no-id path builds fresh, which a composition test may not simulate (`tests/COMPOSITION-TESTS.md`). (a) A cap-less sponsored send behind a held predecessor builds once after release and writes no `reask`. (b) Never: Nulo's sponsor row re-pointed while queued fails closed before any build. Controls: a self-paid send that becomes queued after its estimate, with an estimate id and without one, still builds.
    - `tests/e2e/fixtures/send-burst.ts` (`readEstimateState`, `expectEstimateQueued`: enabled exactly while a cap shows or the payer is Nulo's sponsor) and the spec header of `same-token-concurrent-sends`. One held-send scenario there submits the sponsored send while held and checks its row stays queued until release. Wall-clock before and after.
    - UI impact: OA-3, quoted. Gate: `F`, then `NULO_E2E_PROVERLESS=1` and `same-token-concurrent-sends` once.
-7. **#504 B, on OA-2 B or C.** Change: `FeeSettingsCard.vue`, `FeeMethodSelector.vue` and tests. Pending with no preview shows the skeleton. Control: a hold shows "Select method", never an endless skeleton. UI impact: OA-2 B. Gate: `F`.
+7. **Waiting (arc 2 leaves it out).** OA-2 B is signed, but the owner asked to see the whole fee block as a skeleton first; that mockup is being made. **#504 B, on OA-2 B or C.** Change: `FeeSettingsCard.vue`, `FeeMethodSelector.vue` and tests. Pending with no preview shows the skeleton. Control: a hold shows "Select method", never an endless skeleton. UI impact: OA-2 B. Gate: `F`.
 8. ✓ **Full gate.**
    - `bun run test:all`, `bun run test:ci-gating`, and `bun run check:plans` after staging.
    - Smoke on Chrome and on Firefox (`NULO_E2E_BROWSER=firefox`): `cd apps/extension && bun run test:e2e -- tests/e2e/<f>.test.ts --retry=0` for `send-fee-privacy`, `send-keyboard`, `send-outcome-rows` and `settings-crud`.
@@ -102,10 +102,16 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
 | D7 | #504 probe collection (deviation, arc 1) | popup marks in a page global, worker marks in a `chrome.storage.session` key, read by the test | Developer Mode plus `readSwLogTrail`: Codex round 1 allowed any temporary numeric-only probe, and this one needs no logger level or flush wait |
 | D8 | delivery (deviation, arc 1) | arc 1 ships phases 1-3 with OA-1..OA-4 at A and leaves the plan open; the page 20 picks ship in arc 2, which closes the plan | one arc that waits for page 20: the signed #316 and #340 words would wait on unsigned asks |
 | D6 | #505 test layer | executor unit tests and one e2e scenario | a composition test (lane brief): the no-id path builds fresh, which the harness may not simulate |
+| D9 | arc 2 branch (deviation) | `send-fees-ux-arc2` off `origin/dev` after #532's squash | reuse `worktree-send-fees-ux`: it is pushed with arc 1's unsquashed history, and no pushed branch is rewritten |
+| D10 | #505's e2e scenario (deviation) | convert the sponsored "two private sends of the same token" case (18/19) to queue B while A is held | a new scenario: the other sponsored held cases still prove "the estimate lands once A is mined", so a conversion proves the new path with no added runtime |
+| D11 | where "entered with Nulo's sponsor" lives | `sequence()` returns `sponsored` from the row it already resolves; `TransferRun` keeps the entry value | a second `getFpcImpl` read at entry (another await before the journal row, racing the first) |
+| D12 | #504 in arc 2 | left out on the orchestrator's word; phase 7 waits | build OA-2 B now: the owner asked to see a whole-block skeleton before it ships |
 
 ## Delivery
 
 Single arc: branch `worktree-send-fees-ux`, one PR against `dev` with `gh pr create`, opened only after phase 8 and the Codex loop converge. Title: `fix(wallet): sponsor address check on edit, cap refusal words` (60 characters), widened to the answers it carries, at most 93. Body: the change and why; a `UI impact` line per surface with screenshots; the validation runs; phase 3's numbers; e2e wall-clock before and after for any changed scenario (else "no e2e scenario added or changed"); `Closes #316 #340`. Add `Closes #503`, `#504`, `#505` when OA-1, OA-2, OA-3 have answers the arc carries; an answer of A closes its issue by comment. OA-4 still open at close-out becomes an issue. Comment on each issue left open. Open the PR without labels. Add `e2e:extension-network` if the path filter skips the network lane. No parallel lanes.
+
+**Arc 2** (D8, D9): branch `send-fees-ux-arc2` off `origin/dev` after #532, one PR against `dev` with `gh pr create`, opened after the full gate and the Codex loop. Title: `fix(wallet): app fee legend while estimating, queue sponsored sends` (65 characters). `Closes #503`, `Closes #505`; #316's OA-4 B rides along (the issue is closed); #504 stays open (phase 7 waits). Body quotes page 20's picks. The close-out (Outcome, archive move) waits for #504's arc.
 
 ## Post-implementation
 
@@ -122,6 +128,8 @@ The steps are `implementations-plan/README.md` § Post-implementation standard a
 **Round 3, Codex** (resume, confirmation): **approve**. All five round 2 resolutions verified; no regression found.
 
 **Implementation rounds 1-2** (phases 1-2 diff; round 2, Codex resume: approve, the loop converged). Codex (gpt-6.1-sol, high, session 01a141e3): conditional approve; its one in-scope finding, the rename control's out-of-field addresses, fixed (84e49ca0). Opus diff review: approve after the same fix. Pre-existing, outside the arc: the submit button is live while the duplicate list loads (#528, known limit); a row another network adds while a form is open (#529, known limit); a Send-page send the cap refused reads "Stopped before broadcast" (OA-5, ships as is). Log: [lessons/phase-8.md](lessons/phase-8.md).
+
+**Arc 2 implementation rounds 1-2** (phases 1b, 5 and 6; round 2, Codex resume: approve, the loop converged). Codex (gpt-6.1-sol, high, session 01a144e6): conditional approve, 2 findings: an edit of Nulo's sponsor row between the press and the worker's first read escapes the fail-closed rule, as it does for a send that is not queued (known limit #569: closing it needs the approved payer on the wire); the refusal's slot and ticket release was unasserted (test added). Opus diff review: approve; the same window (#569), a dead estimate-id change (reverted) and an overclaiming comment (narrowed). Log: [lessons/phase-8.md](lessons/phase-8.md).
 
 ## Seeds
 

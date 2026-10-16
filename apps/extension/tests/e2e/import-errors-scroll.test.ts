@@ -18,7 +18,8 @@ import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { restoreNoticeText, restoreWarningText, retryResultText } from "@/components/composite/import/restore-warning"
 import { LOCAL_L1_CHAIN_ID } from "@/utils/chain-ids"
-import { interceptRpc } from "./fixtures/browser"
+import { interceptRpc, prepareClick, prepareKeys } from "./fixtures/browser"
+import { editorText, readEditorStyles } from "./fixtures/code-editor"
 import { clickByTestId, launchExtension, test } from "./fixtures/extension"
 import {
 	buildSyntheticBackup,
@@ -126,6 +127,83 @@ async function textOf(page: Page, testId: string, timeout = 10_000): Promise<str
 	return (await shown.jsonValue()) as string
 }
 
+/** The editor element focus rests on, through the shadow roots it crosses. */
+const deepFocus = (page: Page) =>
+	page.evaluate(() => {
+		let el = document.activeElement
+		while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement
+		return el?.classList.contains("cm-content") ? "editor" : (el?.getAttribute("data-testid") ?? el?.tagName ?? "none")
+	})
+
+/**
+ * The inline JSON viewer, in its shadow root: styled; a token the mouse selects is exactly what a
+ * copy carries (a selection CodeMirror failed to read would copy nothing, or the whole line); and the popup's
+ * focus trap keeps the editor in its Tab cycle.
+ */
+async function expectViewerUsable(page: Page): Promise<void> {
+	expect(await readEditorStyles(page, "json-editor")).toEqual({ display: "flex", fontSize: "14px", scrollbarWidth: "none" })
+	// The popup animates in, and a drag measured mid-motion ends lines below where it aimed.
+	await page.waitForFunction(
+		() => {
+			const box = document.querySelector('[data-testid="json-editor"]')?.getBoundingClientRect()
+			if (!box) return false
+			const w = window as unknown as { __viewerBox?: string; __viewerStill?: number }
+			const key = `${box.left},${box.top},${box.width},${box.height}`
+			w.__viewerStill = key === w.__viewerBox ? (w.__viewerStill ?? 0) + 1 : 0
+			w.__viewerBox = key
+			return w.__viewerStill >= 5
+		},
+		{ timeout: 10_000, polling: "raf" },
+	)
+	const token = await page.evaluate(() => {
+		const lines = document.querySelector('[data-testid="json-editor"]')?.shadowRoot?.querySelectorAll(".cm-line") ?? []
+		for (const line of lines) {
+			const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+			for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+				const text = node.textContent ?? ""
+				if (text.length < 4 || text !== text.trim() || text === (line.textContent ?? "").trim()) continue
+				const range = document.createRange()
+				range.setStart(node, 0)
+				range.setEnd(node, 1)
+				const first = range.getBoundingClientRect()
+				range.setStart(node, text.length - 1)
+				range.setEnd(node, text.length)
+				const last = range.getBoundingClientRect()
+				return { text, y: first.top + first.height / 2, from: first.left + 1, to: last.right - 1 }
+			}
+		}
+		return null
+	})
+	if (!token) throw new Error("the viewer rendered no token to select")
+	await prepareClick(page)
+	await page.mouse.move(token.from, token.y)
+	await page.mouse.down()
+	await page.mouse.move(token.to, token.y, { steps: 5 })
+	await page.mouse.up()
+	// A dispatched copy needs no user activation or clipboard permission; CodeMirror fills its data
+	// from the selection it read, as on a real copy.
+	const copied = await page.evaluate(() => {
+		const content = document.querySelector('[data-testid="json-editor"]')?.shadowRoot?.querySelector(".cm-content")
+		if (!content) return null
+		const copy = new ClipboardEvent("copy", { clipboardData: new DataTransfer(), bubbles: true, composed: true, cancelable: true })
+		content.dispatchEvent(copy)
+		return copy.clipboardData?.getData("text/plain") ?? null
+	})
+	expect(copied).toBe(token.text)
+
+	await prepareKeys(page)
+	expect(await deepFocus(page)).toBe("editor")
+	await page.keyboard.press("Tab")
+	const stops = [await deepFocus(page)]
+	// The popup's controls, and a snack's, if one is up, come before the cycle closes.
+	while (stops.length < 4 && stops.at(-1) !== "editor") {
+		await page.keyboard.press("Tab")
+		stops.push(await deepFocus(page))
+	}
+	expect(stops[0]).not.toBe("editor")
+	expect(stops.at(-1), `Tab comes back round to the editor: ${stops.join(" → ")}`).toBe("editor")
+}
+
 /** Presses Retry with the local node still refused and returns the line the failed Retry leaves. */
 async function failedRetryLine(page: Page): Promise<string> {
 	await clickByTestId(page, "import-full-backup-retry-btn")
@@ -154,7 +232,8 @@ test("one network to retry: the open lands at the scroller's end, the title abov
 
 		expect(await failedRetryLine(page)).toBe(retryResultText(["Local Network"]))
 		await clickByTestId(page, "import-full-backup-view-errors-btn")
-		expect(await textOf(page, "data-viewer")).toMatch(/"network": "Local Network",\s*"networkId": "[0-9a-f]{8}"/)
+		expect(await editorText(page, "json-editor")).toMatch(/"network": "Local Network",\s*"networkId": "[0-9a-f]{8}"/)
+		await expectViewerUsable(page)
 	})
 })
 

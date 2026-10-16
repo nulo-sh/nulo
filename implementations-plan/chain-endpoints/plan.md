@@ -1,8 +1,9 @@
 ---
 plan: chain-endpoints
 tier: mid
-status: arc 1 merged (#276); arcs 2a and 2c in build (D-orch-4 to D-orch-9); arc 2b not released (D-orch-7)
-issues: "#171 (arc 1); #200, #101, #116, #79 (arc 2, waits on page 12); #77, #197 (no arc, blocked:external)"
+status: arcs 1 (#276), 2a (#506) and 2c (#509) merged; arc 2b released 2026-10-16 (D-orch-11) and in build on chain-endpoints-2b; close-out (Phase 3) after 2b merges
+issues: "#171 (arc 1); #200, #101 item 14 (arc 2a); #116 (arc 2c); #101 item 15 (arc 2b, D-orch-11; #101 closes at close-out); #79 (no arc: #389 closed it, D27); #77, #197 (no arc, blocked:external)"
+revision: "2026-10-16, light: close-out only; base origin/dev at c5e9c8e8"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -21,9 +22,10 @@ Chain and endpoint configuration, in two arcs and a close-out. The lane map's ar
 
 - **Arc 1 (#171, decision-free, ships first).** Every smoke browser sends each HTTP, HTTPS and WebSocket request for a host outside the machine to a small guard on loopback. The guard refuses it and records the host. Each launch proves its own routing with a canary that would be reached only on a direct path. A launch that tried an undeclared host fails when it closes. No shipped byte changes.
 - **Arc 2a (#200, #101 item 14, #79; waits on page 12).** A node URL with a space, a non-breaking space or a control character inside it is refused with its own line (P12-04). `connect-src` allows plain HTTP only to `localhost` and `127.0.0.1`, and the form refuses `[::1]` (P12-02). The default token list stays built in, so #79 closes by comment (P12-05).
-- **Arc 2b (#101 item 15; waits on page 12 and R3).** The logs and JSON viewers move their styles into a shadow root, and `style-src` drops `'unsafe-inline'` (P12-03).
+- **Arc 2b (#101 item 15; waits on page 12 and R3).** The logs and JSON viewers move their styles into a shadow root, and `style-src` drops `'unsafe-inline'` (P12-03). Released 2026-10-16 (D-orch-11): P12-03 was not struck.
 - **Arc 2c (#116; waits on page 12 and R2).** A funded wallet whose price fetch failed shows "—" and "Prices unavailable" on Home (P12-01).
 - **No arc.** #77 waits on unleashed's mainnet bridge; #197 waits on the upstream JSON-RPC client.
+- **Close-out revision (2026-10-16).** Arcs 1, 2a and 2c merged; 2b was struck, then released the same day (D-orch-11), so the close-out follows its merge. #79 needs no arc: #389 retired the built-in list on 2026-10-14, a day before P12-05's change was recorded. The close-out is the last phase (§ Close-out revision). Over the mid size target: the merged arcs' records stay verbatim.
 
 Recon: [recon.md](recon.md). Questions for the owner: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
@@ -33,10 +35,10 @@ Recon: [recon.md](recon.md). Questions for the owner: [OWNER-ASKS.md](OWNER-ASKS
 
 **Out, with reason:**
 - #77 (`blocked:external`): the get-gas link can only change once unleashed has a mainnet bridge.
-- #197 (`blocked:external`): no arc in this lane. Recon found an in-repo half that is not blocked: a `GasFees` shape check inside `predictedWorstMinFees` (`packages/aztec-runtime/src/fee-juice.ts:18`) covers every caller. It belongs to the lane that owns `fee-juice.ts` (fees-and-sponsors). The close-out comments this on #197.
+- #197 (`blocked:external`): no arc in this lane. Recon found an in-repo half that is not blocked: a `GasFees` shape check inside `predictedWorstMinFees` (`packages/aztec-runtime/src/fee-juice.ts:18`) covers every caller. It belongs to the lane that owns `fee-juice.ts` (fees-and-sponsors). The close-out comments this on #197. Superseded: #270 shipped that half (R-F8).
 - Artifact-run smoke (release and nightly smoke of the production zip): it keeps its documented live dRPC leg (`apps/extension/tests/e2e/README.md:59`) and its price-host block. The guard is off there (D4, Ask A1).
 - The network e2e suite: the smoke setup alone arms the guard; the network runner belongs to e2e-harness-gaps. The close-out samples two network files and files an issue if they reach an outside host (Ask A5).
-- A fetched default token list (#79): P12-05 keeps the list in the build for v1.0.0.
+- A fetched default token list (#79): P12-05 keeps the list in the build for v1.0.0. Superseded: the owner changed P12-05, and #389 had already shipped the fetched list (D27).
 - Channels other than HTTP, HTTPS and WebSocket (UDP, WebRTC). The wallet uses none (recon); arc 1 bounds its guarantee to the three it routes, plus DNS on Chrome.
 
 **Claims that did not hold or hold narrower:**
@@ -109,8 +111,9 @@ Recon: [recon.md](recon.md). Questions for the owner: [OWNER-ASKS.md](OWNER-ASKS
 - A1. Should artifact runs also run behind the guard? **Working assumption: no.** `tests/e2e/README.md:59` keeps one live run of the shipped token list before a release, and #171 names the smoke build. A hermetic artifact run would be its own issue.
 - A2. Should the smoke setup refuse a dist that is not the armed smoke build? **Working assumption: yes** (D8). It is developer tooling, no shipped surface.
 - A3. Does #156 (R5) wait for arc 2b's `style-src` edit, or only for arc 2a? **Working assumption:** it waits for both, until the orchestrator disposes of R5 in writing (§ Delivery).
-- A4. Who closes #79. **Working assumption:** the arc-2a session, by comment, once page 12 records P12-05 as approved.
+- A4. Who closes #79. **Working assumption:** the arc-2a session, by comment, once page 12 records P12-05 as approved. Superseded: #389 closed it (D27).
 - A5. Network-suite egress. **Working assumption:** the close-out samples two network files with the guard armed locally (uncommitted) and files an issue if one records an outside host. A sample is not a proof for the whole suite.
+- A6. Resolved by D-orch-11: P12-03 stands, arc 2b builds item 15. The earlier text: #101 item 15: the lane brief and the program record (2026-10-15) say the owner vetoed P12-03; #101's Decision block reads "accepted from the veto list", the program's phrase for a record that was not struck. **Working assumption:** arc 2b stays struck (the orchestrator's release governs this lane), and #101 closes only if the approval of this revision carries the owner's veto (words, date, where recorded); without it, #101 stays open for item 15 (D28).
 
 ## Architecture & Implementation
 
@@ -278,7 +281,8 @@ Cases:
 - **Arc 2a, extension-page CSP and the network form message (P12-02):** "connect-src allows plain HTTP only to localhost and 127.0.0.1. A saved http://[::1] node URL stops working (switch it to localhost); the form refuses [::1] and its message drops "/ http://[::1]"."
 - **Arc 2b, logs and JSON viewers (P12-03, veto list):** "The logs and JSON viewers' inline styles move into their shadow root's stylesheet, before/after shots prove identical pixels, and style-src drops unsafe-inline."
 - **Arc 2a, #79 (P12-05):** no screen.
-- Anything beyond these words is in OWNER-ASKS.md (OA-1 to OA-7) with what ships now.
+- **Close-out revision:** none. The no-list state (Home's "NOTHING HERE YET", Holdings' "0 tokens") shipped with #389 under the owner's "Nothing extra" (2026-10-13, R-F5); this revision changes no file a build reads.
+- Anything beyond these words is in OWNER-ASKS.md (OA-1 to OA-8) with what ships now.
 
 ## Security & Adversarial Considerations
 
@@ -295,7 +299,7 @@ Cases:
 - *A node operator or a person who pastes a URL from one.* Before: a URL with a hidden character inside validates and is stored, so the URL the person reads can differ from the one dialed. After: refused at the input boundary with its own line.
 - *Stored rows the new rules refuse:* they still list, the popup still starts, and the person can fix them. The node factory refuses to dial `[::1]`; the refusal becomes an inactive status, logged as a fixed category at `debug`. A hidden-character row dials its percent-encoded form, which is harmless. Backups carry no network rows, so no backup can bring one in.
 - *A price service* that fails or answers nothing usable. Before: a funded wallet reads `$0.00`, which can push a person to act. After: "—" and "Prices unavailable". The signal comes from the background's own fetch, not from any page.
-- *#79:* a fetched list would be a remote-code and supply-chain surface (signing, pinning, store declarations); P12-05 keeps it built in.
+- *#79:* a fetched list would be a remote-code and supply-chain surface (signing, pinning, store declarations); P12-05 keeps it built in. Superseded (D27): #388, #389 and #489 shipped that surface under their own threat model (`SECURITY.md` § Token list signing); the close-out adds nothing to it.
 - *Crypto:* the CSP hash is SHA-256 from `node:crypto` in a test. No new runtime crypto.
 
 ## Phases
@@ -472,7 +476,7 @@ Warning: start only after forms-and-contacts arc 1 (#212) merges, and only if P1
    - the JSON viewer renders inline and in full screen.
 9. Capture "after" shots with the same fixture and settings. Compare each pair with the script; any differing pixel blocks the phase.
 
-Validation gate: Fast; `bun run test:all`; the armed smoke builds; whole smoke on both browsers; network `networks.test.ts` and `default-token-seeding.test.ts` on both browsers. Pass: exit 0; the CSP recorder records zero violations in every context the suites exercise (it cannot hear a violation raised while a document parses, `tests/e2e/README.md:67`, which is why step 7 scans the built HTML and the step-8 cases check that styles apply); the script reports zero differing pixels for all twelve pairs (three surfaces, two themes, two browsers). Layers: lint, typecheck, unit, component, smoke e2e, network e2e.
+Validation gate: Fast; `bun run test:all`; `bun run test:ci-gating` and `bun run lint:actions` (D38); the armed smoke builds; whole smoke on both browsers; network `networks.test.ts`, `default-token-seeding.test.ts`, `tx-sendTx-reject.test.ts` (D33) and `backup-import-stalled-network.test.ts` (it reads the data viewer's text) on both browsers. Pass: exit 0; the CSP recorder records zero violations in every context the suites exercise (it cannot hear a violation raised while a document parses, `tests/e2e/README.md:67`, which is why step 7 scans the built HTML and the step-8 cases check that styles apply); the script reports zero differing pixels for all twelve pairs (three surfaces, two themes, two browsers). Layers: lint, typecheck, unit, component, smoke e2e, network e2e.
 
 ### Arc 2c: the Home hero when prices could not load (#116, P12-01) — waits on page 12 and R2
 
@@ -515,6 +519,46 @@ Outcome (2026-10-15): local gate passed. `test:all`, lint and `typecheck:all` ex
 - The failure bookkeeping moved into `recordFailure` to keep `doRefresh` within the complexity budget.
 - The hero asks what the total sums (`fiatOf`), not `quoteFor` (Opus round 1, finding 7).
 
+## Close-out revision (2026-10-16)
+
+The lane brief asked for an arc that ends the built-in default token list under the owner's changed P12-05 ("No, let's just move to the remote token fully. Unless I'm missing something obvious."), the record of P12-03's veto on #101, and the close-out. Read at `origin/dev` c5e9c8e8 (merged as ad127c19) by two Sonnet explorers; the planner checked every cite below.
+
+### What the tree says
+
+- R-F1. **The built-in list is gone.** #389 (merged 2026-10-14, `Closes #79`) replaced it with the signed list at `https://tokens.nulo.sh/v1/list.json`, and #79 has been closed since. `default-tokens.ts` holds only the `DefaultTokenSeed` type and `seedsFromList` (`:31-40`), which maps the verified snapshot and returns `[]` without one; the seeder takes seeds only through it (`token/service.ts:186`). The e2e seed source exists only in armed builds, which `_build-extension.yml` refuses (`:93-96`, marker grep `:139`). No production file under `apps/extension/src` or `packages/*/src` names a token address.
+- R-F2. **What a build still compiles, and why** (`packages/token-list/src`): the two pinned keys (`keys.ts`), the list's trust root; the sequence floor (`floor.json`, 1792014908), the last list that delisted or flagged a token, so a replayed older list cannot restore one on a fresh install (`index.ts:30-58`); one bundled token class id (`class-ids.ts`), since the wallet never fetches an artifact; the price-id table (`price-ids.ts`), four CoinGecko ids with sanity bands, so every wallet sends the same price request and a list can only pick from it. None of them is a list token (Fee Juice and the protocol contracts stay compiled, as before). So some token changes still need a release, by design: a token on a new contract class (the wallet never downloads code), a new price id, a floor raise after a delisting (until then a replayed older list can restore the token on a fresh install), a key change.
+- R-F3. **A fresh install before the first fetch.** Nothing is fetched until the Terms are current (`token-list/service.ts:124-133`); with no snapshot the seeder stops before any seed (`seeder.ts:447-448`). Home shows no token row and, once balances and seed status settle, "NOTHING HERE YET" / "Tap to import your first token." (`TokensView.vue:417-427`). Holdings shows its search field, "0 tokens" (`holdings.vue:122`) and, with dollar values on, a $0.00 total (`holdings.vue:110-111,193`); it has no empty state. Fee Juice is the gas card, not a token row (`BalanceView.vue:380-381`). No banner. A list that lands later reaches `seeder.listChanged()` and seeds without a relaunch (`token/service.ts:205,221-223`).
+- R-F4. **An install that stays offline** shows R-F3's screens until a fetch succeeds: retries after 5 min, 30 min, 2 h, 6 h, then daily, from a persisted deadline and an alarm (`token-list/service.ts:24,159-166`). The price fetch does not depend on the list (`price-map.ts:31`) and fails offline as before.
+- R-F5. **The owner already chose this state.** dynamic-token-list's UI impact reads "With no list, Home shows no default rows. The owner chose this on 2026-10-13: 'Nothing extra'", and its D5 reads "no bundled copy" (owner and both audits) (`implementations-plan/archive/dynamic-token-list/plan.md`). Page 12's P12-05 text predates #389's merge.
+- R-F6. **Store and legal already declare the download**: `store/remote-code.md` § The token list (`:84-100`: signed data, verified against compiled keys before it is parsed, able to name a bundled contract and an address, never code or a host); `store/listing.md:56,80-82,252-255`; `legal/privacy.md` § 5.11 (`:273-296`) and § 13 (`:391-393`). No permission: `host_permissions` does not name `tokens.nulo.sh` (`manifest.config.ts:24`); the fetch runs under `connect-src https:`. One gap: `remote-code.md` § The token list does not say a list can flag a token, which the wallet then warns about (#526); the close-out files it as a `docs` issue (Phase 3 step 3), since the token-list plans are archived.
+- R-F7. **#101**: item 14 shipped in #506 (the issue's comment of 2026-10-15). The lane brief records P12-03 as vetoed, which strikes item 15; the issue's Decision block reads "accepted from the veto list", which the program writes for a record that was not struck (`implementations-plan/archive/ci-release-supply/plan.md`, D-orch-12) (Ask A6). R5 (`manifest.config.ts`, #156) waited on arc 2b, which will not run; #156 shipped anyway in #534 (2026-10-16), so R5 holds nothing (D32).
+- R-F8. **#197**: its in-repo half shipped in #270 (`checkedFees`, `packages/aztec-runtime/src/fee-juice.ts:9-17`), which commented on the issue, so the old close-out step routing it to fees-and-sponsors is moot. **#77** is unchanged.
+- R-F9. D11's dead end is #498 (open, filed with arc 2a). OA-8 (#116) is unanswered and no issue holds it. `lessons.md` is at 8,190 of 8,192 bytes.
+
+### The owner's question, answered
+
+Nothing is missing, and it has shipped. Since #389 a build carries no list token: the defaults arrive with the first signed list, fetched once the Terms are accepted, normally during onboarding. Until then, and on an install that stays offline, Home reads "NOTHING HERE YET" and Holdings "0 tokens": the owner's own "Nothing extra" of 2026-10-13. What stays compiled is R-F2's trust minimum, so a new contract class, a new price id, a floor raise and a key change still need a release, by design. The store and privacy texts already declare the download. Nothing a person sees changes, so OWNER-ASKS.md carries this as a note, not an ask.
+
+### Phase 3: close-out (the only phase left)
+
+Runs on `chain-endpoints-close-out`, which carries this revision's commit (D31).
+
+1. `git fetch origin dev && git merge origin/dev`; read what changed in `implementations-plan/index.md` and `lessons.md`; never a union merge.
+2. **A5, the network suite's egress sample (D29).** Wait for load1 < 150. Locally and uncommitted, edit two files: provide `egressGuard: true` in `apps/extension/tests/e2e/global-setup.ts` beside `extensionPath`; in `closeAfterEgressCheck` (`fixtures/egress-guard.ts`), after the listeners stop, print the guard's whole record (`guard.attempts()`, declared hosts included) and the Testnet stand-in's request count (`node?.requests()`), which never reach the guard. Then one call per browser: `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/networks.test.ts tests/e2e/network/default-token-seeding.test.ts`, and the same with `NULO_E2E_BROWSER=firefox`. The record prints on every close, a failing test's included, so every outcome is data: log each host other than loopback, the canary and the browser's own, the stand-in's count and every red with its cause, per file and browser, in `lessons/phase-3.md`. Expect `api.coingecko.com`: `agent.sh` blocks no price host. A run that prints no record (the sandbox never came up) is retried once; still none, the sample is recorded as not done, with the reason. Then restore the two files (`git checkout -- <file>` after reading their diff) and confirm `git status -- apps` is clean.
+   - A wallet or spec host in the record, or a nonzero stand-in count: dedupe (`gh issue list --state all --search "network e2e outside host"`), then file one `ci` issue (five sections, `Record` naming the archived plan).
+   - Neither: a disposition line in the Outcome.
+3. **Issues** (dedupe each new one first; five sections; `Record` names the archived plan).
+   - #79 (closed): comment the answer of § The owner's question with its evidence (R-F1 to R-F6), naming #389, #489, #501 and #507.
+   - #101 (D28): if the orchestrator's approval carries the owner's veto of P12-03 (words, date, where recorded), comment that item 14 shipped in #506 and quote the veto, so `style-src` keeps `'unsafe-inline'`; the PR says `Closes #101`. Otherwise comment that item 14 shipped and item 15 is not built by this lane, which closes with its record reading "accepted from the veto list"; the PR says `Refs #101` and #101 is an Open item.
+   - #77 and #197: one line each: no arc in this lane, still `blocked:external` (#77: unleashed's mainnet bridge; #197: the upstream JSON-RPC client, its in-repo half shipped in #270).
+   - OA-8: unanswered, file an `owner-decision` issue quoting its options and what ships now (D30); answered, record the answer in OWNER-ASKS.md and file any work it creates as its own issue.
+   - R-F6's gap: one `docs` issue, `store/remote-code.md` § The token list does not say a list can flag a token.
+4. Write the `## Outcome` block after the front matter with the literal fields the gate reads (`Date:`, `Status:`, `Shipped:`, `Seeds retired:`), plus: one disposition line each for arc 2b, phase 2a.3 and #79 (D27), the #197 routing step (R-F8), OA-4's wording (shipped as recommended) and R5 (released, D32); `Known limits: none`; `Open items:` #77, #197, #498, the issues step 3 filed, A5's issue if filed, and #101 if it stays open.
+5. Promote at most one line to `lessons.md`, retiring or shortening as much as it adds so the file stays under 8 KiB. Candidate: Chrome sends link-local IP literals past `--proxy-server` unless the bypass list starts with `<-loopback>`, and a `MAP *` resolver rule also captures IP literals, the proxy's own included (Chrome, 2026-10; `lessons/phase-0.md`).
+6. Delete `STATUS.md`; keep `OWNER-ASKS.md`; commit. Then `git mv implementations-plan/chain-endpoints implementations-plan/archive/chain-endpoints` in its own commit and move the index line to `implementations-plan/archive/index.md`. No live file links into the plan (checked at revision time); the plan's own links are relative within its directory.
+
+Validation gate: `bun run check:plans` and `bun run lint` exit 0 on the staged final tree; `git diff --stat origin/dev` lists only `implementations-plan/**`; both A5 runs are logged with their outcome (or the sample is recorded as not done, with the reason). Layers: plans gate, lint, network e2e (the sample, both browsers). Then § Post-implementation steps 8-11.
+
 ## Decision ledger
 
 | # | Decision | Chosen because | Rejected |
@@ -551,9 +595,26 @@ Outcome (2026-10-15): local gate passed. `test:all`, lint and `typecheck:all` ex
 | D-orch-4 | Arc 2a builds the signed page-12 picks: P12-04 with OA-1 **B**, OA-2 **A**, OA-3 **A**; P12-02 with OA-4 **B** and OA-5 **A**. OA-4 came with no words, so the page's example ships as recommended: "Use http://localhost instead of http://[::1]." (`ERR_RPC_URL_IPV6_LOOPBACK`); OWNER-ASKS.md lists it as a wording the owner may change | The orchestrator's release of arc 2a (2026-10-15) after pages 12 and 18 were signed | Shipping "Something went wrong." (OA-4 A) |
 | D-orch-5 | The refused set is `\p{White_Space}`, `\p{Cc}`, `\p{Cf}` and `\p{Default_Ignorable_Code_Point}`, inside the trimmed string; one line for all | OA-1 B's signed text names `Cf` and `Default_Ignorable_Code_Point`; together they hold every zero-width character, every bidirectional control (`Bidi_Control`, U+200E and U+200F included), the byte-order mark, and the fillers and soft hyphen a host drops silently (Codex round 1, finding 3). No legitimate node URL contains one | The release message's code-point ranges alone (first build: would let a Hangul filler through); `Bidi_Control` plus the listed ranges (round-1 build) |
 | D-orch-6 | Phase 2a.3 is dropped: P12-05 was answered "change" ("move to the remote token list fully"), so #79 no longer closes by comment; this lane does nothing on #79 | The orchestrator routes #79 to a planner (2026-10-15) | Closing #79 by comment (A4, D16; superseded) |
-| D-orch-7 | Arc 2b is not built by this session, per the orchestrator's release message ("struck: P12-03 was vetoed"); #101 stays open for item 15. #101's Decision block records P12-03 as "accepted from the veto list", not struck, so the #101 comment says only that item 14 ships in arc 2a's PR and item 15 is not in it; the report raises the discrepancy | The release message scopes this session; the issue text is what was signed, so no comment claims a veto it does not carry | Building 2b without a release; quoting a veto the issue does not hold |
+| D-orch-7 | Superseded by D-orch-11. Arc 2b is not built by this session, per the orchestrator's release message ("struck: P12-03 was vetoed"); #101 stays open for item 15. #101's Decision block records P12-03 as "accepted from the veto list", not struck, so the #101 comment says only that item 14 ships in arc 2a's PR and item 15 is not in it; the report raises the discrepancy | The release message scopes this session; the issue text is what was signed, so no comment claims a veto it does not carry | Building 2b without a release; quoting a veto the issue does not hold |
 | D-orch-8 | Arcs 2a and 2c open as plain PRs against `dev` (`gh pr create --base dev`, no `gh stack`), 2c branched from the merged plan branch, not from 2a; both may be open at once and neither merges (release freeze until the 0.31.0 promote) | The orchestrator's call (2026-10-15); lifts D17's one-unmerged-arc rule for these two | One stack, one unmerged layer (D17) |
 | D-orch-9 | Arc 2c builds P18-01 **A** (it replaces the held P12-11) with OA-6 **B** and OA-7 **B**: any failed fetch with no usable price switches the hero, the 3-minute refresh, a background that did not answer and a reconnect after a restart included. This supersedes D14's rule that only the open answer may set `unavailable` | The signed answers on #116 (pages 12 and 18) | What shipped-now text OA-6 A and OA-7 described |
+| D-orch-10 | The close-out revision (2026-10-16, tier light): plan the arc that finishes P12-05's change on #79 ("No, let's just move to the remote token fully. Unless I'm missing something obvious."), answer that question with evidence, record P12-03's veto on #101 (arc 2b struck), then close out | The orchestrator's lane brief | Leaving #79 and #101 to another lane |
+| D-orch-11 | Arc 2b is released and built (2026-10-16). The release message's "struck: P12-03 was vetoed" was wrong: page 12's sign-off record (2026-10-15T14:16Z) holds P12-03 = null, the page's value for a veto-list item the owner left standing, as P12-02 and P12-04 (both shipped); #101's Decision block reads "accepted from the veto list". So A6 and D28 resolve: item 15 is built by this arc, whose PR says `Refs #101`, and the close-out PR says `Closes #101` with items 14 (#506) and 15 shipped. R3 is satisfied (#212 closed by #255, 2026-10-10) and R5 is moot (#156 shipped in #534, D32) | The orchestrator's correction (2026-10-16); the signed record governs | Keeping 2b struck (D-orch-7, superseded); closing #101 on a veto (D28's first branch, moot) |
+| D33 | Arc 2b's e2e: the logs window in a new smoke file (`viewers-csp.test.ts`); the inline JSON viewer's checks on `import-errors-scroll`'s existing data-viewer step; the full-screen JSON window on network `tx-sendTx-reject`, clicked before the reject | The JSON window opens only from a live dApp interaction held in the background's memory, so smoke cannot reach it without faking the background port; the network launch's CSP recorder covers the window, and the existing steps add no launch (Codex and Opus) | One smoke file for all three (the plan's text); a faked port in smoke (a fake dApp); a new network file (copies its setup); shots alone (no lasting check) |
+| D34 | The shadow root adopts a verbatim copy of the page rules the editors matched (`editor-shadow.css`: the base.css reset, scrollbar, `button`, `input` rules and JsonViewer.vue's `::selection`); a unit test pins the exact selector list and that each rule equals its source, and that CodeMirror's sheet comes first and the copy last | The document had CodeMirror's `<style>` at the head's start, before the page's links, so the order keeps every tie as it resolved; a test catches drift in either copy | A `@nulo/design` file base.css `@import`s (reorders the cascade of two apps); adopting all of base.css (`replaceSync` drops its `@import`, and it carries `@font-face` URLs); no drift test |
+| D35 | The viewers' hosts carry testids (`logs-editor`, `json-editor`); below them a spec reaches only CodeMirror's documented `cm-` classes inside the shadow root, the one recorded exception to the testid rule (e2e skill) | One rule for the vendor DOM; the search panel has no attribute hook anyway (Codex) | Testids through `EditorView.contentAttributes` and on `scrollDOM`, with the panel alone excepted (Opus: two mechanisms for one boundary) |
+| D36 | `vite serve` alone keeps `style-src 'self' 'unsafe-inline'`, the whole directive replaced, in `manifest.chrome.config.ts`; keyed on `command`, never `mode` | Vite's dev client injects every stylesheet as a `<style>`; beside a hash the keyword is ignored; `dev:firefox` builds in development mode and must get the strict policy. A unit test pins both build modes strict and the serve policy | A fixed dev nonce (configuration for one caller); keying on `mode` (would ship it in development builds) |
+| D37 | The popup focus trap reads open shadow roots (`tabbableOptions.getShadowRoot`) | Without it the trap's tabbable list loses the JSON viewer's editor, which its `contenteditable` content was in before, so Tab no longer reaches it in DataViewerPopup (Codex) | Leaving keyboard entry to the editor broken |
+| D38 | `_build-extension.yml` fails a bundle whose JS or HTML carries `style="`, `style='` or `style=\"` | Vue's compiler stringifies a long static template run into innerHTML, and a constant `style` there would render unstyled under the new `style-src`; the source holds 79 static `style` attributes, so a template edit can bring one back on a page no e2e opens (Opus). Today both bundles hold none | The one-time scan of step 7 only |
+| D39 | `LogsViewer`'s search-panel `focusin` listener sits on the editor's shadow root, not the document; its unit test dispatches with a related target inside the root | Focus moving from the content to the search field stays in one shadow root, and the document drops it (target and related target both retarget to the host), so the follow went on with the panel open; the first smoke run on the arc's build caught it, the base stops (lessons, second smoke run) | `composedPath()` on a document listener, which the event never reaches |
+| D40 | `viewers-csp.test.ts` reads the follow off the viewer's own state: a line it does not follow shows its scroll-to-end button (`logs-scroll-btn`); the selection, search-panel and control cases each log one line. The inline viewer's copy check waits until the popup holds still | CodeMirror 6.43.9 keeps a view resting within 4px of its end at its end on its own, so the view's position after a line proves nothing (CI Firefox read 0px on the search case; the base's selection case did the same); a drag measured while the popup animated in landed two lines low on both builds (probes, lessons) | Reading the scroll position, which CodeMirror decides; asserting the base's lost place, which would pin a bug |
+| D41 | `@nulo/design`'s `ToastManagerBase` returns focus into a shadow root: a capturing document `focusout` keeps the element focus left, and the card's `focusin` uses it when its related target is that element's root host | With the viewers' editors in shadow roots, the related target the card sees is the host, which `focus()` cannot enter (Codex round 2) | Giving the editor host `delegatesFocus`, which would also redirect clicks on the editor's unfocusable parts and change its Tab stop |
+| D27 | #79 gets no arc. #389 retired the built-in list a day before P12-05's change was recorded; the build compiles only R-F2's minimum, which names no token. The close-out comments the evidence on #79, and its PR says `Refs #79` | R-F1 to R-F6: nothing in the tree is left to move, and the no-list screens are the owner's own "Nothing extra" (R-F5) | A bundled fallback list (the owner rejected it in dynamic-token-list's D5); renaming `default-tokens.ts` (its name already says what it maps) |
+| D28 | Resolved by D-orch-11: `Closes #101` at close-out, with item 15 shipped by arc 2b. The earlier rule: #101 closes with the close-out PR (`Closes #101`) only when the orchestrator's approval carries the owner's veto of P12-03, which the comment quotes; otherwise `Refs #101`, and #101 stays open for item 15 as an Open item | An owner-rejected item is a disposition, not open work, but #101's signed record reads "accepted from the veto list" (not struck), so closing it needs the veto's own record; D-orch-7 held the same line | Closing on the brief's word alone (Codex: justified by the supplied veto; Opus: the record contradicts it, High; the conditional settles both); closing by hand before the PR exists |
+| D29 | A5 runs as written, made exact: the guard armed for the network suite by a local, uncommitted `provide`, the whole record printed (declared hosts included), two files on each browser at retry 0, and an issue only for a wallet or spec host | Without the print, a declared host such as `api.coingecko.com` passes the close silently, and declared hosts are what the sample is for | Arming the network suite's guard in CI (the e2e harness's scope, and a sample is not that proof); skipping the sample |
+| D30 | OA-8 leaves the plan as an `owner-decision` issue if it is still unanswered at close-out | A plan never closes owning an item outside an issue | Archiving it inside OWNER-ASKS.md alone |
+| D31 | This revision is committed on `chain-endpoints-close-out`, cut from `origin/dev`, which is also the close-out PR's head; `worktree-chain-endpoints` stays at the merge of `origin/dev` (ad127c19), tree-equal to `dev` | That branch still carries arc 1's pre-squash commits (its remote was deleted when #276 merged), so a PR from it would list them again; left tree-equal to `dev`, `agent-worktree done --merged` sees it as landed, which a revision commit on it followed by the close-out's `STATUS.md` deletion would break (Opus); arcs 2a and 2c used fresh branches the same way | A PR from `worktree-chain-endpoints`; committing there and cherry-picking (the first draft); rewriting it |
+| D32 | R5 is released: #156 shipped in #534 (2026-10-16), and this lane makes no further edit to `manifest.config.ts` (2a merged, 2b struck); the Outcome says so | Codex 3 and Opus 2 asked for a written release; #156's merge, found when this revision merged `dev`, leaves nothing to coordinate, so no comment on the closed #156 | A comment on #156 (the first fix, moot once it closed) |
 
 ## Audit verdicts
 
@@ -795,6 +856,85 @@ Verdict: **approve with small fixes**. No correctness bug. I2 was wrong as state
 
 Verdict: **approve**, no new findings; the loop converged. The interception assertions prove the refusal path, the unpriced-only and balance-count cases test what they name, and `fiatOf` aligns the hero with the total.
 
+### Close-out revision, Codex (gpt-6.1-sol, high; session `01a144eb-44d0-7853-84dd-8b13853d5cfe`), 2026-10-16
+
+Verdict: **conditional approve (with conditions: fix A5's observation gap, make the close-out resumable after archiving, explicitly release R5)**. It confirmed #79 needs no arc (#389 closed it; `seedsFromList(undefined)` gives no seed; nothing compiled lists a token), the no-list note, D30, D31 and step 8. All five findings verified and accepted.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Medium. A guarded launch also arms the Testnet stand-in, which answers node requests inside the browser, so the guard's record omits them | Accepted: A5 prints `node?.requests()` beside `guard.attempts()`, after the listeners stop |
+| 2 | Medium. The `/loop` read a missing active plan as "delivered" after step 6 archived it, before the loops and the PR | Accepted: it checks the merge first, then reads the plan under either path and continues steps 8-11 until the PR exists |
+| 3 | Medium. R5 is never released, so #156 could wait on a struck arc | Accepted: D32 and an Outcome line; #156 then shipped in #534, so no comment |
+| 4 | Low. #77 gets no comment, though the README asks for one on each issue taken on and not fixed | Accepted: one line each on #77 and #197 |
+| 5 | Low. "`git status` clean" conflicts with the new lessons file, and checking out the whole e2e tree is broader than the two edits | Accepted: restore the two files after reading their diff; `git status -- apps` clean |
+
+### Close-out revision, Opus (Plan agent, read-only), 2026-10-16
+
+Verdict: **conditional approve (with conditions: before #101 is closed, quote the owner's veto of P12-03 or keep #101 open; record what happens to R5; state in the #79 answer what still needs a release)**. It verified "no arc for #79" (no compiled list, the e2e sources refused by the release build, the live list above the floor) and that A5 works on both browsers.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | High. D28 closes #101 on a veto that #101's signed record contradicts: the program writes "accepted from the veto list" for a record not struck | Accepted (the phrase verified in `archive/ci-release-supply/plan.md`, D-orch-12): D28 closes #101 only with the veto quoted from the approval, else `Refs #101` and #101 stays open |
+| 2 | Medium. R5 is never released | Accepted (Codex 3): D32 |
+| 3 | Medium. "Nothing is missing" overclaims: a new class, a new price id, a floor raise and a key change still need a release; "names no token" is loose; Holdings also shows a $0.00 total | Accepted: R-F2, R-F3, the answer and the OWNER-ASKS note say so |
+| 4 | Low. Committing the revision on `worktree-chain-endpoints` and cherry-picking makes `agent-worktree done --merged` keep that branch | Accepted: the revision is committed on `chain-endpoints-close-out` (D31 revised) |
+| 5 | Low. Close-out gaps: #77 and #197 comments; R-F6's `flagged` gap has no home; privacy § 5.2 is accurate; the gate's literal `Seeds retired:` field; A4 and the #197 routing line read as live | Accepted: comments on both, a `docs` issue for the gap, § 5.2 dropped, the Outcome's literal fields named, A4 and the Scope line marked superseded |
+| 6 | Low. A5: a red from a refused host is data, so no rerun; run both files in one call per browser with `NULO_E2E_RETRY=0`; expect `api.coingecko.com` | Accepted |
+| 7 | Step 8 is required by the README's placement rule; one round with no material finding ends it | Kept |
+
+### Close-out revision, Codex round 2 (session `01a144eb-44d0-7853-84dd-8b13853d5cfe` resumed), 2026-10-16
+
+Verdict: **approve**. All five round-1 findings resolved; D28's condition, D31 and the Outcome fields verified; no regression and no new material finding. One Low accepted: the OWNER-ASKS note says "a new contract class", since a new token on the bundled class needs only the list.
+
+### Arc 2b, round 1, Codex (gpt-6.1-sol, high, read-only; session `01a1455f-a401-74f0-9b60-afb170596547`), 2026-10-16
+
+Verdict: **approve with fixes**. No production or CSP defect; two reliability findings in the new smoke spec, which had not run yet.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Medium. `viewers-csp.test.ts` drags the middle of the rendered `.cm-line`s, which CodeMirror keeps rendered above the visible area, so the drag can land outside the editor and select nothing | Accepted: the drag picks a line inside the scroller and asserts a non-empty selection first |
+| 2 | Low. The `count * 10` growth wait returns before every line has landed, so a late line overlaps the next read | Accepted: the wait is the measured line height times the count, then 300 ms without a height change |
+
+### Arc 2b, round 1, Opus (general-purpose, read-only), 2026-10-16
+
+Verdict: **approve with fixes**. Its items 1 and 2 are Codex's 1 and 2, the first rated High (by the third case the middle rendered line sits about 480px above the scroller).
+
+| # | Finding | Disposition |
+|---|---|---|
+| 3 | Low. Ctrl+F reaches CodeMirror's `Mod-f`, which is Cmd on macOS | Accepted: F3, whose command opens the panel while there is no query |
+| 4 | Low. The build guard's `style="` also matches `font-style="`, an SVG attribute CSP allows | Accepted: each marker starts with a space |
+| 5 | Low. CLAUDE.md still names `waitForToast` the one selector exception | Accepted: the rule names the viewers' exception too |
+| 6 | Nit. "would copy the whole line" holds only when CodeMirror's selection is empty | Accepted: "would copy nothing, or the whole line" |
+| 7 | Nit. `editor-shadow.test.ts`'s list comment tells history, and the copy leaves out `.noanimations *` | Accepted: the comment states the list and why that rule is out (it only removes transitions; every editor element computes `transition-duration: 0s` and no animation in all 20 style dumps) |
+| - | Noted, no change: a page's Enter shortcut now sees the viewer's host, not CodeMirror's search `<input>`, so Enter in that field no longer reaches a page shortcut | Recorded in the PR body |
+
+### Arc 2b, round 2, Codex (session `01a1455f-a401-74f0-9b60-afb170596547` resumed), 2026-10-16
+
+Verdict: **approve with fixes**, over the round-1 fixes and the search-panel `focusin` fix (D39).
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Medium. `ToastManagerBase.vue`'s focus return stores the card `focusin`'s related target, which for focus leaving the JSON editor is the editor's host; `focus()` on that `<div>` does nothing, so dismissing a snack reached by Shift+Tab from the editor leaves focus on `body` | Accepted (D41): a capturing document `focusout` keeps the element focus left, used when the related target is its shadow root's host; a unit test fails on the old code |
+| 2 | Nit. A test comment says the viewer's listeners are on the document | Accepted: deleted |
+
+### Arc 2b, round 3, Codex (session `01a1455f-a401-74f0-9b60-afb170596547` resumed), 2026-10-16
+
+Verdict: **approve**, no new material findings; the loop converged. The host check keeps a departure from another root out, a null related target stays null, a disconnected target is skipped, and each mount adds and removes the same capturing listener.
+
+### Arc 2b, gate fixes, Opus (general-purpose, read-only), 2026-10-16
+
+Over the two test-only fixes the gate runs needed after the loop converged (type-roles' fixture through the CSSOM; the full-screen JSON step). Verdict: **approve with fixes**; neither passes vacuously.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Medium. Opening the JSON window at a copied URL skips `showJson`, and a null box can mean an expand control no person can reach either | Accepted: the step hit-tests the control's centre (`elementFromPoint` reaches it) and dispatches a click, so `showJson` opens the window again |
+| 2 | Low. The comment named a cause nobody established | Accepted: it states the `<svg>` has no `click()` |
+| 3 | Nit. type-roles' CSSOM write skipped a missing input in silence | Accepted: it throws |
+
+### Arc 2b, CI fix, Codex (gpt-6.1-sol, high, read-only; session `01a146a2-10ab-70c0-9265-57dba3bb8ec2`), 2026-10-16
+
+Over the commit that reads the logs follow off the viewer's scroll-to-end button (D40). Verdict: **approve**, no material bugs; it confirmed CodeMirror 6.43.9's stick to the end in the source, that the observer latches a button shown and removed again, and that the absence precondition catches a follow already off by geometry. One low comment finding, accepted: the observer states why it latches (the viewer's scroll handler hides the button once CodeMirror scrolls back to the end).
+
 ## Delivery
 
 One `gh stack`, base `dev`, one PR per arc, each opened only after its arc gate passes and its Codex loop converges.
@@ -807,12 +947,13 @@ One `gh stack`, base `dev`, one PR per arc, each opened only after its arc gate 
 | 2 | `chain-endpoints-arc-2a` | 2a.1-2a.3 | page 12 | `fix(network): refuse hidden url characters, allow plain http only to localhost` | #200; #79 by comment (2a.3) | off |
 | 3 | `chain-endpoints-arc-2b` | 2b | page 12, R3 | `fix(csp): move the viewers' styles into shadow roots, drop unsafe-inline` | #101 (with layer 2's item 14) | off |
 | 4 | `chain-endpoints-arc-2c` | 2c | page 12, R2 | `feat(home): show prices unavailable on a funded wallet when the price fetch fails` | #116 | off |
-| 5 | `chain-endpoints-close-out` | close-out | every arc delivered | `docs(plans): close chain-endpoints` | — | off |
+| 5 | `chain-endpoints-close-out` (D31) | 3 (close-out) | every arc delivered (2b struck) | `docs(plans): close chain-endpoints` | #101 if the veto is quoted, else `Refs #101` (D28); `Refs #79` (D27) | off |
 
 - Start: `gh stack init --adopt worktree-chain-endpoints --base dev`. Layer 1 carries this plan's commit. It may be submitted and merged before page 12 is signed.
 - At most one arc layer is unmerged at a time. A later arc starts only when the orchestrator releases it and the arc below it has merged: `gh stack sync`, then `gh stack add <branch>`. The table's order is the default; if the holds clear out of order (say R2 before R3), the orchestrator may release 2c before 2b, and it still waits for the layer below it to merge.
 - R5 holds until arc 2b merges, or until the orchestrator disposes of it in writing: #156 waits for both 2a (`connect-src`) and 2b (`style-src`). 2b's banner-hash test catches a drift; it does not release the reservation.
-- Layer 2's PR says `Refs #101`; layer 3's PR says `Closes #101` once item 14 is merged. If P12-03 is struck, layer 3 is dropped and #101 stays open with a comment naming item 15.
+- Layer 2's PR says `Refs #101`; layer 3's PR says `Closes #101` once item 14 is merged. If P12-03 is struck, layer 3 is dropped and #101 stays open with a comment naming item 15. Superseded by D28: arc 2b is struck; the close-out PR closes #101 only with the owner's veto quoted.
+- **Close-out (D-orch-10, D31):** one plain PR, `gh pr create --base dev` from `chain-endpoints-close-out`, after Phase 3's gate and both Codex loops of § Post-implementation steps 8-9.
 - Open each PR without labels. Then add `e2e:extension-smoke` or `e2e:extension-network` only when the path filter would skip a suite the arc needs; a label at creation cancels the run.
 - PR body: what changed and why, the validation runs with outcomes, the `Closes` lines. Arc 2 PRs also quote page 12's sign-off for each surface and attach the shots: the hero in both themes (2c); the viewers before and after (2b).
 
@@ -822,11 +963,11 @@ One `gh stack`, base `dev`, one PR per arc, each opened only after its arc gate 
 |---|---|---|
 | #171 | 1 | layer 1's PR |
 | #200 | 2a | layer 2's PR, after page 12 (P12-04) |
-| #101 | 2a (item 14), 2b (item 15) | layer 3's PR when both items have shipped; stays open with a comment if P12-03 is struck |
+| #101 | 2a (item 14), 2b (item 15, struck) | the close-out PR when the owner's veto is quoted; else stays open for item 15 (D28) |
 | #116 | 2c | layer 4's PR, after page 12 (P12-01) and R2 |
-| #79 | 2a (phase 2a.3) | closed by comment once P12-05 is approved; no PR closes it |
+| #79 | none (D27) | already closed by #389 (2026-10-14); the close-out comments the evidence, its PR says `Refs #79` |
 | #77 | no arc | stays open: `blocked:external`, waits on unleashed's mainnet bridge |
-| #197 | no arc | stays open: `blocked:external` upstream; the close-out comments that the in-repo `GasFees` check belongs to the lane that owns `fee-juice.ts` |
+| #197 | no arc | stays open: `blocked:external` upstream; its in-repo half shipped in #270 (R-F8) |
 
 ## Post-implementation
 
@@ -854,44 +995,28 @@ This section is self-contained: the implementing session follows it from here.
 
 ### Delivery
 
-6. Per the Delivery section. Never open a PR, not even a draft, before its arc's loop converges. `gh stack submit --auto`, then `gh pr edit` each body. Then `gh pr checks --watch`. Commits are signed; afterwards `git log --format='%h %G?' -3` shows no `N` (on a hang, rerun as `env -u SSH_AUTH_SOCK git <cmd>`). Before every push: `bun run test` and `bun run lint:actions`.
+6. Per the Delivery section (arcs 1, 2a, 2c; the close-out follows steps 7-11). Never open a PR, not even a draft, before its arc's loop converges. `gh stack submit --auto`, then `gh pr edit` each body. Then `gh pr checks --watch`. Commits are signed; afterwards `git log --format='%h %G?' -3` shows no `N` (on a hang, rerun as `env -u SSH_AUTH_SOCK git <cmd>`). Before every push: `bun run test` and `bun run lint:actions`.
 
-### Close-out (the stack's docs-only top layer, after every arc PR exists)
+### Close-out (revised 2026-10-16: Phase 3, one plain PR)
 
-7. Before the close-out commit, merge `origin/dev` into the branch. Read what changed in `implementations-plan/index.md` and `lessons.md`; never a union merge.
-8. Write an `## Outcome` block directly after the front matter: date; status; what shipped with PR numbers; what was dropped or did not hold, one disposition line each; an `Open items:` line (#77 and #197 at least, plus any issue left open, such as #101 if P12-03 was struck); and a line retiring the `/goal` and `/loop` seeds below.
-9. Promote the generalizable gotchas into `implementations-plan/lessons.md`, one line each, linking the archived detail. Keep it under 8 KiB, deduplicate, retire what a new entry supersedes, and date tool-specific lines.
-10. Comment on #197: its in-repo half (a `GasFees` shape check in `predictedWorstMinFees`) is not external and belongs to the lane that owns `fee-juice.ts`.
-11. Sample the network suite's egress (Ask A5): arm the guard locally, uncommitted, and run `networks.test.ts` and `default-token-seeding.test.ts` on each browser. If either records an outside host, dedupe (`gh issue list --state all --search "network e2e live host"`), then open an issue.
-12. File every open item in its home:
-
-| Situation | Home |
-|---|---|
-| Work inside the implementation you are on | this `plan.md` and the PR |
-| Actionable work that outlives the plan | a GitHub issue with a domain label and a `Record` link to the archived plan |
-| Needs a product call, or waits on something outside the repo | an issue labelled `owner-decision` or `blocked:external` |
-| A suspected exploitable weakness | a private draft security advisory; the plan records only "tracked privately: GHSA-…" |
-| Rejected, superseded or already done | a disposition line in the Outcome block |
-| Knowledge that prevents a repeat | `implementations-plan/lessons.md` |
-| A legal or store blank with a release deadline | `BEFORE-LAUNCH.md` |
-| Accepted code work that blocks launch | the `v1.0.0` milestone, pointed at once from `BEFORE-LAUNCH.md` |
-
-   Dedupe first (`gh issue list --state all --search "<words>"`). An issue body has `## What happens`, `## Where`, `## Impact`, `## Possible fix`, `## Record`.
-13. Delete `STATUS.md`. Keep `OWNER-ASKS.md` with its answers (it archives with the plan). `git mv implementations-plan/chain-endpoints implementations-plan/archive/chain-endpoints` in its own commit. Repair the relative links the extra level breaks (`git grep -n 'chain-endpoints'`). Move the index line to `implementations-plan/archive/index.md`. Run `bun run check:plans`.
-14. Report and wait. Merging is the orchestrator's call; the merge of the close-out completes the plan.
+7. Branch (D31): this revision's commit is already on `chain-endpoints-close-out` (local, unpushed); `git switch chain-endpoints-close-out` and run Phase 3 there.
+8. The cross-arc pass step 5 still owes, before the close-out's own loop: a fresh Codex session (the command of step 2) over the three merged arcs, `git show f60125ec 110446a4 2dcdad48` (#276, #506, #509), asking only for seams between them and drift from this plan, with the two rules. They are merged, so a finding with a written path becomes an issue (an Open item) or a disposition line; the close-out PR fixes no code. Resume until a round yields no new material finding; three-round stop.
+9. The close-out loop: a fresh Codex session over `git diff origin/dev...HEAD` once Phase 3's gate passes, asking whether the Outcome, the dispositions and the issue comments match the tree and GitHub, with the two rules; resume until no new material finding; three-round stop. Log both loops in `lessons/phase-3.md` and § Audit verdicts.
+10. Push and open one PR: `gh pr create --base dev --head chain-endpoints-close-out --title "docs(plans): close chain-endpoints"`, unlabelled. Body: what closed and why, A5's runs and outcome, `Closes #101` or `Refs #101` (D28), `Refs #79` (closed by #389; nothing remains), the Open items. Then `gh pr checks --watch`.
+11. Report and wait. Merging is the orchestrator's call; the merge completes the plan.
 
 ### Teardown after the merge
 
-15. Once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/chain-endpoints/plan.md` succeeds, run `agent-worktree done chain-endpoints --merged --trunk dev`, without asking. This session was started inside the worktree, so there is nothing to exit. The helper refuses rather than forces: relay a refusal and stop. A `/loop` session checks this on every firing. A `/goal` session arms one background wait after its wrap-up report: `until git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/chain-endpoints/plan.md; do sleep 300; done`.
+12. Once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/chain-endpoints/plan.md` succeeds, run `agent-worktree done chain-endpoints --merged --trunk dev`, without asking. This session was started inside the worktree, so there is nothing to exit. The helper refuses rather than forces: relay a refusal and stop. A `/loop` session checks this on every firing. A `/goal` session arms one background wait after its wrap-up report: `until git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/chain-endpoints/plan.md; do sleep 300; done`.
 
 ## Seeds
 
-Recommended: `/goal`. Use exactly one per session; they do not compose. Both are drafts until the orchestrator approves the plan. Arcs 2a, 2b and 2c start only when the orchestrator releases them after page 12 and their reservations.
+Recommended: `/goal`. Use exactly one per session; they do not compose. Drafts until the orchestrator approves this revision; the earlier seeds drove arcs 1, 2a and 2c and are retired.
 
 ```
-/goal Every phase of the arcs the orchestrator released is marked ✓ in implementations-plan/chain-endpoints/plan.md, each backed by its validation gate reported passing in the transcript; for each phase the transcript prints LESSONS_FILE=implementations-plan/chain-endpoints/lessons/phase-N.md; /code-review was NOT run (code_review is off); the Codex fix loop (env -u CODEX_ACCOUNT run-codex.sh … high read-only gpt-6.1-sol) converged for each released arc at its boundary, each convergence a resumed Codex pass reporting no new material findings, quoted in the transcript; each released arc's PR exists on GitHub, created only after its loop converged (gh stack view in the transcript); only once every arc (1, 2a, 2b, 2c, or the ones the orchestrator dropped in writing) is delivered: the final cross-arc pass converged and the close-out layer archived the plan (git show --stat of the archive-move commit); bun run test and bun run lint both exit 0 in the transcript.
+/goal Phase 3 of implementations-plan/chain-endpoints/plan.md is marked ✓, its validation gate reported passing in the transcript (bun run check:plans and bun run lint exit 0; git diff --stat origin/dev lists only implementations-plan/**; the four A5 network runs logged with their outcome, or the sample recorded as not done with its reason); the transcript prints LESSONS_FILE=implementations-plan/archive/chain-endpoints/lessons/phase-3.md; /code-review was NOT run (code_review is off); the cross-arc Codex pass and the close-out Codex loop (env -u CODEX_ACCOUNT run-codex.sh … high read-only gpt-6.1-sol) each converged, each convergence a resumed Codex pass reporting no new material finding, quoted in the transcript; the comments on #79 and #101 and any new issue (OA-8's, A5's) exist on GitHub (gh issue view in the transcript); the archive-move commit exists (git show --stat in the transcript); the close-out PR exists against dev, opened only after both loops converged (gh pr view in the transcript); bun run test and bun run lint:actions both exit 0 in the transcript.
 ```
 
 ```
-/loop 15m Drive implementations-plan/chain-endpoints forward. Never idle. Each firing: (1) read plan.md, STATUS.md, OWNER-ASKS.md and lessons/ from the top stack layer; if the plan path is gone, check `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/chain-endpoints/plan.md`: success means merged, so run `agent-worktree done chain-endpoints --merged --trunk dev`, report, clear this loop and stop; failure means delivered, so babysit CI only. (2) Waiting on CI is fine; confirm it progresses. (3) No task in hand: take the next pending step of a released arc; arcs 2a-2c need the signed page 12 and their reservations, and an open OWNER-ASKS item leaves its part as "what ships now" says. Run lint and the touched tests after each edit; commit; gh stack push. (4) A decision you would bring to a person: consult Codex (env -u CODEX_ACCOUNT run-codex.sh … high read-only gpt-6.1-sol) and act on the stronger argument; log it in lessons/. Anything a person would see goes to OWNER-ASKS.md, never decided. Never merge, never push to main, never expand scope. (5) Same step failed five times: stop and reassess with Codex. (6) Phase green per its gate: mark ✓, log lessons, print LESSONS_FILE=…; at an arc boundary run the Codex loop first, then report and wait for the orchestrator to release the next arc. (7) Close out only when every arc is delivered (or dropped in writing by the orchestrator): final cross-arc pass, then the close-out per Post-implementation, then report and stop. Released arcs delivered while others still wait: report and stop.
+/loop 15m Drive the close-out of implementations-plan/chain-endpoints forward. Never idle. Each firing: (1) First `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/chain-endpoints/plan.md`: success means merged, so run `agent-worktree done chain-endpoints --merged --trunk dev`, report, clear this loop and stop. Otherwise work on branch chain-endpoints-close-out and read plan.md § Close-out revision, OWNER-ASKS.md and lessons/ at `implementations-plan/chain-endpoints/`, or at `implementations-plan/archive/chain-endpoints/` once Phase 3 step 6 has moved them: a moved plan means continue § Post-implementation steps 8-11, and only once `gh pr list --head chain-endpoints-close-out` shows the PR, babysit its CI. (2) Waiting on CI or on host load (A5 needs load1 < 150) is fine; confirm it progresses. (3) No task in hand: take the next pending step of Phase 3 or § Post-implementation steps 8-11. (4) A decision you would bring to a person: consult Codex (env -u CODEX_ACCOUNT run-codex.sh … high read-only gpt-6.1-sol) and act on the stronger argument; log it in lessons/phase-3.md. Anything a person would see goes to OWNER-ASKS.md, never decided. No code changes; never merge, never push to main, never expand scope. (5) Same step failed three times: stop and report. (6) Phase 3 green: mark ✓, print LESSONS_FILE=…, run the two Codex loops, open the PR, watch its checks, report and stop.
 ```

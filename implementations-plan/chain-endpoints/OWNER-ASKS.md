@@ -17,6 +17,20 @@ Arc 1 (#171) changes nothing a person sees in a shipped build and has no ask.
 | OA-7 | **B** | arc 2c |
 | P12-01 / P12-11 | P18-01 **A**: "—" and "Prices unavailable" | arc 2c |
 
+**Open at the close-out revision (2026-10-16):** OA-8 only. If it is still unanswered at close-out, it leaves this file as an `owner-decision` issue (plan D30), and what ships stays A.
+
+## Note, no ask: P12-05 (#79), "Unless I'm missing something obvious"
+
+Nothing is missing: the move to the remote list has already shipped. #389 (merged 2026-10-14, a day before page 12's answer was recorded) removed the built-in list, and a build now carries no list token. The defaults arrive with the first signed list from `tokens.nulo.sh`, fetched once the Terms are accepted, normally during onboarding.
+
+| Case | What a person sees today |
+|---|---|
+| Fresh install, before the first list arrives | Home: no token rows, then "NOTHING HERE YET" / "Tap to import your first token." Holdings: "0 tokens" and, with dollar values on, a $0.00 total. The gas card shows Fee Juice as always. |
+| The list arrives | The default tokens appear, without reopening the popup. |
+| An install that stays offline | The same as before the first list; the wallet retries after 5 min, 30 min, 2 h, 6 h, then daily. |
+
+That empty state is the owner's own call of 2026-10-13 ("Nothing extra", with no bundled fallback list). What a build still compiles names no list token: the two signing keys, a floor sequence that stops an old list from bringing back a removed token, the one token contract the wallet has code for, and the four price ids. So four changes still need a release, by design: a token whose contract uses a new contract class (the wallet never downloads code; a new token on the class it already has needs only the list), a new price id, raising the floor after a token is removed, and a new signing key. The store's remote-code text and the Privacy Policy (§ 5.11, § 13) already declare the download. Nothing changes, so there is nothing to sign. Evidence: plan.md § Close-out revision, R-F1 to R-F6.
+
 **A wording the owner may still change:** OA-4's line, "Use http://localhost instead of http://[::1].", shown under the RPC URL field when a person types plain HTTP to `[::1]` (`ERR_RPC_URL_IPV6_LOOPBACK` in `apps/extension/src/wallet/services/network/spec.ts`). A new wording is a one-line change there plus the popup test rows that quote it.
 
 ## OA-1. #200: which characters count as "hidden"

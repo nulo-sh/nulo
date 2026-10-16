@@ -137,11 +137,11 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
 
 ### Arc 3 (branches from dev after #508's PR merges)
 
-**Phase 7. One encoding, one RPC.** Change `authwit-discoverer.ts`, `execution/{service,spec,client}.ts`. Tests (real Token artifact; addresses checked with `isValidAztecAddress`): `computeCallMessageHash` over the content equals the hash over `decodeGrantsForDisplay`'s call; an object, a decimal string and a hex string argument each decode to the value the hash encodes; one refused class each: a non-`call` content, unknown contract, unknown function, an argument that does not encode, a decode that fails. Gate: `F`. Pass: exit 0.
+**Phase 7. One encoding, one RPC.** ✓ Change `authwit-discoverer.ts`, `execution/{service,spec,client}.ts`. Tests (real Token artifact; addresses checked with `isValidAztecAddress`): `computeCallMessageHash` over the content equals the hash over `decodeGrantsForDisplay`'s call; an object, a decimal string and a hex string argument each decode to the value the hash encodes; one refused class each: a non-`call` content, unknown contract, unknown function, an argument that does not encode, a decode that fails. Gate: `F`. Pass: exit 0.
 
-**Phase 8. Window and card.** Change `index.vue`, `OperationCard.vue`, `OperationActionRow.vue`, `CallArguments.vue`, the grant fixtures in `OperationCard.test.ts`, `.authwit.test.ts`, `.long-strings.test.ts` (rewritten wire-shaped), `identifier-sites.expected.json`. Tests: a decoded transfer grant shows spender, From, To (whole) and Amount with the symbol, and enables Confirm (control); a field, a long string and an array print whole; pending holds Confirm with "Reading arguments…"; each undecoded reason shows the card's warning, the error row, a disabled Confirm, and `approve()` refuses; a fee change keeps the refusal. UI impact: P22-01 A as signed (`o-grant-a`) and OA-G1's what ships now. Gate: `bun run audit:vue`; `bun run test:all`. Pass: exit 0; `scripts/complexity-baseline/manifest.json` unchanged.
+**Phase 8. Window and card.** ✓ Change `index.vue`, `OperationCard.vue`, `OperationActionRow.vue`, `CallArguments.vue`, the grant fixtures in `OperationCard.test.ts`, `.authwit.test.ts`, `.long-strings.test.ts` (rewritten wire-shaped), `identifier-sites.expected.json`. Tests: a decoded transfer grant shows spender, From, To (whole) and Amount with the symbol, and enables Confirm (control); a field, a long string and an array print whole; pending holds Confirm with "Reading arguments…"; each undecoded reason shows the card's warning, the error row, a disabled Confirm, and `approve()` refuses; a fee change keeps the refusal. UI impact: P22-01 A as signed (`o-grant-a`) and OA-G1's what ships now. Gate: `bun run audit:vue`; `bun run test:all`. Pass: exit 0; `scripts/complexity-baseline/manifest.json` unchanged.
 
-**Phase 9. Real browsers.** `type-roles-windows.test.ts`: the grant flow waits for `execute-grant-amount` and sweeps the new rows; `authwit-lifecycle.test.ts`: the grant window shows the decoded amount at rest. No scenario added. Run both, then `authwit-consume-smoke`, `snack-placement`, `frozen-account-canary` and `passkey-execution-canary` (they confirm a grant). Gate: all green; `bun run test:ci-gating`; `bun run check:plans`. Pass: exit 0; wall-clock before and after in `lessons/phase-9.md`.
+**Phase 9. Real browsers.** ✓ `type-roles-windows.test.ts`: the grant flow waits for `execute-grant-amount` and sweeps the new rows; `authwit-lifecycle.test.ts`: the grant window shows the decoded amount at rest. No scenario added. Run both, then `authwit-consume-smoke`, `snack-placement`, `frozen-account-canary` and `passkey-execution-canary` (they confirm a grant). Gate: all green; `bun run test:ci-gating`; `bun run check:plans`. Pass: exit 0; wall-clock before and after in `lessons/phase-9.md`.
 
 ## Delivery
 
@@ -186,6 +186,13 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 | D21 | Where the open-Send test sits (implementation) | `send.test.ts`, not `send-amount.test.ts` | the helper takes the decimals as an argument; only the mounted page re-reads its list |
 | D22 | The balance service on `onTokenUpdated` (arc 1 review) | re-send the token's balances with the new metadata and queue them, for a token its map already holds | each balance carries its token's metadata from a map loaded at activation, which precedes the re-read |
 | D23 | Send's transfer kind after an update (arc 1 review) | when the active token's transfer capabilities change, move only a selection it can no longer transfer | the id watcher does not fire for the same token, so a kind the chain does not support stayed selected; re-running the full selection would replace a still-valid choice with the preselected kind |
+| D24 | Arc 3's start (orchestrator) | released while arcs 1 and 2 are open, cut from `dev` at `d461b059` | arc 3's gate was #508's merge (#594); it shares no file with arc 1 and only `index.vue` with arc 2 |
+| D25 | The shared encoder's shape (implementation, arc 3 review) | `encodeAuthwitCall(fn, args)` takes the function each caller resolved by name; a non-`call` content reads as `unavailable` | signing keeps its frozen error text and the display its own reason for a missing function; no existing reason fits a content with no function, and a new one would be new copy |
+| D26 | `full` and the `this account` sender (implementation) | left out: the prop documents that only a call read without caller context sets it | the grant card passes none, so the branch is unreachable under `full`; a full variant there would be an inventory entry no state can seed |
+| D27 | What the grant decode reads (arc 3 review) | the stored operation, by reference and as a draft before any fee choice: `decodeGrantsForDisplay(interactionId, index)` through `materializeStoredDraft`, which holds the guards `materializeStoredOperation` had | the popup's copy passes through the message layer's JSON replacer, which rewrites some values the encoder reads; the completed read refuses a send whose fee is unchosen, which is when the window decodes |
+| D28 | A decode that does not encode back (arc 3 review) | on the grant path, it reads as undecoded (`arguments`) | the decoder reads some types narrower than the encoder writes them; arc 3 changes the grant path only |
+| D29 | A value that cannot print whole (arc 3 review) | the grant reads as undecoded (`arguments`), the existing refusal | the signed picture prints every value whole; a stripped value is not the one signed, and a marker would be new UI |
+| D30 | Which function a grant decodes with (arc 3 review) | the one resolved by name and encoded for, as signing resolves it | an artifact may list another function with the same selector, so a selector lookup can read the signed fields through a different interface |
 
 ## Audit verdicts
 
@@ -233,6 +240,21 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 **Arc 1 review, round 2** (2026-10-16). Codex, resumed over `90137f90`: **reject**, 1 material finding, verified and accepted: the capability watcher re-ran the full selection, so gaining private transfers replaced a valid public choice with the preselected kind. It now moves only a selection the token can no longer transfer (D23); a mounted-page test pins the kept choice and is red against the round-1 watcher.
 
 **Arc 1 review, round 3** (2026-10-16). Codex, resumed over `cd9c8be5`: **approve**, no new findings. The loop converged.
+
+**Arc 3 review, round 1** (2026-10-16). Codex `gpt-6.1-sol` high, read-only, over `d461b059..17dd2c43`: **reject**, 3 material findings. Opus 5.5 general-purpose, alongside: **reject**, 2 material findings (one is Codex's first), a cost note and comment nits. Each was checked against the tree; all were accepted and fixed in `8b49f561`.
+
+| Finding | Decided |
+|---|---|
+| The card decoded the popup's copy of the request, not the request approval executes (both) | D27; a service test pins a stored value the copy rewrites |
+| A decode can read narrower than the fields it came from (an `EthAddress`, a boolean, a string character) (Codex) | D28; a test with an address past 160 bits, red without the check |
+| A value with control or direction characters printed with them stripped (Codex) | D29; `readableGrants` tests |
+| A batch shorter than the operation's grants left the rest unrefused (Opus) | each index without a decode reads as `unavailable`; a window test, red without it |
+| A wide `str<N>` parameter encoded before the argument bound (Opus) | the bound runs first |
+| Comments: the window's init note out of date; three docs named their caller (Opus) | fixed |
+
+**Arc 3 review, round 2** (2026-10-16). Codex, resumed over `cd3f739e`: **reject**, 2 material findings, both verified and accepted, fixed in `8829a309`: the decode read the completed operation, which refuses a send whose fee is not yet chosen, so every such grant read as undecoded (D27; the service test now drives the real interaction service, red against the round-1 read); and the grant decoded through a selector lookup while its round trip checked the function resolved by name (D30; a test with two functions sharing a selector, red without the fix). The pre-fix Chrome run caught neither, as it built from the popup-copy path; it also showed the lifecycle file's read of a wait's handle, which this suite's fixtures resolve to `null` (fixed in `cd3f739e`).
+
+**Arc 3 review, round 3** (2026-10-16). Codex, resumed over `8829a309`: **approve**, no material findings; it re-ran the transaction card's decoder over its inputs and found its results unchanged. The loop converged.
 
 ## Seeds (draft; the orchestrator finalizes after approval)
 

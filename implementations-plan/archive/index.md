@@ -263,6 +263,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [shell-identity-fences](shell-identity-fences/plan.md) — completed — identity-safe popup shell continuations, and two retired pieces removed
 - [simulate-fast-path](simulate-fast-path/plan.md) — completed — a dApp simulateTx serves a public-static prefix directly on the node
 - [single-sim-estimates](single-sim-estimates/plan.md) — completed — fewer simulations per dApp sendTx estimate, after proving identical gas
+- [small-ui-fixes-1](small-ui-fixes-1/plan.md) — completed — Show network name hides the chip's name at its height, one export file-name rule, the JSON window closes on lock, a second duplicate warning
 - [stable-release](stable-release/plan.md) — completed — the stable release cut as a short, repeatable procedure
 - [stale-network-reset](stale-network-reset/plan.md) — completed — an update that leaves a network behind quarantines only that network; layout A offers an in-place reset (Mainnet blocked), resumable after a worker kill
 - [storage-migration-backup](storage-migration-backup/plan.md) — completed — imported backups migrate through the same migrations as live storage

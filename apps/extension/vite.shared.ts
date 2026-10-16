@@ -1,5 +1,6 @@
 import { fileURLToPath, URL } from "node:url"
 import { resolvePackageAsset } from "@nulo/resolve-asset"
+import type { InlineConfig } from "vitest/node"
 import packageJson from "./package.json" with { type: "json" }
 
 /**
@@ -10,6 +11,7 @@ import packageJson from "./package.json" with { type: "json" }
  * aliases). Single-owning them here is the fix.
  */
 import RetryErrorReporter from "./tests/e2e/retry-error-reporter.ts"
+import { FORK_HEAP_MIB, STALL_MS } from "./tests/e2e/run-limits.ts"
 import StallWatchdog, { type StallWatchdogOptions } from "./tests/e2e/stall-watchdog.ts"
 
 /**
@@ -106,3 +108,54 @@ export function e2eReporters(
 		...(options.stall ? [new StallWatchdog(options.stall)] : []),
 	]
 }
+
+/**
+ * The vitest `retry` count from `NULO_E2E_RETRY`, `fallback` when unset or empty. Anything but a
+ * nonnegative decimal safe integer throws, where `Number()` would hand vitest `NaN` or accept a
+ * spelling such as `" 2"` or `"1e1"`.
+ */
+export function e2eRetry(fallback: number): number {
+	const raw = process.env.NULO_E2E_RETRY
+	if (!raw) return fallback
+	const retry = Number(raw)
+	if (!/^\d+$/.test(raw) || !Number.isSafeInteger(retry)) {
+		throw new Error(`NULO_E2E_RETRY=${JSON.stringify(raw)} is not a non-negative integer`)
+	}
+	return retry
+}
+
+/**
+ * One forked worker per e2e file, files in sequence, so an earlier file's orphan processes cannot
+ * break the next file's browser launch (seen after ~17 files as cascading `Connection closed`).
+ * `pool` and `isolate` are vitest 4's defaults, written out so a changed default cannot drop them.
+ */
+export const e2eIsolation = {
+	environment: "node",
+	fileParallelism: false,
+	pool: "forks",
+	isolate: true,
+} satisfies InlineConfig
+
+/**
+ * Runner options shared by every config that runs the network suite (`vitest.e2e.network`,
+ * `vitest.e2e.all`). A function, so each config gets its own stateful reporters and no other
+ * importer of this module builds them.
+ */
+export const networkRunner = () =>
+	({
+		testTimeout: 30_000,
+		// `tokenReadyExtension` (and global-setup's contract deploy) creates an EmbeddedWallet and mints
+		// tokens; 120 s timed out during the deploy on slower machines.
+		hookTimeout: 300_000,
+		execArgv: [`--max-old-space-size=${FORK_HEAP_MIB}`],
+		reporters: e2eReporters({ stall: { stallMs: STALL_MS } }),
+		// Node 24 enforces JSON import attributes, and `@aztec-labs/accounts`' lazy loaders import their
+		// .json artifacts without `with: { type: "json" }`, so plain Node refuses them in global-setup
+		// (`ERR_IMPORT_ATTRIBUTE_MISSING`). Inlining the `@aztec` packages routes them through vitest's
+		// own transformer, which does not enforce the attribute.
+		server: {
+			deps: {
+				inline: [/@aztec(-labs|-foundation)?\//],
+			},
+		},
+	}) satisfies InlineConfig

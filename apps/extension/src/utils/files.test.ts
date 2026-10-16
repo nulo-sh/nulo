@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { FilePickCanceledError, FileTooLargeError, compressData, downloadFile, pickFile } from "./files"
+import { FilePickCanceledError, FileTooLargeError, compressData, downloadFile, pickFile, profileFileNameSegment } from "./files"
 
 /** Drives pickFile's hidden input: grabs it post-append, plants the file, fires onchange. */
 async function pickWith(file: File, maxBytes?: number): Promise<File> {
@@ -103,5 +103,25 @@ describe("downloadFile — never prompts for the downloads permission", () => {
 		})
 		await expect(downloadFile({ data: "x", filename: "f.txt" })).rejects.toThrow("download disk full")
 		expect(requestSpy).not.toHaveBeenCalled()
+	})
+})
+
+describe("profileFileNameSegment", () => {
+	test.each([
+		["a character a file system refuses", 'a:b?c|d"e*f<g>h\\i', "a_b_c_d_e_f_g_h_i"],
+		["a path separator", "work/main", "work_main"],
+		["a parent segment", "../main", "_main"],
+		["a name of symbols only", "?!*", "_"],
+		["a space", "My Main Wallet", "My_Main_Wallet"],
+	])("maps %s to _", (_class, name, segment) => {
+		expect(profileFileNameSegment(name)).toBe(segment)
+	})
+
+	test.each([[""], [undefined]])("names an empty name (%j) profile", (name) => {
+		expect(profileFileNameSegment(name)).toBe("profile")
+	})
+
+	test("keeps letters of any script, digits, _ and -", () => {
+		expect(profileFileNameSegment("José_Ελένη-李7")).toBe("José_Ελένη-李7")
 	})
 })

@@ -34,6 +34,7 @@ const isAnimationsDisabled = ref(defaultConfig.disableAnimations)
 const isIncomingTransfersVisible = ref(defaultConfig.incomingTransfersVisible)
 // D8 dust filter — a NUMBER, not a toggle, so it lives outside the `settings` toggle map.
 const dustThreshold = ref(String(defaultConfig.incomingDustUsdThreshold))
+const TOGGLE_TESTIDS = { disableAnimations: "animations-toggle", showNode: "show-network-name-toggle" }
 const settings = {
 	theme: {
 		title: "",
@@ -227,7 +228,7 @@ onBeforeUnmount(() => {
 				<Toggle
 					@update:modelValue="updateSetting(sk, $event)"
 					:modelValue="settings[sk].model.value"
-					:data-testid="(sk === 'disableAnimations' && 'animations-toggle') || null"
+					:data-testid="TOGGLE_TESTIDS[sk] || null"
 				/>
 			</Flex>
 

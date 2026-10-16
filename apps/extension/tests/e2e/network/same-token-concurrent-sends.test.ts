@@ -11,8 +11,9 @@
  * a person on a real network sends into. Every case starts from an empty mempool, so it never pairs
  * with a tx an earlier case left behind, and asserts the journal, the estimate and the balance rows
  * against a ledger of the file's own settled sends. The service worker does the waiting; the Send
- * page shows the fee row queued with Send disabled, and a confirmed send that waits shows its card
- * at the journal's `queued` stage.
+ * page shows the fee row queued with Send disabled unless the row offers to queue (a fee cap, or
+ * Nulo's sponsor paying), and a confirmed send that waits shows its card at the journal's `queued`
+ * stage.
  *
  * @requires-proverless — formal marker scanned by scripts/e2e/agent.sh; the proof and projection
  * gates exist only in a proverless-armed build.
@@ -174,8 +175,8 @@ const HELD_MS = 15_000
 
 /**
  * The ordering contract for sends that share chain state: while A is held unmined, B's fee row reads
- * queued and Send stays disabled (never the failure toast, never a fee). Lifting the hold mines A;
- * B's estimate then lands, B confirms, and both succeed.
+ * queued (never the failure toast, never a fee), with Send enabled only where the row offers to
+ * queue. Lifting the hold mines A; B's estimate then lands, B confirms, and both succeed.
  */
 async function expectQueued(burst: Burst, a: BurstSend, b: BurstSend, afterA?: (burst: Burst) => Promise<void>): Promise<void> {
 	const aHash = await fireIntoHeldWindow(burst, a)
@@ -230,13 +231,25 @@ test.skipIf(!hasConfig)(
 	},
 )
 
-test.skipIf(!hasConfig)("two private sends of the same token: the second waits", { timeout: 600_000, retry: 0 }, async ({ burst }) => {
-	await expectQueued(
-		burst,
-		{ token: "TST", from: "private", to: "private", amount: "18", destination: to(), fee: "sponsored" },
-		{ token: "TST", from: "private", to: "private", amount: "19", destination: to(), fee: "sponsored" },
-	)
-})
+test.skipIf(!hasConfig)(
+	"two private sends of the same token on Nulo's sponsor: the second is queued while the first is held, then both succeed",
+	{ timeout: 600_000, retry: 0 },
+	async ({ burst }) => {
+		const a: BurstSend = { token: "TST", from: "private", to: "private", amount: "18", destination: to(), fee: "sponsored" }
+		const b: BurstSend = { token: "TST", from: "private", to: "private", amount: "19", destination: to(), fee: "sponsored" }
+		const aHash = await fireIntoHeldWindow(burst, a)
+		const { page } = burst
+		await startSend(page, b)
+		await expectEstimateQueued(page, 3_000)
+		expect(await page.$eval('[data-testid="send-submit"]', (el) => el.textContent?.trim())).toBe("Queue send")
+		await shotSend(page, "send-queued-sponsored", "fee-settings-card")
+		await confirmSend(page)
+		await expectStageHeld(page, raw(b.amount), "queued", HELD_MS)
+		expect((await readTxStatuses(page, [aHash]))[aHash], "A is still unmined while B waits").toBe(0)
+		await releaseMining()
+		await expectBothSucceed(burst, a, b)
+	},
+)
 
 test.skipIf(!hasConfig)(
 	"two public sends paid with private fee juice: the second waits",

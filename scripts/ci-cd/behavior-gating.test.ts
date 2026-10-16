@@ -104,6 +104,9 @@ const E2E_LANES = {
 	"pr-extension-network-e2e-firefox.yml": ["e2e:extension-network", "e2e:network"],
 }
 
+/** The gate scripts every e2e lane runs; an edit to one runs the lanes, as an edit to the lane's own YAML does. */
+const GATE_SCRIPTS = ["scripts/ci-cd/e2e-decide.sh", "scripts/ci-cd/e2e-aggregate.sh"]
+
 describe("CI aggregator check names", () => {
 	test("each PR workflow's status job produces its documented check-run name", () => {
 		for (const [file, name] of Object.entries(AGGREGATOR_CHECKS)) {
@@ -305,7 +308,7 @@ describe("live labels", () => {
 
 	test("every lane reads its own two labels live and decides from that output alone", () => {
 		for (const [file, labels] of Object.entries(E2E_LANES)) {
-			const { changes, decide } = workflow(file).jobs
+			const { changes } = workflow(file).jobs
 			const live = changes.steps.find((step: { id?: string }) => step.id === "live")
 			expect(live?.run, file).toBe(`${SCRIPT} ${labels.join(" ")}`)
 			expect(live?.if, `${file}: runs on every event`).toBeUndefined()
@@ -317,11 +320,26 @@ describe("live labels", () => {
 				PR: "${{ github.event.pull_request.number }}",
 				HEAD_SHA: "${{ github.event.pull_request.head.sha }}",
 			})
-			for (const output of ["label-hit", "base", "read-attempt"]) {
-				expect(changes.outputs[output], `${file}: ${output} has no fallback`).toBe(`\${{ steps.live.outputs.${output} }}`)
-			}
-			expect(decide.steps[0].env.LABEL_HIT, file).toBe("${{ needs.changes.outputs.label-hit }}")
-			expect(decide.steps[0].env.BASE, file).toBe("${{ needs.changes.outputs.base }}")
+			expect(changes.outputs, `${file}: the gate's verdict and the attempt it read in, with no fallback`).toEqual({
+				run: "${{ steps.gate.outputs.run }}",
+				"read-attempt": "${{ steps.live.outputs.read-attempt }}",
+			})
+			// The gate is the last step, so it reads the live labels, the filter and the dispatch override.
+			const [surface, ...others] = Object.keys(filtersOf(file))
+			expect(others, `${file}: one paths filter`).toEqual([])
+			const gate = changes.steps.at(-1)
+			expect(gate, `${file}: the gate step`).toEqual({
+				name: "Decide",
+				id: "gate",
+				env: {
+					EVENT: "${{ github.event_name }}",
+					BASE: "${{ steps.live.outputs.base }}",
+					LABEL_HIT: "${{ steps.live.outputs.label-hit }}",
+					SURFACE: `\${{ steps.override.outputs.full || steps.filter.outputs.${surface} }}`,
+				},
+				run: "bash scripts/ci-cd/e2e-decide.sh",
+			})
+			expect(workflow(file).jobs.decide, `${file}: no separate decide job`).toBeUndefined()
 		}
 	})
 
@@ -523,6 +541,13 @@ describe("CI behavior-gating guard", () => {
 		expect(JSON.stringify(wf.jobs.status.steps)).toContain("needs.build-landing.result")
 	})
 
+	test("each e2e lane's filter covers the gate scripts it runs", () => {
+		for (const file of Object.keys(E2E_LANES)) {
+			const [patterns] = Object.values(filtersOf(file))
+			for (const script of GATE_SCRIPTS) expect(patterns, `${file} → ${script}`).toContain(script)
+		}
+	})
+
 	test("cross-cutting inputs (patches + root build inputs) gate the e2e suites", () => {
 		for (const [label, pats] of [
 			["smoke", smoke],
@@ -561,6 +586,18 @@ describe("CI behavior-gating guard", () => {
 		expect(String(pool?.[1].with?.retry), "the shard pool runs at retry 0").toBe("0")
 		expect(existsSync(join(ROOT, "apps/extension/tests/e2e/network/sim-from-selfpay.test.ts")), "sim-from-selfpay exists").toBe(true)
 		expect(existsSync(join(ROOT, "apps/extension/tests/e2e/network/selfpay-phase.test.ts")), "selfpay-phase exists").toBe(true)
+	})
+
+	test("both reusable suites take their retry count from one input, empty by default, as NULO_E2E_RETRY", () => {
+		// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+		const reusable = (file: string): any => Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8"))
+		const smoke = reusable("_extension-smoke-e2e.yml")
+		const network = reusable("_extension-network-e2e.yml")
+		for (const wf of [smoke, network]) expect(wf.on.workflow_call.inputs.retry).toMatchObject({ type: "string", default: "" })
+		// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+		const run = smoke.jobs.smoke.steps.find((step: any) => step.name === "Run smoke e2e")
+		expect(run.env.NULO_E2E_RETRY).toBe("${{ inputs.retry }}")
+		expect(network.jobs["network-e2e"].env.NULO_E2E_RETRY).toBe("${{ inputs.retry }}")
 	})
 })
 
@@ -612,9 +649,7 @@ describe("Firefox lanes", () => {
 
 	// A lane's aggregator passes when its gate skips the suites, so a twin whose gate skips where its
 	// Chrome lane runs passes a head its Firefox suites never ran on.
-	test("the Firefox PR lanes hold no write scope, and trigger and decide exactly like their Chrome twins", () => {
-		type Decide = { steps: { run?: string }[] }
-		const runnable = (job: Decide) => ({ ...job, steps: job.steps.map((step) => ({ ...step, run: commandLines(step.run) })) })
+	test("the Firefox PR lanes hold no write scope, and trigger, decide and aggregate exactly like their Chrome twins", () => {
 		for (const { chrome, firefox } of TWINS) {
 			const [chromeWf, wf] = [workflow(chrome), workflow(firefox)]
 			expect(wf.permissions, firefox).toEqual({ contents: "read" })
@@ -623,7 +658,10 @@ describe("Firefox lanes", () => {
 				expect(job.permissions, `${firefox} → ${name}`).toEqual(want)
 			}
 			expect(wf.on, `${firefox} triggers`).toEqual(chromeWf.on)
-			expect(runnable(wf.jobs.decide), `${firefox} → decide`).toEqual(runnable(chromeWf.jobs.decide))
+			expect(wf.jobs.changes.steps.at(-1), `${firefox} → the gate step`).toEqual(chromeWf.jobs.changes.steps.at(-1))
+			const { name: _, ...status } = wf.jobs.status
+			const { name: __, ...chromeStatus } = chromeWf.jobs.status
+			expect(status, `${firefox} → status`).toEqual(chromeStatus)
 		}
 	})
 
@@ -642,14 +680,18 @@ describe("Firefox lanes", () => {
 			const reads = evaluated(workflow(file)).filter((text) => /draft/i.test(text))
 			expect(reads, file).toEqual([])
 		}
+		// A script reaches the flag through the event payload, which the YAML scan above never sees.
+		for (const script of GATE_SCRIPTS) {
+			const reads = commandLines(readFileSync(join(ROOT, script), "utf8")).filter((line) => /draft|GITHUB_EVENT_PATH/i.test(line))
+			expect(reads, script).toEqual([])
+		}
 	})
 
 	// Exact, not a /firefox/ denylist: quality-status legitimately needs `build-firefox`.
 	test("the required extension aggregators wait on exactly the Chrome suites", () => {
-		expect(workflow("pr-extension-smoke-e2e.yml").jobs.status.needs).toEqual(["changes", "decide", "smoke"])
+		expect(workflow("pr-extension-smoke-e2e.yml").jobs.status.needs).toEqual(["changes", "smoke"])
 		expect(workflow("pr-extension-network-e2e.yml").jobs.status.needs).toEqual([
 			"changes",
-			"decide",
 			"network-e2e",
 			"network-e2e-heavy",
 			"network-e2e-heavy-concurrent",
@@ -996,26 +1038,15 @@ describe("canary lanes", () => {
 		}
 	})
 
-	/** The jobs an aggregator's script actually tests: the operands of its `for r in …; do` lists and of
-	 *  its direct `[ "${{ needs.x.result }}" …` checks — an echo or a comment naming a result does not count. */
-	function resultsTested(run: unknown): string[] {
-		const commands = commandLines(run).join("\n")
-		const inLoops = [...commands.matchAll(/for r in([\s\S]*?);\s*do/g)].flatMap((loop) =>
-			[...loop[1].matchAll(/needs\.([\w-]+)\.result/g)].map((token) => token[1]),
-		)
-		const direct = [...commands.matchAll(/\[ "\$\{\{ needs\.([\w-]+)\.result \}\}" /g)].map((token) => token[1])
-		return [...new Set([...inLoops, ...direct])].sort()
-	}
-
-	// A job in `needs` that the loop never tests can be red under a green aggregator.
-	test("every job an aggregator waits on is tested in its result loop, and nothing else is", () => {
-		for (const [file, aggregator] of [
-			["pr-extension-network-e2e.yml", "status"],
-			["pr-extension-network-e2e-firefox.yml", "status"],
-		] as const) {
-			const job = workflow(file).jobs[aggregator]
-			const script = (job.steps as { run?: string }[]).map((step) => step.run ?? "").join("\n")
-			expect(resultsTested(script), `${file} → ${aggregator} tests exactly its needs`).toEqual([...[job.needs ?? []].flat()].sort())
+	// A job in `needs` that the aggregator never reads can be red under a green check, so each lane
+	// hands the shared script every need at once: the suite list lives in `needs` alone.
+	test("every e2e aggregator reads all its needs through toJSON(needs), and runs the shared script", () => {
+		for (const file of Object.keys(E2E_LANES)) {
+			const steps = workflow(file).jobs.status.steps as { name?: string; run?: string; env?: Record<string, string> }[]
+			const runs = steps.filter((step) => step.run !== undefined)
+			expect(runs, file).toEqual([
+				{ name: "Aggregate results", env: { NEEDS: "${{ toJSON(needs) }}" }, run: "bash scripts/ci-cd/e2e-aggregate.sh" },
+			])
 		}
 	})
 

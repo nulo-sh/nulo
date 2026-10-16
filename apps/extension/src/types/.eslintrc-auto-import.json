@@ -492,6 +492,7 @@
     "planRestoreAgain": true,
     "postAuthRoute": true,
     "preflightNetworkConnectivity": true,
+    "profileFileNameSegment": true,
     "profileTypeLabel": true,
     "profileUiKeys": true,
     "projectArgument": true,

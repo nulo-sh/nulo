@@ -26,6 +26,7 @@ import { isSelfPay } from "@nulo/wallet-bridge"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import type {
 	DecodedCall,
+	DecodedGrant,
 	DiscoveredAuthwit,
 	FeeSettings,
 	OperationAuthwitPreview,
@@ -55,6 +56,7 @@ import {
 import { trimAddress } from "@/utils/string"
 import { humanizeMethodName } from "@/utils/tx-enrichment"
 import { isEmbeddedFeePayment } from "./operation-validation"
+import { grantContentsOf } from "./display-calls"
 
 // `DraftUIOperation` is the shared honest type. Send-like `feeSettings` is optional during user
 // editing — the card v-models it via the FeeSettingsCard emit, the parent's `requiresFeeSelection`
@@ -84,6 +86,9 @@ const props = defineProps<{
 	decodedCalls?: readonly DecodedCall[]
 	/** Display-only decodings of the discovered authorizations, by message hash. */
 	decodedAuthwits?: ReadonlyMap<string, DecodedCall>
+	/** Decodings of a `send_transaction`'s public grants, index-aligned with them; `undefined` while
+	 *  the wallet is still decoding. */
+	decodedGrants?: readonly DecodedGrant[]
 	/** The wallet's registered tokens, so an amount can carry its symbol and decimals. */
 	tokens?: readonly TokenInfo[]
 	/**
@@ -130,6 +135,19 @@ const sendTxRows = computed(() => (props.op.kind === "aztec_sendTx" ? sendTxCall
 
 /** Only a contract the wallet registered as a token gets the transfer/mint vocabulary. */
 const isToken = (contract: unknown): boolean => tokenAt(props.tokens, props.op.network?.chainId, contract) !== undefined
+
+/** A grant reads from the call its signature hashes, or, undecoded, as the raw arguments it carries.
+ *  No caller context: the spender makes the future call, so a transfer names only an explicit `from`. */
+const grantRows = computed(() =>
+	grantContentsOf(props.op).map((content, k) => {
+		const grant = props.decodedGrants ? (props.decodedGrants[k] ?? { kind: "undecoded", reason: "unavailable" }) : undefined
+		if (grant?.kind === "decoded") {
+			return { contract: grant.call.to, surface: callSurface(undefined, grant.call, grant.decoded, isToken(grant.call.to)) }
+		}
+		const raw = content.kind === "call" ? { to: content.contract, args: content.args } : {}
+		return { contract: raw.to, surface: callSurface(undefined, raw, grant, false, Number.POSITIVE_INFINITY) }
+	}),
+)
 
 /** What an `aztec_createAuthWit` asks the wallet to sign: a call it can show, or a hash it cannot. */
 type CreateAuthwitSurface =
@@ -222,12 +240,25 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 				</Text>
 			</Flex>
 			<!-- send_transaction has actions[]; aztec_sendTx has exec.calls[] -->
-			<Flex v-if="op.kind === 'send_transaction'" :class="$style.prop">
-				<Text variant="label" color="secondary">Payload:</Text>
-				<Flex direction="column" gap="4" :class="$style.payload">
-					<OperationActionRow v-for="(action, j) in op.actions" :key="`${index}:${j}`" :action="action" />
+			<template v-if="op.kind === 'send_transaction'">
+				<Flex :class="$style.prop">
+					<Text variant="label" color="secondary">Payload:</Text>
+					<Flex direction="column" gap="4" :class="$style.payload">
+						<OperationActionRow v-for="(action, j) in op.actions" :key="`${index}:${j}`" :action="action" hide-args />
+					</Flex>
 				</Flex>
-			</Flex>
+				<Flex
+					v-for="(grant, k) in grantRows"
+					:key="`${index}:grant:${k}`"
+					data-testid="execute-grant-args"
+					direction="column"
+					gap="4"
+					:class="$style.group"
+				>
+					<Text variant="label" color="secondary">Arguments</Text>
+					<CallArguments :surface="grant.surface" :contract="grant.contract" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-grant" json-view full />
+				</Flex>
+			</template>
 			<template v-else-if="op.kind === 'aztec_sendTx'">
 				<SendTxSummary
 					:calls="sendTxRows"
@@ -313,16 +344,29 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 		<div :class="$style.op_divider" />
 
 		<template v-if="isEmbeddedFeePayment(op)">
-			<Flex data-testid="execute-op-fee-set-badge" align="center" gap="8" wide :class="$style.op_fee_set">
+			<Flex
+				data-testid="execute-op-fee-set-badge"
+				align="start"
+				gap="8"
+				wide
+				:aria-busy="isEstimating && !feeEstimate ? 'true' : undefined"
+				:class="$style.op_fee_set"
+			>
 				<Icon name="check-circle" size="14" color="green" />
-				<Text v-if="feeEstimate" variant="body" color="secondary" data-testid="execute-op-app-fee">
-					Fee up to
-					<Text variant="name" color="primary" :class="$style.name_size">{{ feeEstimate.maxFeeFormatted }} FJ</Text><template v-if="feeEstimate.priorityFeeFormatted">, includes a {{ feeEstimate.priorityFeeFormatted }} FJ <DottedTerm term="priority-fee" testid="execute-op-priority-term">priority fee</DottedTerm> the app asked for</template>
-				</Text>
-				<Text v-else variant="body" color="secondary">
-					Fee payment method set by
-					<Text variant="name" color="primary" :class="$style.name_size">{{ safeWire(dapp?.name, 64) || 'the app' }}</Text>
-				</Text>
+				<Flex direction="column" gap="6" :class="$style.fee_lines">
+					<Text variant="body" color="secondary" data-testid="execute-op-app-legend">
+						Fee payment method set by
+						<Text variant="name" color="primary" :class="$style.name_size">{{ safeWire(dapp?.name, 64) || 'the app' }}</Text>
+					</Text>
+					<Text v-if="feeEstimate" variant="body" color="secondary" data-testid="execute-op-app-fee">
+						Fee up to
+						<Text variant="name" color="primary" :class="$style.name_size">{{ feeEstimate.maxFeeFormatted }} FJ</Text><template v-if="feeEstimate.priorityFeeFormatted">, includes a {{ feeEstimate.priorityFeeFormatted }} FJ <DottedTerm term="priority-fee" testid="execute-op-priority-term">priority fee</DottedTerm> the app asked for</template>
+					</Text>
+					<Flex v-else-if="isEstimating" align="center" gap="4" data-testid="execute-op-app-fee-estimating">
+						<Text variant="body" color="secondary">Fee up to</Text>
+						<Skeleton />
+					</Flex>
+				</Flex>
 			</Flex>
 			<!-- Mounted with the row: a region created with its text in place may go unannounced. -->
 			<div role="status" aria-live="polite" aria-atomic="true" data-testid="execute-op-app-payer-live">
@@ -589,6 +633,12 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 .op_fee_set {
 	padding: 12px;
 	background: var(--nulo-surface-low);
+}
+
+/* The 1 px sets the first line's text on the icon's centre. */
+.fee_lines {
+	min-width: 0;
+	padding-top: 1px;
 }
 
 /* A label on its own line above a full-width stack, so nothing hangs off the right-aligned value column. */

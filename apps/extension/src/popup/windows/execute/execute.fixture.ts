@@ -4,7 +4,8 @@
  * account holds), a call the wallet has no interface for, a USDC authorization the wallet reads, and
  * an app authorization on a Vault. USDC's call and authorization decode through the real decoder and
  * Token artifact; the Hub's and the Vault's are the records the decoder returns for an interface the
- * app registered. A test fixture: nothing in the wallet imports it.
+ * app registered. Also a public grant on USDC as `grantPublicAuthwit` sends it, decoded the same way.
+ * A test fixture: nothing in the wallet imports it.
  */
 
 // @ts-expect-error — raw JSON import via vite alias
@@ -13,8 +14,8 @@ import { FunctionSelector, loadContractArtifact } from "@aztec-labs/stdlib/abi"
 import { vi } from "vitest"
 import { trimAddress } from "@/utils/string"
 import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
-import { decodeCallForDisplay } from "@/wallet/services/execution/call-decoder"
-import type { DecodedCall, DiscoveredAuthwit } from "@/wallet/services/execution/client"
+import { decodeCallForDisplay, decodeGrantForDisplay } from "@/wallet/services/execution/call-decoder"
+import type { CallAuthwitContent, DecodedCall, DecodedGrant, DiscoveredAuthwit } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { authwitDisplayCall, displayCallsOf } from "./display-calls"
 import type { DraftUIOperation } from "./types"
@@ -143,6 +144,19 @@ export const decodeFixture = async ({ vaultDecoded = true } = {}) => {
 		]),
 	}
 }
+
+/** A `grantPublicAuthwit` content as the playground sends it: the owner and spender as hex, the
+ *  amount and nonce as decimal strings. */
+export const GRANT: CallAuthwitContent = {
+	kind: "call",
+	caller: HUB,
+	contract: USDC,
+	method: "transfer_public_to_public",
+	args: [MAIN, RECIPIENT, "25000000", "0"],
+}
+
+/** The grant's decode as the worker returns it; call `stubTokenSelectors` first under jsdom. */
+export const decodeGrantFixture = (content: CallAuthwitContent = GRANT): Promise<DecodedGrant> => decodeGrantForDisplay(lookup, content)
 
 /** A fact the window shows today: text in its row, or a row element's `title`. A row is every element
  *  carrying its `data-call-index` (a call) or `data-message-hash` (an authorization). */

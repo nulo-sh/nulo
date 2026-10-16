@@ -34,6 +34,7 @@ export type {
 	DiscoveredAuthwit,
 	OperationAuthwitPreview,
 	DecodedCall,
+	DecodedGrant,
 	DecodedParam,
 	DecodedValue,
 	DisplayCallInput,
