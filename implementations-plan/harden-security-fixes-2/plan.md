@@ -189,9 +189,10 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 | D24 | Arc 3's start (orchestrator) | released while arcs 1 and 2 are open, cut from `dev` at `d461b059` | arc 3's gate was #508's merge (#594); it shares no file with arc 1 and only `index.vue` with arc 2 |
 | D25 | The shared encoder's shape (implementation, arc 3 review) | `encodeAuthwitCall(fn, args)` takes the function each caller resolved by name; a non-`call` content reads as `unavailable` | signing keeps its frozen error text and the display its own reason for a missing function; no existing reason fits a content with no function, and a new one would be new copy |
 | D26 | `full` and the `this account` sender (implementation) | left out: the prop documents that only a call read without caller context sets it | the grant card passes none, so the branch is unreachable under `full`; a full variant there would be an inventory entry no state can seed |
-| D27 | What the grant decode reads (arc 3 review) | the stored operation, by reference: `decodeGrantsForDisplay(interactionId, index)`, as `estimateOperationFee` reads it | the popup's copy passes through the message layer's JSON replacer, which rewrites some values the encoder reads |
+| D27 | What the grant decode reads (arc 3 review) | the stored operation, by reference and as a draft before any fee choice: `decodeGrantsForDisplay(interactionId, index)` through `materializeStoredDraft`, which holds the guards `materializeStoredOperation` had | the popup's copy passes through the message layer's JSON replacer, which rewrites some values the encoder reads; the completed read refuses a send whose fee is unchosen, which is when the window decodes |
 | D28 | A decode that does not encode back (arc 3 review) | on the grant path, it reads as undecoded (`arguments`) | the decoder reads some types narrower than the encoder writes them; arc 3 changes the grant path only |
 | D29 | A value that cannot print whole (arc 3 review) | the grant reads as undecoded (`arguments`), the existing refusal | the signed picture prints every value whole; a stripped value is not the one signed, and a marker would be new UI |
+| D30 | Which function a grant decodes with (arc 3 review) | the one resolved by name and encoded for, as signing resolves it | an artifact may list another function with the same selector, so a selector lookup can read the signed fields through a different interface |
 
 ## Audit verdicts
 
@@ -250,6 +251,8 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 | A batch shorter than the operation's grants left the rest unrefused (Opus) | each index without a decode reads as `unavailable`; a window test, red without it |
 | A wide `str<N>` parameter encoded before the argument bound (Opus) | the bound runs first |
 | Comments: the window's init note out of date; three docs named their caller (Opus) | fixed |
+
+**Arc 3 review, round 2** (2026-10-16). Codex, resumed over `cd3f739e`: **reject**, 2 material findings, both verified and accepted, fixed in `8829a309`: the decode read the completed operation, which refuses a send whose fee is not yet chosen, so every such grant read as undecoded (D27; the service test now drives the real interaction service, red against the round-1 read); and the grant decoded through a selector lookup while its round trip checked the function resolved by name (D30; a test with two functions sharing a selector, red without the fix). The pre-fix Chrome run caught neither, as it built from the popup-copy path; it also showed the lifecycle file's read of a wait's handle, which this suite's fixtures resolve to `null` (fixed in `cd3f739e`).
 
 ## Seeds (draft; the orchestrator finalizes after approval)
 
