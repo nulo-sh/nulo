@@ -3,6 +3,7 @@ import { expect, inject } from "vitest"
 import { type AztecTestConfig, deployDelegatedPullRig, ensureStandardPublicChecks } from "../fixtures/aztec"
 import { clickByTestId, type ExtensionContext, grantCapBundle, test } from "../fixtures/extension"
 import { requestPgBundle, setPgInput, setPgTextarea, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { shotSend } from "../fixtures/send-page"
 import {
 	openExecuteDetails,
 	rejectCapabilities,
@@ -289,8 +290,10 @@ test.skipIf(!hasConfig)(
 			expect(assertedIn(rest)).toEqual(
 				expect.arrayContaining([sel("execute-discovered-line-caller"), sel("execute-discovered-line-consumer")]),
 			)
+			await shotSend(win, "authwit-summary", "execute-op-summary-authwits-section")
 			await openExecuteDetails(win)
 			await win.waitForSelector(sel("execute-discovered-authwit-details"), { visible: true, timeout: 10_000 })
+			await shotSend(win, "authwit-details", "execute-op-discovered-authwits")
 			const [rows, open] = await sweepWindow(win, "windows-execute", [
 				"a send with a discovered authwit, all details open (network)",
 				"a discovered authwit with its details open (network)",

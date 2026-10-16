@@ -18,7 +18,7 @@ const MINT_LABELS: Record<string, string> = {
 	mint_to_private: "Mint (private)",
 }
 
-/** Labels for the names that move no token; transfer labels come from the descriptor-derived vocabulary. */
+/** The other curated labels; transfer labels come from the descriptor-derived vocabulary. */
 const METHOD_LABELS: Record<string, string> = {
 	shield: "Shield",
 	unshield: "Unshield",

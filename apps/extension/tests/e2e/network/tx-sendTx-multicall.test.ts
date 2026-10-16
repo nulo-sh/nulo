@@ -5,6 +5,7 @@ import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures
 import { readSendRecords, waitForSendRecord } from "../fixtures/journal"
 import { mintPublicTokensForAccount, waitForTxMined, type AztecTestConfig } from "../fixtures/aztec"
 import { readPublicTokenBalance } from "../fixtures/selfpay-phase"
+import { shotSend } from "../fixtures/send-page"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -64,6 +65,7 @@ for (const c of cases) {
 			}))
 			expect(atRest.calls).toBeGreaterThanOrEqual(c.calls)
 			expect(atRest.rows).toBe(0)
+			await shotSend(execPopup, `multicall-${c.calls}-summary`, "execute-op-summary")
 
 			await approveExecute(execPopup)
 

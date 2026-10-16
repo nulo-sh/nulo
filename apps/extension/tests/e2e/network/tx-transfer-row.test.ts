@@ -6,6 +6,7 @@ import { importTokenAndWaitForBalance } from "../fixtures/helpers"
 import { setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { openExecuteDetails, rejectExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { shotSend } from "../fixtures/send-page"
+import { expectSitesClean, observeIdentifierSites } from "../fixtures/type-roles"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -35,8 +36,21 @@ async function expectTransferLine(page: Page, recipient: string): Promise<void> 
 	await page.waitForSelector(line, { visible: true, timeout: 60_000 })
 	const name = await page.$eval(sel("execute-op-from-account"), (el) => el.getAttribute("data-account-name"))
 	expect(await senderKind(page, "execute-op-call-line")).toBe("explicit")
-	expect(await textOf(page, line)).toBe(`5 TST from ${name} to ${trimmed(recipient)}`)
+	// Each address fills its text after a contact lookup, once the line already shows.
+	const expected = `5 TST from ${name} to ${trimmed(recipient)}`
+	await page
+		.waitForFunction(
+			(selector: string, text: string) => document.querySelector(selector)?.textContent?.replace(/\s+/g, " ").trim() === text,
+			{ timeout: 10_000 },
+			line,
+			expected,
+		)
+		.catch(() => undefined)
+	expect(await textOf(page, line)).toBe(expected)
 	expect(await page.$(sel("execute-op-details"))).toBeNull()
+	for (const state of ["a transfer the wallet reads, from a named sender (network)", "a transfer the wallet reads (network)"]) {
+		expectSitesClean(await observeIdentifierSites(page, "windows-execute", state))
+	}
 }
 
 /** The card reads an amount in a token's units only for a token the wallet holds. */
@@ -72,6 +86,7 @@ test.skipIf(!hasConfig)(
 		// The decode and the token list land after the window opens; the line turns once both have.
 		await expectTransferLine(send, minterAddress)
 		expect(await textOf(send, sel("execute-op-summary-call-head"))).toMatch(/^Transfer \(public\) on /)
+		await shotSend(send, "transfer-line-send", "execute-op-summary")
 		await openExecuteDetails(send)
 		const row = `${sel("execute-op-payload-row")}[data-intent-kind="transfer"]`
 		await send.waitForSelector(row, { visible: true, timeout: 60_000 })

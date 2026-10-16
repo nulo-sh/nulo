@@ -182,7 +182,6 @@ const summaryAuthwits = computed(() =>
 	authwits.value.kind === "list" ? authwits.value.authwits.map((authwit) => ({ authwit, surface: authwitArgs(authwit) })) : undefined,
 )
 
-/** Whether the summary's rows are open; the summary is the review, the rows its evidence. */
 const detailsOpen = ref(false)
 
 /** Which discovered authorizations the person closed: once the rows are open, an authorization's
@@ -270,6 +269,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 						:class="$style.group"
 					>
 						<Text variant="label" color="secondary">Authorizations the wallet will sign (found during estimation)</Text>
+						<!-- The hash in the key remounts a re-estimated row: AddressDisplay reads its address once, at mount. -->
 						<Flex
 							v-for="(a, k) in authwits.authwits"
 							:key="`${k}:${a.messageHash}`"

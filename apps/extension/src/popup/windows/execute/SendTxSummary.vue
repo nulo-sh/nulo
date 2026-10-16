@@ -1,10 +1,5 @@
 <script setup lang="ts">
-/**
- * What a transaction does, before its value rows: each call in order with the wallet's own reading
- * of it, and each authorization the wallet will sign. Only the wallet's reading of a transfer or mint
- * states an amount and a recipient; every other call is marked as named by the app, and an unreadable
- * call keeps its warning here, at rest.
- */
+/** Only the wallet's own reading of a transfer or mint states an amount or a party; nothing here closes. */
 import type { DiscoveredAuthwit } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { type CallSurface, type WireCall, amountLabel, authwitLine, authwitTitle, rowTitle } from "./call-surface"
@@ -19,12 +14,6 @@ const props = defineProps<{
 	chainId?: number
 	tokens?: readonly TokenInfo[]
 }>()
-
-/** An amount in the token's units with its symbol, or the raw integer in base units. */
-const amountOf = (contract: unknown, amount: string): { text: string; baseUnits: boolean } => {
-	const { text, symbol } = amountLabel(props.tokens, props.chainId, contract, amount)
-	return symbol ? { text: `${text} ${symbol}`, baseUnits: false } : { text, baseUnits: true }
-}
 
 const callRows = computed(() =>
 	props.calls.map(({ call, surface }) => ({
@@ -45,6 +34,12 @@ const authwitRows = computed(() =>
 		}
 	}),
 )
+
+/** An amount in the token's units with its symbol, or the raw integer in base units. */
+const amountOf = (contract: unknown, amount: string): { text: string; baseUnits: boolean } => {
+	const { text, symbol } = amountLabel(props.tokens, props.chainId, contract, amount)
+	return symbol ? { text: `${text} ${symbol}`, baseUnits: false } : { text, baseUnits: true }
+}
 </script>
 
 <template>
@@ -94,6 +89,7 @@ const authwitRows = computed(() =>
 	<Flex v-if="authwitRows.length" data-testid="execute-op-summary-authwits-section" direction="column" gap="8" :class="$style.section">
 		<SectionLabel label="Authorizations" :count="authwitRows.length" />
 		<ul data-testid="execute-op-summary-authwits" :class="$style.items">
+			<!-- The hash in the key remounts a re-estimated row: AddressDisplay reads its address once, at mount. -->
 			<li
 				v-for="({ authwit: a, line, amount }, k) in authwitRows"
 				:key="`${k}:${a.messageHash}`"

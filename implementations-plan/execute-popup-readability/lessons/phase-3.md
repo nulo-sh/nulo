@@ -1,0 +1,18 @@
+# Phase 3: real browsers and shots
+
+## Runtime, before
+
+CI, the latest successful PR run of each network workflow before this arc (2026-10-16), first attempt:
+
+| | Chrome (run 38902121888) | Firefox (run 38902121661) |
+|---|---|---|
+| suite envelope (`Run / …` jobs) | 18 min | 21 min |
+| `type-roles-windows.test.ts` (4 tests) | 121.1 s | 137.9 s |
+| `tx-transfer-row.test.ts` (4 tests) | 94.1 s | 116.4 s |
+| `tx-sendTx-multicall.test.ts` (2 tests) | 56.2 s | 67.0 s |
+
+No scenario is added; the three files gain reads at rest and one press each.
+
+## Runs
+
+- 2026-10-16, Chrome, local `e2e:agent` at retry 0 over the three files in one sandbox (load1 ≈ 100 at start), head e509d98b: 10/10 green. `type-roles-windows` 146.3 s, `tx-transfer-row` 99.5 s, `tx-sendTx-multicall` 109.2 s (local times on a shared host; CI's are the comparison).

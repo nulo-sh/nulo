@@ -143,7 +143,7 @@ export const rowTitle = (call: WireCall, surface: CallSurface): string => {
 }
 
 /** A discovered authorization's function: its decoded name under the body's title rule, or the
- *  selector it carries until the decode lands. */
+ *  selector it carries while it has no decode. */
 export const authwitTitle = (selector: unknown, consumer: unknown, surface: CallSurface): string =>
 	"fn" in surface ? rowTitle({ to: consumer }, surface) : wire(selector, 64)
 

@@ -1,11 +1,10 @@
 <script setup lang="ts">
-/** The window's one disclosure control: a native button, so it is a Tab stop and Enter and Space press it. */
 defineProps<{ open: boolean; label: string }>()
 </script>
 
 <template>
 	<button type="button" :aria-expanded="open" :class="$style.toggle">
-		<Icon name="chevron-right" size="10" color="secondary" :class="[$style.chevron, open && $style.chevron_open]" />
+		<Icon name="chevron-right" size="10" color="secondary" aria-hidden="true" :class="[$style.chevron, open && $style.chevron_open]" />
 		<Text variant="label" color="secondary">{{ label }}</Text>
 	</button>
 </template>
