@@ -1,7 +1,8 @@
 /**
  * The header row's shrink order, which only a real layout shows: the name claims no width of its
  * own, so the account group never shrinks below the avatar and the address, and the actions may
- * shrink below their content, so a long network name truncates the chip instead.
+ * shrink below their content, so a long network name truncates the chip instead; and the network
+ * chip's height with its name hidden.
  */
 import { expect, test } from "vitest"
 import { boundAttr, declarationsOf, elementByTestid, parseSource } from "../../scripts/type-roles/source-scan"
@@ -23,4 +24,15 @@ test("the network chip's row may shrink below its content", () => {
 	expect(chip && boundAttr(chip.ancestors[chip.ancestors.length - 1], "class")).toBe("$style.actions")
 	expect(declarationsOf(parsed, ".actions")["min-width"]).toBe("0")
 	expect(declarationsOf(parsed, ".network_chip")).toMatchObject({ "min-width": "0", "flex-shrink": "1" })
+})
+
+test("with its name hidden, the network chip keeps the height the name gives it", () => {
+	// One line of the label's role, plus the 6px padding and 1px border above and below.
+	expect(declarationsOf(parsed, ".network_label").composes).toBe("type--tag from global")
+	expect(declarationsOf(parsed, ".network_chip")).toMatchObject({
+		composes: "type--tag from global",
+		padding: "6px 10px",
+		border: "1px solid var(--nulo-border)",
+		"min-height": "calc(1lh + 14px)",
+	})
 })

@@ -1,7 +1,9 @@
+import type { Page } from "puppeteer"
 import { expect } from "vitest"
-import { extensionUrl, gotoExtensionPage, newPage } from "./fixtures/browser"
+import { BROWSER, extensionUrl, gotoExtensionPage, newPage } from "./fixtures/browser"
 import { test, openPopup, waitForHash, clickByTestId, patchPagePolling, recordPageErrors } from "./fixtures/extension"
-import { navigateByHash, navigateToSettings, setTheme } from "./fixtures/helpers"
+import { clickNavTab, navigateByHash, navigateToSettings, setTheme } from "./fixtures/helpers"
+import { shotSend } from "./fixtures/send-page"
 
 test("cycle theme system → light → dark verifies html[theme=…] each step", async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)
@@ -128,4 +130,63 @@ test("onboarding paints the stored theme over a pre-paint hint that disagrees, a
 	expect(ctx.pageErrors).toEqual([])
 	await page.close()
 	await popup.close()
+})
+
+/** Flips Display's Show network name to `on`, then returns to Home with the chip settled. */
+async function showNetworkName(page: Page, on: boolean): Promise<void> {
+	await navigateToSettings(page, "display")
+	const toggle = '[data-testid="show-network-name-toggle"]'
+	await page.waitForSelector(toggle, { visible: true, timeout: 5_000 })
+	if ((await page.$eval(toggle, (el) => el.getAttribute("data-toggle-active"))) !== String(on)) {
+		await clickByTestId(page, "show-network-name-toggle")
+		await page.waitForFunction(
+			(sel: string, want: string) => document.querySelector(sel)?.getAttribute("data-toggle-active") === want,
+			{ timeout: 5_000, polling: 50 },
+			toggle,
+			String(on),
+		)
+	}
+	await clickNavTab(page, "general")
+	await page.waitForFunction(
+		(want: boolean) =>
+			!!document.querySelector('[data-testid="network-button"]') && !!document.querySelector('[data-testid="network-name"]') === want,
+		{ timeout: 5_000, polling: 50 },
+		on,
+	)
+}
+
+const networkChip = (page: Page) =>
+	page.evaluate(() => {
+		const chip = document.querySelector('[data-testid="network-button"]')
+		const dot = document.querySelector('[data-testid="network-status-dot"]')?.getBoundingClientRect()
+		return {
+			name: document.querySelector('[data-testid="network-name"]')?.textContent?.trim() ?? null,
+			label: chip?.getAttribute("aria-label"),
+			height: chip?.getBoundingClientRect().height,
+			dotArea: dot ? dot.width * dot.height : 0,
+		}
+	})
+
+test("Show network name off hides the name in the header chip, keeps its dot and height; on brings it back", async ({
+	registeredExtension,
+}) => {
+	const page = await openPopup(registeredExtension)
+	await waitForHash(page, "#/popup/general")
+	await page.waitForSelector('[data-testid="network-name"]', { visible: true, timeout: 10_000 })
+	const shown = await networkChip(page)
+	expect(shown.name).toBeTruthy()
+
+	await showNetworkName(page, false)
+	const hidden = await networkChip(page)
+	expect(hidden).toEqual({ name: null, label: shown.label, height: shown.height, dotArea: shown.dotArea })
+	expect(hidden.dotArea).toBeGreaterThan(0)
+	await shotSend(page, `577-chip-off-${BROWSER}`, "network-button")
+
+	// The file's tests share one extension: leave the setting as the others expect it.
+	await showNetworkName(page, true)
+	expect(await networkChip(page)).toEqual(shown)
+	await shotSend(page, `577-chip-on-${BROWSER}`, "network-button")
+
+	expect(registeredExtension.consoleErrors).toEqual([])
+	expect(registeredExtension.pageErrors).toEqual([])
 })
