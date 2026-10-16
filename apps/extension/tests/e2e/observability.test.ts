@@ -2,11 +2,12 @@
  * Sandbox-free pins for the e2e observability layer:
  *  - `formatPgMismatch` dumps the branch-CORRECT field, bounded, truncation-marked.
  *  - `RetryErrorReporter` prints the retained first-attempt error of a test that
- *    PASSED on retry (spawned child vitest on a fail-once fixture — the reporter
- *    contract can't be pinned in-process because it hooks the runner itself).
+ *    PASSED on retry and counts it, by name, in the job summary (spawned child
+ *    vitest on a fail-once fixture — the reporter contract can't be pinned
+ *    in-process because it hooks the runner itself).
  */
 import { spawnSync } from "node:child_process"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { expect, test } from "vitest"
@@ -60,10 +61,11 @@ test("assertPgOk: pg-error-text is bounded and a failed read cannot mask the pri
 	)
 })
 
-test("RetryErrorReporter surfaces the first-attempt error of a retried pass", () => {
+test("RetryErrorReporter surfaces the first-attempt error of a retried pass and counts it", () => {
 	const dir = mkdtempSync(join(tmpdir(), "nulo-retry-reporter-pin-"))
 	try {
 		const marker = join(dir, "attempt-marker")
+		const summary = join(dir, "summary.md")
 		writeFileSync(
 			join(dir, "fail-once.test.ts"),
 			`import { existsSync, writeFileSync } from "node:fs"
@@ -73,6 +75,9 @@ test("fails first, passes on retry", () => {
 		writeFileSync(${JSON.stringify(marker)}, "1")
 		throw new Error("SYNTHETIC_FIRST_ATTEMPT_FAILURE")
 	}
+	expect(true).toBe(true)
+})
+test("passes first time", () => {
 	expect(true).toBe(true)
 })
 `,
@@ -88,10 +93,13 @@ test("fails first, passes on retry", () => {
 		// .bin only exists when dependencies are hoisted.
 		const vitestBin = resolve(pkgDir, "node_modules/.bin/vitest")
 		const reporterAbs = join(__dirname, "retry-error-reporter.ts")
+		// Its own summary file: on CI the inherited one is this job's, which the fixture's
+		// retried pass would otherwise reach.
 		const child = spawnSync(vitestBin, ["run", "--root", dir, "--retry", "1", "--reporter", "default", "--reporter", reporterAbs], {
 			cwd: pkgDir,
 			encoding: "utf8",
 			timeout: 120_000,
+			env: { ...process.env, GITHUB_STEP_SUMMARY: summary },
 		})
 		const combined = `${child.stdout ?? ""}\n${child.stderr ?? ""}`
 		// The synthetic test PASSES on retry, so the child must exit 0 — a nonzero
@@ -102,6 +110,10 @@ test("fails first, passes on retry", () => {
 		).toBe(0)
 		expect(combined.split("PASSED ON RETRY").length - 1, "reporter must fire exactly once").toBe(1)
 		expect(combined).toContain("SYNTHETIC_FIRST_ATTEMPT_FAILURE")
+		const block = readFileSync(summary, "utf8")
+		expect(block).toMatch(/^1 passed on retry$/m)
+		expect(block).toContain("- fails first, passes on retry (`fail-once.test.ts`)")
+		expect(block).not.toContain("passes first time")
 	} finally {
 		rmSync(dir, { recursive: true, force: true })
 	}
