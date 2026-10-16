@@ -76,7 +76,7 @@ describe("windows/execute/OperationCard", () => {
 
 describe("windows/execute/OperationCard — action rows", () => {
 	test.each(["send_transaction", "simulate_transaction"] as const)(
-		"%s renders a public authwit with its spender, method, contract and args",
+		"%s renders a public authwit with its spender, method and contract",
 		(kind) => {
 			const w = mountCard(authwitOp(kind))
 			const rows = w.findAll("[data-testid='execute-op-payload-row']")
@@ -85,9 +85,16 @@ describe("windows/execute/OperationCard — action rows", () => {
 			const addresses = rows[1]?.findAll("i[data-address]").map((a) => a.attributes("data-address"))
 			expect(addresses).toEqual(["0xspender", "0xtoken"])
 			expect(rows[1]?.text()).toContain("Transfer (public)")
-			// Args are wire strings: control characters stripped, capped at 48 code points plus an ellipsis.
-			expect(rows[1]?.find("[data-testid='execute-authwit-args']").text()).toBe(`1, abcd${"x".repeat(44)}…`)
 			expect(rows[1]?.text()).not.toContain("add public authwit")
 		},
 	)
+
+	test("a simulation keeps a grant's arguments in its action line; a send moves them to the grant's own rows", () => {
+		// Args are wire strings: control characters stripped, capped at 48 code points plus an ellipsis.
+		const simulated = mountCard(authwitOp("simulate_transaction")).find("[data-testid='execute-authwit-args']")
+		expect(simulated.text()).toBe(`1, abcd${"x".repeat(44)}…`)
+		const sent = mountCard(authwitOp("send_transaction"))
+		expect(sent.find("[data-testid='execute-authwit-args']").exists()).toBe(false)
+		expect(sent.find("[data-testid='execute-grant-args']").exists()).toBe(true)
+	})
 })

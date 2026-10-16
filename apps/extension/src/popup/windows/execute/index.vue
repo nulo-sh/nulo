@@ -23,7 +23,8 @@ import { storageLocalSet } from "@/utils/storage"
 import { isSelfPay } from "@nulo/wallet-bridge"
 import { isEmbeddedFeePayment, requiresFeeSelection } from "./operation-validation"
 import { type FeePayerPick, personPaysAppPayment, waitsForFeeFigure } from "./fee-figure"
-import { authwitDisplayCall, pendingAuthwitDecodes, undecodedAll } from "./display-calls"
+import { authwitDisplayCall, grantContentsOf, pendingAuthwitDecodes, undecodedAll } from "./display-calls"
+import { rawNotice, readableGrants } from "./call-surface"
 import { decodeOperationArguments, readKnownTokens, resolveOperations } from "./operation-display"
 import type { DraftUIOperation } from "./types"
 
@@ -33,6 +34,7 @@ import { NetworkServiceClient } from "@/wallet/services/network/client"
 import { type Account, AccountServiceClient } from "@/wallet/services/account/client"
 import {
 	type DecodedCall,
+	type DecodedGrant,
 	type DiscoveredAuthwit,
 	ExecutionServiceClient,
 	type FeeSettings,
@@ -115,6 +117,19 @@ const decodedAuthwits = ref<Map<string, DecodedCall>>(new Map())
 const authwitDecodesInFlight = new Set<string>()
 /** The wallet's registered tokens on the operations' chains, so amounts render in token units. */
 const knownTokens = ref<TokenInfo[]>([])
+
+/** Per operation index, the decodings of its public grants; absent while the wallet is decoding.
+ *  Unlike a call's decode, a grant's gates Confirm: what the card shows is what the wallet signs. */
+const decodedGrants = ref<Map<number, readonly DecodedGrant[]>>(new Map())
+const grantsPending = computed(() =>
+	operations.value.some((op, i) => grantContentsOf(op as unknown as UIOperation).length > 0 && !decodedGrants.value.has(i)),
+)
+/** The footer's error row for a grant the wallet cannot read. Its own state, so the `clearError()` of
+ *  a fee change never lifts it. */
+const grantRefusal = computed(() => {
+	const unread = [...decodedGrants.value.values()].flat().find((grant) => grant.kind === "undecoded")
+	return unread ? { title: "Can't read the arguments", tooltip: rawNotice(unread.reason), type: "error" } : undefined
+})
 
 const {
 	requestId,
@@ -265,9 +280,10 @@ const init = async () => {
 			// No fee card asks for these: the estimate runs once, to check the app's own fee contract.
 			else if (isAppPaid(op)) scheduleFeeEstimate(index, { index, feeSettings: { paymentMethod: { kind: "embedded" } } })
 		}
-		// Neither is awaited by the approve gate: a slow decode leaves the card on its vocabulary
-		// reading or "Reading arguments…", and a failed one falls back to the raw fields.
+		// None is awaited here. A call's decode never gates Confirm: a slow one leaves the card on its
+		// vocabulary reading or "Reading arguments…", and a failed one falls back to the raw fields.
 		void decodeOperationArguments(resolved.operations, executionService, (index, decoded) => decodedCalls.value.set(index, decoded))
+		void decodeOperationGrants(resolved.operations)
 		void readKnownTokens(resolved.operations, profile.value!.id, tokenService).then((tokens) => {
 			if (tokens) knownTokens.value = tokens
 		})
@@ -322,6 +338,24 @@ async function prefetchTokenMetadata(
 	} finally {
 		refs.loading.value = false
 	}
+}
+
+/** Per operation, one decode of its stored grants; a failed one reads as unavailable, which refuses
+ *  the request rather than leaving it pending. */
+async function decodeOperationGrants(ops: UIOperation[]): Promise<void> {
+	await Promise.all(
+		ops.map(async (op, index) => {
+			const count = grantContentsOf(op).length
+			if (!count) return
+			let decoded: readonly DecodedGrant[] = []
+			try {
+				decoded = await executionService.decodeGrantsForDisplay(requestId.value!, index)
+			} catch (error) {
+				console.warn("[Execute] Grant decode failed", { index, error })
+			}
+			decodedGrants.value.set(index, readableGrants(decoded, count))
+		}),
+	)
 }
 
 /** Every discovered authorization an estimate or preview lists gets one decode on its consumer. */
@@ -381,6 +415,7 @@ const approve = async () => {
 		return
 	}
 	if (payerShort.value || awaitsFeeFigure.value) return
+	if (grantsPending.value || grantRefusal.value) return
 	try {
 		isLoading.value = true
 		// Ownership handoff: approval transfers the estimates and previews to the
@@ -566,6 +601,7 @@ onUnmounted(() => {
 						:isPreviewing="!!previewingOps[i]"
 						:decodedCalls="decodedCalls.get(i)"
 						:decodedAuthwits="decodedAuthwits"
+						:decodedGrants="decodedGrants.get(i)"
 						:tokens="knownTokens"
 						:tokenMetadata="op.kind === 'register_token' ? tokenMetadata.get((op as { address: string }).address) : undefined"
 						:tokenMetadataError="op.kind === 'register_token' ? tokenMetadataError.get((op as { address: string }).address) : undefined"
@@ -578,7 +614,7 @@ onUnmounted(() => {
 		</Flex>
 
 		<DappApprovalFooter
-			:processing-error="processingError"
+			:processing-error="grantRefusal ?? processingError"
 			reject-testid="execute-reject-btn"
 			reject-label="Reject"
 			:reject-disabled="isLoading || !requestId"
@@ -593,6 +629,8 @@ onUnmounted(() => {
 				needsFeeSelection ||
 				payerShort ||
 				awaitsFeeFigure ||
+				grantsPending ||
+				grantRefusal !== undefined ||
 				isInteractionCancelled
 			"
 			@reject="reject"

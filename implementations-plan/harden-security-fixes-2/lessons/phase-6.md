@@ -26,7 +26,7 @@ After merging `dev` twice (its reworked operation card, then arc 1), the same fi
 | Chrome | 45.5 s | 67.1 s | 45.5 s → 112.5 s |
 | Firefox | 113.3 s | 128.5 s | 113.3 s → 241.8 s |
 
-After the first PR CI run (D27 revised) and merging `dev` again (#604), the three files that run the changed gate, at retry 0, exit 0 on both browsers: this file, `authwit-lifecycle.test.ts` and `scope-refusal.test.ts`. This file's numbers on that head:
+After the first PR CI run (D34 revised) and merging `dev` again (#604), the three files that run the changed gate, at retry 0, exit 0 on both browsers: this file, `authwit-lifecycle.test.ts` and `scope-refusal.test.ts`. This file's numbers on that head:
 
 | Browser | Earlier case | New case | File before → after |
 |---|---|---|---|
@@ -45,5 +45,5 @@ The first CI run's lesson: a change to when Confirm enables reaches every networ
 ## Reviews after the implementation
 
 - **Round 1.** Codex `gpt-6.1-sol` high, read-only: approve with changes, 1 finding (the fee window dropped the approved authorization rows), fixed. An Opus 5.5 general-purpose review ran beside it: approve with changes, 6 findings; the plan's verdict table records each.
-- **Round 2.** Codex, the same session: approve with changes, 1 finding. An app's own payment naming the PrivateFPC as payer charges the account's Private Fee Juice, and the playground's PrivateFPC routes reach it (`apps/extension/tests/e2e/network/selfpay-phase.test.ts`), so the first answer (an owner ask that shipped the exemption) narrowed the owner's pick. Fixed as D30.
+- **Round 2.** Codex, the same session: approve with changes, 1 finding. An app's own payment naming the PrivateFPC as payer charges the account's Private Fee Juice, and the playground's PrivateFPC routes reach it (`apps/extension/tests/e2e/network/selfpay-phase.test.ts`), so the first answer (an owner ask that shipped the exemption) narrowed the owner's pick. Fixed as D37.
 - **Round 3.** Codex, the same session: approve, no findings. The loop ends here, inside its three rounds.

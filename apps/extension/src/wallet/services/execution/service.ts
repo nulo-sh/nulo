@@ -52,7 +52,7 @@ import { isFeeAmount, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { assertLiveChainIdentity, liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { assertArtifactClassId } from "@nulo/aztec-runtime/pxe"
-import { type FeeSettingsReaders, refuseUnknownPriorities } from "@nulo/wallet-bridge"
+import { type DraftOperation, type FeeSettingsReaders, refuseUnknownPriorities } from "@nulo/wallet-bridge"
 import {
 	EXECUTION_SERVICE_NAME,
 	type Methods,
@@ -72,6 +72,7 @@ import {
 	type OperationApprovalEnvelope,
 	type OperationAuthwitPreview,
 	type DecodedCall,
+	type DecodedGrant,
 	type DisplayCallInput,
 	type RegisterTokenOperation,
 	type TransferFeeEstimate,
@@ -95,7 +96,7 @@ import { ViewExecutor } from "./view-executor"
 import { ExecutionLane } from "./execution-lane"
 import { GasBalanceReader } from "./gas-balance-reader"
 import { AUTHWIT_CALL_BINDING, ContractResolver, assertSelectorBinding, findFunctionBySelector } from "./contract-resolver"
-import { type ArtifactLookup, decodeCallForDisplay } from "./call-decoder"
+import { type ArtifactLookup, decodeCallForDisplay, decodeGrantForDisplay } from "./call-decoder"
 import { getViewSimulationDeps } from "./helpers/get-view-simulation-deps"
 import { AuthwitDiscoverer } from "./authwit-discoverer"
 import { TxRequestBuilder } from "./tx-request-builder"
@@ -109,12 +110,14 @@ export * from "./spec"
 
 /** The dApp-interaction service's SW-internal view of a stored request: the
  *  operation at `(interactionId, index)`, materialized and — when fee settings
- *  are given — completed with a validated fee path. The estimate and preview
- *  entry points read the operation THROUGH this, never from their caller. */
+ *  are given — completed with a validated fee path, or as a draft before any
+ *  fee choice. The estimate, preview and display entry points read the
+ *  operation THROUGH this, never from their caller. */
 export interface InteractionOperationSource {
 	materializeStoredOperation(interactionId: string, index: number, feeSettings?: FeeSettings): Promise<Operation>
 	/** Asks a held send's question in a window; `true` only when the person accepted it. */
 	askFeeAgain(question: FeeQuestion): Promise<boolean>
+	materializeStoredDraft(interactionId: string, index: number): Promise<DraftOperation>
 }
 
 /** Default PXE-client factory: the real RPC-backed client. Exported so the
@@ -170,6 +173,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		"estimateOperationFee",
 		"previewOperationAuthwits",
 		"decodeCallsForDisplay",
+		"decodeGrantsForDisplay",
 		"cancelJob",
 		"acceptQueuedFee",
 		"cancelEstimate",
@@ -801,15 +805,32 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	}
 
 	public async decodeCallsForDisplay(networkId: string, calls: DisplayCallInput[]): Promise<DecodedCall[]> {
+		const lookup = await this.displayArtifactLookup(networkId, calls)
+		return Promise.all(calls.map((call) => decodeCallForDisplay(lookup, call)))
+	}
+
+	public async decodeGrantsForDisplay(interactionId: string, index: number): Promise<DecodedGrant[]> {
 		await this.ensureInitialized()
-		if (!Array.isArray(calls) || calls.length > MAX_DISPLAY_CALLS) throw new Error("Invalid calls")
+		// The request approval executes, never the popup's copy: its JSON round trip rewrites some values.
+		// A draft: the window decodes while the fee is still unchosen.
+		const operation = await this.interactionOperations().materializeStoredDraft(interactionId, index)
+		if (operation.kind !== "send_transaction") return []
+		const contents = operation.actions.flatMap((action) => (action.kind === "add_public_authwit" ? [action.content] : []))
+		const lookup = await this.displayArtifactLookup(operation.networkId, contents)
+		return Promise.all(contents.map((content) => decodeGrantForDisplay(lookup, content)))
+	}
+
+	/** The checks every display decode shares (a bounded batch, on a network of the active profile),
+	 *  then one artifact fetch per contract for the whole batch: a batch usually targets one. */
+	private async displayArtifactLookup(networkId: string, batch: readonly unknown[]): Promise<ArtifactLookup> {
+		await this.ensureInitialized()
+		if (!Array.isArray(batch) || batch.length > MAX_DISPLAY_CALLS) throw new Error("Invalid calls")
 		const profile = await this.profileService.getActiveProfile()
 		const network = await this.networkService.getNetwork(networkId)
 		if (!profile || network.profileId !== profile.id) throw new Error("unauthorized profile")
 		const info = networkInfoFrom(network)
-		// One artifact fetch per contract for the whole batch: a multicall usually targets one contract.
 		const artifacts = new Map<string, Promise<ContractArtifact | undefined>>()
-		const lookup: ArtifactLookup = (address) => {
+		return (address) => {
 			const pending = artifacts.get(address)
 			if (pending) return pending
 			const fresh = (async () => {
@@ -820,7 +841,6 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			artifacts.set(address, fresh)
 			return fresh
 		}
-		return Promise.all(calls.map((call) => decodeCallForDisplay(lookup, call)))
 	}
 
 	public async executeOperations(

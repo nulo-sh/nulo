@@ -34,6 +34,7 @@ const SUMMARY = styleOf(SendTxSummary)
 const styleSource = (file: string) =>
 	postcss.parse(readFileSync(join(__dirname, file), "utf8").split("<style module>")[1]?.split("</style>")[0] ?? "")
 const CARD_STYLE = styleSource("OperationCard.vue")
+const ARGS_STYLE = styleSource("CallArguments.vue")
 const isRule =
 	(selector: string) =>
 	(node: ChildNode): node is Rule =>
@@ -59,6 +60,26 @@ const grant = {
 		},
 	],
 }
+
+/** A decode whose 32-character parameter name and 100-character string value are the longest a
+ *  contract can make the grant rows print. */
+const LONG_NAME = "W".repeat(32)
+const LONG_TEXT = "i".repeat(100)
+const grantDecoded = [
+	{
+		kind: "decoded",
+		call: { to: TOKEN, selector: "0x12345678", args: [FIELD, FIELD] },
+		decoded: {
+			kind: "decoded",
+			contract: "Token",
+			fn: NARROW,
+			params: [
+				{ name: LONG_NAME, value: { kind: "field", value: FIELD } },
+				{ name: "memo", value: { kind: "string", value: LONG_TEXT } },
+			],
+		},
+	},
+]
 
 const sendTx = {
 	...base,
@@ -97,13 +118,19 @@ const mountOpen = async (props: Record<string, unknown> = {}) => {
 }
 
 describe("OperationCard — long dApp strings break inside the card", () => {
-	test("a grant's arguments render in a mono role inside the payload column that lets them wrap", () => {
-		const w = mountCard(grant)
-		const args = w.find('[data-testid="execute-authwit-args"]')
-		expect(args.attributes("variant")).toBe("data")
-		expect(args.text()).toContain(FIELD.slice(0, 40))
-		expect(args.element.closest(`.${CARD.payload}`)).not.toBeNull()
+	test("a grant's function name breaks in the payload column; its whole values break in their rows, names kept on one line", () => {
+		const w = mountCard(grant, { decodedGrants: grantDecoded })
 		expect(w.find(`.${CARD.payload}`).text()).toMatch(HUMANIZED)
+		const values = w.findAll('[data-testid="execute-grant-decoded-param-value"]')
+		expect(values.map((v) => v.text())).toEqual([FIELD, LONG_TEXT])
+		for (const value of values) {
+			expect(value.attributes("variant")).toBe("data")
+			expect(value.element.parentElement?.classList.contains(ARGS.row)).toBe(true)
+			expect(value.element.parentElement?.lastElementChild).toBe(value.element)
+		}
+		expect(w.find('[data-testid="execute-grant-decoded-args"]').classes()).toContain(ARGS.full)
+		expect(declarationsOf(".row", undefined, ARGS_STYLE)).toMatchObject({ gap: "12px" })
+		expect(declarationsOf(".full .row > :first-child", undefined, ARGS_STYLE)).toEqual({ "flex-shrink": "0", "max-width": "50%" })
 	})
 
 	test("a call's 64-character name and its address sit in the call row, whose children may break", async () => {
@@ -184,8 +211,31 @@ describe("CallArguments — long values wrap", () => {
 		expect(value.element.parentElement?.lastElementChild).toBe(value.element)
 	})
 
+	test("under `full` a field, a long string and a list print whole; without it the row trims them", () => {
+		const items = Array.from({ length: 12 }, (_, i) => ({ kind: "integer", value: String(i) }))
+		const surface = {
+			kind: "decoded",
+			fn: "f",
+			params: [
+				{ name: "root", value: { kind: "field", value: FIELD } },
+				{ name: "memo", value: { kind: "string", value: LONG_TEXT } },
+				{ name: "ids", value: { kind: "array", items } },
+			],
+		}
+		const texts = (full: boolean) =>
+			mount(CallArguments, { props: { surface: surface as never, contract: TOKEN, prefix: "t", full }, global: { stubs } })
+				.findAll('[data-testid="t-decoded-param-value"]')
+				.map((v) => v.text())
+		expect(texts(true)).toEqual([FIELD, LONG_TEXT, `[${items.map((i) => i.value).join(", ")}]`])
+		expect(texts(false)).toEqual([
+			`${FIELD.slice(0, 10)}..${FIELD.slice(-6)}`,
+			`${"i".repeat(64)}…`,
+			"[0, 1, 2, 3, 4, 5, 6, 7, +4 more]",
+		])
+	})
+
 	test("a raw text argument is the wrapping last child of its row", async () => {
-		const w = mountArgs({ kind: "raw", reason: "unknown-contract", rows: [{ kind: "text", value: NARROW }], hidden: 0 })
+		const w = mountArgs({ kind: "raw", reason: "unknown-contract", rows: [{ kind: "text", value: NARROW, full: NARROW }], hidden: 0 })
 		await w.find('[data-testid="t-raw-toggle"]').trigger("click")
 		const row = w.find('[data-testid="t-arg"]')
 		expect(row.classes()).toContain(ARGS.row)
