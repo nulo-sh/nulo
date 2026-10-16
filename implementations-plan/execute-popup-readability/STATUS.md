@@ -9,3 +9,4 @@
 - 2026-10-15 panel round 2: Codex conditional approve (4 new, accepted: D11–D14); round 3: Codex approve, no new findings.
 - 2026-10-15 plan committed; waits on R1 and the orchestrator's approval.
 - 2026-10-16 arc 1 started: merged origin/dev (ec0204e3), branch feat/execute-popup-readability; R1 signed A + part 2 Yes; plan map revised for A (D15, D16).
+- 2026-10-16 Codex consult on the A map: approve (2 clarifications accepted). Phase 1 gate green: execute tests 229/229, lint 0, typecheck:all 0.

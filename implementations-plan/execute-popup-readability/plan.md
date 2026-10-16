@@ -66,7 +66,7 @@ R1's answer (#508 `## Decision`, decision page 20, 2026-10-16): **A**, part 2 **
 
 ## Phases
 
-### Phase 1: shared fixture and the reachability test (no pixel)
+### Phase 1: shared fixture and the reachability test (no pixel) ✓
 
 - Assumes: Facts 1, 2 and 5; nothing visible changes.
 - Add `execute-fixture.ts` (test-only): R1's example, wire-shaped (`0x` + 64-hex fields, the `FunctionCall.toJSON` shape, addresses checked with `isValidAztecAddress`); USDC decoded through the real `decodeCallForDisplay` and Token artifact (as `OperationCard.wire.test.ts` does); Hub and Vault given as the `DecodedCall` records the decoder returns. Beside it, a hand-written manifest: per row and field, the expected text.
@@ -129,6 +129,7 @@ Implementation (2026-10-16), after R1 was signed:
 |---|---|---|
 | D15 | The map is redrawn for A: the summary in a new `SendTxSummary.vue`, `DetailsToggle.vue` for the three toggles, `UnreadableArgsNotice.vue` for the warning shared by the summary and `CallArguments`; C's `actionLine` is dropped (the summary reads the `CallSurface` it already has) | A signed; the summary is a block of its own, testable alone; one copy of the toggle and of the unreadable-call copy |
 | D16 | "Checking authorizations…" renders at rest in the summary, not behind the toggle | a status, not a value row; hiding it would leave the authorizations slot silent at rest while they are being found (rule 2) |
+| D17 | Codex on the redrawn map: `approve`; the body's discovered-authorization inventory sites move to the opened state; a test for the pending → wallet-read title change | accepted, both local |
 
 ## Seeds (draft; finalized after R1 and the orchestrator's approval)
 

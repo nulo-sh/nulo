@@ -213,7 +213,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 			</Flex>
 			<template v-else-if="op.kind === 'aztec_sendTx'">
 				<Flex :class="$style.group"><Text variant="label" color="secondary">Payload</Text></Flex>
-				<Flex v-for="({ call, surface }, j) in sendTxCalls(op)" :key="`${index}:${j}`" direction="column" gap="4" :class="$style.call">
+				<Flex v-for="({ call, surface }, j) in sendTxCalls(op)" :key="`${index}:${j}`" :data-call-index="j" direction="column" gap="4" :class="$style.call">
 					<Flex
 						data-testid="execute-op-payload-row"
 						:data-call-name="call.name ?? ''"
