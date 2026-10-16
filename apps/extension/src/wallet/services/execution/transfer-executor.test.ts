@@ -1323,7 +1323,7 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 		const sequencer = sequencerOnPendingMap()
 		const { executor, deps } = makeHarness({ sequencer })
 		;(deps.lane.tryTakeSlot as ReturnType<typeof vi.fn>).mockReturnValue(undefined)
-		const sequence = { scope: SCOPE, keys: REQ_KEYS }
+		const sequence = { scope: SCOPE, keys: REQ_KEYS, sponsored: false }
 		expect(await executor.estimateFee(makeReq(), undefined, sequence)).toEqual({ queued: true, tokenSpent: true })
 		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
 		expect(sequencer.isBlocked(SCOPE, REQ_KEYS)).toBe(false)
@@ -1333,7 +1333,7 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 		const { executor, deps } = makeHarness({ sequencer: sequencerOnPendingMap() })
 		const release = vi.fn()
 		;(deps.lane.tryTakeSlot as ReturnType<typeof vi.fn>).mockReturnValue(Promise.resolve(release))
-		await executor.estimateFee(makeReq(), undefined, { scope: SCOPE, keys: REQ_KEYS })
+		await executor.estimateFee(makeReq(), undefined, { scope: SCOPE, keys: REQ_KEYS, sponsored: false })
 		expect(deps.lane.tryTakeSlot).toHaveBeenCalledWith(FENCE.profileId, SCOPE.chainId)
 		const built = (deps.buildAndEstimate as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]
 		expect(built).toBeLessThan(release.mock.invocationCallOrder[0])
@@ -1494,6 +1494,66 @@ describe("TransferExecutor: the fee contract a send is ordered against", () => {
 		const { executor, deps } = makeHarness({ getFpcImpl })
 		await executor.execute(FPC_REQ, "est-1", FENCE)
 		expect(deps.estimateReuse.tryConsume).toHaveBeenCalledWith("est-1", FPC_REQ, FENCE, pinned)
+	})
+})
+
+describe("TransferExecutor: a queued send Nulo's sponsor pays, with no cap", () => {
+	const SCOPE = { chainId: 7, account: "0xme" }
+	const SPONSORED = makeReq({ feeSettings: { paymentMethod: { kind: "fpc", fpcId: "s" } } as never })
+	const NULO_SPONSOR = { infoData: { id: "s", type: FpcType.DefaultSponsoredFpc, chainId: 7, address: "0xsponsor", isProtocol: true } }
+	const REPOINTED = { infoData: { ...NULO_SPONSOR.infoData, address: "0xB", isProtocol: false } }
+
+	/** A predecessor holding every key `req` takes, released by the test. */
+	async function behindHeldSend(req: TransferRequest, getFpcImpl = vi.fn(async () => NULO_SPONSOR as never)) {
+		const sequencer = new SendSequencer({ pendingTxs: () => [], sleep: () => new Promise((r) => setTimeout(r, 0)), now: () => 0 })
+		const h = makeHarness({ sequencer, getFpcImpl })
+		const earlier = sequencer.enter(SCOPE, (await h.executor.sequence(req)).keys)
+		const waiting = async () => {
+			await vi.waitFor(() => expect(h.deps.lane.beginQueuedWait).toHaveBeenCalledWith("j1"))
+			expect(h.deps.buildAndEstimate).not.toHaveBeenCalled()
+		}
+		return { ...h, earlier, waiting }
+	}
+	const reasks = (deps: TransferExecutorDeps) =>
+		(deps.transitionJournal as ReturnType<typeof vi.fn>).mock.calls.filter((c) => (c[1] as { reask?: unknown }).reask)
+
+	test("it waits behind the held send, then builds once and proves without asking", async () => {
+		const { executor, deps, proveAndSend, earlier, waiting } = await behindHeldSend(SPONSORED)
+		const run = executor.execute(SPONSORED, undefined, FENCE)
+		await waiting()
+		earlier.release()
+		await run
+		expect(deps.buildAndEstimate).toHaveBeenCalledOnce()
+		expect(proveAndSend).toHaveBeenCalledOnce()
+		expect(reasks(deps)).toEqual([])
+	})
+
+	test("its sponsor row re-pointed while it waits: it fails closed before any reuse or build", async () => {
+		let row: unknown = NULO_SPONSOR
+		const { executor, deps, proveAndSend, earlier, waiting } = await behindHeldSend(
+			SPONSORED,
+			vi.fn(async () => row as never),
+		)
+		const run = executor.execute(SPONSORED, "est-1", FENCE)
+		await waiting()
+		row = REPOINTED
+		earlier.release()
+		await expect(run).rejects.toBeInstanceOf(JournaledRejection)
+		expect(deps.estimateReuse.tryConsume).not.toHaveBeenCalled()
+		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
+		expect(proveAndSend).not.toHaveBeenCalled()
+		expect(deps.transitionJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, expect.objectContaining({ kind: "transfer" }))
+	})
+
+	test.each([undefined, "est-1"])("control: a self-paid send held the same way, estimate id %s, still builds", async (estimateId) => {
+		const req = makeReq()
+		const { executor, deps, proveAndSend, earlier, waiting } = await behindHeldSend(req)
+		const run = executor.execute(req, estimateId, FENCE)
+		await waiting()
+		earlier.release()
+		await run
+		expect(deps.buildAndEstimate).toHaveBeenCalledOnce()
+		expect(proveAndSend).toHaveBeenCalledOnce()
 	})
 })
 

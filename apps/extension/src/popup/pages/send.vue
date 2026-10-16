@@ -299,17 +299,22 @@ const clearQueued = () => {
 }
 /** Queued against the cap: only a fee the person pays, and nothing goes out above the cap shown. */
 const queueCap = computed(() => (feeQueued.value && feePayerOf(payer.value) === "self" ? queuedCap.value : null))
+/** Queued with Nulo's sponsor paying: the person pays nothing, so there is no cap to hold it to. A
+ *  sponsor added by hand can charge the account, so it never queues. */
+const queuedSponsored = computed(() => feeQueued.value && feePayerOf(payer.value) === "sponsor")
+const queueMode = computed(() => Boolean(queueCap.value) || queuedSponsored.value)
 
 const isAllowedToSend = computed(() => {
 	if (!legal.isCurrent.value) return false
-	if (feeQueued.value && !queueCap.value) return false
+	if (feeQueued.value && !queueMode.value) return false
 	if (!amountTerm.value) return false
 	if (isBlockedTransfer.value) return false
 	if (!isValidAddress.value) return false
 	if (!feeSettings.value) return false
 	// Nothing goes out on a fee the person has not seen: a failed estimate leaves this off too. A
-	// queued send's figure is the cap the card shows, and nothing goes out above it.
-	if (!queueCap.value && !feeEstimate.value) return false
+	// queued send's figure is the cap the card shows, and nothing goes out above it; Nulo's sponsor
+	// charges the person nothing.
+	if (!queueMode.value && !feeEstimate.value) return false
 	if (feeEstimate.value?.feeJuiceShortfall) return false
 	if (fiatQuoteBlocked.value) return false
 	return amountValidation.value.valid
@@ -473,7 +478,7 @@ function snapshotTransfer() {
 	// estimate would orphan its eventual stash (nobody consumes, nobody can
 	// cancel) for the full TTL.
 	const feeCap = queueCap.value?.cap
-	const precomputedEstimateId = feeCap ? undefined : feeEstimate.value?.estimateId
+	const precomputedEstimateId = queueMode.value ? undefined : feeEstimate.value?.estimateId
 	if (precomputedEstimateId) handoffFeeEstimate()
 	return {
 		networkId: appStore.network.id,
@@ -834,7 +839,7 @@ onBeforeUnmount(() => {
 					:disabled="!isAllowedToSend || isSending"
 					:loading="isSending"
 				>
-					{{ isSending ? "CONFIRMING" : facts.requiresReview ? "Review send" : queueCap ? "Queue send" : "Confirm Transaction" }}
+					{{ isSending ? "CONFIRMING" : facts.requiresReview ? "Review send" : queueMode ? "Queue send" : "Confirm Transaction" }}
 				</Button>
 			</Flex>
 		</Flex>
@@ -855,6 +860,7 @@ onBeforeUnmount(() => {
 			:sending="isSending"
 			:ready="reviewReady"
 			:queuedCapText="queueCap ? queuedCapText : undefined"
+			:queuedSponsored="queuedSponsored"
 			@close="closeReview"
 			@send="submit('review')"
 		/>
