@@ -4,7 +4,11 @@ import type { Action } from "@nulo/wallet-bridge"
 import { humanizeMethodName } from "@/utils/tx-enrichment"
 import { safeWire } from "./humanize"
 
-defineProps<{ action: Action }>()
+defineProps<{
+	action: Action
+	/** Leaves a grant's arguments out of the line. */
+	hideArgs?: boolean
+}>()
 </script>
 
 <template>
@@ -29,7 +33,7 @@ defineProps<{ action: Action }>()
 				<Text variant="data">{{ humanizeMethodName(safeWire(action.content.method, 64)) }}</Text>
 				<Text color="secondary"> on </Text>
 				<AddressDisplay data-testid="execute-authwit-contract" :address="action.content.contract" />
-				<template v-if="action.content.args?.length">
+				<template v-if="!hideArgs && action.content.args?.length">
 					<Text color="secondary"> args </Text>
 					<Text data-testid="execute-authwit-args" variant="data">{{ action.content.args.map((a) => safeWire(String(a), 48)).join(", ") }}</Text>
 				</template>

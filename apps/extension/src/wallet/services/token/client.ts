@@ -3,7 +3,15 @@ import type { MethodsSpec, ServiceSpec } from "@/wallet/base"
 import { ServiceClient, definePassthroughsExhaustive } from "@nulo/extension-messaging/background"
 import { documentLogger } from "@/wallet/services/logger/client"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { type Events, type Methods, type SeedScope, TOKEN_SERVICE_NAME, type TokenAdded, type TokenDeleted } from "./spec"
+import {
+	type Events,
+	type Methods,
+	type SeedScope,
+	TOKEN_SERVICE_NAME,
+	type TokenAdded,
+	type TokenDeleted,
+	type TokenUpdated,
+} from "./spec"
 
 export * from "./spec"
 
@@ -15,6 +23,7 @@ export interface TokenServiceClient extends MethodsSpec<Methods> {}
 export class TokenServiceClient extends ServiceClient<Methods, Events> implements ServiceSpec<Methods, Events> {
 	public readonly onTokenAdded = new EventHandler<TokenAdded>()
 	public readonly onTokenDeleted = new EventHandler<TokenDeleted>()
+	public readonly onTokenUpdated = new EventHandler<TokenUpdated>()
 	public readonly onSeedStatusChanged = new EventHandler<SeedScope>()
 
 	public constructor(name?: string) {
@@ -33,4 +42,5 @@ definePassthroughsExhaustive<Methods>()(TokenServiceClient.prototype, [
 	"getSeedStatus",
 	"ensureSeeding",
 	"retrySeed",
+	"refreshRestoredTokens",
 ])

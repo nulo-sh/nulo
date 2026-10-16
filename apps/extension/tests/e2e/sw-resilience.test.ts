@@ -76,6 +76,7 @@ async function optOutOfStrictMode(page: Page): Promise<void> {
 describe("background death and cold respawn", () => {
 	test("extension survives SW stop+respawn: lock → kill SW → unlock → general", async ({ registeredExtension }) => {
 		const page = await openPopup(registeredExtension)
+		await ensureUnlocked(page)
 		await waitForHash(page, "#/popup/general")
 
 		await lockWallet(page)
@@ -145,6 +146,7 @@ describe("background death and cold respawn", () => {
 
 	test("strict mode default ON: unlock → kill SW → expect lock screen on respawn", async ({ registeredExtension }) => {
 		const page = await openPopup(registeredExtension)
+		await ensureUnlocked(page)
 		await waitForHash(page, "#/popup/general")
 		// Note: deliberately NO lockWallet() call. Strict mode is the lock.
 		await page.close()

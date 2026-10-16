@@ -65,7 +65,13 @@ vi.mock("@/wallet/services/fpc/client", () => ({
 }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onTokenAdded: new EventHandler(), onTokenDeleted: new EventHandler(), getTokens: mocks.getTokens }
+		return {
+			disconnect: vi.fn(),
+			onTokenAdded: new EventHandler(),
+			onTokenUpdated: new EventHandler(),
+			onTokenDeleted: new EventHandler(),
+			getTokens: mocks.getTokens,
+		}
 	}),
 }))
 vi.mock("@/wallet/services/token-balance/client", () => ({
@@ -169,9 +175,9 @@ const STUBS = {
 	// The card's read-only rows, and the menu chrome around the real selector's items.
 	FeeMethodRow: { template: '<div data-testid="stub-fee-method-row" />' },
 	FeeCostReadout: {
-		props: ["estimate", "isEstimating", "isQueued", "queuedCap"],
+		props: ["estimate", "isEstimating", "isQueued", "queuedCap", "payer"],
 		template:
-			'<div data-testid="stub-fee-cost" :data-usd="estimate?.usd" :data-queued="String(Boolean(isEstimating && isQueued))" :data-cap="queuedCap?.cap.amount" />',
+			'<div data-testid="stub-fee-cost" :data-usd="estimate?.usd" :data-queued="String(Boolean(isEstimating && isQueued))" :data-cap="queuedCap?.cap.amount" :data-payer="payer" />',
 	},
 	FeePriorityRow: { template: '<div data-testid="stub-fee-priority" />' },
 	DropdownRoot: { template: '<div data-testid="stub-dropdown"><slot name="trigger" /><slot name="popup" /></div>' },
@@ -729,10 +735,31 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		w.unmount()
 	})
 
-	test("with a cap and a sponsor paying: the queued row stays, Send stays disabled, nothing is sent", async () => {
+	test("Nulo's sponsor paying: the answered row and Queue send, which sends no cap and no estimate to reuse", async () => {
+		// The answer carries a cap, as one for a self-paid shape would: a send nobody caps must not take it.
 		const { w } = await queuedPrivately(FUNDING["no gas, a sponsor"])
 		expect(queuedRow(w)).toBe(true)
+		expect(w.get('[data-testid="stub-fee-cost"]').attributes("data-payer")).toBe("sponsor")
 		expect(capShown(w)).toBeUndefined()
+		expect(submit(w).text()).toBe("Queue send")
+		expect(sendDisabled(w)).toBe(false)
+		await strip(w).trigger("click")
+		expect(w.get('[data-testid="send-review-fee-queued"]').text()).toBe("Fee · Goes out after your earlier send.")
+		expect(w.get('[data-testid="send-review-submit"]').text()).toBe("Queue send")
+		await closeSheet(w)
+		await submit(w).trigger("click")
+		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
+		const args = mocks.executeTransfer.mock.calls[0] as unknown[]
+		expect(args[6]).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+		expect(args[7]).toBeUndefined()
+		expect(args[8]).toBeUndefined()
+		w.unmount()
+	})
+
+	test("a sponsor added by hand: the queued row stays, Send stays disabled, nothing is sent", async () => {
+		const { w } = await queuedPrivately(FUNDING["no gas, a hand-added sponsor picked"])
+		expect(queuedRow(w)).toBe(true)
+		expect(w.get('[data-testid="stub-fee-cost"]').attributes("data-payer")).toBe("unvouched")
 		expect(submit(w).text()).toBe("Confirm Transaction")
 		expect(sendDisabled(w)).toBe(true)
 		await submit(w).trigger("click")

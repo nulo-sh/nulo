@@ -9,6 +9,7 @@ import { NetworkService, networkInfoFrom } from "@/wallet/services/network/servi
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import type { OperationContext, OperationOrigin } from "@/wallet/services/operation-journal/spec"
 import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
+import type { RunFence } from "@/wallet/services/profile/spec"
 import { type ExecutionFence, type ProfileDeletionState, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { requireOwnedRow } from "@/wallet/services/require-owned-row"
@@ -35,6 +36,7 @@ import {
 	type TokenAdded,
 	type TokenInfo,
 	type TokenDeleted,
+	type TokenUpdated,
 	type SeedScope,
 	type SeedStatusSnapshot,
 	TOKEN_SERVICE_NAME,
@@ -122,6 +124,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		"getSeedStatus",
 		"ensureSeeding",
 		"retrySeed",
+		"refreshRestoredTokens",
 	)
 	public static name = TOKEN_SERVICE_NAME
 
@@ -130,6 +133,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 
 	public readonly onTokenAdded = new EventHandler<TokenAdded>()
 	public readonly onTokenDeleted = new EventHandler<TokenDeleted>()
+	public readonly onTokenUpdated = new EventHandler<TokenUpdated>()
 	public readonly onSeedStatusChanged = new EventHandler<SeedScope>()
 
 	private readonly tokens: EntityStorage<Token>
@@ -455,7 +459,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		const existing = await this.findToken(input.profileId, input.tokenInterface.chainId, input.tokenInterface.contract)
 		if (existing) return attempt.ownsLock() ? await this.journalSucceeded(attempt, existing) : carried
 		const metadata = carried.stage === "fetched" ? carried.metadata : await this.addMetadata(attempt)
-		const token = buildToken(input, metadata, await nextNumericId(this.tokens))
+		const token = buildToken(input.profileId, input.tokenInterface, metadata, await nextNumericId(this.tokens))
 		// Assert authority flush against the write: the metadata fetch
 		// can span a profile deletion or the network's purge cascade —
 		// landing the row afterwards creates an orphan the cascade's own
@@ -908,6 +912,55 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		}
 	}
 
+	public async refreshRestoredTokens(fence: RunFence, deadlineAt: number): Promise<void> {
+		await this.ensureInitialized()
+		await this.profiles.assertRunFence(fence)
+		if (!(deadlineAt > Date.now())) return
+		const rows = (await this.tokens.getValues()).filter((token) => token.profileId === fence.profileId)
+		await Promise.all(rows.map((row) => this.refreshRestoredToken(fence, row, deadlineAt)))
+	}
+
+	/** The row's own class is the backup's claim, so the read takes no pin from it. */
+	private async refreshRestoredToken(fence: RunFence, row: Token, deadlineAt: number): Promise<void> {
+		const read = await settleBy(this.readChainToken(fence, row), deadlineAt)
+		if (read.kind !== "read") {
+			this.logDebug("a restored token kept its backup metadata", { category: read.kind })
+			return
+		}
+		await this.withTokenLock(async (ownsLock) => {
+			const current = await this.tokens.get(`${row.id}`)
+			// Deleted, or its id given to another token, during the read.
+			if (!current || current.profileId !== row.profileId || current.chainId !== row.chainId || current.contract !== row.contract)
+				return
+			const next = { ...current, ...read.value }
+			if (!refreshedFieldsDiffer(current, next) || !(await this.networks.isChainLive(row.profileId, row.chainId))) return
+			// A read that landed after the deadline, or a session that ended since, writes nothing.
+			if (!ownsLock() || Date.now() >= deadlineAt || !this.profiles.isFenceLive(fence)) return
+			await this.track(this.tokens.set(`${row.id}`, next))
+			// The chain sweep takes no token lock, so its delete can land before this set.
+			if (!(await this.networks.isChainLive(row.profileId, row.chainId))) {
+				if (ownsLock()) await this.track(this.tokens.delete(`${row.id}`))
+				return
+			}
+			this.emit("onTokenUpdated", { ...getTokenInfo(next), profileId: next.profileId })
+		})
+	}
+
+	private async readChainToken(fence: RunFence, row: Token): Promise<RefreshedFields> {
+		const network = (await this.networks.getNetworksRaw(fence.profileId, row.chainId))[0]
+		const account = (await this.accounts.getAccounts(fence.profileId, row.chainId, true))[0]
+		if (!network || !account) throw new Error("no network or account on the token's chain")
+		const { interface: ti, ...metadata } = await this.previewTokenMetadata(network.id, account.address, row.contract)
+		const {
+			id: _id,
+			profileId: _profileId,
+			chainId: _chainId,
+			contract: _contract,
+			...fields
+		} = buildToken(fence.profileId, ti, metadata, row.id)
+		return fields
+	}
+
 	public async backup(): Promise<Token[]> {
 		const profile = await requireActiveProfile(this.profiles)
 
@@ -968,11 +1021,37 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	}
 }
 
-function buildToken(input: PersistTokenInput, metadata: TokenMetadata, id: number): Token {
-	const { tokenInterface } = input
+/** The fields a restored row takes from its chain; its identity stays the row's. */
+type RefreshedFields = Omit<Token, "id" | "profileId" | "chainId" | "contract">
+
+function refreshedFieldsDiffer(row: Token, next: Token): boolean {
+	const keys = new Set([...Object.keys(row), ...Object.keys(next)] as Array<keyof Token>)
+	return [...keys].some((key) => JSON.stringify(row[key]) !== JSON.stringify(next[key]))
+}
+
+/** `read`'s value; `failed` once it rejects, `late` once `deadlineAt` passes first. Its rejection
+ *  is contained either way. */
+async function settleBy<T>(
+	read: Promise<T>,
+	deadlineAt: number,
+): Promise<{ kind: "read"; value: T } | { kind: "failed" } | { kind: "late" }> {
+	const outcome = read.then(
+		(value) => ({ kind: "read" as const, value }),
+		() => ({ kind: "failed" as const }),
+	)
+	const remaining = deadlineAt - Date.now()
+	if (!(remaining > 0)) return { kind: "late" }
+	let timer: ReturnType<typeof setTimeout> | undefined
+	const late = new Promise<{ kind: "late" }>((resolve) => {
+		timer = setTimeout(() => resolve({ kind: "late" }), remaining)
+	})
+	return await Promise.race([outcome, late]).finally(() => clearTimeout(timer))
+}
+
+function buildToken(profileId: string, tokenInterface: TokenInterface, metadata: TokenMetadata, id: number): Token {
 	return {
 		id,
-		profileId: input.profileId,
+		profileId,
 		chainId: tokenInterface.chainId,
 		contract: tokenInterface.contract,
 		classId: tokenInterface.classId,

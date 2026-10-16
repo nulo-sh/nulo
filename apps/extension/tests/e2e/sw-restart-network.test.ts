@@ -2,7 +2,7 @@ import { describe, expect } from "vitest"
 import { stopBackground } from "./fixtures/browser"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
-import { lockWallet, readLivenessBaseline, waitForWorkerLiveness } from "./fixtures/helpers"
+import { ensureUnlocked, lockWallet, readLivenessBaseline, waitForWorkerLiveness } from "./fixtures/helpers"
 
 // The active chain (`Network.id`) and the chain's primary endpoint
 // (`Network.primaryEndpointId`) live in `chrome.storage.local`. SW
@@ -12,6 +12,7 @@ import { lockWallet, readLivenessBaseline, waitForWorkerLiveness } from "./fixtu
 describe("background restart — network state", () => {
 	test("SW restart preserves active network + primary endpoint", async ({ registeredExtension }) => {
 		const page = await openPopup(registeredExtension)
+		await ensureUnlocked(page)
 		await waitForHash(page, "#/popup/general")
 
 		// Read pre-restart state from chrome.storage.local: NetworkService's

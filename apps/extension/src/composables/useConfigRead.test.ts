@@ -82,6 +82,23 @@ describe("useConfigRead", () => {
 		expect(h.land).toHaveBeenCalledExactlyOnceWith("b", expect.any(Function))
 	})
 
+	test("a read the drop rejected before the open was announced reads again on the next open", async () => {
+		const reads: PromiseWithResolvers<string>[] = []
+		const h = harness(() => {
+			const read = Promise.withResolvers<string>()
+			reads.push(read)
+			return read.promise
+		})
+		void h.read()
+		reads[0].reject(new Error("disconnected"))
+		await flushPromises()
+		h.config.onConnected.invoke()
+		reads[1].resolve("b")
+		await flushPromises()
+		expect(h.fetch).toHaveBeenCalledTimes(2)
+		expect(h.land).toHaveBeenCalledExactlyOnceWith("b", expect.any(Function))
+	})
+
 	test("an older read that answers last is ignored", async () => {
 		const h = harness()
 		void h.read()

@@ -1,7 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { type Ref, toRaw, watch } from "vue"
 import { useToast } from "@/composables/toast"
-import { FilePickCanceledError, FileTooLargeError, downloadFile, pickFile } from "@/utils"
+import { FilePickCanceledError, FileTooLargeError, downloadFile, pickFile, profileFileNameSegment } from "@/utils"
 import {
 	type ImportRow,
 	type ImportWrite,
@@ -128,7 +128,7 @@ async function exportContacts(deps: ContactIoServices): Promise<void> {
 
 	try {
 		const profile = await profileService.getActiveProfile()
-		if (profile?.name) filename = `${profile.name}_${filename}`
+		if (profile?.name) filename = `${profileFileNameSegment(profile.name)}_${filename}`
 
 		try {
 			await downloadFile({ data: JSON.stringify(exportPayload, null, 2), filename })

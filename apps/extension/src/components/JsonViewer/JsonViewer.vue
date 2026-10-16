@@ -20,6 +20,7 @@ import { copyWithToast } from "@/utils/clipboard"
 
 /** Services */
 import { customViewerTheme } from "./theme.js"
+import { editorShadowRoot } from "./editor-shadow"
 
 const props = defineProps({
 	data: {
@@ -67,7 +68,7 @@ const initViewer = () => {
 
 	const editorView = new EditorView({
 		state,
-		parent: editorRef.value,
+		parent: editorShadowRoot(editorRef.value),
 	})
 }
 
@@ -116,7 +117,7 @@ onMounted(() => {
 			:class="$style.copy_icon"
 		/>
 
-		<div ref="editorRef" :class="$style.editor" />
+		<div ref="editorRef" data-testid="json-editor" :class="$style.editor" />
 	</div>
 </template>
 

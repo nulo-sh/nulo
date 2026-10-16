@@ -17,3 +17,29 @@
 - 2026-10-15: phase 2a.1 gate pass: lint, typecheck:all, test (787 files); armed smoke endpoints + settings-crud 15/15 Chrome, 15/15 Firefox at retry 0.
 - 2026-10-15: phase 2a.2 gate pass: test:all, lint, typecheck:all; whole smoke Chrome 240 tests (pre-fix build) and touched files 21/21 on the final head, Firefox 239 tests; network files 7/7 on both browsers at retry 0. Codex converged in two rounds.
 - 2026-10-15: phase 2c local gate pass: test:all, lint, typecheck:all; network hero-prices-unavailable and fiat-send 2/2 on both browsers, smoke fiat-display 2/2 on both, retry 0. Codex round 1 approve, Opus round 1 approve with fixes, folded in (OA-8 raised).
+- 2026-10-16: close-out revision (light): merged dev c5e9c8e8; 2 sonnet explorers; #79 already closed by #389 (no arc, D27); #101 closes with the close-out (D28); #197 half shipped in #270; D11 issue is #498; OA-8 open. Plan revised (Phase 3); panel next.
+- 2026-10-16: panel: Codex conditional approve (5 findings), Opus conditional approve (7, one High on #101's record); all accepted; D28 conditional, D31 revised, D32 (R5 released). Codex resume next.
+- 2026-10-16: Codex round 2 approve (one Low wording fix); merged dev 5c273865 (#534 closed #156, so R5 is moot); revision committed on chain-endpoints-close-out. Awaiting the orchestrator.
+- 2026-10-16: arc 2b released (D-orch-11: P12-03 was never struck); branch chain-endpoints-2b off 78d22cca, dev 7697c376 merged; R3 (#212 via #255) and R5 (#534) satisfied.
+- 2026-10-16: 2b.4-5 code in place (shadow roots, style-src hash, manifest + seam + focus tests, unit green); 2b.7 scan clean on both dists; e2e waits for load1 < 150 (389).
+- 2026-10-16: 2b.1 probe pass (both browsers), 2b.3/2b.9 shots: 12 pairs, 0 differing pixels; computed styles identical but for one unpainted Chrome ::selection report.
+- 2026-10-16: test:ci-gating, lint:actions, typecheck:all, lint: exit 0 (lint warnings are elsewhere, none in the arc's files).
+- 2026-10-16: 2b.6 dev server: styled and zero violations with the serve branch; unstyled and one violation without it (D36 holds).
+- 2026-10-16: smoke runs 1-2 on Chrome: the search-panel follow regressed (D39, fixed); selection case dropped (D40); import-errors launch timeouts under load.
+- 2026-10-16: focused smoke on Chrome (viewers-csp, import-errors-scroll), retry 0: 7/7 pass (12.2 s, 71.2 s).
+- 2026-10-16: focused smoke on Firefox, retry 0: 7/7 pass. Codex round 2: one Medium (D41, fixed in afe15481) and one Nit (fixed).
+- 2026-10-16: Codex round 3: approve, no new material findings (loop converged). Firefox focused smoke 7/7 (import-errors-scroll 90.6 s, viewers-csp 17.4 s).
+- 2026-10-16: whole smoke Chrome, retry 0 (start load 148, peak 510): 53 files pass, 4 fail; type-roles' fixture parsed a style attribute (2 style-src-attr from pptr, fixed via CSSOM); contacts-import, legal-acceptance S10, passkey-retry timed out at launch (settleLaunchedExtension), rerun pending.
+- 2026-10-16: whole smoke Firefox, retry 0 (start load 149): 59 files pass, 1 fails (security-reset purge over its 15 s budget), zero CSP violations; rerun pending.
+- 2026-10-16: the gate chain hit its 2 h background limit during network Chrome (SIGTERM after contracts deployed); no survivor of the run, its ports released; network rerun per browser.
+- 2026-10-16: network Chrome, retry 0 (start load 145): networks, default-token-seeding, backup-import-stalled-network pass; tx-sendTx-reject failed at the new JSON-window step (clickByTestId calls click() on the button's <svg>); spec fixed, rerun pending.
+- 2026-10-16: network Firefox, retry 0: networks, default-token-seeding, backup-import-stalled-network pass; tx-sendTx-reject's pointer click on the expand <svg> opened no window on either browser (no box, no click event; diagnostic run). The step opens the JSON window at its URL with the live request id; Chrome pass (28.6 s).
+- 2026-10-16: network Chrome tx-sendTx-reject on the final step (hit-test + dispatched click, showJson opens the window): pass, 23.4 s.
+- 2026-10-16: smoke reruns at retry 0 on the final head (armed dists): Chrome viewers-csp, import-errors-scroll, type-roles, contacts-import, legal-acceptance, passkey-retry 6/6 files (46 tests); Firefox viewers-csp, import-errors-scroll, type-roles, security-reset 4/4 (19 tests); zero CSP violations.
+- 2026-10-16: network Firefox tx-sendTx-reject on the final step: pass, 28.2 s. Every e2e gate green at retry 0.
+- 2026-10-16: final head local gates: test:all (extension 801 files / 12932 tests, design 498, every workspace green), lint, typecheck:all, test:ci-gating, lint:actions: exit 0.
+- 2026-10-16: merged origin/dev (94f4e26b, index.md conflict only). On the merged head: lint, typecheck:all, test:ci-gating, lint:actions, check:plans, test:all (extension 13056, design 500) exit 0; armed builds clean; smoke viewers-csp, import-errors-scroll, type-roles pass on Chrome and Firefox.
+- 2026-10-16: CI on #609: all green but Firefox smoke shard 2/3 (viewers-csp search case, 3/3 attempts). CodeMirror keeps a view within 4px of its end there on its own; the cases now read the viewer's scroll-to-end button (logs-scroll-btn) and the selection case is back. Local: viewers-csp 3x per browser, 4/4 each.
+- 2026-10-16: negative control (Chrome, document selection + document focusin): control passes, selection and search cases fail.
+- 2026-10-16: final head 6d7ead4a: lint, typecheck:all, check:plans, test:all (extension 13,056, design 500) pass; smoke viewers-csp, type-roles, import-errors-scroll at retry 0 pass on both browsers; bundle scan clean.
+- 2026-10-16: final head network: backup-import-stalled-network and tx-sendTx-reject at retry 0 pass on both browsers.

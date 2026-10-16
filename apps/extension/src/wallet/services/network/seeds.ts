@@ -20,7 +20,7 @@ export interface DefaultSeed {
 	l1ChainId: number
 	kind: ChainKind
 	isPrimaryActive: boolean
-	/** Provider label stamped on the seeded endpoint (Settings shows it instead of the raw URL). */
+	/** Provider label stamped on the seeded endpoint; Settings titles the endpoint row with it. */
 	endpointLabel?: string
 }
 

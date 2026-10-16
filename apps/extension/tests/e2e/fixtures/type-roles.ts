@@ -168,7 +168,7 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 	return { vars, readings: collect().map(read) }
 }
 
-/** The hex text no mono role holds: a visible text node with `0x` and two hex digits, CodeMirror aside. Shipped like `readTypography`. */
+/** The hex text no mono role holds: a visible text node with `0x` and two hex digits. Shipped like `readTypography`. */
 function readHexText(win: Window, monoRoles: readonly string[]): { testid: string | null; text: string }[] {
 	const doc = win.document
 	const ROLE = '[class^="type--"], [class*=" type--"]'
@@ -188,7 +188,7 @@ function readHexText(win: Window, monoRoles: readonly string[]): { testid: strin
 	for (let node = walker.nextNode(); node; node = walker.nextNode()) {
 		const holder = node.parentElement
 		if (!holder || !/0x[0-9a-f]{2}/i.test(node.textContent ?? "")) continue
-		if (holder.closest(".cm-editor") || hidden(holder) || inMonoRole(holder)) continue
+		if (hidden(holder) || inMonoRole(holder)) continue
 		found.push({
 			testid: holder.closest("[data-testid]")?.getAttribute("data-testid") ?? null,
 			text: (node.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 60),

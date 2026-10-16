@@ -4,8 +4,9 @@ import { createRunFence } from "./runFence"
 /**
  * A page's config read that survives a worker restart. A dropped port rejects the read in flight
  * and replays no update sent while it was down, so every open of the port after the first reads
- * again. Only the newest read reaches `land`, which learns the keys an update set since that read
- * started, so it can keep their newer values.
+ * again, and so does the first when the newest read failed before it: a port that drops between
+ * Ready and its announcement never fires `onConnected`. Only the newest read reaches `land`, which
+ * learns the keys an update set since that read started, so it can keep their newer values.
  *
  * Call it before anything requests on `config`, and start the mount's read in the mount step that
  * opens the port: the first `onConnected` then belongs to the mount, and every later one is a
@@ -19,23 +20,26 @@ export function useConfigRead<T>(
 	const fence = createRunFence()
 	let updatedDuringRead = new Set<string>()
 	let connections = 0
+	let newestReadFailed = false
 
 	const onUpdate = ({ key }: ConfigProp) => {
 		updatedDuringRead.add(key)
 	}
 	const onConnected = () => {
 		connections++
-		if (connections > 1) void read()
+		if (connections > 1 || newestReadFailed) void read()
 	}
 
 	async function read(): Promise<void> {
 		const isCurrent = fence.begin()
+		newestReadFailed = false
 		const updated = new Set<string>()
 		updatedDuringRead = updated
 		let value: T
 		try {
 			value = await fetch()
 		} catch {
+			if (isCurrent()) newestReadFailed = true
 			return
 		}
 		if (isCurrent()) land(value, (key) => updated.has(key))
