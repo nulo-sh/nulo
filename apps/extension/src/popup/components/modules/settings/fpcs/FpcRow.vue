@@ -40,6 +40,7 @@ const isSynthetic = computed(() => props.synthetic === "public-fj")
 		data-testid="fpc-row"
 		:data-fpc-id="fpc.id"
 		:data-fpc-name="fpc.name || fpc.address"
+		:data-fpc-unnamed="fpc.name ? null : 'true'"
 		:data-fpc-protected="protectedRow ? 'true' : null"
 		:data-fpc-synthetic="synthetic ?? null"
 	>

@@ -88,4 +88,11 @@ describe("FpcRow", () => {
 		await copyAction(w)[0].trigger("click")
 		expect(w.emitted("copyAddress")?.[0]?.[0]).toBe(baseFpc.address)
 	})
+
+	test("marks the row unnamed only while its title shows the address", () => {
+		const unnamed = factory({ fpc: { ...baseFpc, name: undefined } }).find(".setting-item")
+		expect(unnamed.attributes("data-title")).toBe(baseFpc.address)
+		expect(unnamed.attributes("data-fpc-unnamed")).toBe("true")
+		expect(factory().find(".setting-item").attributes()).not.toHaveProperty("data-fpc-unnamed")
+	})
 })
