@@ -10,6 +10,7 @@
 import { describe, expect, test } from "vitest"
 import { TokenContractArtifact as StandardToken } from "@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js"
 import { computeAuthWitMessageHash } from "@aztec-labs/aztec.js/authorization"
+import { TokenBridgeContractArtifact } from "@aztec-labs/noir-contracts.js/TokenBridge"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import {
 	type AbiType,
@@ -60,6 +61,7 @@ const lookup = (known: Record<string, ContractArtifact>) => async (address: stri
 const TOKEN = `0x00${"c".repeat(62)}`
 const TO = `0x00${"b".repeat(62)}`
 const encoded = encodeArguments(claim, [AztecAddress.fromStringUnsafe(TO), 5_000_000n, 7n, true, [1n, 2n]]).map((f) => f.toString())
+const word = (n: bigint): string => `0x${n.toString(16).padStart(64, "0")}`
 
 describe("decodeCallForDisplay", () => {
 	test("names every parameter from the ABI and projects each value by its type", async () => {
@@ -148,6 +150,51 @@ describe("decodeCallForDisplay", () => {
 		expect(await decode("claim_private", sweepSelector, sweepArgs)).toMatchObject({ kind: "decoded", fn: "sweep" })
 		expect(await decode("sweep", claimSelector, encoded)).toMatchObject({ kind: "decoded", fn: "claim_private" })
 		expect(await decode("claim_private", "0x00000000", encoded)).toEqual({ kind: "undecoded", reason: "unknown-function" })
+	})
+
+	test("an L1 exit whose recipient field carries bits past an address reads as unreadable, not as that address", async () => {
+		const bridge = TokenBridgeContractArtifact as ContractArtifact
+		const exit = findFunctionByName(bridge, "exit_to_l1_public") as FunctionAbi
+		const selector = (await FunctionSelector.fromNameAndParameters(exit.name, exit.parameters)).toString()
+		const decode = (args: string[]) => decodeCallForDisplay(lookup({ [TOKEN]: bridge }), { to: TOKEN, name: exit.name, selector, args })
+		const recipient = "0x7c41d2a90b3e85f61c0d7e4b2a9f13c86d5be9f0"
+		const callerOnL1 = "0x3a9f0c6e21d84b57e0a1c9d3f6b2e8a4705c1d9e"
+		const rest = [word(5_000_000n), word(BigInt(callerOnL1)), word(0n)]
+		expect(await decode([word(BigInt(recipient)), ...rest])).toMatchObject({
+			kind: "decoded",
+			fn: exit.name,
+			params: [
+				{ name: "recipient", value: { kind: "address", value: recipient } },
+				{ name: "amount", value: { kind: "integer", value: "5000000" } },
+				{ name: "caller_on_l1", value: { kind: "address", value: callerOnL1 } },
+				{ name: "authwit_nonce", value: { kind: "field", value: word(0n) } },
+			],
+		})
+		// The same last 20 bytes under a set upper bit: the decoder reads the address above, the call carries more.
+		expect(await decode([word(2n ** 160n + BigInt(recipient)), ...rest])).toEqual({ kind: "undecoded", reason: "arguments" })
+	})
+
+	const memo = fn("set_memo", [{ name: "memo", type: { kind: "string", length: 4 } }])
+	const option = (type: AbiType): AbiType => ({
+		kind: "struct",
+		path: "std::option::Option",
+		fields: [
+			{ name: "_is_some", type: { kind: "boolean" } },
+			{ name: "_value", type },
+		],
+	})
+	const limit = fn("set_limit", [{ name: "limit", type: option(option({ kind: "field" })) }])
+	test.each([
+		["a boolean other than 0 or 1", claim, encoded, 3, word(2n)],
+		["a string character past 16 bits", memo, encodeArguments(memo, ["nulo"]).map(String), 0, word(0x1006en)],
+		["an integer past its width", claim, encoded, 1, word(2n ** 128n)],
+		// A Some holding None decodes as the outer None, which encodes to other fields.
+		["a Some holding None", limit, encodeArguments(limit, [0n]).map(String), 1, word(0n)],
+	])("%s reads as unreadable; its control decodes", async (_class, f, fields, at, wide) => {
+		const hub = { name: "BridgeHub", functions: [f], nonDispatchPublicFunctions: [] } as unknown as ContractArtifact
+		const decode = (args: string[]) => decodeCallForDisplay(lookup({ [TOKEN]: hub }), { to: TOKEN, name: f.name, args })
+		expect(await decode(fields)).toMatchObject({ kind: "decoded", fn: f.name })
+		expect(await decode(fields.with(at, wide))).toEqual({ kind: "undecoded", reason: "arguments" })
 	})
 })
 
@@ -273,10 +320,10 @@ describe("decodeGrantForDisplay over the real Token", () => {
 		const both = lookup({
 			[USDC]: { name: "Twin", functions: [flag, value], nonDispatchPublicFunctions: [] } as unknown as ContractArtifact,
 		})
-		const shown = await decodeGrantForDisplay(both, grant(["2"], value.name))
+		const shown = await decodeGrantForDisplay(both, grant(["1"], value.name))
 		if (shown.kind !== "decoded") throw new Error(`undecoded: ${shown.reason}`)
 		expect(shown.decoded.fn).toBe(value.name)
-		expect(shown.decoded.params).toEqual([{ name: "value", value: { kind: "field", value: `0x${"2".padStart(64, "0")}` } }])
+		expect(shown.decoded.params).toEqual([{ name: "value", value: { kind: "field", value: word(1n) } }])
 		// The selector alone resolves to the earlier function, which reads the same field as `true`.
 		expect(await decodeCallForDisplay(both, shown.call)).toMatchObject({
 			kind: "decoded",
