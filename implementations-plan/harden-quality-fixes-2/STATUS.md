@@ -17,3 +17,4 @@
 - 2026-10-16 PR #604 checks: all green; the five aggregators report under their old names; smoke wall-clock Chrome 12m01s, Firefox 15m45s (before 12m14s, 17m26s).
 - 2026-10-16 arc 2 branched `harden-quality-fixes-2-arc2` off dev `5e2888be`; recon re-verified (moves in lessons/phase-2.md); I2 pins green on the base.
 - 2026-10-16 arc 2 phase 2.1 gate: pass (lint 0, typecheck:all 0, test 808 files / 13120 tests; types diff = useConfirm + ConfirmRequest; ban fails on a reverted site).
+- 2026-10-16 arc 2 phase 2.2 gate: pass (lint 0, typecheck:all 0, test:all 0: extension 809 files / 13135 tests; I2 pins green after the change; export diffs are fence substitutions only).
