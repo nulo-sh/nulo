@@ -8,8 +8,21 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: d59459ab
-status: approved by the orchestrator; arc 1 merged (#531); arc 2 implementing
+status: completed (arc 1 #531 merged; arc 2 carries this close-out)
 ---
+
+## Outcome
+
+- **Date:** 2026-10-16.
+- **Status:** closed. Arc 1 is merged (#531); arc 2 (#277, #464) lands with this close-out, and the merge that lands it closes the plan.
+- **Shipped:**
+  - Arc 1 (#531): the owner's no-token line for an address with no contract (#339); `autocomplete="current-password"` on the account-file password field (#465); Continue closes any error toast (#466).
+  - Arc 2, #277: while `clearChainState` or `clearProfileState` runs, the PXE's node client stops retrying for that chain or profile (counted stops in `ChainRuntimeRegistry`, a `retryWhile` predicate down to `makeFetchWithTimeout`); a first attempt always runs, so a reachable node still serves what a clear drains. The incoming scan reads a note's block time before its lock, and the locked commit reads only the scan's cache (D-arc2-1). With the node refusing connections, a reset now purges inside the 15 s budget of a reachable one (T4).
+  - Arc 2, #464: `confirmProfileOperation`, its RPC entries and the coordinator's `confirm` deleted; three stale comments fixed.
+- **Known limits:** #338 (D3), #432 (owner, page 17 B), #551 (KL-3, a silent node), #552 (KL-4, a token add in flight), #553 (KL-5, FPC discovery in flight, D5).
+- **Open items:** #112 (owner, page 15 OA-6 A: as is, stays open); #498 (owner, page 20 B, answered after approval; no arc here, built by a later lane).
+- **Dropped:** none. **Lessons:** none promoted; the one general gotcha (the SDK's `retry` reattempts after a sleep without asking its backoff) is stated at `packages/aztec-runtime/src/utils/fetch.ts`, and `lessons.md` is at its budget.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # wallet-followups-8: teardown stops waiting on node retries, a dead RPC goes, three popup fixes
 
@@ -103,7 +116,7 @@ Tests, each red on `git show d59459ab:<path>` copies: **T5** (`NewTokenPopup.tes
 
 **Validation gate**: `cd apps/extension && bun --bun vitest run src/popup/components/popups/NewTokenPopup.test.ts src/popup/pages/settings/accounts/import.test.ts src/popup/pages/auth.test.ts src/utils/copy-dash-ban.test.ts`; root `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`; smoke `bun run test:e2e -- tests/e2e/{account-import-export,holdings-add-token}.test.ts --retry=0`, then with `NULO_E2E_BROWSER=firefox`; network `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/holdings.test.ts`, Chrome then Firefox. Pass: exit 0 everywhere; the `new-token-error` shot shows the new line. Layers: lint, typecheck, unit, component, smoke, network.
 
-## Phase 2: teardown stops retrying (#277), arc 2
+## Phase 2: teardown stops retrying (#277), arc 2 ✓
 
 Warning: run one `e2e:agent` at a time here, at retry 0; never raise the stall watchdog or T4's bound; run network specs after 23:00Z or when `uptime` load1 is under 60.
 
@@ -116,7 +129,7 @@ Tests: **T1** (`fetch.pins.test.ts`, fake timers) a network error with `retryWhi
 
 **Validation gate**: `cd packages/aztec-runtime && bun run test`; `cd apps/extension && bun --bun vitest run src/wallet/services/incoming-transfer src/wallet/services/profile-deletion src/wallet/services/network-reset src/wallet/services/network`; root `bun run lint`, `bun run typecheck:all`; smoke `bun run test:e2e -- tests/e2e/{security-reset,passkey-backup,passkey-paths,settings-crud}.test.ts --retry=0`, then Firefox; network `e2e:agent tests/e2e/network/{delete-after-prove,stale-network-reset,profile-reimport-matrix,incoming-transfers,incoming-arrival}.test.ts`, Chrome. Pass: exit 0; T3, T4 and T8 red on base copies. Layers: lint, typecheck, unit, composition, smoke, network.
 
-## Phase 3: delete the dead RPC (#464), then the arc gate
+## Phase 3: delete the dead RPC (#464), then the arc gate ✓
 
 Steps: delete per D1; fix the three comments. Then from the root: `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`, `bun run test:ci-gating`; `cd apps/extension && bun --bun vitest run src/wallet/services/profile`. Merge `origin/dev` (PR #506 edits the node factory adapter) and rerun Phase 2's unit and smoke lines. Pass: exit 0; `rg confirmProfileOperation apps packages` finds nothing. Layers: lint, typecheck, unit.
 

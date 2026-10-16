@@ -2,6 +2,8 @@
 
 ## OA-1: popup start on a custom network whose node does not answer and that has no account yet (#498)
 
+**Answered:** owner, 2026-10-16, decision page 20, option B (open on that network without an account), after this plan was approved. Nothing is built here; #498 stays open for a later lane.
+
 - **Surface**: the popup at start (Home and the Header), for a person whose active network is a custom one, with no account on it yet, while its node does not answer.
 - **Today, and what ships now** (no change in this lane): start stops at the account's identity check: after about 6 s with a refused node, or at the popup's 60 s call deadline with a silent one (the background check keeps retrying for up to about 4 minutes). The popup then shows the warning banner "The wallet could not finish starting up." with a RETRY button. The Header's network chip and its shortcut to Settings → Networks stay hidden (they wait for a finished start), so the person cannot switch network or fix the endpoint from there; RETRY fails the same way until the node answers. Read from code (`popup/app.vue:558-568`, `components/Header.vue:155-157, 280`); not reproduced in a browser.
 - **Unchanged in every option**: a node that answers with a different L1 identity still stops start, as today. That check stops a poisoned network row from creating an account on the wrong chain.
