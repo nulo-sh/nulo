@@ -160,6 +160,8 @@ Follow `implementations-plan/README.md` § Post-implementation standard at revis
 - Codex: conditional approve, 2 findings, both accepted: the journal forwarding read the nine metadata fields before `kind` through `initialStage` (moves a read; now an inline literal with `satisfies` at the spread's place, key check re-proved); a restating comment on the test writer type.
 - Opus: approve, 5 nits, all accepted: two comments that named a caller or a moment, the self-pay comment scoped to `aztec_sendTx` on the merged arm, a now-duplicate `stub` in one describe, a test name that kept its deleted partner's qualifier.
 
+**Implementation review, round 2** (Codex resume): approve, no findings; it verified the inline spread restores the read order, own keys and stored bytes. The loop converged.
+
 The plan is 163 lines against the 150-line light target: the audit verdicts and the ledger carry the four review rounds.
 
 ## Seeds

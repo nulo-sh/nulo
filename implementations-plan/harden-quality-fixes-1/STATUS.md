@@ -13,3 +13,6 @@
 - 2026-10-16: phase 5 gate pass: lint, typecheck:all, `bun run test` (800 files); `src/types` gains exactly the three globals.
 - 2026-10-16: phase 6 local part pass: test:all (all workspaces), check:plans (0 findings), extension build, `src/types` clean. Smoke and network e2e waiting on load1 < 150; Codex round 1 and the Opus review running.
 - 2026-10-16: review round 1: Codex conditional approve (2 accepted), Opus approve (5 nits accepted); fixes committed, affected suites green; Codex resumed.
+- 2026-10-16: review round 2 (Codex resume): approve, no findings; loop converged.
+- 2026-10-16: smoke e2e (Chrome, armed bundle at 3a769683, retry 0) pass: 56 files, 6 env-gated skips, 0 failed, 2091 s.
+- 2026-10-16: network e2e (Chrome, retry 0, on b91bc5ce) pass: execute-scope-account 368 s, batch-mixed 218 s, data-privateEvents 242 s. Final-head lint, typecheck:all, test:all pass on b91bc5ce.
