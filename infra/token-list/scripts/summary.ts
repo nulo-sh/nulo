@@ -1,8 +1,8 @@
 /**
  * The `prepare` job's step summary: what the owner approves when the `sign` job asks. It shows the
  * token and flag diffs against the served envelope, the digest of both `sign` will refuse to differ
- * from, and every signing-relevant change since the last publish, because the environment approves a run and
- * does not vet the code that run executes.
+ * from, and every signing-relevant change since the current list was first published, because the
+ * environment approves a run and does not vet the code that run executes.
  *
  *   bun infra/token-list/scripts/summary.ts   (writes `tokens_sha256` to $GITHUB_OUTPUT when set)
  */
@@ -90,22 +90,41 @@ export function renderDiff(diff: TokenDiff): string {
 	)
 }
 
-function git(args: string[]): string {
-	const run = spawnSync("git", args, { cwd: REPO_ROOT, encoding: "utf8" })
+function git(root: string, args: string[]): string {
+	const run = spawnSync("git", args, { cwd: root, encoding: "utf8" })
 	if (run.status !== 0) throw new Error(`git ${args[0]}: ${run.stderr.trim()}`)
 	return run.stdout.trim()
 }
 
-function signingChanges(): string {
-	const last = git(["log", "-1", "--format=%H", "--", `infra/token-list/${ENVELOPE}`])
-	if (last === "") {
-		const log = git(["log", "--oneline", "-n", "50", "--", ...SIGNING_PATHS])
-		return `First publish: the last 50 commits touching the signing paths.\n\n\`\`\`\n${log}\n\`\`\`\n`
+const ENVELOPE_PATH = `infra/token-list/${ENVELOPE}`
+
+/**
+ * The first commit that carried the envelope bytes HEAD holds, so a later commit that restores
+ * them moves nothing; undefined when HEAD has no envelope or that commit has no parent.
+ */
+function publishBase(root: string): string | undefined {
+	if (git(root, ["ls-tree", "--name-only", "HEAD", "--", ENVELOPE_PATH]) === "") return undefined
+	const blob = git(root, ["rev-parse", `HEAD:${ENVELOPE_PATH}`])
+	const [first] = git(root, ["log", "--reverse", "--format=%H", `--find-object=${blob}`, "--", ENVELOPE_PATH]).split("\n")
+	if (!first) return undefined
+	return git(root, ["rev-list", "--max-count=1", "--parents", first]).includes(" ") ? first : undefined
+}
+
+/**
+ * Every signing-path change since the parent of the commit that first published the current list,
+ * that commit's own edits included. A first publish lists every such commit.
+ */
+export function signingChanges(root: string = REPO_ROOT): string {
+	const base = publishBase(root)
+	if (base === undefined) {
+		const log = git(root, ["log", "--oneline", "--", ...SIGNING_PATHS])
+		return `First publish: every commit touching the signing paths.\n\n\`\`\`\n${log}\n\`\`\`\n`
 	}
-	const stat = git(["diff", "--stat", `${last}..HEAD`, "--", ...SIGNING_PATHS])
-	const log = git(["log", "--oneline", `${last}..HEAD`, "--", ...SIGNING_PATHS])
-	if (stat === "") return `No signing-relevant change since the last publish (${last.slice(0, 12)}).\n`
-	return `Since the last publish (${last.slice(0, 12)}):\n\n\`\`\`\n${stat}\n\n${log}\n\`\`\`\n`
+	const range = `${base}^..HEAD`
+	const stat = git(root, ["diff", "--stat", range, "--", ...SIGNING_PATHS])
+	const log = git(root, ["log", "--oneline", range, "--", ...SIGNING_PATHS])
+	if (stat === "") return `No signing-relevant change since the current list was first published (${base.slice(0, 12)}).\n`
+	return `Since the parent of ${base.slice(0, 12)}, which first published the current list:\n\n\`\`\`\n${stat}\n\n${log}\n\`\`\`\n`
 }
 
 if (import.meta.main) {

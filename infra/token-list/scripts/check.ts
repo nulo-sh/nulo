@@ -71,9 +71,11 @@ function publicFindings(root: string): string[] {
 		.map((file) => `public/${file}: the host serves _headers and v1/list.json only`)
 }
 
+/** The signer's key order, and no other key: the committed bytes are exactly what it wrote. */
 export async function envelopeFindings(text: string, keys: readonly PinnedKey[]): Promise<string[]> {
 	try {
-		if (canonical(JSON.parse(text)) !== text) return [`${ENVELOPE}: not in canonical form`]
+		const { format, keyId, payload, signature } = JSON.parse(text) as Record<string, unknown>
+		if (canonical({ format, keyId, payload, signature }) !== text) return [`${ENVELOPE}: not in canonical form`]
 		parsePayload((await verifyEnvelope(text, keys)).payload, "strict")
 		return []
 	} catch (error) {
