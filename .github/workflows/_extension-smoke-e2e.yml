@@ -44,6 +44,13 @@ on:
         required: false
         type: string
         default: ""
+      retry:
+        description: |
+          Override the vitest `retry` count via NULO_E2E_RETRY, as the network lanes do. Empty =
+          config default (3 attempts). "0" makes a test that passes only on a retry fail the run.
+        required: false
+        type: string
+        default: ""
 
 jobs:
   smoke:
@@ -161,6 +168,8 @@ jobs:
           fi
         env:
           SHARD: ${{ inputs.shard }}
+          # Empty leaves the config default (3 attempts); the config treats "" as unset.
+          NULO_E2E_RETRY: ${{ inputs.retry }}
           # Tell the suite whether the loaded build carries the fixture. Unset
           # on the release-artifact path (prod zips exclude the fixture by
           # design), where migration.test.ts skips itself.
