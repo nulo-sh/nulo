@@ -142,7 +142,7 @@ Size: about 205 lines against the light target of 150. The ledger, the audit ver
 
 **Gate.** `bun run lint && bun run test`, and step 2. Pass: exit 0, no lint error, and no warning that step 1 lacks (a reviewed one is recorded in `lessons/phase-2.md`). Layers: lint, unit, build.
 
-### Phase 3: Firefox e2e and shots
+### Phase 3: Firefox e2e and shots ✓
 1. Add the harness option and its pin in `scripts/e2e/firefox-driver.test.ts`: the pref set, absent from `FIREFOX_LAUNCH_PREFS`, and `capabilities()` unchanged without the option. Add the `FIREFOX_ONLY` reason, the `FIREFOX.md` row and the helper move.
 2. Write the spec. Run it on a build of the base pages: it must fail at the row. Run it on the head build: it must pass.
 3. Capture both pages in both themes, and Allow's focus frame, on Firefox into `screenshots/`. Compare them with the signed `o-156-a-*` shots.
