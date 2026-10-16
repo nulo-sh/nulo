@@ -121,7 +121,7 @@ const formatTimestamp = (timestamp) => {
 
 .detail_value_aux {
 	composes: type--meta from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .raw_call_item {
