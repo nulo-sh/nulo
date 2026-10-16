@@ -11,6 +11,7 @@
 <script setup>
 /** Components */
 import BalanceView from "../../components/modules/general/BalanceView.vue"
+import FlaggedTokenBanner from "../../components/modules/general/FlaggedTokenBanner.vue"
 import RecentActivityView from "../../components/modules/general/RecentActivityView.vue"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import { Dropdown } from "@/components/ui/Dropdown"
@@ -21,10 +22,12 @@ import { DateTime } from "luxon"
 /** Services */
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
+import { PriceServiceClient } from "@/wallet/services/price/client"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
 import { pinScopeOf, usePinnedTokens } from "@/composables/usePinnedTokens"
+import { usePrices } from "@/composables/usePrices"
 const { openToast } = useToast()
 
 /** Utils */
@@ -60,6 +63,11 @@ function onBalanceUpdated(tb) {
 	if (tb.id !== tokenBalance.value?.id) return
 	tokenBalance.value = tb
 }
+
+/** The signed list's flags reach the page with the price snapshot. */
+const priceService = new PriceServiceClient()
+const prices = usePrices(priceService)
+const isFlagged = computed(() => prices.isFlagged(token.value))
 
 /** Read the currently-cached balance for this (token, account). Fast path
  *  for first paint — the actual refresh is fired separately via `scheduleRefresh()`. */
@@ -194,6 +202,8 @@ onBeforeUnmount(() => {
 	unmounted = true
 	tokenService.disconnect()
 	tokenBalanceService.disconnect()
+	prices.dispose()
+	priceService.disconnect()
 	pins.dispose()
 	cacheStore.activeTokenIdx = null
 })
@@ -269,6 +279,10 @@ onBeforeUnmount(() => {
 			</template>
 		</SubPageHeader>
 
+		<div v-if="isFlagged" :class="$style.flagged">
+			<FlaggedTokenBanner />
+		</div>
+
 		<BalanceView :tokenBalance />
 
 		<Flex direction="column" justify="between" :class="$style.content">
@@ -290,6 +304,11 @@ onBeforeUnmount(() => {
 	overflow: auto;
 	background: var(--app-bg);
 	scrollbar-gutter: stable;
+}
+
+/* Inset as BalanceView and the page's other banners are. */
+.flagged {
+	padding: 0 24px 16px;
 }
 
 .content {

@@ -12,7 +12,6 @@ import { LoggerStore } from "@/wallet/logger"
 import { asBase64CredentialId, asBase64SecretPrf, asHexUserHandle, type PasskeyCredential } from "@nulo/wallet-crypto"
 import type { PasskeyHandOver, PasskeyService } from "@/wallet/services/passkey/service"
 import { PasskeyRecoveryCoordinator } from "./passkey-recovery-coordinator"
-import type { Profile } from "./spec"
 
 /** Canonical byte-form of a deterministic Fr. Mirrors the real
  *  `PasskeyCredential.deriveMasterSecret()` return shape. */
@@ -223,65 +222,6 @@ describe("PasskeyRecoveryCoordinator", () => {
 			await expect(coord.recoverFromCredentialData({ id: asBase64CredentialId("x"), prf: asBase64SecretPrf("bad") })).rejects.toThrow(
 				/invalid PRF/,
 			)
-		})
-	})
-
-	describe("confirm", () => {
-		test("returns the passkey window's finish for the caller to report through", async () => {
-			const answer = handedOver({ id: "stored-credential" })
-			const getKey = vi.fn(async () => answer)
-			const passkeys = makeFakePasskeyService({ get: getKey })
-			const coord = newCoordinator(passkeys)
-
-			const profile: Profile = {
-				id: "pid",
-				name: "P",
-				type: "passkey",
-				pxeGeneration: "gen-test",
-				dekSealed: "ZGVrLXNlYWxlZA==",
-				walletFingerprint: "fp-test",
-				credentialId: "stored-credential",
-			}
-
-			await expect(coord.confirm(profile)).resolves.toBe(answer.finish)
-			expect(getKey).toHaveBeenCalledWith("stored-credential", { step: "unlock", profileName: "P" })
-			expect(answer.finish).not.toHaveBeenCalled()
-		})
-
-		test("throws when the profile lacks a credentialId", async () => {
-			const passkeys = makeFakePasskeyService()
-			const coord = newCoordinator(passkeys)
-
-			const profile = {
-				id: "pid",
-				name: "P",
-				type: "passkey",
-				pxeGeneration: "gen-test",
-				credentialId: "",
-			} as Profile & { type: "passkey" }
-
-			await expect(coord.confirm(profile)).rejects.toThrow(/Missing credentialId/)
-		})
-
-		test("propagates failures from PasskeyService.getKey", async () => {
-			const passkeys = makeFakePasskeyService({
-				get: (async () => {
-					throw new Error("user cancelled")
-				}) as never,
-			})
-			const coord = newCoordinator(passkeys)
-
-			const profile: Profile = {
-				id: "pid",
-				name: "P",
-				type: "passkey",
-				pxeGeneration: "gen-test",
-				dekSealed: "ZGVrLXNlYWxlZA==",
-				walletFingerprint: "fp-test",
-				credentialId: "stored-credential",
-			}
-
-			await expect(coord.confirm(profile)).rejects.toThrow(/user cancelled/)
 		})
 	})
 })

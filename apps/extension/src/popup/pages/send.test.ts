@@ -9,6 +9,8 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import { ImportedAccountUnusableError, JobCancelledError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
 import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from "vitest"
 import { nextTick, reactive } from "vue"
+import { flaggedKeysOf } from "@/utils/token-flag"
+import { TEST_FLAGGED } from "@/wallet/services/token-list/list.fixture"
 
 const ACCOUNT = "0xacct"
 const DESTINATION = `0x2${"b".repeat(63)}`
@@ -41,6 +43,7 @@ const mocks = vi.hoisted(() => ({
 	legalStatus: vi.fn(async () => "current"),
 	refreezeQuote: vi.fn(),
 	focusAmount: vi.fn(),
+	flagged: { current: [] as string[] },
 }))
 
 vi.mock("@/wallet/services/execution/client", () => ({
@@ -86,8 +89,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: new EventHandler(),
 			onConnected: new EventHandler(),
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
-			refreshIfStale: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {}, flaggedTokens: mocks.flagged.current })),
+			refreshIfStale: vi.fn(async () => ({ quotes: {}, pricedTokens: {}, flaggedTokens: mocks.flagged.current })),
 		}
 	}),
 }))
@@ -293,6 +296,7 @@ beforeEach(() => {
 	vi.spyOn(console, "debug").mockImplementation(() => {})
 })
 afterEach(() => {
+	mocks.flagged.current = []
 	vi.clearAllMocks()
 	vi.restoreAllMocks()
 	vi.useRealTimers()
@@ -1371,6 +1375,27 @@ describe("send page — Refresh quote by keyboard", () => {
 		await vi.waitFor(() => expect(w.get('[data-testid="send-amount-derived"]').text()).toBe("≈ 1.904761 USDC"))
 		expect(w.find('[data-testid="send-fiat-requote"]').exists()).toBe(false)
 		expect(document.activeElement).toBe(w.get('[data-testid="send-amount-fiat-input"]').element)
+		w.unmount()
+	})
+})
+
+describe("send page — a token the signed list flags", () => {
+	test("the banner sits above the token card while the active token is flagged, and leaves with it", async () => {
+		// Wire-shaped, in the upper case a restored row may keep.
+		const scam = { ...TOKEN, id: 8, symbol: "SCAM", contract: `0x${TEST_FLAGGED.address.slice(2).toUpperCase()}` }
+		mocks.flagged.current = flaggedKeysOf([{ chainId: TOKEN.chainId, address: TEST_FLAGGED.address }])
+		mocks.getTokens.mockResolvedValue([TOKEN, scam])
+		const { w, cacheStore } = await mountSend()
+		expect(w.find('[data-testid="token-flagged-banner"]').exists()).toBe(false)
+
+		cacheStore.activeTokenIdx = scam.id
+		await flushPromises()
+		const banner = w.get('[data-testid="token-flagged-banner"]')
+		expect(banner.element.nextElementSibling?.getAttribute("data-testid")).toBe("stub-token-card")
+
+		cacheStore.activeTokenIdx = TOKEN.id
+		await flushPromises()
+		expect(w.find('[data-testid="token-flagged-banner"]').exists()).toBe(false)
 		w.unmount()
 	})
 })

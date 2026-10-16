@@ -1,6 +1,8 @@
+import { Input } from "@nulo/design"
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { expectNativeAttrs } from "../../../../../tests/helpers/credential-pins"
 
 const ADDRESS = `0x${"0b".repeat(32)}`
 const account = vi.hoisted(() => ({
@@ -16,13 +18,21 @@ const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({ path: "/popup/settings/accounts/import", meta: {} }) }))
 vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 
+import { pickFile } from "@/utils"
 import ImportAccount from "./import.vue"
 
 const wrappers: VueWrapper[] = []
 
-async function confirmStep() {
+const InputStub = {
+	props: ["modelValue"],
+	emits: ["update:modelValue"],
+	template: `<label><input :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" /><slot name="right" /></label>`,
+}
+
+function mountImport({ realInput = false } = {}) {
 	const w = mount(ImportAccount, {
 		global: {
+			components: realInput ? { Input } : {},
 			plugins: [
 				createTestingPinia({
 					createSpy: vi.fn,
@@ -42,11 +52,7 @@ async function confirmStep() {
 				CollapsingHeroLayout: { template: "<div><slot /><slot name='bottom' /></div>" },
 				SettingItem: { template: "<button><slot name='description' /></button>" },
 				ItemsContainer: { template: "<div><slot /></div>" },
-				Input: {
-					props: ["modelValue"],
-					emits: ["update:modelValue"],
-					template: `<label><input :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" /><slot name="right" /></label>`,
-				},
+				Input: realInput ? false : InputStub,
 				FieldWarning: { template: "<em data-testid='name-warning'><slot /></em>" },
 				Button: { template: "<button><slot /></button>" },
 				Flex: { template: "<div><slot /></div>" },
@@ -56,6 +62,11 @@ async function confirmStep() {
 		},
 	})
 	wrappers.push(w)
+	return w
+}
+
+async function confirmStep() {
+	const w = mountImport()
 	await w.get('[data-testid="import-account-pick-file"]').trigger("click")
 	await flushPromises()
 	await w.get('[data-testid="import-account-submit"]').trigger("click")
@@ -104,4 +115,12 @@ describe("settings/accounts/import — the account name", () => {
 		expect(account.importAccount).toHaveBeenCalledWith("p1", 7, '{"type":"nulo-account"}', ADDRESS, "", "Imported")
 		expect(w.find('[data-testid="name-warning"]').exists()).toBe(false)
 	})
+})
+
+test("the protected file's password field names its purpose to a password manager", async () => {
+	vi.mocked(pickFile).mockResolvedValueOnce({ name: "account.nulo", text: async () => "c2VhbGVk" } as never)
+	const w = mountImport({ realInput: true })
+	await w.get('[data-testid="import-account-pick-file"]').trigger("click")
+	await flushPromises()
+	expectNativeAttrs(w, "import-account-password-input", { autocomplete: "current-password" })
 })

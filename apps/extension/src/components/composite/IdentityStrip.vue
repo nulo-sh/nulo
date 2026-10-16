@@ -80,7 +80,7 @@ withDefaults(
 .identity_sep {
 	composes: type--meta from global;
 	line-height: 14px;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .identity_network {
@@ -103,6 +103,6 @@ withDefaults(
 
 .identity_brand {
 	composes: type--brand from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 </style>

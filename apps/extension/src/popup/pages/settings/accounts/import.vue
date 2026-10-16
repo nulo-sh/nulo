@@ -214,6 +214,7 @@ const collapsingLabel = "Import Account"
 					label="File password"
 					type="password"
 					placeholder="Password used when exporting"
+					autocomplete="current-password"
 					data-testid="import-account-password-input"
 					v-model="password"
 				/>

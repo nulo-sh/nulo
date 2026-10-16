@@ -86,9 +86,12 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [docs-improvement](docs-improvement/plan.md) — completed — documentation split by job, and a sweep of the code comments
 - [durable-jobs](durable-jobs/plan.md) — completed — every submission becomes a durable job in storage that the popup only observes
 - [dynamic-token-list](dynamic-token-list/plan.md) — completed — a signed token list at tokens.nulo.sh replaces the built-in default tokens: CI signs it in a gated environment, the wallet fetches it after the Terms and daily (#79)
+- [dynamic-token-list-2](dynamic-token-list-2/plan.md) — completed — a `flagged` set in the signed token list, a compiled sequence floor, and a red row line and banners on a flagged token (#383)
+- [e2e-ci-followups-2](e2e-ci-followups-2/plan.md) — completed — cold module loads off unit-test timeouts (#500), one e2e fee ladder for every speed (#405), a readable Firefox exception and the chaos seed closed as a known limit (#322)
 - [e2e-deflake](e2e-deflake/plan.md) — completed — recurring e2e and CI flakes eliminated by root cause, never by budget
 - [e2e-determinism](e2e-determinism/plan.md) — completed — fixed sleeps in the e2e helpers replaced with observable signals
 - [e2e-flake-fixes](e2e-flake-fixes/plan.md) — completed — two CI flakes fixed at their mechanism under a two-core affinity
+- [e2e-harness-gaps](e2e-harness-gaps/plan.md) — completed — e2e runs claim their ports in the host registry and stop only what they started; unproven sleeps and skips gone, a stall watchdog, the e2e tree type-checked; NO_FROM, multicall and private-row coverage; ESM configs proven by the soak matrix
 - [e2e-followups](e2e-followups/plan.md) — completed — proverless guard on vitest's file list, one page-error normaliser, tokens-menu waits on the dropdown state, the stalled-network spec on Firefox, the title bar's newest observer entry
 - [e2e-followups-2](e2e-followups-2/plan.md) — completed — zombie owners are dead, reverted txs fail the mined wait; the Firefox page-error relay was reverted under its stop rule (#297, #281 stays open)
 - [e2e-followups-3](e2e-followups-3/plan.md) — completed — the Firefox page-error relay re-landed (#281); the lock helper observes its redirect, never reloads; `Invalid window ID` filed (#312)
@@ -288,6 +291,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [wallet-followups-5](wallet-followups-5/plan.md) — completed — a gone window closes quietly (#312); the log scan reads every logger level method and every call on a line, the column cut rejected in review (#302)
 - [wallet-followups-6](wallet-followups-6/plan.md) — completed — a secure message bounded to `{iv, ciphertext}` within 16 MiB (#345), one address spelling at the parse (#331), a typed refusal for a non-string method (#332), both e2e error arrays (#336); #262 and #355 known limits
 - [wallet-followups-7](wallet-followups-7/plan.md) — completed — one token contract spelling at the parse (#329); a bound of 32 pending calls on every dApp session at decrypt and dispatch (#354); #371 and #372 known limits
+- [wallet-followups-8](wallet-followups-8/plan.md) — completed — node retries stop while a profile or chain is torn down (#277); a dead profile RPC goes (#464); the no-token line, a field purpose and the unlock toast (#339, #465, #466)
 - [wallet-safety-fixes](wallet-safety-fixes/plan.md) — completed — four small safety and privacy fixes
 - [wallet-sdk-implicit-account-grant](wallet-sdk-implicit-account-grant/plan.md) — completed — no implicit account grant: getAccounts before requestCapabilities throws
 - [wallet-ux-fixes](wallet-ux-fixes/plan.md) — completed — four wallet UX fixes in one change set

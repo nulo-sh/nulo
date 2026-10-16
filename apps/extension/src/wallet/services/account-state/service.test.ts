@@ -447,6 +447,15 @@ describe("AccountStateService.restore (bounded)", () => {
 		;(accountStateService as unknown as { pxeService: FakePxe }).pxeService = pxe
 	})
 
+	// Restore again hands over the live rows, and a URL saved before a rule tightened must not turn
+	// its network into an absent one.
+	test("a network holding a saved http://[::1] endpoint still restores through its primary", async () => {
+		const legacy = { ...NET, endpoints: [...NET.endpoints, { id: "v6", rpcUrl: "http://[::1]:8080" }] } as Network
+		const result = await accountStateService.restore([item([sender(1)])], [legacy], LIVE_FENCE)
+		expect(result[0].restoreError).toBeUndefined()
+		expect(pxe.registerSender).toHaveBeenCalledTimes(1)
+	})
+
 	test("registers every sender/contract when nothing fails and no deadline is set", async () => {
 		const result = await accountStateService.restore([item([sender(1), sender(2)])], [NET], LIVE_FENCE)
 		expect(pxe.registerSender).toHaveBeenCalledTimes(2)

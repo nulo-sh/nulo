@@ -1,7 +1,6 @@
+// Loaded during collection, so each case's re-import only re-evaluates it.
+import "./config"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-
-// Each case pays a fresh module import, which has outlasted the 5 s default under a full parallel run.
-const FRESH_IMPORT = { timeout: 30_000 }
 
 /**
  * Pins the LOAD-BEARING proverless guard (layer 1, see config.ts): proverless
@@ -13,7 +12,7 @@ const FRESH_IMPORT = { timeout: 30_000 }
  * The guard runs at module-evaluation time (top-level `if (...) throw`), so each
  * case stubs `import.meta.env` then re-imports a fresh module instance.
  */
-describe("e2e-proverless config (layer-1 fail-closed guard)", FRESH_IMPORT, () => {
+describe("e2e-proverless config (layer-1 fail-closed guard)", () => {
 	beforeEach(() => {
 		vi.resetModules()
 	})
@@ -57,7 +56,7 @@ describe("e2e-proverless config (layer-1 fail-closed guard)", FRESH_IMPORT, () =
  * token list, so a stray single flag would not be inert — it would
  * ship a wallet that silently stops seeding default tokens.
  */
-describe("e2e-token-seeds config (layer-1 fail-closed guard)", FRESH_IMPORT, () => {
+describe("e2e-token-seeds config (layer-1 fail-closed guard)", () => {
 	beforeEach(() => {
 		vi.resetModules()
 	})
