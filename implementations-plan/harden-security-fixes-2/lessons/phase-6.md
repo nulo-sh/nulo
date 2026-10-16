@@ -33,6 +33,8 @@ After the first PR CI run (D27 revised) and merging `dev` again (#604), the thre
 | Chrome | 42.9 s | 58.6 s | 42.9 s → 101.5 s |
 | Firefox | 92.8 s | 109.6 s | 92.8 s → 202.4 s |
 
+After merging `dev` once more (#608, which reworked the app-paid fee row beside the fee slot), the same three files passed again on both browsers; this file there: Chrome 35.8 s → 90.0 s (new case 54.2 s), Firefox 76.7 s → 169.9 s (new case 93.2 s).
+
 The first CI run's lesson: a change to when Confirm enables reaches every network file that presses it, not only the arc's own; `authwit-lifecycle` and `scope-refusal` press it on requests whose estimate fails by design. Run the files that press Confirm on a refused request before opening the PR.
 
 ## Screenshots
