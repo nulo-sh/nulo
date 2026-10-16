@@ -163,7 +163,7 @@ describe("meta text reads in --nulo-secondary; --nulo-outline is for borders and
 })
 
 describe("the tx page's disclosure rows keep full strength under the pointer", () => {
-	// Faded to 80%, their --nulo-secondary text reads under 4.5:1 in the light theme.
+	// Faded to 80%, their --nulo-secondary text reads under 4.5:1 in both themes.
 	test("no hover rule in the toggle's sheet or a sheet composing it sets opacity; the pointer cursor stays the cue", () => {
 		const sheet = "apps/extension/src/popup/components/modules/tx/tx-shared.module.css"
 		const composers = sourceFiles().filter((file) =>
