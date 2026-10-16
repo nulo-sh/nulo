@@ -43,7 +43,7 @@ const form = useFormState({
 		validate: (v) => {
 			if (!v) return null
 			if (!isValidHex(v)) return "Invalid FPC address"
-			if (fpcs.value.some((f) => sameFieldAddress(v, f.address ?? ""))) return "Already exist"
+			if (fpcs.value.some((f) => sameFieldAddress(v, f.address ?? ""))) return "Already added"
 			return null
 		},
 	},
@@ -53,7 +53,7 @@ const nameTerm = form.fields.name.value
 const fpcAddressTerm = form.fields.address.value
 
 const isAlreadyExist = computed(() => form.fields.name.error.value === "Already exist")
-const isAddressStored = computed(() => form.fields.address.error.value === "Already exist")
+const isAddressStored = computed(() => form.fields.address.error.value === "Already added")
 const isValidAddress = computed(() => isValidHex(fpcAddressTerm.value))
 const isAvailableToAddFpc = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
@@ -172,7 +172,7 @@ watch(
 			<template #right>
 				<Transition name="fade">
 					<FieldWarning v-if="!isValidAddress && fpcAddressTerm"> Invalid FPC address </FieldWarning>
-					<FieldWarning v-else-if="isAddressStored"> Already exist </FieldWarning>
+					<FieldWarning v-else-if="isAddressStored"> Already added </FieldWarning>
 				</Transition>
 			</template>
 		</Input>
