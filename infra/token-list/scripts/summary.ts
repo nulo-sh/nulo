@@ -105,7 +105,8 @@ const ENVELOPE_PATH = `infra/token-list/${ENVELOPE}`
 function publishBase(root: string): string | undefined {
 	if (git(root, ["ls-tree", "--name-only", "HEAD", "--", ENVELOPE_PATH]) === "") return undefined
 	const blob = git(root, ["rev-parse", `HEAD:${ENVELOPE_PATH}`])
-	const [first] = git(root, ["log", "--reverse", "--format=%H", `--find-object=${blob}`, "--", ENVELOPE_PATH]).split("\n")
+	const introduced = ["log", "--full-history", "--topo-order", "--reverse", "--format=%H", `--find-object=${blob}`]
+	const [first] = git(root, [...introduced, "--", ENVELOPE_PATH]).split("\n")
 	if (!first) return undefined
 	return git(root, ["rev-list", "--max-count=1", "--parents", first]).includes(" ") ? first : undefined
 }
@@ -123,8 +124,9 @@ export function signingChanges(root: string = REPO_ROOT): string {
 	const range = `${base}^..HEAD`
 	const stat = git(root, ["diff", "--stat", range, "--", ...SIGNING_PATHS])
 	const log = git(root, ["log", "--oneline", range, "--", ...SIGNING_PATHS])
-	if (stat === "") return `No signing-relevant change since the current list was first published (${base.slice(0, 12)}).\n`
-	return `Since the parent of ${base.slice(0, 12)}, which first published the current list:\n\n\`\`\`\n${stat}\n\n${log}\n\`\`\`\n`
+	if (stat === "" && log === "") return `No signing-relevant change since the current list was first published (${base.slice(0, 12)}).\n`
+	const shown = [stat, log].filter((part) => part !== "").join("\n\n")
+	return `Since the parent of ${base.slice(0, 12)}, which first published the current list:\n\n\`\`\`\n${shown}\n\`\`\`\n`
 }
 
 if (import.meta.main) {

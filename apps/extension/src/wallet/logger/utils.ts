@@ -271,7 +271,6 @@ export const trim = (value: unknown, depth: number = 0): unknown => {
 	return scrubPrimitive(value)
 }
 
-/** A `0x` hex run of 32 bytes or more. */
 const HEX32 = /0x[0-9a-f]{64,}/gi
 
 /** A copy of `trim`'s output with every 32-byte hex run in its strings, keys included, replaced. */

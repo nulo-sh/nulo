@@ -15,7 +15,6 @@ const ENVELOPE = "infra/token-list/public/v1/list.json"
 const SCRIPT = "infra/token-list/scripts/sign.ts"
 const OTHER = "README.md"
 
-/** A throwaway repository: `commit` writes its files and commits them under its subject. */
 function repository() {
 	const root = mkdtempSync(join(tmpdir(), "token-list-summary-"))
 	repos.push(root)
@@ -39,7 +38,7 @@ function repository() {
 		git("commit", "-q", "-m", subject)
 		return git("rev-parse", "HEAD").slice(0, 12)
 	}
-	return { root, commit }
+	return { root, git, commit }
 }
 
 describe("signingChanges: the range starts at the parent of the commit that first carried the current envelope", () => {
@@ -72,6 +71,33 @@ describe("signingChanges: the range starts at the parent of the commit that firs
 		const out = signingChanges(root)
 		expect(out).toContain(`Since the parent of ${first}`)
 		expect(out).toContain("edit-after-a")
+	})
+
+	test("an edit stays listed when a merge keeps older bytes and a later commit restores the side branch's", () => {
+		const { root, git, commit } = repository()
+		commit("root", { [OTHER]: "r" })
+		commit("publish-a", { [ENVELOPE]: "A" })
+		git("switch", "-q", "-c", "side")
+		const side = commit("side-publish-b", { [ENVELOPE]: "B" })
+		git("switch", "-q", "main")
+		commit("edit-on-main", { [SCRIPT]: "1" })
+		git("merge", "-q", "--no-ff", "-s", "ours", "side", "-m", "merge-keeps-a")
+		commit("restore-b", { [ENVELOPE]: "B" })
+		const out = signingChanges(root)
+		expect(out).toContain(`Since the parent of ${side}`)
+		expect(out).toContain("edit-on-main")
+	})
+
+	test("an edit and its revert are both listed, though they cancel in the diff", () => {
+		const { root, commit } = repository()
+		commit("root", { [OTHER]: "r", [SCRIPT]: "0" })
+		commit("publish-a", { [ENVELOPE]: "A" })
+		commit("edit", { [SCRIPT]: "1" })
+		commit("revert-edit", { [SCRIPT]: "0" })
+		const out = signingChanges(root)
+		expect(out).toContain("edit")
+		expect(out).toContain("revert-edit")
+		expect(out).not.toMatch(/^No signing-relevant change/)
 	})
 
 	test("a first publish lists a signing-path edit older than 50 commits", () => {
