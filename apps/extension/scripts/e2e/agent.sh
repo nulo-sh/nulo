@@ -61,8 +61,9 @@ if [ -z "$NULO_E2E_RUN_ID" ]; then
   exit 2
 fi
 export NULO_E2E_RUN_ID
-# Inherited by every process the run starts (forks, Chrome, the sandbox), so a SIGKILLed run's
-# survivors can be found and stopped by marker once this shell, the run's owner, is gone.
+# Inherited by every process the run starts, so a SIGKILLed run's survivors can be found and
+# stopped by marker once this shell, the run's owner, is gone. Not Chrome: it overwrites its
+# environ, so its survivors are found by the dist they load.
 NULO_E2E_RUN=$(jq -r '.runMarker // empty' "$PORTS_JSON")
 NULO_E2E_RUN_OWNER=$(jq -r '.runOwner // empty' "$PORTS_JSON")
 NULO_E2E_WORKTREE=$(jq -r '.worktree // empty' "$PORTS_JSON")

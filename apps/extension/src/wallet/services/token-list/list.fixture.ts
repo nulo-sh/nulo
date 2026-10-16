@@ -2,7 +2,7 @@
  * The four Testnet rc.1 tokens as the signed list carries them (`infra/token-list/list.source.json`).
  * A test fixture: the wallet itself never reads it, its defaults come from the fetched list.
  */
-import { BUNDLED_TOKEN_CLASS_IDS, type TokenListEntry } from "@nulo/token-list"
+import { BUNDLED_TOKEN_CLASS_IDS, type TokenListEntry, type TokenListPair } from "@nulo/token-list"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { type PricedTokens, pricedTokensOf } from "@/wallet/services/price/price-map"
 
@@ -31,3 +31,9 @@ export const TEST_LIST_ENTRIES: readonly TokenListEntry[] = [
 ]
 
 export const TEST_PRICED_TOKENS: PricedTokens = pricedTokensOf(TEST_LIST_ENTRIES)
+
+/** A Testnet pair the list flags as a scam: never an entry, so never seeded or priced. */
+export const TEST_FLAGGED: TokenListPair = {
+	chainId: CHAIN_IDS.TESTNET,
+	address: "0x2b5ce8f0a8d4f6b3c1e7a9d0f4b2c6e8a1d3f5b7c9e0a2b4d6f8a1c3e5b7d9f0",
+}

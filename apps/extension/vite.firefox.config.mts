@@ -1,9 +1,9 @@
 import { crx } from "@crxjs/vite-plugin"
 import { thirdPartyNotices } from "@nulo/third-party-notices"
 import { mergeConfig } from "vite"
-import manifest from "./manifest/manifest.firefox.config"
-import { contentScriptIsolation } from "./scripts/content-script-isolation"
-import viteConfig from "./vite.config"
+import manifest from "./manifest/manifest.firefox.config.ts"
+import { contentScriptIsolation } from "./scripts/content-script-isolation.ts"
+import viteConfig from "./vite.config.ts"
 
 // Registered here, not in the shared config: Storybook and vitest load that one too, and the
 // notices policy describes the shipped extension only. Worker bundles are separate builds the

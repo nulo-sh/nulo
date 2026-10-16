@@ -1,6 +1,7 @@
 /**
  * Shared `test` options every workspace vitest config spreads in. A plain object with no
- * imports on purpose: it resolves identically under the hoisted and the isolated linker.
+ * imports on purpose: it resolves identically under the hoisted and the isolated linker. `.mts`
+ * because the root package declares no `type`, so a `.ts` here would load as CommonJS.
  */
 export const sharedTest = {
 	// STOPGAP until the installed vitest contains vitest-dev/vitest#10363 (≥ 5.0.0-beta.3).

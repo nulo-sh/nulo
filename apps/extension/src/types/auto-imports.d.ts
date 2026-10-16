@@ -150,6 +150,7 @@ declare global {
   const findTransferSignature: typeof import('../utils/token-transfer-vocabulary').findTransferSignature
   const finishRestoreOutcome: typeof import('../utils/restore-outcome').finishRestoreOutcome
   const fitHero: typeof import('../utils/hero-fit').fitHero
+  const flaggedKeysOf: typeof import('../utils/token-flag').flaggedKeysOf
   const foldLabel: typeof import('../utils/token-fold').foldLabel
   const followOwnRoute: typeof import('../utils/own-window').followOwnRoute
   const forChain: typeof import('../utils/token-order').forChain
@@ -198,6 +199,7 @@ declare global {
   const isComposing: typeof import('../composables/usePopupEntity').isComposing
   const isEmptyContactName: typeof import('../utils/contact-name').isEmptyContactName
   const isFirefox: typeof import('../utils/browser-surface').isFirefox
+  const isFlaggedToken: typeof import('../utils/token-flag').isFlaggedToken
   const isForeignProfile: typeof import('../utils/activity-rows').isForeignProfile
   const isHiddenHolding: typeof import('../utils/token-fold').isHiddenHolding
   const isInFlightSend: typeof import('../utils/in-flight-send').isInFlightSend
@@ -838,6 +840,7 @@ declare module 'vue' {
     readonly findTransferSignature: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['findTransferSignature']>
     readonly finishRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['finishRestoreOutcome']>
     readonly fitHero: UnwrapRef<typeof import('../utils/hero-fit')['fitHero']>
+    readonly flaggedKeysOf: UnwrapRef<typeof import('../utils/token-flag')['flaggedKeysOf']>
     readonly foldLabel: UnwrapRef<typeof import('../utils/token-fold')['foldLabel']>
     readonly followOwnRoute: UnwrapRef<typeof import('../utils/own-window')['followOwnRoute']>
     readonly forChain: UnwrapRef<typeof import('../utils/token-order')['forChain']>
@@ -886,6 +889,7 @@ declare module 'vue' {
     readonly isComposing: UnwrapRef<typeof import('../composables/usePopupEntity')['isComposing']>
     readonly isEmptyContactName: UnwrapRef<typeof import('../utils/contact-name')['isEmptyContactName']>
     readonly isFirefox: UnwrapRef<typeof import('../utils/browser-surface')['isFirefox']>
+    readonly isFlaggedToken: UnwrapRef<typeof import('../utils/token-flag')['isFlaggedToken']>
     readonly isForeignProfile: UnwrapRef<typeof import('../utils/activity-rows')['isForeignProfile']>
     readonly isHiddenHolding: UnwrapRef<typeof import('../utils/token-fold')['isHiddenHolding']>
     readonly isInFlightSend: UnwrapRef<typeof import('../utils/in-flight-send')['isInFlightSend']>
