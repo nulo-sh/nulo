@@ -1,7 +1,7 @@
 ---
 plan: harden-quality-fixes-2
 tier: mid (the lane brief's call; competing outline, Codex + Opus dual audit, a fresh Codex final pass)
-status: approved 2026-10-16 (orchestrator); arc 1 merged (#604); arc 2 implemented on `harden-quality-fixes-2-arc2`
+status: closed (arc 1 merged as #604; arc 2 delivered in one PR against dev; its merge closes the plan)
 issues: "#538, #542 (arc 1, Closes); #543 (arc 2, Closes); #541 (arc 2, Refs: page 21 steps 1-2 only)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at ea8827f9
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-16.
+- **Status:** closed. Two arcs, two PRs against `dev`, no stack: arc 1 merged as #604; arc 2 is the PR from `harden-quality-fixes-2-arc2`, whose final commits are this close-out. The merge that lands arc 2 closes the plan.
+- **Shipped:** #538 (arc 1), the three e2e vitest configs sharing one source in `apps/extension/vite.shared.ts`, smoke reading `NULO_E2E_RETRY` with a fallback of 2, each e2e job's summary naming the tests that passed only on a retry, and retries that start unlocked. #542 (arc 1), the four PR e2e gates' decide and aggregate rules in `scripts/ci-cd/e2e-decide.sh` and `e2e-aggregate.sh`, the status job on a sparse SHA-pinned checkout, the check names unchanged. #543 (arc 2), every confirm site through `requestConfirm` (`useConfirm.ts`), which replaces the whole request, with a static ban on the old writes; the contact edit handshake as one `{ contact, onSave }` popup payload. #541 page steps 1 and 2 (arc 2), `BackupSelection` as a `kind` union with one `openSelection`, and `RunFence.snapshot()` replacing the export pages' hand-rolled fences, check for check.
+- **Known limits:** none.
+- **Open items:** #541 (page step 3, the export composable, its own later lane; the issue stays open with a comment naming what shipped).
+- **Dispositions:** the pinned oddities stay as they were, by design: a decrypted body with no profile type keeps Decrypt offered and a second Decrypt fails; a file sealed twice opens on the second Decrypt; a clean Enter in the import-mode contact edit saves the row unchanged and re-judges its selection. Each is a `(BUG PIN)` test, not an open item.
+- **Lessons:** nothing new in `lessons.md` (8,190 of 8,192 bytes); its success-control line already covers the vacuous tests this plan's reviews caught.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # harden-quality-fixes-2: the second quality set of the 2026-10-15 harden
 
