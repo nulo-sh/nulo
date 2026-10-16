@@ -1,7 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { defineConfig } from "vitest/config"
-import { FORK_HEAP_MIB, STALL_MS } from "./tests/e2e/run-limits.ts"
-import { e2eReporters, noirAliases, srcDir } from "./vite.shared.ts"
+import { e2eIsolation, e2eRetry, networkRunner, noirAliases, srcDir } from "./vite.shared.ts"
 
 export default defineConfig({
 	resolve: {
@@ -15,36 +14,11 @@ export default defineConfig({
 		},
 	},
 	test: {
+		...e2eIsolation,
+		...networkRunner(),
 		include: ["tests/e2e/**/*.test.ts"],
-		environment: "node",
 		globalSetup: "./tests/e2e/global-setup.ts",
 		setupFiles: ["./tests/e2e/network-setup.ts"],
-		testTimeout: 30_000,
-		// 5 min — `tokenReadyExtension` (and global-setup's contract deploy)
-		// creates EmbeddedWallet + mints tokens. Same as vitest.e2e.network.config.ts.
-		// 120s was too short and timed out during deploy on slower machines.
-		hookTimeout: 300_000,
-		fileParallelism: false,
-		// Cross-file Chrome-state isolation: own forked worker per file. Mirrors
-		// vitest.e2e.network + vitest.e2e.config (these were missing here — part
-		// of the same keep-in-sync drift as the noir aliases).
-		pool: "forks",
-		isolate: true,
-		// Match the network runner's retry budget (NULO_E2E_RETRY override, default 2).
-		retry: process.env.NULO_E2E_RETRY ? Number(process.env.NULO_E2E_RETRY) : 2,
-		execArgv: [`--max-old-space-size=${FORK_HEAP_MIB}`],
-		reporters: e2eReporters({ stall: { stallMs: STALL_MS } }),
-		// Node v24 enforces JSON import attributes; `@aztec-labs/accounts` lazy
-		// loaders import their .json artifacts without the `with: { type:
-		// "json" }` attribute, so vanilla Node refuses them in global-setup
-		// (contract deploy fails with `ERR_IMPORT_ATTRIBUTE_MISSING`).
-		// Inline-transforming the `@aztec` packages routes them through
-		// vitest's own transformer, which doesn't enforce the attribute.
-		// Mirrors vitest.e2e.network.config.ts.
-		server: {
-			deps: {
-				inline: [/@aztec(-labs|-foundation)?\//],
-			},
-		},
+		retry: e2eRetry(2),
 	},
 })
