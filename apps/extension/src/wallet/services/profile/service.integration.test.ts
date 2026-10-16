@@ -383,34 +383,6 @@ describe("ProfileService integration", () => {
 		}, 30_000)
 	})
 
-	describe("Change 3 — confirmProfileOperation point-in-time", () => {
-		test("confirm runs fully unlocked from phase 2 onwards", async () => {
-			const { service } = await makeService()
-			const profile = await service.createProfile("P", "pass1234")
-
-			// Kick off confirm; meanwhile change password. confirm should see
-			// the OLD password as valid because its snapshot predates change.
-			// Actually — race ordering is timing-dependent; what we must
-			// assert is that confirm + change together complete without
-			// deadlock and without leaving a stuck lock.
-			const [confirmRes, changeRes] = await Promise.allSettled([
-				service.confirmProfileOperation(profile.id, "pass1234"),
-				service.changeProfilePassword(profile.id, "pass1234", "newpass"),
-			])
-
-			expect(changeRes.status).toBe("fulfilled")
-			// confirm with the OLD password: either succeeded (snapshot before
-			// change) or threw wrapped "Invalid password" (snapshot after change).
-			if (confirmRes.status === "rejected") {
-				expect(confirmRes.reason.message).toMatch(/Invalid profile password/)
-			}
-
-			// No stuck lock: subsequent op returns.
-			const info = await service.getActiveProfile()
-			expect(info?.id).toBe(profile.id)
-		}, 30_000)
-	})
-
 	describe("Change 4 — exportPlain single PBKDF2", () => {
 		test("exportPlain for password profile returns raw secret under correct password", async () => {
 			const { service } = await makeService()
@@ -1164,23 +1136,6 @@ describe("ProfileService integration", () => {
 
 			await service.lockActiveProfile()
 			await expect(service.importPasskey("Again")).rejects.toThrow()
-			expect(passkeys.outcomes).toEqual(["done", "failed"])
-		}, 30_000)
-
-		test("an operation confirm reports done after its revalidation, and failed when the profile went away meanwhile", async () => {
-			const { service, passkeys } = await makeService()
-			const profile = await service.createPasskeyProfile("PK")
-			passkeys.outcomes.length = 0
-
-			await expect(service.confirmProfileOperation(profile.id)).resolves.toBe(true)
-			expect(passkeys.outcomes).toEqual(["done"])
-
-			const realGetKey = passkeys.getKey.bind(passkeys)
-			vi.spyOn(passkeys, "getKey").mockImplementation(async (id, display) => {
-				await service.deleteProfile(profile.id)
-				return realGetKey(id, display)
-			})
-			await expect(service.confirmProfileOperation(profile.id)).rejects.toThrow(/Invalid profile id/)
 			expect(passkeys.outcomes).toEqual(["done", "failed"])
 		}, 30_000)
 	})
