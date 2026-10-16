@@ -58,3 +58,5 @@ A scratch harness outside the repo ran the e2e fixtures against cached armed dis
 ## The whole smoke (2026-10-16)
 
 - `type-roles.test.ts` planted an off-role size with `style="font-size: 12px"` in markup it set through `innerHTML`; `style-src` now refuses the attribute, so the judge saw no off-role size and the case failed in 1.3 s. Step 7 scanned the bundle, not the specs. The size is set through the CSSOM now, which CSP allows; no other spec parses a `style` attribute or adds a `<style>` (the rest write `style.cssText`).
+- Network Chrome: the full-screen JSON step failed in `clickByTestId`, which calls `click()` on its target, and `execute-show-json-btn` is an `Icon`, an `<svg>`, which has no `click()`. No spec had clicked it before. The step clicks the element handle with the pointer instead.
+- The whole smoke's other failures: on Chrome, contacts-import, legal-acceptance S10 and passkey-retry timed out at launch (`settleLaunchedExtension`) with load at 510; on Firefox, security-reset's purge missed its 15 s budget. None reads a viewer or a style.

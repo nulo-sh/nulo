@@ -30,3 +30,6 @@
 - 2026-10-16: focused smoke on Firefox, retry 0: 7/7 pass. Codex round 2: one Medium (D41, fixed in afe15481) and one Nit (fixed).
 - 2026-10-16: Codex round 3: approve, no new material findings (loop converged). Firefox focused smoke 7/7 (import-errors-scroll 90.6 s, viewers-csp 17.4 s).
 - 2026-10-16: whole smoke Chrome, retry 0 (start load 148, peak 510): 53 files pass, 4 fail; type-roles' fixture parsed a style attribute (2 style-src-attr from pptr, fixed via CSSOM); contacts-import, legal-acceptance S10, passkey-retry timed out at launch (settleLaunchedExtension), rerun pending.
+- 2026-10-16: whole smoke Firefox, retry 0 (start load 149): 59 files pass, 1 fails (security-reset purge over its 15 s budget), zero CSP violations; rerun pending.
+- 2026-10-16: the gate chain hit its 2 h background limit during network Chrome (SIGTERM after contracts deployed); no survivor of the run, its ports released; network rerun per browser.
+- 2026-10-16: network Chrome, retry 0 (start load 145): networks, default-token-seeding, backup-import-stalled-network pass; tx-sendTx-reject failed at the new JSON-window step (clickByTestId calls click() on the button's <svg>); spec fixed, rerun pending.

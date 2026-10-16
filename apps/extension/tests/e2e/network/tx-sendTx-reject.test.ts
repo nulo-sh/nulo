@@ -1,4 +1,5 @@
 import { expect, inject } from "vitest"
+import { prepareClick } from "../fixtures/browser"
 import { editorText, readEditorStyles } from "../fixtures/code-editor"
 import { clickByTestId, test } from "../fixtures/extension"
 import { snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
@@ -57,7 +58,10 @@ test.skipIf(!hasConfig)(
 		await waitForExecuteContent(execPopup)
 
 		const jsonWindowP = waitForPopup(dappConnectedExtension, "json", { timeout: 30_000 })
-		await clickByTestId(execPopup, "execute-show-json-btn")
+		// An `<svg>`, which has no `click()`: a pointer click on its box.
+		const showJson = await execPopup.waitForSelector('[data-testid="execute-show-json-btn"]', { visible: true, timeout: 30_000 })
+		await prepareClick(execPopup)
+		await showJson?.click()
 		const jsonWindow = await jsonWindowP
 		try {
 			expect(await editorText(jsonWindow, "json-editor", 30_000)).toMatch(/^\[/)
