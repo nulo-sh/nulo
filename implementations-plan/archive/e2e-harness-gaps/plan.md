@@ -1,7 +1,7 @@
 ---
 plan: e2e-harness-gaps
 tier: mid
-status: completed (arcs 1a #267, 1b #273, 2 #278, 3 #293 and 4a #369 merged; arc 4 #477 soaked at e1c4f33f; the close-out lands with or after #477, D29)
+status: completed (arcs 1a #267, 1b #273, 2 #278, 3 #293 and 4a #369 merged; arc 4 #477 soaked at e1c4f33f and, with `dev` merged and #500 fixed, at 30a39be; the close-out lands with #477, D-orch-23)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -18,8 +18,8 @@ post_implementation_hardening: not scheduled
 
 ## Outcome
 
-- **Date:** 2026-10-15.
-- **Status:** closed. Arcs 1a, 1b, 2, 3 and 4a are merged. Arc 4 is #477 (`Closes #186`), at the soaked e1c4f33f plus docs. This close-out lands with #477 or after it (D29); the merge that lands it closes this plan.
+- **Date:** 2026-10-16.
+- **Status:** closed. Arcs 1a, 1b, 2, 3 and 4a are merged. Arc 4 is #477 (`Closes #186`, `Closes #500`), at the soaked 30a39be plus docs. This close-out lands with #477 (D-orch-23); the merge that lands it closes this plan.
 - **Shipped:**
   - Arc 1a (#267, gate G1), for #169:
     - each run claims its ports in the host registry;
@@ -39,22 +39,19 @@ post_implementation_hardening: not scheduled
   - Arc 4 (#477, #186):
     - the extension's configs load as ES modules with Node's native loader;
     - Vite prints no warning block, and the builds are byte-identical;
-    - CLAUDE.md's full soak matrix passed at e1c4f33f, with one quiet-host re-run of the extension's Node reference (§ Audit verdicts).
+    - CLAUDE.md's full soak matrix passed twice: at e1c4f33f, the branch's own change, with one quiet-host re-run of the extension's Node reference; and at 30a39be, with `dev` 2dcdad4 merged, over all 13 workspaces whose config imports the base (§ Audit verdicts);
+    - `zod-jitless`'s test loads its modules in `beforeAll`, off the 5 s test budget a loaded host overran (#500, D-orch-24).
 - **Dropped or refuted:**
   - #165's discovered-authwit half: I2 did not hold, so the env gate stays and #165 stays open with the reason; a later comment there names `ensureStandardPublicChecks` as the way in.
-  - The final cross-arc Codex pass (§ Post-implementation step 3) did not run, and nobody waived it.
-    - Each arc landed on `dev` alone (D-orch-1) and was reviewed on a base that already held the arcs below it, so each loop saw its own seams.
-    - A diff from 4a357b7 to the top arc would now carry every other lane's merged work.
-    - Arc 4's last review was one round over its docs, as the orchestrator scoped it.
   - Not this lane:
     - #195 shipped with ci-release-supply as #370 (D-orch-17);
     - #81 was closed as not planned by the owner (P5-01, D-orch-17);
     - #190 stays `blocked:external`, with no in-repo half (§ Scope);
     - #269, the navigation flake arc 4's first gate met, is closed.
-  - Not promoted to `lessons.md`: a soak compare's one-off Node timeout under host load ([lessons/phase-4.md](lessons/phase-4.md)). The file holds 8,191 bytes, and no entry retires for it.
-- **Size:** 934 lines against mid's 350. The close-out cut § Post-implementation's copy of README's table; what remains is six arcs' decisions, plan audits and implementation reviews.
+  - Not promoted to `lessons.md`: a cold import inside a test's body counts against vitest's 5 s test budget, which a loaded host overruns (#500, [lessons/phase-4.md](lessons/phase-4.md)). The fix's comment carries it where it applies; the file holds 8,190 bytes, and no entry retires for it.
+- **Size:** 995 lines against mid's 350. The close-out cut § Post-implementation's copy of README's table; what remains is six arcs' decisions, plan audits and implementation reviews.
 - **Known limits:** none.
-- **Open items:** #165 (its discovered-authwit half).
+- **Open items:** #165 (its discovered-authwit half); #535 (#500's relay half, which the fix does not cover).
 - **Seeds retired:** the `/goal` and `/loop` seeds below were never run, because the orchestrator drove the lane. This record is evidence, not instructions.
 
 # e2e-harness-gaps: run isolation, unproven waits, the e2e type gate, missing coverage
@@ -494,6 +491,10 @@ Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts
 | D-orch-21 | Arc 4 is deferred a second time (2026-10-14 14:36Z): between 12:45Z and the window's end at 14:27Z, no reading for the quiet-host re-run of `apps/extension`'s Node reference had load under 60. The orchestrator's own quiet-host poll then ran that re-run at the same e1c4f33f from 2026-10-15 04:37Z (load 25, 0 live rows), under a 09:00Z deadline | The orchestrator's call: only the failed side re-runs (D-orch-20), at the soaked commit, so the rest of the matrix stands | Re-running the whole matrix |
 | D-orch-22 | The PR lands at the soaked e1c4f33f plus docs-only commits. `origin/dev` is not merged in and the branch is not rebased. If GitHub reports the PR not mergeable, the lead stops for the orchestrator's call on a re-soak | The matrix binds one commit's tree (D-orch-11, CLAUDE.md's soak bar), and a merge of `dev` changes that tree | Merging `dev` before the PR |
 | D29 | The close-out is pushed as `e2e-harness-gaps-close-out`, a fast-forward of this branch, and stays out of the PR. Since the merge base 3133fb0, `dev` has deleted the index lines on both sides of this plan's line, so removing that line conflicts, and D-orch-22 forbids the merge that would resolve it | A conflicted PR leaves only a `dev` merge or revert commits; a clean PR lets the orchestrator land the close-out after the merge, or fast-forward the PR branch onto it | Pushing the close-out into the PR, which is portable rule 5's shape but makes the PR unmergeable; another `index.md` edit, since any edit that drops this plan's line sits next to lines `dev` deleted |
+| D-orch-23 | #477 takes this close-out and one `dev` merge: `origin/dev` 116974d, merged as e20cfb5. That merge's delta touches test-runtime files and adds two workspaces whose configs import the base, so the matrix runs again at the merged commit over all 13 workspaces whose vitest config imports the base, with the side gates. The e1c4f33f soak stays recorded as evidence of the branch's own change. A later move of `dev` before #477 merges is judged by whether it adds or changes a vitest config, the base or a base import. Supersedes D-orch-22 and resolves D29 | The orchestrator's call: `dev`'s two new token-list configs import the base by its old extensionless name, so #477 at add1c80 would have broken both workspaces' unit runs on `dev` (demonstrated: "Module not found") | Landing #477 at add1c80, then the close-out |
+| D-orch-24 | The lead's second path, after the 685b032 matrix failed only on load timeouts (#500). #500 is fixed on this branch first: `zod-jitless`'s two imports move, in order, into `beforeAll`, as the relay test already loads its module in `beforeEach`; no timeout raised, no retry, the assertion unchanged (db44ace, 30a39be). `origin/dev` 2dcdad4 is merged once more (afc85de, no conflict), and the full matrix runs again at the new head over the 13 workspaces, with the side gates. A side starts when the 1-minute load is under 150, without waiting for zero live registry rows. A side that fails only on timeouts names each one and whether #500's fix covers it; any other failure stops the arc | The orchestrator's call: at 685b032 a quiet start reading never kept a two-hour side quiet on this 188-core host, so the cold import had to leave the test's budget rather than wait for a quiet host | Re-running the extension's two sides at 685b032 on a quiet host |
+| D30 | Both merges' test-runtime delta, each read at 30a39be. e20cfb5 (`dev` 116974d): the two token-list `vitest.config.ts` (now importing `vitest.base.mts`, 9887343, D22) and their `package.json`, by the matrix rows `infra/token-list` and `packages/token-list`; `apps/extension/tests/vitest.setup.ts` and `apps/extension/package.json` by the extension's row; `apps/extension/vite.config.ts`, `apps/playground/vite.config.ts` and `apps/extension/.storybook/main.ts` by the native probe, the builds, Storybook and the dist diff; `biome.json` by `lint`; `bunfig.toml` (comment lines only) and new devDependencies by the frozen install. afc85de (`dev` 2dcdad4): the Aztec line at 6.0.0-rc.3 (versions, `patchedDependencies`, three patches) and 126 changed test files, by every row's install and inventory; `vite.shared.ts`'s `__BB_VERSION__` define by the extension's row and the native probe; the manifest's `connect-src` by the builds and the dist diff. `bun.lock` went from `e273ead5…` (the e1c4f33f soak) to `5c5f8973…` (685b032) to `8967ecaf…`, `dev` 2dcdad4's own, which every summary of this matrix records. e20cfb5's one conflict, `implementations-plan/index.md`, took `dev`'s lines without this plan's | Every input a merge changed is read by a gate that ran at the soaked commit | — |
+| D31 | The cross-arc Codex pass ran before each matrix, its start held while a round was open: two rounds at 685b032, whose two fixes landed before that soak, then a delta round over db44ace and afc85de, whose one wording note landed in 30a39be before this one. The soaked commit is the final code | A code change after the soak would reopen it; the host was busy anyway | The brief's order (matrix, evidence, then the pass) |
 
 ## Audit verdicts
 
@@ -860,6 +861,66 @@ The orchestrator scoped this round to the docs after e1c4f33f, since the code lo
 | CO-2 | Medium. "The timeout tracks host load, not the change" claims a cause the runs do not establish | Accepted: both texts now say the runs fit a load-related timeout and cannot rule out a rare intermittent. PR #477's copy keeps the first wording until this close-out lands |
 | CO-3 | Low. The plan is over its size target and no trim ran | Accepted in part: § Post-implementation's copy of README's table is cut. The rest is decisions and audit evidence |
 | CO-4 | Low. #165's Record does not link this plan | Accepted: its Record now names `implementations-plan/archive/e2e-harness-gaps/plan.md#outcome` |
+
+### Final cross-arc pass, round 1: Codex (gpt-6.1-sol, high, fresh session), 2026-10-15
+
+It ran after CO-1, so the Outcome no longer says it did not.
+
+Over the lane's files at 9887343 (the six squash commits on `dev` and arc 4's diff), asking for seams, duplication, drift and loosened test assumptions. Verdict: **no demonstrated cross-arc runtime regression; two medium, one low.** Sound: all 259 e2e TypeScript files sit under the type gate and pass it; the extension and token-list configs load natively; the watchdog's targets, the ownership-gated Firefox cleanup, the Bun-only compare rules, the NO_FROM registration order and the transaction outcome controls agree.
+
+| # | Finding | Disposition |
+|---|---|---|
+| XA-1 | Medium, demonstrated, arcs 1b and 4. `vitest.e2e.all.config.ts` sets the fork heap cap but never loads `network-setup.ts`, so network files run through `test:e2e:all` skip the check D21 puts in every network fork | Accepted (685b032): `setupFiles` as the network config has it. Both configs load natively with the same `setupFiles` and `execArgv`; the `all` runner itself was not run, since `agent.sh` drives only the network config and a bare run uses fixed ports this host forbids |
+| XA-2 | Medium. HEAD carries the `dev` merge and 13 base importers, and no matrix covers it | No change: D-orch-23's matrix below |
+| XA-3 | Low, demonstrated, arc 1a. `agent.sh`'s comment says Chrome survivors are found by the run marker; Chrome overwrites its environ and is swept by the dist it loads | Accepted (685b032) |
+
+### Final cross-arc pass, round 2: Codex (same session, resumed), 2026-10-15
+
+Verdict: **approve**, no new finding, high confidence: launched with the configs' flags, Node reports a 2240 MiB limit, inside the assertion's range; both sweep entry points call `killChromesLoading`. The loop converged.
+
+### Phase 4.1's gate at 685b032, 2026-10-15: not cleared
+
+After D-orch-23's merge (e20cfb5) and the cross-arc pass's two fixes, the matrix ran at 685b032 over all 13 workspaces, 10:21Z to 13:51Z, at 1-minute load 68 to 250. Every summary recorded 685b032, a clean tree and lockfile `5c5f8973…`.
+
+- 12 of 13 `COMPARE OK`. `apps/extension` failed with an exact inventory on four vitest timeouts and nothing else: Node `zod-jitless` (run 2) and `content-message-relay`'s `beforeEach` (run 20); Bun `zod-jitless` (runs 19 and 20).
+- The quiet-host re-run of the extension's Node side (14:22Z to 16:14Z) started at load 50 and failed run 25 on `zod-jitless`, at load about 230. The Bun side's re-run found no reading under 60 before its 23:00Z window closed.
+- Filed #500. The side gates passed (`test:all` ×5, `pr-quick.yml` dispatch 38697430504, the builds, the dist diff against `dev` 116974d, smoke `navigation` 6/6, network `networks` 4/4). The orchestrator took D-orch-24.
+
+### Cross-arc delta round: Codex (gpt-6.1-sol, high, fresh session), 2026-10-15
+
+Over db44ace (#500's fix) and afc85de (the merge of `dev` 2dcdad4), the two commits after round 2. Verdict: **approve**, no finding; high confidence on source and config, moderate on behaviour under contention. Codex checked that the fix keeps the flag module before zod and the assertion unchanged, and that a failing hook cannot let the assertion pass; that the hook's 10 s budget gives the cold import a larger existing allowance but cannot guarantee success under any load; the config graph's relative extensions and JSON attributes; all 21 changed e2e TypeScript files under the type gate; the docs' 13 base workspaces; and that no new workspace or Bun-only exclusion is needed. Its one note, that the comment copied from the relay test called loading "not the behaviour under test" when the import order is the test's subject, was taken in 30a39be before the matrix.
+
+### Phase 4.1's gate at 30a39be, 2026-10-16: **pass**
+
+The matrix ran at 30a39be after a clean-room `bun install --frozen-lockfile` (every workspace's `node_modules` deleted first), on a clean tree. Every summary records `gitSha` 30a39be, `gitDirty` false, lockfile `8967ecaf…` and vitest 4.1.10, on Node 24.21.0 and Bun 1.4.2. It ran from 2026-10-15 23:49Z to 2026-10-16 03:00Z, 3 h 11 min. Each side started at a 1-minute load under 150 (D-orch-24); the readings at side starts and ends ran 29 to 137.
+
+| Workspace | Node reference: failed runs / tests | Bun candidate: failed runs / tests | Median run, Node / Bun | Compare |
+|---|---|---|---|---|
+| `apps/extension` | 0 / 12,862 | 0 / 12,872 | 199.7 / 128.8 s | OK |
+| `apps/landing` | 0 / 60 | 0 / 60 | 1154 / 977 ms | OK |
+| `infra/token-list` | 0 / 34 | 0 / 34 | 676 / 597 ms | OK |
+| `packages/aztec-runtime` | 0 / 399 | 0 / 399 | 3809 / 2328 ms | OK |
+| `packages/design` | 0 / 495 | 0 / 495 | 3166 / 2916 ms | OK |
+| `packages/extension-messaging` | 0 / 404 | 0 / 404 | 3155 / 2566 ms | OK |
+| `packages/legal` | 0 / 60 | 0 / 60 | 706 / 537 ms | OK |
+| `packages/third-party-notices` | 0 / 66 | 0 / 66 | 873 / 800 ms | OK |
+| `packages/token-list` | 0 / 33 | 0 / 33 | 773 / 641 ms | OK |
+| `packages/wallet-bridge` | 0 / 750 | 0 / 750 | 2387 / 1480 ms | OK |
+| `packages/wallet-core` | 0 / 302 | 0 / 302 | 2024 / 1323 ms | OK |
+| `packages/wallet-crypto` | 0 / 120 | 0 / 120 | 8681 / 6121 ms | OK |
+| `packages/wallet-sdk-schema-patch` | 0 / 15 | 0 / 15 | 771 / 642 ms | OK |
+
+- No run failed on either engine, so there was no timeout to name. `zod-jitless` passed all 60 runs, and the relay's hook timeout, which #500's fix does not cover, did not recur (#535). The extension's 10 Bun-only tests were set aside as `BUN_ONLY_FILES` pins them, each passing every Bun run.
+- The side gates at 30a39be, 2026-10-15:
+  - `bun run test:all` five times: every run exit 0, 150 to 192 s, with no native-loader block and no CommonJS line.
+  - `pr-quick.yml` dispatch 38823367318: `headSha` 30a39be, success.
+  - The native probe loads all 20 configs; `lint`, `typecheck:all`, `check:plans` and `lint:actions` pass; `test:ci-gating`: 571 pass.
+  - `build`, `build-storybook` and the armed Chrome build: exit 0, no warning line.
+  - The dist diff: Chrome and Firefox builds byte-identical to `dev` 2dcdad4, 597 files each.
+  - Smoke `navigation`, Chrome, retry 0: 6/6, 28 s. Network `networks`, Chrome, proverless, through `agent.sh`, retry 0: 4/4, 115 s; registry rows released.
+  - `bunx biome check vitest.base.mts`: `Checked 1 file`.
+  - #477's hosted lanes at 30a39be, green: smoke 11.6 min on Chrome and 16.5 on Firefox, network 19.9 and 22.1.
+  - No Firefox twin ran locally: no fixture, focus, window or WebAuthn code changed.
 
 ## Post-implementation
 

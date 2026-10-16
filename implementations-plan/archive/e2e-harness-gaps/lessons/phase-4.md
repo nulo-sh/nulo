@@ -80,3 +80,10 @@
 - 10 of 11 workspaces `COMPARE OK` on the first pass. `apps/extension` failed only on Node run 16: `zod-jitless` timed out at 5 s under load 120 to 200. That is the one-off this file's 4a.1 section expected to reappear under load. `content-message-relay`'s one-off did not recur.
 - The quiet-host re-run of the extension's Node reference saw no load under 60 before the window closed at 14:27Z (readings 69 to 200, 0 rows; D-orch-21). The orchestrator's poll ran it on 2026-10-15 from 04:37Z (load 25) to 06:12Z: 30/30 clean, `COMPARE OK`. So the reference held on a quiet host. That fits a load-related timeout, which the same one-off under load at f8d1200 also suggests, but two failures in 60 loaded Node runs cannot rule out a rare intermittent.
 - What made the evidence hold across the two days: nothing was committed to the branch between the matrix and the re-run. The compare checks one `gitSha` and lockfile hash across both files. The re-run's JSON and the matrix's Bun candidate both record e1c4f33f, with lockfile `e273ead5…`.
+
+## 4.1 The soak matrices at 685b032 and 30a39be
+
+- 685b032, after the `dev` 116974d merge: 12 of 13 `COMPARE OK`. The extension failed on four load timeouts, three of them `zod-jitless` (#500). A quiet start reading did not keep a two-hour side quiet: the Node re-run started at load 50 and was at about 230 by its failing run 25.
+- What changed the outcome was moving the cold import, not finding a quiet host. `zod-jitless`'s two imports moved into `beforeAll`, under the hook's 10 s budget, keeping their order and the assertion; deleting the flag import still fails the test on both engines.
+- 30a39be, with `dev` 2dcdad4 merged: 13 of 13 `COMPARE OK`, no failed run on either engine, every side started under load 150 (D-orch-24). The relay test's hook timeout, which the fix does not cover, did not recur; it is #535.
+- The matrix ran on a clean-room install: Bun 1.4.2 keeps what an earlier install linked, so every workspace's `node_modules` was deleted before `bun install --frozen-lockfile`.
