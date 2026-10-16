@@ -28,6 +28,7 @@ import {
 	expectSitesClean,
 	expectSweepClean,
 	firstFamily,
+	type IdentifierObservation,
 	judgeTypography,
 	observeIdentifierSites,
 	type PageTypography,
@@ -99,7 +100,10 @@ const FIXTURE_HTML = `
 		<input class="type--input-data" data-testid="tr-mini-data" value="0x1a" style="font-size: 12px" />
 	</div>
 	<div data-testid="tr-field"><span class="type--label">To</span><input class="type--input-data" value="0x1a" /></div>
-	<span class="type--name" data-testid="tr-name" data-address-shows="name">Alice</span>`
+	<span class="type--name" data-testid="tr-name" data-address-shows="name">Alice</span>
+	<span class="type--data" data-testid="tr-twin">0x1a</span>
+	<span class="type--meta" data-testid="tr-twin" style="display: none">0x1a</span>
+	<span class="type--data" data-testid="tr-gone" style="display: none">0x1a</span>`
 
 const fixtureSite = (selector: string, role: SiteEntry["role"]): SiteEntry => ({
 	file: "fixture.vue",
@@ -112,7 +116,7 @@ const fixtureSite = (selector: string, role: SiteEntry["role"]): SiteEntry => ({
 	state: "fixture",
 })
 
-test("a site reads its value or its native field, a name shown is judged as name, an override holds only its role in its scope", async ({
+test("a site reads its value or its native field, a name shown is judged as name, a hidden match is never read, an override holds only its role in its scope", async ({
 	registeredExtension: ctx,
 }) => {
 	const page = await openHome(ctx)
@@ -126,10 +130,19 @@ test("a site reads its value or its native field, a name shown is judged as name
 		const failures = judgeTypography(await readPageTypography(page, { kind: "at", selector: '[data-testid="tr-host"] input' }))
 		expect(failures.map(({ testid, property }) => `${testid} ${property}`)).toEqual(["tr-mini-data font-size"])
 
-		const sites = [fixtureSite("tr-field", "input-data"), fixtureSite("tr-name", "data-lead")]
+		const sites = ["tr-field", "tr-name", "tr-twin", "tr-gone"].map((testid, i) =>
+			fixtureSite(testid, (["input-data", "data-lead", "data", "data"] as const)[i]),
+		)
 		const { sites: observed } = await observeIdentifierSites(page, "fixture", "fixture", { sites })
-		expect(observed.map(({ readings }) => readings.map(({ roles }) => roles.join(" ")))).toEqual([["input-data"], ["name"]])
-		expect(observed.flatMap(({ failures }) => failures)).toEqual([])
+		expect(observed.map(({ readings }) => readings.map(({ roles }) => roles.join(" ")))).toEqual([
+			["input-data"],
+			["name"],
+			["data"],
+			[],
+		])
+		expect(observed.flatMap(({ failures }) => failures.map(({ property, actual }) => `${property}: ${actual}`))).toEqual([
+			"selector: 1 hidden",
+		])
 	} finally {
 		await page.evaluate(() => document.querySelector('[data-testid="tr-host"]')?.remove())
 	}
@@ -194,6 +207,12 @@ const RECIPIENT = "0x09c1c9d2ce72c53c2451f8e9add86ccb8cb284dd4dc4f0eaf301b40b38a
 
 type SiteState = readonly [surface: string, state: string]
 
+const SEEDED_TX = "the seedTransaction row"
+const WITH_EXPLORER = "on the testnet chain with an explorer"
+
+/** Every state this file observed whose sites passed; the coverage test reads it last. */
+const observed: IdentifierObservation[] = []
+
 /**
  * A person reads these to the digit, so none may lose one: not to its own clip or ellipsis, nor to
  * an ancestor's. An unpriced token row shows its contract-supplied name in the fiat line's place,
@@ -229,7 +248,11 @@ async function expectPageClean(page: Page, label: string, states: readonly SiteS
 	const sweep = await sweepTypeRoles(page)
 	expectSweepClean(sweep, label)
 	expect(cutFigures(sweep.readings), `${label}: figures cut`).toEqual([])
-	for (const [surface, state] of states) expectSitesClean(await observeIdentifierSites(page, surface, state))
+	for (const [surface, state] of states) {
+		const observation = await observeIdentifierSites(page, surface, state)
+		expectSitesClean(observation)
+		observed.push(observation)
+	}
 	if (states.length === 0) expect(await readHexOutsideMono(page), `${label}: hex outside a mono role`).toEqual([])
 }
 
@@ -427,11 +450,11 @@ test("a seeded wallet's Home with its fitted balance, Holdings, Activity, a tx d
 		const page = await openSeededHome(ctx)
 		await waitForFittedHero(page)
 		await expectHero(page, false)
-		await expectPageClean(page, "Home")
+		await expectPageClean(page, "Home", [["overlay:Header", ""]])
 		await expectRoleAt(page, "holdings-section-label", "label-section")
 		await expectButtons(page, "tokens-menu-trigger")
 
-		await openAndSweep(page, "actions-receive", "receive-address", "Receive")
+		await openAndSweep(page, "actions-receive", "receive-address", "Receive", [["popup:receive", ""]])
 		await expectButtons(page, "receive-close")
 		await clickByTestId(page, "receive-close")
 		await page.waitForSelector(sel("receive-address"), { hidden: true, timeout: 15_000 })
@@ -442,8 +465,13 @@ test("a seeded wallet's Home with its fitted balance, Holdings, Activity, a tx d
 		await clickNavTab(page, "activity")
 		await waitForHash(page, "#/popup/activity")
 		await page.waitForSelector(sel("page-hero-title"), VISIBLE)
-		await expectPageClean(page, "Activity")
-		await goAndSweep(page, `#/popup/tx/${TX_HASH}`, "tx-from-address", "tx detail", [["popup-tx-id", "the seedTransaction row"]])
+		await expectPageClean(page, "Activity", [["popup-activity", `${SEEDED_TX} ${WITH_EXPLORER}`]])
+		await goAndSweep(page, `#/popup/tx/${TX_HASH}`, "tx-from-address", "tx detail", [
+			["popup-tx-id", SEEDED_TX],
+			["popup-tx-id", `${SEEDED_TX} ${WITH_EXPLORER}`],
+			["popup-tx-id", `${SEEDED_TX} with a nonce`],
+			["popup-tx-id", `${SEEDED_TX} with a user call`],
+		])
 		const amounts = (await sweepTypeRoles(page)).readings.filter(({ roles }) => roles.includes("amount-detail"))
 		expect(amounts.map(({ fontSize }) => fontSize)).toEqual(["24px"])
 		await navigateByHash(page, "#/popup/tokens/1", 10_000)
@@ -480,7 +508,7 @@ test("Send with a recipient typed, the Settings hub, Display, a network, Manage 
 	await openNetworkDetail(page, network)
 	await page.waitForSelector(sel("network-detail-chain-id"), VISIBLE)
 	await expectPageClean(page, "a network", [["popup-settings-networks-id", ""]])
-	await goAndSweep(page, "#/popup/settings/accounts", "accounts-import-btn", "Manage accounts")
+	await goAndSweep(page, "#/popup/settings/accounts", "manage-accounts-row", "Manage accounts", [["popup-settings-accounts", ""]])
 	await expectButtons(page, "accounts-import-btn")
 	await goAndSweep(page, "#/popup/settings/security/reset", "reset-submit-btn", "Reset")
 	await expectButtons(page, "reset-submit-btn")
