@@ -117,7 +117,7 @@ Single arc on `worktree-settings-search-1`: one PR against `dev`, no stack (D-or
 
 ## Post-implementation
 
-Follow [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) as it reads at `f6bd011a`. Specific to this plan:
+Follow [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) as it reads at `f6bd011a`. Specific to this plan:
 
 - Step 1 is absent (`code_review: off`).
 - Step 2 runs once, over the net diff from `f6bd011a`, after phase 3 is green: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, then `resume-codex.sh` per round; on a quota or 401 error, retry once with `CODEX_ACCOUNT=alejo-icloud`. Hard stop at three rounds. Log each round in `lessons/phase-3.md`.
