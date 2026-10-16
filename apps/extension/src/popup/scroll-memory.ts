@@ -8,7 +8,8 @@ import type { RouteLocationNormalized } from "vue-router"
 type Scroller = { scrollTop: number }
 
 export interface ScrollMemory {
-	/** Stores the leaving page's offset under the entry it was shown on. */
+	/** Stores the leaving page's offset under the entry it was shown on; a page with no scroller
+	 *  clears it, so a later page on that entry never inherits an offset. */
 	leave(el: Scroller | null): void
 	/** `restore`: the entry is one the person comes back to (a back or forward), so its stored offset
 	 *  applies. `reused`: the same page instance stays mounted, keeping the offset it had. */
@@ -21,7 +22,9 @@ export function createScrollMemory(position: () => number | undefined): ScrollMe
 	let shown: number | undefined
 	return {
 		leave(el) {
-			if (el && shown !== undefined) offsets.set(shown, el.scrollTop)
+			if (shown === undefined) return
+			if (el) offsets.set(shown, el.scrollTop)
+			else offsets.delete(shown)
 		},
 		arrive(el, { restore, reused }) {
 			const at = position()

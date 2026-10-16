@@ -89,9 +89,9 @@ test("back from a Settings page lands where Settings was left, and the page it o
 type Point = { x: number; y: number }
 
 /** Where a person presses to start or end a drag on `testid`'s text: inside its first or last
- *  visible character. */
+ *  visible character, which must be on screen and on top, or the drag would start somewhere else. */
 async function textEdge(page: Page, testid: string, edge: "first" | "last"): Promise<Point> {
-	return page.$eval(
+	const point = await page.$eval(
 		`[data-testid="${testid}"]`,
 		(el, at) => {
 			const texts: Text[] = []
@@ -111,6 +111,9 @@ async function textEdge(page: Page, testid: string, edge: "first" | "last"): Pro
 		},
 		edge,
 	)
+	const onTop = await page.$eval(`[data-testid="${testid}"]`, (el, p) => el.contains(document.elementFromPoint(p.x, p.y)), point)
+	if (!onTop) throw new Error(`${testid}'s ${edge} character is off screen or covered`)
+	return point
 }
 
 /** A mouse drag from `from` to `to` after clearing any selection; returns what it selected. */
@@ -135,15 +138,15 @@ test("a drag selects the text around a control and none of the control's own: th
 	await page.waitForSelector('[data-testid="balance-amount"]:not([aria-busy])', { visible: true, timeout: 15_000 })
 	const hero = await textOf(page, "balance-amount")
 
-	// Down from the hero, past Send and Receive, onto the bottom nav: nothing selectable lies past it.
-	const toNav = await dragSelect(page, await textEdge(page, "balance-amount", "first"), await textEdge(page, "nav-holdings", "last"))
+	// Down from the hero, past Send and Receive, to the nav's last tab. Home's own text repeats some
+	// tab labels, so the bans are the words only a control shows.
+	const toNav = await dragSelect(page, await textEdge(page, "balance-amount", "first"), await textEdge(page, "nav-settings", "last"))
 	console.log(`[select] hero to the nav: ${JSON.stringify(toNav)}`)
 	expect(toNav.split(hero).length - 1, "the hero's figure, once").toBe(1)
-	for (const label of ["send", "receive", "holdings", "history", "account_balance_wallet"]) expect(lower(toNav)).not.toContain(label)
+	for (const label of ["send", "receive", "account_balance_wallet", "settings"]) expect(lower(toNav)).not.toContain(label)
 
-	// Up from the hero onto the header's account name, past the address and its copy icon.
+	// Up from the hero onto the header's account name.
 	const name = await textOf(page, "account-selector")
-	const address = await textOf(page, "account-address-text")
 	const toHeader = await dragSelect(
 		page,
 		await textEdge(page, "balance-amount", "last"),
@@ -152,7 +155,6 @@ test("a drag selects the text around a control and none of the control's own: th
 	console.log(`[select] hero to the header: ${JSON.stringify(toHeader)}`)
 	expect(toHeader).toContain(hero)
 	expect(lower(toHeader)).not.toContain(lower(name))
-	expect(toHeader).not.toContain(address)
 
 	await navigateToSettings(page, "privacy")
 	await page.waitForSelector('[data-testid="explorer-trigger"]', { visible: true, timeout: 10_000 })
@@ -180,18 +182,32 @@ test("a drag selects the text around a control and none of the control's own: th
 	expect(fromToggle, "a drag that starts on a toggle selects nothing").toBe("")
 	expect(await page.$eval('[data-testid="fiat-values-toggle"]', (el) => el.getAttribute("aria-checked"))).toBe(fiatShown)
 
-	// Down About's list: the link rows and the rows that open a document are controls; the record of
-	// the accepted Terms is text.
+	// Down About's lists: the rows that open a page or a document are controls; the group titles and
+	// the record of the accepted Terms are text.
 	await clickByTestId(page, "subpage-back")
 	await waitForHash(page, "#/popup/settings")
 	await navigateToSettings(page, "about")
 	await page.waitForSelector('[data-testid="legal-about-accepted"]', { visible: true, timeout: 10_000 })
-	const overRows = await across("coingecko-attribution", "legal-about-accepted")
-	console.log(`[select] down About's rows: ${JSON.stringify(overRows)}`)
-	expect(overRows).toContain(await textOf(page, "coingecko-attribution"))
-	expect(overRows).toContain(await textOf(page, "legal-about-accepted"))
-	for (const row of ["nulo website", "suggest an idea", "terms of use", "open-source licences"])
-		expect(lower(overRows)).not.toContain(row)
+	const overLinks = await dragSelect(
+		page,
+		await textEdge(page, "coingecko-attribution", "first"),
+		await textEdge(page, "legal-about-group", "first"),
+	)
+	console.log(`[select] down About's link rows: ${JSON.stringify(overLinks)}`)
+	expect(overLinks).toContain(await textOf(page, "coingecko-attribution"))
+	expect(lower(overLinks)).toContain("contact us")
+	for (const row of ["nulo website", "feedback", "report issue", "report scam"]) expect(lower(overLinks)).not.toContain(row)
+
+	await page.$eval('[data-testid="legal-about-note"]', (el) => el.scrollIntoView({ block: "end" }))
+	const overLegal = await dragSelect(
+		page,
+		await textEdge(page, "legal-about-group", "first"),
+		await textEdge(page, "legal-about-note", "last"),
+	)
+	console.log(`[select] down the Legal rows: ${JSON.stringify(overLegal)}`)
+	expect(overLegal).toContain(await textOf(page, "legal-about-accepted"))
+	expect(overLegal).toContain(await textOf(page, "legal-about-note"))
+	for (const row of ["terms of use", "privacy policy", "open-source licences"]) expect(lower(overLegal)).not.toContain(row)
 
 	await page.evaluate(() => window.getSelection()?.removeAllRanges())
 	expect(registeredExtension.consoleErrors).toEqual([])

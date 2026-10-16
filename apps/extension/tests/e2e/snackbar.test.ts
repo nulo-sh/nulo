@@ -47,6 +47,16 @@ async function settledSnack(page: Page): Promise<Rect> {
 	})
 }
 
+/** The card's box once its enter slide ends, read while it may still be sliding: a pointer aimed
+ *  at its centre lands on the card whatever part of the 20px slide is left. */
+async function restingSnack(page: Page): Promise<{ x: number; y: number }> {
+	return page.$eval(SNACK, (card) => {
+		const box = card.getBoundingClientRect()
+		const slide = new DOMMatrixReadOnly(getComputedStyle(card).transform).m42
+		return { x: box.left + box.width / 2, y: box.top - slide + box.height / 2 }
+	})
+}
+
 /** Stamps every card's first appearance and its removal on the page clock, so a life is measured
  *  where it runs, not across the driver round trip. */
 async function recordSnackLife(page: Page): Promise<void> {
@@ -354,12 +364,14 @@ test("the pointer resting on the snack keeps it; after leaving, it goes within i
 
 	await clickByTestId(page, COPY)
 	await waitForToast(page, "Address is copied", 5_000, { kind: "success" })
-	const rect = await settledSnack(page)
-	await page.mouse.move(rect.left + rect.width / 2, rect.top + rect.height / 2, { steps: 5 })
+	// Aimed before the slide settles: a two-second card leaves no time to wait for it.
+	const centre = await restingSnack(page)
+	await page.mouse.move(centre.x, centre.y, { steps: 5 })
 	await sleep(8_000)
 	expect(await cardCount(page)).toBe(1)
 
-	await page.mouse.move(rect.left + rect.width / 2, rect.top - 40, { steps: 5 })
+	const rect = await settledSnack(page)
+	await page.mouse.move(centre.x, rect.top - 40, { steps: 5 })
 	await waitForSnackGone(page, 2_500)
 
 	expect(registeredExtension.consoleErrors).toEqual([])

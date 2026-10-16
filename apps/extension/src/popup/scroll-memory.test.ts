@@ -89,6 +89,18 @@ describe("createScrollMemory", () => {
 		expect(activity.scrollTop).toBe(640)
 	})
 
+	test("a page left with no scroller clears its entry, so back never applies the replaced page's offset", () => {
+		const { go } = history()
+		const list = { scrollTop: 0 }
+		go(null, list, 0)
+		list.scrollTop = 400
+		go(list, null, 0)
+		go(null, { scrollTop: 0 }, 1)
+		const back = { scrollTop: 0 }
+		go(null, back, -1, { restore: true })
+		expect(back.scrollTop).toBe(0)
+	})
+
 	test("an entry never left has nothing to restore", () => {
 		const { go } = history()
 		const page = { scrollTop: 50 }

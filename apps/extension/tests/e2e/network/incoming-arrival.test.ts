@@ -234,7 +234,7 @@ const waitForSeeded = (page: Page) => page.waitForSelector('[data-arrivals-seede
 
 type Snack = { title: string; sub: string }
 
-/** `hold` keeps the card open for a View that follows. */
+/** `hold` keeps the card open for what follows it: a View, or a read of its layout. */
 async function waitForReceivedSnack(page: Page, timeout = RECEIPT_BUDGET_MS, hold = false): Promise<Snack> {
 	const card = await waitForToast(page, "Received", timeout, { kind: "success", hold })
 	return card.evaluate((el) => ({
@@ -546,7 +546,7 @@ test.skipIf(!hasConfig)(
 		await waitForHash(page, "#/popup/settings")
 		await waitForSeeded(page)
 		await sendPublic(config, account, 10n ** 38n, hostileToken)
-		const snack = await waitForReceivedSnack(page)
+		const snack = await waitForReceivedSnack(page, RECEIPT_BUDGET_MS, true)
 		expect(snack.sub).not.toContain("\u202e")
 		const layout = await page.evaluate(() => {
 			const card = document.querySelector('[data-testid="snackbar"]') as HTMLElement
