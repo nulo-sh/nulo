@@ -285,16 +285,29 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 		<div :class="$style.op_divider" />
 
 		<template v-if="isEmbeddedFeePayment(op)">
-			<Flex data-testid="execute-op-fee-set-badge" align="center" gap="8" wide :class="$style.op_fee_set">
+			<Flex
+				data-testid="execute-op-fee-set-badge"
+				align="start"
+				gap="8"
+				wide
+				:aria-busy="isEstimating && !feeEstimate ? 'true' : undefined"
+				:class="$style.op_fee_set"
+			>
 				<Icon name="check-circle" size="14" color="green" />
-				<Text v-if="feeEstimate" variant="body" color="secondary" data-testid="execute-op-app-fee">
-					Fee up to
-					<Text variant="name" color="primary" :class="$style.name_size">{{ feeEstimate.maxFeeFormatted }} FJ</Text><template v-if="feeEstimate.priorityFeeFormatted">, includes a {{ feeEstimate.priorityFeeFormatted }} FJ <DottedTerm term="priority-fee" testid="execute-op-priority-term">priority fee</DottedTerm> the app asked for</template>
-				</Text>
-				<Text v-else variant="body" color="secondary">
-					Fee payment method set by
-					<Text variant="name" color="primary" :class="$style.name_size">{{ safeWire(dapp?.name, 64) || 'the app' }}</Text>
-				</Text>
+				<Flex direction="column" gap="6" :class="$style.fee_lines">
+					<Text variant="body" color="secondary" data-testid="execute-op-app-legend">
+						Fee payment method set by
+						<Text variant="name" color="primary" :class="$style.name_size">{{ safeWire(dapp?.name, 64) || 'the app' }}</Text>
+					</Text>
+					<Text v-if="feeEstimate" variant="body" color="secondary" data-testid="execute-op-app-fee">
+						Fee up to
+						<Text variant="name" color="primary" :class="$style.name_size">{{ feeEstimate.maxFeeFormatted }} FJ</Text><template v-if="feeEstimate.priorityFeeFormatted">, includes a {{ feeEstimate.priorityFeeFormatted }} FJ <DottedTerm term="priority-fee" testid="execute-op-priority-term">priority fee</DottedTerm> the app asked for</template>
+					</Text>
+					<Flex v-else-if="isEstimating" align="center" gap="4" data-testid="execute-op-app-fee-estimating">
+						<Text variant="body" color="secondary">Fee up to</Text>
+						<Skeleton />
+					</Flex>
+				</Flex>
 			</Flex>
 			<!-- Mounted with the row: a region created with its text in place may go unannounced. -->
 			<div role="status" aria-live="polite" aria-atomic="true" data-testid="execute-op-app-payer-live">
@@ -561,6 +574,12 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 .op_fee_set {
 	padding: 12px;
 	background: var(--nulo-surface-low);
+}
+
+/* The 1 px sets the first line's text on the icon's centre. */
+.fee_lines {
+	min-width: 0;
+	padding-top: 1px;
 }
 
 /* A label on its own line above a full-width stack, so nothing hangs off the right-aligned value column. */

@@ -12,3 +12,4 @@
 - 2026-10-16: phase 8: test:all pass on rerun (first run: zod-jitless cold-import timeout, #500); test:ci-gating pass; check:plans 0 findings; smoke Chrome pass (send-fee-privacy 1, send-keyboard 5, send-outcome-rows 2, settings-crud 9); screenshots taken (Chrome, both themes).
 - 2026-10-16: phase 8 gates pass: smoke Firefox (1, 5, 2, 9); network Chrome fee-methods 8/8 (381 s), NULO_E2E_PROVERLESS=1 same-token-concurrent-sends 16/16 (691 s); final lint and typecheck:all 0. PR next.
 - 2026-10-16: arc 2 started on send-fees-ux-arc2 off origin/dev c5e9c8e8 (page 20: OA-1 B, OA-3 B, OA-4 B; OA-2 waits on the skeleton mockup). Phase 1b (OA-4 B) gate F pass: lint, typecheck:all, test (797 files).
+- 2026-10-16: phase 5 (#503, OA-1 B) gate F pass on rerun (first: type-role-ban 5 s timeout at load 215, file alone 2 s); network spec fee-sponsor-funding pending a host under load 150.

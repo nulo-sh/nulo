@@ -1,0 +1,6 @@
+# Phase 5: #503, the app-set fee row (OA-1 B)
+
+- 2026-10-16: `OperationCard.vue`: the app-set row keeps the legend ("Fee payment method set by {app}", `execute-op-app-legend`) as its first line. The second line is the landed figure (`execute-op-app-fee`, unchanged words) or, while the estimate runs, "Fee up to" and the design `Skeleton` (`execute-op-app-fee-estimating`), with `aria-busy="true"` on the row. A failed estimate and a never-estimated `default_entrypoint` operation show the legend alone. Layout follows the page 20 mockup (icon top-aligned, lines 6 px apart, line 1 offset 1 px).
+- Tests: `OperationCard.fee.test.ts` § app pays, wire-shaped: estimating (legend, loading line, busy), landed (legend above the figure, not busy), failed and `default_entrypoint` while previewing (legend alone), priority fee (sentence on the figure line), short funding. Mutation checks: the old template reds three cases; dropping the estimating branch reds one.
+- `fee-sponsor-funding.test.ts`: the priority sentence is read from `execute-op-app-fee`, the legend apart.
+- Gate F: lint 0 (27 warnings, none new), typecheck:all 0, test: first run red on `src/utils/type-role-ban.test.ts` (5 s test timeout at host load 215; the file alone passes in 2 s), rerun green (797 files).
