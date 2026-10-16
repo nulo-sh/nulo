@@ -562,6 +562,18 @@ describe("CI behavior-gating guard", () => {
 		expect(existsSync(join(ROOT, "apps/extension/tests/e2e/network/sim-from-selfpay.test.ts")), "sim-from-selfpay exists").toBe(true)
 		expect(existsSync(join(ROOT, "apps/extension/tests/e2e/network/selfpay-phase.test.ts")), "selfpay-phase exists").toBe(true)
 	})
+
+	test("both reusable suites take their retry count from one input, empty by default, as NULO_E2E_RETRY", () => {
+		// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+		const reusable = (file: string): any => Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8"))
+		const smoke = reusable("_extension-smoke-e2e.yml")
+		const network = reusable("_extension-network-e2e.yml")
+		for (const wf of [smoke, network]) expect(wf.on.workflow_call.inputs.retry).toMatchObject({ type: "string", default: "" })
+		// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+		const run = smoke.jobs.smoke.steps.find((step: any) => step.name === "Run smoke e2e")
+		expect(run.env.NULO_E2E_RETRY).toBe("${{ inputs.retry }}")
+		expect(network.jobs["network-e2e"].env.NULO_E2E_RETRY).toBe("${{ inputs.retry }}")
+	})
 })
 
 /**
