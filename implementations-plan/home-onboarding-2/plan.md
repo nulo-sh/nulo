@@ -163,7 +163,7 @@ Pass: exit 0; the spec is red on the base pages and green on the head; its runti
 
 ### Phase 4 (arc 2): focus after a grant
 1. The header chain, both pages, and their tests: on each page, a grant while Allow holds focus lands focus on the title (the real `BrutalistTitle`; the real `SettingsPageShell` → `SubPageHeader` → base chain), and a grant while a surviving control holds focus (Skip; Back) leaves it there. `SubPageHeaderBase.test.ts`: `focusTitle` focuses the default title, whose source keeps the no-ring rule, and leaves a slotted title alone. Each page case red with the watcher removed, each control red with the containment check removed.
-2. The Firefox spec waits for focus on `onboarding-presto-title` after Allow and reads no outline on it: red on a build of arc 1's pages, green on the head.
+2. The Firefox spec waits for focus on `onboarding-presto-title` after the clicked Allow, then withholds the grant again, grants it with Enter and reads no outline on the focused title (a click ends keyboard modality, so only the keyed grant can show a ring). Red on a head build with the onboarding watcher removed (at the first focus wait) and on one with the title's no-ring rule removed (at the outline read); green on the head.
 3. Shots of both pages after a grant from a focused Allow, both themes, on Firefox.
 
 **Gate.** `bun run lint && bun run typecheck:all && bun run test`; then, at `--retry=0` with load1 below 150, the armed smoke suite on Firefox and on Chrome (the header change reaches every sub-page title). Pass: exit 0, step 1's red checks recorded, the spec red on arc 1's pages and green on the head, its runtime recorded. Layers: lint, typecheck, unit, component, smoke e2e on both browsers.
@@ -221,6 +221,11 @@ Execute [`implementations-plan/README.md` § Post-implementation standard](../RE
 - **Arc 1, Codex r2** (resume): **approve**, no new material finding; the four fixes and the folded same-family items verified, no Chrome, gating, teardown or seam regression.
 
 - **Arc 2, design panel** (Codex gpt-6.1-sol high, session `01a144fa-1177-71f1-915a-823944c9a953`; Opus Plan lens): both agree on D10 and D12 and on the pre-flush timing. Folded from Opus: focus inside the callback rather than after `nextTick` (D11); the comments state the pre-flush invariant, drop an untrue "only" (a click also focuses a title) and a caller-naming TSDoc; the no-ring rule pinned (source regex; outline read in the e2e); the base test split. Both note the e2e grants with no doorhanger, so the real prompt's focus return stays unproven (P18-04's Mac check covers the same ground).
+
+- **Arc 2, Codex r1** (gpt-6.1-sol high, session `01a14503-beab-78b0-945b-8e7795025e1c`, over `d68687c7`): **approve**, no finding; notes the real doorhanger's focus return stays unproven.
+- **Arc 2, Opus diff review:** approve. Low, accepted: the outline read followed a clicked Allow, whose mousedown ends Firefox's keyboard modality, so it could not fail without the rule; the spec now adds a keyed grant and the red build proves the read (`e12bdd41`). Nit, accepted: the watcher comment's "not the page" now reads "instead of dropping it to the body".
+- **Arc 2, Codex r2** (resume, over `e12bdd41`): conditional approve. Low, plausible, accepted: the keyed pass Tabbed straight after the scratch window closed, and an unfocused Firefox window takes key events without their default actions; `prepareKeys` added (`cec5f0d6`). Noted, no change: the error arrays span both passes, and the keyed pass does not await its probe.
+- **Arc 2, Codex r3** (resume): **approve**, no new finding. The loop converged.
 
 ## Seeds (written, not run)
 

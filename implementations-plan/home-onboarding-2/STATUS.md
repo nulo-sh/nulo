@@ -13,3 +13,9 @@
 - 2026-10-16 arc1 arc gate: pass (audit:vue 0, test:all 0, test:ci-gating 0, test:release 0, build:firefox 0, check:plans 0). Codex loop converged at r2 (approve).
 - 2026-10-16 arc1: PR #534 opened (both browsers' smoke and network lanes tripped by path filter); close-out deferred to the follow-up arc (D9).
 - 2026-10-16 arc2: OA-1 = B (P20-07); design panel agreed (Codex + Opus), Opus folds applied; code committed d68687c7; component red checks recorded. Unit gate running; e2e waits on load1 < 150.
+- 2026-10-16 arc2 phase 4 unit gate: pass (lint 0, typecheck:all 0, test 0: 800 files, 12929 tests). Codex r1 (session 01a14503-beab-78b0-945b-8e7795025e1c): approve, no finding. Red Firefox dist built (onboarding watcher removed); spec run waits on load.
+- 2026-10-16 arc2 Opus diff review: approve, 1 Low (vacuous outline read after a click) + 1 nit, both fixed (e12bdd41); Codex r2 resumed; Firefox chain (red 1, red 2, head, shots) queued on load.
+- 2026-10-16 arc2 Codex r2: conditional approve (1 Low: prepareKeys before the keyed pass, fixed cec5f0d6); r3: approve, loop converged. Firefox e2e chain still waiting on load.
+- 2026-10-16 arc2 arc gate (non-e2e): audit:vue 0, test:all 0, test:ci-gating 0. KL-1 filed closed as #571; P18-04 filed as #572 (owner-decision).
+- 2026-10-16 arc2 e2e red 1 (head build, onboarding watcher removed): red as required, spec fails at presto-host-permission.test.ts:79 (focus on BODY).
+- 2026-10-16 arc2 e2e red 2 (head build, onboarding title's no-ring rule removed): red as required at presto-host-permission.test.ts:91 (outline 'auto 1px 0px' after the keyed grant).
