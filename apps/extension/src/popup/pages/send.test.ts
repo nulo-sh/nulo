@@ -59,7 +59,13 @@ vi.mock("@/wallet/services/execution/client", () => ({
 }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onTokenAdded: liveBus(), onTokenDeleted: liveBus(), getTokens: mocks.getTokens }
+		return {
+			disconnect: vi.fn(),
+			onTokenAdded: liveBus(),
+			onTokenUpdated: liveBus(),
+			onTokenDeleted: liveBus(),
+			getTokens: mocks.getTokens,
+		}
 	}),
 }))
 vi.mock("@/wallet/services/token-balance/client", () => ({
@@ -328,6 +334,18 @@ describe("send page — the submit tail", () => {
 		expect(appStore.awaitingTransactions[0]).toMatchObject({ account: ACCOUNT, destination: DESTINATION, contract: TOKEN.contract })
 		expect(mocks.routerReplace).toHaveBeenCalledWith("/popup/general")
 		expect(submit(w).text()).toBe("CONFIRMING")
+		w.unmount()
+	})
+
+	test("a token updated after mount is sent with its new decimals", async () => {
+		const { w } = await mountSend()
+		mocks.getTokens.mockResolvedValue([{ ...TOKEN, decimals: 4 }])
+		const client = (TokenServiceClient as unknown as { mock: { results: { value: { onTokenUpdated: EventHandler<unknown> } }[] } }).mock
+		client.results.at(-1)?.value.onTokenUpdated.invoke({ ...TOKEN, decimals: 4, profileId: "p1" })
+		await flushPromises()
+		await fillForm(w)
+		await submit(w).trigger("click")
+		expect(mocks.executeTransfer.mock.calls[0]?.[5]).toBe(15_000n)
 		w.unmount()
 	})
 

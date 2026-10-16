@@ -71,10 +71,7 @@ const accountClient = {
 }
 const tokenClient = {
 	restore: vi.fn(),
-	disconnect: vi.fn(),
-}
-const incomingClient = {
-	trustRestoredTokens: vi.fn(),
+	refreshRestoredTokens: vi.fn(),
 	disconnect: vi.fn(),
 }
 /** Registrable child for account-state fixtures: since the bounded
@@ -112,11 +109,6 @@ vi.mock("@/wallet/services/account/client", () => ({
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
 		return tokenClient
-	}),
-}))
-vi.mock("@/wallet/services/incoming-transfer/client", () => ({
-	IncomingTransferServiceClient: vi.fn(function () {
-		return incomingClient
 	}),
 }))
 vi.mock("@/wallet/services/transaction/client", () => ({
@@ -206,6 +198,7 @@ vi.mock("@/wallet/storage/migrations", async () => {
 
 // Imported AFTER mocks are registered.
 import {
+	refreshRestoredTokensStage,
 	relinkRestoredTokenBalances,
 	resolvePasskeyCredential,
 	restoreAccountsAndFilterOwnedSlices,
@@ -216,6 +209,7 @@ import { collectRestoreErrors, sealFullBackupText } from "@/utils/full-backup-he
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { awaitLivenessAdvance, readLiveness } from "@/utils/background-liveness"
 import { ACCOUNT_STATE_SKIP_DEADLINE, ACCOUNT_STATE_SKIP_WRONG_NETWORK } from "@/wallet/services/account-state/normalize"
+import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS } from "./importChainSync"
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -537,8 +531,7 @@ beforeEach(() => {
 	accountClient.disconnect.mockReset()
 	tokenClient.restore.mockReset().mockResolvedValue([])
 	tokenClient.disconnect.mockReset()
-	incomingClient.trustRestoredTokens.mockReset().mockResolvedValue(undefined)
-	incomingClient.disconnect.mockReset()
+	tokenClient.refreshRestoredTokens.mockReset().mockResolvedValue(undefined)
 	transactionClient = passthroughClient()
 	tokenBalanceClient = passthroughClient()
 	accountStateClient = passthroughClient()
@@ -647,7 +640,7 @@ describe("useFullBackupImport — restoreBackup happy path", () => {
 		expect(networkClient.disconnect).toHaveBeenCalled()
 	})
 
-	it("trusts the restored tokens of the created profile and finishes BEFORE finalizeRestore, so no first scan prompts", async () => {
+	it("re-reads the restored tokens after finalizeRestore, on the fence it returned and the tail's deadline, and trusts none", async () => {
 		const opts = makeOpts()
 		const c = useFullBackupImport(opts)
 		const backup = await buildBackup()
@@ -655,47 +648,43 @@ describe("useFullBackupImport — restoreBackup happy path", () => {
 		profileClient.restore.mockResolvedValue({ id: "new-id", name: "Imported", type: "password" })
 		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
 		accountClient.restore.mockResolvedValue([])
-		let settleTrust!: () => void
-		incomingClient.trustRestoredTokens.mockReturnValue(
-			new Promise<void>((resolve) => {
-				settleTrust = resolve
-			}),
-		)
-
-		const restoring = c.restoreBackup()
-		await vi.waitFor(() => expect(incomingClient.trustRestoredTokens).toHaveBeenCalledExactlyOnceWith("new-id"))
-		// Every later stage is a resolved mock, so an import that did not wait for the trust step
-		// would reach finalizeRestore within these turns.
-		for (let turn = 0; turn < 5; turn++) await new Promise((resolve) => setTimeout(resolve, 0))
-		expect(profileClient.finalizeRestore).not.toHaveBeenCalled()
-
-		settleTrust()
-		await restoring
-
-		expect(incomingClient.trustRestoredTokens.mock.invocationCallOrder[0]).toBeGreaterThan(
-			tokenClient.restore.mock.invocationCallOrder[0],
-		)
-		expect(profileClient.finalizeRestore).toHaveBeenCalledOnce()
-		expect(incomingClient.disconnect).toHaveBeenCalledOnce()
-	})
-
-	it("a trust step that rejects costs the prompt, never the import", async () => {
-		const opts = makeOpts()
-		const c = useFullBackupImport(opts)
-		const backup = await buildBackup()
-		c.selectedBackup.value = { name: "x.json", backup, type: "plain", profileType: "password" }
-		profileClient.restore.mockResolvedValue({ id: "new-id", name: "Imported", type: "password" })
-		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
-		accountClient.restore.mockResolvedValue([])
-		incomingClient.trustRestoredTokens.mockRejectedValue(new Error("worker gone"))
-		const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+		const startedAt = Date.now()
 
 		await c.restoreBackup()
 
+		expect(tokenClient.refreshRestoredTokens).toHaveBeenCalledExactlyOnceWith(FENCE, expect.any(Number))
+		const deadlineAt = tokenClient.refreshRestoredTokens.mock.calls[0]?.[1] as number
+		expect(deadlineAt - startedAt).toBeGreaterThan(0)
+		expect(deadlineAt - startedAt).toBeLessThanOrEqual(IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS + 1_000)
+		expect(tokenClient.refreshRestoredTokens.mock.invocationCallOrder[0]).toBeGreaterThan(
+			profileClient.finalizeRestore.mock.invocationCallOrder[0],
+		)
+		expect(opts.completeImport).toHaveBeenCalledOnce()
+	})
+
+	it("a re-read that rejects keeps the import", async () => {
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		c.selectedBackup.value = { name: "x.json", backup: await buildBackup(), type: "plain", profileType: "password" }
+		profileClient.restore.mockResolvedValue({ id: "new-id", name: "Imported", type: "password" })
+		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
+		accountClient.restore.mockResolvedValue([])
+		tokenClient.refreshRestoredTokens.mockRejectedValue(new Error("worker gone"))
+		await c.restoreBackup()
 		expect(c.restoreStatus.value).toBe("finished")
-		expect(profileClient.finalizeRestore).toHaveBeenCalledWith("new-id", "pass1234")
-		expect(incomingClient.disconnect).toHaveBeenCalledOnce()
-		warn.mockRestore()
+		expect(opts.completeImport).toHaveBeenCalledOnce()
+	})
+
+	it("a re-read that never answers ends at the deadline and closes its port", async () => {
+		tokenClient.refreshRestoredTokens.mockReturnValue(new Promise(() => {}))
+		const startedAt = Date.now()
+		await refreshRestoredTokensStage(FENCE, startedAt + 50)
+		expect(Date.now() - startedAt).toBeLessThan(2_000)
+		expect(tokenClient.disconnect).toHaveBeenCalledOnce()
+		// A deadline already past asks nothing.
+		tokenClient.refreshRestoredTokens.mockClear()
+		await refreshRestoredTokensStage(FENCE, Date.now() - 1)
+		expect(tokenClient.refreshRestoredTokens).not.toHaveBeenCalled()
 	})
 
 	it("restores the ACTIVE-network selection by chain BEFORE finalizeRestore", async () => {

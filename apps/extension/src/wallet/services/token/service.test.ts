@@ -56,9 +56,12 @@ async function makeHarness() {
 			onActiveProfileChanged: new EventHandler(),
 			getDeletionState: () => deletionState,
 			captureExecutionFence: async () => ({ profileId: "p1", epoch: deletionState.capture("p1"), session: 1 }),
+			assertRunFence: async () => {},
+			isFenceLive: () => fenceLive.value,
 		}),
 	)
 	const networkLive = { value: true }
+	const fenceLive = { value: true }
 	collection.add(
 		svc(NetworkService.name, {
 			getNetwork: async () => NETWORK,
@@ -66,9 +69,15 @@ async function makeHarness() {
 			onActiveNetworkChanged: new EventHandler(),
 			isNetworkLive: async () => networkLive.value,
 			isChainLive: async () => networkLive.value,
+			getNetworksRaw: async (_profileId: string, chainId: number) => (chainId === NETWORK.chainId ? [NETWORK] : []),
 		}),
 	)
-	collection.add(svc(AccountService.name, { onAccountAdded: new EventHandler() }))
+	collection.add(
+		svc(AccountService.name, {
+			onAccountAdded: new EventHandler(),
+			getAccounts: async (_profileId: string, chainId: number) => (chainId === NETWORK.chainId ? [{ address: "0xacc" }] : []),
+		}),
+	)
 	collection.add(svc(TaskService.name, { startNewTask: () => ({ complete() {}, fail() {} }) }))
 	collection.add(svc(OperationJournalService.name, journal))
 	collection.add(tokenListStub())
@@ -79,7 +88,7 @@ async function makeHarness() {
 	const fetchStub = vi.fn(async (): Promise<[string, string, number]> => ["Fetched Name", "FTCH", 9])
 	// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in to stub the private simulate-backed fetch
 	;(tokenService as any).fetchTokenMetadata = fetchStub
-	return { tokenService, journal, fetchStub, api, deletionState, networkLive }
+	return { tokenService, journal, fetchStub, api, deletionState, networkLive, fenceLive }
 }
 
 describe("TokenService.addToken — journal/lock machinery (characterization)", () => {
@@ -227,6 +236,144 @@ describe("TokenService.restore — per-row allocation", () => {
 		const raw = await api.storage.local.get(null)
 		expect(raw[`nulo:core:tokens@${max}`]).toBe(junk)
 		expect(restored[0].id).not.toBe(restored[1].id)
+	})
+})
+
+describe("TokenService.refreshRestoredTokens — the chain's metadata over the backup's", () => {
+	const FENCE = { profileId: "p1", epoch: 0, session: 1, incarnation: "w1" }
+	const CONTRACT = `0x${"0c".repeat(32)}`
+	const backupRow = {
+		id: 0,
+		profileId: "p1",
+		chainId: 1,
+		contract: CONTRACT,
+		classId: "0xfake",
+		name: "Tether",
+		symbol: "USDT",
+		decimals: 2,
+	}
+	const chainInterface = { ...ti(CONTRACT), classId: "0xclass" }
+	const chain = { name: "Test token", symbol: "TST", decimals: 18, interface: chainInterface }
+
+	async function restored(rows = [backupRow]) {
+		const h = await makeHarness()
+		const [row] = await h.tokenService.restore(rows as never)
+		const preview = vi.fn(async (..._args: unknown[]) => chain)
+		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in to stub the simulate-backed read
+		;(h.tokenService as any).previewTokenMetadata = preview
+		const added = vi.fn()
+		const updated = vi.fn()
+		h.tokenService.onTokenAdded.add(added)
+		h.tokenService.onTokenUpdated.add(updated)
+		return { ...h, id: (row as { id: number }).id, preview, added, updated }
+	}
+	const later = () => Date.now() + 5_000
+
+	test("a row the chain disagrees with takes the chain's class, name, symbol and decimals, with no add", async () => {
+		const { tokenService, id, preview, added, updated } = await restored()
+		await tokenService.refreshRestoredTokens(FENCE, later())
+		expect(preview).toHaveBeenCalledExactlyOnceWith("net1", "0xacc", CONTRACT)
+		expect(await tokenService.getToken(id)).toMatchObject({ classId: "0xclass", name: "Test token", symbol: "TST", decimals: 18 })
+		expect(updated).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id, decimals: 18, profileId: "p1" }))
+		expect(added).not.toHaveBeenCalled()
+	})
+
+	test("a chain that agrees writes nothing (control)", async () => {
+		const { getNameFn, getSymbolFn, getDecimalsFn } = chainInterface
+		const agreeing = {
+			...backupRow,
+			classId: "0xclass",
+			name: "Test token",
+			symbol: "TST",
+			decimals: 18,
+			getNameFn,
+			getSymbolFn,
+			getDecimalsFn,
+		}
+		const { tokenService, api, updated } = await restored([agreeing])
+		const writes = recordWrites(api.storage.local, "nulo:core:tokens@")
+		await tokenService.refreshRestoredTokens(FENCE, later())
+		writes.restore()
+		expect(writes.log).toEqual([])
+		expect(updated).not.toHaveBeenCalled()
+	})
+
+	test.each([
+		["fails", () => Promise.reject(new Error("node down"))],
+		["never settles before the deadline", () => new Promise(() => {})],
+	])("a read that %s keeps the row and writes nothing, by the deadline", async (_label, read) => {
+		const { tokenService, id, preview, updated } = await restored()
+		preview.mockImplementation(read as never)
+		const startedAt = Date.now()
+		await tokenService.refreshRestoredTokens(FENCE, startedAt + 50)
+		expect(Date.now() - startedAt).toBeLessThan(2_000)
+		expect(await tokenService.getToken(id)).toMatchObject({ symbol: "USDT", decimals: 2 })
+		expect(updated).not.toHaveBeenCalled()
+	})
+
+	test("a read that lands after the deadline writes nothing", async () => {
+		const { tokenService, id, preview, updated } = await restored()
+		let land: (value: typeof chain) => void = () => {}
+		preview.mockImplementation(() => new Promise((resolve) => (land = resolve)))
+		await tokenService.refreshRestoredTokens(FENCE, Date.now() + 50)
+		land(chain)
+		await new Promise((resolve) => setTimeout(resolve, 20))
+		expect(await tokenService.getToken(id)).toMatchObject({ symbol: "USDT", decimals: 2 })
+		expect(updated).not.toHaveBeenCalled()
+	})
+
+	test("another profile's row and a row deleted during the read are never written", async () => {
+		const { tokenService, api, id, preview, updated } = await restored([backupRow, { ...backupRow, profileId: "p2" }])
+		preview.mockImplementation(async () => {
+			await tokenService.deleteToken(id)
+			return chain
+		})
+		await tokenService.refreshRestoredTokens(FENCE, later())
+		expect(preview).toHaveBeenCalledOnce()
+		const rows = Object.entries(await api.storage.local.get(null)).filter(([key]) => key.startsWith("nulo:core:tokens@"))
+		expect(rows.map(([, v]) => JSON.parse(v as string))).toEqual([expect.objectContaining({ profileId: "p2", symbol: "USDT" })])
+		expect(updated).not.toHaveBeenCalled()
+	})
+
+	test("a row whose id another token took during the read is never written", async () => {
+		const other = `0x${"0d".repeat(32)}`
+		const { tokenService, id, preview, updated } = await restored()
+		preview.mockImplementation(async () => {
+			await tokenService.deleteToken(id)
+			await tokenService.restore([{ ...backupRow, contract: other }] as never)
+			return chain
+		})
+		await tokenService.refreshRestoredTokens(FENCE, later())
+		expect(await tokenService.getToken(id)).toMatchObject({ contract: other, symbol: "USDT", decimals: 2 })
+		expect(updated).not.toHaveBeenCalled()
+	})
+
+	test("a read that lands in time but reaches the token lock after the deadline writes nothing", async () => {
+		const { tokenService, api, id, updated } = await restored()
+		let release = () => {}
+		const stalled = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		const hold = recordWrites(api.storage.local, "nulo:core:tokens@", undefined, () => stalled)
+		const holder = tokenService.restore([{ ...backupRow, contract: `0x${"0e".repeat(32)}` }] as never)
+		const refresh = tokenService.refreshRestoredTokens(FENCE, Date.now() + 50)
+		await new Promise((resolve) => setTimeout(resolve, 100))
+		release()
+		await Promise.all([holder, refresh])
+		hold.restore()
+		expect(await tokenService.getToken(id)).toMatchObject({ symbol: "USDT", decimals: 2 })
+		expect(updated).not.toHaveBeenCalled()
+	})
+
+	test("a session that ended during the read writes nothing", async () => {
+		const { tokenService, id, preview, fenceLive, updated } = await restored()
+		preview.mockImplementation(async () => {
+			fenceLive.value = false
+			return chain
+		})
+		await tokenService.refreshRestoredTokens(FENCE, later())
+		expect(await tokenService.getToken(id)).toMatchObject({ symbol: "USDT", decimals: 2 })
+		expect(updated).not.toHaveBeenCalled()
 	})
 })
 

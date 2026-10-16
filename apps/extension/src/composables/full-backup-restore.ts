@@ -20,7 +20,6 @@ import { ACCOUNT_STATE_SERVICE_NAME } from "@/wallet/services/account-state/spec
 import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
 import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
 import { TokenServiceClient } from "@/wallet/services/token/client"
-import { IncomingTransferServiceClient } from "@/wallet/services/incoming-transfer/client"
 import { AccountStateServiceClient } from "@/wallet/services/account-state/client"
 import {
 	type NormalizedAccountStateItem,
@@ -29,7 +28,7 @@ import {
 } from "@/wallet/services/account-state/normalize"
 import { NetworkServiceClient } from "@/wallet/services/network/client"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
-import { runImportChainSync } from "./importChainSync"
+import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS, runImportChainSync } from "./importChainSync"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 
 export type RestoreStatus = "" | "progress" | "failed" | "finished" | null | undefined
@@ -598,18 +597,27 @@ export async function restoreTokensStage(
 	io.recordRestoreErrors(TOKEN_SERVICE_NAME, newTokens)
 }
 
-/** Carries the trust a token gets when it is added (its receipts show without the first-receive
- *  prompt) over to the restored tokens: the backup holds no trust rows. Runs before
- *  `finalizeRestore`, so no scan of the profile can read a token as untrusted first. Best effort: a
- *  failure costs one prompt per token, never the import. */
-export async function trustRestoredTokens(profileId: string): Promise<void> {
-	const incoming = new IncomingTransferServiceClient()
+/**
+ * Reads the restored tokens from their chains on the tail's deadline, after `finalizeRestore` opened
+ * the session the reads need. Best effort: a token the chain does not answer in time keeps the
+ * backup's values, and the import never fails on it.
+ */
+export async function refreshRestoredTokensStage(fence: RunFence, deadlineAt: number): Promise<void> {
+	const remaining = deadlineAt - Date.now()
+	if (remaining <= 0) return
+	const tokenService = new TokenServiceClient()
+	let timer: ReturnType<typeof setTimeout> | undefined
 	try {
-		await incoming.trustRestoredTokens(profileId)
-	} catch (err) {
-		console.warn("[full-backup] restored tokens kept no trust:", err)
+		const deadline = new Promise<void>((resolve) => {
+			timer = setTimeout(resolve, remaining)
+		})
+		const refresh = tokenService.refreshRestoredTokens(fence, deadlineAt).catch((error: unknown) => {
+			console.debug("[full-backup] restored tokens kept their backup metadata", { error })
+		})
+		await Promise.race([refresh, deadline])
 	} finally {
-		incoming.disconnect()
+		clearTimeout(timer)
+		tokenService.disconnect()
 	}
 }
 
@@ -664,6 +672,7 @@ export async function restoreAccountStateStage(
 	io: RestoreIo,
 	restoreRun: RestoreRun,
 	profileService: RunFenceClient,
+	deadlineAt: number,
 ): Promise<AccountStateTail> {
 	const accountStateSlice = data[ACCOUNT_STATE_SERVICE_NAME]
 	if (accountStateSlice === undefined) return { restored: [] }
@@ -676,6 +685,7 @@ export async function restoreAccountStateStage(
 		io.setStage("chain-sync")
 		const retryable = await runImportChainSync({
 			slice: accountStateSlice,
+			deadlineAt,
 			...chainSyncClients(accountStateService, networkService, createdNetworks, restoreRun.fence),
 			record: (records, kind) => {
 				const rows = io.recordRestoreErrors(ACCOUNT_STATE_SERVICE_NAME, records)
@@ -830,6 +840,7 @@ export async function retryAccountStateStage(
 		const admitted = await admitReminder(ctx.restoreRun)
 		const retryable = await runImportChainSync({
 			slice: ctx.retryable,
+			deadlineAt: Date.now() + IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS,
 			...chainSyncClients(accountStateService, networkService, ctx.networks, ctx.restoreRun.fence),
 			// Items the normalizer already bounded yield no violations: only outcomes arrive.
 			record: (outcomes, kind) => {

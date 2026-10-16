@@ -56,10 +56,7 @@ const accountClient = {
 }
 const tokenClient = {
 	restore: vi.fn(),
-	disconnect: vi.fn(),
-}
-const incomingClient = {
-	trustRestoredTokens: vi.fn(),
+	refreshRestoredTokens: vi.fn(),
 	disconnect: vi.fn(),
 }
 /** Registrable child for account-state fixtures: since the bounded
@@ -97,11 +94,6 @@ vi.mock("@/wallet/services/account/client", () => ({
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
 		return tokenClient
-	}),
-}))
-vi.mock("@/wallet/services/incoming-transfer/client", () => ({
-	IncomingTransferServiceClient: vi.fn(function () {
-		return incomingClient
 	}),
 }))
 vi.mock("@/wallet/services/transaction/client", () => ({
@@ -270,8 +262,7 @@ beforeEach(() => {
 	accountClient.restore.mockReset()
 	accountClient.disconnect.mockReset()
 	tokenClient.restore.mockReset().mockResolvedValue([])
-	incomingClient.trustRestoredTokens.mockReset().mockResolvedValue(undefined)
-	incomingClient.disconnect.mockReset()
+	tokenClient.refreshRestoredTokens.mockReset().mockResolvedValue(undefined)
 	tokenClient.disconnect.mockReset()
 	transactionClient = passthroughClient()
 	tokenBalanceClient = passthroughClient()
@@ -297,7 +288,7 @@ async function mountWithBackup(overrides: Record<string, unknown> = {}, opts = m
 }
 
 describe("stage-order law (real wiring, happy path with every slice)", () => {
-	it("runs profile → networks → active-pointer → accounts → imported keys → tokens → token trust → six services → reconcile → finalize → account-state → completeImport, in order", async () => {
+	it("runs profile → networks → active-pointer → accounts → imported keys → tokens → six services → reconcile → finalize → account-state → token re-read → completeImport, in order", async () => {
 		const order: string[] = []
 		const track = (name: string, client: { restore: ReturnType<typeof vi.fn> }) => {
 			const prev = client.restore.getMockImplementation() as ((...a: never[]) => Promise<unknown>) | undefined
@@ -328,11 +319,11 @@ describe("stage-order law (real wiring, happy path with every slice)", () => {
 			order.push("imported-keys")
 			return []
 		})
-		// Recorded a macrotask after the call: an import that did not await the trust step runs on
-		// and the later stages land in `order` first.
-		incomingClient.trustRestoredTokens.mockImplementation(async () => {
+		// Recorded a macrotask after the call: an import that did not await the re-read runs on and
+		// completes first.
+		tokenClient.refreshRestoredTokens.mockImplementation(async () => {
 			await new Promise((resolve) => setTimeout(resolve, 0))
-			order.push("trust")
+			order.push("token-refresh")
 		})
 		accountClient.reconcileImportedAccounts.mockImplementation(async () => {
 			order.push("reconcile")
@@ -377,7 +368,6 @@ describe("stage-order law (real wiring, happy path with every slice)", () => {
 			"account",
 			"imported-keys",
 			"token",
-			"trust",
 			"transaction",
 			"token-balance",
 			"auth-registry",
@@ -386,6 +376,7 @@ describe("stage-order law (real wiring, happy path with every slice)", () => {
 			"reconcile",
 			"finalize",
 			"account-state",
+			"token-refresh",
 			"complete",
 		])
 		// Completion payload: completeImport receives the restored profile, with both
@@ -877,7 +868,8 @@ describe("restore wiring handoffs", () => {
 				transaction: [{ account: "0xaaaa", chainId: 1, hash: "h1" }],
 			},
 		})
-		tokenClient.disconnect.mockImplementation(() =>
+		// The token stage's own disconnect; the tail's re-read disconnects the client again later.
+		tokenClient.disconnect.mockImplementationOnce(() =>
 			queueMicrotask(() => {
 				keysAfterTokenDisconnect = Object.keys(c.restoreErrorLog.value)
 			}),

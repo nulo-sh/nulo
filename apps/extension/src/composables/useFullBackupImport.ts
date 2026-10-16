@@ -49,13 +49,15 @@ import {
 	restoreServiceSlices,
 	type SliceRestoreClient,
 	restoreTokensStage,
-	trustRestoredTokens,
+	refreshRestoredTokensStage,
 	retryAccountStateStage,
 	retryReplacedRows,
 	runRestoreFailurePath,
 	verifyPasskeyBody,
 	INTEGRITY_FAILED,
 } from "./full-backup-restore"
+
+import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS } from "./importChainSync"
 
 export type { RestoreStage, RestoreStatus } from "./full-backup-restore"
 import type { RestoreStage, RestoreStatus } from "./full-backup-restore"
@@ -431,7 +433,6 @@ async function executeRestore(
 
 	io.setStage("restoring:tokens")
 	await restoreTokensStage(data, accounts.importedChainAddress, io)
-	await trustRestoredTokens(newProfile.id)
 
 	const sliceClients = buildSliceClients()
 	// The profile restore above always ran first; its id is the fence key every slice
@@ -479,7 +480,10 @@ async function executeRestore(
 	}
 
 	io.setStage("restoring:account-state")
-	const tail = await restoreAccountStateStage(data, nets.seeded, networkService, io, restoreRun, profileService)
+	// One deadline for the whole tail: the token reads get what the registrations leave.
+	const tailDeadlineAt = Date.now() + IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS
+	const tail = await restoreAccountStateStage(data, nets.seeded, networkService, io, restoreRun, profileService, tailDeadlineAt)
+	await refreshRestoredTokensStage(restoreRun.fence, tailDeadlineAt)
 	return { profile: newProfile, networks: nets.seeded, accountStateRetry: tail.retry }
 }
 

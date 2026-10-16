@@ -24,6 +24,7 @@ import {
 	retryAccountStateStage,
 	runFenceLive,
 } from "./full-backup-restore"
+import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS } from "./importChainSync"
 import {
 	DECRYPTION_FAILED,
 	errorLogWriters,
@@ -258,6 +259,7 @@ async function runRestore(state: AgainRefs, opts: UseRestoreAgainOptions, writer
 			io,
 			{ fence, run: record.run },
 			opts.profileService,
+			Date.now() + IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS,
 		)
 		settleRun(state, opts, tail)
 	} catch (error) {
