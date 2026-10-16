@@ -70,7 +70,7 @@ One arc, one PR against `dev`, no stack, `Closes #577 #565 #566 #567`. Recon: [r
 
 **Gate.** `bun run lint && bun run typecheck:all && bun run test`. Pass: exit 0; the two site cases fail on the base builders; `account.test.ts:124` passes unchanged. Layers: lint, typecheck, unit, component.
 
-### Phase 2: the JSON window on lock (#566)
+### Phase 2: the JSON window on lock (#566) ✓
 1. Rewrite `popup/windows/json/index.vue`'s mount per D5.
 2. `json/index.test.ts`: mock `subscribeActiveProfile` as `logger/index.test.ts:11` does, delivering a snapshot. Cases: a locked snapshot removes window 7; a rejected payload read with a locked snapshot removes it and leaves no unhandled rejection; a held snapshot that resolves locked after the page unmounts still removes it; control: an open snapshot renders `json-content` and keeps the window, then a live `undefined` removes it. Keep the three existing cases.
 
