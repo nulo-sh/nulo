@@ -10,3 +10,4 @@
 - 2026-10-15 arc1 codex r1: conditional approve (1 Medium, 3 Low) + opus review (3 Low); all accepted and fixed (4f5f9a99); codex r2 running. Phase 3 e2e waiting on host load (161 at 23:47Z).
 - 2026-10-16 arc1 codex r2: approve (loop converged). Phase 3: spec red on base pages, green on head (10.3 s); shots in screenshots/; full Firefox smoke running.
 - 2026-10-16 arc1 phase 3 gate: pass (smoke Firefox 244/244 2375 s, Chrome 244/244 1624 s; networks.test.ts 4/4 both browsers; spec red on base, green on head).
+- 2026-10-16 arc1 arc gate: pass (audit:vue 0, test:all 0, test:ci-gating 0, test:release 0, build:firefox 0, check:plans 0). Codex loop converged at r2 (approve).
