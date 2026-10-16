@@ -198,6 +198,7 @@ Execute [`implementations-plan/README.md` § Post-implementation standard](../RE
 - **Codex r3** (resume): **approve**, no new material finding. One Low, applied: KL-1 now names the failed-read variant, and Outcome item 2 says "a page that mounts without the grant".
 - **Arc 1, Codex r1** (gpt-6.1-sol, high; session `01a141ee-ee4d-7e90-99da-5b2f42bd0159`): conditional approve. F1 Medium, demonstrated: a grant whose event read overtook the mount read called `onFirstAllowed`, so the page rested unchecked; fixed (D8), with its test red on the pre-fix code. F2 Low: a request answered after `dispose()` still logged; fixed, test red before. F3 Low: the spec could not tell a post-grant check from an earlier probe; it now counts probes (none before Allow, one HTTPS after). F4 Low: two restating comments; cut.
 - **Arc 1, Opus diff review:** no correctness bug. Accepted: comments claimed Chrome cannot withhold host permissions (its site access can; the suite cannot `permissions.remove` a required one), reworded in the composable, `LaunchOptions`, `FIREFOX_ONLY` and `FIREFOX.md`; the onboarding note's absence gained its positive control; the scratch shots spec stays out of the suite runs; the dispose test's name. Noted for KL-1: a sibling Settings page's probe in flight is one more way in.
+- **Arc 1, Codex r2** (resume): **approve**, no new material finding; the four fixes and the folded same-family items verified, no Chrome, gating, teardown or seam regression.
 
 ## Seeds (written, not run)
 
