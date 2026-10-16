@@ -722,28 +722,35 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 	public async clearChainState(profileId: string, chainId: number): Promise<void> {
 		const barrier = this.getProfileBarrier(profileId)
 		const chainGuard = this.getChainGuard(profileId, chainId)
-		await barrier.read(async () => {
-			await chainGuard.write(async () => {
-				// Dispose closes the owned store (releasing the SAH-pool lock), then the OPFS
-				// directory removal reclaims the encrypted bytes — it needs NO live runtime, so
-				// a chain whose PXE never booted this session purges identically. The key stays
-				// with the profile (other chains share it); crypto-erase for the profile as a
-				// whole happens in clearProfileState. The IndexedDB delete is the LEGACY
-				// (rc.2-era) cleanup layer.
-				// Bump the purge epoch at BOTH ends of the destructive section.
-				// The opening bump fences ops that captured before the purge began;
-				// the closing bump (right before the guard releases) fences an op that
-				// entered DURING the destruction window — it would have read
-				// the already-incremented value and otherwise passed the equality
-				// check in withPxeWrite/withPxeRead, resurrecting a chain whose row is
-				// gone. Only a genuinely-post-purge op captures the stable final value.
-				this.bumpChainPurgeEpoch(profileId, chainId)
-				await this.registry.dispose(profileId, chainId)
-				await removeChainStoreDir({ profileId, chainId })
-				await this.deleteDb(chainDataDir({ profileId, chainId }), VERIFIED_ERASE)
-				this.bumpChainPurgeEpoch(profileId, chainId)
+		// Raised before the drain: an op holding the guard against an unreachable node would
+		// otherwise hold this clear for its whole backoff.
+		const releaseRetries = this.registry.stopRetries(profileId, chainId)
+		try {
+			await barrier.read(async () => {
+				await chainGuard.write(async () => {
+					// Dispose closes the owned store (releasing the SAH-pool lock), then the OPFS
+					// directory removal reclaims the encrypted bytes — it needs NO live runtime, so
+					// a chain whose PXE never booted this session purges identically. The key stays
+					// with the profile (other chains share it); crypto-erase for the profile as a
+					// whole happens in clearProfileState. The IndexedDB delete is the LEGACY
+					// (rc.2-era) cleanup layer.
+					// Bump the purge epoch at BOTH ends of the destructive section.
+					// The opening bump fences ops that captured before the purge began;
+					// the closing bump (right before the guard releases) fences an op that
+					// entered DURING the destruction window — it would have read
+					// the already-incremented value and otherwise passed the equality
+					// check in withPxeWrite/withPxeRead, resurrecting a chain whose row is
+					// gone. Only a genuinely-post-purge op captures the stable final value.
+					this.bumpChainPurgeEpoch(profileId, chainId)
+					await this.registry.dispose(profileId, chainId)
+					await removeChainStoreDir({ profileId, chainId })
+					await this.deleteDb(chainDataDir({ profileId, chainId }), VERIFIED_ERASE)
+					this.bumpChainPurgeEpoch(profileId, chainId)
+				})
 			})
-		})
+		} finally {
+			releaseRetries()
+		}
 	}
 
 	/**
@@ -774,11 +781,13 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		// clear must find the erase to join.
 		const record = existing ?? this.newLifecycle(profileId)
 		record.current = { kind: "deleting", gen: generation }
+		const releaseRetries = this.registry.stopRetries(profileId)
 		const done = this.eraseProfile(profileId, generation, record)
 		record.clearing = { gen: generation, done }
 		try {
 			await done
 		} finally {
+			releaseRetries()
 			// A failed erase leaves `deleting(gen)` for the coordinator's retry, which must start a
 			// fresh erase rather than join this rejected one.
 			if (record.clearing?.done === done) record.clearing = undefined
