@@ -18,9 +18,12 @@ All runs are proverless at retry 0 unless marked. "Delegated" is `tx-sendTx-dele
 |---|---|---|---|---|
 | 53c5f7d7 | Chrome, both files | pass | 57.4 s | 204.0 s |
 | 53c5f7d7 | Firefox, both files | pass | 65.7 s | 190.0 s |
-| ed54847c | Chrome, delegated alone, **prover on** | pass | 94.3 s (it published `PublicChecks` itself) | — |
+| ed54847c | Chrome, delegated alone, **prover on** | pass | 94.3 s, publish included | — |
+| aea38d2b, the import removed | Chrome, delegated alone (negative control) | **fail** at the `execute-discovered-authwit-structured-args` wait (60 s), as planned | 155.7 s | — |
+| aea38d2b | Chrome, both files | pass | 90.2 s, publish included | 149.4 s |
+| aea38d2b | Firefox, both files | pass | 94.6 s | 182.9 s |
 
-In both runs type-roles ran first, so the delegated file skipped the `PublicChecks` publish.
+aea38d2b merges `origin/dev` at c5e9c8e8 (#532) over ed54847c's code. The file that runs first on a network publishes `PublicChecks`; the other skips the publish. Both orders passed. The delegated file's spread on Firefox (65.7 s, then 94.6 s, both without the publish) tracks the host's load: load1 sat near 150 at each start.
 
 ## Review loop
 
