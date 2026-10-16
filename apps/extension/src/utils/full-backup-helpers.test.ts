@@ -78,7 +78,7 @@ describe("assembleFullBackup", () => {
 
 	it("rejects an envelope that already carries a checksum or a MAC", async () => {
 		await expect(assembleFullBackup({ checksum: "forged" }, [])).rejects.toThrow(/must not carry a checksum/)
-		await expect(assembleFullBackup({ [BACKUP_MAC_FIELD]: "forged" }, [])).rejects.toThrow(/must not carry a checksum/)
+		await expect(assembleFullBackup({ [BACKUP_MAC_FIELD]: "preset" }, [])).rejects.toThrow(/must not carry a checksum/)
 	})
 
 	it("puts the authenticator's MAC of the checksum beside it, outside the hashed body", async () => {
