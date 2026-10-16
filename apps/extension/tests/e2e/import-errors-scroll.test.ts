@@ -18,7 +18,8 @@ import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { restoreNoticeText, restoreWarningText, retryResultText } from "@/components/composite/import/restore-warning"
 import { LOCAL_L1_CHAIN_ID } from "@/utils/chain-ids"
-import { interceptRpc } from "./fixtures/browser"
+import { interceptRpc, prepareClick, prepareKeys } from "./fixtures/browser"
+import { editorText, readEditorStyles } from "./fixtures/code-editor"
 import { clickByTestId, launchExtension, test } from "./fixtures/extension"
 import {
 	buildSyntheticBackup,
@@ -126,6 +127,71 @@ async function textOf(page: Page, testId: string, timeout = 10_000): Promise<str
 	return (await shown.jsonValue()) as string
 }
 
+/** The editor element focus rests on, through the shadow roots it crosses. */
+const deepFocus = (page: Page) =>
+	page.evaluate(() => {
+		let el = document.activeElement
+		while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement
+		return el?.classList.contains("cm-content") ? "editor" : (el?.getAttribute("data-testid") ?? el?.tagName ?? "none")
+	})
+
+/**
+ * The inline JSON viewer, in its shadow root: styled; a token the mouse selects is exactly what a
+ * copy carries (a selection CodeMirror failed to read would copy the whole line); and the popup's
+ * focus trap keeps the editor in its Tab cycle.
+ */
+async function expectViewerUsable(page: Page): Promise<void> {
+	expect(await readEditorStyles(page, "json-editor")).toEqual({ display: "flex", fontSize: "14px", scrollbarWidth: "none" })
+	const token = await page.evaluate(() => {
+		const lines = document.querySelector('[data-testid="json-editor"]')?.shadowRoot?.querySelectorAll(".cm-line") ?? []
+		for (const line of lines) {
+			const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+			for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+				const text = node.textContent ?? ""
+				if (text.length < 4 || text !== text.trim() || text === (line.textContent ?? "").trim()) continue
+				const range = document.createRange()
+				range.setStart(node, 0)
+				range.setEnd(node, 1)
+				const first = range.getBoundingClientRect()
+				range.setStart(node, text.length - 1)
+				range.setEnd(node, text.length)
+				const last = range.getBoundingClientRect()
+				return { text, y: first.top + first.height / 2, from: first.left + 1, to: last.right - 1 }
+			}
+		}
+		return null
+	})
+	if (!token) throw new Error("the viewer rendered no token to select")
+	await prepareClick(page)
+	await page.mouse.move(token.from, token.y)
+	await page.mouse.down()
+	await page.mouse.move(token.to, token.y, { steps: 5 })
+	await page.mouse.up()
+	const copied = await page.evaluate(() => {
+		let text: string | null = null
+		const record = (e: ClipboardEvent) => {
+			text = e.clipboardData?.getData("text/plain") ?? null
+		}
+		document.addEventListener("copy", record)
+		document.execCommand("copy")
+		document.removeEventListener("copy", record)
+		return text
+	})
+	expect(copied).toBe(token.text)
+
+	await prepareKeys(page)
+	expect(await deepFocus(page)).toBe("editor")
+	await page.keyboard.press("Tab")
+	const stops = [await deepFocus(page)]
+	// The popup's controls, and a snack's, if one is up, come before the cycle closes.
+	while (stops.length < 4 && stops.at(-1) !== "editor") {
+		await page.keyboard.press("Tab")
+		stops.push(await deepFocus(page))
+	}
+	expect(stops[0]).not.toBe("editor")
+	expect(stops.at(-1), `Tab comes back round to the editor: ${stops.join(" → ")}`).toBe("editor")
+}
+
 /** Presses Retry with the local node still refused and returns the line the failed Retry leaves. */
 async function failedRetryLine(page: Page): Promise<string> {
 	await clickByTestId(page, "import-full-backup-retry-btn")
@@ -154,7 +220,8 @@ test("one network to retry: the open lands at the scroller's end, the title abov
 
 		expect(await failedRetryLine(page)).toBe(retryResultText(["Local Network"]))
 		await clickByTestId(page, "import-full-backup-view-errors-btn")
-		expect(await textOf(page, "data-viewer")).toMatch(/"network": "Local Network",\s*"networkId": "[0-9a-f]{8}"/)
+		expect(await editorText(page, "json-editor")).toMatch(/"network": "Local Network",\s*"networkId": "[0-9a-f]{8}"/)
+		await expectViewerUsable(page)
 	})
 })
 

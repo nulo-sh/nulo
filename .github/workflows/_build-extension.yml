@@ -158,6 +158,25 @@ jobs:
           if [ "$fail" = 0 ]; then echo "✓ no test-only markers in production build"; fi
           exit "$fail"
 
+      # `style-src` admits no inline style attribute, so markup that carries one renders unstyled.
+      # Vue's compiler writes such markup when it stringifies a long static run of a template into
+      # innerHTML; a constant `style` there must become a class.
+      - name: Assert no inline style attribute in the bundle
+        run: |
+          fail=0
+          for d in apps/extension/dist/chrome apps/extension/dist/firefox; do
+            [ -d "$d" ] || continue
+            for marker in 'style="' "style='" 'style=\"'; do
+              hits=$(grep -rlF --include='*.js' --include='*.html' "$marker" "$d" || true)
+              if [ -n "$hits" ]; then
+                echo "::error::markup with an inline style attribute ($marker) in: $hits" >&2
+                fail=1
+              fi
+            done
+          done
+          if [ "$fail" = 0 ]; then echo "✓ no inline style attribute in the bundle"; fi
+          exit "$fail"
+
       # MIT, BSD and Apache-2.0 all require their notice to travel INSIDE the distributed artifact.
       # The generator already fails the build on a disallowed or unreviewed licence; this catches
       # the other failure — a file that is absent, or that silently lost a whole class of input

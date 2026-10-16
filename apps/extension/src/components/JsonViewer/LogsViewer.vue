@@ -27,6 +27,7 @@ import { buildLogsCsv } from "./logs-csv"
 import { logDecorationsField } from "./logs-decoration"
 import { useLogFilters } from "./useLogFilters"
 import { createLoggerTheme } from "./creator.js"
+import { editorShadowRoot } from "./editor-shadow"
 
 const editorRef = ref(null)
 let view = null
@@ -90,6 +91,12 @@ function updateShouldAutoScroll() {
 		showScrollBtn.value = true
 		disableAutoScroll()
 	}
+}
+// Chrome reports a selection inside a shadow root only through the root, retargeting the
+// document's to the host; Firefox's root has no `getSelection` and its document's reaches inside.
+function editorSelection() {
+	const root = editorRef.value?.shadowRoot
+	return root?.getSelection ? root.getSelection() : document.getSelection()
 }
 function scrollToBottom() {
 	if (!view) return
@@ -216,7 +223,7 @@ onMounted(async () => {
 	logs.value = await getLogs()
 
 	view = new EditorView({
-		parent: editorRef.value,
+		parent: editorShadowRoot(editorRef.value),
 		state: EditorState.create({
 			doc: logsDocument(logs.value),
 			extensions: [
@@ -232,12 +239,13 @@ onMounted(async () => {
 	view.scrollDOM?.addEventListener("scroll", updateShouldAutoScroll)
 
 	document.addEventListener("selectionchange", () => {
-		const selection = document.getSelection()
+		const selection = editorSelection()
 		if (selection && !selection.isCollapsed) disableAutoScroll()
 	})
 
+	// The editor sits in a shadow root, which retargets `e.target` to its host.
 	document.addEventListener("focusin", (e) => {
-		if (e.target?.closest(".cm-panel.cm-search")) disableAutoScroll()
+		if (e.composedPath()[0]?.closest?.(".cm-panel.cm-search")) disableAutoScroll()
 	})
 
 	const params = new URLSearchParams(window.location.search)
@@ -278,7 +286,7 @@ onBeforeUnmount(() => {
 			<Icon name="arrow-right" size="24" rotate="90" color="tertiary" />
 		</Flex>
 
-		<div ref="editorRef" :class="$style.logs_viewer" />
+		<div ref="editorRef" data-testid="logs-editor" :class="$style.logs_viewer" />
 	</div>
 </template>
 

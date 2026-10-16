@@ -269,7 +269,10 @@ then measured runtime, with each browser's suite wall-clock before and after in 
 Only `data-testid` (rows: `data-<entity>-id` / `data-<entity>-name`). Never text, role, aria-label,
 placeholder, class, or structure. `waitForToast` is the one sanctioned text assertion. If an element
 has no testid, add one BEFORE the test. This is convention plus review — no lint rule or scanner
-enforces it, so a reviewer has to.
+enforces it, so a reviewer has to. One exception, the logs and JSON viewers: CodeMirror builds their
+editor's DOM inside the host's shadow root, so a spec reaches the host by its testid (`logs-editor`,
+`json-editor`) and below it only CodeMirror's documented `cm-` classes (`.cm-content`,
+`.cm-scroller`, `.cm-panel.cm-search`), never a generated theme class or a position.
 
 ### Start from the right fixture (`fixtures/extension.ts`)
 
