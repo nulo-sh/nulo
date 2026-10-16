@@ -1,7 +1,7 @@
 ---
 plan: harden-security-fixes-2
 tier: mid (the lane brief names it; see Asks)
-status: completed 2026-10-16; arcs 1 (#598) and 3 (#611) merged, arc 2 (#607) in review carrying the close-out
+status: completed 2026-10-16; arcs 1 (#598), 3 (#611) and 4 (#619) merged, arc 2 (#607) in review carrying the close-out
 issues: "#416 (arc 2 reopens it and closes it); arcs 1 and 3 have no public issue; known limits #570 (arc 1) and #614 (close-out)"
 driver: claude-code
 claude_model: opus
@@ -18,8 +18,8 @@ post_implementation_hardening: not scheduled
 ## Outcome
 
 - **Date:** 2026-10-16
-- **Status:** completed; three PRs against `dev`, no stack: arcs 1 (#598) and 3 (#611) merged, arc 2 (#607) carries this close-out, and merging it is the owner's call.
-- **Shipped:** #598 (a passkey backup carries a check its own passkey makes, and import restores only a body that check verifies; restored token metadata is re-read from the chain and never trusted on its own; the Testnet endpoint row's disposition as a comment); #607 (a dApp send the person pays for is held to the approved fee: a rise of more than 10 percent and 0.000001 FJ opens a new window that asks again, and Confirm waits for the figure; closes #416); #611 (a public grant's arguments decoded at open as the rows the wallet signs; a grant the wallet cannot read cannot be confirmed).
+- **Status:** completed; four PRs against `dev`, no stack: arcs 1 (#598), 3 (#611) and 4 (#619) merged, arc 2 (#607) carries this close-out, and merging it is the owner's call.
+- **Shipped:** #598 (a passkey backup carries a check its own passkey makes, and import restores only a body that check verifies; restored token metadata is re-read from the chain and never trusted on its own; the Testnet endpoint row's disposition as a comment); #607 (a dApp send the person pays for is held to the approved fee: a rise of more than 10 percent and 0.000001 FJ opens a new window that asks again, and Confirm waits for the figure; closes #416); #611 (a public grant's arguments decoded at open as the rows the wallet signs; a grant the wallet cannot read cannot be confirmed); #619 (the transaction card reads a dApp call's arguments only when they encode back to its fields, else the existing unreadable notice).
 - **Dropped:** OA-G2, withdrawn (D17); OA-F2 part 2 A's known limit, since C was picked and Confirm cannot pass before the figure.
 - **Known limits:** #570 (E, the Testnet endpoint row); #614 (K1, a passkey backup's check proves which passkey made it, not when). K2 is tracked privately.
 - **Open items:** none.
@@ -28,7 +28,7 @@ post_implementation_hardening: not scheduled
 
 # harden-security-fixes-2: what the person approves is what the wallet restores, pays and signs
 
-Four items the owner decided on decision page 22 (2026-10-16), tracked privately. Arc 1 records the endpoint row's disposition, has a passkey backup carry a check its own passkey makes, and reads restored token metadata from the chain. Arc 2 holds a dApp send's fee to the figure the person approved. Arc 3 shows a public grant's arguments as the wallet signs them. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+Four items the owner decided on decision page 22 (2026-10-16), tracked privately. Arc 1 records the endpoint row's disposition, has a passkey backup carry a check its own passkey makes, and reads restored token metadata from the chain. Arc 2 holds a dApp send's fee to the figure the person approved. Arc 3 shows a public grant's arguments as the wallet signs them. Arc 4, added by the orchestrator after arc 3 merged (D-orch-2), has the transaction card read a dApp call's arguments only when they encode back to its fields. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 | Item | Owner's pick (page 22) | Arc | Issue |
 |---|---|---|---|
@@ -36,6 +36,7 @@ Four items the owner decided on decision page 22 (2026-10-16), tracked privately
 | B. The passkey backup | P22-03 **C**: a check over the backup body, and the chain re-read with no auto-trust | 1 | none public |
 | F. The fee after approval | P22-04 **A**: the shown fee is a ceiling; ask again only when higher | 2 | #416, reopened by arc 2 (its reopening condition: "the owner asks for the figure to bind the confirm") |
 | G. The grant card | P22-01 **A**: decode at open, the argument table, refuse what does not decode (shots `o-grant-a`) | 3 | none public |
+| H. The transaction card's decode | none needed: an existing notice, UI impact none (D-orch-2) | 4 | none public |
 
 ## Outcome & Quality Bar
 
@@ -92,9 +93,9 @@ Four items the owner decided on decision page 22 (2026-10-16), tracked privately
 - **Carried figure.** `approval-delta.ts`: `feeCeiling?: string`, the exact `maxFee` of the estimate the window showed for that operation. `dapp-interaction/service.ts` refuses a figure that fails `isFeeAmount` and copies it into `OperationApprovalEnvelope` (`execution/models/index.ts:78`). `index.vue` `approve()` sends `estimate?.maxFee`. The worker has no figure of its own (D7); under OA-F2 part 2 C the window always sends one for a person-paid fee, under B the worker asks when none came.
 - **Which sends** (OA-F2 part 1, recommended A): classified from the build's route, not from `paymentMethod.kind`: the account's Fee Juice (`fj`, `fjwc`, and an embedded `fjwc`) and Private Fee Juice carry the ceiling (Private Fee Juice told from a sponsor by the build's FPC identity, since both are `EXTERNAL`); Nulo's sponsor and an app's own fee contract keep today's behaviour. `default_entrypoint` has no wallet fee.
 - **Compare.** One rule in `execution/fee-reask.ts`, on raw integers: a build asks when its fee exceeds the approved figure by more than 10 percent **and** by at least 0.000001 FJ (`FEE_RISE_ASKS`, OA-F3 C); below that it goes out at the new fee, and a fall never asks. Figures print at six decimals, so a question's two figures never print alike (D8).
-- **Hold and ask.** `dispatchOperation` passes the envelope to `executeSendTransaction` too. After each standard build and before `proveAndSend`, a fee above the ceiling stashes the build where it can be stashed, parks the slot through a `park(wait)` the `runInSlot` callback gains (the `parkSlot` path; the account lines stay held), and asks. Accept with figure Y reruns the build with ceiling Y: `aztec_sendTx` through `tryConsume` (its drift ladder) or a rebuild; `send_transaction`, embedded, `fjwc` and app-capped sends rebuild, so a further rise asks again and every accept is bounded by its figure. The authorization preview taken before the first build is asserted after every build (`PreviewSnapshots.take` is single-use). Refusal, a closed window, or the question's own deadline (`MAX_WAIT_MS` from the ask, shared by the waiter and the window, D32) ends it as `JobCancelledSentinel`: the dApp gets `JOB_CANCELLED` (4001). A person-paid approval that carries no figure is refused before the proof (D33).
+- **Hold and ask.** `dispatchOperation` passes the envelope to `executeSendTransaction` too. After each standard build and before `proveAndSend`, a fee above the ceiling stashes the build where it can be stashed, parks the slot through a `park(wait)` the `runInSlot` callback gains (the `parkSlot` path; the account lines stay held), and asks. Accept with figure Y reruns the build with ceiling Y: `aztec_sendTx` through `tryConsume` (its drift ladder) or a rebuild; `send_transaction`, embedded, `fjwc` and app-capped sends rebuild, so a further rise asks again and every accept is bounded by its figure. The authorization preview taken before the first build is asserted after every build (`PreviewSnapshots.take` is single-use). Refusal, a closed window, or the question's own deadline (`MAX_WAIT_MS` from the ask, shared by the waiter and the window, D36) ends it as `JobCancelledSentinel`: the dApp gets `JOB_CANCELLED` (4001). A person-paid approval that carries no figure is refused before the proof (D37).
 - **One ask mechanism.** Send's `askAgain` body (waiter before the question, journal `queued` + `reask`, `beginQueuedWait`/`endQueuedWait`, expiry → `cancelled`) moves into `fee-reask.ts`; both executors call it; Send's behaviour and tests stay as they are (D9).
-- **Accept and surface** (as built). OA-F1 B: the worker opens a fee window (`popup/windows/fee/`) over the approved request, read-only, with the fee block "Fee went up" over "Was … FJ · Now … FJ" and the buttons Reject and "Send for … FJ"; `DappInteractionService.askFeeAgain` keeps the approved request in memory until its execution ends, and the window's answer settles the worker's waiter with the worker's own captured figure. `acceptQueuedFee` stays transfer-only (D31). OA-F2 part 2 C: Confirm waits for the figure wherever the wallet picks the fee or the account pays it, an app's claim to the account included (D34).
+- **Accept and surface** (as built). OA-F1 B: the worker opens a fee window (`popup/windows/fee/`) over the approved request, read-only, with the fee block "Fee went up" over "Was … FJ · Now … FJ" and the buttons Reject and "Send for … FJ"; `DappInteractionService.askFeeAgain` keeps the approved request in memory until its execution ends, and the window's answer settles the worker's waiter with the worker's own captured figure. `acceptQueuedFee` stays transfer-only (D35). OA-F2 part 2 C: Confirm waits for the figure wherever the wallet picks the fee or the account pays it, an app's claim to the account included (D38).
 
 ### Arc 3: the grant card decodes (after #508 merges)
 
@@ -103,6 +104,11 @@ Four items the owner decided on decision page 22 (2026-10-16), tracked privately
 - **Window.** `index.vue` decodes each grant at open, beside `decodeOperationArguments`. `grantsPending` and `grantRefusal` hold Confirm in the footer and in `approve()` itself; the refusal feeds `DappApprovalFooter`'s error row through its own state, which `handleFeeUpdate`'s `clearError()` does not touch (D11).
 - **Card, as signed (`o-grant-a`).** `OperationCard.vue` `send_transaction` branch: the action line ("Authorize public spend — spender … for … on …", `OperationActionRow.vue` without its argument text), then an "Arguments" group, testid `execute-grant-args`, laid out as the `aztec_createAuthWit` card's, with `CallArguments` over `callSurface(undefined, grant.call, grant.decoded, isToken(contract))` and prefix `execute-grant`. No caller context: the spender makes the future call, so a transfer reads only an explicit `from`. `CallArguments` gains `full`: every value prints whole (`valueText(v, true)`, addresses as full mono text with no name in their place, in every branch `CallArguments` renders, nonce and structured addresses included), and row names do not wrap. Only the grant card sets it (D17).
 - **Files expected to meet #508:** `OperationCard.vue` (its `<style module>`, the branch beside `op_divider`), `CallArguments.vue` (the `full` prop beside `UnreadableArgsNotice`), `call-surface.ts` (read), `identifier-sites.expected.json`, `type-roles-windows.test.ts`, the `OperationCard.*.test.ts` mounts. Arc 3 branches from `dev` after #508's merge and rereads them.
+
+### Arc 4: the transaction card reads what encodes back (orchestrator-added)
+
+- `execution/call-decoder.ts`: the encode-back check D28 put on the grant path moves into the shared `decodeFields`, over the values it already decoded, so `decodeCallForDisplay` (the transaction card, a discovered authorization) and `decodeGrantForDisplay` run one check (D31). A call whose decode does not encode back reads as `undecoded` with reason `arguments`: the card shows the existing unreadable-arguments notice and its raw fields. Confirm keeps today's rule for an unreadable call (D32).
+- UI impact: none (an existing notice shows for one more input).
 
 ### Trade-offs: the competing outline (worker-centric)
 
@@ -154,15 +160,20 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
 
 **Phase 9. Real browsers.** ✓ `type-roles-windows.test.ts`: the grant flow waits for `execute-grant-amount` and sweeps the new rows; `authwit-lifecycle.test.ts`: the grant window shows the decoded amount at rest. No scenario added. Run both, then `authwit-consume-smoke`, `snack-placement`, `frozen-account-canary` and `passkey-execution-canary` (they confirm a grant). Gate: all green; `bun run test:ci-gating`; `bun run check:plans`. Pass: exit 0; wall-clock before and after in `lessons/phase-9.md`.
 
+### Arc 4 (orchestrator-added, from `origin/dev` at `493ff497`)
+
+**Phase 10. The call path's encode-back.** ✓ Change `call-decoder.ts`. Tests: `call-decoder.test.ts`, wire-shaped fields (`0x` + 64 hex): the real TokenBridge `exit_to_l1_public` by its real selector decodes its recipient (control) and reads `arguments` under the same last 20 bytes with a set upper bit; a boolean field of 2, a string character past 16 bits, an integer past its width (an encoder refusal) and a Some holding None each read `arguments` beside a control that decodes; the twin-selector grant test takes a field both functions read canonically. `OperationCard.wire.test.ts`: the same exit through `displayCallsOf`, the real decoder and the card shows the notice with reason `arguments` and no decoded row; the canonical exit shows its four rows (control). No e2e scenario: none is added, and the window's lanes run in CI. Gate: `F`; `bun run test:all`. Pass: exit 0; each new case red against `493ff497`'s decoder.
+
 ## Delivery
 
-Three PRs against `dev`, no stack (D-orch-1), each opened after its arc's gates and Codex loop converge. Branches `harden-security-fixes-2-arc1` (from this branch), `-arc2` and `-arc3` (each from `origin/dev` after the previous arc merges). If OA-F1 is still open when #508 merges, arc 3 may ship second and the close-out moves to arc 2.
+Four PRs against `dev`, no stack (D-orch-1), each opened after its arc's gates and Codex loop converge. Branches `harden-security-fixes-2-arc1` (from this branch), `-arc2`, `-arc3` and `-arc4` (each from `origin/dev`; arc 4 after arc 3 merged). If OA-F1 is still open when #508 merges, arc 3 may ship second and the close-out moves to arc 2.
 
 | Arc | Phases | PR title | Body |
 |---|---|---|---|
 | 1 | 1-3 | `feat(backup): bind passkey backups to their passkey; read restored tokens from the chain` (88) | P22-02 B and P22-03 C, the signed words about the change; the known-limit issue; runs |
 | 2 | 4-6 | `feat(execute): ask again when a dApp send's fee rises above the approved figure` (79) | P22-04 A; OA-F1 to OA-F3 with the shots; `Closes #416` |
 | 3 | 7-9 | `feat(execute): show a public grant's arguments as the decoded rows it signs` (75) | P22-01 A and `o-grant-a` as the sign-off; OA-G1; screenshots light and dark |
+| 4 | 10 | `fix(execute): read a dApp call's arguments only when they encode back to their fields` (86) | the change, the tests, `UI impact: none (an existing notice shows for one more input)` |
 
 Each body states what changed and why, the validation runs, and each browser's suite wall-clock before and after for the suites it touched; it names no private record and describes only the change. It ends with the Claude Code line. Labels only after creation, and only when a path filter would skip a needed suite. Parallelism: none; the arcs wait on outside events, not on each other's files.
 
@@ -172,7 +183,7 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 
 ## Decision ledger
 
-Ids by arc: D1 to D19 at planning, arc 1 D20 to D23, arc 3 D24 to D30, arc 2 D31 to D37. Each arc took the next free id on its branch, so arc 2's collided at both merges and were renumbered.
+Ids by arc: D1 to D19 at planning, arc 1 D20 to D23, arc 3 D24 to D30, arc 4 D31 to D34, arc 2 D35 to D41; `D-orch-1` to `D-orch-3` are the orchestrator's. Each arc took the next free id on its branch, so arc 2's collided at all three merges and were renumbered.
 
 | # | Question | Decided | Why |
 |---|---|---|---|
@@ -206,14 +217,19 @@ Ids by arc: D1 to D19 at planning, arc 1 D20 to D23, arc 3 D24 to D30, arc 2 D31
 | D28 | A decode that does not encode back (arc 3 review) | on the grant path, it reads as undecoded (`arguments`) | the decoder reads some types narrower than the encoder writes them; arc 3 changes the grant path only |
 | D29 | A value that cannot print whole (arc 3 review) | the grant reads as undecoded (`arguments`), the existing refusal | the signed picture prints every value whole; a stripped value is not the one signed, and a marker would be new UI |
 | D30 | Which function a grant decodes with (arc 3 review) | the one resolved by name and encoded for, as signing resolves it | an artifact may list another function with the same selector, so a selector lookup can read the signed fields through a different interface |
-| D-orch-2 | Arc 2's start | in parallel with arc 1, before its merge | the orchestrator released it (2026-10-16), overriding "Parallelism: none" under Delivery; the arcs share no source file |
-| D31 | Who answers a dApp send's question | its own window only; `acceptQueuedFee` stays transfer-only | the window settles the waiter with the worker's captured figure, so no RPC takes a figure from a page; Home's queued dApp row focuses the window |
-| D32 | The question's deadline | `MAX_WAIT_MS` from the ask, one absolute deadline for the waiter and the window | the owner's "unanswered after 60 minutes"; opening the window must not restart it |
-| D33 | A person-paid popup approval with no figure | refused before the proof | under OA-F2 C the window always sends one; accepting none would send unbound |
-| D34 | Which operations Confirm waits on | a fee picked in the window that the person pays (Fee Juice, Private Fee Juice, or a payer the fee card has not reported yet), an app's payment the person makes (a claim to the account, the PrivateFPC), and an app's own cap or priority | the figure binds wherever the person pays; a sponsor picked in the window carries none, so its Confirm behaves as before the arc (revised after PR CI: waiting on it kept a sponsored request the estimate refuses from reaching its refusal) |
-| D35 | What the held send keeps across the question | the build stashed in the reuse cache, and only the question and the stash id in the waiting frame | the cache's two-minute bound holds the signed request, not the person's wait |
-| D36 | After the question | re-check earlier sends under the slot, then claim the record back (`queued → pending`, or still `pending`) | another send of the account may reach the node while this one waits |
-| D37 | An app's own payment naming the PrivateFPC as payer | carries the figure as Private Fee Juice: the worker reads the kernel's payer, the window the request's `feePayer`, both against one address constant the derivation test pins | it charges the account's own Private Fee Juice, which OA-F2 A names; an app's other fee contracts stay exempt |
+| D-orch-2 | Arc 4 (orchestrator, after #611 merged) | the transaction card's decode gets D28's check | a review note kept private |
+| D31 | Where arc 4's check runs (implementation) | inside `decodeFields`, over its decoded values | one check for every decode the window shows, and one decode instead of two; every function of the 40 bundled artifacts (`noir-contracts.js`, `aztec-standards`) reads as before under random canonical arguments; what now reads as unreadable is a decode that loses fields (a Some holding None reads as None, a `BoundedVec`'s storage past its length is dropped) or a tuple parameter, which the stdlib encoder does not take and no bundled artifact has |
+| D32 | Confirm for an unreadable dApp call (implementation) | unchanged: the notice, Confirm as today | the notice asks the person to check the app's description before approving; holding Confirm for a call would change what a person can do, an owner decision this arc does not have |
+| D33 | Where arc 4's card test sits (implementation) | `OperationCard.wire.test.ts`, over the real decoder; the dispatcher test unchanged | the window hands the decode to the card untouched; the dispatcher test pins no decoded shape |
+| D34 | A string the transaction card prints shorter than its characters (arc 4 review) | unchanged in this arc | the card's string print is a display rule outside the decode, and the grant card's whole-print rule would refuse the padding a canonical `str<N>` carries; noted privately |
+| D-orch-3 | Arc 2's start | in parallel with arc 1, before its merge | the orchestrator released it (2026-10-16), overriding "Parallelism: none" under Delivery; the arcs share no source file |
+| D35 | Who answers a dApp send's question | its own window only; `acceptQueuedFee` stays transfer-only | the window settles the waiter with the worker's captured figure, so no RPC takes a figure from a page; Home's queued dApp row focuses the window |
+| D36 | The question's deadline | `MAX_WAIT_MS` from the ask, one absolute deadline for the waiter and the window | the owner's "unanswered after 60 minutes"; opening the window must not restart it |
+| D37 | A person-paid popup approval with no figure | refused before the proof | under OA-F2 C the window always sends one; accepting none would send unbound |
+| D38 | Which operations Confirm waits on | a fee picked in the window that the person pays (Fee Juice, Private Fee Juice, or a payer the fee card has not reported yet), an app's payment the person makes (a claim to the account, the PrivateFPC), and an app's own cap or priority | the figure binds wherever the person pays; a sponsor picked in the window carries none, so its Confirm behaves as before the arc (revised after PR CI: waiting on it kept a sponsored request the estimate refuses from reaching its refusal) |
+| D39 | What the held send keeps across the question | the build stashed in the reuse cache, and only the question and the stash id in the waiting frame | the cache's two-minute bound holds the signed request, not the person's wait |
+| D40 | After the question | re-check earlier sends under the slot, then claim the record back (`queued → pending`, or still `pending`) | another send of the account may reach the node while this one waits |
+| D41 | An app's own payment naming the PrivateFPC as payer | carries the figure as Private Fee Juice: the worker reads the kernel's payer, the window the request's `feePayer`, both against one address constant the derivation test pins | it charges the account's own Private Fee Juice, which OA-F2 A names; an app's other fee contracts stay exempt |
 
 ## Audit verdicts
 
@@ -250,8 +266,8 @@ Ids by arc: D1 to D19 at planning, arc 1 D20 to D23, arc 3 D24 to D30, arc 2 D31
 
 | Finding | Decided |
 |---|---|
-| A: an app's claim to the account read as app-paid, so Confirm could pass with no figure | D34 |
-| B: the waiting frame would hold the signed request past the cache's bound | D35 |
+| A: an app's claim to the account read as app-paid, so Confirm could pass with no figure | D38 |
+| B: the waiting frame would hold the signed request past the cache's bound | D39 |
 | C: a figure one unit below no longer asks once the tolerance exists | D16 revised |
 
 **Arc 1 review, round 1** (2026-10-16). Codex `gpt-6.1-sol` high, read-only, over `2ea17854..6da190f6`: **reject**, 2 material findings and comment nits. Opus 5.5 general-purpose, alongside: **conditional approve**, 1 material finding (Codex's first) and nits. The round ran while the phase 2 and 3 e2e gates waited on host load. Each claim was checked against the tree.
@@ -286,9 +302,9 @@ Ids by arc: D1 to D19 at planning, arc 1 D20 to D23, arc 3 D24 to D30, arc 2 D31
 
 | Finding | Decided |
 |---|---|
-| The exemption of an app's payment through Private Fee Juice narrows OA-F2 A, and the route is supported (the playground's PrivateFPC routes, `selfpay-phase.test.ts`) | D37 |
+| The exemption of an app's payment through Private Fee Juice narrows OA-F2 A, and the route is supported (the playground's PrivateFPC routes, `selfpay-phase.test.ts`) | D41 |
 
-**Arc 2 review, round 3** (2026-10-16). Codex, the same session, on D37 and the e2e's settled-row check: **approve**, no findings ("both prior findings are resolved").
+**Arc 2 review, round 3** (2026-10-16). Codex, the same session, on D41 and the e2e's settled-row check: **approve**, no findings ("both prior findings are resolved").
 
 **Arc 3 review, round 1** (2026-10-16). Codex `gpt-6.1-sol` high, read-only, over `d461b059..17dd2c43`: **reject**, 3 material findings. Opus 5.5 general-purpose, alongside: **reject**, 2 material findings (one is Codex's first), a cost note and comment nits. Each was checked against the tree; all were accepted and fixed in `8b49f561`.
 
@@ -305,7 +321,20 @@ Ids by arc: D1 to D19 at planning, arc 1 D20 to D23, arc 3 D24 to D30, arc 2 D31
 
 **Arc 3 review, round 3** (2026-10-16). Codex, resumed over `8829a309`: **approve**, no material findings; it re-ran the transaction card's decoder over its inputs and found its results unchanged. The loop converged.
 
-**PR CI, first run** (2026-10-16). The network lanes failed on both browsers in `authwit-lifecycle.test.ts` and `scope-refusal.test.ts`: each presses Confirm on a sponsored request whose estimate fails by design (a revoked authorization, an out-of-scope call), and the window waited for a figure on every wallet-picked fee. D34 revised: a sponsor picked in the window does not wait.
+**Arc 4 review, round 1** (2026-10-16). Codex `gpt-6.1-sol` high, read-only, over `493ff497..02391a30`: **approve**, 3 findings and 2 nits. Opus 5.5 general-purpose, alongside: **approve**, no material finding, 4 nits. Each was checked against the tree.
+
+| Finding | Decided |
+|---|---|
+| A canonical Some holding None now reads as unreadable (Codex) | kept: the decode reads it as None, a reading the fields do not carry; recorded in D31 and pinned by a test row |
+| A string's control characters do not print on the transaction card (Codex) | not in this decode; D34 |
+| An unreadable call's title falls back to the dApp's name or the selector (Codex) | the existing rendering of an unreadable call, and execution refuses a name that does not match the selector; the PR body says so |
+| No case exercised an encoder refusal inside the shared decode (both) | a row: an integer past its width |
+| The public exit was sent as a private call in the card test (Codex) | `type: "public"` |
+| The wire test's TokenBridge selector is not checked against the hash; the card test overlaps the unit test (Opus) | kept: the selector is the real one at 6.0.0-rc.3 and only needs to agree with itself under the stood-in hash; the card test is the decode-to-card chain D33 asks for |
+
+**Arc 4 review, round 2** (2026-10-16). Codex, resumed over `2b621f1b`: **approve**, no findings; it re-ran the five refusal rows and their controls, and hashed the TokenBridge selector to the test's value. The loop converged.
+
+**PR CI, first run** (2026-10-16). The network lanes failed on both browsers in `authwit-lifecycle.test.ts` and `scope-refusal.test.ts`: each presses Confirm on a sponsored request whose estimate fails by design (a revoked authorization, an out-of-scope call), and the window waited for a figure on every wallet-picked fee. D38 revised: a sponsor picked in the window does not wait.
 
 **Cross-arc pass** (2026-10-16). Codex `gpt-6.1-sol` high, a fresh read-only session over the net diff from `c5e9c8e8`, arcs 1 and 3 merged under arc 2: **approve with changes**, 2 findings, both verified and accepted, fixed in `a52afd5f`; the same session re-read the fix: **approve**, no findings.
 

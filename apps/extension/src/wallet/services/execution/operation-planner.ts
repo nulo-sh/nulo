@@ -46,7 +46,7 @@ const TRANSFER_FN_BY_TYPE = {
 	[TransferType.PublicToPrivate]: { field: "transferPublicToPrivateFn", descriptor: TOKEN_FN_DESCRIPTORS.transferPublicToPrivate },
 } as const satisfies Record<TransferType, { field: string; descriptor: unknown }>
 import type { Fn } from "@/wallet/utils/fn"
-import { pickPrimaryMethod } from "@/utils/primary-method"
+import { pickPrimaryMethod, wireTitle } from "@/utils/primary-method"
 import type {
 	Action,
 	AddCapsuleAction,
@@ -245,7 +245,7 @@ export class OperationPlanner {
 		}
 		if ("exec" in operation && (operation as AztecSendTxOperation).exec?.calls?.length) {
 			const carriers = (operation as AztecSendTxOperation).exec.calls.map((c) => ({
-				name: c.name?.toString() ?? c.selector?.toString(),
+				name: wireTitle(c.name?.toString()) ?? c.selector?.toString(),
 			}))
 			return pickPrimaryMethod(carriers)
 		}

@@ -40,7 +40,7 @@ import type { AccountService } from "@/wallet/services/account/service"
 import { NoUsableAccountError, projectStoredGrants, requestedSenderOf, resolveAuthorizedSessionAccount } from "@nulo/wallet-bridge"
 import { parseCaipAccount } from "@/wallet/utils/caip"
 import type { CaipAccount } from "@/wallet/services/dapp-interaction/spec"
-import { pickPrimaryMethod } from "@/utils/primary-method"
+import { pickPrimaryWireMethod } from "@/utils/primary-method"
 import { chainInfoToChainId } from "./session-established"
 
 /** Per-session queued-record cap. Bounds the activity feed under burst flood. */
@@ -226,8 +226,8 @@ export function extractPrimaryMethodFromSendTx(message: WalletMessage): string |
 	if (message.type !== "sendTx") return undefined
 	const args = message.args as unknown[] | undefined
 	if (!Array.isArray(args)) return undefined
-	const exec = args[0] as { calls?: Array<{ name?: string }> } | undefined
-	return pickPrimaryMethod(exec?.calls)
+	const exec = args[0] as { calls?: unknown } | undefined
+	return pickPrimaryWireMethod(exec?.calls)
 }
 
 /**

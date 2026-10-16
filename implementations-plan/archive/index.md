@@ -148,7 +148,8 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [harden-findings-remediation](harden-findings-remediation/plan.md) — completed — a whole-codebase security audit remediated as eleven reviewable units
 - [harden-quality-arc](harden-quality-arc/plan.md) — completed — a quality audit's findings landed on one integration branch, tiered by risk
 - [harden-quality-fixes-1](harden-quality-fixes-1/plan.md) — completed — the quality harden's cheap set: one `deferred` test helper, exhaustive operation-kind switches, composed row schemas, four dead paths removed, shared contact rules
-- [harden-security-fixes-2](harden-security-fixes-2/plan.md) — completed — passkey backups bound to their passkey, restored tokens read from the chain, the approved dApp fee as a ceiling (#416), grant arguments decoded
+- [harden-security-fixes-1](harden-security-fixes-1/plan.md) — completed — replies under a byte budget, backup slices row-limited, discovery and key exchange admitted only from their source, dApp call titles cleaned, the wallet's class copy first, dependency logs at `warn`, the publish summary one list back
+- [harden-security-fixes-2](harden-security-fixes-2/plan.md) — completed — passkey backups bound to their passkey, restored tokens read from the chain, the approved dApp fee as a ceiling (#416), grant arguments decoded, call arguments read only when they encode back
 - [harden-security-prerelease](harden-security-prerelease/plan.md) — completed — a security audit's verified findings fixed before the first release, in four batches
 - [hardening-2](hardening-2/plan.md) — completed — every dApp call parsed against the wallet schema, an object-keyed artifact cache, storage fences and a CSP floor
 - [harness-fixtures](harness-fixtures/plan.md) — completed — six complexity suppressions in the e2e harness removed by refactoring
@@ -260,6 +261,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [send-states](send-states/plan.md) — completed — a sponsor funding check on the fee card and a load error on Send's token card
 - [service-fences](service-fences/plan.md) — completed — capture-then-assert fences for three durable writes made after an await
 - [settings-by-task](settings-by-task/plan.md) — completed — Settings grouped by task: profile card, Safety, Preferences, Danger zone, Lock and Privacy pages
+- [settings-search-1](settings-search-1/plan.md) — completed — a search field at the top of Settings finds a row by title, description or synonym, and the opened page outlines it
 - [shell-identity-fences](shell-identity-fences/plan.md) — completed — identity-safe popup shell continuations, and two retired pieces removed
 - [simulate-fast-path](simulate-fast-path/plan.md) — completed — a dApp simulateTx serves a public-static prefix directly on the node
 - [single-sim-estimates](single-sim-estimates/plan.md) — completed — fewer simulations per dApp sendTx estimate, after proving identical gas

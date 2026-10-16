@@ -2358,6 +2358,8 @@ describe("DappSendExecutor: the journal title thunk and the offchain output", ()
 			[[], undefined],
 			[[{ name: "claim_and_end_setup" }, { name: "claim_public" }], [{ method: "claim_public" }]],
 			[[{ name: "dapp_method" }], [{ method: "dapp_method" }]],
+			[[{ name: "transfer", method: "approve_all" }], [{ method: "transfer" }]],
+			[[{ name: `trans\u200bfer\u0007${"f".repeat(70)}` }], [{ method: `transfer${"f".repeat(56)}…` }]],
 		]
 		for (const [calls, expected] of cases) {
 			const { executor, deps } = makeHarness()
