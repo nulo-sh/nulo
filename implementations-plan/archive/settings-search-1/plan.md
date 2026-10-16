@@ -136,6 +136,7 @@ Follow [`implementations-plan/README.md` § Post-implementation standard](../../
 | 3 | Codex (resume) | **approve** | No new material defect or regression |
 | Impl 1 | Codex (gpt-6.1-sol, high), net diff from `f6bd011a` | approve: 2 P3 | Both accepted: `expectOwnedRows` requires exactly one element per visible row (a duplicate escaped `find()`); three narrating comments deleted (`SettingsSearch.vue` header and `stops()`, `index.vue`'s `searchContext`) |
 | Impl 1 | Opus 5.5, final diff | conditional approve: 2 findings | Both accepted: `expectOwnedRows` checks the rows' page order (ties rank by it) and `index.test.ts` checks each list row's caption and fence against its `section`; a modified arrow or Enter (Shift+ArrowUp selects) is left to the field. Noted, not raised: a list result leaves one extra history entry (D2 accepted it) |
+| Follow-up | Codex (gpt-6.1-sol, high), the P32-01 B diff | approve: 3 P3 | All accepted: the highlight's unused `target` no longer returned; three comments the code already says removed |
 
 ## Seeds
 

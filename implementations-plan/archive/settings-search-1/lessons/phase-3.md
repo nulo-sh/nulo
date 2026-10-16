@@ -25,3 +25,22 @@ Chrome, 360 × 600 at 2×, light and dark through `prefers-color-scheme` on the 
 ## Final head
 
 On `daa01c1b` (after merging `origin/dev` at `a433c20b`): `bun run lint` 0, `bun run typecheck:all` 0, `bun run test:all` 0 (extension 13117 passed), `bun run check:plans` 0; armed builds and `settings-routes.test.ts --retry=0` 0 on Chrome (scenario 1.46 s, file 12.9 s, load1 107) and on Firefox (scenario 3.09 s, file 20.2 s, load1 121).
+
+## Follow-up: P32-01 B
+
+The owner answered decision page 32: a result for a Settings-list row opens that row's page and outlines nothing (D8).
+- The 16 list rows took their links into the registry, so the list and its results share one source. Their old `to=` literals matched the new entries one for one, checked by script.
+- The list dropped the highlight directive. The tests that pinned A now pin B; reverting `settingsResultTo` to the A form fails four of them.
+- Codex (session `01a146be…`, gpt-6.1-sol, high, the follow-up diff only): approve with three P3s, all applied. `useSettingsRowHighlight` no longer returns `target`, which had no consumer left, and three comments were removed.
+
+Gates on `414d0970`:
+
+| Gate | Result |
+|---|---|
+| `bun run lint` | 0 |
+| `bun run typecheck:all` | 0 |
+| `bun run test:all` | 0 (extension 13122 passed) |
+| Smoke, Chrome | 0: scenario 1.64 s, file 13.0 s, load1 87 |
+| Smoke, Firefox | 0: scenario 2.97 s, file 20.8 s, load1 118 |
+
+The two screenshots of an outlined list row were replaced by Lock now outlined inset and a list result opening the backup page.
