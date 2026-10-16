@@ -33,3 +33,4 @@
 - 2026-10-16: whole smoke Firefox, retry 0 (start load 149): 59 files pass, 1 fails (security-reset purge over its 15 s budget), zero CSP violations; rerun pending.
 - 2026-10-16: the gate chain hit its 2 h background limit during network Chrome (SIGTERM after contracts deployed); no survivor of the run, its ports released; network rerun per browser.
 - 2026-10-16: network Chrome, retry 0 (start load 145): networks, default-token-seeding, backup-import-stalled-network pass; tx-sendTx-reject failed at the new JSON-window step (clickByTestId calls click() on the button's <svg>); spec fixed, rerun pending.
+- 2026-10-16: network Firefox, retry 0: networks, default-token-seeding, backup-import-stalled-network pass; tx-sendTx-reject's pointer click on the expand <svg> opened no window on either browser (no box, no click event; diagnostic run). The step opens the JSON window at its URL with the live request id; Chrome pass (28.6 s).

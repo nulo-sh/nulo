@@ -1,5 +1,5 @@
 import { expect, inject } from "vitest"
-import { prepareClick } from "../fixtures/browser"
+import { extensionUrl, gotoExtensionPage, newPage } from "../fixtures/browser"
 import { editorText, readEditorStyles } from "../fixtures/code-editor"
 import { clickByTestId, test } from "../fixtures/extension"
 import { snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
@@ -11,7 +11,7 @@ const hasConfig = aztecConfig !== undefined
 
 /**
  * Test #34 — user rejects the /windows/execute popup. dApp gets an error. Before the reject, the
- * request's JSON opens full screen: the one route into that window, which needs a live request.
+ * request's JSON opens full screen, a window that needs a live request.
  */
 test.skipIf(!hasConfig)(
 	"tx-sendTx-reject — Reject button surfaces error to dApp",
@@ -57,12 +57,15 @@ test.skipIf(!hasConfig)(
 		const execPopup = await execPopupP
 		await waitForExecuteContent(execPopup)
 
-		const jsonWindowP = waitForPopup(dappConnectedExtension, "json", { timeout: 30_000 })
-		// An `<svg>`, which has no `click()`: a pointer click on its box.
-		const showJson = await execPopup.waitForSelector('[data-testid="execute-show-json-btn"]', { visible: true, timeout: 30_000 })
-		await prepareClick(execPopup)
-		await showJson?.click()
-		const jsonWindow = await jsonWindowP
+		// The window `execute-show-json-btn` opens, at its own URL: Puppeteer gives that `<svg>` no box.
+		const requestId = /requestId=([^&#]+)/.exec(execPopup.url())?.[1]
+		if (!requestId) throw new Error(`the execute window carries no request id: ${execPopup.url()}`)
+		const jsonWindow = await newPage(dappConnectedExtension.browser)
+		await jsonWindow.setViewport({ width: 900, height: 700 })
+		await gotoExtensionPage(
+			jsonWindow,
+			extensionUrl(dappConnectedExtension.extensionId, `/src/popup/index.html?requestId=${requestId}#/windows/json`),
+		)
 		try {
 			expect(await editorText(jsonWindow, "json-editor", 30_000)).toMatch(/^\[/)
 			expect(await readEditorStyles(jsonWindow, "json-editor")).toEqual({ display: "flex", fontSize: "14px", scrollbarWidth: "none" })
