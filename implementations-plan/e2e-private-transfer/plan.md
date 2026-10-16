@@ -1,7 +1,7 @@
 ---
 plan: e2e-private-transfer
 tier: light
-status: planned, awaiting approval
+status: arc 1 in progress (approved 2026-10-16)
 issues: "#165 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -65,6 +65,7 @@ The owner's decision (page 19, 2026-10-15, option A) names three items. Two alre
 | D3 | `importToken` before the click; no balance wait | The window reads transfer rows only for a stored token row, loaded once at open (`OperationCard.vue:118`, `execute/index.vue:286`); the toast lands after `addToken` resolves. The estimate's simulation syncs the notes itself. | Waiting for the private balance: waits for nothing the flow reads |
 | D4 | One wait for both addresses, one scoped read | On this path the card has no caller context, so a transfer reading always has an explicit sender (`call-surface.ts:80-81`): the sender kind cannot fail alone. From showing the account's name, and To reading the consumer, fail on a swapped role or binding; the label on the decode; the intent on the selector check and token row; the amount on the token's decimals. The decode lands after the toggle (spike) and each address after its own lookup, hence the waits. | The sender-kind read (vacuous); four separate reads (an estimate rerun can unmount the list between them) |
 | D5 | Reuse `serializeInstance` (`fixtures/selfpay-phase.ts:27`, four callers) | Both touched files carry a copy of it. | A new helper; fixing `contracts-register.test.ts`'s copy (a file this arc does not touch) |
+| D6 | Step 5 waits for both addresses to have text, then asserts `from: "name"` in the one `toEqual`; the wait returns that snapshot | Same strength: `AddressDisplay` settles its text and `data-address-shows` in one render after its one await. A wrong sender now fails with a diff, not a timeout. Returning the snapshot from the wait means an estimate rerun cannot split the read. | A wait on `data-address-shows="name"` (fails as a timeout); a separate read after the wait (Opus review) |
 
 ## Security & Adversarial Considerations
 
@@ -131,6 +132,11 @@ One PR from `worktree-e2e-private-transfer` to `dev`, no stack. Title: `test(e2e
 - Q1: state the scope reading. **Accepted:** the UI impact line and the final report. G1 (index line, `check:plans`): done at the plan commit. G2: the negative control. **Accepted.** G3: the Firefox estimate. **Accepted** (I1).
 
 **Codex round 2** (resume): approve with changes. R2-1 (Medium, plausible): the From-name wait does not prove To has rendered (`AddressDisplay` sets its text after an awaited lookup, `AddressDisplay.vue` `onMounted`). **Accepted:** the step 5 wait covers both addresses. Every other fix verified; no disposition reopened.
+
+**Implementation review** (the arc's diff, `lessons/phase-1.md`):
+- **Codex round 1** (gpt-6.1-sol, high, session 01a144d0): approve with changes. Its one Low finding was narrating comments. Three were deleted. The fourth was reworded and kept, because what `from: "name"` means cannot be seen in the code.
+- **Opus review**, alongside round 1: no bug. Accepted: the wait and the read could straddle an estimate rerun (Low, plausible), so the wait now returns the snapshot. Also accepted: two wording fixes. Rejected: moving the docblock, against the repo's idiom.
+- **Codex round 2** (resume): approve, no new material finding. The loop converged.
 
 ## Seeds
 
