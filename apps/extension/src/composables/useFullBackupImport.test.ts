@@ -203,6 +203,7 @@ import {
 	restoreAccountsAndFilterOwnedSlices,
 	restoredNetworkIds,
 } from "./full-backup-restore"
+import { deferred } from "@nulo/wallet-core/utils"
 import { errorLogWriters, useFullBackupImport, validateAndMigrateBackup } from "./useFullBackupImport"
 import { collectRestoreErrors, sealFullBackupText } from "@/utils/full-backup-helpers"
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
@@ -1197,13 +1198,6 @@ describe("useFullBackupImport — Retry the networks that did not restore", () =
 	const accountStateRows = (c: Import) => (c.restoreErrorLog.value["account-state"] ?? []) as Array<Record<string, unknown>>
 	const rowsFor = (c: Import, networkId: string) => accountStateRows(c).filter((r) => r.networkId === networkId)
 
-	function deferred<T>() {
-		let resolve: (value: T) => void = () => {}
-		const promise = new Promise<T>((r) => {
-			resolve = r
-		})
-		return { promise, resolve }
-	}
 	/** Real macrotask turns, so the flow's WebCrypto and mocked RPCs settle while fake timers hold,
 	 *  bounded by real time: WebCrypto finishes on the clock, not within a count of turns. */
 	async function until(cond: () => boolean) {

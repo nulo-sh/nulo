@@ -1,4 +1,4 @@
-import type { AlarmCreateOptions, AlarmEvent, AlarmsPort, BrowserApi, Unsubscribe } from "@nulo/wallet-core/ports"
+import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import type { ILogger } from "@/wallet/logger"
@@ -7,7 +7,7 @@ import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/serv
 import { TokenListService } from "@/wallet/services/token-list/service"
 import { ValueStorage } from "@/wallet/storage"
 import { flaggedKeysOf } from "@/utils/token-flag"
-import { AlarmDispatcher, EventHandler, createSerialQueue } from "@nulo/wallet-core/utils"
+import { AlarmDispatcher, EventHandler, createSerialQueue, readBodyCapped } from "@nulo/wallet-core/utils"
 import { allCoingeckoIds, getSanityBand, pricedTokensOf } from "./price-map"
 import {
 	MAX_CLOCK_SKEW_MS,
@@ -38,14 +38,10 @@ const API_BASE = "https://api.coingecko.com/api/v3"
 const BACKOFF_BASE_MS = 30_000
 const BACKOFF_CAP_MS = QUOTE_TTL_MS
 
-type FetchLike = (
-	input: string,
-	init?: { signal?: AbortSignal; headers?: Record<string, string> },
-) => Promise<{
-	ok: boolean
-	status: number
-	json(): Promise<unknown>
-}>
+/** A real reply for the full id set is about 300 bytes; anything near this is not a price reply. */
+const MAX_PRICE_RESPONSE_BYTES = 16 * 1024
+
+type FetchLike = (input: string, init?: { signal?: AbortSignal; headers?: Record<string, string> }) => Promise<Response>
 
 /**
  * Background price feed. ONE batched CoinGecko request per refresh, always
@@ -106,12 +102,10 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		onError: (err) => this.logWarn("config-change handling failed", err),
 	})
 
-	public constructor(logger: ILogger, browserApi?: BrowserApi, opts?: { fetchFn?: FetchLike; now?: () => number }) {
+	public constructor(logger: ILogger, browserApi: BrowserApi, opts?: { fetchFn?: FetchLike; now?: () => number }) {
 		super(PRICE_SERVICE_NAME, logger)
-		this.cache = browserApi
-			? new ValueStorage<PriceState>(CACHE_STORAGE_KEY, browserApi.storage.local)
-			: new ValueStorage<PriceState>(CACHE_STORAGE_KEY, chrome.storage.local)
-		this.dispatcher = new AlarmDispatcher(PRICE_REFRESH_ALARM_NAME, browserApi ? browserApi.alarms : new ChromeAlarmsFallback())
+		this.cache = new ValueStorage<PriceState>(CACHE_STORAGE_KEY, browserApi.storage.local)
+		this.dispatcher = new AlarmDispatcher(PRICE_REFRESH_ALARM_NAME, browserApi.alarms)
 		this.fetchFn = opts?.fetchFn ?? ((input, init) => fetch(input, init))
 		this.now = opts?.now ?? (() => Date.now())
 	}
@@ -367,7 +361,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			if (!response.ok) {
 				throw new Error(`price fetch failed: HTTP ${response.status}`)
 			}
-			const body = await response.json()
+			const body: unknown = JSON.parse(await readBodyCapped(response, MAX_PRICE_RESPONSE_BYTES))
 			if (gen !== this.generation) return {}
 
 			const fetchedAt = this.now()
@@ -459,21 +453,5 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			merged[id] = quote
 		}
 		return merged
-	}
-}
-
-/** Direct-chrome fallback used when the composition root doesn't inject a
- *  BrowserApi (legacy path, mirrors ContactService's storage fallback). */
-class ChromeAlarmsFallback implements AlarmsPort {
-	public async create(name: string, options: AlarmCreateOptions): Promise<void> {
-		await chrome.alarms.create(name, options)
-	}
-	public async clear(name: string): Promise<boolean> {
-		return await chrome.alarms.clear(name)
-	}
-	public onAlarm(listener: (alarm: AlarmEvent) => void): Unsubscribe {
-		const wrapped = (alarm: chrome.alarms.Alarm) => listener({ name: alarm.name, scheduledTime: alarm.scheduledTime })
-		chrome.alarms.onAlarm.addListener(wrapped)
-		return () => chrome.alarms.onAlarm.removeListener(wrapped)
 	}
 }

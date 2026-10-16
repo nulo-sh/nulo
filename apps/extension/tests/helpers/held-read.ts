@@ -1,25 +1,14 @@
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { type Deferred, deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { type Mock, vi } from "vitest"
 
-/** A promise the test settles by hand. */
-export type Held<T> = { promise: Promise<T>; resolve: (value: T) => void; reject: (error: unknown) => void }
-
-export function held<T>(): Held<T> {
-	let resolve!: Held<T>["resolve"]
-	let reject!: Held<T>["reject"]
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
-}
+export { deferred as held, type Deferred as Held }
 
 /** Every later call to `read` waits for the test: `reads[n]` settles the n-th. The implementation
  *  outlives `vi.clearAllMocks`, so the test resets `read` after itself. */
-export function holdReads<T>(read: { mockImplementation(impl: () => Promise<T>): unknown }): Held<T>[] {
-	const reads: Held<T>[] = []
+export function holdReads<T>(read: { mockImplementation(impl: () => Promise<T>): unknown }): Deferred<T>[] {
+	const reads: Deferred<T>[] = []
 	read.mockImplementation(() => {
-		const next = held<T>()
+		const next = deferred<T>()
 		reads.push(next)
 		return next.promise
 	})

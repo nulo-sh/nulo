@@ -11,7 +11,7 @@
  */
 
 import { EntityStorage } from "@/wallet/storage"
-import { nextNumericId } from "@/wallet/services/id-allocators"
+import { type NumericIdBatch, nextNumericId, numericIdBatch } from "@/wallet/services/id-allocators"
 import { purgeMalformedRows } from "@/wallet/services/purge-rows"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { TOKEN_BALANCE_STORAGE_ROOT, TokenBalanceRawSchema, type TokenBalanceRaw } from "./spec"
@@ -66,9 +66,13 @@ export class BalanceRepository {
 	 *  keys lets the one allocator resolve occupancy, safety, and the fence
 	 *  together. */
 	public async allocateIdAvoiding(avoid: ReadonlySet<number>): Promise<number> {
-		return nextNumericId({
-			getKeys: async () => [...(await this.storage.getKeys()), ...[...avoid].map((n) => String(n))],
-		})
+		return (await this.idBatch()).next(avoid)
+	}
+
+	/** One listing of the key space for many allocations; valid only while the caller holds the
+	 *  allocation lock for the whole batch, since another allocator's write is not in the listing. */
+	public async idBatch(): Promise<NumericIdBatch> {
+		return numericIdBatch(await this.storage.getKeys())
 	}
 
 	/** Raw second pass over the balance rows — the codec-hidden complement

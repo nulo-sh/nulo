@@ -98,8 +98,9 @@ export const BACKUP_SCHEMA_BASELINE = BASELINE_VERSION
 export type SliceRowIdOf = (row: Record<string, unknown>) => string | undefined
 
 export type SliceDescriptor =
-	/** The slice element IS the stored row value, keyed `${root}@${idOf(el)}`. */
-	| { kind: "root"; root: string; idOf: SliceRowIdOf; optional?: boolean }
+	/** The slice element IS the stored row value, keyed `${root}@${idOf(el)}`. A slice longer than
+	 *  `maxRows` is refused before any row is read. */
+	| { kind: "root"; root: string; idOf: SliceRowIdOf; optional?: boolean; maxRows?: number }
 	/** ValueStorage-backed, LOSSY: the slice is a projection of the stored
 	 *  value. `toStored`/`fromStored` preserve absence (never fabricate
 	 *  current-class defaults for keys the slice doesn't carry). */
@@ -204,8 +205,10 @@ export const BACKUP_SLICE_REGISTRY: Readonly<Record<string, SliceDescriptor>> = 
 	// Imported accounts' encrypted signing keys — own root, own owner. Optional: a backup with no
 	// imported accounts carries no slice, and that must not be a required-slice rejection.
 	[IMPORTED_KEYS_SERVICE_NAME]: { kind: "root", root: IMPORTED_KEYS_STORAGE_ROOT, idOf: accountAnchor, optional: true },
-	[TOKEN_SERVICE_NAME]: { kind: "root", root: TOKEN_STORAGE_ROOT, idOf: numberAnchor("id") },
-	[TOKEN_BALANCE_SERVICE_NAME]: { kind: "root", root: TOKEN_BALANCE_STORAGE_ROOT, idOf: numberAnchor("id") },
+	// These caps bound the restore work done while an allocation lock is held; no profile seen holds a
+	// tenth of either.
+	[TOKEN_SERVICE_NAME]: { kind: "root", root: TOKEN_STORAGE_ROOT, idOf: numberAnchor("id"), maxRows: 1024 },
+	[TOKEN_BALANCE_SERVICE_NAME]: { kind: "root", root: TOKEN_BALANCE_STORAGE_ROOT, idOf: numberAnchor("id"), maxRows: 16384 },
 	[CONTACT_SERVICE_NAME]: { kind: "root", root: CONTACT_STORAGE_ROOT, idOf: stringAnchor("id") },
 	[TRANSACTION_SERVICE_NAME]: { kind: "root", root: TRANSACTION_STORAGE_ROOT, idOf: stringAnchor("hash"), optional: true },
 	// Per-row the authwit slice IS the stored row; the service-level lossiness
@@ -327,6 +330,9 @@ function normalizeRootSlice(
 	entries: Record<string, string>,
 ): string | undefined {
 	if (!Array.isArray(slice)) return `slice "${name}" is not an array`
+	if (desc.maxRows !== undefined && slice.length > desc.maxRows) {
+		return `slice "${name}" has ${slice.length} rows, over its limit of ${desc.maxRows}`
+	}
 	for (let i = 0; i < slice.length; i++) {
 		const row = slice[i]
 		if (typeof row !== "object" || row === null || Array.isArray(row)) {

@@ -685,6 +685,11 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 					operation.actions.forEach((x) => this.checkMethodPermission(session, x.kind, chain))
 					break
 				}
+				default: {
+					// A kind no arm names would otherwise skip every permission check.
+					const _unhandled: never = operation
+					throw new Error("Unsupported operation kind")
+				}
 			}
 		}
 		return session

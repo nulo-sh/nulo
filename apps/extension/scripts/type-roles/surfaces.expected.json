@@ -275,6 +275,36 @@
 			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
 		},
 		{
+			"id": "windows-execute-DetailsToggle",
+			"name": "Routed module popup/windows/execute/DetailsToggle.vue",
+			"kind": "route",
+			"source": "apps/extension/src/popup/windows/execute/DetailsToggle.vue",
+			"reach": "none",
+			"states": [],
+			"suite": "none",
+			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
+		},
+		{
+			"id": "windows-execute-SendTxSummary",
+			"name": "Routed module popup/windows/execute/SendTxSummary.vue",
+			"kind": "route",
+			"source": "apps/extension/src/popup/windows/execute/SendTxSummary.vue",
+			"reach": "none",
+			"states": [],
+			"suite": "none",
+			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
+		},
+		{
+			"id": "windows-execute-UnreadableArgsNotice",
+			"name": "Routed module popup/windows/execute/UnreadableArgsNotice.vue",
+			"kind": "route",
+			"source": "apps/extension/src/popup/windows/execute/UnreadableArgsNotice.vue",
+			"reach": "none",
+			"states": [],
+			"suite": "none",
+			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
+		},
+		{
 			"id": "windows-discover",
 			"name": "Discover",
 			"kind": "route",

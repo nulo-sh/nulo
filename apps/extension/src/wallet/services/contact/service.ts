@@ -50,20 +50,13 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 
 	private profileService: ProfileService = null!
 
-	/**
-	 * @param browserApi — optional; if omitted, falls back to `chrome.storage`
-	 *        directly (legacy behavior). Passed explicitly by the composition
-	 *        root and by tests via FakeBrowserApi.
-	 */
 	public constructor(
 		logger: ILogger,
-		browserApi?: BrowserApi,
+		browserApi: BrowserApi,
 		private readonly restoreGate: RestoreGate = NOOP_RESTORE_GATE,
 	) {
 		super(CONTACT_SERVICE_NAME, logger)
-		this.storage = browserApi
-			? new EntityStorage<Contact>(CONTACT_STORAGE_ROOT, browserApi.storage.local, (raw) => ContactSchema.parse(raw))
-			: new EntityStorage<Contact>(CONTACT_STORAGE_ROOT, chrome.storage.local, (raw) => ContactSchema.parse(raw))
+		this.storage = new EntityStorage<Contact>(CONTACT_STORAGE_ROOT, browserApi.storage.local, (raw) => ContactSchema.parse(raw))
 	}
 
 	protected async init(services: ServiceCollection) {

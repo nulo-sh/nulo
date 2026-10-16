@@ -23,7 +23,7 @@
 			"digests": {
 				"apps/extension/src/wallet/services/auth-registry/service.ts": "411f38e2880dd1d4c819f763cd6c04ffe908ab20446103ed9768a4ff4acdd241",
 				"apps/extension/src/wallet/services/execution/operation-planner.ts": "a0a3592e8bf4ca86c75ae9fcf30256a52d89b2137170682bb5e12d9419eaefbd",
-				"packages/wallet-bridge/src/dispatcher.ts": "f1f262b2ebd1237b3c71e5d343382e19e97c42810d4d96c69415ac8ec59e1c88"
+				"packages/wallet-bridge/src/dispatcher.ts": "3e92b84ccee6f48e9b45d867dc4d7aec536ee80fbbc84a79052bb7a3572ae975"
 			},
 			"evidence": [
 				{
@@ -53,7 +53,7 @@
 				}
 			],
 			"digests": {
-				"packages/wallet-bridge/src/dispatcher.ts": "f1f262b2ebd1237b3c71e5d343382e19e97c42810d4d96c69415ac8ec59e1c88"
+				"packages/wallet-bridge/src/dispatcher.ts": "3e92b84ccee6f48e9b45d867dc4d7aec536ee80fbbc84a79052bb7a3572ae975"
 			},
 			"evidence": [
 				{
@@ -87,7 +87,7 @@
 				}
 			],
 			"digests": {
-				"packages/wallet-bridge/src/dispatcher.ts": "f1f262b2ebd1237b3c71e5d343382e19e97c42810d4d96c69415ac8ec59e1c88"
+				"packages/wallet-bridge/src/dispatcher.ts": "3e92b84ccee6f48e9b45d867dc4d7aec536ee80fbbc84a79052bb7a3572ae975"
 			},
 			"evidence": [
 				{
@@ -1127,37 +1127,37 @@
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
 			"expression": "call.to",
-			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx'",
+			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen",
 			"ordinal": 0,
 			"role": "data",
 			"selector": "[data-testid=\"execute-op-call-to\"]",
 			"surface": "windows-execute",
-			"state": "an aztec_sendTx request (network)"
+			"state": "an aztec_sendTx request with all details open (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
 			"expression": "a.consumer",
-			"branch": "isSendTx(op) && authwits.kind === 'list' && authwits.authwits.length",
+			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && authwits.kind === 'list' && authwits.authwits.length",
 			"ordinal": 0,
 			"role": "data",
 			"selector": "[data-testid=\"execute-discovered-consumer\"]",
 			"surface": "windows-execute",
-			"state": "a send with a discovered authwit (network)"
+			"state": "a send with a discovered authwit, all details open (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
 			"expression": "a.caller",
-			"branch": "isSendTx(op) && authwits.kind === 'list' && authwits.authwits.length",
+			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && authwits.kind === 'list' && authwits.authwits.length",
 			"ordinal": 0,
 			"role": "data",
 			"selector": "[data-testid=\"execute-discovered-caller\"]",
 			"surface": "windows-execute",
-			"state": "a send with a discovered authwit (network)"
+			"state": "a send with a discovered authwit, all details open (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
 			"expression": "trimAddress(safeWire(a.innerHash, 80), 10, 6)",
-			"branch": "isSendTx(op) && authwits.kind === 'list' && authwits.authwits.length && isAuthwitOpen(a)",
+			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && authwits.kind === 'list' && authwits.authwits.length && isAuthwitOpen(a)",
 			"ordinal": 0,
 			"role": "data",
 			"selector": "[data-testid=\"execute-discovered-inner-hash\"]",
@@ -1354,6 +1354,76 @@
 			"surface": "windows-execute",
 			"state": "",
 			"why": "the hash's native title tooltip, which no type role styles; the element's text is its own site"
+		},
+		{
+			"file": "apps/extension/src/popup/windows/execute/SendTxSummary.vue",
+			"expression": "row.call.to",
+			"branch": "callRows.length",
+			"ordinal": 0,
+			"role": "data",
+			"selector": "[data-testid=\"execute-op-summary-call-to\"]",
+			"surface": "windows-execute",
+			"state": "an aztec_sendTx request (network)"
+		},
+		{
+			"file": "apps/extension/src/popup/windows/execute/SendTxSummary.vue",
+			"expression": "row.surface.sender.address",
+			"branch": "callRows.length && (row.amount && (row.surface.kind === 'transfer' || row.surface.kind === 'mint')) && row.surface.kind === 'transfer' && row.surface.sender.kind === 'explicit'",
+			"ordinal": 0,
+			"role": "data",
+			"selector": "[data-testid=\"execute-op-line-from\"]",
+			"surface": "windows-execute",
+			"state": "a transfer the wallet reads, from a named sender (network)"
+		},
+		{
+			"file": "apps/extension/src/popup/windows/execute/SendTxSummary.vue",
+			"expression": "row.surface.to",
+			"branch": "callRows.length && (row.amount && (row.surface.kind === 'transfer' || row.surface.kind === 'mint'))",
+			"ordinal": 0,
+			"role": "data",
+			"selector": "[data-testid=\"execute-op-line-to\"]",
+			"surface": "windows-execute",
+			"state": "a transfer the wallet reads (network)"
+		},
+		{
+			"file": "apps/extension/src/popup/windows/execute/SendTxSummary.vue",
+			"expression": "a.caller",
+			"branch": "authwitRows.length",
+			"ordinal": 0,
+			"role": "data",
+			"selector": "[data-testid=\"execute-discovered-line-caller\"]",
+			"surface": "windows-execute",
+			"state": "a send with a discovered authwit (network)"
+		},
+		{
+			"file": "apps/extension/src/popup/windows/execute/SendTxSummary.vue",
+			"expression": "line.from",
+			"branch": "authwitRows.length && line.kind === 'move'",
+			"ordinal": 0,
+			"role": "data",
+			"selector": "[data-testid=\"execute-discovered-line-from\"]",
+			"surface": "windows-execute",
+			"state": "a discovered token authorization the wallet reads (component test)"
+		},
+		{
+			"file": "apps/extension/src/popup/windows/execute/SendTxSummary.vue",
+			"expression": "line.to",
+			"branch": "authwitRows.length && line.kind === 'move'",
+			"ordinal": 0,
+			"role": "data",
+			"selector": "[data-testid=\"execute-discovered-line-to\"]",
+			"surface": "windows-execute",
+			"state": "a discovered token authorization the wallet reads (component test)"
+		},
+		{
+			"file": "apps/extension/src/popup/windows/execute/SendTxSummary.vue",
+			"expression": "a.consumer",
+			"branch": "authwitRows.length && !(line.kind === 'move')",
+			"ordinal": 0,
+			"role": "data",
+			"selector": "[data-testid=\"execute-discovered-line-consumer\"]",
+			"surface": "windows-execute",
+			"state": "a send with a discovered authwit (network)"
 		}
 	]
 }

@@ -3,17 +3,10 @@
  * parks the run at ONE await boundary, forces the race there, and proves the
  * superseded/drifted run commits NOTHING past that point.
  */
+import { deferred } from "@nulo/wallet-core/utils"
 import { describe, expect, test, vi } from "vitest"
 import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
 import { createNetworkSwitchHandler, type NetworkSwitchDeps, type NetworkSwitchScope } from "./network-switch"
-
-function _deferred<T = void>() {
-	let resolve!: (value: T) => void
-	const promise = new Promise<T>((res) => {
-		resolve = res
-	})
-	return { promise, resolve }
-}
 
 const ACCOUNT = { address: "0xa" }
 
@@ -95,7 +88,7 @@ describe("createNetworkSwitchHandler", () => {
 
 	test("not-ready (no scope): returns without touching anything — but still supersedes an in-flight run", async () => {
 		const h = makeDeps()
-		const gate = _deferred<never[]>()
+		const gate = deferred<never[]>()
 		h.client.getAccounts.mockReturnValueOnce(gate.promise as never)
 		const handler = createNetworkSwitchHandler(h.deps)
 		const run1 = handler() // parks at getAccounts
@@ -110,11 +103,11 @@ describe("createNetworkSwitchHandler", () => {
 
 	test("superseded at await 1 (first getAccounts): no set, no setup, no sync", async () => {
 		const h = makeDeps()
-		const gate = _deferred<Array<typeof ACCOUNT>>()
+		const gate = deferred<Array<typeof ACCOUNT>>()
 		h.client.getAccounts.mockReturnValueOnce(gate.promise)
 		const handler = createNetworkSwitchHandler(h.deps)
 		const run1 = handler()
-		const run2gate = _deferred<Array<typeof ACCOUNT>>()
+		const run2gate = deferred<Array<typeof ACCOUNT>>()
 		h.client.getAccounts.mockReturnValueOnce(run2gate.promise)
 		const run2 = handler() // supersedes
 		gate.resolve([ACCOUNT]) // run1 resumes — must abandon
@@ -128,12 +121,12 @@ describe("createNetworkSwitchHandler", () => {
 	test("superseded at await 2 (ensureDefaultAccount): the re-fetch and second set never happen", async () => {
 		const h = makeDeps()
 		h.client.getAccounts.mockResolvedValueOnce([])
-		const gate = _deferred()
+		const gate = deferred()
 		h.client.ensureDefaultAccount.mockReturnValueOnce(gate.promise as never)
 		const handler = createNetworkSwitchHandler(h.deps)
 		const run1 = handler() // parks at ensureDefaultAccount
 		await vi.waitFor(() => expect(h.client.ensureDefaultAccount).toHaveBeenCalled())
-		const run2gate = _deferred<Array<typeof ACCOUNT>>()
+		const run2gate = deferred<Array<typeof ACCOUNT>>()
 		h.client.getAccounts.mockReturnValueOnce(run2gate.promise)
 		const run2 = handler()
 		gate.resolve()
@@ -147,13 +140,13 @@ describe("createNetworkSwitchHandler", () => {
 	test("superseded at await 3 (re-fetch): the second set never lands", async () => {
 		const h = makeDeps()
 		h.client.getAccounts.mockResolvedValueOnce([])
-		const gate = _deferred<Array<typeof ACCOUNT>>()
+		const gate = deferred<Array<typeof ACCOUNT>>()
 		h.client.getAccounts.mockReturnValueOnce(gate.promise)
 		const handler = createNetworkSwitchHandler(h.deps)
 		const run1 = handler() // set([]) lands, parks at the re-fetch
 		await vi.waitFor(() => expect(h.client.getAccounts).toHaveBeenCalledTimes(2))
 		expect(h.setAccounts).toHaveBeenCalledTimes(1)
-		const run2gate = _deferred<Array<typeof ACCOUNT>>()
+		const run2gate = deferred<Array<typeof ACCOUNT>>()
 		h.client.getAccounts.mockReturnValueOnce(run2gate.promise)
 		const run2 = handler()
 		gate.resolve([ACCOUNT]) // run1's re-fetch resumes — must abandon
@@ -165,12 +158,12 @@ describe("createNetworkSwitchHandler", () => {
 
 	test("superseded at await 4 (setupActiveAccount): the tail sync never starts", async () => {
 		const h = makeDeps()
-		const gate = _deferred()
+		const gate = deferred()
 		h.setupActiveAccount.mockReturnValueOnce(gate.promise)
 		const handler = createNetworkSwitchHandler(h.deps)
 		const run1 = handler() // parks in setupActiveAccount
 		await vi.waitFor(() => expect(h.setupActiveAccount).toHaveBeenCalled())
-		const run2gate = _deferred<Array<typeof ACCOUNT>>()
+		const run2gate = deferred<Array<typeof ACCOUNT>>()
 		h.client.getAccounts.mockReturnValueOnce(run2gate.promise)
 		const run2 = handler()
 		gate.resolve()
@@ -183,7 +176,7 @@ describe("createNetworkSwitchHandler", () => {
 
 	test("PROFILE DRIFT with no new watcher fire: generation intact, live scope moved — the run still abandons", async () => {
 		const h = makeDeps()
-		const gate = _deferred<Array<typeof ACCOUNT>>()
+		const gate = deferred<Array<typeof ACCOUNT>>()
 		h.client.getAccounts.mockReturnValueOnce(gate.promise)
 		const run = createNetworkSwitchHandler(h.deps)()
 		h.setLive({ profileId: "p2", networkId: "n1", chainId: 1 }) // drift — no second handler call
@@ -194,7 +187,7 @@ describe("createNetworkSwitchHandler", () => {
 
 	test("captured scope is passed to the calls — never a live re-read", async () => {
 		const h = makeDeps()
-		const gate = _deferred<never[]>()
+		const gate = deferred<never[]>()
 		h.client.getAccounts.mockReturnValueOnce(gate.promise as never)
 		const run = createNetworkSwitchHandler(h.deps)()
 		// getScope now returns a DIFFERENT scope mid-run while the LIVE scope still
@@ -210,8 +203,8 @@ describe("createNetworkSwitchHandler", () => {
 
 	test("rapid double-switch: only the second run's results land", async () => {
 		const h = makeDeps()
-		const g1 = _deferred<Array<typeof ACCOUNT>>()
-		const g2 = _deferred<Array<typeof ACCOUNT>>()
+		const g1 = deferred<Array<typeof ACCOUNT>>()
+		const g2 = deferred<Array<typeof ACCOUNT>>()
 		h.client.getAccounts.mockReturnValueOnce(g1.promise).mockReturnValueOnce(g2.promise)
 		const handler = createNetworkSwitchHandler(h.deps)
 		const run1 = handler()
@@ -257,7 +250,7 @@ describe("createNetworkSwitchHandler", () => {
 
 	test("switched away while the target's stale view is read: the stale run commits nothing, the live one loads", async () => {
 		const h = makeDeps()
-		const gate = _deferred<StaleNetworkView | null>()
+		const gate = deferred<StaleNetworkView | null>()
 		h.syncStaleNetwork.mockReturnValueOnce(gate.promise)
 		const handler = createNetworkSwitchHandler(h.deps)
 		const run1 = handler()
@@ -274,7 +267,7 @@ describe("createNetworkSwitchHandler", () => {
 
 	test("a reset re-keys the network under a running switch: the old chain's run abandons", async () => {
 		const h = makeDeps()
-		const gate = _deferred<Array<typeof ACCOUNT>>()
+		const gate = deferred<Array<typeof ACCOUNT>>()
 		h.client.getAccounts.mockReturnValueOnce(gate.promise)
 		const run = createNetworkSwitchHandler(h.deps)()
 		h.setLive({ profileId: "p1", networkId: "n1", chainId: 7 })
