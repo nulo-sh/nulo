@@ -198,10 +198,13 @@ Per `implementations-plan/README.md` § Post-implementation standard at 8459699c
   - `seedArrivalRow` reads the receipts' block from the one `RECEIPT_BLOCK`; `activity-seeds.ts` writes every row through `storeRow`.
   - The new test reads the native recipient field before a contact is chosen, as Phase 1.3 asks.
 - **Arc 1 review, Codex** round 2 (resumed): `clean`. Both majors confirmed closed; one new minor taken: the hop between the two authwits visits waits for Home's own `tokens-menu-trigger`, since the header's avatar also shows on the authwits page.
+- **Arc 1 review, Codex** round 3 (resumed, verification of the post-merge changes, the cap): `findings` (1 major), taken: the same read-before-render reached the spec's other `AddressDisplay` states (`grantPublicAuthwit`'s spender and contract, the target's caller, the summary's caller), so the wait moved from two testids to every state's sites. It confirmed the third D1 owner hides no smoke-reachable site and that the waits are state-driven.
 - **Arc 1 implementation deviations** (evidence in [lessons/phase-1.md](lessons/phase-1.md)):
   - S3's Activity and tx states ride S1's visits, and the import row and New token share one Home visit: no page is opened twice for one state.
   - The seed also writes the scope's arrival row (`seedArrivalRow`). Without one, Activity holds its incoming rows until the chain-tip read gives up, about 60 s under the refused Testnet. The state is a wallet's after any feed read the tip; no timeout was raised. The product delay is #579.
   - The unlock screen is read after explorer None and Developer mode, where the lock lands in the flow; S8 stays last.
+  - D1 gains a third owner. Merging `dev` brought #594's two `SendTxSummary.vue` sites marked `(component test)`, on the execute window no smoke state opens; `siteSuite` now returns `component` for that marker, so neither e2e spec claims them and the coverage test counts them apart. No e2e reads them in a real browser yet; arc 2's revision decides whether the network spec should.
+  - D7 caught a read-before-render in #594's discovered-authwit network test: `AddressDisplay`s judged empty, before their contact lookup settled. The network spec's sweep now waits, for every state it reads, until some element at each live site has a box; a site that never shows is left to the observation, which names it.
   - D9's base timing restores `type-roles.test.ts` at d738b790 over the head on the same host, rather than a second worktree.
 
 ## Seeds

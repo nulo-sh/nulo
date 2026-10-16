@@ -924,9 +924,11 @@ test("every identifier site the smoke suite owns was read in its role", ({ skip 
 	skipUnlessListPrices(skip)
 	const sites = identifierSites().filter((site) => site.role !== "none")
 	const coverage = coverageOf(observed, { sites: sites.filter((site) => siteSuite(site) === "smoke") })
-	const network = sites.filter((site) => !site.unreachable && siteSuite(site) === "network").length
+	const live = (suite: ReturnType<typeof siteSuite>) => sites.filter((site) => !site.unreachable && siteSuite(site) === suite).length
 	const unreachable = sites.filter((site) => site.unreachable).length
-	console.log(`[type-roles] identifier sites: ${coverage.live} smoke-owned live, ${network} network-owned, ${unreachable} unreachable`)
+	console.log(
+		`[type-roles] identifier sites: ${coverage.live} smoke-owned live, ${live("network")} network-owned, ${live("component")} component-test, ${unreachable} unreachable`,
+	)
 	// An AddressDisplay of the wallet's own account shows its name, so its address form goes unjudged.
 	const forms = observed.flatMap(({ sites }) =>
 		sites.flatMap(({ key, readings }) => readings.map(({ addressShows }) => [key, addressShows] as const)),
