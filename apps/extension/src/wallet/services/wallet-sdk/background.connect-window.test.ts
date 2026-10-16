@@ -91,7 +91,7 @@ import { RESERVATION_GRACE_MS, VerifyAdmissionGate } from "./verify-admission"
 import { fakeSdkPorts } from "./test-ports"
 import { SESSION_INVALID_ERROR } from "./error-envelope"
 import { MAX_PENDING_PER_SESSION } from "./verification-hold"
-import { FAKE_DAPP_ORIGIN as ORIGIN, FAKE_SENDER, fakeSdkServices } from "./test-services"
+import { FAKE_DAPP_ORIGIN as ORIGIN, FAKE_SENDER, type FakeDappSessionRow, fakeSdkServices } from "./test-services"
 
 const OTHER_ORIGIN = "https://other.example"
 const noopLogger = { log: () => {} } as never
@@ -708,7 +708,7 @@ describe("establishment shows the check in the connect window", () => {
 	]
 
 	test.each(abandonments)(
-		"an attempt abandoned because %s never establishes, even once a sibling trusts the row",
+		"an attempt abandoned because %s never establishes, while a reconnect beside it shows its own check",
 		async (_, abandon, kept) => {
 			const h = boot()
 			await approvedIn(h, "f1", 41)
@@ -716,28 +716,18 @@ describe("establishment shows the check in the connect window", () => {
 			expect(markers().get("f1")?.cancelled).toBe(true)
 			expect(h.windows.open.has(41)).toBe(kept)
 
-			// A new discovery from the origin is a reconnect: its own window, since the row is untrusted.
+			// A new discovery from the origin is a reconnect, which shows its check in a window of its own.
 			h.discover("r2")
 			await flush()
 			await h.establish("r2")
 			expect(h.windows.created).toHaveLength(1)
 			expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("r2")}&isReconnect=true`)
 
-			// A sibling's check set "Skip this check next time" on the row the abandoned attempt wrote.
-			const row = [...h.rows.values()][0]
-			row.trustedVerification = true
 			await h.establish("f1")
 			await h.establish("f1")
 			expect(terminated()).toEqual(["f1", "f1"])
 			// No check is ever loaded for f1: the only navigation is the expired page.
 			expect(h.windows.navigated).toEqual(kept ? [{ windowId: 41, url: "EXPIRED-f1" }] : [])
-			expect(h.windows.created).toHaveLength(1)
-
-			// The trusted skip is unchanged for a new request id.
-			h.discover("r3")
-			await flush()
-			await h.establish("r3")
-			expect(terminated()).toEqual(["f1", "f1"])
 			expect(h.windows.created).toHaveLength(1)
 		},
 	)
@@ -746,16 +736,18 @@ describe("establishment shows the check in the connect window", () => {
 describe("an app's calls wait for the person to confirm the check", () => {
 	const CHAIN = String(chainInfoToChainId(chain(1)))
 	/** The app's remembered row on chain 1 under p1, sharing `FAKE_SENDER` with a transaction grant. */
-	const remember = (h: ReturnType<typeof boot>, trusted: boolean) =>
-		h.rows.set(`${ORIGIN}|${CHAIN}`, {
+	const remember = (h: ReturnType<typeof boot>) => {
+		const row: FakeDappSessionRow = {
 			id: "row-1",
 			profileId: "p1",
 			chainId: CHAIN,
-			trustedVerification: trusted,
 			accounts: [`aztec:${CHAIN}:${FAKE_SENDER}`],
 			capabilityGrants: [{ capability: { type: "transaction", scope: "*" } as { type: string } }],
-		})
-	/** A reconnect of the remembered app on `requestId`, which shows its own check unless the row is trusted. */
+		}
+		h.rows.set(`${ORIGIN}|${CHAIN}`, row)
+		return row
+	}
+	/** A reconnect of the remembered app on `requestId`, which shows its own check. */
 	async function reconnect(h: ReturnType<typeof boot>, requestId: string) {
 		h.discover(requestId)
 		await flush()
@@ -783,45 +775,33 @@ describe("an app's calls wait for the person to confirm the check", () => {
 	})
 	afterEach(() => dispatch.mockReset())
 
-	test("calls sent while the check shows wait, then run in arrival order once it is confirmed; a later call runs at once", async () => {
-		const h = boot()
-		remember(h, false)
-		await reconnect(h, "r1")
-		expect(h.windows.created).toHaveLength(1)
-		h.send("r1", "getChainInfo", "a")
-		h.send("r1", "sendTx", "s")
-		h.send("r1", "getAccounts", "b")
-		await settle()
-		expect(row(h)?.stage).toBe("queued")
-		expect(dispatched()).toEqual([])
+	test.each([false, true])(
+		"calls sent while the check shows wait, then run in arrival order once it is confirmed; a later call runs at once (old skip flag: %s)",
+		async (skipFlag) => {
+			const h = boot()
+			remember(h).trustedVerification = skipFlag
+			await reconnect(h, "r1")
+			expect(h.windows.created).toHaveLength(1)
+			h.send("r1", "getChainInfo", "a")
+			h.send("r1", "sendTx", "s")
+			h.send("r1", "getAccounts", "b")
+			await settle()
+			expect(row(h)?.stage).toBe("queued")
+			expect(dispatched()).toEqual([])
 
-		h.confirm(hashOf("r1"))
-		await settle()
-		expect(dispatched()).toEqual(["r1:getChainInfo", "r1:sendTx", "r1:getAccounts"])
-		h.send("r1", "getAddressBook", "c")
-		await settle()
-		expect(dispatched()).toEqual(["r1:getChainInfo", "r1:sendTx", "r1:getAccounts", "r1:getAddressBook"])
-		expect(terminated()).toEqual([])
-	})
-
-	test("control: a trusted reconnect shows no check and runs the same calls with no confirmation", async () => {
-		const h = boot()
-		remember(h, true)
-		await reconnect(h, "r1")
-		expect(h.windows.created).toEqual([])
-		h.send("r1", "getChainInfo", "a")
-		h.send("r1", "sendTx", "s")
-		h.send("r1", "getAccounts", "b")
-		await settle()
-		expect(dispatched()).toEqual(["r1:getChainInfo", "r1:sendTx", "r1:getAccounts"])
-		h.send("r1", "getAddressBook", "c")
-		await settle()
-		expect(dispatched()).toHaveLength(4)
-	})
+			h.confirm(hashOf("r1"))
+			await settle()
+			expect(dispatched()).toEqual(["r1:getChainInfo", "r1:sendTx", "r1:getAccounts"])
+			h.send("r1", "getAddressBook", "c")
+			await settle()
+			expect(dispatched()).toEqual(["r1:getChainInfo", "r1:sendTx", "r1:getAccounts", "r1:getAddressBook"])
+			expect(terminated()).toEqual([])
+		},
+	)
 
 	test("They don't match ends the session; its calls never run and the held send's row is refused", async () => {
 		const h = boot()
-		remember(h, false)
+		remember(h)
 		await reconnect(h, "r1")
 		h.send("r1", "getChainInfo", "a")
 		h.send("r1", "sendTx", "s")
@@ -836,7 +816,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 	test("closing the check keeps the calls held; the tab closing then ends the session and refuses the row", async () => {
 		const h = boot()
-		remember(h, false)
+		remember(h)
 		await reconnect(h, "r1")
 		h.send("r1", "sendTx", "s")
 		await settle()
@@ -854,7 +834,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 	test("a lock ends only the session whose check is unanswered, and its held send's row reads the lock", async () => {
 		const h = boot()
-		remember(h, false)
+		remember(h)
 		await reconnect(h, "c1")
 		h.confirm(hashOf("c1"))
 		await reconnect(h, "h1")
@@ -889,7 +869,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 	test("a lock whose first termination throws still drops the other held session's calls", async () => {
 		const h = boot()
-		remember(h, false)
+		remember(h)
 		await reconnect(h, "h1")
 		await reconnect(h, "h2")
 		h.send("h1", "sendTx", "s1")
@@ -906,7 +886,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 	test("a direct switch to another profile ends the held session through the switch teardown", async () => {
 		const h = boot()
-		remember(h, false)
+		remember(h)
 		await reconnect(h, "r1")
 		h.send("r1", "sendTx", "s")
 		await settle()
@@ -919,7 +899,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 	test("two checks for one app hold independently: each hash releases only its own session's calls", async () => {
 		const h = boot()
-		remember(h, false)
+		remember(h)
 		await reconnect(h, "r1")
 		await reconnect(h, "r2")
 		h.send("r1", "getChainInfo", "a1")
@@ -935,7 +915,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 	test("past 32 held calls the next is answered -32005 before any row; the 32 run after the confirmation", async () => {
 		const h = boot()
-		remember(h, false)
+		remember(h)
 		await reconnect(h, "r1")
 		for (let i = 0; i < 32; i++) h.send("r1", "getChainInfo", `m${i}`)
 		h.send("r1", "sendTx", "over")
@@ -960,7 +940,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 	test("a hold dropped while the held send's row is still being written fails that row once the write lands", async () => {
 		const h = boot()
-		remember(h, false)
+		remember(h)
 		await reconnect(h, "r1")
 		const write = deferred<void>()
 		const create = h.journal.createOperation.getMockImplementation()!
@@ -982,7 +962,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 	test("the app's row deleted while its calls wait ends the session and refuses the held send", async () => {
 		const h = boot()
-		remember(h, false)
+		remember(h)
 		await reconnect(h, "r1")
 		h.send("r1", "sendTx", "s")
 		await settle()
@@ -1001,7 +981,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		"%s whose termination throws still refuses the held send; the live session's later calls run nothing and file nothing",
 		async (_, end) => {
 			const h = boot()
-			remember(h, false)
+			remember(h)
 			await reconnect(h, "r1")
 			const held = hashOf("r1")
 			h.send("r1", "sendTx", "s1")
@@ -1029,7 +1009,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			const firstWrite = deferred<undefined>()
 			let writes = 0
 			const h = boot({ setVerificationHash: () => (++writes === 1 ? firstWrite.promise : Promise.resolve()) })
-			remember(h, false)
+			remember(h)
 			h.discover("r1")
 			await flush()
 			const stale = h.establish("r1")
@@ -1058,7 +1038,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 	test("a send decrypted for an ended session files nothing and runs nothing on the session that re-keyed its id", async () => {
 		const h = boot()
-		remember(h, false)
+		remember(h)
 		await reconnect(h, "r1")
 		const ended = sessions.get("r1")
 		await rekey(h, "r1", FIRST_CHECK_WINDOW)
@@ -1079,7 +1059,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 	test("a call parked behind a confirmed session's slow call never runs on the session that re-keys its id", async () => {
 		const legal = vi.fn(async () => undefined)
 		const h = boot({ legal })
-		remember(h, false)
+		remember(h)
 		await reconnect(h, "r1")
 		h.confirm(hashOf("r1"))
 		const slow = deferred<unknown>()
@@ -1117,7 +1097,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 				return held ?? Promise.resolve()
 			},
 		})
-		remember(h, false)
+		remember(h)
 		await reconnect(h, "r1")
 		h.confirm(hashOf("r1"))
 		const read = deferred<void>()
@@ -1139,7 +1119,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		["stays live (control)", false],
 	])("a profile mismatch found after the fence read, while the session %s", async (_, rekeyed) => {
 		const h = boot()
-		remember(h, false)
+		remember(h)
 		await reconnect(h, "r1")
 		h.confirm(hashOf("r1"))
 		const fence = deferred<void>()
@@ -1190,7 +1170,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 		test("a confirmed session whose head waits in dispatch admits 31 more, answers the next -32005 with no row, and frees a slot when the head fails", async () => {
 			const h = boot()
-			remember(h, false)
+			remember(h)
 			await confirmedSession(h, "r1")
 			await confirmedSession(h, "r2")
 			const head = deferred<unknown>()
@@ -1220,7 +1200,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 		test("decrypted payloads that are not objects take no slot: after 32 of them a call still runs", async () => {
 			const h = boot()
-			remember(h, false)
+			remember(h)
 			await confirmedSession(h, "r1")
 			for (let i = 0; i < MAX_PENDING_PER_SESSION; i++) {
 				// Upstream catches whatever the callback throws, so a throw here is swallowed there too.
@@ -1236,7 +1216,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 		test("a send past its FIFO release keeps its slot until it is answered", async () => {
 			const h = boot()
-			remember(h, false)
+			remember(h)
 			await confirmedSession(h, "r1")
 			dispatch
 				.mockImplementationOnce((_method, _args, _ctx, hooks) => {
@@ -1256,7 +1236,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 		test("with a session's head decrypt held, 32 more wait and the next is dropped before its decrypt", async () => {
 			const h = boot()
-			remember(h, true)
+			remember(h)
 			await reconnect(h, "r1")
 			const head = deferred<void>()
 			const decrypted: unknown[] = []
@@ -1279,7 +1259,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 		test("control: an id that re-keys while its old lane is full and held decrypts its successor's message at once", async () => {
 			const h = boot()
-			remember(h, true)
+			remember(h)
 			await reconnect(h, "r1")
 			const head = deferred<void>()
 			const decrypted: unknown[] = []
@@ -1302,7 +1282,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 		test("at the bound, a refusal appended while a decrypt runs still goes out: every decrypted call is answered, the dropped one never", async () => {
 			const h = boot()
-			remember(h, false)
+			remember(h)
 			await confirmedSession(h, "r1")
 			await fillToBound(h, "r1")
 			const first = deferred<void>()
@@ -1324,7 +1304,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 		test("a held refusal reply takes the lane's turn, so 32 ciphertexts fill it; a reply that fails still lets the lane advance", async () => {
 			const h = boot()
-			remember(h, false)
+			remember(h)
 			await confirmedSession(h, "r1")
 			await fillToBound(h, "r1")
 			const reply = deferred<void>()
@@ -1349,7 +1329,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 		test("a refusal queued behind a held decrypt sends nothing once its id re-keys; the successor's refusal is sent", async () => {
 			const h = boot()
-			remember(h, false)
+			remember(h)
 			await confirmedSession(h, "r1")
 			await fillToBound(h, "r1")
 			const held = deferred<void>()

@@ -514,7 +514,6 @@ function buildHandlerCallbacks(
 				isSessionLive: () => live.isLive(),
 				windows,
 				reservations: state.admission,
-				hold,
 				logger: deps.logger,
 			})
 			// A failed establishment ends without a termination when its id was taken over meanwhile.
@@ -921,7 +920,7 @@ async function handleDiscovery(discovery: PendingDiscovery, deps: DiscoveryDeps)
 			return
 		}
 		if (existingSession && served) {
-			autoApproveExistingSession(discovery, chainId, deps, existingSession.trustedVerification === true)
+			autoApproveExistingSession(discovery, chainId, deps)
 			return
 		}
 
@@ -1044,15 +1043,15 @@ function rejectIfNotAdmitted(
 }
 
 /** Returning user on this chain: approve through the origin's reconnect budget. A remembered
- *  handshake is the one a reload loop repeats, so it always spends a token; only an untrusted
- *  session needs a verify window and so a slot. Synchronous when admitted at once. */
-function autoApproveExistingSession(discovery: PendingDiscovery, chainId: string, deps: DiscoveryDeps, trusted: boolean): void {
+ *  handshake is the one a reload loop repeats, so it spends a token as well as the slot of the check
+ *  it will show. Synchronous when admitted at once. */
+function autoApproveExistingSession(discovery: PendingDiscovery, chainId: string, deps: DiscoveryDeps): void {
 	const outcome = deps.admission.admit(
 		{
 			id: discovery.requestId,
 			origin: discovery.origin,
 			deadline: discoveryDeadline(discovery),
-			needsWindow: !trusted,
+			needsWindow: true,
 			consumesToken: true,
 		},
 		(reservation) => approveAdmitted(discovery, chainId, deps, reservation, "existing session"),
