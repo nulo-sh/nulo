@@ -17,6 +17,8 @@ A result from a sub-page (Full-height popups) works as drawn in both options: th
 
 **What ships now: A**, the decision's literal "opening the owning page with the row highlighted".
 
+**Answered: B** (owner, decision page 32, P32-01, 2026-10-16): "Open the row's page at once, as a tap on the row does; nothing is outlined." Shipped in PR #613 (plan D8).
+
 ## OA-2. The words when nothing matches
 
 **Surface:** the Settings list, below the field, when no row matches. The lane brief allows "one plain line"; its words are open.
@@ -29,6 +31,8 @@ A result from a sub-page (Full-height popups) works as drawn in both options: th
 **Recommendation: A.** It is shorter, and the typed text is already in the field above.
 
 **What ships now: A.**
+
+**Answered: A** (P32-02), as shipped.
 
 ## OA-3. The synonym list
 
@@ -75,6 +79,8 @@ A result from a sub-page (Full-height popups) works as drawn in both options: th
 
 **What ships now:** this list.
 
+**Answered: A** (P32-03), the list as shipped.
+
 ## OA-4. The outline on a row inside a bordered list
 
 **Surface:** the momentary outline (mockup c) on a row that sits inside a bordered box: the 16 rows of the Settings list (under OA-1 A) and Lock now on the Lock page. Mockup c draws a free-standing Display row, with the outline 8 px outside the row. A bordered box cuts off anything drawn outside it, so mockup c's outline would show as two stray lines with no sides.
@@ -90,6 +96,8 @@ Free-standing rows (Display, Privacy, the Developer rows and the Lock rows below
 
 **What ships now: A.**
 
+**Answered: A** (P32-04), as shipped. With OA-1 B, Lock now on the Lock page is the one outlined row inside a bordered list.
+
 ## OA-5. Back from an opened result
 
 **Surface:** the Settings list, after you open a result and press the back arrow.
@@ -103,3 +111,4 @@ Free-standing rows (Display, Privacy, the Developer rows and the Lock rows below
 
 **What ships now: A.**
 
+**Answered: A** (P32-05), as shipped.

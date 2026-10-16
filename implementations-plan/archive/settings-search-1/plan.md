@@ -1,7 +1,7 @@
 ---
 plan: settings-search-1
 tier: light
-status: closed; delivered in one PR against dev; OA-1 to OA-5 ship their what-ships-now lines
+status: closed; delivered in one PR against dev; the owner answered OA-1 B (shipped, D8) and OA-2 to OA-5 A
 issues: "#591 (closes)"
 driver: claude-code
 claude_model: opus
@@ -18,15 +18,15 @@ post_implementation_hardening: not scheduled
 ## Outcome
 
 - **Date:** 2026-10-16.
-- **Status:** delivered in one PR against `dev`, whose final commits are this close-out; merging it closes #591 and this plan. OA-1 to OA-5 ship their "what ships now" lines (OA-1 A, OA-2 "No settings found", OA-3 the tabled synonyms, OA-4 inset, OA-5 an empty field); the orchestrator carries them to decision page 32, and an answer that differs is a follow-up change.
+- **Status:** delivered in one PR against `dev`, whose final commits are this close-out; merging it closes #591 and this plan. The owner answered the asks on decision page 32 (2026-10-16): P32-01 B, so a result for a Settings-list row opens that row's page and outlines nothing, shipped in the same PR (D8); P32-02 to P32-05 A, as built ("No settings found", the tabled synonyms, inset, an empty field).
 - **Shipped:**
   - `apps/extension/src/utils/settings-search.ts`: the 34 searchable rows, their visibility rules and the matcher (D3). The Settings list, Lock, Privacy, Display and Developer render each row's title, description and testid from it (D1); each page's test checks its rows against it (`tests/helpers/settings-rows.ts`: one element per visible row, exact text, page order, `v-settings-row`; the list's captions and fence in `index.test.ts`).
-  - `SettingsSearch.vue` at the top of the Settings list (mockups a and b): results grouped under their captions, the no-result line, real focus over the field and the results (D4), modified keys left to the field.
-  - `useSettingsRowHighlight.ts` and `settings-row-highlight.css`: `?row=` read once and replaced away (D2), the matched row scrolled to the centre and outlined for 2.4 s (mockup c), inset in a clipping box (OA-4), with no fade under reduced motion or Disable animations.
+  - `SettingsSearch.vue` at the top of the Settings list (mockups a and b): results grouped under their captions, the no-result line, real focus over the field and the results (D4), modified keys left to the field. A Settings-list row's result opens the row's own page (D8).
+  - `useSettingsRowHighlight.ts` and `settings-row-highlight.css`: `?row=` read once and replaced away (D2), the matched sub-page row scrolled to the centre and outlined for 2.4 s (mockup c), inset in a clipping box (OA-4, Lock now), with no fade under reduced motion or Disable animations.
   - One smoke scenario in `settings-routes.test.ts`, green on Chrome (1.2 s) and Firefox (2.4 s); screenshots in [screenshots/](screenshots/).
   - `lessons.md`: nothing promoted. It sits at its 8 KiB budget, and the reusable e2e technique (freeze an animation from an observer armed before the action; read a colour through a canvas) stays in [lessons/phase-3.md](lessons/phase-3.md).
 - **Dropped, rejected, superseded:**
-  - A result for a row on the Settings list leaves one extra history entry for the same page: accepted in D2, noted again by the Opus review, not changed.
+  - OA-1 A (D5, a Settings-list result back on the list with the row outlined): superseded by P32-01 B (D8). With it went the one extra history entry that result left (D2, noted by the Opus review).
   - The Logs row's "1 recent failure" line is not indexed (D6).
   - The sub-pages' captions are their page titles and are not pinned against the registry; the list's captions are.
 - **Known limits:** none.
@@ -64,9 +64,10 @@ For a person who knows a setting exists but not which page holds it. Excellent: 
 | D2 | `?row=<id>`, read by an immediate watch and cleared at once; a local directive marks and outlines the row on mount; one attribute is the style hook; the CSS ends the moment by itself. | `history.state`: survives Back. A class: Vue rewrites `className` when a row's class binding changes. An id → element map: no caller (Opus), since sub-page results mount fresh pages and the list uses `v-if`. A JS timer: a lifecycle. Widening `SettingItem.to` for a same-page `replace`: a contract change for a Back nobody can press on the list. |
 | D3 | Fold (`normalize("NFD")`, strip `\p{M}`, lower case); split the query on white space; every term must be a substring of the title, the description or a synonym ("prefix" is a substring, so no rule of its own). Groups in registry order. In a group, rank by the weakest field any term needed (title, then description, then synonym), ties in page order. | Page order alone: contradicts mockup b. Fuzzy scoring: no caller. |
 | D4 | Real focus over [field, result links], wrapping, as `DropdownRoot` does. One keydown listener on the component root; every shortcut first returns on `isComposing(e)` or `e.defaultPrevented`. Enter on a link opens it natively; Enter in the field opens the first result and refuses a repeat Enter. Escape with text clears, focuses the field and is cancelled; on an empty field a repeat Escape is cancelled (a held key that cleared the text cannot close the toolbar popup) and a fresh one is left to the browser. | The combobox model (`aria-activedescendant`): it needs an active-row style the mockups do not draw. |
-| D5 | A result for a row on the Settings list returns to the list with that row outlined (the decision's literal words). | Opening the row's page: OA-1. |
+| D5 | Superseded by D8. A result for a row on the Settings list returns to the list with that row outlined (the decision's literal words). | Opening the row's page: OA-1. |
 | D6 | 34 rows. Out: list contents (the brief); the profile card; flow pages; the export page's modes (Full Backup would join mockup b's "full"); About's links; Glossary definitions; the Proving page's status copy. Logs keeps its default line; its "1 recent failure" variant is not indexed. | Indexing the Glossary: definitions are not settings. |
 | D7 | Built beside the plan: `settingItemProps(id, context)` binds a `SettingItem`'s title, description and testid in one `v-bind` (the list's 16 rows and Lock now); `settingsQueryTerms` is the one blank-query test, which the matcher and the list's `v-if` share; the tint's last keyframe is left out, so it fades into the row's own background. | A second blank test in `index.vue` (`trim()`): a query of combining marks alone would hide the list and show no results. |
+| D8 | P32-01 B (owner, decision page 32, 2026-10-16): a result for a Settings-list row opens that row's page at once, as a tap on the row does, and outlines nothing; sub-page results keep D2. The 16 list rows take their links (`to`) from the registry, which `settingItemProps` binds, and drop `v-settings-row`; `settingsResultTo` is the row's link, else `<page>?row=<id>`; `expectOwnedRows` checks a linked row's `href` and that it carries no outline marker. Supersedes D5. | Keeping the list's links in `index.vue` beside a registry copy for the results: two sources for one link. |
 
 ## Phases
 
@@ -96,7 +97,7 @@ For a person who knows a setting exists but not which page holds it. Excellent: 
 ## UI impact
 
 - **Settings list**: the search field at the top (mockup a, P29-05 A); results under captions in place of the list (mockup b); the no-result line, which the lane brief allows as "one plain line" (words OA-2); Back from a result shows an empty field (OA-5).
-- **Display, Privacy, Lock, Developer and the Settings list**: the row outlined for a moment on arrival (mockup c, P29-05 A); inset inside a bordered list (OA-4).
+- **Display, Privacy, Lock and Developer**: the row outlined for a moment on arrival (mockup c, P29-05 A); inset inside a bordered list (OA-4). A Settings-list row's result opens that row's page with no outline (P32-01 B, D8).
 - No row's text, order or control changes. Copy: "Search settings"; no dotted term; no em dash.
 
 ## Security & Adversarial Considerations
