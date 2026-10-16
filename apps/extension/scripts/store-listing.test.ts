@@ -14,7 +14,12 @@ const privacy = readFileSync(resolve(REPO, "legal/privacy.md"), "utf8")
 const headings = [...listing.matchAll(/^#### (.+)$/gm)].map((m) => m[1])
 const hasHeading = (needle: string) => headings.some((h) => h.includes(`\`${needle}\``))
 
-type Manifest = { permissions: string[]; host_permissions: string[]; content_scripts: { matches: string[] }[] }
+type Manifest = {
+	permissions: string[]
+	host_permissions: string[]
+	optional_host_permissions?: string[]
+	content_scripts: { matches: string[] }[]
+}
 const chrome = manifest as unknown as Manifest
 const firefox = (firefoxManifest as unknown as (env: { command: string; mode: string }) => Manifest)({
 	command: "build",
@@ -31,7 +36,8 @@ const tableValue = (name: string) => {
 describe("store listing", () => {
 	test("every permission and host permission of both builds has a justification heading", () => {
 		for (const m of [chrome, firefox]) {
-			for (const p of [...m.permissions, ...m.host_permissions]) expect(hasHeading(p), p).toBe(true)
+			for (const p of [...m.permissions, ...m.host_permissions, ...(m.optional_host_permissions ?? [])])
+				expect(hasHeading(p), p).toBe(true)
 			for (const cs of m.content_scripts) for (const pattern of cs.matches) expect(hasHeading(pattern), pattern).toBe(true)
 		}
 	})

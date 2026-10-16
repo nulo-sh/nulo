@@ -18,6 +18,9 @@ const m = manifest as unknown as {
 
 type FirefoxManifest = {
 	permissions: string[]
+	host_permissions: string[]
+	optional_host_permissions?: unknown
+	optional_permissions?: unknown
 	content_security_policy: unknown
 	browser_specific_settings: {
 		gecko: { id: string; strict_min_version: string; data_collection_permissions: { required: string[] } }
@@ -161,5 +164,13 @@ describe("firefox manifest", () => {
 		expect(permissions).not.toContain("sidePanel")
 		expect(permissions).not.toContain("offscreen")
 		expect(permissions).toContain("storage")
+	})
+
+	// A person can withhold these in about:addons; the Presto pages ask for exactly them again.
+	test("keeps the shared host permissions and lists only Presto's loopback as optional", () => {
+		const built = buildFirefox()
+		expect(built.host_permissions).toEqual(m.host_permissions)
+		expect(built.optional_host_permissions).toEqual(["https://127.0.0.1/*", "http://127.0.0.1/*"])
+		expect(built.optional_permissions).toBeUndefined()
 	})
 })
