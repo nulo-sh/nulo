@@ -35,3 +35,6 @@
 - 2026-10-16: network Chrome, retry 0 (start load 145): networks, default-token-seeding, backup-import-stalled-network pass; tx-sendTx-reject failed at the new JSON-window step (clickByTestId calls click() on the button's <svg>); spec fixed, rerun pending.
 - 2026-10-16: network Firefox, retry 0: networks, default-token-seeding, backup-import-stalled-network pass; tx-sendTx-reject's pointer click on the expand <svg> opened no window on either browser (no box, no click event; diagnostic run). The step opens the JSON window at its URL with the live request id; Chrome pass (28.6 s).
 - 2026-10-16: network Chrome tx-sendTx-reject on the final step (hit-test + dispatched click, showJson opens the window): pass, 23.4 s.
+- 2026-10-16: smoke reruns at retry 0 on the final head (armed dists): Chrome viewers-csp, import-errors-scroll, type-roles, contacts-import, legal-acceptance, passkey-retry 6/6 files (46 tests); Firefox viewers-csp, import-errors-scroll, type-roles, security-reset 4/4 (19 tests); zero CSP violations.
+- 2026-10-16: network Firefox tx-sendTx-reject on the final step: pass, 28.2 s. Every e2e gate green at retry 0.
+- 2026-10-16: final head local gates: test:all (extension 801 files / 12932 tests, design 498, every workspace green), lint, typecheck:all, test:ci-gating, lint:actions: exit 0.
