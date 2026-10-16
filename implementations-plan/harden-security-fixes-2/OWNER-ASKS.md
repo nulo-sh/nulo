@@ -120,3 +120,8 @@ Confirm is disabled either way; Reject works.
 **Recommendation: A.** No new copy; the row and the card say the same thing.
 
 **What ships now: A.**
+
+## A consequence of OA-F2 A: an app's own payment through Private Fee Juice (no decision needed unless you object)
+
+- **Surface:** a dApp send whose request carries its own fee payment ("Fee up to …") naming the Private Fee Juice contract as payer, as the playground's PrivateFPC routes do.
+- That payment charges the account's own Private Fee Juice, so it carries the figure as Private Fee Juice does: Confirm waits for the estimate (and shows "Couldn't estimate fee. Try again." when it fails), and a rise past OA-F3's rule asks in the window, whose fee block reads "Private Fee Juice" with no Available or Priority row, as for an app's claim. An app's own fee contract keeps today's behaviour.

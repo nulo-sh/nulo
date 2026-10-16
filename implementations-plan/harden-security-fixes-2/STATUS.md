@@ -7,3 +7,6 @@
 - 2026-10-16: arc 2 started in parallel with arc 1 (orchestrator's release). Codex design consult: approve with changes (A-C), all accepted.
 - 2026-10-16: phase 4 gate: lint, typecheck:all, test green; test:all red only on the type-role inventory of phase 5's window, which lands with it.
 - 2026-10-16: phase 5 gate: audit:vue green (804 files, 13,001 tests, build).
+- 2026-10-16: arc 2 reviews: Codex round 1 approve with changes (fixed), Opus approve with changes (6, recorded), Codex round 2 approve with changes (D26), round 3 approve. Gates on the tree at 7df00af4 plus the e2e fix: lint, typecheck:all, test:all green (extension 13,011 tests).
+- 2026-10-16: phase 6 Chrome: tx-sendTx-default.test.ts at retry 0 exit 0 (new case 65.3 s, file tests 113.5 s; attempts 1-2 were test bugs, lessons/phase-6.md).
+- 2026-10-16: phase 6 Firefox: same file at retry 0 exit 0 (new case 140.2 s, file tests 263.7 s). Phase 6 ✓.

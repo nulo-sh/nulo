@@ -7,3 +7,4 @@ Paths are repo-relative.
 - The JSON view (`windows/json`) reads the question's one operation, so the window's expand icon works as on the execute window.
 - A new route is a new surface: `scripts/type-roles/surfaces.expected.json` needs its entry or `inventory.test.ts` reds (it did, mid-run, in phase 4's `test:all`).
 - Gate: `bun run audit:vue` exit 0 (804 files, 13,001 tests, build 37.5 s; 4 min 4 s wall at load ~200).
+- When the wallet picked Fee Juice with a claim, Available reads the public balance without the claim, so it can print below "Now". The row is the mockup's; whether it should add the claim is the owner's.

@@ -80,10 +80,10 @@ Four items the owner decided on decision page 22 (2026-10-16), tracked privately
 
 - **Carried figure.** `approval-delta.ts`: `feeCeiling?: string`, the exact `maxFee` of the estimate the window showed for that operation. `dapp-interaction/service.ts` refuses a figure that fails `isFeeAmount` and copies it into `OperationApprovalEnvelope` (`execution/models/index.ts:78`). `index.vue` `approve()` sends `estimate?.maxFee`. The worker has no figure of its own (D7); under OA-F2 part 2 C the window always sends one for a person-paid fee, under B the worker asks when none came.
 - **Which sends** (OA-F2 part 1, recommended A): classified from the build's route, not from `paymentMethod.kind`: the account's Fee Juice (`fj`, `fjwc`, and an embedded `fjwc`) and Private Fee Juice carry the ceiling (Private Fee Juice told from a sponsor by the build's FPC identity, since both are `EXTERNAL`); Nulo's sponsor and an app's own fee contract keep today's behaviour. `default_entrypoint` has no wallet fee.
-- **Compare.** One rule in `execution/fee-reask.ts`: raw integers, `getEstimatedFee(built) > ceiling` asks (Send's rule, D8). How the two figures print is OA-F3.
-- **Hold and ask.** `dispatchOperation` passes the envelope to `executeSendTransaction` too. After each standard build and before `proveAndSend`, a fee above the ceiling stashes the build where it can be stashed, parks the slot through a `park(wait)` the `runInSlot` callback gains (the `parkSlot` path; the account lines stay held), and asks. Accept with figure Y reruns the build with ceiling Y: `aztec_sendTx` through `tryConsume` (its drift ladder) or a rebuild; `send_transaction`, embedded, `fjwc` and app-capped sends rebuild, so a further rise asks again and every accept is bounded by its figure. The authorization preview taken before the first build is asserted after every build (`PreviewSnapshots.take` is single-use). Refusal or the sequencer deadline ends it as `JobCancelledSentinel`: the dApp gets `JOB_CANCELLED` (4001).
+- **Compare.** One rule in `execution/fee-reask.ts`, on raw integers: a build asks when its fee exceeds the approved figure by more than 10 percent **and** by at least 0.000001 FJ (`FEE_RISE_ASKS`, OA-F3 C); below that it goes out at the new fee, and a fall never asks. Figures print at six decimals, so a question's two figures never print alike (D8).
+- **Hold and ask.** `dispatchOperation` passes the envelope to `executeSendTransaction` too. After each standard build and before `proveAndSend`, a fee above the ceiling stashes the build where it can be stashed, parks the slot through a `park(wait)` the `runInSlot` callback gains (the `parkSlot` path; the account lines stay held), and asks. Accept with figure Y reruns the build with ceiling Y: `aztec_sendTx` through `tryConsume` (its drift ladder) or a rebuild; `send_transaction`, embedded, `fjwc` and app-capped sends rebuild, so a further rise asks again and every accept is bounded by its figure. The authorization preview taken before the first build is asserted after every build (`PreviewSnapshots.take` is single-use). Refusal, a closed window, or the question's own deadline (`MAX_WAIT_MS` from the ask, shared by the waiter and the window, D21) ends it as `JobCancelledSentinel`: the dApp gets `JOB_CANCELLED` (4001). A person-paid approval that carries no figure is refused before the proof (D22).
 - **One ask mechanism.** Send's `askAgain` body (waiter before the question, journal `queued` + `reask`, `beginQueuedWait`/`endQueuedWait`, expiry → `cancelled`) moves into `fee-reask.ts`; both executors call it; Send's behaviour and tests stay as they are (D9).
-- **Accept and surface.** `acceptQueuedFee` admits `dapp_execute` rows with the same stage and exact-figure checks; the surface is OA-F1's pick, and nothing visible is built before it.
+- **Accept and surface** (as built). OA-F1 B: the worker opens a fee window (`popup/windows/fee/`) over the approved request, read-only, with the fee block "Fee went up" over "Was … FJ · Now … FJ" and the buttons Reject and "Send for … FJ"; `DappInteractionService.askFeeAgain` keeps the approved request in memory until its execution ends, and the window's answer settles the worker's waiter with the worker's own captured figure. `acceptQueuedFee` stays transfer-only (D20). OA-F2 part 2 C: Confirm waits for the figure wherever the wallet picks the fee or the account pays it, an app's claim to the account included (D23).
 
 ### Arc 3: the grant card decodes (after #508 merges)
 
@@ -133,7 +133,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
 
 **Phase 5. The surface (OA-F1's pick).** Build the picked option and its component tests over a wire-shaped fixture. UI impact: OA-F1 to OA-F3 as answered, quoted in the PR with the shots. Gate: `bun run audit:vue`. Pass: exit 0.
 
-**Phase 6. One network scenario.** Failure mode: worker hold, the surface, accept and proof in a real browser against a live node, which jsdom and mocks cannot reach. Force (D16): the test picks the account's public Fee Juice (`selectFeeMethod(execPopup, "public")`, asserted, since the card defaults to Nulo's sponsor) and approves through the worker's approval entry with a figure one unit below the estimate the window showed, so the real build lands above it; it asserts the queued question before accepting and the proof after. No production seam, no node fixture. File: `tests/e2e/network/tx-sendTx-default.test.ts` gains the case; estimate +60 s per browser. Gate: that file at retry 0, on Chrome, and on Firefox if OA-F1 picks a window option. Pass: exit 0; wall-clock in `lessons/phase-6.md`.
+**Phase 6. One network scenario.** Failure mode: worker hold, the surface, accept and proof in a real browser against a live node, which jsdom and mocks cannot reach. Force (D16): the test estimates on the account's public Fee Juice through the worker (asserting no shortfall, since the card defaults to Nulo's sponsor and its own balance read can lag the funding) and approves through the worker's approval entry with half that figure, the two thresholds asserted in the test, so the real build lands above it; it asserts the queued question and the window before accepting, and the proof after. No production seam, no node fixture. File: `tests/e2e/network/tx-sendTx-default.test.ts` gains the case; estimate +60 s per browser. Gate: that file at retry 0, on Chrome, and on Firefox if OA-F1 picks a window option. Pass: exit 0; wall-clock in `lessons/phase-6.md`.
 
 ### Arc 3 (branches from dev after #508's PR merges)
 
@@ -170,7 +170,7 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 | D5 | Fold the export and restore service pairs | no | different secrets; six shared lines |
 | D6 | When the token re-read runs | after finalize, on the tail's one deadline | the session is open; no new lifecycle; a late read keeps the row |
 | D7 | Where the approved figure comes from | the popup's delta | the threat is the node, not the popup; a worker record needs ids, expiry and cleanup |
-| D8 | Compare | raw integers, Send's rule | a rounding bucket would accept a dearer fee; the print is OA-F3 |
+| D8 | Compare | raw integers, with the owner's tolerance: more than 10 percent and at least 0.000001 FJ above asks | OA-F3 C; the floor of one readout unit keeps "Was" and "Now" apart at six decimals |
 | D9 | Send's ask loop | extract the answer and transition mechanism once | no copy |
 | D10 | Grant decode | one worker RPC: shared encode, existing decoder | shown and signed share one encoding; ingress refusal contradicts the signed words |
 | D11 | Grant refusal state | its own computed, also checked in `approve()` | `clearError()` runs on every fee change |
@@ -178,10 +178,18 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 | D13 | A worker decodability check at grant confirm | no | every grant opens the window; signing already throws on an unknown contract, function or unencodable arguments |
 | D14 | Restored-token trust | the call goes | P22-03 C; OA-B1 may keep it for list tokens |
 | D15 | #416 | reopened and closed by arc 2 | its reopening condition is the owner's pick |
-| D16 | How the e2e forces a dearer build | approve with a figure below the shown estimate | deterministic, crosses the production compare, no seam; a speed change re-estimates the window, so it cannot force one |
+| D16 | How the e2e forces a dearer build | approve through the worker's entry with half the estimate's figure, both thresholds asserted | deterministic, crosses the production compare past the tolerance, no seam; a speed change re-estimates the window, so it cannot force one |
 | D17 | Address and value print in the grant rows | whole, as `o-grant-a` draws them, via `CallArguments`' `full` | the signed picture; the transaction card keeps its trimmed rows |
 | D18 | The re-read's pin | none from the row | a pin from the file's `classId` would turn a mismatch into a kept row |
 | D19 | How open pages learn of an updated row | an `onTokenUpdated` event, separate from add | Send integerizes with its list snapshot (`send.vue:154,490`); the add event trusts the token |
+| D-orch-2 | Arc 2's start | in parallel with arc 1, before its merge | the orchestrator released it (2026-10-16), overriding "Parallelism: none" under Delivery; the arcs share no source file |
+| D20 | Who answers a dApp send's question | its own window only; `acceptQueuedFee` stays transfer-only | the window settles the waiter with the worker's captured figure, so no RPC takes a figure from a page; Home's queued dApp row focuses the window |
+| D21 | The question's deadline | `MAX_WAIT_MS` from the ask, one absolute deadline for the waiter and the window | the owner's "unanswered after 60 minutes"; opening the window must not restart it |
+| D22 | A person-paid popup approval with no figure | refused before the proof | under OA-F2 C the window always sends one; accepting none would send unbound |
+| D23 | Which operations Confirm waits on | a wallet-picked fee, an app's claim to the account, and an app's own cap or priority | the figure binds wherever the account pays; a claim to the account is the account paying |
+| D24 | What the held send keeps across the question | the build stashed in the reuse cache, and only the question and the stash id in the waiting frame | the cache's two-minute bound holds the signed request, not the person's wait |
+| D25 | After the question | re-check earlier sends under the slot, then claim the record back (`queued → pending`, or still `pending`) | another send of the account may reach the node while this one waits |
+| D26 | An app's own payment naming the PrivateFPC as payer | carries the figure as Private Fee Juice: the worker reads the kernel's payer, the window the request's `feePayer`, both against one address constant the derivation test pins | it charges the account's own Private Fee Juice, which OA-F2 A names; an app's other fee contracts stay exempt |
 
 ## Audit verdicts
 
@@ -214,7 +222,35 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 | F4: the network command allowed retries | `--retry=0` on every network run |
 | Ask: the `/loop` seed could read as settling owner choices | the seed leaves what a person sees to the owner |
 
+**Arc 2 design consult** (2026-10-16). Codex `gpt-6.1-sol` high, read-only, on the worker design: **approve with changes**, 3 findings, all accepted ([lessons/phase-4.md](lessons/phase-4.md)).
+
+| Finding | Decided |
+|---|---|
+| A: an app's claim to the account read as app-paid, so Confirm could pass with no figure | D23 |
+| B: the waiting frame would hold the signed request past the cache's bound | D24 |
+| C: a figure one unit below no longer asks once the tolerance exists | D16 revised |
+
 ## Seeds (draft; the orchestrator finalizes after approval)
 
 - `/goal` Every phase of implementations-plan/harden-security-fixes-2/plan.md marked ✓ in order, each backed by its gate's output in the transcript; `LESSONS_FILE=implementations-plan/harden-security-fixes-2/lessons/phase-N.md` printed per phase; `/code-review` not run; the Codex loop converged per arc and the cross-arc pass converged, each quoted; each arc's PR against `dev` opened after its loop, the close-out's archive-move commit shown by `git show --stat`; `bun run test:all` and `bun run lint` exit 0.
 - `/loop 15m` Drive implementations-plan/harden-security-fixes-2 forward per its plan.md and the README's Post-implementation standard at `c5e9c8e8`; never start arc 2 before OA-F1 to OA-F3 are answered, nor arc 3 before #508's PR merges; settle open technical questions with Codex and log each in lessons/; what a person sees waits for the owner's answer in OWNER-ASKS.md.
+
+**Arc 2 review, round 1** (2026-10-16), on the implementation. Codex `gpt-6.1-sol` high, read-only: **approve with changes**, 1 finding. Opus 5.5 general-purpose: **approve with changes**, 6 findings. Each was checked against the tree.
+
+| Finding | Decided |
+|---|---|
+| Codex: the fee window dropped the authorization rows the approval window listed | the preview snapshot keeps them; the question carries them and `OperationCard` lists them again (`approvedAuthwits`) |
+| Opus 1: a send held on its question was not counted as an approved send in flight | `isApprovedSendInFlight` counts a queued `dapp_execute` carrying `reask` |
+| Opus 2: an app's own payment through the Private Fee Juice contract is exempt | first filed as an owner ask; round 2 below |
+| Opus 3: two stacked doc comments | removed and moved |
+| Opus 4: the reask adapter built twice; an inline type restating `StandardBuild` | declined: two small call sites; the inline type predates the arc and also types the estimate path's call |
+| Opus 5: the e2e takes the re-hold of a reused build | accepted as is: the fresh-build path is unit-tested; the e2e accepts well inside the reuse entry's life |
+| Opus 6: Available for a wallet-picked claim excludes the claim | recorded in [lessons/phase-5.md](lessons/phase-5.md); the row is the mockup's |
+
+**Arc 2 review, round 2** (2026-10-16). Codex, the same session: **approve with changes**, 1 finding; round 1's finding resolved.
+
+| Finding | Decided |
+|---|---|
+| The exemption of an app's payment through Private Fee Juice narrows OA-F2 A, and the route is supported (the playground's PrivateFPC routes, `selfpay-phase.test.ts`) | D26 |
+
+**Arc 2 review, round 3** (2026-10-16). Codex, the same session, on D26 and the e2e's settled-row check: **approve**, no findings ("both prior findings are resolved").

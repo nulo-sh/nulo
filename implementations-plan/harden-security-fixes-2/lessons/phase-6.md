@@ -1,0 +1,31 @@
+# Phase 6: the network scenario
+
+Paths are repo-relative.
+
+## Attempts
+
+- **1, Chrome.** `selectFeeMethod(execPopup, "public")` timed out: "Public Fee Juice" stayed disabled for 45 s. The approval window read the account's balance before `fundPublicFeeJuice` landed and kept that read. Fix: the test estimates through the worker on `{ kind: "fj" }` and asserts no `feeJuiceShortfall`, so it no longer depends on the card's balance read; the approval already went through the worker's entry.
+- **2, Chrome.** The hold, the queued record, the window and its four texts all passed. The check that the dApp had no answer yet failed (seq 1 → 2): the playground writes a `pending` result row when the request starts, and `snapshotResultSeq` counts it. Fix: count only settled `sendTx` rows past the snapshot.
+- **3, Chrome, then Firefox.** `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/tx-sendTx-default.test.ts --retry=0`, then the same under `NULO_E2E_BROWSER=firefox`: both exit 0.
+
+## Wall-clock
+
+The file's test time; "before" is its one earlier case, which the arc does not change, timed in the same run (load1 under 150, other agents running).
+
+| Browser | Earlier case | New case | File before → after |
+|---|---|---|---|
+| Chrome | 48.2 s | 65.3 s | 48.2 s → 113.5 s |
+| Firefox | 123.5 s | 140.2 s | 123.5 s → 263.7 s |
+
+The plan estimated +60 s per browser; Firefox costs more, as its earlier case does, from its slower proving.
+
+## Screenshots
+
+- A local scratch copy of the case (never committed) shoots the waiting Confirm and the window in both themes; its first run passed the whole flow in 75.8 s.
+- That run's window printed "Available 0 FJ" for an account that then paid: the gas-balance cache (five minutes) held the read the fixture made before the test funded the account from outside the wallet, which invalidates nothing. The window now reads past the cache, one read per question; attempt 1's disabled "Public Fee Juice" was the same cache on the execute window's card, which the arc does not change.
+
+## Reviews after the implementation
+
+- **Round 1.** Codex `gpt-6.1-sol` high, read-only: approve with changes, 1 finding (the fee window dropped the approved authorization rows), fixed. An Opus 5.5 general-purpose review ran beside it: approve with changes, 6 findings; the plan's verdict table records each.
+- **Round 2.** Codex, the same session: approve with changes, 1 finding. An app's own payment naming the PrivateFPC as payer charges the account's Private Fee Juice, and the playground's PrivateFPC routes reach it (`apps/extension/tests/e2e/network/selfpay-phase.test.ts`), so the first answer (an owner ask that shipped the exemption) narrowed the owner's pick. Fixed as D26.
+- **Round 3.** Codex, the same session: approve, no findings. The loop ends here, inside its three rounds.
