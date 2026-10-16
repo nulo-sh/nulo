@@ -125,7 +125,7 @@ onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
 .terms {
 	composes: type--caption from global;
 	line-height: 1.5;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 	text-align: center;
 	margin: 0;
 

@@ -45,6 +45,6 @@ defineProps({
 	composes: type--body from global;
 	padding: 24px 16px;
 	text-align: center;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 </style>
