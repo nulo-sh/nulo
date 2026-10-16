@@ -22,3 +22,9 @@ Every attempt, measurement and deviation of arc 1, in order.
 - Test design: the seed now writes the scope's arrival row at the receipt's block (`seedArrivalRow`), the state a wallet holds once any feed read the tip, so no tip read runs and the receipt is not an arrival. No timeout raised.
 - Confirmation: with the arrival row seeded, the incoming row showed 3 ms after the visit (60 016 ms without, in the same build).
 - Gate: Chrome file 64 s (seeded test 21.4 s, was 16.8 s at base), Firefox 115 s (seeded 31.5 s, was 20.5 s), the four `seedTransaction` callers 16/16 on Chrome.
+
+## Phase 1.3
+
+- One writer, `seedFpcs`, serves both the protocol rows and the unnamed sponsor; `seedProtocolFpcs` is built on it.
+- `FpcRow.test.ts` gains one case: the row carries `data-fpc-unnamed` only while its title shows the address.
+- Gate: Chrome file 73 s (new test 17.1 s), Firefox 182 s with load1 near 200 during the run (new test 32.3 s), `send-keyboard` 5/5 on Chrome.

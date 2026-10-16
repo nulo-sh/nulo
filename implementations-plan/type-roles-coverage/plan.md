@@ -103,7 +103,7 @@ The total is about +80 s on Chrome and +130 s on Firefox.
 - Order: write every explorer-on state before S5 and S5 before S6. Run S8 last.
 - Validation gate: Phase 1.1's first two commands. Then run `bun run test:e2e -- tests/e2e/rows.test.ts tests/e2e/send-outcome-rows.test.ts tests/e2e/navigation.test.ts tests/e2e/home-links.test.ts --retry=0` on Chrome. These are the other `seedTransaction` callers, and their defaults are unchanged. All must pass.
 
-### Phase 1.3 — the new test (S9–S12)
+### Phase 1.3 ✓ — the new test (S9–S12)
 - Change map:
   - `type-roles.test.ts`: one `registeredExtensionPerTest` test; the hide flow inlined, as in `accounts.test.ts:117`.
   - `helpers/fpc-seeds.ts`: a row writer with an optional name.

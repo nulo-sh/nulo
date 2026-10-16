@@ -13,7 +13,9 @@ import { extensionUrl, FIREFOX_ONLY, isFirefox, stopBackground } from "./fixture
 import { evaluateInActionPopup, openActionPopup } from "./fixtures/browser/firefox-action-popup"
 import { clickByTestId, type ExtensionContext, openOnboarding, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
 import {
+	addContact,
 	clickNavTab,
+	closeStuckPopup,
 	ensureUnlocked,
 	lockWallet,
 	navigateByHash,
@@ -57,8 +59,10 @@ import {
 	seedTokenRow,
 	seedTransaction,
 } from "./helpers/activity-seeds"
+import { exportAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "./helpers/account-io"
 import { seedAuthwits } from "./helpers/authwit-seeds"
-import { refuseTestnet } from "./helpers/contacts"
+import { closeImportWith, contactsFiles, pickContactsFile, refuseTestnet } from "./helpers/contacts"
+import { seedFpcs, seedProtocolFpcs } from "./helpers/fpc-seeds"
 import { pressEscape } from "./helpers/pointer-probes"
 import { seedStaleNetwork, takeoverScreen } from "./helpers/stale-network"
 
@@ -677,6 +681,118 @@ test("Send with a recipient typed, the Settings hub, Display, a network, Manage 
 	await page.close()
 	expect(ctx.pageErrors).toEqual([])
 }, 180_000)
+
+/** Wire-shaped and on the curve, as a contact's address must be. */
+const ALICE = "0x01904dba18e847d163097ce15dcd8597e763fb11fe19ef1273d266d6e959ec4a"
+const ALICE_ELSEWHERE = "0x02056523b85ea4e550facca78516f7270f18bddb0f5474177d406f6bf0e58617"
+const BOB = "0x048b29517cddb7566a05a2a292624eb2c5350dbe44350763cefe4c9207344c10"
+/** A sponsor at an address no protocol FPC holds, so its row offers Edit. */
+const UNNAMED_FPC = { id: "e2e-unnamed-fpc", type: 1, address: `0x0d${"7c".repeat(31)}` }
+const FPC_ROW = `${sel("fpc-row")}[data-fpc-id="${UNNAMED_FPC.id}"]`
+
+/** A saved contact in Contacts, then on Send: suggested for a partial name, chosen, revealed. */
+async function expectContactOnSend(page: Page): Promise<void> {
+	await navigateToSettings(page, "contacts")
+	await page.waitForSelector(sel("contacts-new-btn"), VISIBLE)
+	await addContact(page, "Alice", ALICE)
+	await expectPageClean(page, "Contacts, a saved contact", [["popup-settings-contacts", "a saved contact"]])
+	await goAndSweep(page, "#/popup/send", "send-destination-field", "Send")
+	await replaceInputValue(page, `${sel("send-destination-field")} input`, "Ali")
+	await page.waitForSelector(sel("recipient-suggestion-address"), VISIBLE)
+	await expectPageClean(page, "Send, a contact suggested", [["popup-send", "a saved contact and a partial recipient typed"]])
+	await openAndSweep(page, "recipient-suggestion-address", "recipient-card-masked", "Send, a recipient chosen", [
+		["popup-send", "a chosen recipient"],
+	])
+	await openAndSweep(page, "recipient-card-reveal", "recipient-card-full-address", "Send, the recipient revealed", [
+		["popup-send", "a chosen recipient with recipient-card-reveal clicked"],
+	])
+}
+
+/** A contacts file naming the saved Alice at another address, and Bob, whom the book lacks. */
+async function expectContactsImport(page: Page): Promise<void> {
+	const files = contactsFiles()
+	try {
+		const file = files.write({
+			version: 2,
+			contacts: [
+				{ name: "Alice", address: ALICE_ELSEWHERE },
+				{ name: "Bob", address: BOB },
+			],
+		})
+		await navigateByHash(page, "#/popup/settings/contacts", 10_000)
+		await page.waitForSelector(sel("contacts-new-btn"), VISIBLE)
+		await pickContactsFile(page, file)
+		await expectPageClean(page, "contacts import", [
+			["popup:import_contacts", "a new contact in the file"],
+			["popup:import_contacts", "a saved Alice and a file naming Alice at another address (address-change)"],
+		])
+		await closeImportWith(page, "import-contacts-cancel")
+	} finally {
+		files.cleanup()
+	}
+}
+
+/** An unnamed sponsor's FPC row and Edit popup, New FPC, New sender, the profile's id, Export's accounts. */
+async function expectSettingsForms(page: Page): Promise<void> {
+	await navigateByHash(page, "#/popup/settings/fpcs", 10_000)
+	await page.waitForSelector(FPC_ROW, VISIBLE)
+	await expectPageClean(page, "FPCs", [["popup-settings-fpcs", "a seeded FPC with no name"]])
+	await page.$eval(`${FPC_ROW} ${sel("fpc-edit-btn")}`, (button) => (button as HTMLElement).click())
+	await page.waitForSelector(sel("edit-fpc-address-input"), VISIBLE)
+	await expectPageClean(page, "Edit FPC", [
+		["popup:edit_fpc", ""],
+		["popup:edit_fpc", "a seeded FPC with no name, opened for editing"],
+	])
+	await closeByEscape(page, "edit-fpc-address-input")
+	await openAndSweep(page, "fpc-new-btn", "fpc-address-input", "New FPC", [["popup:new_fpc", ""]])
+	await closeByEscape(page, "fpc-address-input")
+	await goAndSweep(page, "#/popup/settings/developer/account-state/senders", "senders-add-btn", "Senders")
+	await openAndSweep(page, "senders-add-btn", "new-sender-address-input", "New sender", [["popup:new_sender", ""]])
+	await closeByEscape(page, "new-sender-address-input")
+	await goAndSweep(page, "#/popup/settings/profile", "identity-id-value", "Profile", [["popup-settings-profile", ""]])
+	await goAndSweep(page, "#/popup/settings/security/export/account", "export-account-row", "Export account", [
+		["popup-settings-security-export-account", ""],
+	])
+}
+
+/** A second account hidden from Manage accounts, then the first one's file previewed for import. */
+async function expectHiddenAccountAndImport(page: Page): Promise<void> {
+	await navigateByHash(page, "#/popup/settings/accounts", 10_000)
+	await clickByTestId(page, "accounts-new-btn")
+	await replaceInputValue(page, sel("account-name-input"), "Hidden")
+	await clickByTestId(page, "new-account-submit")
+	const row = `${sel("manage-accounts-row")}[data-account-name="Hidden"]`
+	await page.waitForSelector(row, VISIBLE)
+	await closeStuckPopup(page)
+	await page.$eval(`${row} ${sel("account-hide")}`, (button) => (button as HTMLElement).click())
+	await page.waitForSelector(`${sel("manage-accounts-hidden-row")}[data-account-name="Hidden"]`, VISIBLE)
+	await expectPageClean(page, "Manage accounts, a hidden account", [["popup-settings-accounts", "a hidden account"]])
+	const body = await exportAccountBody(page, FIRST_ACCOUNT_NAME, false)
+	expect(await previewImport(page, body)).toMatch(/^0x/)
+	await expectPageClean(page, "Import account, a file previewed", [
+		["popup-settings-accounts-import", "an account file pasted into Import account"],
+	])
+}
+
+test("a contact on Send and in Contacts, a contacts file, an unnamed FPC, New sender, the profile, a hidden account and an account file", async ({
+	registeredExtensionPerTest: ctx,
+}) => {
+	const refusal = await refuseTestnet(ctx)
+	try {
+		const page = await openHome(ctx)
+		const scope = await readActivityScope(page)
+		await seedProtocolFpcs(page, scope)
+		await seedFpcs(page, scope, [UNNAMED_FPC])
+		await expectContactOnSend(page)
+		await expectContactsImport(page)
+		await expectSettingsForms(page)
+		await expectHiddenAccountAndImport(page)
+		expect(await refusal.failures()).toEqual([])
+	} finally {
+		await refusal.stop()
+	}
+	expect(ctx.pageErrors).toEqual([])
+}, 240_000)
 
 test("the large CTA on onboarding's create step holds its role and box", async ({ freshExtensionPerTest: ctx }) => {
 	const page = await openOnboarding(ctx)
