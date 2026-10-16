@@ -67,7 +67,7 @@ For a person who knows a setting exists but not which page holds it. Excellent: 
 - `settings/index.test.ts`: the input is the first focusable element inside `settings-page`; a non-blank query unmounts every list row (the existing row-list assertion stays green on a blank query); `?row=hub-display` clears the query and outlines `setting-nav-display`.
 - **Validation gate.** Commands: `bun run lint`; `bun run typecheck:all`; `bun run test:all`. Pass: exit 0 each. Layers: typecheck/lint, unit, component.
 
-### Phase 3: the smoke e2e and the docs
+### Phase 3: the smoke e2e and the docs ✓
 
 - `tests/e2e/settings-routes.test.ts`, one scenario. It types "full" and reads the result testids in order: Chrome `[…display-full-height, …display-side-panel]`, Firefox `[…display-full-height]` (branch on `isFirefox` in the spec). Before the click it arms a `MutationObserver` in the page that, when an element gains `data-highlighted`, pauses that element's animations at time 0 and disconnects (the spec also disconnects it in its `finally`). It clicks Full-height popups and waits for `#/popup/settings/display` with no query. Then it checks `display-row-full-height` carries `data-highlighted`, lies inside its scroller's visible rectangle, and shows a solid outline with a non-transparent colour; no 2.4 s window bounds the reads. No console or page errors. Failure mode: the hand-off through the real router, the row mounting after the real config read, the real `chrome.sidePanel` per browser, and the CSS painting. No cheaper layer has these. Estimate 10 s per browser; record the measured time.
 - Docs: the registry's header comment names it the one place a searchable row registers, with the testid and `v-settings-row` rule; `index.vue` points there in one line.
