@@ -1,0 +1,9 @@
+# Phase 2: the passkey backup check
+
+- `packages/wallet-crypto`: `PasskeyCredential.deriveBackupMacKey()` (HKDF-SHA256, the credential's salt, expand label `nulo:backup-mac:v1`, a non-extractable HMAC-SHA256 key) and `backup-mac.ts` (`computeBackupMac`, `verifyBackupMac` over the UTF-8 checksum hex, base64 MAC; verify answers `false` on a malformed MAC). The package index exports them; `public.ts` does not.
+- The known-answer vector in `backup-mac.test.ts` was cross-checked against an independent `node:crypto` reference (`hkdfSync` with a 64-byte output, the HMAC-SHA256 block size WebCrypto defaults an HMAC key to, then `createHmac`). `key-vectors.test.ts` pins the label and the MAC.
+- Export: `assembleFullBackup` takes an optional `authenticate(checksum)` and seals its result under `"backup-mac"` after the checksum; an envelope that already carries either field is refused. `full.vue` passes `passkeyBackupAuthenticator(credentialData)` on a passkey run only.
+- Import: `validateAndMigrateBackup` strips the MAC before the hash; a passkey body without a string MAC returns "Incompatible backup" before any prompt. `executeRestore` calls `verifyPasskeyBody` right after the passkey answers and before `buildRestoreSecret`; a mismatch returns the existing integrity refusal. `useRestoreAgain` inherits both.
+- Existing passkey import tests used non-base64 credential ids and PRFs (`"cred-PK123"`, `"AAAA"`), which `PasskeyCredential.create` cannot decode once the import derives a key; they now use valid base64 fixtures and real MACs.
+- E2E: `buildSyntheticPasskeyBackup` is async and adds the MAC from a PRF the test reads with an in-page `navigator.credentials.get` on the same virtual authenticator (`readPasskeyPrf`, the wallet's PRF input); its three callers await it.
+- Gate `F` and `bun run test:all` (2026-10-16, `24c1cc67`): exit 0 (extension 801 files passed, 3 skipped).

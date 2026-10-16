@@ -72,7 +72,7 @@ Four items the owner decided on decision page 22 (2026-10-16), tracked privately
 
 **B, the re-read and the trust.**
 - `wallet/services/token/service.ts`: `refreshRestoredTokens(fence, deadlineAt)`: for each token row of the fence's profile on a live chain, read the instance and its interface and metadata as `previewTokenMetadata` does, with no pin taken from the row (its `classId` is the file's claim, D18), then update the row's class, interface, name, symbol and decimals where they differ. It updates, never adds, so no `onTokenAdded` fires and no trust follows. One write per changed row, under the token lock and the deletion fence the restore writes use. Each read is raced at the exact remainder to `deadlineAt` with its rejection contained (`registerOneNetwork`'s pattern, `importChainSync.ts:111-120`); the write checks the deadline again under the lock, so a read that lands late writes nothing. A failed or late read keeps the row and logs a fixed category at `debug`. Spec, client and RPC list gain it.
-- **The update event** (D19): each changed row's write emits `onTokenUpdated` (`TokenInfo & { profileId }`, a third event beside add and delete). `send.vue`, `useScopedTokens` and `settings/tokens/index.vue` re-read their list on it, so a Send page opened before the refresh integerizes with the chain's decimals after it; `incoming-transfer` and `token-balance` do not subscribe, so no trust follows.
+- **The update event** (D19): each changed row's write emits `onTokenUpdated` (`TokenInfo & { profileId }`, a third event beside add and delete). `send.vue`, `useScopedTokens` and `settings/tokens/index.vue` re-read their list on it, so a Send page opened before the refresh integerizes with the chain's decimals after it; `token-balance` re-sends the token's balances with the new metadata and queues them for a re-read (D22); `incoming-transfer` does not subscribe, so no trust follows.
 - `composables/useFullBackupImport.ts`: `executeRestore` takes one absolute `tailDeadlineAt` before the tail, passes it to `runImportChainSync` (a new parameter replacing its internal one, same budget constant) and then to `refreshRestoredTokens`, on the restore run's fence; the popup races that call at the same remainder. It never fails the restore.
 - Trust: the `trustRestoredTokens` call goes, with its stage (`full-backup-restore.ts:583-593`), service method, spec line and client entry; each restored token's first note uses the existing first-receipt prompt. OA-B1 may keep trust for list tokens.
 
@@ -182,6 +182,10 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 | D17 | Address and value print in the grant rows | whole, as `o-grant-a` draws them, via `CallArguments`' `full` | the signed picture; the transaction card keeps its trimmed rows |
 | D18 | The re-read's pin | none from the row | a pin from the file's `classId` would turn a mismatch into a kept row |
 | D19 | How open pages learn of an updated row | an `onTokenUpdated` event, separate from add | Send integerizes with its list snapshot (`send.vue:154,490`); the add event trusts the token |
+| D20 | Phase 3's network case (implementation) | doctor the funded token's row inside the existing `backup-restore-integrity` scenario | a separate case needs its own funded wallet and export; the same import already reaches the real PXE and node |
+| D21 | Where the open-Send test sits (implementation) | `send.test.ts`, not `send-amount.test.ts` | the helper takes the decimals as an argument; only the mounted page re-reads its list |
+| D22 | The balance service on `onTokenUpdated` (arc 1 review) | re-send the token's balances with the new metadata and queue them, for a token its map already holds | each balance carries its token's metadata from a map loaded at activation, which precedes the re-read |
+| D23 | Send's transfer kind after an update (arc 1 review) | re-run the kind selection when the active token's transfer capabilities change | the id watcher does not fire for the same token, so a kind the chain does not support stayed selected |
 
 ## Audit verdicts
 
@@ -213,6 +217,18 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 | F3: the fee e2e accepted the card's default payer, Nulo's sponsor | phase 6 picks the account's public Fee Juice; phase 4 pins a nonempty `maxFee` handoff |
 | F4: the network command allowed retries | `--retry=0` on every network run |
 | Ask: the `/loop` seed could read as settling owner choices | the seed leaves what a person sees to the owner |
+
+**Arc 1 review, round 1** (2026-10-16). Codex `gpt-6.1-sol` high, read-only, over `2ea17854..6da190f6`: **reject**, 2 material findings and comment nits. Opus 5.5 general-purpose, alongside: **conditional approve**, 1 material finding (Codex's first) and nits. The round ran while the phase 2 and 3 e2e gates waited on host load. Each claim was checked against the tree.
+
+| Finding | Decided |
+|---|---|
+| The balance service keeps the backup's metadata after the re-read (both) | D22; two tests, each red without its guard |
+| An open Send page keeps a transfer kind the chain does not support (Codex) | D23; one mounted-page test, red without the watcher; the decimals test now also pins the kind it keeps |
+| No refresh test removes the chain mid-read or mid-write (Opus) | two tests, each red without its guard |
+| No test imports an encrypted passkey file (Opus) | one case each way: the check survives the seal, and a file stripped before the seal is refused before any prompt |
+| Comments: a caller-specific note on the MAC label, a restating type doc, a redundant line in `full.vue`, the tail budget's stale scope; no comment on why restore-again needs no prompt (both) | fixed |
+| A test name carried a review label (Opus) | renamed to what it proves |
+| One out-of-scope question (Opus) | sent to the lane's private record; no change in this arc |
 
 ## Seeds (draft; the orchestrator finalizes after approval)
 
