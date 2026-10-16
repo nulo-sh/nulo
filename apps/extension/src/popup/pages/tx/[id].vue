@@ -453,7 +453,7 @@ onBeforeUnmount(() => {
 
 .detail_value_aux {
 	composes: type--meta from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .detail_link {

@@ -154,7 +154,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 	composes: type--label from global;
 	padding-bottom: 6px;
 
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .head > span + span {
@@ -266,7 +266,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 	composes: type--label from global;
 	padding-top: 1px;
 
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .fn_names {
