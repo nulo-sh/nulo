@@ -1,7 +1,7 @@
 ---
 plan: harden-quality-fixes-2
 tier: mid (the lane brief's call; competing outline, Codex + Opus dual audit, a fresh Codex final pass)
-status: planned, awaiting the orchestrator's approval
+status: approved 2026-10-16 (orchestrator); arc 1 in progress
 issues: "#538, #542 (arc 1, Closes); #543 (arc 2, Closes); #541 (arc 2, Refs: page 21 steps 1-2 only)"
 driver: claude-code
 claude_model: opus
@@ -193,6 +193,10 @@ Follow `implementations-plan/README.md` § Post-implementation standard at revis
 | D11 | `openSelection` | replaces `openEncryptedBackup` at its layer; opens any target holding text | an async wrapper over it (adds a continuation); accepting only `sealed` (breaks today's second Decrypt of a file sealed twice) |
 | D12 | Export fence | `RunFence.snapshot()`; instance `runs` | `begin()` (invalidates in-flight runs, skips their `finally`) |
 | D13 | Old-way confirm writes | one static ban case in `useConfirm.test.ts` | a one-time `rg` in the gate (JS SFCs are unchecked, so the pattern would rot); a new ban file (one case suffices) |
+| D14 | Asks A1-A3 | the orchestrator accepted all three as written (2026-10-16): A1 the handshake takes `requestConfirm`'s discipline, not its helper (D9); A2 page step 1 includes `openSelection` (D11); A3 arc 2 waits on the three lanes | — |
+| D15 | `networkRunner` shape (arc 1) | a function returning the options | the plan's object: built at import, it would construct the stateful reporters in every importer of `vite.shared.ts` (build and unit configs too) and share one instance between configs |
+| D16 | Where the e2e status checkout and the run step are pinned (arc 1) | the checkout's whole step once, in `aggregators.test.ts`'s lane loader (it refuses any other shape before a table runs); the run step whole in `behavior-gating.test.ts` | the plan's second copy of the checkout pin in `behavior-gating.test.ts` (the same assertion twice) |
+| D17 | Decide error text (arc 1) | names the step output the script reads (`live.outputs.label-hit`, `live.outputs.base`) | today's `changes.outputs.*` wording, which names job outputs that no longer exist |
 
 ## Audit verdicts
 
