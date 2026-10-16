@@ -20,3 +20,6 @@
 - 2026-10-16 arc 2 phase 2.2 gate: pass (lint 0, typecheck:all 0, test:all 0: extension 809 files / 13135 tests; I2 pins green after the change; export diffs are fence substitutions only).
 - 2026-10-16 arc 2 phase 2.3 smoke (Chrome, retry 0): 8 files, 24/24 pass (316 s). Load read 154 at launch, the watcher had seen < 150 just before; later runs gate on load in the launching command.
 - 2026-10-16 arc 2 review round 1: Codex 3 low + Opus 2 low; 5 accepted (one in part), fixed in 066f90ad; resuming Codex.
+- 2026-10-16 arc 2 phase 2.3 network (retry 0, e2e:agent): token-management + senders-advanced, 2 files, 4/4 (289 s, load1 134 at launch). Phase 2.3 gate: pass.
+- 2026-10-16 arc 2 review round 2 (Codex, resumed 01a146da): no new material finding (high confidence); arc 2 loop converged. Fresh cross-arc pass running.
+- 2026-10-16 cross-arc Codex pass (fresh 01a146e6): 2 low; 1b + 2 fixed, 1a rejected (D22). Resuming to verify.
