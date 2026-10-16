@@ -114,8 +114,8 @@ const displayedTokenFiat = computed(() => {
 const fiatOf = safeFiatOf((tb) => prices.tokenFiatMicro(tb.token, parseRawBalance(tb)))
 const aggregate = computed(() => aggregateFiat(tokenBalances.value, fiatOf))
 
-/** Holdings that lack a price count as $0.00 under the "priced assets only" caption; a wallet where
- *  no priced holding has one is `pricesUnavailable`. */
+/** Holdings that lack a price count as $0.00 under the "priced assets only" caption, unless every
+ *  priceable one lacks it (`pricesUnavailable`). */
 const aggregateFiatDisplay = computed(() => prices.formatUsdMicro(aggregate.value.micro))
 const isAggregatePartial = computed(() => aggregate.value.partial)
 
@@ -207,9 +207,10 @@ const isPriceableHolding = (tb) =>
 	typeof tb.token?.contract === "string" &&
 	(parseRawBalance(tb) ?? 0n) > 0n &&
 	(!prices.mapped.value || prices.isPriced(tb.token.chainId, tb.token.contract))
-/** A price-mapped holding counts as $0.00 until its quote lands, so a wallet holding one waits for
- *  the first price answer; an empty or unpriced wallet has none to wait for. */
+/** A wallet holding a price-mapped token waits for the first price answer; an empty or unpriced
+ *  wallet has none to wait for. */
 const awaitingQuotes = computed(() => showFiatValues.value && !prices.settled.value && tokenBalances.value.some(isPriceableHolding))
+/** Whatever the cause: an expired quote, one an answer left out, a failed fetch, no answer by the cap. */
 const pricesUnavailable = computed(() => {
 	if (!showFiatValues.value) return false
 	const holdings = tokenBalances.value.filter(isPriceableHolding)

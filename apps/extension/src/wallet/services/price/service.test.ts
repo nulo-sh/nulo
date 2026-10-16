@@ -239,7 +239,7 @@ describe("PriceService — refresh pipeline", () => {
 		expect(quotes.aztec).toBeDefined()
 	})
 
-	test("a failed scheduled refresh is broadcast, so a reader re-filters without an expired quote", async () => {
+	test("a failed scheduled refresh still broadcasts the usable snapshot", async () => {
 		const { service, state } = await harness()
 		const seen: PriceSnapshot[] = []
 		service.onQuotesUpdated.add((s) => seen.push(s))
