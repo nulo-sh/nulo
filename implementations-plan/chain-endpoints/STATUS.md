@@ -27,3 +27,5 @@
 - 2026-10-16: 2b.6 dev server: styled and zero violations with the serve branch; unstyled and one violation without it (D36 holds).
 - 2026-10-16: smoke runs 1-2 on Chrome: the search-panel follow regressed (D39, fixed); selection case dropped (D40); import-errors launch timeouts under load.
 - 2026-10-16: focused smoke on Chrome (viewers-csp, import-errors-scroll), retry 0: 7/7 pass (12.2 s, 71.2 s).
+- 2026-10-16: focused smoke on Firefox, retry 0: 7/7 pass. Codex round 2: one Medium (D41, fixed in afe15481) and one Nit (fixed).
+- 2026-10-16: Codex round 3: approve, no new material findings (loop converged). Firefox focused smoke 7/7 (import-errors-scroll 90.6 s, viewers-csp 17.4 s).

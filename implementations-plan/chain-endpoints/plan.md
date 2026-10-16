@@ -917,6 +917,10 @@ Verdict: **approve with fixes**, over the round-1 fixes and the search-panel `fo
 | 1 | Medium. `ToastManagerBase.vue`'s focus return stores the card `focusin`'s related target, which for focus leaving the JSON editor is the editor's host; `focus()` on that `<div>` does nothing, so dismissing a snack reached by Shift+Tab from the editor leaves focus on `body` | Accepted (D41): a capturing document `focusout` keeps the element focus left, used when the related target is its shadow root's host; a unit test fails on the old code |
 | 2 | Nit. A test comment says the viewer's listeners are on the document | Accepted: deleted |
 
+### Arc 2b, round 3, Codex (session `01a1455f-a401-74f0-9b60-afb170596547` resumed), 2026-10-16
+
+Verdict: **approve**, no new material findings; the loop converged. The host check keeps a departure from another root out, a null related target stays null, a disconnected target is skipped, and each mount adds and removes the same capturing listener.
+
 ## Delivery
 
 One `gh stack`, base `dev`, one PR per arc, each opened only after its arc gate passes and its Codex loop converges.
