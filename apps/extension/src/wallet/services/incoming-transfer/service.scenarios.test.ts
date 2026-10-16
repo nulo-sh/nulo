@@ -990,15 +990,8 @@ describe("IncomingTransferService — account lifecycle", () => {
 
 describe("IncomingTransferService — scanContract dedup + emit semantics", () => {
 	test("a watchdog handoff mid-park lets onTokenDeleted wipe — the revoked CS writes nothing", async () => {
-		// The production hazard end-to-end: the note-CS parks on its trust read
-		// while HOLDING the serviceLock; the queued
-		// onTokenDeleted (which bumps the lifecycle epoch FIRST inside the
-		// lock) cannot run until the lock's 5-minute watchdog hands over; the
-		// revoked CS then resumes with a moved epoch and must write NOTHING —
-		// no record resurrection, no outbox row, no Added emit. Trust is
-		// pre-seeded `trusted` so every pre-park branch is quiet and the
-		// assertions are pure post-handoff effects (an unknown-trust write
-		// lands BEFORE the park and could never discriminate the re-check).
+		// Trust is pre-seeded `trusted` so nothing is written before the park: an unknown-trust
+		// write would land before it and could never discriminate the post-handoff re-check.
 		vi.useFakeTimers()
 		try {
 			const network = makeNetworkStub([{ id: "n1", chainId: 1 }])
@@ -6121,6 +6114,18 @@ describe("IncomingTransferService — a note's block time is read outside the se
 		await scan(f.service)
 		expect(f.note.getBlockTimestamp).not.toHaveBeenCalled()
 		expect(records.get(NOTE_ID)).toMatchObject({ blockTimestamp: undefined })
+	})
+
+	test("a new note without an amount, which the commit never records, costs no block-time read", async () => {
+		const f = await bootService({
+			network: makeNetworkStub([{ id: "n1", chainId: 1 }]),
+			token: makeTokenStub([tokenA]),
+			note: makeNoteStub({ [tokenA.contract]: [note({ content: {} })] }, { 100: 1_234 }),
+		})
+		trustedRow()
+		await scan(f.service)
+		expect(f.note.getBlockTimestamp).not.toHaveBeenCalled()
+		expect(records.size).toBe(0)
 	})
 
 	test("a failed block-time read is made once per block per scan, and again by the next scan", async () => {

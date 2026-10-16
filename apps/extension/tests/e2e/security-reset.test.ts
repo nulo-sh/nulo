@@ -32,9 +32,8 @@ test("reset profile wipes state and routes to register", async ({ registeredExte
 	expect(registeredExtensionPerTest.pageErrors).toEqual([])
 }, 60_000)
 
-// A refused node fails each call fast, so whatever the purge still waits on is the node client's
-// retry backoff, which a fake node cannot reproduce: only the real PXE makes the boot, sync and
-// op calls the purge drains. Same 15 s purge budget as the reachable case.
+// Only the production PXE makes the boot, sync and op node calls a purge drains, so only a browser
+// proves no retry of theirs still holds it. Same 15 s purge budget as the reachable case.
 test("reset purges within the same budget while the node refuses connections", async ({ registeredExtensionPerTest: ctx }) => {
 	const node = await interceptRpc(ctx.browser, ctx.extensionId, TESTNET_RPC_ORIGIN, { kind: "refuse" })
 	try {

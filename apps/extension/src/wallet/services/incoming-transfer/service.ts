@@ -1734,12 +1734,13 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	}
 
 	/** Whether the locked commit will want this note's block time, read here before the lock a
-	 *  teardown waits on: a row without one, or a new note that is not an own send. An own send's
-	 *  change note never gets a row, so without that exclusion every scan would fetch its block. */
+	 *  teardown waits on: a row without one, or a new note with an amount that is not an own send.
+	 *  Neither an own send's change note nor a note without an amount ever gets a row, so without
+	 *  those exclusions every scan would fetch its block. */
 	private async commitReadsBlockTime(ctx: NoteScanContext, note: RawNote): Promise<boolean> {
 		const existing = await this.repo.getRecord(noteRecordId(ctx.profileId, ctx.networkId, note.siloedNullifier))
 		if (existing) return existing.blockTimestamp === undefined
-		return !(await this.isOwnSend(ctx, note.txHash))
+		return parseNoteAmount(note) !== null && !(await this.isOwnSend(ctx, note.txHash))
 	}
 
 	/** The per-note locked critical section. Its head is the public arm's, read for read: tokens,
