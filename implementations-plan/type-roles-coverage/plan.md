@@ -114,7 +114,7 @@ The total is about +80 s on Chrome and +130 s on Firefox.
   - Seed the canonical rows with `seedProtocolFpcs` beside the unnamed row, so `getFpcs` registers nothing (F11). Give the unnamed row a non-protocol address so Edit shows.
 - Validation gate: Phase 1.1's first two commands. Then run `tests/e2e/send-keyboard.test.ts --retry=0` on Chrome, since it imports `fpc-seeds.ts`.
 
-### Phase 1.4 — the coverage test and the measurement
+### Phase 1.4 ✓ — the coverage test and the measurement
 - Change map: `type-roles.test.ts` (the final test, D2 and D3).
 - Never-happens proof: locally drop one state from a call and see the coverage test name that site's key. Then restore it. The success control is the green run with `live` = 58.
 - Validation gate:
@@ -186,9 +186,21 @@ Per `implementations-plan/README.md` § Post-implementation standard at 8459699c
   - Per-file coverage settled for arc 2 (A2).
   - Rejected: its claim that no startup step clears an in-flight import (F6 shows the boot sweep does).
 - **Codex resume** (verification): `conditional approve (with conditions: make D6's selector exact; prevent protocol discovery in S11)`. Both demonstrated by source trace and met as Codex specified: `data-fpc-unnamed` (its second option; the first, the seed's id, ties the inventory to one test), and `seedProtocolFpcs` with the refusal held for the whole test. It confirmed every other disposition, the `call` pair's move and D8's known limit (own-account displays are `static`).
+- **Arc 1 review, Codex** (gpt-6.1-sol, high), round 1: `findings` (2 major, 1 minor). Accepted:
+  - Both caller kinds rendered `record-caller` in one visit, so one could stand in for the other. The encoded call is now stored and read on a second visit, and each visit asserts one caller.
+  - Activity's row hash has one testid on both explorer branches, and only the tx page proved the setting. `TransactionCard.vue`'s explorer action gains `activity-row-explorer`, asserted present with an explorer and absent without.
+  - Rejected: the `send-destination-field input` selector. The suite's shared Send fixture (`fixtures/helpers.ts:1272`) and `send-keyboard.test.ts:20` select the native field the same way, and giving it a testid is a change to the design package's `Input`.
+- **Arc 1 review, Opus** (alongside Codex round 1): `clean` (3 minor, 5 nits), all taken:
+  - The coverage test logs the sites read only as a name, the D8 limit made visible in every run.
+  - The import state waits on `token-import-spinner`, which renders only while the record is in flight.
+  - Authwit rows carry the mined shape (`txHash`, `pending: false`); every seeded address is on the curve and every hash under the modulus (`TX_HASH` included).
+  - `once` names the receipt states read only with the explorer on; one comment moved to the constant it explains.
+  - `seedArrivalRow` reads the receipts' block from the one `RECEIPT_BLOCK`; `activity-seeds.ts` writes every row through `storeRow`.
+  - The new test reads the native recipient field before a contact is chosen, as Phase 1.3 asks.
+- **Arc 1 review, Codex** round 2 (resumed): `clean`. Both majors confirmed closed; one new minor taken: the hop between the two authwits visits waits for Home's own `tokens-menu-trigger`, since the header's avatar also shows on the authwits page.
 - **Arc 1 implementation deviations** (evidence in [lessons/phase-1.md](lessons/phase-1.md)):
   - S3's Activity and tx states ride S1's visits, and the import row and New token share one Home visit: no page is opened twice for one state.
-  - The seed also writes the scope's arrival row (`seedArrivalRow`). Without one, Activity holds its incoming rows until the chain-tip read gives up, about 60 s under the refused Testnet. The state is a wallet's after any feed read the tip; no timeout was raised.
+  - The seed also writes the scope's arrival row (`seedArrivalRow`). Without one, Activity holds its incoming rows until the chain-tip read gives up, about 60 s under the refused Testnet. The state is a wallet's after any feed read the tip; no timeout was raised. The product delay is #579.
   - The unlock screen is read after explorer None and Developer mode, where the lock lands in the flow; S8 stays last.
   - D9's base timing restores `type-roles.test.ts` at d738b790 over the head on the same host, rather than a second worktree.
 

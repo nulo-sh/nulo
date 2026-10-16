@@ -12,3 +12,5 @@
 - 2026-10-16 phase 1.2 static gate pass: lint, typecheck:all, test exit 0.
 - 2026-10-16 phase 1.2 smoke gate pass: `type-roles.test.ts --retry=0` green on Chrome (64 s wall, seeded test 21.4 s) and Firefox (115 s wall, seeded test 31.5 s); `rows`, `send-outcome-rows`, `navigation`, `home-links` 16/16 on Chrome. Phase 1.2 done.
 - 2026-10-16 phase 1.3 gate pass: lint, typecheck:all, test exit 0; `type-roles.test.ts --retry=0` green on Chrome (73 s wall, new test 17.1 s) and Firefox (182 s wall at load1 ~200, new test 32.3 s); `send-keyboard` 5/5 on Chrome. Phase 1.3 done.
+- 2026-10-16 arc 1 review: Codex round 1 `findings` (2 major taken, 1 minor rejected), Opus `clean` (all minors taken), Codex round 2 `clean` (1 minor taken). Loop converged.
+- 2026-10-16 phase 1.4 gate pass: never-happens proof named the dropped site (live 58); `type-roles.test.ts --retry=0` green 3/3 on Chrome (106, 104, 119 s) and 3/3 on Firefox (186, 183, 196 s); the seven smoke importers of the seed helpers 24/24 on Chrome; D9 timings in lessons. Phase 1.4 done.

@@ -18,7 +18,7 @@ Every attempt, measurement and deviation of arc 1, in order.
 
 - Attempt 1: Activity's `activity-incoming-hash` read "none" right after the visit, with the public receipt stored. Attempt 2 waited for the row (15 s): still none. A timing pass showed the row at 60 005 ms, while the received detail answered in 239 ms.
 - Cause: Activity and Home's recent widget assign incoming rows only after the arrivals coordinator's `load`, which reads `getArrivalState`. With no arrival row for the scope, that reads the chain tip through the offscreen PXE, and with Testnet refused the node client retries in 1, 2, 3 s cycles until about 60 s (57 refused requests, 46 from the offscreen document, in one pass). The received detail reads the record alone.
-- Product reach: a receipt discovered while no popup read the tip (no arrival row yet), or a token with a pending arrival floor, then an unreachable node: the feed shows no incoming row for about a minute. Rows arrive late, none is lost.
+- Product reach: a receipt discovered while no popup read the tip (no arrival row yet), or a token with a pending arrival floor, then an unreachable node: the feed shows no incoming row for about a minute. Rows arrive late, none is lost. Filed as #579.
 - Test design: the seed now writes the scope's arrival row at the receipt's block (`seedArrivalRow`), the state a wallet holds once any feed read the tip, so no tip read runs and the receipt is not an arrival. No timeout raised.
 - Confirmation: with the arrival row seeded, the incoming row showed 3 ms after the visit (60 016 ms without, in the same build).
 - Gate: Chrome file 64 s (seeded test 21.4 s, was 16.8 s at base), Firefox 115 s (seeded 31.5 s, was 20.5 s), the four `seedTransaction` callers 16/16 on Chrome.
@@ -28,3 +28,27 @@ Every attempt, measurement and deviation of arc 1, in order.
 - One writer, `seedFpcs`, serves both the protocol rows and the unnamed sponsor; `seedProtocolFpcs` is built on it.
 - `FpcRow.test.ts` gains one case: the row carries `data-fpc-unnamed` only while its title shows the address.
 - Gate: Chrome file 73 s (new test 17.1 s), Firefox 182 s with load1 near 200 during the run (new test 32.3 s), `send-keyboard` 5/5 on Chrome.
+
+## Phase 1.4
+
+- Never-happens proof (Chrome, local only): with Receive's state dropped from the seeded test, the coverage test failed naming `apps/extension/src/popup/components/popups/ReceivePopup.vue|account.address.slice(0, 6)||0` and logged 58 smoke-owned live, 32 network-owned, 15 unreachable. Restored before the green runs.
+- Review fixes, Chrome check (load1 rising from 136 to ~190): the file-scoped `registeredExtension` launch timed out on the service worker's liveness signal (30 s, `fixtures/extension.ts:264`) before any spec code ran, so its five tests failed and the coverage test named the four sites only the Send/Settings test reads. Every arc test on a per-test launch passed (seeded 19.7 s, new 15.7 s). A launch flake under load, not the arc; the green runs follow.
+- D9 head timing, final tree, one stamped run per browser (stamps uncommitted; host shared, load1 up to ~340 during the Chrome run). File wall: Chrome 108 s (base 65.7 s), Firefox 142 s (base 84.8 s). Seeded test: Chrome 22.5 s (base 16.8 s), Firefox 33.0 s (base 20.5 s). New test: Chrome 36.3 s, of which about 26 s is its launch under load, Firefox 22.3 s.
+
+  | Step | Chrome s | Firefox s |
+  |---|---|---|
+  | S1 Home + Receive, Accounts | 0.6 | 2.1 |
+  | S2 seeds + background restart | 5.4 | 8.5 |
+  | S1+S3 Activity + tx | 0.6 | 0.6 |
+  | S3 receipt + journal | 0.5 | 0.4 |
+  | S4 token page + metadata | 0.9 | 0.6 |
+  | S3+S4 import + New token | 0.3 | 0.8 |
+  | S5 explorer None | 1.0 | 1.4 |
+  | S6 debug panel | 0.5 | 0.7 |
+  | S7 authwits (two visits) | 0.5 | 0.7 |
+  | S8 stale takeover | 0.7 | 0.7 |
+  | S9 contact on Send | 0.9 | 1.8 |
+  | S10 contacts import | 0.4 | 0.7 |
+  | S11 FPC seed + settings forms | 1.2 | 2.3 |
+  | S12 hidden account + import | 7.4 | 6.3 |
+- Gate on the final tree: three green runs per browser at retry 0, Chrome 106, 104, 119 s and Firefox 186, 183, 196 s wall (each started at load1 < 150); `rows`, `send-outcome-rows`, `navigation`, `home-links`, `received-fee-privacy`, `token-list`, `send-keyboard` 24/24 on Chrome after the `storeRow` refactor. A two-hour background limit stopped the first sequence before the third Firefox run started; it ran on its own after.
