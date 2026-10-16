@@ -384,3 +384,67 @@ describe("ChainRuntimeRegistry peek/ensure split", () => {
 		expect(reg.peek(P, 1)).toBe(bad)
 	})
 })
+
+describe("ChainRuntimeRegistry.stopRetries", () => {
+	type Stop = [profileId: string, chainId?: number]
+	const RUNTIMES = ["a:1", "a:12", "b:1"] as const
+
+	async function registryWith(...keys: string[]) {
+		const retryWhile = new Map<string, () => boolean>()
+		const reg = new ChainRuntimeRegistry({
+			createChainRuntime: async (n, _storeKey, retries) => {
+				retryWhile.set(`${n.profileId}:${n.chainId}`, retries?.retryWhile ?? (() => true))
+				return new ChainRuntime(n.chainId, {} as never, {} as never, n.rpcUrl)
+			},
+		})
+		const ensure = async (key: string) => {
+			const [profileId, chainId] = key.split(":")
+			await reg.ensure({ profileId, chainId: Number(chainId), rpcUrl: "http://n" })
+		}
+		for (const key of keys) await ensure(key)
+		const retrying = () => Object.fromEntries([...retryWhile].map(([key, allowed]) => [key, allowed()]))
+		return { reg, ensure, retrying }
+	}
+
+	test.each<{ name: string; stops: Stop[]; stopped: string[] }>([
+		{ name: "no stop", stops: [], stopped: [] },
+		{ name: "one chain's stop", stops: [["a", 1]], stopped: ["a:1"] },
+		{ name: "a profile's stop", stops: [["a"]], stopped: ["a:1", "a:12"] },
+		{ name: "another profile's stop", stops: [["b"]], stopped: ["b:1"] },
+	])("$name turns off exactly its runtimes' retries", async ({ stops, stopped }) => {
+		const { reg, retrying } = await registryWith(...RUNTIMES)
+		for (const [profileId, chainId] of stops) reg.stopRetries(profileId, chainId)
+		expect(retrying()).toEqual(Object.fromEntries(RUNTIMES.map((key) => [key, !stopped.includes(key)])))
+	})
+
+	test("a release restores retries; overlapping stops need every release, each counted once", async () => {
+		const { reg, retrying } = await registryWith(...RUNTIMES)
+		const chain = reg.stopRetries("a", 1)
+		const profile = reg.stopRetries("a")
+		const again = reg.stopRetries("a")
+
+		profile()
+		profile()
+		expect(retrying()).toEqual({ "a:1": false, "a:12": false, "b:1": true })
+		again()
+		expect(retrying()).toEqual({ "a:1": false, "a:12": true, "b:1": true })
+		chain()
+		expect(retrying()).toEqual({ "a:1": true, "a:12": true, "b:1": true })
+	})
+
+	test("a runtime built while its profile is stopped starts with retries off", async () => {
+		const { reg, ensure, retrying } = await registryWith()
+		const release = reg.stopRetries("a")
+		await ensure("a:3")
+		expect(retrying()).toEqual({ "a:3": false })
+		release()
+		expect(retrying()).toEqual({ "a:3": true })
+	})
+
+	test("the production factory builds its node with the registry's retry policy", async () => {
+		const createNode = vi.fn(fakeNodeFactory.createNode)
+		const retries = { retryWhile: () => false }
+		await new ProductionPxeFactory({ ...fakeNodeFactory, createNode }).createChainRuntime(fakeNetwork, fakeStoreKey, retries)
+		expect(createNode).toHaveBeenCalledWith(fakeNetwork.rpcUrl, retries)
+	})
+})

@@ -291,6 +291,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [wallet-followups-5](wallet-followups-5/plan.md) — completed — a gone window closes quietly (#312); the log scan reads every logger level method and every call on a line, the column cut rejected in review (#302)
 - [wallet-followups-6](wallet-followups-6/plan.md) — completed — a secure message bounded to `{iv, ciphertext}` within 16 MiB (#345), one address spelling at the parse (#331), a typed refusal for a non-string method (#332), both e2e error arrays (#336); #262 and #355 known limits
 - [wallet-followups-7](wallet-followups-7/plan.md) — completed — one token contract spelling at the parse (#329); a bound of 32 pending calls on every dApp session at decrypt and dispatch (#354); #371 and #372 known limits
+- [wallet-followups-8](wallet-followups-8/plan.md) — completed — node retries stop while a profile or chain is torn down (#277); a dead profile RPC goes (#464); the no-token line, a field purpose and the unlock toast (#339, #465, #466)
 - [wallet-safety-fixes](wallet-safety-fixes/plan.md) — completed — four small safety and privacy fixes
 - [wallet-sdk-implicit-account-grant](wallet-sdk-implicit-account-grant/plan.md) — completed — no implicit account grant: getAccounts before requestCapabilities throws
 - [wallet-ux-fixes](wallet-ux-fixes/plan.md) — completed — four wallet UX fixes in one change set

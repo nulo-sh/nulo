@@ -7,7 +7,6 @@
  *   - Create a passkey credential bound to a new profile.
  *   - Recover the master secret from an existing credential (by id for
  *     the unlock path, or without one for the import path).
- *   - Confirm the user still holds the key bound to a profile.
  *
  * Pure coordinator: no storage, no session state, no passwords, no
  * locking. The facade serializes cross-collaborator workflows.
@@ -27,7 +26,6 @@
 import type { ILogger } from "@/wallet/logger"
 import type { PasskeyHandOver, PasskeyService } from "@/wallet/services/passkey/service"
 import type { Base64CredentialId, HexUserHandle, MasterSecretBytes, PasskeyCredential, PasskeyCredentialData } from "@nulo/wallet-crypto"
-import type { Profile } from "./spec"
 
 /** Shape returned by create / import paths — everything the facade
  *  needs to persist a passkey Profile + open the first session.
@@ -107,18 +105,5 @@ export class PasskeyRecoveryCoordinator {
 			finish?.("failed")
 			throw err
 		}
-	}
-
-	/** Verifies the user still holds the key bound to this passkey profile, for
-	 *  `confirmProfileOperation`'s passkey branch (the password branch goes through
-	 *  `PasswordSecretBox` on the facade). Returns the passkey window's `finish`: the caller
-	 *  reports through it once its own revalidation is done. */
-	public async confirm(profile: Profile & { type: "passkey" }): Promise<PasskeyHandOver["finish"]> {
-		if (!profile.credentialId) {
-			throw new Error("Missing credentialId")
-		}
-		// Confirming an operation authenticates the profile the way an unlock does.
-		const { finish } = await this.passkeys.getKey(profile.credentialId, { step: "unlock", profileName: profile.name })
-		return finish
 	}
 }
