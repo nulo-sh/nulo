@@ -1,7 +1,7 @@
 ---
 plan: e2e-private-transfer
 tier: light
-status: arc 1 in progress (approved 2026-10-16)
+status: completed
 issues: "#165 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 8459699c
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-10-16
+- **Status**: completed. One arc. Phase 1's gates and the negative control behaved as planned. The Codex loop converged in two rounds.
+- **Shipped**: `tx-sendTx-delegated-authwit.test.ts` now runs in the default network partition on both browsers, with no env gate (#165). It reads the discovered authwit as the donor's private transfer to the consumer, in the token's units, and checks that the send is submitted. The delegated-pull rig publishes `PublicChecks` itself. `NULO_E2E_STANDARD_CONTRACTS` is gone.
+- **Dispositions**: the playground control and the private-row e2e named by #165 already shipped in #293 (Scope). The step 5 read changed shape (D6).
+- **Known limits**: none.
+- **Open items**: none.
+- **Lessons**: none promoted. `lessons.md` is at its 8 KiB budget and this plan supersedes none of it. The false "post-genesis publish collides" premise was deleted with the header that carried it.
+- **Seeds retired**: the `/goal` and `/loop` drafts under Seeds.
 
 # e2e-private-transfer: the discovered-authwit transfer row, end to end
 
@@ -85,7 +96,7 @@ The owner's decision (page 19, 2026-10-15, option A) names three items. Two alre
 
 **Asks:** none.
 
-## Phase 1: the delegated-authwit file runs and asserts its discovered transfer row (#165)
+## Phase 1 ✓: the delegated-authwit file runs and asserts its discovered transfer row (#165)
 
 Steps: apply the change map, writing comments to the repository's comment rules.
 
