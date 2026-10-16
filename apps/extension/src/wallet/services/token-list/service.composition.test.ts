@@ -20,6 +20,7 @@ const URL = "https://tokens.example/v1/list.json"
 const HOUR = 3_600_000
 const T0 = 1_760_000_000_000
 const aboveFloor = (n: number) => SEQUENCE_FLOOR + n
+const FLAGGED = [{ chainId: 7, address: `0x${"2".padStart(64, "0")}` }]
 
 async function signer(keyId = "nulo-ci-1") {
 	const seed = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, "0")).join("")
@@ -40,6 +41,7 @@ async function signer(keyId = "nulo-ci-1") {
 					name: "Test",
 				},
 			],
+			flagged: FLAGGED,
 		}
 		return JSON.stringify(await signEnvelope(new TextEncoder().encode(JSON.stringify(payload)), privateKey, keyId))
 	}
@@ -119,7 +121,7 @@ describe("TokenListService admission", () => {
 			},
 		])
 		expect(h.calls[0].init.headers).toBeUndefined()
-		expect(h.service.getSnapshot()?.sequence).toBe(aboveFloor(10))
+		expect(h.service.getSnapshot()).toMatchObject({ sequence: aboveFloor(10), flagged: FLAGGED })
 		expect(h.changes.map((c) => c.sequence)).toEqual([aboveFloor(10)])
 	})
 })

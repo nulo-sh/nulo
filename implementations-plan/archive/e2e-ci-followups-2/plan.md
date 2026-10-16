@@ -15,7 +15,7 @@ eli5_mode: skipped (orchestrator-owned)
 
 - **Date**: 2026-10-16
 - **Status**: completed, one arc, all three phases' gates green and the Codex loop converged in two rounds.
-- **Shipped**: five unit-test files load their module under test during collection, off every test and hook timeout, and `config.test.ts` loses its 30 s timeout (#500); `VITE_NULO_FEE_MULTIPLIER` sets Normal's multiplier and scales Fast and Urgent with it, so production stays 2/3/5 and CI prices 10/15/25 (#405); the Firefox relay reports each exception at its first add-on frame (#322's diagnostic).
+- **Shipped**: five unit-test files load their module under test during collection, off every test and hook timeout, and `config.test.ts` loses its 30 s timeout (#500, closed by #477's hook-budget fix to `zod-jitless`, which the merge replaces; #535, the relay half #477 left open); `VITE_NULO_FEE_MULTIPLIER` sets Normal's multiplier and scales Fast and Urgent with it, so production stays 2/3/5 and CI prices 10/15/25 (#405); the Firefox relay reports each exception at its first add-on frame (#322's diagnostic).
 - **Known limits**: #322 (the seed replays green; the recursion never recurred).
 - **Open items**: none.
 - **Lessons**: none promoted: `lessons.md` sits at its 8 KiB budget and this plan supersedes none of it; the cold-import shape is commented at each site it fixed and recorded in [`lessons/phase-1.md`](lessons/phase-1.md).
@@ -127,6 +127,7 @@ None. No screen, copy or behaviour a person sees changes; production pricing is 
 - **Diff review round 1, Codex (gpt-6.1-sol, high)**: `approve`. Low: the hoisted `dispatcher.test.ts` comment still claimed to catch a bundler tree-shaking the activation: **adopted** (clause dropped).
 - **Diff review, Opus (general-purpose)**: `conditional approve`, no code defect. (1) `FIREFOX.md` and a test title still said "first frame": **adopted**. (2) Phase 3's e2e gate unlogged at review time: closes at its gate. (3) The ladder's doc sat on a private const: **adopted**, moved onto `FEE_MULTIPLIERS`. (4) The collection-load comment belongs on the bare import: **adopted**.
 - **Diff review round 2, Codex (resumed, verification)**: `approve`, no new material finding; the loop converged.
+- **Merge after #477**: `dev` fixed `zod-jitless` by moving its two imports into `beforeAll`, under the 10 s hook budget, and closed #500. The merge keeps the collection-time imports, which leave no budget to overrun, and drops the hook, which then proves nothing more; deleting the flag import still reds the test on both engines. #477 split the relay's hook timeout out as #535; this arc's relay hoist moves the first fetch outside the hook and passes the delayed-fetch reproducer, so the PR closes #535 and refers to #500. Codex (gpt-6.1-sol, high) on the resolution: `approve`; its one low finding, this line's causal wording, adopted.
 
 ## Delivery
 

@@ -232,8 +232,8 @@ export class TokenListService implements IService {
 	}
 }
 
-function toSnapshot({ sequence, keyId, entries }: VerifiedTokenList): TokenListSnapshot {
-	return { sequence, keyId, entries }
+function toSnapshot({ sequence, keyId, entries, flagged }: VerifiedTokenList): TokenListSnapshot {
+	return { sequence, keyId, entries, flagged }
 }
 
 function refusalOutcome(error: unknown): RefreshOutcome {
