@@ -1460,26 +1460,40 @@ export async function getSelectedFeeMethod(page: Page): Promise<string | null> {
 
 /** Wait for the snack whose title or sub contains `text` (case-insensitive: the title is uppercased
  *  by CSS, not in the DOM), optionally of one `kind`, and return it. A success closes itself after
- *  6 s; an error stays until closed. */
+ *  2 s; an error stays until closed. `hold` focuses the card's action in the same task that finds
+ *  the card, which holds a success open as a person's focus does; for a test of where the action
+ *  leads or what the card says, never of focus, keyboard reach or the card's life. */
 export async function waitForToast(
 	page: Page,
 	text: string,
 	timeout = 5_000,
-	opts: { kind?: "success" | "info" | "error" } = {},
+	opts: { kind?: "success" | "info" | "error"; hold?: boolean } = {},
 ): Promise<ElementHandle<Element>> {
 	const handle = await page.waitForFunction(
-		(t: string, kind: string | null) => {
-			for (const card of document.querySelectorAll('[data-testid="snackbar"]')) {
-				if (kind && card.getAttribute("data-kind") !== kind) continue
-				const title = card.querySelector('[data-testid="snackbar-title"]')?.textContent ?? ""
-				const sub = card.querySelector('[data-testid="snackbar-sub"]')?.textContent ?? ""
-				if (`${title} ${sub}`.toLowerCase().includes(t.toLowerCase())) return card
-			}
-			return null
+		(t: string, kind: string | null, hold: boolean) => {
+			const reads = (card: Element) =>
+				`${card.querySelector('[data-testid="snackbar-title"]')?.textContent ?? ""} ${card.querySelector('[data-testid="snackbar-sub"]')?.textContent ?? ""}`
+			const card = [...document.querySelectorAll('[data-testid="snackbar"]')].find(
+				(c) => (!kind || c.getAttribute("data-kind") === kind) && reads(c).toLowerCase().includes(t.toLowerCase()),
+			)
+			if (!card || !hold) return card ?? null
+			// The card holds on its `focusin`, which a page without focus never dispatches.
+			let held = false
+			card.addEventListener(
+				"focusin",
+				() => {
+					held = true
+				},
+				{ once: true },
+			)
+			card.querySelector<HTMLElement>('[data-testid="snackbar-action"]')?.focus({ preventScroll: true })
+			if (!held) throw new Error(`the snack containing "${t}" took no focus, so nothing holds it open`)
+			return card
 		},
 		{ timeout, polling: 200 },
 		text,
 		opts.kind ?? null,
+		opts.hold === true,
 	)
 	const element = handle.asElement() as ElementHandle<Element> | null
 	if (!element) throw new Error(`the snack containing "${text}" left between the wait and the read`)
