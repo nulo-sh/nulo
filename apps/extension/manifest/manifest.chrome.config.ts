@@ -1,6 +1,6 @@
 import { defineManifest } from "@crxjs/vite-plugin"
 
-import ManifestConfig from "./manifest.config"
+import ManifestConfig from "./manifest.config.ts"
 
 // An unpacked build derives its extension id from its load path, so every worktree and machine is
 // a different origin to Presto (its own approval prompt). Development builds carry this public key

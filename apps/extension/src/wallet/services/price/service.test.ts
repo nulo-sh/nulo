@@ -17,7 +17,8 @@ import { LoggerStore } from "@/wallet/logger"
 import { ConfigStore } from "@/wallet/config"
 import { CONFIG_SERVICE_NAME } from "@/wallet/services/config/spec"
 import { PROFILE_SERVICE_NAME, type ProfileInfo } from "@/wallet/services/profile/spec"
-import { TEST_LIST_ENTRIES, TEST_PRICED_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import { flaggedKeysOf } from "@/utils/token-flag"
+import { TEST_FLAGGED, TEST_LIST_ENTRIES, TEST_PRICED_TOKENS } from "@/wallet/services/token-list/list.fixture"
 import { TOKEN_LIST_SERVICE_NAME, type TokenListSnapshot } from "@/wallet/services/token-list/spec"
 import {
 	PRICE_REFRESH_ALARM_NAME,
@@ -51,7 +52,7 @@ async function harness(opts?: { enabled?: boolean; profile?: ProfileInfo | undef
 		body: opts?.body ?? goodBody(1_000_000),
 		fetchCalls: [] as string[],
 		fetchImpl: undefined as undefined | (() => Promise<FetchResponse>),
-		list: { sequence: 1, keyId: "nulo-ci-1", entries: TEST_LIST_ENTRIES } as TokenListSnapshot | undefined,
+		list: { sequence: 1, keyId: "nulo-ci-1", entries: TEST_LIST_ENTRIES, flagged: [TEST_FLAGGED] } as TokenListSnapshot | undefined,
 	}
 
 	const fakeConfig = {
@@ -127,17 +128,20 @@ describe("PriceService — refresh pipeline", () => {
 		expect(Object.keys(seen[0]).sort()).toEqual(["aztec", "usd-coin"])
 	})
 
-	test("quotes carry the list's mapping, and a new list re-emits them with its own, fetching nothing", async () => {
+	test("quotes carry the list's mapping and flags, and a new list re-emits them with its own, fetching nothing", async () => {
 		const { service, state, fakeTokenList } = await harness()
-		expect((await service.refreshIfStale()).pricedTokens).toEqual(TEST_PRICED_TOKENS)
+		const first = await service.refreshIfStale()
+		expect(first.pricedTokens).toEqual(TEST_PRICED_TOKENS)
+		expect(first.flaggedTokens).toEqual(flaggedKeysOf([TEST_FLAGGED]))
 		const seen: PriceSnapshot[] = []
 		service.onQuotesUpdated.add((s) => seen.push(s))
 
-		state.list = { sequence: 2, keyId: "nulo-ci-1", entries: TEST_LIST_ENTRIES.filter((e) => e.symbol !== "USDC") }
+		state.list = { sequence: 2, keyId: "nulo-ci-1", entries: TEST_LIST_ENTRIES.filter((e) => e.symbol !== "USDC"), flagged: [] }
 		fakeTokenList.onListChanged.invoke(state.list)
 		await vi.waitFor(() => expect(seen).toHaveLength(1))
 
 		expect(Object.values(seen[0].pricedTokens).sort()).toEqual(["euro-coin", "tether"])
+		expect(seen[0].flaggedTokens).toEqual([])
 		expect(Object.keys(seen[0].quotes).sort()).toEqual(["aztec", "usd-coin"])
 		expect(state.fetchCalls).toHaveLength(1)
 	})
@@ -246,7 +250,9 @@ describe("PriceService — refresh pipeline", () => {
 			throw new Error("offline")
 		}
 		await service.onAlarmTick()
-		expect(seen).toEqual([{ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, lastRefreshFailed: true }])
+		expect(seen).toEqual([
+			{ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: flaggedKeysOf([TEST_FLAGGED]), lastRefreshFailed: true },
+		])
 	})
 
 	test("a newer stored quote is never overwritten by an older response (monotonic)", async () => {
@@ -291,9 +297,11 @@ describe("PriceService — staleness", () => {
 })
 
 describe("PriceService — kill switch (showFiatValues)", () => {
-	test("disabled: getQuotes is empty and nothing is fetched", async () => {
+	test("disabled: getQuotes is empty and nothing is fetched, while the list's flags still arrive", async () => {
 		const { service, state } = await harness({ enabled: false })
-		expect((await service.getQuotes()).quotes).toEqual({})
+		const read = await service.getQuotes()
+		expect(read.quotes).toEqual({})
+		expect(read.flaggedTokens).toEqual(flaggedKeysOf([TEST_FLAGGED]))
 		expect((await service.refreshIfStale()).quotes).toEqual({})
 		expect(state.fetchCalls).toHaveLength(0)
 	})

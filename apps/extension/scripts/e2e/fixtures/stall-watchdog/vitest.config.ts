@@ -1,6 +1,6 @@
 import { BaseSequencer, type TestSpecification } from "vitest/node"
 import { defineConfig } from "vitest/config"
-import StallWatchdog from "../../../../tests/e2e/stall-watchdog"
+import StallWatchdog from "../../../../tests/e2e/stall-watchdog.ts"
 
 class ByName extends BaseSequencer {
 	override async sort(files: TestSpecification[]): Promise<TestSpecification[]> {

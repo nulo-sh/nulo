@@ -8,7 +8,8 @@ import { flushPromises, mount } from "@vue/test-utils"
 import { effect, nextTick, stop } from "vue"
 import { createAppStoreHarness } from "../../../../tests/helpers/app-store-harness"
 import { installChromeStorage } from "../../../../tests/helpers/chrome-storage-mock"
-import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import { flaggedKeysOf } from "@/utils/token-flag"
+import { TEST_FLAGGED, TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
 const H = vi.hoisted(() => {
 	const makeEvent = () => {
@@ -58,8 +59,12 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: H.priceDisconnect,
 			onQuotesUpdated: H.quotesUpdated,
 			onConnected: H.priceConnected,
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
-			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: H.quotes.current, pricedTokens: TEST_PRICED_TOKENS })),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: flaggedKeysOf([TEST_FLAGGED]) })),
+			refreshIfStale: vi.fn().mockImplementation(async () => ({
+				quotes: H.quotes.current,
+				pricedTokens: TEST_PRICED_TOKENS,
+				flaggedTokens: flaggedKeysOf([TEST_FLAGGED]),
+			})),
 		}
 	}),
 }))
@@ -86,7 +91,12 @@ const STUBS = {
 	PopupCard: { template: "<div><slot /></div>" },
 	PopupHeader: { template: "<div><slot name='title' /></div>" },
 	ItemsContainer: { template: "<div><slot /></div>" },
-	SettingItem: { props: ["title"], template: "<div :data-title='title' />" },
+	// Draws the description only when a slot is passed, as `SettingItem` does.
+	SettingItem: {
+		props: ["title"],
+		template:
+			"<div :data-title='title'><div v-if='$slots.description' data-testid='setting-description'><slot name='description' /></div></div>",
+	},
 	MaterialIcon: { template: "<i />" },
 	Text: { template: "<span><slot /></span>" },
 	Flex: { template: "<div><slot /></div>" },
@@ -156,6 +166,20 @@ describe("SelectTokenPopup", () => {
 		])
 		expect(rowSymbols(wrapper)).toEqual(["PRICED", "ALPHA", "ZED", "EMPTY"])
 		expect(H.getTokenBalances).toHaveBeenCalledWith(undefined, ACCOUNT)
+	})
+
+	test("a row the signed list flags carries 'Flagged as a scam' as its second line; the others carry none", async () => {
+		// Wire-shaped, in the upper case a restored row may keep.
+		const contract = `0x${TEST_FLAGGED.address.slice(2).toUpperCase()}`
+		const wrapper = await mountOpen([row(1, "SCAM", { contract }), row(2, "ALPHA")])
+		const lines = wrapper.findAll('[data-testid="select-token-row"]').map((el) => {
+			const line = el.find('[data-testid="setting-description"]')
+			return [el.attributes("data-symbol"), line.exists() ? line.get('[data-testid="select-token-flagged"]').text() : null]
+		})
+		expect(lines).toEqual([
+			["ALPHA", null],
+			["SCAM", "Flagged as a scam"],
+		])
 	})
 
 	test("a row on another chain is not listed", async () => {

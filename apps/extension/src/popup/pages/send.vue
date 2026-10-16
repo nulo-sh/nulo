@@ -10,6 +10,7 @@
 <script setup>
 /** Components */
 import AmountCard from "@/components/composite/send/AmountCard.vue"
+import FlaggedTokenBanner from "@/popup/components/modules/general/FlaggedTokenBanner.vue"
 import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue"
 import PublishStrip from "@/components/composite/send/PublishStrip.vue"
 import RecipientField from "@/popup/components/modules/send/RecipientField.vue"
@@ -758,6 +759,7 @@ onBeforeUnmount(() => {
 				<!-- Section: Select Asset -->
 				<div :class="$style.section">
 					<span :class="$style.section_label">Select Asset</span>
+					<FlaggedTokenBanner v-if="prices.isFlagged(activeToken)" />
 					<SelectTokenCard :token="activeToken" :loading="tokensLoading" :failed="tokensFailed" @retry="retryTokens" />
 				</div>
 
