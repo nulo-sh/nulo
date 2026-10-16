@@ -205,7 +205,8 @@ import {
 	restoredNetworkIds,
 } from "./full-backup-restore"
 import { deferred } from "@nulo/wallet-core/utils"
-import { errorLogWriters, useFullBackupImport, validateAndMigrateBackup } from "./useFullBackupImport"
+import { DECRYPTION_FAILED, errorLogWriters, useFullBackupImport, validateAndMigrateBackup } from "./useFullBackupImport"
+import { showsDecryptCta } from "@/utils/full-backup-ctas"
 import { collectRestoreErrors, sealFullBackupText } from "@/utils/full-backup-helpers"
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { awaitLivenessAdvance, readLiveness } from "@/utils/background-liveness"
@@ -2724,5 +2725,46 @@ describe("useFullBackupImport — decryptBackup stale-selection fence", () => {
 		expect(opts.fillError).not.toHaveBeenCalled()
 		passhashSpy.mockRestore()
 		decrypt.mockRestore()
+	})
+})
+
+describe("useFullBackupImport — a second Decrypt on an opened backup", () => {
+	async function pickSealed(c: ReturnType<typeof useFullBackupImport>, opts: ReturnType<typeof makeOpts>, text: string) {
+		opts.pickFile.mockResolvedValue(new File([text], "sealed.txt", { type: "text/plain" }))
+		await c.pickBackupFile()
+		c.decryptionPassword.value = "pass1234"
+	}
+
+	it("(BUG PIN) a decrypted body with no profile type keeps Decrypt offered, and a second Decrypt fails", async () => {
+		// The opened body is no longer text, so the second Decrypt throws before any key derivation.
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		await pickSealed(c, opts, await sealFullBackupText(JSON.stringify({ data: {} }), "pass1234"))
+
+		await c.decryptBackup()
+		expect(opts.fillError).not.toHaveBeenCalled()
+		expect(c.selectedBackup.value?.profileType).toBeNull()
+		expect(showsDecryptCta({ selectedBackup: c.selectedBackup.value })).toBe(true)
+
+		await c.decryptBackup()
+		expect(opts.fillError).toHaveBeenCalledExactlyOnceWith("full_backup", DECRYPTION_FAILED.title, DECRYPTION_FAILED.message)
+		expect(showsDecryptCta({ selectedBackup: c.selectedBackup.value })).toBe(true)
+	})
+
+	it("(BUG PIN) a file sealed twice opens its inner backup on the second Decrypt", async () => {
+		const inner = await sealFullBackupText(JSON.stringify({ data: { profile: { type: "password", name: "Inner" } } }), "pass1234")
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		await pickSealed(c, opts, await sealFullBackupText(JSON.stringify(inner), "pass1234"))
+
+		await c.decryptBackup()
+		expect(c.selectedBackup.value?.profileType).toBeNull()
+		expect(showsDecryptCta({ selectedBackup: c.selectedBackup.value })).toBe(true)
+
+		await c.decryptBackup()
+		expect(opts.fillError).not.toHaveBeenCalled()
+		expect(c.selectedBackup.value?.profileType).toBe("password")
+		expect(c.parsedBackupName.value).toBe("Inner")
+		expect(showsDecryptCta({ selectedBackup: c.selectedBackup.value })).toBe(false)
 	})
 })
