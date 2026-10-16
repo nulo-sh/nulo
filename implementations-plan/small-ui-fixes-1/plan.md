@@ -1,7 +1,7 @@
 ---
 plan: small-ui-fixes-1
 tier: light (the lane brief's call; one Codex audit round-trip plus one Opus Plan lens)
-status: planned, awaiting the orchestrator's approval (Codex approve; Opus conditional approve, conditions folded in)
+status: closed (arc 1 delivered in one PR against dev; the merge closes the plan)
 issues: "#577, #565, #566, #567 (all arc 1)"
 driver: claude-code
 claude_model: opus
@@ -15,9 +15,20 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-16.
+- **Status:** closed. One arc, one PR against `dev` from `worktree-small-ui-fixes-1`; the merge that lands it closes the plan.
+- **Shipped:** #577, Show network name off hides the name in the header chip and keeps its dot, at the height the name gives it (P25-09 B, P27-01 B). #565, `profileFileNameSegment`, the account export's rule, now names the full-backup and contacts files too (P25-11 A). #566, the JSON window subscribes to the active profile before it reads the payload, so a wallet locked at mount closes it. #567, each duplicate-phrase warning writes its own whole confirm request. Also, from review: `useConfigRead` re-reads on the next open when the newest read failed before its open was announced, and `settings/lock.test.ts`'s pin of the old behaviour is corrected.
+- **Known limits:** #600 (I1: with the setting off, the name can show for one config read after `Header` mounts).
+- **Open items:** none.
+- **Lessons:** nothing new in `lessons.md` (8,190 of 8,192 bytes); its `useConfigRead` line already routes a config read to the composable, whose doc now states the unannounced-open case.
+- **Size:** about 155 lines against the light target of 150: four issues, the ledger and five review rounds are the record.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
+
 # small-ui-fixes-1: four small fixes the owner already decided
 
-One arc, one PR against `dev`, no stack, `Closes #577 #565 #566 #567`. Recon: [recon.md](recon.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (OA-1, the off chip's height; the arc ships without it). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+One arc, one PR against `dev`, no stack, `Closes #577 #565 #566 #567`. Recon: [recon.md](recon.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (OA-1, the off chip's height, answered P27-01 B). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Outcome & Quality Bar
 
@@ -92,7 +103,7 @@ One arc, one PR against `dev`, no stack, `Closes #577 #565 #566 #567`. Recon: [r
 
 **Gate.** As phase 1. Then per browser `b` in `chrome`, `firefox`, at load1 < 150: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:<b>` (`build` for Chrome), then `cd apps/extension && env -u EXTENSION_PATH -u NULO_E2E_ARTIFACT_RUN NULO_E2E_BROWSER=<b> NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/appearance.test.ts --retry=0`. Pass: exit 0 on both; the scenario fails at the name check on the base Header plus testids; runtime recorded. Layers: lint, typecheck, unit, component, smoke e2e on both browsers.
 
-### Pre-delivery gate
+### Pre-delivery gate ✓
 `bun run audit:vue && bun run test:all`, then the whole smoke suite on each browser (the phase 4 commands without the file argument), at load1 < 150. Pass: exit 0 everywhere; a red is a known flake (one rerun) or a fix.
 
 ## Security & Adversarial Considerations
