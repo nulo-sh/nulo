@@ -146,8 +146,9 @@ async function showNetworkName(page: Page, on: boolean): Promise<void> {
 			String(on),
 		)
 	}
-	// Display shows no bottom nav.
+	// Display shows no bottom nav, so Home's is the sign that Home rendered.
 	await navigateByHash(page, "#/popup/general")
+	await page.waitForSelector('[data-testid="nav-general"]', { visible: true, timeout: 5_000 })
 	await page.waitForFunction(
 		(want: boolean) =>
 			!!document.querySelector('[data-testid="network-button"]') && !!document.querySelector('[data-testid="network-name"]') === want,

@@ -125,6 +125,7 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 | Codex gpt-6.1-sol high, review round 1 over phases 1-3, session `01a14599-c2a6-79c1-851a-672a118e2627` | **approve**, two P3s, both fixed | Second-warning test asserts the dialog is open and two import calls before confirming; a narrating fake comment removed. [lessons/phase-3.md](lessons/phase-3.md) |
 | Codex, review round 2 (resume, same session) over the fix diff bdaa8dd9 | **approve**, no new material finding | Round converged for phases 1-3. |
 | Codex, review round 3 (resume) over phase 4's diff 12edeaad | changes needed: P2, P3 | P2 fixed in `useConfigRead` (a deviation, below); P3 fixed (the scenario waits for Home's hash). [lessons/phase-4.md](lessons/phase-4.md) |
+| Codex, review round 4 (resume) over ef5947ec | **approve**, one non-blocking P3 | Fixed: the scenario waits for Home's `nav-general` after `navigateByHash`. |
 | Opus 5.5 general-purpose review of phase 4's diff | request changes: one high, three lows, a nit | H fixed (no bottom nav on Display); fonts awaited before the first height; the `updatedSince` guard gets a Header case (mutation-checked); this plan carries P27-01 B; the CSS comment names the line-height condition. |
 | Opus 5.5 general-purpose review of the same diff | approve, one medium, three lows | M fixed (the fake's disconnect now rejects the held snapshot; a mutation proves the case reds on an unmount disconnect); L1 fixed (doc: each run); L2 rejected (Security accepts the one-read render); L3 a deviation, below. |
 
