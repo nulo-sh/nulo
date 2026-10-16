@@ -33,6 +33,7 @@ const tokenService = new TokenServiceClient()
 const { entities: tokens, refresh: refreshTokens } = useEntityCrud({
 	fetch: () => tokenService.getTokens(appStore.profile.id, appStore.network.chainId),
 	added: tokenService.onTokenAdded,
+	updated: tokenService.onTokenUpdated,
 	deleted: tokenService.onTokenDeleted,
 	// Resync re-reads through the scoped fetch, which is always correct.
 	mode: "resync",

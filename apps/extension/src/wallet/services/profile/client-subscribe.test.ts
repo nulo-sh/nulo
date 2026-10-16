@@ -5,17 +5,10 @@
  * lost-event window is a separate, in-code-commented residual.)
  */
 
+import { deferred } from "@nulo/wallet-core/utils"
 import { describe, expect, test } from "vitest"
 import type { ProfileInfo } from "./spec"
 import { ProfileServiceClient } from "./client"
-
-function _deferred<T>() {
-	let resolve!: (v: T) => void
-	const promise = new Promise<T>((res) => {
-		resolve = res
-	})
-	return { promise, resolve }
-}
 
 const profile = (id: string) => ({ id, name: id, type: "password" }) as unknown as ProfileInfo
 
@@ -35,7 +28,7 @@ describe("ProfileServiceClient.subscribeActiveProfile — delivery discipline", 
 		const unsubscribe = await client.subscribeActiveProfile((p) => seen.push(p?.id))
 		expect(seen).toEqual(["A"])
 
-		const parked = _deferred<ProfileInfo | undefined>()
+		const parked = deferred<ProfileInfo | undefined>()
 		queue.push(parked.promise)
 		client.onConnected.invoke() // reconnect snapshot parks on the RPC
 		unsubscribe()
@@ -51,7 +44,7 @@ describe("ProfileServiceClient.subscribeActiveProfile — delivery discipline", 
 		queue.push(Promise.resolve(profile("A")))
 		await client.subscribeActiveProfile((p) => seen.push(p?.id))
 
-		const parked = _deferred<ProfileInfo | undefined>()
+		const parked = deferred<ProfileInfo | undefined>()
 		queue.push(parked.promise)
 		client.onConnected.invoke() // snapshot parks holding pre-switch state
 		client.onActiveProfileChanged.invoke(profile("B")) // live switch delivers
@@ -67,8 +60,8 @@ describe("ProfileServiceClient.subscribeActiveProfile — delivery discipline", 
 		queue.push(Promise.resolve(profile("A")))
 		await client.subscribeActiveProfile((p) => seen.push(p?.id))
 
-		const first = _deferred<ProfileInfo | undefined>()
-		const second = _deferred<ProfileInfo | undefined>()
+		const first = deferred<ProfileInfo | undefined>()
+		const second = deferred<ProfileInfo | undefined>()
 		queue.push(first.promise, second.promise)
 		client.onConnected.invoke()
 		client.onConnected.invoke()

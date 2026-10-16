@@ -19,11 +19,11 @@
  * `Operation`, `OperationResult`, …) all live in `@nulo/wallet-bridge`.
  */
 
-import type { GrantedCapabilityRecord, RejectedCapabilityRecord } from "./capabilities"
+import type { GrantedCapabilityRecord } from "./capabilities"
 import type { CapabilityParams, CapabilityResult, ExecutionParams, ExecutionResult } from "./dapp-interaction-protocol"
 import type { Operation } from "./operation"
 import type { OperationResult } from "./operation-result"
-import type { AccessLevel, DappPermissions, IAccountRef, IDappSessionRef, INetworkRef } from "./session-types"
+import type { IAccountRef, IDappSessionRef, INetworkRef } from "./session-types"
 import type { LocalTxOrigin } from "./transaction-origin"
 import type { ExecutionFence } from "./types"
 
@@ -140,16 +140,6 @@ export interface IDappSessionWriter {
 	 *  omitted, the implementation resolves the live active profile. Returns
 	 *  `undefined` when no matching session exists. */
 	tryGetDappSessionByOriginAndChain(origin: string, chainId: string, forProfileId?: string): Promise<IDappSessionRef | undefined>
-	getDappSession(id: string): Promise<IDappSessionRef>
-	updateDappSession(
-		id: string,
-		permissions: DappPermissions[],
-		accounts: string[],
-		confirmationLevel: AccessLevel,
-	): Promise<IDappSessionRef>
-	setAccountAliases(id: string, aliases: Record<string, string>): Promise<IDappSessionRef>
-	setCapabilityGrants(id: string, grants: GrantedCapabilityRecord[]): Promise<IDappSessionRef>
-	setCapabilityRejections(id: string, rejections: RejectedCapabilityRecord[]): Promise<IDappSessionRef>
 	/** Atomically apply a capability decision (accounts + aliases + grants +
 	 *  rejections) against the LATEST row under one lock — the merge is recomputed
 	 *  from the current row, so it can't clobber a concurrent decision or leave a

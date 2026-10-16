@@ -96,27 +96,17 @@ function makeSession(overrides: Partial<IDappSessionRef> = {}): IDappSessionRef 
 	} as IDappSessionRef
 }
 
+type TestSessionWriter = IDappSessionWriter & { getDappSession(id: string): Promise<IDappSessionRef> }
+
 function makeSessionWriter(initial: IDappSessionRef) {
 	let session = initial
 	const calls: { setRejections: RejectedCapabilityRecord[][]; setGrants: GrantedCapabilityRecord[][] } = {
 		setRejections: [],
 		setGrants: [],
 	}
-	const writer: IDappSessionWriter = {
+	const writer: TestSessionWriter = {
 		tryGetDappSessionByOriginAndChain: async () => session,
 		getDappSession: async () => session,
-		updateDappSession: async () => session,
-		setAccountAliases: async () => session,
-		setCapabilityGrants: async (_id, grants) => {
-			calls.setGrants.push(grants)
-			session = { ...session, capabilityGrants: grants } as IDappSessionRef
-			return session
-		},
-		setCapabilityRejections: async (_id, rejections) => {
-			calls.setRejections.push(rejections)
-			session = { ...session, capabilityRejections: rejections } as IDappSessionRef
-			return session
-		},
 		applyCapabilityDecision: async (_id, decision) => {
 			session = applyDecisionTo(session, decision)
 			// Mirror the merged session onto the call trackers the tests assert on. A
@@ -468,11 +458,6 @@ function makeGetAccountsDispatcher(opts: {
 }): { dispatcher: WalletSdkDispatcher; loggerCalls?: Array<{ level: LogLevel; msg: string }> } {
 	const sessionWriter: IDappSessionWriter = {
 		tryGetDappSessionByOriginAndChain: async () => opts.session,
-		getDappSession: async () => opts.session,
-		updateDappSession: async () => opts.session,
-		setAccountAliases: async () => opts.session,
-		setCapabilityGrants: async () => opts.session,
-		setCapabilityRejections: async () => opts.session,
 		applyCapabilityDecision: async (_id, decision) => applyDecisionTo(opts.session, decision),
 	}
 	const network: INetworkRef = { id: "net-0", chainId: 0 }
@@ -498,11 +483,6 @@ describe("dispatcher.handleGetAccounts contract rows", () => {
 		// is its pair.
 		const sessionWriter: IDappSessionWriter = {
 			tryGetDappSessionByOriginAndChain: async () => null as unknown as IDappSessionRef,
-			getDappSession: async () => null as unknown as IDappSessionRef,
-			updateDappSession: async () => null as unknown as IDappSessionRef,
-			setAccountAliases: async () => null as unknown as IDappSessionRef,
-			setCapabilityGrants: async () => null as unknown as IDappSessionRef,
-			setCapabilityRejections: async () => null as unknown as IDappSessionRef,
 			applyCapabilityDecision: async () => null as unknown as IDappSessionRef,
 		}
 		const network: INetworkRef = { id: "net-0", chainId: 0 }
@@ -1743,11 +1723,6 @@ describe("network-only methods fail-closed on missing session", () => {
 	function dispatcherNoSession(): WalletSdkDispatcher {
 		const writer: IDappSessionWriter = {
 			tryGetDappSessionByOriginAndChain: async () => null as unknown as IDappSessionRef,
-			getDappSession: async () => null as unknown as IDappSessionRef,
-			updateDappSession: async () => null as unknown as IDappSessionRef,
-			setAccountAliases: async () => null as unknown as IDappSessionRef,
-			setCapabilityGrants: async () => null as unknown as IDappSessionRef,
-			setCapabilityRejections: async () => null as unknown as IDappSessionRef,
 			applyCapabilityDecision: async () => null as unknown as IDappSessionRef,
 		}
 		const network: INetworkRef = { id: "net-0", chainId: 0 }
@@ -1804,17 +1779,6 @@ describe("dispatch() session lookup consolidation (TOCTOU defense)", () => {
 			tryGetDappSessionByOriginAndChain: async () => {
 				counter.lookups += 1
 				return session as IDappSessionRef
-			},
-			getDappSession: async () => session as IDappSessionRef,
-			updateDappSession: async () => session as IDappSessionRef,
-			setAccountAliases: async () => session as IDappSessionRef,
-			setCapabilityGrants: async (_id, grants) => {
-				session = { ...(session as IDappSessionRef), capabilityGrants: grants } as IDappSessionRef
-				return session
-			},
-			setCapabilityRejections: async (_id, rejections) => {
-				session = { ...(session as IDappSessionRef), capabilityRejections: rejections } as IDappSessionRef
-				return session
 			},
 			applyCapabilityDecision: async (_id, decision) => {
 				session = applyDecisionTo(session as IDappSessionRef, decision)
@@ -2229,7 +2193,6 @@ function capabilityHarness(session: IDappSessionRef, answer?: (params: Capabilit
 	const counted: IDappSessionWriter = {
 		...makeSessionWriter(session).writer,
 		tryGetDappSessionByOriginAndChain: async () => current,
-		getDappSession: async () => current,
 		applyCapabilityDecision: async (_id, decision) => {
 			decisions.push(decision)
 			current = applyDecisionTo(current, decision)
@@ -3519,11 +3482,6 @@ describe("dispatcher — arg guards: order, tolerance, batch-leg validation", ()
 	function makeBareDispatcher(session: IDappSessionRef | undefined) {
 		const writer: IDappSessionWriter = {
 			tryGetDappSessionByOriginAndChain: async () => session,
-			getDappSession: async () => session as IDappSessionRef,
-			updateDappSession: async () => session as IDappSessionRef,
-			setAccountAliases: async () => session as IDappSessionRef,
-			setCapabilityGrants: async () => session as IDappSessionRef,
-			setCapabilityRejections: async () => session as IDappSessionRef,
 			applyCapabilityDecision: async (_id, decision) => applyDecisionTo(session as IDappSessionRef, decision),
 		}
 		const interaction: IDappInteractionRunner = {

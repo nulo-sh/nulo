@@ -16,6 +16,10 @@
  * foreign-account TOKEN-BALANCE row (both must be dropped) plus a funded-account
  * authwit (must survive).
  *
+ * The funded token's row is doctored too (class, name, symbol, decimals): the
+ * import reads the token from the live node after the session opens, so the
+ * restored row must hold the chain's metadata before Home renders it.
+ *
  * Finally it drives a delete → re-add round-trip: resetting the
  * profile fires the awaited deletion coordinator, which must purge every
  * account-owned root AND clear its durable tombstone (proving the cascade is
@@ -117,6 +121,17 @@ test.skipIf(!hasConfig)(
 			{ id: 999_001, token: someTokenId, account: FOREIGN_ACCOUNT, publicBalance: "5", updatedAt: 1 },
 		]
 
+		// The funded token's row claims another class, name, symbol and decimals; the import reads the
+		// token from the chain and must keep the chain's, which are the values the export carried.
+		const fundedToken = aztecConfig!.tokenAddress.toLowerCase()
+		const tokenRow = ((exported.data.token ?? []) as Array<Record<string, unknown>>).find(
+			(row) => String(row.contract).toLowerCase() === fundedToken,
+		)
+		if (!tokenRow) throw new Error("the export carries no row for the funded token")
+		const chainMetadata = { classId: tokenRow.classId, name: tokenRow.name, symbol: tokenRow.symbol, decimals: tokenRow.decimals }
+		expect(chainMetadata).toMatchObject({ classId: expect.any(String), symbol: "TST", decimals: 18 })
+		Object.assign(tokenRow, { classId: `0x${"11".repeat(32)}`, name: "Doctored", symbol: "FAKE", decimals: 6 })
+
 		keepChainAccountState(exported.data, chainId, aztecConfig!.tokenAddress)
 
 		// ── 3. Import into a FRESH extension ──────────────────────────────
@@ -127,6 +142,16 @@ test.skipIf(!hasConfig)(
 			ctx2 = await launchExtension({ userDataDir: profileDir })
 			const page2 = await gotoPopupImport(ctx2)
 			await importFullBackup(page2, filePath, TEST_PASSWORD, POPUP_IMPORT_SHELL)
+
+			// ── 4a. The token row holds the chain's metadata once the import ends ──
+			const restoredToken = await page2.evaluate(async (contract) => {
+				const all = await chrome.storage.local.get()
+				return Object.entries(all)
+					.filter(([k]) => k.startsWith("nulo:core:tokens@"))
+					.map(([, v]) => JSON.parse(v as string) as Record<string, unknown>)
+					.find((row) => String(row.contract).toLowerCase() === contract)
+			}, fundedToken)
+			expect(restoredToken).toMatchObject(chainMetadata)
 
 			// ── 4. Provenance assertion via RAW chrome.storage ──────────────
 			const txAccounts = await page2.evaluate(async () => {

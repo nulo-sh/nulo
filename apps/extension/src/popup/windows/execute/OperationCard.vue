@@ -7,7 +7,8 @@
  * - `send_transaction` + `aztec_sendTx` — header + From account +
  *   Payload list + fee settings (either the embedded "set by app"
  *   badge or a `<FeeSettingsCard>` v-modeled into the parent's
- *   `op.feeSettings`).
+ *   `op.feeSettings`). An `aztec_sendTx` reads as its summary first;
+ *   the Payload list and the authorizations' rows open under one toggle.
  * - All other read-only / register / simulate variants — header +
  *   from account (when present) + per-kind detail rows.
  *
@@ -35,10 +36,22 @@ import type { Account } from "@/wallet/services/account/client"
 import type { Network } from "@/wallet/services/network/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import CallArguments from "./CallArguments.vue"
+import DetailsToggle from "./DetailsToggle.vue"
 import OperationActionRow from "./OperationActionRow.vue"
+import SendTxSummary from "./SendTxSummary.vue"
 import { humanizeOperationKind, safeWire } from "./humanize"
 import type { DraftAztecSendTxOperation, DraftSendTransactionOperation, DraftUIOperation } from "./types"
-import { type CallSurface, type CallerContext, type WireCall, callName, callSurface, tokenAt, wire } from "./call-surface"
+import {
+	type CallSurface,
+	type CallerContext,
+	type WireCall,
+	authwitTitle,
+	callName,
+	callSurface,
+	rowTitle,
+	tokenAt,
+	wire,
+} from "./call-surface"
 import { trimAddress } from "@/utils/string"
 import { humanizeMethodName } from "@/utils/tx-enrichment"
 import { isEmbeddedFeePayment } from "./operation-validation"
@@ -113,6 +126,7 @@ const sendTxCalls = (op: DraftAztecSendTxOperation): { call: WireCall; surface: 
 	const ctx: CallerContext = { accountAddress: op.accountAddress, noFrom: isNoFrom(op as SendLikeUIOp) }
 	return (op.exec.calls as WireCall[]).map((call, j) => ({ call, surface: callSurface(ctx, call, decodedAt(j), isToken(call.to)) }))
 }
+const sendTxRows = computed(() => (props.op.kind === "aztec_sendTx" ? sendTxCalls(props.op) : []))
 
 /** Only a contract the wallet registered as a token gets the transfer/mint vocabulary. */
 const isToken = (contract: unknown): boolean => tokenAt(props.tokens, props.op.network?.chainId, contract) !== undefined
@@ -154,10 +168,6 @@ const authwits = computed(() => authwitSurface(props.op))
 
 /** A discovered authorization decodes on its consumer; the selector stands in until it does. */
 const authwitDecode = (a: DiscoveredAuthwit): DecodedCall | undefined => props.decodedAuthwits?.get(a.messageHash)
-const authwitFunction = (a: DiscoveredAuthwit): string => {
-	const decoded = authwitDecode(a)
-	return decoded?.kind === "decoded" ? humanizeMethodName(safeWire(decoded.fn, 64), a.consumer) : safeWire(a.selector, 64)
-}
 // A discovered authorization is not in the request's JSON view, so its own row list is the whole disclosure.
 const authwitArgs = (a: DiscoveredAuthwit): CallSurface =>
 	callSurface(
@@ -168,14 +178,21 @@ const authwitArgs = (a: DiscoveredAuthwit): CallSurface =>
 		Number.POSITIVE_INFINITY,
 	)
 
-/** Which discovered authorizations the user expanded; collapsed by default, the summary row is the review. */
-const openAuthwits = ref(new Set<string>())
-const isAuthwitOpen = (a: DiscoveredAuthwit): boolean => openAuthwits.value.has(a.messageHash)
+const summaryAuthwits = computed(() =>
+	authwits.value.kind === "list" ? authwits.value.authwits.map((authwit) => ({ authwit, surface: authwitArgs(authwit) })) : undefined,
+)
+
+const detailsOpen = ref(false)
+
+/** Which discovered authorizations the person closed: once the rows are open, an authorization's
+ *  values are open too, so a raw one stays within two presses of the card at rest. */
+const closedAuthwits = ref(new Set<string>())
+const isAuthwitOpen = (a: DiscoveredAuthwit): boolean => !closedAuthwits.value.has(a.messageHash)
 const toggleAuthwit = (a: DiscoveredAuthwit): void => {
-	const next = new Set(openAuthwits.value)
+	const next = new Set(closedAuthwits.value)
 	if (next.has(a.messageHash)) next.delete(a.messageHash)
 	else next.add(a.messageHash)
-	openAuthwits.value = next
+	closedAuthwits.value = next
 }
 </script>
 
@@ -212,74 +229,85 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 				</Flex>
 			</Flex>
 			<template v-else-if="op.kind === 'aztec_sendTx'">
-				<Flex :class="$style.group"><Text variant="label" color="secondary">Payload</Text></Flex>
-				<Flex v-for="({ call, surface }, j) in sendTxCalls(op)" :key="`${index}:${j}`" direction="column" gap="4" :class="$style.call">
-					<Flex
-						data-testid="execute-op-payload-row"
-						:data-call-name="call.name ?? ''"
-						:data-call-to="call.to?.toString() ?? ''"
-						:data-intent-kind="surface.kind"
-						justify="between"
-						align="center"
-						:class="[$style.row, $style.call_row]"
-					>
-						<Text variant="data" color="primary">{{ callName(call, surface) }}</Text>
-						<Text variant="caption" color="secondary">on <AddressDisplay :address="call.to" data-testid="execute-op-call-to" /></Text>
-					</Flex>
-					<CallArguments :surface="surface" :contract="call.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-op" json-view />
+				<SendTxSummary
+					:calls="sendTxRows"
+					:authwits="summaryAuthwits"
+					:checkingAuthwits="authwits.kind === 'pending'"
+					:chainId="op.network?.chainId"
+					:tokens="tokens"
+				/>
+				<Flex :class="$style.group">
+					<DetailsToggle
+						data-testid="execute-op-details-toggle"
+						:open="detailsOpen"
+						:label="detailsOpen ? 'Hide all details' : 'Show all details'"
+						@click="detailsOpen = !detailsOpen"
+					/>
 				</Flex>
-			</template>
-			<Flex
-				v-if="authwits.kind === 'list' && authwits.authwits.length"
-				data-testid="execute-op-discovered-authwits"
-				direction="column"
-				gap="4"
-				:class="$style.group"
-			>
-				<Text variant="label" color="secondary">Authorizations the wallet will sign (found during estimation)</Text>
-				<Flex
-					v-for="(a, k) in authwits.authwits"
-					:key="`${index}:authwit:${k}`"
-					data-testid="execute-op-discovered-authwit"
-					:data-message-hash="a.messageHash"
-					direction="column"
-					gap="2"
-					:class="$style.structured_args"
-				>
-					<Flex justify="between" :class="$style.row">
-						<Text variant="label" color="secondary">Consumer:</Text>
-						<AddressDisplay :address="a.consumer" data-testid="execute-discovered-consumer" />
+				<Flex v-if="detailsOpen" data-testid="execute-op-details" direction="column" wide>
+					<Flex :class="$style.group"><Text variant="label" color="secondary">Payload</Text></Flex>
+					<Flex v-for="({ call, surface }, j) in sendTxRows" :key="`${index}:${j}`" :data-call-index="j" direction="column" gap="4" :class="$style.call">
+						<Flex
+							data-testid="execute-op-payload-row"
+							:data-call-name="call.name ?? ''"
+							:data-call-to="call.to?.toString() ?? ''"
+							:data-intent-kind="surface.kind"
+							justify="between"
+							align="center"
+							:class="[$style.row, $style.call_row]"
+						>
+							<Text variant="data" color="primary">{{ rowTitle(call, surface) }}</Text>
+							<Text variant="caption" color="secondary">on <AddressDisplay :address="call.to" data-testid="execute-op-call-to" /></Text>
+						</Flex>
+						<CallArguments :surface="surface" :contract="call.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-op" json-view />
 					</Flex>
-					<Flex justify="between" :class="$style.row">
-						<Text variant="label" color="secondary">Authorizes:</Text>
-						<AddressDisplay :address="a.caller" data-testid="execute-discovered-caller" />
-					</Flex>
-					<Flex justify="between" :class="$style.row">
-						<Text variant="label" color="secondary">Function:</Text>
-						<Text variant="data" color="primary" data-testid="execute-discovered-authwit-function">{{ authwitFunction(a) }}</Text>
-					</Flex>
-					<button
-						type="button"
-						data-testid="execute-discovered-authwit-toggle"
-						:aria-expanded="isAuthwitOpen(a)"
-						:class="$style.details_toggle"
-						@click="toggleAuthwit(a)"
+					<Flex
+						v-if="authwits.kind === 'list' && authwits.authwits.length"
+						data-testid="execute-op-discovered-authwits"
+						direction="column"
+						gap="4"
+						:class="$style.group"
 					>
-						<Icon name="chevron-right" size="10" color="secondary" :class="[$style.chevron, isAuthwitOpen(a) && $style.chevron_open]" />
-						<Text variant="label" color="secondary">{{ isAuthwitOpen(a) ? "Hide details" : "Show details" }}</Text>
-					</button>
-					<Flex v-if="isAuthwitOpen(a)" data-testid="execute-discovered-authwit-details" direction="column" gap="2">
-						<CallArguments :surface="authwitArgs(a)" :contract="a.consumer" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-discovered-authwit" />
-						<Flex justify="between" :class="$style.row">
-							<Text variant="label" color="secondary">Inner hash:</Text>
-							<Text variant="data" color="primary" :title="safeWire(a.innerHash, 80)" data-testid="execute-discovered-inner-hash">{{ trimAddress(safeWire(a.innerHash, 80), 10, 6) }}</Text>
+						<Text variant="label" color="secondary">Authorizations the wallet will sign (found during estimation)</Text>
+						<!-- The hash in the key remounts a re-estimated row: AddressDisplay reads its address once, at mount. -->
+						<Flex
+							v-for="(a, k) in authwits.authwits"
+							:key="`${k}:${a.messageHash}`"
+							data-testid="execute-op-discovered-authwit"
+							:data-message-hash="a.messageHash"
+							direction="column"
+							gap="2"
+							:class="$style.structured_args"
+						>
+							<Flex justify="between" :class="$style.row">
+								<Text variant="label" color="secondary">Consumer:</Text>
+								<AddressDisplay :address="a.consumer" data-testid="execute-discovered-consumer" />
+							</Flex>
+							<Flex justify="between" :class="$style.row">
+								<Text variant="label" color="secondary">Authorizes:</Text>
+								<AddressDisplay :address="a.caller" data-testid="execute-discovered-caller" />
+							</Flex>
+							<Flex justify="between" :class="$style.row">
+								<Text variant="label" color="secondary">Function:</Text>
+								<Text variant="data" color="primary" data-testid="execute-discovered-authwit-function">{{ authwitTitle(a.selector, a.consumer, authwitArgs(a)) }}</Text>
+							</Flex>
+							<DetailsToggle
+								data-testid="execute-discovered-authwit-toggle"
+								:open="isAuthwitOpen(a)"
+								:label="isAuthwitOpen(a) ? 'Hide details' : 'Show details'"
+								@click="toggleAuthwit(a)"
+							/>
+							<Flex v-if="isAuthwitOpen(a)" data-testid="execute-discovered-authwit-details" direction="column" gap="2">
+								<CallArguments :surface="authwitArgs(a)" :contract="a.consumer" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-discovered-authwit" />
+								<Flex justify="between" :class="$style.row">
+									<Text variant="label" color="secondary">Inner hash:</Text>
+									<Text variant="data" color="primary" :title="safeWire(a.innerHash, 80)" data-testid="execute-discovered-inner-hash">{{ trimAddress(safeWire(a.innerHash, 80), 10, 6) }}</Text>
+								</Flex>
+							</Flex>
 						</Flex>
 					</Flex>
 				</Flex>
-			</Flex>
-			<Flex v-else-if="authwits.kind === 'pending'" :class="$style.prop">
-				<Text variant="body" color="secondary" data-testid="execute-op-authwits-pending">Checking authorizations…</Text>
-			</Flex>
+			</template>
 		</Flex>
 
 		<div :class="$style.op_divider" />
@@ -609,26 +637,6 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 
 .structured_args {
 	width: 100%;
-}
-
-.details_toggle {
-	display: inline-flex;
-	align-items: center;
-	align-self: flex-start;
-	gap: 4px;
-	padding: 2px 0;
-	border: 0;
-	background: none;
-	cursor: pointer;
-	font: inherit;
-}
-
-.chevron {
-	transition: transform 120ms ease;
-}
-
-.chevron_open {
-	transform: rotate(90deg);
 }
 
 .title_size {

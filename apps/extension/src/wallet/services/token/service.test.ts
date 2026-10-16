@@ -7,7 +7,7 @@
  * layer's boundary rules — see COMPOSITION-TESTS.md.
  */
 
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
 import { afterEach, describe, expect, test, vi } from "vitest"
@@ -56,9 +56,12 @@ async function makeHarness() {
 			onActiveProfileChanged: new EventHandler(),
 			getDeletionState: () => deletionState,
 			captureExecutionFence: async () => ({ profileId: "p1", epoch: deletionState.capture("p1"), session: 1 }),
+			assertRunFence: async () => {},
+			isFenceLive: () => fenceLive.value,
 		}),
 	)
 	const networkLive = { value: true }
+	const fenceLive = { value: true }
 	collection.add(
 		svc(NetworkService.name, {
 			getNetwork: async () => NETWORK,
@@ -66,9 +69,15 @@ async function makeHarness() {
 			onActiveNetworkChanged: new EventHandler(),
 			isNetworkLive: async () => networkLive.value,
 			isChainLive: async () => networkLive.value,
+			getNetworksRaw: async (_profileId: string, chainId: number) => (chainId === NETWORK.chainId ? [NETWORK] : []),
 		}),
 	)
-	collection.add(svc(AccountService.name, { onAccountAdded: new EventHandler() }))
+	collection.add(
+		svc(AccountService.name, {
+			onAccountAdded: new EventHandler(),
+			getAccounts: async (_profileId: string, chainId: number) => (chainId === NETWORK.chainId ? [{ address: "0xacc" }] : []),
+		}),
+	)
 	collection.add(svc(TaskService.name, { startNewTask: () => ({ complete() {}, fail() {} }) }))
 	collection.add(svc(OperationJournalService.name, journal))
 	collection.add(tokenListStub())
@@ -79,7 +88,7 @@ async function makeHarness() {
 	const fetchStub = vi.fn(async (): Promise<[string, string, number]> => ["Fetched Name", "FTCH", 9])
 	// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in to stub the private simulate-backed fetch
 	;(tokenService as any).fetchTokenMetadata = fetchStub
-	return { tokenService, journal, fetchStub, api, deletionState, networkLive }
+	return { tokenService, journal, fetchStub, api, deletionState, networkLive, fenceLive }
 }
 
 describe("TokenService.addToken — journal/lock machinery (characterization)", () => {
@@ -230,6 +239,173 @@ describe("TokenService.restore — per-row allocation", () => {
 	})
 })
 
+describe("TokenService.refreshRestoredTokens — the chain's metadata over the backup's", () => {
+	const FENCE = { profileId: "p1", epoch: 0, session: 1, incarnation: "w1" }
+	const CONTRACT = `0x${"0c".repeat(32)}`
+	const backupRow = {
+		id: 0,
+		profileId: "p1",
+		chainId: 1,
+		contract: CONTRACT,
+		classId: "0xfake",
+		name: "Tether",
+		symbol: "USDT",
+		decimals: 2,
+	}
+	const chainInterface = { ...ti(CONTRACT), classId: "0xclass" }
+	const chain = { name: "Test token", symbol: "TST", decimals: 18, interface: chainInterface }
+
+	async function restored(rows = [backupRow]) {
+		const h = await makeHarness()
+		const [row] = await h.tokenService.restore(rows as never)
+		const preview = vi.fn(async (..._args: unknown[]) => chain)
+		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in to stub the simulate-backed read
+		;(h.tokenService as any).previewTokenMetadata = preview
+		const added = vi.fn()
+		const updated = vi.fn()
+		h.tokenService.onTokenAdded.add(added)
+		h.tokenService.onTokenUpdated.add(updated)
+		return { ...h, id: (row as { id: number }).id, preview, added, updated }
+	}
+	const later = () => Date.now() + 5_000
+
+	test("a row the chain disagrees with takes the chain's class, name, symbol and decimals, with no add", async () => {
+		const { tokenService, id, preview, added, updated } = await restored()
+		await tokenService.refreshRestoredTokens(FENCE, later())
+		expect(preview).toHaveBeenCalledExactlyOnceWith("net1", "0xacc", CONTRACT)
+		expect(await tokenService.getToken(id)).toMatchObject({ classId: "0xclass", name: "Test token", symbol: "TST", decimals: 18 })
+		expect(updated).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id, decimals: 18, profileId: "p1" }))
+		expect(added).not.toHaveBeenCalled()
+	})
+
+	test("a chain that agrees writes nothing (control)", async () => {
+		const { getNameFn, getSymbolFn, getDecimalsFn } = chainInterface
+		const agreeing = {
+			...backupRow,
+			classId: "0xclass",
+			name: "Test token",
+			symbol: "TST",
+			decimals: 18,
+			getNameFn,
+			getSymbolFn,
+			getDecimalsFn,
+		}
+		const { tokenService, api, updated } = await restored([agreeing])
+		const writes = recordWrites(api.storage.local, "nulo:core:tokens@")
+		await tokenService.refreshRestoredTokens(FENCE, later())
+		writes.restore()
+		expect(writes.log).toEqual([])
+		expect(updated).not.toHaveBeenCalled()
+	})
+
+	test.each([
+		["fails", () => Promise.reject(new Error("node down"))],
+		["never settles before the deadline", () => new Promise(() => {})],
+	])("a read that %s keeps the row and writes nothing, by the deadline", async (_label, read) => {
+		const { tokenService, id, preview, updated } = await restored()
+		preview.mockImplementation(read as never)
+		const startedAt = Date.now()
+		await tokenService.refreshRestoredTokens(FENCE, startedAt + 50)
+		expect(Date.now() - startedAt).toBeLessThan(2_000)
+		expect(await tokenService.getToken(id)).toMatchObject({ symbol: "USDT", decimals: 2 })
+		expect(updated).not.toHaveBeenCalled()
+	})
+
+	test("a read that lands after the deadline writes nothing", async () => {
+		const { tokenService, id, preview, updated } = await restored()
+		let land: (value: typeof chain) => void = () => {}
+		preview.mockImplementation(() => new Promise((resolve) => (land = resolve)))
+		await tokenService.refreshRestoredTokens(FENCE, Date.now() + 50)
+		land(chain)
+		await new Promise((resolve) => setTimeout(resolve, 20))
+		expect(await tokenService.getToken(id)).toMatchObject({ symbol: "USDT", decimals: 2 })
+		expect(updated).not.toHaveBeenCalled()
+	})
+
+	test("another profile's row and a row deleted during the read are never written", async () => {
+		const { tokenService, api, id, preview, updated } = await restored([backupRow, { ...backupRow, profileId: "p2" }])
+		preview.mockImplementation(async () => {
+			await tokenService.deleteToken(id)
+			return chain
+		})
+		await tokenService.refreshRestoredTokens(FENCE, later())
+		expect(preview).toHaveBeenCalledOnce()
+		const rows = Object.entries(await api.storage.local.get(null)).filter(([key]) => key.startsWith("nulo:core:tokens@"))
+		expect(rows.map(([, v]) => JSON.parse(v as string))).toEqual([expect.objectContaining({ profileId: "p2", symbol: "USDT" })])
+		expect(updated).not.toHaveBeenCalled()
+	})
+
+	test("a row whose id another token took during the read is never written", async () => {
+		const other = `0x${"0d".repeat(32)}`
+		const { tokenService, id, preview, updated } = await restored()
+		preview.mockImplementation(async () => {
+			await tokenService.deleteToken(id)
+			await tokenService.restore([{ ...backupRow, contract: other }] as never)
+			return chain
+		})
+		await tokenService.refreshRestoredTokens(FENCE, later())
+		expect(await tokenService.getToken(id)).toMatchObject({ contract: other, symbol: "USDT", decimals: 2 })
+		expect(updated).not.toHaveBeenCalled()
+	})
+
+	test("a read that lands in time but reaches the token lock after the deadline writes nothing", async () => {
+		const { tokenService, api, id, updated } = await restored()
+		let release = () => {}
+		const stalled = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		const hold = recordWrites(api.storage.local, "nulo:core:tokens@", undefined, () => stalled)
+		const holder = tokenService.restore([{ ...backupRow, contract: `0x${"0e".repeat(32)}` }] as never)
+		const refresh = tokenService.refreshRestoredTokens(FENCE, Date.now() + 50)
+		await new Promise((resolve) => setTimeout(resolve, 100))
+		release()
+		await Promise.all([holder, refresh])
+		hold.restore()
+		expect(await tokenService.getToken(id)).toMatchObject({ symbol: "USDT", decimals: 2 })
+		expect(updated).not.toHaveBeenCalled()
+	})
+
+	test("a session that ended during the read writes nothing", async () => {
+		const { tokenService, id, preview, fenceLive, updated } = await restored()
+		preview.mockImplementation(async () => {
+			fenceLive.value = false
+			return chain
+		})
+		await tokenService.refreshRestoredTokens(FENCE, later())
+		expect(await tokenService.getToken(id)).toMatchObject({ symbol: "USDT", decimals: 2 })
+		expect(updated).not.toHaveBeenCalled()
+	})
+
+	const tokenRows = async (api: { storage: { local: { get: (k: null) => Promise<Record<string, unknown>> } } }) =>
+		Object.entries(await api.storage.local.get(null))
+			.filter(([key]) => key.startsWith("nulo:core:tokens@"))
+			.map(([, v]) => JSON.parse(v as string))
+
+	test("a chain swept during the read is never written", async () => {
+		const { tokenService, api, preview, networkLive, updated } = await restored()
+		preview.mockImplementation(async () => {
+			networkLive.value = false
+			return chain
+		})
+		await tokenService.refreshRestoredTokens(FENCE, later())
+		expect(await tokenRows(api)).toEqual([expect.objectContaining({ symbol: "USDT", decimals: 2 })])
+		expect(updated).not.toHaveBeenCalled()
+	})
+
+	test("a chain sweep that lands during the write takes the row back out, with no update event", async () => {
+		const { tokenService, api, networkLive, updated } = await restored()
+		const realSet = api.storage.local.set.bind(api.storage.local)
+		api.storage.local.set = (async (items: Record<string, unknown>) => {
+			await realSet(items)
+			if (Object.keys(items).some((k) => k.startsWith("nulo:core:tokens@"))) networkLive.value = false
+		}) as typeof api.storage.local.set
+		await tokenService.refreshRestoredTokens(FENCE, later())
+		api.storage.local.set = realSet as typeof api.storage.local.set
+		expect(await tokenRows(api)).toEqual([])
+		expect(updated).not.toHaveBeenCalled()
+	})
+})
+
 describe("TokenService.restore — deletion fence", () => {
 	const mk = (contract: string) => ({ id: 0, profileId: "p1", chainId: 1, contract, name: "T", symbol: "T", decimals: 9 })
 
@@ -265,14 +441,6 @@ describe("TokenService.restore — deletion fence", () => {
 })
 
 describe("TokenService.addToken — creation fences", () => {
-	function _deferred<T>() {
-		let resolve!: (v: T) => void
-		const promise = new Promise<T>((res) => {
-			resolve = res
-		})
-		return { promise, resolve }
-	}
-
 	async function tokenRowCount(api: { storage: { local: { get: (k: null) => Promise<Record<string, unknown>> } } }): Promise<number> {
 		const raw = await api.storage.local.get(null)
 		return Object.keys(raw).filter((k) => k.startsWith("nulo:core:tokens@")).length
@@ -431,7 +599,7 @@ describe("TokenService.addToken — creation fences", () => {
 		// fence captured at the AUTHORIZING entry still rejects — a fence minted
 		// at commit would observe the settled epoch and land the orphan row.
 		const { tokenService, fetchStub, api, deletionState } = await makeHarness()
-		const gate = _deferred<[string, string, number]>()
+		const gate = deferred<[string, string, number]>()
 		fetchStub.mockReturnValueOnce(gate.promise)
 
 		const writes = recordWrites(api.storage.local, "nulo:core:tokens@")
@@ -449,7 +617,7 @@ describe("TokenService.addToken — creation fences", () => {
 
 	test("a chain deleted during the metadata fetch rejects the write (liveness-at-commit pin)", async () => {
 		const { tokenService, fetchStub, api } = await makeHarness()
-		const gate = _deferred<[string, string, number]>()
+		const gate = deferred<[string, string, number]>()
 		fetchStub.mockReturnValueOnce(gate.promise)
 		const networks = (tokenService as unknown as { networks: { isNetworkLive: (id: string) => Promise<boolean> } }).networks
 
@@ -529,7 +697,7 @@ describe("TokenService.addToken — creation fences", () => {
 		const emitted: unknown[] = []
 		tokenService.onTokenAdded.add((t) => emitted.push(t))
 		const networks = (tokenService as unknown as { networks: { isNetworkLive: (id: string) => Promise<boolean> } }).networks
-		const lastCheck = _deferred<void>()
+		const lastCheck = deferred<void>()
 		let checks = 0
 		networks.isNetworkLive = async () => {
 			checks += 1
@@ -570,16 +738,6 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 	const WATCHDOG_MS = 5 * 60_000 + 1
 	const mk = (contract: string, profileId = "p1") => ({ id: 0, profileId, chainId: 1, contract, name: "T", symbol: "T", decimals: 9 })
 
-	function gate<T = void>() {
-		let resolve!: (v: T) => void
-		let reject!: (e: unknown) => void
-		const promise = new Promise<T>((res, rej) => {
-			resolve = res
-			reject = rej
-		})
-		return { promise, resolve, reject }
-	}
-
 	type Harness = Awaited<ReturnType<typeof makeHarness>>
 	type Networks = {
 		isNetworkLive: (id: string) => Promise<boolean>
@@ -618,8 +776,8 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 	/** Holds the answer of the `nth` read of `key`, already taken, until `release`. */
 	function holdRead(h: Harness, key: string, nth = 1) {
 		const get = h.api.storage.local.get.bind(h.api.storage.local)
-		const held = gate()
-		const reached = gate()
+		const held = deferred()
+		const reached = deferred()
 		let reads = 0
 		h.api.storage.local.get = (async (keys?: string | string[] | null) => {
 			const answer = await get(keys)
@@ -634,7 +792,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 
 	/** Parks the `nth` call of `isNetworkLive` until `release(answer)`; other calls read `networkLive`. */
 	function holdNetworkCheck(h: Harness, nth: number) {
-		const held = gate<boolean>()
+		const held = deferred<boolean>()
 		let calls = 0
 		networksOf(h).isNetworkLive = async () => {
 			calls += 1
@@ -663,7 +821,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 	test("released in the fetch, it reports a same-contract add that landed meanwhile and writes nothing", async () => {
 		const h = await setup()
 		h.journal.createOperation.mockResolvedValueOnce({ id: "op-1" }).mockResolvedValueOnce({ id: "op-2" })
-		const fetch = gate<[string, string, number]>()
+		const fetch = deferred<[string, string, number]>()
 		h.fetchStub.mockReturnValueOnce(fetch.promise)
 		const first = add(h, "0xa11")
 		await settle()
@@ -680,7 +838,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 
 	test("released in the fetch and again in the resumed pre-set check, it still writes one row and emits once", async () => {
 		const h = await setup()
-		const fetch = gate<[string, string, number]>()
+		const fetch = deferred<[string, string, number]>()
 		h.fetchStub.mockReturnValueOnce(fetch.promise)
 		const check = holdNetworkCheck(h, 2)
 		const run = add(h, "0xa11")
@@ -700,7 +858,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 
 	test("released while its set is still applying, a successor waits for that set before it allocates", async () => {
 		const h = await setup()
-		const set = gate()
+		const set = deferred()
 		let sets = 0
 		const writes = recordWrites(h.api.storage.local, "nulo:core:tokens@", undefined, () => (++sets === 1 ? set.promise : undefined))
 		const first = add(h, "0xa11")
@@ -720,8 +878,8 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 
 	test("its set rejecting while a successor drains it, the successor also waits for the failure it journals", async () => {
 		const h = await setup()
-		const set = gate()
-		const failed = gate()
+		const set = deferred()
+		const failed = deferred()
 		recordWrites(h.api.storage.local, "nulo:core:tokens@", undefined, () => set.promise)
 		;(h.journal.transitionOperation as ReturnType<typeof vi.fn>).mockImplementation(async (...args: unknown[]) => {
 			if ((args[1] as { stage: string }).stage === "failed") await failed.promise
@@ -747,7 +905,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 
 	test("an add parked before the lock while its profile is deleted and restored with that contract rejects", async () => {
 		const h = await setup()
-		const created = gate<{ id: string }>()
+		const created = deferred<{ id: string }>()
 		h.journal.createOperation.mockReturnValueOnce(created.promise)
 		const run = add(h, "0xa11")
 		await settle()
@@ -791,7 +949,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 		const h = await setup()
 		h.networkLive.value = true
 		let chainReads = 0
-		const chainRead = gate<boolean>()
+		const chainRead = deferred<boolean>()
 		networksOf(h).isChainLive = async () => (++chainReads === 1 ? await chainRead.promise : true)
 		let checks = 0
 		networksOf(h).isNetworkLive = async () => ++checks === 1
@@ -895,9 +1053,9 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 
 	test("a fetch rejected after the release journals its failure before a token operation queued after it runs", async () => {
 		const h = await setup()
-		const fetch = gate<[string, string, number]>()
+		const fetch = deferred<[string, string, number]>()
 		h.fetchStub.mockReturnValueOnce(fetch.promise)
-		const failed = gate()
+		const failed = deferred()
 		;(h.journal.transitionOperation as ReturnType<typeof vi.fn>).mockImplementation(async (...args: unknown[]) => {
 			if ((args[1] as { stage: string }).stage === "failed") await failed.promise
 		})
@@ -922,7 +1080,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 	test("a restore released in a row's pre-set chain read refuses that row and the rest; an add's row at its id survives", async () => {
 		const h = await setup()
 		let chainReads = 0
-		const chainRead = gate<boolean>()
+		const chainRead = deferred<boolean>()
 		networksOf(h).isChainLive = async () => (++chainReads === 1 ? await chainRead.promise : true)
 		const restoring = h.tokenService.restore([mk("0xaaa"), mk("0xbbb")])
 		await settle()
@@ -960,7 +1118,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 		h.tokenService.onTokenDeleted.add((t) => {
 			deleted.push(t.id)
 		})
-		const removal = gate()
+		const removal = deferred()
 		const remove = h.api.storage.local.remove.bind(h.api.storage.local)
 		h.api.storage.local.remove = async (keys) => {
 			await removal.promise

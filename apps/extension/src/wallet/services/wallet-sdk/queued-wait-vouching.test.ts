@@ -2,18 +2,9 @@
  * Placement pins for the pre-claim vouching chain: begin BEFORE the
  * FIFO wait, end at SETTLEMENT (never the early execution-enqueue release).
  */
+import { deferred } from "@nulo/wallet-core/utils"
 import { describe, expect, test, vi } from "vitest"
 import { chainSendTxWithVouching } from "./queued-wait-vouching"
-
-function deferred<T = void>() {
-	let resolve!: (v: T) => void
-	let reject!: (e: unknown) => void
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
-}
 
 function makeVouch() {
 	return { beginQueuedWait: vi.fn(), endQueuedWait: vi.fn() }

@@ -1,0 +1,6 @@
+# Phase 1: shared fixture and the reachability test
+
+- **Codex consult on the map redrawn for A** (gpt-6.1-sol, high, session `01a144c5-8899-7661-aa84-f3c829a5513a`): `approve`. Two clarifications accepted: the body's discovered-authorization inventory sites move to the opened state, the summary's sit at rest; one test proves a pending `transfer_public_to_public` title turns into "Transfer (public)" once the read lands. It found the three new components proportionate, the mint authorization's "call" line right (a mint has no sender), D16 within the signed text.
+- **Fixture addresses**: two of the mockup's illustrative prefixes (`0x5e6f12…`, `0x3d9a17…`) are above the BN254 modulus, so no address with them exists; the fixture uses `0x1e6f12…` and `0x0d9a17…`. Every fixture address passes `isValidAztecAddress`.
+- **Facts test**: green against today's card with `data-call-index` added on each body call (an attribute only); the control (the real `AddressDisplay` dropping the transfer's recipient) misses exactly that fact; the unreadable-Vault variant reaches its deepest fact at exactly two presses.
+- Gate (2026-10-16): `bun --bun vitest run src/popup/windows/execute` 229/229; `bun run lint` exit 0; `bun run typecheck:all` exit 0.

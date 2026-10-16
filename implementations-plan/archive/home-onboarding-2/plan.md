@@ -1,8 +1,8 @@
 ---
 plan: home-onboarding-2
 tier: light
-status: approved; arc 1 in progress
-issues: "#156 (arc 1); #132 (no arc: shipped by #348)"
+status: closed (2026-10-16)
+issues: "#156 (arc 1, closed by #534; arc 2 ships OA-1 = B); #132 (no arc: shipped by #348)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -15,17 +15,30 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-16.
+- **Status:** closed. Two arcs, one PR each against `dev`: #534 (arc 1, merged) and arc 2's PR from `worktree-home-onboarding-2-arc2`; the merge that lands arc 2 closes the plan.
+- **Shipped:** in #534, the Firefox permission row in place of the Presto content on the onboarding step and Settings → Proving (P18-03 A), the Firefox manifest's optional loopback origins (P16-04 B), a terminal `usePrestoCheck.start()` after `dispose()`, and the e2e launch option that lets a real click's request be granted with no doorhanger. In arc 2, a grant that takes the row away while it holds focus moves focus to the page's title (OA-1, P20-07 B), through `focusTitle()` on the sub-page header. #132 needed no code: #348 shipped P18-02 A.
+- **Known limits:** #571 (KL-1: a probe sent before a grant can answer the check the grant starts).
+- **Open items:** #572 (P18-04, the owner's Mac check of Allow in the toolbar panel, and focus after a real doorhanger).
+- **Lessons:** nothing new in `lessons.md` (8,190 of 8,192 bytes, and nothing here earns a retirement). The click-ends-keyboard-modality gotcha went to the `e2e-testing` skill's focus bullet, where focus tests are written.
+- **Size:** about 245 lines against the light target of 150: the ledger, two arcs of audit verdicts and KL-1 are the record.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
+
 # home-onboarding-2: the Firefox Presto permission row (#156)
 
 On Firefox, while Nulo lacks its loopback host permission, the onboarding Presto step and Settings → Proving show the signed permission row in place of the Presto content. The Firefox manifest also lists the two loopback origins as optional. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Scope and sign-off
 
-- **#156, arc 1.** One PR against `dev`, `Closes #156`.
+- **#156, arc 1.** One PR against `dev`, `Closes #156`: #534, merged 2026-10-16.
+- **#156, arc 2: OA-1 = B.** One PR against `dev`; #156 is already closed, so the PR names it without `Closes`.
 - **#132, no arc (D1).** #348 (`19629fdb`) removed `.section_header` (8 px bottom padding, hairline rule) from both of `RecentActivityView.vue`'s header uses. It closed #132 on 2026-10-13. HEAD keeps that result (`:847`, `:925`), and page 18's option A reads "This is what #348 shipped". The lane brief's `Closes #132` does not hold.
 - **Out:** #170, #181, #352, Chrome onboarding, and Chrome's site-access controls.
 - **UI impact, onboarding Presto step and Settings → Proving on Firefox (P18-03, option A):** "The permission row (a warning banner with the line "Firefox needs your permission for Nulo to reach Presto." and an "Allow" button with the usual focus ring) stands in place of the Presto content while the permission is missing, so one instruction shows at a time. On the onboarding step the Get Presto pitch and the status card are hidden, Continue is unavailable and Skip shows. On Settings → Proving the status card, "Get Presto" and the detail rows are hidden; the closing note stays. Once allowed (here or in Firefox's add-on settings), the page is exactly today's and checks Presto at once." The signed photos are of `shot/156-a` (`2d7981a0`), and its markup is the row's spec (D3).
 - **UI impact, the Firefox manifest (P16-04, option B, in #156's Decision):** "The Firefox manifest gains the optional host permission whatever the probe shows." No screen changes. P16-04's record told the owner that option A meant "nothing new on the AMO listing", so B accepts a listing change.
+- **UI impact, focus after a grant (P20-07, OA-1, option B, in #156's Decision):** "Focus moves to the page's title ("Speed up" on onboarding, "Proving" on Settings), as clearing History's token chip already does." Nothing visible changes: the title draws no ring, as History's does.
 - **Not waited on:** P18-04, the owner's Mac check of the toolbar panel under Firefox's prompt (Delivery).
 
 ## Outcome & Quality Bar
@@ -35,14 +48,14 @@ On Firefox, while Nulo lacks its loopback host permission, the onboarding Presto
 1. The row shows only on Firefox, only while the two loopback origins are missing, and it alone replaces the Presto content. Chrome, and Firefox with the grant, see today's pages with today's testids.
 2. Allow asks the browser from the click. A grant from Allow, from another Nulo page or from about:addons brings back today's page and one Presto check at once. A refusal leaves the row. A page that mounts without the grant sends no probe until a grant (KL-1 names the exceptions).
 
-**Good enough.** No Chrome step, and no own window for the toolbar panel (P18-04). Focus after a grant follows OA-1's "what ships now".
+**Good enough.** No Chrome step, and no own window for the toolbar panel (P18-04). Focus after a grant: arc 1 shipped OA-1's "what ships now" (A); arc 2 ships the owner's B.
 
 ## Assumptions
 
 **Facts**
 - F1. #156's impact claim, "Proving falls back or fails silently", does not hold on Firefox 153.0.4.
   - In the probe of 2026-10-13, a withheld permission blocked no request to a CORS-answering loopback server.
-  - What the withheld permission costs is Presto's minimal `/health` body until Presto approves Nulo, so Proving's version rows read "—" ([probe](../archive/home-onboarding-chrome/lessons/phase-2.md)).
+  - What the withheld permission costs is Presto's minimal `/health` body until Presto approves Nulo, so Proving's version rows read "—" ([probe](../home-onboarding-chrome/lessons/phase-2.md)).
   - The owner signed pages 16 and 18 on 2026-10-15, after that record. Page 16 B reads "whatever the probe shows". The arc ships the signed text.
 - F2. Firefox 153.0.4 merges `optional_host_permissions` with an MV3 manifest's origins into one optional set (`Extension.sys.mjs:1357-1384`). The install grant is unchanged (`:1338-1346`). So P16-04 B grants nothing new at run time.
 - F3. Facts about `permissions.request` (probe; `schemas/permissions.json:110` and `ext-permissions.js` in Firefox's `omni.ja`):
@@ -60,7 +73,7 @@ On Firefox, while Nulo lacks its loopback host permission, the onboarding Presto
 - I1. On Firefox, until the first `contains` read lands, the page shows today's first frame (`detecting`: the pitch on onboarding, "Get Presto" on Settings, no Skip). When the permission is missing, the row then replaces it. The read is one parent-process call.
 - I2. `web-ext@10.6.0 lint` reports no new error for an origin in both lists (Phase 2 checks).
 
-**Asks:** OA-1 in OWNER-ASKS (focus after a grant). The arc ships its "what ships now".
+**Asks:** OA-1 in OWNER-ASKS (focus after a grant), answered B on page 20; arc 2 ships it.
 
 ## Architecture & Implementation
 
@@ -100,6 +113,12 @@ On Firefox, while Nulo lacks its loopback host permission, the onboarding Presto
   3. Tab to Allow and assert the ring. Click it with `pointerClick`.
   4. Assert the row leaves (`onAdded`) and the card reaches the stubbed state with no Retry click. Assert no console or page errors.
 
+### Arc 2: focus after a grant (OA-1 = B)
+
+- **Rule (D10).** When `missing` turns false while the row holds focus, focus moves to the page's title. Focus on any other control, or on no control, stays.
+- **Pages.** A default (pre-flush) `watch(permissionMissing)` runs while the row is still mounted, so `rowRef.$el.contains(document.activeElement)` is answerable, and focuses the title in the same callback (D11). Onboarding: `BrutalistTitle` gets `tabindex="-1"`, `data-testid="onboarding-presto-title"` and a no-ring `:focus` rule by fallthrough to its `<h1>`. Settings: `shellRef.value?.focusTitle()`.
+- **The Settings title (D12).** `SubPageHeaderBase`'s default title span gets a static `tabindex="-1"`, a no-ring `:focus` rule and `defineExpose({ focusTitle })` (a no-op under a `title` slot or with no title). `SubPageHeader` and `SettingsPageShell` forward it. The tabindex reaches about 28 sub-page titles: none enters the Tab order, and a click now focuses the title invisibly.
+
 ## Security & Adversarial Considerations
 
 - **Least privilege.** The request names only the manifest's exact-host loopback entries. Firefox also refuses undeclared origins. The optional list grants nothing new (F2). Chrome's manifest stays pinned with nothing optional (`manifest.test.ts:78-81`).
@@ -116,8 +135,6 @@ On Firefox, while Nulo lacks its loopback host permission, the onboarding Presto
 - Reopen on a report of "—" rows after a grant, or a presto-core change to its single-flight probe.
 
 ## Phases
-
-Size: about 205 lines against the light target of 150. The ledger, the audit verdicts of a split panel and KL-1 (about 45 lines) are the record, so they stay.
 
 ### Phase 1: the permission read and the row (#156) ✓
 1. Build the composable with at least 10 tests (CLAUDE.md § composables). Each never-happens case has a success control. The cases:
@@ -153,6 +170,13 @@ Size: about 205 lines against the light target of 150. The ledger, the audit ver
 
 Pass: exit 0; the spec is red on the base pages and green on the head; its runtime is recorded. Layers: unit, smoke e2e on both browsers, network e2e.
 
+### Phase 4 (arc 2): focus after a grant ✓
+1. The header chain, both pages, and their tests: on each page, a grant while Allow holds focus lands focus on the title (the real `BrutalistTitle`; the real `SettingsPageShell` → `SubPageHeader` → base chain), and a grant while a surviving control holds focus (Skip; Back) leaves it there. `SubPageHeaderBase.test.ts`: `focusTitle` focuses the default title, whose source keeps the no-ring rule, and leaves a slotted title alone. Each page case red with the watcher removed, each control red with the containment check removed.
+2. The Firefox spec waits for focus on `onboarding-presto-title` after the clicked Allow, then withholds the grant again, grants it with Enter and reads no outline on the focused title (a click ends keyboard modality, so only the keyed grant can show a ring). Red on a head build with the onboarding watcher removed (at the first focus wait) and on one with the title's no-ring rule removed (at the outline read); green on the head.
+3. Shots of both pages after a grant from a focused Allow, both themes, on Firefox.
+
+**Gate.** `bun run lint && bun run typecheck:all && bun run test`; then, at `--retry=0` with load1 below 150, the armed smoke suite on Firefox and on Chrome (the header change reaches every sub-page title). Pass: exit 0, step 1's red checks recorded, the spec red on arc 1's pages and green on the head, its runtime recorded. Layers: lint, typecheck, unit, component, smoke e2e on both browsers.
+
 ### Arc gate (before the Codex loop)
 `bun run audit:vue`, `bun run test:all`, `bun run test:ci-gating`, `bun run --cwd apps/extension build:firefox`, and `bun run check:plans` after staging.
 
@@ -160,6 +184,7 @@ Pass: exit 0; the spec is red on the base pages and green on the head; its runti
 
 - One PR against `dev`, with no stack (D-orch-1), opened after the arc gate and the Codex loop.
 - Title (79 characters): `feat(presto): ask Firefox for Presto's loopback permission in place of the step`.
+- Arc 2: one PR against `dev` off `origin/dev` (branch `worktree-home-onboarding-2-arc2`), title `feat(presto): move focus to the title when the firefox permission row leaves with it`, after its arc gate (the arc 1 list plus Phase 4's) and its Codex loop. It quotes P20-07 B, carries the shots and `Refs #156`, and ends with the close-out commits (D9).
 - The body has what the README standard asks for, plus:
   - Both UI quotes and the Firefox shots.
   - #348's header after-shots, for #132.
@@ -168,7 +193,7 @@ Pass: exit 0; the spec is red on the base pages and green on the head; its runti
 
 ## Post-implementation
 
-Execute [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard), read at `dfdf4c31`. Specific to this plan:
+Execute [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard), read at `dfdf4c31`. Specific to this plan:
 - Single arc: the loop runs once, over the net diff from the merge base with `dev`, after the arc gate. Codex runs it: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, then `resume-codex.sh`. Hard stop at three rounds.
 - The close-out is this PR's final commits, after merging `origin/dev`.
 - Teardown: `agent-worktree done home-onboarding-2 --merged`, once `FETCH_HEAD:implementations-plan/archive/home-onboarding-2/plan.md` exists on `dev`. Arm one background wait after the wrap-up report.
@@ -187,6 +212,9 @@ Execute [`implementations-plan/README.md` § Post-implementation standard](../RE
 | D7 (arc 1) | The Codex loop starts beside Phase 3's e2e gates, not after them | The host's load gate (load1 below 150) held the e2e runs; a later round verifies any e2e-driven change | Waiting out the load before the first round |
 | D8 (arc 1) | "The first read" is the mount read: an event read that overtakes it and finds the grant calls `onGranted`; a failure while still `pending`, from either read, falls back | Codex arc-r1 F1: keyed on "first to land", a grant arriving during the mount read rested the page unchecked | Keying the callbacks on the first read to land |
 | D9 (arc 1) | The close-out waits for the lane's last arc, not this PR | The orchestrator schedules OA-1's page-20 pick as a follow-up arc of this plan, so the plan still owns open work; KL-1 is filed then | Closing the plan in #534 |
+| D10 (arc 2) | Focus moves only when the row held it at removal | OA-1 asked about "the Allow button that holds focus"; a grant from about:addons or another page would otherwise pull a person off Skip or Back. Codex and Opus agree | Moving focus on every removal; also when focus is on the body |
+| D11 (arc 2) | A pre-flush watcher per page focuses the title in the same callback, before the row leaves | Focus never falls to the body between the two, and nothing is queued past an unmount (Opus). Two pages, four lines each | `nextTick` after the update (Codex's first shape); the row reporting from its own `onBeforeUnmount`, which also fires when the page goes |
+| D12 (arc 2) | Settings reaches its title through `focusTitle()` exposed by the base and forwarded by the two wrappers, with a static `tabindex="-1"` | Each layer keeps what it owns; History's title is static too. Codex and Opus agree | A DOM query into the shell; a forwarded `#title` slot that copies the title's styling; a `focusable` prop for one caller; tabindex set inside `focusTitle()` |
 
 ## Audit verdicts
 
@@ -200,6 +228,13 @@ Execute [`implementations-plan/README.md` § Post-implementation standard](../RE
 - **Arc 1, Codex r1** (gpt-6.1-sol, high; session `01a141ee-ee4d-7e90-99da-5b2f42bd0159`): conditional approve. F1 Medium, demonstrated: a grant whose event read overtook the mount read called `onFirstAllowed`, so the page rested unchecked; fixed (D8), with its test red on the pre-fix code. F2 Low: a request answered after `dispose()` still logged; fixed, test red before. F3 Low: the spec could not tell a post-grant check from an earlier probe; it now counts probes (none before Allow, one HTTPS after). F4 Low: two restating comments; cut.
 - **Arc 1, Opus diff review:** no correctness bug. Accepted: comments claimed Chrome cannot withhold host permissions (its site access can; the suite cannot `permissions.remove` a required one), reworded in the composable, `LaunchOptions`, `FIREFOX_ONLY` and `FIREFOX.md`; the onboarding note's absence gained its positive control; the scratch shots spec stays out of the suite runs; the dispose test's name. Noted for KL-1: a sibling Settings page's probe in flight is one more way in.
 - **Arc 1, Codex r2** (resume): **approve**, no new material finding; the four fixes and the folded same-family items verified, no Chrome, gating, teardown or seam regression.
+
+- **Arc 2, design panel** (Codex gpt-6.1-sol high, session `01a144fa-1177-71f1-915a-823944c9a953`; Opus Plan lens): both agree on D10 and D12 and on the pre-flush timing. Folded from Opus: focus inside the callback rather than after `nextTick` (D11); the comments state the pre-flush invariant, drop an untrue "only" (a click also focuses a title) and a caller-naming TSDoc; the no-ring rule pinned (source regex; outline read in the e2e); the base test split. Both note the e2e grants with no doorhanger, so the real prompt's focus return stays unproven (P18-04's Mac check covers the same ground).
+
+- **Arc 2, Codex r1** (gpt-6.1-sol high, session `01a14503-beab-78b0-945b-8e7795025e1c`, over `d68687c7`): **approve**, no finding; notes the real doorhanger's focus return stays unproven.
+- **Arc 2, Opus diff review:** approve. Low, accepted: the outline read followed a clicked Allow, whose mousedown ends Firefox's keyboard modality, so it could not fail without the rule; the spec now adds a keyed grant and the red build proves the read (`e12bdd41`). Nit, accepted: the watcher comment's "not the page" now reads "instead of dropping it to the body".
+- **Arc 2, Codex r2** (resume, over `e12bdd41`): conditional approve. Low, plausible, accepted: the keyed pass Tabbed straight after the scratch window closed, and an unfocused Firefox window takes key events without their default actions; `prepareKeys` added (`cec5f0d6`). Noted, no change: the error arrays span both passes, and the keyed pass does not await its probe.
+- **Arc 2, Codex r3** (resume): **approve**, no new finding. The loop converged.
 
 ## Seeds (written, not run)
 

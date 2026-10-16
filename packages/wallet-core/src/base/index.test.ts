@@ -8,16 +8,7 @@
  */
 import { describe, expect, test } from "vitest"
 import { ServiceCollection, type IService } from "./index"
-
-function deferred() {
-	let resolve!: () => void
-	let reject!: (e: unknown) => void
-	const promise = new Promise<void>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
-}
+import { deferred } from "../utils/deferred"
 
 function svc(name: string, start: (c: ServiceCollection) => Promise<void>, dependencies?: readonly string[]): IService {
 	return { name, dependencies, start }

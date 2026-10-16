@@ -19,7 +19,7 @@
  * used so init() runs end-to-end.
  */
 
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { flushPromises } from "@vue/test-utils"
 import { ServiceCollection } from "@/wallet/base"
@@ -294,6 +294,7 @@ function makeTokenStub(tokens: { id: number; chainId: number; contract: string; 
 		dependencies: [],
 		onTokenAdded: eh<unknown>(),
 		onTokenDeleted: eh<unknown>(),
+		onTokenUpdated: eh<unknown>(),
 		getTokensRaw: vi.fn().mockResolvedValue(tokens),
 		async start() {},
 	}
@@ -862,10 +863,11 @@ describe("IncomingTransferService — trust after a full-backup import", () => {
 	async function bootRestored() {
 		const profile = makeProfileStub()
 		profile.lock()
+		const token = makeTokenStub([tokenA])
 		const booted = await bootService({
 			profile,
 			account: makeAccountStub([{ profileId: "p1", chainId: 1, address: "0xa" }]),
-			token: makeTokenStub([tokenA]),
+			token,
 			note: makeNoteStub({ [tokenA.contract]: [note({ l2BlockNumber: 7 })] }, { 7: 1_700_000_007 }),
 		})
 		await flushPromises()
@@ -876,42 +878,23 @@ describe("IncomingTransferService — trust after a full-backup import", () => {
 			await profile.onActiveProfileChanged.invoke()
 			await flushPromises()
 		}
-		return { ...booted, pending, open }
+		return { ...booted, pending, open, token }
 	}
 
-	test("without trustRestoredTokens, the restored token's first scan prompts (the backup has no trust rows)", async () => {
+	test("a restored token's first note asks: the backup carries no trust rows and the restore trusts nothing", async () => {
 		const { pending, open } = await bootRestored()
 		await open()
 		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("pending")
 		expect(pending).toHaveBeenCalledTimes(1)
 	})
 
-	test("trustRestoredTokens before the profile opens → the restored token is trusted and its first scan never prompts", async () => {
-		const { service, pending, open } = await bootRestored()
-		await service.trustRestoredTokens("p1")
+	test("the chain re-read's update event trusts nothing (control: an added token is trusted on its add)", async () => {
+		const { pending, open, token } = await bootRestored()
 		await open()
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("trusted")
-		expect(pending).not.toHaveBeenCalled()
-	})
-
-	test("trustRestoredTokens keeps a trust row that exists", async () => {
-		const { service } = await bootRestored()
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
-			profileId: "p1",
-			networkId: "n1",
-			contract: tokenA.contract,
-			state: "blocked",
-			updatedAt: 0,
-		})
-		await service.trustRestoredTokens("p1")
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("blocked")
-	})
-
-	test("trustRestoredTokens writes nothing for a profile being deleted", async () => {
-		const { service, profile } = await bootRestored()
-		profile.beginDeletion("p1")
-		await service.trustRestoredTokens("p1")
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))).toBeUndefined()
+		await token.onTokenUpdated.invoke({ ...tokenA, profileId: "p1", name: "Token A" } as never)
+		await flushPromises()
+		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("pending")
+		expect(pending).toHaveBeenCalledTimes(1)
 	})
 })
 
@@ -5025,14 +5008,6 @@ describe("IncomingTransferService — public-scan health (episodes, backoff, ret
 })
 
 // ── Arrivals ─────────────────────────────────────────────────────────────
-
-function deferred<T>() {
-	let resolve!: (value: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
-}
 
 /** A chain tip the test steers: each read takes the next queued answer (a number, an Error, or a
  *  promise the test settles), then the standing one. */

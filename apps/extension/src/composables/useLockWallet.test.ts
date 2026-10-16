@@ -1,3 +1,4 @@
+import { deferred } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises } from "@vue/test-utils"
 
@@ -40,16 +41,6 @@ function fakeProfileClient() {
 			for (const fn of [...disconnected]) fn()
 		},
 	}
-}
-
-function deferred() {
-	let resolve: () => void = () => {}
-	let reject: (reason: unknown) => void = () => {}
-	const promise = new Promise<void>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
 }
 
 function readAnswers(running: number, gate?: Promise<void>) {

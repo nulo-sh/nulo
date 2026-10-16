@@ -7,6 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { DISCOVERY_STALE_MS } from "@nulo/wallet-bridge"
+import { deferred } from "@nulo/wallet-core/utils"
 import { LogLevel } from "@/wallet/logger"
 
 type Callbacks = {
@@ -59,14 +60,6 @@ import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN as ORIGIN, fakeSdkServices } from "./test-services"
 
 const noopLogger = { log: () => {} } as never
-
-function deferred<T>() {
-	let resolve!: (v: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
-}
 
 /** Boot the handler over a remembered session (`trusted` decides whether a verify window opens). */
 function boot(
