@@ -12,3 +12,4 @@
 - 2026-10-16 arc1 phase 3 gate: pass (smoke Firefox 244/244 2375 s, Chrome 244/244 1624 s; networks.test.ts 4/4 both browsers; spec red on base, green on head).
 - 2026-10-16 arc1 arc gate: pass (audit:vue 0, test:all 0, test:ci-gating 0, test:release 0, build:firefox 0, check:plans 0). Codex loop converged at r2 (approve).
 - 2026-10-16 arc1: PR #534 opened (both browsers' smoke and network lanes tripped by path filter); close-out deferred to the follow-up arc (D9).
+- 2026-10-16 arc2: OA-1 = B (P20-07); design panel agreed (Codex + Opus), Opus folds applied; code committed d68687c7; component red checks recorded. Unit gate running; e2e waits on load1 < 150.
