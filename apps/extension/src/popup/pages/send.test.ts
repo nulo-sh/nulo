@@ -350,6 +350,21 @@ describe("send page — the submit tail", () => {
 		w.unmount()
 	})
 
+	test("a token update that adds private transfers keeps the open page's public choice", async () => {
+		const publicOnly = { ...TOKEN, hasPrivateTransfers: false }
+		mocks.getTokens.mockResolvedValue([publicOnly])
+		const { w, cacheStore } = await mountSend()
+		cacheStore.preselectedBalanceType = "private"
+		mocks.getTokens.mockResolvedValue([TOKEN])
+		const client = (TokenServiceClient as unknown as { mock: { results: { value: { onTokenUpdated: EventHandler<unknown> } }[] } }).mock
+		client.results.at(-1)?.value.onTokenUpdated.invoke({ ...TOKEN, profileId: "p1" })
+		await flushPromises()
+		await fillForm(w)
+		await submit(w).trigger("click")
+		expect(mocks.executeTransfer.mock.calls[0]?.[3]).toBe(TransferType.Public)
+		w.unmount()
+	})
+
 	test("a token update that takes away private transfers moves the open page to public", async () => {
 		const { w } = await mountSend()
 		const publicOnly = { ...TOKEN, hasPrivateTransfers: false }

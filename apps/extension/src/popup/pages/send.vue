@@ -536,10 +536,12 @@ watch(
 	},
 )
 
-// A re-read of the same token can take away the transfer kind the page has selected.
-watch([() => activeToken.value?.hasPrivateTransfers, () => activeToken.value?.hasPublicTransfers], () => {
-	initSendType()
-	initReceiverType()
+// A re-read of the same token can take away the transfer kind the page has selected; a kind it
+// still supports stays selected.
+watch([() => activeToken.value?.hasPrivateTransfers, () => activeToken.value?.hasPublicTransfers], ([canPrivate, canPublic]) => {
+	if (!activeToken.value) return
+	if (!canPrivate) selectedSendType.value = selectedReceiverType.value = "public"
+	if (!canPublic) selectedSendType.value = selectedReceiverType.value = "private"
 })
 
 watch(

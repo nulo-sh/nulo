@@ -185,7 +185,7 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 | D20 | Phase 3's network case (implementation) | doctor the funded token's row inside the existing `backup-restore-integrity` scenario | a separate case needs its own funded wallet and export; the same import already reaches the real PXE and node |
 | D21 | Where the open-Send test sits (implementation) | `send.test.ts`, not `send-amount.test.ts` | the helper takes the decimals as an argument; only the mounted page re-reads its list |
 | D22 | The balance service on `onTokenUpdated` (arc 1 review) | re-send the token's balances with the new metadata and queue them, for a token its map already holds | each balance carries its token's metadata from a map loaded at activation, which precedes the re-read |
-| D23 | Send's transfer kind after an update (arc 1 review) | re-run the kind selection when the active token's transfer capabilities change | the id watcher does not fire for the same token, so a kind the chain does not support stayed selected |
+| D23 | Send's transfer kind after an update (arc 1 review) | when the active token's transfer capabilities change, move only a selection it can no longer transfer | the id watcher does not fire for the same token, so a kind the chain does not support stayed selected; re-running the full selection would replace a still-valid choice with the preselected kind |
 
 ## Audit verdicts
 
@@ -229,6 +229,8 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 | Comments: a caller-specific note on the MAC label, a restating type doc, a redundant line in `full.vue`, the tail budget's stale scope; no comment on why restore-again needs no prompt (both) | fixed |
 | A test name carried a review label (Opus) | renamed to what it proves |
 | One out-of-scope question (Opus) | sent to the lane's private record; no change in this arc |
+
+**Arc 1 review, round 2** (2026-10-16). Codex, resumed over `90137f90`: **reject**, 1 material finding, verified and accepted: the capability watcher re-ran the full selection, so gaining private transfers replaced a valid public choice with the preselected kind. It now moves only a selection the token can no longer transfer (D23); a mounted-page test pins the kept choice and is red against the round-1 watcher.
 
 ## Seeds (draft; the orchestrator finalizes after approval)
 
