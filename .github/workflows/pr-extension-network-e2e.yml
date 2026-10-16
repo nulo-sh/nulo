@@ -34,9 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
-      extension-network: ${{ steps.override.outputs.full || steps.filter.outputs.extension-network }}
-      label-hit: ${{ steps.live.outputs.label-hit }}
-      base: ${{ steps.live.outputs.base }}
+      run: ${{ steps.gate.outputs.run }}
       read-attempt: ${{ steps.live.outputs.read-attempt }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -101,6 +99,8 @@ jobs:
               # Network workflow + composite actions:
               - '.github/workflows/_extension-network-e2e.yml'
               - '.github/workflows/pr-extension-network-e2e.yml'
+              - 'scripts/ci-cd/e2e-decide.sh'
+              - 'scripts/ci-cd/e2e-aggregate.sh'
               - '.github/actions/setup-aztec/**'
               - '.github/actions/setup-presto-server/**'
               - '.github/actions/setup-bun/**'
@@ -110,47 +110,19 @@ jobs:
         id: override
         run: echo "full=true" >> "$GITHUB_OUTPUT"
 
-  decide:
-    name: Decide
-    needs: changes
-    runs-on: ubuntu-latest
-    timeout-minutes: 1
-    outputs:
-      run: ${{ steps.gate.outputs.run }}
-    steps:
-      - id: gate
+      - name: Decide
+        id: gate
         env:
           EVENT: ${{ github.event_name }}
-          BASE: ${{ needs.changes.outputs.base }}
-          NETWORK: ${{ needs.changes.outputs.extension-network }}
-          LABEL_HIT: ${{ needs.changes.outputs.label-hit }}
-        run: |
-          case "$LABEL_HIT" in
-            true | false) ;;
-            *) echo "::error::changes.outputs.label-hit is not true/false: '$LABEL_HIT'"; exit 1 ;;
-          esac
-          if [ "$EVENT" = pull_request ] && [ -z "$BASE" ]; then
-            echo "::error::changes.outputs.base is empty"
-            exit 1
-          fi
-          # The paths filter already answers "does this diff touch the surface?" — gating it on
-          # the base branch as well only creates a hole, because a stacked PR's `github.base_ref`
-          # is the branch below it. Only the bottom arc of a stack targets `dev`; every arc above
-          # it could reach this suite by LABEL alone, and a gate miss reports success-on-skip.
-          # `main` and `workflow_dispatch` still force-run, so dropping the base test only widens.
-          if [ "$EVENT" = "workflow_dispatch" ] \
-             || [ "$BASE" = "main" ] \
-             || [ "$LABEL_HIT" = "true" ] \
-             || [ "$NETWORK" = "true" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
+          BASE: ${{ steps.live.outputs.base }}
+          LABEL_HIT: ${{ steps.live.outputs.label-hit }}
+          SURFACE: ${{ steps.override.outputs.full || steps.filter.outputs.extension-network }}
+        run: bash scripts/ci-cd/e2e-decide.sh
 
   network-e2e:
     name: Run / shard ${{ matrix.shard.id }}
-    needs: decide
-    if: needs.decide.outputs.run == 'true'
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     strategy:
       # Don't cancel other shards when one fails — under flaky CI we want the
       # full per-shard picture. fail-fast: true would mask "is this 1 specific
@@ -196,8 +168,8 @@ jobs:
 
   network-e2e-heavy:
     name: Run / heavy / fee-methods + selfpay-phase
-    needs: decide
-    if: needs.decide.outputs.run == 'true'
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     # Dedicated runner so the prover queue isn't shared with popup-shape
     # tests. fee-methods is ~6 min wall-time (5 tests, 4 real fee-juice TX
     # flows requiring full WASM proving on CI). Without this isolation the
@@ -219,8 +191,8 @@ jobs:
 
   network-e2e-heavy-concurrent:
     name: Run / heavy / concurrent-confirm
-    needs: decide
-    if: needs.decide.outputs.run == 'true'
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     # Dedicated runner, same rationale as fee-methods: two sequential dApp
     # sendTx proves (both approved → both confirm, serialized by the execution
     # mutex). Kept off the SHA-1 matrix so its WASM-prove CPU doesn't pressure
@@ -240,8 +212,8 @@ jobs:
 
   network-e2e-heavy-long:
     name: Run / heavy / snack-placement + failed-send-check
-    needs: decide
-    if: needs.decide.outputs.run == 'true'
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     # Two files of about 8 and 4.5 minutes on Firefox. The SHA-1 sharder weighs no runtime, and the
     # shard that drew both reached its 30-minute job limit with every test green.
     uses: ./.github/workflows/_extension-network-e2e.yml
@@ -254,8 +226,8 @@ jobs:
 
   network-e2e-canary:
     name: Run / canary / real-proving
-    needs: decide
-    if: needs.decide.outputs.run == 'true'
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     # The ONLY prover-ON jobs after the proverless split — they guard the real
     # BB-proving path the proverless pool no longer exercises:
     #   - transfers: wallet-UI flow, waits through real prove → mine (balance change).
@@ -286,8 +258,8 @@ jobs:
 
   network-e2e-chaos:
     name: Run / chaos / seed ${{ matrix.seed }}
-    needs: decide
-    if: needs.decide.outputs.run == 'true'
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     # Fixed send-chaos seeds, each beside the nightly run it comes from; the red-seed and rotation
     # rules are in CI.md, § pr-extension-network-e2e.yml.
     strategy:
@@ -309,47 +281,19 @@ jobs:
   status:
     name: extension-network-e2e-status
     if: always()
-    needs: [changes, decide, network-e2e, network-e2e-heavy, network-e2e-heavy-concurrent, network-e2e-heavy-long, network-e2e-canary, network-e2e-chaos]
+    needs: [changes, network-e2e, network-e2e-heavy, network-e2e-heavy-concurrent, network-e2e-heavy-long, network-e2e-canary, network-e2e-chaos]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
+      # The commit this run's workflow file came from, so the script is the one this file was written
+      # against. A failed fetch reds the check: it is never green without the evaluation.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: /scripts/ci-cd/e2e-aggregate.sh
+          sparse-checkout-cone-mode: false
       - name: Aggregate results
-        run: |
-          # An exact state machine, not a denylist of bad results. `changes` and `decide` must
-          # have SUCCEEDED, and the suites must match what the gate asked for: all `success` when
-          # it said run, all `skipped` when it said not to. Anything else — a malformed or empty
-          # `run` output from a wiring typo, a suite that vanished, a future zero-entry matrix —
-          # is a fault. Checking only the failure results, or only the `run=true` branch, is how a
-          # suite that never executed reports a green PR.
-          RUN="${{ needs.decide.outputs.run }}"
-          for r in "${{ needs.changes.result }}" "${{ needs.decide.result }}"; do
-            if [ "$r" != "success" ]; then
-              echo "::error::A gate-control job did not succeed: $r"
-              exit 1
-            fi
-          done
-          case "$RUN" in
-            true) want="success" ;;
-            false) want="skipped" ;;
-            *) echo "::error::decide.outputs.run is not true/false: '$RUN'"; exit 1 ;;
-          esac
-          # A partial re-run carries an earlier attempt's gate over, so a skip stands only on labels
-          # read in this attempt.
-          if [ "$RUN" = false ] && [ "${{ needs.changes.outputs.read-attempt }}" != "${{ github.run_attempt }}" ]; then
-            echo "::error::the suites were skipped on labels read at attempt '${{ needs.changes.outputs.read-attempt }}', not this one: re-run all jobs"
-            exit 1
-          fi
-          for r in \
-            "${{ needs.network-e2e.result }}" \
-            "${{ needs.network-e2e-heavy.result }}" \
-            "${{ needs.network-e2e-heavy-concurrent.result }}" \
-            "${{ needs.network-e2e-heavy-long.result }}" \
-            "${{ needs.network-e2e-canary.result }}" \
-            "${{ needs.network-e2e-chaos.result }}" \
-          ; do
-            if [ "$r" != "$want" ]; then
-              echo "::error::gate said run=$RUN, so every suite job must be '$want' — got '$r'"
-              exit 1
-            fi
-          done
-          echo "Extension network e2e gate passed (or was skipped — no relevant changes / not labeled)."
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: bash scripts/ci-cd/e2e-aggregate.sh
