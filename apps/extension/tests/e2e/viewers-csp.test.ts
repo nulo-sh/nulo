@@ -1,18 +1,18 @@
 /**
  * The logs window's editor under `style-src` without `'unsafe-inline'`: its styles reach it in its
- * shadow root, and focus moving inside the root still stops the follow of new lines. The launch's
- * CSP recorder fails the file on a blocked style. Each case starts at the end of a window with more
- * lines than it shows, so a scroll of its own cannot stop the follow first, and reads the follow off
- * one new line: the viewer re-arms it on any scroll that ends within 20px of the end.
+ * shadow root, and a selection or focus inside the root still stops the follow of new lines. The
+ * launch's CSP recorder fails the file on a blocked style. The follow is read off the viewer's own
+ * state, its scroll-to-end button, which a line it does not follow shows: CodeMirror keeps a view
+ * that rests within 4px of its end there on its own, so where the view lands proves nothing.
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
-import { extensionUrl, gotoExtensionPage, newPage } from "./fixtures/browser"
+import { extensionUrl, gotoExtensionPage, newPage, prepareClick } from "./fixtures/browser"
 import { readEditorStyles } from "./fixtures/code-editor"
 import { type ExtensionContext, test } from "./fixtures/extension"
 
 const HOST = "logs-editor"
-/** Under one line's height: at the end, or a line short of it. */
+/** Under one line's height: the follow's scroll to the end, give or take CodeMirror's margin. */
 const AT_END = 10
 
 /** The scroller's geometry, read once the frames after a change have run. */
@@ -57,6 +57,29 @@ async function logLines(page: Page, count: number): Promise<void> {
 	)
 }
 
+/** Logs one line and reports whether the viewer followed it. */
+async function followsNextLine(page: Page): Promise<boolean> {
+	expect(await page.$('[data-testid="logs-scroll-btn"]')).toBeNull()
+	await page.evaluate(() => {
+		const w = window as unknown as { __scrollBtnShown?: boolean }
+		w.__scrollBtnShown = false
+		new MutationObserver((records, observer) => {
+			const shown = records.some(({ addedNodes }) =>
+				[...addedNodes].some(
+					(node) =>
+						node instanceof Element &&
+						(node.matches('[data-testid="logs-scroll-btn"]') || node.querySelector('[data-testid="logs-scroll-btn"]')),
+				),
+			)
+			if (!shown) return
+			w.__scrollBtnShown = true
+			observer.disconnect()
+		}).observe(document.body, { childList: true, subtree: true })
+	})
+	await logLines(page, 1)
+	return !(await page.evaluate(() => (window as unknown as { __scrollBtnShown?: boolean }).__scrollBtnShown))
+}
+
 async function openLogs(ctx: ExtensionContext): Promise<Page> {
 	const page = await newPage(ctx.browser)
 	await page.setViewport({ width: 900, height: 700 })
@@ -83,10 +106,41 @@ test("the logs editor takes its styles from its shadow root", async ({ registere
 	await page.close()
 })
 
-test("with the search panel closed, new lines are followed", async ({ registeredExtension: ctx }) => {
+test("with nothing selected and the search panel closed, new lines are followed", async ({ registeredExtension: ctx }) => {
 	const page = await filledLogs(ctx)
-	await logLines(page, 1)
+	expect(await followsNextLine(page)).toBe(true)
 	expect((await scroller(page)).gapToEnd).toBeLessThan(AT_END)
+	await page.close()
+})
+
+test("selecting log text stops the follow", async ({ registeredExtension: ctx }) => {
+	const page = await filledLogs(ctx)
+	const line = await page.evaluate((id) => {
+		const root = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot
+		const view = root?.querySelector(".cm-scroller")?.getBoundingClientRect()
+		if (!root || !view) throw new Error("the logs editor has no scroller")
+		// CodeMirror renders lines beyond the visible area too; a drag there selects nothing.
+		const shown = [...root.querySelectorAll(".cm-line")]
+			.map((el) => el.getBoundingClientRect())
+			.filter((box) => box.top >= view.top + 4 && box.bottom <= view.bottom - 4 && box.width > 40)
+		const box = shown[Math.floor(shown.length / 2)]
+		if (!box) throw new Error("the logs editor shows no line")
+		return { left: box.left + 2, right: box.left + Math.min(box.width - 4, 300), y: box.top + box.height / 2 }
+	}, HOST)
+	await prepareClick(page)
+	await page.mouse.move(line.left, line.y)
+	await page.mouse.down()
+	await page.mouse.move(line.right, line.y, { steps: 5 })
+	await page.mouse.up()
+	const selected = await page.evaluate((id) => {
+		const root = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot as
+			| (ShadowRoot & { getSelection?: () => Selection | null })
+			| null
+			| undefined
+		return (root?.getSelection ? root.getSelection() : document.getSelection())?.toString() ?? ""
+	}, HOST)
+	expect(selected.length).toBeGreaterThan(0)
+	expect(await followsNextLine(page)).toBe(false)
 	await page.close()
 })
 
@@ -101,13 +155,9 @@ test("focusing the search panel stops the follow", async ({ registeredExtension:
 	await page.keyboard.press("F3")
 	await page.waitForFunction(
 		(id) => !!document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.activeElement?.closest(".cm-panel.cm-search"),
-		{
-			timeout: 5_000,
-			polling: 50,
-		},
+		{ timeout: 5_000, polling: 50 },
 		HOST,
 	)
-	await logLines(page, 1)
-	expect((await scroller(page)).gapToEnd).toBeGreaterThan(AT_END)
+	expect(await followsNextLine(page)).toBe(false)
 	await page.close()
 })

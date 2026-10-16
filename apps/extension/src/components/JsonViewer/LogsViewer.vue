@@ -283,7 +283,7 @@ onBeforeUnmount(() => {
 			@clearLogs="handleClearLogs"
 		/>
 
-		<Flex v-if="showScrollBtn" @click="scrollToBottom" align="center" :class="$style.scroll_btn">
+		<Flex v-if="showScrollBtn" data-testid="logs-scroll-btn" @click="scrollToBottom" align="center" :class="$style.scroll_btn">
 			<Icon name="arrow-right" size="24" rotate="90" color="tertiary" />
 		</Flex>
 
