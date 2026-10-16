@@ -19,13 +19,10 @@ const realFetch = globalThis.fetch
 const CONSOLE_METHODS = ["log", "info", "warn", "error", "debug"] as const
 
 function reply(body: unknown, init: { ok?: boolean; status?: number } = {}): Response {
-	return {
-		ok: init.ok ?? true,
+	return new Response(JSON.stringify(body), {
 		status: init.status ?? 200,
 		statusText: init.ok === false ? "Server Error" : "OK",
-		headers: { get: () => null },
-		json: async () => body,
-	} as unknown as Response
+	})
 }
 
 /** Answers each batched request by its id, as a node does. */
