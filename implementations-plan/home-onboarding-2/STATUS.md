@@ -11,3 +11,4 @@
 - 2026-10-16 arc1 codex r2: approve (loop converged). Phase 3: spec red on base pages, green on head (10.3 s); shots in screenshots/; full Firefox smoke running.
 - 2026-10-16 arc1 phase 3 gate: pass (smoke Firefox 244/244 2375 s, Chrome 244/244 1624 s; networks.test.ts 4/4 both browsers; spec red on base, green on head).
 - 2026-10-16 arc1 arc gate: pass (audit:vue 0, test:all 0, test:ci-gating 0, test:release 0, build:firefox 0, check:plans 0). Codex loop converged at r2 (approve).
+- 2026-10-16 arc1: PR #534 opened (both browsers' smoke and network lanes tripped by path filter); close-out deferred to the follow-up arc (D9).

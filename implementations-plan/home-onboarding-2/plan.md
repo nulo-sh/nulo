@@ -186,6 +186,7 @@ Execute [`implementations-plan/README.md` § Post-implementation standard](../RE
 | D6 | E2E on the onboarding step of a fresh install; Settings by component test | The stand-in node needs the loopback grant (recon); the browser facts do not depend on the page | Both pages in the e2e |
 | D7 (arc 1) | The Codex loop starts beside Phase 3's e2e gates, not after them | The host's load gate (load1 below 150) held the e2e runs; a later round verifies any e2e-driven change | Waiting out the load before the first round |
 | D8 (arc 1) | "The first read" is the mount read: an event read that overtakes it and finds the grant calls `onGranted`; a failure while still `pending`, from either read, falls back | Codex arc-r1 F1: keyed on "first to land", a grant arriving during the mount read rested the page unchecked | Keying the callbacks on the first read to land |
+| D9 (arc 1) | The close-out waits for the lane's last arc, not this PR | The orchestrator schedules OA-1's page-20 pick as a follow-up arc of this plan, so the plan still owns open work; KL-1 is filed then | Closing the plan in #534 |
 
 ## Audit verdicts
 
