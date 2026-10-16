@@ -235,7 +235,7 @@ const startRename = async () => {
 	}
 
 	&::placeholder {
-		color: var(--nulo-outline);
+		color: var(--nulo-secondary);
 	}
 }
 </style>

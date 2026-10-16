@@ -300,7 +300,7 @@ onBeforeUnmount(() => {
 
 .location {
 	composes: type--data from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 	line-height: 1.4;
 	word-break: break-all;
 }
@@ -355,7 +355,7 @@ onBeforeUnmount(() => {
 
 .render_error_msg {
 	composes: type--body from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 	overflow-wrap: anywhere;
 	line-height: 1.4;
 }

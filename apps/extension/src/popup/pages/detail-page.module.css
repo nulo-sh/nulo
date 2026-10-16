@@ -37,7 +37,7 @@
 
 .empty_sub {
 	composes: type--body from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 	text-align: center;
 }
 
@@ -64,7 +64,7 @@
 
 .meta_sep {
 	composes: type--meta from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .hero_link {
@@ -152,5 +152,5 @@
 
 .detail_value_aux {
 	composes: type--meta from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }

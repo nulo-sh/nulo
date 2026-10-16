@@ -449,7 +449,7 @@ const handleClear = () => {
 }
 
 .base input::placeholder {
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .base input::-webkit-outer-spin-button,

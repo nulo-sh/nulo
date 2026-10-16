@@ -43,6 +43,6 @@ const emit = defineEmits(["toggleTrust"])
 .setting_sub {
 	composes: type--caption from global;
 	line-height: 1.4;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 </style>

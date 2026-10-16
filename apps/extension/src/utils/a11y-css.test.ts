@@ -5,6 +5,7 @@
 import { readdirSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { describe, expect, test } from "vitest"
+import { enclosingRule, parseSource, resolveSelector, sourceFiles } from "../../scripts/type-roles/source-scan"
 
 const read = (path: string) => readFileSync(resolve(__dirname, "..", path), "utf8")
 
@@ -130,5 +131,33 @@ describe("meta text reads in --nulo-secondary; --nulo-outline is for borders and
 	])("%s: %s", (path, selector) => {
 		const body = read(path).match(new RegExp(`^\\${selector} \\{([^{}]*)\\}`, "m"))?.[1] ?? ""
 		expect(body).toMatch(/\bcolor: var\(--nulo-secondary\);/)
+	})
+
+	// Blind to template `style` / `:style` bindings, colours set from script strings, and an alias
+	// custom property that names the token.
+	test("no stylesheet rule colours text with --nulo-outline; the connect window's copy glyph and row chevron are icons", () => {
+		const stylesheets = [
+			...sourceFiles().filter((file) => /\.(vue|css|scss)$/.test(file)),
+			"packages/design/src/base.css",
+			"packages/design/src/utilities.css",
+		]
+		const outline = /var\(\s*--nulo-outline\s*[,)]/i
+		const found = stylesheets.flatMap((file) =>
+			parseSource(file).styles.flatMap(({ root }) => {
+				const keys: string[] = []
+				root.walkDecls(/^color$/i, (decl) => {
+					const rule = enclosingRule(decl)
+					if (outline.test(decl.value)) keys.push(`${file} ${rule ? resolveSelector(rule) : "(no rule)"}`)
+				})
+				return keys
+			}),
+		)
+		expect(stylesheets).toEqual(
+			expect.arrayContaining(["packages/design/src/ui/Input.vue", "apps/extension/src/popup/pages/detail-page.module.css"]),
+		)
+		expect(found).toEqual([
+			"apps/extension/src/components/composite/capabilities/DetailsTable.vue .address .copy_glyph",
+			"apps/extension/src/components/composite/capabilities/DetailsTable.vue .row .chevron",
+		])
 	})
 })

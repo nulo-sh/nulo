@@ -74,6 +74,6 @@ import { GLOSSARY, GLOSSARY_SECTIONS } from "@/utils/glossary"
 
 .where {
 	composes: type--caption from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 </style>
