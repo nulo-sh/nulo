@@ -86,14 +86,14 @@ Every step proves one failure mode. The source guard (`type-role-ban.test.ts`) c
 
 The total is about +80 s on Chrome and +130 s on Firefox.
 
-### Phase 1.1 — ownership, visibility, collector, S1
+### Phase 1.1 ✓ — ownership, visibility, collector, S1
 - Change map: `tests/e2e/fixtures/type-roles.ts` (the D1 predicate, D7 in `observeSite`); `tests/e2e/type-roles.test.ts` (`observed`, the push, S1's states; Manage accounts also waits for `manage-accounts-row`). In the fixture test (`:115`), add a hidden element at a site's selector next to a visible one. Assert that only the visible one is read. Assert that a site with only a hidden match fails `selector`.
 - Validation gate:
   - `bun run lint && bun run typecheck:all && bun run test` exits 0.
   - `cd apps/extension && bun run test:e2e -- tests/e2e/type-roles.test.ts --retry=0` passes on Chrome and with `NULO_E2E_BROWSER=firefox`, with 14 sites asserted.
   - D7 touches the network spec's reads. Run `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/type-roles-windows.test.ts` on both browsers, only with load1 < 150. It must stay green.
 
-### Phase 1.2 — the seeded test (S2–S8)
+### Phase 1.2 ✓ — the seeded test (S2–S8)
 - Change map:
   - `helpers/activity-seeds.ts`: `seedTransaction` gains optional `block`, `to` and call fields; add an import-row writer.
   - An authwit-row writer beside the type-roles helpers.
@@ -186,6 +186,11 @@ Per `implementations-plan/README.md` § Post-implementation standard at 8459699c
   - Per-file coverage settled for arc 2 (A2).
   - Rejected: its claim that no startup step clears an in-flight import (F6 shows the boot sweep does).
 - **Codex resume** (verification): `conditional approve (with conditions: make D6's selector exact; prevent protocol discovery in S11)`. Both demonstrated by source trace and met as Codex specified: `data-fpc-unnamed` (its second option; the first, the seed's id, ties the inventory to one test), and `seedProtocolFpcs` with the refusal held for the whole test. It confirmed every other disposition, the `call` pair's move and D8's known limit (own-account displays are `static`).
+- **Arc 1 implementation deviations** (evidence in [lessons/phase-1.md](lessons/phase-1.md)):
+  - S3's Activity and tx states ride S1's visits, and the import row and New token share one Home visit: no page is opened twice for one state.
+  - The seed also writes the scope's arrival row (`seedArrivalRow`). Without one, Activity holds its incoming rows until the chain-tip read gives up, about 60 s under the refused Testnet. The state is a wallet's after any feed read the tip; no timeout was raised.
+  - The unlock screen is read after explorer None and Developer mode, where the lock lands in the flow; S8 stays last.
+  - D9's base timing restores `type-roles.test.ts` at d738b790 over the head on the same host, rather than a second worktree.
 
 ## Seeds
 

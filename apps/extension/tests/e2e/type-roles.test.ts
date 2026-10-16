@@ -14,14 +14,18 @@ import { evaluateInActionPopup, openActionPopup } from "./fixtures/browser/firef
 import { clickByTestId, type ExtensionContext, openOnboarding, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
 import {
 	clickNavTab,
+	ensureUnlocked,
 	lockWallet,
 	navigateByHash,
+	navigateToSettings,
 	openHoldings,
 	openNetworkDetail,
 	readSessionRow,
+	setDeveloperMode,
 	unlockAfterBackgroundDeath,
 } from "./fixtures/helpers"
 import { holdNextPasskeyRequest, openPasskeyRegister, setupPasskeyVirtualAuth } from "./fixtures/passkey"
+import { settleClosedPopup } from "./fixtures/popup-leave"
 import {
 	checkFontFaces,
 	clearTypeRoleProbes,
@@ -43,8 +47,20 @@ import {
 	withBlockedAccount,
 } from "./fixtures/type-roles"
 import { skipUnlessListPrices } from "./fixtures/token-list"
-import { readActivityScope, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
+import {
+	type ActivityScope,
+	readActivityScope,
+	seedArrivalRow,
+	seedJournalRecord,
+	seedPublicReceipt,
+	seedTokenImport,
+	seedTokenRow,
+	seedTransaction,
+} from "./helpers/activity-seeds"
+import { seedAuthwits } from "./helpers/authwit-seeds"
 import { refuseTestnet } from "./helpers/contacts"
+import { pressEscape } from "./helpers/pointer-probes"
+import { seedStaleNetwork, takeoverScreen } from "./helpers/stale-network"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const PROBE = "type-role-probe-"
@@ -204,11 +220,25 @@ const TX_HASH = `0x${"5e".repeat(32)}`
 const longBalance = (decimals: number) => `123456789012345${"678901234567890123456789".slice(0, decimals)}`
 /** Wire-shaped: 0x and 64 hex, the x coordinate of a Grumpkin point. */
 const RECIPIENT = "0x09c1c9d2ce72c53c2451f8e9add86ccb8cb284dd4dc4f0eaf301b40b38a9459b"
+/** Wire-shaped, each under the field modulus: the receipt's hash is parsed before its fee lookup. */
+const BLOCK = { number: 42, hash: `0x0b${"4e".repeat(31)}` }
+const CHUNK_NONCE = `0x0c${"5a".repeat(31)}`
+const RECEIPT_TX_HASH = `0x${"1d".repeat(32)}`
+const IMPORT_CONTRACT = `0x0a${"6b".repeat(31)}`
+/** 16 hex, as the journal mints its ids. */
+const JOURNAL_ID = "a1b2c3d4e5f60718"
+const IMPORT_ID = "0f1e2d3c4b5a6978"
 
 type SiteState = readonly [surface: string, state: string]
 
 const SEEDED_TX = "the seedTransaction row"
 const WITH_EXPLORER = "on the testnet chain with an explorer"
+const WITHOUT_EXPLORER = "without an explorer"
+const RECEIPT = "a seedReceipt note"
+const PUBLIC_RECEIPT = "a public seedReceipt note with a block number"
+const JOURNAL = "a journal operation with a recipient"
+const DEBUG_PANEL = "Developer mode on, the debug toggle clicked"
+const AUTHWITS = "popup-settings-developer-account-state-authwits"
 
 /** Every state this file observed whose sites passed; the coverage test reads it last. */
 const observed: IdentifierObservation[] = []
@@ -325,11 +355,12 @@ async function expectButtons(page: Page, ...testids: ButtonTestid[]): Promise<vo
 }
 
 /**
- * Seeds a token row, its long private balance, a quote and a transfer, then restarts the
- * background: the balance service reads its token map only as it starts. The caller holds the
- * Testnet RPC refused, or a balance refresh writes the real zero over the seed.
+ * Seeds a token row, its long private balance, a quote, a transfer to an outside address in a
+ * block, a public receipt the feed has seen, a send's failed record and one authwit of each kind,
+ * then restarts the background: the balance service reads its token map only as it starts. The
+ * caller holds the Testnet RPC refused, or a balance refresh writes the real zero over the seed.
  */
-async function openSeededHome(ctx: ExtensionContext): Promise<Page> {
+async function openSeededHome(ctx: ExtensionContext): Promise<{ page: Page; scope: ActivityScope; receipt: string }> {
 	const seeder = await openHome(ctx)
 	await seeder
 		.waitForFunction(() => document.querySelector('[data-testid="tokens-list"]')?.getAttribute("data-settled") === "true", {
@@ -340,7 +371,17 @@ async function openSeededHome(ctx: ExtensionContext): Promise<Page> {
 	const priceId = scope.token.priceId
 	if (priceId === undefined) throw new Error("the held list prices no token on this chain")
 	await seedTokenRow(seeder, scope, 1)
-	await seedTransaction(seeder, scope, { hash: TX_HASH, amount: "1500000" })
+	await seedTransaction(seeder, scope, { hash: TX_HASH, amount: "1500000", to: RECIPIENT, block: BLOCK, chunkNonce: CHUNK_NONCE })
+	const receipt = await seedPublicReceipt(seeder, scope, { tokenId: 1, amount: "2500000", txHash: RECEIPT_TX_HASH })
+	await seedArrivalRow(seeder, scope, 1)
+	await seedJournalRecord(seeder, scope, {
+		id: JOURNAL_ID,
+		tokenId: 1,
+		amount: "700000",
+		progress: { stage: "failed", from: "simulating" },
+		errorKind: "transfer",
+	})
+	await seedAuthwits(seeder, scope)
 	await seeder.evaluate((items: Record<string, string>) => chrome.storage.local.set(items), {
 		"nulo:core:token-balances@1": JSON.stringify({
 			id: 1,
@@ -365,7 +406,7 @@ async function openSeededHome(ctx: ExtensionContext): Promise<Page> {
 	const page = await openPopup(ctx)
 	await unlockAfterBackgroundDeath(page)
 	await page.waitForSelector(sel("balance-amount"), VISIBLE)
-	return page
+	return { page, scope, receipt }
 }
 
 /** Resolves once the visible figure under `balance-amount` is drawn below full size. */
@@ -440,14 +481,116 @@ async function goAndSweep(page: Page, hash: string, ready: string, label: string
 	await expectPageClean(page, label, states)
 }
 
-test("a seeded wallet's Home with its fitted balance, Holdings, Activity, a tx detail, Receive, Accounts and the unlock screen", async ({
+/** Closes the popup holding `inner` the way a person does, by Escape. */
+async function closeByEscape(page: Page, inner: string): Promise<void> {
+	expect(await pressEscape(page), `Escape over ${inner}`).toBe(true)
+	await settleClosedPopup(page, inner)
+}
+
+/** Which forms the file's `AddressDisplay` readings took: the judge treats `name` and `address` apart. */
+const addressForms = (): string[] =>
+	[
+		...new Set(
+			observed.flatMap(({ sites }) => sites.flatMap(({ readings }) => readings.flatMap(({ addressShows }) => addressShows ?? []))),
+		),
+	].sort()
+
+/** The seeded receipt's detail and the seeded send's record, with the explorer on or set to None. */
+async function expectReceiptAndJournal(page: Page, receipt: string, explorer: boolean): Promise<void> {
+	const tail = explorer ? WITH_EXPLORER : WITHOUT_EXPLORER
+	const always: SiteState[] = [
+		["popup-received-id", RECEIPT],
+		["popup-received-id", `${RECEIPT} from an address`],
+	]
+	await goAndSweep(page, `#/popup/received/${receipt}`, explorer ? "tx-explorer-link" : "tx-hash-copy", `received detail ${tail}`, [
+		...(explorer ? always : []),
+		["popup-received-id", `${RECEIPT} ${tail}`],
+		["popup-received-id", `${PUBLIC_RECEIPT} ${tail}`],
+	])
+	const recipient = explorer ? "journal-detail-recipient-link" : "journal-detail-recipient"
+	await goAndSweep(page, `#/popup/journal/${JOURNAL_ID}`, recipient, `journal detail ${tail}`, [
+		["popup-journal-id", `${JOURNAL} ${tail}`],
+	])
+}
+
+/** The token page's metadata popup, from its menu. */
+async function expectTokenMetadata(page: Page): Promise<void> {
+	await clickByTestId(page, "token-menu-trigger")
+	await page.waitForSelector(sel("token-menu-metadata"), VISIBLE)
+	await openAndSweep(page, "token-menu-metadata", "token-metadata-id", "token metadata", [["popup:token_metadata", ""]])
+	await closeByEscape(page, "token-metadata-id")
+}
+
+/** Home again with a token import in flight, written after the worker's last start, then New token from its menu. */
+async function expectImportAndNewToken(page: Page, scope: ActivityScope): Promise<void> {
+	await seedTokenImport(page, scope, { id: IMPORT_ID, contract: IMPORT_CONTRACT })
+	await goAndSweep(page, "#/popup/general", "token-import-title", "Home, an import in flight", [
+		["popup-general", "a token import in flight whose token has no name"],
+	])
+	await clickByTestId(page, "tokens-menu-trigger")
+	await page.waitForSelector(sel("tokens-menu-import"), VISIBLE)
+	await openAndSweep(page, "tokens-menu-import", "token-address-input", "New token", [["popup:new_token", ""]])
+	await closeByEscape(page, "token-address-input")
+}
+
+/**
+ * With the explorer set to None, every value that was a link renders bare. Activity's row hash keeps
+ * one testid on both branches, so the tx page proves the setting took first.
+ */
+async function expectWithoutExplorer(page: Page, receipt: string): Promise<void> {
+	await navigateByHash(page, "#/popup/general", 10_000)
+	await navigateToSettings(page, "privacy")
+	await clickByTestId(page, "explorer-trigger")
+	await clickByTestId(page, "explorer-none-btn")
+	await goAndSweep(page, `#/popup/tx/${TX_HASH}`, "tx-hash", `tx detail ${WITHOUT_EXPLORER}`, [
+		["popup-tx-id", `${SEEDED_TX} ${WITHOUT_EXPLORER}`],
+		["popup-tx-id", `${SEEDED_TX} with a block ${WITHOUT_EXPLORER}`],
+	])
+	expect(await page.$(sel("tx-hash-link"))).toBeNull()
+	await goAndSweep(page, "#/popup/activity", "activity-row-hash", `Activity ${WITHOUT_EXPLORER}`, [
+		["popup-activity", `${SEEDED_TX} ${WITHOUT_EXPLORER}`],
+	])
+	await expectReceiptAndJournal(page, receipt, false)
+}
+
+/** Developer mode's debug panel on the tx page, opened: the hash and the call's chunk nonce. */
+async function expectTxDebugPanel(page: Page): Promise<void> {
+	await setDeveloperMode(page, true)
+	await navigateByHash(page, `#/popup/tx/${TX_HASH}`, 10_000)
+	await page.waitForSelector(sel("tx-debug-toggle"), VISIBLE)
+	await openAndSweep(page, "tx-debug-toggle", "tx-debug-chunk-nonce", "tx debug panel", [
+		["popup-tx-id", `${SEEDED_TX}, ${DEBUG_PANEL}`],
+		["popup-tx-id", `a call with a chunkNonce, ${DEBUG_PANEL}`],
+	])
+}
+
+/** One authwit record of each kind on the developer authwits page. */
+const expectAuthwits = (page: Page): Promise<void> =>
+	goAndSweep(page, "#/popup/settings/developer/account-state/authwits", "record-hash", "authwits", [
+		[AUTHWITS, "a public authwit granted"],
+		[AUTHWITS, "a backup restored with an encoded_call authwit record"],
+		[AUTHWITS, "a backup restored with an intent authwit record"],
+		[AUTHWITS, "a backup restored with a message_hash authwit record"],
+	])
+
+/** From the lock screen: Testnet's row moved as a network reset moves it, the takeover, and its reset confirmation. */
+async function expectStaleTakeover(page: Page): Promise<void> {
+	await seedStaleNetwork(page, "network-reset")
+	await ensureUnlocked(page)
+	expect(await takeoverScreen(page)).toBe("network-reset")
+	await openAndSweep(page, "stale-network-reset", "stale-confirm-account-address", "stale network confirmation", [
+		["overlay:StaleNetworkTakeover", "A3 opened from A1 on a stale Testnet seeded by seedStaleNetwork"],
+	])
+}
+
+test("a seeded wallet's Home, Holdings, Activity, its tx, receipt and send details with an explorer and without, token metadata, New token, Accounts, the debug panel, authwits, unlock and a stale takeover", async ({
 	listedExtensionPerTest: ctx,
 	skip,
 }) => {
 	skipUnlessListPrices(skip)
 	const refusal = await refuseTestnet(ctx)
 	try {
-		const page = await openSeededHome(ctx)
+		const { page, scope, receipt } = await openSeededHome(ctx)
 		await waitForFittedHero(page)
 		await expectHero(page, false)
 		await expectPageClean(page, "Home", [["overlay:Header", ""]])
@@ -464,27 +607,41 @@ test("a seeded wallet's Home with its fitted balance, Holdings, Activity, a tx d
 		await expectAddTokenOffer(page)
 		await clickNavTab(page, "activity")
 		await waitForHash(page, "#/popup/activity")
-		await page.waitForSelector(sel("page-hero-title"), VISIBLE)
-		await expectPageClean(page, "Activity", [["popup-activity", `${SEEDED_TX} ${WITH_EXPLORER}`]])
+		await page.waitForSelector(sel("activity-incoming-hash"), VISIBLE)
+		await expectPageClean(page, "Activity", [
+			["popup-activity", `${SEEDED_TX} ${WITH_EXPLORER}`],
+			["popup-activity", RECEIPT],
+		])
 		await goAndSweep(page, `#/popup/tx/${TX_HASH}`, "tx-from-address", "tx detail", [
 			["popup-tx-id", SEEDED_TX],
 			["popup-tx-id", `${SEEDED_TX} ${WITH_EXPLORER}`],
 			["popup-tx-id", `${SEEDED_TX} with a nonce`],
 			["popup-tx-id", `${SEEDED_TX} with a user call`],
+			["popup-tx-id", `${SEEDED_TX} with a block ${WITH_EXPLORER}`],
 		])
+		// The wallet's own account shows by name and the outside recipient by address.
+		expect(addressForms()).toEqual(["address", "name"])
 		const amounts = (await sweepTypeRoles(page)).readings.filter(({ roles }) => roles.includes("amount-detail"))
 		expect(amounts.map(({ fontSize }) => fontSize)).toEqual(["24px"])
+		await expectReceiptAndJournal(page, receipt, true)
 		await navigateByHash(page, "#/popup/tokens/1", 10_000)
 		await vi.waitFor(() => expectHero(page, true), { timeout: 15_000, interval: 500 })
+		await expectTokenMetadata(page)
 
-		await navigateByHash(page, "#/popup/general", 10_000)
+		await expectImportAndNewToken(page, scope)
 		await page.waitForSelector(sel("account-avatar-btn"), VISIBLE)
 		await openAndSweep(page, "account-avatar-btn", "account-item", "Accounts", [["popup:accounts", ""]])
+		await closeByEscape(page, "account-item")
+
+		await expectWithoutExplorer(page, receipt)
+		await expectTxDebugPanel(page)
+		await expectAuthwits(page)
 		await lockWallet(page)
 		await page.waitForSelector(sel("auth-submit"), VISIBLE)
 		await expectPageClean(page, "unlock")
 		await expectRoleAt(page, "auth-password-input", "input", true)
 		await expectButtons(page, "auth-submit")
+		await expectStaleTakeover(page)
 	} finally {
 		await refusal.stop()
 	}

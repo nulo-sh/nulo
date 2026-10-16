@@ -26,7 +26,7 @@ const formatTimestamp = (timestamp) => {
 
 <template>
 	<Flex wide direction="column" gap="10">
-		<button type="button" @click="expanded = !expanded" :class="$style.debug_toggle">
+		<button type="button" @click="expanded = !expanded" :class="$style.debug_toggle" data-testid="tx-debug-toggle">
 			<SectionLabel label="Debug details" />
 			<Icon
 				name="chevron"

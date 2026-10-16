@@ -419,7 +419,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"record-caller\"]",
 			"surface": "popup-settings-developer-account-state-authwits",
-			"state": "a public authwit granted (network)"
+			"state": "a public authwit granted"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/authwits/AuthwitCard.vue",
@@ -429,7 +429,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"record-contract\"]",
 			"surface": "popup-settings-developer-account-state-authwits",
-			"state": "a public authwit granted (network)"
+			"state": "a public authwit granted"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/authwits/AuthwitCard.vue",
