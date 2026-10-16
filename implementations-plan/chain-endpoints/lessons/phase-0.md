@@ -68,3 +68,10 @@ From an ordinary page served on `127.0.0.1`, with the plan's routing: Chrome and
 ## Confirmation round, Codex (final session resumed), 2026-10-10
 
 Verdict: **approve**. The seven final-pass findings are closed; one Low (export `isAllowedRpcUrl` from the aztec-runtime adapters barrel) accepted into arc 2a's change map. The panel has converged.
+
+## Close-out revision, panel (2026-10-16)
+
+- **Codex** (gpt-6.1-sol, high, session `01a144eb-44d0-7853-84dd-8b13853d5cfe`, default `~/.codex` login): **conditional approve**, five findings (A5's stand-in blind spot, the `/loop` after archiving, R5, #77's comment, A5's cleanup scope). All verified against the tree and accepted.
+- **Opus** (Plan agent): **conditional approve**, seven findings. The High one held: "accepted from the veto list" is the program's phrase for a record not struck (`archive/ci-release-supply/plan.md`, D-orch-12), so #101 closes only with the owner's veto quoted (D28). It also caught that committing on `worktree-chain-endpoints` would make the teardown keep that branch (D31 revised).
+- Where they split: Codex called closing #101 justified by the brief's veto; Opus said the signed record contradicts it. The conditional D28 is the smaller claim that both accept. Dispositions in `plan.md` § Audit verdicts.
+- **Codex round 2** (same session resumed): **approve**, no new material finding; one Low wording fix (a new contract *class* needs a release, not a new token on the bundled class), accepted.

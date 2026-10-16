@@ -54,10 +54,10 @@ export default {
 			// `http://[::1]:*` source; the form refuses it. Firefox checks `downloads.download` of a
 			// blob URL against this.
 			"connect-src 'self' blob: https: http://localhost:* http://127.0.0.1:*",
-			// CodeMirror (the logs and JSON viewers) generates its theme into a `<style>` element and
-			// rewrites it as themes mount, so no hash can name it; a hash would also switch
-			// 'unsafe-inline' off for the Presto banner's inline stylesheet.
-			"style-src 'self' 'unsafe-inline'",
+			// The one inline stylesheet a page may carry is the Presto banner's shadow-root `<style>`, one
+			// constant for every variant and theme; `src/manifest.test.ts` re-hashes it from the
+			// installed package. The viewers' CodeMirror adopts its sheets into their shadow roots.
+			"style-src 'self' 'sha256-C0kfQfSj0nK8EHJVnIUHaTi2TjSzbRaDjpU61ugGI9o='",
 		].join("; "),
 	},
 	cross_origin_embedder_policy: {

@@ -69,3 +69,14 @@ Artifact runs (release and nightly smoke of the production zip) block only the p
 - PR #252 (ci-release-supply) edits the smoke workflows; arc 1 here edits no workflow.
 - Reservations (program lane map): R2 `usePrices.ts`/`BalanceView.vue` after send-queue-activity arc 3 (#103); R3 `LogsViewer.vue` after forms-and-contacts arc 1 (#212); R5 `manifest.config.ts`: this lane's arc 2 (#101) before home-onboarding-chrome arc 2 (#156). The R2 rule text says "send-queue arc 2 (#103)", but the same file's arc table puts #103 in send-queue arc 3, as the lane brief does.
 - #197's guard belongs where `fee-juice.ts` lives (fees-and-sponsors depends on it); #77 waits on unleashed.
+
+## Close-out revision recon (2026-10-16)
+
+Read at `origin/dev` c5e9c8e8 by two Sonnet explorers (the token list's no-list and offline paths; store, legal, docs and the archived token-list plans), then checked by the planner. The Default tokens line above is stale since #389: no list ships in the build. Findings are R-F1 to R-F9 in `plan.md` § Close-out revision.
+
+| Capability the revision needs | Existing code | Verdict |
+|---|---|---|
+| Default tokens from a fetched, signed list | `TokenListService` (`EXT/src/wallet/services/token-list/service.ts`), `seedsFromList` (`EXT/src/wallet/services/token/default-tokens.ts:31-40`), the compiled floor (`packages/token-list/src/`) | **already shipped** (#389, #489): nothing to build, no second fetch, no new permission |
+| What a person sees with no list | Home's empty state (`TokensView.vue:417-427`), Holdings' count (`EXT/src/popup/pages/holdings.vue:122`) | **reuse as is**: the owner chose it ("Nothing extra", 2026-10-13) |
+| Store and privacy declarations of the download | `EXT/store/remote-code.md:84-100`, `EXT/store/listing.md:56,80-82,252-255`, `legal/privacy.md` § 5.11, § 13 | **already current** |
+| A5: record the network suite's outside hosts | The egress guard (`EXT/tests/e2e/fixtures/egress-guard.ts`), armed only by `project.provide("egressGuard", true)` in `global-setup-smoke.ts:75` | **reuse** with a local, uncommitted `provide` in `global-setup.ts` and a print of `attempts()` |

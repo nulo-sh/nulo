@@ -1,8 +1,12 @@
+import { createHash } from "node:crypto"
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join, resolve } from "node:path"
 import { describe, expect, test } from "vitest"
+import "@alejoamiras/presto-banners/register"
+import { clearDismissal } from "@alejoamiras/presto-banners"
 import logoDataUri from "@/assets/logo.png?inline"
 import manifest from "../manifest/manifest.config"
+import chromeManifest from "../manifest/manifest.chrome.config"
 import firefoxManifest from "../manifest/manifest.firefox.config"
 import { RP_ID } from "@/wallet/services/passkey/spec"
 
@@ -28,6 +32,8 @@ type FirefoxManifest = {
 }
 const buildFirefox = () =>
 	(firefoxManifest as unknown as (env: { command: string; mode: string }) => FirefoxManifest)({ command: "build", mode: "production" })
+type ManifestEnv = { command: string; mode: string }
+const chromeFor = (env: ManifestEnv) => (chromeManifest as unknown as (env: ManifestEnv) => { content_security_policy: unknown })(env)
 
 /** Chrome match-pattern semantics for the subset the manifest uses: `<scheme>://<host>/<path>`,
  *  where host is `*`, `*.domain` (domain and every subdomain) or an exact domain. */
@@ -124,12 +130,45 @@ describe("passkey relying party", () => {
 /** Every extension page, the background and the PXE host run under this one policy; Firefox
  *  inherits it. */
 const EXTENSION_PAGES_CSP =
-	"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data: blob:; connect-src 'self' blob: https: http://localhost:* http://127.0.0.1:*; style-src 'self' 'unsafe-inline'"
+	"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data: blob:; connect-src 'self' blob: https: http://localhost:* http://127.0.0.1:*; style-src 'self' 'sha256-C0kfQfSj0nK8EHJVnIUHaTi2TjSzbRaDjpU61ugGI9o='"
+
+/** The `<style>` texts the onboarding's Presto pitch paints into its shadow root, rendered with the
+ *  page's own attributes. */
+function prestoPitchStyles(): string[] {
+	clearDismissal("presto:banner:card:offline")
+	const banner = document.createElement("presto-banner")
+	for (const [name, value] of Object.entries({ variant: "card", state: "offline", fonts: "none" })) banner.setAttribute(name, value)
+	document.body.append(banner)
+	try {
+		return [...(banner.shadowRoot?.querySelectorAll("style") ?? [])].map((style) => style.textContent ?? "")
+	} finally {
+		banner.remove()
+	}
+}
 
 describe("content security policy", () => {
 	test("the extension pages' policy is exactly the pinned one, on both browsers", () => {
 		expect(m.content_security_policy).toEqual({ extension_pages: EXTENSION_PAGES_CSP })
 		expect(buildFirefox().content_security_policy).toEqual({ extension_pages: EXTENSION_PAGES_CSP })
+		for (const mode of ["production", "development"]) {
+			expect(chromeFor({ command: "build", mode }).content_security_policy).toEqual({ extension_pages: EXTENSION_PAGES_CSP })
+		}
+	})
+
+	test("only the dev server's policy admits inline styles, and it differs in nothing else", () => {
+		const served = chromeFor({ command: "serve", mode: "development" }).content_security_policy
+		expect(served).toEqual({
+			extension_pages: EXTENSION_PAGES_CSP.replace(/style-src [^;]*/, "style-src 'self' 'unsafe-inline'"),
+		})
+	})
+
+	// A banner bump that changes its stylesheet fails here, not as an unstyled card in onboarding.
+	test("style-src admits inline only the Presto pitch's stylesheet, by its hash", () => {
+		const styles = prestoPitchStyles()
+		expect(styles).toHaveLength(1)
+		const hash = createHash("sha256").update(styles[0]).digest("base64")
+		const styleSrc = EXTENSION_PAGES_CSP.split("; ").find((directive) => directive.startsWith("style-src "))
+		expect(styleSrc).toBe(`style-src 'self' 'sha256-${hash}'`)
 	})
 })
 
