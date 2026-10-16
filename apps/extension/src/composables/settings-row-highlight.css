@@ -1,0 +1,51 @@
+/* The row a settings search opened. The animation alone draws the outline and fills nothing, so it
+ * ends by itself, the tint fades into the row's own background, and its hover and focus rings stay
+ * its own. */
+[data-settings-row][data-highlighted] {
+	animation: settings-row-found 2.4s ease-out;
+	animation-fill-mode: none;
+}
+
+/* A container that clips (`ItemsContainer`) would cut an outline drawn outside the row. */
+[data-settings-row][data-highlighted="inset"] {
+	animation-name: settings-row-found-inset;
+}
+
+/* Calm: the outline holds for the same moment, then goes, with no fade. */
+@media (prefers-reduced-motion: reduce) {
+	[data-settings-row][data-highlighted] {
+		animation-timing-function: step-end;
+	}
+}
+
+.noanimations [data-settings-row][data-highlighted] {
+	animation-timing-function: step-end;
+}
+
+@keyframes settings-row-found {
+	0%,
+	50% {
+		background: color-mix(in srgb, var(--nulo-accent) 7%, transparent);
+		box-shadow: 0 0 0 8px color-mix(in srgb, var(--nulo-accent) 7%, transparent);
+		outline: 1px solid color-mix(in srgb, var(--nulo-accent) 55%, transparent);
+		outline-offset: 8px;
+	}
+	100% {
+		box-shadow: 0 0 0 8px transparent;
+		outline: 1px solid transparent;
+		outline-offset: 8px;
+	}
+}
+
+@keyframes settings-row-found-inset {
+	0%,
+	50% {
+		background: color-mix(in srgb, var(--nulo-accent) 7%, transparent);
+		outline: 1px solid color-mix(in srgb, var(--nulo-accent) 55%, transparent);
+		outline-offset: -1px;
+	}
+	100% {
+		outline: 1px solid transparent;
+		outline-offset: -1px;
+	}
+}

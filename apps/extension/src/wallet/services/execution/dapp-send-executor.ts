@@ -41,7 +41,7 @@ import { liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { type JobError, type JobProgress, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { markFailedUnlessCancelled } from "./mark-failed-unless-cancelled"
 import { formatFeeJuice } from "@/utils/fee-estimation"
-import { pickPrimaryMethod } from "@/utils/primary-method"
+import { pickPrimaryMethod, pickPrimaryWireMethod } from "@/utils/primary-method"
 import { findPrimaryEndpoint, primaryEndpointUrl } from "@/wallet/services/network/spec"
 import type { ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
 import type { WrappedTask } from "@/wallet/services/task/service"
@@ -1155,7 +1155,7 @@ function spendAccounts(account: string, additionalScopes: unknown): string[] {
 /** The shared picker, not the raw first call: it skips a leading self-pay fee payload, so the proving
  *  title and the settled record's agree. */
 function primaryMethodCalls(op: AztecSendTxOperation): { method: string }[] | undefined {
-	const primaryMethod = Array.isArray(op.exec?.calls) ? pickPrimaryMethod(op.exec.calls) : undefined
+	const primaryMethod = pickPrimaryWireMethod(op.exec?.calls)
 	return primaryMethod ? [{ method: primaryMethod }] : undefined
 }
 

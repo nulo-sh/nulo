@@ -66,6 +66,21 @@ describe("reduced motion and Disable animations both stop the shakes and the shi
 	})
 })
 
+describe("a settings search's row outline holds with no fade under reduced motion and Disable animations", () => {
+	const source = read("composables/settings-row-highlight.css")
+	const flat = source.replace(/\s+/g, " ")
+	const row = "[data-settings-row][data-highlighted]"
+
+	test("both switch the fade to one step at the end of the same moment", () => {
+		expect(reducedMotionRules(source).get(row)).toBe("animation-timing-function: step-end;")
+		expect(flat).toContain(`.noanimations ${row} { animation-timing-function: step-end; }`)
+	})
+
+	test("the animation fills nothing, so no outline outlives it", () => {
+		expect(flat).toContain(`${row} { animation: settings-row-found 2.4s ease-out; animation-fill-mode: none; }`)
+	})
+})
+
 describe("the detail pages' links draw the focus ring on :focus-visible, never on plain :focus", () => {
 	const shared = read("popup/pages/detail-page.module.css")
 		.replace(/\/\*[\s\S]*?\*\//g, "")

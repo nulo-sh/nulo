@@ -3,6 +3,7 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, expect, test, vi } from "vitest"
 import type { ConfigProp } from "@/wallet/config"
+import { expectOwnedRows, settingsContext, settingsRouter } from "../../../../../tests/helpers/settings-rows"
 import AdvancedSettings from "./index.vue"
 
 const fakes = vi.hoisted(() => ({ config: undefined as unknown }))
@@ -63,7 +64,7 @@ afterEach(() => vi.unstubAllGlobals())
 async function mountAdvanced() {
 	const wrapper = mount(AdvancedSettings, {
 		global: {
-			plugins: [createTestingPinia({ createSpy: vi.fn })],
+			plugins: [settingsRouter(), createTestingPinia({ createSpy: vi.fn })],
 			stubs: {
 				SettingsPageShell: { template: "<div><slot /></div>" },
 				Flex: { template: "<div><slot /></div>" },
@@ -72,7 +73,7 @@ async function mountAdvanced() {
 				Toggle: true,
 				RowTarget: true,
 				MaterialIcon: true,
-				RouterLink: true,
+				RouterLink: { template: "<a><slot /></a>" },
 			},
 		},
 	})
@@ -124,4 +125,9 @@ test("a reread that finds Developer Mode changed shows it and writes nothing", a
 	await flushPromises()
 	expect(w.get('[data-testid="settings-toggle-developerMode"]').attributes("modelvalue")).toBe("false")
 	expect(config.setValue).not.toHaveBeenCalled()
+})
+
+test.each([false, true])("renders the search registry's rows with developer mode %s", async (developerMode) => {
+	config.getProps.mockResolvedValue([{ key: "developerMode", value: developerMode }] as ConfigProp[])
+	expectOwnedRows(await mountAdvanced(), "/popup/settings/developer", settingsContext({ developerMode }))
 })

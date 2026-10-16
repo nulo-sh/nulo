@@ -504,6 +504,15 @@ export function identifierSites(): readonly SiteEntry[] {
 	return loadedSites
 }
 
+/**
+ * The suite that observes a site: the network spec for a state the expected file marks `(network)`,
+ * none for one it marks `(component test)`, which no e2e state renders, the smoke spec for any other.
+ */
+export function siteSuite(site: Pick<SiteEntry, "state">): "smoke" | "network" | "component" {
+	if (site.state.endsWith("(network)")) return "network"
+	return site.state.endsWith("(component test)") ? "component" : "smoke"
+}
+
 /** An occurrence's identity: file, expression, branch and ordinal; the line is only a hint. */
 export const siteKey = (site: Pick<SiteEntry, "file" | "expression" | "branch" | "ordinal">): string =>
 	`${site.file}|${site.expression}|${site.branch}|${site.ordinal}`
@@ -518,14 +527,16 @@ function judgeSite(reading: TypeReading, site: SiteEntry, vars: Vars): SweepFail
 	return [...carried, ...judgeAs(reading, role, vars)]
 }
 
+/** A hidden match is another branch's or a closed panel's, so it neither passes nor observes the site. */
 async function observeSite(page: Page, site: SiteEntry): Promise<SiteObservation> {
 	const key = siteKey(site)
 	if (site.unreachable) return { key, site, mode: "unreachable", readings: [], failures: [] }
-	const { vars, readings } = await readPageTypography(page, {
+	const { vars, readings: matched } = await readPageTypography(page, {
 		kind: "at",
 		selector: selectorOf(site.selector),
 		native: site.role === "input-data",
 	})
+	const readings = matched.filter((reading) => reading.visible)
 	const failures =
 		readings.length === 0
 			? [
@@ -534,8 +545,8 @@ async function observeSite(page: Page, site: SiteEntry): Promise<SiteObservation
 						text: "",
 						role: site.role,
 						property: "selector",
-						expected: `an element at ${site.selector}`,
-						actual: "none",
+						expected: `a visible element at ${site.selector}`,
+						actual: matched.length === 0 ? "none" : `${matched.length} hidden`,
 					},
 				]
 			: readings.flatMap((reading) => judgeSite(reading, site, vars))
@@ -543,9 +554,10 @@ async function observeSite(page: Page, site: SiteEntry): Promise<SiteObservation
 }
 
 /**
- * The identifier sites of one surface in one seeded state: every element at each matching site's selector,
- * and at least one, carries the site's role and computes to it (an `AddressDisplay` showing a name
- * expects `name`; an `input-data` site is read at its native field), then the hex text scan.
+ * The identifier sites of one surface in one seeded state: every visible element at each matching
+ * site's selector, and at least one, carries the site's role and computes to it (an `AddressDisplay`
+ * showing a name expects `name`; an `input-data` site is read at its native field), then the hex text
+ * scan.
  */
 export async function observeIdentifierSites(
 	page: Page,
