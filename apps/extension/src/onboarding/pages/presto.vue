@@ -55,8 +55,8 @@ function goNext() {
 	router.push("/onboarding/done")
 }
 
-// Pre-flush, so the row is still mounted: a grant that takes it away while it holds focus hands
-// focus to the title, not the page.
+// Pre-flush, so the row is still mounted: a grant that takes it away while it holds focus moves
+// focus to the title instead of dropping it to the body.
 watch(permissionMissing, (missing) => {
 	if (!missing && rowRef.value?.$el.contains(document.activeElement)) titleRef.value?.$el.focus()
 })
