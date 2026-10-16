@@ -53,8 +53,7 @@ jobs:
       - name: Review summary
         id: summary
         run: bun infra/token-list/scripts/summary.ts >> "$GITHUB_STEP_SUMMARY"
-      # Advisory: no failure here, a crash or a timeout included, blocks the publish. The node
-      # stays keyless, since this line is committed (and pinned in behavior-gating.test.ts).
+      # Committed and pinned in behavior-gating.test.ts: the node URL must carry no key.
       - name: Live check (advisory)
         continue-on-error: true
         timeout-minutes: 5

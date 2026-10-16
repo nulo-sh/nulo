@@ -1,9 +1,7 @@
 /**
- * The `prepare` job's advisory live check: every source entry read from a public node for its chain,
- * the way the wallet checks it before seeding (the instance's address and current class, then the
- * symbol and decimals its getters return). A node can lie, so `matches` means only that this node
- * agrees; the wallet checks again on its own node. No unchecked node text reaches stdout or stderr:
- * every value is shape-checked before use, and a failure prints as a fixed category.
+ * The `prepare` job's advisory check of each source entry against a public node for its chain, as the
+ * wallet checks it before seeding. `matches` means only that the node agrees. Only shape-checked node
+ * values and fixed failure categories reach stdout or stderr.
  *
  *   bun infra/token-list/scripts/live-check.ts <nodeUrl>...   (exits 0 only when there are rows and every one matches)
  */
@@ -91,7 +89,7 @@ async function readField(url: string, block: number, address: string, slot: numb
 	return value
 }
 
-/** The symbol as the wallet decodes its getter's field: UTF-8, every NUL removed. */
+/** The wallet's decoding of the symbol field: UTF-8, every NUL removed (invalid bytes may yield fewer U+FFFD). */
 function decodeSymbol(field: string): string {
 	const bytes = Uint8Array.from(field.slice(2).match(/../g) ?? [], (byte) => Number.parseInt(byte, 16))
 	return UTF8.decode(bytes).replaceAll("\u0000", "")
