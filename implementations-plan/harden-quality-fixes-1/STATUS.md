@@ -5,3 +5,5 @@
 - 2026-10-16: round 1: Codex conditional approve (7, all accepted), Opus conditional approve (10; 9 accepted, 1 claim refuted by a TypeScript probe). D5 mapping fixed, D11 handles, special-arm refusal tests, retry 0. Codex resume running.
 - 2026-10-16: round 2 (Codex resume): conditional approve (2, both accepted: a red on base leaves the gate unmet; the binding read-order words restored). Fresh final Codex pass running.
 - 2026-10-16: final fresh Codex pass: conditional approve (1, accepted: the armed smoke build); resumed: approve. Plan committed; awaiting the orchestrator's approval and A1, A2 (OA-1 for the owner).
+- 2026-10-16: arc 1 started; merged origin/dev (7697c376). A1 refused (no `execute/index.vue` hunk, no fee-seed helper; `Refs #549`), A2 accepted (D3).
+- 2026-10-16: phase 1 gate pass: lint, typecheck:all, `bun run test` (800 files), wallet-core test (24 files); the copy grep prints exactly the nine expected lines.

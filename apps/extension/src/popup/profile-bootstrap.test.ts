@@ -3,6 +3,7 @@
  * superseded mid-await must commit nothing — neither the failure record, its
  * clear, nor the toast.
  */
+import { deferred } from "@nulo/wallet-core/utils"
 import { describe, expect, test, vi } from "vitest"
 import { runFencedBootstrap, type FencedBootstrapDeps } from "./profile-bootstrap"
 
@@ -19,16 +20,6 @@ function makeDeps(over: Partial<FencedBootstrapDeps> = {}) {
 		...over,
 	}
 	return { deps, setFailure, toast }
-}
-
-function _deferred() {
-	let resolve!: () => void
-	let reject!: (e: unknown) => void
-	const promise = new Promise<void>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
 }
 
 describe("runFencedBootstrap", () => {
@@ -48,7 +39,7 @@ describe("runFencedBootstrap", () => {
 	})
 
 	test("STALE success (B superseded A mid-await) does not clear B's record", async () => {
-		const gate = _deferred()
+		const gate = deferred()
 		let current = true
 		const h = makeDeps({ bootstrap: () => gate.promise, isCurrent: () => current })
 		const run = runFencedBootstrap(h.deps)
@@ -59,7 +50,7 @@ describe("runFencedBootstrap", () => {
 	})
 
 	test("STALE failure (B superseded A mid-await) writes nothing and never toasts", async () => {
-		const gate = _deferred()
+		const gate = deferred()
 		let current = true
 		const h = makeDeps({ bootstrap: () => gate.promise, isCurrent: () => current })
 		vi.spyOn(console, "error").mockImplementation(() => {})
