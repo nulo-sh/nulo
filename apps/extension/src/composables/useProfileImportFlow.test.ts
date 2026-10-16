@@ -230,6 +230,8 @@ describe("useProfileImportFlow", () => {
 		/** Drive the ConfirmPopup the way the real popup does: invoke the stashed callback. */
 		async function confirmDialog() {
 			const { useCacheStore } = await import("@/stores/cache.store")
+			const { usePopupStore } = await import("@/stores/popup.store")
+			expect(usePopupStore().isOpened("confirm")).toBe(true)
 			const confirm = useCacheStore().confirm as { callback?: () => void; title?: string; description?: string }
 			expect(confirm.title).toBeTruthy()
 			confirm.callback?.()
@@ -302,6 +304,7 @@ describe("useProfileImportFlow", () => {
 
 			const second = flow.handleImportSeed()
 			await tick()
+			expect(profileApi.importMnemonic).toHaveBeenCalledTimes(2)
 			const confirm = (await confirmDialog()) as { description?: string; confirm_text?: string }
 			expect(String(confirm.description)).toContain("Savings")
 			expect(confirm.confirm_text).toBe("Add anyway")

@@ -6,3 +6,4 @@
 - 2026-10-16: arc 1 started; `origin/dev` (ea8827f9) merged, `index.md` conflict resolved to dev plus this plan's line. Phase 1 gate (`bun run lint && bun run typecheck:all && bun run test`): **pass** (801 files, 12976 tests); both site cases red on the base builders, `account.test.ts:124` unchanged.
 - 2026-10-16: phase 2 gate (`bun run lint && bun run typecheck:all && bun run test`): **pass** (801 files, 12979 tests); the three lock cases red on the base `json/index.vue`, the three existing cases green on both.
 - 2026-10-16: phase 3 gate (`bun run lint && bun run typecheck:all && bun run test`): **pass** (801 files, 12980 tests); the second-warning case red on the base composable (blank dialog, `title` undefined).
+- 2026-10-16: review round 1 over phases 1-3: Codex **approve** (two P3s fixed), Opus approve (M and L1 fixed, L2 rejected, L3 recorded as a deviation). Targeted tests green.

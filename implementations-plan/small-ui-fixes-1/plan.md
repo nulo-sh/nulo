@@ -121,7 +121,12 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 | Codex gpt-6.1-sol high, session `01a14563-8ea0-7561-b755-da911cb6a3a5` | conditional approve (C1-C8), then on resume **approve** | C1 path (a) holds via `route-guard.ts:74-80`: accepted, the claim corrected. C2 all-symbol → `_`: accepted. C3 read order, I1's flash: accepted (D1; I1 to a known limit). C4 the client's lost-event window: accepted as wording. C5 chip height is the owner's: accepted (OA-1). C6 `onBeforeUnmount` cleanup: argued against O7, **withdrawn** by Codex on resume. C7 pre-delivery gate: accepted. C8 shot paths: accepted. Resume R1 (the off chip is a rectangle; height falls by line height minus 6 px) and R2 (the D5 reason is navigation while a read is pending, not guard ordering): accepted; its deferred-snapshot test added to phase 2. |
 | Opus 5.5 Plan lens | conditional approve (O1-O9) | O1 expectations and the password profile's file name: accepted; its combining-mark ask rejected (P25-11 A chose the account export's rule; the PR body states it). O2 payload catch: accepted. O3 UI impact lines, OA-1: accepted. O4 drop the scenario: rejected, the scenario stays for the Header-port path and the shots (Codex concurs). O5 red proof, O6 read order, O7 `beforeunload`, O8 smoke env, O9 `lh` rule for OA-1 B only: accepted. |
 
+| Codex gpt-6.1-sol high, review round 1 over phases 1-3, session `01a14599-c2a6-79c1-851a-672a118e2627` | **approve**, two P3s, both fixed | Second-warning test asserts the dialog is open and two import calls before confirming; a narrating fake comment removed. [lessons/phase-3.md](lessons/phase-3.md) |
+| Opus 5.5 general-purpose review of the same diff | approve, one medium, three lows | M fixed (the fake's disconnect now rejects the held snapshot; a mutation proves the case reds on an unmount disconnect); L1 fixed (doc: each run); L2 rejected (Security accepts the one-read render); L3 a deviation, below. |
+
 Unresolved: none between the legs. Open for the owner: OA-1.
+
+**Deviations from the plan (arc 1).** D5: the window keeps no `unsubscribe`; `onClose`'s `disconnect()` ends the subscription, and nothing reconnects after an explicit disconnect. Phase 2: the control (an open snapshot renders `json-content`, then a live `undefined` removes the window) is the first existing case with a `json-content` assertion added, not a fourth case.
 
 ## Seeds
 

@@ -34,13 +34,21 @@ vi.mock("@/wallet/services/profile/client", () => ({
 			add: (fn: (profile: unknown) => void) => live.add(fn),
 			remove: (fn: (profile: unknown) => void) => live.delete(fn),
 		}
+		let dropReads: (error: Error) => void = () => {}
+		const dropped = new Promise<never>((_, reject) => {
+			dropReads = reject
+		})
+		dropped.catch(() => undefined)
 		return {
 			onActiveProfileChanged,
 			connect: async () => {},
-			disconnect: () => {},
-			// The real client's composition: the current state first, then every change.
+			disconnect: () => dropReads(new Error("port closed")),
 			subscribeActiveProfile: async (fn: (profile: unknown) => void) => {
-				fn(await snapshot())
+				try {
+					fn(await Promise.race([snapshot(), dropped]))
+				} catch {
+					// As the real client: a snapshot the disconnect rejected is dropped.
+				}
 				onActiveProfileChanged.add(fn)
 				return () => onActiveProfileChanged.remove(fn)
 			},
