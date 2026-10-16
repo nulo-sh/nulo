@@ -7,13 +7,19 @@
  * and encrypted message relay. No private keys or secrets touch this script.
  */
 import { ContentScriptConnectionHandler } from "@aztec-labs/wallet-sdk/extension/handlers"
+import { createApprovalFilter } from "./approval-filter"
+
+const approvals = createApprovalFilter()
 
 const handler = new ContentScriptConnectionHandler({
-	sendToBackground: (message) => chrome.runtime.sendMessage(message),
+	sendToBackground: (message) => {
+		approvals.sent(message)
+		return chrome.runtime.sendMessage(message)
+	},
 	addBackgroundListener: (listener) => {
 		// biome-ignore lint/suspicious/noExplicitAny: Chrome message listener provides untyped messages
 		chrome.runtime.onMessage.addListener((message: any) => {
-			listener(message)
+			if (approvals.admits(message)) listener(message)
 			return undefined
 		})
 	},
