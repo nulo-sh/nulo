@@ -20,3 +20,4 @@
 - 2026-10-16: close-out revision (light): merged dev c5e9c8e8; 2 sonnet explorers; #79 already closed by #389 (no arc, D27); #101 closes with the close-out (D28); #197 half shipped in #270; D11 issue is #498; OA-8 open. Plan revised (Phase 3); panel next.
 - 2026-10-16: panel: Codex conditional approve (5 findings), Opus conditional approve (7, one High on #101's record); all accepted; D28 conditional, D31 revised, D32 (R5 released). Codex resume next.
 - 2026-10-16: Codex round 2 approve (one Low wording fix); merged dev 5c273865 (#534 closed #156, so R5 is moot); revision committed on chain-endpoints-close-out. Awaiting the orchestrator.
+- 2026-10-16: arc 2b released (D-orch-11: P12-03 was never struck); branch chain-endpoints-2b off 78d22cca, dev 7697c376 merged; R3 (#212 via #255) and R5 (#534) satisfied.
