@@ -39,9 +39,11 @@ import { backupNotice } from "@/components/stale-network/copy"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
+import { useConfirm } from "@/composables/useConfirm"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 import { isPopupSubmitKey, refuseRepeatEnter } from "@/composables/usePopupEntity"
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
 
 // Path A passkey ceremony — replaces the prior SW-driven popup window for
 // passkey profile backup-export. Mounted as `<PasskeyCeremonyDialog>` in
@@ -50,11 +52,7 @@ const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onR
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
-import { useCacheStore } from "@/stores/cache.store"
-import { usePopupStore } from "@/stores/popup.store"
 const appStore = useAppStore()
-const cacheStore = useCacheStore()
-const popupStore = usePopupStore()
 
 const router = useRouter()
 
@@ -448,7 +446,7 @@ async function downloadBackup(isEncrypted) {
  *  the callback downloads only the plain file of the run the person was warned about. */
 function confirmPlainDownload() {
 	const gen = generation
-	cacheStore.confirm = {
+	requestConfirm({
 		pre_title: "Not encrypted",
 		title: "Download without a password?",
 		description:
@@ -459,8 +457,7 @@ function confirmPlainDownload() {
 		callback: () => {
 			if (gen === generation && backupStatus.value === "finished") void downloadBackup(false)
 		},
-	}
-	popupStore.open("confirm")
+	})
 }
 
 function handleDownloadClick() {

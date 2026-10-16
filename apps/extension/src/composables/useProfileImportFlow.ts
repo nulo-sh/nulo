@@ -2,7 +2,7 @@
 import { computed, type Ref, ref, watch } from "vue"
 import { DuplicateWalletError } from "@nulo/extension-messaging/errors"
 import type { ToastOptions } from "@/composables/toast"
-import { useCacheStore } from "@/stores/cache.store"
+import { useConfirm } from "@/composables/useConfirm"
 import { usePopupStore } from "@/stores/popup.store"
 import { type RestoreErrorNetworks, useFullBackupImport } from "@/composables/useFullBackupImport"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
@@ -91,14 +91,10 @@ export function useImportErrorState(openToast: UseProfileImportFlowOptions["open
 	return { error, isCopied, fillError, clearError, fillUnknownImportError, handleCopyError, handlePasswordInput, handleSecretInput }
 }
 
-/** The fields ConfirmPopup reads for the duplicate warning; `cacheStore.confirm` itself is an untyped
- *  `reactive({})` that every other writer fills from an unchecked SFC. */
-type DuplicateConfirmRequest = { title: string; description: string; confirm_text: string; callback: () => void }
-
 /** The duplicate-recovery-phrase warn-and-confirm, shared by every import path. */
 function useDuplicateConfirm() {
-	const cacheStore = useCacheStore()
 	const popupStore = usePopupStore()
+	const { requestConfirm } = useConfirm()
 	/** Set once the user confirms the duplicate-recovery-phrase warning; the retry passes it to
 	 *  the service. Reset per attempt so a confirm never leaks into a later, unrelated import. */
 	const allowDuplicate = ref(false)
@@ -123,28 +119,24 @@ function useDuplicateConfirm() {
 					stop()
 					resolve(value)
 				}
-				// A whole new object per request: ConfirmPopup replaces `cacheStore.confirm` on close, so
-				// a field written into an object held from before that close never reaches the dialog.
-				const request: DuplicateConfirmRequest = {
-					title: "You already have this wallet",
-					description: existing
-						? `“${existing}” already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?`
-						: "Another profile already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?",
-					confirm_text: "Add anyway",
-					// ConfirmPopup invokes `callback` on confirm and just closes on cancel/dismiss —
-					// there is no cancel hook — so the close transition IS the cancel signal. Watch it
-					// (the watcher starts before `open`, and `settle` is idempotent, so a confirm that
-					// also closes can't resolve twice).
-					callback: () => settle(true),
-				}
-				cacheStore.confirm = request
+				// ConfirmPopup invokes `callback` on confirm and just closes on cancel/dismiss — there is
+				// no cancel hook — so the close transition IS the cancel signal. Watch it (the watcher
+				// starts before the dialog opens, and `settle` is idempotent, so a confirm that also
+				// closes can't resolve twice).
 				const stop = watch(
 					() => popupStore.isOpened("confirm"),
 					(isOpen, wasOpen) => {
 						if (wasOpen && !isOpen) settle(false)
 					},
 				)
-				popupStore.open("confirm")
+				requestConfirm({
+					title: "You already have this wallet",
+					description: existing
+						? `“${existing}” already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?`
+						: "Another profile already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?",
+					confirm_text: "Add anyway",
+					callback: () => settle(true),
+				})
 			})
 			if (!confirmed) return undefined
 			allowDuplicate.value = true
