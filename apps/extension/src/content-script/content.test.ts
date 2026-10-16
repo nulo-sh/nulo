@@ -3,8 +3,10 @@ import { beforeEach, expect, test, vi } from "vitest"
 const discovery = { type: "aztec-wallet-discovery", requestId: "mine", appId: "app", chainInfo: { chainId: "1", version: "1" } }
 const approval = (sessionId: string) => ({ origin: "background", type: "discovery-approved", sessionId, content: {} })
 
+const stubPostMessage = () => vi.spyOn(window, "postMessage").mockImplementation(() => {})
+
 let deliver: (message: unknown) => void
-let posted: ReturnType<typeof vi.spyOn<Window, "postMessage">>
+let posted: ReturnType<typeof stubPostMessage>
 const sent: unknown[] = []
 
 beforeEach(async () => {
@@ -28,7 +30,7 @@ beforeEach(async () => {
 			port2 = {}
 		},
 	)
-	posted = vi.spyOn(window, "postMessage").mockImplementation(() => {})
+	posted = stubPostMessage()
 	vi.resetModules()
 	await import("./content")
 })
