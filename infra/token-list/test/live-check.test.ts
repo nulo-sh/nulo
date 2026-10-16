@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process"
-import { createServer } from "node:http"
+import { createServer, type ServerResponse } from "node:http"
 import type { AddressInfo } from "node:net"
 import { BUNDLED_TOKEN_CLASS_IDS, TOKEN_METADATA_SLOTS, type TokenListEntry } from "@nulo/token-list"
 import { describe, expect, test } from "vitest"
@@ -69,7 +69,24 @@ function node(
 		if (answered instanceof Error) throw answered
 		return answered instanceof Response ? answered : Response.json(answered)
 	}) as typeof fetch
-	return { calls, io: { fetch: fake, deadline: new AbortController().signal } satisfies LiveCheckIO }
+	return { calls, reply, io: { fetch: fake, deadline: new AbortController().signal } satisfies LiveCheckIO }
+}
+
+/** A node on an OS-assigned local port, answering each JSON-RPC call with `answer`. */
+async function serve(answer: (call: Call, res: ServerResponse, path: string) => void) {
+	const server = createServer((req, res) => {
+		let body = ""
+		req.on("data", (chunk) => {
+			body += chunk
+		})
+		req.on("end", () => answer(JSON.parse(body) as Call, res, req.url ?? ""))
+	})
+	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+	const close = () => {
+		server.closeAllConnections()
+		server.close()
+	}
+	return { origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, close }
 }
 
 const URL_A = "https://node.example"
@@ -111,6 +128,12 @@ describe("the live check", () => {
 		expect(results).toEqual([expected])
 		expect(ok).toBe(false)
 		if (deployed[0]?.classId === OTHER_CLASS) expect(n.calls.map((c) => c.method)).not.toContain("aztec_getPublicStorageAt")
+	})
+
+	test("a source with no token checks nothing, so it does not pass", async () => {
+		const { text, ok } = await liveCheck([], [URL_A], node([]).io)
+		expect(text).toContain("The source lists no token.")
+		expect(ok).toBe(false)
 	})
 
 	test("an entry on a chain no node serves stays a row, beside one that matches", async () => {
@@ -162,18 +185,25 @@ describe("the live check", () => {
 		expect(n.calls.filter((c) => c.method === "aztec_getContract")).toHaveLength(1)
 	})
 
-	test("the rows the time budget leaves unread say so", async () => {
+	// Real `fetch` against a local node that never finishes a body, with a test timeout below the
+	// 10 s request timeout: only the deadline reaching the request can end the read.
+	test("the deadline ends a stalled read, and the rows it leaves unread say so", async () => {
 		const list = [token(1), token(2), token(3)]
-		const budget = new AbortController()
-		const n = node(list, (c) => {
-			if (c.method !== "aztec_getContract" || c.params[0] !== hex(2)) return undefined
-			budget.abort()
-			return new DOMException("aborted", "AbortError")
+		const { origin, close } = await serve((call, res) => {
+			if (call.method === "aztec_getContract" && call.params[0] === hex(2)) res.writeHead(200).write("{")
+			else res.end(JSON.stringify(node(list).reply(call)))
 		})
-		const { results } = await rows(list, { io: { ...n.io, deadline: budget.signal } })
-		expect(results).toEqual(["matches", "not checked: time budget spent", "not checked: time budget spent"])
-		expect(n.calls.filter((c) => c.method === "aztec_getContract")).toHaveLength(2)
-	})
+		try {
+			const { text } = await liveCheck(list, [origin], { fetch, deadline: AbortSignal.timeout(300) })
+			const results = text
+				.split("\n")
+				.filter((line) => line.startsWith(`| ${CHAIN}`))
+				.map((line) => line.split(" | ").at(-1))
+			expect(results).toEqual(["matches |", "not checked: time budget spent |", "not checked: time budget spent |"])
+		} finally {
+			close()
+		}
+	}, 3_000)
 
 	test.each<[string, Uint8Array, string]>([
 		["UTF-8", new TextEncoder().encode("€URC"), "€URC"],
@@ -209,18 +239,16 @@ describe("the live check script", () => {
 	// A real process against a local node: what reaches stdout (the step summary) and stderr (which
 	// the runner reads for workflow commands), and that no redirect is followed.
 	test("prints no node text, follows no redirect, and exits 1 on a row it could not check", async () => {
-		const HOSTILE = "6.0.0\n::error::forged‮"
+		const HOSTILE = "6.0.0\n::error::forged\u202e"
 		const paths: string[] = []
-		const server = createServer((req, res) => {
-			paths.push(req.url ?? "")
-			if (req.url === "/moved") {
-				res.writeHead(302, { location: "/elsewhere" }).end()
-				return
-			}
-			res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(result({ ...NODE_INFO, nodeVersion: HOSTILE })))
+		const { origin, close } = await serve((_call, res, path) => {
+			paths.push(path)
+			if (path === "/moved") res.writeHead(302, { location: "/elsewhere" }).end()
+			else
+				res.writeHead(200, { "content-type": "application/json" }).end(
+					JSON.stringify(result({ ...NODE_INFO, nodeVersion: HOSTILE })),
+				)
 		})
-		await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
-		const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
 		try {
 			const child = spawn(process.execPath, ["infra/token-list/scripts/live-check.ts", `${origin}/hostile`, `${origin}/moved`], {
 				cwd: REPO_ROOT,
@@ -240,11 +268,11 @@ describe("the live check script", () => {
 			expect(stdout).toContain(`| not checked: no node read for chain ${CHAIN} |`)
 			for (const output of [stdout, stderr]) {
 				expect(output).not.toContain("forged")
-				expect(output).not.toContain("‮")
+				expect(output).not.toContain("\u202e")
 			}
 			expect(paths).toEqual(["/hostile", "/moved"])
 		} finally {
-			server.close()
+			close()
 		}
 	}, 30_000)
 })

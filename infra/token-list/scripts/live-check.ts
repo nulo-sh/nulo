@@ -5,7 +5,7 @@
  * agrees; the wallet checks again on its own node. No node text reaches stdout or stderr: every value
  * is shape-checked before use, and a failure prints as a fixed category.
  *
- *   bun infra/token-list/scripts/live-check.ts <nodeUrl>...   (exits 0 only when every row matches)
+ *   bun infra/token-list/scripts/live-check.ts <nodeUrl>...   (exits 0 only when there are rows and every one matches)
  */
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -151,7 +151,7 @@ async function checkNode(url: string, entries: readonly TokenListEntry[], result
 	return `- ${origin}: ${node.line}`
 }
 
-/** One row per entry, whatever the nodes answer; `ok` only when every row matches. */
+/** One row per entry, whatever the nodes answer; `ok` only when there are rows and every one matches. */
 export async function liveCheck(
 	entries: readonly TokenListEntry[],
 	urls: readonly string[],
@@ -178,7 +178,7 @@ export async function liveCheck(
 		...table,
 		"",
 	].join("\n")
-	return { text, ok: rows.every((r) => r.matches) }
+	return { text, ok: rows.length > 0 && rows.every((r) => r.matches) }
 }
 
 if (import.meta.main) {

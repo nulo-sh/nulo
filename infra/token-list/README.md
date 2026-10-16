@@ -41,8 +41,9 @@ verifier are [`@nulo/token-list`](../../packages/token-list/README.md).
 2. The push runs `.github/workflows/publish-token-list.yml`. Read the `prepare` summary: the token and
    flag diffs, the digest of both, every signing-relevant change since the last publish, and the live
    check, one row per entry: `matches`, the difference (the chain's value beside the list's), or
-   `not checked` with its reason. It is advisory: `sign` does not wait on it, and `matches` means only
-   that the public node agrees, since the wallet checks every entry again on its own node.
+   `not checked` with its reason. It is advisory: no failure of it blocks `sign`, which it delays by
+   at most its 5 min timeout, and `matches` means only that the public node agrees, since the wallet
+   checks every entry again on its own node.
    `bun infra/token-list/scripts/live-check.ts <nodeUrl>...` runs it locally against keyless nodes.
 3. Approve `sign` in the `token-list` environment.
 4. Merge the `chore(token-list): publish sequence <n>` PR the release App opens; when the list delists
