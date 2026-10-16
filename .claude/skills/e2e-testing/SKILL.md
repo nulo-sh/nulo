@@ -195,7 +195,6 @@ runtime env var can never arm a build-time flag.
 | `NULO_E2E_STAGE_LOG=1` (+`_OUT`) | append per-import stage-trajectory records (`helpers/import-stage-timing.ts`) |
 | `NULO_E2E_OPENPOPUP_LOG=1` | log `openPopup`'s fast-path/fallback timing |
 | `NULO_E2E_CONSOLE_PROBE=1`, `NULO_E2E_PROBE=1` | enable the two `_probe-*` files (skipped by default; probes, not gates) |
-| `NULO_E2E_STANDARD_CONTRACTS=1` | opt `tx-sendTx-delegated-authwit` into the standard-contracts variant |
 | `ANVIL_URL`, `AZTEC_NODE_URL`, `PLAYGROUND_URL`, `*_PORT` | the port pack (`agent.sh` exports them from `ports.json`) |
 | `VITE_NULO_FEE_MULTIPLIER` | build-time fee envelope widening; CI sets `10` to absorb devnet base-fee drift. It is Normal's multiplier and scales Fast and Urgent with it (CI prices 10, 15, 25), so the speeds keep their order |
 
