@@ -1,5 +1,5 @@
 import { consoleMethods, LogLevel } from "@nulo/wallet-core/logger"
-import { beforeAll, expect, test, vi } from "vitest"
+import { expect, test, vi } from "vitest"
 
 const { lines, handed } = vi.hoisted(() => ({
 	lines: [] as unknown[][],
@@ -21,10 +21,9 @@ vi.mock("@nulo/aztec-runtime/pxe", () => ({
 
 const HEX32 = `0x${"ab".repeat(32)}`
 
-beforeAll(async () => {
-	vi.stubGlobal("chrome", { runtime: { onMessage: { addListener: () => {} }, sendMessage: async () => {} } })
-	await import("./index")
-})
+// The frame wires its hooks when it loads, so it loads once, at collection.
+vi.stubGlobal("chrome", { runtime: { onMessage: { addListener: () => {} }, sendMessage: async () => {} } })
+await import("./index")
 
 test("the frame's console hooks and the logger its PXE services receive both scrub 32-byte hex", () => {
 	lines.length = 0
