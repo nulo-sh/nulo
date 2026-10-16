@@ -157,8 +157,8 @@ describe("settings/lock", () => {
 		const strict = (w: VueWrapper) => w.findComponent('[data-testid="strict-security-toggle"]').attributes("modelvalue")
 		const minutes = (w: VueWrapper) => w.findComponent('[data-testid="auto-lock-input"]').attributes("modelvalue")
 
-		// A dropped port never announces its open, so the first open announced after the drop is the
-		// reopened port's; a read that timed out waiting for Ready meets that port's own first open.
+		// A port dropped before its deferred Ready announcement never makes it, so the next open announced
+		// is the reopened port's; a read that timed out waiting for Ready meets that port's own first open.
 		test("a read the drop rejected is made again on the next open, the port's first included", async () => {
 			fakes.config.getValue.mockRejectedValueOnce(new Error("Client disconnected"))
 			const w = await mountLock()
