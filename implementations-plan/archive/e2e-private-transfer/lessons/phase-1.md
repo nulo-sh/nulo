@@ -22,8 +22,10 @@ All runs are proverless at retry 0 unless marked. "Delegated" is `tx-sendTx-dele
 | aea38d2b, the import removed | Chrome, delegated alone (negative control) | **fail** at the `execute-discovered-authwit-structured-args` wait (60 s), as planned | 155.7 s | — |
 | aea38d2b | Chrome, both files | pass | 90.2 s, publish included | 149.4 s |
 | aea38d2b | Firefox, both files | pass | 94.6 s | 182.9 s |
+| 639f4ba3 (final head) | Chrome, both files | pass | 72.1 s | 164.3 s |
+| 639f4ba3 (final head) | Firefox, both files | pass | 76.1 s | 209.4 s |
 
-aea38d2b merges `origin/dev` at c5e9c8e8 (#532) over ed54847c's code. The file that runs first on a network publishes `PublicChecks`; the other skips the publish. Both orders passed. The delegated file's spread on Firefox (65.7 s, then 94.6 s, both without the publish) tracks the host's load: load1 sat near 150 at each start.
+aea38d2b merges `origin/dev` at c5e9c8e8 (#532) over ed54847c's code. 639f4ba3 also merges 7697c376 (#534, which touches the e2e fixtures, and #564). The file that runs first on a network publishes `PublicChecks`; the other skips the publish. Both orders passed. The delegated file's spread on Firefox (65.7 s, then 94.6 s, both without the publish) tracks the host's load: load1 sat near 150 at each start.
 
 ## Review loop
 
@@ -34,3 +36,9 @@ aea38d2b merges `origin/dev` at c5e9c8e8 (#532) over ed54847c's code. The file t
   - Accepted (Nit): `DONOR_MINT` now sits beside `AMOUNT`.
   - Rejected (Nit): moving the docblock below the consts. The repo's network files put it first.
   - Fixes in ed54847c.
+
+## Final-head unit gates (639f4ba3)
+
+- `bun run lint`, `bun run typecheck:all` and `bun run test:all` exited 0, and so did `bun run check:plans` after staging.
+- `bun run test` went red once. Two static source scans, `storage-facade-ban.test.ts` and `service.fence-entry.test.ts`, took 7.9 s and 7.5 s against their 5 s timeout, with load1 above 250. Neither reads a file this arc touches.
+- The same extension suite then passed inside `test:all` on the same head: 800 files, 0 failed. That counts as the one rerun a load flake gets.
