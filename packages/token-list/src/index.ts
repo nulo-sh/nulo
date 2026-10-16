@@ -3,7 +3,7 @@ import floor from "./floor.json"
 import { PINNED_KEYS } from "./keys"
 import { PayloadError, parsePayload, selectEntries, type TokenListEntry, type TokenListPair } from "./parse"
 
-export { BUNDLED_TOKEN_CLASS_IDS } from "./class-ids"
+export { BUNDLED_TOKEN_CLASS_IDS, TOKEN_METADATA_SLOTS, type TokenMetadataSlots } from "./class-ids"
 export {
 	ENVELOPE_FORMAT,
 	EnvelopeError,
