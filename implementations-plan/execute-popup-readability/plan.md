@@ -1,8 +1,8 @@
 ---
 plan: execute-popup-readability
 tier: light (the lane brief's call; the panel of two still argues each decision)
-status: planned (Codex approve); implementation waits on OWNER-ASKS R1
-issues: "#508 (arc 1 closes it, after R1 is signed)"
+status: arc 1 in progress (R1 signed 2026-10-16: A, part 2 Yes)
+issues: "#508 (arc 1 closes it)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -43,19 +43,20 @@ post_implementation_hardening: not scheduled
 
 **Inferences:** the decision page renders R1's mockups from its legend; `tx-transfer-row.test.ts` (it holds the token) renders the wallet-read lines in a real browser.
 
-**Asks:** R1 ([OWNER-ASKS.md](OWNER-ASKS.md)). Phases 2–3 start only after it is signed.
+**Asks:** R1 ([OWNER-ASKS.md](OWNER-ASKS.md)), signed 2026-10-16: option A, part 2 Yes (#508 `## Decision`). The owner's note there (descriptions for contracts beyond the token standard) is a later blueprint, out of this arc.
 
-## Architecture & Implementation (for C with part 2 Yes; other answers below)
+## Architecture & Implementation (option A with part 2 Yes, as signed)
 
-- **`call-surface.ts`** gains `actionLine(surface, accountAddress, amount)` and `authwitLine(a, surface, amount)`, where `amount` is the `AmountLabel` the card already computes with `amountLabel`. Each returns the sender discriminant (`account | explicit | none`, explicit compared case-insensitively with the account) and that label, so "base units" and "Caller: none" survive. Part 2 is a body-only `rowTitle(call, surface)` beside `callName`: the six transfer and mint labels only on a `transfer`/`mint` surface, every other label as `callName` gives it. The body's calls and `authwitFunction` use it; the `createAuthWit` card keeps `callName`.
-- **`DetailsToggle.vue`** (new): a native `<button>`, chevron, `aria-expanded`, `aria-describedby` (its row's title), label and testid by prop. It replaces both copies (Fact 5) and serves the call and authorization rows.
-- **Rows stay inline in `OperationCard.vue`.** Lines 214-279 become "Actions" and "Authorizations" sections. Today's `openAuthwits` Set becomes one open-set keyed `call:{j}` and `authwit:{messageHash}`; authorization rows are keyed by message hash, not index. A raw or pending row renders its warning, notice or "Reading arguments…" outside the toggled part and has no row toggle, so no open state is read once at mount.
-- **Testids:** kept: `execute-op-payload-row` (each call's title line, at rest), `execute-op-discovered-authwits`, `execute-op-discovered-authwit`, `execute-discovered-authwit-toggle`, `execute-discovered-authwit-details`, `execute-discovered-consumer` (the "on" address), `execute-discovered-caller` (the line's caller), `execute-discovered-authwit-function`, every `data-*` attribute. New: `execute-op-call-line`, `execute-op-call-toggle`, `execute-op-call-details`, `execute-discovered-authwit-line`, and one per address in a line (`execute-op-line-from`, `-line-to`, `execute-discovered-line-from`, `-line-to`).
-- **Inventory:** `DetailsToggle.vue` joins `surfaces.expected.json`; moved and new address sites update `identifier-sites.expected.json`, each with the state that renders it: action-line sites from `tx-transfer-row.test.ts`, the generic authorization line from the delegated flow in `type-roles-windows.test.ts`, the token form of the authorization line from the component test only (no network flow holds that token; no import is added).
-- **Other answers' reach rule:** under A and E the opened body shows each authorization's details open, so an undecoded authorization's raw values stay within two presses.
-- **Other answers:** A adds the summary list and one section fold over today's body; B the headers (a pure `groupConsecutive`) and authorization lines; D a two-row cut per value block; E a `Tabs` generalized from `AuthMethodTabs`. Only the signed answer's map is built; this section is revised in place before Phase 2.
-- **Not taken:** rendering `DecodedCall.contract` (an app-chosen artifact name that can read "USDC"); a new value-moving predicate (`CallSurface.kind` is the wallet's reading); a `PayloadRow.vue` with a slot API (the inline set is smaller and has no frozen-open state).
-- **Boundary with send-fees-ux (#503):** this lane edits `OperationCard.vue` above `op_divider`, never `index.vue`'s fee gates, `FeeSettingsCard`, or `authwitSurface`'s `isEmbeddedFeePayment` rule. Shared files both lanes may touch: `OperationCard.vue`'s `<style module>`, `identifier-sites.expected.json`, `type-roles-windows.test.ts`. The second PR to merge merges `origin/dev` first and reruns its gates.
+R1's answer (#508 `## Decision`, decision page 20, 2026-10-16): **A**, part 2 **Yes**. The map below replaces the one drawn for C; the target is the rendered `o-508-a` mockup the owner signed (roles and spacing from its HTML source).
+
+- **`SendTxSummary.vue`** (new, execute-local, presentational): "What this does" (`SectionLabel`, no count) as an `<ol>` of every call in order: number (`data`, secondary), title (`data`) " on " contract (`AddressDisplay`), then per surface: a wallet-read transfer `"{amount} {unit} from {sender} to {recipient}"` (sender `this account`, or the explicit address through `AddressDisplay`; no sender: `"{amount} {unit} to {recipient}. Caller: none"`), a mint `"{amount} {unit} to {recipient}"`, a decoded call `"Named by the app."` (`caption`), a pending call "Reading arguments…", a raw call the warning and notice. Then "Authorizations" with its count as a `<ul>`: `"Lets {caller} move {amount} {unit} from {sender} to {recipient}"` on a wallet-read transfer, otherwise `"Lets {caller} call {function} on {consumer}"`. "Checking authorizations…" sits here at rest (it is a status, not a value row). Units through the existing `amountLabel`; "base units" when it gives no symbol.
+- **`call-surface.ts`** gains `rowTitle(call, surface)` (part 2: a name `tokenMovementLabel` maps to one of the six labels gets that label only on a `transfer`/`mint` surface, its own title-cased name otherwise; every other name as `callName` gives it), `authwitTitle(selector, consumer, surface)` (today's `authwitFunction` under `rowTitle`) and `authwitLine(surface, fn)` (`move` only for a transfer with an explicit sender). `tx-enrichment.ts` splits its label table so `tokenMovementLabel` and `plainMethodName` (today's fallback) are exported; `humanizeMethodName` is unchanged. The body's call titles and the discovered authorization's "Function:" use `rowTitle`/`authwitTitle`; the `createAuthWit` and simulate cards keep theirs.
+- **`OperationCard.vue`** (`aztec_sendTx` only, above `op_divider`): the summary, then one `DetailsToggle` "Show all details" / "Hide all details", then, when open, today's body unchanged (Payload rows with `CallArguments`, the discovered authorizations block) with each authorization's details open by default (`closedAuthwits` replaces `openAuthwits`). `send_transaction` and every other kind are untouched.
+- **`DetailsToggle.vue`** (new): today's toggle markup (native `<button>`, chevron, `aria-expanded`, `label` prop, testid by attribute). It replaces the two copies (Fact 5) and serves the new toggle. **`UnreadableArgsNotice.vue`** (new): the warning and notice, shared by `CallArguments` and the summary, so the copy lives once.
+- **Testids:** every body testid kept, on the body. New: `execute-op-summary-calls`, `execute-op-summary-call` (`data-call-index`, `data-intent-kind`), `execute-op-summary-call-title`, `execute-op-summary-call-to`, `execute-op-call-line`, `execute-op-line-amount`, `execute-op-line-from`, `execute-op-line-to`, `execute-op-call-named`, `execute-op-summary-args-pending`, `execute-op-summary-unverified-warning`, `execute-op-summary-authwits`, `execute-discovered-authwit-line` (`data-message-hash`, `data-line-kind`), `execute-discovered-line-caller`, `-line-amount`, `-line-from`, `-line-to`, `-line-function`, `-line-consumer`, `execute-op-details-toggle`, `execute-op-details`; `data-call-index` on each body call. `execute-op-authwits-pending` moves with its line.
+- **Inventory:** the three new `.vue` join `surfaces.expected.json`; the body's moved sites and the summary's new ones update `identifier-sites.expected.json`, each with the state that renders it (the summary's contract and the authorization line from the swept states in `type-roles-windows.test.ts`; the wallet-read call line from `tx-transfer-row.test.ts`; the token form of the authorization line component-only, no import added).
+- **Not taken:** rendering `DecodedCall.contract`; a new value-moving predicate; collapsing an authorization; a summary line built from a dApp name.
+- **Boundary with send-fees-ux (#503):** unchanged: this lane edits `OperationCard.vue` above `op_divider`, never `index.vue`'s fee gates, `FeeSettingsCard`, or `authwitSurface`'s `isEmbeddedFeePayment` rule. Shared files: `OperationCard.vue`'s `<style module>`, `identifier-sites.expected.json`, `type-roles-windows.test.ts`. The second PR to merge merges `origin/dev` first and reruns its gates.
 
 ## Security & Adversarial Considerations
 
@@ -72,18 +73,18 @@ post_implementation_hardening: not scheduled
 - Add `OperationCard.facts.test.ts`: mount the card, press only `button[aria-expanded="false"]` breadth first, record each fact's depth within its own row (text or `title` attribute), and assert depth ≤ 2. Control: a stub card that drops one row's field fails the same check while the manifest stays fixed. A second fixture variant leaves auth 2 undecoded, so its raw values are counted too.
 - **Gate:** `cd apps/extension && bun --bun vitest run src/popup/windows/execute` green; `bun run lint`; `bun run typecheck:all`. Pass: exit 0; the facts test green against today's card, its control red.
 
-### Phase 2: the signed answer (C shown)
+### Phase 2: the signed answer (A, part 2 Yes)
 
-- Assumes: R1 signed (the map is revised first if the answer is not C); Facts 2, 3, 5 and 6.
-- Build the map above; update only the `OperationCard.*.test.ts` assertions that read moved rows.
-- Tests: in `call-surface.test.ts`, one case per line form (account, explicit, none sender; empty symbol; mint; pending, undecoded and two-argument authorizations) and part 2 (a decoded `transfer_public_to_public` on an unregistered token keeps its own name). `OperationCard.rows.test.ts` over the fixture: at rest both authorization lines and the unreadable warning show and call 1's values are absent until its toggle is pressed; mounted `pending`, then given raw (warning shows, no toggle) and decoded (closed); each toggle is a button with `aria-expanded` described by its title. The Phase 1 test stays green unchanged.
+- Assumes: R1 signed (A); Facts 2, 3, 5 and 6.
+- Build the map above. The existing `OperationCard.*.test.ts` files read today's body, so each mount helper that reads a `aztec_sendTx` body presses `execute-op-details-toggle` first; no assertion is loosened.
+- Tests: `call-surface.test.ts`: `rowTitle` (a decoded `transfer_public_to_public` on an unregistered token keeps its own name; a wallet-read one keeps its label; a non-token label such as "Shield" unchanged), `authwitTitle`, `authwitLine` (move only with an explicit sender; a mint and a decoded call read as `call`). `tx-enrichment.test.ts`: the six labels and nothing else answer `tokenMovementLabel`. `OperationCard.summary.test.ts` over the fixture: at rest every call's title, contract and line (transfer with the explicit sender by name, "Named by the app.", the unreadable warning and notice) and both authorization lines show, the body is absent and the toggle reads "Show all details" with `aria-expanded="false"`; one press shows the body with each authorization's details open; sender `account`, `none` and empty-symbol forms; a call mounted `pending`, then given raw (warning shows), then decoded; "Checking authorizations…" at rest while pending. The Phase 1 test stays green unchanged.
 - **Gate:** `bun run audit:vue`; `bun run test:all`. Pass: exit 0, inventory green, `scripts/complexity-baseline/manifest.json` unchanged.
 
 ### Phase 3: real browsers and shots
 
 - Assumes: Fact 4; the playground's buttons still open the window.
-- `tx-sendTx-multicall.test.ts`: the three title lines are visible at rest. `type-roles-windows.test.ts`: `openExecute` waits for the call title, asserts it closed, presses each row toggle, then keeps today's decoded-value wait, before `payloadPastCard` and `stretchPayload`. `tx-transfer-row.test.ts`: assert the action line (amount, sender, recipient) at rest, then open the row and keep today's reads. In `type-roles-windows.test.ts`'s delegated flow, assert the authorization line and its caller at rest, before its details open, inside the containment and role checks. Failure mode: a role, overflow or missing line on the new rows in a real 400 px window, which jsdom cannot compute. No token import is added.
-- Run each file at retry 0: `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<file>.test.ts`, then again with `NULO_E2E_BROWSER=firefox`. Record each file's wall-clock on `d59459ab` and after, per browser, in `lessons/phase-3.md`. Capture the window light and dark on both browsers into `~/.cache/nulo-backlog/execute-popup-readability/`.
+- `tx-sendTx-multicall.test.ts`: the summary lists `c.calls` items at rest. `type-roles-windows.test.ts`: `openExecute` for a send waits for the summary, asserts the body closed, presses "Show all details", then keeps today's `ready` wait; the containment check also covers the summary items and `stretchPayload` stretches their title and contract. The delegated flow sweeps the authorization line and its caller at rest, then opens the body (details open by default, no per-row press); the raw flow opens the body before the raw toggle. `tx-transfer-row.test.ts`: assert the wallet-read line (amount, sender, recipient) at rest, then open the body and keep today's reads. Failure mode: a role, overflow or missing line on the new rows in a real 400 px window, which jsdom cannot compute. No token import is added.
+- Run each file at retry 0 with load1 below 150: `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<file>.test.ts`, then again with `NULO_E2E_BROWSER=firefox`. Record each file's wall-clock before and after, per browser, in `lessons/phase-3.md`. Capture the window light and dark on both browsers into `~/.cache/nulo-backlog/execute-popup-readability/`.
 - **Gate:** the three files green on both browsers; `bun run test:ci-gating`; `bun run check:plans`. Pass: exit 0.
 
 ## Delivery
@@ -121,6 +122,13 @@ Round 2 (Codex resumed, verification): `conditional approve`, four new findings,
 | D14 | No browser run shows a discovered-authorization line | the delegated flow asserts it at rest; the token form stays component-only |
 
 Round 3 (Codex resumed, verification of D11–D14): **`approve`**, no new material findings. Opus round 1's conditions are met by D1–D10.
+
+Implementation (2026-10-16), after R1 was signed:
+
+| # | Decision | Why |
+|---|---|---|
+| D15 | The map is redrawn for A: the summary in a new `SendTxSummary.vue`, `DetailsToggle.vue` for the three toggles, `UnreadableArgsNotice.vue` for the warning shared by the summary and `CallArguments`; C's `actionLine` is dropped (the summary reads the `CallSurface` it already has) | A signed; the summary is a block of its own, testable alone; one copy of the toggle and of the unreadable-call copy |
+| D16 | "Checking authorizations…" renders at rest in the summary, not behind the toggle | a status, not a value row; hiding it would leave the authorizations slot silent at rest while they are being found (rule 2) |
 
 ## Seeds (draft; finalized after R1 and the orchestrator's approval)
 
