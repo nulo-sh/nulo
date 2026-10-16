@@ -206,6 +206,10 @@ Follow `implementations-plan/README.md` § Post-implementation standard at revis
 
 **Final pass, Codex** (gpt-6.1-sol, high, fresh session `01a1458e`): conditional approve, 1 finding, accepted. A file sealed twice decrypts to a JSON string; today Decrypt stays offered and a second click opens the inner backup, which an `openSelection` accepting only `sealed` would turn into "Decryption Failed" (demonstrated in memory against the helper chain): it now decides by the runtime type of `backup`, with a pin for the nested case written on arc 2's base. Codex found no other path to a green check without suites, judged the round-1 fixes complete and in proportion, and the rejected alternatives rightly rejected (D9's payload included).
 
+**Arc 1, round 1, Codex** (gpt-6.1-sol, high, session `01a145c0`, over `c310bce2..10f8c519`): no blocking regression, 4 low findings. Accepted: #1 `e2e-decide.sh` let a malformed `SURFACE` read as a skip (inherited from the inline gate; plausible, needs an upstream output anomaly): it now refuses anything but true/false, with one test per refused class; #2 CI.md's job counts were wrong before and after the edit (18 more jobs, 14 suites, 4 control; 11 network suite jobs per browser); #4 in part: the two `vite.shared.ts` comments tightened, the loader's restating comment dropped. Rejected: #3, the network config's retry comment is unchanged existing text whose archive path resolves (CLAUDE.md lets it stay until rewritten); #4's other trims, since the headers state the invariant the test or reporter exists for.
+
+**Arc 1, round 1, Opus lens** (general-purpose, opus): approve with small fixes, 4 findings, all accepted. #1 and #2 are Codex's #2 and #1. #3 the aggregate header listed "a suite that vanished" among the faults the script catches; it cannot see a need that is not in `needs`, so the header now says the test holds `needs` to every job. #4 `verify-cert-run.sh` still named the removed `decide` job.
+
 ## Seeds
 
 Drafts until the orchestrator approves; no ELI5 is produced (orchestrator-owned).

@@ -15,6 +15,13 @@ true | false) ;;
 	exit 1
 	;;
 esac
+case "$SURFACE" in
+true | false) ;;
+*)
+	echo "::error::the paths filter's verdict is not true/false: '$SURFACE'"
+	exit 1
+	;;
+esac
 if [ "$EVENT" = pull_request ] && [ -z "$BASE" ]; then
 	echo "::error::live.outputs.base is empty"
 	exit 1

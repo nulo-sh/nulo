@@ -2,9 +2,10 @@
 # An e2e lane's aggregator: an exact state machine over the job's `needs`, not a denylist of bad
 # results. `changes` must have succeeded with a `run` output of true or false, and every other need
 # is a suite that must have ended `success` when the gate said run, `skipped` when it said not to.
-# Anything else — a malformed or empty `run` from a wiring typo, a suite that vanished, a lane with
-# no suite, a future zero-entry matrix — is a fault. Checking only the failure results, or only the
-# `run=true` branch, is how a suite that never executed reports a green PR.
+# Anything else — a malformed or empty `run` from a wiring typo, a lane with no suite, a future
+# zero-entry matrix — is a fault. Checking only the failure results, or only the `run=true` branch,
+# is how a suite that never executed reports a green PR. A suite missing from `needs` is invisible
+# here; aggregators.test.ts holds `needs` to every job.
 #
 # Usage: e2e-aggregate.sh
 # Env: NEEDS (the job's `toJSON(needs)`), GITHUB_RUN_ATTEMPT, GITHUB_WORKFLOW.

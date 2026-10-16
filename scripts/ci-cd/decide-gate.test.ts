@@ -76,6 +76,11 @@ describe("the e2e Decide gate", () => {
 		expect(runGate({ LABEL_HIT: value }).code).not.toBe(0)
 	})
 
+	// A filter output that never arrived would otherwise read as an untouched surface and skip.
+	test.each(["", "yes"])("refuses a paths-filter verdict of %j", (value) => {
+		expect(runGate({ SURFACE: value }).code).not.toBe(0)
+	})
+
 	test("refuses a pull request with no base", () => {
 		expect(runGate({ BASE: "" }).code).not.toBe(0)
 	})

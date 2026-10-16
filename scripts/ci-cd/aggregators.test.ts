@@ -382,7 +382,6 @@ const E2E_LANES = [
 	{ file: "pr-extension-network-e2e-firefox.yml", surface: "extension-network" },
 ]
 
-/** The status job's only other step: this run's commit, no credential left behind, one file. */
 const STATUS_CHECKOUT = {
 	uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
 	with: {

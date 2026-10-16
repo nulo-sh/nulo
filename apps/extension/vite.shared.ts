@@ -105,9 +105,9 @@ export function e2eReporters(
 }
 
 /**
- * The vitest `retry` count `NULO_E2E_RETRY` sets, `fallback` when it is unset or empty. Only a
- * nonnegative decimal safe integer is a count: anything else throws, where `Number()` would hand
- * vitest `NaN` and a padded or exponent spelling would run a count the variable never named.
+ * The vitest `retry` count from `NULO_E2E_RETRY`, `fallback` when unset or empty. Anything but a
+ * nonnegative decimal safe integer throws, where `Number()` would hand vitest `NaN` or accept a
+ * spelling such as `" 2"` or `"1e1"`.
  */
 export function e2eRetry(fallback: number): number {
 	const raw = process.env.NULO_E2E_RETRY
@@ -120,13 +120,9 @@ export function e2eRetry(fallback: number): number {
 }
 
 /**
- * Cross-file browser-state isolation for every e2e runner: one forked worker per file, files in
- * sequence, so orphan processes from an earlier file cannot leak into the next file's browser launch.
- * Without it, after ~17 sequential files the next file occasionally inherits a broken browser
- * connection, seen as cascading `Connection closed` / `Navigating frame was detached` errors.
- * `fileParallelism: false` forces `maxWorkers = 1` (vitest 4 dropped `poolOptions.forks.singleFork`),
- * and `pool`/`isolate` are written out although they are vitest 4's defaults, so a changed default
- * cannot silently drop them.
+ * One forked worker per e2e file, files in sequence, so an earlier file's orphan processes cannot
+ * break the next file's browser launch (seen after ~17 files as cascading `Connection closed`).
+ * `pool` and `isolate` are vitest 4's defaults, written out so a changed default cannot drop them.
  */
 export const e2eIsolation = {
 	environment: "node",
