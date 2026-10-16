@@ -26,6 +26,15 @@ After merging `dev` twice (its reworked operation card, then arc 1), the same fi
 | Chrome | 45.5 s | 67.1 s | 45.5 s → 112.5 s |
 | Firefox | 113.3 s | 128.5 s | 113.3 s → 241.8 s |
 
+After the first PR CI run (D27 revised) and merging `dev` again (#604), the three files that run the changed gate, at retry 0, exit 0 on both browsers: this file, `authwit-lifecycle.test.ts` and `scope-refusal.test.ts`. This file's numbers on that head:
+
+| Browser | Earlier case | New case | File before → after |
+|---|---|---|---|
+| Chrome | 42.9 s | 58.6 s | 42.9 s → 101.5 s |
+| Firefox | 92.8 s | 109.6 s | 92.8 s → 202.4 s |
+
+The first CI run's lesson: a change to when Confirm enables reaches every network file that presses it, not only the arc's own; `authwit-lifecycle` and `scope-refusal` press it on requests whose estimate fails by design. Run the files that press Confirm on a refused request before opening the PR.
+
 ## Screenshots
 
 - A local scratch copy of the case (never committed) shoots the waiting Confirm and the window in both themes; its first run passed the whole flow in 75.8 s.
