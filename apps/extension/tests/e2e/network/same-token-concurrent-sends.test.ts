@@ -666,9 +666,8 @@ test.skipIf(!hasConfig)(
 	{ timeout: 600_000, retry: 0 },
 	async ({ burst }) => {
 		const { nodeUrl } = aztecConfig as AztecTestConfig
-		// Both speeds are explicit: Normal prices at the build's default multiplier, which the e2e build
-		// widens above Urgent's. B's basis is the older Urgent send, never A at Fast: seeded at 4/5 of A's
-		// fee, its cap is about A's fee, below B at Urgent, whose multiplier is 5/3 of Fast's in every build.
+		// B's basis is the older Urgent send, never A at Fast: seeded at 4/5 of A's fee, its cap is about
+		// A's fee, below B at Urgent, whose multiplier is 5/3 of Fast's in every build.
 		const a: BurstSend = { token: "TST", from: "private", to: "private", amount: "9", destination: to(), fee: "public", speed: "fast" }
 		const b: BurstSend = { ...a, amount: "10", speed: "urgent" }
 		const basis = await seedUrgentSend(burst, await fireIntoHeldWindow(burst, a))
