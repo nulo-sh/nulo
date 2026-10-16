@@ -19,7 +19,6 @@ import { ExecutionServiceClient } from "@/wallet/services/execution/client"
 /** Composables */
 import { useConfigRead } from "@/composables/useConfigRead"
 import { usePrestoCheck } from "@/composables/usePrestoCheck"
-import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
 
 /** Utils */
 import { rowDescriptionFor } from "@/utils/presto-ui-state"
@@ -31,7 +30,6 @@ import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
 
 /** Each row below registers in `@/utils/settings-search`, which is what the search reads. */
-const { vSettingsRow, target: highlightTarget } = useSettingsRowHighlight()
 const query = ref("")
 const searching = computed(() => settingsQueryTerms(query.value).length > 0)
 
@@ -75,11 +73,6 @@ function onHubUpdate({ key, value }) {
 	if (!HUB_KEYS.has(key)) return
 	hubConfig[key] = value
 }
-
-// A result for a row of this list empties the field, so the list mounts and the row is outlined.
-watch(highlightTarget, (row) => {
-	if (row) query.value = ""
-})
 
 onBeforeMount(async () => {
 	void startPresto()
@@ -154,133 +147,102 @@ onBeforeUnmount(() => {
 
 				<ItemsContainer title="Your wallet">
 					<SettingItem
-						to="/popup/settings/accounts"
 						materialIcon="account_balance_wallet"
 						chevron
 						v-bind="settingItemProps('hub-accounts', searchContext)"
-						v-settings-row.inset="'hub-accounts'"
 					/>
 					<SettingItem
-						to="/popup/settings/contacts"
 						materialIcon="group"
 						chevron
 						v-bind="settingItemProps('hub-contacts', searchContext)"
-						v-settings-row.inset="'hub-contacts'"
 					/>
 					<SettingItem
-						to="/popup/settings/tokens"
 						materialIcon="toll"
 						chevron
 						v-bind="settingItemProps('hub-tokens', searchContext)"
-						v-settings-row.inset="'hub-tokens'"
 					/>
 				</ItemsContainer>
 
 				<ItemsContainer title="Apps and networks">
 					<SettingItem
-						to="/popup/settings/connected-apps"
 						materialIcon="extension"
 						chevron
 						v-bind="settingItemProps('hub-connected-apps', searchContext)"
-						v-settings-row.inset="'hub-connected-apps'"
 					/>
 					<SettingItem
-						to="/popup/settings/networks"
 						materialIcon="hub"
 						chevron
 						v-bind="settingItemProps('hub-networks', searchContext)"
-						v-settings-row.inset="'hub-networks'"
 					/>
 					<SettingItem
-						to="/popup/settings/fpcs"
 						materialIcon="local_gas_station"
 						chevron
 						v-bind="settingItemProps('hub-fpcs', searchContext)"
-						v-settings-row.inset="'hub-fpcs'"
 					/>
 					<SettingItem
-						to="/popup/settings/proving"
 						materialIcon="speed"
 						chevron
 						v-bind="settingItemProps('hub-proving', searchContext)"
-						v-settings-row.inset="'hub-proving'"
 						:data-status="prestoState.kind"
 					/>
 				</ItemsContainer>
 
 				<ItemsContainer title="Safety">
 					<SettingItem
-						to="/popup/settings/lock"
 						materialIcon="lock"
 						:value="values.lock"
 						chevron
 						v-bind="settingItemProps('hub-lock', searchContext)"
-						v-settings-row.inset="'hub-lock'"
 					/>
 					<SettingItem
-						to="/popup/settings/security/export"
 						materialIcon="download"
 						chevron
 						v-bind="settingItemProps('hub-backup', searchContext)"
-						v-settings-row.inset="'hub-backup'"
 					/>
 					<SettingItem
 						v-if="!isPasskey"
-						to="/popup/settings/security/change-password"
 						materialIcon="password"
 						chevron
 						v-bind="settingItemProps('hub-change-password', searchContext)"
-						v-settings-row.inset="'hub-change-password'"
 					/>
 				</ItemsContainer>
 
 				<ItemsContainer title="Preferences">
 					<SettingItem
-						to="/popup/settings/privacy"
 						materialIcon="visibility"
 						:value="values.privacy"
 						chevron
 						v-bind="settingItemProps('hub-privacy', searchContext)"
-						v-settings-row.inset="'hub-privacy'"
 					/>
 					<SettingItem
-						to="/popup/settings/display"
 						materialIcon="palette"
 						:value="values.display"
 						chevron
 						v-bind="settingItemProps('hub-display', searchContext)"
-						v-settings-row.inset="'hub-display'"
 					/>
 					<SettingItem
-						to="/popup/settings/developer"
 						materialIcon="bolt"
 						:value="values.developer"
 						chevron
 						v-bind="settingItemProps('hub-developer', searchContext)"
-						v-settings-row.inset="'hub-developer'"
 					/>
 				</ItemsContainer>
 
 				<ItemsContainer title="Help">
 					<SettingItem
-						to="/popup/settings/glossary"
 						materialIcon="menu_book"
 						chevron
 						v-bind="settingItemProps('hub-glossary', searchContext)"
-						v-settings-row.inset="'hub-glossary'"
 					/>
 					<SettingItem
-						to="/popup/settings/about"
 						materialIcon="info"
 						chevron
 						v-bind="settingItemProps('hub-about', searchContext)"
-						v-settings-row.inset="'hub-about'"
 					/>
 				</ItemsContainer>
 
 				<ItemsContainer title="Danger zone" danger>
-					<SettingItem to="/popup/settings/security/reset" chevron v-bind="settingItemProps('hub-delete-profile', searchContext)"
-						v-settings-row.inset="'hub-delete-profile'">
+					<SettingItem chevron v-bind="settingItemProps('hub-delete-profile', searchContext)">
 						<template #icon>
 							<span :class="$style.danger_icon">
 								<MaterialIcon name="delete" :size="20" color="red" />

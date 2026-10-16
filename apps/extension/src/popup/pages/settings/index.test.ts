@@ -193,15 +193,16 @@ describe("settings hub — rows", () => {
 
 	test("each row sits under the caption a search shows it under", async () => {
 		const w = await mountHub()
-		const placed = w
-			.findAllComponents(ItemsContainer)
-			.flatMap((group) =>
-				group
-					.findAll("[data-settings-row]")
-					.map((row) => [row.attributes("data-settings-row"), group.props("title"), group.props("danger")]),
-			)
 		const context = settingsContext({ provingStatus: "Presto · connected" })
 		const hub = visibleSettingsRows(context).filter((row) => row.page === "/popup/settings")
+		const idOf = new Map(hub.map((row) => [row.testid, row.id]))
+		const placed = w.findAllComponents(ItemsContainer).flatMap((group) =>
+			group
+				.findAll("[data-testid]")
+				.map((el) => idOf.get(el.attributes("data-testid") ?? ""))
+				.filter((id) => id !== undefined)
+				.map((id) => [id, group.props("title"), group.props("danger")]),
+		)
 		expect(placed).toEqual(hub.map((row) => [row.id, row.section, row.danger]))
 	})
 
@@ -255,18 +256,13 @@ describe("settings hub — search", () => {
 		expect(rowIds(w)).toEqual(PASSWORD_ROWS.map(([id]) => id))
 	})
 
-	test("a result for a row of this list empties the field and outlines that row inside its box", async () => {
+	test("a result for a row of this list opens that row's page as a tap on it does, outlining nothing", async () => {
 		const w = await mountHub()
-		await search(w).setValue("theme")
-		await w.vm.$router.push("/popup/settings?row=hub-display")
+		await search(w).setValue("seed")
+		await w.get('[data-testid="settings-search-result-hub-backup"]').trigger("click")
 		await flushPromises()
-		expect((search(w).element as HTMLInputElement).value).toBe("")
-		expect(w.get('[data-testid="setting-nav-display"]').attributes()).toMatchObject({
-			"data-settings-row": "hub-display",
-			"data-highlighted": "inset",
-		})
-		expect(w.findAll("[data-highlighted]")).toHaveLength(1)
-		expect(w.vm.$router.currentRoute.value.fullPath).toBe("/popup/settings")
+		expect(w.vm.$router.currentRoute.value.fullPath).toBe("/popup/settings/security/export")
+		expect(w.findAll("[data-highlighted]")).toHaveLength(0)
 	})
 })
 

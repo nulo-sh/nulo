@@ -5,7 +5,7 @@ import SettingItem from "@/components/ui/Settings/SettingItem.vue"
 
 /** Utils */
 import { isComposing } from "@nulo/design/composables/keys.ts"
-import { searchSettings, visibleSettingsRows } from "@/utils/settings-search"
+import { searchSettings, settingsResultTo, visibleSettingsRows } from "@/utils/settings-search"
 
 const props = defineProps({
 	/** The `SettingsContext` that decides which rows exist. */
@@ -19,8 +19,6 @@ const root = useTemplateRef("root")
 const field = useTemplateRef("field")
 const groups = computed(() => searchSettings(visibleSettingsRows(props.context), query.value))
 const firstResult = computed(() => groups.value?.[0]?.rows[0])
-
-const resultTo = (row) => `${row.page}?row=${row.id}`
 
 function focusField() {
 	field.value?.focus()
@@ -52,7 +50,7 @@ function onEscape(e) {
 function onFieldEnter(e) {
 	e.preventDefault()
 	if (e.repeat || !firstResult.value) return
-	void router.push(resultTo(firstResult.value))
+	void router.push(settingsResultTo(firstResult.value))
 }
 
 function onKeydown(e) {
@@ -85,7 +83,7 @@ function onKeydown(e) {
 				<SettingItem
 					v-for="row in group.rows"
 					:key="row.id"
-					:to="resultTo(row)"
+					:to="settingsResultTo(row)"
 					:title="row.title"
 					:description="row.description"
 					chevron

@@ -6,6 +6,7 @@ import {
 	type SettingsContext,
 	type SettingsRowId,
 	searchSettings,
+	settingsResultTo,
 	settingsRow,
 	visibleSettingsRows,
 } from "./settings-search"
@@ -74,6 +75,18 @@ describe("matching", () => {
 	})
 })
 
+describe("where a result goes", () => {
+	test("a Settings-list row's result opens the row's own page, as a tap on the row does", () => {
+		expect(settingsResultTo(settingsRow("hub-backup"))).toBe("/popup/settings/security/export")
+		expect(settingsResultTo(settingsRow("hub-display"))).toBe("/popup/settings/display")
+	})
+
+	test("a sub-page row's result opens its page, naming the row to outline", () => {
+		expect(settingsResultTo(settingsRow("display-full-height"))).toBe("/popup/settings/display?row=display-full-height")
+		expect(settingsResultTo(settingsRow("lock-now"))).toBe("/popup/settings/lock?row=lock-now")
+	})
+})
+
 describe("visibility", () => {
 	const visible = (context: SettingsContext) => visibleSettingsRows(context).map((r) => r.id)
 
@@ -114,11 +127,18 @@ describe("the registry", () => {
 		expect(new Set(runs).size).toBe(runs.length)
 	})
 
-	test("every page is a route the popup renders", () => {
+	test("every page and every row's link is a route the popup renders", () => {
 		const pages = resolve(__dirname, "../popup/pages")
-		for (const page of new Set(ALL.map((id) => SETTINGS_ROWS[id].page))) {
+		const links = ALL.map((id) => settingsRow(id).to).filter((to) => to !== undefined)
+		for (const page of new Set([...ALL.map((id) => SETTINGS_ROWS[id].page), ...links])) {
 			const path = page.replace(/^\/popup/, pages)
 			expect(existsSync(`${path}.vue`) || existsSync(`${path}/index.vue`), page).toBe(true)
 		}
+	})
+
+	test("exactly the Settings list's rows carry a link of their own", () => {
+		const linked = ALL.filter((id) => settingsRow(id).to !== undefined)
+		expect(linked).toEqual(ALL.filter((id) => SETTINGS_ROWS[id].page === "/popup/settings"))
+		expect(linked).toHaveLength(16)
 	})
 })

@@ -44,6 +44,14 @@ describe("results", () => {
 		expect(w.find('[data-testid="settings-search-empty"]').exists()).toBe(false)
 	})
 
+	test("a result for a row of the Settings list opens that row's own page", async () => {
+		const { w } = await mountSearch("seed")
+		expect(w.findAllComponents(ItemsContainer).map((g) => g.props("title"))).toEqual(["Safety"])
+		expect(results(w).map((r) => [r.dataset.testid, r.getAttribute("href")])).toEqual([
+			["settings-search-result-hub-backup", "/popup/settings/security/export"],
+		])
+	})
+
 	test("on a browser with no side panel, Full-height popups alone", async () => {
 		const { w } = await mountSearch("full", false)
 		expect(results(w).map((r) => r.dataset.testid)).toEqual(["settings-search-result-display-full-height"])
@@ -135,5 +143,11 @@ describe("keys", () => {
 		expect(push).not.toHaveBeenCalled()
 		expect(key(field(w), "Enter")).toBe(false)
 		expect(push).toHaveBeenCalledExactlyOnceWith("/popup/settings/display?row=display-full-height")
+	})
+
+	test("Enter on a Settings-list result opens that row's own page", async () => {
+		const { w, push } = await mountSearch("seed")
+		key(field(w), "Enter")
+		expect(push).toHaveBeenCalledExactlyOnceWith("/popup/settings/security/export")
 	})
 })

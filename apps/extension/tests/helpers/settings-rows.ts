@@ -15,15 +15,16 @@ export function settingsContext(over: Partial<SettingsContext> = {}): SettingsCo
 
 /**
  * Checks a mounted page against the search registry: every row the registry places on `page` and
- * shows in `context` renders once under its testid, marked `v-settings-row` with its id, with its exact
- * title and description, in the registry's order, and no hidden one renders. A row the page drops,
+ * shows in `context` renders once under its testid, with its exact title and description, in the
+ * registry's order, and no hidden one renders. A row with a link of its own links there and is not
+ * an outline target; any other row is marked `v-settings-row` with its id. A row the page drops,
  * renames or moves fails here, and so does a stale entry.
  */
 export function expectOwnedRows(wrapper: VueWrapper, page: string, context: SettingsContext): void {
 	const owned = (Object.keys(SETTINGS_ROWS) as SettingsRowId[]).filter((id) => SETTINGS_ROWS[id].page === page)
 	expect(owned.length, page).toBeGreaterThan(0)
 	for (const id of owned) {
-		const { testid, title, description } = settingsRow(id, context)
+		const { testid, title, description, to } = settingsRow(id, context)
 		const rows = wrapper.findAll(`[data-testid="${testid}"]`)
 		if (!isSettingsRowVisible(id, context)) {
 			expect(rows, `${id} is hidden`).toHaveLength(0)
@@ -32,7 +33,12 @@ export function expectOwnedRows(wrapper: VueWrapper, page: string, context: Sett
 		// Exactly one: a second copy would never receive the outline the first one takes.
 		expect(rows, `${id} renders once`).toHaveLength(1)
 		const [row] = rows
-		expect(row.attributes("data-settings-row"), `${id} carries v-settings-row`).toBe(id)
+		if (to !== undefined) {
+			expect(row.attributes("href"), `${id} links to its page`).toBe(to)
+			expect(row.attributes("data-settings-row"), `${id} is no outline target`).toBeUndefined()
+		} else {
+			expect(row.attributes("data-settings-row"), `${id} carries v-settings-row`).toBe(id)
+		}
 		const texts = row.findAll("*").map((el) => el.text())
 		expect(texts, `${id}'s title`).toContain(title)
 		if (description !== undefined) expect(texts, `${id}'s description`).toContain(description)

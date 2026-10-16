@@ -360,6 +360,7 @@ declare global {
   const setLastActiveProfileId: typeof import('../utils/lastActiveProfile').setLastActiveProfileId
   const settingItemProps: typeof import('../utils/settings-search').settingItemProps
   const settingsQueryTerms: typeof import('../utils/settings-search').settingsQueryTerms
+  const settingsResultTo: typeof import('../utils/settings-search').settingsResultTo
   const settingsRow: typeof import('../utils/settings-search').settingsRow
   const shallowReactive: typeof import('vue').shallowReactive
   const shallowReadonly: typeof import('vue').shallowReadonly
@@ -1074,6 +1075,7 @@ declare module 'vue' {
     readonly setLastActiveProfileId: UnwrapRef<typeof import('../utils/lastActiveProfile')['setLastActiveProfileId']>
     readonly settingItemProps: UnwrapRef<typeof import('../utils/settings-search')['settingItemProps']>
     readonly settingsQueryTerms: UnwrapRef<typeof import('../utils/settings-search')['settingsQueryTerms']>
+    readonly settingsResultTo: UnwrapRef<typeof import('../utils/settings-search')['settingsResultTo']>
     readonly settingsRow: UnwrapRef<typeof import('../utils/settings-search')['settingsRow']>
     readonly shallowReactive: UnwrapRef<typeof import('vue')['shallowReactive']>
     readonly shallowReadonly: UnwrapRef<typeof import('vue')['shallowReadonly']>

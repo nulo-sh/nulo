@@ -1,9 +1,10 @@
 /**
  * Every Settings row a search can find, in the order the pages show them. The pages render each
- * row's title, description and testid from here and mark the row with `v-settings-row="<id>"`, so
- * the one place a searchable row registers is its entry below: adding, renaming or removing a row
- * is an edit here plus the control that renders it, and each owning page's test (`expectOwnedRows`)
- * fails when the two halves disagree.
+ * row's title, description and testid from here; a row on the Settings list also takes its link
+ * (`to`), and a sub-page row is marked `v-settings-row="<id>"` so a result can outline it. The one
+ * place a searchable row registers is its entry below: adding, renaming or removing a row is an
+ * edit here plus the control that renders it, and each owning page's test (`expectOwnedRows`) fails
+ * when the two halves disagree.
  */
 
 /** What decides which rows exist and what two of them say, as the Settings list knows it. */
@@ -26,6 +27,8 @@ type RowDefinition = {
 	/** Words that find the row and are never shown. */
 	synonyms: readonly string[]
 	testid: string
+	/** Where the row itself leads; its result opens that page as a tap on the row does. */
+	to?: string
 	visible?: (context: SettingsContext) => boolean
 }
 
@@ -38,6 +41,7 @@ export type SettingsRow = {
 	description: string | undefined
 	synonyms: readonly string[]
 	testid: string
+	to: string | undefined
 }
 
 export type SettingsResultGroup = { caption: string; danger: boolean; rows: SettingsRow[] }
@@ -52,6 +56,7 @@ export const SETTINGS_ROWS = {
 		description: "Switch, create, manage",
 		synonyms: ["wallet", "address", "add account", "import account", "hide account"],
 		testid: "setting-nav-accounts",
+		to: "/popup/settings/accounts",
 	},
 	"hub-contacts": {
 		page: HUB,
@@ -60,6 +65,7 @@ export const SETTINGS_ROWS = {
 		description: "Saved addresses",
 		synonyms: ["address book", "people", "recipients", "import contacts", "export contacts"],
 		testid: "setting-nav-contacts",
+		to: "/popup/settings/contacts",
 	},
 	"hub-tokens": {
 		page: HUB,
@@ -68,6 +74,7 @@ export const SETTINGS_ROWS = {
 		description: "Tracked tokens and balances",
 		synonyms: ["assets", "coins", "add token", "import token", "balances"],
 		testid: "setting-nav-tokens",
+		to: "/popup/settings/tokens",
 	},
 	"hub-connected-apps": {
 		page: HUB,
@@ -76,6 +83,7 @@ export const SETTINGS_ROWS = {
 		description: "Apps with granted permissions",
 		synonyms: ["dapps", "sites", "sessions", "permissions", "disconnect"],
 		testid: "setting-nav-connected-apps",
+		to: "/popup/settings/connected-apps",
 	},
 	"hub-networks": {
 		page: HUB,
@@ -84,6 +92,7 @@ export const SETTINGS_ROWS = {
 		description: "Aztec networks and RPCs",
 		synonyms: ["chain", "rpc", "node", "endpoint", "testnet"],
 		testid: "setting-nav-networks",
+		to: "/popup/settings/networks",
 	},
 	"hub-fpcs": {
 		page: HUB,
@@ -92,6 +101,7 @@ export const SETTINGS_ROWS = {
 		description: "FPCs and fee methods",
 		synonyms: ["fee", "gas", "sponsor", "fee juice", "paymaster"],
 		testid: "setting-nav-fpcs",
+		to: "/popup/settings/fpcs",
 	},
 	"hub-proving": {
 		page: HUB,
@@ -100,6 +110,7 @@ export const SETTINGS_ROWS = {
 		description: (context) => context.provingStatus,
 		synonyms: ["presto", "prover", "proof", "speed"],
 		testid: "setting-nav-proving",
+		to: "/popup/settings/proving",
 	},
 	"hub-lock": {
 		page: HUB,
@@ -108,6 +119,7 @@ export const SETTINGS_ROWS = {
 		description: (context) => (context.passkey ? "Auto-lock" : "Auto-lock, strict mode"),
 		synonyms: ["auto-lock", "timeout", "session"],
 		testid: "setting-nav-lock",
+		to: "/popup/settings/lock",
 	},
 	"hub-backup": {
 		page: HUB,
@@ -116,6 +128,7 @@ export const SETTINGS_ROWS = {
 		description: "Keep a copy of this profile",
 		synonyms: ["export", "backup", "recovery phrase", "seed phrase", "save"],
 		testid: "backup-link-btn",
+		to: "/popup/settings/security/export",
 	},
 	"hub-change-password": {
 		page: HUB,
@@ -123,6 +136,7 @@ export const SETTINGS_ROWS = {
 		title: "Change password",
 		synonyms: ["password", "passphrase"],
 		testid: "change-password-link-btn",
+		to: "/popup/settings/security/change-password",
 		visible: (context) => !context.passkey,
 	},
 	"hub-privacy": {
@@ -132,6 +146,7 @@ export const SETTINGS_ROWS = {
 		description: "Prices, explorer",
 		synonyms: ["prices", "fiat", "usd", "explorer", "coingecko"],
 		testid: "setting-nav-privacy",
+		to: "/popup/settings/privacy",
 	},
 	"hub-display": {
 		page: HUB,
@@ -140,6 +155,7 @@ export const SETTINGS_ROWS = {
 		description: "Theme, layout",
 		synonyms: ["appearance", "theme", "dark mode", "light mode", "layout"],
 		testid: "setting-nav-display",
+		to: "/popup/settings/display",
 	},
 	"hub-developer": {
 		page: HUB,
@@ -148,6 +164,7 @@ export const SETTINGS_ROWS = {
 		description: "Mode, logs, account state",
 		synonyms: ["debug", "logs", "advanced"],
 		testid: "setting-nav-developer",
+		to: "/popup/settings/developer",
 	},
 	"hub-glossary": {
 		page: HUB,
@@ -156,6 +173,7 @@ export const SETTINGS_ROWS = {
 		description: "What Nulo's words mean",
 		synonyms: ["help", "terms", "definitions", "dictionary"],
 		testid: "setting-nav-glossary",
+		to: "/popup/settings/glossary",
 	},
 	"hub-about": {
 		page: HUB,
@@ -164,6 +182,7 @@ export const SETTINGS_ROWS = {
 		description: "Version, contact, legal",
 		synonyms: ["version", "contact", "support", "terms of use", "privacy policy", "licences", "feedback"],
 		testid: "setting-nav-about",
+		to: "/popup/settings/about",
 	},
 	"hub-delete-profile": {
 		page: HUB,
@@ -172,6 +191,7 @@ export const SETTINGS_ROWS = {
 		title: "Delete profile",
 		synonyms: ["reset", "remove", "erase", "wipe"],
 		testid: "delete-profile-link-btn",
+		to: "/popup/settings/security/reset",
 	},
 	"lock-now": {
 		page: "/popup/settings/lock",
@@ -342,13 +362,19 @@ export function settingsRow(id: SettingsRowId, context?: SettingsContext): Setti
 		description,
 		synonyms: row.synonyms,
 		testid: row.testid,
+		to: row.to,
 	}
 }
 
-/** A `SettingItem`'s title, description and testid for the row `id`. */
+/** A `SettingItem`'s title, description, link and testid for the row `id`. */
 export function settingItemProps(id: SettingsRowId, context?: SettingsContext) {
-	const { title, description, testid } = settingsRow(id, context)
-	return { title, description, "data-testid": testid }
+	const { title, description, to, testid } = settingsRow(id, context)
+	return { title, description, to, "data-testid": testid }
+}
+
+/** Where a result goes: the row's own link, or its page told which row to outline. */
+export function settingsResultTo(row: SettingsRow): string {
+	return row.to ?? `${row.page}?row=${row.id}`
 }
 
 export function isSettingsRowVisible(id: SettingsRowId, context: SettingsContext): boolean {

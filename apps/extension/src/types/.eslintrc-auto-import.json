@@ -566,6 +566,7 @@
     "setLastActiveProfileId": true,
     "settingItemProps": true,
     "settingsQueryTerms": true,
+    "settingsResultTo": true,
     "settingsRow": true,
     "shallowReactive": true,
     "shallowReadonly": true,
