@@ -5,6 +5,7 @@ import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures
 import { readSendRecords, waitForSendRecord } from "../fixtures/journal"
 import { mintPublicTokensForAccount, waitForTxMined, type AztecTestConfig } from "../fixtures/aztec"
 import { readPublicTokenBalance } from "../fixtures/selfpay-phase"
+import { shotSend } from "../fixtures/send-page"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -57,8 +58,14 @@ for (const c of cases) {
 			const execPopup = await execPopupP
 			await waitForExecuteContent(execPopup)
 
-			const payloadRows = await execPopup.evaluate(() => document.querySelectorAll('[data-testid="execute-op-payload-row"]').length)
-			expect(payloadRows).toBeGreaterThanOrEqual(c.calls)
+			// The summary lists every call at rest; the value rows stay closed under it.
+			const atRest = await execPopup.evaluate(() => ({
+				calls: document.querySelectorAll('[data-testid="execute-op-summary-call"]').length,
+				rows: document.querySelectorAll('[data-testid="execute-op-payload-row"]').length,
+			}))
+			expect(atRest.calls).toBeGreaterThanOrEqual(c.calls)
+			expect(atRest.rows).toBe(0)
+			await shotSend(execPopup, `multicall-${c.calls}-summary`, "execute-op-summary")
 
 			await approveExecute(execPopup)
 

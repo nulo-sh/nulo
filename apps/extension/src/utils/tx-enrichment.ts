@@ -13,10 +13,13 @@ type TxCall = {
 	args?: unknown[]
 }
 
-/** Labels for the non-transfer names; transfer labels come from the descriptor-derived vocabulary. */
-const METHOD_LABELS: Record<string, string> = {
+const MINT_LABELS: Record<string, string> = {
 	mint_to_public: "Mint (public)",
 	mint_to_private: "Mint (private)",
+}
+
+/** The other curated labels; transfer labels come from the descriptor-derived vocabulary. */
+const METHOD_LABELS: Record<string, string> = {
 	shield: "Shield",
 	unshield: "Unshield",
 	redeem_shield: "Redeem shield",
@@ -32,7 +35,10 @@ const FEE_JUICE_L2_ADDRESS = AztecAddress.fromNumberUnsafe(FEE_JUICE_ADDRESS).to
  *  trust surface (it would misdescribe what the user is authorizing). */
 const FEE_JUICE_ONLY_LABELS = new Set(["claim", "claim_and_end_setup"])
 
-const curatedLabel = (method: string): string | null => transferLabel(method) ?? METHOD_LABELS[method] ?? null
+/** The wallet's label for a name that claims a token transfer or mint, the six a reading must earn. */
+export const tokenMovementLabel = (method: string): string | null => transferLabel(method) ?? MINT_LABELS[method] ?? null
+
+const curatedLabel = (method: string): string | null => tokenMovementLabel(method) ?? METHOD_LABELS[method] ?? null
 
 /**
  * Look up the wallet-curated friendly label for `method`. Returns `null` for anything not in the allowlist —
@@ -59,17 +65,15 @@ export function getMethodLabel(method: string, contract?: string): string | null
  * - Generic snake_case gets title-cased
  */
 export function humanizeMethodName(method: string, contract?: string): string {
+	return getMethodLabel(method, contract) ?? plainMethodName(method)
+}
+
+/** A name as its contract spells it, with no wallet label: a hex selector truncated, snake_case title-cased. */
+export function plainMethodName(method: string): string {
 	if (!method) return "Unknown"
-
-	const label = getMethodLabel(method, contract)
-	if (label) return label
-
-	// Hex selector — truncate
 	if (/^0x[0-9a-fA-F]+$/.test(method)) {
 		return method.length > 10 ? `${method.slice(0, 10)}...` : method
 	}
-
-	// Generic snake_case → title case
 	return method.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
