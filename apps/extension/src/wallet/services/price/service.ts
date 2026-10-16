@@ -6,6 +6,7 @@ import { ConfigService } from "@/wallet/services/config/service"
 import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
 import { TokenListService } from "@/wallet/services/token-list/service"
 import { ValueStorage } from "@/wallet/storage"
+import { flaggedKeysOf } from "@/utils/token-flag"
 import { AlarmDispatcher, EventHandler, createSerialQueue } from "@nulo/wallet-core/utils"
 import { allCoingeckoIds, getSanityBand, pricedTokensOf } from "./price-map"
 import {
@@ -270,10 +271,14 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		return (await this.isEnabled()) ? this.readUsable() : {}
 	}
 
+	/** Reads the list as each answer is built, after any price await, so a slow refresh never carries
+	 *  an older list's mapping or flags. */
 	private snapshotOf(quotes: PriceState): PriceSnapshot {
+		const list = this.tokenList.getSnapshot()
 		return {
 			quotes,
-			pricedTokens: pricedTokensOf(this.tokenList.getSnapshot()?.entries ?? []),
+			pricedTokens: pricedTokensOf(list?.entries ?? []),
+			flaggedTokens: flaggedKeysOf(list?.flagged ?? []),
 			lastRefreshFailed: this.consecutiveFailures > 0,
 		}
 	}

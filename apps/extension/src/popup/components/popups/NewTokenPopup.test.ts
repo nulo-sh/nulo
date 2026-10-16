@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { ref } from "vue"
-import { ContractNotFoundError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
+import { ChainNotSupportedError, ContractNotFoundError, WalletError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -279,12 +279,18 @@ describe("NewTokenPopup", () => {
 			new Error(
 				"openChainStore: an open for pxe-1a2b3c4d-1 is already in flight or a prior one wedged (its OPFS worker never released its lock). Refusing to start a second worker. Restart the offscreen document to recover.",
 			),
+			"Something went wrong. Try again.",
 		],
-		["a contract the network does not hold", walletErrorFromPayload(new ContractNotFoundError().toPayload())],
-	])("%s reads the generic line under Submit, never its own text, and goes to the debug log", async (_, refusal) => {
+		[
+			"a contract the network does not hold",
+			walletErrorFromPayload(new ContractNotFoundError().toPayload()),
+			"There is no token at this address on this network.",
+		],
+		["a quarantined chain", walletErrorFromPayload(new ChainNotSupportedError().toPayload()), "Something went wrong. Try again."],
+	])("%s reads its line under Submit, never the error's own text, and goes to the debug log", async (_, refusal, line) => {
 		const debug = vi.spyOn(console, "debug").mockImplementation(() => {})
 		const { message } = refusal
-		if (refusal instanceof ContractNotFoundError) tokenServiceMock.parseTokenInterface.mockRejectedValueOnce(refusal)
+		if (refusal instanceof WalletError) tokenServiceMock.parseTokenInterface.mockRejectedValueOnce(refusal)
 		else {
 			tokenServiceMock.parseTokenInterface.mockResolvedValueOnce({ isComplete: true })
 			tokenServiceMock.addToken.mockRejectedValueOnce(refusal)
@@ -294,7 +300,7 @@ describe("NewTokenPopup", () => {
 		await submitBtn(w).trigger("click")
 		await flushPromises()
 
-		expect(w.find('[data-testid="new-token-error"]').text()).toBe("Something went wrong. Try again.")
+		expect(w.find('[data-testid="new-token-error"]').text()).toBe(line)
 		expect(w.text()).not.toContain(message)
 		expect(debug).toHaveBeenCalledWith("[new-token] add refused", { reason: refusal })
 		expect(w.emitted("onClose")).toBeUndefined()
