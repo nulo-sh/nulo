@@ -6,7 +6,7 @@
  * default view.
  */
 
-import type { DecodedCall, DecodedParam, DecodedValue, UndecodedReason } from "@/wallet/services/execution/client"
+import type { DecodedCall, DecodedGrant, DecodedParam, DecodedValue, UndecodedReason } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { formatBaseUnits } from "@/utils/amount"
 import { trimAddress } from "@/utils/string"
@@ -24,7 +24,10 @@ export type TransferSender = { kind: "explicit" | "account"; address: string } |
 
 /** One raw field row: trimmed for the eye, the full value on hover, and its decimal when it is small
  *  enough to be a count or an amount rather than a hash. */
-export type RawRow = { kind: "field"; short: string; full: string; decimal?: string } | { kind: "text"; value: string } | { kind: "opaque" }
+export type RawRow =
+	| { kind: "field"; short: string; full: string; decimal?: string }
+	| { kind: "text"; value: string; full: string }
+	| { kind: "opaque" }
 export type RawRows = { rows: RawRow[]; hidden: number }
 
 export type CallSurface =
@@ -44,11 +47,13 @@ export const wire = (v: unknown, max: number): string => safeWire(v === undefine
 export const MAX_ARG_ROWS = 32
 /** Array items shown inline; the full list stays available as the row's title. */
 const MAX_INLINE_ITEMS = 8
+/** The most code points a whole value prints before it is cut. */
+const FULL_TEXT_MAX = 4096
 
 const rawRow = (arg: unknown): RawRow => {
 	const p = projectArgument(arg)
 	if (p.kind === "field") return { kind: "field", short: trimAddress(p.value, 10, 6), full: p.value, decimal: smallFieldDecimal(p.value) }
-	if (p.kind === "text") return { kind: "text", value: safeWire(p.value, 64) }
+	if (p.kind === "text") return { kind: "text", value: safeWire(p.value, 64), full: safeWire(p.value, 4096) }
 	return { kind: "opaque" }
 }
 
@@ -180,7 +185,7 @@ export const valueText = (v: DecodedValue, full = false): string => {
 		case "selector":
 			return v.value
 		case "string":
-			return safeWire(v.value, full ? 4096 : 64)
+			return safeWire(v.value, full ? FULL_TEXT_MAX : 64)
 		case "boolean":
 			return v.value ? "true" : "false"
 		case "field":
@@ -220,6 +225,28 @@ export const RAW_NOTICE: Readonly<Record<UndecodedReason, string>> = {
 	arguments: "The arguments don't fit the contract's interface, so Nulo can't read them.",
 	unavailable: "Nulo couldn't read the arguments right now.",
 }
+
+/** The card's notice under unreadable arguments, also the window's refusal of a grant it cannot read. */
+export const rawNotice = (reason: UndecodedReason): string => `${RAW_NOTICE[reason]} Check what the app says this does before approving.`
+
+/** Whether `valueText(v, true)` prints every character `v` carries: a string loses what the print
+ *  strips (control and direction characters), cuts, or cannot draw (a lone surrogate). */
+const printsWhole = (v: DecodedValue): boolean => {
+	if (v.kind === "string") return v.value.isWellFormed() && safeWire(v.value, FULL_TEXT_MAX) === v.value
+	if (v.kind === "array") return v.items.every(printsWhole)
+	if (v.kind === "struct") return v.fields.every((f) => printsWhole(f.value))
+	return true
+}
+
+/** Each of an operation's `count` grants as the card can read it: missing from the batch is
+ *  unavailable, and a decode the card cannot print whole is unreadable. */
+export const readableGrants = (decoded: readonly DecodedGrant[], count: number): DecodedGrant[] =>
+	Array.from({ length: count }, (_, k): DecodedGrant => {
+		const grant = decoded[k] ?? { kind: "undecoded", reason: "unavailable" }
+		return grant.kind === "decoded" && !grant.decoded.params.every((p) => printsWhole(p.value))
+			? { kind: "undecoded", reason: "arguments" }
+			: grant
+	})
 
 export const rawToggleLabel = (count: number, open: boolean): string =>
 	open ? "Hide raw values" : `Show ${count} raw value${count === 1 ? "" : "s"}`

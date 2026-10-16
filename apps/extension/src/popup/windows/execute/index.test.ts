@@ -148,6 +148,7 @@ vi.mock("@/composables/useFeeEstimationMap", () => ({
 	}),
 }))
 const estimateOperationFeeMock = vi.fn(async () => undefined)
+const decodeGrantsForDisplayMock = vi.fn(async (): Promise<unknown[]> => [])
 const previewOperationAuthwitsMock = vi.fn(async () => undefined)
 
 const toastMocks = vi.hoisted(() => ({ openToast: vi.fn() }))
@@ -186,6 +187,7 @@ vi.mock("@/wallet/services/execution/client", () => ({
 			estimateOperationFee: estimateOperationFeeMock,
 			previewOperationAuthwits: previewOperationAuthwitsMock,
 			decodeCallsForDisplay: vi.fn(async () => []),
+			decodeGrantsForDisplay: decodeGrantsForDisplayMock,
 			cancelEstimate: vi.fn(async () => undefined),
 		}
 	}),
@@ -319,6 +321,7 @@ const STUBS = {
 
 // Lazy import after vi.mock hoist
 import Execute from "./index.vue"
+import { rawNotice } from "./call-surface"
 
 const factory = () => mount(Execute, { global: { stubs: STUBS } })
 
@@ -1051,5 +1054,122 @@ describe("execute window — send drafts from wire-shaped requests", () => {
 			drafted(REQUESTS[4], undefined),
 		])
 		expect(vm.accounts).toEqual([acct(OWNER), acct(OTHER)])
+	})
+})
+
+// ── A public grant: Confirm waits for its decode, and a grant the wallet cannot read refuses the
+//    request through the footer's error row. ──
+describe("execute window — a public grant", () => {
+	const NETWORK = { id: "n1", chainId: 1, name: "TestNet" }
+	const OWNER = "0x0a1b2c0000000000000000000000000000000000000000000000000000009c2d"
+	const SPENDER = "0x1b5c090000000000000000000000000000000000000000000000000000083d4e"
+	const TOKEN = "0x2f4e8100000000000000000000000000000000000000000000000000000077a0"
+	const GRANT = {
+		kind: "call",
+		caller: SPENDER,
+		contract: TOKEN,
+		method: "transfer_public_to_public",
+		args: [OWNER, SPENDER, "1", "7"],
+	}
+	const field = (n: bigint) => `0x${n.toString(16).padStart(64, "0")}`
+	const DECODED = {
+		kind: "decoded",
+		call: { to: TOKEN, name: "transfer_public_to_public", selector: "0xc47adea0", args: [OWNER, SPENDER, field(1n), field(7n)] },
+		decoded: {
+			kind: "decoded",
+			contract: "Token",
+			fn: "transfer_public_to_public",
+			params: [
+				{ name: "from", value: { kind: "address", value: OWNER } },
+				{ name: "to", value: { kind: "address", value: SPENDER } },
+				{ name: "amount", value: { kind: "integer", value: "1" } },
+				{ name: "_nonce", value: { kind: "field", value: field(7n) } },
+			],
+		},
+	}
+	async function opened() {
+		accountServiceCtorMock.mockImplementationOnce(function () {
+			return {
+				getAccount: vi.fn(async (_p: string, _c: number, address: string) => ({ address, chainId: 1, name: "Main" })),
+				connect: vi.fn(),
+				disconnect: vi.fn(),
+			}
+		})
+		networkServiceCtorMock.mockImplementationOnce(function () {
+			return { getNetworks: vi.fn(async () => [NETWORK]), connect: vi.fn(), disconnect: vi.fn() }
+		} as never)
+		payloadToLoad = {
+			session: { profileId: "p1", dappMetadata: { name: "Test DApp", url: "https://example.com" } },
+			params: {
+				operations: [
+					{ kind: "send_transaction", account: `aztec:1:${OWNER}`, actions: [{ kind: "add_public_authwit", content: GRANT }] },
+				],
+			},
+		}
+		w = factory()
+		await completeInit()
+		const vm = w.vm as unknown as ExecVm & {
+			handleFeeUpdate: (index: number, value: unknown) => void
+			grantRefusal?: { title: string; tooltip: string }
+		}
+		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fj" } })
+		await flushPromises()
+		return { vm, confirm: () => w!.find('[data-testid="execute-confirm-btn"]'), error: () => w!.find('[data-testid="error-text"]') }
+	}
+
+	test("a grant that decodes enables Confirm, and approval goes through", async () => {
+		decodeGrantsForDisplayMock.mockResolvedValueOnce([DECODED])
+		const { vm, confirm, error } = await opened()
+		expect(decodeGrantsForDisplayMock).toHaveBeenCalledExactlyOnceWith("req-123", 0)
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		expect(error().exists()).toBe(false)
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("while the grant decodes, Confirm waits and approve sends nothing", async () => {
+		let release!: (value: unknown[]) => void
+		decodeGrantsForDisplayMock.mockImplementationOnce(() => new Promise((resolve) => (release = resolve)))
+		const { vm, confirm } = await opened()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+		release([DECODED])
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+	})
+
+	test.each([
+		["unknown-contract", () => decodeGrantsForDisplayMock.mockResolvedValueOnce([{ kind: "undecoded", reason: "unknown-contract" }])],
+		["unknown-function", () => decodeGrantsForDisplayMock.mockResolvedValueOnce([{ kind: "undecoded", reason: "unknown-function" }])],
+		["arguments", () => decodeGrantsForDisplayMock.mockResolvedValueOnce([{ kind: "undecoded", reason: "arguments" }])],
+		["unavailable", () => decodeGrantsForDisplayMock.mockRejectedValueOnce(new Error("decoder unreachable"))],
+	] as const)("a grant that reads as %s shows the error row, holds Confirm, and approve refuses", async (reason, arrange) => {
+		arrange()
+		const { vm, confirm, error } = await opened()
+		expect(error().text()).toBe("Can't read the arguments")
+		expect(vm.grantRefusal?.tooltip).toBe(rawNotice(reason))
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+	})
+
+	test("a batch that comes back short refuses the grant it left out", async () => {
+		decodeGrantsForDisplayMock.mockResolvedValueOnce([])
+		const { vm, confirm, error } = await opened()
+		expect(error().text()).toBe("Can't read the arguments")
+		expect(vm.grantRefusal?.tooltip).toBe(rawNotice("unavailable"))
+		expect(confirm().attributes("disabled")).toBeDefined()
+	})
+
+	test("a fee change clears the window's error but not the grant's refusal", async () => {
+		decodeGrantsForDisplayMock.mockResolvedValueOnce([{ kind: "undecoded", reason: "arguments" }])
+		const { vm, confirm, error } = await opened()
+		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fpc", fpcId: "s1" } })
+		await flushPromises()
+		expect(error().text()).toBe("Can't read the arguments")
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
 	})
 })

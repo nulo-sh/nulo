@@ -26,6 +26,7 @@ import { isSelfPay } from "@nulo/wallet-bridge"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import type {
 	DecodedCall,
+	DecodedGrant,
 	DiscoveredAuthwit,
 	FeeSettings,
 	OperationAuthwitPreview,
@@ -55,6 +56,7 @@ import {
 import { trimAddress } from "@/utils/string"
 import { humanizeMethodName } from "@/utils/tx-enrichment"
 import { isEmbeddedFeePayment } from "./operation-validation"
+import { grantContentsOf } from "./display-calls"
 
 // `DraftUIOperation` is the shared honest type. Send-like `feeSettings` is optional during user
 // editing — the card v-models it via the FeeSettingsCard emit, the parent's `requiresFeeSelection`
@@ -84,6 +86,9 @@ const props = defineProps<{
 	decodedCalls?: readonly DecodedCall[]
 	/** Display-only decodings of the discovered authorizations, by message hash. */
 	decodedAuthwits?: ReadonlyMap<string, DecodedCall>
+	/** Decodings of a `send_transaction`'s public grants, index-aligned with them; `undefined` while
+	 *  the wallet is still decoding. */
+	decodedGrants?: readonly DecodedGrant[]
 	/** The wallet's registered tokens, so an amount can carry its symbol and decimals. */
 	tokens?: readonly TokenInfo[]
 	/**
@@ -130,6 +135,19 @@ const sendTxRows = computed(() => (props.op.kind === "aztec_sendTx" ? sendTxCall
 
 /** Only a contract the wallet registered as a token gets the transfer/mint vocabulary. */
 const isToken = (contract: unknown): boolean => tokenAt(props.tokens, props.op.network?.chainId, contract) !== undefined
+
+/** A grant reads from the call its signature hashes, or, undecoded, as the raw arguments it carries.
+ *  No caller context: the spender makes the future call, so a transfer names only an explicit `from`. */
+const grantRows = computed(() =>
+	grantContentsOf(props.op).map((content, k) => {
+		const grant = props.decodedGrants ? (props.decodedGrants[k] ?? { kind: "undecoded", reason: "unavailable" }) : undefined
+		if (grant?.kind === "decoded") {
+			return { contract: grant.call.to, surface: callSurface(undefined, grant.call, grant.decoded, isToken(grant.call.to)) }
+		}
+		const raw = content.kind === "call" ? { to: content.contract, args: content.args } : {}
+		return { contract: raw.to, surface: callSurface(undefined, raw, grant, false, Number.POSITIVE_INFINITY) }
+	}),
+)
 
 /** What an `aztec_createAuthWit` asks the wallet to sign: a call it can show, or a hash it cannot. */
 type CreateAuthwitSurface =
@@ -222,12 +240,25 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 				</Text>
 			</Flex>
 			<!-- send_transaction has actions[]; aztec_sendTx has exec.calls[] -->
-			<Flex v-if="op.kind === 'send_transaction'" :class="$style.prop">
-				<Text variant="label" color="secondary">Payload:</Text>
-				<Flex direction="column" gap="4" :class="$style.payload">
-					<OperationActionRow v-for="(action, j) in op.actions" :key="`${index}:${j}`" :action="action" />
+			<template v-if="op.kind === 'send_transaction'">
+				<Flex :class="$style.prop">
+					<Text variant="label" color="secondary">Payload:</Text>
+					<Flex direction="column" gap="4" :class="$style.payload">
+						<OperationActionRow v-for="(action, j) in op.actions" :key="`${index}:${j}`" :action="action" hide-args />
+					</Flex>
 				</Flex>
-			</Flex>
+				<Flex
+					v-for="(grant, k) in grantRows"
+					:key="`${index}:grant:${k}`"
+					data-testid="execute-grant-args"
+					direction="column"
+					gap="4"
+					:class="$style.group"
+				>
+					<Text variant="label" color="secondary">Arguments</Text>
+					<CallArguments :surface="grant.surface" :contract="grant.contract" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-grant" json-view full />
+				</Flex>
+			</template>
 			<template v-else-if="op.kind === 'aztec_sendTx'">
 				<SendTxSummary
 					:calls="sendTxRows"

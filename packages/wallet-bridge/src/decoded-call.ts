@@ -35,3 +35,9 @@ export type DisplayCallInput = {
 	readonly selector?: string
 	readonly args: readonly string[]
 }
+
+/** A public grant as the approval card reads it: the call its message hash commits to (the target,
+ *  the selector and the encoded fields) with those fields decoded, or why the wallet cannot read it. */
+export type DecodedGrant =
+	| { readonly kind: "decoded"; readonly call: DisplayCallInput; readonly decoded: Extract<DecodedCall, { kind: "decoded" }> }
+	| { readonly kind: "undecoded"; readonly reason: UndecodedReason }
