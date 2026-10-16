@@ -1189,24 +1189,16 @@ export function patchPagePolling(page: Page): void {
 		// Use our patched waitForFunction (polling: 200) under the hood.
 		// biome-ignore lint/suspicious/noExplicitAny: dynamic invocation on the patched method
 		await (page as any).waitForFunction(
-			// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: accepted at score 29 — the predicate implements Puppeteer's exact exists / visible / hidden selector semantics in-page
 			(args: { sel: string; visible: boolean; hidden: boolean }) => {
 				const el = document.querySelector<HTMLElement>(args.sel)
-				if (args.hidden) {
-					if (!el) return true
-					const style = window.getComputedStyle(el)
-					if (style.display === "none" || style.visibility === "hidden") return true
-					const rect = el.getBoundingClientRect()
-					return rect.width === 0 || rect.height === 0
-				}
-				if (!el) return false
-				if (args.visible) {
-					const style = window.getComputedStyle(el)
+				const shown = (e: HTMLElement) => {
+					const style = window.getComputedStyle(e)
 					if (style.display === "none" || style.visibility === "hidden") return false
-					const rect = el.getBoundingClientRect()
-					if (rect.width === 0 || rect.height === 0) return false
+					const rect = e.getBoundingClientRect()
+					return rect.width !== 0 && rect.height !== 0
 				}
-				return true
+				if (args.hidden) return !el || !shown(el)
+				return !!el && (!args.visible || shown(el))
 			},
 			{ timeout, polling: 200 },
 			{ sel: selector, visible, hidden },
