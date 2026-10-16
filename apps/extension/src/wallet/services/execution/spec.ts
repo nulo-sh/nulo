@@ -1,7 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import type { TransferType, LocalTxOrigin } from "@/wallet/services/transaction/spec"
 import type {
-	AuthwitContent,
 	DecodedCall,
 	DecodedGrant,
 	DisplayCallInput,
@@ -123,12 +122,13 @@ export type Methods = {
 	decodeCallsForDisplay(networkId: string, calls: DisplayCallInput[]): DecodedCall[]
 
 	/**
-	 * Decodes public grants for the approval card, index-aligned with `contents`: each from the
-	 * fields its message hash commits to, encoded as signing encodes them, under the checks and
-	 * bound of {@link decodeCallsForDisplay}. Display only. A grant that does not encode or decode
-	 * says why; the window refuses to confirm it.
+	 * Decodes the public grants of the stored operation at `(interactionId, index)` for the approval
+	 * card, in action order: each from the fields its message hash commits to, encoded as signing
+	 * encodes them, under the checks and bound of {@link decodeCallsForDisplay}. By reference, as
+	 * {@link estimateOperationFee}, so the card reads the request approval executes. A grant that
+	 * does not encode, decode, or decode back to its fields says why.
 	 */
-	decodeGrantsForDisplay(networkId: string, contents: AuthwitContent[]): DecodedGrant[]
+	decodeGrantsForDisplay(interactionId: string, index: number): DecodedGrant[]
 
 	/**
 	 * Cancel an in-flight fee estimate by its caller-minted token.

@@ -19,8 +19,8 @@ const props = defineProps<{
 	prefix: string
 	/** Whether the request's JSON view carries this call, so capped rows can point there. */
 	jsonView?: boolean
-	/** Every value prints whole, an address as its own text with no name in its place. Only a call
-	 *  read without caller context sets it, so no sender reads as `this account`. */
+	/** Every value prints whole, an address as its own text with no name in its place; the
+	 *  `this account` sender, which only a surface read with caller context carries, is not covered. */
 	full?: boolean
 }>()
 

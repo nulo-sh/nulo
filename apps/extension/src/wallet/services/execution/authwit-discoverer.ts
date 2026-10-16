@@ -84,17 +84,11 @@ export type BuildTxRequestFn = (
 	paymentMethod: AccountFeePaymentMethodOptions,
 ) => Promise<DiscoverContext>
 
-/** The call a `call`-kind authwit content names, encoded as its message hash commits to it: the
- *  function found by name in `artifact`, its selector, and the arguments as fields. `undefined` when
- *  the artifact has no such function; throws when the arguments do not fit it. The approval card
- *  decodes these same fields, so what it shows is what the hash signs. */
-export async function encodeAuthwitCall(
-	artifact: ContractArtifact,
-	content: Pick<CallAuthwitContent, "method" | "args">,
-): Promise<{ fn: FunctionAbi; selector: FunctionSelector; fields: Fr[] } | undefined> {
-	const fn = findFunctionByName(artifact, content.method)
-	if (!fn) return undefined
-	return { fn, selector: await FunctionSelector.fromNameAndParameters(fn.name, fn.parameters), fields: encodeArguments(fn, content.args) }
+/** A `call`-kind authwit's call as its message hash commits to it: `fn`'s selector and `args` as
+ *  fields. Throws when the arguments do not fit `fn`. Every reading of such an authwit encodes
+ *  through here, so none can differ from the fields it signs. */
+export async function encodeAuthwitCall(fn: FunctionAbi, args: unknown[]): Promise<{ selector: FunctionSelector; fields: Fr[] }> {
+	return { selector: await FunctionSelector.fromNameAndParameters(fn.name, fn.parameters), fields: encodeArguments(fn, args) }
 }
 
 /** The `compute*MessageHash` methods hash over the `nodeInfo` they are given and do not validate chain identity:
@@ -162,11 +156,11 @@ export class AuthwitDiscoverer {
 		instances: Map<string, ContractInstanceWithAddress>,
 		artifacts: Map<string, ContractArtifact>,
 	): Promise<Fr> {
-		const encoded = await encodeAuthwitCall(requireArtifact(instances, artifacts, content.contract), content)
-		if (!encoded) {
+		const fn = findFunctionByName(requireArtifact(instances, artifacts, content.contract), content.method)
+		if (!fn) {
 			throw new Error("Method not found")
 		}
-		const { fn, selector, fields } = encoded
+		const { selector, fields } = await encodeAuthwitCall(fn, content.args)
 		return await computeAuthWitMessageHash(
 			{
 				caller: AztecAddress.fromStringUnsafe(content.caller),

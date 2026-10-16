@@ -23,7 +23,7 @@ import { storageLocalSet } from "@/utils/storage"
 import { isSelfPay } from "@nulo/wallet-bridge"
 import { isEmbeddedFeePayment, requiresFeeSelection } from "./operation-validation"
 import { authwitDisplayCall, displayCallsOf, grantContentsOf, pendingAuthwitDecodes, undecodedAll } from "./display-calls"
-import { rawNotice } from "./call-surface"
+import { rawNotice, readableGrants } from "./call-surface"
 import type { DraftUIOperation } from "./types"
 
 /** Services */
@@ -295,8 +295,8 @@ const init = async () => {
 			// No fee card asks for these: the estimate runs once, to check the app's own fee contract.
 			else if (isAppPaid(op)) scheduleFeeEstimate(index, { index, feeSettings: { paymentMethod: { kind: "embedded" } } })
 		}
-		// Neither is awaited by the approve gate: a slow decode leaves the card on its vocabulary
-		// reading or "Reading arguments…", and a failed one falls back to the raw fields.
+		// None is awaited here. A call's decode never gates Confirm: a slow one leaves the card on its
+		// vocabulary reading or "Reading arguments…", and a failed one falls back to the raw fields.
 		void decodeOperationArguments(resolved.operations)
 		void decodeOperationGrants(resolved.operations)
 		void loadKnownTokens(resolved.operations, profile.value!.id)
@@ -461,19 +461,20 @@ async function decodeOperationArguments(ops: UIOperation[]): Promise<void> {
 	)
 }
 
-/** Per operation, one batch decode of its grants; a failed batch reads as unavailable, which refuses
+/** Per operation, one decode of its stored grants; a failed one reads as unavailable, which refuses
  *  the request rather than leaving it pending. */
 async function decodeOperationGrants(ops: UIOperation[]): Promise<void> {
 	await Promise.all(
 		ops.map(async (op, index) => {
-			const contents = grantContentsOf(op)
-			if (!contents.length) return
+			const count = grantContentsOf(op).length
+			if (!count) return
+			let decoded: readonly DecodedGrant[] = []
 			try {
-				decodedGrants.value.set(index, await executionService.decodeGrantsForDisplay(op.networkId, contents))
+				decoded = await executionService.decodeGrantsForDisplay(requestId.value!, index)
 			} catch (error) {
 				console.warn("[Execute] Grant decode failed", { index, error })
-				decodedGrants.value.set(index, undecodedAll(contents.length))
 			}
+			decodedGrants.value.set(index, readableGrants(decoded, count))
 		}),
 	)
 }

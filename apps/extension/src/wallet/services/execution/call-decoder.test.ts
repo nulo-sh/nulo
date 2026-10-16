@@ -239,11 +239,29 @@ describe("decodeGrantForDisplay over the real Token", () => {
 			kind: "undecoded",
 			reason: "arguments",
 		})
-		// Encodes, but into more fields than the card decodes row by row.
+		// More fields than the card decodes row by row, refused before encoding them.
 		const wide = fn("set_many", [{ name: "values", type: { kind: "array", length: 300, type: { kind: "field" } } }])
 		const registry = { name: "Registry", functions: [wide], nonDispatchPublicFunctions: [] } as unknown as ContractArtifact
 		const many = grant([Array(300).fill("1")], "set_many")
 		expect(encodeArguments(wide, many.args)).toHaveLength(300)
 		expect(await decodeGrantForDisplay(lookup({ [USDC]: registry }), many)).toEqual({ kind: "undecoded", reason: "arguments" })
+	})
+
+	test("a grant whose decode drops signed bits is not read: an EthAddress field past 160 bits", async () => {
+		const ETH: AbiType = {
+			kind: "struct",
+			path: "aztec::protocol_types::address::eth_address::EthAddress",
+			fields: [{ name: "inner", type: { kind: "field" } }],
+		}
+		const bridge = fn("exit_to", [{ name: "recipient", type: ETH }])
+		const hub = lookup({ [USDC]: { name: "Hub", functions: [bridge], nonDispatchPublicFunctions: [] } as unknown as ContractArtifact })
+		const recipient = "0x7c41d2a90b3e85f61c0d7e4b2a9f13c86d5be9f0"
+		expect(await decodeGrantForDisplay(hub, grant([recipient], "exit_to"))).toMatchObject({
+			kind: "decoded",
+			decoded: { params: [{ name: "recipient", value: { kind: "address", value: recipient } }] },
+		})
+		// The same last 20 bytes under a set upper bit: the decoder reads the address above, the hash signs more.
+		const padded = `0x${(2n ** 160n + BigInt(recipient)).toString(16)}`
+		expect(await decodeGrantForDisplay(hub, grant([padded], "exit_to"))).toEqual({ kind: "undecoded", reason: "arguments" })
 	})
 })

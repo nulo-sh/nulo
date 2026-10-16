@@ -70,7 +70,6 @@ import {
 	type GasBalances,
 	type OperationApprovalEnvelope,
 	type OperationAuthwitPreview,
-	type AuthwitContent,
 	type DecodedCall,
 	type DecodedGrant,
 	type DisplayCallInput,
@@ -784,8 +783,13 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		return Promise.all(calls.map((call) => decodeCallForDisplay(lookup, call)))
 	}
 
-	public async decodeGrantsForDisplay(networkId: string, contents: AuthwitContent[]): Promise<DecodedGrant[]> {
-		const lookup = await this.displayArtifactLookup(networkId, contents)
+	public async decodeGrantsForDisplay(interactionId: string, index: number): Promise<DecodedGrant[]> {
+		await this.ensureInitialized()
+		// The request approval executes, never the popup's copy: its JSON round trip rewrites some values.
+		const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index)
+		if (operation.kind !== "send_transaction") return []
+		const contents = operation.actions.flatMap((action) => (action.kind === "add_public_authwit" ? [action.content] : []))
+		const lookup = await this.displayArtifactLookup(operation.networkId, contents)
 		return Promise.all(contents.map((content) => decodeGrantForDisplay(lookup, content)))
 	}
 

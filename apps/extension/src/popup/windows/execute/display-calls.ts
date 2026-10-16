@@ -46,9 +46,9 @@ export function grantContentsOf(op: DraftUIOperation): AuthwitContent[] {
 	return (op.actions ?? []).flatMap((action) => (action.kind === "add_public_authwit" ? [action.content] : []))
 }
 
-/** The decoder itself was unreachable: every call or grant reads as undecoded for that reason, so the
- *  card falls back to raw fields instead of waiting forever. */
-export const undecodedAll = (count: number): Extract<DecodedCall, { kind: "undecoded" }>[] =>
+/** The decoder itself was unreachable: every call reads as undecoded for that reason, so the card
+ *  falls back to raw fields instead of waiting forever. */
+export const undecodedAll = (count: number): DecodedCall[] =>
 	Array.from({ length: count }, () => ({ kind: "undecoded", reason: "unavailable" }))
 
 /** A discovered authorization decodes on its consumer contract by selector; only records not yet

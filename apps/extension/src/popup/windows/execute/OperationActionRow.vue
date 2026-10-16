@@ -6,7 +6,7 @@ import { safeWire } from "./humanize"
 
 defineProps<{
 	action: Action
-	/** The card renders a grant's arguments in their own rows, decoded as the wallet signs them. */
+	/** Leaves a grant's arguments out of the line. */
 	hideArgs?: boolean
 }>()
 </script>

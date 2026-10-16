@@ -1120,7 +1120,7 @@ describe("execute window — a public grant", () => {
 	test("a grant that decodes enables Confirm, and approval goes through", async () => {
 		decodeGrantsForDisplayMock.mockResolvedValueOnce([DECODED])
 		const { vm, confirm, error } = await opened()
-		expect(decodeGrantsForDisplayMock).toHaveBeenCalledExactlyOnceWith("n1", [GRANT])
+		expect(decodeGrantsForDisplayMock).toHaveBeenCalledExactlyOnceWith("req-123", 0)
 		expect(confirm().attributes("disabled")).toBeUndefined()
 		expect(error().exists()).toBe(false)
 		await vm.approve()
@@ -1152,6 +1152,14 @@ describe("execute window — a public grant", () => {
 		expect(confirm().attributes("disabled")).toBeDefined()
 		await vm.approve()
 		expect(approveInteractionMock).not.toHaveBeenCalled()
+	})
+
+	test("a batch that comes back short refuses the grant it left out", async () => {
+		decodeGrantsForDisplayMock.mockResolvedValueOnce([])
+		const { vm, confirm, error } = await opened()
+		expect(error().text()).toBe("Can't read the arguments")
+		expect(vm.grantRefusal?.tooltip).toBe(rawNotice("unavailable"))
+		expect(confirm().attributes("disabled")).toBeDefined()
 	})
 
 	test("a fee change clears the window's error but not the grant's refusal", async () => {
