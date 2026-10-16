@@ -76,7 +76,7 @@ One arc, one PR against `dev`, no stack, `Closes #577 #565 #566 #567`. Recon: [r
 
 **Gate.** As phase 1. Pass: exit 0; the three lock cases fail on the base `index.vue`. Layers: lint, typecheck, unit, component.
 
-### Phase 3: a second duplicate warning (#567)
+### Phase 3: a second duplicate warning (#567) ✓
 1. Replace the four field writes in `useProfileImportFlow.ts:130-146` per D6.
 2. `useProfileImportFlow.test.ts`: `dismissDialog` also sets `useCacheStore().confirm = {}`, as `ConfirmPopup` does. New case: a duplicate naming `Main`, dismiss, import again with a duplicate naming `Savings`; the dialog carries the `Savings` description, `confirm_text` `Add anyway` and a callback; confirming retries with `allowDuplicate` `true`. The first-warning cases are the control.
 
