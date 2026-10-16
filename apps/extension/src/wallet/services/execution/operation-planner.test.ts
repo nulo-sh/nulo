@@ -341,6 +341,14 @@ describe("OperationPlanner.extractPrimaryMethod", () => {
 		expect(planner.extractPrimaryMethod(op)).toBe("0xdead")
 	})
 
+	test("cleans an aztec_sendTx call name as sanitizeWireString returns it at 64 code points", () => {
+		const op = {
+			kind: "aztec_sendTx",
+			exec: { calls: [{ name: `trans\u200bfer\u0007${"f".repeat(70)}`, selector: "0xbeef" }] },
+		} as unknown as AztecSendTxOperation
+		expect(planner.extractPrimaryMethod(op)).toBe(`transfer${"f".repeat(56)}…`)
+	})
+
 	test("returns the first exec.calls[].name for aztec_sendTx shape", () => {
 		const op = {
 			kind: "aztec_sendTx",
