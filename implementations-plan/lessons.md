@@ -11,7 +11,7 @@
 - Vue unit tests (3.5.41, VTU 2.4.11): only `vue`/`vue-router` auto-import; stub `@nulo/design`'s recursing `Button`; fake timers run a native event's first listener only; a second `mount` strips the first's stubs. [Evidence](archive/ux-feedback/plan.md#vue-tests)
 - A check accepting a wrong state passes broken code: pair never-happens tests with a success control; match screenshot state exactly; stub only what production returns. [Evidence](archive/connect-window/plan.md#controls), [more](archive/harden-dedupe/plan.md#success-control)
 - CodeQL's ReDoS query fails a PR on any regex it reaches, a test's or a helper's too: never put a free-form group beside `\s*`; split on the delimiter. [Evidence](archive/forms-and-contacts/lessons/phase-3.md)
-- A change to when a window's Confirm enables reaches every e2e that presses it, refusals by design included (`authwit-lifecycle`, `scope-refusal`): run those before the PR. [Evidence](harden-security-fixes-2/lessons/phase-6.md)
+- A change to when a window's Confirm enables reaches every e2e that presses it, refusals by design included (`authwit-lifecycle`, `scope-refusal`): run those before the PR. [Evidence](archive/harden-security-fixes-2/lessons/phase-6.md)
 
 ## Git & GitHub
 
@@ -19,7 +19,7 @@
 - A job needing a skipped job is skipped unless its `if` calls a status function; `always()` also runs after a cancel: use `always() && !cancelled()`. [Evidence](archive/release-pipeline-hardening/plan.md#always)
 - `git diff -M`'s R100 is not byte identity (compare blob ids and modes), and a pathspec splits a move across it into a delete and an add. [Evidence](archive/plans-scaffolding/plan.md#renames)
 - A `gh stack` runs the plans gate on every arc head, so an arc cannot link a later arc's file; after the squash merge, merging `dev` into the old head is add/add. [Evidence](archive/ux-feedback/plan.md#stack-gate)
-- Parallel arcs of one plan each took the next free decision id and collided at both merges: give each arc its own id range when planning. [Evidence](harden-security-fixes-2/plan.md#decision-ledger)
+- Parallel arcs of one plan each took the next free decision id and collided at both merges: give each arc its own id range when planning. [Evidence](archive/harden-security-fixes-2/plan.md#decision-ledger)
 
 ## Extension runtime
 
