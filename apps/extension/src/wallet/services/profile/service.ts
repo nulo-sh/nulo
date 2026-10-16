@@ -254,16 +254,10 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	private readonly restorePending: RestorePendingRepository
 	private readonly local: StorageArea
 
-	/**
-	 * @param browserApi Optional. Tests pass `FakeBrowserApi` so the
-	 *        collaborators work off in-memory storage without chrome.*. The
-	 *        legacy SW boot path passes nothing and falls back to
-	 *        `chrome.storage.local / session`.
-	 */
-	public constructor(config: IConfig, logger: ILogger, browserApi?: BrowserApi) {
+	public constructor(config: IConfig, logger: ILogger, browserApi: BrowserApi) {
 		super(PROFILE_SERVICE_NAME, logger)
 		this.repo = new ProfileRepository(browserApi)
-		this.local = (browserApi?.storage.local ?? chrome.storage.local) as StorageArea
+		this.local = browserApi.storage.local
 		this.tombstones = new TombstoneRepository(this.local)
 		this.integrityBlocked = new AccountIntegrityBlockedRepository(this.local)
 		this.integrityStamps = new AccountIntegrityVerifiedStampRepository(this.local)

@@ -4,7 +4,7 @@
  * authorization preview for a `default_entrypoint` one. An operation with nothing
  * to list renders no block at all: `send_transaction`, whose confirm adds none, and
  * an embedded-fee standard one, whose discovery is skipped. Each entry is a summary
- * row; its arguments and inner hash sit behind a toggle.
+ * row under the card's "Show all details", its arguments and inner hash open with it.
  */
 
 import { mount } from "@vue/test-utils"
@@ -49,12 +49,16 @@ const stubs = {
 	Icon: true,
 	FeeSettingsCard: true,
 }
-const mountCard = (op: unknown, props: Record<string, unknown> = {}) =>
-	mount(OperationCard, { props: { op: op as never, index: 0, ...props }, global: { stubs } })
+/** Mounts the card with its rows open, as the person reads them after "Show all details". */
+const mountCard = async (op: { kind: string }, props: Record<string, unknown> = {}) => {
+	const w = mount(OperationCard, { props: { op: op as never, index: 0, ...props }, global: { stubs } })
+	if (op.kind === "aztec_sendTx") await w.get('[data-testid="execute-op-details-toggle"]').trigger("click")
+	return w
+}
 
 describe("OperationCard — discovered authorizations", () => {
-	test("a standard aztec_sendTx lists what the estimate found: consumer, delegate and function; args and inner hash behind the toggle", async () => {
-		const w = mountCard(sendTx({ calls: [] }), { feeEstimate: estimate([authwit("a"), authwit("b")]) })
+	test("a standard aztec_sendTx lists what the estimate found: consumer, delegate and function, its args and inner hash open; one press closes them", async () => {
+		const w = await mountCard(sendTx({ calls: [] }), { feeEstimate: estimate([authwit("a"), authwit("b")]) })
 		const rows = w.findAll('[data-testid="execute-op-discovered-authwit"]')
 		expect(rows).toHaveLength(2)
 		expect(rows[0]!.attributes("data-message-hash")).toBe("0xmsga")
@@ -62,14 +66,16 @@ describe("OperationCard — discovered authorizations", () => {
 		expect(summary).toContain(CONSUMER)
 		expect(summary).toContain(CALLER)
 		expect(summary).toContain("0x1234abcd")
-		expect(summary).not.toContain("arg-a")
-		expect(summary).not.toContain(INNER)
-		await rows[0]!.find('[data-testid="execute-discovered-authwit-toggle"]').trigger("click")
 		const details = rows[0]!.find('[data-testid="execute-discovered-authwit-details"]')
-		expect(details.exists()).toBe(true)
 		expect(details.text()).toContain("Reading arguments…")
 		expect(details.find("[title]").attributes("title")).toBe(INNER)
 		expect(details.text()).not.toContain(INNER)
+		const toggle = rows[0]!.find('[data-testid="execute-discovered-authwit-toggle"]')
+		expect(toggle.attributes("aria-expanded")).toBe("true")
+		await toggle.trigger("click")
+		expect(rows[0]!.find('[data-testid="execute-discovered-authwit-details"]').exists()).toBe(false)
+		expect(rows[0]!.html()).not.toContain(INNER)
+		expect(rows[1]!.find('[data-testid="execute-discovered-authwit-details"]').exists()).toBe(true)
 	})
 
 	test("a decoded authorization names its function and parameters; an undecoded one shows the raw values, bidi sanitized", async () => {
@@ -85,13 +91,11 @@ describe("OperationCard — discovered authorizations", () => {
 			],
 			["0xmsgb", { kind: "undecoded", reason: "unknown-contract" }],
 		])
-		const w = mountCard(sendTx({ calls: [] }), { feeEstimate: estimate([authwit("a"), authwit("b")]), decodedAuthwits })
+		const w = await mountCard(sendTx({ calls: [] }), { feeEstimate: estimate([authwit("a"), authwit("b")]), decodedAuthwits })
 		const [a, b] = w.findAll('[data-testid="execute-op-discovered-authwit"]')
 		expect(a!.find('[data-testid="execute-discovered-authwit-function"]').text()).not.toContain("0x1234abcd")
 		expect(b!.find('[data-testid="execute-discovered-authwit-function"]').text()).toContain("0x1234abcd")
-		await a!.find('[data-testid="execute-discovered-authwit-toggle"]').trigger("click")
 		expect(a!.findAll('[data-testid="execute-discovered-authwit-decoded-param"]')).toHaveLength(1)
-		await b!.find('[data-testid="execute-discovered-authwit-toggle"]').trigger("click")
 		expect(b!.find('[data-testid="execute-discovered-authwit-unverified-warning"]').exists()).toBe(true)
 		await b!.find('[data-testid="execute-discovered-authwit-raw-toggle"]').trigger("click")
 		const html = b!.html()
@@ -125,7 +129,7 @@ describe("OperationCard — discovered authorizations", () => {
 			],
 		}
 		// The twin carries transfer_private_to_commitment's selector under the same decode.
-		const w = mountCard(sendTx({ calls: [] }), {
+		const w = await mountCard(sendTx({ calls: [] }), {
 			tokens: [usdc],
 			feeEstimate: estimate([at("0xaf28c76f", "0xmsgh"), at("0x638d3f00", "0xmsgt")]),
 			decodedAuthwits: new Map([
@@ -134,7 +138,6 @@ describe("OperationCard — discovered authorizations", () => {
 			]),
 		})
 		const [honest, twin] = w.findAll('[data-testid="execute-op-discovered-authwit"]')
-		await honest!.find('[data-testid="execute-discovered-authwit-toggle"]').trigger("click")
 		const details = honest!.find('[data-testid="execute-discovered-authwit-details"]')
 		const rows = details.find('[data-testid="execute-discovered-authwit-structured-args"]')
 		expect(rows.attributes("data-intent-kind")).toBe("transfer")
@@ -144,40 +147,35 @@ describe("OperationCard — discovered authorizations", () => {
 		expect(nonce.text()).toContain("0x0f3c7a91..c07e2a")
 		expect(nonce.find("[title]").attributes("title")).toBe(NONCE)
 		expect(details.html().indexOf(NONCE)).toBeLessThan(details.html().indexOf(INNER))
-		await twin!.find('[data-testid="execute-discovered-authwit-toggle"]').trigger("click")
 		expect(twin!.find('[data-testid="execute-discovered-authwit-decoded-args"]').exists()).toBe(true)
 		expect(twin!.find('[data-testid="execute-discovered-authwit-structured-args"]').exists()).toBe(false)
 	})
 
-	test("zero entries render nothing; without an estimate nothing renders either", () => {
-		expect(
-			mountCard(sendTx({ calls: [] }), { feeEstimate: estimate([]) })
-				.find('[data-testid="execute-op-discovered-authwits"]')
-				.exists(),
-		).toBe(false)
-		expect(
-			mountCard(sendTx({ calls: [] }))
-				.find('[data-testid="execute-op-discovered-authwits"]')
-				.exists(),
-		).toBe(false)
+	test("zero entries render nothing; without an estimate nothing renders either", async () => {
+		for (const w of [await mountCard(sendTx({ calls: [] }), { feeEstimate: estimate([]) }), await mountCard(sendTx({ calls: [] }))]) {
+			expect(w.find('[data-testid="execute-op-discovered-authwits"]').exists()).toBe(false)
+			expect(w.find('[data-testid="execute-op-summary-authwits-section"]').exists()).toBe(false)
+		}
 	})
 
-	test("an embedded-fee standard operation renders no authorization block at all", () => {
+	test("an embedded-fee standard operation renders no authorization block at all", async () => {
 		const op = sendTx({ calls: [], feePayer: "0xfpc" }, { feeSettings: { paymentMethod: { kind: "embedded" } } })
-		const w = mountCard(op, { feeEstimate: estimate([authwit("x")]) })
+		const w = await mountCard(op, { feeEstimate: estimate([authwit("x")]) })
 		expect(w.find('[data-testid="execute-op-discovered-authwits"]').exists()).toBe(false)
+		expect(w.find('[data-testid="execute-op-summary-authwits-section"]').exists()).toBe(false)
 		expect(w.find('[data-testid="execute-op-authwits-pending"]').exists()).toBe(false)
 	})
 
-	test("a default_entrypoint operation lists its preview, and shows the pending state while it runs", () => {
+	test("a default_entrypoint operation lists its preview, and shows the pending state while it runs", async () => {
 		const op = sendTx({ calls: [] }, { executionMode: "default_entrypoint", feeSettings: { paymentMethod: { kind: "embedded" } } })
-		const listed = mountCard(op, { authwitPreview: { previewId: "pv", discoveredAuthwits: [authwit("n")] } })
+		const listed = await mountCard(op, { authwitPreview: { previewId: "pv", discoveredAuthwits: [authwit("n")] } })
 		expect(listed.findAll('[data-testid="execute-op-discovered-authwit"]')).toHaveLength(1)
-		const pending = mountCard(op, { isPreviewing: true })
+		expect(listed.findAll('[data-testid="execute-discovered-authwit-line"]')).toHaveLength(1)
+		const pending = await mountCard(op, { isPreviewing: true })
 		expect(pending.find('[data-testid="execute-op-authwits-pending"]').exists()).toBe(true)
 	})
 
-	test("send_transaction never lists discovered authorizations", () => {
+	test("send_transaction never lists discovered authorizations", async () => {
 		const op = {
 			kind: "send_transaction",
 			networkId: "net-1",
@@ -187,7 +185,7 @@ describe("OperationCard — discovered authorizations", () => {
 			feeSettings: { paymentMethod: { kind: "fj" } },
 			actions: [],
 		}
-		const w = mountCard(op, { feeEstimate: estimate([authwit("s")]) })
+		const w = await mountCard(op, { feeEstimate: estimate([authwit("s")]) })
 		expect(w.find('[data-testid="execute-op-discovered-authwits"]').exists()).toBe(false)
 	})
 })

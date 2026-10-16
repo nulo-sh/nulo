@@ -16,7 +16,8 @@ export enum NodeStatus {
 
 // "devnet" is LEGACY-tolerated only (no seed/UI since the devnet default was dropped): stored
 // rows and backups may still carry it, so the schema keeps accepting it.
-export type ChainKind = "mainnet" | "testnet" | "devnet" | "local" | "custom"
+const CHAIN_KINDS = ["mainnet", "testnet", "devnet", "local", "custom"] as const
+export type ChainKind = (typeof CHAIN_KINDS)[number]
 
 export type NetworkEndpoint = {
 	/** Stable id (random hex). */
@@ -55,13 +56,9 @@ const NetworkEndpointRowSchema: z.ZodType<NetworkEndpoint> = z.object({
 	label: z.string().optional(),
 })
 
-/** STORAGE codec row schema — structural only, deliberately LAXER than the wire
- *  `NetworkSchema` below (no `.min(1)`): a legacy row written before a
- *  value-constraint was tightened must still LOAD (the strict rules keep applying
- *  at the add/update/restore boundaries). The `kind` enum
- *  list MUST stay in sync with `ChainKind` above: a new kind written before it
- *  is added here would make those rows unreadable (kept, but hidden) on read. */
-export const NetworkRowSchema: z.ZodType<Network> = z.object({
+export const ChainKindSchema: z.ZodType<ChainKind> = z.enum(CHAIN_KINDS)
+
+const networkShape = {
 	id: z.string(),
 	profileId: z.string(),
 	chainId: z.number(),
@@ -72,8 +69,14 @@ export const NetworkRowSchema: z.ZodType<Network> = z.object({
 	name: z.string(),
 	primaryEndpointId: z.string(),
 	endpoints: z.array(NetworkEndpointRowSchema),
-	kind: z.enum(["mainnet", "testnet", "devnet", "local", "custom"]).optional(),
-})
+	kind: ChainKindSchema.optional(),
+} as const satisfies Record<keyof Network, z.ZodType>
+
+/** STORAGE codec row schema — structural only, deliberately LAXER than the wire
+ *  `NetworkSchema` below (no `.min(1)`): a legacy row written before a
+ *  value-constraint was tightened must still LOAD (the strict rules keep applying
+ *  at the add/update/restore boundaries). */
+export const NetworkRowSchema: z.ZodType<Network> = z.object(networkShape)
 
 /**
  * Synthesized at lookup-time from `(Network, primaryEndpoint.rpcUrl)`. Kept
@@ -137,8 +140,6 @@ const ERR_RPC_URL_TRANSPORT = "RPC URL must use https:// or http://localhost / h
 
 // ── Zod schemas for the RPC boundary ─────────────────────────────────
 
-export const ChainKindSchema: z.ZodType<ChainKind> = z.enum(["mainnet", "testnet", "devnet", "local", "custom"])
-
 /**
  * An RPC URL the wallet may treat as its chain authority: no hidden character
  * inside it, then the transport rule (`rpcTransportVerdict`), userinfo refused.
@@ -171,14 +172,8 @@ export const RpcUrlSchema = z
  *  the row codec reads it: a URL saved before a rule tightened (an `http://[::1]` node) must still
  *  list and restore, so the person can switch or delete it. */
 export const NetworkSchema: z.ZodType<Network> = z.object({
-	id: z.string(),
-	profileId: z.string(),
-	chainId: z.number(),
-	l1ChainId: z.number().int().nonnegative().max(0xffffffff),
-	name: z.string(),
-	primaryEndpointId: z.string(),
+	...networkShape,
 	endpoints: z.array(NetworkEndpointRowSchema).min(1),
-	kind: ChainKindSchema.optional(),
 })
 
 export const NodeStatusSchema: z.ZodType<NodeStatus> = z.enum(NodeStatus)

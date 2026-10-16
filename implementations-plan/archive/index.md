@@ -107,6 +107,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [e2e-stabilization](e2e-stabilization/plan.md) — completed — the network suite's remaining flakes fixed, iterating locally first
 - [embedded-fpc-firsttx-cosmetic](embedded-fpc-firsttx-cosmetic/plan.md) — completed — embedded FPC cap and first-transaction cleanups after the simulation fast path
 - [enter-gate-and-ping](enter-gate-and-ping/plan.md) — completed — one submit-validity computed for the profile-edit popup, and a ping message type
+- [execute-popup-readability](execute-popup-readability/plan.md) — completed — the approval window's transaction body read as a summary of calls and authorizations, its rows behind one toggle
 - [execution-decomposition](execution-decomposition/plan.md) — completed — the execution service decomposed with zero behaviour change
 - [execution-pipeline](execution-pipeline/plan.md) — completed — a money-path complexity burn-down with no wire or journal change
 - [execution-pxe-injection-spike](execution-pxe-injection-spike/plan.md) — completed — the composition test layer proven on the execution service
@@ -146,6 +147,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [harden-dedupe](harden-dedupe/plan.md) — completed — a quality audit's duplication folded into shared helpers on one integration branch, with today's behaviour pinned first
 - [harden-findings-remediation](harden-findings-remediation/plan.md) — completed — a whole-codebase security audit remediated as eleven reviewable units
 - [harden-quality-arc](harden-quality-arc/plan.md) — completed — a quality audit's findings landed on one integration branch, tiered by risk
+- [harden-quality-fixes-1](harden-quality-fixes-1/plan.md) — completed — the quality harden's cheap set: one `deferred` test helper, exhaustive operation-kind switches, composed row schemas, four dead paths removed, shared contact rules
 - [harden-security-prerelease](harden-security-prerelease/plan.md) — completed — a security audit's verified findings fixed before the first release, in four batches
 - [hardening-2](hardening-2/plan.md) — completed — every dApp call parsed against the wallet schema, an object-keyed artifact cache, storage fences and a CSP floor
 - [harness-fixtures](harness-fixtures/plan.md) — completed — six complexity suppressions in the e2e harness removed by refactoring
