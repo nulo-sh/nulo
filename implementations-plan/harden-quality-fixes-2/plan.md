@@ -1,7 +1,7 @@
 ---
 plan: harden-quality-fixes-2
 tier: mid (the lane brief's call; competing outline, Codex + Opus dual audit, a fresh Codex final pass)
-status: approved 2026-10-16 (orchestrator); arc 1 in progress
+status: approved 2026-10-16 (orchestrator); arc 1 implemented, PR A open; arc 2 waits per A3
 issues: "#538, #542 (arc 1, Closes); #543 (arc 2, Closes); #541 (arc 2, Refs: page 21 steps 1-2 only)"
 driver: claude-code
 claude_model: opus
@@ -112,7 +112,7 @@ Two arcs, each one PR against `dev`, no stack (orchestrator D-orch-1). Arc 1 mak
 
 Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Each exits 0. Commit per phase.
 
-### Phase 1.1: #538
+### Phase 1.1: #538 ✓
 - Change: `apps/extension/vite.shared.ts`, the three `apps/extension/vitest.e2e*.config.ts`, `.github/workflows/_extension-smoke-e2e.yml`, `apps/extension/tests/e2e/retry-error-reporter.ts`, the four specs above, `apps/extension/tests/e2e/observability.test.ts`; docs: `.claude/skills/e2e-testing/SKILL.md:42-44,187` (the configs table, the `NULO_E2E_RETRY` row; no other doc states smoke's retry).
 - Tests:
   - `apps/extension/scripts/e2e/e2e-retry.test.ts`: unset and `""` give the fallback; `"0"` and `"3"` parse; one case per refused class: `"abc"`, `"-1"`, `"1.5"`, `" 2"`.
@@ -122,7 +122,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Each exi
 - Proofs, not committed: before the first edit and again after it, a scratch script under `~/.cache/nulo-backlog/harden-quality-fixes-2/` imports each of the three configs and prints its `test` object (reporters by class name, functions by name); the two dumps are equal. This is the only proof for `vitest.e2e.all.config.ts`, which no gate loads. `NULO_E2E_RETRY=abc bun run --cwd apps/extension test:e2e -- tests/e2e/wallet-lock.test.ts` fails at config load naming the variable. Insert a throw after `lockWallet` in `auth-flows.test.ts` test 1 and run it with `--retry=1`: on `ea8827f9` the retry fails with a route-wait timeout; on the branch it fails at the inserted throw again. Remove the throw. Log both in `lessons/phase-1.md`.
 - Gate: `F`; `bun run test:ci-gating`; `bun run lint:actions`. Phase 1.3's smoke and network runs load the changed configs.
 
-### Phase 1.2: #542
+### Phase 1.2: #542 ✓
 - Change: `scripts/ci-cd/e2e-decide.sh`, `scripts/ci-cd/e2e-aggregate.sh` (new); the four `.github/workflows/pr-extension-*-e2e*.yml`; `scripts/ci-cd/decide-gate.test.ts`, `aggregators.test.ts`, `behavior-gating.test.ts`; `CI.md` (`:48` the smoke aggregator, `:104-106` the `Decide` mentions and the attempt rule, with the checkout failure and its recovery beside it, `:230` adding a suite to `status`), `.github/WORKFLOWS.md:7-15`.
 - Tests:
   - `decide-gate.test.ts` runs `e2e-decide.sh` directly: today's seven truth rows, plus `LABEL_HIT` `""`, `yes`, `True` and an empty PR `BASE`, each refused.
@@ -130,7 +130,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Each exi
   - `behavior-gating.test.ts`: the gate step's env in `changes` (replaces `:306-326`); twin gate steps equal (`:615-627`); `status.needs` without `decide` (`:648-660`); `NEEDS: ${{ toJSON(needs) }}` replaces `resultsTested` (`:999-1020`); the status checkout's exact `with:`; both scripts in each lane's filter; no `decide` job in any lane; the no-draft-read pin (`:641-645`) also reads both scripts' text and refuses `draft` and `GITHUB_EVENT_PATH` there (a script could read the event payload the YAML scan never sees). The aggregator-name pin (`:87-132`) stays unchanged and green.
 - Gate: `F`; `bun run test:ci-gating`; `bun run lint:actions`; `shellcheck scripts/ci-cd/e2e-decide.sh scripts/ci-cd/e2e-aggregate.sh` (actionlint sees only the call, not the files); `bun run check:plans`. Each exits 0.
 
-### Phase 1.3: arc 1 gate
+### Phase 1.3: arc 1 gate ✓
 - `bun run test:all`, `bun run test:release`. Then, with `load1 < 150`, build the armed bundle: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome` (and `build:firefox`).
 - Smoke, Chrome then Firefox (`NULO_E2E_BROWSER=firefox`): `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension test:e2e -- tests/e2e/{auth-flows,wallet-lock,sw-resilience,sw-restart-network,observability}.test.ts --retry=0`. Then the whole smoke suite on Chrome once at retry 0.
 - Network, one spec through the shared network block: `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/batch-mixed.test.ts`.
@@ -209,6 +209,8 @@ Follow `implementations-plan/README.md` § Post-implementation standard at revis
 **Arc 1, round 1, Codex** (gpt-6.1-sol, high, session `01a145c0`, over `c310bce2..10f8c519`): no blocking regression, 4 low findings. Accepted: #1 `e2e-decide.sh` let a malformed `SURFACE` read as a skip (inherited from the inline gate; plausible, needs an upstream output anomaly): it now refuses anything but true/false, with one test per refused class; #2 CI.md's job counts were wrong before and after the edit (18 more jobs, 14 suites, 4 control; 11 network suite jobs per browser); #4 in part: the two `vite.shared.ts` comments tightened, the loader's restating comment dropped. Rejected: #3, the network config's retry comment is unchanged existing text whose archive path resolves (CLAUDE.md lets it stay until rewritten); #4's other trims, since the headers state the invariant the test or reporter exists for.
 
 **Arc 1, round 1, Opus lens** (general-purpose, opus): approve with small fixes, 4 findings, all accepted. #1 and #2 are Codex's #2 and #1. #3 the aggregate header listed "a suite that vanished" among the faults the script catches; it cannot see a need that is not in `needs`, so the header now says the test holds `needs` to every job. #4 `verify-cert-run.sh` still named the removed `decide` job.
+
+**Arc 1, round 2, Codex** (resumed session `01a145c0`, over `10f8c519..0ceeb1db`): "No new material finding (high confidence)." The fixes are correct and complete; no settled disposition reopened. Arc 1's loop has converged; the cross-arc pass over the net diff runs after arc 2.
 
 ## Seeds
 

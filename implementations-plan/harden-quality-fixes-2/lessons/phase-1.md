@@ -18,3 +18,5 @@
 
 - Codex (session `01a145c0`) and the Opus lens both found the decide gate's unvalidated `SURFACE` (a pre-existing gap the shared script's header now claimed to close) and the CI.md job counts; both fixed. Details and rejections in the plan's Audit verdicts.
 - Retry repro on the base spec (`ea8827f9`'s `auth-flows.test.ts` plus a throw after `lockWallet`, `--retry=1`): the first attempt fails at the throw, the retry fails `TimeoutError: Waiting failed: 15000ms exceeded` at the general-route wait, as the issue said.
+- The same repro on the branch spec: both attempts fail at the inserted throw, so the retry re-ran the failed step instead of timing out at its first route wait. The throw was removed; the spec is as committed.
+- Codex round 2 (resumed `01a145c0`): no new material finding. Loop converged at round 2.
