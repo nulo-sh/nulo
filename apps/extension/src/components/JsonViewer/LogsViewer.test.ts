@@ -229,7 +229,6 @@ describe("LogsViewer auto-scroll around the search panel", () => {
 	 *  target and the related target. */
 	async function focusInEditor(className: string) {
 		H.getLogs.mockResolvedValueOnce([log(1)]).mockResolvedValue([])
-		// In the document, where the viewer's listeners are.
 		const wrapper = mountViewer(document.body)
 		await vi.advanceTimersByTimeAsync(0)
 		const root = [...wrapper.element.querySelectorAll("div")].find((el) => el.shadowRoot)?.shadowRoot

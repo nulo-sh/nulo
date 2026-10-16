@@ -26,3 +26,4 @@
 - 2026-10-16: test:ci-gating, lint:actions, typecheck:all, lint: exit 0 (lint warnings are elsewhere, none in the arc's files).
 - 2026-10-16: 2b.6 dev server: styled and zero violations with the serve branch; unstyled and one violation without it (D36 holds).
 - 2026-10-16: smoke runs 1-2 on Chrome: the search-panel follow regressed (D39, fixed); selection case dropped (D40); import-errors launch timeouts under load.
+- 2026-10-16: focused smoke on Chrome (viewers-csp, import-errors-scroll), retry 0: 7/7 pass (12.2 s, 71.2 s).
