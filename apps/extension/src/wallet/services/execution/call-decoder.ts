@@ -51,6 +51,7 @@ function decodeFields(artifact: ContractArtifact, fn: FunctionAbi, fields: Fr[] 
 	if (!fields || fields.length !== countArgumentsSize(fn)) return { kind: "undecoded", reason: "arguments" }
 	try {
 		const values = decodeEachFromAbi(types, fields)
+		if (!encodesBack(fn, values, fields)) return { kind: "undecoded", reason: "arguments" }
 		return {
 			kind: "decoded",
 			contract: artifact.name,
@@ -63,9 +64,8 @@ function decodeFields(artifact: ContractArtifact, fn: FunctionAbi, fields: Fr[] 
 }
 
 /** A grant reads from the fields its message hash commits to, decoded against the function that
- *  encoded them (by name, as signing resolves it; another function may share its selector), and only
- *  when that decode encodes back to those fields. Only a `call`-kind content names a function to
- *  encode for; today's grant producer sends no other. */
+ *  encoded them (by name, as signing resolves it; another function may share its selector). Only a
+ *  `call`-kind content names a function to encode for; today's grant producer sends no other. */
 export async function decodeGrantForDisplay(lookup: ArtifactLookup, content: AuthwitContent): Promise<DecodedGrant> {
 	if (content?.kind !== "call" || typeof content.contract !== "string") return { kind: "undecoded", reason: "unavailable" }
 	const artifact = await lookup(content.contract).catch(() => undefined)
@@ -89,27 +89,19 @@ export async function decodeGrantForDisplay(lookup: ArtifactLookup, content: Aut
 		return { kind: "undecoded", reason: "arguments" }
 	}
 	const decoded = decodeFields(artifact, fn, fields)
-	if (decoded.kind !== "decoded") return decoded
-	return encodesBack(fn, fields) ? { kind: "decoded", call, decoded } : { kind: "undecoded", reason: "arguments" }
+	return decoded.kind === "decoded" ? { kind: "decoded", call, decoded } : decoded
 }
 
 /** The decoder drops bits the encoder keeps (an `EthAddress` keeps 20 bytes, a boolean reads any
- *  nonzero field as true, a string character 16 bits), so two grants that sign different fields can
- *  decode alike; one whose decode does not encode back to its fields is not read. */
-function encodesBack(fn: FunctionAbi, fields: readonly Fr[]): boolean {
-	try {
-		const values = decodeEachFromAbi(
-			fn.parameters.map((p) => p.type),
-			[...fields],
-		)
-		const again = encodeArguments(
-			fn,
-			values.map((v, i) => encodable(v, fn.parameters[i].type)),
-		)
-		return again.length === fields.length && again.every((f, i) => f.equals(fields[i]))
-	} catch {
-		return false
-	}
+ *  nonzero field as true, a string character 16 bits), so two calls that carry different fields can
+ *  decode alike; one whose decode does not encode back to its fields is not read. Throws when the
+ *  encoder refuses a decoded value. */
+function encodesBack(fn: FunctionAbi, values: readonly AbiDecoded[], fields: readonly Fr[]): boolean {
+	const again = encodeArguments(
+		fn,
+		values.map((v, i) => encodable(v, fn.parameters[i].type)),
+	)
+	return again.length === fields.length && again.every((f, i) => f.equals(fields[i]))
 }
 
 /** A decoded value as the encoder takes it back: the two disagree only on a `BoundedVec`, which

@@ -9,6 +9,7 @@
 // @ts-expect-error — raw JSON import via vite alias
 import WonderlandTokenJson from "@wonderland-token-artifact"
 import { flushPromises, mount } from "@vue/test-utils"
+import { TokenBridgeContractArtifact } from "@aztec-labs/noir-contracts.js/TokenBridge"
 import { type ContractArtifact, FunctionSelector, loadContractArtifact } from "@aztec-labs/stdlib/abi"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import AddressDisplay from "@/components/AddressDisplay.vue"
@@ -42,9 +43,9 @@ const field = (n: bigint): string => `0x${n.toString(16).padStart(64, "0")}`
 const USDC = { id: 1, chainId: 1, contract: TOKEN, name: "USD Coin", symbol: "USDC", decimals: 6 } as TokenInfo
 const TOKEN_ARTIFACT = loadContractArtifact(WonderlandTokenJson as never)
 
-/** The standard Token's real selectors at 6.0.0-rc.3, pinned against the real hash by
- *  `token-transfer-vocabulary.real.test.ts`: bb.js's poseidon2 cannot run under jsdom, so the hash
- *  is stood in. */
+/** Real selectors at 6.0.0-rc.3: the standard Token's, pinned against the real hash by
+ *  `token-transfer-vocabulary.real.test.ts`, and TokenBridge's public exit to L1. bb.js's poseidon2
+ *  cannot run under jsdom, so the hash is stood in. */
 const SELECTORS = new Map([
 	["transfer_private_to_private", "0xedc09d49"],
 	["transfer_public_to_public", "0xc47adea0"],
@@ -55,6 +56,7 @@ const SELECTORS = new Map([
 	["transfer_private_to_commitment", "0x638d3f00"],
 	["transfer_public_to_commitment", "0xd427610c"],
 	["transfer_private_to_public_with_commitment", "0x398c27b4"],
+	["exit_to_l1_public", "0xfd157a1f"],
 ])
 vi.spyOn(FunctionSelector, "fromNameAndParameters").mockImplementation(async (name) =>
 	FunctionSelector.fromString(SELECTORS.get(name) ?? "0x00000000"),
@@ -214,5 +216,22 @@ describe("OperationCard — a call as the wire carries it", () => {
 		["a one-element array", ["0xedc09d49"], "decoded"],
 	])("the honest call with its selector as %s never reads the transfer row", async (_spelling, selector, kind) => {
 		expect(intentKind(await mountCard(sendTx({ ...honest, selector })))).toBe(kind)
+	})
+
+	test("an L1 exit whose recipient field carries bits past an address shows the notice, not that address", async () => {
+		const L1 = BigInt("0x7c41d2a90b3e85f61c0d7e4b2a9f13c86d5be9f0")
+		const exit = (recipient: bigint) =>
+			mountCard(sendTx(callOf("exit_to_l1_public", [field(recipient), field(5_000_000n), field(L1), field(0n)])), {
+				tokens: [],
+				artifact: TokenBridgeContractArtifact,
+			})
+		const canonical = await exit(L1)
+		expect(intentKind(canonical)).toBe("decoded")
+		expect(decodedNames(canonical)).toEqual(["recipient", "amount", "caller_on_l1", "authwit_nonce"])
+		const padded = await exit(2n ** 160n + L1)
+		expect(intentKind(padded)).toBe("raw")
+		expect(one(padded, "execute-op-unverified-args").attributes("data-reason")).toBe("arguments")
+		expect(one(padded, "execute-op-unverified-warning").text()).toContain("Can't read the arguments")
+		expect(decodedNames(padded)).toEqual([])
 	})
 })
