@@ -14,6 +14,7 @@ import { NetworkService } from "@/wallet/services/network/service"
 import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { canonicalNumericStorageId } from "@/wallet/services/purge-rows"
+import type { NumericIdBatch } from "@/wallet/services/id-allocators"
 import { TokenService, type Token, type TokenDeleted, type TokenInfo, type TokenUpdated } from "@/wallet/services/token/service"
 import { ExecutionService } from "@/wallet/services/execution/service"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
@@ -690,9 +691,10 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		// the wire, and a row pointing at a token the profile doesn't own is rejected.
 		const ownedTokens = new Map((await this.tokenService.getTokensRaw(profileId)).map((t) => [t.id, t]))
 		const seenPairs = new Set<string>()
-		return await this.lock.withLock(async () =>
-			restoreRows(tokenBalances, async (tb) => {
-				const id = await this.allocateUnfencedId()
+		return await this.lock.withLock(async () => {
+			// Ownership and pair checks precede the first balance-key listing, which runs once per restore.
+			let ids: NumericIdBatch | undefined
+			return await restoreRows(tokenBalances, async (tb) => {
 				const token = ownedTokens.get(tb.token)
 				if (!token) throw new Error("balance row references a token the profile does not own")
 				// The backup registry rejects duplicate row IDS only — two blob rows can
@@ -700,6 +702,8 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 				const pair = `${token.id}:${tb.account}`
 				if (seenPairs.has(pair)) throw new Error("duplicate balance pair in backup")
 				seenPairs.add(pair)
+				ids ??= await this.repo.idBatch()
+				const id = ids.next(this.invalidatedBalanceIds)
 				// Parse the exact persisted shape (a malformed row records a restoreError,
 				// never a KEPT-but-hidden write). Derived identity fields land LAST so the
 				// blob can never override them.
@@ -717,7 +721,7 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 				assertRestoreEpoch(deletion, epochs, profileId)
 				await this.repo.set(row)
 				return row
-			}),
-		)
+			})
+		})
 	}
 }
