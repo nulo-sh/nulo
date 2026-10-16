@@ -83,11 +83,10 @@ test.skipIf(!hasConfig)(
 			const popup = await popupP
 			await waitForExecuteContent(popup)
 			// The card reads the amount from the fields the grant's signature hashes, before Confirm.
-			const amount = await popup.waitForSelector(
-				'[data-testid="execute-grant-decoded-param"][data-param="amount"] [data-testid="execute-grant-decoded-param-value"]',
-				{ visible: true, timeout: 60_000 },
-			)
-			expect(await amount?.evaluate((el) => el.textContent?.trim())).toBe("1")
+			const amount =
+				'[data-testid="execute-grant-decoded-param"][data-param="amount"] [data-testid="execute-grant-decoded-param-value"]'
+			await popup.waitForSelector(amount, { visible: true, timeout: 60_000 })
+			expect(await popup.$eval(amount, (el) => el.textContent?.trim())).toBe("1")
 			await approveExecute(popup)
 			const res = await waitForPgResult(page, "grantPublicAuthwit", seq, 360_000)
 			await assertPgOk(page, res, "authwit-lifecycle:res")
