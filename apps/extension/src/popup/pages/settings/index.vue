@@ -53,7 +53,6 @@ const HUB_KEYS = new Set(["sessionTtl", "showFiatValues", "theme", "developerMod
 const hubConfig = reactive({})
 const values = computed(() => hubValues(hubConfig))
 
-/** What decides which searchable rows exist here and what two of them say. */
 const searchContext = computed(() => ({
 	sidePanel: Boolean(chrome.sidePanel),
 	passkey: isPasskey.value,

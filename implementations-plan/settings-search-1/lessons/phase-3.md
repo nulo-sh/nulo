@@ -16,3 +16,8 @@
 ## Screenshots
 
 Chrome, 360 × 600 at 2×, light and dark through `prefers-color-scheme` on the System theme: the empty field (mockup a), "full" typed (mockup b), Display with Full-height popups outlined (mockup c), and Back up profile outlined inset in its box (OA-4), each animation frozen at its first frame. The scratch harness stayed untracked and was deleted.
+
+## Review loop
+
+- Round 1, Codex (session `01a14682…`, gpt-6.1-sol, high, read-only): approve with two P3s, both accepted. A page rendering a registry row twice passed `expectOwnedRows` (it read only the first match), and three comments narrated the code.
+- Round 1, Opus 5.5 (final diff, same time): conditional approve, two findings accepted. Captions and row order were not checked against the registry, so a renamed list caption would leave search showing the old one. The field's keydown also took Shift+ArrowUp and Ctrl+Enter. Mutation checks: dropping the modifier guard fails the new `SettingsSearch` case, and swapping two Display rows in the registry fails both Display ownership cases.

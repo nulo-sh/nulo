@@ -15,24 +15,33 @@ export function settingsContext(over: Partial<SettingsContext> = {}): SettingsCo
 
 /**
  * Checks a mounted page against the search registry: every row the registry places on `page` and
- * shows in `context` renders under its testid, marked `v-settings-row` with its id, with its exact
- * title and description, and no hidden one renders. A row the page drops, renames or moves fails
- * here, and so does a stale entry.
+ * shows in `context` renders once under its testid, marked `v-settings-row` with its id, with its exact
+ * title and description, in the registry's order, and no hidden one renders. A row the page drops,
+ * renames or moves fails here, and so does a stale entry.
  */
 export function expectOwnedRows(wrapper: VueWrapper, page: string, context: SettingsContext): void {
 	const owned = (Object.keys(SETTINGS_ROWS) as SettingsRowId[]).filter((id) => SETTINGS_ROWS[id].page === page)
 	expect(owned.length, page).toBeGreaterThan(0)
 	for (const id of owned) {
 		const { testid, title, description } = settingsRow(id, context)
-		const row = wrapper.find(`[data-testid="${testid}"]`)
+		const rows = wrapper.findAll(`[data-testid="${testid}"]`)
 		if (!isSettingsRowVisible(id, context)) {
-			expect(row.exists(), `${id} is hidden`).toBe(false)
+			expect(rows, `${id} is hidden`).toHaveLength(0)
 			continue
 		}
-		expect(row.exists(), `${id} renders`).toBe(true)
+		// Exactly one: a second copy would never receive the outline the first one takes.
+		expect(rows, `${id} renders once`).toHaveLength(1)
+		const [row] = rows
 		expect(row.attributes("data-settings-row"), `${id} carries v-settings-row`).toBe(id)
 		const texts = row.findAll("*").map((el) => el.text())
 		expect(texts, `${id}'s title`).toContain(title)
 		if (description !== undefined) expect(texts, `${id}'s description`).toContain(description)
 	}
+	// Ties in a search keep registry order, which must be the order the page shows.
+	const shown = owned.filter((id) => isSettingsRowVisible(id, context)).map((id) => SETTINGS_ROWS[id].testid)
+	const selector = shown.map((testid) => `[data-testid="${testid}"]`).join(", ")
+	expect(
+		wrapper.findAll(selector).map((row) => row.attributes("data-testid")),
+		`${page} row order`,
+	).toEqual(shown)
 }

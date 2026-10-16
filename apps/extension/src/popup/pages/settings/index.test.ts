@@ -4,6 +4,7 @@ import { Flex, Icon, Input, MaterialIcon, Spinner, Text } from "@nulo/design"
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { ConfigProp } from "@/wallet/config"
+import { visibleSettingsRows } from "@/utils/settings-search"
 import { expectOwnedRows, settingsContext, settingsRouter } from "../../../../tests/helpers/settings-rows"
 
 const clients = vi.hoisted(() => ({ config: undefined as unknown, execution: undefined as unknown }))
@@ -188,6 +189,20 @@ describe("settings hub — rows", () => {
 	])("renders the search registry's rows for a $profile.type profile", async ({ profile, passkey }) => {
 		const context = settingsContext({ passkey, provingStatus: "Presto · connected" })
 		expectOwnedRows(await mountHub(profile), "/popup/settings", context)
+	})
+
+	test("each row sits under the caption a search shows it under", async () => {
+		const w = await mountHub()
+		const placed = w
+			.findAllComponents(ItemsContainer)
+			.flatMap((group) =>
+				group
+					.findAll("[data-settings-row]")
+					.map((row) => [row.attributes("data-settings-row"), group.props("title"), group.props("danger")]),
+			)
+		const context = settingsContext({ provingStatus: "Presto · connected" })
+		const hub = visibleSettingsRows(context).filter((row) => row.page === "/popup/settings")
+		expect(placed).toEqual(hub.map((row) => [row.id, row.section, row.danger]))
 	})
 
 	test("the rows read as the signed copy", async () => {

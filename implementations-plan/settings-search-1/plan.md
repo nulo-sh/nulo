@@ -114,6 +114,8 @@ Follow [`implementations-plan/README.md` § Post-implementation standard](../REA
 | 1 | Opus 5.5 Plan | conditional approve: OA-4; fill mode none; string `to`; `v-if`, no map; D1 re-decided | All 9 accepted: map dropped, D3 multi-term rank, OA-5, `test:all` alone, owning-pages pin dropped, "first Tab stop" scoped |
 | 2 | Codex (resume) | conditional approve: keep rendered-text checks; capture the animation deterministically | Both accepted: `expectOwnedRows` checks exact title and description; the e2e pauses the animation from an observer armed before the click; I2 reworded |
 | 3 | Codex (resume) | **approve** | No new material defect or regression |
+| Impl 1 | Codex (gpt-6.1-sol, high), net diff from `f6bd011a` | approve: 2 P3 | Both accepted: `expectOwnedRows` requires exactly one element per visible row (a duplicate escaped `find()`); three narrating comments deleted (`SettingsSearch.vue` header and `stops()`, `index.vue`'s `searchContext`) |
+| Impl 1 | Opus 5.5, final diff | conditional approve: 2 findings | Both accepted: `expectOwnedRows` checks the rows' page order (ties rank by it) and `index.test.ts` checks each list row's caption and fence against its `section`; a modified arrow or Enter (Shift+ArrowUp selects) is left to the field. Noted, not raised: a list result leaves one extra history entry (D2 accepted it) |
 
 ## Seeds
 

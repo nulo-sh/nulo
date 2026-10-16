@@ -1,10 +1,4 @@
 <script setup>
-/**
- * The search field at the top of Settings and, while it holds a word, the rows that word finds,
- * grouped under their captions. A result opens the row's page with the row outlined
- * (`useSettingsRowHighlight`). Arrow keys move real focus over the field and the results, wrapping.
- */
-
 /** Components */
 import ItemsContainer from "@/components/ui/Settings/ItemsContainer.vue"
 import SettingItem from "@/components/ui/Settings/SettingItem.vue"
@@ -32,7 +26,6 @@ function focusField() {
 	field.value?.focus()
 }
 
-/** The field, then each result link, in DOM order. */
 function stops() {
 	return [field.value?.inputEl, ...(root.value?.$el.querySelectorAll("[data-settings-result]") ?? [])].filter(Boolean)
 }
@@ -63,7 +56,8 @@ function onFieldEnter(e) {
 }
 
 function onKeydown(e) {
-	if (isComposing(e) || e.defaultPrevented) return
+	// A modified arrow or Enter keeps the field's own meaning (Shift+ArrowUp selects to the start).
+	if (isComposing(e) || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
 	if (e.key === "ArrowDown" || e.key === "ArrowUp") {
 		if (moveFocus(e.key === "ArrowDown" ? 1 : -1)) e.preventDefault()
 	} else if (e.key === "Escape") {

@@ -119,6 +119,15 @@ describe("keys", () => {
 		expect(field(w).value).toBe("full")
 	})
 
+	test("a modified arrow or Enter keeps the field's own meaning", async () => {
+		const { w, push } = await mountSearch("full")
+		field(w).focus()
+		expect(key(field(w), "ArrowUp", { shiftKey: true })).toBe(true)
+		expect(key(field(w), "Enter", { ctrlKey: true })).toBe(true)
+		expect(document.activeElement).toBe(field(w))
+		expect(push).not.toHaveBeenCalled()
+	})
+
 	test("Enter in the field opens the first result; a repeat or composing Enter opens nothing", async () => {
 		const { w, push } = await mountSearch("full")
 		key(field(w), "Enter", { repeat: true })
