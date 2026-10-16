@@ -536,6 +536,12 @@ watch(
 	},
 )
 
+// A re-read of the same token can take away the transfer kind the page has selected.
+watch([() => activeToken.value?.hasPrivateTransfers, () => activeToken.value?.hasPublicTransfers], () => {
+	initSendType()
+	initReceiverType()
+})
+
 watch(
 	() => tokens.value,
 	() => {

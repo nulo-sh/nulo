@@ -14,7 +14,7 @@ import { NetworkService } from "@/wallet/services/network/service"
 import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { canonicalNumericStorageId } from "@/wallet/services/purge-rows"
-import { TokenService, type Token, type TokenDeleted, type TokenInfo } from "@/wallet/services/token/service"
+import { TokenService, type Token, type TokenDeleted, type TokenInfo, type TokenUpdated } from "@/wallet/services/token/service"
 import { ExecutionService } from "@/wallet/services/execution/service"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { TaskService } from "@/wallet/services/task/service"
@@ -158,6 +158,7 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		this.accountService.registerAccountPurgeSubscriber((profileId, scopes) => this.purgeForAccounts(scopes, profileId))
 		this.tokenService.onTokenAdded.add(this.onTokenAdded)
 		this.tokenService.onTokenDeleted.add(this.onTokenDeleted)
+		this.tokenService.onTokenUpdated.add(this.onTokenUpdated)
 		this.transactionService.onTransactionUpdated.add(this.onTransactionUpdated)
 
 		// Subscriptions are already live above, so a profile switch can land during
@@ -493,6 +494,22 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		if (gen !== this.profileGeneration) return
 		const pairs = accounts.map((account) => ({ token: tokenRaw, account }))
 		await this.lock.withLock(() => this.ensurePairsHoldingLock(pairs, gen))
+	}
+
+	/** A balance carries its token's metadata, and the projector reads the token's functions fresh,
+	 *  so each row is re-sent at once and re-read. Only a token the map already holds takes it: an
+	 *  update never creates a balance row. */
+	private readonly onTokenUpdated = async (token: TokenUpdated) => {
+		const gen = this.profileGeneration
+		const tokenRaw = await this.tokenService.getTokenRaw(token.id).catch(() => undefined)
+		if (gen !== this.profileGeneration || !tokenRaw || !this.isSameTokenLive(tokenRaw)) return
+		this.tokens.set(tokenRaw.id, tokenRaw)
+		const rows = (await this.repo.getAll()).filter((row) => rowMatchesToken(row, tokenRaw))
+		if (gen !== this.profileGeneration || !this.isSameTokenLive(tokenRaw)) return
+		for (const row of rows) {
+			this.emit("onTokenBalanceUpdated", this.getTokenBalanceInfo(row))
+			this.queue.enqueue(row)
+		}
 	}
 
 	private readonly onTokenDeleted = async (token: TokenDeleted) => {

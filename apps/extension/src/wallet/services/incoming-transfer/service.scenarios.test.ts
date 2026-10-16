@@ -888,7 +888,7 @@ describe("IncomingTransferService — trust after a full-backup import", () => {
 		expect(pending).toHaveBeenCalledTimes(1)
 	})
 
-	test("the chain re-read's update event trusts nothing (an add does: see the LR14 control)", async () => {
+	test("the chain re-read's update event trusts nothing (control: an added token is trusted on its add)", async () => {
 		const { pending, open, token } = await bootRestored()
 		await open()
 		await token.onTokenUpdated.invoke({ ...tokenA, profileId: "p1", name: "Token A" } as never)

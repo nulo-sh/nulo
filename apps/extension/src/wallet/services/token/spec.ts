@@ -283,7 +283,6 @@ export type TokenDeleted = TokenInfo & { profileId: string }
 /** `onTokenAdded` payload, carrying `profileId` too: an add can finish after a profile switch. */
 export type TokenAdded = TokenInfo & { profileId: string }
 
-/** `onTokenUpdated` payload: the row as it now stands. */
 export type TokenUpdated = TokenInfo & { profileId: string }
 
 export type Events = {

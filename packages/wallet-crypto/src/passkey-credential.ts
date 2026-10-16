@@ -34,7 +34,6 @@ const PASSKEY_MASTER_LABEL = te.encode("nulo:master:v1")
 // a DISTINCT expand, so the wrap key never coincides with (or leaks) the master derivation.
 const PASSKEY_DEK_WRAP_LABEL = te.encode("nulo:dek-wrap:v1")
 
-/** Exported for the key-vector pin ONLY. */
 export const PASSKEY_BACKUP_MAC_LABEL = "nulo:backup-mac:v1"
 const PASSKEY_BACKUP_MAC_INFO = te.encode(PASSKEY_BACKUP_MAC_LABEL)
 

@@ -347,7 +347,6 @@ async function handleBackup() {
 		chainStateOmitted.value = !!appStore.profile.recoveryMode
 		const envelope = buildBackupEnvelope(material)
 
-		// A passkey body restores only under the check its own passkey makes here.
 		const authenticate = credentialData ? passkeyBackupAuthenticator(credentialData) : undefined
 		const sources = backupSources(runClients, material.heldSlices)
 		const result = await assembleFullBackup(envelope, sources, () => gen === generation, authenticate)

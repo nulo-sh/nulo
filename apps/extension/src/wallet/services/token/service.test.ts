@@ -375,6 +375,35 @@ describe("TokenService.refreshRestoredTokens — the chain's metadata over the b
 		expect(await tokenService.getToken(id)).toMatchObject({ symbol: "USDT", decimals: 2 })
 		expect(updated).not.toHaveBeenCalled()
 	})
+
+	const tokenRows = async (api: { storage: { local: { get: (k: null) => Promise<Record<string, unknown>> } } }) =>
+		Object.entries(await api.storage.local.get(null))
+			.filter(([key]) => key.startsWith("nulo:core:tokens@"))
+			.map(([, v]) => JSON.parse(v as string))
+
+	test("a chain swept during the read is never written", async () => {
+		const { tokenService, api, preview, networkLive, updated } = await restored()
+		preview.mockImplementation(async () => {
+			networkLive.value = false
+			return chain
+		})
+		await tokenService.refreshRestoredTokens(FENCE, later())
+		expect(await tokenRows(api)).toEqual([expect.objectContaining({ symbol: "USDT", decimals: 2 })])
+		expect(updated).not.toHaveBeenCalled()
+	})
+
+	test("a chain sweep that lands during the write takes the row back out, with no update event", async () => {
+		const { tokenService, api, networkLive, updated } = await restored()
+		const realSet = api.storage.local.set.bind(api.storage.local)
+		api.storage.local.set = (async (items: Record<string, unknown>) => {
+			await realSet(items)
+			if (Object.keys(items).some((k) => k.startsWith("nulo:core:tokens@"))) networkLive.value = false
+		}) as typeof api.storage.local.set
+		await tokenService.refreshRestoredTokens(FENCE, later())
+		api.storage.local.set = realSet as typeof api.storage.local.set
+		expect(await tokenRows(api)).toEqual([])
+		expect(updated).not.toHaveBeenCalled()
+	})
 })
 
 describe("TokenService.restore — deletion fence", () => {

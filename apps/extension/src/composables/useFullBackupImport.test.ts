@@ -2140,6 +2140,28 @@ describe("useFullBackupImport — passkey backup", () => {
 		expectNothingWritten()
 	})
 
+	it.each([
+		["keeps its check through the seal and restores (control)", true],
+		["whose check was stripped before the seal is refused before any prompt", false],
+	])("an encrypted passkey file %s", async (_label, keepMac) => {
+		const { "backup-mac": mac, ...body } = await buildPasskeyBackup()
+		const sealed = await sealFullBackupText(JSON.stringify(keepMac ? { ...body, "backup-mac": mac } : body), "pass1234")
+		const { c, opts, runCeremony } = mountPasskeyImport(sealed)
+		c.selectedBackup.value = { name: "x.txt", backup: sealed, type: "encrypted", profileType: null }
+		c.decryptionPassword.value = "pass1234"
+		await c.decryptBackup()
+		expect(c.selectedBackup.value?.profileType).toBe("passkey")
+		await c.restoreBackup()
+		if (keepMac) {
+			expect(opts.fillError).not.toHaveBeenCalled()
+			expect(profileClient.restore).toHaveBeenCalledOnce()
+			return
+		}
+		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Incompatible backup", expect.any(String))
+		expect(runCeremony).not.toHaveBeenCalled()
+		expectNothingWritten()
+	})
+
 	it("a password body restores with no MAC field", async () => {
 		const opts = makeOpts()
 		const c = useFullBackupImport(opts)

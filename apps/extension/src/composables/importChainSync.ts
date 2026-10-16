@@ -25,7 +25,8 @@ import {
 import type { NodeStatus } from "@/wallet/services/network/spec"
 import { preflightNetworkConnectivity } from "./importPreflight"
 
-/** The whole tail (preflight + registrations) shares this wall-clock budget. */
+/** The whole tail (preflight, registrations and the restored tokens' re-read) shares this
+ *  wall-clock budget. */
 export const IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS = 45_000
 /** The preflight's own cap within the shared budget. */
 export const IMPORT_PREFLIGHT_BUDGET_MS = 21_000

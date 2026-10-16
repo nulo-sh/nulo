@@ -346,6 +346,20 @@ describe("send page — the submit tail", () => {
 		await fillForm(w)
 		await submit(w).trigger("click")
 		expect(mocks.executeTransfer.mock.calls[0]?.[5]).toBe(15_000n)
+		expect(mocks.executeTransfer.mock.calls[0]?.[3]).toBe(TransferType.Private)
+		w.unmount()
+	})
+
+	test("a token update that takes away private transfers moves the open page to public", async () => {
+		const { w } = await mountSend()
+		const publicOnly = { ...TOKEN, hasPrivateTransfers: false }
+		mocks.getTokens.mockResolvedValue([publicOnly])
+		const client = (TokenServiceClient as unknown as { mock: { results: { value: { onTokenUpdated: EventHandler<unknown> } }[] } }).mock
+		client.results.at(-1)?.value.onTokenUpdated.invoke({ ...publicOnly, profileId: "p1" })
+		await flushPromises()
+		await fillForm(w)
+		await submit(w).trigger("click")
+		expect(mocks.executeTransfer.mock.calls[0]?.[3]).toBe(TransferType.Public)
 		w.unmount()
 	})
 

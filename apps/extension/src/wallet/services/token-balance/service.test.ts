@@ -213,6 +213,7 @@ describe("TokenBalanceService.restore — hostile-row validation", () => {
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
+				onTokenUpdated: new EventHandler(),
 				// restore() derives identity from the profile's OWN token table — the
 				// explicit-profileId read, not the (empty pre-activation) active map.
 				getTokensRaw: async (profileId: string) =>
@@ -387,6 +388,7 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
+				onTokenUpdated: new EventHandler(),
 				getTokensRaw,
 			}),
 		)
@@ -444,6 +446,7 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded,
 				onTokenDeleted: new EventHandler(),
+				onTokenUpdated: new EventHandler(),
 				getTokensRaw: async () => [],
 				getTokenRaw: async () => tokenRaw(100, "A"),
 			}),
@@ -503,6 +506,7 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded,
 				onTokenDeleted: new EventHandler(),
+				onTokenUpdated: new EventHandler(),
 				getTokensRaw: async () => [],
 				getTokenRaw: async () => tokenRaw(100, "A"),
 			}),
@@ -574,6 +578,7 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
+				onTokenUpdated: new EventHandler(),
 				getTokensRaw: async () => [tokenRaw(100, "A"), tokenRaw(200, "A")],
 			}),
 		)
@@ -629,6 +634,7 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
+				onTokenUpdated: new EventHandler(),
 				getTokensRaw: async () => [tokenRaw(100, "A")],
 			}),
 		)
@@ -686,6 +692,7 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
+				onTokenUpdated: new EventHandler(),
 				getTokensRaw: async () => [tokenRaw(100, "A")],
 			}),
 		)
@@ -760,6 +767,7 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded,
 				onTokenDeleted: new EventHandler(),
+				onTokenUpdated: new EventHandler(),
 				getTokensRaw: async () => [tokenRaw(100, "A")],
 				getTokenRaw: async () => tokenRaw(100, "A"),
 			}),
@@ -823,6 +831,7 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
 				onTokenDeleted,
+				onTokenUpdated: new EventHandler(),
 				getTokensRaw: async () => [tokenRaw(100, "A")],
 			}),
 		)
@@ -884,6 +893,7 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
+				onTokenUpdated: new EventHandler(),
 				getTokensRaw: async (profileId: string) => {
 					// Park ONLY init's read (profile A, first call).
 					if (!initReadSeen && profileId === "A") {
@@ -954,6 +964,7 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
+				onTokenUpdated: new EventHandler(),
 				getTokensRaw: async () => [tokenRaw(100, "A")],
 			}),
 		)
@@ -1003,6 +1014,7 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded,
 				onTokenDeleted: new EventHandler(),
+				onTokenUpdated: new EventHandler(),
 				// Token 100 is already mapped, so the account-added path has work.
 				getTokensRaw: async () => [tokenRaw(100, "A")],
 				getTokenRaw: async () => tokenRaw(200, "A"),
@@ -1084,6 +1096,7 @@ describe("TokenBalanceService legacy sweep + schema transition", () => {
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
+				onTokenUpdated: new EventHandler(),
 				getTokensRaw: async () => [
 					{ id: 100, profileId: "A", chainId: 1, contract: "0xtok100", name: "T", symbol: "T", decimals: 18 } as never,
 				],
@@ -1142,6 +1155,7 @@ describe("TokenBalanceService reconcile — identity hardening", () => {
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
+				onTokenUpdated: new EventHandler(),
 				getTokensRaw: async () => opts.tokens as never[],
 			}),
 		)
@@ -1353,5 +1367,83 @@ describe("TokenBalanceService.purgeForAccounts — tuple-scoped account purge", 
 			expect(row.updatedAt).toBe(0)
 			expect(fenced(service, row.id)).toBe(false)
 		}
+	})
+})
+
+describe("TokenBalanceService.onTokenUpdated — a balance carries its token's current metadata", () => {
+	const tokenRaw = (id: number, profileId: string, over: Record<string, unknown> = {}) =>
+		({ id, profileId, chainId: 1, name: `T${id}`, symbol: `T${id}`, decimals: 18, contract: `0xtok${id}`, ...over }) as never
+	const flush = () => new Promise((r) => setTimeout(r, 0))
+
+	async function boot(stored: Record<number, unknown>) {
+		const api = new FakeBrowserApi()
+		api.reset()
+		await new BalanceRepository(api).set(balance(1, 100))
+		const onTokenUpdated = new EventHandler<never>()
+		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
+		const services = new ServiceCollection()
+		services.add(
+			svc(PROFILE_SERVICE_NAME, {
+				onActiveProfileChanged: new EventHandler(),
+				getActiveProfile: async () => ({ id: "A", name: "A" }),
+				getDeletionState: () => new ProfileDeletionState(),
+			}),
+		)
+		services.add(svc(NETWORK_SERVICE_NAME, {}))
+		services.add(
+			svc(ACCOUNT_SERVICE_NAME, {
+				registerAccountPurgeSubscriber: () => {},
+				onAccountAdded: new EventHandler(),
+				getAccountsRaw: async () => [],
+			}),
+		)
+		services.add(
+			svc(TOKEN_SERVICE_NAME, {
+				onTokenAdded: new EventHandler(),
+				onTokenDeleted: new EventHandler(),
+				onTokenUpdated,
+				getTokensRaw: async () => [tokenRaw(100, "A", { symbol: "FAKE", decimals: 6 })],
+				getTokenRaw: async (id: number) => stored[id] ?? Promise.reject(new Error("unknown token id")),
+			}),
+		)
+		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
+		services.add(svc(EXECUTION_SERVICE_NAME, {}))
+		services.add(svc(TASK_SERVICE_NAME, { createNewTask: () => ({ id: "t1" }) }))
+		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
+		services.add(service)
+		await services.start()
+		const updated: { id: number; token: { decimals: number } }[] = []
+		service.onTokenBalanceUpdated.add((b) => updated.push(b))
+		const enqueue = vi.spyOn((service as never as { queue: { enqueue: (row: unknown) => void } }).queue, "enqueue")
+		const settle = async () => {
+			for (let i = 0; i < 10; i++) await flush()
+		}
+		return { service, api, onTokenUpdated, updated, enqueue, settle }
+	}
+
+	test("an updated token re-sends its balances with the new metadata at once and queues them for a re-read", async () => {
+		const chain = tokenRaw(100, "A", { symbol: "TST", decimals: 18 })
+		const { service, onTokenUpdated, updated, enqueue, settle } = await boot({ 100: chain })
+		expect((await service.getTokenBalances())[0].token).toMatchObject({ symbol: "FAKE", decimals: 6 })
+
+		void onTokenUpdated.invoke(chain)
+		await settle()
+		expect((await service.getTokenBalances())[0].token).toMatchObject({ symbol: "TST", decimals: 18 })
+		expect(updated.map((b) => [b.id, b.token.decimals])).toEqual([[1, 18]])
+		expect(enqueue).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: 1, token: 100 }))
+	})
+
+	test("an update for a token the map does not hold, or for another token at its id, changes and creates nothing", async () => {
+		const foreign = tokenRaw(200, "B")
+		const successor = tokenRaw(100, "A", { contract: "0xother", decimals: 18 })
+		const { service, api, onTokenUpdated, updated, enqueue, settle } = await boot({ 100: successor, 200: foreign })
+
+		void onTokenUpdated.invoke(foreign)
+		void onTokenUpdated.invoke(successor)
+		await settle()
+		expect((await service.getTokenBalances())[0].token).toMatchObject({ symbol: "FAKE", decimals: 6 })
+		expect(await new BalanceRepository(api).getAll()).toHaveLength(1)
+		expect(updated).toEqual([])
+		expect(enqueue).not.toHaveBeenCalled()
 	})
 })

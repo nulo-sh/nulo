@@ -238,6 +238,8 @@ async function runRestore(state: AgainRefs, opts: UseRestoreAgainOptions, writer
 	try {
 		const validated = await validateAndMigrateBackup(selection.backup as FullBackupEnvelope)
 		if (state.ended.value) return
+		// Only the body this profile was restored from passes, and its import already checked it, so no
+		// passkey prompt runs again here.
 		if (validated.kind === "rejected" || validated.checksum !== record.backup) {
 			const refusal = validated.kind === "rejected" ? validated : RESTORE_AGAIN_OTHER_BACKUP
 			state.restoreStatus.value = "failed"
