@@ -1,7 +1,7 @@
 ---
 plan: ui-followups-p18
 tier: light (the orchestrator's call; the panel of two still argues each decision)
-status: arc 1 done (phases 1-2 green, Codex loop converged, PR open against dev); arc 2 waits on SA-1; SA-2 open
+status: arc 1 merged (#530); arc 2 phase 3 done at 71f98db4, phase 4 waits on SA-1; SA-2 open
 issues: "#363 (arc 1), #451 (arc 1, no code change), #364 (arc 2, after SA-1)"
 driver: claude-code
 claude_model: opus
@@ -21,7 +21,7 @@ Two arcs, one PR each against `dev`, no stack. Arc 1 moves every remaining text 
 
 ## Scope
 
-**In:** 28 of the 30 text rules at HEAD (recon.md table); a source sweep that keeps text off the outline tone; one contrast pin; the #451 close; the regenerated store set, committed on SA-1 A; `apps/extension/README.md:62`.
+**In:** 28 of the 30 text rules at HEAD (recon.md table); a source sweep that keeps text off the outline tone; one contrast pin; the #451 close; the regenerated store set, committed on SA-1 A; the store-art line of `apps/extension/README.md` (D10).
 **Out:** DetailsTable's copy glyph and row chevron (icons; P18-06 keeps them); any new tone; #132, #503-#505, #508.
 
 ## Outcome & Quality Bar
@@ -41,7 +41,7 @@ Two arcs, one PR each against `dev`, no stack. Arc 1 moves every remaining text 
 6. `store-captures.test.ts` and `store-art.ts` overwrite the tracked images in place, and a rerun changes addresses and hashes. The promo tile takes no capture (`store-art.ts:70-75`).
 
 **Inferences:**
-- I1. The capture tool runs green at arc 2's base. #351 repaired it on 2026-10-13; about 20 commits have touched its fixtures since, and nothing has run it. Phase 3 proves or refutes it.
+- I1. The capture tool runs green at arc 2's base. #351 repaired it on 2026-10-13; about 20 commits have touched its fixtures since, and nothing has run it. Phase 3 proves or refutes it. **Held** on 2026-10-16: green at retry 0 at `71f98db4` with no fix ([lessons/phase-3.md](lessons/phase-3.md)).
 
 **Asks:** SA-1 (OWNER-ASKS.md). No other open owner question: arc 1's whole visible change is P18-06's signed text.
 
@@ -81,7 +81,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test && bun run
 
 Scratch `S` = `~/.cache/nulo-backlog/ui-followups-p18/store-art`.
 
-### Phase 3: the regenerated set and SA-1
+### Phase 3: the regenerated set and SA-1 (done)
 1. Run `git fetch origin dev`. Then run `git switch -c ui-followups-p18-store-art origin/dev`.
 2. Prove arc 1 is in the base: the phase 1 grep prints only the two icon lines. Record the SHA.
 3. Copy `apps/extension/store/` (`captures/*.png` and `*.png`) to `S/old/`, keeping its layout.
@@ -97,7 +97,7 @@ Scratch `S` = `~/.cache/nulo-backlog/ui-followups-p18/store-art`.
 
 ### Phase 4: on SA-1
 - On A: copy `S/new/` into `apps/extension/store/`. In `apps/extension/store`, run `sha256sum -c` against the hashes SA-1 records.
-- On either answer: fix `apps/extension/README.md:62` to `screenshot-{1..5}`. Keep any phase-3 spec fix.
+- On either answer: fix the `bun scripts/store-art.ts` row of `apps/extension/README.md` (line 66 at `71f98db4`, D10) to `screenshot-{1..5}`. Keep any phase-3 spec fix.
 - Gate on A: `sha256sum -c` prints 11 OKs; `git status --short apps/extension/store` lists only paths among those 11 (the promo tile may be unchanged) and no `??`.
 - Gate on B: `git status --short apps/extension/store` prints nothing.
 - Gate on both: `bun run lint` and `bun run check:plans` exit 0.
@@ -132,6 +132,8 @@ Follow `implementations-plan/README.md` § Post-implementation standard at revis
 | D7 | Local Firefox smoke | run it, as the lane brief requires | CI only (Opus #10): the brief names both browsers |
 | D8 | The sweep's rule lookup (implementation deviation) | `enclosingRule` in `source-scan.ts` takes any postcss child, so the sweep keys a declaration by it | a copy of its ancestor loop in the test; the plan's "header only" edit |
 | D9 | When arc 1's Codex loop runs (deviation) | round 1 alongside the smoke e2e, in the host's load window | strictly after the e2e gate: the diff is CSS and a test, and a red e2e that needs a fix resumes the loop with it |
+| D10 | The README line (deviation) | the `store-art.ts` row, line 66 at `71f98db4` | line 62: dev moved it since planning |
+| D11 | Where the side-by-side lives (deviation) | `S` plus a copy in the orchestrator's shots directory, as the spawn asked; SA-1's hashes govern both | `S` only |
 
 ## Audit verdicts
 

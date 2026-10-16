@@ -13,3 +13,5 @@
 - 2026-10-15 final head 1b40c67a: lint, typecheck:all, test:all, design test, check:plans, test:ci-gating green. Shots taken (smoke spec + connect window via e2e:agent proverless, retry 0).
 - 2026-10-15 phase 2 smoke Firefox (armed, retry 0): 243 passed, 14 skipped, 0 failed, 2650 s. Phase 2 gate green.
 - 2026-10-16 arc 1 pushed and PR opened against dev (see the PR list for worktree-ui-followups-p18).
+- 2026-10-16 arc 1 merged as #530 (71f98db4). Arc 2 branch `ui-followups-p18-store-art` from origin/dev; the phase 1 grep prints only the two icon lines.
+- 2026-10-16 phase 3 gate: capture run green at retry 0 (I1 held, no fix), store-art exit 0, 11 files at their sizes, the tile byte-identical, `git status --short apps/extension/store` empty after restore. SA-1 filled with the composites and the 11 hashes; phase 4 waits on SA-1.
