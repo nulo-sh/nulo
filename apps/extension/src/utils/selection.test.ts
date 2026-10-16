@@ -26,9 +26,11 @@ describe("selectedWithin", () => {
 		expect(selectedWithin(value)).toBe(true)
 	})
 
-	test("a selection elsewhere on the page, or a caret inside the element, is no selection of it", () => {
+	test("a selection elsewhere on the page, one that ends at the element's edge, or a caret inside it, holds none of it", () => {
 		const { value, at } = page()
 		select(at("after"), 0, at("after"), 3)
+		expect(selectedWithin(value)).toBe(false)
+		select(at("before"), 0, at("value"), 0)
 		expect(selectedWithin(value)).toBe(false)
 		select(at("value"), 1, at("value"), 1)
 		expect(selectedWithin(value)).toBe(false)

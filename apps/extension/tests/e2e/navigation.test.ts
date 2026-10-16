@@ -88,8 +88,9 @@ test("back from a Settings page lands where Settings was left, and the page it o
 
 type Point = { x: number; y: number }
 
-/** Where a person presses to start or end a drag on `testid`'s text: inside its first or last
- *  visible character, which must be on screen and on top, or the drag would start somewhere else. */
+/** Where a person presses to start or end a drag on `testid`'s text: a quarter in from the outer
+ *  edge of its first or last visible character, which must be on screen and on top. Chrome starts no
+ *  selection from a press just right of a glyph's middle, only a caret that follows the drag. */
 async function textEdge(page: Page, testid: string, edge: "first" | "last"): Promise<Point> {
 	const point = await page.$eval(
 		`[data-testid="${testid}"]`,
@@ -107,7 +108,7 @@ async function textEdge(page: Page, testid: string, edge: "first" | "last"): Pro
 			range.setStart(node, index)
 			range.setEnd(node, index + 1)
 			const box = range.getBoundingClientRect()
-			return { x: box.left + box.width / 2, y: box.top + box.height / 2 }
+			return { x: box.left + box.width * (at === "first" ? 0.25 : 0.75), y: box.top + box.height / 2 }
 		},
 		edge,
 	)
@@ -138,15 +139,14 @@ test("a drag selects the text around a control and none of the control's own: th
 	await page.waitForSelector('[data-testid="balance-amount"]:not([aria-busy])', { visible: true, timeout: 15_000 })
 	const hero = await textOf(page, "balance-amount")
 
-	// Down from the hero, past Send and Receive, to the nav's last tab. Home's own text repeats some
-	// tab labels, so the bans are the words only a control shows.
+	// Nothing selectable lies past the nav or above the header, so these two drags end on a control.
+	// Firefox keeps the text a drag ends on, even a control's; the bans are the controls each crosses,
+	// in words Home's own text never shows.
 	const toNav = await dragSelect(page, await textEdge(page, "balance-amount", "first"), await textEdge(page, "nav-settings", "last"))
 	console.log(`[select] hero to the nav: ${JSON.stringify(toNav)}`)
 	expect(toNav.split(hero).length - 1, "the hero's figure, once").toBe(1)
-	for (const label of ["send", "receive", "account_balance_wallet", "settings"]) expect(lower(toNav)).not.toContain(label)
+	for (const label of ["send", "receive", "home", "account_balance_wallet", "history"]) expect(lower(toNav)).not.toContain(label)
 
-	// Up from the hero onto the header's account name.
-	const name = await textOf(page, "account-selector")
 	const toHeader = await dragSelect(
 		page,
 		await textEdge(page, "balance-amount", "last"),
@@ -154,7 +154,7 @@ test("a drag selects the text around a control and none of the control's own: th
 	)
 	console.log(`[select] hero to the header: ${JSON.stringify(toHeader)}`)
 	expect(toHeader).toContain(hero)
-	expect(lower(toHeader)).not.toContain(lower(name))
+	for (const label of ["testnet", "lock"]) expect(lower(toHeader)).not.toContain(label)
 
 	await navigateToSettings(page, "privacy")
 	await page.waitForSelector('[data-testid="explorer-trigger"]', { visible: true, timeout: 10_000 })
@@ -188,6 +188,7 @@ test("a drag selects the text around a control and none of the control's own: th
 	await waitForHash(page, "#/popup/settings")
 	await navigateToSettings(page, "about")
 	await page.waitForSelector('[data-testid="legal-about-accepted"]', { visible: true, timeout: 10_000 })
+	await page.$eval('[data-testid="legal-about-group"]', (group) => group.firstElementChild?.scrollIntoView({ block: "nearest" }))
 	const overLinks = await dragSelect(
 		page,
 		await textEdge(page, "coingecko-attribution", "first"),
