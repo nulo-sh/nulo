@@ -17,12 +17,13 @@ const hasConfig = aztecConfig !== undefined
  * The consumer pulls the donor's tokens via `transfer_in_private` (msg.sender = crowdfunding ≠
  * from = donor), so the token asserts a call authwit against the DONOR's account. The wallet's
  * folded estimate must DISCOVER that need in its stubbed first sim (the CallAuthorizationRequest
- * offchain effect), show it decoded on its consumer as the transfer it is, sign the witness, and
+ * offchain effect), show it decoded on the token as the transfer it is, sign the witness, and
  * verify it in the validated rebuild.
  */
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
-/** 5 PULL in base units, half of what the rig mints the donor. */
+const DONOR_MINT = 10n ** 19n
+/** 5 PULL in base units, half of `DONOR_MINT`. */
 const AMOUNT = "5000000000000000000"
 
 test.skipIf(!hasConfig)(
@@ -31,9 +32,8 @@ test.skipIf(!hasConfig)(
 	async ({ dappConnectedExtensionPerTest: ctx }) => {
 		const page = ctx.playgroundPage
 
-		// The bundle grants the send and `registerContract` for the dApp's own contracts.
 		const [accountAddress] = await grantCapBundle(ctx, page, "transaction-contracts", async (ids) => [ids[0]!])
-		const { pullTokenAddress, consumerAddress } = await deployDelegatedPullRig(aztecConfig!, accountAddress!, 10n ** 19n)
+		const { pullTokenAddress, consumerAddress } = await deployDelegatedPullRig(aztecConfig!, accountAddress!, DONOR_MINT)
 
 		// The window reads a call as a transfer only on a token the wallet holds, from the list it
 		// loads when it opens, so the import lands before the send.
@@ -42,8 +42,6 @@ test.skipIf(!hasConfig)(
 		await importToken(home, pullTokenAddress)
 		await home.close()
 
-		// The dApp side registers both instances (instance + bundled artifact) like any real dApp
-		// introducing its own contracts.
 		const { createAztecNodeClient } = await import("@aztec-labs/aztec.js/node")
 		const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses")
 		const node = createAztecNodeClient(aztecConfig!.nodeUrl)
@@ -55,7 +53,6 @@ test.skipIf(!hasConfig)(
 		await setPgTextarea(page, "delegatedTokenInstance", serializeInstance(tokenInstance))
 		await setPgTextarea(page, "delegatedConsumerInstance", serializeInstance(consumerInstance))
 
-		// Fire: registerContract ×2 (silent on default sessions) + sendTx.
 		const seqTx = await snapshotResultSeq(page)
 		const execPopupP = waitForPopup(ctx, "execute", { timeout: 60_000 })
 		await clickByTestId(page, "pg-btn-sendTx-delegated")
@@ -79,30 +76,28 @@ test.skipIf(!hasConfig)(
 		await execPopup.waitForSelector(sel("execute-discovered-authwit-toggle"), { visible: true, timeout: 60_000 })
 		await clickByTestId(execPopup, "execute-discovered-authwit-toggle")
 		await execPopup.waitForSelector(sel("execute-discovered-authwit-structured-args"), { visible: true, timeout: 60_000 })
-		// Each address fills itself in after its own contact lookup.
-		await execPopup.waitForFunction(
-			() =>
-				["execute-discovered-authwit-transfer-sender-address", "execute-discovered-authwit-transfer-to"].every((id) =>
-					document.querySelector(`[data-testid="execute-op-discovered-authwit"] [data-testid="${id}"]`)?.textContent?.trim(),
-				),
-			{ timeout: 10_000 },
+		// Each address fills itself in after its own contact lookup. The row is read in the same pass
+		// that sees both filled, so an estimate rerun that remounts the list cannot split the read.
+		const discovered = await execPopup.waitForFunction(
+			() => {
+				const rows = document.querySelectorAll('[data-testid="execute-op-discovered-authwit"]')
+				const at = (id: string) => rows[0]?.querySelector(`[data-testid="${id}"]`)
+				const text = (id: string) => (at(id)?.textContent ?? "").replace(/\s+/g, " ").trim()
+				const to = text("execute-discovered-authwit-transfer-to")
+				if (!text("execute-discovered-authwit-transfer-sender-address") || !to) return false
+				return {
+					rows: rows.length,
+					intent: at("execute-discovered-authwit-structured-args")?.getAttribute("data-intent-kind") ?? null,
+					fn: text("execute-discovered-authwit-function"),
+					from: at("execute-discovered-authwit-transfer-sender-address")?.getAttribute("data-address-shows") ?? null,
+					to,
+					amount: text("execute-discovered-authwit-amount"),
+				}
+			},
+			{ timeout: 60_000 },
 		)
-		// One read, so an estimate rerun cannot remount the list between two fields.
-		const discovered = await execPopup.evaluate(() => {
-			const rows = document.querySelectorAll('[data-testid="execute-op-discovered-authwit"]')
-			const at = (id: string) => rows[0]?.querySelector(`[data-testid="${id}"]`)
-			const text = (id: string) => (at(id)?.textContent ?? "").replace(/\s+/g, " ").trim()
-			return {
-				rows: rows.length,
-				intent: at("execute-discovered-authwit-structured-args")?.getAttribute("data-intent-kind") ?? null,
-				fn: text("execute-discovered-authwit-function"),
-				from: at("execute-discovered-authwit-transfer-sender-address")?.getAttribute("data-address-shows") ?? null,
-				to: text("execute-discovered-authwit-transfer-to"),
-				amount: text("execute-discovered-authwit-amount"),
-			}
-		})
-		// From names the donor (the wallet's own account); To is the consumer that pulls.
-		expect(discovered).toEqual({
+		// A name: From is the wallet's account, the donor. To is the Crowdfunding contract that pulls.
+		expect(await discovered.jsonValue()).toEqual({
 			rows: 1,
 			intent: "transfer",
 			fn: "Transfer (private)",
