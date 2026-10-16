@@ -38,6 +38,7 @@ import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
 import { backupNotice } from "@/components/stale-network/copy"
 
 /** Composables */
+import { createRunFence } from "@/composables/runFence"
 import { useToast } from "@/composables/toast.js"
 import { useConfirm } from "@/composables/useConfirm"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
@@ -66,11 +67,11 @@ let encryptedB64 = null
 
 // Re-entry latch + currency fence (the export/account.vue idiom): `isBusy`
 // closes synchronously before the first await so a double click / double
-// Enter cannot start a second assembly; `generation` is bumped on unmount so
-// a superseded run can neither publish state nor resurrect scrubbed secrets.
+// Enter cannot start a second assembly; `runs` is invalidated by `discardRun` (runs only snapshot
+// it) so a superseded run can neither publish state nor resurrect scrubbed secrets.
 const isBusy = ref(false)
 const isDownloading = ref(false)
-let generation = 0
+const runs = createRunFence()
 // The in-flight run's clients, for unmount teardown (per-run construction —
 // see `buildBackupServices`).
 let activeRunClients = null
@@ -173,14 +174,14 @@ function leaveAfterPasskeyFailure() {
  *  calling the service. Targeted `get` against this profile's stored
  *  credentialId so the OS prompt is bound to the right key. Returns "handled"
  *  when the flow already resolved the failure UI (or was superseded). */
-async function acquirePasskeyCredential(gen) {
+async function acquirePasskeyCredential(isCurrent) {
 	try {
 		const credentialId = await managers.profile.getPasskeyCredentialId(appStore.profile.id)
-		if (gen !== generation) return "handled"
+		if (!isCurrent()) return "handled"
 		const credentialData = await runCeremony({ mode: "get", credentialId, step: "export", profileName: appStore.profile.name })
 		return { credentialData }
 	} catch (err) {
-		if (gen !== generation) return "handled"
+		if (!isCurrent()) return "handled"
 		backupStatus.value = ""
 		// A cancel or an unconfirmed prompt resets the agreement gate so the user can re-confirm or
 		// back out without bouncing off the page — passkey export auto-fires on agree (no "Create
@@ -202,7 +203,7 @@ async function acquirePasskeyCredential(gen) {
 /** Stage 2: the authenticated key-material export, discriminated per profile
  *  type. Returns "handled" when the failure UI already resolved (wrong
  *  password / passkey failure / superseded run). */
-async function exportKeyMaterial(gen, fence, credentialData, accountClient) {
+async function exportKeyMaterial(isCurrent, fence, credentialData, accountClient) {
 	try {
 		if (isPasskeyProfile.value) {
 			// Passkey blobs carry the credentialId as `master-key` and NEVER an entropy field —
@@ -210,7 +211,7 @@ async function exportKeyMaterial(gen, fence, credentialData, accountClient) {
 			// as a SEALED blob (the restore ceremony's wrap key opens it) — the stored one, or a
 			// fresh one when the stored slot no longer opens. The file carries the key rows it counted.
 			const passkeyKeys = await accountClient.exportPasskeyBackupKeys(fence, credentialData)
-			if (gen !== generation) return "handled"
+			if (!isCurrent()) return "handled"
 			return {
 				key: passkeyKeys.credentialId,
 				dekSealedB64: passkeyKeys.dekSealed,
@@ -230,7 +231,7 @@ async function exportKeyMaterial(gen, fence, credentialData, accountClient) {
 			heldSlices: { [ACCOUNT_SERVICE_NAME]: material.accounts, [IMPORTED_KEYS_SERVICE_NAME]: material.importedKeyRows },
 		}
 	} catch (error) {
-		if (gen !== generation) return "handled"
+		if (!isCurrent()) return "handled"
 		backupStatus.value = ""
 		if (!isPasskeyProfile.value) {
 			isWrongPassword.value = true
@@ -293,8 +294,8 @@ function rejectOversizedBackup(pretty) {
 /** The assembly-failure UI (deliberately synchronous — runs inside the catch's
  *  span; owns the currency fence: a superseded run stays silent — the page
  *  that could show the error is gone). */
-function reportAssemblyFailure(gen, err) {
-	if (gen !== generation) return
+function reportAssemblyFailure(isCurrent, err) {
+	if (!isCurrent()) return
 	backupStatus.value = ""
 	if (isPasskeyProfile.value) isAgreed.value = false
 	console.error("[export/full] backup assembly failed:", err)
@@ -312,13 +313,13 @@ function backupSources(runClients, heldSlices = {}) {
  *  profile on their own and a profile switch updates this page in place, so the run is bound to
  *  one session of one profile in one worker: a lock, a switch (even away and back) or a worker
  *  restart before publication fails it. Returns "handled" when the run already ended. */
-async function openRun(gen) {
+async function openRun(isCurrent) {
 	const fence = await managers.profile.captureRunFence()
-	if (gen !== generation) return "handled"
+	if (!isCurrent()) return "handled"
 	if (fence.profileId !== appStore.profile.id) throw new Error("The active profile is not the one being backed up")
 	if (!isPasskeyProfile.value) return { fence }
-	const acquired = await acquirePasskeyCredential(gen)
-	if (acquired === "handled" || gen !== generation) return "handled"
+	const acquired = await acquirePasskeyCredential(isCurrent)
+	if (acquired === "handled" || !isCurrent()) return "handled"
 	return { fence, credentialData: acquired.credentialData }
 }
 
@@ -327,19 +328,19 @@ async function handleBackup() {
 	// the empty-status window during PBKDF2 was where double-fires slipped in.
 	if (isBusy.value) return
 	isBusy.value = true
-	const gen = generation
+	const isCurrent = runs.snapshot()
 	backupStatus.value = "progress"
 	let runClients = null
 	try {
-		const run = await openRun(gen)
+		const run = await openRun(isCurrent)
 		if (run === "handled") return
 
 		runClients = buildBackupServices()
 		activeRunClients = runClients
 		const accountClient = runClients.find(({ name }) => name === ACCOUNT_SERVICE_NAME).client
 		const { fence, credentialData } = run
-		const material = await exportKeyMaterial(gen, fence, credentialData, accountClient)
-		if (material === "handled" || gen !== generation) return
+		const material = await exportKeyMaterial(isCurrent, fence, credentialData, accountClient)
+		if (material === "handled" || !isCurrent()) return
 		dekReplaced.value = !!material.dekReplaced
 		unopenedImportedKeys.value = material.dekReplaced ? 0 : (material.unopenedImportedKeys ?? 0)
 		chainStateOmitted.value = !!appStore.profile.recoveryMode
@@ -347,22 +348,22 @@ async function handleBackup() {
 
 		const authenticate = credentialData ? passkeyBackupAuthenticator(credentialData) : undefined
 		const sources = backupSources(runClients, material.heldSlices)
-		const result = await assembleFullBackup(envelope, sources, () => gen === generation, authenticate)
+		const result = await assembleFullBackup(envelope, sources, isCurrent, authenticate)
 		await managers.profile.assertRunFence(fence)
 		// Fence first: a superseded run must not run the oversize UI writes.
-		if (gen !== generation || rejectOversizedBackup(result.pretty)) return
+		if (!isCurrent() || rejectOversizedBackup(result.pretty)) return
 
 		payloadCompact = result.compact
 		payloadPretty = result.pretty
 		backupStatus.value = "finished"
 		showRecommendation.value = true
 	} catch (err) {
-		reportAssemblyFailure(gen, err)
+		reportAssemblyFailure(isCurrent, err)
 	} finally {
 		if (runClients) disconnectAll(runClients)
 		// A null runClients matches only a null activeRunClients — no-op either way.
 		if (activeRunClients === runClients) activeRunClients = null
-		if (gen === generation) isBusy.value = false
+		if (isCurrent()) isBusy.value = false
 	}
 }
 
@@ -389,7 +390,7 @@ async function handleEncrypt() {
 	if (isBusy.value || isDownloading.value) return
 	if (passkeyPasswordBlocked()) return
 	isBusy.value = true
-	const gen = generation
+	const isCurrent = runs.snapshot()
 	const plaintext = payloadCompact
 
 	backupStatus.value = "encrypting"
@@ -397,7 +398,7 @@ async function handleEncrypt() {
 
 	try {
 		const sealed = await sealFullBackupText(plaintext, password.value)
-		if (gen !== generation) return
+		if (!isCurrent()) return
 		// Encrypted-side half of the shared size invariant (the tag, base64 and AES-GCM
 		// overhead could in principle cross the line a plain file sits under).
 		// The text is pure ASCII, so string length IS the byte count here.
@@ -409,12 +410,12 @@ async function handleEncrypt() {
 		encryptedB64 = sealed
 		backupStatus.value = "encrypted"
 	} catch (error) {
-		if (gen !== generation) return
+		if (!isCurrent()) return
 		console.error("Failed to encrypt the backup", error)
 		openToast({ kind: "error", label: "Failed to encrypt the backup" })
 		backupStatus.value = "finished"
 	} finally {
-		if (gen === generation) isBusy.value = false
+		if (isCurrent()) isBusy.value = false
 	}
 }
 
@@ -425,27 +426,27 @@ async function downloadBackup(isEncrypted) {
 	const fileContent = isEncrypted ? encryptedB64 : payloadPretty
 	if (!fileContent) return
 	isDownloading.value = true
-	const gen = generation
+	const isCurrent = runs.snapshot()
 	let filename = `_${profileFileNameSegment(appStore.profile.name)}_${Math.floor(Date.now() / 1000)}`
 	filename = isEncrypted ? `NuloEncryptedBackup${filename}.txt` : `NuloBackup${filename}.json`
 
 	try {
 		await downloadFile({ data: fileContent, filename, compressionFormat: "gzip" })
-		if (gen !== generation) return
+		if (!isCurrent()) return
 		openToast({ kind: "success", label: "Backup downloaded successfully" })
 	} catch (err) {
-		if (gen !== generation) return
+		if (!isCurrent()) return
 		console.error("Download failed:", { error: err })
 		openToast({ kind: "error", label: "Failed to download backup" })
 	} finally {
-		if (gen === generation) isDownloading.value = false
+		if (isCurrent()) isDownloading.value = false
 	}
 }
 
 /** ConfirmPopup runs its callback without awaiting it, and the page may have moved on by then:
  *  the callback downloads only the plain file of the run the person was warned about. */
 function confirmPlainDownload() {
-	const gen = generation
+	const isCurrent = runs.snapshot()
 	requestConfirm({
 		pre_title: "Not encrypted",
 		title: "Download without a password?",
@@ -455,7 +456,7 @@ function confirmPlainDownload() {
 		confirm_variant: "destructive",
 		confirm_text: "Download anyway",
 		callback: () => {
-			if (gen === generation && backupStatus.value === "finished") void downloadBackup(false)
+			if (isCurrent() && backupStatus.value === "finished") void downloadBackup(false)
 		},
 	})
 }
@@ -470,7 +471,7 @@ function handleDownloadClick() {
  *  hold the plaintext master, entropy and imported-keys key (best-effort: references cleared;
  *  pending operations keep what they captured until they settle). */
 function discardRun() {
-	generation++
+	runs.invalidate()
 	if (activeRunClients) {
 		disconnectAll(activeRunClients)
 		activeRunClients = null

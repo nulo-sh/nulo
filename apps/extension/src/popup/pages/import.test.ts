@@ -74,7 +74,7 @@ function makeFlow() {
 		isAllowedToImportBySeedPhrase: ref(false),
 		selectedBackup: ref({
 			name: "backup.txt",
-			type: "encrypted",
+			kind: "opened",
 			profileType: "password",
 			backup: { data: { profile: { name: "Main" } } },
 		}),
@@ -466,8 +466,8 @@ function popupCtas(w: VueWrapper): PopupCta[] {
 		])
 }
 
-const ENCRYPTED = { name: "backup.txt", type: "encrypted", profileType: null, backup: "ciphertext" }
-const PLAIN = { name: "backup.json", type: "plain", profileType: "password", backup: { data: { profile: { name: "Main" } } } }
+const ENCRYPTED = { name: "backup.txt", kind: "sealed", profileType: null, backup: "ciphertext" }
+const PLAIN = { name: "backup.json", kind: "plain", profileType: "password", backup: { data: { profile: { name: "Main" } } } }
 const BACK: PopupCta = ["Back", null, false, null, "cta_outline"]
 const BACK_OFF: PopupCta = ["Back", null, true, null, "cta_outline"]
 const IMPORT_MAIN: PopupCta = ["Import Main", "import-full-backup-submit-btn", false, null, "cta"]
