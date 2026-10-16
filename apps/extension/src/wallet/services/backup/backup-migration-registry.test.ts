@@ -159,6 +159,29 @@ describe("backup-migration-registry", () => {
 		expect(normalizeBackupData(data).ok).toBe(false)
 	})
 
+	describe.each([
+		["token", 1024],
+		["token-balance", 16384],
+	])("the %s slice's row limit", (slice, limit) => {
+		const rows = (n: number) => Array.from({ length: n }, (_, i) => ({ id: i + 1, token: 1, account: "0xaaa1" }))
+
+		test("a slice at the limit normalizes", () => {
+			expect(normalizeBackupData({ ...fixture(), [slice]: rows(limit) }).ok).toBe(true)
+		})
+
+		test("one row over the limit refuses with the slice, its length and the limit", () => {
+			expect(normalizeBackupData({ ...fixture(), [slice]: rows(limit + 1) })).toEqual({
+				ok: false,
+				reason: `slice "${slice}" has ${limit + 1} rows, over its limit of ${limit}`,
+			})
+		})
+
+		test("an unlimited slice of the same length normalizes (control)", () => {
+			const contacts = Array.from({ length: limit + 1 }, (_, i) => ({ id: `c${i}`, profileId: "p1", name: "A", address: "0xccc" }))
+			expect(normalizeBackupData({ ...fixture(), contact: contacts }).ok).toBe(true)
+		})
+	})
+
 	test("account-state is non-storage and profile is block-listed; blocked roots pinned", () => {
 		expect(BACKUP_SLICE_REGISTRY["account-state"]).toEqual({ kind: "non-storage", optional: true })
 		expect(BACKUP_SLICE_REGISTRY.profile).toEqual({ kind: "block-listed", root: PROFILE_STORAGE_ROOT })

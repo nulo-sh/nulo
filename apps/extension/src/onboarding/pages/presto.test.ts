@@ -1,4 +1,4 @@
-import { Flex, Text } from "@nulo/design"
+import { BrutalistTitle, Flex, Text } from "@nulo/design"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import type { Ref } from "vue"
@@ -13,7 +13,16 @@ vi.mock("@/composables/snackInset", () => ({
 vi.mock("@/composables/usePrestoCheck", async () => {
 	const { ref } = await import("vue")
 	const state = ref<{ kind: string; info?: object }>({ kind: "detecting" })
-	return { usePrestoCheck: () => ({ state, start: vi.fn(async () => {}), check: vi.fn(async () => {}), dispose: vi.fn() }), state }
+	return {
+		usePrestoCheck: vi.fn(() => ({ state, start: vi.fn(async () => {}), check: vi.fn(async () => {}), dispose: vi.fn() })),
+		state,
+	}
+})
+vi.mock("@/composables/usePrestoHostPermission", async () => {
+	const { ref } = await import("vue")
+	const missing = ref(false)
+	const request = vi.fn()
+	return { usePrestoHostPermission: vi.fn(() => ({ missing, request, dispose: vi.fn() })), missing, request }
 })
 vi.mock("@/wallet/services/config/client", () => ({
 	ConfigServiceClient: vi.fn(function () {
@@ -24,14 +33,40 @@ vi.mock("@alejoamiras/presto-banners/register", () => ({}))
 vi.mock("vue-router", () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
 import * as prestoCheck from "@/composables/usePrestoCheck"
+import * as hostPermission from "@/composables/usePrestoHostPermission"
 import OnboardingSkipLink from "../components/OnboardingSkipLink.vue"
 import Presto from "./presto.vue"
 
 const state = (prestoCheck as unknown as { state: Ref<{ kind: string; info?: object }> }).state
+const permission = hostPermission as unknown as { missing: Ref<boolean>; request: ReturnType<typeof vi.fn> }
+
+/** `withTitle` renders the real title, attached to the document so focus can land in it. */
+const mountPresto = ({ withTitle = false } = {}) =>
+	mount(Presto, {
+		attachTo: withTitle ? document.body : undefined,
+		global: {
+			components: { BrutalistTitle, Flex, Text, OnboardingSkipLink },
+			stubs: {
+				OnboardingPage: { template: "<div><slot /></div>" },
+				Button: { template: '<button v-bind="$attrs"><slot /></button>' },
+				StepIndicator: true,
+				BrutalistTitle: !withTitle,
+				SectionLabel: true,
+				PrestoStatusCard: true,
+				PrestoPermissionRow: {
+					emits: ["allow"],
+					template: `<button data-testid="presto-permission-allow" @click="$emit('allow')" />`,
+				},
+				"presto-banner": true,
+			},
+		},
+	})
 
 afterEach(() => {
 	footer.values.length = 0
 	state.value = { kind: "detecting" }
+	permission.missing.value = false
+	permission.request.mockClear()
 })
 
 describe("onboarding presto", () => {
@@ -69,5 +104,73 @@ describe("onboarding presto", () => {
 		expect(w.find("button").exists()).toBe(false)
 		expect(footer.values.at(-1)).toBe(false)
 		w.unmount()
+	})
+
+	test("hands the probe to the grant: start once allowed, check on each grant", () => {
+		mountPresto().unmount()
+		const check = vi.mocked(prestoCheck.usePrestoCheck).mock.results.at(-1)?.value
+		expect(hostPermission.usePrestoHostPermission).toHaveBeenLastCalledWith({ onFirstAllowed: check.start, onGranted: check.check })
+		expect(check.start).not.toHaveBeenCalled()
+	})
+
+	test("a missing grant puts the row in place of the pitch, the card and the note, and offers Skip", async () => {
+		state.value = { kind: "available", info: {} }
+		const w = mountPresto()
+		await flushPromises()
+		expect(w.find("presto-status-card-stub").exists()).toBe(true)
+		expect(w.text()).toContain("Presto will ask you to allow Nulo")
+		expect(w.find('[data-testid="presto-permission-allow"]').exists()).toBe(false)
+
+		permission.missing.value = true
+		await flushPromises()
+		expect(w.find("presto-status-card-stub").exists()).toBe(false)
+		expect(w.text()).not.toContain("Presto will ask you to allow Nulo")
+		const pitch = w.find('[data-testid="onboarding-presto-pitch"]')
+		expect(pitch.exists()).toBe(true)
+		expect(pitch.element.parentElement?.style.display).toBe("none")
+		expect(w.find('[data-testid="onboarding-presto-continue"]').exists()).toBe(false)
+		expect(w.find('[data-testid="onboarding-presto-skip"]').exists()).toBe(true)
+		expect(footer.values.at(-1)).toBe(true)
+
+		await w.find('[data-testid="presto-permission-allow"]').trigger("click")
+		expect(permission.request).toHaveBeenCalledOnce()
+		w.unmount()
+	})
+
+	describe("focus when a grant takes the row away", () => {
+		const focused = (w: ReturnType<typeof mountPresto>, testid: string) => {
+			const el = w.get(`[data-testid="${testid}"]`).element as HTMLElement
+			el.focus()
+			expect(document.activeElement).toBe(el)
+			return el
+		}
+
+		test("from Allow, focus moves to the title", async () => {
+			permission.missing.value = true
+			const w = mountPresto({ withTitle: true })
+			await flushPromises()
+			focused(w, "presto-permission-allow")
+
+			permission.missing.value = false
+			await flushPromises()
+			const title = w.get('[data-testid="onboarding-presto-title"]').element
+			expect(title.tagName).toBe("H1")
+			expect(document.activeElement).toBe(title)
+			w.unmount()
+		})
+
+		test("from a control that stays, focus stays on it", async () => {
+			state.value = { kind: "offline" }
+			permission.missing.value = true
+			const w = mountPresto({ withTitle: true })
+			await flushPromises()
+			const skip = focused(w, "onboarding-presto-skip")
+
+			permission.missing.value = false
+			await flushPromises()
+			expect(w.find('[data-testid="presto-permission-allow"]').exists()).toBe(false)
+			expect(document.activeElement).toBe(skip)
+			w.unmount()
+		})
 	})
 })

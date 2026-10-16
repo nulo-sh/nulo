@@ -11,12 +11,13 @@
  * over an in-memory chrome.storage shim (the established repo-test pattern).
  */
 
-import { beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
+import { EntityStorage } from "@/wallet/storage"
 import { ACCOUNT_SERVICE_NAME } from "@/wallet/services/account/spec"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { EXECUTION_SERVICE_NAME } from "@/wallet/services/execution/spec"
@@ -232,6 +233,10 @@ describe("TokenBalanceService.restore — hostile-row validation", () => {
 		await services.start()
 	})
 
+	afterEach(() => {
+		vi.restoreAllMocks()
+	})
+
 	test("fenced-id incarnation guard: allocation SKIPS ids fenced this lifetime, so a reused id can neither eat a stale write nor stay suppressed", async () => {
 		// Simulate: row 5 (the allocator's NEXT id — max existing is 4) was
 		// deleted this lifetime and fenced while its old projection is still in
@@ -341,6 +346,37 @@ describe("TokenBalanceService.restore — hostile-row validation", () => {
 		expect(restored[0].restoreError).toBeUndefined()
 		expect(restored[1].restoreError).toMatch(/duplicate balance pair/)
 		expect(await seedRepo.getAll()).toHaveLength(1)
+	})
+
+	test("a batch whose rows all name a token the profile does not own lists no balance keys and writes nothing", async () => {
+		const listings = vi.spyOn(EntityStorage.prototype, "getKeys")
+		const restored = await service.restore([balance(1, 3), balance(2, 4), balance(3, 3)], "p1")
+		expect(restored).toHaveLength(3)
+		for (const r of restored) expect(r.restoreError).toMatch(/does not own/)
+		expect(listings).not.toHaveBeenCalled()
+		expect(await seedRepo.getAll()).toEqual([])
+	})
+
+	test("one valid row followed by repeats of its pair lists the balance keys once and writes once", async () => {
+		const listings = vi.spyOn(EntityStorage.prototype, "getKeys")
+		const restored = await service.restore([balance(1, 1), balance(2, 1), balance(3, 1), balance(4, 1)], "p1")
+		expect(restored[0].restoreError).toBeUndefined()
+		for (const r of restored.slice(1)) expect(r.restoreError).toMatch(/duplicate balance pair/)
+		expect(listings).toHaveBeenCalledOnce()
+		expect(await seedRepo.getAll()).toHaveLength(1)
+	})
+
+	test("valid rows restore under distinct fresh ids after exactly one listing (control)", async () => {
+		await seedRepo.set(balance(7, 2, { account: "0xseeded" }))
+		const listings = vi.spyOn(EntityStorage.prototype, "getKeys")
+		const restored = await service.restore(
+			[balance(1, 1), balance(2, 2), balance(3, 1, { account: "0xother" }), balance(4, 2, { account: "0xother" })],
+			"p1",
+		)
+		expect(restored.map((r) => r.restoreError)).toEqual([undefined, undefined, undefined, undefined])
+		expect(restored.map((r) => r.id)).toEqual([8, 9, 10, 11])
+		expect(listings).toHaveBeenCalledOnce()
+		expect((await seedRepo.getAll()).map((b) => b.id).sort((a, b) => a - b)).toEqual([7, 8, 9, 10, 11])
 	})
 })
 

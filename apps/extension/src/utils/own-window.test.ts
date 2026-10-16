@@ -10,6 +10,7 @@ import {
 	postAuthRoute,
 	releaseOwnWindow,
 } from "./own-window"
+import { deferred } from "@nulo/wallet-core/utils"
 
 const EXPORT = "/popup/settings/security/export/full"
 const BROWSER = { left: 100, top: 50, width: 1200, height: 900, type: "normal" }
@@ -24,14 +25,6 @@ let update: ReturnType<typeof vi.fn>
 let session: Map<string, unknown>
 let sessionGet: ReturnType<typeof vi.fn>
 let closeDocument: ReturnType<typeof vi.spyOn>
-
-function deferred<T>() {
-	let resolve!: (value: T) => void
-	const promise = new Promise<T>((done) => {
-		resolve = done
-	})
-	return { promise, resolve }
-}
 
 beforeEach(() => {
 	create = vi.fn().mockResolvedValue({ id: 7 })

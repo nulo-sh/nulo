@@ -241,8 +241,6 @@ function nothingSentLabel(kind: JobErrorKind): CategoricalFailureLabel | undefin
 	switch (kind) {
 		case "transfer":
 		case "dapp_execute":
-		// A cap refusal reads as the app send it refused.
-		case "too_many_pending":
 			return { ...STOPPED_BEFORE_BROADCAST }
 		case "sw_restart_post_prove":
 		case "stale_on_resume":
@@ -269,6 +267,8 @@ function kindLabel(kind: JobErrorKind): CategoricalFailureLabel {
 				label: "Refused before sending",
 				context: "The wallet refused this request before anything was signed. Nothing was sent.",
 			}
+		case "too_many_pending":
+			return { label: "Refused before sending", context: "Too many sends were already waiting. Nothing was sent." }
 		case "session_ended":
 			// Never "Nothing was sent": a lock that lands during execution files this kind too.
 			return { label: "Stopped when the wallet locked", context: "The wallet locked while this was in progress." }
@@ -295,7 +295,6 @@ function kindLabel(kind: JobErrorKind): CategoricalFailureLabel {
 				context: "Your wallet couldn't finish this send. If it was already submitted, it may still go through.",
 			}
 		case "dapp_execute":
-		case "too_many_pending":
 			return { label: "Reported by app", context: "The connected app reported an error." }
 		default:
 			return { label: "Error", context: "Something went wrong with this transaction." }
@@ -324,6 +323,7 @@ function failedSubtitleFor(kind: JobErrorKind): string {
 		case "terms_refused":
 			return "Terms not accepted"
 		case "wallet_refused":
+		case "too_many_pending":
 			return "Refused before sending"
 		// popup_bound, transfer, dapp_execute, unknown, and any other / future
 		// kind all fall through to the generic copy. The kind is still preserved

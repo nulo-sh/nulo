@@ -108,10 +108,6 @@ const expanded = defineModel({ type: Boolean, default: false })
 
 .fee_row_static {
 	cursor: default;
-
-	&:hover {
-		opacity: 1;
-	}
 }
 
 .fee_breakdown {

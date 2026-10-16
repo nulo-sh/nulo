@@ -30,6 +30,8 @@ const props = defineProps({
 })
 
 const router = useRouter()
+const base = useTemplateRef("base")
+defineExpose({ focusTitle: () => base.value?.focusTitle() })
 
 async function handleBack() {
 	// An own window has nowhere to go back to: its back arrow closes it.
@@ -49,6 +51,7 @@ async function handleBack() {
 
 <template>
 	<SubPageHeaderBase
+		ref="base"
 		:title="title"
 		:show-back="showBack"
 		:leading-icon="leadingIcon"

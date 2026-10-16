@@ -58,32 +58,8 @@ export type OperationOrigin = "popup" | "dapp" | "seed"
  */
 export type OperationContext = { origin: "popup" } | { origin: "dapp"; dappOrigin: string } | { origin: "seed" }
 
-export interface OperationRecord {
-	/** Random 16-hex id assigned at `createOperation`. */
-	id: string
-	kind: OperationKind
-	/** Where the operation came from — tagged at create-time. */
-	origin: OperationOrigin
-	/** Profile id — tagged at create-time for per-profile fairness. */
-	profileId: string
-	/**
-	 * Session id for `dapp_execute` records originating from a wallet-sdk
-	 * message. Populated by `tryCreateQueuedJournal` from
-	 * `ActiveSession.sessionId`. Used by the per-session queued-record
-	 * cap. Undefined for `popup`-origin records (UI-initiated transfers,
-	 * token imports).
-	 */
-	sessionId?: string
-	/** Extensible per-stage progress payload (from `@nulo/wallet-core/jobs`). */
-	progress: JobProgress
-	/** Present iff `progress.stage === "failed"`; raw category preserved. */
-	error: JobError | null
-	/** Set when the record enters a terminal stage; `null` otherwise. */
-	terminalAt: number | null
-	/** Attempt counter for the retry policy; starts at 0. */
-	attempts: number
-	createdAt: number
-	updatedAt: number
+/** The optional fields a record carries verbatim from its creation input. */
+export interface JournalMetadata {
 	/** Scope metadata — preserved for activity UI + chain purge consumers. */
 	accountAddress?: string
 	networkId?: string
@@ -124,6 +100,34 @@ export interface OperationRecord {
 	transferType?: TransferType
 }
 
+export interface OperationRecord extends JournalMetadata {
+	/** Random 16-hex id assigned at `createOperation`. */
+	id: string
+	kind: OperationKind
+	/** Where the operation came from — tagged at create-time. */
+	origin: OperationOrigin
+	/** Profile id — tagged at create-time for per-profile fairness. */
+	profileId: string
+	/**
+	 * Session id for `dapp_execute` records originating from a wallet-sdk
+	 * message. Populated by `tryCreateQueuedJournal` from
+	 * `ActiveSession.sessionId`. Used by the per-session queued-record
+	 * cap. Undefined for `popup`-origin records (UI-initiated transfers,
+	 * token imports).
+	 */
+	sessionId?: string
+	/** Extensible per-stage progress payload (from `@nulo/wallet-core/jobs`). */
+	progress: JobProgress
+	/** Present iff `progress.stage === "failed"`; raw category preserved. */
+	error: JobError | null
+	/** Set when the record enters a terminal stage; `null` otherwise. */
+	terminalAt: number | null
+	/** Attempt counter for the retry policy; starts at 0. */
+	attempts: number
+	createdAt: number
+	updatedAt: number
+}
+
 /**
  * Fields a caller supplies at create-time. The journal fills in
  * `id`, `progress` (defaults to `{ stage: "pending" }`), `error: null`,
@@ -150,15 +154,6 @@ export type NewOperationInput = {
 	 * bare existence check and write into the successor incarnation.
 	 */
 	profileEpoch?: number
-	accountAddress?: string
-	networkId?: string
-	tokenId?: number
-	title?: string
-	subtitle?: string
-	amountRaw?: string
-	recipientAddress?: string
-	contractAddress?: string
-	transferType?: TransferType
 	/**
 	 * Optional initial-stage override. Defaults to `{ stage: "pending" }`.
 	 * Restricted to non-terminal pre-execution stages so callers can't
@@ -169,7 +164,7 @@ export type NewOperationInput = {
 	 * an earlier send.
 	 */
 	initialStage?: { stage: "queued" } | { stage: "pending" }
-}
+} & JournalMetadata
 
 // ── Zod schemas ──────────────────────────────────────────────────────
 
@@ -272,6 +267,18 @@ export const JobErrorSchema: z.ZodType<JobError> = z.object({
 	normalizedRaw: z.string().max(NORMALIZED_RAW_MAX_CHARS).nullable(),
 })
 
+const journalMetadataShape = {
+	accountAddress: z.string().optional(),
+	networkId: z.string().optional(),
+	tokenId: z.number().optional(),
+	title: z.string().optional(),
+	subtitle: z.string().optional(),
+	amountRaw: z.string().optional(),
+	recipientAddress: z.string().optional(),
+	contractAddress: z.string().optional(),
+	transferType: z.enum(TransferType).optional(),
+} as const satisfies Record<keyof JournalMetadata, z.ZodType>
+
 export const OperationRecordSchema: z.ZodType<OperationRecord> = z.object({
 	id: z.string(),
 	kind: OperationKindSchema,
@@ -284,15 +291,7 @@ export const OperationRecordSchema: z.ZodType<OperationRecord> = z.object({
 	attempts: z.number().int().nonnegative(),
 	createdAt: z.number(),
 	updatedAt: z.number(),
-	accountAddress: z.string().optional(),
-	networkId: z.string().optional(),
-	tokenId: z.number().optional(),
-	title: z.string().optional(),
-	subtitle: z.string().optional(),
-	amountRaw: z.string().optional(),
-	recipientAddress: z.string().optional(),
-	contractAddress: z.string().optional(),
-	transferType: z.enum(TransferType).optional(),
+	...journalMetadataShape,
 })
 
 /**
@@ -308,15 +307,7 @@ export const NewOperationInputSchema: z.ZodType<NewOperationInput> = z
 		profileId: z.string().min(1),
 		sessionId: z.string().optional(),
 		profileEpoch: z.number().int().nonnegative().optional(),
-		accountAddress: z.string().optional(),
-		networkId: z.string().optional(),
-		tokenId: z.number().optional(),
-		title: z.string().optional(),
-		subtitle: z.string().optional(),
-		amountRaw: z.string().optional(),
-		recipientAddress: z.string().optional(),
-		contractAddress: z.string().optional(),
-		transferType: z.enum(TransferType).optional(),
+		...journalMetadataShape,
 		initialStage: InitialStageSchema.optional(),
 	})
 	.refine(

@@ -28,6 +28,7 @@ import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import type { ILogger } from "@nulo/wallet-core/logger"
+import { makeFetchWithTimeout, type RetryOptions } from "../utils/fetch"
 import { ChainRuntime, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { PxeService, type IProfileReader } from "./service"
 import { LogLevel } from "@nulo/wallet-core/logger"
@@ -254,14 +255,14 @@ describe("PxeService deletion honesty", () => {
 
 	test("clearChainState REJECTS when deleteDatabase errors — no false 'deleted'", async () => {
 		const service = makeService(makeFactory({ nodeBehavior: "throws" }).factory)
-		;(service as unknown as { registry: unknown }).registry = { dispose: async () => {} }
+		;(service as unknown as { registry: unknown }).registry = { dispose: async () => {}, stopRetries: () => () => {} }
 		vi.stubGlobal("indexedDB", { deleteDatabase: () => fireReq("error") })
 		await expect(service.clearChainState("p1", 1)).rejects.toThrow()
 	})
 
 	test("clearProfileState deletes the profile's DBs by prefix and never keyval-store, even as the last profile", async () => {
 		const service = makeService(makeFactory({ nodeBehavior: "throws" }).factory)
-		;(service as unknown as { registry: unknown }).registry = { disposeProfile: async () => {} }
+		;(service as unknown as { registry: unknown }).registry = { disposeProfile: async () => {}, stopRetries: () => () => {} }
 		const deleted: string[] = []
 		let dbs = [{ name: "pxe/p1/1" }, { name: "pxe/p2/1" }, { name: "keyval-store" }]
 		vi.stubGlobal("indexedDB", {
@@ -289,6 +290,7 @@ describe("PxeService deletion honesty", () => {
 			disposeProfile: async () => {
 				if (disposeShouldFail) throw new AggregateError([new Error("close failed")], "dispose failed")
 			},
+			stopRetries: () => () => {},
 		}
 		vi.stubGlobal("indexedDB", { databases: async () => [], deleteDatabase: () => fireReq("success") })
 
@@ -382,5 +384,149 @@ describe("PxeService.getLatestBlockNumber", () => {
 		}
 		await expect(makeService(factory).getLatestBlockNumber(network)).resolves.toBe(4242)
 		expect(tags).toEqual([])
+	})
+})
+
+describe("PxeService teardown against an unreachable node", () => {
+	type Clear = (service: PxeService) => Promise<void>
+	const CLEARS: Array<{ name: string; clear: Clear }> = [
+		{ name: "clearChainState", clear: (service) => service.clearChainState(network.profileId, network.chainId) },
+		{ name: "clearProfileState", clear: (service) => service.clearProfileState(network.profileId, "gen-1") },
+	]
+
+	let attempts = 0
+	let answer: ((blockNumber: number) => void) | undefined
+	let retryWhile: (() => boolean) | undefined
+
+	beforeEach(() => {
+		attempts = 0
+		answer = undefined
+		vi.stubGlobal("chrome", {
+			runtime: { onMessage: { addListener: () => {}, removeListener: () => {} }, sendMessage: () => Promise.resolve() },
+		})
+		vi.stubGlobal("indexedDB", { databases: async () => [], deleteDatabase: () => succeedingDelete() })
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => {
+				attempts++
+				throw new TypeError(`refused #${attempts}`)
+			}),
+		)
+		vi.useFakeTimers()
+	})
+	afterEach(() => {
+		vi.useRealTimers()
+		vi.unstubAllGlobals()
+	})
+
+	function succeedingDelete(): unknown {
+		const req: Record<string, unknown> = {}
+		queueMicrotask(() => (req.onsuccess as () => void)?.())
+		return req
+	}
+
+	/** A runtime whose node goes through the production retrying fetch, or answers when told to. */
+	function serviceWithNode(kind: "refusing" | "answering"): PxeService {
+		const factory: PxeFactory = {
+			createChainRuntime: async (n, _storeKey, retries?: RetryOptions) => {
+				retryWhile = retries?.retryWhile
+				const fetchBlock = makeFetchWithTimeout(60_000, retries)
+				const node = {
+					getBlockNumber: () =>
+						kind === "refusing"
+							? fetchBlock(n.rpcUrl, {}).then(() => 0)
+							: new Promise<number>((resolve) => {
+									answer = resolve
+								}),
+				} as unknown as AztecNode
+				return new ChainRuntime(n.chainId, node, {} as PXE, n.rpcUrl)
+			},
+		}
+		return makeService(factory)
+	}
+
+	function track(promise: Promise<unknown>): { settled: () => boolean; outcome: Promise<unknown> } {
+		let settled = false
+		const outcome = promise.then(
+			(value) => value,
+			(error: unknown) => error,
+		)
+		void outcome.finally(() => {
+			settled = true
+		})
+		return { settled: () => settled, outcome }
+	}
+
+	test.each(CLEARS)("$name settles inside the running backoff sleep of an op holding the guard", async ({ clear }) => {
+		const service = serviceWithNode("refusing")
+		const op = track(service.getLatestBlockNumber(network))
+		await vi.advanceTimersByTimeAsync(0)
+		expect(attempts).toBe(1)
+
+		const cleared = track(clear(service))
+		await vi.advanceTimersByTimeAsync(1_000)
+		expect(cleared.settled()).toBe(true)
+		expect(await cleared.outcome).toBeUndefined()
+		expect(((await op.outcome) as Error).message).toContain("refused #1")
+		expect(attempts).toBe(1)
+	})
+
+	test.each(CLEARS)("$name still waits for an op whose node answers, which completes", async ({ clear }) => {
+		const service = serviceWithNode("answering")
+		const op = track(service.getLatestBlockNumber(network))
+		await vi.advanceTimersByTimeAsync(0)
+
+		const cleared = track(clear(service))
+		await vi.advanceTimersByTimeAsync(10_000)
+		expect(cleared.settled()).toBe(false)
+
+		answer?.(7)
+		expect(await op.outcome).toBe(7)
+		expect(await cleared.outcome).toBeUndefined()
+	})
+
+	test.each(CLEARS)("$name holds the stop for its whole call and releases it when it rejects", async ({ clear }) => {
+		const service = serviceWithNode("answering")
+		const op = track(service.getLatestBlockNumber(network))
+		await vi.advanceTimersByTimeAsync(0)
+		vi.stubGlobal("indexedDB", {
+			databases: async () => {
+				throw new Error("idb down")
+			},
+			deleteDatabase: () => {
+				throw new Error("idb down")
+			},
+		})
+
+		const cleared = track(clear(service))
+		await vi.advanceTimersByTimeAsync(0)
+		expect(retryWhile?.()).toBe(false)
+
+		answer?.(7)
+		await op.outcome
+		expect(await cleared.outcome).toBeInstanceOf(Error)
+		expect(retryWhile?.()).toBe(true)
+	})
+
+	test("a clearProfileState refused for its generation, or for an erased one, raises no stop", async () => {
+		const service = serviceWithNode("answering")
+		await vi.advanceTimersByTimeAsync(0)
+		const registry = (service as unknown as { registry: { stopRetries: (profileId: string) => () => void } }).registry
+		const stopRetries = vi.spyOn(registry, "stopRetries")
+
+		await service.clearProfileState(network.profileId, "gen-1")
+		expect(stopRetries).toHaveBeenCalledTimes(1)
+		await service.clearProfileState(network.profileId, "gen-1")
+		expect(stopRetries).toHaveBeenCalledTimes(1)
+
+		vi.stubGlobal("indexedDB", {
+			databases: async () => {
+				throw new Error("idb down")
+			},
+		})
+		await expect(service.clearProfileState(network.profileId, "gen-2")).rejects.toThrow("idb down")
+		expect(stopRetries).toHaveBeenCalledTimes(2)
+		await expect(service.clearProfileState(network.profileId, "gen-3")).rejects.toThrow("generation mismatch")
+		expect(stopRetries).toHaveBeenCalledTimes(2)
 	})
 })

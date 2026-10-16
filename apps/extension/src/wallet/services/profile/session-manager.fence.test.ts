@@ -13,21 +13,11 @@
 import { asImportedKeysDek, asMasterSecretBytes, asPasshash, type MasterSecretBytes } from "@nulo/wallet-crypto"
 import { describe, expect, test } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import type { ConfigProp, IConfig } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import type { ActiveSession, Profile, ProfileInfo } from "./spec"
 import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME, SessionManager } from "./session-manager"
-
-function _deferred<T = void>() {
-	let resolve!: (value: T) => void
-	let reject!: (reason?: unknown) => void
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
-}
 
 function fakeConfig(initialTtl: number): IConfig {
 	const onUpdate = new EventHandler<ConfigProp>()
@@ -125,7 +115,7 @@ describe("SessionManager artifact fence", () => {
 		expireActive(manager)
 
 		// Gate the row delete: A's expiry close will park INSIDE the mutex.
-		const gate = _deferred()
+		const gate = deferred()
 		api.storage.session.remove = async (keys: string | string[]) => {
 			events.push("row-delete")
 			await gate.promise
@@ -325,7 +315,7 @@ describe("SessionManager artifact fence", () => {
 		// Park open(B) at wrapPair — the section's one slow crypto await,
 		// deliberately OUTSIDE the mutex — so the expiry close can run to
 		// completion while B prepares.
-		const gate = _deferred()
+		const gate = deferred()
 		const box = (manager as unknown as { sessionSecretBox: { wrapPair: () => Promise<unknown> } }).sessionSecretBox
 		box.wrapPair = async () => {
 			await gate.promise

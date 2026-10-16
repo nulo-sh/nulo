@@ -1,3 +1,4 @@
+import { deferred } from "@nulo/wallet-core/utils"
 import { describe, expect, test, vi } from "vitest"
 import type { IncomingTransferRecord } from "@/wallet/services/incoming-transfer/spec"
 import { type ReceiptFeeService, useReceiptFee } from "./useReceiptFee"
@@ -6,12 +7,6 @@ type Fee = { feeJuice: string } | null
 
 const publicRecord = (id = "pub:p1|n1|0x01|0") => ({ id, kind: "public-event" }) as IncomingTransferRecord
 const noteRecord = { id: "note:p1|n1|0x02", kind: "note" } as IncomingTransferRecord
-
-function deferred() {
-	let resolve!: (fee: Fee) => void
-	const promise = new Promise<Fee>((r) => (resolve = r))
-	return { promise, resolve }
-}
 
 function makeService(lookup: Fee = { feeJuice: "100" }, cached: Fee = null) {
 	return {
@@ -63,7 +58,7 @@ describe("useReceiptFee", () => {
 
 	test("a tap looks the fee up once and shows it", async () => {
 		const service = makeService({ feeJuice: "100" })
-		const lookup = deferred()
+		const lookup = deferred<Fee>()
 		service.getReceiptFee.mockReturnValueOnce(lookup.promise)
 		const fee = useReceiptFee(service)
 		await fee.load(publicRecord(), true)
@@ -111,7 +106,7 @@ describe("useReceiptFee", () => {
 
 	test("a later load drops an earlier lookup's answer and clears the old fee", async () => {
 		const service = makeService()
-		const first = deferred()
+		const first = deferred<Fee>()
 		service.getReceiptFee.mockReturnValueOnce(first.promise)
 		const fee = useReceiptFee(service)
 		const stale = fee.load(publicRecord("old"), false)
@@ -123,7 +118,7 @@ describe("useReceiptFee", () => {
 
 	test("a load during a tap's lookup drops the tap's answer", async () => {
 		const service = makeService()
-		const pressed = deferred()
+		const pressed = deferred<Fee>()
 		service.getReceiptFee.mockReturnValueOnce(pressed.promise)
 		const fee = useReceiptFee(service)
 		await fee.load(publicRecord(), true)
@@ -136,7 +131,7 @@ describe("useReceiptFee", () => {
 
 	test("dispose drops a lookup still in flight", async () => {
 		const service = makeService()
-		const lookup = deferred()
+		const lookup = deferred<Fee>()
 		service.getReceiptFee.mockReturnValueOnce(lookup.promise)
 		const fee = useReceiptFee(service)
 		const loading = fee.load(publicRecord(), false)

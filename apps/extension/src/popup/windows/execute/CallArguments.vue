@@ -5,7 +5,9 @@
  */
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { safeWire } from "./humanize"
-import { type CallSurface, RAW_NOTICE, amountLabel, nonceValue, rawToggleLabel, valueText, valueTitle } from "./call-surface"
+import { type CallSurface, amountLabel, nonceValue, rawToggleLabel, valueText, valueTitle } from "./call-surface"
+import DetailsToggle from "./DetailsToggle.vue"
+import UnreadableArgsNotice from "./UnreadableArgsNotice.vue"
 
 const props = defineProps<{
 	surface: CallSurface
@@ -109,22 +111,14 @@ const nonce = computed(() =>
 	</Text>
 
 	<Flex v-else :data-testid="`${prefix}-unverified-args`" :data-reason="surface.reason" direction="column" gap="4" :class="$style.block">
-		<Flex align="center" gap="4">
-			<Icon name="warning" size="12" color="orange" />
-			<Text :data-testid="`${prefix}-unverified-warning`" variant="body" color="orange">Can't read the arguments</Text>
-		</Flex>
-		<Text variant="body" color="tertiary">{{ RAW_NOTICE[surface.reason] }} Check what the app says this does before approving.</Text>
-		<button
+		<UnreadableArgsNotice :reason="surface.reason" :prefix="prefix" />
+		<DetailsToggle
 			v-if="surface.rows.length"
-			type="button"
 			:data-testid="`${prefix}-raw-toggle`"
-			:aria-expanded="rawOpen"
-			:class="$style.toggle"
+			:open="rawOpen"
+			:label="rawToggleLabel(surface.rows.length + surface.hidden, rawOpen)"
 			@click="rawOpen = !rawOpen"
-		>
-			<Icon name="chevron-right" size="10" color="secondary" :class="[$style.chevron, rawOpen && $style.chevron_open]" />
-			<Text variant="label" color="secondary">{{ rawToggleLabel(surface.rows.length + surface.hidden, rawOpen) }}</Text>
-		</button>
+		/>
 		<Flex v-if="rawOpen" :data-testid="`${prefix}-raw-args`" direction="column" gap="2">
 			<Flex v-for="(row, m) in surface.rows" :key="m" :data-testid="`${prefix}-arg`" :data-arg-kind="row.kind" justify="between" :class="$style.row">
 				<Text variant="label" color="secondary">#{{ m }}</Text>
@@ -159,25 +153,5 @@ const nonce = computed(() =>
 	> :last-child {
 		text-align: right;
 	}
-}
-
-.toggle {
-	display: inline-flex;
-	align-items: center;
-	align-self: flex-start;
-	gap: 4px;
-	padding: 2px 0;
-	border: 0;
-	background: none;
-	cursor: pointer;
-	font: inherit;
-}
-
-.chevron {
-	transition: transform 120ms ease;
-}
-
-.chevron_open {
-	transform: rotate(90deg);
 }
 </style>

@@ -7,7 +7,7 @@
  * real dispatcher over it, with stub network, account, execution and window services. See
  * `apps/extension/tests/COMPOSITION-TESTS.md`.
  */
-import { beforeAll, describe, expect, test } from "vitest"
+import { beforeAll, describe, expect, test, vi } from "vitest"
 import { type IDappInteractionRunner, WalletSdkDispatcher } from "@nulo/wallet-bridge"
 import { withHeader } from "@nulo/wallet-bridge/testing"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
@@ -71,24 +71,19 @@ describe("DappSessionService composition — in-process, no sandbox", () => {
 		expect(found?.id).toBe(added.id)
 	})
 
-	test("upgradeDappSession swaps old id → new id (old gone, new present)", async () => {
-		const { service } = await makeHarness()
-		const added = await service.addDappSession({ url: ORIGIN }, [], [], AccessLevel.Transactions, "0xA")
-
-		const upgraded = await service.upgradeDappSession(added.id, "newid", Date.now() + 1_000_000)
-		expect(upgraded.id).toBe("newid")
-		expect((await service.getDappSession("newid")).id).toBe("newid")
-		await expect(service.getDappSession(added.id)).rejects.toThrow("Invalid id")
-	})
-
 	test("reading an expired session evicts it (read-triggered FSM)", async () => {
 		const { service } = await makeHarness()
 		const added = await service.addDappSession({ url: ORIGIN }, [], [], AccessLevel.Transactions, "0xA")
-		// Re-stamp a past expiry via upgrade, then read → throws + evicts.
-		await service.upgradeDappSession(added.id, "expired", Date.now() - 1_000)
-
-		await expect(service.getDappSession("expired")).rejects.toThrow("Session expired")
-		expect(await service.tryGetDappSession("expired")).toBeUndefined() // evicted on read
+		// Only the clock moves past the 7-day expiry: the lock's timers and the row MAC stay real.
+		vi.useFakeTimers({ toFake: ["Date"] })
+		try {
+			vi.setSystemTime(Date.now() + 8 * 24 * 60 * 60 * 1000)
+			await expect(service.getDappSession(added.id)).rejects.toThrow("Session expired")
+		} finally {
+			vi.useRealTimers()
+		}
+		// Back on the real clock the row would be live again, so its absence is the eviction.
+		expect(await service.tryGetDappSession(added.id)).toBeUndefined()
 	})
 
 	test("setCapabilityGrants persists + round-trips through real storage", async () => {

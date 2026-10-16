@@ -20,7 +20,7 @@ import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { type AztecNode, AztecNodeApiSchema, createAztecNodeClient } from "@aztec-labs/stdlib/interfaces/client"
 import { rpcTransportVerdict, walletChainId } from "@nulo/wallet-core/utils"
 import type { NodeFactory } from "../ports/node-factory-port"
-import { makeFetchWithTimeout, makeSingleAttemptFetch } from "../utils/fetch"
+import { makeFetchWithTimeout, makeSingleAttemptFetch, type RetryOptions } from "../utils/fetch"
 
 const noop = () => {}
 
@@ -65,12 +65,12 @@ export function isAllowedRpcUrl(rpcUrl: string): { ok: true } | { ok: false; rea
 }
 
 export class AztecNodeFactoryAdapter implements NodeFactory {
-	public createNode(rpcUrl: string): AztecNode {
+	public createNode(rpcUrl: string, options?: RetryOptions): AztecNode {
 		const check = isAllowedRpcUrl(rpcUrl)
 		if (!check.ok) {
 			throw new Error(`AztecNodeFactoryAdapter refused to construct node client — ${check.reason}`)
 		}
-		return createAztecNodeClient(rpcUrl, { fetch: makeFetchWithTimeout() })
+		return createAztecNodeClient(rpcUrl, { fetch: makeFetchWithTimeout(undefined, options) })
 	}
 
 	public createSingleAttemptNode(rpcUrl: string, timeoutMs: number): AztecNode {

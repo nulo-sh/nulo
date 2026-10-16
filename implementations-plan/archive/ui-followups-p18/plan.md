@@ -1,8 +1,8 @@
 ---
 plan: ui-followups-p18
 tier: light (the orchestrator's call; the panel of two still argues each decision)
-status: arc 1 done (phases 1-2 green, Codex loop converged, PR open against dev); arc 2 waits on SA-1; SA-2 open
-issues: "#363 (arc 1), #451 (arc 1, no code change), #364 (arc 2, after SA-1)"
+status: closed with its delivery (arc 1 #530 merged; arc 2's PR carries the close-out)
+issues: "#363 (arc 1), #451 (arc 1, no code change), #364 (arc 2, after SA-1); SA-2 (arc 2, no issue)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -15,13 +15,28 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-16.
+- **Status:** closed with its delivery. Arc 1 merged as #530; arc 2's PR carries this close-out. Merging is the owner's call; that merge closes the plan.
+- **Shipped:**
+  - **#530, arc 1:** the 28 outline-grey text rules in 21 files moved to `--nulo-secondary` (page 18 P18-06 = C); `DetailsTable`'s copy glyph and row chevron kept on outline; a sweep in `a11y-css.test.ts` allows exactly those two; `--nulo-secondary` pinned on `--dropdown-bg`. Closed #363, and #451 (page 17 P17-01 = A, the shipped wording, no code change).
+  - **Arc 2:** the store captures and listing art regenerated (SA-1 = A, page 24 P24-01): 10 files, byte-identical to the signed set by SA-1's hashes, from one capture run at `71f98db4`; the promo tile rendered unchanged. The tx page's fee and developer rows keep full strength under the pointer (SA-2 = B, page 23 P23-01), and a sweep refuses a hover `opacity` on the toggle or any sheet composing it. The README's store-art row names five screenshots. Closes #364.
+- **Review loop:** the plan took three Codex rounds (conditional, conditional, approve) and an Opus conditional approve. Arc 1: three Codex rounds ending in approve, and an Opus review with no bugs. Arc 2: three Codex rounds, each approve (round 3 carried the standard's two rules, which rounds 1-2 left out), and an Opus approve with one low point accepted.
+- **Gates at arc 2's head:** `bun run lint`, `typecheck:all`, `test:all`, `test:ci-gating` (572 pass) and `check:plans` on the final head. The full smoke suite on the armed build at retry 0, before dev's #534 and #564 merged in: Chrome 246 passed, 13 skipped, 0 failed (1986 s); Firefox 245 passed, 14 skipped, 0 failed (3276 s). No e2e scenario changed. The hovered fee row's computed opacity was 0.8 on dev and 1 here, in both themes.
+- **Deviations:** D8-D12 in the ledger. SA-2 was not in the approved plan; it shipped in arc 2 on the owner's answer (D12).
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted. The one reusable trap, a hash set right after `reloadExtensionPage` losing to the start-up route to Home, is already a comment in `store-captures.test.ts`; the rest is specific to the store tooling and lives in [lessons/phase-3.md](lessons/phase-3.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
+
 # ui-followups-p18: the rest of the outline-grey text, and fresh store art
 
 Two arcs, one PR each against `dev`, no stack. Arc 1 moves every remaining text rule off `--nulo-outline` (#363, page 18 P18-06 = C) and closes #451, whose wording page 17 already signed. Arc 2 regenerates the store captures and art (#364); it commits no image until the owner signs the new set (SA-1). Recon: [recon.md](recon.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Scope
 
-**In:** 28 of the 30 text rules at HEAD (recon.md table); a source sweep that keeps text off the outline tone; one contrast pin; the #451 close; the regenerated store set, committed on SA-1 A; `apps/extension/README.md:62`.
+**In:** 28 of the 30 text rules at HEAD (recon.md table); a source sweep that keeps text off the outline tone; one contrast pin; the #451 close; the regenerated store set, committed on SA-1 A; the store-art line of `apps/extension/README.md` (D10).
 **Out:** DetailsTable's copy glyph and row chevron (icons; P18-06 keeps them); any new tone; #132, #503-#505, #508.
 
 ## Outcome & Quality Bar
@@ -41,7 +56,7 @@ Two arcs, one PR each against `dev`, no stack. Arc 1 moves every remaining text 
 6. `store-captures.test.ts` and `store-art.ts` overwrite the tracked images in place, and a rerun changes addresses and hashes. The promo tile takes no capture (`store-art.ts:70-75`).
 
 **Inferences:**
-- I1. The capture tool runs green at arc 2's base. #351 repaired it on 2026-10-13; about 20 commits have touched its fixtures since, and nothing has run it. Phase 3 proves or refutes it.
+- I1. The capture tool runs green at arc 2's base. #351 repaired it on 2026-10-13; about 20 commits have touched its fixtures since, and nothing has run it. Phase 3 proves or refutes it. **Held** on 2026-10-16: green at retry 0 at `71f98db4` with no fix ([lessons/phase-3.md](lessons/phase-3.md)).
 
 **Asks:** SA-1 (OWNER-ASKS.md). No other open owner question: arc 1's whole visible change is P18-06's signed text.
 
@@ -81,7 +96,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test && bun run
 
 Scratch `S` = `~/.cache/nulo-backlog/ui-followups-p18/store-art`.
 
-### Phase 3: the regenerated set and SA-1
+### Phase 3: the regenerated set and SA-1 (done)
 1. Run `git fetch origin dev`. Then run `git switch -c ui-followups-p18-store-art origin/dev`.
 2. Prove arc 1 is in the base: the phase 1 grep prints only the two icon lines. Record the SHA.
 3. Copy `apps/extension/store/` (`captures/*.png` and `*.png`) to `S/old/`, keeping its layout.
@@ -95,26 +110,28 @@ Scratch `S` = `~/.cache/nulo-backlog/ui-followups-p18/store-art`.
 - Gate: steps 4 and 5 exit 0 at retry 0; 11 files at 720×1200, 1280×800 or 440×280; `git status --short apps/extension/store` prints nothing.
 - A red capture run: find the cause and fix it, never with a raised timeout or a retry. A fix in `tests/e2e/fixtures/**` runs every network spec that imports the changed export, at retry 0, on both browsers. Three failures on one step end the arc with `ARC_FAILED`.
 
-### Phase 4: on SA-1
+### Phase 4: on SA-1 and SA-2
 - On A: copy `S/new/` into `apps/extension/store/`. In `apps/extension/store`, run `sha256sum -c` against the hashes SA-1 records.
-- On either answer: fix `apps/extension/README.md:62` to `screenshot-{1..5}`. Keep any phase-3 spec fix.
+- On either answer: fix the `bun scripts/store-art.ts` row of `apps/extension/README.md` (line 66 at `71f98db4`, D10) to `screenshot-{1..5}`. Keep any phase-3 spec fix.
 - Gate on A: `sha256sum -c` prints 11 OKs; `git status --short apps/extension/store` lists only paths among those 11 (the promo tile may be unchanged) and no `??`.
 - Gate on B: `git status --short apps/extension/store` prints nothing.
 - Gate on both: `bun run lint` and `bun run check:plans` exit 0.
 - On B: comment on #364 with the answer and close it as not planned; the Outcome carries the disposition.
+- SA-2 on B (D12): drop `disclosure_toggle`'s hover fade (`tx-shared.module.css`) and `.fee_row_static`'s `opacity: 1` counter-rule (`TxFeeRow.vue`). One test in `a11y-css.test.ts`: no `:hover` rule in the toggle's sheet or any sheet composing it sets `opacity`, red first on both keys; the composers and `.disclosure_toggle`'s `cursor: pointer` are its success controls. UI impact: SA-2 B, "the row keeps full strength under the pointer".
+- Gate for SA-2: `F`, `bun run test:all`, `bun run test:ci-gating`, `bun run check:plans`, then the full smoke suite on Chrome and on Firefox at retry 0 on the armed build, as phase 2. A before/after of the hover on Chrome, light theme, from a throwaway spec.
 - Either way the close-out commits follow (Post-implementation).
 
 ## Delivery
 
 Arc 1: branch `worktree-ui-followups-p18`, `gh pr create` against `dev` after phase 2, its Codex loop and the screenshots. Title (67): `fix(ui): move the remaining outline-grey text to the secondary tone`. Body: the change and why, the UI impact line with the screenshots, the validation runs, `Closes #363`, `Closes #451` (P17-01 A, the shipped wording, pinned by `useLockWallet.test.ts:408-430`, no code change), and `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
-Arc 2: branch `ui-followups-p18-store-art`, after SA-1. Title (59) on A: `chore(store): regenerate the store captures and listing art`; on B: `docs(store): close ui-followups-p18 and fix the store-art readme`. Body: SA-1's answer, the composites, the `sha256sum -c` output, `Closes #364` on A.
+Arc 2: branch `ui-followups-p18-store-art`, after SA-1. Title (84): `fix(ui): keep the tx disclosure rows at full strength on hover; regenerate store art`. Body: both sign-offs (page 24 P24-01 = A, page 23 P23-01 = B), the composites and the hover before/after, the `sha256sum -c` output, the validation runs, `Closes #364`.
 Both open without labels.
 
 ## Post-implementation
 
 Follow `implementations-plan/README.md` § Post-implementation standard at revision d59459ab, per arc (each arc is its own PR):
 - Step 1 is absent (`code_review: off`).
-- Step 2: one loop per arc over that arc's diff from its base, after its last gate. `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, then `resume-codex.sh`; log rounds in `lessons/phase-2.md` and `lessons/phase-4.md`. Hard stop at three rounds. No cross-arc pass: the arcs are separate PRs, and arc 2 changes only images, one README line, any capture-spec fix and plan files.
+- Step 2: one loop per arc over that arc's diff from its base, after its last gate. `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, then `resume-codex.sh`; log rounds in `lessons/phase-2.md` and `lessons/phase-4.md`. Hard stop at three rounds. No cross-arc pass: the arcs are separate PRs, and arc 2 changes only images, one README line, SA-2's two rules with their test, and plan files.
 - Step 3: the Delivery above, then `gh pr checks <n> --watch`.
 - Step 4: the close-out is arc 2's final commits.
 - Step 5: after arc 2 merges, `agent-worktree done ui-followups-p18 --merged`.
@@ -132,6 +149,9 @@ Follow `implementations-plan/README.md` § Post-implementation standard at revis
 | D7 | Local Firefox smoke | run it, as the lane brief requires | CI only (Opus #10): the brief names both browsers |
 | D8 | The sweep's rule lookup (implementation deviation) | `enclosingRule` in `source-scan.ts` takes any postcss child, so the sweep keys a declaration by it | a copy of its ancestor loop in the test; the plan's "header only" edit |
 | D9 | When arc 1's Codex loop runs (deviation) | round 1 alongside the smoke e2e, in the host's load window | strictly after the e2e gate: the diff is CSS and a test, and a red e2e that needs a fix resumes the loop with it |
+| D10 | The README line (deviation) | the `store-art.ts` row, line 66 at `71f98db4` | line 62: dev moved it since planning |
+| D11 | Where the side-by-side lives (deviation) | `S` plus a copy in the orchestrator's shots directory, as the spawn asked; SA-1's hashes govern both | `S` only |
+| D12 | Where SA-2 ships (deviation) | arc 2's PR, as the orchestrator directed with both answers | its own PR: one CSS rule and a test do not earn a second review loop and CI run |
 
 ## Audit verdicts
 
@@ -142,6 +162,9 @@ Follow `implementations-plan/README.md` § Post-implementation standard at revis
 
 **Arc 1, Codex** (gpt-6.1-sol, high, session 01a141b2; [lessons/phase-2.md](lessons/phase-2.md)): r1 conditional: case-insensitive `color` and a one-sentence `source-scan.ts` header accepted; the fee row's hover fade (3.51:1 light while hovered) verified but pre-existing and visible, so OWNER-ASKS SA-2. r2 conditional: one low over-match rejected (fails closed on a token nobody defines). r3 approve.
 **Arc 1, Opus diff review:** no bugs; three low points accepted (the token regex in any case, the alias blind spot named, a coverage check on both roots).
+
+**Arc 2, Codex** (gpt-6.1-sol, high, session 01a144d6; [lessons/phase-4.md](lessons/phase-4.md)): r1 approve, no material finding; r2 approve after the comment fix; r3, with the standard's ask and two rules that r1-r2 omitted, approve. Converged.
+**Arc 2, Opus diff review:** approve; one low point accepted (the fade fails contrast in both themes, not light alone); two rejected as failing closed or needing a class that does not exist.
 
 ## Seeds
 

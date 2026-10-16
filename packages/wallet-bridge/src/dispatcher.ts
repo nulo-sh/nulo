@@ -1054,7 +1054,6 @@ export class WalletSdkDispatcher {
 	 *   - simulateTx(exec, opts): [ExecutionPayload, SimulateOptions]
 	 *   - executeUtility(call, opts): [FunctionCall, ExecuteUtilityOptions]
 	 *   - profileTx(exec, opts): [ExecutionPayload, ProfileOptions]
-	 *   - createAuthWit(messageHashOrIntent): [IntentInnerHash | CallIntent]
 	 *
 	 * registerToken / sendTx are handled separately via handleRegisterToken /
 	 * handleSendTx, which route through DappInteractionService for the popup gate.
@@ -1087,14 +1086,6 @@ export class WalletSdkDispatcher {
 					accountAddress,
 					exec: args[0] as AztecProfileTxOperation["exec"],
 					opts: { ...((args[1] as Record<string, unknown>) ?? {}), from: accountAddress } as AztecProfileTxOperation["opts"],
-				}
-			case "aztec_createAuthWit":
-				// WalletSchema: createAuthWit(from: AztecAddress, messageHashOrIntent) — args[0] is from, args[1] is the intent
-				return {
-					kind,
-					networkId,
-					accountAddress,
-					messageHashOrIntent: args[1] as AztecCreateAuthWitOperation["messageHashOrIntent"],
 				}
 			default:
 				throw new Error(`Unknown account operation: ${kind}`)

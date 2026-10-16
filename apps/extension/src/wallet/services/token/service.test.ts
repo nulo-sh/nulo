@@ -7,7 +7,7 @@
  * layer's boundary rules — see COMPOSITION-TESTS.md.
  */
 
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
 import { afterEach, describe, expect, test, vi } from "vitest"
@@ -265,14 +265,6 @@ describe("TokenService.restore — deletion fence", () => {
 })
 
 describe("TokenService.addToken — creation fences", () => {
-	function _deferred<T>() {
-		let resolve!: (v: T) => void
-		const promise = new Promise<T>((res) => {
-			resolve = res
-		})
-		return { promise, resolve }
-	}
-
 	async function tokenRowCount(api: { storage: { local: { get: (k: null) => Promise<Record<string, unknown>> } } }): Promise<number> {
 		const raw = await api.storage.local.get(null)
 		return Object.keys(raw).filter((k) => k.startsWith("nulo:core:tokens@")).length
@@ -431,7 +423,7 @@ describe("TokenService.addToken — creation fences", () => {
 		// fence captured at the AUTHORIZING entry still rejects — a fence minted
 		// at commit would observe the settled epoch and land the orphan row.
 		const { tokenService, fetchStub, api, deletionState } = await makeHarness()
-		const gate = _deferred<[string, string, number]>()
+		const gate = deferred<[string, string, number]>()
 		fetchStub.mockReturnValueOnce(gate.promise)
 
 		const writes = recordWrites(api.storage.local, "nulo:core:tokens@")
@@ -449,7 +441,7 @@ describe("TokenService.addToken — creation fences", () => {
 
 	test("a chain deleted during the metadata fetch rejects the write (liveness-at-commit pin)", async () => {
 		const { tokenService, fetchStub, api } = await makeHarness()
-		const gate = _deferred<[string, string, number]>()
+		const gate = deferred<[string, string, number]>()
 		fetchStub.mockReturnValueOnce(gate.promise)
 		const networks = (tokenService as unknown as { networks: { isNetworkLive: (id: string) => Promise<boolean> } }).networks
 
@@ -529,7 +521,7 @@ describe("TokenService.addToken — creation fences", () => {
 		const emitted: unknown[] = []
 		tokenService.onTokenAdded.add((t) => emitted.push(t))
 		const networks = (tokenService as unknown as { networks: { isNetworkLive: (id: string) => Promise<boolean> } }).networks
-		const lastCheck = _deferred<void>()
+		const lastCheck = deferred<void>()
 		let checks = 0
 		networks.isNetworkLive = async () => {
 			checks += 1
@@ -570,16 +562,6 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 	const WATCHDOG_MS = 5 * 60_000 + 1
 	const mk = (contract: string, profileId = "p1") => ({ id: 0, profileId, chainId: 1, contract, name: "T", symbol: "T", decimals: 9 })
 
-	function gate<T = void>() {
-		let resolve!: (v: T) => void
-		let reject!: (e: unknown) => void
-		const promise = new Promise<T>((res, rej) => {
-			resolve = res
-			reject = rej
-		})
-		return { promise, resolve, reject }
-	}
-
 	type Harness = Awaited<ReturnType<typeof makeHarness>>
 	type Networks = {
 		isNetworkLive: (id: string) => Promise<boolean>
@@ -618,8 +600,8 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 	/** Holds the answer of the `nth` read of `key`, already taken, until `release`. */
 	function holdRead(h: Harness, key: string, nth = 1) {
 		const get = h.api.storage.local.get.bind(h.api.storage.local)
-		const held = gate()
-		const reached = gate()
+		const held = deferred()
+		const reached = deferred()
 		let reads = 0
 		h.api.storage.local.get = (async (keys?: string | string[] | null) => {
 			const answer = await get(keys)
@@ -634,7 +616,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 
 	/** Parks the `nth` call of `isNetworkLive` until `release(answer)`; other calls read `networkLive`. */
 	function holdNetworkCheck(h: Harness, nth: number) {
-		const held = gate<boolean>()
+		const held = deferred<boolean>()
 		let calls = 0
 		networksOf(h).isNetworkLive = async () => {
 			calls += 1
@@ -663,7 +645,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 	test("released in the fetch, it reports a same-contract add that landed meanwhile and writes nothing", async () => {
 		const h = await setup()
 		h.journal.createOperation.mockResolvedValueOnce({ id: "op-1" }).mockResolvedValueOnce({ id: "op-2" })
-		const fetch = gate<[string, string, number]>()
+		const fetch = deferred<[string, string, number]>()
 		h.fetchStub.mockReturnValueOnce(fetch.promise)
 		const first = add(h, "0xa11")
 		await settle()
@@ -680,7 +662,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 
 	test("released in the fetch and again in the resumed pre-set check, it still writes one row and emits once", async () => {
 		const h = await setup()
-		const fetch = gate<[string, string, number]>()
+		const fetch = deferred<[string, string, number]>()
 		h.fetchStub.mockReturnValueOnce(fetch.promise)
 		const check = holdNetworkCheck(h, 2)
 		const run = add(h, "0xa11")
@@ -700,7 +682,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 
 	test("released while its set is still applying, a successor waits for that set before it allocates", async () => {
 		const h = await setup()
-		const set = gate()
+		const set = deferred()
 		let sets = 0
 		const writes = recordWrites(h.api.storage.local, "nulo:core:tokens@", undefined, () => (++sets === 1 ? set.promise : undefined))
 		const first = add(h, "0xa11")
@@ -720,8 +702,8 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 
 	test("its set rejecting while a successor drains it, the successor also waits for the failure it journals", async () => {
 		const h = await setup()
-		const set = gate()
-		const failed = gate()
+		const set = deferred()
+		const failed = deferred()
 		recordWrites(h.api.storage.local, "nulo:core:tokens@", undefined, () => set.promise)
 		;(h.journal.transitionOperation as ReturnType<typeof vi.fn>).mockImplementation(async (...args: unknown[]) => {
 			if ((args[1] as { stage: string }).stage === "failed") await failed.promise
@@ -747,7 +729,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 
 	test("an add parked before the lock while its profile is deleted and restored with that contract rejects", async () => {
 		const h = await setup()
-		const created = gate<{ id: string }>()
+		const created = deferred<{ id: string }>()
 		h.journal.createOperation.mockReturnValueOnce(created.promise)
 		const run = add(h, "0xa11")
 		await settle()
@@ -791,7 +773,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 		const h = await setup()
 		h.networkLive.value = true
 		let chainReads = 0
-		const chainRead = gate<boolean>()
+		const chainRead = deferred<boolean>()
 		networksOf(h).isChainLive = async () => (++chainReads === 1 ? await chainRead.promise : true)
 		let checks = 0
 		networksOf(h).isNetworkLive = async () => ++checks === 1
@@ -895,9 +877,9 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 
 	test("a fetch rejected after the release journals its failure before a token operation queued after it runs", async () => {
 		const h = await setup()
-		const fetch = gate<[string, string, number]>()
+		const fetch = deferred<[string, string, number]>()
 		h.fetchStub.mockReturnValueOnce(fetch.promise)
-		const failed = gate()
+		const failed = deferred()
 		;(h.journal.transitionOperation as ReturnType<typeof vi.fn>).mockImplementation(async (...args: unknown[]) => {
 			if ((args[1] as { stage: string }).stage === "failed") await failed.promise
 		})
@@ -922,7 +904,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 	test("a restore released in a row's pre-set chain read refuses that row and the rest; an add's row at its id survives", async () => {
 		const h = await setup()
 		let chainReads = 0
-		const chainRead = gate<boolean>()
+		const chainRead = deferred<boolean>()
 		networksOf(h).isChainLive = async () => (++chainReads === 1 ? await chainRead.promise : true)
 		const restoring = h.tokenService.restore([mk("0xaaa"), mk("0xbbb")])
 		await settle()
@@ -960,7 +942,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 		h.tokenService.onTokenDeleted.add((t) => {
 			deleted.push(t.id)
 		})
-		const removal = gate()
+		const removal = deferred()
 		const remove = h.api.storage.local.remove.bind(h.api.storage.local)
 		h.api.storage.local.remove = async (keys) => {
 			await removal.promise
