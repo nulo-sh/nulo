@@ -148,7 +148,7 @@ Follow `implementations-plan/README.md` § Post-implementation standard at revis
 **Arc 1, Codex** (gpt-6.1-sol, high, session 01a141b2; [lessons/phase-2.md](lessons/phase-2.md)): r1 conditional: case-insensitive `color` and a one-sentence `source-scan.ts` header accepted; the fee row's hover fade (3.51:1 light while hovered) verified but pre-existing and visible, so OWNER-ASKS SA-2. r2 conditional: one low over-match rejected (fails closed on a token nobody defines). r3 approve.
 **Arc 1, Opus diff review:** no bugs; three low points accepted (the token regex in any case, the alias blind spot named, a coverage check on both roots).
 
-**Arc 2, Codex** (gpt-6.1-sol, high, session 01a144d6; [lessons/phase-4.md](lessons/phase-4.md)): r1 approve, no material finding; r2 approve after the comment fix. Converged at two rounds.
+**Arc 2, Codex** (gpt-6.1-sol, high, session 01a144d6; [lessons/phase-4.md](lessons/phase-4.md)): r1 approve, no material finding; r2 approve after the comment fix; r3, with the standard's ask and two rules that r1-r2 omitted, approve. Converged.
 **Arc 2, Opus diff review:** approve; one low point accepted (the fade fails contrast in both themes, not light alone); two rejected as failing closed or needing a class that does not exist.
 
 ## Seeds

@@ -18,4 +18,8 @@ Verdict: approve. Four low points:
 
 ## Codex round 2 (resume)
 
-Verdict: approve. It verified the comment fix, judged (a) demonstrated but failing closed and (b) needing conditions the wallet does not support, and found no regression. The loop converged at two rounds.
+Verdict: approve. It verified the comment fix, judged (a) demonstrated but failing closed and (b) needing conditions the wallet does not support, and found no regression.
+
+## Codex round 3 (resume)
+
+Rounds 1-2 left out the standard's adversarial ask and its two verbatim rules (`implementations-plan/README.md` § Post-implementation standard, step 2), so round 3 re-read the whole arc diff with them. Verdict: approve, no new finding. The comment audit found nothing to cut and no invariant left uncommented. The loop converged.
