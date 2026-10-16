@@ -99,6 +99,7 @@ declare global {
   const buildIncomingCardProps: typeof import('../utils/received-display').buildIncomingCardProps
   const buildJournalTerminalCardProps: typeof import('../utils/journal-state').buildJournalTerminalCardProps
   const buildRestoreSecret: typeof import('../composables/full-backup-restore').buildRestoreSecret
+  const canSubmitContact: typeof import('../utils/contact-rules').canSubmitContact
   const canonicalContactAddress: typeof import('../utils/contact-rules').canonicalContactAddress
   const capRecords: typeof import('../utils/full-backup-helpers').capRecords
   const capTokenRows: typeof import('../utils/token-order').capTokenRows
@@ -121,7 +122,9 @@ declare global {
   const computed: typeof import('vue').computed
   const confirmationOf: typeof import('../composables/useStaleNetwork').confirmationOf
   const confirmationPolicies: typeof import('../utils/confirmation-policies').confirmationPolicies
+  const contactAddressError: typeof import('../utils/contact-rules').contactAddressError
   const contactListReducers: typeof import('../utils/entity-list').contactListReducers
+  const contactNameError: typeof import('../utils/contact-rules').contactNameError
   const contactNameKey: typeof import('../utils/contact-name').contactNameKey
   const copyFor: typeof import('../utils/presto-ui-state').copyFor
   const copyToClipboard: typeof import('../utils/clipboard').copyToClipboard
@@ -793,6 +796,7 @@ declare module 'vue' {
     readonly buildIncomingCardProps: UnwrapRef<typeof import('../utils/received-display')['buildIncomingCardProps']>
     readonly buildJournalTerminalCardProps: UnwrapRef<typeof import('../utils/journal-state')['buildJournalTerminalCardProps']>
     readonly buildRestoreSecret: UnwrapRef<typeof import('../composables/full-backup-restore')['buildRestoreSecret']>
+    readonly canSubmitContact: UnwrapRef<typeof import('../utils/contact-rules')['canSubmitContact']>
     readonly canonicalContactAddress: UnwrapRef<typeof import('../utils/contact-rules')['canonicalContactAddress']>
     readonly capRecords: UnwrapRef<typeof import('../utils/full-backup-helpers')['capRecords']>
     readonly capTokenRows: UnwrapRef<typeof import('../utils/token-order')['capTokenRows']>
@@ -815,7 +819,9 @@ declare module 'vue' {
     readonly computed: UnwrapRef<typeof import('vue')['computed']>
     readonly confirmationOf: UnwrapRef<typeof import('../composables/useStaleNetwork')['confirmationOf']>
     readonly confirmationPolicies: UnwrapRef<typeof import('../utils/confirmation-policies')['confirmationPolicies']>
+    readonly contactAddressError: UnwrapRef<typeof import('../utils/contact-rules')['contactAddressError']>
     readonly contactListReducers: UnwrapRef<typeof import('../utils/entity-list')['contactListReducers']>
+    readonly contactNameError: UnwrapRef<typeof import('../utils/contact-rules')['contactNameError']>
     readonly contactNameKey: UnwrapRef<typeof import('../utils/contact-name')['contactNameKey']>
     readonly copyFor: UnwrapRef<typeof import('../utils/presto-ui-state')['copyFor']>
     readonly copyToClipboard: UnwrapRef<typeof import('../utils/clipboard')['copyToClipboard']>
