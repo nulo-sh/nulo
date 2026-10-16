@@ -1,8 +1,8 @@
 ---
 plan: harden-security-fixes-2
 tier: mid (the lane brief names it; see Asks)
-status: arcs 1 (#598) and 3 (#611) merged; arc 2 (#607) in review, carrying the close-out
-issues: "#416 (arc 2 reopens it and closes it); arcs 1 and 3 have no public issue; arc 1 files two closed known-limit issues"
+status: completed 2026-10-16; arcs 1 (#598) and 3 (#611) merged, arc 2 (#607) in review carrying the close-out
+issues: "#416 (arc 2 reopens it and closes it); arcs 1 and 3 have no public issue; known limits #570 (arc 1) and #614 (close-out)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,6 +14,17 @@ base: origin/dev at c5e9c8e8
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-16
+- **Status:** completed; three PRs against `dev`, no stack: arcs 1 (#598) and 3 (#611) merged, arc 2 (#607) carries this close-out, and merging it is the owner's call.
+- **Shipped:** #598 (a passkey backup carries a check its own passkey makes, and import restores only a body that check verifies; restored token metadata is re-read from the chain and never trusted on its own; the Testnet endpoint row's disposition as a comment); #607 (a dApp send the person pays for is held to the approved fee: a rise of more than 10 percent and 0.000001 FJ opens a new window that asks again, and Confirm waits for the figure; closes #416); #611 (a public grant's arguments decoded at open as the rows the wallet signs; a grant the wallet cannot read cannot be confirmed).
+- **Dropped:** OA-G2, withdrawn (D17); OA-F2 part 2 A's known limit, since C was picked and Confirm cannot pass before the figure.
+- **Known limits:** #570 (E, the Testnet endpoint row); #614 (K1, a passkey backup's check proves which passkey made it, not when). K2 is tracked privately.
+- **Open items:** none.
+- **Lessons:** two promoted to `lessons.md`: a change to when Confirm enables reaches the e2e that press it on refused requests; parallel arcs collided on decision ids.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # harden-security-fixes-2: what the person approves is what the wallet restores, pays and signs
 
@@ -161,6 +172,8 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 
 ## Decision ledger
 
+Ids by arc: D1 to D19 at planning, arc 1 D20 to D23, arc 3 D24 to D30, arc 2 D31 to D37. Each arc took the next free id on its branch, so arc 2's collided at both merges and were renumbered.
+
 | # | Question | Decided | Why |
 |---|---|---|---|
 | D1 | Tier | `mid` | the lane brief names it; four items, three PRs |
@@ -292,9 +305,16 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 
 **Arc 3 review, round 3** (2026-10-16). Codex, resumed over `8829a309`: **approve**, no material findings; it re-ran the transaction card's decoder over its inputs and found its results unchanged. The loop converged.
 
+**PR CI, first run** (2026-10-16). The network lanes failed on both browsers in `authwit-lifecycle.test.ts` and `scope-refusal.test.ts`: each presses Confirm on a sponsored request whose estimate fails by design (a revoked authorization, an out-of-scope call), and the window waited for a figure on every wallet-picked fee. D34 revised: a sponsor picked in the window does not wait.
+
+**Cross-arc pass** (2026-10-16). Codex `gpt-6.1-sol` high, a fresh read-only session over the net diff from `c5e9c8e8`, arcs 1 and 3 merged under arc 2: **approve with changes**, 2 findings, both verified and accepted, fixed in `a52afd5f`; the same session re-read the fix: **approve**, no findings.
+
+| Finding | Decided |
+|---|---|
+| Demonstrated: the fee window passed the card no grant decodes, so a held send with a public grant read "Reading arguments…" for good while "Send for" stayed live | the window decodes the question's stored request through a display-only read (`decodeQuestionGrantsForDisplay`), lists the rows and keeps "Send for" off while a grant decodes or cannot be read; estimates, previews and approval still refuse a question's id |
+| Plausible: both windows kept the token list they read at open and missed arc 1's `onTokenUpdated` | `followKnownTokens` reads again on an update for the window's profile and drops a superseded read |
+
 ## Seeds (draft; the orchestrator finalizes after approval)
 
 - `/goal` Every phase of implementations-plan/harden-security-fixes-2/plan.md marked ✓ in order, each backed by its gate's output in the transcript; `LESSONS_FILE=implementations-plan/harden-security-fixes-2/lessons/phase-N.md` printed per phase; `/code-review` not run; the Codex loop converged per arc and the cross-arc pass converged, each quoted; each arc's PR against `dev` opened after its loop, the close-out's archive-move commit shown by `git show --stat`; `bun run test:all` and `bun run lint` exit 0.
 - `/loop 15m` Drive implementations-plan/harden-security-fixes-2 forward per its plan.md and the README's Post-implementation standard at `c5e9c8e8`; never start arc 2 before OA-F1 to OA-F3 are answered, nor arc 3 before #508's PR merges; settle open technical questions with Codex and log each in lessons/; what a person sees waits for the owner's answer in OWNER-ASKS.md.
-
-**PR CI, first run** (2026-10-16). The network lanes failed on both browsers in `authwit-lifecycle.test.ts` and `scope-refusal.test.ts`: each presses Confirm on a sponsored request whose estimate fails by design (a revoked authorization, an out-of-scope call), and the window waited for a figure on every wallet-picked fee. D34 revised: a sponsor picked in the window does not wait.

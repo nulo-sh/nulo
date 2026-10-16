@@ -47,3 +47,8 @@ The first CI run's lesson: a change to when Confirm enables reaches every networ
 - **Round 1.** Codex `gpt-6.1-sol` high, read-only: approve with changes, 1 finding (the fee window dropped the approved authorization rows), fixed. An Opus 5.5 general-purpose review ran beside it: approve with changes, 6 findings; the plan's verdict table records each.
 - **Round 2.** Codex, the same session: approve with changes, 1 finding. An app's own payment naming the PrivateFPC as payer charges the account's Private Fee Juice, and the playground's PrivateFPC routes reach it (`apps/extension/tests/e2e/network/selfpay-phase.test.ts`), so the first answer (an owner ask that shipped the exemption) narrowed the owner's pick. Fixed as D37.
 - **Round 3.** Codex, the same session: approve, no findings. The loop ends here, inside its three rounds.
+
+## Cross-arc pass
+
+- A fresh Codex `gpt-6.1-sol` high session over the net diff from `c5e9c8e8`, after arc 3 (#611) merged: approve with changes, 2 findings. The fee window gave the card no grant decodes, so a held send with a public grant read "Reading arguments…" for good while "Send for" stayed live; both windows kept the token list they read at open. Fixed in `a52afd5f`; the same session re-read it: approve, no findings.
+- Merging arc 3 turned two of its execute-window grant tests red: they press Confirm on a send the person pays with no estimate landed, which D34 now holds. The tests land an estimate; the hold is the behaviour the owner picked (OA-F2 part 2 C).
