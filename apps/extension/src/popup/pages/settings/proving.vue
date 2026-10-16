@@ -13,6 +13,7 @@ import { ExecutionServiceClient } from "@/wallet/services/execution/client"
 
 /** Composables */
 import { usePrestoCheck } from "@/composables/usePrestoCheck"
+import { usePrestoHostPermission } from "@/composables/usePrestoHostPermission"
 
 /** Utils */
 import { PRESTO_SITE_URL } from "@/presto/config"
@@ -20,6 +21,11 @@ import { copyFor, detailRowsFor, isPitchKind } from "@/utils/presto-ui-state"
 
 const configService = new ConfigServiceClient()
 const { state, start, check, dispose } = usePrestoCheck(configService)
+const {
+	missing: permissionMissing,
+	request: requestPermission,
+	dispose: disposePermission,
+} = usePrestoHostPermission({ onFirstAllowed: start, onGranted: check })
 
 const lastProve = ref(null)
 const copy = computed(() => copyFor(state.value, lastProve.value, "settings"))
@@ -33,7 +39,6 @@ function retry() {
 }
 
 onBeforeMount(async () => {
-	void start()
 	try {
 		lastProve.value = await executionService.getLastProveOutcome()
 	} catch {
@@ -46,12 +51,16 @@ onBeforeUnmount(() => {
 	executionService.disconnect()
 	configService.disconnect()
 	dispose()
+	disposePermission()
 })
 </script>
 
 <template>
 	<SettingsPageShell title="Proving" backTo="/popup/settings" gap="24">
+		<PrestoPermissionRow v-if="permissionMissing" @allow="requestPermission" />
+
 		<PrestoStatusCard
+			v-if="!permissionMissing"
 			compact
 			:copy="copy"
 			:status="state.kind"
@@ -61,7 +70,7 @@ onBeforeUnmount(() => {
 			@retry="retry"
 		/>
 
-		<ItemsContainer v-if="isPitchKind(state.kind)" title="Presto">
+		<ItemsContainer v-if="!permissionMissing && isPitchKind(state.kind)" title="Presto">
 			<SettingItem
 				:to="PRESTO_SITE_URL"
 				title="Get Presto"
@@ -71,7 +80,7 @@ onBeforeUnmount(() => {
 				data-testid="settings-proving-get"
 			/>
 		</ItemsContainer>
-		<ItemsContainer v-else title="Details">
+		<ItemsContainer v-else-if="!permissionMissing" title="Details">
 			<SettingItem v-for="row in rows" :key="row.title" :title="row.title" :description="row.description" :materialIcon="row.icon" raw>
 				<template #right>
 					<Text variant="value" color="primary">{{ row.value }}</Text>
