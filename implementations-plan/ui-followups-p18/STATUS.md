@@ -18,3 +18,5 @@
 - 2026-10-16 SA-1 A (page 24 P24-01) and SA-2 B (page 23 P23-01) signed. Merged origin/dev (c5e9c8e8; store untouched since the capture). Phase 4 gate on A: `sha256sum -c` 11 OK, 10 paths changed, no `??`; committed e8fbe11a. README store-art row fixed.
 - 2026-10-16 SA-2: the sweep red on two keys, green after the edit (7e1ccae4). Gate F: lint, typecheck:all, test (797 files), design test (36) green.
 - 2026-10-16 arc 2 gates: test:all and test:ci-gating (571 pass) green. Codex r1 approve, Opus approve (1 low accepted), Codex r2 approve: loop converged.
+- 2026-10-16 smoke Chrome (armed, retry 0): 246 passed, 13 skipped, 0 failed, 1986 s.
+- 2026-10-16 smoke Firefox (armed, retry 0): 245 passed, 14 skipped, 0 failed, 3276 s. Hover before/after: computed opacity 0.8 on dev, 1 here, both themes.
