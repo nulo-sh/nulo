@@ -84,7 +84,7 @@ describe("ArtifactRegistry.resolve", () => {
 		expect(pxeLookup).toHaveBeenCalledTimes(1)
 	})
 
-	test("known hit when pxe misses (bundled-standards bypass)", async () => {
+	test("a compiled-in class resolves without consulting the PXE (bundled-standards bypass)", async () => {
 		// Smart-tighten counterpart: bundled standards still resolve
 		// without the dApp passing an artifact.
 		const classId = new Fr(11)
@@ -97,6 +97,7 @@ describe("ArtifactRegistry.resolve", () => {
 		const pxeLookup = vi.fn().mockResolvedValue(undefined)
 		const got = await reg.resolve(classId, pxeLookup)
 		expect(got).toBe(knownArtifact)
+		expect(pxeLookup).not.toHaveBeenCalled()
 	})
 
 	test("ensureKnown dedupes concurrent calls", async () => {
@@ -132,7 +133,7 @@ describe("ArtifactRegistry.resolve", () => {
  * source (or return undefined if no source matched).
  */
 describe("ArtifactRegistry.resolve — class-id trust enforcement", () => {
-	test("pxe-local mismatch → falls through to known (or undefined)", async () => {
+	test("a mismatched stored artifact resolves to nothing when the bundle lacks the class", async () => {
 		const classId = new Fr(99)
 		const verifier = makeMismatchVerifier(new Set([classId.toString()]))
 		const reg = new ArtifactRegistry(emptyLoader, { verifier })
@@ -141,7 +142,6 @@ describe("ArtifactRegistry.resolve — class-id trust enforcement", () => {
 
 		const got = await reg.resolve(classId, pxeLookup)
 
-		// pxe-local mismatch → fall through to known (no entry) → undefined.
 		expect(got).toBeUndefined()
 	})
 

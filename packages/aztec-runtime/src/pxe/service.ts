@@ -439,6 +439,8 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		// address PREIMAGE and returns the address it derived — asserting it against the supplied
 		// instance's address makes a malformed preimage/address pair fail loudly at registration
 		// instead of surfacing later as a wrong-contract identity.
+		// The first load of the compiled-in bundle hashes every class it ships: paid before the chain's write lock.
+		if (contract.artifact) await this.artifacts.ensureKnown()
 		return this.withPxeWrite("registerContract", network, async (pxe) => {
 			const instance = await ContractInstanceWithAddressSchema.parseAsync(contract.instance)
 			const artifact = await ContractArtifactSchema.optional().parseAsync(contract.artifact)
