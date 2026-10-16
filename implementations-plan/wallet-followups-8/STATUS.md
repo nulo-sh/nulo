@@ -12,3 +12,4 @@
 - 2026-10-15 arc 1 gate: smoke Chrome pass (5 tests, 71 s; launched at load1 155, see lessons), smoke Firefox pass (5 tests, 67 s).
 - 2026-10-16 arc 1 gate: network `holdings.test.ts` via `agent.sh`, retry 0: Chrome pass (73.4 s), Firefox pass (83.9 s). Phase 1 gate green.
 - 2026-10-16 arc 1: final gates on `0a039883` pass (lint, typecheck:all, test:all, test:ci-gating, check:plans); PR #531 opened against dev.
+- 2026-10-16 arc 1: PR #531 checks green (54 pass, 4 skipped; all five required checks pass); CI `holdings.test.ts` 59.0 s Chrome, 66.7 s Firefox.
