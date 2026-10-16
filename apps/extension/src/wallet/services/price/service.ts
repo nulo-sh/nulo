@@ -1,4 +1,4 @@
-import type { AlarmCreateOptions, AlarmEvent, AlarmsPort, BrowserApi, Unsubscribe } from "@nulo/wallet-core/ports"
+import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import type { ILogger } from "@/wallet/logger"
@@ -106,12 +106,10 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		onError: (err) => this.logWarn("config-change handling failed", err),
 	})
 
-	public constructor(logger: ILogger, browserApi?: BrowserApi, opts?: { fetchFn?: FetchLike; now?: () => number }) {
+	public constructor(logger: ILogger, browserApi: BrowserApi, opts?: { fetchFn?: FetchLike; now?: () => number }) {
 		super(PRICE_SERVICE_NAME, logger)
-		this.cache = browserApi
-			? new ValueStorage<PriceState>(CACHE_STORAGE_KEY, browserApi.storage.local)
-			: new ValueStorage<PriceState>(CACHE_STORAGE_KEY, chrome.storage.local)
-		this.dispatcher = new AlarmDispatcher(PRICE_REFRESH_ALARM_NAME, browserApi ? browserApi.alarms : new ChromeAlarmsFallback())
+		this.cache = new ValueStorage<PriceState>(CACHE_STORAGE_KEY, browserApi.storage.local)
+		this.dispatcher = new AlarmDispatcher(PRICE_REFRESH_ALARM_NAME, browserApi.alarms)
 		this.fetchFn = opts?.fetchFn ?? ((input, init) => fetch(input, init))
 		this.now = opts?.now ?? (() => Date.now())
 	}
@@ -459,21 +457,5 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			merged[id] = quote
 		}
 		return merged
-	}
-}
-
-/** Direct-chrome fallback used when the composition root doesn't inject a
- *  BrowserApi (legacy path, mirrors ContactService's storage fallback). */
-class ChromeAlarmsFallback implements AlarmsPort {
-	public async create(name: string, options: AlarmCreateOptions): Promise<void> {
-		await chrome.alarms.create(name, options)
-	}
-	public async clear(name: string): Promise<boolean> {
-		return await chrome.alarms.clear(name)
-	}
-	public onAlarm(listener: (alarm: AlarmEvent) => void): Unsubscribe {
-		const wrapped = (alarm: chrome.alarms.Alarm) => listener({ name: alarm.name, scheduledTime: alarm.scheduledTime })
-		chrome.alarms.onAlarm.addListener(wrapped)
-		return () => chrome.alarms.onAlarm.removeListener(wrapped)
 	}
 }

@@ -524,11 +524,6 @@ function registerServices(services: ServiceCollection, deps: WalletRuntimeDeps):
 	}
 	const tokenListSource = E2E_TOKEN_LIST ? new ChromeStorageTokenListSource() : undefined
 	services.add(new TokenListService(logger, browserApi, tokenListSource ? { getSource: () => tokenListSource.get() } : {}))
-	// Passing `browserApi` threads the storage port into ProfileService AND, because the port
-	// carries alarms, ACTIVATES SessionManager's proactive TTL auto-lock (dormant pre-arc when the
-	// composition root passed no port — see session-manager.ts "proactive TTL lights up once the
-	// composition root wires browserApi"). Accepted behavior change; seam-pinned in
-	// service.integration.test.ts "Q10 composition seam".
 	const profileService = new ProfileService(config, logger, browserApi)
 	services.add(profileService)
 	wirePxeProviders(profileService)

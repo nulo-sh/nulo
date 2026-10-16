@@ -64,11 +64,6 @@ function harness(grants: unknown[]) {
 	const seen: Seen = { windows: 0, sent: [], executed: [] }
 	const writer: IDappSessionWriter = {
 		tryGetDappSessionByOriginAndChain: async () => session,
-		getDappSession: async () => session,
-		updateDappSession: async () => session,
-		setAccountAliases: async () => session,
-		setCapabilityGrants: async () => session,
-		setCapabilityRejections: async () => session,
 		applyCapabilityDecision: async () => session,
 	}
 	const interaction: IDappInteractionRunner = {

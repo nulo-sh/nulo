@@ -89,7 +89,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 	/** Optional network-liveness fence for `createOperation` — see `init`. */
 	private networkService: NetworkService | null = null
 
-	public constructor(logger: ILogger, browserApi?: BrowserApi) {
+	public constructor(logger: ILogger, browserApi: BrowserApi) {
 		super(OPERATION_JOURNAL_SERVICE_NAME, logger)
 		// Local storage: records survive SW restart AND full browser exit.
 		// Originally used `chrome.storage.session` on the rationale that
@@ -100,9 +100,9 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		// (users expect to keep it). The reaper's boot-sweep still marks
 		// surviving non-terminal records as failed on SW restart — same
 		// behavior as before, just the durability layer changed.
-		this.storage = browserApi
-			? new EntityStorage<OperationRecord>("nulo:journal", browserApi.storage.local, (raw) => OperationRecordSchema.parse(raw))
-			: new EntityStorage<OperationRecord>("nulo:journal", chrome.storage.local, (raw) => OperationRecordSchema.parse(raw))
+		this.storage = new EntityStorage<OperationRecord>("nulo:journal", browserApi.storage.local, (raw) =>
+			OperationRecordSchema.parse(raw),
+		)
 		// Instantiated in the constructor (not as a field initializer) so the
 		// logger reference is guaranteed to be the same instance the base
 		// Service stores on `this`. See class field comment above for the

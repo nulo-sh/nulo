@@ -1798,13 +1798,8 @@ describe("ProfileService integration", () => {
 		}, 30_000)
 	})
 
-	// Composition seam — the runtime now does `new ProfileService(config, logger, browserApi)`
-	// (runtime.ts:136). The browserApi port carries BOTH storage AND alarms, so wiring it for the
-	// storage migration also ACTIVATES SessionManager's pre-existing proactive TTL auto-lock (it was
-	// dormant only because the composition root passed no port). This is an accepted,
-	// user-visible behavior change — the intended completion of the migration, so a proactive-TTL
-	// auto-lock that follows from wiring the port is deliberate. These pins keep the activation
-	// from silently regressing back to dormant (or silently flipping on without a port).
+	// The browserApi port carries alarms as well as storage, so the proactive TTL auto-lock is live
+	// wherever ProfileService is constructed.
 	describe("ProfileService composition seam — proactive TTL activation", () => {
 		test("WITH a browserApi port → SessionManager subscribes to the proactive-TTL alarm", () => {
 			const api = new FakeBrowserApi()
@@ -1814,17 +1809,6 @@ describe("ProfileService integration", () => {
 			const logger = new LoggerStore(config)
 			new ProfileService(config, logger, api)
 			expect(onAlarm).toHaveBeenCalledTimes(1)
-		})
-
-		test("WITHOUT a browserApi port (the runtime before the port was wired) → no alarm subscription (reactive-only, dormant)", () => {
-			const api = new FakeBrowserApi()
-			api.reset()
-			const onAlarm = vi.spyOn(api.alarms, "onAlarm")
-			const config = fakeConfig()
-			const logger = new LoggerStore(config)
-			// Port deliberately NOT passed — mirrors the earlier `new ProfileService(config, logger)`.
-			new ProfileService(config, logger)
-			expect(onAlarm).not.toHaveBeenCalled()
 		})
 	})
 

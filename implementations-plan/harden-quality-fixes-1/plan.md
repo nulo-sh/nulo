@@ -141,6 +141,7 @@ Follow `implementations-plan/README.md` § Post-implementation standard at revis
 | D8 | Expiry fixture | a fake `Date` past the 7-day expiry, restored before the eviction read | a hand-written row (rows are MAC'd); keep `upgradeDappSession` for a test |
 | D9 | Writer reads in tests | a local type: the interface plus `getDappSession` | keep the five members for tests |
 | D10 | "Show network name" | OA-1; unchanged | delete or wire it here (a UI change) |
+| D12 | `dispatcher.ts` digest pinned by `identifier-sites.expected.json` (type-roles-coverage's hold) | re-attest (the edit removes an account-operation case; no `send_transaction` producer moves) and re-pin the three digest lines | keep the dead authwit case (leaves part of #558, which the owner chose to delete, P21-05 A) |
 | D11 | #559's shape | two validators and a submit predicate over `{ value }` handles, read in today's order | value arguments (read every ref before the early returns); one rules object (a factory over the same three functions); gates left inline (a copy stays) |
 
 ## Audit verdicts

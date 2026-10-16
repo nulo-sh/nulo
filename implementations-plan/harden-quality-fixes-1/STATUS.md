@@ -9,3 +9,4 @@
 - 2026-10-16: phase 1 gate pass: lint, typecheck:all, `bun run test` (800 files), wallet-core test (24 files); the copy grep prints exactly the nine expected lines.
 - 2026-10-16: phase 2 gate pass: lint, typecheck:all, `bun run test` (800 files), wallet-bridge test (17 files); exhaustiveness proof TS2322 at the three sites; unknown-kind test red on the base service.
 - 2026-10-16: phase 3 gate pass: lint, typecheck:all, `bun run test` (800 files; storage-codecs unchanged and green); new-field compile proof at three sites.
+- 2026-10-16: phase 4 gate pass: lint, typecheck:all, wallet-bridge test (17 files), `bun run test` (800 files) after re-pinning the dispatcher digest (D12); Header HTML identical base vs branch.
