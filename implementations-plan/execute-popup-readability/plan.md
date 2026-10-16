@@ -145,6 +145,8 @@ Review loop (Codex gpt-6.1-sol high, session `01a144e4-7db1-7213-9e94-f945c9c8f4
 | R8 | Part 2's reach on the `send_transaction` card (`OperationActionRow`) (Opus) | out of R1's scope, which keeps "every other card" as today; asked as R3 in OWNER-ASKS.md, non-blocking |
 | R9 | The plan's testid list put the authorization line's attributes on the sentence (Opus) | the plan follows the build: the `<li>` carries them |
 
+Round 1: Codex `conditional approve` (R1–R3, minor), Opus `conditional approve` (R3–R9, no material UI defect). Round 2 (Codex resumed over a968c932): **`approve`**, no new material findings; R7 and R8 stand. The loop converged.
+
 ## Seeds (draft; finalized after R1 and the orchestrator's approval)
 
 - `/goal` Every phase of implementations-plan/execute-popup-readability/plan.md marked ✓, each backed by its gate's output in the transcript; `LESSONS_FILE=implementations-plan/execute-popup-readability/lessons/phase-N.md` printed per phase; `/code-review` not run; the Codex loop converged (a resumed pass with no new material finding, quoted); the PR against `dev` opened after it, with the close-out's archive-move commit shown by `git show --stat`; `bun run test:all` and `bun run lint` exit 0.

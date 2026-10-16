@@ -12,3 +12,5 @@
 - 2026-10-16 Codex consult on the A map: approve (2 clarifications accepted). Phase 1 gate green: execute tests 229/229, lint 0, typecheck:all 0.
 - 2026-10-16 Phase 2 gate green: audit:vue 0 (12913 tests, build), test:all 0, complexity manifest unchanged.
 - 2026-10-16 Chrome network e2e (3 files, retry 0): 10/10 green. Codex r1: conditional approve (3 minor, accepted).
+- 2026-10-16 Opus review: conditional approve (R4–R9); fixes a968c932. Codex r2: approve, converged.
+- 2026-10-16 Firefox network e2e (3 files, retry 0): 10/10 green; shots taken.
