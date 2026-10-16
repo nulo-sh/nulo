@@ -271,7 +271,7 @@ Today a call named `transfer_public_to_public` is titled "Transfer (public)", th
 
 Until R1 is answered nothing visible ships. If the answer is "As is" (and part 2 No), the lane ships nothing and #508 is closed by the owner's call. The test-only phase (a shared wire-shaped fixture and a check that every fact stays reachable) changes no pixel and lands inside the same PR as the signed option.
 
-## R3 (non-blocking). Part 2 on the grant-authorization card
+## R3 (non-blocking). Part 2 on the grant-authorization card (#575)
 
 **Surface:** the execute window's `send_transaction` card, which a dApp's `grantPublicAuthwit` opens (its "Payload:" rows, `OperationActionRow.vue`). R1 part 2 was drawn for the transaction body and its authorizations and kept "every other card" as today, so this card still titles a call with the wallet's transfer and mint labels on any contract, read or not.
 

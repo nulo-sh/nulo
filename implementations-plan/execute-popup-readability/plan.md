@@ -1,7 +1,7 @@
 ---
 plan: execute-popup-readability
 tier: light (the lane brief's call; the panel of two still argues each decision)
-status: arc 1 in progress (R1 signed 2026-10-16: A, part 2 Yes)
+status: completed (arc 1 in review; R1 signed 2026-10-16: A, part 2 Yes)
 issues: "#508 (arc 1 closes it)"
 driver: claude-code
 claude_model: opus
@@ -16,6 +16,17 @@ post_implementation_hardening: not scheduled
 ---
 
 # execute-popup-readability: a multi-call transaction the approval window can be read by
+
+## Outcome
+
+- **Date**: 2026-10-16
+- **Status**: completed. One arc, one PR against `dev` (`feat(execute): read a multi-call transaction as rows and authorizations`), built to R1 as the owner signed it: option A, part 2 Yes. The merge closes #508.
+- **Shipped**: the `aztec_sendTx` card opens with "What this does" (each call in order: the wallet's own transfer or mint line, "Named by the app.", "Reading arguments…", or the unreadable call's warning and notice) and "Authorizations" with a line each; today's rows sit under "Show all details", each authorization's details open there. The six transfer and mint labels title only a call the wallet read as one. One disclosure control and one unreadable-call notice replace their copies. Tests: a wire-shaped fixture, a two-press reachability check with its control, the summary's forms, the helpers; three network e2e files read the summary at rest on both browsers.
+- **Dropped**: C's per-row toggles and `actionLine` (A was signed); a wider number column (#576).
+- **Known limits**: #576.
+- **Open items**: #575 (part 2 on the grant-authorization card, an owner decision). The owner's note on #508 (descriptions for contracts beyond the token standard) is the orchestrator's later blueprint.
+- **Lessons**: none promoted: `lessons.md` is at its 8 KiB budget and nothing in it is superseded; the Vue whitespace note stays in [lessons/phase-2.md](lessons/phase-2.md).
+- **Seeds retired**: the `/goal` and `/loop` below.
 
 #508: a dApp transaction with several calls, or calls plus authorizations, renders as one flat list of labels, addresses and 32-byte values. This lane's first deliverable is the design call: [OWNER-ASKS.md](OWNER-ASKS.md) R1 (five options over one example plus a title rule; the planner recommends C with part 2 Yes). After the owner signs R1, one PR builds the signed answer. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
@@ -80,7 +91,7 @@ R1's answer (#508 `## Decision`, decision page 20, 2026-10-16): **A**, part 2 **
 - Tests: `call-surface.test.ts`: `rowTitle` (a decoded `transfer_public_to_public` on an unregistered token keeps its own name; a wallet-read one keeps its label; a non-token label such as "Shield" unchanged), `authwitTitle`, `authwitLine` (move only with an explicit sender; a mint and a decoded call read as `call`). `tx-enrichment.test.ts`: the six labels and nothing else answer `tokenMovementLabel`. `OperationCard.summary.test.ts` over the fixture: at rest every call's title, contract and line (transfer with the explicit sender by name, "Named by the app.", the unreadable warning and notice) and both authorization lines show, the body is absent and the toggle reads "Show all details" with `aria-expanded="false"`; one press shows the body with each authorization's details open; sender `account`, `none` and empty-symbol forms; a call mounted `pending`, then given raw (warning shows), then decoded; "Checking authorizations…" at rest while pending. The Phase 1 test stays green unchanged.
 - **Gate:** `bun run audit:vue`; `bun run test:all`. Pass: exit 0, inventory green, `scripts/complexity-baseline/manifest.json` unchanged.
 
-### Phase 3: real browsers and shots
+### Phase 3: real browsers and shots ✓
 
 - Assumes: Fact 4; the playground's buttons still open the window.
 - `tx-sendTx-multicall.test.ts`: the summary lists `c.calls` items at rest. `type-roles-windows.test.ts`: `openExecute` for a send waits for the summary, asserts the body closed, presses "Show all details", then keeps today's `ready` wait; the containment check also covers the summary items and `stretchPayload` stretches their title and contract. The delegated flow sweeps the authorization line and its caller at rest, then opens the body (details open by default, no per-row press); the raw flow opens the body before the raw toggle. `tx-transfer-row.test.ts`: assert the wallet-read line (amount, sender, recipient) at rest, then open the body and keep today's reads. Failure mode: a role, overflow or missing line on the new rows in a real 400 px window, which jsdom cannot compute. No token import is added.
@@ -141,13 +152,13 @@ Review loop (Codex gpt-6.1-sol high, session `01a144e4-7db1-7213-9e94-f945c9c8f4
 | R4 | `expectTransferLine` reads the line before its addresses have text (Opus) | accepted: waits for the full sentence, then asserts it |
 | R5 | `authwitTitle`'s comment says the selector shows "until the decode lands"; an undecodable one keeps it (Opus) | accepted |
 | R6 | `amountOf` declared before the computed state (Opus) | accepted: moved after, per the SFC order |
-| R7 | Items 10 and up shift 4 px: "10" overflows the 10 px number column (Opus) | rejected: a wider column moves every row off the signed mockup's geometry; the shift is cosmetic and only from the tenth call |
-| R8 | Part 2's reach on the `send_transaction` card (`OperationActionRow`) (Opus) | out of R1's scope, which keeps "every other card" as today; asked as R3 in OWNER-ASKS.md, non-blocking |
+| R7 | Items 10 and up shift 4 px: "10" overflows the 10 px number column (Opus) | rejected: a wider column moves every row off the signed mockup's geometry; the shift is cosmetic and only from the tenth call; known limit #576 |
+| R8 | Part 2's reach on the `send_transaction` card (`OperationActionRow`) (Opus) | out of R1's scope, which keeps "every other card" as today; asked as R3 in OWNER-ASKS.md, non-blocking; #575 |
 | R9 | The plan's testid list put the authorization line's attributes on the sentence (Opus) | the plan follows the build: the `<li>` carries them |
 
 Round 1: Codex `conditional approve` (R1–R3, minor), Opus `conditional approve` (R3–R9, no material UI defect). Round 2 (Codex resumed over a968c932): **`approve`**, no new material findings; R7 and R8 stand. The loop converged.
 
-## Seeds (draft; finalized after R1 and the orchestrator's approval)
+## Seeds (retired)
 
 - `/goal` Every phase of implementations-plan/execute-popup-readability/plan.md marked ✓, each backed by its gate's output in the transcript; `LESSONS_FILE=implementations-plan/execute-popup-readability/lessons/phase-N.md` printed per phase; `/code-review` not run; the Codex loop converged (a resumed pass with no new material finding, quoted); the PR against `dev` opened after it, with the close-out's archive-move commit shown by `git show --stat`; `bun run test:all` and `bun run lint` exit 0.
 - `/loop 15m` Drive implementations-plan/execute-popup-readability forward per its plan.md and the README's Post-implementation standard at `d59459ab`; never start Phase 2 before OWNER-ASKS R1 is signed; decide open questions with Codex, log each in lessons/.
