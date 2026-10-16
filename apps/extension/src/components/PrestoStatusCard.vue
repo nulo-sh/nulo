@@ -208,7 +208,7 @@ const stepNumber = (index: number) => String(index + 1).padStart(2, "0")
 
 .step_num {
 	composes: type--meta from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 	padding-top: 3px;
 	flex-shrink: 0;
 }

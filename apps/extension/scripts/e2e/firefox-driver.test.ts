@@ -280,7 +280,7 @@ describe("a page error's location", () => {
 		expect(errorFrames([], { sourceName: "", lineNumber: 0, columnNumber: 0 })).toEqual([])
 	})
 
-	test("the close reports each recent exception with its context and first frame, 1-based as Firefox prints a stack", () => {
+	test("the close reports each recent exception with its context and kept frame, 1-based as Firefox prints a stack", () => {
 		const frame = { url: reported.sourceName, functionName: "", lineNumber: 4, columnNumber: 811 }
 		const recent = [
 			{ context: "w1", text: "InternalError: too much recursion", frame },
@@ -290,6 +290,17 @@ describe("a page error's location", () => {
 			`w1: InternalError: too much recursion at ${reported.sourceName}:5:812`,
 			"no context: TypeError: x is undefined",
 		])
+	})
+
+	const builtIn = { url: "self-hosted", functionName: "forEach", lineNumber: 3601, columnNumber: 20 }
+	const addon = { url: "moz-extension://5c9e/assets/client.js", functionName: "walk", lineNumber: 0, columnNumber: 99 }
+	const addonReported = { url: reported.sourceName, functionName: "", lineNumber: 4, columnNumber: 811 }
+	test.each([
+		["its first add-on frame under a built-in's", [builtIn, addon], addonReported, addon],
+		["the add-on location it reports when no frame is the add-on's", [builtIn], addonReported, addonReported],
+		["its top frame when neither is the add-on's", [builtIn], { ...addonReported, url: "https://dapp.example/x.js" }, builtIn],
+	])("the close reports an exception at %s", (_, frames, reported, expected) => {
+		expect(runSerialised(RELAY_HELPERS, "recentFrame(frames, reported)", { frames, reported })).toEqual(expected)
 	})
 })
 

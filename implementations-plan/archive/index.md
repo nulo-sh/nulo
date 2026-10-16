@@ -87,6 +87,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [durable-jobs](durable-jobs/plan.md) — completed — every submission becomes a durable job in storage that the popup only observes
 - [dynamic-token-list](dynamic-token-list/plan.md) — completed — a signed token list at tokens.nulo.sh replaces the built-in default tokens: CI signs it in a gated environment, the wallet fetches it after the Terms and daily (#79)
 - [dynamic-token-list-2](dynamic-token-list-2/plan.md) — completed — a `flagged` set in the signed token list, a compiled sequence floor, and a red row line and banners on a flagged token (#383)
+- [e2e-ci-followups-2](e2e-ci-followups-2/plan.md) — completed — cold module loads off unit-test timeouts (#500), one e2e fee ladder for every speed (#405), a readable Firefox exception and the chaos seed closed as a known limit (#322)
 - [e2e-deflake](e2e-deflake/plan.md) — completed — recurring e2e and CI flakes eliminated by root cause, never by budget
 - [e2e-determinism](e2e-determinism/plan.md) — completed — fixed sleeps in the e2e helpers replaced with observable signals
 - [e2e-flake-fixes](e2e-flake-fixes/plan.md) — completed — two CI flakes fixed at their mechanism under a two-core affinity
