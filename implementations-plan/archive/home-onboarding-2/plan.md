@@ -55,7 +55,7 @@ On Firefox, while Nulo lacks its loopback host permission, the onboarding Presto
 **Facts**
 - F1. #156's impact claim, "Proving falls back or fails silently", does not hold on Firefox 153.0.4.
   - In the probe of 2026-10-13, a withheld permission blocked no request to a CORS-answering loopback server.
-  - What the withheld permission costs is Presto's minimal `/health` body until Presto approves Nulo, so Proving's version rows read "—" ([probe](../archive/home-onboarding-chrome/lessons/phase-2.md)).
+  - What the withheld permission costs is Presto's minimal `/health` body until Presto approves Nulo, so Proving's version rows read "—" ([probe](../home-onboarding-chrome/lessons/phase-2.md)).
   - The owner signed pages 16 and 18 on 2026-10-15, after that record. Page 16 B reads "whatever the probe shows". The arc ships the signed text.
 - F2. Firefox 153.0.4 merges `optional_host_permissions` with an MV3 manifest's origins into one optional set (`Extension.sys.mjs:1357-1384`). The install grant is unchanged (`:1338-1346`). So P16-04 B grants nothing new at run time.
 - F3. Facts about `permissions.request` (probe; `schemas/permissions.json:110` and `ext-permissions.js` in Firefox's `omni.ja`):
@@ -193,7 +193,7 @@ Pass: exit 0; the spec is red on the base pages and green on the head; its runti
 
 ## Post-implementation
 
-Execute [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard), read at `dfdf4c31`. Specific to this plan:
+Execute [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard), read at `dfdf4c31`. Specific to this plan:
 - Single arc: the loop runs once, over the net diff from the merge base with `dev`, after the arc gate. Codex runs it: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, then `resume-codex.sh`. Hard stop at three rounds.
 - The close-out is this PR's final commits, after merging `origin/dev`.
 - Teardown: `agent-worktree done home-onboarding-2 --merged`, once `FETCH_HEAD:implementations-plan/archive/home-onboarding-2/plan.md` exists on `dev`. Arm one background wait after the wrap-up report.
