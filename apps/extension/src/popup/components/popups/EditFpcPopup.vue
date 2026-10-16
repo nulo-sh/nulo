@@ -1,6 +1,7 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 import { FieldWarning } from "@nulo/design"
+import { sameFieldAddress } from "@nulo/wallet-bridge"
 /** Services */
 import { FpcServiceClient, FpcType } from "@/wallet/services/fpc/client"
 
@@ -48,6 +49,7 @@ const form = useFormState({
 		validate: (v) => {
 			if (!v) return null
 			if (!isValidHex(v)) return "Invalid address"
+			if (fpcs.value.some((f) => f.id !== fpcToEdit.value?.id && sameFieldAddress(v, f.address ?? ""))) return "Already added"
 			return null
 		},
 	},
@@ -79,6 +81,8 @@ const addressChanged = computed(() => Boolean(fpcToEdit.value) && addressTerm.va
 const hasChanges = computed(() => nameChanged.value || addressChanged.value)
 
 const isAlreadyExist = computed(() => form.fields.name.error.value === "Already exist" && nameChanged.value)
+// Only an edited address is checked, so a row that already shares its address can still be renamed.
+const isAddressStored = computed(() => form.fields.address.error.value === "Already added" && addressChanged.value)
 const isAddressValid = computed(() => isValidHex(addressTerm.value))
 const isAvailableToUpdateFpc = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
@@ -94,7 +98,7 @@ const isAvailableToUpdateFpc = computed(() => {
 		if (form.fields.name.error.value) return false
 	}
 	if (addressChanged.value) {
-		if (!isAddressValid.value) return false
+		if (!isAddressValid.value || form.fields.address.error.value) return false
 	}
 	return true
 })
@@ -267,6 +271,7 @@ watch(
 			<template #right>
 				<Transition name="fade">
 					<FieldWarning v-if="!isAddressValid && addressTerm"> Invalid address </FieldWarning>
+					<FieldWarning v-else-if="isAddressStored"> Already added </FieldWarning>
 				</Transition>
 			</template>
 		</Input>

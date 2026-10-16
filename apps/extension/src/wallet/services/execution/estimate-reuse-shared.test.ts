@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest"
+import { afterEach, describe, expect, test, vi } from "vitest"
 import { ESTIMATE_REUSE_TTL_MS, pendingHashesChanged, SingleShotTtlCache } from "./estimate-reuse-shared"
 
 const TTL = 1000
@@ -81,5 +81,23 @@ describe("pendingHashesChanged", () => {
 	})
 	test("true when a member differs", () => {
 		expect(pendingHashesChanged(["a", "b"], ["a", "c"])).toBe(true)
+	})
+})
+
+describe("feeMultiplierFor", () => {
+	afterEach(() => {
+		vi.unstubAllEnvs()
+		vi.resetModules()
+	})
+
+	// The override is read at module evaluation, so each case re-evaluates the real parse.
+	test.each([
+		["", [2, 2, 3, 5]],
+		["10", [10, 10, 15, 25]],
+	])("VITE_NULO_FEE_MULTIPLIER=%j prices no speed, Normal, Fast and Urgent at %j", async (value, ladder) => {
+		vi.stubEnv("VITE_NULO_FEE_MULTIPLIER", value)
+		vi.resetModules()
+		const { feeMultiplierFor } = await import("./estimate-reuse-shared")
+		expect(([undefined, "normal", "fast", "urgent"] as const).map((p) => feeMultiplierFor(p))).toEqual(ladder)
 	})
 })

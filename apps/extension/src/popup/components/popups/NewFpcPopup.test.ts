@@ -221,7 +221,7 @@ describe("NewFpcPopup — duplicate addresses", () => {
 		await w.find('input[data-input-label="Address"]').setValue(address)
 		await flushPromises()
 		return {
-			warns: w.find('input[data-input-label="Address"]').element.parentElement?.textContent?.includes("Already exist"),
+			warns: w.find('input[data-input-label="Address"]').element.parentElement?.textContent?.includes("Already added"),
 			disabled: w.find('[data-testid="form-submit"]').attributes("disabled") !== undefined,
 		}
 	}

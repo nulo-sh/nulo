@@ -174,3 +174,66 @@ describe("retry-wrapper interaction (makeFetchWithTimeout)", () => {
 		expect(calls).toBe(1)
 	})
 })
+
+describe("retryWhile (makeFetchWithTimeout)", () => {
+	function refusingFetch(): { calls: () => number } {
+		let calls = 0
+		globalThis.fetch = vi.fn(async () => {
+			calls++
+			throw new TypeError(`refused #${calls}`)
+		}) as typeof fetch
+		return { calls: () => calls }
+	}
+
+	/** The outcome once `ms` of fake time has passed, or `undefined` if still pending then. */
+	async function settleWithin(pending: Promise<unknown>, ms: number): Promise<Error | undefined> {
+		let error: Error | undefined
+		pending.catch((e: Error) => {
+			error = e
+		})
+		await vi.advanceTimersByTimeAsync(ms)
+		return error
+	}
+
+	// Retries stopped means no backoff sleep either: the call rejects with no time passing.
+	test.each([
+		{ allowed: false, calls: 1, ms: 0 },
+		{ allowed: true, calls: 4, ms: 6_000 },
+	])(
+		"a network failure with retryWhile $allowed makes $calls attempt(s) and rejects with the last one's error",
+		async ({ allowed, calls, ms }) => {
+			const node = refusingFetch()
+			vi.useFakeTimers()
+			try {
+				const error = await settleWithin(makeFetchWithTimeout(1000, { retryWhile: () => allowed })("http://h", {}), ms)
+				expect(error?.message).toBe(`Error fetching from host http://h: TypeError: refused #${calls}`)
+				expect(node.calls()).toBe(calls)
+			} finally {
+				vi.useRealTimers()
+			}
+		},
+	)
+
+	test("a stop raised during the backoff sleep dispatches nothing when the sleep ends", async () => {
+		const node = refusingFetch()
+		let allowed = true
+		vi.useFakeTimers()
+		try {
+			const outcome = makeFetchWithTimeout(1000, { retryWhile: () => allowed })("http://h", {}).catch((e: Error) => e)
+			await vi.advanceTimersByTimeAsync(500)
+			expect(node.calls()).toBe(1)
+			allowed = false
+			await vi.advanceTimersByTimeAsync(10_000)
+			expect(((await outcome) as Error).message).toBe("Error fetching from host http://h: TypeError: refused #1")
+			expect(node.calls()).toBe(1)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("a first attempt runs and resolves even with retries stopped", async () => {
+		globalThis.fetch = vi.fn(async () => jsonResponse({ result: 9 }, { ok: true })) as typeof fetch
+		const out = await makeFetchWithTimeout(1000, { retryWhile: () => false })("http://h", {})
+		expect(out.response).toEqual({ result: 9 })
+	})
+})

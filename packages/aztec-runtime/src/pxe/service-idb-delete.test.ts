@@ -115,6 +115,7 @@ function makeService(): PxeService {
 		disposeProfile: async () => {
 			h.calls.push("disposeProfile")
 		},
+		stopRetries: () => () => {},
 	}
 	return service
 }

@@ -76,6 +76,9 @@ type NoteScanContext = {
 	contract: string
 	chainId: number
 	blockTimestampFor: (blockNumber: number) => Promise<number | undefined>
+	/** What `blockTimestampFor` read for this block in this scan, never a read of its own: a locked
+	 *  section uses only this, so no lock is held across the node. */
+	cachedBlockTimestamp: (blockNumber: number) => number | undefined
 }
 
 /** One public receipt's capture for its locked commit. */
@@ -1542,10 +1545,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 		const network = await this.networkService.getNetwork(networkId)
 
-		// Block-timestamp cache scoped to this scan. Lazy lookup inside the
-		// per-note critical section: only blocks of notes that actually need
-		// processing (new record or missing-blockTimestamp backfill) trigger
-		// a PXE call. Multiple notes from the same block share the lookup.
+		// One read per block per scan, a failed one (`undefined`) included, so a node that does not
+		// answer is asked once, not once per note.
 		const blockTimestampCache = new Map<number, number | undefined>()
 		const blockTimestampFor = async (bn: number): Promise<number | undefined> => {
 			if (blockTimestampCache.has(bn)) return blockTimestampCache.get(bn)
@@ -1565,10 +1566,14 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			contract,
 			chainId: network.chainId,
 			blockTimestampFor,
+			cachedBlockTimestamp: (bn) => blockTimestampCache.get(bn),
 		}
 		let reached = true
 		for (const note of notes) {
 			if (!note.siloedNullifier) continue
+			if (this.serviceEpoch === epochAtStart && (await this.commitReadsBlockTime(ctx, note))) {
+				await blockTimestampFor(note.l2BlockNumber)
+			}
 			// A fence only ever turns false inside a held section, so one still open at its end never refused.
 			const open = await this.withServiceLock(async (isCurrent) => {
 				const fence = this.receiptFence(epochAtStart, isCurrent)
@@ -1728,6 +1733,16 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		})
 	}
 
+	/** Whether the locked commit will want this note's block time, read here before the lock a
+	 *  teardown waits on: a row without one, or a new note with an amount that is not an own send.
+	 *  Neither an own send's change note nor a note without an amount ever gets a row, so without
+	 *  those exclusions every scan would fetch its block. */
+	private async commitReadsBlockTime(ctx: NoteScanContext, note: RawNote): Promise<boolean> {
+		const existing = await this.repo.getRecord(noteRecordId(ctx.profileId, ctx.networkId, note.siloedNullifier))
+		if (existing) return existing.blockTimestamp === undefined
+		return parseNoteAmount(note) !== null && !(await this.isOwnSend(ctx, note.txHash))
+	}
+
 	/** The per-note locked critical section. Its head is the public arm's, read for read: tokens,
 	 *  the record, then the own-send sets, which only ever gate a new record. */
 	private async commitScannedNote(ctx: NoteScanContext, note: RawNote, fence: ReceiptFence): Promise<void> {
@@ -1762,7 +1777,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		note: RawNote,
 		fenced: () => boolean,
 	): Promise<void> {
-		const ts = await ctx.blockTimestampFor(note.l2BlockNumber)
+		const ts = ctx.cachedBlockTimestamp(note.l2BlockNumber)
 		if (ts !== undefined && fenced()) await this.repo.upsertRecord({ ...existing, blockTimestamp: ts })
 	}
 
@@ -1803,8 +1818,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		fenced: () => boolean,
 	): Promise<void> {
 		const { profileId, networkId, accountAddress } = ctx
-		const blockTimestamp = await ctx.blockTimestampFor(note.l2BlockNumber)
-		if (!fenced()) return
+		const blockTimestamp = ctx.cachedBlockTimestamp(note.l2BlockNumber)
 		const record = this.buildRecord({
 			note,
 			profileId,

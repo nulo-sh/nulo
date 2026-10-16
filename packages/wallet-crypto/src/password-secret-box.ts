@@ -11,16 +11,13 @@
  * `unseal` / `unsealWithPasshash` / `reseal` **return `null`** when the
  * supplied credential can't decrypt the profile. They do NOT throw for
  * the wrong-password case. The facade is responsible for mapping
- * `null` into the specific per-callsite error the 31-method RPC
- * contract expects:
+ * `null` into the specific error each RPC's contract expects:
  *
  *   - `unlockProfile`           → `throw new InvalidPasswordError()`
  *   - `changeProfilePassword`   → `throw new Error("Invalid profile old password")`
- *   - `confirmProfileOperation` → `throw new InvalidPasswordError()`
+ *   - `exportPlain` (password)  → `throw new InvalidPasswordError()`
  *                                 (then wrapped by the method's own
  *                                 catch block into a generic Error)
- *   - `exportPlain` (password)  → delegates to `confirmProfileOperation`
- *                                 above, which throws first
  *   - `exportMnemonic`          → `throw new Error("Invalid profile old password")`
  *   - `restorePasswordSession`  → silent close (SessionManager owns this)
  *
