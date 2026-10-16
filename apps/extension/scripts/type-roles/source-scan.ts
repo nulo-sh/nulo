@@ -2,13 +2,13 @@ import { readdirSync, readFileSync, statSync } from "node:fs"
 import { dirname, join, relative } from "node:path"
 import { fileURLToPath } from "node:url"
 import { parse as parseSfc } from "@vue/compiler-sfc"
-import postcss, { type Container, type Document, type Root, type Rule } from "postcss"
+import postcss, { type ChildNode, type Container, type Document, type Root, type Rule } from "postcss"
 import { compileString } from "sass"
 
 /**
- * One reader of the wallet's sources for the type-role guard and the two inventory generators, so
- * all three see the same files the same way: Vue SFCs split into template, scripts and styles,
- * stylesheets parsed by postcss (nested rules kept as written), the one `.scss` file compiled first.
+ * One reader of the wallet's sources, so every guard and inventory sees the same files the same way:
+ * Vue SFCs split into template, scripts and styles, stylesheets parsed by postcss (nested rules kept
+ * as written), the one `.scss` file compiled first.
  */
 
 export const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..")
@@ -122,9 +122,9 @@ export function splitTopLevel(text: string, separator: RegExp): string[] {
 	return parts.map((part) => part.trim()).filter(Boolean)
 }
 
-/** The nearest rule a nested rule sits in, through any at-rules between them. */
-export function enclosingRule(rule: Rule): Rule | undefined {
-	let node: Container | Document | undefined = rule.parent
+/** The nearest rule a rule or declaration sits in, through any at-rules between them. */
+export function enclosingRule(child: ChildNode): Rule | undefined {
+	let node: Container | Document | undefined = child.parent
 	while (node && node.type !== "rule") node = node.parent
 	return node?.type === "rule" ? (node as Rule) : undefined
 }

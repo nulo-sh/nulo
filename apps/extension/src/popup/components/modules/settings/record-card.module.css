@@ -55,7 +55,7 @@
 
 .kv_key {
 	composes: type--label from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 
 	overflow: hidden;
 	text-overflow: ellipsis;
