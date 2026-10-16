@@ -24,6 +24,7 @@ import {
 	retryAccountStateStage,
 	runFenceLive,
 } from "./full-backup-restore"
+import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS } from "./importChainSync"
 import {
 	DECRYPTION_FAILED,
 	errorLogWriters,
@@ -237,6 +238,8 @@ async function runRestore(state: AgainRefs, opts: UseRestoreAgainOptions, writer
 	try {
 		const validated = await validateAndMigrateBackup(selection.backup as FullBackupEnvelope)
 		if (state.ended.value) return
+		// Only the body this profile was restored from passes, and its import already checked it, so no
+		// passkey prompt runs again here.
 		if (validated.kind === "rejected" || validated.checksum !== record.backup) {
 			const refusal = validated.kind === "rejected" ? validated : RESTORE_AGAIN_OTHER_BACKUP
 			state.restoreStatus.value = "failed"
@@ -258,6 +261,7 @@ async function runRestore(state: AgainRefs, opts: UseRestoreAgainOptions, writer
 			io,
 			{ fence, run: record.run },
 			opts.profileService,
+			Date.now() + IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS,
 		)
 		settleRun(state, opts, tail)
 	} catch (error) {

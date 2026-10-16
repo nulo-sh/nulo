@@ -25,7 +25,8 @@ import {
 import type { NodeStatus } from "@/wallet/services/network/spec"
 import { preflightNetworkConnectivity } from "./importPreflight"
 
-/** The whole tail (preflight + registrations) shares this wall-clock budget. */
+/** The whole tail (preflight, registrations and the restored tokens' re-read) shares this
+ *  wall-clock budget. */
 export const IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS = 45_000
 /** The preflight's own cap within the shared budget. */
 export const IMPORT_PREFLIGHT_BUDGET_MS = 21_000
@@ -36,6 +37,8 @@ export const IMPORT_REGISTRATION_BUDGET_MS = 30_000
 export interface ImportChainSyncDeps {
 	/** The backup's raw account-state slice (attacker-controlled). */
 	slice: unknown
+	/** The tail's absolute deadline (epoch ms), at most {@link IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS} out. */
+	deadlineAt: number
 	/** Ids of the networks THIS restore created (probe-able). */
 	createdNetworkIds: string[]
 	/** `AccountStateServiceClient.restore`-shaped call, deadline included; one network per call. */
@@ -62,7 +65,7 @@ interface TailClock {
 /** Resolves with the normalized items a Retry may replay: networks that ran out of time, whose
  *  call rejected, whose node could not be reached, or whose result reports either. */
 export async function runImportChainSync(deps: ImportChainSyncDeps): Promise<NormalizedAccountStateItem[]> {
-	const deadlineAt = Date.now() + IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS
+	const { deadlineAt } = deps
 
 	const normalized = normalizeAccountStateSlice(deps.slice)
 	if (normalized.violations.length) deps.record(normalized.violations, "violations")

@@ -40,6 +40,7 @@ exists at all:
 | imported-key rows | an external account's Grumpkin signing key | AES-256-GCM under `HKDF(dek, chainId ‖ address)` |
 | `storage.session` bearer | `master ‖ dek` **and** the random token that unwraps it | nothing, jointly — see below |
 | full backup file | plaintext master + entropy + DEK, unless encrypted | the backup password, if the user chose one |
+| passkey full backup's `backup-mac` | HMAC-SHA256 over the body's checksum | keyed by the passkey's PRF (`nulo:backup-mac:v1`); a body restores only under it |
 
 ## Cost to invert each one
 

@@ -15,8 +15,10 @@ import { basename, join } from "node:path"
 import { type Page, TimeoutError } from "puppeteer"
 import { expect } from "vitest"
 import { defaultProfileName } from "@/utils/profile-name"
+import { PASSKEY_PRF_LABEL, RP_ID } from "@/wallet/services/passkey/spec"
+import { computeBackupMac, PasskeyCredential } from "@nulo/wallet-crypto"
 import type { ILogger } from "@nulo/wallet-core/logger"
-import type { VirtualAuthenticator } from "../fixtures/browser"
+import { prepareClick, type VirtualAuthenticator } from "../fixtures/browser"
 import {
 	clickByTestId,
 	type ExtensionContext,
@@ -511,9 +513,36 @@ export async function readRegisteredPasskey(page: Page): Promise<RegisteredPassk
 	})
 }
 
+/** The PRF output the wallet's ceremony reads from `credentialId`, asked in `page`, where the
+ *  credential's virtual authenticator answers. */
+async function readPasskeyPrf(page: Page, credentialId: string): Promise<string> {
+	const prfInput = [...createHash("sha256").update(PASSKEY_PRF_LABEL).digest()]
+	await prepareClick(page)
+	return await page.evaluate(
+		async (id: string, rpId: string, input: number[]) => {
+			const assertion = (await navigator.credentials.get({
+				publicKey: {
+					challenge: crypto.getRandomValues(new Uint8Array(32)),
+					rpId,
+					userVerification: "required",
+					allowCredentials: [{ id: Uint8Array.from(atob(id), (c) => c.charCodeAt(0)), type: "public-key" }],
+					extensions: { prf: { eval: { first: new Uint8Array(input) } } },
+				},
+			})) as PublicKeyCredential | null
+			const first = assertion?.getClientExtensionResults().prf?.results?.first
+			if (!first) throw new Error("the passkey returned no PRF output")
+			return btoa(String.fromCharCode(...new Uint8Array(first as ArrayBuffer)))
+		},
+		credentialId,
+		RP_ID,
+		prfInput,
+	)
+}
+
 /** A full backup of a registered passkey profile that the importer accepts. Its `master-key` is the
- *  credential id, and it carries no entropy: the restore derives the master from the passkey. */
-export function buildSyntheticPasskeyBackup(passkey: RegisteredPasskey, profileName = "Imported PK"): string {
+ *  credential id, and it carries no entropy: the restore derives the master from the passkey, which
+ *  `page` asks for once to make the backup's check. */
+export async function buildSyntheticPasskeyBackup(page: Page, passkey: RegisteredPasskey, profileName = "Imported PK"): Promise<string> {
 	const body = {
 		"wallet-version": "test",
 		"aztec-version": "test",
@@ -530,7 +559,8 @@ export function buildSyntheticPasskeyBackup(passkey: RegisteredPasskey, profileN
 		},
 	}
 	const checksum = createHash("sha256").update(JSON.stringify(body)).digest("hex")
-	return JSON.stringify({ ...body, checksum })
+	const credential = await PasskeyCredential.create({ id: passkey.credentialId, prf: await readPasskeyPrf(page, passkey.credentialId) })
+	return JSON.stringify({ ...body, checksum, "backup-mac": await computeBackupMac(credential, checksum) })
 }
 
 /** Chooses `filePath` in the full-backup form and submits it with the passkey refused once; the
