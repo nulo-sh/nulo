@@ -205,8 +205,8 @@ export const BACKUP_SLICE_REGISTRY: Readonly<Record<string, SliceDescriptor>> = 
 	// Imported accounts' encrypted signing keys — own root, own owner. Optional: a backup with no
 	// imported accounts carries no slice, and that must not be a required-slice rejection.
 	[IMPORTED_KEYS_SERVICE_NAME]: { kind: "root", root: IMPORTED_KEYS_STORAGE_ROOT, idOf: accountAnchor, optional: true },
-	// Each restored token and balance row costs storage reads under one held lock, so their slices
-	// are bounded; no profile seen holds a tenth of either limit.
+	// These caps bound the restore work done while an allocation lock is held; no profile seen holds a
+	// tenth of either.
 	[TOKEN_SERVICE_NAME]: { kind: "root", root: TOKEN_STORAGE_ROOT, idOf: numberAnchor("id"), maxRows: 1024 },
 	[TOKEN_BALANCE_SERVICE_NAME]: { kind: "root", root: TOKEN_BALANCE_STORAGE_ROOT, idOf: numberAnchor("id"), maxRows: 16384 },
 	[CONTACT_SERVICE_NAME]: { kind: "root", root: CONTACT_STORAGE_ROOT, idOf: stringAnchor("id") },

@@ -3,7 +3,6 @@ import { ResponseTooLargeError, readBodyCapped } from "./read-capped"
 
 const encode = (text: string) => new TextEncoder().encode(text)
 
-/** A response streaming `chunks` in order, with a spy on the body's cancel and a count of reads. */
 function streamed(chunks: Uint8Array[], { headers, cancel }: { headers?: HeadersInit; cancel?: () => Promise<void> } = {}) {
 	const onCancel = vi.fn(cancel ?? (async () => {}))
 	let pulls = 0

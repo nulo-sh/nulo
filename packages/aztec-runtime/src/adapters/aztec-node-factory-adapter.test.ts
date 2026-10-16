@@ -18,11 +18,8 @@ const SENTINEL = "sentinel-7f3a"
 const realFetch = globalThis.fetch
 const CONSOLE_METHODS = ["log", "info", "warn", "error", "debug"] as const
 
-function reply(body: unknown, init: { ok?: boolean; status?: number } = {}): Response {
-	return new Response(JSON.stringify(body), {
-		status: init.status ?? 200,
-		statusText: init.ok === false ? "Server Error" : "OK",
-	})
+function reply(body: unknown, status = 200): Response {
+	return new Response(JSON.stringify(body), { status, statusText: status >= 400 ? "Server Error" : "OK" })
 }
 
 /** Answers each batched request by its id, as a node does. */
@@ -76,7 +73,7 @@ describe("AztecNodeFactoryAdapter.readPublicStorageOnce", () => {
 	})
 
 	test("a 500 rejects after exactly one attempt", async () => {
-		const fetchSpy = vi.fn(async () => reply({ error: { message: "boom" } }, { ok: false, status: 500 }))
+		const fetchSpy = vi.fn(async () => reply({ error: { message: "boom" } }, 500))
 		globalThis.fetch = fetchSpy as unknown as typeof fetch
 
 		await expect(new AztecNodeFactoryAdapter().readPublicStorageOnce(URL, CONTRACT, SLOT, 5_000)).rejects.toThrow()

@@ -9,8 +9,8 @@ export class ResponseTooLargeError extends Error {
 /**
  * Reads `response`'s body as UTF-8 text, decoded as `Response.json()` decodes it, and refuses with
  * {@link ResponseTooLargeError} past `maxBytes`: a declared `content-length` over the budget before any
- * read, a streamed body at the first chunk past it. Either refusal cancels the body, so the worker never
- * buffers more than the budget plus one chunk. A response with no body reads as `""`.
+ * read, a streamed body at the first chunk past it. Either refusal cancels the body. A response with no
+ * body reads as `""`.
  */
 export async function readBodyCapped(response: Response, maxBytes: number): Promise<string> {
 	if (Number(response.headers.get("content-length")) > maxBytes) {

@@ -351,7 +351,8 @@ describe("TokenBalanceService.restore — hostile-row validation", () => {
 	test("a batch whose rows all name a token the profile does not own lists no balance keys and writes nothing", async () => {
 		const listings = vi.spyOn(EntityStorage.prototype, "getKeys")
 		const restored = await service.restore([balance(1, 3), balance(2, 4), balance(3, 3)], "p1")
-		expect(restored.every((r) => /does not own/.test(r.restoreError ?? ""))).toBe(true)
+		expect(restored).toHaveLength(3)
+		for (const r of restored) expect(r.restoreError).toMatch(/does not own/)
 		expect(listings).not.toHaveBeenCalled()
 		expect(await seedRepo.getAll()).toEqual([])
 	})
@@ -360,7 +361,7 @@ describe("TokenBalanceService.restore — hostile-row validation", () => {
 		const listings = vi.spyOn(EntityStorage.prototype, "getKeys")
 		const restored = await service.restore([balance(1, 1), balance(2, 1), balance(3, 1), balance(4, 1)], "p1")
 		expect(restored[0].restoreError).toBeUndefined()
-		expect(restored.slice(1).every((r) => /duplicate balance pair/.test(r.restoreError ?? ""))).toBe(true)
+		for (const r of restored.slice(1)) expect(r.restoreError).toMatch(/duplicate balance pair/)
 		expect(listings).toHaveBeenCalledOnce()
 		expect(await seedRepo.getAll()).toHaveLength(1)
 	})

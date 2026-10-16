@@ -167,7 +167,6 @@ describe("validateContentScriptMessage — a discovery request's content", () =>
 	const wire = { type: "aztec-wallet-discovery", requestId: "r", appId: "a", chainInfo: { chainId: "1", version: "1" } }
 	const withChain = (chainInfo: object) => ({ ...wire, chainInfo: { ...wire.chainInfo, ...chainInfo } })
 
-	/** The page message the SDK's `ExtensionProvider.discoverWallets` posts, as the content script parses it. */
 	async function postedDiscovery(): Promise<unknown> {
 		const posted: string[] = []
 		vi.stubGlobal("window", { postMessage: (m: string) => posted.push(m), addEventListener: () => {}, removeEventListener: () => {} })

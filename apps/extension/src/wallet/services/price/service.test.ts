@@ -29,8 +29,6 @@ import {
 	type PriceState,
 } from "./service"
 
-type FetchResponse = Response
-
 const reply = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status })
 
 const PROFILE: ProfileInfo = { id: "p1", name: "Test" } as ProfileInfo
@@ -53,7 +51,7 @@ async function harness(opts?: { enabled?: boolean; profile?: ProfileInfo | undef
 		profile: "profile" in (opts ?? {}) ? opts?.profile : PROFILE,
 		body: opts?.body ?? goodBody(1_000_000),
 		fetchCalls: [] as string[],
-		fetchImpl: undefined as undefined | (() => Promise<FetchResponse>),
+		fetchImpl: undefined as undefined | (() => Promise<Response>),
 		list: { sequence: 1, keyId: "nulo-ci-1", entries: TEST_LIST_ENTRIES, flagged: [TEST_FLAGGED] } as TokenListSnapshot | undefined,
 	}
 
@@ -77,7 +75,7 @@ async function harness(opts?: { enabled?: boolean; profile?: ProfileInfo | undef
 		getSnapshot: () => state.list,
 	}
 
-	const fetchFn = vi.fn(async (url: string): Promise<FetchResponse> => {
+	const fetchFn = vi.fn(async (url: string): Promise<Response> => {
 		state.fetchCalls.push(url)
 		if (state.fetchImpl) return state.fetchImpl()
 		return reply(state.body)
@@ -508,8 +506,8 @@ describe("PriceService — race pins", () => {
 		const flush = () => new Promise((r) => setTimeout(r, 0))
 		const { service, state, fakeConfig } = await harness()
 		// A queue of fetch gates so refresh A and refresh B stall independently.
-		const gates: ((v: FetchResponse) => void)[] = []
-		state.fetchImpl = () => new Promise<FetchResponse>((r) => gates.push(r))
+		const gates: ((v: Response) => void)[] = []
+		state.fetchImpl = () => new Promise<Response>((r) => gates.push(r))
 
 		// Refresh A starts and parks on its fetch.
 		const aPromise = service.refreshIfStale()
@@ -570,7 +568,7 @@ describe("PriceService — race pins", () => {
 		const flush = () => new Promise((r) => setTimeout(r, 0))
 		const { service, state, fakeConfig } = await harness()
 		// Refresh A stalls in-flight (deferred fetch).
-		state.fetchImpl = () => new Promise<FetchResponse>(() => {})
+		state.fetchImpl = () => new Promise<Response>(() => {})
 		void service.refreshIfStale()
 		await flush()
 		expect(state.fetchCalls).toHaveLength(1)

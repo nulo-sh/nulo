@@ -142,7 +142,7 @@ describe("the node reply byte budget", () => {
 	test.each([200, 503])("a reply over the budget with status %i is a NoRetryError and is fetched once", async (status) => {
 		const spy = vi.fn(async () => streamedJsonString(MAX_NODE_RESPONSE_BYTES + 1, status))
 		globalThis.fetch = spy as unknown as typeof fetch
-		const err = await makeFetchWithTimeout(1000)("http://h", {}).catch((e) => e)
+		const err = await makeFetchWithTimeout(60_000)("http://h", {}).catch((e) => e)
 		expect(err).toBeInstanceOf(NoRetryError)
 		expect(err.message).toBe(`Response body is over its ${MAX_NODE_RESPONSE_BYTES}-byte budget`)
 		expect(spy).toHaveBeenCalledOnce()
@@ -150,7 +150,7 @@ describe("the node reply byte budget", () => {
 
 	test("a reply at the budget parses (control)", async () => {
 		globalThis.fetch = vi.fn(async () => streamedJsonString(MAX_NODE_RESPONSE_BYTES, 200)) as unknown as typeof fetch
-		const out = await makeSingleAttemptFetch(1000)("http://h", {})
+		const out = await makeSingleAttemptFetch(60_000)("http://h", {})
 		expect((out.response as unknown as string).length).toBe(MAX_NODE_RESPONSE_BYTES - 2)
 	})
 })

@@ -17,10 +17,10 @@
  *     offscreen pings) are passed through untouched — the listener's
  *     receiver does its own filter on `origin === "background"` etc.
  *
- * Apart from the secure-message size bound and the discovery shape, which
- * nothing upstream enforces, NOT a security boundary on its own (the
- * upstream handler also filters), just a noise-reduction + invariant check
- * that catches malformed dispatches before they reach the upstream code.
+ * It holds two invariants of its own: a secure message's ciphertext is
+ * bounded, and a discovery request carries only the SDK's fields, each
+ * bounded. Beyond them it is noise reduction (the upstream handler also
+ * filters), catching malformed dispatches before they reach upstream code.
  *
  * Pure function — no chrome.*, no globals. Tested directly with
  * synthetic payloads.
@@ -73,7 +73,7 @@ const onlyOwnKeys =
 	(value: unknown): boolean =>
 		typeof value === "object" && value !== null && Object.keys(value).every((key) => keys.has(key))
 
-/** Twice a UUID; the session id is the discovery's request id. */
+/** A discovery's request id becomes its session id. */
 const MAX_REQUEST_ID_CHARS = 128
 
 const EnvelopeSchema = z.object({

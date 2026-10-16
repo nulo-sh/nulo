@@ -675,8 +675,7 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		const ownedTokens = new Map((await this.tokenService.getTokensRaw(profileId)).map((t) => [t.id, t]))
 		const seenPairs = new Set<string>()
 		return await this.lock.withLock(async () => {
-			// Rows are refused before any storage read, and the key space is listed once, at the first
-			// accepted row: a batch costs one listing however many rows it carries.
+			// Ownership and pair checks precede the first balance-key listing, which runs once per restore.
 			let ids: NumericIdBatch | undefined
 			return await restoreRows(tokenBalances, async (tb) => {
 				const token = ownedTokens.get(tb.token)
