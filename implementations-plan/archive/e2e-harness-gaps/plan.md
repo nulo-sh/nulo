@@ -49,7 +49,7 @@ post_implementation_hardening: not scheduled
     - #190 stays `blocked:external`, with no in-repo half (§ Scope);
     - #269, the navigation flake arc 4's first gate met, is closed.
   - Not promoted to `lessons.md`: a cold import inside a test's body counts against vitest's 5 s test budget, which a loaded host overruns (#500, [lessons/phase-4.md](lessons/phase-4.md)). The fix's comment carries it where it applies; the file holds 8,190 bytes, and no entry retires for it.
-- **Size:** 995 lines against mid's 350. The close-out cut § Post-implementation's copy of README's table; what remains is six arcs' decisions, plan audits and implementation reviews.
+- **Size:** 997 lines against mid's 350. The close-out cut § Post-implementation's copy of README's table; what remains is six arcs' decisions, plan audits and implementation reviews.
 - **Known limits:** none.
 - **Open items:** #165 (its discovered-authwit half); #535 (#500's relay half, which the fix does not cover).
 - **Seeds retired:** the `/goal` and `/loop` seeds below were never run, because the orchestrator drove the lane. This record is evidence, not instructions.
