@@ -1801,7 +1801,7 @@ describe("ProfileService integration", () => {
 	// The browserApi port carries alarms as well as storage, so the proactive TTL auto-lock is live
 	// wherever ProfileService is constructed.
 	describe("ProfileService composition seam — proactive TTL activation", () => {
-		test("WITH a browserApi port → SessionManager subscribes to the proactive-TTL alarm", () => {
+		test("SessionManager subscribes to the proactive-TTL alarm", () => {
 			const api = new FakeBrowserApi()
 			api.reset()
 			const onAlarm = vi.spyOn(api.alarms, "onAlarm")

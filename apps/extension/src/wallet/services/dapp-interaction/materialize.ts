@@ -69,9 +69,10 @@ export async function materializeRequest(request: OperationRequest, deps: Materi
 		case "aztec_sendTx":
 		case "send_transaction": {
 			const [network, account] = await deps.resolveNetworkAndAccount(request.account)
-			// A requested self-pay (the account named as payer with no fee call) starts with NO
-			// settings: the fee card, locked to Fee Juice, derives them only once a verified balance
-			// can pay — a pre-filled method would leave Confirm live over an empty or unread balance.
+			// On `aztec_sendTx`, a requested self-pay (the account named as payer with no fee call)
+			// starts with NO settings: the fee card, locked to Fee Juice, derives them only once a
+			// verified balance can pay — a pre-filled method would leave Confirm live over an empty
+			// or unread balance.
 			return {
 				...request,
 				networkId: network.id,

@@ -124,8 +124,8 @@ export class SessionManager {
 	/** Facade-lock serializer injected by ProfileService. Serializes the
 	 *  alarm-driven TTL close against the facade-locked session writers
 	 *  (refresh/open/unlock) so a racing refresh writeback cannot resurrect a
-	 *  session the alarm just closed. Defaults to a pass-through for tests that
-	 *  construct the manager without the facade. */
+	 *  session the alarm just closed. Defaults to a pass-through when no facade
+	 *  lock is injected. */
 	private readonly runExclusive: <T>(fn: () => Promise<T>) => Promise<T>
 	/** Serializes the session ARTIFACT operations (row write/delete, alarm
 	 *  schedule/clear) across every entry point — including the off-lock

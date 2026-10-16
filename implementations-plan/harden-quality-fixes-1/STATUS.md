@@ -11,3 +11,5 @@
 - 2026-10-16: phase 3 gate pass: lint, typecheck:all, `bun run test` (800 files; storage-codecs unchanged and green); new-field compile proof at three sites.
 - 2026-10-16: phase 4 gate pass: lint, typecheck:all, wallet-bridge test (17 files), `bun run test` (800 files) after re-pinning the dispatcher digest (D12); Header HTML identical base vs branch.
 - 2026-10-16: phase 5 gate pass: lint, typecheck:all, `bun run test` (800 files); `src/types` gains exactly the three globals.
+- 2026-10-16: phase 6 local part pass: test:all (all workspaces), check:plans (0 findings), extension build, `src/types` clean. Smoke and network e2e waiting on load1 < 150; Codex round 1 and the Opus review running.
+- 2026-10-16: review round 1: Codex conditional approve (2 accepted), Opus approve (5 nits accepted); fixes committed, affected suites green; Codex resumed.

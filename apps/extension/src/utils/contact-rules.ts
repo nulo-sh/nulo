@@ -18,7 +18,7 @@ export function canonicalContactAddress(address: string): string {
 }
 
 // The contact form's rules take the reactive refs as `{ value }` handles, read only where the check
-// reaches them, so a computed over them depends on what it reads today and nothing more.
+// reaches them, so a computed over them tracks only the refs its check reaches.
 type Handle<T> = { readonly value: T }
 
 /** The name field's verdict: `null` while empty or free, `CONTACT_EXISTS` when a saved contact other

@@ -156,6 +156,10 @@ Follow `implementations-plan/README.md` § Post-implementation standard at revis
 
 **Final pass, Codex** (fresh session 01a144f8): conditional approve, 1 finding, accepted: the smoke gate needs the armed bundle (`global-setup-smoke.ts:45-52` refuses a plain build). It also corrected D11's reason for rejecting a rules object. **Resumed: approve**; no new material finding.
 
+**Implementation review, round 1** (Codex gpt-6.1-sol high, session 01a14547; Opus general-purpose alongside):
+- Codex: conditional approve, 2 findings, both accepted: the journal forwarding read the nine metadata fields before `kind` through `initialStage` (moves a read; now an inline literal with `satisfies` at the spread's place, key check re-proved); a restating comment on the test writer type.
+- Opus: approve, 5 nits, all accepted: two comments that named a caller or a moment, the self-pay comment scoped to `aztec_sendTx` on the merged arm, a now-duplicate `stub` in one describe, a test name that kept its deleted partner's qualifier.
+
 The plan is 163 lines against the 150-line light target: the audit verdicts and the ledger carry the four review rounds.
 
 ## Seeds

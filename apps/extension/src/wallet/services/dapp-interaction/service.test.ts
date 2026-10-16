@@ -755,7 +755,6 @@ describe("DappInteractionService — the capability window's known contracts", (
 		confirmationLevel: AccessLevel.Transactions,
 		expiry: Number.MAX_SAFE_INTEGER,
 	}
-	const stub = (name: string, methods: Record<string, unknown>) => ({ name, dependencies: [], async start() {}, ...methods }) as never
 
 	test("names only what the wallet vouches for, whatever the stores and the request carry", async () => {
 		const api = new FakeBrowserApi()

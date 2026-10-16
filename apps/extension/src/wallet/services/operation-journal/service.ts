@@ -294,19 +294,6 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		const id = await nextRandomId(this.storage, 16)
 
 		const now = Date.now()
-		// Every key is named, so a metadata field added to the type fails to compile until it is
-		// forwarded, and an input-only field (`profileEpoch`, `initialStage`) is never stored.
-		const metadata: { [K in keyof Required<JournalMetadata>]: JournalMetadata[K] | undefined } = {
-			accountAddress: input.accountAddress,
-			networkId: input.networkId,
-			tokenId: input.tokenId,
-			title: input.title,
-			subtitle: input.subtitle,
-			amountRaw: input.amountRaw,
-			recipientAddress: input.recipientAddress,
-			contractAddress: input.contractAddress,
-			transferType: input.transferType,
-		}
 		const record: OperationRecord = {
 			id,
 			kind: input.kind,
@@ -322,7 +309,19 @@ export class OperationJournalService extends Service<Methods, Events> implements
 			attempts: 0,
 			createdAt: now,
 			updatedAt: now,
-			...metadata,
+			// Every key is named, so a metadata field added to the type fails to compile until it is
+			// forwarded, and an input-only field (`profileEpoch`, `initialStage`) is never stored.
+			...({
+				accountAddress: input.accountAddress,
+				networkId: input.networkId,
+				tokenId: input.tokenId,
+				title: input.title,
+				subtitle: input.subtitle,
+				amountRaw: input.amountRaw,
+				recipientAddress: input.recipientAddress,
+				contractAddress: input.contractAddress,
+				transferType: input.transferType,
+			} satisfies { [K in keyof Required<JournalMetadata>]: JournalMetadata[K] | undefined }),
 		}
 		await this.storage.set(record.id, record)
 		this.emit("onOperationAdded", record)

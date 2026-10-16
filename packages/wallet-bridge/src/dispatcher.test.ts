@@ -96,7 +96,6 @@ function makeSession(overrides: Partial<IDappSessionRef> = {}): IDappSessionRef 
 	} as IDappSessionRef
 }
 
-/** The dispatcher's writer plus the read the tests assert stored rows through. */
 type TestSessionWriter = IDappSessionWriter & { getDappSession(id: string): Promise<IDappSessionRef> }
 
 function makeSessionWriter(initial: IDappSessionRef) {
