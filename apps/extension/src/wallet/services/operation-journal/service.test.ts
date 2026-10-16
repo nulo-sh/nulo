@@ -15,7 +15,14 @@ import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { OperationJournalService } from "./service"
-import { type NewOperationInput, type OperationRecord, type SendCheckState, isSendCheckable, wasNeverSent } from "./spec"
+import {
+	type JournalMetadata,
+	type NewOperationInput,
+	type OperationRecord,
+	type SendCheckState,
+	isSendCheckable,
+	wasNeverSent,
+} from "./spec"
 
 const VALID_INPUT: NewOperationInput = {
 	kind: "transfer",
@@ -77,23 +84,29 @@ describe("OperationJournalService", () => {
 		expect(seen).toHaveBeenCalledWith(rec)
 	})
 
-	test("createOperation: persists amountRaw + recipientAddress + transferType for transfer ops", async () => {
-		const rec = await service.createOperation({
-			...VALID_INPUT,
+	test("createOperation: every metadata field survives storage, and the input-only fields are never stored", async () => {
+		const metadata = {
 			accountAddress: "0xabc",
 			networkId: "net1",
 			tokenId: 42,
+			title: "Send 5 USDC",
+			subtitle: "to 0xdef",
 			amountRaw: "5000000",
 			recipientAddress: "0xdef",
+			contractAddress: "0x123",
 			// TransferType.Private === 0 — pin the falsy enum value so a
 			// truthy gate regresses the persistence layer loudly instead of
 			// silently dropping the field on Private→Private records.
 			transferType: 0,
-		})
+		} satisfies Required<JournalMetadata>
+		const rec = await service.createOperation({ ...VALID_INPUT, ...metadata, profileEpoch: 3, initialStage: { stage: "pending" } })
 
-		expect(rec.amountRaw).toBe("5000000")
-		expect(rec.recipientAddress).toBe("0xdef")
-		expect(rec.transferType).toBe(0)
+		const key = `nulo:journal@${rec.id}`
+		const stored = JSON.parse((await api.storage.local.get(key))[key] as string)
+		expect(await service.getOperation(rec.id)).toMatchObject(metadata)
+		expect(stored).toMatchObject(metadata)
+		expect(stored).not.toHaveProperty("profileEpoch")
+		expect(stored).not.toHaveProperty("initialStage")
 	})
 
 	test("createOperation: rejects malformed input (missing origin) with ValidationError", async () => {

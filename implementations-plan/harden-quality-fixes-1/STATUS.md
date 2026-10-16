@@ -8,3 +8,4 @@
 - 2026-10-16: arc 1 started; merged origin/dev (7697c376). A1 refused (no `execute/index.vue` hunk, no fee-seed helper; `Refs #549`), A2 accepted (D3).
 - 2026-10-16: phase 1 gate pass: lint, typecheck:all, `bun run test` (800 files), wallet-core test (24 files); the copy grep prints exactly the nine expected lines.
 - 2026-10-16: phase 2 gate pass: lint, typecheck:all, `bun run test` (800 files), wallet-bridge test (17 files); exhaustiveness proof TS2322 at the three sites; unknown-kind test red on the base service.
+- 2026-10-16: phase 3 gate pass: lint, typecheck:all, `bun run test` (800 files; storage-codecs unchanged and green); new-field compile proof at three sites.
