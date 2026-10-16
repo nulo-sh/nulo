@@ -1,10 +1,11 @@
 /**
- * Content script — pure relay between page (postMessage/MessagePort) and
+ * Content script — relay between page (postMessage/MessagePort) and
  * background (chrome.runtime.sendMessage).
  *
  * Uses the standardized @aztec-labs/wallet-sdk ContentScriptConnectionHandler
  * which handles discovery, MessageChannel creation, key exchange relay,
- * and encrypted message relay. No private keys or secrets touch this script.
+ * and encrypted message relay; `approval-filter.ts` narrows which discovery
+ * approvals reach it. No private keys or secrets touch this script.
  */
 import { ContentScriptConnectionHandler } from "@aztec-labs/wallet-sdk/extension/handlers"
 import { createApprovalFilter } from "./approval-filter"

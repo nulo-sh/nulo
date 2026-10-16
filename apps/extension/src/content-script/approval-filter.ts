@@ -1,8 +1,7 @@
 /**
- * Keeps a discovery approval to the document that asked for it. The background sends an approval to
- * every frame of the tab, and the SDK's content script answers its page with a channel for each one,
- * so a document passes on only an approval whose session id is a discovery request it forwarded.
- * Ids correlate, they do not authenticate: the background's key-exchange check is the boundary.
+ * A document passes a discovery approval to its page only for a discovery request it forwarded;
+ * approvals are addressed to the tab, not the frame. Ids correlate, they do not authenticate: the
+ * background's key-exchange check is the boundary.
  */
 
 /** `InternalMessageType` values; the SDK's package entry does not export the enum. */
@@ -13,7 +12,6 @@ const DISCOVERY_APPROVED = "discovery-approved"
 export const REMEMBERED_REQUESTS = 32
 
 export interface ApprovalFilter {
-	/** Notes a message this document sends to the background. */
 	sent(message: unknown): void
 	/** Whether a background message may reach this document's SDK handler. */
 	admits(message: unknown): boolean

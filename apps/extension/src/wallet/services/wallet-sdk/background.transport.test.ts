@@ -58,7 +58,12 @@ const keyExchange = async (sessionId: string) => ({
 		publicKey: await exportPublicKey((await generateKeyPair()).publicKey),
 	},
 })
-const keyExchangeResponses = () => sendMessage.mock.calls.filter(([, m]) => (m as { type?: string }).type === "key-exchange-response")
+const keyExchangeResponses = (sessionId: string) =>
+	sendMessage.mock.calls.filter(
+		([, m]) =>
+			(m as { type?: string; sessionId?: string }).type === "key-exchange-response" &&
+			(m as { sessionId?: string }).sessionId === sessionId,
+	)
 
 type Deliver = (message: unknown, from?: MessageSender) => void
 
@@ -102,7 +107,7 @@ async function expectKeyExchangeRefused(handler: BackgroundConnectionHandler, de
 	deliver(await keyExchange(sessionId), from)
 	await flush()
 	expect(sdkListener).not.toHaveBeenCalled()
-	expect(keyExchangeResponses()).toEqual([])
+	expect(keyExchangeResponses(sessionId)).toEqual([])
 	expect(handler.getSession(sessionId)).toBeUndefined()
 }
 
@@ -295,6 +300,21 @@ describe("a key exchange, admitted only from its discovery's tab and document or
 			tab: { id: TAB, url: `${FAKE_DAPP_ORIGIN}/` },
 			frameId: 0,
 		} as MessageSender)
+	})
+
+	test("from a document reporting an opaque origin it is refused, whatever its url", async () => {
+		const { handler, deliver } = boot()
+		await approve(deliver, "k6", sender(TAB))
+		await expectKeyExchangeRefused(handler, deliver, "k6", sender(TAB, 0, "null"))
+		const sandboxed = { ...sender(TAB), origin: "null", url: `${FAKE_DAPP_ORIGIN}/` } as MessageSender
+		await expectKeyExchangeRefused(handler, deliver, "k6", sandboxed)
+	})
+
+	test("from a sender with only a url of another origin it is refused", async () => {
+		const { handler, deliver } = boot()
+		await approve(deliver, "k7", sender(TAB))
+		const elsewhere = { tab: { id: TAB, url: `${FAKE_DAPP_ORIGIN}/` }, frameId: 0, url: "https://other.example/app" } as MessageSender
+		await expectKeyExchangeRefused(handler, deliver, "k7", elsewhere)
 	})
 
 	test("from a sender with only a url (as Firefox reports one), its url's origin decides (control)", async () => {
