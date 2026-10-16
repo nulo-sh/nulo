@@ -5,7 +5,7 @@ import { clickByTestId, grantCapBundle, openPopup, test, waitForHash } from "../
 import { importToken } from "../fixtures/helpers"
 import { waitForDappExecuteWorked } from "../fixtures/journal"
 import { assertPgOk, setPgInput, setPgTextarea, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
-import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
+import { approveExecute, openExecuteDetails, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { serializeInstance } from "../fixtures/selfpay-phase"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -72,9 +72,9 @@ test.skipIf(!hasConfig)(
 		)
 		expect(ops).toEqual(["aztec_sendTx"])
 
-		// The discovered authwit shows once the estimate lands, and its decode after that.
-		await execPopup.waitForSelector(sel("execute-discovered-authwit-toggle"), { visible: true, timeout: 60_000 })
-		await clickByTestId(execPopup, "execute-discovered-authwit-toggle")
+		// The discovered authwit sits under the card's "Show all details", closed at rest, and its
+		// values open with it once the estimate lands.
+		await openExecuteDetails(execPopup)
 		await execPopup.waitForSelector(sel("execute-discovered-authwit-structured-args"), { visible: true, timeout: 60_000 })
 		// Each address fills itself in after its own contact lookup. The row is read in the same pass
 		// that sees both filled, so an estimate rerun that remounts the list cannot split the read.
