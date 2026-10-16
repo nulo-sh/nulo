@@ -57,7 +57,10 @@ existing keys and profiles.
   ever challenges it) — the edge that already terminates the host's TLS,
   so no new trust root, and the page's CSP refuses any script a zone
   feature would inject; the README lists the dashboard settings to keep
-  off.
+  off. The derivation trusts the browser to let only this extension
+  evaluate the credential's PRF for this RP ID; another extension the
+  browser authorizes for it is a compromised browser, outside the threat
+  model (known limit #597).
   - **Build-time gate** (`scripts/check-rp-id.ts`): single source
     of truth is `RP_ID` exported from
     `src/wallet/services/passkey/spec.ts`. The gate fails the build if
