@@ -84,6 +84,6 @@
 ## 4.1 The soak matrices at 685b032 and 30a39be
 
 - 685b032, after the `dev` 116974d merge: 12 of 13 `COMPARE OK`. The extension failed on four load timeouts, three of them `zod-jitless` (#500). A quiet start reading did not keep a two-hour side quiet: the Node re-run started at load 50 and was at about 230 by its failing run 25.
-- What changed the outcome was moving the cold import, not finding a quiet host. `zod-jitless`'s two imports moved into `beforeAll`, under the hook's 10 s budget, keeping their order and the assertion; deleting the flag import still fails the test on both engines.
-- 30a39be, with `dev` 2dcdad4 merged: 13 of 13 `COMPARE OK`, no failed run on either engine, every side started under load 150 (D-orch-24). The relay test's hook timeout, which the fix does not cover, did not recur; it is #535.
+- The fix moved the cold import instead of waiting for a quiet host. `zod-jitless`'s two imports moved into `beforeAll`, under the hook's 10 s budget, keeping their order and the assertion; deleting the flag import still fails the test on both engines.
+- 30a39be, with `dev` 2dcdad4 merged: 13 of 13 `COMPARE OK`, no failed run on either engine, every side started under load 150 (D-orch-24). Its sampled load (29 to 137) was lower than 685b032's and the merge brought other code, so the pass shows the fix holds under that load, not that it alone cleared the gate. The relay test's hook timeout, which the fix does not cover, did not recur; it is #535.
 - The matrix ran on a clean-room install: Bun 1.4.2 keeps what an earlier install linked, so every workspace's `node_modules` was deleted before `bun install --frozen-lockfile`.
