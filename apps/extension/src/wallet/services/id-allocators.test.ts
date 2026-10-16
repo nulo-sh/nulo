@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { nextNumericId, nextRandomId, preferOrReallocId } from "./id-allocators"
+import { nextNumericId, nextRandomId, numericIdBatch, preferOrReallocId } from "./id-allocators"
 
 describe("nextNumericId", () => {
 	test("returns max(existing numeric keys) + 1", async () => {
@@ -64,6 +64,49 @@ describe("nextNumericId", () => {
 		const second = await nextNumericId({ getKeys: async () => keys })
 		expect(Number.isSafeInteger(second)).toBe(true)
 		expect(keys).not.toContain(String(second))
+	})
+})
+
+describe("numericIdBatch", () => {
+	/** What `nextNumericId` returns for each of `count` allocations when each id is written before the next. */
+	async function successive(keys: string[], count: number, fenced: ReadonlySet<number> = new Set()): Promise<number[]> {
+		const store = [...keys]
+		const out: number[] = []
+		for (let i = 0; i < count; i++) {
+			const id = await nextNumericId({ getKeys: async () => [...store, ...[...fenced].map(String)] })
+			store.push(String(id))
+			out.push(id)
+		}
+		return out
+	}
+
+	const batchOf = (keys: string[], count: number, fenced: ReadonlySet<number> = new Set()) => {
+		const batch = numericIdBatch(keys)
+		return Array.from({ length: count }, () => batch.next(fenced))
+	}
+
+	test.each([
+		["a sane store", ["1", "2", "5"]],
+		["an empty store", []],
+		["non-canonical and unsafe keys", ["0", "01", "0x10", "1e+21", "999999999999999999999", "3"]],
+		["a MAX_SAFE_INTEGER key", ["1", String(Number.MAX_SAFE_INTEGER)]],
+	])("matches successive nextNumericId calls over %s", async (_, keys) => {
+		expect(batchOf(keys, 5)).toEqual(await successive(keys, 5))
+	})
+
+	test("skips fenced ids, as nextNumericId does with them as keys", async () => {
+		const fenced = new Set([4, 6])
+		const ids = batchOf(["1", "3"], 4, fenced)
+		expect(ids).toEqual(await successive(["1", "3"], 4, fenced))
+		expect(ids.some((id) => fenced.has(id))).toBe(false)
+	})
+
+	test("reads the fence on every call", () => {
+		const fenced = new Set<number>()
+		const batch = numericIdBatch(["1"])
+		expect(batch.next(fenced)).toBe(2)
+		fenced.add(3)
+		expect(batch.next(fenced)).toBe(4)
 	})
 })
 

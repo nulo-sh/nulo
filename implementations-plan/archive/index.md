@@ -100,6 +100,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [e2e-followups-6](e2e-followups-6/plan.md) — completed — every window a helper hands back is recorded and each asserting test checks its arrays before a popup clears them (#325); the zombie tests keep their zombie (#326)
 - [e2e-followups-7](e2e-followups-7/plan.md) — completed — snack-placement's drain settles the grant's finality balance write before the mint (#349); #403 a known limit
 - [e2e-network-recovery](e2e-network-recovery/plan.md) — completed — the network e2e suite recovered by probes and root causes
+- [e2e-private-transfer](e2e-private-transfer/plan.md) — completed — the delegated-authwit e2e runs un-gated on both browsers and reads its discovered authwit as the donor's private transfer (#165)
 - [e2e-proverless-stub](e2e-proverless-stub/plan.md) — completed — network e2e skips real proving for most tests and keeps simulation and execution
 - [e2e-reliability-fixes](e2e-reliability-fixes/plan.md) — completed — a wave of test-reliability follow-ups closed at their root causes
 - [e2e-skill-refresh](e2e-skill-refresh/plan.md) — completed — one service-worker kill helper and a procedure-first e2e-testing skill
@@ -273,6 +274,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [transport-unification](transport-unification/plan.md) — completed — one template-method RPC design for the background and offscreen transports
 - [type-roles](type-roles/plan.md) — completed — one rulebook of 28 type roles, generated from the token contract, chooses every text face; a guard and a computed-style sweep enforce it
 - [typecheck-cleanup](typecheck-cleanup/plan.md) — completed — the extension taken to zero type errors, with one root typecheck command
+- [ui-followups-p18](ui-followups-p18/plan.md) — completed — the last outline-grey text moved to secondary (#363), store art regenerated after the owner signed it (#364), the tx fee row's hover fade removed
 - [unserved-chain-connect](unserved-chain-connect/plan.md) — completed — a connection to a chain the profile has no network for is refused, and the wallet says so
 - [ux-cleanup-arc](ux-cleanup-arc/plan.md) — completed in part — five small fixes for user-facing rough edges
 - [ux-feedback](ux-feedback/plan.md) — completed — a user-testing proposal built as five batches on one stack

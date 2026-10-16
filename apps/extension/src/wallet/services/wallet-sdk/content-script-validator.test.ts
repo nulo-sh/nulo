@@ -4,10 +4,12 @@ import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { jsonStringify } from "@aztec-labs/foundation/json-rpc"
 import { loadContractArtifact } from "@aztec-labs/stdlib/abi"
+import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { encrypt } from "@aztec-labs/wallet-sdk/crypto"
+import { ExtensionProvider } from "@aztec-labs/wallet-sdk/extension/provider"
 import { wireInstance } from "@nulo/wallet-bridge/testing"
 import { resolvePackageRoot } from "@nulo/resolve-asset"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS, isSubframeSender, validateContentScriptMessage } from "./content-script-validator"
 
 describe("isSubframeSender (defense-in-depth)", () => {
@@ -58,7 +60,7 @@ describe("validateContentScriptMessage", () => {
 		const result = validateContentScriptMessage({
 			origin: "content-script",
 			type: "discovery-request",
-			content: { type: "discovery", requestId: "abc", appId: "test", chainInfo: {} },
+			content: { type: "aztec-wallet-discovery", requestId: "abc", appId: "test", chainInfo: { chainId: "1", version: "1" } },
 		})
 		expect(result.kind).toBe("valid")
 		if (result.kind === "valid") {
@@ -152,6 +154,64 @@ describe("validateContentScriptMessage", () => {
 			content: {},
 		})
 		expect(result.kind).toBe("invalid")
+	})
+})
+
+describe("validateContentScriptMessage — a discovery request's content", () => {
+	const envelope = (content: unknown, sessionId?: unknown) => ({
+		origin: "content-script",
+		type: "discovery-request",
+		sessionId,
+		content,
+	})
+	const wire = { type: "aztec-wallet-discovery", requestId: "r", appId: "a", chainInfo: { chainId: "1", version: "1" } }
+	const withChain = (chainInfo: object) => ({ ...wire, chainInfo: { ...wire.chainInfo, ...chainInfo } })
+
+	async function postedDiscovery(): Promise<unknown> {
+		const posted: string[] = []
+		vi.stubGlobal("window", { postMessage: (m: string) => posted.push(m), addEventListener: () => {}, removeEventListener: () => {} })
+		try {
+			await ExtensionProvider.discoverWallets({ chainId: new Fr(31337n), version: new Fr(1n) }, { appId: "test-dapp", timeout: 1 })
+		} finally {
+			vi.unstubAllGlobals()
+		}
+		return JSON.parse(posted[0] ?? "null")
+	}
+
+	it("admits the message ExtensionProvider.discoverWallets posts, its chain fields 66 characters long", async () => {
+		const content = (await postedDiscovery()) as { chainInfo: { chainId: string } }
+		expect(content.chainInfo.chainId).toHaveLength(66)
+		expect(validateContentScriptMessage(envelope(content)).kind).toBe("valid")
+	})
+
+	it("admits every field at its bound (control)", () => {
+		const atBounds = {
+			...wire,
+			requestId: "r".repeat(128),
+			appId: "a".repeat(256),
+			chainInfo: { chainId: "1".repeat(80), version: "1".repeat(80) },
+		}
+		expect(validateContentScriptMessage(envelope(atBounds, "s".repeat(128))).kind).toBe("valid")
+	})
+
+	it.each<[string, unknown]>([
+		["a content key the SDK does not send", { ...wire, appName: "x" }],
+		["a chainInfo key the SDK does not send", withChain({ extra: "1" })],
+		["an own __proto__ key in content", JSON.parse(`{"__proto__":"x",${JSON.stringify(wire).slice(1)}`)],
+		["an own __proto__ key in chainInfo", { ...wire, chainInfo: JSON.parse('{"chainId":"1","version":"1","__proto__":"x"}') }],
+		["a requestId over 128 characters", { ...wire, requestId: "r".repeat(129) }],
+		["an appId over 256 characters", { ...wire, appId: "a".repeat(257) }],
+		["a chainId over 80 characters", withChain({ chainId: "1".repeat(81) })],
+		["a version over 80 characters", withChain({ version: "1".repeat(81) })],
+		["another content type", { ...wire, type: "aztec-wallet-discovery-response" }],
+		["no content", undefined],
+	])("refuses %s", (_label, content) => {
+		expect(validateContentScriptMessage(envelope(content)).kind).toBe("invalid")
+	})
+
+	it("refuses a session id over 128 characters on any envelope", () => {
+		expect(validateContentScriptMessage(envelope(wire, "s".repeat(129))).kind).toBe("invalid")
+		expect(validateContentScriptMessage({ origin: "content-script", type: "ping", sessionId: "s".repeat(129) }).kind).toBe("invalid")
 	})
 })
 

@@ -6,4 +6,3 @@ Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 - [home-onboarding-2](home-onboarding-2/plan.md) — in progress — the Firefox Presto permission row in place of the step (#156, P18-03 A, P16-04 B); #132 already shipped
 - [send-fees-ux](send-fees-ux/plan.md) — planned, awaiting approval — the edit form's sponsor address check and the cap refusal words (#316, #340), #504's wait measured; #503, #504's field and #505 wait on owner asks OA-1 to OA-4
 - [small-ui-fixes-1](small-ui-fixes-1/plan.md) — planned, awaiting approval — the Show network name toggle (#577 P25-09 B), one export file-name rule (#565 P25-11 A), the JSON window on lock (#566), a second duplicate warning (#567)
-- [ui-followups-p18](ui-followups-p18/plan.md) — planned — the rest of the outline-grey text to secondary (#363 page 18 C), #451 closed as signed, fresh store art after the owner signs it (#364)

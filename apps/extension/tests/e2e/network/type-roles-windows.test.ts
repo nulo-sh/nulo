@@ -1,6 +1,6 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
-import { type AztecTestConfig, deployDelegatedPullRig, ensureStandardPublicChecks } from "../fixtures/aztec"
+import { type AztecTestConfig, deployDelegatedPullRig } from "../fixtures/aztec"
 import { clickByTestId, type ExtensionContext, grantCapBundle, test } from "../fixtures/extension"
 import { requestPgBundle, setPgInput, setPgTextarea, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import {
@@ -11,6 +11,7 @@ import {
 	waitForPopup,
 	waitForPopupClosed,
 } from "../fixtures/popups"
+import { serializeInstance } from "../fixtures/selfpay-phase"
 import {
 	expectSitesClean,
 	expectSweepClean,
@@ -225,18 +226,13 @@ async function instanceJson(address: string): Promise<string> {
 	const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses")
 	const instance = await createAztecNodeClient(aztecConfig!.nodeUrl).getContract(AztecAddress.fromStringUnsafe(address))
 	if (!instance) throw new Error(`no contract instance at ${address}`)
-	return JSON.stringify(instance, (_k, x) => {
-		if (typeof x === "bigint") return x.toString()
-		const ctor = x && typeof x === "object" ? Object.getPrototypeOf(x)?.constructor?.name : undefined
-		return ctor === "Fr" || ctor === "AztecAddress" || ctor === "EthAddress" ? x.toString() : x
-	})
+	return serializeInstance(instance)
 }
 
 /** Fills the playground's delegated send but leaves the consumer instance unset: registering it is what lets the wallet decode the call. */
 async function rigDelegatedSend(ctx: Connected): Promise<{ consumerAddress: string }> {
 	const pg = ctx.playgroundPage
 	const [account] = await grantCapBundle(ctx, pg, "transaction-contracts", async (ids) => [ids[0]!])
-	await ensureStandardPublicChecks(aztecConfig!)
 	const { pullTokenAddress, consumerAddress } = await deployDelegatedPullRig(aztecConfig!, account!)
 	await setPgInput(pg, "consumerAddress", consumerAddress)
 	await setPgInput(pg, "amount", "100")
