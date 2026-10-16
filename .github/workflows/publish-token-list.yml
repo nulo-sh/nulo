@@ -6,6 +6,8 @@ run-name: "publish-token-list ← ${{ github.event_name }} at ${{ github.sha }}"
 # - `prepare` holds no secret: it runs the tree invariants and writes the review summary (token diff,
 #   the tokens digest `sign` will hold to, and every signing-relevant change since the last publish).
 #   The `token-list` environment approves a run, not its code: read the summary before approving.
+#   Its advisory live check reads each entry from a keyless public node; no failure of it blocks
+#   `sign`, which it delays by at most its 5 min timeout.
 # - `sign` runs in the `token-list` environment (owner reviewer, branch `dev`), reads its secret in
 #   one step, installs nothing and runs the signer with `bun --no-install`; the signer's import
 #   closure is pinned to `node:` and its own package. It refuses any token set but the summary's,
@@ -51,6 +53,11 @@ jobs:
       - name: Review summary
         id: summary
         run: bun infra/token-list/scripts/summary.ts >> "$GITHUB_STEP_SUMMARY"
+      # Committed and pinned in behavior-gating.test.ts: the node URL must carry no key.
+      - name: Live check (advisory)
+        continue-on-error: true
+        timeout-minutes: 5
+        run: bun infra/token-list/scripts/live-check.ts https://aztec-testnet.drpc.org >> "$GITHUB_STEP_SUMMARY"
 
   sign:
     name: sign (owner approval)

@@ -96,6 +96,9 @@ function isPrestoProbeNoise(msg: ConsoleMessage): boolean {
  *
  *  `fixedWindowSize: false` launches without the driver's fixed window size (`LaunchOptions`).
  *
+ *  `grantPermissionRequests: true` grants a permission request from a real click with no prompt
+ *  (`LaunchOptions`; Firefox only).
+ *
  *  `live: true` sends the Testnet node's host and the token list's host direct instead of holding
  *  the stand-in, and fails the close if the guard sees either. Only a run that provides `liveLeg` may
  *  ask: elsewhere the launch would make a gate depend on a live host.
@@ -110,9 +113,10 @@ export async function launchExtension(
 		fixedWindowSize?: boolean
 		live?: true
 		tokenList?: "held"
+		grantPermissionRequests?: true
 	} = {},
 ): Promise<ExtensionContext> {
-	const { userDataDir, waitForLiveness = true, fixedWindowSize } = opts
+	const { userDataDir, waitForLiveness = true, fixedWindowSize, grantPermissionRequests } = opts
 	const extensionPath = inject("extensionPath")
 	// Read before Chrome writes the profile: `onInstalled` fires with reason "install" — the only
 	// reason that opens the first-run tab — exactly when the profile has never held the extension.
@@ -122,7 +126,7 @@ export async function launchExtension(
 	// HEADLESS=0 flips to windowed mode for local debugging.
 	const headless: boolean = process.env.HEADLESS !== "0"
 	const launch = (egress?: { guardPort: number; liveHosts?: readonly string[] }) =>
-		launchBrowser({ extensionPath, userDataDir, headless, fixedWindowSize, egress })
+		launchBrowser({ extensionPath, userDataDir, headless, fixedWindowSize, egress, grantPermissionRequests })
 	const settle = (browser: Browser) =>
 		settleLaunchedExtension(browser, {
 			freshProfile,
