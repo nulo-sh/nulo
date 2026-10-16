@@ -271,6 +271,19 @@ export const trim = (value: unknown, depth: number = 0): unknown => {
 	return scrubPrimitive(value)
 }
 
+/** A `0x` hex run of 32 bytes or more. */
+const HEX32 = /0x[0-9a-f]{64,}/gi
+
+/** A copy of `trim`'s output with every 32-byte hex run in its strings, keys included, replaced. */
+export const scrubHex32 = (value: unknown): unknown => {
+	if (typeof value === "string") return value.replace(HEX32, "[32-byte hex]")
+	if (Array.isArray(value)) return value.map(scrubHex32)
+	if (value && typeof value === "object") {
+		return Object.fromEntries(Object.entries(value).map(([key, entry]) => [scrubHex32(key), scrubHex32(entry)]))
+	}
+	return value
+}
+
 export const print = (log: Log) => {
 	const date = new Date(log.timestamp)
 	const time = `${date.toTimeString().slice(0, 8)}.${date.getMilliseconds().toString().padStart(3, "0")}`

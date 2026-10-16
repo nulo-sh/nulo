@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { trim } from "./utils"
+import { scrubHex32, trim } from "./utils"
 
 /**
  * `trim()` is the only redaction between a log call and the log store, and until now it had no
@@ -301,5 +301,21 @@ describe("trim — structural guards retained", () => {
 
 	test("walks arrays", () => {
 		expect(trim([{ password: SECRET }, "safe"])).toEqual([{ password: "[password]" }, "safe"])
+	})
+})
+
+describe("scrubHex32", () => {
+	const HEX32 = `0x${"ab".repeat(32)}`
+
+	test("replaces every 32-byte or longer hex run in a string, a nested value and a key, in a copy", () => {
+		const longer = `0x${"AB".repeat(32)}${"cd".repeat(32)}`
+		const value = { [HEX32]: [`id ${HEX32}, then ${longer}`] }
+		expect(scrubHex32(value)).toEqual({ "[32-byte hex]": ["id [32-byte hex], then [32-byte hex]"] })
+		expect(value).toEqual({ [HEX32]: [`id ${HEX32}, then ${longer}`] })
+	})
+
+	test("passes a shorter hex value, plain text and non-strings unchanged (control)", () => {
+		const value = { selector: "0x12345678", l1: `0x${"ef".repeat(20)}`, text: "ready", block: 12, ok: true, none: null }
+		expect(scrubHex32(value)).toEqual(value)
 	})
 })

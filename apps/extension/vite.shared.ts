@@ -42,6 +42,9 @@ function bbVersion(): string {
 	return version
 }
 
+/** The minimum level of every Aztec dependency logger in the bundle, read from `process.env.LOG_LEVEL`. */
+export const DEPENDENCY_LOG_LEVEL = "warn"
+
 /** Compile-time `define` constants shared by the build + unit configs. */
 export const sharedDefine: Record<string, string> = {
 	__VERSION__: JSON.stringify(packageJson.version),
