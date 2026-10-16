@@ -15,3 +15,4 @@
 - 2026-10-16: phase 8 gate (`audit:vue`, `test:all`, complexity manifest unchanged): pass (`de9a488e`).
 - 2026-10-16: arc 3 review round 1: Codex reject (3), Opus reject (2); all accepted, fixed in `8b49f561`; lint, typecheck:all and test pass. Round 2 next.
 - 2026-10-16: arc 3 review round 2: Codex reject (2); both accepted, fixed in `8829a309`; lint, typecheck:all and test pass. Round 3 and the phase 9 runs next.
+- 2026-10-16: arc 3 review round 3: Codex approve; the loop converged. Phase 9 runs wait on host load.

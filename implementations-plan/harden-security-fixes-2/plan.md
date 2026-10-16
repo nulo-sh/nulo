@@ -254,6 +254,8 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 
 **Arc 3 review, round 2** (2026-10-16). Codex, resumed over `cd3f739e`: **reject**, 2 material findings, both verified and accepted, fixed in `8829a309`: the decode read the completed operation, which refuses a send whose fee is not yet chosen, so every such grant read as undecoded (D27; the service test now drives the real interaction service, red against the round-1 read); and the grant decoded through a selector lookup while its round trip checked the function resolved by name (D30; a test with two functions sharing a selector, red without the fix). The pre-fix Chrome run caught neither, as it built from the popup-copy path; it also showed the lifecycle file's read of a wait's handle, which this suite's fixtures resolve to `null` (fixed in `cd3f739e`).
 
+**Arc 3 review, round 3** (2026-10-16). Codex, resumed over `8829a309`: **approve**, no material findings; it re-ran the transaction card's decoder over its inputs and found its results unchanged. The loop converged.
+
 ## Seeds (draft; the orchestrator finalizes after approval)
 
 - `/goal` Every phase of implementations-plan/harden-security-fixes-2/plan.md marked ✓ in order, each backed by its gate's output in the transcript; `LESSONS_FILE=implementations-plan/harden-security-fixes-2/lessons/phase-N.md` printed per phase; `/code-review` not run; the Codex loop converged per arc and the cross-arc pass converged, each quoted; each arc's PR against `dev` opened after its loop, the close-out's archive-move commit shown by `git show --stat`; `bun run test:all` and `bun run lint` exit 0.
