@@ -18,6 +18,7 @@ Depends only on `wallet-core` for the `ILogger` interface and `Web Crypto` (avai
 | `src/password-secret-box.ts` | `PasswordSecretBox` — password-based wrap around `EncryptionKey`, with no storage or session state. Its `passhash` is an unsalted SHA-256 of the password: password-equivalent, held in memory only, never persisted. |
 | `src/session-secret-box.ts` | `SessionSecretBox` — the lenient-mode silent-restore bearer: the master secret and the imported-keys key in one AES-256-GCM frame under a key HKDF-derived from a fresh random token, bound to the profile id. The session record holds nothing derived from the password. |
 | `src/passkey-credential.ts` | `PasskeyCredential` — WebAuthn PRF → HKDF master-secret. Exposes `recoverFromCredentialData()` for the in-page modal Path A flow. |
+| `src/backup-mac.ts` | `computeBackupMac` / `verifyBackupMac` — a passkey backup's check: HMAC-SHA256 over the body's checksum under `PasskeyCredential.deriveBackupMacKey()` (`nulo:backup-mac:v1`). |
 | `src/constants.ts` | `ENCRYPTION_GUARD` (frozen by the V8 vector), `PASSKEY_PRF_LABEL`. |
 | `src/zeroize.ts` | `zeroize()` helper for explicit secret-buffer wipes. |
 | `src/index.ts` | Public exports. |

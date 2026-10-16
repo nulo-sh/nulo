@@ -31,7 +31,7 @@ import { CURRENT_BACKUP_SCHEMA_VERSION } from "@/wallet/services/backup/backup-m
 
 /** Utils */
 import { downloadFile } from "@/utils"
-import { MAX_BACKUP_FILE_BYTES, assembleFullBackup, sealFullBackupText } from "@/utils/full-backup-helpers"
+import { MAX_BACKUP_FILE_BYTES, assembleFullBackup, passkeyBackupAuthenticator, sealFullBackupText } from "@/utils/full-backup-helpers"
 import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow, ownWindowRoute } from "@/utils/own-window"
 import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
@@ -347,7 +347,10 @@ async function handleBackup() {
 		chainStateOmitted.value = !!appStore.profile.recoveryMode
 		const envelope = buildBackupEnvelope(material)
 
-		const result = await assembleFullBackup(envelope, backupSources(runClients, material.heldSlices), () => gen === generation)
+		// A passkey body restores only under the check its own passkey makes here.
+		const authenticate = credentialData ? passkeyBackupAuthenticator(credentialData) : undefined
+		const sources = backupSources(runClients, material.heldSlices)
+		const result = await assembleFullBackup(envelope, sources, () => gen === generation, authenticate)
 		await managers.profile.assertRunFence(fence)
 		// Fence first: a superseded run must not run the oversize UI writes.
 		if (gen !== generation || rejectOversizedBackup(result.pretty)) return

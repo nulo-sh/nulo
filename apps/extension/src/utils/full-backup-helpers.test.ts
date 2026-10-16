@@ -5,6 +5,7 @@ import { IMPORTED_KEYS_SERVICE_NAME } from "@/wallet/services/account/spec"
 import {
 	AssemblyAbortedError,
 	assembleFullBackup,
+	BACKUP_MAC_FIELD,
 	type BackupSource,
 	MAX_BACKUP_FILE_BYTES,
 	collectRestoreErrors,
@@ -75,8 +76,22 @@ describe("assembleFullBackup", () => {
 		expect(await EncryptionKey.getHashHex(JSON.stringify(body))).toBe(checksum)
 	})
 
-	it("rejects an envelope that already carries a checksum", async () => {
+	it("rejects an envelope that already carries a checksum or a MAC", async () => {
 		await expect(assembleFullBackup({ checksum: "forged" }, [])).rejects.toThrow(/must not carry a checksum/)
+		await expect(assembleFullBackup({ [BACKUP_MAC_FIELD]: "forged" }, [])).rejects.toThrow(/must not carry a checksum/)
+	})
+
+	it("puts the authenticator's MAC of the checksum beside it, outside the hashed body", async () => {
+		const { sources } = twelveSources((name) => [{ from: name }])
+		const authenticate = vi.fn(async (checksum: string) => `mac-of-${checksum}`)
+		const result = await assembleFullBackup({ "wallet-version": "1.0.0" }, sources, undefined, authenticate)
+		const { checksum, [BACKUP_MAC_FIELD]: mac, ...body } = JSON.parse(result.pretty) as Record<string, unknown>
+		expect(authenticate).toHaveBeenCalledExactlyOnceWith(result.checksum)
+		expect(mac).toBe(`mac-of-${result.checksum}`)
+		expect(await EncryptionKey.getHashHex(JSON.stringify(body))).toBe(checksum)
+		// Without an authenticator the file has no MAC field at all.
+		const plain = JSON.parse((await assembleFullBackup({ "wallet-version": "1.0.0" }, sources)).compact) as Record<string, unknown>
+		expect(BACKUP_MAC_FIELD in plain).toBe(false)
 	})
 
 	it("aborts via the onSlice probe without calling later sources", async () => {

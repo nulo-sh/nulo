@@ -31,7 +31,7 @@ import { createTestingPinia } from "@pinia/testing"
 import { ref } from "vue"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { NodeStatus } from "@/wallet/services/network/spec"
-import { EncryptionKey } from "@nulo/wallet-crypto"
+import { computeBackupMac, EncryptionKey, PasskeyCredential } from "@nulo/wallet-crypto"
 import { RpcDisconnectedError } from "@nulo/extension-messaging/errors"
 
 // ── Mocks ───────────────────────────────────────────────────────────────────
@@ -697,6 +697,7 @@ describe("pickBackupFile / decryptBackup behavior pins", () => {
 
 describe("epoch-4 passkey gates", () => {
 	const CRED_ID = Buffer.from(new Uint8Array(16).fill(7)).toString("base64")
+	const CREDENTIAL = { id: CRED_ID, prf: Buffer.from(new Uint8Array(32).fill(5)).toString("base64") }
 
 	async function passkeyBackup(mutate: (body: Record<string, unknown>) => void) {
 		const base = await buildBackup({
@@ -706,11 +707,12 @@ describe("epoch-4 passkey gates", () => {
 		})
 		const { checksum: _c, entropy: _e, "imported-keys-dek": _dek, ...body } = base as Record<string, unknown>
 		mutate(body)
-		return { ...body, checksum: await EncryptionKey.getHashHex(JSON.stringify(body)) }
+		const checksum = await EncryptionKey.getHashHex(JSON.stringify(body))
+		return { ...body, checksum, "backup-mac": await computeBackupMac(await PasskeyCredential.create(CREDENTIAL), checksum) }
 	}
 
 	function mountPasskey(backup: unknown) {
-		const runCeremony = vi.fn(async () => ({ credentialId: CRED_ID }) as never)
+		const runCeremony = vi.fn(async () => CREDENTIAL as never)
 		const opts = { ...makeOpts({ password: "", repeatedPassword: "" }), runCeremony }
 		const c = useFullBackupImport(opts as never)
 		c.selectedBackup.value = { name: "x.json", backup, type: "plain", profileType: "passkey" }

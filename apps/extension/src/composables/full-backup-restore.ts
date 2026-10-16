@@ -3,7 +3,7 @@
  * callbacks, never a captured error-log object: the log's ref value is replaced at restore start.
  */
 
-import { asBase64CredentialId, asBase64MasterSecret } from "@nulo/wallet-crypto"
+import { asBase64CredentialId, asBase64MasterSecret, PasskeyCredential, verifyBackupMac } from "@nulo/wallet-crypto"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { isClientDisconnectRejection, RpcDisconnectedError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { awaitLivenessAdvance, readLiveness } from "@/utils/background-liveness"
@@ -212,6 +212,28 @@ export async function resolvePasskeyCredential(
 		if (handleCancelOrUnconfirmed(err, openToast)) return { kind: "silent-reset" }
 		return { kind: "fail", title: "Couldn't authenticate", message: passkeyFailureCopy(err, errorMessageFromUnknown(err)) }
 	}
+}
+
+/** What a backup that is not the one the wallet exported shows, whichever check refused it. */
+export const INTEGRITY_FAILED = {
+	title: "Backup Integrity Check Failed",
+	message: "The backup file appears to be corrupted or has been tampered with. Please ensure you have the correct backup file.",
+} as const
+
+/** A passkey body restores only when the passkey that opens it made its check. Runs after the
+ *  passkey answers and before anything is written. */
+export async function verifyPasskeyBody(
+	profile: Pick<BackupProfile, "type">,
+	credentialData: PasskeyCredentialData | undefined,
+	checksum: string,
+	mac: string | undefined,
+): Promise<{ kind: "proceed" } | StageFail> {
+	if (profile.type !== "passkey") return { kind: "proceed" }
+	const verified =
+		credentialData !== undefined &&
+		mac !== undefined &&
+		(await verifyBackupMac(await PasskeyCredential.create(credentialData), checksum, mac))
+	return verified ? { kind: "proceed" } : { kind: "fail", ...INTEGRITY_FAILED }
 }
 
 /**
