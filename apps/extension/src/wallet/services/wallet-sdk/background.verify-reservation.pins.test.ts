@@ -17,15 +17,29 @@ const at = (effect: string) => effects.push(`${effect}@${rung()}`)
 
 type Outcome = "rejected" | "expired" | "admitted"
 let outcomes: Outcome[] = []
-const admitAsync = vi.fn((_gate: unknown, _req: unknown) => {
+const admitAsync = vi.fn((_gate: unknown, req: { id: string }) => {
 	const outcome = outcomes.shift()
 	rung = microtaskLadder()
-	return Promise.resolve(outcome === "admitted" ? undefined : outcome)
+	return Promise.resolve(outcome === "admitted" ? slot(req.id) : outcome)
 })
+/** An unstarted reservation as the gate hands one out; the scripted admission bypasses the gate. */
+const slot = (id: string) =>
+	new WindowReservation(
+		id,
+		ORIGIN,
+		Number.MAX_SAFE_INTEGER,
+		() => {},
+		() => false,
+		{
+			closeWindow: () => {},
+			navigateWindow: async () => {},
+			expired: () => {},
+		},
+	)
 
 vi.mock("./verify-admission", async (importOriginal) => ({
 	...(await importOriginal<typeof import("./verify-admission")>()),
-	admitAsync: (gate: unknown, req: unknown) => admitAsync(gate, req),
+	admitAsync: (gate: unknown, req: { id: string }) => admitAsync(gate, req),
 }))
 vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
 	BackgroundConnectionHandler: class {
@@ -57,6 +71,7 @@ vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
 import { initWalletSdkHandler } from "./background"
 import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN as ORIGIN, fakeSdkServices } from "./test-services"
+import { WindowReservation } from "./verify-admission"
 
 /** Counts microtask rungs from the moment it starts. */
 function microtaskLadder(): () => number {
@@ -146,7 +161,6 @@ const request = (id: string) => ({
 	id,
 	origin: ORIGIN,
 	deadline: Date.now() + DISCOVERY_STALE_MS,
-	needsWindow: true,
 	consumesToken: false,
 })
 

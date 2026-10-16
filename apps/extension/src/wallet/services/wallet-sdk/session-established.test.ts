@@ -51,7 +51,7 @@ function reserved(
 	})
 	let reservation: WindowReservation | undefined
 	gate.admit(
-		{ id, origin: ORIGIN, deadline: Date.now() + 55_000, needsWindow: true, consumesToken: false },
+		{ id, origin: ORIGIN, deadline: Date.now() + 55_000, consumesToken: false },
 		(r) => {
 			reservation = r
 		},
@@ -190,12 +190,12 @@ describe("handleSessionEstablished — verify-window reservation", () => {
 		// A second handshake for the origin takes the last slot; a third must wait.
 		let third: WindowReservation | undefined
 		gate.admit(
-			{ id: "sess-2", origin: ORIGIN, deadline: Date.now() + 55_000, needsWindow: true, consumesToken: false },
+			{ id: "sess-2", origin: ORIGIN, deadline: Date.now() + 55_000, consumesToken: false },
 			() => {},
 			() => {},
 		)
 		gate.admit(
-			{ id: "sess-3", origin: ORIGIN, deadline: Date.now() + 55_000, needsWindow: true, consumesToken: false },
+			{ id: "sess-3", origin: ORIGIN, deadline: Date.now() + 55_000, consumesToken: false },
 			(r) => {
 				third = r
 			},
@@ -401,7 +401,7 @@ describe("handleSessionEstablished — profile binding", () => {
 function admitReplacement(gate: VerifyAdmissionGate, markers: Map<string, PendingVerificationEntry>) {
 	let slot: WindowReservation | undefined
 	gate.admit(
-		{ id: "sess-1", origin: ORIGIN, deadline: Date.now() + 55_000, needsWindow: true, consumesToken: false },
+		{ id: "sess-1", origin: ORIGIN, deadline: Date.now() + 55_000, consumesToken: false },
 		(r) => {
 			slot = r
 		},

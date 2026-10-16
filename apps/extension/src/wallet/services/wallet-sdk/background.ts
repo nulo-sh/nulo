@@ -992,15 +992,15 @@ function approveAdmitted(
 	discovery: PendingDiscovery,
 	chainId: string,
 	deps: DiscoveryDeps,
-	reservation: WindowReservation | undefined,
+	reservation: WindowReservation,
 	why: string,
 ): void {
 	if (rejectIfExpired(discovery, deps)) {
-		reservation?.releaseIfUnstarted()
+		reservation.releaseIfUnstarted()
 		return
 	}
 	if (!deps.handler.approveDiscovery(discovery.requestId)) {
-		reservation?.releaseIfUnstarted()
+		reservation.releaseIfUnstarted()
 		deps.logger.log(
 			"wallet-sdk",
 			LogLevel.Warn,
@@ -1027,7 +1027,6 @@ function admitVerifyWindow(discovery: PendingDiscovery, deps: DiscoveryDeps) {
 		id: discovery.requestId,
 		origin: discovery.origin,
 		deadline: discoveryDeadline(discovery),
-		needsWindow: true,
 		consumesToken: false,
 	})
 }
@@ -1051,7 +1050,6 @@ function autoApproveExistingSession(discovery: PendingDiscovery, chainId: string
 			id: discovery.requestId,
 			origin: discovery.origin,
 			deadline: discoveryDeadline(discovery),
-			needsWindow: true,
 			consumesToken: true,
 		},
 		(reservation) => approveAdmitted(discovery, chainId, deps, reservation, "existing session"),
@@ -1178,7 +1176,7 @@ async function runDiscoveryPopup(
 		if (rejectIfNotAdmitted(discovery, deps, admitted)) return
 		if (waitingWindow !== undefined) {
 			// A window closed while its Allow was queued fails the attach: its removal was buffered.
-			if (!admitted?.attach(waitingWindow, result.expiredUrl)) {
+			if (!admitted.attach(waitingWindow, result.expiredUrl)) {
 				rejectThrottled(discovery, deps, "its connect window closed while waiting for a verify-window slot")
 				return
 			}
@@ -1265,7 +1263,7 @@ async function persistAndApprove(
 	chainId: string,
 	params: DiscoveryParams,
 	profileId: string,
-	reservation: WindowReservation | undefined,
+	reservation: WindowReservation,
 	deps: DiscoveryDeps,
 ): Promise<void> {
 	const { handler, dappSessionService, logger } = deps
@@ -1311,7 +1309,7 @@ async function persistAndApprove(
 			discovery,
 			sessionId: newSession.id,
 			approverProfileId: newSession.profileId,
-			attemptOpen: () => reservation?.abandoned !== true,
+			attemptOpen: () => !reservation.abandoned,
 			approveDiscovery: (id) => handler.approveDiscovery(id),
 			rejectDiscovery: (id) => handler.rejectDiscovery(id),
 			deleteSession: (id) => dappSessionService.deleteDappSession(id),
@@ -1326,7 +1324,7 @@ async function persistAndApprove(
 			)
 		}
 	} finally {
-		if (!approved) reservation?.releaseIfUnstarted()
+		if (!approved) reservation.releaseIfUnstarted()
 	}
 }
 
