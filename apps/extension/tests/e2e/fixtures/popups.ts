@@ -10,8 +10,10 @@ import { appendFileSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import type { Page, Target } from "puppeteer"
 import { waitForTarget } from "./browser"
-import { clickByTestId, clickSelector, patchPagePolling, recordPageErrors, waitForHash, type ExtensionContext } from "./extension"
-import { selectFeeMethod, type FeeMethodSubtitle } from "./helpers"
+import { clickByTestId, clickSelector, patchPagePolling, waitForHash } from "./dom"
+import type { ExtensionContext } from "./extension"
+import { selectFeeMethod, type FeeMethodSubtitle } from "./transfers"
+import { recordPageErrors } from "./wallet-pages"
 
 export type PopupKind =
 	| "discover"

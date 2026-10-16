@@ -204,6 +204,8 @@ Follow `implementations-plan/README.md` § Post-implementation standard at revis
 | D10 | Bulk setter | `setPgInputs` over `setPgInput` | a native-setter copy (the playground syncs on both events; the suite already sets these inputs through `setPgInput`) |
 | D11 | `extension.ts:1082` | stays dynamic, comment corrected (reversed in round 1) | static (both legs: it would load `@nulo/wallet-crypto` and bb.js in every hub importer, 50 smoke specs that skip it today) |
 | D12 | Arc 1 phase order | the predicate in place first, then the structure as one change | leaves first (the moved directive fails `F` until the rewrite; repointing needs modules that do not exist yet; Codex) |
+| D13 | How `biome.json` scopes the cycle rule (arc 1, tree over plan) | the rule at error at the root, `off` in a last override for `["**", "!apps/extension/tests/e2e/**"]` | the plan's e2e-only override: Biome 2.5.13 builds its module graph only for a project rule enabled at the root, so the override reported nothing on a planted cycle (`--only` did); the rule at the root everywhere (out of scope: `src/` has cycles). Cost: `bun run lint` 1.36 s to about 3.2 s |
+| D14 | What `dom.ts`, `wallet-pages.ts` and the barrel carry besides the moved code | the Azguard attribution line on the two modules cut from `extension.ts` (ACKNOWLEDGEMENTS.md: each derived file carries it); the barrel keeps `helpers.ts`'s selector-contract comment above its one line | a one-line barrel only (drops the contract the specs' entry has always stated) |
 
 ## Audit verdicts
 
