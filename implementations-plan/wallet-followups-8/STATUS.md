@@ -13,3 +13,7 @@
 - 2026-10-16 arc 1 gate: network `holdings.test.ts` via `agent.sh`, retry 0: Chrome pass (73.4 s), Firefox pass (83.9 s). Phase 1 gate green.
 - 2026-10-16 arc 1: final gates on `0a039883` pass (lint, typecheck:all, test:all, test:ci-gating, check:plans); PR #531 opened against dev.
 - 2026-10-16 arc 1: PR #531 checks green (54 pass, 4 skipped; all five required checks pass); CI `holdings.test.ts` 59.0 s Chrome, 66.7 s Firefox.
+- 2026-10-16 arc 2: plan branch merged `origin/dev` at `8459699c` (index conflict resolved: only this plan's line kept). Phase 2 step 1: T4 red on base as required (Chrome, retry 0: purge incomplete at 15 s, tombstone still present; the reachable-node case passes, 10.8 s).
+- 2026-10-16 arc 2 phase 2: unit gate (aztec-runtime; extension incoming, profile-deletion, network-reset, network), lint, typecheck:all pass; T3 and T8 red on base copies; smoke Chrome 17/17 and Firefox 17/17 at retry 0 (T4 green).
+- 2026-10-16 arc 2 phase 3: #464 deleted (`d4d8ee60`); profile tests pass; `rg confirmProfileOperation apps packages` finds nothing; lint, typecheck:all pass.
+- 2026-10-16 arc 2 phase 2: network (proverless, via `agent.sh`, retry 0) Chrome `delete-after-prove`, `stale-network-reset`, `profile-reimport-matrix`, `incoming-transfers`, `incoming-arrival`: 16/16 pass (611 s). Phase 2 gate green.

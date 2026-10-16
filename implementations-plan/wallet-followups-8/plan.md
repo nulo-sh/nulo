@@ -8,7 +8,7 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: d59459ab
-status: approved by the orchestrator; arc 1 implementing
+status: approved by the orchestrator; arc 1 merged (#531); arc 2 implementing
 ---
 
 # wallet-followups-8: teardown stops waiting on node retries, a dead RPC goes, three popup fixes
@@ -84,6 +84,8 @@ The lane brief numbers the background set arc 1; this plan builds the popup set 
 - D3. #338: known limit. The consequence is one pin preference in a profile that took a deleted profile's id, behind a stale page or a parked write straddling a delete and a same-id restore. The fix needs `pxeGeneration` in `ProfileInfo` and pins keyed by it with a prefix purge: persistent shape and every pin path for a preference. Reopen on a report or when per-profile UI keys hold more than preferences.
 - D4. #277's token-add path: KL-4, not a fix. It needs a token add already running when the reset starts (its popup can be dismissed: the request keeps running, and the lock spans profiles); token persistence is a journaled, resumable state machine, and moving its metadata reads out of `withTokenLock` reworks it. The incoming path is fixed: scans run by themselves, and the read moves before the lock without changing who commits (Codex).
 - D-orch-1. Two arcs, each one PR against `dev`, no stack. Arc 1 merges first; arc 2 carries the close-out and merges last.
+- D-arc2-1 (deviation, Codex consult in arc 2). The incoming scan's pre-lock read is gated on a fresh epoch and on a row without a time or a new note that is **not an own send**: an own send's change note never gets a row, so the plan's "row missing" gate would fetch its block on every scan. The locked commit reads only the scan's cache (a miss records no time and is backfilled), so no locked path awaits the node even when its own-send read disagrees with the pre-lock one. Test cost: the receipt matrix's helpers address the n-th call (`getRecord#2`), N8/N4b/N8h now describe the read before the lock, two older park tests park on in-lock store reads, and one test whose in-lock hold was never reached (a running displaced deleter stands the section down at entry) asserts that entry stand-down directly.
+- D5 (arc 2, Codex r1). `FpcService.getFpcs` discovery holds the FPC lock across `pxe.registerContract`, whose cold runtime waits on a retrying `getL1ContractAddresses`; `fpcs.purgeForProfile` takes that lock before either stop is raised. Same shape and disposition as D4: KL-5. It needs FPC discovery already running (a Send or fee screen opened while the protocol FPC rows are missing) when the reset starts; the lock's 5-minute watchdog bounds it. Moving the registration out of the lock reworks discovery's fence sequence, a plan change for the orchestrator.
 - D-arc1-1 (deviation). Arc 1 is built in the lane worktree on `worktree-wallet-followups-8-popup`, cut from `origin/dev` at `2dcdad48`, not in a second worktree: the arc's write boundary is the lane worktree. So `agent-worktree done wallet-followups-8-popup` has nothing to remove; the branch goes when its PR merges. T5 gained a third row, a rebuilt `ChainNotSupportedError` reading the generic line, so a check widened to any typed error cannot pass (Opus review).
 
 ## Security & Adversarial Considerations
@@ -156,6 +158,10 @@ Known limits to file: **KL-3** (#277): after the stop, each node call still make
 | arc 1, r1 | Codex, gpt-6.1-sol (session 01a141dd) | approve | two comments: `auth.vue`'s close comment asserted an ownership the toast singleton lacks; `auth.test.ts`'s `retry` doc restated its body | none |
 | arc 1, r1 | Opus 5.5 | approve | a typed non-contract refusal (`ChainNotSupportedError`) as T5's control | none |
 | arc 1, r2 | Codex, resumed | **approve** | none new: the fixes (`0a039883`) verified, no regression | none |
+| arc 2, consult | Codex, gpt-6.1-sol (session 01a14474) | approve with one hole | the incoming gate (own sends excluded, stale scan skipped); a locked commit whose own-send read disagreed still reached the node: cache-only lookup inside the lock (D-arc2-1) | none |
+| arc 2, r1 | Codex, resumed | conditional approve | two test comments; FPC discovery holds its lock across a PXE registration that the profile purge waits on before either stop: a wait outside Fact 2, filed as KL-5 (D5), the fix is a plan change | none |
+| arc 2, r1 | Opus 5.5 | conditional approve | a new note without an amount still cost the pre-lock read every scan: the gate requires an amount (`2bb6f738`) | none |
+| arc 2, r2 | Codex, resumed | **approve** | none new: the fixes verified, KL-5's disposition settled, no regression | none |
 
 Over the light target: the two panel rounds and #466 added scope; nothing restates.
 
