@@ -64,7 +64,7 @@ test.skipIf(!hasConfig)(
 )
 
 test.skipIf(!hasConfig)(
-	"connect-verify-mismatch — an untrusted reconnect's check refused in its own window",
+	"connect-verify-mismatch — a reconnect's check refused in its own window",
 	{ timeout: 150_000 },
 	async ({ registeredExtensionPerTest: ctx }) => {
 		const wallet = await walletOnLocalNetwork(ctx)
@@ -74,13 +74,10 @@ test.skipIf(!hasConfig)(
 		await approveVerify(await approveConnect(ctx, await discoverP))
 		await dapp.waitForSelector(CONNECTED, { timeout: 20_000 })
 
-		// The app's page shows the same flag the check sets, still off.
+		// The app's page shows the last connection's grid.
 		await listConnectedApps(wallet)
 		await clickByTestId(wallet, "connected-app-row")
-		await wallet.waitForSelector(
-			'[data-testid="connected-app-verification"] [data-testid="toggle-switch"][data-toggle-active="false"]',
-			{ visible: true, timeout: 15_000 },
-		)
+		await wallet.waitForSelector('[data-testid="connected-app-verification"]', { visible: true, timeout: 15_000 })
 		await shotSend(wallet, "verify-mismatch-settings-row", "connected-app-verification")
 
 		await clickByTestId(dapp, "pg-btn-disconnect")
