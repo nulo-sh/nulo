@@ -1,7 +1,16 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import type { DappSession, DappMetadata } from "@/wallet/services/dapp-session/spec"
 import type { OperationApprovalDelta } from "./approval-delta"
-import type { CapabilityParams, CapabilityResult, ExecutionParams, ExecutionResult, IExecutionHooks } from "@nulo/wallet-bridge"
+import type {
+	CapabilityParams,
+	CapabilityResult,
+	ExecutionParams,
+	ExecutionResult,
+	FeeSettings,
+	IExecutionHooks,
+	OperationRequest,
+} from "@nulo/wallet-bridge"
+import type { QueuedFeePayer } from "@nulo/wallet-core/jobs"
 
 /** Protocol-shape types (`ExecutionParams`, `ExecutionResult`,
  *  `CapabilityParams`, `CapabilityResult`, all `OperationRequest`
@@ -121,7 +130,25 @@ export type NetworkUnavailableParams = {
 	dappMetadata: DappMetadata
 }
 
-export type InteractionPayload = ExecutionPayload | CapabilityPayload | DiscoveryPayload | NetworkUnavailablePayload
+/** What a held send's question window shows: the one operation it holds, as the dApp asked for it,
+ *  and the figures. It has no `params`, so no approval route ever reads it as a request to execute. */
+export type FeeQuestionPayload = {
+	feeQuestion: {
+		/** The new fee and the one the person approved, in base units. */
+		fee: string
+		approved: string
+		payer: QueuedFeePayer
+		/** The fee settings the person approved the send with. */
+		feeSettings?: FeeSettings
+	}
+	operation: OperationRequest
+	session: DappSession
+}
+
+/** The window's answer: only `accepted: true` sends; anything else cancels the send. */
+export type FeeQuestionResult = { accepted: boolean }
+
+export type InteractionPayload = ExecutionPayload | CapabilityPayload | DiscoveryPayload | NetworkUnavailablePayload | FeeQuestionPayload
 
 export type Methods = {
 	getInteractionPayload(id: string): InteractionPayload
@@ -133,7 +160,7 @@ export type Methods = {
 	 * claim when the interaction is not an executable one or the lengths differ.
 	 */
 	approveInteraction(id: string, deltas: OperationApprovalDelta[]): void
-	resolveInteraction(id: string, result: ExecutionResult | CapabilityResult | DiscoveryResult): void
+	resolveInteraction(id: string, result: ExecutionResult | CapabilityResult | DiscoveryResult | FeeQuestionResult): void
 	rejectInteraction(id: string, reason: string): void
 	/** Replay read for popups that mount after the cancel broadcast fired. */
 	isInteractionCancelled(id: string): boolean

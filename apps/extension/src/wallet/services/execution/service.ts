@@ -68,6 +68,7 @@ import {
 	type AztecCreateAuthWitOperation,
 	type FeeOptions,
 	type GasBalances,
+	type FeeQuestion,
 	type OperationApprovalEnvelope,
 	type OperationAuthwitPreview,
 	type DecodedCall,
@@ -112,6 +113,8 @@ export * from "./spec"
  *  entry points read the operation THROUGH this, never from their caller. */
 export interface InteractionOperationSource {
 	materializeStoredOperation(interactionId: string, index: number, feeSettings?: FeeSettings): Promise<Operation>
+	/** Asks a held send's question in a window; `true` only when the person accepted it. */
+	askFeeAgain(question: FeeQuestion): Promise<boolean>
 }
 
 /** Default PXE-client factory: the real RPC-backed client. Exported so the
@@ -501,6 +504,9 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 					this.lane.parkSlot(release, networkId, queuedJournalId, fence, preController, originKey, wait),
 				joinOriginLine: (fence, chainId, originKey) => this.lane.joinOriginLine(fence, chainId, originKey),
 				failUnclaimed: (journalId, error) => this.lane.failUnclaimed(journalId, error),
+				reclaimParked: (journalId) => this.lane.reclaimParked(journalId),
+				beginQueuedWait: (journalId) => this.lane.beginQueuedWait(journalId),
+				endQueuedWait: (journalId) => this.lane.endQueuedWait(journalId),
 			},
 			sequencer: this.sendSequencer,
 			chainTip: this.chainTipGate,
@@ -510,6 +516,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			recordPendingAuthwits: (...args) => this.authRegistryService.recordPendingAuthwits(...args),
 			noteSent: (chainId, account, txHash, calls) =>
 				this.sendSequencer.externalSent({ chainId, account }, txHash, recordedTxKeys({ account, calls })),
+			answers: this.queuedFeeAnswers,
+			askInWindow: (question) => void this.askInWindow(question),
 			logDebug: (msg, ...rest) => this.logDebug(msg, ...rest),
 		})
 		this.viewExecutor = new ViewExecutor({
@@ -772,6 +780,22 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		)
 	}
 
+	/** The window's answer reaches the send as exactly the figure it asked; any other end, a window
+	 *  that never opened included, cancels the send while it still asks that figure. */
+	private async askInWindow(question: FeeQuestion): Promise<void> {
+		const { journalId, reask } = question
+		// A closed, refused or timed-out window rejects: that is the person's answer, not a fault.
+		const accepted = await Promise.resolve()
+			.then(() => this.interactionOperations().askFeeAgain(question))
+			.catch(() => false)
+		try {
+			if (accepted) this.queuedFeeAnswers.accept(journalId, reask.fee)
+			else await this.lane.cancelQuestion(journalId, reask.fee)
+		} catch (error) {
+			this.logError("A held send's question could not be settled", { error })
+		}
+	}
+
 	private interactionOperations(): InteractionOperationSource {
 		return this.services.get<InteractionOperationSource & { name: string; start(): Promise<void> }>(DAPP_INTERACTION_SERVICE_NAME)
 	}
@@ -910,7 +934,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 				// carries { originKey }); without it hostile-dApp grants + UI auth ops
 				// collapse into one __no_origin__ capacity bucket, losing fairness.
 				const fence = authorizedFence ?? (await this.captureFence())
-				return this.executeSendTransaction(operation, origin, operationTask, hooks, fence)
+				return this.executeSendTransaction(operation, origin, operationTask, hooks, fence, approval)
 			}
 			case "simulate_transaction": {
 				return this.viewExecutor.executeSimulateTransaction(operation)
@@ -1065,11 +1089,12 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		parentTask?: WrappedTask,
 		hooks?: ExecutionHooks,
 		fence?: ExecutionFence,
+		approval?: OperationApprovalEnvelope,
 	): Promise<string> {
 		await this.ensureInitialized()
 		await this.legal.assertCurrent()
 		const authorized = fence ?? (await this.captureFence())
-		return this.dappSendExecutor.executeSendTransaction(op, origin, parentTask, authorized, hooks)
+		return this.dappSendExecutor.executeSendTransaction(op, origin, parentTask, authorized, hooks, approval)
 	}
 
 	/**

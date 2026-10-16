@@ -23,6 +23,7 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
 import { JobCancelledError, RpcTimeoutError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
+import { FpcType } from "@/wallet/services/fpc/spec"
 import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/spec"
 import { DappSendExecutor, type DappSendExecutorDeps } from "./dapp-send-executor"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
@@ -31,6 +32,10 @@ import type { ProveAndSendContext } from "./execution-coordinator"
 import { AUTHWITS_CHANGED_MESSAGE, ESTIMATE_INCOMPLETE_MESSAGE, PREVIEW_FOREIGN_MESSAGE, PreviewSnapshots } from "./preview-snapshots"
 import { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { fingerprintOperation } from "./operation-fingerprint"
+import { QueuedFeeAnswers } from "./queued-fee-cap"
+import { FEE_RISE_ASKS, personalPayerOf } from "./fee-reask"
+import type { FeeQuestion } from "./models"
+import { feeLimitOf } from "./tx-fee-details"
 import { MAX_WAIT_MS, SendSequencer } from "./send-sequencer"
 import { ExecutionService } from "./service"
 
@@ -87,12 +92,18 @@ const clearLine = () => ({
 	}),
 	joinOriginLine: vi.fn(() => ({ behind: () => false, earlierDone: async () => true, leave: vi.fn() })),
 	failUnclaimed: vi.fn(async () => {}),
+	reclaimParked: vi.fn(async () => {}),
+	beginQueuedWait: vi.fn(),
+	endQueuedWait: vi.fn(),
 })
 const EXPIRY = { timestamp: 1_750_003_600, nullifier: `0x${"02".padStart(64, "0")}` }
 
+/** The fee `makeTxRequest` commits: gas limits × max fees per gas. */
+const BUILT_FEE = "800"
 /** A popup approval envelope carrying a reuse id; the producer mints `previewId = estimateId`
- *  for a bound standard estimate, so a real approval always pairs the two equal. */
-const APPROVAL = (estimateId: string) => ({ interactionId: "i-1", index: 0, estimateId, previewId: estimateId })
+ *  for a bound standard estimate, so a real approval always pairs the two equal. It carries the
+ *  figure its window showed. */
+const APPROVAL = (estimateId: string) => ({ interactionId: "i-1", index: 0, estimateId, previewId: estimateId, feeCeiling: BUILT_FEE })
 
 function makeTxRequest() {
 	return {
@@ -207,6 +218,8 @@ function makeHarness(
 		chainTip: { unconfirmed: () => false, wait: async () => "confirmed" },
 		logDebug: vi.fn(),
 		readPublicStorageOnce: vi.fn(async () => new Fr(0n)),
+		answers: new QueuedFeeAnswers(),
+		askInWindow: vi.fn(),
 		...overrides,
 	}
 	return {
@@ -2595,5 +2608,287 @@ describe("DappSendExecutor — a sponsor row edited after the build read it", ()
 		expect(h.feeNode.getPredictedMinFees).not.toHaveBeenCalled()
 		expect(h.buildAndEstimateFolded).toHaveBeenCalledTimes(2)
 		expect(h.proveAndSend).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("DappSendExecutor: a popup-approved send whose fee came out above the approved figure", () => {
+	const APPROVED = 16_000_000_000_000_000n // 0.016 FJ
+	const ROSE = 21_000_000_000_000_000n // 0.021 FJ
+	const TOLERATED = APPROVED + (APPROVED * FEE_RISE_ASKS.percent) / 100n
+	const HOOKS = { queuedJournalId: "q-1", originKey: "https://dapp.example" } as never
+	const PRIVATE_ROW = { id: "pfj", type: FpcType.PrivateFpc, address: "0xpfj", chainId: 7, isProtocol: true }
+	const { EXTERNAL, FEE_JUICE_WITH_CLAIM, PREEXISTING_FEE_JUICE } = AccountFeePaymentMethodOptions
+	type Route = { feePaymentMethod: AccountFeePaymentMethodOptions; fpcIdentity?: typeof PRIVATE_ROW }
+	const FJ: Route = { feePaymentMethod: PREEXISTING_FEE_JUICE }
+	const PRIVATE: Route = { feePaymentMethod: EXTERNAL, fpcIdentity: PRIVATE_ROW }
+
+	/** A request whose fee limit is exactly `fee`. */
+	const txAt = (fee: bigint) =>
+		({
+			authWitnesses: [],
+			txContext: {
+				gasSettings: {
+					gasLimits: { daGas: 1, l2Gas: 0 },
+					teardownGasLimits: { daGas: 0, l2Gas: 0 },
+					maxFeesPerGas: { feePerDaGas: fee, feePerL2Gas: 0n },
+					maxPriorityFeesPerGas: { feePerDaGas: 0n, feePerL2Gas: 0n },
+				},
+			},
+		}) as never
+	const approval = (over: Record<string, unknown> = {}) => ({
+		interactionId: "i-1",
+		index: 0,
+		previewId: "pv-1",
+		feeCeiling: APPROVED.toString(),
+		...over,
+	})
+	const sendTransaction = () =>
+		({
+			kind: "send_transaction",
+			networkId: "net-1",
+			accountAddress: "0xacct",
+			feeSettings: { paymentMethod: { kind: "fj" } },
+			actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+		}) as never
+
+	/** A reuse cache that hands back what it holds, once. */
+	function reuseCache() {
+		const entries = new Map<string, unknown>()
+		return {
+			entries,
+			tryConsume: vi.fn(async (id: string) => {
+				const entry = entries.get(id)
+				entries.delete(id)
+				return entry
+			}),
+			stash: vi.fn((id: string, entry: unknown) => void entries.set(id, entry)),
+			evict: vi.fn((id: string) => void entries.delete(id)),
+		}
+	}
+
+	/**
+	 * Builds at `fees` in turn over `route`. A park gives the slot back, runs its wait and is granted
+	 * a fresh slot; the window answers each question with `answer`, an accept by default.
+	 */
+	function holding(fees: bigint[], route: Route, answer: "accept" | "refuse" | "none" = "accept") {
+		const shape = makeHarness().built
+		const builds = fees.map((fee) => ({ ...shape, ...route, txRequest: txAt(fee) }))
+		const build = vi.fn(async () => {
+			const next = builds.shift()
+			if (!next) throw new Error("no build left")
+			return next as never
+		})
+		const reuse = reuseCache()
+		const controller = new AbortController()
+		const askInWindow = vi.fn((question: FeeQuestion) => {
+			if (answer === "accept") h.deps.answers.accept(question.journalId, question.reask.fee)
+			if (answer === "refuse") controller.abort()
+		})
+		const h = makeHarness({
+			buildAndEstimateFolded: build,
+			buildAndEstimateValidated: build,
+			operationEstimateReuse: reuse as never,
+			askInWindow,
+		})
+		const granted = vi.fn()
+		const regranted = vi.fn()
+		const leave = vi.fn()
+		const lane = h.deps.lane
+		lane.acquireSlot = vi.fn(async () => ({ release: granted, preController: undefined }))
+		lane.claimOrCreateJournal = vi.fn(async () => ({ journalId: "j1", controller }))
+		lane.joinOriginLine = vi.fn(() => ({ behind: () => false, earlierDone: async () => true, leave }))
+		lane.parkSlot = vi.fn(async (release: () => void, ...rest: unknown[]) => {
+			release()
+			await (rest.at(-1) as () => Promise<void>)()
+			return regranted
+		})
+		h.deps.previewSnapshots.stash("pv-1", { interactionId: "i-1", index: 0, fingerprint: null, discoveredHashes: [] })
+		const aztec = (envelope: object = approval()) =>
+			h.executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, HOOKS, FENCE, envelope as never)
+		const sendTx = (envelope: object = approval()) =>
+			h.executor.executeSendTransaction(sendTransaction(), ORIGIN, undefined, FENCE, HOOKS, envelope as never)
+		/** The fee each proof committed. */
+		const proved = () => h.proveAndSend.mock.calls.map((call) => feeLimitOf((call[0] as unknown as { txRequest: never }).txRequest))
+		/** The records' moves, in order. */
+		const moves = () => (lane.commitJournal as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[1])
+		return { ...h, build, reuse, controller, askInWindow, granted, regranted, leave, lane, aztec, sendTx, proved, moves }
+	}
+	type Holding = ReturnType<typeof holding>
+
+	const routes: Array<[string, Route, (h: Holding) => Promise<unknown>]> = [
+		["aztec_sendTx, the account's Fee Juice", FJ, (h) => h.aztec()],
+		["aztec_sendTx, a claim to the account", { feePaymentMethod: FEE_JUICE_WITH_CLAIM }, (h) => h.aztec()],
+		["aztec_sendTx, Private Fee Juice", PRIVATE, (h) => h.aztec()],
+		["send_transaction, the account's Fee Juice", FJ, (h) => h.sendTx()],
+		["send_transaction, Private Fee Juice", PRIVATE, (h) => h.sendTx()],
+	]
+
+	test.each(routes)("%s: a fall or a rise within the tolerance proves once, unasked", async (_case, route, run) => {
+		for (const fee of [APPROVED - 1n, TOLERATED]) {
+			const h = holding([fee], route)
+			await run(h)
+			expect(h.askInWindow).not.toHaveBeenCalled()
+			expect(h.lane.parkSlot).not.toHaveBeenCalled()
+			expect(h.proved()).toEqual([fee])
+		}
+	})
+
+	test.each(routes)("%s: above it, nothing proves until the person accepts the new figure", async (_case, route, run) => {
+		const h = holding([ROSE, ROSE], route, "none")
+		const sent = run(h)
+		await vi.waitFor(() => expect(h.askInWindow).toHaveBeenCalledTimes(1))
+
+		const question = h.askInWindow.mock.calls[0][0]
+		const reask = { fee: ROSE.toString(), cap: APPROVED.toString(), payer: personalPayerOf(route) }
+		expect(question).toEqual({ interactionId: "i-1", index: 0, journalId: "j1", reask, deadline: expect.any(Number) })
+		expect(h.moves()).toContainEqual({ stage: "queued", reask })
+		expect(h.granted).toHaveBeenCalledTimes(1)
+		expect(h.proveAndSend).not.toHaveBeenCalled()
+
+		expect(h.deps.answers.accept("j1", (ROSE - 1n).toString())).toBe(false)
+		expect(h.deps.answers.accept("j1", ROSE.toString())).toBe(true)
+		await sent
+		expect(h.moves()).toContainEqual({ stage: "pending" })
+		expect(h.lane.reclaimParked).toHaveBeenCalledWith("j1")
+		expect(h.proved()).toEqual([ROSE])
+		expect(h.regranted).toHaveBeenCalledTimes(1)
+	})
+
+	test("a rise past the accepted figure asks again, measured from what was accepted", async () => {
+		const higher = ROSE + (ROSE * FEE_RISE_ASKS.percent) / 100n + 1n
+		const h = holding([ROSE, higher, higher], FJ)
+		h.reuse.stash.mockImplementation(() => {})
+		await h.aztec()
+		expect(h.askInWindow.mock.calls.map(([q]) => [q.reask.fee, q.reask.cap])).toEqual([
+			[ROSE.toString(), APPROVED.toString()],
+			[higher.toString(), ROSE.toString()],
+		])
+		expect(h.proved()).toEqual([higher])
+	})
+
+	test("the accepted figure proves from the build the person saw, without building again", async () => {
+		const h = holding([ROSE], FJ)
+		await h.aztec()
+		expect(h.build).toHaveBeenCalledTimes(1)
+		expect(h.reuse.tryConsume).toHaveBeenCalledTimes(1)
+		expect(h.proved()).toEqual([ROSE])
+	})
+
+	test("a refusal ends the send cancelled, unproven, and drops the held build", async () => {
+		const h = holding([ROSE], FJ, "refuse")
+		await expect(h.aztec()).rejects.toBeInstanceOf(JobCancelledSentinel)
+		expect(h.proveAndSend).not.toHaveBeenCalled()
+		expect(h.reuse.stash).toHaveBeenCalledTimes(1)
+		expect(h.reuse.entries.size).toBe(0)
+		expect(h.regranted).not.toHaveBeenCalled()
+	})
+
+	test("unanswered for the waiters' hour, the send ends cancelled at the deadline its window was given", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })
+		try {
+			const h = holding([ROSE], FJ, "none")
+			const askedAt: number[] = []
+			h.askInWindow.mockImplementation(() => void askedAt.push(Date.now()))
+			const sent = h.sendTx().catch((error: unknown) => error)
+			await vi.waitFor(() => expect(h.askInWindow).toHaveBeenCalledTimes(1))
+			const { deadline } = h.askInWindow.mock.calls[0][0]
+			expect(deadline).toBe(askedAt[0] + MAX_WAIT_MS)
+
+			await vi.advanceTimersByTimeAsync(deadline - Date.now() - 1)
+			expect(h.moves()).not.toContainEqual({ stage: "cancelled" })
+			await vi.advanceTimersByTimeAsync(1)
+			expect(await sent).toBeInstanceOf(JobCancelledSentinel)
+			expect(h.moves()).toContainEqual({ stage: "cancelled" })
+			expect(h.deps.answers.accept("j1", ROSE.toString())).toBe(false)
+			expect(h.proveAndSend).not.toHaveBeenCalled()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test.each([
+		["a sponsor", { feePaymentMethod: EXTERNAL, fpcIdentity: { ...PRIVATE_ROW, type: FpcType.DefaultSponsoredFpc } }],
+		["an app's own fee contract", { feePaymentMethod: EXTERNAL }],
+	] as Array<[string, Route]>)("%s pays from a balance that is not the person's: any figure proves unasked", async (_case, route) => {
+		const h = holding([ROSE], route)
+		await h.aztec(approval({ feeCeiling: undefined }))
+		expect(h.askInWindow).not.toHaveBeenCalled()
+		expect(h.proved()).toEqual([ROSE])
+	})
+
+	test("a send with no approval window is never held", async () => {
+		const h = holding([ROSE], FJ)
+		await h.executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, HOOKS, FENCE)
+		expect(h.askInWindow).not.toHaveBeenCalled()
+		expect(h.proved()).toEqual([ROSE])
+	})
+
+	test("an approval with no figure for a fee the account pays is refused unproven", async () => {
+		const h = holding([APPROVED], FJ)
+		await expect(h.aztec(approval({ feeCeiling: undefined }))).rejects.toThrow(
+			"The approval carries no fee figure for a fee the account pays",
+		)
+		expect(h.proveAndSend).not.toHaveBeenCalled()
+		expect((h.lane.markJournal as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[1])).toContainEqual({ stage: "failed" })
+	})
+
+	test("the build after an accept is held to the preview: an authorization it never showed is refused unproven", async () => {
+		const h = holding([ROSE], FJ)
+		h.reuse.stash.mockImplementation(() => {})
+		const rebuilt = { ...makeHarness().built, ...FJ, txRequest: txAt(ROSE) }
+		const discovering = vi.fn(async (...args: unknown[]) => {
+			const probe = args[3] as { collected: unknown[]; discovered: unknown[] }
+			probe.collected.push({ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "mh:ih:new" } })
+			probe.discovered.push({
+				consumer: "0xc",
+				caller: "caller:new",
+				selector: "0xsel",
+				args: [],
+				innerHash: "ih:new",
+				messageHash: "mh:ih:new",
+			})
+			return rebuilt as never
+		})
+		h.build.mockImplementationOnce(h.build.getMockImplementation() as never).mockImplementationOnce(discovering as never)
+		await expect(h.aztec()).rejects.toThrow(AUTHWITS_CHANGED_MESSAGE)
+		expect(h.askInWindow).toHaveBeenCalledTimes(1)
+		expect(h.proveAndSend).not.toHaveBeenCalled()
+	})
+
+	test("the send keeps its place in its app's line while asked, and gives it up only to prove", async () => {
+		const h = holding([ROSE], FJ)
+		await h.aztec()
+		const [asked] = h.askInWindow.mock.invocationCallOrder
+		const [left] = h.leave.mock.invocationCallOrder
+		const [proving] = h.proveAndSend.mock.invocationCallOrder
+		expect(asked).toBeLessThan(left)
+		expect(left).toBeLessThan(proving)
+	})
+
+	test("a send of the account that reached the node while the question was open is waited for before the rebuild", async () => {
+		const pending: Array<{ hash: string; chainId: number; account: string; calls: object[]; createdAt: number }> = []
+		const tick = () => new Promise<void>((r) => setTimeout(r, 0))
+		const sequencer = new SendSequencer({ pendingTxs: () => pending as never, sleep: tick, now: () => 0 })
+		const h = holding([ROSE, ROSE], FJ, "none")
+		h.reuse.stash.mockImplementation(() => {})
+		Object.assign(h.deps, { sequencer })
+		const executor = new DappSendExecutor(h.deps)
+		const pendingAtBuild: number[] = []
+		h.build.mockImplementation(async () => {
+			pendingAtBuild.push(pending.length)
+			return { ...makeHarness().built, ...FJ, txRequest: txAt(ROSE) } as never
+		})
+		const sent = executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, HOOKS, FENCE, approval() as never)
+		await vi.waitFor(() => expect(h.askInWindow).toHaveBeenCalledTimes(1))
+		pending.push({ hash: "0xother", chainId: 7, account: "0xacct", calls: [], createdAt: 0 })
+		h.deps.answers.accept("j1", ROSE.toString())
+		for (let i = 0; i < 5; i++) await tick()
+		expect(h.build).toHaveBeenCalledTimes(1)
+		expect(h.lane.parkSlot).toHaveBeenCalledTimes(2)
+
+		pending.length = 0
+		await sent
+		expect(pendingAtBuild).toEqual([0, 0])
+		expect(h.proved()).toEqual([ROSE])
 	})
 })

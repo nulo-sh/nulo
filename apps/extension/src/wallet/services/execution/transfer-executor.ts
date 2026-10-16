@@ -13,14 +13,7 @@
 import type { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import type { TxExecutionRequest } from "@aztec-labs/stdlib/tx"
-import {
-	IllegalTransitionError,
-	type JobError,
-	type JobProgress,
-	JobCancelledSentinel,
-	normalizeError,
-	type QueuedFeePayer,
-} from "@nulo/wallet-core/jobs"
+import { type JobError, type JobProgress, JobCancelledSentinel, normalizeError, type QueuedFeePayer } from "@nulo/wallet-core/jobs"
 import { JournaledRejection, OperationNotRecordedError, SessionEndedError, WalletError } from "@nulo/extension-messaging/errors"
 import type { IAccountContract } from "@nulo/aztec-runtime/account"
 import { formatFeeJuice } from "@/utils/fee-estimation"
@@ -40,6 +33,7 @@ import { type ExecutionCoordinator, fenceChecks } from "./execution-coordinator"
 import type { ExecutionMutexRelease } from "./execution-mutex"
 import type { FeeEstimate } from "./fee/fee-strategy"
 import { builtCapOf, type ChainIdentity } from "./estimate-reuse-shared"
+import { askFeeAgain } from "./fee-reask"
 import { failureKind } from "./mark-failed-unless-cancelled"
 import type { OperationPlanner, TransferRequest } from "./operation-planner"
 import { type QueuedFeeAnswers, queuedFeePayer, speedOf } from "./queued-fee-cap"
@@ -181,11 +175,6 @@ const WAIT_LIMIT_MESSAGE = "An earlier send of this account is still in flight"
 /** Embedded fee payments take a divergent execution path, and Fee Juice with a claim mutates its
  *  actions during the build, so neither leaves a build to reuse. */
 const reusable = (feeSettings: FeeSettings): boolean => feeSettings.paymentMethod.kind === "fj" || feeSettings.paymentMethod.kind === "fpc"
-
-/** `cancelJob` writes `cancelled` before it aborts, so a move of the send's own record that fails
- *  while aborted, or on a cancelled record, lost to the cancel. */
-const lostToCancel = (err: unknown, controller: AbortController): boolean =>
-	controller.signal.aborted || (err instanceof IllegalTransitionError && err.from === "cancelled")
 
 export class TransferExecutor {
 	public constructor(private readonly deps: TransferExecutorDeps) {}
@@ -371,38 +360,19 @@ export class TransferExecutor {
 		return { over: { stashId: run.stashId, fee, cap, payer: queuedFeePayer(turn.fpc) } }
 	}
 
-	/**
-	 * Asks the person about a fee above the cap and returns once they accept exactly it, the row
-	 * claimed back to `pending`. The waiter exists before the question is published, so an accept
-	 * never arrives first. A ×, a session end, or the send's own deadline ends it as cancelled.
-	 */
-	private async askAgain(run: TransferRun, over: OverCap): Promise<void> {
+	/** Asks the person about a fee above the cap; the send's own line deadline bounds the question. */
+	private askAgain(run: TransferRun, over: OverCap): Promise<void> {
 		const { journalId, controller } = run
-		const answer = this.deps.answers.wait(journalId, over.fee, controller.signal, run.line.ticket.remainingMs())
-		try {
-			await this.moveOwn(journalId, controller, { stage: "queued", reask: { fee: over.fee, cap: over.cap, payer: over.payer } })
-		} catch (err) {
-			this.deps.answers.drop(journalId)
-			throw err
-		}
-		this.deps.logDebug("queued send: fee above its cap, asking again")
-		this.deps.lane.beginQueuedWait(journalId)
-		const result = await answer.finally(() => this.deps.lane.endQueuedWait(journalId))
-		if (result === "aborted") throw new JobCancelledSentinel(journalId)
-		if (result === "expired") {
-			this.deps.logDebug("queued send: unanswered at its deadline, cancelled")
-			await this.moveOwn(journalId, controller, { stage: "cancelled" })
-			throw new JobCancelledSentinel(journalId)
-		}
-		await this.moveOwn(journalId, controller, { stage: "pending" })
-	}
-
-	private async moveOwn(journalId: string, controller: AbortController, progress: JobProgress): Promise<void> {
-		try {
-			await this.deps.transitionJournal(journalId, progress)
-		} catch (err) {
-			throw lostToCancel(err, controller) ? new JobCancelledSentinel(journalId) : err
-		}
+		return askFeeAgain(
+			{
+				answers: this.deps.answers,
+				transitionJournal: (id, progress) => this.deps.transitionJournal(id, progress),
+				beginQueuedWait: (id) => this.deps.lane.beginQueuedWait(id),
+				endQueuedWait: (id) => this.deps.lane.endQueuedWait(id),
+				logDebug: (msg) => this.deps.logDebug(msg),
+			},
+			{ journalId, controller, reask: { fee: over.fee, cap: over.cap, payer: over.payer }, ms: run.line.ticket.remainingMs() },
+		)
 	}
 
 	/** Stashes a build for the accept to reuse. A consumed entry goes back as it was, so its
