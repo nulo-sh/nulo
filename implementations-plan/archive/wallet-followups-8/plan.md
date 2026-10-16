@@ -153,7 +153,7 @@ Steps: delete per D1; fix the three comments. Then from the root: `bun run lint`
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `d59459ab`. Specific to this plan:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `d59459ab`. Specific to this plan:
 - Step 1 is absent (`code_review: off`). Step 2 runs per arc over its diff from `origin/dev` after its last gate: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; prompts under `~/.cache/nulo-backlog/wallet-followups-8/`; hard stop at three rounds; rounds logged in `lessons/phase-N.md`. No cross-arc pass: the arcs share no file or seam (deviation).
 - Approval boundary: aborting in-flight fetches, a timeout on a teardown wait, a stop raised outside the two clears or outliving its call, a retry change for callers without `retryWhile`, moving token-add I/O out of its lock, or any work on #498 is a plan change and stops for the orchestrator.
 - Close-out on arc 2: label #338 and #432 `known-limit` and close them as not planned, each with a comment (hypothesis, consequence, disposition, reopening condition); file KL-3 and KL-4 as closed `known-limit` issues (dedupe first); comment on #112 and #498 why they stay open; delete `STATUS.md`. Teardown of both worktrees after the merges: `agent-worktree done wallet-followups-8-popup --merged`, then `agent-worktree done wallet-followups-8 --merged`; trunk `dev`; `implementations-plan/archive/wallet-followups-8/plan.md`.
