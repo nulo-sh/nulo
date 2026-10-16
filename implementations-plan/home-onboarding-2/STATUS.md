@@ -19,3 +19,4 @@
 - 2026-10-16 arc2 arc gate (non-e2e): audit:vue 0, test:all 0, test:ci-gating 0. KL-1 filed closed as #571; P18-04 filed as #572 (owner-decision).
 - 2026-10-16 arc2 e2e red 1 (head build, onboarding watcher removed): red as required, spec fails at presto-host-permission.test.ts:79 (focus on BODY).
 - 2026-10-16 arc2 e2e red 2 (head build, onboarding title's no-ring rule removed): red as required at presto-host-permission.test.ts:91 (outline 'auto 1px 0px' after the keyed grant).
+- 2026-10-16 arc2 e2e head: presto-host-permission.test.ts green on Firefox, 13.6 s alone (arc 1: 10.3 s).
