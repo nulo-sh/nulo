@@ -137,7 +137,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
 
 ### Arc 3 (branches from dev after #508's PR merges)
 
-**Phase 7. One encoding, one RPC.** Change `authwit-discoverer.ts`, `execution/{service,spec,client}.ts`. Tests (real Token artifact; addresses checked with `isValidAztecAddress`): `computeCallMessageHash` over the content equals the hash over `decodeGrantsForDisplay`'s call; an object, a decimal string and a hex string argument each decode to the value the hash encodes; one refused class each: a non-`call` content, unknown contract, unknown function, an argument that does not encode, a decode that fails. Gate: `F`. Pass: exit 0.
+**Phase 7. One encoding, one RPC.** ✓ Change `authwit-discoverer.ts`, `execution/{service,spec,client}.ts`. Tests (real Token artifact; addresses checked with `isValidAztecAddress`): `computeCallMessageHash` over the content equals the hash over `decodeGrantsForDisplay`'s call; an object, a decimal string and a hex string argument each decode to the value the hash encodes; one refused class each: a non-`call` content, unknown contract, unknown function, an argument that does not encode, a decode that fails. Gate: `F`. Pass: exit 0.
 
 **Phase 8. Window and card.** Change `index.vue`, `OperationCard.vue`, `OperationActionRow.vue`, `CallArguments.vue`, the grant fixtures in `OperationCard.test.ts`, `.authwit.test.ts`, `.long-strings.test.ts` (rewritten wire-shaped), `identifier-sites.expected.json`. Tests: a decoded transfer grant shows spender, From, To (whole) and Amount with the symbol, and enables Confirm (control); a field, a long string and an array print whole; pending holds Confirm with "Reading arguments…"; each undecoded reason shows the card's warning, the error row, a disabled Confirm, and `approve()` refuses; a fee change keeps the refusal. UI impact: P22-01 A as signed (`o-grant-a`) and OA-G1's what ships now. Gate: `bun run audit:vue`; `bun run test:all`. Pass: exit 0; `scripts/complexity-baseline/manifest.json` unchanged.
 
@@ -186,6 +186,8 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 | D21 | Where the open-Send test sits (implementation) | `send.test.ts`, not `send-amount.test.ts` | the helper takes the decimals as an argument; only the mounted page re-reads its list |
 | D22 | The balance service on `onTokenUpdated` (arc 1 review) | re-send the token's balances with the new metadata and queue them, for a token its map already holds | each balance carries its token's metadata from a map loaded at activation, which precedes the re-read |
 | D23 | Send's transfer kind after an update (arc 1 review) | when the active token's transfer capabilities change, move only a selection it can no longer transfer | the id watcher does not fire for the same token, so a kind the chain does not support stayed selected; re-running the full selection would replace a still-valid choice with the preselected kind |
+| D24 | Arc 3's start (orchestrator) | released while arcs 1 and 2 are open, cut from `dev` at `d461b059` | arc 3's gate was #508's merge (#594); it shares no file with arc 1 and only `index.vue` with arc 2 |
+| D25 | The shared encoder's shape (implementation) | `encodeAuthwitCall` returns `undefined` for a missing function; a non-`call` content reads as `unavailable` | signing keeps its frozen error text and the display needs no error matching; no existing reason fits a content with no function, and a new one would be new copy |
 
 ## Audit verdicts
 
