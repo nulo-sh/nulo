@@ -24,7 +24,7 @@ post_implementation_hardening: not scheduled
 - **Known limits:** none.
 - **Open items:** #536 (its later steps and the three copies in files other lanes held); #549 (the execute window's `buildOperationsFromPayload` switch and fee seed, routed after #508); OA-1 (the "Show network name" setting that already does nothing) with the orchestrator for an owner decision page.
 - **Lessons:** none promoted; the one cross-task gotcha (`identifier-sites.expected.json` pins a hash of `dispatcher.ts`) is named by its own failing test, and `lessons.md` is at its budget.
-- **Seeds:** the `/goal` and `/loop` seeds below are retired.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # harden-quality-fixes-1: the cheap dedupe set of the 2026-10-15 quality harden
 
