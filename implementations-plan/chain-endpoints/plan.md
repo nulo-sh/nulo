@@ -1,7 +1,7 @@
 ---
 plan: chain-endpoints
 tier: mid
-status: arcs 1 (#276), 2a (#506) and 2c (#509) merged; 2b struck (P12-03 veto); close-out revision 2026-10-16, awaiting approval (no arc for #79, D27)
+status: arcs 1 (#276), 2a (#506) and 2c (#509) merged; 2b struck; close-out revision 2026-10-16 approved by the panel (Codex approve, Opus conditional approve, conditions met), awaiting the orchestrator (no arc for #79, D27)
 issues: "#171 (arc 1); #200, #101 item 14 (arc 2a); #116 (arc 2c); #101 item 15 (struck, closes at close-out, D28); #79 (no arc: #389 closed it, D27); #77, #197 (no arc, blocked:external)"
 revision: "2026-10-16, light: close-out only; base origin/dev at c5e9c8e8"
 driver: claude-code
@@ -871,6 +871,10 @@ Verdict: **conditional approve (with conditions: before #101 is closed, quote th
 | 5 | Low. Close-out gaps: #77 and #197 comments; R-F6's `flagged` gap has no home; privacy § 5.2 is accurate; the gate's literal `Seeds retired:` field; A4 and the #197 routing line read as live | Accepted: comments on both, a `docs` issue for the gap, § 5.2 dropped, the Outcome's literal fields named, A4 and the Scope line marked superseded |
 | 6 | Low. A5: a red from a refused host is data, so no rerun; run both files in one call per browser with `NULO_E2E_RETRY=0`; expect `api.coingecko.com` | Accepted |
 | 7 | Step 8 is required by the README's placement rule; one round with no material finding ends it | Kept |
+
+### Close-out revision, Codex round 2 (session `01a144eb-44d0-7853-84dd-8b13853d5cfe` resumed), 2026-10-16
+
+Verdict: **approve**. All five round-1 findings resolved; D28's condition, D31 and the Outcome fields verified; no regression and no new material finding. One Low accepted: the OWNER-ASKS note says "a new contract class", since a new token on the bundled class needs only the list.
 
 ## Delivery
 
