@@ -63,8 +63,9 @@ import LogsViewer from "./LogsViewer.vue"
 
 const DEADLINE_MS = 500
 
-function mountViewer() {
+function mountViewer(attachTo?: HTMLElement) {
 	return mount(LogsViewer, {
+		attachTo,
 		global: { stubs: { LogsToolbar: true, Flex: true, Icon: true } },
 	})
 }
@@ -215,6 +216,44 @@ describe("LogsViewer Clear logs", () => {
 		})
 		expect(H.openToast).not.toHaveBeenCalled()
 		expect(doc()).toBe(docOf([log(2)]))
+		wrapper.unmount()
+	})
+})
+
+describe("LogsViewer auto-scroll around the search panel", () => {
+	const t = Date.now()
+	const log = (id: number): LogEntry => ({ id, timestamp: t, source: "ui", level: 1, data: [`log ${id}`] })
+
+	/** Focus moving from one element of the editor's shadow root to another, as CodeMirror's search
+	 *  panel takes it from the content: the document never hears it, seeing the host as both the
+	 *  target and the related target. */
+	async function focusInEditor(className: string) {
+		H.getLogs.mockResolvedValueOnce([log(1)]).mockResolvedValue([])
+		const wrapper = mountViewer(document.body)
+		await vi.advanceTimersByTimeAsync(0)
+		const root = [...wrapper.element.querySelectorAll("div")].find((el) => el.shadowRoot)?.shadowRoot
+		if (!root) throw new Error("the editor has no shadow root")
+		const from = root.appendChild(document.createElement("div"))
+		const holder = root.appendChild(document.createElement("div"))
+		holder.className = className
+		const input = holder.appendChild(document.createElement("input"))
+		const view = H.editors[0] as StubView
+		view.dispatch.mockClear()
+		input.dispatchEvent(new FocusEvent("focusin", { bubbles: true, composed: true, relatedTarget: from }))
+		H.onLog.invoke(log(2))
+		const scrolled = view.dispatch.mock.calls.some(([spec]) => spec.effects)
+		return { wrapper, scrolled }
+	}
+
+	test("focus moving into the search panel stops it", async () => {
+		const { wrapper, scrolled } = await focusInEditor("cm-panel cm-search")
+		expect(scrolled).toBe(false)
+		wrapper.unmount()
+	})
+
+	test("focus elsewhere in the editor keeps it", async () => {
+		const { wrapper, scrolled } = await focusInEditor("cm-content")
+		expect(scrolled).toBe(true)
 		wrapper.unmount()
 	})
 })

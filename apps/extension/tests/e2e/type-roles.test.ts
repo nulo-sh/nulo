@@ -95,8 +95,8 @@ test("every role's probe computes to its record, and a probe pushed off it is ca
 
 const FIXTURE_HTML = `
 	<div data-input-size="mini">
-		<input class="type--input" data-testid="tr-mini-input" value="12" style="font-size: 12px" />
-		<input class="type--input-data" data-testid="tr-mini-data" value="0x1a" style="font-size: 12px" />
+		<input class="type--input" data-testid="tr-mini-input" value="12" />
+		<input class="type--input-data" data-testid="tr-mini-data" value="0x1a" />
 	</div>
 	<div data-testid="tr-field"><span class="type--label">To</span><input class="type--input-data" value="0x1a" /></div>
 	<span class="type--name" data-testid="tr-name" data-address-shows="name">Alice</span>`
@@ -120,6 +120,12 @@ test("a site reads its value or its native field, a name shown is judged as name
 		const host = document.createElement("div")
 		host.setAttribute("data-testid", "tr-host")
 		host.innerHTML = html
+		// Through the CSSOM: `style-src` refuses a parsed `style` attribute.
+		for (const id of ["tr-mini-input", "tr-mini-data"]) {
+			const input = host.querySelector(`[data-testid="${id}"]`)
+			if (!(input instanceof HTMLElement)) throw new Error(`the fixture has no ${id}`)
+			input.style.fontSize = "12px"
+		}
 		document.body.appendChild(host)
 	}, FIXTURE_HTML)
 	try {

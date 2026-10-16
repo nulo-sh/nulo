@@ -79,10 +79,11 @@ async function networkIdOfChain(page: Page, chainId: number): Promise<string> {
 /** Opens View Errors, reads the log from the text the data viewer renders, and closes it. */
 async function readViewedErrorLog(page: Page): Promise<Record<string, ErrorRow[]>> {
 	await clickByTestId(page, "import-full-backup-view-errors-btn")
-	// The viewer renders its document after it mounts; wait for text that parses.
+	// The viewer renders its document after it mounts, in its editor's shadow root; wait for text that parses.
 	const shown = await page.waitForFunction(
 		() => {
-			const text = (document.querySelector('[data-testid="data-viewer"]') as HTMLElement | null)?.innerText ?? ""
+			const content = document.querySelector('[data-testid="json-editor"]')?.shadowRoot?.querySelector(".cm-content")
+			const text = (content as HTMLElement | null)?.innerText ?? ""
 			const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)
 			try {
 				JSON.parse(json)
