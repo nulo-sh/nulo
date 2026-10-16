@@ -1,17 +1,7 @@
 import { describe, test, expect, vi, afterEach } from "vitest"
 import { MAX_READER_DRAIN_MS, ReadWriteGuard } from "./rw-guard"
 import type { ILogger } from "../logger/interfaces"
-
-/** Creates a deferred promise for controlling async timing in tests. */
-function deferred<T = void>() {
-	let resolve!: (value: T) => void
-	let reject!: (reason?: unknown) => void
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
-}
+import { deferred } from "./deferred"
 
 /** Flush all pending microtasks by waiting for a macrotask. */
 const flush = () => new Promise<void>((r) => setTimeout(r, 0))

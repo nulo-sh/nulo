@@ -2,8 +2,8 @@
 <script setup>
 /** Utils */
 import { isValidAztecAddress } from "@/utils/aztec-address"
-import { CONTACT_EXISTS, canonicalContactAddress, sameContactAddress } from "@/utils/contact-rules"
-import { isEmptyContactName, sameContactName, sanitizeContactName } from "@/utils/contact-name"
+import { CONTACT_EXISTS, canSubmitContact, canonicalContactAddress, contactAddressError, contactNameError } from "@/utils/contact-rules"
+import { sanitizeContactName } from "@/utils/contact-name"
 import { contactListReducers } from "@/utils/entity-list"
 
 /** Components */
@@ -64,27 +64,8 @@ const storedNameOf = (contact) => sanitizeContactName(contact?.name ?? "")
  *  filters out the contact-being-edited so saving with the SAME name/
  *  address it already has doesn't trip the duplicate guard. */
 const form = useFormState({
-	name: {
-		initial: "",
-		validate: (v) => {
-			if (isEmptyContactName(v)) return null
-			// The name as it would be stored: the cut can make a longer draft another contact's name.
-			const conflicting = contacts.value.find((c) => sameContactName(c.name, sanitizeContactName(v)) && !isEditedContact(c))
-			if (conflicting) return CONTACT_EXISTS
-			return null
-		},
-	},
-	address: {
-		initial: "",
-		validate: (v) => {
-			if (!v) return null
-			if (!isValidAztecAddress(v)) return "Invalid address"
-			// Case-insensitive: hex casing doesn't make a different address.
-			const conflicting = contacts.value.find((c) => sameContactAddress(c, v) && !isEditedContact(c))
-			if (conflicting) return CONTACT_EXISTS
-			return null
-		},
-	},
+	name: { initial: "", validate: (v) => contactNameError(v, contacts, isEditedContact) },
+	address: { initial: "", validate: (v) => contactAddressError(v, contacts, isEditedContact) },
 })
 
 const nameTerm = form.fields.name.value
@@ -105,16 +86,15 @@ const isStartedEditing = computed(() => isStartedEditingName.value || isStartedE
 const isAlreadyExistName = computed(() => form.fields.name.error.value === CONTACT_EXISTS && isStartedEditing.value)
 const isAlreadyExistAddress = computed(() => form.fields.address.error.value === CONTACT_EXISTS && isStartedEditing.value)
 const isValidAddress = computed(() => isValidAztecAddress(contactAddressTerm.value))
-const isAvailableToUpdateContact = computed(() => {
-	// Full-lifetime submit latch: a running save closes the form on EVERY
-	// route (button, Enter, future callers) — not just the pointer path.
-	if (isLoading.value) return false
-	if (isEmptyContactName(nameTerm.value ?? "")) return false
-	if (!isValidAddress.value) return false
-	if (form.fields.name.error.value) return false
-	if (form.fields.address.error.value) return false
-	return true
-})
+const isAvailableToUpdateContact = computed(() =>
+	canSubmitContact({
+		loading: isLoading,
+		name: nameTerm,
+		validAddress: isValidAddress,
+		nameError: form.fields.name.error,
+		addressError: form.fields.address.error,
+	}),
+)
 
 const isLoading = ref(false)
 const processingError = ref({
