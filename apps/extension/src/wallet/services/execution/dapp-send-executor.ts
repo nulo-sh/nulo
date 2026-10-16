@@ -239,7 +239,6 @@ interface SlotRun {
 	leaveLine: () => void
 }
 
-/** A build above the approved figure, as the question needs it: the build itself is only in the stash. */
 /** A build above the approved figure, as its question needs it: never the build itself. `shown` is
  *  the authorization rows the approval window listed, which the question shows again. */
 type OverCeiling = { reask: QueuedFeeReask; stashId?: string; shown?: readonly DiscoveredAuthwit[] }
@@ -266,7 +265,6 @@ type StandardBuild = Pick<
 	reused?: OperationEstimateReuseEntry
 }
 
-/** What a build's reuse entry is bound to, read before the build. */
 /** What every build of one standard dApp send answers to. */
 type StandardRun = {
 	op: AztecSendTxOperation
@@ -278,6 +276,7 @@ type StandardRun = {
 	approval: OperationApprovalEnvelope | undefined
 }
 
+/** What a build's reuse entry is bound to, read before the build. */
 type ReuseSnapshot = { sequenceEpoch: number; pendingHashes: readonly string[]; lagging: boolean }
 
 /** A popup approval of a send the person pays carries the figure its window showed. */

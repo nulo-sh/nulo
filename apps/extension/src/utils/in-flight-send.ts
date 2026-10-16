@@ -36,9 +36,10 @@ export function isInFlightSend(op: Pick<OperationRecord, "kind" | "origin" | "pr
 /** True when `op` is a send, from any origin, that the user approved and that has not reached
  *  `submitting`: the stages that hold an expiring session open and that the lock dialog counts,
  *  since a lock cancels dApp sends too. A queued dApp request is not approved yet, so it can neither
- *  keep the wallet unlocked nor make a lock ask; a queued transfer was confirmed on the Send page. */
+ *  keep the wallet unlocked nor make a lock ask; a queued transfer was confirmed on the Send page,
+ *  and a queued dApp send asking about its fee was approved in its window. */
 export function isApprovedSendInFlight(op: Pick<OperationRecord, "kind" | "progress">): boolean {
-	if (op.kind === "transfer" && op.progress?.stage === "queued") return true
+	if (op.progress?.stage === "queued" && (op.kind === "transfer" || op.progress.reask !== undefined)) return true
 	return SENDING_KINDS.has(op.kind) && APPROVED_UNBROADCAST_STAGES.has(op.progress?.stage)
 }
 
