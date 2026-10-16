@@ -20,7 +20,7 @@ Codex (gpt-6.1-sol, high) and an Opus Plan agent, in parallel, over plan.md, rec
 
 ## Round 2 (2026-10-16)
 
-- Codex resume: conditional approve, 4 findings, all accepted: the frame's direct service logger (`createPxeOffscreen({ logger })`) bypassed the planned capture hooks; resolve C6 inside the write callback, since the public read wrapper would wait on the held write; a D4 phrase; the duplicate-pair test cases.
+- Codex resume: conditional approve, 4 findings, all accepted: the frame's direct service logger (`createPxeOffscreen({ logger })`) takes the same wrapper as the planned capture hooks; resolve C6 inside the write callback, since the public read wrapper would wait on the held write; a D4 phrase; the duplicate-pair test cases.
 - Checked before asking: the vendored account artifact registers through the same seam (`nulo-account.ts:130`) and is not in the compiled-in set; Codex found no wallet-internal registration whose result C6 changes.
 
 ## Final fresh pass (2026-10-16)
