@@ -65,16 +65,16 @@ import type { PartialGasSettingsRPC } from "@nulo/aztec-runtime/account"
 import { PRIORITY_MULTIPLIERS, type PriorityLevel } from "@nulo/wallet-bridge"
 import { feeCapFor } from "./fee-cap"
 
-/** The `maxFeesPerGas` multiplier per speed: `PRIORITY_MULTIPLIERS` in production. A build may set
- *  Normal's with `VITE_NULO_FEE_MULTIPLIER`, so e2e CI can widen the envelope when devnet base fees
- *  drift on loaded runners; Fast and Urgent scale with it, so the ladder keeps its order. Parsed once
- *  at module load; unset, invalid or below 1 leaves the ladder as it is. */
 const VITE_FEE_MULTIPLIER_RAW = (import.meta.env?.VITE_NULO_FEE_MULTIPLIER ?? "") as string
 const VITE_FEE_MULTIPLIER_PARSED = Number.parseFloat(VITE_FEE_MULTIPLIER_RAW)
 const FEE_LADDER_SCALE =
 	Number.isFinite(VITE_FEE_MULTIPLIER_PARSED) && VITE_FEE_MULTIPLIER_PARSED >= 1
 		? VITE_FEE_MULTIPLIER_PARSED / PRIORITY_MULTIPLIERS.normal
 		: 1
+/** The `maxFeesPerGas` multiplier per speed: `PRIORITY_MULTIPLIERS` in production. A build may set
+ *  Normal's with `VITE_NULO_FEE_MULTIPLIER`, so e2e CI can widen the envelope when devnet base fees
+ *  drift on loaded runners; Fast and Urgent scale with it, so the ladder keeps its order. Parsed once
+ *  at module load; unset, invalid or below 1 leaves the ladder as it is. */
 export const FEE_MULTIPLIERS: Record<PriorityLevel, number> = {
 	normal: PRIORITY_MULTIPLIERS.normal * FEE_LADDER_SCALE,
 	fast: PRIORITY_MULTIPLIERS.fast * FEE_LADDER_SCALE,

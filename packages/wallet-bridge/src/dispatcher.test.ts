@@ -1361,8 +1361,8 @@ describe("dispatcher — simulateTx / profileTx act as the account named in `opt
 describe("dispatcher — registerToken reachability + routing", () => {
 	test("schema patch extends WalletSchema with a 2-arg `registerToken` entry", async () => {
 		// The file's first import is the production activation, so this is the
-		// reachability assertion: if that side-effect import drifts (renamed,
-		// moved, or tree-shaken by a future bundler), this test fails.
+		// reachability assertion: if that side-effect import is renamed or
+		// moved, this test fails.
 		const { WalletSchema } = await import("@aztec-labs/aztec.js/wallet")
 		expect("registerToken" in WalletSchema).toBe(true)
 		// biome-ignore lint/suspicious/noExplicitAny: WalletSchema entry shape is upstream-typed but per-key access is opaque

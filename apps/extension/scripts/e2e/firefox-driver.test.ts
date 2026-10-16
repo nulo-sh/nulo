@@ -255,7 +255,7 @@ describe("a page error's location", () => {
 		expect(errorFrames([], { sourceName: "", lineNumber: 0, columnNumber: 0 })).toEqual([])
 	})
 
-	test("the close reports each recent exception with its context and first frame, 1-based as Firefox prints a stack", () => {
+	test("the close reports each recent exception with its context and kept frame, 1-based as Firefox prints a stack", () => {
 		const frame = { url: reported.sourceName, functionName: "", lineNumber: 4, columnNumber: 811 }
 		const recent = [
 			{ context: "w1", text: "InternalError: too much recursion", frame },

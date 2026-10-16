@@ -6,6 +6,7 @@
  * every case re-imports a fresh module via vi.resetModules().
  */
 
+// Loaded during collection, so each case's re-import only re-evaluates it.
 import "./content-message-relay"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { OPEN_TOOLBAR_POPUP } from "@/wallet/utils/onboarding-tab"
@@ -14,7 +15,6 @@ type Listener = (message: unknown, sender: unknown) => undefined
 let chromeListeners: Listener[]
 let relay: typeof import("./content-message-relay")
 
-// Loaded during collection, so each case's re-import only re-evaluates it.
 beforeEach(async () => {
 	vi.resetModules()
 	vi.useRealTimers()

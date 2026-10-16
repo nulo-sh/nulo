@@ -1,3 +1,4 @@
+// Loaded during collection, so each case's re-import only re-evaluates it.
 import "./client"
 import { readFileSync } from "node:fs"
 import { PrestoClient } from "@alejoamiras/presto-core"
@@ -8,7 +9,6 @@ type ClientModule = typeof import("./client")
 let first: ClientModule
 let second: ClientModule
 
-// Loaded during collection, so each case's re-import only re-evaluates it.
 beforeEach(async () => {
 	vi.resetModules()
 	first = await import("./client")
