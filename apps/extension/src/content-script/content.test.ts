@@ -5,22 +5,30 @@ const approval = (sessionId: string) => ({ origin: "background", type: "discover
 
 const stubPostMessage = () => vi.spyOn(window, "postMessage").mockImplementation(() => {})
 
-let deliver: (message: unknown) => void
+let deliver: (message: unknown) => void = () => {}
 let posted: ReturnType<typeof stubPostMessage>
 const sent: unknown[] = []
 
-beforeEach(async () => {
+// The content script wires its listeners when it loads, so it loads once, at collection.
+vi.stubGlobal("chrome", {
+	runtime: {
+		sendMessage: async () => {},
+		onMessage: {
+			addListener: (listener: (message: unknown) => void) => {
+				deliver = listener
+			},
+		},
+	},
+})
+await import("./content")
+
+beforeEach(() => {
 	sent.length = 0
 	vi.stubGlobal("chrome", {
 		runtime: {
 			sendMessage: vi.fn(async (message: unknown) => {
 				sent.push(message)
 			}),
-			onMessage: {
-				addListener: (listener: (message: unknown) => void) => {
-					deliver = listener
-				},
-			},
 		},
 	})
 	vi.stubGlobal(
@@ -31,8 +39,6 @@ beforeEach(async () => {
 		},
 	)
 	posted = stubPostMessage()
-	vi.resetModules()
-	await import("./content")
 })
 
 test("the page is answered only for the discovery it sent through this content script", () => {
