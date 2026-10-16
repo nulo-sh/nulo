@@ -95,6 +95,9 @@ describe("onboarding tab", () => {
 		freshExtensionPerTest: extension,
 	}) => {
 		const page = await openOnboarding(extension)
+		// Short enough that the create step scrolls, so a step that kept its offset would show it.
+		const viewport = page.viewport()
+		await page.setViewport({ width: 1280, height: 480 })
 
 		// Click create on welcome
 		await clickByTestId(page, "onboarding-welcome-create")
@@ -104,11 +107,20 @@ describe("onboarding tab", () => {
 		await expectNoNameField(page, "onboarding-create-page", "onboarding-name-input")
 		await replaceInputValue(page, '[data-testid="onboarding-password-input"]', TEST_PASSWORD)
 		await replaceInputValue(page, '[data-testid="onboarding-password-confirm"]', TEST_PASSWORD)
+		const scrolled = await page.evaluate(() => {
+			const doc = document.scrollingElement as Element
+			doc.scrollTop = doc.scrollHeight
+			return doc.scrollTop
+		})
+		expect(scrolled).toBeGreaterThan(0)
 
 		await clickByTestId(page, "onboarding-submit-create")
 
 		// Wait for the bootstrap to finish + route to /learn
 		await waitForHash(page, "#/onboarding/learn", 30_000)
+		await page.waitForSelector('[data-testid="onboarding-learn-continue"]', { visible: true, timeout: 10_000 })
+		expect(await page.evaluate(() => document.scrollingElement?.scrollTop)).toBe(0)
+		if (viewport) await page.setViewport(viewport)
 		expect(await readProfileNames(page)).toEqual(["Main"])
 
 		// Continue from learn routes into the fee-juice explainer step. Skip on

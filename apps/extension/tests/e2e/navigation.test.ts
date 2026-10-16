@@ -57,6 +57,35 @@ test("bottom navigation switches between all four pages", async ({ registeredExt
 	expect(registeredExtension.pageErrors).toEqual([])
 })
 
+test("back from a Settings page lands where Settings was left, and the page it opened starts at its top", async ({
+	registeredExtension,
+}) => {
+	const page = await openPopup(registeredExtension)
+	await waitForHash(page, "#/popup/general")
+	await clickNavTab(page, "settings")
+	await waitForHash(page, "#/popup/settings")
+	await page.waitForSelector('[data-testid="setting-nav-developer"]', { visible: true, timeout: 5_000 })
+
+	const left = await page.$eval('[data-testid="settings-page"]', (el) => {
+		el.scrollTop = Math.round((el.scrollHeight - el.clientHeight) / 2)
+		return el.scrollTop
+	})
+	expect(left).toBeGreaterThan(0)
+	await clickByTestId(page, "setting-nav-developer")
+	await waitForHash(page, "#/popup/settings/developer")
+	await page.waitForSelector('[data-testid="settings-developer-page"]', { visible: true, timeout: 5_000 })
+	expect(await page.$eval('[data-testid="settings-developer-page"]', (el) => el.scrollTop)).toBe(0)
+
+	await clickByTestId(page, "subpage-back")
+	await waitForHash(page, "#/popup/settings")
+	await page.waitForSelector('[data-testid="settings-page"]', { visible: true, timeout: 5_000 })
+	const back = await page.$eval('[data-testid="settings-page"]', (el) => el.scrollTop)
+	expect(Math.abs(back - left), `left at ${left}, back at ${back}`).toBeLessThanOrEqual(1)
+
+	expect(registeredExtension.consoleErrors).toEqual([])
+	expect(registeredExtension.pageErrors).toEqual([])
+})
+
 test("about page shows version info", async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")

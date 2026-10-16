@@ -149,7 +149,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<SettingsPageShell title="Developer" :backTo="'/popup/settings'" gap="32">
+	<SettingsPageShell title="Developer" :backTo="'/popup/settings'" gap="32" data-testid="settings-developer-page">
 		<LoadingState v-if="isLoading" label="FETCHING SETTINGS" />
 
 		<template v-if="!isLoading">

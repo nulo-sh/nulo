@@ -37,6 +37,8 @@ routes.push({
 const router = createRouter({
 	history: createWebHashHistory(import.meta.env.BASE_URL),
 	routes,
+	// The onboarding document itself scrolls: a step opens at its top, and back lands where it was.
+	scrollBehavior: (_to, _from, saved) => saved ?? { top: 0 },
 })
 
 router.beforeEach(createLegalGuard(() => managers.legal.getStatus()))
