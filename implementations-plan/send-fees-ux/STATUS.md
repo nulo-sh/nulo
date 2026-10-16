@@ -15,3 +15,5 @@
 - 2026-10-16: phase 5 (#503, OA-1 B) gate F pass on rerun (first: type-role-ban 5 s timeout at load 215, file alone 2 s); network spec fee-sponsor-funding pending a host under load 150.
 - 2026-10-16: phase 6 (#505, OA-3 B) gate F pass: lint, typecheck:all (after adding `sponsored` to two test literals), test (797 files). Network specs next.
 - 2026-10-16: phase 6 network gate pass: NULO_E2E_PROVERLESS=1 same-token-concurrent-sends 16/16 (875 s wall). Review round 1: Codex conditional approve (2), Opus approve (3 notes); fixes applied; known limit #569.
+- 2026-10-16: arc 2 review round 2 (Codex resume): approve; loop converged.
+- 2026-10-16: phase 8 (arc 2): test:all pass (extension 797 files), test:ci-gating pass (571).

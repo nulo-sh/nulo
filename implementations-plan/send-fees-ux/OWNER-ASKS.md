@@ -1,5 +1,7 @@
 # Owner asks: send-fees-ux
 
+Answers (decision page 20, 2026-10-16, quoted on each issue): OA-1 B (#503), OA-2 B (#504, with the owner's request to see the whole fee block as a skeleton first), OA-3 B (#505), OA-4 B (#316). Arc 2 ships OA-1, OA-3 and OA-4; OA-2 waits for the mockup; OA-5 has no answer and ships as is.
+
 Five issues. Two carry signed words and ship in full: #316 and #340 (decision page 18, P18-09 A and P18-11 A). Four calls are open. Each has a "what ships now" line, which is what the arc builds if the ask is still open when its PR opens. An answer that lands before then ships with the arc.
 
 ## OA-1. #503: the app-set fee row in the approval window
