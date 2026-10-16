@@ -6,7 +6,6 @@ import { isTerminal } from "@nulo/wallet-core/jobs"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { ProfileService } from "@/wallet/services/profile/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
-import { captureRestoreEpochs, requireRestoreProfileId } from "@/wallet/services/restore-fence"
 import { NetworkService, networkInfoFrom, primaryEndpointUrl, type Network } from "@/wallet/services/network/service"
 import { AccountService } from "@/wallet/services/account/service"
 import { TokenService, type Token, type TokenAdded, type TokenDeleted } from "@/wallet/services/token/service"
@@ -207,7 +206,6 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		"retryIncomingScan",
 		"setTrustAllow",
 		"setTrustReject",
-		"trustRestoredTokens",
 		"clearProfile",
 		"clearChain",
 		"replayPendingPrompts",
@@ -782,29 +780,6 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const visible = await this.isVisibilityEnabled()
 		const floor = nextArrivalFloor(stored, { tip, lowerBound: maxBlock(hidden), epochMoved: this.serviceEpoch !== epochAtTip })
 		return { trust: trustedRow(stored, floor), unhidden: hidden.map((r) => ({ ...r, hidden: false })), visible }
-	}
-
-	public async trustRestoredTokens(profileId: string): Promise<void> {
-		requireRestoreProfileId(profileId)
-		await this.ensureInitialized()
-		// The profile is not open yet, so its deletion epoch stands in for the session fence.
-		const deletion = this.profileService.getDeletionState()
-		const epoch = captureRestoreEpochs(deletion, [profileId]).get(profileId)
-		if (epoch === undefined) return
-		const scopes: { networkId: string; contract: string; tip: number | undefined }[] = []
-		for (const token of await this.tokenService.getTokensRaw(profileId)) {
-			const network = (await this.networkService.getNetworksRaw(profileId, token.chainId))[0]
-			if (network) scopes.push({ networkId: network.id, contract: token.contract, tip: await this.readTip(network.id) })
-		}
-		const epochAtTip = this.serviceEpoch
-		await this.withServiceLock(async (isCurrent) => {
-			const kept = () => isCurrent() && deletion.isCurrent(profileId, epoch)
-			for (const { networkId, contract, tip } of scopes) {
-				if (await this.repo.getTrust(profileId, networkId, contract)) continue
-				if (!(await this._setTrustStateLocked(profileId, networkId, contract, "trusted", kept))) return
-				await this.moveArrivalFloorLocked(profileId, networkId, contract, { tip, epochAtTip, isCurrent: kept })
-			}
-		})
 	}
 
 	public async setTrustReject(profileId: string, networkId: string, contract: string): Promise<boolean> {

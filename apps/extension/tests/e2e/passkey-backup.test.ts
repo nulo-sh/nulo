@@ -325,7 +325,7 @@ test("passkey full-backup: in-session round-trip (register → reset → import 
 		expect(passkey.credentialId.length).toBeGreaterThan(0)
 
 		// 2. Build the synthetic backup file with that exact credentialId.
-		const filePath = writeBackupToTemp(buildSyntheticPasskeyBackup(passkey), "passkey-backup.json")
+		const filePath = writeBackupToTemp(await buildSyntheticPasskeyBackup(page, passkey), "passkey-backup.json")
 
 		// 3. Reset the wallet via the in-app reset flow — the same pattern
 		//    `passkey-paths.test.ts:140-172` uses.
