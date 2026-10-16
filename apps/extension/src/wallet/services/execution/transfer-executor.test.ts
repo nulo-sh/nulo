@@ -1507,12 +1507,18 @@ describe("TransferExecutor: a queued send Nulo's sponsor pays, with no cap", () 
 	async function behindHeldSend(req: TransferRequest, getFpcImpl = vi.fn(async () => NULO_SPONSOR as never)) {
 		const sequencer = new SendSequencer({ pendingTxs: () => [], sleep: () => new Promise((r) => setTimeout(r, 0)), now: () => 0 })
 		const h = makeHarness({ sequencer, getFpcImpl })
+		const releases: ReturnType<typeof vi.fn>[] = []
+		;(h.deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+			const release = vi.fn()
+			releases.push(release)
+			return release
+		})
 		const earlier = sequencer.enter(SCOPE, (await h.executor.sequence(req)).keys)
 		const waiting = async () => {
 			await vi.waitFor(() => expect(h.deps.lane.beginQueuedWait).toHaveBeenCalledWith("j1"))
 			expect(h.deps.buildAndEstimate).not.toHaveBeenCalled()
 		}
-		return { ...h, earlier, waiting }
+		return { ...h, sequencer, releases, earlier, waiting }
 	}
 	const reasks = (deps: TransferExecutorDeps) =>
 		(deps.transitionJournal as ReturnType<typeof vi.fn>).mock.calls.filter((c) => (c[1] as { reask?: unknown }).reask)
@@ -1530,7 +1536,7 @@ describe("TransferExecutor: a queued send Nulo's sponsor pays, with no cap", () 
 
 	test("its sponsor row re-pointed while it waits: it fails closed before any reuse or build", async () => {
 		let row: unknown = NULO_SPONSOR
-		const { executor, deps, proveAndSend, earlier, waiting } = await behindHeldSend(
+		const { executor, deps, proveAndSend, sequencer, releases, earlier, waiting } = await behindHeldSend(
 			SPONSORED,
 			vi.fn(async () => row as never),
 		)
@@ -1543,6 +1549,10 @@ describe("TransferExecutor: a queued send Nulo's sponsor pays, with no cap", () 
 		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
 		expect(proveAndSend).not.toHaveBeenCalled()
 		expect(deps.transitionJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, expect.objectContaining({ kind: "transfer" }))
+		// The refusal holds the slot it was granted and the ticket it re-entered with; both go back.
+		expect(releases.length).toBeGreaterThan(0)
+		for (const release of releases) expect(release).toHaveBeenCalled()
+		expect(sequencer.isBlocked(SCOPE, (await executor.sequence(SPONSORED)).keys)).toBe(false)
 	})
 
 	test.each([undefined, "est-1"])("control: a self-paid send held the same way, estimate id %s, still builds", async (estimateId) => {

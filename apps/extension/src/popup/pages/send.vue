@@ -289,7 +289,7 @@ const handleRequote = (e) => {
 }
 
 /** The wallet answered that an earlier send holds this transfer's chain state; set until a real
- *  estimate lands, fails or stops, so nothing goes out on a fee the user has not seen. */
+ *  estimate lands, fails or stops, so nothing the person pays goes out on a fee they have not seen. */
 const feeQueued = ref(false)
 /** The cap the queued answer offered (`{ basis, cap }`), or null when it offered none. */
 const queuedCap = ref(null)
@@ -478,7 +478,7 @@ function snapshotTransfer() {
 	// estimate would orphan its eventual stash (nobody consumes, nobody can
 	// cancel) for the full TTL.
 	const feeCap = queueCap.value?.cap
-	const precomputedEstimateId = queueMode.value ? undefined : feeEstimate.value?.estimateId
+	const precomputedEstimateId = feeCap ? undefined : feeEstimate.value?.estimateId
 	if (precomputedEstimateId) handoffFeeEstimate()
 	return {
 		networkId: appStore.network.id,
