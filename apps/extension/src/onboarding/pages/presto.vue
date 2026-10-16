@@ -40,6 +40,8 @@ const diagnosis = computed(() => (state.value.kind === "secure-connection-unavai
 const bannerTheme = document.documentElement.getAttribute("theme") === "light" ? "light" : "dark"
 
 const pitchRef = useTemplateRef<HTMLDivElement>("pitchRef")
+const titleRef = useTemplateRef<ComponentPublicInstance>("titleRef")
+const rowRef = useTemplateRef<ComponentPublicInstance>("rowRef")
 
 function retry() {
 	void check()
@@ -52,6 +54,12 @@ function skip() {
 function goNext() {
 	router.push("/onboarding/done")
 }
+
+// Pre-flush, so the row is still mounted: a grant that takes it away while it holds focus moves
+// focus to the title instead of dropping it to the body.
+watch(permissionMissing, (missing) => {
+	if (!missing && rowRef.value?.$el.contains(document.activeElement)) titleRef.value?.$el.focus()
+})
 
 onBeforeMount(() => {
 	// A reset clears chrome.storage, not this page's localStorage: a pitch dismissed during an
@@ -78,7 +86,14 @@ onBeforeUnmount(() => {
 	<OnboardingPage>
 		<StepIndicator :current="5" />
 		<Flex direction="column" gap="16" :class="$style.hero">
-			<BrutalistTitle main="Speed up" sub="Proving" />
+			<BrutalistTitle
+				ref="titleRef"
+				tabindex="-1"
+				main="Speed up"
+				sub="Proving"
+				:class="$style.title"
+				data-testid="onboarding-presto-title"
+			/>
 			<div :class="$style.hero_bar" />
 			<Text variant="body" color="secondary" height="150">
 				Proofs in your browser take about 30 seconds. With Presto they take a few.
@@ -86,7 +101,7 @@ onBeforeUnmount(() => {
 			</Text>
 		</Flex>
 
-		<PrestoPermissionRow v-if="permissionMissing" @allow="requestPermission" />
+		<PrestoPermissionRow v-if="permissionMissing" ref="rowRef" @allow="requestPermission" />
 
 		<Flex v-show="isPitch && !permissionMissing" direction="column" gap="10">
 			<SectionLabel label="01 · Get it" />
@@ -136,6 +151,11 @@ onBeforeUnmount(() => {
 <style module>
 .hero {
 	padding: 8px 0;
+}
+
+/* A focus target, not a control: no ring. */
+.title:focus {
+	outline: none;
 }
 
 .hero_bar {
