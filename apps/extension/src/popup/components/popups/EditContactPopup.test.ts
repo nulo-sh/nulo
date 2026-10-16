@@ -216,9 +216,12 @@ describe("EditContactPopup — decoupled from sender registration", () => {
 
 	test("Enter with a clean form is a no-op (dirty gate holds on the keyboard path)", async () => {
 		const w = await mountAndOpen()
-		const input = w.find('[data-testid="name-input"]').element as HTMLInputElement
-		input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+		// The listener lives on `document` and the mounted tree is detached.
+		const docInput = document.createElement("input")
+		document.body.appendChild(docInput)
+		docInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
 		await flushPromises()
+		docInput.remove()
 
 		expect(contactServiceMock.updateContact).not.toHaveBeenCalled()
 		expect(w.emitted("onClose")).toBeFalsy()
