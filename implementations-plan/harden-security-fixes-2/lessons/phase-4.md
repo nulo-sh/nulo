@@ -14,7 +14,7 @@ Arc 2 started before arc 1 merged: the orchestrator released it in parallel (dec
 
 - `askAgain`'s body moved into `execution/fee-reask.ts` as `askFeeAgain`; Send's 89 executor tests pass unchanged.
 - A popup-approved build the person pays for, with no figure, is refused before the proof (`MISSING_FEE_FIGURE`); a silent or wallet send carries no approval and is never held.
-- `acceptQueuedFee` stays transfer-only: the dApp question is answered only by its own window, through `DappInteractionService.askFeeAgain` and the worker's captured figure (deviation from the plan's Arc 2 "Accept and surface" line; ledger D20).
+- `acceptQueuedFee` stays transfer-only: the dApp question is answered only by its own window, through `DappInteractionService.askFeeAgain` and the worker's captured figure (deviation from the plan's Arc 2 "Accept and surface" line; ledger D24).
 - A refusal cancels through `lane.cancelQuestion`, which cancels only while the record still asks that figure.
 - Test harness: a default parameter swallows an explicit `undefined`, so the "no approval" case calls the executor directly; a second rise needs the restashed build to miss, since a hit proves at the accepted figure without building.
 

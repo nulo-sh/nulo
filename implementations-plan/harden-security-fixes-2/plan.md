@@ -1,7 +1,7 @@
 ---
 plan: harden-security-fixes-2
 tier: mid (the lane brief names it; see Asks)
-status: planned, awaits the orchestrator's approval; arc 2 waits on OA-F1 to OA-F3; arc 3 waits on #508's merge
+status: arc 1 merged (#598); arc 2 in review; arc 3 waits on #508's merge
 issues: "#416 (arc 2 reopens it and closes it); arcs 1 and 3 have no public issue; arc 1 files two closed known-limit issues"
 driver: claude-code
 claude_model: opus
@@ -72,7 +72,7 @@ Four items the owner decided on decision page 22 (2026-10-16), tracked privately
 
 **B, the re-read and the trust.**
 - `wallet/services/token/service.ts`: `refreshRestoredTokens(fence, deadlineAt)`: for each token row of the fence's profile on a live chain, read the instance and its interface and metadata as `previewTokenMetadata` does, with no pin taken from the row (its `classId` is the file's claim, D18), then update the row's class, interface, name, symbol and decimals where they differ. It updates, never adds, so no `onTokenAdded` fires and no trust follows. One write per changed row, under the token lock and the deletion fence the restore writes use. Each read is raced at the exact remainder to `deadlineAt` with its rejection contained (`registerOneNetwork`'s pattern, `importChainSync.ts:111-120`); the write checks the deadline again under the lock, so a read that lands late writes nothing. A failed or late read keeps the row and logs a fixed category at `debug`. Spec, client and RPC list gain it.
-- **The update event** (D19): each changed row's write emits `onTokenUpdated` (`TokenInfo & { profileId }`, a third event beside add and delete). `send.vue`, `useScopedTokens` and `settings/tokens/index.vue` re-read their list on it, so a Send page opened before the refresh integerizes with the chain's decimals after it; `incoming-transfer` and `token-balance` do not subscribe, so no trust follows.
+- **The update event** (D19): each changed row's write emits `onTokenUpdated` (`TokenInfo & { profileId }`, a third event beside add and delete). `send.vue`, `useScopedTokens` and `settings/tokens/index.vue` re-read their list on it, so a Send page opened before the refresh integerizes with the chain's decimals after it; `token-balance` re-sends the token's balances with the new metadata and queues them for a re-read (D22); `incoming-transfer` does not subscribe, so no trust follows.
 - `composables/useFullBackupImport.ts`: `executeRestore` takes one absolute `tailDeadlineAt` before the tail, passes it to `runImportChainSync` (a new parameter replacing its internal one, same budget constant) and then to `refreshRestoredTokens`, on the restore run's fence; the popup races that call at the same remainder. It never fails the restore.
 - Trust: the `trustRestoredTokens` call goes, with its stage (`full-backup-restore.ts:583-593`), service method, spec line and client entry; each restored token's first note uses the existing first-receipt prompt. OA-B1 may keep trust for list tokens.
 
@@ -81,9 +81,9 @@ Four items the owner decided on decision page 22 (2026-10-16), tracked privately
 - **Carried figure.** `approval-delta.ts`: `feeCeiling?: string`, the exact `maxFee` of the estimate the window showed for that operation. `dapp-interaction/service.ts` refuses a figure that fails `isFeeAmount` and copies it into `OperationApprovalEnvelope` (`execution/models/index.ts:78`). `index.vue` `approve()` sends `estimate?.maxFee`. The worker has no figure of its own (D7); under OA-F2 part 2 C the window always sends one for a person-paid fee, under B the worker asks when none came.
 - **Which sends** (OA-F2 part 1, recommended A): classified from the build's route, not from `paymentMethod.kind`: the account's Fee Juice (`fj`, `fjwc`, and an embedded `fjwc`) and Private Fee Juice carry the ceiling (Private Fee Juice told from a sponsor by the build's FPC identity, since both are `EXTERNAL`); Nulo's sponsor and an app's own fee contract keep today's behaviour. `default_entrypoint` has no wallet fee.
 - **Compare.** One rule in `execution/fee-reask.ts`, on raw integers: a build asks when its fee exceeds the approved figure by more than 10 percent **and** by at least 0.000001 FJ (`FEE_RISE_ASKS`, OA-F3 C); below that it goes out at the new fee, and a fall never asks. Figures print at six decimals, so a question's two figures never print alike (D8).
-- **Hold and ask.** `dispatchOperation` passes the envelope to `executeSendTransaction` too. After each standard build and before `proveAndSend`, a fee above the ceiling stashes the build where it can be stashed, parks the slot through a `park(wait)` the `runInSlot` callback gains (the `parkSlot` path; the account lines stay held), and asks. Accept with figure Y reruns the build with ceiling Y: `aztec_sendTx` through `tryConsume` (its drift ladder) or a rebuild; `send_transaction`, embedded, `fjwc` and app-capped sends rebuild, so a further rise asks again and every accept is bounded by its figure. The authorization preview taken before the first build is asserted after every build (`PreviewSnapshots.take` is single-use). Refusal, a closed window, or the question's own deadline (`MAX_WAIT_MS` from the ask, shared by the waiter and the window, D21) ends it as `JobCancelledSentinel`: the dApp gets `JOB_CANCELLED` (4001). A person-paid approval that carries no figure is refused before the proof (D22).
+- **Hold and ask.** `dispatchOperation` passes the envelope to `executeSendTransaction` too. After each standard build and before `proveAndSend`, a fee above the ceiling stashes the build where it can be stashed, parks the slot through a `park(wait)` the `runInSlot` callback gains (the `parkSlot` path; the account lines stay held), and asks. Accept with figure Y reruns the build with ceiling Y: `aztec_sendTx` through `tryConsume` (its drift ladder) or a rebuild; `send_transaction`, embedded, `fjwc` and app-capped sends rebuild, so a further rise asks again and every accept is bounded by its figure. The authorization preview taken before the first build is asserted after every build (`PreviewSnapshots.take` is single-use). Refusal, a closed window, or the question's own deadline (`MAX_WAIT_MS` from the ask, shared by the waiter and the window, D25) ends it as `JobCancelledSentinel`: the dApp gets `JOB_CANCELLED` (4001). A person-paid approval that carries no figure is refused before the proof (D26).
 - **One ask mechanism.** Send's `askAgain` body (waiter before the question, journal `queued` + `reask`, `beginQueuedWait`/`endQueuedWait`, expiry → `cancelled`) moves into `fee-reask.ts`; both executors call it; Send's behaviour and tests stay as they are (D9).
-- **Accept and surface** (as built). OA-F1 B: the worker opens a fee window (`popup/windows/fee/`) over the approved request, read-only, with the fee block "Fee went up" over "Was … FJ · Now … FJ" and the buttons Reject and "Send for … FJ"; `DappInteractionService.askFeeAgain` keeps the approved request in memory until its execution ends, and the window's answer settles the worker's waiter with the worker's own captured figure. `acceptQueuedFee` stays transfer-only (D20). OA-F2 part 2 C: Confirm waits for the figure wherever the wallet picks the fee or the account pays it, an app's claim to the account included (D23).
+- **Accept and surface** (as built). OA-F1 B: the worker opens a fee window (`popup/windows/fee/`) over the approved request, read-only, with the fee block "Fee went up" over "Was … FJ · Now … FJ" and the buttons Reject and "Send for … FJ"; `DappInteractionService.askFeeAgain` keeps the approved request in memory until its execution ends, and the window's answer settles the worker's waiter with the worker's own captured figure. `acceptQueuedFee` stays transfer-only (D24). OA-F2 part 2 C: Confirm waits for the figure wherever the wallet picks the fee or the account pays it, an app's claim to the account included (D27).
 
 ### Arc 3: the grant card decodes (after #508 merges)
 
@@ -112,15 +112,15 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
 
 ### Arc 1
 
-**Phase 1. E.** Search first: `gh issue list --state all --label known-limit --search "endpoint provider"`. File and close the issue; write its number on the Outcome's `Known limits:` line at close-out. Correct the `seeds.ts:23` comment. UI impact: none. Gate: `F`. Pass: exit 0; the issue closed with `known-limit`.
+**Phase 1. E.** ✓ Search first: `gh issue list --state all --label known-limit --search "endpoint provider"`. File and close the issue; write its number on the Outcome's `Known limits:` line at close-out. Correct the `seeds.ts:23` comment. UI impact: none. Gate: `F`. Pass: exit 0; the issue closed with `known-limit`.
 
-**Phase 2. B: the check.**
+**Phase 2. B: the check.** ✓
 - Change the files listed under Arc 1. E2E: `buildSyntheticPasskeyBackup` (`tests/e2e/helpers/import-drivers.ts:516`) adds the MAC with `computeBackupMac`, fed by a PRF the test reads through an in-page `get` on the same virtual authenticator with the wallet's PRF input (`PASSKEY_PRF_LABEL`); its three callers (`passkey-backup.test.ts:328`, `passkey-retry.test.ts:37`, `passkey-toolbar-panel.test.ts:544`) keep their flows. Estimate: +2 s per call.
 - Tests: `backup-mac.test.ts` (a known-answer vector; true on the same body; false on another checksum, another credential, a malformed MAC); `key-vectors.test.ts` pins the label; `full-backup-helpers.test.ts` (the MAC sits outside the checksum preimage; no callback, no field); `useFullBackupImport.test.ts` (a true passkey body restores; each refused class above returns its refusal and `profileService.restore` is never called; a missing MAC never prompts; a password body without the field restores).
 - UI impact: the two existing refusals also answer a passkey body whose check fails or is missing (OWNER-ASKS, consequences; P22-03 C, words verbatim).
 - Gate: `F`; `bun run test:all`; the three smoke files at retry 0 on Chrome and under `NULO_E2E_BROWSER=firefox` (WebAuthn, a fixture change); the Firefox panel round trip (`passkey-toolbar-panel.test.ts`, its real export and import, 96-180 s) locally. Pass: exit 0; each file's wall-clock before and after per browser in `lessons/phase-2.md`.
 
-**Phase 3. B: the re-read and the trust.**
+**Phase 3. B: the re-read and the trust.** ✓
 - Change: `token/{service,spec,client}.ts`, `useFullBackupImport.ts`, `importChainSync.ts`, `full-backup-restore.ts`, `incoming-transfer/{service,spec,client}.ts`, `send.vue`, `useScopedTokens.ts`, `settings/tokens/index.vue`, and the tests that pinned `trustRestoredTokens` (`useFullBackupImport.test.ts:642`, `incoming-transfer/service.scenarios.test.ts`).
 - Tests: a row whose decimals, symbol or class differ from the chain's is updated (never: the row keeps them), with no `onTokenAdded`; an agreeing chain writes nothing (control); a failed read, and a read that never settles, return by the deadline, keep the row and write nothing later; each changed row emits `onTokenUpdated` once and `incoming-transfer` ignores it; a Send page mounted before the update integerizes "1" with the updated decimals (`send-amount.test.ts`); `useScopedTokens` re-reads on it; another profile's rows and a token deleted during the read are never written; `importChainSync` honours a passed deadline. `incoming-transfer`: a restored token's first note is `pending` (control: an added token's note is visible).
 - Network e2e: `tests/e2e/network/backup-restore-integrity.test.ts` gains one case: a backup whose token row disagrees with the chain restores with the chain's metadata on Home. Failure mode: the read after finalize against a real PXE and node, which no mocked layer reaches. Estimate +20 s.
@@ -129,11 +129,11 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
 
 ### Arc 2 (starts once OA-F1 to OA-F3 have answers)
 
-**Phase 4. The figure and the hold.** Change the files under Arc 2, `transfer-executor.ts` through `fee-reask.ts`, and `execution/service.ts`. Tests: `approval-delta.test.ts`, `service.approval-binding.test.ts` (a malformed figure refused; the figure reaches the envelope); `index.test.ts:759-775` seeds a nonempty `maxFee` and pins its exact handoff as the fourth key; `dapp-send-executor.test.ts`, one matrix over `aztec_sendTx` (reuse hit, reuse miss, embedded `fjwc`, embedded fee contract, app cap, app priority, Private Fee Juice) and `send_transaction` (`fj`, Private Fee Juice): within the figure proves once (control); above it nothing proves, the slot is free, the row is `queued` with `reask`; accept proves at the accepted figure; a rise after an accept asks again; refusal and deadline end `JOB_CANCELLED`; the preview holds on every build; the payers OA-F2 leaves out prove as today. `transfer-executor.test.ts:1500-1735` stays green unchanged. Gate: `F`; `bun run test:all`. Pass: exit 0.
+**Phase 4. The figure and the hold.** ✓ Change the files under Arc 2, `transfer-executor.ts` through `fee-reask.ts`, and `execution/service.ts`. Tests: `approval-delta.test.ts`, `service.approval-binding.test.ts` (a malformed figure refused; the figure reaches the envelope); `index.test.ts:759-775` seeds a nonempty `maxFee` and pins its exact handoff as the fourth key; `dapp-send-executor.test.ts`, one matrix over `aztec_sendTx` (reuse hit, reuse miss, embedded `fjwc`, embedded fee contract, app cap, app priority, Private Fee Juice) and `send_transaction` (`fj`, Private Fee Juice): within the figure proves once (control); above it nothing proves, the slot is free, the row is `queued` with `reask`; accept proves at the accepted figure; a rise after an accept asks again; refusal and deadline end `JOB_CANCELLED`; the preview holds on every build; the payers OA-F2 leaves out prove as today. `transfer-executor.test.ts:1500-1735` stays green unchanged. Gate: `F`; `bun run test:all`. Pass: exit 0.
 
-**Phase 5. The surface (OA-F1's pick).** Build the picked option and its component tests over a wire-shaped fixture. UI impact: OA-F1 to OA-F3 as answered, quoted in the PR with the shots. Gate: `bun run audit:vue`. Pass: exit 0.
+**Phase 5. The surface (OA-F1's pick).** ✓ Build the picked option and its component tests over a wire-shaped fixture. UI impact: OA-F1 to OA-F3 as answered, quoted in the PR with the shots. Gate: `bun run audit:vue`. Pass: exit 0.
 
-**Phase 6. One network scenario.** Failure mode: worker hold, the surface, accept and proof in a real browser against a live node, which jsdom and mocks cannot reach. Force (D16): the test estimates on the account's public Fee Juice through the worker (asserting no shortfall, since the card defaults to Nulo's sponsor and its own balance read can lag the funding) and approves through the worker's approval entry with half that figure, the two thresholds asserted in the test, so the real build lands above it; it asserts the queued question and the window before accepting, and the proof after. No production seam, no node fixture. File: `tests/e2e/network/tx-sendTx-default.test.ts` gains the case; estimate +60 s per browser. Gate: that file at retry 0, on Chrome, and on Firefox if OA-F1 picks a window option. Pass: exit 0; wall-clock in `lessons/phase-6.md`.
+**Phase 6. One network scenario.** ✓ Failure mode: worker hold, the surface, accept and proof in a real browser against a live node, which jsdom and mocks cannot reach. Force (D16): the test estimates on the account's public Fee Juice through the worker (asserting no shortfall, since the card defaults to Nulo's sponsor and its own balance read can lag the funding) and approves through the worker's approval entry with half that figure, the two thresholds asserted in the test, so the real build lands above it; it asserts the queued question and the window before accepting, and the proof after. No production seam, no node fixture. File: `tests/e2e/network/tx-sendTx-default.test.ts` gains the case; estimate +60 s per browser. Gate: that file at retry 0, on Chrome, and on Firefox if OA-F1 picks a window option. Pass: exit 0; wall-clock in `lessons/phase-6.md`.
 
 ### Arc 3 (branches from dev after #508's PR merges)
 
@@ -182,14 +182,18 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 | D17 | Address and value print in the grant rows | whole, as `o-grant-a` draws them, via `CallArguments`' `full` | the signed picture; the transaction card keeps its trimmed rows |
 | D18 | The re-read's pin | none from the row | a pin from the file's `classId` would turn a mismatch into a kept row |
 | D19 | How open pages learn of an updated row | an `onTokenUpdated` event, separate from add | Send integerizes with its list snapshot (`send.vue:154,490`); the add event trusts the token |
+| D20 | Phase 3's network case (implementation) | doctor the funded token's row inside the existing `backup-restore-integrity` scenario | a separate case needs its own funded wallet and export; the same import already reaches the real PXE and node |
+| D21 | Where the open-Send test sits (implementation) | `send.test.ts`, not `send-amount.test.ts` | the helper takes the decimals as an argument; only the mounted page re-reads its list |
+| D22 | The balance service on `onTokenUpdated` (arc 1 review) | re-send the token's balances with the new metadata and queue them, for a token its map already holds | each balance carries its token's metadata from a map loaded at activation, which precedes the re-read |
+| D23 | Send's transfer kind after an update (arc 1 review) | when the active token's transfer capabilities change, move only a selection it can no longer transfer | the id watcher does not fire for the same token, so a kind the chain does not support stayed selected; re-running the full selection would replace a still-valid choice with the preselected kind |
 | D-orch-2 | Arc 2's start | in parallel with arc 1, before its merge | the orchestrator released it (2026-10-16), overriding "Parallelism: none" under Delivery; the arcs share no source file |
-| D20 | Who answers a dApp send's question | its own window only; `acceptQueuedFee` stays transfer-only | the window settles the waiter with the worker's captured figure, so no RPC takes a figure from a page; Home's queued dApp row focuses the window |
-| D21 | The question's deadline | `MAX_WAIT_MS` from the ask, one absolute deadline for the waiter and the window | the owner's "unanswered after 60 minutes"; opening the window must not restart it |
-| D22 | A person-paid popup approval with no figure | refused before the proof | under OA-F2 C the window always sends one; accepting none would send unbound |
-| D23 | Which operations Confirm waits on | a wallet-picked fee, an app's claim to the account, and an app's own cap or priority | the figure binds wherever the account pays; a claim to the account is the account paying |
-| D24 | What the held send keeps across the question | the build stashed in the reuse cache, and only the question and the stash id in the waiting frame | the cache's two-minute bound holds the signed request, not the person's wait |
-| D25 | After the question | re-check earlier sends under the slot, then claim the record back (`queued → pending`, or still `pending`) | another send of the account may reach the node while this one waits |
-| D26 | An app's own payment naming the PrivateFPC as payer | carries the figure as Private Fee Juice: the worker reads the kernel's payer, the window the request's `feePayer`, both against one address constant the derivation test pins | it charges the account's own Private Fee Juice, which OA-F2 A names; an app's other fee contracts stay exempt |
+| D24 | Who answers a dApp send's question | its own window only; `acceptQueuedFee` stays transfer-only | the window settles the waiter with the worker's captured figure, so no RPC takes a figure from a page; Home's queued dApp row focuses the window |
+| D25 | The question's deadline | `MAX_WAIT_MS` from the ask, one absolute deadline for the waiter and the window | the owner's "unanswered after 60 minutes"; opening the window must not restart it |
+| D26 | A person-paid popup approval with no figure | refused before the proof | under OA-F2 C the window always sends one; accepting none would send unbound |
+| D27 | Which operations Confirm waits on | a wallet-picked fee, an app's claim to the account, and an app's own cap or priority | the figure binds wherever the account pays; a claim to the account is the account paying |
+| D28 | What the held send keeps across the question | the build stashed in the reuse cache, and only the question and the stash id in the waiting frame | the cache's two-minute bound holds the signed request, not the person's wait |
+| D29 | After the question | re-check earlier sends under the slot, then claim the record back (`queued → pending`, or still `pending`) | another send of the account may reach the node while this one waits |
+| D30 | An app's own payment naming the PrivateFPC as payer | carries the figure as Private Fee Juice: the worker reads the kernel's payer, the window the request's `feePayer`, both against one address constant the derivation test pins | it charges the account's own Private Fee Juice, which OA-F2 A names; an app's other fee contracts stay exempt |
 
 ## Audit verdicts
 
@@ -226,14 +230,25 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 
 | Finding | Decided |
 |---|---|
-| A: an app's claim to the account read as app-paid, so Confirm could pass with no figure | D23 |
-| B: the waiting frame would hold the signed request past the cache's bound | D24 |
+| A: an app's claim to the account read as app-paid, so Confirm could pass with no figure | D27 |
+| B: the waiting frame would hold the signed request past the cache's bound | D28 |
 | C: a figure one unit below no longer asks once the tolerance exists | D16 revised |
 
-## Seeds (draft; the orchestrator finalizes after approval)
+**Arc 1 review, round 1** (2026-10-16). Codex `gpt-6.1-sol` high, read-only, over `2ea17854..6da190f6`: **reject**, 2 material findings and comment nits. Opus 5.5 general-purpose, alongside: **conditional approve**, 1 material finding (Codex's first) and nits. The round ran while the phase 2 and 3 e2e gates waited on host load. Each claim was checked against the tree.
 
-- `/goal` Every phase of implementations-plan/harden-security-fixes-2/plan.md marked ✓ in order, each backed by its gate's output in the transcript; `LESSONS_FILE=implementations-plan/harden-security-fixes-2/lessons/phase-N.md` printed per phase; `/code-review` not run; the Codex loop converged per arc and the cross-arc pass converged, each quoted; each arc's PR against `dev` opened after its loop, the close-out's archive-move commit shown by `git show --stat`; `bun run test:all` and `bun run lint` exit 0.
-- `/loop 15m` Drive implementations-plan/harden-security-fixes-2 forward per its plan.md and the README's Post-implementation standard at `c5e9c8e8`; never start arc 2 before OA-F1 to OA-F3 are answered, nor arc 3 before #508's PR merges; settle open technical questions with Codex and log each in lessons/; what a person sees waits for the owner's answer in OWNER-ASKS.md.
+| Finding | Decided |
+|---|---|
+| The balance service keeps the backup's metadata after the re-read (both) | D22; two tests, each red without its guard |
+| An open Send page keeps a transfer kind the chain does not support (Codex) | D23; one mounted-page test, red without the watcher; the decimals test now also pins the kind it keeps |
+| No refresh test removes the chain mid-read or mid-write (Opus) | two tests, each red without its guard |
+| No test imports an encrypted passkey file (Opus) | one case each way: the check survives the seal, and a file stripped before the seal is refused before any prompt |
+| Comments: a caller-specific note on the MAC label, a restating type doc, a redundant line in `full.vue`, the tail budget's stale scope; no comment on why restore-again needs no prompt (both) | fixed |
+| A test name carried a review label (Opus) | renamed to what it proves |
+| One out-of-scope question (Opus) | sent to the lane's private record; no change in this arc |
+
+**Arc 1 review, round 2** (2026-10-16). Codex, resumed over `90137f90`: **reject**, 1 material finding, verified and accepted: the capability watcher re-ran the full selection, so gaining private transfers replaced a valid public choice with the preselected kind. It now moves only a selection the token can no longer transfer (D23); a mounted-page test pins the kept choice and is red against the round-1 watcher.
+
+**Arc 1 review, round 3** (2026-10-16). Codex, resumed over `cd9c8be5`: **approve**, no new findings. The loop converged.
 
 **Arc 2 review, round 1** (2026-10-16), on the implementation. Codex `gpt-6.1-sol` high, read-only: **approve with changes**, 1 finding. Opus 5.5 general-purpose: **approve with changes**, 6 findings. Each was checked against the tree.
 
@@ -251,6 +266,11 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 
 | Finding | Decided |
 |---|---|
-| The exemption of an app's payment through Private Fee Juice narrows OA-F2 A, and the route is supported (the playground's PrivateFPC routes, `selfpay-phase.test.ts`) | D26 |
+| The exemption of an app's payment through Private Fee Juice narrows OA-F2 A, and the route is supported (the playground's PrivateFPC routes, `selfpay-phase.test.ts`) | D30 |
 
-**Arc 2 review, round 3** (2026-10-16). Codex, the same session, on D26 and the e2e's settled-row check: **approve**, no findings ("both prior findings are resolved").
+**Arc 2 review, round 3** (2026-10-16). Codex, the same session, on D30 and the e2e's settled-row check: **approve**, no findings ("both prior findings are resolved").
+
+## Seeds (draft; the orchestrator finalizes after approval)
+
+- `/goal` Every phase of implementations-plan/harden-security-fixes-2/plan.md marked ✓ in order, each backed by its gate's output in the transcript; `LESSONS_FILE=implementations-plan/harden-security-fixes-2/lessons/phase-N.md` printed per phase; `/code-review` not run; the Codex loop converged per arc and the cross-arc pass converged, each quoted; each arc's PR against `dev` opened after its loop, the close-out's archive-move commit shown by `git show --stat`; `bun run test:all` and `bun run lint` exit 0.
+- `/loop 15m` Drive implementations-plan/harden-security-fixes-2 forward per its plan.md and the README's Post-implementation standard at `c5e9c8e8`; never start arc 2 before OA-F1 to OA-F3 are answered, nor arc 3 before #508's PR merges; settle open technical questions with Codex and log each in lessons/; what a person sees waits for the owner's answer in OWNER-ASKS.md.
