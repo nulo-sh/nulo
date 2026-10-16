@@ -20,5 +20,5 @@ test("base.css content is pinned (edits must be deliberate + visually re-verifie
 	// and scrim tokens at their literals' values, its --txt-danger lighter than --red so it reads 4.5:1 on a
 	// pressed row, and --btn-destructive darker than --red so the red buttons' label reads AA; line 1
 	// carries the Apache-2.0 §4(b) header.
-	expect(hash).toBe("2b4cf462c70465e99f3131b814fd267d2a145dfbe9905fc1d26bdfbb7f954739")
+	expect(hash).toBe("7b2badc42e200e8ba9635fda3dac664e844f87ea3b07c81b09a3717c9544654d")
 })

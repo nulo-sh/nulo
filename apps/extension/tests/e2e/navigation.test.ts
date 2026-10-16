@@ -1,7 +1,7 @@
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { clickByTestId, test, openPopup, waitForHash } from "./fixtures/extension"
-import { clickNavTab, openDropdown, openHoldings, seedUsdQuoteAndReload } from "./fixtures/helpers"
+import { clickNavTab, navigateToSettings, openDropdown, openHoldings, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { readActivityScope, seedTransaction } from "./helpers/activity-seeds"
 import { tabAround } from "./helpers/pointer-probes"
 
@@ -82,6 +82,118 @@ test("back from a Settings page lands where Settings was left, and the page it o
 	const back = await page.$eval('[data-testid="settings-page"]', (el) => el.scrollTop)
 	expect(Math.abs(back - left), `left at ${left}, back at ${back}`).toBeLessThanOrEqual(1)
 
+	expect(registeredExtension.consoleErrors).toEqual([])
+	expect(registeredExtension.pageErrors).toEqual([])
+})
+
+type Point = { x: number; y: number }
+
+/** Where a person presses to start or end a drag on `testid`'s text: inside its first or last
+ *  visible character. */
+async function textEdge(page: Page, testid: string, edge: "first" | "last"): Promise<Point> {
+	return page.$eval(
+		`[data-testid="${testid}"]`,
+		(el, at) => {
+			const texts: Text[] = []
+			const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+			for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+				if (n.textContent?.trim() && n.parentElement?.getClientRects().length) texts.push(n as Text)
+			}
+			const node = at === "first" ? texts[0] : texts.at(-1)
+			if (!node) throw new Error(`${el.getAttribute("data-testid")} shows no text`)
+			const content = node.textContent ?? ""
+			const index = at === "first" ? content.search(/\S/) : content.trimEnd().length - 1
+			const range = document.createRange()
+			range.setStart(node, index)
+			range.setEnd(node, index + 1)
+			const box = range.getBoundingClientRect()
+			return { x: box.left + box.width / 2, y: box.top + box.height / 2 }
+		},
+		edge,
+	)
+}
+
+/** A mouse drag from `from` to `to` after clearing any selection; returns what it selected. */
+async function dragSelect(page: Page, from: Point, to: Point): Promise<string> {
+	await page.evaluate(() => window.getSelection()?.removeAllRanges())
+	await page.mouse.move(from.x, from.y)
+	await page.mouse.down()
+	await page.mouse.move(to.x, to.y, { steps: 8 })
+	await page.mouse.up()
+	return page.evaluate(() => window.getSelection()?.toString() ?? "")
+}
+
+const textOf = (page: Page, testid: string) => page.$eval(`[data-testid="${testid}"]`, (el) => (el as HTMLElement).innerText.trim())
+const lower = (text: string) => text.toLowerCase()
+
+test("a drag selects the text around a control and none of the control's own: the nav, the header's buttons, a toggle, a dropdown, list rows", async ({
+	registeredExtension,
+}) => {
+	const page = await openPopup(registeredExtension)
+	await waitForHash(page, "#/popup/general")
+	await page.bringToFront()
+	await page.waitForSelector('[data-testid="balance-amount"]:not([aria-busy])', { visible: true, timeout: 15_000 })
+	const hero = await textOf(page, "balance-amount")
+
+	// Down from the hero, past Send and Receive, onto the bottom nav: nothing selectable lies past it.
+	const toNav = await dragSelect(page, await textEdge(page, "balance-amount", "first"), await textEdge(page, "nav-holdings", "last"))
+	console.log(`[select] hero to the nav: ${JSON.stringify(toNav)}`)
+	expect(toNav.split(hero).length - 1, "the hero's figure, once").toBe(1)
+	for (const label of ["send", "receive", "holdings", "history", "account_balance_wallet"]) expect(lower(toNav)).not.toContain(label)
+
+	// Up from the hero onto the header's account name, past the address and its copy icon.
+	const name = await textOf(page, "account-selector")
+	const address = await textOf(page, "account-address-text")
+	const toHeader = await dragSelect(
+		page,
+		await textEdge(page, "balance-amount", "last"),
+		await textEdge(page, "account-selector", "first"),
+	)
+	console.log(`[select] hero to the header: ${JSON.stringify(toHeader)}`)
+	expect(toHeader).toContain(hero)
+	expect(lower(toHeader)).not.toContain(lower(name))
+	expect(toHeader).not.toContain(address)
+
+	await navigateToSettings(page, "privacy")
+	await page.waitForSelector('[data-testid="explorer-trigger"]', { visible: true, timeout: 10_000 })
+	const fiatShown = await page.$eval('[data-testid="fiat-values-toggle"]', (el) => el.getAttribute("aria-checked"))
+	const across = async (from: string, to: string) =>
+		dragSelect(page, await textEdge(page, from, "first"), await textEdge(page, to, "last"))
+
+	const overToggle = await across("fiat-values-description", "explorer-title")
+	console.log(`[select] across the fiat toggle: ${JSON.stringify(overToggle)}`)
+	expect(overToggle).toContain(await textOf(page, "fiat-values-description"))
+	expect(overToggle).toContain(await textOf(page, "explorer-title"))
+
+	const explorer = await textOf(page, "explorer-trigger")
+	const overTrigger = await across("explorer-description", "privacy-mode-title")
+	console.log(`[select] across the explorer menu's trigger (${explorer}): ${JSON.stringify(overTrigger)}`)
+	expect(overTrigger).toContain(await textOf(page, "explorer-description"))
+	expect(overTrigger).toContain(await textOf(page, "privacy-mode-title"))
+	expect(lower(overTrigger)).not.toContain(lower(explorer))
+
+	const toggle = await page.$eval('[data-testid="fiat-values-toggle"]', (el) => {
+		const box = el.getBoundingClientRect()
+		return { x: box.left + box.width / 2, y: box.top + box.height / 2 }
+	})
+	const fromToggle = await dragSelect(page, toggle, await textEdge(page, "explorer-title", "last"))
+	expect(fromToggle, "a drag that starts on a toggle selects nothing").toBe("")
+	expect(await page.$eval('[data-testid="fiat-values-toggle"]', (el) => el.getAttribute("aria-checked"))).toBe(fiatShown)
+
+	// Down About's list: the link rows and the rows that open a document are controls; the record of
+	// the accepted Terms is text.
+	await clickByTestId(page, "subpage-back")
+	await waitForHash(page, "#/popup/settings")
+	await navigateToSettings(page, "about")
+	await page.waitForSelector('[data-testid="legal-about-accepted"]', { visible: true, timeout: 10_000 })
+	const overRows = await across("coingecko-attribution", "legal-about-accepted")
+	console.log(`[select] down About's rows: ${JSON.stringify(overRows)}`)
+	expect(overRows).toContain(await textOf(page, "coingecko-attribution"))
+	expect(overRows).toContain(await textOf(page, "legal-about-accepted"))
+	for (const row of ["nulo website", "suggest an idea", "terms of use", "open-source licences"])
+		expect(lower(overRows)).not.toContain(row)
+
+	await page.evaluate(() => window.getSelection()?.removeAllRanges())
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 })
