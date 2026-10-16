@@ -1553,7 +1553,7 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 		expect(result.previewId).toBe(result.estimateId)
 		expect(snapshots(deps).take(result.previewId, identity)).toEqual({
 			kind: "found",
-			snapshot: expect.objectContaining({ ...CTX, discoveredHashes: ["mh:ih:a"] }),
+			snapshot: expect.objectContaining({ ...CTX, discoveredHashes: ["mh:ih:a"], discoveredAuthwits: [record("a")] }),
 		})
 		const stash = (deps.operationEstimateReuse.stash as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]
 		expect(stash[1]).toMatchObject({ discoveredHashes: ["mh:ih:a"] })
@@ -2853,6 +2853,24 @@ describe("DappSendExecutor: a popup-approved send whose fee came out above the a
 		await expect(h.aztec()).rejects.toThrow(AUTHWITS_CHANGED_MESSAGE)
 		expect(h.askInWindow).toHaveBeenCalledTimes(1)
 		expect(h.proveAndSend).not.toHaveBeenCalled()
+	})
+
+	test("the question shows again the authorizations the approval window listed", async () => {
+		const listed = [{ consumer: "0xc", caller: "0xd", selector: "0xsel", args: [], innerHash: "ih:a", messageHash: "mh:ih:a" }]
+		const h = holding([ROSE, ROSE], FJ)
+		h.deps.previewSnapshots.stash("pv-1", {
+			interactionId: "i-1",
+			index: 0,
+			fingerprint: null,
+			discoveredHashes: ["mh:ih:a"],
+			discoveredAuthwits: listed,
+		})
+		await h.aztec()
+		expect(h.askInWindow.mock.calls[0][0].discoveredAuthwits).toEqual(listed)
+
+		const bare = holding([ROSE, ROSE], FJ)
+		await bare.aztec()
+		expect("discoveredAuthwits" in bare.askInWindow.mock.calls[0][0]).toBe(false)
 	})
 
 	test("the send keeps its place in its app's line while asked, and gives it up only to prove", async () => {

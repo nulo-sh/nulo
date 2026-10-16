@@ -400,6 +400,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 				approved: question.reask.cap,
 				payer: question.reask.payer,
 				feeSettings: approved.deltas[question.index]?.feeSettings,
+				discoveredAuthwits: question.discoveredAuthwits,
 			},
 			operation,
 			session: approved.payload.session,

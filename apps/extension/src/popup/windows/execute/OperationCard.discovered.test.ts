@@ -149,6 +149,17 @@ describe("OperationCard — discovered authorizations", () => {
 		expect(twin!.find('[data-testid="execute-discovered-authwit-structured-args"]').exists()).toBe(false)
 	})
 
+	test("a window that only reads the operation lists the rows the approval window listed", () => {
+		const w = mountCard(sendTx({ calls: [] }), { approvedAuthwits: [authwit("a")] })
+		const rows = w.findAll('[data-testid="execute-op-discovered-authwit"]')
+		expect(rows.map((r) => r.attributes("data-message-hash"))).toEqual(["0xmsga"])
+		expect(
+			mountCard(sendTx({ calls: [] }))
+				.find('[data-testid="execute-op-discovered-authwits"]')
+				.exists(),
+		).toBe(false)
+	})
+
 	test("zero entries render nothing; without an estimate nothing renders either", () => {
 		expect(
 			mountCard(sendTx({ calls: [] }), { feeEstimate: estimate([]) })

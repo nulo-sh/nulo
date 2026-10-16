@@ -131,8 +131,10 @@ const STUBS = {
 	},
 	// The card's own rendering is pinned in its tests; here it shows which request it read and its fee slot.
 	OperationCard: {
-		props: ["op"],
-		template: `<div data-testid="execute-op-item" :data-op-kind="op.kind" :data-account="op.accountAddress"><slot name="fee" /></div>`,
+		props: ["op", "approvedAuthwits", "decodedAuthwits"],
+		template: `<div data-testid="execute-op-item" :data-op-kind="op.kind" :data-account="op.accountAddress"
+			:data-authwits="(approvedAuthwits ?? []).map((a) => a.messageHash).join(',')"
+			:data-decoded="[...(decodedAuthwits?.keys() ?? [])].join(',')"><slot name="fee" /></div>`,
 	},
 	SignerIdentityStrip: { template: '<div data-testid="signer-strip" />', props: ["signerAccounts", "signerNetworks", "status"] },
 	DappIdentityBlock: {
@@ -185,6 +187,26 @@ describe("the fee question window", () => {
 		expect(getGasBalancesMock).toHaveBeenCalledExactlyOnceWith("n1", OWNER)
 		expect(confirm().text()).toBe("Send for 0.021 FJ")
 		expect(confirm().attributes("disabled")).toBeUndefined()
+	})
+
+	test("the authorizations the approval window listed are listed again, each decoded on its consumer", async () => {
+		const hash = `0x${"4c".repeat(32)}`
+		const listed = [
+			{
+				consumer: TOKEN,
+				caller: `0x${"7b".repeat(32)}`,
+				selector: "0x1f2e3d4c",
+				args: [OWNER],
+				innerHash: `0x${"9a".repeat(32)}`,
+				messageHash: hash,
+			},
+		]
+		await opened(question({ discoveredAuthwits: listed }))
+		expect(byId("execute-op-item").attributes()).toMatchObject({ "data-authwits": hash, "data-decoded": hash })
+
+		w!.unmount()
+		await opened()
+		expect(byId("execute-op-item").attributes("data-authwits")).toBe("")
 	})
 
 	test("Send for answers yes and closes the window; nothing is rejected", async () => {

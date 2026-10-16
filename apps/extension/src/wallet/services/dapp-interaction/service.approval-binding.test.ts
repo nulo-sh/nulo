@@ -221,11 +221,13 @@ describe("materializeStoredOperation — estimate and preview read the stored re
 
 describe("askFeeAgain — the question a held send asks in its own window", () => {
 	const REASK = { fee: "21000000000000000", cap: "16000000000000000", payer: { type: "fj", isProtocol: false } } as const
+	const LISTED = [{ consumer: "0xc", caller: "0xd", selector: "0xsel", args: [], innerHash: "0xih", messageHash: "0xmh" }]
 	const question = (over: Record<string, unknown> = {}) => ({
 		interactionId: "i-1",
 		index: 0,
 		journalId: "j-1",
 		reask: REASK,
+		discoveredAuthwits: LISTED,
 		deadline: Date.now() + 60_000,
 		...over,
 	})
@@ -268,7 +270,13 @@ describe("askFeeAgain — the question a held send asks in its own window", () =
 		expect(opened.timeoutMs).toBeLessThanOrEqual(60_000)
 		const stored = h.internals.storage.get(h.feeId())!
 		expect(stored.payload).toEqual({
-			feeQuestion: { fee: REASK.fee, approved: REASK.cap, payer: REASK.payer, feeSettings: { paymentMethod: { kind: "fj" } } },
+			feeQuestion: {
+				fee: REASK.fee,
+				approved: REASK.cap,
+				payer: REASK.payer,
+				feeSettings: { paymentMethod: { kind: "fj" } },
+				discoveredAuthwits: LISTED,
+			},
 			operation: request,
 			session: SESSION,
 		})

@@ -20,6 +20,7 @@ import SignerIdentityStrip from "../execute/SignerIdentityStrip.vue"
 
 /** Utils */
 import { formatFeeJuice, formatGasBalance } from "@/utils/fee-estimation"
+import { authwitDisplayCall, undecodedAll } from "../execute/display-calls"
 import { decodeOperationArguments, readKnownTokens, resolveOperations } from "../execute/operation-display"
 import { uniqueSignerAccounts, uniqueSignerNetworks } from "../execute/signers"
 import type { DraftUIOperation } from "../execute/types"
@@ -46,6 +47,7 @@ const router = useRouter()
 const profile = ref<ProfileInfo>()
 const operation = ref<DraftUIOperation>()
 const decodedCalls = ref<readonly DecodedCall[]>()
+const decodedAuthwits = ref<Map<string, DecodedCall>>(new Map())
 const knownTokens = ref<TokenInfo[]>([])
 const available = ref<string | null>(null)
 const availableLoading = ref(true)
@@ -129,6 +131,7 @@ const init = async () => {
 			if (tokens) knownTokens.value = tokens
 		})
 		void readAvailable(op)
+		void decodeAuthwits(op)
 	} catch (error) {
 		console.error("Failed to initialize the fee question", { error })
 		setError("Something went wrong")
@@ -136,6 +139,20 @@ const init = async () => {
 		accountService?.disconnect()
 		networkService?.disconnect()
 	}
+}
+
+/** Each listed authorization decodes on its consumer; a failed batch leaves the selectors standing. */
+async function decodeAuthwits(op: DraftUIOperation | undefined): Promise<void> {
+	const listed = question.value?.discoveredAuthwits ?? []
+	if (!op || !listed.length) return
+	let decoded: DecodedCall[]
+	try {
+		decoded = await executionService.decodeCallsForDisplay(op.networkId, listed.map(authwitDisplayCall))
+	} catch (error) {
+		console.warn("[Fee] Authorization decode failed", { error })
+		decoded = undecodedAll(listed.length)
+	}
+	decodedAuthwits.value = new Map(listed.map((a, i) => [a.messageHash, decoded[i] ?? { kind: "undecoded", reason: "unavailable" }]))
 }
 
 /** The payer's balance as the readout prints it; a failed read shows none rather than a zero. */
@@ -222,6 +239,8 @@ onUnmounted(disposeWindow)
 					:profile="profile"
 					:dapp="dapp ?? undefined"
 					:decodedCalls="decodedCalls"
+					:approvedAuthwits="question.discoveredAuthwits"
+					:decodedAuthwits="decodedAuthwits"
 					:tokens="knownTokens"
 				>
 					<template #fee>

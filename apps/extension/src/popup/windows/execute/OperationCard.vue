@@ -65,6 +65,8 @@ const props = defineProps<{
 	 *  need at send, discovered without signing (no fee estimate exists for it). */
 	authwitPreview?: OperationAuthwitPreview
 	isPreviewing?: boolean
+	/** The authorizations an earlier window listed for this operation, for a window that only reads it. */
+	approvedAuthwits?: readonly DiscoveredAuthwit[]
 	/** Display-only ABI decodings of this operation's calls, index-aligned with
 	 *  `exec.calls` (or the single `createAuthWit` intent call); `undefined`
 	 *  while the wallet is still decoding. */
@@ -148,7 +150,8 @@ const authwitSurface = (op: UIOperation): AuthwitSurface => {
 		return props.isPreviewing ? { kind: "pending" } : { kind: "hidden" }
 	}
 	if (isEmbeddedFeePayment(op)) return { kind: "hidden" }
-	return props.feeEstimate?.discoveredAuthwits ? { kind: "list", authwits: props.feeEstimate.discoveredAuthwits } : { kind: "hidden" }
+	const listed = props.feeEstimate?.discoveredAuthwits ?? props.approvedAuthwits
+	return listed ? { kind: "list", authwits: listed } : { kind: "hidden" }
 }
 const authwits = computed(() => authwitSurface(props.op))
 

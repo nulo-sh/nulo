@@ -4,6 +4,7 @@ import type { OperationApprovalDelta } from "./approval-delta"
 import type {
 	CapabilityParams,
 	CapabilityResult,
+	DiscoveredAuthwit,
 	ExecutionParams,
 	ExecutionResult,
 	FeeSettings,
@@ -140,6 +141,8 @@ export type FeeQuestionPayload = {
 		payer: QueuedFeePayer
 		/** The fee settings the person approved the send with. */
 		feeSettings?: FeeSettings
+		/** The authorizations the approval window listed for the operation. */
+		discoveredAuthwits?: readonly DiscoveredAuthwit[]
 	}
 	operation: OperationRequest
 	session: DappSession

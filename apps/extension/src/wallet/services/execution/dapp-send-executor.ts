@@ -240,7 +240,9 @@ interface SlotRun {
 }
 
 /** A build above the approved figure, as the question needs it: the build itself is only in the stash. */
-type OverCeiling = { reask: QueuedFeeReask; stashId?: string }
+/** A build above the approved figure, as its question needs it: never the build itself. `shown` is
+ *  the authorization rows the approval window listed, which the question shows again. */
+type OverCeiling = { reask: QueuedFeeReask; stashId?: string; shown?: readonly DiscoveredAuthwit[] }
 
 /** A standard build, whichever arm made it, with what a stash of it is bound to. */
 type StandardBuild = Pick<
@@ -534,7 +536,9 @@ export class DappSendExecutor {
 		// found would show authorizations confirm never adds.
 		const bound = operation.kind === "aztec_sendTx"
 		const previewId =
-			bound && preview ? this.writePreview(preview, fingerprintOperation(identity), discoveredHashes, estimateId) : undefined
+			bound && preview
+				? this.writePreview(preview, fingerprintOperation(identity), discoveredHashes, estimateId, discovered)
+				: undefined
 
 		const maxFeeRaw = BigInt(getEstimatedFee(txRequest))
 		const priorityFee = priorityFeeOf(txRequest)
@@ -614,9 +618,10 @@ export class DappSendExecutor {
 		fingerprint: string | null,
 		discoveredHashes: readonly string[],
 		estimateId: string | undefined,
+		discoveredAuthwits?: readonly DiscoveredAuthwit[],
 	): string {
 		const previewId = estimateId ?? crypto.randomUUID()
-		this.deps.previewSnapshots.stash(previewId, { ...preview, fingerprint, discoveredHashes })
+		this.deps.previewSnapshots.stash(previewId, { ...preview, fingerprint, discoveredHashes, discoveredAuthwits })
 		return previewId
 	}
 
@@ -891,7 +896,7 @@ export class DappSendExecutor {
 	private async askAboutFee(ctx: SlotRun, approval: OperationApprovalEnvelope | undefined, over: OverCeiling): Promise<string> {
 		const { journalId, controller } = ctx
 		if (!approval || !journalId || !controller) throw new Error("A send with no record cannot be asked about its fee")
-		const { reask } = over
+		const { reask, shown } = over
 		const deadline = Date.now() + MAX_WAIT_MS
 		const { interactionId, index } = approval
 		await ctx.park(() =>
@@ -908,7 +913,15 @@ export class DappSendExecutor {
 					controller,
 					reask,
 					ms: deadline - Date.now(),
-					onAsked: () => this.deps.askInWindow({ interactionId, index, journalId, reask, deadline }),
+					onAsked: () =>
+						this.deps.askInWindow({
+							interactionId,
+							index,
+							journalId,
+							reask,
+							deadline,
+							...(shown && { discoveredAuthwits: shown }),
+						}),
 				},
 			),
 		)
@@ -1010,7 +1023,8 @@ export class DappSendExecutor {
 		checkCancelled()
 		const reask = overCeiling(approval, ceiling, built)
 		if (!reask) return { built }
-		return { over: { reask, stashId: await this.restash(op, identity, built, before, fence.profileId) } }
+		const shown = preview?.kind === "found" ? preview.snapshot.discoveredAuthwits : undefined
+		return { over: { reask, stashId: await this.restash(op, identity, built, before, fence.profileId), shown } }
 	}
 
 	/** A consumed entry goes back as it was, so its `builtAt` still bounds how long the signed request

@@ -1,4 +1,5 @@
 import type { QueuedFeeReask } from "@nulo/wallet-core/jobs"
+import type { DiscoveredAuthwit } from "@nulo/wallet-bridge"
 
 /** Operation type family lives in `@nulo/wallet-bridge`. This barrel
  *  re-exports the types so extension consumers can keep importing them
@@ -93,7 +94,13 @@ export type PreviewContext = Pick<OperationApprovalEnvelope, "interactionId" | "
 
 /** A held dApp send's question, for the window that asks it: the approval it came from, its record,
  *  the figures, and when it lapses (epoch ms). */
-export type FeeQuestion = PreviewContext & { readonly journalId: string; readonly reask: QueuedFeeReask; readonly deadline: number }
+export type FeeQuestion = PreviewContext & {
+	readonly journalId: string
+	readonly reask: QueuedFeeReask
+	readonly deadline: number
+	/** The authorizations the approval window listed for the operation. */
+	readonly discoveredAuthwits?: readonly DiscoveredAuthwit[]
+}
 import type { PrestoPhase } from "@alejoamiras/presto"
 import type { ProveBackend } from "@nulo/wallet-core/jobs"
 
