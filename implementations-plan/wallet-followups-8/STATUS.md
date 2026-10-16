@@ -9,3 +9,6 @@
 - 2026-10-15 arc 1 gate: Phase 1 unit files pass; T5-T7 red on base copies, green on head.
 - 2026-10-15 arc 1 gate: `bun run lint` pass (after a format fix), `typecheck:all` pass, `bun run test` pass (795 files), `bun run test:all` pass.
 - 2026-10-15 arc 1 review: Codex r1 approve (2 comments), Opus approve (+1 control row), fixes `0a039883`; Codex r2 approve, no new finding.
+- 2026-10-15 arc 1 gate: smoke Chrome pass (5 tests, 71 s; launched at load1 155, see lessons), smoke Firefox pass (5 tests, 67 s).
+- 2026-10-16 arc 1 gate: network `holdings.test.ts` via `agent.sh`, retry 0: Chrome pass (73.4 s), Firefox pass (83.9 s). Phase 1 gate green.
+- 2026-10-16 arc 1: final gates on `0a039883` pass (lint, typecheck:all, test:all, test:ci-gating, check:plans); PR #531 opened against dev.

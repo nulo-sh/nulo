@@ -93,7 +93,7 @@ The lane brief numbers the background set arc 1; this plan builds the popup set 
 - **#339**: the line repeats the node's answer; a lying node can make a real token read "no token", as it can lie about any read (the decision states it). No address or error text reaches the line or a log beyond today's `{ reason }` at debug.
 - **#465, #466**: an attribute; a toast closed earlier. No data moves.
 
-## Phase 1: popup fixes (#339, #465, #466), arc 1
+## Phase 1: popup fixes (#339, #465, #466), arc 1 ✓ (PR #531)
 
 Steps: change the catch, the attribute and the toast check. Update the holdings e2e wait to the new line.
 
