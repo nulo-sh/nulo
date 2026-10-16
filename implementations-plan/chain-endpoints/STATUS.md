@@ -29,3 +29,4 @@
 - 2026-10-16: focused smoke on Chrome (viewers-csp, import-errors-scroll), retry 0: 7/7 pass (12.2 s, 71.2 s).
 - 2026-10-16: focused smoke on Firefox, retry 0: 7/7 pass. Codex round 2: one Medium (D41, fixed in afe15481) and one Nit (fixed).
 - 2026-10-16: Codex round 3: approve, no new material findings (loop converged). Firefox focused smoke 7/7 (import-errors-scroll 90.6 s, viewers-csp 17.4 s).
+- 2026-10-16: whole smoke Chrome, retry 0 (start load 148, peak 510): 53 files pass, 4 fail; type-roles' fixture parsed a style attribute (2 style-src-attr from pptr, fixed via CSSOM); contacts-import, legal-acceptance S10, passkey-retry timed out at launch (settleLaunchedExtension), rerun pending.
