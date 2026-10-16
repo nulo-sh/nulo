@@ -94,8 +94,8 @@ export interface TransferExecutorLane {
 }
 
 /** Where a transfer stands in its account's line, and what it holds there; `feeSpender` is the fee
- *  contract its `fpc:` key names. */
-export type TransferSequence = { scope: SequenceScope; keys: ReadonlySet<SequenceKey>; feeSpender?: string }
+ *  contract its `fpc:` key names, and `sponsored` whether Nulo's own sponsor pays. */
+export type TransferSequence = { scope: SequenceScope; keys: ReadonlySet<SequenceKey>; feeSpender?: string; sponsored: boolean }
 
 /** Mutated in place on re-entry, so the submit callback and the cleanup see the current ticket. */
 type TransferLine = { sequence: TransferSequence; ticket: SequenceTicket }
@@ -108,6 +108,8 @@ type TransferRun = {
 	readonly journalId: string
 	readonly controller: AbortController
 	readonly line: TransferLine
+	/** Nulo's own sponsor paid when the send entered; a re-entry's sequence does not change it. */
+	readonly sponsored: boolean
 	readonly task: WrappedTask
 	markJournal(progress: JobProgress): Promise<boolean>
 	checkCancelled(): void
@@ -162,15 +164,22 @@ export interface TransferExecutorDeps {
 
 const QUEUED_SPENT: TransferFeeQueued = { queued: true, tokenSpent: true }
 
+/** Nulo's own sponsor on this chain: the one FPC that never spends the payer's notes. */
+function isProtocolSponsor(fpc: Fpc | undefined, chainId: number): boolean {
+	const info = fpc?.infoData
+	return info?.type === FpcType.DefaultSponsoredFpc && info.isProtocol === true && info.chainId === chainId
+}
+
 /** An FPC that may spend the payer's notes: any but the protocol sponsor on this chain. */
 function feeSpenderOf(fpc: Fpc | undefined, chainId: number): string | undefined {
 	const info = fpc?.infoData
 	if (!info) return undefined
-	const protocolSponsor = info.type === FpcType.DefaultSponsoredFpc && info.isProtocol === true && info.chainId === chainId
-	return protocolSponsor ? undefined : info.address
+	return isProtocolSponsor(fpc, chainId) ? undefined : info.address
 }
 /** The failure once a send has waited its whole `MAX_WAIT_MS` for earlier sends and the slot. */
 const WAIT_LIMIT_MESSAGE = "An earlier send of this account is still in flight"
+/** The failure of a send that entered with Nulo's sponsor whose row is no longer it at its turn. */
+const SPONSOR_MOVED_MESSAGE = "Nulo's sponsor row changed while this send waited"
 
 /** Embedded fee payments take a divergent execution path, and Fee Juice with a claim mutates its
  *  actions during the build, so neither leaves a build to reuse. */
@@ -198,7 +207,7 @@ export class TransferExecutor {
 			initializing: !history.some(minedSuccessfully),
 			used: usedSequences(history, req.accountAddress),
 		})
-		return { scope: { chainId, account: req.accountAddress }, keys, feeSpender }
+		return { scope: { chainId, account: req.accountAddress }, keys, feeSpender, sponsored: isProtocolSponsor(fpc, chainId) }
 	}
 
 	/** The validated fee contract a transfer pays through; `undefined` when it pays without an FPC. */
@@ -258,7 +267,7 @@ export class TransferExecutor {
 			controller = created.controller
 			if (!created.live) throw new SessionEndedError()
 			const journal = { journalId: created.journalId, controller: controller as AbortController }
-			run = { ...journal, req, fence, line: held, task: transferTask, markJournal, checkCancelled }
+			run = { ...journal, req, fence, line: held, sponsored: sequence.sponsored, task: transferTask, markJournal, checkCancelled }
 			const built = await this.buildWithinCap(run, queued, precomputedEstimateId, cap)
 			const { txRequest, node, pxe, account, initializesAccount } = built
 			const { txHash } = await this.deps.coordinator.proveAndSend({
@@ -338,6 +347,9 @@ export class TransferExecutor {
 		const { req, fence, line } = run
 		const turn = await this.takeTurn(req, run.journalId, run.controller, line, fence, queued)
 		run.release = turn.release
+		// A send that entered with Nulo's sponsor goes out with no cap, so a row edited while it waited
+		// must not pay for it: that contract could spend an authorization the account granted it.
+		if (run.sponsored && !isProtocolSponsor(turn.fpc, line.sequence.scope.chainId)) throw new Error(SPONSOR_MOVED_MESSAGE)
 		// The cached estimate first; any drift from its snapshot (`tryConsume`'s ladder) rebuilds.
 		const reused = estimateId ? await this.deps.estimateReuse.tryConsume(estimateId, req, fence, turn.fpc) : undefined
 

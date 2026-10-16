@@ -253,12 +253,13 @@ test.skipIf(!hasConfig)(
 			const popup = await execute
 			await waitForExecuteContent(popup)
 			await popup.waitForSelector('[data-testid="execute-op-app-fee"]', { visible: true, timeout: 120_000 })
-			// `innerText`: the dotted term's definition sits in the row, hidden, for its `aria-describedby`.
-			const row = await popup.$eval('[data-testid="execute-op-fee-set-badge"]', (el) =>
-				(el as HTMLElement).innerText.replace(/\s+/g, " ").trim(),
-			)
-			const sentence = /^Fee up to ([\d.]+) FJ, includes a ([\d.]+) FJ priority fee the app asked for$/.exec(row)
-			expect(sentence, `the row reads "${row}"`).not.toBeNull()
+			// `innerText`: the dotted term's definition sits in the line, hidden, for its `aria-describedby`.
+			const read = (testid: string) =>
+				popup.$eval(`[data-testid="${testid}"]`, (el) => (el as HTMLElement).innerText.replace(/\s+/g, " ").trim())
+			expect(await read("execute-op-app-legend")).toMatch(/^Fee payment method set by \S/)
+			const line = await read("execute-op-app-fee")
+			const sentence = /^Fee up to ([\d.]+) FJ, includes a ([\d.]+) FJ priority fee the app asked for$/.exec(line)
+			expect(sentence, `the fee line reads "${line}"`).not.toBeNull()
 			const [figure, priority] = [Number(sentence?.[1]), Number(sentence?.[2])]
 			expect(priority).toBeGreaterThan(0)
 			expect(priority).toBeLessThan(figure)

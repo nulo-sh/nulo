@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest"
 import { mount, type VueWrapper } from "@vue/test-utils"
 import { Skeleton } from "@nulo/design"
-import { QUEUED_FEE_COPY } from "@/components/composite/send/publish-facts"
+import { QUEUED_FEE_COPY, QUEUED_SPONSORED_COPY } from "@/components/composite/send/publish-facts"
 import FeeCostReadout from "./FeeCostReadout.vue"
 
 const STUBS = {
@@ -65,6 +65,16 @@ describe("FeeCostReadout", () => {
 			"Goes out after your earlier send, for at most 1.25 FJ.",
 		)
 		expect(drawn(factory({ isEstimating: true, isQueued: true }))).toBe(`You pay ${QUEUED_FEE_COPY}`)
+	})
+
+	test("queued with Nulo's sponsor paying: You pay nothing and it goes out after the earlier send; a hand-added sponsor keeps the queued line", () => {
+		const w = factory({ isEstimating: true, isQueued: true, payer: "sponsor" })
+		expect(drawn(w)).toBe(`You pay Nothing ${QUEUED_SPONSORED_COPY}`)
+		expect(w.get('[data-testid="fee-estimate-queued-sponsored-line"]').text()).toBe("Goes out after your earlier send.")
+		expect(w.find('[data-testid="fee-estimate-queued"]').exists()).toBe(false)
+		const handAdded = factory({ isEstimating: true, isQueued: true, payer: "unvouched" })
+		expect(handAdded.find('[data-testid="fee-estimate-queued-sponsored"]').exists()).toBe(false)
+		expect(drawn(handAdded)).toBe(`You pay ${QUEUED_FEE_COPY}`)
 	})
 
 	test("a queued estimate shows the queued line in place of the skeleton; the estimate replaces it", () => {

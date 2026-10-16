@@ -271,6 +271,23 @@ describe("EditFpcPopup — duplicate addresses", () => {
 		expect(fpcServiceMock.updateFpc).toHaveBeenCalledWith("fpc-1", "Renamed")
 		expect(fpcServiceMock.updateFpcAddress).not.toHaveBeenCalled()
 	})
+
+	test("the row's own address re-cased is no change: no warning, Save disabled, Enter updates nothing; a rename beside it saves the name alone", async () => {
+		fpcServiceMock.getFpc.mockResolvedValue({ ...FPC, address: OTHER })
+		fpcServiceMock.getFpcs.mockResolvedValue([{ ...FPC, address: OTHER }])
+		const w = await mountShown()
+		expect(await addressState(w, OTHER.toUpperCase().replace("0X", "0x"))).toEqual({ warns: false, disabled: true })
+		pressEnterOnInput()
+		await flushPromises()
+		expect(fpcServiceMock.updateFpcAddress).not.toHaveBeenCalled()
+		expect(fpcServiceMock.updateFpc).not.toHaveBeenCalled()
+
+		await typeName(w, "Renamed")
+		pressEnterOnInput()
+		await flushPromises()
+		expect(fpcServiceMock.updateFpc).toHaveBeenCalledWith("fpc-1", "Renamed")
+		expect(fpcServiceMock.updateFpcAddress).not.toHaveBeenCalled()
+	})
 })
 
 describe("EditFpcPopup — the list under a held read", () => {

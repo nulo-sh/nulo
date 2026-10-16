@@ -5,6 +5,7 @@
  */
 import { config, flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { createPinia } from "pinia"
+import { Skeleton } from "@nulo/design"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
 import { GLOSSARY } from "@/utils/glossary"
@@ -302,17 +303,19 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		opts: { from: OWNER, fee: { gasSettings: GAS_SETTINGS } },
 		feeSettings: { paymentMethod: { kind: "embedded" } },
 	})
-	const mountWith = async (feeEstimate: unknown) => {
+	const mountWith = async (feeEstimate: unknown, state: { isEstimating?: boolean; op?: unknown; isPreviewing?: boolean } = {}) => {
 		const w = mount(OperationCard, {
 			props: {
-				op: appPaid() as never,
+				op: (state.op ?? appPaid()) as never,
 				index: 0,
 				profile: { id: "p1", name: "Main" } as never,
 				feeEstimate: feeEstimate as never,
+				isEstimating: state.isEstimating ?? false,
+				isPreviewing: state.isPreviewing ?? false,
 				dapp: { name: "Swap" },
 			},
 			// The real term, so the test reads its markup: the key, the Tab stop, the hidden definition.
-			global: { stubs, components: { DottedTerm } },
+			global: { stubs, components: { DottedTerm, Skeleton } },
 		})
 		mounted = w
 		await flushPromises()
@@ -320,28 +323,50 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 	}
 	const region = (w: VueWrapper) => w.get('[data-testid="execute-op-app-payer-live"]')
 	const row = (w: VueWrapper) => w.get('[data-testid="execute-op-fee-set-badge"]')
+	const legend = (w: VueWrapper) => w.get('[data-testid="execute-op-app-legend"]').text()
+	const figure = (w: VueWrapper) => w.find('[data-testid="execute-op-app-fee"]')
+	const waiting = (w: VueWrapper) => w.find('[data-testid="execute-op-app-fee-estimating"]')
 	const covered = { address: APP_FPC, funded: true, provenShort: false }
 
-	test("no estimate has landed: the row names the app, its region empty", async () => {
-		const w = await mountWith(undefined)
-		expect(row(w).text()).toBe("Fee payment method set by Swap")
-		expect(w.find('[data-testid="execute-op-app-fee"]').exists()).toBe(false)
+	test("estimating: the legend stays, the second line reads Fee up to with the loading bar, and the row is busy", async () => {
+		const w = await mountWith(undefined, { isEstimating: true })
+		expect(legend(w)).toBe("Fee payment method set by Swap")
+		expect(waiting(w).text()).toBe("Fee up to")
+		expect(waiting(w).findComponent(Skeleton).exists()).toBe(true)
+		expect(figure(w).exists()).toBe(false)
+		expect(row(w).attributes("aria-busy")).toBe("true")
 		expect(region(w).attributes()).toMatchObject({ role: "status", "aria-live": "polite" })
 		expect(region(w).text()).toBe("")
 		expect(fee(w).exists()).toBe(false)
 	})
 
-	test("the estimate lands: the row reads the fee limit, and no priority part when the app set none", async () => {
+	test("the estimate lands: the legend stays above the fee limit, the row no longer busy, and no priority part when the app set none", async () => {
 		const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered })
-		expect(row(w).text()).toBe("Fee up to 3.577824 FJ")
-		expect(w.get('[data-testid="execute-op-app-fee"]').text()).toBe("Fee up to 3.577824 FJ")
+		expect(legend(w)).toBe("Fee payment method set by Swap")
+		expect(figure(w).text()).toBe("Fee up to 3.577824 FJ")
+		expect(waiting(w).exists()).toBe(false)
+		expect(row(w).attributes("aria-busy")).toBeUndefined()
 		expect(region(w).text()).toBe("")
 		expect(w.findAllComponents(DottedTerm)).toHaveLength(0)
 	})
 
+	test("a failed estimate, and an operation the wallet never estimates while its preview runs: the legend alone", async () => {
+		const failed = await mountWith(undefined)
+		expect(row(failed).text()).toBe("Fee payment method set by Swap")
+		expect(waiting(failed).exists()).toBe(false)
+		expect(row(failed).attributes("aria-busy")).toBeUndefined()
+		failed.unmount()
+
+		const noFrom = { ...appPaid(), executionMode: "default_entrypoint" }
+		const previewing = await mountWith(undefined, { op: noFrom, isPreviewing: true })
+		expect(row(previewing).text()).toBe("Fee payment method set by Swap")
+		expect(waiting(previewing).exists()).toBe(false)
+		expect(row(previewing).attributes("aria-busy")).toBeUndefined()
+	})
+
 	// An approval window carries one operation and nothing else on it is dotted, so the card's
 	// dotted terms are the screen's, which the glossary rule caps at two.
-	test("the app asked for a priority fee: one sentence, its priority fee the screen's one dotted term, defined by the glossary", async () => {
+	test("the app asked for a priority fee: one sentence under the legend, its priority fee the screen's one dotted term, defined by the glossary", async () => {
 		const w = await mountWith({
 			...ESTIMATE,
 			maxFee: "16000000000000000",
@@ -350,7 +375,8 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 			priorityFeeFormatted: "0.004",
 			appPayerFunding: covered,
 		})
-		expect(shownText(row(w).element)).toBe("Fee up to 0.016 FJ, includes a 0.004 FJ priority fee the app asked for")
+		expect(legend(w)).toBe("Fee payment method set by Swap")
+		expect(shownText(figure(w).element)).toBe("Fee up to 0.016 FJ, includes a 0.004 FJ priority fee the app asked for")
 		expect(w.findAllComponents(DottedTerm).map((t) => t.props("term"))).toEqual(["priority-fee"])
 		const term = w.get('[data-testid="execute-op-priority-term"]')
 		expect(term.text()).toBe("priority fee")
@@ -364,7 +390,7 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		"the app's fee contract reads short (proven: %s): the figure stays and the hedged notice shows under the row",
 		async (provenShort) => {
 			const w = await mountWith({ ...ESTIMATE, appPayerFunding: { address: APP_FPC, funded: false, provenShort } })
-			expect(row(w).text()).toBe("Fee up to 3.577824 FJ")
+			expect(figure(w).text()).toBe("Fee up to 3.577824 FJ")
 			expect(region(w).text()).toBe("This app's fee contract may not cover this fee right now.")
 		},
 	)
