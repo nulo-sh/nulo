@@ -47,6 +47,26 @@ describe("SubPageHeaderBase (router-free)", () => {
 		expect(SOURCE).toMatch(/&:focus-visible \{\s*outline: 2px solid var\(--nulo-accent\);\s*outline-offset: -2px;\s*\}/)
 	})
 
+	test("focusTitle focuses the default title, which draws no ring", () => {
+		const w = mount(SubPageHeaderBase, { props: { title: "Proving" }, global: { stubs: STUBS }, attachTo: document.body })
+		w.vm.focusTitle()
+		expect(document.activeElement?.textContent).toBe("Proving")
+		expect(SOURCE).toMatch(/\.title \{[^}]*&:focus \{\s*outline: none;\s*\}/)
+		w.unmount()
+	})
+
+	test("focusTitle leaves a slotted title alone", () => {
+		const slotted = mount(SubPageHeaderBase, {
+			props: { title: "X" },
+			slots: { title: '<span tabindex="-1">Custom</span>' },
+			global: { stubs: STUBS },
+			attachTo: document.body,
+		})
+		slotted.vm.focusTitle()
+		expect(document.activeElement).toBe(document.body)
+		slotted.unmount()
+	})
+
 	test("clicking back emits @back (no router coupling)", async () => {
 		const w = mountHeader({ title: "X" })
 		await w.get('[data-testid="subpage-back"]').trigger("click")
