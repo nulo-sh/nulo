@@ -83,7 +83,7 @@ One arc, one PR against `dev`, no stack, `Closes #577 #565 #566 #567`. Recon: [r
 
 **Gate.** As phase 1. Pass: exit 0; the new case fails on the base composable. Layers: lint, typecheck, unit.
 
-### Phase 4: Show network name (#577), after harden-quality-fixes-1 merges
+### Phase 4: Show network name (#577), after harden-quality-fixes-1 merges ✓
 1. `git fetch origin dev && git merge origin/dev`; confirm `Header.vue` holds no `showNode`.
 2. Header per D1; testids `network-name` (the label) and `network-status-dot`. `display.vue:230` maps `showNode` to `show-network-name-toggle`.
 3. `Header.test.ts`: the config mock gains `onConnected`. Cases: stored `false` hides `network-name`, keeps the dot and the aria-label naming the network; control: stored `true` shows it; an `onUpdate` flips it. Red proof: the merged base Header plus only the two testids.
