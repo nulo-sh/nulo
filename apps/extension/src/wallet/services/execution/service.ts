@@ -70,7 +70,9 @@ import {
 	type GasBalances,
 	type OperationApprovalEnvelope,
 	type OperationAuthwitPreview,
+	type AuthwitContent,
 	type DecodedCall,
+	type DecodedGrant,
 	type DisplayCallInput,
 	type RegisterTokenOperation,
 	type TransferFeeEstimate,
@@ -94,7 +96,7 @@ import { ViewExecutor } from "./view-executor"
 import { ExecutionLane } from "./execution-lane"
 import { GasBalanceReader } from "./gas-balance-reader"
 import { AUTHWIT_CALL_BINDING, ContractResolver, assertSelectorBinding, findFunctionBySelector } from "./contract-resolver"
-import { type ArtifactLookup, decodeCallForDisplay } from "./call-decoder"
+import { type ArtifactLookup, decodeCallForDisplay, decodeGrantForDisplay } from "./call-decoder"
 import { getViewSimulationDeps } from "./helpers/get-view-simulation-deps"
 import { AuthwitDiscoverer } from "./authwit-discoverer"
 import { TxRequestBuilder } from "./tx-request-builder"
@@ -167,6 +169,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		"estimateOperationFee",
 		"previewOperationAuthwits",
 		"decodeCallsForDisplay",
+		"decodeGrantsForDisplay",
 		"cancelJob",
 		"acceptQueuedFee",
 		"cancelEstimate",
@@ -777,15 +780,26 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	}
 
 	public async decodeCallsForDisplay(networkId: string, calls: DisplayCallInput[]): Promise<DecodedCall[]> {
+		const lookup = await this.displayArtifactLookup(networkId, calls)
+		return Promise.all(calls.map((call) => decodeCallForDisplay(lookup, call)))
+	}
+
+	public async decodeGrantsForDisplay(networkId: string, contents: AuthwitContent[]): Promise<DecodedGrant[]> {
+		const lookup = await this.displayArtifactLookup(networkId, contents)
+		return Promise.all(contents.map((content) => decodeGrantForDisplay(lookup, content)))
+	}
+
+	/** The checks every display decode shares (a bounded batch, on a network of the active profile),
+	 *  then one artifact fetch per contract for the whole batch: a batch usually targets one. */
+	private async displayArtifactLookup(networkId: string, batch: readonly unknown[]): Promise<ArtifactLookup> {
 		await this.ensureInitialized()
-		if (!Array.isArray(calls) || calls.length > MAX_DISPLAY_CALLS) throw new Error("Invalid calls")
+		if (!Array.isArray(batch) || batch.length > MAX_DISPLAY_CALLS) throw new Error("Invalid calls")
 		const profile = await this.profileService.getActiveProfile()
 		const network = await this.networkService.getNetwork(networkId)
 		if (!profile || network.profileId !== profile.id) throw new Error("unauthorized profile")
 		const info = networkInfoFrom(network)
-		// One artifact fetch per contract for the whole batch: a multicall usually targets one contract.
 		const artifacts = new Map<string, Promise<ContractArtifact | undefined>>()
-		const lookup: ArtifactLookup = (address) => {
+		return (address) => {
 			const pending = artifacts.get(address)
 			if (pending) return pending
 			const fresh = (async () => {
@@ -796,7 +810,6 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			artifacts.set(address, fresh)
 			return fresh
 		}
-		return Promise.all(calls.map((call) => decodeCallForDisplay(lookup, call)))
 	}
 
 	public async executeOperations(

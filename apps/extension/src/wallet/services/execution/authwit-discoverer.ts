@@ -26,7 +26,14 @@
  */
 
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
-import { FunctionSelector, type FunctionType, FunctionCall, encodeArguments, getFunctionReturnType } from "@aztec-labs/stdlib/abi"
+import {
+	type FunctionAbi,
+	FunctionSelector,
+	type FunctionType,
+	FunctionCall,
+	encodeArguments,
+	getFunctionReturnType,
+} from "@aztec-labs/stdlib/abi"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { computeAuthWitMessageHash, computeInnerAuthWitHash } from "@aztec-labs/aztec.js/authorization"
 import type { ContractArtifact } from "@aztec-labs/stdlib/abi"
@@ -76,6 +83,19 @@ export type BuildTxRequestFn = (
 	op: { networkId: string; accountAddress: string; actions: Action[] },
 	paymentMethod: AccountFeePaymentMethodOptions,
 ) => Promise<DiscoverContext>
+
+/** The call a `call`-kind authwit content names, encoded as its message hash commits to it: the
+ *  function found by name in `artifact`, its selector, and the arguments as fields. `undefined` when
+ *  the artifact has no such function; throws when the arguments do not fit it. The approval card
+ *  decodes these same fields, so what it shows is what the hash signs. */
+export async function encodeAuthwitCall(
+	artifact: ContractArtifact,
+	content: Pick<CallAuthwitContent, "method" | "args">,
+): Promise<{ fn: FunctionAbi; selector: FunctionSelector; fields: Fr[] } | undefined> {
+	const fn = findFunctionByName(artifact, content.method)
+	if (!fn) return undefined
+	return { fn, selector: await FunctionSelector.fromNameAndParameters(fn.name, fn.parameters), fields: encodeArguments(fn, content.args) }
+}
 
 /** The `compute*MessageHash` methods hash over the `nodeInfo` they are given and do not validate chain identity:
  *  a signing caller passes one already checked against the selected network. */
@@ -142,22 +162,22 @@ export class AuthwitDiscoverer {
 		instances: Map<string, ContractInstanceWithAddress>,
 		artifacts: Map<string, ContractArtifact>,
 	): Promise<Fr> {
-		const artifact = requireArtifact(instances, artifacts, content.contract)
-		const fn = findFunctionByName(artifact, content.method)
-		if (!fn) {
+		const encoded = await encodeAuthwitCall(requireArtifact(instances, artifacts, content.contract), content)
+		if (!encoded) {
 			throw new Error("Method not found")
 		}
+		const { fn, selector, fields } = encoded
 		return await computeAuthWitMessageHash(
 			{
 				caller: AztecAddress.fromStringUnsafe(content.caller),
 				call: new FunctionCall(
 					fn.name,
 					AztecAddress.fromStringUnsafe(content.contract),
-					await FunctionSelector.fromNameAndParameters(fn.name, fn.parameters),
+					selector,
 					fn.functionType,
 					content.hideSender === true,
 					fn.isStatic,
-					encodeArguments(fn, content.args),
+					fields,
 					getFunctionReturnType(fn),
 				),
 			},

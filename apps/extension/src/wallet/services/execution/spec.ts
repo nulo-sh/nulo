@@ -1,7 +1,9 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import type { TransferType, LocalTxOrigin } from "@/wallet/services/transaction/spec"
 import type {
+	AuthwitContent,
 	DecodedCall,
+	DecodedGrant,
 	DisplayCallInput,
 	FeeSettings,
 	GasBalances,
@@ -119,6 +121,14 @@ export type Methods = {
 	 * decode says why instead of guessing.
 	 */
 	decodeCallsForDisplay(networkId: string, calls: DisplayCallInput[]): DecodedCall[]
+
+	/**
+	 * Decodes public grants for the approval card, index-aligned with `contents`: each from the
+	 * fields its message hash commits to, encoded as signing encodes them, under the checks and
+	 * bound of {@link decodeCallsForDisplay}. Display only. A grant that does not encode or decode
+	 * says why; the window refuses to confirm it.
+	 */
+	decodeGrantsForDisplay(networkId: string, contents: AuthwitContent[]): DecodedGrant[]
 
 	/**
 	 * Cancel an in-flight fee estimate by its caller-minted token.

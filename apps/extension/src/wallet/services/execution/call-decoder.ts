@@ -20,7 +20,9 @@ import {
 	isOptionStruct,
 	isWrappedFieldStruct,
 } from "@aztec-labs/stdlib/abi"
-import type { DecodedCall, DecodedValue, DisplayCallInput } from "@nulo/wallet-bridge"
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import type { AuthwitContent, DecodedCall, DecodedGrant, DecodedValue, DisplayCallInput } from "@nulo/wallet-bridge"
+import { encodeAuthwitCall } from "./authwit-discoverer"
 import { findFunctionByName, findFunctionBySelector } from "./contract-resolver"
 
 export type ArtifactLookup = (contractAddress: string) => Promise<ContractArtifact | undefined>
@@ -53,6 +55,29 @@ export async function decodeCallForDisplay(lookup: ArtifactLookup, call: Display
 	} catch {
 		return { kind: "undecoded", reason: "arguments" }
 	}
+}
+
+/** A grant reads from the fields its message hash commits to, decoded back by the same decoder. Only
+ *  a `call`-kind content names a function to encode for; today's grant producer sends no other. */
+export async function decodeGrantForDisplay(lookup: ArtifactLookup, content: AuthwitContent): Promise<DecodedGrant> {
+	if (content?.kind !== "call" || typeof content.contract !== "string") return { kind: "undecoded", reason: "unavailable" }
+	const artifact = await lookup(content.contract).catch(() => undefined)
+	if (!artifact) return { kind: "undecoded", reason: "unknown-contract" }
+	let call: DisplayCallInput
+	try {
+		const encoded = await encodeAuthwitCall(artifact, content)
+		if (!encoded) return { kind: "undecoded", reason: "unknown-function" }
+		call = {
+			to: AztecAddress.fromStringUnsafe(content.contract).toString(),
+			name: encoded.fn.name,
+			selector: encoded.selector.toString(),
+			args: encoded.fields.map((f) => f.toString()),
+		}
+	} catch {
+		return { kind: "undecoded", reason: "arguments" }
+	}
+	const decoded = await decodeCallForDisplay(lookup, call)
+	return decoded.kind === "decoded" ? { kind: "decoded", call, decoded } : decoded
 }
 
 /** A selector is what the PXE dispatches on, so it is the truth when present; the dApp-supplied name
