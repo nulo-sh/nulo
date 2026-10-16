@@ -273,7 +273,6 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			quotes,
 			pricedTokens: pricedTokensOf(list?.entries ?? []),
 			flaggedTokens: flaggedKeysOf(list?.flagged ?? []),
-			lastRefreshFailed: this.consecutiveFailures > 0,
 		}
 	}
 
@@ -406,7 +405,8 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		this.logWarn(`refresh failed (attempt ${this.consecutiveFailures})`, error)
 		const usable = await this.readUsable()
 		if (gen !== this.generation) return {}
-		// A popup open across a scheduled refresh has no request of its own to learn the failure from.
+		// Readers that re-filter on every broadcast, incoming dust among them, learn here that a quote
+		// expired behind the failed fetch.
 		this.emit("onQuotesUpdated", this.snapshotOf(usable))
 		return usable
 	}

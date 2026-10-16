@@ -115,7 +115,7 @@ const fiatOf = safeFiatOf((tb) => prices.tokenFiatMicro(tb.token, parseRawBalanc
 const aggregate = computed(() => aggregateFiat(tokenBalances.value, fiatOf))
 
 /** Holdings that lack a price count as $0.00 under the "priced assets only" caption; a wallet where
- *  none has one after a failed fetch is `pricesUnavailable`. */
+ *  no priced holding has one is `pricesUnavailable`. */
 const aggregateFiatDisplay = computed(() => prices.formatUsdMicro(aggregate.value.micro))
 const isAggregatePartial = computed(() => aggregate.value.partial)
 
@@ -211,7 +211,7 @@ const isPriceableHolding = (tb) =>
  *  the first price answer; an empty or unpriced wallet has none to wait for. */
 const awaitingQuotes = computed(() => showFiatValues.value && !prices.settled.value && tokenBalances.value.some(isPriceableHolding))
 const pricesUnavailable = computed(() => {
-	if (!showFiatValues.value || !prices.unavailable.value) return false
+	if (!showFiatValues.value) return false
 	const holdings = tokenBalances.value.filter(isPriceableHolding)
 	return holdings.length > 0 && holdings.every((tb) => fiatOf(tb) === undefined)
 })
