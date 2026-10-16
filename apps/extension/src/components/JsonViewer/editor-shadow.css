@@ -1,0 +1,35 @@
+/* The document rules that match a viewer's editor elements, which no document sheet reaches in
+ * its shadow root: `@nulo/design/base.css` and `JsonViewer.vue`'s, held equal by the colocated test. */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+	margin: 0;
+}
+
+* {
+	scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+	display: none;
+}
+
+button {
+	font-family: inherit;
+	padding: 0;
+	border: none;
+	outline: none;
+}
+
+input {
+	font: inherit;
+	border: none;
+	outline: none;
+	background: transparent;
+}
+
+::selection {
+	background-color: var(--nulo-surface-highest);
+}

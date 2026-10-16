@@ -288,7 +288,7 @@ Every extraction preserves all `data-testid` attributes verbatim. New components
 
 When adding new interactive elements, add a `data-testid` rather than relying on placeholder, label, or role queries. Querying by placeholder is a common source of e2e flake.
 
-**E2E selector rule (strict):** e2e tests select **only** by `data-testid`. Never by `aria-label`, text content, role, placeholder, class, or DOM structure. If an element doesn't have a testid, add one BEFORE writing the test. Text-based selectors look fine until copy changes, i18n lands, or a Vue refactor reshuffles the tree — then every test that touched the element breaks at once. The `waitForToast` helper is the one explicit exception (toasts are intentionally text-asserted as a content check, not a click target).
+**E2E selector rule (strict):** e2e tests select **only** by `data-testid`. Never by `aria-label`, text content, role, placeholder, class, or DOM structure. If an element doesn't have a testid, add one BEFORE writing the test. Text-based selectors look fine until copy changes, i18n lands, or a Vue refactor reshuffles the tree — then every test that touched the element breaks at once. Two explicit exceptions: the `waitForToast` helper (toasts are intentionally text-asserted as a content check, not a click target), and the logs and JSON viewers' editors, which CodeMirror builds inside their host's shadow root: a spec reaches the host by its testid and below it only CodeMirror's documented `cm-` classes (the `e2e-testing` skill, § Selectors).
 
 ## Keyboard & focus order
 

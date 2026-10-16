@@ -92,8 +92,19 @@ const onPointerMove = (event: PointerEvent) => {
 	if (Math.abs(event.clientX - previous.x) >= 1 || Math.abs(event.clientY - previous.y) >= 1) hovered.value = true
 }
 
+// The card's `focusin` names a shadow root's host, which `focus()` cannot enter, for the element
+// inside it that focus left; the document's capturing `focusout` still sees that element.
+let departed: Element | null = null
+const trackDeparture = (event: FocusEvent) => {
+	const from = event.composedPath()[0]
+	departed = from instanceof Element ? from : null
+}
+
 const onFocusIn = (event: FocusEvent) => {
-	if (!focusWithin.value) returnFocusTo = event.relatedTarget instanceof Element ? event.relatedTarget : null
+	if (!focusWithin.value) {
+		const from = event.relatedTarget instanceof Element ? event.relatedTarget : null
+		returnFocusTo = from && (departed?.getRootNode() as ShadowRoot | undefined)?.host === from ? departed : from
+	}
 	focusWithin.value = true
 }
 
@@ -116,10 +127,14 @@ const selectFor = (id: number) => () => {
 	action?.onSelect()
 }
 
-onMounted(() => document.addEventListener("pointermove", trackPointer, { capture: true, passive: true }))
+onMounted(() => {
+	document.addEventListener("pointermove", trackPointer, { capture: true, passive: true })
+	document.addEventListener("focusout", trackDeparture, { capture: true })
+})
 
 onBeforeUnmount(() => {
 	document.removeEventListener("pointermove", trackPointer, { capture: true })
+	document.removeEventListener("focusout", trackDeparture, { capture: true })
 	hovered.value = false
 	focusWithin.value = false
 	holdToast(false)

@@ -144,7 +144,8 @@ function giveRangesEmptyRects(): () => void {
 }
 
 /** Shows the real viewer in an app of its own outside the page, where the shell's popup manager
- *  renders it (a second VTU mount would drop the page's stubs), and returns its editor. */
+ *  renders it (a second VTU mount would drop the page's stubs), and returns its editor, which sits
+ *  in the viewer's shadow root. */
 async function showErrorViewer(data: Record<string, unknown[]>): Promise<EditorView> {
 	const restoreRects = giveRangesEmptyRects()
 	const app = createApp({ render: () => h(JsonViewer, { data }) })
@@ -152,7 +153,7 @@ async function showErrorViewer(data: Record<string, unknown[]>): Promise<EditorV
 	const host = document.body.appendChild(document.createElement("div"))
 	app.mount(host)
 	await flushPromises()
-	const editor = host.querySelector<HTMLElement>(".cm-editor")
+	const editor = [...host.querySelectorAll("*")].find((el) => el.shadowRoot)?.shadowRoot?.querySelector<HTMLElement>(".cm-editor")
 	const view = editor && EditorView.findFromDOM(editor)
 	cleanups.push(() => {
 		// Destroying the view cancels its pending measure before the rects go.
@@ -164,7 +165,8 @@ async function showErrorViewer(data: Record<string, unknown[]>): Promise<EditorV
 	return view
 }
 
-const enterKey = () => new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true, cancelable: true })
+// Composed, as a real key event is: one from inside the viewer's shadow root reaches the document.
+const enterKey = () => new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true, cancelable: true, composed: true })
 
 beforeEach(() => {
 	vi.clearAllMocks()
