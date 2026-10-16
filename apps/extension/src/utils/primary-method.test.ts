@@ -144,6 +144,13 @@ describe("pickPrimaryWireMethod — a dApp call list's title", () => {
 		expect(pickPrimaryWireMethod([{ name: "\u200b\u0007" }])).toBeUndefined()
 	})
 
+	test("names are cleaned before the pick, so a queued title skips the fee call a settled record does", () => {
+		const wire = [{ name: "\u200bpay_fee" }, { name: "transfer" }]
+		const settled = wire.map((call) => ({ method: wireTitle(call.name) }))
+		expect(pickPrimaryWireMethod(wire)).toBe("transfer")
+		expect(pickPrimaryMethod(settled)).toBe("transfer")
+	})
+
 	test("the fee-skip rules pick as before (control)", () => {
 		expect(pickPrimaryWireMethod([{ name: "claim_and_end_setup" }, { name: "claim_public" }])).toBe("claim_public")
 		expect(pickPrimaryWireMethod([{ name: "claim" }, { name: "mint_and_pay_fee" }, { name: "swap" }])).toBe("swap")

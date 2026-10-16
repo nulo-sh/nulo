@@ -481,10 +481,8 @@ function admitContentMessage(
 }
 
 /**
- * A key exchange completes the discovery whose id it names, and upstream credits the session to that
- * discovery's tab and origin. So it is admitted only from that tab, from a document whose own origin
- * is the credited one (a frame's own origin, never its tab's), and never for an `"unknown"` credit.
- * A message of any other type, or one naming no pending discovery, is not this check's to judge.
+ * Upstream credits a session to the pending discovery its key exchange names, so the exchange must come
+ * from that discovery's tab and document origin; one naming no pending discovery is upstream's to drop.
  */
 function keyExchangeFromItsDiscovery(
 	envelope: ContentScriptMessageEnvelope,

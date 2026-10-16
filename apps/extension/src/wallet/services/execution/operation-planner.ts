@@ -245,9 +245,9 @@ export class OperationPlanner {
 		}
 		if ("exec" in operation && (operation as AztecSendTxOperation).exec?.calls?.length) {
 			const carriers = (operation as AztecSendTxOperation).exec.calls.map((c) => ({
-				name: c.name?.toString() ?? c.selector?.toString(),
+				name: wireTitle(c.name?.toString()) ?? c.selector?.toString(),
 			}))
-			return wireTitle(pickPrimaryMethod(carriers))
+			return pickPrimaryMethod(carriers)
 		}
 		return undefined
 	}
