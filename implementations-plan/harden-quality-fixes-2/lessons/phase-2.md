@@ -10,8 +10,16 @@ Arc 2 branches off `dev` after #598 (harden-security-fixes-2 arc 1), #610 (small
 - Backup selection: `full-backup-helpers.ts:37-42` (`BackupSelection`), `:110-118` (`openEncryptedBackup`) as recon. `useFullBackupImport.ts`: the plain-name cast is `:559`, the `as string` cast `:583`, the validator cast `:629`, `isAllowedToImportBackup` `:802-806`. `useRestoreAgain.ts`: `as string` `:172`, validator cast `:239`, `profileType` readers `:234`, `:362`. `ImportFullBackupForm.vue` lives in `components/composite/import/` (`:113`, `:133` as recon); `import.vue:292` and `full-backup-ctas.ts:17-22` as recon.
 - `import-helpers.ts` reads no `type`: it calls the CTA predicates, so it needs no edit.
 - Fences: `export/full.vue:75` and `export/account.vue:59` (`let generation`); bumps only in `discardRun` (`full.vue:476`), `resetFlow` (`account.vue:62`) and `account.vue`'s unmount (`:213`).
-- `.eslintrc-auto-import.json` does not exist in this tree; the types gate reads `src/types/auto-imports.d.ts` alone.
 
 ## I2 pins (before any phase 2.2 edit)
 
 - `useFullBackupImport.test.ts`, "a second Decrypt on an opened backup", both driven through `pickBackupFile` so the real producer builds the selection: an opened body with no profile type keeps Decrypt offered and a second Decrypt shows "Decryption Failed"; a file sealed twice opens its inner backup on the second Decrypt. Both pass at `5e2888be`: I2 holds.
+
+## Phase 2.1 (#543)
+
+- The store slot's read type unwraps `toggle.model` (Pinia types a setup store's state through `UnwrapRef`), so `useConfirm`'s one write casts the request to `UnwrapRef<ConfirmRequest>`: the runtime stores the caller's ref and the reactive read unwraps it, which `useConfirm.test.ts`'s toggle case proves (the switch writes the caller's ref).
+- `useDuplicateConfirm` now starts its close watcher before `requestConfirm` instead of between the slot write and `open`; the watcher reads only `popupStore.isOpened("confirm")`, which the slot write does not change, so nothing it observes moved.
+- `EditContactPopup.handleUpdateContact` reads the payload twice, at the dirty gate and at the branch, both before its first await, as it read `cacheStore.importContact` twice.
+- Its "Enter with a clean form is a no-op" case dispatches Enter on the detached tree, which never reaches the document-level listener, so it passes whatever the gate does. The new import-mode bug pin dispatches from a document input, as the re-entrancy pin does, and so is the success control for the keyboard path; the old case is left as it is (out of scope).
+- Generated globals: `useConfirm` and the type `ConfirmRequest` in `auto-imports.d.ts`; `.eslintrc-auto-import.json` gains both names (the plan named only `useConfirm`).
+- Proofs, not committed (each reverted): `requestConfirm` merging with `Object.assign` fails the replace and open-dialog cases; the slot as `reactive` fails the `pinia.state` case; one site reverted by hand to a field write and an `open('confirm')` makes the ban list both `file:line`s.
