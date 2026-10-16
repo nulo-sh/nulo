@@ -6,3 +6,5 @@
 - 2026-10-16 19:2x: audits: Codex r1 conditional approve, Opus r1 conditional approve, Codex r2 conditional approve (D4 removal stands), Codex r3 approve. OA-1 and OA-2 written. Awaiting the orchestrator's approval.
 - 2026-10-16 19:2x: phase 2 implemented (2 commits: the check on every reconnect; D4 needsWindow removed); lint ✓, typecheck:all ✓; test + test:all running.
 - 2026-10-16 19:4x: phase 2 gate pass: lint 0, typecheck:all 0, test 0, test:all 0; folded flag case red on base 826df75c, green after; no complexity suppression.
+- 2026-10-16 19:5x: phase 3 unit gate pass: lint 0, typecheck:all 0, audit:vue 0, test:all 0; never-happens toggle assertion red on base index.vue. e2e pending (load).
+- 2026-10-16 20:1x: codex r1 approve, opus review approve; comment fixes applied; opus finding 1 → known limit.

@@ -200,8 +200,7 @@ export async function denyDiscover(page: Page): Promise<void> {
 
 export async function approveVerify(page: Page): Promise<void> {
 	await clickByTestId(page, "verify-confirm-btn")
-	// `handleConfirm` closes the window only once the worker has received They match, so a closed
-	// window proves the app's held calls were released before the caller moves on.
+	// `handleConfirm` closes the window only after the worker answers the confirmation.
 	if (!page.isClosed()) {
 		await new Promise<void>((resolve, reject) => {
 			const timer = setTimeout(() => {

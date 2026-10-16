@@ -14,7 +14,7 @@ export type FakeDappSessionRow = {
 	id: string
 	profileId: string
 	chainId: string
-	/** Inert: no wallet path reads it; a test sets it to prove so. */
+	/** Read by no wallet path. */
 	trustedVerification?: boolean
 	accounts?: string[]
 	capabilityGrants?: Array<{ capability: { type: string } }>

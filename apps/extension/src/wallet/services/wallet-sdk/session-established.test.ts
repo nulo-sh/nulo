@@ -623,7 +623,7 @@ describe("handleSessionEstablished — the check in the waiting connect window",
 })
 
 describe("handleSessionEstablished — the check on every connection", () => {
-	/** A remembered row, with or without the skip flag the check's old switch stored. */
+	/** A remembered row, with or without a stored `trustedVerification: true`. */
 	const remembered = (trustedVerification: boolean) => ({
 		tryGetDappSessionByOriginAndChain: vi.fn().mockResolvedValue({ id: "dapp-1", profileId: "prof-A", trustedVerification }),
 		setVerificationHash: vi.fn().mockResolvedValue(undefined),
@@ -632,7 +632,7 @@ describe("handleSessionEstablished — the check on every connection", () => {
 	test.each([
 		["a new connection", () => makeDeps({ pendingVerification: new Map([["sess-1", marker()]]) }), "false"],
 		["a reconnect", () => makeDeps({ dappSessionService: remembered(false) }), "true"],
-		["a reconnect whose row carries the old skip flag", () => makeDeps({ dappSessionService: remembered(true) }), "true"],
+		["a reconnect whose row stores trustedVerification: true", () => makeDeps({ dappSessionService: remembered(true) }), "true"],
 	])("%s shows the check", async (_, made, isReconnect) => {
 		const { deps, create, terminate } = made()
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(true)

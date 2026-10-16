@@ -776,7 +776,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 	afterEach(() => dispatch.mockReset())
 
 	test.each([false, true])(
-		"calls sent while the check shows wait, then run in arrival order once it is confirmed; a later call runs at once (old skip flag: %s)",
+		"calls sent while the check shows wait, then run in arrival order once it is confirmed; a later call runs at once (stored trustedVerification: %s)",
 		async (skipFlag) => {
 			const h = boot()
 			remember(h).trustedVerification = skipFlag
