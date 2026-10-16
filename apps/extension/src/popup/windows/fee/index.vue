@@ -20,8 +20,9 @@ import SignerIdentityStrip from "../execute/SignerIdentityStrip.vue"
 
 /** Utils */
 import { formatFeeJuice, formatGasBalance } from "@/utils/fee-estimation"
-import { authwitDisplayCall, undecodedAll } from "../execute/display-calls"
-import { decodeOperationArguments, readKnownTokens, resolveOperations } from "../execute/operation-display"
+import { authwitDisplayCall, grantContentsOf, undecodedAll } from "../execute/display-calls"
+import { grantRefusalRow, readableGrants } from "../execute/call-surface"
+import { decodeOperationArguments, followKnownTokens, resolveOperations } from "../execute/operation-display"
 import { uniqueSignerAccounts, uniqueSignerNetworks } from "../execute/signers"
 import type { DraftUIOperation } from "../execute/types"
 
@@ -29,7 +30,7 @@ import type { DraftUIOperation } from "../execute/types"
 import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
 import { NetworkServiceClient } from "@/wallet/services/network/client"
 import { AccountServiceClient } from "@/wallet/services/account/client"
-import { type DecodedCall, ExecutionServiceClient } from "@/wallet/services/execution/client"
+import { type DecodedCall, type DecodedGrant, ExecutionServiceClient } from "@/wallet/services/execution/client"
 import { type TokenInfo, TokenServiceClient } from "@/wallet/services/token/client"
 import { DappInteractionServiceClient, type FeeQuestionPayload } from "@/wallet/services/dapp-interaction/client"
 
@@ -53,10 +54,13 @@ const available = ref<string | null>(null)
 const availableLoading = ref(true)
 const isLoading = ref(false)
 const isWrongProfile = ref(false)
+/** Absent while the grants decode; the card reads them as the approval window did. */
+const decodedGrants = ref<readonly DecodedGrant[]>()
 
 const executionService = new ExecutionServiceClient()
 const interactionService = new DappInteractionServiceClient()
 const tokenService = new TokenServiceClient()
+const tokenFollow = followKnownTokens(tokenService, knownTokens)
 const profileService = new ProfileServiceClient()
 
 const {
@@ -102,6 +106,8 @@ const {
 })
 
 const question = computed(() => payload.value?.feeQuestion)
+const grantsPending = computed(() => !!operation.value && grantContentsOf(operation.value).length > 0 && !decodedGrants.value)
+const grantRefusal = computed(() => grantRefusalRow(decodedGrants.value ?? []))
 const was = computed(() => (question.value ? formatFeeJuice(BigInt(question.value.approved)) : ""))
 const now = computed(() => (question.value ? formatFeeJuice(BigInt(question.value.fee)) : ""))
 /** The app's own payment set the fee path: no speed was picked, and its claim, not the balance, pays. */
@@ -127,11 +133,10 @@ const init = async () => {
 		void decodeOperationArguments(resolved.operations, executionService, (_, decoded) => {
 			decodedCalls.value = decoded
 		})
-		void readKnownTokens(resolved.operations, profile.value.id, tokenService).then((tokens) => {
-			if (tokens) knownTokens.value = tokens
-		})
+		void tokenFollow.start(resolved.operations, profile.value.id)
 		void readAvailable(op)
 		void decodeAuthwits(op)
+		void decodeGrants(op)
 	} catch (error) {
 		console.error("Failed to initialize the fee question", { error })
 		setError("Something went wrong")
@@ -155,6 +160,20 @@ async function decodeAuthwits(op: DraftUIOperation | undefined): Promise<void> {
 	decodedAuthwits.value = new Map(listed.map((a, i) => [a.messageHash, decoded[i] ?? { kind: "undecoded", reason: "unavailable" }]))
 }
 
+/** The held request's grants, decoded from the request its question shows; a failed decode reads as
+ *  unavailable, which keeps Send for off as the approval window kept Confirm. */
+async function decodeGrants(op: DraftUIOperation | undefined): Promise<void> {
+	const count = op ? grantContentsOf(op).length : 0
+	if (!count) return
+	let decoded: readonly DecodedGrant[] = []
+	try {
+		decoded = await executionService.decodeQuestionGrantsForDisplay(requestId.value!)
+	} catch (error) {
+		console.warn("[Fee] Grant decode failed", { error })
+	}
+	decodedGrants.value = readableGrants(decoded, count)
+}
+
 /** The payer's balance as the readout prints it, read past the cache, which can predate a deposit
  *  made outside the wallet; a failed read shows none rather than a zero. */
 async function readAvailable(op: DraftUIOperation | undefined): Promise<void> {
@@ -173,6 +192,7 @@ async function readAvailable(op: DraftUIOperation | undefined): Promise<void> {
 
 const accept = async () => {
 	if (isInteractionCancelled.value || isLoading.value || !requestId.value || !operation.value) return
+	if (grantsPending.value || grantRefusal.value) return
 	try {
 		isLoading.value = true
 		await interactionService.resolveInteraction(requestId.value, { accepted: true })
@@ -205,7 +225,10 @@ profileService.onActiveProfileChanged.add(onActiveProfileChanged)
 
 onMounted(startWindow)
 
-onUnmounted(disposeWindow)
+onUnmounted(() => {
+	tokenFollow.dispose()
+	disposeWindow()
+})
 </script>
 
 <template>
@@ -242,6 +265,7 @@ onUnmounted(disposeWindow)
 					:decodedCalls="decodedCalls"
 					:approvedAuthwits="question.discoveredAuthwits"
 					:decodedAuthwits="decodedAuthwits"
+					:decodedGrants="decodedGrants"
 					:tokens="knownTokens"
 				>
 					<template #fee>
@@ -260,14 +284,16 @@ onUnmounted(disposeWindow)
 		</Flex>
 
 		<DappApprovalFooter
-			:processing-error="processingError"
+			:processing-error="grantRefusal ?? processingError"
 			reject-testid="fee-reject-btn"
 			reject-label="Reject"
 			:reject-disabled="isLoading || !requestId"
 			confirm-testid="fee-confirm-btn"
 			:confirm-label="`Send for ${now} FJ`"
 			:confirm-loading="isLoading"
-			:confirm-disabled="processingError?.type === 'error' || !operation || !question || isInteractionCancelled"
+			:confirm-disabled="
+				processingError?.type === 'error' || !operation || !question || grantsPending || grantRefusal !== undefined || isInteractionCancelled
+			"
 			@reject="reject"
 			@approve="accept"
 		/>

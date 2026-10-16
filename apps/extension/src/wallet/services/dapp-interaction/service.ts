@@ -79,6 +79,10 @@ function isNoticePayload(payload: DappInteraction["payload"]): payload is Networ
 	return "notice" in payload
 }
 
+function isFeeQuestionPayload(payload: DappInteraction["payload"]): payload is FeeQuestionPayload {
+	return "feeQuestion" in payload
+}
+
 /** A discovery is the only answerable interaction without a session: it is what creates one. */
 function isDiscoveryPayload(payload: DappInteraction["payload"]): payload is DiscoveryPayload {
 	return !("session" in payload) && !isNoticePayload(payload)
@@ -443,6 +447,16 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		const profile = await this.profileService.getActiveProfile()
 		if (profile?.id !== interaction.payload.session.profileId) throw new Error("Wallet locked")
 		return materializeRequest(request, this.materializeDepsFor(profile.id))
+	}
+
+	/** The stored request a fee question shows, for the window's display reads only; estimates,
+	 *  previews and approval read execution requests alone. */
+	public async materializeQuestionDraft(interactionId: string): Promise<DraftOperation> {
+		const interaction = this.storage.get(interactionId)
+		if (!interaction || !isFeeQuestionPayload(interaction.payload)) throw new Error("Invalid id")
+		const profile = await this.profileService.getActiveProfile()
+		if (profile?.id !== interaction.payload.session.profileId) throw new Error("Wallet locked")
+		return materializeRequest(interaction.payload.operation, this.materializeDepsFor(profile.id))
 	}
 
 	/** CAIP → row resolution against `profileId` for the shared materializer. */

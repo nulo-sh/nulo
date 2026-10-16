@@ -51,6 +51,13 @@ const rejectMock = vi.fn()
 const resolveInteractionMock = vi.fn(async () => undefined)
 const getGasBalancesMock = vi.fn(async () => ({ publicFeeJuice: "3000000000000000000", privateFeeJuice: "1250000000000000000" }))
 const windowsRemoveMock = vi.fn(async () => undefined)
+const getTokensMock = vi.fn(async (_profileId: string, _chainId: number): Promise<unknown[]> => [])
+const tokenListeners = new Set<(token: { profileId: string }) => void>()
+const tokenUpdated = {
+	add: vi.fn((handler: (token: { profileId: string }) => void) => void tokenListeners.add(handler)),
+	remove: vi.fn((handler: (token: { profileId: string }) => void) => void tokenListeners.delete(handler)),
+}
+const decodeGrantsMock = vi.fn(async (_interactionId: string): Promise<unknown[]> => [])
 const appStoreMock = reactive({ isSessionChecked: true, isLogined: true, pageAwaitingAuth: "" })
 
 vi.mock("@/composables/useDappInteractionPayload", () => ({
@@ -87,12 +94,17 @@ vi.mock("@/wallet/services/dapp-interaction/client", () => ({
 }))
 vi.mock("@/wallet/services/execution/client", () => ({
 	ExecutionServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), decodeCallsForDisplay: vi.fn(async () => []), getGasBalances: getGasBalancesMock }
+		return {
+			disconnect: vi.fn(),
+			decodeCallsForDisplay: vi.fn(async () => []),
+			decodeQuestionGrantsForDisplay: decodeGrantsMock,
+			getGasBalances: getGasBalancesMock,
+		}
 	}),
 }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
-		return { connect: vi.fn(), disconnect: vi.fn(), getTokens: vi.fn(async () => []) }
+		return { connect: vi.fn(), disconnect: vi.fn(), getTokens: getTokensMock, onTokenUpdated: tokenUpdated }
 	}),
 }))
 vi.mock("@/wallet/services/account/client", () => ({
@@ -131,10 +143,12 @@ const STUBS = {
 	},
 	// The card's own rendering is pinned in its tests; here it shows which request it read and its fee slot.
 	OperationCard: {
-		props: ["op", "approvedAuthwits", "decodedAuthwits"],
+		props: ["op", "approvedAuthwits", "decodedAuthwits", "decodedGrants", "tokens"],
 		template: `<div data-testid="execute-op-item" :data-op-kind="op.kind" :data-account="op.accountAddress"
 			:data-authwits="(approvedAuthwits ?? []).map((a) => a.messageHash).join(',')"
-			:data-decoded="[...(decodedAuthwits?.keys() ?? [])].join(',')"><slot name="fee" /></div>`,
+			:data-decoded="[...(decodedAuthwits?.keys() ?? [])].join(',')"
+			:data-grants="decodedGrants ? decodedGrants.map((g) => g.kind).join(',') : 'reading'"
+			:data-tokens="(tokens ?? []).map((t) => t.symbol).join(',')"><slot name="fee" /></div>`,
 	},
 	SignerIdentityStrip: { template: '<div data-testid="signer-strip" />', props: ["signerAccounts", "signerNetworks", "status"] },
 	DappIdentityBlock: {
@@ -268,5 +282,81 @@ describe("the fee question window", () => {
 		expect(byId("dapp-cancelled-overlay").attributes("data-message")).toContain("different profile")
 		expect(getGasBalancesMock).not.toHaveBeenCalled()
 		expect(confirm().attributes("disabled")).toBeDefined()
+	})
+})
+
+describe("the fee question window — a held send with a public grant", () => {
+	const SPENDER = `0x${"1b".repeat(32)}`
+	const GRANT = { kind: "call", caller: SPENDER, contract: TOKEN, method: "transfer_public_to_public", args: [OWNER, SPENDER, "1", "7"] }
+	const field = (n: bigint) => `0x${n.toString(16).padStart(64, "0")}`
+	const DECODED = {
+		kind: "decoded",
+		call: { to: TOKEN, name: "transfer_public_to_public", selector: "0xc47adea0", args: [OWNER, SPENDER, field(1n), field(7n)] },
+		decoded: { kind: "decoded", contract: "Token", fn: "transfer_public_to_public", params: [] },
+	}
+	const granted = () => ({
+		...question({ payer: { type: "fj", isProtocol: false }, feeSettings: { paymentMethod: { kind: "fj" } } }),
+		operation: { kind: "send_transaction", account: `aztec:1:${OWNER}`, actions: [{ kind: "add_public_authwit", content: GRANT }] },
+	})
+
+	test("the card shows the grant as the wallet decoded it from the held request, and Send for answers yes", async () => {
+		decodeGrantsMock.mockResolvedValueOnce([DECODED])
+		await opened(granted())
+		expect(decodeGrantsMock).toHaveBeenCalledExactlyOnceWith("req-1")
+		expect(byId("execute-op-item").attributes("data-grants")).toBe("decoded")
+		expect(byId("error-text").exists()).toBe(false)
+		await confirm().trigger("click")
+		await flushPromises()
+		expect(resolveInteractionMock).toHaveBeenCalledExactlyOnceWith("req-1", { accepted: true })
+	})
+
+	test("while the grant decodes, Send for waits and accepts nothing", async () => {
+		let release!: (value: unknown[]) => void
+		decodeGrantsMock.mockImplementationOnce(() => new Promise((resolve) => (release = resolve)))
+		await opened(granted())
+		expect(byId("execute-op-item").attributes("data-grants")).toBe("reading")
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await (w!.vm as unknown as { accept: () => Promise<void> }).accept()
+		expect(resolveInteractionMock).not.toHaveBeenCalled()
+		release([DECODED])
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+	})
+
+	test.each([
+		[
+			"the wallet cannot read the grant",
+			() => decodeGrantsMock.mockResolvedValueOnce([{ kind: "undecoded", reason: "unknown-contract" }]),
+		],
+		["the decode fails", () => decodeGrantsMock.mockRejectedValueOnce(new Error("pxe down"))],
+	])("%s: the refusal row, and Send for stays off", async (_, arrange) => {
+		arrange()
+		await opened(granted())
+		expect(byId("execute-op-item").attributes("data-grants")).toBe("undecoded")
+		expect(byId("error-text").text()).toBe("Can't read the arguments")
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await (w!.vm as unknown as { accept: () => Promise<void> }).accept()
+		expect(resolveInteractionMock).not.toHaveBeenCalled()
+	})
+
+	test("a request without a grant decodes none", async () => {
+		await opened()
+		expect(decodeGrantsMock).not.toHaveBeenCalled()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+	})
+})
+
+describe("the fee question window — the token list", () => {
+	test("an update to the profile's tokens reads the list again; the window stops listening when it closes", async () => {
+		getTokensMock.mockResolvedValueOnce([])
+		await opened()
+		expect(getTokensMock).toHaveBeenCalledExactlyOnceWith("p1", 1)
+		getTokensMock.mockResolvedValueOnce([{ id: 1, chainId: 1, contract: TOKEN, name: "USD Coin", symbol: "USDC", decimals: 6 }])
+		for (const listener of tokenListeners) listener({ profileId: "p1" })
+		await flushPromises()
+		expect(byId("execute-op-item").attributes("data-tokens")).toBe("USDC")
+		w!.unmount()
+		w = undefined
+		expect(tokenListeners.size).toBe(0)
 	})
 })

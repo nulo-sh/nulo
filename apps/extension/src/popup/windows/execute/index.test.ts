@@ -73,6 +73,8 @@ const interactionServiceDisconnectMock = vi.fn(() => callLog.push("interaction.d
 const executionServiceConnectMock = vi.fn(() => callLog.push("execution.connect"))
 const executionServiceDisconnectMock = vi.fn(() => callLog.push("execution.disconnect"))
 const tokenServiceConnectMock = vi.fn(() => callLog.push("token.connect"))
+const getTokensMock = vi.fn(async (_profileId: string, _chainId: number): Promise<unknown[]> => [])
+const tokenUpdatedMock = { add: vi.fn(), remove: vi.fn() }
 const tokenServiceDisconnectMock = vi.fn(() => callLog.push("token.disconnect"))
 const onActiveProfileChangedAddMock = vi.fn()
 const windowsRemoveMock = vi.fn(() => callLog.push("windows.remove"))
@@ -200,7 +202,8 @@ vi.mock("@/wallet/services/token/client", () => ({
 			connect: tokenServiceConnectMock,
 			disconnect: tokenServiceDisconnectMock,
 			previewTokenMetadata: vi.fn(async () => undefined),
-			getTokens: vi.fn(async () => []),
+			getTokens: getTokensMock,
+			onTokenUpdated: tokenUpdatedMock,
 		}
 	}),
 }))
@@ -1193,6 +1196,7 @@ describe("execute window — a public grant", () => {
 			grantRefusal?: { title: string; tooltip: string }
 		}
 		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fj" } })
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
 		await flushPromises()
 		return { vm, confirm: () => w!.find('[data-testid="execute-confirm-btn"]'), error: () => w!.find('[data-testid="error-text"]') }
 	}
@@ -1205,6 +1209,20 @@ describe("execute window — a public grant", () => {
 		expect(error().exists()).toBe(false)
 		await vm.approve()
 		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("an update to the profile's tokens reads the list again; the window stops listening when it closes", async () => {
+		decodeGrantsForDisplayMock.mockResolvedValueOnce([DECODED])
+		await opened()
+		expect(getTokensMock).toHaveBeenCalledExactlyOnceWith("p1", 1)
+		const [[listener]] = tokenUpdatedMock.add.mock.calls as [[(token: { profileId: string }) => void]]
+		listener({ profileId: "p2" })
+		listener({ profileId: "p1" })
+		await flushPromises()
+		expect(getTokensMock).toHaveBeenCalledTimes(2)
+		w!.unmount()
+		w = undefined
+		expect(tokenUpdatedMock.remove).toHaveBeenCalledExactlyOnceWith(listener)
 	})
 
 	test("while the grant decodes, Confirm waits and approve sends nothing", async () => {

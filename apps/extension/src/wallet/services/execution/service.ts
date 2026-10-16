@@ -118,6 +118,7 @@ export interface InteractionOperationSource {
 	/** Asks a held send's question in a window; `true` only when the person accepted it. */
 	askFeeAgain(question: FeeQuestion): Promise<boolean>
 	materializeStoredDraft(interactionId: string, index: number): Promise<DraftOperation>
+	materializeQuestionDraft(interactionId: string): Promise<DraftOperation>
 }
 
 /** Default PXE-client factory: the real RPC-backed client. Exported so the
@@ -174,6 +175,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		"previewOperationAuthwits",
 		"decodeCallsForDisplay",
 		"decodeGrantsForDisplay",
+		"decodeQuestionGrantsForDisplay",
 		"cancelJob",
 		"acceptQueuedFee",
 		"cancelEstimate",
@@ -813,7 +815,16 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		await this.ensureInitialized()
 		// The request approval executes, never the popup's copy: its JSON round trip rewrites some values.
 		// A draft: the window decodes while the fee is still unchosen.
-		const operation = await this.interactionOperations().materializeStoredDraft(interactionId, index)
+		return this.decodeGrantsOf(await this.interactionOperations().materializeStoredDraft(interactionId, index))
+	}
+
+	/** A held send's grants, read from the stored request its fee question shows. */
+	public async decodeQuestionGrantsForDisplay(interactionId: string): Promise<DecodedGrant[]> {
+		await this.ensureInitialized()
+		return this.decodeGrantsOf(await this.interactionOperations().materializeQuestionDraft(interactionId))
+	}
+
+	private async decodeGrantsOf(operation: DraftOperation): Promise<DecodedGrant[]> {
 		if (operation.kind !== "send_transaction") return []
 		const contents = operation.actions.flatMap((action) => (action.kind === "add_public_authwit" ? [action.content] : []))
 		const lookup = await this.displayArtifactLookup(operation.networkId, contents)

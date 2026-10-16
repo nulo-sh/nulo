@@ -8,7 +8,8 @@ import type { Account, AccountServiceClient } from "@/wallet/services/account/cl
 import type { CaipAccount, CaipChain, ExecutionPayload } from "@/wallet/services/dapp-interaction/client"
 import type { DecodedCall, DisplayCallInput } from "@/wallet/services/execution/client"
 import type { Network, NetworkServiceClient } from "@/wallet/services/network/client"
-import type { TokenInfo } from "@/wallet/services/token/client"
+import type { Ref } from "vue"
+import type { TokenInfo, TokenServiceClient, TokenUpdated } from "@/wallet/services/token/client"
 import { parseCaipAccount, parseCaipChain, resolveNetworkByChainId } from "@/wallet/utils/caip"
 import { displayCallsOf, undecodedAll } from "./display-calls"
 import { isEmbeddedFeePayment } from "./operation-validation"
@@ -140,5 +141,37 @@ export async function readKnownTokens(
 	} catch (error) {
 		console.warn("[Execute] Token list unavailable", { error })
 		return undefined
+	}
+}
+
+/**
+ * Holds `known` to the tokens of the operations' chains and reads them again whenever one of the
+ * profile's tokens is updated, as a restore's chain read does after the window opened; a read an
+ * update superseded never lands. The window calls `dispose` on unmount.
+ */
+export function followKnownTokens(
+	tokenService: Pick<TokenServiceClient, "getTokens" | "onTokenUpdated">,
+	known: Ref<TokenInfo[]>,
+): { start(ops: DraftUIOperation[], profileId: string): Promise<void>; dispose(): void } {
+	let ops: DraftUIOperation[] = []
+	let profileId: string | undefined
+	let reads = 0
+	const read = async () => {
+		if (!profileId) return
+		const mine = ++reads
+		const tokens = await readKnownTokens(ops, profileId, tokenService)
+		if (tokens && mine === reads) known.value = tokens
+	}
+	const onUpdated = (token: TokenUpdated) => {
+		if (token.profileId === profileId) void read()
+	}
+	tokenService.onTokenUpdated.add(onUpdated)
+	return {
+		start(nextOps, nextProfileId) {
+			ops = nextOps
+			profileId = nextProfileId
+			return read()
+		},
+		dispose: () => tokenService.onTokenUpdated.remove(onUpdated),
 	}
 }

@@ -24,8 +24,8 @@ import { isSelfPay } from "@nulo/wallet-bridge"
 import { isEmbeddedFeePayment, requiresFeeSelection } from "./operation-validation"
 import { type FeePayerPick, personPaysAppPayment, waitsForFeeFigure } from "./fee-figure"
 import { authwitDisplayCall, grantContentsOf, pendingAuthwitDecodes, undecodedAll } from "./display-calls"
-import { rawNotice, readableGrants } from "./call-surface"
-import { decodeOperationArguments, readKnownTokens, resolveOperations } from "./operation-display"
+import { grantRefusalRow, readableGrants } from "./call-surface"
+import { decodeOperationArguments, followKnownTokens, resolveOperations } from "./operation-display"
 import type { DraftUIOperation } from "./types"
 
 /** Services */
@@ -117,6 +117,7 @@ const decodedAuthwits = ref<Map<string, DecodedCall>>(new Map())
 const authwitDecodesInFlight = new Set<string>()
 /** The wallet's registered tokens on the operations' chains, so amounts render in token units. */
 const knownTokens = ref<TokenInfo[]>([])
+const tokenFollow = followKnownTokens(tokenService, knownTokens)
 
 /** Per operation index, the decodings of its public grants; absent while the wallet is decoding.
  *  Unlike a call's decode, a grant's gates Confirm: what the card shows is what the wallet signs. */
@@ -126,10 +127,7 @@ const grantsPending = computed(() =>
 )
 /** The footer's error row for a grant the wallet cannot read. Its own state, so the `clearError()` of
  *  a fee change never lifts it. */
-const grantRefusal = computed(() => {
-	const unread = [...decodedGrants.value.values()].flat().find((grant) => grant.kind === "undecoded")
-	return unread ? { title: "Can't read the arguments", tooltip: rawNotice(unread.reason), type: "error" } : undefined
-})
+const grantRefusal = computed(() => grantRefusalRow([...decodedGrants.value.values()].flat()))
 
 const {
 	requestId,
@@ -284,9 +282,7 @@ const init = async () => {
 		// vocabulary reading or "Reading arguments…", and a failed one falls back to the raw fields.
 		void decodeOperationArguments(resolved.operations, executionService, (index, decoded) => decodedCalls.value.set(index, decoded))
 		void decodeOperationGrants(resolved.operations)
-		void readKnownTokens(resolved.operations, profile.value!.id, tokenService).then((tokens) => {
-			if (tokens) knownTokens.value = tokens
-		})
+		void tokenFollow.start(resolved.operations, profile.value!.id)
 
 		// Pre-fetch token metadata for any `register_token` ops so the
 		// OperationCard renders name/symbol/decimals before Allow. The Allow
@@ -544,6 +540,7 @@ onMounted(startWindow)
 
 onUnmounted(() => {
 	scopeFollow.invalidate()
+	tokenFollow.dispose()
 	disposeWindow()
 })
 </script>
