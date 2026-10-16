@@ -169,14 +169,14 @@ const allClients = () => [
 
 const wrappers: VueWrapper[] = []
 
-function mountPage() {
+function mountPage(profileName = "Test Profile") {
 	const wrapper = mount(FullExportPage, {
 		attachTo: document.body,
 		global: {
 			plugins: [
 				createTestingPinia({
 					initialState: {
-						app: { profile: { id: "p1", type: "password", name: "Test Profile" }, network: { id: "net1", chainId: 7 } },
+						app: { profile: { id: "p1", type: "password", name: profileName }, network: { id: "net1", chainId: 7 } },
 					},
 					stubActions: false,
 				}),
@@ -331,6 +331,18 @@ describe("export/full.vue — a password profile's file leaves only encrypted", 
 		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
 		expect(downloadFile.mock.calls[0][0].filename).toMatch(/^NuloEncryptedBackup_/)
 		expect(usePopupStore().isOpened("confirm")).toBe(false)
+	})
+
+	it("a profile name with a space and a symbol takes the account export's file-name rule", async () => {
+		vi.spyOn(EncryptionKey, "getPasshash").mockResolvedValue(new Uint8Array(32) as never)
+		vi.spyOn(EncryptionKey, "fromPasshash").mockResolvedValue({ encrypt: async () => new Uint8Array(29) } as never)
+		const wrapper = mountPage("Work: main")
+		await reachBackupReady(wrapper)
+		await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
+		await vi.waitFor(() => expect(downloadButton(wrapper).attributes("disabled")).toBeUndefined())
+		await downloadButton(wrapper).trigger("click")
+		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
+		expect(downloadFile.mock.calls[0][0].filename).toMatch(/^NuloEncryptedBackup_Work_main_\d+\.txt$/)
 	})
 
 	it("a download that fails is logged under a named key", async () => {

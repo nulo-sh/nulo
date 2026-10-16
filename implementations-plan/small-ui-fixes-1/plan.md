@@ -63,7 +63,7 @@ One arc, one PR against `dev`, no stack, `Closes #577 #565 #566 #567`. Recon: [r
 
 ## Phases
 
-### Phase 1: export file names (#565)
+### Phase 1: export file names (#565) ✓
 1. Add `profileFileNameSegment` to `utils/files.ts`; call it in `account.vue:177`, `full.vue:429`, `useContactImportExport.ts:131` (keep `contacts.json` when the profile has no name).
 2. In `useContactImportExport.test.ts:50` and `.pins.test.ts:39`, take the helper from `importOriginal`, never a stub.
 3. `utils/files.test.ts`: one case per refused class (`: ? | " * < > \`; `/`; a `..` segment; `"?!*"` → `_`; `""` and `undefined` → `profile`); control: precomposed letters (`José`, `Ελένη`, `李`), digits, `_`, `-` unchanged, `My Main Wallet` → `My_Main_Wallet`. `full.test.ts`: a `Work: main` password profile reaches `downloadFile` as `NuloEncryptedBackup_Work_main_<ts>.txt`. `useContactImportExport.test.ts`: `Work_main_contacts.json`.

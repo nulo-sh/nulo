@@ -47,11 +47,12 @@ vi.mock("@/composables/toast", async (importOriginal) => {
 	const real = await importOriginal<typeof import("@/composables/toast")>()
 	return { ...real, useToast: () => ({ ...real.useToast(), openToast: openToastMock, updateToast: updateToastMock }) }
 })
-vi.mock("@/utils", () => ({
+vi.mock("@/utils", async (importOriginal) => ({
 	FilePickCanceledError: class FilePickCanceledError extends Error {},
 	FileTooLargeError: class FileTooLargeError extends Error {},
 	downloadFile: vi.fn(),
 	pickFile: (...args: unknown[]) => pickFileMock(...args),
+	profileFileNameSegment: (await importOriginal<typeof import("@/utils")>()).profileFileNameSegment,
 }))
 vi.mock("@/wallet/services/profile/client", () => ({
 	ProfileServiceClient: vi.fn(function () {
@@ -376,6 +377,19 @@ describe("useContactImportExport — export", () => {
 			logged.mockRestore()
 		}
 		expect(openToastMock.mock.calls).toEqual([[{ kind: "error", label: "Failed to export contacts" }]])
+	})
+
+	test("a profile name with a space and a symbol takes the account export's file-name rule", async () => {
+		const { accountStateService } = makeServices()
+		const { downloadFile } = await import("@/utils")
+		const { ProfileServiceClient } = await import("@/wallet/services/profile/client")
+		vi.mocked(ProfileServiceClient).mockImplementationOnce(function () {
+			return { connect: vi.fn(), disconnect: vi.fn(), getActiveProfile: vi.fn().mockResolvedValue({ name: "Work: main" }) } as never
+		})
+		const api = useContactImportExport({ contacts: ref([{ id: "c1", name: "A", address: ADDR_A }]), accountStateService } as never)
+
+		await api.exportContacts()
+		expect(vi.mocked(downloadFile).mock.calls.at(-1)?.[0]).toMatchObject({ filename: "Work_main_contacts.json" })
 	})
 
 	test("isSender flags come from the cross-network sender union", async () => {
