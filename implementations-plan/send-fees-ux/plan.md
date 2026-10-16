@@ -100,6 +100,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
 | D4 | #316 rule | the forms, as the add form | a service refusal (the name rule has none; the archived plan's D3) |
 | D5 | #503 init debounce (500 ms) | unchanged | skip it at init: one option for one caller |
 | D7 | #504 probe collection (deviation, arc 1) | popup marks in a page global, worker marks in a `chrome.storage.session` key, read by the test | Developer Mode plus `readSwLogTrail`: Codex round 1 allowed any temporary numeric-only probe, and this one needs no logger level or flush wait |
+| D8 | delivery (deviation, arc 1) | arc 1 ships phases 1-3 with OA-1..OA-4 at A and leaves the plan open; the page 20 picks ship in arc 2, which closes the plan | one arc that waits for page 20: the signed #316 and #340 words would wait on unsigned asks |
 | D6 | #505 test layer | executor unit tests and one e2e scenario | a composition test (lane brief): the no-id path builds fresh, which the harness may not simulate |
 
 ## Delivery
