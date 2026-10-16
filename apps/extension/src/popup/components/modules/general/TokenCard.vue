@@ -132,6 +132,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 }
 
 .link {
+	user-select: none;
 	cursor: pointer;
 	transition: background 0.2s var(--bezier);
 

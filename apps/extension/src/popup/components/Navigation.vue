@@ -48,6 +48,7 @@ const navigationLinks = [
 
 <style module>
 .wrapper {
+	user-select: none;
 	position: absolute;
 	bottom: 0;
 	left: 0;

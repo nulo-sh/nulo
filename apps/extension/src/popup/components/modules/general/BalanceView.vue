@@ -447,6 +447,8 @@ onBeforeUnmount(() => {
 
 .arrival_chip {
 	composes: type--tag from global;
+	/* Faded out, the chip still holds its text, which a drag across the hero would copy. */
+	user-select: none;
 	position: absolute;
 	left: 50%;
 	top: -18px;

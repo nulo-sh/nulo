@@ -18,7 +18,8 @@ test("base.css content is pinned (edits must be deliberate + visually re-verifie
 	// `::-webkit-scrollbar` rule Firefox ignores, with `-moz-osx-font-smoothing` on the icon font, so
 	// Firefox matches Chrome; the dark palette is declared once (`:root, [theme="dark"]`), its hairline
 	// and scrim tokens at their literals' values, its --txt-danger lighter than --red so it reads 4.5:1 on a
-	// pressed row, and --btn-destructive darker than --red so the red buttons' label reads AA; line 1
-	// carries the Apache-2.0 §4(b) header.
-	expect(hash).toBe("7b2badc42e200e8ba9635fda3dac664e844f87ea3b07c81b09a3717c9544654d")
+	// pressed row, and --btn-destructive darker than --red so the red buttons' label reads AA; text is
+	// selectable and a control is not, by its tag, its ARIA role or the icon font's class, the landing
+	// keeping its own `<nav>` selectable; line 1 carries the Apache-2.0 §4(b) header.
+	expect(hash).toBe("29a288b010c64f5eeac038a2a66514a01fe444c4d39546e5e4ed3ef595cc3244")
 })

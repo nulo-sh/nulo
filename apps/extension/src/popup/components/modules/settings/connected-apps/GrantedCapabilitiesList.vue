@@ -66,6 +66,7 @@ const isExpanded = (i) => expanded.value.has(i)
 }
 
 .grant_header {
+	user-select: none;
 	padding: 10px 12px;
 	cursor: pointer;
 

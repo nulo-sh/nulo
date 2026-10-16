@@ -282,6 +282,18 @@ body {
 	-moz-osx-font-smoothing: grayscale;
 }
 
+/* Text is selectable; a control is not, so a drag or a double-click across one never takes its
+   label or an icon's ligature name. A control without one of these semantics sets it on its class. */
+button,
+[role="button"],
+[role="tab"],
+[role="switch"],
+[role="checkbox"],
+[role="option"],
+.material-symbols-outlined {
+	user-select: none;
+}
+
 .slide-enter-active {
 	transition: all 0.3s var(--bezier);
 }

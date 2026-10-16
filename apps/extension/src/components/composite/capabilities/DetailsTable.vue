@@ -170,6 +170,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 }
 
 .row {
+	user-select: none;
 	position: relative;
 	min-height: 30px;
 	border-bottom: 1px solid var(--hairline-soft);

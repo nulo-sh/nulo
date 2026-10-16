@@ -112,6 +112,7 @@ const startRename = async () => {
 
 <style module>
 .row {
+	user-select: none;
 	position: relative;
 
 	display: flex;

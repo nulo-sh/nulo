@@ -213,6 +213,7 @@ const Root = (_, { slots }) => {
 }
 
 .interactive {
+	user-select: none;
 	cursor: pointer;
 	transition: background 0.2s var(--bezier);
 

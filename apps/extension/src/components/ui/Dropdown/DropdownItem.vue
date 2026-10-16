@@ -19,6 +19,7 @@ defineProps({
 <style module>
 .wrapper {
 	composes: type--row-title from global;
+	user-select: none;
 	display: flex;
 	align-items: center;
 

@@ -297,6 +297,7 @@ onBeforeUnmount(() => {
 }
 
 .scroll_btn {
+	user-select: none;
 	position: absolute;
 	right: 18px;
 	bottom: 18px;

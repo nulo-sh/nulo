@@ -96,6 +96,8 @@ function onKey(e: KeyboardEvent) {
 
 .addr {
 	composes: type--data from global;
+	/* The row is a control; the address it shows stays selectable. */
+	user-select: text;
 	color: var(--nulo-secondary);
 }
 

@@ -34,6 +34,7 @@ const props = defineProps({
 <style module>
 .wrapper {
 	composes: divider from "./settings-row.module.css";
+	user-select: none;
 
 	cursor: pointer;
 	background: transparent;

@@ -94,6 +94,7 @@ onBeforeUnmount(() => {
 
 <style module>
 .wrapper {
+	user-select: none;
 	height: 40px;
 
 	border: 1px solid var(--nulo-border);
