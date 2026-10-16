@@ -5,7 +5,7 @@
 import { readdirSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { describe, expect, test } from "vitest"
-import { enclosingRule, parseSource, resolveSelector, sourceFiles } from "../../scripts/type-roles/source-scan"
+import { declarationsOf, enclosingRule, parseSource, REPO_ROOT, resolveSelector, sourceFiles } from "../../scripts/type-roles/source-scan"
 
 const read = (path: string) => readFileSync(resolve(__dirname, "..", path), "utf8")
 
@@ -159,5 +159,34 @@ describe("meta text reads in --nulo-secondary; --nulo-outline is for borders and
 			"apps/extension/src/components/composite/capabilities/DetailsTable.vue .address .copy_glyph",
 			"apps/extension/src/components/composite/capabilities/DetailsTable.vue .row .chevron",
 		])
+	})
+})
+
+describe("the tx page's disclosure rows keep full strength under the pointer", () => {
+	// Faded to 80%, their --nulo-secondary text reads under 4.5:1 in the light theme.
+	test("no hover rule in the toggle's sheet or a sheet composing it sets opacity; the pointer cursor stays the cue", () => {
+		const sheet = "apps/extension/src/popup/components/modules/tx/tx-shared.module.css"
+		const composers = sourceFiles().filter((file) =>
+			/composes:\s*disclosure_toggle\b/.test(readFileSync(resolve(REPO_ROOT, file), "utf8")),
+		)
+		const faded = [sheet, ...composers].flatMap((file) =>
+			parseSource(file).styles.flatMap(({ root }) => {
+				const keys: string[] = []
+				root.walkDecls(/^opacity$/i, (decl) => {
+					const rule = enclosingRule(decl)
+					const selector = rule ? resolveSelector(rule) : "(no rule)"
+					if (/:hover\b/.test(selector)) keys.push(`${file} ${selector}`)
+				})
+				return keys
+			}),
+		)
+		expect(composers).toEqual(
+			expect.arrayContaining([
+				"apps/extension/src/popup/components/modules/tx/TxFeeRow.vue",
+				"apps/extension/src/popup/components/modules/tx/TxDebugPanel.vue",
+			]),
+		)
+		expect(declarationsOf(parseSource(sheet), ".disclosure_toggle")).toMatchObject({ cursor: "pointer" })
+		expect(faded).toEqual([])
 	})
 })
