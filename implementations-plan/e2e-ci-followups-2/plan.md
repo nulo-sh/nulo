@@ -67,7 +67,7 @@ Gate:
 - Chrome, the CI env, from the root: `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 VITE_NULO_FEE_MULTIPLIER=10 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/popup-escape-layered.test.ts`. Pass: ``bundle contains parseFloat(`10`) ✓``, all cases green, no Fee Juice shortfall at the 25× Urgent cap.
 - `bun run lint`, `bun run typecheck:all`, `bun run test:all` exit 0.
 
-### Phase 3: a readable Firefox exception, one seed replay (#322)
+### Phase 3: a readable Firefox exception, one seed replay (#322) ✓
 
 Change map:
 - `apps/extension/tests/e2e/fixtures/browser/firefox-page-errors.ts`: `recentFrame`, serialized into the relay as `errorFrames` is; the child's record carries the reported location; `state.recent` keeps `recentFrame`'s result.
@@ -113,6 +113,10 @@ None. No screen, copy or behaviour a person sees changes; production pricing is 
 - **Opus (Plan), round 1**: `conditional approve`. F1 = Codex (1), same fix: **adopted**. F2 Fact 6 false; add `popup-escape-layered.test.ts` to the gate: **adopted**. F3 = Codex (2): **adopted**. F4 fall back to the reported location, not the first frame: **adopted**. F5 stale hook comments: **adopted**. F6 one replay, not five (CI replays the seed in every Firefox run): **adopted**. F7 zod wording: **adopted**.
 - **Disposition of #322**: both legs: a `known-limit` close after a green replay, citing the CI record; lazy-loading `JsonViewer` rejected (unshown cause, changes what windows load).
 - **Codex round 2** (resumed, verification): `approve`; no remaining material finding, no disposition disputed. Open inferences (Fee Juice at 25×, a reported add-on location) close at their gates.
+- **Implementation deviations**: the review diff is `git diff origin/dev...HEAD` (`dev` was merged in after `d59459ab`, so `d59459ab...HEAD` would carry #506 and #509); the `register` reproducer is a second scratch config spreading `packages/wallet-bridge/vitest.config.ts`, since the dispatcher test runs under the bridge's config; the fee test's control stubs the env to `""` and re-imports, so an exported `VITE_NULO_FEE_MULTIPLIER` cannot red it; `recentFrame`'s `test.each` runs its serialised form, so one table proves both; the Node full-suite gate excludes the three reviewed `BUN_ONLY_FILES`, as the soak's Node reference does.
+- **Diff review round 1, Codex (gpt-6.1-sol, high)**: `approve`. Low: the hoisted `dispatcher.test.ts` comment still claimed to catch a bundler tree-shaking the activation: **adopted** (clause dropped).
+- **Diff review, Opus (general-purpose)**: `conditional approve`, no code defect. (1) `FIREFOX.md` and a test title still said "first frame": **adopted**. (2) Phase 3's e2e gate unlogged at review time: closes at its gate. (3) The ladder's doc sat on a private const: **adopted**, moved onto `FEE_MULTIPLIERS`. (4) The collection-load comment belongs on the bare import: **adopted**.
+- **Diff review round 2, Codex (resumed, verification)**: `approve`, no new material finding; the loop converged.
 
 ## Delivery
 
