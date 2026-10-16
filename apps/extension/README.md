@@ -63,7 +63,7 @@ For the L0–L6 component model and the C0/C1 composable rules, read [`../../CLA
 | `bun run build-storybook` | Production Storybook build. |
 | `bun run check:rp-id` | Build-step gate: verifies the WebAuthn RP_ID constant is in sync with the manifest. |
 | `bun scripts/store-icons.ts` | Regenerates the manifest icon set from `src/assets/logo.png`; `--check` fails on drift (also run by `scripts/store-icons.test.ts`). |
-| `bun scripts/store-art.ts` | Renders `store/promo-440x280.png` and `store/screenshot-{1,2,3}-1280x800.png` from `store/templates/` and `store/captures/`. |
+| `bun scripts/store-art.ts` | Renders `store/promo-440x280.png` and `store/screenshot-{1..5}-1280x800.png` from `store/templates/` and `store/captures/`. |
 
 ## Testing
 

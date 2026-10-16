@@ -73,6 +73,7 @@ async function world(project: (b: TokenBalanceRaw) => ProjectedBalance = ok) {
 		svc(TOKEN_SERVICE_NAME, {
 			onTokenAdded: new EventHandler(),
 			onTokenDeleted: new EventHandler(),
+			onTokenUpdated: new EventHandler(),
 			getTokensRaw: async () => [TOKEN],
 		}),
 	)

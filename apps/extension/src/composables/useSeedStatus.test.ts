@@ -1,3 +1,4 @@
+import { deferred } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises } from "@vue/test-utils"
 import type { SeedScope, SeedStatusEntry, SeedStatusSnapshot } from "@/wallet/services/token/spec"
@@ -13,14 +14,6 @@ function makeEvent<T>() {
 		},
 		size: () => handlers.size,
 	}
-}
-
-function deferred<T>() {
-	let resolve!: (v: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
 }
 
 const entry = (status: SeedStatusEntry["status"], chainId = 1): SeedStatusEntry => ({

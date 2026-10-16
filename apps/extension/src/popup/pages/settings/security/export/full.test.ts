@@ -1,5 +1,6 @@
 import { EncryptionKey } from "@nulo/wallet-crypto"
 import { MaterialIcon } from "@nulo/design"
+import { deferred } from "@nulo/wallet-core/utils"
 import { FULL_BACKUP_V2_TAG, MAX_BACKUP_FILE_BYTES, openFullBackupText } from "@/utils/full-backup-helpers"
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
@@ -17,17 +18,6 @@ import FullExportPage from "./full.vue"
  * (the useFullBackupImport.test.ts pattern); the assembler is REAL — the
  * single-execution proof counts the per-slice backup() calls through it.
  */
-
-type Deferred<T> = { promise: Promise<T>; resolve: (v: T) => void; reject: (e: unknown) => void }
-function deferred<T>(): Deferred<T> {
-	let resolve!: (v: T) => void
-	let reject!: (e: unknown) => void
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
-}
 
 function sliceClient() {
 	return { backup: vi.fn(async (): Promise<unknown> => []), disconnect: vi.fn() }
@@ -436,6 +426,8 @@ describe("export/full.vue — sealed artifact", () => {
 		const parsed = await downloadAndOpen(wrapper)
 		const { checksum, ...body } = parsed
 		expect(await EncryptionKey.getHashHex(JSON.stringify(body))).toBe(checksum)
+		// A password file carries no passkey check.
+		expect("backup-mac" in parsed).toBe(false)
 		expect(parsed["master-key"]).toBe("mk")
 		expect((parsed.data as Record<string, unknown>).profile).toEqual([{ id: "p1", type: "password" }])
 		// The imported-keys slice key must be the registry's real literal — an

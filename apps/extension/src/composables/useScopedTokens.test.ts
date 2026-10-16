@@ -1,4 +1,4 @@
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { reactive } from "vue"
@@ -21,27 +21,21 @@ const token = (id: number, symbol: string): TokenInfo => ({
 	hasPrivateToPublicTransfers: true,
 })
 
-function deferred<T>() {
-	let resolve!: (value: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
-}
-
 let getTokens: ReturnType<typeof vi.fn>
 let onTokenAdded: EventHandler<TokenInfo>
+let onTokenUpdated: EventHandler<TokenInfo>
 let store: { profileId: string | null; chainId: number | null; account: string }
 
 const setup = () =>
 	useScopedTokens({
-		tokenService: { getTokens, onTokenAdded } as unknown as UseScopedTokensOptions["tokenService"],
+		tokenService: { getTokens, onTokenAdded, onTokenUpdated } as unknown as UseScopedTokensOptions["tokenService"],
 		scope: () => (store.profileId && store.chainId ? { profileId: store.profileId, chainId: store.chainId } : undefined),
 	})
 
 beforeEach(() => {
 	getTokens = vi.fn().mockResolvedValue([token(1, "TST")])
 	onTokenAdded = new EventHandler<TokenInfo>()
+	onTokenUpdated = new EventHandler<TokenInfo>()
 	store = reactive({ profileId: "p1", chainId: 1, account: "0xa" })
 })
 
@@ -130,6 +124,17 @@ describe("useScopedTokens", () => {
 		expect(tokens.value.map((t) => t.symbol)).toEqual(["TST", "ADD"])
 	})
 
+	test("a token updated anywhere re-reads the scope, so a row's new decimals replace the old", async () => {
+		const { tokens, reload } = setup()
+		await reload()
+		getTokens.mockResolvedValue([{ ...token(1, "TST"), decimals: 6 }])
+
+		onTokenUpdated.invoke({ ...token(1, "TST"), decimals: 6 })
+		await flushPromises()
+		expect(getTokens).toHaveBeenCalledTimes(2)
+		expect(tokens.value.map((t) => t.decimals)).toEqual([6])
+	})
+
 	test("tokenById finds a known id and nothing for an unknown or missing one", async () => {
 		const { tokenById, reload } = setup()
 		await reload()
@@ -153,6 +158,7 @@ describe("useScopedTokens", () => {
 
 		store.chainId = 2
 		onTokenAdded.invoke(token(3, "ADD"))
+		onTokenUpdated.invoke(token(1, "TST"))
 		await reload()
 		await flushPromises()
 		expect(getTokens).toHaveBeenCalledTimes(1)

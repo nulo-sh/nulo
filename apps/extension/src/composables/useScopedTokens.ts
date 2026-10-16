@@ -5,7 +5,7 @@ import { createRunFence } from "@/composables/runFence"
 export type TokenScope = { profileId: string; chainId: number }
 
 export interface UseScopedTokensOptions {
-	tokenService: Pick<TokenServiceClient, "getTokens" | "onTokenAdded">
+	tokenService: Pick<TokenServiceClient, "getTokens" | "onTokenAdded" | "onTokenUpdated">
 	/** The profile and chain whose tokens to hold (what `getTokens` reads by); `undefined` while
 	 *  either is unknown. */
 	scope: () => TokenScope | undefined
@@ -70,6 +70,7 @@ export function useScopedTokens({ tokenService, scope }: UseScopedTokensOptions)
 		{ flush: "sync" },
 	)
 	tokenService.onTokenAdded.add(reload)
+	tokenService.onTokenUpdated.add(reload)
 
 	const tokenById = (id: number | undefined) => (id === undefined ? undefined : tokens.value.find((t) => t.id === id))
 
@@ -78,6 +79,7 @@ export function useScopedTokens({ tokenService, scope }: UseScopedTokensOptions)
 		disposed = true
 		stopScopeWatch()
 		tokenService.onTokenAdded.remove(reload)
+		tokenService.onTokenUpdated.remove(reload)
 	}
 
 	return { tokens, loaded, tokenById, reload, dispose }

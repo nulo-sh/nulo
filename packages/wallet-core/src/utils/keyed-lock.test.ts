@@ -1,15 +1,6 @@
 import { describe, expect, test, vi } from "vitest"
 import { KeyedLock } from "./keyed-lock"
-
-const deferred = <T = void>() => {
-	let resolve!: (v: T) => void
-	let reject!: (e: unknown) => void
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
-}
+import { deferred } from "./deferred"
 
 describe("KeyedLock", () => {
 	test("waiting counts the ops queued behind a key's running one; an unknown or deleted key reads 0", async () => {

@@ -1,17 +1,10 @@
+import { deferred } from "@nulo/wallet-core/utils"
 import { describe, expect, test } from "vitest"
 import type { LockLandingAction } from "./lock-landing"
 import { reconcileLockedBoot } from "./reconcile-locked-boot"
 
 type R = { kind: "locked" | "active" | "unreachable"; profiles: string[] }
 const locked: R = { kind: "locked", profiles: ["p1"] }
-
-function deferred<T>() {
-	let resolve!: (v: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
-}
 
 /** A shell: the event counter, the run fence, the recorded actions, and a decision that can
  *  change between the lookup and the action (the event path mutates the store meanwhile). */

@@ -6,6 +6,7 @@
  */
 import { describe, expect, test, vi } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
+import { deferred } from "@nulo/wallet-core/utils"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
@@ -32,14 +33,6 @@ vi.mock("@aztec-labs/stdlib/contract", async (importOriginal) => ({
 
 import { FpcService, FpcType } from "./service"
 import { FPC_STORAGE_ROOT } from "./spec"
-
-function _deferred<T>() {
-	let resolve!: (v: T) => void
-	const promise = new Promise<T>((res) => {
-		resolve = res
-	})
-	return { promise, resolve }
-}
 
 const SPONSOR_ARTIFACT = { functions: [{ name: "sponsor_unconditionally", parameters: [], returnTypes: [] }] }
 const NETWORK = {
@@ -91,7 +84,7 @@ async function fpcRowCount(api: FakeBrowserApi): Promise<number> {
 describe("FPC creation fences", () => {
 	test("addFpc: a deletion completing DURING the artifact fetch rejects the write (entry-capture pin)", async () => {
 		const h = await makeHarness()
-		const gate = _deferred<unknown>()
+		const gate = deferred<unknown>()
 		;(h.service as unknown as { pxeService: unknown }).pxeService = {
 			getPXE: () => ({
 				getContractInstance: async () => ({ currentContractClassId: "c1" }),
@@ -116,7 +109,7 @@ describe("FPC creation fences", () => {
 		// Discovery is best-effort per item (throws are caught + logged), so the
 		// observable contract is: zero rows land for the deleted profile.
 		const h = await makeHarness()
-		const gate = _deferred<void>()
+		const gate = deferred<void>()
 		;(h.service as unknown as { pxeService: unknown }).pxeService = {
 			getPXE: () => ({
 				registerContract: () => gate.promise,

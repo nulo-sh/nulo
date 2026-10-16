@@ -1,19 +1,10 @@
+import { deferred } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { type Ref, reactive, ref } from "vue"
 import type { TokenBalanceInfo } from "@/wallet/services/token-balance/client"
 import { type TokenBalanceSnapshotState, useTokenBalanceSnapshot } from "./useTokenBalanceSnapshot"
 
 const row = (id: number, chainId = 1, account = "0xa") => ({ id, account, token: { chainId } }) as unknown as TokenBalanceInfo
-
-function held<T>() {
-	let resolve!: (v: T) => void
-	let reject!: (e: unknown) => void
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
-}
 
 function setup(over: { scopeFence?: () => () => boolean; mapRow?: (r: TokenBalanceInfo) => TokenBalanceInfo } = {}) {
 	const listeners = new Set<() => void>()
@@ -65,7 +56,7 @@ describe("useTokenBalanceSnapshot", () => {
 
 	test("only the latest run lands", async () => {
 		const s = setup()
-		const first = held<TokenBalanceInfo[]>()
+		const first = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(first.promise).mockResolvedValueOnce([row(2)])
 		const p1 = s.snap.fetchTokenBalances()
 		await s.snap.fetchTokenBalances()
@@ -77,7 +68,7 @@ describe("useTokenBalanceSnapshot", () => {
 	test("a scope fence gone false drops the run on resolve and on reject", async () => {
 		let current = true
 		const s = setup({ scopeFence: () => () => current })
-		const ok = held<TokenBalanceInfo[]>()
+		const ok = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(ok.promise)
 		const p1 = s.snap.fetchTokenBalances()
 		current = false
@@ -87,7 +78,7 @@ describe("useTokenBalanceSnapshot", () => {
 		expect(s.state.value).toBe("loading")
 
 		current = true
-		const bad = held<TokenBalanceInfo[]>()
+		const bad = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(bad.promise)
 		const p2 = s.snap.fetchTokenBalances()
 		current = false
@@ -99,7 +90,7 @@ describe("useTokenBalanceSnapshot", () => {
 
 	test("a run marked dirty in flight refetches instead of landing", async () => {
 		const s = setup()
-		const first = held<TokenBalanceInfo[]>()
+		const first = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(first.promise).mockResolvedValueOnce([row(1), row(2)])
 		const p = s.snap.fetchTokenBalances()
 		s.snap.markDirty()
@@ -156,7 +147,7 @@ describe("useTokenBalanceSnapshot", () => {
 		s.snap.onBalanceUpdated(moved)
 		expect(s.rows.value).toEqual([moved])
 
-		const quiet = held<TokenBalanceInfo[]>()
+		const quiet = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(quiet.promise)
 		const p1 = s.snap.fetchTokenBalances()
 		s.snap.onBalanceUpdated(row(9, 2))
@@ -164,7 +155,7 @@ describe("useTokenBalanceSnapshot", () => {
 		await p1
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(2)
 
-		const stale = held<TokenBalanceInfo[]>()
+		const stale = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(stale.promise)
 		const p2 = s.snap.fetchTokenBalances()
 		s.snap.onBalanceUpdated(row(9))
@@ -186,7 +177,7 @@ describe("useTokenBalanceSnapshot", () => {
 
 	test("an out-of-scope add lands nothing and leaves a run in flight clean; an in-scope one marks it", async () => {
 		const s = setup()
-		const quiet = held<TokenBalanceInfo[]>()
+		const quiet = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(quiet.promise)
 		const p1 = s.snap.fetchTokenBalances()
 		s.snap.onBalanceAdded(row(7, 2))
@@ -196,7 +187,7 @@ describe("useTokenBalanceSnapshot", () => {
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
 		expect(ids(s.rows)).toEqual([1])
 
-		const stale = held<TokenBalanceInfo[]>()
+		const stale = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(stale.promise).mockResolvedValueOnce([row(1), row(9)])
 		const p2 = s.snap.fetchTokenBalances()
 		s.snap.onBalanceAdded(row(9))
@@ -219,7 +210,7 @@ describe("useTokenBalanceSnapshot", () => {
 		const s = setup()
 		s.client.getTokenBalances.mockRejectedValueOnce(new Error("port closed"))
 		await s.snap.fetchTokenBalances()
-		const late = held<TokenBalanceInfo[]>()
+		const late = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(late.promise)
 		const p = s.snap.fetchTokenBalances()
 		s.snap.dispose()
@@ -233,7 +224,7 @@ describe("useTokenBalanceSnapshot", () => {
 
 	test("the chain id is read when the run starts", async () => {
 		const s = setup()
-		const pending = held<TokenBalanceInfo[]>()
+		const pending = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(pending.promise)
 		const p = s.snap.fetchTokenBalances()
 		;(s.live.network as { chainId: number }).chainId = 2

@@ -15,6 +15,7 @@
  * swapping it).
  */
 
+import { deferred } from "@nulo/wallet-core/utils"
 import { flushPromises, mount } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
 import { nextTick, ref } from "vue"
@@ -69,6 +70,7 @@ const H = vi.hoisted(() => {
 		taskUpdated: makeEvent(),
 		taskDeleted: makeEvent(),
 		tokenAdded: makeEvent(),
+		tokenUpdated: makeEvent(),
 		// mutable reactive-store holder (set in beforeEach)
 		store: { current: null as unknown as ReturnType<typeof createAppStoreHarness> },
 	}
@@ -157,6 +159,7 @@ vi.mock("@/wallet/services/token/client", () => ({
 			disconnect: vi.fn(),
 			getTokens: H.getTokens,
 			onTokenAdded: H.tokenAdded,
+			onTokenUpdated: H.tokenUpdated,
 		}
 	}),
 }))
@@ -189,14 +192,6 @@ const makeRouter = () =>
 const ACCT_A = "0xacct" // matches the harness default active account
 const ACCT_B = "0xB"
 const ACCT_FOREIGN = "0xOTHER"
-
-function deferred<T>() {
-	let resolve!: (v: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
-}
 
 const inFlightTransferOp = (account: string, id = "op-a") => ({
 	id,
@@ -272,6 +267,7 @@ beforeEach(() => {
 		H.taskUpdated,
 		H.taskDeleted,
 		H.tokenAdded,
+		H.tokenUpdated,
 	]) {
 		ev.handlers.clear()
 	}
