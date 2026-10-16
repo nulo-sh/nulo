@@ -119,10 +119,8 @@ function useDuplicateConfirm() {
 					stop()
 					resolve(value)
 				}
-				// ConfirmPopup invokes `callback` on confirm and just closes on cancel/dismiss — there is
-				// no cancel hook — so the close transition IS the cancel signal. Watch it (the watcher
-				// starts before the dialog opens, and `settle` is idempotent, so a confirm that also
-				// closes can't resolve twice).
+				// A close without the callback is the dialog's only cancel signal; a confirm closes it
+				// too, after `settle(true)`, which `settled` keeps final.
 				const stop = watch(
 					() => popupStore.isOpened("confirm"),
 					(isOpen, wasOpen) => {

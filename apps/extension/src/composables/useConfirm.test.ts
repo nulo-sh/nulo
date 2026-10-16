@@ -213,7 +213,6 @@ describe("useConfirm — the only way to open the confirm dialog", () => {
 		"popup/components/popups/ConfirmPopup.vue": /^\s*cacheStore\.confirm = \{\}\s*$/,
 	}
 
-	/** Each write of the slot or open of the dialog in a source, with the line its match starts on. */
 	function offenses(source: string): Array<{ line: number; text: string }> {
 		const lines = source.split("\n")
 		return FORMS.flatMap((form) =>

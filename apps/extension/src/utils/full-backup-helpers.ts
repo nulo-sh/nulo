@@ -142,10 +142,10 @@ export async function readBackupFile(file: File): Promise<ProcessBackupResult> {
 	// advertised ceiling before any later check sees it. Belt over the
 	// pickFile-side cap: this helper must hold its own even for callers that
 	// hand it an arbitrary File.
-	const unreadable = { kind: "unreadable", name: file.name, backup: null, profileType: null } as const
+	const unreadable = () => ({ kind: "unreadable", name: file.name, backup: null, profileType: null }) as const
 	if (file.size > MAX_BACKUP_FILE_BYTES) {
 		return {
-			selection: unreadable,
+			selection: unreadable(),
 			parseError: {
 				title: "Backup File Too Large",
 				tooltip: "The backup file is too large to import. Please select a correct backup file.",
@@ -155,13 +155,13 @@ export async function readBackupFile(file: File): Promise<ProcessBackupResult> {
 	const text = await file.text()
 	const detectedType = detectBackupType(text)
 	if (detectedType === "encrypted") return { selection: { kind: "sealed", name: file.name, backup: text, profileType: null } }
-	if (detectedType === "unknown") return { selection: unreadable }
+	if (detectedType === "unknown") return { selection: unreadable() }
 	let backup: unknown
 	try {
 		backup = JSON.parse(text)
 	} catch {
 		return {
-			selection: unreadable,
+			selection: unreadable(),
 			parseError: {
 				title: "Invalid JSON Format",
 				tooltip: "The selected file is not a valid JSON backup. Please select a correct backup file.",
