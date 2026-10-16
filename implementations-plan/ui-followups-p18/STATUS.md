@@ -15,3 +15,5 @@
 - 2026-10-16 arc 1 pushed and PR opened against dev (see the PR list for worktree-ui-followups-p18).
 - 2026-10-16 arc 1 merged as #530 (71f98db4). Arc 2 branch `ui-followups-p18-store-art` from origin/dev; the phase 1 grep prints only the two icon lines.
 - 2026-10-16 phase 3 gate: capture run green at retry 0 (I1 held, no fix), store-art exit 0, 11 files at their sizes, the tile byte-identical, `git status --short apps/extension/store` empty after restore. SA-1 filled with the composites and the 11 hashes; phase 4 waits on SA-1.
+- 2026-10-16 SA-1 A (page 24 P24-01) and SA-2 B (page 23 P23-01) signed. Merged origin/dev (c5e9c8e8; store untouched since the capture). Phase 4 gate on A: `sha256sum -c` 11 OK, 10 paths changed, no `??`; committed e8fbe11a. README store-art row fixed.
+- 2026-10-16 SA-2: the sweep red on two keys, green after the edit (7e1ccae4). Gate F: lint, typecheck:all, test (797 files), design test (36) green.

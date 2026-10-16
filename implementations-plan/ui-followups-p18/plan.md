@@ -1,8 +1,8 @@
 ---
 plan: ui-followups-p18
 tier: light (the orchestrator's call; the panel of two still argues each decision)
-status: arc 1 merged (#530); arc 2 phase 3 done at 71f98db4, phase 4 waits on SA-1; SA-2 open
-issues: "#363 (arc 1), #451 (arc 1, no code change), #364 (arc 2, after SA-1)"
+status: arc 1 merged (#530); arc 2 phase 4 in progress (SA-1 A, SA-2 B signed 2026-10-16)
+issues: "#363 (arc 1), #451 (arc 1, no code change), #364 (arc 2, after SA-1); SA-2 (arc 2, no issue)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -95,26 +95,28 @@ Scratch `S` = `~/.cache/nulo-backlog/ui-followups-p18/store-art`.
 - Gate: steps 4 and 5 exit 0 at retry 0; 11 files at 720×1200, 1280×800 or 440×280; `git status --short apps/extension/store` prints nothing.
 - A red capture run: find the cause and fix it, never with a raised timeout or a retry. A fix in `tests/e2e/fixtures/**` runs every network spec that imports the changed export, at retry 0, on both browsers. Three failures on one step end the arc with `ARC_FAILED`.
 
-### Phase 4: on SA-1
+### Phase 4: on SA-1 and SA-2
 - On A: copy `S/new/` into `apps/extension/store/`. In `apps/extension/store`, run `sha256sum -c` against the hashes SA-1 records.
 - On either answer: fix the `bun scripts/store-art.ts` row of `apps/extension/README.md` (line 66 at `71f98db4`, D10) to `screenshot-{1..5}`. Keep any phase-3 spec fix.
 - Gate on A: `sha256sum -c` prints 11 OKs; `git status --short apps/extension/store` lists only paths among those 11 (the promo tile may be unchanged) and no `??`.
 - Gate on B: `git status --short apps/extension/store` prints nothing.
 - Gate on both: `bun run lint` and `bun run check:plans` exit 0.
 - On B: comment on #364 with the answer and close it as not planned; the Outcome carries the disposition.
+- SA-2 on B (D12): drop `disclosure_toggle`'s hover fade (`tx-shared.module.css`) and `.fee_row_static`'s `opacity: 1` counter-rule (`TxFeeRow.vue`). One test in `a11y-css.test.ts`: no `:hover` rule in the toggle's sheet or any sheet composing it sets `opacity`, red first on both keys; the composers and `.disclosure_toggle`'s `cursor: pointer` are its success controls. UI impact: SA-2 B, "the row keeps full strength under the pointer".
+- Gate for SA-2: `F`, `bun run test:all`, `bun run test:ci-gating`, `bun run check:plans`, then the full smoke suite on Chrome and on Firefox at retry 0 on the armed build, as phase 2. A before/after of the hover on Chrome, light theme, from a throwaway spec.
 - Either way the close-out commits follow (Post-implementation).
 
 ## Delivery
 
 Arc 1: branch `worktree-ui-followups-p18`, `gh pr create` against `dev` after phase 2, its Codex loop and the screenshots. Title (67): `fix(ui): move the remaining outline-grey text to the secondary tone`. Body: the change and why, the UI impact line with the screenshots, the validation runs, `Closes #363`, `Closes #451` (P17-01 A, the shipped wording, pinned by `useLockWallet.test.ts:408-430`, no code change), and `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
-Arc 2: branch `ui-followups-p18-store-art`, after SA-1. Title (59) on A: `chore(store): regenerate the store captures and listing art`; on B: `docs(store): close ui-followups-p18 and fix the store-art readme`. Body: SA-1's answer, the composites, the `sha256sum -c` output, `Closes #364` on A.
+Arc 2: branch `ui-followups-p18-store-art`, after SA-1. Title (84): `fix(ui): keep the tx disclosure rows at full strength on hover; regenerate store art`. Body: both sign-offs (page 24 P24-01 = A, page 23 P23-01 = B), the composites and the hover before/after, the `sha256sum -c` output, the validation runs, `Closes #364`.
 Both open without labels.
 
 ## Post-implementation
 
 Follow `implementations-plan/README.md` § Post-implementation standard at revision d59459ab, per arc (each arc is its own PR):
 - Step 1 is absent (`code_review: off`).
-- Step 2: one loop per arc over that arc's diff from its base, after its last gate. `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, then `resume-codex.sh`; log rounds in `lessons/phase-2.md` and `lessons/phase-4.md`. Hard stop at three rounds. No cross-arc pass: the arcs are separate PRs, and arc 2 changes only images, one README line, any capture-spec fix and plan files.
+- Step 2: one loop per arc over that arc's diff from its base, after its last gate. `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, then `resume-codex.sh`; log rounds in `lessons/phase-2.md` and `lessons/phase-4.md`. Hard stop at three rounds. No cross-arc pass: the arcs are separate PRs, and arc 2 changes only images, one README line, SA-2's two rules with their test, and plan files.
 - Step 3: the Delivery above, then `gh pr checks <n> --watch`.
 - Step 4: the close-out is arc 2's final commits.
 - Step 5: after arc 2 merges, `agent-worktree done ui-followups-p18 --merged`.
@@ -134,6 +136,7 @@ Follow `implementations-plan/README.md` § Post-implementation standard at revis
 | D9 | When arc 1's Codex loop runs (deviation) | round 1 alongside the smoke e2e, in the host's load window | strictly after the e2e gate: the diff is CSS and a test, and a red e2e that needs a fix resumes the loop with it |
 | D10 | The README line (deviation) | the `store-art.ts` row, line 66 at `71f98db4` | line 62: dev moved it since planning |
 | D11 | Where the side-by-side lives (deviation) | `S` plus a copy in the orchestrator's shots directory, as the spawn asked; SA-1's hashes govern both | `S` only |
+| D12 | Where SA-2 ships (deviation) | arc 2's PR, as the orchestrator directed with both answers | its own PR: one CSS rule and a test do not earn a second review loop and CI run |
 
 ## Audit verdicts
 
