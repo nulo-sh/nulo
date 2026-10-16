@@ -77,7 +77,13 @@ const typeDescription = computed(() => {
 })
 
 const nameChanged = computed(() => Boolean(fpcToEdit.value) && nameTerm.value !== (fpcToEdit.value?.name ?? ""))
-const addressChanged = computed(() => Boolean(fpcToEdit.value) && addressTerm.value !== (fpcToEdit.value?.address ?? ""))
+// The row's own address in another letter case is the same contract, so it is no change: the
+// service matches Nulo's sponsor by exact spelling, and a re-cased row would stop being it.
+const addressChanged = computed(() => {
+	if (!fpcToEdit.value) return false
+	const own = fpcToEdit.value.address ?? ""
+	return addressTerm.value !== own && !sameFieldAddress(addressTerm.value, own)
+})
 const hasChanges = computed(() => nameChanged.value || addressChanged.value)
 
 const isAlreadyExist = computed(() => form.fields.name.error.value === "Already exist" && nameChanged.value)
