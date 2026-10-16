@@ -181,7 +181,11 @@ onBeforeUnmount(() => {
 						data-testid="select-token-row"
 						:data-symbol="tb.token.symbol"
 						:data-selected="tb.token.id === cacheStore.activeTokenIdx ? 'true' : 'false'"
-					/>
+					>
+						<template v-if="prices.isFlagged(tb.token)" #description>
+							<span data-testid="select-token-flagged" :class="$style.flagged">Flagged as a scam</span>
+						</template>
+					</SettingItem>
 				</ItemsContainer>
 
 				<ItemsContainer>
@@ -203,6 +207,11 @@ onBeforeUnmount(() => {
 <style module>
 .wrapper {
 	composes: body from "./popup-shared.module.css";
+}
+
+/* The description slot's caption role, in the danger colour Home's flagged row uses. */
+.flagged {
+	color: var(--txt-danger);
 }
 
 .error {

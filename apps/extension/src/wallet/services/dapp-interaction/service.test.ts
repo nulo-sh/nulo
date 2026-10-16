@@ -740,7 +740,7 @@ describe("DappInteractionService — the capability window's known contracts", (
 				],
 			}),
 		)
-		const getVerifiedDefaults = vi.fn(async () => seedsFromList({ sequence: 1, keyId: "k", entries: TEST_LIST_ENTRIES }))
+		const getVerifiedDefaults = vi.fn(async () => seedsFromList({ sequence: 1, keyId: "k", entries: TEST_LIST_ENTRIES, flagged: [] }))
 		collection.add(
 			stub(TokenService.name, {
 				getTokens: async () => [{ id: 1, chainId: CHAIN_IDS.TESTNET, contract: TOKEN, name: "Fee Juice" }],

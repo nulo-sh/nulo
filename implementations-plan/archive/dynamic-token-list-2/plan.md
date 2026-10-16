@@ -1,7 +1,7 @@
 ---
 plan: dynamic-token-list-2
 tier: light (the orchestrator's call; the common brief's panel of two still argues each decision)
-status: arc 1 (P1–P3) implemented, PR open; the warning arc waits on W1
+status: completed (arc 1 merged as #489; arc 2, the warning, and this close-out in one PR)
 issues: "#383 (Refs: this arc ships the payload, the signer and the floor; the warning waits on OWNER-ASKS W1 and its own PR closes #383); #386 (Refs: the floor ends its fresh-install delisting half; it stays a closed known limit)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,19 @@ base: origin/dev at 116974dc
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-15.
+- **Status:** delivered in two PRs against `dev`: [#489](https://github.com/nulo-sh/nulo/pull/489) (arc 1, merged) and the warning arc's PR, whose final commits are this close-out. That merge closes the plan.
+- **Shipped:**
+  - Arc 1: the `flagged` set in the `nulo-token-list/1` payload under the one signed digest (D1, D2); the compiled floor in `packages/token-list/src/floor.json`, enforced in `readTokenList` on a fetched and a stored list (D4) and raised by the publish PR of a list that delists or flags (D3, D6); `runPublish` refuses when `dev` serves another envelope than the run's base.
+  - Arc 2, W1 signed as option A (page 18, P18-05): the flags travel in `PriceSnapshot.flaggedTokens` (D8); `apps/extension/src/utils/token-flag.ts` matches chain and contract in any case, with or without `0x`; `usePrices.isFlagged` reads the list on every connect without waiting on the price provider. Home, Holdings and Send picker rows read "Flagged as a scam" in `--txt-danger`; the token page and the Send form carry `FlaggedTokenBanner`. One smoke scenario in `token-list.test.ts`, about 17 s on Chrome and 16 s on Firefox. Screenshots: [screenshots/](screenshots/).
+  - `lessons.md`: nothing promoted; it sits at its 8 KiB budget. The arc's facts stay in [lessons/phase-4.md](lessons/phase-4.md): a new `src/utils` export regenerates two committed auto-import files, and a negative control on a missing `CHAIN_IDS` key passes on `undefined`.
+- **Dropped, rejected, superseded:** Codex's arc-1 finding 4 (reversed on new evidence) and the arc-2 cleanup-order note, reasons in § Audit verdicts; the floor at every published sequence (D3's alternative) stays the owner's option, not shipped; every other rejected alternative is in § Decision ledger.
+- **Known limits:** #386 (the freeze and the A2 rollbacks; the floor ends its fresh-install delisting half), #511 (a hand-made restored row with junk after its contract shows no warning), #512 (a new list's flags reach an open popup late when the fiat setting read fails).
+- **Open items:** none. #383 was closed by hand on 2026-10-15 before the warning arc's PR opened; that PR still names it.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # dynamic-token-list-2: a scam flag and a sequence floor for the signed token list
 
@@ -121,6 +134,46 @@ Every gate also runs `bun run lint` and `bun run typecheck:all`, each exiting 0.
    - `bun run test:all` and `bun run check:plans` exit 0.
    - No e2e scenario is added: the composition test proves each refusal without a browser.
 
+## The warning arc (arc 2)
+
+The owner signed W1 as **option A** on decision page 18 (P18-05 = A, 2026-10-15; the second `## Decision` paragraph on #383). The words, colours and surfaces in [OWNER-ASKS.md § Option A](OWNER-ASKS.md#option-a-recommended-a-red-line-on-each-row-and-a-banner-where-you-act-on-the-token) are the sign-off, and the sub-questions keep their first-listed answers: flagged rows keep their order and their fold, and Send stays allowed. Base: `origin/dev` at `dfdf4c31`.
+
+**Facts** (verified at `dfdf4c31`):
+- F1. The popup sees the signed list only through `PriceSnapshot.pricedTokens` (`price/service.ts` `withMapping`), which `onQuotesUpdated` re-sends on every new list. Every warning surface but the token page already holds `usePrices`; `TokenCard` holds one per row.
+- F2. The list's addresses are canonical lower-case hex (`parse.ts`). Rows compare contracts lower-cased (`usePinnedTokens`, `getPriceMapEntry`).
+- F3. The "Couldn't refresh" and "Couldn't set up" lines use `--red`, not `--txt-danger`. The signed mockup names `--txt-danger` (AA in both themes, `type--caption`), so the row line uses `--txt-danger`; the two existing lines are unchanged.
+- F4. The Send picker's rows (`SelectTokenPopup`, `SettingItem`) have one line today; the flagged line goes in `SettingItem`'s description slot.
+
+**Design.**
+- `TokenListSnapshot` carries `flagged` (D5's deferred half). `PriceSnapshot` gains `flaggedTokens: string[]`, the `${chainId}:${address}` key of each flagged pair, beside `pricedTokens` (D8).
+- `apps/extension/src/utils/token-flag.ts` owns the key and the match: `flaggedKeysOf(pairs)` for the worker, `isFlaggedToken(keys, token)` for the popup, the row's contract lower-cased. `usePrices` exposes `isFlagged(token)`; no component parses a pair.
+- Rows: `TokenCard` (Home, Holdings) shows "Flagged as a scam" in place of its fiat value or name; a picker row adds it as its second line. Banners: `FlaggedTokenBanner` (an error `Banner`, title and text verbatim) directly above `BalanceView` on the token page, and above `SelectTokenCard` in Send's Select Asset section when the active token is flagged.
+
+**UI impact** (signed, page 18, P18-05 = A): the row line on Home, Holdings and the Send picker; the banner on the token page and the Send form. No tooltip, glossary term, colour, type role or other copy.
+
+**Security.** A flag only adds a warning: it never hides a row, blocks a send or changes a figure, so a host that withholds a flag (the freeze, #386) or a popup whose price channel fails shows an ordinary row, as before this arc. Flag keys come from a verified list only.
+
+### W1. The channel and the match ✓
+
+1. `TokenListSnapshot.flagged`; `PriceSnapshot.flaggedTokens` from `withMapping`; `usePrices.isFlagged`. `usePrices` reads the list from the network-free `getQuotes()` on every connect, not only the first, and a read begun before a broadcast or refresh answer is dropped, so a warning never waits on the price provider.
+2. `token-flag.ts` with `token-flag.test.ts`: chain and address both match, a row in upper case or without `0x` (a restored row may keep either) matches, the same address on another chain and another address on the same chain do not, an empty set flags nothing.
+3. Tests: `price/service.test.ts` (a snapshot carries the flags, a new list re-sends them, fiat off still carries them); `usePrices.test.ts` (flags before the refresh answers, a reconnect re-reads them, an older read never overwrites a broadcast); `token-list/service.composition.test.ts` (`getSnapshot().flagged` survives the verified read).
+- **Gate:** the touched suites, `bun run lint`, `bun run typecheck:all` exit 0.
+
+### W2. The rows and the banners ✓
+
+1. `TokenCard`, `SelectTokenPopup`, `FlaggedTokenBanner` (L4, `modules/general/`, vertical error `Banner`), `send.vue`, and `tokens/[id].vue`, which gains its own `PriceServiceClient` and `usePrices`, torn down in its `onBeforeUnmount`. Each warning element carries a `data-testid`; the row line is its own rule composing `type--caption`.
+2. Component tests with a wire-shaped flagged pair (0x + 64 hex, upper case on the row): `TokenCard` shows the line in place of the name, with an unflagged row as control, and a source check that the rule is `type--caption` in `--txt-danger`; `FlaggedTokenBanner` renders the two strings in a vertical error `Banner`; the picker row's line through the real description slot; Send and the token page show the banner only for a flagged token.
+- **Gate:** W1's commands, `bun run test`, `bun run --cwd apps/extension test:components`.
+
+### W3. One smoke scenario, screenshots ✓
+
+1. The source run's held list flags one Testnet pair beside its two tokens, as its own export at an address no spec seeds (`fixtures/token-list.ts`; `tests/e2e/README.md` says so). A scenario in `token-list.test.ts`: the flagged pair's token and balance rows are seeded and the worker restarted, as `type-roles.test.ts`'s seeded Home does; Home's row reads the line, the token page and Send show the banner. **Failure mode:** the flag never crosses from the verified list in the worker to the popup's rows (snapshot, port, composable, row), which only a real worker and popup exercise; the unit and component layers each stub one side. **Runtime:** estimated 35 s per browser; measured in the PR body with the suite wall-clock before and after.
+2. Screenshots (Chrome, dark and light): the Home row, the Send form, the token page, the Send picker and Holdings.
+- **Gate:** the armed build, the scenario on Chrome and Firefox at retry 0, `bun run audit:vue`, `bun run test:all`, `bun run check:plans`.
+
+**Delivery.** One plain PR against `dev`: `feat(tokens): warn on a flagged token with a red row line and a banner`; `Closes #383`, `Refs #386`; `## UI impact` quoting page 18; the review loop as in Post-implementation; then the close-out in the same PR.
+
 ## Delivery
 
 One arc, one PR against `dev`, no stack (D-orch-1). Open it only after the P3 gate passes and the Codex loop converges.
@@ -129,7 +182,7 @@ Title: `feat(token-list): flag a token and refuse a list below a compiled floor`
 
 ## Post-implementation
 
-Follows [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `116974dc`. Specific to this plan:
+Follows [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `116974dc`. Specific to this plan:
 
 - **Review loop:** `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol` over the net diff from `116974dc`, resumed with `resume-codex.sh`, at most three rounds. `code_review: off`.
 - **Delivery:** `gh pr create --base dev`, then `gh pr checks <n> --watch`.
@@ -147,6 +200,7 @@ Follows [`implementations-plan/README.md` § Post-implementation standard](../RE
 | D5 | `VerifiedTokenList` carries `flagged`; the snapshot waits for the warning PR (Opus over Codex) | Snapshot now (Codex: "a small, useful seam"). No consumer reads it before the warning PR, which must add the popup channel anyway. A required field forces edits to unrelated test literals (`price/service.test.ts`, `token/service.composition.test.ts`) |
 | D6 | `raisesFloor` lives in `infra/token-list/scripts` | In the package: it is publish policy, and a cross-package relative import from the App-token job |
 | D7 | Implementation deviations (2026-10-15): the review diff's base is `0ac9e062` (`origin/dev`, merged in before P1), not `116974dc`, whose net diff would carry the rc.3 move; the plan stays active and this PR runs no close-out, by the orchestrator's call (the warning arc closes it); `floor.ts` also owns `floorText`, the file's canonical form, which both the tree check and the publish PR need and which the App-token job cannot import from `check.ts` | Close-out now: the warning arc belongs to this plan |
+| D8 | The flags reach the popup in `PriceSnapshot`, beside `pricedTokens` (both legs agree) | A token-list RPC service and its own composable: a second channel for the same list, five new clients, and a prop through `TokensView` and `TokenList`. A `TokenInfo` field: Home's rows keep the balance service's token map, refilled only on a profile switch or a token add, so a new list would not reach them |
 
 ## Audit verdicts
 
@@ -166,9 +220,21 @@ Follows [`implementations-plan/README.md` § Post-implementation standard](../RE
 - **Round 2:** Codex conditional approve over the round-1 fixes and the stale-base path. The refusal landed in 5e3932d6.
 - **Round 3:** Codex **approve**, "No new material findings. Confidence: high." The loop converged.
 
+**Arc 2 plan review** (Codex `gpt-6.1-sol` high, session `01a1417a`; Opus 5.5 Plan, in parallel). Both: **conditional approve**, both keep D8.
+
+- **Accepted, Codex:** a reconnect waited on the price provider for changed flags (W1.1); a restored row without `0x` missed its flag, reproduced in memory (W1.2); usePrices, fiat-off and Send/token-page tests (W1.3, W2.2); the picker test must render the real description slot.
+- **Accepted, Opus:** the token page had no price client (W2.1); the Home row needs a balance row and a worker restart (W3.1); a separate fixture export at an unused address, and the e2e README (W3.1); a `toSnapshot` assertion (W1.3); picker and Holdings screenshots, since the picker's second line is new (W3.2); `--txt-danger` over `--red`, stated in the PR body.
+- **Known limits, not fixed:** Codex's "plausible" list-change emit lost to a config read failure: the mapping has the same exposure today, and the fix is a recovery policy (#512). Opus's residual, a hand-made backup row with junk after the address: a hostile backup's author already chooses every row it restores, so the consequence does not matter (#511).
+
+**Implementation, arc 2** (Codex `gpt-6.1-sol` high, fresh session `01a1418e` over `43775c01..HEAD`; one Opus 5.5 diff review beside round 1; log in [lessons/phase-4.md](lessons/phase-4.md)):
+
+- **Round 1:** Codex approve, moderate. Accepted: the smoke scenario's structural selectors, now test ids only. Rejected: disconnecting the token page's price client before disposing `usePrices`, since the six other owners dispose first. Deviation: the prompt left out the standard's two verbatim rules and the adversarial ask; round 2 carried them over the whole diff.
+- **Opus diff review:** conditional approve. Must-fix: commit the regenerated auto-import files, or CI's generated-sources check reds. Should-fix: the picker test's stub drew a description for every row; `ARCHITECTURE.md` named neither the flags nor their channel. All applied in `ab0133f2`.
+- **Round 2:** Codex **approve**, moderate: the fixes verified, two comment trims applied in `aeb1c882`, no new material finding. The loop converged.
+
 ## Seeds
 
-The plan runs past the `light` target (about 180 lines) because it records both review legs' dispositions, the gate commands the implementer runs verbatim, and these seeds.
+The plan runs past the `light` target (150 lines) because it carries two arcs, each with both review legs' dispositions and the gate commands the implementer ran verbatim, and these seeds.
 
 Use exactly one per session, from inside the worktree (`agent-worktree resume dynamic-token-list-2`).
 

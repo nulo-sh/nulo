@@ -20,7 +20,7 @@ describe("default-token seeds", () => {
 
 	test("a list entry becomes a seed pinned to its class, symbol and decimals", () => {
 		expect(seedsFromList(undefined)).toEqual([])
-		expect(seedsFromList({ sequence: 1, keyId: "k", entries: TEST_LIST_ENTRIES.slice(0, 1) })).toEqual([
+		expect(seedsFromList({ sequence: 1, keyId: "k", entries: TEST_LIST_ENTRIES.slice(0, 1), flagged: [] })).toEqual([
 			{
 				chainId: TEST_LIST_ENTRIES[0].chainId,
 				contract: TEST_LIST_ENTRIES[0].address,

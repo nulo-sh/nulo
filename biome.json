@@ -7,7 +7,7 @@
 			"apps/**",
 			"infra/**",
 			"packages/**",
-			"vitest.base.ts",
+			"vitest.base.mts",
 			"scripts/**",
 			"!scripts/ci-cd/test-soak/baselines",
 			"!**/node_modules",
