@@ -187,8 +187,11 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 | D22 | The balance service on `onTokenUpdated` (arc 1 review) | re-send the token's balances with the new metadata and queue them, for a token its map already holds | each balance carries its token's metadata from a map loaded at activation, which precedes the re-read |
 | D23 | Send's transfer kind after an update (arc 1 review) | when the active token's transfer capabilities change, move only a selection it can no longer transfer | the id watcher does not fire for the same token, so a kind the chain does not support stayed selected; re-running the full selection would replace a still-valid choice with the preselected kind |
 | D24 | Arc 3's start (orchestrator) | released while arcs 1 and 2 are open, cut from `dev` at `d461b059` | arc 3's gate was #508's merge (#594); it shares no file with arc 1 and only `index.vue` with arc 2 |
-| D25 | The shared encoder's shape (implementation) | `encodeAuthwitCall` returns `undefined` for a missing function; a non-`call` content reads as `unavailable` | signing keeps its frozen error text and the display needs no error matching; no existing reason fits a content with no function, and a new one would be new copy |
+| D25 | The shared encoder's shape (implementation, arc 3 review) | `encodeAuthwitCall(fn, args)` takes the function each caller resolved by name; a non-`call` content reads as `unavailable` | signing keeps its frozen error text and the display its own reason for a missing function; no existing reason fits a content with no function, and a new one would be new copy |
 | D26 | `full` and the `this account` sender (implementation) | left out: the prop documents that only a call read without caller context sets it | the grant card passes none, so the branch is unreachable under `full`; a full variant there would be an inventory entry no state can seed |
+| D27 | What the grant decode reads (arc 3 review) | the stored operation, by reference: `decodeGrantsForDisplay(interactionId, index)`, as `estimateOperationFee` reads it | the popup's copy passes through the message layer's JSON replacer, which rewrites some values the encoder reads |
+| D28 | A decode that does not encode back (arc 3 review) | on the grant path, it reads as undecoded (`arguments`) | the decoder reads some types narrower than the encoder writes them; arc 3 changes the grant path only |
+| D29 | A value that cannot print whole (arc 3 review) | the grant reads as undecoded (`arguments`), the existing refusal | the signed picture prints every value whole; a stripped value is not the one signed, and a marker would be new UI |
 
 ## Audit verdicts
 
@@ -236,6 +239,17 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 **Arc 1 review, round 2** (2026-10-16). Codex, resumed over `90137f90`: **reject**, 1 material finding, verified and accepted: the capability watcher re-ran the full selection, so gaining private transfers replaced a valid public choice with the preselected kind. It now moves only a selection the token can no longer transfer (D23); a mounted-page test pins the kept choice and is red against the round-1 watcher.
 
 **Arc 1 review, round 3** (2026-10-16). Codex, resumed over `cd9c8be5`: **approve**, no new findings. The loop converged.
+
+**Arc 3 review, round 1** (2026-10-16). Codex `gpt-6.1-sol` high, read-only, over `d461b059..17dd2c43`: **reject**, 3 material findings. Opus 5.5 general-purpose, alongside: **reject**, 2 material findings (one is Codex's first), a cost note and comment nits. Each was checked against the tree; all were accepted and fixed in `8b49f561`.
+
+| Finding | Decided |
+|---|---|
+| The card decoded the popup's copy of the request, not the request approval executes (both) | D27; a service test pins a stored value the copy rewrites |
+| A decode can read narrower than the fields it came from (an `EthAddress`, a boolean, a string character) (Codex) | D28; a test with an address past 160 bits, red without the check |
+| A value with control or direction characters printed with them stripped (Codex) | D29; `readableGrants` tests |
+| A batch shorter than the operation's grants left the rest unrefused (Opus) | each index without a decode reads as `unavailable`; a window test, red without it |
+| A wide `str<N>` parameter encoded before the argument bound (Opus) | the bound runs first |
+| Comments: the window's init note out of date; three docs named their caller (Opus) | fixed |
 
 ## Seeds (draft; the orchestrator finalizes after approval)
 

@@ -13,3 +13,4 @@
 - 2026-10-16: merged `origin/dev` (`63498074`): conflicts in the balance service's imports and the plans index, resolved; lint, typecheck:all and test:all pass on the merge.
 - 2026-10-16: arc 3 started on `worktree-harden-security-fixes-2-arc3` (dev `d461b059`, orchestrator's parallel release). Phase 7 gate F: pass (`9f2b1148`).
 - 2026-10-16: phase 8 gate (`audit:vue`, `test:all`, complexity manifest unchanged): pass (`de9a488e`).
+- 2026-10-16: arc 3 review round 1: Codex reject (3), Opus reject (2); all accepted, fixed in `8b49f561`; lint, typecheck:all and test pass. Round 2 next.
