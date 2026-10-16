@@ -1,6 +1,6 @@
 # home-onboarding-2: recon
 
-Base: `origin/dev` at `dfdf4c31`. Two Explore agents (sonnet): a reuse sweep over ten capabilities, and a map of the Firefox e2e harness. The planner read the pages, the composable, the archived lane [home-onboarding-chrome](../archive/home-onboarding-chrome/plan.md) and Firefox 153.0.4's own extension modules.
+Base: `origin/dev` at `dfdf4c31`. Two Explore agents (sonnet): a reuse sweep over ten capabilities, and a map of the Firefox e2e harness. The planner read the pages, the composable, the archived lane [home-onboarding-chrome](../home-onboarding-chrome/plan.md) and Firefox 153.0.4's own extension modules.
 
 ## Reuse map
 
@@ -24,7 +24,7 @@ Base: `origin/dev` at `dfdf4c31`. Two Explore agents (sonnet): a reuse sweep ove
 ## Facts the plan rests on
 
 - **Firefox merges the lists.** Firefox 153.0.4 (`modules/Extension.sys.mjs`, from the browser's `omni.ja`): `manifestOptionalPermissions` (`:1357-1384`) builds one set from `optional_host_permissions` and, for an MV3 extension (`originControls`), the manifest's own origins; the install grant reads `getManifestOrigins()` (`:1338-1346`, `:4390-4400`). An origin listed in both lists is one optional origin, granted at install as today.
-- **The probe of 2026-10-13** ([lessons/phase-2.md](../archive/home-onboarding-chrome/lessons/phase-2.md)):
+- **The probe of 2026-10-13** ([lessons/phase-2.md](../home-onboarding-chrome/lessons/phase-2.md)):
   - `permissions.request` grants an origin listed only in `host_permissions`.
   - With `extensions.webextOptionalPermissionPrompts=false`, a hit-tested click's request resolves `true` with no doorhanger.
   - Withholding needs both loopback origins and `*://*/*` removed.

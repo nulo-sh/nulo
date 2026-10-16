@@ -1,4 +1,4 @@
-import { Flex, Text } from "@nulo/design"
+import { BrutalistTitle, Flex, Text } from "@nulo/design"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import type { Ref } from "vue"
@@ -40,15 +40,17 @@ import Presto from "./presto.vue"
 const state = (prestoCheck as unknown as { state: Ref<{ kind: string; info?: object }> }).state
 const permission = hostPermission as unknown as { missing: Ref<boolean>; request: ReturnType<typeof vi.fn> }
 
-const mountPresto = () =>
+/** `withTitle` renders the real title, attached to the document so focus can land in it. */
+const mountPresto = ({ withTitle = false } = {}) =>
 	mount(Presto, {
+		attachTo: withTitle ? document.body : undefined,
 		global: {
-			components: { Flex, Text, OnboardingSkipLink },
+			components: { BrutalistTitle, Flex, Text, OnboardingSkipLink },
 			stubs: {
 				OnboardingPage: { template: "<div><slot /></div>" },
 				Button: { template: '<button v-bind="$attrs"><slot /></button>' },
 				StepIndicator: true,
-				BrutalistTitle: true,
+				BrutalistTitle: !withTitle,
 				SectionLabel: true,
 				PrestoStatusCard: true,
 				PrestoPermissionRow: {
@@ -133,5 +135,42 @@ describe("onboarding presto", () => {
 		await w.find('[data-testid="presto-permission-allow"]').trigger("click")
 		expect(permission.request).toHaveBeenCalledOnce()
 		w.unmount()
+	})
+
+	describe("focus when a grant takes the row away", () => {
+		const focused = (w: ReturnType<typeof mountPresto>, testid: string) => {
+			const el = w.get(`[data-testid="${testid}"]`).element as HTMLElement
+			el.focus()
+			expect(document.activeElement).toBe(el)
+			return el
+		}
+
+		test("from Allow, focus moves to the title", async () => {
+			permission.missing.value = true
+			const w = mountPresto({ withTitle: true })
+			await flushPromises()
+			focused(w, "presto-permission-allow")
+
+			permission.missing.value = false
+			await flushPromises()
+			const title = w.get('[data-testid="onboarding-presto-title"]').element
+			expect(title.tagName).toBe("H1")
+			expect(document.activeElement).toBe(title)
+			w.unmount()
+		})
+
+		test("from a control that stays, focus stays on it", async () => {
+			state.value = { kind: "offline" }
+			permission.missing.value = true
+			const w = mountPresto({ withTitle: true })
+			await flushPromises()
+			const skip = focused(w, "onboarding-presto-skip")
+
+			permission.missing.value = false
+			await flushPromises()
+			expect(w.find('[data-testid="presto-permission-allow"]').exists()).toBe(false)
+			expect(document.activeElement).toBe(skip)
+			w.unmount()
+		})
 	})
 })
