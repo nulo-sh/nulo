@@ -17,3 +17,5 @@
 - 2026-10-15: phase 2a.1 gate pass: lint, typecheck:all, test (787 files); armed smoke endpoints + settings-crud 15/15 Chrome, 15/15 Firefox at retry 0.
 - 2026-10-15: phase 2a.2 gate pass: test:all, lint, typecheck:all; whole smoke Chrome 240 tests (pre-fix build) and touched files 21/21 on the final head, Firefox 239 tests; network files 7/7 on both browsers at retry 0. Codex converged in two rounds.
 - 2026-10-15: phase 2c local gate pass: test:all, lint, typecheck:all; network hero-prices-unavailable and fiat-send 2/2 on both browsers, smoke fiat-display 2/2 on both, retry 0. Codex round 1 approve, Opus round 1 approve with fixes, folded in (OA-8 raised).
+- 2026-10-16: close-out revision (light): merged dev c5e9c8e8; 2 sonnet explorers; #79 already closed by #389 (no arc, D27); #101 closes with the close-out (D28); #197 half shipped in #270; D11 issue is #498; OA-8 open. Plan revised (Phase 3); panel next.
+- 2026-10-16: panel: Codex conditional approve (5 findings), Opus conditional approve (7, one High on #101's record); all accepted; D28 conditional, D31 revised, D32 (R5 released). Codex resume next.
