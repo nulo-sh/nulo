@@ -40,11 +40,20 @@ const makeRecordingVerifier = () => {
 }
 
 describe("ArtifactRegistry.resolve", () => {
-	test("default order: pxe-local → known, first hit wins", async () => {
+	test("a compiled-in class resolves to the compiled-in copy, whatever this PXE stores for it", async () => {
+		const classId = new Fr(42)
+		const compiledIn = makeArtifact("known-hit")
+		const loader: KnownArtifactsLoader = async () => ({ artifacts: new Map([[classId.toString(), compiledIn]]), instances: new Map() })
+		const reg = new ArtifactRegistry(loader, { verifier: passthroughVerifier })
+		const pxeLookup = vi.fn().mockResolvedValue(makeArtifact("stored, another byte form"))
+		expect(await reg.resolve(classId, pxeLookup)).toBe(compiledIn)
+		expect(pxeLookup).not.toHaveBeenCalled()
+	})
+
+	test("a class the bundle lacks resolves to this PXE's copy (control)", async () => {
 		const reg = new ArtifactRegistry(emptyLoader, { verifier: passthroughVerifier })
 		const pxeLookup = vi.fn().mockResolvedValue(makeArtifact("pxe-hit"))
-		const classId = new Fr(42)
-		const got = await reg.resolve(classId, pxeLookup)
+		const got = await reg.resolve(new Fr(42), pxeLookup)
 		expect((got as { name: string }).name).toBe("pxe-hit")
 		expect(pxeLookup).toHaveBeenCalledTimes(1)
 	})
