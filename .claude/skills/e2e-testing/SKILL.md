@@ -445,7 +445,9 @@ assertion; drive the rest of the flow with the ordinary helpers.
   spot: reach a control with `tabTo` and assert the next stop, never a walk from the page top. Read
   a ring with `focusRing`, which waits for the control's transitions (a shot taken sooner shows the
   ring mid-fade); on Firefox call `prepareKeys` first, since an unfocused page matches no
-  `:focus-visible`. Prove `aria-hidden` or a live region from CDP's `Accessibility.getFullAXTree`
+  `:focus-visible`. A click ends keyboard modality, so a script focus after it draws no ring
+  whatever the CSS: prove a no-ring rule after a keyed activation
+  (`implementations-plan/archive/home-onboarding-2/lessons/phase-4.md`). Prove `aria-hidden` or a live region from CDP's `Accessibility.getFullAXTree`
   with `DOM.resolveNode` (Chrome): `page.accessibility.snapshot()` gives no ignored flag and no
   element (`implementations-plan/archive/accessibility-1/lessons/`).
 

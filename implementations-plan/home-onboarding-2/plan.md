@@ -1,7 +1,7 @@
 ---
 plan: home-onboarding-2
 tier: light
-status: arc 1 merged (#534); arc 2 in progress
+status: closed (2026-10-16)
 issues: "#156 (arc 1, closed by #534; arc 2 ships OA-1 = B); #132 (no arc: shipped by #348)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at dfdf4c31
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-16.
+- **Status:** closed. Two arcs, one PR each against `dev`: #534 (arc 1, merged) and arc 2's PR from `worktree-home-onboarding-2-arc2`; the merge that lands arc 2 closes the plan.
+- **Shipped:** in #534, the Firefox permission row in place of the Presto content on the onboarding step and Settings → Proving (P18-03 A), the Firefox manifest's optional loopback origins (P16-04 B), a terminal `usePrestoCheck.start()` after `dispose()`, and the e2e launch option that lets a real click's request be granted with no doorhanger. In arc 2, a grant that takes the row away while it holds focus moves focus to the page's title (OA-1, P20-07 B), through `focusTitle()` on the sub-page header. #132 needed no code: #348 shipped P18-02 A.
+- **Known limits:** #571 (KL-1: a probe sent before a grant can answer the check the grant starts).
+- **Open items:** #572 (P18-04, the owner's Mac check of Allow in the toolbar panel, and focus after a real doorhanger).
+- **Lessons:** nothing new in `lessons.md` (8,190 of 8,192 bytes, and nothing here earns a retirement). The click-ends-keyboard-modality gotcha went to the `e2e-testing` skill's focus bullet, where focus tests are written.
+- **Size:** about 245 lines against the light target of 150: the ledger, two arcs of audit verdicts and KL-1 are the record.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # home-onboarding-2: the Firefox Presto permission row (#156)
 
@@ -125,8 +136,6 @@ On Firefox, while Nulo lacks its loopback host permission, the onboarding Presto
 
 ## Phases
 
-Size: about 205 lines against the light target of 150. The ledger, the audit verdicts of a split panel and KL-1 (about 45 lines) are the record, so they stay.
-
 ### Phase 1: the permission read and the row (#156) ✓
 1. Build the composable with at least 10 tests (CLAUDE.md § composables). Each never-happens case has a success control. The cases:
    - Chrome: no API call and no listener; `onFirstAllowed` runs once.
@@ -161,7 +170,7 @@ Size: about 205 lines against the light target of 150. The ledger, the audit ver
 
 Pass: exit 0; the spec is red on the base pages and green on the head; its runtime is recorded. Layers: unit, smoke e2e on both browsers, network e2e.
 
-### Phase 4 (arc 2): focus after a grant
+### Phase 4 (arc 2): focus after a grant ✓
 1. The header chain, both pages, and their tests: on each page, a grant while Allow holds focus lands focus on the title (the real `BrutalistTitle`; the real `SettingsPageShell` → `SubPageHeader` → base chain), and a grant while a surviving control holds focus (Skip; Back) leaves it there. `SubPageHeaderBase.test.ts`: `focusTitle` focuses the default title, whose source keeps the no-ring rule, and leaves a slotted title alone. Each page case red with the watcher removed, each control red with the containment check removed.
 2. The Firefox spec waits for focus on `onboarding-presto-title` after the clicked Allow, then withholds the grant again, grants it with Enter and reads no outline on the focused title (a click ends keyboard modality, so only the keyed grant can show a ring). Red on a head build with the onboarding watcher removed (at the first focus wait) and on one with the title's no-ring rule removed (at the outline read); green on the head.
 3. Shots of both pages after a grant from a focused Allow, both themes, on Firefox.
