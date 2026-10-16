@@ -1,7 +1,7 @@
 ---
 plan: ui-followups-p18
 tier: light (the orchestrator's call; the panel of two still argues each decision)
-status: arc 1 merged (#530); arc 2 phase 4 in progress (SA-1 A, SA-2 B signed 2026-10-16)
+status: closed with its delivery (arc 1 #530 merged; arc 2's PR carries the close-out)
 issues: "#363 (arc 1), #451 (arc 1, no code change), #364 (arc 2, after SA-1); SA-2 (arc 2, no issue)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,21 @@ base: origin/dev at d59459ab
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-16.
+- **Status:** closed with its delivery. Arc 1 merged as #530; arc 2's PR carries this close-out. Merging is the owner's call; that merge closes the plan.
+- **Shipped:**
+  - **#530, arc 1:** the 28 outline-grey text rules in 21 files moved to `--nulo-secondary` (page 18 P18-06 = C); `DetailsTable`'s copy glyph and row chevron kept on outline; a sweep in `a11y-css.test.ts` allows exactly those two; `--nulo-secondary` pinned on `--dropdown-bg`. Closed #363, and #451 (page 17 P17-01 = A, the shipped wording, no code change).
+  - **Arc 2:** the store captures and listing art regenerated (SA-1 = A, page 24 P24-01): 10 files, byte-identical to the signed set by SA-1's hashes, from one capture run at `71f98db4`; the promo tile rendered unchanged. The tx page's fee and developer rows keep full strength under the pointer (SA-2 = B, page 23 P23-01), and a sweep refuses a hover `opacity` on the toggle or any sheet composing it. The README's store-art row names five screenshots. Closes #364.
+- **Review loop:** the plan took three Codex rounds (conditional, conditional, approve) and an Opus conditional approve. Arc 1: three Codex rounds ending in approve, and an Opus review with no bugs. Arc 2: three Codex rounds, each approve (round 3 carried the standard's two rules, which rounds 1-2 left out), and an Opus approve with one low point accepted.
+- **Gates at arc 2's head:** `bun run lint`, `typecheck:all`, `test:all`, `test:ci-gating` (571 pass) and `check:plans` on the final head. The full smoke suite on the armed build at retry 0, before dev's #534 and #564 merged in: Chrome 246 passed, 13 skipped, 0 failed (1986 s); Firefox 245 passed, 14 skipped, 0 failed (3276 s). No e2e scenario changed. The hovered fee row's computed opacity was 0.8 on dev and 1 here, in both themes.
+- **Deviations:** D8-D12 in the ledger. SA-2 was not in the approved plan; it shipped in arc 2 on the owner's answer (D12).
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted. The one reusable trap, a hash set right after `reloadExtensionPage` losing to the start-up route to Home, is already a comment in `store-captures.test.ts`; the rest is specific to the store tooling and lives in [lessons/phase-3.md](lessons/phase-3.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # ui-followups-p18: the rest of the outline-grey text, and fresh store art
 
