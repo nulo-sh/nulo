@@ -10,3 +10,4 @@
 - 2026-10-16: arc 2 reviews: Codex round 1 approve with changes (fixed), Opus approve with changes (6, recorded), Codex round 2 approve with changes (D26), round 3 approve. Gates on the tree at 7df00af4 plus the e2e fix: lint, typecheck:all, test:all green (extension 13,011 tests).
 - 2026-10-16: phase 6 Chrome: tx-sendTx-default.test.ts at retry 0 exit 0 (new case 65.3 s, file tests 113.5 s; attempts 1-2 were test bugs, lessons/phase-6.md).
 - 2026-10-16: phase 6 Firefox: same file at retry 0 exit 0 (new case 140.2 s, file tests 263.7 s). Phase 6 ✓.
+- 2026-10-16: merged origin/dev (6 commits; the card's details toggle needed one test to open it). Final head: lint, typecheck:all, test:all green (extension 13,088 tests); tx-sendTx-default.test.ts at retry 0 exit 0 on Chrome and Firefox; check:plans 0 findings.

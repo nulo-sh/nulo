@@ -19,6 +19,13 @@ The file's test time; "before" is its one earlier case, which the arc does not c
 
 The plan estimated +60 s per browser; Firefox costs more, as its earlier case does, from its slower proving.
 
+After merging `dev` (its reworked operation card), the same file on the final head, retry 0, exit 0 on both:
+
+| Browser | Earlier case | New case | File before → after |
+|---|---|---|---|
+| Chrome | 54.6 s | 64.7 s | 54.6 s → 119.3 s |
+| Firefox | 104.5 s | 118.1 s | 104.5 s → 222.6 s |
+
 ## Screenshots
 
 - A local scratch copy of the case (never committed) shoots the waiting Confirm and the window in both themes; its first run passed the whole flow in 75.8 s.
