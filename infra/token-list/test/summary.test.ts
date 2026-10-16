@@ -99,6 +99,22 @@ describe("signingChanges: the range starts at the parent of the commit that firs
 		expect(signingChanges(root)).toContain("edit-on-main")
 	})
 
+	test("an edit stays listed when another branch copies the previous list's bytes after it", () => {
+		const { root, git, commit } = repository()
+		commit("root", { [OTHER]: "r" })
+		commit("publish-z", { [ENVELOPE]: "Z" })
+		git(["switch", "-q", "-c", "side"])
+		const previous = commit("publish-a", { [ENVELOPE]: "A" })
+		commit("publish-b", { [ENVELOPE]: "B" })
+		git(["switch", "-q", "main"])
+		commit("edit-on-main", { [SCRIPT]: "1" })
+		commit("main-copies-a", { [ENVELOPE]: "A" })
+		git(["merge", "-q", "--no-ff", "-X", "theirs", "side", "-m", "merge-takes-b"])
+		const out = signingChanges(root)
+		expect(out).toContain(`Since the parent of ${previous}`)
+		expect(out).toContain("edit-on-main")
+	})
+
 	test("an edit and its revert are both listed, though they cancel in the diff", () => {
 		const { root, commit } = repository()
 		commit("root", { [OTHER]: "r", [SCRIPT]: "0" })

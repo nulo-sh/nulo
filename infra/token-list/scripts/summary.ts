@@ -103,9 +103,9 @@ function envelopeBlob(root: string, rev: string): string | undefined {
 	return git(root, ["rev-parse", `${rev}:${ENVELOPE_PATH}`])
 }
 
-/** The first commit, over every branch in ancestry order, whose envelope is `blob`; it must have a parent. */
-function firstCarrier(root: string, blob: string): string | undefined {
-	const introduced = ["log", "--full-history", "--topo-order", "--reverse", "--format=%H", `--find-object=${blob}`]
+/** The first commit in `rev`'s ancestry, every branch in ancestry order, whose envelope is `blob`; it must have a parent. */
+function firstCarrier(root: string, rev: string, blob: string): string | undefined {
+	const introduced = ["log", "--full-history", "--topo-order", "--reverse", "--format=%H", `--find-object=${blob}`, rev]
 	const [first] = git(root, [...introduced, "--", ENVELOPE_PATH]).split("\n")
 	return first && git(root, ["rev-list", "--max-count=1", "--parents", first]).includes(" ") ? first : undefined
 }
@@ -117,9 +117,9 @@ function firstCarrier(root: string, blob: string): string | undefined {
  */
 function publishBase(root: string): string | undefined {
 	const current = envelopeBlob(root, "HEAD")
-	const published = current && firstCarrier(root, current)
+	const published = current && firstCarrier(root, "HEAD", current)
 	const previous = published && envelopeBlob(root, `${published}^`)
-	return previous ? firstCarrier(root, previous) : undefined
+	return previous ? firstCarrier(root, `${published}^`, previous) : undefined
 }
 
 /** Every signing-path change since the parent of `publishBase`; a first publish lists every such commit. */
