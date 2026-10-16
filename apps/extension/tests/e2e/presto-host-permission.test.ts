@@ -84,6 +84,7 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.permissionRequest, () => {
 			// browser's ring off.
 			expect(await withhold(extension)).toBe(false)
 			await page.waitForSelector('[data-testid="presto-permission-row"]', { visible: true, timeout: 10_000 })
+			await prepareKeys(page)
 			await tabTo(page, "presto-permission-allow")
 			await page.keyboard.press("Enter")
 			await waitForFocus(page, "onboarding-presto-title")
