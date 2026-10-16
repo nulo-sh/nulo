@@ -20,3 +20,4 @@
 - 2026-10-16: merged `origin/dev` (`f0ab5dd6`, arc 1's #598 and #601): conflicts in this plan's files, resolved; lint, typecheck:all and test:all pass. Phase 9 at `f0ab5dd6`, retry 0: the four quick files and the two canaries pass on Chrome and Firefox; `test:ci-gating` and `check:plans` pass. Phases 7-9 ✓; PR next.
 - 2026-10-16: arc 4 (orchestrator-added) started on `harden-security-fixes-2-arc4` (dev `493ff497`). Phase 10 gate F (lint, typecheck:all, test): pass at `02391a30`.
 - 2026-10-16: arc 4 review round 1: Codex approve (3 findings), Opus approve (nits); two test rows and the public call type added, the rest recorded (D31, D34). Round 2 next.
+- 2026-10-16: arc 4 review round 2: Codex approve; the loop converged. Final gates next.

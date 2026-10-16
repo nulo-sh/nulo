@@ -207,8 +207,8 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 | D-orch-2 | Arc 4 (orchestrator, after #611 merged) | the transaction card's decode gets D28's check | a review note kept private |
 | D31 | Where arc 4's check runs (implementation) | inside `decodeFields`, over its decoded values | one check for every decode the window shows, and one decode instead of two; every function of the 40 bundled artifacts (`noir-contracts.js`, `aztec-standards`) reads as before under random canonical arguments; what now reads as unreadable is a decode that loses fields (a Some holding None reads as None, a `BoundedVec`'s storage past its length is dropped) or a tuple parameter, which the stdlib encoder does not take and no bundled artifact has |
 | D32 | Confirm for an unreadable dApp call (implementation) | unchanged: the notice, Confirm as today | the notice asks the person to check the app's description before approving; holding Confirm for a call would change what a person can do, an owner decision this arc does not have |
-| D34 | A string the transaction card prints shorter than its characters (arc 4 review) | unchanged in this arc | the card's string print is a display rule outside the decode, and the grant card's whole-print rule would refuse the padding a canonical `str<N>` carries; noted privately |
 | D33 | Where arc 4's card test sits (implementation) | `OperationCard.wire.test.ts`, over the real decoder; the dispatcher test unchanged | the window hands the decode to the card untouched; the dispatcher test pins no decoded shape |
+| D34 | A string the transaction card prints shorter than its characters (arc 4 review) | unchanged in this arc | the card's string print is a display rule outside the decode, and the grant card's whole-print rule would refuse the padding a canonical `str<N>` carries; noted privately |
 
 ## Audit verdicts
 
@@ -282,6 +282,8 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 | No case exercised an encoder refusal inside the shared decode (both) | a row: an integer past its width |
 | The public exit was sent as a private call in the card test (Codex) | `type: "public"` |
 | The wire test's TokenBridge selector is not checked against the hash; the card test overlaps the unit test (Opus) | kept: the selector is the real one at 6.0.0-rc.3 and only needs to agree with itself under the stood-in hash; the card test is the decode-to-card chain D33 asks for |
+
+**Arc 4 review, round 2** (2026-10-16). Codex, resumed over `2b621f1b`: **approve**, no findings; it re-ran the five refusal rows and their controls, and hashed the TokenBridge selector to the test's value. The loop converged.
 
 ## Seeds (draft; the orchestrator finalizes after approval)
 
