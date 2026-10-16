@@ -159,7 +159,7 @@ Starts per A3, on branch `harden-quality-fixes-2-arc2` off `dev` (cherry-pick th
 - Proof, not committed: `git diff` of `full.vue` and `account.vue` shows every changed line is a fence substitution (no `await` line added or moved).
 - Gate: `F`; `bun run test:all`.
 
-### Phase 2.3: arc 2 gate
+### Phase 2.3: arc 2 gate ✓
 - `bun run test:all`, `bun run --cwd apps/extension build`, `git diff --exit-code -- apps/extension/src/types`, `bun run check:plans`.
 - With `load1 < 150` and the armed Chrome bundle: smoke `tests/e2e/{contacts,contacts-import,duplicate-phrase-import,passkey-backup,backup-imported-account,backup-roundtrip,restore-outcome,wallet-lock}.test.ts` at `--retry=0`; network `token-management` and `senders-advanced` (`NULO_E2E_RETRY=0`, as above). Same pass rule and red procedure as phase 1.3. No e2e scenario is added. `UI impact: none`; no screenshot is owed.
 
@@ -224,6 +224,8 @@ Follow `implementations-plan/README.md` § Post-implementation standard at revis
 **Arc 2, round 2, Codex** (resumed session `01a146da`, over `b1d4cefe..066f90ad`): "No new material finding (high confidence)." The whole-text ban keeps the single-line forms and sees split calls without false positives; the `JSON.parse` spy is deterministic and restored before the assertions. Arc 2's loop converged.
 
 **Cross-arc pass, Codex** (gpt-6.1-sol, high, fresh session `01a146e6`, over arc 1's `f2f434fa` and arc 2's `5e2888be..HEAD`): no cross-arc runtime regression (high confidence), 2 low findings. #1 moved reads, in two parts. Rejected: `openSelection` reads `target.name` and the parsed body's profile type before the caller's last fence rather than after it. D11 puts the build there, and neither value can differ across that microtask (every writer replaces a selection whole, and the parsed body is the helper's own), so a superseded run reads the same values and still publishes nothing (D22). Accepted: `readBackupFile` built its `unreadable` selection, reading `file.name`, before the size check and the `await file.text()`; each branch now builds it where it returns. #2 accepted: the duplicate-confirm watcher's comment drops to the one fact its code does not show (a confirm also closes the dialog, after `settle(true)`), and the scan helper's doc comment, which restated its signature, goes.
+
+**Cross-arc pass, round 2, Codex** (resumed session `01a146e6`, over `88b26d18..98f7259b`): "No new material finding (high confidence)." Each lazy `unreadable()` call keeps its branch's shape and file name and adds no await; the existing tests still pin every kind. D22 stands. The cross-arc pass converged.
 
 ## Seeds
 

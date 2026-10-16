@@ -39,3 +39,5 @@ Arc 2 branches off `dev` after #598 (harden-security-fixes-2 arc 1), #610 (small
 - A mutant edit of source while `e2e:agent` builds would ship in its bundle: the network run's `dist/chrome/manifest.json` was written at 22:43:14, before the one mutant at 22:44:55, so that run is clean; no mutant runs while an e2e build may.
 - Round 2 (Codex, resumed `01a146da`): no new material finding; the arc 2 loop converged at round 2.
 - Cross-arc pass (Codex, fresh session `01a146e6`): 2 low; one part of #1 rejected (D22), the rest fixed in one commit. The pass ran across the merge of `origin/dev` (#609) into the branch; that merge touched no file of this plan beyond `CLAUDE.md`'s CSP lines.
+
+Cross-arc round 2 (Codex, resumed `01a146e6`, over `88b26d18..98f7259b`): no new material finding (high confidence); the pass converged.
