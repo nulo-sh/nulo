@@ -92,7 +92,7 @@ export async function abandonSession(
 /** One sweep per process, before the first launch claims ports or writes a record. */
 let sweep: Promise<string[]> | undefined
 
-async function launch({ extensionPath, userDataDir, headless, egress }: LaunchOptions): Promise<LaunchedBrowser> {
+async function launch({ extensionPath, userDataDir, headless, egress, grantPermissionRequests }: LaunchOptions): Promise<LaunchedBrowser> {
 	sweep ??= reapOrphanLaunches()
 	const reaped = await sweep
 	if (reaped.length) console.warn(`[firefox] reaped ${reaped.length} orphaned launch(es): ${reaped.join(", ")}`)
@@ -123,7 +123,7 @@ async function launch({ extensionPath, userDataDir, headless, egress }: LaunchOp
 		recordLaunch(record)
 
 		const running = () => gecko.exitCode === null && gecko.signalCode === null
-		const session = await WebDriverSession.open(base, capabilities({ profileDir, headless, egress }), running)
+		const session = await WebDriverSession.open(base, capabilities({ profileDir, headless, egress, grantPermissionRequests }), running)
 		try {
 			assertVersion(session.capabilities.browserVersion)
 			// Teardown owns a process by the marker in its environment. A Firefox that did not inherit
@@ -286,14 +286,22 @@ export function egressGuardPrefs(guardPort: number, liveHosts: readonly string[]
 	}
 }
 
+/**
+ * `permissions.request` still needs the click's user input under this pref; it only skips the
+ * doorhanger. Kept out of `FIREFOX_LAUNCH_PREFS`, since users are asked.
+ */
+export const permissionRequestPrefs = { "extensions.webextOptionalPermissionPrompts": false }
+
 export function capabilities({
 	profileDir,
 	headless,
 	egress,
+	grantPermissionRequests,
 }: {
 	profileDir: string
 	headless: boolean
 	egress?: LaunchOptions["egress"]
+	grantPermissionRequests?: LaunchOptions["grantPermissionRequests"]
 }): Record<string, unknown> {
 	return {
 		// Asks geckodriver for a BiDi endpoint on the session it owns, which is what makes one
@@ -302,7 +310,11 @@ export function capabilities({
 		"moz:firefoxOptions": {
 			binary: resolveFirefoxBinary(),
 			args: ["-profile", profileDir, ...(headless ? ["-headless"] : [])],
-			prefs: egress ? { ...FIREFOX_LAUNCH_PREFS, ...egressGuardPrefs(egress.guardPort, egress.liveHosts) } : FIREFOX_LAUNCH_PREFS,
+			prefs: {
+				...FIREFOX_LAUNCH_PREFS,
+				...(egress ? egressGuardPrefs(egress.guardPort, egress.liveHosts) : {}),
+				...(grantPermissionRequests ? permissionRequestPrefs : {}),
+			},
 		},
 	}
 }

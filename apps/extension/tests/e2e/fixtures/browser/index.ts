@@ -17,6 +17,10 @@ export interface LaunchOptions {
 	/** Route every request for an outside host to the egress guard on this loopback port, but the
 	 *  `liveHosts`, which go direct. */
 	egress?: { guardPort: number; liveHosts?: readonly string[] }
+	/** A permission request from a real click is granted with no prompt, which no protocol can
+	 *  answer. Chrome ignores it: its `permissions.remove` refuses a required host permission, so no
+	 *  spec there reaches a withheld one to grant. */
+	grantPermissionRequests?: true
 }
 
 export interface LaunchedBrowser {
@@ -211,6 +215,7 @@ export const CHROME_ONLY = {
 export const FIREFOX_ONLY = {
 	windowRefocus: "refocuses an approval popup; headless Chrome moves focus only by creating a window",
 	toolbarPanel: "drives the toolbar popup itself, which no protocol opens on Chrome",
+	permissionRequest: "withholds and re-grants a required host permission, which Chrome's permissions.remove refuses",
 } as const
 
 /** The launch a background call is made against; every `ExtensionContext` is one. */

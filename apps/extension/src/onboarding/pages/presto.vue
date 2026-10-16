@@ -12,6 +12,7 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 /** Composables */
 import { vSnackFooter } from "@/composables/snackInset"
 import { usePrestoCheck } from "@/composables/usePrestoCheck"
+import { usePrestoHostPermission } from "@/composables/usePrestoHostPermission"
 
 /** Utils */
 import { PRESTO_SITE_URL } from "@/presto/config"
@@ -23,11 +24,16 @@ const PITCH_DISMISSAL_KEY = "presto:banner:card:offline"
 const router = useRouter()
 const configService = new ConfigServiceClient()
 const { state, start, check, dispose } = usePrestoCheck(configService)
+const {
+	missing: permissionMissing,
+	request: requestPermission,
+	dispose: disposePermission,
+} = usePrestoHostPermission({ onFirstAllowed: start, onGranted: check })
 
 const copy = computed(() => copyFor(state.value))
 const isPitch = computed(() => isPitchKind(state.value.kind))
 const isProbing = computed(() => state.value.kind === "detecting")
-const canContinue = computed(() => state.value.kind === "available" || state.value.kind === "downloading")
+const canContinue = computed(() => !permissionMissing.value && (state.value.kind === "available" || state.value.kind === "downloading"))
 const diagnosis = computed(() => (state.value.kind === "secure-connection-unavailable" ? state.value.diagnosis : undefined))
 // The theme painted at mount: the stored one once onboarding's first Config read has landed, else the
 // pre-paint hint, which that read may still change. The banner keeps it.
@@ -52,7 +58,6 @@ onBeforeMount(() => {
 	// earlier onboarding must not stay hidden from a re-onboarding user. The banner checks the
 	// record when it connects and a later clear triggers no redraw, so this runs before first render.
 	clearDismissal(PITCH_DISMISSAL_KEY)
-	void start()
 })
 
 onMounted(() => {
@@ -65,6 +70,7 @@ onBeforeUnmount(() => {
 	pitchRef.value?.removeEventListener(BANNER_EVENTS.dismiss, skip)
 	configService.disconnect()
 	dispose()
+	disposePermission()
 })
 </script>
 
@@ -80,7 +86,9 @@ onBeforeUnmount(() => {
 			</Text>
 		</Flex>
 
-		<Flex v-show="isPitch" direction="column" gap="10">
+		<PrestoPermissionRow v-if="permissionMissing" @allow="requestPermission" />
+
+		<Flex v-show="isPitch && !permissionMissing" direction="column" gap="10">
 			<SectionLabel label="01 · Get it" />
 			<!-- The wrapper stays mounted so the banner's bubbling events have one stable listener.
 				`variant`, `href` and `state` are read from attributes, and `variant`/`href` are getter-only
@@ -98,7 +106,7 @@ onBeforeUnmount(() => {
 			</div>
 		</Flex>
 
-		<Flex direction="column" gap="10">
+		<Flex v-if="!permissionMissing" direction="column" gap="10">
 			<SectionLabel v-if="isPitch" label="02 · Connect it" />
 			<PrestoStatusCard
 				:copy="copy"
@@ -109,16 +117,16 @@ onBeforeUnmount(() => {
 				@retry="retry"
 			/>
 		</Flex>
-		<Text v-if="state.kind === 'available'" variant="body" color="support" height="150">
+		<Text v-if="state.kind === 'available' && !permissionMissing" variant="body" color="support" height="150">
 			Presto will ask you to allow Nulo the first time you send.
 		</Text>
 
 		<!-- A Continue-sized slot, so Skip sits where Continue would and the page never jumps. -->
-		<div v-snack-footer="canContinue || !isProbing" :class="$style.ctaSlot">
+		<div v-snack-footer="canContinue || permissionMissing || !isProbing" :class="$style.ctaSlot">
 			<Button v-if="canContinue" variant="cta" size="large" data-testid="onboarding-presto-continue" @click="goNext">
 				Continue
 			</Button>
-			<OnboardingSkipLink v-else-if="!isProbing" testid="onboarding-presto-skip" @click="skip">
+			<OnboardingSkipLink v-else-if="permissionMissing || !isProbing" testid="onboarding-presto-skip" @click="skip">
 				Skip. Proving will run in your browser.
 			</OnboardingSkipLink>
 		</div>
