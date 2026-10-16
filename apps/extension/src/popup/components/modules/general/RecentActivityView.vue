@@ -978,7 +978,7 @@ onBeforeUnmount(() => {
 	border: 1px dashed var(--nulo-border);
 
 	line-height: 1.4;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .stalled_retry {

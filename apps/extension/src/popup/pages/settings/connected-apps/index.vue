@@ -240,7 +240,7 @@ onBeforeUnmount(() => {
 
 .empty_hint {
 	composes: type--body from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .icon_btn {

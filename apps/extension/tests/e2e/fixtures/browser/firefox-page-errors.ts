@@ -102,8 +102,18 @@ export function logEntryFor(record: unknown, context: string): LogEntryParams | 
 	return { type: "console", method: "error", args: (r.args as string[]).map((value) => ({ type: "string", value })), ...common }
 }
 
+/**
+ * The one frame the launch's close reports for an exception: its first in the add-on's code, which a
+ * recursion in a built-in buries under `self-hosted` frames, else the location the error reports when
+ * that is the add-on's, else its top frame. Serialised into the relay, so it uses nothing outside itself.
+ */
+export function recentFrame(frames: CallFrame[], reported: CallFrame | null | undefined): CallFrame | null {
+	const own = (frame: CallFrame | null | undefined) => typeof frame?.url === "string" && frame.url.startsWith("moz-extension:")
+	return frames.find(own) ?? (own(reported) ? (reported as CallFrame) : (frames[0] ?? null))
+}
+
 /** What the relay runs: the code its unit tests run. */
-export const RELAY_HELPERS = `${isCallFrame}\n${logEntryFor}`
+export const RELAY_HELPERS = `${isCallFrame}\n${logEntryFor}\n${recentFrame}`
 
 /**
  * A process script, so it runs in every content process, and through the delayed load in each later
@@ -154,7 +164,7 @@ function listenerSource(addonId: string): string {
 		if (topId === undefined) return;
 		const kind = kindOf(message);
 		const text = message.errorMessage;
-		send({ kind, topId, text, args: kind === "console" ? [text] : [], timeStamp: message.timeStamp, callFrames: callFrames(errorFrames(savedFrames(message.stack), message)) });
+		send({ kind, topId, text, args: kind === "console" ? [text] : [], timeStamp: message.timeStamp, callFrames: callFrames(errorFrames(savedFrames(message.stack), message)), reported: callFrames(errorFrames([], message))[0] ?? null });
 	};
 	const onConsoleCall = (event) => {
 		const message = event.wrappedJSObject;
@@ -181,7 +191,7 @@ function listenerSource(addonId: string): string {
  * Evaluated in a system sandbox of its own, so it outlives every browser window. A record whose top
  * context has no BiDi id is not emitted: the background page and its PXE frame, which no page
  * listener hears on Chrome either, or a page that has closed. Every exception, emitted or not, is
- * kept with its first frame among the recent ones the launch's close reports; console errors are
+ * kept with its `recentFrame` among the recent ones the launch's close reports; console errors are
  * not, as the wallet's logger writes many. The emit is synchronous in the message handler; that an error a page reported before
  * answering a command arrives ahead of the answer is measured, not derived, and the smoke control's
  * barrier holds it.
@@ -228,7 +238,8 @@ const relay = (record) => {
 	if (record?.kind === "fault") return fault("listener: " + record.reason);
 	const context = typeof record?.topId === "number" ? contextOf(record.topId) : "";
 	if (record?.kind === "javascript" && typeof record.text === "string") {
-		state.recent.push({ context, text: record.text.slice(0, 300), frame: record.callFrames?.[0] ?? null });
+		const frames = Array.isArray(record.callFrames) ? record.callFrames : [];
+		state.recent.push({ context, text: record.text.slice(0, 300), frame: recentFrame(frames, record.reported) });
 		if (state.recent.length > ${RECENT_KEPT}) state.recent.shift();
 	}
 	if (context === null) return;
@@ -340,7 +351,7 @@ export function relayVerdict(read: unknown): string | undefined {
 
 /**
  * The relay's latest exceptions, oldest first, each with the BiDi context it was raised in ("no
- * context" when none was available) and its first frame, 1-based as Firefox prints a stack.
+ * context" when none was available) and its `recentFrame`, 1-based as Firefox prints a stack.
  * `read` is what the close-time read returned.
  */
 export function recentExceptions(read: unknown): string[] {

@@ -52,7 +52,7 @@ defineEmits<{ "update:modelValue": [value: string] }>()
 	outline: none;
 
 	&::placeholder {
-		color: var(--nulo-outline);
+		color: var(--nulo-secondary);
 	}
 }
 </style>
