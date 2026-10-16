@@ -123,7 +123,8 @@ test("a site reads its value or its native field, a name shown is judged as name
 		// Through the CSSOM: `style-src` refuses a parsed `style` attribute.
 		for (const id of ["tr-mini-input", "tr-mini-data"]) {
 			const input = host.querySelector(`[data-testid="${id}"]`)
-			if (input instanceof HTMLElement) input.style.fontSize = "12px"
+			if (!(input instanceof HTMLElement)) throw new Error(`the fixture has no ${id}`)
+			input.style.fontSize = "12px"
 		}
 		document.body.appendChild(host)
 	}, FIXTURE_HTML)

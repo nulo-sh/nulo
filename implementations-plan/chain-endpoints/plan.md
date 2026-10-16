@@ -921,6 +921,16 @@ Verdict: **approve with fixes**, over the round-1 fixes and the search-panel `fo
 
 Verdict: **approve**, no new material findings; the loop converged. The host check keeps a departure from another root out, a null related target stays null, a disconnected target is skipped, and each mount adds and removes the same capturing listener.
 
+### Arc 2b, gate fixes, Opus (general-purpose, read-only), 2026-10-16
+
+Over the two test-only fixes the gate runs needed after the loop converged (type-roles' fixture through the CSSOM; the full-screen JSON step). Verdict: **approve with fixes**; neither passes vacuously.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Medium. Opening the JSON window at a copied URL skips `showJson`, and a null box can mean an expand control no person can reach either | Accepted: the step hit-tests the control's centre (`elementFromPoint` reaches it) and dispatches a click, so `showJson` opens the window again |
+| 2 | Low. The comment named a cause nobody established | Accepted: it states the `<svg>` has no `click()` |
+| 3 | Nit. type-roles' CSSOM write skipped a missing input in silence | Accepted: it throws |
+
 ## Delivery
 
 One `gh stack`, base `dev`, one PR per arc, each opened only after its arc gate passes and its Codex loop converges.

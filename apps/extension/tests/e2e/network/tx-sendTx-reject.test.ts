@@ -1,5 +1,4 @@
 import { expect, inject } from "vitest"
-import { extensionUrl, gotoExtensionPage, newPage } from "../fixtures/browser"
 import { editorText, readEditorStyles } from "../fixtures/code-editor"
 import { clickByTestId, test } from "../fixtures/extension"
 import { snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
@@ -57,15 +56,21 @@ test.skipIf(!hasConfig)(
 		const execPopup = await execPopupP
 		await waitForExecuteContent(execPopup)
 
-		// The window `execute-show-json-btn` opens, at its own URL: Puppeteer gives that `<svg>` no box.
-		const requestId = /requestId=([^&#]+)/.exec(execPopup.url())?.[1]
-		if (!requestId) throw new Error(`the execute window carries no request id: ${execPopup.url()}`)
-		const jsonWindow = await newPage(dappConnectedExtension.browser)
-		await jsonWindow.setViewport({ width: 900, height: 700 })
-		await gotoExtensionPage(
-			jsonWindow,
-			extensionUrl(dappConnectedExtension.extensionId, `/src/popup/index.html?requestId=${requestId}#/windows/json`),
-		)
+		// A pointer reaches the expand control; the click is dispatched, since an `<svg>` has no `click()`.
+		const showJson = '[data-testid="execute-show-json-btn"]'
+		await execPopup.waitForSelector(showJson, { visible: true, timeout: 30_000 })
+		expect(
+			await execPopup.$eval(showJson, (el) => {
+				el.scrollIntoView({ block: "center" })
+				const box = el.getBoundingClientRect()
+				return !!document
+					.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)
+					?.closest('[data-testid="execute-show-json-btn"]')
+			}),
+		).toBe(true)
+		const jsonWindowP = waitForPopup(dappConnectedExtension, "json", { timeout: 30_000 })
+		await execPopup.$eval(showJson, (el) => el.dispatchEvent(new MouseEvent("click", { bubbles: true })))
+		const jsonWindow = await jsonWindowP
 		try {
 			expect(await editorText(jsonWindow, "json-editor", 30_000)).toMatch(/^\[/)
 			expect(await readEditorStyles(jsonWindow, "json-editor")).toEqual({ display: "flex", fontSize: "14px", scrollbarWidth: "none" })
