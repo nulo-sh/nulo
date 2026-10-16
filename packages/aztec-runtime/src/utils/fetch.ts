@@ -101,6 +101,13 @@ export function makeSingleAttemptFetch(timeoutMs: number): JsonRpcFetch {
 	return fetchOnce(timeoutMs)
 }
 
+/** Retry policy for `makeFetchWithTimeout`. */
+export interface RetryOptions {
+	/** Asked before each retry of a failed attempt; `false` ends the retries and the call rejects
+	 *  with that attempt's own error. The first attempt always runs. */
+	retryWhile?: () => boolean
+}
+
 /**
  * Create a JSON-RPC fetch function with per-request timeout AND retry logic.
  *
@@ -109,15 +116,37 @@ export function makeSingleAttemptFetch(timeoutMs: number): JsonRpcFetch {
  * - Stops immediately on 4xx (NoRetryError)
  * - Adds per-request timeout via AbortController (the SDK lacks this)
  */
-export function makeFetchWithTimeout(timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS): JsonRpcFetch {
+export function makeFetchWithTimeout(
+	timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
+	{ retryWhile = () => true }: RetryOptions = {},
+): JsonRpcFetch {
 	const once = fetchOnce(timeoutMs)
 	return async (host, body, extraHeaders = {}, noRetry) => {
+		let failed: { error: unknown } | undefined
 		return await retry(
-			() => once(host, body, extraHeaders, noRetry ?? false),
+			async () => {
+				// The SDK's `retry` sleeps, then calls again without asking the backoff, so a stop
+				// raised during the sleep is only seen here.
+				if (failed && !retryWhile()) throw failed.error
+				try {
+					return await once(host, body, extraHeaders, noRetry ?? false)
+				} catch (error) {
+					failed = { error }
+					throw error
+				}
+			},
 			`JsonRpcClient request to ${host}`,
-			makeBackoff([1, 2, 3]),
+			backoffWhile(makeBackoff([1, 2, 3]), retryWhile),
 			undefined,
 			false,
 		)
+	}
+}
+
+/** `backoff`, ended as soon as `retryWhile` answers false, so no sleep is scheduled after a stop. */
+function* backoffWhile(backoff: Generator<number, void>, retryWhile: () => boolean): Generator<number, void> {
+	for (const seconds of backoff) {
+		if (!retryWhile()) return
+		yield seconds
 	}
 }

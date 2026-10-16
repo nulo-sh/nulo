@@ -310,13 +310,6 @@ export type Methods = {
 	changeProfilePassword(id: string, oldPassword: string, newPassword: string): ProfileInfo
 
 	/**
-	 * Confirm profile operation.
-	 * @param id Profile id.
-	 * @param password Profile password.
-	 */
-	confirmProfileOperation(id: string, password?: string): boolean
-
-	/**
 	 * Deletes a profile and returns the deleted profile.
 	 * @param id Profile id.
 	 */

@@ -102,7 +102,6 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		"changeProfileName",
 		"saveFeePick",
 		"changeProfilePassword",
-		"confirmProfileOperation",
 		"deleteProfile",
 		"importPasskey",
 		"importMnemonic",
@@ -1232,62 +1231,6 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		})
 	}
 
-	/** Point-in-time "does this user know the password / still hold the
-	 *  passkey?". Snapshots the profile under the lock, releases, runs the
-	 *  credential check UNLOCKED. The caller's downstream op (if any) runs
-	 *  its own lock + refetch, so there is no TOCTOU worth serializing here.
-	 *  Only UI-local ConfirmPopup callbacks currently consume the return. */
-	public async confirmProfileOperation(id: string, password?: string): Promise<boolean> {
-		await this.ensureInitialized()
-
-		const { profile: snapshot, capturedEpoch } = await this.captureRowFence(id)
-
-		try {
-			let passkeyWindow: Pick<PasskeyRecovery, "finish"> = {}
-			if (snapshot.type === "password") {
-				if (!password) {
-					throw new Error("Password is required")
-				}
-				const unsealed = await this.secretBox.unseal(password, this.sealedTriple(snapshot))
-				try {
-					if (!unsealed) {
-						// Wrapped by the catch below into a generic Error. Keeps the
-						// current "confirm rejects on wrong password" contract.
-						throw new InvalidPasswordError()
-					}
-				} finally {
-					// confirmation only checks decryptability — the secrets
-					// are live key material but never used. Zero both.
-					if (unsealed) {
-						zeroize(unsealed.secret)
-						zeroize(unsealed.entropy)
-					}
-				}
-			} else {
-				// Facade dispatches on profile.type — password path above goes
-				// through PasswordSecretBox, passkey path goes through the
-				// coordinator.
-				passkeyWindow = { finish: await this.passkeyCoordinator.confirm(snapshot) }
-			}
-			// Revalidate AFTER the async credential op: a delete that completed
-			// during the (unlocked) derivation/prompt — even one followed by
-			// a same-id restore — must not report success for the stale generation.
-			// A LEGIT concurrent password change does NOT bump the epoch, so confirm
-			// still succeeds.
-			await this.reportToPasskeyWindow(passkeyWindow, () =>
-				this.runExclusive(async () => {
-					if (await this.profileFenceBroken(id, capturedEpoch)) {
-						throw new Error("Invalid profile id")
-					}
-				}),
-			)
-			return true
-		} catch (error) {
-			this.logError("Failed to confirm operation", error)
-			throw new Error(getErrorMessage(error))
-		}
-	}
-
 	/** Injected by the last-started ProfileDeletionCoordinator. */
 	public setDeletionDelegate(delegate: ProfileDeletionDelegate): void {
 		this.deletionDelegate = delegate
@@ -1758,10 +1701,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		if (!password) {
 			throw new Error("Password is required")
 		}
-		// Single unseal — skip the redundant `confirmProfileOperation`
-		// PBKDF2. Still emulate that method's outer catch: any throw
-		// (including crypto-level failures) is flattened to a plain
-		// `Error(message)` so callers see a stable error shape.
+		// Any throw, a crypto-level failure included, is flattened to a plain `Error(message)`, so
+		// callers see one error shape.
 		try {
 			const unsealed = await this.secretBox.unseal(password, this.sealedTriple(profile))
 			try {
