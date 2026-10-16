@@ -125,8 +125,8 @@ const FIXTURE_HTML = `
 	<div data-testid="tr-field"><span class="type--label">To</span><input class="type--input-data" value="0x1a" /></div>
 	<span class="type--name" data-testid="tr-name" data-address-shows="name">Alice</span>
 	<span class="type--data" data-testid="tr-twin">0x1a</span>
-	<span class="type--meta" data-testid="tr-twin" style="display: none">0x1a</span>
-	<span class="type--data" data-testid="tr-gone" style="display: none">0x1a</span>`
+	<span class="type--meta" data-testid="tr-twin" hidden>0x1a</span>
+	<span class="type--data" data-testid="tr-gone" hidden>0x1a</span>`
 
 const fixtureSite = (selector: string, role: SiteEntry["role"]): SiteEntry => ({
 	file: "fixture.vue",
