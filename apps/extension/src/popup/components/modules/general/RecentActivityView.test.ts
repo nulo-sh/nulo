@@ -15,6 +15,7 @@
  * swapping it).
  */
 
+import { deferred } from "@nulo/wallet-core/utils"
 import { flushPromises, mount } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
 import { nextTick, ref } from "vue"
@@ -189,14 +190,6 @@ const makeRouter = () =>
 const ACCT_A = "0xacct" // matches the harness default active account
 const ACCT_B = "0xB"
 const ACCT_FOREIGN = "0xOTHER"
-
-function deferred<T>() {
-	let resolve!: (v: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
-}
 
 const inFlightTransferOp = (account: string, id = "op-a") => ({
 	id,

@@ -8,6 +8,7 @@ import { createHash } from "node:crypto"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { WindowPort } from "@nulo/wallet-core/ports"
 import { DISCOVERY_STALE_MS, WalletSdkDispatcher } from "@nulo/wallet-bridge"
+import { deferred } from "@nulo/wallet-core/utils"
 
 type Callbacks = {
 	onPendingDiscovery: (d: unknown) => void
@@ -119,16 +120,6 @@ function keyExchange(requestId: string, over: Record<string, unknown> = {}): Ses
 	}
 	sessions.set(requestId, session)
 	return session
-}
-
-function deferred<T>() {
-	let resolve!: (v: T) => void
-	let reject!: (e: unknown) => void
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
 }
 
 /** A browser that knows which windows are open: `remove` or `navigate` of a gone window rejects,

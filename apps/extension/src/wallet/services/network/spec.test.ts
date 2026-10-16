@@ -3,6 +3,8 @@ import {
 	ERR_RPC_URL_HIDDEN_CHARACTERS,
 	ERR_RPC_URL_IPV6_LOOPBACK,
 	type Network,
+	NetworkRowSchema,
+	NetworkSchema,
 	NodeStatus,
 	NodeStatusSchema,
 	networkInfoFrom,
@@ -104,6 +106,33 @@ const network = (over: Partial<Network> = {}): Network => ({
 	],
 	kind: "custom",
 	...over,
+})
+
+describe("NetworkRowSchema and NetworkSchema", () => {
+	const row: Network = {
+		id: "n1",
+		profileId: "p1",
+		chainId: 1,
+		l1ChainId: 1,
+		name: "Testnet",
+		primaryEndpointId: "e1",
+		endpoints: [{ id: "e1", rpcUrl: "https://rpc.example.com" }],
+	}
+
+	test("the row codec loads a row with no endpoints; the strict schema refuses it", () => {
+		const empty = { ...row, endpoints: [] }
+		expect(NetworkRowSchema.safeParse(empty).success).toBe(true)
+		expect(NetworkSchema.safeParse(empty).success).toBe(false)
+	})
+
+	test("both take every chain kind and refuse an unknown one", () => {
+		for (const schema of [NetworkRowSchema, NetworkSchema]) {
+			for (const kind of ["mainnet", "testnet", "devnet", "local", "custom"]) {
+				expect(schema.safeParse({ ...row, kind }).success).toBe(true)
+			}
+			expect(schema.safeParse({ ...row, kind: "staging" }).success).toBe(false)
+		}
+	})
 })
 
 describe("NodeStatusSchema", () => {
