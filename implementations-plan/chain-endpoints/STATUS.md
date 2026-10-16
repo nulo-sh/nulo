@@ -21,3 +21,4 @@
 - 2026-10-16: panel: Codex conditional approve (5 findings), Opus conditional approve (7, one High on #101's record); all accepted; D28 conditional, D31 revised, D32 (R5 released). Codex resume next.
 - 2026-10-16: Codex round 2 approve (one Low wording fix); merged dev 5c273865 (#534 closed #156, so R5 is moot); revision committed on chain-endpoints-close-out. Awaiting the orchestrator.
 - 2026-10-16: arc 2b released (D-orch-11: P12-03 was never struck); branch chain-endpoints-2b off 78d22cca, dev 7697c376 merged; R3 (#212 via #255) and R5 (#534) satisfied.
+- 2026-10-16: 2b.4-5 code in place (shadow roots, style-src hash, manifest + seam + focus tests, unit green); 2b.7 scan clean on both dists; e2e waits for load1 < 150 (389).
