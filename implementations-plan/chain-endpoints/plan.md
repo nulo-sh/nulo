@@ -931,6 +931,10 @@ Over the two test-only fixes the gate runs needed after the loop converged (type
 | 2 | Low. The comment named a cause nobody established | Accepted: it states the `<svg>` has no `click()` |
 | 3 | Nit. type-roles' CSSOM write skipped a missing input in silence | Accepted: it throws |
 
+### Arc 2b, CI fix, Codex (gpt-6.1-sol, high, read-only; session `01a146a2-10ab-70c0-9265-57dba3bb8ec2`), 2026-10-16
+
+Over the commit that reads the logs follow off the viewer's scroll-to-end button (D40). Verdict: **approve**, no material bugs; it confirmed CodeMirror 6.43.9's stick to the end in the source, that the observer latches a button shown and removed again, and that the absence precondition catches a follow already off by geometry. One low comment finding, accepted: the observer states why it latches (the viewer's scroll handler hides the button once CodeMirror scrolls back to the end).
+
 ## Delivery
 
 One `gh stack`, base `dev`, one PR per arc, each opened only after its arc gate passes and its Codex loop converges.

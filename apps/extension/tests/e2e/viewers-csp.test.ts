@@ -63,6 +63,7 @@ async function followsNextLine(page: Page): Promise<boolean> {
 	await page.evaluate(() => {
 		const w = window as unknown as { __scrollBtnShown?: boolean }
 		w.__scrollBtnShown = false
+		// Latched: CodeMirror's stick to the end scrolls the view back, which hides the button again.
 		new MutationObserver((records, observer) => {
 			const shown = records.some(({ addedNodes }) =>
 				[...addedNodes].some(

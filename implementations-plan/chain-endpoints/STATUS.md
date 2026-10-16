@@ -40,3 +40,4 @@
 - 2026-10-16: final head local gates: test:all (extension 801 files / 12932 tests, design 498, every workspace green), lint, typecheck:all, test:ci-gating, lint:actions: exit 0.
 - 2026-10-16: merged origin/dev (94f4e26b, index.md conflict only). On the merged head: lint, typecheck:all, test:ci-gating, lint:actions, check:plans, test:all (extension 13056, design 500) exit 0; armed builds clean; smoke viewers-csp, import-errors-scroll, type-roles pass on Chrome and Firefox.
 - 2026-10-16: CI on #609: all green but Firefox smoke shard 2/3 (viewers-csp search case, 3/3 attempts). CodeMirror keeps a view within 4px of its end there on its own; the cases now read the viewer's scroll-to-end button (logs-scroll-btn) and the selection case is back. Local: viewers-csp 3x per browser, 4/4 each.
+- 2026-10-16: negative control (Chrome, document selection + document focusin): control passes, selection and search cases fail.
