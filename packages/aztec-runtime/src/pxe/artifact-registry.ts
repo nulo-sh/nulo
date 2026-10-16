@@ -10,10 +10,12 @@ import { PXE_SERVICE_NAME } from "./spec"
 
 export type ArtifactSource = "pxe-local" | "known"
 
-const RESOLUTION_ORDER: readonly ArtifactSource[] = ["pxe-local", "known"]
+/** The compiled-in copy of a class wins over this PXE's: a store can hold another byte form of a class
+ *  the wallet ships. */
+const RESOLUTION_ORDER: readonly ArtifactSource[] = ["known", "pxe-local"]
 
 /**
- * Artifact resolution: this PXE first, then the compiled-in bundle.
+ * Artifact resolution: the compiled-in bundle first, then this PXE.
  *
  * Holds the compiled-in "known" artifacts + the SponsoredFPC instance,
  * loaded lazily via the injected `KnownArtifactsLoader`.
@@ -68,9 +70,10 @@ export class ArtifactRegistry {
 		return this.known?.instances.get(address)
 	}
 
-	/** Resolve an artifact by class id: "pxe-local", then "known" unless
-	 *  `pxeOnly`. The `pxeLookup` callback is invoked exactly once —
-	 *  callers pass the chain's PXE so the registry stays PXE-agnostic.
+	/** Resolve an artifact by class id: "known" unless `pxeOnly`, then
+	 *  "pxe-local". The `pxeLookup` callback is invoked at most once, and
+	 *  not when the compiled-in bundle has the class — callers pass the
+	 *  chain's PXE so the registry stays PXE-agnostic.
 	 *
 	 *  ## Trust enforcement
 	 *
