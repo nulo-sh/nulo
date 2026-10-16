@@ -22,7 +22,7 @@ import { requireNetwork } from "@/utils/core"
 import { storageLocalSet } from "@/utils/storage"
 import { isSelfPay } from "@nulo/wallet-bridge"
 import { isEmbeddedFeePayment, requiresFeeSelection } from "./operation-validation"
-import { personPaysAppPayment, waitsForFeeFigure } from "./fee-figure"
+import { type FeePayerPick, personPaysAppPayment, waitsForFeeFigure } from "./fee-figure"
 import { authwitDisplayCall, pendingAuthwitDecodes, undecodedAll } from "./display-calls"
 import { decodeOperationArguments, readKnownTokens, resolveOperations } from "./operation-display"
 import type { DraftUIOperation } from "./types"
@@ -71,6 +71,8 @@ const router = useRouter()
 
 const session = ref()
 const operations = ref<UIOperation[]>([])
+/** Per operation, the paying method its fee card reports. */
+const feePayers = ref<Record<number, FeePayerPick | null>>({})
 const accounts = ref<Account[]>([])
 
 const isLoading = ref(false)
@@ -160,7 +162,7 @@ const isAppPaid = (op: UIOperation | undefined): boolean =>
 
 /** The figure an approval carries is on screen before Confirm; a failed estimate keeps Confirm off. */
 const awaitsFeeFigure = computed(() =>
-	operations.value.some((op, i) => waitsForFeeFigure(op as unknown as UIOperation) && !feeEstimates.value[i]),
+	operations.value.some((op, i) => waitsForFeeFigure(op as unknown as UIOperation, feePayers.value[i]) && !feeEstimates.value[i]),
 )
 
 /** An estimate whose payer the node would refuse at submission: an app's fee contract proven unable
@@ -569,6 +571,7 @@ onUnmounted(() => {
 						:tokenMetadataError="op.kind === 'register_token' ? tokenMetadataError.get((op as { address: string }).address) : undefined"
 						:tokenMetadataLoading="op.kind === 'register_token' && tokenMetadataLoading"
 						@updateFeeSettings="handleFeeUpdate"
+						@updatePayer="(index: number, payer: FeePayerPick | null) => (feePayers[index] = payer)"
 					/>
 				</Flex>
 			</Flex>

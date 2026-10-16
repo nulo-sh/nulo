@@ -40,6 +40,7 @@ import DetailsToggle from "./DetailsToggle.vue"
 import OperationActionRow from "./OperationActionRow.vue"
 import SendTxSummary from "./SendTxSummary.vue"
 import { humanizeOperationKind, safeWire } from "./humanize"
+import type { FeePayerPick } from "./fee-figure"
 import type { DraftAztecSendTxOperation, DraftSendTransactionOperation, DraftUIOperation } from "./types"
 import {
 	type CallSurface,
@@ -103,7 +104,11 @@ const props = defineProps<{
 	tokenMetadataLoading?: boolean
 }>()
 
-const emit = defineEmits<(e: "updateFeeSettings", index: number, value: FeeSettings | undefined) => void>()
+const emit = defineEmits<{
+	updateFeeSettings: [index: number, value: FeeSettings | undefined]
+	/** The fee card's paying method, or null while none pays. */
+	updatePayer: [index: number, payer: FeePayerPick | null]
+}>()
 
 // TS type predicate so the template's `v-if="isSendTx(op)"` narrows op
 // to the send-like subtype downstream (lets us access `op.feeSettings`
@@ -356,6 +361,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 			:isEstimating="isEstimating"
 			:modelValue="op.feeSettings"
 			@update:modelValue="(value: FeeSettings | undefined) => emit('updateFeeSettings', index, value)"
+			@update:payer="(payer: FeePayerPick | null) => emit('updatePayer', index, payer)"
 		/>
 	</Flex>
 

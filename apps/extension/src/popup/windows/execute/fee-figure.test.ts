@@ -44,4 +44,14 @@ describe("waitsForFeeFigure", () => {
 	])("does not wait for %s", (_case, op) => {
 		expect(waitsForFeeFigure(op)).toBe(false)
 	})
+
+	test("a fee picked in the window waits unless a sponsor pays it", () => {
+		const picked = sendTx({ calls: [] })
+		expect(waitsForFeeFigure(picked, { type: "fj" })).toBe(true)
+		expect(waitsForFeeFigure(picked, { type: "private_fpc" })).toBe(true)
+		expect(waitsForFeeFigure(picked, null)).toBe(true)
+		expect(waitsForFeeFigure(picked, { type: "fpc" })).toBe(false)
+		const capped = sendTx({ calls: [] }, { fee: { gasSettings: { maxFeesPerGas: {} } } })
+		expect(waitsForFeeFigure(capped, { type: "fpc" })).toBe(true)
+	})
 })

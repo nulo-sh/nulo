@@ -22,13 +22,18 @@ export function personPaysAppPayment(op: DraftUIOperation): boolean {
 	return claimsToAccount(op) || (op.kind === "aztec_sendTx" && isPrivateFpc(op.exec?.feePayer))
 }
 
+/** The paying method the window's fee card reports; `fpc` is a sponsor, never the person. */
+export type FeePayerPick = { type: "fj" | "private_fpc" | "fpc" }
+
 /**
  * Whether Confirm waits for this operation's estimate. The figure is what an approval holds the
- * send to wherever the wallet picks the fee or the account pays it, and it is the charge an app's
- * own cap or priority commits. A default-entrypoint operation is never estimated: nothing to wait for.
+ * send to wherever the person pays: a method picked in the window other than a sponsor (`payer`,
+ * waited on while unknown), or an app's payment the person makes all the same. It is also the
+ * charge an app's own cap or priority commits. A default-entrypoint operation is never estimated.
  */
-export function waitsForFeeFigure(op: DraftUIOperation): boolean {
+export function waitsForFeeFigure(op: DraftUIOperation, payer?: FeePayerPick | null): boolean {
 	if (op.kind !== "send_transaction" && op.kind !== "aztec_sendTx") return false
 	if (op.kind === "aztec_sendTx" && op.executionMode === "default_entrypoint") return false
-	return !isEmbeddedFeePayment(op) || personPaysAppPayment(op) || setsOwnFee(op)
+	const personPicks = !isEmbeddedFeePayment(op) && payer?.type !== "fpc"
+	return personPicks || personPaysAppPayment(op) || setsOwnFee(op)
 }

@@ -1047,6 +1047,25 @@ describe("execute window — an operation the app pays for", () => {
 		await vm.approve()
 		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
 	})
+
+	test("a sponsor picked in the window pays, not the person: Confirm does not wait, and a failed estimate leaves it on", async () => {
+		const { vm, fees, confirm } = await opened({ ...appPaid, exec: { calls: [] } })
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		const card = w!.findComponent(STUBS.OperationCard)
+		;(vm as unknown as { handleFeeUpdate: (index: number, value: unknown) => void }).handleFeeUpdate(0, {
+			paymentMethod: { kind: "fpc", fpcId: "s1" },
+		})
+		card.vm.$emit("updatePayer", 0, { type: "private_fpc" })
+		api.results.value = { 0: null }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+
+		card.vm.$emit("updatePayer", 0, { type: "fpc" })
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
 })
 
 // ── The two send kinds as a dApp's wire carries them: 32-byte hex fields, CAIP accounts. Each draft
