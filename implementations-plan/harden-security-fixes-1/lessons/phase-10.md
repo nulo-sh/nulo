@@ -9,3 +9,4 @@
 ## Final gates
 
 - Static scans that read the whole tree (copy-dash-ban, log-payload-ban, profile-ui-keys.scan, storage-facade-ban) and a hook that imported the content script per test timed out at their 5 s and 10 s limits at a load of about 200. The hook now imports the module once, at collection; the scans pass alone. Neither limit was raised.
+- PR B (#603) at its final head: Firefox network, 4 files, 7 tests passed; Chrome network, 10 of 11 tests in the 8-file batch, with `session-reconnect`'s untrusted case timing out on a 10 s wait for the verify window at a load of about 220, and passing in a rerun of the file. The file passed in both browsers before the `dev` merge.

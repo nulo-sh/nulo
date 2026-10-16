@@ -1,7 +1,7 @@
 ---
 plan: harden-security-fixes-1
 tier: mid
-status: completed (A #578 merged; B #PRB and C, which carries this close-out, open)
+status: completed (A #578 merged; B #603 and C, which carries this close-out, open)
 issues: "none open; the sources are tracked privately and no PR carries a Closes for them. C9's closed known-limit issue is #597."
 driver: claude-code
 claude_model: opus
@@ -18,10 +18,10 @@ post_implementation_hardening: not scheduled
 ## Outcome
 
 - **Date:** 2026-10-16.
-- **Status:** closed. PR A is merged (#578); PR B (#PRB) and PR C (this close-out) are open, and the merge that lands both closes the plan.
+- **Status:** closed. PR A is merged (#578); PR B (#603) and PR C (this close-out) are open, and the merge that lands both closes the plan.
 - **Shipped:**
   - #578 (phases 1-3): replies read under a byte budget (`readBodyCapped`: node 32 MiB, price 16 KiB, the token list's own); a backup's token and balance slices limited to 1024 and 16384 rows, checked before any row is read, with one balance key listing per restore; a discovery request admitted only in the SDK's shape.
-  - #PRB (phases 4-6): a key exchange admitted only from its discovery's tab and document origin, and a document passes on only the approvals it asked for; a dApp call's title from its declared `name`, cleaned, also where a settled transaction records its calls (D8); the wallet's own class copy first at resolution and at `registerContract` (D9).
+  - #603 (phases 4-6): a key exchange admitted only from its discovery's tab and document origin, and a document passes on only the approvals it asked for; a dApp call's title from its declared `name`, cleaned, also where a settled transaction records its calls (D8); the wallet's own class copy first at resolution and at `registerContract` (D9).
   - PR C (phases 7-9): Aztec dependency loggers at `warn`, and no 32-byte value leaves the PXE host frame's log lines (D10, D11); the publish summary's base one list back, a shallow clone refused, and the envelope held to the signer's exact key order (D7); SECURITY.md names the browser trust the passkey derivation rests on.
 - **Known limits:** #597 (C9).
 - **Open items:** none.
@@ -182,7 +182,7 @@ Loops per PR, Codex gpt-6.1-sol at high, read-only, with one Opus review beside 
 
 **PR A (#578, merged).** Codex round 1 (session 01a14526): approve, five comment findings, applied. Opus: logic correct; a typecheck break, a 1 s abort timer under the 32 MiB pins, test and README nits, applied. Codex round 2: approve.
 
-**PR B.** Codex round 1 (session 01a14562): approve, three findings (origin-precedence tests, stale resolution-order text, a narrating comment), applied. Opus: C4 and C6 correct; accepted a further title site (the call names a settled transaction records now pass through `wireTitle` too: `wireTitle(name) ?? selector`, D8), a wiring test for the content script, and wording; it also proposed loading the compiled-in bundle before the write lock. Codex round 2: conditional approve, one material: that hoist put an await before `withPxeWrite` captures the chain's purge epoch; the hoist was removed, and the one-time load stays inside the write (D9). Codex round 3: the fix correct; one commit body reworded to state the invariant. The loop closed at three rounds with every condition applied.
+**PR B (#603).** Codex round 1 (session 01a14562): approve, three findings (origin-precedence tests, stale resolution-order text, a narrating comment), applied. Opus: C4 and C6 correct; accepted a further title site (the call names a settled transaction records now pass through `wireTitle` too: `wireTitle(name) ?? selector`, D8), a wiring test for the content script, and wording; it also proposed loading the compiled-in bundle before the write lock. Codex round 2: conditional approve, one material: that hoist put an await before `withPxeWrite` captures the chain's purge epoch; the hoist was removed, and the one-time load stays inside the write (D9). Codex round 3: the fix correct; one commit body reworded to state the invariant. The loop closed at three rounds with every condition applied.
 
 **PR C.** Codex round 1 (session 01a1459a): reject. Accepted: #1 a merge that keeps older bytes before a restore (not reproduced on git 2.43, where `--find-object` reaches the side branch's commit by default, also when it is dated after its descendants; `--full-history --topo-order` now state the walk, with a merge test that fails under the old base); #2 an edit and its revert cancel in `git diff --stat`, so "no change" now needs an empty log too; #3 two comments removed; #4 a skill clause reworded.
 
