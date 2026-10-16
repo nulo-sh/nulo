@@ -430,7 +430,7 @@ requestConfirm({
 })
 ```
 
-Each request replaces the whole previous one; never write into `cacheStore.confirm` (`useConfirm.test.ts` fails on a write or an `open("confirm")` outside the helper).
+Each request replaces the whole previous one; never write into `cacheStore.confirm` (`useConfirm.test.ts` fails on a write to `cacheStore.confirm` or an `open("confirm")` outside the helper).
 
 **Toast notifications:**
 

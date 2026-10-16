@@ -45,6 +45,8 @@ export type BackupSelection =
 	| { kind: "sealed"; name: string; backup: string; profileType: null }
 	| { kind: "opened"; name: string; backup: unknown; profileType: string | null }
 
+/** Read unchecked on purpose: narrowing a malformed value would change which CTAs a malformed file
+ *  shows, and restore validates the whole body before it trusts any field. */
 const profileTypeOf = (backup: unknown): string | null =>
 	(backup as { data?: { profile?: { type?: string } } } | null)?.data?.profile?.type ?? null
 

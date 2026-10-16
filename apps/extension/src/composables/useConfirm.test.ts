@@ -141,6 +141,7 @@ describe("useConfirm — what the dialog shows", () => {
 		await request(req)
 		req.title = "Changed"
 		await flushPromises()
+		expect(useCacheStore().confirm.title).toBe("Delete this sender?")
 		expect(text("confirm-title")).toBe("Delete this sender?")
 	})
 })
@@ -194,19 +195,33 @@ describe("useConfirm — answering", () => {
 })
 
 /**
- * The ban, read from source text: under `src/`, outside tests and generated types, no assignment
- * to `cacheStore.confirm` or a member of it (`=`, `Object.assign`), and no `open("confirm")` with
- * any quote, except ConfirmPopup's clear on close and this helper. It cannot see a write through an
- * alias of the slot or a `$patch`; those still fail the whole-object rule at review.
+ * The ban, read from each file's whole text so a call split across lines is seen: under `src/`,
+ * outside tests and generated types, no assignment to `cacheStore.confirm` or a member of it (`=`,
+ * `Object.assign`), and no `open("confirm")` with any quote, except ConfirmPopup's clear on close
+ * and this helper. It cannot see the store bound under another name, a write through an alias of
+ * the slot, or a `$patch`; those still fail the whole-object rule at review.
  */
 describe("useConfirm — the only way to open the confirm dialog", () => {
 	const SRC = join(__dirname, "..")
-	const WRITE =
-		/\b(?:cacheStore|useCacheStore\(\))\.confirm\b[\w.[\]"']*\s*=(?!=)|Object\.assign\(\s*(?:cacheStore|useCacheStore\(\))\.confirm\b/
-	const OPEN = /\bopen\(\s*["'`]confirm["'`]/
+	const FORMS = [
+		/\b(?:cacheStore|useCacheStore\(\))\.confirm\b[\w.[\]"']*\s*=(?!=)/g,
+		/Object\.assign\(\s*(?:cacheStore|useCacheStore\(\))\.confirm\b/g,
+		/\bopen\(\s*["'`]confirm["'`]/g,
+	]
 	const ALLOWED: Record<string, RegExp> = {
 		"composables/useConfirm.ts": /./,
 		"popup/components/popups/ConfirmPopup.vue": /^\s*cacheStore\.confirm = \{\}\s*$/,
+	}
+
+	/** Each write of the slot or open of the dialog in a source, with the line its match starts on. */
+	function offenses(source: string): Array<{ line: number; text: string }> {
+		const lines = source.split("\n")
+		return FORMS.flatMap((form) =>
+			[...source.matchAll(form)].map((m) => {
+				const line = source.slice(0, m.index).split("\n").length
+				return { line, text: lines[line - 1] ?? "" }
+			}),
+		)
 	}
 
 	function sources(dir: string, out: string[] = []): string[] {
@@ -218,16 +233,23 @@ describe("useConfirm — the only way to open the confirm dialog", () => {
 		return out
 	}
 
+	test("the scan sees each form it names, a call split across lines included, and lets reads pass", () => {
+		const at = (source: string) => offenses(source).map((o) => o.line)
+		expect(at(`cacheStore.confirm.title = "x"`)).toEqual([1])
+		expect(at(`useCacheStore().confirm = {}`)).toEqual([1])
+		expect(at(`x()\nObject.assign(\n\tcacheStore.confirm,\n\treq,\n)`)).toEqual([2])
+		expect(at(`popupStore.open(\n\t"confirm",\n)`)).toEqual([1])
+		expect(at(`if (cacheStore.confirm.callback === fn) close()\n<Toggle v-model="cacheStore.confirm.toggle.model"\n/>`)).toEqual([])
+	})
+
 	test("no source writes the slot or opens the dialog itself", () => {
 		const offending: string[] = []
 		for (const file of sources(SRC)) {
 			const rel = relative(SRC, file)
 			if (rel.startsWith("types/")) continue
-			readFileSync(file, "utf8")
-				.split("\n")
-				.forEach((line, i) => {
-					if ((WRITE.test(line) || OPEN.test(line)) && !ALLOWED[rel]?.test(line)) offending.push(`${rel}:${i + 1}`)
-				})
+			for (const { line, text } of offenses(readFileSync(file, "utf8"))) {
+				if (!ALLOWED[rel]?.test(text)) offending.push(`${rel}:${line}`)
+			}
 		}
 		expect(offending).toEqual([])
 	})

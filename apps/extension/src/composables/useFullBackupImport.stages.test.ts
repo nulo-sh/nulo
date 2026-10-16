@@ -744,9 +744,9 @@ describe("epoch-4 passkey gates", () => {
 
 describe("decrypt publication race — the last await seam", () => {
 	it("a re-pick landing between the helper's final fence and the caller's continuation is NOT overwritten", async () => {
-		const inner = { data: { profile: { type: "password", name: "RaceName" } } }
+		const innerJson = JSON.stringify({ data: { profile: { type: "password", name: "RaceName" } } })
 		const key = await EncryptionKey.fromPassword("pw12345678")
-		const sealed = Buffer.from(await key.encrypt(new TextEncoder().encode(JSON.stringify(inner)))).toString("base64")
+		const sealed = Buffer.from(await key.encrypt(new TextEncoder().encode(innerJson))).toString("base64")
 
 		const opts = makeOpts()
 		const c = useFullBackupImport(opts)
@@ -755,25 +755,21 @@ describe("decrypt publication race — the last await seam", () => {
 		c.selectedBackup.value = original
 		c.decryptionPassword.value = "pw12345678"
 
-		// Deterministic scheduling: wrap the real key's decrypt so the re-pick is queued AT
-		// decrypt resolution. Microtask order is then [helper continuation (fence passes,
-		// parse, return), re-pick, caller continuation] — landing the replacement exactly in
-		// the seam between the helper's last internal fence and the caller's publication.
-		const realFromPasshash = EncryptionKey.fromPasshash.bind(EncryptionKey)
-		vi.spyOn(EncryptionKey, "fromPasshash").mockImplementation(async (passhash) => {
-			const realKey = await realFromPasshash(passhash)
-			return {
-				decrypt: async (bytes: Uint8Array) => {
-					const out = await realKey.decrypt(bytes as Uint8Array<ArrayBuffer>)
-					queueMicrotask(() => {
-						c.selectedBackup.value = replacement
-					})
-					return out
-				},
-			} as never
+		// The re-pick is queued from the helper's parse of the decrypted body, which runs after its
+		// last stale check and before it returns, so the microtask runs ahead of the caller's
+		// continuation: only the caller's own fence can keep the replacement.
+		const realParse = JSON.parse
+		const parse = vi.spyOn(JSON, "parse").mockImplementation((text, reviver) => {
+			if (text === innerJson) {
+				queueMicrotask(() => {
+					c.selectedBackup.value = replacement
+				})
+			}
+			return realParse(text, reviver)
 		})
 
 		await c.decryptBackup()
+		parse.mockRestore()
 
 		// The replacement selection must survive (structural: the ref stores a reactive
 		// proxy of the assigned object); the decrypted publication must not land.
