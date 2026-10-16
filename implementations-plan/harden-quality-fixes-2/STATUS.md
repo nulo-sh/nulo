@@ -13,3 +13,6 @@
 - 2026-10-16 arc 1 phase 1.3: whole Chrome smoke retry 0: 56 files pass, 6 skipped; 246 tests pass, 14 skipped (2095 s locally, load ~150-200).
 - 2026-10-16 arc 1 phase 1.3: network batch-mixed retry 0 via e2e:agent: 1/1 pass (174 s). Phase 1.3 gate: pass.
 - 2026-10-16 arc 1 final gates on the final head: lint, lint:actions, shellcheck, typecheck:all, test:ci-gating 576, test:release, test:all all pass. Pushing; PR next.
+- 2026-10-16 PR #604 opened (no labels; both e2e path filters trip). Watching checks.
+- 2026-10-16 PR #604 checks: all green; the five aggregators report under their old names; smoke wall-clock Chrome 12m01s, Firefox 15m45s (before 12m14s, 17m26s).
+- 2026-10-16 arc 2 branched `harden-quality-fixes-2-arc2` off dev `5e2888be`; recon re-verified (moves in lessons/phase-2.md); I2 pins green on the base.
