@@ -688,9 +688,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		const [, , rpcUrl] = validateParams(NetworkMethodSchemas.addEndpoint.params, [networkId, label, rawRpcUrl], "addEndpoint")
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
-		// Peek the network's kind unlocked so the chainId probe can short-circuit
-		// for `kind === "local"` regardless of how the URL was edited. The lock-
-		// guarded re-read below handles the (rare) deletion race.
+		// Peek the network's kind unlocked so a loopback endpoint of a `local` row reads as chain 0
+		// whatever its URL. The lock-guarded re-read below handles the (rare) deletion race.
 		const peek = requireOwnedRow(await this.storage.get(networkId), profile.id)
 		const probed = await this._probeChainIdentity(rpcUrl, peek.kind)
 		return await this.lock.withLock(async () => {
@@ -726,8 +725,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
 		const normalized = normalizeRpcUrl(rpcUrl)
-		// Peek the network's kind so the chainId probe can short-circuit for
-		// `kind === "local"` regardless of how the URL was edited.
+		// Peek the network's kind so a loopback endpoint of a `local` row reads as chain 0 whatever its URL.
 		const peek = requireOwnedRow(await this.storage.get(networkId), profile.id)
 		// Probe outside the lock even for an unchanged URL: the node's chain identity may have drifted.
 		const probed = await this._probeChainIdentity(rpcUrl, peek.kind)
@@ -879,8 +877,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	 * is no URL to pin to.)
 	 *
 	 * Failures are reported via `reportEndpointFailure(url)`; after 3
-	 * consecutive failures the cache entry is evicted and the next poll
-	 * rebuilds the same URL.
+	 * reported failures, which a success does not reset, the cache entry is
+	 * evicted and the next poll rebuilds the same URL.
 	 */
 	public async getNodeForUrl(url: string): Promise<AztecNode> {
 		await this.ensureInitialized()
@@ -1181,7 +1179,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	}
 
 	/** A caller that knows the network is local passes `kindHint`, so a Local Network endpoint
-	 *  edited away from the seed URL still reads as chain 0. */
+	 *  edited to another loopback URL still reads as chain 0. */
 	private async _getChainId(rpcUrl: string, kindHint?: ChainKind): Promise<number> {
 		return (await this._probeChainIdentity(rpcUrl, kindHint)).chainId
 	}

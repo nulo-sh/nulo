@@ -277,12 +277,13 @@ which makes the endpoint trust boundary explicit.
   reduces to: a malicious endpoint can serve crafted RPC responses to a
   PXE / wallet that already trusts the **chain**.
 - **Chain identity is checked at adoption.** `addNetwork` probes the node's
-  `getNodeInfo()` and records its exact L1 chain id and the wallet chain id
-  it computes (`walletChainId(l1ChainId, rollupVersion)`). `addEndpoint` /
-  `updateEndpoint` refuse a node unless both equal the row's; the refusal
-  carries `ENDPOINT_CHAIN_MISMATCH` and shows inline in the popup. Chain 0
-  is the Local Network: L1 31337 (`LOCAL_L1_CHAIN_ID`) on `localhost` or
-  `127.0.0.1`. A node elsewhere whose answer computes to 0 is refused.
+  `getNodeInfo()` and records its exact L1 chain id and its wallet chain id:
+  0 for a loopback node at the Local Network's URL or on the Local Network's
+  row, otherwise the composite `walletChainId(l1ChainId, rollupVersion)`.
+  `addEndpoint` / `updateEndpoint` refuse a node unless both equal the row's;
+  the refusal carries `ENDPOINT_CHAIN_MISMATCH` and shows inline in the popup.
+  Chain 0 is the Local Network: L1 31337 (`LOCAL_L1_CHAIN_ID`) on `localhost`
+  or `127.0.0.1`. Any other node whose answer computes to 0 is refused.
 - **Chain identity is checked at use.** Every step that builds the chain
   metadata a signature, proof or simulation commits to compares the live
   node with the stored row (`assertLiveChainIdentity`): the L1 and the
@@ -297,8 +298,9 @@ which makes the endpoint trust boundary explicit.
 - **Duplicate-URL guard per Network.** Adding the same `rpcUrl` twice to
   the same `Network` is rejected (`DUPLICATE_ENDPOINT`).
 - **Per-URL `AztecNode` cache** with 3-strike eviction: each unique URL
-  gets its own client; transient failures don't poison neighbours;
-  consecutive failures evict.
+  gets its own client; transient failures don't poison neighbours; three
+  reported failures, which a success does not reset, evict the client and
+  the next use rebuilds the same URL.
 
 ### Pending-tx polling pin
 
@@ -311,8 +313,8 @@ URL via `getNodeForUrl`. This avoids:
   seen the bundle yet, and
 - a malicious endpoint shadowing receipts for txs it never received.
 
-Three consecutive failures rebuild that URL's client; the poll never moves
-to another endpoint.
+Three reported failures rebuild that URL's client; the poll never moves to
+another endpoint.
 
 ### What endpoints can still do
 

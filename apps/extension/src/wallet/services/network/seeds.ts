@@ -34,8 +34,8 @@ export interface DefaultSeed {
  * if a user (or test fixture) edits the seed's endpoint URL via the
  * settings UI, the chainId resolution still recognizes it as Local Network.
  * For the structural path, callers that already know they're touching a
- * `kind === "local"` network pass `kindHint` to `_getChainId` and bypass
- * the URL comparison entirely.
+ * `kind === "local"` network pass `kindHint` to `_getChainId`, which
+ * replaces the URL comparison; the URL must still be loopback.
  */
 export const LOCAL_NETWORK_RPC_URL: string = (import.meta.env.VITE_LOCAL_NETWORK_RPC_URL as string | undefined) ?? "http://localhost:8080"
 
