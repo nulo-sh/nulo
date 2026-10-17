@@ -1,7 +1,7 @@
 ---
 plan: type-scale-1
 tier: mid
-status: planned, awaiting approval (OA-1 conditional; OA-2 to OA-4 open, the arc builds their "what ships now" forms)
+status: arc 1 blocked at Phase 1 (2026-10-17): a base overflow on the capabilities window (OA-5) and the gate's measurement (D8, pending approval)
 issues: "#589 (closed by the one arc)"
 driver: claude-code
 claude_model: opus
@@ -117,7 +117,9 @@ Every gate includes the fast layers: `bun run lint`, `bun run typecheck:all`, `b
 - **Smoke**, per browser (`<b>` is `chrome` or `firefox`): first the armed build of the current tree, `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:<b>`; then `cd apps/extension && NULO_E2E_CSP_REPORT=1 NULO_E2E_BROWSER=<b> bun run test:e2e -- <file> --retry=0`.
 - **Network**, per browser: `cd <worktree> && NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_BROWSER=<b> bun run e2e:agent tests/e2e/network/<file>.test.ts`. It rebuilds `dist/<b>` for the network, so rebuild the armed smoke build before the next smoke run.
 
-### Phase 0 — wait and base (no code)
+### Phase 0 — wait and base (no code) ✓
+
+Done 2026-10-17: merged at 966bbde5, census unchanged ([lessons/phase-0.md](lessons/phase-0.md)).
 
 1. Wait until type-roles-coverage's arc 1 PR is merged into `dev`.
 2. Run `git fetch origin && git merge origin/dev`, then `bun install --frozen-lockfile`.
@@ -125,7 +127,9 @@ Every gate includes the fast layers: `bun run lint`, `bun run typecheck:all`, `b
 
 **Gate**: `git merge-base --is-ancestor <arc-1 merge sha> HEAD` exits 0; fast layers exit 0. Layers: static, unit.
 
-### Phase 1 — the guard and the layout predicate, on today's tree
+### Phase 1 — the guard and the layout predicate, on today's tree ✗ blocked
+
+Step 1 done (db31c210). Step 2's gate is red on the base UI: one genuine overflow (OA-5) and measurement defects (D8); see [lessons/phase-1.md](lessons/phase-1.md).
 
 1. In `type-role-ban.test.ts`, give the three forms their hard "not a role" finding. Add one self-test per form, the comparison-operand control and one success control per form.
 2. In `fixtures/type-roles.ts`, add the `laid-out` scope and `overflowingText`; assert it in `expectPageClean`, the windows sweep and the panel test; add the input control to the probe test.
@@ -180,6 +184,8 @@ As Architecture § OA-2 answer A says; then the pinned tests that name `data` (`
 | D5 | Layout gate | `overflowingText` over the `laid-out` read (role-bearing ∪ own-text) on every swept surface; a base failure stops the phase | A surface allowlist (Codex r1, Opus: hides new clips on fragile screens); an element-keyed list (Opus) — see Audit verdicts; per-site permanent assertions (one-off risks, measured once instead) |
 | D6 | A site that would overlap at its successor's size | OA-1: today's look through `OVERRIDES` entries on that element only | Block the arc on the owner (retiring a role is atomic); a tenth role; widening the box unsigned. Codex r1 called it a monkey-patch and withdrew in r2 |
 | D7 | Sequencing | After type-roles-coverage arc 1; recount; merge `dev` before the PR | Branch now: both lanes edit the same identifier and e2e files |
+| D8 | The layout gate's measurement, after Phase 1 read the base (2026-10-17; pending the orchestrator's approval) | Measure text, not scrollable area: each own text node's line boxes against its allocated box and each enclosing box up to the first that scrolls, clips or draws an ellipsis; an element clipped to nothing (the screen-reader idiom) and an icon-font glyph are not text; the ancestor-clip span from text too | `scrollWidth > clientWidth` as specified: it reads 0 for an inline box's client width in Firefox (45 false findings), counts positioned non-text descendants (the Header's copy icon, every page) and judges text drawn at no size on purpose. Codex: "correction, recorded as a deviation"; the nearest box alone would lose the publish strip's containment |
+| D9 | The base failure the gate found ("TRANSACT", 58 px in a 54 px track, both browsers) | Stop Phase 1 and report (the Warning); OA-5 to the owner | A reviewed exception (forbidden by D5 and the Warning); OA-1's "today's look" (today's look itself fails) |
 
 ## Audit verdicts
 

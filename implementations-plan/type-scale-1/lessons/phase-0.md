@@ -34,3 +34,8 @@ Verdict: **conditional approve**; four conditions accepted and folded in (plan.m
 ### Fresh Codex pass (new session), then one resume
 
 Verdict: **conditional approve** (the union read flags Holdings search's native field; the commands lacked the armed smoke build and `NULO_E2E_RETRY=0`; OA-1's C could not ship a run-past). Verified: `global-setup-smoke.ts:34,63-74` refuses a missing or unarmed `dist/<browser>` and builds nothing; `vitest.e2e.network.config.ts:26` retries twice unless `NULO_E2E_RETRY` is set. Resumed on the one condition resolved differently (the predicate defined by kind for native fields and scroll containers): **approve**, "correct definition, not suppression".
+
+## Arc 1, Phase 0 (2026-10-17)
+
+- Merged `origin/dev` at 966bbde5 (#621, #613, #617, #603, #619). One conflict, `index.md` (both lines kept).
+- Recount on the merged tree: `name-tag` 0/2/0, `tag` 2/20/0, `label` 68/42/1, `data` 42/29/2, `meta` 8/33/2, `nav` 0/1/0 (variant / composes / static class), the same as recon. #613's new Settings rows use `body`, `caption`, `row-title` only. `identifier-sites.expected.json`: 129 sites, 88 `data`, unchanged in count.

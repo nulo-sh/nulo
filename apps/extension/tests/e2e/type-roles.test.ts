@@ -183,30 +183,65 @@ test("a site reads its value or its native field, a name shown is judged as name
 const LAYOUT_HTML = `
 	<div data-testid="tr-clip"><input class="type--input" data-testid="tr-clipped-input" value="1" /></div>
 	<input class="type--input-data" data-testid="tr-scrolling-input" value="0x09c1c9d2ce72c53c2451f8e9add86ccb8cb284dd4dc4f0eaf301b40b38a9459b" />
-	<div data-testid="tr-narrow"><span data-testid="tr-run-past">Text that runs past its box</span></div>`
+	<div data-testid="tr-narrow"><span data-testid="tr-run-past">Text that runs past its box</span></div>
+	<div data-testid="tr-narrow-line"><span data-testid="tr-inline-past">Text that runs past its line</span></div>
+	<span class="type--meta" data-testid="tr-cell"><b>Name</b><span>A fact too long</span></span>
+	<span data-testid="tr-inline-fits">Fits</span>
+	<span data-testid="tr-positioned">0x1a...2b<i data-testid="tr-positioned-icon"></i></span>
+	<span data-testid="tr-hidden">Read aloud only</span>
+	<span class="material-symbols-outlined" data-testid="tr-glyph">chevron_right</span>`
 
-test("the layout gate reports a field an ancestor cuts and text past its own box, never a field scrolling its value", async ({
+/** Each control's style, set through the CSSOM: `style-src` refuses a parsed `style` attribute. */
+const LAYOUT_STYLES: Record<string, Record<string, string>> = {
+	"tr-clip": { width: "40px", overflow: "hidden" },
+	"tr-clipped-input": { width: "200px" },
+	"tr-scrolling-input": { width: "100px" },
+	"tr-narrow": { width: "40px" },
+	"tr-run-past": { display: "block", whiteSpace: "nowrap" },
+	"tr-narrow-line": { width: "40px", whiteSpace: "nowrap" },
+	"tr-cell": { display: "flex", width: "40px", whiteSpace: "nowrap" },
+	"tr-positioned": { display: "inline-flex", position: "relative" },
+	"tr-positioned-icon": { position: "absolute", left: "calc(100% + 6px)", width: "12px", height: "12px" },
+	"tr-hidden": { position: "absolute", width: "1px", height: "1px", overflow: "hidden", clipPath: "inset(50%)", whiteSpace: "nowrap" },
+	"tr-glyph": { transform: "rotate(90deg)" },
+}
+
+test("the layout gate reports text an ancestor cuts or that runs past the box it lays out in, and nothing else", async ({
 	registeredExtension: ctx,
 }) => {
 	const page = await openHome(ctx)
-	await page.evaluate((html: string) => {
-		const host = document.createElement("div")
-		host.setAttribute("data-testid", "tr-layout")
-		host.innerHTML = html
-		// Through the CSSOM: `style-src` refuses a parsed `style` attribute.
-		const style = (testid: string) => (host.querySelector(`[data-testid="${testid}"]`) as HTMLElement).style
-		Object.assign(style("tr-clip"), { width: "40px", overflow: "hidden" })
-		style("tr-clipped-input").width = "200px"
-		style("tr-scrolling-input").width = "100px"
-		Object.assign(style("tr-narrow"), { width: "40px" })
-		Object.assign(style("tr-run-past"), { display: "block", whiteSpace: "nowrap" })
-		document.body.appendChild(host)
-	}, LAYOUT_HTML)
+	await page.evaluate(
+		(html: string, styles: Record<string, Record<string, string>>) => {
+			const host = document.createElement("div")
+			host.setAttribute("data-testid", "tr-layout")
+			host.innerHTML = html
+			for (const [testid, style] of Object.entries(styles))
+				Object.assign((host.querySelector(`[data-testid="${testid}"]`) as HTMLElement).style, style)
+			document.body.appendChild(host)
+		},
+		LAYOUT_HTML,
+		LAYOUT_STYLES,
+	)
 	try {
 		const { readings } = await readPageTypography(page, { kind: "laid-out" })
 		const fixture = readings.filter((reading) => reading.testid?.startsWith("tr-"))
-		expect(fixture.map(({ testid }) => testid).sort()).toEqual(["tr-clipped-input", "tr-run-past", "tr-scrolling-input"])
-		expect(overflowingText(fixture).map(({ testid }) => testid)).toEqual(["tr-clipped-input", "tr-run-past"])
+		// The screen-reader span paints nothing, so it is not read at all.
+		expect([...new Set(fixture.map(({ testid }) => testid))].sort()).toEqual([
+			"tr-cell",
+			"tr-clipped-input",
+			"tr-glyph",
+			"tr-inline-fits",
+			"tr-inline-past",
+			"tr-positioned",
+			"tr-run-past",
+			"tr-scrolling-input",
+		])
+		expect(overflowingText(fixture).map(({ testid }) => testid)).toEqual([
+			"tr-clipped-input",
+			"tr-run-past",
+			"tr-inline-past",
+			"tr-cell",
+		])
 	} finally {
 		await page.evaluate(() => document.querySelector('[data-testid="tr-layout"]')?.remove())
 	}
