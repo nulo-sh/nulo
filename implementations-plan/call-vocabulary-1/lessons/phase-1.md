@@ -11,3 +11,5 @@
   6. Applied: the two-grant test could not catch indexing by action. It now leads with a `call` action, and fails when `grantRows` is indexed by action.
   7. Applied: `ListedToken` was declared twice. It is now exported once from `tx-amount.ts`.
 - **Codex round 2** (resumed, same session, on `2bab2ff2`): approve, "No new regression, adversarial path, or comment finding." Converged after two rounds.
+- **Screenshot seeds must pass the same validation as real records.** The first capture seeded a class id of `0xc1…`, which is above the field modulus. `sameFieldAddress` refuses it, so the branch build never read the listed mint, and the base build hid the mint amounts. Both pictures misreported the change. The seed now uses `0x1c…`, and both builds were captured again. One discarded capture started at load1 151.1, just over the 150 limit; every gate run started below it.
+- **The I2 switch, measured** (Home, branch build, Chrome, 5 reloads at load1 about 150): a listed mint's plain name shows for 22, 28, 37, 43 and 70 ms before its label (median 37 ms, about two frames at 60 Hz).
