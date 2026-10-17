@@ -87,10 +87,8 @@ jobs:
             case "$name" in
               VITE_FEE_JUICE_BRIDGE_URL | VITE_NULO_ALLOW_IFRAME_DAPPS) ;;
               VITE_*)
-                if [ -n "${!name}" ]; then
-                  echo "::error::$name is set in the build environment — only VITE_FEE_JUICE_BRIDGE_URL and VITE_NULO_ALLOW_IFRAME_DAPPS may reach this build" >&2
-                  fail=1
-                fi
+                echo "::error::$name is set in the build environment — only VITE_FEE_JUICE_BRIDGE_URL and VITE_NULO_ALLOW_IFRAME_DAPPS may reach this build" >&2
+                fail=1
                 ;;
             esac
           done

@@ -21,10 +21,13 @@ const NO_GH = "#!/usr/bin/env bash\nexit 1\n"
 const exitCodeWith = (env: Record<string, string>) => runStep(STEP, { shim: NO_GH, bound: {}, overrides: env }).code
 
 describe("the build-env guard", () => {
-	test("passes with nothing set, with the production build options, and with an empty flag", () => {
+	test("passes with nothing set and with the production build options", () => {
 		expect(exitCodeWith({})).toBe(0)
 		expect(exitCodeWith({ VITE_FEE_JUICE_BRIDGE_URL: "https://example.org", VITE_NULO_ALLOW_IFRAME_DAPPS: "1" })).toBe(0)
-		expect(exitCodeWith({ VITE_NULO_FEE_MULTIPLIER: "" })).toBe(0)
+	})
+
+	test("refuses a flag set to the empty string, which Vite still bakes in", () => {
+		expect(exitCodeWith({ VITE_LOCAL_NETWORK_RPC_URL: "" })).toBe(1)
 	})
 
 	test.each([
