@@ -2,10 +2,10 @@
  * Narrow integration test for the header — deliberately NOT a full Header suite (L4+ convention:
  * e2e owns the header). It pins the wiring unit tests cannot see: the address button hands the FULL
  * active address (not the truncated display text) to the clipboard, except on a pointer click that
- * ends a selection inside it, both switcher affordances open
- * the accounts popup, the lock chip runs the shared lock (its behavior: `useLockWallet.test.ts`), the
- * network chip's `data-status` follows the store's status, the chip shows the network name only while
- * Show network name is on, and a failure log marks the settings badge.
+ * ends a selection inside it; both switcher affordances open the accounts popup; the lock chip runs
+ * the shared lock (its behavior: `useLockWallet.test.ts`); the network chip's `data-status` follows
+ * the store's status; the chip shows the network name only while Show network name is on; and a
+ * failure log marks the settings badge.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
@@ -147,20 +147,23 @@ describe("Header — avatar/name/address split", () => {
 		Object.defineProperty(window.navigator, "clipboard", { value: { writeText }, configurable: true })
 		// `selectedWithin` reads only a node in the document.
 		const w = mountHeader(document.body.appendChild(document.createElement("div")))
-		const range = document.createRange()
-		range.selectNodeContents(w.get('[data-testid="account-address-text"]').element)
-		window.getSelection()?.addRange(range)
-		expect(window.getSelection()?.toString()).toContain("0x018d...00f6")
+		try {
+			const range = document.createRange()
+			range.selectNodeContents(w.get('[data-testid="account-address-text"]').element)
+			window.getSelection()?.addRange(range)
+			expect(window.getSelection()?.toString()).toContain("0x018d...00f6")
 
-		await clickAddress(w, 1)
-		expect(writeText).not.toHaveBeenCalled()
-		expect(H.openToast).not.toHaveBeenCalled()
+			await clickAddress(w, 1)
+			expect(writeText).not.toHaveBeenCalled()
+			expect(H.openToast).not.toHaveBeenCalled()
 
-		await clickAddress(w, 0)
-		expect(writeText.mock.calls).toEqual([[FULL_ADDRESS]])
-		window.getSelection()?.removeAllRanges()
-		w.unmount()
-		document.body.replaceChildren()
+			await clickAddress(w, 0)
+			expect(writeText.mock.calls).toEqual([[FULL_ADDRESS]])
+		} finally {
+			window.getSelection()?.removeAllRanges()
+			w.unmount()
+			document.body.replaceChildren()
+		}
 	})
 
 	test("avatar AND name both open the accounts popup (the two switcher affordances)", async () => {

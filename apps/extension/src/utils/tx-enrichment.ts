@@ -123,7 +123,7 @@ export function getTxTitle(calls: TxCall[]): string {
 	return primary ? humanizeMethodName(primary.method) : "Transaction"
 }
 
-/** The chip of a dApp that names itself nothing. */
+/** The label of a dApp that names itself nothing. */
 export const DAPP_LABEL = "dApp"
 
 /**

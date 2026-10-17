@@ -147,7 +147,7 @@ const FRESH = () => ({
 	"usd-coin": { coingeckoId: "usd-coin", usd: 0.999857, fetchedAt: Date.now(), providerUpdatedAt: null },
 })
 
-async function mountView(props: Record<string, unknown> = {}, attachTo?: Element) {
+async function mountView(props: Record<string, unknown> = {}) {
 	const pinia = createTestingPinia({ stubActions: false })
 	const appStore = useAppStore(pinia)
 	appStore.profile = { id: "p1" } as never
@@ -156,7 +156,6 @@ async function mountView(props: Record<string, unknown> = {}, attachTo?: Element
 
 	const wrapper = mount(BalanceView, {
 		props,
-		attachTo,
 		shallow: true,
 		global: {
 			plugins: [pinia],

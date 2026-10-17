@@ -1,7 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { type Ref, ref } from "vue"
 
-/** How long a success stays open; an info or an error stays until it is closed. */
+/** How long a success without an action stays open; an info or an error stays until it is closed. */
 export const SUCCESS_TOAST_MS = 2_000
 /** A success with an action stays longer, so its action can still be reached. */
 export const ACTION_TOAST_MS = 6_000
@@ -54,8 +54,8 @@ const armTimer = (ms: number) => {
 
 /**
  * One snack at a time. A success closes itself after {@link SUCCESS_TOAST_MS}, or
- * {@link ACTION_TOAST_MS} when it carries an action, and waits while the pointer or focus is on it (the region reports that through `holdToast`); an info or an error
- * stays until it is closed. Any other kind is treated as an error, so a message of unknown class
+ * {@link ACTION_TOAST_MS} when it carries an action, and waits while the pointer or focus is on it
+ * (the region reports that through `holdToast`); an info or an error stays until it is closed. Any other kind is treated as an error, so a message of unknown class
  * never leaves on its own.
  */
 export const useToast = () => {

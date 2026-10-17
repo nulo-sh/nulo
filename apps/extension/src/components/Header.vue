@@ -129,8 +129,8 @@ const handleOpenPopup = (target) => {
 }
 
 const { openToast } = useToast()
-/** A drag that selects the address ends in a pointer click, which copies nothing. Enter and Space
- *  reach a native button as a click with `detail` 0 and still copy, as the scope rows' keys do. */
+/** A pointer click that ends a drag selecting the address copies nothing; Enter and Space reach a
+ *  native button as a click with `detail` 0 and copy even over a selection. */
 const handleCopyAddress = (e) => {
 	if (e.detail > 0 && selectedWithin(e.currentTarget)) return
 	copyAddressToClipboard(appStore.account?.address, openToast)

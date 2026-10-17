@@ -141,6 +141,12 @@ Decision page 35 (2026-10-17) settled five leftovers and, as an amendment the or
 - A2 (medium): give the nine-digit fixture a dApp so the extreme case runs through `.chips`. Rejected as a committed test: that row proves a nine-digit send, and a dApp moving $100M+ is the range known limit #645 already records; the scratch ladder measures it once and the PR body reports it.
 - A3 (low): `top >= bottom` passes a wrong gap or a sideways chip. Accepted: 4 px gap and matching left edges asserted; the title's centring is the layout's unchanged rule, not asserted.
 
+**Codex fix loop, round 1 (gpt-6.1-sol, high, session 01a14a8e; the net diff from the merged dev 623fc97f, plan files excluded): approve with changes, no production bug.**
+- R1-1 (low): the predicate table's "one quote" case quoted every holding, so `.some` in place of `.every` passed. Accepted: two contracts, one quoted; the `.some` mutant now fails.
+- R1-2 (low, comments): accepted for `Header.vue` (one tighter sentence), `TransactionCard.vue` ("up to its cap"), `toast.ts` ("a success without an action") and the `readTwoChipRow` doc line (dropped). Rejected for `DAPP_LABEL`'s line: the name does not say it is a nameless dApp's fallback.
+
+**Opus 5.5 diff review (general-purpose), alongside round 1: approve with changes, no correctness, reactivity or security defect.** Folded: the mixed-quote case (same as R1-1); the new `journal-state` describe moved above the sanitizer's header comment and its title's false "as its settled row does" dropped (the settled row does not bracket a schemeful name; pre-existing, out of scope); `mountView`'s dead `attachTo`; the header selection test's cleanup into `finally`; rewrapped TSDoc in `toast.ts` and `widgets.ts`; `DAPP_LABEL` called a label (`tx/[id].vue` shows it as the App value); a clearer wrap comment. Not taken: the network lanes meeting 6 s action toasts (CI's required lanes run them); `execution/service.ts`'s own `"dApp"` log literal (out of scope).
+
 ## Delivery
 
 - One PR against `dev` from `worktree-ui-leftovers-1`, no stack (D-orch-1). Title: `fix(ui): display-only token hero, selectable header address, dapp chip, holdings, toasts` (88 characters).
@@ -152,7 +158,7 @@ Decision page 35 (2026-10-17) settled five leftovers and, as an amendment the or
 Follow `implementations-plan/README.md` § Post-implementation standard at `1b93cbfa`. Plan-specific values:
 
 - Step 1 is absent (`code_review: off`).
-- Step 2: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol` over the net diff from `1b93cbfa`, after Phase 6. Prompts start "You are a subagent. Don't run memo." and carry the standard's two rules verbatim. Hard stop at three rounds; log each in `lessons/phase-6.md`.
+- Step 2: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol` over the net diff from the merged `dev` (`623fc97f`, which carries #650; the plan's base was `1b93cbfa`), after Phase 6. Prompts start "You are a subagent. Don't run memo." and carry the standard's two rules verbatim. Hard stop at three rounds; log each in `lessons/phase-6.md`.
 - If the orchestrator relays OA-1 or OA-2 before the PR opens, fold the answer in as its own phase. Otherwise file each unanswered ask at close-out as an `owner-decision` issue (dedupe first; #628 and #618 close with the PR) and list it on the Outcome's `Open items:` line.
 - Teardown after the merge: `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/ui-leftovers-1/plan.md`, then `agent-worktree done ui-leftovers-1 --merged`.
 

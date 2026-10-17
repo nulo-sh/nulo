@@ -73,14 +73,17 @@ describe("isPriceableHolding and pricesUnavailable", () => {
 		privateBalance: "0",
 		token: { chainId: 1, contract, decimals: 6 },
 	})
-	const mapping = (mapped: boolean): PriceMapping => ({ mapped: ref(mapped), isPriced: (_chain, contract) => contract === "0xp" })
+	const mapping = (mapped: boolean): PriceMapping => ({
+		mapped: ref(mapped),
+		isPriced: (_chain, contract) => contract === "0xp" || contract === "0xq",
+	})
 	const quoted = (micro: Record<string, bigint | undefined>) => (tb: Held) => micro[tb.token.contract]
 
 	test.each([
 		{ name: "a priced holding with no quote", rows: [held("0xp")], mapped: true, quotes: {}, priceable: [true], unavailable: true },
 		{
 			name: "one quote among priced holdings",
-			rows: [held("0xp"), held("0xp")],
+			rows: [held("0xp"), held("0xq")],
 			mapped: true,
 			quotes: { "0xp": 5n },
 			priceable: [true, true],

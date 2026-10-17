@@ -29,3 +29,15 @@ Two gaps found while planning page 35's picks. The arc ships each in its "ships 
 **Recommendation.** B. It is the state the owner already signed for Home, and it never shows a figure that is about to change.
 
 **Ships now.** A (unchanged). The page 35 pick applies from the first answer on: a dash and "Prices unavailable".
+
+## OA-3 (#583, P35-08 B): the two-chip row from about $10M
+
+**Surface.** A dApp's transfer row (Home, History, a token page) at an eight-digit dollar figure or more. Page 35's B was drawn up to 1,250 USDC. Measured in the built extension (Chrome, 360 px): from 1,250 to 12,345.67 USDC the app chip sits under the whole direction chip at 96 px and the row is 68 px, as signed. From about $10M (12,345,678 USDC) the direction chip alone is wider than the room left beside the amount, so it breaks onto two lines too, above the dropped chip (91 px, then 84 px at 123,456,789.12), and the row is 81 px. #650 drew 62 px there, with "…" beside a two-line direction.
+
+**Options.**
+- **A. The direction breaks above the dropped chip (what ships now).** 81 px from about $10M; the app's name stays.
+- **B. The app chip disappears from where the direction would break.** 62 px; the name stays on the details page. Needs code that measures the row's room.
+
+**Recommendation.** A. It keeps the name on the largest transfers, which is why B was picked, and it costs height only on amounts a testnet wallet rarely shows.
+
+**Ships now.** A.

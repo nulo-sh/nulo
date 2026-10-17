@@ -530,18 +530,12 @@ describe("a failed send its record proves never left the wallet", () => {
 	})
 })
 
-// dApp-controlled `subtitle` is the origin/name stored at session-discover
-// time. The journal detail page renders it; if a malicious dApp set its
-// origin to an http(s) URL string, the bare value could be visually
-// confusable with a link. `sanitizeJournalSubtitle` brackets URL-shaped
-// values so the UI can render the text plainly without it reading as
-// "tap to open."
 describe("journalCardOriginLabel — the in-flight row's app chip", () => {
 	test.each([
 		["", "dApp"],
 		["uniswap.example", "uniswap.example"],
 		["https://evil.example", "[https://evil.example]"],
-	])("a dApp named %j reads %j, as its settled row does", (subtitle, label) => {
+	])("a dApp named %j reads %j", (subtitle, label) => {
 		expect(journalCardOriginLabel(recordWith({ kind: "dapp_execute", subtitle, terminalAt: null }))).toBe(label)
 	})
 
@@ -550,6 +544,12 @@ describe("journalCardOriginLabel — the in-flight row's app chip", () => {
 	})
 })
 
+// dApp-controlled `subtitle` is the origin/name stored at session-discover
+// time. The journal detail page renders it; if a malicious dApp set its
+// origin to an http(s) URL string, the bare value could be visually
+// confusable with a link. `sanitizeJournalSubtitle` brackets URL-shaped
+// values so the UI can render the text plainly without it reading as
+// "tap to open."
 describe("sanitizeJournalSubtitle — URL-shape defense", () => {
 	test("null / undefined / empty → null", () => {
 		expect(sanitizeJournalSubtitle(null)).toBeNull()

@@ -236,7 +236,8 @@ onBeforeUnmount(() => {
 }
 
 /* A wrap measures the slot at its floor (a zero basis, clamped up), so the slot drops under the whole
- * direction chip exactly where it would go below it; on its own line it fills the line, its chip at its cap. */
+ * direction chip exactly where one line would squeeze it below that floor; on its own line it fills
+ * the line, its chip up to its cap. */
 .chips {
 	display: flex;
 	flex-wrap: wrap;

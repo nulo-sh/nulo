@@ -655,7 +655,6 @@ type TwoChipRow = {
 	chip: { width: number; cut: boolean; name: string; gap: number; left: number; lead: { content: string; display: string } }
 }
 
-/** A two-chip row's direction chip and its app chip. */
 function readTwoChipRow(page: Page, hash: string): Promise<TwoChipRow> {
 	return page.evaluate((h: string) => {
 		const row = document.querySelector(`[data-testid="tx-card"][data-tx-hash="${h}"]`)
