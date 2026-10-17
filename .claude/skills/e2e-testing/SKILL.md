@@ -700,10 +700,11 @@ left. `network/inflight-call-background-death.test.ts` is the model: in flight, 
 background (heartbeat-dependent, seconds budget), idle against an attached one (rejected under the
 5 s heartbeat interval, so only the `secure-message` branch can have answered).
 
-A stage that can outlast the browser's idle reaper (a prover-ON canary) checks `backgroundAlive(ext)`
-first: an absent background is already the restart, so it proceeds to recovery with a warning; a
-present one gets the real kill (`restartBackground` in the two canaries). Called with no worker
-alive, Chrome's helper's own 15s `waitForTarget` throws — nothing in it wakes one.
+A stage that can outlast the browser's idle reaper (a prover-ON canary) calls
+`stopBackgroundIfAlive(ext)` (`fixtures/browser`): an absent background is already the restart, so
+it returns false with a warning and the stage proceeds to recovery; a present one gets the real
+kill. `stopBackground` called with no worker alive throws on Chrome (its own 15s `waitForTarget`)
+— nothing in it wakes one.
 
 Stage gates are `chrome.storage.session` rendezvous compiled in by the proverless build, each with
 its own protocol: `proof-gate.ts` is presence-only and parks a tx right before `pxe.proveTx`;

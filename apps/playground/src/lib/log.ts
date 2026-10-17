@@ -6,7 +6,9 @@
  *
  * Returns the call's resolved value (or rethrows) — the feed update is a side effect.
  */
-import { appendPendingResult, settleResult } from "../state"
+import type { Wallet } from "@aztec-labs/aztec.js/wallet"
+import { appendPendingResult, setState, settleResult } from "../state"
+import { getWallet, NOT_CONNECTED } from "./wallet"
 
 export async function logCall<T>(method: string, fn: () => Promise<T>): Promise<T> {
 	const seq = appendPendingResult(method)
@@ -17,5 +19,23 @@ export async function logCall<T>(method: string, fn: () => Promise<T>): Promise<
 	} catch (err) {
 		settleResult(seq, "error", err)
 		throw err
+	}
+}
+
+/** A click handler: runs `fn` through {@link logCall} with the connected wallet, or records
+ *  {@link NOT_CONNECTED} when there is none. Either failure lands in `lastError`, never as a
+ *  rejected handler. */
+export function guarded<T>(method: string, fn: (wallet: Wallet) => Promise<T>): () => Promise<void> {
+	return async () => {
+		const wallet = getWallet()
+		if (!wallet) {
+			setState({ lastError: NOT_CONNECTED })
+			return
+		}
+		try {
+			await logCall(method, () => fn(wallet))
+		} catch (err) {
+			setState({ lastError: err instanceof Error ? err.message : String(err) })
+		}
 	}
 }

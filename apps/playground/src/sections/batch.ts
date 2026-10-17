@@ -7,9 +7,8 @@
  * - abort-on-failure: includes a leg expected to fail; verifies the dispatcher
  *   aborts the batch on the first failure and the dApp sees the underlying error.
  */
-import { getWallet } from "../lib/wallet"
-import { logCall } from "../lib/log"
-import { getInput, getState, setState } from "../state"
+import { guarded } from "../lib/log"
+import { getInput, getState } from "../state"
 
 export function renderBatch(): string {
 	const s = getState()
@@ -26,26 +25,10 @@ export function renderBatch(): string {
 	`
 }
 
-function safeBatch(method: string, fn: () => Promise<unknown>): () => Promise<void> {
-	return async () => {
-		const wallet = getWallet()
-		if (!wallet) {
-			setState({ lastError: "Not connected" })
-			return
-		}
-		try {
-			await logCall(method, fn)
-		} catch (err) {
-			setState({ lastError: err instanceof Error ? err.message : String(err) })
-		}
-	}
-}
-
 export function bindBatch(root: HTMLElement): void {
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-batch-meta"]')?.addEventListener(
 		"click",
-		safeBatch("batch", () => {
-			const wallet = getWallet()!
+		guarded("batch", (wallet) => {
 			// Only include methods that are silently dispatchable pre-grant.
 			// `getAccounts` is in EXEMPT_METHODS (capability-map.ts:14) for
 			// `enforceCapability` purposes, but `handleGetAccounts` still throws
@@ -66,8 +49,7 @@ export function bindBatch(root: HTMLElement): void {
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-batch-mixed"]')?.addEventListener(
 		"click",
-		safeBatch("batch", async () => {
-			const wallet = getWallet()!
+		guarded("batch", async (wallet) => {
 			// Silent meta + two `basic`-bundle silent legs. `getAccounts` pre-grant
 			// throws inside `handleGetAccounts` (see comment in batch-meta above)
 			// — so this batch uses getChainInfo + 2x getContractMetadata to stress
@@ -85,8 +67,7 @@ export function bindBatch(root: HTMLElement): void {
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-batch-partial-failure"]')?.addEventListener(
 		"click",
-		safeBatch("batch", () => {
-			const wallet = getWallet()!
+		guarded("batch", (wallet) => {
 			// One real meta call + one expected-to-fail leg (unknown method).
 			// The dispatcher aborts on the first failure; the unknown method
 			// throws and the whole batch rejects with that error.

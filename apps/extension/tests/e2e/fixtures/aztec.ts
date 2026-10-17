@@ -214,15 +214,25 @@ export async function createSponsoredFeeOptions(wallet: InstanceType<typeof Embe
 		salt: new Fr(SPONSORED_FPC_SALT),
 	})
 
-	// Register the SponsoredFPC contract so the wallet can use it for fee payment
-	try {
-		await wallet.registerContract(instance, SponsoredFPCContractArtifact)
-	} catch {
-		// Already registered — ignore
-	}
+	await wallet.registerContract(instance, SponsoredFPCContractArtifact)
 
 	const paymentMethod = new SponsoredFeePaymentMethod(instance.address)
 	return { paymentMethod, address: instance.address.toString() }
+}
+
+/** Registers the deployed token with the test wallet's PXE, which private execution needs and
+ *  `TokenContract.at` alone does not do. Re-registering is a no-op on the pinned line, so an error
+ *  here is the real cause and propagates. */
+export async function registerTokenOnWallet(
+	wallet: InstanceType<typeof EmbeddedWallet>,
+	node: ReturnType<typeof createAztecNodeClient>,
+	tokenAddress: string,
+): Promise<AztecAddress> {
+	const addr = AztecAddress.fromStringUnsafe(tokenAddress)
+	const instance = await node.getContract(addr)
+	if (!instance) throw new Error(`Token instance not found at node for ${tokenAddress}`)
+	await wallet.registerContract(instance, TokenContract.artifact)
+	return addr
 }
 
 /** Mint public tokens to an address. Waits for the balance to be readable via the test wallet's PXE.
@@ -280,14 +290,7 @@ export async function mintPrivateTokens(
 	minterAddress: string,
 	feeOptions: { paymentMethod: SponsoredFeePaymentMethod },
 ): Promise<string> {
-	const addr = AztecAddress.fromStringUnsafe(tokenAddress)
-	const instance = await node.getContract(addr)
-	if (!instance) throw new Error(`Token instance not found at node for ${tokenAddress}`)
-	try {
-		await wallet.registerContract(instance, TokenContract.artifact)
-	} catch {
-		// Already registered — ignore.
-	}
+	const addr = await registerTokenOnWallet(wallet, node, tokenAddress)
 
 	const token = await TokenContract.at(addr, wallet)
 	// `send()` waits for the checkpointed receipt by default (300 s); this bounds it at 120 s, and the
@@ -315,14 +318,7 @@ export async function transferPrivateTokens(
 	amount: bigint,
 	feeOptions: { paymentMethod: SponsoredFeePaymentMethod },
 ): Promise<string> {
-	const addr = AztecAddress.fromStringUnsafe(tokenAddress)
-	const instance = await node.getContract(addr)
-	if (!instance) throw new Error(`Token instance not found at node for ${tokenAddress}`)
-	try {
-		await wallet.registerContract(instance, TokenContract.artifact)
-	} catch {
-		// Already registered — ignore.
-	}
+	const addr = await registerTokenOnWallet(wallet, node, tokenAddress)
 
 	const token = await TokenContract.at(addr, wallet)
 	const sent = await token.methods
@@ -391,14 +387,7 @@ export async function transferPrivateToPublicTokens(
 	amount: bigint,
 	feeOptions: { paymentMethod: SponsoredFeePaymentMethod },
 ): Promise<void> {
-	const addr = AztecAddress.fromStringUnsafe(tokenAddress)
-	const instance = await node.getContract(addr)
-	if (!instance) throw new Error(`Token instance not found at node for ${tokenAddress}`)
-	try {
-		await wallet.registerContract(instance, TokenContract.artifact)
-	} catch {
-		// Already registered — ignore.
-	}
+	const addr = await registerTokenOnWallet(wallet, node, tokenAddress)
 	const from = AztecAddress.fromStringUnsafe(fromAddress)
 	const token = await TokenContract.at(addr, wallet)
 	await token.methods
@@ -420,14 +409,7 @@ export async function transferPublicToPrivateTokens(
 	amount: bigint,
 	feeOptions: { paymentMethod: SponsoredFeePaymentMethod },
 ): Promise<void> {
-	const addr = AztecAddress.fromStringUnsafe(tokenAddress)
-	const instance = await node.getContract(addr)
-	if (!instance) throw new Error(`Token instance not found at node for ${tokenAddress}`)
-	try {
-		await wallet.registerContract(instance, TokenContract.artifact)
-	} catch {
-		// Already registered — ignore.
-	}
+	const addr = await registerTokenOnWallet(wallet, node, tokenAddress)
 	const from = AztecAddress.fromStringUnsafe(fromAddress)
 	const token = await TokenContract.at(addr, wallet)
 	await token.methods
