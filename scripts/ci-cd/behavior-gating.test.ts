@@ -125,6 +125,155 @@ describe("CI aggregator check names", () => {
 	})
 })
 
+// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+const workflowOf = (file: string): any => Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8"))
+const NETWORK_SUITE = "_extension-network-e2e.yml"
+const NETWORK_LANE = "_extension-network-e2e-lane.yml"
+/** Nightly's advisory rerun of the canary files on the in-browser prover; it belongs to no lane. */
+const WASM_LEG = "network-e2e-canary-wasm"
+
+type CallerJob = {
+	name?: string
+	uses?: string
+	if?: unknown
+	needs?: unknown
+	strategy?: { "fail-fast"?: unknown; matrix?: Record<string, unknown> }
+	with?: Record<string, unknown>
+	secrets?: unknown
+}
+/** One run of the network suite: the top-level job it comes from, its name down to the suite's, its inputs. */
+type SuiteCall = { job: string; name: string; inputs: Record<string, unknown> }
+type Scope = { inputs?: Record<string, unknown>; matrix?: Record<string, unknown> }
+
+/**
+ * The only `if`s a lane job may carry, evaluated on the bound `chaos_seed`. A caller's expression
+ * counts as non-empty: nightly's ends in `github.run_id`, which never is.
+ */
+const LANE_IFS: Record<string, (seed: unknown) => boolean> = {
+	"inputs.chaos_seed == ''": (seed) => seed === "",
+	"inputs.chaos_seed != ''": (seed) => seed !== "",
+}
+
+const REFERENCE = /\$\{\{ (inputs|matrix)\.(\w+)(?:\.(\w+))? \}\}/g
+
+/**
+ * Binds each `${{ inputs.<k> }}` and `${{ matrix.<k>[.<f>] }}` of a context the scope defines: a
+ * value that is one whole reference takes the bound value and its type, a reference inside text
+ * is spliced in as a string, and every other expression stays opaque text. A key the scope's
+ * context lacks throws.
+ */
+function bind(value: unknown, scope: Scope, at: string): unknown {
+	if (typeof value !== "string") return value
+	const lookup = (match: string, context: "inputs" | "matrix", key: string, field?: string): unknown => {
+		const values = scope[context]
+		if (values === undefined) return match
+		if (!(key in values)) throw new Error(`${at}: ${match} names nothing in scope`)
+		const bound = values[key]
+		if (field === undefined) return bound
+		if (typeof bound !== "object" || bound === null || !(field in bound)) throw new Error(`${at}: ${match} names nothing in scope`)
+		return (bound as Record<string, unknown>)[field]
+	}
+	const whole = new RegExp(`^${REFERENCE.source}$`).exec(value)
+	if (whole) return lookup(whole[0], whole[1] as "inputs" | "matrix", whole[2], whole[3])
+	return value.replace(REFERENCE, (match, context, key, field) => String(lookup(match, context, key, field)))
+}
+
+/** A job's matrix legs: one per value of its one literal key, or a single leg without a matrix. */
+function legsOf(job: CallerJob, at: string): (Record<string, unknown> | undefined)[] {
+	const matrix = job.strategy?.matrix
+	if (matrix === undefined) return [undefined]
+	const axes = Object.entries(matrix)
+	if (axes.length !== 1 || !Array.isArray(axes[0][1])) throw new Error(`${at}: the matrix is not one literal key`)
+	const [key, values] = axes[0]
+	return values.map((value) => ({ [key]: value }))
+}
+
+/**
+ * The suite calls one job makes: itself when it calls the suite, every job of the lane bound to
+ * what it hands the lane (an input it omits takes the lane's default) when it calls the lane.
+ */
+function callsOf(id: string, job: CallerJob, inputs?: Record<string, unknown>, prefix = ""): Omit<SuiteCall, "job">[] {
+	return legsOf(job, id).flatMap((matrix) => {
+		const scope = { inputs, matrix }
+		const name = `${prefix}${String(bind(job.name ?? id, scope, id))}`
+		const handed = Object.fromEntries(Object.entries(job.with ?? {}).map(([key, value]) => [key, bind(value, scope, id)]))
+		if (job.uses === `./.github/workflows/${NETWORK_SUITE}`) return [{ name, inputs: handed }]
+		if (job.uses === `./.github/workflows/${NETWORK_LANE}`) return laneCalls(handed, `${name} / `)
+		return []
+	})
+}
+
+function laneCalls(handed: Record<string, unknown>, prefix: string): Omit<SuiteCall, "job">[] {
+	const lane = workflowOf(NETWORK_LANE)
+	const declared = lane.on.workflow_call.inputs as Record<string, { required?: boolean; default?: unknown }>
+	for (const key of Object.keys(handed)) if (!(key in declared)) throw new Error(`the lane declares no input ${key}`)
+	for (const [key, spec] of Object.entries(declared))
+		if (spec.required && !(key in handed)) throw new Error(`the lane's required input ${key} is not handed`)
+	const inputs = Object.fromEntries(Object.entries(declared).map(([key, spec]) => [key, key in handed ? handed[key] : spec.default]))
+	return (Object.entries(lane.jobs) as [string, CallerJob][]).flatMap(([id, job]) => {
+		if (job.if === undefined) return callsOf(id, job, inputs, prefix)
+		const runs = LANE_IFS[String(job.if)]
+		if (runs === undefined) throw new Error(`${NETWORK_LANE} → ${id}: an if the expander does not evaluate`)
+		return runs(inputs.chaos_seed) ? callsOf(id, job, inputs, prefix) : []
+	})
+}
+
+/** Every network suite call a workflow makes, directly or through a lane call. */
+const suiteCalls = (file: string): SuiteCall[] =>
+	(Object.entries(workflowOf(file).jobs) as [string, CallerJob][]).flatMap(([id, job]) =>
+		callsOf(id, job).map((call) => ({ job: id, ...call })),
+	)
+
+const PR_DISABLE_PRESTO = "${{ github.event.inputs.disable_presto == 'true' || vars.NULO_E2E_DISABLE_PRESTO == '1' }}"
+const NIGHTLY_IF = "always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'"
+const NIGHTLY_WITH = {
+	ref: "${{ needs.resolve.outputs.sha }}",
+	disable_presto: "${{ vars.NULO_E2E_DISABLE_PRESTO == '1' }}",
+	chaos_seed: "${{ github.event.inputs.chaos_seed || github.run_id }}",
+}
+/** Every call of the network lane: the caller's job id, name, `needs` and `if` (whitespace folded), and what it hands the lane. */
+const LANE_CALLERS = [
+	{
+		file: "pr-extension-network-e2e.yml",
+		job: "network-e2e",
+		name: "Run",
+		needs: "changes",
+		if: "needs.changes.outputs.run == 'true'",
+		with: { ref: "${{ github.event.pull_request.head.sha || github.ref }}", retry: "0", disable_presto: PR_DISABLE_PRESTO },
+	},
+	{
+		file: "pr-extension-network-e2e-firefox.yml",
+		job: "network-e2e",
+		name: "Run",
+		needs: "changes",
+		if: "needs.changes.outputs.run == 'true'",
+		with: {
+			ref: "${{ github.event.pull_request.head.sha || github.ref }}",
+			browser: "firefox",
+			retry: "0",
+			disable_presto: PR_DISABLE_PRESTO,
+		},
+	},
+	{ file: "nightly.yml", job: "network-e2e", name: "Run", needs: "resolve", if: NIGHTLY_IF, with: NIGHTLY_WITH },
+	{
+		file: "nightly.yml",
+		job: "network-e2e-firefox",
+		name: "Firefox / Run",
+		needs: "resolve",
+		if: NIGHTLY_IF,
+		with: { ...NIGHTLY_WITH, browser: "firefox" },
+	},
+	{
+		file: "release.yml",
+		job: "network-e2e",
+		name: "Run",
+		needs: "resolve",
+		if: "always() && needs.resolve.result == 'success' && github.event.inputs.run_network_e2e == 'true'",
+		with: { ref: "${{ needs.resolve.outputs.sha }}", retry: "0", disable_presto: "${{ vars.NULO_E2E_DISABLE_PRESTO == '1' }}" },
+	},
+] as const
+const foldSpace = (text: unknown): string => String(text).split(/\s+/).join(" ").trim()
+
 /**
  * verify-cert-run.sh certifies a head only when every network suite job ran green, matched by its
  * full name: the caller's job name, then the reusable workflow's. A rename on either side that the
@@ -808,8 +957,6 @@ describe("canary lanes", () => {
 		{ file: "nightly.yml", browser: "firefox" },
 	] as const
 	type SuiteJob = { uses?: string; with?: Record<string, unknown> }
-	/** Nightly's advisory rerun of the canary files on the in-browser prover; it belongs to no lane. */
-	const WASM_LEG = "network-e2e-canary-wasm"
 	/** A lane is one browser's network suite in one caller: the shard pool plus its dedicated jobs. */
 	const laneJobs = (file: string, browser: string): [string, SuiteJob][] =>
 		(Object.entries(workflow(file).jobs) as [string, SuiteJob][]).filter(
@@ -1075,6 +1222,50 @@ describe("canary lanes", () => {
 			'if [ "$PROVE_SUCCESS" -eq 0 ] && [[ "$SHARD_LABEL" == canary* ]]; then',
 		)
 		expect(existsSync(join(ROOT, "scripts/ci-cd/assert-canary-results.ts"))).toBe(true)
+	})
+})
+
+/**
+ * A caller moved onto the lane hands the suite what its jobs hand it today, call for call: the same
+ * names, raw strings and typed values. Two normalizations only. An input left out equals that input
+ * set to the suite's default, as GitHub reads it. Release's `!matrix.leg.proverless && X` is `X` on
+ * its prover-ON leg and the default `false` on the others, once the leg's literal is bound.
+ */
+describe("network lane migration", () => {
+	const declared = workflowOf(NETWORK_SUITE).on.workflow_call.inputs as Record<string, { default?: unknown }>
+	const defaults = Object.fromEntries(Object.entries(declared).map(([key, spec]) => [key, spec.default]))
+	const PROVER_ON_ONLY = /^\$\{\{ !matrix\.leg\.proverless && (.+) \}\}$/
+	const normalized = ({ name, inputs }: Omit<SuiteCall, "job">) => {
+		const full: Record<string, unknown> = { ...defaults, ...inputs }
+		const proverOnOnly = PROVER_ON_ONLY.exec(String(full.disable_presto))
+		if (proverOnOnly) full.disable_presto = full.proverless === true ? false : `\${{ ${proverOnOnly[1]} }}`
+		return { name, inputs: full }
+	}
+	const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name)
+	const browserOf = (caller: (typeof LANE_CALLERS)[number]): string => ("browser" in caller.with ? caller.with.browser : "chrome")
+	const today = (file: string): SuiteCall[] => suiteCalls(file).filter((call) => call.job !== WASM_LEG)
+
+	test("each caller's lane call makes exactly the suite calls its jobs make today", () => {
+		for (const caller of LANE_CALLERS) {
+			const at = `${caller.file} → ${caller.job}`
+			const before = today(caller.file).filter((call) => normalized(call).inputs.browser === browserOf(caller))
+			const after = callsOf(caller.job, { name: caller.name, uses: `./.github/workflows/${NETWORK_LANE}`, with: caller.with })
+			expect(before.length, at).toBeGreaterThan(0)
+			expect(after.map(normalized).sort(byName), at).toStrictEqual(before.map(normalized).sort(byName))
+			const jobs = workflowOf(caller.file).jobs as Record<string, CallerJob>
+			for (const id of new Set(before.map((call) => call.job))) {
+				expect(jobs[id].needs, `${at}: ${id} needs`).toEqual(caller.needs)
+				expect(foldSpace(jobs[id].if), `${at}: ${id} if`).toBe(caller.if)
+			}
+		}
+	})
+
+	test("the callers cover every browser each of their workflows runs the suite on", () => {
+		for (const file of new Set(LANE_CALLERS.map((caller) => caller.file))) {
+			const browsers = new Set(today(file).map((call) => normalized(call).inputs.browser))
+			const covered = new Set(LANE_CALLERS.filter((caller) => caller.file === file).map(browserOf))
+			expect([...browsers].sort(), file).toEqual([...covered].sort())
+		}
 	})
 })
 
