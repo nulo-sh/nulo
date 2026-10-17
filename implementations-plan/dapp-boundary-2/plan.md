@@ -104,6 +104,7 @@ The lane brief's record (no new screen, copy or format) covers both surfaces bel
 | Codex final, resumed | approve | the three fixes verified; no regression | none |
 | Codex fix 1 (arc diff) | approve | nothing material | none |
 | Opus fix 1 (arc diff) | approve | the in-flight check binds the window's profile; a dispatcher test name matched to what it pins | the parsed key for `registerAccount` (the PXE client takes wire text) |
+| Codex fix 2, resumed twice | request changes, then approve | the digest attestations; one wording fix | a profile switch between the Allow's profile check and the row write (predates the arc; filed as an issue), a waiting duplicate across a switch (closed known limit) |
 
 ## Delivery
 

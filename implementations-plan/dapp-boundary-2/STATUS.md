@@ -8,4 +8,5 @@
 - 2026-10-17 phase 1 gate green: lint 0, typecheck:all 0, execution tests 1317 passed; red/green logged.
 - 2026-10-17 phase 2 gate green: lint 0, typecheck:all 0, wallet-bridge 766 passed; red/green logged.
 - 2026-10-17 phase 3 gate green: lint 0, typecheck:all 0, wallet-sdk 460 passed; red/green logged.
-- 2026-10-17 final gate: one inventory digest re-pinned after re-attesting; Codex fix 1 approve; Opus approve with one low finding, taken.
+- 2026-10-17 final gate: one inventory digest re-pinned after re-attesting; Codex fix 1 approve; Opus approve with one low point, taken.
+- 2026-10-17 Codex fix 2: request changes, then approve after the dispositions were argued; the loop converged.
