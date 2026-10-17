@@ -5,3 +5,4 @@
 - 2026-10-17 dual review started: Codex round 1 (gpt-6.1-sol high) and the Opus Plan leg.
 - 2026-10-17 dual review: Codex conditional approve (5), Opus conditional approve (8); plan revised (D3 keeps a waited-on row, D4, D5, harness and env fixes); fresh final Codex pass next.
 - 2026-10-17 final Codex pass: conditional approve (notice kind in D4, the waiter limit), resumed: approve. OWNER-ASKS holds only OA-1, which arc 1 does not touch: auto-continue into arc 1.
+- 2026-10-17 phase 1 gate green: lint 0, typecheck:all 0, execution tests 1317 passed; red/green logged.
