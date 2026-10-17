@@ -840,3 +840,120 @@ test("a dApp's long function name and host never widen Home or History: the titl
 	expect(listedExtensionPerTest.consoleErrors).toEqual([])
 	expect(listedExtensionPerTest.pageErrors).toEqual([])
 }, 180_000)
+
+/** Five priced sends: more than Home's middle shows at 360 × 600 or 360 × 900. */
+const HOME_ROWS = Array.from({ length: 5 }, (_, i) => `0x${(0x71 + i).toString(16).repeat(32)}`)
+
+type HomeLayout = { heroTop: number; scrollTop: number; maxScroll: number; shadow: string; navBottom: number; viewport: number }
+
+function readHome(page: Page): Promise<HomeLayout> {
+	return page.evaluate(() => {
+		const q = (id: string) => document.querySelector(`[data-testid="${id}"]`) as HTMLElement
+		const scroller = q("home-scroller")
+		return {
+			heroTop: q("balance-amount").getBoundingClientRect().top,
+			scrollTop: scroller.scrollTop,
+			maxScroll: scroller.scrollHeight - scroller.clientHeight,
+			shadow: getComputedStyle(q("home-scroll-shadow")).opacity,
+			navBottom: q("bottom-nav").getBoundingClientRect().bottom,
+			viewport: window.innerHeight,
+		}
+	})
+}
+
+/** Scrolls Home's middle and waits for the scroll to land and the shadow's fade to finish. */
+async function scrollHome(page: Page, top: number, shadow: "0" | "1"): Promise<HomeLayout> {
+	await page.$eval(sel("home-scroller"), (el, y) => el.scrollTo(0, y as number), top)
+	await page
+		.waitForFunction(
+			(s: string, o: string) => getComputedStyle(document.querySelector(s) as Element).opacity === o,
+			{ timeout: 5_000, polling: 50 },
+			sel("home-scroll-shadow"),
+			shadow,
+		)
+		.catch(async (error: unknown) => {
+			throw new Error(`the shadow never read ${shadow} at ${top}: ${JSON.stringify(await readHome(page))}; ${String(error)}`)
+		})
+	return readHome(page)
+}
+
+test("Home's hero stays fixed over a scrolling middle: the shadow shows only once it has scrolled and lets a press through to the row under it; a tall panel keeps the nav at its bottom; PageDown on a row scrolls the middle", async ({
+	listedExtensionPerTest,
+	skip,
+}) => {
+	skipUnlessListPrices(skip)
+	const page = await openPopup(listedExtensionPerTest)
+	await waitForHash(page, "#/popup/general")
+	const scope = await readActivityScope(page, { priced: true })
+	const now = Date.now()
+	for (const [i, hash] of HOME_ROWS.entries()) await seedTransaction(page, scope, { hash, amount: "1500000", at: now - i * 1_000 })
+	await seedUsdQuoteAndReload(page, scope.token.priceId)
+	await page.bringToFront()
+	await settledRows(page, HOME_ROWS.length)
+
+	const rest = await scrollHome(page, 0, "0")
+	console.log(`[rows] Home at rest: ${JSON.stringify(rest)}`)
+	await shotSend(page, "home-rest", "home-hero")
+	const scrolled = await scrollHome(page, 200, "1")
+	console.log(`[rows] Home scrolled: ${JSON.stringify(scrolled)}`)
+	expect(scrolled.scrollTop).toBe(Math.min(200, rest.maxScroll))
+	expect(scrolled.scrollTop).toBeGreaterThan(0)
+	expect(Math.abs(scrolled.heroTop - rest.heroTop)).toBeLessThanOrEqual(0.5)
+
+	// A row centred in the shadow's band: the band draws over it, and a press there still opens it.
+	const band = await page.$eval(sel("home-scroll-shadow"), (el) => {
+		const b = el.getBoundingClientRect()
+		return { top: b.top, bottom: b.bottom }
+	})
+	const target = await page.$eval(
+		sel("home-scroller"),
+		(scroller, y) => {
+			const row = scroller.querySelector('[data-testid="tx-card"]') as HTMLElement
+			const box = row.getBoundingClientRect()
+			scroller.scrollTop += box.top + box.height / 2 - (y as number)
+			const after = row.getBoundingClientRect()
+			const x = after.left + 72
+			const hit = document.elementFromPoint(x, y as number)?.closest('[data-testid="tx-card"]')
+			return { x, hash: row.getAttribute("data-tx-hash"), hit: hit === row }
+		},
+		(band.top + band.bottom) / 2,
+	)
+	expect(target.hit).toBe(true)
+	await scrollHome(page, await page.$eval(sel("home-scroller"), (el) => el.scrollTop), "1")
+	await shotSend(page, "home-scrolled", "home-hero")
+	await page.mouse.click(target.x, (band.top + band.bottom) / 2)
+	await waitForHashPrefix(page, `#/popup/tx/${target.hash}`)
+
+	await page.evaluate(() => history.back())
+	await waitForHash(page, "#/popup/general", 10_000)
+	for (const width of [360, 480]) {
+		await page.setViewport({ width, height: 900 })
+		await settledRows(page, HOME_ROWS.length)
+		const top = await scrollHome(page, 0, "0")
+		const end = await scrollHome(page, top.maxScroll, "1")
+		console.log(`[rows] Home at ${width} × 900: ${JSON.stringify({ top, end })}`)
+		expect(end.scrollTop).toBeGreaterThan(0)
+		expect(Math.abs(end.heroTop - top.heroTop)).toBeLessThanOrEqual(0.5)
+		expect(Math.abs(end.navBottom - end.viewport)).toBeLessThanOrEqual(0.5)
+	}
+
+	await page.setViewport({ width: 360, height: 600 })
+	await settledRows(page, HOME_ROWS.length)
+	await scrollHome(page, 0, "0")
+	await page.$eval(`${sel("tx-card")} [data-row-target]`, (el) => (el as HTMLElement).focus())
+	const before = await page.$eval(sel("home-scroller"), (el) => el.scrollTop)
+	await page.keyboard.press("PageDown")
+	await page
+		.waitForFunction(
+			(s: string, b: number) => (document.querySelector(s) as HTMLElement).scrollTop > b,
+			{ timeout: 5_000, polling: 50 },
+			sel("home-scroller"),
+			before,
+		)
+		.catch(async (error: unknown) => {
+			throw new Error(`PageDown from a row left the middle at ${before}: ${JSON.stringify(await readHome(page))}; ${String(error)}`)
+		})
+
+	expect(listedExtensionPerTest.consoleErrors).toEqual([])
+	expect(listedExtensionPerTest.pageErrors).toEqual([])
+}, 240_000)
