@@ -293,6 +293,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [tools-readiness](tools-readiness/plan.md) — completed — a dApp session widened to a new account without forgetting the app
 - [transport-unification](transport-unification/plan.md) — completed — one template-method RPC design for the background and offscreen transports
 - [type-roles](type-roles/plan.md) — completed — one rulebook of 28 type roles, generated from the token contract, chooses every text face; a guard and a computed-style sweep enforce it
+- [type-roles-coverage](type-roles-coverage/plan.md) — completed — every live identifier site read in its mono role by the spec that owns its state: 58 smoke, 41 network (#366)
 - [type-scale-1](type-scale-1/plan.md) — completed — Scale A on every screen (#589): `meta` 13, `nav` 11, the small caps in `label-section`, `data` into `meta`, and a layout gate on every swept state
 - [typecheck-cleanup](typecheck-cleanup/plan.md) — completed — the extension taken to zero type errors, with one root typecheck command
 - [ui-followups-p18](ui-followups-p18/plan.md) — completed — the last outline-grey text moved to secondary (#363), store art regenerated after the owner signed it (#364), the tx fee row's hover fade removed
