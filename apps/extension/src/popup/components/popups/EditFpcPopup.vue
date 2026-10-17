@@ -226,7 +226,7 @@ watch(
 				data-testid="edit-fpc-header-row"
 				size="large"
 				:title="fpcToEdit?.name || fpcToEdit?.address"
-				:titleVariant="fpcToEdit?.name ? 'row-title' : 'data'"
+				:titleVariant="fpcToEdit?.name ? 'row-title' : 'meta'"
 				:description="typeDescription"
 				icon="fee"
 				raw

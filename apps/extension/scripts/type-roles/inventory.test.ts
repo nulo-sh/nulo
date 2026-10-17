@@ -13,7 +13,7 @@ import { type Surface, surfaces } from "./surfaces"
  * renders reaches review.
  */
 
-type Role = "data" | "data-lead" | "input-data" | "meta" | "name" | "none"
+type Role = "data-lead" | "input-data" | "meta" | "name" | "none"
 type SiteKey = { file: string; expression: string; branch: string; ordinal: number }
 type SiteEntry = SiteKey & {
 	role: Role
@@ -44,7 +44,7 @@ type SurfaceEntry = {
 }
 
 const HERE = "apps/extension/scripts/type-roles"
-const ROLES = new Set<string>(["data", "data-lead", "input-data", "meta", "name", "none"])
+const ROLES = new Set<string>(["data-lead", "input-data", "meta", "name", "none"])
 const SUITES = new Set<string>(["smoke", "network", "none"])
 
 const read = (file: string): string => readFileSync(join(REPO_ROOT, file), "utf8")

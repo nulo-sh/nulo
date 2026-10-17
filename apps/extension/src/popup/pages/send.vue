@@ -932,7 +932,7 @@ onBeforeUnmount(() => {
 }
 
 .requote_action {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	line-height: inherit;
 	background: none;
 	color: var(--nulo-accent);

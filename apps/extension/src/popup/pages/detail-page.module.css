@@ -14,7 +14,7 @@
 }
 
 .detail_key {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
@@ -25,7 +25,7 @@
 }
 
 .detail_value_mono {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 }
 
@@ -42,6 +42,8 @@
 	min-width: 0;
 	text-align: right;
 	word-break: break-all;
+	/* Firefox's break-all won't split a letter from the digits after it; anywhere fills every line. */
+	line-break: anywhere;
 	line-height: 1.4;
 }
 
@@ -84,7 +86,7 @@
 }
 
 .hero_link {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	user-select: none;
 	display: inline-flex;
 	align-items: center;
@@ -129,12 +131,12 @@
 }
 
 .caption {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
 .type_chip {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	align-self: center;
 
 	padding: 5px 12px;

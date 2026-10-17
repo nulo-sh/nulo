@@ -131,7 +131,7 @@ const emit = defineEmits(["close", "disableAutoClose"])
 }
 
 .ghost_link {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	align-self: center;
 
 	color: var(--nulo-secondary);

@@ -28,9 +28,9 @@ test("the network chip's row may shrink below its content", () => {
 
 test("with its name hidden, the network chip keeps the height the name gives it", () => {
 	// One line of the label's role, plus the 6px padding and 1px border above and below.
-	expect(declarationsOf(parsed, ".network_label").composes).toBe("type--tag from global")
+	expect(declarationsOf(parsed, ".network_label").composes).toBe("type--label-section from global")
 	expect(declarationsOf(parsed, ".network_chip")).toMatchObject({
-		composes: "type--tag from global",
+		composes: "type--label-section from global",
 		padding: "6px 10px",
 		border: "1px solid var(--nulo-border)",
 		"min-height": "calc(1lh + 14px)",

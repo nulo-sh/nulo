@@ -42,7 +42,7 @@ const formatted = computed(() => formatScope(props.scope))
 				<Text v-if="String(p.contract) === '*'" variant="body" color="secondary">Any contract</Text>
 				<ScopeAddress v-else :address="String(p.contract)" />
 				<Flex align="center" gap="6">
-					<Text variant="label" color="tertiary">fn:</Text>
+					<Text variant="label-section" color="tertiary">fn:</Text>
 					<Text color="secondary" :class="$style.mono">
 						{{ String(p.function) === "*" ? "*" : fnLabel(String(p.function)) }}
 					</Text>

@@ -65,7 +65,7 @@ const cells = computed(() => CELLS.map((c) => ({ ...c, glyph: publishGlyph(props
 }
 
 .cell {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	flex: 1 1 auto;
 	display: flex;
 	align-items: center;
@@ -76,6 +76,13 @@ const cells = computed(() => CELLS.map((c) => ({ ...c, glyph: publishGlyph(props
 	border-right: 1px solid var(--nulo-border);
 
 	white-space: nowrap;
+}
+
+/* The facts sit at 10px semibold, a step under the bold 10px names, so every cell fits its text. */
+.strip .cell {
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
 }
 
 .name {

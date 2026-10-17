@@ -170,11 +170,11 @@ function fitField() {
 	fieldScale.value = typing ? 1 : fitHero(1, (_, scale) => rulerWidth(form, scale), inputRoom(input)).scale
 }
 
-/** `.derived_type`'s full size, and the type scale's smallest step. */
-const DERIVED_PX = 11
+/** `.derived_type`'s full size, its meta line's. */
+const DERIVED_PX = 13
 const DERIVED_MIN_PX = 8
 
-/** The derived token line's type as a fraction of its 11 px: the largest that keeps it on one line
+/** The derived token line's type as a fraction of its 13 px: the largest that keeps it on one line
  *  beside the balance and Max or, where that is under 8 px, in its own row under the amount. */
 const derivedScale = ref(1)
 const derivedOwnRow = ref(false)
@@ -486,7 +486,7 @@ const handleFiatBalanceAction = (divisor) => {
 								derivedTokenLabel
 							}}</span>
 						</template>
-						<!-- Here wherever the line is drawn, in the meta line's own mono 11 px, so a shortened line is fitted again. -->
+						<!-- Here wherever the line is drawn, in the meta line's own mono 13 px, so a shortened line is fitted again. -->
 						<span v-if="derivedTokenLabel" aria-hidden="true" :class="$style.ruler"><span ref="derivedRuler" :class="$style.derived_type">{{ derivedTokenLabel }}</span></span>
 					</template>
 					<template v-else>
@@ -587,7 +587,7 @@ const handleFiatBalanceAction = (divisor) => {
 }
 
 .unit_pair {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	flex: none;
 	line-height: inherit;
 	background: none;
@@ -623,7 +623,7 @@ const handleFiatBalanceAction = (divisor) => {
 }
 
 .derived_type {
-	font-size: calc(11px * var(--hero-scale, 1));
+	font-size: calc(13px * var(--hero-scale, 1));
 	white-space: nowrap;
 }
 
@@ -634,7 +634,7 @@ const handleFiatBalanceAction = (divisor) => {
 }
 
 .action_link {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	line-height: inherit;
 	background: none;
 	color: var(--nulo-accent);

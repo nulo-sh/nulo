@@ -305,7 +305,7 @@ onBeforeUnmount(() => {
 }
 
 .chip {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -428,7 +428,7 @@ onBeforeUnmount(() => {
 }
 
 .number {
-	composes: type--data from global;
+	composes: type--meta from global;
 	flex: none;
 	width: 14px;
 	text-align: center;

@@ -16,7 +16,7 @@ defineProps<{
 		<!-- Unreachable from today's window producers (the one request carrying actions is a grant); rendered so a
 			future producer can never hide a call target behind an opaque label. -->
 		<template v-if="action.kind === 'call' || action.kind === 'encoded_call'">
-			<Text variant="data">
+			<Text variant="meta">
 				{{ humanizeMethodName(safeWire(action.kind === "call" ? action.method : (action.name ?? action.selector), 64)) }}
 			</Text>
 			<Text color="secondary"> on </Text>
@@ -30,12 +30,12 @@ defineProps<{
 				<Text color="secondary"> — spender </Text>
 				<AddressDisplay data-testid="execute-authwit-spender" :address="action.content.caller" />
 				<Text color="secondary"> for </Text>
-				<Text variant="data">{{ humanizeMethodName(safeWire(action.content.method, 64)) }}</Text>
+				<Text variant="meta">{{ humanizeMethodName(safeWire(action.content.method, 64)) }}</Text>
 				<Text color="secondary"> on </Text>
 				<AddressDisplay data-testid="execute-authwit-contract" :address="action.content.contract" />
 				<template v-if="!hideArgs && action.content.args?.length">
 					<Text color="secondary"> args </Text>
-					<Text data-testid="execute-authwit-args" variant="data">{{ action.content.args.map((a) => safeWire(String(a), 48)).join(", ") }}</Text>
+					<Text data-testid="execute-authwit-args" variant="meta">{{ action.content.args.map((a) => safeWire(String(a), 48)).join(", ") }}</Text>
 				</template>
 			</template>
 			<!-- Unreachable from today's grant producer (it hardcodes `call`); rendered so a future producer can
@@ -44,7 +44,7 @@ defineProps<{
 				<Text color="secondary"> — spender </Text>
 				<AddressDisplay data-testid="execute-authwit-spender" :address="action.content.caller" />
 				<Text color="secondary"> for </Text>
-				<Text variant="data">{{ humanizeMethodName(safeWire(action.content.name ?? action.content.selector, 64)) }}</Text>
+				<Text variant="meta">{{ humanizeMethodName(safeWire(action.content.name ?? action.content.selector, 64)) }}</Text>
 				<Text color="secondary"> on </Text>
 				<AddressDisplay data-testid="execute-authwit-to" :address="action.content.to" />
 			</template>
@@ -54,7 +54,7 @@ defineProps<{
 			</template>
 			<template v-else>
 				<Text color="secondary"> — message hash </Text>
-				<Text data-testid="execute-authwit-spender" variant="data">{{ action.content.messageHash }}</Text>
+				<Text data-testid="execute-authwit-spender" variant="meta">{{ action.content.messageHash }}</Text>
 			</template>
 		</template>
 		<template v-else>

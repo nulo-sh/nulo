@@ -68,7 +68,7 @@ const badgeSize = computed(() => (props.layout === "window" ? 20 : 14))
 
 <style module>
 .tag {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	display: inline-flex;
 	align-items: center;
 	padding: 4px 8px;
