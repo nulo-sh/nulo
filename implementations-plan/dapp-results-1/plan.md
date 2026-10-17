@@ -82,7 +82,7 @@ Gate `F`: `bun run lint && bun run typecheck:all && bun run test && bun run test
    - Add the three keys. Run `cd apps/extension && bun --bun vitest run src/wallet/logger/utils.test.ts src/utils/log-payload-ban.test.ts`.
    - If the guard flags an existing line, change the line to pass the value under its named key or to log a count. Never add the line to the guard's allowlist.
    - UI impact: none. Gate: `F`.
-2. **An app-facing `executeUtility` answer.** First confirm the tree still returns `stats` (Fact 7); if it does not, record that in `lessons/phase-2.md` and skip the phase.
+2. **An app-facing `executeUtility` answer.** ✓ (gate F and the e2e run, 2026-10-17) First confirm the tree still returns `stats` (Fact 7); if it does not, record that in `lessons/phase-2.md` and skip the phase.
    - Change: add `toAppFacingUtilityResult` and wire `executeAztecExecuteUtility` through it.
    - Test, in `app-facing-results.test.ts`, on the serialised wire: build the PXE's plain object with return values, one offchain effect and a `stats` whose timings and node-call record each hold a unique sentinel. Pass it through `toAppFacingUtilityResult`, `toJsonSafe` and `JSON.stringify`. Never: no sentinel, and the parsed keys are exactly `result`, `offchainEffects`, `anchorBlockTimestamp`; the same search finds the sentinels on the unreduced object. Control: after `UtilityExecutionResult.schema` parses the wire JSON, the return values, the effect's data and contract address, and the timestamp equal the input's.
    - Test, in `view-executor.test.ts`: the harness's `pxe.executeUtility` returns a full `UtilityExecutionResult` with `stats`. The executor's answer has `stats === undefined` (the constructor keeps an own `undefined` key, which `JSON.stringify` drops, so exact keys are asserted only on the wire) and keeps `result`, `offchainEffects` and `anchorBlockTimestamp`.
@@ -108,6 +108,8 @@ Gate `F`: `bun run lint && bun run typecheck:all && bun run test && bun run test
 
 - **Arc 1, Codex round 1** (new session, gpt-6.1-sol, high, over `git diff 563b0627 -- apps/`): `conditional approve (with conditions: correct the README and pass the planned Chrome smoke gate)`. No runtime defect; every route traced to the rebuilt answer. Accepted: the README says the wallet's own reads bypass both shapes; the helper's comment cut to its two constraints; `lessons/phase-2.md` reworded. Rejected: deleting the wire test's comment on the positive search (it states why that assertion exists, as the sibling simulate test's identical comment does).
 - **Arc 1, Opus diff review**: `conditional approve (with conditions: commit the working-tree edits; run phase 2's e2e)`. Correctness traced (dispatch, `batch`, `DappInteractionService`; aztec.js and the playground read only the kept fields). Accepted: the redundant `parsed.stats` line removed; the executor describe renamed to cover the answer; "too" restored in the helper's comment; README grammar.
+
+- **Arc 1, Codex round 2** (resumed): `conditional approve (with conditions: planned Chrome smoke gate passes)`. Every accepted fix verified, no regression, no new point; the smoke check then passed (2/2). The loop converged.
 
 ## Delivery
 

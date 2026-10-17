@@ -9,3 +9,5 @@
 - 2026-10-17 approved by the orchestrator (D3 kept, phase 2 added); Codex amendment pass conditional approve, applied.
 - 2026-10-17 phase 1 gate F: lint 0, typecheck:all 0, test 0 (13571 passed), test:all 0. Green.
 - 2026-10-17 phase 2 gate F: lint 0, typecheck:all 0, test 0, test:all 0. e2e pending (load1 above 150).
+- 2026-10-17 phase 2 e2e: connect-locked-queue Chrome retry 0, 2/2 green. Phase 2 green.
+- 2026-10-17 review loop: Codex r1 conditional approve + Opus conditional approve (fixes b95367f5); Codex r2 conditional approve on the smoke check, which passed. Converged.
