@@ -370,6 +370,31 @@ describe("Task Tree Implementation", () => {
 			expect(Object.keys(thrown as Error)).toEqual([])
 		})
 
+		test("completing a task the switch cleared, past its broadcast, is a no-op", async () => {
+			const { service, switchToProfile } = await createTestSetup()
+			switchToProfile({ id: "A", name: "A", type: "password" })
+			const task = service.startNewTask(new StepContent("T1"))
+			switchToProfile({ id: "B", name: "B", type: "password" })
+			const onTaskUpdated = vi.fn()
+			service.onTaskUpdated.add(onTaskUpdated)
+
+			expect(() => task.completeIfTracked()).not.toThrow()
+			expect(onTaskUpdated).not.toHaveBeenCalled()
+		})
+
+		test("completing a tracked task past its broadcast keeps every finishing rule", async () => {
+			const { service, switchToProfile, expectEvent } = await createTestSetup()
+			switchToProfile({ id: "A", name: "A", type: "password" })
+			const parent = service.startNewTask(new StepContent("T1"))
+			const child = parent.startSubtask(new StepContent("T2"))
+
+			expect(() => parent.completeIfTracked()).toThrow(`Cannot finish task ${parent.id} with unfinished subtasks: ${child.id}`)
+			child.complete()
+			parent.completeIfTracked()
+			expect(parent.status).toBe(TaskStatus.Completed)
+			expectEvent("onTaskUpdated", parent.task)
+		})
+
 		test("keeps tasks when switching to the same profile", async () => {
 			const { service, switchToProfile } = await createTestSetup()
 

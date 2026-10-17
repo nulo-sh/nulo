@@ -112,6 +112,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [enter-gate-and-ping](enter-gate-and-ping/plan.md) — completed — one submit-validity computed for the profile-edit popup, and a ping message type
 - [execute-popup-readability](execute-popup-readability/plan.md) — completed — the approval window's transaction body read as a summary of calls and authorizations, its rows behind one toggle
 - [execution-decomposition](execution-decomposition/plan.md) — completed — the execution service decomposed with zero behaviour change
+- [execution-integrity-1](execution-integrity-1/plan.md) — completed — a transfer bound to its approved token contract, every broadcast recorded through a profile switch, revokes that wait for their grants and verify (#662, #664, #669)
 - [execution-pipeline](execution-pipeline/plan.md) — completed — a money-path complexity burn-down with no wire or journal change
 - [execution-pxe-injection-spike](execution-pxe-injection-spike/plan.md) — completed — the composition test layer proven on the execution service
 - [export-integrity](export-integrity/plan.md) — completed — a pure backup assembly and a latch on the export path

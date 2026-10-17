@@ -44,7 +44,9 @@ vi.mock("@/wallet/services/token/functions", () => {
 	}
 })
 
-const { OperationPlanner } = await import("./operation-planner")
+const { OperationPlanner, TOKEN_MOVED_MESSAGE } = await import("./operation-planner")
+
+const CONTRACT = `0x${"1a".repeat(32)}`
 
 const DEFAULT_FEE_SETTINGS = {
 	paymentMethod: { kind: "fj" as const },
@@ -62,7 +64,7 @@ function makeToken(overrides: Partial<Token> = {}): Token {
 		id: 1,
 		profileId: "pid",
 		chainId: 1,
-		contract: "0x1234",
+		contract: CONTRACT,
 		name: "Nulo",
 		symbol: "NULO",
 		decimals: 18,
@@ -87,6 +89,7 @@ describe("OperationPlanner.buildTransferOperation", () => {
 			networkId: "net-1",
 			accountAddress: "0xabc",
 			tokenId: 1,
+			tokenContract: CONTRACT,
 			transferType: TransferType.Public,
 			recipientAddress: "0xdef",
 			amount: 100n,
@@ -110,6 +113,7 @@ describe("OperationPlanner.buildTransferOperation", () => {
 			networkId: "net-1",
 			accountAddress: "0xa",
 			tokenId: 1,
+			tokenContract: CONTRACT,
 			transferType: TransferType.Private,
 			recipientAddress: "0xb",
 			amount: 1n,
@@ -124,6 +128,7 @@ describe("OperationPlanner.buildTransferOperation", () => {
 			networkId: "n",
 			accountAddress: "0xa",
 			tokenId: 1,
+			tokenContract: CONTRACT,
 			transferType: TransferType.PrivateToPublic,
 			recipientAddress: "0xb",
 			amount: 1n,
@@ -138,6 +143,7 @@ describe("OperationPlanner.buildTransferOperation", () => {
 			networkId: "n",
 			accountAddress: "0xa",
 			tokenId: 1,
+			tokenContract: CONTRACT,
 			transferType: TransferType.PublicToPrivate,
 			recipientAddress: "0xb",
 			amount: 1n,
@@ -153,12 +159,32 @@ describe("OperationPlanner.buildTransferOperation", () => {
 				networkId: "n",
 				accountAddress: "0xa",
 				tokenId: 1,
+				tokenContract: CONTRACT,
 				transferType: TransferType.Public,
 				recipientAddress: "0xb",
 				amount: 1n,
 				feeSettings: DEFAULT_FEE_SETTINGS,
 			}),
 		).rejects.toThrow(/Unauthorized/)
+	})
+
+	test.each([
+		["names another contract: refused", `0x${"1b".repeat(32)}`, false],
+		["control: names the approved contract in another letter case: built", CONTRACT.toUpperCase().replace("0X", "0x"), true],
+	])("a token row that %s", async (_name, rowContract, builds) => {
+		const planner = new OperationPlanner(makeProfile(), makeTokenService(makeToken({ contract: rowContract })))
+		const built = planner.buildTransferOperation({
+			networkId: "n",
+			accountAddress: "0xa",
+			tokenId: 1,
+			tokenContract: CONTRACT,
+			transferType: TransferType.Public,
+			recipientAddress: "0xb",
+			amount: 1n,
+			feeSettings: DEFAULT_FEE_SETTINGS,
+		})
+		if (builds) await expect(built).resolves.toMatchObject({ op: { actions: [{ to: rowContract }] } })
+		else await expect(built).rejects.toThrow(TOKEN_MOVED_MESSAGE)
 	})
 
 	test("throws 'Transfer type not supported' when token missing private fn", async () => {
@@ -168,6 +194,7 @@ describe("OperationPlanner.buildTransferOperation", () => {
 				networkId: "n",
 				accountAddress: "0xa",
 				tokenId: 1,
+				tokenContract: CONTRACT,
 				transferType: TransferType.Private,
 				recipientAddress: "0xb",
 				amount: 1n,
@@ -183,6 +210,7 @@ describe("OperationPlanner.buildTransferOperation", () => {
 				networkId: "n",
 				accountAddress: "0xa",
 				tokenId: 1,
+				tokenContract: CONTRACT,
 				transferType: TransferType.PublicToPrivate,
 				recipientAddress: "0xb",
 				amount: 1n,
@@ -202,6 +230,7 @@ describe("OperationPlanner.buildTransferOperation", () => {
 				networkId: "n",
 				accountAddress: "0xa",
 				tokenId: 1,
+				tokenContract: CONTRACT,
 				transferType: transferType as never,
 				recipientAddress: "0xb",
 				amount: 1n,
@@ -217,6 +246,7 @@ describe("OperationPlanner.buildTransferOperation", () => {
 				networkId: "n",
 				accountAddress: "0xa",
 				tokenId: 1,
+				tokenContract: CONTRACT,
 				transferType: 99 as TransferType,
 				recipientAddress: "0xb",
 				amount: 1n,
