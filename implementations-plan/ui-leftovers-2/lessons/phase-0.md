@@ -24,3 +24,5 @@
 - Codex fix loop round 1 (session 01a14bb7): approve with changes, one redundant comment (accepted). Opus diff review: approve with changes, O1 a test selector the Skeleton also matched, O2 a test name (both accepted). Round 2: approve.
 - `audit:vue`'s lint leg runs `biome check` over the whole tree, untracked files included: an untracked scratch spec failed it on format (exit 130 on the other legs). The scratch spec now lives outside the tree between its runs.
 - Holdings' token rows each run their own `usePrices`: a page test holding `refreshIfStale` must release every call, not the last one.
+- The #716 merge added `@aztec-labs/standard-contracts` to `wallet-bridge`: `typecheck:all` failed on the unresolved module until `bun install --frozen-lockfile`. Every later dev merge checks its manifest diff first.
+- Close-out: #724 filed and closed as a known limit (OA-3); #674 commented.

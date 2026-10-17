@@ -11,6 +11,21 @@ base: dev 2c0df3b9
 issues: "#675, #676 (both closed by the one arc)"
 ---
 
+## Outcome
+
+- **Date:** 2026-10-17
+- **Status:** completed. One PR against `dev` carries the arc and this close-out; merging it is the orchestrator's call.
+- **Shipped:**
+  - #675 (P39-05 A): a nameless dApp's failed and cancelled rows keep the "dApp" chip, and its journal page reads App, "dApp", both through `journalCardOriginLabel` (phase 1; D1).
+  - #676 (P39-06 B): Holdings shows a 96 × 26 px skeleton in its total's place, with the count alone, until the first price answer or its rejection; Home and Holdings share `awaitingFirstPriceAnswer` (phase 2; D2, D4, D6).
+- **Owner asks:** OA-1, OA-2 and OA-3 shipped their A forms (OWNER-ASKS.md § Settled). The settling message's OA-2 phrase describes B; it went back to the orchestrator with the arc report, and B is one CSS rule.
+- **Dropped:** the fiat-off never-happens control, which no version of the check could fail (D7).
+- **Known limits:** #724 (the skeleton can last to the 60 s RPC deadline when the worker restarts mid-wait; OA-3, D3).
+- **Open items:** none. #674 (a whitespace-only name's blank chip) now reaches the terminal row and the App row too; commented there, still a closed known limit.
+- **Lessons:** none promoted. `lessons.md` is at 8188 of 8192 bytes, and this arc's notes ([lessons/phase-0.md](lessons/phase-0.md)) are plan-local.
+- **Length:** past a light plan's size; the inline audit verdicts make up most of it.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
+
 # ui-leftovers-2: two picks from decision page 39
 
 Decision page 39 (2026-10-17) settled two asks the ui-leftovers-1 lane left open; each pick is a Decision block on the parent issue (#628, #618). One arc, one PR against `dev`. Recon: [recon.md](recon.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md).
@@ -68,7 +83,7 @@ Decision page 39 (2026-10-17) settled two asks the ui-leftovers-1 lane left open
 ### Phase 0: base and "before" shots ✓
 - Merge `origin/dev`. If a lead's merge touched `journal/[id].vue`, `RecentActivityView.vue` or `holdings.vue`, read its diff.
 - **Smoke recipe** (every smoke run below; load1 < 150 first): an armed build, `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:<chrome|firefox>`; then, from `apps/extension`, `env -u EXTENSION_PATH NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 [NULO_E2E_BROWSER=firefox] bun run test:e2e -- <file> --retry=0`.
-- **Shots** (Chrome, light and dark, under `~/.cache/nulo-backlog/ui-leftovers-2/shots/`): a scratch spec, never committed, seeds a nameless dApp's cancelled and failed records (as `rows.test.ts` does) and shoots Home's activity and the cancelled record's journal page. For Holdings it holds the first price answer over a stale cache: `interceptRpc(..., "https://api.coingecko.com", { kind: "redirect", to })` to a run-owned stub that holds every request until the spec releases a valid quote (Home's refresh, which Holdings joins, starts at the reload, so the spec opens Holdings at once and releases before the 10 s abort); a second run refuses it for the failure state. It asserts the interception's hits and no failures, logs the summary's height held and after the figure lands, and samples the visible summary each frame from mount (the OA-1 frame count).
+- **Shots** (Chrome, light and dark, kept outside the repo): a scratch spec, never committed, seeds a nameless dApp's cancelled and failed records (as `rows.test.ts` does) and shoots Home's activity and the cancelled record's journal page. For Holdings it holds the first price answer over a stale cache: `interceptRpc(..., "https://api.coingecko.com", { kind: "redirect", to })` to a run-owned stub that holds every request until the spec releases a valid quote (Home's refresh, which Holdings joins, starts at the reload, so the spec opens Holdings at once and releases before the 10 s abort); a second run refuses it for the failure state. It asserts the interception's hits and no failures, logs the summary's height held and after the figure lands, and samples the visible summary each frame from mount (the OA-1 frame count).
 - Time `rows` on the base, per browser (the "before" figure).
 - **Gate**: `bun install --frozen-lockfile && bun run lint && bun run typecheck:all` exit 0.
 
