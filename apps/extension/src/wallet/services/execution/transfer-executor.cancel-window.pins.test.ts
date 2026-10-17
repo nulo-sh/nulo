@@ -31,7 +31,7 @@ function makeReq(): TransferRequest {
 }
 
 function makeDeps(overrides: Partial<TransferExecutorDeps>): TransferExecutorDeps {
-	const task = { complete: vi.fn(), fail: vi.fn(), cancel: vi.fn() }
+	const task = { complete: vi.fn(), completeIfTracked: vi.fn(), fail: vi.fn(), cancel: vi.fn() }
 	return {
 		tasks: { startNewTask: vi.fn(() => task) } as never,
 		planner: {

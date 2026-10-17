@@ -26,6 +26,12 @@ export class WrappedTask {
 		this.taskService.completeTask(this.id, result)
 	}
 
+	/** {@link complete}, or nothing when a profile switch has cleared the task from the registry. Only
+	 *  for work past its broadcast: the send went out, and progress bookkeeping must not replace that. */
+	public completeIfTracked(): void {
+		if (this.exists) this.complete()
+	}
+
 	/** Records `error` on the task. When the task cannot take it (a profile switch cleared the
 	 *  registry, say), the thrown error carries `error` as its cause, so a caller that rethrows it
 	 *  still lets the failure that ended the work be found. */

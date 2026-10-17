@@ -438,9 +438,10 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 			// Ensure the registry toggle is mined + visible before returning, so a
 			// fast follow-up consume reads the new state (see waitForOnChainState).
 			await this.waitForTxProven(node, txHash)
-			await this.syncStatus(node, scope, task)
+			// No subtask past the send: a profile switch clears the registry, and the status must still land.
+			await this.applyStatus(node, scope)
 
-			task.complete()
+			task.completeIfTracked()
 		} catch (error) {
 			// Convert the internal sentinel to the structured RPC-boundary
 			// error so the popup's `classifyCancellableRejection` works.
@@ -537,26 +538,31 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 
 	private async syncStatus(node: AztecNode, scope: AuthwitScope, parentTask: WrappedTask): Promise<void> {
 		const task = parentTask.startSubtask(new StepContent("Sync status"))
-		const rowId = authwitStatusRowId(scope.profileId, scope.chainId, scope.account)
 		try {
-			const isEnabled = await isAuthRegistryEnabled(node, scope.account)
-			await this.lock.withLock(async () => {
-				const enabled = (await this.statuses.get(rowId)) ?? true
-				if (enabled !== isEnabled) {
-					if (isEnabled) {
-						await this.statuses.delete(rowId)
-						this.emit("onRegistryEnabled", scope)
-					} else {
-						await this.statuses.set(rowId, isEnabled)
-						this.emit("onRegistryDisabled", scope)
-					}
-				}
-			})
+			await this.applyStatus(node, scope)
 			task.complete()
 		} catch (error) {
 			task.fail(error)
 			throw error
 		}
+	}
+
+	/** Stores the registry status the node reads now for `scope`. */
+	private async applyStatus(node: AztecNode, scope: AuthwitScope): Promise<void> {
+		const rowId = authwitStatusRowId(scope.profileId, scope.chainId, scope.account)
+		const isEnabled = await isAuthRegistryEnabled(node, scope.account)
+		await this.lock.withLock(async () => {
+			const enabled = (await this.statuses.get(rowId)) ?? true
+			if (enabled !== isEnabled) {
+				if (isEnabled) {
+					await this.statuses.delete(rowId)
+					this.emit("onRegistryEnabled", scope)
+				} else {
+					await this.statuses.set(rowId, isEnabled)
+					this.emit("onRegistryDisabled", scope)
+				}
+			}
+		})
 	}
 
 	public async backup(): Promise<Authwit[] | undefined> {

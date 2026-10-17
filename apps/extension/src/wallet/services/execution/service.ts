@@ -907,7 +907,9 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 					authorizedFence,
 					approvals?.[operationIndex],
 				)
-				operationTask.complete()
+				// A broadcast stands even when a profile switch has cleared its task meanwhile.
+				if (BROADCASTING_OPERATION_KINDS.has(operation.kind)) operationTask.completeIfTracked()
+				else operationTask.complete()
 				this.logDebug(`[${traceId}] executeOperations: ${operation.kind} completed`)
 				results.push({ status: "ok", result })
 			} catch (error) {

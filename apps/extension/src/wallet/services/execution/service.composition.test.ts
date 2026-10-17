@@ -248,7 +248,7 @@ async function makeHarness() {
 	collection.add(journal)
 	// `cancel` is part of the real WrappedTask surface — classifyOperationCatch
 	// calls task.cancel() on a user-cancel before returning the cancelled result.
-	const fakeTask = { complete: vi.fn(), fail: vi.fn(), cancel: vi.fn(), startSubtask: vi.fn() }
+	const fakeTask = { complete: vi.fn(), completeIfTracked: vi.fn(), fail: vi.fn(), cancel: vi.fn(), startSubtask: vi.fn() }
 	fakeTask.startSubtask.mockReturnValue(fakeTask)
 	collection.add(svc(TaskService.name, { startNewTask: () => fakeTask }))
 	collection.add(svc(PriceService.name, { getUsableQuote: async () => undefined }))

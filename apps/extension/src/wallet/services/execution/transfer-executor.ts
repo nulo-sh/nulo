@@ -290,7 +290,7 @@ export class TransferExecutor {
 			})
 			// Released at submit, as a dApp send's: the ticket, not the slot, holds until inclusion.
 			run.release?.()
-			transferTask.complete()
+			transferTask.completeIfTracked()
 			return txHash.toString()
 		} catch (error) {
 			// Journal already in `cancelled` (cancelJob did it); convert the

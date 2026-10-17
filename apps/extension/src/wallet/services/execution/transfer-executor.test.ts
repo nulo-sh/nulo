@@ -21,6 +21,8 @@ import {
 	SessionEndedError,
 } from "@nulo/extension-messaging/errors"
 import { IllegalTransitionError, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
+import { TaskStatus } from "@/wallet/services/task/service"
+import { startedTaskService } from "@/wallet/services/task/test-task-service"
 import { OriginType, TransferType } from "@/wallet/services/transaction/service"
 import type { ProveAndSendContext } from "./execution-coordinator"
 import type { TransferRequest } from "./operation-planner"
@@ -88,7 +90,7 @@ function tipGate(readTip: () => Promise<number>) {
 }
 
 function makeHarness(overrides: Partial<TransferExecutorDeps> = {}) {
-	const task = { complete: vi.fn(), fail: vi.fn(), cancel: vi.fn() }
+	const task = { complete: vi.fn(), completeIfTracked: vi.fn(), fail: vi.fn(), cancel: vi.fn() }
 	const network = {
 		chainId: 7,
 		endpoints: [{ id: "e1", rpcUrl: "http://primary" }],
@@ -218,10 +220,27 @@ describe("TransferExecutor.execute", () => {
 		const record = recordedTx(deps)
 		expect((record.calls as Array<{ method: string }>)[0].method).toBe("transfer_private")
 		expect(record.nonce).toBe("42")
-		expect(task.complete).toHaveBeenCalledTimes(1)
+		expect(task.completeIfTracked).toHaveBeenCalledTimes(1)
 		// Controller registered under journalId, removed in finally.
 		expect(deps.lane.registerInFlight).toHaveBeenCalledWith("j1", FENCE.session, expect.any(AbortController))
 		expect(deps.lane.deleteController).toHaveBeenCalledWith("j1")
+	})
+
+	test.each([
+		["a profile switch clears its task", true],
+		["control: its task stays tracked", false],
+	])("a send the node took resolves with its hash when %s (real TaskService)", async (_name, switches) => {
+		const { tasks, switchToProfile } = await startedTaskService("p1")
+		const proveAndSend = vi.fn(async (ctx: { recordTransaction: (h: string) => Promise<unknown> }) => {
+			if (switches) switchToProfile("p2")
+			await ctx.recordTransaction("0xhash")
+			return { txHash: { toString: () => "0xhash" } }
+		})
+		const { executor, deps } = makeHarness({ tasks, coordinator: { proveAndSend } as never })
+		await expect(executor.execute(makeReq(), undefined, FENCE)).resolves.toBe("0xhash")
+		expect(deps.addTransaction).toHaveBeenCalledOnce()
+		expect(deps.transitionJournal).not.toHaveBeenCalledWith("j1", { stage: "failed" }, expect.anything())
+		expect((await tasks.getTasks()).map((task) => task.status)).toEqual(switches ? [] : [TaskStatus.Completed])
 	})
 
 	test("reuse path: snapshot consumed, planner + buildAndEstimate skipped, snapshot shapes the record", async () => {
@@ -264,7 +283,7 @@ describe("TransferExecutor.execute", () => {
 		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
 		expect(proveAndSend).not.toHaveBeenCalled()
 		expect(deps.transitionJournal).not.toHaveBeenCalled()
-		expect(task.complete).not.toHaveBeenCalled()
+		expect(task.completeIfTracked).not.toHaveBeenCalled()
 		expect(task.fail).toHaveBeenCalledTimes(1)
 	})
 
@@ -1261,7 +1280,7 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 		;(deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockResolvedValue(release)
 		await executor.execute(makeReq(), undefined, FENCE)
 		expect(proveAndSend.mock.invocationCallOrder[0]).toBeLessThan(release.mock.invocationCallOrder[0])
-		expect(release.mock.invocationCallOrder[0]).toBeLessThan(task.complete.mock.invocationCallOrder[0])
+		expect(release.mock.invocationCallOrder[0]).toBeLessThan(task.completeIfTracked.mock.invocationCallOrder[0])
 		expect(sequencer.isBlocked(SCOPE, REQ_KEYS)).toBe(true)
 	})
 

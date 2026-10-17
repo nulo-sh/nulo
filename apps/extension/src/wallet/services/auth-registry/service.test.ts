@@ -23,7 +23,8 @@ import { EXECUTION_SERVICE_NAME } from "@/wallet/services/execution/spec"
 import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { type ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
-import { TASK_SERVICE_NAME } from "@/wallet/services/task/spec"
+import { TASK_SERVICE_NAME, TaskStatus } from "@/wallet/services/task/spec"
+import { startedTaskService } from "@/wallet/services/task/test-task-service"
 import { OriginType, TRANSACTION_SERVICE_NAME, TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
 import { getAuthRegistryAddress } from "@/wallet/utils/auth-registry"
 import { svc } from "../composition-harness"
@@ -176,7 +177,7 @@ async function makeHarness(opts: { node?: unknown; activeProfile?: { id: string 
 	const cancelEstimate = vi.fn(async (_token: string) => {})
 	services.add(svc(EXECUTION_SERVICE_NAME, { executeSendTransaction, estimateSendTransactionFee, cancelEstimate }))
 	services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: txUpdated }))
-	const task = () => ({ complete() {}, fail() {}, startSubtask: task })
+	const task = () => ({ complete() {}, completeIfTracked() {}, fail() {}, startSubtask: task })
 	services.add(svc(TASK_SERVICE_NAME, { startNewTask: task }))
 	const service = new AuthRegistryService(new LoggerStore(new ConfigStore()) as never, api)
 	services.add(service)
@@ -261,7 +262,7 @@ describe("AuthRegistryService names a send's journal record to the caller that k
 		internals.nodeFor = async () => ({})
 		internals.waitForTxProven = async () => {}
 		internals.syncAuthwits = async () => {}
-		internals.syncStatus = async () => {}
+		internals.applyStatus = async () => {}
 		return { h, started }
 	}
 
@@ -384,7 +385,12 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 		}
 		internals.taskService.startNewTask = (taskContent: unknown) => {
 			log.push(`task:${(taskContent as { constructor: { name: string } }).constructor.name}`)
-			return { complete: () => log.push("complete"), fail: () => log.push("fail"), cancel: () => log.push("cancel") }
+			return {
+				complete: () => log.push("complete"),
+				completeIfTracked: () => log.push("complete"),
+				fail: () => log.push("fail"),
+				cancel: () => log.push("cancel"),
+			}
 		}
 		internals.transactionService.waitForTx = async (txHash: string) => {
 			log.push(`waitForTx:${txHash}`)
@@ -399,8 +405,8 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 		internals.syncAuthwits = async (_node: unknown, scope: unknown, _task: unknown, rows?: Authwit[]) => {
 			log.push(`syncAuthwits:${JSON.stringify(scope)}:${rows?.map((r) => r.id).join(",")}`)
 		}
-		internals.syncStatus = async (_node: unknown, scope: unknown) => {
-			log.push(`syncStatus:${JSON.stringify(scope)}`)
+		internals.applyStatus = async (_node: unknown, scope: unknown) => {
+			log.push(`applyStatus:${JSON.stringify(scope)}`)
 		}
 		h.executeSendTransaction.mockImplementation(async (...args: unknown[]) => {
 			log.push(`send:${JSON.stringify(args[0])}:${JSON.stringify(args[1])}:${args[3]}:${JSON.stringify(args[4])}`)
@@ -502,9 +508,30 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 			"waitForTx:0xtx",
 			"nodeFor",
 			"proven:0xtx",
-			`syncStatus:${JSON.stringify(P1)}`,
+			`applyStatus:${JSON.stringify(P1)}`,
 			"complete",
 		])
+	})
+
+	test.each([
+		["a profile switch clears its task", true],
+		["control: its task stays tracked", false],
+	])("a registry toggle stores the status the node reads and resolves when %s (real TaskService)", async (_name, switches) => {
+		const h = await makeHarness({ node: {} })
+		const { tasks, switchToProfile } = await startedTaskService("p1")
+		const internals = h.service as unknown as Record<string, unknown> & { transactionService: Record<string, unknown> }
+		internals.taskService = tasks
+		internals.transactionService.waitForTx = async () => {}
+		internals.waitForTxProven = async () => {
+			if (switches) switchToProfile("p2")
+		}
+		const util = await import("@/wallet/utils/auth-registry")
+		vi.spyOn(util, "isAuthRegistryEnabled").mockResolvedValue(false)
+
+		await expect(h.service.setRegistryEnabled("net-1", A, false, FEE)).resolves.toBeUndefined()
+		expect(await h.service.getRegistryEnabled(1, A)).toBe(false)
+		expect((await tasks.getTasks()).map((task) => task.status)).toEqual(switches ? [] : [TaskStatus.Completed])
+		vi.restoreAllMocks()
 	})
 
 	test("a send failure fails the task; a cancellation cancels it and surfaces JobCancelledError", async () => {
