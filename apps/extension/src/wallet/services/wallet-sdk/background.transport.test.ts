@@ -336,7 +336,6 @@ describe("a key exchange, admitted only from its discovery's tab and document or
 	])("for a discovery %s, the discovery is refused and no key exchange establishes it", async (_label, from) => {
 		const { handler, deliver } = boot()
 		deliver(discovery("k5"), from as MessageSender)
-		await flush()
 		expect(handler.getPendingDiscovery("k5")).toBeUndefined()
 		deliver(await keyExchange("k5"), from as MessageSender)
 		await flush()

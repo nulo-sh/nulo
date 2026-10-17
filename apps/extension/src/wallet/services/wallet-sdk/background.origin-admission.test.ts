@@ -1,8 +1,10 @@
 /**
- * `handleDiscovery` refuses an origin that is neither `https:` nor plain `http:` on loopback before
- * anything else reads it: no connect window, no place in the locked queue, no reconnect from a
- * session stored under that origin. A secure origin still reaches the window.
+ * `handleDiscovery` refuses an origin that is neither `https:` nor plain `http:` on loopback
+ * synchronously, inside the SDK's callback and before the reset wait that is its first await: no
+ * connect window, no place in the locked queue, no reconnect from a session stored under that
+ * origin, and no Terms, network or notice read. A secure origin still reaches each of them.
  */
+import { DiscoveryQueue } from "@nulo/wallet-bridge"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 type Callbacks = { onPendingDiscovery: (d: unknown) => void }
@@ -46,8 +48,16 @@ import { FAKE_DAPP_ORIGIN, fakeSdkServices } from "./test-services"
 
 const PLAIN_HTTP_ORIGIN = "http://dapp.example"
 
-function boot(opts: Parameters<typeof fakeSdkServices>[0] = {}) {
-	const fake = fakeSdkServices(opts)
+/** Every read a discovery can reach, each a spy; `activeProfile` answering undefined is locked. */
+function boot(activeProfile?: () => Promise<{ id: string } | undefined>) {
+	const reads = {
+		resetRun: vi.fn(async () => {}),
+		legal: vi.fn(async () => {}),
+		served: vi.fn(() => true),
+		notice: vi.fn(async () => {}),
+		popup: vi.fn(async () => ({ approved: true })),
+	}
+	const fake = fakeSdkServices({ ...reads, activeProfile })
 	initWalletSdkHandler(fake.services, { log: () => {} } as never, fakeSdkPorts())
 	const discover = (requestId: string, origin: string) => {
 		const discovery = {
@@ -63,7 +73,7 @@ function boot(opts: Parameters<typeof fakeSdkServices>[0] = {}) {
 		pending.set(requestId, discovery)
 		captured?.onPendingDiscovery(discovery)
 	}
-	return { discover, rows: fake.rows, onActiveProfileChanged: fake.onActiveProfileChanged }
+	return { discover, reads, rows: fake.rows, onActiveProfileChanged: fake.onActiveProfileChanged }
 }
 
 const flush = async () => {
@@ -76,71 +86,77 @@ beforeEach(() => {
 	handlerCalls.length = 0
 	pending.clear()
 	captured = undefined
-	// biome-ignore lint/suspicious/noExplicitAny: chrome stub
-	;(globalThis as any).chrome = {
+	vi.stubGlobal("chrome", {
 		runtime: { getURL: (p: string) => p },
 		tabs: { sendMessage: () => {} },
 		action: { setBadgeText: () => {}, setBadgeBackgroundColor: () => {} },
-	}
-	// biome-ignore lint/suspicious/noExplicitAny: vite define-injected global
-	;(globalThis as any).__VERSION__ = "test"
+	})
+	vi.stubGlobal("__VERSION__", "test")
 })
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+	vi.restoreAllMocks()
+	vi.unstubAllGlobals()
+})
 
 describe("discovery admits secure origins only", () => {
-	test("a plain-http origin is refused with no connect window", async () => {
-		const popup = vi.fn(async () => ({ approved: true }))
-		const { discover, rows } = boot({ popup })
+	test("a plain-http origin is refused inside the callback and reads nothing", async () => {
+		const { discover, reads, rows } = boot()
 
 		discover("d1", PLAIN_HTTP_ORIGIN)
+		expect(rejected()).toEqual(["d1"])
 		await flush()
 
-		expect(rejected()).toEqual(["d1"])
-		expect(popup).not.toHaveBeenCalled()
+		for (const read of Object.values(reads)) expect(read).not.toHaveBeenCalled()
+		expect(approved()).toEqual([])
 		expect(rows.size).toBe(0)
 	})
 
+	test("an https origin passes the reset wait, the Terms and network reads, and the window (control)", async () => {
+		const { discover, reads } = boot()
+
+		discover("d1", FAKE_DAPP_ORIGIN)
+		expect(rejected()).toEqual([])
+		await flush()
+
+		expect(reads.resetRun).toHaveBeenCalledTimes(1)
+		expect(reads.legal).toHaveBeenCalledTimes(1)
+		expect(reads.served).toHaveBeenCalled()
+		expect(reads.popup).toHaveBeenCalledTimes(1)
+		expect(approved()).toEqual(["d1"])
+	})
+
 	test.each([
-		["a plain-http origin is refused while locked and opens nothing on unlock", PLAIN_HTTP_ORIGIN, 0],
-		["an https origin queued while locked opens the connect window on unlock", FAKE_DAPP_ORIGIN, 1],
-	])("%s", async (_label, origin, windows) => {
+		["a plain-http origin is refused while locked: never queued, nothing opens on unlock", PLAIN_HTTP_ORIGIN, false],
+		["an https origin is queued while locked and opens the window on unlock (control)", FAKE_DAPP_ORIGIN, true],
+	])("%s", async (_label, origin, admitted) => {
+		const enqueue = vi.spyOn(DiscoveryQueue.prototype, "enqueue")
 		let unlocked = false
-		const popup = vi.fn(async () => ({ approved: true }))
-		const { discover, onActiveProfileChanged } = boot({ popup, activeProfile: async () => (unlocked ? { id: "p1" } : undefined) })
+		const { discover, reads, onActiveProfileChanged } = boot(async () => (unlocked ? { id: "p1" } : undefined))
 
 		discover("d1", origin)
+		expect(rejected()).toEqual(admitted ? [] : ["d1"])
 		await flush()
+		expect(enqueue).toHaveBeenCalledTimes(admitted ? 1 : 0)
+
 		unlocked = true
 		onActiveProfileChanged.invoke({ id: "p1" })
 		await flush()
-
-		expect(popup).toHaveBeenCalledTimes(windows)
-		expect(approved()).toEqual(windows ? ["d1"] : [])
+		expect(reads.popup).toHaveBeenCalledTimes(admitted ? 1 : 0)
+		expect(approved()).toEqual(admitted ? ["d1"] : [])
 	})
 
-	test("a session stored under a plain-http origin does not reconnect it", async () => {
-		const popup = vi.fn(async () => ({ approved: true }))
-		const { discover, rows } = boot({ popup })
-		rows.set(`${PLAIN_HTTP_ORIGIN}|0`, { id: "row-http", profileId: "p1", chainId: "0" })
+	test.each([
+		["a session stored under a plain-http origin does not reconnect it", PLAIN_HTTP_ORIGIN, false],
+		["a session stored under an https origin reconnects it with no window (control)", FAKE_DAPP_ORIGIN, true],
+	])("%s", async (_label, origin, admitted) => {
+		const { discover, reads, rows } = boot()
+		rows.set(`${origin}|0`, { id: "row-1", profileId: "p1", chainId: "0" })
 
-		discover("d1", PLAIN_HTTP_ORIGIN)
+		discover("d1", origin)
+		expect(rejected()).toEqual(admitted ? [] : ["d1"])
 		await flush()
 
-		expect(rejected()).toEqual(["d1"])
-		expect(approved()).toEqual([])
-		expect(popup).not.toHaveBeenCalled()
-		expect(rows.has(`${PLAIN_HTTP_ORIGIN}|0`)).toBe(true)
-	})
-
-	test("an https origin opens the connect window and is approved on Allow", async () => {
-		const popup = vi.fn(async () => ({ approved: true }))
-		const { discover } = boot({ popup })
-
-		discover("d1", FAKE_DAPP_ORIGIN)
-		await flush()
-
-		expect(popup).toHaveBeenCalledTimes(1)
-		expect(approved()).toEqual(["d1"])
-		expect(rejected()).toEqual([])
+		expect(approved()).toEqual(admitted ? ["d1"] : [])
+		expect(reads.popup).not.toHaveBeenCalled()
 	})
 })

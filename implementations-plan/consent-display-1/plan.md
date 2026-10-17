@@ -210,6 +210,11 @@ Outline B (not committed) proposed a worker snapshot by id with a 120 s life, cl
 - **Final fresh Codex pass, round 1** (session 01a14b5f): reject. Accepted: OA-1 named the import row whose titles arc 1 cleaned (→ D8: the cleaning moved to arc 2, arc 1 is the refusal alone); the restored mint amount needed an ask (→ OA-5, UI impact, failed and late refresh tests); the idempotent and resumed exits of D2 needed tests (→ phase 3); the two drafts of the mark's words differed (→ one text); F4, I3 and I5 wording. Not taken: removing this record and the ledger's reviewer columns. The lane's wording rule bars naming the outside review, its items and the weakness; the repository's standard requires each accepted and rejected point with its reason in `plan.md`, and this record describes plan decisions only.
 - **Final fresh Codex pass, round 2** (resumed): **approve**. It verified the re-cut arc 1, OA-5, the D2 exits, the single text and the reworded facts, and withdrew the wording point: no committed sentence names the outside review or describes its path.
 
+### Arc 1 implementation review
+
+- **Codex round 1** (gpt-6.1-sol, high, session 01a14b75) on 70057899: reject, no production bypass. Taken: the refusal asserted synchronously, the queue spied with a queued `https:` control, the reset wait, Terms, network read, notice and window spied; `vi.stubGlobal` in place of two test-only `biome-ignore` lines. Held: the wrapper's `"unknown"` clause; numeric IPv4 forms normalize to this machine.
+- **Opus review** of 70057899: approve. Taken: an `https:` stored-session control; the orphaned flow doc block deleted. Not taken: removing the `"unknown"` clause (pre-existing, redundant, outside the arc).
+
 ## Seeds
 
 Orchestrator-owned: no ELI5; the seeds are not run.

@@ -907,16 +907,6 @@ const DEDUPE_WAITERS_CAP = 8
 
 const discoveryDeadline = (discovery: PendingDiscovery): number => discovery.timestamp + DISCOVERY_STALE_MS
 
-/**
- * Handle a new discovery request from a dApp.
- *
- * Flow:
- * 1. Check if the wallet is unlocked (active profile exists)
- * 2. Check if a valid DappSession already exists for this origin (returning user)
- *    - If yes: auto-approve discovery without showing popup
- *    - If no: show connect popup via DappInteractionService
- * 3. On approval, the wallet-sdk proceeds with ECDH key exchange
- */
 /** Fail closed: an answer that cannot be read is "no". */
 async function isLegalCurrent(legal: LegalAdmission): Promise<boolean> {
 	return legal.assertCurrent().then(
