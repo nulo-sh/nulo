@@ -304,6 +304,7 @@
     "assembleFullBackup": true,
     "awaitLivenessAdvance": true,
     "awaitProfileActivation": true,
+    "awaitingFirstPriceAnswer": true,
     "backCtaBlocked": true,
     "balanceFormatted": true,
     "browser": true,
