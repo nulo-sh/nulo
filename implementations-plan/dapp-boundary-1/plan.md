@@ -1,7 +1,7 @@
 ---
 plan: dapp-boundary-1
 tier: mid
-status: arc 1 in progress (phases 1-3 ✓; PR next)
+status: completed
 issues: "none (the PR closes nothing)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,21 @@ base: origin/dev at 13d5f8d0
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-17
+- **Status:** completed. One PR against `dev` carries the arc and this close-out; merging it is the orchestrator's call.
+- **Shipped:**
+  - A dApp's `simulateTx` answer is the app-facing shape (`execution/app-facing-results.ts`): an allowlist rebuilt from the upstream classes that still parses as `TxSimulationResultWithAppOffset`, applied after the fast path's merge on every route a dApp's simulation takes (D1, D3, D6).
+  - A dApp's `profileTx` is refused with `UnsupportedMethodError` (-32601) before a fence or a build; the error keeps its code through the execution catch and logs at debug (D4).
+  - `delete-after-prove` holds bb.js's CRS store from the popup through the erase, on every prover backend (D8).
+- **Dropped:** `stats` from the answer, against the brief's list (Brief claims; D3 amended in arc 1); the dApp profile build path with its gas-settings test.
+- **Rejected:** a composition test (D7); emptying `argsHash` (D3).
+- **Known limits:** none.
+- **Open items:** #699 (OA-1, a `gates` profile signed inside the wallet). D3's kept argument hashes are tracked privately.
+- **Lessons:** none promoted. `lessons.md` is at 8163 of 8192 bytes with no stale entry, and this plan's cross-task gotchas are already there: a typed error survives only the hops that name it, and a never test pairs with a success control.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # dapp-boundary-1: one app-facing shape for simulateTx; no dApp profileTx
 
