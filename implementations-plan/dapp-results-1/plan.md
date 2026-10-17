@@ -1,7 +1,7 @@
 ---
 plan: dapp-results-1
 tier: light
-status: approved 2026-10-17 by the orchestrator (D3 kept, phase 2 added); arc 1 in progress
+status: completed
 issues: "none (the PR closes nothing)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,20 @@ base: origin/dev at 563b0627
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-17
+- **Status:** completed. One PR against `dev` carries the arc and this close-out; merging it is the orchestrator's call.
+- **Shipped:**
+  - `trim()` denies `witness`, `newNotes` and `taggingIndexRanges`, and the static log guard refuses the names flattened into a message (phase 1; D3).
+  - A dApp's `executeUtility` answer is rebuilt as its return values, offchain effects and anchor timestamp, without the PXE's `stats` (phase 2; D5).
+- **Dropped:** kebab-case twins of the keys (D2); a `NoteAndSlot` shape rule (D1).
+- **Rejected:** deleting the wire test's comment on the positive search (Arc 1, Codex round 1).
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` is at 8163 of 8192 bytes, and this plan's one cross-task point (a never test pairs with a success control) is already there.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # dapp-results-1: an app-facing `executeUtility` answer; the log redactor denies three execution keys
 
