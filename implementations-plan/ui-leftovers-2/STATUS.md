@@ -10,3 +10,5 @@
 - 2026-10-17 21:01 Phase 2 gate green (lint, typecheck:all, test holdings token-aggregate BalanceView: 108 passed; never-happens mutant caught).
 - 2026-10-17 21:3x test:all green at f96b06b7 (extension 13,571 passed); Codex loop converged in 2 rounds (fix 6a8f0f09); Opus diff review folded.
 - 2026-10-17 21:4x merged origin/dev 356004ce (b8610413; #713 adds a lock check before the price fetch, no effect here); audit:vue 0, test:all 0 (extension 13,599 passed) on the merged head.
+- 2026-10-17 22:0x merged origin/dev dc4a88ec (4c2a4e9e; #716 adds a dependency: `bun install`); lint, typecheck:all, test:all (extension 13,638 passed) exit 0; armed builds, rows Chrome 9/9 (63.2 s), Firefox 9/9 (111.6 s); after shots retaken.
+- 2026-10-17 22:3x merged origin/dev 4ad2a80d (5dfdb044; #717, execution and logger only); lint, typecheck:all, touched tests (496 passed), check:plans exit 0. Phase 3 done.
