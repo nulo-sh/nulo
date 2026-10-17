@@ -17,6 +17,8 @@ import { ContractInitializationStatus } from "@aztec-labs/aztec.js/wallet"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { FunctionSelector, FunctionType } from "@aztec-labs/stdlib/abi"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { toAppFacingSimulationResult } from "./app-facing-results"
+import { simulationFixture } from "./app-facing-results.fixtures"
 import { ContractResolver } from "./contract-resolver"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { ViewExecutor, type ViewExecutorDeps } from "./view-executor"
@@ -66,12 +68,9 @@ function makeHarness(overrides: Partial<ViewExecutorDeps> = {}) {
 		ensureRegistered: vi.fn(async () => {}),
 		requiresInitialization: vi.fn(async () => false),
 	}
+	const simulated = simulationFixture({ tail: "public", publicOutput: true }).result
 	const pxe = {
-		simulateTx: vi.fn(async () => ({
-			gasUsed: { totalGas: 1n },
-			getPrivateReturnValues: () => "priv",
-			getPublicReturnValues: () => "pub",
-		})),
+		simulateTx: vi.fn(async () => simulated),
 		executeUtility: vi.fn(async () => ({ result: [] })),
 		getContracts: vi.fn(async () => []),
 		registerContract: vi.fn(async () => {}),
@@ -98,7 +97,7 @@ function makeHarness(overrides: Partial<ViewExecutorDeps> = {}) {
 		logError: vi.fn(),
 		...overrides,
 	}
-	return { deps, network, node, account, pxe, executor: new ViewExecutor(deps) }
+	return { deps, network, node, account, pxe, simulated, executor: new ViewExecutor(deps) }
 }
 
 // The fast-path arm wraps accountAddress via the REAL AztecAddress.fromString.
@@ -117,7 +116,7 @@ function makeSimOp(overrides: Record<string, unknown> = {}) {
 
 describe("ViewExecutor.executeSimulateTransaction", () => {
 	test("scopes=[account.address], fee enforcement skipped, projected result shape", async () => {
-		const { executor, pxe, account } = makeHarness()
+		const { executor, pxe, account, simulated } = makeHarness()
 		const result = await executor.executeSimulateTransaction({
 			kind: "simulate_transaction",
 			networkId: "net-1",
@@ -127,7 +126,11 @@ describe("ViewExecutor.executeSimulateTransaction", () => {
 
 		const simArgs = pxe.simulateTx.mock.calls[0] as unknown[]
 		expect(simArgs[1]).toEqual({ simulatePublic: false, skipFeeEnforcement: true, scopes: [account.address] })
-		expect(result).toEqual({ gasUsed: { totalGas: 1n }, privateReturn: "priv", publicReturn: "pub" })
+		expect(result).toEqual({
+			gasUsed: simulated.gasUsed,
+			privateReturn: simulated.getPrivateReturnValues(),
+			publicReturn: simulated.getPublicReturnValues(),
+		})
 	})
 })
 
@@ -138,11 +141,14 @@ describe("ViewExecutor.executeAztecSimulateTx", () => {
 		await expect(executor.executeAztecSimulateTx(op)).rejects.toThrow("Invalid `opts.from`")
 	})
 
-	test("split=null routes to the standard path: stub-account msgSender + scopes pin", async () => {
+	test("split=null routes to the standard path: stub-account msgSender + scopes pin, and the answer comes back reduced", async () => {
 		fastPathMocks.rehydrateOptimizablePrefix.mockReturnValue(null)
 		const extra = addr("0xextra")
-		const { executor, pxe, account } = makeHarness()
-		await executor.executeAztecSimulateTx(makeSimOp({ opts: { from: addr(VALID_ADDR), additionalScopes: [extra] } }))
+		const { executor, pxe, account, simulated } = makeHarness()
+		const result = await executor.executeAztecSimulateTx(makeSimOp({ opts: { from: addr(VALID_ADDR), additionalScopes: [extra] } }))
+
+		expect(result).toEqual(toAppFacingSimulationResult(simulated))
+		expect(result).not.toEqual(simulated)
 
 		expect(fastPathMocks.runFastPath).not.toHaveBeenCalled()
 		const simArgs = pxe.simulateTx.mock.calls[0] as unknown[]
@@ -172,15 +178,18 @@ describe("ViewExecutor.executeAztecSimulateTx", () => {
 		expect(planned.calls).toEqual(calls)
 	})
 
-	test("fast path result returned verbatim when non-null", async () => {
+	test("a non-null fast path result comes back reduced; the merge gets the standard arm in full", async () => {
 		fastPathMocks.rehydrateOptimizablePrefix.mockReturnValue({ optimizableCalls: [{}], remainingRaw: [] })
-		const fastResult = { kind: "fast" }
+		const fastResult = simulationFixture({ tail: "public", publicOutput: true, appCallOffset: 1 }).result
 		fastPathMocks.runFastPath.mockResolvedValue(fastResult)
-		const { executor, pxe } = makeHarness()
+		const { executor, pxe, simulated } = makeHarness()
 		const result = await executor.executeAztecSimulateTx(makeSimOp())
 
-		expect(result).toBe(fastResult)
+		expect(result).toEqual(toAppFacingSimulationResult(fastResult))
+		expect(result).not.toEqual(fastResult)
 		expect(pxe.simulateTx).not.toHaveBeenCalled()
+		const { runStandardArm } = fastPathMocks.runFastPath.mock.calls[0][0] as { runStandardArm: (calls: unknown[]) => Promise<unknown> }
+		expect(await runStandardArm([])).toBe(simulated)
 	})
 })
 

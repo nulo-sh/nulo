@@ -1,7 +1,7 @@
 ---
 plan: dapp-boundary-1
 tier: mid
-status: planned; final Codex pass approve; arc 1 next
+status: arc 1 in progress (phase 1 ✓)
 issues: "none (the PR closes nothing)"
 driver: claude-code
 claude_model: opus
@@ -85,7 +85,7 @@ For a dApp built on `@aztec-labs/wallet-sdk` that simulates before it sends, and
 
 Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test && bun run test:all`. Pass: each exits 0. A phase is ✓ only when its gate passes. Each phase logs to `lessons/phase-N.md`.
 
-1. **The simulate shape.** Change: the module, its fixtures and test; wire `executeAztecSimulateTx`; the executor test's harness returns real results ("fast path result returned verbatim" becomes "returned reduced"). Tests, in `app-facing-results.test.ts`:
+1. **The simulate shape.** ✓ (gate F, 2026-10-17) Change: the module, its fixtures and test; wire `executeAztecSimulateTx`; the executor test's harness returns real results ("fast path result returned verbatim" becomes "returned reduced"). Tests, in `app-facing-results.test.ts`:
    - never (wire): a fixture whose root, depth-1 and depth-2 calls each carry a unique sentinel in every emptied field (bytecode, vk, witness, note, counter map, tagging secret, class log; public inputs with a key-validation request, a read request, a note hash, a nullifier, a private log), a tail with nullifiers, note hashes and logs in both phases, a `publicOutput.txEffect` with effects, debug logs and a revert reason, and a non-zero `firstNullifier`. Assert that `JSON.stringify(toJsonSafe(out))` contains no sentinel (buffers decoded first where a sentinel sits inside one), and that every object level of that JSON has exactly the schema's keys;
    - control, after the dApp's own `TxSimulationResultWithAppOffset.schema` parse: `getPrivateReturnValuesOfAppCall` decodes the app call's values, the `offchainEffects` getter keeps contract addresses, `gasUsed` with and without a public output, each frame's four kept public-input fields at depth 2, `publicFunctionCalldata`, the tail's constants, gas, fee payer and call requests, `publicReturnValues`, `stats`, and `appCallOffset` kept for an offset input and absent for a plain one;
    - executor: the standard path's and the fast path's answers both come back reduced.

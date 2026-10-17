@@ -38,6 +38,7 @@ import { type NetworkService, networkInfoFrom } from "@/wallet/services/network/
 import type { ProfileService } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"
+import { toAppFacingSimulationResult } from "./app-facing-results"
 import { assertSelectorBinding, CALL_BINDING, type ContractResolver, findFunctionByName, findFunctionBySelector } from "./contract-resolver"
 import { rehydrateOptimizablePrefix, runFastPath } from "./fast-path"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
@@ -228,7 +229,12 @@ export class ViewExecutor {
 		}))
 	}
 
+	/** The dApp gets the app-facing shape; the fast path's merge still reads the full standard arm. */
 	public async executeAztecSimulateTx(op: AztecSimulateTxOperation): Promise<TxSimulationResult> {
+		return toAppFacingSimulationResult(await this.simulateDappTx(op))
+	}
+
+	private async simulateDappTx(op: AztecSimulateTxOperation): Promise<TxSimulationResult> {
 		if (op.accountAddress !== op.opts?.from?.toString()) {
 			throw new Error("Invalid `opts.from`")
 		}

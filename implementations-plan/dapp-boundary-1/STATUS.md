@@ -5,3 +5,4 @@
 - 2026-10-17 dual review: Codex reject, Opus conditional approve; plan revised (refuse dApp profileTx, OA-1; narrow tail/public output; wire-level tests); final fresh Codex pass next.
 - 2026-10-17 final fresh Codex pass: conditional approve; both conditions and the retry point applied.
 - 2026-10-17 final Codex resume: approve. Plan committed.
+- 2026-10-17 arc 1 phase 1 (the simulate shape): gate F green.
