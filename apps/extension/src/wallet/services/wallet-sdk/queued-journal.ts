@@ -37,7 +37,13 @@ import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error
 import type { DappSessionService } from "@/wallet/services/dapp-session/service"
 import type { NetworkService } from "@/wallet/services/network/service"
 import type { AccountService } from "@/wallet/services/account/service"
-import { NoUsableAccountError, projectStoredGrants, requestedSenderOf, resolveAuthorizedSessionAccount } from "@nulo/wallet-bridge"
+import {
+	AuthRegistryRefusalError,
+	NoUsableAccountError,
+	projectStoredGrants,
+	requestedSenderOf,
+	resolveAuthorizedSessionAccount,
+} from "@nulo/wallet-bridge"
 import { parseCaipAccount } from "@/wallet/utils/caip"
 import type { CaipAccount } from "@/wallet/services/dapp-interaction/spec"
 import { pickPrimaryWireMethod } from "@/utils/primary-method"
@@ -267,7 +273,7 @@ export async function failQueuedIfUnclaimed(
 /** The kinds a row failed before any claim can carry. */
 export type QueuedFailureKind = Extract<
 	KnownJobErrorKind,
-	"popup_bound" | "scope_refused" | "malformed_request" | "terms_refused" | "session_ended" | "wallet_refused"
+	"popup_bound" | "scope_refused" | "registry_refused" | "malformed_request" | "terms_refused" | "session_ended" | "wallet_refused"
 >
 
 /** Fails a still-queued row with the error that ended its message before any claim, classified by
@@ -284,6 +290,7 @@ export async function failQueuedForError(
 
 function queuedFailureKind(error: unknown): QueuedFailureKind {
 	if (error instanceof TermsAcceptanceRequiredError) return "terms_refused"
+	if (error instanceof AuthRegistryRefusalError) return "registry_refused"
 	if (error instanceof ScopeViolationError || error instanceof CapabilityNotGrantedError) return "scope_refused"
 	if (error instanceof InvalidWalletArgumentsError) return "malformed_request"
 	if (error instanceof SessionEndedError || error instanceof WalletLockedError) return "session_ended"

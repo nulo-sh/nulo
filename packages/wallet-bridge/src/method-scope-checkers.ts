@@ -2,14 +2,15 @@
  * Per-method scope-check function bodies + their helpers.
  *
  * The method-descriptors registry and scope-enforcement both import these checkers, so at runtime
- * this module imports only leaves (`./field-address`, `./scope-violation`; `MethodName` is
- * type-only), which is what keeps the registry↔scope-enforcement graph acyclic.
+ * this module imports only leaves (`./auth-registry`, `./field-address`, `./scope-violation`;
+ * `MethodName` is type-only), which is what keeps the registry↔scope-enforcement graph acyclic.
  *
  * Each checker mirrors a `WalletSchema` arg shape and must stay in sync with
  * `buildNetworkOperation` / `buildAccountOperation` in dispatcher.ts.
  */
 
 import { isRecord } from "@nulo/wallet-core/utils"
+import { authRegistryRefusal, isAuthRegistry, isAuthRegistryGrantCall } from "./auth-registry"
 import type { Capability, GrantedCapabilityRecord, Scope, ScopePattern } from "./capabilities"
 import { sameFieldAddress } from "./field-address"
 import type { MethodName } from "./method-descriptors"
@@ -256,7 +257,16 @@ export function isCreateAuthWitCoveredByTxOrSimulationScope(intent: unknown, gra
 	return permitted
 }
 
+/** A registry witness is usable only by a registry grant function, which no grant may reach. */
+function refuseAuthRegistryIntent(intent: unknown): void {
+	const target = isCallIntent(intent) ? intent.call.to : isIntentInnerHash(intent) ? intent.consumer : undefined
+	if (target !== undefined && isAuthRegistry(target)) {
+		throw authRegistryRefusal("Scope violation: createAuthWit intent targets the authorization registry")
+	}
+}
+
 export function checkCreateAuthWit(args: unknown[], grants: GrantedCapabilityRecord[]): void {
+	refuseAuthRegistryIntent(args[1])
 	const from = String(args[0])
 
 	const caps = grantsOfType(grants, "accounts")
@@ -353,7 +363,12 @@ function requireAddressBookGrant(method: MethodName, grants: GrantedCapabilityRe
 // The registry's `scopeCheck` holds these stable references, which the parity tests compare by
 // identity.
 
+/** Ahead of the grant filter, so no grant, a wildcard included, admits a registry grant call. */
 export function checkSendTx(args: unknown[], grants: GrantedCapabilityRecord[]): void {
+	const calls = (args[0] as WireExecPayload | undefined)?.calls
+	if (Array.isArray(calls) && calls.some((call) => isRecord(call) && isAuthRegistryGrantCall(call))) {
+		throw authRegistryRefusal("Scope violation: sendTx call targets an authorization registry grant function")
+	}
 	checkTransactionCalls("sendTx", args, grants)
 }
 

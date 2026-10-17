@@ -1,7 +1,7 @@
 ---
 plan: dapp-boundary-3
 tier: mid
-status: planned, awaiting approval (final Codex pass: approve)
+status: approved 2026-10-17 (orchestrator); arc 1 in progress
 issues: none (P38-06 carries no public issue; P38-08 waits on the owner)
 driver: claude-code
 claude_model: opus
@@ -95,7 +95,7 @@ export function isAuthRegistryGrantCall(call: { to: unknown; selector: unknown }
 - **Outline B (competing, as first drafted): refuse by pinned grant selectors in `sendTx`/`simulateTx` only.** The literal reading of the pick. Both legs rejected it: it leaves the intent and inner routes open, so the stated invariant fails.
 - **Address versus function in `sendTx`.** The first draft refused every registry function by address. Codex showed that this blocks reading the rejection switch (F6) beyond the owner's words; refusing the three grant functions by selector matches the pick. The selector is what the entrypoint runs; a mismatched name is refused later by the selector binding (`contract-resolver.ts:114-127`). Cost: three pins that move only if a signature changes, caught by the pin test.
 - **Address in `createAuthWit` and the decode loop.** Precise there: only `set_authorized_private` verifies a witness (I3, F6), so no selector is needed.
-- **Typed reason.** Reuse `ScopeViolationError`: the envelope, the History row and the log level already exist. New text or a new code is a public contract: OA-1.
+- **Typed reason.** A subclass of `ScopeViolationError` keeps the code, the log level and the expected-refusal handling; the envelope and the History row read the subclass for their own text (OA-1 = b, D10).
 - **Address source.** Import the upstream leaf rather than pin a hex like `FEE_JUICE_CONTRACT`: one source; the leaf pulls no artifact JSON.
 - **Decode rule: refuse, not skip.** Skipping leaves the build to fail at proving with an opaque error after the window; refusing is typed and comes before any discovered witness is signed.
 - **Where the inner refusal settles.** The decode loop is the one place that knows each request's consumer; the signing sites see only the hash. Settling the open window with the typed refusal needs a new path from estimate to request owner, which the existing call-binding refusal also lacks: OA-4, not this arc.
@@ -114,12 +114,12 @@ export function isAuthRegistryGrantCall(call: { to: unknown; selector: unknown }
 ## UI impact
 
 - **Signed (orchestrator's record):** "the reason a refused dApp call shows, on the existing refusal surface; no new screen."
-- **After arc 1:** a refused dApp send leaves the existing History row "Not allowed", "The app asked for more than you allowed. Nothing was sent."; a refused intent shows nothing in the wallet, as any scope refusal today; an inner request keeps a standard send's Confirm off with the existing toast "Couldn't estimate fee. Try again.", the path the call-binding refusal takes today; in a NO_FROM send the preview shows its existing failure toast, and Confirm ends in the typed refusal and "Not allowed". No copy, row or layout changes.
-- **Not shipped:** a registry-specific reason (OA-1); a window that closes itself with the refusal (OA-4); hiding a requested registry scope in the connect window (OA-5).
+- **After arc 1:** a refused dApp send leaves a History row "Not allowed" with its own context line (OA-1, D10); a refused intent shows nothing in the wallet, as any scope refusal today; an inner request keeps a standard send's Confirm off with the existing toast "Couldn't estimate fee. Try again.", the path the call-binding refusal takes today; in a NO_FROM send the preview shows its existing failure toast, and Confirm ends in the typed refusal and "Not allowed". No copy, row or layout changes.
+- **Answered (orchestrator, D-orch, 2026-10-17; reason: "the planner's recommendation, no UI change beyond the lane brief's budget"):** OA-1 = b: a registry refusal keeps the scope-refusal code and gets its own dApp text and History context line (D10), both quoted in the PR body as a "what ships now" the owner can flip. OA-2 = a. OA-4: the existing estimate-failure toast ships; a self-settling window is its own later plan. OA-5 = a: the connect window keeps listing registry scope rows.
 
 ## Phases (arc 1)
 
-### Phase 1: the bridge refuses dApp requests that name the registry's grant functions
+### Phase 1: the bridge refuses dApp requests that name the registry's grant functions ✓
 
 1. Add `"@aztec-labs/standard-contracts": "6.0.0-rc.3"` to `packages/wallet-bridge/package.json` dependencies. Run `bun install`. Check that `bun.lock` changes only the wallet-bridge workspace block.
 2. Add `src/auth-registry.ts`, its export, and `auth-registry.test.ts`: the three selectors equal the ones derived from the installed artifact; `isAuthRegistryGrantCall` holds for an upper-case selector spelling; it does not hold for `is_reject_all` on the registry, or for a grant selector on another contract.
@@ -178,13 +178,14 @@ Ids D1-D19 belong to arc 1, D20 and up to arc 2.
 |---|---|---|---|
 | D1 | `sendTx`: refuse a registry call by the selector of a grant function | every registry function by address (first draft); by name | matches the pick's words and keeps the switch readable (Codex); the selector is what runs |
 | D2 | Cover `createAuthWit` intents and inner requests too | the scope check on calls only (Outline B) | the pick's purpose fails otherwise; both are one-predicate checks at existing chokepoints (both legs) |
-| D3 | Reuse `ScopeViolationError` and its envelope | a new class, code or text | new public contract and copy: OA-1 |
+| D3 | Keep the scope-refusal code and class family | a new code | superseded in part by OA-1 = b (D10): own text, same code |
 | D4 | Import the upstream address leaf | a pinned hex constant | one source; the extension already imports it |
 | D5 | The decode rule refuses, for every origin, by address | skip the effect; dApp origin only; by selector | typed and before signing; the wallet's own flows raise none (F8); only one registry function verifies a witness (I3) |
 | D6 | No new e2e scenario | an e2e per route | unit, dispatcher and executor seams prove each refusal; two existing e2e files prove no regression |
 | D7 | Leave `simulateTx` and `profileTx` unchanged | refuse there too (first draft) | a simulation writes nothing and signs no delegated authorization witness (F8); refusing it blocks reading the switch (Opus, Codex) |
 | D8 | The inner refusal keeps the window's existing estimate-failure path | settle the request from the estimate (Codex) | a new settlement path, which the call-binding refusal lacks too: a plan change for the owner (OA-4) |
 | D9 | Relaying another account's approval through `set_authorized_private` is refused as a top-level call or a discovered request; a nested relay with a witness the dApp already holds is not | refuse only when the approver is the person's account; refuse nested relays too | the pick names the grant functions; trusting a call argument adds a second rule (Opus); a nested relay obtains nothing from this wallet (final Codex pass); reopening condition: a dApp report |
+| D10 | OA-1 = b: a refusal subclass of `ScopeViolationError` (same code, same `walletErrorCode`) with its own dApp text and its own journal kind and History context line | a new code; a field on the envelope | every `instanceof ScopeViolationError` site (log level, expected-refusal list, journal) keeps working; only the envelope and the History label read the subclass |
 
 ## Review verdicts
 

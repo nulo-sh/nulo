@@ -265,6 +265,14 @@ simulation scope. When it carries an `IntentInnerHash`, the `consumer`
 contract is validated at wildcard function. Raw message hashes cannot be
 validated beyond the account check (no semantic info).
 
+The authorization registry's grant functions answer only the wallet's own
+authorization action (`grantPublicAuthwit`), so a public authorization a dApp
+obtains by naming the registry is always in the wallet's index, where a person
+can review and revoke it. A dApp's
+`sendTx` call to a grant function, a `createAuthWit` intent naming the registry,
+and a registry authorization request raised inside a dApp transaction are each
+refused, whatever the grant (`packages/wallet-bridge/src/auth-registry.ts`).
+
 ## RPC endpoint as user input
 
 The wallet talks to Aztec nodes over HTTPS-JSON-RPC. The endpoint URL is a

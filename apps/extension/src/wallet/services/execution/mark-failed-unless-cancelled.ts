@@ -1,5 +1,6 @@
 import { type JobError, type JobErrorKind, type JobProgress, JobCancelledSentinel, normalizeError } from "@nulo/wallet-core/jobs"
 import { DuplicateInitializationError, ScopeViolationError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import { AuthRegistryRefusalError } from "@nulo/wallet-bridge"
 import { refusalTitleOf } from "./contract-resolver"
 
 /**
@@ -31,8 +32,12 @@ export function markFailedUnlessCancelled(
 	if (error instanceof JobCancelledSentinel) {
 		throw error
 	}
-	const kind = error instanceof ScopeViolationError ? "scope_refused" : failureKind(error, "dapp_execute")
+	const kind = error instanceof ScopeViolationError ? scopeRefusalKind(error) : failureKind(error, "dapp_execute")
 	return lane.markJournal(journalId, { stage: "failed" }, normalizeError(error, kind), refusalTitleOf(error))
+}
+
+function scopeRefusalKind(error: ScopeViolationError): JobErrorKind {
+	return error instanceof AuthRegistryRefusalError ? "registry_refused" : "scope_refused"
 }
 
 /** The journal kind of a send failure. Classified failures keep their own kind:
