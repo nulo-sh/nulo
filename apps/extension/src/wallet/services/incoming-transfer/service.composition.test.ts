@@ -1,13 +1,14 @@
 /**
  * Composition test: the real IncomingTransferService, its real repository and the lock on
  * FakeBrowserApi storage, every other service a canned stub. The Allow touches trust, records and
- * the lock only (no PXE, no bb, no simulate or prove), so its stored rows are the oracle. See
+ * the lock only, and a scan reads notes from a constant `NoteService` stub (no PXE, no bb, no
+ * simulate or prove), so the stored rows and the log buffer are the oracle. See
  * `apps/extension/tests/COMPOSITION-TESTS.md`.
  */
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { ConfigStore } from "@/wallet/config"
+import type { ConfigProp, IConfig } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { ServiceCollection } from "@/wallet/base"
 import { svc } from "@/wallet/services/composition-harness"
@@ -23,6 +24,7 @@ import { ConfigService } from "@/wallet/services/config/service"
 import { TokenBalanceService } from "@/wallet/services/token-balance/service"
 import { TaskService } from "@/wallet/services/task/service"
 import { PriceService } from "@/wallet/services/price/service"
+import type { RawNote } from "@/wallet/services/note/spec"
 import type { PublicEventReader } from "./public-event-indexer"
 import { IncomingTransferRepository } from "./repository"
 import { IncomingTransferService } from "./service"
@@ -46,11 +48,9 @@ const reader: PublicEventReader = {
 }
 
 function hiddenReceipt(n: number, accountAddress: string, l2BlockNumber: number): IncomingNoteRecord {
-	const siloedNullifier = `0x${n.toString(16).padStart(64, "0")}`
 	return {
 		kind: "note",
-		id: noteRecordId("p1", "n1", siloedNullifier),
-		siloedNullifier,
+		id: noteRecordId("p1", "n1", `0x${n.toString(16).padStart(64, "0")}`),
 		profileId: "p1",
 		networkId: "n1",
 		accountAddress,
@@ -68,9 +68,19 @@ function hiddenReceipt(n: number, accountAddress: string, l2BlockNumber: number)
 	}
 }
 
-async function makeHarness() {
-	const api = new FakeBrowserApi()
-	api.reset()
+const NO_NOTES = { getNotesRaw: async () => [], getBlockTimestamp: async () => undefined }
+
+/** Keeps debug lines too, so the buffer holds every line a scan writes. */
+function debugLogger(): LoggerStore {
+	const config: IConfig = {
+		onUpdate: new EventHandler<ConfigProp>(),
+		get: ((key: string) => key === "debugMode") as IConfig["get"],
+	}
+	return new LoggerStore(config)
+}
+
+/** Starts the real service over `api`; `notes` is the `NoteService` stub. */
+async function startService(api: FakeBrowserApi, notes: Record<string, unknown> = NO_NOTES) {
 	const deletion = new ProfileDeletionState()
 	const session = 1
 	const visibility = { gate: undefined as Promise<void> | undefined, reached: false }
@@ -106,7 +116,7 @@ async function makeHarness() {
 	)
 	collection.add(svc(TransactionService.name, { onTransactionAdded: new EventHandler(), getTransactions: async () => [] }))
 	collection.add(svc(OperationJournalService.name, { getOperations: async () => [] }))
-	collection.add(svc(NoteService.name, { getNotesRaw: async () => [], getBlockTimestamp: async () => undefined }))
+	collection.add(svc(NoteService.name, notes))
 	collection.add(
 		svc(ConfigService.name, {
 			getValue: async (key: string) => {
@@ -122,9 +132,17 @@ async function makeHarness() {
 	collection.add(svc(TokenBalanceService.name, { requestBalanceRefresh: async () => ({ busy: true }) }))
 	collection.add(svc(TaskService.name, { getTaskSync: () => ({ status: 0 }) }))
 	collection.add(svc(PriceService.name, { getQuotes: async () => ({ quotes: {}, pricedTokens: {} }) }))
-	const service = new IncomingTransferService(new LoggerStore(new ConfigStore()), api, 1_000_000, reader)
+	const logger = debugLogger()
+	const service = new IncomingTransferService(logger, api, 1_000_000, reader)
 	collection.add(service)
 	await collection.start()
+	return { service, logger, visibility }
+}
+
+async function makeHarness() {
+	const api = new FakeBrowserApi()
+	api.reset()
+	const { service, visibility } = await startService(api)
 
 	const repo = new IncomingTransferRepository(api)
 	await repo.setTrust("p1", "n1", CONTRACT, "pending")
@@ -183,5 +201,81 @@ describe("IncomingTransferService composition — the Allow, in-process", () => 
 		expect(await call).toBe(false)
 		expect(await repo.getTrust("p1", "n1", CONTRACT)).toMatchObject({ state: "pending" })
 		for (const r of receipts) expect((await repo.getRecord(r.id))?.hidden).toBe(true)
+	})
+})
+
+describe("IncomingTransferService composition — a received note, scanned in-process", () => {
+	const ACCOUNT = `0x${"a1".repeat(32)}`
+	const UNIQUE_NOTE_HASH = `0x${"1c".repeat(32)}`
+	const NULLIFIER = `0x${"7e3d".repeat(16)}`
+	/** As the PXE wire carries it: the note's nullifier rides along with the fields a row keeps. */
+	const wireNote = {
+		contract: CONTRACT,
+		storageSlot: "0x1",
+		txHash: `0x${"7b".repeat(32)}`,
+		rawContent: ["0x64"],
+		content: { value: "100" },
+		uniqueNoteHash: UNIQUE_NOTE_HASH,
+		noteHash: `0x${"ab".repeat(32)}`,
+		l2BlockNumber: TIP - 10,
+		txIndexInBlock: 0,
+		noteIndexInTx: 0,
+		siloedNullifier: NULLIFIER,
+	} as RawNote
+	const notes = {
+		getNotesRaw: async () => [wireNote],
+		getBlockTimestamp: async () => 1_700_000_000,
+		getSyncedBlock: async () => ({ number: TIP, hash: "0xproposed" }),
+	}
+
+	type Scannable = {
+		serviceEpoch: number
+		scanContract: (p: string, n: string, a: string, c: string, epoch: number, tips?: unknown) => Promise<boolean>
+	}
+	const scan = (service: IncomingTransferService, tips?: unknown) => {
+		const s = service as unknown as Scannable
+		return s.scanContract("p1", "n1", ACCOUNT, CONTRACT, s.serviceEpoch, tips)
+	}
+
+	test("no stored key, value or log line holds a note's nullifier, and discovery, settlement and a restart keep one settled row", async () => {
+		const api = new FakeBrowserApi()
+		api.reset()
+		const repo = new IncomingTransferRepository(api)
+		await repo.setTrust("p1", "n1", CONTRACT, "trusted")
+		const loggers: LoggerStore[] = []
+		const start = async () => {
+			const started = await startService(api, notes)
+			loggers.push(started.logger)
+			return started.service
+		}
+		const noteRows = async () => (await repo.listByContract("p1", "n1", CONTRACT)).filter((r) => r.kind === "note")
+		/** Every place a scan writes to, lower-cased, so the nullifier is found with or without `0x`. */
+		const surfaces = async () =>
+			JSON.stringify([
+				await api.storage.local.get(null),
+				await api.storage.session.get(null),
+				loggers.map((l) => l.get(10_000)),
+			]).toLowerCase()
+		const expectNoNullifier = async () => {
+			const written = await surfaces()
+			expect(written).toContain(UNIQUE_NOTE_HASH.slice(2))
+			expect(written).not.toContain(NULLIFIER.slice(2))
+		}
+		const id = noteRecordId("p1", "n1", UNIQUE_NOTE_HASH)
+		const first = await start()
+
+		await scan(first)
+		const discovered = await noteRows()
+		expect(discovered.map((r) => r.id)).toEqual([id])
+		expect(discovered[0]).not.toHaveProperty("settled", true)
+		await expectNoNullifier()
+
+		await scan(first, await reader.getScanTips("n1"))
+		expect((await noteRows()).map((r) => [r.id, r.settled])).toEqual([[id, true]])
+		await expectNoNullifier()
+
+		await scan(await start(), await reader.getScanTips("n1"))
+		expect((await noteRows()).map((r) => [r.id, r.settled])).toEqual([[id, true]])
+		await expectNoNullifier()
 	})
 })

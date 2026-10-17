@@ -213,11 +213,9 @@ async function seedChain(h: H, networkId: string, chainId: number, l1ChainId: nu
 		await h.sessions.addDappSession({ url: `https://dapp${n}.example` }, [], [address], AccessLevel.Transactions, String(chainId))
 		const repo = new IncomingTransferRepository(h.api)
 		await repo.setTrust("p1", networkId, CONTRACT, "pending")
-		const siloedNullifier = `0x${n.toString(16).padStart(64, "0")}`
 		await repo.upsertRecord({
 			kind: "note",
-			id: noteRecordId("p1", networkId, siloedNullifier),
-			siloedNullifier,
+			id: noteRecordId("p1", networkId, `0x${n.toString(16).padStart(64, "0")}`),
 			profileId: "p1",
 			networkId,
 			accountAddress: address,

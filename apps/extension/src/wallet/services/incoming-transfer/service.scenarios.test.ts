@@ -473,12 +473,14 @@ beforeEach(() => {
 	arrivals.clear()
 })
 
+/** A record's fields plus the note's `uniqueNoteHash`, which the record keeps only in its id. */
+type NoteSeed = Partial<IncomingNoteRecord> & { uniqueNoteHash?: string }
+
 /** Build a valid note-kind record with the `id` ALWAYS derived from the final
- *  (profileId, networkId, siloedNullifier) — so a `{ ...other }` spread can't carry a stale id. */
-function noteRecord(overrides: Partial<IncomingNoteRecord> = {}): IncomingNoteRecord {
+ *  (profileId, networkId, uniqueNoteHash) — so a `{ ...other }` spread can't carry a stale id. */
+function noteRecord({ uniqueNoteHash = validNoteHash(1), ...overrides }: NoteSeed = {}): IncomingNoteRecord {
 	const merged = {
 		kind: "note" as const,
-		siloedNullifier: validNullifier(1),
 		profileId: "p1",
 		networkId: "n1",
 		accountAddress: "0xa",
@@ -487,7 +489,7 @@ function noteRecord(overrides: Partial<IncomingNoteRecord> = {}): IncomingNoteRe
 		owner: "0xa",
 		amountRaw: "100",
 		noteHash: "0xnh",
-		txHash: "0xtx",
+		txHash: "0xtx1",
 		l2BlockNumber: 1,
 		txIndexInBlock: 0,
 		indexInTx: 0,
@@ -495,11 +497,11 @@ function noteRecord(overrides: Partial<IncomingNoteRecord> = {}): IncomingNoteRe
 		discoveredAt: 0,
 		...overrides,
 	}
-	return { ...merged, id: noteRecordId(merged.profileId, merged.networkId, merged.siloedNullifier) }
+	return { ...merged, id: noteRecordId(merged.profileId, merged.networkId, uniqueNoteHash) }
 }
 
 /** Seed a note record keyed by its `id` (matches the repo's real keying). Returns the record. */
-function seedNote(overrides: Partial<IncomingNoteRecord> = {}): IncomingNoteRecord {
+function seedNote(overrides: NoteSeed = {}): IncomingNoteRecord {
 	const r = noteRecord(overrides)
 	records.set(r.id, r)
 	return r
@@ -507,13 +509,13 @@ function seedNote(overrides: Partial<IncomingNoteRecord> = {}): IncomingNoteReco
 
 // ── Tests ───────────────────────────────────────────────────────────────
 
-const validNullifier = (n: number) => `0x${n.toString(16).padStart(64, "0")}`
+const validNoteHash = (n: number) => `0x${n.toString(16).padStart(64, "0")}`
 const tokenA = { id: 1, profileId: "p1", chainId: 1, contract: "0xtokenA", symbol: "TKA", decimals: 18 }
 const tokenB = { id: 2, chainId: 1, contract: "0xtokenB", symbol: "TKB", decimals: 18 }
 
 function note(
 	overrides: Partial<{
-		siloedNullifier: string
+		uniqueNoteHash: string
 		noteHash: string
 		l2BlockNumber: number
 		txIndexInBlock: number
@@ -526,7 +528,7 @@ function note(
 	}> = {},
 ) {
 	return {
-		siloedNullifier: validNullifier(1),
+		uniqueNoteHash: validNoteHash(1),
 		noteHash: "0xnh1",
 		l2BlockNumber: 100,
 		txIndexInBlock: 0,
@@ -553,7 +555,7 @@ describe("IncomingTransferService — public surface gating (visibility)", () =>
 		const config = makeConfigStub(false)
 		const { service } = await bootService({ config })
 		seedNote({
-			siloedNullifier: "k",
+			uniqueNoteHash: "k",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -576,7 +578,7 @@ describe("IncomingTransferService — public surface gating (visibility)", () =>
 	test("getIncomingTransfers returns visible records when visibility=true", async () => {
 		const { service } = await bootService()
 		seedNote({
-			siloedNullifier: "k",
+			uniqueNoteHash: "k",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -602,7 +604,6 @@ describe("IncomingTransferService — public surface gating (visibility)", () =>
 		records.set("k", {
 			kind: "note",
 			id: "note:p1|n1|k",
-			siloedNullifier: "k",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -632,7 +633,7 @@ describe("IncomingTransferService — public surface gating (visibility)", () =>
 	test("getIncomingTransfers filters hidden records", async () => {
 		const { service } = await bootService()
 		seedNote({
-			siloedNullifier: "v",
+			uniqueNoteHash: "v",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -649,7 +650,7 @@ describe("IncomingTransferService — public surface gating (visibility)", () =>
 			discoveredAt: 0,
 		})
 		seedNote({
-			siloedNullifier: "h",
+			uniqueNoteHash: "h",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -667,7 +668,7 @@ describe("IncomingTransferService — public surface gating (visibility)", () =>
 		})
 		const out = await service.getIncomingTransfers("p1", "n1", "0xa")
 		expect(out).toHaveLength(1)
-		expect((out[0] as IncomingNoteRecord).siloedNullifier).toBe("v")
+		expect(out[0].id).toBe(noteRecordId("p1", "n1", "v"))
 	})
 
 	test("replayPendingPrompts is a no-op when visibility=false (regression pin)", async () => {
@@ -684,7 +685,7 @@ describe("IncomingTransferService — public surface gating (visibility)", () =>
 			updatedAt: 0,
 		})
 		seedNote({
-			siloedNullifier: validNullifier(7),
+			uniqueNoteHash: validNoteHash(7),
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -724,7 +725,7 @@ describe("IncomingTransferService — public surface gating (visibility)", () =>
 			updatedAt: 0,
 		})
 		seedNote({
-			siloedNullifier: "ka",
+			uniqueNoteHash: "ka",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -741,7 +742,7 @@ describe("IncomingTransferService — public surface gating (visibility)", () =>
 			discoveredAt: 0,
 		})
 		seedNote({
-			siloedNullifier: "kb",
+			uniqueNoteHash: "kb",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -774,7 +775,7 @@ describe("IncomingTransferService — trust transitions", () => {
 			updatedAt: 0,
 		})
 		seedNote({
-			siloedNullifier: "k",
+			uniqueNoteHash: "k",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -808,7 +809,7 @@ describe("IncomingTransferService — trust transitions", () => {
 			updatedAt: 0,
 		})
 		seedNote({
-			siloedNullifier: "k",
+			uniqueNoteHash: "k",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -835,7 +836,7 @@ describe("IncomingTransferService — trust transitions", () => {
 	test("setTrustReject sets state=blocked + does NOT flip hidden records visible", async () => {
 		const { service } = await bootService({ token: makeTokenStub([tokenA]) })
 		seedNote({
-			siloedNullifier: "k",
+			uniqueNoteHash: "k",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -1034,7 +1035,7 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 			// Existing record for the SAME nullifier, timestamp missing → the
 			// scan takes the backfill branch and parks.
 			seedNote({
-				siloedNullifier: n.siloedNullifier,
+				uniqueNoteHash: n.uniqueNoteHash,
 				contract: tokenA.contract,
 				tokenId: tokenA.id,
 				blockTimestamp: undefined,
@@ -1151,14 +1152,14 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 		expect(records.size).toBe(1)
 	})
 
-	test("dedupe source 1 (prior records): existing siloedNullifier → skip", async () => {
+	test("dedupe source 1 (prior records): existing uniqueNoteHash → skip", async () => {
 		const network = makeNetworkStub([{ id: "n1", chainId: 1 }])
 		const token = makeTokenStub([tokenA])
 		const n = note()
 		const noteSvc = makeNoteStub({ [tokenA.contract]: [n] })
 		const { service } = await bootService({ network, token, note: noteSvc })
 		seedNote({
-			siloedNullifier: n.siloedNullifier,
+			uniqueNoteHash: n.uniqueNoteHash,
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -1293,7 +1294,7 @@ describe("IncomingTransferService — late-delete on onTransactionAdded", () => 
 		const { service } = await bootService({ transaction })
 
 		const pre = noteRecord({
-			siloedNullifier: validNullifier(7),
+			uniqueNoteHash: validNoteHash(7),
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -1326,7 +1327,7 @@ describe("IncomingTransferService — late-delete on onTransactionAdded", () => 
 		const { service } = await bootService({ transaction })
 
 		const pre = noteRecord({
-			siloedNullifier: validNullifier(8),
+			uniqueNoteHash: validNoteHash(8),
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -1359,7 +1360,7 @@ describe("IncomingTransferService — late-delete on onTransactionAdded", () => 
 		const { service } = await bootService({ transaction })
 
 		const pre = noteRecord({
-			siloedNullifier: validNullifier(9),
+			uniqueNoteHash: validNoteHash(9),
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -1399,7 +1400,7 @@ describe("IncomingTransferService — late-delete on onTransactionAdded", () => 
 		// / sponsored flows where account A's outgoing tx can deliver a
 		// note to account B in the same hash).
 		const recordA = noteRecord({
-			siloedNullifier: validNullifier(10),
+			uniqueNoteHash: validNoteHash(10),
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xA",
@@ -1415,7 +1416,7 @@ describe("IncomingTransferService — late-delete on onTransactionAdded", () => 
 			hidden: false,
 			discoveredAt: 0,
 		})
-		const recordB = noteRecord({ ...recordA, siloedNullifier: validNullifier(11), accountAddress: "0xB", owner: "0xB" })
+		const recordB = noteRecord({ ...recordA, uniqueNoteHash: validNoteHash(11), accountAddress: "0xB", owner: "0xB" })
 		records.set(recordA.id, recordA)
 		records.set(recordB.id, recordB)
 
@@ -1436,7 +1437,7 @@ describe("IncomingTransferService — cleanup wiring", () => {
 	test("clearProfile wipes records + trust for that profileId", async () => {
 		const { service } = await bootService()
 		seedNote({
-			siloedNullifier: "k1",
+			uniqueNoteHash: "k1",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -1453,7 +1454,7 @@ describe("IncomingTransferService — cleanup wiring", () => {
 			discoveredAt: 0,
 		})
 		seedNote({
-			siloedNullifier: "k2",
+			uniqueNoteHash: "k2",
 			profileId: "p2",
 			networkId: "n1",
 			accountAddress: "0xb",
@@ -1483,7 +1484,7 @@ describe("IncomingTransferService — cleanup wiring", () => {
 	test("clearChain wipes only records + trust matching (profileId, networkId)", async () => {
 		const { service } = await bootService()
 		seedNote({
-			siloedNullifier: "k1",
+			uniqueNoteHash: "k1",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -1500,7 +1501,7 @@ describe("IncomingTransferService — cleanup wiring", () => {
 			discoveredAt: 0,
 		})
 		seedNote({
-			siloedNullifier: "k2",
+			uniqueNoteHash: "k2",
 			profileId: "p1",
 			networkId: "n2",
 			accountAddress: "0xa",
@@ -1554,9 +1555,9 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 	test("(Path 2) blockTimestamp lookup is memoized per scan (1 PXE call per unique block)", async () => {
 		// 3 notes, 2 unique blocks → 2 PXE calls.
 		const notes = [
-			note({ siloedNullifier: validNullifier(10), txHash: "0xt1", l2BlockNumber: 10, noteIndexInTx: 0 }),
-			note({ siloedNullifier: validNullifier(11), txHash: "0xt2", l2BlockNumber: 10, noteIndexInTx: 1 }),
-			note({ siloedNullifier: validNullifier(12), txHash: "0xt3", l2BlockNumber: 11, noteIndexInTx: 0 }),
+			note({ uniqueNoteHash: validNoteHash(10), txHash: "0xt1", l2BlockNumber: 10, noteIndexInTx: 0 }),
+			note({ uniqueNoteHash: validNoteHash(11), txHash: "0xt2", l2BlockNumber: 10, noteIndexInTx: 1 }),
+			note({ uniqueNoteHash: validNoteHash(12), txHash: "0xt3", l2BlockNumber: 11, noteIndexInTx: 0 }),
 		]
 		const noteSvc = makeNoteStub({ [tokenA.contract]: notes }, { 10: 1_700_000_000, 11: 1_700_000_036 })
 		const { service } = await bootService({ network: network(), token: token(), note: noteSvc })
@@ -1594,7 +1595,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 
 		const persisted = [...records.values()][0]
 		expect(persisted.blockTimestamp).toBeUndefined()
-		expect((persisted as IncomingNoteRecord).siloedNullifier).toBe(validNullifier(1))
+		expect(persisted.id).toBe(noteRecordId("p1", "n1", validNoteHash(1)))
 	})
 
 	test("(token-delete wipe) onTokenDeleted purges records + resets trust to unknown", async () => {
@@ -1605,7 +1606,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 		const { service } = await bootService({ network: network(), account: accountStub, token: tokenStub })
 
 		seedNote({
-			siloedNullifier: "k1",
+			uniqueNoteHash: "k1",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -1623,7 +1624,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 			blockTimestamp: 1_700_000_000,
 		})
 		seedNote({
-			siloedNullifier: "k2",
+			uniqueNoteHash: "k2",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -1642,7 +1643,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 		})
 		// Unrelated contract's records must survive.
 		seedNote({
-			siloedNullifier: "kOther",
+			uniqueNoteHash: "kOther",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -1691,7 +1692,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 		const { service } = await bootService({ network: network(), account: accountStub, token: tokenStub })
 
 		seedNote({
-			siloedNullifier: "k1",
+			uniqueNoteHash: "k1",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -1766,9 +1767,8 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 		const reindexed = [...records.values()][0]
 		expect(reindexed.blockTimestamp).toBe(1_700_000_000)
 		expect(reindexed.l2BlockNumber).toBe(42)
-		// siloedNullifier is identical to the original (cryptographically
-		// stable across delete + re-discover).
-		expect((reindexed as IncomingNoteRecord).siloedNullifier).toBe(validNullifier(1))
+		// The id is the original's: a note's unique note hash is stable across delete + re-discover.
+		expect(reindexed.id).toBe(noteRecordId("p1", "n1", validNoteHash(1)))
 	})
 })
 
@@ -2058,7 +2058,7 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 		const second = [...records.values()][0]
 		expect(second.blockTimestamp).toBe(1_700_000_050)
 		// Other fields untouched — backfill preserves the original record.
-		expect((second as IncomingNoteRecord).siloedNullifier).toBe(validNullifier(1))
+		expect(second.id).toBe(noteRecordId("p1", "n1", validNoteHash(1)))
 		expect(second.l2BlockNumber).toBe(50)
 	})
 
@@ -2113,7 +2113,7 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 			updatedAt: 0,
 		})
 		seedNote({
-			siloedNullifier: "k1",
+			uniqueNoteHash: "k1",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -2163,7 +2163,7 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 			updatedAt: 0,
 		})
 		seedNote({
-			siloedNullifier: "k1",
+			uniqueNoteHash: "k1",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -2512,7 +2512,7 @@ describe("IncomingTransferService — lock-races (pins for the global serviceLoc
 			transaction: txStub,
 		})
 		seedNote({
-			siloedNullifier: validNullifier(1),
+			uniqueNoteHash: validNoteHash(1),
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -2973,7 +2973,7 @@ describe("IncomingTransferService — public-event scan arm", () => {
 	test("same-tx note + public event yield TWO records under disjoint PKs", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		seedNote({ siloedNullifier: "sn-shared", txHash: "0xshared", contract: tokenA.contract, tokenId: tokenA.id, accountAddress: "0xa" })
+		seedNote({ uniqueNoteHash: "sn-shared", txHash: "0xshared", contract: tokenA.contract, tokenId: tokenA.id, accountAddress: "0xa" })
 		trust.set(trustKey("p1", "n1", tokenA.contract), {
 			profileId: "p1",
 			networkId: "n1",
@@ -3690,9 +3690,9 @@ async function bootDust(overrides: { threshold?: number; quotes?: Record<string,
 	return booted.service
 }
 
-const dustSeed = (siloedNullifier: string, amountRaw: string) =>
+const dustSeed = (uniqueNoteHash: string, amountRaw: string) =>
 	seedNote({
-		siloedNullifier,
+		uniqueNoteHash,
 		networkId: "nMain",
 		accountAddress: "0xa",
 		contract: MAPPED_CONTRACT,
@@ -3730,7 +3730,7 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 		config.setDustThreshold(1000) // huge threshold
 		price.setQuotes({ "usd-coin": { usd: 1 } })
 		seedNote({
-			siloedNullifier: "unk",
+			uniqueNoteHash: "unk",
 			networkId: "n1",
 			accountAddress: "0xa",
 			contract: "0xunmapped",
@@ -3761,7 +3761,7 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 	test("NEVER bypasses hidden: a hidden (pending) record stays hidden regardless of dust value", async () => {
 		const service = await bootDust({ threshold: 0.01, quotes: { "usd-coin": { usd: 1 } } })
 		seedNote({
-			siloedNullifier: "hid",
+			uniqueNoteHash: "hid",
 			networkId: "nMain",
 			accountAddress: "0xa",
 			contract: MAPPED_CONTRACT,
@@ -3794,10 +3794,10 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 	})
 
 	const hash = (s: string) => ({ toString: () => s })
-	// TxHash.fromString field-validates (BN254), so test tx hashes MUST be in-range — validNullifier
+	// TxHash.fromString field-validates (BN254), so test tx hashes MUST be in-range — validNoteHash
 	// zero-pads to a tiny value that always parses. A high-nibble hash (0x55…) would throw in fromString
 	// and mask the behaviour under test.
-	const txh = (n: number) => validNullifier(n)
+	const txh = (n: number) => validNoteHash(n)
 
 	test("getReceiptFee returns the sender-paid fee juice for a public receipt + caches it (one node call)", async () => {
 		const network = makeNetworkStub()
@@ -5061,8 +5061,8 @@ function seedTrust(contract: string, over: Partial<IncomingTrustRecord> = {}) {
 }
 
 /** A receipt in `block` for `account`, on tokenA unless `contract` says otherwise. */
-function receipt(n: number, block: number, over: Partial<IncomingNoteRecord> = {}) {
-	return seedNote({ siloedNullifier: validNullifier(1_000 + n), contract: tokenA.contract, l2BlockNumber: block, ...over })
+function receipt(n: number, block: number, over: NoteSeed = {}) {
+	return seedNote({ uniqueNoteHash: validNoteHash(1_000 + n), contract: tokenA.contract, l2BlockNumber: block, ...over })
 }
 
 const tokenAdd = (token: typeof tokenB) => ({ ...token, profileId: "p1", name: `${token.symbol} Token` })
@@ -5867,7 +5867,7 @@ async function runHandoff<T>(inst: ReturnType<typeof instrumentReceipt>, op: () 
 
 const flagString = (flags: boolean[]) => flags.map((f) => (f ? "1" : "0")).join("")
 
-const NOTE_ID = noteRecordId("p1", "n1", validNullifier(1))
+const NOTE_ID = noteRecordId("p1", "n1", validNoteHash(1))
 const PUB_TX = "0xptx"
 const PUB_ID = `pub:p1|n1|${PUB_TX}|0`
 const trustedRow = () =>
@@ -5892,7 +5892,7 @@ async function bootNoteReceipt(fixture: NoteFixture) {
 	if (fixture === "trusted") trustedRow()
 	if (fixture === "existing")
 		seedNote({
-			siloedNullifier: validNullifier(1),
+			uniqueNoteHash: validNoteHash(1),
 			contract: tokenA.contract,
 			tokenId: tokenA.id,
 			l2BlockNumber: 100,
@@ -6104,7 +6104,7 @@ describe("IncomingTransferService — a note's block time is read outside the se
 	})
 
 	test("a failed block-time read is made once per block per scan, and again by the next scan", async () => {
-		const notes = [note(), note({ siloedNullifier: validNullifier(2), txHash: "0xtx2" })]
+		const notes = [note(), note({ uniqueNoteHash: validNoteHash(2), txHash: "0xtx2" })]
 		const f = await bootService({
 			network: makeNetworkStub([{ id: "n1", chainId: 1 }]),
 			token: makeTokenStub([tokenA]),
@@ -6318,7 +6318,7 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 		const f = await bootService({
 			network: makeNetworkStub([{ id: "n1", chainId: 1 }]),
 			token: makeTokenStub([tokenA]),
-			note: makeNoteStub({ [tokenA.contract]: [note({ siloedNullifier: validNullifier(2), txHash: "0xtx2" })] }, { 100: 1_234 }),
+			note: makeNoteStub({ [tokenA.contract]: [note({ uniqueNoteHash: validNoteHash(2), txHash: "0xtx2" })] }, { 100: 1_234 }),
 			publicReader: steeredTip(100).reader,
 		})
 		await flushPromises()
@@ -6329,8 +6329,8 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 			state: "pending",
 			updatedAt: 0,
 		})
-		const earlier = seedNote({ siloedNullifier: validNullifier(1), contract: tokenA.contract, hidden: true })
-		const fresh = noteRecordId("p1", "n1", validNullifier(2))
+		const earlier = seedNote({ uniqueNoteHash: validNoteHash(1), contract: tokenA.contract, hidden: true })
+		const fresh = noteRecordId("p1", "n1", validNoteHash(2))
 		const trustRead = holdCall(internals(f.service).repo, "getTrust", 1, "after")
 		vi.useFakeTimers()
 		try {
@@ -7056,9 +7056,9 @@ async function bootReconcile() {
 }
 
 /** A stored note row of tokenA for `0xa` at `block`, its PXE note at the same position. */
-function reconcileRow(n: number, block = 100, overrides: Partial<IncomingNoteRecord> = {}) {
+function reconcileRow(n: number, block = 100, overrides: NoteSeed = {}) {
 	const row = seedNote({
-		siloedNullifier: validNullifier(n),
+		uniqueNoteHash: validNoteHash(n),
 		contract: tokenA.contract,
 		tokenId: tokenA.id,
 		txHash: `0xtx${n}`,
@@ -7066,7 +7066,7 @@ function reconcileRow(n: number, block = 100, overrides: Partial<IncomingNoteRec
 		blockTimestamp: 1_000,
 		...overrides,
 	})
-	const pxeNote = note({ siloedNullifier: validNullifier(n), l2BlockNumber: block, txHash: `0xtx${n}`, contract: row.contract })
+	const pxeNote = note({ uniqueNoteHash: validNoteHash(n), l2BlockNumber: block, txHash: `0xtx${n}`, contract: row.contract })
 	return { row, pxeNote }
 }
 
@@ -7086,6 +7086,22 @@ describe("IncomingTransferService — note rows reconciled against the PXE", () 
 		expect(records.has(row.id)).toBe(false)
 		expect(outbox.has(OUTBOX_A)).toBe(true)
 		expect(f.deleted.map((r) => r.id)).toEqual([row.id])
+	})
+
+	test.each<[string, (status?: string) => boolean]>([
+		["every notes read", () => true],
+		["the spent-or-unspent read", (status) => status === "active-or-nullified"],
+	])("%s rejecting on two verified scans keeps the row", async (_name, rejects) => {
+		const f = await bootReconcile()
+		const { row } = reconcileRow(1)
+		f.note.getNotesRaw.mockImplementation(async (_n: string, _a: string, _c: string, status?: string) => {
+			if (rejects(status)) throw new Error("identity unavailable")
+			return []
+		})
+		expect(await f.run()).toBe(false)
+		expect(await f.run()).toBe(false)
+		expect(records.get(row.id)).toEqual(row)
+		expect(f.deleted).toEqual([])
 	})
 
 	test("a row missing once and then found keeps no strike: the next absence strikes it again", async () => {
@@ -7160,6 +7176,7 @@ describe("IncomingTransferService — note rows reconciled against the PXE", () 
 	test.each<[string, (pxeNote: ReturnType<typeof note>) => ReturnType<typeof note>, Partial<IncomingNoteRecord>]>([
 		["a new transaction index", (n) => ({ ...n, txIndexInBlock: 3 }), { txIndexInBlock: 3, blockTimestamp: 1_000 }],
 		["a new block", (n) => ({ ...n, l2BlockNumber: 101 }), { l2BlockNumber: 101, blockTimestamp: 1_010 }],
+		["a new transaction hash", (n) => ({ ...n, txHash: "0xtx-replacement" }), { txHash: "0xtx-replacement", blockTimestamp: 1_000 }],
 	])("a re-mine at %s rewrites the row in place with one Updated and no second arrival", async (_name, remine, expected) => {
 		const f = await bootReconcile()
 		const { row, pxeNote } = reconcileRow(1, 100, { discoveredAt: 7 })

@@ -380,7 +380,7 @@ test("a receipt's To card: its explorer link is a Tab stop with the ring and a 2
 	await waitForHash(page, "#/popup/general")
 	const scope = await readActivityScope(page)
 	await seedTokenRow(page, scope, 1)
-	await seedReceipt(page, scope, { tokenId: 1, amount: "1500000", nullifier: `0x${"3d".repeat(32)}` })
+	await seedReceipt(page, scope, { tokenId: 1, amount: "1500000", uniqueNoteHash: `0x${"3d".repeat(32)}` })
 	await seedUsdQuoteAndReload(page)
 	const row = `${sel("tx-incoming-card")} a[data-row-target]`
 	await page.waitForSelector(row, { visible: true, timeout: 15_000 })
@@ -730,7 +730,12 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 		dapp: DAPP_NAME,
 	})
 	await seedTokenRow(page, scope, RECEIPT_TOKEN_ID)
-	await seedReceipt(page, scope, { tokenId: RECEIPT_TOKEN_ID, amount: "4200000", nullifier: `0x${"5c".repeat(32)}`, at: now - 3_000 })
+	await seedReceipt(page, scope, {
+		tokenId: RECEIPT_TOKEN_ID,
+		amount: "4200000",
+		uniqueNoteHash: `0x${"5c".repeat(32)}`,
+		at: now - 3_000,
+	})
 	await seedUsdQuoteAndReload(page, scope.token.priceId)
 	await page.bringToFront()
 
