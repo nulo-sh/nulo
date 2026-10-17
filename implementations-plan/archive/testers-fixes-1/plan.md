@@ -120,7 +120,7 @@ Every gate includes `bun run lint`, `bun run typecheck:all`, `bun run test` and 
 
 ### Phase 6: whole-arc gate ✓
 
-- Full smoke, then the full network suite, each on Chrome then Firefox (`bun run test:e2e`, `bun run e2e:agent`, each again with `NULO_E2E_BROWSER=firefox`). Record each wall-clock against the base SHA's for the PR body. Capture the done page's tip and a selection on Settings, dark and light, into `implementations-plan/testers-fixes-1/screenshots/`.
+- Full smoke, then the full network suite, each on Chrome then Firefox (`bun run test:e2e`, `bun run e2e:agent`, each again with `NULO_E2E_BROWSER=firefox`). Record each wall-clock against the base SHA's for the PR body. Capture the done page's tip and a selection on Settings, dark and light, into `implementations-plan/archive/testers-fixes-1/screenshots/`.
 - **Gate.** Pass: all four suites exit 0 at retry 0, or one rerun of a known flake named in the PR body.
 
 ## UI impact
@@ -137,7 +137,7 @@ One arc, one branch (`worktree-testers-fixes-1`), one PR to `dev`, opened after 
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `d461b059`. Plan-specific values:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `d461b059`. Plan-specific values:
 
 - **Review loop**: single arc, once over the net diff from `d461b059` after phase 6: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh` on the same codex-dir; both verbatim rules in every prompt; hard stop at three rounds. No `/code-review` (`code_review: off`).
 - **While implementing**: one commit per phase; `lessons/phase-N.md` per phase; `agent-worktree status testers-fixes-1 "phase N green: <next>"` at each gate; stop after three failures on one step.
@@ -172,6 +172,6 @@ Implementation decisions and deviations; evidence in `lessons/phase-N.md`.
 
 ## Seeds
 
-Recommended, `/goal`: `/goal All phases of implementations-plan/testers-fixes-1/plan.md are marked ✓, each backed by its gate's commands reported passing in the transcript; LESSONS_FILE=implementations-plan/testers-fixes-1/lessons/phase-N.md printed for each phase; the Codex loop (gpt-6.1-sol, high) converged over the net diff from d461b059, quoted; one PR to dev exists, opened after the loop, with the close-out's archive move (git show --stat); bun run test and bun run lint exit 0.`
+Recommended, `/goal`: `/goal All phases of implementations-plan/archive/testers-fixes-1/plan.md are marked ✓, each backed by its gate's commands reported passing in the transcript; LESSONS_FILE=implementations-plan/archive/testers-fixes-1/lessons/phase-N.md printed for each phase; the Codex loop (gpt-6.1-sol, high) converged over the net diff from d461b059, quoted; one PR to dev exists, opened after the loop, with the close-out's archive move (git show --stat); bun run test and bun run lint exit 0.`
 
 Fallback, `/loop 15m`: `/loop 15m Drive implementations-plan/testers-fixes-1 forward per its plan.md and the README's Post-implementation standard at d461b059: rebuild the task list from the phase headers, run the next phase's gate, consult Codex (gpt-6.1-sol, high) on any decision, never merge; once the archived plan is on dev, run agent-worktree done testers-fixes-1 --merged and stop.`
