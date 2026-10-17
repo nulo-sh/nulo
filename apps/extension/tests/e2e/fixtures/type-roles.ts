@@ -128,11 +128,9 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 	type Span = { left: number; right: number }
 	const join = (span: Span | null, more: Span): Span =>
 		span ? { left: Math.min(span.left, more.left), right: Math.max(span.right, more.right) } : { left: more.left, right: more.right }
-	// The icon font draws a glyph from its ligature text, which is not text a person reads.
-	const ICON_FONT = /Material Symbols/
-	/** Lays its text out apart from its parent's: a field, an icon glyph, a box out of flow, or one that clips or scrolls. */
+	/** Lays its text out apart from its parent's: a field, a box out of flow, or one that clips or scrolls. */
 	const apart = (el: Element, style: CSSStyleDeclaration): boolean =>
-		el.matches(FIELD) || ICON_FONT.test(style.fontFamily) || /^(absolute|fixed)$/.test(style.position) || style.overflowX !== "visible"
+		el.matches(FIELD) || /^(absolute|fixed)$/.test(style.position) || style.overflowX !== "visible"
 	const textNodeSpan = (node: Node): Span | null => {
 		if ((node.textContent ?? "").trim() === "") return null
 		const range = doc.createRange()
@@ -150,11 +148,9 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 	const textSpan = (el: Element): Span | null => {
 		const known = spans.get(el)
 		if (known !== undefined) return known
-		const parts = ICON_FONT.test(win.getComputedStyle(el).fontFamily)
-			? []
-			: Array.from(el.childNodes).map((node) =>
-					node.nodeType === 3 ? textNodeSpan(node) : node.nodeType === 1 ? childSpan(node as Element) : null,
-				)
+		const parts = Array.from(el.childNodes).map((node) =>
+			node.nodeType === 3 ? textNodeSpan(node) : node.nodeType === 1 ? childSpan(node as Element) : null,
+		)
 		const span = parts.reduce<Span | null>((sum, part) => (part ? join(sum, part) : sum), null)
 		spans.set(el, span)
 		return span
@@ -170,7 +166,7 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 	}
 	const paintedSpan = (el: Element, span: Span | null): Span => {
 		const box = el.getBoundingClientRect()
-		// Text an element clips itself paints no further than its own box; a field or a glyph is its box.
+		// Text an element clips itself paints no further than its own box; a field is its box.
 		if (!span || el.matches(FIELD) || win.getComputedStyle(el).overflowX !== "visible") return { left: box.left, right: box.right }
 		return { ...span }
 	}

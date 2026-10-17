@@ -188,8 +188,7 @@ const LAYOUT_HTML = `
 	<span class="type--meta" data-testid="tr-cell"><b>Name</b><span>A fact too long</span></span>
 	<span data-testid="tr-inline-fits">Fits</span>
 	<span data-testid="tr-positioned">0x1a...2b<i data-testid="tr-positioned-icon"></i></span>
-	<span data-testid="tr-hidden">Read aloud only</span>
-	<span class="material-symbols-outlined" data-testid="tr-glyph">chevron_right</span>`
+	<span data-testid="tr-hidden">Read aloud only</span>`
 
 /** Each control's style, set through the CSSOM: `style-src` refuses a parsed `style` attribute. */
 const LAYOUT_STYLES: Record<string, Record<string, string>> = {
@@ -203,7 +202,6 @@ const LAYOUT_STYLES: Record<string, Record<string, string>> = {
 	"tr-positioned": { display: "inline-flex", position: "relative" },
 	"tr-positioned-icon": { position: "absolute", left: "calc(100% + 6px)", width: "12px", height: "12px" },
 	"tr-hidden": { position: "absolute", width: "1px", height: "1px", overflow: "hidden", clipPath: "inset(50%)", whiteSpace: "nowrap" },
-	"tr-glyph": { transform: "rotate(90deg)" },
 }
 
 test("the layout gate reports text an ancestor cuts or that runs past the box it lays out in, and nothing else", async ({
@@ -229,7 +227,6 @@ test("the layout gate reports text an ancestor cuts or that runs past the box it
 		expect([...new Set(fixture.map(({ testid }) => testid))].sort()).toEqual([
 			"tr-cell",
 			"tr-clipped-input",
-			"tr-glyph",
 			"tr-inline-fits",
 			"tr-inline-past",
 			"tr-positioned",
