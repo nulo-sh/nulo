@@ -8,12 +8,12 @@ import { type SimulationFixture, type SimulationFixtureOptions, simulationFixtur
 
 type Json = Record<string, unknown>
 
-/** What the dApp's page receives: the response line runs `toJsonSafe`, then `JSON.stringify`. */
+/** Serialised as the response line does: the SDK's parse would strip an unknown key before a test saw it. */
 function wire(result: TxSimulationResult): Json {
 	return JSON.parse(JSON.stringify(toJsonSafe(result)))
 }
 
-/** The wire as text, every serialised buffer (bytecode, vk, public inputs) spelled out in hex. */
+/** Buffers in hex, so a field element inside bytecode or serialised public inputs stays searchable. */
 function wireText(json: unknown): string {
 	return JSON.stringify(json, (_key, value) => (isBufferJson(value) ? Buffer.from(value.data).toString("hex") : value))
 }
@@ -68,26 +68,29 @@ describe("toAppFacingSimulationResult", () => {
 		expect(found(wireText(wire(toAppFacingSimulationResult(fixture.result))), fixture)).toEqual([])
 	})
 
-	test.each(VARIANTS)("every level of the wire has exactly the schema's keys, with %s", (_name, opts) => {
-		const json = wire(toAppFacingSimulationResult(simulationFixture(opts).result))
-		const root = ["privateExecutionResult", "publicInputs"]
-		if (opts.publicOutput) root.push("publicOutput")
-		if (opts.appCallOffset !== undefined) root.push("appCallOffset")
+	test.each(VARIANTS)(
+		"the answer, its execution, every call and the public output have exactly the schema's keys, with %s",
+		(_name, opts) => {
+			const json = wire(toAppFacingSimulationResult(simulationFixture(opts).result))
+			const root = ["privateExecutionResult", "publicInputs"]
+			if (opts.publicOutput) root.push("publicOutput")
+			if (opts.appCallOffset !== undefined) root.push("appCallOffset")
 
-		expect(Object.keys(json).sort()).toEqual(root.sort())
-		const execution = json.privateExecutionResult as Json
-		expect(Object.keys(execution).sort()).toEqual(["entrypoint", "firstNullifier", "publicFunctionCalldata"])
-		expect(callKeySets(execution.entrypoint as Json)).toEqual([CALL_KEYS, CALL_KEYS, CALL_KEYS])
-		if (opts.publicOutput) {
-			expect(Object.keys(json.publicOutput as Json).sort()).toEqual([
-				"debugLogs",
-				"gasUsed",
-				"globalVariables",
-				"publicReturnValues",
-				"txEffect",
-			])
-		}
-	})
+			expect(Object.keys(json).sort()).toEqual(root.sort())
+			const execution = json.privateExecutionResult as Json
+			expect(Object.keys(execution).sort()).toEqual(["entrypoint", "firstNullifier", "publicFunctionCalldata"])
+			expect(callKeySets(execution.entrypoint as Json)).toEqual([CALL_KEYS, CALL_KEYS, CALL_KEYS])
+			if (opts.publicOutput) {
+				expect(Object.keys(json.publicOutput as Json).sort()).toEqual([
+					"debugLogs",
+					"gasUsed",
+					"globalVariables",
+					"publicReturnValues",
+					"txEffect",
+				])
+			}
+		},
+	)
 
 	test.each(VARIANTS)("the dApp's own schema parse keeps what aztec.js reads, with %s", async (_name, opts) => {
 		const input = simulationFixture(opts).result

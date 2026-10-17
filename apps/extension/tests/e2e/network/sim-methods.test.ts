@@ -8,14 +8,12 @@ const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
 /**
- * Tests #23-#25: the canonical simulation methods are silent on default sessions
- * (PrivateData=4 < confLevel=5). simulateTx (#23) answers; profileTx (#24) is refused as an
- * unsupported method, since every profile mode needs the account's real signature; the
- * executeUtility probe (#25) calls `balance_of_public`, a public function, under the session's
- * simulation utility grant, and the wallet refuses it as invalid arguments before PXE runs it.
+ * The canonical simulation methods run silently under a default session's grants
+ * (PrivateData=4 < confLevel=5). `balance_of_public` is a public function, so the executeUtility
+ * probe is refused as invalid arguments before PXE runs it.
  *
- * Uses `dappConnectedExtensionWithAccountsCap` so the cap-popup round-trip happens during fixture
- * setup (hookTimeout=300s) rather than during a test's budget.
+ * `dappConnectedExtensionWithAccountsCap` runs the cap-popup round-trip in fixture setup
+ * (hookTimeout=300s), outside each test's budget.
  */
 async function fillInputs(page: Page): Promise<void> {
 	await page.evaluate(

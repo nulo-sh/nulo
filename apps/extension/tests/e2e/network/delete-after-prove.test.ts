@@ -2,11 +2,10 @@
  * Deleting the profile that has just proven and sent a transaction completes, and the lock screen's
  * picker no longer lists it.
  *
- * Once bb.js loads its CRS in the browser it caches the points in IndexedDB's `keyval-store` and
- * keeps that connection open for the life of the page, so an erase that deleted the store waited
- * 5 s on the blocked delete, rejected, and the reset page answered "Couldn't delete profile". A WASM
- * prove opens the store, but the required-Presto CI lane proves natively, so the popup opens it the
- * way bb.js's idb-keyval does and holds it through the erase on every prover backend.
+ * Once bb.js loads its CRS it keeps IndexedDB's `keyval-store` open for the life of the page, so
+ * the erase must leave that store alone: deleting it blocks, and the reset fails. The required-Presto
+ * CI lane proves natively and never opens it, so the popup opens it the way bb.js's idb-keyval does
+ * and holds it through the erase on every prover backend.
  *
  * Profile B exists so the delete lands on the lock screen rather than registration. Run it with
  * `NULO_E2E_RETRY=0`: it spends on-chain and PXE state that a retry would find half-consumed.

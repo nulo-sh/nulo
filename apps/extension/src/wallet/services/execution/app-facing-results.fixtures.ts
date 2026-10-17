@@ -42,7 +42,7 @@ import {
 	TxSimulationResult,
 } from "@aztec-labs/stdlib/tx"
 
-/** A simulation result with a unique value in every field the app-facing shape drops. */
+/** A simulation result with a unique value in each populated field the app-facing shape drops. */
 export interface SimulationFixture {
 	result: TxSimulationResult
 	/** The dropped field elements, as 64 hex digits: how they read in a field's JSON and inside a buffer. */
@@ -62,9 +62,8 @@ const APP = AztecAddress.fromBigIntUnsafe(0xa2n)
 const NESTED = AztecAddress.fromBigIntUnsafe(0xa3n)
 
 /**
- * Root (the account entrypoint), depth 1 (the app call, which returns 41) and depth 2 (a call the
- * app makes, which returns 42). Every kept value is small and every dropped one is unique, so a
- * dropped value found on the wire names the field kept by mistake.
+ * The app call (depth 1) returns 41 and the call it makes (depth 2) returns 42. Kept values are
+ * small and each dropped one is unique, so a dropped value on the wire names the field kept by mistake.
  */
 export function simulationFixture(opts: SimulationFixtureOptions): SimulationFixture {
 	const droppedFields: Fr[] = []
@@ -142,7 +141,6 @@ export function simulationFixture(opts: SimulationFixtureOptions): SimulationFix
 	return { result, droppedFields: droppedFields.map(hexDigits), droppedCounters, droppedStrings }
 }
 
-/** The four kept fields carry values derived from `seed`; every other side effect is a dropped one. */
 function callPublicInputs(msgSender: AztecAddress, contract: AztecAddress, seed: number, drop: () => Fr): PrivateCircuitPublicInputs {
 	const pi = PrivateCircuitPublicInputs.empty()
 	pi.callContext = new CallContext(msgSender, contract, FunctionSelector.fromField(new Fr(seed + 1)), false)
