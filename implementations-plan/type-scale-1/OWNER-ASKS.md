@@ -82,6 +82,7 @@ Found in Phase 3 (2026-10-17) by a before/after scan of every value an ellipsis 
   - **C. Accept the cut**: "TEST…" on every page. Not recommended: a person reads the network there.
 - **Recommendation**: B with the chip padding, if the owner accepts a tighter chip; otherwise A.
 - **What ships now**: A, through one compound rule in `Header.vue` (`.actions .network_chip, .network_chip .network_label, .lock_chip .lock_label`) and three `OVERRIDES` entries (font-size 10px, font-weight 600, letter-spacing 0.08em, role `label-section`). The chip itself takes the size too, since its own size sets its `1lh` and so its height. This departs from the signed Home picture on these two words; the PR says so.
+- **Open as #651** (`owner-decision`), filed at close-out.
 
 ## OA-7: Manage accounts, where an imported row's address line no longer fits at 13 px
 
@@ -96,6 +97,7 @@ Found in Phase 4 (2026-10-17) by `account-import-export.test.ts` in Chrome and F
   - **C. 13 px on two lines**: the marker on one line, the address on the next.
 - **Recommendation**: A for now; B or C if an imported row should show its address head, which A does not.
 - **What ships now**: A, through one rule in `accounts/index.vue` (`.desc_line:has(.addr_head)`, font-size 11 px; every row's line has a head, so the `:has` only lifts the rule above the role's class) and one `OVERRIDES` entry (role `meta`, scope `[data-testid="manage-accounts-address"]`). It covers every visible row, so the list reads at one size, as today.
+- **Open as #652** (`owner-decision`), filed at close-out.
 
 ## OA-8: lines the signed 13 px now wraps
 
@@ -114,3 +116,4 @@ Found in the review loop (2026-10-17) from the after screenshots, in both browse
   - **C. Keep the earlier size on those lines** through `OVERRIDES`, as OA-6 and OA-7 do: 12 px on the execute window's full arguments, 11 px on the token-mode line.
 - **Recommendation**: B on the execute window, where a person compares addresses and a two-character last line is the easiest to misread. A for the other two.
 - **What ships now**: A, the signed size (P34-03 for the arguments, P30-14 for `meta`).
+- **Open as #653** (`owner-decision`), filed at close-out.

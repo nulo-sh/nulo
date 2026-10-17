@@ -1,7 +1,7 @@
 ---
 plan: type-scale-1
 tier: mid
-status: arc 1 in progress (2026-10-17): decision page 34 answered OA-1 B, OA-2 A, OA-3 B, OA-4 C, OA-5 A; Phases 0-4 ✓; OA-6 and OA-7 open
+status: completed (2026-10-17): #649 carries the arc and this close-out; OA-6, OA-7 and OA-8 are open as #651, #652 and #653
 issues: "#589 (closed by the one arc)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,37 @@ base: origin/dev at 493ff497
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-17
+- **Status:** completed. One PR against `dev` (#649) carries the work and this close-out; merging it is the owner's call.
+- **Shipped:**
+  - #589, Scale A on every screen (P30-14 A, P30-15 B):
+    - `meta` 13 px and `nav` 11 px;
+    - `label`, `name-tag` and `tag` folded into `label-section`;
+    - 24 roles.
+  - Decision page 34:
+    - OA-5 A: the permission table's tracks at 66 px;
+    - OA-1 B: the identity strip's network cap at 102 px;
+    - OA-2 A: `data` retired into `meta`;
+    - OA-3 B: the off-row dollar figures at 11 px;
+    - OA-4 C: the publish strip's facts at 10 px semibold.
+  - The guard refuses a role name that names no role.
+  - The e2e sweep fails, in both browsers, on text that runs past its box or that a box cuts with no ellipsis drawn (D5, D8, D15).
+  - The tx detail page's App value breaks at any character in Firefox too (D14).
+- **Dropped:** none. OA-6, OA-7 and OA-8 ship their "what ships now" until the owner answers. Every review finding was fixed, disclosed (OA-8) or filed (#654).
+- **Known limits:** none.
+- **Open items:**
+  - #651: OA-6, the header chips;
+  - #652: OA-7, Manage accounts' address line;
+  - #653: OA-8, the lines the scale wraps;
+  - #654: loading bars and glyphs sized for 11 px lines;
+  - #627: the store captures and art, extended to this scale.
+- **Lessons:** none promoted, because `lessons.md` is at 8163 of 8192 bytes and no entry is stale.
+  - Firefox's `break-all` keeps a letter with the digits after it, and `line-break: anywhere` fixes that ([lessons/phase-4.md](lessons/phase-4.md)).
+  - A flex box draws no ellipsis, and a block's ellipsis never shortens a block inside it ([lessons/phase-5.md](lessons/phase-5.md)).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # type-scale-1: Scale A, app-wide at once
 
@@ -259,3 +290,4 @@ The execution contract is this plan plus [`implementations-plan/README.md` § Po
 /loop 15m Drive implementations-plan/type-scale-1 forward per its plan.md (read it and lessons/ first; Outcome & Quality Bar is the bar). Never idle. Phase 0 waits for type-roles-coverage arc 1 on dev. Run each phase's gate as written; e2e at retry 0 with load1 < 150. Decide with Codex (gpt-6.1-sol, high), never a person-visible choice: that goes to OWNER-ASKS.md. Same step failed 5 times: stop and reassess with Codex. All phases ✓: the post-implementation steps, then report and stop; teardown after the merge.
 ```
 - 2026-10-17 arc 1 phase 4 ✓: smoke `account-import-export` red on both browsers (an imported row's line at 13 px) and `rows` red on Firefox (the App value's first line); panel (Codex, Opus) ship-A as OA-7 (D13) and keep `line-break: anywhere` (D14); the three specs green on both (16/16); docs at 24 roles; audit:vue 0; build-storybook 0; clean pair green (after wall-clocks in lessons/phase-4.md); after shots retaken on the final tree, 15 pairs per browser.
+- 2026-10-17 arc 1 close-out: merged origin/dev at 1b93cbfa (#644, no conflict); OA-6, OA-7 and OA-8 filed as #651, #652, #653; #654 filed; #627 extended to the store images; Outcome written; plan archived.
