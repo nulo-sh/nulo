@@ -15,7 +15,8 @@ dispatch, and collaborator wiring; the work lives in focused modules.
 | `transfer-executor.ts` | Popup transfer flow: `execute` + `estimateFee`, estimate-reuse fast path, transfer-only activity-record shape. Waits on the send sequencer, then takes the execution slot from claim to submit, like a dApp send. |
 | `send-sequencer.ts`, `transfer-sequence-keys.ts` | The order between popup transfers of one account that share chain state: a token's note sequences, the pair handshake, a fee contract's notes, the account's initialization. Tickets for sends, a check-and-hold for estimates, release on receipt settlement. |
 | `dapp-send-executor.ts` | dApp send flows: `executeSendTransaction`, `executeAztecSendTx`, NO_FROM/DefaultEntrypoint path, `estimateOperationFee`. Slot-bearing lane deps; slot-before-claim ordering frozen. |
-| `view-executor.ts` | Read-only dApp RPC family: simulate (fast path + standard), utility, profile, contract/class metadata, chain info, address book. No lane deps by design. |
+| `view-executor.ts` | Read-only dApp RPC family: simulate (fast path + standard), utility, contract/class metadata, chain info, address book; refuses `profileTx`. No lane deps by design. |
+| `app-facing-results.ts` | The answer a dApp's `simulateTx` gets: an allowlist rebuilt from the upstream classes, so it still parses as `TxSimulationResultWithAppOffset`. |
 | `execution-coordinator.ts` | Shared prove → send → record → journal pipeline (`proveAndSend`) + the three task-lifecycle wrappers (`simulateTxTask`, `proveTxTask`, `sendTxTask`). |
 | `tx-request-builder.ts` | `buildStandard` / `buildNoFrom` — payload → `TxExecutionRequest` with account entrypoint wiring. Returns `BuiltStandardTx` / `BuiltNoFromTx`. |
 | `operation-planner.ts` | `TransferRequest` → `SendTransactionOperation` (token transfer-fn resolution) + aztec.js payload processing. |
@@ -49,6 +50,10 @@ dispatch, and collaborator wiring; the work lives in focused modules.
   rejection drops the cancel silently.
 - **`JobCancelledSentinel` never crosses RPC** — `rpc-cancel.ts` is the
   boundary.
+- **A dApp's `simulateTx` answer is the app-facing shape** (`app-facing-results.ts`),
+  applied after the fast path's merge; the wallet's own simulations call PXE
+  directly and keep the full result. No dApp `profileTx` runs: every profile
+  mode needs the account's real signature.
 - **FPC fee strategy is two-pass byte-parity-sensitive** — structural
   fixtures in `fee/strategies-structural.test.ts` pin the choreography.
 - **Chain identity** (`assertLiveChainIdentity`) is asserted at every

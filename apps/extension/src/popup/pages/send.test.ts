@@ -322,6 +322,7 @@ describe("send page — the submit tail", () => {
 			"n1",
 			ACCOUNT,
 			TOKEN.id,
+			TOKEN.contract,
 			TransferType.Private,
 			DESTINATION,
 			1_500_000n,
@@ -344,8 +345,8 @@ describe("send page — the submit tail", () => {
 		await flushPromises()
 		await fillForm(w)
 		await submit(w).trigger("click")
-		expect(mocks.executeTransfer.mock.calls[0]?.[5]).toBe(15_000n)
-		expect(mocks.executeTransfer.mock.calls[0]?.[3]).toBe(TransferType.Private)
+		expect(mocks.executeTransfer.mock.calls[0]?.[6]).toBe(15_000n)
+		expect(mocks.executeTransfer.mock.calls[0]?.[4]).toBe(TransferType.Private)
 		w.unmount()
 	})
 
@@ -360,7 +361,7 @@ describe("send page — the submit tail", () => {
 		await flushPromises()
 		await fillForm(w)
 		await submit(w).trigger("click")
-		expect(mocks.executeTransfer.mock.calls[0]?.[3]).toBe(TransferType.Public)
+		expect(mocks.executeTransfer.mock.calls[0]?.[4]).toBe(TransferType.Public)
 		w.unmount()
 	})
 
@@ -373,7 +374,7 @@ describe("send page — the submit tail", () => {
 		await flushPromises()
 		await fillForm(w)
 		await submit(w).trigger("click")
-		expect(mocks.executeTransfer.mock.calls[0]?.[3]).toBe(TransferType.Public)
+		expect(mocks.executeTransfer.mock.calls[0]?.[4]).toBe(TransferType.Public)
 		w.unmount()
 	})
 
@@ -390,6 +391,7 @@ describe("send page — the submit tail", () => {
 			"n1",
 			ACCOUNT,
 			TOKEN.id,
+			TOKEN.contract,
 			TransferType.Private,
 			DESTINATION,
 			1_234_567_123_456n,
@@ -664,7 +666,7 @@ describe("send page — consent", () => {
 		const closeSpy = vi.spyOn(popupStore, "close")
 		await sendNow(w).trigger("click")
 		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
-		expect(mocks.executeTransfer.mock.calls[0]?.[6]).toEqual(FJ.settings)
+		expect(mocks.executeTransfer.mock.calls[0]?.[7]).toEqual(FJ.settings)
 		expect(closeSpy.mock.invocationCallOrder[0]).toBeLessThan(mocks.routerReplace.mock.invocationCallOrder[0] as number)
 		expect(sheetOpen(w)).toBe(false)
 		w.unmount()

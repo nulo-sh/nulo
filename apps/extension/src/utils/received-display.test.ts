@@ -10,8 +10,7 @@ const REAL = AztecAddress.fromBigIntUnsafe(0xabcn).toString()
 
 const noteRec = (): IncomingNoteRecord => ({
 	kind: "note",
-	id: "note:p1|n1|0xsn",
-	siloedNullifier: "0xsn",
+	id: "note:p1|n1|0xuh",
 	noteHash: "0xnh",
 	owner: "0xa",
 	profileId: "p1",

@@ -136,7 +136,7 @@ describe("send-submit", () => {
 	})
 	afterEach(() => vi.restoreAllMocks())
 
-	test("posts the awaiting row under a fresh id and fires the transfer with the snapshot, in order", () => {
+	test("posts the awaiting row under a fresh id and fires the transfer with the snapshot, bound to its contract, in order", () => {
 		const { deps } = harness()
 		const id = submitTransfer(deps, SNAP)
 		expect(deps.awaiting.add).toHaveBeenCalledWith({ id, account: "0xacct", destination: DESTINATION, contract: "0xtoken" })
@@ -144,6 +144,7 @@ describe("send-submit", () => {
 			"n1",
 			"0xacct",
 			7,
+			"0xtoken",
 			0,
 			DESTINATION,
 			SNAP.amount,

@@ -12,6 +12,7 @@ import { useLockWallet } from "@/composables/useLockWallet"
 /** Utils */
 import { managers } from "@/utils/core"
 import { copyAddressToClipboard } from "./header-copy-address"
+import { selectedWithin } from "@/utils/selection"
 import { accountStateOf } from "./header-account"
 
 /** Store */
@@ -128,7 +129,12 @@ const handleOpenPopup = (target) => {
 }
 
 const { openToast } = useToast()
-const handleCopyAddress = () => copyAddressToClipboard(appStore.account?.address, openToast)
+/** A pointer click that ends a drag selecting the address copies nothing; Enter and Space reach a
+ *  native button as a click with `detail` 0 and copy even over a selection. */
+const handleCopyAddress = (e) => {
+	if (e.detail > 0 && selectedWithin(e.currentTarget)) return
+	copyAddressToClipboard(appStore.account?.address, openToast)
+}
 
 const handleOpenNetworks = () => {
 	if (!appStore.isLogined) return
@@ -346,6 +352,7 @@ onBeforeUnmount(() => {
 	position: relative;
 	display: inline-flex;
 	align-items: center;
+	user-select: text;
 
 	text-decoration: underline transparent;
 	text-underline-offset: 3px;
