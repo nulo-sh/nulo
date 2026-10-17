@@ -9,3 +9,4 @@ The arc ships without waiting on any entry here; it does not change the connect 
 - **Option A (keep, recommended):** no change. The window already closes on the answer, and the arc removes the leftover row, the only lasting effect.
 - **Option B:** close the window as soon as its tab goes, as handed-over windows already close. The person would see the window disappear with no answer asked; a new connect from the app opens a new one.
 - **Recommendation:** A. #673 lists B as optional; it changes a behaviour a person notices for no lasting gain.
+- **Filed:** #683.

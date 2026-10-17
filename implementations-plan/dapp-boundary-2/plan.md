@@ -1,7 +1,7 @@
 ---
 plan: dapp-boundary-2
 tier: mid
-status: panel approved (final Codex pass); arc 1 running under auto-continue
+status: completed (2026-10-17): #679 carries the arc and this close-out; #680 and #683 are open
 issues: "#670 (Closes), #673 (Closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,23 @@ base: origin/dev at 13d5f8d0
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-17
+- **Status:** completed. One PR against `dev` (#679) carries the arc and this close-out; merging it is the orchestrator's call.
+- **Shipped:**
+  - `registerContract` with a secret key registers an account only when the key derives the instance's own address; any other key answers `INVALID_PARAMS` before any PXE write (D1).
+  - #670: the dispatcher resolves the session's network once per call, after the capability, schema and scope checks, so every route answers `CHAIN_NOT_SUPPORTED` on a chain the wallet does not serve, a quarantined one included (D2).
+  - #673: a connect whose approval does not land deletes its row unless a duplicate waits on the window, and a failed grant write deletes its row and still refuses the discovery (D3, D5). A row of the window's own profile found while its connect window is open waits on that window; a pending notice keeps the immediate reconnect (D4).
+  - The type-roles inventory's digest of `dispatcher.ts`, re-attested and re-pinned.
+- **Dropped:** passing the parsed key to `registerAccount`, because the PXE client takes wire text and its seam parses it with the same schema.
+- **Known limits:** #682 (a row kept for a waiting duplicate whose page is gone stays until it expires), #681 (a duplicate waiting across a profile switch reconnects without a reconnect token).
+- **Open items:**
+  - #680: an Allow's row can land on the profile a switch reaches before the write;
+  - #683: OA-1, closing a connect window when its tab closes.
+- **Lessons:** none promoted, because `lessons.md` is at 8163 of 8192 bytes and no entry is stale. The one trap that crosses tasks, the inventory's digest pins on `dispatcher.ts`, names its own remedy when it fails ([lessons/phase-4.md](lessons/phase-4.md)).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # dapp-boundary-2: three dApp ingress rules
 
