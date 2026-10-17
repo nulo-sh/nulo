@@ -292,6 +292,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [type-scale-1](type-scale-1/plan.md) — completed — Scale A on every screen (#589): `meta` 13, `nav` 11, the small caps in `label-section`, `data` into `meta`, and a layout gate on every swept state
 - [typecheck-cleanup](typecheck-cleanup/plan.md) — completed — the extension taken to zero type errors, with one root typecheck command
 - [ui-followups-p18](ui-followups-p18/plan.md) — completed — the last outline-grey text moved to secondary (#363), store art regenerated after the owner signed it (#364), the tx fee row's hover fade removed
+- [ui-leftovers-1](ui-leftovers-1/plan.md) — completed — decision page 35's six picks: a display-only token hero, a selectable header address, the in-flight dApp chip, Holdings' unavailable state, 6 s action toasts, a large dApp transfer's app chip under its direction
 - [unserved-chain-connect](unserved-chain-connect/plan.md) — completed — a connection to a chain the profile has no network for is refused, and the wallet says so
 - [ux-cleanup-arc](ux-cleanup-arc/plan.md) — completed in part — five small fixes for user-facing rough edges
 - [ux-feedback](ux-feedback/plan.md) — completed — a user-testing proposal built as five batches on one stack

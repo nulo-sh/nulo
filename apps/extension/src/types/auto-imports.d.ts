@@ -21,6 +21,7 @@ declare global {
   const CLEANUP_PENDING_MESSAGE: typeof import('../composables/full-backup-restore').CLEANUP_PENDING_MESSAGE
   const CONTACT_EXISTS: typeof import('../utils/contact-rules').CONTACT_EXISTS
   const CONTACT_NAME_MAX: typeof import('../utils/contact-name').CONTACT_NAME_MAX
+  const DAPP_LABEL: typeof import('../utils/tx-enrichment').DAPP_LABEL
   const DECRYPTION_FAILED: typeof import('../composables/useFullBackupImport').DECRYPTION_FAILED
   const EffectScope: typeof import('vue').EffectScope
   const EnsureSuperseded: typeof import('../stores/balances.store').EnsureSuperseded
@@ -214,6 +215,7 @@ declare global {
   const isPitchKind: typeof import('../utils/presto-ui-state').isPitchKind
   const isPopupSubmitKey: typeof import('../composables/usePopupEntity').isPopupSubmitKey
   const isPrefersDarkScheme: typeof import('../utils/general').isPrefersDarkScheme
+  const isPriceableHolding: typeof import('../utils/token-aggregate').isPriceableHolding
   const isProxy: typeof import('vue').isProxy
   const isReactive: typeof import('vue').isReactive
   const isReadonly: typeof import('vue').isReadonly
@@ -293,6 +295,7 @@ declare global {
   const planRestoreAgain: typeof import('../composables/full-backup-restore').planRestoreAgain
   const postAuthRoute: typeof import('../utils/own-window').postAuthRoute
   const preflightNetworkConnectivity: typeof import('../composables/importPreflight').preflightNetworkConnectivity
+  const pricesUnavailable: typeof import('../utils/token-aggregate').pricesUnavailable
   const profileFileNameSegment: typeof import('../utils/files').profileFileNameSegment
   const profileTypeLabel: typeof import('../utils/settings-labels').profileTypeLabel
   const profileUiKeys: typeof import('../utils/profile-ui-keys').profileUiKeys
@@ -707,7 +710,7 @@ declare global {
   export type { SettingsContext, SettingsRow, SettingsResultGroup, SettingsRowId } from '../utils/settings-search'
   import('../utils/settings-search')
   // @ts-ignore
-  export type { Aggregate } from '../utils/token-aggregate'
+  export type { Aggregate, PriceMapping } from '../utils/token-aggregate'
   import('../utils/token-aggregate')
   // @ts-ignore
   export type { FiatOf } from '../utils/token-amount'
@@ -744,6 +747,7 @@ declare module 'vue' {
     readonly CLEANUP_PENDING_MESSAGE: UnwrapRef<typeof import('../composables/full-backup-restore')['CLEANUP_PENDING_MESSAGE']>
     readonly CONTACT_EXISTS: UnwrapRef<typeof import('../utils/contact-rules')['CONTACT_EXISTS']>
     readonly CONTACT_NAME_MAX: UnwrapRef<typeof import('../utils/contact-name')['CONTACT_NAME_MAX']>
+    readonly DAPP_LABEL: UnwrapRef<typeof import('../utils/tx-enrichment')['DAPP_LABEL']>
     readonly DECRYPTION_FAILED: UnwrapRef<typeof import('../composables/useFullBackupImport')['DECRYPTION_FAILED']>
     readonly EffectScope: UnwrapRef<typeof import('vue')['EffectScope']>
     readonly EnsureSuperseded: UnwrapRef<typeof import('../stores/balances.store')['EnsureSuperseded']>
@@ -937,6 +941,7 @@ declare module 'vue' {
     readonly isPitchKind: UnwrapRef<typeof import('../utils/presto-ui-state')['isPitchKind']>
     readonly isPopupSubmitKey: UnwrapRef<typeof import('../composables/usePopupEntity')['isPopupSubmitKey']>
     readonly isPrefersDarkScheme: UnwrapRef<typeof import('../utils/general')['isPrefersDarkScheme']>
+    readonly isPriceableHolding: UnwrapRef<typeof import('../utils/token-aggregate')['isPriceableHolding']>
     readonly isProxy: UnwrapRef<typeof import('vue')['isProxy']>
     readonly isReactive: UnwrapRef<typeof import('vue')['isReactive']>
     readonly isReadonly: UnwrapRef<typeof import('vue')['isReadonly']>
@@ -1016,6 +1021,7 @@ declare module 'vue' {
     readonly planRestoreAgain: UnwrapRef<typeof import('../composables/full-backup-restore')['planRestoreAgain']>
     readonly postAuthRoute: UnwrapRef<typeof import('../utils/own-window')['postAuthRoute']>
     readonly preflightNetworkConnectivity: UnwrapRef<typeof import('../composables/importPreflight')['preflightNetworkConnectivity']>
+    readonly pricesUnavailable: UnwrapRef<typeof import('../utils/token-aggregate')['pricesUnavailable']>
     readonly profileFileNameSegment: UnwrapRef<typeof import('../utils/files')['profileFileNameSegment']>
     readonly profileTypeLabel: UnwrapRef<typeof import('../utils/settings-labels')['profileTypeLabel']>
     readonly profileUiKeys: UnwrapRef<typeof import('../utils/profile-ui-keys')['profileUiKeys']>
