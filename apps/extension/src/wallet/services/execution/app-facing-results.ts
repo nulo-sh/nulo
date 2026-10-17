@@ -24,11 +24,12 @@ const EMPTY_BUFFER = Buffer.alloc(0)
  *
  * Kept: each call's return values, offchain effects, call context, args hash, revertible counter
  * and public call requests; the public calldata; the tail's constants, gas, fee payer, expiry and
- * public call requests; the public return values and gas; the stats; the app call offset, read
- * structurally because the fast path's merge builds it in another package. Everything else
- * (bytecode, vks, witnesses, notes, tagging ranges, key validation requests, side effects, the
- * first nullifier, the public tx effect, revert reason and debug logs) comes back empty, and a
- * field upstream adds to the call's public inputs arrives empty.
+ * public call requests; the public return values and gas; the app call offset, read structurally
+ * because the fast path's merge builds it in another package. Everything else (bytecode, vks,
+ * witnesses, notes, tagging ranges, key validation requests, side effects, the first nullifier,
+ * the public tx effect, revert reason and debug logs) comes back empty, and a field upstream adds
+ * to the call's public inputs arrives empty. The stats are omitted: they time and count the
+ * wallet's own sync as well as the dApp's call.
  */
 export function toAppFacingSimulationResult(
 	result: TxSimulationResult & { readonly appCallOffset?: number },
@@ -38,7 +39,7 @@ export function toAppFacingSimulationResult(
 		PrivateExecutionResult.from({ entrypoint: appFacingCall(entrypoint), firstNullifier: Fr.ZERO, publicFunctionCalldata }),
 		appFacingTail(result.publicInputs),
 		result.publicOutput && appFacingPublicOutput(result.publicOutput),
-		result.stats,
+		undefined,
 		result.appCallOffset,
 	)
 }

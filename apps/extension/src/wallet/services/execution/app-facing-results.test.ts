@@ -70,7 +70,7 @@ describe("toAppFacingSimulationResult", () => {
 
 	test.each(VARIANTS)("every level of the wire has exactly the schema's keys, with %s", (_name, opts) => {
 		const json = wire(toAppFacingSimulationResult(simulationFixture(opts).result))
-		const root = ["privateExecutionResult", "publicInputs", "stats"]
+		const root = ["privateExecutionResult", "publicInputs"]
 		if (opts.publicOutput) root.push("publicOutput")
 		if (opts.appCallOffset !== undefined) root.push("appCallOffset")
 
@@ -131,7 +131,8 @@ describe("toAppFacingSimulationResult", () => {
 		expect(tail.forRollup === undefined).toBe(input.publicInputs.forRollup === undefined)
 
 		expect(parsed.getPublicReturnValues()).toEqual(input.getPublicReturnValues())
-		expect(parsed.stats).toEqual(input.stats)
+		expect(input.stats).toBeDefined()
+		expect(parsed.stats).toBeUndefined()
 		expect(parsed.appCallOffset).toBe(opts.appCallOffset)
 	})
 })

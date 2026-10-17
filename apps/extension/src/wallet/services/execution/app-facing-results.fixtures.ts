@@ -14,6 +14,7 @@ import {
 	PartialPrivateTailPublicInputsForRollup,
 	PrivateCircuitPublicInputs,
 	PrivateKernelTailCircuitPublicInputs,
+	PrivateCallRequest,
 	PrivateLogData,
 	PrivateToPublicAccumulatedData,
 	PrivateToRollupAccumulatedData,
@@ -63,7 +64,7 @@ const NESTED = AztecAddress.fromBigIntUnsafe(0xa3n)
 /**
  * Root (the account entrypoint), depth 1 (the app call, which returns 41) and depth 2 (a call the
  * app makes, which returns 42). Every kept value is small and every dropped one is unique, so a
- * dropped value found on the wire names the field that leaked.
+ * dropped value found on the wire names the field kept by mistake.
  */
 export function simulationFixture(opts: SimulationFixtureOptions): SimulationFixture {
 	const droppedFields: Fr[] = []
@@ -151,6 +152,8 @@ function callPublicInputs(msgSender: AztecAddress, contract: AztecAddress, seed:
 	pi.publicCallRequests.claimedLength = 1
 	pi.returnsHash = drop()
 	pi.protocolNullifier = drop()
+	pi.privateCallRequests.array[0] = new PrivateCallRequest(pi.callContext, drop(), drop(), 6, 7)
+	pi.privateCallRequests.claimedLength = 1
 	pi.keyValidationRequestsAndSeparators.array[0] = new KeyValidationRequestAndSeparator(new KeyValidationRequest(drop(), drop()), drop())
 	pi.keyValidationRequestsAndSeparators.claimedLength = 1
 	pi.noteHashReadRequests.array[0] = new ScopedReadRequest(new ReadRequest(drop(), 1), contract)
