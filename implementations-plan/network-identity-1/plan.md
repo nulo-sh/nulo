@@ -89,9 +89,9 @@ One arc, one PR against `dev`. The wallet holds the composite chain id 0 to one 
 
 ## Phases
 
-### Phase 1: the shared constant, the loopback predicate and the use-time rule
+### Phase 1: the shared constant, the loopback predicate and the use-time rule ✓
 
-- [ ] Change map: `packages/wallet-core/src/utils/{chain-id,rpc-url}.ts` and `rpc-url.test.ts`; `apps/extension/src/utils/chain-ids.ts`; `packages/aztec-runtime/src/utils/chain-identity.ts` and `.test.ts`; the execution fixtures above.
+- [x] Change map: `packages/wallet-core/src/utils/{chain-id,rpc-url}.ts` and `rpc-url.test.ts`; `apps/extension/src/utils/chain-ids.ts`; `packages/aztec-runtime/src/utils/chain-identity.ts` and `.test.ts`; the execution fixtures above.
 - Tests:
   - `rpc-url.test.ts`, `isLoopbackHost`: `localhost` and `127.0.0.1` are true. `localhost.`, `127.0.0.2`, `[::1]`, `a.localhost` and `rpc.example.com` are false. `rpcTransportVerdict`'s table stays unchanged and green.
   - `chain-identity.test.ts`, the local test becomes a pair:

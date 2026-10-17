@@ -78,7 +78,7 @@ describe("AuthwitDiscoverer.discoverPrivateAuthwits — a real CallAuthorization
 			node: { getNodeInfo: async () => CHAIN },
 			pxe: { simulateTx },
 			account: { address: account },
-			// A local row (chainId 0) skips only the composite check; the exact l1ChainId still binds.
+			// A local row (chainId 0): the identity check binds the local L1 and leaves the rollup free.
 			network: { chainId: 0, ...CHAIN },
 		}
 		const disc = new AuthwitDiscoverer(fakeLogger())

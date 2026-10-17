@@ -9,10 +9,12 @@
  * the id was a bare literal with no recorded pair. Keep the pair next to every id.
  */
 
-import { walletChainId } from "@nulo/wallet-core/utils"
+import { LOCAL_L1_CHAIN_ID, walletChainId } from "@nulo/wallet-core/utils"
 
-/** The extension's entry point for the formula; extension code imports it from here. */
-export { walletChainId }
+/** The extension's entry point for the formula and the local L1; extension code imports them from
+ *  here. The seeded Local Network's L1 is `LOCAL_L1_CHAIN_ID`, hardcoded (never probed at seed
+ *  time) so profile creation stays offline-safe; key derivation consumes it. */
+export { LOCAL_L1_CHAIN_ID, walletChainId }
 
 /** Ethereum mainnet's L1 id: the trust root a stored `mainnet`-kind network row is checked against.
  *  No mainnet network is seeded on the V6 line. */
@@ -23,10 +25,6 @@ export const MAINNET_L1_CHAIN_ID = 1
  *  the two agree. */
 export const TESTNET_L1_CHAIN_ID = 11155111
 export const TESTNET_ROLLUP_VERSION = 3409706519
-
-/** Anvil's fixed default chain id — the seeded Local Network's L1 identity. Hardcoded (never
- *  probed at seed time) so profile creation stays offline-safe; key derivation consumes it. */
-export const LOCAL_L1_CHAIN_ID = 31337
 
 export const CHAIN_IDS = {
 	TESTNET: walletChainId(TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION), // 3415328944
