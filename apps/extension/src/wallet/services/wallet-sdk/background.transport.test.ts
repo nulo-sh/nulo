@@ -324,14 +324,24 @@ describe("a key exchange, admitted only from its discovery's tab and document or
 		expect(handler.getSession("k4")).toBeDefined()
 	})
 
-	test("for a discovery credited to no origin it is refused", async () => {
+	test.each([
+		[
+			"credited to no origin (a tab with no url)",
+			{ tab: { id: TAB }, frameId: 0, origin: FAKE_DAPP_ORIGIN, url: `${FAKE_DAPP_ORIGIN}/` },
+		],
+		[
+			"from a plain-http tab",
+			{ tab: { id: TAB, url: "http://dapp.example/" }, frameId: 0, origin: "http://dapp.example", url: "http://dapp.example/" },
+		],
+	])("for a discovery %s, the discovery is refused and no key exchange establishes it", async (_label, from) => {
 		const { handler, deliver } = boot()
-		const noUrl = { tab: { id: TAB }, frameId: 0, origin: FAKE_DAPP_ORIGIN, url: `${FAKE_DAPP_ORIGIN}/` } as MessageSender
-		deliver(discovery("k5"), noUrl)
+		deliver(discovery("k5"), from as MessageSender)
 		await flush()
-		expect(handler.getPendingDiscovery("k5")?.origin).toBe("unknown")
-		handler.approveDiscovery("k5")
-		await expectKeyExchangeRefused(handler, deliver, "k5", noUrl)
+		expect(handler.getPendingDiscovery("k5")).toBeUndefined()
+		deliver(await keyExchange("k5"), from as MessageSender)
+		await flush()
+		expect(handler.getSession("k5")).toBeUndefined()
+		expect(sentTo(TAB)).toEqual([])
 	})
 })
 

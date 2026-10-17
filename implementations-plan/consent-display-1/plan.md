@@ -201,6 +201,7 @@ Outline B (not committed) proposed a worker snapshot by id with a 120 s life, cl
 | D7 | The mark's trigger | vocabulary name or selector, failed corroboration | same (a 4-byte selector collision is about 2^32 hashes) | **Name or selector, on a registered token.** B's broader triggers mark honest calls. |
 | D8 | Arcs | two; the refusal may move to arc 1; an ask on a surface arc 1 touches blocks its release | refusal into arc 1; ask OA-1 first | **Three arcs.** Arc 1 is the refusal alone: no ask concerns discovery. Arc 2 holds all token ingestion, since the cleaning shares the import row with OA-1's message, and waits for OA-1 so it is built once. |
 | D9 | The mark's words | name the interface; cover mints | "Don't rely on these names. Check the addresses and amount" | **Draft adopted from both**; the owner decides (OA-2). |
+| D10 | Arc 1: where the refusal sits in code (tree deviation) | | | **`handleDiscovery` is the origin gate; its former body is `handleSecureDiscovery`.** The refusal as the first statement of the old body scored 16 against the cognitive budget of 15, and a suppression is barred. Both callers, the SDK callback and the unlock drain, still enter through the gate. `background.transport.test.ts`'s no-origin case now asserts the refusal at discovery on the real SDK handler, plus a plain-http tab; the key-exchange wrapper's `"unknown"` clause is kept and now unreachable. |
 
 ## Plan review record
 

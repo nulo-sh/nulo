@@ -86,6 +86,7 @@ import {
 import { KeyedLock, deferred } from "@nulo/wallet-core/utils"
 import { admitAsync, VerifyAdmissionGate, type WindowReservation } from "./verify-admission"
 import { approveOrRollbackDiscoverySession, rollBackDiscoverySession } from "./discovery-approval"
+import { isSecureDappOrigin } from "./dapp-origin"
 import { failQueuedForError, failQueuedIfUnclaimed, type QueuedFailureKind, tryCreateQueuedJournal } from "./queued-journal"
 import { chainSendTxWithVouching } from "./queued-wait-vouching"
 import { createSessionBaton } from "./session-baton"
@@ -925,6 +926,21 @@ async function isLegalCurrent(legal: LegalAdmission): Promise<boolean> {
 }
 
 async function handleDiscovery(discovery: PendingDiscovery, deps: DiscoveryDeps): Promise<void> {
+	// Before the first await: upstream recorded the discovery just before this call, so a refusal
+	// here leaves nothing the locked queue, a stored session or a window could act on.
+	if (!isSecureDappOrigin(discovery.origin)) {
+		deps.handler.rejectDiscovery(discovery.requestId)
+		deps.logger.log(
+			"wallet-sdk",
+			LogLevel.Debug,
+			`Discovery refused (origin not secure): request ${describeExternalId(discovery.requestId)}`,
+		)
+		return
+	}
+	await handleSecureDiscovery(discovery, deps)
+}
+
+async function handleSecureDiscovery(discovery: PendingDiscovery, deps: DiscoveryDeps): Promise<void> {
 	const { handler, logger } = deps
 	try {
 		// Resolve chainId up-front — the locked-queue coalesce/cap and the
