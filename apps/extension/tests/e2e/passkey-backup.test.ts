@@ -22,11 +22,12 @@
  */
 import { expect } from "vitest"
 import type { Page } from "puppeteer"
-import { clickByTestId, expectNoNameField, openPopup, waitForHash, test, waitForServiceReady } from "./fixtures/extension"
-import { getActiveProfileName } from "./fixtures/helpers"
-import { setupPasskeyVirtualAuth, stallNextPasskeyCeremony } from "./fixtures/passkey"
+import { clickByTestId, openPopup, waitForHash, test, waitForServiceReady } from "./fixtures/extension"
+import { confirmProfileReset } from "./fixtures/helpers"
+import { registerPasskeyProfile, setupPasskeyVirtualAuth, stallNextPasskeyCeremony } from "./fixtures/passkey"
 import { shotSend } from "./fixtures/send-page"
-import { armBackupDownloadCapture, downloadPlainPasskeyBackup } from "./helpers/backup-export"
+import { downloadPlainPasskeyBackup } from "./helpers/backup-export"
+import { armDownloadCapture } from "./helpers/download-capture"
 import {
 	buildSyntheticPasskeyBackup,
 	readActiveAccount,
@@ -47,48 +48,9 @@ async function resetWallet(page: Page): Promise<void> {
 		window.location.hash = "#/popup/settings/security/reset"
 	})
 	await waitForHash(page, "#/popup/settings/security/reset", 5_000)
-	await page.waitForSelector('[data-testid="reset-checkbox-permanent"]', { visible: true, timeout: 5_000 })
-	await clickByTestId(page, "reset-checkbox-permanent")
-	await clickByTestId(page, "reset-checkbox-undone")
-	await clickByTestId(page, "reset-checkbox-sure")
-	// Read the profile name from the reset page's data-profile-name attribute rather than
-	// hardcoding it.
-	const activeProfileName = await getActiveProfileName(page)
-	await page.evaluate((expectedName: string) => {
-		const input = document.querySelector<HTMLInputElement>('[data-testid="reset-confirm-input"] input')
-		if (!input) throw new Error("reset-confirm-input not found")
-		const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
-		setter?.call(input, expectedName)
-		input.dispatchEvent(new Event("input", { bubbles: true }))
-	}, activeProfileName)
-	await page.waitForFunction(
-		() => {
-			const btn = document.querySelector<HTMLButtonElement>('[data-testid="reset-submit-btn"]')
-			return btn !== null && !btn.disabled
-		},
-		{ timeout: 5_000 },
-	)
-	await clickByTestId(page, "reset-submit-btn")
+	await confirmProfileReset(page, 5_000)
 	await waitForHash(page, "#/popup/register", 10_000)
 	await waitForServiceReady(page, 15_000)
-}
-
-/** Drive the passkey-register flow on a fresh extension at /popup/register.
- *  Mirrors `passkey-paths.test.ts:registerPasskeyProfile`. Lands on
- *  /popup/general. */
-async function registerPasskeyProfile(page: Page): Promise<void> {
-	await waitForHash(page, "#/popup/register", 15_000)
-	await waitForServiceReady(page, 15_000)
-	await clickByTestId(page, "register-create-btn")
-
-	// A fresh install's first profile has no name field; it is created as "Main".
-	await expectNoNameField(page, "register-page", "register-name-input")
-
-	await page.waitForSelector('[data-testid="register-method-passkey"]', { visible: true, timeout: 10_000 })
-	await clickByTestId(page, "register-method-passkey")
-	await page.waitForSelector('[data-testid="register-submit-btn"]', { visible: true, timeout: 10_000 })
-	await clickByTestId(page, "register-submit-btn")
-	await waitForHash(page, "#/popup/general", 60_000)
 }
 
 /** Drive the full-backup-import flow for a PASSKEY backup from the import page's method picker. */
@@ -165,7 +127,7 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 
 		// An unencrypted download asks first: Cancel writes nothing, Download anyway writes the
 		// plain file, whose master-key field is only the passkey's credential id.
-		await armBackupDownloadCapture(page)
+		await armDownloadCapture(page, { gzip: true })
 		await clickByTestId(page, "download-backup-btn")
 		await page.waitForSelector('[data-testid="confirm-submit"]', { visible: true, timeout: 5_000 })
 		expect(await page.$eval('[data-testid="confirm-title"]', (el) => el.textContent?.trim())).toBe("Download without a password?")
@@ -174,7 +136,7 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 		await page.waitForFunction(() => !document.querySelector('[data-testid="confirm-submit"]'), { timeout: 5_000 })
 		const afterCancel = await page.evaluate(() =>
 			Promise.race([
-				(window as unknown as { __backupCapture: Promise<string> }).__backupCapture.then(() => "downloaded"),
+				(window as unknown as { __downloadCapture: Promise<string> }).__downloadCapture.then(() => "downloaded"),
 				new Promise<string>((resolve) => setTimeout(() => resolve("nothing"), 1_000)),
 			]),
 		)

@@ -1,8 +1,7 @@
 import { expect, inject } from "vitest"
-import type { Page } from "puppeteer"
 import { clickByTestId, openPopup, test } from "../fixtures/extension"
 import { getAccountAddress, switchAccountByAddress } from "../fixtures/helpers"
-import { assertPgOk, callExpectingNoPopup, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { assertPgOk, callExpectingNoPopup, setPgInputs, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import {
 	createTestWallet,
@@ -17,18 +16,6 @@ const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
 const lower = (s: string) => s.toLowerCase()
-
-/** The playground's inputs are re-rendered from state, so values are set through the native setter. */
-async function setPgInputs(page: Page, values: Record<string, string>): Promise<void> {
-	await page.evaluate((entries: Array<[string, string]>) => {
-		for (const [name, v] of entries) {
-			const input = document.querySelector<HTMLInputElement>(`[data-testid="${name}"]`)
-			if (!input) throw new Error(`missing ${name}`)
-			Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(input, v)
-			input.dispatchEvent(new Event("input", { bubbles: true }))
-		}
-	}, Object.entries(values))
-}
 
 /**
  * An ACCOUNT switch under a live dApp session (not a profile switch). The popup moves its active
@@ -85,10 +72,10 @@ test.skipIf(!hasConfig)(
 			const feeB0 = await readPublicFeeJuice(wallet, reader, b)
 
 			await setPgInputs(page, {
-				"pg-input-tokenAddress": token,
-				"pg-input-recipient": recipient,
-				"pg-input-amount": "1",
-				"pg-input-from": a,
+				tokenAddress: token,
+				recipient,
+				amount: "1",
+				from: a,
 			})
 			const seqTx = await snapshotResultSeq(page)
 			const execPopupP = waitForPopup(ctx, "execute", { timeout: 30_000 })

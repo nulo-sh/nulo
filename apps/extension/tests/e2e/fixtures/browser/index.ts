@@ -263,5 +263,15 @@ export const pxeHostState = (page: Page): Promise<PxeHostState> => driver.pxeHos
 export const stopBackground = (owner: BackgroundOwner): Promise<void> =>
 	standing.whileReleased(owner.browser, () => driver.stopBackground(owner.browser, owner.extensionId))
 export const backgroundAlive = (owner: BackgroundOwner): Promise<boolean> => driver.backgroundAlive(owner.browser, owner.extensionId)
+/** Stops a live background; false, with a warning, when the browser already stopped it. A failed
+ *  kill still throws. */
+export const stopBackgroundIfAlive = async (owner: BackgroundOwner): Promise<boolean> => {
+	if (!(await backgroundAlive(owner))) {
+		console.warn("[stopBackgroundIfAlive] no live background: the browser already stopped it")
+		return false
+	}
+	await stopBackground(owner)
+	return true
+}
 export const evaluateInBackground = <T>(owner: BackgroundOwner, body: string): Promise<T> =>
 	driver.evaluateInBackground<T>(owner.browser, owner.extensionId, body)

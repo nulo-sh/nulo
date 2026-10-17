@@ -1,7 +1,6 @@
 import { expect, inject } from "vitest"
-import type { Page } from "puppeteer"
 import { clickByTestId, openPopup, test } from "../fixtures/extension"
-import { assertPgOk, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { assertPgOk, setPgInputs, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { waitForDappExecuteWorked } from "../fixtures/journal"
 import {
@@ -17,17 +16,6 @@ const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
 const lower = (s: string) => s.toLowerCase()
-
-async function setPgInputs(page: Page, values: Record<string, string>): Promise<void> {
-	await page.evaluate((entries: Array<[string, string]>) => {
-		for (const [name, v] of entries) {
-			const input = document.querySelector<HTMLInputElement>(`[data-testid="${name}"]`)
-			if (!input) throw new Error(`missing ${name}`)
-			Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(input, v)
-			input.dispatchEvent(new Event("input", { bubbles: true }))
-		}
-	}, Object.entries(values))
-}
 
 /**
  * Test #39 — multi-account session: two accounts granted, two sends.
@@ -52,9 +40,9 @@ test.skipIf(!hasConfig)(
 		await mintPublicTokensForAccount(aztecConfig!, accountAddresses[0]!)
 
 		await setPgInputs(page, {
-			"pg-input-tokenAddress": aztecConfig!.tokenAddress,
-			"pg-input-recipient": aztecConfig!.minterAddress,
-			"pg-input-amount": "1",
+			tokenAddress: aztecConfig!.tokenAddress,
+			recipient: aztecConfig!.minterAddress,
+			amount: "1",
 		})
 
 		await snapshotResultSeq(page)
@@ -99,10 +87,10 @@ test.skipIf(!hasConfig)(
 			const fee1 = await readPublicFeeJuice(wallet, reader, first)
 
 			await setPgInputs(page, {
-				"pg-input-tokenAddress": token,
-				"pg-input-recipient": recipient,
-				"pg-input-amount": "1",
-				"pg-input-from": second,
+				tokenAddress: token,
+				recipient,
+				amount: "1",
+				from: second,
 			})
 			const seqTx = await snapshotResultSeq(page)
 			const execPopupP = waitForPopup(ctx, "execute", { timeout: 30_000 })
