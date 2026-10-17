@@ -97,7 +97,7 @@ Decision page 35 (2026-10-17) settled five leftovers and, as an amendment the or
 - Tests: one table test for the predicates: priced and unquoted, one quote, empty, unpriced only, before the mapping, zero balance. Holdings: after the answer with no quote, the summary reads "—" and "Prices unavailable", with no "$" and no count. Before the answer (`refreshIfStale` pending), it reads as today (never-happens).
 - **Gate**: fast layers plus `bun run --cwd apps/extension test token-aggregate holdings BalanceView` exit 0.
 
-### Phase 5: an action keeps a toast 6 s (#634), then the arc gate
+### Phase 5: an action keeps a toast 6 s (#634), then the arc gate (phase ✓; arc gate after Phase 6)
 - Files: `packages/design/src/composables/toast.ts`, `toast.test.ts`, `packages/design/src/ui/ToastManagerBase.test.ts`, `ToastManagerBase.stories.ts`, `apps/extension/tests/e2e/fixtures/widgets.ts` (docstring only).
 - Tests: a success with an action is open at 5.9 s and gone at 6 s, beside the existing 2 s case. The three hold tests expect the close 5 400 ms after release.
 - Gate the phase: `bun run --cwd packages/design test toast ToastManagerBase` exit 0. Then take light and dark "after" shots of the four surfaces.

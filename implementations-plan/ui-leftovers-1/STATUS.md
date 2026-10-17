@@ -9,3 +9,4 @@
 - 2026-10-17 15:21Z: Phase 2 (#639) gate pass: lint, typecheck:all, `test Header` (52/52), navigation by the smoke recipe on Chrome (8/8) and Firefox (8/8). Deviation: the plain-click control clears the selection first (Chrome keeps a selection through a click inside it; lessons/phase-0.md).
 - 2026-10-17 15:24Z: Phase 3 (#628) gate pass: lint, typecheck:all, `test journal-state tx-enrichment RecentActivityView` (211/211).
 - 2026-10-17 15:30Z: Phase 4 (#618) gate pass: lint, typecheck:all, `test token-aggregate holdings BalanceView` (106/106). Red proof: the unavailable case fails on the base page.
+- 2026-10-17 15:33Z: Phase 5 (#634) gate pass: `test toast ToastManagerBase` (50/50), lint, typecheck:all. After-shots and the arc gate move past Phase 6.
