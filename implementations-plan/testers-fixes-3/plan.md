@@ -1,7 +1,7 @@
 ---
 plan: testers-fixes-3
 tier: light
-status: planned, awaiting approval
+status: implemented; Codex loop converged (round 3 approve)
 issues: "#629 (closes); #583 OA-1 (refs: #583 closed with #633)"
 driver: claude-code
 claude_model: opus
@@ -21,8 +21,9 @@ One arc, one PR against `dev`: `Closes #629`, `Refs #583`. It ships the two pick
 
 ## Claims that did not hold
 
-- The decision's "SHI with an ellipsis" and the brief's "SHIEL…": with today's roles at 360 px and 2.5 USDC, Chrome gives the app chip 33 px, one letter and "…" (Firefox 41 px, "SHI…"). From about $25 Chrome shows "…" alone; from about $1,000 of any priced token the drawn rule covers the amount (recon § Measurement). D ships; OA-1 asks what gives past that point.
-- The brief's "the row is 62 px": true in Chrome for a priced row up to a seven-digit dollar figure (Firefox 64 px). An unpriced row is 52 px; an eight-digit dollar figure makes 73 px under the ship-now form.
+- The decision's "SHI with an ellipsis": holds in the extension, 41 px "SHI…" at 2.5 USDC in both browsers (the recon's scratch page gave Chrome 33 px). The chip reads "SH…" at 25, "S…" at 250, and sits at its 19 px floor from about $1,000, where the drawn rule would cover the amount (OA-1's table). D ships; OA-1 asks what gives past that point.
+- The brief's "the row is 62 px": Chrome 62, Firefox 64, up to an eight-digit dollar figure; a nine-digit one makes 73/74 px, the direction on three lines.
+- D2's "a bare '…'": no engine ellipses a line's first character (CSS UI 3 § text-overflow), so the floor drew "S…" in Chrome and a hard-cut "SH" in Firefox. D5 fixes it.
 - The brief's "the 42-character host #633's tests use": #633 used the 43-character `staging-nemi-interface.nemi-e65.workers.dev`. The 42-character `verylongsubdomainwithoutbreaks.example.com` is #629's. Each is used where it applies.
 - #629's "23 px past the box's border": the scratch page reads 10 px, without the detail scroller's stable gutter. The direction holds; Phase 2's red proof measures it in the extension.
 
@@ -47,12 +48,15 @@ For a person who reads their activity after using dApps, and opens a dApp operat
   - D2, the floor is "…" alone, 19 px. One letter (27-29 px) breaks the direction chip from about $25; 20 px already breaks it at $100 in Chrome (19.4 px left). The px value depends on `type--tag`: Phase 1's test checks the floor holds a whole "…" in the chip's own font, so a role change fails it instead of drawing a clipped chip. Which part gives past the floor is OA-1.
   - D3, shared rules, not a component (Codex and Opus agree). The App row is a label and a value; the details rows are inline `<Flex>` rows, and `TxHashRow` is a component only because it carries copy and link behaviour. The three Flex attributes repeat; the look is one copy, pinned.
   - D4, no change to the awaiting and terminal cards (they show one chip) or to `activity-card.module.css`.
+  - D5 (found in verification, high-scale shots): `.app_slot > .app_chip::before { content: ""; display: inline-block }` takes the line's first place, so the floor draws "…" alone, as OA-1 A states. Rows above the floor are byte-identical in screenshots, heights unchanged; the large row's e2e pins the `::before`. Rejected: a 29 px floor that fits a letter (OA-1 D, the owner's call).
+  - D6 (Codex round 2, demonstrated: "   NEMI" drew 40.2 px against 36.8): the empty inline keeps a leading space from collapsing, so the slot renders the name without leading ASCII whitespace.
+  - Deviations: the red proofs ran on the base layout plus the invisible direction testid (the bare base failed on the testid alone); the two-chip shot is on History, where Home's hero pushes the rows under the nav; `readTwoChipRow` logs `directionShort`, the large row's regime margin Phase 3 reads.
 
 ## Security & Adversarial Considerations
 
 - **Threat:** a dApp controls `tx.origin.name` and `op.subtitle` (64 code points on the session path). Its capability here is layout. Text renders through Vue interpolation, with no `v-html`; the sanitizers do not change. Its name's length cannot move the direction chip: the slot's basis is 0 whatever the name.
 - **The row's name:** from about $25 the row shows "…" and not the dApp's name; the details page shows it. The name is the dApp's own claim, not a verified origin, in the row and on the page. Bidi controls could choose which one glyph sits beside "…": cosmetic, possible at today's cap too. Approval windows are untouched.
-- **Layout abuse:** no name or host can widen Home or cover the amount up to a nine-digit dollar figure (Phase 1, both browsers). Past about $1B the two-chip row runs out of room before a send row does: a known limit filed at close-out (path: at 123.45M the chips end exactly at the 10 px gap; one more dollar group adds about 26 px). A symbol up to 32 characters can widen the page: known limit #625. The journal value breaks anywhere, so a host cannot widen the page.
+- **Layout abuse:** no name or host can widen Home or cover the amount up to a nine-digit dollar figure (Phase 1, both browsers). Past about $1B the two-chip row runs out of room before a send row does: a known limit filed at close-out (measured in the extension: at $1,234,567,891.23 the chips end 7.3 px before the amount column, inside its 10 px gap, where a send row keeps 10 px). A name's leading spaces are dropped in the slot (D6). A symbol up to 32 characters can widen the page: known limit #625. The journal value breaks anywhere, so a host cannot widen the page.
 - Least privilege, cryptography, supply chain: no change (no dependency, no permission, no crypto).
 
 ## Assumptions
@@ -97,7 +101,7 @@ Tests:
 
 Validation gate: Phase 1's gate, both browsers.
 
-### Phase 3: merge, evidence, full gates
+### Phase 3: merge, evidence, full gates ✓
 
 1. `git fetch origin dev` and merge it (type-scale-1 may have landed). Rerun Phase 1 and 2's tests. From the logged widths, confirm each fixture is still inside its regime by at least 4 px, in both browsers.
 2. Run both scenarios with `NULO_E2E_SHOT_DIR` on Chrome: the drawn row, the large row, the journal App row, both themes.
@@ -138,6 +142,14 @@ Round 1 accepted:
 Round 1 rejected:
 - Codex F5 for the dApp scenario (wait for both dollar figures): its drawn-regime checks hold priced or not (33 px priced, 37 px unpriced), and a wait for a dollar figure would hang where the list has no price.
 - Opus E9's drop of the journal component test: it is the unit-layer proof that the template binds the shared rules, which the lane brief asks for; only its control case is dropped. Opus E4's canvas `measureText`: a hidden clone of the chip reads the same font without relying on canvas letter-spacing support.
+
+## Audit verdicts (post-implementation)
+
+| Round | Codex (gpt-6.1-sol, high, session 01a149bb) | Opus diff review |
+|---|---|---|
+| 1 | approve; 2 comment nits: the `.chips` comment and a helper doc removed; the shared chip's comment kept (D4, no caller references) | approve; 3 nits: the false `.chips` comment and the slot's why fixed, a vacuous `>= floor` check made `> floor`; `directionShort` kept, logged only (a margin assertion would fail on type-scale-1's retune) |
+| 2 (resume: D5) | conditional approve: a leading space shows after the empty inline (plausible, then demonstrated); fixed, D6 | — |
+| 3 (resume) | **approve**, no findings | — |
 
 ## Seeds
 

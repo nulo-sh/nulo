@@ -52,3 +52,7 @@ The journal App row, `verylongsubdomainwithoutbreaks.example.com` (42 characters
 
 - type-scale-1 retunes roles and sizes in the activity cards and the details pages. This lane changes no role or size. Its PR may land first: Phase 3 merges `dev` and re-reads the measurement in the e2e log.
 - harden-quality-fixes-3 arc 2 edits `tests/e2e/fixtures/**` and the playground; this lane edits neither.
+
+## In the extension (2026-10-17, after the build)
+
+The scratch page underestimated the row's room: the built extension gives the drawn row's chip 41 px in both browsers ("SHI…"), and "NEMI" stays whole at 2.5 USDC. OWNER-ASKS.md OA-1 carries the measured table. At its 19 px floor no engine drew a bare "…": a line's first character is clipped, never ellipsed (CSS UI 3 § text-overflow), so Chrome drew "S…" into the padding and Firefox a hard-cut "SH" (plan D5). The journal App value with the 42-character host ran 29.8 px past the box's inner edge before the change.
