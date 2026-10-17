@@ -1,7 +1,7 @@
 ---
 plan: dapp-boundary-3
 tier: mid
-status: approved 2026-10-17 (orchestrator); arc 1 in progress
+status: approved 2026-10-17 (orchestrator); arc 1 in review
 issues: none (P38-06 carries no public issue; P38-08 waits on the owner)
 driver: claude-code
 claude_model: opus
@@ -152,7 +152,7 @@ export function isAuthRegistryGrantCall(call: { to: unknown; selector: unknown }
 - Pass: all exit 0; the decode and seam tests fail with the rule removed; F12's paths are unchanged, or the arc stops with an owner ask.
 - Layers: lint, typecheck, unit.
 
-### Phase 3: arc gate
+### Phase 3: arc gate ✓
 
 1. Run `bun run test:all`.
 2. Merge `origin/dev`. Rerun `bun run lint`, `bun run typecheck:all` and `bun run test`.
@@ -197,6 +197,7 @@ Ids D1-D19 belong to arc 1, D20 and up to arc 2.
 - **Resumed final pass, round 3: `approve`.** "Signing claims, relay scope, and refusal-test/control expectations are consistent … No regressions or remaining issues within this verification scope."
 - **Arc 1 review, round 1, Codex (gpt-6.1-sol high, on the arc diff): `conditional approve`.** (1) The registry refusal lost its class across the operation-result channel, so a NO_FROM Confirm's dApp read the generic text (demonstrated): accepted, D11, with a classify → unwrap → envelope assertion. (2) The selector-pin test passed without checking when hashing failed: accepted, the pins moved to `auth-registry.pins.test.ts`, node-only, with no catch.
 - **Arc 1 review, Opus (general-purpose, same diff): `conditional approve`.** (1) and (2) as Codex. (3) Three "nothing signed" assertions in the estimate and preview tests could not fail in the harness: dropped; the standalone test keeps the validated build, where discovered witnesses are signed. (4) Comment wording in the envelope, the scope checkers and the job-kind list: tightened. Rejected: none.
+- **Arc 1 review, round 2, Codex (resumed on the fix diff): `approve`.** "All three registry messages preserve the subclass and literal name through RPC serialization and `classify → unwrap → envelope` … Other messages under `SCOPE_VIOLATION` reconstruct as the parent … The pin test has no suppressed hashing failures." No findings.
 
 ## Delivery
 

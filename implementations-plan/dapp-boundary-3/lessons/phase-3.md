@@ -15,3 +15,15 @@ Both `conditional approve`; the same two findings from both legs, each checked a
 2. **The pin test could pass unchecked.** The `bad_cast|wasm` catch hid any hashing failure in the package's own runner too. Fix: `auth-registry.pins.test.ts`, no catch, on the extension runner's exclude list beside the other bb.js-bound files; it runs in wallet-bridge's own suite (`test:all` in CI). `fee-payer.test.ts` keeps the same catch; outside this arc.
 
 Opus only: three `createAuthWit` not-called assertions on the estimate and preview paths could not fail (the harness's validated build is a mock, and previews never sign): dropped. Comments tightened in `error-envelope.ts`, `method-scope-checkers.ts` and the job-kind list.
+
+## Review round 2 (Codex, resumed on the fix diff)
+
+`approve`, no findings: the subclass and its name survive RPC serialization and the classify → unwrap → envelope chain for all three messages; any other message under the code rebuilds as the parent; a registry message under another code keeps that code's class; no reader compares `error.name`; the table keeps every exact assertion. The loop converged at round 2.
+
+A first resume attempt passed the worktree as the Codex output directory (the resume script's third argument is the session's output dir, not a cwd) and wrote the script's state files into the worktree root; they were removed before anything was staged.
+
+## Gates on the final head, 2026-10-17
+
+- `lint`, `typecheck:all`: exit 0. `test:all`: every workspace exit 0 (extension 13607, wallet-bridge 789, extension-messaging 412, wallet-core 317).
+- Network e2e on Chrome, retry 0, one at a time, each started at load1 below 150: `authwit-lifecycle.test.ts` 1 passed (148 s); `scope-refusal.test.ts` 2 passed (40 s). No e2e scenario added or changed.
+- `check:plans` after staging: 0 findings.
