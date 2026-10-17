@@ -9,6 +9,7 @@ Each ask names what ships now. Every "now" form stays inside the signed records 
 - **What each looks like**: A, the rows read as today with the new glyphs (`settings`, `add`, `remove`, `help`, `user`, `fee`, `network-edit`, `package`). B, title and description only, like the Settings list in the Direction 2 mockup.
 - **Ships now**: A. "Settings rows lose their icons" is read as the Settings tab only.
 - **Recommendation**: A. Most of these rows are actions in a sheet (add, manage, remove), where the glyph tells the action apart; the Settings list is a list of places, where the title carries it. B removes three glyphs from the set (`fee`, `network-edit`, `package`).
+- **Resolved**: decision page 34, A, as shipped.
 
 ## OA-2: the long-tail glyphs
 
@@ -17,6 +18,7 @@ Each ask names what ships now. Every "now" form stays inside the signed records 
 - **What each looks like**: A, each row and card keeps a distinct picture. B, the connection window shows the pencil, the user and the padlock on three permission rows that today have three distinct pictures.
 - **Ships now**: A. The PR carries the glyph sheet story at 24, 12, 10 and 9 px, light and dark.
 - **Recommendation**: A. On the connection window the pictures help tell permissions apart; a redraw or a merge later changes one entry in one file.
+- **Resolved**: decision page 34, A, as shipped.
 
 ## OA-3: the reveal toggles' eye
 

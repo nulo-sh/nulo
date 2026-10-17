@@ -9,7 +9,28 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev 493ff497
 issues: "#602 (closed by arc 1), #590 (icon part: arc 2; the sheet part stays open)"
+status: closed (delivered in #641 and arc 2's PR, with this close-out)
 ---
+
+## Outcome
+
+- **Date:** 2026-10-17. Planned 2026-10-16; arc 1 merged 2026-10-17.
+- **Status:** closed with its delivery. Arc 1 is [#641](https://github.com/nulo-sh/nulo/pull/641) (closes #602), merged into `dev` as 111fe020. Arc 2 is the PR from `icons-d2-1-marks` (refs #590), whose final commits are this close-out; merging is the owner's call, after OA-6's sign-off.
+- **Shipped:**
+  - **Arc 1, #641**: every glyph drawn in Direction 2 in one typed module, `packages/design/src/core/glyphs.ts` (58 entries), painted only through `color`; the Material font (343 628 bytes), `icons.json`, `MaterialIcon` and `StaleIcon` retired, so no third-party glyph ships; Settings-page rows without their leading glyph; the static name guard `icon-names.test.ts`; the glyph sheet story at 24, 12, 10 and 9 px (P30-08 B, #602 B, OA-1 A, OA-2 A).
+  - **Arc 2**: `private` a solid square and `public` the same square in eight dots, on Home's token rows, a token's balance line, the Send review rows, the publish strip and the fee tag, each in its colour of today; the padlock means Lock only; the glossary names the squares (P33-05 B, OA-6). The network page's Name row draws `edit` where a chevron sits, through `SettingItem`'s `trailingIcon` (P35-06 B). Before and after captures in [screenshots/arc2/](screenshots/arc2/).
+- **Review loop:** the plan took a dual audit and a final Codex pass (§ [Audit verdicts](#audit-verdicts)). Arc 1 converged at Codex round 2 beside an Opus review; arc 2 at Codex round 2; the fresh cross-arc session at round 2 (§ [Arc 2 implementation review](#arc-2-implementation-review)).
+- **Gates at arc 2's head:** `bun run lint`, `typecheck:all`, `test:all`, `test:ci-gating`, `test:release`, `audit:vue`, `build-storybook` and `check:plans` exit 0; smoke 15/15 and network `fee-methods` 8/8 on Chrome at retry 0 ([lessons/phase-3.md](lessons/phase-3.md)).
+- **Lessons:** none promoted. The trap arc 1 hit, a CI-only gate (`test:ci-gating`) reading SVG path data as milestone tags, is already `lessons.md`'s root-test line, and the path-data rule sits in `glyphs.ts`'s header.
+- **Known limits:** none.
+- **Open items:** #630 (a Firefox timing flake in `security-reset`, seen during arc 1). #590 stays open for its sheet part, which another lane owns.
+- **Dropped, rejected, superseded:**
+  - **P30-09 A** (arrows beside Send and Receive): superseded by P33-06 B, words only; Phase 3's hero step dropped.
+  - **P30-10 A** (the eye pair for the marks): superseded by P33-05 B, the squares; `eye` and `eye-off` serve the reveal toggles alone (OA-3).
+  - **D7**, the interim padlock and globe: superseded by arc 2.
+  - **OA-4**: withdrawn while planning (Audit verdicts, round 1).
+  - **Pinning the marks' coordinates in a test** and **weakening the glossary pin's comment**: rejected (§ [Arc 2 implementation review](#arc-2-implementation-review)).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # icons-d2-1: Direction 2 glyphs, Material and icons.json retired
 
