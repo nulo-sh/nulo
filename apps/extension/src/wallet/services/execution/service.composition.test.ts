@@ -92,6 +92,7 @@ function makeControllableGate() {
 
 const MIN_FEES = { feePerDaGas: 1n, feePerL2Gas: 1n }
 const ACCOUNT = AztecAddress.fromNumberUnsafe(0x1234)
+const TOKEN_CONTRACT = AztecAddress.fromNumberUnsafe(0x7070).toString()
 const NETWORK = {
 	id: "net1",
 	// The node's pair below: (5 ^ 4) >>> 0 === 1.
@@ -233,7 +234,7 @@ async function makeHarness() {
 			onTransactionUpdated: { add: () => {} },
 		}),
 	)
-	collection.add(svc(TokenService.name, { getTokenRaw: async () => ({ contract: "0xtoken" }) }))
+	collection.add(svc(TokenService.name, { getTokenRaw: async () => ({ contract: TOKEN_CONTRACT }) }))
 	collection.add(
 		svc(FpcService.name, {
 			onFpcUpdated: { add: () => {} },
@@ -263,6 +264,7 @@ async function makeHarness() {
 		networkId: NETWORK.id,
 		accountAddress: ACCOUNT.toString(),
 		tokenId: 1,
+		tokenContract: TOKEN_CONTRACT,
 		transferType: TransferType.Public,
 		recipientAddress: AztecAddress.fromNumberUnsafe(0x5678).toString(),
 		amount: 10n,
@@ -300,7 +302,7 @@ async function makeHarness() {
 		} as never,
 		nonce: { toString: () => "0" },
 		feePaymentMethod: "EXTERNAL" as never,
-		token: { contract: "0xtok", name: "Tok", symbol: "TOK", decimals: 18 },
+		token: { contract: TOKEN_CONTRACT, name: "Tok", symbol: "TOK", decimals: 18 },
 		fnName: "transfer_public_to_public",
 		args: [],
 		builtAt: Date.now(),
@@ -352,6 +354,7 @@ describe("ExecutionService composition — cancel-mid-prove (in-process, no sand
 				req.networkId,
 				req.accountAddress,
 				req.tokenId,
+				req.tokenContract,
 				req.transferType,
 				req.recipientAddress,
 				req.amount,
@@ -508,6 +511,7 @@ const transfer = (h: Harness, estimateId: string | undefined = h.estimateId) =>
 			h.req.networkId,
 			h.req.accountAddress,
 			h.req.tokenId,
+			h.req.tokenContract,
 			h.req.transferType,
 			h.req.recipientAddress,
 			h.req.amount,
@@ -1062,6 +1066,7 @@ describe("ExecutionService composition — nothing is broadcast without a curren
 				h.req.networkId,
 				h.req.accountAddress,
 				h.req.tokenId,
+				h.req.tokenContract,
 				h.req.transferType,
 				h.req.recipientAddress,
 				h.req.amount,
@@ -1205,6 +1210,7 @@ describe("ExecutionService composition — a send whose answer was lost is check
 				h.req.networkId,
 				h.req.accountAddress,
 				h.req.tokenId,
+				h.req.tokenContract,
 				h.req.transferType,
 				h.req.recipientAddress,
 				h.req.amount,
@@ -1253,6 +1259,7 @@ describe("ExecutionService composition — a send whose answer was lost is check
 				h.req.networkId,
 				h.req.accountAddress,
 				h.req.tokenId,
+				h.req.tokenContract,
 				h.req.transferType,
 				h.req.recipientAddress,
 				h.req.amount,
@@ -1287,6 +1294,7 @@ describe("ExecutionService composition — a send queued against a fee cap asks 
 				h.req.networkId,
 				h.req.accountAddress,
 				h.req.tokenId,
+				h.req.tokenContract,
 				h.req.transferType,
 				h.req.recipientAddress,
 				h.req.amount,

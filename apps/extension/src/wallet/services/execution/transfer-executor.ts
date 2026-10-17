@@ -128,7 +128,6 @@ export interface TransferExecutorDeps {
 	lane: TransferExecutorLane
 	sequencer: SendSequencer
 	chainTip: Pick<ChainTipGate, "unconfirmed" | "wait">
-	getTokenContract(tokenId: number): Promise<string>
 	/** The validated row a build pays with: owned, with its protocol addresses derived even on a cold worker. */
 	getFpcImpl(fpcId: string): Promise<Fpc>
 	getTransactions(account: string): Promise<Tx[]>
@@ -190,8 +189,7 @@ export class TransferExecutor {
 
 	/** The account's line this transfer joins, and the keys it holds there (`transfer-sequence-keys.ts`). */
 	public async sequence(req: TransferRequest): Promise<TransferSequence> {
-		const [token, network] = await Promise.all([this.deps.getTokenContract(req.tokenId), this.deps.getNetwork(req.networkId)])
-		const chainId = network.chainId
+		const { chainId } = await this.deps.getNetwork(req.networkId)
 		const [fpc, history] = await Promise.all([
 			this.payingFpc(req.feeSettings),
 			this.deps.getTransactions(req.accountAddress).then((txs) => txs.filter((tx) => tx.chainId === chainId)),
@@ -199,7 +197,7 @@ export class TransferExecutor {
 		const feeSpender = feeSpenderOf(fpc, chainId)
 		const keys = transferSequenceKeys({
 			me: req.accountAddress,
-			token,
+			token: req.tokenContract,
 			type: req.transferType,
 			recipient: req.recipientAddress,
 			feeSpender,

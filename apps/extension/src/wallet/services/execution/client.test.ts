@@ -23,7 +23,16 @@ afterEach(() => {
 	vi.useRealTimers()
 })
 
-const ARGS = ["net1", "0xacct", 1, TransferType.Public, "0xdest", 10n, { paymentMethod: { kind: "fpc" } } as never] as const
+const ARGS = [
+	"net1",
+	"0xacct",
+	1,
+	`0x${"1a".repeat(32)}`,
+	TransferType.Public,
+	"0xdest",
+	10n,
+	{ paymentMethod: { kind: "fpc" } } as never,
+] as const
 
 /** The promise's state, read without awaiting it. */
 function track<T>(promise: Promise<T>): { readonly state: "pending" | "resolved" | "rejected"; readonly value: unknown } {

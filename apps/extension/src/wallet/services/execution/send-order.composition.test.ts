@@ -48,6 +48,7 @@ const SLOT = `p1:${NETWORK.chainId}`
 const ORIGIN_KEY = "https://dapp.example"
 const DAPP = { type: OriginType.DAPP, name: "dapp" } as never
 const ACCOUNT_2 = AztecAddress.fromNumberUnsafe(0x2222).toString()
+const TOKEN_CONTRACT = AztecAddress.fromNumberUnsafe(0x7070).toString()
 
 async function makeHarness() {
 	const api = new FakeBrowserApi()
@@ -123,7 +124,7 @@ async function makeHarness() {
 			onTransactionUpdated: { add: () => {} },
 		}),
 	)
-	collection.add(svc(TokenService.name, { getTokenRaw: async () => ({ contract: "0xtoken" }) }))
+	collection.add(svc(TokenService.name, { getTokenRaw: async () => ({ contract: TOKEN_CONTRACT }) }))
 	collection.add(
 		svc(FpcService.name, {
 			onFpcUpdated: { add: () => {} },
@@ -187,6 +188,7 @@ const request = (fpcId: string) => {
 		networkId: NETWORK.id,
 		accountAddress: ACCOUNT,
 		tokenId: 1,
+		tokenContract: TOKEN_CONTRACT,
 		transferType: TransferType.Public,
 		recipientAddress: AztecAddress.fromNumberUnsafe(0x5678).toString(),
 		amount: 10n,
@@ -207,7 +209,16 @@ describe("send ordering composition: a restarted worker still orders by the reco
 		const h = await makeHarness()
 		const r = request("fpc-f")
 		const run = h.service
-			.executeTransfer(r.networkId, r.accountAddress, r.tokenId, r.transferType, r.recipientAddress, r.amount, r.feeSettings)
+			.executeTransfer(
+				r.networkId,
+				r.accountAddress,
+				r.tokenId,
+				r.tokenContract,
+				r.transferType,
+				r.recipientAddress,
+				r.amount,
+				r.feeSettings,
+			)
 			.catch((e: unknown) => e)
 		let id = ""
 		await waitFor(async () => {
@@ -235,6 +246,7 @@ describe("send ordering composition: a restarted worker still orders by the reco
 				f.networkId,
 				f.accountAddress,
 				f.tokenId,
+				f.tokenContract,
 				f.transferType,
 				f.recipientAddress,
 				f.amount,

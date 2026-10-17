@@ -25,7 +25,7 @@ import { TaskStatus } from "@/wallet/services/task/service"
 import { startedTaskService } from "@/wallet/services/task/test-task-service"
 import { OriginType, TransferType } from "@/wallet/services/transaction/service"
 import type { ProveAndSendContext } from "./execution-coordinator"
-import type { TransferRequest } from "./operation-planner"
+import { OperationPlanner, TOKEN_MOVED_MESSAGE, type TransferRequest } from "./operation-planner"
 import { ChainTipGate } from "./chain-tip-gate"
 import { DEFAULT_FEE_MULTIPLIER } from "./fee/fee-strategy"
 import { MAX_WAIT_MS, SendSequencer } from "./send-sequencer"
@@ -42,8 +42,21 @@ vi.mock("@aztec-labs/protocol-contracts/fee-juice", async (importOriginal) => {
 	const { Fr } = await import("@aztec-labs/foundation/curves/bn254")
 	return { ...(await importOriginal<object>()), computeFeePayerBalanceStorageSlot: vi.fn(async () => new Fr(0x51n)) }
 })
+// The real planner's selector is poseidon2 too; these tests need only the op it builds around it.
+vi.mock("@/wallet/services/token/functions", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	createTokenFn: (_descriptor: unknown, name: string) => ({
+		name,
+		type: "private",
+		isStatic: false,
+		buildArgs: (...args: unknown[]) => args,
+		getSelector: async () => ({ toString: () => `selector:${name}` }),
+		encodeArgs: (args: unknown[]) => args.map((arg) => ({ toString: () => String(arg) })),
+	}),
+}))
 
-const TOKEN = { contract: "0xtoken", name: "Test", symbol: "TST", decimals: 18 }
+const TOKEN_CONTRACT = `0x${"1a".repeat(32)}`
+const TOKEN = { contract: TOKEN_CONTRACT, name: "Test", symbol: "TST", decimals: 18 }
 const FEE_SETTINGS = { paymentMethod: { kind: "fj" } } as never
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
 const EXPIRY = { timestamp: 1_750_003_600, nullifier: `0x${"02".padStart(64, "0")}` }
@@ -66,6 +79,7 @@ function makeReq(overrides: Partial<TransferRequest> = {}): TransferRequest {
 		networkId: "net-1",
 		accountAddress: "0xme",
 		tokenId: 1,
+		tokenContract: TOKEN_CONTRACT,
 		transferType: TransferType.Private,
 		recipientAddress: "0xyou",
 		amount: 5n,
@@ -128,7 +142,6 @@ function makeHarness(overrides: Partial<TransferExecutorDeps> = {}) {
 		getFpcImpl: vi.fn(
 			async () => ({ infoData: { type: FpcType.DefaultSponsoredFpc, isProtocol: true, chainId: 7, address: "0xsponsor" } }) as never,
 		),
-		getTokenContract: vi.fn(async () => "0xtoken"),
 		// One mined tx: the account is initialized.
 		getTransactions: vi.fn(async () => [{ chainId: 7, status: 2, executionResult: 0, calls: [] }] as never),
 		lane: {
@@ -739,7 +752,7 @@ describe("TransferExecutor: the activity record, field by field", () => {
 	}
 	const CALLS = [
 		{
-			contract: "0xtoken",
+			contract: TOKEN_CONTRACT,
 			method: "transfer_private",
 			args: ["0xme", "0xyou", "5"],
 			transfers: [
@@ -1005,7 +1018,7 @@ describe("TransferExecutor: a predecessor's block the PXE's node does not have y
 		account: "0xme",
 		networkId: "net-1",
 		block: { number: block, hash: `0xb${block}` },
-		calls: [{ contract: "0xtoken", method: "swap", args: [] }],
+		calls: [{ contract: TOKEN_CONTRACT, method: "swap", args: [] }],
 	})
 	const settle = () => new Promise((r) => setTimeout(r, 0))
 
@@ -1091,13 +1104,13 @@ describe("TransferExecutor: a predecessor's block the PXE's node does not have y
 describe("TransferExecutor: sends that share chain state take turns", () => {
 	const SCOPE = { chainId: 7, account: "0xme" }
 	/** Private TST from 0xme to 0xyou, first use: what `makeReq()` holds. */
-	const REQ_KEYS = new Set(["seq:0xtoken:0xyou", "seq:0xtoken:0xme", "handshake:0xyou", "handshake:0xme"])
+	const REQ_KEYS = new Set([`seq:${TOKEN_CONTRACT}:0xyou`, `seq:${TOKEN_CONTRACT}:0xme`, "handshake:0xyou", "handshake:0xme"])
 	const sequencerOnPendingMap = () =>
 		new SendSequencer({ pendingTxs: () => [], sleep: () => new Promise((r) => setTimeout(r, 0)), now: () => 0 })
 
 	test("a send that waits starts its row queued, waits without the slot, heartbeated, then claims pending", async () => {
 		const sequencer = sequencerOnPendingMap()
-		const earlier = sequencer.enter(SCOPE, new Set(["seq:0xtoken:0xme"]))
+		const earlier = sequencer.enter(SCOPE, new Set([`seq:${TOKEN_CONTRACT}:0xme`]))
 		const { executor, deps } = makeHarness({ sequencer })
 		const run = executor.execute(makeReq(), "est-1", FENCE)
 		await vi.waitFor(() => expect(deps.lane.beginQueuedWait).toHaveBeenCalledWith("j1"))
@@ -1143,7 +1156,7 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 		;(deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockImplementation(async () => {
 			// The first grant comes after a dApp tx of the token reached the node.
 			if (releases.length === 0)
-				pending.push({ hash: "0xdapp", chainId: 7, account: "0xme", calls: [{ contract: "0xtoken" }], createdAt: 0 })
+				pending.push({ hash: "0xdapp", chainId: 7, account: "0xme", calls: [{ contract: TOKEN_CONTRACT }], createdAt: 0 })
 			const release = vi.fn()
 			releases.push(release)
 			return release
@@ -1211,7 +1224,7 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 
 	test("a cancel that wins the claim ends the send as cancelled and frees the slot", async () => {
 		const sequencer = sequencerOnPendingMap()
-		const earlier = sequencer.enter(SCOPE, new Set(["seq:0xtoken:0xme"]))
+		const earlier = sequencer.enter(SCOPE, new Set([`seq:${TOKEN_CONTRACT}:0xme`]))
 		let registered: AbortController | undefined
 		const release = vi.fn()
 		const { executor, deps } = makeHarness({ sequencer })
@@ -1305,7 +1318,7 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 
 	test("a cancel while waiting releases the turn and never builds", async () => {
 		const sequencer = sequencerOnPendingMap()
-		const blocker = sequencer.enter(SCOPE, new Set(["seq:0xtoken:0xme"]))
+		const blocker = sequencer.enter(SCOPE, new Set([`seq:${TOKEN_CONTRACT}:0xme`]))
 		let registered: AbortController | undefined
 		const { executor, deps } = makeHarness({
 			sequencer,
@@ -1333,7 +1346,7 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 		const { executor, deps } = makeHarness({ sequencer })
 		const sequence = await executor.sequence(makeReq())
 		expect([...sequence.keys].sort()).toEqual([...REQ_KEYS].sort())
-		sequencer.enter(SCOPE, new Set(["seq:0xtoken:0xme"]))
+		sequencer.enter(SCOPE, new Set([`seq:${TOKEN_CONTRACT}:0xme`]))
 		expect(await executor.estimateFee(makeReq(), undefined, sequence)).toEqual({ queued: true, tokenSpent: true })
 		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
 	})
@@ -1366,7 +1379,7 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 		const sequence = await h.executor.sequence(makeReq())
 		const estimate = h.executor.estimateFee(makeReq(), undefined, sequence)
 		await vi.waitFor(() => expect(h.deps.buildAndEstimate).toHaveBeenCalled())
-		const later = sequencer.enter(SCOPE, new Set(["seq:0xtoken:0xme"]))
+		const later = sequencer.enter(SCOPE, new Set([`seq:${TOKEN_CONTRACT}:0xme`]))
 		let turned = false
 		const turn = later.waitTurn(new AbortController().signal).then((t) => {
 			turned = true
@@ -1516,29 +1529,33 @@ describe("TransferExecutor: the fee contract a send is ordered against", () => {
 	})
 })
 
+/** A harness over `overrides` whose send queues behind a predecessor holding every key `req` takes,
+ *  released by the test. */
+async function heldBehind(req: TransferRequest, overrides: Partial<TransferExecutorDeps> = {}) {
+	const sequencer = new SendSequencer({ pendingTxs: () => [], sleep: () => new Promise((r) => setTimeout(r, 0)), now: () => 0 })
+	const h = makeHarness({ sequencer, ...overrides })
+	const releases: ReturnType<typeof vi.fn>[] = []
+	;(h.deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+		const release = vi.fn()
+		releases.push(release)
+		return release
+	})
+	const { scope, keys } = await h.executor.sequence(req)
+	const earlier = sequencer.enter(scope, keys)
+	const waiting = async () => {
+		await vi.waitFor(() => expect(h.deps.lane.beginQueuedWait).toHaveBeenCalledWith("j1"))
+		expect(h.deps.buildAndEstimate).not.toHaveBeenCalled()
+	}
+	return { ...h, sequencer, releases, earlier, waiting }
+}
+
 describe("TransferExecutor: a queued send Nulo's sponsor pays, with no cap", () => {
 	const SCOPE = { chainId: 7, account: "0xme" }
 	const SPONSORED = makeReq({ feeSettings: { paymentMethod: { kind: "fpc", fpcId: "s" } } as never })
 	const NULO_SPONSOR = { infoData: { id: "s", type: FpcType.DefaultSponsoredFpc, chainId: 7, address: "0xsponsor", isProtocol: true } }
 	const REPOINTED = { infoData: { ...NULO_SPONSOR.infoData, address: "0xB", isProtocol: false } }
 
-	/** A predecessor holding every key `req` takes, released by the test. */
-	async function behindHeldSend(req: TransferRequest, getFpcImpl = vi.fn(async () => NULO_SPONSOR as never)) {
-		const sequencer = new SendSequencer({ pendingTxs: () => [], sleep: () => new Promise((r) => setTimeout(r, 0)), now: () => 0 })
-		const h = makeHarness({ sequencer, getFpcImpl })
-		const releases: ReturnType<typeof vi.fn>[] = []
-		;(h.deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockImplementation(async () => {
-			const release = vi.fn()
-			releases.push(release)
-			return release
-		})
-		const earlier = sequencer.enter(SCOPE, (await h.executor.sequence(req)).keys)
-		const waiting = async () => {
-			await vi.waitFor(() => expect(h.deps.lane.beginQueuedWait).toHaveBeenCalledWith("j1"))
-			expect(h.deps.buildAndEstimate).not.toHaveBeenCalled()
-		}
-		return { ...h, sequencer, releases, earlier, waiting }
-	}
+	const behindHeldSend = (req: TransferRequest, getFpcImpl = vi.fn(async () => NULO_SPONSOR as never)) => heldBehind(req, { getFpcImpl })
 	const reasks = (deps: TransferExecutorDeps) =>
 		(deps.transitionJournal as ReturnType<typeof vi.fn>).mock.calls.filter((c) => (c[1] as { reask?: unknown }).reask)
 
@@ -1586,10 +1603,68 @@ describe("TransferExecutor: a queued send Nulo's sponsor pays, with no cap", () 
 	})
 })
 
+describe("TransferExecutor: a send bound to the token contract it was approved with", () => {
+	const OTHER_CONTRACT = `0x${"1b".repeat(32)}`
+
+	/** The real planner over a token row whose contract the test moves, as a removal and an add that
+	 *  reuses the id would. */
+	function plannerOver(row: { contract: string }) {
+		const tokens = { getTokenRaw: vi.fn(async () => ({ ...TOKEN, transferPrivateFn: { name: "transfer_private", impl: 0 }, ...row })) }
+		const profiles = { getActiveProfile: async () => ({ id: "p1" }) }
+		return { planner: new OperationPlanner(profiles as never, tokens as never), tokens }
+	}
+
+	test("a row that names another contract when its turn comes: refused before any build, slot and ticket given back", async () => {
+		const row = { contract: TOKEN_CONTRACT }
+		const { planner } = plannerOver(row)
+		const { executor, deps, proveAndSend, sequencer, releases, earlier, waiting } = await heldBehind(makeReq(), { planner })
+		const run = executor.execute(makeReq(), undefined, FENCE)
+		await waiting()
+		row.contract = OTHER_CONTRACT
+		earlier.release()
+		const rejection = await run.catch((error: unknown) => error)
+		expect(rejection).toBeInstanceOf(JournaledRejection)
+		expect((rejection as JournaledRejection).error).toEqual(new Error(TOKEN_MOVED_MESSAGE))
+		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
+		expect(proveAndSend).not.toHaveBeenCalled()
+		expect(releases.length).toBeGreaterThan(0)
+		for (const release of releases) expect(release).toHaveBeenCalled()
+		const { scope, keys } = await executor.sequence(makeReq())
+		expect(sequencer.isBlocked(scope, keys)).toBe(false)
+	})
+
+	test("control: a row that still names it builds the transfer of that contract and proves once", async () => {
+		const { planner } = plannerOver({ contract: TOKEN_CONTRACT.toUpperCase().replace("0X", "0x") })
+		const { executor, deps, proveAndSend, earlier, waiting } = await heldBehind(makeReq(), { planner })
+		const run = executor.execute(makeReq(), undefined, FENCE)
+		await waiting()
+		earlier.release()
+		await expect(run).resolves.toBe("0xhash")
+		expect(deps.buildAndEstimate).toHaveBeenCalledOnce()
+		expect(proveAndSend).toHaveBeenCalledOnce()
+	})
+
+	test("a reuse hit after the row moved sends the approved build, in line under the approved contract", async () => {
+		const { planner, tokens } = plannerOver({ contract: OTHER_CONTRACT })
+		const snapshot = { txRequest: makeTxRequest(), nonce: { toString: () => "7" }, token: TOKEN, fnName: "transfer_private", args: [] }
+		const sequencer = new SendSequencer({ pendingTxs: () => [], sleep: () => new Promise((r) => setTimeout(r, 0)), now: () => 0 })
+		const enter = vi.spyOn(sequencer, "enter")
+		const { executor, deps } = makeHarness({
+			planner,
+			sequencer,
+			estimateReuse: { tryConsume: vi.fn(async () => snapshot), stash: vi.fn() } as never,
+		})
+		await expect(executor.execute(makeReq(), "est-1", FENCE)).resolves.toBe("0xhash")
+		expect(tokens.getTokenRaw).not.toHaveBeenCalled()
+		expect([...(enter.mock.calls[0]?.[1] ?? [])]).toContain(`seq:${TOKEN_CONTRACT}:0xyou`)
+		expect((recordedTx(deps).calls as Array<{ contract: string }>)[0]?.contract).toBe(TOKEN_CONTRACT)
+	})
+})
+
 describe("TransferExecutor: a queued send against a fee cap", () => {
 	const SCOPE = { chainId: 7, account: "0xme" }
 	/** Private TST from 0xme to 0xyou, first use: what `makeReq()` holds. */
-	const REQ_KEYS = new Set(["seq:0xtoken:0xyou", "seq:0xtoken:0xme", "handshake:0xyou", "handshake:0xme"])
+	const REQ_KEYS = new Set([`seq:${TOKEN_CONTRACT}:0xyou`, `seq:${TOKEN_CONTRACT}:0xme`, "handshake:0xyou", "handshake:0xme"])
 	const CHAIN = { l1ChainId: 1, rollupVersion: 6 }
 	const MIN_FEES = new GasFees(1n, 2n)
 
