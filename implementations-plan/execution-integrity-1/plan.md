@@ -164,7 +164,7 @@ One arc, one PR, base `dev`, branch `worktree-execution-integrity-1`, no stack. 
 
 Verdict after the fixes (same session, resumed): `approve`, with two minor notes, both accepted: a rejected post-proof re-read joins the retention test, and `awaitGrantBlocks` checks every `txHash` before it starts a poll and returns only after every poll ends.
 
-## Audit verdicts
+## Review verdicts
 
 **Implementation review, round 1** (net diff from 13d5f8d0 at 6b5a5de9). Codex gpt-6.1-sol high, session `01a14ad1-1488-7152-b70e-500fbd649f2a`: `approve`, one minor and three nits. Opus general-purpose review: `conditional approve (with conditions: a grant that reads Dropped must not stop the rest of its revoke batch, or a recorded known limit)`.
 
