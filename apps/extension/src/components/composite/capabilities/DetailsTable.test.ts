@@ -1,4 +1,4 @@
-import { MaterialIcon, RowAction } from "@nulo/design"
+import { Icon, RowAction } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import DetailsTable from "./DetailsTable.vue"
@@ -16,7 +16,7 @@ const anyContract = { name: "Any contract", simulate: ["Any function"], add: fal
 const mountTable = (props: Record<string, unknown> = {}) =>
 	mount(DetailsTable, {
 		props: { known: [feeJuice], unknown: [token, drip], anyContract: null, label: "3 contracts", ...props } as never,
-		global: { components: { MaterialIcon, RowAction } },
+		global: { components: { RowAction, Icon } },
 	})
 
 /** The compiled `<style module>` class names; a script-setup instance does not expose `$style`. */
@@ -74,7 +74,8 @@ describe("composite/capabilities/DetailsTable", () => {
 		expect(marks(0)).toEqual(["check", "dash", "check"])
 		expect(marks(1)).toEqual(["check", "check", "check"])
 		expect(marks(2)).toEqual(["dash", "check", "check"])
-		expect(rowOf(w, 0).querySelector(`.${STYLE.yes}`)?.textContent).toBe("check")
+		const yes = w.findAllComponents(Icon).find((glyph) => glyph.classes().includes(STYLE.yes))
+		expect(yes?.props("name")).toBe("check")
 	})
 
 	test("a named row's target is named for what it lists, since the head is hidden", async () => {

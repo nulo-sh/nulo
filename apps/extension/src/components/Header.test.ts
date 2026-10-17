@@ -84,7 +84,6 @@ import Header from "./Header.vue"
 const STUBS = {
 	Flex: { template: "<div><slot /></div>" },
 	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
-	MaterialIcon: { template: '<span data-testid="stub-material" :data-name="name" />', props: ["name", "size", "color"] },
 	AccountAvatar: { template: '<span data-testid="stub-avatar" />', props: ["name", "address", "size"] },
 	Skeleton: { template: '<span data-testid="stub-skeleton" :data-width="width" :data-height="height" />', props: ["width", "height"] },
 }
@@ -149,7 +148,7 @@ describe("Header — avatar/name/address split", () => {
 describe("Header — lock", () => {
 	test("is a chip: the padlock and the word Lock, named for what it does", () => {
 		const lock = mountHeader().get('[data-testid="header-lock"]')
-		expect(lock.get('[data-testid="stub-material"]').attributes("data-name")).toBe("lock")
+		expect(lock.get('[data-testid="stub-icon"]').attributes("data-name")).toBe("lock")
 		expect(lock.text()).toBe("Lock")
 		expect(lock.attributes("aria-label")).toBe("Lock wallet")
 		expect(lock.attributes("type")).toBe("button")

@@ -1,4 +1,4 @@
-import { Flex, Input, MaterialIcon, Text } from "@nulo/design"
+import { Flex, Icon, Input, Text } from "@nulo/design"
 import { mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, describe, expect, test } from "vitest"
 import { enterOn, expectMaskToggle, expectNativeAttrs, nativeInput, typeNow } from "../../../../../../tests/helpers/credential-pins"
@@ -14,7 +14,7 @@ function mountCredentials(props: Record<string, unknown> = {}) {
 	const w = mount(NewProfileCredentials, {
 		props: { maxPasswordLength: 128, strengthHint: "At least 8 characters", ...props },
 		attachTo: document.body,
-		global: { components: { Flex, Input, MaterialIcon, Text } },
+		global: { components: { Flex, Input, Text, Icon } },
 	})
 	mounted.push(w)
 	return w

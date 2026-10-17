@@ -91,7 +91,6 @@ const STUBS = {
 	Flex: { template: "<div><slot /></div>" },
 	Text: { template: "<span><slot /></span>" },
 	Icon: { template: "<i></i>" },
-	MaterialIcon: { template: "<i></i>" },
 	Tooltip: { template: '<div><slot /><slot name="content" /></div>' },
 	FeeMethodSelector: {
 		props: ["modelValue", "methods", "payerNoticeShape"],

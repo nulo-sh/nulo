@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest"
 import BarrierOverlay from "./BarrierOverlay.vue"
 
 const stubs = {
-	MaterialIcon: {
+	Icon: {
 		props: ["name", "size", "color"],
 		template: `<i data-testid="glyph" :data-name="name" :data-size="size" :data-color="color" />`,
 	},
@@ -39,12 +39,12 @@ describe("BarrierOverlay", () => {
 		expect(w.attributes("data-testid")).toBeUndefined()
 	})
 
-	test("the default glyph is the red warning icon", () => {
+	test("the default glyph is the warning icon, in the card's colour", () => {
 		const w = mountOverlay({}, { title: "T" })
 		const glyph = w.find("[data-testid='glyph']")
 		expect(glyph.attributes("data-name")).toBe("warning")
 		expect(glyph.attributes("data-size")).toBe("24")
-		expect(glyph.attributes("data-color")).toBe("--red")
+		expect(glyph.attributes("data-color")).toBeUndefined()
 	})
 
 	test("the icon slot replaces the default glyph", () => {

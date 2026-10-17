@@ -1,5 +1,5 @@
 import { createTestingPinia } from "@pinia/testing"
-import { Icon, MaterialIcon, Toggle, Tooltip } from "@nulo/design"
+import { Icon, Toggle, Tooltip } from "@nulo/design"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import PermissionRow from "@/components/composite/capabilities/PermissionRow.vue"
@@ -75,7 +75,7 @@ async function mountPage(initial: ReturnType<typeof session>) {
 	const w = mount(ConnectedApp, {
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn })],
-			components: { Icon, MaterialIcon, Toggle, Tooltip },
+			components: { Icon, Toggle, Tooltip },
 			mocks: { confirmationPolicies: [] },
 			stubs: {
 				SettingsPageShell: { template: "<div><slot /></div>" },

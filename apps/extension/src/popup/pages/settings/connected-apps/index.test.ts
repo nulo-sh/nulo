@@ -61,7 +61,6 @@ async function mountPage(sessions: Session[]) {
 				Tooltip: { template: "<div><slot /></div>" },
 				RowAction: { template: "<button><slot /></button>" },
 				Icon: true,
-				MaterialIcon: true,
 			},
 		},
 	})

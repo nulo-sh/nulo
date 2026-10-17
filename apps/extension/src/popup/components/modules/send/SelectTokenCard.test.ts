@@ -24,7 +24,6 @@ function mountCard(props: Record<string, unknown>) {
 			stubs: {
 				Flex: { template: '<div v-bind="$attrs"><slot /></div>', inheritAttrs: false },
 				Icon: { template: "<i />" },
-				MaterialIcon: { template: "<i />" },
 			},
 		},
 	})

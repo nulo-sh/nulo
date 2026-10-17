@@ -1,4 +1,4 @@
-import { Flex, Icon, Input, MaterialIcon, Text } from "@nulo/design"
+import { Flex, Icon, Input, Text } from "@nulo/design"
 import { mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { expectMaskToggle, expectNativeAttrs, nativeInput, pasteInto } from "../../../../tests/helpers/credential-pins"
@@ -9,7 +9,6 @@ const stubs = {
 	Flex: { template: "<div><slot /></div>" },
 	Text: { template: "<span><slot /></span>" },
 	Icon: { template: "<i></i>" },
-	MaterialIcon: { template: "<i></i>" },
 	Transition: { template: "<div><slot /></div>" },
 	ItemsContainer: { template: "<div><slot /></div>" },
 	SettingItem: {
@@ -227,7 +226,7 @@ describe("ImportFullBackupForm — credential controls, real Input", () => {
 			props: baseProps({ selectedBackup }),
 			attachTo: document.body,
 			global: {
-				components: { Flex, Icon, Input, MaterialIcon, Text },
+				components: { Flex, Icon, Input, Text },
 				stubs: { ItemsContainer: stubs.ItemsContainer, SettingItem: stubs.SettingItem, Transition: stubs.Transition },
 			},
 		})

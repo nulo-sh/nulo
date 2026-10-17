@@ -283,7 +283,7 @@ describe("ImportContactsPopup — keyboard and assistive semantics", () => {
 		expect(named("Lena Fischer")).toBe(`Lena Fischer ${trim(OFF_CURVE)} Invalid address`)
 		expect(named("Hana")).toBe(`Hana ${trim(ADDR.ivo)} Matches two saved contacts`)
 
-		const arrows = w.findAll('i[name="arrow-right"]')
+		const arrows = w.findAll('i[name="forward"]')
 		expect(arrows.length).toBeGreaterThan(0)
 		expect(arrows.every((a) => a.attributes("aria-hidden") === "true")).toBe(true)
 

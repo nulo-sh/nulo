@@ -1,6 +1,6 @@
 import { createTestingPinia } from "@pinia/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { Flex, Icon, Input, MaterialIcon, Spinner, Text } from "@nulo/design"
+import { Flex, Icon, Input, Spinner, Text } from "@nulo/design"
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { ConfigProp } from "@/wallet/config"
@@ -118,7 +118,7 @@ async function mountHub(profile = PASSWORD) {
 		attachTo: document.body,
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn, initialState: { app: { isLogined: true, profile } } }), router],
-			components: { AccountAvatar, Flex, Icon, Input, ItemsContainer, MaterialIcon, SettingItem, Spinner, Text },
+			components: { AccountAvatar, Flex, Icon, Input, ItemsContainer, SettingItem, Spinner, Text },
 		},
 	})
 	await flushPromises()

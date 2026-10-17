@@ -116,7 +116,6 @@ const stubs = {
 	Flex: { template: "<div><slot /></div>" },
 	Text: { template: "<span><slot /></span>" },
 	Icon: true,
-	MaterialIcon: true,
 	Tooltip: { template: "<div><slot /></div>" },
 	Dropdown: { template: '<div><slot name="trigger" /><slot name="popup" /></div>' },
 	DropdownRoot: { template: '<div><slot name="trigger" /><slot name="popup" /></div>' },

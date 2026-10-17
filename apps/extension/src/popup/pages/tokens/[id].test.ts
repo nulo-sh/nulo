@@ -102,7 +102,6 @@ const STUBS = {
 	BalanceView: { template: '<div data-testid="stub-balance-view" />' },
 	Banner: { template: "<div><slot /></div>" },
 	RecentActivityView: { template: "<div />" },
-	MaterialIcon: { template: "<i />" },
 	Icon: { template: "<i />" },
 	Flex: { template: "<div><slot /></div>" },
 	Text: { template: "<span><slot /></span>" },

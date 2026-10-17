@@ -43,7 +43,7 @@ vi.mock("@/utils/own-window", async (importOriginal) => ({
 
 import { openSearchPanel } from "@codemirror/search"
 import { EditorView } from "@codemirror/view"
-import { Flex, Input, MaterialIcon, Text } from "@nulo/design"
+import { Flex, Icon, Input, Text } from "@nulo/design"
 import { pressOn } from "../../../tests/helpers/press-key"
 import { enterOn, expectNativeAttrs, IGNORED_ENTERS, nativeInput, pasteInto, typeNow } from "../../../tests/helpers/credential-pins"
 import JsonViewer from "@/components/JsonViewer/JsonViewer.vue"
@@ -119,7 +119,7 @@ async function mountImport() {
 		attachTo: document.body,
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn })],
-			components: { Flex, Input, MaterialIcon, SubPageHeader, Text },
+			components: { Flex, Input, SubPageHeader, Text, Icon },
 			stubs: {
 				Button: { template: "<button><slot /></button>" },
 				Icon: true,
