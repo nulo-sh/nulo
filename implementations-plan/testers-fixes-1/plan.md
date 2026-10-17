@@ -1,7 +1,7 @@
 ---
 plan: testers-fixes-1
 tier: light
-status: audited (Codex approve at round 3; Opus conditional approve, folded in); awaits the orchestrator's approval
+status: delivered in one PR against dev, awaiting the orchestrator's merge
 issues: "#580 #581 #582 #584 #586 (one arc closes all five)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,23 @@ base: origin/dev at d461b059
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-17.
+- **Status:** delivered in one PR against `dev` from `worktree-testers-fixes-1`, awaiting the orchestrator's merge; the merge that lands it closes this plan.
+- **Shipped:**
+  - #580: text is selectable; controls take none, by semantics in `base.css` and by class elsewhere (D1, I3, I4); a click that ends a selection inside a copy target skips the copy (I2). The sweep's two links and one shifting box fixed.
+  - #581: the done page's tip names no browser (OA-3 A).
+  - #582: back and forward restore each history entry's scroll in the popup; a push that reuses the page opens it at its top; onboarding opens each step at its top (D2, D3, OA-4 A).
+  - #584: success toasts close after 2 s (D5, OA-1 A); every success wait read, two held, one armed early (I1).
+  - #586: the Home hero is display only; the token page's tap stays (D4, OA-2 A).
+  - Gates: fast layers, `audit:vue`, the full smoke and network suites on Chrome and Firefox at retry 0, all green; the arc's e2e files again after merging `dev`.
+  - Docs: `tests/e2e/FIREFOX.md` (Firefox keeps a drag's end node's text) and the `e2e-testing` skill (a drag can select nothing). No `lessons.md` promotion: both are e2e technique, which CLAUDE.md routes to the skill, and the file sits at its budget.
+- **Known limits:** #640 (a selection across an ellipsis copies the text past the cut).
+- **Open items:** #634, #635, #636, #637 (OA-1 to OA-4, owner decisions on what shipped); #638 (the other click-to-copy values copy at a drag's end); #639 (the header's address, the header lane's call).
+- **Dropped, rejected, superseded:** Badge's `none` (D1's list; it has no handler, I4); the per-phase e2e file runs, folded into phase 6's full suites (I7).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # testers-fixes-1: the testers' first round, the quick calls
 
@@ -101,7 +118,7 @@ Every gate includes `bun run lint`, `bun run typecheck:all`, `bun run test` and 
 - Sweep every popup page, window and onboarding step in both themes: drag, double-click and drag past the edge on each family; classify recon's sites, role-bearing elements and navigating rows by D1's rule; copy one long hostile token name where it shows as selectable text (`TokenMetadataPopup.vue`).
 - **Gate.** The fast layers; `bun run audit:vue`; smoke `navigation.test.ts`, Chrome and Firefox. Pass: exit 0; the sweep table has no unclassified site.
 
-### Phase 6: whole-arc gate
+### Phase 6: whole-arc gate ✓
 
 - Full smoke, then the full network suite, each on Chrome then Firefox (`bun run test:e2e`, `bun run e2e:agent`, each again with `NULO_E2E_BROWSER=firefox`). Record each wall-clock against the base SHA's for the PR body. Capture the done page's tip and a selection on Settings, dark and light, into `implementations-plan/testers-fixes-1/screenshots/`.
 - **Gate.** Pass: all four suites exit 0 at retry 0, or one rerun of a known flake named in the PR body.
