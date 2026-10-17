@@ -48,7 +48,14 @@ export async function clickPgButton(page: Page, name: string): Promise<void> {
 	await clickByTestId(page, `pg-btn-${name}`)
 }
 
-export type PgBundle = "accounts" | "transaction" | "transaction-contracts" | "transaction-listed" | "data" | "data-scopedEvents"
+export type PgBundle =
+	| "accounts"
+	| "transaction"
+	| "transaction-contracts"
+	| "transaction-listed"
+	| "data"
+	| "data-scopedEvents"
+	| "contractClasses-listed"
 
 /** Pick the capability bundle the next `requestCapabilities` click sends. */
 export async function selectPgBundle(page: Page, bundle: PgBundle): Promise<void> {

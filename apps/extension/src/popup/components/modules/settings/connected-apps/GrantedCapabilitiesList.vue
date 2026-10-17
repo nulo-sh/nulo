@@ -29,6 +29,8 @@ const isExpanded = (i) => expanded.value.has(i)
 			:class="$style.grant_card"
 		>
 			<Flex
+				data-testid="granted-capability-toggle"
+				:data-capability-type="grant.capability.type"
 				@click="toggle(gi)"
 				align="center"
 				justify="between"

@@ -310,8 +310,12 @@ export async function readCapabilitySwitch(page: Page, rowKey: string): Promise<
 
 const APP_SWITCH = '[data-testid="connected-app-authorizations-toggle"]'
 
-/** Open Settings → Connected apps → the app served from `host`. A miss names the hosts listed. */
-async function openConnectedApp(page: Page, host: string): Promise<void> {
+/**
+ * Open Settings → Connected apps → the app served from `host`, ready once `ready` shows: the
+ * authorizations switch by default, which a grant with no call scope does not render. A miss names
+ * the hosts listed.
+ */
+export async function openConnectedApp(page: Page, host: string, ready = APP_SWITCH): Promise<void> {
 	await page.evaluate(() => {
 		window.location.hash = "#/popup/settings/connected-apps"
 	})
@@ -320,7 +324,7 @@ async function openConnectedApp(page: Page, host: string): Promise<void> {
 		const hosts = await page.$$eval('[data-testid="connected-app-row"]', (rows) => rows.map((r) => r.getAttribute("data-app-host")))
 		throw new Error(`no connected-app row for ${host}; rows: ${JSON.stringify(hosts)}`, { cause: err })
 	})
-	await page.waitForSelector(APP_SWITCH, { visible: true, timeout: 15_000 })
+	await page.waitForSelector(ready, { visible: true, timeout: 15_000 })
 }
 
 const switchIs = (page: Page, on: boolean) =>
