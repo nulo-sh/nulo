@@ -98,12 +98,12 @@ test("every role's probe computes to its record, and a probe pushed off it is ca
 	const page = await openHome(ctx)
 	const { sweep, pushed } = await withProbes(page, async () => {
 		const sweep = await sweepTypeRoles(page)
-		// 0.2em at 10px is 2px against the role's 1px: past the 0.1px tolerance, and past no override.
+		// 0.2em at 11px is 2.2px against the role's 1.1px: past the 0.1px tolerance, and past no override.
 		await page.evaluate(
 			(probe: string) => {
 				document.querySelector<HTMLElement>(probe)?.style.setProperty("letter-spacing", "0.2em")
 			},
-			sel(`${PROBE}label`),
+			sel(`${PROBE}label-section`),
 		)
 		return { sweep, pushed: judgeTypography(await readPageTypography(page, { kind: "roles" })) }
 	})
@@ -112,7 +112,14 @@ test("every role's probe computes to its record, and a probe pushed off it is ca
 	expect(probes.map((reading) => reading.roles.join(" ")).sort()).toEqual([...typeRoleNames].sort())
 	expectSweepClean(sweep)
 	expect(pushed).toEqual([
-		{ testid: `${PROBE}label`, text: PROBE_TEXT, role: "label", property: "letter-spacing", expected: "0.1em", actual: "2px" },
+		{
+			testid: `${PROBE}label-section`,
+			text: PROBE_TEXT,
+			role: "label-section",
+			property: "letter-spacing",
+			expected: "0.1em",
+			actual: "2.2px",
+		},
 	])
 	const tracked = probes.filter((reading) => typeRoles[reading.roles[0] as keyof typeof typeRoles].tracking !== 0)
 	console.log(`[type-roles] probe tracking: ${tracked.map(describeTracking).join(", ")}`)
@@ -124,11 +131,11 @@ const FIXTURE_HTML = `
 		<input class="type--input" data-testid="tr-mini-input" value="12" />
 		<input class="type--input-data" data-testid="tr-mini-data" value="0x1a" />
 	</div>
-	<div data-testid="tr-field"><span class="type--label">To</span><input class="type--input-data" value="0x1a" /></div>
+	<div data-testid="tr-field"><span class="type--label-section">To</span><input class="type--input-data" value="0x1a" /></div>
 	<span class="type--name" data-testid="tr-name" data-address-shows="name">Alice</span>
-	<span class="type--data" data-testid="tr-twin">0x1a</span>
-	<span class="type--meta" data-testid="tr-twin" hidden>0x1a</span>
-	<span class="type--data" data-testid="tr-gone" hidden>0x1a</span>`
+	<span class="type--meta" data-testid="tr-twin">0x1a</span>
+	<span class="type--data-lead" data-testid="tr-twin" hidden>0x1a</span>
+	<span class="type--meta" data-testid="tr-gone" hidden>0x1a</span>`
 
 const fixtureSite = (selector: string, role: SiteEntry["role"]): SiteEntry => ({
 	file: "fixture.vue",
@@ -162,13 +169,13 @@ test("a site reads its value or its native field, a name shown is judged as name
 		expect(failures.map(({ testid, property }) => `${testid} ${property}`)).toEqual(["tr-mini-data font-size"])
 
 		const sites = ["tr-field", "tr-name", "tr-twin", "tr-gone"].map((testid, i) =>
-			fixtureSite(testid, (["input-data", "data-lead", "data", "data"] as const)[i]),
+			fixtureSite(testid, (["input-data", "data-lead", "meta", "meta"] as const)[i]),
 		)
 		const { sites: observed } = await observeIdentifierSites(page, "fixture", "fixture", { sites })
 		expect(observed.map(({ readings }) => readings.map(({ roles }) => roles.join(" ")))).toEqual([
 			["input-data"],
 			["name"],
-			["data"],
+			["meta"],
 			[],
 		])
 		expect(observed.flatMap(({ failures }) => failures.map(({ property, actual }) => `${property}: ${actual}`))).toEqual([
@@ -370,7 +377,7 @@ async function expectPageClean(page: Page, label: string, states: readonly SiteS
 	if (states.length === 0) expect(await readHexOutsideMono(page), `${label}: hex outside a mono role`).toEqual([])
 }
 
-/** Holdings' offer to add a pasted address no row holds: the address in `data`, inside the button's box. */
+/** Holdings' offer to add a pasted address no row holds: the address in `meta`, inside the button's box. */
 async function expectAddTokenOffer(page: Page): Promise<void> {
 	await replaceInputValue(page, sel("holdings-search"), RECIPIENT)
 	await page.waitForSelector(sel("holdings-add-token-address"), VISIBLE)

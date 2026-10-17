@@ -188,7 +188,7 @@ const handleCopyAddress = (target) => {
 					:title="account.name"
 					titleVariant="name"
 					:description="account.address"
-					descriptionVariant="data"
+					descriptionVariant="meta"
 					data-testid="manage-accounts-hidden-row"
 					:data-account-name="account.name"
 				>

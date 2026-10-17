@@ -14,7 +14,7 @@
 }
 
 .detail_key {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
@@ -25,7 +25,7 @@
 }
 
 .detail_value_mono {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 }
 
@@ -68,7 +68,7 @@
 }
 
 .hero_link {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	user-select: none;
 	display: inline-flex;
 	align-items: center;
@@ -113,12 +113,12 @@
 }
 
 .caption {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
 .type_chip {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	align-self: center;
 
 	padding: 5px 12px;

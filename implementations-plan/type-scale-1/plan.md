@@ -140,7 +140,7 @@ Step 1 done (db31c210). Step 2's gate was red on the base UI: one genuine overfl
 
 **Gate**: fast layers exit 0; the new self-tests pass and the guard reports nothing on today's tree; the four e2e runs pass. **Warning: a base element that fails `overflowingText` stops the phase.** Do not add a list or narrow the predicate. Record the element, its screenshot and its measured widths in `lessons/phase-1.md`, and report it as a blocker. Layers: static, unit, smoke e2e, network e2e, both browsers.
 
-### Phase 2 — the contract and the signed call sites
+### Phase 2 — the contract and the signed call sites ✓
 
 1. Edit the contract; run `bun run --cwd packages/design gen:tokens`.
 2. Update `type-roles.contract.test.ts` (`BOARD_A` roles, `ANSWERED`).
@@ -150,7 +150,7 @@ Step 1 done (db31c210). Step 2's gate was red on the base UI: one genuine overfl
 
 **Gate**: fast layers exit 0; `bun run test:all` exits 0; the grep shows no retired name outside comments that state history. Layers: static, unit.
 
-### Phase 2b — only on OA-2 answer A
+### Phase 2b — only on OA-2 answer A ✓
 
 As Architecture § OA-2 answer A says; then the pinned tests that name `data` (`Text.test.ts:24`, `Settings.test.ts:248-278`, `OperationCard.long-strings.test.ts:127`, the ban test's `data` snippets with the mono-floor case on `meta`) and the windows spec's header comment.
 

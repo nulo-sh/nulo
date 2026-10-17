@@ -182,7 +182,7 @@ watch(network, (n) => {
 					size="small"
 					title="Chain ID"
 					:description="String(network.chainId)"
-					descriptionVariant="data"
+					descriptionVariant="meta"
 					raw
 					data-testid="network-detail-chain-id"
 				/>

@@ -67,7 +67,7 @@ withDefaults(
 }
 
 .identity_account {
-	composes: type--name-tag from global;
+	composes: type--label-section from global;
 	color: var(--txt-primary);
 
 	overflow: hidden;

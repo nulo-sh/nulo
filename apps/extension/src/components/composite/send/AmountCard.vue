@@ -587,7 +587,7 @@ const handleFiatBalanceAction = (divisor) => {
 }
 
 .unit_pair {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	flex: none;
 	line-height: inherit;
 	background: none;
@@ -634,7 +634,7 @@ const handleFiatBalanceAction = (divisor) => {
 }
 
 .action_link {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	line-height: inherit;
 	background: none;
 	color: var(--nulo-accent);

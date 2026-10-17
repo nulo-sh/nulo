@@ -467,7 +467,7 @@ onBeforeUnmount(() => {
 }
 
 .view_all {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	user-select: none;
 	color: var(--nulo-secondary);
 

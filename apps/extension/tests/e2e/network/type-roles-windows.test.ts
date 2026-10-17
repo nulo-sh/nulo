@@ -30,7 +30,7 @@ const hasConfig = aztecConfig !== undefined
 /**
  * The type-role sweep in the approval windows a dApp opens: every role-bearing element of the
  * capabilities and execute windows computes to its role, and each identifier site the request
- * renders carries its own, an `AddressDisplay` showing an address (`data`) and one showing an
+ * renders carries its own, an `AddressDisplay` showing an address (`meta`) and one showing an
  * account's name (`name`) among them; no text runs past its box, the longest payload a dApp can send
  * included. Every window is rejected.
  */

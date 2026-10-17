@@ -538,7 +538,7 @@ export type SiteEntry = {
 	expression: string
 	branch: string
 	ordinal: number
-	role: "data" | "data-lead" | "input-data" | "meta" | "name" | "none"
+	role: "data-lead" | "input-data" | "meta" | "name" | "none"
 	selector: string
 	surface: string
 	state: string

@@ -298,7 +298,7 @@ onBeforeUnmount(() => {
 }
 
 .account_label {
-	composes: type--name-tag from global;
+	composes: type--label-section from global;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -383,7 +383,7 @@ onBeforeUnmount(() => {
 /* With the label's role, `1lh` is the label's line while the label sets no line-height of its own, so
  * the chip keeps its height when the name is hidden; 14px is the padding and border. */
 .network_chip {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
@@ -406,7 +406,7 @@ onBeforeUnmount(() => {
 }
 
 .network_label {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -445,7 +445,7 @@ onBeforeUnmount(() => {
 }
 
 .lock_label {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 

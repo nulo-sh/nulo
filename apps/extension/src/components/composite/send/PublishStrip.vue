@@ -65,7 +65,7 @@ const cells = computed(() => CELLS.map((c) => ({ ...c, glyph: publishGlyph(props
 }
 
 .cell {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	flex: 1 1 auto;
 	display: flex;
 	align-items: center;

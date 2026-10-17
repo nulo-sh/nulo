@@ -151,7 +151,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 }
 
 .head {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	padding-bottom: 6px;
 
 	color: var(--nulo-secondary);
@@ -162,7 +162,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 }
 
 .sub {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	padding: 10px 0 5px;
 	border-bottom: 1px solid var(--hairline-soft);
 
@@ -190,7 +190,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 	composes: type--name from global;
 	overflow: hidden;
 
-	font-size: 12px;
+	font-size: 13px;
 	white-space: nowrap;
 	text-overflow: ellipsis;
 	color: var(--txt-primary);
@@ -205,7 +205,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 }
 
 .address_text {
-	composes: type--data from global;
+	composes: type--meta from global;
 }
 
 /* The 24px box centres a 12px glyph: pulled in by the difference, the glyph sits 6px from the text. */
@@ -255,7 +255,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 }
 
 .fn {
-	composes: type--data from global;
+	composes: type--meta from global;
 	display: grid;
 	grid-template-columns: 66px minmax(0, 1fr);
 	gap: 8px;
@@ -264,7 +264,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 }
 
 .fn_label {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	padding-top: 1px;
 
 	color: var(--nulo-secondary);

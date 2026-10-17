@@ -25,7 +25,7 @@ defineProps({
 <template>
 	<!-- Fee Juice details -->
 	<Flex v-if="method?.type === 'fj'" align="center" justify="between" :class="$style.detail_row">
-		<Text variant="label" color="secondary">Available</Text>
+		<Text variant="label-section" color="secondary">Available</Text>
 		<Skeleton v-if="isLoading" />
 		<Text v-else variant="value" color="primary">
 			{{ feeJuiceBalanceFormatted ?? '—' }} FJ
@@ -34,7 +34,7 @@ defineProps({
 
 	<!-- Private Fee Juice (PrivateFPC) details -->
 	<Flex v-else-if="method?.type === 'private_fpc'" align="center" justify="between" :class="$style.detail_row">
-		<Text variant="label" color="secondary">Available</Text>
+		<Text variant="label-section" color="secondary">Available</Text>
 		<Skeleton v-if="isLoading" />
 		<template v-else-if="method.fpc">
 			<Text variant="value" color="primary">

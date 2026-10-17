@@ -219,7 +219,7 @@ onBeforeUnmount(() => {
 }
 
 .chip {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 	background: var(--nulo-surface-low);
 	border: 1px solid var(--hairline-soft);

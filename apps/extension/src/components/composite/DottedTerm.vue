@@ -76,7 +76,7 @@ const definition = computed(() => GLOSSARY[props.term]?.definition ?? "")
 /* The padding makes the hit area 24px tall and the margin gives it back, so the label sits where
    the drawing puts the text. */
 .action {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	display: block;
 
 	padding: 7px 0;
