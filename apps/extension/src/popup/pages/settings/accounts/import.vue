@@ -299,7 +299,7 @@ const collapsingLabel = "Import Account"
 
 <style module>
 .preview_address {
-	composes: type--data from global;
+	composes: type--meta from global;
 	display: block;
 	white-space: normal;
 	word-break: break-all;

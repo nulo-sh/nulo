@@ -198,7 +198,7 @@ Six layers, low → high. A layer can import only from layers below it. Enforced
 
 ```
 [L0] design tokens     @nulo/design (token-contract.ts → generated tokens.ts + utilities.css,
-                       the 28 type roles included; hand-authored base.css + fonts).
+                       the 24 type roles included; hand-authored base.css + fonts).
                        Extension src/design/tokens.ts re-exports the package.
 
 [L1] core primitives   @nulo/design/core: Flex, Icon (a glyph of core/glyphs.ts), Text (variant =

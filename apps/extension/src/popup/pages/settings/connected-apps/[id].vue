@@ -258,7 +258,7 @@ onBeforeUnmount(() => {
 					:title="getAccountAlias(acc)"
 					titleVariant="name"
 					:description="`${getChainName(acc.chainId).toUpperCase()} · ${trimAddress(acc.address, 6, 4, '...')}`"
-					descriptionVariant="data"
+					descriptionVariant="meta"
 					raw
 					data-testid="connected-app-account-row"
 				>
@@ -283,20 +283,20 @@ onBeforeUnmount(() => {
 			<SectionLabel label="Session allowances" />
 
 			<Flex v-if="sessionChainName" align="start" gap="4">
-				<Text variant="label" color="secondary">Network:</Text>
+				<Text variant="label-section" color="secondary">Network:</Text>
 				<Text variant="value" color="secondary" :style="{ lineHeight: '1.2' }">
 					{{ sessionChainName }}
 				</Text>
 			</Flex>
 
 			<Flex align="start" gap="4">
-				<Text variant="label" color="secondary">Methods:</Text>
-				<Text variant="data" color="secondary" :style="{ lineHeight: '1.2' }">{{ methods.join(", ") }}</Text>
+				<Text variant="label-section" color="secondary">Methods:</Text>
+				<Text variant="meta" color="secondary" :style="{ lineHeight: '1.2' }">{{ methods.join(", ") }}</Text>
 			</Flex>
 
 			<Flex align="start" gap="4">
-				<Text variant="label" color="secondary">Events:</Text>
-				<Text v-if="events.length" variant="data" color="secondary" :style="{ lineHeight: '1.2' }">
+				<Text variant="label-section" color="secondary">Events:</Text>
+				<Text v-if="events.length" variant="meta" color="secondary" :style="{ lineHeight: '1.2' }">
 					{{ events.join(", ") }}
 				</Text>
 				<Text v-else variant="value" color="tertiary" :style="{ lineHeight: '1.2' }">no allowances given</Text>

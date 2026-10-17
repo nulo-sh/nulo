@@ -49,7 +49,7 @@ const filteredKeys = (kind, filters, search) => {
 				:class="$style.filter_button"
 			>
 				<Icon :name="allOptionsSelected[kind] ? 'filter' : 'filter-solid'" size="14" />
-				<Text variant="tag">{{ capitalize(kind) }}</Text>
+				<Text variant="label-section">{{ capitalize(kind) }}</Text>
 			</Flex>
 
 			<template #content>

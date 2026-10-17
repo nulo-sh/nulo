@@ -65,7 +65,7 @@ const toggleVisibility = () => {
 }
 
 .action_chip {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;

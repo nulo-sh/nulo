@@ -159,7 +159,7 @@ const stepNumber = (index: number) => String(index + 1).padStart(2, "0")
 }
 
 .retry {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	margin-left: auto;
 	background: transparent;
 	border: 1px solid var(--nulo-outline);

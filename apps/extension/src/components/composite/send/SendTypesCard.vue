@@ -80,7 +80,7 @@ const handleSwitchReceiverType = () => {
 }
 
 .sub_label {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
