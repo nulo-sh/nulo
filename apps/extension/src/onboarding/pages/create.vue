@@ -36,7 +36,7 @@ const { bootstrapActiveProfile } = useProfileBootstrap()
 
 const maxPasswordLength = 128
 
-// A password wallet shows its words before Ready. They live only in this ref, for this page's life.
+// The words live only in this ref, for this page's life.
 const stage = ref<"form" | "phrase">("form")
 const words = ref<string[]>([])
 let createdId = ""
@@ -74,8 +74,8 @@ const {
 	dispose,
 } = useProfileCreateFlow({
 	// Onboarding has no popup app.vue listener, so it bootstraps the freshly created profile itself.
-	// The words are read first, with the password just typed, which is cleared before bootstrap; a
-	// failed read still reaches Ready, where Home's reminder stays until the phrase is saved.
+	// Reading the words needs the typed password, so they are read before it is cleared; a failed
+	// read still reaches Ready, where Home's reminder stays until the phrase is saved.
 	onCreated: async (created) => {
 		if (!isMounted()) return
 		const profile = created as ProfileInfo
@@ -83,11 +83,12 @@ const {
 		password.value = ""
 		confirm.value = ""
 		if (!isMounted()) return
-		await bootstrapActiveProfile(profile)
+		const active = await bootstrapActiveProfile(profile)
 		if (!isMounted()) return
-		await setLastActiveProfileId(profile.id)
+		if (active) await setLastActiveProfileId(profile.id)
 		if (!isMounted()) return
-		if (!phrase) {
+		// The lock wins: a session locked or superseded during bootstrap shows no words.
+		if (!phrase || !active) {
 			router.push("/onboarding/done")
 			return
 		}
@@ -198,7 +199,7 @@ onBeforeUnmount(() => {
 						inputTestid="onboarding-password-confirm-input"
 					/>
 				</Flex>
-				<Text v-if="passwordStrengthHint" variant="body" color="secondary" height="150">
+				<Text v-if="passwordStrengthHint && !isCreating" variant="body" color="secondary" height="150">
 					{{ passwordStrengthHint }}
 				</Text>
 			</Flex>

@@ -13,7 +13,7 @@ const props = withDefaults(
 		activeClass: string
 		passwordTestid: string
 		passkeyTestid: string
-		/** The tab read and reached first: DOM order is both the reading order and the arrow order. */
+		/** The tab read and reached first. */
 		first?: AuthMethod
 	}>(),
 	{ first: "password" },

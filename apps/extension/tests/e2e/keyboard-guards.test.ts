@@ -1,8 +1,9 @@
 /**
  * A held Enter acts once. On the recovery phrase's Retrieve the button ignores the repeat, so the
  * held key makes one retrieval; in onboarding's confirm field the browser's implicit submission
- * activates Create once, and the repeat that reaches the phrase step presses nothing there. The page records each Enter keydown, click and submit, so a driver that
- * sends no repeat, or a repeat that lands anywhere but the control, fails on the record.
+ * activates Create once, and the repeat that reaches the phrase step presses nothing there. The
+ * page records each Enter keydown, click and submit, so a driver that sends no repeat, or a repeat
+ * that lands anywhere but the control, fails on the record.
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"

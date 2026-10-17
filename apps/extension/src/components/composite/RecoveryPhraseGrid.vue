@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/** The recovery phrase as numbered words, read across each row, with one Copy for the whole phrase. */
 const props = defineProps<{
 	words: readonly string[]
 	columns: 3 | 4
@@ -14,6 +13,7 @@ const emit = defineEmits<{ copy: [] }>()
 
 <template>
 	<div v-if="props.words.length" :class="$style.wrapper" :data-testid="testId" translate="no">
+		<!-- Page translation must never rewrite a recovery word. -->
 		<ol :class="[$style.grid, columns === 4 ? $style.four : $style.three]">
 			<li v-for="(word, i) in props.words" :key="i" :class="$style.cell">
 				<span :class="$style.num">{{ i + 1 }}</span>

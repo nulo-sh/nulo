@@ -293,13 +293,14 @@ describe("onboarding create — the recovery phrase step", () => {
 		expect(document.activeElement).toBe(w.get('[data-testid="onboarding-phrase-title"]').element)
 	})
 
-	test("the password is cleared before bootstrap runs", async () => {
+	test("the password is cleared before bootstrap runs, with no length hint under the empty fields", async () => {
 		const pending = defer<boolean>()
 		bootstrapActiveProfile.mockReturnValueOnce(pending.promise)
 		const w = await mountCreate()
 		await submitPassword(w)
 		expect(bootstrapActiveProfile).toHaveBeenCalledTimes(1)
 		expect(typed(w)).toEqual(["", ""])
+		expect(w.text()).not.toContain("At least 8 characters")
 		pending.resolve(true)
 		await flushPromises()
 		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(true)
@@ -322,6 +323,16 @@ describe("onboarding create — the recovery phrase step", () => {
 		await submitPassword(w)
 		expect(typed(w)).toEqual(["", ""])
 		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(false)
+	})
+
+	test("a session locked during bootstrap shows no words and records no last profile", async () => {
+		bootstrapActiveProfile.mockResolvedValueOnce(false)
+		const w = await mountCreate()
+		await submitPassword(w)
+		expect(profileApi.exportMnemonic).toHaveBeenCalledTimes(1)
+		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(false)
+		expect(setLastActiveProfileId).not.toHaveBeenCalled()
+		expect(routerPush).toHaveBeenCalledWith("/onboarding/done")
 	})
 
 	test("I saved it marks the new profile, and only then routes to Ready", async () => {

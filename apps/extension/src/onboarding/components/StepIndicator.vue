@@ -1,22 +1,5 @@
 <script setup lang="ts">
-/**
- * Onboarding step indicator. Four-step brutalist row:
- *   [01]     [02]     [03]     [04]
- *   ━━━━━    ━━━━━    ─────    ─────
- *   TERMS    CREATE   PHRASE   READY
- *
- * Every path shows all four cells: a passkey wallet and an import skip from 02 to 04, so the row
- * reads the same before and after the method is chosen.
- *
- * The 2px bar underneath each cell carries the state:
- *   active:  --nulo-accent (warm off-white)
- *   past:    --nulo-secondary
- *   future:  --nulo-border (dim, almost-bg)
- *
- * Welcome page intentionally has no indicator — it owns the canvas with
- * its own hero. Indicator appears starting from /terms, so accepting the
- * Terms reads as the first step of a visible sequence, not a gate in front of one.
- */
+// Every path keeps all four cells, including a passkey wallet and an import, which skip Phrase.
 defineProps<{ current: 1 | 2 | 3 | 4 }>()
 
 const steps: Array<{ num: string; label: string }> = [
