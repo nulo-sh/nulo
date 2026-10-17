@@ -271,6 +271,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [service-fences](service-fences/plan.md) — completed — capture-then-assert fences for three durable writes made after an await
 - [settings-by-task](settings-by-task/plan.md) — completed — Settings grouped by task: profile card, Safety, Preferences, Danger zone, Lock and Privacy pages
 - [settings-search-1](settings-search-1/plan.md) — completed — a search field at the top of Settings finds a row by title, description or synonym, and the opened page outlines it
+- [sheet-1](sheet-1/plan.md) — completed — the flat bottom sheet at content height, the light scrim, the Full-height setting retired (#590 P33-07 E, P33-08 A, P33-09 A)
 - [shell-identity-fences](shell-identity-fences/plan.md) — completed — identity-safe popup shell continuations, and two retired pieces removed
 - [simulate-fast-path](simulate-fast-path/plan.md) — completed — a dApp simulateTx serves a public-static prefix directly on the node
 - [single-sim-estimates](single-sim-estimates/plan.md) — completed — fewer simulations per dApp sendTx estimate, after proving identical gas
