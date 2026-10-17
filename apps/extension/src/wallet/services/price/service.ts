@@ -50,9 +50,10 @@ type FetchLike = (input: string, init?: { signal?: AbortSignal; headers?: Record
  * sanity bands), cached in `chrome.storage.local`, and treated as absent
  * after `QUOTE_TTL_MS`.
  *
- * Privacy posture: refreshes run only while a profile session is unlocked
- * (alarm created on unlock, cleared on lock), plus stale-on-connect via
- * `refreshIfStale`. Executors read `getUsableQuote` cache-or-nothing — no
+ * Privacy posture: a fetch starts only while a profile session is open
+ * (`doRefresh`, which every refresh path reaches, checks it last); the alarm
+ * is created on unlock and cleared on lock, and `refreshIfStale` refreshes a
+ * stale cache on connect. Executors read `getUsableQuote` cache-or-nothing — no
  * fetch is ever triggered by transaction activity. The `showFiatValues`
  * config toggle disables everything and clears the cache.
  *
@@ -339,6 +340,12 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		if (now < this.nextAllowedFetchAt) {
 			this.logDebug("refresh suppressed by backoff window")
 			return this.readUsable()
+		}
+		// The last await before the request leaves: a lock that landed while a caller was awaiting
+		// (the unlock handler's alarm write, say) still stops it.
+		if (!(await this.profileService.getActiveProfile())) {
+			const usable = await this.readUsable()
+			return gen === this.generation ? usable : {}
 		}
 
 		const ids = allCoingeckoIds()
