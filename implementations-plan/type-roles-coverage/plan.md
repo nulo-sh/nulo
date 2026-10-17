@@ -1,7 +1,7 @@
 ---
 plan: type-roles-coverage
 tier: light
-status: planned, awaiting orchestrator approval
+status: arc 1 merged (#621); arc 2 revised under A2 and approved, in progress
 issues: "#366 (arc 1 Refs, arc 2 Closes)"
 driver: claude-code
 claude_model: opus
@@ -122,30 +122,116 @@ The total is about +80 s on Chrome and +130 s on Firefox.
   - The S1–S12 base and head timings (D9) are logged in `lessons/phase-1.md`.
   - A1 is checked on the PR's CI numbers before arc 2.
 
-## Arc 2: the 18 network sites (`Closes #366`; only after A1 and A2)
+## Arc 2: the 24 network sites (`Closes #366`; the A2 revision, at 0fe841be)
 
-- 2.1 Existing windows tests (6): the field-parameter state on row 1, its selector qualified by `data-value-kind`, like `ADDRESS_ARGUMENT`; `registerToken` and `createAuthWit`-for-an-intent rows; the connected-app detail after the transaction grant.
-- 2.2 New window flows (6): an imported token's transfer (`to`, explicit `from`); a contract-scope grant's detail; the contracts and senders pages after a registration; the Send review sheet.
-- 2.3 Landed-tx states (3): a private note (2) and an incoming transfer from an unknown sender.
-- 2.4 No path through the generic playground (3): a send's non-zero authwit nonce, a sender of kind `account`, a concrete class scope. Each gets a generic playground control (C13: test infrastructure, a screenshot in the PR).
-- 2.5 The network coverage test in `network/type-roles-windows.test.ts`, on D1, D2 and D7.
-- Gates: lint, typecheck and test. Then `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/type-roles-windows.test.ts` on Chrome and with `NULO_E2E_BROWSER=firefox`. Run only with load1 < 150, and never two in one worktree.
+This section replaces the 18-site sketch that A2 held back.
+
+**Recount.**
+- The expected file lists 129 entries, 99 of them live.
+- 41 belong to the network spec: the 39 marked `(network)`, and #594's two `(component test)` sites, which D10 hands over.
+- `type-roles-windows.test.ts` reads 17 of them, so 24 remain, not 18:
+  - #611 added the grant's transfer rows (2).
+  - #594 added the summary's transfer lines (2). `tx-transfer-row.test.ts` reads them, but no coverage test counts that file.
+  - #594 also added the two move-line sites.
+- #649 moved 37 of the 41 from `data` to `meta`. No selector or state moved with it.
+
+**Decisions.**
+- **D10 D1's `component` owner is retired.**
+  - A discovered authorization on a token the wallet registered reads as a move, so the network spec reaches #594's two sites. They take `(network)`, and `siteSuite` returns to two owners.
+  - Rejected: keeping `component`. jsdom computes no face, so nothing would ever read their role.
+- **D11 Branch-exact selectors, in the expected file (D6 extended).**
+  - The decoded parameter's value is selected by its row's `data-value-kind` (`address`, `field`), so the spec-local `ADDRESS_ARGUMENT` remap goes.
+  - The transfer sender is selected by `data-sender-kind`: `account` and `explicit` on the call's row, and `explicit` on the grant's.
+  - The account row is selected by its card's `data-op-kind`. That testid is on both cards: `:is(…)` the send kinds for the send's entry, `:not(…)` them for the other.
+- **D12 Two playground controls (C13: test infrastructure, a screenshot in the PR).**
+  - Bundle `contractClasses-listed`: accounts (`canGet` only), the token's address and the token's class id, read from the existing `pg-input-classId`.
+  - A `transferFn` option `transfer`: the reference Token's two-argument private transfer, built from its own artifact. It names no `from`.
+  - An unknown sender and a non-zero nonce need no control. `pg-btn-consumeAuthwit` already sends `transfer_public_to_public(owner, caller, amount, nonce)` from the account. It is an honest producer for the approval window, which is rejected. It does not prove a consumed authorization.
+- **D13 One testid and one parameter.**
+  - `GrantedCapabilitiesList.vue`'s header gains `granted-capability-toggle` and `data-capability-type`. No pixel changes.
+  - `openConnectedApp` is exported and takes the testid it waits for. A grant with no call scope renders no authorizations switch.
+- **D14 Coverage test (D2 in the windows spec).**
+  - `sweepWindow` pushes each observation after `expectSitesClean`.
+  - A last test asserts `coverageOf(observed, { sites: network-owned }).unobserved` is `[]` and `live` > 0, and logs `live`.
+  - The precondition is the file's own, `hasConfig`. The network lanes always have it.
+- **D15 The incoming-trust prompt is seeded, not mined.**
+  - Its producer is a restored token's first discovery. A full-backup import writes a registered token with no trust row; the first discovered note moves it to `pending`, the receipt is kept hidden, and the replay opens the prompt (`service.scenarios.test.ts`, "trust after a full-backup import").
+  - Every popup add path trusts its token (`onTokenAdded`), so nothing in this file reaches a first receipt live.
+  - `seedPendingTrust` (`helpers/activity-seeds.ts`) writes that snapshot: the pending trust row, and the receipt hidden. The receipt is written by the same writer as `seedReceipt`, and its nullifier, note hash and tx hash are under the field modulus. Then the page reloads.
+  - The add path writes `trusted` and then the arrival floor, both after the add. The second write rewrites the state it read, so `seedPendingTrust` waits for both (`trusted` with `arrivalFloor` or `arrivalFloorPending`) before seeding.
+  - The receipt is in storage only. The next verified scans strike it and then delete it, so the state lasts until the popup's replay, which is when it is read.
+  - It proves the prompt's typography, not receipt discovery. It stays in the windows spec, per A2.
+- **D16 Inputs leak between requests.** The playground keeps every input.
+  - Each request sets, or clears with `""`, every input that an earlier request in its test changes, including the fallbacks it relies on, such as the call intent's empty `consumer`.
+  - No request in the file sets `simFrom` or the app fee inputs, and only the rig test sets `transferFn`, before its last send. Those keep the fixture's defaults on purpose.
+  - The probe's second grant inherited the consume request's owner and never opened a window.
+- **D17 Every name shown is also read as its address.**
+  - An `AddressDisplay` showing a known account is judged as `name` (F8). Read only that way, the account sender, the move line's `from`, and the consume request's `to` and summary `to` would count as read without their mono role.
+  - None of them is `static`, so a press shows the address. After its states pass, `sweepWindow` presses each one showing a name until it shows its address, then reads the states again.
+  - The last test also fails on any key read only as a name. Unlike D8's smoke sites, nothing here needs a known limit.
+- **D18 The sender comes before the token.** The rig test registers the minter as a sender before the pull token joins the wallet, so the token's first balance read finds the minted notes. The notes state waits for a note of the pull token's own contract.
+
+**Sites, producers and measured cost.** Times are seconds per step, from local Chrome probe runs at retry 0 (`lessons/phase-2.md`). None of the 24 is unreachable.
+
+| Test | Producer | Sites | Chrome |
+|---|---|---|---|
+| capabilities | approve `contractClasses-listed`, open the app's page, open its two grant cards | connected dApp's account row; contract scope; class scope | 1.4 + 1.7 |
+| execute | state added on the existing `sendTx` | decoded field parameter | 0 |
+| execute | state added on the call intent; the inner-hash intent | non-send account row; intent consumer and inner hash | 0.8–1.7 |
+| execute | `registerToken`, approved | token address | 2.6–5.8 |
+| execute | `consumeAuthwit` on the registered token: owner the minter, nonce 2^64+ | explicit sender (unknown, by address); `to`; nonce; summary from and to | 1.4–2.3 |
+| execute | `grantPublicAuthwit` on the registered token | grant sender and `to`, printed whole | 1.2–1.7 |
+| execute | pending-trust seed, reload (D15) | incoming-trust contract | 1.2–2.3 |
+| rig | `registerToken` of the pull token, approved | (enables the next rows) | 3.7–5.0 |
+| rig | the delegated send again | move line from and to (#594) | 8.9–9.6 |
+| rig | `transferFn` = `transfer` on the pull token | sender of kind `account` | 1.9–2.1 |
+| rig | wallet: add the minter as a sender; Send the pull token, review sheet; notes; contracts | sender; review recipient; note contract and value; registered contract | 2.3–3.9 |
+
+- The added steps sum to about +36 s per Chrome run. The probe's full Chrome run was 5/5 green with `live` = 41 and nothing unobserved, the file taking 208.3 s.
+- **D9's measurement.** One base and one head run per browser, on this host, at retry 0, each started at load1 < 150. The base restores the file at HEAD over the head tree. They are logged in `lessons/phase-2.md` and are the local evidence. They do not stand in for CI.
+  - On the final draft: Chrome went from 135.4 s (base, 4/4) to 178.9 s (head, 5/5). Firefox went from 233.0 s to 212.5 s.
+  - Both head runs had `live` = 41, with nothing unobserved and nothing read only as a name.
+  - Presses cost 0.02–0.4 s per state on Chrome and 0.16–1.4 s on Firefox.
+  - Firefox's head run was faster than its base, so host load swamps this file's added steps there. The CI bound below is what judges A1.
+- **Bound: A1's, on this file's CI numbers.** It is judged on the PR's first attempt, once CI has run.
+  - The per-file duration stays at most 221.2 s on Chrome and 295.3 s on Firefox: #621's 121.2 s and 135.3 s, plus 100 s and 160 s.
+  - The network shard job holding it stays under 25 min. #621's ran 15.9 and 18.3 min.
+  - A breach goes to the orchestrator with the numbers, and the PR is not handed over as done.
+
+### Phase 2.1 — the producers and the coverage test
+- Change map:
+  - `apps/playground/src/lib/bundles.ts` and `sections/connect.ts` (the bundle); `sections/transactions.ts` (`transfer`); `apps/playground/README.md` (the `transferFn` list).
+  - `tests/e2e/fixtures/playground.ts` (`PgBundle`); `fixtures/popups.ts` (`openConnectedApp`).
+  - `GrantedCapabilitiesList.vue` (D13).
+  - The expected file (D10, D11); `fixtures/type-roles.ts` (`siteSuite`); `type-roles.test.ts` (its count line).
+  - `network/type-roles-windows.test.ts`: the flows above, `observed`, the reveal (D17), the last test.
+  - `helpers/activity-seeds.ts`: `seedPendingTrust`, and one note writer under it and `seedReceipt`, with the note and tx hash under the modulus.
+- Never-happens proof: drop one state from a request locally, and see the last test name that site's key. Then restore it.
+- Gates:
+  - `bun run lint && bun run typecheck:all && bun run test` exits 0. `inventory.test.ts` passes on the edited entries.
+  - `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/type-roles-windows.test.ts` passes on Chrome and with `NULO_E2E_BROWSER=firefox`, with `live` = 41. Run only with load1 < 150, and never two in one worktree.
+  - `tests/e2e/network/tx-transfer-row.test.ts` (the `transferFn` select's other reader) and `authwit-variants.test.ts` (`openConnectedApp`'s other caller) pass on Chrome.
+  - The smoke `type-roles.test.ts` and `rows.test.ts` pass on Chrome at retry 0: the count line and `seedReceipt`'s hashes changed. Both run on the armed build (`VITE_NULO_E2E_*`).
 
 ## Security & Adversarial Considerations
 
-- The change is test-only, plus two `data-testid` attributes and `data-fpc-unnamed`. Permissions, storage shapes and dependencies stay the same; no screen changes.
-- The seeds are raw rows in a throwaway e2e profile. Each is shaped as its producer writes it: wire-shaped `0x` plus 64 hex, under the field modulus (lessons.md § Aztec). No secret, key or seed phrase is written or logged.
+- The change is test-only, apart from three data attributes:
+  - two `data-testid` attributes and `data-fpc-unnamed` (arc 1);
+  - `granted-capability-toggle` with `data-capability-type` (arc 2).
+- Arc 2 adds two generic playground controls (D12). Each one sends what any wallet-sdk dApp can send, and the playground still reaches the wallet only through `@aztec-labs/wallet-sdk`.
+- Permissions, storage shapes and dependencies stay the same. No screen changes.
+- The seeds are raw rows in a throwaway e2e profile. Each is shaped as its producer writes it: wire-shaped `0x` plus 64 hex, under the field modulus (lessons.md § Aztec). Arc 2's trust seed follows this, and `seedReceipt`'s note hash and tx hash move under the modulus with it (they were `0xab…` and `0x7c…`). Only the received detail's displayed hash changes: the receipt fee lookup reads public-event rows only. No secret, key or seed phrase is written or logged.
 - The real risk is false coverage evidence. D2 (push after a pass), D6 and D7 close the paths the panel traced. A hand-written `(network)` suffix or `unreachable` entry can still move a site out of smoke coverage. That edit shows in review, and the coverage test logs the counts.
 - Supply chain: no new dependency, frozen lockfile.
 
 ## UI impact
 
-None. The two testids and `data-fpc-unnamed` change no pixel. No copy, layout or row changes.
+None. The testids, `data-fpc-unnamed` and `data-capability-type` change no pixel, and no copy, layout or row changes. The playground's new bundle option and `transferFn` option are test infrastructure (C13); the PR attaches a screenshot of them.
 
 ## Delivery
 
 - One PR per arc against `dev`, no stack (D-orch-1). Arc 2 branches from `dev` after arc 1's squash merge.
-- Titles: `test(e2e): observe the smoke identifier sites and assert their coverage` (70 characters); `test(e2e): observe the network identifier sites and assert their coverage`.
+- Titles: `test(e2e): observe the smoke identifier sites and assert their coverage` (70 characters); `test(e2e): observe the network identifier sites and assert their coverage` (72).
 - PR body:
   - What changed and why.
   - Each step's failure mode and measured time on both browsers.
@@ -199,6 +285,24 @@ Per `implementations-plan/README.md` § Post-implementation standard at 8459699c
   - The new test reads the native recipient field before a contact is chosen, as Phase 1.3 asks.
 - **Arc 1 review, Codex** round 2 (resumed): `clean`. Both majors confirmed closed; one new minor taken: the hop between the two authwits visits waits for Home's own `tokens-menu-trigger`, since the header's avatar also shows on the authwits page.
 - **Arc 1 review, Codex** round 3 (resumed, verification of the post-merge changes, the cap): `findings` (1 major), taken: the same read-before-render reached the spec's other `AddressDisplay` states (`grantPublicAuthwit`'s spender and contract, the target's caller, the summary's caller), so the wait moved from two testids to every state's sites. It confirmed the third D1 owner hides no smoke-reachable site and that the waits are state-driven.
+- **Arc 2 revision, Codex** (gpt-6.1-sol, high, read-only), round 1: `conditional approve`. It confirmed the recount (129, 99, 41, 17, 24, and 37 `data` → `meta` moves), D10, D11, D13, D14, and the order of the decoded reads before the registration. Accepted, all six:
+  - D15's producer is a restored token's first discovery, not "a token the wallet never added".
+  - The trust seed's hashes are under the modulus, and `seedReceipt`'s moved with them.
+  - Names are pressed to their addresses and read again (D17), and the last test fails on a key read only as a name.
+  - The sender is registered before the pull token joins the wallet, and the notes state waits for the pull token's own note (D18).
+  - D9's head and base pairs on both browsers. CI ceilings are 221.2 s and 295.3 s, judged after the PR's first run.
+  - D16 names every input, `""` included. D12 counts two controls, not three.
+- **Arc 2 revision, Opus Plan leg**: `conditional approve`. It confirmed the 24 producers against the Vue branches, D10, the push order, the absence of an `AddressDisplay` in the header on the developer pages, and the CI bounds. Accepted, all five:
+  - Re-measure on the current draft and log D17's press cost: the D9 runs, with a stamp around each press.
+  - The account row's card kind moves from the spec into the expected file (D11), so `Request.opKind` goes. The grant sender is qualified by `data-sender-kind="explicit"`.
+  - `seedPendingTrust` waits for the add path's `trusted` write. The seeded receipt's one-scan life is logged (D15).
+  - Three stale docs: the playground README's `transferFn` list, the Security count, and the spec header.
+  - The class bundle asks for `canGet` only.
+- **Arc 2 revision, Codex** resume (verification, snapshot 589b5b72): `conditional approve`. It found Codex conditions 1–4 and Opus conditions 2, 4 and 5 met, and no new false-green path in the press loop, the name-only check, the `:is` / `:not` selectors or the receipt hashes. Open, and taken:
+  - The D9 numbers on the current draft.
+  - The trust wait must also see the arrival-floor write. `setArrivalFloor` rewrites the state it read, so a seed between the two writes would be lost. It now waits for both.
+  - D16 is narrowed to what it enforces, and the inputs no request changes are named.
+- **Arc 2 revision, Codex** resume (closing verification, snapshot 66e89bc8): `approve`, no finding. It confirmed the final-draft D9 pairs, the floor wait and the narrowed D16. It traced the reload: `reloadExtensionPage` remounts the popup, whose client connect runs the product's `replayPendingPrompts`, so the prompt is the product's replay of the seeded row. It found no owner-facing ask.
 - **Arc 1 implementation deviations** (evidence in [lessons/phase-1.md](lessons/phase-1.md)):
   - S3's Activity and tx states ride S1's visits, and the import row and New token share one Home visit: no page is opened twice for one state.
   - The seed also writes the scope's arrival row (`seedArrivalRow`). Without one, Activity holds its incoming rows until the chain-tip read gives up, about 60 s under the refused Testnet. The state is a wallet's after any feed read the tip; no timeout was raised. The product delay is #579.
