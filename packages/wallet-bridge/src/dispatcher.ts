@@ -233,6 +233,9 @@ export class WalletSdkDispatcher {
 		// payload; before the scope check, so no checker, handler or window reads an unparsed value.
 		await assertWalletSchemaArgs(method, args)
 		this.enforceScopeFor(method, args, grants, dappSession)
+		// Every call past those checks answers CHAIN_NOT_SUPPORTED on a chain the wallet does not serve,
+		// a quarantined one included, even when its handler never reads a network.
+		await this.resolveNetwork(ctx)
 
 		// Methods that don't go through ExecutionService return the handler's
 		// own promise, un-awaited here (rejection timing unchanged).
