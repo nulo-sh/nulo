@@ -86,6 +86,7 @@ import {
 import { KeyedLock, deferred } from "@nulo/wallet-core/utils"
 import { admitAsync, VerifyAdmissionGate, type WindowReservation } from "./verify-admission"
 import { approveOrRollbackDiscoverySession, rollBackDiscoverySession } from "./discovery-approval"
+import { isSecureDappOrigin } from "./dapp-origin"
 import { failQueuedForError, failQueuedIfUnclaimed, type QueuedFailureKind, tryCreateQueuedJournal } from "./queued-journal"
 import { chainSendTxWithVouching } from "./queued-wait-vouching"
 import { createSessionBaton } from "./session-baton"
@@ -906,16 +907,6 @@ const DEDUPE_WAITERS_CAP = 8
 
 const discoveryDeadline = (discovery: PendingDiscovery): number => discovery.timestamp + DISCOVERY_STALE_MS
 
-/**
- * Handle a new discovery request from a dApp.
- *
- * Flow:
- * 1. Check if the wallet is unlocked (active profile exists)
- * 2. Check if a valid DappSession already exists for this origin (returning user)
- *    - If yes: auto-approve discovery without showing popup
- *    - If no: show connect popup via DappInteractionService
- * 3. On approval, the wallet-sdk proceeds with ECDH key exchange
- */
 /** Fail closed: an answer that cannot be read is "no". */
 async function isLegalCurrent(legal: LegalAdmission): Promise<boolean> {
 	return legal.assertCurrent().then(
@@ -925,6 +916,21 @@ async function isLegalCurrent(legal: LegalAdmission): Promise<boolean> {
 }
 
 async function handleDiscovery(discovery: PendingDiscovery, deps: DiscoveryDeps): Promise<void> {
+	// Before the first await: upstream recorded the discovery just before this call, so a refusal
+	// here leaves nothing the locked queue, a stored session or a window could act on.
+	if (!isSecureDappOrigin(discovery.origin)) {
+		deps.handler.rejectDiscovery(discovery.requestId)
+		deps.logger.log(
+			"wallet-sdk",
+			LogLevel.Debug,
+			`Discovery refused (origin not secure): request ${describeExternalId(discovery.requestId)}`,
+		)
+		return
+	}
+	await handleSecureDiscovery(discovery, deps)
+}
+
+async function handleSecureDiscovery(discovery: PendingDiscovery, deps: DiscoveryDeps): Promise<void> {
 	const { handler, logger } = deps
 	try {
 		// Resolve chainId up-front — the locked-queue coalesce/cap and the
