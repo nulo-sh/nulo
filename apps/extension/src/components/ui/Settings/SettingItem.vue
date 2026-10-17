@@ -238,7 +238,6 @@ const Root = (_, { slots }) => {
 	flex-shrink: 0;
 }
 
-/* A slotted icon sets its own size. */
 .icon_slotted {
 	width: auto;
 	height: auto;
