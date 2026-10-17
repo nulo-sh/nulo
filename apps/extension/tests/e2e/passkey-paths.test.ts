@@ -24,7 +24,7 @@
 import { expect } from "vitest"
 import type { Page } from "puppeteer"
 import { clickByTestId, expectNoNameField, openPopup, waitForHash, test, waitForServiceReady } from "./fixtures/extension"
-import { getActiveProfileName } from "./fixtures/helpers"
+import { confirmProfileReset } from "./fixtures/helpers"
 import { readPasskeySurface, registerPasskeyProfile, setupPasskeyVirtualAuth, watchPasskeySurface } from "./fixtures/passkey"
 
 /** Read the active account address from chrome.storage.local. The wallet
@@ -125,38 +125,12 @@ test("register → reset profile → import via passkey discovery → same addre
 		expect(addressBefore.startsWith("0x")).toBe(true)
 
 		// Step 2: reset profile via /popup/settings/security/reset.
-		// All three confirm checkboxes + the profile-name confirm input
-		// must be ticked/typed for `reset-submit-btn` to enable. Profile
-		// name is read dynamically from the reset page's data-profile-name
-		// attribute — after F1 the user picks the name explicitly, so a
-		// hardcoded "Profile 1" no longer holds.
 		await page.evaluate(() => {
 			window.location.hash = "#/popup/settings/security/reset"
 		})
 		await waitForHash(page, "#/popup/settings/security/reset", 5_000)
 
-		await page.waitForSelector('[data-testid="reset-checkbox-permanent"]', { visible: true, timeout: 5_000 })
-		await clickByTestId(page, "reset-checkbox-permanent")
-		await clickByTestId(page, "reset-checkbox-undone")
-		await clickByTestId(page, "reset-checkbox-sure")
-
-		const activeProfileName = await getActiveProfileName(page)
-		await page.evaluate((expectedName: string) => {
-			const input = document.querySelector<HTMLInputElement>('[data-testid="reset-confirm-input"] input')
-			if (!input) throw new Error("reset-confirm-input not found")
-			const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
-			setter?.call(input, expectedName)
-			input.dispatchEvent(new Event("input", { bubbles: true }))
-		}, activeProfileName)
-
-		await page.waitForFunction(
-			() => {
-				const btn = document.querySelector<HTMLButtonElement>('[data-testid="reset-submit-btn"]')
-				return btn !== null && !btn.disabled
-			},
-			{ timeout: 5_000 },
-		)
-		await clickByTestId(page, "reset-submit-btn")
+		await confirmProfileReset(page, 5_000)
 		// reset.vue routes to /popup/register when no profiles remain.
 		await waitForHash(page, "#/popup/register", 10_000)
 

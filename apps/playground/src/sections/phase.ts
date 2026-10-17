@@ -14,9 +14,9 @@ import { Fr } from "@aztec-labs/aztec.js/fields"
 import { decodeFromAbi } from "@aztec-labs/stdlib/abi"
 import { getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts"
 import { getWallet } from "../lib/wallet"
-import { logCall } from "../lib/log"
+import { guarded } from "../lib/log"
 import { summarizeSimulation } from "../lib/simulation-summary"
-import { getInput, getState, setState } from "../state"
+import { getInput, getState } from "../state"
 
 export function renderPhase(): string {
 	const s = getState()
@@ -138,20 +138,6 @@ async function buildMintPayload() {
 	return { exec, from, recipient, amount }
 }
 
-function safe<T>(method: string, fn: () => Promise<T>): () => Promise<void> {
-	return async () => {
-		if (!getWallet()) {
-			setState({ lastError: "Not connected — call connect() first" })
-			return
-		}
-		try {
-			await logCall(method, fn)
-		} catch (err) {
-			setState({ lastError: err instanceof Error ? err.message : String(err) })
-		}
-	}
-}
-
 /** Run a utility call as `scope` and return its decoded value as a string (u128 balances). */
 // biome-ignore lint/suspicious/noExplicitAny: the call is built from a structurally-typed contract
 async function readUtility(call: any, scope: AztecAddress): Promise<string> {
@@ -163,7 +149,7 @@ async function readUtility(call: any, scope: AztecAddress): Promise<string> {
 }
 
 function on(root: HTMLElement, testid: string, method: string, fn: () => Promise<unknown>): void {
-	root.querySelector<HTMLButtonElement>(`[data-testid="${testid}"]`)?.addEventListener("click", safe(method, fn))
+	root.querySelector<HTMLButtonElement>(`[data-testid="${testid}"]`)?.addEventListener("click", guarded(method, fn))
 }
 
 export function bindPhase(root: HTMLElement): void {

@@ -6,9 +6,8 @@
  * methods AND the latter's internal `simulate_views` op kind) are documented
  * in `packages/wallet-bridge/README.md` under "Custom RPC methods".
  */
-import { getWallet } from "../lib/wallet"
-import { logCall } from "../lib/log"
-import { getState, setState } from "../state"
+import { guarded } from "../lib/log"
+import { getState } from "../state"
 
 export function renderMeta(): string {
 	const s = getState()
@@ -25,34 +24,19 @@ export function renderMeta(): string {
 	`
 }
 
-function safeCall<T>(method: string, fn: (w: NonNullable<ReturnType<typeof getWallet>>) => Promise<T>): () => Promise<void> {
-	return async () => {
-		const wallet = getWallet()
-		if (!wallet) {
-			setState({ lastError: "Not connected — call connect() first" })
-			return
-		}
-		try {
-			await logCall(method, () => fn(wallet))
-		} catch (err) {
-			setState({ lastError: err instanceof Error ? err.message : String(err) })
-		}
-	}
-}
-
 export function bindMeta(root: HTMLElement): void {
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-getChainInfo"]')?.addEventListener(
 		"click",
-		safeCall("getChainInfo", (w) => w.getChainInfo()),
+		guarded("getChainInfo", (w) => w.getChainInfo()),
 	)
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-getAccounts"]')?.addEventListener(
 		"click",
-		safeCall("getAccounts", (w) => w.getAccounts()),
+		guarded("getAccounts", (w) => w.getAccounts()),
 	)
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-getAddressBook"]')?.addEventListener(
 		"click",
-		safeCall("getAddressBook", (w) => w.getAddressBook()),
+		guarded("getAddressBook", (w) => w.getAddressBook()),
 	)
 }

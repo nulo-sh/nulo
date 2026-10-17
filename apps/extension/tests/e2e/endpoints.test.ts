@@ -1,4 +1,5 @@
 import { expect } from "vitest"
+import type { Page } from "puppeteer"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
 import { captureSoleProfileId, navigateToSettings, openNetworkDetail } from "./fixtures/helpers"
 
@@ -9,20 +10,23 @@ import { captureSoleProfileId, navigateToSettings, openNetworkDetail } from "./f
 // add → setPrimary → delete cycle requires a live Aztec node and
 // lives in the network suite.
 
-test("network detail page renders chain info + endpoints section", async ({ registeredExtension }) => {
-	const page = await openPopup(registeredExtension)
-	await waitForHash(page, "#/popup/general")
-
+/** Settings → Networks, then the first row's detail page. */
+async function openFirstNetworkDetail(page: Page): Promise<void> {
 	await navigateToSettings(page, "networks")
 	await page.waitForSelector('[data-testid="network-row"]', { visible: true, timeout: 5_000 })
-
 	const firstName = await page.evaluate(() => {
 		const row = document.querySelector('[data-testid="network-row"]') as HTMLElement | null
 		return row?.getAttribute("data-network-name") ?? null
 	})
 	expect(firstName).toBeTruthy()
-
 	await openNetworkDetail(page, firstName as string)
+}
+
+test("network detail page renders chain info + endpoints section", async ({ registeredExtension }) => {
+	const page = await openPopup(registeredExtension)
+	await waitForHash(page, "#/popup/general")
+
+	await openFirstNetworkDetail(page)
 
 	// Chain section: rename row + chain-id row
 	await page.waitForSelector('[data-testid="network-detail-rename"]', { visible: true, timeout: 5_000 })
@@ -42,16 +46,7 @@ test("NewEndpointPopup keeps submit disabled with empty URL", async ({ registere
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
-	await navigateToSettings(page, "networks")
-	await page.waitForSelector('[data-testid="network-row"]', { visible: true, timeout: 5_000 })
-
-	const firstName = await page.evaluate(() => {
-		const row = document.querySelector('[data-testid="network-row"]') as HTMLElement | null
-		return row?.getAttribute("data-network-name") ?? null
-	})
-	expect(firstName).toBeTruthy()
-
-	await openNetworkDetail(page, firstName as string)
+	await openFirstNetworkDetail(page)
 	await clickByTestId(page, "endpoint-add-btn")
 	await page.waitForSelector('[data-testid="add-endpoint-submit"]', { visible: true, timeout: 5_000 })
 
@@ -70,16 +65,7 @@ test("EditEndpointPopup pre-fills with current values + isDirty guard keeps save
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
-	await navigateToSettings(page, "networks")
-	await page.waitForSelector('[data-testid="network-row"]', { visible: true, timeout: 5_000 })
-
-	const firstName = await page.evaluate(() => {
-		const row = document.querySelector('[data-testid="network-row"]') as HTMLElement | null
-		return row?.getAttribute("data-network-name") ?? null
-	})
-	expect(firstName).toBeTruthy()
-
-	await openNetworkDetail(page, firstName as string)
+	await openFirstNetworkDetail(page)
 
 	// Click the edit icon on the first endpoint row. The icon is rendered
 	// inside the `#right` slot Tooltip, so click via dispatchEvent on the
@@ -114,16 +100,7 @@ test("Single-endpoint network hides the delete-endpoint icon (last-endpoint guar
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
-	await navigateToSettings(page, "networks")
-	await page.waitForSelector('[data-testid="network-row"]', { visible: true, timeout: 5_000 })
-
-	const firstName = await page.evaluate(() => {
-		const row = document.querySelector('[data-testid="network-row"]') as HTMLElement | null
-		return row?.getAttribute("data-network-name") ?? null
-	})
-	expect(firstName).toBeTruthy()
-
-	await openNetworkDetail(page, firstName as string)
+	await openFirstNetworkDetail(page)
 	await page.waitForSelector('[data-testid="endpoint-row"]', { visible: true, timeout: 5_000 })
 
 	const endpointCount = (await page.$$('[data-testid="endpoint-row"]')).length
@@ -143,16 +120,7 @@ test("NewEndpointPopup invalid URL surfaces inline RPC-didn't-respond error", as
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
-	await navigateToSettings(page, "networks")
-	await page.waitForSelector('[data-testid="network-row"]', { visible: true, timeout: 5_000 })
-
-	const firstName = await page.evaluate(() => {
-		const row = document.querySelector('[data-testid="network-row"]') as HTMLElement | null
-		return row?.getAttribute("data-network-name") ?? null
-	})
-	expect(firstName).toBeTruthy()
-
-	await openNetworkDetail(page, firstName as string)
+	await openFirstNetworkDetail(page)
 	await clickByTestId(page, "endpoint-add-btn")
 	await page.waitForSelector('[data-testid="add-endpoint-submit"]', { visible: true, timeout: 5_000 })
 

@@ -18,3 +18,4 @@
 - 2026-10-17 final-head smoke Firefox (armed, retry 0): 60 passed, 3 skipped by design, 0 failed, 2333 s. `bun run lint` 1.28-1.37 s in the base form, 3.39-4.32 s with the cycle step (three runs each, load1 about 55). Final gates all pass; #623 landed after them (no e2e file; merges cleanly).
 - 2026-10-17 arc 2 started on harden-quality-fixes-3-arc2 off dev 04b10075 (#632 merged; #631 still open).
 - 2026-10-17 phase 2.1 gate pass: lint, typecheck:all, test (823 files) exit 0; the txHashOf/setPgInputs/restartBackground grep over the four specs prints nothing.
+- 2026-10-17 phase 2.2 gate pass: lint, typecheck:all, test (823 files), playground typecheck and build exit 0.
