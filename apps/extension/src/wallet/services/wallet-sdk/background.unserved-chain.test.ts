@@ -49,6 +49,7 @@ vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
 import { dispatcherNetworks, initWalletSdkHandler } from "./background"
 import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN as ORIGIN, fakeSdkServices } from "./test-services"
+import { VerifyAdmissionGate } from "./verify-admission"
 
 const noopLogger = { log: () => {} } as never
 
@@ -212,6 +213,24 @@ describe("discovery for a chain the profile has no network for", () => {
 		expect(rejected()).toEqual(["back1"])
 		expect(notice).toHaveBeenCalledTimes(1)
 		expect(rows.has(`${ORIGIN}|0`)).toBe(true)
+	})
+
+	test("a remembered row whose network is back while the notice is open reconnects at once, spending a reconnect token", async () => {
+		const admit = vi.spyOn(VerifyAdmissionGate.prototype, "admit")
+		const window = held()
+		let reads = 0
+		const notice = vi.fn((_p: NoticeParams) => window.promise)
+		const { discover, rows } = boot({ remembered: true, notice, served: () => reads++ > 0 })
+
+		discover("back1", 0)
+		await flush()
+		expect(rows.has(`${ORIGIN}|0`)).toBe(true)
+		discover("back2", 0)
+		await flush()
+
+		expect(approved()).toEqual(["back2"])
+		expect(admit.mock.calls.map(([request]) => request.consumesToken)).toEqual([true])
+		window.release()
 	})
 
 	test("a discovery queued while locked reaches the same gate on unlock", async () => {

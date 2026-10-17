@@ -253,17 +253,17 @@ watch(
 											:class="item.row.addressText?.full && $style.detail_full"
 										>
 											<template v-if="item.row.addressText">
-												<Text variant="data" color="tertiary" data-testid="import-contact-address-saved" :class="$style.address_saved">
+												<Text variant="meta" color="tertiary" data-testid="import-contact-address-saved" :class="$style.address_saved">
 													{{ item.row.addressText.saved }}
 												</Text>
 												<span :class="$style.visually_hidden">changes to</span>
 												<Icon name="forward" size="12" color="tertiary" aria-hidden="true" :class="$style.arrow" />
-												<Text variant="data" color="primary" data-testid="import-contact-address-incoming" :class="$style.address_incoming">
+												<Text variant="meta" color="primary" data-testid="import-contact-address-incoming" :class="$style.address_incoming">
 													{{ item.row.addressText.incoming }}
 												</Text>
 											</template>
-											<Text v-else variant="data" color="tertiary" data-testid="import-contact-address">{{ trimAddress(item.row.address) }}</Text>
-											<Text v-if="item.row.isSender" variant="tag" color="tertiary" :class="$style.tag">sender</Text>
+											<Text v-else variant="meta" color="tertiary" data-testid="import-contact-address">{{ trimAddress(item.row.address) }}</Text>
+											<Text v-if="item.row.isSender" variant="label-section" color="tertiary" :class="$style.tag">sender</Text>
 										</Flex>
 
 										<Text v-if="!item.row.importable" :id="`${uid}-${item.row.idx}-reason`" variant="caption" color="tertiary">

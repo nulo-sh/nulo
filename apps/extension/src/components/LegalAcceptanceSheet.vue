@@ -157,7 +157,7 @@ onBeforeUnmount(() => {
 }
 
 .later {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	padding: 6px 12px;
 
 	color: var(--txt-secondary);

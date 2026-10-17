@@ -96,7 +96,7 @@ const sponsoredSentence = computed(() => {
 }
 
 .fee_value {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 }
 

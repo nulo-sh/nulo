@@ -54,10 +54,10 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 				:data-intent-kind="row.surface.kind"
 				:class="$style.item"
 			>
-				<Text variant="data" color="secondary" :class="$style.marker">{{ j + 1 }}</Text>
+				<Text variant="meta" color="secondary" :class="$style.marker">{{ j + 1 }}</Text>
 				<Flex direction="column" gap="4" :class="$style.item_body">
 					<Text data-testid="execute-op-summary-call-head" variant="body" color="primary" height="130">
-						<Text variant="data" data-testid="execute-op-summary-call-title">{{ row.title }}</Text> on <AddressDisplay :address="row.call.to" data-testid="execute-op-summary-call-to" /><template v-if="row.amount">:</template><template v-else-if="row.surface.kind === 'decoded'">. <Text variant="caption" color="secondary" data-testid="execute-op-call-named">Named by the app.</Text></template>
+						<Text variant="meta" data-testid="execute-op-summary-call-title">{{ row.title }}</Text> on <AddressDisplay :address="row.call.to" data-testid="execute-op-summary-call-to" /><template v-if="row.amount">:</template><template v-else-if="row.surface.kind === 'decoded'">. <Text variant="caption" color="secondary" data-testid="execute-op-call-named">Named by the app.</Text></template>
 					</Text>
 					<Text
 						v-if="row.amount && (row.surface.kind === 'transfer' || row.surface.kind === 'mint')"
@@ -68,7 +68,7 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 						height="130"
 					>
 						<!-- A sentence's spaces sit inside its text nodes: a bare newline between two tags renders none. -->
-						<Text variant="data" data-testid="execute-op-line-amount">{{ row.amount.text }}</Text>
+						<Text variant="meta" data-testid="execute-op-line-amount">{{ row.amount.text }}</Text>
 						<template v-if="row.amount.baseUnits"> base units</template>
 						<template v-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'account'"> from this account</template>
 						<template v-else-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'explicit'"> from <AddressDisplay :address="row.surface.sender.address" data-testid="execute-op-line-from" /></template>
@@ -101,10 +101,10 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 				<Text variant="body" color="secondary" aria-hidden="true" :class="$style.marker">•</Text>
 				<Text data-testid="execute-discovered-authwit-line" variant="body" color="primary" height="130" :class="$style.item_body">
 					Lets <AddressDisplay :address="a.caller" data-testid="execute-discovered-line-caller" />
-					<template v-if="line.kind === 'move' && amount"> move <Text variant="data" data-testid="execute-discovered-line-amount">{{ amount.text }}</Text></template>
+					<template v-if="line.kind === 'move' && amount"> move <Text variant="meta" data-testid="execute-discovered-line-amount">{{ amount.text }}</Text></template>
 					<template v-if="line.kind === 'move' && amount?.baseUnits"> base units</template>
 					<template v-if="line.kind === 'move'"> from <AddressDisplay :address="line.from" data-testid="execute-discovered-line-from" /> to <AddressDisplay :address="line.to" data-testid="execute-discovered-line-to" /></template>
-					<template v-else> call <Text variant="data" data-testid="execute-discovered-line-function">{{ line.fn }}</Text> on <AddressDisplay :address="a.consumer" data-testid="execute-discovered-line-consumer" /></template>
+					<template v-else> call <Text variant="meta" data-testid="execute-discovered-line-function">{{ line.fn }}</Text> on <AddressDisplay :address="a.consumer" data-testid="execute-discovered-line-consumer" /></template>
 				</Text>
 			</li>
 		</ul>

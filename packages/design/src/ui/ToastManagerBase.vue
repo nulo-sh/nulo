@@ -270,7 +270,7 @@ onBeforeUnmount(() => {
 }
 
 .action {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	flex: none;
 	padding: 6px 4px;
 	color: var(--nulo-accent);

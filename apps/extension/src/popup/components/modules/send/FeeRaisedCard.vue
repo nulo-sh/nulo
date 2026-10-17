@@ -33,7 +33,7 @@ const methodTitle = computed(() => (props.payer.type === "private_fpc" ? "Privat
 <template>
 	<Flex direction="column" data-testid="fee-raised-card">
 		<Flex align="center" justify="between" :class="$style.card">
-			<Text variant="label" color="primary">Fee</Text>
+			<Text variant="label-section" color="primary">Fee</Text>
 			<Text variant="name" color="primary" :class="$style.method_size" data-testid="fee-raised-method">{{ methodTitle }}</Text>
 		</Flex>
 		<FeeMethodRow
@@ -45,12 +45,12 @@ const methodTitle = computed(() => (props.payer.type === "private_fpc" ? "Privat
 		/>
 		<Flex direction="column" gap="4" :class="$style.detail_row" data-testid="fee-raised">
 			<Text variant="value" color="primary">Fee went up</Text>
-			<Text variant="data" color="secondary">
-				<span data-testid="fee-raised-was">Was {{ was }} FJ</span> · <Text variant="data" color="primary" data-testid="fee-raised-now">Now {{ now }} FJ</Text>
+			<Text variant="meta" color="secondary">
+				<span data-testid="fee-raised-was">Was {{ was }} FJ</span> · <Text variant="meta" color="primary" data-testid="fee-raised-now">Now {{ now }} FJ</Text>
 			</Text>
 		</Flex>
 		<Flex v-if="priority" align="center" justify="between" :class="$style.detail_row" data-testid="fee-raised-priority">
-			<Text variant="label" color="secondary">Priority</Text>
+			<Text variant="label-section" color="secondary">Priority</Text>
 			<Text variant="value" color="primary">{{ PRIORITY_LABELS[priority] }}</Text>
 		</Flex>
 	</Flex>

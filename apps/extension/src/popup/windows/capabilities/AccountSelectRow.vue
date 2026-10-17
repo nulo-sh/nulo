@@ -186,7 +186,7 @@ const startRename = async () => {
 }
 
 .row_address {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 	line-height: 16px;
 
@@ -211,7 +211,7 @@ const startRename = async () => {
 }
 
 .alias_label {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	display: flex;
 	align-items: center;
 	gap: 4px;

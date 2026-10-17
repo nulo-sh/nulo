@@ -438,7 +438,7 @@ watch(
 }
 
 .reset_link {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 
 	background: transparent;
