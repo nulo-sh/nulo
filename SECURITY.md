@@ -276,14 +276,26 @@ which makes the endpoint trust boundary explicit.
   user, decrypt session material, or write to storage. The threat model
   reduces to: a malicious endpoint can serve crafted RPC responses to a
   PXE / wallet that already trusts the **chain**.
-- **Chain-id verification is mandatory at adoption.** `addEndpoint` /
-  `updateEndpoint` probe the candidate URL via
-  `AztecNode.getNodeInfo()` and reject when `l1ChainId` (or the chain
-  identifier carried in the response) doesn't match the parent
-  `Network.chainId`. Errors surface as `EndpointChainMismatchError`
-  inline in the popup.
+- **Chain identity is checked at adoption.** `addNetwork` probes the node's
+  `getNodeInfo()` and records its exact L1 chain id and the wallet chain id
+  it computes (`walletChainId(l1ChainId, rollupVersion)`). `addEndpoint` /
+  `updateEndpoint` refuse a node unless both equal the row's; the refusal
+  carries `ENDPOINT_CHAIN_MISMATCH` and shows inline in the popup. Chain 0
+  is the Local Network: L1 31337 (`LOCAL_L1_CHAIN_ID`) on `localhost` or
+  `127.0.0.1`. A node elsewhere whose answer computes to 0 is refused.
+- **Chain identity is checked at use.** Every step that builds the chain
+  metadata a signature, proof or simulation commits to compares the live
+  node with the stored row (`assertLiveChainIdentity`): the L1 and the
+  wallet chain id on a non-zero chain, and L1 31337 on chain 0, whose
+  rollup version is not pinned because every local sandbox redeploys it.
+  Promotion to primary does not probe. Loopback is checked when an endpoint
+  is adopted, built into a row or promoted, not at use. The guarantee
+  covers the metadata the wallet builds and the accounts it allocates: an
+  existing account is re-derived from its own stored L1 for verification
+  and export, and an imported key or an opaque message hash carries no
+  chain (§ Authorization enforcement).
 - **Duplicate-URL guard per Network.** Adding the same `rpcUrl` twice to
-  the same `Network` is rejected (`DuplicateEndpointError`).
+  the same `Network` is rejected (`DUPLICATE_ENDPOINT`).
 - **Per-URL `AztecNode` cache** with 3-strike eviction: each unique URL
   gets its own client; transient failures don't poison neighbours;
   consecutive failures evict.
@@ -299,7 +311,8 @@ URL via `getNodeForUrl`. This avoids:
   seen the bundle yet, and
 - a malicious endpoint shadowing receipts for txs it never received.
 
-Failover happens only after the original URL trips the 3-strike eviction.
+Three consecutive failures rebuild that URL's client; the poll never moves
+to another endpoint.
 
 ### What endpoints can still do
 
@@ -318,8 +331,8 @@ explicit and per-Network.
 ### What endpoints cannot do
 
 - Spend or sign without account material the SW already holds.
-- Inject arbitrary data into PXE state — every input is bound to a chain
-  via the `chainId` check at adoption + reverification on `setPrimaryEndpoint`.
+- Make the wallet build signing or proving metadata for a chain other than
+  the stored one.
 - Read decrypted master secrets or session records (none of these cross
   the wire).
 - Trigger storage writes outside the network/endpoint surface.
