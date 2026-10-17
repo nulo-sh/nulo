@@ -1,7 +1,7 @@
 ---
 plan: test-infra-1
 tier: mid
-status: arc 1 implemented (Phases 1-3 ✓); Codex fix loop round 2
+status: arc 1 implemented (Phases 1-3 ✓); Codex loop converged (round 2 approve); PR open
 issues: "#550 (arc 1 Closes), #561 (arc 3 Closes), #536 (arc 3 Closes), #540 (arc 4 Closes)"
 driver: claude-code
 claude_model: opus
@@ -231,6 +231,8 @@ It reproduced F9's three differences independently and found none in the other 8
 - R1-3 (Medium) the shared skip classes widen `toast-call-sites`' skips to `.js` tests and stories, against D3: each guard keeps its exact old patterns. The 14 lists re-ran equal (`lessons/phase-1.md`).
 
 **Arc 1 Opus diff review** (opus, beside round 1): `approve with fixes`. Taken: R1-1 (found independently); the parse cost against vitest's 5 s default, cut by parsing without JSDoc nodes and, in the masker, without parent links, never by a raised timeout (`lessons/phase-2.md`: the slowest guard test from 2-4 s to under 2 s). Not taken: a `PACKAGE_SRC_ROOTS` entry whose `src` holds no file a policy reads throws "holds no file". It needs a package that does not exist, and it fails loud and names the root in the PR that adds one, which is the throw's purpose.
+
+**Arc 1 Codex fix loop, round 2** (resumed, verification of 2cca9bdb): `approve`. No material finding. It replayed all 14 walker policies against the 0fe841be walkers, directory and file-name skips included, and got identical lists. Across 1,858 files the masking was byte-for-byte unchanged under the new parse options, and 187,284 calls matched in callee, argument kind and text, offset and line. JSDoc tags, comment delimiters inside JSDoc types, template literal types, CRLF and Vue expressions all read as before. The loop converged in two rounds.
 
 ## Seeds
 
