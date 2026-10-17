@@ -1,6 +1,6 @@
 import { expect } from "vitest"
 import { isFirefox } from "./fixtures/browser"
-import { test, openPopup, waitForHash } from "./fixtures/extension"
+import { test, openPopup, replaceInputValue, waitForHash } from "./fixtures/extension"
 import { clickNavTab } from "./fixtures/helpers"
 import { shotSend } from "./fixtures/send-page"
 
@@ -69,14 +69,18 @@ test("a settings search opens the row's page with the row outlined", async ({ re
 		await clickNavTab(page, "settings")
 		await waitForHash(page, "#/popup/settings")
 
-		await page.type('[data-testid="settings-search-input"]', "full")
-		await page.waitForSelector('[data-testid="settings-search-result-display-full-height"]', { visible: true, timeout: 10_000 })
-		const results = await page.$$eval('[data-testid^="settings-search-result-"]', (rows) =>
-			rows.map((row) => row.getAttribute("data-testid")),
-		)
+		const shownResults = () =>
+			page.$$eval('[data-testid^="settings-search-result-"]', (rows) => rows.map((row) => row.getAttribute("data-testid")))
 		// Firefox has no side panel, so its row is not offered there and a search cannot find it.
-		const fullHeight = "settings-search-result-display-full-height"
-		expect(results).toEqual(isFirefox ? [fullHeight] : [fullHeight, "settings-search-result-display-side-panel"])
+		const sidePanel = "settings-search-result-display-side-panel"
+		await page.type('[data-testid="settings-search-input"]', "panel")
+		await page.waitForSelector(`[data-testid="${isFirefox ? "settings-search-empty" : sidePanel}"]`, { visible: true, timeout: 10_000 })
+		expect(await shownResults()).toEqual(isFirefox ? [] : [sidePanel])
+
+		const animations = "settings-search-result-display-animations"
+		await replaceInputValue(page, '[data-testid="settings-search-input"]', "nimat")
+		await page.waitForSelector(`[data-testid="${animations}"]`, { visible: true, timeout: 10_000 })
+		expect(await shownResults()).toEqual([animations])
 
 		// The outline lasts a moment: freeze its first frame as it starts, so no timing bounds the reads.
 		await page.evaluate(() => {
@@ -93,10 +97,10 @@ test("a settings search opens the row's page with the row outlined", async ({ re
 			observer.observe(document, { subtree: true, attributes: true, attributeFilter: ["data-highlighted"] })
 			Object.assign(window, { settingsSearchObserver: observer })
 		})
-		await page.click(`[data-testid="${fullHeight}"]`)
+		await page.click(`[data-testid="${animations}"]`)
 		await waitForHash(page, "#/popup/settings/display")
 
-		const row = '[data-testid="display-row-full-height"]'
+		const row = '[data-testid="display-row-animations"]'
 		await page.waitForSelector(`${row}[data-highlighted]`, { timeout: 10_000 })
 		const shown = await page.$eval(row, (el) => {
 			const style = getComputedStyle(el)

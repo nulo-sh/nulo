@@ -10,3 +10,4 @@
 - 2026-10-17 15:24Z: S1 filed as #656 (ux).
 - 2026-10-17 15:36Z: Phase 0 gate pass: smoke capture specs green at retry 0 on Chrome (8 files, 34 tests, 5:07), network/send-amount-exact green at retry 0 (45 s), the nine captures in both themes in before/.
 - 2026-10-17 15:58Z: Phase 1 gate pass: lint, typecheck:all, test (826 files), test:all, build-storybook exit 0; smoke on Chrome (8 files, 37 tests, 3:54) and Firefox (3 files, 18 tests, 3:17) green at retry 0; the handle_zone/slide-enter grep empty.
+- 2026-10-17 16:20Z: Phase 2 gate pass (second run): lint, typecheck:all, test (825 files), test:all exit 0; the retirement grep empty; settings-routes green at retry 0 on Chrome and Firefox (6 tests each). First test run red: `pages/settings/index.test.ts` searched "full", the retired row's only hit in jsdom (no side panel); re-pointed to "motion" (not in the change map; recorded in the ledger).
