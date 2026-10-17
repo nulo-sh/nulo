@@ -86,6 +86,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [dependency-refresh](dependency-refresh/plan.md) — completed — minor and patch updates inside existing ranges, with the release-age gate holding
 - [deprecate-simulate-views](deprecate-simulate-views/plan.md) — completed — the internal simulate_views operation kind retired from every layer
 - [design-system-externalization](design-system-externalization/plan.md) — completed — `@nulo/design` becomes the single source of tokens, base styles and primitives
+- [docs-1](docs-1/plan.md) — completed — the documents say what the code does (passkey boundary, authwit contract, backup contents) plus four small fixes (#665 #667 #668 #672)
 - [docs-improvement](docs-improvement/plan.md) — completed — documentation split by job, and a sweep of the code comments
 - [durable-jobs](durable-jobs/plan.md) — completed — every submission becomes a durable job in storage that the popup only observes
 - [dynamic-token-list](dynamic-token-list/plan.md) — completed — a signed token list at tokens.nulo.sh replaces the built-in default tokens: CI signs it in a gated environment, the wallet fetches it after the Terms and daily (#79)
