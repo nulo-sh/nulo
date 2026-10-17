@@ -120,9 +120,9 @@ One arc, one PR against `dev`. The wallet holds the composite chain id 0 to one 
   - Pass: exit 0. Tests 1 to 5 and 7 fail against the base files.
   - Layers: lint, typecheck, unit.
 
-### Phase 3: the docs, then the arc gate
+### Phase 3: the docs, then the arc gate ✓
 
-- [ ] Change map: `SECURITY.md` § RPC endpoint as user input (`:279-289`, `:302`, `:321-322`).
+- [x] Change map: `SECURITY.md` § RPC endpoint as user input (`:279-289`, `:302`, `:321-322`).
 - Rewrite these statements to the checks the code runs; state rules, not history:
   - **Adoption.** `addNetwork` probes `getNodeInfo()` and records the exact L1 and the composite. `addEndpoint` and `updateEndpoint` refuse a node unless both equal the row's (`ENDPOINT_CHAIN_MISMATCH`). Chain 0 is the Local Network, L1 31337 on `localhost` / `127.0.0.1`. A composite that computes to 0 is refused.
   - **Use.** Every step that builds the chain metadata a signature, proof or simulation commits to compares the live node with the stored row (`assertLiveChainIdentity`). That is the L1 and the composite on a non-zero chain, and L1 31337 on chain 0, whose rollup version is not pinned. Promotion does not probe. Loopback is checked when an endpoint is adopted, built into a row or promoted, not at use. The guarantee covers the metadata the wallet builds and the accounts it allocates. Existing accounts are re-derived from their own stored L1 for verification and export. An imported key and an opaque message hash carry no chain (§ Authorization, `:255-261`).

@@ -11,3 +11,9 @@
 ## Implementation review r2, 2026-10-17
 
 - **Codex** (resume, session `01a14abd`): **approve**. The three fixes match the code. Item 1 was withdrawn as blocking: no supported path creates or restores the row, so it is a known limit, recorded with D5 at close-out.
+
+## The arc gate, 2026-10-17
+
+- The smoke run needs the armed Chrome build first (the global setup refuses a missing `dist/chrome` and prints the build command); built in 46 s.
+- Smoke, Chrome, retry 0: `tests/e2e/endpoints.test.ts` 7 passed, 39.5 s.
+- Network, Chrome, `e2e:agent`, `NULO_E2E_RETRY=0`: `endpoint-refused-recovery.test.ts` 21.0 s and `backup-edited-local-network.test.ts` 26.2 s, both passed; the run took 190 s (245 s with the build). No scenario was added.

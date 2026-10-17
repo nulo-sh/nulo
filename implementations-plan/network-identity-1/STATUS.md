@@ -8,3 +8,4 @@
 - 2026-10-17 final Codex pass verified: approve. Plan committed.
 - 2026-10-17 arc 1 phase 1 green: lint 0, typecheck:all 0, wallet-core test 317 passed, aztec-runtime test 423 passed, root test 13408 passed. The refused sink case fails on the base `chain-identity.ts` (2 failed) and passes after. Fixtures moved: fast-path, batched-view-simulation.
 - 2026-10-17 arc 1 phase 2 green: lint 0, typecheck:all 0, network/account/network-reset 481 passed, root test 13428 passed, test:all 0. 13 new tests fail on the base service files and pass after.
+- 2026-10-17 arc 1 phase 3 green: smoke endpoints.test.ts 7 passed (39.5 s); network endpoint-refused-recovery 21.0 s and backup-edited-local-network 26.2 s passed at retry 0 (run 190 s); test:ci-gating 576 pass; check:plans 0. Codex loop: r1 reject (2 adopted, 1 argued), r2 approve; Opus conditional approve, folded.
