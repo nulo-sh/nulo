@@ -72,7 +72,6 @@ export const pausedImported = (name: string, imported: readonly string[]) =>
 		? `${quoted(imported)} is an imported account. Deleting ${name} deletes it.`
 		: `${quoted(imported)} are imported accounts. Deleting ${name} deletes them.`
 
-/** The network page's reason line while a reset holds the network's endpoints. */
 export const endpointsHeld = (name: string) => `${name}’s reset is paused. Endpoints can be edited once it finishes.`
 
 /** Appended to Delete chain's confirmation while a paused reset holds the network. */

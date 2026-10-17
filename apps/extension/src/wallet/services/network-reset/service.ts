@@ -122,7 +122,8 @@ function journalAccounts(rows: Account[], resealed: ReadonlyMap<string, { newAdd
 	return { accounts, unmovable }
 }
 
-/** A stored name as a sentence may quote it: stripped of bidi, zero-width and control characters. */
+/** Letters, digits, space and `-._` only, so no bidi, zero-width or control character reaches a
+ *  sentence. */
 const sentenceName = (name: string) => sanitizeString(name, 32).trim() || DEFAULT_IMPORTED_ACCOUNT_NAME
 
 /** The imported accounts deleting a paused network deletes: the journal's, moved or not, and every

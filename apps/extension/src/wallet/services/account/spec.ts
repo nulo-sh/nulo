@@ -8,7 +8,6 @@ export const ACCOUNT_SERVICE_NAME = "account"
 
 export const DEFAULT_ACCOUNT_NAME = "Account 1"
 
-/** The name an imported account gets when it is given none. */
 export const DEFAULT_IMPORTED_ACCOUNT_NAME = "Imported account"
 
 /** EntityStorage root for account rows. Frozen:

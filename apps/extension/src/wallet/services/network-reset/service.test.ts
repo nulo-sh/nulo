@@ -370,8 +370,9 @@ describe("NetworkResetService — what deleting a paused network deletes", () =>
 		await putNetwork(h, { id: "tn", name: "Testnet", chainId: NEW, l1ChainId: L1, kind: "testnet" })
 		await putImported(h, NEW, SK1, 0, { address: `${importedAddr(SK1)}-new` })
 		await putImported(h, NEW, SK2, 1, { name: "Ho\u202eld\u200b" })
+		await putImported(h, NEW, SK1, 2, { address: "0xunnamed", name: "\u202e★" })
 		await putJournal(h, journalOf({ purged: true, accounts: [importedEntry(0, "Savings", importedAddr(SK1), true)] }))
-		expect((await h.reset.getStaleNetwork("tn"))?.reset?.imported).toEqual(["Savings", "Hold"])
+		expect((await h.reset.getStaleNetwork("tn"))?.reset?.imported).toEqual(["Savings", "Hold", "Imported account"])
 	})
 })
 

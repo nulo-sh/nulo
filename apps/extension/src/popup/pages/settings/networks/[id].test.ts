@@ -21,10 +21,12 @@ vi.mock("@/utils/core", () => ({
 }))
 vi.mock("@/composables/useNetworkActivation", () => ({ useNetworkActivation: () => ({ activate: vi.fn(async () => "activated") }) }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
-vi.mock("vue-router", () => ({
-	useRoute: () => ({ params: { id: "mine" } }),
-	useRouter: () => ({ push: vi.fn(), go: vi.fn(), replace: vi.fn() }),
-}))
+const routing = vi.hoisted(() => ({ route: undefined as unknown as { params: { id: string } } }))
+vi.mock("vue-router", async () => {
+	const { reactive } = await import("vue")
+	routing.route = reactive({ params: { id: "mine" } })
+	return { useRoute: () => routing.route, useRouter: () => ({ push: vi.fn(), go: vi.fn(), replace: vi.fn() }) }
+})
 // The detail page must never consult Developer Mode: managing a row that already exists is not
 // gated, only creating one is. A constructed config client here is a regression.
 vi.mock("@/wallet/services/config/client", () => ({
@@ -34,6 +36,7 @@ vi.mock("@/wallet/services/config/client", () => ({
 }))
 
 beforeEach(() => {
+	routing.route.params.id = "mine"
 	setPrimaryEndpoint.mockClear()
 	networkReset.getPendingReset.mockReset().mockResolvedValue(null)
 	networkReset.getStaleNetwork.mockReset().mockResolvedValue(null)
@@ -80,7 +83,10 @@ function mountDetail() {
 			plugins: [createTestingPinia({ createSpy: vi.fn })],
 			components: { SettingsPageShell },
 			stubs: {
-				SettingItem: { inheritAttrs: false, template: "<div v-bind='$attrs'><slot name='right' /></div>" },
+				SettingItem: {
+					inheritAttrs: false,
+					template: "<div v-bind='$attrs' :data-clickable='String(!!$attrs.onClick)'><slot name='right' /></div>",
+				},
 				Button: { inheritAttrs: false, template: "<button v-bind='$attrs'><slot /></button>" },
 				Icon: { inheritAttrs: false, template: "<i v-bind='$attrs' />" },
 				Tooltip: { template: "<span><slot /></span>" },
@@ -124,7 +130,19 @@ describe("Settings › Network detail — a paused reset of this network", () =>
 		const wrapper = mountDetail()
 		await flushPromises()
 		await wrapper.get('[data-testid="network-delete-chain-btn"]').trigger("click")
+		await flushPromises()
 		return useCacheStore().confirm?.description
+	}
+	/** The page's own first read answers only when `release` is called. */
+	const holdFirstRead = () => {
+		let release!: (pending: PendingReset | null) => void
+		networkReset.getPendingReset.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					release = resolve
+				}),
+		)
+		return (pending: PendingReset | null) => release(pending)
 	}
 	const WIPES = "This wipes accounts, balances, tokens, and PXE state on this chain. This cannot be undone."
 
@@ -143,7 +161,8 @@ describe("Settings › Network detail — a paused reset of this network", () =>
 		expect(wrapper.get('[data-testid="endpoint-reset-held"]').text()).toBe(
 			"My Chain’s reset is paused. Endpoints can be edited once it finishes.",
 		)
-		expect(wrapper.findAll('[data-testid="endpoint-row"]')).toHaveLength(2)
+		const rows = wrapper.findAll('[data-testid="endpoint-row"]')
+		expect(rows.map((r) => r.attributes("data-clickable"))).toEqual(["false", "false"])
 		expect(wrapper.find('[data-testid="endpoint-edit-btn"]').exists()).toBe(false)
 		expect(wrapper.find('[data-testid="endpoint-delete-btn"]').exists()).toBe(false)
 		expect(wrapper.get('[data-testid="endpoint-add-btn"]').attributes("disabled")).toBeDefined()
@@ -157,9 +176,38 @@ describe("Settings › Network detail — a paused reset of this network", () =>
 		await flushPromises()
 		expect(wrapper.find('[data-testid="endpoint-reset-held"]').exists()).toBe(false)
 		expect(wrapper.findAll('[data-testid="endpoint-edit-btn"]')).toHaveLength(2)
+		expect(wrapper.findAll('[data-testid="endpoint-row"]').map((r) => r.attributes("data-clickable"))).toEqual(["true", "true"])
 		expect(wrapper.get('[data-testid="endpoint-add-btn"]').attributes("disabled")).toBeUndefined()
 		await wrapper.findAll('[data-testid="endpoint-row"]')[1]!.trigger("click")
 		expect(setPrimaryEndpoint).toHaveBeenCalledWith("mine", "m2")
+	})
+
+	test("a Delete chain clicked before the page's read lands still names the imported accounts", async () => {
+		const release = holdFirstRead()
+		holdMine(["Savings"])
+		const wrapper = mountDetail()
+		await flushPromises()
+		expect(wrapper.find('[data-testid="endpoint-reset-held"]').exists()).toBe(false)
+		await wrapper.get('[data-testid="network-delete-chain-btn"]').trigger("click")
+		await flushPromises()
+		expect(useCacheStore().confirm?.description).toBe(`${WIPES} It also deletes the imported account “Savings”.`)
+		release({ networkId: "mine", running: false })
+		await flushPromises()
+	})
+
+	test("a hold read for one network never shows on another the page moves to, and comes back with it", async () => {
+		const release = holdFirstRead()
+		holdMine(["Savings"])
+		const wrapper = mountDetail()
+		await flushPromises()
+		routing.route.params.id = "alpha"
+		await flushPromises()
+		release({ networkId: "mine", running: false })
+		await flushPromises()
+		expect(wrapper.find('[data-testid="endpoint-reset-held"]').exists()).toBe(false)
+		routing.route.params.id = "mine"
+		await flushPromises()
+		expect(wrapper.find('[data-testid="endpoint-reset-held"]').exists()).toBe(true)
 	})
 
 	test("the confirmation is unchanged with no imported account, or when the reset names another network", async () => {

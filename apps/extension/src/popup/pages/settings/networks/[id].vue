@@ -40,17 +40,21 @@ const network = computed(() => appStore.networks.find((n) => n.id === networkId.
 const isActive = computed(() => appStore.network?.id === networkId.value)
 const canDelete = computed(() => !isActive.value && appStore.networks.length > 1)
 
-/** A reset that names this network, with the imported accounts deleting it would delete. A running
- *  reset's takeover covers this page, so only a paused one's view is read. */
+/** The hold a reset puts on network `id`, with the imported accounts deleting it would delete. A
+ *  running reset's takeover covers this page, so only a paused one's view is read. */
+async function readHeldReset(id) {
+	const pending = await managers.networkReset.getPendingReset()
+	if (pending?.networkId !== id) return null
+	const view = pending.running ? null : await managers.networkReset.getStaleNetwork(id)
+	return { imported: view?.reset?.imported ?? [] }
+}
+
 const heldReset = ref(null)
 let resetReads = 0
 const syncHeldReset = async () => {
 	const read = ++resetReads
-	const id = networkId.value
-	const pending = await managers.networkReset.getPendingReset()
-	const view = pending?.networkId === id && !pending.running ? await managers.networkReset.getStaleNetwork(id) : null
-	if (read !== resetReads) return
-	heldReset.value = pending?.networkId === id ? { imported: view?.reset?.imported ?? [] } : null
+	const held = await readHeldReset(networkId.value)
+	if (read === resetReads) heldReset.value = held
 }
 managers.networkReset.onStaleNetworkChanged.add(syncHeldReset)
 void syncHeldReset()
@@ -138,16 +142,20 @@ const handleDeleteEndpoint = (endpoint) => {
 	})
 }
 
-const handleDeleteNetwork = () => {
+const handleDeleteNetwork = async () => {
 	if (!network.value) return
 	if (!canDelete.value) return
+	const { id, name } = network.value
+	// Read at the click: a confirmation opened before the page's own read landed must still name them.
+	const held = await readHeldReset(id).catch(() => heldReset.value)
+	if (networkId.value !== id) return
 	requestConfirm({
 		confirm_text: "Yes, delete chain",
 		confirm_color: "red",
-		title: `Delete ${network.value.name}?`,
+		title: `Delete ${name}?`,
 		description: [
 			"This wipes accounts, balances, tokens, and PXE state on this chain. This cannot be undone.",
-			heldReset.value?.imported.length ? staleCopy.deleteChainImported(heldReset.value.imported) : "",
+			held?.imported.length ? staleCopy.deleteChainImported(held.imported) : "",
 		]
 			.filter(Boolean)
 			.join(" "),
@@ -172,6 +180,12 @@ const handleDeleteNetwork = () => {
 // If the network row disappears (deleted from elsewhere), redirect back to the list.
 watch(network, (n) => {
 	if (!n) router.replace("/popup/settings/networks")
+})
+
+// The router reuses this page across network ids; a hold read for one must never show on another.
+watch(networkId, () => {
+	heldReset.value = null
+	void syncHeldReset()
 })
 
 onBeforeUnmount(() => {
@@ -223,6 +237,7 @@ onBeforeUnmount(() => {
 				<Text variant="body" color="secondary" height="140">{{ staleCopy.endpointsHeld(network.name) }}</Text>
 			</Flex>
 			<ItemsContainer>
+				<!-- A bound onClick, not @click: SettingItem renders a row inert only with no click listener. -->
 				<SettingItem
 					v-for="endpoint in network.endpoints"
 					:key="endpoint.id"
