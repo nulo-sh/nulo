@@ -82,12 +82,12 @@ describe("runFencedBootstrap", () => {
 	})
 
 	describe("an earlier failure record at entry", () => {
-		/** A record channel the run reads and writes, and what it held when the bootstrap started. */
 		type FailureRecord = { profileId: string; message: string } | null
-		function withRecord(initial: FailureRecord) {
+		function withRecord(initial: FailureRecord, isCurrent = () => true) {
 			let record = initial
 			let atBootstrap: FailureRecord | undefined
 			const h = makeDeps({
+				isCurrent,
 				readFailure: () => record,
 				setFailure: (next) => {
 					record = next
@@ -104,6 +104,12 @@ describe("runFencedBootstrap", () => {
 			const r = withRecord({ profileId: "pA", message: "earlier" })
 			void runFencedBootstrap(r.h.deps)
 			expect(r.atBootstrap()).toBeNull()
+		})
+
+		test("a run a newer event already superseded clears nothing", () => {
+			const r = withRecord({ profileId: "pA", message: "newer run's" }, () => false)
+			void runFencedBootstrap(r.h.deps)
+			expect(r.atBootstrap()).toEqual({ profileId: "pA", message: "newer run's" })
 		})
 
 		test("control: another profile's record stays", () => {

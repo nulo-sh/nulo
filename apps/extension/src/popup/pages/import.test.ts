@@ -383,7 +383,6 @@ describe("popup import — in its own window", () => {
 })
 
 describe("popup import — the activation wait", () => {
-	/** The page's own completeImport over the real recovery and activation wait, past its first await. */
 	async function startImport() {
 		const real = await vi.importActual<typeof import("@/composables/completeImportWithRecovery")>(
 			"@/composables/completeImportWithRecovery",
