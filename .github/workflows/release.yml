@@ -281,10 +281,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bun scripts/release/attach-assets-run.ts select
-      # Info-ZIP refuses an absolute or `..` member, so each zip lands inside its own tree.
+      # Info-ZIP refuses an absolute or `..` member, so each zip lands inside its own tree; `-d`
+      # creates only the last directory of its path.
       - name: Unpack the published zips
         if: steps.select.outputs.source == 'published'
         run: |
+          mkdir -p dist/published
           unzip -q "dist/release/nulo-chrome-${VERSION}.zip" -d dist/published/chrome
           unzip -q "dist/release/nulo-firefox-${VERSION}.zip" -d dist/published/firefox
       - name: Upload the published Chrome tree

@@ -497,7 +497,10 @@ const PUBLISHED_ASSETS = [
 function handoffFindings(steps: Step[]): string[] {
 	const findings: string[] = []
 	const unpacked = commandsOf(steps.find((s) => s.run?.includes("unzip")))
-	const want = ["chrome", "firefox"].map((browser, i) => `unzip -q "${PUBLISHED_ZIPS[i]}" -d dist/published/${browser}`)
+	const want = [
+		"mkdir -p dist/published",
+		...["chrome", "firefox"].map((browser, i) => `unzip -q "${PUBLISHED_ZIPS[i]}" -d dist/published/${browser}`),
+	]
 	if (!Bun.deepEquals(unpacked, want)) findings.push(`${SELECT}: a tree is not its own browser's zip`)
 	for (const browser of ["chrome", "firefox"]) {
 		const upload = steps.find((s) => s.with?.name === `published-${browser}`)
