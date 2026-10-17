@@ -9,7 +9,24 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev 1b93cbfa
 issues: "#590 (the sheet part: this arc; Closes #590 only once icons-d2-1's last PR is on dev, else Refs #590)"
+status: closed (delivered by the PR from `worktree-sheet-1`, with this close-out)
 ---
+
+## Outcome
+
+- **Date:** 2026-10-17. Planned and implemented the same day; one arc.
+- **Status:** closed with its delivery: the PR from `worktree-sheet-1` (closes #590; its icon part landed in #641 and #655), whose final commits are this close-out; merging is the owner's call.
+- **Shipped:**
+  - Every `PopupCard` sheet sits at its content height, scrolls inside its card when taller than the frame, and draws no bar: the 2 px accent edge, 16 px of top padding and a 6 px offset ledge (P33-07 E). The light theme's `Popup` scrim is the page background at 70 %, and its card carries the 1 px outline line under the ledge (P33-09 A, OA-1 "both"). The sheet fades in where it rests (`.sheet-*`, today's curve and timing).
+  - The Full-height popups setting is gone: its config key, composable, Display row and search row (P33-08 A). A stored value is dropped by the next config write (`store.test.ts`); an old backup's row is skipped at restore.
+  - The 500-row import review proves on both engines that a content-height sheet keeps its answers on screen while its list scrolls. Before and after captures in [screenshots/](screenshots/).
+- **Review loop:** the plan took a dual audit and a final Codex pass; the implementation converged at Codex round 2 beside an Opus review (§ [Audit verdicts](#audit-verdicts)).
+- **Gates at the final head:** at the merged head (dev 093fa10d with this arc): `audit:vue` (typecheck, test, lint, build), `test:all` and `check:plans` exit 0; the whole smoke suite at retry 0 on Chrome (57 files, 259 tests) and on Firefox (60 files, 259 tests); network `snack-placement`, `send-picker`, `popup-escape-layered`, `send-amount-exact` and `stale-network-reset` on Chrome, and `popup-escape-layered` and `snack-placement` on Firefox, at retry 0. Each phase's gate is in [lessons/](lessons/).
+- **Lessons:** none promoted. The arc's gotchas are local (a search test that found the retired row by a word, not its id; stale 40 px wording in two e2e docs) and sit in `lessons/`; `lessons.md` is at its budget.
+- **Known limits:** #686.
+- **Open items:** #656 (a double-click's second press can answer the Confirm its first press opened; OA-3, waits on the owner). OA-1, OA-2 and OA-4 shipped their "now" forms and go to the owner's next decision page through the orchestrator; any change they bring is new work.
+- **Dropped, rejected, superseded:** the double-click guard (D11, OA-3: not shipped, tracked in #656); a sheet primitive in `@nulo/design` and new sheet tokens (outline B, D1, D2: rejected); `slideopacity` for the sheet (D4: rejected for its curve).
+- **Seeds:** the `/goal` and `/loop` seeds below are retired.
 
 # sheet-1: the popup sheet's new look, the Full-height setting retired
 
@@ -169,7 +186,7 @@ Surfaces:
 1. The e2e-testing skill's `pointerClick` passage still described the 40 px rise: **accepted**.
 2. `base.css:78`, "the light theme inherits … every scrim unchanged": **declined**; true of the tokens (the plan's ruling), the light `Popup` scrim being a component rule.
 3. The long-import test's header did not name the fit assertion's failure mode: **accepted**.
-- Its note that a scrolled onboarding tab leaves an undimmed strip below a sheet (the wrapper sits against the viewport) predates this arc: a known limit (close-out).
+- Its note that a scrolled onboarding tab leaves an undimmed strip below a sheet (the wrapper resolves against the first screen, not the scrolled one) predates this arc: a known limit, #686.
 
 **Implementation, round 2, Codex** (resumed `01a14aab`, the fix commit 80d913c2): `approve`; the fixes verified, no new material finding. The loop converged.
 
@@ -215,7 +232,7 @@ Surfaces:
 
 **Validation gate**: `bun run lint && bun run typecheck:all && bun run test && bun run test:all`, exit 0; `git grep -n -i 'showPopupFullscreen\|display-full-height\|fullscreenPopupSetting' -- apps packages` empty; `settings-routes.test.ts` green at retry 0 on Chrome and on Firefox. Layers: lint, typecheck, unit, e2e.
 
-### Phase 3: full suites, "after" shots
+### Phase 3: full suites, "after" shots ✓
 
 1. Run the whole smoke suite on Chrome, then on Firefox, each from a fresh armed build.
 2. Run on Chrome `network/snack-placement network/send-picker network/popup-escape-layered network/send-amount-exact network/stale-network-reset`, then `network/popup-escape-layered network/snack-placement` with `NULO_E2E_BROWSER=firefox`.

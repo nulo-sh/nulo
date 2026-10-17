@@ -13,3 +13,7 @@
 - 2026-10-17 16:20Z: Phase 2 gate pass (second run): lint, typecheck:all, test (825 files), test:all exit 0; the retirement grep empty; settings-routes green at retry 0 on Chrome and Firefox (6 tests each). First test run red: `pages/settings/index.test.ts` searched "full", the retired row's only hit in jsdom (no side panel); re-pointed to "motion" (not in the change map; recorded in the ledger).
 - 2026-10-17 16:47Z: Codex loop converged: round 1 `approve with fixes` (3 low comments; 2 accepted, 1 declined), Opus `approve with fixes` (2 accepted, 1 declined), fixes 80d913c2, round 2 `approve`.
 - 2026-10-17 17:21Z: Phase 3, at 80d913c2: Chrome full smoke green at retry 0 (57 files passed, 6 skipped, 258 tests); the "after" captures green and the nine pairs in both themes in `screenshots/`. #649 landed on dev; Firefox's full run stopped at start, to run on the merged head.
+- 2026-10-17 17:34Z: merged dev 093fa10d (#649, #679): clean, base.css untouched by dev (hash holds); audit:vue and test:all exit 0 on the merged head; retirement greps empty.
+- 2026-10-17 18:12Z: Phase 3 on the merged head: Chrome full smoke green at retry 0 (57 files passed, 6 skipped, 259 tests, wall=2101s local).
+- 2026-10-17 18:27Z: Phase 3 on the merged head: Firefox full smoke green at retry 0 (60 files passed, 3 skipped, 259 tests, 2983 s local).
+- 2026-10-17 18:28Z: Phase 3 on the merged head: Chrome network snack-placement, send-picker, popup-escape-layered, send-amount-exact, stale-network-reset green at retry 0 (10 tests).
