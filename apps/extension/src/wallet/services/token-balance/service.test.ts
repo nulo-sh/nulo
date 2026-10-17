@@ -13,7 +13,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
@@ -26,6 +26,7 @@ import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { TASK_SERVICE_NAME } from "@/wallet/services/task/spec"
 import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
 import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
+import { awaitedBus } from "../../../../tests/helpers/held-read"
 import { svc } from "../composition-harness"
 import { BalanceRepository } from "./balance-repository"
 import { reconcilePlan } from "./reconcile-pairs"
@@ -450,15 +451,18 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 	})
 
 	test("(FAN-OUT PIN) onTokenAdded aborts after a mid-fan-out profile switch — no cross-context balance persisted", async () => {
-		const flush = () => new Promise((r) => setTimeout(r, 0))
 		const api = new FakeBrowserApi()
 		api.reset()
 
 		// The account fan-out parks here so a switch can land mid-flight.
-		let resolveAccounts!: (v: unknown) => void
-		const getAccounts = vi.fn().mockImplementation(() => new Promise((r) => (resolveAccounts = r)))
-		const onTokenAdded = new EventHandler<never>()
-		const onActiveProfileChanged = new EventHandler<never>()
+		const accounts = deferred<unknown>()
+		const accountsReached = deferred()
+		const getAccounts = vi.fn().mockImplementation(() => {
+			accountsReached.resolve()
+			return accounts.promise
+		})
+		const onTokenAdded = awaitedBus<never>()
+		const onActiveProfileChanged = awaitedBus<never>()
 
 		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
 		const services = new ServiceCollection()
@@ -497,29 +501,27 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		const setSpy = vi.spyOn((service as never as { repo: { set: (...a: unknown[]) => Promise<void> } }).repo, "set")
 
 		// A token is added under A; its account fan-out parks on getAccounts.
-		void onTokenAdded.invoke(tokenRaw(100, "A"))
-		await flush()
+		const added = onTokenAdded.dispatch(tokenRaw(100, "A"))
+		await accountsReached.promise
 		expect(getAccounts).toHaveBeenCalled()
 
 		// The user switches profile mid-fan-out — bumps the generation.
-		void onActiveProfileChanged.invoke({ id: "B", name: "B" } as never)
-		await flush()
+		await onActiveProfileChanged.dispatch({ id: "B", name: "B" } as never)
 
 		// Release the accounts; onTokenAdded resumes and must bail on the generation
 		// check before persisting any balance for the now-departed context.
-		resolveAccounts([{ address: "0xa", chainId: 1 }])
-		await flush()
+		accounts.resolve([{ address: "0xa", chainId: 1 }])
+		await added
 
 		expect(setSpy).not.toHaveBeenCalled()
 	})
 
 	test("(CREATE-BALANCE PIN) a switch DURING the balance write skips the emit/enqueue for the departed context", async () => {
-		const flush = () => new Promise((r) => setTimeout(r, 0))
 		const api = new FakeBrowserApi()
 		api.reset()
 
-		const onTokenAdded = new EventHandler<never>()
-		const onActiveProfileChanged = new EventHandler<never>()
+		const onTokenAdded = awaitedBus<never>()
+		const onActiveProfileChanged = awaitedBus<never>()
 		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
 		const services = new ServiceCollection()
 		services.add(
@@ -556,20 +558,24 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 
 		// Park inside the id ALLOCATION (before repo.set) so a switch lands past the
 		// loop-level fence but inside createTokenBalance's own await window.
-		let resolveAlloc!: (id: number) => void
+		const alloc = deferred<number>()
+		const allocReached = deferred()
 		vi.spyOn(
 			(service as never as { repo: { allocateIdAvoiding: (avoid: ReadonlySet<number>) => Promise<number> } }).repo,
 			"allocateIdAvoiding",
-		).mockImplementation(() => new Promise((r) => (resolveAlloc = r as never)))
+		).mockImplementation(() => {
+			allocReached.resolve()
+			return alloc.promise
+		})
 		const setSpy = vi.spyOn((service as never as { repo: { set: (b: unknown) => Promise<void> } }).repo, "set")
 
-		void onTokenAdded.invoke(tokenRaw(100, "A"))
-		await flush() // reaches createTokenBalance, parks in allocateId
+		const added = onTokenAdded.dispatch(tokenRaw(100, "A"))
+		await allocReached.promise
 
-		void onActiveProfileChanged.invoke({ id: "B", name: "B" } as never)
-		await flush()
-		resolveAlloc(5)
-		await flush()
+		// The switch's own reconcile queues behind the parked creation's lock hold.
+		const switched = onActiveProfileChanged.dispatch({ id: "B", name: "B" } as never)
+		alloc.resolve(5)
+		await Promise.all([added, switched])
 
 		// The context departed mid-allocation: the write must be skipped entirely.
 		expect(setSpy).not.toHaveBeenCalled()
@@ -776,8 +782,8 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		const api = new FakeBrowserApi()
 		api.reset()
 
-		const onTokenAdded = new EventHandler<never>()
-		const onAccountAdded = new EventHandler<never>()
+		const onTokenAdded = awaitedBus<never>()
+		const onAccountAdded = awaitedBus<never>()
 		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
 		const services = new ServiceCollection()
 		services.add(
@@ -825,10 +831,12 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 			return id
 		})
 
-		// Both handlers target token 100 on account 0xa — the SAME pair.
-		void onAccountAdded.invoke({ address: "0xa", chainId: 1 } as never)
-		void onTokenAdded.invoke(tokenRaw(100, "A") as never)
-		for (let i = 0; i < 40; i++) await flush()
+		// Both handlers target token 100 on account 0xa — the SAME pair — and both are in flight
+		// before either is awaited.
+		await Promise.all([
+			onAccountAdded.dispatch({ address: "0xa", chainId: 1 } as never),
+			onTokenAdded.dispatch(tokenRaw(100, "A") as never),
+		])
 
 		const rows = await new BalanceRepository(api).getAll()
 		expect(rows.filter((r) => r.token === 100 && r.account === "0xa")).toHaveLength(1)
@@ -840,12 +848,11 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 	test("a creation parked mid-write cannot survive a token deletion", async () => {
 		// Deletion queues behind an in-flight creation, so its snapshot includes
 		// and sweeps the completed write.
-		const flush = () => new Promise((r) => setTimeout(r, 0))
 		const api = new FakeBrowserApi()
 		api.reset()
 
-		const onAccountAdded = new EventHandler<never>()
-		const onTokenDeleted = new EventHandler<never>()
+		const onAccountAdded = awaitedBus<never>()
+		const onTokenDeleted = awaitedBus<never>()
 		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
 		const services = new ServiceCollection()
 		services.add(
@@ -880,19 +887,21 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 
 		// Park the creation inside its physical write, then delete the token.
 		const repo = service as never as { repo: { set: (b: unknown) => Promise<void> } }
-		let releaseWrite!: () => void
+		const writeReached = deferred()
+		const releaseWrite = deferred()
 		const realSet = repo.repo.set.bind(repo.repo)
 		vi.spyOn(repo.repo, "set").mockImplementationOnce(async (b) => {
-			await new Promise<void>((r) => (releaseWrite = r))
+			writeReached.resolve()
+			await releaseWrite.promise
 			return realSet(b)
 		})
 
-		void onAccountAdded.invoke({ address: "0xa", chainId: 1 } as never)
-		await flush()
-		void onTokenDeleted.invoke(tokenRaw(100, "A") as never)
-		await flush()
-		releaseWrite()
-		for (let i = 0; i < 40; i++) await flush()
+		const creation = onAccountAdded.dispatch({ address: "0xa", chainId: 1 } as never)
+		await writeReached.promise
+		// The deletion's lock acquisition is queued synchronously, behind the parked write's hold.
+		const deletion = onTokenDeleted.dispatch(tokenRaw(100, "A") as never)
+		releaseWrite.resolve()
+		await Promise.all([creation, deletion])
 
 		// The deletion is serialized behind the creation, so it sweeps the row the
 		// creation just wrote — nothing for the deleted token survives.
@@ -901,13 +910,13 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 	})
 
 	test("(init fence) a switch while init's token read is parked cannot repopulate the old profile", async () => {
-		const flush = () => new Promise((r) => setTimeout(r, 0))
 		const api = new FakeBrowserApi()
 		api.reset()
 
-		const onActiveProfileChanged = new EventHandler<never>()
+		const onActiveProfileChanged = awaitedBus<never>()
 		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
-		let releaseInitRead!: (rows: unknown[]) => void
+		const initRead = deferred<unknown[]>()
+		const initReadReached = deferred()
 		let initReadSeen = false
 		const services = new ServiceCollection()
 		services.add(
@@ -934,7 +943,8 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 					// Park ONLY init's read (profile A, first call).
 					if (!initReadSeen && profileId === "A") {
 						initReadSeen = true
-						return new Promise((r) => (releaseInitRead = r as never))
+						initReadReached.resolve()
+						return initRead.promise as never
 					}
 					return []
 				},
@@ -947,14 +957,12 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		services.add(service)
 
 		const starting = services.start()
-		await flush()
+		await initReadReached.promise
 		// Subscriptions are live before init finishes awaiting, so the switch lands
 		// mid-init and bumps the generation.
-		void onActiveProfileChanged.invoke({ id: "B", name: "B" } as never)
-		await flush()
-		releaseInitRead([tokenRaw(100, "A")])
-		await starting
-		for (let i = 0; i < 20; i++) await flush()
+		const switched = onActiveProfileChanged.dispatch({ id: "B", name: "B" } as never)
+		initRead.resolve([tokenRaw(100, "A")])
+		await Promise.all([starting, switched])
 
 		// A's token must not be in the map after the switch to B.
 		const balances = service as never as { tokens: Map<number, unknown> }
@@ -1026,8 +1034,8 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		const api = new FakeBrowserApi()
 		api.reset()
 
-		const onTokenAdded = new EventHandler<never>()
-		const onAccountAdded = new EventHandler<never>()
+		const onTokenAdded = awaitedBus<never>()
+		const onAccountAdded = awaitedBus<never>()
 		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
 		const services = new ServiceCollection()
 		services.add(
@@ -1081,12 +1089,12 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 			return realSet(b)
 		})
 
-		// Both creators in flight at once, the way independent RPCs produce them.
-		// `invoke` dispatches un-awaited (that is the property under test), so the
-		// handlers are drained by flushing rather than by awaiting the invokes.
-		void onAccountAdded.invoke({ address: "0xb", chainId: 1 } as never)
-		void onTokenAdded.invoke(tokenRaw(200, "A") as never)
-		for (let i = 0; i < 40; i++) await flush()
+		// Both creators in flight at once, the way independent RPCs produce them: `invoke` does not
+		// await its subscribers, so neither dispatch is awaited before the other starts.
+		await Promise.all([
+			onAccountAdded.dispatch({ address: "0xb", chainId: 1 } as never),
+			onTokenAdded.dispatch(tokenRaw(200, "A") as never),
+		])
 
 		expect(written).toHaveLength(2)
 		expect(new Set(written).size).toBe(2)
@@ -1409,13 +1417,12 @@ describe("TokenBalanceService.purgeForAccounts — tuple-scoped account purge", 
 describe("TokenBalanceService.onTokenUpdated — a balance carries its token's current metadata", () => {
 	const tokenRaw = (id: number, profileId: string, over: Record<string, unknown> = {}) =>
 		({ id, profileId, chainId: 1, name: `T${id}`, symbol: `T${id}`, decimals: 18, contract: `0xtok${id}`, ...over }) as never
-	const flush = () => new Promise((r) => setTimeout(r, 0))
-
 	async function boot(stored: Record<number, unknown>) {
 		const api = new FakeBrowserApi()
 		api.reset()
 		await new BalanceRepository(api).set(balance(1, 100))
-		const onTokenUpdated = new EventHandler<never>()
+		const onTokenUpdated = awaitedBus<never>()
+		const getTokenRaw = vi.fn(async (id: number) => stored[id] ?? Promise.reject(new Error("unknown token id")))
 		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
 		const services = new ServiceCollection()
 		services.add(
@@ -1439,7 +1446,7 @@ describe("TokenBalanceService.onTokenUpdated — a balance carries its token's c
 				onTokenDeleted: new EventHandler(),
 				onTokenUpdated,
 				getTokensRaw: async () => [tokenRaw(100, "A", { symbol: "FAKE", decimals: 6 })],
-				getTokenRaw: async (id: number) => stored[id] ?? Promise.reject(new Error("unknown token id")),
+				getTokenRaw,
 			}),
 		)
 		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
@@ -1451,19 +1458,15 @@ describe("TokenBalanceService.onTokenUpdated — a balance carries its token's c
 		const updated: { id: number; token: { decimals: number } }[] = []
 		service.onTokenBalanceUpdated.add((b) => updated.push(b))
 		const enqueue = vi.spyOn((service as never as { queue: { enqueue: (row: unknown) => void } }).queue, "enqueue")
-		const settle = async () => {
-			for (let i = 0; i < 10; i++) await flush()
-		}
-		return { service, api, onTokenUpdated, updated, enqueue, settle }
+		return { service, api, onTokenUpdated, getTokenRaw, updated, enqueue }
 	}
 
 	test("an updated token re-sends its balances with the new metadata at once and queues them for a re-read", async () => {
 		const chain = tokenRaw(100, "A", { symbol: "TST", decimals: 18 })
-		const { service, onTokenUpdated, updated, enqueue, settle } = await boot({ 100: chain })
+		const { service, onTokenUpdated, updated, enqueue } = await boot({ 100: chain })
 		expect((await service.getTokenBalances())[0].token).toMatchObject({ symbol: "FAKE", decimals: 6 })
 
-		void onTokenUpdated.invoke(chain)
-		await settle()
+		await onTokenUpdated.dispatch(chain)
 		expect((await service.getTokenBalances())[0].token).toMatchObject({ symbol: "TST", decimals: 18 })
 		expect(updated.map((b) => [b.id, b.token.decimals])).toEqual([[1, 18]])
 		expect(enqueue).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: 1, token: 100 }))
@@ -1472,11 +1475,10 @@ describe("TokenBalanceService.onTokenUpdated — a balance carries its token's c
 	test("an update for a token the map does not hold, or for another token at its id, changes and creates nothing", async () => {
 		const foreign = tokenRaw(200, "B")
 		const successor = tokenRaw(100, "A", { contract: "0xother", decimals: 18 })
-		const { service, api, onTokenUpdated, updated, enqueue, settle } = await boot({ 100: successor, 200: foreign })
+		const { service, api, onTokenUpdated, getTokenRaw, updated, enqueue } = await boot({ 100: successor, 200: foreign })
 
-		void onTokenUpdated.invoke(foreign)
-		void onTokenUpdated.invoke(successor)
-		await settle()
+		await Promise.all([onTokenUpdated.dispatch(foreign), onTokenUpdated.dispatch(successor)])
+		expect(getTokenRaw.mock.calls).toEqual([[200], [100]])
 		expect((await service.getTokenBalances())[0].token).toMatchObject({ symbol: "FAKE", decimals: 6 })
 		expect(await new BalanceRepository(api).getAll()).toHaveLength(1)
 		expect(updated).toEqual([])

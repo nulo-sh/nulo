@@ -1,7 +1,7 @@
 ---
 plan: test-infra-1
 tier: mid
-status: arc 1 implemented (Phases 1-3 ✓); Codex loop converged (round 2 approve); PR open
+status: arc 1 merged (#706); arc 2 in progress (Phase 4 ✓)
 issues: "#550 (arc 1 Closes), #561 (arc 3 Closes), #536 (arc 3 Closes), #540 (arc 4 Closes)"
 driver: claude-code
 claude_model: opus
@@ -96,7 +96,7 @@ Four test-infrastructure refactors the owner picked on decision page 37 (option 
 
 ## Arc 2: waits for causes and shared builders, free sites (one PR, refs #536 #540)
 
-### Phase 4 — the awaited bus and the unit waits
+### Phase 4 — the awaited bus and the unit waits ✓
 1. Add `awaitedBus` to `apps/extension/tests/helpers/held-read.ts`. Add `"tests/helpers/**/*.test.ts"` to `apps/extension/vitest.config.ts` `include` and `"tests/helpers/**/*.ts"` to `apps/extension/tsconfig.json` `include`, so the new helper tests run and are type-checked.
 2. `token-balance/service.test.ts` `:831, :895, :957, :1089, :1455`: replace each counted flush with `await bus.dispatch(…)`. Where a spy parks a write to stage a race (`:821-825`, `:881-895`, `:1069-1075`), give it a `deferred` reached and release pair and have it call through to the real write after release. Keep each test's own order: start the dispatch that parks, await its reached signal, start the other, release, then await both (`:840-895`: the deletion starts only after the creation reached its write, else the creation fails its liveness check and never reaches it).
 3. `network/client.test.ts:8-10` and `composables/importChainSync.test.ts:207,324`: await the cause each drain stands for (the connect message; the code's own reaction to the late promise, `importChainSync.ts:122`). A site with no reachable cause keeps its drain, with the reason in the PR body.
