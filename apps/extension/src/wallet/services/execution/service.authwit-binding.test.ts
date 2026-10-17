@@ -6,11 +6,16 @@
  * Barretenberg branch, which fails under vitest).
  */
 import { computeAuthWitMessageHash } from "@aztec-labs/aztec.js/authorization"
+import { AccountFeePaymentMethodOptions, DefaultAccountEntrypoint } from "@aztec-labs/entrypoints/account"
+import { EncodedAppEntrypointCalls } from "@aztec-labs/entrypoints/encoding"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { FunctionCall, FunctionSelector, FunctionType } from "@aztec-labs/stdlib/abi"
+import { AuthWitness } from "@aztec-labs/stdlib/auth-witness"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { ExecutionPayload } from "@aztec-labs/stdlib/tx"
 import { describe, expect, test, vi } from "vitest"
-import { ScopeViolationError } from "@nulo/extension-messaging/errors"
+import { OwnAccountIntentRefusalError, ScopeViolationError } from "@nulo/extension-messaging/errors"
+import { enforceScope, type GrantedCapabilityRecord } from "@nulo/wallet-bridge"
 import { ExecutionService } from "./service"
 
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
@@ -144,5 +149,55 @@ describe("aztec_createAuthWit: the selector binding of a call intent", () => {
 		const { facade, createAuthWit } = makeFacade()
 		await facade.executeAztecCreateAuthWit(op(callIntent({ selector: await selectorOf() })), FENCE)
 		expect(createAuthWit.mock.calls[0]?.[0]?.toString()).toBe(await expectedCallHash())
+	})
+})
+
+describe("aztec_createAuthWit: an inner hash the signing account consumes", () => {
+	test("signs the account entrypoint's own authorization of a payload, so the scope check refuses it; another consumer's does not", async () => {
+		// `op()` signs for CALLER.
+		const account = CALLER
+		const grants = [
+			{ capability: { type: "accounts", canGet: true, canCreateAuthWit: true }, grantedAt: 0 },
+			{ capability: { type: "transaction", scope: "*" }, grantedAt: 0 },
+		] as GrantedCapabilityRecord[]
+		const call = new FunctionCall(
+			FN.name,
+			AztecAddress.fromStringUnsafe(TO),
+			FunctionSelector.fromString(await selectorOf()),
+			FN.functionType,
+			false,
+			FN.isStatic,
+			[AztecAddress.fromStringUnsafe(account).toField(), new Fr(5n)],
+			FN.returnType as never,
+		)
+		const txNonce = new Fr(42n)
+		const entrypointSigned: Fr[] = []
+		const entrypoint = new DefaultAccountEntrypoint(AztecAddress.fromStringUnsafe(account), {
+			createAuthWit: async (hash: Fr | Buffer) => {
+				const field = hash instanceof Fr ? hash : Fr.fromBuffer(hash)
+				entrypointSigned.push(field)
+				return new AuthWitness(field, [])
+			},
+		})
+		await entrypoint.wrapExecutionPayload(new ExecutionPayload([call], [], [], [], undefined), CHAIN_INFO, {
+			cancellable: false,
+			txNonce,
+			feePaymentMethodOptions: AccountFeePaymentMethodOptions.EXTERNAL,
+		})
+		const innerHash = (await (await EncodedAppEntrypointCalls.create([call], txNonce)).hash()).toString()
+		const signedFor = async (consumer: string) => {
+			const { facade, createAuthWit } = makeFacade()
+			await facade.executeAztecCreateAuthWit(op({ consumer, innerHash }), FENCE)
+			return createAuthWit.mock.calls[0]?.[0]?.toString()
+		}
+
+		expect(entrypointSigned).toHaveLength(1)
+		expect(await signedFor(account)).toBe(entrypointSigned[0]?.toString())
+		expect(() => enforceScope("createAuthWit", [account, { consumer: account, innerHash }], grants)).toThrow(
+			OwnAccountIntentRefusalError,
+		)
+
+		expect(await signedFor(CONSUMER)).not.toBe(entrypointSigned[0]?.toString())
+		expect(() => enforceScope("createAuthWit", [account, { consumer: CONSUMER, innerHash }], grants)).not.toThrow()
 	})
 })

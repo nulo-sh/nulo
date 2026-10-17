@@ -278,7 +278,9 @@ sign authorizations without asking is in effect
 opens a confirmation: for a `CallIntent` it shows the authorized caller, the
 target contract, the function and its arguments; for an `IntentInnerHash`,
 the consumer contract and the inner hash, with a warning that the wallet
-cannot show what the hash authorizes.
+cannot show what the hash authorizes. An `IntentInnerHash` whose consumer is
+the signing account itself is refused before any window, whatever the grant:
+only the wallet's own send authorizes that account's transactions.
 
 The authorization registry's grant functions answer only the wallet's own
 authorization action (`grantPublicAuthwit`), so a public authorization a dApp

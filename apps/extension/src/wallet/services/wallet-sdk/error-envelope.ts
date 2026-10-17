@@ -24,6 +24,7 @@ import {
 	ContractNotRegisteredError,
 	InvalidWalletArgumentsError,
 	JobCancelledError,
+	OwnAccountIntentRefusalError,
 	PxeScopeUnregisteredError,
 	PxeStaleAnchorError,
 	RpcDisconnectedError,
@@ -241,8 +242,21 @@ export const AUTH_REGISTRY_REFUSAL_ENVELOPE = Object.freeze({
 	data: Object.freeze({ walletErrorCode: ScopeViolationError.CODE }),
 })
 
+/** A `createAuthWit` inner hash whose consumer is the signing account: the scope refusal's code with
+ *  its own text, which no wider grant changes. */
+export const OWN_ACCOUNT_INTENT_REFUSAL_MESSAGE =
+	"An authorization's consumer cannot be the account that signs it. Name the contract that consumes it."
+
+export const OWN_ACCOUNT_INTENT_REFUSAL_ENVELOPE = Object.freeze({
+	code: 4100,
+	message: OWN_ACCOUNT_INTENT_REFUSAL_MESSAGE,
+	data: Object.freeze({ walletErrorCode: ScopeViolationError.CODE }),
+})
+
 function scopeViolationEnvelope(error: ScopeViolationError): WalletResponse["error"] {
-	return error instanceof AuthRegistryRefusalError ? AUTH_REGISTRY_REFUSAL_ENVELOPE : SCOPE_VIOLATION_ENVELOPE
+	if (error instanceof AuthRegistryRefusalError) return AUTH_REGISTRY_REFUSAL_ENVELOPE
+	if (error instanceof OwnAccountIntentRefusalError) return OWN_ACCOUNT_INTENT_REFUSAL_ENVELOPE
+	return SCOPE_VIOLATION_ENVELOPE
 }
 
 /**

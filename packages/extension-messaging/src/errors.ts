@@ -229,6 +229,20 @@ function isAuthRegistryRefusalMessage(message: unknown): message is AuthRegistry
 	return (AUTH_REGISTRY_REFUSAL_MESSAGES as readonly unknown[]).includes(message)
 }
 
+const OWN_ACCOUNT_INTENT_REFUSAL_MESSAGE = "Scope violation: createAuthWit inner hash names the signing account as its consumer"
+
+/**
+ * A scope refusal of a `createAuthWit` inner-hash intent whose consumer is the signing account,
+ * whatever the grant, with its own dApp text. It shares the scope refusal's code, so
+ * `walletErrorFromPayload` rebuilds it from its constant message.
+ */
+export class OwnAccountIntentRefusalError extends ScopeViolationError {
+	public constructor() {
+		super(OWN_ACCOUNT_INTENT_REFUSAL_MESSAGE)
+		this.name = "OwnAccountIntentRefusalError"
+	}
+}
+
 /**
  * Raised when a dApp's sendTx is refused because the per-(profileId, chainId)
  * execution lane is at capacity — either the dApp's own per-origin pending cap
@@ -617,6 +631,7 @@ export function walletErrorFromPayload(payload: WalletErrorPayload): WalletError
 	if (ctor === undefined) return new WalletError(payload.code, payload.message, payload.details)
 	if (ctor === CapabilityNotGrantedError) return CapabilityNotGrantedError.fromPayload(payload)
 	if (ctor === ScopeViolationError && isAuthRegistryRefusalMessage(payload.message)) return new AuthRegistryRefusalError(payload.message)
+	if (ctor === ScopeViolationError && payload.message === OWN_ACCOUNT_INTENT_REFUSAL_MESSAGE) return new OwnAccountIntentRefusalError()
 	// The wire `details` is unvalidated. Constant-message constructors ignore both arguments, and
 	// `ScopeViolationError` ignores the details.
 	return new ctor(payload.message, payload.details as never)
