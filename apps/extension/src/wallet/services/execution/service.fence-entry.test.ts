@@ -8,6 +8,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join, relative } from "node:path"
 import { describe, expect, test, vi } from "vitest"
 import { SessionEndedError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
+import { startedTaskService } from "@/wallet/services/task/test-task-service"
 import { type LocalTxOrigin, OriginType } from "@/wallet/services/transaction/spec"
 import { ExecutionService } from "./service"
 
@@ -25,7 +26,7 @@ const SEND_OP = {
 
 /** The real facade methods on a bare prototype, over a capture that reports a later session. */
 function makeFacade() {
-	const task = { startSubtask: vi.fn(), complete: vi.fn(), fail: vi.fn(), cancel: vi.fn() }
+	const task = { startSubtask: vi.fn(), complete: vi.fn(), completeIfTracked: vi.fn(), fail: vi.fn(), cancel: vi.fn() }
 	const captureExecutionFence = vi.fn(async () => LIVE)
 	const executeSendTransaction = vi.fn(async () => "0xhash")
 	const startNewTask = vi.fn(() => task)
@@ -80,6 +81,27 @@ describe("ExecutionService: no broadcasting entry point runs without a current T
 		const batch = [{ kind: "aztec_simulateTx", networkId: "net-1", accountAddress: "0xacct" }] as never
 		expect(await facade.executeOperations(batch, UI)).toEqual([{ status: "ok", result: "done" }])
 		expect(assertCurrent).not.toHaveBeenCalled()
+	})
+})
+
+describe("ExecutionService.executeOperations: a profile switch during dispatch (real TaskService)", () => {
+	async function dispatchUnderSwitch(kind: string) {
+		const { facade } = makeFacade()
+		const { tasks, switchToProfile } = await startedTaskService("p1")
+		const dispatchOperation = vi.fn(async () => {
+			switchToProfile("p2")
+			return "0xhash"
+		})
+		Object.assign(facade, { taskService: tasks, dispatchOperation })
+		return facade.executeOperations([{ ...(SEND_OP as object), kind }] as never, UI)
+	}
+
+	test.each(["send_transaction", "aztec_sendTx"])("a %s whose dispatch broadcast is reported ok", async (kind) => {
+		expect(await dispatchUnderSwitch(kind)).toEqual([{ status: "ok", result: "0xhash" }])
+	})
+
+	test("control: an operation that broadcasts nothing still fails on its cleared task", async () => {
+		await expect(dispatchUnderSwitch("aztec_simulateTx")).rejects.toThrow("Invalid task id")
 	})
 })
 

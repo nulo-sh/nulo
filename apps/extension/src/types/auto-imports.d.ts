@@ -21,6 +21,7 @@ declare global {
   const CLEANUP_PENDING_MESSAGE: typeof import('../composables/full-backup-restore').CLEANUP_PENDING_MESSAGE
   const CONTACT_EXISTS: typeof import('../utils/contact-rules').CONTACT_EXISTS
   const CONTACT_NAME_MAX: typeof import('../utils/contact-name').CONTACT_NAME_MAX
+  const DAPP_LABEL: typeof import('../utils/tx-enrichment').DAPP_LABEL
   const DECRYPTION_FAILED: typeof import('../composables/useFullBackupImport').DECRYPTION_FAILED
   const EffectScope: typeof import('vue').EffectScope
   const EnsureSuperseded: typeof import('../stores/balances.store').EnsureSuperseded
@@ -214,6 +215,7 @@ declare global {
   const isPitchKind: typeof import('../utils/presto-ui-state').isPitchKind
   const isPopupSubmitKey: typeof import('../composables/usePopupEntity').isPopupSubmitKey
   const isPrefersDarkScheme: typeof import('../utils/general').isPrefersDarkScheme
+  const isPriceableHolding: typeof import('../utils/token-aggregate').isPriceableHolding
   const isProxy: typeof import('vue').isProxy
   const isReactive: typeof import('vue').isReactive
   const isReadonly: typeof import('vue').isReadonly
@@ -293,6 +295,7 @@ declare global {
   const planRestoreAgain: typeof import('../composables/full-backup-restore').planRestoreAgain
   const postAuthRoute: typeof import('../utils/own-window').postAuthRoute
   const preflightNetworkConnectivity: typeof import('../composables/importPreflight').preflightNetworkConnectivity
+  const pricesUnavailable: typeof import('../utils/token-aggregate').pricesUnavailable
   const profileFileNameSegment: typeof import('../utils/files').profileFileNameSegment
   const profileTypeLabel: typeof import('../utils/settings-labels').profileTypeLabel
   const profileUiKeys: typeof import('../utils/profile-ui-keys').profileUiKeys
@@ -423,6 +426,7 @@ declare global {
   const useFeeEstimation: typeof import('../composables/useFeeEstimation').useFeeEstimation
   const useFeeEstimationMap: typeof import('../composables/useFeeEstimationMap').useFeeEstimationMap
   const useFormState: typeof import('../composables/useFormState').useFormState
+  const useFullBackupExport: typeof import('../composables/useFullBackupExport').useFullBackupExport
   const useFullBackupImport: typeof import('../composables/useFullBackupImport').useFullBackupImport
   const useFullscreenPopupSetting: typeof import('../composables/fullscreenPopupSetting').useFullscreenPopupSetting
   const useId: typeof import('vue').useId
@@ -477,7 +481,6 @@ declare global {
   const verifyPasskeyBody: typeof import('../composables/full-backup-restore').verifyPasskeyBody
   const visibleSettingsRows: typeof import('../utils/settings-search').visibleSettingsRows
   const vocabularySelector: typeof import('../utils/token-transfer-vocabulary').vocabularySelector
-  const waitForProfileActive: typeof import('../composables/waitForProfileActive').waitForProfileActive
   const waitForServiceReady: typeof import('../utils/core').waitForServiceReady
   const walletChainId: typeof import('../utils/chain-ids').walletChainId
   const watch: typeof import('vue').watch
@@ -535,6 +538,9 @@ declare global {
   // @ts-ignore
   export type { FieldDef, FieldHandle, FormState } from '../composables/useFormState'
   import('../composables/useFormState')
+  // @ts-ignore
+  export type { UseFullBackupExportOptions } from '../composables/useFullBackupExport'
+  import('../composables/useFullBackupExport')
   // @ts-ignore
   export type { FullBackupEnvelope, UseFullBackupImportOptions, RestoreErrorNetworks, UseFullBackupImportResult, RestoreStage, RestoreStatus } from '../composables/useFullBackupImport'
   import('../composables/useFullBackupImport')
@@ -610,9 +616,6 @@ declare global {
   // @ts-ignore
   export type { WalletTxEstimatesDeps } from '../composables/useWalletTxEstimates'
   import('../composables/useWalletTxEstimates')
-  // @ts-ignore
-  export type { ProfileActivationSubject } from '../composables/waitForProfileActive'
-  import('../composables/waitForProfileActive')
   // @ts-ignore
   export type { AwaitingTx, ActivitySlice } from '../stores/activity.store'
   import('../stores/activity.store')
@@ -707,7 +710,7 @@ declare global {
   export type { SettingsContext, SettingsRow, SettingsResultGroup, SettingsRowId } from '../utils/settings-search'
   import('../utils/settings-search')
   // @ts-ignore
-  export type { Aggregate } from '../utils/token-aggregate'
+  export type { Aggregate, PriceMapping } from '../utils/token-aggregate'
   import('../utils/token-aggregate')
   // @ts-ignore
   export type { FiatOf } from '../utils/token-amount'
@@ -744,6 +747,7 @@ declare module 'vue' {
     readonly CLEANUP_PENDING_MESSAGE: UnwrapRef<typeof import('../composables/full-backup-restore')['CLEANUP_PENDING_MESSAGE']>
     readonly CONTACT_EXISTS: UnwrapRef<typeof import('../utils/contact-rules')['CONTACT_EXISTS']>
     readonly CONTACT_NAME_MAX: UnwrapRef<typeof import('../utils/contact-name')['CONTACT_NAME_MAX']>
+    readonly DAPP_LABEL: UnwrapRef<typeof import('../utils/tx-enrichment')['DAPP_LABEL']>
     readonly DECRYPTION_FAILED: UnwrapRef<typeof import('../composables/useFullBackupImport')['DECRYPTION_FAILED']>
     readonly EffectScope: UnwrapRef<typeof import('vue')['EffectScope']>
     readonly EnsureSuperseded: UnwrapRef<typeof import('../stores/balances.store')['EnsureSuperseded']>
@@ -937,6 +941,7 @@ declare module 'vue' {
     readonly isPitchKind: UnwrapRef<typeof import('../utils/presto-ui-state')['isPitchKind']>
     readonly isPopupSubmitKey: UnwrapRef<typeof import('../composables/usePopupEntity')['isPopupSubmitKey']>
     readonly isPrefersDarkScheme: UnwrapRef<typeof import('../utils/general')['isPrefersDarkScheme']>
+    readonly isPriceableHolding: UnwrapRef<typeof import('../utils/token-aggregate')['isPriceableHolding']>
     readonly isProxy: UnwrapRef<typeof import('vue')['isProxy']>
     readonly isReactive: UnwrapRef<typeof import('vue')['isReactive']>
     readonly isReadonly: UnwrapRef<typeof import('vue')['isReadonly']>
@@ -1016,6 +1021,7 @@ declare module 'vue' {
     readonly planRestoreAgain: UnwrapRef<typeof import('../composables/full-backup-restore')['planRestoreAgain']>
     readonly postAuthRoute: UnwrapRef<typeof import('../utils/own-window')['postAuthRoute']>
     readonly preflightNetworkConnectivity: UnwrapRef<typeof import('../composables/importPreflight')['preflightNetworkConnectivity']>
+    readonly pricesUnavailable: UnwrapRef<typeof import('../utils/token-aggregate')['pricesUnavailable']>
     readonly profileFileNameSegment: UnwrapRef<typeof import('../utils/files')['profileFileNameSegment']>
     readonly profileTypeLabel: UnwrapRef<typeof import('../utils/settings-labels')['profileTypeLabel']>
     readonly profileUiKeys: UnwrapRef<typeof import('../utils/profile-ui-keys')['profileUiKeys']>
@@ -1146,6 +1152,7 @@ declare module 'vue' {
     readonly useFeeEstimation: UnwrapRef<typeof import('../composables/useFeeEstimation')['useFeeEstimation']>
     readonly useFeeEstimationMap: UnwrapRef<typeof import('../composables/useFeeEstimationMap')['useFeeEstimationMap']>
     readonly useFormState: UnwrapRef<typeof import('../composables/useFormState')['useFormState']>
+    readonly useFullBackupExport: UnwrapRef<typeof import('../composables/useFullBackupExport')['useFullBackupExport']>
     readonly useFullBackupImport: UnwrapRef<typeof import('../composables/useFullBackupImport')['useFullBackupImport']>
     readonly useFullscreenPopupSetting: UnwrapRef<typeof import('../composables/fullscreenPopupSetting')['useFullscreenPopupSetting']>
     readonly useId: UnwrapRef<typeof import('vue')['useId']>
@@ -1200,7 +1207,6 @@ declare module 'vue' {
     readonly verifyPasskeyBody: UnwrapRef<typeof import('../composables/full-backup-restore')['verifyPasskeyBody']>
     readonly visibleSettingsRows: UnwrapRef<typeof import('../utils/settings-search')['visibleSettingsRows']>
     readonly vocabularySelector: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['vocabularySelector']>
-    readonly waitForProfileActive: UnwrapRef<typeof import('../composables/waitForProfileActive')['waitForProfileActive']>
     readonly waitForServiceReady: UnwrapRef<typeof import('../utils/core')['waitForServiceReady']>
     readonly walletChainId: UnwrapRef<typeof import('../utils/chain-ids')['walletChainId']>
     readonly watch: UnwrapRef<typeof import('vue')['watch']>

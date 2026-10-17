@@ -18,6 +18,7 @@
 
 import {
 	AccountAddressInconsistencyError,
+	AuthRegistryRefusalError,
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
 	ContractNotRegisteredError,
@@ -124,7 +125,7 @@ export function toWalletResponseError(error: unknown): WalletResponse["error"] {
 	if (error instanceof ScopeViolationError) {
 		// The classification tells a dApp that the call is outside its grant, not that something
 		// downstream failed.
-		return SCOPE_VIOLATION_ENVELOPE
+		return scopeViolationEnvelope(error)
 	}
 	if (error instanceof RpcTimeoutError) {
 		// An internal RPC (e.g. offscreen prove/simulate) exceeded its timeout.
@@ -229,6 +230,20 @@ export const SCOPE_VIOLATION_ENVELOPE = Object.freeze({
 	message: SCOPE_VIOLATION_MESSAGE,
 	data: Object.freeze({ walletErrorCode: ScopeViolationError.CODE }),
 })
+
+/** A refusal that keeps the authorization registry to the wallet's own authorization action: the
+ *  scope refusal's code with its own text, a public contract like `SCOPE_VIOLATION_MESSAGE`. */
+export const AUTH_REGISTRY_REFUSAL_MESSAGE = "Apps cannot set public authorizations directly. Ask the wallet with grantPublicAuthwit."
+
+export const AUTH_REGISTRY_REFUSAL_ENVELOPE = Object.freeze({
+	code: 4100,
+	message: AUTH_REGISTRY_REFUSAL_MESSAGE,
+	data: Object.freeze({ walletErrorCode: ScopeViolationError.CODE }),
+})
+
+function scopeViolationEnvelope(error: ScopeViolationError): WalletResponse["error"] {
+	return error instanceof AuthRegistryRefusalError ? AUTH_REGISTRY_REFUSAL_ENVELOPE : SCOPE_VIOLATION_ENVELOPE
+}
 
 /**
  * The session was invalidated mid-flight (profile switch, revocation) and the dApp must reconnect.

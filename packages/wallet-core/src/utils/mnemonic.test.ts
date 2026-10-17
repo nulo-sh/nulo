@@ -128,6 +128,18 @@ test("a corrupted final word fails the checksum, never decodes", async () => {
 	await expect(getEntropy(corrupted)).rejects.toThrow("Invalid checksum")
 })
 
+test("an unknown word is reported by its position, never echoed", async () => {
+	const marker = "zzmarkerzz"
+	const words = testcases[8]![1]!.split(" ")
+	words[6] = marker
+	const error = await getEntropy(words).then(
+		() => undefined,
+		(e: unknown) => e as Error,
+	)
+	expect(error?.message).toBe("Invalid mnemonic word at position 7")
+	expect(error?.message).not.toContain(marker)
+})
+
 test("a word swap inside the phrase fails the checksum", async () => {
 	const words = testcases[9]![1]!.split(" ")
 	const swapped = [...words]

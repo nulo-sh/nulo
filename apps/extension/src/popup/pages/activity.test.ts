@@ -89,9 +89,9 @@ import { CHAIN_IDS } from "@/utils/chain-ids"
 import TransactionsList from "../components/modules/activity/TransactionsList.vue"
 import Activity from "./activity.vue"
 
-const record = (siloedNullifier: string, discoveredAt: number) => ({
+const record = (key: string, discoveredAt: number) => ({
 	kind: "note",
-	id: `note:p1|net-1|${siloedNullifier}`,
+	id: `note:p1|net-1|${key}`,
 	profileId: "p1",
 	accountAddress: "0xacct",
 	networkId: "net-1",

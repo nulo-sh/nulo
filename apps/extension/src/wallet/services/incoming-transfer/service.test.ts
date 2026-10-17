@@ -3,11 +3,9 @@ import { orderByBlockIndex } from "./service"
 import type { IncomingNoteRecord, IncomingTransferRecord } from "./spec"
 
 function record(overrides: Partial<IncomingNoteRecord> = {}): IncomingTransferRecord {
-	const siloedNullifier = overrides.siloedNullifier ?? "0xnull"
 	return {
 		kind: "note",
-		id: overrides.id ?? `note:p1|net-1|${siloedNullifier}`,
-		siloedNullifier,
+		id: "note:p1|net-1|0xunique",
 		profileId: "p1",
 		networkId: "net-1",
 		accountAddress: "0xaccount",
@@ -43,8 +41,8 @@ describe("orderByBlockIndex — (block, txIndex, indexInTx) ascending", () => {
 		expect([a, b].sort(orderByBlockIndex)[0]).toBe(b)
 	})
 	test("identical positions → stable sort (zero return)", () => {
-		const a = record({ siloedNullifier: "0x1" })
-		const b = record({ siloedNullifier: "0x2" })
+		const a = record({ id: "note:p1|net-1|0x1" })
+		const b = record({ id: "note:p1|net-1|0x2" })
 		expect(orderByBlockIndex(a, b)).toBe(0)
 	})
 })

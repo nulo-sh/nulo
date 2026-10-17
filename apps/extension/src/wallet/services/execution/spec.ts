@@ -32,6 +32,8 @@ export type Methods = {
 	 * @param network Network id.
 	 * @param account Sender account address.
 	 * @param token Token id.
+	 * @param tokenContract The contract of the token the person approved; the send is refused when
+	 *   the row `tokenId` names holds another.
 	 * @param transferType Transfer type.
 	 * @param recipient Recipient address.
 	 * @param amount Amount.
@@ -42,6 +44,7 @@ export type Methods = {
 		networkId: string,
 		accountAddress: string,
 		tokenId: number,
+		tokenContract: string,
 		transferType: TransferType,
 		recipientAddress: string,
 		amount: bigint,
@@ -82,6 +85,7 @@ export type Methods = {
 		networkId: string,
 		accountAddress: string,
 		tokenId: number,
+		tokenContract: string,
 		transferType: TransferType,
 		recipientAddress: string,
 		amount: bigint,

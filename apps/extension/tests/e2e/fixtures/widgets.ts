@@ -56,8 +56,8 @@ export async function dropdownDiagnostic(page: Page, triggerTestId: string, stag
 
 /** Wait for the snack whose title or sub contains `text` (case-insensitive: the title is uppercased
  *  by CSS, not in the DOM), optionally of one `kind`, and return it. A success closes itself after
- *  2 s; an error stays until closed. `hold` focuses the card's action in the same task that finds
- *  the card, which holds a success open as a person's focus does; for a test of where the action
+ *  2 s, 6 s with an action; an error stays until closed. `hold` focuses the card's action in the same
+ *  task that finds the card, which holds a success open as a person's focus does; for a test of where the action
  *  leads or what the card says, never of focus, keyboard reach or the card's life. */
 export async function waitForToast(
 	page: Page,

@@ -1032,7 +1032,7 @@ test("every identifier site the smoke suite owns was read in its role", ({ skip 
 	const live = (suite: ReturnType<typeof siteSuite>) => sites.filter((site) => !site.unreachable && siteSuite(site) === suite).length
 	const unreachable = sites.filter((site) => site.unreachable).length
 	console.log(
-		`[type-roles] identifier sites: ${coverage.live} smoke-owned live, ${live("network")} network-owned, ${live("component")} component-test, ${unreachable} unreachable`,
+		`[type-roles] identifier sites: ${coverage.live} smoke-owned live, ${live("network")} network-owned, ${unreachable} unreachable`,
 	)
 	// An AddressDisplay of the wallet's own account shows its name, so its address form goes unjudged.
 	const forms = observed.flatMap(({ sites }) =>

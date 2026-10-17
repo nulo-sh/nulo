@@ -40,7 +40,7 @@ const meta: Meta<typeof ToastManagerBase> = {
 		template: `
 			<div style="position: relative; min-height: 220px; padding: 24px;">
 				<div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start;">
-					<button @click="success()">Success with View (2 s, held while hovered or focused)</button>
+					<button @click="success()">Success with View (6 s, held while hovered or focused)</button>
 					<button @click="info()">Info with × (stays until closed)</button>
 					<button @click="error()">Error with × (stays until closed)</button>
 					<button @click="long()">Long wrapped message</button>

@@ -235,16 +235,20 @@ onBeforeUnmount(() => {
 	composes: app_chip from "../../../../components/composite/activity/activity-card.module.css";
 }
 
+/* A wrap measures the slot at its floor (a zero basis, clamped up), so the slot drops under the whole
+ * direction chip exactly where one line would squeeze it below that floor; on its own line it fills
+ * the line, its chip up to its cap. */
 .chips {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
-	gap: 6px;
+	gap: 4px 6px;
 	min-width: 0;
 }
 
 /* The slot takes the room left and the chip inside hugs its name up to its cap. A zero basis takes no
- * share of the shrink, so the direction chip breaks only once the slot is at its floor: the chip's
- * border, padding and one "…" at the chip's 10px, so the chip never draws empty. */
+ * share of the shrink; the floor is the chip's border, padding and one "…" at the chip's 10px, so the
+ * chip never draws empty. */
 .app_slot {
 	display: flex;
 	flex: 1 1 0;

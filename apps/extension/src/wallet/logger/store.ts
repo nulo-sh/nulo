@@ -20,7 +20,7 @@ export class LoggerStore implements ILoggerStore {
 	 * pending, and a purge awaiting only the latest promise can still be overtaken by the earlier
 	 * write. Chaining every `set` and `remove` through one queue makes the ordering total.
 	 */
-	private readonly storageOps = createSerialQueue({ onError: () => {} })
+	private readonly storageOps = createSerialQueue()
 	private persistEnabled: boolean
 
 	private readonly config: IConfig
@@ -53,8 +53,8 @@ export class LoggerStore implements ILoggerStore {
 	 */
 	public clear(): Promise<void> {
 		this.logs.clear()
-		// Returned, not fired-and-forgotten: `clearLogs()` must not acknowledge success while the
-		// persisted copy is still on disk — a worker restart in that window resurrects it.
+		// Returned with its failure: `clearLogs()` must not acknowledge success while the persisted
+		// copy is still on disk, where a worker restart resurrects it.
 		return this.purgePersisted()
 	}
 
@@ -123,15 +123,15 @@ export class LoggerStore implements ILoggerStore {
 			void this.enqueueStorageOp(async () => {
 				const items = this.logs.items().slice(-2000)
 				await chrome.storage.session.set({ "nulo:logs": items })
-			})
+			}).catch(() => {})
 		}, 2000)
 	}
 
 	/**
-	 * Append a session-storage operation to the serialized chain and return its completion.
+	 * Append a session-storage operation to the serialized chain and return its outcome.
 	 *
-	 * Each link swallows its own failure — session storage is unavailable in tests and can throw at
-	 * runtime — so one bad operation never wedges the queue for the rest of the worker's life.
+	 * The queue only orders: a failed operation never wedges it, and its rejection reaches this
+	 * caller, which decides. Session storage is unavailable in tests and can throw at runtime.
 	 */
 	private enqueueStorageOp(op: () => Promise<void>): Promise<void> {
 		return this.storageOps.run(op)
@@ -151,7 +151,8 @@ export class LoggerStore implements ILoggerStore {
 		this.persistEnabled = this.config.get("developerMode") === true
 		if (this.persistEnabled) return
 		this.logs.clear()
-		await this.purgePersisted()
+		// Best effort: this runs inside the boot's config leg, which a rejection would veto.
+		await this.purgePersisted().catch(() => {})
 	}
 
 	/**
@@ -181,7 +182,7 @@ export class LoggerStore implements ILoggerStore {
 			// Turning retention off must PURGE, not merely stop writing: entries captured while it
 			// was on otherwise survive in session storage and are re-imported by rehydrate() on the
 			// next worker restart, so the setting would appear to do nothing.
-			if (!this.persistEnabled) void this.purgePersisted()
+			if (!this.persistEnabled) void this.purgePersisted().catch(() => {})
 		}
 	}
 }

@@ -16,6 +16,7 @@ import {
 	type CategoricalFailureLabel,
 	categoricalLabel,
 	humanizeErrorKind,
+	journalCardOriginLabel,
 	type JournalTerminalDisplay,
 	journalTerminalDisplay,
 	type SendOutcome,
@@ -529,6 +530,20 @@ describe("a failed send its record proves never left the wallet", () => {
 	})
 })
 
+describe("journalCardOriginLabel — the in-flight row's app chip", () => {
+	test.each([
+		["", "dApp"],
+		["uniswap.example", "uniswap.example"],
+		["https://evil.example", "[https://evil.example]"],
+	])("a dApp named %j reads %j", (subtitle, label) => {
+		expect(journalCardOriginLabel(recordWith({ kind: "dapp_execute", subtitle, terminalAt: null }))).toBe(label)
+	})
+
+	test("a transfer has no app chip", () => {
+		expect(journalCardOriginLabel(recordWith({ kind: "transfer", subtitle: "", terminalAt: null }))).toBeNull()
+	})
+})
+
 // dApp-controlled `subtitle` is the origin/name stored at session-discover
 // time. The journal detail page renders it; if a malicious dApp set its
 // origin to an http(s) URL string, the bare value could be visually
@@ -684,6 +699,7 @@ describe("refusals filed before any window: card and detail", () => {
 		["terms_refused", "Terms not accepted", "Accept Nulo's Terms to let apps send. Nothing was sent."],
 		["wallet_refused", "Refused before sending", "The wallet refused this request before anything was signed. Nothing was sent."],
 		["scope_refused", "Not allowed", "The app asked for more than you allowed. Nothing was sent."],
+		["registry_refused", "Not allowed", "Apps cannot change your public authorizations. Nothing was sent."],
 	])("%s reads %s on the card and in the detail", (kind, label, context) => {
 		const op = refused(kind)
 		expect(categoricalLabel(op)).toEqual({ label, context })
