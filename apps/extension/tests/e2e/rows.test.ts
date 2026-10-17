@@ -650,7 +650,8 @@ type TwoChipRow = {
 	directionLines: number
 	/** How much narrower the direction chip is than its one-line width. */
 	directionShort: number
-	chip: { width: number; cut: boolean }
+	/** `lead` is the chip's `::before`: an empty inline-block lets the "…" replace the first letter. */
+	chip: { width: number; cut: boolean; lead: { content: string; display: string } }
 	ellipsis: number
 }
 
@@ -677,7 +678,11 @@ function readTwoChipRow(page: Page, hash: string): Promise<TwoChipRow> {
 		return {
 			directionLines: new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size,
 			directionShort: natural(direction, direction.textContent ?? "") - direction.getBoundingClientRect().width,
-			chip: { width: chip.getBoundingClientRect().width, cut: chip.scrollWidth > chip.clientWidth },
+			chip: {
+				width: chip.getBoundingClientRect().width,
+				cut: chip.scrollWidth > chip.clientWidth,
+				lead: (({ content, display }) => ({ content, display }))(getComputedStyle(chip, "::before")),
+			},
 			ellipsis: natural(chip, "…"),
 		}
 	}, hash)
@@ -750,7 +755,8 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 			expect(large.chip.cut).toBe(true)
 			expect(large.chip.width).toBeCloseTo(APP_CHIP_FLOOR, 0)
 			expect(large.chip.width).toBeGreaterThanOrEqual(large.ellipsis)
-			if (surface.name === "Home" && theme === "dark") await shotSend(page, "dapp-transfer-rows", "activity-direction-chip")
+			expect(large.chip.lead).toEqual({ content: '""', display: "inline-block" })
+			if (surface.name === "History" && theme === "dark") await shotSend(page, "dapp-transfer-rows", "activity-app-chip")
 			if (surface.name !== "History") continue
 			const clearance = await page.evaluate((rowsSel: string) => {
 				const label = document.querySelector('[data-testid="activity-date-label"]')
@@ -857,8 +863,6 @@ async function readDappRows(page: Page): Promise<NamedRows> {
 	}, rows)
 }
 
-/** A details page's App value, read against its label and its Details box's inner edge: it breaks
- *  anywhere onto two lines, each flush with the box's right edge, the row growing. */
 async function expectAppValueBreaksAnywhere(page: Page, ids: { value: string; label: string; box: string }, host: string): Promise<void> {
 	await page.waitForSelector(sel(ids.value), { visible: true, timeout: 15_000 })
 	await shotSend(page, ids.value, ids.value)
@@ -944,7 +948,7 @@ test("a dApp's long function name and host never widen Home or History, named or
 		expect(rows.transfer.cut).toBe(false)
 		expect(rows.transfer.direction).toEqual({ lines: 1 })
 		expect(rows.transfer.chip).toMatchObject({ cut: true, below: false })
-		expect(rows.transfer.chip?.width).toBeGreaterThanOrEqual(APP_CHIP_FLOOR - 0.5)
+		expect(rows.transfer.chip?.width).toBeGreaterThan(APP_CHIP_FLOOR + 0.5)
 		expect(rows.transfer.chip?.width).toBeLessThan(APP_CHIP_CAP - 0.5)
 	}
 

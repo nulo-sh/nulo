@@ -232,7 +232,6 @@ onBeforeUnmount(() => {
 	composes: app_chip from "../../../../components/composite/activity/activity-card.module.css";
 }
 
-/* One line beside the symbol: the direction keeps its whole width while the app chip gets what is left. */
 .chips {
 	display: flex;
 	align-items: center;
@@ -240,8 +239,9 @@ onBeforeUnmount(() => {
 	min-width: 0;
 }
 
-/* A zero basis takes no share of the shrink, so the direction chip breaks only once this is at its
- * floor: the chip's border, padding and one "…" in `type--tag`, so the chip never draws empty. */
+/* The slot takes the room left and the chip inside hugs its name up to its cap. A zero basis takes no
+ * share of the shrink, so the direction chip breaks only once the slot is at its floor: the chip's
+ * border, padding and one "…" in `type--tag`, so the chip never draws empty. */
 .app_slot {
 	display: flex;
 	flex: 1 1 0;
@@ -251,6 +251,13 @@ onBeforeUnmount(() => {
 /* Below the shared cap in this row only; two classes outrank the shared chip's `flex-shrink: 0`. */
 .app_slot > .app_chip {
 	flex-shrink: 1;
+}
+
+/* A line's first character is clipped, never ellipsed; an empty atomic inline in its place lets the
+ * floor show the "…" alone instead of a letter cut at the border. */
+.app_slot > .app_chip::before {
+	content: "";
+	display: inline-block;
 }
 
 /* The 24px box overhangs the 14px secondary row and the 10px glyph, so the row keeps its rhythm. */
