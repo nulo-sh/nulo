@@ -169,16 +169,14 @@ async function hitsAfterScroll(page: Page, testids: string[]): Promise<Hit[]> {
 type Box = { top: number; bottom: number; left: number; right: number }
 type ControlPlacement = { at: string; hit: string; covered: boolean; snack: Box; control: Box; viewport: number }
 
-/** Scrolls `testid` to `at` (the end of the container that scrolls it, or centred) and waits for the
- *  snack to measure again. */
-async function scrollControl(page: Page, testid: string, at: "rest" | "end" | "centre"): Promise<void> {
+/** Scrolls `testid` to `at` (the top of the container that scrolls it, the highest it shows, or
+ *  centred) and waits for the snack to measure again. */
+async function scrollControl(page: Page, testid: string, at: "rest" | "top" | "centre"): Promise<void> {
 	await page.evaluate(
 		async (id: string, where: string) => {
 			const el = document.querySelector(`[data-testid="${id}"]`)
 			if (!el) throw new Error(`${id} not found`)
-			let scroller = el.parentElement
-			while (scroller && !["auto", "scroll"].includes(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement
-			if (where === "end") (scroller ?? document.scrollingElement ?? document.documentElement).scrollTop = Number.MAX_SAFE_INTEGER
+			if (where === "top") el.scrollIntoView({ block: "start" })
 			if (where === "centre") el.scrollIntoView({ block: "center" })
 			await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
 		},
@@ -187,12 +185,12 @@ async function scrollControl(page: Page, testid: string, at: "rest" | "end" | "c
 	)
 }
 
-/** `testid` where the page rests, with the container that scrolls it at its end, then centred, each
+/** `testid` where the page rests, at the top of the container that scrolls it, then centred, each
  *  read once the snack has measured again: what a click at its centre hits, whether any part of it is
  *  under the snack, and where both are. */
 async function placementsAtRestAndScrolled(page: Page, testid: string): Promise<ControlPlacement[]> {
 	const placements: ControlPlacement[] = []
-	for (const at of ["rest", "end", "centre"] as const) {
+	for (const at of ["rest", "top", "centre"] as const) {
 		await scrollControl(page, testid, at)
 		const placement = await page.evaluate(
 			(s: string, id: string, where: string) => {
@@ -586,7 +584,7 @@ test.skipIf(!hasConfig)(
 		await settledCard(page)
 
 		const placed = await placementsAtRestAndScrolled(page, "tx-awaiting-cancel")
-		console.log(`[snack-placement] Home, Cancel at rest, at the scroll's end and centred: ${JSON.stringify(placed)}`)
+		console.log(`[snack-placement] Home, Cancel at rest, at the top of the middle and centred: ${JSON.stringify(placed)}`)
 		for (const p of placed) {
 			expect([p.at, p.covered, p.hit], "Cancel is clear of the snack and takes the click").toEqual([
 				p.at,
@@ -595,8 +593,14 @@ test.skipIf(!hasConfig)(
 			])
 			expect(p.snack.top >= 0 && p.snack.bottom <= p.viewport, `${p.at}: the snack is wholly on screen`).toBe(true)
 		}
-		// Clear of the Cancel, the snack rests 12px above the 64px nav rather than above where the row was.
-		expect(placed.slice(1).map((p) => p.viewport - p.snack.bottom)).toEqual([76, 76])
+		// The snack rests 12px above the 64px nav, and climbs to 12px above the Cancel only where resting
+		// would cover it; at the top of the middle the row is clear, so it is back at rest.
+		for (const p of placed) {
+			const rest = { bottom: p.viewport - 76, top: p.viewport - 76 - (p.snack.bottom - p.snack.top) }
+			const meets = p.control.top < rest.bottom && p.control.bottom > rest.top
+			expect(p.snack.bottom, `${p.at}: the snack's bottom`).toBeCloseTo(meets ? p.control.top - 12 : rest.bottom, 0)
+		}
+		expect(placed.filter((p) => p.at === "top").map((p) => p.viewport - p.snack.bottom)).toEqual([76])
 		await page.evaluate(async () => {
 			window.scrollTo(0, 0)
 			await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))

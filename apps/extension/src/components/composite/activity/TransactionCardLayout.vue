@@ -38,6 +38,8 @@ const props = defineProps({
 	opens: { type: Boolean, default: false },
 	/** The row is a receipt arriving now: it slides in and glows. */
 	arriving: { type: Boolean, default: false },
+	/** The title names the function a dApp called: it stays on one line, cut at its end. */
+	oneLineTitle: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(["activate"])
@@ -104,7 +106,7 @@ function hasActionsContent() {
 
 			<Flex direction="column" gap="4" :class="$style.text">
 				<Flex align="center" gap="6">
-					<span :id="titleId" :class="$style.title" data-testid="activity-title">{{ title }}</span>
+					<span :id="titleId" :class="[$style.title, oneLineTitle && $style.title_one_line]" data-testid="activity-title">{{ title }}</span>
 					<slot name="title-trailing" />
 				</Flex>
 				<Flex v-if="$slots.secondary" align="center" gap="6" :class="$style.secondary_row">
@@ -224,6 +226,14 @@ function hasActionsContent() {
 	composes: type--row-title from global;
 	font-size: 14px;
 	color: var(--txt-primary);
+}
+
+/* A name the dApp chose can be any length; only this cut keeps it from widening the page. */
+.title_one_line {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .secondary_row {

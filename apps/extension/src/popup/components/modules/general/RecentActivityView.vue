@@ -885,6 +885,7 @@ onBeforeUnmount(() => {
 				:stage="op.progress?.stage ?? null"
 				:backend="op.progress?.backend ?? null"
 				:hasApprovalWindow="op.kind === 'dapp_execute'"
+				:oneLineTitle="op.kind === 'dapp_execute'"
 				@cancel="onCancelInFlight"
 				@focus="onFocusInFlight"
 				@review="onReviewInFlight"
@@ -901,6 +902,7 @@ onBeforeUnmount(() => {
 				:originLabel="executingOriginLabel"
 				:amount="executingAmount"
 				:amountSymbol="executingAmountSymbol"
+				:oneLineTitle="!isUiTransfer"
 			/>
 			<TransactionAwaitingCard v-else-if="!renderedInFlightOps.length && showFallbackAwaiting" />
 			<!-- Chronological merge of terminal journal records + settled chain

@@ -11,7 +11,8 @@
 import type { Page, Target } from "puppeteer"
 import { inject } from "vitest"
 import { EXTENSION_SCHEME, newPage } from "./browser"
-import { clickByTestId, patchPagePolling, replaceInputValue, type ExtensionContext } from "./extension"
+import { clickByTestId, patchPagePolling, replaceInputValue } from "./dom"
+import type { ExtensionContext } from "./extension"
 import { dumpDeepDiagnostics } from "./journal"
 
 export const PLAYGROUND_TEST_URL = (() => {

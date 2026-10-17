@@ -288,9 +288,9 @@ onBeforeUnmount(() => {
 				<Flex wide direction="column" gap="10" :class="$style.details_box">
 					<TxHashRow v-if="tx?.hash" :hash="tx.hash" :explorerUrl="explorerUrl" linkTestid="tx-hash-link" copyTestid="tx-hash" @copy="handleCopy" />
 
-					<Flex v-if="originLabel" wide justify="between" align="center">
-						<span :class="$style.detail_key">App</span>
-						<span :class="$style.detail_value">{{ originLabel }}</span>
+					<Flex v-if="originLabel" wide justify="between" align="start" gap="16">
+						<span :class="$style.app_key" data-testid="tx-detail-app-label">App</span>
+						<span :class="$style.app_value" data-testid="tx-detail-app">{{ originLabel }}</span>
 					</Flex>
 
 					<Flex v-if="feePaymentLabel" wide justify="between" align="center">
@@ -449,6 +449,22 @@ onBeforeUnmount(() => {
 .detail_value_mono {
 	composes: type--data from global;
 	color: var(--txt-primary);
+}
+
+/* Sits level with the value's first line, whose line box is taller. */
+.app_key {
+	composes: detail_key;
+	flex-shrink: 0;
+	padding-top: 2px;
+}
+
+/* A dApp's name can be one unbreakable word: it breaks anywhere, so the row grows instead of the page. */
+.app_value {
+	composes: detail_value_mono;
+	min-width: 0;
+	text-align: right;
+	word-break: break-all;
+	line-height: 1.4;
 }
 
 .detail_value_aux {

@@ -240,6 +240,7 @@ describe("buildJournalTerminalCardProps", () => {
 		expect(props?.amount).toBe("1.5")
 		expect(props?.amountSymbol).toBe("USDC")
 		expect(props?.state).toBe("cancelled")
+		expect(props?.oneLineTitle).toBe(false)
 	})
 
 	test("transfer + failed → title=token symbol, state=failed, amount present", () => {
@@ -278,6 +279,22 @@ describe("buildJournalTerminalCardProps", () => {
 		expect(props?.originLabel).toBe("uniswap.example")
 		expect(props?.amount).toBeNull()
 		expect(props?.state).toBe("failed")
+		expect(props?.oneLineTitle).toBe(true)
+	})
+
+	test("dapp_execute from a dApp that named itself nothing still cuts its title to one line", () => {
+		const props = buildJournalTerminalCardProps(
+			recordWith({
+				kind: "dapp_execute",
+				title: "swapexacttokensfortokens",
+				subtitle: "",
+				progress: { stage: "cancelled" },
+				error: null,
+			}),
+			TEST_CTX,
+		)
+		expect(props?.originLabel).toBeNull()
+		expect(props?.oneLineTitle).toBe(true)
 	})
 
 	test("dapp_execute with no title → fallback to 'Transaction'", () => {
@@ -454,6 +471,7 @@ describe("a failed send that may have reached the network reads as its check's a
 			transferTypeLabel: null,
 			amount: null,
 			amountSymbol: null,
+			oneLineTitle: true,
 		})
 	})
 
