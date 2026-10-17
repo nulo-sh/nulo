@@ -15,6 +15,7 @@ import {
 	seedUsdQuoteAndReload,
 	setDeveloperMode,
 	setTheme,
+	waitForHomeReminders,
 } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
 import { shotSend } from "./fixtures/send-page"
@@ -1013,6 +1014,7 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 	for (const [i, hash] of HOME_ROWS.entries()) await seedTransaction(page, scope, { hash, amount: "1500000", at: now - i * 1_000 })
 	await seedUsdQuoteAndReload(page, scope.token.priceId)
 	await page.bringToFront()
+	await waitForHomeReminders(page)
 	await settledRows(page, HOME_ROWS.length)
 
 	const rest = await scrollHome(page, 0, "0")

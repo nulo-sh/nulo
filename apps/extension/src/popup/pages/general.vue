@@ -144,7 +144,8 @@ onBeforeUnmount(() => {
 			<div aria-hidden="true" :class="[$style.scroll_shadow, scrolled && $style.scroll_shadow_visible]" data-testid="home-scroll-shadow" />
 		</div>
 
-		<div :class="$style.scroller" data-testid="home-scroller" @scroll.passive="onScroll">
+		<!-- The card waits for its reads, so it can mount after the rows have and move them down. -->
+		<div :class="$style.scroller" data-testid="home-scroller" :data-reminders-settled="reminders !== null" @scroll.passive="onScroll">
 			<Flex direction="column" gap="16" :class="$style.content">
 				<RecoveryModeBanner />
 				<RestoreOutcomeBanner />

@@ -125,6 +125,7 @@ describe("Home — the backup reminder's sources", () => {
 		expect(has(w, "backup-reminder-banner")).toBe(false)
 		expect(has(w, "get-started-phrase")).toBe(true)
 		expect(has(w, "get-started-feeJuice")).toBe(true)
+		expect(w.get('[data-testid="home-scroller"]').attributes("data-reminders-settled")).toBe("true")
 	})
 
 	test("while the gas read is still out, an empty token list shows nothing yet", async () => {
@@ -132,6 +133,7 @@ describe("Home — the backup reminder's sources", () => {
 		const w = await mountHome()
 		expect(has(w, "get-started")).toBe(false)
 		expect(has(w, "backup-reminder-banner")).toBe(false)
+		expect(w.get('[data-testid="home-scroller"]').attributes("data-reminders-settled")).toBe("false")
 	})
 
 	test("a funded passkey wallet gets the backup row, never the banner", async () => {

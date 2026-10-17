@@ -112,6 +112,12 @@ export async function waitForHomeTotal(page: Page): Promise<void> {
 	await page.waitForFunction(() => !document.querySelector('[data-testid="balance-hero-loading"]'), { timeout: 20_000 })
 }
 
+/** Home's Get started card and backup banner mount once their reads settle, which can be after the
+ *  rows have: a spec that measures or scrolls the middle waits for this first. */
+export async function waitForHomeReminders(page: Page): Promise<void> {
+	await page.waitForSelector('[data-testid="home-scroller"][data-reminders-settled="true"]', { timeout: 30_000 })
+}
+
 /** Import a token from Home and wait for its projected balance row to carry `expectedPublicRaw`
  *  and a fresher timestamp than before the import — the discipline every multi-token spec needs so
  *  its assertions never race the balance projector. */
