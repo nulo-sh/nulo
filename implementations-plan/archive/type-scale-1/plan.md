@@ -272,7 +272,7 @@ One arc, one PR, no stack (the orchestrator's D-orch-1). Branch `worktree-type-s
 
 ## Post-implementation
 
-The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) read at 493ff497. Plan-specific values:
+The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) read at 493ff497. Plan-specific values:
 
 - Step 1 is absent (`code_review: off`).
 - Step 2: single arc, one loop over the net diff from the Phase 0 merge, after Phase 4 is green. Reviewer: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. Hard stop at three rounds. Log each round in `lessons/phase-5.md`.
