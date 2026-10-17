@@ -1,7 +1,7 @@
 ---
 plan: execution-integrity-1
 tier: mid
-status: planned; final Codex pass approved (round 2); awaiting the orchestrator
+status: arc 1 implemented; implementation review loop running
 issues: "#662 #664 #669 (the one arc closes all three)"
 driver: claude-code
 claude_model: opus
@@ -75,12 +75,12 @@ Everything before a broadcast keeps the strict settle, and `fail` keeps its caus
 *Not taken:* record the contract the worker reads at entry (no wire change). It binds what the worker saw, not what the person approved.
 
 **D3, #664: a revoke waits for every selected grant's block, then verifies and prunes.** In `revokeAuthwits`, after `revokeOperation` and the task start, before `executeSendTransaction`:
-- `awaitGrantBlocks(rows)`: for each distinct `txHash` of a `pending` row, in parallel, poll `getTxReceipt` every second through the network's single-attempt node (`networkService.getSingleAttemptNodeForUrl(primaryEndpointUrl(network))`, so one read never retries) until `txStatusFromReceipt` is past Pending and Dropped. A failed read counts as not in a block. Polling stops at the first poll after 120 s, so the wait ends within 120 s plus one read's timeout. It checks that every `pending` row has a `txHash` before starting any poll, and returns only after every poll has ended, so no poll outlives the call. A `pending` row with no `txHash`, or a grant not in a block when polling stops, refuses before any send: `Authwit #N's grant is not in a block yet. Revoke it again later.`
+- `awaitGrantBlocks(rows)`: for each distinct `txHash` of a `pending` row, in parallel, poll `getTxReceipt` every second through the network's single-attempt node (`networkService.getSingleAttemptNodeForUrl(primaryEndpointUrl(network))`, so one read never retries) until `txStatusFromReceipt` is past Pending and Dropped. A failed read counts as not in a block. Polling stops at the first poll after 120 s, so the wait ends within 120 s plus one read's timeout. It checks that every `pending` row has a `txHash` before starting any poll, and returns only after every poll has ended, so no poll outlives the call. A `pending` row with no `txHash`, or a grant whose last read is still Pending or failed, refuses before any send: `Authwit #N's grant is not in a block yet. Revoke it again later.` A grant whose last read is Dropped lets the revoke go out. That keeps a dropped grant from holding back the rest of its batch, and `verifyRevoked` keeps its row and fails the revoke.
 - `waitForTxProven` returns the revoke's block `R`.
 - `verifyRevoked(node, scope, rows, R)`, task-free: a hash that still reads as authorized fails the revoke (`Authwit #N is still authorized after the revoke`) and keeps its row. A non-pending row that reads not authorized is deleted. A `pending` row is deleted only when its grant's receipt, read again through the same single-attempt node, shows a block at or below `R` (a reverted grant included). Otherwise, a failed read included, it is kept and the revoke fails with the not-in-a-block reason.
 - Deletion is one helper extracted from `syncAuthwit`: under the lock, delete only if the stored row still has the same id, scope, hash and `txHash`. `syncAuthwit` keeps its `!pending` condition; the revoke's caller does not, since `reconcileAuthwits` may clear `pending` concurrently.
 `syncAuthwits` and `syncRegistry` are unchanged. The helpers keep `revokeAuthwits` within the complexity budgets.
-*Not taken:* refuse `pending` rows (see the #664 claim; a dropped grant's lingering row would also become unrevocable); refuse while the grant is unconfirmed (a failure the person must retry, where a wait of seconds does the same); `waitForTx` as the wait (F5: it does not prove inclusion); wallet sends joining the account's send line as dApp sends do (`dapp-send-executor.ts:344-345`). That line would also order a repeated grant of a tracked hash, but it reverses the recorded rule that a wallet send never waits there (pinned by "a wallet send (Settings) never waits", `dapp-send-executor.test.ts:1097`): such a wait is a spinner with no card and nothing to cancel, behind unrelated sends too.
+*Not taken:* refuse `pending` rows (see the #664 claim; a dropped grant would also block every grant batched with it); refuse a grant still Dropped at the deadline (the first implementation did: "Revoke all" then left every other grant of that batch authorized on every retry); refuse while the grant is unconfirmed (a failure the person must retry, where a wait of seconds does the same); `waitForTx` as the wait (F5: it does not prove inclusion); wallet sends joining the account's send line as dApp sends do (`dapp-send-executor.ts:344-345`). That line would also order a repeated grant of a tracked hash, but it reverses the recorded rule that a wallet send never waits there (pinned by "a wallet send (Settings) never waits", `dapp-send-executor.test.ts:1097`): such a wait is a spinner with no card and nothing to cancel, behind unrelated sends too.
 
 ## Security & Adversarial Considerations
 
@@ -163,6 +163,19 @@ One arc, one PR, base `dev`, branch `worktree-execution-integrity-1`, no stack. 
 | Qualify I2 | **Accepted.** |
 
 Verdict after the fixes (same session, resumed): `approve`, with two minor notes, both accepted: a rejected post-proof re-read joins the retention test, and `awaitGrantBlocks` checks every `txHash` before it starts a poll and returns only after every poll ends.
+
+## Audit verdicts
+
+**Implementation review, round 1** (net diff from 13d5f8d0 at 6b5a5de9). Codex gpt-6.1-sol high, session `01a14ad1-1488-7152-b70e-500fbd649f2a`: `approve`, one minor and three nits. Opus general-purpose review: `conditional approve (with conditions: a grant that reads Dropped must not stop the rest of its revoke batch, or a recorded known limit)`.
+
+| Point | From | Disposition |
+|---|---|---|
+| A grant still Dropped at the deadline refused its whole batch, so "Revoke all" left the batch's other grants authorized on every retry; base revoked them | Opus (major) | **Accepted**, after a Codex consult in the same session (verdict `A`). The wait reports Dropped apart from Pending and failed reads, and only those two refuse at the deadline. The verify is unchanged, so it keeps the dropped grant's row and the call still rejects. Tests: Dropped then included sends after inclusion; a batch with a grant still Dropped sends once, prunes the confirmed row, keeps the dropped one (re-read Dropped or above the revoke's block) and rejects. D3 corrected. |
+| The `reconcileFromTx` residual claimed a dropped grant's row stays revocable | Codex (minor) | **Accepted**: it states that the row stays listed and a revoke keeps it and fails. |
+| The harness TSDoc sat on `receiptNode`; `applyStatus`'s doc narrated it | both (nit) | **Accepted.** |
+| `TOKEN_MOVED_MESSAGE`'s doc restates it | Codex (nit) | **Kept**: the sibling message constants carry the same doc, and it pins "changed" to the contract. Codex agreed. |
+| `onSent` outside `sendTxTask`'s try: a throw leaves the subtask open | Opus (nit) | **Not taken**: both bodies are in-memory sequencer writes, and the outcome (nothing recorded, journal `failed`) is the same either way. |
+| A stale pre-existing test title ("sync reconciles") | Opus (nit) | **Accepted.** |
 
 **Close-out items** (filed by the implementer, deduplicated first; each a closed `known-limit` issue unless named otherwise):
 - KL1: a refused send's journal card resolves `tokenId`, so it can show the new row's symbol. Reopen if the journal row comes to carry the contract, or on a user report.

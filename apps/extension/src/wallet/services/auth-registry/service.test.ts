@@ -132,13 +132,12 @@ describe("AuthRegistryService — pending/reconcile/cap", () => {
 	})
 })
 
-/** Stub-peer harness: the real lifecycle over stubs (init registers the two purge subscribers
- *  + the tx listener). `network` is what `getNetwork` resolves — owned by p1 on chain 1. */
-/** A node whose every receipt reads `status` in `blockNumber`. */
 const receiptNode = (status = AztecTxStatus.PROPOSED, blockNumber: number | undefined = 1) => ({
 	getTxReceipt: vi.fn(async () => ({ status, blockNumber })),
 })
 
+/** Stub-peer harness: the real lifecycle over stubs (init registers the two purge subscribers
+ *  + the tx listener). `network` is what `getNetwork` resolves — owned by p1 on chain 1. */
 async function makeHarness(opts: { node?: unknown; grantNode?: unknown; activeProfile?: { id: string } | undefined } = {}) {
 	const api = new FakeBrowserApi()
 	api.reset()
@@ -590,23 +589,26 @@ describe("AuthRegistryService.revokeAuthwits waits for each grant's block, then 
 		return { h, internals, consumable, revoke, hashes: async () => (await rowsOf(h.service)).map((row) => row.hash) }
 	}
 
-	test("a pending row's revoke is sent only once its grant's receipt reads a block", async () => {
-		vi.useFakeTimers({ toFake: ["setTimeout", "Date"] })
-		const grantNode = { getTxReceipt: vi.fn() }
-		grantNode.getTxReceipt
-			.mockResolvedValueOnce({ status: AztecTxStatus.PENDING })
-			.mockResolvedValue({ status: AztecTxStatus.PROPOSED, blockNumber: 3 })
-		const { h, revoke } = await revoking(grantNode)
-		const run = revoke()
-		await vi.advanceTimersByTimeAsync(0)
-		expect(grantNode.getTxReceipt).toHaveBeenCalledTimes(1)
-		expect(h.executeSendTransaction).not.toHaveBeenCalled()
-		await vi.advanceTimersByTimeAsync(1_000)
-		await run
-		expect(grantNode.getTxReceipt.mock.invocationCallOrder[1]).toBeLessThan(
-			h.executeSendTransaction.mock.invocationCallOrder[0] as number,
-		)
-	})
+	test.each([AztecTxStatus.PENDING, AztecTxStatus.DROPPED])(
+		"a pending row's revoke whose grant reads %s is sent only once the grant reads a block",
+		async (first) => {
+			vi.useFakeTimers({ toFake: ["setTimeout", "Date"] })
+			const grantNode = { getTxReceipt: vi.fn() }
+			grantNode.getTxReceipt
+				.mockResolvedValueOnce({ status: first })
+				.mockResolvedValue({ status: AztecTxStatus.PROPOSED, blockNumber: 3 })
+			const { h, revoke } = await revoking(grantNode)
+			const run = revoke()
+			await vi.advanceTimersByTimeAsync(0)
+			expect(grantNode.getTxReceipt).toHaveBeenCalledTimes(1)
+			expect(h.executeSendTransaction).not.toHaveBeenCalled()
+			await vi.advanceTimersByTimeAsync(1_000)
+			await run
+			expect(grantNode.getTxReceipt.mock.invocationCallOrder[1]).toBeLessThan(
+				h.executeSendTransaction.mock.invocationCallOrder[0] as number,
+			)
+		},
+	)
 
 	test("control: a confirmed row's revoke reads no receipt before its send", async () => {
 		const { h, revoke } = await revoking()
@@ -618,14 +620,14 @@ describe("AuthRegistryService.revokeAuthwits waits for each grant's block, then 
 
 	test.each([
 		["has no grant transaction", "untracked"],
-		["has a grant still dropped when polling stops", "dropped"],
+		["has a grant still pending when polling stops", "pending"],
 		["has a grant whose every read fails", "unreadable"],
 	])("a pending row that %s is refused before any send", async (_name, kind) => {
 		vi.useFakeTimers({ toFake: ["setTimeout", "Date"] })
 		const grantNode = {
 			getTxReceipt: vi.fn(async () => {
 				if (kind === "unreadable") throw new Error("node unreachable")
-				return { status: AztecTxStatus.DROPPED }
+				return { status: AztecTxStatus.PENDING }
 			}),
 		}
 		const { h, revoke, hashes } = await revoking(grantNode)
@@ -639,6 +641,28 @@ describe("AuthRegistryService.revokeAuthwits waits for each grant's block, then 
 		expect(h.executeSendTransaction).not.toHaveBeenCalled()
 		expect(await hashes()).toEqual(["0xh1"])
 	})
+
+	test.each([
+		["still dropped", { status: AztecTxStatus.DROPPED }],
+		["in a block above the revoke's", { status: AztecTxStatus.PROPOSED, blockNumber: REVOKE_BLOCK + 1 }],
+	])(
+		"a grant still dropped when polling stops holds back no other row: sent once, its row kept when it re-reads %s, the call rejected",
+		async (_name, reread) => {
+			vi.useFakeTimers({ toFake: ["setTimeout", "Date"] })
+			const grantNode = { getTxReceipt: vi.fn() }
+			const { h, hashes } = await revoking(grantNode)
+			grantNode.getTxReceipt.mockImplementation(async () =>
+				h.executeSendTransaction.mock.calls.length ? reread : { status: AztecTxStatus.DROPPED },
+			)
+			await h.service.recordPendingAuthwits(P1, [{ hash: "0xh2", content }], TX2)
+			await h.service.reconcileAuthwits(P1, TX2, "mined")
+			const run = h.service.revokeAuthwits("net-1", A, [1, 2], FEE).catch((error: unknown) => error)
+			await vi.advanceTimersByTimeAsync(GRANT_BLOCK_WAIT_MS + 1_000)
+			expect(await run).toEqual(new Error(NOT_IN_BLOCK))
+			expect(h.executeSendTransaction).toHaveBeenCalledOnce()
+			expect(await hashes()).toEqual(["0xh1"])
+		},
+	)
 
 	test("a hash still authorized after the proof fails the revoke and keeps its row", async () => {
 		const { revoke, consumable, hashes } = await revoking()
@@ -735,7 +759,7 @@ describe("AuthRegistryService.reconcileFromTx — scoped by the tx's provenance;
 		await new Promise((r) => setTimeout(r, 10))
 	}
 
-	test("a Dropped tx does NOT remove pending rows — dropped is reversible (resurrection); sync reconciles", async () => {
+	test("a Dropped tx does NOT remove pending rows — dropped is reversible (resurrection), so the row stays pending", async () => {
 		await emitTx({ hash: TX1, status: TxStatus.Dropped, updatedAt: Date.now() })
 		expect(await h.service.getAuthwits(1, A)).toHaveLength(1)
 	})

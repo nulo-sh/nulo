@@ -174,8 +174,8 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	 *  answers happen behind load-balanced RPCs), and a row removed here can never be reconfirmed —
 	 *  authwit hashes aren't enumerable from chain. ACCEPTED RESIDUAL: a genuinely dropped tx's row
 	 *  then lingers as pending — `syncAuthwit` skips pending rows on purpose, so nothing prunes it.
-	 *  That is the safe direction (over-claiming; revoking a never-landed grant is a no-op); it
-	 *  stays user-visible/revocable and only costs headroom against the tracked-authwit cap. */
+	 *  That is the safe direction (over-claiming): the row stays listed, a revoke keeps it and fails
+	 *  on it, and it costs headroom against the tracked-authwit cap. */
 	private async reconcileFromTx(tx: Tx): Promise<void> {
 		if (!tx.profileId) return
 		const scope: AuthwitScope = { profileId: tx.profileId, chainId: tx.chainId, account: tx.account }
@@ -551,9 +551,10 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		return this.networkService.getSingleAttemptNodeForUrl(url)
 	}
 
-	/** Waits until the grant of every selected `pending` row is in a block, so the revoke cannot be
-	 *  included before a grant it names. Refuses before any send when a row has no grant transaction to
-	 *  wait for, or a grant is still out of a block once polling stops. */
+	/** Waits until the grant of every selected `pending` row is in a block, so the revoke is not
+	 *  included before a grant it names. Refuses before any send when a row has no grant transaction,
+	 *  or a grant still reads pending or unreadable once polling stops. A grant still read dropped then
+	 *  does not hold back the rest of the batch: `verifyRevoked` keeps its row and fails the revoke. */
 	private async awaitGrantBlocks(network: Network, authwits: Authwit[]): Promise<void> {
 		const pending = authwits.filter((authwit) => authwit.pending)
 		const untracked = pending.find((authwit) => !authwit.txHash)
@@ -562,9 +563,9 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		const node = await this.singleAttemptNodeFor(network)
 		const txHashes = [...new Set(pending.map((authwit) => authwit.txHash as string))]
 		const deadline = Date.now() + GRANT_BLOCK_WAIT_MS
-		const blocks = await Promise.all(txHashes.map((txHash) => awaitGrantBlock(node, txHash, deadline)))
-		const landed = new Set(txHashes.filter((_, i) => blocks[i] !== undefined))
-		const waiting = pending.find((authwit) => !landed.has(authwit.txHash as string))
+		const reads = await Promise.all(txHashes.map((txHash) => awaitGrantBlock(node, txHash, deadline)))
+		const unseen = new Set(txHashes.filter((_, i) => reads[i] === undefined))
+		const waiting = pending.find((authwit) => unseen.has(authwit.txHash as string))
 		if (waiting) throw grantNotInBlock(waiting)
 	}
 
@@ -606,7 +607,6 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		}
 	}
 
-	/** Stores the registry status the node reads now for `scope`. */
 	private async applyStatus(node: AztecNode, scope: AuthwitScope): Promise<void> {
 		const rowId = authwitStatusRowId(scope.profileId, scope.chainId, scope.account)
 		const isEnabled = await isAuthRegistryEnabled(node, scope.account)
