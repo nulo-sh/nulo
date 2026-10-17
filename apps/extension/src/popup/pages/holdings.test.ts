@@ -197,10 +197,16 @@ describe("holdings page", () => {
 describe("holdings page — prices unavailable", () => {
 	const summaryOf = (w: Awaited<ReturnType<typeof mountPage>>) => w.get('[data-testid="holdings-summary"]').text()
 
-	test("once the first answer prices no holding, the total is Home's dash and the meta line says why, with no count", async () => {
+	test.each([
+		["an answer that prices no holding", ANSWER],
+		["a rejected answer", () => Promise.reject(new Error("port closed"))],
+	])("after %s, the total is Home's dash and the meta line says why, with no count", async (_, answer) => {
 		installChromeStorage()
+		answerQuotes = answer
 		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
 		const w = await mountPage()
+		expect(w.find('[data-testid="holdings-total-loading"]').exists()).toBe(false)
+		expect(w.get('[data-testid="holdings-total"]').text()).toBe("—")
 		expect(summaryOf(w)).toContain("—")
 		expect(summaryOf(w)).toContain("Prices unavailable")
 		expect(summaryOf(w)).not.toContain("$")
@@ -238,7 +244,7 @@ describe("holdings page — before the first price answer", () => {
 		expect(meta(w)).toBe("2 tokens · priced assets only")
 	})
 
-	test("a wallet the signed list prices nothing of shows today's figure while the answer is still held", async () => {
+	test("a wallet the signed list prices nothing of shows $0.00 and its count, no skeleton, while the answer is held", async () => {
 		installChromeStorage()
 		answerQuotes = () => new Promise(() => {})
 		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET)]

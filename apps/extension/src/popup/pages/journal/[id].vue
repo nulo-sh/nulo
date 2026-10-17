@@ -113,7 +113,6 @@ const recipientLabel = computed(() => {
 	return trimAddress(r, 6, 4, "…")
 })
 
-// The activity row's chip, so the App row and the row agree.
 const originChip = computed(() => (op.value ? journalCardOriginLabel(op.value) : null))
 
 const txHash = computed(() => op.value?.progress?.txHash ?? null)
