@@ -53,7 +53,7 @@ const freshState = () => ({
 /** The state a test reads and flips; replaced whole by `resetWindowHarness`. */
 export const approval = freshState()
 
-export const loadInteractionPayloadMock = vi.fn(
+const loadInteractionPayloadMock = vi.fn(
 	() =>
 		new Promise<void>((resolve) => {
 			approval.resolveLoad = () => {
@@ -74,16 +74,15 @@ export const getActiveProfileMock = vi.fn(
 			approval.rejectProfile = reject
 		}),
 )
-export const profileServiceConnectMock = vi.fn(() => callLog.push("profile.connect"))
-export const profileServiceDisconnectMock = vi.fn(() => callLog.push("profile.disconnect"))
-export const interactionServiceConnectMock = vi.fn(() => callLog.push("interaction.connect"))
-export const interactionServiceDisconnectMock = vi.fn(() => callLog.push("interaction.disconnect"))
+const profileServiceConnectMock = vi.fn(() => callLog.push("profile.connect"))
+const profileServiceDisconnectMock = vi.fn(() => callLog.push("profile.disconnect"))
+const interactionServiceConnectMock = vi.fn(() => callLog.push("interaction.connect"))
+const interactionServiceDisconnectMock = vi.fn(() => callLog.push("interaction.disconnect"))
 export const onActiveProfileChangedAddMock = vi.fn()
 export const windowsRemoveMock = vi.fn(() => callLog.push("windows.remove"))
-export const routerPushMock = vi.fn()
-export const routerMock = {
+const routerMock = {
 	currentRoute: { value: { fullPath: "/windows/approval?requestId=req-route", query: { requestId: "req-route" } } },
-	push: routerPushMock,
+	push: vi.fn(),
 }
 
 export const payloadModule = {

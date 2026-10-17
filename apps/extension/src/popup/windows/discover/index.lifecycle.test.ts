@@ -1,21 +1,12 @@
 /**
- * Frozen-oracle characterization tests for the discover approval window's SHELL
- * lifecycle — the connect/wait/redirect/init/beforeunload skeleton, the unmount
- * disconnect ORDER, and the closeWindow/beforeunload reject routing. Discover
- * uses the same `useDappApprovalWindow` shell as capabilities/execute, so these
- * pin its composition of that shell the same way those windows' oracles do; the
- * per-pin rationale lives in the characterization spec:
- * implementations-plan/archive/harden-quality-arc/window-characterization.md.
- *
- * Discover's business gate (the `isReady` phishing defense on the Allow button)
- * is pinned separately in `index.test.ts`; this file owns ONLY the shell skeleton.
- *
- * Pins covered here (spec ids): A1 connect set+order · A2 session gate ·
- * A3 auth redirect · A4 beforeunload-after-init (incl. init-throw) · A5 unmount
- * disconnect order · A6 closeWindow(true) vs closeWindow() incl. overlay dismiss ·
- * A7 no-double-reject · B8 reject two-layer order · B9 the reject bail-out
- * (discover DIVERGES from capabilities — it bails on !requestId; do NOT "fix") ·
- * B10 cancelled-reject inert · C12 onActiveProfileChanged guard.
+ * The discover approval window on the shared approval shell, whose own contracts
+ * `composables/useDappApprovalWindow.test.ts` pins. This file pins what the window adds to it: the
+ * services it connects and the order it disconnects them (A1, A5), an init the shell gates and
+ * waits for, the profile fetch then the payload load (A2, A4, a throwing init included), its
+ * overlay dismiss and its reject routed through the shell's close (A6, B8, B10), its reject's
+ * bail-out with no request id, where capabilities proceeds (B9), the profile guard it subscribes
+ * (C12) and what follows a resolved Allow. The Allow button's phishing gate is pinned in
+ * `index.test.ts`.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
@@ -31,8 +22,6 @@ import {
 	onActiveProfileChangedAddMock,
 	rejectViaInteractionServiceMock,
 	resetWindowHarness,
-	routerMock,
-	routerPushMock,
 	windowsRemoveMock,
 } from "../../../../tests/helpers/approval-window-harness"
 
@@ -139,16 +128,6 @@ describe("discover window — shell lifecycle frozen oracle", () => {
 		expect(beforeunloadAdds()).toBe(1)
 	})
 
-	test("A3: auth redirect short-circuits — pageAwaitingAuth set, no init, no beforeunload", async () => {
-		approval.appStore.isLogined = false
-		w = factory()
-		await flushPromises()
-		expect(approval.appStore.pageAwaitingAuth).toBe(routerMock.currentRoute.value.fullPath)
-		expect(routerPushMock).toHaveBeenCalledWith({ path: "/popup/auth" })
-		expect(getActiveProfileMock).not.toHaveBeenCalled()
-		expect(beforeunloadAdds()).toBe(0)
-	})
-
 	test("A4: beforeunload is added AFTER init resolves — exactly once", async () => {
 		w = factory()
 		await flushPromises()
@@ -182,18 +161,6 @@ describe("discover window — shell lifecycle frozen oracle", () => {
 		expect(callLog).toEqual(["profile.disconnect", "interaction.disconnect", "removeEventListener:beforeunload"])
 	})
 
-	test("A6: closeWindow(true) removes the beforeunload listener; closeWindow() keeps it; both close", async () => {
-		w = factory()
-		await completeInit()
-		const vm = w.vm as unknown as DiscoverVm
-		vm.closeWindow()
-		expect(beforeunloadRemoves()).toBe(0)
-		expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
-		vm.closeWindow(true)
-		expect(beforeunloadRemoves()).toBe(1)
-		expect(windowsRemoveMock).toHaveBeenCalledTimes(2)
-	})
-
 	test("A6: overlay @dismiss wires to closeWindow() with NO arg — listener stays attached", async () => {
 		w = factory()
 		await completeInit()
@@ -206,15 +173,6 @@ describe("discover window — shell lifecycle frozen oracle", () => {
 		// deliberately delivered by the unload event, not a direct call.
 		expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
 		expect(beforeunloadRemoves()).toBe(0)
-	})
-
-	test("A7: no double-reject — a decided reject detaches the listener before the window unloads", async () => {
-		w = factory()
-		await completeInit()
-		await (w.vm as unknown as DiscoverVm).reject()
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledTimes(1)
-		window.dispatchEvent(new Event("beforeunload"))
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledTimes(1)
 	})
 
 	test("B8: window-local reject() = composable reject THEN closeWindow(true) — order pinned", async () => {

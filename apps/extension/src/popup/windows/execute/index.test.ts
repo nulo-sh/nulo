@@ -1,23 +1,12 @@
 /**
- * Frozen-oracle characterization tests for the execute approval window's SHELL
- * lifecycle — the connect/wait/redirect/init/beforeunload skeleton, the unmount
- * disconnect ORDER (4 services + listener last), the lazy execution-transport
- * asymmetry, and the wrong-profile overlay whose rejection is delivered via the
- * beforeunload route. These pin CURRENT behavior verbatim so the planned shell
- * extraction can be graded against them; they must pass unchanged before AND
- * after it. Spec: implementations-plan/archive/harden-quality-arc/window-characterization.md.
- *
- * Pins covered here (spec ids): A1 connect set+order (+ executionService NEVER
- * eager-connected) · A2 session gate · A3 auth redirect · A4 beforeunload-after-
- * init (incl. init-throw) · A5 unmount disconnect order · A6 closeWindow(true)
- * vs closeWindow() · A7 no-double-reject · B8 reject two-layer order · B9-mirror
- * (execute DOES bail on !requestId — the guard capabilities lacks) · C12
- * onActiveProfileChanged guard · D13 wrong-profile init check · D14 wrong-profile
- * rejection delivered on dismiss→unload · D16 connect/disconnect asymmetry.
- *
- * Out of scope (window-specific business pins D15: approve gating stack, fee
- * selection, token-metadata loading) — deferred; the network e2e dApp-execute
- * flow covers them end-to-end today.
+ * The execute approval window on the shared approval shell, whose own contracts
+ * `composables/useDappApprovalWindow.test.ts` pins. This file pins what the window adds to it: its
+ * four services, the execution transport opened only on first use (A1, A5/D16), an init the shell
+ * gates and waits for, the profile fetch then the payload load (A2, A4, a throwing init
+ * included), its reject routed through the shell's close (B8), its reject's bail-out with no
+ * request id (B9-mirror), the profile guard it subscribes (C12), and a request from another
+ * profile, refused on dismiss and unload (D13, D14). Then the window's own business: cancellation,
+ * init sequencing, self-pay, the approval envelope, app-paid operations, send drafts and grants.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
@@ -36,8 +25,6 @@ import {
 	onActiveProfileChangedAddMock,
 	rejectViaInteractionServiceMock,
 	resetWindowHarness,
-	routerMock,
-	routerPushMock,
 	windowsRemoveMock,
 } from "../../../../tests/helpers/approval-window-harness"
 
@@ -251,16 +238,6 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		expect(getActiveProfileMock).toHaveBeenCalledTimes(1)
 	})
 
-	test("A3: auth redirect short-circuits — pageAwaitingAuth set, no init, no beforeunload", async () => {
-		approval.appStore.isLogined = false
-		w = factory()
-		await flushPromises()
-		expect(approval.appStore.pageAwaitingAuth).toBe(routerMock.currentRoute.value.fullPath)
-		expect(routerPushMock).toHaveBeenCalledWith({ path: "/popup/auth" })
-		expect(getActiveProfileMock).not.toHaveBeenCalled()
-		expect(beforeunloadAdds()).toBe(0)
-	})
-
 	test("A4: beforeunload is added AFTER init resolves — exactly once", async () => {
 		w = factory()
 		await flushPromises()
@@ -298,27 +275,6 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 			"removeEventListener:beforeunload",
 		])
 		expect(executionServiceConnectMock).not.toHaveBeenCalled()
-	})
-
-	test("A6: closeWindow(true) removes the beforeunload listener; closeWindow() keeps it; both close", async () => {
-		w = factory()
-		await completeInit()
-		const vm = w.vm as unknown as ExecVm
-		vm.closeWindow()
-		expect(beforeunloadRemoves()).toBe(0)
-		expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
-		vm.closeWindow(true)
-		expect(beforeunloadRemoves()).toBe(1)
-		expect(windowsRemoveMock).toHaveBeenCalledTimes(2)
-	})
-
-	test("A7: no double-reject — a decided reject detaches the listener before the window unloads", async () => {
-		w = factory()
-		await completeInit()
-		await (w.vm as unknown as ExecVm).reject()
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledTimes(1)
-		window.dispatchEvent(new Event("beforeunload"))
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledTimes(1)
 	})
 
 	test("B8: window-local reject() = composable reject THEN closeWindow(true) — order pinned", async () => {
@@ -467,11 +423,10 @@ describe("execute window — dApp cancellation state", () => {
 	})
 })
 
-// ── Seam pins — pre-extraction, byte-identical
-//    across the refactor commits: init resolves operations SEQUENTIALLY (op N+1's
-//    lookups start only after op N resolved), commits operations/accounts and
-//    flips `initComplete` only AFTER the loop, then prefetches register_token
-//    metadata with the loading flag cleared in a `finally` even on failure. ──
+// ── Init resolves operations SEQUENTIALLY (op N+1's lookups start only after op N
+//    resolved), commits operations/accounts and flips `initComplete` only AFTER the
+//    loop, then prefetches register_token metadata with the loading flag cleared in
+//    a `finally` even on failure. ──
 
 describe("execute window — init sequencing pins", () => {
 	const NETWORK = { id: "n1", chainId: 1, name: "TestNet" }
