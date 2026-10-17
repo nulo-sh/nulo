@@ -344,7 +344,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		// The last await before the request leaves, so a lock that landed while a caller was awaiting
 		// stops it. The peek must stay in this continuation: it catches a lock queued behind the read.
 		if (!(await this.profileService.getActiveProfile()) || this.profileService.peekLiveSerial() === undefined) {
-			return this.usableUnlessSuperseded(gen)
+			return this.answerLocked(gen)
 		}
 
 		const ids = allCoingeckoIds()
@@ -402,7 +402,11 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		}
 	}
 
-	private async usableUnlessSuperseded(gen: number): Promise<PriceState> {
+	/** Leaves the in-flight slot first, so a refresh an unlock starts meanwhile fetches instead of
+	 *  joining this cache read. While `gen` is current the slot is this run's: only a kill-switch
+	 *  flip, which bumps the generation, empties it early. */
+	private async answerLocked(gen: number): Promise<PriceState> {
+		if (gen === this.generation) this.inflight = undefined
 		const usable = await this.readUsable()
 		return gen === this.generation ? usable : {}
 	}

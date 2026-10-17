@@ -455,6 +455,34 @@ describe("PriceService — unlock-gated alarm lifecycle", () => {
 		expect(fetchFn).not.toHaveBeenCalled()
 	})
 
+	test("an unlock while a locked refresh reads the cache gets its own fetch", async () => {
+		const { service, state, fakeProfile, browserApi, fetchFn } = await harness({ profile: undefined })
+		const local = browserApi.storage.local
+		const read = local.get.bind(local)
+		let holdNextRead = false
+		let release: (() => void) | undefined
+		fakeProfile.getActiveProfile = async () => {
+			holdNextRead = !state.profile
+			return state.profile
+		}
+		vi.spyOn(local, "get").mockImplementation(async (keys) => {
+			if (holdNextRead) {
+				holdNextRead = false
+				await new Promise<void>((r) => {
+					release = r
+				})
+			}
+			return read(keys)
+		})
+		const locked = service.refreshIfStale()
+		await vi.waitFor(() => expect(release).toBeDefined())
+		state.profile = PROFILE
+		fakeProfile.onActiveProfileChanged.invoke(PROFILE)
+		await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1))
+		release?.()
+		await locked
+	})
+
 	test("onAlarmTick while locked reconciles (clears) instead of fetching", async () => {
 		const { service, state } = await harness()
 		state.profile = undefined
