@@ -423,7 +423,9 @@ async function doubleClick(page: Page, x: number, y: number, gapMs: number): Pro
 		{ type: "pointerDown", button: 0 },
 		{ type: "pointerUp", button: 0 },
 	]
-	// Puppeteer's own mouse id, so its idea of where the pointer stands stays true.
+	// Through Puppeteer's mouse first, so its record of where the pointer stands stays true; the chain
+	// then drives the same input source, and a move to where it already stands changes nothing.
+	await page.mouse.move(x, y)
 	await frame.browsingContext.performActions([
 		{
 			type: "pointer",

@@ -389,7 +389,8 @@ assertion; drive the rest of the flow with the ordinary helpers.
 `pointerClick`s or two `mouse.down`/`up` pairs: Firefox counts presses only inside one action chain,
 so those reach its page as two clicks of `detail` 1 (FIREFOX.md). Record what each press hit with a
 window capture listener and assert it, as `contacts.test.ts`'s Confirm case does: a second press that
-missed its target proves nothing.
+missed its target proves nothing. A bubble listener on the window reads whether a click was stopped,
+but a control that stops its own click (`RowAction`'s `@click.stop`) hides it there too.
 
 ### What to assert
 

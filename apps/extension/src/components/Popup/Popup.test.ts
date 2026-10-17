@@ -223,6 +223,7 @@ describe("Popup", () => {
 		const w = await openPopup()
 		const inside = document.querySelector<HTMLElement>('[data-testid="inside"]')
 		const closeArea = inside?.parentElement?.firstElementChild
+		expect(closeArea).toBeTruthy()
 		const clicks: number[] = []
 		inside?.addEventListener("click", (event) => clicks.push(event.detail))
 		const press = (el: Element | null | undefined, type: "mousedown" | "click", detail: number, button = 0) => {
@@ -233,7 +234,7 @@ describe("Popup", () => {
 
 		expect(press(inside, "click", 2).defaultPrevented).toBe(true)
 		press(inside, "click", 3)
-		press(closeArea, "click", 2)
+		expect(press(closeArea, "click", 2).defaultPrevented).toBe(true)
 		expect(w.emitted("onClose")).toBeUndefined()
 		press(inside, "mousedown", 1, 2)
 		press(inside, "click", 2)
@@ -244,6 +245,8 @@ describe("Popup", () => {
 		press(inside, "mousedown", 2)
 		press(inside, "click", 2)
 		expect(clicks).toEqual([0, 1, 2])
+		press(closeArea, "click", 1)
+		expect(w.emitted("onClose")).toEqual([[]])
 		w.unmount()
 	})
 

@@ -255,13 +255,14 @@ export const chromeDriver: BrowserDriver = {
 	// Chrome runs a key's default action on the page the key is sent to, focused or not.
 	prepareKeys: async () => {},
 	doubleClick: async (page, x, y, gapMs) => {
+		// Through Puppeteer's mouse first, so its record of where the pointer stands stays true.
+		await page.mouse.move(x, y)
 		const cdp = await page.createCDPSession()
 		const press = async (clickCount: number) => {
 			await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", buttons: 1, clickCount })
 			await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", buttons: 0, clickCount })
 		}
 		try {
-			await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y })
 			await press(1)
 			await new Promise((resolve) => setTimeout(resolve, gapMs))
 			await press(2)

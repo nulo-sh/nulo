@@ -168,6 +168,8 @@ test("a double-click's second press cannot answer the Confirm its first opened; 
 	// The Confirm's answer sits at the frame's bottom, which a row's icon reaches only on a list this long.
 	const rows = () => page.evaluate(() => document.querySelectorAll('[data-testid="contact-row"]').length)
 	while ((await rows()) < 10) await addContact(page, uniqueName("Row"), randomAddress())
+	// A saved contact's snack sits over the list's bottom rows, where the answer is.
+	await page.waitForFunction(() => !document.querySelector('[data-testid="snackbar"]'), { timeout: 15_000, polling: 100 })
 
 	await page.evaluate(() => document.querySelector<HTMLElement>('[data-testid="contact-delete"]')?.click())
 	await page.waitForSelector('[data-testid="confirm-submit"]', { visible: true, timeout: 5_000 })
@@ -180,15 +182,10 @@ test("a double-click's second press cannot answer the Confirm its first opened; 
 	await settleClosedPopup(page, "confirm-cancel")
 
 	const aim = await page.evaluate((target) => {
-		const scrollerOf = (el: Element) => {
-			for (let p = el.parentElement; p; p = p.parentElement) {
-				if (/(auto|scroll)/.test(getComputedStyle(p).overflowY) && p.scrollHeight > p.clientHeight) return p
-			}
-			return document.scrollingElement
-		}
+		const scroller = document.querySelector('[data-testid="contacts-page"]')
+		const tried: string[] = []
 		for (const row of [...document.querySelectorAll<HTMLElement>('[data-testid="contact-row"]')].reverse()) {
 			const icon = row.querySelector('[data-testid="contact-delete"]')
-			const scroller = icon && scrollerOf(row)
 			if (!icon || !scroller) continue
 			const before = icon.getBoundingClientRect()
 			scroller.scrollTop += before.top + before.height / 2 - target.y
@@ -196,13 +193,16 @@ test("a double-click's second press cannot answer the Confirm its first opened; 
 			const x = box.left + box.width / 2
 			const y = box.top + box.height / 2
 			const hit = document.elementFromPoint(x, y)?.closest('[data-testid="contact-delete"]')
+			tried.push(
+				`${Math.round(before.top)}->${Math.round(y)} x${Math.round(x)} hit=${hit === icon} st=${scroller.scrollTop}/${scroller.scrollHeight - scroller.clientHeight}`,
+			)
 			if (Math.abs(y - target.y) <= 4 && x > target.left + 4 && x < target.right - 4 && hit === icon) {
-				return { x, y, name: row.dataset.contactName ?? "" }
+				return { x, y, name: row.dataset.contactName ?? "", tried }
 			}
 		}
-		return null
+		return { x: 0, y: 0, name: "", tried }
 	}, answer)
-	if (!aim) throw new Error(`no contact-delete icon could be scrolled under the answer at y ${answer.y}`)
+	if (!aim.name) throw new Error(`no contact-delete icon under the answer ${JSON.stringify(answer)}: ${aim.tried.join(" | ")}`)
 
 	// Window capture runs before the sheet's own listener; `defaultPrevented` is read after dispatch.
 	await page.evaluate(() => {
@@ -223,17 +223,19 @@ test("a double-click's second press cannot answer the Confirm its first opened; 
 			if (entry) entry.delivered = true
 		})
 	})
-	await doubleClick(page, aim.x, aim.y, 300)
+	await doubleClick(page, aim.x, aim.y, 150)
 	await page.waitForFunction(() => (window as unknown as { __clicks: unknown[] }).__clicks.length >= 2, { timeout: 5_000 })
 	const clicks = await page.evaluate(() =>
 		(window as unknown as { __clicks: { event: MouseEvent; target: string | null; delivered: boolean }[] }).__clicks.map(
 			({ event, target, delivered }) => ({ detail: event.detail, target, prevented: event.defaultPrevented, delivered }),
 		),
 	)
-	expect(clicks).toEqual([
-		{ detail: 1, target: "contact-delete", prevented: false, delivered: true },
-		{ detail: 2, target: "confirm-submit", prevented: true, delivered: false },
+	// The row's icon stops its own click short of the window, so only the second's delivery is read.
+	expect(clicks.map(({ detail, target, prevented }) => ({ detail, target, prevented }))).toEqual([
+		{ detail: 1, target: "contact-delete", prevented: false },
+		{ detail: 2, target: "confirm-submit", prevented: true },
 	])
+	expect(clicks[1]?.delivered).toBe(false)
 	expect(await page.evaluate((s: string) => !!document.querySelector(s), contactRow(aim.name))).toBe(true)
 
 	await pointerClick(page, "confirm-submit")
