@@ -2127,8 +2127,10 @@ export const getEntropy = async (mnemonic: string[]): Promise<Uint8Array<ArrayBu
 		for (const word of mnemonic) {
 			const index = bip39Words.indexOf(word)
 
+			// Names the position, never the word: the message reaches logs and the import page, and a
+			// mistyped word is usually one edit from a word of the phrase.
 			if (index < 0) {
-				throw new Error(`Invalid mnemonic word '${word}'`)
+				throw new Error(`Invalid mnemonic word at position ${wordIndex + 1}`)
 			}
 
 			concatBits[wordIndex * 11 + 0] = (index >> 10) & 1

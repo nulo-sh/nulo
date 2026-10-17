@@ -66,6 +66,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [copy-polish](copy-polish/plan.md) — completed — four small user-visible copy changes, including the clause-dash ban
 - [dapp-boundary-1](dapp-boundary-1/plan.md) — completed — an app-facing simulateTx result for dApps, and no dApp profileTx (OA-1 is #699)
 - [dapp-boundary-2](dapp-boundary-2/plan.md) — completed — a contract's key registers only its own account, one chain check per dApp call, no row for a connect that reaches no page
+- [dapp-results-1](dapp-results-1/plan.md) — completed — an app-facing `executeUtility` answer, and the log redactor denies `witness`, `newNotes` and `taggingIndexRanges`; the simulate side shipped in #701
 - [dapp-dispatch-hold](dapp-dispatch-hold/plan.md) — completed — hold an app's calls until They match: a per-session hold opened at establishment, released by the session's own hash, dropped on every session end; a lock ends unconfirmed sessions; 32 held calls then -32005
 - [dapp-grants](dapp-grants/plan.md) — completed — a refused dApp request tells no one more than it must
 - [dapp-ingress-grants](dapp-ingress-grants/plan.md) — completed — stored grants validated at every deciding reader, other profiles' handshakes kept, refused app sends named and titled by their call, the app's network in the connect window, the app contract ratified (class widening, address checks, strict `chainInfo`, -32005)
@@ -86,6 +87,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [dependency-refresh](dependency-refresh/plan.md) — completed — minor and patch updates inside existing ranges, with the release-age gate holding
 - [deprecate-simulate-views](deprecate-simulate-views/plan.md) — completed — the internal simulate_views operation kind retired from every layer
 - [design-system-externalization](design-system-externalization/plan.md) — completed — `@nulo/design` becomes the single source of tokens, base styles and primitives
+- [docs-1](docs-1/plan.md) — completed — the documents say what the code does (passkey boundary, authwit contract, backup contents) plus four small fixes (#665 #667 #668 #672)
 - [docs-improvement](docs-improvement/plan.md) — completed — documentation split by job, and a sweep of the code comments
 - [durable-jobs](durable-jobs/plan.md) — completed — every submission becomes a durable job in storage that the popup only observes
 - [dynamic-token-list](dynamic-token-list/plan.md) — completed — a signed token list at tokens.nulo.sh replaces the built-in default tokens: CI signs it in a gated environment, the wallet fetches it after the Terms and daily (#79)

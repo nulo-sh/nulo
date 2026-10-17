@@ -51,9 +51,10 @@ type FetchLike = (input: string, init?: { signal?: AbortSignal; headers?: Record
  * sanity bands), cached in `chrome.storage.local`, and treated as absent
  * after `QUOTE_TTL_MS`.
  *
- * Privacy posture: refreshes run only while a profile session is unlocked
- * (alarm created on unlock, cleared on lock), plus stale-on-connect via
- * `refreshIfStale`. Executors read `getUsableQuote` cache-or-nothing — no
+ * Privacy posture: a fetch starts only while a profile session is open
+ * (`doRefresh`, which every refresh path reaches, checks it last); the alarm
+ * is created on unlock and cleared on lock, and `refreshIfStale` refreshes a
+ * stale cache on connect. Executors read `getUsableQuote` cache-or-nothing — no
  * fetch is ever triggered by transaction activity. The `showFiatValues`
  * config toggle disables everything and clears the cache.
  *
@@ -341,6 +342,11 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			this.logDebug("refresh suppressed by backoff window")
 			return this.readUsable()
 		}
+		// The last await before the request leaves, so a lock that landed while a caller was awaiting
+		// stops it. The peek must stay in this continuation: it catches a lock queued behind the read.
+		if (!(await this.profileService.getActiveProfile()) || this.profileService.peekLiveSerial() === undefined) {
+			return this.answerLocked(gen)
+		}
 
 		const ids = allCoingeckoIds()
 		const url = `${API_BASE}/simple/price?ids=${ids.join(",")}&vs_currencies=usd&include_last_updated_at=true`
@@ -395,6 +401,15 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			// Retract only our own controller — a newer refresh may have published its own.
 			if (this.abortController === controller) this.abortController = undefined
 		}
+	}
+
+	/** Leaves the in-flight slot first, so a refresh an unlock starts meanwhile fetches instead of
+	 *  joining this cache read. While `gen` is current the slot is this run's: only a kill-switch
+	 *  flip, which bumps the generation, empties it early. */
+	private async answerLocked(gen: number): Promise<PriceState> {
+		if (gen === this.generation) this.inflight = undefined
+		const usable = await this.readUsable()
+		return gen === this.generation ? usable : {}
 	}
 
 	private async recordFailure(gen: number, error: unknown): Promise<PriceState> {

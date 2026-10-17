@@ -19,16 +19,19 @@
 import { describe, expect, test, vi } from "vitest"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
-import { JobCancelledError, RpcTimeoutError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import { AuthRegistryRefusalError, JobCancelledError, RpcTimeoutError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { FpcType } from "@/wallet/services/fpc/spec"
 import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/spec"
+import { AuthwitDiscoverer } from "./authwit-discoverer"
 import { DappSendExecutor, type DappSendExecutorDeps } from "./dapp-send-executor"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
+import type { CollectingDiscoveryProbe } from "./discovery-probe"
 import type { ProveAndSendContext } from "./execution-coordinator"
 import { AUTHWITS_CHANGED_MESSAGE, ESTIMATE_INCOMPLETE_MESSAGE, PREVIEW_FOREIGN_MESSAGE, PreviewSnapshots } from "./preview-snapshots"
 import { OperationEstimateReuse } from "./operation-estimate-reuse"
@@ -1774,6 +1777,80 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			expect(results[0]?.status).toBe("failed")
 			expect(JSON.stringify(results[0])).toContain(ESTIMATE_INCOMPLETE_MESSAGE)
 			expect(account.createAuthWit).not.toHaveBeenCalled()
+		})
+	})
+
+	describe("a request from the authorization registry, through the real decoder", () => {
+		const registryEffect = { data: ["r"], contractAddress: STANDARD_AUTH_REGISTRY_ADDRESS }
+		const noFromOp = () => makeAztecOp({ executionMode: "default_entrypoint", feeSettings: { paymentMethod: { kind: "embedded" } } })
+		const FJWC = { paymentMethod: { kind: "fjwc" } } as never
+		const FJ = { paymentMethod: { kind: "fj" } } as never
+		const standalone = () => makeHarness({ authwit: new AuthwitDiscoverer({} as never) as never })
+		/** The fee strategies' folded first sim: the probe reads the sim's effects. */
+		const folded = () => {
+			const base = makeHarness()
+			const buildAndEstimateFolded = vi.fn(async (...args: unknown[]) => {
+				const probe = args[3] as CollectingDiscoveryProbe
+				await probe.extractEffects({ privateExecutionResult: {} }, { node: base.node as never, network: base.built.network })
+				return base.built as never
+			})
+			return makeHarness({ buildAndEstimateFolded })
+		}
+
+		test("standalone discovery refuses it: the validated build, which signs the discovered witnesses, never runs", async () => {
+			collectOffchainEffectsMock.mockReturnValueOnce([effect("a"), registryEffect])
+			const h = standalone()
+			await expect(h.executor.estimateOperationFee(makeAztecOp(), FJWC, undefined, CTX)).rejects.toBeInstanceOf(
+				AuthRegistryRefusalError,
+			)
+			expect(h.buildAndEstimateValidated).not.toHaveBeenCalled()
+		})
+
+		test("standalone discovery hands another contract's request to the validated build once", async () => {
+			collectOffchainEffectsMock.mockReturnValueOnce([effect("a")])
+			const h = standalone()
+			const result = await h.executor.estimateOperationFee(makeAztecOp(), FJWC, undefined, CTX)
+			expect(result.discoveredAuthwits).toEqual([record("a")])
+			const [op] = h.buildAndEstimateValidated.mock.calls[0] as [{ actions: { kind: string }[] }]
+			expect(op.actions.filter((a) => a.kind === "add_private_authwit")).toEqual([
+				{ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "mh:ih:a" } },
+			])
+		})
+
+		test("the folded probe refuses it and the estimate rejects; another contract's request is listed", async () => {
+			collectOffchainEffectsMock.mockReturnValueOnce([registryEffect])
+			const refused = folded()
+			await expect(refused.executor.estimateOperationFee(makeAztecOp(), FJ, undefined, CTX)).rejects.toBeInstanceOf(
+				AuthRegistryRefusalError,
+			)
+
+			collectOffchainEffectsMock.mockReturnValueOnce([effect("a")])
+			const allowed = folded()
+			const result = await allowed.executor.estimateOperationFee(makeAztecOp(), FJ, undefined, CTX)
+			expect(result.discoveredAuthwits).toEqual([record("a")])
+		})
+
+		test("the NO_FROM preview refuses it", async () => {
+			collectOffchainEffectsMock.mockReturnValueOnce([registryEffect])
+			const { executor } = makeHarness()
+			await expect(executor.previewOperationAuthwits(noFromOp(), CTX)).rejects.toBeInstanceOf(AuthRegistryRefusalError)
+		})
+
+		test("a NO_FROM Confirm refuses it with nothing signed or sent, and History records registry_refused", async () => {
+			collectOffchainEffectsMock.mockReturnValueOnce([effect("n"), registryEffect])
+			const { executor, deps, account, proveAndSend } = makeHarness()
+			snapshots(deps).stash("pv", { ...identity, discoveredHashes: ["mh:ih:n"] })
+			await expect(
+				executor.executeAztecSendTx(noFromOp(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: "pv" }),
+			).rejects.toBeInstanceOf(AuthRegistryRefusalError)
+			expect(account.createAuthWit).not.toHaveBeenCalled()
+			expect(proveAndSend).not.toHaveBeenCalled()
+			expect(deps.lane.markJournal).toHaveBeenCalledWith(
+				"j1",
+				{ stage: "failed" },
+				expect.objectContaining({ kind: "registry_refused" }),
+				undefined,
+			)
 		})
 	})
 
