@@ -217,6 +217,8 @@ Resumed to verify: **`approve`**; all five fixes present, no regression in phase
 7. Low, two stale comments: **accepted**.
 8. Low, the network page's rename row loses its only edit cue: **accepted** as OA-5; a capture of the page is added (D20).
 
+Resumed (round 2, same Codex session, over `6860b443..5b18cc75`): **`approve`**, no new material finding; every accepted fix verified, both added captures no-ops without `NULO_E2E_SHOT_DIR`.
+
 ## Arc 1: Direction 2 everywhere (closes #602)
 
 **Smoke runs, every time** (F9): build the armed smoke build for the browser, then run with its flags, from the repo root:
