@@ -2271,6 +2271,56 @@ describe("NetworkService in-place reset", () => {
 		expect(write).not.toHaveBeenCalled()
 	})
 
+	const ADDED = "https://added.example"
+	/** A node at `ADDED` serving the stale Testnet row's own chain, so an edit passes the identity check. */
+	const servesOld = { l1ChainId: TESTNET_L1_CHAIN_ID, rollupVersion: (OLD ^ TESTNET_L1_CHAIN_ID) >>> 0 } as NodeInfo
+	const endpointEdits: Array<[string, (service: NetworkService) => Promise<unknown>]> = [
+		["addEndpoint", (service) => service.addEndpoint("tn", undefined, ADDED)],
+		["updateEndpoint", (service) => service.updateEndpoint("tn", "u2", "Other", ADDED)],
+		["deleteEndpoint", (service) => service.deleteEndpoint("tn", "u2")],
+		["setPrimaryEndpoint", (service) => service.setPrimaryEndpoint("tn", "u2")],
+	]
+
+	test.each(endpointEdits)("%s refuses while a reset journal names the network, and leaves the row as it was", async (_m, edit) => {
+		const { service, local } = setupServiceWithStorage({ [ADDED]: servesOld })
+		staleTestnet(local)
+		local.store.set("nulo:core:network-reset@p1", journalFor("tn"))
+		const before = local.store.get("nulo:core:networks@tn")
+		await expect(edit(service)).rejects.toThrow(/^ERR_RESET_PENDING: /)
+		expect(local.store.get("nulo:core:networks@tn")).toBe(before)
+	})
+
+	test("endpoint edits go through while the journal names another network", async () => {
+		const { service, local } = setupServiceWithStorage({ [ADDED]: servesOld })
+		staleTestnet(local)
+		local.store.set("nulo:core:network-reset@p1", journalFor("zz"))
+		const added = await service.addEndpoint("tn", "Added", ADDED)
+		await service.updateEndpoint("tn", added.id, "Renamed", ADDED)
+		await service.setPrimaryEndpoint("tn", "u2")
+		await service.deleteEndpoint("tn", added.id)
+		expect(stored(local, "tn")).toMatchObject({
+			primaryEndpointId: "u2",
+			endpoints: [
+				{ id: "u1", rpcUrl: MY_NODE },
+				{ id: "u2", rpcUrl: "https://other.example", label: "Other" },
+			],
+		})
+	})
+
+	test("while edits refuse, the reset's rewrite and deleteNetwork still run", async () => {
+		const { service, local } = setupServiceWithStorage({ [ADDED]: servesOld })
+		staleTestnet(local)
+		storeRow(local, { id: "ln", chainId: 0, kind: "local" })
+		local.store.set("nulo:core:active-network@p1", "ln")
+		local.store.set("nulo:core:network-reset@p1", journalFor("tn"))
+		await service.resetChainInPlace(request({ purged: true }), hooks())
+		expect(stored(local, "tn").chainId).toBe(CHAIN_IDS.TESTNET)
+		await expect(service.setPrimaryEndpoint("tn", "u2")).rejects.toThrow(/^ERR_RESET_PENDING: /)
+		await service.deleteNetwork("tn")
+		expect(local.store.has("nulo:core:networks@tn")).toBe(false)
+		expect(local.store.has("nulo:core:network-reset@p1")).toBe(false)
+	})
+
 	test("probeIdentityOnce makes one single-attempt read within its budget", async () => {
 		const { service, factory } = setupServiceWithStorage({})
 		const getNodeInfo = vi.fn().mockResolvedValue({ l1ChainId: TESTNET_L1_CHAIN_ID, rollupVersion: 9 })

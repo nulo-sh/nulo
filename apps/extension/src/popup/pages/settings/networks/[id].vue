@@ -218,6 +218,10 @@ onBeforeUnmount(() => {
 		<!-- Endpoints -->
 		<Flex direction="column" gap="12">
 			<SectionLabel label="Endpoints" :count="network.endpoints.length" />
+			<Flex v-if="heldReset" align="start" gap="6" data-testid="endpoint-reset-held">
+				<Icon name="warning" size="12" color="orange" aria-hidden="true" :class="$style.reason_icon" />
+				<Text variant="body" color="secondary" height="140">{{ staleCopy.endpointsHeld(network.name) }}</Text>
+			</Flex>
 			<ItemsContainer>
 				<SettingItem
 					v-for="endpoint in network.endpoints"
@@ -227,11 +231,11 @@ onBeforeUnmount(() => {
 					:icon="network.primaryEndpointId === endpoint.id ? 'square-check' : 'square'"
 					:iconFillColor="network.primaryEndpointId === endpoint.id ? 'primary' : 'tertiary'"
 					iconBgColor="transparent"
-					@click="handleSetPrimary(endpoint)"
+					:onClick="heldReset ? undefined : () => handleSetPrimary(endpoint)"
 					data-testid="endpoint-row"
 					:data-endpoint-id="endpoint.id"
 				>
-					<template #right>
+					<template v-if="!heldReset" #right>
 						<Flex align="center" gap="8">
 							<Tooltip position="end" delay="350">
 								<RowAction label="Edit endpoint" data-testid="endpoint-edit-btn" @click="handleEditEndpoint(endpoint)">
@@ -259,6 +263,7 @@ onBeforeUnmount(() => {
 				wide
 				variant="primary_outline"
 				size="medium"
+				:disabled="!!heldReset"
 				data-testid="endpoint-add-btn"
 			>
 				Add endpoint
@@ -283,3 +288,10 @@ onBeforeUnmount(() => {
 		</Flex>
 	</SettingsPageShell>
 </template>
+
+<style module>
+.reason_icon {
+	flex-shrink: 0;
+	margin-top: 2px;
+}
+</style>

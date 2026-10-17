@@ -7,6 +7,7 @@ import SettingsPageShell from "@/components/composite/SettingsPageShell.vue"
 import type { PendingReset, StaleNetworkView } from "@/wallet/services/network-reset/client"
 import NetworkDetail from "./[id].vue"
 
+const setPrimaryEndpoint = vi.hoisted(() => vi.fn(async () => undefined))
 const networkReset = vi.hoisted(() => ({
 	getPendingReset: vi.fn(async (): Promise<PendingReset | null> => null),
 	getStaleNetwork: vi.fn(async (_id: string): Promise<Partial<StaleNetworkView> | null> => null),
@@ -14,13 +15,16 @@ const networkReset = vi.hoisted(() => ({
 }))
 vi.mock("@/utils/core", () => ({
 	managers: {
-		network: { getNetworks: vi.fn(async () => []), setActiveNetwork: vi.fn(), getActiveNetwork: vi.fn() },
+		network: { getNetworks: vi.fn(async () => []), setActiveNetwork: vi.fn(), getActiveNetwork: vi.fn(), setPrimaryEndpoint },
 		networkReset,
 	},
 }))
 vi.mock("@/composables/useNetworkActivation", () => ({ useNetworkActivation: () => ({ activate: vi.fn(async () => "activated") }) }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
-vi.mock("vue-router", () => ({ useRoute: () => ({ params: { id: "mine" } }), useRouter: () => ({ push: vi.fn(), go: vi.fn() }) }))
+vi.mock("vue-router", () => ({
+	useRoute: () => ({ params: { id: "mine" } }),
+	useRouter: () => ({ push: vi.fn(), go: vi.fn(), replace: vi.fn() }),
+}))
 // The detail page must never consult Developer Mode: managing a row that already exists is not
 // gated, only creating one is. A constructed config client here is a regression.
 vi.mock("@/wallet/services/config/client", () => ({
@@ -30,6 +34,7 @@ vi.mock("@/wallet/services/config/client", () => ({
 }))
 
 beforeEach(() => {
+	setPrimaryEndpoint.mockClear()
 	networkReset.getPendingReset.mockReset().mockResolvedValue(null)
 	networkReset.getStaleNetwork.mockReset().mockResolvedValue(null)
 	vi.stubGlobal("chrome", {
@@ -129,6 +134,32 @@ describe("Settings › Network detail — a paused reset of this network", () =>
 		expect(networkReset.getStaleNetwork).toHaveBeenCalledWith("mine")
 		holdMine(["Savings"])
 		expect(await deleteConfirmText()).toBe(`${WIPES} It also deletes the imported account “Savings”.`)
+	})
+
+	test("its endpoints are held: rows inert, no edit or delete, Add disabled, and the reason line", async () => {
+		holdMine(["Savings"])
+		const wrapper = mountDetail()
+		await flushPromises()
+		expect(wrapper.get('[data-testid="endpoint-reset-held"]').text()).toBe(
+			"My Chain’s reset is paused. Endpoints can be edited once it finishes.",
+		)
+		expect(wrapper.findAll('[data-testid="endpoint-row"]')).toHaveLength(2)
+		expect(wrapper.find('[data-testid="endpoint-edit-btn"]').exists()).toBe(false)
+		expect(wrapper.find('[data-testid="endpoint-delete-btn"]').exists()).toBe(false)
+		expect(wrapper.get('[data-testid="endpoint-add-btn"]').attributes("disabled")).toBeDefined()
+		await wrapper.findAll('[data-testid="endpoint-row"]')[1]!.trigger("click")
+		expect(setPrimaryEndpoint).not.toHaveBeenCalled()
+	})
+
+	test("a reset of another network holds nothing here", async () => {
+		networkReset.getPendingReset.mockResolvedValue({ networkId: "alpha", running: false })
+		const wrapper = mountDetail()
+		await flushPromises()
+		expect(wrapper.find('[data-testid="endpoint-reset-held"]').exists()).toBe(false)
+		expect(wrapper.findAll('[data-testid="endpoint-edit-btn"]')).toHaveLength(2)
+		expect(wrapper.get('[data-testid="endpoint-add-btn"]').attributes("disabled")).toBeUndefined()
+		await wrapper.findAll('[data-testid="endpoint-row"]')[1]!.trigger("click")
+		expect(setPrimaryEndpoint).toHaveBeenCalledWith("mine", "m2")
 	})
 
 	test("the confirmation is unchanged with no imported account, or when the reset names another network", async () => {

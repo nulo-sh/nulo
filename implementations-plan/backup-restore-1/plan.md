@@ -182,6 +182,11 @@ Round 1, Codex (gpt-6.1-sol high, session `01a14b4c`): **conditional approve** (
 | Ask | C4 says "paused" during a running reset (Codex) | Rejected: a run's takeover covers the page (F6), so C4 shows only while paused |
 | Ask | Held names in View Errors; keys-lost suppression; C7 for re-exported held rows | Accepted: names never enter the log; OA-6 |
 
+**Arc 1 deviations from the plan (implementation).**
+- D5: a name that cleans to nothing reads as the default imported-account name, now `DEFAULT_IMPORTED_ACCOUNT_NAME` in `account/spec.ts`, which `importAccount` also uses; the plan named no fallback, and dropping the name would undercount what a delete removes.
+- C2 and C3 join names with the existing `joinNames` of `restore-warning.ts` ("A, B, and C" past two), the form C6 already follows.
+- D6: the page holds whenever the pending reset names the network, running or not, and reads `reset.imported` only when it is not running.
+
 Final fresh Codex pass (gpt-6.1-sol high, session `01a14b63`): **conditional approve** (condition: an owner ask for D2c's orphan-key warning, with a "what ships now" form). Applied: D2c moved into OA-5, and the arc ships today's outcome. Round-1 dispositions and rejected alternatives held; arc 1 depends on no open ask. Resumed on the change: **approve**.
 
 ## Delivery
