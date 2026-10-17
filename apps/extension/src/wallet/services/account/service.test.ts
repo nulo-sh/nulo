@@ -257,6 +257,7 @@ describe("AccountService.restore — a chain the profile has no network for", ()
 			imported("0xheld", 1337),
 			mkAccount("0xderived", { chainId: 1337 }),
 			imported("0xtampered", 2),
+			imported("0xwrongl1", 1),
 			mkAccount("0xok"),
 		])
 
@@ -264,6 +265,7 @@ describe("AccountService.restore — a chain the profile has no network for", ()
 			undefined,
 			"No network for chain 1337 in this profile",
 			"Seeded network L1 identity mismatch: stored 9, expected 11155111",
+			"account/network chain identity mismatch: 5 vs 1",
 			undefined,
 		])
 		const stored = Object.keys(await api.storage.local.get(null)).filter((k) => k.startsWith("nulo:core:accounts@"))

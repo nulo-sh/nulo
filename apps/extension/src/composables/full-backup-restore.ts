@@ -473,14 +473,23 @@ export async function restoreAccountsAndFilterOwnedSlices(
 	return { importedChainAddress, held }
 }
 
-/** The key rows the key restore receives: each of an account this restore wrote, and each without
+/** Whether the key restore receives `row`: a key of an account this restore wrote, or a row without
  *  a scope to match, which the service refuses and records. A key no restored account uses is
  *  dropped: with no account row, the next start's orphan sweep would delete it anyway. */
-function keysOfRestoredAccounts(rows: unknown[], restored: ReadonlySet<string>): unknown[] {
-	return rows.filter((row) => {
-		const { chainId, address } = (typeof row === "object" && row !== null ? row : {}) as { chainId?: unknown; address?: unknown }
-		return typeof chainId !== "number" || typeof address !== "string" || restored.has(accountScopeKey(chainId, address))
+function keyOfRestoredAccount(row: unknown, restored: ReadonlySet<string>): boolean {
+	const { chainId, address } = (typeof row === "object" && row !== null ? row : {}) as { chainId?: unknown; address?: unknown }
+	return typeof chainId !== "number" || typeof address !== "string" || restored.has(accountScopeKey(chainId, address))
+}
+
+/** Each result back at its row's position in the backup's slice, so the error log locates a failed
+ *  row there and not among the rows the restore was handed. */
+function atSourcePositions(results: unknown, positions: readonly number[]): unknown {
+	if (!Array.isArray(results)) return results
+	const placed: unknown[] = []
+	results.forEach((result, i) => {
+		if (i < positions.length) placed[positions[i]!] = result
 	})
+	return placed
 }
 
 /**
@@ -588,10 +597,9 @@ export async function restoreAccountsStage(
 		const importedKeySlice = data[IMPORTED_KEYS_SERVICE_NAME]
 		if (Array.isArray(importedKeySlice)) {
 			const restored = new Set([...importedChainAddress, ...held.map((h) => accountScopeKey(h.chainId, h.address))])
-			io.recordRestoreErrors(
-				IMPORTED_KEYS_SERVICE_NAME,
-				await accountService.restoreImportedKeys(keysOfRestoredAccounts(importedKeySlice, restored)),
-			)
+			const positions = importedKeySlice.flatMap((row, i) => (keyOfRestoredAccount(row, restored) ? [i] : []))
+			const results = await accountService.restoreImportedKeys(positions.map((i) => importedKeySlice[i]))
+			io.recordRestoreErrors(IMPORTED_KEYS_SERVICE_NAME, atSourcePositions(results, positions))
 		}
 		return { kind: "proceed", importedChainAddress, held }
 	} catch (err) {
@@ -621,12 +629,9 @@ export async function restoreAccountsStage(
 }
 
 /**
- * Drops every imported account left with no key row, then records each held account that kept
- * its key, so the import stops at its warning, and returns them for it. Runs after every slice has
- * landed and before the session opens. Fail-fast: a reconcile or purge failure propagates to the
- * outer catch, which rolls the created profile back, so the import never commits with orphaned
- * dependents. The client is closed once the call settles: the accounts stage closed it, the call
- * reconnected it, and nothing uses it after.
+ * Reconciles the imported accounts, then records each held account that kept its key, so the import
+ * stops at its warning. Runs before the session opens; a reconcile failure propagates, so the created
+ * profile is rolled back. The client is closed once the call settles.
  */
 export async function settleHeldAccounts(
 	accountService: AccountRestoreClient,

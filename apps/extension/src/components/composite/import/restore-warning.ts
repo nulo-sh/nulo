@@ -13,7 +13,6 @@ export function restoreWarningText(networkNames: readonly string[], hasOtherErro
 /** A restore can hold any number of accounts, and a crafted backup thousands: a list names this many. */
 const MAX_LISTED = 3
 
-/** The first `MAX_LISTED` items, then how many more, worded by `more`. */
 function listed(items: readonly string[], more: (count: number) => string): string {
 	if (items.length <= MAX_LISTED) return joinNames(items)
 	return joinNames([...items.slice(0, MAX_LISTED), more(items.length - MAX_LISTED)])

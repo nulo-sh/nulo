@@ -290,7 +290,7 @@ describe("exportFullBackupKeys — restore", () => {
 })
 
 describe("full-backup restore — an imported account on a network the new profile lacks", () => {
-	test("keeps its row and its key across a worker restart, and lists it once a network for its chain exists", async () => {
+	test("keeps its row and its key across a worker restart, and the per-chain read lists it", async () => {
 		const DEVNET = 1337
 		const source = await build()
 		const p = await source.profile.createProfile("P", PASSWORD)
@@ -315,8 +315,6 @@ describe("full-backup restore — an imported account on a network the new profi
 			accountRowId(profileId, DEVNET, ADDR_A),
 		)
 		expect(stored).toEqual({ ...keys.accounts[0], profileId })
-
-		seeded.set(DEVNET, L1)
 		expect((await restarted.account.getAccounts(profileId, DEVNET)).map((a) => a.address)).toEqual([ADDR_A])
 	}, 60_000)
 })

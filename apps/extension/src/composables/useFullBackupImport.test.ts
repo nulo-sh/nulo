@@ -455,7 +455,8 @@ describe("restoreAccountsStage — which key rows reach the key restore", () => 
 		})
 
 		expect(restoreImportedKeys).toHaveBeenCalledWith([key(1, "0xa"), key(1337, "0xheld"), scopeless])
-		expect(log.value["imported-account-keys"]).toEqual([{ row: 2, profileId: "p", chainId: 1, restoreError: "address: Required" }])
+		// The refused row is recorded at its position in the backup's slice, not among the rows passed.
+		expect(log.value["imported-account-keys"]).toEqual([{ row: 3, profileId: "p", chainId: 1, restoreError: "address: Required" }])
 		expect(out).toMatchObject({ kind: "proceed", held: [{ chainId: 1337, address: "0xheld", row: 1 }] })
 		expect([...(out as { importedChainAddress: ReadonlySet<string> }).importedChainAddress]).toEqual(["1:0xa"])
 	})
