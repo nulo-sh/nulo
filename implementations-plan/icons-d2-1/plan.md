@@ -164,6 +164,8 @@ This lane owns `packages/design/src/core/{Icon.vue,Icon.test.ts,Icon.stories.ts,
 | D15 | Screenshots by `NULO_E2E_SHOT_DIR` on the existing captures, plus two `shotSend` calls added to tests that already open the Settings hub and a flagged capabilities row; "before" taken at the rebased base SHA before Phase 1 | A spec copied in and deleted (not reproducible, both auditors) |
 | D16 | Azguard header stays on `Icon.vue` | Dropping it: the prop API derives from Azguard's component |
 | D17 | `square-cross`'s inner X at the set weight (source: 2.25 units) | A per-stroke width in `Glyph` for one 0.25-unit difference |
+| D18 | Plain-TS modules take `GlyphName` from `@nulo/design/core/glyphs.ts` | The barrel: the e2e typecheck reaches `journal-state.ts` and resolves no `.vue`, so every SFC the barrel exports fails it |
+| D19 | `StaleNetworkTakeover`'s screen branch is `v-else-if="content"` and its mark `v-else-if="line.mark"`, so vue-tsc narrows them; four identifier-inventory branches re-keyed to match | A non-null cast on `content`, which hides the `undefined` the loading and progress screens produce |
 
 ## Audit verdicts
 
@@ -205,7 +207,7 @@ Resumed to verify: **`approve`**; all five fixes present, no regression in phase
 
 **The eight capture pairs** (D15), each a light and a dark PNG: Home (`home-links.test.ts`, `home-links-rest`), Activity (`home-links.test.ts`, `history-filtered`), Holdings (`holdings-add-token.test.ts`), Send (`send-keyboard.test.ts`), Settings hub (`settings-routes.test.ts`, added), the execute window (`network/type-roles-windows.test.ts`, `authwit-summary`), the capabilities window with a flagged row (`network/cap-window.test.ts` A-5, added) and the connection check (`network/connect-verify-mismatch.test.ts`, `verify-mismatch-new`). The files write other captures too; those may stay in the folder.
 
-### Phase 0: base and "before" shots
+### Phase 0: base and "before" shots ✓
 
 1. Wait for #613 on `dev`, then rebase. Record the SHA in `STATUS.md`.
 2. Add `shotSend` to `settings-routes.test.ts` (the Settings hub) and to `network/cap-window.test.ts`'s flagged widening (A-5). Commit them.
@@ -213,7 +215,7 @@ Resumed to verify: **`approve`**; all five fixes present, no regression in phase
 
 **Validation gate**: the capture files green at retry 0; the eight pairs present in `before/`; the source SHA recorded. Layers: e2e, e2e-live-network.
 
-### Phase 1: the migration
+### Phase 1: the migration ✓
 
 1. Add `glyphs.ts` with every entry of the catalogue.
 2. Rewrite `Icon.vue` as the Architecture section says.
