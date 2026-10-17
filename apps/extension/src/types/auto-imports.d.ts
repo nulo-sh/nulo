@@ -103,6 +103,7 @@ declare global {
   const buildIncomingCardProps: typeof import('../utils/received-display').buildIncomingCardProps
   const buildJournalTerminalCardProps: typeof import('../utils/journal-state').buildJournalTerminalCardProps
   const buildRestoreSecret: typeof import('../composables/full-backup-restore').buildRestoreSecret
+  const callTitle: typeof import('../utils/tx-enrichment').callTitle
   const canSubmitContact: typeof import('../utils/contact-rules').canSubmitContact
   const canonicalContactAddress: typeof import('../utils/contact-rules').canonicalContactAddress
   const capRecords: typeof import('../utils/full-backup-helpers').capRecords
@@ -368,6 +369,7 @@ declare global {
   const settingsQueryTerms: typeof import('../utils/settings-search').settingsQueryTerms
   const settingsResultTo: typeof import('../utils/settings-search').settingsResultTo
   const settingsRow: typeof import('../utils/settings-search').settingsRow
+  const settledReading: typeof import('../utils/tx-amount').settledReading
   const shallowReactive: typeof import('vue').shallowReactive
   const shallowReadonly: typeof import('vue').shallowReadonly
   const shallowRef: typeof import('vue').shallowRef
@@ -725,7 +727,7 @@ declare global {
   export type { TransferIntent, ProjectedArgument } from '../utils/transfer-intent'
   import('../utils/transfer-intent')
   // @ts-ignore
-  export type { TxAmount } from '../utils/tx-amount'
+  export type { TxAmount, SettledCall } from '../utils/tx-amount'
   import('../utils/tx-amount')
 }
 
@@ -829,6 +831,7 @@ declare module 'vue' {
     readonly buildIncomingCardProps: UnwrapRef<typeof import('../utils/received-display')['buildIncomingCardProps']>
     readonly buildJournalTerminalCardProps: UnwrapRef<typeof import('../utils/journal-state')['buildJournalTerminalCardProps']>
     readonly buildRestoreSecret: UnwrapRef<typeof import('../composables/full-backup-restore')['buildRestoreSecret']>
+    readonly callTitle: UnwrapRef<typeof import('../utils/tx-enrichment')['callTitle']>
     readonly canSubmitContact: UnwrapRef<typeof import('../utils/contact-rules')['canSubmitContact']>
     readonly canonicalContactAddress: UnwrapRef<typeof import('../utils/contact-rules')['canonicalContactAddress']>
     readonly capRecords: UnwrapRef<typeof import('../utils/full-backup-helpers')['capRecords']>
@@ -1094,6 +1097,7 @@ declare module 'vue' {
     readonly settingsQueryTerms: UnwrapRef<typeof import('../utils/settings-search')['settingsQueryTerms']>
     readonly settingsResultTo: UnwrapRef<typeof import('../utils/settings-search')['settingsResultTo']>
     readonly settingsRow: UnwrapRef<typeof import('../utils/settings-search')['settingsRow']>
+    readonly settledReading: UnwrapRef<typeof import('../utils/tx-amount')['settledReading']>
     readonly shallowReactive: UnwrapRef<typeof import('vue')['shallowReactive']>
     readonly shallowReadonly: UnwrapRef<typeof import('vue')['shallowReadonly']>
     readonly shallowRef: UnwrapRef<typeof import('vue')['shallowRef']>

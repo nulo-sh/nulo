@@ -220,6 +220,7 @@ const summaryAuthwits = computed(() =>
 )
 
 const detailsOpen = ref(false)
+const detailsId = useId()
 
 /** Which discovered authorizations the person closed: once the rows are open, an authorization's
  *  values are open too, so a raw one stays within two presses of the card at rest. */
@@ -290,11 +291,12 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 					<DetailsToggle
 						data-testid="execute-op-details-toggle"
 						:open="detailsOpen"
+						:controls="detailsId"
 						:label="detailsOpen ? 'Hide all details' : 'Show all details'"
 						@click="detailsOpen = !detailsOpen"
 					/>
 				</Flex>
-				<Flex v-if="detailsOpen" data-testid="execute-op-details" direction="column" wide>
+				<Flex v-if="detailsOpen" :id="detailsId" data-testid="execute-op-details" direction="column" wide>
 					<Flex :class="$style.group"><Text variant="label-section" color="secondary">Payload</Text></Flex>
 					<Flex v-for="({ call, surface }, j) in sendTxRows" :key="`${index}:${j}`" :data-call-index="j" direction="column" gap="4" :class="$style.call">
 						<Flex
@@ -344,10 +346,11 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 							<DetailsToggle
 								data-testid="execute-discovered-authwit-toggle"
 								:open="isAuthwitOpen(a)"
+								:controls="`${detailsId}-${k}`"
 								:label="isAuthwitOpen(a) ? 'Hide details' : 'Show details'"
 								@click="toggleAuthwit(a)"
 							/>
-							<Flex v-if="isAuthwitOpen(a)" data-testid="execute-discovered-authwit-details" direction="column" gap="2">
+							<Flex v-if="isAuthwitOpen(a)" :id="`${detailsId}-${k}`" data-testid="execute-discovered-authwit-details" direction="column" gap="2">
 								<CallArguments :surface="authwitArgs(a)" :contract="a.consumer" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-discovered-authwit" />
 								<Flex justify="between" :class="$style.row">
 									<Text variant="label-section" color="secondary">Inner hash:</Text>

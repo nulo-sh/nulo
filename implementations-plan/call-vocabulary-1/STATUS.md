@@ -9,3 +9,4 @@
 - 2026-10-17 orchestrator approved the plan and released arc 1; OA-1 to OA-4 answered (ship-now form each). Merged origin/dev (563b0627).
 - 2026-10-17 phase 1 gate: lint, typecheck:all, vitest (src/utils, activity, pages/tx, call-surface: 94 files, 1553 passed) all exit 0.
 - 2026-10-17 phase 2 gate: lint, typecheck:all, vitest src/popup/windows/execute (23 files, 284 passed) all exit 0.
+- 2026-10-17 phase 3 gate: `bun run audit:vue` exit 0, `bun run test:all` exit 0 (extension 829 files, 13580 passed). The four new assertions fail with the fix removed. `OperationCard.wire.test.ts` now mounts its two cards one after the other: test-utils stubs through Vue's process-wide `transformVNodeArgs`, so a concurrent mount re-created the first card's stubbed toggle and serialized the new conditional `aria-controls` in another order. Smoke deferred: load1 333.

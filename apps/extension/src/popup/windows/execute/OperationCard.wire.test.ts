@@ -150,7 +150,10 @@ describe("OperationCard — a call as the wire carries it", () => {
 	})
 
 	test("a copy whose isStatic, returnType and returnTypes lie renders the same rows", async () => {
-		const [truth, lies] = await Promise.all([mountCard(sendTx(honest)), mountCard(sendTx(hostile))])
+		// One after the other: test-utils stubs through a process-wide hook, so a mount made while another
+		// card is live re-creates that card's stubbed subtrees and reorders their attributes.
+		const truth = await mountCard(sendTx(honest))
+		const lies = await mountCard(sendTx(hostile))
 
 		expect(lies.html()).toBe(truth.html())
 		expect(intentKind(lies)).toBe("transfer")

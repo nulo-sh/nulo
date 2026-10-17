@@ -94,7 +94,7 @@ Good enough: in-flight rows keep their titles (OA-4); a read transfer keeps "Tra
 - Tests: `OperationCard.authwit.test.ts` decodes a wire-shaped grant; its unregistered case (`tokens: []`) gains "Transfer In Public", never "Transfer (public)", and its registered case is the success control. One case with two grants, one on a registered token and one not, proves each line takes its own grant's reading. `OperationCard.test.ts:73-87` pinned the name-only label; it becomes "Transfer In Public".
 - **Validation gate**: lint, typecheck:all, `cd apps/extension && bun --bun vitest run src/popup/windows/execute`; exit 0.
 
-### Phase 3: #516, `DetailsToggle` accessibility
+### Phase 3: #516, `DetailsToggle` accessibility ✓
 - Change map: `DetailsToggle.vue`, `CallArguments.vue:133-140`, `OperationCard.vue:279-286,333-339`.
 - Tests: in the tests that open each toggle (`OperationCard.summary`, `.fallback`, `.discovered` with two authwits), `aria-controls` names that toggle's own panel while open and is absent while closed; `utils/a11y-css.test.ts` pins `.chevron`'s `transition: none` under reduced motion.
 - **Validation gate**: `bun run audit:vue`, `bun run test:all`; then the armed build (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`) and the smoke files over the changed screens: `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/rows.test.ts tests/e2e/type-roles.test.ts tests/e2e/send-outcome-rows.test.ts tests/e2e/navigation.test.ts --retry=0`. No e2e file changes; no Firefox twin (no fixture, focus, window or activation change). The PR's smoke lanes run the rest.
