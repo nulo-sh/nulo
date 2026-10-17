@@ -1450,7 +1450,7 @@ describe("NetworkService.onProfileDeleted cascade", () => {
 		// This test locks the cascade ContactService.onProfileDeleted's docstring
 		// references: when a profile is deleted, every network of that profile
 		// gets purgeChain → pxeServiceClient.clearChainState, which wipes the
-		// PXE IndexedDB (`pxe/${profileId}/${chainId}`) including its sender list.
+		// PXE's OPFS store (`pxe/${profileId}/${chainId}`) including its sender list.
 		// So senders for deleted profiles are cleaned up here, not in
 		// ContactService. If this contract ever changes, the orphan-senders
 		// bug returns and ContactService needs its own cleanup path.
