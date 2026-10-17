@@ -18,6 +18,7 @@ import { managers } from "@/utils/core"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { useConfirm } from "@/composables/useConfirm"
 import { useEntityCrud } from "@/composables/useEntityCrud"
 
 /** Components */
@@ -27,6 +28,7 @@ import FpcRow from "@/popup/components/modules/settings/fpcs/FpcRow.vue"
 import { fpcSortOrder, isSyntheticRow, prepareFpc, PUBLIC_FJ_ROW } from "@/popup/components/modules/settings/fpcs/fpc-helpers"
 
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -80,17 +82,17 @@ const handleEdit = (fpc) => {
 }
 
 const handleDelete = (fpc) => {
-	cacheStore.confirm.confirm_text = "Yes, delete FPC"
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.title = "Delete this FPC?"
-	cacheStore.confirm.description = "By confirming this action, the selected FPC will be permanently deleted from your wallet"
-	cacheStore.confirm.callback = async () => {
-		await fpcService.deleteFpc(fpc.id)
-		await managers.profile.saveFeePick(fpc.profileId, { kind: "forgetFpc", fpcId: fpc.id })
-
-		openToast({ kind: "success", label: "FPC is deleted" })
-	}
-	popupStore.open("confirm")
+	requestConfirm({
+		confirm_text: "Yes, delete FPC",
+		confirm_color: "red",
+		title: "Delete this FPC?",
+		description: "By confirming this action, the selected FPC will be permanently deleted from your wallet",
+		callback: async () => {
+			await fpcService.deleteFpc(fpc.id)
+			await managers.profile.saveFeePick(fpc.profileId, { kind: "forgetFpc", fpcId: fpc.id })
+			openToast({ kind: "success", label: "FPC is deleted" })
+		},
+	})
 }
 
 // A profile/network switch emits no fpc events and this route is not

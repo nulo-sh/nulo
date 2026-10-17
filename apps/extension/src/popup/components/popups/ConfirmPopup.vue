@@ -10,13 +10,10 @@ const cacheStore = useCacheStore()
 const { order, depth } = usePopupStack("confirm")
 
 /** Optional toggle row driven by a caller-owned ref:
- *  cacheStore.confirm.toggle = { label, description?, model: someRef }
- *  The popup binds v-model to `model` directly — Pinia's reactive
- *  deep-unwrap means accessing `model` on the store auto-unwraps the
- *  Ref to its primitive, and writes via v-model go back through the
- *  ref's setter. The caller's callback closure-captures `someRef`
- *  directly, so popup-clear (after submit) doesn't drop state
- *  mid-await. See contacts/index.vue:handleDeleteContact. */
+ *  requestConfirm({ …, toggle: { label, description?, model: someRef } })
+ *  The store's deep unwrap reads `model` as the ref's value, and v-model writes go back through
+ *  the ref's setter. The caller's callback closes over `someRef`, so the clear on close drops no
+ *  state mid-await. */
 
 const emit = defineEmits(["onClose"])
 const props = defineProps({

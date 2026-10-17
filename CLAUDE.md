@@ -421,12 +421,16 @@ await configService.setValue("stealthMode", true)
 **Confirmation dialogs:**
 
 ```js
-cacheStore.confirm.title = "Confirm Action?"
-cacheStore.confirm.description = "Description text"
-cacheStore.confirm.confirm_text = "Yes"
-cacheStore.confirm.callback = () => { /* action */ }
-popupStore.open("confirm")
+const { requestConfirm } = useConfirm()
+requestConfirm({
+  title: "Confirm Action?",
+  description: "Description text",
+  confirm_text: "Yes",
+  callback: () => { /* action */ },
+})
 ```
+
+Each request replaces the whole previous one; never write into `cacheStore.confirm` (`useConfirm.test.ts` fails on a write to `cacheStore.confirm` or an `open("confirm")` outside the helper).
 
 **Toast notifications:**
 

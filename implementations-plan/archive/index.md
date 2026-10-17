@@ -149,6 +149,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [harden-findings-remediation](harden-findings-remediation/plan.md) — completed — a whole-codebase security audit remediated as eleven reviewable units
 - [harden-quality-arc](harden-quality-arc/plan.md) — completed — a quality audit's findings landed on one integration branch, tiered by risk
 - [harden-quality-fixes-1](harden-quality-fixes-1/plan.md) — completed — the quality harden's cheap set: one `deferred` test helper, exhaustive operation-kind switches, composed row schemas, four dead paths removed, shared contact rules
+- [harden-quality-fixes-2](harden-quality-fixes-2/plan.md) — completed — one e2e runner config and counted retries, shared e2e gate scripts, one confirm request helper, explicit backup selection and run fence
 - [harden-security-fixes-1](harden-security-fixes-1/plan.md) — completed — replies under a byte budget, backup slices row-limited, discovery and key exchange admitted only from their source, dApp call titles cleaned, the wallet's class copy first, dependency logs at `warn`, the publish summary one list back
 - [harden-security-fixes-2](harden-security-fixes-2/plan.md) — completed — passkey backups bound to their passkey, restored tokens read from the chain, the approved dApp fee as a ceiling (#416), grant arguments decoded, call arguments read only when they encode back
 - [harden-security-prerelease](harden-security-prerelease/plan.md) — completed — a security audit's verified findings fixed before the first release, in four batches

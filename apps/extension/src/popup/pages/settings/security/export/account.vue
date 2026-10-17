@@ -21,6 +21,7 @@ import { downloadFile, profileFileNameSegment } from "@/utils"
 import { trimAddress } from "@/utils/string"
 
 /** Composables */
+import { createRunFence } from "@/composables/runFence"
 import { useToast } from "@/composables/toast.js"
 const { openToast } = useToast()
 
@@ -54,12 +55,13 @@ const isDownloading = ref(false)
 const fileStatus = ref("")
 const payload = ref("")
 
-/** Async-result fence: bumped by every flow reset and by unmount, so an export RPC that resolves
- *  late can neither write a payload back after the scrub nor land in a different account's flow. */
-let generation = 0
+/** Async-result fence: invalidated by every flow reset and by unmount (runs only snapshot it), so an
+ *  export RPC that resolves late can neither write a payload back after the scrub nor land in a
+ *  different account's flow. */
+const runs = createRunFence()
 
 const resetFlow = () => {
-	generation++
+	runs.invalidate()
 	selectedAddress.value = ""
 	isAgreed.value = false
 	password.value = null
@@ -117,7 +119,7 @@ const handleAgree = () => {
 const handleCreate = async () => {
 	if (!password.value || isBusy.value) return
 	isBusy.value = true
-	const gen = generation
+	const isCurrent = runs.snapshot()
 	try {
 		const body = await managers.account.exportAccount(
 			appStore.profile.id,
@@ -126,11 +128,11 @@ const handleCreate = async () => {
 			password.value,
 			false,
 		)
-		if (gen !== generation) return
+		if (!isCurrent()) return
 		payload.value = body
 		fileStatus.value = "ready"
 	} catch (error) {
-		if (gen !== generation) return
+		if (!isCurrent()) return
 		// Only an authentication failure belongs on the password field; anything else (a deleted
 		// account, a disconnect) shaking the input as "Wrong password" would send the user
 		// retyping a password that was never the problem.
@@ -141,14 +143,14 @@ const handleCreate = async () => {
 			openToast({ kind: "error", label: "Failed to create the file" })
 		}
 	} finally {
-		if (gen === generation) isBusy.value = false
+		if (isCurrent()) isBusy.value = false
 	}
 }
 
 const handleProtect = async () => {
 	if (isBusy.value || isDownloading.value) return
 	isBusy.value = true
-	const gen = generation
+	const isCurrent = runs.snapshot()
 	try {
 		const body = await managers.account.exportAccount(
 			appStore.profile.id,
@@ -157,16 +159,16 @@ const handleProtect = async () => {
 			password.value,
 			true,
 		)
-		if (gen !== generation) return
+		if (!isCurrent()) return
 		payload.value = body
 		fileStatus.value = "protected"
 		// The password's job is done once the protected payload exists.
 		password.value = null
 	} catch (error) {
-		if (gen !== generation) return
+		if (!isCurrent()) return
 		openToast({ kind: "error", label: "Failed to protect the file" })
 	} finally {
-		if (gen === generation) isBusy.value = false
+		if (isCurrent()) isBusy.value = false
 	}
 }
 
@@ -182,17 +184,17 @@ const canDownload = computed(() => fileStatus.value === "protected")
 const handleDownload = async () => {
 	if (!canDownload.value || isDownloading.value || isBusy.value) return
 	isDownloading.value = true
-	const gen = generation
+	const isCurrent = runs.snapshot()
 	try {
 		await downloadFile({ data: payload.value, filename: fileName.value })
-		if (gen !== generation) return
+		if (!isCurrent()) return
 		openToast({ kind: "success", label: "Account file downloaded" })
 	} catch (err) {
-		if (gen !== generation) return
+		if (!isCurrent()) return
 		console.error("Download failed:", { error: err })
 		openToast({ kind: "error", label: "Failed to download the file" })
 	} finally {
-		if (gen === generation) isDownloading.value = false
+		if (isCurrent()) isDownloading.value = false
 	}
 }
 
@@ -210,7 +212,7 @@ onBeforeUnmount(() => {
 	document.removeEventListener("keydown", onKeydown)
 	// The plain payload is spendable material; drop both secrets with the page and fence out any
 	// export RPC still in flight.
-	generation++
+	runs.invalidate()
 	payload.value = ""
 	password.value = null
 })

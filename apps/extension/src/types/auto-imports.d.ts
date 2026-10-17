@@ -265,9 +265,9 @@ declare global {
   const onUnmounted: typeof import('vue').onUnmounted
   const onUpdated: typeof import('vue').onUpdated
   const onWatcherCleanup: typeof import('vue').onWatcherCleanup
-  const openEncryptedBackup: typeof import('../utils/full-backup-helpers').openEncryptedBackup
   const openFullBackupText: typeof import('../utils/full-backup-helpers').openFullBackupText
   const openLegalDocument: typeof import('../utils/legal-links').openLegalDocument
+  const openSelection: typeof import('../utils/full-backup-helpers').openSelection
   const openThirdPartyNotices: typeof import('../utils/legal-links').openThirdPartyNotices
   const orderTokenRows: typeof import('../utils/token-order').orderTokenRows
   const ownWindowRoute: typeof import('../utils/own-window').ownWindowRoute
@@ -411,6 +411,7 @@ declare global {
   const useBalancesStore: typeof import('../stores/balances.store').useBalancesStore
   const useCacheStore: typeof import('../stores/cache.store').useCacheStore
   const useConfigRead: typeof import('../composables/useConfigRead').useConfigRead
+  const useConfirm: typeof import('../composables/useConfirm').useConfirm
   const useCssModule: typeof import('vue').useCssModule
   const useCssVars: typeof import('vue').useCssVars
   const useDappApprovalWindow: typeof import('../composables/useDappApprovalWindow').useDappApprovalWindow
@@ -617,6 +618,9 @@ declare global {
   // @ts-ignore
   export type { EnsureSuperseded, BalanceScope, SliceStatus, GasSlice, FpcSlice, BalanceEntry, BalanceLeg, SubscribeCaps, EnsureSnapshot } from '../stores/balances.store'
   import('../stores/balances.store')
+  // @ts-ignore
+  export type { ConfirmRequest } from '../stores/cache.store'
+  import('../stores/cache.store')
   // @ts-ignore
   export type { NotificationType, NotificationPayload, NotificationItem } from '../stores/notification.store'
   import('../stores/notification.store')
@@ -983,9 +987,9 @@ declare module 'vue' {
     readonly onUnmounted: UnwrapRef<typeof import('vue')['onUnmounted']>
     readonly onUpdated: UnwrapRef<typeof import('vue')['onUpdated']>
     readonly onWatcherCleanup: UnwrapRef<typeof import('vue')['onWatcherCleanup']>
-    readonly openEncryptedBackup: UnwrapRef<typeof import('../utils/full-backup-helpers')['openEncryptedBackup']>
     readonly openFullBackupText: UnwrapRef<typeof import('../utils/full-backup-helpers')['openFullBackupText']>
     readonly openLegalDocument: UnwrapRef<typeof import('../utils/legal-links')['openLegalDocument']>
+    readonly openSelection: UnwrapRef<typeof import('../utils/full-backup-helpers')['openSelection']>
     readonly openThirdPartyNotices: UnwrapRef<typeof import('../utils/legal-links')['openThirdPartyNotices']>
     readonly orderTokenRows: UnwrapRef<typeof import('../utils/token-order')['orderTokenRows']>
     readonly ownWindowRoute: UnwrapRef<typeof import('../utils/own-window')['ownWindowRoute']>
@@ -1129,6 +1133,7 @@ declare module 'vue' {
     readonly useBalancesStore: UnwrapRef<typeof import('../stores/balances.store')['useBalancesStore']>
     readonly useCacheStore: UnwrapRef<typeof import('../stores/cache.store')['useCacheStore']>
     readonly useConfigRead: UnwrapRef<typeof import('../composables/useConfigRead')['useConfigRead']>
+    readonly useConfirm: UnwrapRef<typeof import('../composables/useConfirm')['useConfirm']>
     readonly useCssModule: UnwrapRef<typeof import('vue')['useCssModule']>
     readonly useCssVars: UnwrapRef<typeof import('vue')['useCssVars']>
     readonly useDappApprovalWindow: UnwrapRef<typeof import('../composables/useDappApprovalWindow')['useDappApprovalWindow']>

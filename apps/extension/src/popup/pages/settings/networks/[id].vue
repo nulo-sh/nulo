@@ -12,8 +12,10 @@ import { managers } from "@/utils/core"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { useConfirm } from "@/composables/useConfirm"
 import { useNetworkActivation } from "@/composables/useNetworkActivation"
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
 const { activate: activateNetwork } = useNetworkActivation({
 	persist: (id) => managers.network.setActiveNetwork(id),
 	read: () => managers.network.getActiveNetwork(),
@@ -96,52 +98,54 @@ const handleDeleteEndpoint = (endpoint) => {
 	if (network.value.primaryEndpointId === endpoint.id) return
 	if (network.value.endpoints.length === 1) return
 
-	cacheStore.confirm.confirm_text = "Yes, delete endpoint"
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.title = "Delete this endpoint?"
-	cacheStore.confirm.description = `This RPC URL will be removed from ${network.value.name}. The chain itself stays.`
-	cacheStore.confirm.callback = async () => {
-		try {
-			await managers.network.deleteEndpoint(network.value.id, endpoint.id)
-			await refreshNetworks()
-			openToast({ kind: "success", label: "Endpoint deleted" })
-		} catch (err) {
-			const msg = errorMessageFromUnknown(err)
-			if (msg.includes("PRIMARY_ENDPOINT")) {
-				openToast({ kind: "error", label: "Make another endpoint primary first." })
-			} else if (msg.includes("LAST_ENDPOINT")) {
-				openToast({ kind: "error", label: "Last endpoint. Delete the chain instead." })
-			} else {
-				openToast({ kind: "error", label: "Failed to delete endpoint" })
+	requestConfirm({
+		confirm_text: "Yes, delete endpoint",
+		confirm_color: "red",
+		title: "Delete this endpoint?",
+		description: `This RPC URL will be removed from ${network.value.name}. The chain itself stays.`,
+		callback: async () => {
+			try {
+				await managers.network.deleteEndpoint(network.value.id, endpoint.id)
+				await refreshNetworks()
+				openToast({ kind: "success", label: "Endpoint deleted" })
+			} catch (err) {
+				const msg = errorMessageFromUnknown(err)
+				if (msg.includes("PRIMARY_ENDPOINT")) {
+					openToast({ kind: "error", label: "Make another endpoint primary first." })
+				} else if (msg.includes("LAST_ENDPOINT")) {
+					openToast({ kind: "error", label: "Last endpoint. Delete the chain instead." })
+				} else {
+					openToast({ kind: "error", label: "Failed to delete endpoint" })
+				}
 			}
-		}
-	}
-	popupStore.open("confirm")
+		},
+	})
 }
 
 const handleDeleteNetwork = () => {
 	if (!network.value) return
 	if (!canDelete.value) return
-	cacheStore.confirm.confirm_text = "Yes, delete chain"
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.title = `Delete ${network.value.name}?`
-	cacheStore.confirm.description = "This wipes accounts, balances, tokens, and PXE state on this chain. This cannot be undone."
-	cacheStore.confirm.callback = async () => {
-		const target = network.value
-		try {
-			await appStore.removeNetwork(target)
-			openToast({ kind: "success", label: "Chain deleted" })
-			router.replace("/popup/settings/networks")
-		} catch (err) {
-			const msg = errorMessageFromUnknown(err)
-			if (msg.startsWith("ACTIVE_NETWORK")) {
-				openToast({ kind: "error", label: "Switch to another chain before deleting this one." })
-			} else {
-				openToast({ kind: "error", label: "Failed to delete chain" })
+	requestConfirm({
+		confirm_text: "Yes, delete chain",
+		confirm_color: "red",
+		title: `Delete ${network.value.name}?`,
+		description: "This wipes accounts, balances, tokens, and PXE state on this chain. This cannot be undone.",
+		callback: async () => {
+			const target = network.value
+			try {
+				await appStore.removeNetwork(target)
+				openToast({ kind: "success", label: "Chain deleted" })
+				router.replace("/popup/settings/networks")
+			} catch (err) {
+				const msg = errorMessageFromUnknown(err)
+				if (msg.startsWith("ACTIVE_NETWORK")) {
+					openToast({ kind: "error", label: "Switch to another chain before deleting this one." })
+				} else {
+					openToast({ kind: "error", label: "Failed to delete chain" })
+				}
 			}
-		}
-	}
-	popupStore.open("confirm")
+		},
+	})
 }
 
 // If the network row disappears (deleted from elsewhere), redirect back to the list.

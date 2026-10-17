@@ -1,3 +1,4 @@
+import { useConfirm } from "@/composables/useConfirm"
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStore } from "@/stores/popup.store"
@@ -12,16 +13,6 @@ export type LockProfileClient = Pick<
 const LOCK_READ_BUDGET_MS = 3_000
 
 type LockRead = { answered: true; handle: string | undefined } | { answered: false; handle?: undefined }
-
-/** The fields of the shared, untyped `cacheStore.confirm` that the lock's confirm writes. */
-type LockConfirm = {
-	pre_title?: string
-	title?: string
-	description?: string
-	confirm_text?: string
-	confirm_color?: string
-	callback?: () => void
-}
 
 const sendsSentence = (running: number) =>
 	running === 1
@@ -54,8 +45,7 @@ export function useLockWallet(profile: LockProfileClient): { lock: () => Promise
 	const appStore = useAppStore()
 	const cacheStore = useCacheStore()
 	const popupStore = usePopupStore()
-	// ConfirmPopup replaces the whole object on close, so it is read afresh on every access.
-	const confirmSlot = () => cacheStore.confirm as LockConfirm
+	const { requestConfirm } = useConfirm()
 
 	let disposed = false
 	let pendingDecisions = 0
@@ -82,7 +72,7 @@ export function useLockWallet(profile: LockProfileClient): { lock: () => Promise
 	}
 
 	const closeOwnConfirm = () => {
-		if (confirmLock && confirmSlot().callback === confirmLock) popupStore.close("confirm")
+		if (confirmLock && cacheStore.confirm.callback === confirmLock) popupStore.close("confirm")
 	}
 
 	// A session change or a dropped worker connection abandons a pending decision; the worker refuses
@@ -105,15 +95,15 @@ export function useLockWallet(profile: LockProfileClient): { lock: () => Promise
 		confirmLock = () => {
 			if (namesEvery(named, appStore.contactImports)) lockWallet(handle)
 		}
-		const confirm = confirmSlot()
 		const { pre_title, description } = lockConfirmCopy(running, named.size)
-		confirm.pre_title = pre_title
-		confirm.title = "Lock wallet?"
-		confirm.description = description
-		confirm.confirm_text = "Lock anyway"
-		confirm.confirm_color = "red"
-		confirm.callback = confirmLock
-		popupStore.open("confirm")
+		requestConfirm({
+			pre_title,
+			title: "Lock wallet?",
+			description,
+			confirm_text: "Lock anyway",
+			confirm_color: "red",
+			callback: confirmLock,
+		})
 	}
 
 	const decide = ({ answered, handle }: LockRead, changesBefore: number) => {
