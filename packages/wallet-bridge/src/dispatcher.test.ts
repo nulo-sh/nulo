@@ -1,6 +1,7 @@
 import "@nulo/wallet-sdk-schema-patch/register"
 import { describe, test, expect, beforeAll } from "vitest"
 import {
+	AuthRegistryRefusalError,
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
 	ContractNotRegisteredError,
@@ -14,7 +15,6 @@ import {
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { NoUsableAccountError } from "./account-resolution"
-import { AuthRegistryRefusalError } from "./auth-registry"
 import { dataFieldsCovered, projectKnownCapability, ungrantedAccounts, unwrapOperationResult, WalletSdkDispatcher } from "./dispatcher"
 import type { Capability, DataCapability, GrantedCapabilityRecord, RejectedCapabilityRecord } from "./capabilities"
 import type { CapabilityParams, CapabilityResult } from "./dapp-interaction-protocol"

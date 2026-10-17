@@ -9,8 +9,9 @@
  * `buildNetworkOperation` / `buildAccountOperation` in dispatcher.ts.
  */
 
+import { AuthRegistryRefusalError } from "@nulo/extension-messaging/errors"
 import { isRecord } from "@nulo/wallet-core/utils"
-import { authRegistryRefusal, isAuthRegistry, isAuthRegistryGrantCall } from "./auth-registry"
+import { isAuthRegistry, isAuthRegistryGrantCall } from "./auth-registry"
 import type { Capability, GrantedCapabilityRecord, Scope, ScopePattern } from "./capabilities"
 import { sameFieldAddress } from "./field-address"
 import type { MethodName } from "./method-descriptors"
@@ -257,11 +258,11 @@ export function isCreateAuthWitCoveredByTxOrSimulationScope(intent: unknown, gra
 	return permitted
 }
 
-/** A registry witness is usable only by a registry grant function, which no grant may reach. */
+/** A registry witness is usable only by a registry grant function, which no dApp capability may reach. */
 function refuseAuthRegistryIntent(intent: unknown): void {
 	const target = isCallIntent(intent) ? intent.call.to : isIntentInnerHash(intent) ? intent.consumer : undefined
 	if (target !== undefined && isAuthRegistry(target)) {
-		throw authRegistryRefusal("Scope violation: createAuthWit intent targets the authorization registry")
+		throw new AuthRegistryRefusalError("Scope violation: createAuthWit intent targets the authorization registry")
 	}
 }
 
@@ -363,11 +364,12 @@ function requireAddressBookGrant(method: MethodName, grants: GrantedCapabilityRe
 // The registry's `scopeCheck` holds these stable references, which the parity tests compare by
 // identity.
 
-/** Ahead of the grant filter, so no grant, a wildcard included, admits a registry grant call. */
+/** Ahead of the capability filter, so no capability, a wildcard included, admits a call to a registry
+ *  grant function. */
 export function checkSendTx(args: unknown[], grants: GrantedCapabilityRecord[]): void {
 	const calls = (args[0] as WireExecPayload | undefined)?.calls
 	if (Array.isArray(calls) && calls.some((call) => isRecord(call) && isAuthRegistryGrantCall(call))) {
-		throw authRegistryRefusal("Scope violation: sendTx call targets an authorization registry grant function")
+		throw new AuthRegistryRefusalError("Scope violation: sendTx call targets an authorization registry grant function")
 	}
 	checkTransactionCalls("sendTx", args, grants)
 }

@@ -12,7 +12,8 @@ import { CallAuthorizationRequest, computeAuthWitMessageHash } from "@aztec-labs
 import type { ChainInfo } from "@aztec-labs/entrypoints/interfaces"
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
-import { authRegistryRefusal, type DiscoveredAuthwit, isAuthRegistry } from "@nulo/wallet-bridge"
+import { AuthRegistryRefusalError } from "@nulo/extension-messaging/errors"
+import { type DiscoveredAuthwit, isAuthRegistry } from "@nulo/wallet-bridge"
 import { type DecodedAuthRequest, toDiscoveredAuthwit } from "./discovered-authwit"
 
 /** The decode and hash seams; unit tests inject fakes so they run without Barretenberg. */
@@ -32,7 +33,7 @@ export async function decodeAuthwitEffects(
 	crypto: AuthwitDecodeCrypto = REAL_CRYPTO,
 ): Promise<{ record: DiscoveredAuthwit; messageHash: Fr }[]> {
 	if (effects.some((effect) => isAuthRegistry(effect.contractAddress))) {
-		throw authRegistryRefusal("Scope violation: a transaction's authorization request targets the authorization registry")
+		throw new AuthRegistryRefusalError("Scope violation: a transaction's authorization request targets the authorization registry")
 	}
 	const decoded: { record: DiscoveredAuthwit; messageHash: Fr }[] = []
 	for (const effect of effects) {

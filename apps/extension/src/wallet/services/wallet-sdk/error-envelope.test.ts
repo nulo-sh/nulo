@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest"
 import {
+	AuthRegistryRefusalError,
 	AccountAddressInconsistencyError,
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
@@ -24,7 +25,6 @@ import {
 import { unwrapOperationResult } from "@nulo/wallet-bridge"
 import { assertSelectorBinding, CALL_BINDING } from "@/wallet/services/execution/contract-resolver"
 import { classifyOperationCatch } from "@/wallet/services/execution/rpc-cancel"
-import { authRegistryRefusal } from "@nulo/wallet-bridge"
 import {
 	AUTH_REGISTRY_REFUSAL_ENVELOPE,
 	SCOPE_VIOLATION_ENVELOPE,
@@ -86,7 +86,7 @@ describe("toWalletResponseError", () => {
 
 	test("a registry refusal keeps the scope refusal's code with its own constant text", () => {
 		const env = toWalletResponseError(
-			authRegistryRefusal("Scope violation: sendTx call targets an authorization registry grant function"),
+			new AuthRegistryRefusalError("Scope violation: sendTx call targets an authorization registry grant function"),
 		)
 		expect(env).toEqual({
 			code: 4100,
@@ -305,6 +305,12 @@ describe("stale-anchor and unregistered-contract arms", () => {
 			}
 		})()
 		expect(toWalletResponseError(rethrown(bindingRefusal))).toBe(SCOPE_VIOLATION_ENVELOPE)
+
+		const registry = rethrown(
+			new AuthRegistryRefusalError("Scope violation: a transaction's authorization request targets the authorization registry"),
+		)
+		expect(registry).toBeInstanceOf(AuthRegistryRefusalError)
+		expect(toWalletResponseError(registry)).toBe(AUTH_REGISTRY_REFUSAL_ENVELOPE)
 	})
 })
 

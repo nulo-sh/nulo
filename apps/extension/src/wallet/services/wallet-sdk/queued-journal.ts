@@ -21,6 +21,7 @@ import type { ActiveSession } from "@aztec-labs/wallet-sdk/extension/handlers"
 import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@/wallet/logger"
 import {
+	AuthRegistryRefusalError,
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
 	InvalidWalletArgumentsError,
@@ -37,13 +38,7 @@ import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error
 import type { DappSessionService } from "@/wallet/services/dapp-session/service"
 import type { NetworkService } from "@/wallet/services/network/service"
 import type { AccountService } from "@/wallet/services/account/service"
-import {
-	AuthRegistryRefusalError,
-	NoUsableAccountError,
-	projectStoredGrants,
-	requestedSenderOf,
-	resolveAuthorizedSessionAccount,
-} from "@nulo/wallet-bridge"
+import { NoUsableAccountError, projectStoredGrants, requestedSenderOf, resolveAuthorizedSessionAccount } from "@nulo/wallet-bridge"
 import { parseCaipAccount } from "@/wallet/utils/caip"
 import type { CaipAccount } from "@/wallet/services/dapp-interaction/spec"
 import { pickPrimaryWireMethod } from "@/utils/primary-method"

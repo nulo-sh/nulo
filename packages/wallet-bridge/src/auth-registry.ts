@@ -5,7 +5,6 @@
  */
 import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { FunctionSelector } from "@aztec-labs/stdlib/abi"
-import { ScopeViolationError } from "@nulo/extension-messaging/errors"
 import { sameFieldAddress } from "./field-address"
 
 /** `set_authorized(Field,bool)`, `set_reject_all(bool)` and `set_authorized_private((Field),Field,bool)`;
@@ -31,17 +30,4 @@ export function isAuthRegistryGrantCall(call: { to?: unknown; selector?: unknown
 	if (!isAuthRegistry(call.to)) return false
 	const key = selectorKey(call.selector)
 	return key === undefined || AUTH_REGISTRY_GRANT_SELECTORS.has(key)
-}
-
-export type AuthRegistryRefusalMessage =
-	| "Scope violation: sendTx call targets an authorization registry grant function"
-	| "Scope violation: createAuthWit intent targets the authorization registry"
-	| "Scope violation: a transaction's authorization request targets the authorization registry"
-
-/** A scope refusal with its own dApp text and History row; every other reader treats it as a
- *  `ScopeViolationError`. */
-export class AuthRegistryRefusalError extends ScopeViolationError {}
-
-export function authRegistryRefusal(message: AuthRegistryRefusalMessage): AuthRegistryRefusalError {
-	return new AuthRegistryRefusalError(message)
 }

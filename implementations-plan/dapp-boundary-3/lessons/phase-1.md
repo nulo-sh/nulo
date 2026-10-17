@@ -2,7 +2,7 @@
 
 ## Placement, two departures from the step text
 
-- The three message literals live in `auth-registry.ts` as `AuthRegistryRefusalMessage`, beside `AuthRegistryRefusalError`, not in `scope-violation.ts`. OA-1 (b) gave the refusal its own subclass, and the constructor keeps the same rule as `scopeViolation`: wallet-owned words only, so a request value cannot reach the text.
+- The three message literals live with `AuthRegistryRefusalError`, not in `scope-violation.ts`: OA-1 (b) gave the refusal its own subclass, whose constructor admits only those wallet-owned words. After the arc review they moved with the class to `@nulo/extension-messaging/errors` (D11).
 - The call rule sits in `checkSendTx`, ahead of `checkTransactionCalls`. Only `sendTx` calls `checkTransactionCalls`, so the two placements are equivalent; `checkSendTx` keeps D7 (simulations unchanged) visible at the rule.
 
 ## Guard-removal runs (wallet-bridge)

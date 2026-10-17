@@ -1,8 +1,7 @@
 import { describe, expect, test, vi } from "vitest"
 import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
-import { ScopeViolationError } from "@nulo/extension-messaging/errors"
-import { AuthRegistryRefusalError } from "@nulo/wallet-bridge"
+import { AuthRegistryRefusalError, ScopeViolationError } from "@nulo/extension-messaging/errors"
 import { type AuthwitDecodeCrypto, decodeAuthwitEffects } from "./decode-authwit-effects"
 
 const CHAIN = { chainId: 7, version: 6 } as never

@@ -7,6 +7,7 @@ import type { WalletMessage } from "@aztec-labs/wallet-sdk/types"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { ActiveSession } from "@aztec-labs/wallet-sdk/extension/handlers"
 import {
+	AuthRegistryRefusalError,
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
 	InvalidWalletArgumentsError,
@@ -16,7 +17,7 @@ import {
 	TermsAcceptanceRequiredError,
 	UserRejectedError,
 } from "@nulo/extension-messaging/errors"
-import { authRegistryRefusal, NoUsableAccountError } from "@nulo/wallet-bridge"
+import { NoUsableAccountError } from "@nulo/wallet-bridge"
 import { LogLevel } from "@/wallet/logger"
 import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
 import {
@@ -377,7 +378,7 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 		[
 			"a registry refusal",
 			"registry_refused",
-			authRegistryRefusal("Scope violation: sendTx call targets an authorization registry grant function"),
+			new AuthRegistryRefusalError("Scope violation: sendTx call targets an authorization registry grant function"),
 			"Transaction",
 		],
 		["a missing grant", "scope_refused", new CapabilityNotGrantedError("transaction"), "Transaction"],

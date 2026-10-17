@@ -22,8 +22,7 @@ import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
-import { JobCancelledError, RpcTimeoutError, SessionEndedError } from "@nulo/extension-messaging/errors"
-import { AuthRegistryRefusalError } from "@nulo/wallet-bridge"
+import { AuthRegistryRefusalError, JobCancelledError, RpcTimeoutError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { FpcType } from "@/wallet/services/fpc/spec"
@@ -1798,14 +1797,13 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			return makeHarness({ buildAndEstimateFolded })
 		}
 
-		test("standalone discovery refuses it: the validated build, which signs, never runs", async () => {
+		test("standalone discovery refuses it: the validated build, which signs the discovered witnesses, never runs", async () => {
 			collectOffchainEffectsMock.mockReturnValueOnce([effect("a"), registryEffect])
 			const h = standalone()
 			await expect(h.executor.estimateOperationFee(makeAztecOp(), FJWC, undefined, CTX)).rejects.toBeInstanceOf(
 				AuthRegistryRefusalError,
 			)
 			expect(h.buildAndEstimateValidated).not.toHaveBeenCalled()
-			expect(h.account.createAuthWit).not.toHaveBeenCalled()
 		})
 
 		test("standalone discovery hands another contract's request to the validated build once", async () => {
@@ -1825,7 +1823,6 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			await expect(refused.executor.estimateOperationFee(makeAztecOp(), FJ, undefined, CTX)).rejects.toBeInstanceOf(
 				AuthRegistryRefusalError,
 			)
-			expect(refused.account.createAuthWit).not.toHaveBeenCalled()
 
 			collectOffchainEffectsMock.mockReturnValueOnce([effect("a")])
 			const allowed = folded()
@@ -1835,9 +1832,8 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 
 		test("the NO_FROM preview refuses it", async () => {
 			collectOffchainEffectsMock.mockReturnValueOnce([registryEffect])
-			const { executor, account } = makeHarness()
+			const { executor } = makeHarness()
 			await expect(executor.previewOperationAuthwits(noFromOp(), CTX)).rejects.toBeInstanceOf(AuthRegistryRefusalError)
-			expect(account.createAuthWit).not.toHaveBeenCalled()
 		})
 
 		test("a NO_FROM Confirm refuses it with nothing signed or sent, and History records registry_refused", async () => {

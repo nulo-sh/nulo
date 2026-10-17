@@ -1,7 +1,6 @@
 import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { describe, expect, test } from "vitest"
-import { ScopeViolationError } from "@nulo/extension-messaging/errors"
-import { AuthRegistryRefusalError } from "./auth-registry"
+import { AuthRegistryRefusalError, ScopeViolationError } from "@nulo/extension-messaging/errors"
 import type { GrantedCapabilityRecord } from "./capabilities"
 import type { MethodName } from "./method-descriptors"
 import { authorizationsEffective, coversAnyContract, effectiveGrants, isAnyContractScope, readConsent } from "./method-scope-checkers"

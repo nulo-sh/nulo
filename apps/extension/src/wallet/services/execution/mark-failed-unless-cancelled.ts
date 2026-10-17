@@ -1,6 +1,10 @@
 import { type JobError, type JobErrorKind, type JobProgress, JobCancelledSentinel, normalizeError } from "@nulo/wallet-core/jobs"
-import { DuplicateInitializationError, ScopeViolationError, SessionEndedError } from "@nulo/extension-messaging/errors"
-import { AuthRegistryRefusalError } from "@nulo/wallet-bridge"
+import {
+	AuthRegistryRefusalError,
+	DuplicateInitializationError,
+	ScopeViolationError,
+	SessionEndedError,
+} from "@nulo/extension-messaging/errors"
 import { refusalTitleOf } from "./contract-resolver"
 
 /**

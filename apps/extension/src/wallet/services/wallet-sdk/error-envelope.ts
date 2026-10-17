@@ -18,6 +18,7 @@
 
 import {
 	AccountAddressInconsistencyError,
+	AuthRegistryRefusalError,
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
 	ContractNotRegisteredError,
@@ -36,7 +37,6 @@ import {
 	UserRejectedError,
 } from "@nulo/extension-messaging/errors"
 import type { WalletResponse } from "@aztec-labs/wallet-sdk/types"
-import { AuthRegistryRefusalError } from "@nulo/wallet-bridge"
 
 /** Every schema refusal's dApp text: one sentence that names no method and no argument value. */
 export const INVALID_PARAMS_MESSAGE = "The request's arguments do not match the wallet API."
@@ -231,8 +231,8 @@ export const SCOPE_VIOLATION_ENVELOPE = Object.freeze({
 	data: Object.freeze({ walletErrorCode: ScopeViolationError.CODE }),
 })
 
-/** A refused request that names the authorization registry's grant functions: the scope refusal's
- *  code with its own text, a public contract like that one. */
+/** A refusal that keeps the authorization registry to the wallet's own authorization action: the
+ *  scope refusal's code with its own text, a public contract like `SCOPE_VIOLATION_MESSAGE`. */
 export const AUTH_REGISTRY_REFUSAL_MESSAGE = "Apps cannot set public authorizations directly. Ask the wallet with grantPublicAuthwit."
 
 export const AUTH_REGISTRY_REFUSAL_ENVELOPE = Object.freeze({

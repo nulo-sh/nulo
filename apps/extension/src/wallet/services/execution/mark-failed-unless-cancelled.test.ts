@@ -10,9 +10,13 @@
  */
 import { describe, expect, test, vi } from "vitest"
 import { type JobError, type JobProgress, JobCancelledSentinel, normalizeError } from "@nulo/wallet-core/jobs"
-import { DuplicateInitializationError, ScopeViolationError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import {
+	AuthRegistryRefusalError,
+	DuplicateInitializationError,
+	ScopeViolationError,
+	SessionEndedError,
+} from "@nulo/extension-messaging/errors"
 import type { FunctionAbi } from "@aztec-labs/stdlib/abi"
-import { authRegistryRefusal } from "@nulo/wallet-bridge"
 import { assertSelectorBinding, AUTHWIT_CALL_BINDING, CALL_BINDING } from "./contract-resolver"
 import { failureKind, markFailedUnlessCancelled } from "./mark-failed-unless-cancelled"
 
@@ -94,7 +98,9 @@ describe("markFailedUnlessCancelled", () => {
 
 	test("a registry refusal on a dApp send records registry_refused", async () => {
 		const lane = fakeLane()
-		const error = authRegistryRefusal("Scope violation: a transaction's authorization request targets the authorization registry")
+		const error = new AuthRegistryRefusalError(
+			"Scope violation: a transaction's authorization request targets the authorization registry",
+		)
 		await markFailedUnlessCancelled(error, "j1", lane)
 		expect(lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, normalizeError(error, "registry_refused"), undefined)
 	})
