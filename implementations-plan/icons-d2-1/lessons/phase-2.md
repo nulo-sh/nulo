@@ -23,3 +23,7 @@ Before from `f86407dd` (base `dev` 3dc5a06a); after from `5b18cc75`; the code is
 
 - **Firefox failure**: `security-reset.test.ts` › "reset purges within the same budget while the node refuses connections". `waitForProfilePurged` ran out at 15 s with the tombstone still present. Three isolated reruns passed, at 15.3, 22.7 and 15.3 s for the whole test. Nothing on the purge path changed, so this is a timing flake under host load, filed as #630.
 - **Captures**: `NULO_E2E_SHOT_DIR` on `home-links`, `holdings-add-token`, `send-keyboard`, `settings-routes`, `accounts` and `endpoints` (smoke, 28/28) and the three network files. The eight pairs, the Accounts popup, the network page and the sheet are in `screenshots/`.
+
+## CI
+
+- **`test:ci-gating`** (CI's unit job runs it after vitest; `audit:vue` does not) failed on the first push. `workflow-refs.test.ts`'s milestone pattern `\b[MA][0-9]+\.[0-9]+\b` matched 56 path strings like `"M4.25 …`. Fix: a space after every `M` command (valid SVG, sheet capture byte-identical), and a header line saying why. Exempting the file would have loosened the gate. Run `bun run test:ci-gating` and `bun run test:release` locally before pushing.
