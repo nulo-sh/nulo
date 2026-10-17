@@ -1,7 +1,7 @@
 ---
 plan: call-vocabulary-1
 tier: light
-status: planned; final Codex pass approve; awaiting the orchestrator (OA-1, OA-3 touch Activity)
+status: approved by the orchestrator 2026-10-17; arc 1 implementing
 issues: "#514 #575 #516 (one arc)"
 driver: claude-code
 claude_model: opus
@@ -79,11 +79,12 @@ Good enough: in-flight rows keep their titles (OA-4); a read transfer keeps "Tra
   - Until tokens load, a listed mint or a dApp's read transfer shows the unread form first, the window's words for a call not yet read (I2); OA-3 asks whether to avoid the switch.
 - **P36-01 = A** ("The same rule on the grant card: a token-movement label only on a call the wallet read as one; otherwise the call's own name, Transfer In Public"): the grant line names an unread `transfer_in_public` "Transfer In Public"; a registered token's corroborated grant keeps "Transfer (public)". The unreachable `simulate_transaction` card's rows take the same rule.
 - **P40-01 = B**: nothing visible.
-- PR body: light and dark screenshots of each changed row (as #678: PNGs under `apps/extension/pr-screens/` in one commit, linked by its SHA, deleted in the next), the picks quoted by id and text, and the measured length of the I2 flip on Home.
+- **OA-1 to OA-4**, answered by the orchestrator (2026-10-17, D-orch: "ship-now form; the owner sees it on a decision page with the arc's screenshots"): a read transfer keeps "Transfer"; `mint_to_commitment` reads "Mint To Commitment"; the authorization, simulate and utility cards keep their labels; the token-load switch ships; in-flight rows keep their titles.
+- PR body: every ship-now wording quoted; light and dark screenshots, before (dev) and after, of Activity, the detail page, the received row and the approval window (as #678: PNGs under `apps/extension/pr-screens/` in one commit, linked by its SHA, deleted in the next); the picks quoted by id and text; the measured length of the I2 switch on Home.
 
 ## Phases
 
-### Phase 1: #514, the settled reading and one title rule
+### Phase 1: #514, the settled reading and one title rule ✓
 - Change map: `utils/tx-enrichment.ts`, `utils/tx-amount.ts`, `popup/windows/execute/call-surface.ts`, `popup/components/modules/activity/TransactionCard.vue`, `popup/pages/tx/[id].vue`, `utils/received-display.ts` (label, header comment), `components/composite/activity/TransactionIncomingCard.vue:30` (comment), and `types/auto-imports.d.ts` and `types/.eslintrc-auto-import.json` as the build regenerates them.
 - Tests: `tx-enrichment.test.ts` replaces the prefix describes (`:140-175`) with one table: own send → transfer/"Transfer"; vocabulary transfer on a pinned listed token → transfer/"Transfer"; the same call with no `classId`, with another class, unlisted, or with a wrong arity → tx and its plain name; `transfer_ownership` → tx/"Transfer Ownership"; pinned listed `mint_to_private`/`mint_to_public` → mint and their labels; `mint_to_commitment` → mint/"Mint To Commitment"; `claim` off Fee Juice → "Claim", on Fee Juice → "Claim Fee Juice"; no calls → tx/"Transaction" (kept from the old table). `TransactionCard.test.ts`: `transfer_ownership` passes `icon` "zap" (never "send") to `TransactionCardLayout` beside a listed mint passing "faucet" with "Mint (private)". `tx/[id].test.ts`: a mint's header and `tx-call-method`; an unread movement name plain; one deferred `getTokens` showing the plain title before it resolves and the label after. `received-display.test.ts:61` → "Mint (public)". `call-surface.test.ts` unchanged.
 - **Validation gate**: `bun run lint`, `bun run typecheck:all`, `cd apps/extension && bun --bun vitest run src/utils src/popup/components/modules/activity src/popup/pages/tx src/popup/windows/execute/call-surface.test.ts`; all exit 0.
