@@ -1,19 +1,36 @@
 /**
- * The I/O around attach-assets.ts, as the three commands the release and nightly publish jobs run:
+ * The I/O around attach-assets.ts, as the four commands the release and nightly publish jobs run:
  *
+ *   select                                   a dispatch's `source`: `published` once a published
+ *                                            release's assets are downloaded into dist/release and
+ *                                            checked, else `build`; writes nothing to the release
  *   plan                                     writes the chosen `action`; exits 1 on a refusal
  *   apply --expect publish [--target <sha>]  pins the tag, fills a draft, checks it, publishes it,
  *                                            checks it again; `--target` creates a nightly's tag
- *   verify-published                         checks a published release's assets against their
- *                                            attestation and SHASUMS256.txt, and writes their `dir`
+ *   verify-published                         checks the assets a published release ships against
+ *                                            their digests, attestations and SHASUMS256.txt: on a
+ *                                            push, a fresh download, written to `dir`; on a
+ *                                            dispatch, the bytes in dist/release
  *
- * Environment: TAG, VERSION, SHA (the tag's commit), GITHUB_SHA, GITHUB_REPOSITORY, GH_TOKEN, and
- * NOTES (the release body's file) for apply and verify-published. The built assets are read from
- * dist/release. Every GitHub read and write is REST; only the attestation check runs `gh`.
+ * Environment: TAG, VERSION, SHA (the tag's commit), GITHUB_SHA, GITHUB_EVENT_NAME,
+ * GITHUB_REPOSITORY, GH_TOKEN, SOURCE (`build` or `published`, unset reads `build`), and NOTES (the
+ * release body's file) for apply and verify-published. The assets are read from dist/release.
+ * Every GitHub read and write is REST; only the attestation check runs `gh`.
  */
 
 import { appendFileSync, mkdirSync } from "node:fs"
-import { assetNames, compareAssets, type LocalAsset, parseShasums, planAttach, type ReleaseState, type RemoteAsset } from "./attach-assets"
+import {
+	type AttachPlan,
+	ambiguousReason,
+	assetNames,
+	compareAssets,
+	type LocalAsset,
+	parseShasums,
+	planAttach,
+	planPublished,
+	type ReleaseState,
+	type RemoteAsset,
+} from "./attach-assets"
 import { command } from "./workflow-command"
 
 export interface ReleaseRecord {
@@ -60,6 +77,10 @@ export interface RunInput {
 	tagSha: string
 	/** The directory holding the built assets. */
 	dir: string
+	/** Where this run's assets came from: its own build, or the published release `select` checked. */
+	source: "build" | "published"
+	/** `GITHUB_EVENT_NAME`: only a push re-downloads in verify-published. */
+	event: string
 }
 
 /** Where the release notes print the tagged commit for `gh attestation verify --source-digest`. */
@@ -86,10 +107,37 @@ export async function readState(io: AttachIO, tag: string): Promise<ReleaseState
 	return { kind: "published", id: release.id, immutable: release.immutable, assets: release.assets }
 }
 
-async function decide(io: AttachIO, input: RunInput) {
+async function decide(io: AttachIO, input: RunInput): Promise<{ local: LocalAsset[]; state: ReleaseState; plan: AttachPlan }> {
 	const local = await localAssets(io, input)
 	const state = await readState(io, input.tag)
-	return { local, state, plan: planAttach({ tag: input.tag, state, local, workflowSha: input.workflowSha, tagSha: input.tagSha }) }
+	const plan = planAttach({ tag: input.tag, state, local, workflowSha: input.workflowSha, tagSha: input.tagSha })
+	// Downloaded bytes are never published again: their attestation would name this run as the builder.
+	if (plan.action === "publish" && input.source === "published")
+		return { local, state, plan: { action: "refuse", reason: `${input.tag} is no longer published; dispatch again to build it` } }
+	return { local, state, plan }
+}
+
+/** On a dispatch, which bytes the gates and the stores get: a published release's own, or this run's build. */
+export async function runSelect(io: AttachIO, input: RunInput): Promise<0 | 1> {
+	const state = await readState(io, input.tag)
+	if (state.kind === "ambiguous") return fail(io, ambiguousReason(input.tag, state.count))
+	if (state.kind !== "published") {
+		io.output("source", "build")
+		io.log(`${input.tag}: no published release; this run builds it`)
+		return 0
+	}
+	const names = assetNames(input.version)
+	const plan = planPublished(input.tag, state, names)
+	if (plan.action === "refuse") return fail(io, plan.reason)
+	for (const name of names) {
+		const problem = await fetchVerified(io, input, state.assets, name, `${input.dir}/${name}`)
+		if (problem) return fail(io, problem)
+	}
+	const sums = await checkShasums(io, input.version, input.dir)
+	if (sums) return fail(io, sums)
+	io.output("source", "published")
+	io.log(`${input.tag}: the gates and the stores get the published, attested assets in ${input.dir}`)
+	return 0
 }
 
 export async function runPlan(io: AttachIO, input: RunInput): Promise<0 | 1> {
@@ -154,49 +202,99 @@ async function confirmPublished(io: AttachIO, input: RunInput, id: number, local
 	return 0
 }
 
+/**
+ * A push that finds its release published is a rerun of a run that published it: it ships a fresh
+ * download, and a rebuild that differs only warns. A dispatch never downloads here: the bytes it
+ * holds (the ones `select` checked and the smokes ran, or a rebuild that met a release published
+ * during the run) ship only if they are the release's own.
+ */
 export async function runVerifyPublished(io: AttachIO, input: RunInput, notes: string): Promise<0 | 1> {
 	const { local, state, plan } = await decide(io, input)
 	if (plan.action !== "use-published" || state.kind !== "published") {
 		return fail(io, `the release changed since plan: ${plan.action === "refuse" ? plan.reason : plan.action}`)
 	}
-	const dir = `${input.dir}/published`
-	for (const name of assetNames(input.version)) {
-		const problem = await fetchVerified(io, input, state.assets, name, `${dir}/${name}`)
-		if (problem) return fail(io, problem)
-	}
-	const sums = await checkShasums(io, input.version, dir)
-	if (sums) return fail(io, sums)
-	for (const asset of local) {
-		const published = await io.sha256(`${dir}/${asset.name}`)
-		if (published !== asset.sha256)
-			io.log(command("warning", `${asset.name}: this run rebuilt ${asset.sha256}; the release ships ${published}`))
-	}
+	const problem = input.event === "push" ? await checkDownload(io, input, state.assets, local) : await checkHeld(io, input, state.assets)
+	if (problem) return fail(io, problem)
 	await io.editRelease(state.id, { tag: input.tag, body: notes })
+	if (input.event !== "push") {
+		io.log(`${input.tag}: shipping the assets this run holds, the published release's own`)
+		return 0
+	}
+	const dir = `${input.dir}/published`
 	io.output("dir", dir)
 	io.log(`${input.tag}: shipping the published, attested assets from ${dir}`)
 	return 0
 }
 
-/** Downloads one published asset and checks it against GitHub's digest and its attestation. */
-export async function fetchVerified(
-	io: PublishedReadIO,
-	input: Pick<RunInput, "tag" | "tagSha">,
-	assets: RemoteAsset[],
-	name: string,
-	path: string,
-): Promise<string | null> {
+async function checkDownload(io: AttachIO, input: RunInput, assets: RemoteAsset[], local: LocalAsset[]): Promise<string | null> {
+	const dir = `${input.dir}/published`
+	for (const name of assetNames(input.version)) {
+		const problem = await fetchVerified(io, input, assets, name, `${dir}/${name}`)
+		if (problem) return problem
+	}
+	const sums = await checkShasums(io, input.version, dir)
+	if (sums) return sums
+	for (const asset of local) {
+		const published = await io.sha256(`${dir}/${asset.name}`)
+		if (published !== asset.sha256)
+			io.log(command("warning", `${asset.name}: this run rebuilt ${asset.sha256}; the release ships ${published}`))
+	}
+	return null
+}
+
+async function checkHeld(io: AttachIO, input: RunInput, assets: RemoteAsset[]): Promise<string | null> {
+	for (const name of assetNames(input.version)) {
+		const problem = await checkAsset(io, input, assets, name, `${input.dir}/${name}`)
+		if (problem) return problem
+	}
+	return checkShasums(io, input.version, input.dir)
+}
+
+type Pinned = Pick<RunInput, "tag" | "tagSha">
+
+/** The release's asset `name`, refused unless GitHub holds a digest for it that this workflow attested. */
+async function attestedAsset(io: PublishedReadIO, input: Pinned, assets: RemoteAsset[], name: string): Promise<RemoteAsset | string> {
 	const asset = assets.find((a) => a.name === name)
 	if (!asset?.digest) return `${input.tag}: ${name} has no digest`
 	if (!(await io.attested(asset.digest.replace(/^sha256:/, "")))) {
 		return `${input.tag} is not attested by this workflow; cut a new release to submit it to a store`
 	}
-	await io.downloadAsset(asset.id, path)
-	if (`sha256:${await io.sha256(path)}` !== asset.digest) return `${name}: the download does not match ${asset.digest}`
-	if (!(await io.verifyAttestation(path, input.tagSha))) return `${name}: its attestation does not verify for ${input.tagSha}`
+	return asset
+}
+
+async function checkBytes(io: PublishedReadIO, input: Pinned, asset: RemoteAsset, path: string): Promise<string | null> {
+	if (`sha256:${await io.sha256(path)}` !== asset.digest) return `${asset.name}: ${path} does not match ${asset.digest}`
+	if (!(await io.verifyAttestation(path, input.tagSha))) return `${asset.name}: its attestation does not verify for ${input.tagSha}`
 	return null
 }
 
-/** The published SHASUMS256.txt must name exactly the two zips, with the downloaded bytes' hashes. */
+/** Checks the bytes at `path` as the release's asset `name`: its digest, and their attestation for the tagged commit. */
+export async function checkAsset(
+	io: PublishedReadIO,
+	input: Pinned,
+	assets: RemoteAsset[],
+	name: string,
+	path: string,
+): Promise<string | null> {
+	const asset = await attestedAsset(io, input, assets, name)
+	return typeof asset === "string" ? asset : checkBytes(io, input, asset, path)
+}
+
+/** Downloads one published asset and checks it as checkAsset does; nothing unattested is downloaded. */
+export async function fetchVerified(
+	io: PublishedReadIO,
+	input: Pinned,
+	assets: RemoteAsset[],
+	name: string,
+	path: string,
+): Promise<string | null> {
+	const asset = await attestedAsset(io, input, assets, name)
+	if (typeof asset === "string") return asset
+	await io.downloadAsset(asset.id, path)
+	return checkBytes(io, input, asset, path)
+}
+
+/** The SHASUMS256.txt in `dir` must name exactly the two zips, with the hashes of the zips beside it. */
 async function checkShasums(io: AttachIO, version: string, dir: string): Promise<string | null> {
 	const sums = parseShasums(await io.readText(`${dir}/SHASUMS256.txt`))
 	const zips = assetNames(version).filter((name) => name.endsWith(".zip"))
@@ -218,10 +316,14 @@ export function inputFromEnv(env: Record<string, string | undefined>): RunInput 
 		workflowSha: env.GITHUB_SHA ?? "",
 		tagSha: env.SHA ?? "",
 		dir: "dist/release",
+		event: env.GITHUB_EVENT_NAME ?? "",
 	}
 	if (!TAG.test(input.tag) || input.version !== input.tag.slice(1)) return `TAG ${input.tag} and VERSION ${input.version} do not agree`
 	if (!SHA.test(input.workflowSha) || !SHA.test(input.tagSha)) return "GITHUB_SHA and SHA must be commit ids"
-	return input
+	// Unset is nightly's and the select step's; a dispatch always names one, so an empty value is a fault.
+	const source = env.SOURCE ?? "build"
+	if (source !== "build" && source !== "published") return `SOURCE '${source}' is neither build nor published`
+	return { ...input, source }
 }
 
 function parseAsset(json: unknown): RemoteAsset {
@@ -242,6 +344,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
 	const input = inputFromEnv(env)
 	if (typeof input === "string") return fail(io, input)
 	const [command, ...args] = argv
+	if (command === "select" && args.length === 0) return runSelect(io, input)
 	if (command === "plan") return runPlan(io, input)
 	const notes = env.NOTES ? (await io.readText(env.NOTES)).replaceAll(SOURCE_COMMIT, input.tagSha) : ""
 	if (!notes) return fail(io, "NOTES names no release body")
@@ -250,7 +353,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
 		if (args.length === 2) return runApply(io, input, notes, null)
 		if (args.length === 4 && args[2] === "--target") return runApply(io, input, notes, args[3])
 	}
-	return fail(io, `usage: plan | apply --expect publish [--target <sha>] | verify-published (got ${argv.join(" ")})`)
+	return fail(io, `usage: select | plan | apply --expect publish [--target <sha>] | verify-published (got ${argv.join(" ")})`)
 }
 
 /** The body of `res`, refused once it passes `limit` bytes, before the rest reaches memory. */

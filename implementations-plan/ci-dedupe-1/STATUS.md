@@ -8,3 +8,4 @@
 - 2026-10-17 18:42Z gate: final Codex pass approve; OWNER-ASKS none; auto-continue into arc 1
 - 2026-10-17 18:53Z arc 1 phase 1: lane + migration pin committed 93fbf0eb, gate green, 7 mutations red; phase 2 next
 - 2026-10-17 22:29Z arc 1 phase 2: callers on the lane, pins and docs; gate green (one load-induced unit timeout, green on re-run); committing
+- 2026-10-17 22:50Z arc 1 phase 3: select-assets, runner, pins, docs; gate green after a frozen install for dev's new dependency; committing; Codex loop next

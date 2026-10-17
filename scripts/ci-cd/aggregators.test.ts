@@ -114,25 +114,35 @@ const release = (context: World, skipped: string[]): World => ({
 	"needs.auto-unstick.outputs.unstuck": "",
 	"needs.resolve.outputs.is_prerelease": "false",
 	"needs.resolve.outputs.on_main": "true",
+	"needs.select-assets.outputs.source": "build",
 	...context,
 	...results(RELEASE.needs, skipped),
 })
+/** A push never selects: select-assets skips and writes no source. */
+const push = (context: World, skipped: string[]): World =>
+	release({ "github.event_name": "push", "needs.select-assets.outputs.source": "", ...context }, [...skipped, "select-assets"])
 const asked = (value: string): World => ({
 	"github.event.inputs.run_network_e2e": value,
 	"github.event.inputs.publish_chrome": value,
 	"github.event.inputs.publish_firefox": value,
 })
-const PUSH_WITHOUT_RELEASE = release(
+const PUSH_WITHOUT_RELEASE = push(
 	{
-		"github.event_name": "push",
 		"needs.auto-unstick.outputs.unstuck": "false",
 		"needs.resolve.outputs.is_prerelease": "",
 		"needs.resolve.outputs.on_main": "",
 	},
 	RELEASE.needs.filter((job) => job !== "release-please" && job !== "auto-unstick"),
 )
-const PUSH_RESCUED = release({ "github.event_name": "push", "needs.auto-unstick.outputs.unstuck": "true" }, NOT_ASKED)
+const PUSH_RESCUED = push({ "needs.auto-unstick.outputs.unstuck": "true" }, NOT_ASKED)
 const STORE_SUBMISSION = release(asked("true"), ["release-please", "auto-unstick"])
+/** A store dispatch on a published release: its own checked bytes are smoked and shipped, so nothing builds. */
+const PUBLISHED_SUBMISSION = release({ ...asked("true"), "needs.select-assets.outputs.source": "published" }, [
+	"release-please",
+	"auto-unstick",
+	"build-chrome",
+	"build-firefox",
+])
 
 const CASES: { file: string; agg: Aggregator; advisory: string[]; worlds: Record<string, World> }[] = [
 	{
@@ -169,13 +179,14 @@ const CASES: { file: string; agg: Aggregator; advisory: string[]; worlds: Record
 		advisory: ["release-pr-lockfile", "sync-main-to-dev"],
 		worlds: {
 			"a push that only refreshes the Release PR": PUSH_WITHOUT_RELEASE,
-			"a push release-please tagged": release(
-				{ "github.event_name": "push", "needs.release-please.outputs.release_created": "true" },
-				["auto-unstick", ...NOT_ASKED],
-			),
+			"a push release-please tagged": push({ "needs.release-please.outputs.release_created": "true" }, [
+				"auto-unstick",
+				...NOT_ASKED,
+			]),
 			"a push the auto-unstick rescued": PUSH_RESCUED,
 			"a republish": release(asked("false"), ["release-please", "auto-unstick", ...NOT_ASKED]),
 			"a store submission with the network suite": STORE_SUBMISSION,
+			"a store submission of a published release's own bytes": PUBLISHED_SUBMISSION,
 			"a Chrome store submission alone": release(
 				{
 					"github.event.inputs.run_network_e2e": "false",
@@ -320,6 +331,13 @@ test.each([
 	["needs.auto-unstick.outputs.unstuck", RELEASE, PUSH_RESCUED, RESCUE_CHAIN],
 	["needs.resolve.outputs.is_prerelease", RELEASE, STORE_SUBMISSION, STORES],
 	["needs.resolve.outputs.on_main", RELEASE, STORE_SUBMISSION, STORES],
+	// No build, smoke or attach-assets takes an unknown source; the store jobs wait on attach-assets.
+	[
+		"needs.select-assets.outputs.source",
+		RELEASE,
+		STORE_SUBMISSION,
+		["build-chrome", "build-firefox", "smoke-against-artifact", "smoke-firefox-against-artifact", "attach-assets", ...STORES],
+	],
 ] as const)("%s: a malformed control output fails the check", (output, agg, world, skips) => {
 	expect(exitCode(agg, world)).toBe(0)
 	const skipped = Object.fromEntries(skips.map((job) => [`needs.${job}.result`, "skipped"]))
@@ -333,33 +351,89 @@ test("release_created may be empty, but nothing else that is not true or false",
 
 /** The opt-in network suite must be exactly what the dispatch asked for; every other gate exactly `success`. */
 const NETWORK_CLAUSE = "needs.network-e2e.result == (github.event.inputs.run_network_e2e == 'true' && 'success' || 'skipped')"
-
-test("release's attach-assets publishes only past gates that all ended as asked, and never from a cancelled run", () => {
-	const job = workflow("release.yml").jobs["attach-assets"]
-	const needs: string[] = [job.needs].flat()
-	expect([...needs].sort()).toEqual(
-		[
-			"resolve",
-			"lint-and-typecheck",
-			"unit-tests",
-			"network-e2e",
-			"build-chrome",
-			"build-firefox",
-			"smoke-against-artifact",
-			"smoke-firefox-against-artifact",
-			"release-notes",
-		].sort(),
-	)
-	const clauses = String(job.if)
-		.replace(NETWORK_CLAUSE, "NETWORK")
+/** select-assets ran exactly on a dispatch. */
+const SELECTED = "needs.select-assets.result == (github.event_name == 'workflow_dispatch' && 'success' || 'skipped')"
+/** A dispatch's source is one select-assets can write; a failed, cancelled or empty select matches neither. */
+const SOURCE_KNOWN =
+	"(github.event_name == 'push' || needs.select-assets.outputs.source == 'build' || needs.select-assets.outputs.source == 'published')"
+const BUILDS = "(github.event_name == 'push' || needs.select-assets.outputs.source == 'build')"
+/** A build ran exactly when the bytes are this run's own. */
+const built = (browser: string): string =>
+	`needs.build-${browser}.result == (needs.select-assets.outputs.source == 'published' && 'skipped' || 'success')`
+const BROWSERS = ["chrome", "firefox"]
+const TOKENS: [string, string][] = [
+	[NETWORK_CLAUSE, "NETWORK"],
+	[SELECTED, "SELECTED"],
+	[SOURCE_KNOWN, "SOURCE_KNOWN"],
+	[BUILDS, "BUILDS"],
+	...BROWSERS.map((browser): [string, string] => [built(browser), `BUILT ${browser}`]),
+]
+/** A job's `if:` as its sorted `&&` clauses, each compound clause above read as one token. */
+const clausesOf = (condition: unknown): string[] =>
+	TOKENS.reduce((text, [clause, token]) => text.replaceAll(clause, token), String(condition).split(/\s+/).join(" ").trim())
 		.split("&&")
 		.map((clause) => clause.trim())
-	const expected = [
-		"always()",
-		"!cancelled()",
-		...needs.map((need) => (need === "network-e2e" ? "NETWORK" : `needs.${need}.result == 'success'`)),
-	]
-	expect(clauses.sort()).toEqual(expected.sort())
+		.sort()
+const succeeded = (...jobs: string[]): string[] => jobs.map((job) => `needs.${job}.result == 'success'`)
+
+// Each consumer of select-assets takes SELECTED and SOURCE_KNOWN, so a dispatch whose select failed,
+// was cancelled or wrote no source runs no smoke and no attach-assets, not only a red status.
+describe("release's source-bound stages", () => {
+	const { jobs } = workflow("release.yml")
+
+	test("attach-assets publishes only past gates that all ended as asked, and never from a cancelled run", () => {
+		const job = jobs["attach-assets"]
+		expect([job.needs].flat().sort()).toEqual(
+			[
+				"resolve",
+				"lint-and-typecheck",
+				"unit-tests",
+				"network-e2e",
+				"select-assets",
+				"build-chrome",
+				"build-firefox",
+				"smoke-against-artifact",
+				"smoke-firefox-against-artifact",
+				"release-notes",
+			].sort(),
+		)
+		expect(clausesOf(job.if)).toEqual(
+			[
+				"always()",
+				"!cancelled()",
+				"NETWORK",
+				"SELECTED",
+				"SOURCE_KNOWN",
+				"BUILT chrome",
+				"BUILT firefox",
+				...succeeded(
+					"resolve",
+					"lint-and-typecheck",
+					"unit-tests",
+					"smoke-against-artifact",
+					"smoke-firefox-against-artifact",
+					"release-notes",
+				),
+			].sort(),
+		)
+	})
+
+	test.each(BROWSERS)("build-%s runs past the gates, on a push or a dispatch that selected the build", (browser) => {
+		const job = jobs[`build-${browser}`]
+		expect([job.needs].flat().sort()).toEqual(["resolve", "lint-and-typecheck", "unit-tests", "select-assets"].sort())
+		expect(clausesOf(job.if)).toEqual(
+			["always()", "SELECTED", "BUILDS", ...succeeded("resolve", "lint-and-typecheck", "unit-tests")].sort(),
+		)
+	})
+
+	test.each([
+		["smoke-against-artifact", "chrome"],
+		["smoke-firefox-against-artifact", "firefox"],
+	])("%s runs on the source select-assets chose, its build exactly when that is the build", (name, browser) => {
+		const job = jobs[name]
+		expect([job.needs].flat().sort()).toEqual(["resolve", `build-${browser}`, "select-assets"].sort())
+		expect(clausesOf(job.if)).toEqual(["always()", "SELECTED", "SOURCE_KNOWN", `BUILT ${browser}`, ...succeeded("resolve")].sort())
+	})
 })
 
 // The opt-in suite is one call of the PR lanes' lane (behavior-gating.test.ts pins its jobs), so the
