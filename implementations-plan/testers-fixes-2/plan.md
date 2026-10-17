@@ -1,7 +1,7 @@
 ---
 plan: testers-fixes-2
 tier: light
-status: implementing (orchestrator approved 2026-10-16)
+status: completed
 issues: "#583 #592 (the one arc closes both)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,24 @@ base: origin/dev at 493ff497
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-17
+- **Status:** completed. One PR against `dev` carries the work and this close-out; merging it is the owner's call.
+- **Shipped:**
+  - #583, the activity rows:
+    - A row that names a dApp and shows no direction chip cuts its function name on one line, at its end. Journal cards decide this by the operation's kind, so a nameless dApp is cut too.
+    - The app chip is capped at 96 px and never shrinks below that cap.
+    - A dApp-started transfer's app chip wraps under its direction chip (OA-1 A).
+    - Send, receive and receipt rows are unchanged.
+  - #583, the transaction details' App row: right-aligned in mono, breaking at any character, 16 px from its label.
+  - #592, Home: the hero is fixed over a scrolling middle, with a 12 px shadow that shows once the middle has scrolled.
+- **Dropped:** OA-2 shipped as B (unchanged); its decision is #629. D6's `tabindex` on the middle was rejected on measurement.
+- **Known limits:** #624 (a row scrolled under the hero still lifts the snack); #625 (a send row's symbol, up to 32 characters, is never cut).
+- **Open items:** #626 (Send and Receive are not keyboard-operable); #627 (the store captures show the old Home); #628 (a nameless dApp's in-flight row shows no chip); #629 (OA-2, the journal App row).
+- **Lessons:** none promoted (`lessons.md` is at its budget). A positioned ancestor bounds a popup's scrim, and a stacking context between it and the shell caps it; that stays in [lessons/phase-3.md](lessons/phase-3.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # testers-fixes-2: activity rows, the App row, Home's fixed hero
 
@@ -104,7 +122,7 @@ Validation gate:
 2. With load1 < 150: `cd <worktree> && NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/snack-placement.test.ts` passes, then the same with `NULO_E2E_BROWSER=firefox`.
 3. `STORE_CAPTURES=1 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/store-captures.test.ts` (Chrome) fits Home. Then restore the PNGs it wrote with `git checkout -- apps/extension/store/captures`: new store images are the owner's call (open item).
 
-### Phase 3: rebase, evidence, full gates
+### Phase 3: rebase, evidence, full gates ✓
 
 1. `git fetch origin dev`. If testers-fixes-1 has landed, rebase the unpushed branch (merge if pushed). If its #582 restores Home's scroll by element, point it at `home-scroller` and run its test.
 2. Run Phase 1 and 2's tests with `NULO_E2E_SHOT_DIR` for both themes: Home at rest and scrolled with a priced row in the shadow band, the long-name rows, the two-chip row, the App row (`shotSend`).
