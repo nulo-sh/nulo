@@ -13,8 +13,6 @@ export type Glyph = { readonly s?: readonly string[]; readonly f?: readonly stri
 
 const FRAME = "M 4.25 4.25h15.5v15.5H4.25z"
 
-const lock: Glyph = { f: ["M 4.5 10.5h15v10h-15z"], s: ["M 8.25 10.5V4.5H15.75V10.5"] }
-
 export const glyphs = {
 	/** A square with one diagonal. */
 	home: { s: [FRAME, "M 4.25 19.75L19.75 4.25"] },
@@ -58,12 +56,23 @@ export const glyphs = {
 	warning: { f: ["M 12 2.5L22.25 20.5H1.75ZM 10.75 7.75h2.5v7h-2.5zM 10.75 15.75h2.5v2.5h-2.5z"] },
 	/** A square with an i. */
 	info: { s: [FRAME, "M 12 10.75V16.5"], f: ["M 10.75 6.75h2.5v2.5h-2.5z"] },
-	/** A padlock: a solid body under a square shackle. */
-	lock,
-	/** A private balance: the padlock. */
-	private: lock,
-	/** A public balance: an octagonal globe with its equator and meridian. */
-	public: { s: ["M 8.5 3.75H15.5L20.25 8.5V15.5L15.5 20.25H8.5L3.75 15.5V8.5Z", "M 3.75 12H20.25M 12 3.75V20.25"] },
+	/** A padlock: a solid body under a square shackle. It means Lock, never a private balance. */
+	lock: { f: ["M 4.5 10.5h15v10h-15z"], s: ["M 8.25 10.5V4.5H15.75V10.5"] },
+	/** A private balance: a solid square, a wall. */
+	private: { f: ["M 4 4h16v16H4z"] },
+	/** A public balance: the same square in eight dots, a fence you can see through. */
+	public: {
+		f: [
+			"M 3.5 3.5h4v4h-4z",
+			"M 10 3.5h4v4h-4z",
+			"M 16.5 3.5h4v4h-4z",
+			"M 3.5 10h4v4h-4z",
+			"M 16.5 10h4v4h-4z",
+			"M 3.5 16.5h4v4h-4z",
+			"M 10 16.5h4v4h-4z",
+			"M 16.5 16.5h4v4h-4z",
+		],
+	},
 	/** Three solid squares in a row. */
 	more: { f: ["M 3.5 10.25h3.5v3.5h-3.5z", "M 10.25 10.25h3.5v3.5h-3.5z", "M 17 10.25h3.5v3.5h-3.5z"] },
 	/** A chevron pointing right. */
@@ -119,7 +128,7 @@ export const glyphs = {
 	},
 	/** A tap with a falling drop. */
 	faucet: { s: ["M 5.75 9.5H17.75V12.5", "M 11.75 9.5V5.5M 8.75 5.5H14.75"], f: ["M 17.75 15.5L20 17.75L17.75 20L15.5 17.75Z"] },
-	/** The public globe with a pencil. */
+	/** An octagonal globe with its equator and meridian, and a pencil. */
 	"network-edit": {
 		s: ["M 6.75 3H12.25L16 6.75V12.25L12.25 16H6.75L3 12.25V6.75Z", "M 3 9.5H16M 9.5 3V16"],
 		f: ["M 14 21.5V18.75L19.75 13L22.5 15.75L16.75 21.5Z"],

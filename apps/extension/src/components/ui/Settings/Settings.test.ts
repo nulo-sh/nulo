@@ -15,7 +15,10 @@ import SettingField from "./SettingField.vue"
 const STUBS = {
 	Flex: { template: '<div :class="$attrs.class" v-bind="$attrs"><slot /></div>', inheritAttrs: false },
 	Text: { template: '<span :class="$attrs.class" v-bind="$attrs"><slot /></span>', inheritAttrs: false },
-	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
+	Icon: {
+		template: '<span data-testid="stub-icon" :data-name="name" :data-size="size" :data-color="color" />',
+		props: ["name", "size", "color"],
+	},
 	Spinner: { template: '<span data-testid="stub-spinner" />' },
 	RouterLink: { template: '<a :href="to"><slot /></a>', props: ["to"] },
 }
@@ -220,6 +223,28 @@ describe("ui/Settings — SettingItem", () => {
 	test("loading + icon shows a Spinner (instead of the icon)", async () => {
 		const { w } = await mountItem({ title: "X", icon: "user", loading: true })
 		expect(w.find('[data-testid="stub-spinner"]').exists()).toBe(true)
+		w.unmount()
+	})
+
+	test("trailingIcon draws its glyph where the chevron sits, after the title, 18 px secondary, and no chevron", async () => {
+		const { w } = await mountItem({ title: "Name", trailingIcon: "edit" }, { onClick: vi.fn() })
+		const icons = w.findAll('[data-testid="stub-icon"]')
+		expect(icons.map((icon) => [icon.attributes("data-name"), icon.attributes("data-size"), icon.attributes("data-color")])).toEqual([
+			["edit", "18", "secondary"],
+		])
+		const title = w.get('[data-testid="setting-title"]')
+		expect(title.element.compareDocumentPosition(icons[0].element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+		w.unmount()
+	})
+
+	test.each([
+		["a link", { to: "/popup/settings/lock" }, ["chevron"]],
+		["an explicit chevron", { chevron: true }, ["chevron"]],
+		["an external link", { to: "https://example.com", external: true }, ["open"]],
+		["a plain row", {}, []],
+	])("without trailingIcon, %s keeps its trailing glyph", async (_case, props, names) => {
+		const { w } = await mountItem({ title: "X", ...props })
+		expect(w.findAll('[data-testid="stub-icon"]').map((icon) => icon.attributes("data-name"))).toEqual(names)
 		w.unmount()
 	})
 
