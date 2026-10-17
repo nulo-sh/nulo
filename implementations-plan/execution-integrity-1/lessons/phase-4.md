@@ -3,7 +3,8 @@
 ## Arc gate (2026-10-17)
 
 - `bun run test:all`: green in every workspace. The extension ran 13 433 tests.
-- Smoke, armed Chrome build, retry 0: `send-keyboard`, `send-fee-privacy`, `legal-acceptance`. 3 files, 20 tests, green in 278 s at load 152. No e2e scenario was added or changed.
+- Smoke, armed Chrome build, retry 0: `send-keyboard`, `send-fee-privacy`, `legal-acceptance`. 3 files, 20 tests, green in 278 s at load 152. This ran at 6b5a5de9: the review fixes after it touch only the revoke path and comments, which no Send spec reaches.
+- Network, `e2e:agent`, retry 0, one at a time, at 7f154336: `authwit-lifecycle` green, test 144 s (458 s wall with boot and build), started at load 147; `transfers` green, test 174 s (358 s wall), started at load 141. No e2e scenario was added or changed.
 
 ## Review loop, round 1
 
