@@ -19,7 +19,7 @@ import FeeMethodRow from "./FeeMethodRow.vue"
 import { usePrices } from "@/composables/usePrices"
 
 /** Utils */
-import { feeDisplay, feeText } from "@/utils/fee-estimation"
+import { feeDisplay } from "@/utils/fee-estimation"
 
 const props = defineProps<{
 	payer: QueuedFeePayer
@@ -34,9 +34,6 @@ const props = defineProps<{
 	/** The speed the wallet chose; absent when the app set the fee path. */
 	priority?: PriorityLevel
 }>()
-/** The window's Confirm label, which names the new fee as this card prints it. */
-const confirmText = defineModel<string | null>("confirmText", { default: null })
-
 const PRIORITY_LABELS: Record<PriorityLevel, string> = { normal: "Normal", fast: "Fast", urgent: "Urgent" }
 
 const method = computed(() => ({
@@ -49,14 +46,6 @@ const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const was = computed(() => feeDisplay(props.approved, prices.feeJuiceQuote.value?.usd))
 const now = computed(() => feeDisplay(props.fee, prices.feeJuiceQuote.value?.usd))
-
-watch(
-	now,
-	(display) => {
-		confirmText.value = `Send for ${feeText(display)}`
-	},
-	{ immediate: true },
-)
 
 onBeforeUnmount(() => {
 	priceService.disconnect()
@@ -80,7 +69,7 @@ onBeforeUnmount(() => {
 		<Flex direction="column" gap="4" :class="$style.detail_row" data-testid="fee-raised">
 			<Text variant="value" color="primary">Fee went up</Text>
 			<Text variant="meta" color="secondary">
-				<span data-testid="fee-raised-was">Was <FeeAmount :display="was" /></span> · <Text variant="meta" color="primary" data-testid="fee-raised-now">Now <FeeAmount :display="now" /></Text>
+				<span :class="$style.figure" data-testid="fee-raised-was">Was <FeeAmount :display="was" /></span> · <Text variant="meta" color="primary" :class="$style.figure" data-testid="fee-raised-now">Now <FeeAmount :display="now" /></Text>
 			</Text>
 		</Flex>
 		<Flex v-if="priority" align="center" justify="between" :class="$style.detail_row" data-testid="fee-raised-priority">
@@ -97,6 +86,11 @@ onBeforeUnmount(() => {
 
 .method_size {
 	font-size: 13px;
+}
+
+/* The line breaks between the two figures, never inside one. */
+.figure {
+	white-space: nowrap;
 }
 
 .detail_row {

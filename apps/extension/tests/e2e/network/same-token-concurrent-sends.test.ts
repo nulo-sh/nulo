@@ -38,7 +38,7 @@ import {
 	registerProfile,
 	waitForHash,
 } from "../fixtures/extension"
-import { pinFeeJuiceQuote, pinnedFeeText } from "../fixtures/fee-quote"
+import { pinnedFeeText, refusePrices, seedFeeJuiceQuote } from "../fixtures/fee-quote"
 import {
 	createAndActivateProfile,
 	getAccountAddress,
@@ -680,14 +680,15 @@ test.skipIf(!hasConfig)(
 	{ timeout: 600_000, retry: 0 },
 	async ({ burst }) => {
 		const { nodeUrl } = aztecConfig as AztecTestConfig
+		const prices = await refusePrices(burst.ctx)
 		// B's basis is the older Urgent send, never A at Fast: seeded at 4/5 of A's fee, its cap is about
 		// A's fee, below B at Urgent, whose multiplier is 5/3 of Fast's in every build.
 		const a: BurstSend = { token: "TST", from: "private", to: "private", amount: "9", destination: to(), fee: "public", speed: "fast" }
 		const b: BurstSend = { ...a, amount: "10", speed: "urgent" }
 		const basis = await seedUrgentSend(burst, await fireIntoHeldWindow(burst, a))
 		const { page } = burst
-		// Pinned before Home remounts for the first re-ask, which is when its price client reads.
-		const refused = await pinFeeJuiceQuote(burst.ctx)
+		// Before Home remounts for the first re-ask, which is when its price client reads.
+		await seedFeeJuiceQuote(burst.ctx, prices)
 
 		await startSend(page, b)
 		await expectEstimateQueued(page, 3_000)
@@ -729,8 +730,8 @@ test.skipIf(!hasConfig)(
 			await pointerClick(burst.page, "send-review-submit")
 			accepted = asking.reask.fee
 		}
-		expect(await refused.failures(), "price interception failures").toEqual([])
-		await refused.stop()
+		expect(await prices.refused.failures(), "price interception failures").toEqual([])
+		await prices.refused.stop()
 
 		expect(caps[0], "the first re-ask holds B to the like send's cap").toBe(queuedFeeCap(basis))
 		await expectBothSucceed(burst, a, b)

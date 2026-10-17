@@ -1,7 +1,8 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
+import { feeDisplay, feeFigure } from "@/utils/fee-estimation"
 import { clickByTestId, openPopup, test } from "../fixtures/extension"
-import { pinFeeJuiceQuote, pinnedFeeText } from "../fixtures/fee-quote"
+import { pinnedFeeText, refusePrices, seedFeeJuiceQuote } from "../fixtures/fee-quote"
 import { shotSend } from "../fixtures/send-page"
 import { callService } from "../fixtures/helpers"
 import { snapshotResultSeq, waitForPgResult, assertPgOk } from "../fixtures/playground"
@@ -129,7 +130,7 @@ test.skipIf(!hasConfig)(
 	{ timeout: 480_000 },
 	async ({ dappConnectedExtensionWithTransactionCap: ctx }) => {
 		const { playgroundPage: page, accountAddress } = ctx
-		const refused = await pinFeeJuiceQuote(ctx)
+		const prices = await refusePrices(ctx)
 		await mintPublicTokensForAccount(aztecConfig!, accountAddress)
 		const { wallet, accounts, node, cleanup } = await createTestWallet(aztecConfig!.nodeUrl)
 		try {
@@ -165,6 +166,7 @@ test.skipIf(!hasConfig)(
 		expect(shown - approved).toBeGreaterThanOrEqual(10n ** 12n)
 		expect((shown - approved) * 100n).toBeGreaterThan(approved * 10n)
 
+		await seedFeeJuiceQuote(ctx, prices)
 		const feePopupP = waitForPopup(ctx, "fee", { timeout: 180_000 })
 		await callService(execPopup, "dapp-interaction", "approveInteraction", [
 			requestId,
@@ -194,9 +196,9 @@ test.skipIf(!hasConfig)(
 		expect(await text("fee-raised-was")).toBe(`Was ${pinnedFeeText(approved)}`)
 		expect(await text("fee-raised-now")).toBe(`Now ${pinnedFeeText(fee)}`)
 		expect(await text("fee-raised-method")).toBe("Public Fee Juice")
-		expect(await text("fee-confirm-btn")).toBe(`Send for ${pinnedFeeText(fee)}`)
-		expect(await refused.failures(), "price interception failures").toEqual([])
-		await refused.stop()
+		expect(await text("fee-confirm-btn")).toBe(`Send for ${feeFigure(feeDisplay(fee, undefined))}`)
+		expect(await prices.refused.failures(), "price interception failures").toEqual([])
+		await prices.refused.stop()
 		await shotSend(feePopup, "fee-window-raised", "fee-raised")
 		// The dApp's own row is pending from its request on; only a settled one would mean an answer.
 		const settled = await page.evaluate(

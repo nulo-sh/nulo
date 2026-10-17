@@ -11,6 +11,7 @@ import { AlarmDispatcher, EventHandler, createSerialQueue, readBodyCapped } from
 import { allCoingeckoIds, getSanityBand, pricedTokensOf } from "./price-map"
 import {
 	MAX_CLOCK_SKEW_MS,
+	PRICE_FETCH_TIMEOUT_MS,
 	PRICE_SERVICE_NAME,
 	QUOTE_TTL_MS,
 	isQuoteFresh,
@@ -354,7 +355,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		// `finally`, to retract ourselves iff we're still the one published.
 		const controller = new AbortController()
 		this.abortController = controller
-		const timeout = setTimeout(() => controller.abort(), 10_000)
+		const timeout = setTimeout(() => controller.abort(), PRICE_FETCH_TIMEOUT_MS)
 		try {
 			const response = await this.fetchFn(url, { signal: controller.signal, headers })
 			if (!response.ok) {

@@ -43,16 +43,12 @@ describe("FeeRaisedCard", () => {
 		expect(text(w, "fee-raised-priority")).toContain("Normal")
 	})
 
-	test("both figures price at the card's own quote, and the window's Confirm names the new one the same way", async () => {
-		const unpriced = factory()
-		expect(unpriced.emitted<[string]>("update:confirmText")?.at(-1)).toEqual(["Send for ~0.021 FJ"])
-
+	test("both figures price at the card's own quote", async () => {
 		priceFake.reset(2)
 		const w = factory()
 		await flushPromises()
 		expect(text(w, "fee-raised-was")).toBe("Was ~0.016 FJ ($0.032)")
 		expect(text(w, "fee-raised-now")).toBe("Now ~0.021 FJ ($0.042)")
-		expect(w.emitted<[string]>("update:confirmText")?.at(-1)).toEqual(["Send for ~0.021 FJ ($0.042)"])
 		expect(priceFake.refreshes()).toBe(1)
 	})
 

@@ -3,35 +3,47 @@
  * provider, whose quote would replace a seeded one; the pin refuses the provider and seeds the quote,
  * so the expected text comes from the helper the popup prints with, at a known rate.
  */
-import { feeDisplay, feeText, FEE_JUICE_DECIMALS, FEE_READOUT_UNIT } from "@/utils/fee-estimation"
 import { parseAmountToBaseUnits } from "@/utils/amount"
+import { FEE_JUICE_DECIMALS, FEE_READOUT_UNIT, feeDisplay, feeText } from "@/utils/fee-estimation"
+import { PRICE_FETCH_TIMEOUT_MS } from "@/wallet/services/price/spec"
 import { type ArmedInterception, interceptRpc, openScratchPage } from "./browser"
 import type { ExtensionContext } from "./extension"
 
 /** Inside AZTEC's sanity band, and high enough that a sandbox fee prints whole tenths of a cent. */
 export const PINNED_FEE_JUICE_USD = 7
 
-/**
- * Refuses the provider for the returned interception's life, then writes the quote beside the cached
- * ones. A fee card reads the quote when it mounts, so pin before the screen opens. A fetch already in
- * flight when the refusal arms still lands, within its 10 s abort; the quote is stamped 30 s ahead,
- * inside the 2 min skew the cache accepts, so that fetch's merge keeps it.
- */
-export async function pinFeeJuiceQuote(ctx: ExtensionContext): Promise<ArmedInterception> {
+export interface PricePin {
+	refused: ArmedInterception
+	armedAt: number
+}
+
+/** Refuses the provider for the pin's life. Arm it at the scenario's start, then seed before the screen. */
+export async function refusePrices(ctx: ExtensionContext): Promise<PricePin> {
 	const refused = await interceptRpc(ctx.browser, ctx.extensionId, "https://api.coingecko.com", { kind: "refuse" })
+	return { refused, armedAt: Date.now() }
+}
+
+/**
+ * Writes the quote beside the cached ones. A fetch begun before the refusal armed reads the cache before
+ * it writes it, so landing after the seed it would put the live quote back; the service aborts every
+ * fetch within `PRICE_FETCH_TIMEOUT_MS` and a refused one writes nothing, so the seed waits out what is
+ * left of that window. A fee card reads the quote when it mounts: seed before the screen opens.
+ */
+export async function seedFeeJuiceQuote(ctx: ExtensionContext, pin: PricePin): Promise<void> {
+	const settled = pin.armedAt + PRICE_FETCH_TIMEOUT_MS + 1_000 - Date.now()
+	if (settled > 0) await new Promise((resolve) => setTimeout(resolve, settled))
 	const page = await openScratchPage(ctx.browser, ctx.extensionId)
 	try {
 		await page.evaluate(async (usd: number) => {
 			const key = "nulo:core:token-prices"
 			const stored = (await chrome.storage.local.get(key))[key]
 			const quotes = typeof stored === "string" ? JSON.parse(stored) : {}
-			quotes.aztec = { coingeckoId: "aztec", usd, fetchedAt: Date.now() + 30_000, providerUpdatedAt: null }
+			quotes.aztec = { coingeckoId: "aztec", usd, fetchedAt: Date.now(), providerUpdatedAt: null }
 			await chrome.storage.local.set({ [key]: JSON.stringify(quotes) })
 		}, PINNED_FEE_JUICE_USD)
 	} finally {
 		await page.close()
 	}
-	return refused
 }
 
 /** A fee in base units as the popup prints it at the pinned quote. */

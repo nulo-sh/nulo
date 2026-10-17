@@ -59,6 +59,8 @@ const tokenUpdated = {
 	remove: vi.fn((handler: (token: { profileId: string }) => void) => void tokenListeners.delete(handler)),
 }
 const decodeGrantsMock = vi.fn(async (_interactionId: string): Promise<unknown[]> => [])
+/** Set, the request's account read waits on it, so the operation stays unresolved. */
+let accountReadGate: Promise<void> | undefined
 const appStoreMock = reactive({ isSessionChecked: true, isLogined: true, pageAwaitingAuth: "" })
 
 vi.mock("@/composables/useDappInteractionPayload", () => ({
@@ -111,7 +113,10 @@ vi.mock("@/wallet/services/token/client", () => ({
 vi.mock("@/wallet/services/account/client", () => ({
 	AccountServiceClient: vi.fn(function () {
 		return {
-			getAccount: vi.fn(async (_p: string, chainId: number, address: string) => ({ address, chainId, name: "Main" })),
+			getAccount: vi.fn(async (_p: string, chainId: number, address: string) => {
+				await accountReadGate
+				return { address, chainId, name: "Main" }
+			}),
 			disconnect: vi.fn(),
 		}
 	}),
@@ -190,6 +195,7 @@ afterEach(() => {
 	payloadMock.value = null
 	isCancelledMock.value = false
 	Object.assign(appStoreMock, { isSessionChecked: true, isLogined: true, pageAwaitingAuth: "" })
+	accountReadGate = undefined
 	vi.clearAllMocks()
 })
 
@@ -207,11 +213,21 @@ describe("the fee question window", () => {
 		expect(confirm().attributes("disabled")).toBeUndefined()
 	})
 
-	test("with a quote, Confirm names the new figure as the card prints it, dollars included", async () => {
+	test("with a quote the card prices both figures; Confirm names the new one alone, without its dollars", async () => {
 		priceFake.reset(2)
 		await opened()
 		expect(byId("fee-raised-now").text()).toBe("Now ~0.021 FJ ($0.042)")
-		expect(confirm().text()).toBe("Send for ~0.021 FJ ($0.042)")
+		expect(confirm().text()).toBe("Send for ~0.021 FJ")
+	})
+
+	test("while the request's operation resolves, Confirm already names the new fee, off and with no price read", async () => {
+		priceFake.reset(2)
+		accountReadGate = new Promise(() => {})
+		await opened()
+		expect(byId("fee-raised-card").exists()).toBe(false)
+		expect(confirm().text()).toBe("Send for ~0.021 FJ")
+		expect(confirm().attributes("disabled")).toBeDefined()
+		expect(priceFake.refreshes()).toBe(0)
 	})
 
 	test.each([

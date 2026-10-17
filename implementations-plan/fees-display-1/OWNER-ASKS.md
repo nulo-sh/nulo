@@ -16,3 +16,29 @@
 **Answered: A** (orchestrator, D-orch, 2026-10-17). The lane's mono rule covers fee values shown as values (rows, lines, cells), not the text of a control; the review's re-ask submit and the fee window's Confirm keep their face with the fee figure inside their label.
 
 Not asked: the pick (P36-04 A) is applied as written, so a figure after "About", "up to" or "at most" also takes `~` ("About ~X FJ ($Y)"); plan.md D5 records why.
+
+## OA-2 — the approval window's app-paid fee figure: weight 400 or 600
+
+**Surface:** the approval window's line for an app that pays its own fee, "Fee up to ~X FJ ($Y)". The figure moves from the body face into a mono role under the lane's rule, at its old 12 px. It was the `name` role, weight 600; the 12 px mono role (`fiat`) is weight 400, and no mono role is 12 px at 600.
+
+| Option | Figure |
+|---|---|
+| **A (ships now)**: the mono role's weight | ~X FJ ($Y) in mono, 12 px, weight 400, primary color |
+| B: keep the emphasis | ~X FJ ($Y) in mono, 12 px, weight 600: a new type role in `@nulo/design` |
+
+**Recommendation:** A. Every other fee figure in the arc is mono at weight 400; the primary color still sets the figure apart from the secondary words around it. B adds a type role for one figure.
+
+**What ships now:** A. B needs a 12 px, weight 600 mono role in `packages/design/src/token-contract.ts` and the figure's class moved onto it; no other change.
+
+## OA-3 — the fee window's Confirm: the figure alone, or with its dollars
+
+**Surface:** the dApp fee window's Confirm (`DappApprovalFooter`, a half-width button beside Reject, `type--button-md`). The plan wrote it as the review's submit, "Send for ~X FJ ($Y)". Rendered, that label overflows the button: the arc's first screenshot shows "D FOR ~0.00451 FJ ($0.0", clipped on both sides.
+
+| Option | Confirm |
+|---|---|
+| **A (ships now)**: the figure alone | SEND FOR ~0.00451 FJ; the card above reads "Now ~0.00451 FJ ($0.032)" |
+| B: the dollars too | SEND FOR ~0.00451 FJ ($0.032), with the footer's label allowed to wrap onto two lines |
+
+**Recommendation:** A. The dollars sit one line above the button, and a two-line button label in the shared footer reaches every approval window.
+
+**What ships now:** A. B needs `DappApprovalFooter` to let its confirm label wrap, and the window's label built with `feeText`; no other change.

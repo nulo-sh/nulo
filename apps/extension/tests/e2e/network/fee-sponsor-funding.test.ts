@@ -23,7 +23,7 @@ import {
 	test,
 	waitForHash,
 } from "../fixtures/extension"
-import { pinFeeJuiceQuote, pinnedFeeTexts } from "../fixtures/fee-quote"
+import { pinnedFeeTexts, refusePrices, seedFeeJuiceQuote } from "../fixtures/fee-quote"
 import { fillSendForm, navigateToSettings, setActiveSendType } from "../fixtures/helpers"
 import {
 	assertPgOk,
@@ -241,14 +241,15 @@ test.skipIf(!hasConfig)(
 	{ timeout: 300_000 },
 	async ({ tokenReadyExtension }) => {
 		const config = aztecConfig as AztecTestConfig
+		const prices = await refusePrices(tokenReadyExtension)
 		const pg = await playgroundFor(tokenReadyExtension)
-		await setPgInput(pg, "tokenAddress", config.tokenAddress)
-		await setPgInput(pg, "recipient", config.minterAddress)
-		await setPgInput(pg, "amount", "1")
-		await setPgInput(pg, "sponsorSalt", "0")
-		await setPgInput(pg, "maxPriorityFeesPerGas", "10000000000,10000000000")
-		const refused = await pinFeeJuiceQuote(tokenReadyExtension)
 		try {
+			await setPgInput(pg, "tokenAddress", config.tokenAddress)
+			await setPgInput(pg, "recipient", config.minterAddress)
+			await setPgInput(pg, "amount", "1")
+			await setPgInput(pg, "sponsorSalt", "0")
+			await setPgInput(pg, "maxPriorityFeesPerGas", "10000000000,10000000000")
+			await seedFeeJuiceQuote(tokenReadyExtension, prices)
 			const seq = await snapshotResultSeq(pg)
 			const execute = waitForPopup(tokenReadyExtension, "execute", { timeout: 60_000 })
 			await clickPgButton(pg, "sendTx-appSponsored")
@@ -269,7 +270,7 @@ test.skipIf(!hasConfig)(
 				[...pinnedFeeTexts(priority)].map((p) => `Fee up to ${f}, includes a ${p} priority fee the app asked for`),
 			)
 			expect(lines, "the line prints both figures at the pinned quote").toContain(line)
-			expect(await refused.failures(), "price interception failures").toEqual([])
+			expect(await prices.refused.failures(), "price interception failures").toEqual([])
 			await shotSend(popup, "execute-app-fee-priority", "execute-op-fee-set-badge")
 
 			await approveExecute(popup)
@@ -278,7 +279,7 @@ test.skipIf(!hasConfig)(
 			await assertPgOk(pg, result, "fee-sponsor-funding:priority")
 			expect(typeof (result.resultJson as { txHash?: unknown }).txHash).toBe("string")
 		} finally {
-			await refused.stop()
+			await prices.refused.stop()
 			await setPgInput(pg, "maxPriorityFeesPerGas", "")
 		}
 	},
