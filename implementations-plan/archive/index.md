@@ -300,6 +300,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [typecheck-cleanup](typecheck-cleanup/plan.md) — completed — the extension taken to zero type errors, with one root typecheck command
 - [ui-followups-p18](ui-followups-p18/plan.md) — completed — the last outline-grey text moved to secondary (#363), store art regenerated after the owner signed it (#364), the tx fee row's hover fade removed
 - [ui-leftovers-1](ui-leftovers-1/plan.md) — completed — decision page 35's six picks: a display-only token hero, a selectable header address, the in-flight dApp chip, Holdings' unavailable state, 6 s action toasts, a large dApp transfer's app chip under its direction
+- [ui-leftovers-2](ui-leftovers-2/plan.md) — completed — decision page 39's two picks: a nameless dApp keeps its chip when its call ends, and Holdings' total waits for the first price answer
 - [unserved-chain-connect](unserved-chain-connect/plan.md) — completed — a connection to a chain the profile has no network for is refused, and the wallet says so
 - [ux-cleanup-arc](ux-cleanup-arc/plan.md) — completed in part — five small fixes for user-facing rough edges
 - [ux-feedback](ux-feedback/plan.md) — completed — a user-testing proposal built as five batches on one stack
