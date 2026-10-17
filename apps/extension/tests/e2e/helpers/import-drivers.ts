@@ -141,7 +141,7 @@ export const ONBOARDING_IMPORT_SHELL: ImportShell = {
 	pageTestId: "onboarding-import-page",
 	nameInputTestId: "onboarding-name-input",
 	submitTestId: () => "onboarding-submit-import",
-	successHash: "#/onboarding/learn",
+	successHash: "#/onboarding/done",
 }
 
 /** Set a batch of `<Input>` values in page context (native setter + input event

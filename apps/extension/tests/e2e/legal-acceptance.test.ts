@@ -69,10 +69,11 @@ describe("onboarding: the Terms gate", () => {
 		expect(record?.history).toHaveLength(1)
 
 		await expectNoNameField(page, "onboarding-create-page", "onboarding-name-input")
+		await clickByTestId(page, "onboarding-method-password")
 		await replaceInputValue(page, '[data-testid="onboarding-password-input"]', TEST_PASSWORD)
 		await replaceInputValue(page, '[data-testid="onboarding-password-confirm"]', TEST_PASSWORD)
 		await clickByTestId(page, "onboarding-submit-create")
-		await waitForHash(page, "#/onboarding/learn", 30_000)
+		await waitForHash(page, "#/onboarding/done", 30_000)
 
 		expect(extension.pageErrors).toEqual([])
 		await page.close()
@@ -80,7 +81,7 @@ describe("onboarding: the Terms gate", () => {
 
 	test("S2 the gate cannot be skipped by jumping to a later step", async ({ freshExtensionPerTest: extension }) => {
 		const page = await openOnboarding(extension, { legal: "missing" })
-		for (const step of ["create", "import", "learn", "fees", "presto", "done"]) {
+		for (const step of ["create", "import", "done"]) {
 			await page.evaluate((hash) => {
 				window.location.hash = hash
 			}, `#/onboarding/${step}`)

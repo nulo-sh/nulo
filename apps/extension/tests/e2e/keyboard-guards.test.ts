@@ -103,11 +103,12 @@ test("Enter in the confirm field creates the wallet once", { timeout: 120_000 },
 	const page = await openOnboarding(extension)
 	await clickByTestId(page, "onboarding-welcome-create")
 	await waitForHash(page, "#/onboarding/create", 10_000)
+	await clickByTestId(page, "onboarding-method-password")
 	await replaceInputValue(page, sel("onboarding-password-input"), TEST_PASSWORD)
 	await replaceInputValue(page, sel("onboarding-password-confirm-input"), TEST_PASSWORD)
 
 	await holdEnterOn(page, "onboarding-password-confirm-input")
-	await waitForHash(page, "#/onboarding/learn", 60_000)
+	await waitForHash(page, "#/onboarding/done", 60_000)
 
 	const record = await readRecord(page)
 	expectHeldEnterOn(record, "onboarding-password-confirm-input")

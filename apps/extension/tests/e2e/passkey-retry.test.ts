@@ -95,7 +95,7 @@ const STEPS: Step[] = [
 			return undefined
 		},
 		control: "onboarding-submit-create",
-		finished: (page) => waitForHash(page, "#/onboarding/learn", 60_000),
+		finished: (page) => waitForHash(page, "#/onboarding/done", 60_000),
 	},
 	{
 		where: "the popup's unlock",
@@ -125,7 +125,7 @@ const STEPS: Step[] = [
 	},
 	...[
 		{ where: "the popup's passkey import", to: toPopupImport, landing: "#/popup/general" },
-		{ where: "onboarding's passkey import", to: toOnboardingImport, landing: "#/onboarding/learn" },
+		{ where: "onboarding's passkey import", to: toOnboardingImport, landing: "#/onboarding/done" },
 	].map(
 		({ where, to, landing }): Step => ({
 			where,

@@ -48,7 +48,7 @@ async function completeImport(profile: unknown) {
 		},
 		recover: async () => (await hydrateKnownProfile())?.id === p.id && appStore.isLogined,
 	})
-	router.push("/onboarding/learn")
+	router.push("/onboarding/done")
 }
 
 const {

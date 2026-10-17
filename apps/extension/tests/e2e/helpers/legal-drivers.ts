@@ -140,10 +140,11 @@ export async function createProfileAcceptingTerms(ctx: ExtensionContext): Promis
 	const page = await openOnboarding(ctx, { legal: "missing" })
 	await clickByTestId(page, "onboarding-welcome-create")
 	await acceptOnboardingTerms(page, "create")
+	await clickByTestId(page, "onboarding-method-password")
 	await replaceInputValue(page, '[data-testid="onboarding-password-input"]', TEST_PASSWORD)
 	await replaceInputValue(page, '[data-testid="onboarding-password-confirm"]', TEST_PASSWORD)
 	await clickByTestId(page, "onboarding-submit-create")
-	await waitForHash(page, "#/onboarding/learn", 60_000)
+	await waitForHash(page, "#/onboarding/done", 60_000)
 	await page.evaluate(() => chrome.storage.local.set({ "nulo:onboarding:completed": true }))
 	await page.close()
 }

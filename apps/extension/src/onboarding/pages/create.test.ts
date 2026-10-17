@@ -50,6 +50,7 @@ async function mountCreate() {
 }
 
 const page = (w: VueWrapper) => w.get('[data-testid="onboarding-create-page"]')
+const choosePassword = (w: VueWrapper) => w.get('[data-testid="onboarding-method-password"]').trigger("click")
 
 beforeEach(() => {
 	vi.clearAllMocks()
@@ -60,7 +61,7 @@ afterEach(() => {
 })
 
 describe("onboarding create", () => {
-	test("a first profile: no name field, the drawn words, focus on the password", async () => {
+	test("a first profile: no name field, the drawn words, Passkey first and selected", async () => {
 		const w = await mountCreate()
 		expect(page(w).attributes("data-name-field")).toBe("hidden")
 		expect(w.find('[data-testid="onboarding-name-input"]').exists()).toBe(false)
@@ -69,21 +70,28 @@ describe("onboarding create", () => {
 		expect(w.text()).not.toContain("Profile")
 		expect(w.text()).toContain("How you'll unlock Nulo")
 		expect(w.get('[role="tablist"]').attributes("aria-label")).toBe("How you'll unlock Nulo")
+		expect(w.findAll('[role="tab"]').map((t) => t.attributes("data-testid"))).toEqual([
+			"onboarding-method-passkey",
+			"onboarding-method-password",
+		])
+		expect(w.get('[data-testid="onboarding-method-passkey"]').attributes("aria-selected")).toBe("true")
+		expect(w.find('[data-testid="onboarding-password-input"]').exists()).toBe(false)
+		expect(w.get('[data-testid="onboarding-submit-create"]').text()).toBe("Create with passkey")
+
+		await choosePassword(w)
 		expect(w.get('[data-testid="onboarding-submit-create"]').text()).toBe("Create wallet")
 		expect(document.activeElement).toBe(w.get('[data-testid="onboarding-password-input"] input').element)
-
-		await w.get('[data-testid="onboarding-method-passkey"]').trigger("click")
-		expect(w.get('[data-testid="onboarding-submit-create"]').text()).toBe("Create with passkey")
 	})
 
-	test("the first profile is created as Main", async () => {
+	test("the first profile is created as Main, then the page routes to Ready", async () => {
 		const w = await mountCreate()
+		await choosePassword(w)
 		await w.get('[data-testid="onboarding-password-input"] input').setValue("password123")
 		await w.get('[data-testid="onboarding-password-confirm"] input').setValue("password123")
 		await w.get('[data-testid="onboarding-submit-create"]').trigger("click")
 		await flushPromises()
 		expect(profileApi.createProfile).toHaveBeenCalledWith("Main", "password123")
-		expect(routerPush).toHaveBeenCalledWith("/onboarding/learn")
+		expect(routerPush).toHaveBeenCalledWith("/onboarding/done")
 	})
 
 	test("with a profile already there, the field shows prefilled Profile 2", async () => {
@@ -103,55 +111,55 @@ describe("onboarding create — the method tablist", () => {
 		return event
 	}
 	const macrotask = () => new Promise((resolve) => setTimeout(resolve, 0))
-	const focusPassword = (w: VueWrapper) => (tab(w, "password").element as HTMLElement).focus()
+	const focusPasskey = (w: VueWrapper) => (tab(w, "passkey").element as HTMLElement).focus()
 
-	test("two tabs, Password then Passkey, each a non-submitting button", async () => {
+	test("two tabs, Passkey then Password, each a non-submitting button", async () => {
 		const w = await mountCreate()
 		const tabs = w.findAll('[role="tablist"] > *')
 		expect(tabs.map((t) => [t.attributes("data-testid"), t.attributes("role"), t.attributes("type"), t.text()])).toEqual([
-			["onboarding-method-password", "tab", "button", "Password"],
 			["onboarding-method-passkey", "tab", "button", "Passkey"],
+			["onboarding-method-password", "tab", "button", "Password"],
 		])
 	})
 
 	test("ArrowRight and ArrowLeft switch the method, move the one tab stop and the focus", async () => {
 		const w = await mountCreate()
-		focusPassword(w)
+		focusPasskey(w)
 
 		expect(press("ArrowRight").defaultPrevented).toBe(true)
 		await flushPromises()
-		expect(tab(w, "passkey").attributes()).toMatchObject({ "aria-selected": "true", tabindex: "0" })
-		expect(tab(w, "password").attributes()).toMatchObject({ "aria-selected": "false", tabindex: "-1" })
-		expect(document.activeElement).toBe(tab(w, "passkey").element)
-		expect(w.find('[data-testid="onboarding-password-input"]').exists()).toBe(false)
-		expect(w.get('[data-testid="onboarding-submit-create"]').text()).toBe("Create with passkey")
+		expect(tab(w, "password").attributes()).toMatchObject({ "aria-selected": "true", tabindex: "0" })
+		expect(tab(w, "passkey").attributes()).toMatchObject({ "aria-selected": "false", tabindex: "-1" })
+		expect(document.activeElement).toBe(tab(w, "password").element)
+		expect(w.find('[data-testid="onboarding-password-input"]').exists()).toBe(true)
+		expect(w.get('[data-testid="onboarding-submit-create"]').text()).toBe("Create wallet")
 
 		expect(press("ArrowLeft").defaultPrevented).toBe(true)
 		await flushPromises()
-		expect(tab(w, "password").attributes()).toMatchObject({ "aria-selected": "true", tabindex: "0" })
-		expect(document.activeElement).toBe(tab(w, "password").element)
-		expect(w.find('[data-testid="onboarding-password-input"]').exists()).toBe(true)
+		expect(tab(w, "passkey").attributes()).toMatchObject({ "aria-selected": "true", tabindex: "0" })
+		expect(document.activeElement).toBe(tab(w, "passkey").element)
+		expect(w.find('[data-testid="onboarding-password-input"]').exists()).toBe(false)
 	})
 
-	test("two ArrowRight presses in separate tasks go Password → Passkey → Password", async () => {
+	test("two ArrowRight presses in separate tasks go Passkey → Password → Passkey", async () => {
 		const w = await mountCreate()
-		focusPassword(w)
+		focusPasskey(w)
 		press("ArrowRight")
 		await macrotask()
-		expect(document.activeElement).toBe(tab(w, "passkey").element)
-		press("ArrowRight")
-		await macrotask()
-		expect(tab(w, "password").attributes("aria-selected")).toBe("true")
 		expect(document.activeElement).toBe(tab(w, "password").element)
+		press("ArrowRight")
+		await macrotask()
+		expect(tab(w, "passkey").attributes("aria-selected")).toBe("true")
+		expect(document.activeElement).toBe(tab(w, "passkey").element)
 	})
 
 	test("any other key leaves the method alone and is not prevented", async () => {
 		const w = await mountCreate()
-		focusPassword(w)
+		focusPasskey(w)
 		for (const key of ["a", "ArrowDown", "Home"]) expect(press(key).defaultPrevented).toBe(false)
 		await flushPromises()
-		expect(tab(w, "password").attributes("aria-selected")).toBe("true")
-		expect(document.activeElement).toBe(tab(w, "password").element)
+		expect(tab(w, "passkey").attributes("aria-selected")).toBe("true")
+		expect(document.activeElement).toBe(tab(w, "passkey").element)
 	})
 
 	test("the active tab carries the one class the inactive lacks, and it follows the method", async () => {
@@ -162,19 +170,20 @@ describe("onboarding create — the method tablist", () => {
 				.classes()
 				.filter((c) => !offClasses.includes(c))
 		}
-		const active = extra("password", "passkey")
+		const active = extra("passkey", "password")
 		expect(active).toHaveLength(1)
-		expect(extra("passkey", "password")).toEqual([])
-
-		await tab(w, "passkey").trigger("click")
-		expect(extra("passkey", "password")).toEqual(active)
 		expect(extra("password", "passkey")).toEqual([])
+
+		await tab(w, "password").trigger("click")
+		expect(extra("password", "passkey")).toEqual(active)
+		expect(extra("passkey", "password")).toEqual([])
 	})
 })
 
 describe("onboarding create — Enter does what the focused control says, with a valid password pair", () => {
 	async function mountWithValidPair() {
 		const w = await mountCreate()
+		await choosePassword(w)
 		await w.get('[data-testid="onboarding-password-input"] input').setValue("password123")
 		await w.get('[data-testid="onboarding-password-confirm"] input').setValue("password123")
 		return w

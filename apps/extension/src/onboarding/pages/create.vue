@@ -56,7 +56,7 @@ const {
 	onCreated: async (profile) => {
 		await bootstrapActiveProfile(profile as ProfileInfo)
 		await setLastActiveProfileId((profile as ProfileInfo).id)
-		router.push("/onboarding/learn")
+		router.push("/onboarding/done")
 	},
 	openToast,
 	notifyCreateFailed: (isPasskey) => {
@@ -74,6 +74,9 @@ const {
 		})
 	},
 })
+
+// The shared flow defaults to Password for the popup's new-profile page; a first run starts on Passkey.
+authMethod.value = "passkey"
 
 const submitLabel = computed(() => {
 	if (isCreating.value) return "Creating..."
@@ -111,6 +114,7 @@ onBeforeUnmount(() => {
 				<Text variant="label-section" color="secondary">How you'll unlock Nulo</Text>
 				<AuthMethodTabs
 					v-model="authMethod"
+					first="passkey"
 					:class="$style.tabs"
 					ariaLabel="How you'll unlock Nulo"
 					:tabClass="$style.tab"

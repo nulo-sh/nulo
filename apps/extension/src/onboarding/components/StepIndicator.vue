@@ -1,9 +1,12 @@
 <script setup lang="ts">
 /**
- * Onboarding step indicator. Six-step brutalist row:
- *   [01]     [02]     [03]     [04]     [05]     [06]
- *   ━━━━━    ━━━━━    ━━━━━    ━━━━━    ─────    ─────
- *   TERMS    SETUP    AZTEC    FEES     SPEED    DONE
+ * Onboarding step indicator. Four-step brutalist row:
+ *   [01]     [02]     [03]     [04]
+ *   ━━━━━    ━━━━━    ─────    ─────
+ *   TERMS    CREATE   PHRASE   READY
+ *
+ * Every path shows all four cells: a passkey wallet and an import skip from 02 to 04, so the row
+ * reads the same before and after the method is chosen.
  *
  * The 2px bar underneath each cell carries the state:
  *   active:  --nulo-accent (warm off-white)
@@ -14,15 +17,13 @@
  * its own hero. Indicator appears starting from /terms, so accepting the
  * Terms reads as the first step of a visible sequence, not a gate in front of one.
  */
-defineProps<{ current: 1 | 2 | 3 | 4 | 5 | 6 }>()
+defineProps<{ current: 1 | 2 | 3 | 4 }>()
 
 const steps: Array<{ num: string; label: string }> = [
 	{ num: "01", label: "Terms" },
-	{ num: "02", label: "Setup" },
-	{ num: "03", label: "Aztec" },
-	{ num: "04", label: "Fees" },
-	{ num: "05", label: "Speed" },
-	{ num: "06", label: "Done" },
+	{ num: "02", label: "Create" },
+	{ num: "03", label: "Phrase" },
+	{ num: "04", label: "Ready" },
 ]
 </script>
 
@@ -49,7 +50,7 @@ const steps: Array<{ num: string; label: string }> = [
 <style module>
 .row {
 	display: grid;
-	grid-template-columns: repeat(6, 1fr);
+	grid-template-columns: repeat(4, 1fr);
 	gap: 8px;
 	width: 100%;
 	margin: 0 0 16px;

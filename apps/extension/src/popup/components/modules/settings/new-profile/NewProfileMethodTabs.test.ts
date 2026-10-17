@@ -9,6 +9,14 @@ const pwTab = (w: ReturnType<typeof mountTabs>) => w.get('[data-testid="register
 const pkTab = (w: ReturnType<typeof mountTabs>) => w.get('[data-testid="register-method-passkey"]')
 
 describe("new-profile/NewProfileMethodTabs (roving tablist)", () => {
+	test("Password comes first here, while onboarding leads with Passkey", () => {
+		const w = mountTabs()
+		expect(w.findAll('[role="tab"]').map((t) => t.attributes("data-testid"))).toEqual([
+			"register-method-password",
+			"register-method-passkey",
+		])
+	})
+
 	test("only the ACTIVE tab is in the Tab order (tabindex 0); the other is -1", () => {
 		const w = mountTabs("password")
 		expect(pwTab(w).attributes("tabindex")).toBe("0")

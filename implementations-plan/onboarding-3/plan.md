@@ -1,7 +1,7 @@
 ---
 plan: onboarding-3
 tier: mid
-status: planned, awaiting approval
+status: implementing (arc 1)
 issues: "#588 #585 #581 #636 (one arc closes all four)"
 driver: claude-code
 claude_model: opus
@@ -149,7 +149,7 @@ The parents use `useSecretClipboardCopy` unchanged. `seed.vue` swaps `SecretReve
 
 Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`; pass = each exits 0. Smoke: `cd apps/extension && bun run test:e2e -- tests/e2e/<file> --retry=0`, with the Firefox twin under `NULO_E2E_BROWSER=firefox`. Network: `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<file>.test.ts` (the network config retries twice unless told), with the Firefox twin too. Run e2e only while load1 < 150, at retry 0. Every phase that adds or deletes an auto-imported component or export commits the regenerated `src/types/*.d.ts` (`bun run build`). A phase is ✓ only when its gate passes; each phase logs to `lessons/phase-N.md`.
 
-**1. The fast lane (#585, P30-01 A route set, P30-03 B).**
+**1. The fast lane (#585, P30-01 A route set, P30-03 B).** ✓ (2026-10-17, [lessons/phase-1.md](lessons/phase-1.md))
 - Change map:
   - Delete `onboarding/pages/{learn,fees,presto}.vue`, `presto.test.ts`, `onboarding/components/{OnboardingExplainer,OnboardingSkipLink}.{vue,test.ts}` and `tests/e2e/helpers/presto-step.ts`.
   - `onboarding/app.vue` and `onboarding/pages/{create,import}.vue`: target `/onboarding/done`. `StepIndicator.vue`: four cells. `done.vue`: `current=4`. `create.vue`: Passkey selected. `AuthMethodTabs.vue`: `first`.
@@ -284,6 +284,8 @@ Outline B (local `outline-b.md`, safest-first) split the arc into two PRs: B1 (t
 | D7 | Grid and Copy | one L3 composite that emits `copy`, as `SecretRevealCard` does | Copy in each parent |
 | D8 | E2E | extend `onboarding-tab`, `keyboard-guards`, `security-backup` and `frozen-account-canary`; move the grant spec to Proving | a new Home spec, or a network spec just for the banner |
 | D9 | Urgent banner | the drawn form from core primitives | `Banner warning` (not the drawn form), a new `Banner` variant (one caller) |
+| D10 | Presto leftovers (implementation) | keep `copyFor`'s onboarding surface, the custom-element allowance and the CSP style hash; file one issue | removing the hash now (a manifest change the plan rules out) |
+| D11 | The HTTP-fallback e2e (implementation) | move the `https-disabled` case to `settings-proving` | dropping it with the Presto step (the only e2e proof of the loopback HTTP path) |
 
 ## Audit verdicts
 

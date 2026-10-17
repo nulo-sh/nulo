@@ -70,6 +70,11 @@ describe("popup new profile", () => {
 		expect(page(w).attributes("data-name-field")).toBe("hidden")
 		expect(w.find('[data-testid="register-name-input"]').exists()).toBe(false)
 	})
+
+	test("the method starts on Password, unlike onboarding's Passkey", async () => {
+		const w = await mountNew()
+		expect(w.findComponent({ name: "NewProfileMethodTabs" }).props("type")).toBe("password")
+	})
 })
 
 describe("popup new profile — the profile-name field", () => {

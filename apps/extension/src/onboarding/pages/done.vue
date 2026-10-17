@@ -62,7 +62,7 @@ async function openWallet() {
 
 <template>
 	<OnboardingPage align="center" :gap="40">
-		<StepIndicator :current="6" />
+		<StepIndicator :current="4" />
 		<Flex direction="column" align="center" gap="16" :class="$style.hero">
 			<BrutalistTitle main="You're" sub="In" align="center" />
 			<div :class="$style.hero_bar" />

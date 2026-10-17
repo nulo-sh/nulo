@@ -20,12 +20,13 @@ const PROPS = {
 }
 
 /** Mounts under a parent that owns the model, as both hosts do. */
-function mountOwned(initial: Method = "password") {
+function mountOwned(initial: Method = "password", first?: Method) {
 	const method = ref<Method>(initial)
 	const Host = defineComponent(
 		() => () =>
 			h(AuthMethodTabs, {
 				...PROPS,
+				first,
 				class: "root-x",
 				modelValue: method.value,
 				"onUpdate:modelValue": (v: Method) => (method.value = v),
@@ -58,6 +59,23 @@ describe("AuthMethodTabs", () => {
 			["pw-x", "Password"],
 			["pk-x", "Passkey"],
 		])
+	})
+
+	test("first: passkey renders Passkey then Password, and the arrows still switch and carry focus", async () => {
+		const { w, method } = mountOwned("passkey", "passkey")
+		expect(w.findAll('[role="tab"]').map((t) => [t.attributes("data-testid"), t.text()])).toEqual([
+			["pk-x", "Passkey"],
+			["pw-x", "Password"],
+		])
+		focus(w, "passkey")
+		expect(press("ArrowRight").defaultPrevented).toBe(true)
+		await flushPromises()
+		expect(method.value).toBe("password")
+		expect(document.activeElement).toBe(tab(w, "password").element)
+		expect(press("ArrowLeft").defaultPrevented).toBe(true)
+		await flushPromises()
+		expect(method.value).toBe("passkey")
+		expect(document.activeElement).toBe(tab(w, "passkey").element)
 	})
 
 	test("both tabs are non-submitting buttons", () => {

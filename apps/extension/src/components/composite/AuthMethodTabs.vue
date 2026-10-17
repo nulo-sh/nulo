@@ -1,55 +1,53 @@
 <script setup lang="ts">
 /** A roving tablist: one tab stop, and ←/→ switch the method and move focus to it. */
-import { nextTick, ref } from "vue"
+import { computed, nextTick } from "vue"
 
 type AuthMethod = "password" | "passkey"
 
 const method = defineModel<AuthMethod>({ required: true })
 
-defineProps<{
-	ariaLabel: string
-	tabClass: string
-	activeClass: string
-	passwordTestid: string
-	passkeyTestid: string
-}>()
+const props = withDefaults(
+	defineProps<{
+		ariaLabel: string
+		tabClass: string
+		activeClass: string
+		passwordTestid: string
+		passkeyTestid: string
+		/** The tab read and reached first: DOM order is both the reading order and the arrow order. */
+		first?: AuthMethod
+	}>(),
+	{ first: "password" },
+)
 
-const passwordTab = ref<HTMLButtonElement>()
-const passkeyTab = ref<HTMLButtonElement>()
+const LABELS: Record<AuthMethod, string> = { password: "Password", passkey: "Passkey" }
+const order = computed<AuthMethod[]>(() => (props.first === "passkey" ? ["passkey", "password"] : ["password", "passkey"]))
+const testid = (m: AuthMethod) => (m === "password" ? props.passwordTestid : props.passkeyTestid)
+
+const tabs: Partial<Record<AuthMethod, HTMLButtonElement>> = {}
 
 const onKeydown = (e: KeyboardEvent) => {
 	if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
 	e.preventDefault()
 	method.value = method.value === "password" ? "passkey" : "password"
-	nextTick(() => (method.value === "password" ? passwordTab.value : passkeyTab.value)?.focus())
+	nextTick(() => tabs[method.value]?.focus())
 }
 </script>
 
 <template>
 	<div role="tablist" :aria-label="ariaLabel" @keydown="onKeydown">
 		<button
-			ref="passwordTab"
+			v-for="m in order"
+			:key="m"
+			:ref="(el) => (tabs[m] = (el as HTMLButtonElement | null) ?? undefined)"
 			type="button"
 			role="tab"
-			:aria-selected="method === 'password'"
-			:tabindex="method === 'password' ? 0 : -1"
-			:class="[tabClass, method === 'password' && activeClass]"
-			:data-testid="passwordTestid"
-			@click="method = 'password'"
+			:aria-selected="method === m"
+			:tabindex="method === m ? 0 : -1"
+			:class="[tabClass, method === m && activeClass]"
+			:data-testid="testid(m)"
+			@click="method = m"
 		>
-			Password
-		</button>
-		<button
-			ref="passkeyTab"
-			type="button"
-			role="tab"
-			:aria-selected="method === 'passkey'"
-			:tabindex="method === 'passkey' ? 0 : -1"
-			:class="[tabClass, method === 'passkey' && activeClass]"
-			:data-testid="passkeyTestid"
-			@click="method = 'passkey'"
-		>
-			Passkey
+			{{ LABELS[m] }}
 		</button>
 	</div>
 </template>

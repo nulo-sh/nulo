@@ -1,57 +1,34 @@
-/**
- * Coverage for the 6-cell onboarding step indicator. Pins each load-bearing
- * fact about the visual + a11y contract so a future renumber doesn't drift
- * silently:
- *   - 6 cells in fixed order (Terms → Setup → Aztec → Fees → Speed → Done)
- *   - `:current` prop selects which cell gets `aria-current="step"`
- *   - past / active / future state across the full range (1..6)
- *   - the nav element carries the document a11y label
- */
-
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 
 import StepIndicator from "./StepIndicator.vue"
 
-describe("StepIndicator — 6-cell onboarding progress", () => {
-	test("renders 6 cells, Terms first, so accepting reads as step one of the sequence", () => {
+const currents = (current: 1 | 2 | 3 | 4) =>
+	mount(StepIndicator, { props: { current } })
+		.findAll("nav > div")
+		.map((cell) => cell.attributes("aria-current"))
+
+describe("StepIndicator", () => {
+	test("renders four cells, Terms first, so accepting reads as step one of the sequence", () => {
 		const wrapper = mount(StepIndicator, { props: { current: 1 } })
 		const cells = wrapper.findAll("nav > div").map((cell) => cell.text())
-		expect(cells).toEqual(["01Terms", "02Setup", "03Aztec", "04Fees", "05Speed", "06Done"])
+		expect(cells).toEqual(["01Terms", "02Create", "03Phrase", "04Ready"])
 	})
 
-	test("current=1 (Terms) — only the first cell is aria-current", () => {
-		const wrapper = mount(StepIndicator, { props: { current: 1 } })
-		const cells = wrapper.findAll("nav > div")
-		expect(cells[0].attributes("aria-current")).toBe("step")
-		for (let i = 1; i < cells.length; i++) {
-			expect(cells[i].attributes("aria-current")).toBeUndefined()
-		}
+	test("current=1 (Terms): only the first cell is aria-current", () => {
+		expect(currents(1)).toEqual(["step", undefined, undefined, undefined])
 	})
 
-	test("current=4 (Fees) — only the fourth cell is aria-current", () => {
-		const wrapper = mount(StepIndicator, { props: { current: 4 } })
-		const cells = wrapper.findAll("nav > div")
-		expect(cells.map((cell) => cell.attributes("aria-current"))).toEqual([
-			undefined,
-			undefined,
-			undefined,
-			"step",
-			undefined,
-			undefined,
-		])
+	test("current=3 (Phrase): only the third cell is aria-current", () => {
+		expect(currents(3)).toEqual([undefined, undefined, "step", undefined])
 	})
 
-	test("current=6 (Done) — only the last cell is aria-current", () => {
-		const wrapper = mount(StepIndicator, { props: { current: 6 } })
-		const cells = wrapper.findAll("nav > div")
-		expect(cells[5].attributes("aria-current")).toBe("step")
-		expect(cells[4].attributes("aria-current")).toBeUndefined()
+	test("current=4 (Ready): only the last cell is aria-current", () => {
+		expect(currents(4)).toEqual([undefined, undefined, undefined, "step"])
 	})
 
 	test("nav element carries the a11y label", () => {
 		const wrapper = mount(StepIndicator, { props: { current: 1 } })
-		const nav = wrapper.find("nav")
-		expect(nav.attributes("aria-label")).toBe("Onboarding progress")
+		expect(wrapper.find("nav").attributes("aria-label")).toBe("Onboarding progress")
 	})
 })

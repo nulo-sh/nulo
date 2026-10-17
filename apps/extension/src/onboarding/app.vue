@@ -72,7 +72,7 @@ onMounted(async () => {
 
 	const active = await hydrateKnownProfile()
 	if (active) {
-		router.replace("/onboarding/learn")
+		router.replace("/onboarding/done")
 		return
 	}
 
