@@ -20,7 +20,7 @@ post_implementation_hardening: not scheduled
 Three document picks the owner signed on decision page 38 and four small behaviour fixes. One arc, one PR against `dev`. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are relative to `apps/extension/src` unless they start with `apps/`, `packages/`, `scripts/`, `.github/` or a root document name.
 
 The picks, as signed:
-- **P38-01 = A**: "Keep passkey-only recovery; the documents state the real boundary plainly, through the private advisory first." The advisory is drafted (tracked privately). #597, which records the known limit, is not edited here; its text changes when the advisory is published.
+- **P38-01 = A**: "Keep passkey-only recovery; the documents state the real boundary plainly, through the private advisory first." #597, which records the known limit, is left as it is.
 - **P38-11 = A**: "Today's behaviour is the contract: raw hashes refused; inner-hash intents always confirmed with the consumer shown; SECURITY.md corrected."
 - **P38-12 = A**: "Known limit: old files keep restoring; reopened on the first production user or a leaked old backup; the document is corrected."
 
@@ -65,7 +65,7 @@ One arc, five phases, one new test file. Each phase is a commit.
 
 **Phase 3, #667.** `mnemonic.ts:2131` throws `Invalid mnemonic word at position ${wordIndex + 1}` (`wordIndex` is the word's place, `:2126`; `index` is its wordlist lookup).
 
-**Phase 4, #668.** The guard step refuses every set, non-empty `VITE_*` variable except the two production build options, `VITE_FEE_JUICE_BRIDGE_URL` and `VITE_NULO_ALLOW_IFRAME_DAPPS` (`for name in $(compgen -e)`, one `::error::` per name, exit 1). An allowlist fails closed, so a new test flag needs no edit and no source scan. Its comment and `SECURITY.md`'s "enforced fail-fast" stay true.
+**Phase 4, #668.** The guard step refuses every set `VITE_*` variable, empty ones included (Vite bakes an empty value in), except the two production build options, `VITE_FEE_JUICE_BRIDGE_URL` and `VITE_NULO_ALLOW_IFRAME_DAPPS` (`for name in $(compgen -e)`, one `::error::` per name, exit 1). An allowlist fails closed, so a new test flag needs no edit and no source scan. Its comment and `SECURITY.md`'s "enforced fail-fast" stay true.
 
 **Phase 5, #672.** `doRefresh` returns the usable cache when `getActiveProfile()` is `undefined`, after the backoff check and before the request is built; across that await and the cache read it keeps the generation check (a kill-switch flip meanwhile returns `{}`). This is the one point every refresh path reaches (connect, unlock, re-enable, alarm) and the last await before `fetchFn`, so a lock during the unlock handler's `ensureAlarm()` is caught too. `onAlarmTick` keeps its check, which also clears the alarm. The class TSDoc (`:53-55`) says fetches start only while a session is open.
 
@@ -91,7 +91,7 @@ Every gate includes `bun run lint` and `bun run typecheck:all`.
 
 ## Security & Adversarial Considerations
 
-- **Documents.** W1 and W3 state two facts: the wallet holds no factor of its own, and the browser and the authenticator decide who may use the passkey. Neither says how, or by whom, that decision could be used. W2 and W5 state the enforced contract; W4 is the owner's accepted limit, with its reopening condition on the issue.
+- **Documents.** W1 and W3 state two facts: the wallet holds no factor of its own, and the browser and the authenticator decide who may use the passkey. Neither goes beyond the boundary. W2 and W5 state the enforced contract; W4 is the owner's accepted limit, with its reopening condition on the issue.
 - **#665.** No boundary crossed; a false success stops, and the boot keeps its no-veto property (the Phase 2 guard test).
 - **#667.** No recovery word enters an error message, so neither the debug log nor a copied error can hold one. The position is not secret.
 - **#668.** The guard fails closed: any `VITE_*` other than the two production options stops the build. No token or permission changes.
@@ -113,6 +113,10 @@ Panel round 1: Codex `conditional approve` (W1 to W4 tightened, two gates correc
 - **D6, UI.** Codex round 1: the failed-clear path is an observable change needing sign-off. Driver: the viewer's own designed and tested failure behaviour now receives the failures it was built for; no surface, copy or row rule changes, and #665 is in the orchestrator's signed scope with `UI impact: none`. Codex's verification pass agreed: the recorded before/after and the orchestrator's notice suffice; it authorizes no other UI change. No `OWNER-ASKS.md` entry.
 
 Codex verification pass: `conditional approve`; W1 to W5, D3 (allowlist, its shell tested under `bash -e -o pipefail`), D4 and the gates verified. Conditions, both adopted: the position counter is `wordIndex`, not `index` (the wordlist lookup); the locked early return in `doRefresh` keeps the generation check (path: session await pauses, fiat display is turned off, the stale refresh would return quotes). W2 now says "admitted request". Confirm resume: `approve` (no new material defect).
+
+## Review rounds
+
+- **Round 1.** Codex (session 01a14b6d): one point, demonstrated: a lock queued behind `doRefresh`'s session read closed the session before the refresh resumed, and the fetch started (fixed: `peekLiveSerial()` in the same continuation; test added). Opus diff review, seven points: the plan's own wording around the pick (trimmed); W1 contradicted the RP-host measures listed above it (now "no restriction beyond the measures above"); W2's "at any function" read as any one function, while the code needs a `*` function pattern (reworded); the passkey row's plain-file list was incomplete (now "everything but the keys"); a gate log used a banned word (reworded); an empty `VITE_*` passed the guard though Vite bakes it in (now refused, test flipped); a locked refresh that an unlock joins answers from the cache, so prices wait for the next connect or alarm tick (known limit, filed at close-out: the only fix is a retry).
 
 ## Delivery
 
