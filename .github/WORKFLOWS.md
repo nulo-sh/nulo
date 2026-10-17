@@ -12,7 +12,7 @@ These `status` aggregators are what branch protection on `main` / `dev` requires
 | `pr-extension-smoke-e2e.yml` | `extension-smoke-e2e-status` | dev + main | PR to `main`, OR `e2e:extension-smoke` label, OR `smoke-surface` paths-filter | chrome build + puppeteer smoke, 3 shards |
 | `pr-extension-network-e2e.yml` | `extension-network-e2e-status` | dev + main | PR to `main`, OR `e2e:extension-network` label, OR `extension-network` paths-filter | full network e2e (anvil + Aztec sandbox + playground), plus two fixed send-chaos seeds |
 | `pr-extension-smoke-e2e-firefox.yml` | `extension-smoke-e2e-firefox-status` | dev + main | same gate as the Chrome twin (its own file + `setup-geckodriver` in the filter), drafts included | firefox build + the smoke suite over geckodriver + Puppeteer BiDi, the same 3 shards |
-| `pr-extension-network-e2e-firefox.yml` | `extension-network-e2e-firefox-status` | dev | same gate as the Chrome twin, drafts included | the network suite on Firefox: 5 proverless shards + 3 heavy jobs + the real-proving canary (the same five files as on Chrome) + the two chaos seeds |
+| `pr-extension-network-e2e-firefox.yml` | `extension-network-e2e-firefox-status` | dev | same gate as the Chrome twin, drafts included | the network suite on Firefox: the same lane as on Chrome (5 proverless shards + 3 heavy jobs + the real-proving canary + the two chaos seeds) |
 | `pr-supersede.yml` | — | — | a push to an open same-repository PR (`synchronize`) | cancels the PR workflows' runs on heads the PR has moved past; one job with `actions: write`, no action, no checkout |
 | `pr-retarget.yml` | — | — | a base change of an open same-repository PR (`edited`; a title or body edit skips the job) | re-runs all jobs of each e2e lane's latest run of the head, cancelling and waiting for a run in flight; one job with `actions: write`, no action, no checkout |
 | `actionlint.yml` | `Status` (not required) | — | when `.github/workflows/**` or shell scripts change | actionlint + shellcheck |
@@ -37,9 +37,10 @@ Reusables live as `.github/workflows/_*.yml` and are called from top-level workf
 | `_build-extension.yml` | `pr-quick`, `release`, `nightly`, `source-rebuild` |
 | `_release-pr-lockfile.yml` | `release`, `release-prerelease` |
 | `_extension-smoke-e2e.yml` | `pr-extension-smoke-e2e`, `pr-extension-smoke-e2e-firefox`, `release`, `nightly` |
-| `_extension-network-e2e.yml` | `pr-extension-network-e2e`, `pr-extension-network-e2e-firefox`, `extension-network-e2e-soak`, `release` (opt-in: `workflow_dispatch` with `run_network_e2e=true`), `nightly` |
+| `_extension-network-e2e-lane.yml` | `pr-extension-network-e2e`, `pr-extension-network-e2e-firefox`, `nightly` (both browsers), `release` (opt-in: `workflow_dispatch` with `run_network_e2e=true`): the network suite's one partition, shard pool + dedicated jobs + chaos seeds, each a call of the suite below |
+| `_extension-network-e2e.yml` | `_extension-network-e2e-lane`, `extension-network-e2e-soak`, `nightly` (its advisory in-browser canary leg) |
 
-Both take a `browser` input (`chrome` default, `firefox`); log-artifact and browser-cache names carry the browser so a Firefox lane can neither overwrite nor restore a Chrome lane's.
+The two suites and the lane take a `browser` input (`chrome` default, `firefox`); log-artifact and browser-cache names carry the browser so a Firefox lane can neither overwrite nor restore a Chrome lane's.
 
 Composite actions live in `.github/actions/` and are shared step fragments used inside jobs.
 

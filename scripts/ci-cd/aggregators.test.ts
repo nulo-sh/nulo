@@ -362,13 +362,13 @@ test("release's attach-assets publishes only past gates that all ended as asked,
 	expect(clauses.sort()).toEqual(expected.sort())
 })
 
-// The opt-in suite is one matrix job whose legs are the PR lane's jobs (behavior-gating.test.ts pins
-// them), so the one clause above reads every leg; a second job calling the suite is one it never reads.
+// The opt-in suite is one call of the PR lanes' lane (behavior-gating.test.ts pins its jobs), so the
+// one clause above reads every lane job; a second job calling the suite is one it never reads.
 test("release runs the network suite in the one job attach-assets and status read", () => {
 	const { jobs } = workflow("release.yml")
-	const callers = Object.keys(jobs).filter((name) => /\/_extension-network-e2e\.yml(@.*)?$/.test(String(jobs[name].uses)))
+	const callers = Object.keys(jobs).filter((name) => /\/_extension-network-e2e(-lane)?\.yml(@.*)?$/.test(String(jobs[name].uses)))
 	expect(callers).toEqual(["network-e2e"])
-	expect(jobs["network-e2e"].strategy?.["fail-fast"]).toBe(false)
+	expect(jobs["network-e2e"].uses).toBe("./.github/workflows/_extension-network-e2e-lane.yml")
 })
 
 // The four PR e2e lanes. Each `status` checks out `e2e-aggregate.sh` at this run's commit and runs it

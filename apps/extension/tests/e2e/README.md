@@ -159,7 +159,7 @@ If any check fails, setup reaps the stale children by marker and cold-starts a f
 
 ## CI sharding (5-way matrix)
 
-CI runs the network suite as a **5-shard GitHub Actions matrix** (`.github/workflows/pr-extension-network-e2e.yml`). Each shard:
+CI runs the network suite as a **5-shard GitHub Actions matrix** beside its dedicated jobs, all in one reusable lane (`.github/workflows/_extension-network-e2e-lane.yml`) that both PR lanes, the nightly and release's opt-in run call. Each shard:
 
 - Is its own ubuntu-latest VM — own anvil, own aztec node, own playground vite, own Chrome
 - Gets roughly a fifth of the shard pool, assigned deterministically by vitest's `--shard=N/M` (SHA-1 hash of filename). The pool is every network test file but the twelve with a dedicated job (`fee-methods`, `selfpay-phase`, `concurrent-sendtx-confirm`, `same-token-concurrent-sends`, `snack-placement`, `failed-send-check`, `transfers`, `tx-sendTx-default`, `frozen-account-canary`, `passkey-execution-canary`, `delete-after-prove`, `send-chaos`): 109 of the suite's 121 files today, some of which skip themselves unless an env flag arms them (the `_probe-*` file and `store-captures` among them). `scripts/ci-cd/behavior-gating.test.ts` pins the pool's exclusions to the dedicated jobs' files
