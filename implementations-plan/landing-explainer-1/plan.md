@@ -52,7 +52,7 @@ For a new Nulo user who taps "How Aztec works" on Home and lands in a tab, and f
 | D8 | The drawing's "3 clips" eyebrow waits for arc 2 | Shipping it now: false until clips exist |
 | D9 | Reversed by the orchestrator (D-orch, 2026-10-17): arc 2 stays in this lane, held until the owner answers OA-1 to OA-4, and the close-out ships with arc 2, never with arc 1 | The planner's version (close out with arc 1 and file the clips as an issue): the lane brief makes the clips this lane's arc 2 |
 
-## Phase 1 (arc 1): the page
+## Phase 1 (arc 1): the page ✓
 
 Assumptions: F1 to F10, I1. Steps:
 
