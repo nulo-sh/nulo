@@ -699,6 +699,7 @@ describe("refusals filed before any window: card and detail", () => {
 		["terms_refused", "Terms not accepted", "Accept Nulo's Terms to let apps send. Nothing was sent."],
 		["wallet_refused", "Refused before sending", "The wallet refused this request before anything was signed. Nothing was sent."],
 		["scope_refused", "Not allowed", "The app asked for more than you allowed. Nothing was sent."],
+		["registry_refused", "Not allowed", "Apps cannot change your public authorizations. Nothing was sent."],
 	])("%s reads %s on the card and in the detail", (kind, label, context) => {
 		const op = refused(kind)
 		expect(categoricalLabel(op)).toEqual({ label, context })

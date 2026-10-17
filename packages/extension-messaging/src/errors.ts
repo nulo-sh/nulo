@@ -205,6 +205,30 @@ export class ScopeViolationError extends WalletError {
 	}
 }
 
+const AUTH_REGISTRY_REFUSAL_MESSAGES = [
+	"Scope violation: sendTx call targets an authorization registry grant function",
+	"Scope violation: createAuthWit intent targets the authorization registry",
+	"Scope violation: a transaction's authorization request targets the authorization registry",
+] as const
+
+export type AuthRegistryRefusalMessage = (typeof AUTH_REGISTRY_REFUSAL_MESSAGES)[number]
+
+/**
+ * A scope refusal that keeps the authorization registry's grant functions to the wallet's own
+ * authorization action, with its own dApp text and History row. It shares the scope refusal's code,
+ * so `walletErrorFromPayload` rebuilds it from its exact message.
+ */
+export class AuthRegistryRefusalError extends ScopeViolationError {
+	public constructor(message: AuthRegistryRefusalMessage) {
+		super(message)
+		this.name = "AuthRegistryRefusalError"
+	}
+}
+
+function isAuthRegistryRefusalMessage(message: unknown): message is AuthRegistryRefusalMessage {
+	return (AUTH_REGISTRY_REFUSAL_MESSAGES as readonly unknown[]).includes(message)
+}
+
 /**
  * Raised when a dApp's sendTx is refused because the per-(profileId, chainId)
  * execution lane is at capacity — either the dApp's own per-origin pending cap
@@ -592,6 +616,7 @@ export function walletErrorFromPayload(payload: WalletErrorPayload): WalletError
 	const ctor = BY_CODE.get(payload.code)
 	if (ctor === undefined) return new WalletError(payload.code, payload.message, payload.details)
 	if (ctor === CapabilityNotGrantedError) return CapabilityNotGrantedError.fromPayload(payload)
+	if (ctor === ScopeViolationError && isAuthRegistryRefusalMessage(payload.message)) return new AuthRegistryRefusalError(payload.message)
 	// The wire `details` is unvalidated. Constant-message constructors ignore both arguments, and
 	// `ScopeViolationError` ignores the details.
 	return new ctor(payload.message, payload.details as never)

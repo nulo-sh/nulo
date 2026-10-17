@@ -125,11 +125,11 @@ export type JobProgress =
  * to `never` (consumers MUST keep a `default` arm). The literals exist for
  * autocomplete + the runtime drift guard, NOT for compiler exhaustiveness.
  *
- * Producers: `normalizeError(…, "transfer" | "dapp_execute" | "prover" |
- * "network" | "unknown")`, `popup_bound`, `scope_refused`, `malformed_request`, `terms_refused` and
- * `wallet_refused` (wallet-sdk; `scope_refused` also from execution's `markFailedUnlessCancelled`,
- * `terms_refused` also from the dApp interaction service), `too_many_pending` (execution's
- * waiting-sends cap), the reaper
+ * Producers: `normalizeError(…, "transfer" | "dapp_execute" | "prover" | "network" | "unknown")`,
+ * `popup_bound`, `scope_refused`, `registry_refused`, `malformed_request`, `terms_refused` and
+ * `wallet_refused` (wallet-sdk; `scope_refused` and `registry_refused` also from execution's
+ * `markFailedUnlessCancelled`, `terms_refused` also from the dApp interaction service),
+ * `too_many_pending` (execution's waiting-sends cap), the reaper
  * (`sw_restart_post_prove` | `stuck_proving` | `stuck_queued` | `stale_on_resume`),
  * and `classifyTokenImportError` (`network_unreachable` | `contract_invalid` |
  * `metadata_fetch` | `unknown`). `user_rejected` | `network` | `simulation` are
@@ -139,6 +139,7 @@ export type KnownJobErrorKind =
 	| "user_rejected"
 	| "popup_bound"
 	| "scope_refused"
+	| "registry_refused"
 	| "malformed_request"
 	| "terms_refused"
 	| "wallet_refused"
@@ -172,6 +173,7 @@ const KNOWN_JOB_ERROR_KIND_TABLE = {
 	user_rejected: true,
 	popup_bound: true,
 	scope_refused: true,
+	registry_refused: true,
 	malformed_request: true,
 	terms_refused: true,
 	wallet_refused: true,
