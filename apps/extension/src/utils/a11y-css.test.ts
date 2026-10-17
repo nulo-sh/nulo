@@ -66,6 +66,10 @@ describe("reduced motion and Disable animations both stop the shakes and the shi
 	})
 })
 
+test("the execute window's disclosure chevron turns without a transition under reduced motion", () => {
+	expect(reducedMotionRules(read("popup/windows/execute/DetailsToggle.vue")).get(".chevron")).toBe("transition: none;")
+})
+
 describe("a settings search's row outline holds with no fade under reduced motion and Disable animations", () => {
 	const source = read("composables/settings-row-highlight.css")
 	const flat = source.replace(/\s+/g, " ")

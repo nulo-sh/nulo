@@ -38,6 +38,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [bun-1.4-adoption](bun-1.4-adoption/plan.md) — completed — the Bun 1.4 adoption split into four plans: the bump, the isolated linker, vitest on Bun, native tooling
 - [bun-1.4-bump](bun-1.4-bump/plan.md) — completed — an exact Bun 1.4 pin with only the wins that need no runtime or topology change
 - [bundle-fpc-nft](bundle-fpc-nft/plan.md) — completed in part — the PrivateFPC note schema bundled with the wallet; the Wonderland NFT half did not ship
+- [call-vocabulary-1](call-vocabulary-1/plan.md) — completed — one name for a call: Activity and the detail pages take the approval window's words (#514), the grant card labels only what it read (#575), `DetailsToggle` accessibility (#516)
 - [capabilities-popup-quality](capabilities-popup-quality/plan.md) — completed — the capabilities popup and connected-apps page say only what the protocol does
 - [capture-await-write-sweep](capture-await-write-sweep/plan.md) — completed — a hunt for the capture, await, stale-write race shape, with each hit fenced
 - [chain-endpoints](chain-endpoints/plan.md) — completed — a smoke suite that reaches no outside host (#171); hidden characters refused in node URLs, plain HTTP only to this computer and no inline styles in the extension CSP (#200, #101); a missing price reads as unavailable on Home (#116)
