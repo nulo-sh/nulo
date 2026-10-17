@@ -2,14 +2,17 @@
  * The authwit decode loop all three discovery paths share (the standalone discoverer, the folded
  * probe, the NO_FROM send): each offchain effect that decodes as a `CallAuthorizationRequest` is
  * hashed over the given chain and recorded, in effect order; any effect that fails is skipped.
- * Callers keep their own early return for "no effects" above the live-chain fetch, and any dedupe.
+ * An effect from the authorization registry refuses the whole set before anything decodes: the
+ * registry asks only to change an account's public authorizations, which only the wallet's own
+ * authorization action may do. Callers keep their own early return for "no effects" above the
+ * live-chain fetch, and any dedupe.
  */
 
 import { CallAuthorizationRequest, computeAuthWitMessageHash } from "@aztec-labs/aztec.js/authorization"
 import type { ChainInfo } from "@aztec-labs/entrypoints/interfaces"
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
-import type { DiscoveredAuthwit } from "@nulo/wallet-bridge"
+import { authRegistryRefusal, type DiscoveredAuthwit, isAuthRegistry } from "@nulo/wallet-bridge"
 import { type DecodedAuthRequest, toDiscoveredAuthwit } from "./discovered-authwit"
 
 /** The decode and hash seams; unit tests inject fakes so they run without Barretenberg. */
@@ -28,6 +31,9 @@ export async function decodeAuthwitEffects(
 	chainInfo: ChainInfo,
 	crypto: AuthwitDecodeCrypto = REAL_CRYPTO,
 ): Promise<{ record: DiscoveredAuthwit; messageHash: Fr }[]> {
+	if (effects.some((effect) => isAuthRegistry(effect.contractAddress))) {
+		throw authRegistryRefusal("Scope violation: a transaction's authorization request targets the authorization registry")
+	}
 	const decoded: { record: DiscoveredAuthwit; messageHash: Fr }[] = []
 	for (const effect of effects) {
 		try {

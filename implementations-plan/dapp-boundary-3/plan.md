@@ -135,7 +135,7 @@ export function isAuthRegistryGrantCall(call: { to: unknown; selector: unknown }
 - Pass: all exit 0. Each new refusal test fails with its rule removed and passes with it, and each success control stays green; record both runs in `lessons/phase-1.md`.
 - Layers: lint, typecheck, unit.
 
-### Phase 2: discovery refuses an authorization request from the registry
+### Phase 2: discovery refuses an authorization request from the registry ✓
 
 1. In `decodeAuthwitEffects`, throw the decode refusal for an effect whose `contractAddress` is the registry, before decoding and outside the `catch`.
 2. Confirm I2 by reading each caller. A caller that converts or retries the error lets a `ScopeViolationError` pass unchanged. Add no retry and no fallback.
