@@ -177,7 +177,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`; pass = e
 - Tests: a new `done.test.ts`. The tip equals the sentence and contains neither "Chrome" nor "from now on". Control: the tip hides on `isOnToolbar: true`.
 - Gate: `F`; smoke `onboarding-tab` on Chrome and Firefox.
 
-**3. The recovery phrase (P33-02 C + Copy; the Settings grid).**
+**3. The recovery phrase (P33-02 C + Copy; the Settings grid).** ✓ (2026-10-17, [lessons/phase-3.md](lessons/phase-3.md))
 - Change map:
   - New `components/composite/RecoveryPhraseGrid.vue` and `onboarding/components/OnboardingPhraseStep.vue`.
   - `onboarding/pages/create.vue`: the tail, the stage and the handlers.
@@ -199,8 +199,8 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`; pass = e
   - `get-started.test.ts` (storage): one read; only `=== true` counts (`"true"` and `1` read as unset); a mark writes `true`.
   - `profile-ui-keys.scan.test.ts` passes with the new prefixes.
   - `seed.test.ts`: a reveal marks the captured id; a wrong password marks nothing.
-  - E2E, the `onboarding-tab` run-through: Create (Password); read the 24 words; "I saved it"; assert the stored `phraseSaved` before any Settings reveal; Ready; then compare the words with Settings' reveal. Failure mode: the words come from the real service and the write lands in real storage (a unit test mocks both). Runtime: estimated +6 s; measured: (fill in).
-  - E2E, `keyboard-guards` "Enter in the confirm field": hold Enter through the stage's mount, deliver a recorded repeat, assert no click on `onboarding-phrase-saved` and no stored flag, release; one plain activation writes the flag (control). Failure mode: a repeat after the mount; jsdom cannot show it. Runtime: estimated +3 s.
+  - E2E, the `onboarding-tab` run-through: Create (Password); read the 24 words; "I saved it"; assert the stored `phraseSaved` before any Settings reveal; Ready; then compare the words with Settings' reveal. Failure mode: the words come from the real service and the write lands in real storage (a unit test mocks both). Runtime: estimated +6 s; measured +3.3 s on Chrome, within noise on Firefox.
+  - E2E, `keyboard-guards` "Enter in the confirm field": hold Enter through the stage's mount, deliver a recorded repeat, assert no click on `onboarding-phrase-saved` and no stored flag, release; one plain activation writes the flag (control). Failure mode: a repeat after the mount; jsdom cannot show it. Runtime: estimated +3 s; measured +0.4 s on Chrome, +4.7 s on Firefox under load.
 - Gate:
   - `F`.
   - Smoke on Chrome and Firefox: `onboarding-tab`, `keyboard-guards`, `security-backup`, `duplicate-phrase-import`, `legal-acceptance`, `import-paths`, `token-list`, `shipped-token-list`.
