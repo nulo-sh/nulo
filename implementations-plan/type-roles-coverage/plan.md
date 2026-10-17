@@ -49,6 +49,8 @@ Inferences (the implementer verifies in phase and logs in `lessons/phase-1.md`):
 
 Asks (the working assumption holds until the orchestrator overrides it at approval):
 - A1 Arc 2 starts only if `type-roles.test.ts`'s CI per-file duration on arc 1's PR, first attempt, stays within +100 s on Chrome and +160 s on Firefox of F10. It also needs no smoke shard job over 25 min. Otherwise the numbers go to the orchestrator and #366 stays open.
+  - Met on #621's first attempts: `type-roles.test.ts` went from 41.8 to 60.9 s on Chrome (+19 s) and from 68.4 to 98.5 s on Firefox (+30 s). The longest smoke shard job ran 16.9 min.
+  - The windows spec was at 121.2 s on Chrome (run 38979529712, shard 5/5, 15.9 min) and 135.3 s on Firefox (run 38979529691, 18.3 min). Arc 2's bound starts from those.
 - A2 Arc 2 opens with a plan revision, approved before any arc 2 code. The revision gives a producer path, a measured cost and a disposition for each of the 18 sites, all observed in `type-roles-windows.test.ts`. A missing playground control does not make a state `unreachable`.
 
 ## Architecture & Implementation
@@ -303,6 +305,10 @@ Per `implementations-plan/README.md` § Post-implementation standard at 8459699c
   - The trust wait must also see the arrival-floor write. `setArrivalFloor` rewrites the state it read, so a seed between the two writes would be lost. It now waits for both.
   - D16 is narrowed to what it enforces, and the inputs no request changes are named.
 - **Arc 2 revision, Codex** resume (closing verification, snapshot 66e89bc8): `approve`, no finding. It confirmed the final-draft D9 pairs, the floor wait and the narrowed D16. It traced the reload: `reloadExtensionPage` remounts the popup, whose client connect runs the product's `replayPendingPrompts`, so the prompt is the product's replay of the seeded row. It found no owner-facing ask.
+- **Arc 2 code review, Codex** (gpt-6.1-sol, high), round 1: `findings (0 major, 2 minor)`, both on comments.
+  - Taken: the nonce comment, and three of four restating comments.
+  - Kept: `observed`'s doc, which states D2's push-after-pass rule and the coupling to the last test.
+  - Round 2 (resumed): `clean`.
 - **Arc 1 implementation deviations** (evidence in [lessons/phase-1.md](lessons/phase-1.md)):
   - S3's Activity and tx states ride S1's visits, and the import row and New token share one Home visit: no page is opened twice for one state.
   - The seed also writes the scope's arrival row (`seedArrivalRow`). Without one, Activity holds its incoming rows until the chain-tip read gives up, about 60 s under the refused Testnet. The state is a wallet's after any feed read the tip; no timeout was raised. The product delay is #579.

@@ -70,3 +70,18 @@
   - Trust step: 1.6 s on Chrome, 2.6 s on Firefox.
   - Presses: 0.02–0.4 s per state on Chrome and 0.16–1.4 s on Firefox. The sendTx state is the dearest.
   - Firefox's head ran faster than its base (233.0 s), so host load swamps the added steps there. The local pairs are evidence of cost, not of the bound; CI judges A1.
+
+## Phase 2.1 and the review loop
+
+- The revision closed on Codex `approve`, on snapshot 66e89bc8.
+- Merged origin/dev at bdb61a1f. Only `helpers/activity-seeds.ts` conflicted.
+  - #692 keys a note receipt by its unique note hash and drops `siloedNullifier`. The note writer and the trust seed moved onto `uniqueNoteHash`.
+  - Reconciliation renames its key and keeps its strike-then-delete rule, so the seed's one-scan life holds.
+  - `bun install --frozen-lockfile` showed no change.
+- Static gate on the merged tree: `bun run lint`, `typecheck:all` and `bun run test` (828 files) exit 0, and `inventory.test.ts` passes 10/10.
+- Codex code review (gpt-6.1-sol, high), round 1: `findings (0 major, 2 minor)`, both on comments.
+  - The playground's nonce comment covered the new two-argument `transfer`. Taken.
+  - Four comments restated their code. Three were deleted: `runRequest`'s, `tokenRowOf`'s, and the class bundle's.
+  - `observed`'s doc stays. That module-level array couples every test to the last one, and the doc states D2's push-after-pass rule.
+- Round 2 (resumed): `clean`, so the loop converged.
+- Two fixture lessons were routed to the e2e-testing skill: a seed racing the wallet's second write, and playground inputs persisting across requests. `lessons.md` sits at its budget, and neither is a cross-task gotcha.
