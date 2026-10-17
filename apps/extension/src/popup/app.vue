@@ -294,6 +294,7 @@ const onActiveProfileChanged = async (profile) => {
 			setFailure: (record) => {
 				appStore.bootstrapFailure = record
 			},
+			readFailure: () => appStore.bootstrapFailure,
 			shouldToast: () => !appStore.isLogined || appStore.profile?.id === profile.id,
 			toast: () => openToast({ kind: "error", label: "Something went wrong" }),
 		})
