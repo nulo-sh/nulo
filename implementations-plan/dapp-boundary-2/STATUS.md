@@ -7,3 +7,4 @@
 - 2026-10-17 final Codex pass: conditional approve (notice kind in D4, the waiter limit), resumed: approve. OWNER-ASKS holds only OA-1, which arc 1 does not touch: auto-continue into arc 1.
 - 2026-10-17 phase 1 gate green: lint 0, typecheck:all 0, execution tests 1317 passed; red/green logged.
 - 2026-10-17 phase 2 gate green: lint 0, typecheck:all 0, wallet-bridge 766 passed; red/green logged.
+- 2026-10-17 phase 3 gate green: lint 0, typecheck:all 0, wallet-sdk 460 passed; red/green logged.

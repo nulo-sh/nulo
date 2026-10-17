@@ -396,7 +396,7 @@ describe("the connect window after Allow", () => {
 		expect(gate().windowsHeld(ORIGIN)).toBe(0)
 	})
 
-	test("an approval that does not land closes the window and leaves no marker", async () => {
+	test("an approval that does not land closes the window and leaves no marker and no row", async () => {
 		const h = boot()
 		approveReturns = false
 		h.discover("f1")
@@ -407,6 +407,55 @@ describe("the connect window after Allow", () => {
 		expect(h.windows.removed).toEqual([41])
 		expect(markers().has("f1")).toBe(false)
 		expect(gate().windowsHeld(ORIGIN)).toBe(0)
+		expect(h.rows.size).toBe(0)
+	})
+
+	test("an approval that does not land while a duplicate waits on the window keeps the row, and the duplicate connects on it", async () => {
+		const h = boot()
+		h.discover("f1")
+		await flush()
+		h.discover("twin", { tabId: 8 })
+		await flush()
+		// The SDK no longer holds f1's request, while its connect window stays open.
+		droppedTabs.add(7)
+		h.allow("f1", 41)
+		await flush()
+
+		expect(approved()).toEqual(["f1", "twin"])
+		expect(h.rows.size).toBe(1)
+		expect(markers().has("f1")).toBe(false)
+	})
+
+	test("a duplicate arriving while the approval's writes run waits on the window and connects through it, not as a returning app", async () => {
+		const grants = deferred<undefined>()
+		const h = boot({ setCapabilityGrants: () => grants.promise })
+		h.discover("f1")
+		await flush()
+		h.allow("f1", 41)
+		await flush()
+		expect(h.rows.size).toBe(1)
+
+		h.discover("twin")
+		await flush()
+		expect(approved()).toEqual([])
+
+		grants.resolve(undefined)
+		await flush()
+		expect(approved()).toEqual(["f1", "twin"])
+		expect(admit.mock.calls.map(([request]) => request.consumesToken)).toEqual([false, false])
+	})
+
+	test("a grant write that fails deletes the row it followed and refuses the discovery", async () => {
+		const h = boot({ setCapabilityGrants: () => Promise.reject(new Error("write failed")) })
+		h.discover("f1")
+		await flush()
+		h.allow("f1", 41)
+		await flush()
+
+		expect(rejected()).toEqual(["f1"])
+		expect(approved()).toEqual([])
+		expect(h.rows.size).toBe(0)
+		expect(h.windows.removed).toEqual([41])
 	})
 
 	test("a window closed while the approval's writes run: rejected, the row deleted, no marker set", async () => {
