@@ -13,3 +13,4 @@
   - Point 2 (closed known limit): a duplicate already waiting when the person switches profiles can connect on the new profile's remembered row through the window path without spending a reconnect token, at most eight per window. The waiter path predates the arc.
   - Point 3 (taken): a banned word in this file.
   - Argued on proportion and scope; resumed answer: approve, dispositions accepted, nothing else new and material. The loop converged after two rounds.
+- Final gate at a85eb8ac (the later commits touch plan files only): lint 0, typecheck:all 0, `bun run test` 0 (13434 passed), `bun run test:all` 0, `bun run check:plans` 0. Network e2e at c9f57096 on Chrome, retry 0, load1 147 at start: contracts-register, cap-request-repeat-noPopup, connect-dapp and connect-one-window, 4 of 4 passed in 229 s.
