@@ -8,7 +8,7 @@ import type { TypeRole } from "@nulo/design/tokens"
  */
 
 /** The guard's rules, in the order a declaration, prop, key or string is judged. */
-export type RuleId = "face" | "tracking" | "case" | "size" | "text-prop" | "tie" | "faceless" | "site-size" | "identifier"
+export type RuleId = "face" | "tracking" | "case" | "size" | "text-prop" | "tie" | "faceless" | "site-size" | "identifier" | "role"
 
 /** A pick that cannot be a role, kept for good. `selector` narrows a CSS pick to one rule. */
 export type CarveOut = { file: string; rule: RuleId; text: string; selector?: string; why: string }

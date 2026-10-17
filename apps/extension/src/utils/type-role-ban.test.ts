@@ -35,8 +35,10 @@ import {
  * `MIN_MONO_PX`), text-prop (`size`, `weight`, `mono`, `tabular` on a `<Text>`), tie (a role
  * property at the role's specificity), faceless (a size or weight outside a role, in module CSS or
  * a bound style), site-size (a role property other than the size in the module class of a
- * site-sized `<Text variant>`), identifier (a template `trimAddress(` outside a mono role). `font`
- * and `font-variant` are judged by their longhands. Findings match `type-role-ban.reviewed.json`
+ * site-sized `<Text variant>`), identifier (a template `trimAddress(` outside a mono role), role (a
+ * `type--` name in `composes` or a static class, or a `<Text variant>` literal, that names no role;
+ * a bound variant's literals count only where the expression can evaluate to them). `font` and
+ * `font-variant` are judged by their longhands. Findings match `type-role-ban.reviewed.json`
  * by file, rule and text as a multiset: a moved line needs no edit, a second identical pick its
  * own entry.
  *
@@ -51,7 +53,18 @@ import {
  */
 
 const REVIEWED_PATH = join(__dirname, "type-role-ban.reviewed.json")
-const RULE_ORDER: readonly RuleId[] = ["face", "tracking", "case", "size", "text-prop", "tie", "faceless", "site-size", "identifier"]
+const RULE_ORDER: readonly RuleId[] = [
+	"face",
+	"tracking",
+	"case",
+	"size",
+	"text-prop",
+	"tie",
+	"faceless",
+	"site-size",
+	"identifier",
+	"role",
+]
 /** An override silences only the rules a compound declaration trips; a tie or a prop is never overridden. */
 const OVERRIDABLE: ReadonlySet<RuleId> = new Set(["face", "tracking", "case", "size", "faceless"])
 const ROLE_NAMES: ReadonlySet<string> = new Set(typeRoleNames)
@@ -157,6 +170,7 @@ const CHECKS: Record<RuleId, Check> = {
 	"site-size": (property, _value, _hands, { carrier }) =>
 		carrier !== undefined && siteSizeCase(carrier) && setsRoleProperty(property, carrier),
 	identifier: () => false,
+	role: () => false,
 }
 
 function judge(property: string, value: string, judged: Judged): RuleId | undefined {
@@ -174,14 +188,18 @@ function ownDeclarations(container: Container): Declaration[] {
 	})
 }
 
-function composedRole(rule: Rule): TypeRole | undefined {
-	const global = ownDeclarations(rule).filter((decl) => decl.prop === "composes" && /\sfrom\s+global\s*$/.test(decl.value))
-	const names = global.flatMap((decl) => decl.value.replace(/\sfrom\s+global\s*$/, "").split(/\s+/))
-	return names
-		.filter((name) => name.startsWith("type--"))
-		.map((name) => name.slice("type--".length))
-		.find(isRole)
-}
+const NOT_A_ROLE = "not a role"
+const FROM_GLOBAL = /\sfrom\s+global\s*$/
+
+/** The `type--` names in a list of class names, prefix dropped. */
+const typeNames = (names: readonly string[]): string[] =>
+	names.filter((name) => name.startsWith("type--")).map((name) => name.slice("type--".length))
+
+/** The `type--` names a `composes` declaration takes from global. */
+const composedNames = (decl: Declaration): string[] =>
+	decl.prop === "composes" && FROM_GLOBAL.test(decl.value) ? typeNames(decl.value.replace(FROM_GLOBAL, "").split(/\s+/)) : []
+
+const composedRole = (rule: Rule): TypeRole | undefined => ownDeclarations(rule).flatMap(composedNames).find(isRole)
 
 const SINGLE_CLASS = /^\.([\w-]+)$/
 
@@ -213,6 +231,13 @@ function matchOverride(scan: Scan, selector: string, property: string, value: st
 	return found
 }
 
+function scanComposes(scan: Scan, decl: Declaration, selector: string, line: number): void {
+	for (const name of composedNames(decl).filter((name) => !isRole(name))) {
+		const text = normalize(`composes: type--${name}`)
+		scan.findings.push({ file: scan.file, rule: "role", text, at: selector, line, selector, hard: NOT_A_ROLE })
+	}
+}
+
 function scanSheet(scan: Scan, sheet: StyleSheet, links: ReadonlyMap<string, Carrier>): void {
 	const memo = new Map<Rule, boolean>()
 	sheet.root.walkRules((rule) => {
@@ -221,12 +246,13 @@ function scanSheet(scan: Scan, sheet: StyleSheet, links: ReadonlyMap<string, Car
 		const judged: Judged = { module: sheet.module, carrier, mono: ruleMono(rule, carrier, memo) }
 		for (const decl of ownDeclarations(rule)) {
 			const property = decl.prop.toLowerCase()
+			const line = sheet.startLine + (decl.source?.start?.line ?? 1) - 1
+			scanComposes(scan, decl, selector, line)
 			if (property === "composes") continue
 			const found = judge(property, decl.value, judged)
 			const override = matchOverride(scan, selector, property, decl.value)
 			if (!found || (override && OVERRIDABLE.has(found))) continue
 			const text = normalize(`${decl.prop}: ${decl.value}${decl.important ? " !important" : ""}`)
-			const line = sheet.startLine + (decl.source?.start?.line ?? 1) - 1
 			scan.findings.push({ file: scan.file, rule: found, text, at: selector, line, selector })
 		}
 	})
@@ -368,18 +394,34 @@ function propSource(prop: TemplateProp): string {
 	return prop.exp ? `:${prop.arg?.content}="${prop.exp.content}"` : `:${prop.arg?.content}`
 }
 
-/** Roles named by a static attribute, or by the string literals of its binding. */
-function namedRoles(node: TemplateNode, name: string): TypeRole[] {
-	const literals = [...(boundAttr(node, name) ?? "").matchAll(/["'`]([\w-]+)["'`]/g)].map(([, value]) => value)
-	return [staticAttr(node, name) ?? "", ...literals].filter(isRole)
+/** The string literals an expression can evaluate to: the whole of it, or a branch of a conditional or a fallback. */
+function resultLiterals(expression: string | undefined): string[] {
+	if (expression === undefined) return []
+	const tree = ts.createSourceFile("expression.ts", `(${expression})`, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+	const results = (node: ts.Expression): string[] => {
+		if (ts.isParenthesizedExpression(node)) return results(node.expression)
+		if (ts.isConditionalExpression(node)) return [...results(node.whenTrue), ...results(node.whenFalse)]
+		const fallback = [ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken]
+		if (ts.isBinaryExpression(node) && fallback.includes(node.operatorToken.kind))
+			return [...results(node.left), ...results(node.right)]
+		return ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) ? [node.text] : []
+	}
+	const [statement] = tree.statements
+	return statement && ts.isExpressionStatement(statement) ? results(statement.expression) : []
 }
 
+/** Names a static attribute gives, or that its binding can evaluate to. */
+function attrNames(node: TemplateNode, name: string): string[] {
+	const value = staticAttr(node, name)
+	return [...(value === undefined ? [] : [value]), ...resultLiterals(boundAttr(node, name))]
+}
+
+const namedRoles = (node: TemplateNode, name: string): TypeRole[] => attrNames(node, name).filter(isRole)
+
+const classTypeNames = (node: TemplateNode): string[] => typeNames((staticAttr(node, "class") ?? "").split(/\s+/))
+
 function elementCarrier(node: TemplateNode, textNames: ReadonlySet<string>): Carrier | undefined {
-	const fromClass = (staticAttr(node, "class") ?? "")
-		.split(/\s+/)
-		.filter((name) => name.startsWith("type--"))
-		.map((name) => name.slice("type--".length))
-		.filter(isRole)
+	const fromClass = classTypeNames(node).filter(isRole)
 	const fromVariant = textNames.has(node.tag ?? "") ? namedRoles(node, "variant") : []
 	if (fromClass.length === 0 && fromVariant.length === 0) return undefined
 	return { roles: [...fromClass, ...fromVariant], viaText: fromClass.length === 0 }
@@ -397,21 +439,28 @@ function link(links: Map<string, Carrier>, node: TemplateNode, carrier: Carrier)
 	}
 }
 
-function scanTextProps(scan: Scan, node: TemplateNode): void {
-	const props = node.props ?? []
-	const variant = staticAttr(node, "variant")
-	const withVariant = props.some((prop) => propName(prop) === "variant")
-	const at = elementAt(node)
-	if (variant !== undefined && !isRole(variant)) {
+/** A `type--` class, or a `<Text variant>` literal, that names no role. */
+function scanRoleNames(scan: Scan, node: TemplateNode, isText: boolean): void {
+	const named = [
+		...classTypeNames(node).map((name) => [name, `class="type--${name}"`] as const),
+		...(isText ? attrNames(node, "variant") : []).map((name) => [name, `variant="${name}"`] as const),
+	]
+	for (const [, text] of named.filter(([name]) => !isRole(name))) {
 		scan.findings.push({
 			file: scan.file,
-			rule: "text-prop",
-			text: normalize(`variant="${variant}"`),
-			at,
+			rule: "role",
+			text: normalize(text),
+			at: elementAt(node),
 			line: node.loc.start.line,
-			hard: "not a role",
+			hard: NOT_A_ROLE,
 		})
 	}
+}
+
+function scanTextProps(scan: Scan, node: TemplateNode): void {
+	const props = node.props ?? []
+	const withVariant = props.some((prop) => propName(prop) === "variant")
+	const at = elementAt(node)
 	for (const prop of props.filter((candidate) => TEXT_PROPS.has(propName(candidate) ?? ""))) {
 		const finding: Finding = { file: scan.file, rule: "text-prop", text: normalize(propSource(prop)), at, line: prop.loc.start.line }
 		scan.findings.push(withVariant ? { ...finding, hard: "beside variant" } : finding)
@@ -484,7 +533,9 @@ function scanIdentifiers(template: TemplateScan, expression: Expression, chain: 
 function scanElement(template: TemplateScan, node: TemplateNode, ancestors: readonly TemplateNode[]): void {
 	const carrier = elementCarrier(node, template.textNames)
 	if (carrier) link(template.links, node, carrier)
-	if (template.textNames.has(node.tag ?? "")) scanTextProps(template.scan, node)
+	const isText = template.textNames.has(node.tag ?? "")
+	scanRoleNames(template.scan, node, isText)
+	if (isText) scanTextProps(template.scan, node)
 	scanStaticStyle(template.scan, node, carrier)
 	scanBoundStyle(template.scan, node, carrier)
 	for (const prop of node.props ?? []) {
@@ -700,6 +751,7 @@ describe("type role ban rules", () => {
 		["face: a variable naming a family", "a.module.css", ".a { --banner-font: var(--font-body); }", ["face"]],
 		["tracking", "a.module.css", ".a { letter-spacing: 0.1em; }", ["tracking"]],
 		["tracking: a composing rule without it passes", "a.module.css", ".a { composes: type--label from global; color: red; }", []],
+		["role: a composed role passes", "a.module.css", ".a { composes: row type--meta from global; }", []],
 		["case: upper case", "a.module.css", ".a { text-transform: uppercase; }", ["case"]],
 		["case: capitalize passes", "a.module.css", ".a { text-transform: capitalize; }", []],
 		["size: under the floor", "a.module.css", ".a { font-size: 9px; }", ["size"]],
@@ -745,6 +797,17 @@ describe("type role ban rules", () => {
 	test.each([
 		["text-prop: each prop is one finding", '<template><Text size="12" weight="600">x</Text></template>', ["text-prop", "text-prop"]],
 		["text-prop: a variant passes", '<template><Text variant="body">x</Text></template>', []],
+		[
+			"role: a bound variant whose branches are roles passes",
+			"<template><Text :variant=\"x ? 'meta' : 'body'\">x</Text></template>",
+			[],
+		],
+		[
+			"role: a bound variant's comparison operand is not a branch",
+			"<template><Text :variant=\"kind === 'address' ? 'meta' : 'body'\">x</Text></template>",
+			[],
+		],
+		["role: a static role class passes", '<template><span class="row type--meta">x</span></template>', []],
 		["text-prop: a bare tabular", "<template><Text tabular>1</Text></template>", ["text-prop"]],
 		[
 			"text-prop: an aliased Text import",
@@ -835,11 +898,19 @@ describe("type role ban rules", () => {
 	})
 
 	test.each([
-		["a size beside a variant", '<template><Text variant="data" size="12">x</Text></template>', "beside variant"],
-		["a variant outside the roles", '<template><Text variant="huge">x</Text></template>', "not a role"],
-	])("hard: %s fails with any entry", (_case, source, reason) => {
-		const { findings } = scanSource("x.vue", source, [])
-		const covering = { "x.vue": findings.map(({ rule, text }) => ({ rule, text, role: "drop" as const, at: "" })) }
+		["a size beside a variant", "x.vue", '<template><Text variant="data" size="12">x</Text></template>', "beside variant"],
+		["a variant outside the roles", "x.vue", '<template><Text variant="huge">x</Text></template>', "not a role"],
+		[
+			"a bound variant's branch outside the roles",
+			"x.vue",
+			"<template><Text :variant=\"x ? 'meta' : 'huge'\">x</Text></template>",
+			"not a role",
+		],
+		["a static class outside the roles", "x.vue", '<template><span class="row type--huge">x</span></template>', "not a role"],
+		["a composed name outside the roles", "a.module.css", ".a { composes: type--huge from global; }", "not a role"],
+	])("hard: %s fails with any entry", (_case, file, source, reason) => {
+		const { findings } = scanSource(file, source, [])
+		const covering = { [file]: findings.map(({ rule, text }) => ({ rule, text, role: "drop" as const, at: "" })) }
 		expect(findings.map(({ hard }) => hard)).toEqual([reason])
 		expect(review(findings, covering, []).open).toHaveLength(1)
 	})
