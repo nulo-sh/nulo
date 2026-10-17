@@ -231,7 +231,7 @@ onBeforeUnmount(() => {
 				</Flex>
 
 				<!-- type="text" (not number) so there are no spinner arrows widening the field; the $ prefix
-				     lives in the wrapper and updateDustThreshold parseFloat-normalizes any input on change. -->
+				     lives in the wrapper. -->
 				<label :class="$style.dust_field">
 					<span :class="$style.dust_prefix">$</span>
 					<input

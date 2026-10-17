@@ -437,11 +437,12 @@ test("export, then import: into the same wallet nothing changes, into a fresh wa
 	}
 }, 300_000)
 
-// Fails if leaving Contacts cuts off a running import (the page's clients rejected the row being
-// written), if the real chip or the menu's Import item does not follow the running import, or if
-// the import's progress snack does not reach the shell's region on every page as one card
-// relabelled in place. Component tests mount stubs, fake clients and a mocked toast, so only the
-// built popup's real page unmount, Header, menu and snack region can show these.
+// Fails if a 500-row review clips its answers or scrolls the card instead of its list, if leaving
+// Contacts cuts off a running import (the page's clients rejected the row being written), if the
+// real chip or the menu's Import item does not follow the running import, or if the import's
+// progress snack does not reach the shell's region on every page as one card relabelled in place.
+// Component tests mount stubs, fake clients and a mocked toast, so only the built popup's real
+// layout, page unmount, Header, menu and snack region can show these.
 test("an import holds Lock until it ends, counts on one snack on every page, and leaving Contacts does not disturb it", async ({
 	registeredExtensionPerTest: ctx,
 }) => {

@@ -1,9 +1,9 @@
 /**
  * `FormPopup` composite.
  *
- * L3 contract: ≥10 cases. Tests use real `Popup` + `PopupCard` +
- * `PopupHeader` children stubbed at the wrapper level so the focus is
- * on `FormPopup`'s own contract (slots, props, emits).
+ * L3 contract: ≥10 cases. `Popup`, `PopupCard` and `PopupHeader` are
+ * stubbed at the wrapper level, keeping teleport and close events, so the
+ * focus is on `FormPopup`'s own contract (slots, props, emits).
  *
  * `Popup` teleports its content to `#popup`, so most assertions look at
  * the teleport target after `show=true`.
