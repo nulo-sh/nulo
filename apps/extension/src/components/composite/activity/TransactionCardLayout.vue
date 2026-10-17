@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Comment, type PropType, ref, useId, useSlots } from "vue"
+import type { GlyphName } from "@nulo/design"
 import type { JobStage, ProveBackend } from "@nulo/wallet-core/jobs"
 import RowTarget from "@/components/ui/RowTarget.vue"
 import { vSnackFooter } from "@/composables/snackInset"
@@ -16,15 +17,14 @@ import { vSnackFooter } from "@/composables/snackInset"
  */
 const props = defineProps({
 	title: { type: String, required: true },
-	icon: { type: String, required: true },
-	iconRotate: { type: [String, Number], default: 0 },
-	amount: { type: String, default: null },
-	amountSymbol: { type: String, default: null },
+	icon: { type: String as PropType<GlyphName>, required: true },
+	amount: { type: String as PropType<string | null>, default: null },
+	amountSymbol: { type: String as PropType<string | null>, default: null },
 	/** `≈ $x.xx` line under the amount — omitted (null) when unpriced. */
-	amountFiat: { type: String, default: null },
+	amountFiat: { type: String as PropType<string | null>, default: null },
 	testId: { type: String, default: undefined },
-	txAmountDisplay: { type: String, default: undefined },
-	txTransferTypeLabel: { type: String, default: undefined },
+	txAmountDisplay: { type: String as PropType<string | null>, default: undefined },
+	txTransferTypeLabel: { type: String as PropType<string | null>, default: undefined },
 	txStatus: { type: String, default: undefined },
 	txHash: { type: String, default: undefined },
 	stage: { type: String as PropType<JobStage | null>, default: null },
@@ -96,7 +96,7 @@ function hasActionsContent() {
 
 		<Flex align="center" gap="16" :class="$style.left_content">
 			<Flex align="center" justify="center" :class="$style.activity_icon" data-testid="activity-icon">
-				<Icon :name="icon" :rotate="iconRotate" size="18" color="secondary" />
+				<Icon :name="icon" size="18" color="secondary" />
 				<div v-if="$slots.badge" :class="$style.badge">
 					<slot name="badge" />
 				</div>

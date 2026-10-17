@@ -234,7 +234,6 @@ export function rowDescriptionFor(state: PrestoUiState, last?: LastProveOutcome 
 export interface PrestoDetailRow {
 	title: string
 	description: string
-	icon: string
 	value: string
 }
 
@@ -250,8 +249,8 @@ function connectionLabel(state: PrestoUiState): string {
 export function detailRowsFor(state: PrestoUiState): PrestoDetailRow[] {
 	const info = "info" in state ? state.info : {}
 	return [
-		{ title: "Presto", description: "Menu-bar app", icon: "memory", value: info.appVersion ?? "—" },
-		{ title: "Aztec runtime", description: "Prover version", icon: "layers", value: info.nativeAztecVersion ?? "—" },
-		{ title: "Connection", description: "Loopback, this machine only", icon: "lan", value: connectionLabel(state) },
+		{ title: "Presto", description: "Menu-bar app", value: info.appVersion ?? "—" },
+		{ title: "Aztec runtime", description: "Prover version", value: info.nativeAztecVersion ?? "—" },
+		{ title: "Connection", description: "Loopback, this machine only", value: connectionLabel(state) },
 	]
 }

@@ -357,7 +357,7 @@ onBeforeUnmount(() => {
 			<Flex v-if="tokenToDisplay" align="center" justify="center" gap="12" :class="$style.breakdown">
 				<Tooltip textAlign="left" delay="300">
 					<span :class="$style.breakdown_item">
-						<span :class="$style.breakdown_private"><Icon name="lock" size="12" :aria-label="PRIVATE_BALANCE_LABEL" /></span>
+						<span :class="$style.breakdown_private"><Icon name="private" size="12" :aria-label="PRIVATE_BALANCE_LABEL" /></span>
 						<span data-testid="private-balance-value">{{ privateBalanceFormatted }}</span>
 					</span>
 					<template #content>
@@ -367,7 +367,7 @@ onBeforeUnmount(() => {
 				<span :class="$style.breakdown_divider">|</span>
 				<Tooltip textAlign="left" delay="300">
 					<span :class="$style.breakdown_item">
-						<span :class="$style.breakdown_public"><Icon name="globe" size="12" :aria-label="PUBLIC_BALANCE_LABEL" /></span>
+						<span :class="$style.breakdown_public"><Icon name="public" size="12" :aria-label="PUBLIC_BALANCE_LABEL" /></span>
 						<span data-testid="public-balance-value">{{ publicBalanceFormatted }}</span>
 					</span>
 					<template #content>

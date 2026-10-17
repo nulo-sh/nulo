@@ -358,13 +358,13 @@ onBeforeUnmount(() => {
 				<RouterLink v-if="overflowCount > 0" to="/popup/holdings" data-testid="tokens-view-all" :class="$style.view_all">View all</RouterLink>
 				<Dropdown>
 					<Button variant="secondary" size="micro" data-testid="tokens-menu-trigger">
-						<Icon name="dots" size="12" color="secondary" />
+						<Icon name="more" size="12" color="secondary" />
 					</Button>
 
 					<template #popup>
 						<DropdownItem @click="popupStore.open('new_token')" data-testid="tokens-menu-import">
 							<Flex align="center" gap="8">
-								<Icon name="plus-circle" size="14" color="primary" />
+								<Icon name="add" size="14" color="primary" />
 								Import token
 							</Flex>
 						</DropdownItem>

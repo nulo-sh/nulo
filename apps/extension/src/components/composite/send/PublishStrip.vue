@@ -33,7 +33,7 @@ const cells = computed(() => CELLS.map((c) => ({ ...c, glyph: publishGlyph(props
 			<span>{{ factWord(cell, facts) }}</span>
 		</span>
 		<span :class="$style.chevron" aria-hidden="true">
-			<MaterialIcon name="chevron_right" :size="15" color="secondary" />
+			<Icon name="chevron" :size="15" color="secondary" />
 		</span>
 	</button>
 </template>

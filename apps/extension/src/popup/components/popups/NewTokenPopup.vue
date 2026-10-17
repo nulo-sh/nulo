@@ -320,7 +320,7 @@ usePopupEntity(
 			:disabled="isBusy"
 		>
 			<template #suffix>
-				<Icon v-if="isAvailableToCreateToken" name="check-circle" size="14" color="green" />
+				<Icon v-if="isAvailableToCreateToken" name="square-check" size="14" color="green" />
 			</template>
 			<template #right>
 				<Transition name="fade">
@@ -329,7 +329,7 @@ usePopupEntity(
 						<Text variant="body" color="primary"> Already exist </Text>
 					</Flex>
 					<Flex v-else-if="isInvalidAddress" align="center" gap="4" role="alert" data-testid="error-text">
-						<Icon name="close-circle" size="12" color="red" />
+						<Icon name="square-cross" size="12" color="red" />
 						<Text variant="body" color="primary"> Invalid address </Text>
 					</Flex>
 				</Transition>

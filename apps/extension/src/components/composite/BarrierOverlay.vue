@@ -10,7 +10,7 @@ defineProps({
 <template>
 	<div :class="$style.wrapper" :data-testid="testid">
 		<div :class="$style.card">
-			<slot name="icon"><MaterialIcon name="warning" size="24" color="--red" /></slot>
+			<slot name="icon"><Icon name="warning" size="24" /></slot>
 			<span :class="$style.title"><slot name="title" /></span>
 			<span v-if="$slots.sub" :class="$style.sub" :data-testid="subTestid"><slot name="sub" /></span>
 			<span v-if="$slots.detail" :class="$style.detail" :data-testid="detailTestid"><slot name="detail" /></span>

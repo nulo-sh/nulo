@@ -242,7 +242,7 @@ onBeforeUnmount(() => {
 				:disabled="appStore.lockHeldByImport"
 				:class="$style.lock_chip"
 			>
-				<MaterialIcon name="lock" :size="15" color="primary" />
+				<Icon name="lock" :size="15" color="primary" />
 				<span :class="$style.lock_label">Lock</span>
 			</button>
 

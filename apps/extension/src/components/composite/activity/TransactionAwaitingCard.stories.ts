@@ -40,7 +40,7 @@ export const TransferUnderWidthPressure: Story = {
 	args: {
 		title: "USDC",
 		subtitle: "Generating proof...",
-		icon: "arrow-narrow-up-right",
+		icon: "send",
 		amount: "5.00",
 		amountSymbol: "USDC",
 		transferTypeLabel: "Private → Public",

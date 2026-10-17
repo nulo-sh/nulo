@@ -1,11 +1,13 @@
 <script setup lang="ts">
+import type { GlyphName } from "@nulo/design"
+
 /**
  * One permission: its icon, title, current line and, when it has a switch name, a switch. Only the
  * switch acts: the row has no hover and no click. A consumer fills the `sub` slot to put a dotted
  * term in the line; this row imports no other composite.
  */
 const props = defineProps<{
-	icon: string
+	icon: GlyphName
 	title: string
 	/** The line under the title; a switch row reads it while on. */
 	subOn?: string
@@ -36,7 +38,7 @@ const hasSub = computed(() => line.value !== undefined || slots.sub !== undefine
 
 <template>
 	<div :class="[$style.row, flagged && $style.flagged, granted && $style.granted]">
-		<MaterialIcon :name="icon" :size="16" :class="$style.icon" aria-hidden="true" />
+		<Icon :name="icon" :size="16" :class="$style.icon" aria-hidden="true" />
 
 		<div :class="$style.body">
 			<div :data-testid="titleTestid" :class="$style.title">
@@ -85,7 +87,6 @@ const hasSub = computed(() => line.value !== undefined || slots.sub !== undefine
 	border-top-color: rgba(124, 116, 104, 0.2);
 }
 
-/* Two classes, so the icon's own color utility never decides. */
 .row .icon {
 	margin-top: 1px;
 	color: var(--nulo-secondary);

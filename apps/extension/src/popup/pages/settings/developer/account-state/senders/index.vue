@@ -117,14 +117,14 @@ onBeforeUnmount(() => {
 							@click="handleCopyAddress(sender)"
 						>
 							<Icon v-if="copiedAddress !== sender" name="copy" size="14" color="tertiary" />
-							<Icon v-else name="check-circle" size="14" color="green" :style="{ transition: 'all 0.2s ease', fill: 'var(--green)' }" />
+							<Icon v-else name="square-check" size="14" color="green" />
 						</RowAction>
 
 						<template #content> Copy address </template>
 					</Tooltip>
 					<Tooltip position="end" delay="350">
 						<RowAction label="Delete sender" data-testid="sender-delete" @click="handleDelete(sender)">
-							<Icon name="close-circle" size="14" color="tertiary" />
+							<Icon name="close" size="14" color="tertiary" />
 						</RowAction>
 
 						<template #content> Delete sender </template>

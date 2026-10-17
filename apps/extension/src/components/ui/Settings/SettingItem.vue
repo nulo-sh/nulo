@@ -28,7 +28,6 @@ const props = defineProps({
 		validator: (value) => ["caption", "data"].includes(value),
 	},
 	icon: String,
-	materialIcon: String,
 	iconBgColor: {
 		type: String,
 		default: "gray-20",
@@ -114,27 +113,20 @@ const Root = (_, { slots }) => {
 
 		<Flex wide align="center" justify="between" gap="16">
 			<Flex align="center" gap="14" wide>
-				<div v-if="icon || materialIcon || $slots.dot || $slots.icon" :class="[$style.icon_wrapper, $slots.icon && $style.icon_slotted]">
+				<div v-if="icon || $slots.dot || $slots.icon" :class="[$style.icon_wrapper, $slots.icon && $style.icon_slotted]">
 					<!-- Dot -->
 					<slot name="dot" />
 
 					<!-- Icon: custom slot wins, otherwise prop-driven fallback -->
 					<slot name="icon">
-						<MaterialIcon
-							v-if="materialIcon && !loading"
-							:name="materialIcon"
-							:size="20"
-							color="secondary"
-							:class="$style.material_icon"
-						/>
 						<Icon
-							v-else-if="icon && !loading"
+							v-if="icon && !loading"
 							:name="icon"
 							size="18"
 							:color="iconFillColor"
 							:class="$style.icon"
 						/>
-						<div v-else-if="(icon || materialIcon) && loading" :class="$style.icon_loading">
+						<div v-else-if="icon && loading" :class="$style.icon_loading">
 							<Spinner size="16" color="--txt-primary" />
 						</div>
 					</slot>
@@ -156,9 +148,9 @@ const Root = (_, { slots }) => {
 			<Flex align="center" gap="12">
 				<Text v-if="value" data-testid="setting-value" variant="value" color="secondary" :class="$style.value">{{ value }}</Text>
 				<slot name="right">
-					<MaterialIcon
+					<Icon
 						v-if="to || chevron"
-						:name="!external ? 'chevron_right' : 'arrow_outward'"
+						:name="external ? 'open' : 'chevron'"
 						:size="18"
 						color="secondary"
 						:class="$style.chevron_icon"
@@ -243,22 +235,12 @@ const Root = (_, { slots }) => {
 	flex-shrink: 0;
 }
 
-/* A slotted icon sets its own size. The fixed box stays the default: a material icon's ligature
- * text lays out wider than 20px until its font loads, and the box keeps the row from widening. */
+/* A slotted icon sets its own size. */
 .icon_slotted {
 	width: auto;
 	height: auto;
 	min-width: 20px;
 	min-height: 20px;
-}
-
-.material_icon {
-	color: var(--nulo-secondary);
-	transition: color 0.2s var(--bezier);
-}
-
-.interactive:hover .material_icon {
-	color: var(--nulo-accent);
 }
 
 .icon_loading {

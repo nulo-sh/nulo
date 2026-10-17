@@ -352,7 +352,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 				:aria-busy="isEstimating && !feeEstimate ? 'true' : undefined"
 				:class="$style.op_fee_set"
 			>
-				<Icon name="check-circle" size="14" color="green" />
+				<Icon name="square-check" size="14" color="green" />
 				<Flex direction="column" gap="6" :class="$style.fee_lines">
 					<Text variant="body" color="secondary" data-testid="execute-op-app-legend">
 						Fee payment method set by

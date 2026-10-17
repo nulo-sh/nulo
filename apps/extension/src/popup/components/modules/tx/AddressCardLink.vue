@@ -8,7 +8,7 @@ defineProps({
 
 <template>
 	<a :href="href" target="_blank" rel="noopener noreferrer" :aria-label="label" :class="$style.link" @click.stop>
-		<Icon name="external-link" size="12" color="tertiary" />
+		<Icon name="open" size="12" color="tertiary" />
 	</a>
 </template>
 
@@ -23,11 +23,11 @@ defineProps({
 	padding: 6px;
 
 	& svg {
-		transition: fill 0.2s var(--bezier);
+		transition: color 0.2s var(--bezier);
 	}
 
 	&:hover svg {
-		fill: var(--nulo-accent);
+		color: var(--nulo-accent);
 	}
 
 	&:focus-visible {

@@ -18,15 +18,14 @@ defineProps({
 	title: { type: String, required: true },
 	/** State-specific subtitle copy. Comes verbatim from journalTerminalDisplay. */
 	subtitle: { type: String, required: true },
-	/** Icon name for the status badge (e.g. "cancel", "refresh-circle",
-	 *  "close-circle"). Mapped per-state by journalTerminalDisplay. */
+	/** Glyph for the status badge (e.g. "square-cross", "refresh"). Mapped per-state by
+	 *  journalTerminalDisplay. */
 	icon: { type: String, required: true },
 	/** Status tone, one of "gray" | "amber" | "red" | "green": the status line's colour and, through
 	 *  `STATUS_ICON_FILL`, the icon's. */
 	color: { type: String, required: true },
 	/** Activity-row icon (left of the badge). Same convention as the
-	 *  awaiting card: "arrow-narrow-up-right" for UI transfers, "zap" for
-	 *  generic dApp ops. */
+	 *  awaiting card: "send" for UI transfers, "zap" for generic dApp ops. */
 	activityIcon: { type: String, default: "zap" },
 	/** Origin chip — for dApp-initiated txs, the dApp hostname. UI-initiated
 	 *  transfers leave this null and the chip is suppressed. */

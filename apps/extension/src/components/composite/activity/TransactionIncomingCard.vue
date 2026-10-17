@@ -50,8 +50,7 @@ const hashSlice = computed(() => {
 <template>
 	<TransactionCardLayout
 		:title="tokenSymbol"
-		icon="arrow-narrow-up-right"
-		:iconRotate="180"
+		icon="receive"
 		:amount="formattedAmount ? `+${formattedAmount}` : null"
 		:amountSymbol="tokenSymbol"
 		:amountFiat="amountFiat"
@@ -60,7 +59,7 @@ const hashSlice = computed(() => {
 		testId="tx-incoming-card"
 	>
 		<template #badge>
-			<Icon name="check-circle" size="12" :color="STATUS_ICON_FILL.green" data-testid="activity-status-icon" />
+			<Icon name="square-check" size="12" :color="STATUS_ICON_FILL.green" data-testid="activity-status-icon" />
 		</template>
 
 		<template #title-trailing>

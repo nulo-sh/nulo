@@ -175,7 +175,7 @@ onBeforeUnmount(() => {
 						:key="tb.id"
 						@click="handleSelectToken(tb.token.id)"
 						:title="tb.token.symbol"
-						:icon="tb.token.id === cacheStore.activeTokenIdx ? 'check-circle' : 'circle'"
+						:icon="tb.token.id === cacheStore.activeTokenIdx ? 'square-check' : 'square'"
 						:iconFillColor="tb.token.id === cacheStore.activeTokenIdx ? 'primary' : 'tertiary'"
 						iconBgColor="transparent"
 						data-testid="select-token-row"

@@ -106,7 +106,7 @@ usePopupEntity(() => props.show, {
 				size="large"
 				:title="networkToEdit.name"
 				description="Selected network for editing"
-				icon="globe-edit"
+				icon="network-edit"
 				raw
 			/>
 		</ItemsContainer>

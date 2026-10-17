@@ -145,19 +145,19 @@ onBeforeUnmount(() => {
 		<template #trailing>
 			<Dropdown>
 				<button type="button" :class="$style.icon_btn" aria-label="Contact actions" data-testid="contacts-menu-trigger">
-					<MaterialIcon name="more_vert" :size="18" color="secondary" />
+					<Icon name="more" :rotate="90" :size="18" color="secondary" />
 				</button>
 
 				<template #popup>
 					<DropdownItem @click="importContacts" :disabled="appStore.contactImports.size > 0" data-testid="contacts-menu-import">
 						<Flex align="center" gap="8">
-							<Icon name="upload-outline" size="14" color="secondary" />
+							<Icon name="upload" size="14" color="secondary" />
 							Import contacts
 						</Flex>
 					</DropdownItem>
 					<DropdownItem @click="exportContacts" :disabled="!contacts.length" data-testid="contacts-menu-export">
 						<Flex align="center" gap="8">
-							<Icon name="download-outline" size="14" color="secondary" />
+							<Icon name="download" size="14" color="secondary" />
 							Export contacts
 						</Flex>
 					</DropdownItem>

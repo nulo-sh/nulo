@@ -249,7 +249,7 @@
 		{
 			"file": "apps/extension/src/components/stale-network/StaleNetworkTakeover.vue",
 			"expression": "content.eyebrow.text",
-			"branch": "!(screen === 'loading' || screen === 'progress')",
+			"branch": "content",
 			"ordinal": 0,
 			"role": "none",
 			"selector": "",
@@ -260,7 +260,7 @@
 		{
 			"file": "apps/extension/src/components/stale-network/StaleNetworkTakeover.vue",
 			"expression": "line.text",
-			"branch": "!(screen === 'loading' || screen === 'progress') && content.box",
+			"branch": "content && content.box",
 			"ordinal": 0,
 			"role": "none",
 			"selector": "",
@@ -271,7 +271,7 @@
 		{
 			"file": "apps/extension/src/components/stale-network/StaleNetworkTakeover.vue",
 			"expression": "content.primary.text",
-			"branch": "!(screen === 'loading' || screen === 'progress')",
+			"branch": "content",
 			"ordinal": 0,
 			"role": "none",
 			"selector": "",
@@ -282,7 +282,7 @@
 		{
 			"file": "apps/extension/src/components/stale-network/StaleNetworkTakeover.vue",
 			"expression": "content.secondary.text",
-			"branch": "!(screen === 'loading' || screen === 'progress') && content.secondary",
+			"branch": "content && content.secondary",
 			"ordinal": 0,
 			"role": "none",
 			"selector": "",

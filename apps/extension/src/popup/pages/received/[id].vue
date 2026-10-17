@@ -254,7 +254,7 @@ onBeforeUnmount(() => {
 						:class="$style.hero_link"
 					>
 						<span>View on {{ explorerName }}</span>
-						<Icon name="external-link" size="10" color="tertiary" />
+						<Icon name="open" size="10" color="tertiary" />
 					</a>
 					<span
 						v-else-if="received.txHash"

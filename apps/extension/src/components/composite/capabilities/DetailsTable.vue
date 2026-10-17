@@ -100,16 +100,16 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 								:class="$style.copy"
 								@click="emit('copy', stripWireControl(entry.row.address ?? ''))"
 							>
-								<MaterialIcon name="content_copy" :size="12" :class="$style.copy_glyph" aria-hidden="true" />
+								<Icon name="copy" :size="12" :class="$style.copy_glyph" aria-hidden="true" />
 							</RowAction>
 						</span>
 
 						<template v-for="[column, has] in COLUMNS" :key="column">
-							<MaterialIcon v-if="has(entry.row)" name="check" :size="15" :class="$style.yes" aria-hidden="true" />
+							<Icon v-if="has(entry.row)" name="check" :size="15" :class="$style.yes" aria-hidden="true" />
 							<span v-else :class="$style.no" aria-hidden="true" />
 						</template>
 
-						<MaterialIcon name="chevron_right" :size="14" :class="$style.chevron" aria-hidden="true" />
+						<Icon name="chevron" :size="14" :class="$style.chevron" aria-hidden="true" />
 					</div>
 
 					<div v-if="opened.has(entry.key)" data-testid="cap-details-fns" :class="$style.fns">

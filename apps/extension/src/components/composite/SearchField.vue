@@ -13,7 +13,7 @@ defineEmits<{ "update:modelValue": [value: string] }>()
 
 <template>
 	<label :class="$style.search">
-		<MaterialIcon name="search" :size="16" color="secondary" />
+		<Icon name="search" :size="16" color="secondary" />
 		<input
 			:value="modelValue"
 			@input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"

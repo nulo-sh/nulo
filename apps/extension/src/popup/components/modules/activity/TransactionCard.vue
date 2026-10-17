@@ -1,5 +1,5 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
-<script setup>
+<script setup lang="ts">
 /**
  * Settled phase of an activity card. Wraps `TransactionCardLayout` so its
  * field positions match the in-flight phase (`TransactionAwaitingCard`) —
@@ -7,12 +7,15 @@
  * content swap from spinner+status-text to status-icon+hash-and-chips.
  */
 /** Vendor */
+import type { GlyphName } from "@nulo/design"
+import type { PropType } from "vue"
 
 /** Components */
 import TransactionCardLayout from "@/components/composite/activity/TransactionCardLayout.vue"
 
 /** Services */
-import { TxStatus, TxExecutionResult } from "@/wallet/services/transaction/client"
+import type { TokenInfo } from "@/wallet/services/token/client"
+import { type Tx, TxStatus, TxExecutionResult } from "@/wallet/services/transaction/client"
 
 /** Utils */
 import { STATUS_ICON_FILL } from "@/components/composite/activity/status-icon-fill"
@@ -29,12 +32,10 @@ import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
 
 const props = defineProps({
-	tx: {
-		type: Object,
-	},
+	tx: { type: Object as PropType<Tx>, required: true },
 	/** The profile and chain's tokens: a mint shows an amount only for a token in this list, and a
 	 *  transfer none for a listed token whose decimals the wallet does not know. */
-	tokens: { type: Array, default: () => [] },
+	tokens: { type: Array as PropType<TokenInfo[]>, default: () => [] },
 	/** The route the row opens. */
 	to: { type: String, default: undefined },
 })
@@ -50,8 +51,8 @@ const figureUnknown = computed(() => {
 	return listed !== undefined && knownDecimals(listed) === null
 })
 
-const icon = computed(() => {
-	if (type.value === "transfer") return "arrow-narrow-up-right"
+const icon = computed<GlyphName>(() => {
+	if (type.value === "transfer") return "send"
 	if (type.value === "mint") return "faucet"
 	return "zap"
 })
@@ -62,13 +63,15 @@ const isMined = computed(() => {
 })
 const isPending = computed(() => props.tx.status === TxStatus.Pending)
 const isDropped = computed(() => props.tx.status === TxStatus.Dropped)
-const isReverted = computed(() => isMined.value && !!props.tx.executionResult && props.tx.executionResult !== TxExecutionResult.Success)
+const isReverted = computed(
+	() => isMined.value && props.tx.executionResult !== undefined && props.tx.executionResult !== TxExecutionResult.Success,
+)
 const isSuccess = computed(() => isMined.value && !isReverted.value)
 
-const statusIcon = computed(() => {
-	if (isReverted.value || isDropped.value) return "close-circle"
-	if (isSuccess.value) return "check-circle"
-	return "clock-circle"
+const statusIcon = computed<GlyphName>(() => {
+	if (isReverted.value || isDropped.value) return "square-cross"
+	if (isSuccess.value) return "square-check"
+	return "square-half"
 })
 
 const statusColor = computed(() => {
@@ -177,7 +180,7 @@ onBeforeUnmount(() => {
 			<span v-if="hashSlice && explorerUrl" :class="$style.hash_group">
 				<span data-testid="activity-row-hash" :class="$style.hash">{{ hashSlice }}</span>
 				<RowAction :href="explorerUrl" label="Open in block explorer" :class="$style.explorer">
-					<Icon name="external-link" size="10" color="tertiary" />
+					<Icon name="open" size="10" color="tertiary" />
 				</RowAction>
 			</span>
 			<span v-else-if="hashSlice" data-testid="activity-row-hash" :class="$style.hash">{{ hashSlice }}</span>

@@ -232,8 +232,8 @@ watch(
 									<Icon
 										:name="
 											item.row.selected
-												? 'check-circle'
-												: 'circle'
+												? 'square-check'
+												: 'square'
 										"
 										size="16"
 										:color="item.row.selected ? 'primary' : 'tertiary'"
@@ -244,7 +244,7 @@ watch(
 											<template v-if="item.row.kind === 'name-change'">
 												<Text variant="name" color="tertiary" :class="[$style.name_part, $style.name_size]">{{ item.row.savedName }}</Text>
 												<span :class="$style.visually_hidden">changes to</span>
-												<Icon name="arrow-right" size="12" color="tertiary" aria-hidden="true" :class="$style.arrow" />
+												<Icon name="forward" size="12" color="tertiary" aria-hidden="true" :class="$style.arrow" />
 												<Text variant="name" color="primary" :class="[$style.name_part, $style.name_size]">{{ item.row.name }}</Text>
 											</template>
 											<Text v-else variant="name" color="primary" :class="[$style.title, $style.name_size]">
@@ -263,7 +263,7 @@ watch(
 													{{ item.row.addressText.saved }}
 												</Text>
 												<span :class="$style.visually_hidden">changes to</span>
-												<Icon name="arrow-right" size="12" color="tertiary" aria-hidden="true" :class="$style.arrow" />
+												<Icon name="forward" size="12" color="tertiary" aria-hidden="true" :class="$style.arrow" />
 												<Text variant="data" color="primary" data-testid="import-contact-address-incoming" :class="$style.address_incoming">
 													{{ item.row.addressText.incoming }}
 												</Text>
