@@ -385,6 +385,12 @@ being ready — content that arrives later can still move a control — so wait 
 done-loading signal first when it has one. Use it for the control whose reachability IS the
 assertion; drive the rest of the flow with the ordinary helpers.
 
+**A double-click is `doubleClick(page, x, y, gapMs)`** (`fixtures/browser`), never two
+`pointerClick`s or two `mouse.down`/`up` pairs: Firefox counts presses only inside one action chain,
+so those reach its page as two clicks of `detail` 1 (FIREFOX.md). Record what each press hit with a
+window capture listener and assert it, as `contacts.test.ts`'s Confirm case does: a second press that
+missed its target proves nothing.
+
 ### What to assert
 
 - **Post-action state, not the route.** A hash change proves nothing; assert the rendered address,

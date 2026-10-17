@@ -42,6 +42,21 @@ const onEscape = (event) => {
 	return false
 }
 
+// A double-click's first press can open this sheet and its later presses then land on whatever the
+// sheet drew under the pointer. `detail` numbers the presses of one multi-click, so until this opening
+// has seen a first press of its own, a click past the first belongs to a press made before it opened.
+let pressBeganInside = false
+
+const notePress = (event) => {
+	if (event.button === 0 && event.detail === 1) pressBeganInside = true
+}
+
+const refuseCarriedClick = (event) => {
+	if (event.detail <= 1 || pressBeganInside) return
+	event.stopPropagation()
+	event.preventDefault()
+}
+
 const releaseTrap = (options) => {
 	if (trap?.active) trap.deactivate(options)
 	trap = undefined
@@ -55,6 +70,7 @@ const trapContainers = (container) => {
 }
 
 const activate = async () => {
+	pressBeganInside = false
 	const _ = managers.profile?.refreshSession()
 	const token = ++activation
 	// Read before the tick: a child may focus its own input from a continuation queued in this same
@@ -115,6 +131,8 @@ onBeforeUnmount(() => {
 					:class="$style.wrapper"
 					:style="{ zIndex: (displaceIdx + 1) * 100 * 5 }"
 					tabindex="-1"
+					@mousedown.capture="notePress"
+					@click.capture="refuseCarriedClick"
 				>
 					<div @click="emit('onClose')" :class="$style.close_area" />
 

@@ -3,6 +3,9 @@ import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "
 import { addContact, closeStuckPopup, contactRow, deleteContact, navigateToSettings } from "./fixtures/helpers"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { shotSend } from "./fixtures/send-page"
+import { doubleClick } from "./fixtures/browser"
+import { settleClosedPopup } from "./fixtures/popup-leave"
+import { pointerClick } from "./helpers/legal-drivers"
 
 // Per-CALL fresh identities: the extension fixture is file-scoped, so a
 // vitest retry re-enters a test with earlier attempts' contacts persisted —
@@ -153,6 +156,88 @@ test("delete-confirm never offers sender options (contacts are decoupled from se
 	await clickByTestId(page, "confirm-cancel")
 	// Vue Transition can stick mid-leave in headless Chrome — force-close.
 	await closeStuckPopup(page)
+
+	expect(registeredExtension.consoleErrors).toEqual([])
+	expect(registeredExtension.pageErrors).toEqual([])
+})
+
+test("a double-click's second press cannot answer the Confirm its first opened; one press can", async ({ registeredExtension }) => {
+	const page = await openPopup(registeredExtension)
+	await waitForHash(page, "#/popup/general")
+	await navigateToSettings(page, "contacts")
+	// The Confirm's answer sits at the frame's bottom, which a row's icon reaches only on a list this long.
+	const rows = () => page.evaluate(() => document.querySelectorAll('[data-testid="contact-row"]').length)
+	while ((await rows()) < 10) await addContact(page, uniqueName("Row"), randomAddress())
+
+	await page.evaluate(() => document.querySelector<HTMLElement>('[data-testid="contact-delete"]')?.click())
+	await page.waitForSelector('[data-testid="confirm-submit"]', { visible: true, timeout: 5_000 })
+	const answer = await page.evaluate(() => {
+		const box = document.querySelector('[data-testid="confirm-submit"]')?.getBoundingClientRect()
+		return box ? { left: box.left, right: box.right, y: box.top + box.height / 2 } : null
+	})
+	if (!answer) throw new Error("confirm-submit has no box")
+	await clickByTestId(page, "confirm-cancel")
+	await settleClosedPopup(page, "confirm-cancel")
+
+	const aim = await page.evaluate((target) => {
+		const scrollerOf = (el: Element) => {
+			for (let p = el.parentElement; p; p = p.parentElement) {
+				if (/(auto|scroll)/.test(getComputedStyle(p).overflowY) && p.scrollHeight > p.clientHeight) return p
+			}
+			return document.scrollingElement
+		}
+		for (const row of [...document.querySelectorAll<HTMLElement>('[data-testid="contact-row"]')].reverse()) {
+			const icon = row.querySelector('[data-testid="contact-delete"]')
+			const scroller = icon && scrollerOf(row)
+			if (!icon || !scroller) continue
+			const before = icon.getBoundingClientRect()
+			scroller.scrollTop += before.top + before.height / 2 - target.y
+			const box = icon.getBoundingClientRect()
+			const x = box.left + box.width / 2
+			const y = box.top + box.height / 2
+			const hit = document.elementFromPoint(x, y)?.closest('[data-testid="contact-delete"]')
+			if (Math.abs(y - target.y) <= 4 && x > target.left + 4 && x < target.right - 4 && hit === icon) {
+				return { x, y, name: row.dataset.contactName ?? "" }
+			}
+		}
+		return null
+	}, answer)
+	if (!aim) throw new Error(`no contact-delete icon could be scrolled under the answer at y ${answer.y}`)
+
+	// Window capture runs before the sheet's own listener; `defaultPrevented` is read after dispatch.
+	await page.evaluate(() => {
+		const seen: { event: MouseEvent; target: string | null; delivered: boolean }[] = []
+		;(window as unknown as { __clicks: typeof seen }).__clicks = seen
+		window.addEventListener(
+			"click",
+			(event) =>
+				seen.push({
+					event,
+					target: (event.target as Element).closest("[data-testid]")?.getAttribute("data-testid") ?? null,
+					delivered: false,
+				}),
+			true,
+		)
+		window.addEventListener("click", (event) => {
+			const entry = seen.find((e) => e.event === event)
+			if (entry) entry.delivered = true
+		})
+	})
+	await doubleClick(page, aim.x, aim.y, 300)
+	await page.waitForFunction(() => (window as unknown as { __clicks: unknown[] }).__clicks.length >= 2, { timeout: 5_000 })
+	const clicks = await page.evaluate(() =>
+		(window as unknown as { __clicks: { event: MouseEvent; target: string | null; delivered: boolean }[] }).__clicks.map(
+			({ event, target, delivered }) => ({ detail: event.detail, target, prevented: event.defaultPrevented, delivered }),
+		),
+	)
+	expect(clicks).toEqual([
+		{ detail: 1, target: "contact-delete", prevented: false, delivered: true },
+		{ detail: 2, target: "confirm-submit", prevented: true, delivered: false },
+	])
+	expect(await page.evaluate((s: string) => !!document.querySelector(s), contactRow(aim.name))).toBe(true)
+
+	await pointerClick(page, "confirm-submit")
+	await page.waitForFunction((s: string) => !document.querySelector(s), { timeout: 5_000 }, contactRow(aim.name))
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
