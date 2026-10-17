@@ -9,3 +9,4 @@
   - **C.** Keep both texts: `batch` and `data` keep their own guard.
 - **Recommendation.** A: six of eight already say it, and it tells the developer what to do.
 - **What ships now.** C. The six sections that share the long message use the shared guard; `batch` and `data` keep theirs, and #539 stays open with a comment naming them until this is answered.
+- **Answer.** A, decision page 34 (P34-10), signed 2026-10-17; it shipped in the same PR, so #539 closes there.
