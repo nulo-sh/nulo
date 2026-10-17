@@ -38,9 +38,10 @@ describe("Icon", () => {
 		expect(w.attributes("stroke")).toBe("currentColor")
 	})
 
-	test("private is one solid square and public eight dots on its outline, never the padlock", () => {
-		expect(render({ name: "private" }).findAll("path")).toHaveLength(1)
-		expect(render({ name: "public" }).findAll("path")).toHaveLength(8)
+	test("private is one solid and public eight, all filled, and neither is the padlock", () => {
+		const [priv, pub] = [render({ name: "private" }).findAll("path"), render({ name: "public" }).findAll("path")]
+		expect([priv.length, pub.length]).toEqual([1, 8])
+		for (const p of [...priv, ...pub]) expect(p.attributes("stroke")).toBe("none")
 		expect(glyphs.private).not.toEqual(glyphs.lock)
 	})
 

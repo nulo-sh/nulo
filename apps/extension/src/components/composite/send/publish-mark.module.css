@@ -1,6 +1,6 @@
 /* One vocabulary for the strip, the review sheet and the fee-source tag. The element carrying a
-   visibility class sets the ink; the glyph inside (`publishGlyph`: solid square hidden, dotted square
-   public, none unknown) draws in currentColor. Glyph and word carry the meaning; colour only reinforces. */
+   visibility class sets the ink and its glyph (`publishGlyph`) paints in it. Glyph and word carry the
+   meaning; colour only reinforces. */
 
 .hidden {
 	color: var(--txt-tertiary);

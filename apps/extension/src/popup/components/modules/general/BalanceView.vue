@@ -538,8 +538,7 @@ onBeforeUnmount(() => {
 	color: var(--nulo-secondary);
 }
 
-/* Same private/public vocabulary as TokenCard's split: accent solid square = private, grey dotted
-   square = public. */
+/* Keep in step with TokenCard's split: one private/public vocabulary on every balance. */
 .breakdown_private {
 	display: inline-flex;
 	color: var(--nulo-accent);
