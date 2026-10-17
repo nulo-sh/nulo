@@ -47,6 +47,7 @@ import {
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { type FeeSettingsReaders, type IExecutionHooks, refuseUnknownPriorities } from "@nulo/wallet-bridge"
 import { TxHash } from "@aztec-labs/stdlib/tx"
+import { GRANT_BLOCK_WAIT_MS, awaitGrantBlock, grantBlockOf } from "./grant-block"
 
 export * from "./spec"
 
@@ -68,6 +69,9 @@ type AuthwitScope = { profileId: string; chainId: number; account: string }
 function assertRevokeCount(ids: number[]): void {
 	if (ids.length > MAX_REVOKES_PER_TX) throw new Error(`Cannot revoke more than ${MAX_REVOKES_PER_TX} authwits per single tx`)
 }
+
+const grantNotInBlock = (authwit: Authwit): Error =>
+	new Error(`Authwit #${authwit.id}'s grant is not in a block yet. Revoke it again later.`)
 
 function registryToggleOperation(networkId: string, account: string, enabled: boolean, feeSettings: FeeSettings): SendTransactionOperation {
 	const contract = getAuthRegistryAddress().toString()
@@ -376,6 +380,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 
 		const task = this.taskService.startNewTask(new RevokeAuthwitsContent(ids))
 		try {
+			await this.awaitGrantBlocks(network, authwits)
 			const txHash = await this.executionService.executeSendTransaction(
 				operation,
 				{ type: OriginType.UI },
@@ -391,10 +396,11 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 			// not that its PUBLIC effect is mined + visible. Poll the on-chain state
 			// so a fast (proverless) follow-up consume can't race a not-yet-mined
 			// revoke. See waitForOnChainState.
-			await this.waitForTxProven(node, txHash)
-			await this.syncAuthwits(node, scope, task, authwits)
+			const revokeBlock = await this.waitForTxProven(node, txHash)
+			// No subtask past the send: a profile switch clears the registry, and the prune must still land.
+			await this.verifyRevoked(network, node, scope, authwits, revokeBlock)
 
-			task.complete()
+			task.completeIfTracked()
 		} catch (error) {
 			// Convert the internal sentinel to the structured RPC-boundary
 			// error so the popup's `classifyCancellableRejection` works.
@@ -472,27 +478,27 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	 * authwit consume's `AuthRegistry.consume` — against PROVEN state, so a
 	 * revoke/toggle visible only at `latest` is invisible to that execution and a
 	 * fast consume can still spend a "revoked" grant. Poll the proven tip past the
-	 * tx's receipt block. Throws on timeout — never report an unverifiable
+	 * tx's receipt block, and return that block. Throws on timeout — never report an unverifiable
 	 * security mutation as success. (Proven advances normally here: grants reach
 	 * proven within the test's own step timing, which is why their consumes work.)
 	 */
-	private async waitForTxProven(node: AztecNode, txHash: string, timeoutMs = 120_000): Promise<void> {
+	private async waitForTxProven(node: AztecNode, txHash: string, timeoutMs = 120_000): Promise<number> {
 		const receipt = await node.getTxReceipt(TxHash.fromString(txHash))
 		const target = receipt.blockNumber
 		if (target === undefined) throw new Error(`waitForTxProven: tx ${txHash} has no block number`)
 		const start = Date.now()
 		while (Date.now() - start < timeoutMs) {
-			if ((await node.getChainTips()).proven.block.number >= target) return
+			if ((await node.getChainTips()).proven.block.number >= target) return target
 			await sleep(1_000)
 		}
 		throw new Error(`waitForTxProven: tx ${txHash} (block ${target}) not proven within ${timeoutMs}ms`)
 	}
 
-	private async syncAuthwits(node: AztecNode, scope: AuthwitScope, parentTask: WrappedTask, authwits?: Authwit[]) {
+	private async syncAuthwits(node: AztecNode, scope: AuthwitScope, parentTask: WrappedTask) {
 		const task = parentTask.startSubtask(new StepContent("Sync authwits"))
 		try {
-			const _authwits = authwits ?? (await this.rowsForScope(scope))
-			await Promise.all(_authwits.map((authwit) => this.syncAuthwit(node, scope, authwit, task)))
+			const authwits = await this.rowsForScope(scope)
+			await Promise.all(authwits.map((authwit) => this.syncAuthwit(node, scope, authwit, task)))
 			task.complete()
 		} catch (error) {
 			task.fail(error)
@@ -501,39 +507,92 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	}
 
 	private async syncAuthwit(node: AztecNode, scope: AuthwitScope, authwit: Authwit, parentTask: WrappedTask) {
-		// Skip no-op syncs BEFORE starting a subtask: a started-but-unfinished subtask blocks
-		// the PARENT task from completing (TaskService refuses a parent with open children),
-		// which is exactly what wedged `revokeAuthwits`' syncAuthwits when the revoked grants
-		// were still `pending`. A `pending` row is reconciled by its tx outcome
-		// (onTransactionUpdated), not by sync; a still-consumable row is live. Sync only prunes
-		// confirmed-but-vanished rows.
+		// A `pending` row's grant may still land, so a node that reads its hash unauthorized proves
+		// nothing about it: its tx outcome reconciles it, or a revoke that saw the grant's block
+		// prunes it. Skipped before the subtask starts, so no open subtask blocks the parent.
 		if (authwit.pending) return
 		if (await isAuthwitConsumable(node, authwit.account, authwit.hash)) return
 		const task = parentTask.startSubtask(new StepContent(`Sync authwit #${authwit.id}`))
 		try {
-			await this.lock.withLock(async () => {
-				// Re-read UNDER the lock and delete only if the row still holds the SAME
-				// scope + hash + pending state the sync captured: a purge + restore during
-				// the (lock-free) node await can hand this numeric id to a different tuple,
-				// and an id-keyed delete would then destroy the wrong row.
-				const current = await this.authwits.get(`${authwit.id}`)
-				if (
-					current &&
-					!current.pending &&
-					current.profileId === scope.profileId &&
-					current.chainId === scope.chainId &&
-					current.account === scope.account &&
-					current.hash === authwit.hash
-				) {
-					await this.authwits.delete(`${authwit.id}`)
-					this.emit("onAuthwitDeleted", current)
-				}
-			})
+			await this.deleteTracked(scope, authwit, { confirmedOnly: true })
 			task.complete()
 		} catch (error) {
 			task.fail(error)
 			throw error
 		}
+	}
+
+	/** Deletes `authwit`'s row under the lock only while it still holds the same scope, hash and grant
+	 *  transaction: a purge and restore during an unlocked node read can hand its id to another row.
+	 *  `confirmedOnly` also keeps a row that is `pending` now. */
+	private async deleteTracked(scope: AuthwitScope, authwit: Authwit, { confirmedOnly }: { confirmedOnly: boolean }): Promise<void> {
+		await this.lock.withLock(async () => {
+			const current = await this.authwits.get(`${authwit.id}`)
+			if (
+				!current ||
+				(confirmedOnly && current.pending) ||
+				current.profileId !== scope.profileId ||
+				current.chainId !== scope.chainId ||
+				current.account !== scope.account ||
+				current.hash !== authwit.hash ||
+				current.txHash !== authwit.txHash
+			) {
+				return
+			}
+			await this.authwits.delete(`${authwit.id}`)
+			this.emit("onAuthwitDeleted", current)
+		})
+	}
+
+	/** The single-attempt client of the operation's own network, for reads the caller repeats itself. */
+	private async singleAttemptNodeFor(network: Network): Promise<AztecNode> {
+		const url = primaryEndpointUrl(network)
+		if (!url) throw new Error(`network ${network.id} has no primary endpoint`)
+		return this.networkService.getSingleAttemptNodeForUrl(url)
+	}
+
+	/** Waits until the grant of every selected `pending` row is in a block, so the revoke cannot be
+	 *  included before a grant it names. Refuses before any send when a row has no grant transaction to
+	 *  wait for, or a grant is still out of a block once polling stops. */
+	private async awaitGrantBlocks(network: Network, authwits: Authwit[]): Promise<void> {
+		const pending = authwits.filter((authwit) => authwit.pending)
+		const untracked = pending.find((authwit) => !authwit.txHash)
+		if (untracked) throw grantNotInBlock(untracked)
+		if (!pending.length) return
+		const node = await this.singleAttemptNodeFor(network)
+		const txHashes = [...new Set(pending.map((authwit) => authwit.txHash as string))]
+		const deadline = Date.now() + GRANT_BLOCK_WAIT_MS
+		const blocks = await Promise.all(txHashes.map((txHash) => awaitGrantBlock(node, txHash, deadline)))
+		const landed = new Set(txHashes.filter((_, i) => blocks[i] !== undefined))
+		const waiting = pending.find((authwit) => !landed.has(authwit.txHash as string))
+		if (waiting) throw grantNotInBlock(waiting)
+	}
+
+	/** Prunes every revoked row the node now reads unauthorized, then fails on the first row it could
+	 *  not verify. A `pending` row goes only when its grant's block is at or below `revokeBlock`: a grant
+	 *  included after the revoke would still be live. */
+	private async verifyRevoked(
+		network: Network,
+		node: AztecNode,
+		scope: AuthwitScope,
+		authwits: Authwit[],
+		revokeBlock: number,
+	): Promise<void> {
+		const grantNode = authwits.some((authwit) => authwit.pending) ? await this.singleAttemptNodeFor(network) : undefined
+		const outcomes = await Promise.allSettled(
+			authwits.map(async (authwit) => {
+				if (await isAuthwitConsumable(node, authwit.account, authwit.hash)) {
+					throw new Error(`Authwit #${authwit.id} is still authorized after the revoke`)
+				}
+				if (authwit.pending) {
+					const grantBlock = grantNode && authwit.txHash ? await grantBlockOf(grantNode, authwit.txHash) : undefined
+					if (grantBlock === undefined || grantBlock > revokeBlock) throw grantNotInBlock(authwit)
+				}
+				await this.deleteTracked(scope, authwit, { confirmedOnly: false })
+			}),
+		)
+		const failure = outcomes.find((outcome) => outcome.status === "rejected")
+		if (failure) throw failure.reason
 	}
 
 	private async syncStatus(node: AztecNode, scope: AuthwitScope, parentTask: WrappedTask): Promise<void> {
