@@ -8,3 +8,4 @@
 - 2026-10-17 18:50Z final Codex: conditional approve (2 local conditions); folded; resumed for verification.
 - 2026-10-17 19:05Z final Codex resumed: approve. Plan committed; arc 1 starts (auto-continue).
 - 2026-10-17 18:04Z arc 1 phase 1 green: one walker (`sourceFiles(policy)`), 13 guards moved, 14 file lists and DottedTerm's occurrences equal (lessons/phase-1.md); lint, typecheck:all, test (828 files, 13438 tests) pass.
+- 2026-10-17 18:19Z arc 1 phase 2 green: `codeLines` and `callsTo` over the TS parser; log-payload-ban, useLogFilters.scan and toast-call-sites moved; masked text differs only at F9's three misreads, every derived list equal (lessons/phase-2.md); manifest lost only the stripNoise record; lint, typecheck:all, test (829 files, 13448 tests), complexity check pass.

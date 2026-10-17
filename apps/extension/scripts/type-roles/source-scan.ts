@@ -51,7 +51,7 @@ export type TemplateProp = {
 	type: number
 	name: string
 	value?: { content: string; loc: { start: Position; source: string } }
-	arg?: { content: string } | null
+	arg?: (Expression & { isStatic: boolean }) | null
 	exp?: Expression | null
 	loc: { start: Position; source: string }
 }

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, test } from "vitest"
+import { callsTo } from "../../../scripts/type-roles/source-code"
 import { PACKAGE_SRC_ROOTS, REPO_ROOT, sourceFiles, TEST_FILE } from "../../../scripts/type-roles/source-scan"
 import { LOG_SOURCES } from "./useLogFilters"
 
@@ -22,7 +23,7 @@ import { LOG_SOURCES } from "./useLogFilters"
  */
 
 const REGISTRATION_FILES = ["apps/extension/src/wallet/runtime.ts", "packages/aztec-runtime/src/offscreen/entry.ts"]
-const ADD_OPENER = "services.add("
+const ADD_CALLEE = /^services\.add$/
 
 const SOURCES = new Map(
 	sourceFiles({ roots: ["apps/extension/src", ...PACKAGE_SRC_ROOTS], exts: ["ts", "vue"], skip: [TEST_FILE] }).map((file) => [
@@ -30,41 +31,6 @@ const SOURCES = new Map(
 		readFileSync(join(REPO_ROOT, file), "utf8"),
 	]),
 )
-
-const QUOTES = "\"'`"
-const COMMENTS = /\/\/[^\n]*|\/\*[\s\S]*?\*\//g
-
-/** The index of the last character of the string or comment that starts at `at`, or `at` itself. */
-function skipToken(source: string, at: number): number {
-	const c = source[at] as string
-	if (c === "/" && source[at + 1] === "/") return source.indexOf("\n", at)
-	if (c === "/" && source[at + 1] === "*") return source.indexOf("*/", at) + 1
-	if (!QUOTES.includes(c)) return at
-	for (let i = at + 1; i < source.length; i++) {
-		if (source[i] === "\\") i++
-		else if (source[i] === c) return i
-	}
-	throw new Error(`unterminated string at offset ${at}`)
-}
-
-/** The top-level arguments of the call whose `(` sits just before `open`, comments dropped. */
-function callArgs(source: string, open: number): string[] {
-	const args: string[] = []
-	let depth = 0
-	let start = open
-	for (let i = open; i < source.length; i++) {
-		const skipped = skipToken(source, i)
-		if (skipped !== i) i = skipped
-		else if ("([{".includes(source[i] as string)) depth++
-		else if (source[i] === "," && depth === 0) {
-			args.push(source.slice(start, i))
-			start = i + 1
-		} else if (")]}".includes(source[i] as string) && depth-- === 0) {
-			return [...args, source.slice(start, i)].map((arg) => arg.replace(COMMENTS, "").trim()).filter(Boolean)
-		}
-	}
-	throw new Error(`unbalanced call at offset ${open}`)
-}
 
 /** The class a `services.add(<arg>)` registers: `new X(…)`, or `<id>` bound by `const <id> = new X(` in the same file. */
 function registeredClass(source: string, arg: string): string {
@@ -76,11 +42,11 @@ function registeredClass(source: string, arg: string): string {
 }
 
 /** Every `services.add` call in one file: the classes it resolved and the arguments it refused. */
-function registrations(source: string) {
+function registrations(file: string, source: string) {
 	const classes: string[] = []
 	const refused: string[] = []
-	for (let at = source.indexOf(ADD_OPENER); at !== -1; at = source.indexOf(ADD_OPENER, at + 1)) {
-		const arg = callArgs(source, at + ADD_OPENER.length)[0] ?? ""
+	for (const call of callsTo(file, source, ADD_CALLEE)) {
+		const arg = call.args[0]?.getText() ?? ""
 		try {
 			classes.push(registeredClass(source, arg))
 		} catch (error) {
@@ -146,7 +112,7 @@ const registeredPerFile = once(() =>
 	REGISTRATION_FILES.map((path) => {
 		const text = SOURCES.get(path)
 		if (!text) throw new Error(`registration file missing: ${path}`)
-		return { path, ...registrations(text) }
+		return { path, ...registrations(path, text) }
 	}),
 )
 const registeredSources = once(() =>
@@ -165,7 +131,7 @@ describe("log source filter: every registered service is listed", () => {
 	})
 
 	test("an argument the resolver does not understand is refused, not skipped", () => {
-		expect(registrations("services.add(makeService(logger))")).toEqual({
+		expect(registrations("inline.ts", "services.add(makeService(logger))")).toEqual({
 			classes: [],
 			refused: ["unsupported services.add argument: makeService(logger)"],
 		})
@@ -177,7 +143,7 @@ describe("log source filter: every registered service is listed", () => {
 })
 
 /** A logger call, on a receiver named `logger` or `_logger`: a class's own `log` helper or the logger client's `shared.log` is not one. */
-const LOGGER_CALL = /\b_?logger\??\.log\(/g
+const LOGGER_CALL = /\b_?logger\??\.log$/
 const SERVICE_LOG_CALL = /\bthis\.log(?:Debug|Info|Warn|Error)\(/
 const UPPER_IDENTIFIER = /^[A-Z][A-Z0-9_]*$/
 
@@ -197,36 +163,36 @@ const positional = (index: number, loggerIndex: number) => (args: string[]) => (
  * that builds it, in the site's own file; a site that passes no logger never logs and is skipped.
  */
 const INJECTED: { file: string; expr: string; site: RegExp; source: (args: string[]) => string | undefined }[] = [
-	{ file: "packages/wallet-core/src/utils/lock.ts", expr: "this.name!", site: /\bnew Lock\(/g, source: positional(0, 1) },
+	{ file: "packages/wallet-core/src/utils/lock.ts", expr: "this.name!", site: /^Lock$/, source: positional(0, 1) },
 	{
 		file: "packages/wallet-core/src/utils/keyed-lock.ts",
 		expr: "this.#name",
-		site: /\bnew KeyedLock\(/g,
+		site: /^KeyedLock$/,
 		source: ([opts = ""]) => (/\blogger\b/.test(opts) ? (/\bname\s*:\s*([^,}\s]+)/.exec(opts)?.[1] ?? "") : undefined),
 	},
-	{ file: "packages/wallet-core/src/utils/rw-guard.ts", expr: "this.name", site: /\bnew ReadWriteGuard\(/g, source: positional(0, 1) },
+	{ file: "packages/wallet-core/src/utils/rw-guard.ts", expr: "this.name", site: /^ReadWriteGuard$/, source: positional(0, 1) },
 	{
 		file: "apps/extension/src/wallet/services/window-manager/window-manager.ts",
 		expr: "source",
-		site: /(?<!function\s)\bcreatePlaced\(/g,
+		site: /^createPlaced$/,
 		source: positional(4, 3),
 	},
 	{
 		file: "packages/extension-messaging/src/offscreen/telemetry.ts",
 		expr: "this.logSource",
-		site: /\bnew LoggingTelemetrySink\(/g,
+		site: /^LoggingTelemetrySink$/,
 		source: positional(1, 0),
 	},
 	{
 		file: "apps/extension/src/core/adapters/clock-ticker-adapter.ts",
 		expr: "this.logSource",
-		site: /\bnew ClockTickerAdapter\(/g,
+		site: /^ClockTickerAdapter$/,
 		source: positional(2, 1),
 	},
 	{
 		file: "packages/aztec-runtime/src/account/nulo-account.ts",
 		expr: "this.logSource",
-		site: /\bNuloAccount\.(?:new|fromSigningKey)\(/g,
+		site: /^NuloAccount\.(?:new|fromSigningKey)$/,
 		source: positional(2, 1),
 	},
 ]
@@ -255,19 +221,24 @@ function resolveSource(file: string, text: string, expr: string): string | undef
 	throw new Error(expr ? `unsupported source ${expr}` : "a logger with no source")
 }
 
-const lineOf = (text: string, index: number) => text.slice(0, index).split("\n").length
+/** Every callee `sourceExprs` reads, so each file is parsed once. */
+const READ_CALLEES = new RegExp([LOGGER_CALL, ...INJECTED.map((inj) => inj.site)].map((re) => `(?:${re.source})`).join("|"))
 
 /** Every source expression in one file, with its line: logger calls, a service's own log calls, and the sources it supplies to a primitive. */
 function sourceExprs(file: string, text: string): { expr: string; line: number }[] {
-	const at = (m: RegExpMatchArray) => ({ args: callArgs(text, (m.index ?? 0) + m[0].length), line: lineOf(text, m.index ?? 0) })
-	const calls = [...text.matchAll(LOGGER_CALL)].map(at).map(({ args, line }) => ({ expr: args[0] ?? "", line }))
+	const found = callsTo(file, text, READ_CALLEES)
+	const calls = found
+		.filter((call) => LOGGER_CALL.test(call.callee))
+		.map((call) => ({ expr: call.args[0]?.getText() ?? "", line: call.line }))
 	const own = STATIC_NAME.test(text) && SERVICE_LOG_CALL.test(text) ? [{ expr: "this.name", line: 0 }] : []
 	STATIC_NAME.lastIndex = 0
 	const supplied = INJECTED.flatMap((inj) =>
-		[...text.matchAll(inj.site)].map(at).flatMap(({ args, line }) => {
-			const expr = inj.source(args)
-			return expr === undefined ? [] : [{ expr, line }]
-		}),
+		found
+			.filter((call) => inj.site.test(call.callee))
+			.flatMap((call) => {
+				const expr = inj.source(call.args.map((arg) => arg.getText()))
+				return expr === undefined ? [] : [{ expr, line: call.line }]
+			}),
 	)
 	// A primitive's own parameter is resolved at its sites, so its own logger call is not.
 	return [...calls, ...own, ...supplied].filter(({ expr }) => !INJECTED.some((inj) => inj.file === file && inj.expr === expr))
