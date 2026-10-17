@@ -6,6 +6,7 @@ import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } fr
 import { navigateToSettings, waitForToast } from "./fixtures/helpers"
 import { pointerClick } from "./helpers/legal-drivers"
 import { activeTestId, focusInPopupOf } from "./helpers/pointer-probes"
+import { shotSend } from "./fixtures/send-page"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const SNACK = sel("snackbar")
@@ -502,6 +503,7 @@ test("in the Receive sheet a copy's snack sits 12px above the sheet's Close butt
 	await stubClipboard(page, "resolve")
 	await clickByTestId(page, "actions-receive")
 	await sheetAtRest(page, "receive-close")
+	await shotSend(page, "sheet-receive", "receive-close")
 
 	await clickByTestId(page, "receive-address")
 	await waitForToast(page, "Address is copied", 5_000, { kind: "success" })

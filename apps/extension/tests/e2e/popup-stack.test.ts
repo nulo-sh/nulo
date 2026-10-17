@@ -6,6 +6,7 @@
 import { expect } from "vitest"
 import { clickByTestId, openPopup, test, waitForHash } from "./fixtures/extension"
 import { settleClosedPopup } from "./fixtures/popup-leave"
+import { shotSend } from "./fixtures/send-page"
 import { pointerClick } from "./helpers/legal-drivers"
 import { coveredAt, tabAround, waitForFocus } from "./helpers/pointer-probes"
 
@@ -38,6 +39,7 @@ test("a popup over a popup: the lower one is covered, Tab stays in the top one, 
 
 	await pointerClick(page, "accounts-popup-new")
 	await page.waitForSelector(sel("account-name-input"), { visible: true, timeout: 5_000 })
+	await shotSend(page, "sheet-stacked", "account-name-input")
 
 	// Covered: the pointer would land on the newer popup, never on the row beneath it.
 	expect(await coveredAt(page, "account-item")).not.toBeNull()

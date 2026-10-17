@@ -2,6 +2,7 @@ import { expect } from "vitest"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
 import { addContact, closeStuckPopup, contactRow, deleteContact, navigateToSettings } from "./fixtures/helpers"
 import { isValidAztecAddress } from "@/utils/aztec-address"
+import { shotSend } from "./fixtures/send-page"
 
 // Per-CALL fresh identities: the extension fixture is file-scoped, so a
 // vitest retry re-enters a test with earlier attempts' contacts persisted —
@@ -144,6 +145,7 @@ test("delete-confirm never offers sender options (contacts are decoupled from se
 		row?.querySelector<HTMLElement>('[data-testid="contact-delete"]')?.click()
 	}, rowSelector)
 	await page.waitForSelector('[data-testid="confirm-submit"]', { visible: true, timeout: 5_000 })
+	await shotSend(page, "sheet-confirm-delete", "confirm-submit")
 
 	const toggleVisible = await page.evaluate(() => !!document.querySelector('[data-testid="confirm-toggle"]'))
 	expect(toggleVisible).toBe(false)

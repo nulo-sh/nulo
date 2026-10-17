@@ -52,6 +52,7 @@ for (const { from, to, control } of [
 		}, from)
 		await waitForHash(page, to, 10_000)
 		await page.waitForSelector(`[data-testid="${control}"]`, { visible: true, timeout: 10_000 })
+		if (to === "#/popup/settings/display") await shotSend(page, "settings-display", "display-row-network-name")
 
 		expect(registeredExtension.consoleErrors).toEqual([])
 		expect(registeredExtension.pageErrors).toEqual([])

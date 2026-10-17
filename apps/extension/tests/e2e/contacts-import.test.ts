@@ -49,6 +49,7 @@ import {
 	waitForStoredCount,
 	shownToast,
 } from "./helpers/contacts"
+import { shotSend } from "./fixtures/send-page"
 import { pressEscape } from "./helpers/pointer-probes"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
@@ -426,6 +427,7 @@ test("an import holds Lock until it ends, counts on one snack on every page, and
 }) => {
 	await onContacts(ctx, async (page) => {
 		await pickContactsFile(page, longImportFile())
+		await shotSend(page, "sheet-import-contacts", "import-contacts-submit")
 		await toastAfter(
 			page,
 			async () => {
