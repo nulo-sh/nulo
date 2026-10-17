@@ -3,6 +3,7 @@
  * provider, whose quote would replace a seeded one; the pin refuses the provider and seeds the quote,
  * so the expected text comes from the helper the popup prints with, at a known rate.
  */
+import type { Page } from "puppeteer"
 import { parseAmountToBaseUnits } from "@/utils/amount"
 import { FEE_JUICE_DECIMALS, FEE_READOUT_UNIT, feeDisplay, feeText } from "@/utils/fee-estimation"
 import { PRICE_FETCH_TIMEOUT_MS } from "@/wallet/services/price/spec"
@@ -44,6 +45,24 @@ export async function seedFeeJuiceQuote(ctx: ExtensionContext, pin: PricePin): P
 	} finally {
 		await page.close()
 	}
+}
+
+/**
+ * The element's text once it reads `expected`, else as it reads after `timeout`, for the caller to
+ * assert: a fee card renders its figures before its quote's read answers, then adds the dollars.
+ */
+export async function settledText(page: Page, testid: string, expected: string, timeout = 15_000): Promise<string | undefined> {
+	const sel = `[data-testid="${testid}"]`
+	const text = (s: string) => document.querySelector(s)?.textContent?.replace(/\s+/g, " ").trim()
+	await page
+		.waitForFunction(
+			(s: string, want: string) => document.querySelector(s)?.textContent?.replace(/\s+/g, " ").trim() === want,
+			{ timeout, polling: 100 },
+			sel,
+			expected,
+		)
+		.catch(() => undefined)
+	return page.evaluate(text, sel)
 }
 
 /** A fee in base units as the popup prints it at the pinned quote. */

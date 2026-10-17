@@ -341,7 +341,7 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		expect(w.findAllComponents(DottedTerm)).toHaveLength(0)
 	})
 
-	test("a failed estimate, and an operation the wallet never estimates while its preview runs: the legend alone, and no price read", async () => {
+	test("after a failed estimate, and while an operation the wallet never estimates runs its preview: the legend alone, and no price read", async () => {
 		const failed = await mountWith(undefined)
 		expect(row(failed).text()).toBe("Fee payment method set by Swap")
 		expect(waiting(failed).exists()).toBe(false)

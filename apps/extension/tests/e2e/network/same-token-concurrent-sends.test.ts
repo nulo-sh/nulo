@@ -718,7 +718,12 @@ test.skipIf(!hasConfig)(
 			console.log(`[same-token] re-ask ${asks} over a ${basis} basis: ${JSON.stringify(asking.reask)}`)
 			expect(BigInt(asking.reask.fee) > BigInt(asking.reask.cap), "a re-ask names a fee above its cap").toBe(true)
 			expect(await pendingTxCount(nodeUrl), "the node holds no tx of B before the accept").toBe(0)
-			if (asks === 1) await reopen(burst)
+			if (asks === 1) {
+				await reopen(burst)
+				// The sheet keeps the quote Home holds when it opens. Home's price reads start as it mounts,
+				// and its gas card shows its dollars once they answer.
+				await burst.page.waitForSelector('[data-testid="gas-fiat-public"]', { visible: true, timeout: 30_000 })
+			}
 			expect((await waitForAwaitingCard(burst.page, "queued")).subtitle).toBe("Fee went up. Review")
 			if (asks === 1) await shotSend(burst.page, "4-home-reask-row", "tx-awaiting-card")
 			await pointerClick(burst.page, "tx-awaiting-card")
