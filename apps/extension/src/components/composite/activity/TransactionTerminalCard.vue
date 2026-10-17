@@ -37,6 +37,8 @@ defineProps({
 	transferTypeLabel: { type: String, default: null },
 	amount: { type: String, default: null },
 	amountSymbol: { type: String, default: null },
+	/** The title names the function a dApp called: one line, cut at its end. */
+	oneLineTitle: { type: Boolean, default: false },
 	/** The route the row opens. */
 	to: { type: String, default: undefined },
 })
@@ -49,7 +51,7 @@ defineProps({
 		:amount="amount"
 		:amountSymbol="amountSymbol"
 		:to="to"
-		:oneLineTitle="Boolean(originLabel) && !transferTypeLabel"
+		:oneLineTitle="oneLineTitle"
 		testId="tx-terminal-card"
 	>
 		<template #badge>

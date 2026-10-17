@@ -145,6 +145,16 @@ Round 2 accepted: the App row moves into Phase 1, whose test reads it (C1); the 
 
 Size: 154 lines against the 150 target; the overrun is the record of panel rounds 2 and 3.
 
+## Audit verdicts (implementation)
+
+Net diff against `origin/dev` after Phase 3's merge; Codex gpt-6.1-sol at high, session 01a1476b; one Opus review alongside round 1.
+
+| Round | Codex | Opus | Accepted and fixed |
+|---|---|---|---|
+| 1 | approve with changes, 2 low | approve with changes, 1 medium, 3 low, nits | all; see below |
+
+Round 1: the scroller's `isolation` (and the hero's `z-index`) scoped a popup's scrim drawn in the middle under the hero and the nav (Opus, demonstrated red in a browser probe: `{ hero: false, nav: false }`); neither is a stacking context now and the shadow carries `z-index: 2`, pinned by a scrim probe in the Home scenario. A dApp whose name sanitizes to `""` got no chip and so no cut, and an unbreakable function name still widened Home (Opus, traced through `discoveryDappMetadata` and `sanitizeJournalSubtitle`); the journal cards now cut by the op's kind (`buildJournalTerminalCardProps`, the awaiting card's parent), pinned in `journal-state.test.ts` and by a nameless row in the rows scenario. Tests: the chip checked at 96 px and the two-chip row's app chip below its direction (Codex 1); the App value's first line filled to within a glyph, which only break-anywhere does (Opus 4); Home read where the reload lands, since a hash set before the start-up navigation settles is overridden (Opus 3, the probe showed it). Comments trimmed or made exact (Codex 2, Opus 5).
+
 ## Seeds
 
 ```

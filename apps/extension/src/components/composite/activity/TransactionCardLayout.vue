@@ -38,7 +38,7 @@ const props = defineProps({
 	opens: { type: Boolean, default: false },
 	/** The row is a receipt arriving now: it slides in and glows. */
 	arriving: { type: Boolean, default: false },
-	/** The title is a dApp's function name: it stays on one line, cut at its end. */
+	/** The title names the function a dApp called: it stays on one line, cut at its end. */
 	oneLineTitle: { type: Boolean, default: false },
 })
 

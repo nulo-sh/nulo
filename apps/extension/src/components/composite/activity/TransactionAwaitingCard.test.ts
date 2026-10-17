@@ -127,7 +127,11 @@ describe("composite/TransactionAwaitingCard", () => {
 
 	test("a dApp's call: its function title is cut to one line and the host sits in the app chip", () => {
 		const host = "staging-nemi-interface.nemi-e65.workers.dev"
-		const w = mountCard({ title: "Swap Exact Tokens For Tokens Supporting Fee On Transfer Tokens", originLabel: host })
+		const w = mountCard({
+			title: "Swap Exact Tokens For Tokens Supporting Fee On Transfer Tokens",
+			originLabel: host,
+			oneLineTitle: true,
+		})
 		expect(w.findComponent(STUBS.TransactionCardLayout).props("oneLineTitle")).toBe(true)
 		expect(w.find('[data-testid="activity-app-chip"]').text()).toBe(host)
 		expect(w.html()).not.toMatch(/transfer_chip/)

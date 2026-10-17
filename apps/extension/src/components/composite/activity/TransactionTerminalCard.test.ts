@@ -47,6 +47,7 @@ type CardProps = {
 	transferTypeLabel?: string | null
 	amount?: string | null
 	amountSymbol?: string | null
+	oneLineTitle?: boolean
 	to?: string
 }
 
@@ -121,7 +122,8 @@ describe("composite/TransactionTerminalCard", () => {
 
 	test("a dApp's call: its function title is cut to one line and the host sits in the app chip", () => {
 		const host = "staging-nemi-interface.nemi-e65.workers.dev"
-		const w = mountCard({ ...CANCELLED, title: "Swap Exact Tokens For Tokens Supporting Fee On Transfer Tokens", originLabel: host })
+		const title = "Swap Exact Tokens For Tokens Supporting Fee On Transfer Tokens"
+		const w = mountCard({ ...CANCELLED, title, originLabel: host, oneLineTitle: true })
 		expect(w.findComponent(STUBS.TransactionCardLayout).props("oneLineTitle")).toBe(true)
 		expect(w.find('[data-testid="activity-app-chip"]').text()).toBe(host)
 	})

@@ -18,8 +18,7 @@
 	padding: 1px 4px;
 }
 
-/* The chip that names a dApp: capped and cut at its end, never shrunk below its cap, so a short name
- * stays whole while the title gives way. */
+/* Never shrinks below its cap: the title gives way first, so a short name stays whole. */
 .app_chip {
 	composes: chip;
 	max-width: 96px;

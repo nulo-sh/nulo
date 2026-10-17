@@ -105,7 +105,7 @@ const transferTypeLabel = computed(() => {
 })
 
 const originLabel = computed(() => getOriginLabel(props.tx.origin))
-/** A row that names a dApp and no direction is titled by the dApp's function name. */
+/** A dApp's call with no direction is titled by the function it called. */
 const oneLineTitle = computed(() => Boolean(originLabel.value) && !transferTypeLabel.value)
 const hashSlice = computed(() => {
 	if (!props.tx.hash) return null

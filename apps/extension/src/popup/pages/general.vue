@@ -29,7 +29,6 @@ const appStore = useAppStore()
 
 const arrivals = inject(ARRIVALS_KEY, undefined)
 
-/** The middle has scrolled: the hero casts its shadow over the rows passing under it. */
 const scrolled = ref(false)
 
 /** One client and one seeding kick for the page: the hero and the list read the same snapshot. */
@@ -77,7 +76,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
-/* The hero stays put; only the middle scrolls. */
 .wrapper {
 	flex: 1;
 	min-height: 0;
@@ -85,19 +83,19 @@ onBeforeUnmount(() => {
 	background: var(--app-bg);
 }
 
-/* Stacked over the middle, so its shadow paints over the rows scrolling under it. */
 .hero {
 	position: relative;
-	z-index: 1;
 	flex: none;
 }
 
-/* Lets every press through to the row beneath it. */
+/* Over the rows' raised actions (z-index 1) as they scroll under it. Neither the hero nor the middle
+ * is a stacking context, so a popup's scrim drawn inside either still covers the whole popup. */
 .scroll_shadow {
 	position: absolute;
 	right: 0;
 	bottom: -12px;
 	left: 0;
+	z-index: 2;
 	height: 12px;
 
 	pointer-events: none;
@@ -121,12 +119,12 @@ onBeforeUnmount(() => {
 	}
 }
 
-/* Its own stacking context keeps the rows' raised actions under the hero's shadow. */
+/* A block around the content column: as the scroll container, the column would let a child with
+ * hidden overflow shrink below its content. */
 .scroller {
 	flex: 1;
 	min-height: 0;
 	overflow-y: auto;
-	isolation: isolate;
 }
 
 .content {

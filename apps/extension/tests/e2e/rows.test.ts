@@ -710,8 +710,12 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 	expect(listedExtensionPerTest.pageErrors).toEqual([])
 }, 180_000)
 
-/** A dApp's function name and host at the lengths testers met: the host breaks only at its hyphens. */
+/** A dApp's function name and host, 62 and 43 characters: the host breaks only at its hyphens. */
 const LONG_METHOD = "swap_exact_tokens_for_tokens_supporting_fee_on_transfer_tokens"
+/** A dApp that names itself nothing gets no chip, and this name humanizes to one unbreakable word. */
+const UNBREAKABLE_METHOD = "swapexacttokensfortokenssupportingfeeontransfertokens"
+const NAMED_RECORD = "d1".repeat(8)
+const NAMELESS_RECORD = "d2".repeat(8)
 const LONG_HOST = "staging-nemi-interface.nemi-e65.workers.dev"
 const SHORT_APP = "NEMI"
 const APP_CHIP_CAP = 96
@@ -721,14 +725,17 @@ const DAPP_TRANSFER_HASH = `0x${"6d".repeat(32)}`
 type NamedRows = {
 	/** Scroll containers and the document that came out wider than their box. */
 	overflowing: string[]
-	/** Per row: its title's line count, whether its text is cut and shown with an ellipsis, its app chip. */
-	rows: Record<string, { lines: number; cut: boolean; ellipsis: boolean; chip: { width: number; cut: boolean } | null }>
+	/** Per row: its title's line count, whether its text is cut and shown with an ellipsis, its app chip
+	 *  and whether that chip sits below the element before it. */
+	rows: Record<string, { lines: number; cut: boolean; ellipsis: boolean; chip: { width: number; cut: boolean; below: boolean } | null }>
 }
 
-/** Reads the three dApp rows once each is drawn and the fonts are in. */
+/** Reads the four dApp rows once each is drawn and the fonts are in. */
 async function readDappRows(page: Page): Promise<NamedRows> {
+	const journalRow = (id: string) => `${sel("tx-terminal-card")}:has([href$="${id}"])`
 	const rows = {
-		terminal: sel("tx-terminal-card"),
+		terminal: journalRow(NAMED_RECORD),
+		nameless: journalRow(NAMELESS_RECORD),
 		call: `${sel("tx-card")}[data-tx-hash="${DAPP_CALL_HASH}"]`,
 		transfer: `${sel("tx-card")}[data-tx-hash="${DAPP_TRANSFER_HASH}"]`,
 	}
@@ -755,11 +762,16 @@ async function readDappRows(page: Page): Promise<NamedRows> {
 			const title = row.querySelector<HTMLElement>('[data-testid="activity-title"]')
 			if (!title) throw new Error("a row has no title")
 			const chip = row.querySelector<HTMLElement>('[data-testid="activity-app-chip"]')
+			const before = chip?.previousElementSibling?.getBoundingClientRect()
 			return {
 				lines: lineCount(title),
 				cut: title.scrollWidth > title.clientWidth,
 				ellipsis: getComputedStyle(title).textOverflow === "ellipsis",
-				chip: chip && { width: chip.getBoundingClientRect().width, cut: chip.scrollWidth > chip.clientWidth },
+				chip: chip && {
+					width: chip.getBoundingClientRect().width,
+					cut: chip.scrollWidth > chip.clientWidth,
+					below: before !== undefined && chip.getBoundingClientRect().top >= before.bottom - 0.5,
+				},
 			}
 		}
 		const overflowing = new Set<string>()
@@ -775,7 +787,7 @@ async function readDappRows(page: Page): Promise<NamedRows> {
 	}, rows)
 }
 
-test("a dApp's long function name and host never widen Home or History: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol never cut; the details' App value breaks against the box's right edge", async ({
+test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol never cut and its app chip under its direction; the details' App value breaks anywhere against the box's right edge", async ({
 	listedExtensionPerTest,
 }) => {
 	const page = await openPopup(listedExtensionPerTest)
@@ -783,31 +795,41 @@ test("a dApp's long function name and host never widen Home or History: the titl
 	const scope = await readActivityScope(page)
 	const now = Date.now()
 	await seedJournalRecord(page, scope, {
-		id: "d1".repeat(8),
+		id: NAMED_RECORD,
 		kind: "dapp_execute",
 		title: LONG_METHOD,
 		subtitle: LONG_HOST,
 		progress: { stage: "cancelled" },
 		at: now,
 	})
+	await seedJournalRecord(page, scope, {
+		id: NAMELESS_RECORD,
+		kind: "dapp_execute",
+		title: UNBREAKABLE_METHOD,
+		subtitle: "",
+		progress: { stage: "cancelled" },
+		at: now - 500,
+	})
 	await seedTransaction(page, scope, { hash: DAPP_CALL_HASH, amount: "0", method: LONG_METHOD, dapp: SHORT_APP, at: now - 1_000 })
 	await seedTransaction(page, scope, { hash: DAPP_TRANSFER_HASH, amount: "2500000", transferType: 2, dapp: LONG_HOST, at: now - 2_000 })
 	await seedUsdQuoteAndReload(page)
 	await page.bringToFront()
 
+	// The reload's start-up navigation lands on Home and overrides a hash set before it settles, and
+	// a hash Home is already on remounts nothing: Home is read where the reload lands, its rows awaited.
 	for (const surface of SURFACES.filter((s) => s.name !== "the token page")) {
-		await openSurface(page, surface.hash)
+		if (surface.name !== "Home") await openSurface(page, surface.hash)
 		const { overflowing, rows } = await readDappRows(page)
 		console.log(`[rows] ${surface.name}, dApp rows: ${JSON.stringify(rows)}`)
 		await shotSend(page, `dapp-rows-${surface.name.toLowerCase()}`, "tx-terminal-card")
 		expect(overflowing, surface.name).toEqual([])
-		for (const key of ["terminal", "call"])
+		for (const key of ["terminal", "nameless", "call"])
 			expect(rows[key], `${surface.name}, ${key}`).toMatchObject({ lines: 1, cut: true, ellipsis: true })
-		expect(rows.terminal.chip?.width).toBeLessThanOrEqual(APP_CHIP_CAP + 0.5)
-		expect(rows.terminal.chip?.cut).toBe(true)
-		expect(rows.call.chip?.cut).toBe(false)
+		expect(rows.nameless.chip).toBeNull()
+		expect(rows.terminal.chip).toMatchObject({ cut: true, width: expect.closeTo(APP_CHIP_CAP, 0) })
+		expect(rows.call.chip).toMatchObject({ cut: false, below: false })
 		expect(rows.transfer.cut).toBe(false)
-		expect(rows.transfer.chip?.width).toBeLessThanOrEqual(APP_CHIP_CAP + 0.5)
+		expect(rows.transfer.chip).toMatchObject({ cut: true, below: true, width: expect.closeTo(APP_CHIP_CAP, 0) })
 	}
 
 	await navigateByHash(page, `#/popup/tx/${DAPP_TRANSFER_HASH}`)
@@ -822,10 +844,17 @@ test("a dApp's long function name and host never widen Home or History: the titl
 		const range = document.createRange()
 		range.selectNodeContents(value)
 		const lines = [...range.getClientRects()]
+		const text = value.firstChild as Text
+		range.setStart(text, text.data.indexOf("s"))
+		range.setEnd(text, text.data.indexOf("s") + 1)
+		const glyph = range.getBoundingClientRect().width
 		return {
 			text: value.textContent?.trim(),
 			lines: new Set(lines.map((r) => Math.round(r.top))).size,
 			lineRights: lines.map((r) => r.right - inner),
+			// Breaking anywhere fills the first line to within a glyph; at the hyphens it would end far short.
+			firstLineSlack: Math.min(...lines.map((r) => r.left)) - value.getBoundingClientRect().left,
+			glyph,
 			right: value.getBoundingClientRect().right - inner,
 			gap: value.getBoundingClientRect().left - label.getBoundingClientRect().right,
 		}
@@ -835,13 +864,14 @@ test("a dApp's long function name and host never widen Home or History: the titl
 	expect(app.lines).toBe(2)
 	expect(Math.abs(app.right)).toBeLessThanOrEqual(0.5)
 	for (const right of app.lineRights) expect(Math.abs(right)).toBeLessThanOrEqual(0.5)
+	expect(app.firstLineSlack).toBeLessThan(app.glyph)
 	expect(app.gap).toBeGreaterThanOrEqual(16 - 0.5)
 
 	expect(listedExtensionPerTest.consoleErrors).toEqual([])
 	expect(listedExtensionPerTest.pageErrors).toEqual([])
 }, 180_000)
 
-/** Five priced sends: more than Home's middle shows at 360 × 600 or 360 × 900. */
+/** Five priced sends: more than Home's middle shows at 360 × 600 and in the 900px-tall panels. */
 const HOME_ROWS = Array.from({ length: 5 }, (_, i) => `0x${(0x71 + i).toString(16).repeat(32)}`)
 
 type HomeLayout = { heroTop: number; scrollTop: number; maxScroll: number; shadow: string; navBottom: number; viewport: number }
@@ -877,7 +907,7 @@ async function scrollHome(page: Page, top: number, shadow: "0" | "1"): Promise<H
 	return readHome(page)
 }
 
-test("Home's hero stays fixed over a scrolling middle: the shadow shows only once it has scrolled and lets a press through to the row under it; a tall panel keeps the nav at its bottom; PageDown on a row scrolls the middle", async ({
+test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the middle still covers it; the shadow shows only once the middle has scrolled and lets a press through to the row under it; a tall panel keeps the nav at its bottom; PageDown on a row scrolls the middle", async ({
 	listedExtensionPerTest,
 	skip,
 }) => {
@@ -893,6 +923,21 @@ test("Home's hero stays fixed over a scrolling middle: the shadow shows only onc
 
 	const rest = await scrollHome(page, 0, "0")
 	console.log(`[rows] Home at rest: ${JSON.stringify(rest)}`)
+	// A popup draws its scrim where it is mounted, and a row's review sheet mounts in the middle: the
+	// scrim must still cover the hero and the nav, as it does on every other page.
+	const scrimCovers = await page.$eval(sel("home-scroller"), (scroller) => {
+		const scrim = document.createElement("div")
+		scrim.style.cssText = "position: absolute; inset: 0; z-index: 400"
+		scroller.firstElementChild?.append(scrim)
+		const on = (testid: string) => {
+			const box = document.querySelector(`[data-testid="${testid}"]`)?.getBoundingClientRect()
+			return box !== undefined && document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) === scrim
+		}
+		const covers = { hero: on("balance-amount"), nav: on("bottom-nav") }
+		scrim.remove()
+		return covers
+	})
+	expect(scrimCovers).toEqual({ hero: true, nav: true })
 	await shotSend(page, "home-rest", "home-hero")
 	const scrolled = await scrollHome(page, 200, "1")
 	console.log(`[rows] Home scrolled: ${JSON.stringify(scrolled)}`)

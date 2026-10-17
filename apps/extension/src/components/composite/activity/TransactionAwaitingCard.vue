@@ -46,6 +46,8 @@ const props = defineProps({
 	/** A queued send whose fee came out above its cap: this line replaces the stage line, and the row
 	 *  opens its review. */
 	reaskLine: { type: String, default: null },
+	/** The title names the function a dApp called: one line, cut at its end. */
+	oneLineTitle: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(["cancel", "focus", "review"])
@@ -67,7 +69,7 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 			:backend="backend"
 			:opens="focusable || Boolean(reaskLine && jobId)"
 			:actionCount="(focusable ? 1 : 0) + (showCancel ? 1 : 0)"
-			:oneLineTitle="Boolean(originLabel) && !transferTypeLabel"
+			:oneLineTitle="oneLineTitle"
 			testId="tx-awaiting-card"
 			@activate="reaskLine ? emit('review', jobId) : emit('focus', jobId)"
 		>
