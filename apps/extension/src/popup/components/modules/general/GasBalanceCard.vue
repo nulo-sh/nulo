@@ -213,12 +213,12 @@ onBeforeUnmount(() => {
 }
 
 .label {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
 .amount {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--nulo-accent);
 	transition: opacity 0.2s var(--bezier, ease);
 }

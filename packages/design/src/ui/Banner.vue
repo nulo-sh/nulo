@@ -135,7 +135,7 @@ defineProps({
 }
 
 .action_btn {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	align-self: flex-start;
 	color: var(--nulo-accent);
 	background: transparent;

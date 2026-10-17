@@ -83,7 +83,7 @@ const reason = computed(() => (isFailed.value ? "Couldn't set up" : "Couldn't ve
 }
 
 .retry {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	height: 28px;
 	padding: 0 12px;
 	background: transparent;

@@ -36,7 +36,7 @@ const emit = defineEmits<{ save: [] }>()
 }
 
 .action {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	flex: none;
 	padding: 0;
 	border: none;

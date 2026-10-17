@@ -21,7 +21,7 @@ describe("Text", () => {
 	})
 
 	test("variant → its type-- role class, beside the other props' classes", () => {
-		expect(mount(Text, { props: { variant: "data", color: "primary" } }).classes()).toEqual(["type--data", "lh--100", "color--primary"])
+		expect(mount(Text, { props: { variant: "meta", color: "primary" } }).classes()).toEqual(["type--meta", "lh--100", "color--primary"])
 	})
 
 	test("without variant, a tag sets no type and inherits its parent's", () => {

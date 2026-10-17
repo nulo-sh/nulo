@@ -1,6 +1,7 @@
 import "@nulo/wallet-sdk-schema-patch/register"
 import { describe, test, expect, beforeAll } from "vitest"
 import {
+	AuthRegistryRefusalError,
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
 	ContractNotRegisteredError,
@@ -12,6 +13,7 @@ import {
 	ValidationError,
 } from "@nulo/extension-messaging/errors"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { NoUsableAccountError } from "./account-resolution"
 import { dataFieldsCovered, projectKnownCapability, ungrantedAccounts, unwrapOperationResult, WalletSdkDispatcher } from "./dispatcher"
 import type { Capability, DataCapability, GrantedCapabilityRecord, RejectedCapabilityRecord } from "./capabilities"
@@ -77,6 +79,10 @@ const noopLogger: ILogger = { log: () => {} }
 const stubNetwork: INetworkReader = {
 	getNetworksRaw: async () => [],
 }
+/** A chain the wallet serves, for routes that must get past the dispatch-level chain check. */
+const servingNetwork: INetworkReader = {
+	getNetworksRaw: async () => [{ id: "net-0", chainId: 0 } as INetworkRef],
+}
 const stubAccount: AccountFake = { provisionDefaultAccount: declineProvision, getAccounts: async () => [] }
 const stubExecution: IExecutionRunner = {
 	executeOperations: async () => [],
@@ -129,7 +135,7 @@ function makeDispatcher(
 		execute: async () => ({}) as never,
 		requestCapabilities: requestCapabilitiesImpl as never,
 	}
-	return new WalletSdkDispatcher(stubNetwork, stubAccount, stubExecution, interaction, sessionWriter, noopLogger)
+	return new WalletSdkDispatcher(servingNetwork, stubAccount, stubExecution, interaction, sessionWriter, noopLogger)
 }
 
 const ctx = {
@@ -760,10 +766,7 @@ describe("dispatcher.requestCapabilities — field-aware accounts diff", () => {
 		expect(accounts?.accounts).toEqual([])
 	})
 
-	test("enrichGrantedCapabilities resolves the network UNCONDITIONALLY — canGet:false on an unresolvable chain THROWS, not [] — Q11", async () => {
-		// Behavior-preservation pin: resolveNetwork
-		// runs BEFORE the canGet gate, so a future gate-hoist can't silently turn a
-		// throw into accounts:[]. networkReader returns no networks → resolve throws.
+	test("requestCapabilities with canGet:false on an unresolvable chain THROWS, not [] — Q11", async () => {
 		const accountReader: AccountFake = { provisionDefaultAccount: declineProvision, getAccounts: async () => [] }
 		const networkReader: INetworkReader = { getNetworksRaw: async () => [] }
 		const session = makeSession({
@@ -1870,7 +1873,7 @@ describe("dispatcher — getWalletFeatures", () => {
 			execute: async () => ({}) as never,
 			requestCapabilities: (async () => ({})) as never,
 		}
-		const dispatcher = new WalletSdkDispatcher(stubNetwork, stubAccount, stubExecution, interaction, writer, noopLogger)
+		const dispatcher = new WalletSdkDispatcher(servingNetwork, stubAccount, stubExecution, interaction, writer, noopLogger)
 		const features = (await dispatcher.dispatch("getWalletFeatures", [], ctx)) as readonly string[]
 		expect(features).toEqual(WALLET_FEATURES)
 		expect(features).toContain(DAPP_SELF_PAY_FEATURE)
@@ -1899,7 +1902,7 @@ describe("dispatcher — isTokenRegistered reachability + gating", () => {
 			execute: async () => ({}) as never,
 			requestCapabilities: (async () => ({})) as never,
 		}
-		return new WalletSdkDispatcher(stubNetwork, stubAccount, stubExecution, interaction, writer, noopLogger, reader)
+		return new WalletSdkDispatcher(servingNetwork, stubAccount, stubExecution, interaction, writer, noopLogger, reader)
 	}
 
 	test("schema patch extends WalletSchema with a 1-arg boolean `isTokenRegistered` entry", async () => {
@@ -1947,7 +1950,7 @@ describe("dispatcher — isTokenRegistered reachability + gating", () => {
 			execute: async () => ({}) as never,
 			requestCapabilities: (async () => ({})) as never,
 		}
-		const dispatcher = new WalletSdkDispatcher(stubNetwork, stubAccount, stubExecution, interaction, writer, noopLogger)
+		const dispatcher = new WalletSdkDispatcher(servingNetwork, stubAccount, stubExecution, interaction, writer, noopLogger)
 		await expect(dispatcher.dispatch("isTokenRegistered", [TOKEN], ctx)).rejects.toThrow(/not available/)
 	})
 })
@@ -2773,6 +2776,17 @@ describe("dispatcher — createAuthWit asks unless the authorizations consent is
 		await h.batch(intent(TOKEN))
 		expect(h.counts).toEqual({ signed: 0, windows: 1 })
 	})
+
+	test("an intent naming the authorization registry is refused under any scope and consent: nothing signs, no window opens", async () => {
+		const REGISTRY = STANDARD_AUTH_REGISTRY_ADDRESS.toString()
+		const h = harness({ capabilityGrants: [accounts, anyContract], authorizationsWithoutAsking: { broad: true } })
+		await expect(h.authwit(intent(REGISTRY))).rejects.toBeInstanceOf(AuthRegistryRefusalError)
+		await expect(h.authwit({ consumer: REGISTRY, innerHash: `0x${"01".repeat(32)}` })).rejects.toBeInstanceOf(AuthRegistryRefusalError)
+		expect(h.counts).toEqual({ signed: 0, windows: 0 })
+
+		await expect(h.authwit(intent(TOKEN))).resolves.toBe("0xsigned")
+		expect(h.counts).toEqual({ signed: 1, windows: 0 })
+	})
 })
 
 describe("dispatcher — the authorizations consent in requestCapabilities", () => {
@@ -3018,7 +3032,7 @@ describe("dispatcher — contracts field-diff re-consent", () => {
 			execute: async () => ({}) as never,
 			requestCapabilities: (async () => ({})) as never,
 		}
-		const dispatcher = new WalletSdkDispatcher(stubNetwork, stubAccount, stubExecution, interaction, writer, noopLogger, reader)
+		const dispatcher = new WalletSdkDispatcher(servingNetwork, stubAccount, stubExecution, interaction, writer, noopLogger, reader)
 		await dispatcher.dispatch("isTokenRegistered", [TOKEN], { ...ctx, profileId: "profile-A", chainId: 42 })
 		expect(seen[0]).toEqual([TOKEN, "profile-A", 42])
 	})
@@ -3488,7 +3502,7 @@ describe("dispatcher — arg guards: order, tolerance, batch-leg validation", ()
 			execute: async () => ({}) as never,
 			requestCapabilities: (async () => ({})) as never,
 		}
-		return new WalletSdkDispatcher(stubNetwork, stubAccount, stubExecution, interaction, writer, noopLogger)
+		return new WalletSdkDispatcher(servingNetwork, stubAccount, stubExecution, interaction, writer, noopLogger)
 	}
 
 	test("guard rejects BEFORE capability enforcement — arity garbage on an ungranted method", async () => {
@@ -3636,7 +3650,10 @@ describe("dispatcher session-lookup anchoring", () => {
 		// Anchored, never the active profile: an accountless mutation racing a
 		// switch must carry the composing profile's network row so execution
 		// fails closed on the ownership check.
-		expect(seen).toEqual([["test-profile", 0]])
+		expect(seen).toEqual([
+			["test-profile", 0],
+			["test-profile", 0],
+		])
 	})
 })
 
@@ -4145,5 +4162,109 @@ describe("dispatcher.requestCapabilities — a contracts permission that grants 
 		).rejects.toThrow(refusal)
 		expect(h.popups).toEqual([])
 		expect(h.calls).toEqual({ setRejections: [], setGrants: [] })
+	})
+})
+
+describe("dispatcher — a chain the wallet does not serve answers CHAIN_NOT_SUPPORTED on every route", () => {
+	const TOKEN = `0x${"07".repeat(32)}`
+	const held = (capability: Record<string, unknown>) => ({ capability, grantedAt: 1 }) as unknown as GrantedCapabilityRecord
+	const noNetwork: INetworkReader = { getNetworksRaw: async () => [] }
+
+	/** The routes whose handlers read no network of their own. */
+	const ROUTES: Array<{ route: string; method: string; args: unknown[]; grants: GrantedCapabilityRecord[]; reaches: string[] }> = [
+		{
+			route: "isTokenRegistered",
+			method: "isTokenRegistered",
+			args: [TOKEN],
+			grants: [held({ type: "contracts", contracts: [TOKEN], canGetMetadata: true })],
+			reaches: ["tokenRegistryReader"],
+		},
+		{
+			route: "requestCapabilities, every type held",
+			method: "requestCapabilities",
+			args: [withHeader({ capabilities: [{ type: "data", addressBook: true }] })],
+			grants: [held({ type: "data", addressBook: true })],
+			reaches: [],
+		},
+		{
+			route: "requestCapabilities, a new type",
+			method: "requestCapabilities",
+			args: [withHeader({ capabilities: [{ type: "data", addressBook: true }] })],
+			grants: [],
+			reaches: ["window", "applyCapabilityDecision"],
+		},
+		{
+			route: "requestCapabilities, an empty manifest",
+			method: "requestCapabilities",
+			args: [withHeader({ capabilities: [] })],
+			grants: [],
+			reaches: [],
+		},
+		{ route: "getWalletFeatures", method: "getWalletFeatures", args: [], grants: [], reaches: [] },
+		{
+			route: "getAccounts on an accounts grant with no account",
+			method: "getAccounts",
+			args: [],
+			grants: [held({ type: "accounts", canGet: true, canCreateAuthWit: false, accounts: [] })],
+			reaches: [],
+		},
+		{ route: "an empty batch", method: "batch", args: [[]], grants: [], reaches: [] },
+	]
+
+	function harness(networks: INetworkReader, grants: GrantedCapabilityRecord[]) {
+		const touched: string[] = []
+		const { writer } = makeSessionWriter(makeSession({ capabilityGrants: grants }))
+		const counted: IDappSessionWriter = {
+			...writer,
+			applyCapabilityDecision: async (id, decision) => {
+				touched.push("applyCapabilityDecision")
+				return writer.applyCapabilityDecision(id, decision)
+			},
+		}
+		const interaction: IDappInteractionRunner = {
+			execute: async () => ({}) as never,
+			requestCapabilities: (async () => {
+				touched.push("window")
+				return { granted: [{ type: "data", addressBook: true }] }
+			}) as never,
+		}
+		const reader = {
+			isTokenRegistered: async () => {
+				touched.push("tokenRegistryReader")
+				return true
+			},
+		}
+		const dispatcher = new WalletSdkDispatcher(networks, stubAccount, stubExecution, interaction, counted, noopLogger, reader)
+		return { dispatcher, touched }
+	}
+
+	test.each(ROUTES)("$route: refused before its handler runs", async ({ method, args, grants }) => {
+		const { dispatcher, touched } = harness(noNetwork, grants)
+		await expect(dispatcher.dispatch(method, args, ctx)).rejects.toBeInstanceOf(ChainNotSupportedError)
+		expect(touched).toEqual([])
+	})
+
+	test.each(ROUTES)("$route: answered on a served chain", async ({ method, args, grants, reaches }) => {
+		const { dispatcher, touched } = harness(servingNetwork, grants)
+		await expect(dispatcher.dispatch(method, args, ctx)).resolves.toBeDefined()
+		expect(touched).toEqual(reaches)
+	})
+
+	test("each batch leg is checked again: a chain that stops being served mid-batch refuses the next leg", async () => {
+		let reads = 0
+		const flipping: INetworkReader = { getNetworksRaw: async () => (reads++ < 2 ? [{ id: "net-0", chainId: 0 } as INetworkRef] : []) }
+		const { dispatcher } = harness(flipping, [])
+		const legs = [
+			{ name: "getWalletFeatures", args: [] },
+			{ name: "getWalletFeatures", args: [] },
+		]
+		await expect(dispatcher.dispatch("batch", [legs], ctx)).rejects.toBeInstanceOf(ChainNotSupportedError)
+		expect(reads).toBe(3)
+	})
+
+	test("the capability refusal keeps precedence over the chain check", async () => {
+		const { dispatcher, touched } = harness(noNetwork, [])
+		await expect(dispatcher.dispatch("isTokenRegistered", [TOKEN], ctx)).rejects.toBeInstanceOf(CapabilityNotGrantedError)
+		expect(touched).toEqual([])
 	})
 })

@@ -75,30 +75,25 @@ jobs:
             console.log('patched extension version to', p.version);
           "
 
-      # Vite bakes any VITE_* env into the bundle, so fail FAST if one of these
-      # is even set — stronger than only grepping the artifact afterwards (which
-      # we also do below). The CoinGecko key is a local/CI convenience that must
-      # never ship; the e2e flags would ship a wallet that misprices or stops
-      # seeding defaults entirely.
+      # Vite bakes any VITE_* env into the bundle, so fail FAST if one is even set — stronger than
+      # only grepping the artifact afterwards (which we also do below). Only the production build
+      # options pass: every other VITE_* is a secret (the CoinGecko key) or a test flag that would
+      # ship a wallet that misprices, skips proving, stops seeding defaults or widens its fee caps,
+      # and an allowlist refuses a new test flag without an edit here.
       - name: Assert no test-only or secret VITE_* flags in the build env
         run: |
-          if [ -n "${VITE_COINGECKO_API_KEY:-}" ]; then
-            echo "::error::VITE_COINGECKO_API_KEY is set in the build environment — release builds must be keyless" >&2
-            exit 1
-          fi
-          if [ -n "${VITE_NULO_E2E_PRICE_MAP:-}" ]; then
-            echo "::error::VITE_NULO_E2E_PRICE_MAP is set in the build environment — e2e-only price mapping must never arm a release build" >&2
-            exit 1
-          fi
-          if [ -n "${VITE_NULO_E2E_TOKEN_SEEDS:-}" ] || [ -n "${VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM:-}" ]; then
-            echo "::error::VITE_NULO_E2E_TOKEN_SEEDS(_CONFIRM) is set in the build environment — an armed token-seed source REPLACES the default seed list, so a release build carrying it would ship a wallet that never seeds defaults" >&2
-            exit 1
-          fi
-          if [ -n "${VITE_NULO_E2E_CSP_REPORT:-}" ]; then
-            echo "::error::VITE_NULO_E2E_CSP_REPORT is set in the build environment — the e2e-only CSP violation recorder must never ship" >&2
-            exit 1
-          fi
-          echo "✓ build env carries no CoinGecko key and no e2e price-map, token-seed or CSP-report flags"
+          fail=0
+          for name in $(compgen -e); do
+            case "$name" in
+              VITE_FEE_JUICE_BRIDGE_URL | VITE_NULO_ALLOW_IFRAME_DAPPS) ;;
+              VITE_*)
+                echo "::error::$name is set in the build environment — only VITE_FEE_JUICE_BRIDGE_URL and VITE_NULO_ALLOW_IFRAME_DAPPS may reach this build" >&2
+                fail=1
+                ;;
+            esac
+          done
+          if [ "$fail" != 0 ]; then exit 1; fi
+          echo "✓ build env carries no VITE_* flag beyond the production build options"
 
       - name: Build Chrome
         if: inputs.target == 'chrome' || inputs.target == 'both'

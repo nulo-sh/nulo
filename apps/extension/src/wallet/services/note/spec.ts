@@ -23,16 +23,14 @@ export type Note = {
 	renderError?: string
 }
 
-/** Note shape extended with the raw `NoteDao` identity + ordering fields that
- *  the popup-friendly `Note` shape strips. Used by background-side consumers
- *  (incoming-transfer discovery) that need the cryptographically-unique
- *  `siloedNullifier` for idempotent records and the block-index tuple for
- *  ordering. */
+/** Note shape extended with the identity + ordering fields that the popup-friendly `Note` shape
+ *  lacks. Used by background-side consumers (incoming-transfer discovery) that need a per-note
+ *  identity for idempotent records and the block-index tuple for ordering. */
 export type RawNote = Note & {
-	/** Cryptographically unique per note (nullifier siloed under the
-	 *  contract's address). Stable across PXE syncs; the unique key for
-	 *  incoming-transfer records. */
-	siloedNullifier: string
+	/** The leaf the note's creation inserts into the note hash tree. It survives a re-mine, even
+	 *  under a fee-bump replacement with another tx hash, and differs for any other note at the same
+	 *  position; the key of incoming-transfer records. */
+	uniqueNoteHash: string
 	/** Note's commitment hash. Stable per note. */
 	noteHash: string
 	/** L2 block the note was created in. Ordering field. */
@@ -58,10 +56,10 @@ export type Methods = {
 	 */
 	getNotes(networkId: string, account: string, contract?: string): Note[]
 	/**
-	 * Same as `getNotes` but exposes the raw `NoteDao` identity + ordering
-	 * fields. Reserved for background-side consumers that key records by
-	 * `siloedNullifier` or order by `(l2BlockNumber, txIndexInBlock,
-	 * noteIndexInTx)`. `status` defaults to `"active"`.
+	 * Same as `getNotes` plus each note's identity + ordering fields, for background-side consumers
+	 * that key records by `uniqueNoteHash` or order by `(l2BlockNumber, txIndexInBlock,
+	 * noteIndexInTx)`. Rejects when a note's identity cannot be computed. `status` defaults to
+	 * `"active"`.
 	 */
 	getNotesRaw(networkId: string, account: string, contract?: string, status?: NoteReadStatus): RawNote[]
 	/**

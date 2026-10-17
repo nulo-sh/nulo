@@ -30,6 +30,7 @@ export type BundleId =
 	| "data"
 	| "data-scopedEvents"
 	| "contractClasses"
+	| "contractClasses-listed"
 	| "full"
 
 export type AppCapabilitiesManifest = {
@@ -48,6 +49,10 @@ const MANIFEST_METADATA: AppCapabilitiesManifest["metadata"] = {
 function getTokenAddress(): string {
 	if (typeof window === "undefined") return "0x0"
 	return new URL(window.location.href).searchParams.get("tokenAddress") || getInput("tokenAddress") || "0x0"
+}
+
+function getClassId(): string {
+	return getInput("classId") || "0x0"
 }
 
 function buildCapabilities(id: BundleId): unknown[] {
@@ -122,6 +127,12 @@ function buildCapabilities(id: BundleId): unknown[] {
 			return [
 				{ type: "contracts", contracts: "*", canRegister: true, canGetMetadata: true },
 				{ type: "contractClasses", classes: "*", canGetMetadata: true },
+			]
+		case "contractClasses-listed":
+			return [
+				{ type: "accounts", canGet: true },
+				{ type: "contracts", contracts: [tokenAddress], canRegister: true, canGetMetadata: true },
+				{ type: "contractClasses", classes: [getClassId()], canGetMetadata: true },
 			]
 		case "full":
 			return [

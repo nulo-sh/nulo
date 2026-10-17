@@ -14,18 +14,18 @@ const props = defineProps({
 		default: "medium",
 	},
 	title: String,
-	/** `name` for a row titled with a person's or account's name, `data` for an identifier. */
+	/** `name` for a row titled with a person's or account's name, `meta` for an identifier. */
 	titleVariant: {
 		type: String,
 		default: "row-title",
-		validator: (value) => ["row-title", "name", "data"].includes(value),
+		validator: (value) => ["row-title", "name", "meta"].includes(value),
 	},
 	description: String,
-	/** `data` for an address or id. */
+	/** `meta` for an address or id. */
 	descriptionVariant: {
 		type: String,
 		default: "caption",
-		validator: (value) => ["caption", "data"].includes(value),
+		validator: (value) => ["caption", "meta"].includes(value),
 	},
 	icon: String,
 	iconBgColor: {
@@ -47,6 +47,8 @@ const props = defineProps({
 		type: Boolean,
 		default: false,
 	},
+	/** A glyph in the chevron's place, for a row that acts in place instead of opening a page. */
+	trailingIcon: String,
 	disabled: {
 		type: Boolean,
 		default: false,
@@ -135,11 +137,11 @@ const Root = (_, { slots }) => {
 				<!-- Labels: Title & Description -->
 				<Flex direction="column" gap="4" wide>
 					<Flex align="center" gap="6">
-						<Text v-if="titleVariant === 'data'" :id="titleId" data-testid="setting-title" variant="data" color="primary" :class="[$style.title, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
+						<Text v-if="titleVariant === 'meta'" :id="titleId" data-testid="setting-title" variant="meta" color="primary" :class="[$style.title, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
 						<Text v-else :id="titleId" data-testid="setting-title" :variant="titleVariant === 'name' ? 'name' : 'row-title'" color="primary" :class="[$style.title, $style.title_size, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
 						<slot name="titleSuffix" />
 					</Flex>
-					<Text v-if="description || $slots.description" data-testid="setting-description" :variant="descriptionVariant === 'data' ? 'data' : 'caption'" color="tertiary" :class="$style.description">
+					<Text v-if="description || $slots.description" data-testid="setting-description" :variant="descriptionVariant === 'meta' ? 'meta' : 'caption'" color="tertiary" :class="$style.description">
 						<slot name="description">{{ description }}</slot>
 					</Text>
 				</Flex>
@@ -149,8 +151,8 @@ const Root = (_, { slots }) => {
 				<Text v-if="value" data-testid="setting-value" variant="value" color="secondary" :class="$style.value">{{ value }}</Text>
 				<slot name="right">
 					<Icon
-						v-if="to || chevron"
-						:name="external ? 'open' : 'chevron'"
+						v-if="to || chevron || trailingIcon"
+						:name="trailingIcon || (external ? 'open' : 'chevron')"
 						:size="18"
 						color="secondary"
 						:class="$style.chevron_icon"
@@ -236,7 +238,6 @@ const Root = (_, { slots }) => {
 	flex-shrink: 0;
 }
 
-/* A slotted icon sets its own size. */
 .icon_slotted {
 	width: auto;
 	height: auto;

@@ -26,12 +26,10 @@ function journal(overrides: Partial<OperationRecord>): OperationRecord {
 	} as OperationRecord
 }
 
-function incoming(overrides: Partial<IncomingNoteRecord>): IncomingTransferRecord {
-	const siloedNullifier = overrides.siloedNullifier ?? "0xn1"
+function incoming({ key = "0xn1", ...overrides }: Partial<IncomingNoteRecord> & { key?: string }): IncomingTransferRecord {
 	return {
 		kind: "note",
-		id: overrides.id ?? `note:p1|net-1|${siloedNullifier}`,
-		siloedNullifier,
+		id: `note:p1|net-1|${key}`,
 		profileId: "p1",
 		networkId: "net-1",
 		accountAddress: "0xa",
@@ -72,7 +70,7 @@ describe("buildActivityRows — three-source merge", () => {
 		const rows = buildActivityRows({
 			transactions: [tx(1_000, "0xtx-old")],
 			terminalJournalOps: [journal({ id: "j-new", terminalAt: 5_000 })],
-			incomingTransfers: [incoming({ siloedNullifier: "0xn-mid", discoveredAt: 3_000 })],
+			incomingTransfers: [incoming({ key: "0xn-mid", discoveredAt: 3_000 })],
 			...ACTIVE,
 		})
 		expect(rows.map((r) => r.sortKey)).toEqual([5_000, 3_000, 1_000])
@@ -122,7 +120,7 @@ describe("buildActivityRows — three-source merge", () => {
 		const rows = buildActivityRows({
 			transactions: [],
 			terminalJournalOps: [],
-			incomingTransfers: [incoming({ siloedNullifier: "0xa" }), incoming({ siloedNullifier: "0xb", discoveredAt: 2_000 })],
+			incomingTransfers: [incoming({ key: "0xa" }), incoming({ key: "0xb", discoveredAt: 2_000 })],
 		})
 		expect(rows).toHaveLength(2)
 		expect(rows.every((r) => r.type === "incoming")).toBe(true)
@@ -132,7 +130,7 @@ describe("buildActivityRows — three-source merge", () => {
 		const rows = buildActivityRows({
 			transactions: [tx(1_000, "0xtx1")],
 			terminalJournalOps: [journal({ id: "j1" })],
-			incomingTransfers: [incoming({ siloedNullifier: "0xn1" })],
+			incomingTransfers: [incoming({ key: "0xn1" })],
 			...ACTIVE,
 		})
 		const keys = rows.map((r) => r.key)
@@ -172,27 +170,21 @@ describe("buildActivityRows — three-source merge", () => {
 		const rows = buildActivityRows({
 			transactions: [],
 			terminalJournalOps: [],
-			incomingTransfers: [
-				incoming({ siloedNullifier: "0xmine" }),
-				incoming({ siloedNullifier: "0xtheirs", accountAddress: "0xother" }),
-			],
+			incomingTransfers: [incoming({ key: "0xmine" }), incoming({ key: "0xtheirs", accountAddress: "0xother" })],
 			accountAddress: "0xa",
 		})
-		expect(rows.map((r) => (r.type === "incoming" && r.inc.kind === "note" ? r.inc.siloedNullifier : ""))).toEqual(["0xmine"])
+		expect(rows.map((r) => (r.type === "incoming" && r.inc.kind === "note" ? r.inc.id : ""))).toEqual(["note:p1|net-1|0xmine"])
 	})
 
 	test("incoming scoping: drops wrong-network incoming when networkId is supplied", () => {
 		const rows = buildActivityRows({
 			transactions: [],
 			terminalJournalOps: [],
-			incomingTransfers: [
-				incoming({ siloedNullifier: "0xhere", networkId: "net-1" }),
-				incoming({ siloedNullifier: "0xelsewhere", networkId: "net-2" }),
-			],
+			incomingTransfers: [incoming({ key: "0xhere", networkId: "net-1" }), incoming({ key: "0xelsewhere", networkId: "net-2" })],
 			accountAddress: "0xa",
 			networkId: "net-1",
 		})
-		expect(rows.map((r) => (r.type === "incoming" && r.inc.kind === "note" ? r.inc.siloedNullifier : ""))).toEqual(["0xhere"])
+		expect(rows.map((r) => (r.type === "incoming" && r.inc.kind === "note" ? r.inc.id : ""))).toEqual(["note:p1|net-1|0xhere"])
 	})
 })
 
@@ -238,7 +230,7 @@ describe("buildActivityRows — scope pins", () => {
 		const rows = buildActivityRows({
 			transactions: [{ ...tx(3_000, "0xany"), account: "0xother", chainId: 9, profileId: "p9" } as Tx],
 			terminalJournalOps: [],
-			incomingTransfers: [incoming({ siloedNullifier: "0xany", accountAddress: "0xother", networkId: "net-9", profileId: "p9" })],
+			incomingTransfers: [incoming({ key: "0xany", accountAddress: "0xother", networkId: "net-9", profileId: "p9" })],
 		})
 		expect(rows.map((r) => r.key)).toEqual(["tx:0xany", "incoming:note:p1|net-1|0xany"])
 	})
@@ -285,36 +277,27 @@ describe("buildActivityRows — scope pins", () => {
 		buildActivityRows({ transactions: [], terminalJournalOps: [], incomingTransfers: records, ...scope }).map((r) => r.key)
 
 	test("an incoming record stamped with another profile is dropped under a known scope, beside an identical kept one", () => {
-		expect(
-			incomingKeys([
-				incoming({ siloedNullifier: "0xmine" }),
-				incoming({ siloedNullifier: "0xtheirs", profileId: "p2", discoveredAt: 900 }),
-			]),
-		).toEqual(["incoming:note:p1|net-1|0xmine"])
+		expect(incomingKeys([incoming({ key: "0xmine" }), incoming({ key: "0xtheirs", profileId: "p2", discoveredAt: 900 })])).toEqual([
+			"incoming:note:p1|net-1|0xmine",
+		])
 	})
 
 	test("an unknown scope profile keeps an incoming record stamped with any profile", () => {
-		expect(incomingKeys([incoming({ siloedNullifier: "0xtheirs", profileId: "p2" })], { ...scoped, profileId: undefined })).toEqual([
+		expect(incomingKeys([incoming({ key: "0xtheirs", profileId: "p2" })], { ...scoped, profileId: undefined })).toEqual([
 			"incoming:note:p1|net-1|0xtheirs",
 		])
 	})
 
 	test("an empty profile id is a known id on either side of the incoming profile check", () => {
 		expect(
-			incomingKeys(
-				[
-					incoming({ siloedNullifier: "0xempty", profileId: "" }),
-					incoming({ siloedNullifier: "0xtheirs", profileId: "p2", discoveredAt: 900 }),
-				],
-				{ ...scoped, profileId: "" },
-			),
+			incomingKeys([incoming({ key: "0xempty", profileId: "" }), incoming({ key: "0xtheirs", profileId: "p2", discoveredAt: 900 })], {
+				...scoped,
+				profileId: "",
+			}),
 		).toEqual(["incoming:note:p1|net-1|0xempty"])
-		expect(
-			incomingKeys([
-				incoming({ siloedNullifier: "0xmine" }),
-				incoming({ siloedNullifier: "0xempty", profileId: "", discoveredAt: 900 }),
-			]),
-		).toEqual(["incoming:note:p1|net-1|0xmine"])
+		expect(incomingKeys([incoming({ key: "0xmine" }), incoming({ key: "0xempty", profileId: "", discoveredAt: 900 })])).toEqual([
+			"incoming:note:p1|net-1|0xmine",
+		])
 	})
 })
 
@@ -397,7 +380,7 @@ describe("a token's rows", () => {
 	const rows = buildActivityRows({
 		transactions: [onContract("0x1", "0xusdc"), onContract("0x2", "0xeurc")],
 		terminalJournalOps: [journal({ id: "j1", tokenId: 1 }), journal({ id: "j2", tokenId: 2 })],
-		incomingTransfers: [incoming({ siloedNullifier: "0xa1", tokenId: 1 }), incoming({ siloedNullifier: "0xa2", tokenId: 2 })],
+		incomingTransfers: [incoming({ key: "0xa1", tokenId: 1 }), incoming({ key: "0xa2", tokenId: 2 })],
 		accountAddress: "0xa",
 		profileId: "p1",
 		networkId: "net-1",

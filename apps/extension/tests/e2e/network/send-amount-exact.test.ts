@@ -312,7 +312,7 @@ test.skipIf(!hasConfig)(
 			timeout: 10_000,
 		})
 		const short = await readUsdLines(page)
-		expect.soft(short.derivedPx, `a short derived line shrinks: ${JSON.stringify(short)}`).toBe(11)
+		expect.soft(short.derivedPx, `a short derived line shrinks: ${JSON.stringify(short)}`).toBe(13)
 		expect.soft(short.sharesBalanceRow, `a short derived line leaves the balance's row: ${JSON.stringify(short)}`).toBe(true)
 		expect.soft(short.overlap, `a short derived line runs into the balance: ${JSON.stringify(short)}`).toBeLessThanOrEqual(0.5)
 

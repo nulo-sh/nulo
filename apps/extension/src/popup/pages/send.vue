@@ -396,12 +396,22 @@ const {
 } = useFeeEstimation({
 	debounceMs: 800,
 	estimate: (params, estimateToken, signal) => {
-		const { networkId, accountAddress, tokenId, transferType: tt, destination, amount, settings } = params
+		const { networkId, accountAddress, tokenId, tokenContract, transferType: tt, destination, amount, settings } = params
 		lastEstimateParams = params
 		console.debug(`[send:${sendInstanceId}] estimateTransferFee firing`)
 		return estimateWhenClear(
 			() =>
-				executionService.estimateTransferFee(networkId, accountAddress, tokenId, tt, destination, amount, settings, estimateToken),
+				executionService.estimateTransferFee(
+					networkId,
+					accountAddress,
+					tokenId,
+					tokenContract,
+					tt,
+					destination,
+					amount,
+					settings,
+					estimateToken,
+				),
 			signal,
 			{
 				onQueued: (answer) => {
@@ -571,6 +581,7 @@ watch(
 		() => feeSettings.value,
 		() => legal.isCurrent.value,
 		() => activeToken.value?.id,
+		() => activeToken.value?.contract,
 		() => appStore.network?.id,
 		() => appStore.account?.address,
 	],
@@ -597,6 +608,7 @@ watch(
 			networkId: appStore.network.id,
 			accountAddress: appStore.account.address,
 			tokenId: activeToken.value.id,
+			tokenContract: activeToken.value.contract,
 			transferType: transferType.value,
 			destination: searchTerm.value,
 			amount: amountValidation.value.integerized,
@@ -932,7 +944,7 @@ onBeforeUnmount(() => {
 }
 
 .requote_action {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	line-height: inherit;
 	background: none;
 	color: var(--nulo-accent);

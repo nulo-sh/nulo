@@ -87,6 +87,10 @@ export const REDACTED_KEYS: ReadonlySet<string> = new Set([
 	"partialWitness",
 	"publicInputs",
 	"vk",
+	"witness",
+	// A private call's execution material: note preimages and app tagging secrets.
+	"newNotes",
+	"taggingIndexRanges",
 	// Wallet key material and its wrappers.
 	"masterKey",
 	"master-key",

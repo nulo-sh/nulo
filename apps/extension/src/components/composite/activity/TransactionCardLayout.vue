@@ -242,7 +242,7 @@ function hasActionsContent() {
 
 .amount_fiat {
 	composes: type--fiat from global;
-	font-size: 11px;
+	font-size: 13px;
 	color: var(--nulo-secondary);
 }
 

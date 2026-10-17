@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { hasHiddenUrlCharacter, rpcTransportVerdict } from "./rpc-url"
+import { hasHiddenUrlCharacter, isLoopbackHost, rpcTransportVerdict } from "./rpc-url"
 
 describe("rpcTransportVerdict", () => {
 	test.each([
@@ -14,6 +14,27 @@ describe("rpcTransportVerdict", () => {
 		["ws://localhost:8080", { allowed: false, refusal: "scheme", scheme: "ws" }],
 	])("%j → %j", (url, verdict) => {
 		expect(rpcTransportVerdict(new URL(url))).toEqual(verdict)
+	})
+})
+
+describe("isLoopbackHost", () => {
+	test.each([
+		["localhost", true],
+		["LOCALHOST", true],
+		["127.0.0.1", true],
+		["localhost.", false],
+		["a.localhost", false],
+		["127.0.0.2", false],
+		["[::1]", false],
+		["rpc.example.com", false],
+	])("%s → %s", (hostname, loopback) => {
+		expect(isLoopbackHost(hostname)).toBe(loopback)
+	})
+
+	test("reads the hostname as URL parsing normalises it", () => {
+		expect(isLoopbackHost(new URL("https://127.1:8443/").hostname)).toBe(true)
+		expect(isLoopbackHost(new URL("https://0x7f000001/").hostname)).toBe(true)
+		expect(isLoopbackHost(new URL("https://localhost.evil.example/").hostname)).toBe(false)
 	})
 })
 

@@ -19,6 +19,7 @@
 
 import type { MinFeeNode } from "@nulo/aztec-runtime/fee-juice"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
+import { sameFieldAddress } from "@nulo/wallet-bridge"
 import type { Fpc } from "@/wallet/services/fpc/fpc"
 import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
@@ -84,7 +85,8 @@ export type TransferEstimateReuseEntry = ReuseEntryBase & {
 	readonly sequenceEpoch: number | undefined
 	/** Inputs for the activity-feed record. We persist a transfer-only
 	 *  call shape (no FPC fee payload) so the card title stays the token
-	 *  symbol regardless of payment method. */
+	 *  symbol regardless of payment method. `token.contract` is also an
+	 *  input: a request for another contract misses. */
 	readonly token: { contract: string; name: string; symbol: string; decimals: number }
 	readonly fnName: string
 	readonly args: readonly unknown[]
@@ -148,6 +150,7 @@ export class TransferEstimateReuse {
 			entry.networkId !== inputs.networkId ||
 			entry.accountAddress !== inputs.accountAddress ||
 			entry.tokenId !== inputs.tokenId ||
+			!sameFieldAddress(entry.token.contract, inputs.tokenContract) ||
 			entry.transferType !== inputs.transferType ||
 			entry.recipientAddress !== inputs.recipientAddress ||
 			entry.amount !== inputs.amount ||

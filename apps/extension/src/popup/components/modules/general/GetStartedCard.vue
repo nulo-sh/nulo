@@ -40,7 +40,7 @@ const ROWS: Readonly<Record<GetStartedItem, { title: string; description?: strin
 
 <style module>
 .hide {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	padding: 0;
 	border: none;
 	background: transparent;

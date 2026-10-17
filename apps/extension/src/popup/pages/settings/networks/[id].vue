@@ -175,6 +175,7 @@ watch(network, (n) => {
 					size="small"
 					title="Name"
 					:description="network.name"
+					trailingIcon="edit"
 					@click="handleEditNetworkName"
 					data-testid="network-detail-rename"
 				/>
@@ -182,7 +183,7 @@ watch(network, (n) => {
 					size="small"
 					title="Chain ID"
 					:description="String(network.chainId)"
-					descriptionVariant="data"
+					descriptionVariant="meta"
 					raw
 					data-testid="network-detail-chain-id"
 				/>

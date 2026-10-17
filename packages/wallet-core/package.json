@@ -9,6 +9,7 @@
 		"./ports": "./src/ports/index.ts",
 		"./testing": "./src/testing/index.ts",
 		"./utils": "./src/utils/index.ts",
+		"./chain-id": "./src/utils/chain-id.ts",
 		"./storage": "./src/storage/index.ts",
 		"./migration": "./src/migration/index.ts",
 		"./base": "./src/base/index.ts",

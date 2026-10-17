@@ -177,7 +177,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 
 .fiat {
 	composes: type--fiat from global;
-	font-size: 11px;
+	font-size: 13px;
 	color: var(--nulo-secondary);
 
 	max-width: 160px;
@@ -207,8 +207,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	gap: 3px;
 }
 
-/* Same private/public vocabulary as BalanceView's breakdown: bone lock = private,
-   grey globe = public. Icons inherit via currentColor. */
+/* Keep in step with BalanceView's breakdown; the glyph paints in the span's colour. */
 .icon_private {
 	display: inline-flex;
 	color: var(--nulo-accent);

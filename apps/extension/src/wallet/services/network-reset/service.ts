@@ -3,7 +3,7 @@ import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { validateParams } from "@nulo/extension-messaging/zod"
 import type { BrowserApi, StorageChanges } from "@nulo/wallet-core/ports"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { MAINNET_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { NOOP_RESTORE_GATE, type RestoreGate } from "@/e2e/restore-gate"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import type { ILogger } from "@/wallet/logger"
@@ -82,6 +82,7 @@ function validateJournal(journal: ResetJournal, row: Network | undefined): asser
 	const seed = seedForKind(row.kind)
 	if (journal.toChainId !== (seed?.chainId ?? journal.fromChainId)) throw notResettable("the target is not this build's")
 	if (journal.l1ChainId !== (seed?.l1ChainId ?? row.l1ChainId)) throw notResettable("the L1 is not this network's")
+	if (journal.toChainId === 0 && journal.l1ChainId !== LOCAL_L1_CHAIN_ID) throw notResettable("chain 0 is the local development L1's")
 }
 
 /** An imported key that does not open is unmovable (a blocked network opens none); one that

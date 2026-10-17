@@ -23,7 +23,7 @@ E2E tests append `?test=1` to the URL and run the Vite dev server with `VITE_DIS
 - `pg-input-{name}` for every input (e.g. `pg-input-recipient`, `pg-input-amount`)
 - `pg-bundle-select` with `<option data-bundle-id="X">` per capability bundle
 - `pg-input-maxFeesPerGas` and `pg-input-maxPriorityFeesPerGas`: the app's own `maxFeesPerGas` and `maxPriorityFeesPerGas`, each `da,l2` in base units; when either is set, every `sendTx` button passes it as `opts.fee.gasSettings`
-- `pg-select-transferFn`: the Token transfer function `pg-btn-sendTx-default` builds, one of `transfer_public_to_public` (untouched), `transfer_private_to_private`, `transfer_private_to_public`, `transfer_public_to_private`; the NoFrom, feePayer, app-sponsored, multicall and chunked buttons build `transfer_public_to_public`
+- `pg-select-transferFn`: the Token transfer function `pg-btn-sendTx-default` builds, one of `transfer_public_to_public` (untouched), `transfer_private_to_private`, `transfer_private_to_public`, `transfer_public_to_private`, or the reference Token's two-argument `transfer(to, amount)`, built from `@aztec-labs/noir-contracts.js`'s artifact, which names no `from`; the NoFrom, feePayer, app-sponsored, multicall and chunked buttons build `transfer_public_to_public`
 - `pg-result` rows with `data-result-seq` (monotonic), `data-method`, `data-status="pending|ok|error"`, `data-result-json` (JSON-escaped). Tests snapshot the seq before invocation and wait for the matching row.
 - `pg-error-text` (with `role="alert"`) for inline errors
 - `pg-protocol-log` (debug only)

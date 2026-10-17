@@ -46,7 +46,12 @@ import { TransactionService, TransferType } from "@/wallet/services/transaction/
 import { OriginType } from "@/wallet/services/transaction/spec"
 import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
-import { InvalidWalletArgumentsError, TermsAcceptanceRequiredError, TooManyPendingError } from "@nulo/extension-messaging/errors"
+import {
+	InvalidWalletArgumentsError,
+	TermsAcceptanceRequiredError,
+	TooManyPendingError,
+	UnsupportedMethodError,
+} from "@nulo/extension-messaging/errors"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import { SEND_CHECK_TICK_MS, SendCheck } from "@/wallet/services/operation-journal/send-check"
 import { TaskService } from "@/wallet/services/task/service"
@@ -92,6 +97,7 @@ function makeControllableGate() {
 
 const MIN_FEES = { feePerDaGas: 1n, feePerL2Gas: 1n }
 const ACCOUNT = AztecAddress.fromNumberUnsafe(0x1234)
+const TOKEN_CONTRACT = AztecAddress.fromNumberUnsafe(0x7070).toString()
 const NETWORK = {
 	id: "net1",
 	// The node's pair below: (5 ^ 4) >>> 0 === 1.
@@ -233,7 +239,7 @@ async function makeHarness() {
 			onTransactionUpdated: { add: () => {} },
 		}),
 	)
-	collection.add(svc(TokenService.name, { getTokenRaw: async () => ({ contract: "0xtoken" }) }))
+	collection.add(svc(TokenService.name, { getTokenRaw: async () => ({ contract: TOKEN_CONTRACT }) }))
 	collection.add(
 		svc(FpcService.name, {
 			onFpcUpdated: { add: () => {} },
@@ -248,7 +254,7 @@ async function makeHarness() {
 	collection.add(journal)
 	// `cancel` is part of the real WrappedTask surface — classifyOperationCatch
 	// calls task.cancel() on a user-cancel before returning the cancelled result.
-	const fakeTask = { complete: vi.fn(), fail: vi.fn(), cancel: vi.fn(), startSubtask: vi.fn() }
+	const fakeTask = { complete: vi.fn(), completeIfTracked: vi.fn(), fail: vi.fn(), cancel: vi.fn(), startSubtask: vi.fn() }
 	fakeTask.startSubtask.mockReturnValue(fakeTask)
 	collection.add(svc(TaskService.name, { startNewTask: () => fakeTask }))
 	collection.add(svc(PriceService.name, { getUsableQuote: async () => undefined }))
@@ -263,6 +269,7 @@ async function makeHarness() {
 		networkId: NETWORK.id,
 		accountAddress: ACCOUNT.toString(),
 		tokenId: 1,
+		tokenContract: TOKEN_CONTRACT,
 		transferType: TransferType.Public,
 		recipientAddress: AztecAddress.fromNumberUnsafe(0x5678).toString(),
 		amount: 10n,
@@ -300,7 +307,7 @@ async function makeHarness() {
 		} as never,
 		nonce: { toString: () => "0" },
 		feePaymentMethod: "EXTERNAL" as never,
-		token: { contract: "0xtok", name: "Tok", symbol: "TOK", decimals: 18 },
+		token: { contract: TOKEN_CONTRACT, name: "Tok", symbol: "TOK", decimals: 18 },
 		fnName: "transfer_public_to_public",
 		args: [],
 		builtAt: Date.now(),
@@ -352,6 +359,7 @@ describe("ExecutionService composition — cancel-mid-prove (in-process, no sand
 				req.networkId,
 				req.accountAddress,
 				req.tokenId,
+				req.tokenContract,
 				req.transferType,
 				req.recipientAddress,
 				req.amount,
@@ -508,6 +516,7 @@ const transfer = (h: Harness, estimateId: string | undefined = h.estimateId) =>
 			h.req.networkId,
 			h.req.accountAddress,
 			h.req.tokenId,
+			h.req.tokenContract,
 			h.req.transferType,
 			h.req.recipientAddress,
 			h.req.amount,
@@ -1062,6 +1071,7 @@ describe("ExecutionService composition — nothing is broadcast without a curren
 				h.req.networkId,
 				h.req.accountAddress,
 				h.req.tokenId,
+				h.req.tokenContract,
 				h.req.transferType,
 				h.req.recipientAddress,
 				h.req.amount,
@@ -1112,6 +1122,7 @@ describe("ExecutionService composition — a refused operation logs at the level
 		["a Terms refusal", () => new TermsAcceptanceRequiredError(), "refused: terms not accepted"],
 		["an argument refusal", () => InvalidWalletArgumentsError.forMethod("executeUtility"), "refused: invalid arguments"],
 		["a capacity refusal", () => new TooManyPendingError(), "refused: too many pending"],
+		["an unsupported-method refusal", () => UnsupportedMethodError.forMethod("profileTx"), "refused: unsupported method"],
 		["an unclassified failure", () => new Error("boom"), undefined],
 	])("%s", async (_label, makeError, debugReason) => {
 		const h = await makeHarness()
@@ -1205,6 +1216,7 @@ describe("ExecutionService composition — a send whose answer was lost is check
 				h.req.networkId,
 				h.req.accountAddress,
 				h.req.tokenId,
+				h.req.tokenContract,
 				h.req.transferType,
 				h.req.recipientAddress,
 				h.req.amount,
@@ -1253,6 +1265,7 @@ describe("ExecutionService composition — a send whose answer was lost is check
 				h.req.networkId,
 				h.req.accountAddress,
 				h.req.tokenId,
+				h.req.tokenContract,
 				h.req.transferType,
 				h.req.recipientAddress,
 				h.req.amount,
@@ -1287,6 +1300,7 @@ describe("ExecutionService composition — a send queued against a fee cap asks 
 				h.req.networkId,
 				h.req.accountAddress,
 				h.req.tokenId,
+				h.req.tokenContract,
 				h.req.transferType,
 				h.req.recipientAddress,
 				h.req.amount,

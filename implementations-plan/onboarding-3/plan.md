@@ -86,7 +86,7 @@ The URL stays `/onboarding/create`. The stage renders the new `onboarding/compon
 - A flag is a reminder preference, not proof of a backup.
 - Writers:
   - `phraseSaved`: "I saved it", and `seed.vue` after a successful `exportMnemonic`, for the profile id captured before the await;
-  - `backupSaved`: `full.vue` at its "Backup downloaded successfully" point, under `isCurrent()`;
+  - `backupSaved`: Full Backup's export run (`composables/useFullBackupExport.ts` since #705) at its "Backup downloaded successfully" point, under `isCurrent()`;
   - `aztecOpened` and `hidden`: Home.
 - `aztecOpened` is awaited before `window.open`, because opening a tab closes the toolbar popup.
 - Every flag write catches its own error (a `debug` line with `{ error }`), so it never blocks the action it rides on: the link still opens, the Full Backup toast still reads success, "I saved it" still reaches Ready.

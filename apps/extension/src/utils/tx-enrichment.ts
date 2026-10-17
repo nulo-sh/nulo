@@ -123,12 +123,15 @@ export function getTxTitle(calls: TxCall[]): string {
 	return primary ? humanizeMethodName(primary.method) : "Transaction"
 }
 
+/** The label of a dApp that names itself nothing. */
+export const DAPP_LABEL = "dApp"
+
 /**
  * Returns dApp name for DAPP origin, null for UI/other.
  */
 export function getOriginLabel(origin?: TxOrigin): string | null {
 	if (!origin || origin.type !== OriginType.DAPP) return null
-	return origin.name || "dApp"
+	return origin.name || DAPP_LABEL
 }
 
 // TransferType enum values: Private=0, PrivateToPublic=1, Public=2, PublicToPrivate=3

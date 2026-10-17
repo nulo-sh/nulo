@@ -45,6 +45,7 @@ import {
 	SessionEndedError,
 	TermsAcceptanceRequiredError,
 	TooManyPendingError,
+	UnsupportedMethodError,
 } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 
@@ -101,7 +102,8 @@ export function classifyOperationCatch(error: unknown, task: CancellableTask, er
 		error instanceof TermsAcceptanceRequiredError ||
 		error instanceof ScopeViolationError ||
 		error instanceof InvalidWalletArgumentsError ||
-		error instanceof TooManyPendingError
+		error instanceof TooManyPendingError ||
+		error instanceof UnsupportedMethodError
 	return {
 		status: "failed",
 		error: errorMessage(error),

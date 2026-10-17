@@ -551,12 +551,20 @@ assertion; drive the rest of the flow with the ordinary helpers.
   `home-scroller[data-reminders-settled="true"]`. A funded password wallet shows the urgent banner
   above the hero until its phrase is revealed; a spec that frames Home without either (store
   captures) reveals the phrase and taps Hide through the UI.
+- **A storage seed over a row the wallet is still writing is lost.** Adding a token trusts it, then
+  `setArrivalFloor` rewrites the trust row from the state it read, so a seed written between the two
+  writes is overwritten. Wait for the service's last write before seeding: `seedPendingTrust`
+  (`helpers/activity-seeds.ts`) waits for `trusted` plus `arrivalFloor` or `arrivalFloorPending`.
 
 ### Driving the wallet through the playground (dApp-shaped tests)
 
 From `implementations-plan/archive/self-pay-setup-fix/`; `network/selfpay-phase.test.ts` is
 the pattern.
 
+- **The playground keeps every input across requests.** A button reads whatever an earlier request
+  left in its inputs, so a grant after `consumeAuthwit` asks under that request's owner and opens no
+  window. Each request sets, or clears with `""`, every input an earlier request in its test
+  changed (`requests` in `network/type-roles-windows.test.ts`).
 - **The dApp never sees the wallet's real error.** A failed `simulateTx` / `sendTx` reaches the feed
   as `"The wallet could not process the request."` (the scrubbed envelope, by design). The reason
   is in the worker's log trail, retained only with Developer Mode on: toggle

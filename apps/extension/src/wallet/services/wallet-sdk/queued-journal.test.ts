@@ -7,6 +7,7 @@ import type { WalletMessage } from "@aztec-labs/wallet-sdk/types"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { ActiveSession } from "@aztec-labs/wallet-sdk/extension/handlers"
 import {
+	AuthRegistryRefusalError,
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
 	InvalidWalletArgumentsError,
@@ -374,6 +375,12 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 	test.each([
 		["a Terms refusal", "terms_refused", new TermsAcceptanceRequiredError(), "Transaction"],
 		["a scope refusal", "scope_refused", refusal, "Transaction"],
+		[
+			"a registry refusal",
+			"registry_refused",
+			new AuthRegistryRefusalError("Scope violation: sendTx call targets an authorization registry grant function"),
+			"Transaction",
+		],
 		["a missing grant", "scope_refused", new CapabilityNotGrantedError("transaction"), "Transaction"],
 		["a schema refusal", "malformed_request", InvalidWalletArgumentsError.forMethod("sendTx"), "Transaction"],
 		["an ended session", "session_ended", new SessionEndedError(), "Transaction"],

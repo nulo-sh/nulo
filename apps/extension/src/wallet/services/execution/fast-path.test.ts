@@ -277,8 +277,8 @@ describe("runFastPath", () => {
 				node: node as never,
 				pxe: pxe as never,
 				resolver: resolver as never,
-				// A local row (chainId 0) skips only the composite check; the exact l1ChainId still binds.
-				network: { chainId: 0, l1ChainId: 11155111 },
+				// The row of the fake node's default pair, so the identity check passes on both halves.
+				network: { chainId: (11155111 ^ 4127419662) >>> 0, l1ChainId: 11155111 },
 				fromAddr: AztecAddress.ZERO,
 				opts: opts as never,
 				optimizableCalls,

@@ -3,8 +3,8 @@
  * judges the element it should, the faces they ask for load, History's hero title takes
  * `title-hero` through its composed module rule, every page the smoke suite sweeps holds its roles
  * and its identifier sites, as do the native fields and each `Button` variant and size in today's
- * box, no figure on any of them loses a digit to a clip or an ellipsis, and in Firefox's real
- * toolbar panel the role-bearing text neither clips nor moves the layout.
+ * box, no figure on any of them loses a digit to a clip or an ellipsis, no text on them runs past its
+ * box unannounced, and in Firefox's real toolbar panel the text neither clips nor moves the layout.
  */
 import { typeRoleNames, typeRoles } from "@nulo/design/tokens"
 import type { Page } from "puppeteer"
@@ -32,6 +32,7 @@ import {
 	checkFontFaces,
 	clearTypeRoleProbes,
 	coverageOf,
+	expectLaidOut,
 	expectSitesClean,
 	expectSweepClean,
 	firstFamily,
@@ -39,6 +40,7 @@ import {
 	identifierSites,
 	judgeTypography,
 	observeIdentifierSites,
+	overflowingText,
 	type PageTypography,
 	panelBodies,
 	PROBE_TEXT,
@@ -96,12 +98,12 @@ test("every role's probe computes to its record, and a probe pushed off it is ca
 	const page = await openHome(ctx)
 	const { sweep, pushed } = await withProbes(page, async () => {
 		const sweep = await sweepTypeRoles(page)
-		// 0.2em at 10px is 2px against the role's 1px: past the 0.1px tolerance, and past no override.
+		// 0.2em at 11px is 2.2px against the role's 1.1px: past the 0.1px tolerance, and past no override.
 		await page.evaluate(
 			(probe: string) => {
 				document.querySelector<HTMLElement>(probe)?.style.setProperty("letter-spacing", "0.2em")
 			},
-			sel(`${PROBE}label`),
+			sel(`${PROBE}label-section`),
 		)
 		return { sweep, pushed: judgeTypography(await readPageTypography(page, { kind: "roles" })) }
 	})
@@ -110,7 +112,14 @@ test("every role's probe computes to its record, and a probe pushed off it is ca
 	expect(probes.map((reading) => reading.roles.join(" ")).sort()).toEqual([...typeRoleNames].sort())
 	expectSweepClean(sweep)
 	expect(pushed).toEqual([
-		{ testid: `${PROBE}label`, text: PROBE_TEXT, role: "label", property: "letter-spacing", expected: "0.1em", actual: "2px" },
+		{
+			testid: `${PROBE}label-section`,
+			text: PROBE_TEXT,
+			role: "label-section",
+			property: "letter-spacing",
+			expected: "0.1em",
+			actual: "2.2px",
+		},
 	])
 	const tracked = probes.filter((reading) => typeRoles[reading.roles[0] as keyof typeof typeRoles].tracking !== 0)
 	console.log(`[type-roles] probe tracking: ${tracked.map(describeTracking).join(", ")}`)
@@ -122,11 +131,11 @@ const FIXTURE_HTML = `
 		<input class="type--input" data-testid="tr-mini-input" value="12" />
 		<input class="type--input-data" data-testid="tr-mini-data" value="0x1a" />
 	</div>
-	<div data-testid="tr-field"><span class="type--label">To</span><input class="type--input-data" value="0x1a" /></div>
+	<div data-testid="tr-field"><span class="type--label-section">To</span><input class="type--input-data" value="0x1a" /></div>
 	<span class="type--name" data-testid="tr-name" data-address-shows="name">Alice</span>
-	<span class="type--data" data-testid="tr-twin">0x1a</span>
-	<span class="type--meta" data-testid="tr-twin" hidden>0x1a</span>
-	<span class="type--data" data-testid="tr-gone" hidden>0x1a</span>`
+	<span class="type--meta" data-testid="tr-twin">0x1a</span>
+	<span class="type--data-lead" data-testid="tr-twin" hidden>0x1a</span>
+	<span class="type--meta" data-testid="tr-gone" hidden>0x1a</span>`
 
 const fixtureSite = (selector: string, role: SiteEntry["role"]): SiteEntry => ({
 	file: "fixture.vue",
@@ -160,13 +169,13 @@ test("a site reads its value or its native field, a name shown is judged as name
 		expect(failures.map(({ testid, property }) => `${testid} ${property}`)).toEqual(["tr-mini-data font-size"])
 
 		const sites = ["tr-field", "tr-name", "tr-twin", "tr-gone"].map((testid, i) =>
-			fixtureSite(testid, (["input-data", "data-lead", "data", "data"] as const)[i]),
+			fixtureSite(testid, (["input-data", "data-lead", "meta", "meta"] as const)[i]),
 		)
 		const { sites: observed } = await observeIdentifierSites(page, "fixture", "fixture", { sites })
 		expect(observed.map(({ readings }) => readings.map(({ roles }) => roles.join(" ")))).toEqual([
 			["input-data"],
 			["name"],
-			["data"],
+			["meta"],
 			[],
 		])
 		expect(observed.flatMap(({ failures }) => failures.map(({ property, actual }) => `${property}: ${actual}`))).toEqual([
@@ -174,6 +183,102 @@ test("a site reads its value or its native field, a name shown is judged as name
 		])
 	} finally {
 		await page.evaluate(() => document.querySelector('[data-testid="tr-host"]')?.remove())
+	}
+	expect(ctx.pageErrors).toEqual([])
+})
+
+const LAYOUT_HTML = `
+	<div data-testid="tr-clip"><input class="type--input" data-testid="tr-clipped-input" value="1" /></div>
+	<input class="type--input-data" data-testid="tr-scrolling-input" value="0x09c1c9d2ce72c53c2451f8e9add86ccb8cb284dd4dc4f0eaf301b40b38a9459b" />
+	<div data-testid="tr-narrow"><span data-testid="tr-run-past">Text that runs past its box</span></div>
+	<div data-testid="tr-narrow-line"><span data-testid="tr-inline-past">Text that runs past its line</span></div>
+	<span class="type--meta" data-testid="tr-cell"><b>Name</b><span>A fact too long</span></span>
+	<span class="type--meta" data-testid="tr-grown-cell"><span data-testid="tr-grown">A clip that grew</span></span>
+	<div data-testid="tr-flex-ellipsis"><span data-testid="tr-flex-cut">A cut word</span></div>
+	<div data-testid="tr-wide-clip"><span data-testid="tr-wide-fits">Fits</span></div>
+	<div data-testid="tr-block-clip"><div data-testid="tr-block-cut">Text in a block too wide</div></div>
+	<div data-testid="tr-ellipsis"><span data-testid="tr-ellipsized">Text an ellipsis shortens</span></div>
+	<span class="type--meta" data-testid="tr-field-cell"><input class="type--input" data-testid="tr-wide-field" value="12" /></span>
+	<span data-testid="tr-inline-fits">Fits</span>
+	<span data-testid="tr-positioned">0x1a...2b<i data-testid="tr-positioned-icon"></i></span>
+	<span data-testid="tr-hidden">Read aloud only</span>`
+
+/** Each control's style, set through the CSSOM: `style-src` refuses a parsed `style` attribute. */
+const LAYOUT_STYLES: Record<string, Record<string, string>> = {
+	"tr-clip": { width: "40px", overflow: "hidden" },
+	"tr-clipped-input": { width: "200px" },
+	"tr-scrolling-input": { width: "100px" },
+	"tr-narrow": { width: "40px" },
+	"tr-run-past": { display: "block", whiteSpace: "nowrap" },
+	"tr-narrow-line": { width: "40px", whiteSpace: "nowrap" },
+	"tr-cell": { display: "flex", width: "40px", whiteSpace: "nowrap" },
+	"tr-grown-cell": { display: "flex", width: "40px", whiteSpace: "nowrap" },
+	"tr-grown": { flexShrink: "0", overflow: "hidden", textOverflow: "ellipsis" },
+	"tr-flex-ellipsis": { display: "flex", width: "40px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+	"tr-flex-cut": { flexShrink: "0" },
+	"tr-wide-clip": { width: "100px", overflow: "hidden" },
+	"tr-wide-fits": { display: "block", width: "200px", overflow: "hidden" },
+	"tr-block-clip": { width: "40px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+	"tr-block-cut": { width: "400px" },
+	"tr-ellipsis": { width: "40px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+	"tr-field-cell": { display: "block", width: "100px" },
+	"tr-wide-field": { width: "120px", marginLeft: "-10px", padding: "0 20px", boxSizing: "border-box" },
+	"tr-positioned": { display: "inline-flex", position: "relative" },
+	"tr-positioned-icon": { position: "absolute", left: "calc(100% + 6px)", width: "12px", height: "12px" },
+	"tr-hidden": { position: "absolute", width: "1px", height: "1px", overflow: "hidden", clipPath: "inset(50%)", whiteSpace: "nowrap" },
+}
+
+test("the layout gate reports text an ancestor cuts or that runs past the box it lays out in, and nothing else", async ({
+	registeredExtension: ctx,
+}) => {
+	const page = await openHome(ctx)
+	await page.evaluate(
+		(html: string, styles: Record<string, Record<string, string>>) => {
+			const host = document.createElement("div")
+			host.setAttribute("data-testid", "tr-layout")
+			host.innerHTML = html
+			for (const [testid, style] of Object.entries(styles))
+				Object.assign((host.querySelector(`[data-testid="${testid}"]`) as HTMLElement).style, style)
+			document.body.appendChild(host)
+		},
+		LAYOUT_HTML,
+		LAYOUT_STYLES,
+	)
+	try {
+		const { readings } = await readPageTypography(page, { kind: "laid-out" })
+		const fixture = readings.filter((reading) => reading.testid?.startsWith("tr-"))
+		// The screen-reader span paints nothing, so it is not read at all.
+		expect([...new Set(fixture.map(({ testid }) => testid))].sort()).toEqual([
+			"tr-block-cut",
+			"tr-cell",
+			"tr-clipped-input",
+			"tr-ellipsized",
+			"tr-field-cell",
+			"tr-flex-cut",
+			"tr-grown",
+			"tr-grown-cell",
+			"tr-inline-fits",
+			"tr-inline-past",
+			"tr-positioned",
+			"tr-run-past",
+			"tr-scrolling-input",
+			"tr-wide-field",
+			"tr-wide-fits",
+		])
+		// A flex box draws no ellipsis, nor does a block for a block inside it; a clip that keeps its
+		// width runs past its cell. An ellipsis on the text's own lines, a field's box and short text
+		// in a wide clipping box report nothing.
+		expect(overflowingText(fixture).map(({ testid }) => testid)).toEqual([
+			"tr-clipped-input",
+			"tr-run-past",
+			"tr-inline-past",
+			"tr-cell",
+			"tr-grown-cell",
+			"tr-flex-cut",
+			"tr-block-cut",
+		])
+	} finally {
+		await page.evaluate(() => document.querySelector('[data-testid="tr-layout"]')?.remove())
 	}
 	expect(ctx.pageErrors).toEqual([])
 })
@@ -294,6 +399,7 @@ async function expectPageClean(page: Page, label: string, states: readonly SiteS
 	const sweep = await sweepTypeRoles(page)
 	expectSweepClean(sweep, label)
 	expect(cutFigures(sweep.readings), `${label}: figures cut`).toEqual([])
+	await expectLaidOut(page, label)
 	for (const [surface, state] of states) {
 		const observation = await observeIdentifierSites(page, surface, state)
 		expectSitesClean(observation)
@@ -302,7 +408,7 @@ async function expectPageClean(page: Page, label: string, states: readonly SiteS
 	if (states.length === 0) expect(await readHexOutsideMono(page), `${label}: hex outside a mono role`).toEqual([])
 }
 
-/** Holdings' offer to add a pasted address no row holds: the address in `data`, inside the button's box. */
+/** Holdings' offer to add a pasted address no row holds: the address in `meta`, inside the button's box. */
 async function expectAddTokenOffer(page: Page): Promise<void> {
 	await replaceInputValue(page, sel("holdings-search"), RECIPIENT)
 	await page.waitForSelector(sel("holdings-add-token-address"), VISIBLE)
@@ -873,7 +979,7 @@ const SETTLE_SAMPLES_MS = [0, 150, 300, 600, 1_200]
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
-	test("in the toolbar panel, Home and Settings hold their layout and no role-bearing text clips", async ({
+	test("in the toolbar panel, Home and Settings hold their layout and no text runs past its box", async ({
 		registeredExtensionPerTest: ctx,
 	}) => {
 		await openActionPopup(ctx.browser)
@@ -897,21 +1003,14 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 				expect(layout, `${tab} +${wait}ms`).toMatchObject({ shellHeight: layout.viewportHeight, navBottom: layout.viewportHeight })
 			}
 			console.log(`[type-roles] panel ${tab}: ${JSON.stringify(await inPanel<PanelLayout>(MEASURE_PANEL))}`)
+			const laidOut = await inPanel<PageTypography>(panelBodies.read({ kind: "laid-out" }))
+			expect(overflowingText(laidOut.readings), `${tab}: text past its box in the panel`).toEqual([])
 
 			expect(await inPanel<number>(panelBodies.placeProbes())).toBe(typeRoleNames.length)
 			try {
 				const typography = await inPanel<PageTypography>(panelBodies.read({ kind: "roles" }))
 				expect(typography.readings.filter((reading) => reading.testid?.startsWith(PROBE))).toHaveLength(typeRoleNames.length)
 				expect(judgeTypography(typography), `${tab}: role values in the panel`).toEqual([])
-				const clipped = typography.readings.filter(
-					(reading) =>
-						reading.visible &&
-						(reading.clippedBy !== null ||
-							(reading.overflowX !== "visible" &&
-								reading.scrollWidth > reading.clientWidth &&
-								reading.textOverflow !== "ellipsis")),
-				)
-				expect(clipped, `${tab}: role-bearing text clipped without an ellipsis`).toEqual([])
 				expect(cutFigures(typography.readings), `${tab}: figures cut in the panel`).toEqual([])
 				const widths = typography.readings
 					.filter((reading) => !reading.testid?.startsWith(PROBE))
@@ -933,7 +1032,7 @@ test("every identifier site the smoke suite owns was read in its role", ({ skip 
 	const live = (suite: ReturnType<typeof siteSuite>) => sites.filter((site) => !site.unreachable && siteSuite(site) === suite).length
 	const unreachable = sites.filter((site) => site.unreachable).length
 	console.log(
-		`[type-roles] identifier sites: ${coverage.live} smoke-owned live, ${live("network")} network-owned, ${live("component")} component-test, ${unreachable} unreachable`,
+		`[type-roles] identifier sites: ${coverage.live} smoke-owned live, ${live("network")} network-owned, ${unreachable} unreachable`,
 	)
 	// An AddressDisplay of the wallet's own account shows its name, so its address form goes unjudged.
 	const forms = observed.flatMap(({ sites }) =>

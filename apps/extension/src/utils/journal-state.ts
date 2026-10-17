@@ -10,7 +10,7 @@ import type { GlyphName } from "@nulo/design/core/glyphs.ts"
 import type { JobErrorKind, SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import { balanceFormatted } from "@/utils/amount.js"
 import { knownDecimals } from "@/utils/token-amount"
-import { formatTransferType, humanizeMethodName } from "@/utils/tx-enrichment"
+import { DAPP_LABEL, formatTransferType, humanizeMethodName } from "@/utils/tx-enrichment"
 import { isSendCheckable, type OperationKind, type OperationRecord, wasNeverSent } from "@/wallet/services/operation-journal/spec"
 
 /**
@@ -250,6 +250,8 @@ function kindLabel(kind: JobErrorKind): CategoricalFailureLabel {
 			return { label: "Popup closed early", context: "The popup closed before this transaction could finish." }
 		case "scope_refused":
 			return { label: "Not allowed", context: "The app asked for more than you allowed. Nothing was sent." }
+		case "registry_refused":
+			return { label: "Not allowed", context: "Apps cannot change your public authorizations. Nothing was sent." }
 		case "malformed_request":
 			return { label: "Couldn't read request", context: "The app sent a request the wallet could not read. Nothing was sent." }
 		case "terms_refused":
@@ -309,6 +311,7 @@ function failedSubtitleFor(kind: JobErrorKind): string {
 		case "session_ended":
 			return "Stopped when the wallet locked"
 		case "scope_refused":
+		case "registry_refused":
 			return "Not allowed"
 		case "malformed_request":
 			return "Couldn't read request"
@@ -424,7 +427,8 @@ function dappCardFields(op: OperationRecord): JournalCardFields {
 
 /*
  * The awaiting card's fields, built from the same leaves as the terminal card's so a journal op
- * reads the same across its lifecycle. Each checks the kind before reading anything else.
+ * reads the same across its lifecycle; only a nameless dApp's chip takes the settled row's fallback.
+ * Each checks the kind before reading anything else.
  */
 
 export function journalCardTitle(op: OperationRecord, tokenById: JournalTerminalCardCtx["tokenById"]): string {
@@ -439,8 +443,8 @@ export function journalCardIcon(op: OperationRecord): GlyphName {
 /** `op.subtitle` is the dApp-controlled origin persisted at session-discover time; bracketed when
  *  schemeful so it never reads as a link. */
 export function journalCardOriginLabel(op: OperationRecord): string | null {
-	if (op.kind === "transfer") return null
-	return sanitizeJournalSubtitle(op.subtitle)
+	if (op.kind !== "dapp_execute") return null
+	return sanitizeJournalSubtitle(op.subtitle) ?? DAPP_LABEL
 }
 
 export function journalCardTransferTypeLabel(op: OperationRecord): string | null {

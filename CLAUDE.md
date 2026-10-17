@@ -198,7 +198,7 @@ Six layers, low → high. A layer can import only from layers below it. Enforced
 
 ```
 [L0] design tokens     @nulo/design (token-contract.ts → generated tokens.ts + utilities.css,
-                       the 28 type roles included; hand-authored base.css + fonts).
+                       the 24 type roles included; hand-authored base.css + fonts).
                        Extension src/design/tokens.ts re-exports the package.
 
 [L1] core primitives   @nulo/design/core: Flex, Icon (a glyph of core/glyphs.ts), Text (variant =
@@ -256,6 +256,7 @@ Service-bound visual components (Header, AddressDisplay, GlobalLoader, Notificat
 - Pure function with no Vue reactivity → `*.ts` helper colocated with the parent.
 - Reactive state, computed, watch, or service subscriptions → composable in `src/composables/`.
 - Owns a service-client connection? Composable receives the *connected* client; the parent owns connect/disconnect.
+- **Exception, backup runs**: a full-backup run owns the clients it opens, built when the run opens and disconnected in its `finally` (the export's scrub also closes the in-flight run's), so a dropped run can never share or close another run's connections (`useFullBackupImport`, `useFullBackupExport`).
 
 ## Vue component test conventions
 

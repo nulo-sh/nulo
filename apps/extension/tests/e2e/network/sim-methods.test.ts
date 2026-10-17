@@ -1,32 +1,20 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { clickByTestId, test } from "../fixtures/extension"
-import { callExpectingNoPopup } from "../fixtures/playground"
+import { callExpectingNoPopup, type PgResult } from "../fixtures/playground"
 import type { AztecTestConfig } from "../fixtures/aztec"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
 /**
- * Tests #23-#25 — canonical simulation methods (simulateTx, profileTx,
- * executeUtility) are silent on default sessions (PrivateData=4 < confLevel=5).
+ * The canonical simulation methods run silently under a default session's grants
+ * (PrivateData=4 < confLevel=5). `balance_of_public` is a public function, so the executeUtility
+ * probe is refused as invalid arguments before PXE runs it.
  *
- * Each case: set token + recipient inputs, click the method's button, assert
- * callExpectingNoPopup result. The executeUtility probe calls
- * `balance_of_public`, a public function, under the session's simulation
- * utility grant: the wallet refuses it as invalid arguments before PXE runs it.
- *
- * Uses `dappConnectedExtensionWithAccountsCap` so the cap-popup round-trip
- * happens during fixture setup (hookTimeout=300s) rather than during this
- * test's budget. Mirrors the pattern landed in `register-token.test.ts`.
- * Before it, sim-profileTx (#24) was the residual cap-popup-class
- * flake on a cold shard — the fixture migration is the structural fix.
+ * `dappConnectedExtensionWithAccountsCap` runs the cap-popup round-trip in fixture setup
+ * (hookTimeout=300s), outside each test's budget.
  */
-const cases: Array<{ id: number; name: string; method: string; btn: string }> = [
-	{ id: 23, name: "simulateTx", method: "simulateTx", btn: "pg-btn-simulateTx-transfer" },
-	{ id: 24, name: "profileTx", method: "profileTx", btn: "pg-btn-profileTx" },
-]
-
 async function fillInputs(page: Page): Promise<void> {
 	await page.evaluate(
 		({ token, recipient }: { token: string; recipient: string }) => {
@@ -45,21 +33,44 @@ async function fillInputs(page: Page): Promise<void> {
 	)
 }
 
-for (const c of cases) {
-	test.skipIf(!hasConfig)(
-		`sim-${c.name} (#${c.id}) — silent path returns ok or error`,
-		{ timeout: 60_000 },
-		async ({ dappConnectedExtensionWithAccountsCap }) => {
-			const { playgroundPage: page } = dappConnectedExtensionWithAccountsCap
-			await fillInputs(page)
-
-			const result = await callExpectingNoPopup(dappConnectedExtensionWithAccountsCap, page, c.method, async () => {
-				await clickByTestId(page, c.btn)
-			})
-			expect(["ok", "error"]).toContain(result.status)
-		},
-	)
+/** The JSON-RPC error the wallet answered, as the playground records it. */
+function envelopeOf(result: PgResult): unknown {
+	const payload = result.errorJson as string | { message?: string } | undefined
+	return JSON.parse((typeof payload === "string" ? payload : payload?.message) ?? "null")
 }
+
+test.skipIf(!hasConfig)(
+	"sim-simulateTx (#23) — silent path returns ok or error",
+	{ timeout: 60_000 },
+	async ({ dappConnectedExtensionWithAccountsCap }) => {
+		const { playgroundPage: page } = dappConnectedExtensionWithAccountsCap
+		await fillInputs(page)
+
+		const result = await callExpectingNoPopup(dappConnectedExtensionWithAccountsCap, page, "simulateTx", async () => {
+			await clickByTestId(page, "pg-btn-simulateTx-transfer")
+		})
+		expect(["ok", "error"]).toContain(result.status)
+	},
+)
+
+test.skipIf(!hasConfig)(
+	"sim-profileTx (#24) — refused silently as an unsupported method",
+	{ timeout: 60_000 },
+	async ({ dappConnectedExtensionWithAccountsCap }) => {
+		const { playgroundPage: page } = dappConnectedExtensionWithAccountsCap
+		await fillInputs(page)
+
+		const result = await callExpectingNoPopup(dappConnectedExtensionWithAccountsCap, page, "profileTx", async () => {
+			await clickByTestId(page, "pg-btn-profileTx")
+		})
+		expect(result.status).toBe("error")
+		expect(envelopeOf(result)).toEqual({
+			code: -32601,
+			message: "Unsupported wallet method: profileTx",
+			data: { walletErrorCode: "UNSUPPORTED_METHOD" },
+		})
+	},
+)
 
 test.skipIf(!hasConfig)(
 	"sim-executeUtility (#25) — a public function is refused silently as invalid arguments",
@@ -72,9 +83,7 @@ test.skipIf(!hasConfig)(
 			await clickByTestId(page, "pg-btn-executeUtility-balance")
 		})
 		expect(result.status).toBe("error")
-		const payload = result.errorJson as string | { message?: string } | undefined
-		const envelope = JSON.parse((typeof payload === "string" ? payload : payload?.message) ?? "null")
-		expect(envelope).toEqual({
+		expect(envelopeOf(result)).toEqual({
 			code: -32602,
 			message: "The request's arguments do not match the wallet API.",
 			data: { walletErrorCode: "INVALID_PARAMS" },

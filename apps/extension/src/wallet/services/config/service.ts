@@ -1,8 +1,8 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import type { Restored, ServiceSpec } from "@/wallet/base"
-import { toRestoreError } from "@/utils/restore-error"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import type { IConfigStore } from "@/wallet/config"
+import { restoreRows } from "@/wallet/services/restore-rows"
 import type { ILogger } from "@/wallet/logger"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import {
@@ -60,28 +60,18 @@ export class ConfigService extends Service<Methods, Events> implements ServiceSp
 	}
 
 	public async restore(configProps: ConfigProp[]): Promise<Restored<ConfigProp>[]> {
-		const result: Restored<ConfigProp>[] = []
-
-		for (const cp of configProps) {
-			// Skip any key not on the presentation-prefs allowlist (security
-			// keys, diagnostic toggles, unknown keys) — a backup can never lower
-			// the runtime security posture. Skipped keys keep their current value.
-			if (!RESTORABLE_CONFIG_KEYS.has(cp.key)) {
-				this.logWarn(`Skipping non-restorable config key from backup: "${cp.key}"`)
-				continue
-			}
-			try {
-				await this.setValue(cp.key, cp.value)
-				result.push(cp)
-			} catch (err) {
-				result.push({
-					...cp,
-					restoreError: toRestoreError(err),
-				})
-			}
-		}
-
-		return result
+		// Skip any key not on the presentation-prefs allowlist (security
+		// keys, diagnostic toggles, unknown keys) — a backup can never lower
+		// the runtime security posture. Skipped keys keep their current value.
+		const restorable = configProps.filter((cp) => {
+			if (RESTORABLE_CONFIG_KEYS.has(cp.key)) return true
+			this.logWarn("Skipping a non-restorable config key from backup", { configKey: cp.key })
+			return false
+		})
+		return restoreRows(restorable, async (cp) => {
+			await this.setValue(cp.key, cp.value)
+			return cp
+		})
 	}
 
 	private readonly onConfigUpdated = (prop: ConfigProp) => {

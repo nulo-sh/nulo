@@ -324,7 +324,6 @@ describe("the received page's explorer links", () => {
 		...common,
 		kind: "note",
 		id: "r1",
-		siloedNullifier: `0x${"3d".repeat(32)}`,
 		noteHash: `0x${"ab".repeat(32)}`,
 		owner: ACCOUNT,
 	} satisfies IncomingNoteRecord

@@ -24,8 +24,8 @@ const sendTransaction = (feeSettings: unknown) => ({ kind: "send_transaction", n
 /** Each guarded method, the service that owns it, and its arguments with `feeSettings` in place.
  *  The multi-entry methods put the tested settings last, behind a well-formed entry. */
 const METHODS: Array<{ service: ServiceName; method: string; args: (feeSettings: unknown) => unknown[] }> = [
-	{ service: "execution", method: "executeTransfer", args: (f) => ["net-1", "0xacc", 1, 0, "0xrec", "5", f] },
-	{ service: "execution", method: "estimateTransferFee", args: (f) => ["net-1", "0xacc", 1, 0, "0xrec", "5", f, "token"] },
+	{ service: "execution", method: "executeTransfer", args: (f) => ["net-1", "0xacc", 1, "0xtok", 0, "0xrec", "5", f] },
+	{ service: "execution", method: "estimateTransferFee", args: (f) => ["net-1", "0xacc", 1, "0xtok", 0, "0xrec", "5", f, "token"] },
 	{ service: "execution", method: "estimateOperationFee", args: (f) => ["interaction", 0, f, "token"] },
 	{ service: "execution", method: "executeOperations", args: (f) => [[sendTransaction(fee("fast")), sendTx(f)], { type: 0 }] },
 	{
