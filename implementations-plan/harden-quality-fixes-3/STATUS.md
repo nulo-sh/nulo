@@ -25,3 +25,4 @@
 - 2026-10-17 phase 2.4 canaries prover-ON Chrome (presto-server 1.1.3, private PRESTO_HOME, VITE_NULO_PRESTO_REQUIRED=1, retry 0): frozen-account-canary, passkey-execution-canary, delete-after-prove: 3 files, 5 tests passed; presto log 7 `Proving succeeded` (04:13:27 04:18:00  UTC).
 - 2026-10-17 phase 2.4 canaries prover-ON Firefox (same server and flags): 3 files, 5 tests passed; presto log +7 `Proving succeeded` (14 total) (04:18:09 04:23:51  UTC).
 - 2026-10-17 Codex loop converged: arc 2 round 1 (2 Low, fixed), round 2 clean; Opus approve (2 Low, fixed); cross-arc fresh session approve, no findings.
+- 2026-10-17 phase 2.4 network Chrome, 12 named files (proverless, retry 0): 11 passed, 1 skipped by design (firefox-background-restart), 26 tests, 892 s.
