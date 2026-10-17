@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest"
 import {
+	AuthRegistryRefusalError,
 	AccountAddressInconsistencyError,
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
@@ -24,7 +25,12 @@ import {
 import { unwrapOperationResult } from "@nulo/wallet-bridge"
 import { assertSelectorBinding, CALL_BINDING } from "@/wallet/services/execution/contract-resolver"
 import { classifyOperationCatch } from "@/wallet/services/execution/rpc-cancel"
-import { SCOPE_VIOLATION_ENVELOPE, toWalletResponseError, UNCLASSIFIED_ERROR_MESSAGE } from "./error-envelope"
+import {
+	AUTH_REGISTRY_REFUSAL_ENVELOPE,
+	SCOPE_VIOLATION_ENVELOPE,
+	toWalletResponseError,
+	UNCLASSIFIED_ERROR_MESSAGE,
+} from "./error-envelope"
 
 describe("toWalletResponseError", () => {
 	test("JobCancelledError → {code:4001, walletErrorCode, jobId} (regression for existing behavior)", () => {
@@ -76,6 +82,20 @@ describe("toWalletResponseError", () => {
 		expect(env === SCOPE_VIOLATION_ENVELOPE && Object.isFrozen(env) && Object.isFrozen(SCOPE_VIOLATION_ENVELOPE.data)).toBe(true)
 		// The same words on a plain Error are not a refusal: the fall-through stays constant.
 		expect(toWalletResponseError(new Error(refusal.message))).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+	})
+
+	test("a registry refusal keeps the scope refusal's code with its own constant text", () => {
+		const env = toWalletResponseError(
+			new AuthRegistryRefusalError("Scope violation: sendTx call targets an authorization registry grant function"),
+		)
+		expect(env).toEqual({
+			code: 4100,
+			message: "Apps cannot set public authorizations directly. Ask the wallet with grantPublicAuthwit.",
+			data: { walletErrorCode: "SCOPE_VIOLATION" },
+		})
+		expect(env === AUTH_REGISTRY_REFUSAL_ENVELOPE && Object.isFrozen(env) && Object.isFrozen(AUTH_REGISTRY_REFUSAL_ENVELOPE.data)).toBe(
+			true,
+		)
 	})
 
 	test("SessionEndedError → {code:4900, walletErrorCode SESSION_ENDED} with the constant message; only the class maps", () => {
@@ -285,6 +305,12 @@ describe("stale-anchor and unregistered-contract arms", () => {
 			}
 		})()
 		expect(toWalletResponseError(rethrown(bindingRefusal))).toBe(SCOPE_VIOLATION_ENVELOPE)
+
+		const registry = rethrown(
+			new AuthRegistryRefusalError("Scope violation: a transaction's authorization request targets the authorization registry"),
+		)
+		expect(registry).toBeInstanceOf(AuthRegistryRefusalError)
+		expect(toWalletResponseError(registry)).toBe(AUTH_REGISTRY_REFUSAL_ENVELOPE)
 	})
 })
 
