@@ -1,4 +1,3 @@
-import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
