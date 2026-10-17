@@ -7,10 +7,9 @@
  *
  * Covered: store materialization under `pxe/<profileId>/<chainId>` (per-chain pool dirs — the
  * upstream default's single shared store must never reappear) · encryption at rest (no plaintext
- * SQLite magic in the pool files) · zero legacy IndexedDB `pxe/*` databases (the rc.2-era one-way
- * cleanup) · profile purge removes the profile's dirs WITHOUT a live runtime dependency while a
- * seeded sibling profile's dir survives (the isolation negative-control), and sweeps the
- * profile's legacy IndexedDB debris.
+ * SQLite magic in the pool files) · zero IndexedDB `pxe/*` databases (the PXE opens none) · profile
+ * purge removes the profile's dirs WITHOUT a live runtime dependency while a seeded sibling
+ * profile's dir survives (the isolation negative-control).
  *
  * Residual: cross-RESTART persistence isn't driven here; a full browser-restart harness would be
  * new infrastructure for standard sqlite durability.
@@ -96,15 +95,15 @@ test.skipIf(!hasConfig)(
 		expect(plaintextHits.hits).toBe(0)
 		console.log(`[opfs] ${plaintextHits.files} pool files scanned — zero plaintext SQLite headers`)
 
-		// ── 3. Legacy layer: zero rc.2-era IndexedDB `pxe/*` databases. ──
-		const legacyDbs = await page.evaluate(async () =>
+		// ── 3. No IndexedDB `pxe/*` database: the store above is the PXE's only one. ──
+		const pxeDbs = await page.evaluate(async () =>
 			(await indexedDB.databases()).map((d) => d.name).filter((n) => n?.startsWith("pxe/")),
 		)
-		expect(legacyDbs).toEqual([])
+		expect(pxeDbs).toEqual([])
 
-		// ── 4. Seed the negative controls: a fake sibling profile's OPFS dir (must SURVIVE the
-		// purge — profile isolation) and a fake legacy IndexedDB for OUR profile (must be swept). ──
-		await page.evaluate(async (pid: string) => {
+		// ── 4. Seed the negative control: a fake sibling profile's OPFS dir (must SURVIVE the
+		// purge — profile isolation). ──
+		await page.evaluate(async () => {
 			const root = await navigator.storage.getDirectory()
 			const pxe = await root.getDirectoryHandle("pxe", { create: true })
 			const sibling = await pxe.getDirectoryHandle("fake-sibling-profile", { create: true })
@@ -113,18 +112,10 @@ test.skipIf(!hasConfig)(
 			const w = await marker.createWritable()
 			await w.write(new Uint8Array([1, 2, 3]))
 			await w.close()
-			await new Promise<void>((resolve, reject) => {
-				const req = indexedDB.open(`pxe/${pid}/legacy-999`)
-				req.onsuccess = () => {
-					req.result.close()
-					resolve()
-				}
-				req.onerror = () => reject(req.error)
-			})
-		}, profileId)
+		})
 
 		// ── 5. Profile purge: the reset UI AWAITS the deletion cascade (coordinator →
-		// clearProfileState → crypto-erase + registry-driven OPFS removal + legacy sweep)
+		// clearProfileState → crypto-erase + registry-driven OPFS removal)
 		// BEFORE navigating — so observe the purge's own completion signal (row proven
 		// present pre-submit + exact tombstone + row gone) first, then assert the
 		// redirect. The old 30s route wait raced the awaited cascade while the
@@ -145,14 +136,7 @@ test.skipIf(!hasConfig)(
 		expect(after.some((e) => e.profileId === profileId)).toBe(false)
 		expect(after.some((e) => e.profileId === "fake-sibling-profile")).toBe(true)
 
-		// The seeded legacy IndexedDB for the purged profile is swept too.
-		const legacyAfter = await page.evaluate(
-			async (pid: string) => (await indexedDB.databases()).map((d) => d.name).filter((n) => n?.startsWith(`pxe/${pid}/`)),
-			profileId,
-		)
-		expect(legacyAfter).toEqual([])
-
-		console.log("[opfs] purge removed the profile's stores, spared the sibling, swept legacy IndexedDB")
+		console.log("[opfs] purge removed the profile's stores and spared the sibling")
 		await page.close()
 	},
 )
