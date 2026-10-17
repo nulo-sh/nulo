@@ -1,7 +1,7 @@
 ---
 plan: storage-privacy-1
 tier: mid
-status: planned; final review approve; arc 1 running under auto-continue
+status: completed (2026-10-17): one PR against dev carries arc 1 and this close-out; OA-1 is open as #689
 issues: "#660 (Closes)"
 driver: claude-code
 claude_model: opus
@@ -20,6 +20,26 @@ post_implementation_hardening: not scheduled
 Two changes in one arc. (1) An incoming-note row is keyed by the note's unique note hash, the leaf the protocol inserts when the note is created, and stores no nullifier; reconciliation matches a live note to its row by that key. (2) The worker restricts `chrome.storage.local` to trusted contexts where the browser offers the call (`Closes #660`). No UI change. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (OA-1, a confirmation; the arc ships the standing rule's answer).
 
 **Issue claims that did not hold:** #660's browser check is done (recon § Browser probe): Chrome 152 honours the call for `local` and keeps it across a relaunch; Firefox 153 has no such call, so the Firefox part becomes a known limit (D6). There is no declared minimum Chrome version; the API dates from Chrome 102.
+
+## Outcome
+
+- **Date:** 2026-10-17
+- **Status:** completed. One PR against `dev` carries arc 1 and this close-out (`Closes #660`); merging it is the owner's call.
+- **Shipped:**
+  - A note receipt row is keyed by the note's unique note hash, and no stored key or value and no log line holds the note's nullifier. The composition test scans, settles and restarts over one store and checks both storage areas and the log buffer after every scan; its red run is in [lessons/phase-1.md](lessons/phase-1.md).
+  - `NoteService.getNotesRaw` computes the hash and rejects when it cannot; `getNotes` does not hash (D2).
+  - A moved row takes its note's `txHash` (D8).
+  - The background sets `chrome.storage.local` to trusted contexts at every start, feature-detected and never blocking (D5, #660).
+  - `SECURITY.md` names incoming receipts in the plaintext list and the access level in the content-script threat model.
+  - `apps/extension/tests/COMPOSITION-TESTS.md` § Always: a never-happens check runs after every write it guards.
+- **Dropped:** none. The Opus Plan leg's two rejected items are in the ledger; every arc-review comment nit was taken (`108cddf1`).
+- **Known limits:** #687 (D6), #688 (D9).
+- **Open items:** #689: OA-1, received rows on an updated install (ships A until the owner answers).
+- **Deviations from the gates as written:**
+  - `incoming-arrival` and `account-switch-isolation` are `@requires-proverless`: the runner refuses them without `NULO_E2E_PROVERLESS=1`, so both ran with it, as CI runs them.
+  - Host load kept e2e off between the phases, so every e2e ran on the build carrying both. The first Chrome smoke started at load 154.7, over the 150 ceiling; the post-merge rerun started under it.
+  - The review prompts of rounds 1 and 2 lacked the two verbatim rules of the post-implementation standard; round 3 carried them.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 ## Outcome & Quality Bar
 
@@ -63,7 +83,7 @@ Two changes in one arc. (1) An incoming-note row is keyed by the note's unique n
 
 ## Arc 1 (one PR, `Closes #660`)
 
-### Phase 1 — note rows keyed by their note hash
+### Phase 1 — note rows keyed by their note hash ✓
 
 1. Change `note/spec.ts`, `note/service.ts`, `incoming-transfer/spec.ts`, `note-reconcile.ts` and `service.ts` as the change map says.
 2. Adapt the fixtures that build note rows or `RawNote`s: the scenario suite's `note()` and `noteRecord()` factories (one default `txHash`, ids from `noteRecordId`, notes told apart by `uniqueNoteHash`) and its 55 sites, `note-reconcile.test.ts`, `service.test.ts`, `storage-codecs.test.ts`, `network-reset/service.composition.test.ts`, and the popup tests that build records (recon § Test surface). A pair that matches today must still match, so no test reaches strike or delete instead of the path it names.
@@ -82,7 +102,7 @@ Two changes in one arc. (1) An incoming-note row is keyed by the note's unique n
 - Network, one at a time, load1 under 150: `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/incoming-transfers.test.ts`, then `incoming-arrival.test.ts`, then `account-switch-isolation.test.ts`: green. Real PXE notes reach rows only if the worker computed their hash, so these prove D2 end to end; no scenario is added.
 - Layers: lint, typecheck, unit, composition, smoke e2e, network e2e.
 
-### Phase 2 — local storage for trusted contexts
+### Phase 2 — local storage for trusted contexts ✓
 
 1. Add `storage-access.ts`: an `async` `restrictToTrustedContexts(area)` that calls `area.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" })` when the method exists and, on a throw or a rejection, logs `console.warn` with a fixed message and `{ error }`. It never rejects.
 2. Call it from `apps/extension/src/wallet/index.ts` at module scope, right after `registerContentMessageRelay()`, with `chrome.storage.local`, as `void`.
@@ -172,6 +192,12 @@ Competing outline (reviewed with the first draft): key rows by a keyed digest of
 - The helper catches a synchronous throw (`async`).
 - Its Ask (installs from the store listings): answered by F6, the owner's standing rule.
 - Rejected: dropping the row's unused `noteHash` (outside this change), and an extra assertion in a network e2e (the composition and unit tests already cover it).
+
+**Arc 1, post-implementation** (over `3e365e83..HEAD`):
+- **Codex round 1** (fresh session, gpt-6.1-sol, high, read-only): `approve — required changes: none`. It checked the hash against the pinned PXE, the id matching and D8's fence, the invariant's sinks, the tests' failure modes, the start-up call on both browsers and the committed text.
+- **Opus diff review** (alongside round 1): `approve`. One nit, taken in `280b29c4`: a scenario comment still named the old key.
+- **Codex round 2** (resumed, verification of `280b29c4` and the e2e results): `approve — required changes: none`.
+- **Codex round 3** (resumed, with the standard's two verbatim rules and the adversarial ask): `approve — required changes: none`, plus five low-severity comment nits, all verified and taken in `108cddf1`.
 
 ## Seeds
 

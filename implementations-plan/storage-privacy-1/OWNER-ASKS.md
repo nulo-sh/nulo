@@ -13,4 +13,4 @@ The plan changes no screen and no copy (plan § UI impact). One behaviour on ins
 - **B — a one-off purge of old-form received rows at start.** This is a numbered migration, and the rule forbids it before launch. Activity on an upgraded install: no duplicates, but the history of received transfers whose notes were already spent disappears, since discovery only re-creates unspent ones.
 - **C — flip the pre-production rule now.** Every later storage change then needs a migration. For this change it means B, or a rewrite that needs the node to recover each old row's new key.
 
-**What ships now:** A. The arc is the same under A. B would be added on top in its own change.
+**What ships now:** A. The arc is the same under A. B would be added on top in its own change. Open as #689.
