@@ -9,7 +9,8 @@
  * row is renamed out of the way, since network names are unique. The wallet holds only USD Coin
  * and Fee Juice: the harness token is never imported, and no harness transaction touches the
  * captured account. USD Coin is priced at $1 by the seeded quote, with the price host refused, so a
- * live quote cannot move the totals.
+ * live quote cannot move the totals. The wallet is an established one: its phrase is saved and
+ * Home's Get started card hidden through the wallet's own screens, so Home frames as a user's does.
  */
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
@@ -36,6 +37,7 @@ import {
 	navigateByHash,
 	navigateToSettings,
 	openNetworkDetail,
+	revealSeedPhrase,
 	seedUsdQuoteAndReload,
 	selectFeeMethod,
 	selectSendToken,
@@ -44,6 +46,7 @@ import {
 	setTheme,
 	switchToLocalNetwork,
 	waitForFreshBalanceRow,
+	waitForHomeReminders,
 	waitForHomeTotal,
 	waitForToast,
 	waitForTokenCardAmount,
@@ -316,9 +319,22 @@ function clearAmountLine(): Fit {
 	return { scrolled: need }
 }
 
+/** Saves the phrase and hides the card, as an established wallet has: the funded wallet otherwise
+ *  opens on "Your funds have no backup". */
+async function establishWallet(page: Page): Promise<void> {
+	await revealSeedPhrase(page, TEST_PASSWORD)
+	await navigateByHash(page, "#/popup/general")
+	await page.waitForSelector('[data-testid="get-started-hide"]', { visible: true, timeout: 60_000 })
+	await clickByTestId(page, "get-started-hide")
+	await page.waitForFunction(() => !document.querySelector('[data-testid="get-started"]'), { timeout: 15_000, polling: 100 })
+}
+
 async function captureHome(page: Page): Promise<void> {
 	await seedUsdQuoteAndReload(page)
 	await waitForHomeTotal(page)
+	await waitForHomeReminders(page)
+	expect(await page.$('[data-testid="get-started"]'), "the card in the Home frame").toBeNull()
+	expect(await page.$('[data-testid="backup-reminder-banner"]'), "the banner in the Home frame").toBeNull()
 	await page.waitForFunction(() => document.querySelector('[data-testid="balance-amount"]')?.textContent?.trim() === "$1,250.00", {
 		timeout: 30_000,
 		polling: 250,
@@ -403,6 +419,7 @@ describe.skipIf(!process.env.STORE_CAPTURES || isFirefox)("store captures", () =
 			await stageWallet(page, chain)
 			await receive(page, chain)
 			await sendToContact(page, chain)
+			await establishWallet(page)
 			await captureHome(page)
 			await captureSend(page, chain)
 			await captureHistory(page)
