@@ -1,7 +1,7 @@
 ---
 plan: call-vocabulary-1
 tier: light
-status: approved by the orchestrator 2026-10-17; arc 1 implementing
+status: completed (arc 1 carries this close-out)
 issues: "#514 #575 #516 (one arc)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,20 @@ base: origin/dev at 2c0df3b9
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-17.
+- **Status:** closed with this delivery. One arc, one PR from `worktree-call-vocabulary-1`, closes #514, #575 and #516; the merge that lands it closes the plan. The plan runs past the light target by this block.
+- **Shipped:**
+  - P40-02 = A (#514): Activity, the transaction page and the received row name a settled call as the wallet read it (`settledReading`, `callTitle`): a movement label only on the wallet's own send or a vocabulary call on a listed token whose class the call recorded; "Mint (public)" replaces "Minted"; `claim` reads "Claim" off the Fee Juice contract.
+  - P36-01 = A (#575): the grant line labels a movement only on a grant the window read as one.
+  - P40-01 = B (#516): `DetailsToggle` names its panel in `aria-controls` while open, and its chevron turns without a transition under reduced motion.
+  - OA-1 to OA-4 in their ship-now forms (D-orch). The token-load switch measured 22 to 70 ms on Home (median 37 ms).
+- **Known limits:** #718 (K1).
+- **Dropped:** the owner's tooltip note on #516 stays with the orchestrator, not built (CLAUDE.md § Tooltips bars a warning in a tooltip).
+- **Open items:** #719 (OA-1 to OA-4, for the owner), #714 (a function named `constructor` prints `Object`'s source; found in review, outside this plan's UI impact).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are no longer live. Do not run them.
 
 # call-vocabulary-1: one name for a call across the wallet
 

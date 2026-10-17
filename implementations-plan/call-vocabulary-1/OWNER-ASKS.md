@@ -1,6 +1,6 @@
 # call-vocabulary-1: owner asks
 
-All four are answered by the orchestrator (2026-10-17, ship-now form each); the owner sees them on a decision page with the arc's screenshots. They were non-blocking: the arc ships in the form "what ships now" says. OA-1(a), OA-2 and OA-4 propose changes outside the visible budget the lane's records grant (plan § UI impact); their "ships now" is today's form. OA-1(b) ships the window's words, which P40-02 grants, and asks whether a mint label fits better. OA-3 is a consequence the records cover (the approval window's own wording while it reads a call) and offers two ways to avoid it.
+All four are answered by the orchestrator (2026-10-17, ship-now form each); the owner sees them on a decision page with the arc's screenshots. Open for the owner as #719. They were non-blocking: the arc ships in the form "what ships now" says. OA-1(a), OA-2 and OA-4 propose changes outside the visible budget the lane's records grant (plan § UI impact); their "ships now" is today's form. OA-1(b) ships the window's words, which P40-02 grants, and asks whether a mint label fits better. OA-3 is a consequence the records cover (the approval window's own wording while it reads a call) and offers two ways to avoid it.
 
 ## OA-1. Two titles the picks leave open in Activity and on the detail page
 
