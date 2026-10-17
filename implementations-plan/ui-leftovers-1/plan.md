@@ -76,7 +76,7 @@ Decision page 35 (2026-10-17) settled five leftovers and, as an amendment the or
 - Time `navigation` on the base, per browser, with the recipe (the "before" figure).
 - **Gate**: `bun install --frozen-lockfile && bun run lint && bun run typecheck:all` exit 0.
 
-### Phase 1: the token hero is display only (#635)
+### Phase 1: the token hero is display only (#635) ✓
 - Files: `BalanceView.vue`, `BalanceView.test.ts`, `utils/amount.callers.test.ts` (`[2, 0]`).
 - Tests: replace the "hero's tap" block with one test over Home and the token page. Each case reads the figure first (success control), then clicks: no `writeText`, no toast, and a long balance's figure is unchanged after the click (the expansion is gone).
 - **Gate** ("fast layers" below means its first two commands): `bun run lint && bun run typecheck:all && bun run --cwd apps/extension test BalanceView amount.callers` exit 0.

@@ -4,3 +4,5 @@
 - 2026-10-17 14:33Z: Codex and Opus audits returned (both approve with changes); accepted findings applied; Codex verify round running.
 - 2026-10-17 14:34Z: Codex verify round: approve, no new material finding. Plan committed; awaiting orchestrator approval.
 - 2026-10-17 14:59Z: dev 623fc97f merged (#650). #583 B amendment written as Phase 6 (D5); Codex round on it: approve with changes, A1 and A3 folded, A2 rejected with reason. Phase 0 gate (install, lint, typecheck:all) pass; armed builds Chrome and Firefox ok.
+- 2026-10-17 15:09Z: Phase 0 pass. Before shots (Chrome, armed build) of the five surfaces and the two-chip ladder (matches #650's table). Base times, local: navigation Chrome 29.0 s / Firefox 47.8 s; rows Chrome 61.7 s / Firefox 110.5 s.
+- 2026-10-17 15:11Z: Phase 1 (#635) gate pass: lint, typecheck:all, `test BalanceView amount.callers` (70/70). Red proof: the token-page case fails on the base component.

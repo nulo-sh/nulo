@@ -12,8 +12,6 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 
 /** Utils */
 import { balanceFormatted } from "@/utils/amount.js"
-import { copyWithToast } from "@/utils/clipboard"
-import { selectedWithin } from "@/utils/selection"
 import { knownDecimals, parseRawBalance, safeFiatOf } from "@/utils/token-amount"
 import { aggregateFiat } from "@/utils/token-aggregate"
 import { storageLocalGet, storageLocalSet } from "@/utils/storage"
@@ -24,8 +22,6 @@ import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
 /** Composables */
 import { usePrices } from "@/composables/usePrices"
 import { useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
-import { useToast } from "@/composables/toast.js"
-const { openToast } = useToast()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -60,7 +56,6 @@ const PUBLIC_BALANCE_LABEL = "Public balance: anyone can see it"
 const tokenBalances = ref([])
 
 const tokenToDisplay = computed(() => props.tokenBalance?.token)
-const showFullBalance = ref(false)
 /** The token hero reads a stored row: a malformed side or unknown decimals renders a dash, never throws. */
 const heroSides = computed(() => {
 	const tb = props.tokenBalance
@@ -70,12 +65,6 @@ const heroSides = computed(() => {
 	const privateRaw = parseRawBalance({ privateBalance: tb.privateBalance })
 	if (publicRaw === undefined || privateRaw === undefined) return undefined
 	return { publicRaw, privateRaw, decimals }
-})
-const totalTokenBalance = computed(() => {
-	if (!props.tokenBalance) return { value: 0 }
-	const sides = heroSides.value
-	if (!sides) return { value: "—" }
-	return balanceFormatted(sides.publicRaw + sides.privateRaw, sides.decimals, showFullBalance.value ? undefined : 20, { compact: true })
 })
 
 const privateBalanceFormatted = computed(() => {
@@ -141,7 +130,7 @@ const heroCandidates = computed(() => {
 	if (!tokenToDisplay.value) return fiatHeroCandidates(countMicro.value ?? aggregate.value.micro)
 	const sides = heroSides.value
 	if (!sides) return ["—"]
-	return tokenHeroCandidates(sides.publicRaw + sides.privateRaw, sides.decimals, showFullBalance.value ? undefined : 20)
+	return tokenHeroCandidates(sides.publicRaw + sides.privateRaw, sides.decimals, 20)
 })
 const heroFit = ref(FULL_SIZE)
 const heroText = computed(() => heroCandidates.value[Math.min(heroFit.value.index, heroCandidates.value.length - 1)])
@@ -160,21 +149,6 @@ function fitHeroToLine() {
 	const fresh = fitHero(Math.min(candidates.length, forms.length), widthAt, heroRoom(heroSection.value))
 	const next = heroHeldFor === null ? fresh : holdHeroFit(heroFit.value, fresh)
 	if (next.index !== heroFit.value.index || next.scale !== heroFit.value.scale) heroFit.value = next
-}
-
-const handleCopy = (value, label) => {
-	void copyWithToast(value, openToast, `${label} is copied`)
-}
-const handleTokenBalanceClick = async (event) => {
-	if (selectedWithin(event.currentTarget)) return
-	let balance = totalTokenBalance.value?.value
-	if (totalTokenBalance.value?.slashed || showFullBalance.value) {
-		showFullBalance.value = !showFullBalance.value
-		await nextTick()
-		balance = totalTokenBalance.value?.value
-	}
-
-	handleCopy(balance, "Balance")
 }
 
 /** `loaded` = a snapshot for the active scope has SUCCEEDED; it then survives a later rejected refetch.
@@ -298,10 +272,9 @@ onBeforeUnmount(() => {
 			<div :class="$style.hero_wrap">
 				<div
 					v-if="tokenToDisplay || showFiatValues"
-					:onClick="tokenToDisplay ? handleTokenBalanceClick : undefined"
 					data-testid="balance-amount"
 					:aria-busy="(!tokenToDisplay && heroPending) || undefined"
-					:class="[$style.balance_amount, tokenToDisplay && $style.tappable]"
+					:class="$style.balance_amount"
 				>
 					<span v-if="tokenToDisplay" :class="$style.hero_fit" :style="{ '--hero-scale': heroFit.scale }">
 						{{ heroText }}
@@ -414,10 +387,6 @@ onBeforeUnmount(() => {
 	overflow: hidden;
 	max-width: 100%;
 	min-width: 0;
-}
-
-.tappable {
-	cursor: pointer;
 }
 
 /* The figure's type scales down from the hero's size, while its line keeps the full size's height. */
