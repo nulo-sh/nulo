@@ -874,6 +874,52 @@ describe("useFullBackupImport — guards before any writes", () => {
 		expect(c.restoreStatus.value).toBe("finished")
 	})
 
+	it("a body nested past the engine's stack gets the integrity message, and the next pick imports", async () => {
+		let deep: unknown[] = []
+		for (let i = 0; i < 1_000_000; i++) deep = [deep]
+		const valid = await buildBackup()
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		c.selectedBackup.value = {
+			name: "x.json",
+			backup: { ...valid, data: { ...valid.data, deep } },
+			kind: "plain",
+			profileType: "password",
+		}
+		await c.restoreBackup()
+		expect(c.restoreStatus.value).toBe("failed")
+		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Backup Integrity Check Failed", expect.any(String))
+		expect(profileClient.restore).not.toHaveBeenCalled()
+
+		opts.pickFile.mockResolvedValue(new File([JSON.stringify(valid)], "backup.json", { type: "application/json" }))
+		await c.pickBackupFile()
+		expect(c.restoreStatus.value).toBeNull()
+		opts.password.value = "pass1234"
+		opts.repeatedPassword.value = "pass1234"
+		profileClient.restore.mockResolvedValue({ id: "new-id", name: "Imported", type: "password" })
+		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
+		accountClient.restore.mockResolvedValue([{ address: "0xaaaa" }])
+		await c.restoreBackup()
+		expect(c.restoreStatus.value).toBe("finished")
+	})
+
+	it("a gate that throws ends the import with its message instead of leaving it in progress", async () => {
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		c.selectedBackup.value = { name: "x.json", backup: await buildBackup(), kind: "plain", profileType: "password" }
+		const digest = vi.spyOn(EncryptionKey, "getHashHex").mockRejectedValueOnce(new Error("digest unavailable"))
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			await c.restoreBackup()
+		} finally {
+			digest.mockRestore()
+			logged.mockRestore()
+		}
+		expect(c.restoreStatus.value).toBe("")
+		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Import failed", "digest unavailable")
+		expect(profileClient.restore).not.toHaveBeenCalled()
+	})
+
 	it("a migration failure aborts BEFORE any restore() call — zero-rollback atomicity", async () => {
 		// An unknown slice fails the migrator's trust-boundary validation; the
 		// import must reject with profileService.restore never invoked (nothing
