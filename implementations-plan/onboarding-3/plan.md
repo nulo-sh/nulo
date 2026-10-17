@@ -358,6 +358,8 @@ Outline B (local `outline-b.md`, safest-first) split the arc into two PRs: B1 (t
 | R2-1: a lock during the last-profile write still lets the words show | demonstrated; timing unverified | known limit: the tab has no lock listener, so a lock just after the words show leaves them up too; a lock reaction is a new subscription |
 | R2-2: "only its toast is fenced" is stale now that the flag rides the fence (`useFullBackupExport.ts:408`) | demonstrated | reworded |
 
+**Round 3** (same session, verify only): "verification passes; no unresolved material finding beyond the accepted known limits." The loop stops here.
+
 ## Post-implementation
 
 The steps are `implementations-plan/README.md` § Post-implementation standard, read at 1b93cbfa. This section keeps only this plan's parameters.
