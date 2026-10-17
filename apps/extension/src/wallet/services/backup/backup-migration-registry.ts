@@ -110,7 +110,7 @@ export type SliceDescriptor =
 			toStored: (slice: readonly unknown[]) => { ok: true; stored: Record<string, unknown> } | { ok: false; reason: string }
 			fromStored: (stored: unknown) => { ok: true; slice: unknown[] } | { ok: false; reason: string }
 	  }
-	/** Not `chrome.storage.local`-backed (PXE/IndexedDB) — carried through the
+	/** Not `chrome.storage.local`-backed (the PXE's OPFS stores) — carried through the
 	 *  migration untouched. Its wire shape drifts with `aztec-version`, not the
 	 *  storage schema. */
 	| { kind: "non-storage"; optional?: boolean }
