@@ -1,8 +1,8 @@
 // @vitest-environment node
 /**
- * The grant decode RPC reads the stored request approval executes, by reference and before any fee
- * choice, under the boundary every display decode shares: a bounded batch, on a network the active
- * profile owns, through the PXE's artifact for each contract. The stored request goes through the
+ * The grant decode RPCs read the stored request approval executes, or the one a fee question
+ * holds, by reference and before any fee choice, under the boundary every display decode shares: a
+ * bounded batch, on a network the active profile owns, through the PXE's artifact for each contract. The stored request goes through the
  * real interaction service; the execution side is prototype-called with a minimal `this`, so the
  * full ExecutionService init graph is not constructed.
  */
@@ -46,7 +46,10 @@ const sendRequest = (contents: CallAuthwitContent[]) => ({
 	actions: contents.map((content) => ({ kind: "add_public_authwit", content })),
 })
 
-function makeSelf(contents: CallAuthwitContent[], { networkProfileId = "pA", artifact = StandardToken as ContractArtifact } = {}) {
+function makeSelf(
+	contents: CallAuthwitContent[],
+	{ networkProfileId = "pA", artifact = StandardToken as ContractArtifact, questionProfileId = "pA" } = {},
+) {
 	const profileService = { getActiveProfile: vi.fn(async () => ({ id: "pA" })) }
 	const network = {
 		id: "net1",
@@ -68,6 +71,16 @@ function makeSelf(contents: CallAuthwitContent[], { networkProfileId = "pA", art
 		payload: { params: { operations: [sendRequest(contents)] }, session },
 		handleId: "h-1",
 		cancellationToken: "req-1",
+	})
+	;(interactions as unknown as { storage: Map<string, unknown> }).storage.set("q-1", {
+		id: "q-1",
+		payload: {
+			feeQuestion: { fee: "21", approved: "16", payer: { type: "fj" } },
+			operation: sendRequest(contents),
+			session: { ...session, profileId: questionProfileId },
+		},
+		handleId: "h-2",
+		cancellationToken: "q-1",
 	})
 	const getContractInstance = vi.fn(async () => ({ currentContractClassId: { toString: () => "0xc1a55" } }))
 	const self = Object.assign(Object.create(ExecutionService.prototype), {
@@ -107,5 +120,20 @@ describe("decodeGrantsForDisplay", () => {
 		await expect(flood.self.decodeGrantsForDisplay("req-1", 0)).rejects.toThrow("Invalid calls")
 		expect(other.getContractInstance).not.toHaveBeenCalled()
 		expect(flood.getContractInstance).not.toHaveBeenCalled()
+	})
+})
+
+describe("decodeQuestionGrantsForDisplay", () => {
+	test("decodes the grants of the send a fee question holds; each decode reads only its own kind of interaction", async () => {
+		const { self } = makeSelf([TRANSFER])
+		expect((await self.decodeQuestionGrantsForDisplay("q-1")).map((d) => d.kind)).toEqual(["decoded"])
+		await expect(self.decodeQuestionGrantsForDisplay("req-1")).rejects.toThrow("Invalid id")
+		await expect(self.decodeGrantsForDisplay("q-1", 0)).rejects.toThrow("Invalid id")
+	})
+
+	test("a question held for another profile is refused before any PXE read", async () => {
+		const { self, getContractInstance } = makeSelf([TRANSFER], { questionProfileId: "pB" })
+		await expect(self.decodeQuestionGrantsForDisplay("q-1")).rejects.toThrow("Wallet locked")
+		expect(getContractInstance).not.toHaveBeenCalled()
 	})
 })
