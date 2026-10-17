@@ -1,9 +1,10 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: the fixtures below are code SAMPLES fed to the scanner as plain strings — the `${...}` in them is the very thing under test, not an unintended interpolation.
 
-import { readdirSync, readFileSync, statSync } from "node:fs"
-import { join, relative } from "node:path"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { describe, expect, test } from "vitest"
 import { REDACTED_KEYS, SECRET_KEY_SUFFIX, URL_KEYS } from "@/wallet/logger/utils"
+import { PACKAGE_SRC_ROOTS, REPO_ROOT, type SourcePolicy, sourceFiles } from "../../scripts/type-roles/source-scan"
 
 /**
  * Static ban: a log call must not flatten a sensitive value into its message.
@@ -25,8 +26,6 @@ import { REDACTED_KEYS, SECRET_KEY_SUFFIX, URL_KEYS } from "@/wallet/logger/util
  * It catches the direct mistake, which is the one people actually make.
  */
 
-const REPO_ROOT = join(__dirname, "..", "..", "..", "..")
-
 /**
  * Everything that compiles into the extension, not just the app.
  *
@@ -36,22 +35,7 @@ const REPO_ROOT = join(__dirname, "..", "..", "..", "..")
  * `apps/extension/src` would leave the guard blind to exactly the code the branches below it spent
  * the most effort on.
  */
-const SCAN_ROOTS = [
-	"apps/extension/src",
-	// Enumerated, not listed: a new workspace package is covered the day it exists, with nothing
-	// to remember. A hardcoded list had already fallen behind by three packages.
-	...readdirSync(join(REPO_ROOT, "packages"))
-		.map((name) => `packages/${name}/src`)
-		.filter((rel) => {
-			try {
-				return statSync(join(REPO_ROOT, rel)).isDirectory()
-			} catch {
-				return false
-			}
-		}),
-]
-
-const SCANNED_EXT = /\.(ts|js|vue)$/
+const POLICY: SourcePolicy = { roots: ["apps/extension/src", ...PACKAGE_SRC_ROOTS], exts: ["ts", "js", "vue"] }
 
 /**
  * Names extra to the runtime denylist: values `trim()` reduces by SHAPE rather than by key, so
@@ -110,16 +94,6 @@ const ALLOWLIST: RegExp[] = [
 	// Generated shims.
 	/^apps\/extension\/src\/types\//,
 ]
-
-function walk(dir: string, out: string[] = []): string[] {
-	for (const name of readdirSync(dir)) {
-		if (name === "node_modules" || name === "dist") continue
-		const full = join(dir, name)
-		if (statSync(full).isDirectory()) walk(full, out)
-		else if (SCANNED_EXT.test(name)) out.push(full)
-	}
-	return out
-}
 
 /**
  * The scannable text of a file, as lines, with line numbers preserved.
@@ -485,12 +459,7 @@ function findLoggedSecrets(files: Array<{ path: string; content: string }>): str
 
 describe("log-payload ban (static)", () => {
 	test("no sensitive identifier is flattened into a log message", () => {
-		const files = SCAN_ROOTS.flatMap((root) =>
-			walk(join(REPO_ROOT, root)).map((full) => ({
-				path: relative(REPO_ROOT, full),
-				content: readFileSync(full, "utf8"),
-			})),
-		)
+		const files = sourceFiles(POLICY).map((path) => ({ path, content: readFileSync(join(REPO_ROOT, path), "utf8") }))
 		expect(files.length).toBeGreaterThan(500)
 		const offenders = findLoggedSecrets(files)
 		expect(

@@ -2,7 +2,7 @@
  * `requestConfirm` on the real stores and a mounted ConfirmPopup, bound as PopupManager binds it;
  * then the static ban on opening the dialog any other way.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { join, relative } from "node:path"
 import { createPinia, type Pinia, setActivePinia } from "pinia"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
@@ -14,6 +14,7 @@ vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() })
 import ConfirmPopup from "@/popup/components/popups/ConfirmPopup.vue"
 import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStore } from "@/stores/popup.store"
+import { GENERATED_TYPES, REPO_ROOT, sourceFiles, TEST_FILE } from "../../scripts/type-roles/source-scan"
 import { useConfirm } from "./useConfirm"
 
 const STUBS = {
@@ -202,7 +203,7 @@ describe("useConfirm — answering", () => {
  * the slot, or a `$patch`; those still fail the whole-object rule at review.
  */
 describe("useConfirm — the only way to open the confirm dialog", () => {
-	const SRC = join(__dirname, "..")
+	const SRC = "apps/extension/src"
 	const FORMS = [
 		/\b(?:cacheStore|useCacheStore\(\))\.confirm\b[\w.[\]"']*\s*=(?!=)/g,
 		/Object\.assign\(\s*(?:cacheStore|useCacheStore\(\))\.confirm\b/g,
@@ -223,15 +224,6 @@ describe("useConfirm — the only way to open the confirm dialog", () => {
 		)
 	}
 
-	function sources(dir: string, out: string[] = []): string[] {
-		for (const name of readdirSync(dir)) {
-			const full = join(dir, name)
-			if (statSync(full).isDirectory()) sources(full, out)
-			else if (/\.(ts|js|vue)$/.test(name) && !/\.test\.(ts|js)$/.test(name)) out.push(full)
-		}
-		return out
-	}
-
 	test("the scan sees each form it names, a call split across lines included, and lets reads pass", () => {
 		const at = (source: string) => offenses(source).map((o) => o.line)
 		expect(at(`cacheStore.confirm.title = "x"`)).toEqual([1])
@@ -243,10 +235,9 @@ describe("useConfirm — the only way to open the confirm dialog", () => {
 
 	test("no source writes the slot or opens the dialog itself", () => {
 		const offending: string[] = []
-		for (const file of sources(SRC)) {
+		for (const file of sourceFiles({ roots: [SRC], exts: ["ts", "js", "vue"], skip: [TEST_FILE, GENERATED_TYPES] })) {
 			const rel = relative(SRC, file)
-			if (rel.startsWith("types/")) continue
-			for (const { line, text } of offenses(readFileSync(file, "utf8"))) {
+			for (const { line, text } of offenses(readFileSync(join(REPO_ROOT, file), "utf8"))) {
 				if (!ALLOWED[rel]?.test(text)) offending.push(`${rel}:${line}`)
 			}
 		}

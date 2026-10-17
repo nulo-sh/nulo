@@ -7,3 +7,4 @@
 - 2026-10-17 18:25Z Opus leg: conditional approve; folded. Final fresh Codex pass next.
 - 2026-10-17 18:50Z final Codex: conditional approve (2 local conditions); folded; resumed for verification.
 - 2026-10-17 19:05Z final Codex resumed: approve. Plan committed; arc 1 starts (auto-continue).
+- 2026-10-17 18:04Z arc 1 phase 1 green: one walker (`sourceFiles(policy)`), 13 guards moved, 14 file lists and DottedTerm's occurrences equal (lessons/phase-1.md); lint, typecheck:all, test (828 files, 13438 tests) pass.

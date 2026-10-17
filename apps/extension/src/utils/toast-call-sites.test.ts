@@ -1,6 +1,7 @@
-import { readFileSync, readdirSync } from "node:fs"
-import { join, relative, resolve } from "node:path"
+import { readFileSync } from "node:fs"
+import { join, relative } from "node:path"
 import { describe, expect, test } from "vitest"
+import { DECLARATION, REPO_ROOT, STORY_FILE, sourceFiles, TEST_FILE } from "../../scripts/type-roles/source-scan"
 
 /**
  * A snack's kind is a per-site decision nothing types: a call that leaves it out lands as an error,
@@ -8,18 +9,12 @@ import { describe, expect, test } from "vitest"
  * defeats it, which is what review is for.
  */
 
-const SRC = resolve(__dirname, "..")
+const SRC = "apps/extension/src"
 
-function walk(dir: string): string[] {
-	return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-		const path = join(dir, entry.name)
-		if (entry.isDirectory()) return walk(path)
-		const source = /\.(ts|js|vue)$/.test(entry.name) && !/\.(test|stories|d)\.ts$/.test(entry.name)
-		return source ? [path] : []
-	})
-}
-
-const files = walk(SRC).map((path) => ({ path: relative(SRC, path), text: readFileSync(path, "utf8") }))
+const files = sourceFiles({ roots: [SRC], exts: ["ts", "js", "vue"], skip: [TEST_FILE, STORY_FILE, DECLARATION] }).map((file) => ({
+	path: relative(SRC, file),
+	text: readFileSync(join(REPO_ROOT, file), "utf8"),
+}))
 const filesMatching = (pattern: RegExp) => files.filter((file) => pattern.test(file.text)).map((file) => file.path)
 
 const QUOTES = new Set(['"', "'", "`"])

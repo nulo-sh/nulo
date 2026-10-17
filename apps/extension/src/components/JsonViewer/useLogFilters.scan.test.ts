@@ -1,6 +1,7 @@
-import { readdirSync, readFileSync, statSync } from "node:fs"
-import { join, relative } from "node:path"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { describe, expect, test } from "vitest"
+import { PACKAGE_SRC_ROOTS, REPO_ROOT, sourceFiles, TEST_FILE } from "../../../scripts/type-roles/source-scan"
 import { LOG_SOURCES } from "./useLogFilters"
 
 /**
@@ -20,33 +21,14 @@ import { LOG_SOURCES } from "./useLogFilters"
  * the helpers it names.
  */
 
-const REPO_ROOT = join(__dirname, "..", "..", "..", "..", "..")
 const REGISTRATION_FILES = ["apps/extension/src/wallet/runtime.ts", "packages/aztec-runtime/src/offscreen/entry.ts"]
 const ADD_OPENER = "services.add("
 
-const SCAN_ROOTS = [
-	"apps/extension/src",
-	...readdirSync(join(REPO_ROOT, "packages"))
-		.map((name) => `packages/${name}/src`)
-		.filter((rel) => {
-			try {
-				return statSync(join(REPO_ROOT, rel)).isDirectory()
-			} catch {
-				return false
-			}
-		}),
-]
-
-function walk(dir: string): string[] {
-	return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-		const path = join(dir, entry.name)
-		if (entry.isDirectory()) return walk(path)
-		return /\.(ts|vue)$/.test(entry.name) && !/\.(test|spec)\.ts$/.test(entry.name) ? [path] : []
-	})
-}
-
 const SOURCES = new Map(
-	SCAN_ROOTS.flatMap((root) => walk(join(REPO_ROOT, root))).map((path) => [relative(REPO_ROOT, path), readFileSync(path, "utf8")]),
+	sourceFiles({ roots: ["apps/extension/src", ...PACKAGE_SRC_ROOTS], exts: ["ts", "vue"], skip: [TEST_FILE] }).map((file) => [
+		file,
+		readFileSync(join(REPO_ROOT, file), "utf8"),
+	]),
 )
 
 const QUOTES = "\"'`"
