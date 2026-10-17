@@ -9,3 +9,4 @@
 - 2026-10-17 20:58 Phase 1 fast gate green (lint, typecheck:all, test journal-state journal/: 289 passed); rows smoke deferred (load).
 - 2026-10-17 21:01 Phase 2 gate green (lint, typecheck:all, test holdings token-aggregate BalanceView: 108 passed; never-happens mutant caught).
 - 2026-10-17 21:3x test:all green at f96b06b7 (extension 13,571 passed); Codex loop converged in 2 rounds (fix 6a8f0f09); Opus diff review folded.
+- 2026-10-17 21:4x merged origin/dev 356004ce (b8610413; #713 adds a lock check before the price fetch, no effect here); audit:vue 0, test:all 0 (extension 13,599 passed) on the merged head.
