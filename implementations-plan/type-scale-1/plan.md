@@ -53,6 +53,7 @@ For a person reading the wallet in the 360 by 600 popup, on any screen, in eithe
 | The capabilities window's permission table: Simulate and Transact tracks 54 px, the function-label track 58 px (`DetailsTable.vue:148,259`) | 66 px each; the contract track gives up 24 px | **OA-5 A** (P34-01) |
 | The identity strip's network cap 96 px (`IdentityStrip.vue:93`) | 102 px: "Local Network" whole at 13 px; the strip 38 px | **OA-1 B** (P34-02) |
 | Send's publish strip facts (`PublishStrip.vue`, `tag` today) | `label-section` with today's 10 px, 600, 0.08 em through `OVERRIDES` | **OA-4 C** (P34-05) |
+| Home's header chips (`Header.vue`, `tag` today) | `label-section` with today's 10 px, 600, 0.08 em through `OVERRIDES`: at 11 px "TESTNET" is cut | **OA-6**, open; ships A |
 
 Out of scope: icons (#590, lane icons-d2-1), the sheet (#590), Home's layout (#592, testers-fixes-2), any copy, any other role, the store images.
 
@@ -111,6 +112,7 @@ Out of scope: icons (#590, lane icons-d2-1), the sheet (#590), Home's layout (#5
 
 - **Every screen's text** (signed: P30-14 A and P30-15 B, quoted above). Before: caps labels at 10 and 11 px in four voices; small mono at 11; Home's row figures at 11; the nav at 10. After: one caps voice at 11; `meta` at 13; Home's row figures at 13; the nav at 11. The PR body quotes both picks and carries before/after screenshots, light and dark, of Home, Holdings, Send (amount card), Settings (a list page), the execute window, the connection check, onboarding's Welcome, the capabilities window with Details open and its account chooser, and a tx detail page.
 - **Decision page 34** (2026-10-17), quoted in [OWNER-ASKS.md](OWNER-ASKS.md): OA-5 A (the permission table's tracks at 66 px), OA-1 B (the identity strip's network cap at 102 px, the strip 38 px), OA-2 A (every identifier in `meta`), OA-3 B (the off-row dollar figures keep 11 px), OA-4 C (the publish strip's facts keep today's look).
+- **OA-6** (open, found in Phase 3): Home's header chips keep today's 10 px semibold; at the signed 11 px the network name is cut to "TEST…". This departs from the signed Home picture on those two words until the owner answers.
 
 ## Phases
 
@@ -156,7 +158,7 @@ As Architecture § OA-2 answer A says; then the pinned tests that name `data` (`
 
 **Gate**: Phase 2's, with `data` in the grep; `inventory.test.ts` passes. Layers: static, unit.
 
-### Phase 3 — site sizes and the layout reading
+### Phase 3 — site sizes and the layout reading ✓
 
 1. Set the Scope's site sizes and paired sizes (and OA-3's answer, if it is in).
 2. Update `send-amount-exact.test.ts:315` (`toBe(13)`).
@@ -189,6 +191,8 @@ As Architecture § OA-2 answer A says; then the pinned tests that name `data` (`
 | D8 | The layout gate's measurement, after Phase 1 read the base (2026-10-17; a correction both panel legs accepted, recorded as a deviation) | Measure text, not scrollable area: an element's own and in-flow descendants' text (none laid out apart: a field, an icon glyph, a box out of flow or one that clips or scrolls) against its box, or an inline element's containing block, padding edge, more than 1 px; the ancestor-clip span from the same text; a box whose `clip-path: inset()` insets meet paints nothing, so it is not visible | `scrollWidth > clientWidth` as specified: it reads 0 for an inline box's client width in Firefox (45 false findings), counts positioned non-text descendants (the Header's copy icon, every page) and judges screen-reader text drawn at no size on purpose. Own text alone against the nearest box (rejected: Codex, it loses the publish strip's containment, kept here because a role-bearing cell measures its descendants' text) |
 | D9 | The base failure the gate found ("TRANSACT", 58 px in a 54 px track, both browsers) | Stop Phase 1 and report (the Warning); OA-5 to the owner | A reviewed exception (forbidden by D5 and the Warning); OA-1's "today's look" (today's look itself fails) |
 | D10 | Where OA-5 A lands (2026-10-17) | In Phase 1, before its gate re-runs: the answer is what makes today's tree pass, and the orchestrator's resume extends this lane's ownership to the grid line | Phase 3 with the other sizes (Phase 1's gate would stay red on the base) |
+| D11 | The header's network name, newly cut at 11 px ("TEST…", both browsers; the only newly cut value a before/after ellipsis scan found) | OA-6 to the owner; OA-1's form A ships: the two header chips keep today's 10 px / 600 / 0.08 em through three `OVERRIDES` entries (panel: Codex and Opus, both "ship-A") | Apply OA-1 B (it answered the identity strip; the header has no cap to widen, so B means taking width from somewhere unsigned); accept the cut (a person reads the network there) |
+| D12 | How OA-4 C keeps the publish facts at today's look | One compound rule (`.strip .cell`) and three `OVERRIDES` entries on role `label-section` | A tenth role (unsigned); keeping `tag` alive for one site (D1) |
 
 ## Audit verdicts
 
@@ -203,6 +207,8 @@ As Architecture § OA-2 answer A says; then the pinned tests that name `data` (`
 **Final verdict: approve** (fresh Codex pass, resumed once on its own conditions).
 
 **Phase 1 stop, panel** (2026-10-17, on the base-tree readings in [lessons/phase-1.md](lessons/phase-1.md)). Codex (sol, high): "VERDICT: correction ; BLOCKED: yes": replacing scrollable geometry with text geometry is a correction recorded as a deviation; the clip-to-nothing and icon-glyph rules are corrections, a rule on `aria-hidden` or on every tiny box would be narrowing; checking only the nearest box loses containment; replace the scroll-derived span in the clip branch too; "Transact" needs the owner. Opus (general-purpose): the same verdict, with three conditions (each rule by kind, no edge or tolerance moved, recorded as a deviation), the controls the fix needs, and "land the corrected measurement so the blocker is exactly one element". All taken (D8); the blocker is OA-5 (D9).
+
+**Phase 3 header, panel** (2026-10-17, on the readings in [lessons/phase-3.md](lessons/phase-3.md)). Codex (sol, high, session `01a149bb-7479-70c0-96f2-ab7f8abab973`): "VERDICT: ship-A ; Restore the three measured role carriers to their exact baseline and defer the header's width allocation to OA-6." Its checks: re-measure with A applied (the name whole, the address and its copy icon clear, the lock word intact, a long network name and the chip with its name hidden); keep the full name in the chip's accessible label; A restores the baseline relationship (26.8 beside 26 px), not equal heights. Opus (general-purpose): "VERDICT: ship-A", with the cut itself outside OA-1's surface (Home is no approval window), hence a new ask; A departs from the signed Home picture, which draws both words whole by closing the row gap, so the PR and UI impact say so; B's honest sources of about 8 px exclude the cap and the gap. All taken (D11, OA-6), except citing the ask in each entry's `why`: committed code names no ask; the close-out issue names the entries.
 
 ## Delivery
 

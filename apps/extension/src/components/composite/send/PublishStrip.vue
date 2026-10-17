@@ -78,6 +78,13 @@ const cells = computed(() => CELLS.map((c) => ({ ...c, glyph: publishGlyph(props
 	white-space: nowrap;
 }
 
+/* The facts keep their 10px semibold beside the 10px names, so the strip reads as before and fits. */
+.strip .cell {
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+}
+
 .name {
 	composes: type--tag-name from global;
 	color: var(--nulo-secondary);

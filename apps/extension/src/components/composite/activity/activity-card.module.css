@@ -2,7 +2,7 @@
 
 .title_sep {
 	composes: type--row-title from global;
-	font-size: 13px;
+	font-size: 14px;
 	color: var(--nulo-secondary);
 	user-select: none;
 }

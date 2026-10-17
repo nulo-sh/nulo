@@ -90,7 +90,7 @@ withDefaults(
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	max-width: 96px;
+	max-width: 102px;
 }
 
 .identity_warn {

@@ -68,3 +68,17 @@ Found by the layout gate on today's wallet, before any type-scale change; it sto
   - **C. Shorter words** (a copy change, for example "SEND" for "TRANSACT").
 - **Recommendation**: A. It is the same answer as OA-1 B for this table, and it is the only option that keeps the gate free of exceptions.
 - **What ships now**: nothing. The arc stops at Phase 1 until this is answered, since today's look itself fails the gate, so OA-1's "keep today's look" cannot cover it.
+
+## OA-6: Home's header chips, where "TESTNET" no longer fits at 11 px
+
+Found in Phase 3 (2026-10-17) by a before/after scan of every value an ellipsis cuts, over every state the type-role specs sweep, in Chrome and Firefox: the only value the new scale newly cuts.
+
+- **Surface**: the header on every popup page: the network chip ("TESTNET ▪") and the lock chip ("🔒 LOCK") at the right of the account name and address (`Header.vue`).
+- **Today**: both chips' words in `tag`, Space Grotesk 10 px / 600 / 0.08 em. "TESTNET" is 45 px of text in a 79 px chip, whole; the network chip is about 26.8 px tall beside the lock chip's fixed 26 px.
+- **At the signed caps voice** (`label-section`, 11 px / 700 / 0.1 em): "TESTNET" needs 53 px, the lock word grows about 5.5 px, and the row has no width to spare (the address column and its copy icon keep theirs, by design the network chip gives way first), so the network chip's ellipsis draws "TEST…" on every page; the chip also grows to 28 px beside the 26 px lock chip. The design composite (`vd-type-a.png`) draws both words whole in `label-section` by closing the row's 12 px gap, which would put the address's copy icon on the chip.
+- **Options**:
+  - **A. Keep today's look on the two chips** (what ships): the rest of the header, and every other screen, takes Scale A.
+  - **B. Make room** in the row, about 8 px, at the signed voice. Honest sources: the network chip's side padding 10 → 6 px (exactly 8 px, no margin), the lock chip as an icon alone, or a narrower left padding. Widening the chip's cap does nothing: the row, not the 120 px cap, is what holds it.
+  - **C. Accept the cut**: "TEST…" on every page. Not recommended: a person reads the network there.
+- **Recommendation**: B with the chip padding, if the owner accepts a tighter chip; otherwise A.
+- **What ships now**: A, through one compound rule in `Header.vue` (`.actions .network_chip, .network_chip .network_label, .lock_chip .lock_label`) and three `OVERRIDES` entries (font-size 10px, font-weight 600, letter-spacing 0.08em, role `label-section`). The chip itself takes the size too, since its own size sets its `1lh` and so its height. This departs from the signed Home picture on these two words; the PR says so.

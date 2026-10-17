@@ -33,6 +33,11 @@ const APP = "apps/extension/src/popup/app.vue"
 const BRUTALIST = "packages/design/src/ui/BrutalistTitle.vue"
 const BALANCE = "apps/extension/src/popup/components/modules/general/BalanceView.vue"
 const BUTTON = "packages/design/src/ui/Button.vue"
+const HEADER = "apps/extension/src/components/Header.vue"
+const HEADER_CHIPS = ".actions .network_chip, .network_chip .network_label, .lock_chip .lock_label"
+const HEADER_CHIP_SCOPE = '[data-testid="network-button"], [data-testid="network-name"], [data-testid="header-lock"] > span'
+const PUBLISH_STRIP = "apps/extension/src/components/composite/send/PublishStrip.vue"
+const PUBLISH_FACTS = '[data-testid="send-publish-strip"] [data-cell]'
 const ROLELESS = ".wrapper:is(.secondary, .ghost, .text)"
 const ROLELESS_WHY = "the icon-only variants carry no role and keep their size step"
 const CONTACT_ROW = "apps/extension/src/popup/components/modules/settings/contacts/ContactRow.vue"
@@ -91,9 +96,9 @@ export const CARVE_OUTS: CarveOut[] = [
 	{
 		file: "apps/extension/src/components/composite/send/AmountCard.vue",
 		rule: "faceless",
-		text: "font-size: calc(11px * var(--hero-scale, 1))",
+		text: "font-size: calc(13px * var(--hero-scale, 1))",
 		selector: ".derived_type",
-		why: "the derived token line at its meta line's 11px, which the fit shrinks to keep it on one line",
+		why: "the derived token line at its meta line's 13px, which the fit shrinks to keep it on one line",
 	},
 	{
 		file: BALANCE,
@@ -197,5 +202,59 @@ export const OVERRIDES: Override[] = [
 		value: "700",
 		role: "meta",
 		why: "a warned network keeps its bold over meta's 400",
+	},
+	{
+		file: PUBLISH_STRIP,
+		selector: ".strip .cell",
+		scope: PUBLISH_FACTS,
+		property: "font-size",
+		value: "10px",
+		role: "label-section",
+		why: "a publish fact keeps its 10px beside the 10px names",
+	},
+	{
+		file: PUBLISH_STRIP,
+		selector: ".strip .cell",
+		scope: PUBLISH_FACTS,
+		property: "font-weight",
+		value: "600",
+		role: "label-section",
+		why: "a publish fact keeps its semibold, a step under the bold names",
+	},
+	{
+		file: PUBLISH_STRIP,
+		selector: ".strip .cell",
+		scope: PUBLISH_FACTS,
+		property: "letter-spacing",
+		value: "0.08em",
+		role: "label-section",
+		why: "a publish fact keeps the names' tracking",
+	},
+	{
+		file: HEADER,
+		selector: HEADER_CHIPS,
+		scope: HEADER_CHIP_SCOPE,
+		property: "font-size",
+		value: "10px",
+		role: "label-section",
+		why: "the header's chips keep today's 10px while the row has no room for 11px",
+	},
+	{
+		file: HEADER,
+		selector: HEADER_CHIPS,
+		scope: HEADER_CHIP_SCOPE,
+		property: "font-weight",
+		value: "600",
+		role: "label-section",
+		why: "the header's chips keep today's semibold",
+	},
+	{
+		file: HEADER,
+		selector: HEADER_CHIPS,
+		scope: HEADER_CHIP_SCOPE,
+		property: "letter-spacing",
+		value: "0.08em",
+		role: "label-section",
+		why: "the header's chips keep today's tracking",
 	},
 ]

@@ -177,7 +177,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 
 .fiat {
 	composes: type--fiat from global;
-	font-size: 11px;
+	font-size: 13px;
 	color: var(--nulo-secondary);
 
 	max-width: 160px;

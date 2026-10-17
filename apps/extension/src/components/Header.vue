@@ -449,6 +449,16 @@ onBeforeUnmount(() => {
 	color: var(--nulo-secondary);
 }
 
+/* The chips keep their 10px semibold: the row has no width to spare, and at 11px the network chip
+ * shrinks until its ellipsis cuts "TESTNET". The chip's own size sets its `1lh`, so it goes too. */
+.actions .network_chip,
+.network_chip .network_label,
+.lock_chip .lock_label {
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+}
+
 .status_dot {
 	width: 6px;
 	height: 6px;
