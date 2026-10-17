@@ -8,6 +8,7 @@ import type { PendingReset, StaleNetworkView } from "@/wallet/services/network-r
 import NetworkDetail from "./[id].vue"
 
 const setPrimaryEndpoint = vi.hoisted(() => vi.fn(async () => undefined))
+const openToast = vi.hoisted(() => vi.fn())
 const networkReset = vi.hoisted(() => ({
 	getPendingReset: vi.fn(async (): Promise<PendingReset | null> => null),
 	getStaleNetwork: vi.fn(async (_id: string): Promise<Partial<StaleNetworkView> | null> => null),
@@ -20,7 +21,7 @@ vi.mock("@/utils/core", () => ({
 	},
 }))
 vi.mock("@/composables/useNetworkActivation", () => ({ useNetworkActivation: () => ({ activate: vi.fn(async () => "activated") }) }))
-vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
+vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast }) }))
 const routing = vi.hoisted(() => ({ route: undefined as unknown as { params: { id: string } } }))
 vi.mock("vue-router", async () => {
 	const { reactive } = await import("vue")
@@ -38,6 +39,7 @@ vi.mock("@/wallet/services/config/client", () => ({
 beforeEach(() => {
 	routing.route.params.id = "mine"
 	setPrimaryEndpoint.mockClear()
+	openToast.mockClear()
 	networkReset.getPendingReset.mockReset().mockResolvedValue(null)
 	networkReset.getStaleNetwork.mockReset().mockResolvedValue(null)
 	vi.stubGlobal("chrome", {
@@ -193,6 +195,37 @@ describe("Settings › Network detail — a paused reset of this network", () =>
 		expect(useCacheStore().confirm?.description).toBe(`${WIPES} It also deletes the imported account “Savings”.`)
 		release({ networkId: "mine", running: false })
 		await flushPromises()
+	})
+
+	test("a click-time read that fails opens no confirmation, only the failure toast", async () => {
+		const release = holdFirstRead()
+		const wrapper = mountDetail()
+		await flushPromises()
+		networkReset.getPendingReset.mockRejectedValueOnce(new Error("worker gone"))
+		await wrapper.get('[data-testid="network-delete-chain-btn"]').trigger("click")
+		await flushPromises()
+		expect(useCacheStore().confirm?.description).toBeUndefined()
+		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Failed to delete chain" })
+		release(null)
+		await flushPromises()
+	})
+
+	test("a click-time read that lands after the page unmounted opens nothing", async () => {
+		const wrapper = mountDetail()
+		await flushPromises()
+		let release!: (pending: PendingReset | null) => void
+		networkReset.getPendingReset.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					release = resolve
+				}),
+		)
+		await wrapper.get('[data-testid="network-delete-chain-btn"]').trigger("click")
+		wrapper.unmount()
+		release({ networkId: "mine", running: true })
+		await flushPromises()
+		expect(useCacheStore().confirm?.description).toBeUndefined()
+		expect(openToast).not.toHaveBeenCalled()
 	})
 
 	test("a hold read for one network never shows on another the page moves to, and comes back with it", async () => {

@@ -51,6 +51,7 @@ async function readHeldReset(id) {
 
 const heldReset = ref(null)
 let resetReads = 0
+let disposed = false
 const syncHeldReset = async () => {
 	const read = ++resetReads
 	const held = await readHeldReset(networkId.value)
@@ -147,8 +148,15 @@ const handleDeleteNetwork = async () => {
 	if (!canDelete.value) return
 	const { id, name } = network.value
 	// Read at the click: a confirmation opened before the page's own read landed must still name them.
-	const held = await readHeldReset(id).catch(() => heldReset.value)
-	if (networkId.value !== id) return
+	let held
+	try {
+		held = await readHeldReset(id)
+	} catch {
+		held = undefined
+	}
+	if (disposed || networkId.value !== id) return
+	// An unknown hold is not an empty one: the confirmation never omits what the delete removes.
+	if (held === undefined) return openToast({ kind: "error", label: "Failed to delete chain" })
 	requestConfirm({
 		confirm_text: "Yes, delete chain",
 		confirm_color: "red",
@@ -189,6 +197,7 @@ watch(networkId, () => {
 })
 
 onBeforeUnmount(() => {
+	disposed = true
 	managers.networkReset.onStaleNetworkChanged.remove(syncHeldReset)
 })
 </script>
