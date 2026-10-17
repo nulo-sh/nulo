@@ -1,7 +1,6 @@
 /**
  * The deferred orphan-store sweep: a same-id re-import provisioning after the
- * sweep's snapshots must keep its store, and the legacy IndexedDB arm never
- * deletes bb.js's CRS cache (keyval-store).
+ * sweep's snapshots must keep its store.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
@@ -25,12 +24,6 @@ import { PxeService, type IProfileReader } from "./service"
 const noopLogger: ILogger = { log: () => {} }
 const KEY_B64 = btoa(String.fromCharCode(...new Uint8Array(32)))
 
-function fireSuccess(): unknown {
-	const req: Record<string, unknown> = {}
-	queueMicrotask(() => (req.onsuccess as () => void)?.())
-	return req
-}
-
 function makeSweepService(profiles: IProfileReader): PxeService {
 	const service = new PxeService(profiles, noopLogger, {
 		createChainRuntime: async () => {
@@ -51,7 +44,6 @@ describe("PxeService orphan-store sweep — recheck at commit", () => {
 	afterEach(() => vi.unstubAllGlobals())
 
 	test("a profile provisioned after the profiles snapshot is NOT removed as an orphan", async () => {
-		vi.stubGlobal("indexedDB", { databases: async () => [] })
 		let service: PxeService = null!
 		const profiles: IProfileReader = {
 			connect: async () => {},
@@ -70,7 +62,6 @@ describe("PxeService orphan-store sweep — recheck at commit", () => {
 	})
 
 	test("a profile whose only incarnations this document erased is not swept", async () => {
-		vi.stubGlobal("indexedDB", { databases: async () => [] })
 		const service = makeSweepService({ connect: async () => {}, getProfiles: async () => [] })
 		await service.provisionChainStoreKey("p1", KEY_B64, "gen-1")
 		await service.clearProfileState("p1", "gen-1")
@@ -82,7 +73,6 @@ describe("PxeService orphan-store sweep — recheck at commit", () => {
 	})
 
 	test("removal waits for the profile's write barrier — a held read (store-open in flight) delays it", async () => {
-		vi.stubGlobal("indexedDB", { databases: async () => [] })
 		const profiles: IProfileReader = {
 			connect: async () => {},
 			getProfiles: async () => [],
@@ -112,7 +102,6 @@ describe("PxeService orphan-store sweep — recheck at commit", () => {
 	})
 
 	test("a genuinely orphaned profile dir (no lifecycle entry, no row) IS removed", async () => {
-		vi.stubGlobal("indexedDB", { databases: async () => [] })
 		const profiles: IProfileReader = {
 			connect: async () => {},
 			getProfiles: async () => [],
@@ -122,27 +111,5 @@ describe("PxeService orphan-store sweep — recheck at commit", () => {
 		await sweep(service)
 
 		expect(removeProfileStoreDirs).toHaveBeenCalledWith("p1")
-	})
-
-	test("keyval-store survives the sweep that deletes the last legacy DB", async () => {
-		const deleted: string[] = []
-		vi.stubGlobal("indexedDB", {
-			// A live listing: a deleted DB drops out, as it does in the browser.
-			databases: async () => [{ name: "pxe/p1/1" }, { name: "keyval-store" }].filter((x) => !deleted.includes(x.name)),
-			deleteDatabase: (name: string) => {
-				deleted.push(name)
-				return fireSuccess()
-			},
-		})
-		const profiles: IProfileReader = {
-			connect: async () => {},
-			// p1 still exists so the OPFS arm skips; this test is the IDB arm's.
-			getProfiles: async () => [{ id: "p1" }],
-		}
-		const service = makeSweepService(profiles)
-
-		await sweep(service)
-
-		expect(deleted).toEqual(["pxe/p1/1"])
 	})
 })

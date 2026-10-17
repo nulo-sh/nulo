@@ -22,18 +22,35 @@ vi.mock("./known-artifacts", () => ({
 vi.mock("./note-schemas", () => ({
 	loadProductionNoteSchemas: async () => new Map<string, unknown>(),
 }))
+// The OPFS removals are the erase's and the purge's only storage steps; each resolves unless a
+// test scripts it.
+const opfs = vi.hoisted(() => ({
+	removeChainStoreDir: vi.fn(async (_coords: { profileId: string; chainId: number }) => {}),
+	removeProfileStoreDirs: vi.fn(async (_profileId: string) => {}),
+}))
+vi.mock("./opfs-store", async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	removeChainStoreDir: (coords: { profileId: string; chainId: number }) => opfs.removeChainStoreDir(coords),
+	removeProfileStoreDirs: (profileId: string) => opfs.removeProfileStoreDirs(profileId),
+}))
 
 import type { PXE } from "@aztec-labs/pxe/client/bundle"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import type { ILogger } from "@nulo/wallet-core/logger"
+import type { ReadWriteGuard } from "@nulo/wallet-core/utils"
 import { makeFetchWithTimeout, type RetryOptions } from "../utils/fetch"
 import { ChainRuntime, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { PxeService, type IProfileReader } from "./service"
 import { LogLevel } from "@nulo/wallet-core/logger"
 
 const noopLogger: ILogger = { log: () => {} }
+
+beforeEach(() => {
+	opfs.removeChainStoreDir.mockReset()
+	opfs.removeProfileStoreDirs.mockReset()
+})
 
 const noopProfiles: IProfileReader = {
 	connect: async () => {},
@@ -232,54 +249,103 @@ describe("PxeService.getContractInstance cascade", () => {
 	})
 })
 
+type ErasureInternals = {
+	storeKeys: Map<string, Uint8Array>
+	profileLifecycles: Map<string, { current?: { kind: string; gen: string }; dead: Set<string> }>
+	profileBarriers: Map<string, unknown>
+	getProfileBarrier(profileId: string): ReadWriteGuard
+}
+
+async function until(reached: () => boolean): Promise<void> {
+	for (let i = 0; i < 500; i++) {
+		if (reached()) return
+		await Promise.resolve()
+	}
+	throw new Error("state never reached")
+}
+
+function gate(): { promise: Promise<void>; open: () => void } {
+	let open: () => void = () => {}
+	const promise = new Promise<void>((resolve) => {
+		open = resolve
+	})
+	return { promise, open }
+}
+
+/** Counts microtasks from its creation; `watched()` is the first tick `watch` held. */
+function tickCounter(watch?: () => boolean) {
+	let ticks = 0
+	let firstWatched = -1
+	const spin = () => {
+		ticks++
+		if (firstWatched < 0 && watch?.()) firstWatched = ticks
+		if (ticks < 500) queueMicrotask(spin)
+	}
+	queueMicrotask(spin)
+	return { now: () => ticks, watched: () => firstWatched }
+}
+
 describe("PxeService deletion honesty", () => {
+	const calls: string[] = []
+
 	beforeEach(() => {
+		calls.length = 0
 		vi.stubGlobal("chrome", {
 			runtime: { onMessage: { addListener: () => {}, removeListener: () => {} }, sendMessage: () => Promise.resolve() },
+		})
+		opfs.removeChainStoreDir.mockImplementation(async ({ profileId, chainId }) => {
+			calls.push(`removeChainStoreDir:${profileId}/${chainId}`)
+		})
+		opfs.removeProfileStoreDirs.mockImplementation(async (profileId) => {
+			calls.push(`removeProfileStoreDirs:${profileId}`)
 		})
 	})
 	afterEach(() => vi.unstubAllGlobals())
 
-	// A fake IDBOpenDBRequest that fires the chosen lifecycle callback async.
-	function fireReq(kind: "success" | "error"): unknown {
-		const req: Record<string, unknown> = {}
-		queueMicrotask(() => {
-			if (kind === "success") (req.onsuccess as () => void)?.()
-			else {
-				req.error = new Error("boom")
-				;(req.onerror as () => void)?.()
-			}
-		})
-		return req
+	function makeErasingService(): { service: PxeService; raw: ErasureInternals } {
+		const service = makeService(makeFactory({ nodeBehavior: "throws" }).factory)
+		;(service as unknown as { registry: unknown }).registry = {
+			dispose: async () => {
+				calls.push("dispose")
+			},
+			disposeProfile: async () => {
+				calls.push("disposeProfile")
+			},
+			stopRetries: () => () => {},
+		}
+		return { service, raw: service as unknown as ErasureInternals }
 	}
 
-	test("clearChainState REJECTS when deleteDatabase errors — no false 'deleted'", async () => {
-		const service = makeService(makeFactory({ nodeBehavior: "throws" }).factory)
-		;(service as unknown as { registry: unknown }).registry = { dispose: async () => {}, stopRetries: () => () => {} }
-		vi.stubGlobal("indexedDB", { deleteDatabase: () => fireReq("error") })
-		await expect(service.clearChainState("p1", 1)).rejects.toThrow()
+	test("clearChainState disposes the runtime, then removes the chain's OPFS store", async () => {
+		await makeErasingService().service.clearChainState("p1", 1)
+		expect(calls).toEqual(["dispose", "removeChainStoreDir:p1/1"])
 	})
 
-	test("clearProfileState deletes the profile's DBs by prefix and never keyval-store, even as the last profile", async () => {
-		const service = makeService(makeFactory({ nodeBehavior: "throws" }).factory)
-		;(service as unknown as { registry: unknown }).registry = { disposeProfile: async () => {}, stopRetries: () => () => {} }
-		const deleted: string[] = []
-		let dbs = [{ name: "pxe/p1/1" }, { name: "pxe/p2/1" }, { name: "keyval-store" }]
-		vi.stubGlobal("indexedDB", {
-			databases: async () => dbs,
-			deleteDatabase: (name: string) => {
-				deleted.push(name)
-				dbs = dbs.filter((d) => d.name !== name)
-				return fireReq("success")
-			},
+	test("clearProfileState disposes, crypto-erases, then removes the OPFS tree; the generation dies and the barrier goes", async () => {
+		const { service, raw } = makeErasingService()
+		raw.storeKeys.set("p1", new Uint8Array(32))
+		raw.storeKeys.set("p2", new Uint8Array(32))
+		let p1KeyAtRemoval: boolean | undefined
+		opfs.removeProfileStoreDirs.mockImplementation(async (profileId) => {
+			calls.push(`removeProfileStoreDirs:${profileId}`)
+			p1KeyAtRemoval = raw.storeKeys.has("p1")
 		})
 		await service.clearProfileState("p1", "gen-1")
-		expect(deleted).toContain("pxe/p1/1")
-		expect(deleted).not.toContain("pxe/p2/1") // another profile's DB — untouched
-		expect(deleted).not.toContain("keyval-store")
+		expect(calls).toEqual(["disposeProfile", "removeProfileStoreDirs:p1"])
+		expect(p1KeyAtRemoval).toBe(false)
+		expect(raw.storeKeys.has("p2")).toBe(true)
+		expect(raw.profileLifecycles.get("p1")).toEqual({ dead: new Set(["gen-1"]) })
+		expect(raw.profileBarriers.has("p1")).toBe(false)
+	})
 
-		await service.clearProfileState("p2", "gen-2")
-		expect(deleted).toEqual(["pxe/p1/1", "pxe/p2/1"])
+	test("a rejecting OPFS removal fails the erase; the profile stays fenced and its barrier unlocked", async () => {
+		const { service, raw } = makeErasingService()
+		const boom = new Error("opfs down")
+		opfs.removeProfileStoreDirs.mockRejectedValue(boom)
+		await expect(service.clearProfileState("p1", "gen-1")).rejects.toBe(boom)
+		expect(raw.profileLifecycles.get("p1")).toEqual({ current: { kind: "deleting", gen: "gen-1" }, dead: new Set() })
+		expect(raw.profileBarriers.has("p1")).toBe(true)
+		await expect(raw.getProfileBarrier("p1").read(async () => "read ran")).resolves.toBe("read ran")
 	})
 
 	test("clearProfileState RETAINS the profile barrier on erase failure, then drops it on a successful retry", async () => {
@@ -292,7 +358,6 @@ describe("PxeService deletion honesty", () => {
 			},
 			stopRetries: () => () => {},
 		}
-		vi.stubGlobal("indexedDB", { databases: async () => [], deleteDatabase: () => fireReq("success") })
 
 		// Failed erase: rejects AND keeps the barrier entry so the profile stays fenced for a retry.
 		await expect(service.clearProfileState("p1", "gen-1")).rejects.toBeInstanceOf(AggregateError)
@@ -302,6 +367,39 @@ describe("PxeService deletion honesty", () => {
 		disposeShouldFail = false
 		await service.clearProfileState("p1", "gen-1")
 		expect(barriers.has("p1")).toBe(false)
+	})
+
+	test("await shape: the generation dies and a queued barrier read runs fixed ticks after the OPFS removal settles", async () => {
+		const { service, raw } = makeErasingService()
+		const removal = gate()
+		opfs.removeProfileStoreDirs.mockImplementation(() => removal.promise)
+		const run = service.clearProfileState("p1", "gen-1")
+		await until(() => opfs.removeProfileStoreDirs.mock.calls.length === 1)
+		let readAt = -1
+		const counter = tickCounter(() => raw.profileLifecycles.get("p1")?.dead.has("gen-1") === true)
+		const read = raw.getProfileBarrier("p1").read(async () => {
+			readAt = counter.now()
+		})
+		removal.open()
+		await run
+		await read
+		expect({ deletedAt: counter.watched(), readAt }).toEqual({ deletedAt: 2, readAt: 2 })
+	})
+
+	test("await shape: clearChainState settles fixed ticks after its OPFS removal settles", async () => {
+		const removal = gate()
+		opfs.removeChainStoreDir.mockImplementation(() => removal.promise)
+		const run = makeErasingService().service.clearChainState("p1", 1)
+		await until(() => opfs.removeChainStoreDir.mock.calls.length === 1)
+		const counter = tickCounter()
+		let settledAt = -1
+		run.then(() => {
+			settledAt = counter.now()
+		})
+		removal.open()
+		await run
+		await Promise.resolve()
+		expect(settledAt).toBe(6)
 	})
 })
 
@@ -404,7 +502,6 @@ describe("PxeService teardown against an unreachable node", () => {
 		vi.stubGlobal("chrome", {
 			runtime: { onMessage: { addListener: () => {}, removeListener: () => {} }, sendMessage: () => Promise.resolve() },
 		})
-		vi.stubGlobal("indexedDB", { databases: async () => [], deleteDatabase: () => succeedingDelete() })
 		vi.stubGlobal(
 			"fetch",
 			vi.fn(async () => {
@@ -418,12 +515,6 @@ describe("PxeService teardown against an unreachable node", () => {
 		vi.useRealTimers()
 		vi.unstubAllGlobals()
 	})
-
-	function succeedingDelete(): unknown {
-		const req: Record<string, unknown> = {}
-		queueMicrotask(() => (req.onsuccess as () => void)?.())
-		return req
-	}
 
 	/** A runtime whose node goes through the production retrying fetch, or answers when told to. */
 	function serviceWithNode(kind: "refusing" | "answering"): PxeService {
@@ -489,14 +580,9 @@ describe("PxeService teardown against an unreachable node", () => {
 		const service = serviceWithNode("answering")
 		const op = track(service.getLatestBlockNumber(network))
 		await vi.advanceTimersByTimeAsync(0)
-		vi.stubGlobal("indexedDB", {
-			databases: async () => {
-				throw new Error("idb down")
-			},
-			deleteDatabase: () => {
-				throw new Error("idb down")
-			},
-		})
+		const opfsDown = new Error("opfs down")
+		opfs.removeChainStoreDir.mockRejectedValue(opfsDown)
+		opfs.removeProfileStoreDirs.mockRejectedValue(opfsDown)
 
 		const cleared = track(clear(service))
 		await vi.advanceTimersByTimeAsync(0)
@@ -504,7 +590,7 @@ describe("PxeService teardown against an unreachable node", () => {
 
 		answer?.(7)
 		await op.outcome
-		expect(await cleared.outcome).toBeInstanceOf(Error)
+		expect(await cleared.outcome).toBe(opfsDown)
 		expect(retryWhile?.()).toBe(true)
 	})
 
@@ -519,12 +605,8 @@ describe("PxeService teardown against an unreachable node", () => {
 		await service.clearProfileState(network.profileId, "gen-1")
 		expect(stopRetries).toHaveBeenCalledTimes(1)
 
-		vi.stubGlobal("indexedDB", {
-			databases: async () => {
-				throw new Error("idb down")
-			},
-		})
-		await expect(service.clearProfileState(network.profileId, "gen-2")).rejects.toThrow("idb down")
+		opfs.removeProfileStoreDirs.mockRejectedValue(new Error("opfs down"))
+		await expect(service.clearProfileState(network.profileId, "gen-2")).rejects.toThrow("opfs down")
 		expect(stopRetries).toHaveBeenCalledTimes(2)
 		await expect(service.clearProfileState(network.profileId, "gen-3")).rejects.toThrow("generation mismatch")
 		expect(stopRetries).toHaveBeenCalledTimes(2)
