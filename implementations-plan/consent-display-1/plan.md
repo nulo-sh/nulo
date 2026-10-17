@@ -1,7 +1,7 @@
 ---
 plan: consent-display-1
 tier: mid
-status: planned; final Codex pass approve; arc 1 implementing (auto-continue)
+status: arc 1 in review (its PR against dev); arcs 2 and 3 not started
 issues: "none: no public issue exists for this lane's items, so no PR closes one"
 driver: claude-code
 claude_model: opus
@@ -137,6 +137,7 @@ Fast layers in every phase gate: `bun run lint`, `bun run typecheck:all`, `bun r
 - Change map: `wallet/services/wallet-sdk/dapp-origin.ts` (new), `background.ts` (`handleDiscovery`).
 - Tests: `dapp-origin.test.ts`: admitted `https://a.example`, `https://a.example:8443`, `http://localhost:5174`, `http://127.0.0.1:8080`; refused, one each, `http://a.example`, `http://10.0.0.2`, `http://[::1]:3000`, `"null"`, `"unknown"`, `file:///x`, `chrome-extension://abc`, `"not a url"`. A `background.*.test.ts` case on the `initWalletSdkHandler` harness: a plain-http remote discovery is rejected with nothing queued (locked), with no window (unlocked), and with no auto-approval when a session is stored under that origin; an `https:` control opens the window.
 - Gate: the fast layers, `bun run test:all`, then network `tests/e2e/network/register-token.test.ts` (the playground on `http://localhost` still connects).
+- **Done** (70057899, e44ed3d2): gate green, STATUS.md; the code deviation is D10.
 
 ### Arc 2, phase 2: token text cleaned at every write
 - Change map: `wallet/services/token/service.ts` (`buildToken`, `restoreRow`, the import title at creation and backfill).
@@ -213,6 +214,7 @@ Outline B (not committed) proposed a worker snapshot by id with a 120 s life, cl
 ### Arc 1 implementation review
 
 - **Codex round 1** (gpt-6.1-sol, high, session 01a14b75) on 70057899: reject, no production bypass. Taken: the refusal asserted synchronously, the queue spied with a queued `https:` control, the reset wait, Terms, network read, notice and window spied; `vi.stubGlobal` in place of two test-only `biome-ignore` lines. Held: the wrapper's `"unknown"` clause; numeric IPv4 forms normalize to this machine.
+- **Codex round 2** (resumed) on e44ed3d2: **approve**; no new material issue across the arc; the `"unknown"` clause kept.
 - **Opus review** of 70057899: approve. Taken: an `https:` stored-session control; the orphaned flow doc block deleted. Not taken: removing the `"unknown"` clause (pre-existing, redundant, outside the arc).
 
 ## Seeds
