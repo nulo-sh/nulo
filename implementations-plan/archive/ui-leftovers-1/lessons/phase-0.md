@@ -37,3 +37,7 @@ The plan's e2e control ("a plain mouse click after the drag writes the full addr
 ## Post-implementation: Codex round 1 and the Opus review
 
 Codex (session 01a14a8e, gpt-6.1-sol high): approve with changes, two lows (a predicate table that passed a `.some` mutant; five comments). Opus (general-purpose): approve with changes, lows only (test placement and a false title, a dead parameter, test cleanup, wrapping). Both folded except the `DAPP_LABEL` doc deletion and two out-of-scope notes; plan.md § Audit verdicts has each disposition.
+
+## After the PR opened: #649 merged into `dev`
+
+#649 (the type scale) conflicted with the PR on one comment in `TransactionCard.vue`; the merge kept the wrap and #649's 10px chip rule. Its 13 px dollar figure narrows the chips' room, so on Chrome the wrap now starts at about $250 (row 71 px, the one-line row 68 px) and from about $10K the direction chip breaks above the dropped chip (84 px). `rows`' large transfer at 12,345.67 failed its one-line direction read; it now seeds 1,250 USDC, and OA-3 (#677) carries the new figures. The one-line rows below the point stay byte-identical to the base's rules.

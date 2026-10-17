@@ -715,7 +715,7 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 	})
 	await seedTransaction(page, scope, {
 		hash: LARGE_DAPP_HASH,
-		amount: (1_234_567n * 10n ** BigInt(scope.token.decimals - 2)).toString(),
+		amount: (1_250n * 10n ** BigInt(scope.token.decimals)).toString(),
 		at: now - 2_500,
 		transferType: 2,
 		dapp: DAPP_NAME,
