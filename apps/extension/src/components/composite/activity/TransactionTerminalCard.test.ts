@@ -33,7 +33,7 @@ const STUBS = {
 				<span class="symbol">{{ amountSymbol }}</span>
 			</div>
 		`,
-		props: ["title", "icon", "amount", "amountSymbol", "testId", "to"],
+		props: ["title", "icon", "amount", "amountSymbol", "testId", "to", "oneLineTitle"],
 	},
 }
 
@@ -47,6 +47,7 @@ type CardProps = {
 	transferTypeLabel?: string | null
 	amount?: string | null
 	amountSymbol?: string | null
+	oneLineTitle?: boolean
 	to?: string
 }
 
@@ -119,16 +120,20 @@ describe("composite/TransactionTerminalCard", () => {
 		expect(SOURCE).toMatch(/\.subtitle_green \{\s*color: var\(--txt-success\);/)
 	})
 
-	test("renders originLabel chip when supplied (dApp terminal)", () => {
-		const w = mountCard({ ...FAILED, originLabel: "swap.aztec-kit.example" })
-		expect(w.text()).toContain("swap.aztec-kit.example")
-		expect(w.html()).toMatch(/chip/)
+	test("a dApp's call: its function title is cut to one line and the host sits in the app chip", () => {
+		const host = "staging-nemi-interface.nemi-e65.workers.dev"
+		const title = "Swap Exact Tokens For Tokens Supporting Fee On Transfer Tokens"
+		const w = mountCard({ ...CANCELLED, title, originLabel: host, oneLineTitle: true })
+		expect(w.findComponent(STUBS.TransactionCardLayout).props("oneLineTitle")).toBe(true)
+		expect(w.find('[data-testid="activity-app-chip"]').text()).toBe(host)
 	})
 
-	test("renders transferTypeLabel chip when supplied (UI transfer terminal)", () => {
+	test("a transfer keeps its whole title and the direction chip, never the app chip", () => {
 		const w = mountCard({ ...CANCELLED, transferTypeLabel: "Private → Private" })
 		expect(w.text()).toContain("Private → Private")
 		expect(w.html()).toMatch(/chip/)
+		expect(w.findComponent(STUBS.TransactionCardLayout).props("oneLineTitle")).toBe(false)
+		expect(w.find('[data-testid="activity-app-chip"]').exists()).toBe(false)
 	})
 
 	test("suppresses chip when neither originLabel nor transferTypeLabel is set", () => {
