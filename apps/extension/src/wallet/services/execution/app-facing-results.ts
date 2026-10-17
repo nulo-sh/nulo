@@ -14,6 +14,7 @@ import {
 	PublicSimulationOutput,
 	TxEffect,
 	type TxSimulationResult,
+	UtilityExecutionResult,
 } from "@aztec-labs/stdlib/tx"
 
 const EMPTY_BUFFER = Buffer.alloc(0)
@@ -35,6 +36,15 @@ export function toAppFacingSimulationResult(
 		undefined,
 		result.appCallOffset,
 	)
+}
+
+/**
+ * The utility answer a dApp receives: the call's return values, its offchain effects and the anchor
+ * block's timestamp, which aztec.js stamps on the offchain messages. The stats are omitted, as for a
+ * simulation, because they time and count the wallet's own sync.
+ */
+export function toAppFacingUtilityResult(result: UtilityExecutionResult): UtilityExecutionResult {
+	return new UtilityExecutionResult(result.result, result.offchainEffects, result.anchorBlockTimestamp)
 }
 
 function appFacingCall(call: PrivateCallExecutionResult): PrivateCallExecutionResult {

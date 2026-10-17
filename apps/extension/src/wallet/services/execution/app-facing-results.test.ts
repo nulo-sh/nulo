@@ -1,15 +1,16 @@
 import { TxSimulationResultWithAppOffset } from "@aztec-labs/aztec.js/wallet"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
-import type { PrivateCallExecutionResult, TxSimulationResult } from "@aztec-labs/stdlib/tx"
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { type PrivateCallExecutionResult, type TxSimulationResult, UtilityExecutionResult } from "@aztec-labs/stdlib/tx"
 import { describe, expect, test } from "vitest"
 import { toJsonSafe } from "@/wallet/services/wallet-sdk/to-json-safe"
-import { toAppFacingSimulationResult } from "./app-facing-results"
+import { toAppFacingSimulationResult, toAppFacingUtilityResult } from "./app-facing-results"
 import { type SimulationFixture, type SimulationFixtureOptions, simulationFixture } from "./app-facing-results.fixtures"
 
 type Json = Record<string, unknown>
 
 /** Serialised as the response line does: the SDK's parse would strip an unknown key before a test saw it. */
-function wire(result: TxSimulationResult): Json {
+function wire(result: TxSimulationResult | UtilityExecutionResult): Json {
 	return JSON.parse(JSON.stringify(toJsonSafe(result)))
 }
 
@@ -137,5 +138,50 @@ describe("toAppFacingSimulationResult", () => {
 		expect(input.stats).toBeDefined()
 		expect(parsed.stats).toBeUndefined()
 		expect(parsed.appCallOffset).toBe(opts.appCallOffset)
+	})
+})
+
+describe("toAppFacingUtilityResult", () => {
+	const EFFECT_CONTRACT = AztecAddress.fromBigIntUnsafe(0xc0den)
+	const STATS = ["918273645021", "918273645022", "918273645023", "918273645024", "getBlock"]
+
+	function utilityResult(): UtilityExecutionResult {
+		return new UtilityExecutionResult([new Fr(41), new Fr(42)], [{ data: [new Fr(43)], contractAddress: EFFECT_CONTRACT }], 1_234n, {
+			timings: {
+				sync: 918_273_645_021,
+				perFunction: [{ functionName: "balance_of_private", time: 918_273_645_022 }],
+				unaccounted: 0,
+				total: 918_273_645_023,
+			},
+			nodeRPCCalls: {
+				perMethod: { getBlock: { times: [918_273_645_024] } },
+				roundTrips: { roundTrips: 1, totalBlockingTime: 1, roundTripDurations: [1], roundTripMethods: [["getBlock"]] },
+			},
+		})
+	}
+
+	test("the dApp's wire carries the call's result and none of the stats", () => {
+		const found = (result: UtilityExecutionResult) => STATS.filter((value) => JSON.stringify(wire(result)).includes(value))
+
+		// The search finds every stat on the unreduced answer, so its silence below is evidence.
+		expect(found(utilityResult())).toEqual(STATS)
+		expect(found(toAppFacingUtilityResult(utilityResult()))).toEqual([])
+		expect(Object.keys(wire(toAppFacingUtilityResult(utilityResult()))).sort()).toEqual([
+			"anchorBlockTimestamp",
+			"offchainEffects",
+			"result",
+		])
+	})
+
+	test("the dApp's own schema parse keeps the return values, the offchain effects and the anchor timestamp", async () => {
+		const input = utilityResult()
+		const parsed = await UtilityExecutionResult.schema.parseAsync(wire(toAppFacingUtilityResult(input)))
+
+		expect(parsed.result).toEqual(input.result)
+		expect(parsed.offchainEffects.map((e) => [e.contractAddress.toString(), e.data.map(String)])).toEqual([
+			[EFFECT_CONTRACT.toString(), [new Fr(43).toString()]],
+		])
+		expect(parsed.anchorBlockTimestamp).toBe(1_234n)
+		expect(parsed.stats).toBeUndefined()
 	})
 })
