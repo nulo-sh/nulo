@@ -142,14 +142,14 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 	const childSpan = (child: Element): Span | null => {
 		const style = win.getComputedStyle(child)
 		if (style.display === "contents") return textSpan(child)
-		if (!isVisible(child) || /^(absolute|fixed)$/.test(style.position)) return null
+		if (!isVisible(child) || child.matches(FIELD) || /^(absolute|fixed)$/.test(style.position)) return null
 		if (!apart(child, style)) return textSpan(child)
-		// A field or a box that clips lays its text out apart, yet paints it inside this box.
+		// A box that clips lays its text out apart, yet paints it inside this one.
 		const own = textSpan(child)
-		return own || child.matches(FIELD) ? paintedSpan(child, own) : null
+		return own ? paintedSpan(child, own) : null
 	}
 	const spans = new Map<Element, Span | null>()
-	/** Where an element's text reaches sideways: its own text and its in-flow descendants', none laid out apart. */
+	/** Where an element's text reaches sideways: its own and its in-flow descendants', a clipping one's as painted, a field's not at all. */
 	const textSpan = (el: Element): Span | null => {
 		const known = spans.get(el)
 		if (known !== undefined) return known
@@ -189,15 +189,24 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 		}
 		return found
 	}
+	/** The block whose lines hold the element: itself, or the nearest ancestor it sits inline in. */
+	const lineOf = (el: Element): Element => {
+		let box = el
+		while (box.parentElement && /^(inline|contents)/.test(win.getComputedStyle(box).display)) box = box.parentElement
+		return box
+	}
 	const crosses = (span: Span, edge: DOMRect): boolean => span.left < edge.left - 0.5 || span.right > edge.right + 0.5
 	const nameOf = (el: Element): string => el.getAttribute("data-testid") ?? el.tagName
 	const cutBy = (el: Element, text: Span | null): Pick<TypeReading, "clippedBy" | "ellipsizedBy"> => {
 		const span = paintedSpan(el, text)
+		const lines = lineOf(el)
 		let ellipsizedBy: string | null = null
 		for (const up of clippingAncestors(el)) {
 			const edge = up.getBoundingClientRect()
 			const crossed = crosses(span, edge)
-			if (crossed && !drawsEllipsis(win.getComputedStyle(up))) return { clippedBy: nameOf(up), ellipsizedBy }
+			// An ellipsis shortens the lines of the box that draws it, never a block inside that box.
+			const ellipsis = up === lines && drawsEllipsis(win.getComputedStyle(up))
+			if (crossed && !ellipsis) return { clippedBy: nameOf(up), ellipsizedBy }
 			if (crossed) ellipsizedBy ??= nameOf(up)
 			span.left = Math.max(span.left, edge.left)
 			span.right = Math.min(span.right, edge.right)
