@@ -107,6 +107,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [e2e-skill-refresh](e2e-skill-refresh/plan.md) — completed — one service-worker kill helper and a procedure-first e2e-testing skill
 - [e2e-stabilization](e2e-stabilization/plan.md) — completed — the network suite's remaining flakes fixed, iterating locally first
 - [embedded-fpc-firsttx-cosmetic](embedded-fpc-firsttx-cosmetic/plan.md) — completed — embedded FPC cap and first-transaction cleanups after the simulation fast path
+- [emoji-match-1](emoji-match-1/plan.md) — completed — the emoji check on every connection, remembered apps too (#587, P28-04 A); "Skip this check next time" removed; every verify admission reserves a slot
 - [enter-gate-and-ping](enter-gate-and-ping/plan.md) — completed — one submit-validity computed for the profile-edit popup, and a ping message type
 - [execute-popup-readability](execute-popup-readability/plan.md) — completed — the approval window's transaction body read as a summary of calls and authorizations, its rows behind one toggle
 - [execution-decomposition](execution-decomposition/plan.md) — completed — the execution service decomposed with zero behaviour change

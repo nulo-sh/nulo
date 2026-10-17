@@ -68,8 +68,6 @@ const hasSessionAllowances = computed(() => methods.value.length > 0 || events.v
 
 const grantedCapabilities = computed(() => session.value?.capabilityGrants ?? [])
 
-const isTrusted = computed(() => session.value?.trustedVerification ?? false)
-
 const grantedCaps = computed(() => grantedCapabilities.value.map((g) => g.capability))
 // An On consents to the breadth the row shows, so the write carries it.
 const shownBroad = computed(() => coversAnyContract(grantedCaps.value))
@@ -162,11 +160,6 @@ const getAccountAlias = (acc) => {
 	if (!session.value?.accountAliases) return acc.name
 	const caip = formatCaipAccount(acc.chainId, acc.address)
 	return session.value.accountAliases[caip] || acc.name
-}
-
-const toggleTrust = async () => {
-	if (!session.value) return
-	await dappSessionService.setTrustedVerification(session.value.id, !isTrusted.value)
 }
 
 const setAuthorizations = async (on) => {
@@ -351,12 +344,7 @@ onBeforeUnmount(() => {
 		</Flex>
 
 		<!-- Connection check -->
-		<DappSessionVerification
-			v-if="verificationEmojis"
-			:emojis="verificationEmojis"
-			:isTrusted="isTrusted"
-			@toggleTrust="toggleTrust"
-		/>
+		<DappSessionVerification v-if="verificationEmojis" :emojis="verificationEmojis" />
 	</SettingsPageShell>
 </template>
 

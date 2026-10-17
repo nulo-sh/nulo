@@ -80,7 +80,6 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		"refuseVerification",
 		"confirmVerification",
 		"setVerificationHash",
-		"setTrustedVerification",
 		"setAuthorizationsWithoutAsking",
 		"setAccountAliases",
 		"setCapabilityGrants",
@@ -267,12 +266,6 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 	public async setVerificationHash(sessionId: string, verificationHash: string): Promise<DappSession> {
 		return await this.patchSession(sessionId, (session) => {
 			session.verificationHash = verificationHash
-		})
-	}
-
-	public async setTrustedVerification(sessionId: string, trusted: boolean): Promise<DappSession> {
-		return await this.patchSession(sessionId, (session) => {
-			session.trustedVerification = trusted
 		})
 	}
 

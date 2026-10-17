@@ -126,7 +126,7 @@ describe("a running reset holds dApp requests", () => {
 
 describe("a running reset holds discoveries", () => {
 	function boot(gate: ResetRunGate) {
-		const fake = fakeSdkServices({ remembered: { trusted: true }, resetRun: () => gate.waitForRunEnd() })
+		const fake = fakeSdkServices({ remembered: true, resetRun: () => gate.waitForRunEnd() })
 		initWalletSdkHandler(fake.services, { log: () => {} } as never, fakeSdkPorts())
 		const discovery = {
 			requestId: "d1",

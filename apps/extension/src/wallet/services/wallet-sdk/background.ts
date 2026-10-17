@@ -558,7 +558,6 @@ function buildHandlerCallbacks(
 				isSessionLive: () => live.isLive(),
 				windows,
 				reservations: state.admission,
-				hold,
 				logger: deps.logger,
 			})
 			// A failed establishment ends without a termination when its id was taken over meanwhile.
@@ -965,7 +964,7 @@ async function handleDiscovery(discovery: PendingDiscovery, deps: DiscoveryDeps)
 			return
 		}
 		if (existingSession && served) {
-			autoApproveExistingSession(discovery, chainId, deps, existingSession.trustedVerification === true)
+			autoApproveExistingSession(discovery, chainId, deps)
 			return
 		}
 
@@ -1037,15 +1036,15 @@ function approveAdmitted(
 	discovery: PendingDiscovery,
 	chainId: string,
 	deps: DiscoveryDeps,
-	reservation: WindowReservation | undefined,
+	reservation: WindowReservation,
 	why: string,
 ): void {
 	if (rejectIfExpired(discovery, deps)) {
-		reservation?.releaseIfUnstarted()
+		reservation.releaseIfUnstarted()
 		return
 	}
 	if (!deps.handler.approveDiscovery(discovery.requestId)) {
-		reservation?.releaseIfUnstarted()
+		reservation.releaseIfUnstarted()
 		deps.logger.log(
 			"wallet-sdk",
 			LogLevel.Warn,
@@ -1072,7 +1071,6 @@ function admitVerifyWindow(discovery: PendingDiscovery, deps: DiscoveryDeps) {
 		id: discovery.requestId,
 		origin: discovery.origin,
 		deadline: discoveryDeadline(discovery),
-		needsWindow: true,
 		consumesToken: false,
 	})
 }
@@ -1088,15 +1086,14 @@ function rejectIfNotAdmitted(
 }
 
 /** Returning user on this chain: approve through the origin's reconnect budget. A remembered
- *  handshake is the one a reload loop repeats, so it always spends a token; only an untrusted
- *  session needs a verify window and so a slot. Synchronous when admitted at once. */
-function autoApproveExistingSession(discovery: PendingDiscovery, chainId: string, deps: DiscoveryDeps, trusted: boolean): void {
+ *  handshake is the one a reload loop repeats, so it spends a token as well as the slot of the check
+ *  it will show. Synchronous when admitted at once. */
+function autoApproveExistingSession(discovery: PendingDiscovery, chainId: string, deps: DiscoveryDeps): void {
 	const outcome = deps.admission.admit(
 		{
 			id: discovery.requestId,
 			origin: discovery.origin,
 			deadline: discoveryDeadline(discovery),
-			needsWindow: !trusted,
 			consumesToken: true,
 		},
 		(reservation) => approveAdmitted(discovery, chainId, deps, reservation, "existing session"),
@@ -1223,7 +1220,7 @@ async function runDiscoveryPopup(
 		if (rejectIfNotAdmitted(discovery, deps, admitted)) return
 		if (waitingWindow !== undefined) {
 			// A window closed while its Allow was queued fails the attach: its removal was buffered.
-			if (!admitted?.attach(waitingWindow, result.expiredUrl)) {
+			if (!admitted.attach(waitingWindow, result.expiredUrl)) {
 				rejectThrottled(discovery, deps, "its connect window closed while waiting for a verify-window slot")
 				return
 			}
@@ -1310,7 +1307,7 @@ async function persistAndApprove(
 	chainId: string,
 	params: DiscoveryParams,
 	profileId: string,
-	reservation: WindowReservation | undefined,
+	reservation: WindowReservation,
 	deps: DiscoveryDeps,
 ): Promise<void> {
 	const { handler, dappSessionService, logger } = deps
@@ -1356,7 +1353,7 @@ async function persistAndApprove(
 			discovery,
 			sessionId: newSession.id,
 			approverProfileId: newSession.profileId,
-			attemptOpen: () => reservation?.abandoned !== true,
+			attemptOpen: () => !reservation.abandoned,
 			approveDiscovery: (id) => handler.approveDiscovery(id),
 			rejectDiscovery: (id) => handler.rejectDiscovery(id),
 			deleteSession: (id) => dappSessionService.deleteDappSession(id),
@@ -1371,7 +1368,7 @@ async function persistAndApprove(
 			)
 		}
 	} finally {
-		if (!approved) reservation?.releaseIfUnstarted()
+		if (!approved) reservation.releaseIfUnstarted()
 	}
 }
 

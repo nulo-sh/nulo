@@ -3,8 +3,8 @@
  * runs none of its calls until the person confirms that very check.
  *
  * A hold opens for every transport session when upstream reports it established, bound to that
- * key exchange's own verification hash, and settles once: released (no check is needed, or the
- * person confirmed it) or dropped (the session ended first). Calls that arrive meanwhile wait on
+ * key exchange's own verification hash, and settles once: released (the person confirmed its
+ * check) or dropped (the session ended first). Calls that arrive meanwhile wait on
  * its outcome behind the session's FIFO. Settled or not, the hold counts each call from arrival
  * until its handling settles and refuses one past the bound; nothing here times one out. A hold
  * outlives the check's window, whose slot frees on removal, and leaves the map only when its
@@ -31,7 +31,7 @@ export interface VerificationHold {
 	readonly outcome: Promise<HoldOutcome>
 	/** Counts one arriving call until the returned release runs; `undefined` at the bound. */
 	admit(): (() => void) | undefined
-	/** No check is needed, or the person confirmed it. */
+	/** The person confirmed the session's check. */
 	release(): void
 	/** The session ended before release; held calls are dropped and their queued rows filed as `kind`. */
 	drop(kind: Exclude<HoldOutcome, "released">): void

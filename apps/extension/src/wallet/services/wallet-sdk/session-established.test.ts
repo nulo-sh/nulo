@@ -51,7 +51,7 @@ function reserved(
 	})
 	let reservation: WindowReservation | undefined
 	gate.admit(
-		{ id, origin: ORIGIN, deadline: Date.now() + 55_000, needsWindow: true, consumesToken: false },
+		{ id, origin: ORIGIN, deadline: Date.now() + 55_000, consumesToken: false },
 		(r) => {
 			reservation = r
 		},
@@ -71,7 +71,6 @@ function makeDeps(over: Partial<SessionEstablishedDeps> = {}) {
 	const getLastFocused = vi.fn<() => Promise<WindowBounds | undefined>>().mockResolvedValue(ANCHOR)
 	const navigate = vi.fn<(windowId: number, url: string) => Promise<void>>().mockResolvedValue(undefined)
 	const update = vi.fn().mockResolvedValue(undefined)
-	const release = vi.fn()
 	const pendingVerification = over.pendingVerification ?? new Map<string, PendingVerificationEntry>()
 	const { gate, reservation } = reserved("sess-1", pendingVerification)
 	let live = true
@@ -82,7 +81,7 @@ function makeDeps(over: Partial<SessionEstablishedDeps> = {}) {
 	}
 	const deps: SessionEstablishedDeps = {
 		dappSessionService: {
-			tryGetDappSessionByOriginAndChain: vi.fn().mockResolvedValue({ id: "dapp-1", profileId: "prof-A", trustedVerification: false }),
+			tryGetDappSessionByOriginAndChain: vi.fn().mockResolvedValue({ id: "dapp-1", profileId: "prof-A" }),
 			setVerificationHash: vi.fn().mockResolvedValue(undefined),
 		},
 		terminateSession: terminate,
@@ -91,7 +90,6 @@ function makeDeps(over: Partial<SessionEstablishedDeps> = {}) {
 		isSessionLive: () => live,
 		windows: { create, remove, getLastFocused, navigate, update },
 		reservations: gate,
-		hold: { release },
 		logger: noopLogger,
 		...over,
 	}
@@ -104,7 +102,6 @@ function makeDeps(over: Partial<SessionEstablishedDeps> = {}) {
 		getLastFocused,
 		navigate,
 		update,
-		release,
 		gate,
 		reservation,
 		endSession,
@@ -175,20 +172,6 @@ describe("handleSessionEstablished — verify-window reservation", () => {
 		expect(gate.windowsHeld(ORIGIN)).toBe(0)
 	})
 
-	test("a trusted reconnect opens nothing and releases the slot admission reserved", async () => {
-		const { deps, create, gate } = makeDeps({
-			dappSessionService: {
-				tryGetDappSessionByOriginAndChain: vi
-					.fn()
-					.mockResolvedValue({ id: "dapp-1", profileId: "prof-B", trustedVerification: true }),
-				setVerificationHash: vi.fn().mockResolvedValue(undefined),
-			},
-		})
-		expect(await handleSessionEstablished(makeSession(), deps)).toBe(true)
-		expect(create).not.toHaveBeenCalled()
-		expect(gate.windowsHeld(ORIGIN)).toBe(0)
-	})
-
 	test("a window that needs opening without a reservation terminates the session", async () => {
 		const { deps, terminate, create } = makeDeps({ reservations: { reservation: () => undefined } })
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
@@ -207,12 +190,12 @@ describe("handleSessionEstablished — verify-window reservation", () => {
 		// A second handshake for the origin takes the last slot; a third must wait.
 		let third: WindowReservation | undefined
 		gate.admit(
-			{ id: "sess-2", origin: ORIGIN, deadline: Date.now() + 55_000, needsWindow: true, consumesToken: false },
+			{ id: "sess-2", origin: ORIGIN, deadline: Date.now() + 55_000, consumesToken: false },
 			() => {},
 			() => {},
 		)
 		gate.admit(
-			{ id: "sess-3", origin: ORIGIN, deadline: Date.now() + 55_000, needsWindow: true, consumesToken: false },
+			{ id: "sess-3", origin: ORIGIN, deadline: Date.now() + 55_000, consumesToken: false },
 			(r) => {
 				third = r
 			},
@@ -345,9 +328,7 @@ describe("handleSessionEstablished — profile binding", () => {
 		const { deps, stamp, terminate } = makeDeps({
 			pendingVerification,
 			dappSessionService: {
-				tryGetDappSessionByOriginAndChain: vi
-					.fn()
-					.mockResolvedValue({ id: "dapp-1", profileId: "prof-B", trustedVerification: false }),
+				tryGetDappSessionByOriginAndChain: vi.fn().mockResolvedValue({ id: "dapp-1", profileId: "prof-B" }),
 				setVerificationHash: vi.fn().mockResolvedValue(undefined),
 			},
 		})
@@ -368,12 +349,10 @@ describe("handleSessionEstablished — profile binding", () => {
 		expect(pendingVerification.get("sess-1")?.cancelled).toBe(true)
 	})
 
-	test("no marker (trusted reconnect) stamps from the validated row", async () => {
+	test("no marker (a reconnect) stamps from the validated row", async () => {
 		const { deps, stamp } = makeDeps({
 			dappSessionService: {
-				tryGetDappSessionByOriginAndChain: vi
-					.fn()
-					.mockResolvedValue({ id: "dapp-1", profileId: "prof-B", trustedVerification: true }),
+				tryGetDappSessionByOriginAndChain: vi.fn().mockResolvedValue({ id: "dapp-1", profileId: "prof-B" }),
 				setVerificationHash: vi.fn().mockResolvedValue(undefined),
 			},
 		})
@@ -422,7 +401,7 @@ describe("handleSessionEstablished — profile binding", () => {
 function admitReplacement(gate: VerifyAdmissionGate, markers: Map<string, PendingVerificationEntry>) {
 	let slot: WindowReservation | undefined
 	gate.admit(
-		{ id: "sess-1", origin: ORIGIN, deadline: Date.now() + 55_000, needsWindow: true, consumesToken: false },
+		{ id: "sess-1", origin: ORIGIN, deadline: Date.now() + 55_000, consumesToken: false },
 		(r) => {
 			slot = r
 		},
@@ -434,7 +413,7 @@ function admitReplacement(gate: VerifyAdmissionGate, markers: Map<string, Pendin
 }
 
 describe("handleSessionEstablished — the approval ends while establishment waits", () => {
-	const ownRow = { id: "dapp-1", profileId: "prof-A", trustedVerification: false }
+	const ownRow = { id: "dapp-1", profileId: "prof-A" }
 	/** A new connection approved under prof-A whose row read or hash write waits on `step`. */
 	function pausedIn(at: "lookup" | "hash") {
 		const step = deferred<unknown>()
@@ -575,13 +554,10 @@ describe("handleSessionEstablished — the check in the waiting connect window",
 		expect(terminate).toHaveBeenCalledWith("sess-1")
 	})
 
-	test("a failed establishment leaves a tombstone, so a retry on a row since marked trusted terminates", async () => {
-		const tryGetDappSessionByOriginAndChain = vi
-			.fn()
-			.mockResolvedValue({ id: "dapp-1", profileId: "prof-A", trustedVerification: false })
+	test("a failed establishment leaves a tombstone, so the replay of its restored discovery terminates", async () => {
 		const { deps, gate, terminate, stamp, navigate, create, pendingVerification } = standby({
 			dappSessionService: {
-				tryGetDappSessionByOriginAndChain,
+				tryGetDappSessionByOriginAndChain: vi.fn().mockResolvedValue({ id: "dapp-1", profileId: "prof-A" }),
 				setVerificationHash: vi.fn().mockRejectedValueOnce(new Error("QuotaExceededError")).mockResolvedValue(undefined),
 			},
 		})
@@ -590,8 +566,6 @@ describe("handleSessionEstablished — the check in the waiting connect window",
 		gate.windowRemoved(41)
 		expect(gate.windowsHeld(ORIGIN)).toBe(0)
 
-		// A sibling's check set "Skip this check next time" on the row, and the SDK replays the restored discovery.
-		tryGetDappSessionByOriginAndChain.mockResolvedValue({ id: "dapp-1", profileId: "prof-A", trustedVerification: true })
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
 		expect(terminate).toHaveBeenCalledTimes(2)
 		expect(stamp).not.toHaveBeenCalled()
@@ -605,9 +579,7 @@ describe("handleSessionEstablished — the check in the waiting connect window",
 		const setVerificationHash = vi.fn(() => new Promise<void>((r) => (persisted = r)))
 		const { deps, navigate, create, terminate, gate, pendingVerification } = standby({
 			dappSessionService: {
-				tryGetDappSessionByOriginAndChain: vi
-					.fn()
-					.mockResolvedValue({ id: "dapp-1", profileId: "prof-A", trustedVerification: false }),
+				tryGetDappSessionByOriginAndChain: vi.fn().mockResolvedValue({ id: "dapp-1", profileId: "prof-A" }),
 				setVerificationHash,
 			},
 		})
@@ -637,17 +609,9 @@ describe("handleSessionEstablished — the check in the waiting connect window",
 		expect(gate.windowsHeld(ORIGIN)).toBe(0)
 	})
 
-	test("a cancelled marker terminates even on a trusted row, and establishment keeps it for a retry", async () => {
+	test("a cancelled marker terminates, and establishment keeps it for a retry", async () => {
 		const pendingVerification = new Map([["sess-1", marker("prof-A", { cancelled: true })]])
-		const { deps, terminate, stamp, create, navigate } = makeDeps({
-			pendingVerification,
-			dappSessionService: {
-				tryGetDappSessionByOriginAndChain: vi
-					.fn()
-					.mockResolvedValue({ id: "dapp-1", profileId: "prof-A", trustedVerification: true }),
-				setVerificationHash: vi.fn().mockResolvedValue(undefined),
-			},
-		})
+		const { deps, terminate, stamp, create, navigate } = makeDeps({ pendingVerification })
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
 		expect(terminate).toHaveBeenCalledTimes(2)
@@ -658,51 +622,23 @@ describe("handleSessionEstablished — the check in the waiting connect window",
 	})
 })
 
-describe("handleSessionEstablished — the hold on the session's calls", () => {
-	const rowTrusted = (trustedVerification: boolean) => ({
+describe("handleSessionEstablished — the check on every connection", () => {
+	/** A remembered row, with or without a stored `trustedVerification: true`. */
+	const remembered = (trustedVerification: boolean) => ({
 		tryGetDappSessionByOriginAndChain: vi.fn().mockResolvedValue({ id: "dapp-1", profileId: "prof-A", trustedVerification }),
 		setVerificationHash: vi.fn().mockResolvedValue(undefined),
 	})
 
 	test.each([
-		["a new connection", () => makeDeps({ pendingVerification: new Map([["sess-1", marker()]]) })],
-		["an untrusted reconnect", () => makeDeps({ dappSessionService: rowTrusted(false) })],
-	])("%s shows the check and keeps its calls held", async (_, made) => {
-		const { deps, create, release } = made()
+		["a new connection", () => makeDeps({ pendingVerification: new Map([["sess-1", marker()]]) }), "false"],
+		["a reconnect", () => makeDeps({ dappSessionService: remembered(false) }), "true"],
+		["a reconnect whose row stores trustedVerification: true", () => makeDeps({ dappSessionService: remembered(true) }), "true"],
+	])("%s shows the check", async (_, made, isReconnect) => {
+		const { deps, create, terminate } = made()
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(true)
 		expect(create).toHaveBeenCalledTimes(1)
-		expect(release).not.toHaveBeenCalled()
-	})
-
-	test("a trusted reconnect releases its calls and shows no check", async () => {
-		const { deps, create, release } = makeDeps({ dappSessionService: rowTrusted(true) })
-		expect(await handleSessionEstablished(makeSession(), deps)).toBe(true)
-		expect(release).toHaveBeenCalledTimes(1)
-		expect(create).not.toHaveBeenCalled()
-	})
-
-	test.each([
-		["a lost approval", () => makeDeps({ pendingVerification: new Map([["sess-1", marker("prof-A", { cancelled: true })]]) })],
-		[
-			"a session ended during validation",
-			() => {
-				const made = makeDeps({ dappSessionService: rowTrusted(true) })
-				made.endSession()
-				return made
-			},
-		],
-		[
-			"a check that could not be shown",
-			() => {
-				const made = makeDeps()
-				made.create.mockResolvedValueOnce({ id: undefined })
-				return made
-			},
-		],
-	])("%s never releases the calls", async (_, made) => {
-		const { deps, release } = made()
-		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
-		expect(release).not.toHaveBeenCalled()
+		expect(create.mock.calls[0][0].url).toContain(`isReconnect=${isReconnect}`)
+		expect(terminate).not.toHaveBeenCalled()
 	})
 })
 
