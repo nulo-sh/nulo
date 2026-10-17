@@ -1,7 +1,7 @@
 ---
 plan: authwit-intent-1
 tier: light
-status: planned (Codex approve), awaiting approval
+status: approved 2026-10-17 (orchestrator); arc 1 implemented, in review
 issues: none; the PR closes nothing
 driver: claude-code
 claude_model: opus
@@ -83,7 +83,7 @@ The dApp `createAuthWit` path refuses an `IntentInnerHash` whose consumer is the
 - **Execute window:** no screen changes. A self-consumer inner-hash request no longer opens the confirmation, as the lane record narrows P38-11 = A.
 - **History:** none (OA-2).
 
-## Phase 1: the refusal ⬜
+## Phase 1: the refusal ✓
 
 Files: `packages/extension-messaging/src/errors.ts` + `errors.test.ts`; `packages/wallet-bridge/src/method-scope-checkers.ts` + `method-scope-checkers.test.ts`; `dispatcher.test.ts`; `apps/extension/src/wallet/services/execution/service.authwit-binding.test.ts`; `error-envelope.ts` + `error-envelope.test.ts`; `SECURITY.md`; `packages/wallet-bridge/README.md`.
 
@@ -99,7 +99,7 @@ Tests (wire-shaped: addresses and inner hashes are `0x` + 64 hex):
 - Network e2e, host load1 below 150: `cd <worktree> && NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/authwit-variants.test.ts` at retry 0. No scenario is added, so no wall-clock moves.
 - Pass: every command exits 0, and each red proof turns red then green again.
 
-## Phase 2: the fee-payer pin split ⬜
+## Phase 2: the fee-payer pin split ✓
 
 Files: new `packages/wallet-bridge/src/fee-payer.pins.test.ts` (the computed `claim_and_end_setup` selector equals `CLAIM_AND_END_SETUP_SELECTOR`, no catch); `fee-payer.test.ts` (drop the computed-selector block, its catch and the `FunctionSelector` import; keep the address pin and the claim positive); `apps/extension/vitest.config.ts` (exclude line with the bb.js reason).
 
