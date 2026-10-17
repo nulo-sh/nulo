@@ -343,8 +343,8 @@ describe("NetworkService NodeFactory seam", () => {
 
 	test("each getChainId call creates a fresh node — no global cache between URLs", async () => {
 		const { service, factory } = harness({
-			"https://rpc.example/a": { l1ChainId: 1, rollupVersion: 1 },
-			"https://rpc.example/b": { l1ChainId: 2, rollupVersion: 2 },
+			"https://rpc.example/a": { l1ChainId: 1, rollupVersion: 2 },
+			"https://rpc.example/b": { l1ChainId: 2, rollupVersion: 3 },
 		})
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
 		await (service as any)._getChainId("https://rpc.example/a")
@@ -940,16 +940,15 @@ describe("NetworkService public API", () => {
 			// kindHint we'd reject with ENDPOINT_CHAIN_MISMATCH because the
 			// fake node reports chainId XOR != 0.
 			const { service, local } = setupServiceWithStorage({
-				"http://localhost:18080": nodeInfoForChain(42),
+				"http://localhost:18080": { l1ChainId: LOCAL_L1_CHAIN_ID, rollupVersion: 42 },
 			})
 			const localNet = {
 				id: "local-1",
 				profileId: "p1",
 				chainId: 0,
-				// Matches the fake probe's l1ChainId (nodeInfoForChain reports l1=0) so the
-				// endpoint mutation's exact-L1 equality check passes alongside the composite
-				// short-circuit under test.
-				l1ChainId: 0,
+				// Matches the fake probe's l1ChainId so the endpoint mutation's exact-L1 equality
+				// check passes alongside the composite short-circuit under test.
+				l1ChainId: LOCAL_L1_CHAIN_ID,
 				name: "Local Network",
 				kind: "local" as const,
 				primaryEndpointId: "ep-1",
@@ -1693,15 +1692,17 @@ describe("NetworkService node status: getNodeStatus and probeNodeStatus", () => 
 	})
 
 	test("a local-kind network on a non-seed URL whose node answers is Active on both", async () => {
-		const { service, factory, local } = setupServiceWithStorage({ [NON_SEED_LOCAL_URL]: nodeInfoForChain(42) })
-		storeRow(local, { id: "loc", kind: "local" })
+		const { service, factory, local } = setupServiceWithStorage({
+			[NON_SEED_LOCAL_URL]: { l1ChainId: LOCAL_L1_CHAIN_ID, rollupVersion: 42 },
+		})
+		storeRow(local, { id: "loc", kind: "local", l1ChainId: LOCAL_L1_CHAIN_ID })
 		const r = await bothStatuses(service, factory, "loc")
 		expect([r.get, r.probed]).toEqual([NodeStatus.Active, NodeStatus.Active])
 	})
 
 	test("a local-kind network whose node is down is Inactive on both: the carve-out never runs before the probe", async () => {
 		const { service, factory, local } = setupServiceWithStorage({ [NON_SEED_LOCAL_URL]: new Error("ECONNREFUSED") })
-		storeRow(local, { id: "loc", kind: "local" })
+		storeRow(local, { id: "loc", kind: "local", l1ChainId: LOCAL_L1_CHAIN_ID })
 		const r = await bothStatuses(service, factory, "loc")
 		expect([r.get, r.probed]).toEqual([NodeStatus.Inactive, NodeStatus.Inactive])
 	})
@@ -1740,11 +1741,11 @@ describe("NetworkService node status: getNodeStatus and probeNodeStatus", () => 
 describe("NetworkService endpoint identity guard (add and update)", () => {
 	const COMPOSITE = "ENDPOINT_CHAIN_MISMATCH: This RPC reports chainId 99, but this network is chain 50."
 	const L1 = "ENDPOINT_CHAIN_MISMATCH: This RPC reports L1 chain 2, but this network is L1 chain 0."
-	const BOTH = "ENDPOINT_CHAIN_MISMATCH: This RPC reports chainId 0, but this network is chain 50."
+	const BOTH = "ENDPOINT_CHAIN_MISMATCH: This RPC reports chainId 7, but this network is chain 50."
 	const ROWS: [string, NodeInfo, string][] = [
 		["a different composite", nodeInfoForChain(99), COMPOSITE],
 		["the same composite from another L1", { l1ChainId: 2, rollupVersion: 48 }, L1],
-		["both different: the composite is checked first", { l1ChainId: 3, rollupVersion: 3 }, BOTH],
+		["both different: the composite is checked first", { l1ChainId: 3, rollupVersion: 4 }, BOTH],
 	]
 
 	test.each(ROWS)("addEndpoint refuses %s", async (_name, info, message) => {
@@ -1759,6 +1760,136 @@ describe("NetworkService endpoint identity guard (add and update)", () => {
 		await expect(service.updateEndpoint(network.id, network.primaryEndpointId, "X", "https://rpc.other")).rejects.toThrow(
 			new Error(message),
 		)
+	})
+})
+
+describe("NetworkService chain 0: the local L1 on a loopback node", () => {
+	const REMOTE = "https://node.remote.example/"
+	const LOCAL_ANSWER: NodeInfo = { l1ChainId: LOCAL_L1_CHAIN_ID, rollupVersion: 42 }
+	const TESTNET_SELF_PAIR: NodeInfo = { l1ChainId: TESTNET_L1_CHAIN_ID, rollupVersion: TESTNET_L1_CHAIN_ID }
+
+	function localRow(local: FakeStorageArea, over: Partial<Network> = {}): Network {
+		return storeRow(local, { id: "loc", kind: "local", l1ChainId: LOCAL_L1_CHAIN_ID, ...over })
+	}
+
+	const LOCAL_ANSWERS: [string, NodeInfo][] = [
+		["a rollup of its own", LOCAL_ANSWER],
+		["a rollup equal to its L1", { l1ChainId: LOCAL_L1_CHAIN_ID, rollupVersion: LOCAL_L1_CHAIN_ID }],
+	]
+
+	test.each(LOCAL_ANSWERS)("a local row refuses a remote node on the local L1 with %s, on add and on update", async (_label, info) => {
+		const { service, local } = setupServiceWithStorage({ [REMOTE]: info })
+		localRow(local)
+		await expect(service.addEndpoint("loc", "X", REMOTE)).rejects.toThrow(/^ENDPOINT_CHAIN_MISMATCH: /)
+		await expect(service.updateEndpoint("loc", "e1", "X", REMOTE)).rejects.toThrow(/^ENDPOINT_CHAIN_MISMATCH: /)
+		expect((await service.getNetwork("loc")).endpoints).toEqual([{ id: "e1", rpcUrl: NON_SEED_LOCAL_URL }])
+	})
+
+	test.each(LOCAL_ANSWERS)("a local row takes a loopback node on the local L1 with %s, on add and on update", async (_label, info) => {
+		const { service, local } = setupServiceWithStorage({ "https://localhost:8443/": info, "http://127.0.0.1:18081": info })
+		localRow(local)
+		const added = await service.addEndpoint("loc", "X", "https://localhost:8443/")
+		await expect(service.updateEndpoint("loc", added.id, "X", "http://127.0.0.1:18081")).resolves.toMatchObject({
+			rpcUrl: "http://127.0.0.1:18081",
+		})
+	})
+
+	test("addNetwork refuses a node whose answer computes to 0, storing and announcing nothing", async () => {
+		const { service, local } = setupServiceWithStorage({ [REMOTE]: TESTNET_SELF_PAIR })
+		const added = vi.fn(async () => {})
+		service.onNetworkAdded.add(added)
+		await expect(service.addNetwork("Zero", REMOTE)).rejects.toThrow(/^ENDPOINT_CHAIN_MISMATCH: /)
+		expect([...local.store.keys()].filter((k) => k.startsWith("nulo:core:networks@"))).toEqual([])
+		expect(added).not.toHaveBeenCalled()
+	})
+
+	test("addNetwork stores a node whose answer computes to a non-zero chain", async () => {
+		const { service } = setupServiceWithStorage({ [REMOTE]: { l1ChainId: TESTNET_L1_CHAIN_ID, rollupVersion: 7 } })
+		await expect(service.addNetwork("Seven", REMOTE)).resolves.toMatchObject({
+			chainId: (TESTNET_L1_CHAIN_ID ^ 7) >>> 0,
+			l1ChainId: TESTNET_L1_CHAIN_ID,
+			kind: "custom",
+		})
+	})
+
+	test("addNetwork at the Local Network's URL refuses a node on another L1 and stores one on the local L1", async () => {
+		const { service, factory } = setupServiceWithStorage({
+			[LOCAL_NETWORK_RPC_URL]: { l1ChainId: TESTNET_L1_CHAIN_ID, rollupVersion: 9 },
+		})
+		await expect(service.addNetwork("Local", LOCAL_NETWORK_RPC_URL)).rejects.toThrow(/^ENDPOINT_CHAIN_MISMATCH: /)
+		factory.setOverrides(LOCAL_NETWORK_RPC_URL, {
+			getNodeInfo: vi.fn().mockResolvedValue(LOCAL_ANSWER) as unknown as AztecNode["getNodeInfo"],
+		})
+		await expect(service.addNetwork("Local", LOCAL_NETWORK_RPC_URL)).resolves.toMatchObject({
+			chainId: 0,
+			l1ChainId: LOCAL_L1_CHAIN_ID,
+			kind: "custom",
+		})
+	})
+
+	test.each<[string, string, number, boolean]>([
+		["a remote URL", REMOTE, LOCAL_L1_CHAIN_ID, false],
+		["another L1", NON_SEED_LOCAL_URL, TESTNET_L1_CHAIN_ID, false],
+		["the local L1 on localhost", NON_SEED_LOCAL_URL, LOCAL_L1_CHAIN_ID, true],
+		["the local L1 on 127.0.0.1", "http://127.0.0.1:8080", LOCAL_L1_CHAIN_ID, true],
+	])("the row constructor on chain 0 with %s (%s, L1 %i) builds: %s", async (_label, rpcUrl, l1ChainId, builds) => {
+		const { service } = setupServiceWithStorage({})
+		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
+		const build = (service as any)._buildNetwork("p1", "Zero", rpcUrl, 0, l1ChainId, "custom") as Promise<Network>
+		if (builds) await expect(build).resolves.toMatchObject({ chainId: 0, l1ChainId })
+		else await expect(build).rejects.toThrow(/^ENDPOINT_CHAIN_MISMATCH: /)
+	})
+
+	test("both L1 getters refuse a chain-0 row on another L1", async () => {
+		const { service, factory, local } = setupServiceWithStorage({ [LOCAL_NETWORK_RPC_URL]: TESTNET_SELF_PAIR })
+		storeRow(local, { id: "zero", l1ChainId: TESTNET_L1_CHAIN_ID, endpoints: [{ id: "e1", rpcUrl: LOCAL_NETWORK_RPC_URL }] })
+		await expect(service.getL1ChainIdStored("p1", 0)).rejects.toThrow(/^Chain 0 is the local development chain/)
+		await expect(service.resolveVerifiedL1ChainId("p1", 0)).rejects.toThrow(/^Chain 0 is the local development chain/)
+		expect(factory.created).toHaveLength(0)
+	})
+
+	test("both L1 getters return the local L1 of a chain-0 row", async () => {
+		const { service, local } = setupServiceWithStorage({ [LOCAL_NETWORK_RPC_URL]: LOCAL_ANSWER })
+		storeRow(local, { id: "zero", l1ChainId: LOCAL_L1_CHAIN_ID, endpoints: [{ id: "e1", rpcUrl: LOCAL_NETWORK_RPC_URL }] })
+		await expect(service.getL1ChainIdStored("p1", 0)).resolves.toBe(LOCAL_L1_CHAIN_ID)
+		await expect(service.resolveVerifiedL1ChainId("p1", 0)).resolves.toBe(LOCAL_L1_CHAIN_ID)
+	})
+
+	test.each<[string, string]>([
+		["promoting it", "e1"],
+		["confirming it already primary", "e2"],
+	])("a local row refuses a remote endpoint as its primary: %s", async (_label, primaryEndpointId) => {
+		const { service, local } = setupServiceWithStorage({})
+		localRow(local, {
+			primaryEndpointId,
+			endpoints: [
+				{ id: "e1", rpcUrl: NON_SEED_LOCAL_URL },
+				{ id: "e2", rpcUrl: REMOTE },
+			],
+		})
+		const changed = vi.fn(async () => {})
+		service.onPrimaryEndpointChanged.add(changed)
+		await expect(service.setPrimaryEndpoint("loc", "e2")).rejects.toThrow(/^ENDPOINT_CHAIN_MISMATCH: /)
+		expect((await service.getNetwork("loc")).primaryEndpointId).toBe(primaryEndpointId)
+		expect(changed).not.toHaveBeenCalled()
+	})
+
+	test("a local row promotes a loopback endpoint", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		localRow(local, {
+			endpoints: [
+				{ id: "e1", rpcUrl: NON_SEED_LOCAL_URL },
+				{ id: "e2", rpcUrl: "http://127.0.0.1:18081" },
+			],
+		})
+		await expect(service.setPrimaryEndpoint("loc", "e2")).resolves.toMatchObject({ primaryEndpointId: "e2" })
+	})
+
+	test("a local row whose primary is a remote node is InvalidChain on both status methods", async () => {
+		const { service, factory, local } = setupServiceWithStorage({ [REMOTE]: LOCAL_ANSWER })
+		localRow(local, { endpoints: [{ id: "e1", rpcUrl: REMOTE }] })
+		const r = await bothStatuses(service, factory, "loc")
+		expect([r.get, r.probed]).toEqual([NodeStatus.InvalidChain, NodeStatus.InvalidChain])
 	})
 })
 
@@ -2150,5 +2281,12 @@ describe("NetworkService in-place reset", () => {
 		})
 		expect(single).toHaveBeenCalledWith(MY_NODE, 5000)
 		expect(getNodeInfo).toHaveBeenCalledTimes(1)
+	})
+
+	test("probeIdentityOnce refuses a node whose answer computes to 0", async () => {
+		const { service, factory } = setupServiceWithStorage({})
+		const getNodeInfo = vi.fn().mockResolvedValue({ l1ChainId: TESTNET_L1_CHAIN_ID, rollupVersion: TESTNET_L1_CHAIN_ID })
+		vi.spyOn(factory, "createSingleAttemptNode").mockReturnValue({ getNodeInfo } as unknown as AztecNode)
+		await expect(service.probeIdentityOnce(MY_NODE, "testnet", 5000)).rejects.toThrow(/^ENDPOINT_CHAIN_MISMATCH: /)
 	})
 })

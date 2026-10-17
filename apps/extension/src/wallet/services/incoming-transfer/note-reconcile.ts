@@ -1,5 +1,5 @@
 import type { RawNote, SyncedBlock } from "@/wallet/services/note/spec"
-import type { IncomingNoteRecord } from "./spec"
+import { type IncomingNoteRecord, noteRecordId } from "./spec"
 
 /**
  * What one scan decides about an unsettled note row from the PXE's spent-or-unspent read.
@@ -17,13 +17,19 @@ export type NoteRowDecision =
  *  whether both synced reads carried the chain's proposed tip. */
 export type NoteBracket = { finalized: number; synced: number; verified: boolean }
 
-/** A same-height re-mine moves a note's transaction or note index, so all three are its position. */
+/** A re-mine can move a note to another block, another place in it, or, under a fee-bump
+ *  replacement, another transaction hash. */
 export function atPosition(row: IncomingNoteRecord, note: RawNote): boolean {
-	return row.l2BlockNumber === note.l2BlockNumber && row.txIndexInBlock === note.txIndexInBlock && row.indexInTx === note.noteIndexInTx
+	return (
+		row.txHash === note.txHash &&
+		row.l2BlockNumber === note.l2BlockNumber &&
+		row.txIndexInBlock === note.txIndexInBlock &&
+		row.indexInTx === note.noteIndexInTx
+	)
 }
 
-export function notesByNullifier(notes: RawNote[]): Map<string, RawNote> {
-	return new Map(notes.map((n) => [n.siloedNullifier, n]))
+export function notesById(profileId: string, networkId: string, notes: RawNote[]): Map<string, RawNote> {
+	return new Map(notes.map((n) => [noteRecordId(profileId, networkId, n.uniqueNoteHash), n]))
 }
 
 /** The rows the unspent read shows at another position. Nothing else is decided from it: it is not
@@ -31,7 +37,7 @@ export function notesByNullifier(notes: RawNote[]): Map<string, RawNote> {
 export function movedRows(rows: IncomingNoteRecord[], active: Map<string, RawNote>): Array<{ row: IncomingNoteRecord; note: RawNote }> {
 	const moved: Array<{ row: IncomingNoteRecord; note: RawNote }> = []
 	for (const row of rows) {
-		const note = active.get(row.siloedNullifier)
+		const note = active.get(row.id)
 		if (note && !atPosition(row, note)) moved.push({ row, note })
 	}
 	return moved
@@ -40,7 +46,7 @@ export function movedRows(rows: IncomingNoteRecord[], active: Map<string, RawNot
 /** Whether a row needs the bracketed read: missing from the unspent read, or at or below the
  *  finalized tip, where it may settle. Without a finalized tip only a missing row needs it. */
 export function needsBracket(rows: IncomingNoteRecord[], active: Map<string, RawNote>, finalized: number | undefined): boolean {
-	return rows.some((row) => !active.has(row.siloedNullifier) || (finalized !== undefined && row.l2BlockNumber <= finalized))
+	return rows.some((row) => !active.has(row.id) || (finalized !== undefined && row.l2BlockNumber <= finalized))
 }
 
 /** The PXE's block stream swallows a failed sync, so a read can answer from a stale anchor; it is

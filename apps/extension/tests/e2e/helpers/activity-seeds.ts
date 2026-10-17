@@ -134,7 +134,7 @@ export async function seedTokenRow(
 	await storeRow(page, `nulo:core:tokens@${id}`, row)
 }
 
-export type ReceiptSeed = { tokenId: number; amount: string; nullifier: string; at?: number }
+export type ReceiptSeed = { tokenId: number; amount: string; uniqueNoteHash: string; at?: number }
 
 /** Wire-shaped and under the field modulus: `byte` repeated, its first below 0x30. */
 const field = (byte: string) => `0x${byte.repeat(32)}`
@@ -143,11 +143,10 @@ type NoteReceipt = ReceiptSeed & { contract: string; hidden: boolean }
 
 /** A note receipt as the incoming service records one. Block 1 keeps it history: it never plays as an arrival. */
 async function storeNoteReceipt(page: Page, scope: Omit<ActivityScope, "token">, seed: NoteReceipt): Promise<string> {
-	const id = `note:${scope.profileId}|${scope.networkId}|${seed.nullifier}`
+	const id = `note:${scope.profileId}|${scope.networkId}|${seed.uniqueNoteHash}`
 	const record = {
 		kind: "note",
 		id,
-		siloedNullifier: seed.nullifier,
 		noteHash: field("0b"),
 		owner: scope.account,
 		profileId: scope.profileId,
@@ -206,7 +205,7 @@ export async function seedPendingTrust(
 	await storeNoteReceipt(page, scope, {
 		tokenId: token.id,
 		amount: "100",
-		nullifier: field("1a"),
+		uniqueNoteHash: field("1a"),
 		contract: token.contract,
 		hidden: true,
 	})

@@ -34,6 +34,7 @@ vi.mock("./fee/fee-strategy", async (importOriginal) => ({ ...(await importOrigi
 const predicted = vi.mocked(predictedWorstMinFees)
 const REASON = "tryConsumeTransferEstimate est-1: "
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
+const TOKEN_CONTRACT = `0x${"1a".repeat(32)}`
 const FULL_LADDER = ["getNetwork", "getLiveChainIdentity", "getNode", "predictedWorstMinFees", "getPendingForAccount"]
 const FPC: FeeSettings = { paymentMethod: { kind: "fpc", fpcId: "fpc-1" } }
 const SPONSOR = { id: "fpc-1", type: 1, address: "0xsponsor", chainId: 7, isProtocol: true } as const
@@ -43,6 +44,7 @@ function request(feeSettings: FeeSettings = { paymentMethod: { kind: "fj" } }, o
 		networkId: "net-1",
 		accountAddress: "0xacc",
 		tokenId: 1,
+		tokenContract: TOKEN_CONTRACT,
 		transferType: TransferType.Public,
 		recipientAddress: "0xyou",
 		amount: 100n,
@@ -74,7 +76,7 @@ function entry(feeSettings: FeeSettings = { paymentMethod: { kind: "fj" } }, ove
 		initializesAccount: false,
 		nonce: { toString: () => "1" },
 		feePaymentMethod: 0 as never,
-		token: { contract: "0xtoken", name: "Token", symbol: "TOK", decimals: 18 },
+		token: { contract: TOKEN_CONTRACT, name: "Token", symbol: "TOK", decimals: 18 },
 		fnName: "transfer_in_public",
 		args: [],
 		builtAt: Date.now(),

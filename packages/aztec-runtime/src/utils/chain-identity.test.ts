@@ -49,12 +49,20 @@ describe("assertLiveChainIdentity", () => {
 		expect(() => assertLiveChainIdentity(MAINNET, { l1ChainId: MAINNET_L1, rollupVersion: 0.5 })).toThrow(/non-canonical rollupVersion/)
 	})
 
-	test("local networks (stored chainId === 0) skip only the composite: the exact l1ChainId still binds", () => {
+	test("chain 0 binds the local L1 and accepts any rollup version on it", () => {
 		expect(() => assertLiveChainIdentity({ chainId: 0, l1ChainId: 31337 }, { l1ChainId: 31337, rollupVersion: 0 })).not.toThrow()
 		expect(() => assertLiveChainIdentity({ chainId: 0, l1ChainId: 31337 }, { l1ChainId: 31337, rollupVersion: 42 })).not.toThrow()
-		expect(() => assertLiveChainIdentity({ chainId: 0, l1ChainId: 1337 }, { l1ChainId: 1337, rollupVersion: 7 })).not.toThrow()
 		expect(() => assertLiveChainIdentity({ chainId: 0, l1ChainId: 31337 }, { l1ChainId: 1337, rollupVersion: 0 })).toThrow(
 			/l1ChainId=31337 but live node reports l1ChainId=1337/,
+		)
+	})
+
+	test.each([
+		["another rollup", { l1ChainId: 11155111, rollupVersion: 1 }],
+		["a rollup version equal to the L1", { l1ChainId: 11155111, rollupVersion: 11155111 }],
+	])("chain 0 on any L1 but the local one is refused, whatever the node answers (%s)", (_name, live) => {
+		expect(() => assertLiveChainIdentity({ chainId: 0, l1ChainId: 11155111 }, live)).toThrow(
+			/chain 0 with l1ChainId=11155111, but chain 0 is the local development chain \(l1ChainId=31337\)/,
 		)
 	})
 

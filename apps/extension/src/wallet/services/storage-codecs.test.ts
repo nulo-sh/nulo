@@ -231,8 +231,7 @@ const CORPUS = [
 		parse: (raw: unknown) => IncomingTransferRecordSchema.parse(raw),
 		full: {
 			kind: "note",
-			id: "note:p1|n1|0xsn",
-			siloedNullifier: "0xsn",
+			id: "note:p1|n1|0xuh",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -252,8 +251,7 @@ const CORPUS = [
 		} satisfies IncomingTransferRecord,
 		minimal: {
 			kind: "note",
-			id: "note:p1|n1|0xsn2",
-			siloedNullifier: "0xsn2",
+			id: "note:p1|n1|0xuh2",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -270,8 +268,7 @@ const CORPUS = [
 		} satisfies IncomingTransferRecord,
 		drifted: {
 			kind: "note",
-			id: "note:p1|n1|0xsn3",
-			siloedNullifier: "0xsn3",
+			id: "note:p1|n1|0xuh3",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
