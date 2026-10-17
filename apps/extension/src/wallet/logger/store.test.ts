@@ -211,12 +211,13 @@ describe("LoggerStore", () => {
 	})
 
 	describe("clear()", () => {
-		test("removes all logs", () => {
+		test("removes all logs", async () => {
+			mockSessionStorage()
 			const store = new LoggerStore(mockConfig(true))
 			store.log("a", LogLevel.Debug, "msg")
 			store.log("a", LogLevel.Debug, "msg2")
 
-			store.clear()
+			await store.clear()
 			expect(store.get(10)).toHaveLength(0)
 		})
 
@@ -234,12 +235,12 @@ describe("LoggerStore", () => {
 			expect(session.remove).toHaveBeenCalledWith("nulo:logs")
 		})
 
-		test("a removal that fails still resolves clear(), and the next one still runs", async () => {
+		test("a removal that fails rejects clear(), and the next one still runs", async () => {
 			const session = mockSessionStorage()
 			session.remove.mockRejectedValueOnce(new Error("quota"))
 			const store = new LoggerStore(mockConfig(true, true))
 
-			await expect(store.clear()).resolves.toBeUndefined()
+			await expect(store.clear()).rejects.toThrow("quota")
 			await expect(store.clear()).resolves.toBeUndefined()
 			expect(session.remove).toHaveBeenCalledTimes(2)
 		})
@@ -457,6 +458,18 @@ describe("LoggerStore", () => {
 			store.log("a", LogLevel.Error, "new")
 			await vi.advanceTimersByTimeAsync(5000)
 			expect(session.set).toHaveBeenCalled()
+		})
+
+		test("a purge that fails at boot does not fail the boot", async () => {
+			// The boot awaits applyRetentionPolicy() inside its config leg; a rejection would veto it.
+			const session = mockSessionStorage(saved)
+			session.remove.mockRejectedValue(new Error("quota"))
+			const store = new LoggerStore(mutableConfig())
+			await store.rehydrate()
+
+			await expect(store.applyRetentionPolicy()).resolves.toBeUndefined()
+			expect(session.remove).toHaveBeenCalledWith("nulo:logs")
+			expect(store.get(10)).toHaveLength(0)
 		})
 
 		test("a non-developer's rehydrated logs are dropped once the config loads", async () => {

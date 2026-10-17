@@ -1,5 +1,6 @@
+import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { describe, expect, test } from "vitest"
-import { ScopeViolationError } from "@nulo/extension-messaging/errors"
+import { AuthRegistryRefusalError, ScopeViolationError } from "@nulo/extension-messaging/errors"
 import type { GrantedCapabilityRecord } from "./capabilities"
 import type { MethodName } from "./method-descriptors"
 import { authorizationsEffective, coversAnyContract, effectiveGrants, isAnyContractScope, readConsent } from "./method-scope-checkers"
@@ -308,5 +309,68 @@ describe("no request value reaches a scope refusal", () => {
 			message,
 			leaks: false,
 		})
+	})
+})
+
+describe("the authorization registry's grant functions are refused to every dApp grant", () => {
+	const REGISTRY = STANDARD_AUTH_REGISTRY_ADDRESS.toString()
+	const SET_AUTHORIZED = "0xb839de91"
+	const SET_REJECT_ALL = "0x8955f5fc"
+	const SET_AUTHORIZED_PRIVATE = "0x79a3d418"
+	const grant = (capability: unknown) => ({ capability, grantedAt: 0 }) as GrantedCapabilityRecord
+	const widest = [grant(accounts), grant(tx("*")), grant({ type: "simulation", transactions: { scope: "*" }, utilities: { scope: "*" } })]
+	const call = (to: string, selector: string, name = "SENTINEL-NAME") => ({ to, selector, name, args: ["SENTINEL-ARG"] })
+	const send = (...calls: unknown[]) => [{ calls }, { from: A }]
+	const innerHash = (consumer: string) => ["SENTINEL-FROM", { consumer, innerHash: "SENTINEL-INNER-HASH" }]
+	const callIntent = (to: string) => ["SENTINEL-FROM", { caller: "SENTINEL-CALLER", call: call(to, SET_AUTHORIZED_PRIVATE) }]
+	const sendRefusal = "Scope violation: sendTx call targets an authorization registry grant function"
+	const intentRefusal = "Scope violation: createAuthWit intent targets the authorization registry"
+
+	test.each([
+		["sendTx, set_authorized", "sendTx", send(call(REGISTRY, SET_AUTHORIZED)), sendRefusal],
+		["sendTx, set_reject_all", "sendTx", send(call(REGISTRY, SET_REJECT_ALL)), sendRefusal],
+		["sendTx, set_authorized_private", "sendTx", send(call(REGISTRY, SET_AUTHORIZED_PRIVATE)), sendRefusal],
+		[
+			"sendTx, a selector in upper-case hex",
+			"sendTx",
+			send(call(REGISTRY, SET_AUTHORIZED.toUpperCase().replace("0X", "0x"))),
+			sendRefusal,
+		],
+		["sendTx, a grant selector under a view's name", "sendTx", send(call(REGISTRY, SET_AUTHORIZED, "is_reject_all")), sendRefusal],
+		[
+			"sendTx, a grant call after an allowed call",
+			"sendTx",
+			send(call(B, SET_AUTHORIZED), call(REGISTRY, SET_REJECT_ALL)),
+			sendRefusal,
+		],
+		["createAuthWit, a call intent to the registry", "createAuthWit", callIntent(REGISTRY), intentRefusal],
+		["createAuthWit, an inner hash the registry consumes", "createAuthWit", innerHash(REGISTRY), intentRefusal],
+	] as [string, MethodName, unknown[], string][])("%s", (_name, method, args, message) => {
+		let refusal: Error | undefined
+		try {
+			enforceScopeWithSession(method, args, widest, new Set([A]))
+		} catch (error) {
+			refusal = error as Error
+		}
+		const serialized = JSON.stringify({ ...refusal, message: refusal?.message, stack: refusal?.stack })
+		expect({
+			own: refusal instanceof AuthRegistryRefusalError,
+			message: refusal?.message,
+			leaks: /SENTINEL-/.test(serialized),
+		}).toEqual({
+			own: true,
+			message,
+			leaks: false,
+		})
+	})
+
+	test.each([
+		["sendTx, another registry function", "sendTx", send(call(REGISTRY, "0x00000001"))],
+		["sendTx, a grant selector on another contract", "sendTx", send(call(B, SET_AUTHORIZED))],
+		["simulateTx, set_authorized", "simulateTx", send(call(REGISTRY, SET_AUTHORIZED))],
+		["createAuthWit, a call intent to another contract", "createAuthWit", callIntent(B)],
+		["createAuthWit, an inner hash another contract consumes", "createAuthWit", innerHash(B)],
+	] as [string, MethodName, unknown[]][])("%s passes", (_name, method, args) => {
+		expect(() => enforceScopeWithSession(method, args, widest, new Set([A]))).not.toThrow()
 	})
 })
