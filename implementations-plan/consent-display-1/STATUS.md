@@ -6,3 +6,4 @@
 - 2026-10-17: final fresh Codex pass round 2: approve. Plan committed; arc 1 starts (auto-continue).
 - 2026-10-17: arc 1 phase 1 fast layers: `bun run lint` pass (after one format fix and the D10 split for the complexity budget), `bun run typecheck:all` pass, `bun run test:all` red once (`background.transport.test.ts`, a precondition the refusal removes; rewritten, see lessons/phase-1.md), then pass (it runs `@nulo/extension`'s `test`). Network e2e waits for load1 < 150.
 - 2026-10-17: arc 1 network e2e `register-token.test.ts` at 70057899: pass. Codex round 1 reject (tests), fixed in e44ed3d2; Opus approve; Codex round 2 approve. Final gates on the final head next.
+- 2026-10-17: arc 1 final gates: `bun run lint`, `bun run typecheck:all`, `bun run test:all` pass at e44ed3d2 (the code of the final head); `bun run check:plans` pass; network e2e `register-token.test.ts` pass at 4c52422f. PR opens against dev.
