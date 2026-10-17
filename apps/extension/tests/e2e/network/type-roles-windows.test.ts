@@ -344,7 +344,6 @@ async function openExecute(ctx: Connected, { button, inputs, ready, details }: R
 	return win
 }
 
-/** Runs `request` to its answer: the window swept, then approved or rejected. */
 async function runRequest(ctx: Connected, request: Request, shown: Set<string>): Promise<void> {
 	const pg = ctx.playgroundPage
 	const seq = await snapshotResultSeq(pg)
@@ -419,7 +418,6 @@ async function rigDelegatedSend(ctx: Connected): Promise<Rig> {
 	return { account: account!, pullTokenAddress, consumerAddress }
 }
 
-/** The wallet's token row at `contract`. */
 async function tokenRowOf(page: Page, contract: string): Promise<{ id: number; contract: string }> {
 	return page.evaluate(async (target: string) => {
 		const all = await chrome.storage.local.get(null)

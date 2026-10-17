@@ -129,7 +129,6 @@ function buildCapabilities(id: BundleId): unknown[] {
 				{ type: "contractClasses", classes: "*", canGetMetadata: true },
 			]
 		case "contractClasses-listed":
-			// A dApp naming its own contract and that contract's class, each by id.
 			return [
 				{ type: "accounts", canGet: true },
 				{ type: "contracts", contracts: [tokenAddress], canRegister: true, canGetMetadata: true },

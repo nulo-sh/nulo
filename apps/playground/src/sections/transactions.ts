@@ -112,7 +112,8 @@ async function buildTransferExec(callCount = 1, fn: TransferFn = "transfer_publi
 
 	// Build N transfer calls. For the chunked variant (callCount > 5) we issue
 	// N independent BatchCall.request() requests and concat their calls arrays.
-	// Nonce 0 on every call: `from` is the sending account, and the Token refuses any other nonce then.
+	// Nonce 0 on every four-argument call: `from` is the sending account, and the Token refuses any
+	// other nonce then.
 	const calls: unknown[] = []
 	for (let i = 0; i < callCount; i++) {
 		const method =
