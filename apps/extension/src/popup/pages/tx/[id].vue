@@ -464,6 +464,8 @@ onBeforeUnmount(() => {
 	min-width: 0;
 	text-align: right;
 	word-break: break-all;
+	/* Firefox's break-all won't split a letter from the digits after it; anywhere fills every line. */
+	line-break: anywhere;
 	line-height: 1.4;
 }
 
