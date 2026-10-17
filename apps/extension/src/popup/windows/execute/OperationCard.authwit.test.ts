@@ -78,12 +78,17 @@ describe("OperationCard: a public grant", () => {
 	})
 
 	test("two grants: each action line takes its own grant's reading", () => {
-		const op = { ...grantOp(), actions: [GRANT, GRANT].map((content) => ({ kind: "add_public_authwit" as const, content })) }
-		const w = mountGrant({ decodedGrants: [{ kind: "undecoded", reason: "unknown-contract" }, decoded], tokens: [USDC_TOKEN] }, op)
+		const call = { kind: "call" as const, contract: MAIN, method: "noop", args: [] }
+		const grants = [GRANT, GRANT].map((content) => ({ kind: "add_public_authwit" as const, content }))
+		const op = { ...grantOp(), actions: [call, ...grants] }
+		const w = mountGrant(
+			{ decodedGrants: [{ kind: "undecoded", reason: "unknown-contract" }, decoded], tokens: [USDC_TOKEN] },
+			op as never,
+		)
 		const lines = w.findAll('[data-testid="execute-op-payload-row"]').map((r) => r.text())
-		expect(lines).toHaveLength(2)
-		expect(lines[0]).toContain("Transfer Public To Public")
-		expect(lines[1]).toContain("Transfer (public)")
+		expect(lines).toHaveLength(3)
+		expect(lines[1]).toContain("Transfer Public To Public")
+		expect(lines[2]).toContain("Transfer (public)")
 	})
 
 	test("while the wallet decodes, its arguments read as pending", () => {

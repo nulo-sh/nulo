@@ -150,8 +150,8 @@ describe("OperationCard — a call as the wire carries it", () => {
 	})
 
 	test("a copy whose isStatic, returnType and returnTypes lie renders the same rows", async () => {
-		// One after the other: test-utils stubs through a process-wide hook, so a mount made while another
-		// card is live re-creates that card's stubbed subtrees and reorders their attributes.
+		// One after the other: test-utils stubs through a process-wide hook, so a card that re-renders after
+		// another mount takes that mount's stubs and re-creates its stubbed subtrees.
 		const truth = await mountCard(sendTx(honest))
 		const lies = await mountCard(sendTx(hostile))
 

@@ -128,6 +128,7 @@
     "LegalAboutRow": true,
     "LegalSheetContext": true,
     "LegalViewStatus": true,
+    "ListedToken": true,
     "LiveTokenScope": true,
     "LockProfileClient": true,
     "MAINNET_L1_CHAIN_ID": true,

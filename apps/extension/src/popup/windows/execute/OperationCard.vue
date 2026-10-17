@@ -156,7 +156,8 @@ const grantRows = computed(() =>
 	}),
 )
 
-/** Per action, whether the wallet read its grant's call as the movement the call's name claims. */
+/** Per action, whether the window read its grant as a movement. Only an `add_public_authwit` takes a
+ *  grant row, in `grantContentsOf`'s order. */
 const actionReads = computed(() => {
 	if (props.op.kind !== "send_transaction") return []
 	let k = 0

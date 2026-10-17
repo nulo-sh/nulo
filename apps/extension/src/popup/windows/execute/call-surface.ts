@@ -139,7 +139,6 @@ const surfaceName = (call: WireCall, surface: CallSurface): string =>
  *  and a curated label applies only on the contract it belongs to. */
 export const callName = (call: WireCall, surface: CallSurface): string => humanizeMethodName(surfaceName(call, surface), wire(call.to, 80))
 
-/** A transaction body's title for one call, under `callTitle`'s rule. */
 export const rowTitle = (call: WireCall, surface: CallSurface): string =>
 	callTitle(surfaceName(call, surface), wire(call.to, 80), surface.kind === "transfer" || surface.kind === "mint")
 

@@ -164,6 +164,11 @@ describe("the transaction page's words for a call", () => {
 		const read = await mountPage(dappTransfer(TOKEN), Promise.resolve([listed]), { SubPageHeader: header })
 		expect(words(read)).toEqual(["Transfer", "Transfer (private)"])
 	})
+
+	test('a dApp\'s `claim` off the Fee Juice contract reads "Claim" in the header and the Calls box', async () => {
+		const claim = settled({ type: OriginType.DAPP, name: "example.dapp.io" }, [{ contract: OTHER, method: "claim", args: [ACCOUNT] }])
+		expect(words(await mountPage(claim, Promise.resolve([listed]), { SubPageHeader: header }))).toEqual(["Claim", "Claim"])
+	})
 })
 
 describe("the transaction page's explorer links", () => {

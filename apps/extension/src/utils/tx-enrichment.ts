@@ -2,10 +2,9 @@ import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { OriginType } from "@/wallet/services/transaction/spec"
 import type { TxOrigin } from "@/wallet/services/transaction/spec"
-import type { TokenInfo } from "@/wallet/services/token/spec"
 import { FEE_METHODS, pickPrimaryIndex, pickPrimaryMethod } from "./primary-method"
 import { transferLabel } from "./token-transfer-vocabulary"
-import { type SettledCall, settledReading } from "./tx-amount"
+import { type ListedToken, type SettledCall, settledReading } from "./tx-amount"
 
 export { FEE_METHODS, pickPrimaryMethod }
 
@@ -100,8 +99,6 @@ export function getPrimaryCall<T extends { method: string }>(calls: T[]): T | un
 	const idx = pickPrimaryIndex(calls)
 	return idx === undefined ? calls[0] : calls[idx]
 }
-
-type ListedToken = Pick<TokenInfo, "contract" | "classId">
 
 /** A transaction's category: how the wallet reads its primary call against the listed `tokens`. */
 export function getTxCategory(calls: SettledCall[], tokens: readonly ListedToken[]): "transfer" | "mint" | "tx" {

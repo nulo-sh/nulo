@@ -192,6 +192,7 @@ describe("getTxCategory and getTxTitle: the wallet's reading of the primary call
 		["a non-token call on a listed token", [call("transfer_ownership", [DAPP])], "tx", "Transfer Ownership"],
 		["a private mint on a listed token", [call("mint_to_private", [ACCOUNT, field(5n)])], "mint", "Mint (private)"],
 		["a public mint on a listed token", [call("mint_to_public", [ACCOUNT, field(5n)])], "mint", "Mint (public)"],
+		["a mint with an arity the vocabulary lacks", [call("mint_to_public", [ACCOUNT, field(5n), field(1n)])], "tx", "Mint To Public"],
 		[
 			"a mint with another class",
 			[call("mint_to_private", [ACCOUNT, field(5n)], { classId: field(0xc1a56n) })],

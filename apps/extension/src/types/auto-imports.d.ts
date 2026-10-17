@@ -727,7 +727,7 @@ declare global {
   export type { TransferIntent, ProjectedArgument } from '../utils/transfer-intent'
   import('../utils/transfer-intent')
   // @ts-ignore
-  export type { TxAmount, SettledCall } from '../utils/tx-amount'
+  export type { TxAmount, SettledCall, ListedToken } from '../utils/tx-amount'
   import('../utils/tx-amount')
 }
 

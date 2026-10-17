@@ -9,7 +9,7 @@ import { isValidDecimals, knownDecimals } from "./token-amount"
 export type TxAmount = { units: bigint; decimals: number; symbol: string }
 
 export type SettledCall = Pick<TxCall, "contract" | "method" | "args" | "classId" | "transfers">
-type ListedToken = Pick<TokenInfo, "contract" | "classId">
+export type ListedToken = Pick<TokenInfo, "contract" | "classId">
 
 /** The aztec-standards Token's mints, each `(recipient or commitment, amount: u128)`. */
 const STANDARD_MINTS: ReadonlySet<string> = new Set(["mint_to_public", "mint_to_private", "mint_to_commitment"])
@@ -42,8 +42,9 @@ function pinnedListedToken<T extends ListedToken>(call: SettledCall, tokens: rea
 
 /**
  * What the wallet can say a settled call moved: a transfer it sent itself, or a transfer or mint by
- * the vocabulary's name and arity on a listed token whose class the call recorded. The record keeps
- * no selector or decode, so this reads less than the approval window could; anything else is null.
+ * the vocabulary's name and arity on a listed token whose class the call recorded; anything else is
+ * null. The record keeps no selector, decode or sender, so a listed token's same-name function, or a
+ * transfer that hid its sender, can read as a movement the approval window showed plain.
  */
 export function settledReading(call: SettledCall, tokens: readonly ListedToken[]): "transfer" | "mint" | null {
 	if (call.transfers?.length) return "transfer"
