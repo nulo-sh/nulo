@@ -9,7 +9,7 @@ import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { interceptRpc } from "../fixtures/browser"
 import { type ExtensionContext, launchExtension, test } from "../fixtures/extension"
-import { switchToLocalNetwork, waitForHomeTotal, waitForTokenCardAmount } from "../fixtures/helpers"
+import { navigateByHash, revealSeedPhrase, switchToLocalNetwork, waitForHomeTotal, waitForTokenCardAmount } from "../fixtures/helpers"
 import { shotSend } from "../fixtures/send-page"
 import { exportFundedBackup } from "../helpers/crash-truth"
 import { gotoPopupImport, importFullBackup, POPUP_IMPORT_SHELL, TEST_PASSWORD } from "../helpers/import-drivers"
@@ -39,6 +39,19 @@ test.skipIf(!aztecConfig)(
 			expect(await refused.hits(), "price requests refused").toBeGreaterThan(0)
 			expect(await refused.failures(), "price interception failures").toEqual([])
 			await shotSend(page, "hero-prices-unavailable", "balance-amount")
+
+			// Funds no price covers still need their phrase saved: the reminder is the banner, until
+			// the phrase is revealed.
+			await page.waitForSelector('[data-testid="backup-reminder-banner"]', { visible: true, timeout: 30_000 })
+			expect(await page.$('[data-testid="get-started-phrase"]')).toBeNull()
+			await shotSend(page, "home-backup-reminder", "backup-reminder-banner")
+			await revealSeedPhrase(page, TEST_PASSWORD)
+			await navigateByHash(page, "#/popup/general")
+			await page.waitForSelector('[data-testid="balance-amount"]', { visible: true, timeout: 30_000 })
+			await page.waitForFunction(() => !document.querySelector('[data-testid="backup-reminder-banner"]'), {
+				timeout: 15_000,
+				polling: 100,
+			})
 		} finally {
 			await ctx?.close()
 		}

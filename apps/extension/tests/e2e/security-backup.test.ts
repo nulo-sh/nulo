@@ -1,5 +1,7 @@
+import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { TEST_PASSWORD } from "./fixtures/constants"
+import { waitForNewTab } from "./fixtures/browser"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
 import { navigateByHash, revealSeedPhrase } from "./fixtures/helpers"
 import { shotSend } from "./fixtures/send-page"
@@ -8,13 +10,32 @@ import { FULL_BACKUP_V2_TAG } from "@/utils/full-backup-helpers"
 
 const PASSWORD = TEST_PASSWORD
 
-test("seed phrase reveal returns 24 word-like tokens", async ({ registeredExtension }) => {
+const sel = (testid: string) => `[data-testid="${testid}"]`
+const waitForGone = (page: Page, testid: string) =>
+	page.waitForFunction((s: string) => !document.querySelector(s), { timeout: 10_000, polling: 100 }, sel(testid))
+
+test("Home's reminders clear as they are done: How Aztec works opens its page, and the seed reveal clears only the phrase row", async ({
+	registeredExtension,
+}) => {
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
+	await page.waitForSelector(sel("get-started-phrase"), { visible: true, timeout: 30_000 })
+	expect(await page.$(sel("get-started-aztec"))).not.toBeNull()
+	expect(await page.$(sel("backup-reminder-banner"))).toBeNull()
+
+	// The flag is written before the tab opens; the tab still opens after that wait.
+	const tab = await waitForNewTab(registeredExtension.browser, () => clickByTestId(page, "get-started-aztec"), 10_000)
+	await tab.close()
+	await waitForGone(page, "get-started-aztec")
 
 	const tokens = await revealSeedPhrase(page, PASSWORD)
 	expect(tokens.length).toBe(24)
 	for (const token of tokens) expect(token).toMatch(/^[a-z]+$/)
+
+	await navigateByHash(page, "#/popup/general")
+	await page.waitForSelector(sel("get-started"), { visible: true, timeout: 30_000 })
+	expect(await page.$(sel("get-started-phrase"))).toBeNull()
+	expect(await page.$(sel("get-started-presto"))).not.toBeNull()
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])

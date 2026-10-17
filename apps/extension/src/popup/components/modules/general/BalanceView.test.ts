@@ -1255,3 +1255,43 @@ describe("BalanceView — the balance snapshot's fences", () => {
 		expect(asked).toHaveLength(2)
 	})
 })
+
+describe("BalanceView — what Home's reminders learn about holdings", () => {
+	const CAP_MS = 12_000
+	type Wrapper = Awaited<ReturnType<typeof mountView>>["wrapper"]
+	const lastHoldings = (w: Wrapper) => w.emitted("holdings")?.at(-1)?.[0]
+	const emptied = (row: (typeof SEED)[number]) => ({ ...row, publicBalance: "0", privateBalance: "0" })
+
+	beforeEach(() => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+	})
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	test("an unpriced positive row is funds once prices map, with no quote at all", async () => {
+		seedRows = [SEED[1]]
+		mockQuotes = {}
+		const { wrapper } = await mountView()
+		expect(lastHoldings(wrapper)).toBe("some")
+	})
+
+	test("rows that hold nothing are no funds (control)", async () => {
+		seedRows = [emptied(SEED[0]), emptied(SEED[1])]
+		const { wrapper } = await mountView()
+		expect(lastHoldings(wrapper)).toBe("none")
+	})
+
+	test("unknown while the total is still moving, none once the cap passes", async () => {
+		seedRows = [{ ...emptied(SEED[0]), updatedAt: 0 }] as never
+		const { wrapper } = await mountView()
+		expect(wrapper.emitted("holdings")).toEqual([["unknown"]])
+		await vi.advanceTimersByTimeAsync(CAP_MS)
+		expect(lastHoldings(wrapper)).toBe("none")
+	})
+
+	test("the token page answers nothing", async () => {
+		const { wrapper } = await mountView({ tokenBalance: SEED[0] })
+		expect(wrapper.emitted("holdings")).toBeUndefined()
+	})
+})

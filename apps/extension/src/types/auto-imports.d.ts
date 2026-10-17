@@ -37,6 +37,7 @@ declare global {
   const HERO_MIN_SCALE: typeof import('../utils/hero-fit').HERO_MIN_SCALE
   const HOME_TOKEN_ROWS: typeof import('../utils/token-order').HOME_TOKEN_ROWS
   const HOSTNAME_WARNING: typeof import('../composables/useDappHostname').HOSTNAME_WARNING
+  const HOW_AZTEC_WORKS_URL: typeof import('../utils/get-started').HOW_AZTEC_WORKS_URL
   const IMPORT_ACTIVATION_TIMEOUT_MS: typeof import('../composables/completeImportWithRecovery').IMPORT_ACTIVATION_TIMEOUT_MS
   const IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS: typeof import('../composables/importChainSync').IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS
   const IMPORT_LOCK_HOLD_MS: typeof import('../stores/contact-import-guard').IMPORT_LOCK_HOLD_MS
@@ -119,6 +120,7 @@ declare global {
   const closeOwnWindow: typeof import('../utils/own-window').closeOwnWindow
   const coalesce: typeof import('../utils/coalesce').coalesce
   const collectRestoreErrors: typeof import('../utils/full-backup-helpers').collectRestoreErrors
+  const combineHoldings: typeof import('../utils/get-started').combineHoldings
   const compareTokenRows: typeof import('../utils/token-order').compareTokenRows
   const completeImportWithRecovery: typeof import('../composables/completeImportWithRecovery').completeImportWithRecovery
   const compressData: typeof import('../utils/files').compressData
@@ -166,6 +168,7 @@ declare global {
   const formatGasBalance: typeof import('../utils/fee-estimation').formatGasBalance
   const formatSnackAmount: typeof import('../utils/snack-amount').formatSnackAmount
   const formatTransferType: typeof import('../utils/tx-enrichment').formatTransferType
+  const gasHoldings: typeof import('../utils/get-started').gasHoldings
   const getAccount: typeof import('../utils/core').getAccount
   const getCurrentInstance: typeof import('vue').getCurrentInstance
   const getCurrentScope: typeof import('vue').getCurrentScope
@@ -182,6 +185,7 @@ declare global {
   const getStartedHiddenKey: typeof import('../utils/profile-ui-keys').getStartedHiddenKey
   const getStartedKeys: typeof import('../utils/get-started').getStartedKeys
   const getStartedPhraseSavedKey: typeof import('../utils/profile-ui-keys').getStartedPhraseSavedKey
+  const getStartedView: typeof import('../utils/get-started').getStartedView
   const getThousandSeparator: typeof import('../utils/amount').getThousandSeparator
   const getTransaction: typeof import('../utils/core').getTransaction
   const getTxCategory: typeof import('../utils/tx-enrichment').getTxCategory
@@ -364,6 +368,7 @@ declare global {
   const scrubUrls: typeof import('../utils/scrub-urls').scrubUrls
   const sealFullBackupText: typeof import('../utils/full-backup-helpers').sealFullBackupText
   const searchSettings: typeof import('../utils/settings-search').searchSettings
+  const selectedBalanceScope: typeof import('../stores/balances.store').selectedBalanceScope
   const selectedWithin: typeof import('../utils/selection').selectedWithin
   const sendFeePicksKey: typeof import('../utils/profile-ui-keys').sendFeePicksKey
   const sendOutcome: typeof import('../utils/journal-state').sendOutcome
@@ -432,6 +437,7 @@ declare global {
   const useFormState: typeof import('../composables/useFormState').useFormState
   const useFullBackupImport: typeof import('../composables/useFullBackupImport').useFullBackupImport
   const useFullscreenPopupSetting: typeof import('../composables/fullscreenPopupSetting').useFullscreenPopupSetting
+  const useGetStarted: typeof import('../composables/useGetStarted').useGetStarted
   const useId: typeof import('vue').useId
   const useImportErrorState: typeof import('../composables/useProfileImportFlow').useImportErrorState
   const useIncomingSyncHealth: typeof import('../composables/useIncomingSyncHealth').useIncomingSyncHealth
@@ -672,7 +678,7 @@ declare global {
   export type { AssemblyAbortedError, BackupFileType, BackupSelection, ProcessBackupResult, BackupSource, AssembledBackup } from '../utils/full-backup-helpers'
   import('../utils/full-backup-helpers')
   // @ts-ignore
-  export type { GetStartedFlag, GetStartedFlags } from '../utils/get-started'
+  export type { GetStartedFlag, GetStartedFlags, Holdings, GetStartedItem, GetStartedInput, GetStartedView } from '../utils/get-started'
   import('../utils/get-started')
   // @ts-ignore
   export type { GlossaryEntry, GlossaryKey } from '../utils/glossary'
@@ -770,6 +776,7 @@ declare module 'vue' {
     readonly HERO_MIN_SCALE: UnwrapRef<typeof import('../utils/hero-fit')['HERO_MIN_SCALE']>
     readonly HOME_TOKEN_ROWS: UnwrapRef<typeof import('../utils/token-order')['HOME_TOKEN_ROWS']>
     readonly HOSTNAME_WARNING: UnwrapRef<typeof import('../composables/useDappHostname')['HOSTNAME_WARNING']>
+    readonly HOW_AZTEC_WORKS_URL: UnwrapRef<typeof import('../utils/get-started')['HOW_AZTEC_WORKS_URL']>
     readonly IMPORT_ACTIVATION_TIMEOUT_MS: UnwrapRef<typeof import('../composables/completeImportWithRecovery')['IMPORT_ACTIVATION_TIMEOUT_MS']>
     readonly IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS: UnwrapRef<typeof import('../composables/importChainSync')['IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS']>
     readonly IMPORT_LOCK_HOLD_MS: UnwrapRef<typeof import('../stores/contact-import-guard')['IMPORT_LOCK_HOLD_MS']>
@@ -852,6 +859,7 @@ declare module 'vue' {
     readonly closeOwnWindow: UnwrapRef<typeof import('../utils/own-window')['closeOwnWindow']>
     readonly coalesce: UnwrapRef<typeof import('../utils/coalesce')['coalesce']>
     readonly collectRestoreErrors: UnwrapRef<typeof import('../utils/full-backup-helpers')['collectRestoreErrors']>
+    readonly combineHoldings: UnwrapRef<typeof import('../utils/get-started')['combineHoldings']>
     readonly compareTokenRows: UnwrapRef<typeof import('../utils/token-order')['compareTokenRows']>
     readonly completeImportWithRecovery: UnwrapRef<typeof import('../composables/completeImportWithRecovery')['completeImportWithRecovery']>
     readonly compressData: UnwrapRef<typeof import('../utils/files')['compressData']>
@@ -899,6 +907,7 @@ declare module 'vue' {
     readonly formatGasBalance: UnwrapRef<typeof import('../utils/fee-estimation')['formatGasBalance']>
     readonly formatSnackAmount: UnwrapRef<typeof import('../utils/snack-amount')['formatSnackAmount']>
     readonly formatTransferType: UnwrapRef<typeof import('../utils/tx-enrichment')['formatTransferType']>
+    readonly gasHoldings: UnwrapRef<typeof import('../utils/get-started')['gasHoldings']>
     readonly getAccount: UnwrapRef<typeof import('../utils/core')['getAccount']>
     readonly getCurrentInstance: UnwrapRef<typeof import('vue')['getCurrentInstance']>
     readonly getCurrentScope: UnwrapRef<typeof import('vue')['getCurrentScope']>
@@ -915,6 +924,7 @@ declare module 'vue' {
     readonly getStartedHiddenKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedHiddenKey']>
     readonly getStartedKeys: UnwrapRef<typeof import('../utils/get-started')['getStartedKeys']>
     readonly getStartedPhraseSavedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedPhraseSavedKey']>
+    readonly getStartedView: UnwrapRef<typeof import('../utils/get-started')['getStartedView']>
     readonly getThousandSeparator: UnwrapRef<typeof import('../utils/amount')['getThousandSeparator']>
     readonly getTransaction: UnwrapRef<typeof import('../utils/core')['getTransaction']>
     readonly getTxCategory: UnwrapRef<typeof import('../utils/tx-enrichment')['getTxCategory']>
@@ -1097,6 +1107,7 @@ declare module 'vue' {
     readonly scrubUrls: UnwrapRef<typeof import('../utils/scrub-urls')['scrubUrls']>
     readonly sealFullBackupText: UnwrapRef<typeof import('../utils/full-backup-helpers')['sealFullBackupText']>
     readonly searchSettings: UnwrapRef<typeof import('../utils/settings-search')['searchSettings']>
+    readonly selectedBalanceScope: UnwrapRef<typeof import('../stores/balances.store')['selectedBalanceScope']>
     readonly selectedWithin: UnwrapRef<typeof import('../utils/selection')['selectedWithin']>
     readonly sendFeePicksKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['sendFeePicksKey']>
     readonly sendOutcome: UnwrapRef<typeof import('../utils/journal-state')['sendOutcome']>
@@ -1165,6 +1176,7 @@ declare module 'vue' {
     readonly useFormState: UnwrapRef<typeof import('../composables/useFormState')['useFormState']>
     readonly useFullBackupImport: UnwrapRef<typeof import('../composables/useFullBackupImport')['useFullBackupImport']>
     readonly useFullscreenPopupSetting: UnwrapRef<typeof import('../composables/fullscreenPopupSetting')['useFullscreenPopupSetting']>
+    readonly useGetStarted: UnwrapRef<typeof import('../composables/useGetStarted')['useGetStarted']>
     readonly useId: UnwrapRef<typeof import('vue')['useId']>
     readonly useImportErrorState: UnwrapRef<typeof import('../composables/useProfileImportFlow')['useImportErrorState']>
     readonly useIncomingSyncHealth: UnwrapRef<typeof import('../composables/useIncomingSyncHealth')['useIncomingSyncHealth']>

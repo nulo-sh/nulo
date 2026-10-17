@@ -35,6 +35,7 @@ import { MAX_BACKUP_FILE_BYTES, assembleFullBackup, passkeyBackupAuthenticator, 
 import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow, ownWindowRoute } from "@/utils/own-window"
 import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
+import { markGetStarted } from "@/utils/get-started"
 import { backupNotice } from "@/components/stale-network/copy"
 
 /** Composables */
@@ -427,12 +428,15 @@ async function downloadBackup(isEncrypted) {
 	if (!fileContent) return
 	isDownloading.value = true
 	const isCurrent = runs.snapshot()
+	// A profile switch discards the run, so the active profile is the one this file backs up.
+	const profileId = appStore.profile.id
 	let filename = `_${profileFileNameSegment(appStore.profile.name)}_${Math.floor(Date.now() / 1000)}`
 	filename = isEncrypted ? `NuloEncryptedBackup${filename}.txt` : `NuloBackup${filename}.json`
 
 	try {
 		await downloadFile({ data: fileContent, filename, compressionFormat: "gzip" })
 		if (!isCurrent()) return
+		void markGetStarted(profileId, "backupSaved")
 		openToast({ kind: "success", label: "Backup downloaded successfully" })
 	} catch (err) {
 		if (!isCurrent()) return
