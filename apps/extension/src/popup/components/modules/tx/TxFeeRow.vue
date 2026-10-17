@@ -1,26 +1,30 @@
 <script setup>
 /**
  * Fee row inside the tx-detail "Details" box. Renders a chevron-toggle
- * header with the fee value + USD aux, and an optional gas-breakdown
+ * header with the fee and its USD, and an optional gas-breakdown
  * grid below. Used twice in tx/[id].vue: once for "Fee paid" (after
  * the receipt lands) and once for "Estimated fee" (pre-confirmation
  * snapshot). The two callers differ only in label + estimated styling
- * + the savings line.
+ * + the savings line. Every figure is priced at today's quote, not the
+ * one at execution.
  */
-defineProps({
+import FeeAmount from "@/components/composite/FeeAmount.vue"
+import { feeDisplay } from "@/utils/fee-estimation"
+
+const props = defineProps({
 	label: { type: String, required: true },
-	feeAmount: { type: String, default: null },
-	feeUsd: { type: String, default: null },
+	/** The header's fee and the breakdown's estimate, in base units. */
+	fee: { type: String, required: true },
 	estimated: { type: Boolean, default: false },
 	gasBreakdown: { type: Object, default: null },
 	estimatedFee: { type: String, default: null },
-	/** USD of the estimate at today's rate — mirrors the paid row's unit
-	 *  grammar so FJ compares to FJ and $ to $ across adjacent rows. */
-	estimatedFeeUsd: { type: String, default: null },
+	usdPerFeeJuice: { type: Number, default: undefined },
 	feeSavings: { type: String, default: null },
 })
 
 const expanded = defineModel({ type: Boolean, default: false })
+
+const priced = (raw) => feeDisplay(raw, props.usdPerFeeJuice)
 </script>
 
 <template>
@@ -42,35 +46,34 @@ const expanded = defineModel({ type: Boolean, default: false })
 					:class="$style.chevron"
 				/>
 			</Flex>
-			<Flex align="center" gap="6">
-				<span :class="[$style.detail_value_mono, estimated && $style.detail_value_est]">
-					{{ estimated ? `~${feeAmount}` : feeAmount }} FJ
-				</span>
-				<span v-if="feeUsd" :class="$style.detail_value_aux" title="At today's AZTEC price" data-testid="tx-fee-usd">{{
-					feeUsd
-				}}</span>
-			</Flex>
+			<FeeAmount
+				:display="priced(fee)"
+				:class="[$style.detail_value_mono, estimated && $style.detail_value_est]"
+				:usdClass="$style.detail_value_aux"
+				usdTestid="tx-fee-usd"
+			/>
 		</button>
 
 		<Flex v-if="expanded && gasBreakdown" wide direction="column" gap="6" :class="$style.fee_breakdown">
 			<div :class="$style.fee_grid">
 				<span :class="$style.fee_grid_key">L2 gas</span>
 				<span :class="[$style.fee_grid_num, $style.fee_grid_aux]">{{ gasBreakdown.l2Gas }}</span>
-				<span :class="[$style.fee_grid_num, $style.fee_grid_val]">{{ gasBreakdown.l2Cost }} FJ</span>
+				<FeeAmount :display="priced(gasBreakdown.l2Cost)" :class="[$style.fee_grid_num, $style.fee_grid_val]" :usdClass="$style.fee_grid_aux" />
 
 				<span :class="$style.fee_grid_key">DA gas</span>
 				<span :class="[$style.fee_grid_num, $style.fee_grid_aux]">{{ gasBreakdown.daGas }}</span>
-				<span :class="[$style.fee_grid_num, $style.fee_grid_val]">{{ gasBreakdown.daCost }} FJ</span>
+				<FeeAmount :display="priced(gasBreakdown.daCost)" :class="[$style.fee_grid_num, $style.fee_grid_val]" :usdClass="$style.fee_grid_aux" />
 			</div>
 			<Flex v-if="estimatedFee" wide justify="between" align="center" :class="$style.fee_breakdown_divider">
 				<span :class="$style.fee_grid_key">Estimated</span>
 				<!-- fee_grid_num carries the mono face — without it this row
 				     renders in the default font and clashes with FEE PAID. -->
-				<span :class="[$style.fee_grid_num, $style.fee_grid_val]"
-					>{{ estimatedFee }} FJ<template v-if="estimatedFeeUsd">
-						<span :class="$style.fee_grid_aux" title="At today's AZTEC price" data-testid="tx-estimate-usd"> ({{ estimatedFeeUsd }})</span>
-					</template></span
-				>
+				<FeeAmount
+					:display="priced(estimatedFee)"
+					:class="[$style.fee_grid_num, $style.fee_grid_val]"
+					:usdClass="$style.fee_grid_aux"
+					usdTestid="tx-estimate-usd"
+				/>
 			</Flex>
 			<Flex v-if="feeSavings" wide justify="end">
 				<span :class="$style.fee_savings">{{ feeSavings }}</span>

@@ -37,7 +37,6 @@ import {
 	humanizeMethodName,
 	FEE_METHODS,
 } from "@/utils/tx-enrichment"
-import { formatFeeJuice, feeToUsd, feeJuicePricingFromUsd } from "@/utils/fee-estimation"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { getAccountExplorerUrl, getBlockExplorerUrl, getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
 import { buildGasBreakdown, computeFeeSavings, describeFeePaymentMethod } from "@/popup/components/modules/tx/tx-detail-helpers"
@@ -101,15 +100,11 @@ const handleCopy = (target) => {
 
 const feePaymentLabel = computed(() => describeFeePaymentMethod(tx.value))
 
-const formattedFee = computed(() => (tx.value?.fee ? formatFeeJuice(BigInt(tx.value.fee)) : null))
 // Live pricing at TODAY'S AZTEC rate — historical fees are valued at the
 // current spot, not the price at execution time (TxFeeRow labels this).
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
-const feeJuicePricing = computed(() => feeJuicePricingFromUsd(prices.feeJuiceQuote.value?.usd))
-const formattedFeeUsd = computed(() => (tx.value?.fee ? feeToUsd(BigInt(tx.value.fee), feeJuicePricing.value) : null))
-const formattedEstFee = computed(() => (tx.value?.estimatedFee ? formatFeeJuice(BigInt(tx.value.estimatedFee)) : null))
-const formattedEstFeeUsd = computed(() => (tx.value?.estimatedFee ? feeToUsd(BigInt(tx.value.estimatedFee), feeJuicePricing.value) : null))
+const feeJuiceUsd = computed(() => prices.feeJuiceQuote.value?.usd)
 
 /** D2 hero line: fiat value of the transfer at TODAY'S rate, shown for
  *  EVERY status (owner call: a failed transfer's dollar context is still
@@ -299,24 +294,23 @@ onBeforeUnmount(() => {
 					</Flex>
 
 					<TxFeeRow
-						v-if="formattedFee"
+						v-if="tx?.fee"
 						v-model="showFeeBreakdown"
 						label="Fee paid"
-						:feeAmount="formattedFee"
-						:feeUsd="formattedFeeUsd"
+						:fee="tx.fee"
+						:usdPerFeeJuice="feeJuiceUsd"
 						:gasBreakdown="gasBreakdown"
-						:estimatedFee="formattedEstFee"
-						:estimatedFeeUsd="formattedEstFeeUsd"
+						:estimatedFee="tx.estimatedFee"
 						:feeSavings="feeSavings"
 					/>
 
 					<TxFeeRow
-						v-else-if="formattedEstFee"
+						v-else-if="tx?.estimatedFee"
 						v-model="showFeeBreakdown"
 						estimated
 						label="Estimated fee"
-						:feeAmount="formattedEstFee"
-						:feeUsd="formattedEstFeeUsd"
+						:fee="tx.estimatedFee"
+						:usdPerFeeJuice="feeJuiceUsd"
 						:gasBreakdown="gasBreakdown"
 					/>
 

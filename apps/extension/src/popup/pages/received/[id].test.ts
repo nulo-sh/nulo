@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 	routeId: "r1",
 	incoming: undefined as unknown,
 	config: undefined as unknown,
+	feeJuiceUsd: undefined as number | undefined,
 }))
 const appStore = reactive({ defaultExplorer: "aztecscan" as string | null })
 
@@ -37,7 +38,15 @@ vi.mock("@/stores/app.store", () => ({ useAppStore: () => appStore }))
 vi.mock("./received-copy", () => ({ copyReceivedValue: mocks.copy }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 vi.mock("@/composables/usePrices", () => ({
-	usePrices: () => ({ tokenFiatLabel: () => undefined, feeJuiceQuote: { value: undefined }, dispose: vi.fn() }),
+	usePrices: () => ({
+		tokenFiatLabel: () => undefined,
+		feeJuiceQuote: {
+			get value() {
+				return mocks.feeJuiceUsd === undefined ? undefined : { usd: mocks.feeJuiceUsd }
+			},
+		},
+		dispose: vi.fn(),
+	}),
 }))
 vi.mock("@/wallet/services/price/client", () => ({
 	PriceServiceClient: vi.fn(function () {
@@ -109,6 +118,7 @@ beforeEach(() => {
 afterEach(() => {
 	vi.clearAllMocks()
 	appStore.defaultExplorer = "aztecscan"
+	mocks.feeJuiceUsd = undefined
 })
 
 async function mountPage(tokens: Promise<unknown[]>) {
@@ -195,7 +205,13 @@ describe("the received page's network fee and updates", () => {
 		const w = await mountPublic([async () => false])
 		expect(incoming().getReceiptFee).toHaveBeenCalledExactlyOnceWith(PUBLIC_RECEIPT.id)
 		expect(incoming().getCachedReceiptFee).not.toHaveBeenCalled()
-		expect(testid(w, "received-fee-value").text()).toBe("0.0025 FJ")
+		expect(testid(w, "received-fee-value").text()).toBe("~0.0025 FJ")
+	})
+
+	test("with a quote the fee carries its dollars inside the same figure", async () => {
+		mocks.feeJuiceUsd = 2
+		const w = await mountPublic([async () => false])
+		expect(testid(w, "received-fee-value").text()).toBe("~0.0025 FJ ($0.005)")
 	})
 
 	test.each<[string, () => Promise<unknown>, boolean]>([
@@ -265,7 +281,7 @@ describe("the received page's network fee and updates", () => {
 		await testid(w, "received-fee-show").trigger("click")
 		await flushPromises()
 		expect(incoming().getReceiptFee).toHaveBeenCalledExactlyOnceWith(PUBLIC_RECEIPT.id)
-		expect(testid(w, "received-fee-value").text()).toBe("0.0025 FJ")
+		expect(testid(w, "received-fee-value").text()).toBe("~0.0025 FJ")
 	})
 
 	test("an Updated moves the Block row, wins over the first read, and loses to a later Deleted", async () => {

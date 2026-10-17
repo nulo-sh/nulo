@@ -1,6 +1,7 @@
 import { flushPromises, mount } from "@vue/test-utils"
-import { afterEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { CHAIN_IDS } from "@/utils/chain-ids"
+import { priceFake } from "../../../../tests/helpers/price-client-fake"
 import { OriginType, TransferType, TxStatus } from "@/wallet/services/transaction/spec"
 import TxDetail from "./[id].vue"
 
@@ -32,17 +33,9 @@ vi.mock("@/wallet/services/config/client", () => ({
 		return { getProps: vi.fn(async () => []), disconnect: vi.fn() }
 	}),
 }))
-vi.mock("@/wallet/services/price/client", () => ({
-	PriceServiceClient: vi.fn(function () {
-		return {
-			disconnect: vi.fn(),
-			onQuotesUpdated: { add: vi.fn(), remove: vi.fn() },
-			onConnected: { add: vi.fn(), remove: vi.fn() },
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
-			refreshIfStale: vi.fn().mockResolvedValue({ quotes: {}, pricedTokens: {} }),
-		}
-	}),
-}))
+vi.mock("@/wallet/services/price/client", async () => (await import("../../../../tests/helpers/price-client-fake")).priceClientModule())
+
+beforeEach(() => priceFake.reset(undefined))
 
 afterEach(() => {
 	vi.clearAllMocks()
@@ -134,6 +127,35 @@ describe("the transaction page's amount", () => {
 		const w = await mountPage(dappMint, Promise.resolve([]))
 		expect(amountBlock(w).exists()).toBe(false)
 		expect(w.text()).not.toContain("Mint amount")
+	})
+})
+
+describe("the transaction page's fee", () => {
+	const GAS = {
+		feePerL2Gas: "1000000000000",
+		feePerDaGas: "2000000000000",
+		l2GasLimit: 1_000,
+		daGasLimit: 500,
+		teardownL2GasLimit: 0,
+		teardownDaGasLimit: 0,
+	}
+	/** The row's header figure: the fee and, when priced, its dollars. */
+	const headerOf = (w: Awaited<ReturnType<typeof mountPage>>) => w.get("[class*='fee_row_toggle'] > span")
+
+	test("a settled send reads its paid fee, half up, and its estimate in the breakdown, both at the page's one quote", async () => {
+		priceFake.reset(0.06)
+		const tx = { ...sentTransfer, fee: "3577823500000000001", estimatedFee: "4000000000000000000", gasDetails: GAS }
+		const w = await mountPage(tx, Promise.resolve([listed]), { TxFeeRow: false })
+		expect(headerOf(w).text()).toBe("~3.577824 FJ ($0.215)")
+		await w.get("[class*='fee_row_toggle']").trigger("click")
+		expect(w.get('[data-testid="tx-estimate-usd"]').element.parentElement?.textContent).toBe("~4 FJ ($0.240)")
+	})
+
+	test("before the receipt, the estimate alone, in the same grammar", async () => {
+		priceFake.reset(0.06)
+		const w = await mountPage({ ...sentTransfer, estimatedFee: "4000000000000000000" }, Promise.resolve([listed]), { TxFeeRow: false })
+		expect(w.text()).toContain("Estimated fee")
+		expect(headerOf(w).text()).toBe("~4 FJ ($0.240)")
 	})
 })
 
