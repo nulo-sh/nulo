@@ -28,7 +28,6 @@ const stubs = {
 	Flex: { inheritAttrs: false, template: '<div v-bind="$attrs"><slot /></div>' },
 	Text: { inheritAttrs: false, template: '<span v-bind="$attrs"><slot /></span>' },
 	Icon: true,
-	MaterialIcon: true,
 	FeeSettingsCard: true,
 }
 

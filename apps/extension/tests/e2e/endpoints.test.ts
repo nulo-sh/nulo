@@ -2,6 +2,7 @@ import { expect } from "vitest"
 import type { Page } from "puppeteer"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
 import { captureSoleProfileId, navigateToSettings, openNetworkDetail } from "./fixtures/helpers"
+import { shotSend } from "./fixtures/send-page"
 
 // Scope note: `addEndpoint` / `updateEndpoint` probe the candidate URL
 // via Aztec `getNodeInfo()` and reject on chainId mismatch — the
@@ -36,6 +37,7 @@ test("network detail page renders chain info + endpoints section", async ({ regi
 
 	const endpointCount = (await page.$$('[data-testid="endpoint-row"]')).length
 	expect(endpointCount).toBeGreaterThanOrEqual(1)
+	await shotSend(page, "network-detail", "network-detail-rename")
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])

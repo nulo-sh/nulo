@@ -5,7 +5,7 @@
  *
  * Wraps `TransactionCardLayout` so field positions stay byte-identical with the outgoing
  * `TransactionCard`, the in-flight `TransactionAwaitingCard` and the `TransactionTerminalCard`.
- * The badge is a green `check-circle`, the title row carries the receipt's kind chip, and the
+ * The badge is a green `square-check`, the title row carries the receipt's kind chip, and the
  * amount carries a "+" so the feed scans without reading direction.
  */
 
@@ -50,8 +50,7 @@ const hashSlice = computed(() => {
 <template>
 	<TransactionCardLayout
 		:title="tokenSymbol"
-		icon="arrow-narrow-up-right"
-		:iconRotate="180"
+		icon="receive"
 		:amount="formattedAmount ? `+${formattedAmount}` : null"
 		:amountSymbol="tokenSymbol"
 		:amountFiat="amountFiat"
@@ -60,7 +59,7 @@ const hashSlice = computed(() => {
 		testId="tx-incoming-card"
 	>
 		<template #badge>
-			<Icon name="check-circle" size="12" :color="STATUS_ICON_FILL.green" data-testid="activity-status-icon" />
+			<Icon name="square-check" size="12" :color="STATUS_ICON_FILL.green" data-testid="activity-status-icon" />
 		</template>
 
 		<template #title-trailing>

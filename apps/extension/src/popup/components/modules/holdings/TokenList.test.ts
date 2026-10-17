@@ -29,7 +29,6 @@ const STUBS = {
 		props: { to: [String, Object], custom: Boolean },
 	},
 	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
-	MaterialIcon: { template: '<span data-testid="stub-micon" :data-name="name" />', props: ["name", "size", "color"] },
 	Tooltip: { template: "<span><slot /></span>", props: ["side", "position", "delay"] },
 }
 

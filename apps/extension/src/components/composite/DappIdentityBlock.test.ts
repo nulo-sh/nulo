@@ -38,7 +38,7 @@ describe("composite/DappIdentityBlock", () => {
 
 	test("loading logo shows a loading icon", () => {
 		const w = factory({ hostname: "x", dapp: { loadingLogo: true } })
-		expect(w.find('[data-name="dapp"]').exists()).toBe(true)
+		expect(w.find('[data-name="app"]').exists()).toBe(true)
 	})
 
 	test("logo blob URL renders an <img>", () => {

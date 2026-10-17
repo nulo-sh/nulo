@@ -19,16 +19,13 @@ const hasConfig = aztecConfig !== undefined
  * but keeps the DappSession record in storage. On reconnect from a fresh tab,
  * the canonical flow (`handleDiscovery`'s returning-session auto-approve in
  * `background.ts`) auto-approves discover (DappSession exists
- * for origin + unlocked + non-expired) and re-pops verify only if
- * `trustedVerification=false`. The default `dappConnectedExtension` /
- * `approveVerify(...)` fixture path never sets `alwaysTrust=true`, so verify
- * WILL pop on reconnect.
+ * for origin + unlocked + non-expired) and re-pops verify, as every reconnect does.
  */
 test.skipIf(!hasConfig)(
 	"session-tabClose — close + reopen auto-approves discover, re-pops verify",
 	{ timeout: 90_000 },
 	async ({ registeredExtensionPerTest }) => {
-		// First connect — full handshake, no alwaysTrust
+		// First connect — full handshake
 		const dappPage = await openPlayground(registeredExtensionPerTest)
 		const discoverP = waitForPopup(registeredExtensionPerTest, "discover", { timeout: 30_000 })
 		await clickByTestId(dappPage, "pg-btn-connect")
@@ -45,7 +42,7 @@ test.skipIf(!hasConfig)(
 		const targetsBeforeReconnect = registeredExtensionPerTest.browser.targets().map((t) => t.url())
 
 		// Reconnect: discover should auto-approve (DappSession exists for origin),
-		// verify should re-pop (trustedVerification=false).
+		// verify should re-pop.
 		const verifyP2 = waitForPopup(registeredExtensionPerTest, "verify", { timeout: 30_000 })
 		await clickByTestId(dappPage2, "pg-btn-connect")
 		const verifyPage2 = await verifyP2

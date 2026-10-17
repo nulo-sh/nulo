@@ -55,7 +55,7 @@ const pressEscape = async (target: Element) => {
 	await settle()
 }
 
-const STUBS = { Icon: { template: "<i />" }, MaterialIcon: { template: "<i />" } }
+const STUBS = { Icon: { template: "<i />" } }
 
 const mountHost = (template: string) =>
 	mount(

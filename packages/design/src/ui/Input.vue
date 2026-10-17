@@ -6,6 +6,7 @@ import { computed, nextTick, onMounted, ref, watch, type PropType } from "vue"
 /** Components */
 import Flex from "../core/Flex.vue"
 import Icon from "../core/Icon.vue"
+import type { GlyphName } from "../core/glyphs"
 import Text from "../core/Text.vue"
 import Tooltip from "./Tooltip.vue"
 
@@ -54,7 +55,7 @@ const props = defineProps({
 		required: false,
 	},
 	icon: {
-		type: String,
+		type: String as PropType<GlyphName>,
 	},
 	placeholder: {
 		type: String,
@@ -366,7 +367,7 @@ const handleClear = () => {
 			<Icon
 				v-if="clearable && text"
 				@click.stop="handleClear"
-				name="close-circle"
+				name="close"
 				size="14"
 				color="tertiary"
 				:class="$style.clear_btn"
@@ -473,7 +474,7 @@ const handleClear = () => {
 	transition: all 0.2s var(--bezier);
 
 	&:hover {
-		fill: var(--txt-primary);
+		color: var(--txt-primary);
 	}
 }
 </style>

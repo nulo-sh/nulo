@@ -1,7 +1,7 @@
 import type { textColors } from "./token-contract"
 
 /**
- * Utility color NAMES accepted by `color` props (Icon, MaterialIcon, Toggle,
+ * Utility color NAMES accepted by `color` props (Icon, Toggle,
  * SubPageHeader, Text, …) — the KEYS of {@link textColors} (`"primary"`,
  * `"secondary"`, `"red"`, …).
  *

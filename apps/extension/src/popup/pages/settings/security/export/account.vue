@@ -234,7 +234,6 @@ onBeforeUnmount(() => {
 						titleVariant="name"
 						:description="trimAddress(account.address, 6, 4, '...')"
 						descriptionVariant="data"
-						icon="user"
 						chevron
 						data-testid="export-account-row"
 						:data-account-address="account.address"

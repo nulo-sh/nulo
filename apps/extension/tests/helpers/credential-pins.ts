@@ -1,3 +1,4 @@
+import { Icon } from "@nulo/design"
 import type { VueWrapper } from "@vue/test-utils"
 import { flushPromises } from "@vue/test-utils"
 import { expect } from "vitest"
@@ -15,12 +16,17 @@ export interface MaskToggleCase {
 export const nativeInput = (w: VueWrapper, id: string) => w.get(`[data-testid="${id}"] input`).element as HTMLInputElement
 const types = (w: VueWrapper, ids: string[]) => ids.map((id) => nativeInput(w, id).type)
 
-/** The toggle's attributes, its masked default, its exact reach, two activations in one task, and focus. Needs the real `Input` and `MaterialIcon`, mounted attached. */
+/** The toggle's attributes, its masked default, its exact reach, two activations in one task, and focus. Needs the real `Input` and `Icon`, mounted attached. */
 export async function expectMaskToggle(w: VueWrapper, c: MaskToggleCase): Promise<void> {
 	const subject = c.subject ?? "password"
 	const others = c.others ?? []
 	const btn = w.get(`[data-testid="${c.toggle}"]`).element as HTMLButtonElement
-	const icon = () => btn.querySelector("span")
+	const icon = () => btn.querySelector("svg")
+	const glyph = () =>
+		w
+			.findAllComponents(Icon)
+			.find((c) => btn.contains(c.element))
+			?.props("name")
 	expect(btn.tagName).toBe("BUTTON")
 	expect(btn.getAttribute("type")).toBe("button")
 	expect(btn.getAttribute("tabindex")).toBe("-1")
@@ -29,13 +35,13 @@ export async function expectMaskToggle(w: VueWrapper, c: MaskToggleCase): Promis
 	// The `#suffix` slot sits in the input's clickable row; `#bottom` is a direct child of the root.
 	expect(btn.parentElement).not.toBe(fieldRoot)
 	expect(btn.parentElement?.contains(nativeInput(w, c.field))).toBe(true)
-	expect(icon()?.className).toContain("color--secondary")
-	expect(icon()?.style.fontSize).toBe("18px")
+	expect(icon()?.getAttribute("class")).toContain("color--secondary")
+	expect(icon()?.getAttribute("width")).toBe("18")
 
 	const masked = () => {
 		expect(types(w, c.drives)).toEqual(c.drives.map(() => "password"))
 		expect(btn.getAttribute("aria-label")).toBe(`Show ${subject}`)
-		expect(icon()?.textContent).toBe("visibility")
+		expect(glyph()).toBe("eye")
 	}
 	masked()
 	const othersBefore = types(w, others)
@@ -50,7 +56,7 @@ export async function expectMaskToggle(w: VueWrapper, c: MaskToggleCase): Promis
 	expect(types(w, c.drives)).toEqual(c.drives.map(() => "text"))
 	expect(types(w, others)).toEqual(othersBefore)
 	expect(btn.getAttribute("aria-label")).toBe(`Hide ${subject}`)
-	expect(icon()?.textContent).toBe("visibility_off")
+	expect(glyph()).toBe("eye-off")
 	expect(document.activeElement).toBe(nativeInput(w, c.field))
 
 	btn.click()

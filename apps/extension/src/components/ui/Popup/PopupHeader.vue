@@ -26,7 +26,7 @@ defineSlots<{ title?(): unknown; right?(): unknown; description?(): unknown }>()
 					data-testid="popup-close-btn"
 					:class="$style.close_btn"
 				>
-					<MaterialIcon name="close" :size="20" color="secondary" />
+					<Icon name="close" :size="20" color="secondary" />
 				</button>
 			</Flex>
 		</Flex>

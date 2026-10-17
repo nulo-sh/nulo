@@ -33,7 +33,7 @@ const ruleNamesWhere = (keep: (rule: Rule) => boolean): string[] =>
 		.sort()
 
 /** The layer's utility families; a role block may add no other selector. */
-const UTILITY_PREFIXES = /^\.(lh--|type--|ta--|color--|fill--|flex$|flex-wide$|gap--|justify-|items-|content-|wrap-|flex-direction-)/
+const UTILITY_PREFIXES = /^\.(lh--|type--|ta--|color--|flex$|flex-wide$|gap--|justify-|items-|content-|wrap-|flex-direction-)/
 
 describe("type role rules in utilities.css", () => {
 	test("one .type-- rule per role, and no selector outside the utility families", () => {

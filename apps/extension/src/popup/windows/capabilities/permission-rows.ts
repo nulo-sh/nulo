@@ -3,6 +3,7 @@
  * default. Pure, so the window and Settings read one table and the defaults match what the
  * dispatcher enforces.
  */
+import type { GlyphName } from "@nulo/design/core/glyphs.ts"
 import type { ContractsCapability, SimulationCapability, TransactionCapability } from "@nulo/wallet-bridge"
 import { authorizationsEffective, coversAnyContract, isAnyContractScope } from "@nulo/wallet-bridge"
 import { isObjectLike } from "@nulo/wallet-core/utils"
@@ -50,7 +51,7 @@ export type SubSegment = { text: string } | { term: string }
 export type PermissionRowEntry = {
 	key: RowKey
 	group: RowGroup
-	icon: string
+	icon: GlyphName
 	title: string
 	/** The line under the title; a switch row reads it while on, and `subOff` while off. */
 	subOn?: SubSegment[]
@@ -86,7 +87,7 @@ export function plainText(segments: readonly SubSegment[] | undefined): string {
 export function accountAddressRow(accounts: readonly { name?: string }[]): PermissionRowEntry {
 	const only = accounts.length === 1 ? accounts[0].name : undefined
 	const title = only ? `See ${only}'s address` : "See the addresses of the accounts you share"
-	return { key: "account-address", group: "without-asking", icon: "visibility", title, flagged: false }
+	return { key: "account-address", group: "without-asking", icon: "eye", title, flagged: false }
 }
 
 /** Either sub-scope reaching any contract makes the row "any contract"; only transactions can
@@ -97,7 +98,7 @@ export function simulationRow(cap: SimulationCapability): PermissionRowEntry {
 	return {
 		key: "simulation",
 		group: "without-asking",
-		icon: "play_circle",
+		icon: "play",
 		title: any ? "Run simulations on any contract" : "Run simulations and read the results",
 		subOn: PRIVATE_BALANCES,
 		flagged: any,
@@ -112,7 +113,7 @@ export function contractsRow(cap: ContractsCapability): PermissionRowEntry | und
 		return {
 			key: "contracts",
 			group: "without-asking",
-			icon: "add_circle",
+			icon: "add",
 			title: any ? "Add any contract to your wallet" : "Add contracts to your wallet",
 			flagged: any,
 			...(any ? { chip: ANY_CONTRACT } : {}),
@@ -134,7 +135,7 @@ export function contractClassesRow(networkName: string): PermissionRowEntry {
 	return {
 		key: "contract-classes",
 		group: "without-asking",
-		icon: "code_blocks",
+		icon: "code",
 		title: `Look up contract code on ${networkName}`,
 		subOn: [{ text: "Public information any node can give it." }],
 		flagged: false,
@@ -174,7 +175,7 @@ export function privateEventsRow(contracts: "*" | readonly string[]): Permission
 	return {
 		key: "private-events",
 		group: "if-you-allow",
-		icon: "mail_lock",
+		icon: "mail-lock",
 		title: any ? "See private events from any contract" : "See private events from its contracts",
 		subOn: EVENTS_ON,
 		subOff: DATA_OFF,
@@ -202,7 +203,7 @@ export function transactionRow(cap: TransactionCapability): PermissionRowEntry {
 	return {
 		key: "transaction",
 		group: "always-asks",
-		icon: "task_alt",
+		icon: "check",
 		title: any ? "Every transaction, on any contract" : "Every transaction",
 		flagged: false,
 	}

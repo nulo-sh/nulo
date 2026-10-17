@@ -14,7 +14,7 @@ import {
 import { approveExecute, approveVerify, waitForExecuteContent, waitForPopup } from "./popups"
 
 /**
- * Reconnect a playground page whose origin the wallet approved without trusting its check, and
+ * Reconnect a playground page whose origin the wallet remembers, and
  * re-request `bundle` so the page's own account state is populated again — a wallet-initiated
  * disconnect clears it. The discovery is auto-approved for an approved origin and the emoji check
  * opens in its own window; the app's calls wait until it is answered, so it is answered before the

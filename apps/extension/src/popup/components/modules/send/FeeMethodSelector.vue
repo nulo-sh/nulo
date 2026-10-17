@@ -1,7 +1,6 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 import { Dropdown } from "@/components/ui/Dropdown"
-import { publishGlyph } from "@/components/composite/send/publish-facts"
 import mark from "@/components/composite/send/publish-mark.module.css"
 import { menuOrder } from "./fee-helpers"
 
@@ -14,9 +13,6 @@ const props = defineProps({
 })
 
 const emit = defineEmits(["update:modelValue", "open", "close"])
-
-/** The tag only ever says the fee names the account publicly. */
-const TAG_GLYPH = publishGlyph("exposed")
 
 const menu = computed(() => menuOrder(props.methods))
 
@@ -37,7 +33,7 @@ const onRowClick = (method, event) => {
 				data-testid="send-fee-privacy-notice"
 				:data-notice-shape="payerNoticeShape"
 			>
-				<Icon :name="TAG_GLYPH" size="10" aria-hidden="true" />
+				<Icon name="public" size="10" aria-hidden="true" />
 				NAMES YOUR ADDRESS
 			</span>
 		</Flex>
@@ -55,7 +51,7 @@ const onRowClick = (method, event) => {
 				>
 					<span v-if="modelValue" :class="$style.fee_value">{{ modelValue.title }}</span>
 					<span v-else :class="[$style.fee_value, $style.fee_placeholder]">Select method</span>
-					<MaterialIcon name="expand_more" :size="16" color="secondary" aria-hidden="true" />
+					<Icon name="chevron" :rotate="90" :size="16" color="secondary" aria-hidden="true" />
 				</Flex>
 			</template>
 

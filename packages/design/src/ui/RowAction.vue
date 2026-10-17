@@ -49,12 +49,12 @@ defineProps({
 	}
 
 	& :where(svg) {
-		transition: fill 0.2s var(--bezier);
+		transition: color 0.2s var(--bezier);
 	}
 
-	/* `:where` holds this at two classes' weight, so a caller's own hover fill (a danger red) wins. */
+	/* `:where` holds this at two classes' weight, so a caller's own hover colour (a danger red) wins. */
 	&:where(:not(:disabled)):is(:hover, :focus-visible) :where(svg) {
-		fill: var(--txt-primary);
+		color: var(--txt-primary);
 	}
 }
 </style>

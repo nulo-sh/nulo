@@ -164,7 +164,7 @@ watch(network, (n) => {
 					size="small"
 					:title="isActive ? 'Active network' : 'Set as active network'"
 					:description="isActive ? 'Currently in use' : 'Switch the wallet to this chain'"
-					:icon="isActive ? 'check-circle' : 'circle'"
+					:icon="isActive ? 'square-check' : 'square'"
 					:iconFillColor="isActive ? 'primary' : 'tertiary'"
 					iconBgColor="transparent"
 					:disabled="isActive"
@@ -175,9 +175,6 @@ watch(network, (n) => {
 					size="small"
 					title="Name"
 					:description="network.name"
-					icon="edit"
-					iconFillColor="tertiary"
-					iconBgColor="transparent"
 					@click="handleEditNetworkName"
 					data-testid="network-detail-rename"
 				/>
@@ -186,9 +183,6 @@ watch(network, (n) => {
 					title="Chain ID"
 					:description="String(network.chainId)"
 					descriptionVariant="data"
-					icon="info"
-					iconFillColor="tertiary"
-					iconBgColor="transparent"
 					raw
 					data-testid="network-detail-chain-id"
 				/>
@@ -204,7 +198,7 @@ watch(network, (n) => {
 					:key="endpoint.id"
 					:title="endpoint.label || endpoint.rpcUrl"
 					:description="endpoint.label ? endpoint.rpcUrl : undefined"
-					:icon="network.primaryEndpointId === endpoint.id ? 'check-circle' : 'circle'"
+					:icon="network.primaryEndpointId === endpoint.id ? 'square-check' : 'square'"
 					:iconFillColor="network.primaryEndpointId === endpoint.id ? 'primary' : 'tertiary'"
 					iconBgColor="transparent"
 					@click="handleSetPrimary(endpoint)"
@@ -225,7 +219,7 @@ watch(network, (n) => {
 								v-if="network.primaryEndpointId !== endpoint.id && network.endpoints.length > 1"
 							>
 								<RowAction label="Delete endpoint" data-testid="endpoint-delete-btn" @click="handleDeleteEndpoint(endpoint)">
-									<Icon name="close-circle" size="14" color="tertiary" />
+									<Icon name="close" size="14" color="tertiary" />
 								</RowAction>
 								<template #content>Delete endpoint</template>
 							</Tooltip>

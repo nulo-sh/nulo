@@ -68,8 +68,6 @@ const hasSessionAllowances = computed(() => methods.value.length > 0 || events.v
 
 const grantedCapabilities = computed(() => session.value?.capabilityGrants ?? [])
 
-const isTrusted = computed(() => session.value?.trustedVerification ?? false)
-
 const grantedCaps = computed(() => grantedCapabilities.value.map((g) => g.capability))
 // An On consents to the breadth the row shows, so the write carries it.
 const shownBroad = computed(() => coversAnyContract(grantedCaps.value))
@@ -164,11 +162,6 @@ const getAccountAlias = (acc) => {
 	return session.value.accountAliases[caip] || acc.name
 }
 
-const toggleTrust = async () => {
-	if (!session.value) return
-	await dappSessionService.setTrustedVerification(session.value.id, !isTrusted.value)
-}
-
 const setAuthorizations = async (on) => {
 	if (!session.value || isSavingAuthorizations.value) return
 	isSavingAuthorizations.value = true
@@ -216,7 +209,7 @@ onBeforeUnmount(() => {
 		<template #trailing>
 			<Dropdown>
 				<button type="button" :class="$style.icon_btn" aria-label="Session actions">
-					<MaterialIcon name="more_vert" :size="18" color="secondary" />
+					<Icon name="more" :rotate="90" :size="18" color="secondary" />
 				</button>
 
 				<template #popup>
@@ -232,14 +225,14 @@ onBeforeUnmount(() => {
 
 		<!-- Identity block -->
 		<Flex align="center" gap="12" wide>
-			<Icon v-if="session.loadingLogo" :loading="true" name="dapp" size="40" color="tertiary" />
+			<Icon v-if="session.loadingLogo" :loading="true" name="app" size="40" color="tertiary" />
 			<img
 				v-else-if="session.dappMetadata.logoBlobUrl"
 				:src="session.dappMetadata.logoBlobUrl"
 				:class="$style.logo"
 				alt=""
 			/>
-			<Icon v-else name="dapp" size="40" color="tertiary" />
+			<Icon v-else name="app" size="40" color="tertiary" />
 
 			<Flex direction="column" gap="4" wide>
 				<Text variant="name" color="primary" :class="$style.name_size">
@@ -262,7 +255,6 @@ onBeforeUnmount(() => {
 				<SettingItem
 					v-for="acc in accounts"
 					:key="`${acc.chainId}:${acc.address}`"
-					materialIcon="account_balance_wallet"
 					:title="getAccountAlias(acc)"
 					titleVariant="name"
 					:description="`${getChainName(acc.chainId).toUpperCase()} · ${trimAddress(acc.address, 6, 4, '...')}`"
@@ -351,12 +343,7 @@ onBeforeUnmount(() => {
 		</Flex>
 
 		<!-- Connection check -->
-		<DappSessionVerification
-			v-if="verificationEmojis"
-			:emojis="verificationEmojis"
-			:isTrusted="isTrusted"
-			@toggleTrust="toggleTrust"
-		/>
+		<DappSessionVerification v-if="verificationEmojis" :emojis="verificationEmojis" />
 	</SettingsPageShell>
 </template>
 
@@ -381,7 +368,7 @@ onBeforeUnmount(() => {
 	transition: all 0.2s var(--bezier);
 
 	&:hover {
-		fill: var(--txt-primary);
+		color: var(--txt-primary);
 	}
 }
 </style>

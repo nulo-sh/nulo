@@ -84,13 +84,12 @@ onBeforeUnmount(() => {
 				:to="PRESTO_SITE_URL"
 				title="Get Presto"
 				description="presto.build · free, open source"
-				materialIcon="download"
 				external
 				data-testid="settings-proving-get"
 			/>
 		</ItemsContainer>
 		<ItemsContainer v-else-if="!permissionMissing" title="Details">
-			<SettingItem v-for="row in rows" :key="row.title" :title="row.title" :description="row.description" :materialIcon="row.icon" raw>
+			<SettingItem v-for="row in rows" :key="row.title" :title="row.title" :description="row.description" raw>
 				<template #right>
 					<Text variant="value" color="primary">{{ row.value }}</Text>
 				</template>

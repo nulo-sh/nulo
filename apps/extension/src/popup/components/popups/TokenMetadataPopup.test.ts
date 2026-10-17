@@ -66,8 +66,8 @@ describe("popups/TokenMetadataPopup", () => {
 		const icons = w
 			.findAll("[data-testid='cap-icon']")
 			.map((i) => [i.attributes("data-name"), i.attributes("data-color")])
-			.filter(([name]) => name === "check-circle" || name === "close-circle")
-		expect(icons).toEqual(keys.map((k) => (TOKEN[k as keyof typeof TOKEN] ? ["check-circle", "green"] : ["close-circle", "red"])))
+			.filter(([name]) => name === "square-check" || name === "square-cross")
+		expect(icons).toEqual(keys.map((k) => (TOKEN[k as keyof typeof TOKEN] ? ["square-check", "green"] : ["square-cross", "red"])))
 		expect(text).toContain("Balances")
 		expect(text).toContain("Transfers")
 		expect(text).toContain("Private to public")

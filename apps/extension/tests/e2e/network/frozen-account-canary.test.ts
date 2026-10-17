@@ -177,7 +177,7 @@ describe("frozen-account canary — the execution gate every @aztec bump runs, o
 			await recoveryPopup.close()
 			step("post-restart unlock ok; presented account is one of the frozen-derived pair")
 
-			// Reconnect the dApp (verify popup re-fires — the fixture connects with alwaysTrust=false)
+			// Reconnect the dApp (the verify popup re-fires, as on every reconnect)
 			// and land a post-restart tx as A. The background rebuilds the account contract from the
 			// seed on this path and hard-throws on address drift, so an ok result pins BOTH
 			// re-derivation and execution of the re-derived frozen account.

@@ -11,7 +11,6 @@ export const NULO_DESIGN_COMPONENTS = new Set([
 	"Flex",
 	"Icon",
 	"Text",
-	"MaterialIcon",
 	"Badge",
 	"BrutalistTitle",
 	"Checkbox",

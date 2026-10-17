@@ -9,8 +9,8 @@ never import app utilities, stores, service clients, or `chrome.*`.
 - **L0 tokens** — `src/token-contract.ts` (canonical source) → generated `src/tokens.ts` and
   `src/utilities.css`, the type roles among them; `src/base.css` (fonts, resets, per-theme values)
   is hand-authored and imports `utilities.css`.
-- **L1 core** — `src/core/**` primitives: `Flex`, `Icon`, `Text` (its `variant` takes a type role),
-  `MaterialIcon`.
+- **L1 core** — `src/core/**` primitives: `Flex`, `Icon` (a glyph of the set, below), `Text` (its
+  `variant` takes a type role).
 - **L2 ui** — `src/ui/**` ui primitives.
 - **L3 composite** — `src/composite/**` (empty today; the biome layer rule stays in place).
 
@@ -89,6 +89,25 @@ figures. `segment`'s selected item takes weight 700 through the component's own 
 
 Avatar initials take no role: `AccountAvatar` sizes them from their box.
 
+## Icons
+
+`Icon` draws one glyph of `src/core/glyphs.ts`, the set's only source: original drawings on a
+24-unit grid, none taken from a third-party icon set. `name` is a `GlyphName`. An unknown name draws
+nothing, so the extension's `icon-names.test.ts` refuses one in any template, and vue-tsc refuses
+one in a `lang="ts"` caller.
+
+- **Paint**: a glyph paints only through `color`. The root sets `fill` and `stroke` to
+  `currentColor`; the `color` prop adds `.color--<name>`, and without it the glyph takes its
+  parent's colour. A stylesheet colours a glyph with `color`, never `fill` or `stroke`, which would
+  fill a stroked path.
+- **Weight**: strokes are 2.5 units with square caps and mitred joins, thickened below 14.4 px so
+  no line renders under 1.5 px.
+- **Turns**: `rotate` turns the glyph about its centre. `chevron` points right; 90 points it down.
+- **Adding a glyph**: draw it on the 24-unit grid. Stroke paths go in `s`; each solid goes in `f`
+  as its own path, filled even-odd, with a knock-out as an inner subpath. Solids in one glyph
+  overlap only to cut a hole. A TSDoc line names the picture. Check it in the `Core / Icon` sheet
+  story at 24, 12, 10 and 9 px, light and dark.
+
 ## Consumers compile the source
 
 The package ships **Vue SFC + TS source** (no build step); each consumer's Vite/`vue-tsc` compiles it.
@@ -128,4 +147,4 @@ A missing root means the teleported content silently fails to mount (it is NOT a
 
 ## Exports
 
-`.` (barrel) · `./tokens` · `./base.css` · `./core/*` · `./ui/*` · `./composables/*`.
+`.` (barrel, with the `GlyphName` type) · `./tokens` · `./base.css` · `./core/*` (`glyphs.ts` by path, for the name guard and plain-TS modules) · `./ui/*` · `./composables/*`.

@@ -18,7 +18,7 @@ const appStore = useAppStore()
 		<!-- Passkey profile -->
 		<template v-if="appStore.profile.type === 'passkey'">
 			<ItemsContainer title="Profile">
-				<SettingItem :title="appStore.profile.name" titleVariant="name" icon="user" raw />
+				<SettingItem :title="appStore.profile.name" titleVariant="name" raw />
 			</ItemsContainer>
 
 			<Flex direction="column" gap="12" style="padding: 0 8px;">
@@ -29,23 +29,21 @@ const appStore = useAppStore()
 			</Flex>
 
 			<ItemsContainer title="Choose backup mode">
-				<SettingItem title="Full Backup" icon="package" iconBgColor="blue" to="/popup/settings/security/export/full" data-testid="full-backup-link-btn" />
+				<SettingItem title="Full Backup" to="/popup/settings/security/export/full" data-testid="full-backup-link-btn" />
 			</ItemsContainer>
 		</template>
 
 		<!-- Password profile -->
 		<template v-else>
 			<ItemsContainer title="Profile to backup">
-				<SettingItem :title="appStore.profile.name" titleVariant="name" icon="user" raw />
+				<SettingItem :title="appStore.profile.name" titleVariant="name" raw />
 			</ItemsContainer>
 
 			<ItemsContainer title="Choose backup mode">
-				<SettingItem title="Full Backup" icon="package" iconBgColor="blue" to="/popup/settings/security/export/full" data-testid="full-backup-link-btn" />
-				<SettingItem title="Recovery Phrase" icon="text" iconBgColor="blue" to="/popup/settings/security/export/seed" data-testid="seed-phrase-link-btn" />
+				<SettingItem title="Full Backup" to="/popup/settings/security/export/full" data-testid="full-backup-link-btn" />
+				<SettingItem title="Recovery Phrase" to="/popup/settings/security/export/seed" data-testid="seed-phrase-link-btn" />
 				<SettingItem
 					title="Account"
-					icon="key"
-					iconBgColor="blue"
 					to="/popup/settings/security/export/account"
 					data-testid="account-backup-link-btn"
 				/>
@@ -57,7 +55,6 @@ const appStore = useAppStore()
 		>
 			<SettingItem
 				title="Frequently Asked Questions"
-				icon="help"
 				to="/popup/settings/security/export/faq"
 				external
 				disabled

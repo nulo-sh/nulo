@@ -686,7 +686,7 @@ describe("BalanceView — token hero (tokenBalance prop)", () => {
 		expect(wrapper.find('[data-testid="balance-amount"]').text()).toContain("AAA")
 		expect(wrapper.find('[data-testid="balance-fiat"]').text()).toBe("≈ $1,249.82") // (1,000 + 250) Test USDC at $0.999857
 		const icons = wrapper.findAll('[data-testid="stub-icon"]')
-		expect(icons.map((i) => i.attributes("data-name"))).toEqual(["lock", "globe"])
+		expect(icons.map((i) => i.attributes("data-name"))).toEqual(["private", "public"])
 		expect(wrapper.find('[data-testid="private-balance-value"]').text()).toBe("1,000")
 		expect(wrapper.find('[data-testid="public-balance-value"]').text()).toBe("250")
 	})

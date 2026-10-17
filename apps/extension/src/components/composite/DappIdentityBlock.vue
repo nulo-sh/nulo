@@ -30,9 +30,9 @@ const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(prop
 <template>
 	<Flex :align="hostnameSuspicious ? 'start' : 'center'" gap="12" :class="$style.dapp_block">
 		<div :class="$style.dapp_logo_wrapper">
-			<Icon v-if="dapp?.loadingLogo" :loading="true" name="dapp" size="24" color="tertiary" />
+			<Icon v-if="dapp?.loadingLogo" :loading="true" name="app" size="24" color="tertiary" />
 			<img v-else-if="dapp?.logoBlobUrl" :src="dapp?.logoBlobUrl" :class="$style.dapp_logo" alt="" />
-			<Icon v-else name="dapp" size="24" color="tertiary" />
+			<Icon v-else name="app" size="24" color="tertiary" />
 		</div>
 
 		<Flex direction="column" gap="4" wide :class="$style.dapp_info">

@@ -152,7 +152,7 @@ watch(
 				</template>
 				<template #bottom>
 					<Flex align="center" gap="6" :class="$style.hint_row">
-						<MaterialIcon name="lock" :size="12" color="tertiary" />
+						<Icon name="lock" :size="12" color="tertiary" />
 						<Text variant="body" color="tertiary">{{ passwordHint }}</Text>
 					</Flex>
 				</template>

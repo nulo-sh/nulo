@@ -318,20 +318,6 @@ export const VENDORED: readonly Vendored[] = [
 			},
 		],
 	},
-	{
-		trigger: { asset: /^assets\/MaterialSymbolsOutlined-[\w-]+\.woff2$/ },
-		font: { sha256: ["d7706dbc272274f7a6a4278df7a10a838f2a7c1eb14a3e39106dec04192b91a8"] },
-		components: [
-			{
-				name: "Material Symbols Outlined",
-				version: "2.930",
-				license: "Apache-2.0",
-				source: "https://github.com/google/material-design-icons/blob/68e015dbbb6b730b5fe4934e8507cd5a465c8a3d/LICENSE",
-				texts: ["material-symbols.Apache-2.0.txt"],
-				note: "Icon font, bundled by @nulo/design. Copyright Google LLC. The upstream repository ships no NOTICE file.",
-			},
-		],
-	},
 ]
 
 export const DERIVED: readonly VendoredComponent[] = [

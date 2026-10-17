@@ -113,7 +113,7 @@ describe("Input", () => {
 
 	test("clearable + non-empty value shows a clear icon that emits clear+blur on click", async () => {
 		const w = mountInput({ clearable: true, modelValue: "something" })
-		const clearIcon = w.find('[data-name="close-circle"]')
+		const clearIcon = w.find('[data-name="close"]')
 		expect(clearIcon.exists()).toBe(true)
 		await clearIcon.trigger("click")
 		expect(w.emitted("clear")).toHaveLength(1)
@@ -121,7 +121,7 @@ describe("Input", () => {
 	})
 
 	test("clearable + empty value does NOT show the clear icon", () => {
-		expect(mountInput({ clearable: true }).find('[data-name="close-circle"]').exists()).toBe(false)
+		expect(mountInput({ clearable: true }).find('[data-name="close"]').exists()).toBe(false)
 	})
 
 	test("icon prop renders an Icon stub at the leading position", () => {
