@@ -456,6 +456,13 @@ const SELECT_ENV = {
 const SOURCE = "${{ github.event_name == 'push' && 'build' || needs.select-assets.outputs.source }}"
 const BY_SOURCE: Record<string, string> = { build: "env.SOURCE == 'build'", published: "env.SOURCE == 'published'" }
 const SMOKES = { "smoke-against-artifact": "chrome", "smoke-firefox-against-artifact": "firefox" }
+const PUBLISHED_ONLY = "steps.select.outputs.source == 'published'"
+/** A step's shell commands, one per line, comments and blank lines dropped. */
+const commandsOf = (step: Step | undefined): string[] =>
+	(step?.run ?? "")
+		.split("\n")
+		.map((line) => line.trim())
+		.filter((line) => line && !line.startsWith("#"))
 
 function selectStepFindings(step: Step): string[] {
 	const findings: string[] = []
@@ -476,6 +483,34 @@ function selectJobFindings(tree: Tree): string[] {
 	const others = thirdParty(expanded(tree, job))
 	if (others.join() !== "oven-sh/setup-bun") findings.push(`${SELECT}: runs ${others.join(", ")}`)
 	if (!(job.steps ?? []).some((step) => step.run === `${RUNNER} select`)) findings.push(`${SELECT}: does not run select`)
+	return [...findings, ...handoffFindings(job.steps ?? [])]
+}
+
+const PUBLISHED_ZIPS = ["chrome", "firefox"].map((browser) => `dist/release/nulo-${browser}-\${VERSION}.zip`)
+const PUBLISHED_ASSETS = [
+	"dist/release/nulo-chrome-${{ env.VERSION }}.zip",
+	"dist/release/nulo-firefox-${{ env.VERSION }}.zip",
+	"dist/release/SHASUMS256.txt",
+]
+
+/** Each published tree is its own browser's checked zip, unpacked, and the assets artifact is the three checked files. */
+function handoffFindings(steps: Step[]): string[] {
+	const findings: string[] = []
+	const unpacked = commandsOf(steps.find((s) => s.run?.includes("unzip")))
+	const want = ["chrome", "firefox"].map((browser, i) => `unzip -q "${PUBLISHED_ZIPS[i]}" -d dist/published/${browser}`)
+	if (!Bun.deepEquals(unpacked, want)) findings.push(`${SELECT}: a tree is not its own browser's zip`)
+	for (const browser of ["chrome", "firefox"]) {
+		const upload = steps.find((s) => s.with?.name === `published-${browser}`)
+		if (upload?.with?.path !== `dist/published/${browser}` || upload.if !== PUBLISHED_ONLY)
+			findings.push(`${SELECT}: published-${browser} is not the unpacked ${browser} zip`)
+	}
+	const assets = steps.find((s) => s.with?.name === "published-assets")
+	const paths = String(assets?.with?.path ?? "")
+		.trim()
+		.split("\n")
+		.map((p) => p.trim())
+	if (!Bun.deepEquals(paths, PUBLISHED_ASSETS) || assets?.if !== PUBLISHED_ONLY)
+		findings.push(`${SELECT}: published-assets is not the three checked files`)
 	return findings
 }
 
@@ -1092,6 +1127,14 @@ describe("attestations", () => {
 			"a smoke fixed to the rebuild",
 			(t: Tree) => Object.assign(releaseJob(t, "smoke-against-artifact").with ?? {}, { artifact_name: "extension-chrome" }),
 			["smoke-against-artifact: smokes other bytes than its source's"],
+		],
+		[
+			"a tree unpacked from the other browser's zip",
+			(t: Tree) => {
+				const unpack = releaseJob(t, "select-assets").steps?.find((s) => s.run?.includes("unzip"))
+				if (unpack) unpack.run = unpack.run?.replace("nulo-firefox-", "nulo-chrome-")
+			},
+			["release.yml#select-assets: a tree is not its own browser's zip"],
 		],
 		[
 			"an unguarded zip step",

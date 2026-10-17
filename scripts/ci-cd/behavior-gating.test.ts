@@ -847,7 +847,7 @@ describe("Firefox lanes", () => {
 	})
 
 	test("the shared pieces default to chrome, and the browser caches share no key prefix", () => {
-		for (const file of ["_extension-smoke-e2e.yml", "_extension-network-e2e.yml"]) {
+		for (const file of ["_extension-smoke-e2e.yml", "_extension-network-e2e.yml", "_extension-network-e2e-lane.yml"]) {
 			expect(workflow(file).on.workflow_call.inputs.browser.default, file).toBe("chrome")
 		}
 		// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
@@ -893,8 +893,17 @@ describe("shard matrices", () => {
 	})
 })
 
-/** What a lane caller may vary. The partition, its labels and the fixed seeds are the lane's alone. */
-const LANE_INPUTS = ["browser", "chaos_seed", "disable_presto", "ref", "retry"]
+/**
+ * What a lane caller may vary, each input whole, description aside. The partition, its labels and the
+ * fixed seeds are the lane's alone; a caller that omits an input runs on these defaults, the suite's own.
+ */
+const LANE_INPUTS: Record<string, { required: boolean; type: string; default?: unknown }> = {
+	ref: { required: true, type: "string" },
+	browser: { required: false, type: "string", default: "chrome" },
+	retry: { required: false, type: "string", default: "" },
+	disable_presto: { required: false, type: "boolean", default: false },
+	chaos_seed: { required: false, type: "string", default: "" },
+}
 const LANE_JOB_KEYS = ["name", "strategy", "uses", "with"]
 
 /** A lane job's faults: see laneShapeFaults. */
@@ -908,18 +917,28 @@ function laneJobFaults(id: string, job: CallerJob & Record<string, unknown>): st
 	if (job.uses !== `./.github/workflows/${NETWORK_SUITE}`) faults.push(`${id}: does not call the suite`)
 	for (const key of ["ref", "browser", "retry"])
 		if (job.with?.[key] !== `\${{ inputs.${key} }}`) faults.push(`${id}: ${key} is not the caller's`)
+	// The kill switch reaches the prover-ON job, the only one that starts Presto.
+	const killSwitch = job.with?.proverless === true ? undefined : "${{ inputs.disable_presto }}"
+	if (job.with?.disable_presto !== killSwitch) faults.push(`${id}: disable_presto is not ${killSwitch ?? "absent"}`)
 	return faults
 }
 
 /**
  * What lets a lane run differ from the one result its caller reads: a job that can skip (an `if`
  * or `needs` beyond the chaos pair's complementary `if`), a matrix whose red leg cancels the others,
- * a job that does not run the suite on the caller's commit, browser and retry, or an input that
- * lets a caller reach the partition.
+ * a job that does not run the suite on the caller's commit, browser and retry, a kill switch that
+ * misses the prover-ON job, or an input beyond LANE_INPUTS or off its default.
  */
-function laneShapeFaults(lane: { on?: { workflow_call?: { inputs?: object } }; jobs: Record<string, CallerJob> }): string[] {
-	const inputs = Object.keys(lane.on?.workflow_call?.inputs ?? {}).sort()
-	const faults = inputs.join() === LANE_INPUTS.join() ? [] : [`inputs: ${inputs.join(", ")}`]
+function laneShapeFaults(lane: {
+	on?: { workflow_call?: { inputs?: Record<string, object> } }
+	jobs: Record<string, CallerJob>
+}): string[] {
+	const inputs = Object.fromEntries(
+		Object.entries(lane.on?.workflow_call?.inputs ?? {}).map(
+			([key, { description: _, ...spec }]: [string, { description?: unknown }]) => [key, spec],
+		),
+	)
+	const faults = Bun.deepEquals(inputs, LANE_INPUTS, true) ? [] : [`inputs: ${JSON.stringify(inputs)}`]
 	for (const [id, job] of Object.entries(lane.jobs)) faults.push(...laneJobFaults(id, job))
 	for (const id of Object.keys(CHAOS_PAIR)) if (!(id in lane.jobs)) faults.push(`${id}: missing`)
 	return faults
@@ -990,13 +1009,19 @@ describe("network lane", () => {
 		expect(laneShapeFaults(lane)).toEqual([])
 	})
 
-	test("the lane-shape check refuses a dedicated job given an `if`, and a matrix that fails fast", () => {
+	test("the lane-shape check refuses a gated job, a matrix that fails fast, a moved default and a dropped kill switch", () => {
 		const gated = structuredClone(lane)
 		gated.jobs["network-e2e-canary"].if = "inputs.chaos_seed == ''"
 		expect(laneShapeFaults(gated)).toEqual(["network-e2e-canary: takes if"])
 		const failsFast = structuredClone(lane)
 		failsFast.jobs["network-e2e"].strategy["fail-fast"] = undefined
 		expect(laneShapeFaults(failsFast)).toEqual(["network-e2e: a red leg cancels the others"])
+		const firefox = structuredClone(lane)
+		firefox.on.workflow_call.inputs.browser.default = "firefox"
+		expect(laneShapeFaults(firefox)).toHaveLength(1)
+		const noKillSwitch = structuredClone(lane)
+		noKillSwitch.jobs["network-e2e-canary"].with.disable_presto = undefined
+		expect(laneShapeFaults(noKillSwitch)).toEqual(["network-e2e-canary: disable_presto is not ${{ inputs.disable_presto }}"])
 	})
 
 	// "Prover-ON" is the `proverless` input, not the job being dedicated: a heavy job is dedicated too.

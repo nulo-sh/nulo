@@ -252,7 +252,8 @@ jobs:
   # A dispatch's source, read-only and beside the gates: `published` once a published release's
   # assets are downloaded and checked against their digests, attestations and SHASUMS256.txt, so
   # the smokes run the bytes the stores get; `build` for any release not yet published. A push
-  # never asks: its run is the one that publishes, and a rerun of it keeps its own build.
+  # never asks: it always builds, and a rerun that finds its release already published ships the
+  # downloaded release, as verify-published's push path has always done.
   select-assets:
     needs: resolve
     if: always() && needs.resolve.result == 'success' && github.event_name == 'workflow_dispatch'
@@ -333,7 +334,8 @@ jobs:
       needs.resolve.result == 'success' &&
       github.event.inputs.run_network_e2e == 'true'
     # The PR lanes' suite as one job: attach-assets and status read it as this job's single result,
-    # which is `success` only when every lane job succeeded.
+    # `success` only when no lane job failed or was cancelled. The one lane job that skips is the
+    # chaos branch this caller does not pick, the only `if` behavior-gating.test.ts lets the lane hold.
     uses: ./.github/workflows/_extension-network-e2e-lane.yml
     with:
       ref: ${{ needs.resolve.outputs.sha }}
