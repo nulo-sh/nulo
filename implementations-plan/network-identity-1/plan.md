@@ -1,7 +1,7 @@
 ---
 plan: network-identity-1
 tier: mid
-status: planned, approved by the final Codex pass; awaiting the orchestrator
+status: completed; one PR against dev, merging is the owner's call
 issues: "#659 (closed by arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,20 @@ base: origin/dev at 13d5f8d0
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-17
+- **Status:** completed. One PR against `dev` carries the work and this close-out; merging it is the owner's call.
+- **Shipped:**
+  - Chain 0 is the local development chain, L1 31337 on `localhost` / `127.0.0.1`. `nodeChainId` decides a node's chain id and refuses a composite of 0 anywhere else. The row constructor, both stored-L1 getters, promotion and the reset journal hold every chain-0 row to it, and `assertLiveChainIdentity` requires L1 31337 on chain 0 at use.
+  - `LOCAL_L1_CHAIN_ID` and `isLoopbackHost` live in `@nulo/wallet-core/utils`, shared by the transport rule and the network service.
+  - `SECURITY.md` § RPC endpoint as user input states the adoption, use and promotion checks the code runs (#659), the duplicate guard's prefix and the per-URL cache's eviction.
+- **Deviations:** none from the change map. The review loop took three rounds; r3 repeated the standard's verbatim rules, which r1 and r2 had paraphrased.
+- **Known limits:** #684 (D5, and the earlier build's remote Local row argued in implementation review r1).
+- **Open items:** none. OA-1 and OA-2 are not issues: the orchestrator carries them to the owner, and each ships its "what ships now" form.
+- **Lessons:** none promoted; the arc's gotchas are plan-specific (`lessons/phase-1.md` to `lessons/phase-3.md`).
+- **Seeds:** the `/goal` and `/loop` seeds under § Seeds are retired.
 
 # network-identity-1: chain 0 is the local development chain; the endpoint docs say what the code checks
 
@@ -190,6 +204,7 @@ One arc, one PR against `dev`. The wallet holds the composite chain id 0 to one 
 
 - **Implementation review r1** (Codex, session `01a14abd`): **reject**, three items. Adopted: the adoption sentence names the Local target's 0; the cache counts three reported failures, which a success does not reset. Argued: a chain-0 row on L1 31337 with a non-loopback primary, which only an install from before this change can hold, is a known limit with D5. **Opus**, beside it: **conditional approve**; the stale `local`-kind comments and the same adoption wording, adopted.
 - **Implementation review r2** (resume): **approve**; the known-limit disposition accepted.
+- **Implementation review r3** (resume, with the standard's two rules and the adversarial ask verbatim): **approve**, no material item.
 
 ## Delivery
 
