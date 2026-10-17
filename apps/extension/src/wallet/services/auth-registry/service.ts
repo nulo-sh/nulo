@@ -554,7 +554,8 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	/** Waits until the grant of every selected `pending` row is in a block, so the revoke is not
 	 *  included before a grant it names. Refuses before any send when a row has no grant transaction,
 	 *  or a grant still reads pending or unreadable once polling stops. A grant still read dropped then
-	 *  does not hold back the rest of the batch: `verifyRevoked` keeps its row and fails the revoke. */
+	 *  does not hold back the rest of the batch: `verifyRevoked` keeps its row and fails the revoke
+	 *  unless the grant has since landed at or below the revoke's block. */
 	private async awaitGrantBlocks(network: Network, authwits: Authwit[]): Promise<void> {
 		const pending = authwits.filter((authwit) => authwit.pending)
 		const untracked = pending.find((authwit) => !authwit.txHash)
