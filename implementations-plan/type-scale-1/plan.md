@@ -1,7 +1,7 @@
 ---
 plan: type-scale-1
 tier: mid
-status: arc 1 in progress (2026-10-17): decision page 34 answered OA-1 B, OA-2 A, OA-3 B, OA-4 C, OA-5 A; Phase 1 ✓ on the tree merged at f695dea4
+status: arc 1 in progress (2026-10-17): decision page 34 answered OA-1 B, OA-2 A, OA-3 B, OA-4 C, OA-5 A; Phases 0-4 ✓; OA-6 and OA-7 open
 issues: "#589 (closed by the one arc)"
 driver: claude-code
 claude_model: opus
@@ -54,6 +54,7 @@ For a person reading the wallet in the 360 by 600 popup, on any screen, in eithe
 | The identity strip's network cap 96 px (`IdentityStrip.vue:93`) | 102 px: "Local Network" whole at 13 px; the strip 38 px | **OA-1 B** (P34-02) |
 | Send's publish strip facts (`PublishStrip.vue`, `tag` today) | `label-section` with today's 10 px, 600, 0.08 em through `OVERRIDES` | **OA-4 C** (P34-05) |
 | Home's header chips (`Header.vue`, `tag` today) | `label-section` with today's 10 px, 600, 0.08 em through `OVERRIDES`: at 11 px "TESTNET" is cut | **OA-6**, open; ships A |
+| Manage accounts' visible address lines (`accounts/index.vue`, `meta`) | `meta` with today's 11 px through `OVERRIDES`: at 13 px an imported row's marker and tail outgrow the line | **OA-7**, open; ships A |
 
 Out of scope: icons (#590, lane icons-d2-1), the sheet (#590), Home's layout (#592, testers-fixes-2), any copy, any other role, the store images.
 
@@ -113,6 +114,8 @@ Out of scope: icons (#590, lane icons-d2-1), the sheet (#590), Home's layout (#5
 - **Every screen's text** (signed: P30-14 A and P30-15 B, quoted above). Before: caps labels at 10 and 11 px in four voices; small mono at 11; Home's row figures at 11; the nav at 10. After: one caps voice at 11; `meta` at 13; Home's row figures at 13; the nav at 11. The PR body quotes both picks and carries before/after screenshots, light and dark, of Home, Holdings, Send (amount card), Settings (a list page), the execute window, the connection check, onboarding's Welcome, the capabilities window with Details open and its account chooser, and a tx detail page.
 - **Decision page 34** (2026-10-17), quoted in [OWNER-ASKS.md](OWNER-ASKS.md): OA-5 A (the permission table's tracks at 66 px), OA-1 B (the identity strip's network cap at 102 px, the strip 38 px), OA-2 A (every identifier in `meta`), OA-3 B (the off-row dollar figures keep 11 px), OA-4 C (the publish strip's facts keep today's look).
 - **OA-6** (open, found in Phase 3): Home's header chips keep today's 10 px semibold; at the signed 11 px the network name is cut to "TEST…". This departs from the signed Home picture on those two words until the owner answers.
+- **OA-7** (open, found in Phase 4): Manage accounts' visible address lines keep today's 11 px; at the signed 13 px an imported row's marker and tail outgrow the line. As today, an imported row shows none of its address head.
+- **The tx detail page's App value** wraps at any character in both browsers, as its rule says it does (D14). Firefox kept a letter with the digits after it, which at 13 px left the first line 20 px short; breaks may now fall beside punctuation in Chrome too.
 
 ## Phases
 
@@ -168,7 +171,10 @@ As Architecture § OA-2 answer A says; then the pinned tests that name `data` (`
 
 **Gate**: fast layers exit 0; the e2e runs pass at retry 0 with `overflowingText` empty everywhere; each risk site and fixed box has a line in `lessons/phase-3.md` (fits with its numbers, cut earlier, or OA-1). Layers: static, unit, smoke e2e, network e2e, both browsers.
 
-### Phase 4 — the remaining layout specs, docs, screenshots
+### Phase 4 — the remaining layout specs, docs, screenshots ✓
+
+Done 2026-10-17: two smoke failures, each answered by the panel (OA-7 and D13; D14); the three specs, the clean pair and the shots pair green on both browsers ([lessons/phase-4.md](lessons/phase-4.md)).
+
 
 1. Run `rows.test.ts`, `account-import-export.test.ts` and `tooltips-glossary.test.ts` (smoke), Chrome and Firefox.
 2. Update `packages/design/README.md` § Type roles (the record count; the table without the retired rows; `meta` 13, `nav` 11; the successors' "For" cells widened) and `CLAUDE.md` (the L0 line's role count).
@@ -193,6 +199,8 @@ As Architecture § OA-2 answer A says; then the pinned tests that name `data` (`
 | D10 | Where OA-5 A lands (2026-10-17) | In Phase 1, before its gate re-runs: the answer is what makes today's tree pass, and the orchestrator's resume extends this lane's ownership to the grid line | Phase 3 with the other sizes (Phase 1's gate would stay red on the base) |
 | D11 | The header's network name, newly cut at 11 px ("TEST…", both browsers; the only newly cut value a before/after ellipsis scan found) | OA-6 to the owner; OA-1's form A ships: the two header chips keep today's 10 px / 600 / 0.08 em through three `OVERRIDES` entries (panel: Codex and Opus, both "ship-A") | Apply OA-1 B (it answered the identity strip; the header has no cap to widen, so B means taking width from somewhere unsigned); accept the cut (a person reads the network there) |
 | D12 | How OA-4 C keeps the publish facts at today's look | One compound rule (`.strip .cell`) and three `OVERRIDES` entries on role `label-section` | A tenth role (unsigned); keeping `tag` alive for one site (D1) |
+| D13 | Manage accounts' address line at 13 px (2026-10-17, `account-import-export.test.ts`, both browsers): "imported", " · " and the 4-character tail take 117 px of a 100 px line | OA-7 to the owner; OA-1's form A ships on every visible row's line (one `:has` rule that only lifts specificity, one `OVERRIDES` entry; panel: Codex and Opus, both "ship-A") | OA-1 B (no cap or track to widen: the width lives in the marker's copy, the row's actions or the tail the test pins); imported rows alone at 11 px beside 13 px rows (a look nobody signed, and the sweep may see no imported row) |
+| D14 | The App value on the tx detail page, Firefox only at 13 px (`rows.test.ts`): `break-all` keeps a letter with the digits after it, so the first line ends 20.4 px short against a 7.8 px glyph (Chrome 4.8 px) | Add `line-break: anywhere` beside `break-all` (a correction recorded as a deviation: the rule's comment and the test both state "breaks anywhere"): 4.83 px in both browsers; a browser that ignores it falls back to today's `break-all` | An owner ask (it restores what the rule was written to do); loosening the test's one-glyph bound (weakens the gate) |
 
 ## Audit verdicts
 
@@ -209,6 +217,8 @@ As Architecture § OA-2 answer A says; then the pinned tests that name `data` (`
 **Phase 1 stop, panel** (2026-10-17, on the base-tree readings in [lessons/phase-1.md](lessons/phase-1.md)). Codex (sol, high): "VERDICT: correction ; BLOCKED: yes": replacing scrollable geometry with text geometry is a correction recorded as a deviation; the clip-to-nothing and icon-glyph rules are corrections, a rule on `aria-hidden` or on every tiny box would be narrowing; checking only the nearest box loses containment; replace the scroll-derived span in the clip branch too; "Transact" needs the owner. Opus (general-purpose): the same verdict, with three conditions (each rule by kind, no edge or tolerance moved, recorded as a deviation), the controls the fix needs, and "land the corrected measurement so the blocker is exactly one element". All taken (D8); the blocker is OA-5 (D9).
 
 **Phase 3 header, panel** (2026-10-17, on the readings in [lessons/phase-3.md](lessons/phase-3.md)). Codex (sol, high, session `01a149bb-7479-70c0-96f2-ab7f8abab973`): "VERDICT: ship-A ; Restore the three measured role carriers to their exact baseline and defer the header's width allocation to OA-6." Its checks: re-measure with A applied (the name whole, the address and its copy icon clear, the lock word intact, a long network name and the chip with its name hidden); keep the full name in the chip's accessible label; A restores the baseline relationship (26.8 beside 26 px), not equal heights. Opus (general-purpose): "VERDICT: ship-A", with the cut itself outside OA-1's surface (Home is no approval window), hence a new ask; A departs from the signed Home picture, which draws both words whole by closing the row gap, so the PR and UI impact say so; B's honest sources of about 8 px exclude the cap and the gap. All taken (D11, OA-6), except citing the ask in each entry's `why`: committed code names no ask; the close-out issue names the entries.
+
+**Phase 4, panel** (2026-10-17, on the two smoke failures in [lessons/phase-4.md](lessons/phase-4.md)). Codex (sol, high, session `01a149f1-25b4-7181-89e5-d27a6c79917b`): "VERDICT-1: ship-A ; Add OA-7, preserve 11 px across visible-row address descriptions, and disclose the effectively invisible head." and "VERDICT-2: keep-line-break ; Restore the existing wrapping invariant with the local declaration, document the ownership deviation, and retain both-browser assertions." Opus (general-purpose): "VERDICT-1: ship-A ; whole-list scope, comment the `:has` as a specificity-only compound, and OA-7 states that A (like today) shows no address head on an imported row, so B or C is the real fix." and "VERDICT-2: keep-line-break ; record it as a ledger deviation with the measurements, keep `break-all` (a browser that ignores the value falls back to it), and correct the threat note: it is a self-declared name, not a hostname." All taken (D13, D14, OA-7): the head measured at 11 px in both browsers before OA-7 was written (1 px, under its 6.6 px ellipsis). The App value is the dApp's self-declared name (`dappMetadata.name`), on the detail page after the fact; `anywhere` makes its breaks depend on width alone, the same in both browsers.
 
 ## Delivery
 
@@ -233,3 +243,4 @@ The execution contract is this plan plus [`implementations-plan/README.md` § Po
 ```
 /loop 15m Drive implementations-plan/type-scale-1 forward per its plan.md (read it and lessons/ first; Outcome & Quality Bar is the bar). Never idle. Phase 0 waits for type-roles-coverage arc 1 on dev. Run each phase's gate as written; e2e at retry 0 with load1 < 150. Decide with Codex (gpt-6.1-sol, high), never a person-visible choice: that goes to OWNER-ASKS.md. Same step failed 5 times: stop and reassess with Codex. All phases ✓: the post-implementation steps, then report and stop; teardown after the merge.
 ```
+- 2026-10-17 arc 1 phase 4 ✓: smoke `account-import-export` red on both browsers (an imported row's line at 13 px) and `rows` red on Firefox (the App value's first line); panel (Codex, Opus) ship-A as OA-7 (D13) and keep `line-break: anywhere` (D14); the three specs green on both (16/16); docs at 24 roles; audit:vue 0; build-storybook 0; clean pair green (after wall-clocks in lessons/phase-4.md); after shots retaken on the final tree, 15 pairs per browser.

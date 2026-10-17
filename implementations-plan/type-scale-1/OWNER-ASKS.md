@@ -82,3 +82,17 @@ Found in Phase 3 (2026-10-17) by a before/after scan of every value an ellipsis 
   - **C. Accept the cut**: "TEST…" on every page. Not recommended: a person reads the network there.
 - **Recommendation**: B with the chip padding, if the owner accepts a tighter chip; otherwise A.
 - **What ships now**: A, through one compound rule in `Header.vue` (`.actions .network_chip, .network_chip .network_label, .lock_chip .lock_label`) and three `OVERRIDES` entries (font-size 10px, font-weight 600, letter-spacing 0.08em, role `label-section`). The chip itself takes the size too, since its own size sets its `1lh` and so its height. This departs from the signed Home picture on these two words; the PR says so.
+
+## OA-7: Manage accounts, where an imported row's address line no longer fits at 13 px
+
+Found in Phase 4 (2026-10-17) by `account-import-export.test.ts` in Chrome and Firefox: the line may clip only inside the address's head, and at the signed 13 px the parts that never shrink outgrow it.
+
+- **Surface**: Settings → Manage accounts, each visible row's address line (`accounts/index.vue`); an imported row reads "imported · " then the address head (it ends in an ellipsis), then the address's last 4 characters.
+- **Today**: `meta` at 11 px. "imported" 52.8 px, " · " 19.8 px and the tail 26.4 px take 99 of the line's 100 px, so the head gets 1 px, less than its ellipsis (6.6 px): an imported row already shows none of its address head, only "imported · " and the tail (measured in Chrome and Firefox, 2026-10-17).
+- **At the signed `meta`** (13 px): "imported" 62.4 px, " · " 23.4 px and the tail 31.2 px take 117 px of the 100 px line, so the line runs past its box (the test's one-truncation check fails) and the head has none.
+- **Options**:
+  - **A. Keep 11 px on the visible rows' address line** (what ships): every visible row reads as today; the hidden rows and every other screen take 13 px. As today, an imported row shows none of its address head.
+  - **B. 13 px, with room made**: move the "imported" marker off the address line (to the name line, or as an icon), or put the row's four actions behind one menu. Each is a layout or copy change.
+  - **C. 13 px on two lines**: the marker on one line, the address on the next.
+- **Recommendation**: A for now; B or C if an imported row should show its address head, which A does not.
+- **What ships now**: A, through one rule in `accounts/index.vue` (`.desc_line:has(.addr_head)`, font-size 11 px; every row's line has a head, so the `:has` only lifts the rule above the role's class) and one `OVERRIDES` entry (role `meta`, scope `[data-testid="manage-accounts-address"]`). It covers every visible row, so the list reads at one size, as today.
