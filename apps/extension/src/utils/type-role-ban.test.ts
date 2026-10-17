@@ -394,20 +394,30 @@ function propSource(prop: TemplateProp): string {
 	return prop.exp ? `:${prop.arg?.content}="${prop.exp.content}"` : `:${prop.arg?.content}`
 }
 
-/** The string literals an expression can evaluate to: the whole of it, or a branch of a conditional or a fallback. */
+const isWrapper = (node: ts.Expression): node is ts.Expression & { expression: ts.Expression } =>
+	ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isSatisfiesExpression(node) || ts.isNonNullExpression(node)
+
+function literalResults(node: ts.Expression): string[] {
+	if (isWrapper(node) || ts.isTypeAssertionExpression(node)) return literalResults(node.expression)
+	if (ts.isConditionalExpression(node)) return [...literalResults(node.whenTrue), ...literalResults(node.whenFalse)]
+	if (ts.isBinaryExpression(node)) return operandResults(node)
+	return ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) ? [node.text] : []
+}
+
+/** The left of `&&` is a result only when falsy, and of `||` only when truthy: an empty string names no role. */
+function operandResults(node: ts.BinaryExpression): string[] {
+	const operator = node.operatorToken.kind
+	if (operator === ts.SyntaxKind.AmpersandAmpersandToken) return literalResults(node.right)
+	if (operator === ts.SyntaxKind.BarBarToken) return [...literalResults(node.left).filter(Boolean), ...literalResults(node.right)]
+	return operator === ts.SyntaxKind.QuestionQuestionToken ? [...literalResults(node.left), ...literalResults(node.right)] : []
+}
+
+/** The string literals an expression can evaluate to: the whole of it, or a branch of a conditional, `&&` or a fallback. */
 function resultLiterals(expression: string | undefined): string[] {
 	if (expression === undefined) return []
 	const tree = ts.createSourceFile("expression.ts", `(${expression})`, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
-	const results = (node: ts.Expression): string[] => {
-		if (ts.isParenthesizedExpression(node)) return results(node.expression)
-		if (ts.isConditionalExpression(node)) return [...results(node.whenTrue), ...results(node.whenFalse)]
-		const fallback = [ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken]
-		if (ts.isBinaryExpression(node) && fallback.includes(node.operatorToken.kind))
-			return [...results(node.left), ...results(node.right)]
-		return ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) ? [node.text] : []
-	}
 	const [statement] = tree.statements
-	return statement && ts.isExpressionStatement(statement) ? results(statement.expression) : []
+	return statement && ts.isExpressionStatement(statement) ? literalResults(statement.expression) : []
 }
 
 /** Names a static attribute gives, or that its binding can evaluate to. */
@@ -513,11 +523,10 @@ function carriesIdentifierRole(template: TemplateScan, node: TemplateNode): bool
 	return roles.some((role) => IDENTIFIER_ROLES.has(role))
 }
 
-/** `description` or `title` bound on an element whose matching variant prop names an identifier role. */
+/** `description` or `title` bound beside a variant prop of `meta`, the one mono role `SettingItem` renders for either. */
 function passedToIdentifierRole(node: TemplateNode | undefined, attribute: string | undefined): boolean {
 	if (!node || (attribute !== "description" && attribute !== "title")) return false
-	const roles = [...namedRoles(node, `${attribute}Variant`), ...namedRoles(node, `${attribute}-variant`)]
-	return roles.some((role) => IDENTIFIER_ROLES.has(role))
+	return [...namedRoles(node, `${attribute}Variant`), ...namedRoles(node, `${attribute}-variant`)].includes("meta")
 }
 
 function scanIdentifiers(template: TemplateScan, expression: Expression, chain: readonly TemplateNode[], attribute?: string): void {
@@ -828,6 +837,7 @@ describe("type role ban rules", () => {
 			[],
 		],
 		["role: a static role class passes", '<template><span class="row type--meta">x</span></template>', []],
+		["role: an empty string a fallback passes over", "<template><Text :variant=\"'' || 'meta'\">x</Text></template>", []],
 		[
 			"role: a role prop whose branches are roles passes",
 			"<template><SettingItem :titleVariant=\"x ? 'row-title' : 'meta'\" descriptionVariant=\"caption\" /></template>",
@@ -898,6 +908,11 @@ describe("type role ban rules", () => {
 			'<template><SettingItem :description="trimAddress(a)" /></template>',
 			["identifier"],
 		],
+		[
+			"identifier: passed beside a mono role SettingItem never renders",
+			'<template><SettingItem :description="trimAddress(a)" descriptionVariant="input-data" /></template>',
+			["identifier"],
+		],
 		["script: a family in a style string", '<script setup>const s = "color: red; font-family: serif"</script>', ["face"]],
 		["script: a module-scoped size key", "<script setup>const s = { fontWeight: 600 }</script>", ["faceless"]],
 		["script: a font shorthand key", '<script setup>const s = { font: "700 12px serif" }</script>', ["face"]],
@@ -934,6 +949,18 @@ describe("type role ban rules", () => {
 		["a static class outside the roles", "x.vue", '<template><span class="row type--huge">x</span></template>', "not a role"],
 		["a composed name outside the roles", "a.module.css", ".a { composes: type--huge from global; }", "not a role"],
 		["a role prop outside the roles", "x.vue", '<template><SettingItem descriptionVariant="data" /></template>', "not a role"],
+		[
+			"a variant behind && outside the roles",
+			"x.vue",
+			"<template><Text :variant=\"(x && 'data') || 'meta'\">x</Text></template>",
+			"not a role",
+		],
+		[
+			"an asserted variant outside the roles",
+			"x.vue",
+			"<template><Text :variant=\"'data' as const\">x</Text></template>",
+			"not a role",
+		],
 	])("hard: %s fails with any entry", (_case, file, source, reason) => {
 		const { findings } = scanSource(file, source, [])
 		const covering = { [file]: findings.map(({ rule, text }) => ({ rule, text, role: "drop" as const, at: "" })) }

@@ -141,7 +141,12 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 	}
 	const childSpan = (child: Element): Span | null => {
 		const style = win.getComputedStyle(child)
-		return style.display === "contents" || (!apart(child, style) && isVisible(child)) ? textSpan(child) : null
+		if (style.display === "contents") return textSpan(child)
+		if (!isVisible(child) || /^(absolute|fixed)$/.test(style.position)) return null
+		if (!apart(child, style)) return textSpan(child)
+		// A field or a box that clips lays its text out apart, yet paints it inside this box.
+		const own = textSpan(child)
+		return own || child.matches(FIELD) ? paintedSpan(child, own) : null
 	}
 	const spans = new Map<Element, Span | null>()
 	/** Where an element's text reaches sideways: its own text and its in-flow descendants', none laid out apart. */
@@ -155,19 +160,23 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 		spans.set(el, span)
 		return span
 	}
+	/** `text-overflow` acts on a block container's own lines: a flex or grid container draws no ellipsis. */
+	const drawsEllipsis = (style: CSSStyleDeclaration): boolean =>
+		style.textOverflow === "ellipsis" && style.overflowX !== "visible" && !/flex|grid/.test(style.display)
 	const pastBox = (el: Element, span: Span | null): number => {
 		let box = el
 		while (box.parentElement && /^(inline|contents)$/.test(win.getComputedStyle(box).display)) box = box.parentElement
 		const style = win.getComputedStyle(box)
-		const ellipsis = style.textOverflow === "ellipsis" && style.overflowX !== "visible"
-		if (!span || box.matches(FIELD) || /^(auto|scroll)$/.test(style.overflowX) || ellipsis) return 0
+		if (!span || box.matches(FIELD) || /^(auto|scroll)$/.test(style.overflowX) || drawsEllipsis(style)) return 0
 		const left = box.getBoundingClientRect().left + box.clientLeft
 		return Math.max(0, left - span.left, span.right - (left + box.clientWidth))
 	}
 	const paintedSpan = (el: Element, span: Span | null): Span => {
 		const box = el.getBoundingClientRect()
-		// Text an element clips itself paints no further than its own box; a field is its box.
-		if (!span || el.matches(FIELD) || win.getComputedStyle(el).overflowX !== "visible") return { left: box.left, right: box.right }
+		if (!span || el.matches(FIELD)) return { left: box.left, right: box.right }
+		// Text an element clips itself paints no further than its own box.
+		if (win.getComputedStyle(el).overflowX !== "visible")
+			return { left: Math.max(span.left, box.left), right: Math.min(span.right, box.right) }
 		return { ...span }
 	}
 	const clippingAncestors = (el: Element): Element[] => {
@@ -188,7 +197,7 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 		for (const up of clippingAncestors(el)) {
 			const edge = up.getBoundingClientRect()
 			const crossed = crosses(span, edge)
-			if (crossed && win.getComputedStyle(up).textOverflow !== "ellipsis") return { clippedBy: nameOf(up), ellipsizedBy }
+			if (crossed && !drawsEllipsis(win.getComputedStyle(up))) return { clippedBy: nameOf(up), ellipsizedBy }
 			if (crossed) ellipsizedBy ??= nameOf(up)
 			span.left = Math.max(span.left, edge.left)
 			span.right = Math.min(span.right, edge.right)

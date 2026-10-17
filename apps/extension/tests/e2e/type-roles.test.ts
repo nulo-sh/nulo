@@ -193,6 +193,9 @@ const LAYOUT_HTML = `
 	<div data-testid="tr-narrow"><span data-testid="tr-run-past">Text that runs past its box</span></div>
 	<div data-testid="tr-narrow-line"><span data-testid="tr-inline-past">Text that runs past its line</span></div>
 	<span class="type--meta" data-testid="tr-cell"><b>Name</b><span>A fact too long</span></span>
+	<span class="type--meta" data-testid="tr-grown-cell"><span data-testid="tr-grown">A clip that grew</span></span>
+	<div data-testid="tr-flex-ellipsis"><span data-testid="tr-flex-cut">A cut word</span></div>
+	<div data-testid="tr-wide-clip"><span data-testid="tr-wide-fits">Fits</span></div>
 	<span data-testid="tr-inline-fits">Fits</span>
 	<span data-testid="tr-positioned">0x1a...2b<i data-testid="tr-positioned-icon"></i></span>
 	<span data-testid="tr-hidden">Read aloud only</span>`
@@ -206,6 +209,12 @@ const LAYOUT_STYLES: Record<string, Record<string, string>> = {
 	"tr-run-past": { display: "block", whiteSpace: "nowrap" },
 	"tr-narrow-line": { width: "40px", whiteSpace: "nowrap" },
 	"tr-cell": { display: "flex", width: "40px", whiteSpace: "nowrap" },
+	"tr-grown-cell": { display: "flex", width: "40px", whiteSpace: "nowrap" },
+	"tr-grown": { overflow: "hidden", textOverflow: "ellipsis" },
+	"tr-flex-ellipsis": { display: "flex", width: "40px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+	"tr-flex-cut": { flexShrink: "0" },
+	"tr-wide-clip": { width: "100px", overflow: "hidden" },
+	"tr-wide-fits": { display: "block", width: "200px", overflow: "hidden" },
 	"tr-positioned": { display: "inline-flex", position: "relative" },
 	"tr-positioned-icon": { position: "absolute", left: "calc(100% + 6px)", width: "12px", height: "12px" },
 	"tr-hidden": { position: "absolute", width: "1px", height: "1px", overflow: "hidden", clipPath: "inset(50%)", whiteSpace: "nowrap" },
@@ -234,17 +243,25 @@ test("the layout gate reports text an ancestor cuts or that runs past the box it
 		expect([...new Set(fixture.map(({ testid }) => testid))].sort()).toEqual([
 			"tr-cell",
 			"tr-clipped-input",
+			"tr-flex-cut",
+			"tr-grown",
+			"tr-grown-cell",
 			"tr-inline-fits",
 			"tr-inline-past",
 			"tr-positioned",
 			"tr-run-past",
 			"tr-scrolling-input",
+			"tr-wide-fits",
 		])
+		// A flex box draws no ellipsis, a clip that grows to its text still runs past its cell, and
+		// short text in a wide clipping box is not cut by a narrower ancestor.
 		expect(overflowingText(fixture).map(({ testid }) => testid)).toEqual([
 			"tr-clipped-input",
 			"tr-run-past",
 			"tr-inline-past",
 			"tr-cell",
+			"tr-grown-cell",
+			"tr-flex-cut",
 		])
 	} finally {
 		await page.evaluate(() => document.querySelector('[data-testid="tr-layout"]')?.remove())
