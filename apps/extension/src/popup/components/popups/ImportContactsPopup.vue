@@ -343,6 +343,7 @@ watch(
 
 .contact {
 	composes: select_row from "./popup-shared.module.css";
+	user-select: none;
 	position: relative;
 
 	padding: 12px;

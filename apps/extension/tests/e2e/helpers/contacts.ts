@@ -159,7 +159,7 @@ type ToastLog = { titles: string[]; observer: MutationObserver }
 
 /** Runs `act` and waits for a toast reading `text` that was not on screen before it, and returns
  *  that toast's whole title. Toasts are recorded from before `act` starts, so one that has already
- *  left by the time `act` returns (a success toast lasts six seconds) still counts. */
+ *  left by the time `act` returns (a success toast lasts two seconds) still counts. */
 export async function toastAfter(page: Page, act: () => Promise<void>, text: string, timeout = 15_000): Promise<string> {
 	await page.evaluate((s: string) => {
 		const w = window as unknown as { __e2eToastLog?: ToastLog }

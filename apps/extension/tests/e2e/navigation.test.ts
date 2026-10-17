@@ -1,7 +1,7 @@
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { clickByTestId, test, openPopup, waitForHash } from "./fixtures/extension"
-import { clickNavTab, openDropdown, openHoldings, seedUsdQuoteAndReload } from "./fixtures/helpers"
+import { clickNavTab, navigateToSettings, openDropdown, openHoldings, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { readActivityScope, seedTransaction } from "./helpers/activity-seeds"
 import { tabAround } from "./helpers/pointer-probes"
 
@@ -53,6 +53,164 @@ test("bottom navigation switches between all four pages", async ({ registeredExt
 	await clickNavTab(page, "general")
 	await waitForHash(page, "#/popup/general")
 
+	expect(registeredExtension.consoleErrors).toEqual([])
+	expect(registeredExtension.pageErrors).toEqual([])
+})
+
+test("back from a Settings page lands where Settings was left, and the page it opened starts at its top", async ({
+	registeredExtension,
+}) => {
+	const page = await openPopup(registeredExtension)
+	await waitForHash(page, "#/popup/general")
+	await clickNavTab(page, "settings")
+	await waitForHash(page, "#/popup/settings")
+	await page.waitForSelector('[data-testid="setting-nav-developer"]', { visible: true, timeout: 5_000 })
+
+	const left = await page.$eval('[data-testid="settings-page"]', (el) => {
+		el.scrollTop = Math.round((el.scrollHeight - el.clientHeight) / 2)
+		return el.scrollTop
+	})
+	expect(left).toBeGreaterThan(0)
+	await clickByTestId(page, "setting-nav-developer")
+	await waitForHash(page, "#/popup/settings/developer")
+	await page.waitForSelector('[data-testid="settings-developer-page"]', { visible: true, timeout: 5_000 })
+	expect(await page.$eval('[data-testid="settings-developer-page"]', (el) => el.scrollTop)).toBe(0)
+
+	await clickByTestId(page, "subpage-back")
+	await waitForHash(page, "#/popup/settings")
+	await page.waitForSelector('[data-testid="settings-page"]', { visible: true, timeout: 5_000 })
+	const back = await page.$eval('[data-testid="settings-page"]', (el) => el.scrollTop)
+	expect(Math.abs(back - left), `left at ${left}, back at ${back}`).toBeLessThanOrEqual(1)
+
+	expect(registeredExtension.consoleErrors).toEqual([])
+	expect(registeredExtension.pageErrors).toEqual([])
+})
+
+type Point = { x: number; y: number }
+
+/** Where a person presses to start or end a drag on `testid`'s text: a quarter in from the outer
+ *  edge of its first or last visible character, which must be on screen and on top. Chrome starts no
+ *  selection from a press just right of a glyph's middle, only a caret that follows the drag. */
+async function textEdge(page: Page, testid: string, edge: "first" | "last"): Promise<Point> {
+	const point = await page.$eval(
+		`[data-testid="${testid}"]`,
+		(el, at) => {
+			const texts: Text[] = []
+			const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+			for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+				if (n.textContent?.trim() && n.parentElement?.getClientRects().length) texts.push(n as Text)
+			}
+			const node = at === "first" ? texts[0] : texts.at(-1)
+			if (!node) throw new Error(`${el.getAttribute("data-testid")} shows no text`)
+			const content = node.textContent ?? ""
+			const index = at === "first" ? content.search(/\S/) : content.trimEnd().length - 1
+			const range = document.createRange()
+			range.setStart(node, index)
+			range.setEnd(node, index + 1)
+			const box = range.getBoundingClientRect()
+			return { x: box.left + box.width * (at === "first" ? 0.25 : 0.75), y: box.top + box.height / 2 }
+		},
+		edge,
+	)
+	const onTop = await page.$eval(`[data-testid="${testid}"]`, (el, p) => el.contains(document.elementFromPoint(p.x, p.y)), point)
+	if (!onTop) throw new Error(`${testid}'s ${edge} character is off screen or covered`)
+	return point
+}
+
+/** A mouse drag from `from` to `to` after clearing any selection; returns what it selected. */
+async function dragSelect(page: Page, from: Point, to: Point): Promise<string> {
+	await page.evaluate(() => window.getSelection()?.removeAllRanges())
+	await page.mouse.move(from.x, from.y)
+	await page.mouse.down()
+	await page.mouse.move(to.x, to.y, { steps: 8 })
+	await page.mouse.up()
+	return page.evaluate(() => window.getSelection()?.toString() ?? "")
+}
+
+const textOf = (page: Page, testid: string) => page.$eval(`[data-testid="${testid}"]`, (el) => (el as HTMLElement).innerText.trim())
+const lower = (text: string) => text.toLowerCase()
+
+test("a drag selects the text around a control and none of the control's own: the nav, the header's buttons, a toggle, a dropdown, list rows", async ({
+	registeredExtension,
+}) => {
+	const page = await openPopup(registeredExtension)
+	await waitForHash(page, "#/popup/general")
+	await page.bringToFront()
+	await page.waitForSelector('[data-testid="balance-amount"]:not([aria-busy])', { visible: true, timeout: 15_000 })
+	const hero = await textOf(page, "balance-amount")
+
+	// Nothing selectable lies past the nav or above the header, so these two drags end on a control.
+	// Firefox keeps the text a drag ends on, even a control's; the bans are the controls each crosses,
+	// in words Home's own text never shows.
+	const toNav = await dragSelect(page, await textEdge(page, "balance-amount", "first"), await textEdge(page, "nav-settings", "last"))
+	console.log(`[select] hero to the nav: ${JSON.stringify(toNav)}`)
+	expect(toNav.split(hero).length - 1, "the hero's figure, once").toBe(1)
+	for (const label of ["send", "receive", "home", "history"]) expect(lower(toNav)).not.toContain(label)
+
+	const toHeader = await dragSelect(
+		page,
+		await textEdge(page, "balance-amount", "last"),
+		await textEdge(page, "account-selector", "first"),
+	)
+	console.log(`[select] hero to the header: ${JSON.stringify(toHeader)}`)
+	expect(toHeader).toContain(hero)
+	for (const label of ["testnet", "lock"]) expect(lower(toHeader)).not.toContain(label)
+
+	await navigateToSettings(page, "privacy")
+	await page.waitForSelector('[data-testid="explorer-trigger"]', { visible: true, timeout: 10_000 })
+	const fiatShown = await page.$eval('[data-testid="fiat-values-toggle"]', (el) => el.getAttribute("aria-checked"))
+	const across = async (from: string, to: string) =>
+		dragSelect(page, await textEdge(page, from, "first"), await textEdge(page, to, "last"))
+
+	const overToggle = await across("fiat-values-description", "explorer-title")
+	console.log(`[select] across the fiat toggle: ${JSON.stringify(overToggle)}`)
+	expect(overToggle).toContain(await textOf(page, "fiat-values-description"))
+	expect(overToggle).toContain(await textOf(page, "explorer-title"))
+
+	const explorer = await textOf(page, "explorer-trigger")
+	const overTrigger = await across("explorer-description", "privacy-mode-title")
+	console.log(`[select] across the explorer menu's trigger (${explorer}): ${JSON.stringify(overTrigger)}`)
+	expect(overTrigger).toContain(await textOf(page, "explorer-description"))
+	expect(overTrigger).toContain(await textOf(page, "privacy-mode-title"))
+	expect(lower(overTrigger)).not.toContain(lower(explorer))
+
+	const toggle = await page.$eval('[data-testid="fiat-values-toggle"]', (el) => {
+		const box = el.getBoundingClientRect()
+		return { x: box.left + box.width / 2, y: box.top + box.height / 2 }
+	})
+	const fromToggle = await dragSelect(page, toggle, await textEdge(page, "explorer-title", "last"))
+	expect(fromToggle, "a drag that starts on a toggle selects nothing").toBe("")
+	expect(await page.$eval('[data-testid="fiat-values-toggle"]', (el) => el.getAttribute("aria-checked"))).toBe(fiatShown)
+
+	// Down About's lists: the rows that open a page or a document are controls; the group titles and
+	// the record of the accepted Terms are text.
+	await clickByTestId(page, "subpage-back")
+	await waitForHash(page, "#/popup/settings")
+	await navigateToSettings(page, "about")
+	await page.waitForSelector('[data-testid="legal-about-accepted"]', { visible: true, timeout: 10_000 })
+	await page.$eval('[data-testid="legal-about-group"]', (group) => group.firstElementChild?.scrollIntoView({ block: "nearest" }))
+	const overLinks = await dragSelect(
+		page,
+		await textEdge(page, "coingecko-attribution", "first"),
+		await textEdge(page, "legal-about-group", "first"),
+	)
+	console.log(`[select] down About's link rows: ${JSON.stringify(overLinks)}`)
+	expect(overLinks).toContain(await textOf(page, "coingecko-attribution"))
+	expect(lower(overLinks)).toContain("contact us")
+	for (const row of ["nulo website", "feedback", "report issue", "report scam"]) expect(lower(overLinks)).not.toContain(row)
+
+	await page.$eval('[data-testid="legal-about-note"]', (el) => el.scrollIntoView({ block: "end" }))
+	const overLegal = await dragSelect(
+		page,
+		await textEdge(page, "legal-about-group", "first"),
+		await textEdge(page, "legal-about-note", "last"),
+	)
+	console.log(`[select] down the Legal rows: ${JSON.stringify(overLegal)}`)
+	expect(overLegal).toContain(await textOf(page, "legal-about-accepted"))
+	expect(overLegal).toContain(await textOf(page, "legal-about-note"))
+	for (const row of ["terms of use", "privacy policy", "open-source licences"]) expect(lower(overLegal)).not.toContain(row)
+
+	await page.evaluate(() => window.getSelection()?.removeAllRanges())
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 })

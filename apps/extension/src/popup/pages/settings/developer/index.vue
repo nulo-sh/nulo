@@ -143,7 +143,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<SettingsPageShell title="Developer" :backTo="'/popup/settings'" gap="32">
+	<SettingsPageShell title="Developer" :backTo="'/popup/settings'" gap="32" data-testid="settings-developer-page">
 		<LoadingState v-if="isLoading" label="FETCHING SETTINGS" />
 
 		<template v-if="!isLoading">
@@ -205,6 +205,7 @@ onBeforeUnmount(() => {
 
 <style module>
 .state_link {
+	user-select: none;
 	text-decoration: none;
 	transition: opacity 0.2s var(--bezier);
 
@@ -215,6 +216,7 @@ onBeforeUnmount(() => {
 
 /* The box reaches 8px past the text so the ring clears it; the fade stays off the ring. */
 .logs_row {
+	user-select: none;
 	position: relative;
 	margin: -6px -8px;
 	padding: 6px 8px;

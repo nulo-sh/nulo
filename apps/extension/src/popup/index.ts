@@ -19,6 +19,7 @@ import { initAppServiceContext, isServiceReady, managers, waitForServiceReady } 
 import { captureOwnWindow, followOwnRoute } from "@/utils/own-window"
 import { LEGACY_SETTINGS_REDIRECTS } from "./legacy-routes"
 import { createPopupGuard } from "./route-guard"
+import { createScrollMemory, pageScroller } from "./scroll-memory"
 import { createStartGrace, START_GRACE_KEY, START_GRACE_MS } from "./start-grace"
 
 // Eagerly open profile + contact service-worker ports at boot. Matches the
@@ -40,9 +41,18 @@ routes.push(...LEGACY_SETTINGS_REDIRECTS)
 // Read before the router rewrites the URL: the guard may redirect the first route.
 captureOwnWindow(window.location.hash)
 
+const scrollMemory = createScrollMemory(() => {
+	const position: unknown = window.history.state?.position
+	return typeof position === "number" ? position : undefined
+})
+
 const router = createRouter({
 	history: createWebHashHistory(import.meta.env.BASE_URL),
 	routes,
+	// Runs once the entering page has rendered; it returns nothing, so the window never moves.
+	scrollBehavior: (to, from, saved) => {
+		scrollMemory.arrive(pageScroller(to), { restore: saved !== null, reused: to.matched.at(-1) === from.matched.at(-1) })
+	},
 })
 
 // One grace per opening, counted from here, as the bar's delay counts from its first render: a slow
@@ -65,5 +75,9 @@ router.beforeEach(
 	),
 )
 router.afterEach(followOwnRoute)
+// Runs before the render that unmounts the leaving page, so its box still holds the offset.
+router.afterEach((_to, from, failure) => {
+	if (!failure) scrollMemory.leave(pageScroller(from))
+})
 
 createApp(App).provide(START_GRACE_KEY, startGrace).use(router).use(createPinia()).mount("#app")

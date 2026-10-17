@@ -357,6 +357,7 @@ declare global {
   const scrubUrls: typeof import('../utils/scrub-urls').scrubUrls
   const sealFullBackupText: typeof import('../utils/full-backup-helpers').sealFullBackupText
   const searchSettings: typeof import('../utils/settings-search').searchSettings
+  const selectedWithin: typeof import('../utils/selection').selectedWithin
   const sendFeePicksKey: typeof import('../utils/profile-ui-keys').sendFeePicksKey
   const sendOutcome: typeof import('../utils/journal-state').sendOutcome
   const setLastActiveProfileId: typeof import('../utils/lastActiveProfile').setLastActiveProfileId
@@ -1079,6 +1080,7 @@ declare module 'vue' {
     readonly scrubUrls: UnwrapRef<typeof import('../utils/scrub-urls')['scrubUrls']>
     readonly sealFullBackupText: UnwrapRef<typeof import('../utils/full-backup-helpers')['sealFullBackupText']>
     readonly searchSettings: UnwrapRef<typeof import('../utils/settings-search')['searchSettings']>
+    readonly selectedWithin: UnwrapRef<typeof import('../utils/selection')['selectedWithin']>
     readonly sendFeePicksKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['sendFeePicksKey']>
     readonly sendOutcome: UnwrapRef<typeof import('../utils/journal-state')['sendOutcome']>
     readonly setLastActiveProfileId: UnwrapRef<typeof import('../utils/lastActiveProfile')['setLastActiveProfileId']>

@@ -85,6 +85,7 @@ const handleSwitchReceiverType = () => {
 }
 
 .toggle_pair {
+	user-select: none;
 	display: flex;
 	cursor: pointer;
 	border: 1px solid var(--nulo-border);

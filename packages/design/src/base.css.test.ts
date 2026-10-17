@@ -18,6 +18,7 @@ test("base.css content is pinned (edits must be deliberate + visually re-verifie
 	// `::-webkit-scrollbar` rule Firefox ignores, so Firefox matches Chrome; the dark palette is
 	// declared once (`:root, [theme="dark"]`), its hairline and scrim tokens at their literals' values,
 	// its --txt-danger lighter than --red so it reads 4.5:1 on a pressed row, and --btn-destructive
-	// darker than --red so the red buttons' label reads AA; line 1 carries the Apache-2.0 §4(b) header.
-	expect(hash).toBe("107a0312896c9271e382ed4599489b41af81e02967b0628b3a3fc93c158f6336")
+	// darker than --red so the red buttons' label reads AA; `nav` stays out of the control rule because
+	// the landing's is text; line 1 carries the Apache-2.0 §4(b) header.
+	expect(hash).toBe("7062e3d56d96f8f40afc3adbea5536dcc1a40d94f5c49772c78e9da056a39b3e")
 })

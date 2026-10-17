@@ -107,7 +107,7 @@ onBeforeUnmount(() => {
 			<Flex justify="between" align="center" :data-testid="settings.showFiatValues.testid" v-settings-row="settings.showFiatValues.id">
 				<Flex direction="column" gap="6">
 					<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings.showFiatValues.title }}</Text>
-					<Text variant="caption" color="tertiary">{{ settings.showFiatValues.description }}</Text>
+					<Text variant="caption" color="tertiary" data-testid="fiat-values-description">{{ settings.showFiatValues.description }}</Text>
 				</Flex>
 
 				<Toggle
@@ -119,8 +119,8 @@ onBeforeUnmount(() => {
 
 			<Flex justify="between" align="center" :data-testid="settings.defaultExplorer.testid" v-settings-row="settings.defaultExplorer.id">
 				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings.defaultExplorer.title }}</Text>
-					<Text variant="caption" color="tertiary">{{ settings.defaultExplorer.description }}</Text>
+					<Text variant="row-title" :class="$style.title_size" color="primary" data-testid="explorer-title">{{ settings.defaultExplorer.title }}</Text>
+					<Text variant="caption" color="tertiary" data-testid="explorer-description">{{ settings.defaultExplorer.description }}</Text>
 				</Flex>
 
 				<Dropdown>
@@ -161,7 +161,7 @@ onBeforeUnmount(() => {
 
 			<Flex justify="between" align="center" :data-testid="settings.privacyMode.testid" v-settings-row="settings.privacyMode.id">
 				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings.privacyMode.title }}</Text>
+					<Text variant="row-title" :class="$style.title_size" color="primary" data-testid="privacy-mode-title">{{ settings.privacyMode.title }}</Text>
 					<Text variant="caption" color="tertiary">{{ settings.privacyMode.description }}</Text>
 				</Flex>
 

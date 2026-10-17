@@ -13,6 +13,7 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 /** Utils */
 import { balanceFormatted } from "@/utils/amount.js"
 import { copyWithToast } from "@/utils/clipboard"
+import { selectedWithin } from "@/utils/selection"
 import { knownDecimals, parseRawBalance, safeFiatOf } from "@/utils/token-amount"
 import { aggregateFiat } from "@/utils/token-aggregate"
 import { storageLocalGet, storageLocalSet } from "@/utils/storage"
@@ -164,7 +165,8 @@ function fitHeroToLine() {
 const handleCopy = (value, label) => {
 	void copyWithToast(value, openToast, `${label} is copied`)
 }
-const handleTokenBalanceClick = async () => {
+const handleTokenBalanceClick = async (event) => {
+	if (selectedWithin(event.currentTarget)) return
 	let balance = totalTokenBalance.value?.value
 	if (totalTokenBalance.value?.slashed || showFullBalance.value) {
 		showFullBalance.value = !showFullBalance.value
@@ -296,10 +298,10 @@ onBeforeUnmount(() => {
 			<div :class="$style.hero_wrap">
 				<div
 					v-if="tokenToDisplay || showFiatValues"
-					@click="handleTokenBalanceClick"
+					:onClick="tokenToDisplay ? handleTokenBalanceClick : undefined"
 					data-testid="balance-amount"
 					:aria-busy="(!tokenToDisplay && heroPending) || undefined"
-					:class="$style.balance_amount"
+					:class="[$style.balance_amount, tokenToDisplay && $style.tappable]"
 				>
 					<span v-if="tokenToDisplay" :class="$style.hero_fit" :style="{ '--hero-scale': heroFit.scale }">
 						{{ heroText }}
@@ -407,12 +409,15 @@ onBeforeUnmount(() => {
 	composes: type--amount-hero from global;
 	font-size: 48px;
 	color: var(--txt-primary);
-	cursor: pointer;
 
 	white-space: nowrap;
 	overflow: hidden;
 	max-width: 100%;
 	min-width: 0;
+}
+
+.tappable {
+	cursor: pointer;
 }
 
 /* The figure's type scales down from the hero's size, while its line keeps the full size's height. */
@@ -442,6 +447,8 @@ onBeforeUnmount(() => {
 
 .arrival_chip {
 	composes: type--tag from global;
+	/* Faded out, the chip still holds its text, which a drag across the hero would copy. */
+	user-select: none;
 	position: absolute;
 	left: 50%;
 	top: -18px;

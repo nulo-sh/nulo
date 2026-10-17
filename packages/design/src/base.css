@@ -250,6 +250,16 @@ body {
 	text-rendering: optimizeLegibility;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+}
+
+/* Text is selectable; a control is not, so a drag or a double-click across one never takes its
+   label. A control without one of these semantics sets it on its class. */
+button,
+[role="button"],
+[role="tab"],
+[role="switch"],
+[role="checkbox"],
+[role="option"] {
 	user-select: none;
 }
 

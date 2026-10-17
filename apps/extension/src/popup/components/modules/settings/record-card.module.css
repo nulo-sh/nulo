@@ -2,6 +2,7 @@
 
 /* A clickable record with a stretched `RowTarget`. The consumer sets `border` and `padding`. */
 .card {
+	user-select: none;
 	position: relative;
 	display: flex;
 	flex-direction: column;
