@@ -5,6 +5,7 @@
 
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
+import type { GlyphName } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import TransactionTerminalCard from "./TransactionTerminalCard.vue"
@@ -40,9 +41,9 @@ const STUBS = {
 type CardProps = {
 	title: string
 	subtitle: string
-	icon: string
+	icon: GlyphName
 	color: "gray" | "amber" | "red" | "green"
-	activityIcon?: string
+	activityIcon?: GlyphName
 	originLabel?: string | null
 	transferTypeLabel?: string | null
 	amount?: string | null

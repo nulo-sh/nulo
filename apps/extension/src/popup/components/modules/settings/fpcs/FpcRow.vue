@@ -33,8 +33,6 @@ const isSynthetic = computed(() => props.synthetic === "public-fj")
 		:title="fpc.name || fpc.address"
 		:titleVariant="fpc.name ? 'row-title' : 'data'"
 		:description="fpc.typeDescription"
-		icon="fee"
-		iconBgColor="transparent"
 		raw
 		:class="$style.fpc_item"
 		data-testid="fpc-row"
