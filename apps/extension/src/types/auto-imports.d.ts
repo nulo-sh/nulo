@@ -426,6 +426,7 @@ declare global {
   const useFeeEstimation: typeof import('../composables/useFeeEstimation').useFeeEstimation
   const useFeeEstimationMap: typeof import('../composables/useFeeEstimationMap').useFeeEstimationMap
   const useFormState: typeof import('../composables/useFormState').useFormState
+  const useFullBackupExport: typeof import('../composables/useFullBackupExport').useFullBackupExport
   const useFullBackupImport: typeof import('../composables/useFullBackupImport').useFullBackupImport
   const useId: typeof import('vue').useId
   const useImportErrorState: typeof import('../composables/useProfileImportFlow').useImportErrorState
@@ -536,6 +537,9 @@ declare global {
   // @ts-ignore
   export type { FieldDef, FieldHandle, FormState } from '../composables/useFormState'
   import('../composables/useFormState')
+  // @ts-ignore
+  export type { UseFullBackupExportOptions } from '../composables/useFullBackupExport'
+  import('../composables/useFullBackupExport')
   // @ts-ignore
   export type { FullBackupEnvelope, UseFullBackupImportOptions, RestoreErrorNetworks, UseFullBackupImportResult, RestoreStage, RestoreStatus } from '../composables/useFullBackupImport'
   import('../composables/useFullBackupImport')
@@ -1147,6 +1151,7 @@ declare module 'vue' {
     readonly useFeeEstimation: UnwrapRef<typeof import('../composables/useFeeEstimation')['useFeeEstimation']>
     readonly useFeeEstimationMap: UnwrapRef<typeof import('../composables/useFeeEstimationMap')['useFeeEstimationMap']>
     readonly useFormState: UnwrapRef<typeof import('../composables/useFormState')['useFormState']>
+    readonly useFullBackupExport: UnwrapRef<typeof import('../composables/useFullBackupExport')['useFullBackupExport']>
     readonly useFullBackupImport: UnwrapRef<typeof import('../composables/useFullBackupImport')['useFullBackupImport']>
     readonly useId: UnwrapRef<typeof import('vue')['useId']>
     readonly useImportErrorState: UnwrapRef<typeof import('../composables/useProfileImportFlow')['useImportErrorState']>
