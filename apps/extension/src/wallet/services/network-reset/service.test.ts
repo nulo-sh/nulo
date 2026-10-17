@@ -329,6 +329,52 @@ describe("NetworkResetService — the view", () => {
 	})
 })
 
+describe("NetworkResetService — what deleting a paused network deletes", () => {
+	const importedEntry = (index: number, name: string, oldAddress: string, done: boolean) => ({
+		type: 1 as const,
+		index,
+		name,
+		visible: true,
+		oldAddress,
+		newAddress: `${oldAddress}-new`,
+		encryptedSigningKey: "sealed",
+		done,
+	})
+
+	test("names the journal's imported accounts, moved or not, and no derived one", async () => {
+		const h = await harness()
+		await staleTestnet(h)
+		const [derivedOne, derivedTwo] = journalOf().accounts
+		await putJournal(
+			h,
+			journalOf({
+				accounts: [
+					derivedOne,
+					importedEntry(0, "Savings", importedAddr(SK1), true),
+					derivedTwo,
+					importedEntry(1, "Trading", importedAddr(SK2), false),
+				],
+			}),
+		)
+		expect((await h.reset.getStaleNetwork("tn"))?.reset?.imported).toEqual(["Savings", "Trading"])
+
+		const d = await harness()
+		await putNetwork(d, { id: "tn", name: "Testnet", chainId: OLD, l1ChainId: L1, kind: "testnet" })
+		await putAccount(d, { chainId: OLD, address: derived(L1, 0), index: 0 })
+		await putJournal(d, journalOf())
+		expect((await d.reset.getStaleNetwork("tn"))?.reset?.imported).toEqual([])
+	})
+
+	test("after the rewrite, also names an imported row on the new chain the journal does not name, cleaned", async () => {
+		const h = await harness()
+		await putNetwork(h, { id: "tn", name: "Testnet", chainId: NEW, l1ChainId: L1, kind: "testnet" })
+		await putImported(h, NEW, SK1, 0, { address: `${importedAddr(SK1)}-new` })
+		await putImported(h, NEW, SK2, 1, { name: "Ho\u202eld\u200b" })
+		await putJournal(h, journalOf({ purged: true, accounts: [importedEntry(0, "Savings", importedAddr(SK1), true)] }))
+		expect((await h.reset.getStaleNetwork("tn"))?.reset?.imported).toEqual(["Savings", "Hold"])
+	})
+})
+
 describe("NetworkResetService — the node decision (A6)", () => {
 	const userNode = (h: H, info: { l1ChainId: number; rollupVersion: number } | Error) => {
 		const getNodeInfo = info instanceof Error ? vi.fn().mockRejectedValue(info) : vi.fn().mockResolvedValue(info)

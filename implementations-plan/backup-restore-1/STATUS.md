@@ -5,3 +5,4 @@
 - 2026-10-17 dual audit round 1: Codex conditional approve (R1-R5), Opus conditional approve (F-1..F-12); all dispositions in the ledger; #671 moved to arc 1; OA-2..OA-6 filed.
 - 2026-10-17 final fresh Codex pass: conditional approve (owner ask for the orphan-key record) → applied as OA-5 → resumed: approve. #710 filed for P38-05's B.
 - 2026-10-17 arc 1 phase 1 (C5, D7): gate green — lint; vitest MigrationBarrier + useFullBackupImport + useRestoreAgain 177/177; the three new tests fail on the pre-fix code.
+- 2026-10-17 arc 1 phase 2 (D5, C1-C3): gate green — lint; typecheck:all; vitest network-reset + stale-network + networks page + the fixtures' suites 428/428.

@@ -194,7 +194,7 @@ describe("useProfileBootstrap", () => {
 	})
 
 	test("a failed automatic run re-reads the view, so its paused journal shows R1 instead of nothing", async () => {
-		const paused = staleView({ accounts: [], reset: { running: false, purged: true, doneCount: 0 } })
+		const paused = staleView({ accounts: [], reset: { running: false, purged: true, doneCount: 0, imported: [] } })
 		reset.getStaleNetwork.mockResolvedValueOnce(staleView({ accounts: [] })).mockResolvedValue(paused)
 		reset.resetStaleNetwork.mockImplementationOnce(async (networkId: string) => {
 			queueMicrotask(() => reset.onStaleNetworkChanged.invoke({ profileId: "prof-1", networkId, failed: true }))

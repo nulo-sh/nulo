@@ -9,6 +9,7 @@
 <script setup>
 /** Utils */
 import { managers } from "@/utils/core"
+import * as staleCopy from "@/components/stale-network/copy"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -38,6 +39,21 @@ const networkId = computed(() => route.params.id)
 const network = computed(() => appStore.networks.find((n) => n.id === networkId.value))
 const isActive = computed(() => appStore.network?.id === networkId.value)
 const canDelete = computed(() => !isActive.value && appStore.networks.length > 1)
+
+/** A reset that names this network, with the imported accounts deleting it would delete. A running
+ *  reset's takeover covers this page, so only a paused one's view is read. */
+const heldReset = ref(null)
+let resetReads = 0
+const syncHeldReset = async () => {
+	const read = ++resetReads
+	const id = networkId.value
+	const pending = await managers.networkReset.getPendingReset()
+	const view = pending?.networkId === id && !pending.running ? await managers.networkReset.getStaleNetwork(id) : null
+	if (read !== resetReads) return
+	heldReset.value = pending?.networkId === id ? { imported: view?.reset?.imported ?? [] } : null
+}
+managers.networkReset.onStaleNetworkChanged.add(syncHeldReset)
+void syncHeldReset()
 
 async function refreshNetworks() {
 	appStore.networks = await managers.network.getNetworks()
@@ -129,7 +145,12 @@ const handleDeleteNetwork = () => {
 		confirm_text: "Yes, delete chain",
 		confirm_color: "red",
 		title: `Delete ${network.value.name}?`,
-		description: "This wipes accounts, balances, tokens, and PXE state on this chain. This cannot be undone.",
+		description: [
+			"This wipes accounts, balances, tokens, and PXE state on this chain. This cannot be undone.",
+			heldReset.value?.imported.length ? staleCopy.deleteChainImported(heldReset.value.imported) : "",
+		]
+			.filter(Boolean)
+			.join(" "),
 		callback: async () => {
 			const target = network.value
 			try {
@@ -151,6 +172,10 @@ const handleDeleteNetwork = () => {
 // If the network row disappears (deleted from elsewhere), redirect back to the list.
 watch(network, (n) => {
 	if (!n) router.replace("/popup/settings/networks")
+})
+
+onBeforeUnmount(() => {
+	managers.networkReset.onStaleNetworkChanged.remove(syncHeldReset)
 })
 </script>
 

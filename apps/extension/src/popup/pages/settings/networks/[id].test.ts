@@ -2,11 +2,21 @@ import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { useAppStore } from "@/stores/app.store"
+import { useCacheStore } from "@/stores/cache.store"
 import SettingsPageShell from "@/components/composite/SettingsPageShell.vue"
+import type { PendingReset, StaleNetworkView } from "@/wallet/services/network-reset/client"
 import NetworkDetail from "./[id].vue"
 
+const networkReset = vi.hoisted(() => ({
+	getPendingReset: vi.fn(async (): Promise<PendingReset | null> => null),
+	getStaleNetwork: vi.fn(async (_id: string): Promise<Partial<StaleNetworkView> | null> => null),
+	onStaleNetworkChanged: { add: vi.fn(), remove: vi.fn() },
+}))
 vi.mock("@/utils/core", () => ({
-	managers: { network: { getNetworks: vi.fn(async () => []), setActiveNetwork: vi.fn(), getActiveNetwork: vi.fn() } },
+	managers: {
+		network: { getNetworks: vi.fn(async () => []), setActiveNetwork: vi.fn(), getActiveNetwork: vi.fn() },
+		networkReset,
+	},
 }))
 vi.mock("@/composables/useNetworkActivation", () => ({ useNetworkActivation: () => ({ activate: vi.fn(async () => "activated") }) }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
@@ -20,6 +30,8 @@ vi.mock("@/wallet/services/config/client", () => ({
 }))
 
 beforeEach(() => {
+	networkReset.getPendingReset.mockReset().mockResolvedValue(null)
+	networkReset.getStaleNetwork.mockReset().mockResolvedValue(null)
 	vi.stubGlobal("chrome", {
 		storage: {
 			local: {
@@ -92,5 +104,39 @@ describe("Settings › Network detail — an existing custom row is fully manage
 		// Only the non-primary endpoint can be deleted while two exist.
 		expect(wrapper.findAll('[data-testid="endpoint-delete-btn"]')).toHaveLength(1)
 		expect(wrapper.find('[data-testid="network-delete-chain-btn"]').exists()).toBe(true)
+	})
+})
+
+describe("Settings › Network detail — a paused reset of this network", () => {
+	const holdMine = (imported: string[]) => {
+		networkReset.getPendingReset.mockResolvedValue({ networkId: "mine", running: false })
+		networkReset.getStaleNetwork.mockResolvedValue({
+			networkId: "mine",
+			reset: { running: false, purged: true, doneCount: 0, imported },
+		})
+	}
+	const deleteConfirmText = async () => {
+		const wrapper = mountDetail()
+		await flushPromises()
+		await wrapper.get('[data-testid="network-delete-chain-btn"]').trigger("click")
+		return useCacheStore().confirm?.description
+	}
+	const WIPES = "This wipes accounts, balances, tokens, and PXE state on this chain. This cannot be undone."
+
+	test("Delete chain's confirmation names the imported accounts it also deletes", async () => {
+		holdMine(["Savings", "Trading"])
+		expect(await deleteConfirmText()).toBe(`${WIPES} It also deletes the imported accounts “Savings” and “Trading”.`)
+		expect(networkReset.getStaleNetwork).toHaveBeenCalledWith("mine")
+		holdMine(["Savings"])
+		expect(await deleteConfirmText()).toBe(`${WIPES} It also deletes the imported account “Savings”.`)
+	})
+
+	test("the confirmation is unchanged with no imported account, or when the reset names another network", async () => {
+		holdMine([])
+		expect(await deleteConfirmText()).toBe(WIPES)
+		networkReset.getPendingReset.mockResolvedValue({ networkId: "alpha", running: false })
+		networkReset.getStaleNetwork.mockClear()
+		expect(await deleteConfirmText()).toBe(WIPES)
+		expect(networkReset.getStaleNetwork).not.toHaveBeenCalled()
 	})
 })

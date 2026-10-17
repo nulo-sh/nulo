@@ -83,7 +83,7 @@ function parkNextPendingRead(w: ReturnType<typeof fakeWorker>, answer: PendingRe
 describe("useStaleNetwork", () => {
 	test("each unlock resumes a paused reset on another network and shows its progress there", async () => {
 		const w = fakeWorker()
-		w.views.set("tn", view({ reset: { running: false, purged: true, doneCount: 0 } }))
+		w.views.set("tn", view({ reset: { running: false, purged: true, doneCount: 0, imported: [] } }))
 		w.state.pending = { networkId: "tn", running: false }
 		const { stale } = harness(w)
 		await stale.resume("p1")
@@ -215,7 +215,7 @@ describe("useStaleNetwork", () => {
 
 	test("a resume begun for an ended profile starts nothing", async () => {
 		const w = fakeWorker()
-		w.views.set("tn", view({ reset: { running: false, purged: true, doneCount: 0 } }))
+		w.views.set("tn", view({ reset: { running: false, purged: true, doneCount: 0, imported: [] } }))
 		const release = parkNextPendingRead(w, { networkId: "tn", running: false })
 		const { stale } = harness(w)
 		const resumed = stale.resume("p1")
@@ -320,7 +320,7 @@ describe("useStaleNetwork", () => {
 
 	test("a completion this popup heard before its session began is finished at the resume", async () => {
 		const w = fakeWorker()
-		w.views.set("tn", view({ reset: { running: true, purged: true, doneCount: 0 } }))
+		w.views.set("tn", view({ reset: { running: true, purged: true, doneCount: 0, imported: [] } }))
 		w.state.pending = { networkId: "tn", running: true }
 		let scope: ReturnType<StaleNetworkDeps["scope"]>
 		const booted = w.views.get("tn") ?? null
@@ -340,7 +340,7 @@ describe("useStaleNetwork", () => {
 	test("a completion both the event and the catch-up see runs once, whichever comes first", async () => {
 		for (const eventFirst of [true, false]) {
 			const w = fakeWorker()
-			const booted = view({ reset: { running: true, purged: true, doneCount: 0 } })
+			const booted = view({ reset: { running: true, purged: true, doneCount: 0, imported: [] } })
 			let release!: (v: StaleNetworkView | null) => void
 			const parked = new Promise<StaleNetworkView | null>((r) => (release = r))
 			;(w.client.getStaleNetwork as ReturnType<typeof vi.fn>).mockImplementationOnce(() => parked)
@@ -370,7 +370,7 @@ describe("useStaleNetwork", () => {
 			expect(stale.running.value).toBe(target)
 			stale.clear()
 			expect(stale.running.value).toBeNull()
-			const resumed = view({ accounts: [], reset: { running: true, purged: false, doneCount: 0 } })
+			const resumed = view({ accounts: [], reset: { running: true, purged: false, doneCount: 0, imported: [] } })
 			w.views.set("tn", resumed)
 			w.state.pending = { networkId: "tn", running: true }
 			w.emit({ networkId: "tn", running: true })
@@ -565,7 +565,7 @@ describe("runsUnattended", () => {
 			runsUnattended(view({ accounts: [], unmovable: ["Imported 1"], cause: { networkReset: false, addressesMoved: true } })),
 		).toBe(false)
 		expect(runsUnattended(view({ accounts: [], blocked: true }))).toBe(false)
-		expect(runsUnattended(view({ accounts: [], reset: { running: false, purged: false, doneCount: 0 } }))).toBe(false)
+		expect(runsUnattended(view({ accounts: [], reset: { running: false, purged: false, doneCount: 0, imported: [] } }))).toBe(false)
 		expect(runsUnattended(view({ accounts: [], heldBy: { name: "X" } }))).toBe(false)
 		expect(runsUnattended(view({ accounts: [], otherPending: { networkId: "x", name: "X" } }))).toBe(false)
 		expect(runsUnattended(view({ accounts: [], switchToSeedNode: true }))).toBe(false)
