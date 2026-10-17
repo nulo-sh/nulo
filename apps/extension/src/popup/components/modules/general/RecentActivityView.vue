@@ -854,7 +854,7 @@ onBeforeUnmount(() => {
 			<span aria-hidden="true">·</span>
 			<button
 				type="button"
-				class="type--label"
+				class="type--label-section"
 				:class="$style.stalled_retry"
 				:disabled="syncHealth.retrying.value"
 				data-testid="incoming-sync-retry"
@@ -955,7 +955,7 @@ onBeforeUnmount(() => {
 
 <style module>
 .archive_link {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	user-select: none;
 	color: var(--nulo-secondary);
 

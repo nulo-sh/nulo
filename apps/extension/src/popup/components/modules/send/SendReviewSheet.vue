@@ -166,7 +166,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 						<span v-else-if="queuedCapText" data-testid="send-review-fee-cap">Fee up to {{ queuedCapText }}, based on your last send. If it comes out higher, we ask again.</span>
 						<span v-else-if="queuedSponsored" data-testid="send-review-fee-queued">Fee · {{ QUEUED_SPONSORED_COPY }}</span>
 						<span v-else>Fee · {{ feeText || "—" }}</span>
-						<b v-if="paid" class="type--data">{{ paid }}</b>
+						<b v-if="paid" class="type--meta">{{ paid }}</b>
 					</div>
 
 					<Button
@@ -248,7 +248,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 }
 
 .to {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 }
 
@@ -260,7 +260,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 }
 
 .rows_head {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	padding: 6px 10px;
 	border-bottom: 1px solid var(--nulo-border);
 
@@ -308,7 +308,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 }
 
 .row_word {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 }
 
 .why {
@@ -318,7 +318,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 }
 
 .remedy {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	align-self: flex-start;
 	margin-top: 2px;
 
@@ -328,7 +328,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 }
 
 .fee {
-	composes: type--data from global;
+	composes: type--meta from global;
 	display: flex;
 	justify-content: space-between;
 	gap: 8px;

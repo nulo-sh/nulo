@@ -14,18 +14,18 @@ const props = defineProps({
 		default: "medium",
 	},
 	title: String,
-	/** `name` for a row titled with a person's or account's name, `data` for an identifier. */
+	/** `name` for a row titled with a person's or account's name, `meta` for an identifier. */
 	titleVariant: {
 		type: String,
 		default: "row-title",
-		validator: (value) => ["row-title", "name", "data"].includes(value),
+		validator: (value) => ["row-title", "name", "meta"].includes(value),
 	},
 	description: String,
-	/** `data` for an address or id. */
+	/** `meta` for an address or id. */
 	descriptionVariant: {
 		type: String,
 		default: "caption",
-		validator: (value) => ["caption", "data"].includes(value),
+		validator: (value) => ["caption", "meta"].includes(value),
 	},
 	icon: String,
 	iconBgColor: {
@@ -137,11 +137,11 @@ const Root = (_, { slots }) => {
 				<!-- Labels: Title & Description -->
 				<Flex direction="column" gap="4" wide>
 					<Flex align="center" gap="6">
-						<Text v-if="titleVariant === 'data'" :id="titleId" data-testid="setting-title" variant="data" color="primary" :class="[$style.title, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
+						<Text v-if="titleVariant === 'meta'" :id="titleId" data-testid="setting-title" variant="meta" color="primary" :class="[$style.title, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
 						<Text v-else :id="titleId" data-testid="setting-title" :variant="titleVariant === 'name' ? 'name' : 'row-title'" color="primary" :class="[$style.title, $style.title_size, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
 						<slot name="titleSuffix" />
 					</Flex>
-					<Text v-if="description || $slots.description" data-testid="setting-description" :variant="descriptionVariant === 'data' ? 'data' : 'caption'" color="tertiary" :class="$style.description">
+					<Text v-if="description || $slots.description" data-testid="setting-description" :variant="descriptionVariant === 'meta' ? 'meta' : 'caption'" color="tertiary" :class="$style.description">
 						<slot name="description">{{ description }}</slot>
 					</Text>
 				</Flex>

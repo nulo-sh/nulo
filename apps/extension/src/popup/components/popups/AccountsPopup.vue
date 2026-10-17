@@ -75,7 +75,7 @@ const handleManageAccounts = () => {
 						:title="acc.name"
 						titleVariant="name"
 						:description="trimAddress(acc.address, 6, 4, '...')"
-						descriptionVariant="data"
+						descriptionVariant="meta"
 						:icon="account.address === acc.address ? 'square-check' : 'square'"
 						:iconFillColor="account.address === acc.address ? 'primary' : 'tertiary'"
 						data-testid="account-item"

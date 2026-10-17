@@ -224,7 +224,7 @@ onBeforeUnmount(() => {
 }
 
 .chip {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 	background: var(--nulo-surface-low);
 	border: 1px solid var(--hairline-soft);
@@ -244,7 +244,7 @@ onBeforeUnmount(() => {
 
 /* The slot takes the room left and the chip inside hugs its name up to its cap. A zero basis takes no
  * share of the shrink, so the direction chip breaks only once the slot is at its floor: the chip's
- * border, padding and one "…" in `type--tag`, so the chip never draws empty. */
+ * border, padding and one "…" at the chip's 10px, so the chip never draws empty. */
 .app_slot {
 	display: flex;
 	flex: 1 1 0;
@@ -254,6 +254,15 @@ onBeforeUnmount(() => {
 /* Below the shared cap in this row only; two classes outrank the shared chip's `flex-shrink: 0`. */
 .app_slot > .app_chip {
 	flex-shrink: 1;
+}
+
+/* A dApp transfer's two chips keep 10px semibold: at 11px they outgrow the row, and the app chip shows
+ * only "…" where its name was drawn. */
+.chips > .chip,
+.app_slot > .app_chip {
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
 }
 
 /* A line's first character is clipped, never ellipsed; an empty atomic inline in its place lets the
