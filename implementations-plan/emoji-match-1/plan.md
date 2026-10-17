@@ -1,7 +1,7 @@
 ---
 plan: emoji-match-1
 tier: light
-status: planned, awaiting approval (2026-10-16)
+status: delivered as a draft PR held for OA-1 and OA-2 (2026-10-17)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -16,6 +16,16 @@ issues: [587]
 ---
 
 # emoji-match-1: the emoji check on every connection (#587, P28-04 = A)
+
+## Outcome
+
+- **Date:** 2026-10-17.
+- **Status:** delivered as one draft PR against `dev`, `feat(dapp): show the emoji check on every connection, remembered apps too`, held as a draft until the owner answers OA-1 and OA-2 (`OWNER-ASKS.md`; decision page 31, P31-03 and P31-04); the merge that lands it closes this plan.
+- **Shipped:** the emoji check on every connection, remembered apps too (#587, P28-04 = A): `handleSessionEstablished` shows it for every establishment and releases no hold; every verify admission reserves a window slot (`needsWindow` removed, D4); both "Skip this check next time" rows and `setTrustedVerification` removed (OA-1 A); They don't match unchanged (OA-2 A); `trustedVerification` kept in the schema, inert (D2); `session-reconnect.test.ts` reshaped into one scenario (D5). Screenshots in `screenshots/`.
+- **Dropped, rejected, superseded:** keeping `needsWindow` (Opus, D4): rejected. An sdk change (D6): out of scope, filed as #605. Closing a stale check window, or freeing a remembered reconnect's slot when its tab goes before key exchange: new lifecycle state, not taken (#606). No lesson promoted: `lessons.md` is at its budget, and the one candidate (a harness caps a background command below the full local network suite's length) is session tooling, kept in `lessons/phase-3.md`.
+- **Known limits:** #606.
+- **Open items:** #605 (`blocked:external`); OA-1 and OA-2 with the owner.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 The owner signed P28-04 = A on 2026-10-16: "Show the match on every connection: the verification window opens with the grid, 'They match' and 'Reject', and remembering skips only the capability consent that follows." One arc, one PR against `dev`, `Closes #587`.
 
