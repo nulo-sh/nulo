@@ -219,6 +219,12 @@ Follow `implementations-plan/README.md` § Post-implementation standard at revis
 
 **Arc 1, round 2, Codex** (same session): no new material finding. One Low: three plan passages still described the pre-fix barrel comment, `import-drivers` comment and `biome.json` rule; corrected. It verified the fixes, that `--only` keeps Biome's file and VCS filtering (287 e2e files), and that nothing pins the `lint` script's text. Loop converged.
 
+**Arc 2, round 1, Codex** (gpt-6.1-sol, high, session `01a14801`): conditional approve, 2 Low, both accepted: a rewritten docblock still cited an archived plan; two new comments narrated their bodies. It verified every canary budget and assertion against `04b10075`, the sentinel, the nine `clickSelector` targets and the `pkill` scan. **Opus lens** (general-purpose, opus): approve, 2 Low, both accepted: the `pkill` case gains its success control (the set of files that spell it is exactly `sandbox-ownership.ts`); a repeated doc sentence goes.
+
+**Arc 2, round 2, Codex** (same session): no new material finding; it verified the fixes, with negative controls on the `pkill` case. Loop converged.
+
+**Cross-arc, fresh Codex** (gpt-6.1-sol, high, session `01a14811`, `eb5dc145..HEAD`): approve, no findings (moved declarations, predicate table, ownership and imports, canary pass conditions, docs).
+
 ## Seeds
 
 Drafts until the orchestrator approves; no ELI5 is produced (orchestrator-owned).
