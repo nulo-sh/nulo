@@ -43,8 +43,15 @@ const emit = defineEmits<{ copy: [] }>()
 	border: 1px solid var(--nulo-border);
 }
 
+/* At 360 px a column must still hold the widest BIP39 word (eight letters) beside its number. */
 .three {
 	grid-template-columns: repeat(3, 1fr);
+	column-gap: 8px;
+	padding-inline: 12px;
+}
+
+.three .cell {
+	gap: 4px;
 }
 
 .four {
@@ -62,7 +69,7 @@ const emit = defineEmits<{ copy: [] }>()
 .num {
 	composes: type--meta from global;
 	flex: none;
-	width: 18px;
+	width: 16px;
 	color: var(--txt-tertiary);
 }
 

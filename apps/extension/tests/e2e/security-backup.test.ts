@@ -31,6 +31,17 @@ test("Home's reminders clear as they are done: How Aztec works opens its page, a
 	const tokens = await revealSeedPhrase(page, PASSWORD)
 	expect(tokens.length).toBe(24)
 	for (const token of tokens) expect(token).toMatch(/^[a-z]+$/)
+	// At the popup's fixed 360 px every cell holds the widest BIP39 word, eight letters, beside its number.
+	const overruns = await page.evaluate(() =>
+		[...document.querySelectorAll<HTMLElement>('[data-testid="reveal-content-word"]')].flatMap((word, i) => {
+			const shown = word.textContent
+			word.textContent = "abstract"
+			const past = word.getBoundingClientRect().right - (word.parentElement as HTMLElement).getBoundingClientRect().right
+			word.textContent = shown
+			return past > 0.5 ? [`cell ${i + 1} by ${past.toFixed(1)} px`] : []
+		}),
+	)
+	expect(overruns).toEqual([])
 
 	await navigateByHash(page, "#/popup/general")
 	await page.waitForSelector(sel("get-started"), { visible: true, timeout: 30_000 })

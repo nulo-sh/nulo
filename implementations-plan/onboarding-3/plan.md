@@ -290,6 +290,7 @@ Outline B (local `outline-b.md`, safest-first) split the arc into two PRs: B1 (t
 | D13 | The funded-banner e2e (implementation) | `network/hero-prices-unavailable`: a funded password wallet restored from a backup, unpriced; banner, reveal, banner gone | `frozen-account-canary`, which reveals the phrase before it mints, so its wallet never shows the banner |
 | D14 | How Aztec works in e2e (implementation) | one step in `security-backup`: click the row, a tab opens, the row leaves; `nulo.sh` joins the smoke egress guard's declared refusals | no e2e (whether a tab opened after the awaited write survives the browser's popup rule is invisible to jsdom) |
 | D15 | The banner's glyph (implementation) | the warning glyph in the house warning orange, as the drawing shows | `--nulo-accent`, which is cream in the dark theme |
+| D16 | Settings' three columns at 360 px (found by the PR screenshots) | 8 px between columns, 12 px side padding, 4 px number to word: an eight-letter word fits; `security-backup` puts one in every cell and checks it stays inside, both browsers | two columns (OA-8's other option, owner's call) |
 
 ## Audit verdicts
 
