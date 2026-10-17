@@ -1,0 +1,6 @@
+# backup-restore-1 — status
+
+- 2026-10-17 recon done (2 explorers); claims of #663 hold; #671's fix sketch leaves the status at "" (D7).
+- 2026-10-17 draft plan: three arcs, hold-not-drop for #663 (D1), OA-1 filed.
+- 2026-10-17 dual audit round 1: Codex conditional approve (R1-R5), Opus conditional approve (F-1..F-12); all dispositions in the ledger; #671 moved to arc 1; OA-2..OA-6 filed.
+- 2026-10-17 final fresh Codex pass: conditional approve (owner ask for the orphan-key record) → applied as OA-5 → resumed: approve. #710 filed for P38-05's B.
