@@ -16,6 +16,7 @@ import {
 	type CategoricalFailureLabel,
 	categoricalLabel,
 	humanizeErrorKind,
+	journalCardOriginLabel,
 	type JournalTerminalDisplay,
 	journalTerminalDisplay,
 	type SendOutcome,
@@ -535,6 +536,20 @@ describe("a failed send its record proves never left the wallet", () => {
 // confusable with a link. `sanitizeJournalSubtitle` brackets URL-shaped
 // values so the UI can render the text plainly without it reading as
 // "tap to open."
+describe("journalCardOriginLabel — the in-flight row's app chip", () => {
+	test.each([
+		["", "dApp"],
+		["uniswap.example", "uniswap.example"],
+		["https://evil.example", "[https://evil.example]"],
+	])("a dApp named %j reads %j, as its settled row does", (subtitle, label) => {
+		expect(journalCardOriginLabel(recordWith({ kind: "dapp_execute", subtitle, terminalAt: null }))).toBe(label)
+	})
+
+	test("a transfer has no app chip", () => {
+		expect(journalCardOriginLabel(recordWith({ kind: "transfer", subtitle: "", terminalAt: null }))).toBeNull()
+	})
+})
+
 describe("sanitizeJournalSubtitle — URL-shape defense", () => {
 	test("null / undefined / empty → null", () => {
 		expect(sanitizeJournalSubtitle(null)).toBeNull()

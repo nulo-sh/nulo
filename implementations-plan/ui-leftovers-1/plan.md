@@ -87,7 +87,7 @@ Decision page 35 (2026-10-17) settled five leftovers and, as an amendment the or
 - E2E, in the existing drag test: the hero-to-header drag now also contains the shortened address. A drag inside the address selects exactly its shortened text and records no clipboard write; a plain mouse click after it writes the full address once (a page-side write counter, read right after the click: the write is the handler's first call). Failure modes jsdom cannot show: a browser ignoring `user-select` in a native button, and the real drag-then-click order. Estimate +0.5 s per browser; measure it.
 - **Gate**: fast layers plus `bun run --cwd apps/extension test Header`, then `navigation` by the smoke recipe on Chrome, then on Firefox (selection is a browser difference).
 
-### Phase 3: the in-flight row's dApp chip (#628)
+### Phase 3: the in-flight row's dApp chip (#628) ✓
 - Files: `utils/tx-enrichment.ts`, `utils/journal-state.ts`, `journal-state.test.ts`, `RecentActivityView.test.ts`.
 - Tests: `journalCardOriginLabel` over `""` ("dApp"), a name, and a schemeful name (bracketed). The awaiting-card table row `{ kind: "dapp_execute" }` (`RecentActivityView.test.ts:988`) gives `originLabel: "dApp"`. The terminal case at `journal-state.test.ts:285` stays `null` (OA-1).
 - **Gate**: fast layers plus `bun run --cwd apps/extension test journal-state tx-enrichment RecentActivityView` exit 0.
@@ -116,6 +116,7 @@ Decision page 35 (2026-10-17) settled five leftovers and, as an amendment the or
 - D2 #628: fallback at render, inside `journalCardOriginLabel`; the settled and in-flight sites share `DAPP_LABEL`. No new helper: it would have one caller.
 - D3 #618: shared pure predicate plus a `settled` gate on Holdings; Home is unchanged.
 - D4 #634: the rule reads the toast's own `action`; no per-call duration.
+- D7 #628 (implementation): `journalCardOriginLabel` returns null for every kind but `dapp_execute` (was: null for `transfer` only), so the fallback can never put "dApp" on a future kind's card; `token_import` never reaches the awaiting card today (`ACTIVITY_FEED_KINDS`).
 - D6 #639 (implementation, 2026-10-17): the e2e's plain-click control clears the selection first. Chrome holds a selection through a click inside it (probe, lessons/phase-0.md), so the first click on a selected address only clears it, as on every `selectedWithin` site.
 - D5 #583 (amendment, 2026-10-17, orchestrator spawn; P35-08 B signed on page 35): wrap by `flex-wrap` on the existing slot floor, so the switch point is #650's floor by construction; no new threshold, no measurement code.
 

@@ -986,7 +986,7 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 			],
 			[
 				{ kind: "dapp_execute" },
-				{ title: "Transaction", icon: "zap", originLabel: null, amount: null, amountSymbol: null, transferTypeLabel: null },
+				{ title: "Transaction", icon: "zap", originLabel: "dApp", amount: null, amountSymbol: null, transferTypeLabel: null },
 			],
 		]
 		H.getOperations.mockResolvedValue(table.map(([over], i) => inFlight(`op-${i}`, 100 - i, over)))
