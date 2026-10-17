@@ -1,0 +1,5 @@
+# Phase 1: the two-chip row
+
+- 2026-10-17, red proof: on the bare base both scenarios failed only on the new `activity-direction-chip` testid, which proves nothing about the layout. Re-run on the base layout with the testid added (invisible): the dApp transfer's chip read `below: true` at 96 px and the large row's direction one line at 96 px, as planned.
+- 2026-10-17, gate: Chrome and Firefox rows.test.ts 9/9 at --retry=0. The extension's figures differ from the scratch page's (41 px chip at 2.5 USDC in both browsers, not 33), so OA-1's table was re-measured in the extension with a scratch spec kept outside the repo.
+- 2026-10-17, high-scale screenshots of the floor: Chrome drew "S…" with the ellipsis in the padding, Firefox "SH" cut at the border with no ellipsis. Cause: CSS UI 3 § text-overflow keeps a line's first character. Fix (plan D5): an empty inline-block `::before` takes the first place; both engines then draw "…" alone, every wider chip byte-identical. A `<style>` injected for the experiment was blocked by the popup's CSP; a constructed stylesheet (`adoptedStyleSheets`) was not.

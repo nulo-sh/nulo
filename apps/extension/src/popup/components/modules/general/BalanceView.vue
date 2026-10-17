@@ -356,7 +356,7 @@ onBeforeUnmount(() => {
 				priced assets only
 			</div>
 
-			<!-- Glyphs only: the padlock and globe are the token rows' vocabulary, so no word doubles them. -->
+			<!-- Glyphs only: the two squares are the token rows' vocabulary, so no word doubles them. -->
 			<Flex v-if="tokenToDisplay" align="center" justify="center" gap="12" :class="$style.breakdown">
 				<Tooltip textAlign="left" delay="300">
 					<span :class="$style.breakdown_item">
@@ -538,7 +538,7 @@ onBeforeUnmount(() => {
 	color: var(--nulo-secondary);
 }
 
-/* Same private/public vocabulary as TokenCard's split: bone lock = private, grey globe = public. */
+/* Keep in step with TokenCard's split: one private/public vocabulary on every balance. */
 .breakdown_private {
 	display: inline-flex;
 	color: var(--nulo-accent);

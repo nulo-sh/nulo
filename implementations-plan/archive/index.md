@@ -167,6 +167,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [home-onboarding-chrome](home-onboarding-chrome/plan.md) — completed in part — History filtered from a token page, the token page's header, onboarding's stored theme, Account State under Developer, one own window per flow, the store Send frame; the Firefox loopback permission row stopped by its probe
 - [home-refresh](home-refresh/plan.md) — completed — the locked home-screen spec implemented as a light, reversible change
 - [hygiene](hygiene/plan.md) — completed — technical follow-ups that change no screen
+- [icons-d2-1](icons-d2-1/plan.md) — completed — Direction 2 glyphs everywhere, icons.json and the Material font retired, the private and public marks as squares (#602, #590)
 - [import-stage-deadlines](import-stage-deadlines/plan.md) — completed — import stage timing and console-capture fixes in the e2e suite
 - [incoming-public-transfers](incoming-public-transfers/plan.md) — completed — incoming public token transfers indexed into the activity feed
 - [incoming-sync-indicator](incoming-sync-indicator/plan.md) — superseded by holdings-loading-sync — a per-token indicator for incoming history backfill
@@ -278,6 +279,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [sw-wallet-protocol](sw-wallet-protocol/plan.md) — completed — the service-worker boot and wallet protocol path under the complexity budget
 - [testers-fixes-1](testers-fixes-1/plan.md) — completed — selectable text, the toolbar sentence, back keeps scroll, 2 s success toasts, a display-only Home hero (#580 #581 #582 #584 #586)
 - [testers-fixes-2](testers-fixes-2/plan.md) — completed — one-line dApp activity rows with a 96 px app chip, the details App row breaking anywhere, Home's hero fixed over a scrolling middle (#583, #592)
+- [testers-fixes-3](testers-fixes-3/plan.md) — completed — a dApp transfer's two chips on one line with the app chip smaller, a whole "…" at its floor, and the journal App row on the transaction page's shared rules (#583 P34-08 D, #629)
 - [third-party-notices](third-party-notices/plan.md) — completed — every extension build writes and checks a third-party notices file
 - [token-identity](token-identity/plan.md) — completed — distinct faucet and bridge token identities, and a scope-gated `isTokenRegistered` RPC
 - [token-list-live-check](token-list-live-check/plan.md) — completed — an advisory `prepare` step that checks each token-list entry's address, class, symbol and decimals on a public node before the owner approves `sign`
