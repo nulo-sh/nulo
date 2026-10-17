@@ -14,9 +14,9 @@
  *   5. A background restart later, the re-derived account still signs, proves, and lands a tx
  *      (the background's re-derivation path throws "account address inconsistency" on drift, so
  *      an ok result pins re-derivation AND execution).
- *   6. After every prove, the PXE's state lives in its OPFS tree and in no `pxe/` IndexedDB
- *      database (an upstream path opening one would leave a plaintext store the profile erase
- *      never removes).
+ *   6. Once every prove has run, the PXE's only storage is its `pxe` OPFS tree: no other OPFS
+ *      root entry, and no IndexedDB database but bb.js's public CRS cache (an upstream store
+ *      opened beside the injected one would hold plaintext state the profile erase never removes).
  *
  * Every stage asserts an exact outcome — no ok-or-error tolerances in this file. Run it
  * prover-ON per bump, on Chrome and on Firefox: `bun run e2e:agent
@@ -207,21 +207,19 @@ describe("frozen-account canary — the execution gate every @aztec bump runs, o
 			await waitForTxMined(aztecConfig!, finalTxHash, 300_000)
 			step("post-restart tx mined — re-derived frozen account fully operational")
 
-			// ── Stage 6: the PXE's stores are in OPFS only ──
+			// ── Stage 6: the PXE's only storage is its `pxe` OPFS tree ──
 			// Storage is per extension origin, so the popup sees what the PXE host wrote.
 			const storagePopup = await openPopup(ctx)
 			const stores = await storagePopup.evaluate(async () => {
-				const root = await navigator.storage.getDirectory()
-				const opfsPxeRoot = await root.getDirectoryHandle("pxe").then(
-					() => true,
-					() => false,
-				)
-				const idbPxe = (await indexedDB.databases()).map((d) => d.name).filter((n) => n?.startsWith("pxe/"))
-				return { opfsPxeRoot, idbPxe }
+				const root = (await navigator.storage.getDirectory()) as unknown as { entries(): AsyncIterable<[string, unknown]> }
+				const opfsRoot: string[] = []
+				for await (const [name] of root.entries()) opfsRoot.push(name)
+				const idb = (await indexedDB.databases()).map((d) => d.name).filter((n) => n !== "keyval-store")
+				return { opfsRoot, idb }
 			})
 			await storagePopup.close()
-			expect(stores).toEqual({ opfsPxeRoot: true, idbPxe: [] })
-			step("PXE stores in OPFS; no pxe/ IndexedDB database")
+			expect(stores).toEqual({ opfsRoot: ["pxe"], idb: [] })
+			step("PXE storage is the pxe OPFS tree alone; no IndexedDB database but the CRS cache")
 		},
 	)
 })
