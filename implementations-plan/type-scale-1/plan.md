@@ -55,6 +55,7 @@ For a person reading the wallet in the 360 by 600 popup, on any screen, in eithe
 | Send's publish strip facts (`PublishStrip.vue`, `tag` today) | `label-section` with today's 10 px, 600, 0.08 em through `OVERRIDES` | **OA-4 C** (P34-05) |
 | Home's header chips (`Header.vue`, `tag` today) | `label-section` with today's 10 px, 600, 0.08 em through `OVERRIDES`: at 11 px "TESTNET" is cut | **OA-6**, open; ships A |
 | Manage accounts' visible address lines (`accounts/index.vue`, `meta`) | `meta` with today's 11 px through `OVERRIDES`: at 13 px an imported row's marker and tail outgrow the line | **OA-7**, open; ships A |
+| Lines the signed 13 px wraps: the execute window's full arguments, Send's token-mode "≈" line, a token row's dollar figure past 20 characters | as signed; nothing is cut | **OA-8**, open; ships A |
 
 Out of scope: icons (#590, lane icons-d2-1), the sheet (#590), Home's layout (#592, testers-fixes-2), any copy, any other role, the store images.
 
@@ -116,6 +117,7 @@ Out of scope: icons (#590, lane icons-d2-1), the sheet (#590), Home's layout (#5
 - **OA-6** (open, found in Phase 3): Home's header chips keep today's 10 px semibold; at the signed 11 px the network name is cut to "TEST…". This departs from the signed Home picture on those two words until the owner answers.
 - **OA-7** (open, found in Phase 4): Manage accounts' visible address lines keep today's 11 px; at the signed 13 px an imported row's marker and tail outgrow the line. As today, an imported row shows none of its address head.
 - **The tx detail page's App value** wraps at any character in both browsers, as its rule says it does (D14). Firefox kept a letter with the digits after it, which at 13 px left the first line 20 px short; breaks may now fall beside punctuation in Chrome too.
+- **OA-8** (open, found in the review loop): the signed 13 px wraps three lines that fit before. On the execute window, an address beside "FROM:" takes three lines with its last two characters alone. Send's token-mode "≈" sits on its own line. A token row's dollar figure of about $1 trillion or more puts its cents on a third line. Nothing is cut; it ships as signed.
 
 ## Phases
 
@@ -201,6 +203,8 @@ Done 2026-10-17: two smoke failures, each answered by the panel (OA-7 and D13; D
 | D12 | How OA-4 C keeps the publish facts at today's look | One compound rule (`.strip .cell`) and three `OVERRIDES` entries on role `label-section` | A tenth role (unsigned); keeping `tag` alive for one site (D1) |
 | D13 | Manage accounts' address line at 13 px (2026-10-17, `account-import-export.test.ts`, both browsers): "imported", " · " and the 4-character tail take 117 px of a 100 px line | OA-7 to the owner; OA-1's form A ships on every visible row's line (one `:has` rule that only lifts specificity, one `OVERRIDES` entry; panel: Codex and Opus, both "ship-A") | OA-1 B (no cap or track to widen: the width lives in the marker's copy, the row's actions or the tail the test pins); imported rows alone at 11 px beside 13 px rows (a look nobody signed, and the sweep may see no imported row) |
 | D14 | The App value on the tx detail page, Firefox only at 13 px (`rows.test.ts`): `break-all` keeps a letter with the digits after it, so the first line ends 20.4 px short against a 7.8 px glyph (Chrome 4.8 px) | Add `line-break: anywhere` beside `break-all` (a correction recorded as a deviation: the rule's comment and the test both state "breaks anywhere"): 4.83 px in both browsers; a browser that ignores it falls back to today's `break-all` | An owner ask (it restores what the rule was written to do); loosening the test's one-glyph bound (weakens the gate) |
+| D15 | Three gaps in the layout gate the review loop found (Codex r1 and Opus, reproduced) | Corrections, each with a control in the probe test. An ellipsis counts only on a block container: a flex or grid box draws none. Text a box clips paints as far as the shorter of its text and its box. A field or clipping child counts toward its parent's text by what it paints, so a clip that grew to its text is read | Leave them: the gate would miss text a flex box cuts and a clip that grew past its cell, and would flag short text in a wide clipping box |
+| D16 | Wraps the signed 13 px causes: the execute window's arguments, Send's token-mode line, the row's dollar cap (Opus) | OA-8 to the owner; ships as signed, since nothing is cut and every digit shows | Make room or keep the earlier size now: each is an unsigned layout change, and P34-03 signed 13 px for every identifier |
 
 ## Audit verdicts
 
