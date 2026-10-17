@@ -47,6 +47,7 @@ For a person who uses dApps with long names and function names, on Home, History
   - D6, no `tabindex` on the middle (Codex asked for one; rejected on measurement). Both browsers keep today's Tab and PageDown behaviour inside the scrolling content, and `tabindex` restores none of the cases lost over the hero (recon § Keyboard). Its only effect is a new Chrome Tab stop nobody signed. PageDown and the wheel with focus or the pointer over the fixed hero no longer scroll: that follows from the signed layout (OWNER-ASKS N-1).
   - D7, a prop over a `:has()` selector: the cards already hold the two labels that decide it, and a selector cannot name a class from another CSS module.
   - D8 (implementation): Phase 1's "NEMI" row is a settled dApp call, seeded through `seedTransaction`'s `method`, which records no transfer for a non-transfer name; the browser test so covers both the terminal and the settled card's one-line path ([lessons/phase-1.md](lessons/phase-1.md)).
+  - D9 (implementation): `snack-placement`'s Home case reads the Cancel at the top of the middle instead of at its scroll's end, where the fixed hero now clips the row out of view; its closing check states the snack's rule at each position, since a centred row now sits in the snack's resting band and correctly lifts it. The PageDown check focuses an activity row: a holding row needs a balance row only a background restart loads ([lessons/phase-2.md](lessons/phase-2.md)).
 
 ## Security & Adversarial Considerations
 
