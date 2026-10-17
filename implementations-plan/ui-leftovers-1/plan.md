@@ -11,6 +11,16 @@ base: dev 1b93cbfa
 issues: "#635, #639, #628, #618, #634, #583 (all closed by the one arc)"
 ---
 
+## Outcome
+
+- **Date:** 2026-10-17. **Status:** completed; delivered by the PR to `dev` that closes #635, #639, #628, #618, #634 and #583.
+- **Shipped:** the token page's hero display only (P35-01 B); the header's address drag-selectable, a click still copying it whole (P35-03 A); a nameless dApp's in-flight row with the "dApp" chip (P35-04 A); Holdings' unavailable state from the first price answer (P35-05 A); a success with an action open 6 s (P35-09 B); a dApp transfer's app chip under its direction chip past its floor (P35-08 B, the amendment, Phase 6). Implementation deviations: D6 (the e2e's plain click starts from no selection), D7 (the fallback reads the kind `dapp_execute`).
+- **Known limits:** #674 (a dApp named only whitespace shows a blank chip, in flight and settled).
+- **Open items:** #675 (OA-1), #676 (OA-2), #677 (OA-3), owner decisions; each ships its "what ships now" form.
+- **Lessons:** none promoted: `lessons.md` sits at 8,163 of 8,192 B and nothing in it is superseded; Chrome keeping a selection through a click inside it lives at its e2e (`navigation.test.ts`) and in [lessons/phase-0.md](lessons/phase-0.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
+- **Length:** over the light target, for the amendment's phase and the review verdicts.
+
 # ui-leftovers-1: five small fixes from decision page 35
 
 Decision page 35 (2026-10-17) settled five leftovers and, as an amendment the orchestrator relayed at implementation, #583's two-chip row past its room (P35-08 B, Phase 6); each pick is a Decision block on its issue. One arc, one PR against `dev`. Over the light target by the amendment's phase. Recon: [recon.md](recon.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md).
