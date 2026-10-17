@@ -108,6 +108,8 @@ const transferTypeLabel = computed(() => {
 })
 
 const originLabel = computed(() => getOriginLabel(props.tx.origin))
+/** A dApp's call with no direction is titled by the function it called. */
+const oneLineTitle = computed(() => Boolean(originLabel.value) && !transferTypeLabel.value)
 const hashSlice = computed(() => {
 	if (!props.tx.hash) return null
 	return `${props.tx.hash.slice(0, 4)}...${props.tx.hash.slice(-4)}`
@@ -155,6 +157,7 @@ onBeforeUnmount(() => {
 		:txTransferTypeLabel="transferTypeLabel"
 		:txStatus="txStatusAttr"
 		:txHash="props.tx.hash"
+		:oneLineTitle="oneLineTitle"
 	>
 		<template #badge>
 			<Icon :name="statusIcon" size="12" :color="STATUS_ICON_FILL[statusColor]" :class="$style.status_icon" data-testid="activity-status-icon" />
@@ -172,8 +175,12 @@ onBeforeUnmount(() => {
 			     dApp-initiated transfer sets both — render both so the
 			     dApp identity isn't silently dropped. -->
 			<span :class="$style.title_sep">·</span>
-			<span v-if="transferTypeLabel" :class="$style.chip">{{ transferTypeLabel }}</span>
-			<span v-if="originLabel" :class="$style.chip">{{ originLabel }}</span>
+			<span v-if="transferTypeLabel && originLabel" :class="$style.chips">
+				<span :class="$style.chip">{{ transferTypeLabel }}</span>
+				<span :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
+			</span>
+			<span v-else-if="transferTypeLabel" :class="$style.chip">{{ transferTypeLabel }}</span>
+			<span v-else :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
 		</template>
 
 		<template #secondary>
@@ -217,6 +224,17 @@ onBeforeUnmount(() => {
 	background: var(--nulo-surface-low);
 	border: 1px solid var(--hairline-soft);
 	padding: 1px 4px;
+}
+
+.app_chip {
+	composes: app_chip from "../../../../components/composite/activity/activity-card.module.css";
+}
+
+/* The direction and the app do not fit one line beside a symbol and an amount: the app wraps under. */
+.chips {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 4px 6px;
 }
 
 /* The 24px box overhangs the 14px secondary row and the 10px glyph, so the row keeps its rhythm. */

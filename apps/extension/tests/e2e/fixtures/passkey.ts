@@ -1,8 +1,9 @@
 import type { Browser, Page } from "puppeteer"
 import { PASSKEY_COPY } from "@/utils/passkey-copy"
 import { type VirtualAuthenticator, holdNextCredentialGet, virtualAuthenticator } from "./browser"
-import { clickByTestId, expectNoNameField, waitForHash, waitForServiceReady } from "./extension"
-import { waitForToast } from "./helpers"
+import { clickByTestId, expectNoNameField, waitForHash } from "./dom"
+import { waitForServiceReady } from "./wallet-pages"
+import { waitForToast } from "./widgets"
 
 /** Drive the passkey-register flow on a fresh extension at /popup/register.
  *  Preconditions: `setupPasskeyVirtualAuth` has been called against the popup

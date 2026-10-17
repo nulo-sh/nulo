@@ -35,20 +35,31 @@ defineProps({
 	transferTypeLabel: { type: String as PropType<string | null>, default: null },
 	amount: { type: String as PropType<string | null>, default: null },
 	amountSymbol: { type: String as PropType<string | null>, default: null },
+	/** The title names the function a dApp called: one line, cut at its end. */
+	oneLineTitle: { type: Boolean, default: false },
 	/** The route the row opens. */
 	to: { type: String, default: undefined },
 })
 </script>
 
 <template>
-	<TransactionCardLayout :title="title" :icon="activityIcon" :amount="amount" :amountSymbol="amountSymbol" :to="to" testId="tx-terminal-card">
+	<TransactionCardLayout
+		:title="title"
+		:icon="activityIcon"
+		:amount="amount"
+		:amountSymbol="amountSymbol"
+		:to="to"
+		:oneLineTitle="oneLineTitle"
+		testId="tx-terminal-card"
+	>
 		<template #badge>
 			<Icon :name="icon" size="12" :color="STATUS_ICON_FILL[color]" :class="$style.status_icon" :data-color="color" data-testid="activity-status-icon" />
 		</template>
 
 		<template v-if="transferTypeLabel || originLabel" #title-trailing>
 			<span :class="$style.title_sep">·</span>
-			<span :class="$style.chip">{{ transferTypeLabel || originLabel }}</span>
+			<span v-if="transferTypeLabel" :class="$style.chip">{{ transferTypeLabel }}</span>
+			<span v-else :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
 		</template>
 
 		<template #secondary>
@@ -85,5 +96,9 @@ defineProps({
 
 .chip {
 	composes: chip from "./activity-card.module.css";
+}
+
+.app_chip {
+	composes: app_chip from "./activity-card.module.css";
 }
 </style>

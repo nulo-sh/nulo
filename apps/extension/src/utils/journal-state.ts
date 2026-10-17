@@ -350,6 +350,8 @@ export interface JournalTerminalCardProps {
 	transferTypeLabel: string | null
 	amount: string | null
 	amountSymbol: string | null
+	/** The title names the function a dApp called, whether or not the dApp's name survived. */
+	oneLineTitle: boolean
 	state: JournalTerminalVisualState
 	subtitle: string
 	icon: GlyphName
@@ -381,7 +383,7 @@ export function buildJournalTerminalCardProps(op: OperationRecord, ctx: JournalT
 
 type JournalCardFields = Pick<
 	JournalTerminalCardProps,
-	"title" | "activityIcon" | "originLabel" | "transferTypeLabel" | "amount" | "amountSymbol"
+	"title" | "activityIcon" | "originLabel" | "transferTypeLabel" | "amount" | "amountSymbol" | "oneLineTitle"
 >
 
 /** One token lookup, and the amount formatted before the title and the transfer type are read. */
@@ -404,6 +406,7 @@ function transferCardFields(op: OperationRecord, ctx: JournalTerminalCardCtx): J
 		transferTypeLabel: transferTypeLabel(op),
 		amount,
 		amountSymbol,
+		oneLineTitle: false,
 	}
 }
 
@@ -415,6 +418,7 @@ function dappCardFields(op: OperationRecord): JournalCardFields {
 		transferTypeLabel: null,
 		amount: null,
 		amountSymbol: null,
+		oneLineTitle: true,
 	}
 }
 

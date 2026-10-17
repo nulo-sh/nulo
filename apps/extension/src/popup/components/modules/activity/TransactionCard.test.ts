@@ -68,6 +68,7 @@ const STUBS = {
 			"txStatus",
 			"txHash",
 			"to",
+			"oneLineTitle",
 		],
 	},
 }
@@ -116,6 +117,41 @@ describe("modules/activity/TransactionCard (settled)", () => {
 		// originLabel from tx.origin.name — must NOT be silently dropped by
 		// the `||` template when the call shape ALSO produces a transferType.
 		expect(w.text()).toContain("example.dapp.io")
+	})
+
+	describe("the title row, with a dApp's function and host as the wire carries them", () => {
+		const HOST = "staging-nemi-interface.nemi-e65.workers.dev"
+		const dappCallTx = {
+			hash: TX_HASH,
+			status: TxStatus.Proposed,
+			calls: [{ contract: "0xamm", method: "swap_exact_tokens_for_tokens_supporting_fee_on_transfer_tokens", args: [] }],
+			origin: { type: OriginType.DAPP, name: HOST },
+		}
+		const layout = (w: ReturnType<typeof mountCard>) => w.findComponent(STUBS.TransactionCardLayout)
+
+		test("a call names the dApp and no direction: its function title is cut to one line and the host sits in the app chip", () => {
+			const w = mountCard(dappCallTx)
+			expect(layout(w).props("title")).toBe("Swap Exact Tokens For Tokens Supporting Fee On Transfer Tokens")
+			expect(layout(w).props("oneLineTitle")).toBe(true)
+			expect(w.find('[data-testid="activity-app-chip"]').text()).toBe(HOST)
+			expect(w.html()).not.toMatch(/chips/)
+		})
+
+		test("a transfer from the popup is never cut and has no app chip", () => {
+			const { origin: _origin, ...popupTransfer } = dappTransferTx
+			const w = mountCard(popupTransfer)
+			expect(layout(w).props("oneLineTitle")).toBe(false)
+			expect(w.find('[data-testid="activity-app-chip"]').exists()).toBe(false)
+			expect(w.text()).toContain("Private → Public")
+		})
+
+		test("a dApp's transfer keeps its symbol whole and groups the direction with the app chip, which can wrap under it", () => {
+			const w = mountCard({ ...dappTransferTx, origin: { type: OriginType.DAPP, name: HOST } })
+			expect(layout(w).props("oneLineTitle")).toBe(false)
+			const group = w.find('[data-testid="activity-app-chip"]').element.parentElement
+			expect(group?.className).toMatch(/chips/)
+			expect(group?.textContent).toBe(`Private → Public${HOST}`)
+		})
 	})
 
 	describe("a dApp's mint, as the wire carries it", () => {

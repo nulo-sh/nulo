@@ -29,6 +29,8 @@ const appStore = useAppStore()
 
 const arrivals = inject(ARRIVALS_KEY, undefined)
 
+const scrolled = ref(false)
+
 /** One client and one seeding kick for the page: the hero and the list read the same snapshot. */
 const tokenService = new TokenServiceClient()
 const seed = useSeedStatus({
@@ -39,6 +41,10 @@ const seed = useSeedStatus({
 		return profileId !== undefined && chainId !== undefined ? { profileId, chainId } : undefined
 	},
 })
+
+function onScroll(event) {
+	scrolled.value = event.currentTarget.scrollTop > 0
+}
 
 watch(
 	() => [appStore.profile?.id, appStore.network?.chainId],
@@ -53,28 +59,75 @@ onBeforeUnmount(() => {
 
 <template>
 	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper">
-		<BalanceView :seedEntries="seed.entries.value" :seedReady="seed.ready.value" :arrival="arrivals?.latest.value ?? null" />
+		<div :class="$style.hero" data-testid="home-hero">
+			<BalanceView :seedEntries="seed.entries.value" :seedReady="seed.ready.value" :arrival="arrivals?.latest.value ?? null" />
+			<div aria-hidden="true" :class="[$style.scroll_shadow, scrolled && $style.scroll_shadow_visible]" data-testid="home-scroll-shadow" />
+		</div>
 
-		<Flex direction="column" gap="16" :class="$style.content">
-			<RecoveryModeBanner />
-			<RestoreOutcomeBanner />
-			<TokensView :seedEntries="seed.entries.value" :seedReady="seed.ready.value" @retry-seed="seed.retry" />
-			<RecentActivityView />
-		</Flex>
-
+		<div :class="$style.scroller" data-testid="home-scroller" @scroll.passive="onScroll">
+			<Flex direction="column" gap="16" :class="$style.content">
+				<RecoveryModeBanner />
+				<RestoreOutcomeBanner />
+				<TokensView :seedEntries="seed.entries.value" :seedReady="seed.ready.value" @retry-seed="seed.retry" />
+				<RecentActivityView />
+			</Flex>
+		</div>
 	</Flex>
 </template>
 
 <style module>
 .wrapper {
 	flex: 1;
-
-	overflow: auto;
+	min-height: 0;
 
 	background: var(--app-bg);
 }
 
+.hero {
+	position: relative;
+	flex: none;
+}
+
+/* Over the rows' raised actions (z-index 1) as they scroll under it. The middle stays unpositioned
+ * and outside any stacking context, so a popup's scrim drawn inside it still covers the whole frame. */
+.scroll_shadow {
+	position: absolute;
+	right: 0;
+	bottom: -12px;
+	left: 0;
+	z-index: 2;
+	height: 12px;
+
+	pointer-events: none;
+	background: linear-gradient(to bottom, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0));
+	opacity: 0;
+
+	transition: opacity 0.18s cubic-bezier(0.4, 0, 1, 1);
+}
+
+:global([theme="light"]) .scroll_shadow {
+	background: linear-gradient(to bottom, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0));
+}
+
+.scroll_shadow_visible {
+	opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.scroll_shadow {
+		transition: none;
+	}
+}
+
+/* A block around the content column: as the scroll container, the column would let a child with
+ * hidden overflow shrink below its content. */
+.scroller {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+}
+
 .content {
-	padding: 0 24px var(--nav-clearance) 24px;
+	padding: 16px 24px var(--nav-clearance) 24px;
 }
 </style>
