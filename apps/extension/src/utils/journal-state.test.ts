@@ -16,6 +16,7 @@ import {
 	type CategoricalFailureLabel,
 	categoricalLabel,
 	humanizeErrorKind,
+	journalCardOriginLabel,
 	type JournalTerminalDisplay,
 	journalTerminalDisplay,
 	type SendOutcome,
@@ -526,6 +527,20 @@ describe("a failed send its record proves never left the wallet", () => {
 			label: "Stopped when the wallet locked",
 			context: "The wallet locked while this was in progress.",
 		})
+	})
+})
+
+describe("journalCardOriginLabel — the in-flight row's app chip", () => {
+	test.each([
+		["", "dApp"],
+		["uniswap.example", "uniswap.example"],
+		["https://evil.example", "[https://evil.example]"],
+	])("a dApp named %j reads %j", (subtitle, label) => {
+		expect(journalCardOriginLabel(recordWith({ kind: "dapp_execute", subtitle, terminalAt: null }))).toBe(label)
+	})
+
+	test("a transfer has no app chip", () => {
+		expect(journalCardOriginLabel(recordWith({ kind: "transfer", subtitle: "", terminalAt: null }))).toBeNull()
 	})
 })
 

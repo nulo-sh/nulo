@@ -30,6 +30,7 @@ describe("approveOrRollbackDiscoverySession", () => {
 			sessionId: "S1",
 			approverProfileId: "prof-A",
 			attemptOpen: () => true,
+			rowAwaited: () => false,
 			approveDiscovery: h.approve,
 			rejectDiscovery: h.reject,
 			deleteSession: h.del,
@@ -52,6 +53,7 @@ describe("approveOrRollbackDiscoverySession", () => {
 			sessionId: "S1",
 			approverProfileId: "prof-A",
 			attemptOpen: () => true,
+			rowAwaited: () => false,
 			approveDiscovery: h.approve,
 			rejectDiscovery: h.reject,
 			deleteSession: h.del,
@@ -71,6 +73,7 @@ describe("approveOrRollbackDiscoverySession", () => {
 			sessionId: "S1",
 			approverProfileId: "prof-A",
 			attemptOpen: () => true,
+			rowAwaited: () => false,
 			approveDiscovery: h.approve,
 			rejectDiscovery: h.reject,
 			deleteSession: h.del,
@@ -98,6 +101,7 @@ describe("approveOrRollbackDiscoverySession", () => {
 			sessionId: "S1",
 			approverProfileId: "prof-A",
 			attemptOpen: () => true,
+			rowAwaited: () => false,
 			approveDiscovery: h.approve,
 			rejectDiscovery: h.reject,
 			deleteSession: h.del,
@@ -108,7 +112,30 @@ describe("approveOrRollbackDiscoverySession", () => {
 		expect(approved).toBe(false)
 		expect(h.approve).toHaveBeenCalledWith("r1")
 		expect(h.pv.size).toBe(0) // scheduled entry rolled back
+		expect(h.del).toHaveBeenCalledWith("S1") // no page connects on the row
 		expect(h.reject).not.toHaveBeenCalled() // nothing to reject — it's already gone
+	})
+
+	test("keeps the row when the approval did not land while another discovery of the app waits on it", async () => {
+		const h = harness()
+		h.approve.mockReturnValueOnce(false)
+		const approved = await approveOrRollbackDiscoverySession({
+			discovery: discoveryAt("r1", Date.now() - 5_000),
+			sessionId: "S1",
+			approverProfileId: "prof-A",
+			attemptOpen: () => true,
+			rowAwaited: () => true,
+			approveDiscovery: h.approve,
+			rejectDiscovery: h.reject,
+			deleteSession: h.del,
+			pendingVerification: h.pv,
+			logger: noopLogger,
+		})
+
+		expect(approved).toBe(false)
+		expect(h.del).not.toHaveBeenCalled()
+		expect(h.pv.size).toBe(0)
+		expect(h.reject).not.toHaveBeenCalled()
 	})
 
 	test("an attempt abandoned while the writes ran is rolled back: no marker, no approval", async () => {
@@ -119,6 +146,7 @@ describe("approveOrRollbackDiscoverySession", () => {
 			sessionId: "S1",
 			approverProfileId: "prof-A",
 			attemptOpen: () => false,
+			rowAwaited: () => false,
 			approveDiscovery: h.approve,
 			rejectDiscovery: h.reject,
 			deleteSession: h.del,

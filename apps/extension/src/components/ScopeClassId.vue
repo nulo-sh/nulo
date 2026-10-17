@@ -69,7 +69,7 @@ function onKey(e: KeyboardEvent) {
 }
 
 .id {
-	composes: type--data from global;
+	composes: type--meta from global;
 	/* The row is a control; the id it shows stays selectable. */
 	user-select: text;
 	color: var(--nulo-secondary);

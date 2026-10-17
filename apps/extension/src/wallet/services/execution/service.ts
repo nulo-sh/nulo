@@ -10,7 +10,12 @@ import {
 } from "@aztec-labs/stdlib/abi"
 import type { AuthWitness } from "@aztec-labs/stdlib/auth-witness"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
-import { computeContractAddressFromInstance, ContractInstanceWithAddressSchema, computePartialAddress } from "@aztec-labs/stdlib/contract"
+import {
+	CompleteAddress,
+	computeContractAddressFromInstance,
+	ContractInstanceWithAddressSchema,
+	computePartialAddress,
+} from "@aztec-labs/stdlib/contract"
 import z from "zod"
 import { NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
 import type { Network } from "@/wallet/services/network/spec"
@@ -1202,10 +1207,20 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 
 		await assertArtifactClassId(artifact, instance.currentContractClassId)
 
+		// A secret key registers the instance's own account or nothing: one that derives another
+		// address would add an account the dApp's contract grant never named.
+		const account = op.secretKey
+			? await CompleteAddress.fromSecretKeyAndPartialAddress(
+					await Fr.schema.parseAsync(op.secretKey),
+					await computePartialAddress(instance),
+				)
+			: undefined
+		if (account && !account.address.equals(instance.address)) throw InvalidWalletArgumentsError.forMethod("registerContract")
+
 		await this.pxeService.registerContract(networkInfoFrom(network), { instance, artifact })
 
-		if (op.secretKey) {
-			await this.pxeService.registerAccount(networkInfoFrom(network), op.secretKey, await computePartialAddress(instance))
+		if (op.secretKey && account) {
+			await this.pxeService.registerAccount(networkInfoFrom(network), op.secretKey, account.partialAddress)
 		}
 	}
 

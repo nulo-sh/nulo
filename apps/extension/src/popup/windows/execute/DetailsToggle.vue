@@ -5,7 +5,7 @@ defineProps<{ open: boolean; label: string }>()
 <template>
 	<button type="button" :aria-expanded="open" :class="$style.toggle">
 		<Icon name="chevron" size="10" color="secondary" aria-hidden="true" :class="[$style.chevron, open && $style.chevron_open]" />
-		<Text variant="label" color="secondary">{{ label }}</Text>
+		<Text variant="label-section" color="secondary">{{ label }}</Text>
 	</button>
 </template>
 

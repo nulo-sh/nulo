@@ -79,7 +79,7 @@ const hashSlice = computed(() => {
 }
 
 .chip {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	flex-shrink: 0;
 	white-space: nowrap;
 

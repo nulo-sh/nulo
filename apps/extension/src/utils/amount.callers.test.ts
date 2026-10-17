@@ -13,7 +13,7 @@ const SRC = resolve(__dirname, "..")
 /** File → [compact calls, plain calls]. The snack's plain call is its uncapped full amount. */
 const CALLS: Record<string, [number, number]> = {
 	"components/composite/activity/TransactionIncomingCard.vue": [1, 0],
-	"popup/components/modules/general/BalanceView.vue": [3, 0],
+	"popup/components/modules/general/BalanceView.vue": [2, 0],
 	"popup/components/modules/general/RecentActivityView.vue": [2, 0],
 	"popup/components/modules/general/TokenCard.vue": [3, 0],
 	"popup/pages/journal/[id].vue": [1, 0],

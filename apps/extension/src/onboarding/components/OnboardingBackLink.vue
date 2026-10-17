@@ -14,7 +14,7 @@ const router = useRouter()
 
 <style module>
 .back {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	align-self: flex-start;
 	display: inline-flex;
 	align-items: center;
