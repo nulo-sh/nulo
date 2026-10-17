@@ -28,7 +28,6 @@ export function atPosition(row: IncomingNoteRecord, note: RawNote): boolean {
 	)
 }
 
-/** The scope's live notes by the id of the row each one would have. */
 export function notesById(profileId: string, networkId: string, notes: RawNote[]): Map<string, RawNote> {
 	return new Map(notes.map((n) => [noteRecordId(profileId, networkId, n.uniqueNoteHash), n]))
 }

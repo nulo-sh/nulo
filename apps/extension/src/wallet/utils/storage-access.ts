@@ -6,11 +6,8 @@
 /** A storage area as the browser types it; Firefox has no `setAccessLevel`. */
 export type AccessLevelArea = Partial<Pick<chrome.storage.StorageArea, "setAccessLevel">>
 
-/**
- * Limits `area` to trusted contexts. The browser keeps the level across restarts, and the worker
- * sets it again at every start. Never rejects: where the method is missing the area stays as it
- * is, and where the browser refuses, one warning is logged.
- */
+/** Limits `area` to trusted contexts; the browser keeps the level across restarts. Never rejects:
+ *  a missing or refused call must not block start-up. */
 export async function restrictToTrustedContexts(area: AccessLevelArea): Promise<void> {
 	if (typeof area.setAccessLevel !== "function") return
 	try {

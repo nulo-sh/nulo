@@ -79,7 +79,6 @@ function debugLogger(): LoggerStore {
 	return new LoggerStore(config)
 }
 
-/** Starts the real service over `api`; `notes` is the `NoteService` stub. */
 async function startService(api: FakeBrowserApi, notes: Record<string, unknown> = NO_NOTES) {
 	const deletion = new ProfileDeletionState()
 	const session = 1
@@ -208,7 +207,7 @@ describe("IncomingTransferService composition — a received note, scanned in-pr
 	const ACCOUNT = `0x${"a1".repeat(32)}`
 	const UNIQUE_NOTE_HASH = `0x${"1c".repeat(32)}`
 	const NULLIFIER = `0x${"7e3d".repeat(16)}`
-	/** As the PXE wire carries it: the note's nullifier rides along with the fields a row keeps. */
+	/** Carries a nullifier, as the PXE's note does, so a copy of it into a row or a log line fails the check. */
 	const wireNote = {
 		contract: CONTRACT,
 		storageSlot: "0x1",
@@ -249,7 +248,6 @@ describe("IncomingTransferService composition — a received note, scanned in-pr
 			return started.service
 		}
 		const noteRows = async () => (await repo.listByContract("p1", "n1", CONTRACT)).filter((r) => r.kind === "note")
-		/** Every place a scan writes to, lower-cased, so the nullifier is found with or without `0x`. */
 		const surfaces = async () =>
 			JSON.stringify([
 				await api.storage.local.get(null),
