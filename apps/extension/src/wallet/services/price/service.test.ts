@@ -66,6 +66,7 @@ async function harness(opts?: { enabled?: boolean; profile?: ProfileInfo | undef
 		start: async () => {},
 		onActiveProfileChanged: new EventHandler<ProfileInfo | undefined>(),
 		getActiveProfile: async () => state.profile,
+		peekLiveSerial: () => (state.profile ? 1 : undefined),
 	}
 
 	const fakeTokenList = {
@@ -422,6 +423,66 @@ describe("PriceService — unlock-gated alarm lifecycle", () => {
 		})
 	})
 
+	test("locked: refreshIfStale fetches nothing and answers from the cache, empty or partial", async () => {
+		const { service, state, browserApi } = await harness({ profile: undefined })
+		expect((await service.refreshIfStale()).quotes).toEqual({})
+
+		const partial = { aztec: { coingeckoId: "aztec", usd: 0.0147, fetchedAt: state.nowMs, providerUpdatedAt: null } }
+		await browserApi.storage.local.set({ "nulo:core:token-prices": JSON.stringify(partial) })
+		expect((await service.refreshIfStale()).quotes).toEqual(partial)
+		expect(state.fetchCalls).toHaveLength(0)
+	})
+
+	test("a lock that lands before the unlock handler's refresh stops the fetch", async () => {
+		const { state, fakeProfile, fetchFn } = await harness()
+		const sessionRead = vi.fn(async () => state.profile)
+		fakeProfile.getActiveProfile = sessionRead
+		state.profile = undefined
+		fakeProfile.onActiveProfileChanged.invoke(PROFILE)
+		await vi.waitFor(() => expect(sessionRead).toHaveBeenCalled())
+		await new Promise((r) => setTimeout(r, 0))
+		expect(fetchFn).not.toHaveBeenCalled()
+	})
+
+	test("a lock queued behind the session read stops the fetch", async () => {
+		const { service, state, fakeProfile, fetchFn } = await harness()
+		fakeProfile.getActiveProfile = async () => {
+			const open = state.profile
+			state.profile = undefined
+			return open
+		}
+		expect((await service.refreshIfStale()).quotes).toEqual({})
+		expect(fetchFn).not.toHaveBeenCalled()
+	})
+
+	test("an unlock while a locked refresh reads the cache gets its own fetch", async () => {
+		const { service, state, fakeProfile, browserApi, fetchFn } = await harness({ profile: undefined })
+		const local = browserApi.storage.local
+		const read = local.get.bind(local)
+		let holdNextRead = false
+		let release: (() => void) | undefined
+		fakeProfile.getActiveProfile = async () => {
+			holdNextRead = !state.profile
+			return state.profile
+		}
+		vi.spyOn(local, "get").mockImplementation(async (keys) => {
+			if (holdNextRead) {
+				holdNextRead = false
+				await new Promise<void>((r) => {
+					release = r
+				})
+			}
+			return read(keys)
+		})
+		const locked = service.refreshIfStale()
+		await vi.waitFor(() => expect(release).toBeDefined())
+		state.profile = PROFILE
+		fakeProfile.onActiveProfileChanged.invoke(PROFILE)
+		await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1))
+		release?.()
+		await locked
+	})
+
 	test("onAlarmTick while locked reconciles (clears) instead of fetching", async () => {
 		const { service, state } = await harness()
 		state.profile = undefined
@@ -475,6 +536,18 @@ describe("PriceService — race pins", () => {
 		const { quotes } = await service.refreshIfStale()
 		expect(quotes).toEqual({})
 		expect(fetchFn).not.toHaveBeenCalled()
+	})
+
+	test("turning fiat display off while a locked refresh reads its session answers nothing", async () => {
+		const { service, state, fakeConfig, fakeProfile, browserApi } = await harness({ profile: undefined })
+		const partial = { aztec: { coingeckoId: "aztec", usd: 0.0147, fetchedAt: state.nowMs, providerUpdatedAt: null } }
+		await browserApi.storage.local.set({ "nulo:core:token-prices": JSON.stringify(partial) })
+		fakeProfile.getActiveProfile = async () => {
+			state.enabled = false
+			fakeConfig.onUpdate.invoke({ key: "showFiatValues", value: false })
+			return undefined
+		}
+		expect((await service.refreshIfStale()).quotes).toEqual({})
 	})
 
 	test("(KILL-SWITCH PIN) a stale refresh settling after a kill-switch restart does not clear the newer run's in-flight", async () => {
