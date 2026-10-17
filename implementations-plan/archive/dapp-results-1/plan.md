@@ -31,7 +31,7 @@ post_implementation_hardening: not scheduled
 
 # dapp-results-1: an app-facing `executeUtility` answer; the log redactor denies three execution keys
 
-One arc, one PR against `dev`. What a dApp receives from simulation and profiling was settled hours before this plan: #701 rebuilds a dApp's `simulateTx` answer from an allowlist and refuses every dApp `profileTx` ([`archive/dapp-boundary-1`](../archive/dapp-boundary-1/plan.md)). This plan adds what #701 left on the log side: `trim()` blanks the keys `witness`, `newNotes` and `taggingIndexRanges`, and the static log guard refuses them, so a value under any of them reaches a log line only as a placeholder. And a dApp's `executeUtility` answer is rebuilt from an allowlist, as #701 rebuilt `simulateTx`'s: the call's result, its offchain effects and the anchor block's timestamp, without the PXE's `stats` (phase 2, added by the orchestrator on approval). Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+One arc, one PR against `dev`. What a dApp receives from simulation and profiling was settled hours before this plan: #701 rebuilds a dApp's `simulateTx` answer from an allowlist and refuses every dApp `profileTx` ([`archive/dapp-boundary-1`](../dapp-boundary-1/plan.md)). This plan adds what #701 left on the log side: `trim()` blanks the keys `witness`, `newNotes` and `taggingIndexRanges`, and the static log guard refuses them, so a value under any of them reaches a log line only as a placeholder. And a dApp's `executeUtility` answer is rebuilt from an allowlist, as #701 rebuilt `simulateTx`'s: the call's result, its offchain effects and the anchor block's timestamp, without the PXE's `stats` (phase 2, added by the orchestrator on approval). Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Brief claims that did not hold
 
@@ -134,7 +134,7 @@ Gate `F`: `bun run lint && bun run typecheck:all && bun run test && bun run test
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) read at `563b0627`. Plan-specific values:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) read at `563b0627`. Plan-specific values:
 
 - **While implementing.** Comments state invariants only. Log attempts in `lessons/phase-N.md`; `agent-worktree status dapp-results-1 "phase N green: <next>"` at each gate. Stop after 3 failures on one step.
 - **Review loop, once over the net diff from `563b0627`.** `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`; resume with `resume-codex.sh`. On a quota or 401 error retry once with `CODEX_ACCOUNT=alejo-icloud`, else log the failed consult and continue. The prompt carries the diff, this plan with its ledger, the adversarial ask and the README's two rules verbatim. Hard stop at 3 rounds.
