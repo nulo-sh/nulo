@@ -20,173 +20,55 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
-import { reactive, ref, type Ref } from "vue"
+import {
+	approval,
+	beforeunloadAdds,
+	beforeunloadRemoves,
+	callLog,
+	completeInit,
+	getActiveProfileMock,
+	installWindowSpies,
+	onActiveProfileChangedAddMock,
+	rejectViaInteractionServiceMock,
+	resetWindowHarness,
+	routerMock,
+	routerPushMock,
+	windowsRemoveMock,
+} from "../../../../tests/helpers/approval-window-harness"
 
-// ── Mock state (closure refs so tests can flip values mid-test) ──────
-
-let requestIdMock = ref<string | undefined>(undefined)
-let dappMock = ref<{ name: string; url: string } | null>(null)
-let payloadMock: Ref<unknown> = ref(null)
-let isCancelledMock = ref(false)
-let loadPromiseResolve: (() => void) | undefined
-let getActiveProfilePromiseResolve: ((p: unknown) => void) | undefined
-let getActiveProfilePromiseReject: ((err: Error) => void) | undefined
-
-/** Ordered lifecycle log — the load-bearing pins assert exact sequences on this. */
-const callLog: string[] = []
-
-const loadInteractionPayloadMock = vi.fn(() => {
-	return new Promise<void>((resolve) => {
-		loadPromiseResolve = () => {
-			// Mirror the real composable: load() commits requestId first, then dapp.
-			requestIdMock.value = "req-123"
-			dappMock.value = { name: "Test DApp", url: "https://example.com" }
-			resolve()
-		}
-	})
-})
-
-const rejectViaInteractionServiceMock = vi.fn((reason: string) => {
-	callLog.push(`composableReject:${reason}`)
-})
 const resolveInteractionMock = vi.fn(async () => undefined)
 
-const getActiveProfileMock = vi.fn(() => {
-	return new Promise<unknown>((resolve, reject) => {
-		getActiveProfilePromiseResolve = resolve
-		getActiveProfilePromiseReject = reject
-	})
-})
-
-const profileServiceConnectMock = vi.fn(() => callLog.push("profile.connect"))
-const profileServiceDisconnectMock = vi.fn(() => callLog.push("profile.disconnect"))
-const interactionServiceConnectMock = vi.fn(() => callLog.push("interaction.connect"))
-const interactionServiceDisconnectMock = vi.fn(() => callLog.push("interaction.disconnect"))
-const onActiveProfileChangedAddMock = vi.fn()
-const windowsRemoveMock = vi.fn(() => callLog.push("windows.remove"))
-
-const routerPushMock = vi.fn()
-const routerMock = {
-	currentRoute: { value: { fullPath: "/windows/discover?requestId=req-route", query: { requestId: "req-route" } } },
-	push: routerPushMock,
-}
-
-const appStoreDefaults = () =>
-	reactive({
-		isSessionChecked: true,
-		isLogined: true,
-		account: { name: "TestAccount" },
-		network: { name: "TestNet" },
-		pageAwaitingAuth: "",
-	})
-let appStoreMock = appStoreDefaults()
-
-// ── Mocks (vi.mock is hoisted; factories run lazily at component import) ────
-
-vi.mock("@/composables/useDappInteractionPayload", () => ({
-	useDappInteractionPayload: vi.fn(() => ({
-		requestId: requestIdMock,
-		payload: payloadMock,
-		dapp: dappMock,
-		isCancelled: isCancelledMock,
-		load: loadInteractionPayloadMock,
-		reject: rejectViaInteractionServiceMock,
+vi.mock(
+	"@/composables/useDappInteractionPayload",
+	async () => (await import("../../../../tests/helpers/approval-window-harness")).payloadModule,
+)
+vi.mock("@/composables/useDappHostname", async () => (await import("../../../../tests/helpers/approval-window-harness")).hostnameModule)
+vi.mock(
+	"@/wallet/services/profile/client",
+	async () => (await import("../../../../tests/helpers/approval-window-harness")).profileClientModule,
+)
+vi.mock("@/wallet/services/dapp-interaction/client", async () =>
+	(await import("../../../../tests/helpers/approval-window-harness")).interactionClientModule(() => ({
+		resolveInteraction: resolveInteractionMock,
 	})),
+)
+vi.mock("@/stores/app.store", async () => (await import("../../../../tests/helpers/approval-window-harness")).appStoreModule)
+vi.mock("vue-router", async (importOriginal) => ({
+	...(await importOriginal<typeof import("vue-router")>()),
+	...(await import("../../../../tests/helpers/approval-window-harness")).routerModule,
 }))
-
-vi.mock("@/composables/useDappHostname", () => ({
-	useDappHostname: vi.fn(() => ({
-		hostname: ref("example.com"),
-		isSuspicious: ref(false),
-	})),
-}))
-
-// Vitest 4 requires `function` expressions (not arrow functions) for mocks
-// instantiated with `new`. Matches index.test.ts pattern.
-vi.mock("@/wallet/services/profile/client", () => ({
-	ProfileServiceClient: vi.fn(function () {
-		return {
-			getActiveProfile: getActiveProfileMock,
-			connect: profileServiceConnectMock,
-			disconnect: profileServiceDisconnectMock,
-			onActiveProfileChanged: { add: onActiveProfileChangedAddMock },
-		}
-	}),
-}))
-
-vi.mock("@/wallet/services/dapp-interaction/client", () => ({
-	DappInteractionServiceClient: vi.fn(function () {
-		return {
-			connect: interactionServiceConnectMock,
-			disconnect: interactionServiceDisconnectMock,
-			resolveInteraction: resolveInteractionMock,
-		}
-	}),
-}))
-
-vi.mock("@/stores/app.store", () => ({
-	useAppStore: () => appStoreMock,
-}))
-
-vi.mock("vue-router", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("vue-router")>()
-	return { ...actual, useRouter: () => routerMock }
-})
-
-// ── window listener spies (call-through so real registration still happens,
-//    letting tests deliver a synthetic `beforeunload` to the live listener) ──
-
-type WinListener = (type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) => void
-let nativeAdd: WinListener
-let nativeRemove: WinListener
-let addSpy: ReturnType<typeof vi.fn<WinListener>>
-let removeSpy: ReturnType<typeof vi.fn<WinListener>>
-
-const beforeunloadAdds = () => addSpy.mock.calls.filter((c) => c[0] === "beforeunload").length
-const beforeunloadRemoves = () => removeSpy.mock.calls.filter((c) => c[0] === "beforeunload").length
 
 beforeEach(() => {
-	nativeAdd = window.addEventListener.bind(window)
-	nativeRemove = window.removeEventListener.bind(window)
-	addSpy = vi.fn<WinListener>((type, listener, options) => {
-		if (type === "beforeunload") callLog.push("addEventListener:beforeunload")
-		nativeAdd(type, listener, options)
-	})
-	removeSpy = vi.fn<WinListener>((type, listener, options) => {
-		if (type === "beforeunload") callLog.push("removeEventListener:beforeunload")
-		nativeRemove(type, listener, options)
-	})
-	window.addEventListener = addSpy as unknown as typeof window.addEventListener
-	window.removeEventListener = removeSpy as unknown as typeof window.removeEventListener
-
-	// biome-ignore lint/suspicious/noExplicitAny: chrome runtime stub for tests
-	;(globalThis as any).chrome = {
-		windows: {
-			getCurrent: (_o: unknown, cb: (w: { id?: number }) => void) => cb({ id: 42 }),
-			remove: windowsRemoveMock,
-		},
-	}
+	installWindowSpies()
 })
 
 let w: ReturnType<typeof factory> | undefined
 
 afterEach(() => {
-	// Unmount FIRST so the component's removeEventListener goes through the spy
-	// and the real listener actually detaches (no cross-test beforeunload leaks).
+	// Unmount first, so the window's listener removal goes through the spy.
 	w?.unmount()
 	w = undefined
-	window.addEventListener = nativeAdd as unknown as typeof window.addEventListener
-	window.removeEventListener = nativeRemove as unknown as typeof window.removeEventListener
-	callLog.length = 0
-	requestIdMock = ref<string | undefined>(undefined)
-	dappMock = ref<{ name: string; url: string } | null>(null)
-	payloadMock = ref(null)
-	isCancelledMock = ref(false)
-	appStoreMock = appStoreDefaults()
-	loadPromiseResolve = undefined
-	getActiveProfilePromiseResolve = undefined
-	getActiveProfilePromiseReject = undefined
-	vi.clearAllMocks()
+	resetWindowHarness()
 })
 
 // ── Stubs (children flattened; overlay stub re-emits dismiss on click) ──
@@ -230,15 +112,6 @@ const factory = () => mount(Discover, { global: { stubs: STUBS } })
 
 type DiscoverVm = { reject: () => Promise<void>; closeWindow: (interactionCompleted?: boolean) => void }
 
-/** Drive init to completion: resolve the profile fetch, then the payload load. */
-const completeInit = async (profile: { id: string } = { id: "p1" }) => {
-	await flushPromises()
-	getActiveProfilePromiseResolve?.(profile)
-	await flushPromises()
-	loadPromiseResolve?.()
-	await flushPromises()
-}
-
 describe("discover window — shell lifecycle frozen oracle", () => {
 	test("A1: onMounted eager-connects exactly profile → interaction, in order", async () => {
 		w = factory()
@@ -247,30 +120,30 @@ describe("discover window — shell lifecycle frozen oracle", () => {
 	})
 
 	test("A2: session gate — init and beforeunload wait for isSessionChecked, then the delayed path completes", async () => {
-		appStoreMock.isSessionChecked = false
+		approval.appStore.isSessionChecked = false
 		w = factory()
 		await flushPromises()
 		expect(getActiveProfileMock).not.toHaveBeenCalled()
 		expect(beforeunloadAdds()).toBe(0)
-		appStoreMock.isSessionChecked = true
+		approval.appStore.isSessionChecked = true
 		await flushPromises()
 		expect(getActiveProfileMock).toHaveBeenCalledTimes(1)
 		// Drive the unblocked init through to completion: the listener must register
 		// exactly once on the delayed path too (not only the session-ready-at-mount path).
 		// Flush between the two resolves — loadInteractionPayload is only called after
-		// getActiveProfile resolves, so loadPromiseResolve isn't wired until then.
-		getActiveProfilePromiseResolve?.({ id: "p1" })
+		// getActiveProfile resolves, so approval.resolveLoad isn't wired until then.
+		approval.resolveProfile?.({ id: "p1" })
 		await flushPromises()
-		loadPromiseResolve?.()
+		approval.resolveLoad?.()
 		await flushPromises()
 		expect(beforeunloadAdds()).toBe(1)
 	})
 
 	test("A3: auth redirect short-circuits — pageAwaitingAuth set, no init, no beforeunload", async () => {
-		appStoreMock.isLogined = false
+		approval.appStore.isLogined = false
 		w = factory()
 		await flushPromises()
-		expect(appStoreMock.pageAwaitingAuth).toBe(routerMock.currentRoute.value.fullPath)
+		expect(approval.appStore.pageAwaitingAuth).toBe(routerMock.currentRoute.value.fullPath)
 		expect(routerPushMock).toHaveBeenCalledWith({ path: "/popup/auth" })
 		expect(getActiveProfileMock).not.toHaveBeenCalled()
 		expect(beforeunloadAdds()).toBe(0)
@@ -281,11 +154,11 @@ describe("discover window — shell lifecycle frozen oracle", () => {
 		await flushPromises()
 		// init is suspended on getActiveProfile — listener must not exist yet.
 		expect(beforeunloadAdds()).toBe(0)
-		getActiveProfilePromiseResolve?.({ id: "p1" })
+		approval.resolveProfile?.({ id: "p1" })
 		await flushPromises()
 		// Still inside init (payload load pending).
 		expect(beforeunloadAdds()).toBe(0)
-		loadPromiseResolve?.()
+		approval.resolveLoad?.()
 		await flushPromises()
 		expect(beforeunloadAdds()).toBe(1)
 	})
@@ -295,7 +168,7 @@ describe("discover window — shell lifecycle frozen oracle", () => {
 		// registered anyway so a failed popup still rejects the request on close.
 		w = factory()
 		await flushPromises()
-		getActiveProfilePromiseReject?.(new Error("profile-fetch-failed"))
+		approval.rejectProfile?.(new Error("profile-fetch-failed"))
 		await flushPromises()
 		expect(beforeunloadAdds()).toBe(1)
 	})
@@ -324,7 +197,7 @@ describe("discover window — shell lifecycle frozen oracle", () => {
 	test("A6: overlay @dismiss wires to closeWindow() with NO arg — listener stays attached", async () => {
 		w = factory()
 		await completeInit()
-		isCancelledMock.value = true
+		approval.isCancelled.value = true
 		await w.vm.$nextTick()
 		const overlay = w.find('[data-testid="cancelled-overlay"]')
 		expect(overlay.exists()).toBe(true)
@@ -359,7 +232,7 @@ describe("discover window — shell lifecycle frozen oracle", () => {
 		// (implementations-plan/archive/harden-quality-arc/window-characterization.md § 6.5) — this asymmetry is preserved verbatim.
 		w = factory()
 		await flushPromises()
-		expect(requestIdMock.value).toBeUndefined()
+		expect(approval.requestId.value).toBeUndefined()
 		await (w.vm as unknown as DiscoverVm).reject()
 		expect(rejectViaInteractionServiceMock).not.toHaveBeenCalled()
 		expect(beforeunloadRemoves()).toBe(0)
@@ -373,7 +246,7 @@ describe("discover window — shell lifecycle frozen oracle", () => {
 		// because the request is already cancelled, or a dismiss would double-reject.
 		w = factory()
 		await completeInit()
-		isCancelledMock.value = true
+		approval.isCancelled.value = true
 		await w.vm.$nextTick()
 		await w.find('[data-testid="cancelled-overlay"]').trigger("click")
 		expect(beforeunloadRemoves()).toBe(0) // dismiss did NOT detach the listener
