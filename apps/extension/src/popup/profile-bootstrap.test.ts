@@ -15,6 +15,7 @@ function makeDeps(over: Partial<FencedBootstrapDeps> = {}) {
 		bootstrap: async () => {},
 		isCurrent: () => true,
 		setFailure,
+		readFailure: () => null,
 		shouldToast: () => true,
 		toast,
 		...over,
@@ -78,5 +79,43 @@ describe("runFencedBootstrap", () => {
 		vi.spyOn(console, "error").mockImplementation(() => {})
 		await runFencedBootstrap(h.deps)
 		expect(h.setFailure).toHaveBeenCalledWith({ profileId: "pA", message: "raw string" })
+	})
+
+	describe("an earlier failure record at entry", () => {
+		type FailureRecord = { profileId: string; message: string } | null
+		function withRecord(initial: FailureRecord, isCurrent = () => true) {
+			let record = initial
+			let atBootstrap: FailureRecord | undefined
+			const h = makeDeps({
+				isCurrent,
+				readFailure: () => record,
+				setFailure: (next) => {
+					record = next
+				},
+				bootstrap: () => {
+					atBootstrap = record
+					return deferred().promise
+				},
+			})
+			return { h, atBootstrap: () => atBootstrap }
+		}
+
+		test("its own profile's record is retired before the bootstrap starts", () => {
+			const r = withRecord({ profileId: "pA", message: "earlier" })
+			void runFencedBootstrap(r.h.deps)
+			expect(r.atBootstrap()).toBeNull()
+		})
+
+		test("a run a newer event already superseded clears nothing", () => {
+			const r = withRecord({ profileId: "pA", message: "newer run's" }, () => false)
+			void runFencedBootstrap(r.h.deps)
+			expect(r.atBootstrap()).toEqual({ profileId: "pA", message: "newer run's" })
+		})
+
+		test("control: another profile's record stays", () => {
+			const r = withRecord({ profileId: "pB", message: "theirs" })
+			void runFencedBootstrap(r.h.deps)
+			expect(r.atBootstrap()).toEqual({ profileId: "pB", message: "theirs" })
+		})
 	})
 })
