@@ -2018,12 +2018,11 @@ describe("DappSendExecutor.estimateOperationFee: an operation the app pays for",
 		},
 	)
 
-	test("the priority part of the figure is set, with its formatted pair, only when it shows as more than zero", async () => {
+	test("the priority part of the figure is set only when the fee readout shows it as more than zero; neither figure comes formatted", async () => {
 		const { executor, built } = appPaidHarness(true)
 		const op = () => makeAztecOp({ feeSettings: EMBEDDED })
 		const plain = await executor.estimateOperationFee(op(), EMBEDDED)
 		expect(plain).not.toHaveProperty("priorityFee")
-		expect(plain).not.toHaveProperty("priorityFeeFormatted")
 
 		// 100 · 2e12 + 200 · 3e12 = 8e14 (0.0008 FJ), of which 100 · 1e12 + 200 · 1e12 = 3e14 is priority.
 		const gasSettings = new GasSettings(
@@ -2034,8 +2033,9 @@ describe("DappSendExecutor.estimateOperationFee: an operation the app pays for",
 		)
 		Object.assign(built, { txRequest: { authWitnesses: [], txContext: { gasSettings } } })
 		const result = await executor.estimateOperationFee(op(), EMBEDDED)
-		expect([result.maxFee, result.maxFeeFormatted]).toEqual(["800000000000000", "0.0008"])
-		expect([result.priorityFee, result.priorityFeeFormatted]).toEqual(["300000000000000", "0.0003"])
+		expect([result.maxFee, result.priorityFee]).toEqual(["800000000000000", "300000000000000"])
+		expect(result).not.toHaveProperty("maxFeeFormatted")
+		expect(result).not.toHaveProperty("priorityFeeFormatted")
 
 		// 300 · 1e9 = 3e11 rounds to "0" at six decimals: the row would read "includes a 0 FJ priority fee".
 		const tiny = new GasSettings(
@@ -2047,7 +2047,6 @@ describe("DappSendExecutor.estimateOperationFee: an operation the app pays for",
 		Object.assign(built, { txRequest: { authWitnesses: [], txContext: { gasSettings: tiny } } })
 		const rounded = await executor.estimateOperationFee(op(), EMBEDDED)
 		expect(rounded).not.toHaveProperty("priorityFee")
-		expect(rounded).not.toHaveProperty("priorityFeeFormatted")
 	})
 })
 

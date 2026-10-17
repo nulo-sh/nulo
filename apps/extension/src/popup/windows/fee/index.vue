@@ -19,7 +19,7 @@ import OperationCard from "../execute/OperationCard.vue"
 import SignerIdentityStrip from "../execute/SignerIdentityStrip.vue"
 
 /** Utils */
-import { formatFeeJuice, formatGasBalance } from "@/utils/fee-estimation"
+import { formatGasBalance } from "@/utils/fee-estimation"
 import { authwitDisplayCall, grantContentsOf, undecodedAll } from "../execute/display-calls"
 import { grantRefusalRow, readableGrants } from "../execute/call-surface"
 import { decodeOperationArguments, followKnownTokens, resolveOperations } from "../execute/operation-display"
@@ -108,8 +108,8 @@ const {
 const question = computed(() => payload.value?.feeQuestion)
 const grantsPending = computed(() => !!operation.value && grantContentsOf(operation.value).length > 0 && !decodedGrants.value)
 const grantRefusal = computed(() => grantRefusalRow(decodedGrants.value ?? []))
-const was = computed(() => (question.value ? formatFeeJuice(BigInt(question.value.approved)) : ""))
-const now = computed(() => (question.value ? formatFeeJuice(BigInt(question.value.fee)) : ""))
+/** Set by the fee card, which mounts once the question loads; Confirm stays off until then. */
+const confirmText = ref<string | null>(null)
 /** The app's own payment set the fee path: no speed was picked, and its claim, not the balance, pays. */
 const setByApp = computed(() => question.value?.feeSettings?.paymentMethod.kind === "embedded")
 const priority = computed(() => (setByApp.value ? undefined : (question.value?.feeSettings?.priorityLevel ?? "normal")))
@@ -271,8 +271,9 @@ onUnmounted(() => {
 					<template #fee>
 						<FeeRaisedCard
 							:payer="question.payer"
-							:was="was"
-							:now="now"
+							:approved="question.approved"
+							:fee="question.fee"
+							v-model:confirmText="confirmText"
 							:available="available"
 							:availableLoading="availableLoading"
 							:hideAvailable="setByApp"
@@ -289,7 +290,7 @@ onUnmounted(() => {
 			reject-label="Reject"
 			:reject-disabled="isLoading || !requestId"
 			confirm-testid="fee-confirm-btn"
-			:confirm-label="`Send for ${now} FJ`"
+			:confirm-label="confirmText ?? 'Send for FJ'"
 			:confirm-loading="isLoading"
 			:confirm-disabled="
 				processingError?.type === 'error' || !operation || !question || grantsPending || grantRefusal !== undefined || isInteractionCancelled

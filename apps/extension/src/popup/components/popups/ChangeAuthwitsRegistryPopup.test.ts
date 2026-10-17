@@ -27,7 +27,7 @@ const authwitsServiceMock = {
 
 const journalMock = { subscribeJob: vi.fn(), disconnect: vi.fn() }
 
-const ESTIMATE = { maxFee: "1000", maxFeeFormatted: "0.000000000000001", gasDetails: {} }
+const ESTIMATE = { maxFee: "1000", gasDetails: {} }
 /** The popup debounces each estimate by 500 ms. */
 async function estimatesLand() {
 	await vi.advanceTimersByTimeAsync(500)
@@ -392,7 +392,6 @@ describe("ChangeAuthwitsRegistryPopup — the fee check before proving", () => {
 	test("an estimate the account's own Fee Juice cannot cover keeps Send off", async () => {
 		authwitsServiceMock.estimateRegistryToggleFee.mockResolvedValueOnce({
 			maxFee: "800",
-			maxFeeFormatted: "0",
 			gasDetails: {},
 			feeJuiceShortfall: { maxFee: "800", balance: "799" },
 		})

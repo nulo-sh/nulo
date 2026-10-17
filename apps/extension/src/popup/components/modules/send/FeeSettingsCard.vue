@@ -3,6 +3,7 @@
 /** Components */
 import FeeMethodRow from "./FeeMethodRow.vue"
 import FeeCostReadout from "./FeeCostReadout.vue"
+import FeeAmount from "@/components/composite/FeeAmount.vue"
 import FeePriorityRow from "./FeePriorityRow.vue"
 import FeeMethodSelector from "./FeeMethodSelector.vue"
 
@@ -25,9 +26,6 @@ import {
 	buildFeeMethods,
 	defaultSponsor,
 	FEE_JUICE_BRIDGE_URL,
-	feeAmountDisplay,
-	feeDisplay,
-	feeInWords,
 	feePayerOf,
 	feeScopeKey,
 	formatGasBalance,
@@ -36,8 +34,9 @@ import {
 	resolveSavedSelection,
 	savedSelectionOf,
 	settingsForMethod,
-	shortfallSentence,
+	shortfallFigures,
 } from "./fee-helpers"
+import { feeDisplay, feeText } from "@/utils/fee-estimation"
 import { applyFpcEdits, previewForPick, recordOf, resolveSendSelection } from "./fee-privacy"
 import { usePrices } from "@/composables/usePrices"
 
@@ -204,11 +203,13 @@ const privateFeeJuiceFormatted = computed(() =>
  *  expired entirely, where the figure must disappear). */
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
-const estimatedFeeDisplay = computed(() => feeDisplay(props.feeEstimate, prices.feeJuiceQuote.value?.usd))
+const estimatedFeeDisplay = computed(() =>
+	props.feeEstimate ? feeDisplay(props.feeEstimate.maxFee, prices.feeJuiceQuote.value?.usd) : null,
+)
 const queuedCapDisplay = computed(() => {
 	if (!props.queuedCap) return null
 	const usd = prices.feeJuiceQuote.value?.usd
-	return { about: feeAmountDisplay(props.queuedCap.basis, usd), cap: feeAmountDisplay(props.queuedCap.cap, usd) }
+	return { about: feeDisplay(props.queuedCap.basis, usd), cap: feeDisplay(props.queuedCap.cap, usd) }
 })
 
 /** Send's picks, `{ [slot]: { private?, public? } }`, one slot per profile and address: storage keeps
@@ -296,9 +297,9 @@ const sponsorShortText = computed(() => {
 })
 
 /** The account's own Fee Juice, read short of this estimate's fee while it pays. */
-const shortfallText = computed(() => {
-	const shortfall = props.feeEstimate?.feeJuiceShortfall
-	return shortfall && effectiveMethod.value?.type === "fj" ? shortfallSentence(shortfall) : null
+const shortfall = computed(() => {
+	const short = props.feeEstimate?.feeJuiceShortfall
+	return short && effectiveMethod.value?.type === "fj" ? shortfallFigures(short, prices.feeJuiceQuote.value?.usd) : null
 })
 
 /** `short` while the notice shows, `funded` while the sponsor a funded verdict named pays. */
@@ -375,7 +376,7 @@ watch(
 watch(
 	queuedCapDisplay,
 	(d) => {
-		queuedCapTextOut.value = d ? feeInWords(d.cap) : null
+		queuedCapTextOut.value = d ? feeText(d.cap) : null
 	},
 	{ immediate: true },
 )
@@ -944,7 +945,7 @@ onBeforeUnmount(() => {
 				</Text>
 			</Flex>
 			<Flex
-				v-if="shortfallText"
+				v-if="shortfall"
 				align="start"
 				gap="6"
 				wide
@@ -953,7 +954,7 @@ onBeforeUnmount(() => {
 			>
 				<Icon name="warning" size="14" color="secondary" aria-hidden="true" />
 				<Text variant="body" color="secondary" :style="{ paddingTop: '1px' }">
-					{{ shortfallText }}
+					This send can cost up to <FeeAmount :display="shortfall.cost" :class="$style.fee_figure" />. You have {{ shortfall.balance }} FJ.
 				</Text>
 			</Flex>
 		</div>
@@ -1006,6 +1007,10 @@ onBeforeUnmount(() => {
 
 .detail_row {
 	composes: detail_row from "./fee-shared.module.css";
+}
+
+.fee_figure {
+	composes: fee_figure from "./fee-shared.module.css";
 }
 
 .get_fee_juice {

@@ -948,7 +948,7 @@ describe("execute window — an operation the app pays for", () => {
 		await vm.approve()
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 
-		api.results.value = { 0: { maxFee: "16000000000000000", maxFeeFormatted: "0.016" } }
+		api.results.value = { 0: { maxFee: "16000000000000000" } }
 		api.estimating.value = { 0: false }
 		await flushPromises()
 		expect(confirm().attributes("disabled")).toBeUndefined()
@@ -969,7 +969,7 @@ describe("execute window — an operation the app pays for", () => {
 		await vm.approve()
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 
-		api.results.value = { 0: { maxFee: "16000000000000000", maxFeeFormatted: "0.016" } }
+		api.results.value = { 0: { maxFee: "16000000000000000" } }
 		api.estimating.value = { 0: false }
 		await flushPromises()
 		expect(confirm().attributes("disabled")).toBeUndefined()
@@ -1022,7 +1022,7 @@ describe("execute window — an operation the app pays for", () => {
 		await vm.approve()
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 
-		api.results.value = { 0: { maxFee: "16000000000000000", maxFeeFormatted: "0.016" } }
+		api.results.value = { 0: { maxFee: "16000000000000000" } }
 		await flushPromises()
 		expect(confirm().attributes("disabled")).toBeUndefined()
 		await vm.approve()
@@ -1047,7 +1047,7 @@ describe("execute window — an operation the app pays for", () => {
 		await vm.approve()
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 
-		api.results.value = { 0: { maxFee: "21000000000000000", maxFeeFormatted: "0.021" } }
+		api.results.value = { 0: { maxFee: "21000000000000000" } }
 		await flushPromises()
 		expect(confirm().attributes("disabled")).toBeUndefined()
 		await vm.approve()

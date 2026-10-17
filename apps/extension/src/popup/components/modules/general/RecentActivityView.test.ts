@@ -1337,7 +1337,7 @@ describe("RecentActivityView — a queued send that asks again", () => {
 			recipientAddress: RECIPIENT,
 			canSend: true,
 			sending: false,
-			reask: { now: "0.88 FJ ($0.013)", nowAmount: "0.88", capAmount: "0.8" },
+			reask: { now: "~0.88 FJ ($0.013)", cap: "~0.8 FJ ($0.012)" },
 		})
 	})
 
