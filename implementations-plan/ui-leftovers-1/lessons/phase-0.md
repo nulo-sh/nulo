@@ -25,3 +25,7 @@ Verdict: approve with changes. Two demonstrated defects accepted: smoke needs an
 ## Codex verify round (resumed session 01a14a3d)
 
 Approve, no new material finding: the accepted fixes are reflected, the gates and the smoke recipe are runnable as written (static check), the #628 boundary and the #618 reactive view match the source. One recon remnant on `showFullBalance` fixed.
+
+## Amendment: #583 B (P35-08), Codex round on Phase 6 (session 01a14a5d, gpt-6.1-sol high)
+
+Approve with changes. The flex line-break argument holds for a given container width (direction's hypothetical width + 6 + the slot's 19 px decides the wrap); no `align-content` regression with an auto height. A1 (qualify the extreme case) and A3 (assert the 4 px gap and the left edges) accepted; A2 (a dApp on the nine-digit fixture) rejected as a committed test, measured once in the scratch ladder instead. Details in plan.md § Audit verdicts.

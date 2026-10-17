@@ -8,12 +8,12 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev 1b93cbfa
-issues: "#635, #639, #628, #618, #634 (all closed by the one arc)"
+issues: "#635, #639, #628, #618, #634, #583 (all closed by the one arc)"
 ---
 
 # ui-leftovers-1: five small fixes from decision page 35
 
-Decision page 35 (2026-10-17) settled five leftovers; each pick is a Decision block on its issue. One arc, one PR against `dev`. Recon: [recon.md](recon.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md).
+Decision page 35 (2026-10-17) settled five leftovers and, as an amendment the orchestrator relayed at implementation, #583's two-chip row past its room (P35-08 B, Phase 6); each pick is a Decision block on its issue. One arc, one PR against `dev`. Over the light target by the amendment's phase. Recon: [recon.md](recon.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md).
 
 ## Outcome & Quality Bar
 
@@ -30,6 +30,7 @@ Decision page 35 (2026-10-17) settled five leftovers; each pick is a Decision bl
 - **In-flight activity row (#628)**: a nameless dApp's in-flight row (the journal's awaiting card) shows the "dApp" chip. Signed: *"Both rows show the dApp chip: the in-flight row gets the same fallback as the settled one."* (`p35-nameless-a`). The terminal journal row and the journal details' App row are OA-1 and ship unchanged.
 - **Holdings total (#618)**: once the first price answer is in and no priceable holding has a price, the total reads "—" in its role and the meta line reads "Prices unavailable". Signed: *"Holdings takes the hero's unavailable state: a dash in the total's role, with Prices unavailable under it."* Drawn as `p35-holdings-a`: *"the total takes the hero's unavailable state, "—", with the meta line "Prices unavailable""*, so the count leaves the line. Before that answer the page reads as today (OA-2).
 - **Toasts (#634)**: a success with an action lives 6 s; a success without one, 2 s. Signed: *"A success with an action stays 6 s as before; plain successes (Address is copied) close after 2 s."*
+- **Two-chip activity row past its room (#583, P35-08 B)**: where #650's app chip reaches its 19 px floor (about $1,000 at 360 px), the app chip drops under the whole direction chip at its 96 px cap ("SHIELDED PAY…"), the row 68 px. Only a direction chip wider than the whole chip room (an extreme amount) still breaks, above the dropped chip, and the row grows further. Below that point the row is #650's one line, unchanged. Signed: *"From $1,000 the app chip drops under the direction chip, as today, keeping SHIELDED PAY…; that row is 68 px."* (`p35-bigrow-b`).
 
 ## Architecture & Implementation
 
@@ -38,6 +39,7 @@ Decision page 35 (2026-10-17) settled five leftovers; each pick is a Decision bl
 - **#628.** `utils/tx-enrichment.ts` exports `DAPP_LABEL = "dApp"`; `getOriginLabel` uses it. `journalCardOriginLabel` (`journal-state.ts:441`, the awaiting card's only source) returns `sanitizeJournalSubtitle(op.subtitle) ?? DAPP_LABEL`. The orphan card is never a dApp's (`isExecutingTask` admits UI transfers only, `RecentActivityView.vue:648-658`), so `executingOriginLabel` stays. `dappCardFields` (terminal card) and `journal/[id].vue` keep `sanitizeJournalSubtitle` until OA-1; the "same leaves" comment above `journalCardTitle` is narrowed so it stays true. If OA-1 is A, `dappCardFields` calls `journalCardOriginLabel`.
 - **#618.** Move `isPriceableHolding` and `pricesUnavailable` from `BalanceView.vue` into `utils/token-aggregate.ts`, over `(rows, fiatOf, prices)` where `prices` is the `usePrices` result typed structurally as `{ mapped: Readonly<Ref<boolean>>; isPriced(chainId, contract): boolean }`. Both pages pass `prices` itself, so no caller can freeze `mapped`. Home's behaviour is unchanged. `holdings.vue` computes `unavailable = showFiatValues && prices.settled && pricesUnavailable(...)`. Then the total shows an `aria-hidden` "—" in `.summary_fit` and the meta line "Prices unavailable". `totalDisplay` and `summaryMeta` feed both the line and the fit's ruler, and the fit's watch keys on them.
 - **#634.** `packages/design/src/composables/toast.ts`: `ACTION_TOAST_MS = 6_000`; `openToast` arms `options.action ? ACTION_TOAST_MS : SUCCESS_TOAST_MS` for a success. Hold and release keep working on the remainder. No call site changes. Three texts that say "2 s" follow the rule: the `useToast` TSDoc, the story label (`ToastManagerBase.stories.ts:43`) and `waitForToast`'s docstring (`tests/e2e/fixtures/widgets.ts:59`).
+- **#583 B.** `TransactionCard.vue` `.chips` gains `flex-wrap: wrap` and a 4 px row gap (`gap: 4px 6px`, the #633 row's). A flex line breaks on each item's hypothetical size, and the slot's is its 19 px floor (`flex: 1 1 0; min-width: 19px`), so the slot wraps exactly where #650 would start breaking the direction chip: below that point every item fits one line and the layout resolves as the single-line container did. On its own line the slot grows to the line and the chip hugs its name up to the shared 96 px cap. The `::before` stays: between 19 px and the first letter's room the one-line chip still shows "…" alone. The comments on `.chips` and `.app_slot` say the wrap rule. No script, no measuring.
 - **Alternatives not taken**: a per-call `durationMs` on `ToastOptions` (new config surface; the spec is a rule of the toast's shape). Holdings without the `settled` gate (it would claim "Prices unavailable" before any answer). Splitting keydown handlers on the header button, or making it a `span role=button` (re-implements native activation; the probe shows the native button already selects). Applying the fallback at persistence (`discoveryDappMetadata`) instead of render (it would write "dApp" into stored rows and change the connect window's name).
 
 ## Security & Adversarial Considerations
@@ -101,12 +103,20 @@ Decision page 35 (2026-10-17) settled five leftovers; each pick is a Decision bl
 - Gate the phase: `bun run --cwd packages/design test toast ToastManagerBase` exit 0. Then take light and dark "after" shots of the four surfaces.
 - **Arc gate**: `bun run audit:vue`, `bun run test:all`, `bun run check:plans` exit 0. Then, after a fresh armed build (`audit:vue` disarmed `dist`), `navigation`, `rows` and `snackbar` by the smoke recipe on Chrome and on Firefox. Record `navigation`'s time per browser against Phase 0's.
 
+### Phase 6: the two-chip row wraps past its floor (#583 B, amendment)
+- Files: `TransactionCard.vue` (style only), `tests/e2e/rows.test.ts`.
+- Tests: the priced rows scenario's large dApp transfer (12,345.67, seeded today) asserts the wrap, never a dollar threshold: the direction chip on one line, the app chip 4 px under it (±0.5) with matching left edges, the chip at its 96 px cap and cut, its text the dApp's name. The floor-width and "…"-width reads go (no row sits at the floor now); the `::before` read stays. The dApp scenario's 2.5 USDC transfer keeps its one-line assertions (chip beside the direction, above the floor, under the cap): the never-happens control. Row heights stay logged per browser, not asserted (type-scale-1 moves them). jsdom has no layout, so no unit test.
+- Byte-identity below the point: Chrome shots of History at 2.5, 25 and 250 USDC before and after compare pixel-equal.
+- Shots: light and dark at 2.5 and 1,250 USDC (a scratch spec, never committed), which also logs the ladder 2.5 to 123,456,789.12 (chip width, direction lines, row height) for the PR body; the 68 px is read there.
+- **Gate**: fast layers, then `rows` by the smoke recipe on Chrome and on Firefox (a wrap is a layout the engines could disagree on). No added scenario; measure `rows` against #650's 52.5 s / 76.5 s.
+
 ## Decision ledger
 
 - D1 #639: guard pointer clicks only (`detail > 0`). Keys keep copying, matching the scope rows.
 - D2 #628: fallback at render, inside `journalCardOriginLabel`; the settled and in-flight sites share `DAPP_LABEL`. No new helper: it would have one caller.
 - D3 #618: shared pure predicate plus a `settled` gate on Holdings; Home is unchanged.
 - D4 #634: the rule reads the toast's own `action`; no per-call duration.
+- D5 #583 (amendment, 2026-10-17, orchestrator spawn; P35-08 B signed on page 35): wrap by `flex-wrap` on the existing slot floor, so the switch point is #650's floor by construction; no new threshold, no measurement code.
 
 ## Audit verdicts
 
@@ -124,10 +134,15 @@ Decision page 35 (2026-10-17) settled five leftovers; each pick is a Decision bl
 
 **Codex verify (resumed): approve, no new material finding.** One recon wording remnant fixed.
 
+**Codex on the Phase 6 amendment (gpt-6.1-sol, high, session 01a14a5d): approve with changes.**
+- A1 (medium): a direction chip wider than the whole chip room still breaks and the dropped chip may get less than its cap, so "stays on one line" was unconditional. Accepted: UI impact and Phase 6 qualified.
+- A2 (medium): give the nine-digit fixture a dApp so the extreme case runs through `.chips`. Rejected as a committed test: that row proves a nine-digit send, and a dApp moving $100M+ is the range known limit #645 already records; the scratch ladder measures it once and the PR body reports it.
+- A3 (low): `top >= bottom` passes a wrong gap or a sideways chip. Accepted: 4 px gap and matching left edges asserted; the title's centring is the layout's unchanged rule, not asserted.
+
 ## Delivery
 
 - One PR against `dev` from `worktree-ui-leftovers-1`, no stack (D-orch-1). Title: `fix(ui): display-only token hero, selectable header address, dapp chip, holdings, toasts` (88 characters).
-- Body: each pick quoted with its id and the owner's words, the light and dark shots, the validation runs, `navigation`'s local time and the smoke suite's CI wall-clock per browser before (latest green `dev` run) and after, `Closes #635 #639 #628 #618 #634`. CI's network lane runs too (its filter covers `packages/design/**`); `fee-methods` now meets a 6 s "Transaction submitted" between sends, as before #642. Open it without labels, and only after the gates pass and the Codex loop converges.
+- Body: each pick quoted with its id and the owner's words, the light and dark shots, the validation runs, `navigation`'s local time and the smoke suite's CI wall-clock per browser before (latest green `dev` run) and after, `Closes #635 #639 #628 #618 #634 #583`. CI's network lane runs too (its filter covers `packages/design/**`); `fee-methods` now meets a 6 s "Transaction submitted" between sends, as before #642. Open it without labels, and only after the gates pass and the Codex loop converges.
 - Merge `origin/dev` before opening it. If the merge touched the activity rows or the header, take the #628 and #639 shots again.
 
 ## Post-implementation
@@ -135,14 +150,14 @@ Decision page 35 (2026-10-17) settled five leftovers; each pick is a Decision bl
 Follow `implementations-plan/README.md` § Post-implementation standard at `1b93cbfa`. Plan-specific values:
 
 - Step 1 is absent (`code_review: off`).
-- Step 2: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol` over the net diff from `1b93cbfa`, after Phase 5. Prompts start "You are a subagent. Don't run memo." and carry the standard's two rules verbatim. Hard stop at three rounds; log each in `lessons/phase-5.md`.
+- Step 2: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol` over the net diff from `1b93cbfa`, after Phase 6. Prompts start "You are a subagent. Don't run memo." and carry the standard's two rules verbatim. Hard stop at three rounds; log each in `lessons/phase-6.md`.
 - If the orchestrator relays OA-1 or OA-2 before the PR opens, fold the answer in as its own phase. Otherwise file each unanswered ask at close-out as an `owner-decision` issue (dedupe first; #628 and #618 close with the PR) and list it on the Outcome's `Open items:` line.
 - Teardown after the merge: `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/ui-leftovers-1/plan.md`, then `agent-worktree done ui-leftovers-1 --merged`.
 
 ## Seeds (draft; the orchestrator runs none)
 
 ```
-/goal implementations-plan/ui-leftovers-1/plan.md done: Phases 0-5 marked ✓ with each gate's commands passing in the transcript, the Codex loop converged on the net diff (a resumed pass quoted with no new material finding), the PR open with Closes #635 #639 #628 #618 #634 and green checks.
+/goal implementations-plan/ui-leftovers-1/plan.md done: Phases 0-6 marked ✓ with each gate's commands passing in the transcript, the Codex loop converged on the net diff (a resumed pass quoted with no new material finding), the PR open with Closes #635 #639 #628 #618 #634 #583 and green checks.
 ```
 
 ```
