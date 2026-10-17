@@ -238,7 +238,7 @@ export const OVERRIDES: Override[] = [
 		property: "font-size",
 		value: "10px",
 		role: "label-section",
-		why: "the header's chips keep today's 10px while the row has no room for 11px",
+		why: "the header's row fits its chips' words only at 10px",
 	},
 	{
 		file: HEADER,
@@ -247,7 +247,7 @@ export const OVERRIDES: Override[] = [
 		property: "font-weight",
 		value: "600",
 		role: "label-section",
-		why: "the header's chips keep today's semibold",
+		why: "the header's chips pair semibold with their 10px",
 	},
 	{
 		file: HEADER,
@@ -256,7 +256,7 @@ export const OVERRIDES: Override[] = [
 		property: "letter-spacing",
 		value: "0.08em",
 		role: "label-section",
-		why: "the header's chips keep today's tracking",
+		why: "the header's chips pair 0.08em with their 10px",
 	},
 	{
 		file: ACCOUNTS,

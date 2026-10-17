@@ -74,7 +74,7 @@ const ANSWERED: Record<string, Partial<Drawn>> = {
 	"Inline action": { size: 11 },
 	"Account name tag": { face: "G", weight: 700, tracking: 0.1 },
 	"Chip / tag / network": { size: 11, weight: 700, tracking: 0.1 },
-	// The two role edits: meta at 13, the nav at 11.
+	// The two role edits.
 	"Hash, small": { size: 13 },
 	"Token symbol": { size: 13 },
 	"Meta / count / hint": { size: 13 },

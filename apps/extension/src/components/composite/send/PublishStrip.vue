@@ -78,7 +78,7 @@ const cells = computed(() => CELLS.map((c) => ({ ...c, glyph: publishGlyph(props
 	white-space: nowrap;
 }
 
-/* The facts keep their 10px semibold beside the 10px names, so the strip reads as before and fits. */
+/* The facts sit at 10px semibold, a step under the bold 10px names, so every cell fits its text. */
 .strip .cell {
 	font-size: 10px;
 	font-weight: 600;
