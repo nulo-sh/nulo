@@ -1032,7 +1032,7 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 			const { service } = await bootService({ network, token, note: noteSvc })
 			// The first record read is the one before the lock.
 			const recordRead = holdCall(internals(service).repo, "getRecord", 2, "after")
-			// Existing record for the SAME nullifier, timestamp missing → the
+			// Existing record for the SAME note, timestamp missing → the
 			// scan takes the backfill branch and parks.
 			seedNote({
 				uniqueNoteHash: n.uniqueNoteHash,
