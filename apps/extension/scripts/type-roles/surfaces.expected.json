@@ -305,6 +305,15 @@
 			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
 		},
 		{
+			"id": "windows-fee",
+			"name": "Fee went up: a held dApp send's question",
+			"kind": "route",
+			"source": "apps/extension/src/popup/windows/fee/index.vue",
+			"reach": "#/windows/fee, opened when a dApp send's fee came out above the approved figure",
+			"states": ["fee went up"],
+			"suite": "network"
+		},
+		{
 			"id": "windows-discover",
 			"name": "Discover",
 			"kind": "route",

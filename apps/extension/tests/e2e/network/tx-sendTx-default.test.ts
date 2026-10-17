@@ -1,12 +1,34 @@
+import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
+import { formatFeeJuice } from "@/utils/fee-estimation"
 import { clickByTestId, openPopup, test } from "../fixtures/extension"
+import { callService } from "../fixtures/helpers"
 import { snapshotResultSeq, waitForPgResult, assertPgOk } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { BROWSER_AWAITING_CARD, PRESTO_AWAITING_CARD, waitForAwaitingCardBackend, waitForDappExecuteWorked } from "../fixtures/journal"
-import { mintPublicTokensForAccount, type AztecTestConfig } from "../fixtures/aztec"
+import { createTestWallet, fundPublicFeeJuice, mintPublicTokensForAccount, type AztecTestConfig } from "../fixtures/aztec"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
+
+/** The playground's transfer of one fixture token to the minter. */
+async function setTransferInputs(page: Page): Promise<void> {
+	await page.evaluate(
+		({ token, recipient }: { token: string; recipient: string }) => {
+			const setVal = (sel: string, v: string) => {
+				const input = document.querySelector<HTMLInputElement>(sel)
+				if (!input) return
+				const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
+				setter?.call(input, v)
+				input.dispatchEvent(new Event("input", { bubbles: true }))
+			}
+			setVal('[data-testid="pg-input-tokenAddress"]', token)
+			setVal('[data-testid="pg-input-recipient"]', recipient)
+			setVal('[data-testid="pg-input-amount"]', "1")
+		},
+		{ token: aztecConfig!.tokenAddress, recipient: aztecConfig!.minterAddress },
+	)
+}
 
 /**
  * Test #29 — sendTx default (account-bound). Always opens /windows/execute
@@ -39,22 +61,7 @@ test.skipIf(!hasConfig)(
 		// reaches an active stage — breaks waitForDappExecuteWorked).
 		await mintPublicTokensForAccount(aztecConfig!, accountAddress)
 
-		// Set inputs
-		await page.evaluate(
-			({ token, recipient }: { token: string; recipient: string }) => {
-				const setVal = (sel: string, v: string) => {
-					const input = document.querySelector<HTMLInputElement>(sel)
-					if (!input) return
-					const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
-					setter?.call(input, v)
-					input.dispatchEvent(new Event("input", { bubbles: true }))
-				}
-				setVal('[data-testid="pg-input-tokenAddress"]', token)
-				setVal('[data-testid="pg-input-recipient"]', recipient)
-				setVal('[data-testid="pg-input-amount"]', "1")
-			},
-			{ token: aztecConfig!.tokenAddress, recipient: aztecConfig!.minterAddress },
-		)
+		await setTransferInputs(page)
 
 		// Fire sendTx + drive the execute popup
 		const seqTx = await snapshotResultSeq(page)
@@ -104,6 +111,103 @@ test.skipIf(!hasConfig)(
 		// is exercised in CI.
 		const result = await waitForPgResult(page, "sendTx", seqTx, 300_000)
 		await assertPgOk(page, result, "tx-sendTx-default:result")
+		expect(typeof (result.resultJson as { txHash?: string } | undefined)?.txHash).toBe("string")
+	},
+)
+
+/**
+ * A dApp send the account pays for, whose build comes out above the figure the person approved, is
+ * held and asked about in its own window; only the accept proves it. Failure mode: the worker's hold,
+ * the window, the accept and the proof together, in a real browser against a live node, which no
+ * mocked layer reaches. The approval goes through the worker's entry, the account paying from its own
+ * Fee Juice, with a figure half the estimate's, so the real build lands above it past both of the
+ * tolerance's thresholds: no node fixture, no seam.
+ */
+test.skipIf(!hasConfig)(
+	"tx-sendTx-default — a fee above the approved figure is asked again in its own window; the accept proves",
+	{ timeout: 480_000 },
+	async ({ dappConnectedExtensionWithTransactionCap: ctx }) => {
+		const { playgroundPage: page, accountAddress } = ctx
+		await mintPublicTokensForAccount(aztecConfig!, accountAddress)
+		const { wallet, accounts, node, cleanup } = await createTestWallet(aztecConfig!.nodeUrl)
+		try {
+			const scriptAccount = accounts[0]
+			if (!scriptAccount) throw new Error("expected at least one sandbox-deployed test account")
+			await fundPublicFeeJuice(wallet, node, scriptAccount, aztecConfig!, accountAddress)
+		} finally {
+			await cleanup()
+		}
+
+		await setTransferInputs(page)
+		const seqTx = await snapshotResultSeq(page)
+		const execPopupP = waitForPopup(ctx, "execute", { timeout: 30_000 })
+		await clickByTestId(page, "pg-btn-sendTx-default")
+		const execPopup = await execPopupP
+		await waitForExecuteContent(execPopup)
+
+		const requestId = new URL(execPopup.url().replace("#/", "")).searchParams.get("requestId")
+		expect(requestId).toBeTruthy()
+		// The account's own Fee Juice: Nulo's sponsor, the card's default, is not bound by the figure.
+		const feeSettings = { paymentMethod: { kind: "fj" } }
+		const estimate = await callService<{ maxFee: string; estimateId?: string; previewId?: string; feeJuiceShortfall?: unknown }>(
+			execPopup,
+			"execution",
+			"estimateOperationFee",
+			[requestId, 0, feeSettings],
+			120_000,
+		)
+		expect(estimate.feeJuiceShortfall).toBeUndefined()
+		const shown = BigInt(estimate.maxFee)
+		const approved = shown / 2n
+		// Below either threshold the send would go out at the new fee unasked.
+		expect(shown - approved).toBeGreaterThanOrEqual(10n ** 12n)
+		expect((shown - approved) * 100n).toBeGreaterThan(approved * 10n)
+
+		const feePopupP = waitForPopup(ctx, "fee", { timeout: 180_000 })
+		await callService(execPopup, "dapp-interaction", "approveInteraction", [
+			requestId,
+			[{ feeSettings, estimateId: estimate.estimateId, previewId: estimate.previewId, feeCeiling: approved.toString() }],
+		])
+		const feePopup = await feePopupP
+		await feePopup.waitForSelector('[data-testid="fee-raised"]', { visible: true, timeout: 60_000 })
+
+		// Held, unproven: the record asks the question the window shows, with the figure approved.
+		const asked = await feePopup.evaluate(async () => {
+			const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
+			return Object.entries(all)
+				.filter(([key]) => key.startsWith("nulo:journal@"))
+				.map(
+					([, value]) =>
+						(typeof value === "string" ? JSON.parse(value) : value) as {
+							kind?: string
+							progress?: { stage?: string; reask?: { fee: string; cap: string; payer: unknown } }
+						},
+				)
+				.filter((record) => record.kind === "dapp_execute" && record.progress?.stage === "queued")
+				.map((record) => record.progress?.reask)
+		})
+		expect(asked).toEqual([{ fee: expect.any(String), cap: approved.toString(), payer: { type: "fj", isProtocol: false } }])
+		const fee = BigInt(asked[0]!.fee)
+		const text = (id: string) => feePopup.$eval(`[data-testid="${id}"]`, (el) => el.textContent?.replace(/\s+/g, " ").trim())
+		expect(await text("fee-raised-was")).toBe(`Was ${formatFeeJuice(approved)} FJ`)
+		expect(await text("fee-raised-now")).toBe(`Now ${formatFeeJuice(fee)} FJ`)
+		expect(await text("fee-raised-method")).toBe("Public Fee Juice")
+		expect(await text("fee-confirm-btn")).toBe(`Send for ${formatFeeJuice(fee)} FJ`)
+		// The dApp's own row is pending from its request on; only a settled one would mean an answer.
+		const settled = await page.evaluate(
+			(after) =>
+				[...document.querySelectorAll<HTMLElement>('[data-testid="pg-result"][data-method="sendTx"]')].filter(
+					(row) => Number(row.getAttribute("data-result-seq") ?? "0") > after && row.getAttribute("data-status") !== "pending",
+				).length,
+			seqTx,
+		)
+		expect(settled).toBe(0)
+
+		await clickByTestId(feePopup, "fee-confirm-btn")
+		const walletPopup = await openPopup(ctx)
+		await waitForDappExecuteWorked(walletPopup)
+		const result = await waitForPgResult(page, "sendTx", seqTx, 300_000)
+		await assertPgOk(page, result, "tx-sendTx-default:fee-rose")
 		expect(typeof (result.resultJson as { txHash?: string } | undefined)?.txHash).toBe("string")
 	},
 )

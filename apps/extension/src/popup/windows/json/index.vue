@@ -11,7 +11,8 @@ import { ProfileServiceClient } from "@/wallet/services/profile/client"
 const params = new URLSearchParams(window.location.search)
 const requestId = params.get("requestId")
 const payload = ref()
-const data = computed(() => payload.value?.params.operations)
+// A held send's fee question carries the one operation it asks about.
+const data = computed(() => payload.value?.params?.operations ?? (payload.value?.operation ? [payload.value.operation] : undefined))
 
 let profileService
 
