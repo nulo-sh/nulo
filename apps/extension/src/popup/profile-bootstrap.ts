@@ -6,6 +6,7 @@ export interface FencedBootstrapDeps {
 	/** Bound to the shell's profile-event sequence at call time. */
 	isCurrent: () => boolean
 	setFailure: (record: { profileId: string; message: string } | null) => void
+	readFailure: () => { profileId: string } | null
 	shouldToast: () => boolean
 	toast: () => void
 }
@@ -17,6 +18,9 @@ export interface FencedBootstrapDeps {
  * not overwrite the channel or toast over a newer profile's outcome.
  */
 export async function runFencedBootstrap(deps: FencedBootstrapDeps): Promise<void> {
+	// Synchronous, before the bootstrap: a record names its profile's latest activation, so a wait
+	// that starts after this event never acts on a predecessor's failure (a reused id re-imports).
+	if (deps.readFailure()?.profileId === deps.profileId) deps.setFailure(null)
 	try {
 		await deps.bootstrap()
 		if (deps.isCurrent()) deps.setFailure(null)
