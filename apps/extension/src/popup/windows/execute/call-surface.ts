@@ -248,5 +248,13 @@ export const readableGrants = (decoded: readonly DecodedGrant[], count: number):
 			: grant
 	})
 
+/** The footer's error row for the first grant the wallet cannot read: such a request is not approvable. */
+export function grantRefusalRow(grants: Iterable<DecodedGrant>): { title: string; tooltip: string; type: "error" } | undefined {
+	const unread = [...grants].find((grant) => grant.kind === "undecoded")
+	return unread?.kind === "undecoded"
+		? { title: "Can't read the arguments", tooltip: rawNotice(unread.reason), type: "error" }
+		: undefined
+}
+
 export const rawToggleLabel = (count: number, open: boolean): string =>
 	open ? "Hide raw values" : `Show ${count} raw value${count === 1 ? "" : "s"}`

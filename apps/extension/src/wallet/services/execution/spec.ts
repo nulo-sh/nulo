@@ -130,6 +130,10 @@ export type Methods = {
 	 */
 	decodeGrantsForDisplay(interactionId: string, index: number): DecodedGrant[]
 
+	/** {@link decodeGrantsForDisplay} for a held send: the stored request the fee question
+	 *  `interactionId` shows. */
+	decodeQuestionGrantsForDisplay(interactionId: string): DecodedGrant[]
+
 	/**
 	 * Cancel an in-flight fee estimate by its caller-minted token.
 	 *

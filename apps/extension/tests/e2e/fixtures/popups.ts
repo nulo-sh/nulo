@@ -20,6 +20,8 @@ export type PopupKind =
 	| "verify"
 	| "capabilities"
 	| "execute"
+	/** A held dApp send's question: its fee came out above the approved figure. */
+	| "fee"
 	| "json"
 	| "network-unavailable"
 	/** Arm the wait before the open: a logger window's URL can repeat, and a URL already open never

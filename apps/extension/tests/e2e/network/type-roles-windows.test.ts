@@ -51,8 +51,31 @@ const SITES = identifierSites().map((site) =>
 		: site,
 )
 
+/**
+ * Resolves once some element at each live site of `state` has a box. An AddressDisplay paints its
+ * text only after its contact lookup settles, so a site read sooner is empty. A site that never shows
+ * is left to the observation, which names it.
+ */
+async function waitForStateSites(win: Page, surface: string, state: string): Promise<void> {
+	const selectors = SITES.filter((site) => site.surface === surface && site.state === state && site.role !== "none" && !site.unreachable)
+	for (const { selector } of selectors) {
+		await win
+			.waitForFunction(
+				(s: string) =>
+					Array.from(document.querySelectorAll(s)).some((el) => {
+						const box = el.getBoundingClientRect()
+						return box.width > 0 && box.height > 0 && getComputedStyle(el).visibility !== "hidden"
+					}),
+				{ timeout: 10_000 },
+				selector,
+			)
+			.catch(() => undefined)
+	}
+}
+
 /** The faces and roles of the window, then the identifier sites of each state it renders. */
 async function sweepWindow(win: Page, surface: string, states: readonly string[]): Promise<IdentifierObservation[]> {
+	for (const state of states) await waitForStateSites(win, surface, state)
 	expectSweepClean(await sweepTypeRoles(win), surface)
 	const observations: IdentifierObservation[] = []
 	for (const state of states) {

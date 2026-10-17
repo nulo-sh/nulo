@@ -1,0 +1,7 @@
+# Phase 8: the publish summary base and the envelope key order (C8)
+
+- As first built, the base was the first commit that carried HEAD's envelope blob (`git log --full-history --topo-order --reverse --find-object=<blob> -- <envelope>`, first line); the range is `${base}^..HEAD`. Under the old newest-commit base, four of the summary tests fail (an edit in the publishing commit, a mode-only envelope commit, a restore, a merge that keeps older bytes before a restore) and the first-publish test fails on its 50-commit limit.
+- A mode-only change needs the file's mode on disk (`chmodSync`): `git update-index --chmod` is undone by the next `git add -A` when `core.fileMode` is on, and `--allow-empty` hid that by committing nothing. The test repository commits without `--allow-empty`, so a no-op step fails loudly.
+- `--find-object` with a pathspec already reaches a side branch's introducing commit across a merge that keeps the first parent's bytes, on git 2.43, also with that commit dated after its descendants; `--full-history --topo-order` state the walk instead of relying on that.
+- An edit and its revert cancel in `git diff --stat`, so the summary reports "no change" only when the log is empty too.
+- Amended in the review loop (D7): a squash-merged publish's parent is the trunk at merge time, not the commit its run signed, so the base reaches back one list: the first commit that carried the list before the served one. The range shows a superset since the previous publish; a shallow clone is refused.
