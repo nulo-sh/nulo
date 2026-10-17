@@ -166,6 +166,7 @@ This lane owns `packages/design/src/core/{Icon.vue,Icon.test.ts,Icon.stories.ts,
 | D17 | `square-cross`'s inner X at the set weight (source: 2.25 units) | A per-stroke width in `Glyph` for one 0.25-unit difference |
 | D18 | Plain-TS modules take `GlyphName` from `@nulo/design/core/glyphs.ts` | The barrel: the e2e typecheck reaches `journal-state.ts` and resolves no `.vue`, so every SFC the barrel exports fails it |
 | D19 | `StaleNetworkTakeover`'s screen branch is `v-else-if="content"` and its mark `v-else-if="line.mark"`, so vue-tsc narrows them; four identifier-inventory branches re-keyed to match | A non-null cast on `content`, which hides the `undefined` the loading and progress screens produce |
+| D20 | Two more no-op-by-default `shotSend` calls, the Accounts popup (`accounts.test.ts`) and a network page (`endpoints.test.ts`), so the PR shows both | A capture spec copied in and deleted (as D15) |
 
 ## Audit verdicts
 
@@ -199,6 +200,22 @@ This lane owns `packages/design/src/core/{Icon.vue,Icon.test.ts,Icon.stories.ts,
 5. Low, the PNG counts do not match the reused captures: **accepted**; the eight required pairs are named and extra captures allowed.
 
 Resumed to verify: **`approve`**; all five fixes present, no regression in phase numbering, seeds, loop placement or gate commands. No finding in any round adds state, a lifecycle, a protocol or a public contract.
+
+### Arc 1 implementation review
+
+**Round 1, Codex** (`gpt-6.1-sol`, high, session `01a1473a`): `conditional approve`.
+1. Medium, the Settings FPC page's rows keep a leading `fee` glyph: **accepted**; they are Settings-page rows (step 8), not OA-1 popup rows.
+2. Low, `TransactionTerminalCard.vue` forwards untyped glyph props: **accepted**; `lang="ts"` with `GlyphName` and `StatusTone`, stale header sentence dropped.
+
+**Round 1, Opus** (general-purpose agent): `conditional approve`.
+1. Medium, the senders page's copied tick turns primary on hover and focus: **accepted**; inline `color`, as its inline `fill` did.
+2. Low, `.filter_button_active:hover svg` turns a hovered active funnel blue, where its `fill` form never painted: **accepted**; the rule and its dead class go.
+3. Low, glyphs that were Material spans now meet RowAction's hover rule: **accepted** for `DetailsTable`'s copy glyph (a specificity tie, now three classes); History's chip × darkening on hover is inside the icon's own box and is recorded as OA-5.
+4. Low, `mount-all.test.ts` mounts a retired name: **accepted** (`open`).
+5. Low, `Icon.test.ts` no longer pins `role="img"`: **accepted**.
+6. Low, `TransactionTerminalCard` untyped (as Codex 2) and a story-string `chevron`: **accepted**; the guard's limits name story strings, the story keeps the right-pointing chevron.
+7. Low, two stale comments: **accepted**.
+8. Low, the network page's rename row loses its only edit cue: **accepted** as OA-5; a capture of the page is added (D20).
 
 ## Arc 1: Direction 2 everywhere (closes #602)
 

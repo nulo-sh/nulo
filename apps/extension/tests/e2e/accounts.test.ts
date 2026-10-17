@@ -1,6 +1,7 @@
 import { expect } from "vitest"
 import { test, openPopup, waitForHash, clickByTestId, clickSelector, replaceInputValue } from "./fixtures/extension"
 import { closeStuckPopup, navigateToSettings, waitForToast } from "./fixtures/helpers"
+import { shotSend } from "./fixtures/send-page"
 
 test("accounts page shows initial account", async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)
@@ -196,6 +197,7 @@ test("header avatar opens the account switcher", async ({ registeredExtension })
 
 	await clickByTestId(page, "account-avatar-btn")
 	await page.waitForSelector('[data-testid="accounts-popup"]', { visible: true, timeout: 5_000 })
+	await shotSend(page, "accounts-popup", "accounts-popup")
 	await closeStuckPopup(page)
 
 	expect(registeredExtension.consoleErrors).toEqual([])
