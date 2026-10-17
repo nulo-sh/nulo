@@ -170,7 +170,7 @@ Decision page 35 (2026-10-17) settled five leftovers and, as an amendment the or
 Follow `implementations-plan/README.md` § Post-implementation standard at `1b93cbfa`. Plan-specific values:
 
 - Step 1 is absent (`code_review: off`).
-- Step 2: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol` over the net diff from the merged `dev` (`623fc97f`, which carries #650; the plan's base was `1b93cbfa`), after Phase 6. Prompts start "You are a subagent. Don't run memo." and carry the standard's two rules verbatim. Hard stop at three rounds; log each in `lessons/phase-6.md`.
+- Step 2: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol` over the net diff from the merged `dev` (`623fc97f`, which carries #650; the plan's base was `1b93cbfa`), after Phase 6. Prompts start "You are a subagent. Don't run memo." and carry the standard's two rules verbatim. Hard stop at three rounds; log each in `lessons/phase-0.md` (the lane kept one lessons file).
 - If the orchestrator relays OA-1 or OA-2 before the PR opens, fold the answer in as its own phase. Otherwise file each unanswered ask at close-out as an `owner-decision` issue (dedupe first; #628 and #618 close with the PR) and list it on the Outcome's `Open items:` line.
 - Teardown after the merge: `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/ui-leftovers-1/plan.md`, then `agent-worktree done ui-leftovers-1 --merged`.
 
