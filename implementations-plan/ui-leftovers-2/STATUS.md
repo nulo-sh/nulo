@@ -4,3 +4,5 @@
 - 2026-10-17 Codex plan audit: conditional approve, 5 findings accepted; OA-3 added.
 - 2026-10-17 Opus plan lens: approve with changes, 8 findings accepted; Codex verify running.
 - 2026-10-17 Codex verify: conditional approve, then approve; plan at the approval gate.
+- 2026-10-17 20:5x orchestrator approved the plan; OA-1..OA-3 settled A (OA-2 phrase conflict recorded); merged origin/dev 5653e890 (639f0363).
+- 2026-10-17 20:53 Phase 0 gate green (bun install --frozen-lockfile, lint, typecheck:all). Before shots and rows timing deferred: load1 271.

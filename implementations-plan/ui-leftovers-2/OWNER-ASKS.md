@@ -2,6 +2,8 @@
 
 Three gaps found while planning page 39's picks. The arc ships each in its "ships now" form and does not wait.
 
+**Settled (orchestrator, 2026-10-17 20:5xZ, D-orch "the planner's recommendation; the owner sees the result on a decision page with the arc's screenshots"):** all three ship their A forms. OA-1: Holdings keeps today's line while its list loads. OA-3: no cap; the 60 s wait is filed as a closed known-limit issue at close-out. OA-2: the message reads "the skeleton's line as the drawing has it", which describes option B, while the same message settles every ask on its A form, the recommendation. The arc ships A (the line holds the figure's height). The conflicting phrase goes back to the orchestrator in the arc report. The switch to B is one CSS rule.
+
 ## OA-1 (#676): Holdings while its list loads
 
 **Surface.** Holdings with fiat display on, from the moment the page opens until the balance list's first answer. That lasts one read from the wallet's worker. In that time the summary has no rows yet, so today it reads "$0.00" with "0 tokens". After this arc the order is: "$0.00" and "0 tokens", then the skeleton with the real count while the first price answer is out, then the figure. Page 39's pick covers the second step only: it was asked for a funded wallet. An account change on the page also empties the list for one read, and once prices have answered it goes from "$0.00" and "0 tokens" straight to the figure; before that it goes through the skeleton again.

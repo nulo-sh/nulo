@@ -26,7 +26,7 @@ Decision page 39 (2026-10-17) settled two asks the ui-leftovers-1 lane left open
 ## UI impact
 
 - **Terminal activity row and journal details (#675)**: a nameless dApp's cancelled or failed row keeps the "dApp" chip it showed in flight. Its journal details page shows the App row reading "dApp", after "What happened" and before "Method". Signed (P39-05 A): *"Both take the same fallback: the cancelled row keeps the chip; the details page reads App, dApp."* Drawing `p39-nameless-a`.
-- **Holdings' total (#676)**: with fiat on, a held token the signed list may price, and no price answer yet, the total is a 96 × 26 px skeleton and the meta line reads the count alone ("2 tokens"). From the first answer on, page 35's pick applies unchanged. Signed (P39-06 B): *"A skeleton in the total's place, as Home's hero, with the token count beside it."* Drawing `p39-holdings-b`. The line keeps the figure's height (OA-2, ships A).
+- **Holdings' total (#676)**: with fiat on, a held token the signed list may price, and no price answer yet, the total is a 96 × 26 px skeleton and the meta line reads the count alone ("2 tokens"). From the first answer on, page 35's pick applies unchanged. Signed (P39-06 B): *"A skeleton in the total's place, as Home's hero, with the token count beside it."* Drawing `p39-holdings-b`. The line keeps the figure's height (OA-2 A); while the list loads it reads as today (OA-1 A); the skeleton has no cap (OA-3 A). All three were settled A by the orchestrator on 2026-10-17 (OWNER-ASKS.md § Settled).
 
 ## Architecture & Implementation
 
