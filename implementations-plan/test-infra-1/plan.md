@@ -1,7 +1,7 @@
 ---
 plan: test-infra-1
 tier: mid
-status: planned; final Codex pass approve; arc 1 running under auto-continue
+status: arc 1 implemented (Phases 1-3 ✓); Codex fix loop round 2
 issues: "#550 (arc 1 Closes), #561 (arc 3 Closes), #536 (arc 3 Closes), #540 (arc 4 Closes)"
 driver: claude-code
 claude_model: opus
@@ -70,7 +70,7 @@ Four test-infrastructure refactors the owner picked on decision page 37 (option 
 
 ## Arc 1: source guards and the window contracts (one PR, `Closes #550`, refs #561)
 
-### Phase 1 — one walker
+### Phase 1 — one walker ✓ (0da4a6c0)
 1. Add `SourcePolicy`, `sourceFiles(policy?)`, the named skip classes and `PACKAGE_SRC_ROOTS` to `apps/extension/scripts/type-roles/source-scan.ts`.
 2. Write the comparison under `~/.cache/nulo-backlog/test-infra-1/`: for each guard it runs the guard's old walker (taken with `git show 0fe841be:<file>`) and its new policy over the same working tree, and prints the count and the sha256 of each sorted repo-relative list, extra named files (`copy-dash-ban`'s `SCAN_FILES`) included. Record the command in `lessons/phase-1.md`.
 3. Move each guard to `sourceFiles(policy)`: `copy-dash-ban`, `log-payload-ban`, `useLogFilters.scan`, `storage-facade-ban`, `profile-ui-keys.scan`, `toast-call-sites`, `legal/call-sites`, `expiry-deferral.pins`, `DottedTerm.scan` (it reads `<DottedTerm>` through `walkElements`), `icon-names`, `useConfirm`, `a11y-css` (its inline walk) and `identifier-sites.ts` `filesUnder`. Delete each local walker and the copied `SCAN_ROOTS`.
@@ -78,7 +78,7 @@ Four test-infrastructure refactors the owner picked on decision page 37 (option 
 - **Tests:** `scripts/type-roles/source-scan.test.ts` covers: a policy's roots, extensions and skip; sorted repo-relative output; `PACKAGE_SRC_ROOTS` lists every package with a `src`; a missing root throws; a root with no matching file throws. Every guard's own tests stay unchanged.
 - **Validation gate:** `bun run lint && bun run typecheck:all && bun run test`. Pass: exit 0 each; the step 4 comparison shows 13 equal lists, logged in `lessons/phase-1.md`; `inventory.test.ts` green with `identifier-sites.expected.json` unchanged.
 
-### Phase 2 — one tokenizer
+### Phase 2 — one tokenizer ✓ (c376fca7)
 1. Add `apps/extension/scripts/type-roles/source-code.ts` (`codeLines`, `callsTo`).
 2. Move `log-payload-ban` to `codeLines`. Delete `stripNoise`, `startsRegex`, `skipRegex`, `LexState` and `scannableLines`, its `biome-ignore` and its manifest record (`bun run baseline:complexity`; the diff must remove only that record).
 3. Move `useLogFilters.scan` (`skipToken`, `callArgs`, `COMMENTS`) and `toast-call-sites` (`pastString`, `closing`) to `callsTo`. `toast-call-sites`' `oneLiteralWithKind` reads the parsed argument, not a bracket walk.
@@ -86,7 +86,7 @@ Four test-infrastructure refactors the owner picked on decision page 37 (option 
 - **Tests:** `scripts/type-roles/source-code.test.ts` covers: line, block and JSDoc comments and a shebang; escapes in strings; nested templates and `${}`; a bracket key inside `${}` kept with masked brackets; a regex after `throw`, `return`, `!` and `if (ok)`; division after `!`, `++` and `x.in`; a multi-line template keeping its line count; `.vue` script lines at their real numbers and a one-line `<script>`; `callsTo` on an optional call, a `new` expression, a suffix-matched member callee, a call in an interpolation, a directive value and a dynamic argument at its real line, and parens inside strings. The 58 `log-payload-ban` fixtures, its full scan and both other guards' self-tests stay unchanged and green.
 - **Validation gate:** Phase 1's commands, then `bun scripts/complexity-baseline/check.ts`. Pass: exit 0; the manifest lost exactly the `stripNoise` record; step 4's lists are equal, logged.
 
-### Phase 3 — window harness and keyboard contract
+### Phase 3 — window harness and keyboard contract ✓ (6eb7fdf7, 5f374027, c6035b98)
 1. Add `apps/extension/tests/helpers/approval-window-harness.ts`. Move `capabilities/index.test.ts`, `discover/index.lifecycle.test.ts` and `execute/index.test.ts` onto it.
 2. For each of A2, A3, A4, A6 `closeWindow` and A7 in each suite, name the shell test that pins it (`useDappApprovalWindow.test.ts:136,148,158,187,200`) and the kept test that asserts the window's own part. Delete it only when both exist. The table, with each deleted test's title, goes into the PR body.
 3. Rewrite the stale headers (`capabilities/index.test.ts:1-19`, `execute/index.test.ts:1-23`, `:602-606`) to say what each file proves.
@@ -219,6 +219,18 @@ Per `implementations-plan/README.md` § Post-implementation standard at 0fe841be
 It reproduced F9's three differences independently and found none in the other 853 walked test files.
 
 **Final Codex pass, resumed** (verification): `approve`. Both conditions hold; no new material defect.
+
+**Arc 1 implementation: deviations from the plan** (each recorded in `lessons/phase-N.md`):
+- Phase 1: each guard keeps its exact old skips (D3), the walker prunes no directory, and the guards whose old walkers pruned `node_modules` or `dist` skip them in their own policy (the first draft's universal prune and shared skip classes fell to Codex round 1). `icon-names` keeps its own SFC parse (it reads each script block's `lang`, which `parseSource` does not carry). The comparison read the new side from the guards themselves (a temporary dump in `sourceFiles`), not from a restated policy.
+- Phase 2: `Call.line` is the line of the callee's name token, so `this._logger.log(` and `new Lock(` keep the lines the regex readers reported. `useLogFilters.scan` parses each file once, with one alternation of every callee it reads. `registrations` takes the file name `callsTo` needs; its self-test passes `"inline.ts"` and asserts the same result. A `.vue` script block contributes every line, its tag lines included, so code on a `<script>` tag's line is read (no file in the tree has any).
+- Phase 3: the harness's router reports one route, `/windows/approval?requestId=req-route` (each window's own path mattered only to the deleted A3). The harness builds its clients with function declarations (`useArrowFunction` is off only for `*.test.ts`, and a complexity suppression is banned). Revoke's two own button cases moved into their own `describe`. The headers of all three window suites were rewritten (discover's also listed the deleted pins).
+
+**Arc 1 Codex fix loop, round 1** (gpt-6.1-sol, high, the arc's diff against 0fe841be): `reject (blocking: migrated guards lose coverage)`. All taken; it found no defect in the masker, the toast argument shapes, the harness or the nine deletions:
+- R1-1 (Medium) member callees anchored with `^` (`services.add`, `createPlaced`, `NuloAccount.new|fromSigningKey`) miss `this.services.add(…)` and namespace calls: suffix patterns as the regex readers had, with member-form fixtures that fail under the anchors.
+- R1-2 (Medium) the walker's universal `node_modules`/`dist` prune narrows walkers that never pruned (a file under `src/dist/` escapes the storage guard): the prune moved into the policies of the two guards that had it.
+- R1-3 (Medium) the shared skip classes widen `toast-call-sites`' skips to `.js` tests and stories, against D3: each guard keeps its exact old patterns. The 14 lists re-ran equal (`lessons/phase-1.md`).
+
+**Arc 1 Opus diff review** (opus, beside round 1): `approve with fixes`. Taken: R1-1 (found independently); the parse cost against vitest's 5 s default, cut by parsing without JSDoc nodes and, in the masker, without parent links, never by a raised timeout (`lessons/phase-2.md`: the slowest guard test from 2-4 s to under 2 s). Not taken: a `PACKAGE_SRC_ROOTS` entry whose `src` holds no file a policy reads throws "holds no file". It needs a package that does not exist, and it fails loud and names the root in the PR that adds one, which is the throw's purpose.
 
 ## Seeds
 
