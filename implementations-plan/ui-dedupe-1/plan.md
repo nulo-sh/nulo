@@ -75,11 +75,11 @@ Every arc is one PR against `dev`, not stacked (orchestrator rule D-orch-1). A1 
   - **the sealed artifacts**: `pretty`, `compact`, `sealed`, plain closure fields, never reactive;
   - **the flow refs**: `password`, `repeatedPassword`, `isAgreed`, `backupStatus`, `isBusy`, `isDownloading`, `showRecommendation`, `dekReplaced`, `chainStateOmitted`, `unopenedImportedKeys`, `isWrongPassword`, `isPasswordMismatch`, `canDownload`. The scrub is complete by construction, and no page ref is lent to it.
 - **Its options** are `{ runCeremony, leaveAfterPasskeyFailure }`, the two things that belong to the page's shell. It calls `useAppStore()`, `useToast()` and `useConfirm()` itself, and reads `managers`.
-- **It returns** the refs above, plus `agree()`, `handleBackup()`, `handleEncrypt()`, `downloadBackup(encrypted)`, `handleDownloadClick()`, `reset()` and `dispose()`. The template keeps its names and markup byte for byte.
+- **It returns** the refs above, plus `handleBackup()`, `handleEncrypt()`, `downloadBackup(encrypted)`, `handleDownloadClick()`, `reset()` and `dispose()`. The template keeps its names and markup byte for byte.
 - **One scrub, `discard()`**, in today's order: invalidate the fence, disconnect the active run's clients, null the artifacts, null both passwords.
   - `reset()` is `discard()` plus today's flow resets.
   - `dispose()` is `discard()` plus a `disposed` flag. Every action checks the flag first, so nothing starts after unmount (lessons: a C1 `dispose()` is terminal).
-- **The page keeps** the pending-reset notice, the passkey ceremony instance, the own-window move, `onKeydown`, the `flush: "sync"` profile watcher (`reset()`, the ceremony reject, the notice re-read), `handleAgree` (the pending-reset check, then `agree()`, then `handleBackup()` for a passkey profile) and `onBeforeUnmount` (listener removal, then `dispose()`).
+- **The page keeps** the pending-reset notice, the passkey ceremony instance, the own-window move, `onKeydown`, the `flush: "sync"` profile watcher (`reset()`, the ceremony reject, the notice re-read), `handleAgree` (the pending-reset check, then `isAgreed`, then `handleBackup()` for a passkey profile; D107) and `onBeforeUnmount` (listener removal, then `dispose()`).
 - **Await boundaries**: none is added, removed or moved. Every check moves check for check.
   - Two pre-existing gaps stay as they are (D104):
     - **The open-run hop**. `openRun` returns after its last check, and `handleBackup` resumes without one (`full.vue:317-342`). A discard in that microtask lets the superseded run build clients and call the key export. The service's run fence refuses it after a profile switch; after an unmount, a passkey export's sealed result is dropped and the run's own `finally` disconnects its clients. It publishes and writes nothing. Closing it is OA-2.
@@ -257,7 +257,7 @@ Every arc is one PR against `dev`, not stacked (orchestrator rule D-orch-1). A1 
 
 A pass is exit 0, with every named test green and none skipped that ran on base. "Unchanged" is both `git diff --quiet origin/dev...HEAD -- <files>` and `git diff --quiet HEAD -- <files>`, which covers committed, staged and unstaged edits.
 
-- **A1.1** ✗. G-fast; `config/service.test.ts` green (5 cases).
+- **A1.1** ✓. G-fast; `config/service.test.ts` green (5 cases).
 - **A1.2** ✗.
   - G-fast.
   - `full.test.ts`, `full-passkey.pins.test.ts` and `account.test.ts` are unchanged and green.
@@ -302,6 +302,7 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
 | D104 | the open-run hop and the in-flight download stay as today; the hop goes to OA-2 | a quiet fix (the owner's #541 rule) | Codex C1 adopted as an ask; the table rows from Opus O3 adopted |
 | D105 | per-run clients are owned by the run; CLAUDE.md names the backup-run exception | do-the-thing fns in the options (disguises ownership) | Codex C9; round 2 confirms |
 | D106 | `dispose()` is terminal (a `disposed` flag) | `discard()` alone | Opus O4 adopted |
+| D107 | at implementation: no `agree()` (the page sets the returned `isAgreed`, one line for one caller); the TS port reads the store's profile through one cast accessor, as the JS page did unguarded; the source pin counts 12 awaits, each a table row | an `agree()` wrapper; optional chaining on the profile (would turn today's throw into a silent `false`) | implementer |
 | D201 | the premise check lives in `frozen-account-canary` (proves, both browsers, every bump) | `delete-after-prove` (proverless in CI); a scratch probe | Opus O6 adopted |
 | D202 | IndexedDB-stimulus tests are re-driven through a rejecting OPFS step; tick pins are re-derived exactly | delete them | Codex C3 adopted |
 | D301 | `updateSetting` only; the F-21 items are filed as a new issue | take F-21 | both agree |

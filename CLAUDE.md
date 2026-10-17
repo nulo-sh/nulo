@@ -256,6 +256,7 @@ Service-bound visual components (Header, AddressDisplay, GlobalLoader, Notificat
 - Pure function with no Vue reactivity → `*.ts` helper colocated with the parent.
 - Reactive state, computed, watch, or service subscriptions → composable in `src/composables/`.
 - Owns a service-client connection? Composable receives the *connected* client; the parent owns connect/disconnect.
+- **Exception, backup runs**: a full-backup run owns the clients it opens, built when the run opens and disconnected in its `finally` and by its scrub, so a dropped run can never share or close another run's connections (`useFullBackupImport`, `useFullBackupExport`).
 
 ## Vue component test conventions
 
