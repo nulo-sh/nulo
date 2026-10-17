@@ -1,12 +1,9 @@
 /**
- * Codec for the `(profileId, chainId)` coordinate that identifies a PXE runtime.
- *
- * The pair was string-encoded inline in ~7 places, two different ways:
- * `${profileId}:${chainId}` (the `ChainRuntimeRegistry` + per-chain guard key)
- * and `pxe/${profileId}/${chainId}` (the chain's OPFS store directory).
- * The `pxe/...` form is **PERSISTED on disk**, so the exact strings here are
- * load-bearing — changing them orphans a user's existing PXE stores.
- * Centralized so the two encodings and the registry key's profile prefix can't drift.
+ * Codec for the `(profileId, chainId)` coordinate that identifies a PXE runtime, in its two
+ * encodings: `${profileId}:${chainId}` (the `ChainRuntimeRegistry` + per-chain guard key) and
+ * `pxe/${profileId}/${chainId}` (the chain's OPFS store directory). The `pxe/...` form is
+ * **PERSISTED on disk**, so the exact strings here are load-bearing — changing them orphans a
+ * user's existing PXE stores.
  */
 export type ChainCoordinates = {
 	profileId: string

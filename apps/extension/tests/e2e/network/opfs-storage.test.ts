@@ -7,7 +7,7 @@
  *
  * Covered: store materialization under `pxe/<profileId>/<chainId>` (per-chain pool dirs — the
  * upstream default's single shared store must never reappear) · encryption at rest (no plaintext
- * SQLite magic in the pool files) · zero IndexedDB `pxe/*` databases (the PXE opens none) · profile
+ * SQLite magic in the pool files) · zero IndexedDB `pxe/*` databases (the PXE keeps none) · profile
  * purge removes the profile's dirs WITHOUT a live runtime dependency while a seeded sibling
  * profile's dir survives (the isolation negative-control).
  *

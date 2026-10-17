@@ -243,8 +243,8 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		const profiles = await this.profiles.getProfiles()
 		// Remove orphans whole-profile-at-a-time: the profile is POSITIVELY absent
 		// from the profiles store (a chain can only open under an existing profile
-		// row), so recursively dropping its dir cannot race a sibling-chain open —
-		// unlike the removed per-chain empty-dir sweep (a TOCTOU).
+		// row), so recursively dropping its dir cannot race a sibling-chain open,
+		// which a per-chain empty-dir sweep would (a TOCTOU).
 		const orphanProfiles = [...new Set(opfsDirs.map((c) => c.profileId))].filter((id) => !profiles.some((x) => x.id === id))
 		// The barrier loop stays INLINE: the next orphan's `enterWrite()` must
 		// be reserved on the same continuation the previous `leaveWrite()` ran
@@ -268,7 +268,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 				// snapshot: a provision that landed while we waited (dir exists ⟹ key
 				// provisioned ⟹ lifecycle entry present) must not be swept as orphan.
 				if (this.profileLifecycles.has(profileId)) continue
-				this.logWarn(`sweep: removing orphan OPFS PXE profile dir ${PXE_DATA_DIR_ROOT}/${profileId}`)
+				this.logWarn(`sweep: removing orphan OPFS PXE profile dir ${PXE_DATA_DIR_ROOT}${profileId}`)
 				await removeProfileStoreDirs(profileId)
 			} finally {
 				barrier.leaveWrite()

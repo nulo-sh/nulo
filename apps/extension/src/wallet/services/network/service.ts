@@ -1058,8 +1058,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	 *       - OperationJournalService (wipes journal by networkId)
 	 *  2. Offscreen PXE clear via PxeServiceClient — ALWAYS last, hardcoded
 	 *     here (not a subscriber) because peer-state must be wiped before
-	 *     PXE resets, otherwise SW services could read against a fresh
-	 *     empty IDB and get inconsistent state.
+	 *     PXE resets, otherwise SW services could read against a fresh,
+	 *     empty PXE store and get inconsistent state.
 	 *
 	 * Every step runs even when an earlier one fails, and any failure then
 	 * rejects the purge, so no caller treats a partial purge as complete. The
