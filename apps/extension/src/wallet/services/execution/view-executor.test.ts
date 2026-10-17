@@ -435,7 +435,7 @@ describe("ViewExecutor.executeAztecProfileTx", () => {
 	})
 })
 
-describe("ViewExecutor.executeAztecExecuteUtility — the selector binding, with the call as the dispatcher parses it", () => {
+describe("ViewExecutor.executeAztecExecuteUtility — the selector binding and the answer, with the call as the dispatcher parses it", () => {
 	const TO = AztecAddress.fromBigIntUnsafe(0x70c3n)
 	const SYMBOL = { name: "symbol", functionType: FunctionType.UTILITY, isStatic: true }
 

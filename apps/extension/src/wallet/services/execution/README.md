@@ -51,9 +51,9 @@ dispatch, and collaborator wiring; the work lives in focused modules.
 - **`JobCancelledSentinel` never crosses RPC** — `rpc-cancel.ts` is the
   boundary.
 - **A dApp's `simulateTx` and `executeUtility` answers are the app-facing
-  shapes** (`app-facing-results.ts`), the simulation's applied after the fast
+  shapes** (`app-facing-results.ts`), the simulation's is applied after the fast
   path's merge; the wallet's own simulations and utility reads call PXE
-  directly and keep the full result. No dApp `profileTx` runs: every profile
+  directly and bypass both shapes. No dApp `profileTx` runs: every profile
   mode needs the account's real signature.
 - **FPC fee strategy is two-pass byte-parity-sensitive** — structural
   fixtures in `fee/strategies-structural.test.ts` pin the choreography.

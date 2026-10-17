@@ -182,6 +182,5 @@ describe("toAppFacingUtilityResult", () => {
 			[EFFECT_CONTRACT.toString(), [new Fr(43).toString()]],
 		])
 		expect(parsed.anchorBlockTimestamp).toBe(1_234n)
-		expect(parsed.stats).toBeUndefined()
 	})
 })

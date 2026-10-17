@@ -39,9 +39,8 @@ export function toAppFacingSimulationResult(
 }
 
 /**
- * The utility answer a dApp receives: the call's return values, its offchain effects and the anchor
- * block's timestamp, which aztec.js stamps on the offchain messages. The stats are omitted, as for a
- * simulation, because they time and count the wallet's own sync.
+ * Omits the stats, which time and count the wallet's own sync too. Keeps the anchor timestamp,
+ * which aztec.js stamps on offchain messages.
  */
 export function toAppFacingUtilityResult(result: UtilityExecutionResult): UtilityExecutionResult {
 	return new UtilityExecutionResult(result.result, result.offchainEffects, result.anchorBlockTimestamp)

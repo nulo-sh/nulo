@@ -106,6 +106,9 @@ Gate `F`: `bun run lint && bun run typecheck:all && bun run test && bun run test
 - **Orchestrator, on approval**: D3 kept; phase 2 added.
 - **Codex, amendment pass** (new session, gpt-6.1-sol, high): `conditional approve (with conditions: correct the executor assertion, qualify Facts 7-9, update phase-2 completion instructions, rename a heading)` (paraphrased). Kept set `result`, `offchainEffects`, `anchorBlockTimestamp` confirmed (aztec.js attaches the timestamp to offchain messages; the schema requires it); no other route or caller found. All applied: Facts 7 and 9, the executor test's `stats === undefined`, one e2e file with the browser named, the seeds, the heading.
 
+- **Arc 1, Codex round 1** (new session, gpt-6.1-sol, high, over `git diff 563b0627 -- apps/`): `conditional approve (with conditions: correct the README and pass the planned Chrome smoke gate)`. No runtime defect; every route traced to the rebuilt answer. Accepted: the README says the wallet's own reads bypass both shapes; the helper's comment cut to its two constraints; `lessons/phase-2.md` reworded. Rejected: deleting the wire test's comment on the positive search (it states why that assertion exists, as the sibling simulate test's identical comment does).
+- **Arc 1, Opus diff review**: `conditional approve (with conditions: commit the working-tree edits; run phase 2's e2e)`. Correctness traced (dispatch, `batch`, `DappInteractionService`; aztec.js and the playground read only the kept fields). Accepted: the redundant `parsed.stats` line removed; the executor describe renamed to cover the answer; "too" restored in the helper's comment; README grammar.
+
 ## Delivery
 
 - One arc, branch `worktree-dapp-results-1`, one PR against `dev`, no stack (the orchestrator's D-orch-1). `code_review: off`.
