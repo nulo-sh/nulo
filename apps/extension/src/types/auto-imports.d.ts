@@ -467,6 +467,7 @@ declare global {
   const useSeedStatus: typeof import('../composables/useSeedStatus').useSeedStatus
   const useSendReview: typeof import('../composables/useSendReview').useSendReview
   const useSendStageLine: typeof import('../composables/useSendStageLine').useSendStageLine
+  const useSettingUpdate: typeof import('../composables/useSettingUpdate').useSettingUpdate
   const useSettingsRowHighlight: typeof import('../composables/useSettingsRowHighlight').useSettingsRowHighlight
   const useSlots: typeof import('vue').useSlots
   const useSnackInset: typeof import('../composables/snackInset').useSnackInset
@@ -1195,6 +1196,7 @@ declare module 'vue' {
     readonly useSeedStatus: UnwrapRef<typeof import('../composables/useSeedStatus')['useSeedStatus']>
     readonly useSendReview: UnwrapRef<typeof import('../composables/useSendReview')['useSendReview']>
     readonly useSendStageLine: UnwrapRef<typeof import('../composables/useSendStageLine')['useSendStageLine']>
+    readonly useSettingUpdate: UnwrapRef<typeof import('../composables/useSettingUpdate')['useSettingUpdate']>
     readonly useSettingsRowHighlight: UnwrapRef<typeof import('../composables/useSettingsRowHighlight')['useSettingsRowHighlight']>
     readonly useSlots: UnwrapRef<typeof import('vue')['useSlots']>
     readonly useSnackInset: UnwrapRef<typeof import('../composables/snackInset')['useSnackInset']>

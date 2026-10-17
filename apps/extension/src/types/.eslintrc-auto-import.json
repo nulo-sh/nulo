@@ -677,6 +677,7 @@
     "useSeedStatus": true,
     "useSendReview": true,
     "useSendStageLine": true,
+    "useSettingUpdate": true,
     "useSettingsRowHighlight": true,
     "useSlots": true,
     "useSnackInset": true,
