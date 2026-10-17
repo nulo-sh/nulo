@@ -20,8 +20,8 @@ vi.mock("@/composables/useProfileImportFlow", () => ({
 	},
 }))
 vi.mock("@/composables/completeImportWithRecovery", () => ({ completeImportWithRecovery: vi.fn(async () => "active") }))
-vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () => ({ hydrateKnownProfile: vi.fn() }) }))
-vi.mock("@/composables/waitForProfileActive", () => ({ waitForProfileActive: vi.fn() }))
+const boot = vi.hoisted(() => ({ hydrate: vi.fn() }))
+vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () => ({ hydrateKnownProfile: boot.hydrate }) }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 vi.mock("@/utils/lastActiveProfile", () => ({ setLastActiveProfileId: vi.fn(async () => undefined) }))
 vi.mock("@/wallet/utils/onboarding-tab", () => ({ redirectToOnboardingTabIfNeeded: vi.fn() }))
@@ -49,6 +49,8 @@ import { enterOn, expectNativeAttrs, IGNORED_ENTERS, nativeInput, pasteInto, typ
 import JsonViewer from "@/components/JsonViewer/JsonViewer.vue"
 import ImportMethodPicker from "@/components/composite/import/ImportMethodPicker.vue"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
+import { completeImportWithRecovery } from "@/composables/completeImportWithRecovery"
+import { useAppStore } from "@/stores/app.store"
 import ImportPage from "./import.vue"
 
 /** The flow's surface with a decrypted password-profile backup chosen and a valid new password. */
@@ -377,6 +379,62 @@ describe("popup import — in its own window", () => {
 		expect(surface.release).toHaveBeenCalledTimes(1)
 		expect(nav.push).toHaveBeenCalledWith("/popup/general")
 		expect(surface.release.mock.invocationCallOrder[0]).toBeLessThan(nav.push.mock.invocationCallOrder[0] ?? 0)
+	})
+})
+
+describe("popup import — the activation wait", () => {
+	/** The page's own completeImport over the real recovery and activation wait, past its first await. */
+	async function startImport() {
+		const real = await vi.importActual<typeof import("@/composables/completeImportWithRecovery")>(
+			"@/composables/completeImportWithRecovery",
+		)
+		vi.mocked(completeImportWithRecovery).mockImplementationOnce(real.completeImportWithRecovery)
+		await mountImport()
+		const appStore = useAppStore()
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		const done = holder.opts.completeImport({ id: "p1" })
+		await vi.advanceTimersByTimeAsync(0)
+		return { appStore, done }
+	}
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	test("a failure recorded for the imported profile ends the wait at once; another profile's does not", async () => {
+		const { appStore, done } = await startImport()
+		appStore.bootstrapFailure = { profileId: "p2", message: "theirs" }
+		await vi.advanceTimersByTimeAsync(0)
+		expect(boot.hydrate).not.toHaveBeenCalled()
+		expect(nav.push).not.toHaveBeenCalled()
+
+		appStore.bootstrapFailure = { profileId: "p1", message: "boom" }
+		await done
+
+		expect(boot.hydrate).toHaveBeenCalledTimes(1)
+		expect(nav.push).toHaveBeenCalledWith("/popup/auth")
+	})
+
+	test("an activation of the imported profile shows the wallet with no recovery", async () => {
+		const { appStore, done } = await startImport()
+		appStore.profile = { id: "p1" } as typeof appStore.profile
+		appStore.isLogined = true
+		await done
+
+		expect(boot.hydrate).not.toHaveBeenCalled()
+		expect(nav.push).toHaveBeenCalledWith("/popup/general")
+	})
+
+	test("with no signal the wait holds to its 30 s bound, then recovers", async () => {
+		const { done } = await startImport()
+		await vi.advanceTimersByTimeAsync(29_999)
+		expect(boot.hydrate).not.toHaveBeenCalled()
+
+		await vi.advanceTimersByTimeAsync(1)
+		await done
+
+		expect(boot.hydrate).toHaveBeenCalledTimes(1)
+		expect(nav.push).toHaveBeenCalledWith("/popup/auth")
 	})
 })
 
