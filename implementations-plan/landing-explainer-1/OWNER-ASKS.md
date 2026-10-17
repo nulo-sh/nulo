@@ -1,5 +1,7 @@
 # Owner asks: landing-explainer-1
 
+**Settled by the orchestrator (D-orch, 2026-10-17 22:0xZ), on the plan's approval:** OA-5 = A, the page ships unlinked from the home page. OA-6 = A, the owner runs the preview command by hand; nothing enables branch builds. OA-7 = A ships now, quoted in the PR body for the owner to flip. OA-1 to OA-4 stay the owner's: the three scripts and their text versions go on the owner's next decision page verbatim from this file, and the page ships the text versions until the owner picks.
+
 The page `https://nulo.sh/how-aztec-works` ships in arc 1 as the signed drawing `p33-aztec-a` (P33-03 A): the landing's header, grain, plates and footer, the heading "How Aztec works.", the two sentences, then three cards named Private balances, Proofs, Fees. Until a clip exists, each card shows its short text version, never an empty player. The PR stays a draft until you answer OA-1 to OA-3 (P39-11: "I want to approve the explainers though") and a Cloudflare preview of it exists (OA-6).
 
 Every claim below was checked against the Aztec developer docs at v6.0.0-rc.3 and the wallet's own glossary; [recon.md](recon.md) lists the source of each. Two things the clips deliberately do not say: that the record hides who was paid (a first payment to someone new leaves a trace that anyone who knows their address can find), and that transaction sizes are hidden (the current Aztec version does not pad them).
@@ -89,7 +91,7 @@ Both tools cost money and send material to an outside service, so each needs you
 | **B. Header link** | The home header reads "How it works", "How Aztec works", "Get Nulo", as the new page's own header does in the drawing. |
 | **C. Footer link** | "how aztec works" joins the footer row (github · chrome · firefox · releases · privacy · terms). |
 
-**Recommendation: B.** The drawing already puts the link in the page's header, and the two headers then match. Against: at 900 px and narrower the header hides every link but Get Nulo, as it hides How it works today, so B reaches desktop visitors only; C reaches phones too. **What ships now: A.**
+**Recommendation: B.** The drawing already puts the link in the page's header, and the two headers then match. Against: at 900 px and narrower the header hides every link but Get Nulo, as it hides How it works today, so B reaches desktop visitors only; C reaches phones too. **Settled: A** (orchestrator, D-orch: the lane brief ships the page unlinked by default).
 
 ## OA-7. The page's search and share text
 
@@ -100,7 +102,7 @@ Both tools cost money and send material to an outside service, so each needs you
 | **A. The signed words** | How Aztec works \| NULO | Balances are private unless you make them public. Each transaction is proved on this computer and pays a small fee in Fee Juice. | The home page's card ("You're on camera. You choose what it sees.") |
 | **B. Your words** | as A | your description, in a note | as A, or none |
 
-**Recommendation: A.** It reuses copy you signed and the site's one card. Against: "this computer" reads oddly in a search result, and the card shows the home page's headline. **What ships now: A.**
+**Recommendation: A.** It reuses copy you signed and the site's one card. Against: "this computer" reads oddly in a search result, and the card shows the home page's headline. **Ships now: A** (orchestrator, D-orch), quoted in the PR body so you can flip it.
 
 ## OA-6. The Cloudflare preview (an action only you can take)
 
@@ -111,4 +113,4 @@ No landing branch build has run so far: Workers Builds has built `nulo-landing` 
 | **A. One preview by hand** | From a checkout of the PR branch, signed in to Cloudflare: `bun install --frozen-lockfile && cd apps/landing && bun run build && bun run deploy:preview -- --preview-alias how-aztec-works` | Prints `https://how-aztec-works-nulo-landing.<your workers.dev subdomain>` for that commit. Never touches nulo.sh. Rerun after each change you want to see. |
 | **B. Turn on branch builds** | Cloudflare dashboard → Workers & Pages → nulo-landing → Settings → Builds → Branch control: enable "Builds for non-production branches", with the deploy command `bun run deploy:preview` (the README already names it). | Every pushed branch gets a preview link in its checks. The cost: a branch build runs that branch's build commands with the Workers Builds token, which can also deploy to nulo.sh. Any branch an agent or collaborator pushes would then run with that power, not only reviewed `main`. |
 
-**Recommendation: A** for this page: it keeps production deploys behind a reviewed merge. **What ships now:** screenshots in the PR body and A's command; the PR stays a draft.
+**Recommendation: A** for this page: it keeps production deploys behind a reviewed merge. **Settled: A** (orchestrator, D-orch: production deploys stay behind a reviewed merge). The PR body carries A's command and says the preview appears after you run it; nothing enables branch builds.

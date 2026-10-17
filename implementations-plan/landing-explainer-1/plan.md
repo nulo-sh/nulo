@@ -1,7 +1,7 @@
 ---
 plan: landing-explainer-1
 tier: light
-status: planned, awaiting approval (Codex approve, round 3)
+status: approved 2026-10-17; arc 1 open as draft; arc 2 (clips) held for the owner
 issues: "#588 (Refs only: onboarding-3 closes it; no arc here closes an issue)"
 driver: claude-code
 claude_model: opus
@@ -17,7 +17,7 @@ post_implementation_hardening: not scheduled
 
 # landing-explainer-1: the How Aztec works page on nulo.sh
 
-Two arcs, each one PR against `dev`, no stack (D-orch-1). Arc 1 ships the page at the fixed address `https://nulo.sh/how-aztec-works` (P33-03 A, P39-11), each card carrying its text version. Its PR stays a draft until the owner answers OA-1 to OA-3 and a Cloudflare preview of it exists (OA-6). Arc 2 adds the three clips after OA-4, the owner's own go-ahead and a spending cap. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+Two arcs, each one PR against `dev`, no stack (D-orch-1). Arc 1 ships the page at the fixed address `https://nulo.sh/how-aztec-works` (P33-03 A, P39-11), each card carrying its text version. Its PR stays a draft until the owner answers OA-1 to OA-3 and a Cloudflare preview of it exists (OA-6). Arc 2 adds the three clips after OA-4, the owner's own go-ahead and a spending cap. Approved by the orchestrator on 2026-10-17, which settled OA-5 = A (unlinked), OA-6 = A (manual preview, no branch builds) and OA-7 = A (ships now, quoted in the PR), kept OA-1 to OA-4 with the owner, and reversed D9. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Brief claims that did not hold
 
@@ -50,7 +50,7 @@ For a new Nulo user who taps "How Aztec works" on Home and lands in a tab, and f
 | D6 | Clips are produced outside the lane, in a session the owner authorizes; arc 2 integrates approved files | Both skills require the owner's own words and spend money; a relayed brief may start neither |
 | D7 | Text versions start from the wallet's signed glossary, narrowed where it says more than the record hides | New wording: more to approve, and a second voice |
 | D8 | The drawing's "3 clips" eyebrow waits for arc 2 | Shipping it now: false until clips exist |
-| D9 | The close-out ships with arc 1 unless OA-4, the go-ahead and the cap have landed when arc 1 is ready; then the clips become an `owner-decision` issue carrying Phase 3 and OA-4 | Holding the plan open for an undated paid session (README § Proportion: no work while its product decision is open) |
+| D9 | Reversed by the orchestrator (D-orch, 2026-10-17): arc 2 stays in this lane, held until the owner answers OA-1 to OA-4, and the close-out ships with arc 2, never with arc 1 | The planner's version (close out with arc 1 and file the clips as an issue): the lane brief makes the clips this lane's arc 2 |
 
 ## Phase 1 (arc 1): the page
 
@@ -84,9 +84,8 @@ Assumptions: F1 to F10, I1. Steps:
 1. Apply the answers to OA-1 to OA-3 and OA-7 to the page.
 2. On OA-5 B or C, add the home link; check it at 1440 px and at 375 px.
 3. Run the Phase 1 gate. Resume the Codex session once on the change.
-4. Ask the owner for OA-6: a preview of the PR's latest commit.
-5. Load `/how-aztec-works` on that preview; expect the page's title. Put the link in the PR body.
-6. Run `gh pr ready`.
+4. When the owner has run OA-6 A's command on the PR's latest commit, load `/how-aztec-works` on that preview; expect the page's title. Put the link in the PR body.
+5. Mark the PR ready only when the orchestrator says so.
 
 ## Phase 3 (arc 2): the clips
 
@@ -122,10 +121,10 @@ Precondition: OA-4 answered, and three finished clips the owner approved, made o
 
 ## Delivery
 
-- **Arc 1:** branch `worktree-landing-explainer-1`, `gh pr create --draft --base dev` after Phase 1's gate and the Codex loop. Title: `feat(landing): the how aztec works page at nulo.sh/how-aztec-works` (66 characters). Body: what and why; the validation runs; the screenshots; the preview state with OA-6 A's command; `Refs #588`; "Draft until the owner approves the explainers (OA-1 to OA-3) and a preview exists (OA-6)". No labels: no extension e2e lane applies. If the landing issue onboarding-3 plans to file exists by then, the body says `Closes #<n>`. Ready after Phase 2.
+- **Arc 1:** branch `worktree-landing-explainer-1`, `gh pr create --draft --base dev` after Phase 1's gate and the Codex loop. Title: `feat(landing): the how aztec works page at nulo.sh/how-aztec-works` (66 characters). Body: what and why; the picks P33-03 = A and P39-11 = A with the owner's note verbatim; the final URL `https://nulo.sh/how-aztec-works`, stated once; the validation runs; dark screenshots at desktop and phone width; OA-6 A's command, with the note that the preview appears after the owner runs it; OA-7's head copy, quoted for the owner to flip; `Refs #588`; "Draft until the owner approves the explainers (OA-1 to OA-3)". No labels: no extension e2e lane applies. If the landing issue onboarding-3 plans to file exists by then, the body says `Closes #<n>`. Ready after Phase 2.
 - **Arc 2:** branch `landing-explainer-1-clips` off `origin/dev` after arc 1 merges; `gh pr create --base dev`; title `feat(landing): the three how aztec works clips`; `Refs #588`.
 - **Release order:** the wallet item points at this address, so arc 1 must reach `main` with or before the release that ships onboarding-3's item; until then the link shows the home page.
-- **Close-out** per D9. No parallel lanes: one phase per arc.
+- **Close-out** ships with arc 2 (D9 as reversed); arc 1's PR carries no archive move. No parallel lanes: one phase per arc.
 
 ## Post-implementation
 
