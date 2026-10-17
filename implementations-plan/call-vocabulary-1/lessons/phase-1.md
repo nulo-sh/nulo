@@ -10,3 +10,4 @@
   5. Recorded: the grant line now switches from the plain name to the label once its decode lands. Verified that approval waits for every grant decode (`index.vue:414,629`). Added to UI impact under P36-01.
   6. Applied: the two-grant test could not catch indexing by action. It now leads with a `call` action, and fails when `grantRows` is indexed by action.
   7. Applied: `ListedToken` was declared twice. It is now exported once from `tx-amount.ts`.
+- **Codex round 2** (resumed, same session, on `2bab2ff2`): approve, "No new regression, adversarial path, or comment finding." Converged after two rounds.
