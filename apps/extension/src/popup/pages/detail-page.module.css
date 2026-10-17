@@ -29,6 +29,24 @@
 	color: var(--txt-primary);
 }
 
+/* Sits level with the value's first line, whose line box is taller. */
+.app_key {
+	composes: detail_key;
+	flex-shrink: 0;
+	padding-top: 2px;
+}
+
+/* A dApp's name can be one unbreakable word: it breaks anywhere, so the row grows instead of the page. */
+.app_value {
+	composes: detail_value_mono;
+	min-width: 0;
+	text-align: right;
+	word-break: break-all;
+	/* Firefox's break-all won't split a letter from the digits after it; anywhere fills every line. */
+	line-break: anywhere;
+	line-height: 1.4;
+}
+
 .empty_headline {
 	composes: type--title-page from global;
 	color: var(--nulo-secondary);
