@@ -66,6 +66,7 @@ async function harness(opts?: { enabled?: boolean; profile?: ProfileInfo | undef
 		start: async () => {},
 		onActiveProfileChanged: new EventHandler<ProfileInfo | undefined>(),
 		getActiveProfile: async () => state.profile,
+		peekLiveSerial: () => (state.profile ? 1 : undefined),
 	}
 
 	const fakeTokenList = {
@@ -440,6 +441,17 @@ describe("PriceService — unlock-gated alarm lifecycle", () => {
 		fakeProfile.onActiveProfileChanged.invoke(PROFILE)
 		await vi.waitFor(() => expect(sessionRead).toHaveBeenCalled())
 		await new Promise((r) => setTimeout(r, 0))
+		expect(fetchFn).not.toHaveBeenCalled()
+	})
+
+	test("a lock queued behind the session read stops the fetch", async () => {
+		const { service, state, fakeProfile, fetchFn } = await harness()
+		fakeProfile.getActiveProfile = async () => {
+			const open = state.profile
+			state.profile = undefined
+			return open
+		}
+		expect((await service.refreshIfStale()).quotes).toEqual({})
 		expect(fetchFn).not.toHaveBeenCalled()
 	})
 

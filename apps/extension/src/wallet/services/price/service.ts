@@ -341,11 +341,10 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			this.logDebug("refresh suppressed by backoff window")
 			return this.readUsable()
 		}
-		// The last await before the request leaves: a lock that landed while a caller was awaiting
-		// (the unlock handler's alarm write, say) still stops it.
-		if (!(await this.profileService.getActiveProfile())) {
-			const usable = await this.readUsable()
-			return gen === this.generation ? usable : {}
+		// The last await before the request leaves, so a lock that landed while a caller was awaiting
+		// stops it. The peek must stay in this continuation: it catches a lock queued behind the read.
+		if (!(await this.profileService.getActiveProfile()) || this.profileService.peekLiveSerial() === undefined) {
+			return this.usableUnlessSuperseded(gen)
 		}
 
 		const ids = allCoingeckoIds()
@@ -401,6 +400,11 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			// Retract only our own controller — a newer refresh may have published its own.
 			if (this.abortController === controller) this.abortController = undefined
 		}
+	}
+
+	private async usableUnlessSuperseded(gen: number): Promise<PriceState> {
+		const usable = await this.readUsable()
+		return gen === this.generation ? usable : {}
 	}
 
 	private async recordFailure(gen: number, error: unknown): Promise<PriceState> {
