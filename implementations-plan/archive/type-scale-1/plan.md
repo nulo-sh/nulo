@@ -1,7 +1,7 @@
 ---
 plan: type-scale-1
 tier: mid
-status: completed (2026-10-17): #649 carries the arc and this close-out; OA-6, OA-7 and OA-8 are open as #651, #652 and #653
+status: completed (2026-10-17): #649 carries the arc and this close-out; OA-6 to OA-9 are open as #651, #652, #653 and #657
 issues: "#589 (closed by the one arc)"
 driver: claude-code
 claude_model: opus
@@ -32,13 +32,15 @@ post_implementation_hardening: not scheduled
     - OA-4 C: the publish strip's facts at 10 px semibold.
   - The guard refuses a role name that names no role.
   - The e2e sweep fails, in both browsers, on text that runs past its box or that a box cuts with no ellipsis drawn (D5, D8, D15).
-  - The tx detail page's App value breaks at any character in Firefox too (D14).
-- **Dropped:** none. OA-6, OA-7 and OA-8 ship their "what ships now" until the owner answers. Every review finding was fixed, disclosed (OA-8) or filed (#654).
+  - The App value on the transaction and journal details pages breaks at any character in Firefox too (D14). Since #650 the two pages share one rule.
+  - Since #650, a dApp transfer row's two chips keep 10 px semibold, so the row stays one line at the drawn amount, with its 19 px floor (OA-9, D18).
+- **Dropped:** none. OA-6 to OA-9 ship their "what ships now" until the owner answers. D17's 20 px floor was superseded by D18. Every review finding was fixed, disclosed (OA-8) or filed (#654).
 - **Known limits:** none.
 - **Open items:**
   - #651: OA-6, the header chips;
   - #652: OA-7, Manage accounts' address line;
   - #653: OA-8, the lines the scale wraps;
+  - #657: OA-9, a dApp transfer row's two chips;
   - #654: loading bars and glyphs sized for 11 px lines;
   - #627: the store captures and art, extended to this scale.
 - **Lessons:** none promoted, because `lessons.md` is at 8163 of 8192 bytes and no entry is stale.
@@ -236,6 +238,8 @@ Done 2026-10-17: two smoke failures, each answered by the panel (OA-7 and D13; D
 | D14 | The App value on the tx detail page, Firefox only at 13 px (`rows.test.ts`): `break-all` keeps a letter with the digits after it, so the first line ends 20.4 px short against a 7.8 px glyph (Chrome 4.8 px) | Add `line-break: anywhere` beside `break-all` (a correction recorded as a deviation: the rule's comment and the test both state "breaks anywhere"): 4.83 px in both browsers; a browser that ignores it falls back to today's `break-all` | An owner ask (it restores what the rule was written to do); loosening the test's one-glyph bound (weakens the gate) |
 | D15 | Three gaps in the layout gate the review loop found (Codex r1 and Opus, reproduced) | Corrections, each with a control in the probe test. An ellipsis counts only on a block container (a flex or grid box draws none), and only for text in that box's own lines. Text a box clips paints as far as the shorter of its text and its box. A clipping child counts toward its parent's text by what it paints, so a clip that keeps its width is read; a field counts only on its own reading | Leave them: the gate would miss text a flex box cuts and a clip that grew past its cell, and would flag short text in a wide clipping box |
 | D16 | Wraps the signed 13 px causes: the execute window's arguments, Send's token-mode line, the row's dollar cap (Opus) | OA-8 to the owner; ships as signed, since nothing is cut and every digit shows | Make room or keep the earlier size now: each is an unsigned layout change, and P34-03 signed 13 px for every identifier |
+| D17 | (superseded by D18) Merging `dev` after #650 (P34-08 D): its app-chip floor, 19 px, was "border, padding and one '…' in `tag`"; in `label-section` a whole "…" needs 19.89 px (Chrome) and 19.88 px (Firefox), and `rows.test.ts` reds in both browsers | The floor follows the role: 20 px, with `APP_CHIP_FLOOR` and both comments. #650's own check that the chip holds a whole "…" stays as it is (panel: Codex and Opus, both A) | Keep 19 px through three `OVERRIDES` that bring back `tag`'s look for one chip: a retired role revived, and two caps styles in one row |
+| D18 | After D17, at #650's drawn amount (2.5 USDC) the dApp transfer row's chips at 11 px break the direction chip onto two lines, and the app chip shows "…" alone (both browsers). That breaks P34-08 D's one line, and under P35-08 B (lane ui-leftovers-1) the floor would come at $2.50, not about $1,000 | OA-9 to the owner. OA-1's form A ships on the two-chip row only: both chips keep 10 px / 600 / 0.08 em through one grouped rule and three `OVERRIDES` entries, scoped to that branch. The floor is back at 19 px. `rows.test.ts` reads both rows' chip type (panel: Codex and Opus, both A) | Ship as measured (it changes #650's signed assertion, `lines: 1`); the app chip alone at 10 px (two caps sizes in one row) |
 
 ## Audit verdicts
 
@@ -266,6 +270,18 @@ Done 2026-10-17: two smoke failures, each answered by the panel (OA-7 and D13; D
 - **Round 2.** Codex: "VERDICT: changes ; Correct the grown-child control, field false positive, and remaining ellipsis exemption before accepting the layout gate." All four findings were fixed, and the e2e pair is green on both browsers.
 - **Round 3.** Codex: "VERDICT: approve ; The fixes resolve round 2 without a material regression."
 
+**Merge with #650, panel** (2026-10-17, on the red `rows.test.ts:757`). Codex (sol, high, session `01a14a5b-47aa-7d51-8d08-e03a955c7a7c`): "VERDICT: A ; Set the floor and paired test constant to 20px and update both role comments, conditional on complete rebuilt Chrome and Firefox runs preserving the whole-ellipsis and row-layout assertions." Opus (general-purpose): "VERDICT: A ; set the floor to 20 px, rename both comments to `label-section`, then rerun `rows.test.ts` and `type-roles.test.ts` at retry 0 in Chrome and Firefox, including the new `:951` bound and `:758-776`." Taken (D17). The 0.11 px margin stays guarded by #650's whole-"…" check.
+
+**Merge with #650, the two-chip row, panel** (2026-10-17, on the red `rows.test.ts:949`). Codex (resumed): "VERDICT: A ; Preserve baseline typography only on the two-chip branch, record OA-9, and ship only after unchanged geometry assertions and scoped typography checks pass in both browsers." Opus (general-purpose): "VERDICT: A", with conditions:
+- a structural scope that excludes single-chip rows;
+- a `rows.test.ts` assertion of both rows' chip type;
+- reruns in both browsers;
+- the measured chip text at 2.5 USDC disclosed if it is not "SHI…", since this branch also widens the row's dollar figure and separator;
+- D17 marked superseded;
+- OA-9 stating the P35-08 B threshold.
+
+All taken (D18, OA-9).
+
 ## Delivery
 
 One arc, one PR, no stack (the orchestrator's D-orch-1). Branch `worktree-type-scale-1` → `dev`. Title: `feat(design): retune the type scale app-wide, small caps in one role` (68 characters). Body: what changed and why; both signed picks quoted; each owner ask with its answer or its "what ships now"; the screenshots; each validation run with its outcome; the per-browser wall-clock of `type-roles.test.ts` and `type-roles-windows.test.ts` before and after (an added assertion, no added scenario); `Closes #589`. Open it without labels; the path filters trip both e2e lanes. One lane: phases 2 and 3 touch the same files.
@@ -291,3 +307,5 @@ The execution contract is this plan plus [`implementations-plan/README.md` § Po
 ```
 - 2026-10-17 arc 1 phase 4 ✓: smoke `account-import-export` red on both browsers (an imported row's line at 13 px) and `rows` red on Firefox (the App value's first line); panel (Codex, Opus) ship-A as OA-7 (D13) and keep `line-break: anywhere` (D14); the three specs green on both (16/16); docs at 24 roles; audit:vue 0; build-storybook 0; clean pair green (after wall-clocks in lessons/phase-4.md); after shots retaken on the final tree, 15 pairs per browser.
 - 2026-10-17 arc 1 close-out: merged origin/dev at 1b93cbfa (#644, no conflict); OA-6, OA-7 and OA-8 filed as #651, #652, #653; #654 filed; #627 extended to the store images; Outcome written; plan archived.
+- 2026-10-17 arc 1 close-out, second merge: origin/dev at 623fc97f (#650). In `tx/[id].vue` the App row rules had moved to `detail-page.module.css`, so `line-break: anywhere` moved with them and the journal page gets it too. The app chip's floor follows the role (D17).
+- 2026-10-17 arc 1 close-out, the two-chip row: in both browsers at 2.5 USDC the 11 px chips break the direction chip and leave "…" alone. The panel (Codex, Opus) chose A, applied as D18. OA-9 is filed as #657 and cross-referenced on #583. `rows.test.ts` and `type-roles.test.ts` are green in both browsers.

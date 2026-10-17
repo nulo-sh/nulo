@@ -117,3 +117,20 @@ Found in the review loop (2026-10-17) from the after screenshots, in both browse
 - **Recommendation**: B on the execute window, where a person compares addresses and a two-character last line is the easiest to misread. A for the other two.
 - **What ships now**: A, the signed size (P34-03 for the arguments, P30-14 for `meta`).
 - **Open as #653** (`owner-decision`), filed at close-out.
+
+## OA-9: a dApp transfer row's two chips, where 11 px no longer fits one line
+
+Found at close-out (2026-10-17), when `dev` was merged after #650 (P34-08 D). It was measured at retry 0 on the built extension at 360 px, and Chrome and Firefox agree.
+
+- **Surface**: an activity row (Home, History, a token page) for a transfer a dApp asked for. It shows the token symbol, the direction chip ("PUBLIC → PUBLIC"), the app chip, and the amount on the right (`TransactionCard.vue`).
+- **#650's picture** (P34-08 D, drawn with the 10 px chips): "One line, the app chip smaller in this row only: SHI with an ellipsis; 62 px". At 2.5 USDC the app chip was 41 px, "SHI…".
+- **At the signed `label-section`** (11 px / 700 / 0.1 em): at 2.5 USDC the direction chip breaks onto two lines and the app chip sits at its floor, showing "…" alone.
+  - A whole "…" now needs 19.89 px, so the floor would be 20 px.
+  - Under P35-08 B (#583, lane ui-leftovers-1: "from the floor the app chip drops under the direction chip keeping its name, 68 px"), the drop would start at $2.50 instead of about $1,000.
+- **Options**:
+  - **A. The two chips of this row keep 10 px semibold** (what ships). The row is one line at 2.5 USDC and the floor stays 19 px. The app chip is 32.4 px, not 41 px, because this scale also widens the row's dollar figure (13 px) and its separator (14 px). On #650's table that is about "SH…". Send and receive rows, and a lone app chip, take 11 px.
+  - **B. The signed 11 px here too.** The direction chip breaks at any amount and, once P35-08 B lands, the app chip drops under it from $2.50.
+  - **C. Make room at 11 px.** The direction words shorten (for example "PUB → PUB"), or the row's dollar figure goes back to 11 px.
+- **Recommendation**: A, unless the owner prefers one chip size across all rows over the one-line row.
+- **What ships now**: A, through one grouped rule in `TransactionCard.vue` (`.chips > .chip, .app_slot > .app_chip`) and three `OVERRIDES` entries (10px, 600, 0.08em, role `label-section`). They are scoped to the two-chip branch; `rows.test.ts` reads both rows' chip type.
+- **Open as #657** (`owner-decision`), filed at close-out.
