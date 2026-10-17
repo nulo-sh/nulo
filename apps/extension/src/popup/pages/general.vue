@@ -68,24 +68,31 @@ configService.onUpdate.add(onConfigUpdate)
 const prestoRead = useConfigRead(configService, readPrestoReached, landPrestoReached)
 const getStarted = useGetStarted({ profileId: () => appStore.profile?.id })
 
-const reminders = computed(() => {
+const feeJuice = computed(() => {
 	const scope = selectedBalanceScope(appStore)
-	const feeJuice = gasHoldings(scope ? balancesStore.entry(scope)?.gas : undefined)
-	return getStartedView({
+	return gasHoldings(scope ? balancesStore.entry(scope)?.gas : undefined)
+})
+const reminders = computed(() =>
+	getStartedView({
 		type: appStore.profile?.type,
 		flags: getStarted.flags.value,
-		funds: combineHoldings(tokenHoldings.value, feeJuice),
-		feeJuice,
+		funds: combineHoldings(tokenHoldings.value, feeJuice.value),
+		feeJuice: feeJuice.value,
 		prestoReached: prestoReached.value,
-	})
-})
+	}),
+)
+// Token funds can raise the card before the gas read lands, which can still add the Fee Juice row.
+const remindersSettled = computed(() => reminders.value !== null && feeJuice.value !== "unknown")
 
 async function readPrestoReached() {
 	try {
 		return await configService.getValue("prestoReached")
-	} catch {
-		// Unread is not reached: the row offers a setup that may be done already.
-		return false
+	} catch (error) {
+		// Unread is not reached: the row offers a setup that may be done already. Rethrown, so a
+		// reconnect reads it again.
+		prestoReached.value ??= false
+		console.debug("presto flag read failed", { error })
+		throw error
 	}
 }
 
@@ -145,7 +152,7 @@ onBeforeUnmount(() => {
 		</div>
 
 		<!-- The card waits for its reads, so it can mount after the rows have and move them down. -->
-		<div :class="$style.scroller" data-testid="home-scroller" :data-reminders-settled="reminders !== null" @scroll.passive="onScroll">
+		<div :class="$style.scroller" data-testid="home-scroller" :data-reminders-settled="remindersSettled" @scroll.passive="onScroll">
 			<Flex direction="column" gap="16" :class="$style.content">
 				<RecoveryModeBanner />
 				<RestoreOutcomeBanner />

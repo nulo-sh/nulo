@@ -11,6 +11,7 @@ import { interceptRpc } from "../fixtures/browser"
 import { type ExtensionContext, launchExtension, test } from "../fixtures/extension"
 import { navigateByHash, revealSeedPhrase, switchToLocalNetwork, waitForHomeTotal, waitForTokenCardAmount } from "../fixtures/helpers"
 import { shotSend } from "../fixtures/send-page"
+import { waitForHomeReminders } from "../fixtures/tokens"
 import { exportFundedBackup } from "../helpers/crash-truth"
 import { gotoPopupImport, importFullBackup, POPUP_IMPORT_SHELL, TEST_PASSWORD } from "../helpers/import-drivers"
 
@@ -47,11 +48,8 @@ test.skipIf(!aztecConfig)(
 			await shotSend(page, "home-backup-reminder", "backup-reminder-banner")
 			await revealSeedPhrase(page, TEST_PASSWORD)
 			await navigateByHash(page, "#/popup/general")
-			await page.waitForSelector('[data-testid="balance-amount"]', { visible: true, timeout: 30_000 })
-			await page.waitForFunction(() => !document.querySelector('[data-testid="backup-reminder-banner"]'), {
-				timeout: 15_000,
-				polling: 100,
-			})
+			await waitForHomeReminders(page)
+			expect(await page.$('[data-testid="backup-reminder-banner"]')).toBeNull()
 		} finally {
 			await ctx?.close()
 		}

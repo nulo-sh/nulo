@@ -26,13 +26,17 @@ vi.mock("@/composables/useSeedStatus", () => ({
 }))
 const configEvents = { update: new EventHandler(), connected: new EventHandler() }
 let prestoReached: unknown = false
+let prestoReadFailures = 0
 vi.mock("@/wallet/services/config/client", () => ({
 	ConfigServiceClient: vi.fn(function () {
 		return {
 			disconnect: vi.fn(),
 			onUpdate: configEvents.update,
 			onConnected: configEvents.connected,
-			getValue: vi.fn(async () => prestoReached),
+			getValue: vi.fn(async () => {
+				if (prestoReadFailures-- > 0) throw new Error("port closed")
+				return prestoReached
+			}),
 		}
 	}),
 }))
@@ -100,17 +104,26 @@ afterEach(() => {
 	tokenHoldings = "none"
 	gas = undefined
 	prestoReached = false
+	prestoReadFailures = 0
 	vi.restoreAllMocks()
 	vi.clearAllMocks()
 })
 
 describe("Home — the backup reminder's sources", () => {
-	test("a first gas read that failed does not hold back the banner token funds raise", async () => {
+	test("a first gas read that failed reads as empty: the calm card shows, offering Fee Juice", async () => {
 		gas = { status: "degraded", version: 1 }
+		const w = await mountHome()
+		expect(has(w, "get-started-phrase")).toBe(true)
+		expect(has(w, "get-started-feeJuice")).toBe(true)
+		expect(has(w, "backup-reminder-banner")).toBe(false)
+	})
+
+	test("token funds raise the banner before the gas read lands, but Home is not settled until it does", async () => {
+		gas = { status: "fetching", version: 0 }
 		tokenHoldings = "some"
 		const w = await mountHome()
 		expect(has(w, "backup-reminder-banner")).toBe(true)
-		expect(has(w, "get-started-phrase")).toBe(false)
+		expect(w.get('[data-testid="home-scroller"]').attributes("data-reminders-settled")).toBe("false")
 	})
 
 	test("Fee Juice alone is funds: a positive read raises the banner with no token", async () => {
@@ -193,6 +206,18 @@ describe("Home — what the reminders do", () => {
 		storage.fire({ "nulo:ui:getStartedHidden@p1": { newValue: true } })
 		await flushPromises()
 		expect(w.findAll('[data-testid^="get-started-"]').map((el) => el.attributes("data-testid"))).toEqual(["get-started-phrase"])
+	})
+
+	test("a failed Presto read shows the row, and a reconnect reads it again", async () => {
+		gas = ZERO
+		prestoReached = true
+		prestoReadFailures = 1
+		vi.spyOn(console, "debug").mockImplementation(() => {})
+		const w = await mountHome()
+		expect(has(w, "get-started-presto")).toBe(true)
+		configEvents.connected.invoke(undefined)
+		await flushPromises()
+		expect(has(w, "get-started-presto")).toBe(false)
 	})
 
 	test("a Presto already reached leaves its row out", async () => {

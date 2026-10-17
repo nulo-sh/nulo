@@ -38,7 +38,7 @@ export const sendFeePicksKey = (profileId: string) => `${SEND_FEE_PICKS_PREFIX}$
 /** The networks a full-backup restore of this profile has not restored (`utils/restore-outcome.ts`). */
 export const restoreOutcomeKey = (profileId: string) => `${RESTORE_OUTCOME_PREFIX}${profileId}`
 
-/** Home's Get started flags (`utils/get-started.ts`): each is `true` once set, and never unset. */
+/** Home's Get started flags (`utils/get-started.ts`): each is `true` once set, never written `false`. */
 export const getStartedPhraseSavedKey = (profileId: string) => `${GET_STARTED_PHRASE_SAVED_PREFIX}${profileId}`
 export const getStartedBackupSavedKey = (profileId: string) => `${GET_STARTED_BACKUP_SAVED_PREFIX}${profileId}`
 export const getStartedAztecOpenedKey = (profileId: string) => `${GET_STARTED_AZTEC_OPENED_PREFIX}${profileId}`

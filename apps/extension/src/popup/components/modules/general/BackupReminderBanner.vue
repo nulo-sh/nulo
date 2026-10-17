@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/** A funded password wallet whose recovery phrase is not saved: one line, above the balance. */
 const emit = defineEmits<{ save: [] }>()
 </script>
 
