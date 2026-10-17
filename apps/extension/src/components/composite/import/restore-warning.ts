@@ -1,3 +1,6 @@
+/** An imported account a restore kept for a network the new profile lacks, its name cleaned. */
+export type HeldAccount = { name: string; chainId: number }
+
 export function restoreWarningText(networkNames: readonly string[], hasOtherErrors: boolean): string {
 	if (networkNames.length === 0) return "Profile import completed with some errors. You can review the details or continue."
 	const choices = hasOtherErrors ? "You can retry, review the details, or continue." : "You can retry or continue."

@@ -14,6 +14,7 @@ import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { EntityStorage } from "@/wallet/storage"
+import { DEFAULT_SEEDS } from "@/wallet/services/network/seeds"
 import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { PASSKEY_SERVICE_NAME } from "@/wallet/services/passkey/spec"
 import { ProfileService } from "@/wallet/services/profile/service"
@@ -56,20 +57,34 @@ afterEach(() => {
 	vi.clearAllMocks()
 })
 
-async function build() {
+/** A network service whose profile has a network row for exactly the chains of `l1ByChain`. */
+function networksOf(l1ByChain: Map<number, number>) {
+	return {
+		registerChainPurgeSubscriber: () => {},
+		isChainLive: async () => true,
+		getNetworksRaw: async (profileId: string) => [...l1ByChain].map(([chainId, l1ChainId]) => ({ profileId, chainId, l1ChainId })),
+		getL1ChainIdStored: async (_profileId: string, chainId: number) => {
+			const l1 = l1ByChain.get(chainId)
+			if (l1 === undefined) throw new Error(`No network for chain ${chainId} in this profile`)
+			return l1
+		},
+	}
+}
+
+function freshApi() {
 	const api = new FakeBrowserApi()
 	api.reset()
+	return api
+}
+
+/** Boots the services; given an `api`, boots them over its store, as a worker restart does. */
+async function build(opts: { api?: FakeBrowserApi; networks?: ReturnType<typeof networksOf> } = {}) {
+	const api = opts.api ?? freshApi()
 	const config = new ConfigStore()
 	const logger = new LoggerStore(config)
 	const services = new ServiceCollection()
 	services.add(svc(PASSKEY_SERVICE_NAME, {}))
-	services.add(
-		svc(NETWORK_SERVICE_NAME, {
-			registerChainPurgeSubscriber: () => {},
-			isChainLive: async () => true,
-			getL1ChainIdStored: async () => L1,
-		}),
-	)
+	services.add(svc(NETWORK_SERVICE_NAME, opts.networks ?? networksOf(new Map([[CHAIN, L1]]))))
 	const profile = new ProfileService(config, logger, api)
 	services.add(profile)
 	const account = new AccountService(logger, api)
@@ -80,18 +95,18 @@ async function build() {
 }
 
 /** An imported account as `importAccount` leaves it: its row, and its key sealed under `dek`. */
-async function seedImported(api: FakeBrowserApi, profileId: string, address: string, fill: number, dek: ImportedKeysDek) {
+async function seedImported(api: FakeBrowserApi, profileId: string, address: string, fill: number, dek: ImportedKeysDek, chainId = CHAIN) {
 	const signingKey = new Uint8Array(32).fill(fill)
 	const row: ImportedAccountKey = {
 		profileId,
-		chainId: CHAIN,
+		chainId,
 		address,
-		encryptedSigningKey: await sealImportedSigningKeyV2(dek, CHAIN, address, signingKey),
+		encryptedSigningKey: await sealImportedSigningKeyV2(dek, chainId, address, signingKey),
 	}
 	await new ImportedKeysRepository(api.storage.local).set(row)
 	const accountRow: Account = {
 		profileId,
-		chainId: CHAIN,
+		chainId,
 		address,
 		index: 0,
 		type: AccountType.Imported,
@@ -99,7 +114,7 @@ async function seedImported(api: FakeBrowserApi, profileId: string, address: str
 		name: "Imp",
 		visible: true,
 	}
-	await new EntityStorage<Account>(ACCOUNT_STORAGE_ROOT, api.storage.local).set(accountRowId(profileId, CHAIN, address), accountRow)
+	await new EntityStorage<Account>(ACCOUNT_STORAGE_ROOT, api.storage.local).set(accountRowId(profileId, chainId, address), accountRow)
 	return row
 }
 
@@ -131,14 +146,11 @@ async function backupFile(keys: {
 	return { ...body, checksum: await EncryptionKey.getHashHex(JSON.stringify(body)) }
 }
 
-/** Runs a file through the import gates, restores it into a fresh wallet, and returns the restored
- *  profile's opened signing keys. */
-async function restoreIntoFreshWallet(file: Awaited<ReturnType<typeof backupFile>>) {
+/** Runs a file through the import gates and restores its profile into `fresh`, unfinalized. */
+async function restoreProfileFrom(file: Awaited<ReturnType<typeof backupFile>>, fresh: Awaited<ReturnType<typeof build>>) {
 	const validated = await validateAndMigrateBackup(file)
 	if (validated.kind !== "ok") throw new Error(validated.message)
 	const envelope = validated.backup as unknown as Record<string, string>
-	const rows = validated.data[IMPORTED_KEYS_SERVICE_NAME] as ImportedAccountKey[]
-	const fresh = await build()
 	const restored = await fresh.profile.restore(
 		{ id: "source-id", name: "Restored", type: "password" },
 		{
@@ -150,11 +162,23 @@ async function restoreIntoFreshWallet(file: Awaited<ReturnType<typeof backupFile
 		PASSWORD,
 	)
 	if ("restoreError" in restored && restored.restoreError) throw new Error(String(restored.restoreError))
-	const results = await fresh.account.restoreImportedKeys(rows.map((r) => ({ ...r, profileId: restored.id })))
+	const remap = <T>(rows: T[]) => rows.map((r) => ({ ...r, profileId: restored.id }))
+	return {
+		profileId: restored.id,
+		accounts: remap(validated.data[ACCOUNT_SERVICE_NAME] as Account[]),
+		keyRows: remap(validated.data[IMPORTED_KEYS_SERVICE_NAME] as ImportedAccountKey[]),
+	}
+}
+
+/** Restores a file into a fresh wallet and returns the restored profile's opened signing keys. */
+async function restoreIntoFreshWallet(file: Awaited<ReturnType<typeof backupFile>>) {
+	const fresh = await build()
+	const { profileId, keyRows } = await restoreProfileFrom(file, fresh)
+	const results = await fresh.account.restoreImportedKeys(keyRows)
 	expect(results.every((r) => !r.restoreError)).toBe(true)
-	await fresh.profile.finalizeRestore(restored.id, PASSWORD)
-	const destinationDek = (await fresh.profile.getProfileDek(restored.id))!
-	return Promise.all((await fresh.keys.backup(restored.id)).map((row) => opened(destinationDek, row)))
+	await fresh.profile.finalizeRestore(profileId, PASSWORD)
+	const destinationDek = (await fresh.profile.getProfileDek(profileId))!
+	return Promise.all((await fresh.keys.backup(profileId)).map((row) => opened(destinationDek, row)))
 }
 
 describe("exportFullBackupKeys — the per-backup key", () => {
@@ -262,6 +286,38 @@ describe("exportFullBackupKeys — restore", () => {
 		)
 
 		expect(restored).toEqual([Array(32).fill(0x2a)])
+	}, 60_000)
+})
+
+describe("full-backup restore — an imported account on a network the new profile lacks", () => {
+	test("keeps its row and its key across a worker restart, and lists it once a network for its chain exists", async () => {
+		const DEVNET = 1337
+		const source = await build()
+		const p = await source.profile.createProfile("P", PASSWORD)
+		await seedImported(source.api, p.id, ADDR_A, 0x2a, (await source.profile.getProfileDek(p.id))!, DEVNET)
+		const keys = await source.account.exportFullBackupKeys(await source.profile.captureRunFence(), PASSWORD)
+		const file = await backupFile({ ...keys, importedKeysDek: keys.importedKeysKey, rows: keys.importedKeyRows })
+
+		const seeded = new Map(DEFAULT_SEEDS.map((seed) => [seed.chainId, seed.l1ChainId]))
+		const fresh = await build({ networks: networksOf(seeded) })
+		const { profileId, accounts, keyRows } = await restoreProfileFrom(file, fresh)
+		await fresh.account.restore(accounts)
+		await fresh.account.restoreImportedKeys(keyRows)
+		await fresh.account.reconcileImportedAccounts(profileId)
+		await fresh.profile.finalizeRestore(profileId, PASSWORD)
+
+		const restarted = await build({ api: fresh.api, networks: networksOf(seeded) })
+		await restarted.profile.unlockProfile(profileId, PASSWORD)
+		const kept = await restarted.keys.backup(profileId)
+		expect(kept.map((row) => row.address)).toEqual([ADDR_A])
+		expect(await opened((await restarted.profile.getProfileDek(profileId))!, kept[0]!)).toEqual(Array(32).fill(0x2a))
+		const stored = await new EntityStorage<Account>(ACCOUNT_STORAGE_ROOT, fresh.api.storage.local).get(
+			accountRowId(profileId, DEVNET, ADDR_A),
+		)
+		expect(stored).toEqual({ ...keys.accounts[0], profileId })
+
+		seeded.set(DEVNET, L1)
+		expect((await restarted.account.getAccounts(profileId, DEVNET)).map((a) => a.address)).toEqual([ADDR_A])
 	}, 60_000)
 })
 
