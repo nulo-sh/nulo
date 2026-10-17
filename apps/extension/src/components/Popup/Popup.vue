@@ -104,7 +104,7 @@ onBeforeUnmount(() => {
 	<Transition name="slideopacity">
 		<div v-if="show" :class="$style.dark_bg" :style="{ zIndex: (displaceIdx + 1) * 100 * 4 }" />
 	</Transition>
-	<Transition name="slide" appear>
+	<Transition name="sheet" appear>
 		<template v-if="show">
 			<teleport to="#popup">
 				<!-- tabindex -1: the trap's fallback when a popup has no tabbable control. -->
@@ -149,5 +149,9 @@ onBeforeUnmount(() => {
 	bottom: 0;
 
 	background: var(--scrim-popup);
+}
+
+:global([theme="light"]) .dark_bg {
+	background: color-mix(in srgb, var(--app-bg) 70%, transparent);
 }
 </style>

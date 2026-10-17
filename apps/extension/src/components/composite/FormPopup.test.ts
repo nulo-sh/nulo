@@ -24,10 +24,6 @@ vi.mock("@/utils/core", () => ({
 	managers: { profile: { refreshSession: vi.fn() } },
 }))
 
-vi.mock("@/composables/fullscreenPopupSetting", () => ({
-	useFullscreenPopupSetting: () => ({ value: true }),
-}))
-
 const STUBS = {
 	Flex: { template: '<div :class="$attrs.class" v-bind="$attrs"><slot /></div>', inheritAttrs: false },
 	Text: { template: "<span><slot /></span>" },
@@ -44,7 +40,7 @@ const STUBS = {
 	},
 	PopupCard: {
 		template: '<div data-testid="stub-popup-card" :data-displace="String(displaceIdx)"><slot /></div>',
-		props: ["displaceIdx", "large"],
+		props: ["displaceIdx"],
 	},
 	PopupHeader: {
 		template:

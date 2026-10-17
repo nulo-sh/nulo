@@ -6,3 +6,7 @@
 - 2026-10-17 15:10Z: final fresh Codex pass: reject (Phase 1 grep order, the stale capture's flag, S1's Contacts path).
 - 2026-10-17 15:16Z: Contacts probe: S1 deletes a contact today and after; S1 is pre-existing. Plan revised; resumed Codex pass to verify.
 - 2026-10-17 15:18Z: final Codex pass, resumed verify round: approve. Plan committed, awaiting the orchestrator's approval.
+- 2026-10-17 15:22Z: arc 1 started; merged origin/dev 13d5f8d0 (index.md conflict: kept dev's removal of icons-d2-1, sheet-1 row now "arc 1 in progress"). Base for the "before" set: 0e8f7b2a.
+- 2026-10-17 15:24Z: S1 filed as #656 (ux).
+- 2026-10-17 15:36Z: Phase 0 gate pass: smoke capture specs green at retry 0 on Chrome (8 files, 34 tests, 5:07), network/send-amount-exact green at retry 0 (45 s), the nine captures in both themes in before/.
+- 2026-10-17 15:58Z: Phase 1 gate pass: lint, typecheck:all, test (826 files), test:all, build-storybook exit 0; smoke on Chrome (8 files, 37 tests, 3:54) and Firefox (3 files, 18 tests, 3:17) green at retry 0; the handle_zone/slide-enter grep empty.

@@ -29,8 +29,8 @@ const STUBS = {
 		emits: ["onClose"],
 	},
 	PopupCard: {
-		template: '<div data-testid="stub-card" :data-depth="displaceIdx" :data-fit="fit"><slot /></div>',
-		props: { displaceIdx: Number, fit: Boolean },
+		template: '<div data-testid="stub-card" :data-depth="displaceIdx"><slot /></div>',
+		props: { displaceIdx: Number },
 	},
 	PopupHeader: {
 		template:
@@ -98,7 +98,6 @@ describe("modules/send/SendReviewSheet", () => {
 		expect(popup.attributes("data-order")).toBe("2")
 		expect(popup.attributes("data-focus")).toBe("#send-review-title")
 		expect(w.get('[data-testid="stub-card"]').attributes("data-depth")).toBe("3")
-		expect(w.get('[data-testid="stub-card"]').attributes("data-fit")).toBe("true")
 		expect(w.get("#send-review-title").attributes("tabindex")).toBe("-1")
 		const dialog = w.get('[role="dialog"]')
 		expect(dialog.attributes("aria-modal")).toBe("true")

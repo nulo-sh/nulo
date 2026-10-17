@@ -263,17 +263,16 @@ button,
 	user-select: none;
 }
 
-.slide-enter-active {
+.sheet-enter-active {
 	transition: all 0.3s var(--bezier);
 }
 
-.slide-leave-active {
+.sheet-leave-active {
 	transition: all 0.15s var(--bezier);
 }
 
-.slide-enter-from,
-.slide-leave-to {
-	transform: translateY(40px);
+.sheet-enter-from,
+.sheet-leave-to {
 	opacity: 0;
 }
 

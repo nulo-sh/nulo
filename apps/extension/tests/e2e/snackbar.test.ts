@@ -165,8 +165,8 @@ async function waitForSnackGone(page: Page, timeout: number): Promise<void> {
 }
 
 /** Waits until `testid` in a sheet has stopped: the same box on three animation frames in a row, with
- *  no finite animation running. A sheet holds its 40px start offset for up to three frames before it
- *  slides, the last with the slide created but not yet started, so a still box alone is no proof. */
+ *  no finite animation running. A sheet fades in where it rests, and its fade can be created a few
+ *  frames after it mounts, so a still box alone is no proof. */
 async function sheetAtRest(page: Page, testid: string): Promise<void> {
 	await page.waitForSelector(sel(testid), { visible: true, timeout: 5_000 })
 	await page.evaluate((s: string) => {
@@ -217,7 +217,7 @@ async function lengthenCard(page: Page, testid: string, px: number): Promise<voi
 		(id: string, height: number) => {
 			let card = document.querySelector(`[data-testid="${id}"]`)?.parentElement ?? null
 			while (card && getComputedStyle(card).overflowY !== "auto") card = card.parentElement
-			const content = card?.children[1]
+			const content = card?.querySelector(':scope > [data-testid="popup-card-body"]')
 			if (!card || !content) throw new Error(`no scrolling card around ${id}`)
 			const block = document.createElement("div")
 			block.style.height = `${height}px`

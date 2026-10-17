@@ -101,6 +101,26 @@ const longImportFile = () =>
 	contactsFile(onCurveAddresses(LONG_IMPORT_ROWS).map((address, i) => ({ name: `Contact ${String(i + 1).padStart(3, "0")}`, address })))
 const lockChipDisabled = (page: Page) => page.$eval(sel("header-lock"), (button) => (button as HTMLButtonElement).disabled)
 
+/** How a review taller than the frame fits it: the list scrolls inside the card, the card does not,
+ *  and both answers stay on screen. Nested flex sizing only resolves in a real engine. */
+const reviewFit = (page: Page) =>
+	page.evaluate(() => {
+		const inView = (id: string) => {
+			const box = document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect()
+			return box !== undefined && box.top >= 0 && box.bottom <= window.innerHeight
+		}
+		const card = document
+			.querySelector('[data-testid="import-contacts-submit"]')
+			?.closest('[data-testid="popup-card-body"]')?.parentElement
+		let list = document.querySelector('[data-testid="import-contacts-section"]')?.parentElement ?? null
+		while (list && !/auto|scroll/.test(getComputedStyle(list).overflowY)) list = list.parentElement
+		return {
+			answersInView: inView("import-contacts-cancel") && inView("import-contacts-submit"),
+			cardScrolls: card ? card.scrollHeight > card.clientHeight : null,
+			listScrolls: list ? list.scrollHeight > list.clientHeight : null,
+		}
+	})
+
 /** The count on the progress snack, once a settled card reads more than `above`; the card is marked
  *  the first time, and a later read requires the marked card, so a re-keyed card (a replayed
  *  entrance) fails it. */
@@ -427,6 +447,7 @@ test("an import holds Lock until it ends, counts on one snack on every page, and
 }) => {
 	await onContacts(ctx, async (page) => {
 		await pickContactsFile(page, longImportFile())
+		expect(await reviewFit(page)).toEqual({ answersInView: true, cardScrolls: false, listScrolls: true })
 		await shotSend(page, "sheet-import-contacts", "import-contacts-submit")
 		await toastAfter(
 			page,
