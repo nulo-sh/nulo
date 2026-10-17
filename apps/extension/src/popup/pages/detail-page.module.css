@@ -69,6 +69,7 @@
 
 .hero_link {
 	composes: type--label from global;
+	user-select: none;
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;

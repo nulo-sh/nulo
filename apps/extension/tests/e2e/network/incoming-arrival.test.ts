@@ -234,8 +234,9 @@ const waitForSeeded = (page: Page) => page.waitForSelector('[data-arrivals-seede
 
 type Snack = { title: string; sub: string }
 
-async function waitForReceivedSnack(page: Page, timeout = RECEIPT_BUDGET_MS): Promise<Snack> {
-	const card = await waitForToast(page, "Received", timeout, { kind: "success" })
+/** `hold` keeps the card open for what follows it: a View, or a read of its layout. */
+async function waitForReceivedSnack(page: Page, timeout = RECEIPT_BUDGET_MS, hold = false): Promise<Snack> {
+	const card = await waitForToast(page, "Received", timeout, { kind: "success", hold })
 	return card.evaluate((el) => ({
 		title: el.querySelector('[data-testid="snackbar-title"]')?.textContent?.trim() ?? "",
 		sub: el.querySelector('[data-testid="snackbar-sub"]')?.textContent?.trim() ?? "",
@@ -439,7 +440,7 @@ test.skipIf(!hasConfig)(
 		await waitForSeeded(page)
 		await releaseIncomingPoll(page)
 		await waitForIncomingPollPhase(page, "committed", txHash)
-		expectReceivedCopy(await waitForReceivedSnack(page, 30_000))
+		expectReceivedCopy(await waitForReceivedSnack(page, 30_000, true))
 		const viewed = await viewReceipt(page, triple.account)
 		expect(viewed.txHash).toBe(txHash)
 		await expectHomePlaysNothingFor(page, viewed.id)
@@ -451,7 +452,7 @@ test.skipIf(!hasConfig)(
 		await waitForHash(page, "#/popup/settings")
 		await waitForSeeded(page)
 		await sendPublic(config, triple.account, 3n * D)
-		expectReceivedCopy(await waitForReceivedSnack(page))
+		expectReceivedCopy(await waitForReceivedSnack(page, RECEIPT_BUDGET_MS, true))
 		const record = await viewReceipt(page, triple.account)
 		await expectHomePlaysNothingFor(page, record.id)
 		await page.close()
@@ -545,7 +546,7 @@ test.skipIf(!hasConfig)(
 		await waitForHash(page, "#/popup/settings")
 		await waitForSeeded(page)
 		await sendPublic(config, account, 10n ** 38n, hostileToken)
-		const snack = await waitForReceivedSnack(page)
+		const snack = await waitForReceivedSnack(page, RECEIPT_BUDGET_MS, true)
 		expect(snack.sub).not.toContain("\u202e")
 		const layout = await page.evaluate(() => {
 			const card = document.querySelector('[data-testid="snackbar"]') as HTMLElement

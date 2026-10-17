@@ -586,6 +586,12 @@ the pattern.
 
 ### Harness behaviours that look like product bugs
 
+- **A mouse drag can select nothing.** Chrome 152 starts no selection from a press between a
+  glyph's middle and about half a pixel right of it, and a drag of one single move leaves a bare
+  caret: press a quarter in from a character's outer edge and move in steps
+  (`navigation.test.ts`'s `textEdge` and `dragSelect`). Firefox 153 keeps the text a drag ends on
+  even inside a `user-select: none` control, so a selection test bans only the controls a drag
+  crosses (`FIREFOX.md`).
 - **Chrome's created windows keep the launch size.** The launch passes `--window-size=400,600`
   (`fixtures/browser/chrome.ts:40`); under it `windows.create` honours `left` and `top` but not
   `width` or `height` (popups 400×600, normal windows 500×600), while `windows.update` honours

@@ -141,6 +141,7 @@ const filteredKeys = (kind, filters, search) => {
 }
 
 .filter_button {
+	user-select: none;
 	padding: 6px 8px;
 	background-color: var(--dropdown-bg);
 	border: 1px solid var(--nulo-border);
@@ -184,6 +185,7 @@ const filteredKeys = (kind, filters, search) => {
 }
 
 .filter_content_item {
+	user-select: none;
 	padding: 6px 8px;
 	background-color: var(--dropdown-bg);
 	border-radius: 4px;

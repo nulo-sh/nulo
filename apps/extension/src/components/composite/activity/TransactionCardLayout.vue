@@ -144,6 +144,7 @@ function hasActionsContent() {
 }
 
 .interactive {
+	user-select: none;
 	cursor: pointer;
 	transition: background 0.15s var(--bezier);
 

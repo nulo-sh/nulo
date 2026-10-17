@@ -50,6 +50,7 @@ const navigationLinks: { name: string; path: string; icon: GlyphName; label: str
 
 <style module>
 .wrapper {
+	user-select: none;
 	position: absolute;
 	bottom: 0;
 	left: 0;
