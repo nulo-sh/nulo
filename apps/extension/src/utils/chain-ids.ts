@@ -9,7 +9,7 @@
  * the id was a bare literal with no recorded pair. Keep the pair next to every id.
  */
 
-import { LOCAL_L1_CHAIN_ID, walletChainId } from "@nulo/wallet-core/utils"
+import { LOCAL_L1_CHAIN_ID, walletChainId } from "@nulo/wallet-core/chain-id"
 
 /** The extension's entry point for the formula and the local L1; extension code imports them from
  *  here. The seeded Local Network's L1 is `LOCAL_L1_CHAIN_ID`, hardcoded (never probed at seed

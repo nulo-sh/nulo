@@ -15,7 +15,7 @@
 
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { ChainInfo } from "@aztec-labs/entrypoints/interfaces"
-import { LOCAL_L1_CHAIN_ID, walletChainId } from "@nulo/wallet-core/utils"
+import { LOCAL_L1_CHAIN_ID, walletChainId } from "@nulo/wallet-core/chain-id"
 import { assertCanonicalL1ChainId } from "@nulo/wallet-crypto"
 
 export interface LiveNodeChainInfo {
