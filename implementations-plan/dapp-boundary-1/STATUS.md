@@ -7,3 +7,4 @@
 - 2026-10-17 final Codex resume: approve. Plan committed.
 - 2026-10-17 arc 1 phase 1 (the simulate shape): gate F green.
 - 2026-10-17 arc 1 phase 2 (no dApp profile): gate F green.
+- 2026-10-17 arc 1 phase 3 (network proof and docs): Chrome five files and Firefox two files green at retry 0; baselines recorded; review loop converged (Codex approve, round 3 nits applied).

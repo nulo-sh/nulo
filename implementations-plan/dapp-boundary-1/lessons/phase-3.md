@@ -28,3 +28,12 @@
 ## Network e2e (retry 0, Firefox, `NULO_E2E_BROWSER=firefox`, d9bb5827)
 
 - `delete-after-prove` 111.9 s ✓, `sim-methods` (3 tests) 91.6 s ✓; vitest duration 367.6 s. The load check passed at 149.97 and read 155.9 by the time the run recorded its start. The aztec CLI's anvil bind error at boot is the expected one the setup log names.
+
+## The two changed files, before and after (retry 0, vitest per-file duration)
+
+| File | Chrome `13d5f8d0` | Chrome 9bb5126b | Firefox `13d5f8d0` | Firefox d9bb5827 |
+|---|---|---|---|---|
+| `sim-methods` (3 tests) | 91.2 s (profile case 42.0 s) | 61.3 s | 94.2 s (profile case 47.5 s) | 91.6 s (profile case 29.9 s) |
+| `delete-after-prove` | 67.6 s | 62.5 s | 117.1 s | 111.9 s |
+
+The baselines ran from a detached checkout of `13d5f8d0` in this worktree, on the same `node_modules`, one run at a time, load1 < 150 at start (137.9, 147.5).
