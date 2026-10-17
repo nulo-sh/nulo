@@ -380,7 +380,7 @@ test("a receipt's To card: its explorer link is a Tab stop with the ring and a 2
 	await waitForHash(page, "#/popup/general")
 	const scope = await readActivityScope(page)
 	await seedTokenRow(page, scope, 1)
-	await seedReceipt(page, scope, { tokenId: 1, amount: "1500000", nullifier: `0x${"3d".repeat(32)}` })
+	await seedReceipt(page, scope, { tokenId: 1, amount: "1500000", uniqueNoteHash: `0x${"3d".repeat(32)}` })
 	await seedUsdQuoteAndReload(page)
 	const row = `${sel("tx-incoming-card")} a[data-row-target]`
 	await page.waitForSelector(row, { visible: true, timeout: 15_000 })
@@ -556,6 +556,8 @@ const DAPP_NAME = "Shielded Payroll Portal"
 const LARGE_DAPP_HASH = `0x${"6e".repeat(32)}`
 /** The floor of a two-chip row's app chip: its border, padding and one "…" at the chip's 10px. */
 const APP_CHIP_FLOOR = 19
+/** The two chips' gap when the app chip drops under the direction chip. */
+const CHIP_ROW_GAP = 4
 
 type RowLayout = {
 	row: string
@@ -648,42 +650,31 @@ const gapsOf = (rows: RowLayout[]) => rows.slice(1).map((row, i) => row.top - ro
 
 type TwoChipRow = {
 	directionLines: number
-	/** How much narrower the direction chip is than its one-line width. */
-	directionShort: number
-	/** `lead` is the chip's `::before`: an empty inline-block lets the "…" replace the first letter. */
-	chip: { width: number; cut: boolean; lead: { content: string; display: string } }
-	ellipsis: number
+	/** `lead` is the chip's `::before`: an empty inline-block lets the "…" replace the first letter.
+	 *  `gap` runs from the direction chip's bottom to the app chip's top, `left` between their left edges. */
+	chip: { width: number; cut: boolean; name: string; gap: number; left: number; lead: { content: string; display: string } }
 }
 
-/** A two-chip row's direction chip, its app chip, and the width a whole "…" takes in that chip's own
- *  font. Natural widths come from unconstrained clones, removed before the row is read. */
 function readTwoChipRow(page: Page, hash: string): Promise<TwoChipRow> {
 	return page.evaluate((h: string) => {
 		const row = document.querySelector(`[data-testid="tx-card"][data-tx-hash="${h}"]`)
 		const direction = row?.querySelector<HTMLElement>('[data-testid="activity-direction-chip"]')
 		const chip = row?.querySelector<HTMLElement>('[data-testid="activity-app-chip"]')
 		if (!direction || !chip) throw new Error(`row ${h.slice(0, 6)} has no two chips`)
-		const natural = (el: HTMLElement, text: string) => {
-			const probe = el.cloneNode() as HTMLElement
-			probe.removeAttribute("data-testid")
-			probe.textContent = text
-			probe.style.cssText = "position: absolute; visibility: hidden; width: max-content; max-width: none"
-			el.parentElement?.append(probe)
-			const width = probe.getBoundingClientRect().width
-			probe.remove()
-			return width
-		}
 		const range = document.createRange()
 		range.selectNodeContents(direction)
+		const below = direction.getBoundingClientRect()
+		const box = chip.getBoundingClientRect()
 		return {
 			directionLines: new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size,
-			directionShort: natural(direction, direction.textContent ?? "") - direction.getBoundingClientRect().width,
 			chip: {
-				width: chip.getBoundingClientRect().width,
+				width: box.width,
 				cut: chip.scrollWidth > chip.clientWidth,
+				name: chip.textContent ?? "",
+				gap: box.top - below.bottom,
+				left: box.left - below.left,
 				lead: (({ content, display }) => ({ content, display }))(getComputedStyle(chip, "::before")),
 			},
-			ellipsis: natural(chip, "…"),
 		}
 	}, hash)
 }
@@ -704,7 +695,7 @@ const SURFACES = [
 	{ name: "History", hash: "#/popup/activity" },
 ]
 
-test("rows sit 10px apart on Home, a token's page and History, the date heading 12px above the first; a dApp's long title, a nine-digit amount, a dApp's large transfer and a priced receipt stay inside their rows and never cover an amount, dark and light", async ({
+test("rows sit 10px apart on Home, a token's page and History, the date heading 12px above the first; a dApp's long title, a nine-digit amount, a dApp's large transfer with its app chip under its direction and a priced receipt stay inside their rows and never cover an amount, dark and light", async ({
 	listedExtensionPerTest,
 	skip,
 }) => {
@@ -724,13 +715,18 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 	})
 	await seedTransaction(page, scope, {
 		hash: LARGE_DAPP_HASH,
-		amount: (1_234_567n * 10n ** BigInt(scope.token.decimals - 2)).toString(),
+		amount: (1_250n * 10n ** BigInt(scope.token.decimals)).toString(),
 		at: now - 2_500,
 		transferType: 2,
 		dapp: DAPP_NAME,
 	})
 	await seedTokenRow(page, scope, RECEIPT_TOKEN_ID)
-	await seedReceipt(page, scope, { tokenId: RECEIPT_TOKEN_ID, amount: "4200000", nullifier: `0x${"5c".repeat(32)}`, at: now - 3_000 })
+	await seedReceipt(page, scope, {
+		tokenId: RECEIPT_TOKEN_ID,
+		amount: "4200000",
+		uniqueNoteHash: `0x${"5c".repeat(32)}`,
+		at: now - 3_000,
+	})
 	await seedUsdQuoteAndReload(page, scope.token.priceId)
 	await page.bringToFront()
 
@@ -750,12 +746,12 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 			)
 			for (const gap of gaps) expect.soft(gap, `${surface.name}'s row gap`).toBeCloseTo(10, 0)
 			console.log(`[rows] ${theme}, ${surface.name}: the large dApp transfer ${JSON.stringify(large)}`)
-			// Past the app chip's floor the direction chip gives, as a send's does, and the chip never draws empty.
-			expect(large.directionLines, surface.name).toBe(2)
-			expect(large.chip.cut).toBe(true)
-			expect(large.chip.width).toBeCloseTo(APP_CHIP_FLOOR, 0)
-			expect(large.chip.width).toBeGreaterThanOrEqual(large.ellipsis)
-			expect(large.chip.lead).toEqual({ content: '""', display: "inline-block" })
+			// Past the app chip's floor it drops under the whole direction chip and keeps its name, cut at its cap.
+			expect(large.directionLines, surface.name).toBe(1)
+			expect(large.chip).toMatchObject({ cut: true, name: DAPP_NAME, lead: { content: '""', display: "inline-block" } })
+			expect(large.chip.gap).toBeCloseTo(CHIP_ROW_GAP, 0)
+			expect(large.chip.left).toBeCloseTo(0, 0)
+			expect(large.chip.width).toBeCloseTo(APP_CHIP_CAP, 0)
 			if (surface.name === "History" && theme === "dark") await shotSend(page, "dapp-transfer-rows", "activity-app-chip")
 			if (surface.name !== "History") continue
 			const clearance = await page.evaluate((rowsSel: string) => {

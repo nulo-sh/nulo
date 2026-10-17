@@ -28,7 +28,7 @@ import { PublicEventIndexer, type PublicEventReader, type PublicScanResult } fro
 import { ScanEpisodeStore, scanEpisodeKey, scanEpisodeNetworkPrefix } from "./scan-episodes"
 import { isScanSuccess, type ScanOutcome } from "./scan-health"
 import { ARRIVAL_ID_MAX, ARRIVAL_PLAYED_CAP, type ArrivalState, arrivalStateOf, claimPlayed, isArrivalEligible } from "./arrival-state"
-import { type NoteRowDecision, decideNoteRow, isVerifiedBracket, movedRows, needsBracket, notesByNullifier } from "./note-reconcile"
+import { type NoteRowDecision, decideNoteRow, isVerifiedBracket, movedRows, needsBracket, notesById } from "./note-reconcile"
 import {
 	INCOMING_TRANSFER_SERVICE_NAME,
 	type Events,
@@ -179,7 +179,7 @@ function anchoredRowAction(state: "success" | "failure" | "pending" | "missing")
  *   iterates the registered contract list and calls
  *   `noteService.getNotesRaw(networkId, account, contract)`. For each note,
  *   the 3-source dedupe gates record creation: prior records
- *   (`siloedNullifier`), user's own outgoing tx hashes, in-flight journal
+ *   (`uniqueNoteHash`), user's own outgoing tx hashes, in-flight journal
  *   `progress.txHash`.
  *
  * Trust state machine (per `(profileId, networkId, contract)`):
@@ -1545,7 +1545,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		}
 		let reached = true
 		for (const note of notes) {
-			if (!note.siloedNullifier) continue
+			if (!note.uniqueNoteHash) continue
 			if (this.serviceEpoch === epochAtStart && (await this.commitReadsBlockTime(ctx, note))) {
 				await blockTimestampFor(note.l2BlockNumber)
 			}
@@ -1561,7 +1561,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		// Tell the test the parked scan's locked commit is done (the late emission,
 		// if any, has fired) — its precondition before asserting cross-account isolation.
 		if (heldTxHash) await this.incomingPollGate?.markCommitted(heldTxHash)
-		const reconciled = await this.reconcileNoteRows(ctx, notesByNullifier(notes), tips, epochAtStart)
+		const reconciled = await this.reconcileNoteRows(ctx, notesById(profileId, networkId, notes), tips, epochAtStart)
 		return reached && reconciled
 	}
 
@@ -1588,7 +1588,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const bracket = tips ? await this.readNoteBracket(ctx, tips) : undefined
 		if (!tips || !bracket) return false
 		for (const row of rest) {
-			const note = bracket.notes.get(row.siloedNullifier)
+			const note = bracket.notes.get(row.id)
 			if (note) this.noteStrikes.delete(row.id)
 			const decision = decideNoteRow(row, note, bracket, this.noteStrikes.has(row.id))
 			if (!(await this.applyNoteDecision(ctx, row, decision, scopeKey, epochAtStart))) reached = false
@@ -1598,7 +1598,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 	/** A strike lasts while its row is unsettled and missing from the scope's reads. */
 	private forgetStrikes(scopeKey: string, rows: IncomingNoteRecord[], active: Map<string, RawNote>): void {
-		const missing = new Set(rows.filter((r) => !active.has(r.siloedNullifier)).map((r) => r.id))
+		const missing = new Set(rows.filter((r) => !active.has(r.id)).map((r) => r.id))
 		for (const [id, key] of this.noteStrikes) if (key === scopeKey && !missing.has(id)) this.noteStrikes.delete(id)
 	}
 
@@ -1613,7 +1613,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			const notes = await this.noteService.getNotesRaw(networkId, accountAddress, contract, "active-or-nullified")
 			const after = await this.noteService.getSyncedBlock(networkId)
 			return {
-				notes: notesByNullifier(notes),
+				notes: notesById(ctx.profileId, networkId, notes),
 				finalized: tips.finalizedBlockNumber,
 				synced: after.number,
 				verified: isVerifiedBracket(before, after, tips.proposedBlockHash),
@@ -1661,6 +1661,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (blockTimestamp === undefined) return false
 		const moved: IncomingNoteRecord = {
 			...row,
+			txHash: note.txHash,
 			l2BlockNumber: note.l2BlockNumber,
 			txIndexInBlock: note.txIndexInBlock,
 			indexInTx: note.noteIndexInTx,
@@ -1713,7 +1714,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  Neither an own send's change note nor a note without an amount ever gets a row, so without
 	 *  those exclusions every scan would fetch its block. */
 	private async commitReadsBlockTime(ctx: NoteScanContext, note: RawNote): Promise<boolean> {
-		const existing = await this.repo.getRecord(noteRecordId(ctx.profileId, ctx.networkId, note.siloedNullifier))
+		const existing = await this.repo.getRecord(noteRecordId(ctx.profileId, ctx.networkId, note.uniqueNoteHash))
 		if (existing) return existing.blockTimestamp === undefined
 		return parseNoteAmount(note) !== null && !(await this.isOwnSend(ctx, note.txHash))
 	}
@@ -1729,7 +1730,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const token = findToken(tokens, contract, chainId)
 		if (!token) return // Token removed concurrently.
 
-		const existing = await this.repo.getRecord(noteRecordId(profileId, networkId, note.siloedNullifier))
+		const existing = await this.repo.getRecord(noteRecordId(profileId, networkId, note.uniqueNoteHash))
 		if (!fenced()) return
 		if (existing) {
 			if (existing.blockTimestamp === undefined) await this.backfillNoteTimestamp(ctx, existing, note, fenced)
@@ -2733,8 +2734,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const hidden = trustState !== "trusted"
 		return {
 			kind: "note",
-			id: noteRecordId(profileId, networkId, note.siloedNullifier),
-			siloedNullifier: note.siloedNullifier,
+			id: noteRecordId(profileId, networkId, note.uniqueNoteHash),
 			profileId,
 			networkId,
 			accountAddress,

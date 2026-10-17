@@ -1,7 +1,7 @@
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { clickByTestId, test, openPopup, waitForHash } from "./fixtures/extension"
-import { clickNavTab, navigateToSettings, openDropdown, openHoldings, seedUsdQuoteAndReload } from "./fixtures/helpers"
+import { clickNavTab, getAccountAddress, navigateToSettings, openDropdown, openHoldings, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { readActivityScope, seedTransaction } from "./helpers/activity-seeds"
 import { tabAround } from "./helpers/pointer-probes"
 
@@ -130,7 +130,7 @@ async function dragSelect(page: Page, from: Point, to: Point): Promise<string> {
 const textOf = (page: Page, testid: string) => page.$eval(`[data-testid="${testid}"]`, (el) => (el as HTMLElement).innerText.trim())
 const lower = (text: string) => text.toLowerCase()
 
-test("a drag selects the text around a control and none of the control's own: the nav, the header's buttons, a toggle, a dropdown, list rows", async ({
+test("a drag selects the text around a control and none of the control's own but the header's address, which a click still copies whole: the nav, the header's buttons, a toggle, a dropdown, list rows", async ({
 	registeredExtension,
 }) => {
 	const page = await openPopup(registeredExtension)
@@ -154,7 +154,37 @@ test("a drag selects the text around a control and none of the control's own: th
 	)
 	console.log(`[select] hero to the header: ${JSON.stringify(toHeader)}`)
 	expect(toHeader).toContain(hero)
+	const shortAddress = await textOf(page, "account-address-text")
+	expect(toHeader, "the header's shortened address").toContain(shortAddress)
 	for (const label of ["testnet", "lock"]) expect(lower(toHeader)).not.toContain(label)
+
+	// The address is a native button: a browser that ignores its text's `user-select` selects nothing
+	// here, and the drag's own click must not copy. The write is the handler's first call.
+	await page.evaluate(() => {
+		const w = window as unknown as { __copies?: string[] }
+		w.__copies = []
+		navigator.clipboard.writeText = async (text: string) => {
+			w.__copies?.push(text)
+		}
+	})
+	const copies = () => page.evaluate(() => (window as unknown as { __copies?: string[] }).__copies ?? [])
+	const inAddress = await dragSelect(
+		page,
+		await textEdge(page, "account-address-text", "first"),
+		await textEdge(page, "account-address-text", "last"),
+	)
+	console.log(`[select] inside the header's address: ${JSON.stringify(inAddress)}`)
+	expect(inAddress).toBe(shortAddress)
+	expect(await copies()).toEqual([])
+	const middle = await page.$eval('[data-testid="account-address-text"]', (el) => {
+		const box = el.getBoundingClientRect()
+		return { x: box.left + box.width / 2, y: box.top + box.height / 2 }
+	})
+	// Chrome keeps a selection through a click inside it, so that click copies nothing (Firefox drops
+	// it first): the plain click starts from none.
+	await page.evaluate(() => window.getSelection()?.removeAllRanges())
+	await page.mouse.click(middle.x, middle.y)
+	expect(await copies()).toEqual([await getAccountAddress(page)])
 
 	await navigateToSettings(page, "privacy")
 	await page.waitForSelector('[data-testid="explorer-trigger"]', { visible: true, timeout: 10_000 })

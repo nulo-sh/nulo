@@ -12,8 +12,7 @@ import {
 
 // Records default to the READY scope (profile "p", network "n", account "a") so the live
 // scope-filter (onAdded/onUpdated) admits them; override `accountAddress`/`networkId`/`profileId` to
-// exercise the foreign-scope drop. Keyed by `id` — the discriminated-union PK (public records have no
-// `siloedNullifier`).
+// exercise the foreign-scope drop. Keyed by `id`, the discriminated-union PK.
 const rec = (id: string, extra: Record<string, unknown> = {}): IncomingTransferRecord =>
 	({ id, profileId: "p", networkId: "n", accountAddress: "a", ...extra }) as unknown as IncomingTransferRecord
 

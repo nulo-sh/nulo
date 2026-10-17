@@ -1,6 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { NoteStatus, type NoteDao } from "@aztec-labs/stdlib/note"
+import { computeUniqueNoteHash, siloNoteHash } from "@aztec-labs/stdlib/hash"
 import { canonicalSlotHex, type NoteFieldType, type NoteSchema } from "@nulo/aztec-runtime/pxe"
 import type { ILogger } from "@/wallet/logger"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
@@ -66,13 +67,8 @@ export class NoteService extends Service<Methods> implements ServiceSpec<Methods
 	}
 
 	public async getNotes(networkId: string, account: string, contract?: string): Promise<Note[]> {
-		const raws = await this.getNotesRaw(networkId, account, contract)
-		// Project to popup-friendly shape: strip raw fields the popup
-		// doesn't consume. Keeping the projection here means `getNotes`
-		// and `getNotesRaw` always agree on parse + error handling.
-		return raws.map(
-			({ siloedNullifier: _sn, noteHash: _nh, l2BlockNumber: _bn, txIndexInBlock: _ti, noteIndexInTx: _ni, ...note }) => note,
-		)
+		const read = await this.readNotes(networkId, account, contract, "active")
+		return read.map(({ note }) => note)
 	}
 
 	/**
@@ -100,6 +96,33 @@ export class NoteService extends Service<Methods> implements ServiceSpec<Methods
 	}
 
 	public async getNotesRaw(networkId: string, account: string, contract?: string, status: NoteReadStatus = "active"): Promise<RawNote[]> {
+		const read = await this.readNotes(networkId, account, contract, status)
+		const res: RawNote[] = []
+		for (const { dao, note } of read) {
+			res.push({
+				...note,
+				// Outside the per-note catch on purpose: a note without its identity must fail the read,
+				// since a reader that reconciles rows takes a missing note for a vanished one.
+				uniqueNoteHash: (
+					await computeUniqueNoteHash(dao.noteNonce, await siloNoteHash(dao.contractAddress, dao.noteHash))
+				).toString(),
+				noteHash: safeString(() => dao.noteHash),
+				l2BlockNumber: safeNumber(() => dao.l2BlockNumber),
+				txIndexInBlock: safeNumber(() => dao.txIndexInBlock),
+				noteIndexInTx: safeNumber(() => dao.noteIndexInTx),
+			})
+		}
+		return res
+	}
+
+	/** Fetches and parses the notes. Each note parses in isolation, so a single malformed note can't
+	 *  blank out the entire page: it surfaces as a `renderError` card on the UI instead. */
+	private async readNotes(
+		networkId: string,
+		account: string,
+		contract: string | undefined,
+		status: NoteReadStatus,
+	): Promise<Array<{ dao: NoteDao; note: Note }>> {
 		await this.ensureInitialized()
 		const network = await this.networkService.getNetwork(networkId)
 		const noteStatus = status === "active-or-nullified" ? NoteStatus.ACTIVE_OR_NULLIFIED : NoteStatus.ACTIVE
@@ -120,35 +143,22 @@ export class NoteService extends Service<Methods> implements ServiceSpec<Methods
 		const classIdByContract = new Map<string, string | undefined>()
 		const noteSchemas = await this.loadNoteSchemasSafe()
 
-		// Parse each note in isolation so a single malformed note can't blank
-		// out the entire page. Failed entries surface as a renderError card on
-		// the UI instead of an unrecoverable list.
-		const res: RawNote[] = []
-		for (const note of notes) {
+		const res: Array<{ dao: NoteDao; note: Note }> = []
+		for (const dao of notes) {
 			try {
-				const parsed = await this.parseNote(network, note, classIdByContract, noteSchemas)
-				res.push({
-					...parsed,
-					siloedNullifier: safeString(() => note.siloedNullifier),
-					noteHash: safeString(() => note.noteHash),
-					l2BlockNumber: safeNumber(() => note.l2BlockNumber),
-					txIndexInBlock: safeNumber(() => note.txIndexInBlock),
-					noteIndexInTx: safeNumber(() => note.noteIndexInTx),
-				})
+				res.push({ dao, note: await this.parseNote(network, dao, classIdByContract, noteSchemas) })
 			} catch (error) {
 				const message = getErrorMessage(error)
 				this.logError("Failed to parse note", { error })
 				res.push({
-					contract: safeString(() => note.contractAddress),
-					storageSlot: safeString(() => note.storageSlot),
-					txHash: safeString(() => note.txHash),
-					rawContent: [],
-					renderError: message,
-					siloedNullifier: safeString(() => note.siloedNullifier),
-					noteHash: safeString(() => note.noteHash),
-					l2BlockNumber: safeNumber(() => note.l2BlockNumber),
-					txIndexInBlock: safeNumber(() => note.txIndexInBlock),
-					noteIndexInTx: safeNumber(() => note.noteIndexInTx),
+					dao,
+					note: {
+						contract: safeString(() => dao.contractAddress),
+						storageSlot: safeString(() => dao.storageSlot),
+						txHash: safeString(() => dao.txHash),
+						rawContent: [],
+						renderError: message,
+					},
 				})
 			}
 		}
