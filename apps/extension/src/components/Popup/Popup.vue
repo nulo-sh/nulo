@@ -150,8 +150,4 @@ onBeforeUnmount(() => {
 
 	background: var(--scrim-popup);
 }
-
-:global([theme="light"]) .dark_bg {
-	background: color-mix(in srgb, var(--app-bg) 70%, transparent);
-}
 </style>

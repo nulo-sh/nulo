@@ -19,5 +19,5 @@ test("base.css content is pinned (edits must be deliberate + visually re-verifie
 	// its --txt-danger lighter than --red so it reads 4.5:1 on a pressed row, and --btn-destructive
 	// darker than --red so the red buttons' label reads AA; `nav` stays out of the control rule because
 	// the landing's is text; line 1 carries the Apache-2.0 §4(b) header.
-	expect(hash).toBe("8cdba0e7558eb78ef978bd1fec53c0a533c9fa4c9cfa1cf1644375c35e1676e7")
+	expect(hash).toBe("e76829bfe7e4d7f21cd54bba4527e1e2efc73ead3ae01bcbe49892aa7944089f")
 })

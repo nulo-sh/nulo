@@ -39,8 +39,6 @@ defineProps({
 }
 
 :global([theme="light"]) .wrapper {
-	box-shadow:
-		0 -1px 0 0 var(--nulo-outline),
-		-6px -6px 0 0 var(--nulo-outline);
+	box-shadow: -6px -6px 0 0 var(--nulo-outline);
 }
 </style>
