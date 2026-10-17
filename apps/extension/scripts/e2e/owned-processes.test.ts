@@ -412,16 +412,18 @@ describe.skipIf(process.platform !== "linux")("chromes by extension path", { tim
 // `chromePattern`; any other spelling of it drifts from that.
 test("no e2e module but sandbox-ownership.ts spells a pkill", () => {
 	const root = path.resolve(__dirname, "../../tests/e2e")
-	const spelled: string[] = []
+	const spelled = new Set<string>()
 	for (const rel of readdirSync(root, { recursive: true, encoding: "utf8" })) {
-		if (!rel.endsWith(".ts") || rel === "sandbox-ownership.ts") continue
+		if (!rel.endsWith(".ts")) continue
 		const visit = (node: ts.Node): void => {
-			if ((ts.isStringLiteralLike(node) || ts.isTemplateLiteralToken(node)) && node.text.includes("pkill")) spelled.push(rel)
+			if ((ts.isStringLiteralLike(node) || ts.isTemplateLiteralToken(node)) && node.text.includes("pkill")) spelled.add(rel)
 			ts.forEachChild(node, visit)
 		}
 		visit(ts.createSourceFile(rel, readFileSync(path.join(root, rel), "utf8"), ts.ScriptTarget.Latest, true))
 	}
-	expect(spelled).toEqual([])
+	// The one sanctioned spelling is also the scan's success control: a scan that stopped seeing
+	// literals would find nothing at all.
+	expect([...spelled]).toEqual(["sandbox-ownership.ts"])
 })
 
 type ZombieParent = { parent: ChildProcess; child: number | undefined }

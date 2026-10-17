@@ -10,7 +10,6 @@ import { captureSoleProfileId, navigateToSettings, openNetworkDetail } from "./f
 // add → setPrimary → delete cycle requires a live Aztec node and
 // lives in the network suite.
 
-/** Settings → Networks, then the first row's detail page. */
 async function openFirstNetworkDetail(page: Page): Promise<void> {
 	await navigateToSettings(page, "networks")
 	await page.waitForSelector('[data-testid="network-row"]', { visible: true, timeout: 5_000 })

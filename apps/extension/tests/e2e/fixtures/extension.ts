@@ -580,7 +580,6 @@ export function requireAztecConfig(): AztecTestConfig {
 /** What the funded network fixtures mint to the wallet's account, and so expect on its token row. */
 const FIXTURE_TOKEN_RAW = 1000n * 10n ** 18n
 
-/** A launched wallet with a registered profile on Local Network, and the popup that switched it. */
 async function launchOnLocalNetwork(): Promise<{ ctx: ExtensionContext; page: Page }> {
 	const ctx = await launchExtension()
 	await registerProfile(ctx)
@@ -628,8 +627,7 @@ export const test = base.extend<{
 	 *  cap-popup round-trip during the test budget — the cap-popup work happens
 	 *  in fixture setup, which has hookTimeout=300s. The exposed `accountAddress`
 	 *  is the first account from the cap popup (the one the fixture selected on
-	 *  the dApp's behalf).
-	 *  See implementations-plan/archive/e2e-stabilization/plan.md (Cap fixtures). */
+	 *  the dApp's behalf). */
 	dappConnectedExtensionWithTransactionCap: ExtensionContext & { playgroundPage: Page; accountAddress: string }
 	/** Same as `dappConnectedExtensionWithTransactionCap` BUT pre-grants the
 	 *  `transaction` bundle for up to the FIRST TWO accounts the cap popup

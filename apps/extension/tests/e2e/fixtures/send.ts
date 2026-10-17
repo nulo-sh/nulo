@@ -75,7 +75,7 @@ export async function runApprovedPgCall(
 /**
  * One default `sendTx` of 1 token from the connected account to the minter, approved in the execute
  * window and asserted `ok` — the round trip that needs a live PXE host. `label` names the caller in
- * a failure; `popupTimeoutMs` covers a cold PXE boot before the window can open.
+ * a failure.
  */
 export async function sendDefaultTx(
 	ctx: ExtensionContext,

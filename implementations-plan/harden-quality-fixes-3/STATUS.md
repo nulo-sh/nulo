@@ -20,3 +20,5 @@
 - 2026-10-17 phase 2.1 gate pass: lint, typecheck:all, test (823 files) exit 0; the txHashOf/setPgInputs/restartBackground grep over the four specs prints nothing.
 - 2026-10-17 phase 2.2 gate pass: lint, typecheck:all, test (823 files), playground typecheck and build exit 0.
 - 2026-10-17 phase 2.3 gate pass: lint, typecheck:all, test:all (extension 823 files), test:ci-gating (576) exit 0; the pkill case red on the reverted smoke setup, green after.
+- 2026-10-17 phase 2.4 smoke Chrome, 13 named files (armed build, retry 0, load1 74): 12 passed, 1 skipped by design (passkey-toolbar-panel), 56 tests passed, 345 s.
+- 2026-10-17 phase 2.4 smoke Firefox, 13 named files (armed build, retry 0): 13 passed, 62 tests, 579 s.
