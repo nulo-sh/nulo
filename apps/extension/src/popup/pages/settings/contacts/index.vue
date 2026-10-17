@@ -22,10 +22,12 @@ import { copyWithToast } from "@/utils/clipboard"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { useConfirm } from "@/composables/useConfirm"
 import { useEntityCrud } from "@/composables/useEntityCrud"
 import { useContactImportExport } from "@/popup/components/modules/settings/contacts/useContactImportExport"
 
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -120,14 +122,15 @@ function handleEditContact(contact) {
 function handleDeleteContact(contact) {
 	// Deleting a contact never touches sender registration — sender rows are
 	// independent PXE state, managed only in Settings → Developer → Account State → Senders.
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.confirm_text = "Yes, delete contact"
-	cacheStore.confirm.description = `Delete contact "${contact.name}"?`
-	cacheStore.confirm.callback = async () => {
-		await contactService.deleteContact(contact.id)
-		openToast({ kind: "success", label: "Contact deleted" })
-	}
-	popupStore.open("confirm")
+	requestConfirm({
+		confirm_color: "red",
+		confirm_text: "Yes, delete contact",
+		description: `Delete contact "${contact.name}"?`,
+		callback: async () => {
+			await contactService.deleteContact(contact.id)
+			openToast({ kind: "success", label: "Contact deleted" })
+		},
+	})
 }
 
 onMounted(async () => {
@@ -145,19 +148,19 @@ onBeforeUnmount(() => {
 		<template #trailing>
 			<Dropdown>
 				<button type="button" :class="$style.icon_btn" aria-label="Contact actions" data-testid="contacts-menu-trigger">
-					<MaterialIcon name="more_vert" :size="18" color="secondary" />
+					<Icon name="more" :rotate="90" :size="18" color="secondary" />
 				</button>
 
 				<template #popup>
 					<DropdownItem @click="importContacts" :disabled="appStore.contactImports.size > 0" data-testid="contacts-menu-import">
 						<Flex align="center" gap="8">
-							<Icon name="upload-outline" size="14" color="secondary" />
+							<Icon name="upload" size="14" color="secondary" />
 							Import contacts
 						</Flex>
 					</DropdownItem>
 					<DropdownItem @click="exportContacts" :disabled="!contacts.length" data-testid="contacts-menu-export">
 						<Flex align="center" gap="8">
-							<Icon name="download-outline" size="14" color="secondary" />
+							<Icon name="download" size="14" color="secondary" />
 							Export contacts
 						</Flex>
 					</DropdownItem>

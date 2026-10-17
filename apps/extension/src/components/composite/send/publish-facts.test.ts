@@ -90,9 +90,9 @@ describe("payerKindOf", () => {
 
 describe("publishGlyph", () => {
 	test("the padlock only for hidden, the globe for anything public, nothing when Nulo can't tell", () => {
-		expect(publishGlyph("hidden")).toBe("lock")
-		expect(publishGlyph("public")).toBe("globe")
-		expect(publishGlyph("exposed")).toBe("globe")
+		expect(publishGlyph("hidden")).toBe("private")
+		expect(publishGlyph("public")).toBe("public")
+		expect(publishGlyph("exposed")).toBe("public")
 		expect(publishGlyph("unknown")).toBeNull()
 	})
 })

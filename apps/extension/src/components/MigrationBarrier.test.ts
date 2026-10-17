@@ -6,7 +6,7 @@ import { installChromeStorage } from "../../tests/helpers/chrome-storage-mock"
 import MigrationBarrier from "./MigrationBarrier.vue"
 import BarrierOverlay from "./composite/BarrierOverlay.vue"
 
-const stubs = { Spinner: true, MaterialIcon: true, Teleport: true }
+const stubs = { Spinner: true, Teleport: true }
 const mountBarrier = () => mount(MigrationBarrier, { global: { stubs, components: { BarrierOverlay } } })
 
 describe("MigrationBarrier", () => {

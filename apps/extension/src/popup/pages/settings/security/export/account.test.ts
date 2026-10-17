@@ -26,7 +26,7 @@ vi.mock("vue-router", () => ({
 }))
 vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 
-import { MaterialIcon } from "@nulo/design"
+import { Icon } from "@nulo/design"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import AccountExport from "./account.vue"
 
@@ -48,7 +48,7 @@ function mountPage(profileType = "password") {
 					},
 				}),
 			],
-			components: { MaterialIcon, SubPageHeader },
+			components: { SubPageHeader, Icon },
 			stubs: {
 				SecretUnlockSection: {
 					props: ["modelValue", "error"],

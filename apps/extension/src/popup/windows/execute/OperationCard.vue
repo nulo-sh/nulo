@@ -41,6 +41,7 @@ import DetailsToggle from "./DetailsToggle.vue"
 import OperationActionRow from "./OperationActionRow.vue"
 import SendTxSummary from "./SendTxSummary.vue"
 import { humanizeOperationKind, safeWire } from "./humanize"
+import type { FeePayerPick } from "./fee-figure"
 import type { DraftAztecSendTxOperation, DraftSendTransactionOperation, DraftUIOperation } from "./types"
 import {
 	type CallSurface,
@@ -80,6 +81,8 @@ const props = defineProps<{
 	 *  need at send, discovered without signing (no fee estimate exists for it). */
 	authwitPreview?: OperationAuthwitPreview
 	isPreviewing?: boolean
+	/** The authorizations an earlier window listed for this operation, for a window that only reads it. */
+	approvedAuthwits?: readonly DiscoveredAuthwit[]
 	/** Display-only ABI decodings of this operation's calls, index-aligned with
 	 *  `exec.calls` (or the single `createAuthWit` intent call); `undefined`
 	 *  while the wallet is still decoding. */
@@ -106,7 +109,11 @@ const props = defineProps<{
 	tokenMetadataLoading?: boolean
 }>()
 
-const emit = defineEmits<(e: "updateFeeSettings", index: number, value: FeeSettings | undefined) => void>()
+const emit = defineEmits<{
+	updateFeeSettings: [index: number, value: FeeSettings | undefined]
+	/** The fee card's paying method, or null while none pays. */
+	updatePayer: [index: number, payer: FeePayerPick | null]
+}>()
 
 // TS type predicate so the template's `v-if="isSendTx(op)"` narrows op
 // to the send-like subtype downstream (lets us access `op.feeSettings`
@@ -180,7 +187,8 @@ const authwitSurface = (op: UIOperation): AuthwitSurface => {
 		return props.isPreviewing ? { kind: "pending" } : { kind: "hidden" }
 	}
 	if (isEmbeddedFeePayment(op)) return { kind: "hidden" }
-	return props.feeEstimate?.discoveredAuthwits ? { kind: "list", authwits: props.feeEstimate.discoveredAuthwits } : { kind: "hidden" }
+	const listed = props.feeEstimate?.discoveredAuthwits ?? props.approvedAuthwits
+	return listed ? { kind: "list", authwits: listed } : { kind: "hidden" }
 }
 const authwits = computed(() => authwitSurface(props.op))
 
@@ -343,7 +351,9 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 
 		<div :class="$style.op_divider" />
 
-		<template v-if="isEmbeddedFeePayment(op)">
+		<!-- A window that only reads the request draws its own fee block in place of the choice. -->
+		<slot v-if="$slots.fee" name="fee" />
+		<template v-else-if="isEmbeddedFeePayment(op)">
 			<Flex
 				data-testid="execute-op-fee-set-badge"
 				align="start"
@@ -352,7 +362,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 				:aria-busy="isEstimating && !feeEstimate ? 'true' : undefined"
 				:class="$style.op_fee_set"
 			>
-				<Icon name="check-circle" size="14" color="green" />
+				<Icon name="square-check" size="14" color="green" />
 				<Flex direction="column" gap="6" :class="$style.fee_lines">
 					<Text variant="body" color="secondary" data-testid="execute-op-app-legend">
 						Fee payment method set by
@@ -395,6 +405,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 			:isEstimating="isEstimating"
 			:modelValue="op.feeSettings"
 			@update:modelValue="(value: FeeSettings | undefined) => emit('updateFeeSettings', index, value)"
+			@update:payer="(payer: FeePayerPick | null) => emit('updatePayer', index, payer)"
 		/>
 	</Flex>
 

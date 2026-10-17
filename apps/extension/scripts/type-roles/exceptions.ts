@@ -117,12 +117,6 @@ export const CARVE_OUTS: CarveOut[] = [
 		why: "title-hero's size on Activity and the Settings hub",
 	},
 	{
-		file: "packages/design/src/core/MaterialIcon.vue",
-		rule: "faceless",
-		text: "fontSize: `${props.size}px`",
-		why: "sizes an icon glyph, not text",
-	},
-	{
 		file: "apps/extension/src/components/composite/general/EmojiGrid.vue",
 		rule: "faceless",
 		text: "font-size: 24px",

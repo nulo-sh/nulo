@@ -4,7 +4,8 @@ import { type PropType, useTemplateRef } from "vue"
 
 /** Components */
 import Flex from "../core/Flex.vue"
-import MaterialIcon from "../core/MaterialIcon.vue"
+import Icon from "../core/Icon.vue"
+import type { GlyphName } from "../core/glyphs"
 import type { TextColorName } from "../color-names"
 
 // Router-free base: emits `back` instead of touching the router. The extension wrapper owns the
@@ -21,7 +22,7 @@ defineProps({
 		default: true,
 	},
 	leadingIcon: {
-		type: String,
+		type: String as PropType<GlyphName>,
 		required: false,
 	},
 	leadingIconColor: {
@@ -44,13 +45,13 @@ defineExpose({ focusTitle: () => titleEl.value?.focus() })
 			aria-label="Back"
 			data-testid="subpage-back"
 		>
-			<MaterialIcon name="arrow_back" :size="22" color="primary" />
+			<Icon name="back" :size="22" color="primary" />
 		</button>
 		<div v-else :class="$style.back_spacer" />
 
 		<Flex align="center" justify="center" gap="8" :class="$style.title_wrapper">
 			<slot name="title">
-				<MaterialIcon v-if="leadingIcon && title" :name="leadingIcon" :size="18" :color="leadingIconColor" />
+				<Icon v-if="leadingIcon && title" :name="leadingIcon" :size="18" :color="leadingIconColor" />
 				<span v-if="title" ref="titleEl" tabindex="-1" :class="$style.title">{{ title }}</span>
 			</slot>
 		</Flex>

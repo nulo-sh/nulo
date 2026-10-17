@@ -150,7 +150,6 @@ const STUBS = {
 	Flex: { template: '<div v-bind="$attrs"><slot /></div>', inheritAttrs: false },
 	Text: { template: "<span><slot /></span>" },
 	Icon: { template: "<i />" },
-	MaterialIcon: { template: "<i />" },
 	Tooltip: { template: '<div><slot /><slot name="content" /></div>' },
 	SubPageHeader: { template: "<header />" },
 	Banner: { template: '<div data-testid="stub-banner"><slot /></div>' },

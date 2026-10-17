@@ -111,7 +111,7 @@ onBeforeUnmount(() => {
 				</Flex>
 			</Flex>
 
-			<MaterialIcon name="chevron_right" :size="20" color="primary" />
+			<Icon name="chevron" :size="20" color="primary" />
 		</template>
 
 		<Flex v-else-if="isLoading" align="center" gap="12" :class="$style.loading_row">

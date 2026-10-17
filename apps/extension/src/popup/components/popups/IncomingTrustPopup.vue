@@ -169,10 +169,8 @@ watch(
 							name="chevron"
 							size="10"
 							color="tertiary"
-							:style="{
-								transform: `rotate(${expanded ? '180' : '0'}deg)`,
-								transition: 'transform 0.2s ease',
-							}"
+							:rotate="expanded ? 270 : 90"
+							:class="$style.chevron"
 						/>
 					</button>
 					<div
@@ -200,7 +198,7 @@ watch(
 						data-testid="incoming-trust-contract-link"
 					>
 						<span>View contract on {{ explorerName }}</span>
-						<Icon name="external-link" size="10" color="tertiary" />
+						<Icon name="open" size="10" color="tertiary" />
 					</a>
 				</Flex>
 
@@ -312,5 +310,9 @@ watch(
 }
 :global([theme="light"]) .pre_title {
 	color: var(--txt-secondary);
+}
+
+.chevron {
+	transition: transform 0.2s ease;
 }
 </style>

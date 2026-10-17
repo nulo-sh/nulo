@@ -13,7 +13,6 @@ const STUBS = {
 	Skeleton,
 	Flex: { template: "<div><slot /></div>" },
 	Text: { template: "<span><slot /></span>" },
-	MaterialIcon: { template: "<i />" },
 	Icon: { template: '<svg data-testid="stub-glyph" :data-name="name" />', props: ["name", "size"] },
 	Dropdown: {
 		template: '<div><slot name="trigger" /><div data-popup><slot name="popup" /></div></div>',
@@ -131,7 +130,7 @@ describe("FeeMethodSelector", () => {
 		expect(w.find(TAG).attributes("data-notice-shape")).toBe("private-public")
 		expect(w.find(TAG).text()).toBe("NAMES YOUR ADDRESS")
 		expect(w.find(TAG).classes()).toContain(mark.exposed)
-		expect(w.find(`${TAG} [data-testid="stub-glyph"]`).attributes("data-name")).toBe("globe")
+		expect(w.find(`${TAG} [data-testid="stub-glyph"]`).attributes("data-name")).toBe("public")
 		expect(w.find(`${TAG} [data-testid="stub-glyph"]`).attributes("aria-hidden")).toBe("true")
 		expect(w.find('[data-testid="send-fee-method-trigger"]').text()).toContain("Public Fee Juice")
 
@@ -203,7 +202,7 @@ describe("FeeMethodSelector — in the real menu", () => {
 			attachTo: document.body,
 			global: {
 				components: { DropdownItem },
-				stubs: { ...FLEX, Text: STUBS.Text, MaterialIcon: STUBS.MaterialIcon, Icon: STUBS.Icon },
+				stubs: { ...FLEX, Text: STUBS.Text, Icon: STUBS.Icon },
 			},
 		})
 	const isOpen = (w: ReturnType<typeof mount>) => w.find("[data-dropdown-open]").attributes("data-dropdown-open") === "true"
@@ -243,13 +242,13 @@ describe("FeeMethodSelector — in the real menu", () => {
 		const w = mount(FeeMethodSelector, {
 			props: { methods: baseMethods },
 			attachTo: document.body,
-			global: { components: { DropdownItem, Flex }, stubs: { Text: STUBS.Text, MaterialIcon: STUBS.MaterialIcon, Icon: STUBS.Icon } },
+			global: { components: { DropdownItem, Flex }, stubs: { Text: STUBS.Text, Icon: STUBS.Icon } },
 		})
 		const trigger = w.get('[data-testid="send-fee-method-trigger"]')
 		expect(trigger.element.tagName).toBe("BUTTON")
 		expect(trigger.attributes("type")).toBe("button")
-		// The chevron is a ligature: its text would join the button's spoken name.
-		expect(trigger.get("i").attributes("aria-hidden")).toBe("true")
+		// The chevron is decoration: hidden, it stays out of the button's spoken name.
+		expect(trigger.get('[data-testid="stub-glyph"][data-name="chevron"]').attributes("aria-hidden")).toBe("true")
 		;(trigger.element as HTMLButtonElement).click()
 		await flushPromises()
 		expect(isOpen(w)).toBe(true)

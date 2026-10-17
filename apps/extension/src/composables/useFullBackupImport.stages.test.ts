@@ -283,7 +283,7 @@ function happyWiring() {
 async function mountWithBackup(overrides: Record<string, unknown> = {}, opts = makeOpts()) {
 	const c = useFullBackupImport(opts)
 	const backup = await buildBackup(overrides)
-	c.selectedBackup.value = { name: "x.json", backup, type: "plain", profileType: "password" }
+	c.selectedBackup.value = { name: "x.json", backup, kind: "plain", profileType: "password" }
 	return { c, opts, backup }
 }
 
@@ -421,7 +421,7 @@ describe("epoch-4 secret gates — rejections AND permissiveness", () => {
 		const fixed = { ...body, checksum: await EncryptionKey.getHashHex(JSON.stringify(body)) }
 		const opts = makeOpts()
 		const c = useFullBackupImport(opts)
-		c.selectedBackup.value = { name: "x.json", backup: fixed, type: "plain", profileType: "password" }
+		c.selectedBackup.value = { name: "x.json", backup: fixed, kind: "plain", profileType: "password" }
 		await c.restoreBackup()
 		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Can't import", "This backup is missing its recovery-phrase entropy.")
 		expect(c.restoreStatus.value).toBe("failed")
@@ -434,7 +434,7 @@ describe("epoch-4 secret gates — rejections AND permissiveness", () => {
 		const fixed = { ...body, checksum: await EncryptionKey.getHashHex(JSON.stringify(body)) }
 		const opts = makeOpts()
 		const c = useFullBackupImport(opts)
-		c.selectedBackup.value = { name: "x.json", backup: fixed, type: "plain", profileType: "password" }
+		c.selectedBackup.value = { name: "x.json", backup: fixed, kind: "plain", profileType: "password" }
 		await c.restoreBackup()
 		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Can't import", "This backup is missing its imported-keys key.")
 	})
@@ -475,7 +475,7 @@ describe("stage/status matrix on the failure paths", () => {
 		const opts = { ...makeOpts(), confirmDuplicate: vi.fn(async () => undefined) }
 		const c = useFullBackupImport(opts as never)
 		const backup = await buildBackup()
-		c.selectedBackup.value = { name: "x.json", backup, type: "plain", profileType: "password" }
+		c.selectedBackup.value = { name: "x.json", backup, kind: "plain", profileType: "password" }
 		await c.restoreBackup()
 		expect(c.restoreStatus.value).toBe("")
 		expect(opts.fillError).not.toHaveBeenCalled()
@@ -599,7 +599,7 @@ describe("pickBackupFile / decryptBackup behavior pins", () => {
 		const opts = makeOpts()
 		opts.pickFile.mockResolvedValue(null)
 		const c = useFullBackupImport(opts)
-		c.selectedBackup.value = { name: "old.json", backup: {}, type: "plain", profileType: "password" }
+		c.selectedBackup.value = { name: "old.json", backup: {}, kind: "plain", profileType: "password" }
 		await c.pickBackupFile()
 		expect(c.selectedBackup.value).toBeNull()
 	})
@@ -608,7 +608,7 @@ describe("pickBackupFile / decryptBackup behavior pins", () => {
 		const opts = makeOpts()
 		opts.pickFile.mockRejectedValue(new FilePickCanceledError())
 		const c = useFullBackupImport(opts)
-		const chosen = { name: "old.json", backup: {}, type: "plain" as const, profileType: "password" }
+		const chosen = { name: "old.json", backup: {}, kind: "plain" as const, profileType: "password" }
 		c.selectedBackup.value = chosen
 		c.parsedBackupName.value = "Old"
 		await c.pickBackupFile()
@@ -651,7 +651,7 @@ describe("pickBackupFile / decryptBackup behavior pins", () => {
 		const sealed = Buffer.from(await key.encrypt(new TextEncoder().encode(JSON.stringify(inner)))).toString("base64")
 		const opts = makeOpts()
 		const c = useFullBackupImport(opts)
-		c.selectedBackup.value = { name: "e.txt", backup: sealed, type: "encrypted", profileType: null }
+		c.selectedBackup.value = { name: "e.txt", backup: sealed, kind: "sealed", profileType: null }
 		c.decryptionPassword.value = "wrong-password"
 		await c.decryptBackup()
 		expect(opts.fillError).toHaveBeenCalledWith(
@@ -674,7 +674,7 @@ describe("pickBackupFile / decryptBackup behavior pins", () => {
 		const opts = makeOpts()
 		const c = useFullBackupImport(opts)
 		c.parsedBackupName.value = "Previous"
-		c.selectedBackup.value = { name: "e.txt", backup: sealed, type: "encrypted", profileType: null }
+		c.selectedBackup.value = { name: "e.txt", backup: sealed, kind: "sealed", profileType: null }
 		c.decryptionPassword.value = "pw12345678"
 		await c.decryptBackup()
 		expect(c.parsedBackupName.value).toBeNull()
@@ -706,7 +706,7 @@ describe("epoch-4 passkey gates", () => {
 		const runCeremony = vi.fn(async () => CREDENTIAL as never)
 		const opts = { ...makeOpts({ password: "", repeatedPassword: "" }), runCeremony }
 		const c = useFullBackupImport(opts as never)
-		c.selectedBackup.value = { name: "x.json", backup, type: "plain", profileType: "passkey" }
+		c.selectedBackup.value = { name: "x.json", backup, kind: "plain", profileType: "passkey" }
 		return { c, opts, runCeremony }
 	}
 
@@ -744,36 +744,32 @@ describe("epoch-4 passkey gates", () => {
 
 describe("decrypt publication race — the last await seam", () => {
 	it("a re-pick landing between the helper's final fence and the caller's continuation is NOT overwritten", async () => {
-		const inner = { data: { profile: { type: "password", name: "RaceName" } } }
+		const innerJson = JSON.stringify({ data: { profile: { type: "password", name: "RaceName" } } })
 		const key = await EncryptionKey.fromPassword("pw12345678")
-		const sealed = Buffer.from(await key.encrypt(new TextEncoder().encode(JSON.stringify(inner)))).toString("base64")
+		const sealed = Buffer.from(await key.encrypt(new TextEncoder().encode(innerJson))).toString("base64")
 
 		const opts = makeOpts()
 		const c = useFullBackupImport(opts)
-		const original = { name: "e.txt", backup: sealed, type: "encrypted" as const, profileType: null }
-		const replacement = { name: "new.json", backup: {}, type: "plain" as const, profileType: "password" }
+		const original = { name: "e.txt", backup: sealed, kind: "sealed" as const, profileType: null }
+		const replacement = { name: "new.json", backup: {}, kind: "plain" as const, profileType: "password" }
 		c.selectedBackup.value = original
 		c.decryptionPassword.value = "pw12345678"
 
-		// Deterministic scheduling: wrap the real key's decrypt so the re-pick is queued AT
-		// decrypt resolution. Microtask order is then [helper continuation (fence passes,
-		// parse, return), re-pick, caller continuation] — landing the replacement exactly in
-		// the seam between the helper's last internal fence and the caller's publication.
-		const realFromPasshash = EncryptionKey.fromPasshash.bind(EncryptionKey)
-		vi.spyOn(EncryptionKey, "fromPasshash").mockImplementation(async (passhash) => {
-			const realKey = await realFromPasshash(passhash)
-			return {
-				decrypt: async (bytes: Uint8Array) => {
-					const out = await realKey.decrypt(bytes as Uint8Array<ArrayBuffer>)
-					queueMicrotask(() => {
-						c.selectedBackup.value = replacement
-					})
-					return out
-				},
-			} as never
+		// The re-pick is queued from the helper's parse of the decrypted body, which runs after its
+		// last stale check and before it returns, so the microtask runs ahead of the caller's
+		// continuation: only the caller's own fence can keep the replacement.
+		const realParse = JSON.parse
+		const parse = vi.spyOn(JSON, "parse").mockImplementation((text, reviver) => {
+			if (text === innerJson) {
+				queueMicrotask(() => {
+					c.selectedBackup.value = replacement
+				})
+			}
+			return realParse(text, reviver)
 		})
 
 		await c.decryptBackup()
+		parse.mockRestore()
 
 		// The replacement selection must survive (structural: the ref stores a reactive
 		// proxy of the assigned object); the decrypted publication must not land.

@@ -116,7 +116,6 @@ const stubs = {
 	Flex: { template: "<div><slot /></div>" },
 	Text: { template: "<span><slot /></span>" },
 	Icon: true,
-	MaterialIcon: true,
 	Tooltip: { template: "<div><slot /></div>" },
 	Dropdown: { template: '<div><slot name="trigger" /><slot name="popup" /></div>' },
 	DropdownRoot: { template: '<div><slot name="trigger" /><slot name="popup" /></div>' },
@@ -394,4 +393,30 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 			expect(region(w).text()).toBe("This app's fee contract may not cover this fee right now.")
 		},
 	)
+})
+
+describe("OperationCard — a window that only reads the request draws its own fee block", () => {
+	const mountWithFee = async (op: unknown) => {
+		const w = mount(OperationCard, {
+			props: { op: op as never, index: 0, profile: { id: "p1", name: "Main" } as never },
+			slots: { fee: '<div data-testid="own-fee-block" />' },
+			global: { stubs },
+		})
+		mounted = w
+		await flushPromises()
+		return w
+	}
+
+	test.each([
+		["a fee the person picks", sendTx()],
+		["a fee the app pays", { ...sendTx({ feePayer: `0x${"2f".repeat(32)}` }), feeSettings: { paymentMethod: { kind: "embedded" } } }],
+	])("%s: the slot stands in for the choice and the app's row, the payload unchanged", async (_case, op) => {
+		const w = await mountWithFee(op)
+		expect(w.find('[data-testid="own-fee-block"]').exists()).toBe(true)
+		expect(fee(w).exists()).toBe(false)
+		expect(w.find('[data-testid="execute-op-fee-set-badge"]').exists()).toBe(false)
+		await w.get('[data-testid="execute-op-details-toggle"]').trigger("click")
+		expect(w.findAll('[data-testid="execute-op-payload-row"]')).toHaveLength(1)
+		expect(mocks.getGasBalances).not.toHaveBeenCalled()
+	})
 })

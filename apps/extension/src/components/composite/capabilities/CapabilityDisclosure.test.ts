@@ -1,4 +1,4 @@
-import { MaterialIcon } from "@nulo/design"
+import { Icon } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import CapabilityDisclosure from "./CapabilityDisclosure.vue"
@@ -7,7 +7,7 @@ const mountFold = (props: Record<string, unknown> = {}, slot = '<button data-tes
 	mount(CapabilityDisclosure, {
 		props: { label: "Already allowed", tag: "5", testid: "cap-already-allowed", ...props } as never,
 		slots: { default: slot },
-		global: { components: { MaterialIcon } },
+		global: { components: { Icon } },
 	})
 
 /** The compiled `<style module>` class names; a script-setup instance does not expose `$style`. */
@@ -68,9 +68,9 @@ describe("composite/capabilities/CapabilityDisclosure", () => {
 	})
 
 	test("the chevron is hidden from screen readers", () => {
-		const chevron = mountFold().find(`.${STYLE.chevron}`)
-		expect(chevron.attributes("aria-hidden")).toBe("true")
-		expect(chevron.text()).toBe("chevron_right")
+		const w = mountFold()
+		expect(w.find(`.${STYLE.chevron}`).attributes("aria-hidden")).toBe("true")
+		expect(w.getComponent(Icon).props("name")).toBe("chevron")
 	})
 
 	test("two folds keep their own state and panel ids", async () => {
@@ -80,7 +80,7 @@ describe("composite/capabilities/CapabilityDisclosure", () => {
 				template:
 					'<div><CapabilityDisclosure label="A" tag="1" testid="a">one</CapabilityDisclosure><CapabilityDisclosure label="B" tag="2" testid="b">two</CapabilityDisclosure></div>',
 			},
-			{ global: { components: { MaterialIcon } } },
+			{ global: { components: { Icon } } },
 		)
 		await w.find('[data-testid="a"]').trigger("click")
 		await w.find('[data-testid="b"]').trigger("click")

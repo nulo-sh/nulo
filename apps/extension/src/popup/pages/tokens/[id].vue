@@ -26,9 +26,11 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
+import { useConfirm } from "@/composables/useConfirm"
 import { pinScopeOf, usePinnedTokens } from "@/composables/usePinnedTokens"
 import { usePrices } from "@/composables/usePrices"
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
 
 /** Utils */
 import { copyWithToast } from "@/utils/clipboard"
@@ -145,13 +147,12 @@ const showHomeFull = async () => {
 	if (popupStore.isOpened("confirm")) return
 	const symbolOf = new Map(tokens.map((t) => [t.contract.toLowerCase(), sanitizeWireString(t.symbol, 32)]))
 	const pinned = [...pins.pinnedContracts.value].map((c) => symbolOf.get(c)).filter((x) => x !== undefined)
-	cacheStore.confirm = {
+	requestConfirm({
 		single: true,
 		title: "Home is full",
 		description: `Home shows up to 3 pinned tokens. Unpin one of these to pin ${sanitizeWireString(subject.symbol, 32)}: ${pinned.join(", ")}`,
 		confirm_text: "Got it",
-	}
-	popupStore.open("confirm")
+	})
 }
 
 const handleTogglePin = async () => {
@@ -167,13 +168,14 @@ const handleTogglePin = async () => {
 }
 
 const handleDeleteToken = () => {
-	cacheStore.confirm.description = "Removing a token only affects the display in the UI and it does not affect the token balance"
-	cacheStore.confirm.callback = async () => {
-		await tokenService.deleteToken(token.value.id)
-		router.push("/popup/general")
-		openToast({ kind: "success", label: "Token successfully deleted" })
-	}
-	popupStore.open("confirm")
+	requestConfirm({
+		description: "Removing a token only affects the display in the UI and it does not affect the token balance",
+		callback: async () => {
+			await tokenService.deleteToken(token.value.id)
+			router.push("/popup/general")
+			openToast({ kind: "success", label: "Token successfully deleted" })
+		},
+	})
 }
 
 onMounted(async () => {
@@ -214,7 +216,7 @@ onBeforeUnmount(() => {
 		<SubPageHeader
 			:title="token?.symbol || ''"
 			:backTo="'/popup/general'"
-			leadingIcon="account_balance_wallet"
+			leadingIcon="holdings"
 		>
 			<template #trailing>
 				<Tooltip position="end" :disabled="isRefreshingBalance || !tokenBalance?.updatedAt">
@@ -225,7 +227,7 @@ onBeforeUnmount(() => {
 						:class="$style.icon_btn"
 						aria-label="Refresh balance"
 					>
-						<MaterialIcon name="refresh" :size="18" color="secondary" />
+						<Icon name="refresh" :size="18" color="secondary" />
 					</button>
 
 					<template #content>
@@ -236,13 +238,13 @@ onBeforeUnmount(() => {
 
 				<Dropdown>
 					<button type="button" :class="$style.icon_btn" aria-label="Token actions" data-testid="token-menu-trigger">
-						<MaterialIcon name="more_vert" :size="18" color="secondary" />
+						<Icon name="more" :rotate="90" :size="18" color="secondary" />
 					</button>
 
 					<template #popup>
 						<DropdownItem @click="handleTogglePin" data-testid="token-menu-pin" :data-pinned="isPinned ? 'true' : 'false'">
 							<Flex align="center" gap="8">
-								<MaterialIcon name="push_pin" :size="14" color="primary" />
+								<Icon name="pin" :size="14" color="primary" />
 								{{ isPinned ? "Unpin from Home" : "Pin to Home" }}
 							</Flex>
 						</DropdownItem>
@@ -254,7 +256,7 @@ onBeforeUnmount(() => {
 						</DropdownItem>
 						<DropdownItem @click="popupStore.open('token_metadata')" data-testid="token-menu-metadata">
 							<Flex align="center" gap="8">
-								<Icon name="code-circle" size="14" color="primary" />
+								<Icon name="code" size="14" color="primary" />
 								Show metadata
 							</Flex>
 						</DropdownItem>
@@ -270,7 +272,7 @@ onBeforeUnmount(() => {
 						<DropdownDivider />
 						<DropdownItem @click="handleDeleteToken" :class="$style.hover_red">
 							<Flex align="center" gap="8">
-								<Icon name="trash" size="14" color="primary" />
+								<Icon name="remove" size="14" color="primary" />
 								<Text>Remove token</Text>
 							</Flex>
 						</DropdownItem>
@@ -332,7 +334,7 @@ onBeforeUnmount(() => {
 	}
 
 	&:hover {
-		svg { fill: var(--red); }
+		svg { color: var(--red); }
 		span { color: var(--red); }
 	}
 }

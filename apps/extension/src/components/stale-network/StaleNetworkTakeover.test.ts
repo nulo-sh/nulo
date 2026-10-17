@@ -64,7 +64,7 @@ function mountTakeover(v: StaleNetworkView, stale = fakeStale()) {
 			stubs: {
 				Flex: { template: "<div><slot /></div>" },
 				Spinner: { template: '<span data-testid="stub-spinner" />' },
-				StaleIcon: { template: '<i :data-icon="name" />', props: ["name"] },
+				Icon: { template: '<i :data-icon="name" />', props: ["name"] },
 				StaleNetworkConfirm: {
 					template: '<div v-if="show" data-testid="stub-confirm" @click="$emit(\'confirm\')" />',
 					props: ["show", "view"],
@@ -134,7 +134,7 @@ describe("StaleNetworkTakeover — copy and order", () => {
 
 	test("A2: new account addresses, under A1's reset mark, with the notice after the body and no note", () => {
 		const { wrapper } = mountTakeover(view({ cause: { networkReset: false, addressesMoved: true } }))
-		expect(eyebrowIcon(wrapper.element)).toBe("reset")
+		expect(eyebrowIcon(wrapper.element)).toBe("refresh")
 		expect(lines(wrapper.element)).toEqual([
 			...TOP,
 			"NETWORK UPGRADE",

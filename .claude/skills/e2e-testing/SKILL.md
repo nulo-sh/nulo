@@ -317,7 +317,7 @@ as a substitute for closing through the UI). `waitForPopup` matches a NEW `#/win
 URL because every interaction URL carries a unique `requestId`; `callExpectingNoPopup` diffs targets
 by identity because plain popup pages change URL under a lock redirect.
 
-`clickByTestId` calls `el.click()` in the page (`fixtures/extension.ts:1451`), which an SVG element
+`clickByTestId` calls `el.click()` in the page (`fixtures/dom.ts`), which an SVG element
 does not have, so an icon-only `<Icon>` target throws inside the wait and times out: press it with
 `pointerClick`.
 
@@ -586,6 +586,12 @@ the pattern.
 
 ### Harness behaviours that look like product bugs
 
+- **A mouse drag can select nothing.** Chrome 152 starts no selection from a press between a
+  glyph's middle and about half a pixel right of it, and a drag of one single move leaves a bare
+  caret: press a quarter in from a character's outer edge and move in steps
+  (`navigation.test.ts`'s `textEdge` and `dragSelect`). Firefox 153 keeps the text a drag ends on
+  even inside a `user-select: none` control, so a selection test bans only the controls a drag
+  crosses (`FIREFOX.md`).
 - **Chrome's created windows keep the launch size.** The launch passes `--window-size=400,600`
   (`fixtures/browser/chrome.ts:40`); under it `windows.create` honours `left` and `top` but not
   `width` or `height` (popups 400×600, normal windows 500×600), while `windows.update` honours
@@ -627,7 +633,7 @@ the pattern.
   for it on a fresh, unfunded account fails; History's root always renders
   (`implementations-plan/archive/approval-scope-follow/plan.md#empty-feed`).
 - **`page.waitForSelector` with a plain CSS selector resolves to `null`, never a handle.**
-  `patchPagePolling` swaps it for a `waitForFunction` poll (`fixtures/extension.ts:1074-1078`),
+  `patchPagePolling` swaps it for a `waitForFunction` poll (`fixtures/dom.ts`),
   so a probe that reads a box from its result reads nothing: take the element with `page.$`
   after the wait.
 - **The e2e price seed covers `usd-coin` only**, while the wallet also asks for `aztec`

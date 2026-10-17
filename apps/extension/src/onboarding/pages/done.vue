@@ -82,11 +82,11 @@ async function openWallet() {
 			data-testid="onboarding-pin-tip"
 		>
 			<Flex align="center" gap="8">
-				<MaterialIcon name="extension" :size="16" color="secondary" />
+				<Icon name="extension" :size="16" color="secondary" />
 				<Text variant="label-section" color="secondary">Pro tip</Text>
 			</Flex>
 			<Text variant="body" color="secondary" height="150">
-				Click the puzzle icon in your Chrome toolbar, then pin Nulo for
+				Click the puzzle icon in your browser's toolbar, then pin Nulo for
 				quick access. That's how you'll open the wallet from now on.
 			</Text>
 		</Flex>

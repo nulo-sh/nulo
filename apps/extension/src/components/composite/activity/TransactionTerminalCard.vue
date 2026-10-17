@@ -1,15 +1,14 @@
-<script setup>
+<script setup lang="ts">
 /**
  * Terminal phase of the activity card for a journal record with no settled `TransactionService`
  * row. It wraps `TransactionCardLayout`, so every field sits where the awaiting and settled cards
  * put it and only the badge changes between phases. `subtitle`, `icon` and `color` come verbatim
  * from `journalTerminalDisplay` (`@/utils/journal-state.ts`); every color it returns needs a
  * `subtitle_<color>` rule below.
- *
- * Plain `<script setup>`, like `TransactionAwaitingCard.vue`: vue-tsc cannot type the slots of
- * its untyped consumers.
  */
-import { STATUS_ICON_FILL } from "./status-icon-fill"
+import type { GlyphName } from "@nulo/design"
+import type { PropType } from "vue"
+import { STATUS_ICON_FILL, type StatusTone } from "./status-icon-fill"
 import TransactionCardLayout from "./TransactionCardLayout.vue"
 
 defineProps({
@@ -18,39 +17,49 @@ defineProps({
 	title: { type: String, required: true },
 	/** State-specific subtitle copy. Comes verbatim from journalTerminalDisplay. */
 	subtitle: { type: String, required: true },
-	/** Icon name for the status badge (e.g. "cancel", "refresh-circle",
-	 *  "close-circle"). Mapped per-state by journalTerminalDisplay. */
-	icon: { type: String, required: true },
+	/** Glyph for the status badge (e.g. "square-cross", "refresh"). Mapped per-state by
+	 *  journalTerminalDisplay. */
+	icon: { type: String as PropType<GlyphName>, required: true },
 	/** Status tone, one of "gray" | "amber" | "red" | "green": the status line's colour and, through
 	 *  `STATUS_ICON_FILL`, the icon's. */
-	color: { type: String, required: true },
+	color: { type: String as PropType<StatusTone>, required: true },
 	/** Activity-row icon (left of the badge). Same convention as the
-	 *  awaiting card: "arrow-narrow-up-right" for UI transfers, "zap" for
-	 *  generic dApp ops. */
-	activityIcon: { type: String, default: "zap" },
+	 *  awaiting card: "send" for UI transfers, "zap" for generic dApp ops. */
+	activityIcon: { type: String as PropType<GlyphName>, default: "zap" },
 	/** Origin chip — for dApp-initiated txs, the dApp hostname. UI-initiated
 	 *  transfers leave this null and the chip is suppressed. */
-	originLabel: { type: String, default: null },
+	originLabel: { type: String as PropType<string | null>, default: null },
 	/** Privacy-direction chip ("Private → Public" etc.) for UI transfers.
 	 *  Mutually exclusive with originLabel — transfer-kind ops carry only
 	 *  transferTypeLabel; dapp_execute-kind ops carry only originLabel. */
-	transferTypeLabel: { type: String, default: null },
-	amount: { type: String, default: null },
-	amountSymbol: { type: String, default: null },
+	transferTypeLabel: { type: String as PropType<string | null>, default: null },
+	amount: { type: String as PropType<string | null>, default: null },
+	amountSymbol: { type: String as PropType<string | null>, default: null },
+	/** The title names the function a dApp called: one line, cut at its end. */
+	oneLineTitle: { type: Boolean, default: false },
 	/** The route the row opens. */
 	to: { type: String, default: undefined },
 })
 </script>
 
 <template>
-	<TransactionCardLayout :title="title" :icon="activityIcon" :amount="amount" :amountSymbol="amountSymbol" :to="to" testId="tx-terminal-card">
+	<TransactionCardLayout
+		:title="title"
+		:icon="activityIcon"
+		:amount="amount"
+		:amountSymbol="amountSymbol"
+		:to="to"
+		:oneLineTitle="oneLineTitle"
+		testId="tx-terminal-card"
+	>
 		<template #badge>
 			<Icon :name="icon" size="12" :color="STATUS_ICON_FILL[color]" :class="$style.status_icon" :data-color="color" data-testid="activity-status-icon" />
 		</template>
 
 		<template v-if="transferTypeLabel || originLabel" #title-trailing>
 			<span :class="$style.title_sep">·</span>
-			<span :class="$style.chip">{{ transferTypeLabel || originLabel }}</span>
+			<span v-if="transferTypeLabel" :class="$style.chip">{{ transferTypeLabel }}</span>
+			<span v-else :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
 		</template>
 
 		<template #secondary>
@@ -87,5 +96,9 @@ defineProps({
 
 .chip {
 	composes: chip from "./activity-card.module.css";
+}
+
+.app_chip {
+	composes: app_chip from "./activity-card.module.css";
 }
 </style>

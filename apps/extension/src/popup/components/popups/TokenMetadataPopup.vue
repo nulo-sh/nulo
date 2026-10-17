@@ -144,7 +144,7 @@ watch(
 								<Text variant="data" color="secondary"> {{ row.key }} </Text>
 							</Flex>
 
-							<Icon :name="token[row.key] ? 'check-circle' : 'close-circle'" size="12" :color="token[row.key] ? 'green' : 'red'" />
+							<Icon :name="token[row.key] ? 'square-check' : 'square-cross'" size="12" :color="token[row.key] ? 'green' : 'red'" />
 						</Flex>
 					</template>
 				</Flex>

@@ -2,7 +2,7 @@
 import { type Ref, ref } from "vue"
 
 /** How long a success stays open; an info or an error stays until it is closed. */
-export const SUCCESS_TOAST_MS = 6_000
+export const SUCCESS_TOAST_MS = 2_000
 
 /** `info`: an outcome still open, neither a success nor a failure. */
 export type ToastKind = "success" | "info" | "error"

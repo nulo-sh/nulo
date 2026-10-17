@@ -33,7 +33,7 @@ describe("TokenImportRow", () => {
 		expect(w.find('[data-testid="token-import-title"]').text()).toBe("USDC")
 	})
 
-	test("failed: shows close-circle icon, no spinner; subtitle falls back to error message", () => {
+	test("failed: shows the square-cross icon, no spinner; subtitle falls back to error message", () => {
 		const failedOp = {
 			...baseOp,
 			progress: { stage: "failed" as const },

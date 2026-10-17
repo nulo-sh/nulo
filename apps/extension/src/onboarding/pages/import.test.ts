@@ -259,7 +259,7 @@ describe("onboarding import — no Enter shortcut", () => {
 		flow.selectedImportOption.value = "full_backup"
 		flow.selectedBackup.value = {
 			name: "b.json",
-			type: "plain",
+			kind: "plain",
 			profileType: "password",
 			backup: { data: { profile: { type: "password" } } },
 		}
@@ -292,16 +292,16 @@ function onboardingCtas(w: VueWrapper): OnboardingCta[] {
 	])
 }
 
-const ENCRYPTED: BackupSelection = { name: "backup.txt", type: "encrypted", profileType: null, backup: "ciphertext" }
+const ENCRYPTED: BackupSelection = { name: "backup.txt", kind: "sealed", profileType: null, backup: "ciphertext" }
 const DECRYPTED: BackupSelection = {
 	name: "backup.txt",
-	type: "encrypted",
+	kind: "opened",
 	profileType: "password",
 	backup: { data: { profile: { name: "Main" } } },
 }
 const PASSKEY_BACKUP: BackupSelection = {
 	name: "backup.json",
-	type: "plain",
+	kind: "plain",
 	profileType: "passkey",
 	backup: { data: { profile: { name: "Main" } } },
 }

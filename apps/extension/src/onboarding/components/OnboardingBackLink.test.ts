@@ -5,22 +5,23 @@ const push = vi.hoisted(() => vi.fn())
 vi.mock("vue-router", () => ({ useRouter: () => ({ push }) }))
 
 import OnboardingBackLink from "./OnboardingBackLink.vue"
-const MaterialIcon = { props: ["name", "size"], template: `<i :data-name="name" :data-size="size" />` }
+const Icon = { props: ["name", "size", "rotate"], template: `<i :data-name="name" :data-size="size" :data-rotate="rotate" />` }
 
 beforeEach(() => push.mockClear())
 
 describe("OnboardingBackLink", () => {
 	test("renders the chevron and the Back label under the page's testid", () => {
-		const w = mount(OnboardingBackLink, { props: { testid: "onboarding-create-back" }, global: { stubs: { MaterialIcon } } })
+		const w = mount(OnboardingBackLink, { props: { testid: "onboarding-create-back" }, global: { stubs: { Icon } } })
 		expect(w.attributes("type")).toBe("button")
 		expect(w.attributes("data-testid")).toBe("onboarding-create-back")
-		expect(w.find("i").attributes("data-name")).toBe("chevron_left")
+		expect(w.find("i").attributes("data-name")).toBe("chevron")
+		expect(w.find("i").attributes("data-rotate")).toBe("180")
 		expect(w.find("i").attributes("data-size")).toBe("14")
 		expect(w.find("span").text()).toBe("Back")
 	})
 
 	test("a click routes back to the welcome step", async () => {
-		const w = mount(OnboardingBackLink, { props: { testid: "onboarding-import-back" }, global: { stubs: { MaterialIcon } } })
+		const w = mount(OnboardingBackLink, { props: { testid: "onboarding-import-back" }, global: { stubs: { Icon } } })
 		await w.trigger("click")
 		expect(push).toHaveBeenCalledTimes(1)
 		expect(push).toHaveBeenCalledWith("/onboarding/welcome")

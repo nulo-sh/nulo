@@ -51,6 +51,7 @@ const handleReceive = () => {
 
 <style module>
 .button {
+	user-select: none;
 	height: 52px;
 
 	cursor: pointer;

@@ -4,6 +4,7 @@ import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { resolvePackageAsset } from "@nulo/resolve-asset"
 import { describe, expect, test } from "vitest"
+import { isPrivateFpc, PRIVATE_FPC_ADDRESS } from "./private-fpc-address"
 import { derivePrivateFpc, deriveSponsoredFpc } from "./protocol-fpcs"
 
 /** The PrivateFPC's canonical address, the same on every network: the reviewed artifact under this
@@ -49,6 +50,14 @@ describe("protocol FPC derivation", () => {
 			deployer: instance.deployer.toString(),
 			address: instance.address.toString(),
 		}).toEqual(CANONICAL_PRIVATE_FPC)
+	})
+
+	// The window and the worker tell the PrivateFPC by this constant, without loading the artifact.
+	test("the constant the wallet tells the PrivateFPC by is the derived address, in any case", () => {
+		expect(PRIVATE_FPC_ADDRESS).toBe(CANONICAL_PRIVATE_FPC.address)
+		expect(isPrivateFpc(CANONICAL_PRIVATE_FPC.address.toUpperCase().replace("0X", "0x"))).toBe(true)
+		expect(isPrivateFpc(CANONICAL_SPONSORED_FPC.address)).toBe(false)
+		expect(isPrivateFpc(undefined)).toBe(false)
 	})
 
 	// The package publishes the address it was released for; the wallet and unleashed both copy it.

@@ -136,7 +136,7 @@ describe("discovery for a chain the profile has no network for", () => {
 
 	test("a remembered row does not reconnect: it is dropped and the notice opens", async () => {
 		const notice = vi.fn(async (_p: NoticeParams) => {})
-		const { discover, rows } = boot({ remembered: { trusted: true }, notice, served: () => false })
+		const { discover, rows } = boot({ remembered: true, notice, served: () => false })
 		expect(rows.has(`${ORIGIN}|0`)).toBe(true)
 
 		discover("s1", 0)
@@ -185,7 +185,7 @@ describe("discovery for a chain the profile has no network for", () => {
 		const reads = held()
 		const notice = vi.fn(async (_p: NoticeParams) => {})
 		const { discover, rows, onActiveProfileChanged } = boot({
-			remembered: { trusted: true },
+			remembered: true,
 			notice,
 			served: () => reads.promise.then(() => false),
 		})
@@ -204,7 +204,7 @@ describe("discovery for a chain the profile has no network for", () => {
 	test("the drop re-reads the row's own chain: a network added back meanwhile keeps the row", async () => {
 		let reads = 0
 		const notice = vi.fn(async (_p: NoticeParams) => {})
-		const { discover, rows } = boot({ remembered: { trusted: true }, notice, served: () => reads++ > 0 })
+		const { discover, rows } = boot({ remembered: true, notice, served: () => reads++ > 0 })
 
 		discover("back1", 0)
 		await flush()
@@ -292,9 +292,9 @@ describe("discovery for a chain the profile serves", () => {
 		expect(rows.size).toBe(0)
 	})
 
-	test("a remembered row on a served chain still reconnects without a window", async () => {
+	test("a remembered row on a served chain still reconnects without a connect window", async () => {
 		const popup = vi.fn(async () => ({ approved: true }))
-		const { discover } = boot({ remembered: { trusted: true }, popup, served: () => true })
+		const { discover } = boot({ remembered: true, popup, served: () => true })
 
 		discover("again-1", 0)
 		await flush()
@@ -308,7 +308,7 @@ describe("a quarantined chain keeps its network row but serves no dApp", () => {
 	test("a remembered row neither reconnects nor is dropped; the notice opens and no session is written", async () => {
 		const popup = vi.fn(async () => ({ approved: true }))
 		const notice = vi.fn(async (_p: NoticeParams) => {})
-		const { discover, rows } = boot({ remembered: { trusted: true }, popup, notice, quarantined: (chain) => chain === 0 })
+		const { discover, rows } = boot({ remembered: true, popup, notice, quarantined: (chain) => chain === 0 })
 
 		discover("q1", 0)
 		await flush()

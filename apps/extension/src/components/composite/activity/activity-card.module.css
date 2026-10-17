@@ -17,3 +17,11 @@
 	border: 1px solid var(--hairline-soft);
 	padding: 1px 4px;
 }
+
+/* Never shrinks below its cap: the title gives way first, so a short name stays whole. */
+.app_chip {
+	composes: chip;
+	max-width: 96px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}

@@ -6,8 +6,8 @@
  */
 import type { Page } from "puppeteer"
 import { pointerClick } from "../helpers/legal-drivers"
-import { clickByTestId } from "./extension"
-import type { FeeMethodSubtitle } from "./helpers"
+import { clickByTestId } from "./dom"
+import type { FeeMethodSubtitle } from "./transfers"
 import { settleClosedPopup } from "./popup-leave"
 
 export type SendAction = "send" | "review"

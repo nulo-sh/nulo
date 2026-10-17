@@ -302,6 +302,7 @@ function focusAdjacentItem(direction) {
 }
 
 .trigger {
+	user-select: none;
 	width: 100%;
 	cursor: pointer;
 }

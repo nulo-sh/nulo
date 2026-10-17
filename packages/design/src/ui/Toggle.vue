@@ -89,10 +89,6 @@ const toggle = () => {
 	cursor: not-allowed;
 }
 
-.lock svg {
-	fill: var(--txt-primary);
-}
-
 .wrapper.active {
 	background: var(--nulo-accent);
 	border-color: var(--nulo-accent);

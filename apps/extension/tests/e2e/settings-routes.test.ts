@@ -2,6 +2,7 @@ import { expect } from "vitest"
 import { isFirefox } from "./fixtures/browser"
 import { test, openPopup, waitForHash } from "./fixtures/extension"
 import { clickNavTab } from "./fixtures/helpers"
+import { shotSend } from "./fixtures/send-page"
 
 // A fresh profile's defaults: keep this test first, ahead of any test in the file that writes config.
 test("the hub shows each row's current value once read", async ({ registeredExtension }) => {
@@ -24,6 +25,7 @@ test("the hub shows each row's current value once read", async ({ registeredExte
 		)
 		.then((handle) => handle.jsonValue())
 	expect(values).toEqual(["30 min", "Prices on", "System", "Off"])
+	await shotSend(page, "settings-hub", "page-hero")
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])

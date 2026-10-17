@@ -1,6 +1,6 @@
 /**
- * Per-origin admission for dApp handshakes that the wallet will approve without a user gesture
- * (a remembered session) or that will open a verify window.
+ * Per-origin admission for the dApp handshakes the wallet approves, each of which opens a verify
+ * window: a remembered session's, approved without a user gesture, and a new connection's.
  *
  * Two budgets, both keyed on the page origin: a token bucket bounds how fast a remembered origin
  * is re-approved (a reload loop is slowed, not blocked), and a window budget bounds how many verify
@@ -35,15 +35,13 @@ export interface AdmissionRequest {
 	readonly origin: string
 	/** Epoch ms after which the dApp no longer listens for the approval. */
 	readonly deadline: number
-	/** Whether establishment will open a verify window for this handshake. */
-	readonly needsWindow: boolean
 	/** Whether this handshake counts against the origin's reconnect rate (a user-approved
 	 *  connect popup does not; a remembered-session auto-approval does). */
 	readonly consumesToken: boolean
 }
 
 export type AdmissionOutcome = "now" | "queued" | "rejected"
-export type AdmissionRun = (reservation: WindowReservation | undefined) => void
+export type AdmissionRun = (reservation: WindowReservation) => void
 
 export type AdmissionClock = Pick<ClockPort, "now" | "setTimeout" | "clearTimeout">
 
@@ -227,7 +225,7 @@ interface OriginState {
 export class VerifyAdmissionGate {
 	private readonly origins = new Map<string, OriginState>()
 	private readonly reservations = new Map<string, WindowReservation>()
-	/** Window-needing request ids currently queued or holding a reservation — a dApp-controlled id
+	/** Request ids currently queued or holding a reservation — a dApp-controlled id
 	 *  that is already live must not acquire a second slot (it would overwrite the first, which then
 	 *  can never decrement the counters). */
 	private readonly liveWindowIds = new Set<string>()
@@ -242,12 +240,12 @@ export class VerifyAdmissionGate {
 	) {}
 
 	/**
-	 * Admit `req` now (`run` is invoked synchronously with the window reservation, if one was
-	 * requested), queue it (`run` or `expire` is invoked later from the drain), or reject it
-	 * outright when the origin's queue is full.
+	 * Admit `req` now (`run` is invoked synchronously with its window reservation), queue it (`run`
+	 * or `expire` is invoked later from the drain), or reject it outright when the origin's queue is
+	 * full.
 	 */
 	public admit(req: AdmissionRequest, run: AdmissionRun, expire: () => void): AdmissionOutcome {
-		if (req.needsWindow && this.liveWindowIds.has(req.id)) return "rejected"
+		if (this.liveWindowIds.has(req.id)) return "rejected"
 		const origin = this.originState(req.origin)
 		this.refill(origin)
 		if (this.fits(origin, req)) {
@@ -256,7 +254,7 @@ export class VerifyAdmissionGate {
 		}
 		if (origin.queue.length >= ADMISSION_QUEUE_PER_ORIGIN) return "rejected"
 		origin.queue.push({ req, run, expire })
-		if (req.needsWindow) this.liveWindowIds.add(req.id)
+		this.liveWindowIds.add(req.id)
 		this.arm()
 		return "queued"
 	}
@@ -317,13 +315,11 @@ export class VerifyAdmissionGate {
 
 	private fits(origin: OriginState, req: AdmissionRequest): boolean {
 		if (req.consumesToken && origin.tokens < 1) return false
-		if (req.needsWindow && (origin.windows >= VERIFY_WINDOWS_PER_ORIGIN || this.globalWindows >= VERIFY_WINDOWS_GLOBAL)) return false
-		return true
+		return origin.windows < VERIFY_WINDOWS_PER_ORIGIN && this.globalWindows < VERIFY_WINDOWS_GLOBAL
 	}
 
-	private consume(origin: OriginState, req: AdmissionRequest): WindowReservation | undefined {
+	private consume(origin: OriginState, req: AdmissionRequest): WindowReservation {
 		if (req.consumesToken) origin.tokens -= 1
-		if (!req.needsWindow) return undefined
 		origin.windows += 1
 		this.globalWindows += 1
 		this.liveWindowIds.add(req.id)
@@ -367,7 +363,7 @@ export class VerifyAdmissionGate {
 			const head = origin.queue[0]
 			if (now > head.req.deadline) {
 				origin.queue.shift()
-				if (head.req.needsWindow) this.liveWindowIds.delete(head.req.id)
+				this.liveWindowIds.delete(head.req.id)
 				head.expire()
 				continue
 			}
@@ -409,10 +405,7 @@ export class VerifyAdmissionGate {
 }
 
 /** Promise form for the async approval sites: resolves with the reservation once admitted. */
-export function admitAsync(
-	gate: VerifyAdmissionGate,
-	req: AdmissionRequest,
-): Promise<WindowReservation | undefined | "rejected" | "expired"> {
+export function admitAsync(gate: VerifyAdmissionGate, req: AdmissionRequest): Promise<WindowReservation | "rejected" | "expired"> {
 	return new Promise((resolve) => {
 		const outcome = gate.admit(
 			req,

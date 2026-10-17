@@ -98,10 +98,10 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 			<Flex v-else direction="column" align="end" gap="2">
 				<span data-testid="token-amount" :class="[$style.amount, syncFailed && $style.amount_stale]" :data-malformed="isMalformed || undefined">{{ totalBalance || 0 }}</span>
 				<span v-if="!isMalformed" :class="$style.detail">
-					<span :class="$style.icon_private"><Icon name="lock" size="9" /></span>
+					<span :class="$style.icon_private"><Icon name="private" size="9" /></span>
 					{{ privateFormatted }}
 					<span :class="$style.pub_group">
-						<span :class="$style.icon_public"><Icon name="globe" size="9" /></span>
+						<span :class="$style.icon_public"><Icon name="public" size="9" /></span>
 						{{ publicFormatted }}
 					</span>
 				</span>
@@ -132,6 +132,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 }
 
 .link {
+	user-select: none;
 	cursor: pointer;
 	transition: background 0.2s var(--bezier);
 

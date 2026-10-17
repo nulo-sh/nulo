@@ -885,6 +885,7 @@ onBeforeUnmount(() => {
 				:stage="op.progress?.stage ?? null"
 				:backend="op.progress?.backend ?? null"
 				:hasApprovalWindow="op.kind === 'dapp_execute'"
+				:oneLineTitle="op.kind === 'dapp_execute'"
 				@cancel="onCancelInFlight"
 				@focus="onFocusInFlight"
 				@review="onReviewInFlight"
@@ -897,10 +898,11 @@ onBeforeUnmount(() => {
 				v-if="hasOrphanExecutingTask"
 				:title="executingProgressTitle"
 				:subtitle="executingProgressSubtitle"
-				:icon="isUiTransfer ? 'arrow-narrow-up-right' : 'zap'"
+				:icon="isUiTransfer ? 'send' : 'zap'"
 				:originLabel="executingOriginLabel"
 				:amount="executingAmount"
 				:amountSymbol="executingAmountSymbol"
+				:oneLineTitle="!isUiTransfer"
 			/>
 			<TransactionAwaitingCard v-else-if="!renderedInFlightOps.length && showFallbackAwaiting" />
 			<!-- Chronological merge of terminal journal records + settled chain
@@ -954,6 +956,7 @@ onBeforeUnmount(() => {
 <style module>
 .archive_link {
 	composes: type--label from global;
+	user-select: none;
 	color: var(--nulo-secondary);
 
 	transition: color 0.2s var(--bezier);

@@ -70,6 +70,9 @@ export type TransferSeed = {
 	transferType?: number
 	/** Sent by a dApp: its name is the row's second chip. */
 	dapp?: string
+	/** The called function's name, `transfer` unless set. Any other name makes the row a call titled by
+	 *  its function, with no transfer and so no amount, as the wallet records one. */
+	method?: string
 	/** Base units of Fee Juice the send was built to pay at most. */
 	estimatedFee?: string
 	/** The wire's fee option: 0 a fee contract (the default), 1 public Fee Juice, 2 Fee Juice with a claim. */
@@ -87,6 +90,8 @@ export type TransferSeed = {
 export async function seedTransaction(page: Page, scope: ActivityScope, seed: TransferSeed): Promise<void> {
 	const at = seed.at ?? Date.now()
 	const { contract, ...token } = scope.token
+	const method = seed.method ?? "transfer"
+	const transfer = { token, type: seed.transferType ?? 0, from: scope.account, to: seed.to ?? scope.account, amount: seed.amount }
 	const tx = {
 		chainId: scope.chainId,
 		profileId: scope.profileId,
@@ -106,12 +111,10 @@ export async function seedTransaction(page: Page, scope: ActivityScope, seed: Tr
 		calls: [
 			{
 				contract,
-				method: "transfer",
+				method,
 				args: [],
 				...(seed.chunkNonce === undefined ? {} : { chunkNonce: seed.chunkNonce }),
-				transfers: [
-					{ token, type: seed.transferType ?? 0, from: scope.account, to: seed.to ?? scope.account, amount: seed.amount },
-				],
+				transfers: method.startsWith("transfer") ? [transfer] : [],
 			},
 		],
 	}
@@ -198,31 +201,43 @@ export async function seedArrivalRow(page: Page, scope: ActivityScope): Promise<
 	await storeRow(page, key, { sinceBlock: RECEIPT_BLOCK, played: [] })
 }
 
-export type JournalSeed = {
+type JournalSeedBase = {
 	/** 16 hex characters, as the journal mints them. */
 	id: string
-	tokenId: number
-	/** Base units of the token. */
-	amount: string
 	progress: { stage: "failed" | "cancelled"; [field: string]: unknown }
 	errorKind?: string
 	at?: number
 }
 
-/** A Send-page transfer that ended without a settled transaction, stamped with the scope. */
+/** A Send-page transfer: `amount` is in the token's base units. */
+type TransferJournalSeed = JournalSeedBase & { tokenId: number; amount: string }
+
+/** A dApp's call, as the queued-journal path writes it: `title` is the function's name as the dApp
+ *  sent it, `subtitle` the name the dApp gave itself. */
+type DappJournalSeed = JournalSeedBase & { kind: "dapp_execute"; title: string; subtitle: string }
+
+export type JournalSeed = TransferJournalSeed | DappJournalSeed
+
+/** An operation that ended without a settled transaction, stamped with the scope. */
 export async function seedJournalRecord(page: Page, scope: ActivityScope, seed: JournalSeed): Promise<void> {
 	const at = seed.at ?? Date.now()
+	const shape =
+		"kind" in seed
+			? { kind: seed.kind, origin: "dapp", title: seed.title, subtitle: seed.subtitle }
+			: {
+					kind: "transfer",
+					origin: "popup",
+					tokenId: seed.tokenId,
+					amountRaw: seed.amount,
+					recipientAddress: scope.account,
+					transferType: 0,
+				}
 	const record = {
 		id: seed.id,
-		kind: "transfer",
-		origin: "popup",
+		...shape,
 		profileId: scope.profileId,
 		accountAddress: scope.account,
 		networkId: scope.networkId,
-		tokenId: seed.tokenId,
-		amountRaw: seed.amount,
-		recipientAddress: scope.account,
-		transferType: 0,
 		progress: seed.progress,
 		error: seed.errorKind === undefined ? null : { kind: seed.errorKind, message: "seeded", normalizedRaw: null },
 		terminalAt: at,

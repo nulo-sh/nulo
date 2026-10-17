@@ -1,6 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { existsSync, readdirSync } from "node:fs"
-import { TimeoutError, type Browser, type Page, type ConsoleMessage } from "puppeteer"
+import type { Browser, Page } from "puppeteer"
 import { test as base, expect, inject } from "vitest"
 import path from "node:path"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
@@ -10,30 +10,22 @@ import {
 	discoverExtensionId,
 	extensionUrl,
 	gotoExtensionPage,
-	isTargetGone,
 	launchBrowser,
 	newPage,
 	openScratchPage,
-	pickFile,
-	prepareClick,
 	stopBackground,
 } from "./browser"
-import {
-	captureBalanceBaseline,
-	createAccount,
-	getAccountAddress,
-	importToken,
-	readLivenessBaseline,
-	switchToLocalNetwork,
-	waitForFreshBalanceRow,
-	waitForWorkerLiveness,
-} from "./helpers"
-import { assertPgOk, type PgBundle, selectPgBundle, snapshotResultSeq, waitForPgResult } from "./playground"
-import { waitForPopup, waitForPopupClosed, approveCapabilities } from "./popups"
+import { createAccount, getAccountAddress } from "./accounts"
+import { clickByTestId, expectNoNameField, isFrameDetachError, patchPagePolling, typeIntoInput, waitForHash } from "./dom"
+import { switchToLocalNetwork } from "./networks"
+import { readLivenessBaseline, waitForWorkerLiveness } from "./session"
+import { captureBalanceBaseline, importToken, waitForFreshBalanceRow } from "./tokens"
+import { openPopup, seedLegalAcceptance, waitForServiceReady } from "./wallet-pages"
+import { assertPgOk, openPlayground, type PgBundle, selectPgBundle, snapshotResultSeq, waitForPgResult } from "./playground"
+import { approveCapabilities, approveConnect, approveVerify, waitForPopup, waitForPopupClosed } from "./popups"
 import { TEST_PASSWORD } from "./constants"
 import type { AztecTestConfig } from "./aztec"
-import { PRESTO_HTTP_HEALTH_URL, PRESTO_HTTPS_HEALTH_URL } from "./presto"
-import { LEGAL_ACCEPTANCE_KEY, type LegalSeed, legalSeedValue } from "./legal"
+import type { LegalSeed } from "./legal"
 import { assertNoCspViolations, CSP_REPORT_ARMED, closeAfterCspCheck, readCspViolations } from "./csp-violations"
 import {
 	type EgressCanary,
@@ -45,8 +37,12 @@ import {
 	ownGuardedLaunch,
 } from "./egress-guard"
 import { holdNodeStub } from "./node-stub"
-import { pageErrorOf } from "./page-errors"
 import { heldListStorage } from "./token-list"
+
+// Specs reach the page primitives and the popup openers through this hub; they live in leaves so
+// the modules the hub imports can use them without importing the hub back.
+export * from "./dom"
+export * from "./wallet-pages"
 
 export interface ExtensionContext {
 	browser: Browser
@@ -62,20 +58,6 @@ export interface ExtensionContext {
 	/** The smoke suite's egress guard, canary and stand-in Testnet node for this launch; absent where
 	 *  no guard is armed, and no stand-in in a `live` launch. */
 	egress?: { guard: EgressGuard; canary: EgressCanary; node: HeldNode | undefined }
-}
-
-/**
- * Chrome reports a refused loopback probe as a "Failed to load resource" console error. The
- * wallet probes Presto on the onboarding step and on every settings open, and a box without
- * Presto (every smoke runner, the plaintext-only CI prover on the HTTPS port) refuses it by
- * design — that is the browser's report of a probe the wallet expects to fail, not an
- * extension error. Only a refused connection to the two exact health URLs is exempt; a 500,
- * a certificate failure, or any other URL still counts.
- */
-function isPrestoProbeNoise(msg: ConsoleMessage): boolean {
-	if (!msg.text().startsWith("Failed to load resource") || !msg.text().includes("net::ERR_CONNECTION_REFUSED")) return false
-	const url = msg.location().url
-	return url === PRESTO_HTTPS_HEALTH_URL || url === PRESTO_HTTP_HEALTH_URL
 }
 
 /** Launch a fresh browser with the extension and wait for SW liveness.
@@ -347,56 +329,6 @@ async function rebootOverHeldList(browser: Browser, extensionId: string, scratch
 	return next
 }
 
-/** Put the acceptance record in the named state, from any extension page. The service reads storage
- *  on every call, so a write here is seen by the very next admission check. */
-export async function seedLegalAcceptance(page: Page, seed: Exclude<LegalSeed, "keep">): Promise<void> {
-	await page.evaluate(
-		async ({ key, value }: { key: string; value: unknown }) => {
-			if (value === undefined) await chrome.storage.local.remove(key)
-			else await chrome.storage.local.set({ [key]: value })
-		},
-		{ key: LEGAL_ACCEPTANCE_KEY, value: legalSeedValue(seed) },
-	)
-}
-
-/** Open the onboarding tab directly. Use in tests that exercise the tab
- *  flow; complementary to `openPopup` which targets the popup HTML.
- *  Clears the `onboardingCompleted` flag first so the redirect predicates
- *  in register/import/profile-new behave as they would on a fresh install. */
-export async function openOnboarding(ctx: ExtensionContext, opts: { legal?: Exclude<LegalSeed, "keep"> } = {}): Promise<Page> {
-	// Reset onboardingCompleted=false so the onboarding flow runs as on
-	// fresh install (launchExtension seeded it to true by default).
-	const setupPage = await newPage(ctx.browser)
-	patchPagePolling(setupPage)
-	await gotoExtensionPage(setupPage, extensionUrl(ctx.extensionId, "/src/popup/index.html"))
-	// A real fresh install has no acceptance; specs that are about the gate ask for that. Left alone,
-	// the launch's `current` seed stands and a spec about a later step can still jump to it.
-	// Seeded BEFORE the flag flips: the popup reads the flag while it mounts, and on a profile with
-	// no wallet a `false` makes it open the onboarding tab and close itself — so the flip is the
-	// last thing evaluated in it, and it may already be gone when this closes it.
-	if (opts.legal) await seedLegalAcceptance(setupPage, opts.legal)
-	await setupPage.evaluate(async () => {
-		await chrome.storage.local.set({ "nulo:onboarding:completed": false })
-	})
-	await setupPage.close().catch(() => {})
-
-	const page = await newPage(ctx.browser)
-	patchPagePolling(page)
-	await page.setViewport({ width: 720, height: 900 })
-	await page.bringToFront()
-
-	ctx.consoleErrors = []
-	ctx.pageErrors = []
-
-	recordPageErrors(ctx, page)
-
-	const url = extensionUrl(ctx.extensionId, "/src/onboarding/index.html#/onboarding/welcome")
-	await gotoExtensionPage(page, url)
-	// Wait for Vue mount: welcome CTA must render.
-	await page.waitForSelector('[data-testid="onboarding-welcome-create"]', { visible: true, timeout: 30_000 })
-	return page
-}
-
 /** Register a profile with a test password. Leaves the extension on #/popup/general.
  *  Exported so a cold-shard warm-up tap (and any other test infra that
  *  drives the full register flow outside the fixture pipeline) can reuse it. */
@@ -449,9 +381,6 @@ export async function registerProfile(ctx: ExtensionContext): Promise<void> {
  * can perform the same setup without going through the fixture pipeline.
  */
 export async function connectPlayground(ctx: ExtensionContext): Promise<Page> {
-	const { openPlayground } = await import("./playground")
-	const { waitForPopup, approveConnect, approveVerify } = await import("./popups")
-
 	// Internal phase-tag so the outer `[dappConnectedExtensionPerTest:connectPlayground]`
 	// error tells us WHICH step inside this function fails. Without this we
 	// only know "30s timeout somewhere in here" — useless for triage.
@@ -1078,7 +1007,8 @@ export const test = base.extend<{
 			})
 			await waitForHash(page, "#/popup/import", 5_000)
 
-			// Loaded at call time: the import drivers import this module.
+			// Loaded at call time: a static import would load `@nulo/wallet-crypto`, and bb.js through
+			// it, into every spec that imports this hub.
 			const { importSeed, POPUP_IMPORT_SHELL } = await import("../helpers/import-drivers")
 			await importSeed(page, prefunded.words.join(" "), TEST_PASSWORD, POPUP_IMPORT_SHELL)
 
@@ -1136,505 +1066,3 @@ export const test = base.extend<{
 		{ scope: "file" },
 	],
 })
-
-// ── Helpers ─────────────────────────────────────────────────────────────
-
-/**
- * Patch a Page so its waiters default to time-based (`polling: 200`)
- * instead of Puppeteer's default `'raf'` (rAF-based) polling.
- *
- * `'raf'` polling is throttled in offscreen / unfocused tabs in modern
- * Chrome. The popup tab can lose focus during async flows when the SW
- * pushes a navigation while another popup window has focus — the page
- * state actually advances, but the waiter never observes it.
- *
- * `waitForFunction` directly accepts `polling`. `waitForSelector` does
- * NOT — it converts to a `waitForFunction` internally with rAF polling
- * baked in. To work around that we re-implement `waitForSelector` on top
- * of `waitForFunction` (running the standard "exists + visible if
- * requested + enabled if requested" predicate in-page). The new
- * implementation honours the same options shape: `{ visible, hidden,
- * timeout }` plus our forced `polling: 200`.
- */
-export function patchPagePolling(page: Page): void {
-	// ── waitForFunction passthrough ──────────────────────────────────────
-	const originalWaitForFunction = page.waitForFunction.bind(page) as Page["waitForFunction"]
-	// biome-ignore lint/suspicious/noExplicitAny: signature passthrough for Puppeteer overloads
-	;(page as any).waitForFunction = (...args: any[]) => {
-		const optionsIdx = args.findIndex((a) => a && typeof a === "object" && ("timeout" in a || "polling" in a))
-		if (optionsIdx >= 0) {
-			const opts = args[optionsIdx]
-			if (!("polling" in opts)) {
-				args[optionsIdx] = { ...opts, polling: 200 }
-			}
-		} else {
-			args.splice(1, 0, { polling: 200 })
-		}
-		return (originalWaitForFunction as unknown as (...a: unknown[]) => unknown)(...args)
-	}
-
-	// ── waitForSelector replacement ──────────────────────────────────────
-	// Only intercept plain-CSS selectors. Puppeteer also supports prefixed
-	// selectors (`text/...`, `xpath/...`, `aria/...`, `pierce/...`); those go
-	// through specialized QueryHandlers we don't reimplement. Delegate them
-	// to Puppeteer's original waitForSelector.
-	const originalWaitForSelector = page.waitForSelector.bind(page) as Page["waitForSelector"]
-	const PUPPETEER_PREFIXED_SELECTOR_RE = /^(?:text|xpath|aria|pierce)\//
-	// biome-ignore lint/suspicious/noExplicitAny: passthrough for Puppeteer overloads
-	;(page as any).waitForSelector = async (selector: string, options: { visible?: boolean; hidden?: boolean; timeout?: number } = {}) => {
-		if (PUPPETEER_PREFIXED_SELECTOR_RE.test(selector)) {
-			return originalWaitForSelector(selector, options)
-		}
-		const { visible = false, hidden = false, timeout = 30_000 } = options
-		// Use our patched waitForFunction (polling: 200) under the hood.
-		// biome-ignore lint/suspicious/noExplicitAny: dynamic invocation on the patched method
-		await (page as any).waitForFunction(
-			// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: accepted at score 29 — the predicate implements Puppeteer's exact exists / visible / hidden selector semantics in-page
-			(args: { sel: string; visible: boolean; hidden: boolean }) => {
-				const el = document.querySelector<HTMLElement>(args.sel)
-				if (args.hidden) {
-					if (!el) return true
-					const style = window.getComputedStyle(el)
-					if (style.display === "none" || style.visibility === "hidden") return true
-					const rect = el.getBoundingClientRect()
-					return rect.width === 0 || rect.height === 0
-				}
-				if (!el) return false
-				if (args.visible) {
-					const style = window.getComputedStyle(el)
-					if (style.display === "none" || style.visibility === "hidden") return false
-					const rect = el.getBoundingClientRect()
-					if (rect.width === 0 || rect.height === 0) return false
-				}
-				return true
-			},
-			{ timeout, polling: 200 },
-			{ sel: selector, visible, hidden },
-		)
-		// Original waitForSelector returns an ElementHandle. The replacement
-		// returns null because our callers all immediately discard it (and
-		// element-handle methods are broken by the same CDP regression that
-		// motivated this whole approach).
-		return null
-	}
-}
-
-/** Await a puppeteer wait and, on TIMEOUT ONLY, replace it with a diagnostic
- *  that names what never happened. Every other failure — frame detach, CDP
- *  disconnect, page crash — keeps its own identity and message, because
- *  relabelling those as "the state never settled" is exactly how a real fault
- *  gets buried under a plausible-looking flake. The original is preserved as
- *  `cause`. Pass a function when the diagnostic has to read live page state. */
-export async function withTimeoutMessage<T>(wait: Promise<T>, message: string | (() => string | Promise<string>)): Promise<T> {
-	try {
-		return await wait
-	} catch (err) {
-		if (!(err instanceof TimeoutError)) throw err
-		let text: string
-		try {
-			text = typeof message === "function" ? await message() : message
-		} catch (diagErr) {
-			// A diagnostic that reads a dead page must never replace the timeout
-			// it was meant to explain.
-			text = `<diagnostic failed: ${diagErr instanceof Error ? diagErr.message : String(diagErr)}>`
-		}
-		throw new Error(text, { cause: err })
-	}
-}
-
-/**
- * Detect puppeteer detach errors that can occur during the brief CDP race
- * between `browser.newPage()` and the first `page.goto(...)`. These signal
- * a half-initialized frame, not a wallet-side problem — retrying with a
- * fresh page resolves them. Symptom string varies across puppeteer-core
- * versions and timing; match on any of the known phrases.
- */
-function isFrameDetachError(err: unknown): boolean {
-	const msg = err instanceof Error ? err.message : String(err)
-	// "Attempted to use detached Frame/Page" is puppeteer's OTHER detach wording
-	// (thrown by the handle decorators rather than the navigation path). Without
-	// it the retry above cannot see the very failure it exists to absorb.
-	return /Navigating frame was detached|frame got detached|Attempted to use detached (Frame|Page)|Session closed|Target closed|Connection closed/i.test(
-		msg,
-	)
-}
-
-/** Open the extension popup in a new page with error collection. */
-export async function openPopup(ctx: ExtensionContext): Promise<Page> {
-	// One bounded retry on frame-detach errors: under accumulated suite load,
-	// `browser.newPage()` can return a page whose CDP frame is in a half-
-	// initialized state, causing the first `page.goto(popupUrl)` to throw
-	// "Navigating frame was detached" immediately. The mitigation is simply
-	// to close and re-create the page. A broader catch would mask real
-	// crashes — match only on known detach-error signatures.
-	let attempt = 0
-	const maxAttempts = 2
-	for (;;) {
-		try {
-			return await openPopupOnce(ctx)
-		} catch (err) {
-			attempt += 1
-			if (attempt >= maxAttempts || !isFrameDetachError(err)) throw err
-			if (process.env.NULO_E2E_OPENPOPUP_LOG === "1") {
-				console.log(`[openPopup] retry-on-detach attempt=${attempt}`)
-			}
-		}
-	}
-}
-
-async function openPopupOnce(ctx: ExtensionContext): Promise<Page> {
-	const page = await newPage(ctx.browser)
-	try {
-		return await setUpPopupPage(ctx, page)
-	} catch (err) {
-		// The retry in `openPopup` re-creates the page, so this one must not be
-		// left behind: a live target keeps its listeners and its extension
-		// connections, which the next attempt then races.
-		await page.close().catch(() => {})
-		throw err
-	}
-}
-
-const recorded = new WeakSet<Page>()
-
-/** Records `page`'s errors into the launch's arrays from now on, once however often it is asked:
- *  `asPage()` hands every caller resolving one target the same `Page`. */
-export function recordPageErrors(ctx: ExtensionContext, page: Page): void {
-	if (recorded.has(page)) return
-	recorded.add(page)
-	const onConsole = (msg: ConsoleMessage) => {
-		// "Client disconnected" is the benign port-close cascade: pending RPCs reject en masse when the
-		// background restarts, and production treats it as benign too (`isClientDisconnectRejection`).
-		// App `console.*` never reaches this listener on the success path: the console sniffer reroutes
-		// it to the background's log ring (`fixtures/journal.ts` readSwLogTrail). Browser-emitted entries
-		// do ("Unchecked runtime.lastError", on Chrome). `pageerror` holds every uncaught throw and
-		// unhandled rejection on both browsers, Firefox's through the driver's relay (FIREFOX.md). An
-		// error the app catches and logs reaches neither array: prefer DOM, storage or stage evidence.
-		if (msg.type() === "error" && !msg.text().includes("Client disconnected") && !isPrestoProbeNoise(msg)) {
-			ctx.consoleErrors.push(msg.text())
-		}
-	}
-	const onPageError = (payload: unknown) => {
-		const err = pageErrorOf(payload)
-		if (err) ctx.pageErrors.push(err)
-	}
-	page.on("console", onConsole)
-	page.on("pageerror", onPageError)
-}
-
-/** Loads the popup into `page` and records its errors, leaving the arrays as they are. */
-async function loadPopup(ctx: ExtensionContext, page: Page): Promise<void> {
-	patchPagePolling(page)
-	await page.setViewport({ width: 360, height: 600 })
-	// Bring the new page to the front so the tab is "focused" — defense in
-	// depth against rAF throttling. Combined with `--disable-renderer-
-	// backgrounding` it prevents Chrome from suspending the offscreen
-	// renderer.
-	await page.bringToFront()
-	recordPageErrors(ctx, page)
-	await gotoExtensionPage(page, extensionUrl(ctx.extensionId, "/src/popup/index.html"))
-}
-
-/** Puppeteer's BiDi `close()` swallows a failed close, so only the `close` event proves one. */
-async function closeConfirmed(page: Page): Promise<void> {
-	const closed = new Promise<void>((resolve) => page.once("close", () => resolve()))
-	let timer: ReturnType<typeof setTimeout> | undefined
-	const refused = new Promise<never>((_, reject) => {
-		timer = setTimeout(() => reject(new Error("openPopup: the slow popup tab did not close within 10 s")), 10_000)
-	})
-	try {
-		await Promise.race([page.close().then(() => closed), refused])
-	} finally {
-		clearTimeout(timer)
-	}
-}
-
-/** Until the shell has heard the background's Ready: before it, every call the page makes waits. */
-export async function waitForServiceReady(page: Page, timeout = 30_000): Promise<void> {
-	await page.waitForSelector('[data-service-ready="true"]', { timeout })
-}
-
-const popupReady = (page: Page, timeout: number, polling: number) =>
-	page.waitForFunction(
-		() => window.location.hash !== "#/" && window.location.hash !== "" && document.querySelector('[data-service-ready="true"]'),
-		{ timeout, polling },
-	)
-
-async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> {
-	ctx.consoleErrors = []
-	ctx.pageErrors = []
-
-	// Fast-path-then-fallback for the SW-handshake workaround.
-	//
-	// Background: the SW's FIRST popup connection on a brand-new tab can
-	// lose the wallet-bridge handshake (popup logs "Client disconnected"
-	// from `client-*.js` and Vue never mounts; hash stays at "#/" with an
-	// empty body). The historical workaround was an unconditional
-	// triple-nav (popup → about:blank → popup); it now loads the popup again in
-	// a fresh tab — the second load sees a fully-warm SW.
-	//
-	// Readiness predicate: hash leaves "#/" AND the shell has heard the
-	// background's Ready (`data-service-ready`). The hash alone fires too
-	// early: past the start grace the guard routes before the service
-	// answers, and a route decided then is replayed once Ready comes.
-	//
-	// Budget: 2s is provisional and tuned for the prewarmed SW that
-	// `launchExtension()` produces (the SW liveness wait at line 70-80
-	// runs before any test even starts). On a genuinely cold SW + slow CI,
-	// this may need to lengthen — revisit if fallback-count > 0 ever
-	// appears in CI logs. P99 of the fast-path was 811ms in smoke,
-	// 238ms in network in the spike.
-	//
-	// Catch: TimeoutError only. A broader catch would mask page crashes,
-	// CDP disconnects, etc. as "fast-path failed → try fallback" and bury
-	// the real fault.
-	//
-	// Logging is env-gated so the per-call line doesn't pollute default
-	// test output. Set NULO_E2E_OPENPOPUP_LOG=1 to re-emit (useful for
-	// counting fallback occurrences in CI artifacts).
-	const FAST_PATH_BUDGET_MS = 2_000
-	const t0 = Date.now()
-	await loadPopup(ctx, page)
-	try {
-		await popupReady(page, FAST_PATH_BUDGET_MS, 100)
-		if (process.env.NULO_E2E_OPENPOPUP_LOG === "1") console.log(`[openPopup] path=fast totalMs=${Date.now() - t0}`)
-		return page
-	} catch (err) {
-		if (!(err instanceof TimeoutError)) throw err
-	}
-	// Closing a tab raises nothing from it, imports in flight included, while a navigation would make
-	// Firefox reject the left document's in-flight imports from it; the tab stays recorded until gone.
-	await closeConfirmed(page)
-	const fresh = await newPage(ctx.browser)
-	try {
-		await loadPopup(ctx, fresh)
-		await popupReady(fresh, 30_000, 200)
-	} catch (err) {
-		await fresh.close().catch(() => {})
-		throw err
-	}
-	if (process.env.NULO_E2E_OPENPOPUP_LOG === "1") console.log(`[openPopup] path=fallback totalMs=${Date.now() - t0}`)
-	return fresh
-}
-
-/** Wait for Vue hash router to reach the expected hash.
- *
- *  Explicit `polling: 200` matters: Puppeteer's default is `'raf'`
- *  (requestAnimationFrame) which is THROTTLED in offscreen / unfocused tabs
- *  in modern Chrome. The popup tab is technically focused, but during async
- *  flows where the SW pushes a navigation while another popup window has
- *  focus, the rAF-driven poll can stall — the hash transition lands but
- *  this `waitForFunction` never observes it. Time-based polling avoids
- *  the throttling regardless of focus state.
- *
- *  The 15s default budgets for the bare-default call sites, which are all
- *  cold-boot openers (`openPopup` → first route): SW start + Vue mount +
- *  session hydration exceeds 5s under parallel-agent host load, which made
- *  the alphabetically-last files (the `sw-*` family, paying a fresh cold
- *  boot per single-test file at peak accumulated load) the suite's dominant
- *  flake. A genuinely broken route fails at any timeout; call sites that
- *  need a tighter bound pass one explicitly. */
-export async function waitForHash(page: Page, expectedHash: string, timeout = 15_000): Promise<void> {
-	await page.waitForFunction((hash: string) => window.location.hash === hash, { timeout, polling: 200 }, expectedHash)
-}
-
-/** Waits for a profile-creating page, found by its root testid, to settle whether it shows the
- *  Profile-name field: `hidden` for a first profile, `shown` for a later one. */
-export async function waitForNameField(page: Page, pageTestId: string, timeout = 15_000): Promise<"hidden" | "shown"> {
-	const handle = await withTimeoutMessage(
-		page.waitForFunction(
-			(id: string) => {
-				const state = document.querySelector(`[data-testid="${id}"]`)?.getAttribute("data-name-field")
-				return state === "hidden" || state === "shown" ? state : null
-			},
-			{ timeout, polling: 100 },
-			pageTestId,
-		),
-		`${pageTestId} never settled its name field`,
-	)
-	return (await handle.jsonValue()) as "hidden" | "shown"
-}
-
-/** A first profile: the page settles `hidden` and renders no name input. */
-export async function expectNoNameField(page: Page, pageTestId: string, nameInputTestId: string): Promise<void> {
-	const state = await waitForNameField(page, pageTestId)
-	if (state !== "hidden") throw new Error(`${pageTestId}: a first profile must show no name field, got "${state}"`)
-	if (await page.$(`[data-testid="${nameInputTestId}"]`)) throw new Error(`${pageTestId}: ${nameInputTestId} rendered on a first profile`)
-}
-
-/** A later profile: the page settles `shown` with the name input prefilled `expected`. */
-export async function expectNameFieldPrefill(page: Page, pageTestId: string, nameInputTestId: string, expected: string): Promise<void> {
-	const state = await waitForNameField(page, pageTestId)
-	if (state !== "shown") throw new Error(`${pageTestId}: a later profile must show the name field, got "${state}"`)
-	const value = await page.$eval(`[data-testid="${nameInputTestId}"] input`, (el) => (el as HTMLInputElement).value)
-	if (value !== expected) throw new Error(`${nameInputTestId}: expected the prefill "${expected}", got "${value}"`)
-}
-
-/** Type into an input found by placeholder.
- *
- *  History: previously used `elementHandle.click({ clickCount: 3 })` + `.type()`,
- *  which routes through Puppeteer's CDP element-handle path. Recent
- *  Chrome/Puppeteer combos (24.4x against Chrome 128+) hang on that path with
- *  `Runtime.callFunctionOn timed out`, even though synthetic in-page clicks
- *  work fine. Now we go through the same page.evaluate + prototype-setter
- *  path that `replaceInputValue` uses — robust across CDP regressions and
- *  also faster because there's no real-mouse-event sequence. */
-export async function typeIntoInput(page: Page, placeholder: string, text: string): Promise<void> {
-	await replaceInputValue(page, `input[placeholder="${placeholder}"]`, text)
-}
-
-/** Click a visible enabled button by its text content.
- *  Uses page.evaluate to find the actual <button> element, avoiding
- *  stale references from Puppeteer's text/ selector matching descendant nodes. */
-export async function clickButtonByText(page: Page, text: string, timeout = 10_000): Promise<void> {
-	await page.waitForFunction(
-		(label: string) => {
-			const button = [...document.querySelectorAll("button")].find((b) => {
-				const normalized = b.textContent?.replace(/\s+/g, " ").trim()
-				if (normalized !== label) return false
-				const style = window.getComputedStyle(b)
-				const rect = b.getBoundingClientRect()
-				return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0
-			})
-			if (!button) return false
-			button.click()
-			return true
-		},
-		{ timeout },
-		text,
-	)
-}
-
-/** Replace the full value of an `<input>` identified by a CSS selector,
- *  firing the proper `input` event so Vue v-model updates. Puppeteer's
- *  triple-click → type dance is unreliable on some custom Input wrappers
- *  (the selection gets lost before typing lands).
- *
- *  Picks the LAST matching visible element — Vue often keeps the old popup
- *  mounted for transitions, and the topmost popup is what the user sees.
- *
- *  If the matched element is not itself an `<input>` (e.g., a `data-testid`
- *  forwarded via Vue's `inheritAttrs` lands on the Input component's wrapper
- *  div), descend to the first `<input>` underneath. */
-export async function replaceInputValue(page: Page, selector: string, value: string): Promise<void> {
-	await page.waitForSelector(selector, { visible: true, timeout: 5_000 })
-	await page.evaluate(
-		async ({ sel, val }: { sel: string; val: string }) => {
-			const candidates = [...document.querySelectorAll<HTMLElement>(sel)].filter((el) => el.offsetParent !== null)
-			const matched = candidates[candidates.length - 1]
-			if (!matched) throw new Error(`replaceInputValue: no visible match for ${sel}`)
-			const input = matched instanceof HTMLInputElement ? matched : (matched.querySelector("input") as HTMLInputElement | null)
-			if (!input) throw new Error(`replaceInputValue: no <input> reachable from ${sel}`)
-			input.focus()
-			// Use the prototype setter so Vue's v-model listener fires
-			const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
-			setter?.call(input, val)
-			input.dispatchEvent(new Event("input", { bubbles: true }))
-			input.dispatchEvent(new Event("change", { bubbles: true }))
-			// Vue's reactivity flush is microtask-based. Without an explicit
-			// flush before this evaluate returns, a quick chain like
-			//   replaceInputValue(a) -> replaceInputValue(b) -> clickByTestId(submit)
-			// can race the form's :disabled binding — the click sometimes lands
-			// while disabled is still true (button stays gated) AND sometimes
-			// fires the click handler with stale values, so the submit handler
-			// fast-fails silently. Awaiting two microtasks is enough to flush
-			// nested computeds in practice.
-			await Promise.resolve()
-			await Promise.resolve()
-		},
-		{ sel: selector, val: value },
-	)
-}
-
-/** Click a visible, enabled element by an arbitrary CSS selector. Same
- *  in-page synthetic-click pattern as `clickByTestId`, just unscoped from
- *  testids — use this when the target's only stable handle is a class
- *  combo, ARIA role, or other non-testid selector. */
-export async function clickSelector(page: Page, selector: string, timeout = 10_000): Promise<void> {
-	await prepareClick(page)
-	try {
-		await page.waitForFunction(
-			(sel: string) => {
-				const candidates = [...document.querySelectorAll<HTMLElement>(sel)].filter((el) => {
-					if ((el as HTMLButtonElement).disabled) return false
-					const style = window.getComputedStyle(el)
-					if (style.display === "none" || style.visibility === "hidden") return false
-					const rect = el.getBoundingClientRect()
-					if (rect.width === 0 || rect.height === 0) return false
-					return true
-				})
-				const target = candidates[candidates.length - 1]
-				if (!target) return false
-				target.click()
-				return true
-			},
-			{ timeout },
-			selector,
-		)
-	} catch (err) {
-		if (!isTargetDetachError(err)) throw err
-	}
-}
-
-/** Click a visible enabled element by `data-testid`. Preferred over text
- *  matching — survives copy/case/i18n churn.
- *
- *  When multiple elements share the same testid (e.g., a stacked popup
- *  transition where the old card is still in the DOM), this picks the LAST
- *  visible+enabled candidate — that's the topmost / freshest one. Empirically
- *  the right choice for popup chains; matches the same pattern in
- *  `replaceInputValue`. */
-export async function clickByTestId(page: Page, testId: string, timeout = 10_000): Promise<void> {
-	await prepareClick(page)
-	try {
-		await page.waitForFunction(
-			(id: string) => {
-				const candidates = [...document.querySelectorAll<HTMLElement>(`[data-testid="${id}"]`)].filter((el) => {
-					// Skip natively-disabled AND aria-disabled elements (eg. DropdownItem,
-					// which is a <div> that can't carry native `disabled`). Both mean "not
-					// clickable yet" — wait for the element to enable rather than firing a
-					// programmatic click that bypasses CSS `pointer-events: none`.
-					if ((el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true") return false
-					const style = window.getComputedStyle(el)
-					if (style.display === "none" || style.visibility === "hidden") return false
-					const rect = el.getBoundingClientRect()
-					if (rect.width === 0 || rect.height === 0) return false
-					return true
-				})
-				const target = candidates[candidates.length - 1]
-				if (!target) return false
-				target.click()
-				return true
-			},
-			{ timeout },
-			testId,
-		)
-	} catch (err) {
-		// Approval popups auto-close themselves on the click that resolves the
-		// interaction (e.g. cap-approve-btn → resolveInteraction → window.remove).
-		// page.waitForFunction is still polling when the Chrome target detaches,
-		// throwing nested errors: outer "Waiting failed" / "Error: Waiting failed"
-		// with `cause: TargetCloseError("Target closed")` underneath. The click
-		// already fired (otherwise the popup wouldn't be closing), so swallow
-		// target-detach errors. Re-raise everything else.
-		if (!isTargetDetachError(err)) throw err
-	}
-}
-
-/** Click the control that opens a file picker and answer it with `filePath`. */
-export const pickFileByTestId = (page: Page, testId: string, filePath: string): Promise<void> =>
-	pickFile(page, () => clickByTestId(page, testId), filePath)
-
-export function isTargetDetachError(err: unknown): boolean {
-	const messages: string[] = []
-	let current: unknown = err
-	let depth = 0
-	while (current && typeof current === "object" && "message" in current && depth < 5) {
-		messages.push(String((current as { message?: string }).message ?? ""))
-		current = (current as { cause?: unknown }).cause
-		depth++
-	}
-	const stack = err instanceof Error && typeof err.stack === "string" ? err.stack : ""
-	const haystack = `${messages.join(" ")} ${stack}`
-	return /Target ?Close(d)?|frame was detached|frame got detached|Session closed/i.test(haystack) || isTargetGone(haystack)
-}

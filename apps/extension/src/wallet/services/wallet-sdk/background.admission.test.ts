@@ -1,9 +1,9 @@
 /**
  * `handleDiscovery` through the origin's admission gate, driven end to end through the SDK
- * handler's callbacks with a fake clock: a remembered origin's reload loop is served three at
- * once and then one per refill, an untrusted one also waits for verify-window capacity, a fresh
- * connection reserves its window after the popup and gives it back on a rolled-back approval,
- * and the number of handshakes parked behind one popup is bounded.
+ * handler's callbacks with a fake clock: a remembered origin's reload loop spends a reconnect token
+ * and a verify-window slot per handshake, a fresh connection reserves its window after the popup
+ * and gives it back on a rolled-back approval, and the number of handshakes parked behind one
+ * popup is bounded.
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { DISCOVERY_STALE_MS } from "@nulo/wallet-bridge"
@@ -61,10 +61,10 @@ import { FAKE_DAPP_ORIGIN as ORIGIN, fakeSdkServices } from "./test-services"
 
 const noopLogger = { log: () => {} } as never
 
-/** Boot the handler over a remembered session (`trusted` decides whether a verify window opens). */
+/** Boot the handler, over a remembered session when `remembered` is set. */
 function boot(
 	opts: {
-		remembered?: { trusted: boolean }
+		remembered?: boolean
 		popup?: () => Promise<{ approved: boolean }>
 		legal?: () => Promise<void>
 		logger?: { log: (...args: unknown[]) => void }
@@ -140,29 +140,9 @@ beforeEach(() => {
 })
 afterEach(() => vi.useRealTimers())
 
-describe("handleDiscovery — remembered origin, trusted (token budget only)", () => {
-	test("12 back-to-back handshakes: 3 now, then one per refill until the deadline, 5 rejected outright", async () => {
-		const { discover } = boot({ remembered: { trusted: true } })
-		for (let i = 1; i <= 12; i++) discover(`r${i}`)
-		await flush()
-		expect(approved()).toEqual(["r1", "r2", "r3"])
-		expect(rejected()).toEqual(["r8", "r9", "r10", "r11", "r12"])
-
-		await vi.advanceTimersByTimeAsync(RECONNECT_REFILL_MS)
-		expect(approved()).toEqual(["r1", "r2", "r3", "r4"])
-		await vi.advanceTimersByTimeAsync(RECONNECT_REFILL_MS)
-		expect(approved()).toEqual(["r1", "r2", "r3", "r4", "r5"])
-		// The third refill lands past the 55 s discovery deadline: the rest are rejected, not approved.
-		await vi.advanceTimersByTimeAsync(RECONNECT_REFILL_MS)
-		expect(approved()).toEqual(["r1", "r2", "r3", "r4", "r5"])
-		expect(rejected()).toEqual(expect.arrayContaining(["r6", "r7"]))
-		expect(handlerCalls).toHaveLength(12)
-	})
-})
-
-describe("handleDiscovery — remembered origin, untrusted (token + verify-window budget)", () => {
+describe("handleDiscovery — remembered origin (token + verify-window budget)", () => {
 	test("2 approved, 4 queued, 6 rejected; a refill admits nothing while both windows stay open", async () => {
-		const { discover, establish } = boot({ remembered: { trusted: false } })
+		const { discover, establish } = boot({ remembered: true })
 		for (let i = 1; i <= 12; i++) discover(`r${i}`)
 		await flush()
 		expect(approved()).toEqual(["r1", "r2"])
@@ -174,7 +154,7 @@ describe("handleDiscovery — remembered origin, untrusted (token + verify-windo
 	})
 
 	test("closing both windows serves the 3rd at once; the 4th waits for the token refill", async () => {
-		const { discover, establish, closeWindow } = boot({ remembered: { trusted: false } })
+		const { discover, establish, closeWindow } = boot({ remembered: true })
 		for (let i = 1; i <= 4; i++) discover(`r${i}`)
 		await flush()
 		await establish("r1")
@@ -191,7 +171,7 @@ describe("handleDiscovery — remembered origin, untrusted (token + verify-windo
 	})
 
 	test("a returning approval that does not land releases the reserved slot", async () => {
-		const { discover } = boot({ remembered: { trusted: false } })
+		const { discover } = boot({ remembered: true })
 		approveReturns = false
 		discover("r1")
 		await flush()
@@ -206,7 +186,7 @@ describe("handleDiscovery — remembered origin, untrusted (token + verify-windo
 	})
 
 	test("a terminated transport keeps its open window's slot: the reconnect waits until the window closes", async () => {
-		const { discover, establish, closeWindow } = boot({ remembered: { trusted: false } })
+		const { discover, establish, closeWindow } = boot({ remembered: true })
 		discover("r1")
 		discover("r2")
 		await flush()
@@ -374,7 +354,7 @@ describe("discovery without a current Terms acceptance", () => {
 	})
 
 	test("a remembered origin still reconnects: its requests are what get refused, not its channel", async () => {
-		const { discover } = boot({ remembered: { trusted: true }, legal: refuse })
+		const { discover } = boot({ remembered: true, legal: refuse })
 
 		discover("again-1")
 		await flush()

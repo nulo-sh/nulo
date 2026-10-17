@@ -40,6 +40,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [bundle-fpc-nft](bundle-fpc-nft/plan.md) — completed in part — the PrivateFPC note schema bundled with the wallet; the Wonderland NFT half did not ship
 - [capabilities-popup-quality](capabilities-popup-quality/plan.md) — completed — the capabilities popup and connected-apps page say only what the protocol does
 - [capture-await-write-sweep](capture-await-write-sweep/plan.md) — completed — a hunt for the capture, await, stale-write race shape, with each hit fenced
+- [chain-endpoints](chain-endpoints/plan.md) — completed — a smoke suite that reaches no outside host (#171); hidden characters refused in node URLs, plain HTTP only to this computer and no inline styles in the extension CSP (#200, #101); a missing price reads as unavailable on Home (#116)
 - [chrome-store-launch](chrome-store-launch/plan.md) — completed — every Chrome and Firefox store-submission input built inside the repository
 - [ci-cd](ci-cd/plan.md) — completed — CI bring-up: two long-lived branches with change-detected gates
 - [ci-followups](ci-followups/plan.md) — completed — no Bun auto-install in jobs that install nothing, the move-approval label read live, the Docker Bun pins in the runbook
@@ -106,6 +107,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [e2e-skill-refresh](e2e-skill-refresh/plan.md) — completed — one service-worker kill helper and a procedure-first e2e-testing skill
 - [e2e-stabilization](e2e-stabilization/plan.md) — completed — the network suite's remaining flakes fixed, iterating locally first
 - [embedded-fpc-firsttx-cosmetic](embedded-fpc-firsttx-cosmetic/plan.md) — completed — embedded FPC cap and first-transaction cleanups after the simulation fast path
+- [emoji-match-1](emoji-match-1/plan.md) — completed — the emoji check on every connection, remembered apps too (#587, P28-04 A); "Skip this check next time" removed; every verify admission reserves a slot
 - [enter-gate-and-ping](enter-gate-and-ping/plan.md) — completed — one submit-validity computed for the profile-edit popup, and a ping message type
 - [execute-popup-readability](execute-popup-readability/plan.md) — completed — the approval window's transaction body read as a summary of calls and authorizations, its rows behind one toggle
 - [execution-decomposition](execution-decomposition/plan.md) — completed — the execution service decomposed with zero behaviour change
@@ -148,7 +150,9 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [harden-findings-remediation](harden-findings-remediation/plan.md) — completed — a whole-codebase security audit remediated as eleven reviewable units
 - [harden-quality-arc](harden-quality-arc/plan.md) — completed — a quality audit's findings landed on one integration branch, tiered by risk
 - [harden-quality-fixes-1](harden-quality-fixes-1/plan.md) — completed — the quality harden's cheap set: one `deferred` test helper, exhaustive operation-kind switches, composed row schemas, four dead paths removed, shared contact rules
+- [harden-quality-fixes-2](harden-quality-fixes-2/plan.md) — completed — one e2e runner config and counted retries, shared e2e gate scripts, one confirm request helper, explicit backup selection and run fence
 - [harden-security-fixes-1](harden-security-fixes-1/plan.md) — completed — replies under a byte budget, backup slices row-limited, discovery and key exchange admitted only from their source, dApp call titles cleaned, the wallet's class copy first, dependency logs at `warn`, the publish summary one list back
+- [harden-security-fixes-2](harden-security-fixes-2/plan.md) — completed — passkey backups bound to their passkey, restored tokens read from the chain, the approved dApp fee as a ceiling (#416), grant arguments decoded, call arguments read only when they encode back
 - [harden-security-prerelease](harden-security-prerelease/plan.md) — completed — a security audit's verified findings fixed before the first release, in four batches
 - [hardening-2](hardening-2/plan.md) — completed — every dApp call parsed against the wallet schema, an object-keyed artifact cache, storage fences and a CSP floor
 - [harness-fixtures](harness-fixtures/plan.md) — completed — six complexity suppressions in the e2e harness removed by refactoring
@@ -271,6 +275,8 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [storage-migration-framework](storage-migration-framework/plan.md) — completed — persisted storage shapes transformed in place on update, never wiped
 - [supply-chain-release](supply-chain-release/plan.md) — completed — release zips attested and published through a draft, a pinned CI toolchain, an import-free content script, a blocking audit gate (#21 #12 #22 #20)
 - [sw-wallet-protocol](sw-wallet-protocol/plan.md) — completed — the service-worker boot and wallet protocol path under the complexity budget
+- [testers-fixes-1](testers-fixes-1/plan.md) — completed — selectable text, the toolbar sentence, back keeps scroll, 2 s success toasts, a display-only Home hero (#580 #581 #582 #584 #586)
+- [testers-fixes-2](testers-fixes-2/plan.md) — completed — one-line dApp activity rows with a 96 px app chip, the details App row breaking anywhere, Home's hero fixed over a scrolling middle (#583, #592)
 - [third-party-notices](third-party-notices/plan.md) — completed — every extension build writes and checks a third-party notices file
 - [token-identity](token-identity/plan.md) — completed — distinct faucet and bridge token identities, and a scope-gated `isTokenRegistered` RPC
 - [token-list-live-check](token-list-live-check/plan.md) — completed — an advisory `prepare` step that checks each token-list entry's address, class, symbol and decimals on a public node before the owner approves `sign`

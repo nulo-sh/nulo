@@ -18,16 +18,16 @@ import { stringCompare } from "@/utils/string"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { useConfirm } from "@/composables/useConfirm"
 import { useEntityCrud } from "@/composables/useEntityCrud"
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 import { usePopupStore } from "@/stores/popup.store"
-import { useCacheStore } from "@/stores/cache.store"
 const appStore = useAppStore()
 const popupStore = usePopupStore()
-const cacheStore = useCacheStore()
 
 const tokenService = new TokenServiceClient()
 const { entities: tokens, refresh: refreshTokens } = useEntityCrud({
@@ -48,16 +48,16 @@ watch(
 )
 
 const handleDelete = (target) => {
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.confirm_text = "Yes, delete token"
-	cacheStore.confirm.title = "Remove this token?"
-	cacheStore.confirm.description = "Removing a token only affects the display in the interface and it does not affect the token balance"
-	cacheStore.confirm.callback = async () => {
-		await tokenService.deleteToken(target.id)
-		openToast({ kind: "success", label: "Token successfully deleted" })
-	}
-
-	popupStore.open("confirm")
+	requestConfirm({
+		confirm_color: "red",
+		confirm_text: "Yes, delete token",
+		title: "Remove this token?",
+		description: "Removing a token only affects the display in the interface and it does not affect the token balance",
+		callback: async () => {
+			await tokenService.deleteToken(target.id)
+			openToast({ kind: "success", label: "Token successfully deleted" })
+		},
+	})
 }
 
 watch(
@@ -81,7 +81,6 @@ onBeforeUnmount(() => {
 				v-for="token in tokens"
 				:title="token.symbol"
 				:description="token.name"
-				icon="banknote"
 				raw
 				data-testid="token-row"
 			>
@@ -89,7 +88,7 @@ onBeforeUnmount(() => {
 					<Flex align="center" gap="8">
 						<Tooltip v-if="appStore.networks.length > 1" position="end" delay="350">
 							<RowAction label="Delete token" data-testid="token-delete" @click="handleDelete(token)">
-								<Icon name="close-circle" size="14" color="tertiary" />
+								<Icon name="close" size="14" color="tertiary" />
 							</RowAction>
 
 							<template #content> Delete token </template>

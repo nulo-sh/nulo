@@ -1,14 +1,9 @@
 import type { Page } from "puppeteer"
 import { type BackgroundOwner, evaluateInBackground, reloadExtensionPage } from "../fixtures/browser"
 import { TEST_PASSWORD } from "../fixtures/constants"
-import {
-	type ExtensionContext,
-	clickByTestId,
-	openOnboarding,
-	replaceInputValue,
-	seedLegalAcceptance,
-	waitForHash,
-} from "../fixtures/extension"
+import { clickByTestId, replaceInputValue, waitForHash } from "../fixtures/dom"
+import type { ExtensionContext } from "../fixtures/extension"
+import { openOnboarding, seedLegalAcceptance } from "../fixtures/wallet-pages"
 import { LEGAL_ACCEPTANCE_KEY, type LegalSeed } from "../fixtures/legal"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`

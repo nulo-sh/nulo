@@ -51,7 +51,7 @@ const target = ref(null)
 					<Icon name="edit" size="14" color="tertiary" />
 				</RowAction>
 				<RowAction label="Delete contact" data-testid="contact-delete" @click="emit('delete', contact)">
-					<Icon name="close-circle" size="14" color="tertiary" />
+					<Icon name="close" size="14" color="tertiary" />
 				</RowAction>
 			</Flex>
 		</Flex>

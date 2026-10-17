@@ -19,7 +19,6 @@ import SendReviewSheet from "./SendReviewSheet.vue"
 
 const STUBS = {
 	Flex: { template: '<div v-bind="$attrs"><slot /></div>', inheritAttrs: false },
-	MaterialIcon: { template: "<span />" },
 	Icon: { template: '<svg data-testid="stub-glyph" :data-name="name" :data-size="size" />', props: ["name", "size"] },
 	// The popup family is stubbed to what the sheet wires into it: the stack numbers, escape, initial focus, close.
 	Popup: {
@@ -176,7 +175,7 @@ describe("modules/send/SendReviewSheet", () => {
 		w = mountSheet({ facts, payerKind })
 		expect(["you", "to", "amount"].map((id) => row(w as W, id).attributes("data-visibility"))).toEqual(visibilities)
 		expect(row(w, "you").attributes("data-notice-shape")).toBe(shape)
-		const GLYPH = { hidden: "lock", public: "globe", exposed: "globe", unknown: undefined }
+		const GLYPH = { hidden: "private", public: "public", exposed: "public", unknown: undefined }
 		for (const [i, id] of ["you", "to", "amount"].entries()) {
 			const glyph = row(w, id).find('[data-testid="stub-glyph"]')
 			expect(glyph.exists() ? glyph.attributes("data-name") : undefined, id).toBe(GLYPH[visibilities[i]])

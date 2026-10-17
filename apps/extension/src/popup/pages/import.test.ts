@@ -43,7 +43,7 @@ vi.mock("@/utils/own-window", async (importOriginal) => ({
 
 import { openSearchPanel } from "@codemirror/search"
 import { EditorView } from "@codemirror/view"
-import { Flex, Input, MaterialIcon, Text } from "@nulo/design"
+import { Flex, Icon, Input, Text } from "@nulo/design"
 import { pressOn } from "../../../tests/helpers/press-key"
 import { enterOn, expectNativeAttrs, IGNORED_ENTERS, nativeInput, pasteInto, typeNow } from "../../../tests/helpers/credential-pins"
 import JsonViewer from "@/components/JsonViewer/JsonViewer.vue"
@@ -74,7 +74,7 @@ function makeFlow() {
 		isAllowedToImportBySeedPhrase: ref(false),
 		selectedBackup: ref({
 			name: "backup.txt",
-			type: "encrypted",
+			kind: "opened",
 			profileType: "password",
 			backup: { data: { profile: { name: "Main" } } },
 		}),
@@ -119,7 +119,7 @@ async function mountImport() {
 		attachTo: document.body,
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn })],
-			components: { Flex, Input, MaterialIcon, SubPageHeader, Text },
+			components: { Flex, Input, SubPageHeader, Text, Icon },
 			stubs: {
 				Button: { template: "<button><slot /></button>" },
 				Icon: true,
@@ -468,8 +468,8 @@ function popupCtas(w: VueWrapper): PopupCta[] {
 		])
 }
 
-const ENCRYPTED = { name: "backup.txt", type: "encrypted", profileType: null, backup: "ciphertext" }
-const PLAIN = { name: "backup.json", type: "plain", profileType: "password", backup: { data: { profile: { name: "Main" } } } }
+const ENCRYPTED = { name: "backup.txt", kind: "sealed", profileType: null, backup: "ciphertext" }
+const PLAIN = { name: "backup.json", kind: "plain", profileType: "password", backup: { data: { profile: { name: "Main" } } } }
 const BACK: PopupCta = ["Back", null, false, null, "cta_outline"]
 const BACK_OFF: PopupCta = ["Back", null, true, null, "cta_outline"]
 const IMPORT_MAIN: PopupCta = ["Import Main", "import-full-backup-submit-btn", false, null, "cta"]

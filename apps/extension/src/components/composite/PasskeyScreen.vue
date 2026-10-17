@@ -42,7 +42,7 @@ const badgeSize = computed(() => (props.layout === "window" ? 20 : 14))
 			<span v-if="layout === 'window'" :class="$style.wordmark">Nulo</span>
 			<div v-else :class="[$style.glyph, tone !== 'failed' && $style.breathing]" aria-hidden="true">
 				<Icon name="passkey" :size="glyphSize" />
-				<span v-if="tone === 'failed'" :class="$style.badge"><Icon name="close-circle" :size="badgeSize" color="red" /></span>
+				<span v-if="tone === 'failed'" :class="$style.badge"><Icon name="square-cross" :size="badgeSize" color="red" /></span>
 			</div>
 			<span v-if="tag" :class="$style.tag">{{ tag }}</span>
 		</div>
@@ -50,7 +50,7 @@ const badgeSize = computed(() => (props.layout === "window" ? 20 : 14))
 		<div :class="$style.main">
 			<div v-if="layout === 'window'" :class="[$style.glyph, tone !== 'failed' && $style.breathing]" aria-hidden="true">
 				<Icon name="passkey" :size="glyphSize" />
-				<span v-if="tone === 'failed'" :class="$style.badge"><Icon name="close-circle" :size="badgeSize" color="red" /></span>
+				<span v-if="tone === 'failed'" :class="$style.badge"><Icon name="square-cross" :size="badgeSize" color="red" /></span>
 			</div>
 			<div :class="$style.copy">
 				<BrutalistTitle :id="titleId" :main="title[0]" :sub="title[1]" :size="layout === 'card' ? 'compact' : 'default'" />

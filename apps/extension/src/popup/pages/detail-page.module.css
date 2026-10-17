@@ -69,6 +69,7 @@
 
 .hero_link {
 	composes: type--label from global;
+	user-select: none;
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
@@ -80,13 +81,13 @@
 	transition: color 0.2s var(--bezier);
 
 	& svg {
-		transition: fill 0.2s var(--bezier);
+		transition: color 0.2s var(--bezier);
 	}
 
 	&:hover {
 		color: var(--nulo-accent);
 		& svg {
-			fill: var(--nulo-accent);
+			color: var(--nulo-accent);
 		}
 	}
 }

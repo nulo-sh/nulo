@@ -7,7 +7,6 @@ import { type ToastState, useToast } from "../composables/toast"
 
 /** Components */
 import Icon from "../core/Icon.vue"
-import MaterialIcon from "../core/MaterialIcon.vue"
 
 // Host-DOM contract: teleports the snack regions to `teleportTo` (default `#toast`); the consuming
 // app must declare that root. `bottomInset` is the gap above the viewport's bottom edge. `inColumn`
@@ -164,7 +163,7 @@ onBeforeUnmount(() => {
 						@focusin="onFocusIn"
 						@focusout="onFocusOut"
 					>
-						<Icon name="check-circle" size="16" color="green" aria-hidden="true" />
+						<Icon name="square-check" size="16" color="green" aria-hidden="true" />
 						<div :class="$style.text">
 							<span :class="$style.title" data-testid="snackbar-title" :aria-live="relabelled ? 'off' : undefined">{{ shown.label }}</span>
 							<span v-if="shown.sub" :class="$style.sub" data-testid="snackbar-sub">{{ shown.sub }}</span>
@@ -195,8 +194,8 @@ onBeforeUnmount(() => {
 						@focusin="onFocusIn"
 						@focusout="onFocusOut"
 					>
-						<Icon v-if="shown.kind === 'info'" name="clock-circle" size="16" color="secondary" aria-hidden="true" />
-						<Icon v-else name="close-circle" size="16" color="red" aria-hidden="true" />
+						<Icon v-if="shown.kind === 'info'" name="square-half" size="16" color="secondary" aria-hidden="true" />
+						<Icon v-else name="square-cross" size="16" color="red" aria-hidden="true" />
 						<div :class="$style.text">
 							<span :class="$style.title" data-testid="snackbar-title" :aria-live="relabelled ? 'off' : undefined">{{ shown.label }}</span>
 							<span v-if="shown.sub" :class="$style.sub" data-testid="snackbar-sub">{{ shown.sub }}</span>
@@ -205,7 +204,7 @@ onBeforeUnmount(() => {
 							{{ shown.action.label }}
 						</button>
 						<button type="button" :class="$style.close" aria-label="Close" data-testid="snackbar-close" :onClick="closeFor(shown.id)">
-							<MaterialIcon name="close" :size="16" color="secondary" />
+							<Icon name="close" :size="16" color="secondary" />
 						</button>
 					</div>
 				</Transition>

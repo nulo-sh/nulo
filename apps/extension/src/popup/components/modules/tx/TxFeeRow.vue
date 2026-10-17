@@ -38,10 +38,8 @@ const expanded = defineModel({ type: Boolean, default: false })
 					name="chevron"
 					size="10"
 					color="tertiary"
-					:style="{
-						transform: `rotate(${expanded ? '180' : '0'}deg)`,
-						transition: 'transform 0.2s ease',
-					}"
+					:rotate="expanded ? 270 : 90"
+					:class="$style.chevron"
 				/>
 			</Flex>
 			<Flex align="center" gap="6">
@@ -148,5 +146,9 @@ const expanded = defineModel({ type: Boolean, default: false })
 .fee_savings {
 	composes: type--meta from global;
 	color: var(--green);
+}
+
+.chevron {
+	transition: transform 0.2s ease;
 }
 </style>

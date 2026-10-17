@@ -66,7 +66,7 @@ onBeforeUnmount(() => {
 				<template #right>
 					<Flex align="center" gap="8">
 						<Badge v-if="appStore.network?.id === network.id" variant="info" data-testid="network-active-badge">Active</Badge>
-						<MaterialIcon name="chevron_right" :size="18" color="secondary" :class="$style.chevron" />
+						<Icon name="chevron" :size="18" color="secondary" :class="$style.chevron" />
 					</Flex>
 				</template>
 			</SettingItem>
@@ -86,14 +86,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
-.icon_btn {
-	transition: all 0.2s var(--bezier);
-
-	&:hover {
-		fill: var(--txt-primary);
-	}
-}
-
 .chevron {
 	color: var(--nulo-secondary);
 	transition: color 0.2s var(--bezier);

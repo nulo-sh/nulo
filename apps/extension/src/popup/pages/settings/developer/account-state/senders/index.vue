@@ -15,8 +15,10 @@ import { AccountStateServiceClient } from "@/wallet/services/account-state/clien
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { useConfirm } from "@/composables/useConfirm"
 import { useEntityCrud } from "@/composables/useEntityCrud"
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
 
 /** Utils */
 import { copyWithToast } from "@/utils/clipboard"
@@ -24,10 +26,8 @@ import { copyWithToast } from "@/utils/clipboard"
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 import { usePopupStore } from "@/stores/popup.store"
-import { useCacheStore } from "@/stores/cache.store"
 const appStore = useAppStore()
 const popupStore = usePopupStore()
-const cacheStore = useCacheStore()
 
 const copiedAddress = ref("")
 const accountStateClientService = new AccountStateServiceClient()
@@ -70,18 +70,17 @@ const handleCopyAddress = (address) => {
 }
 
 const handleDelete = (sender) => {
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.confirm_text = "Yes, delete sender"
-	cacheStore.confirm.title = "Delete this sender?"
-	cacheStore.confirm.description =
-		"Most transfers are detected automatically; removing a sender only affects transfers delivered with address-derived tagging"
-	cacheStore.confirm.callback = async () => {
-		await accountStateClientService.deleteSender(appStore.network.id, sender)
-
-		openToast({ kind: "success", label: "Sender successfully deleted" })
-	}
-
-	popupStore.open("confirm")
+	requestConfirm({
+		confirm_color: "red",
+		confirm_text: "Yes, delete sender",
+		title: "Delete this sender?",
+		description:
+			"Most transfers are detected automatically; removing a sender only affects transfers delivered with address-derived tagging",
+		callback: async () => {
+			await accountStateClientService.deleteSender(appStore.network.id, sender)
+			openToast({ kind: "success", label: "Sender successfully deleted" })
+		},
+	})
 }
 
 watch(
@@ -110,21 +109,21 @@ onBeforeUnmount(() => {
 
 				<Flex align="center" gap="8">
 					<Tooltip position="end" delay="350">
-						<!-- Inline styles keep the check's own look through the action's pointer and hover fill. -->
+						<!-- Inline styles keep the check's own look through the action's pointer and hover colour. -->
 						<RowAction
 							label="Copy address"
 							:style="copiedAddress === sender ? { cursor: 'default' } : undefined"
 							@click="handleCopyAddress(sender)"
 						>
 							<Icon v-if="copiedAddress !== sender" name="copy" size="14" color="tertiary" />
-							<Icon v-else name="check-circle" size="14" color="green" :style="{ transition: 'all 0.2s ease', fill: 'var(--green)' }" />
+							<Icon v-else name="square-check" size="14" :style="{ color: 'var(--green)' }" />
 						</RowAction>
 
 						<template #content> Copy address </template>
 					</Tooltip>
 					<Tooltip position="end" delay="350">
 						<RowAction label="Delete sender" data-testid="sender-delete" @click="handleDelete(sender)">
-							<Icon name="close-circle" size="14" color="tertiary" />
+							<Icon name="close" size="14" color="tertiary" />
 						</RowAction>
 
 						<template #content> Delete sender </template>

@@ -32,7 +32,8 @@ const formatTimestamp = (timestamp) => {
 				name="chevron"
 				size="12"
 				color="tertiary"
-				:style="{ transform: `rotate(${expanded ? '180' : '0'}deg)`, transition: 'transform 0.2s ease' }"
+				:rotate="expanded ? 270 : 90"
+				:class="$style.chevron"
 			/>
 		</button>
 
@@ -152,5 +153,9 @@ const formatTimestamp = (timestamp) => {
 
 	color: var(--red);
 	word-break: break-word;
+}
+
+.chevron {
+	transition: transform 0.2s ease;
 }
 </style>

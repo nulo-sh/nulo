@@ -76,7 +76,7 @@ const handleManageAccounts = () => {
 						titleVariant="name"
 						:description="trimAddress(acc.address, 6, 4, '...')"
 						descriptionVariant="data"
-						:icon="account.address === acc.address ? 'check-circle' : 'circle'"
+						:icon="account.address === acc.address ? 'square-check' : 'square'"
 						:iconFillColor="account.address === acc.address ? 'primary' : 'tertiary'"
 						data-testid="account-item"
 						:data-account-name="acc.name"
@@ -111,7 +111,7 @@ const handleManageAccounts = () => {
 						data-testid="accounts-popup-new"
 						title="New account"
 						size="small"
-						icon="plus-circle"
+						icon="add"
 						iconFillColor="secondary"
 						iconBgColor="transparent"
 						chevron

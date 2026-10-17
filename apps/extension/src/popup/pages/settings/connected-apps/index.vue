@@ -19,11 +19,9 @@ import { getSafeDisplay } from "@/wallet/services/dapp-session/capability-meta"
 /** Utils */
 import { withoutId } from "@/utils/entity-list"
 
-/** Store */
-import { useCacheStore } from "@/stores/cache.store"
-import { usePopupStore } from "@/stores/popup.store"
-const cacheStore = useCacheStore()
-const popupStore = usePopupStore()
+/** Composables */
+import { useConfirm } from "@/composables/useConfirm"
+const { requestConfirm } = useConfirm()
 
 const formatGrantSummary = (grants) => {
 	// getSafeDisplay returns the constant "Unknown" shortLabel for
@@ -79,26 +77,28 @@ function onDappSessionDeleted(session) {
 const rowIdBase = useId()
 
 const handleDropSession = (session) => {
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.confirm_text = "Yes, disconnect"
-	cacheStore.confirm.description = `Disconnect "${session.dappMetadata?.name ?? "this dApp"}"?`
-	cacheStore.confirm.callback = async () => {
-		await dappSessionService.deleteDappSession(session.id)
-	}
-	popupStore.open("confirm")
+	requestConfirm({
+		confirm_color: "red",
+		confirm_text: "Yes, disconnect",
+		description: `Disconnect "${session.dappMetadata?.name ?? "this dApp"}"?`,
+		callback: async () => {
+			await dappSessionService.deleteDappSession(session.id)
+		},
+	})
 }
 
 const handleDropAllSessions = () => {
 	if (!dappSessions.value.length) return
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.confirm_text = "Yes, disconnect all"
-	cacheStore.confirm.description = `Disconnect all ${dappSessions.value.length} sessions?`
-	cacheStore.confirm.callback = async () => {
-		for (const session of [...dappSessions.value]) {
-			await dappSessionService.deleteDappSession(session.id)
-		}
-	}
-	popupStore.open("confirm")
+	requestConfirm({
+		confirm_color: "red",
+		confirm_text: "Yes, disconnect all",
+		description: `Disconnect all ${dappSessions.value.length} sessions?`,
+		callback: async () => {
+			for (const session of [...dappSessions.value]) {
+				await dappSessionService.deleteDappSession(session.id)
+			}
+		},
+	})
 }
 
 onBeforeMount(async () => {
@@ -117,7 +117,7 @@ onBeforeUnmount(() => {
 		<template #trailing>
 			<Dropdown>
 				<button type="button" :class="$style.icon_btn" aria-label="Session actions">
-					<MaterialIcon name="more_vert" :size="18" color="secondary" />
+					<Icon name="more" :rotate="90" :size="18" color="secondary" />
 				</button>
 
 				<template #popup>
@@ -139,14 +139,14 @@ onBeforeUnmount(() => {
 
 				<Flex align="center" gap="12" wide>
 					<div :class="$style.logo_wrapper">
-						<Icon v-if="ds.loadingLogo" :loading="true" name="dapp" size="18" color="tertiary" />
+						<Icon v-if="ds.loadingLogo" :loading="true" name="app" size="18" color="tertiary" />
 						<img
 							v-else-if="ds.dappMetadata.logoBlobUrl"
 							:src="ds.dappMetadata.logoBlobUrl"
 							:class="$style.logo"
 							alt=""
 						/>
-						<Icon v-else name="dapp" size="18" color="tertiary" />
+						<Icon v-else name="app" size="18" color="tertiary" />
 					</div>
 
 					<Flex direction="column" gap="2" wide :class="$style.row_text">
@@ -159,7 +159,7 @@ onBeforeUnmount(() => {
 					<Flex align="center" gap="8" :class="$style.actions">
 						<Tooltip position="end" delay="350">
 							<RowAction label="Disconnect session" data-testid="session-disconnect" :class="$style.action_danger" @click="handleDropSession(ds)">
-								<Icon name="close-circle" size="14" color="tertiary" />
+								<Icon name="close" size="14" color="tertiary" />
 							</RowAction>
 
 							<template #content> Disconnect session </template>
@@ -217,7 +217,7 @@ onBeforeUnmount(() => {
 .action_danger {
 	&:hover svg,
 	&:focus-visible svg {
-		fill: var(--red);
+		color: var(--red);
 	}
 }
 

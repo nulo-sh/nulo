@@ -9,7 +9,7 @@ const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
 /**
- * A remembered, untrusted origin reconnecting from four tabs at once is admitted through the
+ * A remembered origin reconnecting from four tabs at once is admitted through the
  * origin's verify-window budget: at most two verify windows exist at any moment (the security
  * property — the cap the reconnect gate enforces), the two beyond it wait rather than being
  * rejected, and once the open windows are approved every waiting tab connects. The precise
@@ -26,7 +26,7 @@ test.skipIf(!hasConfig)(
 		await switchToLocalNetwork(setupPage)
 		await setupPage.close()
 
-		// Remember the origin without trusting it, so every reconnect needs a verify window.
+		// Remember the origin; every reconnect needs a verify window.
 		const first = await openPlayground(ctx)
 		const discoverP = waitForPopup(ctx, "discover", { timeout: 30_000 })
 		await clickByTestId(first, "pg-btn-connect")

@@ -147,17 +147,14 @@ onBeforeUnmount(() => {
 
 				<ItemsContainer title="Your wallet">
 					<SettingItem
-						materialIcon="account_balance_wallet"
 						chevron
 						v-bind="settingItemProps('hub-accounts', searchContext)"
 					/>
 					<SettingItem
-						materialIcon="group"
 						chevron
 						v-bind="settingItemProps('hub-contacts', searchContext)"
 					/>
 					<SettingItem
-						materialIcon="toll"
 						chevron
 						v-bind="settingItemProps('hub-tokens', searchContext)"
 					/>
@@ -165,22 +162,18 @@ onBeforeUnmount(() => {
 
 				<ItemsContainer title="Apps and networks">
 					<SettingItem
-						materialIcon="extension"
 						chevron
 						v-bind="settingItemProps('hub-connected-apps', searchContext)"
 					/>
 					<SettingItem
-						materialIcon="hub"
 						chevron
 						v-bind="settingItemProps('hub-networks', searchContext)"
 					/>
 					<SettingItem
-						materialIcon="local_gas_station"
 						chevron
 						v-bind="settingItemProps('hub-fpcs', searchContext)"
 					/>
 					<SettingItem
-						materialIcon="speed"
 						chevron
 						v-bind="settingItemProps('hub-proving', searchContext)"
 						:data-status="prestoState.kind"
@@ -189,19 +182,16 @@ onBeforeUnmount(() => {
 
 				<ItemsContainer title="Safety">
 					<SettingItem
-						materialIcon="lock"
 						:value="values.lock"
 						chevron
 						v-bind="settingItemProps('hub-lock', searchContext)"
 					/>
 					<SettingItem
-						materialIcon="download"
 						chevron
 						v-bind="settingItemProps('hub-backup', searchContext)"
 					/>
 					<SettingItem
 						v-if="!isPasskey"
-						materialIcon="password"
 						chevron
 						v-bind="settingItemProps('hub-change-password', searchContext)"
 					/>
@@ -209,19 +199,16 @@ onBeforeUnmount(() => {
 
 				<ItemsContainer title="Preferences">
 					<SettingItem
-						materialIcon="visibility"
 						:value="values.privacy"
 						chevron
 						v-bind="settingItemProps('hub-privacy', searchContext)"
 					/>
 					<SettingItem
-						materialIcon="palette"
 						:value="values.display"
 						chevron
 						v-bind="settingItemProps('hub-display', searchContext)"
 					/>
 					<SettingItem
-						materialIcon="bolt"
 						:value="values.developer"
 						chevron
 						v-bind="settingItemProps('hub-developer', searchContext)"
@@ -230,25 +217,17 @@ onBeforeUnmount(() => {
 
 				<ItemsContainer title="Help">
 					<SettingItem
-						materialIcon="menu_book"
 						chevron
 						v-bind="settingItemProps('hub-glossary', searchContext)"
 					/>
 					<SettingItem
-						materialIcon="info"
 						chevron
 						v-bind="settingItemProps('hub-about', searchContext)"
 					/>
 				</ItemsContainer>
 
 				<ItemsContainer title="Danger zone" danger>
-					<SettingItem chevron v-bind="settingItemProps('hub-delete-profile', searchContext)">
-						<template #icon>
-							<span :class="$style.danger_icon">
-								<MaterialIcon name="delete" :size="20" color="red" />
-							</span>
-						</template>
-					</SettingItem>
+					<SettingItem chevron v-bind="settingItemProps('hub-delete-profile', searchContext)" />
 				</ItemsContainer>
 			</template>
 		</Flex>
@@ -292,13 +271,5 @@ onBeforeUnmount(() => {
 
 .content {
 	padding: 0 24px;
-}
-
-/* The ligature text lays out wider than the glyph until the icon font loads; the box holds the row. */
-.danger_icon {
-	display: inline-flex;
-	width: 20px;
-	height: 20px;
-	overflow: hidden;
 }
 </style>

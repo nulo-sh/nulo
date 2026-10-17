@@ -59,6 +59,12 @@ describe("isApprovedSendInFlight", () => {
 	test("a queued popup transfer counts: it was confirmed on the Send page and only waits its turn", () => {
 		expect(isApprovedSendInFlight(op({ stage: "queued" }))).toBe(true)
 	})
+
+	test("a dApp send held on its fee question counts: it was approved, and a lock cancels it", () => {
+		const reask = { fee: "21000000000000000", cap: "16000000000000000", payer: { type: "fj", isProtocol: false } }
+		expect(isApprovedSendInFlight(dappSend({ progress: { stage: "queued", reask } } as never))).toBe(true)
+		expect(isApprovedSendInFlight(dappSend({ stage: "queued" }))).toBe(false)
+	})
 })
 
 describe("hasInFlightSend", () => {

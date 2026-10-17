@@ -15,6 +15,7 @@ import {
 	waitForPopup,
 	waitForPopupClosed,
 } from "../fixtures/popups"
+import { shotSend } from "../fixtures/send-page"
 import { pointerClick } from "../helpers/legal-drivers"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -283,6 +284,7 @@ test.skipIf(!hasConfig)(
 		const authorizations = (await getCapItems(widen.popup)).find((item) => item.row === "authorizations")
 		expect(authorizations).toMatchObject({ granted: false, flagged: true })
 		expect(await readCapabilitySwitch(widen.popup, "authorizations")).toBe(false)
+		await shotSend(widen.popup, "cap-window-flagged", "cap-item")
 		await approveCapabilities(widen.popup)
 		await assertPgOk(page, await waitForPgResult(page, "requestCapabilities", widen.seq, 30_000), "cap-window:allow")
 
