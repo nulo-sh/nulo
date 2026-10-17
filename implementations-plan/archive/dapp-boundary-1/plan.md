@@ -140,7 +140,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test && bun run
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) read at `13d5f8d0`. Plan-specific values:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) read at `13d5f8d0`. Plan-specific values:
 
 - **While implementing.** Comments state invariants only. Log attempts in `lessons/phase-N.md`; `agent-worktree status dapp-boundary-1 "phase N green: <next>"` at each gate. Stop after 3 failures on one step (5 under `/loop`).
 - **Review loop (step 2), single arc, once over the net diff from `13d5f8d0` after phase 3.** `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`; resume with `resume-codex.sh`. On a quota or 401 error retry once with `CODEX_ACCOUNT=alejo-icloud`, else log the failed consult and continue. The prompt carries the diff, this plan with its ledger, the adversarial ask and the README's two rules verbatim. Hard stop at 3 rounds. A fix that adds state, a lifecycle, a protocol, a recovery policy or a public contract stops for approval.
