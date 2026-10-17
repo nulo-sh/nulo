@@ -9,7 +9,27 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: 093fa10d (origin/dev)
 issues: [515]
+status: closed (delivered by #733, with this close-out)
 ---
+
+## Outcome
+
+- **Date:** 2026-10-17. Planned and implemented the same day; one arc.
+- **Status:** closed with its delivery: #733 from `worktree-fees-display-1` (closes #515), whose final commits are this close-out; merging is the owner's call.
+- **Shipped:**
+  - One helper prints every fee as `~X FJ ($Y)` (`utils/fee-estimation.ts`: `FEE_DECIMALS`, `BALANCE_DECIMALS`, `feeDisplay`, `feeFigure`, `feeText`; the old formatters private) through one L3 `FeeAmount.vue`. It covers Send's card and readout, the review and its re-ask, both dApp windows, the transaction page and the receipt; balances read as before. The wire drops `maxFeeFormatted` and `priorityFeeFormatted`.
+  - The approval window's app-paid line (`AppFeeLine.vue`) and the fee window's `FeeRaisedCard` own their quote and mount only with a fee, after the session gate; a legend-only operation reads no price.
+  - The network e2e pin one Fee Juice quote (`tests/e2e/fixtures/fee-quote.ts`) and assert the helper's strings in three files; the activity feed states its quote (`data-fee-quote`). Screenshots of 12 sites, light and dark, dev and arc builds, are in [screenshots/](screenshots/).
+- **Deviations:** D11 (the 12 px mono figure at weight 400, OA-2), D12 (the fee window's Confirm shows the figure alone, OA-3) and D13 (the pin waits out `PRICE_FETCH_TIMEOUT_MS`), all in § Decision ledger. The Send shortfall line has no screenshot, since no e2e path reaches it; `FeeSettingsCard.test.ts` pins its text. After the loop, #733's CI wall-clocks exposed a poll in the priority test that never matched and slept out its 15 s; fixed in the PR ([lessons/phase-4.md](lessons/phase-4.md)).
+- **Review loop:** the plan took a dual audit and a final Codex pass. The implementation converged at Codex round 3 beside an Opus review, and #711 met round 3's one condition (§ [Audit verdicts](#audit-verdicts)).
+- **Gates at the final head:**
+  - At `37606dab` (dev `138e0ded` with this arc): `lint`, `typecheck:all`, `test:all`, `build:chrome` and `check:plans` exit 0. `test:all` passed on its second run; the first timed out once in `scripts/e2e/reconcile-lock.test.ts`, untouched here, which then passed 3 of 3 alone.
+  - The three network files at retry 0: Chrome and Firefox at `87182c45`, Chrome again at `a2365141`. `fee-sponsor-funding` on Chrome again after the poll fix.
+  - Smoke at retry 0 (57 files) at `87182c45`; #733's CI at the final head.
+- **Known limits:** #711.
+- **Open items:** #734 (OA-2, OA-3 and an observation on OA-1's re-ask label, for the owner; [OWNER-ASKS.md](OWNER-ASKS.md)).
+- **Lessons:** none promoted. The pin's gotcha lives at its fixture and in [lessons/phase-4.md](lessons/phase-4.md); `lessons.md` sits at its budget.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # fees-display-1: one fee grammar on every screen (#515)
 

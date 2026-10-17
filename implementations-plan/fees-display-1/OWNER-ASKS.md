@@ -15,6 +15,8 @@
 
 **Answered: A** (orchestrator, D-orch, 2026-10-17). The lane's mono rule covers fee values shown as values (rows, lines, cells), not the text of a control; the review's re-ask submit and the fee window's Confirm keep their face with the fee figure inside their label.
 
+**Observed after the answer** (tracked in #734): the Send review's full-width re-ask submit, `SEND FOR ~0.000032 FJ (<$0.001)`, reaches the button's edges at 360 px; the button is `nowrap` with `overflow: hidden`, so a figure one or two characters longer (a fee of 10 FJ or more, or $10 or more) would clip.
+
 Not asked: the pick (P36-04 A) is applied as written, so a figure after "About", "up to" or "at most" also takes `~` ("About ~X FJ ($Y)"); plan.md D5 records why.
 
 ## OA-2 — the approval window's app-paid fee figure: weight 400 or 600
@@ -28,7 +30,7 @@ Not asked: the pick (P36-04 A) is applied as written, so a figure after "About",
 
 **Recommendation:** A. Every other fee figure in the arc is mono at weight 400; the primary color still sets the figure apart from the secondary words around it. B adds a type role for one figure.
 
-**What ships now:** A. B needs a 12 px, weight 600 mono role in `packages/design/src/token-contract.ts` and the figure's class moved onto it; no other change.
+**Open, tracked in #734.** **What ships now:** A. B needs a 12 px, weight 600 mono role in `packages/design/src/token-contract.ts` and the figure's class moved onto it; no other change.
 
 ## OA-3 — the fee window's Confirm: the figure alone, or with its dollars
 
@@ -41,4 +43,4 @@ Not asked: the pick (P36-04 A) is applied as written, so a figure after "About",
 
 **Recommendation:** A. The dollars sit one line above the button, and a two-line button label in the shared footer reaches every approval window.
 
-**What ships now:** A. B needs `DappApprovalFooter` to let its confirm label wrap, and the window's label built with `feeText`; no other change.
+**Open, tracked in #734.** **What ships now:** A. B needs `DappApprovalFooter` to let its confirm label wrap, and the window's label built with `feeText`; no other change.
