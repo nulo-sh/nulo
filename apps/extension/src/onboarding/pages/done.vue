@@ -9,6 +9,9 @@ import { vSnackFooter } from "@/composables/snackInset"
 /** Utils */
 import { clearOnboardingTabTracking, OPEN_TOOLBAR_POPUP, type OpenToolbarPopupAnswer } from "@/wallet/utils/onboarding-tab"
 
+/** Stores */
+import { useAppStore } from "@/stores/app.store"
+
 const appStore = useAppStore()
 
 // Detected on mount so the pin-tip only shows for users who actually need
@@ -86,8 +89,7 @@ async function openWallet() {
 				<Text variant="label-section" color="secondary">Pro tip</Text>
 			</Flex>
 			<Text variant="body" color="secondary" height="150">
-				Click the puzzle icon in your browser's toolbar, then pin Nulo for
-				quick access. That's how you'll open the wallet from now on.
+				Click the puzzle icon in your browser's toolbar, then pin Nulo for quick access.
 			</Text>
 		</Flex>
 

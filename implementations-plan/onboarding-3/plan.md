@@ -172,7 +172,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`; pass = e
   - `presto-host-permission` on Firefox (it is skipped on Chrome).
   - Pass: all green.
 
-**2. The done page (#581, #636).**
+**2. The done page (#581, #636).** ✓ (2026-10-17, [lessons/phase-2.md](lessons/phase-2.md))
 - Change map: `onboarding/pages/done.vue`: the tip is the P35-02 B sentence alone.
 - Tests: a new `done.test.ts`. The tip equals the sentence and contains neither "Chrome" nor "from now on". Control: the tip hides on `isOnToolbar: true`.
 - Gate: `F`; smoke `onboarding-tab` on Chrome and Firefox.
