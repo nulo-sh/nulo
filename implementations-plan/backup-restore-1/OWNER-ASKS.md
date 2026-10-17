@@ -28,7 +28,7 @@ Each ask names a surface, its options and what ships now. The arcs ship the "wha
 - **Why:** a backup can hold many imported accounts, and a crafted one thousands. Each name is cleaned and cut to 32 characters, but a list needs a cap.
 - **Options:** (1) list three names, then "and N more imported accounts"; (2) list none past one: "3 imported accounts were not restored."
 - **Recommendation:** 1.
-- **What ships now:** option 1.
+- **What ships now:** option 1, with the same cap on the chain IDs the sentence asks for: "Add the networks with chain IDs 1, 2, 3, and 2 more to restore them." Lists join as every list in the wallet does ("“A”, “B”, “C”, and 2 more imported accounts", with the comma before "and").
 
 ## OA-5: say on screen when a restore drops an imported account or key (arc 2)
 

@@ -42,6 +42,50 @@ describe("restoreWarningText", () => {
 	})
 })
 
+describe("restoreWarningText — imported accounts held for a network", () => {
+	const held = (name: string, chainId: number) => ({ name, chainId })
+	test.each([
+		[
+			"one account",
+			[],
+			[held("Savings", 1337)],
+			"Profile import completed with some errors. The imported account “Savings” was not restored. Add the network with chain ID 1337 to restore it. You can review the details or continue.",
+		],
+		[
+			"two accounts on one chain",
+			[],
+			[held("Savings", 1337), held("Trading", 1337)],
+			"Profile import completed with some errors. The imported accounts “Savings” and “Trading” were not restored. Add the network with chain ID 1337 to restore them. You can review the details or continue.",
+		],
+		[
+			"two accounts on two chains",
+			[],
+			[held("Savings", 1337), held("Trading", 4242)],
+			"Profile import completed with some errors. The imported accounts “Savings” and “Trading” were not restored. Add the networks with chain IDs 1337 and 4242 to restore them. You can review the details or continue.",
+		],
+		[
+			"past three accounts and three chains",
+			[],
+			[held("A", 1), held("B", 2), held("C", 3), held("D", 4), held("E", 5)],
+			"Profile import completed with some errors. “A”, “B”, “C”, and 2 more imported accounts were not restored. Add the networks with chain IDs 1, 2, 3, and 2 more to restore them. You can review the details or continue.",
+		],
+		[
+			"four accounts on one chain",
+			[],
+			[held("A", 1337), held("B", 1337), held("C", 1337), held("D", 1337)],
+			"Profile import completed with some errors. “A”, “B”, “C”, and 1 more imported account were not restored. Add the network with chain ID 1337 to restore them. You can review the details or continue.",
+		],
+		[
+			"beside a network a Retry replays",
+			["Testnet"],
+			[held("Savings", 1337)],
+			"Testnet didn't answer in time, so what was saved for it may not be restored. The imported account “Savings” was not restored. Add the network with chain ID 1337 to restore it. You can retry, review the details, or continue.",
+		],
+	])("%s", (_, names, accounts, sentence) => {
+		expect(restoreWarningText(names, true, accounts)).toBe(sentence)
+	})
+})
+
 describe("retryResultText", () => {
 	test.each([
 		[["Testnet"], "Retry didn't work · Testnet still not restored"],

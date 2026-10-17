@@ -1,10 +1,39 @@
 /** An imported account a restore kept for a network the new profile lacks, its name cleaned. */
 export type HeldAccount = { name: string; chainId: number }
 
-export function restoreWarningText(networkNames: readonly string[], hasOtherErrors: boolean): string {
-	if (networkNames.length === 0) return "Profile import completed with some errors. You can review the details or continue."
+export function restoreWarningText(networkNames: readonly string[], hasOtherErrors: boolean, held: readonly HeldAccount[] = []): string {
+	const heldPart = held.length ? ` ${heldAccountsText(held)}` : ""
+	if (networkNames.length === 0) {
+		return `Profile import completed with some errors.${heldPart} You can review the details or continue.`
+	}
 	const choices = hasOtherErrors ? "You can retry, review the details, or continue." : "You can retry or continue."
-	return `${joinNames(networkNames)} didn't answer in time, so what was saved for ${pronoun(networkNames)} may not be restored. ${choices}`
+	return `${joinNames(networkNames)} didn't answer in time, so what was saved for ${pronoun(networkNames)} may not be restored.${heldPart} ${choices}`
+}
+
+/** A restore can hold any number of accounts, and a crafted backup thousands: a list names this many. */
+const MAX_LISTED = 3
+
+/** The first `MAX_LISTED` items, then how many more, worded by `more`. */
+function listed(items: readonly string[], more: (count: number) => string): string {
+	if (items.length <= MAX_LISTED) return joinNames(items)
+	return joinNames([...items.slice(0, MAX_LISTED), more(items.length - MAX_LISTED)])
+}
+
+function heldSubject(names: readonly string[]): string {
+	if (names.length === 1) return `The imported account ${names[0]}`
+	if (names.length <= MAX_LISTED) return `The imported accounts ${joinNames(names)}`
+	return listed(names, (count) => `${count} more imported account${count === 1 ? "" : "s"}`)
+}
+
+function heldAccountsText(held: readonly HeldAccount[]): string {
+	const subject = heldSubject(held.map((account) => `“${account.name}”`))
+	const chains = [...new Set(held.map((account) => account.chainId))].map(String)
+	const network =
+		chains.length === 1
+			? `the network with chain ID ${chains[0]}`
+			: `the networks with chain IDs ${listed(chains, (count) => `${count} more`)}`
+	const one = held.length === 1
+	return `${subject} ${one ? "was" : "were"} not restored. Add ${network} to restore ${one ? "it" : "them"}.`
 }
 
 /** Home's reminder of the networks a restore left behind. */

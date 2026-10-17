@@ -9,3 +9,4 @@
 - 2026-10-17 arc 1 phase 3 (D6, C4): gate green — lint; typecheck:all; test:all (extension 13584 passed); build. E2E next.
 - 2026-10-17 arc 1 review loop converged (Codex round 3 clean; Opus 0 material). Final head after merging dev 5653e890: lint, typecheck:all, check:plans, test:all (extension 13588 passed), build green; smoke e2e 5 files 27/27 retry 0 (262 s); network e2e 4 files 7/7 retry 0 proverless (307 s). Screenshots under screenshots/arc1/.
 - 2026-10-17 arc 2 phase 4 (D1, D2, D4): gate green — lint; typecheck:all; vitest account + network + network-reset + composables 1560/1560; restart test red on base 138e0ded (no key row after restart), green after.
+- 2026-10-17 arc 2 phase 5 (C6): lint; typecheck:all; test:all (extension 13677 passed); build green. E2E next.

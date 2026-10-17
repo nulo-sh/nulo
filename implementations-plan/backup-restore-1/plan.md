@@ -190,6 +190,12 @@ Round 1, Codex (gpt-6.1-sol high, session `01a14b4c`): **conditional approve** (
 
 **Arc 1 review loop.** Round 1, Codex (gpt-6.1-sol high, session `01a14b7d`): **findings (2 material)**, both accepted as local fixes: Delete chain reads the hold at the click, and the page re-reads on a route change; two comments removed. Opus diff review: **0 material**; three small items folded (inert-row assertion, `sentenceName` comment, fallback-name test). Round 2, resumed: fixes verified, **findings (2 material)** in the round-1 fix, both accepted: an unknown hold aborts Delete with the existing failure toast, and a continuation after unmount is dropped. Round 3, resumed: **clean**.
 
+**Arc 2 deviations from the plan (implementation).**
+- D1: absence is memoised per profile id inside one `restore` call (normally one id, since the composable remaps every row to the new profile). A derived row skips the absence read and meets `getL1ChainIdStored` as before, so its refusal text is unchanged and no other test stub needed `getNetworksRaw`.
+- D2a: through an import the backup gate already refuses a key row without a string `profileId`, a finite `chainId` and a non-empty `address`, so the pass-through for a scopeless row only serves a direct caller; its test calls `restoreAccountsStage`.
+- D4: each held record sits at its account's ordinal in the backup's account slice, as the account restore's own rows do, not at its position among the held accounts. Names are cleaned by `sentenceName` (`utils/string.ts`), now shared with the paused-reset names; a name that cleans to nothing reads `DEFAULT_IMPORTED_ACCOUNT_NAME`, as in arc 1. `useProfileImportFlow` passes `heldAccounts` through to both pages.
+- C6: past three chains the chain IDs take the same cap as the names (OA-4's addendum); lists join with `joinNames`, so "“C”, and 2 more", with the comma C6's draft omitted.
+
 Final fresh Codex pass (gpt-6.1-sol high, session `01a14b63`): **conditional approve** (condition: an owner ask for D2c's orphan-key warning, with a "what ships now" form). Applied: D2c moved into OA-5, and the arc ships today's outcome. Round-1 dispositions and rejected alternatives held; arc 1 depends on no open ask. Resumed on the change: **approve**.
 
 ## Delivery

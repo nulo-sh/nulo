@@ -365,11 +365,13 @@ declare global {
   const selectedWithin: typeof import('../utils/selection').selectedWithin
   const sendFeePicksKey: typeof import('../utils/profile-ui-keys').sendFeePicksKey
   const sendOutcome: typeof import('../utils/journal-state').sendOutcome
+  const sentenceName: typeof import('../utils/string').sentenceName
   const setLastActiveProfileId: typeof import('../utils/lastActiveProfile').setLastActiveProfileId
   const settingItemProps: typeof import('../utils/settings-search').settingItemProps
   const settingsQueryTerms: typeof import('../utils/settings-search').settingsQueryTerms
   const settingsResultTo: typeof import('../utils/settings-search').settingsResultTo
   const settingsRow: typeof import('../utils/settings-search').settingsRow
+  const settleHeldAccounts: typeof import('../composables/full-backup-restore').settleHeldAccounts
   const settledReading: typeof import('../utils/tx-amount').settledReading
   const shallowReactive: typeof import('vue').shallowReactive
   const shallowReadonly: typeof import('vue').shallowReadonly
@@ -502,7 +504,7 @@ declare global {
   export type { ImportCompletionDeps, ImportCompletionOutcome } from '../composables/completeImportWithRecovery'
   import('../composables/completeImportWithRecovery')
   // @ts-ignore
-  export type { RestoreIo, StageFail, StageOutcome, RestoreScratch, ProfileRestoreClient, RunFenceClient, NetworkRestoreClient, AccountRestoreClient, TailNetwork, RestoredNetwork, RestoreData, BackupProfile, SliceRestoreClient, AccountStateTail, RestoreRun, AccountStateRetryContext } from '../composables/full-backup-restore'
+  export type { RestoreIo, StageFail, StageOutcome, RestoreScratch, ProfileRestoreClient, RunFenceClient, NetworkRestoreClient, AccountRestoreClient, TailNetwork, RestoredNetwork, RestoreData, BackupProfile, HeldScope, SliceRestoreClient, AccountStateTail, RestoreRun, AccountStateRetryContext } from '../composables/full-backup-restore'
   import('../composables/full-backup-restore')
   // @ts-ignore
   export type { ImportChainSyncDeps } from '../composables/importChainSync'
@@ -1093,11 +1095,13 @@ declare module 'vue' {
     readonly selectedWithin: UnwrapRef<typeof import('../utils/selection')['selectedWithin']>
     readonly sendFeePicksKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['sendFeePicksKey']>
     readonly sendOutcome: UnwrapRef<typeof import('../utils/journal-state')['sendOutcome']>
+    readonly sentenceName: UnwrapRef<typeof import('../utils/string')['sentenceName']>
     readonly setLastActiveProfileId: UnwrapRef<typeof import('../utils/lastActiveProfile')['setLastActiveProfileId']>
     readonly settingItemProps: UnwrapRef<typeof import('../utils/settings-search')['settingItemProps']>
     readonly settingsQueryTerms: UnwrapRef<typeof import('../utils/settings-search')['settingsQueryTerms']>
     readonly settingsResultTo: UnwrapRef<typeof import('../utils/settings-search')['settingsResultTo']>
     readonly settingsRow: UnwrapRef<typeof import('../utils/settings-search')['settingsRow']>
+    readonly settleHeldAccounts: UnwrapRef<typeof import('../composables/full-backup-restore')['settleHeldAccounts']>
     readonly settledReading: UnwrapRef<typeof import('../utils/tx-amount')['settledReading']>
     readonly shallowReactive: UnwrapRef<typeof import('vue')['shallowReactive']>
     readonly shallowReadonly: UnwrapRef<typeof import('vue')['shallowReadonly']>
