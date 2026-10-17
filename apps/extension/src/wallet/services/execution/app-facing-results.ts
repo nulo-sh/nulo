@@ -14,6 +14,7 @@ import {
 	PublicSimulationOutput,
 	TxEffect,
 	type TxSimulationResult,
+	UtilityExecutionResult,
 } from "@aztec-labs/stdlib/tx"
 
 const EMPTY_BUFFER = Buffer.alloc(0)
@@ -35,6 +36,14 @@ export function toAppFacingSimulationResult(
 		undefined,
 		result.appCallOffset,
 	)
+}
+
+/**
+ * Omits the stats, which time and count the wallet's own sync too. Keeps the anchor timestamp,
+ * which aztec.js stamps on offchain messages.
+ */
+export function toAppFacingUtilityResult(result: UtilityExecutionResult): UtilityExecutionResult {
+	return new UtilityExecutionResult(result.result, result.offchainEffects, result.anchorBlockTimestamp)
 }
 
 function appFacingCall(call: PrivateCallExecutionResult): PrivateCallExecutionResult {
