@@ -1,7 +1,7 @@
 ---
 plan: dapp-boundary-1
 tier: mid
-status: arc 1 in progress (phase 1 ✓)
+status: arc 1 in progress (phases 1-2 ✓)
 issues: "none (the PR closes nothing)"
 driver: claude-code
 claude_model: opus
@@ -43,7 +43,7 @@ For a dApp built on `@aztec-labs/wallet-sdk` that simulates before it sends, and
 - **Flow.** dispatch → `executeOperations` → `executeAztecSimulateTx` (fast path or standard, merged as today) → `toAppFacingSimulationResult` → `unwrapOperationResult` → `toJsonSafe` → the page. The current body becomes a private method; the public one wraps it, so the fast-path merge still reads the full standard arm.
 - **File-level change map.**
   - add `execution/app-facing-results.ts`, `app-facing-results.test.ts`, and `app-facing-results.fixtures.ts` (real-class builders shared with the executor test);
-  - edit `execution/view-executor.ts`, `view-executor.test.ts` (real results in the harness; the refusal test; the fence test loses its profile call), `execution/rpc-cancel.ts` and `rpc-cancel.test.ts` (the code channel), `execution/service.ts` (`logOperationOutcome`);
+  - edit `execution/view-executor.ts`, `view-executor.test.ts` (real results in the harness; the refusal test; the fence test loses its profile call), `execution/rpc-cancel.ts` (the code channel, proven by `wallet-sdk/error-envelope.test.ts`'s chain test), `execution/service.ts` (`logOperationOutcome`, a row in `service.composition.test.ts`'s log-level table);
   - edit `tests/e2e/network/sim-methods.test.ts` (the profile case asserts the refusal envelope, as #25 does) and `tests/e2e/network/delete-after-prove.test.ts` (D8);
   - docs: `execution/README.md` (file map), `UPDATE.md` § Types coupled to Aztec shapes (the reduction types against upstream classes), `CI.md:84` (the canary's description of `delete-after-prove`);
   - not edited: `dispatcher.ts`, `method-descriptors.ts`, `background.ts`, `to-json-safe.ts`, `pxe/*`, the playground, the grant copy.
@@ -90,7 +90,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test && bun run
    - control, after the dApp's own `TxSimulationResultWithAppOffset.schema` parse: `getPrivateReturnValuesOfAppCall` decodes the app call's values, the `offchainEffects` getter keeps contract addresses, `gasUsed` with and without a public output, each frame's four kept public-input fields at depth 2, `publicFunctionCalldata`, the tail's constants, gas, fee payer and call requests, `publicReturnValues`, `stats`, and `appCallOffset` kept for an offset input and absent for a plain one;
    - executor: the standard path's and the fast path's answers both come back reduced.
    UI impact: none. Gate: `F`.
-2. **No dApp profile.** Change: `executeAztecProfileTx` refuses; its tests become one refusal test (never: no fence capture, build or `pxe.profileTx`; control: the simulate test in the same harness builds); the fence test drops its profile call. `rpc-cancel.ts` lets `UnsupportedMethodError` ride the code channel, with a test beside "an argument refusal keeps its code across the port" that runs classify → unwrap → envelope to `-32601`; `logOperationOutcome` logs it at debug. `sim-methods`: the profile case leaves the loop and asserts `{ code: -32601, message: "Unsupported wallet method: profileTx", data: { walletErrorCode: "UNSUPPORTED_METHOD" } }`, as #25 does. `delete-after-prove` per D8, and `CI.md:84`. UI impact: none. Gate: `F`.
+2. **No dApp profile.** ✓ (gate F, 2026-10-17) Change: `executeAztecProfileTx` refuses; its tests become one refusal test (never: no fence capture, build or `pxe.profileTx`; control: the simulate test in the same harness builds); the fence test drops its profile call. `rpc-cancel.ts` lets `UnsupportedMethodError` ride the code channel, with a test beside "an argument refusal keeps its code across the port" that runs classify → unwrap → envelope to `-32601`; `logOperationOutcome` logs it at debug. `sim-methods`: the profile case leaves the loop and asserts `{ code: -32601, message: "Unsupported wallet method: profileTx", data: { walletErrorCode: "UNSUPPORTED_METHOD" } }`, as #25 does. `delete-after-prove` per D8, and `CI.md:84`. UI impact: none. Gate: `F`.
 3. **Network proof and docs.** Change: `execution/README.md`, `UPDATE.md`. Run, at load1 < 150, one `e2e:agent` run at a time in this worktree, retry 0, from the worktree root:
    `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/sim-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/sim-from-selfpay.test.ts tests/e2e/network/err-scope-and-cap.test.ts tests/e2e/network/delete-after-prove.test.ts`
    then `sim-methods` and `delete-after-prove` again with `NULO_E2E_BROWSER=firefox` added (the network config retries twice unless `NULO_E2E_RETRY` says otherwise). Pass: all green. Record in `lessons/phase-3.md` each file's wall-clock on this branch, and on `13d5f8d0` for the two changed files. Gate: `F` plus the runs.

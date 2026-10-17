@@ -30,7 +30,7 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
 import type { TxProfileResult, TxSimulationResult, UtilityExecutionResult } from "@aztec-labs/stdlib/tx"
 import { liveChainInfo } from "@nulo/aztec-runtime/utils"
-import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
+import { InvalidWalletArgumentsError, UnsupportedMethodError } from "@nulo/extension-messaging/errors"
 import z from "zod"
 import type { AccountService } from "@/wallet/services/account/service"
 import type { ContactService } from "@/wallet/services/contact/service"
@@ -42,7 +42,7 @@ import { toAppFacingSimulationResult } from "./app-facing-results"
 import { assertSelectorBinding, CALL_BINDING, type ContractResolver, findFunctionByName, findFunctionBySelector } from "./contract-resolver"
 import { rehydrateOptimizablePrefix, runFastPath } from "./fast-path"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
-import { appPriorityOf, suggestGasLimits } from "./fee/fee-strategy"
+import { suggestGasLimits } from "./fee/fee-strategy"
 import type { OperationPlanner } from "./operation-planner"
 import type {
 	AztecExecuteUtilityOperation,
@@ -384,26 +384,8 @@ export class ViewExecutor {
 		})
 	}
 
-	public async executeAztecProfileTx(op: AztecProfileTxOperation): Promise<TxProfileResult> {
-		if (op.accountAddress !== op.opts?.from?.toString()) {
-			throw new Error("Invalid `opts.from`")
-		}
-		const fence = await this.deps.profileService.captureExecutionFence()
-		const { actions, feePaymentMethod, feeOptions: fee } = await this.deps.planner.processAztecJsPayload(op.exec, op.opts)
-		const { txRequest, node, pxe } = await this.deps.txBuilder.buildStandard(
-			{ ...op, actions },
-			fence,
-			feePaymentMethod,
-			undefined,
-			appPriorityOf(fee),
-		)
-		suggestGasLimits(txRequest, fee)
-		await applyEmbeddedFpcGasCap(txRequest, fee, node)
-		const additionalScopes = Array.isArray(op.opts.additionalScopes) ? op.opts.additionalScopes : []
-		return pxe.profileTx(txRequest, {
-			profileMode: op.opts.profileMode,
-			skipProofGeneration: op.opts.skipProofGeneration,
-			scopes: [AztecAddress.fromStringUnsafe(op.accountAddress), ...additionalScopes],
-		})
+	/** No profile mode runs without the account's real signature, so a dApp profile never runs. */
+	public async executeAztecProfileTx(_op: AztecProfileTxOperation): Promise<TxProfileResult> {
+		throw UnsupportedMethodError.forMethod("profileTx")
 	}
 }

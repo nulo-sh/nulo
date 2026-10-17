@@ -12,7 +12,12 @@
  */
 
 import { describe, expect, test, vi } from "vitest"
-import { ContractNotRegisteredError, InvalidWalletArgumentsError, ScopeViolationError } from "@nulo/extension-messaging/errors"
+import {
+	ContractNotRegisteredError,
+	InvalidWalletArgumentsError,
+	ScopeViolationError,
+	UnsupportedMethodError,
+} from "@nulo/extension-messaging/errors"
 import { ContractInitializationStatus } from "@aztec-labs/aztec.js/wallet"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { FunctionSelector, FunctionType } from "@aztec-labs/stdlib/abi"
@@ -20,7 +25,6 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { toAppFacingSimulationResult } from "./app-facing-results"
 import { simulationFixture } from "./app-facing-results.fixtures"
 import { ContractResolver } from "./contract-resolver"
-import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { ViewExecutor, type ViewExecutorDeps } from "./view-executor"
 
 const fastPathMocks = vi.hoisted(() => ({
@@ -194,9 +198,7 @@ describe("ViewExecutor.executeAztecSimulateTx", () => {
 })
 
 describe("ViewExecutor builds under a fence captured at entry", () => {
-	const PROFILE_ADDR = `0x${"11".repeat(32)}`
-
-	test("simulate_transaction, the standard aztec_simulateTx arm and profileTx each hand the builder their capture", async () => {
+	test("simulate_transaction and the standard aztec_simulateTx arm each hand the builder their capture", async () => {
 		fastPathMocks.rehydrateOptimizablePrefix.mockReturnValue(null)
 		const { executor, deps } = makeHarness()
 		await executor.executeSimulateTransaction({
@@ -206,12 +208,9 @@ describe("ViewExecutor builds under a fence captured at entry", () => {
 			actions: [],
 		} as never)
 		await executor.executeAztecSimulateTx(makeSimOp())
-		await executor.executeAztecProfileTx(
-			makeSimOp({ kind: "aztec_profileTx", accountAddress: PROFILE_ADDR, opts: { from: addr(PROFILE_ADDR), additionalScopes: [] } }),
-		)
 		const builds = (deps.txBuilder.buildStandard as ReturnType<typeof vi.fn>).mock.calls as unknown[][]
-		expect(builds.map((call) => call[1])).toEqual([FENCE, FENCE, FENCE])
-		expect(deps.profileService.captureExecutionFence).toHaveBeenCalledTimes(3)
+		expect(builds.map((call) => call[1])).toEqual([FENCE, FENCE])
+		expect(deps.profileService.captureExecutionFence).toHaveBeenCalledTimes(2)
 	})
 
 	test("a failed capture (locked) stops before any build", async () => {
@@ -416,26 +415,22 @@ describe("ViewExecutor.executeSimulateUtility / executeAztecExecuteUtility", () 
 })
 
 describe("ViewExecutor.executeAztecProfileTx", () => {
-	test("opts.from mismatch rejected; happy path scopes = [accountAddress, ...additionalScopes]", async () => {
-		const { executor } = makeHarness()
-		await expect(
-			executor.executeAztecProfileTx(makeSimOp({ kind: "aztec_profileTx", opts: { from: addr("0xother") } })),
-		).rejects.toThrow("Invalid `opts.from`")
+	test("every mode is refused as an unsupported method before the fence, a build or PXE; a simulate in the same harness builds", async () => {
+		const { executor, deps, pxe } = makeHarness()
+		for (const profileMode of ["gates", "execution-steps", "full"]) {
+			const op = makeSimOp({ kind: "aztec_profileTx", opts: { from: addr(VALID_ADDR), additionalScopes: [], profileMode } })
+			await expect(executor.executeAztecProfileTx(op)).rejects.toMatchObject({
+				code: UnsupportedMethodError.CODE,
+				message: "Unsupported wallet method: profileTx",
+			})
+		}
+		expect(deps.profileService.captureExecutionFence).not.toHaveBeenCalled()
+		expect(deps.txBuilder.buildStandard).not.toHaveBeenCalled()
+		expect(pxe.profileTx).not.toHaveBeenCalled()
 
-		// profileTx wraps accountAddress via the REAL AztecAddress.fromString,
-		// so this fixture needs a full-length address.
-		const validAddr = `0x${"11".repeat(32)}`
-		const happy = makeHarness()
-		await happy.executor.executeAztecProfileTx(
-			makeSimOp({
-				kind: "aztec_profileTx",
-				accountAddress: validAddr,
-				opts: { from: addr(validAddr), additionalScopes: [], profileMode: "gates" },
-			}),
-		)
-		const profArgs = happy.pxe.profileTx.mock.calls[0] as unknown[]
-		const scopes = (profArgs[1] as { scopes: Array<{ toString(): string }> }).scopes
-		expect(scopes.map((s) => s.toString())).toEqual([validAddr])
+		fastPathMocks.rehydrateOptimizablePrefix.mockReturnValue(null)
+		await executor.executeAztecSimulateTx(makeSimOp())
+		expect(deps.txBuilder.buildStandard).toHaveBeenCalledTimes(1)
 	})
 })
 
@@ -557,26 +552,5 @@ describe("ViewExecutor.executeAztecExecuteUtility — the target's registration"
 		contractResolverMocks.findFunctionBySelector.mockResolvedValueOnce({ name: "lookup_validity", functionType: FunctionType.UTILITY })
 		await executor.executeAztecExecuteUtility(lookupValidity)
 		expect(pxe.executeUtility).toHaveBeenCalledTimes(1)
-	})
-})
-
-describe("ViewExecutor.executeAztecProfileTx: the gas settings a send would commit", () => {
-	test("the build carries the app's priority fee and the embedded cap gets its cap and priority, as the embedded send's do", async () => {
-		const fee = {
-			embeddedFeePayment: "fpc",
-			maxFeesPerGas: { feePerDaGas: "5", feePerL2Gas: "6" },
-			maxPriorityFeesPerGas: { feePerDaGas: "7", feePerL2Gas: "8" },
-			gasPadding: 1,
-		}
-		const validAddr = `0x${"11".repeat(32)}`
-		const { executor, deps, node } = makeHarness({
-			planner: { processAztecJsPayload: vi.fn(async () => ({ actions: [], feePaymentMethod: 0, feeOptions: fee })) } as never,
-		})
-		await executor.executeAztecProfileTx(
-			makeSimOp({ kind: "aztec_profileTx", accountAddress: validAddr, opts: { from: addr(validAddr), additionalScopes: [] } }),
-		)
-		const buildArgs = (deps.txBuilder.buildStandard as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]
-		expect(buildArgs[4]).toEqual({ maxPriorityFeesPerGas: fee.maxPriorityFeesPerGas })
-		expect(vi.mocked(applyEmbeddedFpcGasCap)).toHaveBeenLastCalledWith({ kind: "txr" }, fee, node)
 	})
 })
