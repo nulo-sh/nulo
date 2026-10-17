@@ -32,3 +32,11 @@ Verification of round 1's tree (r1fix pair): network Firefox green (`type-roles-
 | 2 | A field's whole box in its parent's text extent: a padded field offset past its parent reports text past the box although its value fits | Fixed: a field adds nothing to its parent's text; it is judged on its own reading. Control `tr-field-cell` |
 | 3 | A block's ellipsis still exempted text in a block inside it, which it cannot shorten | Fixed: an ancestor's ellipsis counts only when the text sits in that box's own lines (`lineOf`). Controls `tr-block-cut` (reported) and `tr-ellipsized` (not reported) |
 | 4 | `textSpan`'s comment still said descendants laid out apart are excluded | Fixed |
+
+Verification of round 2's tree (r2fix pair, retry 0): smoke `type-roles.test.ts` 12 + 1 skipped on Chrome, 13 on Firefox; network `type-roles-windows.test.ts` and `send-amount-exact.test.ts` 5/5 on each browser. Every swept state stays clean under the stricter gate.
+
+## Round 3 (Codex, resumed): converged
+
+"All four round-2 findings are resolved … No new material findings. D16's disclosed wrapping remains acceptable." "VERDICT: approve ; The fixes resolve round 2 without a material regression."
+
+Wall-clock on the converged tree (the r2fix pair, retry 0, no shots): smoke `type-roles.test.ts` 72.8 s Chrome, 99.5 s Firefox; network `type-roles-windows.test.ts` 112.0 s / 172.4 s, `send-amount-exact.test.ts` 39.1 s / 41.4 s. Beside Phase 4's after figures, the spread is up to 19 s on one suite, so host load dominates.

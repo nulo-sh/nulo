@@ -224,6 +224,17 @@ Done 2026-10-17: two smoke failures, each answered by the panel (OA-7 and D13; D
 
 **Phase 4, panel** (2026-10-17, on the two smoke failures in [lessons/phase-4.md](lessons/phase-4.md)). Codex (sol, high, session `01a149f1-25b4-7181-89e5-d27a6c79917b`): "VERDICT-1: ship-A ; Add OA-7, preserve 11 px across visible-row address descriptions, and disclose the effectively invisible head." and "VERDICT-2: keep-line-break ; Restore the existing wrapping invariant with the local declaration, document the ownership deviation, and retain both-browser assertions." Opus (general-purpose): "VERDICT-1: ship-A ; whole-list scope, comment the `:has` as a specificity-only compound, and OA-7 states that A (like today) shows no address head on an imported row, so B or C is the real fix." and "VERDICT-2: keep-line-break ; record it as a ledger deviation with the measurements, keep `break-all` (a browser that ignores the value falls back to it), and correct the threat note: it is a self-declared name, not a hostname." All taken (D13, D14, OA-7): the head measured at 11 px in both browsers before OA-7 was written (1 px, under its 6.6 px ellipsis). The App value is the dApp's self-declared name (`dappMetadata.name`), on the detail page after the fact; `anywhere` makes its breaks depend on width alone, the same in both browsers.
 
+**Review loop** (2026-10-17, over the whole diff against `dev`; [lessons/phase-5.md](lessons/phase-5.md)). Codex (sol, high, session `01a14a15-67c6-70b1-9e80-11d85d8cce67`) ran three rounds; one Opus review ran beside round 1.
+
+- **Round 1.** Codex: "VERDICT: changes ; Fix the reproducible guard and layout-helper bugs before relying on the new gates." Opus: "VERDICT: changes ; disclose the approval window's three-line identifiers and the two wraps in UI impact and the PR body, and give clipping children their box in the layout gate before the PR opens."
+  - The guard now reads `&&` and type wrappers, and the identifier exemption needs `meta`.
+  - The gate takes three corrections (D15).
+  - Three wraps are disclosed as OA-8 (D16).
+  - The comments were fixed.
+  - The skeleton-bar and glyph sizes are left to an issue.
+- **Round 2.** Codex: "VERDICT: changes ; Correct the grown-child control, field false positive, and remaining ellipsis exemption before accepting the layout gate." All four findings were fixed, and the e2e pair is green on both browsers.
+- **Round 3.** Codex: "VERDICT: approve ; The fixes resolve round 2 without a material regression."
+
 ## Delivery
 
 One arc, one PR, no stack (the orchestrator's D-orch-1). Branch `worktree-type-scale-1` → `dev`. Title: `feat(design): retune the type scale app-wide, small caps in one role` (68 characters). Body: what changed and why; both signed picks quoted; each owner ask with its answer or its "what ships now"; the screenshots; each validation run with its outcome; the per-browser wall-clock of `type-roles.test.ts` and `type-roles-windows.test.ts` before and after (an added assertion, no added scenario); `Closes #589`. Open it without labels; the path filters trip both e2e lanes. One lane: phases 2 and 3 touch the same files.
