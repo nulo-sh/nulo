@@ -132,9 +132,10 @@ export async function acceptOnboardingTerms(page: Page, resumesAt: "create" | "i
 }
 
 /**
- * A first run's own path, from no acceptance: the Terms gate, then a password, ending unlocked with
- * onboarding marked complete so the popup opens on Home. The acceptance is the event the worker's
- * token list fetches on; a launch's seeded acceptance is a storage write that no listener hears.
+ * A first run's own path, from no acceptance: the Terms gate, then a password and "Do it later" on
+ * the recovery phrase, ending unlocked with onboarding marked complete so the popup opens on Home.
+ * The acceptance is the event the worker's token list fetches on; a launch's seeded acceptance is a
+ * storage write that no listener hears.
  */
 export async function createProfileAcceptingTerms(ctx: ExtensionContext): Promise<void> {
 	const page = await openOnboarding(ctx, { legal: "missing" })
@@ -144,7 +145,9 @@ export async function createProfileAcceptingTerms(ctx: ExtensionContext): Promis
 	await replaceInputValue(page, '[data-testid="onboarding-password-input"]', TEST_PASSWORD)
 	await replaceInputValue(page, '[data-testid="onboarding-password-confirm"]', TEST_PASSWORD)
 	await clickByTestId(page, "onboarding-submit-create")
-	await waitForHash(page, "#/onboarding/done", 60_000)
+	await page.waitForSelector('[data-testid="onboarding-phrase-later"]', { visible: true, timeout: 60_000 })
+	await clickByTestId(page, "onboarding-phrase-later")
+	await waitForHash(page, "#/onboarding/done", 10_000)
 	await page.evaluate(() => chrome.storage.local.set({ "nulo:onboarding:completed": true }))
 	await page.close()
 }

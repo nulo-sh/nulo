@@ -12,7 +12,7 @@
 <script setup>
 /** Components */
 import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vue"
-import SecretRevealCard from "@/components/composite/SecretRevealCard.vue"
+import RecoveryPhraseGrid from "@/components/composite/RecoveryPhraseGrid.vue"
 import SecretCountdownClose from "@/components/composite/SecretCountdownClose.vue"
 import SecretUnlockSection from "@/components/composite/SecretUnlockSection.vue"
 
@@ -27,6 +27,9 @@ import { useSecretClipboardCopy } from "@/composables/useSecretClipboardCopy"
 import { useSecretCountdown } from "@/composables/useSecretCountdown"
 const { openToast } = useToast()
 
+/** Utils */
+import { markGetStarted } from "@/utils/get-started"
+
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
@@ -39,13 +42,13 @@ const isStarted = ref(false)
 const isUnlocked = ref(false)
 const password = ref()
 const isWrongPassword = ref(false)
-const phrase = ref("Try harder")
+const words = ref([])
 // Not template state: a pointer double-click must decrypt the phrase once, with nothing re-rendered.
 let isRetrieving = false
 const retrieveFence = createRunFence()
 
 const handleClose = () => {
-	phrase.value = null
+	words.value = []
 	router.push("/popup/settings/security/export")
 }
 
@@ -60,13 +63,16 @@ const handleUnlock = async () => {
 
 	isRetrieving = true
 	const isCurrent = retrieveFence.begin()
+	// The words belong to the profile asked for, even if another becomes active during the read.
+	const profileId = appStore.profile.id
 	try {
-		const mnemonic = await managers.profile.exportMnemonic(appStore.profile.id, password.value)
+		const mnemonic = await managers.profile.exportMnemonic(profileId, password.value)
 		if (!isCurrent()) return
-		phrase.value = mnemonic.join(" ")
+		words.value = mnemonic
 		password.value = null
 		isUnlocked.value = true
 		countdown.start()
+		void markGetStarted(profileId, "phraseSaved")
 	} catch (error) {
 		if (isCurrent()) isWrongPassword.value = true
 	} finally {
@@ -76,7 +82,7 @@ const handleUnlock = async () => {
 
 const { isCopied, copySecret } = useSecretClipboardCopy({ toastLabel: "Recovery phrase copied", openToast })
 const handleCopy = () => {
-	copySecret(phrase.value)
+	copySecret(words.value.join(" "))
 }
 
 const onKeydown = (e) => {
@@ -87,7 +93,7 @@ const onKeydown = (e) => {
 onBeforeUnmount(() => {
 	retrieveFence.invalidate()
 	// The clipboard scrub timer deliberately outlives the page (useSecretClipboardCopy says why).
-	phrase.value = null
+	words.value = []
 })
 </script>
 
@@ -130,13 +136,7 @@ onBeforeUnmount(() => {
 		<template v-else>
 			<div class="export_section">
 				<span class="export_section_label type--label-section">Your recovery phrase</span>
-				<SecretRevealCard
-					:value="phrase"
-					label="Recovery Phrase"
-					testId="reveal-content"
-					:isCopied="isCopied"
-					@copy="handleCopy"
-				/>
+				<RecoveryPhraseGrid :words="words" :columns="3" testId="reveal-content" :isCopied="isCopied" @copy="handleCopy" />
 			</div>
 
 			<div class="export_section_last">

@@ -177,6 +177,11 @@ declare global {
   const getNetwork: typeof import('../utils/core').getNetwork
   const getOriginLabel: typeof import('../utils/tx-enrichment').getOriginLabel
   const getPrimaryCall: typeof import('../utils/tx-enrichment').getPrimaryCall
+  const getStartedAztecOpenedKey: typeof import('../utils/profile-ui-keys').getStartedAztecOpenedKey
+  const getStartedBackupSavedKey: typeof import('../utils/profile-ui-keys').getStartedBackupSavedKey
+  const getStartedHiddenKey: typeof import('../utils/profile-ui-keys').getStartedHiddenKey
+  const getStartedKeys: typeof import('../utils/get-started').getStartedKeys
+  const getStartedPhraseSavedKey: typeof import('../utils/profile-ui-keys').getStartedPhraseSavedKey
   const getThousandSeparator: typeof import('../utils/amount').getThousandSeparator
   const getTransaction: typeof import('../utils/core').getTransaction
   const getTxCategory: typeof import('../utils/tx-enrichment').getTxCategory
@@ -236,6 +241,7 @@ declare global {
   const knownDecimals: typeof import('../utils/token-amount').knownDecimals
   const legalAboutRow: typeof import('../utils/legal-about').legalAboutRow
   const managers: typeof import('../utils/core').managers
+  const markGetStarted: typeof import('../utils/get-started').markGetStarted
   const markRaw: typeof import('vue').markRaw
   const matchSavedContacts: typeof import('../utils/contact-import-rows').matchSavedContacts
   const matchesQuery: typeof import('../utils/token-search').matchesQuery
@@ -303,6 +309,7 @@ declare global {
   const readAmountText: typeof import('../utils/amount').readAmountText
   const readAppPicks: typeof import('../utils/fee-picks').readAppPicks
   const readBackupFile: typeof import('../utils/full-backup-helpers').readBackupFile
+  const readGetStarted: typeof import('../utils/get-started').readGetStarted
   const readLiveness: typeof import('../utils/background-liveness').readLiveness
   const readRestoreOutcome: typeof import('../utils/restore-outcome').readRestoreOutcome
   const readSendSlots: typeof import('../utils/fee-picks').readSendSlots
@@ -665,6 +672,9 @@ declare global {
   export type { AssemblyAbortedError, BackupFileType, BackupSelection, ProcessBackupResult, BackupSource, AssembledBackup } from '../utils/full-backup-helpers'
   import('../utils/full-backup-helpers')
   // @ts-ignore
+  export type { GetStartedFlag, GetStartedFlags } from '../utils/get-started'
+  import('../utils/get-started')
+  // @ts-ignore
   export type { GlossaryEntry, GlossaryKey } from '../utils/glossary'
   import('../utils/glossary')
   // @ts-ignore
@@ -900,6 +910,11 @@ declare module 'vue' {
     readonly getNetwork: UnwrapRef<typeof import('../utils/core')['getNetwork']>
     readonly getOriginLabel: UnwrapRef<typeof import('../utils/tx-enrichment')['getOriginLabel']>
     readonly getPrimaryCall: UnwrapRef<typeof import('../utils/tx-enrichment')['getPrimaryCall']>
+    readonly getStartedAztecOpenedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedAztecOpenedKey']>
+    readonly getStartedBackupSavedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedBackupSavedKey']>
+    readonly getStartedHiddenKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedHiddenKey']>
+    readonly getStartedKeys: UnwrapRef<typeof import('../utils/get-started')['getStartedKeys']>
+    readonly getStartedPhraseSavedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedPhraseSavedKey']>
     readonly getThousandSeparator: UnwrapRef<typeof import('../utils/amount')['getThousandSeparator']>
     readonly getTransaction: UnwrapRef<typeof import('../utils/core')['getTransaction']>
     readonly getTxCategory: UnwrapRef<typeof import('../utils/tx-enrichment')['getTxCategory']>
@@ -959,6 +974,7 @@ declare module 'vue' {
     readonly knownDecimals: UnwrapRef<typeof import('../utils/token-amount')['knownDecimals']>
     readonly legalAboutRow: UnwrapRef<typeof import('../utils/legal-about')['legalAboutRow']>
     readonly managers: UnwrapRef<typeof import('../utils/core')['managers']>
+    readonly markGetStarted: UnwrapRef<typeof import('../utils/get-started')['markGetStarted']>
     readonly markRaw: UnwrapRef<typeof import('vue')['markRaw']>
     readonly matchSavedContacts: UnwrapRef<typeof import('../utils/contact-import-rows')['matchSavedContacts']>
     readonly matchesQuery: UnwrapRef<typeof import('../utils/token-search')['matchesQuery']>
@@ -1026,6 +1042,7 @@ declare module 'vue' {
     readonly readAmountText: UnwrapRef<typeof import('../utils/amount')['readAmountText']>
     readonly readAppPicks: UnwrapRef<typeof import('../utils/fee-picks')['readAppPicks']>
     readonly readBackupFile: UnwrapRef<typeof import('../utils/full-backup-helpers')['readBackupFile']>
+    readonly readGetStarted: UnwrapRef<typeof import('../utils/get-started')['readGetStarted']>
     readonly readLiveness: UnwrapRef<typeof import('../utils/background-liveness')['readLiveness']>
     readonly readRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['readRestoreOutcome']>
     readonly readSendSlots: UnwrapRef<typeof import('../utils/fee-picks')['readSendSlots']>

@@ -1,7 +1,7 @@
 /**
  * A held Enter acts once. On the recovery phrase's Retrieve the button ignores the repeat, so the
  * held key makes one retrieval; in onboarding's confirm field the browser's implicit submission
- * activates Create once. The page records each Enter keydown, click and submit, so a driver that
+ * activates Create once, and the repeat that reaches the phrase step presses nothing there. The page records each Enter keydown, click and submit, so a driver that
  * sends no repeat, or a repeat that lands anywhere but the control, fails on the record.
  */
 import type { Page } from "puppeteer"
@@ -41,6 +41,13 @@ async function readRecord(page: Page): Promise<KeyRecord[]> {
 }
 
 const clicksOn = (record: KeyRecord[], testid: string) => record.filter((r) => r.type === "click" && r.on === testid)
+
+const phraseSavedFlags = (page: Page) =>
+	page.evaluate(async () =>
+		Object.entries(await chrome.storage.local.get(null))
+			.filter(([key]) => key.startsWith("nulo:ui:getStartedPhraseSaved@"))
+			.map(([, value]) => value),
+	)
 
 async function focusWhenEnabled(page: Page, testid: string): Promise<void> {
 	await page.waitForFunction(
@@ -99,7 +106,9 @@ test("a held Enter on Retrieve retrieves once", { timeout: 120_000 }, async ({ r
 	expect(registeredExtension.pageErrors).toEqual([])
 })
 
-test("Enter in the confirm field creates the wallet once", { timeout: 120_000 }, async ({ freshExtensionPerTest: extension }) => {
+test("Enter in the confirm field creates the wallet once, and its repeat cannot press I saved it", { timeout: 120_000 }, async ({
+	freshExtensionPerTest: extension,
+}) => {
 	const page = await openOnboarding(extension)
 	await clickByTestId(page, "onboarding-welcome-create")
 	await waitForHash(page, "#/onboarding/create", 10_000)
@@ -107,16 +116,35 @@ test("Enter in the confirm field creates the wallet once", { timeout: 120_000 },
 	await replaceInputValue(page, sel("onboarding-password-input"), TEST_PASSWORD)
 	await replaceInputValue(page, sel("onboarding-password-confirm-input"), TEST_PASSWORD)
 
-	await holdEnterOn(page, "onboarding-password-confirm-input")
-	await waitForHash(page, "#/onboarding/done", 60_000)
+	// The key stays down until the recovery phrase step has mounted, so its repeat arrives there.
+	await focusWhenEnabled(page, "onboarding-password-confirm-input")
+	await recordKeys(page)
+	await page.keyboard.down("Enter")
+	await page.waitForSelector(sel("onboarding-phrase-saved"), { visible: true, timeout: 60_000 })
+	await page.keyboard.down("Enter")
+	await page.keyboard.up("Enter")
 
 	const record = await readRecord(page)
-	expectHeldEnterOn(record, "onboarding-password-confirm-input")
+	expect(
+		record.filter((r) => r.type === "keydown"),
+		`the press and a repeat after the step mounted were not both recorded: ${JSON.stringify(record)}`,
+	).toEqual([
+		{ type: "keydown", on: "onboarding-password-confirm-input", repeat: false },
+		{ type: "keydown", on: "onboarding-phrase-title", repeat: true },
+	])
 	// Implicit submission clicks the form's default button. Create's click handler disables it before
 	// the button's own activation runs, so no submit event follows.
 	const activations = clicksOn(record, "onboarding-submit-create")
 	expect(activations, `the Enter did not activate Create exactly once: ${JSON.stringify(record)}`).toHaveLength(1)
+	expect(clicksOn(record, "onboarding-phrase-saved")).toEqual([])
 	expect(await readProfileNames(page)).toEqual(["Main"])
+	expect(await phraseSavedFlags(page)).toEqual([])
+
+	// Control: one plain press on I saved it is what records the phrase as saved.
+	await focusWhenEnabled(page, "onboarding-phrase-saved")
+	await page.keyboard.press("Enter")
+	await waitForHash(page, "#/onboarding/done", 10_000)
+	expect(await phraseSavedFlags(page)).toEqual([true])
 
 	expect(extension.consoleErrors).toEqual([])
 	expect(extension.pageErrors).toEqual([])

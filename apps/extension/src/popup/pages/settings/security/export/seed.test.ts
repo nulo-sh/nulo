@@ -11,6 +11,7 @@ vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast: vi.fn()
 import { Flex, Icon, Input, Text } from "@nulo/design"
 import { pressOn } from "../../../../../../tests/helpers/press-key"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
+import { useAppStore } from "@/stores/app.store"
 import Seed from "./seed.vue"
 
 const wrappers: VueWrapper[] = []
@@ -25,7 +26,7 @@ async function mountAgreedWithPassword() {
 			components: { Flex, Icon, Input, SubPageHeader, Text },
 			stubs: {
 				Button: { template: "<button><slot /></button>" },
-				SecretRevealCard: true,
+				RecoveryPhraseGrid: true,
 				SecretCountdownClose: true,
 			},
 		},
@@ -51,6 +52,9 @@ beforeEach(() => {
 afterEach(() => {
 	for (const w of wrappers.splice(0)) w.unmount()
 })
+
+const storageSet = () =>
+	(globalThis as unknown as { chrome: { storage: { local: { set: ReturnType<typeof vi.fn> } } } }).chrome.storage.local.set
 
 describe("recovery phrase — Enter does what the focused control says", () => {
 	test("Enter on the back arrow goes back and retrieves nothing", async () => {
@@ -103,7 +107,7 @@ describe("recovery phrase — one retrieve per press, none after the page left",
 		expect(exportMnemonic).toHaveBeenCalledTimes(1)
 	})
 
-	test("a retrieve settling after unmount sets no phrase and arms no close timer", async () => {
+	test("a retrieve settling after unmount marks nothing and arms no close timer", async () => {
 		const w = await mountAgreedWithPassword()
 		const settle = deferMnemonic()
 		retrieve(w).click()
@@ -112,11 +116,9 @@ describe("recovery phrase — one retrieve per press, none after the page left",
 		try {
 			wrappers.splice(wrappers.indexOf(w), 1)
 			w.unmount()
-			const words = ["alpha", "bravo", "charlie"]
-			const join = vi.spyOn(words, "join")
-			settle(words)
+			settle(["alpha", "bravo", "charlie"])
 			await flushPromises()
-			expect(join).not.toHaveBeenCalled()
+			expect(storageSet()).not.toHaveBeenCalled()
 			expect(vi.getTimerCount()).toBe(0)
 			vi.advanceTimersByTime(5 * 60_000)
 			expect(router.push).not.toHaveBeenCalled()
@@ -134,12 +136,40 @@ describe("recovery phrase — one retrieve per press, none after the page left",
 		try {
 			settle(["alpha", "bravo", "charlie"])
 			await flushPromises()
-			expect(w.findComponent({ name: "SecretRevealCard" }).props("value")).toBe("alpha bravo charlie")
+			expect(w.findComponent({ name: "RecoveryPhraseGrid" }).props()).toMatchObject({
+				words: ["alpha", "bravo", "charlie"],
+				columns: 3,
+				testId: "reveal-content",
+			})
 			expect(vi.getTimerCount()).toBe(2)
 			vi.advanceTimersByTime(5 * 60_000)
 			expect(router.push).toHaveBeenCalledWith("/popup/settings/security/export")
 		} finally {
 			vi.useRealTimers()
 		}
+	})
+})
+
+describe("recovery phrase — a reveal clears Home's reminder", () => {
+	test("a reveal marks the profile it was asked for, even when another became active during the read", async () => {
+		const w = await mountAgreedWithPassword()
+		let settle: (words: string[]) => void = () => {}
+		exportMnemonic.mockImplementationOnce(() => new Promise<string[]>((r) => (settle = r)))
+		retrieve(w).click()
+		await flushPromises()
+		useAppStore().profile = { id: "p2", name: "Other", type: "password" } as never
+		settle(["alpha", "bravo", "charlie"])
+		await flushPromises()
+		expect(storageSet()).toHaveBeenCalledTimes(1)
+		expect(storageSet()).toHaveBeenCalledWith({ "nulo:ui:getStartedPhraseSaved@p1": true })
+	})
+
+	test("a wrong password marks nothing", async () => {
+		const w = await mountAgreedWithPassword()
+		exportMnemonic.mockRejectedValueOnce(new Error("wrong password"))
+		retrieve(w).click()
+		await flushPromises()
+		expect(w.find('[data-testid="unlock-error-text"]').exists()).toBe(true)
+		expect(storageSet()).not.toHaveBeenCalled()
 	})
 })

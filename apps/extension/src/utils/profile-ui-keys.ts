@@ -9,6 +9,10 @@ const PINNED_TOKENS_PREFIX = "nulo:ui:pinnedTokens@"
 const FEE_PICKS_PREFIX = "nulo:ui:feePaymentMethods@"
 const SEND_FEE_PICKS_PREFIX = "nulo:ui:sendFeePaymentMethods@"
 const RESTORE_OUTCOME_PREFIX = "nulo:ui:restoreOutcome@"
+const GET_STARTED_PHRASE_SAVED_PREFIX = "nulo:ui:getStartedPhraseSaved@"
+const GET_STARTED_BACKUP_SAVED_PREFIX = "nulo:ui:getStartedBackupSaved@"
+const GET_STARTED_AZTEC_OPENED_PREFIX = "nulo:ui:getStartedAztecOpened@"
+const GET_STARTED_HIDDEN_PREFIX = "nulo:ui:getStartedHidden@"
 
 /** Each prefix ends in `@`, so a key is its prefix followed by one whole profile id. */
 export const PROFILE_UI_KEY_PREFIXES: readonly string[] = [
@@ -16,6 +20,10 @@ export const PROFILE_UI_KEY_PREFIXES: readonly string[] = [
 	FEE_PICKS_PREFIX,
 	SEND_FEE_PICKS_PREFIX,
 	RESTORE_OUTCOME_PREFIX,
+	GET_STARTED_PHRASE_SAVED_PREFIX,
+	GET_STARTED_BACKUP_SAVED_PREFIX,
+	GET_STARTED_AZTEC_OPENED_PREFIX,
+	GET_STARTED_HIDDEN_PREFIX,
 ]
 
 /** Per-profile map of chain id → pinned token contracts; a UI preference, never backed up. */
@@ -29,6 +37,12 @@ export const sendFeePicksKey = (profileId: string) => `${SEND_FEE_PICKS_PREFIX}$
 
 /** The networks a full-backup restore of this profile has not restored (`utils/restore-outcome.ts`). */
 export const restoreOutcomeKey = (profileId: string) => `${RESTORE_OUTCOME_PREFIX}${profileId}`
+
+/** Home's Get started flags (`utils/get-started.ts`): each is `true` once set, and never unset. */
+export const getStartedPhraseSavedKey = (profileId: string) => `${GET_STARTED_PHRASE_SAVED_PREFIX}${profileId}`
+export const getStartedBackupSavedKey = (profileId: string) => `${GET_STARTED_BACKUP_SAVED_PREFIX}${profileId}`
+export const getStartedAztecOpenedKey = (profileId: string) => `${GET_STARTED_AZTEC_OPENED_PREFIX}${profileId}`
+export const getStartedHiddenKey = (profileId: string) => `${GET_STARTED_HIDDEN_PREFIX}${profileId}`
 
 /** The exact keys `profileId` can hold: `p1`'s never include `p10`'s. */
 export const profileUiKeys = (profileId: string): string[] => PROFILE_UI_KEY_PREFIXES.map((prefix) => `${prefix}${profileId}`)

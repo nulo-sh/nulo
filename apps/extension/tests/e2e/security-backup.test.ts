@@ -9,24 +9,11 @@ import { FULL_BACKUP_V2_TAG } from "@/utils/full-backup-helpers"
 
 const PASSWORD = TEST_PASSWORD
 
-/** Read the value of the input inside the reveal-content container. */
-const readRevealedValue = (page: Page) =>
-	page.evaluate(() => {
-		const scope = document.querySelector('[data-testid="reveal-content"]')
-		const input = scope?.querySelector("input") as HTMLInputElement | null
-		return input?.value ?? null
-	})
-
 test("seed phrase reveal returns 24 word-like tokens", async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
-	await revealSeedPhrase(page, PASSWORD)
-
-	// Input is type=password by default, but its `.value` is still readable.
-	const phrase = await readRevealedValue(page)
-	expect(phrase).toBeTruthy()
-	const tokens = (phrase as string).trim().split(/\s+/)
+	const tokens = await revealSeedPhrase(page, PASSWORD)
 	expect(tokens.length).toBe(24)
 	for (const token of tokens) expect(token).toMatch(/^[a-z]+$/)
 

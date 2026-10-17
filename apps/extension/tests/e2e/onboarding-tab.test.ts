@@ -1,8 +1,8 @@
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { extensionUrl, gotoExtensionPage, isFirefox, newPage, openScratchPage, prepareKeys, waitForTarget } from "./fixtures/browser"
-import { clickByTestId, expectNoNameField, openOnboarding, replaceInputValue, test, waitForHash } from "./fixtures/extension"
-import { readProfileNames } from "./fixtures/helpers"
+import { clickByTestId, expectNoNameField, openOnboarding, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
+import { readProfileNames, readRecoveryWords, revealSeedPhrase } from "./fixtures/helpers"
 import { waitForPopupClosed } from "./fixtures/popups"
 import { shotSend } from "./fixtures/send-page"
 import { focusRing, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
@@ -12,6 +12,13 @@ const TEST_PASSWORD = "OnboardingTest_!23"
 
 const tabsInWindow = (page: Page) =>
 	page.evaluate(async () => (await chrome.tabs.query({ windowId: (await chrome.windows.getCurrent()).id })).length)
+
+const phraseSavedFlags = (page: Page) =>
+	page.evaluate(async () =>
+		Object.entries(await chrome.storage.local.get(null))
+			.filter(([key]) => key.startsWith("nulo:ui:getStartedPhraseSaved@"))
+			.map(([, value]) => value),
+	)
 
 const onboardingCompleted = (control: Page) =>
 	control.evaluate(async () => (await chrome.storage.local.get("nulo:onboarding:completed"))["nulo:onboarding:completed"])
@@ -91,11 +98,19 @@ describe("onboarding tab", () => {
 
 		await clickByTestId(page, "onboarding-submit-create")
 
-		await waitForHash(page, "#/onboarding/done", 30_000)
-		await page.waitForSelector('[data-testid="onboarding-done-open"]', { visible: true, timeout: 10_000 })
+		// A password wallet sees its words before Ready, from the top of the step.
+		await page.waitForSelector('[data-testid="onboarding-phrase-saved"]', { visible: true, timeout: 30_000 })
 		expect(await page.evaluate(() => document.scrollingElement?.scrollTop)).toBe(0)
 		if (viewport) await page.setViewport(viewport)
 		expect(await readProfileNames(page)).toEqual(["Main"])
+		const words = await readRecoveryWords(page, "onboarding-phrase")
+		expect(words).toHaveLength(24)
+
+		await clickByTestId(page, "onboarding-phrase-saved")
+		await waitForHash(page, "#/onboarding/done", 10_000)
+		await page.waitForSelector('[data-testid="onboarding-done-open"]', { visible: true, timeout: 10_000 })
+		// Read before any Settings reveal, which sets the same flag.
+		expect(await phraseSavedFlags(page)).toEqual([true])
 
 		// Onboarding opens beside a person's own tabs, so Open wallet closes it, then opens the popup.
 		const control = await openScratchPage(extension.browser, extension.extensionId)
@@ -111,6 +126,11 @@ describe("onboarding tab", () => {
 		expect(await onboardingCompleted(control)).toBe(true)
 		// A toolbar popup in headless Chrome is beyond what a test can find.
 		if (isFirefox) await waitForOpenPanel(control)
+
+		// The step showed the wallet's own words: Settings reveals the same ones.
+		const popup = await openPopup(extension)
+		await waitForHash(popup, "#/popup/general", 15_000)
+		expect(await revealSeedPhrase(popup, TEST_PASSWORD)).toEqual(words)
 	})
 
 	test("Open wallet keeps a tab that is its window's last, and opens the popup over it", async ({ freshExtensionPerTest: extension }) => {

@@ -4,17 +4,26 @@ import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
+const WORDS = Array.from({ length: 24 }, (_, i) => `w${i + 1}`)
 const profileApi = vi.hoisted(() => ({
 	getProfiles: vi.fn(async () => [] as Array<{ name: string }>),
-	createProfile: vi.fn(async () => ({ id: "p1", name: "Main", type: "password" })),
+	createProfile: vi.fn(async (): Promise<unknown> => ({ id: "p1", name: "Main", type: "password" })),
 	generateProfileId: vi.fn(),
-	createPasskeyProfile: vi.fn(),
+	createPasskeyProfile: vi.fn(async (): Promise<unknown> => ({ id: "k1", name: "Main", type: "passkey" })),
+	exportMnemonic: vi.fn(async (): Promise<string[]> => []),
 }))
 vi.mock("@/utils/core", () => ({ managers: { profile: profileApi } }))
-vi.mock("@/composables/useProfileBootstrap", () => ({
-	useProfileBootstrap: () => ({ bootstrapActiveProfile: vi.fn(async () => true) }),
+const bootstrapActiveProfile = vi.hoisted(() => vi.fn(async (): Promise<boolean> => true))
+vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () => ({ bootstrapActiveProfile }) }))
+const setLastActiveProfileId = vi.hoisted(() => vi.fn(async () => undefined))
+vi.mock("@/utils/lastActiveProfile", () => ({ setLastActiveProfileId }))
+const markGetStarted = vi.hoisted(() => vi.fn(async () => undefined))
+vi.mock("@/utils/get-started", () => ({ markGetStarted }))
+// The background runs the passkey ceremony, as in Firefox's toolbar panel, so no ceremony is driven here.
+vi.mock("@/utils/browser-surface", async (original) => ({
+	...(await original<typeof import("@/utils/browser-surface")>()),
+	passkeyNeedsOwnWindow: () => true,
 }))
-vi.mock("@/utils/lastActiveProfile", () => ({ setLastActiveProfileId: vi.fn(async () => undefined) }))
 vi.mock("@/composables/usePasskeyCeremony", () => ({
 	usePasskeyCeremony: () => ({ request: { value: null }, runCeremony: vi.fn(), onResolve: vi.fn(), onReject: vi.fn() }),
 }))
@@ -25,6 +34,7 @@ import { BrutalistTitle, Flex, Icon, Input, Text } from "@nulo/design"
 import { pressOn } from "../../../tests/helpers/press-key"
 import OnboardingBackLink from "../components/OnboardingBackLink.vue"
 import OnboardingProfileNameField from "../components/OnboardingProfileNameField.vue"
+import OnboardingSkipLink from "../components/OnboardingSkipLink.vue"
 import Create from "./create.vue"
 
 const wrappers: VueWrapper[] = []
@@ -34,7 +44,7 @@ async function mountCreate() {
 		attachTo: document.body,
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn })],
-			components: { BrutalistTitle, Flex, Input, OnboardingBackLink, OnboardingProfileNameField, Text, Icon },
+			components: { BrutalistTitle, Flex, Input, OnboardingBackLink, OnboardingProfileNameField, OnboardingSkipLink, Text, Icon },
 			stubs: {
 				// Registered globally, the design Button would resolve its own `<component is="button">` to itself.
 				Button: { template: '<button v-bind="$attrs"><slot /></button>' },
@@ -55,6 +65,7 @@ const choosePassword = (w: VueWrapper) => w.get('[data-testid="onboarding-method
 beforeEach(() => {
 	vi.clearAllMocks()
 	profileApi.getProfiles.mockResolvedValue([])
+	profileApi.exportMnemonic.mockResolvedValue(WORDS)
 })
 afterEach(() => {
 	for (const w of wrappers.splice(0)) w.unmount()
@@ -83,7 +94,7 @@ describe("onboarding create", () => {
 		expect(document.activeElement).toBe(w.get('[data-testid="onboarding-password-input"] input').element)
 	})
 
-	test("the first profile is created as Main, then the page routes to Ready", async () => {
+	test("the first profile is created as Main", async () => {
 		const w = await mountCreate()
 		await choosePassword(w)
 		await w.get('[data-testid="onboarding-password-input"] input').setValue("password123")
@@ -91,7 +102,6 @@ describe("onboarding create", () => {
 		await w.get('[data-testid="onboarding-submit-create"]').trigger("click")
 		await flushPromises()
 		expect(profileApi.createProfile).toHaveBeenCalledWith("Main", "password123")
-		expect(routerPush).toHaveBeenCalledWith("/onboarding/done")
 	})
 
 	test("with a profile already there, the field shows prefilled Profile 2", async () => {
@@ -235,5 +245,147 @@ describe("onboarding create — the focused method tab's ring", () => {
 		expect(SOURCE).toMatch(
 			/\.tab:focus-visible \{[^}]*\}[\s\S]*\.tabActive:focus-visible \{\s*outline: 2px solid var\(--app-bg\);\s*outline-offset: -5px;\s*\}/,
 		)
+	})
+})
+
+describe("onboarding create — the recovery phrase step", () => {
+	function defer<T>() {
+		let resolve!: (value: T) => void
+		let reject!: (error: unknown) => void
+		const promise = new Promise<T>((res, rej) => {
+			resolve = res
+			reject = rej
+		})
+		return { promise, resolve, reject }
+	}
+
+	async function submitPassword(w: VueWrapper) {
+		await choosePassword(w)
+		await w.get('[data-testid="onboarding-password-input"] input').setValue("password123")
+		await w.get('[data-testid="onboarding-password-confirm"] input').setValue("password123")
+		await w.get('[data-testid="onboarding-submit-create"]').trigger("click")
+		await flushPromises()
+	}
+
+	const typed = (w: VueWrapper) =>
+		["onboarding-password-input", "onboarding-password-confirm"].map(
+			(id) => (w.get(`[data-testid="${id}"] input`).element as HTMLInputElement).value,
+		)
+
+	function unmount(w: VueWrapper) {
+		wrappers.splice(wrappers.indexOf(w), 1)
+		w.unmount()
+	}
+
+	test("a password wallet reads its words once, with the typed password, before bootstrap, then shows them as step 3", async () => {
+		const w = await mountCreate()
+		await submitPassword(w)
+		expect(profileApi.exportMnemonic).toHaveBeenCalledTimes(1)
+		expect(profileApi.exportMnemonic).toHaveBeenCalledWith("p1", "password123")
+		expect(profileApi.exportMnemonic.mock.invocationCallOrder[0]).toBeLessThan(bootstrapActiveProfile.mock.invocationCallOrder[0])
+		expect(setLastActiveProfileId).toHaveBeenCalledWith("p1")
+
+		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(true)
+		expect(w.findAll('[data-testid="onboarding-phrase-word"]').map((word) => word.text())).toEqual(WORDS)
+		expect(w.get("step-indicator-stub").attributes("current")).toBe("3")
+		expect(w.find('[data-testid="onboarding-create-back"]').exists()).toBe(false)
+		expect(routerPush).not.toHaveBeenCalled()
+		expect(document.activeElement).toBe(w.get('[data-testid="onboarding-phrase-title"]').element)
+	})
+
+	test("the password is cleared before bootstrap runs", async () => {
+		const pending = defer<boolean>()
+		bootstrapActiveProfile.mockReturnValueOnce(pending.promise)
+		const w = await mountCreate()
+		await submitPassword(w)
+		expect(bootstrapActiveProfile).toHaveBeenCalledTimes(1)
+		expect(typed(w)).toEqual(["", ""])
+		pending.resolve(true)
+		await flushPromises()
+		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(true)
+	})
+
+	test("a failed read clears the password and goes straight to Ready, with no step and no mark", async () => {
+		profileApi.exportMnemonic.mockRejectedValueOnce(new Error("internal"))
+		const w = await mountCreate()
+		await submitPassword(w)
+		expect(typed(w)).toEqual(["", ""])
+		expect(bootstrapActiveProfile).toHaveBeenCalledTimes(1)
+		expect(routerPush).toHaveBeenCalledWith("/onboarding/done")
+		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(false)
+		expect(markGetStarted).not.toHaveBeenCalled()
+	})
+
+	test("a failed bootstrap still leaves the password cleared", async () => {
+		bootstrapActiveProfile.mockRejectedValueOnce(new Error("activation"))
+		const w = await mountCreate()
+		await submitPassword(w)
+		expect(typed(w)).toEqual(["", ""])
+		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(false)
+	})
+
+	test("I saved it marks the new profile, and only then routes to Ready", async () => {
+		const pending = defer<undefined>()
+		markGetStarted.mockReturnValueOnce(pending.promise)
+		const w = await mountCreate()
+		await submitPassword(w)
+		await w.get('[data-testid="onboarding-phrase-saved"]').trigger("click")
+		expect(markGetStarted).toHaveBeenCalledWith("p1", "phraseSaved")
+		expect(routerPush).not.toHaveBeenCalled()
+		pending.resolve(undefined)
+		await flushPromises()
+		expect(routerPush).toHaveBeenCalledWith("/onboarding/done")
+	})
+
+	test("Do it later routes to Ready and marks nothing", async () => {
+		const w = await mountCreate()
+		await submitPassword(w)
+		await w.get('[data-testid="onboarding-phrase-later"]').trigger("click")
+		expect(routerPush).toHaveBeenCalledWith("/onboarding/done")
+		expect(markGetStarted).not.toHaveBeenCalled()
+	})
+
+	test("a repeat Enter on I saved it is cancelled, so it cannot press it", async () => {
+		const w = await mountCreate()
+		await submitPassword(w)
+		const saved = w.get('[data-testid="onboarding-phrase-saved"]').element
+		const repeat = new KeyboardEvent("keydown", { key: "Enter", repeat: true, bubbles: true, cancelable: true })
+		expect(saved.dispatchEvent(repeat)).toBe(false)
+	})
+
+	test("a Create that settles after the page left reads nothing, bootstraps nothing and routes nowhere", async () => {
+		const created = defer<unknown>()
+		profileApi.createProfile.mockReturnValueOnce(created.promise)
+		const w = await mountCreate()
+		await submitPassword(w)
+		unmount(w)
+		created.resolve({ id: "p1", name: "Main", type: "password" })
+		await flushPromises()
+		expect(profileApi.exportMnemonic).not.toHaveBeenCalled()
+		expect(bootstrapActiveProfile).not.toHaveBeenCalled()
+		expect(setLastActiveProfileId).not.toHaveBeenCalled()
+		expect(routerPush).not.toHaveBeenCalled()
+	})
+
+	test("leaving during the read publishes nothing", async () => {
+		const read = defer<string[]>()
+		profileApi.exportMnemonic.mockReturnValueOnce(read.promise)
+		const w = await mountCreate()
+		await submitPassword(w)
+		unmount(w)
+		read.resolve(WORDS)
+		await flushPromises()
+		expect(bootstrapActiveProfile).not.toHaveBeenCalled()
+		expect(routerPush).not.toHaveBeenCalled()
+	})
+
+	test("a passkey wallet has no phrase to show and goes straight to Ready", async () => {
+		const w = await mountCreate()
+		await w.get('[data-testid="onboarding-submit-create"]').trigger("click")
+		await flushPromises()
+		expect(profileApi.createPasskeyProfile).toHaveBeenCalledWith("Main")
+		expect(profileApi.exportMnemonic).not.toHaveBeenCalled()
+		expect(bootstrapActiveProfile).toHaveBeenCalledTimes(1)
+		expect(routerPush).toHaveBeenCalledWith("/onboarding/done")
 	})
 })

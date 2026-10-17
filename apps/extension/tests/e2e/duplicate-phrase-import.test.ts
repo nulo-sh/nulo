@@ -21,15 +21,11 @@ import {
 } from "./fixtures/extension"
 import { acceptConfirmPopup, closeStuckPopup, navigateByHash, revealSeedPhrase } from "./fixtures/helpers"
 
-/** Read the revealed recovery phrase out of the reveal card. */
-async function readRevealedPhrase(page: Page): Promise<string> {
-	const phrase = await page.evaluate(() => {
-		const scope = document.querySelector('[data-testid="reveal-content"]')
-		const input = scope?.querySelector("input") as HTMLInputElement | null
-		return input?.value ?? ""
-	})
-	expect(phrase.trim().split(/\s+/).length).toBe(24)
-	return phrase.trim()
+/** Reveal the recovery phrase in Settings and return it as one string. */
+async function revealPhrase(page: Page): Promise<string> {
+	const words = await revealSeedPhrase(page, TEST_PASSWORD)
+	expect(words).toHaveLength(24)
+	return words.join(" ")
 }
 
 /** Fill the popup import form for the recovery-phrase option and submit. The wallet already
@@ -61,8 +57,7 @@ test("importing an EXISTING recovery phrase warns, and confirming creates the du
 	await waitForHash(page, "#/popup/general", 30_000)
 
 	// Profile A's own phrase — the exact input that must trip the guard.
-	await revealSeedPhrase(page, TEST_PASSWORD)
-	const phrase = await readRevealedPhrase(page)
+	const phrase = await revealPhrase(page)
 	await closeStuckPopup(page)
 
 	await submitSeedImport(page, phrase)
@@ -88,8 +83,7 @@ test("declining the duplicate warning leaves only the original profile", { timeo
 	const page = await openPopup(registeredExtensionPerTest)
 	await waitForHash(page, "#/popup/general", 30_000)
 
-	await revealSeedPhrase(page, TEST_PASSWORD)
-	const phrase = await readRevealedPhrase(page)
+	const phrase = await revealPhrase(page)
 	await closeStuckPopup(page)
 
 	await submitSeedImport(page, phrase)

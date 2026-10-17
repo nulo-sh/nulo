@@ -5,6 +5,7 @@
 
 <script setup lang="ts">
 /** Composables */
+import { createRunFence } from "@/composables/runFence"
 import { vSnackFooter } from "@/composables/snackInset"
 import { useToast } from "@/composables/toast"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
@@ -12,9 +13,11 @@ import { useProfileBootstrap } from "@/composables/useProfileBootstrap"
 import { useProfileCreateFlow } from "@/composables/useProfileCreateFlow"
 
 /** Services */
+import { managers } from "@/utils/core"
 import type { ProfileInfo } from "@/wallet/services/profile/spec"
 
 /** Utils */
+import { markGetStarted } from "@/utils/get-started"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 
 /** Stores */
@@ -24,6 +27,7 @@ import { useNotificationStore } from "@/stores/notification.store"
 	shell declares too. */
 import AuthMethodTabs from "@/components/composite/AuthMethodTabs.vue"
 import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
+import OnboardingPhraseStep from "../components/OnboardingPhraseStep.vue"
 
 const router = useRouter()
 const notificationStore = useNotificationStore()
@@ -31,6 +35,24 @@ const { openToast } = useToast()
 const { bootstrapActiveProfile } = useProfileBootstrap()
 
 const maxPasswordLength = 128
+
+// A password wallet shows its words before Ready. They live only in this ref, for this page's life.
+const stage = ref<"form" | "phrase">("form")
+const words = ref<string[]>([])
+let createdId = ""
+// One generation for the page's life: a Create that settles after the person left publishes
+// nothing, since bootstrap writes shared stores and the tab may already show another page.
+const lifetime = createRunFence()
+const isMounted = lifetime.snapshot()
+
+async function readPhrase(id: string, typed: string): Promise<string[] | undefined> {
+	try {
+		return await managers.profile.exportMnemonic(id, typed)
+	} catch (error) {
+		console.debug("onboarding phrase read failed", { error })
+		return undefined
+	}
+}
 
 const {
 	nameFieldState,
@@ -51,12 +73,27 @@ const {
 	handleCreate: handleSubmit,
 	dispose,
 } = useProfileCreateFlow({
-	// Onboarding has no popup app.vue listener, so it bootstraps the freshly
-	// created profile itself, then routes.
-	onCreated: async (profile) => {
-		await bootstrapActiveProfile(profile as ProfileInfo)
-		await setLastActiveProfileId((profile as ProfileInfo).id)
-		router.push("/onboarding/done")
+	// Onboarding has no popup app.vue listener, so it bootstraps the freshly created profile itself.
+	// The words are read first, with the password just typed, which is cleared before bootstrap; a
+	// failed read still reaches Ready, where Home's reminder stays until the phrase is saved.
+	onCreated: async (created) => {
+		if (!isMounted()) return
+		const profile = created as ProfileInfo
+		const phrase = profile.type === "password" ? await readPhrase(profile.id, password.value) : undefined
+		password.value = ""
+		confirm.value = ""
+		if (!isMounted()) return
+		await bootstrapActiveProfile(profile)
+		if (!isMounted()) return
+		await setLastActiveProfileId(profile.id)
+		if (!isMounted()) return
+		if (!phrase) {
+			router.push("/onboarding/done")
+			return
+		}
+		createdId = profile.id
+		words.value = phrase
+		stage.value = "phrase"
 	},
 	openToast,
 	notifyCreateFailed: (isPasskey) => {
@@ -83,16 +120,28 @@ const submitLabel = computed(() => {
 	return authMethod.value === "passkey" ? "Create with passkey" : "Create wallet"
 })
 
+async function onPhraseSaved() {
+	await markGetStarted(createdId, "phraseSaved")
+	if (isMounted()) router.push("/onboarding/done")
+}
+
+function onPhraseLater() {
+	router.push("/onboarding/done")
+}
+
 onBeforeUnmount(() => {
+	lifetime.invalidate()
 	dispose()
 	// Defense-in-depth: zero out secret material on unmount.
 	password.value = ""
 	confirm.value = ""
+	words.value = []
 })
 </script>
 
 <template>
-	<OnboardingPage data-testid="onboarding-create-page" :data-name-field="nameFieldState">
+	<OnboardingPhraseStep v-if="stage === 'phrase'" :words="words" @saved="onPhraseSaved" @later="onPhraseLater" />
+	<OnboardingPage v-else data-testid="onboarding-create-page" :data-name-field="nameFieldState">
 		<OnboardingBackLink testid="onboarding-create-back" />
 		<StepIndicator :current="2" />
 		<header :class="$style.hero">

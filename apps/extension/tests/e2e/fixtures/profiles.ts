@@ -247,15 +247,21 @@ export async function waitForProfilePurged(
 	)
 }
 
-/** Drive the seed-phrase reveal flow on `/popup/settings/security/export/seed`.
- *  Caller asserts on `[data-testid="reveal-content"]` afterwards. */
-export async function revealSeedPhrase(page: Page, password: string): Promise<void> {
+/** The words a recovery phrase grid shows, in order: Settings' grid is `reveal-content`, the
+ *  onboarding step's `onboarding-phrase`. */
+export async function readRecoveryWords(page: Page, grid = "reveal-content"): Promise<string[]> {
+	await page.waitForSelector(`[data-testid="${grid}-word"]`, { visible: true, timeout: 15_000 })
+	return page.$$eval(`[data-testid="${grid}-word"]`, (words) => words.map((word) => word.textContent?.trim() ?? ""))
+}
+
+/** Drive the seed-phrase reveal flow on `/popup/settings/security/export/seed` and return its words. */
+export async function revealSeedPhrase(page: Page, password: string): Promise<string[]> {
 	await navigateByHash(page, "#/popup/settings/security/export/seed")
 	await clickByTestId(page, "agree-continue-btn")
 	await page.waitForSelector('[data-testid="unlock-password-input"]', { visible: true, timeout: 5_000 })
 	await replaceInputValue(page, '[data-testid="unlock-password-input"]', password)
 	await clickByTestId(page, "unlock-submit-btn")
-	await page.waitForSelector('[data-testid="reveal-content"]', { visible: true, timeout: 5_000 })
+	return readRecoveryWords(page)
 }
 
 /** Open EditProfilePopup from /popup/settings/profile, replace the name,
