@@ -157,6 +157,11 @@ describe("modules/activity/TransactionCard (settled)", () => {
 			expect([...(group?.children ?? [])]).toEqual([w.find('[data-testid="activity-direction-chip"]').element, slot])
 			expect(group?.textContent).toBe(`Private → Public${HOST}`)
 		})
+
+		test("a dApp's transfer drops the spaces its name leads with, which nothing else would collapse there", () => {
+			const w = mountCard({ ...dappTransferTx, origin: { type: OriginType.DAPP, name: "  NEMI" } })
+			expect(w.find('[data-testid="activity-app-chip"]').element.textContent).toBe("NEMI")
+		})
 	})
 
 	describe("a dApp's mint, as the wire carries it", () => {

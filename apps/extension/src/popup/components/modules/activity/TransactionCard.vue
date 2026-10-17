@@ -108,6 +108,9 @@ const transferTypeLabel = computed(() => {
 })
 
 const originLabel = computed(() => getOriginLabel(props.tx.origin))
+/** The empty inline that leads the slot's chip keeps a space after it from collapsing, as a line's
+ *  first space does in every other chip. */
+const slotLabel = computed(() => originLabel.value?.replace(/^[\t\n\f\r ]+/, ""))
 /** A dApp's call with no direction is titled by the function it called. */
 const oneLineTitle = computed(() => Boolean(originLabel.value) && !transferTypeLabel.value)
 const hashSlice = computed(() => {
@@ -178,7 +181,7 @@ onBeforeUnmount(() => {
 			<span v-if="transferTypeLabel && originLabel" :class="$style.chips">
 				<span :class="$style.chip" data-testid="activity-direction-chip">{{ transferTypeLabel }}</span>
 				<span :class="$style.app_slot">
-					<span :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
+					<span :class="$style.app_chip" data-testid="activity-app-chip">{{ slotLabel }}</span>
 				</span>
 			</span>
 			<span v-else-if="transferTypeLabel" :class="$style.chip" data-testid="activity-direction-chip">{{ transferTypeLabel }}</span>
