@@ -1,4 +1,4 @@
-import { Flex, Icon, Input, MaterialIcon, Spinner, Text } from "@nulo/design"
+import { Flex, Icon, Input, Spinner, Text } from "@nulo/design"
 import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { settingsContext, settingsRouter } from "../../../../../tests/helpers/settings-rows"
@@ -19,7 +19,7 @@ async function mountSearch(query = "", sidePanel = true) {
 			"onUpdate:modelValue": (value: string) => wrapper?.setProps({ modelValue: value }),
 			context: settingsContext({ sidePanel }),
 		},
-		global: { plugins: [router], components: { Flex, Icon, Input, MaterialIcon, Spinner, Text } },
+		global: { plugins: [router], components: { Flex, Icon, Input, Spinner, Text } },
 	})
 	await flushPromises()
 	return { w: wrapper, push }

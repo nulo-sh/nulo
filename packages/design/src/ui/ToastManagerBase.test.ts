@@ -21,7 +21,6 @@ const realComputedStyle = window.getComputedStyle.bind(window)
 
 const STUBS = {
 	Icon: { template: '<span data-testid="stub-icon" :data-name="name" :data-color="color" />', props: ["name", "size", "color"] },
-	MaterialIcon: { template: '<span data-testid="stub-mat-icon" :data-name="name" />', props: ["name", "size", "color"] },
 	transition: false,
 }
 
@@ -120,7 +119,7 @@ describe("ToastManagerBase", () => {
 		await nextTick()
 		expect(status().querySelector(CARD)?.getAttribute("data-kind")).toBe("success")
 		expect(alert().querySelector(CARD)).toBeNull()
-		expect(status().querySelector('[data-name="check-circle"]')?.getAttribute("data-color")).toBe("green")
+		expect(status().querySelector('[data-name="square-check"]')?.getAttribute("data-color")).toBe("green")
 		expect(titleLive()).toBeNull()
 		await settle()
 
@@ -128,7 +127,7 @@ describe("ToastManagerBase", () => {
 		await settle()
 		expect(status().querySelector(CARD)).toBeNull()
 		expect(alert().querySelector(CARD)?.getAttribute("data-kind")).toBe("error")
-		expect(alert().querySelector('[data-name="close-circle"]')?.getAttribute("data-color")).toBe("red")
+		expect(alert().querySelector('[data-name="square-cross"]')?.getAttribute("data-color")).toBe("red")
 		expect(titleLive()).toBeNull()
 	})
 
@@ -139,8 +138,8 @@ describe("ToastManagerBase", () => {
 		expect(status().querySelector(CARD)).toBeNull()
 		const info = alert().querySelector(CARD)
 		expect(info?.getAttribute("data-kind")).toBe("info")
-		expect(info?.querySelector('[data-name="clock-circle"]')?.getAttribute("data-color")).toBe("secondary")
-		expect(info?.querySelector('[data-name="close-circle"]')).toBeNull()
+		expect(info?.querySelector('[data-name="square-half"]')?.getAttribute("data-color")).toBe("secondary")
+		expect(info?.querySelector('[data-name="square-cross"]')).toBeNull()
 		expect(info?.querySelector('[data-testid="snackbar-close"]')).not.toBeNull()
 
 		open({ kind: "error", label: "Failed" })
@@ -148,7 +147,7 @@ describe("ToastManagerBase", () => {
 		const error = alert().querySelector(CARD)
 		expect(error?.getAttribute("data-kind")).toBe("error")
 		expect(error?.classList.length).toBe((info?.classList.length ?? 0) + 1)
-		expect(error?.querySelector('[data-name="clock-circle"]')).toBeNull()
+		expect(error?.querySelector('[data-name="square-half"]')).toBeNull()
 	})
 
 	test("it exposes the drawn height of the snack it places, 0 while none is open", async () => {

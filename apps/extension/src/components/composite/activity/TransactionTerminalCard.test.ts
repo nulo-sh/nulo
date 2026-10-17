@@ -5,6 +5,7 @@
 
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
+import type { GlyphName } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import TransactionTerminalCard from "./TransactionTerminalCard.vue"
@@ -40,9 +41,9 @@ const STUBS = {
 type CardProps = {
 	title: string
 	subtitle: string
-	icon: string
+	icon: GlyphName
 	color: "gray" | "amber" | "red" | "green"
-	activityIcon?: string
+	activityIcon?: GlyphName
 	originLabel?: string | null
 	transferTypeLabel?: string | null
 	amount?: string | null
@@ -51,10 +52,10 @@ type CardProps = {
 	to?: string
 }
 
-const CANCELLED: CardProps = { title: "swap", subtitle: "Cancelled", icon: "cancel", color: "gray" }
-const INTERRUPTED: CardProps = { title: "swap", subtitle: "Transaction was interrupted", icon: "refresh-circle", color: "amber" }
-const FAILED: CardProps = { title: "swap", subtitle: "Network error", icon: "close-circle", color: "red" }
-const SENT: CardProps = { title: "USDC", subtitle: "Sent", icon: "check-circle", color: "green" }
+const CANCELLED: CardProps = { title: "swap", subtitle: "Cancelled", icon: "square-cross", color: "gray" }
+const INTERRUPTED: CardProps = { title: "swap", subtitle: "Transaction was interrupted", icon: "refresh", color: "amber" }
+const FAILED: CardProps = { title: "swap", subtitle: "Network error", icon: "square-cross", color: "red" }
+const SENT: CardProps = { title: "USDC", subtitle: "Sent", icon: "square-check", color: "green" }
 
 const mountCard = (props: CardProps) => mount(TransactionTerminalCard, { props, global: { stubs: STUBS } })
 
@@ -76,36 +77,36 @@ describe("composite/TransactionTerminalCard", () => {
 		expect(statusEl.attributes("aria-atomic")).toBe("true")
 	})
 
-	test("Cancelled state: gray status icon + cancel", () => {
+	test("Cancelled state: gray status icon + square-cross", () => {
 		const w = mountCard(CANCELLED)
 		const badgeIcon = w.find('[data-testid="activity-status-icon"][data-color="gray"]')
 		expect(badgeIcon.exists()).toBe(true)
 		expect(badgeIcon.attributes("data-fill")).toBe("gray")
-		expect(badgeIcon.attributes("data-name")).toBe("cancel")
+		expect(badgeIcon.attributes("data-name")).toBe("square-cross")
 	})
 
-	test("Interrupted state: amber status icon, filled with the warning text token, + refresh-circle", () => {
+	test("Interrupted state: amber status icon, filled with the warning text token, + refresh", () => {
 		const w = mountCard(INTERRUPTED)
 		const badgeIcon = w.find('[data-testid="activity-status-icon"][data-color="amber"]')
 		expect(badgeIcon.exists()).toBe(true)
 		expect(badgeIcon.attributes("data-fill")).toBe("txt-warning")
-		expect(badgeIcon.attributes("data-name")).toBe("refresh-circle")
+		expect(badgeIcon.attributes("data-name")).toBe("refresh")
 	})
 
-	test("Failed state: red status icon, filled with the danger text token, + close-circle", () => {
+	test("Failed state: red status icon, filled with the danger text token, + square-cross", () => {
 		const w = mountCard(FAILED)
 		const badgeIcon = w.find('[data-testid="activity-status-icon"][data-color="red"]')
 		expect(badgeIcon.exists()).toBe(true)
 		expect(badgeIcon.attributes("data-fill")).toBe("txt-danger")
-		expect(badgeIcon.attributes("data-name")).toBe("close-circle")
+		expect(badgeIcon.attributes("data-name")).toBe("square-cross")
 	})
 
-	test("Sent state: green status icon, filled with the success text token, + check-circle, over a green subtitle", () => {
+	test("Sent state: green status icon, filled with the success text token, + square-check, over a green subtitle", () => {
 		const w = mountCard(SENT)
 		const badgeIcon = w.find('[data-testid="activity-status-icon"][data-color="green"]')
 		expect(badgeIcon.exists()).toBe(true)
 		expect(badgeIcon.attributes("data-fill")).toBe("txt-success")
-		expect(badgeIcon.attributes("data-name")).toBe("check-circle")
+		expect(badgeIcon.attributes("data-name")).toBe("square-check")
 		expect(
 			w
 				.find('[role="status"]')
@@ -149,8 +150,8 @@ describe("composite/TransactionTerminalCard", () => {
 	})
 
 	test("activityIcon prop overrides the default 'zap' on the layout", () => {
-		const w = mountCard({ ...FAILED, activityIcon: "arrow-narrow-up-right" })
-		expect(w.find(".layout-icon").attributes("data-icon")).toBe("arrow-narrow-up-right")
+		const w = mountCard({ ...FAILED, activityIcon: "send" })
+		expect(w.find(".layout-icon").attributes("data-icon")).toBe("send")
 	})
 
 	test("defaults activityIcon to 'zap' when not supplied (dApp generic case)", () => {

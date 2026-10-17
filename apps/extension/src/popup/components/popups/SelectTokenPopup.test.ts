@@ -97,7 +97,6 @@ const STUBS = {
 		template:
 			"<div :data-title='title'><div v-if='$slots.description' data-testid='setting-description'><slot name='description' /></div></div>",
 	},
-	MaterialIcon: { template: "<i />" },
 	Text: { template: "<span><slot /></span>" },
 	Flex: { template: "<div><slot /></div>" },
 }

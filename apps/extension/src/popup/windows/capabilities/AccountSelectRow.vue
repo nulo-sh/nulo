@@ -61,12 +61,12 @@ const startRename = async () => {
 		<Flex align="center" gap="12" wide>
 			<Icon
 				v-if="selected"
-				name="check-circle"
+				name="square-check"
 				size="16"
 				color="primary"
 				:class="$style.row_check"
 			/>
-			<Icon v-else name="circle" size="16" color="secondary" :class="$style.row_check" />
+			<Icon v-else name="square" size="16" color="secondary" :class="$style.row_check" />
 
 			<Flex direction="column" gap="2" wide :class="$style.row_text">
 				<Flex align="center" justify="between" gap="8" wide>

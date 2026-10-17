@@ -170,7 +170,7 @@ describe("pages/activity — arrivals", () => {
 			shallow: true,
 			global: {
 				plugins: [router],
-				stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true },
+				stubs: { Flex: { template: "<div><slot /></div>" } },
 				provide: { [ARRIVALS_KEY as symbol]: arrivals },
 			},
 		})
@@ -207,7 +207,7 @@ describe("pages/activity — cancelled and failed operations by network", () => 
 			shallow: true,
 			global: {
 				plugins: [router],
-				stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true },
+				stubs: { Flex: { template: "<div><slot /></div>" } },
 			},
 		})
 		await flushPromises()
@@ -243,7 +243,6 @@ describe("pages/activity — the received row's token", () => {
 				plugins: [router],
 				stubs: {
 					Flex: { template: "<div><slot /></div>" },
-					MaterialIcon: true,
 					TransactionCardLayout: {
 						props: ["title", "amount", "amountFiat"],
 						template: `<div data-testid="row"><span class="title">{{ title }}</span><span class="amount">{{ amount }}</span><span class="fiat">{{ amountFiat }}</span></div>`,
@@ -328,7 +327,7 @@ describe("pages/activity — the incoming load signal", () => {
 			shallow: true,
 			global: {
 				plugins: [router],
-				stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true },
+				stubs: { Flex: { template: "<div><slot /></div>" } },
 			},
 		})
 		await flushPromises()
@@ -348,7 +347,7 @@ describe("pages/activity — the title", () => {
 			shallow: true,
 			global: {
 				plugins: [router],
-				stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true },
+				stubs: { Flex: { template: "<div><slot /></div>" } },
 			},
 		})
 		await flushPromises()
@@ -361,7 +360,7 @@ describe("pages/activity — the title", () => {
 			shallow: true,
 			global: {
 				plugins: [router],
-				stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true },
+				stubs: { Flex: { template: "<div><slot /></div>" } },
 			},
 		})
 		await flushPromises()
@@ -410,7 +409,6 @@ describe("pages/activity — opened from a token page", () => {
 	const eurcIn = { ...record("e", 3000), tokenId: 2 }
 	const stubs = {
 		Flex: { template: "<div><slot /></div>" },
-		MaterialIcon: true,
 		Badge: { template: "<div><slot /></div>" },
 		RowAction: {
 			props: ["label"],

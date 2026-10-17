@@ -216,7 +216,7 @@ onBeforeUnmount(() => {
 		<SubPageHeader
 			:title="token?.symbol || ''"
 			:backTo="'/popup/general'"
-			leadingIcon="account_balance_wallet"
+			leadingIcon="holdings"
 		>
 			<template #trailing>
 				<Tooltip position="end" :disabled="isRefreshingBalance || !tokenBalance?.updatedAt">
@@ -227,7 +227,7 @@ onBeforeUnmount(() => {
 						:class="$style.icon_btn"
 						aria-label="Refresh balance"
 					>
-						<MaterialIcon name="refresh" :size="18" color="secondary" />
+						<Icon name="refresh" :size="18" color="secondary" />
 					</button>
 
 					<template #content>
@@ -238,13 +238,13 @@ onBeforeUnmount(() => {
 
 				<Dropdown>
 					<button type="button" :class="$style.icon_btn" aria-label="Token actions" data-testid="token-menu-trigger">
-						<MaterialIcon name="more_vert" :size="18" color="secondary" />
+						<Icon name="more" :rotate="90" :size="18" color="secondary" />
 					</button>
 
 					<template #popup>
 						<DropdownItem @click="handleTogglePin" data-testid="token-menu-pin" :data-pinned="isPinned ? 'true' : 'false'">
 							<Flex align="center" gap="8">
-								<MaterialIcon name="push_pin" :size="14" color="primary" />
+								<Icon name="pin" :size="14" color="primary" />
 								{{ isPinned ? "Unpin from Home" : "Pin to Home" }}
 							</Flex>
 						</DropdownItem>
@@ -256,7 +256,7 @@ onBeforeUnmount(() => {
 						</DropdownItem>
 						<DropdownItem @click="popupStore.open('token_metadata')" data-testid="token-menu-metadata">
 							<Flex align="center" gap="8">
-								<Icon name="code-circle" size="14" color="primary" />
+								<Icon name="code" size="14" color="primary" />
 								Show metadata
 							</Flex>
 						</DropdownItem>
@@ -272,7 +272,7 @@ onBeforeUnmount(() => {
 						<DropdownDivider />
 						<DropdownItem @click="handleDeleteToken" :class="$style.hover_red">
 							<Flex align="center" gap="8">
-								<Icon name="trash" size="14" color="primary" />
+								<Icon name="remove" size="14" color="primary" />
 								<Text>Remove token</Text>
 							</Flex>
 						</DropdownItem>
@@ -334,7 +334,7 @@ onBeforeUnmount(() => {
 	}
 
 	&:hover {
-		svg { fill: var(--red); }
+		svg { color: var(--red); }
 		span { color: var(--red); }
 	}
 }

@@ -109,21 +109,21 @@ onBeforeUnmount(() => {
 
 				<Flex align="center" gap="8">
 					<Tooltip position="end" delay="350">
-						<!-- Inline styles keep the check's own look through the action's pointer and hover fill. -->
+						<!-- Inline styles keep the check's own look through the action's pointer and hover colour. -->
 						<RowAction
 							label="Copy address"
 							:style="copiedAddress === sender ? { cursor: 'default' } : undefined"
 							@click="handleCopyAddress(sender)"
 						>
 							<Icon v-if="copiedAddress !== sender" name="copy" size="14" color="tertiary" />
-							<Icon v-else name="check-circle" size="14" color="green" :style="{ transition: 'all 0.2s ease', fill: 'var(--green)' }" />
+							<Icon v-else name="square-check" size="14" :style="{ color: 'var(--green)' }" />
 						</RowAction>
 
 						<template #content> Copy address </template>
 					</Tooltip>
 					<Tooltip position="end" delay="350">
 						<RowAction label="Delete sender" data-testid="sender-delete" @click="handleDelete(sender)">
-							<Icon name="close-circle" size="14" color="tertiary" />
+							<Icon name="close" size="14" color="tertiary" />
 						</RowAction>
 
 						<template #content> Delete sender </template>

@@ -1,4 +1,4 @@
-import { Flex, MaterialIcon, Text } from "@nulo/design"
+import { Flex, Icon, Text } from "@nulo/design"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { defineComponent, h, nextTick, ref, withDirectives } from "vue"
@@ -54,7 +54,7 @@ async function open(url: string, guard?: Parameters<ReturnType<typeof createRout
 		expect(arg).toEqual({ block: "center" })
 		scrolled.push(this)
 	})
-	wrapper = mount(Page, { attachTo: document.body, global: { plugins: [router], components: { Flex, MaterialIcon, Text } } })
+	wrapper = mount(Page, { attachTo: document.body, global: { plugins: [router], components: { Flex, Text, Icon } } })
 	await flushPromises()
 	const el = (id: string) => wrapper?.get(`[data-testid="${id}"]`).element as HTMLElement
 	return { router, replace, scrolled, el }

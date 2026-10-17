@@ -16,7 +16,6 @@ const STUBS = {
 	Flex: { template: '<div :class="$attrs.class" v-bind="$attrs"><slot /></div>', inheritAttrs: false },
 	Text: { template: '<span :class="$attrs.class" v-bind="$attrs"><slot /></span>', inheritAttrs: false },
 	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
-	MaterialIcon: { template: '<span data-testid="stub-mat-icon" :data-name="name" />', props: ["name", "size", "color"] },
 	Spinner: { template: '<span data-testid="stub-spinner" />' },
 	RouterLink: { template: '<a :href="to"><slot /></a>', props: ["to"] },
 }
@@ -228,7 +227,7 @@ describe("ui/Settings — SettingItem", () => {
 		const { w } = await mountItem({ title: "Lock", to: "/popup/settings/lock", value: "1 h 30 min" })
 		const value = w.get('[data-testid="setting-value"]')
 		expect(value.text()).toBe("1 h 30 min")
-		const chevron = w.get('[data-name="chevron_right"]')
+		const chevron = w.get('[data-name="chevron"]')
 		expect(value.element.compareDocumentPosition(chevron.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 		w.unmount()
 	})
@@ -239,7 +238,7 @@ describe("ui/Settings — SettingItem", () => {
 	])("value %s: no setting-value element, and the row renders as before", async (_name, props) => {
 		const { w } = await mountItem({ title: "Lock", to: "/popup/settings/lock", ...props })
 		expect(w.find('[data-testid="setting-value"]').exists()).toBe(false)
-		expect(w.find('[data-name="chevron_right"]').exists()).toBe(true)
+		expect(w.find('[data-name="chevron"]').exists()).toBe(true)
 		w.unmount()
 	})
 
@@ -283,9 +282,9 @@ describe("ui/Settings — SettingItem", () => {
 		const iconBoxOf = (w: Awaited<ReturnType<typeof mountItem>>["w"], selector: string) =>
 			(w.get(selector).element.parentElement as HTMLElement).className
 
-		const prop = await mountItem({ title: "Display", materialIcon: "palette" })
-		expect(iconBoxOf(prop.w, '[data-name="palette"]')).toMatch(/icon_wrapper/)
-		expect(iconBoxOf(prop.w, '[data-name="palette"]')).not.toMatch(/icon_slotted/)
+		const prop = await mountItem({ title: "Display", icon: "user" })
+		expect(iconBoxOf(prop.w, '[data-name="user"]')).toMatch(/icon_wrapper/)
+		expect(iconBoxOf(prop.w, '[data-name="user"]')).not.toMatch(/icon_slotted/)
 		prop.w.unmount()
 
 		const dot = await mountItem({ title: "Alpha" }, {}, { dot: () => h("i", { "data-testid": "dot" }) })

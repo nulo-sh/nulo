@@ -29,7 +29,6 @@ const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const ALLOW = '[data-testid="discover-allow-btn"]'
 const GRID = '[data-testid="verify-emoji-grid"]'
 const STEP_BAR = '[data-testid="connect-step-bar"]'
-const TRUST = '[data-testid="verify-always-trust-toggle"] [data-testid="toggle-switch"]'
 const REPEATS_KEY = "e2e:enter-repeats"
 const ACTION = '[data-testid="discover-action"]'
 const ACTION_KEY = "e2e:action-lines"
@@ -183,7 +182,6 @@ test.skipIf(!aztecConfig)(
 		await sleep(1_000)
 		expect(page.isClosed(), "Enter or Escape closed the check").toBe(false)
 		expect(await showsCheck(page)).toBe(true)
-		expect(await page.$eval(TRUST, (el) => el.getAttribute("data-toggle-active"))).toBe("false")
 		await approveVerify(page)
 		expect(await created()).toEqual([{ id: connectWindow, type: "popup" }])
 

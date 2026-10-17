@@ -1,21 +1,21 @@
-import { MaterialIcon } from "@nulo/design"
+import { Icon } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import PasswordVisibilityToggle from "./PasswordVisibilityToggle.vue"
 
 const mountToggle = (props: Record<string, unknown>, attrs: Record<string, unknown> = {}) =>
-	mount(PasswordVisibilityToggle, { props, attrs, global: { components: { MaterialIcon } } })
+	mount(PasswordVisibilityToggle, { props, attrs, global: { components: { Icon } } })
 
 describe("composite/PasswordVisibilityToggle", () => {
 	test.each([
-		[true, undefined, "Show password", "visibility"],
-		[false, undefined, "Hide password", "visibility_off"],
-		[true, "recovery phrase", "Show recovery phrase", "visibility"],
-		[false, "recovery phrase", "Hide recovery phrase", "visibility_off"],
+		[true, undefined, "Show password", "eye"],
+		[false, undefined, "Hide password", "eye-off"],
+		[true, "recovery phrase", "Show recovery phrase", "eye"],
+		[false, "recovery phrase", "Hide recovery phrase", "eye-off"],
 	])("hidden=%s subject=%s labels %s with the %s icon", (hidden, subject, label, icon) => {
 		const w = mountToggle(subject ? { hidden, subject } : { hidden })
 		expect(w.attributes("aria-label")).toBe(label)
-		expect(w.get("span").text()).toBe(icon)
+		expect(w.getComponent(Icon).props("name")).toBe(icon)
 	})
 
 	test.each([
@@ -26,9 +26,9 @@ describe("composite/PasswordVisibilityToggle", () => {
 	})
 
 	test("the icon is 18px, secondary", () => {
-		const icon = mountToggle({ hidden: true }).get("span").element as HTMLElement
-		expect(icon.className).toContain("color--secondary")
-		expect(icon.style.fontSize).toBe("18px")
+		const icon = mountToggle({ hidden: true }).get("svg")
+		expect(icon.classes()).toContain("color--secondary")
+		expect(icon.attributes("width")).toBe("18")
 	})
 
 	test("a click emits one payload-free toggle and changes nothing by itself", async () => {

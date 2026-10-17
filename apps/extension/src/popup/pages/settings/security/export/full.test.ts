@@ -1,5 +1,5 @@
 import { EncryptionKey } from "@nulo/wallet-crypto"
-import { MaterialIcon } from "@nulo/design"
+import { Icon } from "@nulo/design"
 import { deferred } from "@nulo/wallet-core/utils"
 import { FULL_BACKUP_V2_TAG, MAX_BACKUP_FILE_BYTES, openFullBackupText } from "@/utils/full-backup-helpers"
 import { createTestingPinia } from "@pinia/testing"
@@ -171,7 +171,7 @@ function mountPage(profileName = "Test Profile") {
 					stubActions: false,
 				}),
 			],
-			components: { MaterialIcon, SubPageHeader },
+			components: { SubPageHeader, Icon },
 			stubs: {
 				SecretUnlockSection: {
 					props: ["modelValue", "error"],

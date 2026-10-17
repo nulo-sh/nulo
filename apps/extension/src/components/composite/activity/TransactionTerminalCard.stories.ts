@@ -25,9 +25,9 @@ export const Cancelled: Story = {
 	args: {
 		title: "Send 5 USDC",
 		subtitle: "Cancelled",
-		icon: "cancel",
+		icon: "square-cross",
 		color: "gray",
-		activityIcon: "arrow-narrow-up-right",
+		activityIcon: "send",
 		amount: "5.00",
 		amountSymbol: "USDC",
 	},
@@ -38,7 +38,7 @@ export const Interrupted: Story = {
 	args: {
 		title: "Swap Tokens For Exact Tokens",
 		subtitle: "Transaction was interrupted",
-		icon: "refresh-circle",
+		icon: "refresh",
 		color: "amber",
 		activityIcon: "zap",
 		originLabel: "swap.aztec-kit.example",
@@ -50,7 +50,7 @@ export const FailedNetwork: Story = {
 	args: {
 		title: "Swap Tokens For Exact Tokens",
 		subtitle: "Network error",
-		icon: "close-circle",
+		icon: "square-cross",
 		color: "red",
 		activityIcon: "zap",
 		originLabel: "swap.aztec-kit.example",
@@ -62,9 +62,9 @@ export const FailedSimulation: Story = {
 	args: {
 		title: "Send 5 USDC",
 		subtitle: "Simulation failed",
-		icon: "close-circle",
+		icon: "square-cross",
 		color: "red",
-		activityIcon: "arrow-narrow-up-right",
+		activityIcon: "send",
 		amount: "5.00",
 		amountSymbol: "USDC",
 	},
@@ -75,9 +75,9 @@ export const Sent: Story = {
 	args: {
 		title: "Send 5 USDC",
 		subtitle: "Sent",
-		icon: "check-circle",
+		icon: "square-check",
 		color: "green",
-		activityIcon: "arrow-narrow-up-right",
+		activityIcon: "send",
 		amount: "5.00",
 		amountSymbol: "USDC",
 	},

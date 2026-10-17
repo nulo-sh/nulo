@@ -1,5 +1,5 @@
 import { createTestingPinia } from "@pinia/testing"
-import { Flex, MaterialIcon, Text } from "@nulo/design"
+import { Flex, Icon, Text } from "@nulo/design"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
@@ -61,7 +61,7 @@ async function mountLock(type: "password" | "passkey" = "password") {
 					initialState: { app: { isLogined: true, profile: { id: "p1", name: "Primary", type } } },
 				}),
 			],
-			components: { Flex, ItemsContainer, MaterialIcon, SettingItem, Text },
+			components: { Flex, ItemsContainer, SettingItem, Text, Icon },
 			stubs: {
 				SettingsPageShell: { props: ["title"], template: '<div :data-title="title"><slot /></div>' },
 				LoadingState: { template: '<div data-testid="loading" />' },

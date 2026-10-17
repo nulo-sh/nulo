@@ -5,6 +5,8 @@
  * transactions render through `TransactionCard` instead. Each visual state is an owner decision.
  */
 
+// The glyph module, not the barrel: the e2e typecheck reaches this file and resolves no `.vue`.
+import type { GlyphName } from "@nulo/design/core/glyphs.ts"
 import type { JobErrorKind, SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import { balanceFormatted } from "@/utils/amount.js"
 import { knownDecimals } from "@/utils/token-amount"
@@ -34,7 +36,7 @@ export type JournalTerminalVisualState = "cancelled" | "interrupted" | "failed" 
 export interface JournalTerminalDisplay {
 	state: JournalTerminalVisualState
 	subtitle: string
-	icon: string
+	icon: GlyphName
 	color: "gray" | "amber" | "red" | "green"
 }
 
@@ -44,25 +46,15 @@ export type SendOutcome = "nothing_sent" | "checking" | SendCheckOutcome
 
 type CheckedOutcome = Exclude<SendOutcome, "nothing_sent">
 
-/**
- * Canonical icon names per visual state. Centralized to prevent
- * invented-name regressions: the original implementation
- * shipped `circle-minus` and `refresh-cw` (Material-Icons-style names)
- * which don't exist in the `@nulo/design` icon set — the
- * `Icon` component silently renders empty SVG paths for missing names
- * (no console error), so the bug only surfaced during user QA.
- *
- * Every entry MUST be a key of `@nulo/design`'s `internal/icons.json`. If a
- * future state needs a new icon, grep that file first.
- */
+/** The status glyph per visual state. `Icon` draws an unknown name blank, so each is a `GlyphName`. */
 const ICONS = {
-	cancelled: "cancel",
-	interrupted: "refresh-circle",
-	failed: "close-circle",
-	checking: "clock-circle",
-	sent: "check-circle",
+	cancelled: "square-cross",
+	interrupted: "refresh",
+	failed: "square-cross",
+	checking: "square-half",
+	sent: "square-check",
 	unconfirmed: "help",
-} as const
+} as const satisfies Record<JournalTerminalVisualState, GlyphName>
 
 const CHECKED_DISPLAYS: Record<CheckedOutcome, JournalTerminalDisplay> = {
 	checking: { state: "checking", subtitle: "Not confirmed yet", icon: ICONS.checking, color: "gray" },
@@ -348,7 +340,7 @@ export interface JournalTerminalCardCtx {
 /** Props shape a terminal `TransactionTerminalCard` consumes, on Home and in History alike. */
 export interface JournalTerminalCardProps {
 	title: string
-	activityIcon: string
+	activityIcon: GlyphName
 	originLabel: string | null
 	/** Privacy-direction chip ("Private → Public" etc.) for transfer ops.
 	 *  Mutually exclusive with originLabel — the terminal card renders
@@ -362,7 +354,7 @@ export interface JournalTerminalCardProps {
 	oneLineTitle: boolean
 	state: JournalTerminalVisualState
 	subtitle: string
-	icon: string
+	icon: GlyphName
 	color: JournalTerminalDisplay["color"]
 }
 
@@ -409,7 +401,7 @@ function transferCardFields(op: OperationRecord, ctx: JournalTerminalCardCtx): J
 
 	return {
 		title: transferTitle(token),
-		activityIcon: "arrow-narrow-up-right",
+		activityIcon: "send",
 		originLabel: null,
 		transferTypeLabel: transferTypeLabel(op),
 		amount,
@@ -440,8 +432,8 @@ export function journalCardTitle(op: OperationRecord, tokenById: JournalTerminal
 	return dappTitle(op)
 }
 
-export function journalCardIcon(op: OperationRecord): string {
-	return op.kind === "transfer" ? "arrow-narrow-up-right" : "zap"
+export function journalCardIcon(op: OperationRecord): GlyphName {
+	return op.kind === "transfer" ? "send" : "zap"
 }
 
 /** `op.subtitle` is the dApp-controlled origin persisted at session-discover time; bracketed when

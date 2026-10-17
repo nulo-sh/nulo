@@ -171,7 +171,7 @@ describe("meta text reads in --nulo-secondary; --nulo-outline is for borders and
 			expect.arrayContaining(["packages/design/src/ui/Input.vue", "apps/extension/src/popup/pages/detail-page.module.css"]),
 		)
 		expect(found).toEqual([
-			"apps/extension/src/components/composite/capabilities/DetailsTable.vue .address .copy_glyph",
+			"apps/extension/src/components/composite/capabilities/DetailsTable.vue .address .copy .copy_glyph",
 			"apps/extension/src/components/composite/capabilities/DetailsTable.vue .row .chevron",
 		])
 	})

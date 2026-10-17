@@ -893,7 +893,7 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 				{ kind: "transfer", tokenId: 42, amountRaw: "1500000", transferType: 0 },
 				{
 					title: "USDC",
-					icon: "arrow-narrow-up-right",
+					icon: "send",
 					originLabel: null,
 					amount: "1.5",
 					amountSymbol: "USDC",
@@ -904,7 +904,7 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 				{ kind: "transfer", tokenId: 42, amountRaw: "" },
 				{
 					title: "USDC",
-					icon: "arrow-narrow-up-right",
+					icon: "send",
 					originLabel: null,
 					amount: null,
 					amountSymbol: "USDC",
@@ -915,7 +915,7 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 				{ kind: "transfer", tokenId: 44, amountRaw: "2000000" },
 				{
 					title: "RAW",
-					icon: "arrow-narrow-up-right",
+					icon: "send",
 					originLabel: null,
 					amount: null,
 					amountSymbol: "RAW",
@@ -926,7 +926,7 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 				{ kind: "transfer", tokenId: 42 },
 				{
 					title: "USDC",
-					icon: "arrow-narrow-up-right",
+					icon: "send",
 					originLabel: null,
 					amount: null,
 					amountSymbol: "USDC",
@@ -937,7 +937,7 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 				{ kind: "transfer", tokenId: 43, amountRaw: "2000000" },
 				{
 					title: "Transfer",
-					icon: "arrow-narrow-up-right",
+					icon: "send",
 					originLabel: null,
 					amount: "2",
 					amountSymbol: null,
@@ -948,7 +948,7 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 				{ kind: "transfer", amountRaw: "2000000", transferType: 1 },
 				{
 					title: "Transfer",
-					icon: "arrow-narrow-up-right",
+					icon: "send",
 					originLabel: null,
 					amount: null,
 					amountSymbol: null,

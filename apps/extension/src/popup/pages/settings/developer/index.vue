@@ -180,7 +180,7 @@ onBeforeUnmount(() => {
 							{{ cacheStore.failureLog ? '1 recent failure' : logsRow.description }}
 						</Text>
 					</Flex>
-					<MaterialIcon name="open_in_new" :size="18" color="secondary" />
+					<Icon name="open" :size="18" color="secondary" />
 				</Flex>
 			</div>
 
@@ -196,7 +196,7 @@ onBeforeUnmount(() => {
 						<Text variant="row-title" :class="$style.title_size" color="primary">{{ accountStateRow.title }}</Text>
 						<Text variant="caption" color="tertiary">{{ accountStateRow.description }}</Text>
 					</Flex>
-					<MaterialIcon name="chevron_right" :size="18" color="secondary" />
+					<Icon name="chevron" :size="18" color="secondary" />
 				</Flex>
 			</RouterLink>
 		</template>

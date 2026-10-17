@@ -6,6 +6,7 @@
  * (spinner here vs. status icon there) and the secondary-row content.
  */
 import { computed, type PropType } from "vue"
+import type { GlyphName } from "@nulo/design"
 import type { JobStage, ProveBackend } from "@nulo/wallet-core/jobs"
 import TransactionCardLayout from "./TransactionCardLayout.vue"
 
@@ -18,8 +19,8 @@ const props = defineProps({
 	 *  transfers leave this null and the chip is suppressed. */
 	originLabel: { type: String, default: null },
 	/** Activity icon. Defaults to "zap" for the generic dApp case; UI transfers
-	 *  pass the same arrow-narrow-up-right that the settled card uses. */
-	icon: { type: String, default: "zap" },
+	 *  pass the same "send" that the settled card uses. */
+	icon: { type: String as PropType<GlyphName>, default: "zap" },
 	amount: { type: String, default: null },
 	amountSymbol: { type: String, default: null },
 	/** Privacy-direction chip ("Private → Public" etc.). Suppressed when null —

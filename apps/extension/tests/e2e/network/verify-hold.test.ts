@@ -17,8 +17,8 @@ import {
 /**
  * An app's calls wait while its session's emoji check is unanswered: They match runs them in the
  * order they came, and every other ending drops them, the held send's queued row failing with the
- * wallet's existing copy. Each test reconnects a remembered, untrusted app, so its check opens in
- * a window of its own while the app keeps its stored grants. That no call reaches the dispatcher
+ * wallet's existing copy. Each test reconnects a remembered app, so its check opens in a window of
+ * its own while the app keeps its stored grants. That no call reaches the dispatcher
  * before They match is proven in `background.connect-window.test.ts`; these tests prove what the
  * person and the app observe.
  */
@@ -30,7 +30,7 @@ const DISCONNECTED = '[data-testid="pg-status"][data-status="disconnected"]'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-/** The app disconnects and connects again; its row is not trusted, so its check opens in its own window. */
+/** The app disconnects and connects again; its check opens in its own window. */
 async function reconnectToCheck(ctx: ExtensionContext, page: Page): Promise<Page> {
 	await clickByTestId(page, "pg-btn-disconnect")
 	await page.waitForSelector(DISCONNECTED, { timeout: 10_000 })

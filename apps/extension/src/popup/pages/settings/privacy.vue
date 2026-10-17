@@ -129,7 +129,6 @@ onBeforeUnmount(() => {
 							<Text variant="value" color="primary">
 								{{ selectedExplorerName }}
 							</Text>
-							<Icon name="chevron-down" size="12" color="tertiary" />
 						</DropdownTrigger>
 					</template>
 
@@ -142,16 +141,17 @@ onBeforeUnmount(() => {
 						>
 							<Flex align="center" gap="8">
 								<Icon
-									:name="settings.defaultExplorer.model.value === explorer.id ? 'check' : ''"
+									name="check"
 									size="14"
 									color="primary"
+									:class="settings.defaultExplorer.model.value !== explorer.id && $style.unselected"
 								/>
 								{{ explorer.name }}
 							</Flex>
 						</DropdownItem>
 						<DropdownItem @click="updateSetting('defaultExplorer', null)" data-testid="explorer-none-btn">
 							<Flex align="center" gap="8">
-								<Icon :name="!settings.defaultExplorer.model.value ? 'check' : ''" size="14" color="primary" />
+								<Icon name="check" size="14" color="primary" :class="settings.defaultExplorer.model.value && $style.unselected" />
 								None
 							</Flex>
 						</DropdownItem>
@@ -184,5 +184,9 @@ onBeforeUnmount(() => {
 
 .title_size {
 	font-size: 13px;
+}
+
+.unselected {
+	visibility: hidden;
 }
 </style>

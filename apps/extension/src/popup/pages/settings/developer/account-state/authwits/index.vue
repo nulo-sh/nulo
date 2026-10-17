@@ -138,7 +138,7 @@ onBeforeUnmount(() => {
 			<template #trailing>
 				<Dropdown>
 					<button type="button" data-testid="authwits-actions-btn" :class="$style.icon_btn" aria-label="Authwit actions">
-						<MaterialIcon name="settings" :size="18" color="secondary" />
+						<Icon name="settings" :size="18" color="secondary" />
 					</button>
 
 					<template #popup>
@@ -150,7 +150,7 @@ onBeforeUnmount(() => {
 						</DropdownItem>
 						<DropdownItem data-testid="authwits-revoke-all" @click="revokeAuthwits()" :disabled="!authwits.length">
 							<Flex align="center" gap="8">
-								<Icon name="close-circle" size="14" color="secondary" />
+								<Icon name="close" size="14" color="secondary" />
 								Revoke all authwits
 							</Flex>
 						</DropdownItem>

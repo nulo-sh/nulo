@@ -10,8 +10,8 @@ const hasConfig = aztecConfig !== undefined
  *
  * The dApp calls `provider.disconnect()` after a successful handshake;
  * playground status flips to "disconnected" and `wallet` ref clears.
- * The extension's session record persists (so reconnect can be silent if
- * trustedVerification was set), but the dApp's wallet handle is gone.
+ * The extension's session record persists (so a reconnect skips the connect
+ * window), but the dApp's wallet handle is gone.
  */
 test.skipIf(!hasConfig)(
 	"session-explicitDisconnect — playground transitions to disconnected on click",

@@ -44,7 +44,6 @@ export function renderUtilitiesCss(): string {
 	for (const [name, spec] of Object.entries(typeRoles)) blocks.push(rule(`.type--${name}`, ...typeRoleDeclarations(spec)))
 	for (const [key, value] of Object.entries(textAligns)) blocks.push(rule(`.ta--${key}`, `text-align: ${value};`))
 	for (const [key, value] of Object.entries(textColors)) blocks.push(rule(`.color--${key}`, `color: var(${value});`))
-	for (const [key, value] of Object.entries(textColors)) blocks.push(rule(`.fill--${key}`, `fill: var(${value});`))
 
 	blocks.push(rule(".flex", "display: flex;"))
 	blocks.push(rule(".flex-wide", "width: 100%;"))

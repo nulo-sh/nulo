@@ -30,7 +30,7 @@ onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
 	<Flex direction="column" :class="$style.wrapper">
 		<!-- Brand signature: lock icon + NULO wordmark -->
 		<Flex align="center" justify="center" gap="8" :class="$style.brand">
-			<MaterialIcon name="lock" :size="18" color="primary" />
+			<Icon name="lock" :size="18" color="primary" />
 			<span :class="$style.wordmark">NULO</span>
 		</Flex>
 

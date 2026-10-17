@@ -72,7 +72,7 @@ let sdkListener: ReturnType<typeof vi.fn<Listener>> | undefined
 
 function boot(init: typeof initWalletSdkHandler = initWalletSdkHandler): { handler: BackgroundConnectionHandler; deliver: Deliver } {
 	attached = undefined
-	const handler = init(fakeSdkServices({ remembered: { trusted: true } }).services, noopLogger, fakeSdkPorts())
+	const handler = init(fakeSdkServices({ remembered: true }).services, noopLogger, fakeSdkPorts())
 	// `init` assigned it through the mock; the control-flow analysis cannot see that.
 	const wrapper = attached as Listener | undefined
 	if (!wrapper) throw new Error("the wrapper was not attached to the relay")
@@ -80,8 +80,8 @@ function boot(init: typeof initWalletSdkHandler = initWalletSdkHandler): { handl
 }
 
 /**
- * Establish `sessionId` for `tab` as a page does: discovery, the wallet's (remembered, trusted)
- * approval, then a real key exchange — and, like the page, nothing further until the response.
+ * Establish `sessionId` for `tab` as a page does: discovery, the wallet's approval of the remembered
+ * app, then a real key exchange — and, like the page, nothing further until the response.
  */
 async function establish(deliver: Deliver, sessionId: string, tab = TAB, from = sender(tab)): Promise<void> {
 	await approve(deliver, sessionId, from)

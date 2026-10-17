@@ -7,7 +7,7 @@ const router = useRouter()
 
 <template>
 	<button type="button" :class="$style.back" :data-testid="testid" @click="router.push('/onboarding/welcome')">
-		<MaterialIcon name="chevron_left" :size="14" />
+		<Icon name="chevron" color="primary" :rotate="180" :size="14" />
 		<span>Back</span>
 	</button>
 </template>

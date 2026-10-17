@@ -24,7 +24,7 @@ const titleId = useId()
 
 			<Tooltip position="end">
 				<RowAction label="Revoke authwit" :class="$style.revoke" @click="emit('revoke', authwit)">
-					<Icon name="close-circle" color="secondary" size="16" />
+					<Icon name="close" color="secondary" size="16" />
 				</RowAction>
 				<template #content>Revoke authwit</template>
 			</Tooltip>

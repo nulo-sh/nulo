@@ -145,7 +145,7 @@ test("a drag selects the text around a control and none of the control's own: th
 	const toNav = await dragSelect(page, await textEdge(page, "balance-amount", "first"), await textEdge(page, "nav-settings", "last"))
 	console.log(`[select] hero to the nav: ${JSON.stringify(toNav)}`)
 	expect(toNav.split(hero).length - 1, "the hero's figure, once").toBe(1)
-	for (const label of ["send", "receive", "home", "account_balance_wallet", "history"]) expect(lower(toNav)).not.toContain(label)
+	for (const label of ["send", "receive", "home", "history"]) expect(lower(toNav)).not.toContain(label)
 
 	const toHeader = await dragSelect(
 		page,

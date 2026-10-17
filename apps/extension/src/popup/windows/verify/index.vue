@@ -49,7 +49,6 @@ const session = ref<DappSession>()
 const dapp = ref<UIDappMetadata>()
 const emojis = ref("")
 const isReconnect = ref(false)
-const alwaysTrust = ref(false)
 /** The key exchange's hash, as the service worker wrote it into the URL; an open without one reports nothing. */
 const checkHash = ref<string>()
 /** One answer per window: either control locks both, released only when that answer fails. */
@@ -79,9 +78,6 @@ const handleConfirm = async () => {
 	if (isBusy.value) return
 	isBusy.value = true
 	try {
-		if (alwaysTrust.value && session.value) {
-			await dappSessionService.setTrustedVerification(session.value.id, true)
-		}
 		// The app's calls wait for this report. Only the URL's hash names this window's key exchange: the
 		// row's may belong to another session of the same app.
 		if (checkHash.value) await dappSessionService.confirmVerification(checkHash.value)
@@ -231,14 +227,6 @@ onUnmounted(() => {
 
 		<Flex v-snack-footer direction="column" gap="12" :class="$style.footer">
 			<Flex align="center" justify="between" gap="12" wide>
-				<Flex direction="column" gap="4">
-					<Text variant="row-title" color="primary" :class="$style.skip_title_size">Skip this check next time</Text>
-					<Text variant="caption" color="tertiary">Only for this app on this network.</Text>
-				</Flex>
-				<div data-testid="verify-always-trust-toggle"><Toggle :modelValue="alwaysTrust" @update:modelValue="(v: boolean) => (alwaysTrust = v)" /></div>
-			</Flex>
-
-			<Flex align="center" justify="between" gap="12" wide>
 				<Button
 					data-testid="verify-mismatch-btn"
 					@click="handleRefuse"
@@ -296,10 +284,6 @@ onUnmounted(() => {
 
 .footer {
 	composes: footer from "../window-shell.module.css";
-}
-
-.skip_title_size {
-	font-size: 13px;
 }
 
 .visually_hidden {

@@ -2,7 +2,7 @@ import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { InvalidPasswordError, RestoreTornError, UserRejectedError } from "@nulo/extension-messaging/errors"
-import { Flex, Input, MaterialIcon, Text } from "@nulo/design"
+import { Flex, Icon, Input, Text } from "@nulo/design"
 import { expectMaskToggle, expectNativeAttrs, nativeInput, typeNow } from "../../../tests/helpers/credential-pins"
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { useAppStore } from "@/stores/app.store"
@@ -129,7 +129,6 @@ function mountAuth() {
 				Input: InputStub,
 				Button: { template: `<button type="submit" v-bind="$attrs"><slot /></button>` },
 				Tooltip: { template: `<div><slot /></div>` },
-				MaterialIcon: true,
 				Flex: { template: `<div><slot /></div>` },
 				AuthProfilePill: true,
 				PasskeyCeremonyDialog: true,
@@ -553,7 +552,7 @@ describe("auth.vue — the password field's controls, real Input", () => {
 			attachTo: document.body,
 			global: {
 				plugins: [createTestingPinia({ createSpy: vi.fn, stubActions: false })],
-				components: { Flex, Input, MaterialIcon, Text },
+				components: { Flex, Input, Text, Icon },
 				stubs: {
 					Button: { template: `<button type="submit" v-bind="$attrs"><slot /></button>` },
 					Tooltip: { template: `<div><slot /></div>` },
