@@ -49,6 +49,12 @@ export function isPriceableHolding(tb: Holding, prices: PriceMapping): boolean {
 	)
 }
 
+/** No price answer, nor its rejection, has arrived and a holding could be priced: a figure shown now
+ *  would be about to change. An empty or unpriced wallet has nothing to wait for. */
+export function awaitingFirstPriceAnswer(rows: readonly Holding[], prices: PriceMapping & { settled: Readonly<Ref<boolean>> }): boolean {
+	return !prices.settled.value && rows.some((tb) => isPriceableHolding(tb, prices))
+}
+
 /** No priceable holding has a price, whatever the cause: an expired quote, one an answer left out, a
  *  failed fetch. An empty or unpriced wallet has none to miss. */
 export function pricesUnavailable<T extends Holding>(rows: readonly T[], fiatOf: FiatOf<T>, prices: PriceMapping): boolean {

@@ -29,7 +29,7 @@ import { TokenServiceClient } from "@/wallet/services/token/client"
 
 /** Utils */
 import { DETAIL_TIME_FORMAT } from "../detail-page"
-import { categoricalLabel, journalTerminalDisplay, sanitizeJournalSubtitle } from "@/utils/journal-state"
+import { categoricalLabel, journalCardOriginLabel, journalTerminalDisplay } from "@/utils/journal-state"
 import { bindJournalDetailUpdates, readJournalDetail } from "./journal-detail-scope"
 import { humanizeMethodName, formatTransferType } from "@/utils/tx-enrichment"
 import { usePrices } from "@/composables/usePrices"
@@ -113,13 +113,7 @@ const recipientLabel = computed(() => {
 	return trimAddress(r, 6, 4, "…")
 })
 
-// Sanitize the dApp-controlled subtitle before rendering. A malicious dApp
-// could set its origin to an http(s)-URL-looking string; the helper brackets
-// URL-shaped values so the UI signals "not a link" at a glance.
-const originChip = computed(() => {
-	if (op.value?.kind !== "dapp_execute") return null
-	return sanitizeJournalSubtitle(op.value.subtitle)
-})
+const originChip = computed(() => (op.value ? journalCardOriginLabel(op.value) : null))
 
 const txHash = computed(() => op.value?.progress?.txHash ?? null)
 
