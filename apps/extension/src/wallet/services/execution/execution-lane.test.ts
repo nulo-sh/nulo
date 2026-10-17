@@ -822,3 +822,65 @@ describe("ExecutionLane.failUnclaimed", () => {
 		expect(deps.logError).toHaveBeenCalledTimes(1)
 	})
 })
+
+describe("ExecutionLane.reclaimParked", () => {
+	test.each([
+		["a queued record is claimed back", { outcome: "transitioned" }],
+		["a record still pending stays", { outcome: "stage", stage: "pending" }],
+	])("%s", async (_case, result) => {
+		const { lane, deps } = makeLane()
+		const transitionIfStage = deps.operationJournal.transitionIfStage as ReturnType<typeof vi.fn>
+		transitionIfStage.mockResolvedValueOnce(result)
+		await expect(lane.reclaimParked("j-1")).resolves.toBeUndefined()
+		expect(transitionIfStage).toHaveBeenCalledWith("j-1", ["queued"], { stage: "pending" })
+	})
+
+	test("a cancel that landed first ends the send cancelled; any other stage or a gone record ends it", async () => {
+		const { lane, deps } = makeLane()
+		const transitionIfStage = deps.operationJournal.transitionIfStage as ReturnType<typeof vi.fn>
+		transitionIfStage.mockResolvedValueOnce({ outcome: "stage", stage: "cancelled" })
+		await expect(lane.reclaimParked("j-1")).rejects.toBeInstanceOf(JobCancelledSentinel)
+		transitionIfStage.mockResolvedValueOnce({ outcome: "stage", stage: "failed" })
+		await expect(lane.reclaimParked("j-1")).rejects.toThrow("A waiting dApp send lost its record")
+		transitionIfStage.mockResolvedValueOnce({ outcome: "missing" })
+		await expect(lane.reclaimParked("j-1")).rejects.toThrow("A waiting dApp send lost its record")
+	})
+})
+
+describe("ExecutionLane.cancelQuestion", () => {
+	const asking = (progress: object) => {
+		const transitions: unknown[][] = []
+		const harness = makeLane({
+			operationJournal: {
+				getOperation: vi.fn(async () => ({ id: "j-1", profileId: "p1", progress }) as never),
+				transitionOperation: vi.fn(async (...args: unknown[]) => {
+					transitions.push(args)
+					return {}
+				}),
+				touchOperation: vi.fn(async () => {}),
+			} as never,
+		})
+		const controller = new AbortController()
+		harness.lane.registerInFlight("j-1", FENCE.session, controller)
+		return { ...harness, transitions, controller }
+	}
+	const REASK = { fee: "21", cap: "16", payer: { type: "fj", isProtocol: false } }
+
+	test("cancels a send still asking that figure", async () => {
+		const h = asking({ stage: "queued", reask: REASK })
+		await h.lane.cancelQuestion("j-1", "21")
+		expect(h.transitions.find((t) => t[0] === "j-1")?.[1]).toEqual({ stage: "cancelled" })
+		expect(h.controller.signal.aborted).toBe(true)
+	})
+
+	test.each([
+		["another figure", { stage: "queued", reask: { ...REASK, fee: "25" } }],
+		["no question", { stage: "queued" }],
+		["a send already past it", { stage: "simulating" }],
+	])("leaves a send asking %s", async (_case, progress) => {
+		const h = asking(progress)
+		await h.lane.cancelQuestion("j-1", "21")
+		expect(h.transitions).toEqual([])
+		expect(h.controller.signal.aborted).toBe(false)
+	})
+})

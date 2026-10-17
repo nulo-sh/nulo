@@ -212,14 +212,12 @@ describe("PriceService — refresh pipeline", () => {
 		state.fetchImpl = async () => reply({ ...newer, padding: "x".repeat(16 * 1024) })
 		const refused = await service.refreshIfStale()
 		expect(state.fetchCalls).toHaveLength(2)
-		expect(refused.lastRefreshFailed).toBe(true)
 		expect(refused.quotes.aztec?.usd).toBe(0.0147)
 
 		state.nowMs += 60_000
 		state.fetchImpl = async () => reply(newer)
 		const merged = await service.refreshIfStale()
 		expect(state.fetchCalls).toHaveLength(3)
-		expect(merged.lastRefreshFailed).toBe(false)
 		expect(merged.quotes.aztec?.usd).toBe(0.02)
 	})
 
@@ -241,28 +239,7 @@ describe("PriceService — refresh pipeline", () => {
 		expect(quotes.aztec).toBeDefined()
 	})
 
-	test("lastRefreshFailed reports this worker's latest fetch, whatever the cache still holds", async () => {
-		const { service, state } = await harness()
-		const failing = async () => reply({}, 503)
-		state.fetchImpl = failing
-		expect(await service.refreshIfStale()).toMatchObject({ quotes: {}, lastRefreshFailed: true })
-		// Suppressed by the backoff: no new attempt, so the last one still stands.
-		expect((await service.refreshIfStale()).lastRefreshFailed).toBe(true)
-		expect(state.fetchCalls).toHaveLength(1)
-
-		state.nowMs += 60_000
-		state.fetchImpl = undefined
-		expect((await service.refreshIfStale()).lastRefreshFailed).toBe(false)
-
-		state.nowMs += PRICE_REFRESH_PERIOD_MINUTES * 60_000
-		state.fetchImpl = failing
-		const cached = await service.refreshIfStale()
-		expect(state.fetchCalls).toHaveLength(3)
-		expect(cached.lastRefreshFailed).toBe(true)
-		expect(Object.keys(cached.quotes).sort()).toEqual(["aztec", "usd-coin"])
-	})
-
-	test("a failed scheduled refresh is broadcast, so an open popup learns of it", async () => {
+	test("a failed scheduled refresh still broadcasts the usable snapshot", async () => {
 		const { service, state } = await harness()
 		const seen: PriceSnapshot[] = []
 		service.onQuotesUpdated.add((s) => seen.push(s))
@@ -270,9 +247,7 @@ describe("PriceService — refresh pipeline", () => {
 			throw new Error("offline")
 		}
 		await service.onAlarmTick()
-		expect(seen).toEqual([
-			{ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: flaggedKeysOf([TEST_FLAGGED]), lastRefreshFailed: true },
-		])
+		expect(seen).toEqual([{ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: flaggedKeysOf([TEST_FLAGGED]) }])
 	})
 
 	test("a newer stored quote is never overwritten by an older response (monotonic)", async () => {

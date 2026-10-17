@@ -426,7 +426,7 @@ export async function waitForSessionRow(page: Page, predicate: (row: SessionRow)
 
 /** Call one background service method over a port of its own, as the popup's clients do. Unlike a
  *  popup interaction, it navigates nowhere, so it never refreshes the session. */
-async function callService<T>(page: Page, service: string, method: string, params: unknown[] = [], timeoutMs = 15_000): Promise<T> {
+export async function callService<T>(page: Page, service: string, method: string, params: unknown[] = [], timeoutMs = 15_000): Promise<T> {
 	const envelope = { type: MessageType.Request, content: { requestId: 1, method, params: wrapParams(params) } }
 	return (await page.evaluate(
 		(name: string, request: typeof envelope, responseType: number, waitMs: number) =>

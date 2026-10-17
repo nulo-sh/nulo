@@ -87,7 +87,7 @@ Tests:
 
 Validation gate: `bun run lint`, `bun run typecheck:all` and `bun run test` exit 0. Then, after the armed Chrome build (recon § Facts), `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/rows.test.ts tests/e2e/type-roles.test.ts --retry=0` passes; after the armed Firefox build, the same with `NULO_E2E_BROWSER=firefox`.
 
-### Phase 2: Home's fixed hero over a scrolling middle (#592)  ✓
+### Phase 2: Home's fixed hero over a scrolling middle (#592) ✓
 
 Files: as Architecture (layout). `network/store-captures.test.ts:276-280` finds the scroller by `home-scroller` and drops its "balance stays whole" bound.
 

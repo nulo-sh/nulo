@@ -11,6 +11,7 @@
  * pops its entry before a miss, which is why it cannot be the baseline.
  */
 
+import type { DiscoveredAuthwit } from "@nulo/wallet-bridge"
 import { ESTIMATE_REUSE_TTL_MS, SingleShotTtlCache } from "./estimate-reuse-shared"
 
 export type PreviewIdentity = {
@@ -22,6 +23,8 @@ export type PreviewIdentity = {
 
 export type PreviewSnapshot = PreviewIdentity & {
 	readonly discoveredHashes: readonly string[]
+	/** The rows the card listed for those hashes, so a later window can show the same disclosure. */
+	readonly discoveredAuthwits?: readonly DiscoveredAuthwit[]
 	readonly builtAt: number
 }
 
