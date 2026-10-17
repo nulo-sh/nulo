@@ -147,7 +147,7 @@ const FRESH = () => ({
 	"usd-coin": { coingeckoId: "usd-coin", usd: 0.999857, fetchedAt: Date.now(), providerUpdatedAt: null },
 })
 
-async function mountView(props: Record<string, unknown> = {}, attachTo?: Element) {
+async function mountView(props: Record<string, unknown> = {}) {
 	const pinia = createTestingPinia({ stubActions: false })
 	const appStore = useAppStore(pinia)
 	appStore.profile = { id: "p1" } as never
@@ -156,7 +156,6 @@ async function mountView(props: Record<string, unknown> = {}, attachTo?: Element
 
 	const wrapper = mount(BalanceView, {
 		props,
-		attachTo,
 		shallow: true,
 		global: {
 			plugins: [pinia],
@@ -727,49 +726,33 @@ describe("BalanceView — token hero (tokenBalance prop)", () => {
 	})
 })
 
-describe("BalanceView — the hero's tap", () => {
+describe("BalanceView — the hero is display only", () => {
 	const writeText = vi.fn(async (_text: string) => undefined)
+	/** Past the token hero's 20-character cut, so a click that widened the figure would show. */
+	const LONG_FRACTION = {
+		...SEED[0],
+		token: { ...SEED[0].token, decimals: 18 },
+		publicBalance: "1234567890123456789000",
+		privateBalance: "0",
+	}
 	beforeEach(() => {
 		Object.defineProperty(window.navigator, "clipboard", { value: { writeText }, configurable: true })
 		useToast().closeToast()
 	})
-	afterEach(() => {
-		window.getSelection()?.removeAllRanges()
-		useToast().closeToast()
-		document.body.replaceChildren()
-	})
+	afterEach(() => useToast().closeToast())
 
-	test("on Home a tap on the figure copies nothing and opens no toast", async () => {
+	test.each([
+		{ page: "Home", props: {}, shown: "$1,249.82" },
+		{ page: "the token page", props: { tokenBalance: LONG_FRACTION }, shown: "1,234.56789012345678 AAA" },
+	])("on $page a click on the figure copies nothing, opens no toast and leaves the figure as it was", async ({ props, shown }) => {
 		mockQuotes = FRESH()
-		const { wrapper } = await mountView()
-		expect(wrapper.find('[data-testid="balance-amount"]').text()).toBe("$1,249.82")
+		const { wrapper } = await mountView(props)
+		expect(figure(wrapper).text()).toBe(shown)
 		await wrapper.get('[data-testid="balance-amount"]').trigger("click")
 		await flushPromises()
 		expect(writeText).not.toHaveBeenCalled()
 		expect(useToast().toast.value).toBeFalsy()
-	})
-
-	test("on the token page a tap copies the figure and says so", async () => {
-		const { wrapper } = await mountView({ tokenBalance: SEED[0] })
-		await wrapper.get('[data-testid="balance-amount"]').trigger("click")
-		await flushPromises()
-		expect(writeText.mock.calls).toEqual([["1,250"]])
-		expect(useToast().toast.value).toMatchObject({ kind: "success", label: "Balance is copied" })
-	})
-
-	test("on the token page a click that ends a drag selecting the figure copies nothing", async () => {
-		const host = document.body.appendChild(document.createElement("div"))
-		const { wrapper } = await mountView({ tokenBalance: SEED[0] }, host)
-		const hero = wrapper.get('[data-testid="balance-amount"]')
-		const range = document.createRange()
-		range.selectNodeContents(hero.element)
-		window.getSelection()?.addRange(range)
-		expect(window.getSelection()?.toString()).toContain("1,250")
-		await hero.trigger("click")
-		await flushPromises()
-		expect(writeText).not.toHaveBeenCalled()
-		expect(useToast().toast.value).toBeFalsy()
-		wrapper.unmount()
+		expect(figure(wrapper).text()).toBe(shown)
 	})
 })
 

@@ -22,7 +22,7 @@ import type { TokenBalanceInfo } from "@/wallet/services/token-balance/spec"
 
 /** Utils */
 import { parseRawBalance, safeFiatOf } from "@/utils/token-amount"
-import { aggregateFiat } from "@/utils/token-aggregate"
+import { aggregateFiat, pricesUnavailable } from "@/utils/token-aggregate"
 import { forChain } from "@/utils/token-order"
 import { fitHero } from "@/utils/hero-fit"
 import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
@@ -108,7 +108,9 @@ const pins = usePinnedTokens({
 void pins.refresh()
 
 const aggregate = computed(() => aggregateFiat(rows.value, fiatOf))
-const aggregateDisplay = computed(() => prices.formatUsdMicro(aggregate.value.micro))
+/** Home's unavailable state, from the first price answer on: before it no quote has had a chance. */
+const unavailable = computed(() => showFiatValues.value && prices.settled.value && pricesUnavailable(rows.value, fiatOf, prices))
+const totalDisplay = computed(() => (unavailable.value ? "—" : prices.formatUsdMicro(aggregate.value.micro)))
 
 const openAddToken = (address: string) => {
 	cacheStore.preselectedTokenAddressToAdd = address
@@ -118,8 +120,10 @@ const openAddToken = (address: string) => {
 const summary = useTemplateRef<ComponentPublicInstance>("summary")
 const totalRuler = useTemplateRef<HTMLElement>("totalRuler")
 const metaRuler = useTemplateRef<HTMLElement>("metaRuler")
-const summaryMeta = computed(
-	() => `${rows.value.length} tokens${showFiatValues.value && aggregate.value.partial ? " · priced assets only" : ""}`,
+const summaryMeta = computed(() =>
+	unavailable.value
+		? "Prices unavailable"
+		: `${rows.value.length} tokens${showFiatValues.value && aggregate.value.partial ? " · priced assets only" : ""}`,
 )
 /** The total's type as a fraction of its 26 px: full size while it fits beside the meta line
  *  wrapped to its narrowest, then the largest that does, with no floor, so no digit is ever hidden. */
@@ -156,7 +160,7 @@ watch(
 	{ flush: "post", immediate: true },
 )
 // After the render, so the ruler holds the figure the line shows.
-watch([summary, aggregateDisplay, summaryMeta], fitTotal, { flush: "post" })
+watch([summary, totalDisplay, summaryMeta], fitTotal, { flush: "post" })
 
 watch(
 	() => [appStore.profile?.id, appStore.account?.address, appStore.network?.chainId],
@@ -190,14 +194,14 @@ onBeforeUnmount(() => {
 		<Flex direction="column" gap="16" :class="$style.content">
 			<Flex ref="summary" align="end" justify="between" :class="$style.summary" data-testid="holdings-summary">
 				<span v-if="showFiatValues" :class="[$style.summary_amount, { [$style.summary_amount_shrunk]: totalScale < 1 }]">
-					<span :class="$style.summary_fit" :style="{ '--hero-scale': totalScale }">{{ aggregateDisplay }}</span>
+					<span :class="$style.summary_fit" :style="{ '--hero-scale': totalScale }" :aria-hidden="unavailable || undefined">{{ totalDisplay }}</span>
 				</span>
 				<span :class="$style.summary_meta">{{ summaryMeta }}</span>
 				<!-- The fit's ruler: the total in the line's classes at full size and the meta line at its
 				     narrowest, clipped to nothing, never drawn. -->
 				<span v-if="showFiatValues" aria-hidden="true" :class="$style.summary_ruler">
 					<span :class="[$style.summary_amount, $style.summary_ruler_total]">
-						<span ref="totalRuler" :class="$style.summary_fit">{{ aggregateDisplay }}</span>
+						<span ref="totalRuler" :class="$style.summary_fit">{{ totalDisplay }}</span>
 					</span>
 					<span ref="metaRuler" :class="[$style.summary_meta, $style.summary_ruler_meta]">{{ summaryMeta }}</span>
 				</span>

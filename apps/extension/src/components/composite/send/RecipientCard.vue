@@ -41,7 +41,7 @@ const toggleReveal = () => {
 					<Text variant="name" color="primary" noWrap :class="[$style.name, $style.name_size]">
 						{{ name || "Address" }}
 					</Text>
-					<Text variant="data" color="tertiary" noWrap data-testid="recipient-card-masked">
+					<Text variant="meta" color="tertiary" noWrap data-testid="recipient-card-masked">
 						{{ masked }}
 					</Text>
 				</Flex>
@@ -71,7 +71,7 @@ const toggleReveal = () => {
 		</Flex>
 
 		<Flex v-if="revealed" :class="$style.reveal" data-testid="recipient-card-full">
-			<Text variant="data" color="primary" selectable :class="$style.full_addr" data-testid="recipient-card-full-address">
+			<Text variant="meta" color="primary" selectable :class="$style.full_addr" data-testid="recipient-card-full-address">
 				{{ address }}
 			</Text>
 		</Flex>

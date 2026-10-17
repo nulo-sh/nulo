@@ -85,7 +85,7 @@ import {
 } from "@nulo/extension-messaging/errors"
 import { KeyedLock, deferred } from "@nulo/wallet-core/utils"
 import { admitAsync, VerifyAdmissionGate, type WindowReservation } from "./verify-admission"
-import { approveOrRollbackDiscoverySession } from "./discovery-approval"
+import { approveOrRollbackDiscoverySession, rollBackDiscoverySession } from "./discovery-approval"
 import { failQueuedForError, failQueuedIfUnclaimed, type QueuedFailureKind, tryCreateQueuedJournal } from "./queued-journal"
 import { chainSendTxWithVouching } from "./queued-wait-vouching"
 import { createSessionBaton } from "./session-baton"
@@ -276,6 +276,20 @@ function resolveSdkDeps(services: ServiceCollection, logger: ILogger): SdkDeps {
 	}
 }
 
+/** A connect window, with the profile it opened under, or the network-unavailable notice, open for
+ *  one `(origin, chainId)` pair. */
+type PendingWindow = { kind: "connect"; profileId: string; settled: Promise<void> } | { kind: "notice"; settled: Promise<void> }
+
+function dedupeKeyOf(origin: string, chainId: string): string {
+	return `${origin}|${chainId}`
+}
+
+/** A row of `profileId` found while its connect window for the pair is open is the one that window
+ *  is writing, not a remembered app. */
+function isRowInFlight(pendingWindow: PendingWindow | undefined, profileId: string): boolean {
+	return pendingWindow?.kind === "connect" && pendingWindow.profileId === profileId
+}
+
 /** SW-lifetime state shared by the handler callbacks and the wiring around them. */
 type SdkHandlerState = {
 	/**
@@ -296,14 +310,14 @@ type SdkHandlerState = {
 	sessionProfiles: Map<string, string>
 	/**
 	 * Guard against concurrent discoveries for the same `(origin, chainId)`
-	 * pair (prevents duplicate connect popups). Stores a promise that
-	 * resolves when the connect popup completes, so duplicate discoveries
+	 * pair (prevents duplicate connect popups). Holds the open window's kind and
+	 * a promise that resolves when it completes, so duplicate discoveries
 	 * wait for the session to exist before being approved. Keying on the
 	 * `(origin, chainId)` tuple lets a dApp open a connect popup for chain A
 	 * and chain B concurrently without one waiting on the other (and without
 	 * the chain-B discovery being auto-approved against a chain-A session).
 	 */
-	pendingDiscoveryPromises: Map<string, Promise<void>>
+	pendingDiscoveryPromises: Map<string, PendingWindow>
 	/**
 	 * Per-session message queue — ensures messages from the same dApp session
 	 * are processed sequentially (FIFO). Without this, the fire-and-forget
@@ -848,7 +862,7 @@ type DiscoveryDeps = {
 	dappInteractionService: DappInteractionService
 	dappSessionService: DappSessionService
 	pendingVerification: Map<string, PendingVerificationEntry>
-	pendingDiscoveryPromises: Map<string, Promise<void>>
+	pendingDiscoveryPromises: Map<string, PendingWindow>
 	discoveryQueue: DiscoveryQueue
 	legal: LegalAdmission
 	resetRun: ResetRunGate
@@ -963,7 +977,10 @@ async function handleDiscovery(discovery: PendingDiscovery, deps: DiscoveryDeps)
 			)
 			return
 		}
-		if (existingSession && served) {
+		// Read with no yield since the lookup; a row in flight waits on its window like any duplicate.
+		const dedupeKey = dedupeKeyOf(discovery.origin, chainId)
+		const pendingWindow = deps.pendingDiscoveryPromises.get(dedupeKey)
+		if (existingSession && served && !isRowInFlight(pendingWindow, profile.id)) {
 			autoApproveExistingSession(discovery, chainId, deps)
 			return
 		}
@@ -986,10 +1003,8 @@ async function handleDiscovery(discovery: PendingDiscovery, deps: DiscoveryDeps)
 		// chain-B discovery from being auto-approved against the popup
 		// outcome of a chain-A discovery (which is what would happen with
 		// origin-only keying).
-		const dedupeKey = `${discovery.origin}|${chainId}`
-		const pendingPopup = deps.pendingDiscoveryPromises.get(dedupeKey)
-		if (pendingPopup) {
-			if (served) await awaitPendingPopupDedupe(pendingPopup, discovery, chainId, dedupeKey, deps)
+		if (pendingWindow) {
+			if (served) await awaitPendingPopupDedupe(pendingWindow.settled, discovery, chainId, dedupeKey, deps)
 			else rejectBehindNotice(discovery, chainId, deps)
 			return
 		}
@@ -1193,7 +1208,7 @@ async function runDiscoveryPopup(
 	// Store a promise that resolves when the popup completes so duplicate
 	// discoveries can await it.
 	const { promise: popupPromise, resolve: resolvePopup } = deferred()
-	pendingDiscoveryPromises.set(dedupeKey, popupPromise)
+	pendingDiscoveryPromises.set(dedupeKey, { kind: "connect", profileId, settled: popupPromise })
 	let waitingWindow: number | undefined
 
 	try {
@@ -1266,7 +1281,7 @@ async function runNetworkUnavailableNotice(
 	deps: DiscoveryDeps,
 ): Promise<void> {
 	const { promise: noticePromise, resolve: resolveNotice } = deferred()
-	deps.pendingDiscoveryPromises.set(dedupeKey, noticePromise)
+	deps.pendingDiscoveryPromises.set(dedupeKey, { kind: "notice", settled: noticePromise })
 	try {
 		deps.handler.rejectDiscovery(discovery.requestId)
 		deps.logger.log(
@@ -1311,6 +1326,7 @@ async function persistAndApprove(
 	deps: DiscoveryDeps,
 ): Promise<void> {
 	const { handler, dappSessionService, logger } = deps
+	const deleteSession = (id: string) => dappSessionService.deleteDappSession(id)
 	let approved = false
 	try {
 		// The connect window opened on a served chain, and its network can be removed while it is up:
@@ -1345,7 +1361,12 @@ async function persistAndApprove(
 
 		// Initialize with empty capability grants so enforceCapability()
 		// blocks non-exempt methods until requestCapabilities() is called.
-		await dappSessionService.setCapabilityGrants(newSession.id, [])
+		try {
+			await dappSessionService.setCapabilityGrants(newSession.id, [])
+		} catch (error) {
+			await rollBackDiscoverySession(deleteSession, newSession.id, "ungranted", logger)
+			throw error
+		}
 
 		// Re-check freshness AFTER the durable writes (which can
 		// themselves cross the deadline) and approve, or roll back + reject.
@@ -1354,9 +1375,10 @@ async function persistAndApprove(
 			sessionId: newSession.id,
 			approverProfileId: newSession.profileId,
 			attemptOpen: () => !reservation.abandoned,
+			rowAwaited: () => (deps.dedupeWaiters.get(dedupeKeyOf(discovery.origin, chainId)) ?? 0) > 0,
 			approveDiscovery: (id) => handler.approveDiscovery(id),
 			rejectDiscovery: (id) => handler.rejectDiscovery(id),
-			deleteSession: (id) => dappSessionService.deleteDappSession(id),
+			deleteSession,
 			pendingVerification: deps.pendingVerification,
 			logger,
 		})

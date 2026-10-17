@@ -139,7 +139,7 @@ const onRowClick = (method, event) => {
 }
 
 .tag {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	display: inline-flex;
 	align-items: center;
 	gap: 5px;

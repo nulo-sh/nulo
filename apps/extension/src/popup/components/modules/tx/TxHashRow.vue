@@ -44,7 +44,7 @@ const emit = defineEmits(["copy"])
 }
 
 .detail_value_mono {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 }
 

@@ -30,6 +30,8 @@ vi.mock("@/wallet/services/token-balance/client", () => ({
 	}),
 }))
 let mockQuotes: Record<string, unknown> = {}
+const ANSWER = async () => ({ quotes: mockQuotes, pricedTokens: TEST_PRICED_TOKENS })
+let answerQuotes: () => Promise<unknown> = ANSWER
 vi.mock("@/wallet/services/price/client", () => ({
 	PriceServiceClient: vi.fn(function () {
 		return {
@@ -37,7 +39,7 @@ vi.mock("@/wallet/services/price/client", () => ({
 			onQuotesUpdated: new EventHandler(),
 			onConnected: new EventHandler(),
 			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
-			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: mockQuotes, pricedTokens: TEST_PRICED_TOKENS })),
+			refreshIfStale: vi.fn().mockImplementation(() => answerQuotes()),
 		}
 	}),
 }))
@@ -108,6 +110,7 @@ afterEach(() => {
 	seedRows = []
 	fetchError = undefined
 	mockQuotes = {}
+	answerQuotes = ANSWER
 	configValues = { showFiatValues: true, incomingDustUsdThreshold: 0 }
 	vi.clearAllMocks()
 })
@@ -188,6 +191,31 @@ describe("holdings page", () => {
 
 		expect(w.find('[data-testid="holdings-error"]').exists()).toBe(true)
 		expect(w.find('[data-testid="holdings-search"]').exists()).toBe(false)
+	})
+})
+
+describe("holdings page — prices unavailable", () => {
+	const summaryOf = (w: Awaited<ReturnType<typeof mountPage>>) => w.get('[data-testid="holdings-summary"]').text()
+
+	test("once the first answer prices no holding, the total is Home's dash and the meta line says why, with no count", async () => {
+		installChromeStorage()
+		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
+		const w = await mountPage()
+		expect(summaryOf(w)).toContain("—")
+		expect(summaryOf(w)).toContain("Prices unavailable")
+		expect(summaryOf(w)).not.toContain("$")
+		expect(summaryOf(w)).not.toContain("tokens")
+		expect(w.get('[data-testid="holdings-summary"] span[style]').attributes("aria-hidden")).toBe("true")
+	})
+
+	test("before the first answer the summary reads as it did", async () => {
+		installChromeStorage()
+		answerQuotes = () => new Promise(() => {})
+		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
+		const w = await mountPage()
+		expect(summaryOf(w)).toContain("$0.00")
+		expect(summaryOf(w)).toContain("1 tokens")
+		expect(summaryOf(w)).not.toContain("Prices unavailable")
 	})
 })
 

@@ -81,12 +81,12 @@ const expanded = defineModel({ type: Boolean, default: false })
 
 <style module>
 .detail_key {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
 .detail_value_mono {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 }
 
@@ -121,12 +121,12 @@ const expanded = defineModel({ type: Boolean, default: false })
 }
 
 .fee_grid_key {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
 .fee_grid_num {
-	composes: type--data from global;
+	composes: type--meta from global;
 	text-align: right;
 }
 
