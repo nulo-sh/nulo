@@ -4,6 +4,7 @@
  * Consumers should import from the subpath that matches the concern:
  *   - `@nulo/wallet-core/ports`   — I/O boundary interfaces
  *   - `@nulo/wallet-core/utils`   — pure utilities (EventHandler, Lock, etc.)
+ *   - `@nulo/wallet-core/chain-id` — the wallet chain id and the local development L1
  *   - `@nulo/wallet-core/storage` — EntityStorage + ValueStorage
  *   - `@nulo/wallet-core/base`    — ServiceCollection + topology
  *   - `@nulo/wallet-core/logger`  — ILogger + LogLevel + Log interfaces

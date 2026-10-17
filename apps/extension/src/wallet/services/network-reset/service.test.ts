@@ -693,6 +693,38 @@ describe("NetworkResetService — resume and forged journals", () => {
 		expect(await storedKeys(h, "nulo:core:accounts@")).toEqual(before)
 	})
 
+	test.each([false, true])(
+		"a chain-0 journal on an L1 other than the local one is refused and kept, purging nothing (purged: %s)",
+		async (purged) => {
+			const h = await harness()
+			await putNetwork(h, { id: "tn", name: "Zero", chainId: 0, l1ChainId: L1 })
+			await putAccount(h, { chainId: 0, address: derived(L1, 0), index: 0 })
+			await putJournal(h, journalOf({ fromChainId: 0, toChainId: 0, purged, cause: { networkReset: false, addressesMoved: true } }))
+			const before = await storedKeys(h, "nulo:core:accounts@")
+			expect((await resume(h)).failed).toBe(true)
+			expect(h.pxe).not.toHaveBeenCalled()
+			expect(h.purgeForAccounts).not.toHaveBeenCalled()
+			expect(h.purgeForChain).not.toHaveBeenCalled()
+			expect(await storedKeys(h, "nulo:core:accounts@")).toEqual(before)
+			expect(await h.repo.getJournal("p1")).toBeDefined()
+		},
+	)
+
+	test("a chain-0 journal on the local L1 resumes and completes", async () => {
+		const h = await harness()
+		await putNetwork(h, { id: "tn", name: "Zero", chainId: 0, l1ChainId: LOCAL_L1_CHAIN_ID })
+		const journal = journalOf({
+			fromChainId: 0,
+			toChainId: 0,
+			l1ChainId: LOCAL_L1_CHAIN_ID,
+			cause: { networkReset: false, addressesMoved: true },
+		})
+		journal.accounts = [{ type: 0, index: 0, name: "Account 1", visible: true, oldAddress: "0xold", done: false }]
+		await putJournal(h, journal)
+		expect((await resume(h)).completed).toBeDefined()
+		expect((await accountsOn(h, 0)).map((a) => a.address)).toEqual([derived(LOCAL_L1_CHAIN_ID, 0)])
+	})
+
 	test("a forged address-only journal for a custom network on Mainnet's L1 purges nothing", async () => {
 		const h = await harness()
 		await putNetwork(h, { id: "mn", name: "Mainnet", chainId: 77, l1ChainId: 1 })

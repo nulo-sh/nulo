@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { SUCCESS_TOAST_MS, type ToastOptions, useToast } from "./toast"
+import { ACTION_TOAST_MS, SUCCESS_TOAST_MS, type ToastOptions, useToast } from "./toast"
 
 describe("useToast", () => {
 	beforeEach(() => vi.useFakeTimers())
@@ -15,6 +15,16 @@ describe("useToast", () => {
 		expect(SUCCESS_TOAST_MS).toBe(2_000)
 		vi.advanceTimersByTime(1_900)
 		expect(toast.value).toMatchObject({ kind: "success", label: "Copied" })
+		vi.advanceTimersByTime(100)
+		expect(toast.value).toBeNull()
+	})
+
+	it("a success with an action is visible at 5.9 s and gone at 6 s", () => {
+		const { toast, openToast } = useToast()
+		openToast({ kind: "success", label: "Received", action: { label: "View", onSelect: () => {} } })
+		expect(ACTION_TOAST_MS).toBe(6_000)
+		vi.advanceTimersByTime(5_900)
+		expect(toast.value).toMatchObject({ kind: "success", label: "Received" })
 		vi.advanceTimersByTime(100)
 		expect(toast.value).toBeNull()
 	})

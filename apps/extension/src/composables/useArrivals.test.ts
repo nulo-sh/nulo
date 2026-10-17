@@ -35,7 +35,6 @@ function receipt(block: number, over: Partial<IncomingTransferRecord> = {}): Inc
 		indexInTx: 0,
 		hidden: false,
 		discoveredAt: Date.now(),
-		siloedNullifier: `${seq}`,
 		noteHash: "0x1",
 		owner: "0xa",
 		...over,

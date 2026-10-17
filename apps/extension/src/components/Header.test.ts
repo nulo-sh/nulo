@@ -1,10 +1,11 @@
 /**
  * Narrow integration test for the header — deliberately NOT a full Header suite (L4+ convention:
  * e2e owns the header). It pins the wiring unit tests cannot see: the address button hands the FULL
- * active address (not the truncated display text) to the clipboard, both switcher affordances open
- * the accounts popup, the lock chip runs the shared lock (its behavior: `useLockWallet.test.ts`), the
- * network chip's `data-status` follows the store's status, the chip shows the network name only while
- * Show network name is on, and a failure log marks the settings badge.
+ * active address (not the truncated display text) to the clipboard, except on a pointer click that
+ * ends a selection inside it; both switcher affordances open the accounts popup; the lock chip runs
+ * the shared lock (its behavior: `useLockWallet.test.ts`); the network chip's `data-status` follows
+ * the store's status; the chip shows the network name only while Show network name is on; and a
+ * failure log marks the settings badge.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
@@ -88,8 +89,14 @@ const STUBS = {
 	Skeleton: { template: '<span data-testid="stub-skeleton" :data-width="width" :data-height="height" />', props: ["width", "height"] },
 }
 
-function mountHeader() {
-	return mount(Header, { global: { stubs: STUBS } })
+function mountHeader(attachTo?: Element) {
+	return mount(Header, { attachTo, global: { stubs: STUBS } })
+}
+
+/** A pointer click carries `detail` 1, the click a key makes on a button 0; `trigger` cannot set it. */
+async function clickAddress(w: ReturnType<typeof mountHeader>, detail: number) {
+	w.get('[data-testid="account-address-copy"]').element.dispatchEvent(new MouseEvent("click", { bubbles: true, detail }))
+	await flushPromises()
 }
 
 beforeEach(() => {
@@ -128,12 +135,35 @@ describe("Header — avatar/name/address split", () => {
 		const w = mountHeader()
 		// Sanity: the DISPLAY is truncated — the copy must not be.
 		expect(w.find('[data-testid="account-address-copy"]').text()).toContain("0x018d...00f6")
-		await w.find('[data-testid="account-address-copy"]').trigger("click")
-		await flushPromises()
+		await clickAddress(w, 1)
 
 		expect(writeText).toHaveBeenCalledWith(FULL_ADDRESS)
 		expect(H.openToast).toHaveBeenCalledWith({ kind: "success", label: "Address is copied" })
 		expect(H.openPopup).not.toHaveBeenCalled() // copying never opens the switcher
+	})
+
+	test("a pointer click that ends a selection in the address copies nothing; Enter's click over it still copies", async () => {
+		const writeText = vi.fn(async () => {})
+		Object.defineProperty(window.navigator, "clipboard", { value: { writeText }, configurable: true })
+		// `selectedWithin` reads only a node in the document.
+		const w = mountHeader(document.body.appendChild(document.createElement("div")))
+		try {
+			const range = document.createRange()
+			range.selectNodeContents(w.get('[data-testid="account-address-text"]').element)
+			window.getSelection()?.addRange(range)
+			expect(window.getSelection()?.toString()).toContain("0x018d...00f6")
+
+			await clickAddress(w, 1)
+			expect(writeText).not.toHaveBeenCalled()
+			expect(H.openToast).not.toHaveBeenCalled()
+
+			await clickAddress(w, 0)
+			expect(writeText.mock.calls).toEqual([[FULL_ADDRESS]])
+		} finally {
+			window.getSelection()?.removeAllRanges()
+			w.unmount()
+			document.body.replaceChildren()
+		}
 	})
 
 	test("avatar AND name both open the accounts popup (the two switcher affordances)", async () => {

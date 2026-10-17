@@ -242,8 +242,9 @@ function makeDeps(opts: {
 		// biome-ignore lint/suspicious/noExplicitAny: ContractResolver structural stub
 	} as any
 
-	// A local row (chainId 0) skips only the composite check; the exact l1ChainId still binds.
-	return { pxe, node, network: { chainId: 0, l1ChainId: 11155111 }, account, contractResolver, logger: { log: () => {} } }
+	// The row of the fake node's default pair, so the identity check passes on both halves.
+	const network = { chainId: (11155111 ^ 4127419662) >>> 0, l1ChainId: 11155111 }
+	return { pxe, node, network, account, contractResolver, logger: { log: () => {} } }
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────

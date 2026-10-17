@@ -12,14 +12,32 @@ import { LoggerStore } from "@/wallet/logger"
 import { loggedAfter } from "../../../../tests/helpers/logged"
 import { ConfigStore } from "@/wallet/config"
 import { NoteStatus } from "@aztec-labs/stdlib/note"
+import { computeUniqueNoteHash } from "@aztec-labs/stdlib/hash"
 import { NoteService } from "./service"
 import type { Note } from "./spec"
+
+// Barretenberg does not load under vitest, so the protocol hashes are deterministic fakes that name
+// their inputs.
+vi.mock("@aztec-labs/stdlib/hash", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@aztec-labs/stdlib/hash")>()),
+	siloNoteHash: vi.fn(async (contract: unknown, noteHash: unknown) => `silo(${contract},${noteHash})`),
+	computeUniqueNoteHash: vi.fn(async (nonce: unknown, siloed: unknown) => ({ toString: () => `unique(${nonce},${siloed})` })),
+}))
 
 type Fake<T> = T extends object ? { [K in keyof T]?: Fake<T[K]> } : T
 
 /** Minimal NoteDao surface NoteService.parseNote touches. */
 function fakeNoteDao(
-	overrides: Partial<{ contract: string; slot: string; tx: string; items: unknown[]; owner: string; randomness: string }> = {},
+	overrides: Partial<{
+		contract: string
+		slot: string
+		tx: string
+		items: unknown[]
+		owner: string
+		randomness: string
+		nonce: string
+		noteHash: string
+	}> = {},
 ): unknown {
 	const contract = overrides.contract ?? "0xc1"
 	const slot = overrides.slot ?? "0x1"
@@ -34,6 +52,12 @@ function fakeNoteDao(
 		owner: { toString: () => owner },
 		randomness: { toString: () => randomness },
 		note: { items: items.map((x) => ({ toString: () => String(x) })) },
+		noteNonce: { toString: () => overrides.nonce ?? "0xnonce" },
+		noteHash: { toString: () => overrides.noteHash ?? "0xnotehash" },
+		siloedNullifier: { toString: () => "0xnullifier" },
+		l2BlockNumber: 5,
+		txIndexInBlock: 1,
+		noteIndexInTx: 2,
 	}
 }
 
@@ -49,6 +73,9 @@ function brokenNoteDao(): unknown {
 				throw new Error("decode failed")
 			},
 		},
+		noteNonce: { toString: () => "0xbadnonce" },
+		noteHash: { toString: () => "0xbadhash" },
+		siloedNullifier: { toString: () => "0xbadnullifier" },
 	}
 }
 
@@ -189,6 +216,29 @@ describe("NoteService reads for incoming reconciliation", () => {
 			hash: async () => ({ toString: () => hash }),
 		}))
 		expect(await service.getSyncedBlock("n")).toEqual({ number: 42, hash })
+	})
+})
+
+describe("NoteService.getNotesRaw — note identity", () => {
+	const acc = "0x0000000000000000000000000000000000000000000000000000000000000001"
+
+	test("each note, parsed or not, carries the unique hash of its nonce, contract and note hash, and never its nullifier", async () => {
+		const { service, setNotes } = makeService()
+		setNotes([fakeNoteDao({ contract: "0xa", nonce: "0xn1", noteHash: "0xh1" }), brokenNoteDao()])
+
+		const raw = await service.getNotesRaw("n", acc)
+
+		expect(raw.map((n) => n.uniqueNoteHash)).toEqual(["unique(0xn1,silo(0xa,0xh1))", "unique(0xbadnonce,silo(0xbad,0xbadhash))"])
+		expect(raw[1].renderError).toMatch(/decode failed/)
+		expect(JSON.stringify(raw)).not.toContain("nullifier")
+	})
+
+	test("a note whose identity cannot be computed rejects the read", async () => {
+		const { service, setNotes } = makeService()
+		setNotes([fakeNoteDao({ contract: "0xa" }), fakeNoteDao({ contract: "0xb" })])
+		vi.mocked(computeUniqueNoteHash).mockRejectedValueOnce(new Error("hash unavailable"))
+
+		await expect(service.getNotesRaw("n", acc)).rejects.toThrow("hash unavailable")
 	})
 })
 

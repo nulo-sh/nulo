@@ -271,6 +271,12 @@ describe("stale-anchor and unregistered-contract arms", () => {
 			data: { walletErrorCode: "PXE_SCOPE_UNREGISTERED" },
 		})
 
+		expect(toWalletResponseError(rethrown(UnsupportedMethodError.forMethod("profileTx")))).toEqual({
+			code: -32601,
+			message: "Unsupported wallet method: profileTx",
+			data: { walletErrorCode: "UNSUPPORTED_METHOD" },
+		})
+
 		const bindingRefusal = (() => {
 			try {
 				return assertSelectorBinding({ name: "transfer" } as never, { name: "balance_of_public" }, CALL_BINDING)

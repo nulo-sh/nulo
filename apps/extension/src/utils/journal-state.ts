@@ -10,7 +10,7 @@ import type { GlyphName } from "@nulo/design/core/glyphs.ts"
 import type { JobErrorKind, SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import { balanceFormatted } from "@/utils/amount.js"
 import { knownDecimals } from "@/utils/token-amount"
-import { formatTransferType, humanizeMethodName } from "@/utils/tx-enrichment"
+import { DAPP_LABEL, formatTransferType, humanizeMethodName } from "@/utils/tx-enrichment"
 import { isSendCheckable, type OperationKind, type OperationRecord, wasNeverSent } from "@/wallet/services/operation-journal/spec"
 
 /**
@@ -424,7 +424,8 @@ function dappCardFields(op: OperationRecord): JournalCardFields {
 
 /*
  * The awaiting card's fields, built from the same leaves as the terminal card's so a journal op
- * reads the same across its lifecycle. Each checks the kind before reading anything else.
+ * reads the same across its lifecycle; only a nameless dApp's chip takes the settled row's fallback.
+ * Each checks the kind before reading anything else.
  */
 
 export function journalCardTitle(op: OperationRecord, tokenById: JournalTerminalCardCtx["tokenById"]): string {
@@ -439,8 +440,8 @@ export function journalCardIcon(op: OperationRecord): GlyphName {
 /** `op.subtitle` is the dApp-controlled origin persisted at session-discover time; bracketed when
  *  schemeful so it never reads as a link. */
 export function journalCardOriginLabel(op: OperationRecord): string | null {
-	if (op.kind === "transfer") return null
-	return sanitizeJournalSubtitle(op.subtitle)
+	if (op.kind !== "dapp_execute") return null
+	return sanitizeJournalSubtitle(op.subtitle) ?? DAPP_LABEL
 }
 
 export function journalCardTransferTypeLabel(op: OperationRecord): string | null {
