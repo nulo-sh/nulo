@@ -220,12 +220,12 @@ const dappExecuteTask = (id = "task-dapp") => ({
 	subtasks: [],
 })
 
-const incomingRecord = (over: Record<string, unknown>) => ({
+const incomingRecord = ({ key = "k", ...over }: Record<string, unknown>) => ({
 	// Discriminated-union NOTE record: `kind` is required (resolveReceivedType, called during the card
 	// render, early-returns on it — without it a note falls into the public branch and dereferences the
 	// absent `from`), and `id` is the row key.
 	kind: "note",
-	id: `note:p1|net-1|${(over.siloedNullifier as string) ?? "sn"}`,
+	id: `note:p1|net-1|${key}`,
 	profileId: "p1",
 	accountAddress: ACCT_A,
 	networkId: "net-1",
@@ -367,9 +367,9 @@ describe("RecentActivityView — account-switch containment (Layer A)", () => {
 
 	test("excludes foreign-account + foreign-network incoming rows from recentActivityRows", async () => {
 		H.getIncomingTransfers.mockResolvedValue([
-			incomingRecord({ accountAddress: ACCT_A, networkId: "net-1", siloedNullifier: "sn-active", discoveredAt: 2000 }),
-			incomingRecord({ accountAddress: ACCT_FOREIGN, networkId: "net-1", siloedNullifier: "sn-foreign-acct", discoveredAt: 1000 }),
-			incomingRecord({ accountAddress: ACCT_A, networkId: "net-OTHER", siloedNullifier: "sn-foreign-net", discoveredAt: 1500 }),
+			incomingRecord({ accountAddress: ACCT_A, networkId: "net-1", key: "sn-active", discoveredAt: 2000 }),
+			incomingRecord({ accountAddress: ACCT_FOREIGN, networkId: "net-1", key: "sn-foreign-acct", discoveredAt: 1000 }),
+			incomingRecord({ accountAddress: ACCT_A, networkId: "net-OTHER", key: "sn-foreign-net", discoveredAt: 1500 }),
 		])
 
 		const wrapper = mountView()
@@ -382,7 +382,7 @@ describe("RecentActivityView — account-switch containment (Layer A)", () => {
 
 		const vm = vmOf(wrapper)
 		const incoming = vm.recentActivityRows.filter((r: { type: string }) => r.type === "incoming")
-		expect(incoming.map((r: { inc: { siloedNullifier: string } }) => r.inc.siloedNullifier)).toEqual(["sn-active"])
+		expect(incoming.map((r: { inc: { id: string } }) => r.inc.id)).toEqual(["note:p1|net-1|sn-active"])
 	})
 })
 
@@ -547,7 +547,7 @@ describe("RecentActivityView — rows link to their detail routes", () => {
 		H.store.current.transactions = [{ hash: "0xh1", account: ACCT_A, chainId: 1, updatedAt: 3000, calls: [] } as never]
 		H.getTokens.mockResolvedValue([{ id: 2, symbol: "TST" }])
 		H.getOperations.mockResolvedValue([{ ...inFlightTransferOp(ACCT_A, "op-1"), terminalAt: 5, progress: { stage: "cancelled" } }])
-		H.getIncomingTransfers.mockResolvedValue([incomingRecord({ siloedNullifier: "sn-1", discoveredAt: 2000 })])
+		H.getIncomingTransfers.mockResolvedValue([incomingRecord({ key: "sn-1", discoveredAt: 2000 })])
 
 		// The receipt card renders for real, down to its link; the other two stay stubs read by prop.
 		const w = mount(RecentActivityView, {
@@ -826,8 +826,8 @@ describe("RecentActivityView — arrivals", () => {
 	}
 
 	test("the account feed paints its rows only under a loaded arrival state, judges each one and presents them", async () => {
-		const first = incomingRecord({ siloedNullifier: "a", discoveredAt: 2000 })
-		const second = incomingRecord({ siloedNullifier: "b", discoveredAt: 1000 })
+		const first = incomingRecord({ key: "a", discoveredAt: 2000 })
+		const second = incomingRecord({ key: "b", discoveredAt: 1000 })
 		H.getIncomingTransfers.mockResolvedValue([first, second])
 		const arrivals = fakeArrivals([first.id])
 		let finishLoad = () => {}
@@ -848,7 +848,7 @@ describe("RecentActivityView — arrivals", () => {
 	})
 
 	test("a receipt the row budget leaves out is not presented", async () => {
-		const records = [1, 2, 3, 4, 5, 6].map((n) => incomingRecord({ siloedNullifier: `r${n}`, discoveredAt: 1000 * (7 - n) }))
+		const records = [1, 2, 3, 4, 5, 6].map((n) => incomingRecord({ key: `r${n}`, discoveredAt: 1000 * (7 - n) }))
 		H.getIncomingTransfers.mockResolvedValue(records)
 		const arrivals = fakeArrivals(records.map((r) => r.id))
 		mountWith(arrivals)
@@ -857,7 +857,7 @@ describe("RecentActivityView — arrivals", () => {
 	})
 
 	test("the token page's feed waits for no arrival state, marks nothing arriving and presents nothing", async () => {
-		const r = incomingRecord({ siloedNullifier: "t", tokenId: 7 })
+		const r = incomingRecord({ key: "t", tokenId: 7 })
 		H.getIncomingTransfers.mockResolvedValue([r])
 		const arrivals = fakeArrivals([r.id])
 		const w = mountWith(arrivals, { token: { id: 7, contract: "0xtok", symbol: "TOK" } })
@@ -986,7 +986,7 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 			],
 			[
 				{ kind: "dapp_execute" },
-				{ title: "Transaction", icon: "zap", originLabel: null, amount: null, amountSymbol: null, transferTypeLabel: null },
+				{ title: "Transaction", icon: "zap", originLabel: "dApp", amount: null, amountSymbol: null, transferTypeLabel: null },
 			],
 		]
 		H.getOperations.mockResolvedValue(table.map(([over], i) => inFlight(`op-${i}`, 100 - i, over)))

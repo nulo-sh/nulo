@@ -134,15 +134,14 @@ export async function seedTokenRow(
 	await storeRow(page, `nulo:core:tokens@${id}`, row)
 }
 
-export type ReceiptSeed = { tokenId: number; amount: string; nullifier: string; at?: number }
+export type ReceiptSeed = { tokenId: number; amount: string; uniqueNoteHash: string; at?: number }
 
 /** A visible note receipt of the registered token. Block 1 keeps it history: it never plays as an arrival. */
 export async function seedReceipt(page: Page, scope: ActivityScope, seed: ReceiptSeed): Promise<string> {
-	const id = `note:${scope.profileId}|${scope.networkId}|${seed.nullifier}`
+	const id = `note:${scope.profileId}|${scope.networkId}|${seed.uniqueNoteHash}`
 	const record = {
 		kind: "note",
 		id,
-		siloedNullifier: seed.nullifier,
 		noteHash: `0x${"ab".repeat(32)}`,
 		owner: scope.account,
 		profileId: scope.profileId,

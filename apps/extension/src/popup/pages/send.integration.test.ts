@@ -290,7 +290,7 @@ function settled(w: W) {
 	return { action, you, to: strip(w).attributes("data-to"), amount: strip(w).attributes("data-amount") }
 }
 
-const submittedFee = () => (mocks.executeTransfer.mock.calls[0]?.[6] as { paymentMethod: unknown } | undefined)?.paymentMethod
+const submittedFee = () => (mocks.executeTransfer.mock.calls[0]?.[7] as { paymentMethod: unknown } | undefined)?.paymentMethod
 
 beforeEach(() => {
 	document.body.innerHTML = '<div id="popup"></div>'
@@ -729,8 +729,8 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		await submit(w).trigger("click")
 		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
 		const args = mocks.executeTransfer.mock.calls[0] as unknown[]
-		expect(args[7]).toBeUndefined()
-		expect(args[8]).toBe("4472280000000000000")
+		expect(args[8]).toBeUndefined()
+		expect(args[9]).toBe("4472280000000000000")
 		w.unmount()
 	})
 
@@ -749,9 +749,9 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		await submit(w).trigger("click")
 		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
 		const args = mocks.executeTransfer.mock.calls[0] as unknown[]
-		expect(args[6]).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
-		expect(args[7]).toBeUndefined()
+		expect(args[7]).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
 		expect(args[8]).toBeUndefined()
+		expect(args[9]).toBeUndefined()
 		w.unmount()
 	})
 

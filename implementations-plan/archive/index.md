@@ -64,6 +64,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [contacts-rename-export-senders](contacts-rename-export-senders/plan.md) — completed — senders renamed to contacts, with the sender flag kept across export and import
 - [contacts-sender-decouple](contacts-sender-decouple/plan.md) — completed — contacts never register or unregister senders, except the explicit adds an import makes
 - [copy-polish](copy-polish/plan.md) — completed — four small user-visible copy changes, including the clause-dash ban
+- [dapp-boundary-2](dapp-boundary-2/plan.md) — completed — a contract's key registers only its own account, one chain check per dApp call, no row for a connect that reaches no page
 - [dapp-dispatch-hold](dapp-dispatch-hold/plan.md) — completed — hold an app's calls until They match: a per-session hold opened at establishment, released by the session's own hash, dropped on every session end; a lock ends unconfirmed sessions; 32 held calls then -32005
 - [dapp-grants](dapp-grants/plan.md) — completed — a refused dApp request tells no one more than it must
 - [dapp-ingress-grants](dapp-ingress-grants/plan.md) — completed — stored grants validated at every deciding reader, other profiles' handshakes kept, refused app sends named and titled by their call, the app's network in the connect window, the app contract ratified (class widening, address checks, strict `chainInfo`, -32005)
@@ -111,6 +112,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [enter-gate-and-ping](enter-gate-and-ping/plan.md) — completed — one submit-validity computed for the profile-edit popup, and a ping message type
 - [execute-popup-readability](execute-popup-readability/plan.md) — completed — the approval window's transaction body read as a summary of calls and authorizations, its rows behind one toggle
 - [execution-decomposition](execution-decomposition/plan.md) — completed — the execution service decomposed with zero behaviour change
+- [execution-integrity-1](execution-integrity-1/plan.md) — completed — a transfer bound to its approved token contract, every broadcast recorded through a profile switch, revokes that wait for their grants and verify (#662, #664, #669)
 - [execution-pipeline](execution-pipeline/plan.md) — completed — a money-path complexity burn-down with no wire or journal change
 - [execution-pxe-injection-spike](execution-pxe-injection-spike/plan.md) — completed — the composition test layer proven on the execution service
 - [export-integrity](export-integrity/plan.md) — completed — a pure backup assembly and a latch on the export path
@@ -275,6 +277,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [stale-network-reset](stale-network-reset/plan.md) — completed — an update that leaves a network behind quarantines only that network; layout A offers an in-place reset (Mainnet blocked), resumable after a worker kill
 - [storage-migration-backup](storage-migration-backup/plan.md) — completed — imported backups migrate through the same migrations as live storage
 - [storage-migration-framework](storage-migration-framework/plan.md) — completed — persisted storage shapes transformed in place on update, never wiped
+- [storage-privacy-1](storage-privacy-1/plan.md) — completed — note receipts keyed by their unique note hash; `storage.local` for trusted contexts only (#660)
 - [supply-chain-release](supply-chain-release/plan.md) — completed — release zips attested and published through a draft, a pinned CI toolchain, an import-free content script, a blocking audit gate (#21 #12 #22 #20)
 - [sw-wallet-protocol](sw-wallet-protocol/plan.md) — completed — the service-worker boot and wallet protocol path under the complexity budget
 - [testers-fixes-1](testers-fixes-1/plan.md) — completed — selectable text, the toolbar sentence, back keeps scroll, 2 s success toasts, a display-only Home hero (#580 #581 #582 #584 #586)
@@ -291,6 +294,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [type-scale-1](type-scale-1/plan.md) — completed — Scale A on every screen (#589): `meta` 13, `nav` 11, the small caps in `label-section`, `data` into `meta`, and a layout gate on every swept state
 - [typecheck-cleanup](typecheck-cleanup/plan.md) — completed — the extension taken to zero type errors, with one root typecheck command
 - [ui-followups-p18](ui-followups-p18/plan.md) — completed — the last outline-grey text moved to secondary (#363), store art regenerated after the owner signed it (#364), the tx fee row's hover fade removed
+- [ui-leftovers-1](ui-leftovers-1/plan.md) — completed — decision page 35's six picks: a display-only token hero, a selectable header address, the in-flight dApp chip, Holdings' unavailable state, 6 s action toasts, a large dApp transfer's app chip under its direction
 - [unserved-chain-connect](unserved-chain-connect/plan.md) — completed — a connection to a chain the profile has no network for is refused, and the wallet says so
 - [ux-cleanup-arc](ux-cleanup-arc/plan.md) — completed in part — five small fixes for user-facing rough edges
 - [ux-feedback](ux-feedback/plan.md) — completed — a user-testing proposal built as five batches on one stack

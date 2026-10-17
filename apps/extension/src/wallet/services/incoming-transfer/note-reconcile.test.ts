@@ -1,15 +1,16 @@
 import { describe, expect, test } from "vitest"
 import type { RawNote } from "@/wallet/services/note/spec"
-import { type NoteBracket, decideNoteRow, isVerifiedBracket, movedRows, needsBracket, notesByNullifier } from "./note-reconcile"
+import { type NoteBracket, decideNoteRow, isVerifiedBracket, movedRows, needsBracket, notesById } from "./note-reconcile"
 import { type IncomingNoteRecord, noteRecordId } from "./spec"
 
-const nullifier = (n: number) => `0x${n.toString(16).padStart(64, "0")}`
+const uniqueNoteHash = (n: number) => `0x${n.toString(16).padStart(64, "0")}`
 
-function row(n: number, at: { block: number; tx?: number; index?: number }): IncomingNoteRecord {
+type At = { block: number; tx?: number; index?: number; txHash?: string }
+
+function row(n: number, at: At): IncomingNoteRecord {
 	return {
 		kind: "note",
-		id: noteRecordId("p1", "n1", nullifier(n)),
-		siloedNullifier: nullifier(n),
+		id: noteRecordId("p1", "n1", uniqueNoteHash(n)),
 		profileId: "p1",
 		networkId: "n1",
 		accountAddress: "0xa",
@@ -17,7 +18,7 @@ function row(n: number, at: { block: number; tx?: number; index?: number }): Inc
 		owner: "0xa",
 		amountRaw: "1",
 		noteHash: "0xnh",
-		txHash: "0xth",
+		txHash: at.txHash ?? "0xth",
 		l2BlockNumber: at.block,
 		txIndexInBlock: at.tx ?? 0,
 		indexInTx: at.index ?? 0,
@@ -26,13 +27,13 @@ function row(n: number, at: { block: number; tx?: number; index?: number }): Inc
 	}
 }
 
-function note(n: number, at: { block: number; tx?: number; index?: number }): RawNote {
+function note(n: number, at: At): RawNote {
 	return {
 		contract: "0xc",
 		storageSlot: "0x1",
-		txHash: "0xth",
+		txHash: at.txHash ?? "0xth",
 		rawContent: [],
-		siloedNullifier: nullifier(n),
+		uniqueNoteHash: uniqueNoteHash(n),
 		noteHash: "0xnh",
 		l2BlockNumber: at.block,
 		txIndexInBlock: at.tx ?? 0,
@@ -44,18 +45,18 @@ const TIP = `0x${"ab".repeat(32)}`
 const OTHER = `0x${"cd".repeat(32)}`
 
 describe("note reconciliation, step 1: the unspent read", () => {
-	test("a row at another block, transaction index or note index moves; one at its position does not", () => {
+	test("a row at another block, transaction index or transaction moves; one at its position does not", () => {
 		const rows = [row(1, { block: 10 }), row(2, { block: 10 }), row(3, { block: 10 }), row(4, { block: 10 })]
-		const active = notesByNullifier([
+		const active = notesById("p1", "n1", [
 			note(1, { block: 11 }),
 			note(2, { block: 10, tx: 1 }),
-			note(3, { block: 10, index: 2 }),
+			note(3, { block: 10, txHash: "0xreplacement" }),
 			note(4, { block: 10 }),
 		])
-		expect(movedRows(rows, active).map(({ row, note }) => [row.siloedNullifier, note.l2BlockNumber])).toEqual([
-			[nullifier(1), 11],
-			[nullifier(2), 10],
-			[nullifier(3), 10],
+		expect(movedRows(rows, active).map(({ row, note }) => [row.id, note.l2BlockNumber, note.txHash])).toEqual([
+			[noteRecordId("p1", "n1", uniqueNoteHash(1)), 11, "0xth"],
+			[noteRecordId("p1", "n1", uniqueNoteHash(2)), 10, "0xth"],
+			[noteRecordId("p1", "n1", uniqueNoteHash(3)), 10, "0xreplacement"],
 		])
 	})
 
@@ -66,7 +67,7 @@ describe("note reconciliation, step 1: the unspent read", () => {
 		["no tips: a present row at any height", [row(1, { block: 5 })], [note(1, { block: 5 })], undefined, false],
 		["no tips: a missing row", [row(1, { block: 5 })], [], undefined, true],
 	])("bracket needed, %s: %s", (_name, rows, active, finalized, expected) => {
-		expect(needsBracket(rows, notesByNullifier(active), finalized)).toBe(expected)
+		expect(needsBracket(rows, notesById("p1", "n1", active), finalized)).toBe(expected)
 	})
 })
 
