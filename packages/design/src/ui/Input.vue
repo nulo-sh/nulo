@@ -304,7 +304,7 @@ const handleClear = () => {
 	<Flex direction="column" gap="8">
 		<Flex v-if="label" align="center" justify="between">
 			<Flex align="center" gap="4">
-				<Text variant="label" color="secondary">{{ label }}</Text>
+				<Text variant="label-section" color="secondary">{{ label }}</Text>
 				<slot name="labelSuffix" />
 			</Flex>
 

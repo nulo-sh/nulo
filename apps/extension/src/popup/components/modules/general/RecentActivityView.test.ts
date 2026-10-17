@@ -734,7 +734,7 @@ describe("RecentActivityView — stalled incoming scan line", () => {
 		H.getIncomingSyncHealth.mockResolvedValue({ stalled: true, since: 1 })
 		const w = mountFeed()
 		await flushPromises()
-		expect(retry(w).classes()).toContain("type--label")
+		expect(retry(w).classes()).toContain("type--label-section")
 	})
 
 	test("a token lookup that rejects at mount does not abort the rest of mount — the health is still read", async () => {

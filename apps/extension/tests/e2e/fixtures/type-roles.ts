@@ -47,6 +47,11 @@ export type TypeReading = {
 	textOverflow: string
 	/** `visible` cannot clip: an inline box or one whose overflow shows past it. */
 	overflowX: string
+	/**
+	 * How far, in px, its text reaches past the box it lays out in: its own box, or an inline
+	 * element's containing block. 0 for a field, a box that scrolls and a box that draws an ellipsis.
+	 */
+	pastBox: number
 	scrollWidth: number
 	clientWidth: number
 	visible: boolean
@@ -61,10 +66,11 @@ export type TypeReading = {
 }
 
 /**
- * Which elements a read collects: the role-bearing ones, the visible ones with text of their own, or
- * those at a selector, each read as itself or, with `native`, as the native field at or under it.
+ * Which elements a read collects: the role-bearing ones, the visible ones with text of their own,
+ * both (`laid-out`, what the layout gate judges), or those at a selector, each read as itself or,
+ * with `native`, as the native field at or under it.
  */
-export type ReadScope = { kind: "roles" } | { kind: "own-text" } | { kind: "at"; selector: string; native?: boolean }
+export type ReadScope = { kind: "roles" } | { kind: "own-text" } | { kind: "laid-out" } | { kind: "at"; selector: string; native?: boolean }
 
 /** One read of a document: the three face variables as its root resolves them, and the elements. */
 export type PageTypography = { vars: Vars; readings: TypeReading[] }
@@ -95,25 +101,83 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 			.split(/\s+/)
 			.filter((name) => name.startsWith("type--"))
 			.map((name) => name.slice("type--".length))
+	// Insets that meet, the screen-reader idiom: the box paints nothing. A value read as other than a
+	// percentage keeps the box visible.
+	const clipsToNothing = (style: CSSStyleDeclaration): boolean => {
+		const insets = /^inset\(([^)]*?)(?:\s+round\b[^)]*)?\)$/.exec(style.clipPath)?.[1].trim().split(/\s+/)
+		if (!insets) return false
+		const [top, right = top, bottom = top, left = right] = insets.map((v) => (v.endsWith("%") ? Number.parseFloat(v) : Number.NaN))
+		return top + bottom >= 100 || left + right >= 100
+	}
 	const isVisible = (el: Element): boolean => {
 		const box = el.getBoundingClientRect()
-		return box.width > 0 && box.height > 0 && win.getComputedStyle(el).visibility !== "hidden"
+		const style = win.getComputedStyle(el)
+		return box.width > 0 && box.height > 0 && style.visibility !== "hidden" && !clipsToNothing(style)
 	}
 	const hasOwnText = (el: Element): boolean =>
 		Array.from(el.childNodes).some((node) => node.nodeType === 3 && (node.textContent ?? "").trim() !== "")
 	const FIELD = "input, textarea"
 	const field = (el: Element): Element => (el.matches(FIELD) ? el : (el.querySelector(FIELD) ?? el))
+	const shownText = (el: Element): boolean => hasOwnText(el) && isVisible(el)
 	const collect = (): Element[] => {
 		if (scope.kind === "at") return Array.from(doc.querySelectorAll(scope.selector)).map((el) => (scope.native ? field(el) : el))
 		if (scope.kind === "roles") return Array.from(doc.querySelectorAll(ROLE))
-		return Array.from(doc.body.querySelectorAll("*")).filter((el) => hasOwnText(el) && isVisible(el))
+		const all = Array.from(doc.body.querySelectorAll("*"))
+		return scope.kind === "own-text" ? all.filter(shownText) : all.filter((el) => el.matches(ROLE) || shownText(el))
 	}
 	type Span = { left: number; right: number }
-	const paintedSpan = (el: Element): Span => {
+	const join = (span: Span | null, more: Span): Span =>
+		span ? { left: Math.min(span.left, more.left), right: Math.max(span.right, more.right) } : { left: more.left, right: more.right }
+	/** Lays its text out apart from its parent's: a field, a box out of flow, or one that clips or scrolls. */
+	const apart = (el: Element, style: CSSStyleDeclaration): boolean =>
+		el.matches(FIELD) || /^(absolute|fixed)$/.test(style.position) || style.overflowX !== "visible"
+	const textNodeSpan = (node: Node): Span | null => {
+		if ((node.textContent ?? "").trim() === "") return null
+		const range = doc.createRange()
+		range.selectNodeContents(node)
+		return Array.from(range.getClientRects())
+			.filter((rect) => rect.width > 0)
+			.reduce<Span | null>(join, null)
+	}
+	const childSpan = (child: Element): Span | null => {
+		const style = win.getComputedStyle(child)
+		if (style.display === "contents") return textSpan(child)
+		if (!isVisible(child) || child.matches(FIELD) || /^(absolute|fixed)$/.test(style.position)) return null
+		if (!apart(child, style)) return textSpan(child)
+		// A box that clips lays its text out apart, yet paints it inside this one.
+		const own = textSpan(child)
+		return own ? paintedSpan(child, own) : null
+	}
+	const spans = new Map<Element, Span | null>()
+	/** Where an element's text reaches sideways: its own and its in-flow descendants', a clipping one's as painted, a field's not at all. */
+	const textSpan = (el: Element): Span | null => {
+		const known = spans.get(el)
+		if (known !== undefined) return known
+		const parts = Array.from(el.childNodes).map((node) =>
+			node.nodeType === 3 ? textNodeSpan(node) : node.nodeType === 1 ? childSpan(node as Element) : null,
+		)
+		const span = parts.reduce<Span | null>((sum, part) => (part ? join(sum, part) : sum), null)
+		spans.set(el, span)
+		return span
+	}
+	/** `text-overflow` acts on a block container's own lines: a flex or grid container draws no ellipsis. */
+	const drawsEllipsis = (style: CSSStyleDeclaration): boolean =>
+		style.textOverflow === "ellipsis" && style.overflowX !== "visible" && !/flex|grid/.test(style.display)
+	const pastBox = (el: Element, span: Span | null): number => {
+		let box = el
+		while (box.parentElement && /^(inline|contents)$/.test(win.getComputedStyle(box).display)) box = box.parentElement
+		const style = win.getComputedStyle(box)
+		if (!span || box.matches(FIELD) || /^(auto|scroll)$/.test(style.overflowX) || drawsEllipsis(style)) return 0
+		const left = box.getBoundingClientRect().left + box.clientLeft
+		return Math.max(0, left - span.left, span.right - (left + box.clientWidth))
+	}
+	const paintedSpan = (el: Element, span: Span | null): Span => {
 		const box = el.getBoundingClientRect()
+		if (!span || el.matches(FIELD)) return { left: box.left, right: box.right }
 		// Text an element clips itself paints no further than its own box.
-		if (win.getComputedStyle(el).overflowX !== "visible") return { left: box.left, right: box.right }
-		return { left: box.left, right: Math.max(box.right, box.left + el.scrollWidth) }
+		if (win.getComputedStyle(el).overflowX !== "visible")
+			return { left: Math.max(span.left, box.left), right: Math.min(span.right, box.right) }
+		return { ...span }
 	}
 	const clippingAncestors = (el: Element): Element[] => {
 		const found: Element[] = []
@@ -125,15 +189,24 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 		}
 		return found
 	}
+	/** The block whose lines hold the element: itself, or the nearest ancestor it sits inline in. */
+	const lineOf = (el: Element): Element => {
+		let box = el
+		while (box.parentElement && /^(inline|contents)/.test(win.getComputedStyle(box).display)) box = box.parentElement
+		return box
+	}
 	const crosses = (span: Span, edge: DOMRect): boolean => span.left < edge.left - 0.5 || span.right > edge.right + 0.5
 	const nameOf = (el: Element): string => el.getAttribute("data-testid") ?? el.tagName
-	const cutBy = (el: Element): Pick<TypeReading, "clippedBy" | "ellipsizedBy"> => {
-		const span = paintedSpan(el)
+	const cutBy = (el: Element, text: Span | null): Pick<TypeReading, "clippedBy" | "ellipsizedBy"> => {
+		const span = paintedSpan(el, text)
+		const lines = lineOf(el)
 		let ellipsizedBy: string | null = null
 		for (const up of clippingAncestors(el)) {
 			const edge = up.getBoundingClientRect()
 			const crossed = crosses(span, edge)
-			if (crossed && win.getComputedStyle(up).textOverflow !== "ellipsis") return { clippedBy: nameOf(up), ellipsizedBy }
+			// An ellipsis shortens the lines of the box that draws it, never a block inside that box.
+			const ellipsis = up === lines && drawsEllipsis(win.getComputedStyle(up))
+			if (crossed && !ellipsis) return { clippedBy: nameOf(up), ellipsizedBy }
 			if (crossed) ellipsizedBy ??= nameOf(up)
 			span.left = Math.max(span.left, edge.left)
 			span.right = Math.min(span.right, edge.right)
@@ -142,6 +215,7 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 	}
 	const read = (el: Element): TypeReading => {
 		const style = win.getComputedStyle(el)
+		const span = textSpan(el)
 		return {
 			testid: el.closest("[data-testid]")?.getAttribute("data-testid") ?? null,
 			text: (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 60),
@@ -154,10 +228,11 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 			fontVariantNumeric: style.fontVariantNumeric,
 			textOverflow: style.textOverflow,
 			overflowX: style.overflowX,
+			pastBox: pastBox(el, span),
 			scrollWidth: el.scrollWidth,
 			clientWidth: el.clientWidth,
 			visible: isVisible(el),
-			...cutBy(el),
+			...cutBy(el, span),
 			addressShows: el.getAttribute("data-address-shows"),
 			scopes: scopes.filter((selector) => el.matches(selector)),
 		}
@@ -432,6 +507,25 @@ export function expectSweepClean(result: SweepResult, label = "type-role sweep")
 	expect(result.failures, `${label}: role values`).toEqual([])
 }
 
+// ── The layout gate ─────────────────────────────────────────────────────
+
+export type Overflow = Pick<TypeReading, "testid" | "text" | "roles" | "pastBox" | "clippedBy">
+
+/**
+ * Text cut by an ancestor with no ellipsis drawn, or reaching more than 1 px past the box it lays
+ * out in with none drawn there. A field or a box that scrolls answers only for an ancestor's cut.
+ */
+export const overflowingText = (readings: readonly TypeReading[]): Overflow[] =>
+	readings
+		.filter((reading) => reading.visible && (reading.clippedBy !== null || reading.pastBox > 1))
+		.map(({ testid, text, roles, pastBox, clippedBy }) => ({ testid, text, roles, pastBox: Math.round(pastBox * 10) / 10, clippedBy }))
+
+/** The layout gate over the page as it stands: every role-bearing element and every element with text of its own. */
+export async function expectLaidOut(page: Page, label: string): Promise<void> {
+	const { readings } = await readPageTypography(page, { kind: "laid-out" })
+	expect(overflowingText(readings), `${label}: text past its box`).toEqual([])
+}
+
 export type TypeRecord = Pick<
 	TypeReading,
 	"testid" | "text" | "roles" | "fontFamily" | "fontSize" | "fontWeight" | "letterSpacing" | "textTransform" | "fontVariantNumeric"
@@ -462,7 +556,7 @@ export type SiteEntry = {
 	expression: string
 	branch: string
 	ordinal: number
-	role: "data" | "data-lead" | "input-data" | "meta" | "name" | "none"
+	role: "data-lead" | "input-data" | "meta" | "name" | "none"
 	selector: string
 	surface: string
 	state: string

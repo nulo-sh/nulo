@@ -15,6 +15,7 @@ import {
 } from "../fixtures/popups"
 import { serializeInstance } from "../fixtures/selfpay-phase"
 import {
+	expectLaidOut,
 	expectSitesClean,
 	expectSweepClean,
 	type IdentifierObservation,
@@ -29,8 +30,9 @@ const hasConfig = aztecConfig !== undefined
 /**
  * The type-role sweep in the approval windows a dApp opens: every role-bearing element of the
  * capabilities and execute windows computes to its role, and each identifier site the request
- * renders carries its own, an `AddressDisplay` showing an address (`data`) and one showing an
- * account's name (`name`) among them. Every window is rejected.
+ * renders carries its own, an `AddressDisplay` showing an address (`meta`) and one showing an
+ * account's name (`name`) among them; no text runs past its box, the longest payload a dApp can send
+ * included. Every window is rejected.
  */
 
 type Connected = ExtensionContext & { playgroundPage: Page }
@@ -77,6 +79,7 @@ async function waitForStateSites(win: Page, surface: string, state: string): Pro
 async function sweepWindow(win: Page, surface: string, states: readonly string[]): Promise<IdentifierObservation[]> {
 	for (const state of states) await waitForStateSites(win, surface, state)
 	expectSweepClean(await sweepTypeRoles(win), surface)
+	await expectLaidOut(win, surface)
 	const observations: IdentifierObservation[] = []
 	for (const state of states) {
 		const observation = await observeIdentifierSites(win, surface, state, { sites: SITES })
@@ -258,6 +261,7 @@ test.skipIf(!hasConfig)(
 					expect(await payloadPastCard(win)).toBeLessThanOrEqual(0)
 					await stretchPayload(win)
 					expect(await payloadPastCard(win)).toBeLessThanOrEqual(0)
+					await expectLaidOut(win, `${request.method}, the longest payload`)
 					expect(observations.flatMap(({ hexOutsideMono }) => hexOutsideMono)).toEqual([])
 				}
 				const asserted = observations.flatMap(({ sites }) => sites.filter(({ mode }) => mode === "asserted"))

@@ -55,7 +55,7 @@
 }
 
 .kv_key {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 
 	overflow: hidden;
@@ -64,7 +64,7 @@
 }
 
 .kv_val {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 
 	min-width: 0;

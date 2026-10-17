@@ -271,7 +271,7 @@ onBeforeUnmount(() => {
 
 							<Flex direction="column" gap="4" wide>
 								<Text variant="name" color="primary" :class="[$style.title, $style.name_size]">{{ c.name }}</Text>
-								<Text variant="data" color="tertiary" data-testid="recipient-suggestion-address" :class="$style.description">
+								<Text variant="meta" color="tertiary" data-testid="recipient-suggestion-address" :class="$style.description">
 									{{ trimAddress(c.address) }}
 								</Text>
 							</Flex>

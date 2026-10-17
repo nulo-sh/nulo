@@ -147,7 +147,7 @@
 			"expression": "shownAddress(entry.row.address)",
 			"branch": "!(entry.kind === 'sub') && !(entry.named)",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"capability-address\"]",
 			"surface": "windows-capabilities",
 			"state": "a contract scope with its details open (network)"
@@ -200,7 +200,7 @@
 			"expression": "masked",
 			"branch": "",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"recipient-card-masked\"]",
 			"surface": "popup-send",
 			"state": "a chosen recipient"
@@ -210,7 +210,7 @@
 			"expression": "address",
 			"branch": "revealed",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"recipient-card-full-address\"]",
 			"surface": "popup-send",
 			"state": "a chosen recipient with recipient-card-reveal clicked"
@@ -306,7 +306,7 @@
 			"expression": "sanitizeWireString(trimAddress(address), 128)",
 			"branch": "",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"scope-address-value\"]",
 			"surface": "popup-settings-connected-apps-id",
 			"state": "a connected app whose grant holds a contract scope (network)"
@@ -316,7 +316,7 @@
 			"expression": "sanitizeWireString(trimAddress(id), 128)",
 			"branch": "",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"scope-class-id-value\"]",
 			"surface": "popup-settings-connected-apps-id",
 			"state": "a connected app whose grant holds a class scope (network)"
@@ -346,7 +346,7 @@
 			"expression": "title",
 			"branch": "",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"token-import-title\"]",
 			"surface": "popup-general",
 			"state": "a token import in flight whose token has no name"
@@ -356,7 +356,7 @@
 			"expression": "trimAddress(addCandidate, 4, 2, \"…\")",
 			"branch": "addCandidate",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"holdings-add-token-address\"]",
 			"surface": "popup-holdings",
 			"state": "a pasted address no listed token matches"
@@ -376,7 +376,7 @@
 			"expression": "trimAddress(c.address)",
 			"branch": "!(selectedContact && !holdView) && showSuggestions",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"recipient-suggestion-address\"]",
 			"surface": "popup-send",
 			"state": "a saved contact and a partial recipient typed"
@@ -386,7 +386,7 @@
 			"expression": "toLine",
 			"branch": "",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"send-review-recipient\"]",
 			"surface": "popup-send",
 			"state": "recipient and amount typed, review sheet open (network)"
@@ -396,7 +396,7 @@
 			"expression": "authwit.content.selector",
 			"branch": "authwit.content.kind === 'encoded_call'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"record-selector\"]",
 			"surface": "popup-settings-developer-account-state-authwits",
 			"state": "a backup restored with an encoded_call authwit record"
@@ -406,7 +406,7 @@
 			"expression": "authwit.content.messageHash",
 			"branch": "authwit.content.kind === 'message_hash'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"record-hash\"]",
 			"surface": "popup-settings-developer-account-state-authwits",
 			"state": "a backup restored with a message_hash authwit record"
@@ -416,7 +416,7 @@
 			"expression": "authwit.content.caller",
 			"branch": "authwit.content.kind === 'call'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"record-caller\"]",
 			"surface": "popup-settings-developer-account-state-authwits",
 			"state": "a public authwit granted"
@@ -426,7 +426,7 @@
 			"expression": "authwit.content.contract",
 			"branch": "authwit.content.kind === 'call'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"record-contract\"]",
 			"surface": "popup-settings-developer-account-state-authwits",
 			"state": "a public authwit granted"
@@ -436,7 +436,7 @@
 			"expression": "authwit.content.caller",
 			"branch": "authwit.content.kind === 'encoded_call'",
 			"ordinal": 1,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"record-caller\"]",
 			"surface": "popup-settings-developer-account-state-authwits",
 			"state": "a backup restored with an encoded_call authwit record"
@@ -446,7 +446,7 @@
 			"expression": "authwit.content.to",
 			"branch": "authwit.content.kind === 'encoded_call'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"record-to\"]",
 			"surface": "popup-settings-developer-account-state-authwits",
 			"state": "a backup restored with an encoded_call authwit record"
@@ -456,7 +456,7 @@
 			"expression": "authwit.content.consumer",
 			"branch": "authwit.content.kind === 'intent'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"record-consumer\"]",
 			"surface": "popup-settings-developer-account-state-authwits",
 			"state": "a backup restored with an intent authwit record"
@@ -476,7 +476,7 @@
 			"expression": "trimAddress(contact.address)",
 			"branch": "",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"contact-row-address\"]",
 			"surface": "popup-settings-contacts",
 			"state": "a saved contact"
@@ -486,7 +486,7 @@
 			"expression": "fpc.name || fpc.address",
 			"branch": "",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"fpc-row\"][data-fpc-unnamed] [data-testid=\"setting-title\"]",
 			"surface": "popup-settings-fpcs",
 			"state": "a seeded FPC with no name"
@@ -496,7 +496,7 @@
 			"expression": "trimAddress(tx.hash, 8, 6)",
 			"branch": "expanded",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"tx-debug-hash\"]",
 			"surface": "popup-tx-id",
 			"state": "the seedTransaction row, Developer mode on, the debug toggle clicked"
@@ -516,7 +516,7 @@
 			"expression": "trimAddress(acc.address, 6, 4, '...')",
 			"branch": "",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"account-item\"] [data-testid=\"setting-description\"]",
 			"surface": "popup:accounts",
 			"state": ""
@@ -526,7 +526,7 @@
 			"expression": "fpcToEdit?.name || fpcToEdit?.address",
 			"branch": "",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"edit-fpc-header-row\"] [data-testid=\"setting-title\"]",
 			"surface": "popup:edit_fpc",
 			"state": "a seeded FPC with no name, opened for editing"
@@ -546,7 +546,7 @@
 			"expression": "item.row.addressText.saved",
 			"branch": "!(!item.row) && item.row.addressText",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"import-contact-address-saved\"]",
 			"surface": "popup:import_contacts",
 			"state": "a saved Alice and a file naming Alice at another address (address-change)"
@@ -556,7 +556,7 @@
 			"expression": "item.row.addressText.incoming",
 			"branch": "!(!item.row) && item.row.addressText",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"import-contact-address-incoming\"]",
 			"surface": "popup:import_contacts",
 			"state": "a saved Alice and a file naming Alice at another address (address-change)"
@@ -566,7 +566,7 @@
 			"expression": "trimAddress(item.row.address)",
 			"branch": "!(!item.row) && !(item.row.addressText)",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"import-contact-address\"]",
 			"surface": "popup:import_contacts",
 			"state": "a new contact in the file"
@@ -576,7 +576,7 @@
 			"expression": "contractSlice",
 			"branch": "",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"incoming-trust-contract\"]",
 			"surface": "popup:incoming_trust",
 			"state": "an incoming transfer from an unknown sender (network)"
@@ -626,7 +626,7 @@
 			"expression": "token?.id",
 			"branch": "",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"token-metadata-id\"]",
 			"surface": "popup:token_metadata",
 			"state": ""
@@ -636,7 +636,7 @@
 			"expression": "token.contract.slice(0, 6)",
 			"branch": "",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"token-metadata-address\"]",
 			"surface": "popup:token_metadata",
 			"state": ""
@@ -646,7 +646,7 @@
 			"expression": "token.chainId",
 			"branch": "",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"token-metadata-chain-id\"]",
 			"surface": "popup:token_metadata",
 			"state": ""
@@ -656,7 +656,7 @@
 			"expression": "recipientLabel",
 			"branch": "op && display && recipientLabel && recipientUrl",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"journal-detail-recipient-link\"]",
 			"surface": "popup-journal-id",
 			"state": "a journal operation with a recipient on the testnet chain with an explorer"
@@ -666,7 +666,7 @@
 			"expression": "recipientLabel",
 			"branch": "op && display && recipientLabel && !(recipientUrl)",
 			"ordinal": 1,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"journal-detail-recipient\"]",
 			"surface": "popup-journal-id",
 			"state": "a journal operation with a recipient without an explorer"
@@ -707,7 +707,7 @@
 			"expression": "trimAddress(received.txHash, 6, 4)",
 			"branch": "received && explorerUrl",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"tx-explorer-link\"]",
 			"surface": "popup-received-id",
 			"state": "a seedReceipt note on the testnet chain with an explorer"
@@ -717,7 +717,7 @@
 			"expression": "trimAddress(received.txHash, 6, 4)",
 			"branch": "received && !(explorerUrl)",
 			"ordinal": 1,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"tx-hash-copy\"]",
 			"surface": "popup-received-id",
 			"state": "a seedReceipt note without an explorer"
@@ -747,7 +747,7 @@
 			"expression": "previewAddress",
 			"branch": "!(!needsConfirm)",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"import-account-preview-address\"]",
 			"surface": "popup-settings-accounts-import",
 			"state": "an account file pasted into Import account"
@@ -767,7 +767,7 @@
 			"expression": "account.address",
 			"branch": "hiddenAccounts.length",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"manage-accounts-hidden-row\"] [data-testid=\"setting-description\"]",
 			"surface": "popup-settings-accounts",
 			"state": "a hidden account"
@@ -797,7 +797,7 @@
 			"expression": "entry.value",
 			"branch": "appStore.isLogined && filteredDisplayNotes.length && display",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"record-value\"]",
 			"surface": "popup-settings-developer-account-state-notes",
 			"state": "a note exists (network)"
@@ -817,7 +817,7 @@
 			"expression": "`${getChainName(acc.chainId).toUpperCase()} · ${trimAddress(acc.address, 6, 4, '...')}`",
 			"branch": "session && accounts.length",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"connected-app-account-row\"] [data-testid=\"setting-description\"]",
 			"surface": "popup-settings-connected-apps-id",
 			"state": "a connected dApp (network)"
@@ -827,7 +827,7 @@
 			"expression": "String(network.chainId)",
 			"branch": "network",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"network-detail-chain-id\"] [data-testid=\"setting-description\"]",
 			"surface": "popup-settings-networks-id",
 			"state": ""
@@ -837,7 +837,7 @@
 			"expression": "appStore.profile?.id",
 			"branch": "appStore.profile",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"identity-id-value\"]",
 			"surface": "popup-settings-profile",
 			"state": ""
@@ -847,7 +847,7 @@
 			"expression": "trimAddress(account.address, 6, 4, '...')",
 			"branch": "!selectedAddress",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"export-account-row\"] [data-testid=\"setting-description\"]",
 			"surface": "popup-settings-security-export-account",
 			"state": ""
@@ -877,7 +877,7 @@
 			"expression": "trimAddress(hash, 6, 4)",
 			"branch": "explorerUrl",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"tx-hash-link\"]",
 			"surface": "popup-tx-id",
 			"state": "the seedTransaction row on the testnet chain with an explorer"
@@ -887,7 +887,7 @@
 			"expression": "trimAddress(hash, 6, 4)",
 			"branch": "!(explorerUrl)",
 			"ordinal": 1,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"tx-hash\"]",
 			"surface": "popup-tx-id",
 			"state": "the seedTransaction row without an explorer"
@@ -917,7 +917,7 @@
 			"expression": "trimAddress(tx.nonce, 6, 4)",
 			"branch": "tx && tx?.nonce",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"tx-nonce\"]",
 			"surface": "popup-tx-id",
 			"state": "the seedTransaction row with a nonce"
@@ -927,7 +927,7 @@
 			"expression": "trimAddress(c.contract, 6, 4)",
 			"branch": "tx && userCalls.length",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"tx-call-contract\"]",
 			"surface": "popup-tx-id",
 			"state": "the seedTransaction row with a user call"
@@ -937,7 +937,7 @@
 			"expression": "trimAddress(account.address, 6, 4, \"...\")",
 			"branch": "",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"account-select-address\"]",
 			"surface": "windows-capabilities",
 			"state": "a connect request with an account to choose (network)"
@@ -947,7 +947,7 @@
 			"expression": "surface.sender.address",
 			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && surface.kind === 'transfer' && surface.sender.kind === 'account'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-op-transfer-sender-address\"]",
 			"surface": "windows-execute",
 			"state": "a transfer from one of the wallet's accounts (network)"
@@ -957,7 +957,7 @@
 			"expression": "surface.sender.address",
 			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && surface.kind === 'transfer' && !(surface.sender.kind === 'none' || surface.sender.kind === 'account') && full",
 			"ordinal": 1,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-grant-transfer-sender-address\"]",
 			"surface": "windows-execute",
 			"state": "a grant on a registered token (network)"
@@ -967,7 +967,7 @@
 			"expression": "surface.sender.address",
 			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && surface.kind === 'transfer' && !(surface.sender.kind === 'none' || surface.sender.kind === 'account') && !(full)",
 			"ordinal": 2,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-op-transfer-sender-address\"]",
 			"surface": "windows-execute",
 			"state": "a transfer from an address the wallet does not know (network)"
@@ -977,7 +977,7 @@
 			"expression": "surface.to",
 			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && full",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-grant-transfer-to\"]",
 			"surface": "windows-execute",
 			"state": "a grant on a registered token (network)"
@@ -987,7 +987,7 @@
 			"expression": "surface.to",
 			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && !(full)",
 			"ordinal": 1,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-op-transfer-to\"]",
 			"surface": "windows-execute",
 			"state": "a transfer (network)"
@@ -997,7 +997,7 @@
 			"expression": "valueText(nonce, full)",
 			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && nonce",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-op-transfer-nonce-value\"]",
 			"surface": "windows-execute",
 			"state": "a transfer carrying an authwit nonce (network)"
@@ -1007,7 +1007,7 @@
 			"expression": "p.value.value",
 			"branch": "surface.kind === 'decoded' && p.value.kind === 'address' && !full",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-op-decoded-param-value\"]",
 			"surface": "windows-execute",
 			"state": "a decoded call with an address parameter (network)"
@@ -1017,7 +1017,7 @@
 			"expression": "valueText(p.value, full)",
 			"branch": "surface.kind === 'decoded' && !(p.value.kind === 'address' && !full)",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-op-decoded-param-value\"]",
 			"surface": "windows-execute",
 			"state": "a decoded call with a field parameter (network)"
@@ -1027,7 +1027,7 @@
 			"expression": "row.short",
 			"branch": "!((surface.kind === 'transfer' || surface.kind === 'mint') || surface.kind === 'decoded' || surface.kind === 'pending') && rawOpen && row.kind === 'field'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-op-arg-field\"]",
 			"surface": "windows-execute",
 			"state": "an undecodable call with execute-op-raw-toggle clicked (network)"
@@ -1059,7 +1059,7 @@
 			"expression": "action.kind === 'call' ? action.contract : action.to",
 			"branch": "(action.kind === 'call' || action.kind === 'encoded_call')",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-action-contract\"]",
 			"surface": "windows-execute",
 			"state": "",
@@ -1071,7 +1071,7 @@
 			"expression": "action.content.caller",
 			"branch": "action.kind === 'add_public_authwit' && action.content.kind === 'call'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-authwit-spender\"]",
 			"surface": "windows-execute",
 			"state": "a grantPublicAuthwit request (network)"
@@ -1081,7 +1081,7 @@
 			"expression": "action.content.contract",
 			"branch": "action.kind === 'add_public_authwit' && action.content.kind === 'call'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-authwit-contract\"]",
 			"surface": "windows-execute",
 			"state": "a grantPublicAuthwit request (network)"
@@ -1091,7 +1091,7 @@
 			"expression": "action.content.caller",
 			"branch": "action.kind === 'add_public_authwit' && action.content.kind === 'encoded_call'",
 			"ordinal": 1,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-authwit-spender\"]",
 			"surface": "windows-execute",
 			"state": "",
@@ -1103,7 +1103,7 @@
 			"expression": "action.content.to",
 			"branch": "action.kind === 'add_public_authwit' && action.content.kind === 'encoded_call'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-authwit-to\"]",
 			"surface": "windows-execute",
 			"state": "",
@@ -1115,7 +1115,7 @@
 			"expression": "action.content.consumer",
 			"branch": "action.kind === 'add_public_authwit' && action.content.kind === 'intent'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-authwit-spender\"]",
 			"surface": "windows-execute",
 			"state": "",
@@ -1127,7 +1127,7 @@
 			"expression": "action.content.messageHash",
 			"branch": "action.kind === 'add_public_authwit' && !(action.content.kind === 'call' || action.content.kind === 'encoded_call' || action.content.kind === 'intent')",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-authwit-spender\"]",
 			"surface": "windows-execute",
 			"state": "",
@@ -1139,7 +1139,7 @@
 			"expression": "trimAddress(op.account!.address)",
 			"branch": "isSendTx(op)",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-op-account\"]",
 			"surface": "windows-execute",
 			"state": "an aztec_sendTx request (network)"
@@ -1149,7 +1149,7 @@
 			"expression": "call.to",
 			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-op-call-to\"]",
 			"surface": "windows-execute",
 			"state": "an aztec_sendTx request with all details open (network)"
@@ -1159,7 +1159,7 @@
 			"expression": "a.consumer",
 			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && authwits.kind === 'list' && authwits.authwits.length",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-consumer\"]",
 			"surface": "windows-execute",
 			"state": "a send with a discovered authwit, all details open (network)"
@@ -1169,7 +1169,7 @@
 			"expression": "a.caller",
 			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && authwits.kind === 'list' && authwits.authwits.length",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-caller\"]",
 			"surface": "windows-execute",
 			"state": "a send with a discovered authwit, all details open (network)"
@@ -1179,7 +1179,7 @@
 			"expression": "trimAddress(safeWire(a.innerHash, 80), 10, 6)",
 			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && authwits.kind === 'list' && authwits.authwits.length && isAuthwitOpen(a)",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-inner-hash\"]",
 			"surface": "windows-execute",
 			"state": "a discovered authwit with its details open (network)"
@@ -1189,7 +1189,7 @@
 			"expression": "trimAddress(op.account!.address)",
 			"branch": "!(isSendTx(op)) && op.account",
 			"ordinal": 1,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-op-account\"]",
 			"surface": "windows-execute",
 			"state": "an operation other than a send, with an account (network)"
@@ -1199,7 +1199,7 @@
 			"expression": "op.address",
 			"branch": "!(isSendTx(op)) && op.kind === 'register_contract'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-register-contract-address\"]",
 			"surface": "windows-execute",
 			"state": "",
@@ -1211,7 +1211,7 @@
 			"expression": "op.address",
 			"branch": "!(isSendTx(op)) && op.kind === 'register_sender'",
 			"ordinal": 1,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-register-sender-address\"]",
 			"surface": "windows-execute",
 			"state": "",
@@ -1223,7 +1223,7 @@
 			"expression": "op.address",
 			"branch": "!(isSendTx(op)) && op.kind === 'register_token'",
 			"ordinal": 2,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"register-token-address\"]",
 			"surface": "windows-execute",
 			"state": "a registerToken request (network)"
@@ -1233,7 +1233,7 @@
 			"expression": "op.contract",
 			"branch": "!(isSendTx(op)) && op.kind === 'simulate_utility'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-utility-contract\"]",
 			"surface": "windows-execute",
 			"state": "",
@@ -1245,7 +1245,7 @@
 			"expression": "trimAddress(op.id.toString())",
 			"branch": "!(isSendTx(op)) && op.kind === 'aztec_getContractClassMetadata'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-op-class-id\"]",
 			"surface": "windows-execute",
 			"state": "",
@@ -1257,7 +1257,7 @@
 			"expression": "op.address.toString()",
 			"branch": "!(isSendTx(op)) && op.kind === 'aztec_getContractMetadata'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-contract-metadata-address\"]",
 			"surface": "windows-execute",
 			"state": "",
@@ -1269,7 +1269,7 @@
 			"expression": "op.eventFilter.contractAddress.toString()",
 			"branch": "!(isSendTx(op)) && op.kind === 'aztec_getPrivateEvents'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-private-events-contract\"]",
 			"surface": "windows-execute",
 			"state": "",
@@ -1281,7 +1281,7 @@
 			"expression": "op.address.toString()",
 			"branch": "!(isSendTx(op)) && op.kind === 'aztec_registerSender'",
 			"ordinal": 1,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-sdk-register-sender-address\"]",
 			"surface": "windows-execute",
 			"state": "",
@@ -1293,7 +1293,7 @@
 			"expression": "call.to",
 			"branch": "!(isSendTx(op)) && (op.kind === 'aztec_simulateTx' || op.kind === 'aztec_profileTx')",
 			"ordinal": 1,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-op-call-to\"]",
 			"surface": "windows-execute",
 			"state": "",
@@ -1305,7 +1305,7 @@
 			"expression": "op.call.to.toString()",
 			"branch": "!(isSendTx(op)) && op.kind === 'aztec_executeUtility'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-utility-call-to\"]",
 			"surface": "windows-execute",
 			"state": "",
@@ -1317,7 +1317,7 @@
 			"expression": "op.instance.address.toString()",
 			"branch": "!(isSendTx(op)) && op.kind === 'aztec_registerContract'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-register-contract-instance\"]",
 			"surface": "windows-execute",
 			"state": "",
@@ -1329,7 +1329,7 @@
 			"expression": "s.caller",
 			"branch": "!(isSendTx(op)) && op.kind === 'aztec_createAuthWit' && s.kind === 'call'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-authwit-caller-address\"]",
 			"surface": "windows-execute",
 			"state": "an aztec_createAuthWit request for a call (network)"
@@ -1339,7 +1339,7 @@
 			"expression": "s.to",
 			"branch": "!(isSendTx(op)) && op.kind === 'aztec_createAuthWit' && s.kind === 'call'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-authwit-target\"]",
 			"surface": "windows-execute",
 			"state": "an aztec_createAuthWit request for a call (network)"
@@ -1349,7 +1349,7 @@
 			"expression": "s.consumer",
 			"branch": "!(isSendTx(op)) && op.kind === 'aztec_createAuthWit' && !(s.kind === 'call')",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-authwit-consumer\"]",
 			"surface": "windows-execute",
 			"state": "an aztec_createAuthWit request for an intent (network)"
@@ -1359,7 +1359,7 @@
 			"expression": "trimAddress(s.innerHash, 10, 6)",
 			"branch": "!(isSendTx(op)) && op.kind === 'aztec_createAuthWit' && !(s.kind === 'call')",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-authwit-inner-hash-value\"]",
 			"surface": "windows-execute",
 			"state": "an aztec_createAuthWit request for an intent (network)"
@@ -1380,7 +1380,7 @@
 			"expression": "row.call.to",
 			"branch": "callRows.length",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-op-summary-call-to\"]",
 			"surface": "windows-execute",
 			"state": "an aztec_sendTx request (network)"
@@ -1390,7 +1390,7 @@
 			"expression": "row.surface.sender.address",
 			"branch": "callRows.length && (row.amount && (row.surface.kind === 'transfer' || row.surface.kind === 'mint')) && row.surface.kind === 'transfer' && row.surface.sender.kind === 'explicit'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-op-line-from\"]",
 			"surface": "windows-execute",
 			"state": "a transfer the wallet reads, from a named sender (network)"
@@ -1400,7 +1400,7 @@
 			"expression": "row.surface.to",
 			"branch": "callRows.length && (row.amount && (row.surface.kind === 'transfer' || row.surface.kind === 'mint'))",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-op-line-to\"]",
 			"surface": "windows-execute",
 			"state": "a transfer the wallet reads (network)"
@@ -1410,7 +1410,7 @@
 			"expression": "a.caller",
 			"branch": "authwitRows.length",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-line-caller\"]",
 			"surface": "windows-execute",
 			"state": "a send with a discovered authwit (network)"
@@ -1420,7 +1420,7 @@
 			"expression": "line.from",
 			"branch": "authwitRows.length && line.kind === 'move'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-line-from\"]",
 			"surface": "windows-execute",
 			"state": "a discovered token authorization the wallet reads (component test)"
@@ -1430,7 +1430,7 @@
 			"expression": "line.to",
 			"branch": "authwitRows.length && line.kind === 'move'",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-line-to\"]",
 			"surface": "windows-execute",
 			"state": "a discovered token authorization the wallet reads (component test)"
@@ -1440,7 +1440,7 @@
 			"expression": "a.consumer",
 			"branch": "authwitRows.length && !(line.kind === 'move')",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-line-consumer\"]",
 			"surface": "windows-execute",
 			"state": "a send with a discovered authwit (network)"

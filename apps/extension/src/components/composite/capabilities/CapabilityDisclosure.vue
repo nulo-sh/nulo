@@ -64,7 +64,7 @@ const panelId = useId()
 }
 
 .tag {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	white-space: nowrap;
 	color: var(--nulo-secondary);
 }

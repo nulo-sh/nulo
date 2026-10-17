@@ -111,12 +111,12 @@ const formatTimestamp = (timestamp) => {
 }
 
 .detail_key {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
 .detail_value_mono {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 }
 
@@ -131,7 +131,7 @@ const formatTimestamp = (timestamp) => {
 }
 
 .raw_call_method {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 }
 
@@ -141,7 +141,7 @@ const formatTimestamp = (timestamp) => {
 }
 
 .error_key {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--red);
 }
 

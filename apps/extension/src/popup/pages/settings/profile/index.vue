@@ -29,13 +29,13 @@ const popupStore = usePopupStore()
 				data-testid="identity-name-row"
 			/>
 			<Flex direction="column" gap="6" :class="$style.field_row" data-testid="identity-id-row">
-				<Text variant="label" color="secondary">ID</Text>
-				<Text variant="data" color="tertiary" data-testid="identity-id-value" :class="$style.id_value">
+				<Text variant="label-section" color="secondary">ID</Text>
+				<Text variant="meta" color="tertiary" data-testid="identity-id-value" :class="$style.id_value">
 					{{ appStore.profile?.id }}
 				</Text>
 			</Flex>
 			<Flex direction="column" gap="6" :class="$style.field_row" data-testid="identity-type-row">
-				<Text variant="label" color="secondary">Type</Text>
+				<Text variant="label-section" color="secondary">Type</Text>
 				<Text variant="value" color="primary">{{ profileTypeLabel(appStore.profile?.type) }}</Text>
 			</Flex>
 		</ItemsContainer>

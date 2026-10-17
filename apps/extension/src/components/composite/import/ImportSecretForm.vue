@@ -139,7 +139,7 @@ const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeat
 }
 
 .error_tag {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	color: var(--red);
 	border: 1px solid var(--red);
 	padding: 2px 6px;

@@ -554,7 +554,7 @@ const RECEIPT_TOKEN_ID = 1
 const DAPP_NAME = "Shielded Payroll Portal"
 /** A dApp's transfer whose dollar figure leaves its app chip no room past its floor. */
 const LARGE_DAPP_HASH = `0x${"6e".repeat(32)}`
-/** The floor of a two-chip row's app chip: its border, padding and one "…" in `type--tag`. */
+/** The floor of a two-chip row's app chip: its border, padding and one "…" at the chip's 10px. */
 const APP_CHIP_FLOOR = 19
 /** The two chips' gap when the app chip drops under the direction chip. */
 const CHIP_ROW_GAP = 4
@@ -791,6 +791,8 @@ type NamedRows = {
 			ellipsis: boolean
 			direction: { lines: number } | null
 			chip: { width: number; cut: boolean; below: boolean } | null
+			/** Each chip's computed size, weight and tracking. */
+			type: { direction: string | null; chip: string | null }
 		}
 	>
 }
@@ -823,6 +825,11 @@ async function readDappRows(page: Page): Promise<NamedRows> {
 			}
 			return found
 		}
+		const typeOf = (el: Element | null) => {
+			if (!el) return null
+			const { fontSize, fontWeight, letterSpacing } = getComputedStyle(el)
+			return `${fontSize} ${fontWeight} ${letterSpacing}`
+		}
 		const readRow = (row: Element) => {
 			const title = row.querySelector<HTMLElement>('[data-testid="activity-title"]')
 			if (!title) throw new Error("a row has no title")
@@ -839,6 +846,7 @@ async function readDappRows(page: Page): Promise<NamedRows> {
 					cut: chip.scrollWidth > chip.clientWidth,
 					below: chip.getBoundingClientRect().top >= before.bottom - 0.5,
 				},
+				type: { direction: typeOf(direction), chip: typeOf(chip) },
 			}
 		}
 		const overflowing = new Set<string>()
@@ -941,6 +949,9 @@ test("a dApp's long function name and host never widen Home or History, named or
 		expect(rows.transfer.chip).toMatchObject({ cut: true, below: false })
 		expect(rows.transfer.chip?.width).toBeGreaterThan(APP_CHIP_FLOOR + 0.5)
 		expect(rows.transfer.chip?.width).toBeLessThan(APP_CHIP_CAP - 0.5)
+		// A dApp transfer's two chips keep 10px semibold; a lone app chip takes the caps role's 11px bold.
+		expect(rows.transfer.type).toEqual({ direction: "10px 600 0.8px", chip: "10px 600 0.8px" })
+		expect(rows.call.type).toEqual({ direction: null, chip: "11px 700 1.1px" })
 	}
 
 	await navigateByHash(page, `#/popup/tx/${DAPP_TRANSFER_HASH}`)
