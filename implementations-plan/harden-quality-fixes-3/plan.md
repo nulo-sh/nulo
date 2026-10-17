@@ -1,8 +1,8 @@
 ---
 plan: harden-quality-fixes-3
 tier: mid (the lane brief names it; competing outline, Codex + Opus dual audit, a fresh Codex final pass)
-status: approved; arc 1 in review, arc 2 pending
-issues: "#544 (arc 1, Closes); #546, #539 (arc 2, Closes)"
+status: closed (arc 1 merged as #632; arc 2 delivered in one PR against dev; its merge closes the plan)
+issues: "#544 (arc 1, Closes); #546 (arc 2, Closes); #539 (arc 2, Refs while OA-1 is open)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,6 +14,17 @@ base: origin/dev at 493ff497
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-17.
+- **Status:** closed. Two arcs, two PRs against `dev`, no stack: arc 1 merged as #632; arc 2 is the PR from `harden-quality-fixes-3-arc2`, whose final commits are this close-out. The merge that lands arc 2 closes the plan.
+- **Shipped:** #544 (arc 1), the fixture layer's two leaves (`fixtures/dom.ts`, `fixtures/wallet-pages.ts`), `fixtures/helpers.ts` split into eleven domain modules behind a barrel, no import cycle under `tests/e2e/` and a `noImportCycles` step in `bun run lint` that keeps it so, `patchPagePolling`'s acceptance retired (21 left). #539 (arc 2, all but OA-1), the canaries' grant, consume and post-restart reconnect-and-send on `runApprovedPgCall`, `sendDefaultTx`, `reconnectPlayground`, `selectPgAccount`, `setPgInputs`, `txHashOf` and `stopBackgroundIfAlive`, each caller on its own budgets; `confirmProfileReset` for the four reset rituals; `passkey-backup` on the shared `registerPasskeyProfile`; one `openFirstNetworkDetail`; six playground sections on `guarded`. #546 (arc 2), one click driver that refuses `aria-disabled` unless asked (`pressRow`), smoke's Chrome sweep through `killChromesLoading` with a pin on `pkill`, one download capture, one `registerTokenOnWallet`, the funded fixtures on `requireAztecConfig`, `launchOnLocalNetwork` and `importTokenAndWaitForBalance`.
+- **Behaviour changes, named and accepted:** a dApp-side error before the execute window fails `runApprovedPgCall` at once; the funded fixtures take their balance baseline before the import; no registration swallows its error, so the five catches of known limit #568 are gone.
+- **Known limits:** none.
+- **Open items:** #539 keeps OA-1 (the `batch` and `data` sections' "Not connected" message, an owner call on [OWNER-ASKS.md](OWNER-ASKS.md)); the issue stays open with a comment naming the two sections. #643, found by the final whole network run: `import-handshake-note-matrix`'s passkey row, which CI skips, has been red on `dev` since #598 because the spec reseals a passkey backup its MAC binds; outside this plan's scope.
+- **Lessons:** nothing new in `lessons.md` (8,163 of 8,192 bytes). The Biome cycle-rule gotcha lives in the `complexity-budgets` skill and the e2e README; the presto-server hazards of the local prover-ON run went to the `aztec-update` skill.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # harden-quality-fixes-3: the e2e fixture layer, one of each
 

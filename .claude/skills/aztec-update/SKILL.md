@@ -251,6 +251,9 @@ Then Branch A's delivery gates.
   presto-server a private `PRESTO_HOME` and send one warm-up prove once the budget has room, so a
   missing bb fails before the suite instead of as a canary result. CI hands the server the
   workflow token (`PRESTO_GITHUB_API_TOKEN`); a personal token would make it a keyed run.
+  A cached `bb` whose `bb.sha256.json` marker matches the binary needs no lookup, so a private
+  `PRESTO_HOME` seeded from such a cache proves with the budget spent. `presto-server` reads no
+  `--help` (1.1.1): any invocation starts a server on 59833 under the default home.
 - **Upstream's JSON-RPC client prints the node URL**: in its debug fetch line, its error-level
   retry line and the errors it throws (`Error fetching from host <url>`). The Testnet endpoint
   carries its API key in the path, so a script that reads it goes through the silent single-read

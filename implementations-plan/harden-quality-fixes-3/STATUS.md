@@ -26,3 +26,11 @@
 - 2026-10-17 phase 2.4 canaries prover-ON Firefox (same server and flags): 3 files, 5 tests passed; presto log +7 `Proving succeeded` (14 total) (04:18:09 04:23:51  UTC).
 - 2026-10-17 Codex loop converged: arc 2 round 1 (2 Low, fixed), round 2 clean; Opus approve (2 Low, fixed); cross-arc fresh session approve, no findings.
 - 2026-10-17 phase 2.4 network Chrome, 12 named files (proverless, retry 0): 11 passed, 1 skipped by design (firefox-background-restart), 26 tests, 892 s.
+- 2026-10-17 phase 2.4 network Firefox, 12 named files (merged head daffa9cf, proverless, retry 0): 11 passed, 1 skipped by design (backup-restore-sw-restart, Chrome-only), 24 tests, 879 s.
+- 2026-10-17 final-head smoke Chrome, whole suite (merged head daffa9cf, armed, retry 0): 57 passed, 6 skipped by design, 256 tests, 1613 s.
+- 2026-10-17 final-head smoke Firefox, whole suite (armed, retry 0): 60 passed, 3 skipped by design, 256 tests, 2246 s.
+- 2026-10-17 final-head network Chrome, whole suite (daffa9cf, proverless, retry 0, the five prover-ON lane files excluded): 118 passed, 5 skipped, 1 failed (227 tests: 219 passed, 7 skipped), 6729 s. The red is `import-handshake-note-matrix`'s passkey row, pre-existing since #598 and explained in lessons (#643).
+- 2026-10-17 final-head network Firefox, whole suite part 1 (daffa9cf, proverless, retry 0, same exclusions; stopped at the 2 h background cap): 83 of 124 files, 81 passed, 1 skipped by design (backup-restore-sw-restart), 1 failed (176 tests: 171 passed, 4 skipped, 1 failed), the same `import-handshake-note-matrix` passkey row (#643, 335 s). Part 2 runs the 41 files it did not reach.
+- 2026-10-17 final-head network Firefox, part 2 (the 41 files part 1 did not reach, retry 0): 37 passed, 4 skipped by design (env-gated probe, chaos and capture files), 51 tests: 46 passed, 5 skipped, 859 s. Whole Firefox suite: 124 files, the only red #643's row.
+- 2026-10-17 final-head prover-ON lane Chrome (daffa9cf; transfers, tx-sendTx-default, both canaries, delete-after-prove; presto-server 1.1.3, private PRESTO_HOME, VITE_NULO_PRESTO_REQUIRED=1, retry 0): 5 files, 8 tests passed, 457 s; presto log 13 `Proving succeeded` (10:40:21 to 10:45:47 UTC).
+- 2026-10-17 final-head prover-ON lane Firefox (same files, server and flags): 5 files, 8 tests passed, 592 s; presto log +13 `Proving succeeded` (26 total).
