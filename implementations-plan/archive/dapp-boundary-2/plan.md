@@ -132,7 +132,7 @@ The lane brief's record (no new screen, copy or format) covers both surfaces bel
 
 ## Post-implementation
 
-Executes [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 13d5f8d0, with these values:
+Executes [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 13d5f8d0, with these values:
 - Step 1 is absent (`code_review: off`).
 - Step 2, single arc: once, over `git diff $(git merge-base origin/dev HEAD)..HEAD`, after the final gate. Codex: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumes with `resume-codex.sh`; both verbatim rules and the adversarial ask in every prompt. One Opus review (`Agent`, `model: "opus"`, `general-purpose`) beside the first round. Rounds logged in `lessons/phase-4.md` and the ledger. Hard stop after three material rounds.
 - Step 3: `gh pr create` as Delivery says, then `gh pr checks <n> --watch`; a known flake gets one rerun.
