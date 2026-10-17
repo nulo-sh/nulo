@@ -96,7 +96,7 @@ defineProps({
 
 		& .icon {
 			& svg {
-				fill: var(--green);
+				color: var(--green);
 			}
 		}
 	}
@@ -106,7 +106,7 @@ defineProps({
 
 		& .icon {
 			& svg {
-				fill: var(--orange);
+				color: var(--orange);
 			}
 		}
 	}
@@ -116,7 +116,7 @@ defineProps({
 
 		& .icon {
 			& svg {
-				fill: var(--red);
+				color: var(--red);
 			}
 		}
 	}

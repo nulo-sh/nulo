@@ -169,7 +169,7 @@ export const durations = {
  * utility layer). Kept stable so the generated CSS is byte-faithful.
  */
 
-/** `.color--*` / `.fill--*` color-name → CSS-var map */
+/** `.color--*` color-name → CSS-var map */
 export const textColors = {
 	primary: "--txt-primary",
 	body: "--txt-body",
