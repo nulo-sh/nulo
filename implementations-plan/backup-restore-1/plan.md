@@ -186,6 +186,7 @@ Round 1, Codex (gpt-6.1-sol high, session `01a14b4c`): **conditional approve** (
 - D5: a name that cleans to nothing reads as the default imported-account name, now `DEFAULT_IMPORTED_ACCOUNT_NAME` in `account/spec.ts`, which `importAccount` also uses; the plan named no fallback, and dropping the name would undercount what a delete removes.
 - C2 and C3 join names with the existing `joinNames` of `restore-warning.ts` ("A, B, and C" past two), the form C6 already follows.
 - D6: the page holds whenever the pending reset names the network, running or not, and reads `reset.imported` only when it is not running.
+- Phase 3's network gate runs with `NULO_E2E_PROVERLESS=1`: `stale-network-resume.test.ts` is proverless-gated, and CI's network lane runs proverless too.
 
 **Arc 1 review loop.** Round 1, Codex (gpt-6.1-sol high, session `01a14b7d`): **findings (2 material)**, both accepted as local fixes: Delete chain reads the hold at the click, and the page re-reads on a route change; two comments removed. Opus diff review: **0 material**; three small items folded (inert-row assertion, `sentenceName` comment, fallback-name test). Round 2, resumed: fixes verified, **findings (2 material)** in the round-1 fix, both accepted: an unknown hold aborts Delete with the existing failure toast, and a continuation after unmount is dropped. Round 3, resumed: **clean**.
 
