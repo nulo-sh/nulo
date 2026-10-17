@@ -223,6 +223,12 @@ describe("ui/Settings — SettingItem", () => {
 		w.unmount()
 	})
 
+	test("trailingIcon draws its glyph where the chevron sits, and no chevron", async () => {
+		const { w } = await mountItem({ title: "Name", trailingIcon: "edit" }, { onClick: vi.fn() })
+		expect(w.findAll('[data-testid="stub-icon"]').map((icon) => icon.attributes("data-name"))).toEqual(["edit"])
+		w.unmount()
+	})
+
 	test("value renders in setting-value, before the default chevron", async () => {
 		const { w } = await mountItem({ title: "Lock", to: "/popup/settings/lock", value: "1 h 30 min" })
 		const value = w.get('[data-testid="setting-value"]')

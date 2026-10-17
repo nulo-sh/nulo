@@ -24,6 +24,7 @@ Each ask names what ships now. Every "now" form stays inside the signed records 
 - **Ships now**: an outlined diamond with a square pupil, and the same with a 45° slash for the hidden state, because Material retires in arc 1. This is the drawing page 33 currently shows as Direction 2's public-balance mark.
 - **Why it is here**: P30-10 is still iterating on the private and public marks, and the owner does not love the current drawings. If page 33 redraws the eye, arc 2 redraws `eye` and `eye-off`, and these toggles change with it. If page 33 picks the eye for the balance marks, the toggles and the marks share one drawing.
 - **Recommendation**: none needed now; listed so page 33 knows the eye also serves the reveal toggles.
+- **Resolved**: P33-05 B picked pair c, the squares, so the eye serves the reveal toggles alone and arc 2 leaves `eye` and `eye-off` as drawn.
 
 ## OA-5: two side effects of the signed records
 
@@ -32,3 +33,12 @@ Each ask names what ships now. Every "now" form stays inside the signed records 
 - **Options**: A, ship as built. B, give the rename row a trailing `edit` glyph, and keep the × at secondary on hover.
 - **Ships now**: A.
 - **Recommendation**: A for the ×. For the rename row, a look at the network page decides; it is not among the eight capture pairs, so the PR attaches it.
+- **Resolved**: P35-06 B, the rename row takes a trailing `edit` glyph, 18 px in the secondary colour, where a chevron would sit; P35-07 A, the × ships as built.
+
+## OA-6: the glossary's private and public definitions
+
+- **Surface**: Settings → Glossary, and the dotted Private and Public terms whose tooltips read the same entries (`apps/extension/src/utils/glossary.ts`).
+- **What changed**: the definitions named the old marks: "Marked with a padlock." and "Marked with a globe." Under P33-05 B both sentences became false.
+- **Ships now**: the same sentences naming the new marks: "Only you can see it. Marked with a solid square." and "Anyone can see it, like a balance on Ethereum. Marked with a dotted square."
+- **Options**: A, as shipped. B, other wording, or no mark named at all.
+- **Recommendation**: A. A definition that names the mark teaches it where the wallet shows it without a word, on the token rows and Home's split.

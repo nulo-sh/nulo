@@ -207,8 +207,8 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	gap: 3px;
 }
 
-/* Same private/public vocabulary as BalanceView's breakdown: bone lock = private,
-   grey globe = public. Icons inherit via currentColor. */
+/* Same private/public vocabulary as BalanceView's breakdown: accent solid square = private,
+   grey dotted square = public. Icons inherit via currentColor. */
 .icon_private {
 	display: inline-flex;
 	color: var(--nulo-accent);

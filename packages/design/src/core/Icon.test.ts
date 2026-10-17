@@ -38,6 +38,12 @@ describe("Icon", () => {
 		expect(w.attributes("stroke")).toBe("currentColor")
 	})
 
+	test("private is one solid square and public eight dots on its outline, never the padlock", () => {
+		expect(render({ name: "private" }).findAll("path")).toHaveLength(1)
+		expect(render({ name: "public" }).findAll("path")).toHaveLength(8)
+		expect(glyphs.private).not.toEqual(glyphs.lock)
+	})
+
 	test("rotate turns the glyph about its centre", () => {
 		expect(render({ name: "chevron", rotate: 90 }).attributes("style")).toContain("rotate(90deg)")
 		expect(render({ name: "chevron" }).attributes("style") ?? "").not.toContain("rotate")
