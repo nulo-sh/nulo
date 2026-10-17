@@ -16,7 +16,7 @@ import { isPopupSubmitKey, refuseRepeatEnter } from "@/composables/usePopupEntit
 import { useProfileBootstrap } from "@/composables/useProfileBootstrap"
 import { useProfileImportFlow } from "@/composables/useProfileImportFlow"
 import { useToast } from "@/composables/toast"
-import { waitForProfileActive } from "@/composables/waitForProfileActive"
+import { awaitProfileActivation } from "@/composables/unlockWait"
 
 /** Utils */
 import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
@@ -56,26 +56,18 @@ const backTo = computed(() => String(route.query.from || "/popup/register"))
 // @/wallet/utils/onboarding-tab; same predicate as register + profile/new.
 onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
 
-// Popup activation is listener-based: profile activation in the SW fires
-// `popup/app.vue`'s `onActiveProfileChanged`, which runs the bootstrap and flips
-// `appStore.isLogined`. completeImport waits for that ONE bootstrapper (up to the
-// 30s backstop — long enough for a legitimately slow bootstrap on a loaded runner).
-// The wedge (P0-proven): an MV3 worker restart mid-import kills the in-process emit,
-// so the listener never fires and the wait used to dead-end on a silent "Finishing…"
-// screen, then blindly route to /popup/auth. The fix is recovery-on-timeout: once the
-// wait times out the listener has genuinely given up (so there is no bootstrap left to
-// race), and we re-run the SAME recovery a fresh popup would — `hydrateKnownProfile`
-// wakes the SW via getActiveProfile() and bootstraps. A surviving session now lands on
-// /popup/general instead of a forced re-auth; a genuinely-locked profile (strict mode +
-// worker restart dropped the master) routes to /popup/auth to unlock. No dead-end.
-// (An earlier attempt watched the SW connection to escape sub-timeout, but a transient
-// reconnect is indistinguishable from the wedge at drop-time and racing the live
-// listener regressed the healthy path — the timeout is the only race-free signal.)
+// Popup activation is listener-based: the SW's activation fires `popup/app.vue`'s
+// `onActiveProfileChanged`, which bootstraps and flips `appStore.isLogined`. completeImport waits
+// until it activates, the shell records its failure, or the 30 s backstop passes (a slow bootstrap
+// on a loaded runner); the last two run `hydrateKnownProfile`, as a fresh popup would, which joins
+// a same-profile bootstrap still in flight and recovers the wedge where an MV3 worker restart
+// mid-import lost the emit. Watching the SW connection instead regressed the healthy path: a
+// transient reconnect is indistinguishable from the wedge when it drops.
 const { hydrateKnownProfile } = useProfileBootstrap()
 const completeImport = async (profile) => {
 	await setLastActiveProfileId(profile.id)
 	const outcome = await completeImportWithRecovery({
-		waitForActive: (ms) => waitForProfileActive(appStore, profile.id, ms),
+		waitForActive: (ms) => awaitProfileActivation(appStore, profile.id, ms),
 		recover: async () => (await hydrateKnownProfile())?.id === profile.id && appStore.isLogined,
 		timeoutMs: 30_000,
 	})
@@ -293,7 +285,7 @@ onBeforeUnmount(() => {
 					</Button>
 					<!--
 					Finishing window: restore finished cleanly but `completeImport` is
-					awaiting the SW handshake (`waitForProfileActive`). Without this
+					awaiting the activation (`awaitProfileActivation`). Without this
 					branch the user would see a button-less form for ~1s.
 					-->
 					<Button

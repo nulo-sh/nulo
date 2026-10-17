@@ -480,7 +480,6 @@ declare global {
   const verifyPasskeyBody: typeof import('../composables/full-backup-restore').verifyPasskeyBody
   const visibleSettingsRows: typeof import('../utils/settings-search').visibleSettingsRows
   const vocabularySelector: typeof import('../utils/token-transfer-vocabulary').vocabularySelector
-  const waitForProfileActive: typeof import('../composables/waitForProfileActive').waitForProfileActive
   const waitForServiceReady: typeof import('../utils/core').waitForServiceReady
   const walletChainId: typeof import('../utils/chain-ids').walletChainId
   const watch: typeof import('vue').watch
@@ -613,9 +612,6 @@ declare global {
   // @ts-ignore
   export type { WalletTxEstimatesDeps } from '../composables/useWalletTxEstimates'
   import('../composables/useWalletTxEstimates')
-  // @ts-ignore
-  export type { ProfileActivationSubject } from '../composables/waitForProfileActive'
-  import('../composables/waitForProfileActive')
   // @ts-ignore
   export type { AwaitingTx, ActivitySlice } from '../stores/activity.store'
   import('../stores/activity.store')
@@ -1206,7 +1202,6 @@ declare module 'vue' {
     readonly verifyPasskeyBody: UnwrapRef<typeof import('../composables/full-backup-restore')['verifyPasskeyBody']>
     readonly visibleSettingsRows: UnwrapRef<typeof import('../utils/settings-search')['visibleSettingsRows']>
     readonly vocabularySelector: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['vocabularySelector']>
-    readonly waitForProfileActive: UnwrapRef<typeof import('../composables/waitForProfileActive')['waitForProfileActive']>
     readonly waitForServiceReady: UnwrapRef<typeof import('../utils/core')['waitForServiceReady']>
     readonly walletChainId: UnwrapRef<typeof import('../utils/chain-ids')['walletChainId']>
     readonly watch: UnwrapRef<typeof import('vue')['watch']>
