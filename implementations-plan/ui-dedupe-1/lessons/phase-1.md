@@ -17,3 +17,7 @@
 - Codex (gpt-6.1-sol, high): `findings`. F1, the hop row (a reset inside the first client constructor) ran after `runBackup` resumed, so adding the missing check left it green: accepted, the row now discards in the hop itself and goes red when the check is added. F2, a comment at the kept gap: accepted. F3, comment trims: accepted for the script, rejected for the template (byte-identical rule).
 - Opus (general-purpose): `findings`, and no behaviour difference against the base page (it compiled the SFC to check the destructured-ref bindings). F1, the successor row did not pin the `activeRun === run` guard: accepted, mutation-verified. F2, the CLAUDE.md line wrongly said the import side's scrub disconnects: accepted. F3, the hop row lost its passkey case: rejected (one shared line; the passkey key-export rows pin the dropped keys). F4, `?.client` would move an impossible failure into the wrong-password path: accepted as `!`. Four comment nits accepted.
 - A source pin that counts a keyword must strip comments: a new comment saying "await" broke it.
+
+## Review round 2 (2026-10-17)
+
+- Codex resumed: `clean`. It verified the accepted fixes, found no regression, and confirmed the template and styles are byte-identical to base. The loop converged after two rounds.
