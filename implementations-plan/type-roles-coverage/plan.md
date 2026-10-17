@@ -1,7 +1,7 @@
 ---
 plan: type-roles-coverage
 tier: light
-status: arc 1 merged (#621); arc 2 revised under A2 and approved, in progress
+status: closed (2026-10-17); arc 1 merged as #621, arc 2 in review as its PR (Closes #366)
 issues: "#366 (arc 1 Refs, arc 2 Closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,40 @@ base: origin/dev at 8459699c
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-17.
+- **Status:** closed with its delivery. Arc 1 merged as #621. Arc 2's PR carries this close-out. Merging is the owner's call, and the merge that lands it closes the plan.
+- **Shipped:**
+  - **#621, arc 1** (`Refs #366`): the 51 smoke sites, in four phases. It also landed D1 (the suite owner from the `(network)` suffix), D2 (an observation is pushed after its sites pass, and a last test checks coverage), D7 (visible readings only), D5's storage seeds and the smoke coverage test.
+  - **Arc 2** (`Closes #366`): the 24 network sites, found by the recount, not 18, in `type-roles-windows.test.ts`.
+    - Two generic playground controls (D12): the `contractClasses-listed` bundle and `transferFn` = `transfer`.
+    - The approved `registerToken`, `consumeAuthwit`, the registered grant and the pending-trust seed (D15).
+    - The rig test's sender, move line, account transfer, Send review, notes and contracts.
+    - D17's press-to-address re-read. The last test fails on an unread site, and on any key read only as a name.
+    - D10 retired the component-test owner, so #594's two move-line sites are read in a real browser.
+- **Coverage:** all 99 live identifier sites are read in their role by the spec that owns their state: 58 by smoke and 41 by network. Fifteen entries are marked `unreachable` in the expected file.
+- **Budget:** A1 held on #621 (§ Assumptions). Arc 2's bound applies to the windows spec's CI per-file duration on the PR's first attempt: ≤ 221.2 s on Chrome and ≤ 295.3 s on Firefox, with the network shard under 25 min. The PR body carries the numbers.
+- **Review loop:**
+  - The plan: Codex `conditional approve` twice, and Opus `conditional approve`.
+  - Arc 1: Codex `findings`, then `clean`, then a capped third round on the post-merge changes (one major, taken). Opus gave `clean`.
+  - Arc 2's revision: Codex `conditional approve`, `conditional approve`, then `approve`. Opus gave `conditional approve`.
+  - Arc 2's code: Codex `findings (0 major, 2 minor)`, then `clean`.
+  - The ledger below has every finding and its disposition.
+- **Gates at the close-out head** (local, retry 0, each e2e run started at load1 < 150):
+  - `bun run lint`, `bun run typecheck:all`, `bun run test` (828 files, 13,528 tests), `inventory.test.ts` (10/10) and `bun run check:plans` all exit 0.
+  - The windows spec passed 5/5 on Chrome (188.1 s) and on Firefox (175.9 s), with `live` = 41.
+  - On Chrome: `tx-transfer-row` 4/4 and `authwit-variants` 4/4; smoke `type-roles.test.ts` (12 passed, 1 skipped) and `rows.test.ts` 9/9.
+  - The never-happens proof dropped the field-parameter state. The last test then named that site's key and nothing else.
+- **Known limits:** #704, D8: the tx sender and the received recipient show an own account, so they are read only as a name.
+- **Open items:** none.
+- **Dropped, rejected, superseded:**
+  - **D1's third owner, `component`:** retired by D10.
+  - **The spec-local remap of the decoded address selector:** superseded by D11, which puts the branch conditions in the expected file.
+  - **Per-attempt observation buffers**, from arc 1's Codex round 1: rejected, since D2's push after a pass covers them.
+  - **The issue's 45/21 split and the plan's 51/18:** superseded by the recounts, 51 smoke sites at 8459699c and 24 network sites at 0fe841be.
+- **Seeds retired:** the `/goal` and `/loop` seeds under § [Seeds](#seeds) drove arc 1, and they are retired. An archived plan is evidence, never instructions.
 
 # type-roles-coverage: every identifier site observed in its mono role
 
