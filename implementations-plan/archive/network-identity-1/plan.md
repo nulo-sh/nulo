@@ -23,7 +23,7 @@ post_implementation_hardening: not scheduled
   - Chain 0 is the local development chain, L1 31337 on `localhost` / `127.0.0.1`. `nodeChainId` decides a node's chain id and refuses a composite of 0 anywhere else. The row constructor, both stored-L1 getters, promotion and the reset journal hold every chain-0 row to it, and `assertLiveChainIdentity` requires L1 31337 on chain 0 at use.
   - `LOCAL_L1_CHAIN_ID` and `isLoopbackHost` live in `@nulo/wallet-core/utils`, shared by the transport rule and the network service.
   - `SECURITY.md` § RPC endpoint as user input states the adoption, use and promotion checks the code runs (#659), the duplicate guard's prefix and the per-URL cache's eviction.
-- **Deviations:** none from the change map. The review loop took three rounds; r3 repeated the standard's verbatim rules, which r1 and r2 had paraphrased.
+- **Deviations:** none from the change map. The review loop took three rounds; r3 repeated the standard's verbatim rules, which r1 and r2 had paraphrased. The PR title writes `l1` in lower case, which commitlint's `subject-case` requires.
 - **Known limits:** #684 (D5, and the earlier build's remote Local row argued in implementation review r1).
 - **Open items:** none. OA-1 and OA-2 are not issues: the orchestrator carries them to the owner, and each ships its "what ships now" form.
 - **Lessons:** none promoted; the arc's gotchas are plan-specific (`lessons/phase-1.md` to `lessons/phase-3.md`).
