@@ -201,7 +201,8 @@ Six layers, low → high. A layer can import only from layers below it. Enforced
                        the 28 type roles included; hand-authored base.css + fonts).
                        Extension src/design/tokens.ts re-exports the package.
 
-[L1] core primitives   @nulo/design/core: Flex, Icon, MaterialIcon, Text (variant = a type role).
+[L1] core primitives   @nulo/design/core: Flex, Icon (a glyph of core/glyphs.ts), Text (variant =
+                       a type role).
                        No chrome.*.
 
 [L2] ui primitives     @nulo/design/ui — ALL migrated: Badge, Banner, BrutalistTitle, Button,

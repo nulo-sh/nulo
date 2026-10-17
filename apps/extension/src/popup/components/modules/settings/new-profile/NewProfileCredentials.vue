@@ -39,7 +39,7 @@ const isPasswordType = ref(true)
 				</template>
 				<template #bottom>
 					<Flex align="center" gap="6" :class="$style.hint_row">
-						<MaterialIcon name="lock" :size="12" color="tertiary" />
+						<Icon name="lock" :size="12" color="tertiary" />
 						<Text variant="body" color="tertiary">{{ strengthHint }}</Text>
 					</Flex>
 				</template>

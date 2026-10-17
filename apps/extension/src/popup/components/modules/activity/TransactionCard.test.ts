@@ -97,14 +97,14 @@ const dappTransferTx = {
 }
 
 const mountCard = (tx: Record<string, unknown>, props: Record<string, unknown> = {}) =>
-	mount(TransactionCard, { props: { tx, ...props }, global: { stubs: STUBS, components: { RowAction } } })
+	mount(TransactionCard, { props: { tx, ...props } as never, global: { stubs: STUBS, components: { RowAction } } })
 
 describe("modules/activity/TransactionCard (settled)", () => {
 	test.each([
-		["mined", { status: TxStatus.Proposed, executionResult: TxExecutionResult.Success }, "check-circle", "txt-success"],
-		["reverted", { status: TxStatus.Proposed, executionResult: TxExecutionResult.AppLogicReverted }, "close-circle", "txt-danger"],
-		["dropped", { status: TxStatus.Dropped }, "close-circle", "txt-danger"],
-		["pending", { status: TxStatus.Pending }, "clock-circle", "gray"],
+		["mined", { status: TxStatus.Proposed, executionResult: TxExecutionResult.Success }, "square-check", "txt-success"],
+		["reverted", { status: TxStatus.Proposed, executionResult: TxExecutionResult.AppLogicReverted }, "square-cross", "txt-danger"],
+		["dropped", { status: TxStatus.Dropped }, "square-cross", "txt-danger"],
+		["pending", { status: TxStatus.Pending }, "square-half", "gray"],
 	])("a %s tx's status icon fills with its state's status text token", (_label, over, name, fill) => {
 		const icon = mountCard({ ...dappTransferTx, ...over }).find(`[data-testid="activity-status-icon"][data-name="${name}"]`)
 		expect(icon.attributes("data-color")).toBe(fill)
@@ -256,7 +256,7 @@ describe("TransactionCard fiat (D2 activity rows)", () => {
 	])("a priced transfer of a listed token with %s; the title keeps the symbol", async (_label, hasDecimals, want) => {
 		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1.0, fetchedAt: Date.now(), providerUpdatedAt: null } }
 		const tokens = [{ contract: TEST_USDC, symbol: "cUSD", decimals: hasDecimals ? 6 : 0, hasDecimals }]
-		const w = mount(TransactionCard, { props: { tx: mkTransferTx(TEST_USDC), tokens }, global: { stubs: STUBS } })
+		const w = mount(TransactionCard, { props: { tx: mkTransferTx(TEST_USDC), tokens } as never, global: { stubs: STUBS } })
 		await flushPromises()
 		expect({
 			title: w.find(".title").text(),

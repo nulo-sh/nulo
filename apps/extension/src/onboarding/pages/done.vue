@@ -82,7 +82,7 @@ async function openWallet() {
 			data-testid="onboarding-pin-tip"
 		>
 			<Flex align="center" gap="8">
-				<MaterialIcon name="extension" :size="16" color="secondary" />
+				<Icon name="extension" :size="16" color="secondary" />
 				<Text variant="label-section" color="secondary">Pro tip</Text>
 			</Flex>
 			<Text variant="body" color="secondary" height="150">

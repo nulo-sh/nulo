@@ -18,7 +18,6 @@ const EXPECTED_MIGRATED = [
 	"Flex",
 	"Icon",
 	"Text",
-	"MaterialIcon",
 	"Badge",
 	"BrutalistTitle",
 	"Checkbox",

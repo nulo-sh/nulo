@@ -20,7 +20,7 @@ const emit = defineEmits(["toggle"])
 		:aria-label="hidden ? `Show ${subject}` : `Hide ${subject}`"
 		@click="emit('toggle')"
 	>
-		<MaterialIcon :name="hidden ? 'visibility' : 'visibility_off'" :size="18" color="secondary" />
+		<Icon :name="hidden ? 'eye' : 'eye-off'" :size="18" color="secondary" />
 	</button>
 </template>
 

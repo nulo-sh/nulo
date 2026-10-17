@@ -24,5 +24,4 @@ listed here if its format cannot carry one:
 - `apps/extension/tsconfig.json`
 - `apps/extension/tsconfig.node.json`
 - `biome.json`
-- `packages/design/src/internal/icons.json`
 - `packages/design/tsconfig.json`

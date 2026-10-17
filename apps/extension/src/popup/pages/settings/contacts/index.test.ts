@@ -47,7 +47,6 @@ async function mountContacts() {
 			stubs: {
 				SettingsPageShell: { template: '<div><slot name="trailing" /><slot /></div>' },
 				DropdownRoot: { template: '<div><slot /><slot name="popup" /></div>' },
-				MaterialIcon: true,
 				Icon: true,
 				SectionLabel: true,
 				ListStatusMessage: true,

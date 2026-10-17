@@ -111,7 +111,7 @@ onMounted(() => {
 
 		<Icon
 			@click="handleCopy"
-			:name="isCopied ? 'check-circle' : 'copy'"
+			:name="isCopied ? 'square-check' : 'copy'"
 			size="16"
 			:color="isCopied ? 'green' : 'tertiary'"
 			:class="$style.copy_icon"

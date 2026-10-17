@@ -19,7 +19,7 @@ import SubPageHeader from "./SubPageHeader.vue"
 
 const STUBS = {
 	Flex: { template: '<div :class="$attrs.class"><slot /></div>', inheritAttrs: false },
-	MaterialIcon: { template: '<span data-testid="stub-mat-icon" :data-name="name" />', props: ["name", "size", "color"] },
+	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color", "rotate"] },
 }
 
 const mountHeader = (props: Record<string, unknown> = {}, slots: Record<string, string> = {}) =>
@@ -49,7 +49,7 @@ describe("ui/SubPageHeader", () => {
 		expect(btn.exists()).toBe(false)
 	})
 
-	test("leadingIcon prop renders a MaterialIcon stub before the title", () => {
+	test("leadingIcon prop renders an Icon stub before the title", () => {
 		const w = mountHeader({ title: "Settings", leadingIcon: "settings" })
 		const icon = w.find('[data-name="settings"]')
 		expect(icon.exists()).toBe(true)

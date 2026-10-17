@@ -32,7 +32,6 @@ const STUBS = {
 	Flex: { template: '<div :class="$attrs.class" v-bind="$attrs"><slot /></div>', inheritAttrs: false },
 	Text: { template: "<span><slot /></span>" },
 	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
-	MaterialIcon: { template: '<span data-testid="stub-mat-icon" :data-name="name" />', props: ["name", "size", "color"] },
 	Spinner: { template: '<span data-testid="stub-spinner" />' },
 	RouterLink: { template: "<a><slot /></a>", props: ["to"] },
 	// Popup family — minimal stubs that preserve teleport + close-button

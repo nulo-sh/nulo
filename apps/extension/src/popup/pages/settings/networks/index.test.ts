@@ -59,7 +59,6 @@ function mountList(activeId: string) {
 				Text: { template: "<span><slot /></span>" },
 				// Badge is the @nulo/design purple chip; stub keeps the data-testid + text assertions deterministic.
 				Badge: { inheritAttrs: false, template: "<span v-bind='$attrs'><slot /></span>" },
-				MaterialIcon: true,
 				SubPageHeader: true,
 				SectionLabel: true,
 				ItemsContainer: { template: "<div><slot /></div>" },
@@ -109,8 +108,8 @@ describe("Settings › Networks list (item 4 — active badge, keyboard-activata
 		const { wrapper } = mountList("tn")
 		await nextTick()
 		const html = wrapper.html()
-		expect(html).not.toContain("check-circle")
-		expect(html).not.toContain('name="circle"')
+		expect(html).not.toContain("square-check")
+		expect(html).not.toContain('name="square"')
 	})
 })
 

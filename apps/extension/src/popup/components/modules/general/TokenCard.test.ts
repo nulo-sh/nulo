@@ -346,7 +346,7 @@ describe("TokenCard — R5 layout (subtitle left, lock/globe split right)", () =
 		const w = factory({ updatedAt: 1, privateBalance: (7n * 10n ** 18n).toString(), publicBalance: (3n * 10n ** 18n).toString() })
 		await flushPromises()
 		const icons = w.findAll('[data-testid="stub-icon"]')
-		expect(icons.map((i) => i.attributes("data-name"))).toEqual(["lock", "globe"])
+		expect(icons.map((i) => i.attributes("data-name"))).toEqual(["private", "public"])
 		expect(w.text()).toContain("7")
 		expect(w.text()).toContain("3")
 	})

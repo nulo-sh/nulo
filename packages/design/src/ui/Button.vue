@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed, type PropType, useCssModule } from "vue"
 import Icon from "../core/Icon.vue"
+import type { GlyphName } from "../core/glyphs"
 import Spinner from "./Spinner.vue"
 import type { TextColorName } from "../color-names"
 
@@ -65,7 +66,7 @@ const props = defineProps({
 		required: false,
 	},
 	leftIcon: {
-		type: String,
+		type: String as PropType<GlyphName>,
 		required: false,
 	},
 	leftIconColor: {
@@ -73,7 +74,7 @@ const props = defineProps({
 		required: false,
 	},
 	rightIcon: {
-		type: String,
+		type: String as PropType<GlyphName>,
 		required: false,
 	},
 	rightIconColor: {
@@ -278,7 +279,6 @@ const rel = computed(() => {
 .wrapper.primary {
 	background: var(--nulo-accent);
 	color: var(--txt-inverse);
-	fill: var(--txt-inverse);
 }
 .wrapper.primary:hover:not(.disabled):not(.loading) {
 	background: color-mix(in srgb, var(--nulo-accent), var(--txt-primary) 18%);
@@ -287,7 +287,6 @@ const rel = computed(() => {
 .wrapper.destructive {
 	background: var(--btn-destructive);
 	color: var(--txt-white);
-	fill: var(--txt-white);
 }
 /* Toward black in both themes: a mix toward the text colour lightens it in the dark one, below AA. */
 .wrapper.destructive:hover:not(.disabled):not(.loading),
@@ -301,7 +300,6 @@ const rel = computed(() => {
 .wrapper.primary_outline {
 	background: transparent;
 	color: var(--txt-primary);
-	fill: var(--txt-primary);
 	border: 2px solid var(--nulo-outline);
 }
 .wrapper.primary_outline:hover:not(.disabled):not(.loading) {
@@ -373,7 +371,6 @@ const rel = computed(() => {
 .wrapper.cta {
 	background: var(--nulo-accent);
 	color: var(--txt-inverse);
-	fill: var(--txt-inverse);
 	border: none;
 }
 .wrapper.cta:hover:not(.disabled):not(.loading) {
@@ -390,7 +387,6 @@ const rel = computed(() => {
 .wrapper.cta_outline {
 	background: transparent;
 	color: var(--nulo-secondary);
-	fill: var(--nulo-secondary);
 	border: 1px solid var(--nulo-outline);
 }
 .wrapper.cta_outline:hover:not(.disabled):not(.loading) {
@@ -404,7 +400,6 @@ const rel = computed(() => {
 .wrapper.cta_destructive {
 	background: var(--btn-destructive);
 	color: var(--txt-white);
-	fill: var(--txt-white);
 	border: none;
 }
 

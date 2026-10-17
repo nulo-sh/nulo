@@ -10,7 +10,7 @@ const SOURCE = readFileSync(join(process.cwd(), "src/ui/SubPageHeaderBase.vue"),
 
 const STUBS = {
 	Flex: { template: '<div :class="$attrs.class"><slot /></div>', inheritAttrs: false },
-	MaterialIcon: { template: '<span data-testid="stub-mat-icon" :data-name="name" />', props: ["name", "size", "color"] },
+	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
 }
 
 const mountHeader = (props: Record<string, unknown> = {}, slots: Record<string, string> = {}) =>
@@ -35,7 +35,7 @@ describe("SubPageHeaderBase (router-free)", () => {
 		expect(mountHeader({ title: "X", showBack: false }).find("button[aria-label='Back']").exists()).toBe(false)
 	})
 
-	test("leadingIcon renders a MaterialIcon before the title", () => {
+	test("leadingIcon renders an Icon before the title", () => {
 		expect(mountHeader({ title: "Settings", leadingIcon: "settings" }).find('[data-name="settings"]').exists()).toBe(true)
 	})
 

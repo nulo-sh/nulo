@@ -83,7 +83,7 @@ test("copying keeps focus on the copy action while its glyph turns to the check 
 	await nextTick()
 	expect(copy().element).toBe(button)
 	expect(document.activeElement).toBe(button)
-	expect(copy().find("[data-name]").attributes("data-name")).toBe("check-circle")
+	expect(copy().find("[data-name]").attributes("data-name")).toBe("square-check")
 
 	await copy().trigger("click")
 	expect(copyWithToast).toHaveBeenCalledTimes(1)

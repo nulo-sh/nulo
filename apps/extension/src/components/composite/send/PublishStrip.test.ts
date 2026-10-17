@@ -5,7 +5,6 @@ import mark from "./publish-mark.module.css"
 import PublishStrip from "./PublishStrip.vue"
 
 const STUBS = {
-	MaterialIcon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
 	Icon: { template: '<svg data-testid="stub-glyph" :data-name="name" :data-size="size" />', props: ["name", "size"] },
 }
 
@@ -27,14 +26,14 @@ describe("composite/send/PublishStrip", () => {
 	})
 
 	test.each<[string, PublishFacts, string, string | null, string]>([
-		["you hidden", publishFacts("private", "private", "contract"), "you", "lock", "HIDDEN"],
-		["you public", publishFacts("public", "private", null), "you", "globe", "SENDER"],
-		["you exposed", publishFacts("private", "private", "account"), "you", "globe", "FEE PAYER"],
+		["you hidden", publishFacts("private", "private", "contract"), "you", "private", "HIDDEN"],
+		["you public", publishFacts("public", "private", null), "you", "public", "SENDER"],
+		["you exposed", publishFacts("private", "private", "account"), "you", "public", "FEE PAYER"],
 		["you unknown", publishFacts("private", "private", null), "you", null, "—"],
-		["to hidden", publishFacts("public", "private", null), "to", "lock", "HIDDEN"],
-		["to public", publishFacts("private", "public", "contract"), "to", "globe", "PUBLIC"],
-		["amount hidden", publishFacts("private", "private", "contract"), "amount", "lock", "HIDDEN"],
-		["amount public", publishFacts("public", "private", "contract"), "amount", "globe", "PUBLIC"],
+		["to hidden", publishFacts("public", "private", null), "to", "private", "HIDDEN"],
+		["to public", publishFacts("private", "public", "contract"), "to", "public", "PUBLIC"],
+		["amount hidden", publishFacts("private", "private", "contract"), "amount", "private", "HIDDEN"],
+		["amount public", publishFacts("public", "private", "contract"), "amount", "public", "PUBLIC"],
 	])("%s: glyph, tone and word", (_name, facts, attr, glyph, word) => {
 		const w = mountStrip(facts)
 		const visibility = attr === "you" ? facts.you : attr === "to" ? facts.recipient : facts.amount
@@ -45,7 +44,7 @@ describe("composite/send/PublishStrip", () => {
 
 	test("a glyph is decoration at 10px: the words and the label carry the meaning", () => {
 		const w = mountStrip(publishFacts("private", "public", "contract"))
-		const glyphs = w.findAll('[data-testid="stub-glyph"]')
+		const glyphs = w.findAll('[data-cell] [data-testid="stub-glyph"]')
 		expect(glyphs).toHaveLength(3)
 		for (const glyph of glyphs) {
 			expect(glyph.attributes("data-size")).toBe("10")
@@ -63,8 +62,8 @@ describe("composite/send/PublishStrip", () => {
 		const facts = publishFacts("private", "public", "unvouched")
 		const w = mountStrip(facts)
 		expect(strip(w).attributes("aria-label")).toBe(stripAriaLabel(facts))
-		expect(w.get('[data-testid="stub-icon"]').attributes("data-name")).toBe("chevron_right")
-		expect(w.get('[data-testid="stub-icon"]').element.parentElement?.getAttribute("aria-hidden")).toBe("true")
+		const chevron = w.get('[data-testid="stub-glyph"][data-name="chevron"]')
+		expect(chevron.element.parentElement?.getAttribute("aria-hidden")).toBe("true")
 	})
 
 	test("a click emits open once, with no payload", async () => {
@@ -85,6 +84,6 @@ describe("composite/send/PublishStrip", () => {
 		const w = mountStrip(NO_FACTS)
 		expect(glyphOf(w, "you")).toBeNull()
 		expect(cell(w, "you").get("span").text()).toBe("—")
-		expect([glyphOf(w, "to"), glyphOf(w, "amount")]).toEqual(["lock", "lock"])
+		expect([glyphOf(w, "to"), glyphOf(w, "amount")]).toEqual(["private", "private"])
 	})
 })

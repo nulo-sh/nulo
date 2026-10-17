@@ -46,9 +46,9 @@ const filteredKeys = (kind, filters, search) => {
 				@click="emit('openPopover', kind)"
 				align="center"
 				gap="4"
-				:class="[$style.filter_button, !allOptionsSelected[kind] && $style.filter_button_active]"
+				:class="$style.filter_button"
 			>
-				<Icon :name="allOptionsSelected[kind] ? 'filter-outline' : 'filter'" size="14" />
+				<Icon :name="allOptionsSelected[kind] ? 'filter' : 'filter-solid'" size="14" />
 				<Text variant="tag">{{ capitalize(kind) }}</Text>
 			</Flex>
 
@@ -83,7 +83,7 @@ const filteredKeys = (kind, filters, search) => {
 							wide
 							:class="$style.filter_content_item"
 						>
-							<Icon :name="allOptionsSelected[kind] ? 'check-circle' : 'circle'" size="12" />
+							<Icon :name="allOptionsSelected[kind] ? 'square-check' : 'square'" size="12" />
 							<Text variant="body">Select All</Text>
 						</Flex>
 
@@ -97,7 +97,7 @@ const filteredKeys = (kind, filters, search) => {
 								wide
 								:class="[$style.filter_content_item, !filters[kind][k] && $style.inactive]"
 							>
-								<Icon :name="filters[kind][k] ? 'check-circle' : 'circle'" size="12" />
+								<Icon :name="filters[kind][k] ? 'square-check' : 'square'" size="12" />
 								<Text variant="body">{{ getDisplayName(kind, k) }}</Text>
 							</Flex>
 						</template>
@@ -111,13 +111,13 @@ const filteredKeys = (kind, filters, search) => {
 
 		<Dropdown>
 			<Flex align="center" gap="4" :class="$style.filter_button">
-				<Icon name="dots" size="14" />
+				<Icon name="more" size="14" />
 			</Flex>
 
 			<template #popup>
 				<DropdownItem @click="emit('exportCsv')" :class="$style.filter_content_item">
 					<Flex align="center" gap="8">
-						<Icon name="download-outline" size="12" />
+						<Icon name="download" size="12" />
 						<Text variant="body">Export logs to CSV</Text>
 					</Flex>
 				</DropdownItem>
@@ -147,7 +147,6 @@ const filteredKeys = (kind, filters, search) => {
 	border-radius: 6px;
 
 	color: var(--txt-secondary);
-	fill: var(--txt-secondary);
 
 	cursor: pointer;
 
@@ -158,17 +157,6 @@ const filteredKeys = (kind, filters, search) => {
 
 		* {
 			color: var(--txt-primary);
-			fill: var(--txt-primary);
-		}
-	}
-}
-
-.filter_button_active {
-	fill: var(--blue);
-
-	&:hover {
-		* {
-			fill: var(--blue);
 		}
 	}
 }
@@ -201,7 +189,6 @@ const filteredKeys = (kind, filters, search) => {
 	border-radius: 4px;
 
 	color: var(--txt-secondary);
-	fill: var(--txt-secondary);
 
 	cursor: pointer;
 
@@ -211,14 +198,12 @@ const filteredKeys = (kind, filters, search) => {
 		background: var(--nulo-surface-high);
 		* {
 			color: var(--txt-primary);
-			fill: var(--txt-primary);
 		}
 	}
 }
 
 .inactive {
 	color: var(--txt-tertiary);
-	fill: var(--txt-tertiary);
 }
 
 .empty_content {

@@ -86,7 +86,7 @@ const handleCopyAddress = (target) => {
 					@click="handleSelectAccount(account)"
 					:title="account.name"
 					titleVariant="name"
-					:icon="account?.address === appStore.account?.address ? 'check-circle' : 'circle'"
+					:icon="account?.address === appStore.account?.address ? 'square-check' : 'square'"
 					:iconFillColor="account?.address === appStore.account?.address ? 'primary' : 'tertiary'"
 					data-testid="manage-accounts-row"
 					:data-account-name="account.name"
@@ -118,7 +118,7 @@ const handleCopyAddress = (target) => {
 
 							<Tooltip v-if="canExportAccounts" position="end" delay="350">
 								<RowAction label="Export account" data-testid="account-export-btn" @click="handleExportAccount(account)">
-									<Icon name="upload-outline" size="14" color="tertiary" />
+									<Icon name="upload" size="14" color="tertiary" />
 								</RowAction>
 
 								<template #content>Export account</template>
@@ -140,7 +140,7 @@ const handleCopyAddress = (target) => {
 									:class="accounts.length === 1 && $style.disabled"
 									@click="handleHideAccount(account)"
 								>
-									<Icon name="close-circle" size="14" color="tertiary" />
+									<Icon name="close" size="14" color="tertiary" />
 								</RowAction>
 
 								<template #content> Hide account </template>
@@ -196,7 +196,7 @@ const handleCopyAddress = (target) => {
 						<AccountAvatar :name="account.name" :address="account.address" :size="20" />
 					</template>
 					<template #right>
-						<Icon name="arrow-back-up" size="14" color="secondary" />
+						<Icon name="undo" size="14" color="secondary" />
 					</template>
 				</SettingItem>
 			</ItemsContainer>

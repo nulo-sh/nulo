@@ -81,7 +81,6 @@ onBeforeUnmount(() => {
 				v-for="token in tokens"
 				:title="token.symbol"
 				:description="token.name"
-				icon="banknote"
 				raw
 				data-testid="token-row"
 			>
@@ -89,7 +88,7 @@ onBeforeUnmount(() => {
 					<Flex align="center" gap="8">
 						<Tooltip v-if="appStore.networks.length > 1" position="end" delay="350">
 							<RowAction label="Delete token" data-testid="token-delete" @click="handleDelete(token)">
-								<Icon name="close-circle" size="14" color="tertiary" />
+								<Icon name="close" size="14" color="tertiary" />
 							</RowAction>
 
 							<template #content> Delete token </template>

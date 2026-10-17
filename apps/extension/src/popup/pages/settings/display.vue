@@ -178,19 +178,19 @@ onBeforeUnmount(() => {
 					<template #popup>
 						<DropdownItem @click="updateSetting('theme', 'dark')" data-testid="theme-dark-btn">
 							<Flex align="center" gap="8">
-								<Icon :name="theme === 'dark' ? 'check' : ''" size="14" color="primary" />
+								<Icon name="check" size="14" color="primary" :class="theme !== 'dark' && $style.unselected" />
 								Dark
 							</Flex>
 						</DropdownItem>
 						<DropdownItem @click="updateSetting('theme', 'light')" data-testid="theme-light-btn">
 							<Flex align="center" gap="8">
-								<Icon :name="theme === 'light' ? 'check' : ''" size="14" color="primary" />
+								<Icon name="check" size="14" color="primary" :class="theme !== 'light' && $style.unselected" />
 								Light
 							</Flex>
 						</DropdownItem>
 						<DropdownItem @click="updateSetting('theme', 'system')" data-testid="theme-system-btn">
 							<Flex align="center" gap="8">
-								<Icon :name="theme === 'system' ? 'check' : ''" size="14" color="primary" />
+								<Icon name="check" size="14" color="primary" :class="theme !== 'system' && $style.unselected" />
 								System
 							</Flex>
 						</DropdownItem>
@@ -330,5 +330,9 @@ onBeforeUnmount(() => {
 
 .title_size {
 	font-size: 13px;
+}
+
+.unselected {
+	visibility: hidden;
 }
 </style>

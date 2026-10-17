@@ -126,8 +126,8 @@ watch(
 								<Icon
 									:name="
 										profile?.id === appStore.profile?.id
-											? 'check-circle'
-											: 'circle'
+											? 'square-check'
+											: 'square'
 									"
 									size="16"
 									:color="

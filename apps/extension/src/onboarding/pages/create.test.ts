@@ -21,7 +21,7 @@ vi.mock("@/composables/usePasskeyCeremony", () => ({
 const routerPush = vi.fn()
 vi.mock("vue-router", () => ({ useRouter: () => ({ push: routerPush }), useRoute: () => ({ meta: {} }) }))
 
-import { BrutalistTitle, Flex, Input, MaterialIcon, Text } from "@nulo/design"
+import { BrutalistTitle, Flex, Icon, Input, Text } from "@nulo/design"
 import { pressOn } from "../../../tests/helpers/press-key"
 import OnboardingBackLink from "../components/OnboardingBackLink.vue"
 import OnboardingProfileNameField from "../components/OnboardingProfileNameField.vue"
@@ -34,7 +34,7 @@ async function mountCreate() {
 		attachTo: document.body,
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn })],
-			components: { BrutalistTitle, Flex, Input, MaterialIcon, OnboardingBackLink, OnboardingProfileNameField, Text },
+			components: { BrutalistTitle, Flex, Input, OnboardingBackLink, OnboardingProfileNameField, Text, Icon },
 			stubs: {
 				// Registered globally, the design Button would resolve its own `<component is="button">` to itself.
 				Button: { template: '<button v-bind="$attrs"><slot /></button>' },

@@ -38,7 +38,6 @@ const stubs = {
 	Flex: { template: "<div><slot /></div>" },
 	Text: { template: "<span><slot /></span>" },
 	Icon: true,
-	MaterialIcon: true,
 	AmountCard: true,
 	JsonViewer: true,
 	FeeSettingsCard: {

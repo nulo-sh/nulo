@@ -1,4 +1,4 @@
-import { Icon, MaterialIcon, Toggle } from "@nulo/design"
+import { Icon, Toggle } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import PermissionRow from "./PermissionRow.vue"
@@ -16,7 +16,7 @@ const mountRow = (props: Record<string, unknown> = {}, options: { slots?: Record
 		props: { ...AUTH, modelValue: true, ...props } as never,
 		attrs: options.attrs,
 		slots: options.slots,
-		global: { components: { Icon, MaterialIcon, Toggle } },
+		global: { components: { Icon, Toggle } },
 	})
 
 /** The compiled `<style module>` class names; a script-setup instance does not expose `$style`. */
@@ -26,8 +26,9 @@ const toggle = (w: ReturnType<typeof mountRow>) => w.find('[data-testid="cap-tog
 
 describe("composite/capabilities/PermissionRow", () => {
 	test("renders the icon, the title and, without a switch, the line", () => {
-		const w = mountRow({ switchLabel: undefined, subOff: undefined, icon: "task_alt", title: "Every transaction", subOn: "Line" })
-		expect(w.text()).toContain("task_alt")
+		const w = mountRow({ switchLabel: undefined, subOff: undefined, icon: "check", title: "Every transaction", subOn: "Line" })
+		expect(w.getComponent(Icon).props("name")).toBe("check")
+		expect(w.get("svg").findAll("path").length).toBeGreaterThan(0)
 		expect(w.text()).toContain("Every transaction")
 		expect(sub(w).text()).toBe("Line")
 	})
@@ -76,6 +77,23 @@ describe("composite/capabilities/PermissionRow", () => {
 		const w = mountRow({ flagged: true })
 		expect(w.classes()).toContain(STYLE.flagged)
 		expect(mountRow().classes()).not.toContain(STYLE.flagged)
+	})
+
+	// The row's own rule colours its glyph: a colour utility on the svg would compete with it.
+	test.each([
+		["flagged", true],
+		["unflagged", false],
+	])("a %s row draws its glyph with the row's icon class and no colour utility", (_name, flagged) => {
+		const glyph = mountRow({ flagged }).get("svg")
+		expect(glyph.findAll("path").length).toBeGreaterThan(0)
+		expect(glyph.classes()).toContain(STYLE.icon)
+		expect(glyph.classes().some((name) => name.startsWith("color--"))).toBe(false)
+	})
+
+	test("the chip's warning glyph is orange", () => {
+		const chip = mountRow({ chip: "Any contract" }).find(`.${STYLE.chip}`)
+		expect(chip.getComponent(Icon).props("name")).toBe("warning")
+		expect(chip.get("svg").classes()).toContain("color--orange")
 	})
 
 	test("a granted row carries the granted class that turns its title secondary", () => {

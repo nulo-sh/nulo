@@ -72,7 +72,6 @@ async function mountAdvanced() {
 				LoadingState: true,
 				Toggle: true,
 				RowTarget: true,
-				MaterialIcon: true,
 				RouterLink: { template: "<a><slot /></a>" },
 			},
 		},

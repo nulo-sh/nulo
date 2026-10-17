@@ -176,7 +176,6 @@ onBeforeUnmount(() => {
 		<!-- Outside the load gate, so locking never waits on the config reads. -->
 		<ItemsContainer>
 			<SettingItem
-				materialIcon="lock"
 				:disabled="appStore.lockHeldByImport"
 				@click="lockNow"
 				v-bind="settingItemProps('lock-now')"

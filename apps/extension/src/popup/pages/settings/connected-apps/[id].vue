@@ -209,7 +209,7 @@ onBeforeUnmount(() => {
 		<template #trailing>
 			<Dropdown>
 				<button type="button" :class="$style.icon_btn" aria-label="Session actions">
-					<MaterialIcon name="more_vert" :size="18" color="secondary" />
+					<Icon name="more" :rotate="90" :size="18" color="secondary" />
 				</button>
 
 				<template #popup>
@@ -225,14 +225,14 @@ onBeforeUnmount(() => {
 
 		<!-- Identity block -->
 		<Flex align="center" gap="12" wide>
-			<Icon v-if="session.loadingLogo" :loading="true" name="dapp" size="40" color="tertiary" />
+			<Icon v-if="session.loadingLogo" :loading="true" name="app" size="40" color="tertiary" />
 			<img
 				v-else-if="session.dappMetadata.logoBlobUrl"
 				:src="session.dappMetadata.logoBlobUrl"
 				:class="$style.logo"
 				alt=""
 			/>
-			<Icon v-else name="dapp" size="40" color="tertiary" />
+			<Icon v-else name="app" size="40" color="tertiary" />
 
 			<Flex direction="column" gap="4" wide>
 				<Text variant="name" color="primary" :class="$style.name_size">
@@ -255,7 +255,6 @@ onBeforeUnmount(() => {
 				<SettingItem
 					v-for="acc in accounts"
 					:key="`${acc.chainId}:${acc.address}`"
-					materialIcon="account_balance_wallet"
 					:title="getAccountAlias(acc)"
 					titleVariant="name"
 					:description="`${getChainName(acc.chainId).toUpperCase()} · ${trimAddress(acc.address, 6, 4, '...')}`"
@@ -369,7 +368,7 @@ onBeforeUnmount(() => {
 	transition: all 0.2s var(--bezier);
 
 	&:hover {
-		fill: var(--txt-primary);
+		color: var(--txt-primary);
 	}
 }
 </style>

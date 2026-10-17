@@ -71,8 +71,8 @@ export const Wide: Story = {
 }
 
 export const WithLeftIcon: Story = { args: { leftIcon: "copy" } }
-export const WithRightIcon: Story = { args: { rightIcon: "arrow-right" } }
-export const WithBothIcons: Story = { args: { leftIcon: "copy", rightIcon: "arrow-right" } }
+export const WithRightIcon: Story = { args: { rightIcon: "forward" } }
+export const WithBothIcons: Story = { args: { leftIcon: "copy", rightIcon: "forward" } }
 
 export const AsLink: Story = { args: { link: "/popup/general" } }
 

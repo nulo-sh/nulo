@@ -45,17 +45,17 @@ function recordWith(overrides: Partial<OperationRecord> = {}): OperationRecord {
 // These tests assert the canonical names actually present in the icon set,
 // so a future regression to an invented name fails CI.
 describe("journalTerminalDisplay — icon names exist in the @nulo/design icon set", () => {
-	test("cancelled → `cancel`", () => {
+	test("cancelled → `square-cross`", () => {
 		const op = recordWith({ progress: { stage: "cancelled" }, error: null })
-		expect(journalTerminalDisplay(op)?.icon).toBe("cancel")
+		expect(journalTerminalDisplay(op)?.icon).toBe("square-cross")
 	})
-	test("interrupted → `refresh-circle`", () => {
+	test("interrupted → `refresh`", () => {
 		const op = recordWith({ error: { kind: "stuck_proving", message: "...", normalizedRaw: null } })
-		expect(journalTerminalDisplay(op)?.icon).toBe("refresh-circle")
+		expect(journalTerminalDisplay(op)?.icon).toBe("refresh")
 	})
-	test("failed → `close-circle`", () => {
+	test("failed → `square-cross`", () => {
 		const op = recordWith({ error: { kind: "network", message: "...", normalizedRaw: null } })
-		expect(journalTerminalDisplay(op)?.icon).toBe("close-circle")
+		expect(journalTerminalDisplay(op)?.icon).toBe("square-cross")
 	})
 })
 
@@ -77,7 +77,7 @@ describe("journalTerminalDisplay — Cancelled state", () => {
 		expect(journalTerminalDisplay(op)).toEqual({
 			state: "cancelled",
 			subtitle: "Cancelled",
-			icon: "cancel",
+			icon: "square-cross",
 			color: "gray",
 		})
 	})
@@ -89,12 +89,12 @@ describe("journalTerminalDisplay — Cancelled state", () => {
 })
 
 describe("journalTerminalDisplay — Interrupted state (3 kinds)", () => {
-	test("error.kind === 'sw_restart_post_prove' → interrupted (amber, refresh-circle)", () => {
+	test("error.kind === 'sw_restart_post_prove' → interrupted (amber, refresh)", () => {
 		const op = recordWith({ error: { kind: "sw_restart_post_prove", message: "...", normalizedRaw: null } })
 		expect(journalTerminalDisplay(op)).toEqual({
 			state: "interrupted",
 			subtitle: "Transaction was interrupted",
-			icon: "refresh-circle",
+			icon: "refresh",
 			color: "amber",
 		})
 	})
@@ -116,7 +116,7 @@ describe("journalTerminalDisplay — Failed state (catch-all + per-kind subtitle
 		expect(journalTerminalDisplay(op)).toEqual({
 			state: "failed",
 			subtitle: "Network error",
-			icon: "close-circle",
+			icon: "square-cross",
 			color: "red",
 		})
 	})
@@ -143,7 +143,7 @@ describe("journalTerminalDisplay — Failed state (catch-all + per-kind subtitle
 
 	test("error.kind === 'scope_refused' → 'Not allowed', on the red failed card", () => {
 		const op = recordWith({ error: { kind: "scope_refused", message: "...", normalizedRaw: null } })
-		expect(journalTerminalDisplay(op)).toEqual({ state: "failed", subtitle: "Not allowed", icon: "close-circle", color: "red" })
+		expect(journalTerminalDisplay(op)).toEqual({ state: "failed", subtitle: "Not allowed", icon: "square-cross", color: "red" })
 	})
 
 	test("error.kind === 'duplicate_initialization' → the honest init-race subtitle", () => {
@@ -156,7 +156,7 @@ describe("journalTerminalDisplay — Failed state (catch-all + per-kind subtitle
 		expect(journalTerminalDisplay(op)).toEqual({
 			state: "failed",
 			subtitle: "Stopped when the wallet locked",
-			icon: "close-circle",
+			icon: "square-cross",
 			color: "red",
 		})
 	})
@@ -235,7 +235,7 @@ describe("buildJournalTerminalCardProps", () => {
 		const props = buildJournalTerminalCardProps(transferRecord({ progress: { stage: "cancelled" }, error: null }), TEST_CTX)
 		expect(props).not.toBeNull()
 		expect(props?.title).toBe("USDC")
-		expect(props?.activityIcon).toBe("arrow-narrow-up-right")
+		expect(props?.activityIcon).toBe("send")
 		expect(props?.originLabel).toBeNull()
 		expect(props?.amount).toBe("1.5")
 		expect(props?.amountSymbol).toBe("USDC")
@@ -415,19 +415,19 @@ const CHECKED: [SendOutcome, SendCheckOutcome | undefined, JournalTerminalDispla
 	[
 		"checking",
 		undefined,
-		{ state: "checking", subtitle: "Not confirmed yet", icon: "clock-circle", color: "gray" },
+		{ state: "checking", subtitle: "Not confirmed yet", icon: "square-half", color: "gray" },
 		{ label: "Not confirmed yet", context: "Your wallet is checking whether this reached the network. Don't send it again yet." },
 	],
 	[
 		"sent",
 		"sent",
-		{ state: "sent", subtitle: "Sent", icon: "check-circle", color: "green" },
+		{ state: "sent", subtitle: "Sent", icon: "square-check", color: "green" },
 		{ label: "Went through", context: "The network confirmed this transaction." },
 	],
 	[
 		"reverted",
 		"reverted",
-		{ state: "failed", subtitle: "Reverted", icon: "close-circle", color: "red" },
+		{ state: "failed", subtitle: "Reverted", icon: "square-cross", color: "red" },
 		{ label: "Reverted", context: "The network included this transaction, but it reverted. The fee was still paid." },
 	],
 	[
@@ -442,7 +442,7 @@ const CHECKED: [SendOutcome, SendCheckOutcome | undefined, JournalTerminalDispla
 	[
 		"expired",
 		"expired",
-		{ state: "failed", subtitle: "Won't go through", icon: "close-circle", color: "red" },
+		{ state: "failed", subtitle: "Won't go through", icon: "square-cross", color: "red" },
 		{
 			label: "Won't go through",
 			context: "This transaction expired before the network included it. No fee was paid, and you can send it again.",
@@ -493,7 +493,7 @@ describe("a failed send its record proves never left the wallet", () => {
 			label: "Stopped before broadcast",
 			context: "Your wallet caught this before reaching the network. Often balance, fees, or invalid call.",
 		})
-		expect(journalTerminalDisplay(op)).toEqual({ state: "failed", subtitle: "Transaction failed", icon: "close-circle", color: "red" })
+		expect(journalTerminalDisplay(op)).toEqual({ state: "failed", subtitle: "Transaction failed", icon: "square-cross", color: "red" })
 	})
 
 	test.each([
@@ -508,7 +508,7 @@ describe("a failed send its record proves never left the wallet", () => {
 		expect(journalTerminalDisplay(op)).toEqual({
 			state: "interrupted",
 			subtitle: "Transaction was interrupted",
-			icon: "refresh-circle",
+			icon: "refresh",
 			color: "amber",
 		})
 	})
@@ -519,7 +519,7 @@ describe("a failed send its record proves never left the wallet", () => {
 		expect(journalTerminalDisplay(op)).toEqual({
 			state: "failed",
 			subtitle: "Stopped when the wallet locked",
-			icon: "close-circle",
+			icon: "square-cross",
 			color: "red",
 		})
 		expect(categoricalLabel(op)).toEqual({
