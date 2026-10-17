@@ -135,7 +135,14 @@ export async function validateAndMigrateBackup(fullBackup: FullBackupEnvelope): 
 	// compat-epoch, then the migratable schema-version range. The checksum is
 	// accidental-integrity detection only — a plain backup's checksum is
 	// attacker-recomputable, so nothing downstream may treat it as authentication.
-	const comparisonChecksum = await EncryptionKey.getHashHex(JSON.stringify(backup))
+	let body: string
+	try {
+		body = JSON.stringify(backup)
+	} catch {
+		// A body nested past the engine's stack cannot be re-serialised, so it cannot be verified.
+		return INTEGRITY_REFUSAL
+	}
+	const comparisonChecksum = await EncryptionKey.getHashHex(body)
 	if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL
 
 	// A pre-baseline blob (the legacy conflated `schema-version: 2`, no
@@ -615,15 +622,6 @@ async function runRestoreBackup(
 	state.restoreStage.value = "restoring:profile"
 
 	const sel = state.selectedBackup.value as BackupSelection
-	// Integrity + compatibility gate + forward-migration, all before any live state
-	// is touched. The earlier profile name/type reads in pickBackupFile/decryptBackup are
-	// sanitized display-only prefill and gate nothing.
-	const validated = await validateAndMigrateBackup(sel.backup as FullBackupEnvelope)
-	if (validated.kind === "rejected") {
-		state.restoreStatus.value = "failed"
-		opts.fillError("full_backup", validated.title, validated.message)
-		return
-	}
 
 	// Kept alive for the whole restore so the duplicate-address rollback can call
 	// `profileService.deleteProfile()` and so we can call `finalizeRestore()` at the
@@ -650,6 +648,15 @@ async function runRestoreBackup(
 	}
 
 	try {
+		// Integrity + compatibility gate + forward-migration, all before any live state
+		// is touched. The earlier profile name/type reads in pickBackupFile/decryptBackup are
+		// sanitized display-only prefill and gate nothing.
+		const validated = await validateAndMigrateBackup(sel.backup as FullBackupEnvelope)
+		if (validated.kind === "rejected") {
+			state.restoreStatus.value = "failed"
+			opts.fillError("full_backup", validated.title, validated.message)
+			return
+		}
 		state.restoreErrorLog.value = {}
 		state.restoredNetworks.value = []
 		const restored = await executeRestore(validated, scratch, io, { profileService, networkService, opts })

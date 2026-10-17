@@ -195,13 +195,14 @@ describe("StaleNetworkTakeover — copy and order", () => {
 		expect(wrapper.find('[data-testid="stale-network-reset"]').exists()).toBe(false)
 	})
 
-	test("R1: the reset paused", () => {
-		const { wrapper } = mountTakeover(view({ reset: { running: false, purged: true, doneCount: 1 } }))
+	test("R1: the reset paused, with no imported account to name", () => {
+		const { wrapper } = mountTakeover(view({ reset: { running: false, purged: true, doneCount: 1, imported: [] } }))
+		expect(wrapper.find('[data-testid="stale-network-notice"]').exists()).toBe(false)
 		expect(lines(wrapper.element)).toEqual([
 			...TOP,
 			"RESET PAUSED",
 			"Testnet reset did not finish",
-			"Something stopped the reset part-way. Nulo saved your accounts before it removed anything, so nothing is lost.",
+			"Something stopped the reset part-way. Nulo saved your accounts before it removed anything.",
 			"TRYING AGAIN WILL",
 			"Pick up where the reset stopped.",
 			"Move your 2 accounts to the new Testnet. Their addresses stay the same.",
@@ -210,6 +211,23 @@ describe("StaleNetworkTakeover — copy and order", () => {
 			"TRY AGAIN",
 			"SWITCH NETWORK",
 		])
+	})
+
+	test("R1: the reset paused names the imported accounts deleting the network deletes", () => {
+		const two = mountTakeover(view({ reset: { running: false, purged: true, doneCount: 1, imported: ["Savings", "Trading"] } }))
+		expect(two.wrapper.get('[data-testid="stale-network-notice"]').text()).toBe(
+			"“Savings” and “Trading” are imported accounts. Deleting Testnet deletes them.",
+		)
+		expect(lines(two.wrapper.element).slice(TOP.length, TOP.length + 4)).toEqual([
+			"RESET PAUSED",
+			"Testnet reset did not finish",
+			"Something stopped the reset part-way. Nulo saved your accounts before it removed anything.",
+			"“Savings” and “Trading” are imported accounts. Deleting Testnet deletes them.",
+		])
+		const one = mountTakeover(view({ reset: { running: false, purged: true, doneCount: 1, imported: ["Savings"] } }))
+		expect(one.wrapper.get('[data-testid="stale-network-notice"]').text()).toBe(
+			"“Savings” is an imported account. Deleting Testnet deletes it.",
+		)
 	})
 
 	test("R2: the new chain is already added", () => {
@@ -274,7 +292,7 @@ describe("StaleNetworkTakeover — copy and order", () => {
 	})
 
 	test("A4: no top bar; removing, then removed and each account moved or created", () => {
-		const running = view({ reset: { running: true, purged: false, doneCount: 0 } })
+		const running = view({ reset: { running: true, purged: false, doneCount: 0, imported: [] } })
 		const { wrapper } = mountTakeover(running)
 		expect(lines(wrapper.element)).toEqual([
 			"TESTNET",
@@ -285,16 +303,19 @@ describe("StaleNetworkTakeover — copy and order", () => {
 		])
 		expect(wrapper.find('[data-testid="stale-network-lock"]').exists()).toBe(false)
 
-		const moving = mountTakeover(view({ reset: { running: true, purged: true, doneCount: 1 } })).wrapper
+		const moving = mountTakeover(view({ reset: { running: true, purged: true, doneCount: 1, imported: [] } })).wrapper
 		expect(lines(moving.element).slice(3, 6)).toEqual(["Removed old data", "Moved Account 1", "Moving Account 2"])
 		const creating = mountTakeover(
-			view({ cause: { networkReset: false, addressesMoved: true }, reset: { running: true, purged: true, doneCount: 1 } }),
+			view({
+				cause: { networkReset: false, addressesMoved: true },
+				reset: { running: true, purged: true, doneCount: 1, imported: [] },
+			}),
 		).wrapper
 		expect(lines(creating.element).slice(3, 6)).toEqual(["Removed old data", "Created Account 1", "Creating Account 2"])
 	})
 
 	test("A4c: a run on a network never opened reads as its first open, with no step and no control", () => {
-		const { wrapper } = mountTakeover(view({ accounts: [], reset: { running: true, purged: true, doneCount: 0 } }))
+		const { wrapper } = mountTakeover(view({ accounts: [], reset: { running: true, purged: true, doneCount: 0, imported: [] } }))
 		const root = wrapper.find('[data-testid="stale-network-takeover"]')
 		expect(root.attributes("data-screen")).toBe("loading")
 		expect(root.find('[data-testid="stub-spinner"]').exists()).toBe(true)
@@ -307,7 +328,7 @@ describe("StaleNetworkTakeover — actions", () => {
 	test("appearing closes every popup open over the route it replaces; a new view on screen does not", async () => {
 		const { wrapper } = mountTakeover(view())
 		expect(H.closeAll).toHaveBeenCalledTimes(1)
-		await wrapper.setProps({ view: view({ reset: { running: true, purged: false, doneCount: 0 } }) })
+		await wrapper.setProps({ view: view({ reset: { running: true, purged: false, doneCount: 0, imported: [] } }) })
 		expect(H.closeAll).toHaveBeenCalledTimes(1)
 	})
 
@@ -332,7 +353,7 @@ describe("StaleNetworkTakeover — actions", () => {
 	})
 
 	test("TRY AGAIN starts the same view (R1, R4); GO TO activates the pending network (R3)", async () => {
-		const r1 = mountTakeover(view({ reset: { running: false, purged: true, doneCount: 0 } }))
+		const r1 = mountTakeover(view({ reset: { running: false, purged: true, doneCount: 0, imported: [] } }))
 		await r1.wrapper.find('[data-testid="stale-network-retry"]').trigger("click")
 		expect(r1.stale.start).toHaveBeenCalledWith(expect.objectContaining({ networkId: "tn" }))
 		const r3 = mountTakeover(view({ networkId: "ln", name: "Local Network", otherPending: { networkId: "tn", name: "Testnet" } }))
@@ -341,7 +362,7 @@ describe("StaleNetworkTakeover — actions", () => {
 	})
 
 	test("the primary control ignores a repeated Enter, so a held key starts no second run", () => {
-		const { wrapper } = mountTakeover(view({ reset: { running: false, purged: true, doneCount: 0 } }))
+		const { wrapper } = mountTakeover(view({ reset: { running: false, purged: true, doneCount: 0, imported: [] } }))
 		const repeat = new KeyboardEvent("keydown", { key: "Enter", repeat: true, cancelable: true, bubbles: true })
 		wrapper.find('[data-testid="stale-network-retry"]').element.dispatchEvent(repeat)
 		expect(repeat.defaultPrevented).toBe(true)
@@ -350,7 +371,7 @@ describe("StaleNetworkTakeover — actions", () => {
 	test("the primary control is disabled while a start is in flight", async () => {
 		const stale = fakeStale()
 		stale.starting.value = true
-		const { wrapper } = mountTakeover(view({ reset: { running: false, purged: false, doneCount: 0 } }), stale)
+		const { wrapper } = mountTakeover(view({ reset: { running: false, purged: false, doneCount: 0, imported: [] } }), stale)
 		expect(wrapper.find('[data-testid="stale-network-retry"]').attributes("disabled")).toBeDefined()
 	})
 
@@ -359,10 +380,10 @@ describe("StaleNetworkTakeover — actions", () => {
 			view(),
 			view({ cause: { networkReset: false, addressesMoved: true } }),
 			view({ blocked: true }),
-			view({ reset: { running: false, purged: true, doneCount: 0 } }),
+			view({ reset: { running: false, purged: true, doneCount: 0, imported: [] } }),
 			view({ heldBy: { name: "X" } }),
 			view({ otherPending: { networkId: "x", name: "X" } }),
-			view({ reset: { running: true, purged: true, doneCount: 0 } }),
+			view({ reset: { running: true, purged: true, doneCount: 0, imported: [] } }),
 		]
 		for (const state of states) {
 			const { wrapper } = mountTakeover(state)
