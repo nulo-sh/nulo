@@ -1007,8 +1007,8 @@ export const test = base.extend<{
 			})
 			await waitForHash(page, "#/popup/import", 5_000)
 
-			// Loaded at call time: the import drivers load `@nulo/wallet-crypto`, and through it
-			// bb.js, which no other fixture needs.
+			// Loaded at call time: a static import would load `@nulo/wallet-crypto`, and bb.js through
+			// it, into every spec that imports this hub.
 			const { importSeed, POPUP_IMPORT_SHELL } = await import("../helpers/import-drivers")
 			await importSeed(page, prefunded.words.join(" "), TEST_PASSWORD, POPUP_IMPORT_SHELL)
 

@@ -14,7 +14,6 @@
  * `role="alert"`. Avoid asserting on copy.
  */
 
-// Every feature helper the specs import, re-exported from the module that owns its concern.
 export * from "./accounts"
 export * from "./address-book"
 export * from "./auth"

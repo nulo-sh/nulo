@@ -230,7 +230,7 @@ Specs import from two entries: `fixtures/extension.ts` (the launch, the Vitest f
 - `fixtures/wallet-pages.ts`: `openPopup`, `openOnboarding`, `recordPageErrors`, `waitForServiceReady`, `seedLegalAcceptance`.
 - Behind `helpers.ts`: `accounts`, `address-book`, `auth`, `navigation`, `networks`, `profiles`, `session`, `settings`, `tokens` (balance rows included), `transfers` (fee methods included), `widgets` (dropdowns, toasts, popup chains).
 
-The import graph under `tests/e2e/` has no cycle, and `bun run lint` keeps it so: Biome's `noImportCycles` fails on any edge that closes one. A module the hub reaches imports what it calls from the module that owns it, never `extension.ts` or `helpers.ts`, and takes `ExtensionContext` through `import type` (Biome counts `import { type X }` as an edge). In `biome.json` the rule is on at the root and off outside this tree: Biome builds its module graph only for a project rule enabled at the root, so an override that turns it on sees no edges.
+The import graph under `tests/e2e/` has no cycle, and `bun run lint` (CI's lint job runs it) keeps it so: its `biome lint --only=suspicious/noImportCycles` step fails on any edge that closes one. A module the hub reaches imports what it calls from the module that owns it, never `extension.ts` or `helpers.ts`, and takes `ExtensionContext` through `import type` (Biome counts `import { type X }` as an edge). The rule lives in that script, not in `biome.json`: on Biome 2.5.13 it needs a whole-project scan, which an override cannot turn on and a root setting would add to every Biome call (about 3 s on each pre-commit). So the pre-commit hook and the editor do not report a cycle; `bun run lint` does.
 
 ## Helper conventions (CDP regression workarounds)
 

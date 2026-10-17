@@ -49,8 +49,7 @@
 				"noExplicitAny": "error",
 				"noImplicitAnyLet": "warn",
 				"noAssignInExpressions": "warn",
-				"useIterableCallbackReturn": "warn",
-				"noImportCycles": "error"
+				"useIterableCallbackReturn": "warn"
 			},
 			"complexity": {
 				"noExtraBooleanCast": "off",
@@ -483,16 +482,6 @@
 								"allow": ["debug", "warn", "error"]
 							}
 						}
-					}
-				}
-			}
-		},
-		{
-			"includes": ["**", "!apps/extension/tests/e2e/**"],
-			"linter": {
-				"rules": {
-					"suspicious": {
-						"noImportCycles": "off"
 					}
 				}
 			}
