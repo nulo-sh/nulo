@@ -188,6 +188,9 @@ One arc, one PR against `dev`. The wallet holds the composite chain id 0 to one 
 - **Codex r2** (resume): **conditional approve** of A′. Adopted: the chain-0 L1 rule in `assertCanonicalStoredL1` with getter tests; the guarantee scoped to built metadata and derived keys, imported keys and raw hashes outside; loopback in the constructor; an explicit sink success case for two rollup versions on 31337; OA-2 records both consequences; drift as a known limit (D5).
 - **Final fresh Codex pass** (session `01a14a98`): **reject**, two blockers, both adopted. The reset journal is the third source of a new account's L1, so `validateJournal` takes the rule (phase 2, test 7). Committed wording was reduced to the rule and the change. Also adopted: the guarantee is scoped to new allocation, since historical re-derivation reads the account's L1; the fixture list; the remote-seed constructor test; the already-primary promotion test; OA-1's wording. Resumed to verify: **conditional approve** (two wording fixes: OA-2's scope sentence and a misplaced change-map bullet), both applied; resumed again: **approve**.
 
+- **Implementation review r1** (Codex, session `01a14abd`): **reject**, three items. Adopted: the adoption sentence names the Local target's 0; the cache counts three reported failures, which a success does not reset. Argued: a chain-0 row on L1 31337 with a non-loopback primary, which only an install from before this change can hold, is a known limit with D5. **Opus**, beside it: **conditional approve**; the stale `local`-kind comments and the same adoption wording, adopted.
+- **Implementation review r2** (resume): **approve**; the known-limit disposition accepted.
+
 ## Delivery
 
 - One arc, one PR, branch `worktree-network-identity-1` against `dev` (no stack: the orchestrator's D-orch-1). Phases 1 to 3, then the close-out as the PR's final commits. `code_review: off`.
@@ -206,7 +209,7 @@ The execution contract is this section plus `implementations-plan/README.md` § 
 - Step 3 (delivery): as above. Run `gh pr checks <n> --watch` once; a known flake gets one rerun.
 - Step 4 (close-out):
   - Merge `origin/dev` first and read `index.md` / `lessons.md`.
-  - Write the Outcome. Its `Known limits:` line names the closed `known-limit` issue for D5. That issue's body describes the Local Network's development behaviour only: a second sandbox on L1 31337 reads as the same network. Reopen if chain 0 serves anything but development, or the product promises isolation between sandbox deployments.
+  - Write the Outcome. Its `Known limits:` line names the closed `known-limit` issue for D5. That issue's body describes the Local Network's development behaviour only: a second sandbox on L1 31337 reads as the same network, and a Local Network row from an install made before this change keeps a primary that is not on this machine until it is edited. Reopen if chain 0 serves anything but development, or the product promises isolation between sandbox deployments.
   - Promote lessons, delete `STATUS.md`, `git mv` into `archive/` in its own commit, and move the index line to `archive/index.md`.
 - Step 5 (teardown after the merge): once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/network-identity-1/plan.md` succeeds, run `agent-worktree done network-identity-1 --merged`. The orchestrator merges; the session that sees the merge runs it.
 

@@ -7,3 +7,7 @@
   2. `SECURITY.md`'s adoption sentence omitted that a Local target records 0. Adopted.
   3. The cache's three failures are cumulative, not consecutive: a success does not reset the count. Adopted in `SECURITY.md` and in `getNodeForUrl`'s doc comment.
 - **Opus** (general-purpose): **conditional approve**. Every writer of a chain-0 row and every source of a new account's L1 traced and held. Adopted: the comments that still said a `local` kind alone grants chain 0 (`addEndpoint`, `updateEndpoint`, `_getChainId`, `seeds.ts`), and the same `SECURITY.md` adoption wording.
+
+## Implementation review r2, 2026-10-17
+
+- **Codex** (resume, session `01a14abd`): **approve**. The three fixes match the code. Item 1 was withdrawn as blocking: no supported path creates or restores the row, so it is a known limit, recorded with D5 at close-out.
