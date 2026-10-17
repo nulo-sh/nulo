@@ -92,7 +92,7 @@ Decision page 35 (2026-10-17) settled five leftovers and, as an amendment the or
 - Tests: `journalCardOriginLabel` over `""` ("dApp"), a name, and a schemeful name (bracketed). The awaiting-card table row `{ kind: "dapp_execute" }` (`RecentActivityView.test.ts:988`) gives `originLabel: "dApp"`. The terminal case at `journal-state.test.ts:285` stays `null` (OA-1).
 - **Gate**: fast layers plus `bun run --cwd apps/extension test journal-state tx-enrichment RecentActivityView` exit 0.
 
-### Phase 4: Holdings' unavailable state (#618)
+### Phase 4: Holdings' unavailable state (#618) ✓
 - Files: `utils/token-aggregate.ts`, `utils/token-aggregate.test.ts`, `BalanceView.vue`, `holdings.vue`, `holdings.test.ts`.
 - Tests: one table test for the predicates: priced and unquoted, one quote, empty, unpriced only, before the mapping, zero balance. Holdings: after the answer with no quote, the summary reads "—" and "Prices unavailable", with no "$" and no count. Before the answer (`refreshIfStale` pending), it reads as today (never-happens).
 - **Gate**: fast layers plus `bun run --cwd apps/extension test token-aggregate holdings BalanceView` exit 0.

@@ -13,7 +13,7 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 /** Utils */
 import { balanceFormatted } from "@/utils/amount.js"
 import { knownDecimals, parseRawBalance, safeFiatOf } from "@/utils/token-amount"
-import { aggregateFiat } from "@/utils/token-aggregate"
+import { aggregateFiat, isPriceableHolding, pricesUnavailable } from "@/utils/token-aggregate"
 import { storageLocalGet, storageLocalSet } from "@/utils/storage"
 import { createBalanceCount } from "./balance-count"
 import { FULL_SIZE, fiatHeroCandidates, fitHero, holdHeroFit, tokenHeroCandidates } from "@/utils/hero-fit"
@@ -105,7 +105,7 @@ const fiatOf = safeFiatOf((tb) => prices.tokenFiatMicro(tb.token, parseRawBalanc
 const aggregate = computed(() => aggregateFiat(tokenBalances.value, fiatOf))
 
 /** Holdings that lack a price count as $0.00 under the "priced assets only" caption, unless every
- *  priceable one lacks it (`pricesUnavailable`). */
+ *  priceable one lacks it (`noPrices`). */
 const aggregateFiatDisplay = computed(() => prices.formatUsdMicro(aggregate.value.micro))
 const isAggregatePartial = computed(() => aggregate.value.partial)
 
@@ -178,20 +178,13 @@ function restartCap() {
 		capElapsed.value = true
 	}, HERO_PENDING_CAP_MS)
 }
-/** A positive holding a price could cover. Before the mapping arrives, any holding may be priced. */
-const isPriceableHolding = (tb) =>
-	typeof tb.token?.contract === "string" &&
-	(parseRawBalance(tb) ?? 0n) > 0n &&
-	(!prices.mapped.value || prices.isPriced(tb.token.chainId, tb.token.contract))
 /** A wallet holding a price-mapped token waits for the first price answer; an empty or unpriced
  *  wallet has none to wait for. */
-const awaitingQuotes = computed(() => showFiatValues.value && !prices.settled.value && tokenBalances.value.some(isPriceableHolding))
-/** Whatever the cause: an expired quote, one an answer left out, a failed fetch, no answer by the cap. */
-const pricesUnavailable = computed(() => {
-	if (!showFiatValues.value) return false
-	const holdings = tokenBalances.value.filter(isPriceableHolding)
-	return holdings.length > 0 && holdings.every((tb) => fiatOf(tb) === undefined)
-})
+const awaitingQuotes = computed(
+	() => showFiatValues.value && !prices.settled.value && tokenBalances.value.some((tb) => isPriceableHolding(tb, prices)),
+)
+/** Holds too once the cap passes with no price answer: no quote is a missing price. */
+const noPrices = computed(() => showFiatValues.value && pricesUnavailable(tokenBalances.value, fiatOf, prices))
 const heroPending = computed(() => (isTotalUnsettled.value || awaitingQuotes.value) && !capElapsed.value)
 /** After the cap one question decides the figure: did ANY snapshot succeed for this scope? A loaded
  *  empty list is a real $0.00; a list that never loaded is unknown. */
@@ -228,7 +221,7 @@ watch(
 // Only a figure the hero displays is recorded: loading, unknown and fiat off count nothing.
 watch(
 	() =>
-		!tokenToDisplay.value && showFiatValues.value && !heroPending.value && isTotalKnown.value && !pricesUnavailable.value
+		!tokenToDisplay.value && showFiatValues.value && !heroPending.value && isTotalKnown.value && !noPrices.value
 			? aggregate.value.micro
 			: null,
 	(micro) => (micro === null ? balanceCount.reset() : balanceCount.observe(micro)),
@@ -281,7 +274,7 @@ onBeforeUnmount(() => {
 						<span :class="$style.balance_symbol">{{ tokenToDisplay?.symbol }}</span>
 					</span>
 					<Skeleton v-else-if="heroPending" :width="150" :height="40" data-testid="balance-hero-loading" :class="$style.hero_skeleton" />
-					<span v-else-if="isTotalKnown && pricesUnavailable" aria-hidden="true">—</span>
+					<span v-else-if="isTotalKnown && noPrices" aria-hidden="true">—</span>
 					<span v-else-if="isTotalKnown" :class="$style.hero_fit" :style="{ '--hero-scale': heroFit.scale }">{{ heroText }}</span>
 					<!-- The balance list could not be read at all: unknown, which is not zero. -->
 					<span v-else data-testid="balance-hero-unknown">—</span>
@@ -315,7 +308,7 @@ onBeforeUnmount(() => {
 				{{ displayedTokenFiat }}
 			</div>
 			<div
-				v-if="!tokenToDisplay && !heroPending && isTotalKnown && pricesUnavailable"
+				v-if="!tokenToDisplay && !heroPending && isTotalKnown && noPrices"
 				data-testid="balance-prices-unavailable"
 				:class="$style.fiat_partial"
 			>

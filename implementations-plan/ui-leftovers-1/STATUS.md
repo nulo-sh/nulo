@@ -8,3 +8,4 @@
 - 2026-10-17 15:11Z: Phase 1 (#635) gate pass: lint, typecheck:all, `test BalanceView amount.callers` (70/70). Red proof: the token-page case fails on the base component.
 - 2026-10-17 15:21Z: Phase 2 (#639) gate pass: lint, typecheck:all, `test Header` (52/52), navigation by the smoke recipe on Chrome (8/8) and Firefox (8/8). Deviation: the plain-click control clears the selection first (Chrome keeps a selection through a click inside it; lessons/phase-0.md).
 - 2026-10-17 15:24Z: Phase 3 (#628) gate pass: lint, typecheck:all, `test journal-state tx-enrichment RecentActivityView` (211/211).
+- 2026-10-17 15:30Z: Phase 4 (#618) gate pass: lint, typecheck:all, `test token-aggregate holdings BalanceView` (106/106). Red proof: the unavailable case fails on the base page.
