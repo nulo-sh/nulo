@@ -1,0 +1,8 @@
+# fees-display-1 status
+
+- 2026-10-17 phase 0: briefs read; #515 Decision (P36-04 A) verified on the issue; worktree adopted at 093fa10d, registered.
+- 2026-10-17 plan drafted (light, one arc); OWNER-ASKS none (pick applied literally, D5); panel audit next.
+- 2026-10-17 Codex audit round 1 (session 01a14b0b): conditional approve; S1, F1–F7 recorded; Opus leg pending.
+- 2026-10-17 Opus leg: conditional approve; findings folded (D7–D9 added); final fresh Codex pass next.
+- 2026-10-17 Codex final pass: conditional approve; D8–D10 revised; resumed for re-verdict.
+- 2026-10-17 Codex final pass resumed: conditional approve; D8 path folded; D10 filed as OA-1 (blocks auto-continue). Plan committed; awaiting the orchestrator.
