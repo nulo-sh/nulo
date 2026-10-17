@@ -37,7 +37,7 @@ post_implementation_hardening: not scheduled
   - The ledger below has every finding and its disposition.
 - **Gates at the close-out head** (local, retry 0, each e2e run started at load1 < 150):
   - `bun run lint`, `bun run typecheck:all`, `bun run test` (828 files, 13,528 tests), `inventory.test.ts` (10/10) and `bun run check:plans` all exit 0.
-  - The windows spec passed 5/5 on Chrome (188.1 s) and on Firefox (175.9 s), with `live` = 41.
+  - The windows spec passed 5/5 on Chrome (188.1 s, then 180.9 s after dev's #701 and #703 merged in) and on Firefox (175.9 s, then 218.7 s), with `live` = 41.
   - On Chrome: `tx-transfer-row` 4/4 and `authwit-variants` 4/4; smoke `type-roles.test.ts` (12 passed, 1 skipped) and `rows.test.ts` 9/9.
   - The never-happens proof dropped the field-parameter state. The last test then named that site's key and nothing else.
 - **Known limits:** #704, D8: the tx sender and the received recipient show an own account, so they are read only as a name.
