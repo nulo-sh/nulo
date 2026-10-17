@@ -6,3 +6,4 @@
 - 2026-10-17 Opus leg: conditional approve; findings folded (D7–D9 added); final fresh Codex pass next.
 - 2026-10-17 Codex final pass: conditional approve; D8–D10 revised; resumed for re-verdict.
 - 2026-10-17 Codex final pass resumed: conditional approve; D8 path folded; D10 filed as OA-1 (blocks auto-continue). Plan committed; awaiting the orchestrator.
+- 2026-10-17 orchestrator approved the plan at 73b52d8e; OA-1 answered A (D-orch); arc 1 started.
