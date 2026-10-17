@@ -28,18 +28,18 @@ existing keys and profiles.
 
 - **KDF domain separator labels**
   - `nulo:profile:v1` — WebAuthn PRF input label
-    (`src/wallet/services/passkey/spec.ts:PASSKEY_PRF_LABEL`)
+    (`packages/wallet-crypto/src/constants.ts:PASSKEY_PRF_LABEL`)
   - `nulo:kdf:v1` — HKDF salt label
-    (`src/wallet/services/passkey/credential.ts:PASSKEY_KDF_LABEL`)
+    (`packages/wallet-crypto/src/passkey-credential.ts:PASSKEY_KDF_LABEL`)
   - `nulo:master:v1` — HKDF info label
-    (`src/wallet/services/passkey/credential.ts:PASSKEY_MASTER_LABEL`)
+    (`packages/wallet-crypto/src/passkey-credential.ts:PASSKEY_MASTER_LABEL`)
 - **`AccountType.Nulo_v1 = 0`** — embedded in the Poseidon hash used to derive
   account secrets from the master secret. The numeric value is part of the
   hash input; renaming the enum is fine, but reassigning the numeric value
   is not (`src/wallet/services/account/spec.ts`).
 - **AES-GCM ciphertext format** — `[1 version byte][12 byte IV][ciphertext]`
   stored base64 in `profile.secret` and `profile.guard`
-  (`src/wallet/services/profile/encryption/encryption-key.ts`).
+  (`packages/wallet-crypto/src/encryption-key.ts`).
 - **Passkey RP ID** — `passkey.nulo.sh`, used at credential creation AND at
   WebAuthn `get` (both literals must match — they're the same crypto
   binding). Changing it invalidates every existing passkey credential.
@@ -57,10 +57,12 @@ existing keys and profiles.
   ever challenges it) — the edge that already terminates the host's TLS,
   so no new trust root, and the page's CSP refuses any script a zone
   feature would inject; the README lists the dashboard settings to keep
-  off. The derivation trusts the browser to let only this extension
-  evaluate the credential's PRF for this RP ID; another extension the
-  browser authorizes for it is a compromised browser, outside the threat
-  model (known limit #597).
+  off. The wallet holds no factor of its own: the master derives from the
+  passkey alone, which is what lets a fresh install recover the master and
+  every derived account from the passkey (imported keys come back only with
+  a full backup). Who may use the passkey for this RP ID is decided by the
+  browser and the authenticator, not by the wallet, and the wallet adds no
+  restriction of its own (known limit #597).
   - **Build-time gate** (`scripts/check-rp-id.ts`): single source
     of truth is `RP_ID` exported from
     `src/wallet/services/passkey/spec.ts`. The gate fails the build if
@@ -251,19 +253,31 @@ area keeps the browser's default access.
 
 Two layers:
 
-1. **Capability type** (`src/wallet/services/wallet-sdk/capability-map.ts`)
+1. **Capability type** (`packages/wallet-bridge/src/capability-map.ts`)
    — maps each wallet-sdk method to the capability type it requires
    (`accounts`, `transaction`, `simulation`, `data`, `contracts`,
    `contractClasses`).
-2. **Per-operation scope** (`src/wallet/services/wallet-sdk/scope-enforcement.ts`)
+2. **Per-operation scope** (`packages/wallet-bridge/src/scope-enforcement.ts`)
    — validates that the specific contract/function targeted by an operation
    falls within the scope granted.
 
-`createAuthWit` validates both the `from` account and, when the request
-carries a `CallIntent`, the target call itself against transaction or
-simulation scope. When it carries an `IntentInnerHash`, the `consumer`
-contract is validated at wildcard function. Raw message hashes cannot be
-validated beyond the account check (no semantic info).
+`createAuthWit` takes a `CallIntent` or an `IntentInnerHash`, never a raw
+message hash: the argument schema refuses a raw hash before the scope check
+and before any window (`packages/wallet-bridge/src/wallet-schema-args.ts`),
+and the scope check refuses it again
+(`packages/wallet-bridge/src/method-scope-checkers.ts`). The `from` account
+must be one the app's accounts grant allows. When the app holds a
+transaction grant, or a simulation grant with a transaction scope, a
+`CallIntent` whose call is outside that scope is refused, and so is an
+`IntentInnerHash` whose `consumer` contract that scope does not cover at any
+function; with no such grant, nothing is refused on scope. A `CallIntent`
+inside the scope is signed without a window only while the app's consent to
+sign authorizations without asking is in effect
+(`packages/wallet-bridge/src/dispatcher.ts`). Every other admitted request
+opens a confirmation: for a `CallIntent` it shows the authorized caller, the
+target contract, the function and its arguments; for an `IntentInnerHash`,
+the consumer contract and the inner hash, with a warning that the wallet
+cannot show what the hash authorizes.
 
 ## RPC endpoint as user input
 

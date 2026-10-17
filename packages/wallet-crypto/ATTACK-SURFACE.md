@@ -39,7 +39,8 @@ exists at all:
 | `profiles@<id>.credentialId` | WebAuthn credential id (passkey profiles) | nothing — it is a public identifier |
 | imported-key rows | an external account's Grumpkin signing key | AES-256-GCM under `HKDF(dek, chainId ‖ address)` |
 | `storage.session` bearer | `master ‖ dek` **and** the random token that unwraps it | nothing, jointly — see below |
-| full backup file | plaintext master + entropy + DEK, unless encrypted | the backup password, if the user chose one |
+| password full backup file | the master, the entropy, and a key made for this backup alone, under which its imported-key rows open (never the profile's DEK) | the profile's password at export time (a later password change does not touch the file) |
+| passkey full backup file | the credential id, the profile's own DEK sealed under the passkey's wrap key, the imported-key rows | the keys open only with the passkey; without the optional password, the file shows accounts, contacts and activity |
 | passkey full backup's `backup-mac` | HMAC-SHA256 over the body's checksum | keyed by the passkey's PRF (`nulo:backup-mac:v1`); a body restores only under it |
 
 ## Cost to invert each one
@@ -83,10 +84,14 @@ the master and still cannot reach them: the master is not an input to that key. 
 property the DEK exists for, and it is the one place this design goes beyond what a standard wallet
 does.
 
-**The passkey path has no offline attack at all.** The master comes from the authenticator's PRF
-output, which never leaves the device and requires user verification to produce. A disk reader gets
-`credentialId` (a public identifier) and ciphertext they cannot key. There is no password to guess.
-This is strictly the strongest profile type on offer.
+**The passkey path has no offline attack.** The master comes from the passkey's PRF output, which
+only the authenticator computes, after user verification; nothing on disk lets anyone compute it. A
+disk reader gets `credentialId` (a public identifier) and ciphertext they cannot key; there is no
+password to guess. The same design makes the passkey the whole secret: the wallet holds no second
+factor, so a fresh install recovers the master and every derived account from the passkey alone
+(imported keys come back only with a full backup). Against what is on disk, it is the strongest
+profile type on offer; beyond that, it is no stronger than the control the browser and the
+authenticator keep over who may use the passkey for its RP ID.
 
 **The session bearer is an admission, made only in lenient mode.** `storage.session` holds the
 random token *and* the ciphertext it opens, side by side — so whoever reads it recovers the master
@@ -96,9 +101,9 @@ attacker with code execution in the extension, or a read of its memory, compromi
 wallet anyway; what the bearer adds is a copy that needs neither and outlives the worker. Strict
 mode, the default, writes no bearer for that reason.
 
-**An unencrypted backup file is plaintext.** Master, entropy, and DEK, in the clear. Encrypting the
-backup moves it to the same footing as the profile row — i.e. onto the strength of the backup
-password.
+**A decrypted password backup is plaintext.** Master, entropy and the backup's own imported-keys
+key, in the clear. Since v0.31.0 the wallet writes the file only encrypted, which puts it on the
+strength of the profile's password; see the known limit below for older files.
 
 ## Known limitations, stated rather than buried
 
@@ -112,9 +117,12 @@ password.
   600k-iteration PBKDF2, so it does not lower the guessing cost. It would be password-equivalent if
   it ever leaked; that is why it is no longer persisted anywhere (the session bearer used to store
   it and no longer does).
-- **A full backup carries the long-lived profile DEK**, so a backup holder who later regains read
-  access to the source profile can open imported-key rows created *after* the export. Narrower than
-  what the same file already gives up (the plaintext master), and tracked as a follow-up.
+- **A password full backup made before PR #51 (2026-10-08; v0.30.2 and earlier) still restores and
+  carries the profile's long-lived DEK; one made before PR #55 (2026-10-09) may also be
+  unencrypted.** A password change rewraps the DEK and never rotates it, so whoever can open such a
+  file and later reads the source profile's storage can open imported-key rows created after the
+  export. Since v0.31.0 the file is always encrypted under the profile's password and carries a key
+  made for that backup alone. Accepted while the wallet has no production users (known limit #709).
 - **This is a custom derivation scheme.** It is built entirely from standard primitives — PBKDF2,
   HMAC-SHA512, HKDF, AES-256-GCM, SHA-256 — with no hand-rolled cryptography, and the primitives
   are pinned against published test vectors (all 24 official BIP-39 vectors, RFC 5869 A.1 for
