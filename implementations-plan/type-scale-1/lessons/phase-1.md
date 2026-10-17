@@ -47,3 +47,17 @@ The predicate as specified, run on the unchanged UI (Chrome smoke at first asser
 | network `send-amount-exact.test.ts` | 46.4 s | 50.1 s |
 
 These runs added a second in-page pass per read and 15 shot pairs per browser, at a higher host load than the before runs; they bound the added reads' cost from above only.
+
+## The corrected measurement (D8), on the base tree (2026-10-17)
+
+- Implemented as D8 states; the layout test now has nine controls: reported, a field an ancestor cuts, a block running past its box, an inline span running past its line's box, a role-bearing flex cell whose children fit themselves but not the cell; not reported, a field scrolling a 66-character address, a short inline span, fitting text with a positioned icon past it, a rotated icon glyph; not even read, a screen-reader span (`clip-path: inset(50%)`).
+- Result, both suites, both browsers, retry 0: every surface clean except one element, the capabilities window's head word "Transact" (`cap-scroll-area`, 3.8 px past its 54 px track, Chrome and Firefox). Smoke green on both browsers (the Firefox toolbar panel included), the execute windows green with the longest dApp payload, `send-amount-exact` green.
+- The blocker is OA-5. Phase 1 stays ✗ until it is answered; Phases 2 to 4 have not started.
+
+| Suite (retry 0, no shots) | Chrome before → after | Firefox before → after |
+|---|---|---|
+| smoke `type-roles.test.ts` | 74.1 → 80.4 s | 122.6 → 175.3 s |
+| network `type-roles-windows.test.ts` (one test red) | 126.2 → 154.8 s | 163.1 → 185.6 s |
+| network `send-amount-exact.test.ts` (unchanged code) | 34.1 → 45.4 s | 41.0 → 47.1 s |
+
+- The figures are noise-bound: the after runs started at load 133-145 (before: 116), and Firefox's tests that read no layout slowed as much (probe test 8.5 → 13.8 s, faces 1.1 → 2.8 s) as those that do; in Chrome the two layout-heavy smoke tests went 17.2 → 16.9 s and 20.1 → 17.0 s. The reads' cost is under the noise; a clean figure needs a quiet host.

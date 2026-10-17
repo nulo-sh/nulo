@@ -50,10 +50,11 @@ Phase 3 fills in each site with its screenshots (light and dark, Chrome and Fire
 Found by the layout gate on today's wallet, before any type-scale change; it stops the arc (plan § Phase 1, Warning).
 
 - **Surface**: the capabilities window (a dApp's connect request) with Details open: the permission table's head row, "CONTRACT · SIMULATE · ADD · TRANSACT" (`DetailsTable.vue:71-76`). The three right columns are fixed at 54, 34 and 54 px with 4 px gaps.
-- **Today**: "TRANSACT" is 58 px in its 54 px column, in Chrome and Firefox. Centred, it spills about 2 px into each gap and touches nothing (screenshot `capabilities-details`, before set). At Scale A's caps voice (11 px) it is about 64 px, and "SIMULATE" grows past its 54 px too.
+- **Today**: "TRANSACT" is 58 px in its 54 px column, in Chrome and Firefox. Centred, it spills about 2 px into each gap and touches nothing (screenshot `capabilities-details`, before set).
+- **At Scale A's caps voice (11 px)**: "TRANSACT" about 64 px in 54 (past the 4 px gaps too), "SIMULATE" about 60 px in 54, and a contract row's function label column (58 px, `DetailsTable.vue:256-270`) holds "TRANSACT" at about 64 px. The sweep opens the fold but no row, so that last column is unmeasured.
 - **Options**:
-  - **A. Size the two columns to their words**: about 60 px today, 66 px at 11 px; the contract column gives up about 24 px (the contract address still fits, about 120 px with its copy icon in about 140 px).
-  - **B. Accept the spill**: the words run into the gaps as today. The layout gate then needs a reviewed exception for this row, which the plan does not allow without your say.
+  - **A. Size the columns to their words at 11 px**: Simulate and Transact about 66 px each, the function label column about 66 px; the contract column gives up about 24 px (the contract address still fits, about 120 px with its copy icon in about 140 px; a contract name already ends in an ellipsis there).
+  - **B. Accept the spill**: the words run into the gaps, and at 11 px past them. The layout gate then needs a reviewed exception for this row, which the plan does not allow without your say.
   - **C. Shorter words** (a copy change, for example "SEND" for "TRANSACT").
 - **Recommendation**: A. It is the same answer as OA-1 B for this table, and it is the only option that keeps the gate free of exceptions.
 - **What ships now**: nothing. The arc stops at Phase 1 until this is answered, since today's look itself fails the gate, so OA-1's "keep today's look" cannot cover it.
