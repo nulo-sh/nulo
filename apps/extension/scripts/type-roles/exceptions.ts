@@ -36,6 +36,7 @@ const BUTTON = "packages/design/src/ui/Button.vue"
 const HEADER = "apps/extension/src/components/Header.vue"
 const HEADER_CHIPS = ".actions .network_chip, .network_chip .network_label, .lock_chip .lock_label"
 const HEADER_CHIP_SCOPE = '[data-testid="network-button"], [data-testid="network-name"], [data-testid="header-lock"] > span'
+const ACCOUNTS = "apps/extension/src/popup/pages/settings/accounts/index.vue"
 const PUBLISH_STRIP = "apps/extension/src/components/composite/send/PublishStrip.vue"
 const PUBLISH_FACTS = '[data-testid="send-publish-strip"] [data-cell]'
 const ROLELESS = ".wrapper:is(.secondary, .ghost, .text)"
@@ -256,5 +257,14 @@ export const OVERRIDES: Override[] = [
 		value: "0.08em",
 		role: "label-section",
 		why: "the header's chips keep today's tracking",
+	},
+	{
+		file: ACCOUNTS,
+		selector: ".desc_line:has(.addr_head)",
+		scope: '[data-testid="manage-accounts-address"]',
+		property: "font-size",
+		value: "11px",
+		role: "meta",
+		why: "an account row's marker and address tail fit its line only at 11px",
 	},
 ]

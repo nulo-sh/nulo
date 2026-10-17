@@ -214,6 +214,12 @@ const handleCopyAddress = (target) => {
 	flex-shrink: 0;
 }
 
+/* The line keeps 11px: at 13px the marker and the tail alone outgrow the width the actions leave.
+ * Every row's line has a head, so the `:has` only lifts the rule above the role's class. */
+.desc_line:has(.addr_head) {
+	font-size: 11px;
+}
+
 /* Shrink-only (no grow), so on wide rows the tail sits flush against the head. */
 .addr_head {
 	flex: 0 1 auto;
