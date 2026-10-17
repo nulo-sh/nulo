@@ -20,7 +20,7 @@ export const Sheet: Story = {
 		components: { Icon },
 		setup: () => ({ names: Object.keys(glyphs), sizes: [24, 12, 10, 9] }),
 		template: `
-			<div data-testid="glyph-sheet" style="display: grid; grid-template-columns: repeat(3, max-content); gap: 8px 32px; padding: 24px;">
+			<div data-testid="glyph-sheet" style="display: grid; width: max-content; grid-template-columns: repeat(3, max-content); gap: 8px 32px; padding: 24px;">
 				<div v-for="name in names" :key="name" style="display: flex; align-items: center; gap: 12px; height: 28px;">
 					<span style="width: 96px; font: 11px var(--font-mono);">{{ name }}</span>
 					<Icon v-for="size in sizes" :key="size" :name="name" :size="size" />
