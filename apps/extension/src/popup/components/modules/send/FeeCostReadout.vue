@@ -1,5 +1,5 @@
 <script setup>
-import { QUEUED_FEE_COPY, UNVOUCHED_FEE_SENTENCE } from "@/components/composite/send/publish-facts"
+import { QUEUED_FEE_COPY, QUEUED_SPONSORED_COPY, UNVOUCHED_FEE_SENTENCE } from "@/components/composite/send/publish-facts"
 import { feeInWords } from "./fee-helpers"
 
 const props = defineProps({
@@ -42,6 +42,17 @@ const sponsoredSentence = computed(() => {
 			</template>
 		</span>
 		<span :class="$style.queued" data-testid="fee-estimate-queued-cap-line">Goes out after your earlier send, for at most {{ feeInWords(queuedCap.cap) }}.</span>
+	</Flex>
+	<Flex
+		v-else-if="isEstimating && isQueued && !estimate && payer === 'sponsor'"
+		direction="column"
+		gap="4"
+		:class="$style.detail_row"
+		data-testid="fee-estimate-queued-sponsored"
+	>
+		<span :class="$style.fee_label">You pay</span>
+		<span :class="$style.fee_value">Nothing</span>
+		<span :class="$style.queued" data-testid="fee-estimate-queued-sponsored-line">{{ QUEUED_SPONSORED_COPY }}</span>
 	</Flex>
 	<Flex v-else-if="isEstimating && isQueued && !estimate" direction="column" gap="4" :class="$style.detail_row" data-testid="fee-estimate-queued">
 		<span :class="$style.fee_label">You pay</span>

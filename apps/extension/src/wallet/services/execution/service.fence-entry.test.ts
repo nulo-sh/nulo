@@ -263,10 +263,11 @@ test("no production caller relies on that capture: every facade call passes a fe
 			calls.push({ site: `${relative(SRC, file)}@${open}`, args, absent: mayBeAbsent(source, args[4] ?? "undefined", open) })
 		}
 	}
-	// The dispatch arm and the two registry sends, at least.
+	// The dispatch arm and the two registry sends, at least. The fence is the fifth argument; the
+	// dispatch arm adds the popup's approval envelope after it.
 	expect(calls.length).toBeGreaterThanOrEqual(3)
 	for (const { site, args, absent } of calls) {
-		expect(args, site).toHaveLength(5)
+		expect([5, 6], site).toContain(args.length)
 		expect(absent, `${site}: the fence argument may be undefined`).toBe(false)
 	}
 })

@@ -176,7 +176,7 @@ onBeforeUnmount(() => {
 		<template #secondary>
 			<span v-if="hashSlice && explorerUrl" :class="$style.hash_group">
 				<span data-testid="activity-row-hash" :class="$style.hash">{{ hashSlice }}</span>
-				<RowAction :href="explorerUrl" label="Open in block explorer" :class="$style.explorer">
+				<RowAction :href="explorerUrl" label="Open in block explorer" data-testid="activity-row-explorer" :class="$style.explorer">
 					<Icon name="external-link" size="10" color="tertiary" />
 				</RowAction>
 			</span>

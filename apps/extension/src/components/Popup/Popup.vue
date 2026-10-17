@@ -72,6 +72,8 @@ const activate = async () => {
 		fallbackFocus: container,
 		setReturnFocus: opener,
 		escapeDeactivates: props.closeOnEscape ? onEscape : false,
+		// The JSON viewer's editor sits in an open shadow root, which the trap skips otherwise.
+		tabbableOptions: { getShadowRoot: true },
 	})
 	trap.activate()
 }

@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { trimAddress } from "@/utils/string"
 import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
-import type { DecodedValue } from "@/wallet/services/execution/client"
+import type { DecodedGrant, DecodedValue } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import {
 	amountLabel,
@@ -12,6 +12,7 @@ import {
 	callSurface,
 	nonceValue,
 	rawRows,
+	readableGrants,
 	rowTitle,
 	tokenAt,
 	valueText,
@@ -177,7 +178,7 @@ describe("rawRows, tokenAt, amountLabel, valueText, valueTitle", () => {
 		const { rows, hidden } = rawRows([...Array.from({ length: 33 }, (_, i) => field(BigInt(i))), "x"])
 		expect(rows).toHaveLength(32)
 		expect(hidden).toBe(2)
-		expect(rawRows([`a${RLO}b`, {}]).rows).toEqual([{ kind: "text", value: "ab" }, { kind: "opaque" }])
+		expect(rawRows([`a${RLO}b`, {}]).rows).toEqual([{ kind: "text", value: "ab", full: "ab" }, { kind: "opaque" }])
 	})
 
 	test("tokenAt matches contract and chain case-blind", () => {
@@ -383,5 +384,38 @@ describe("rowTitle, authwitTitle and authwitLine: the wallet's words only on wha
 			{ kind: "pending" as const },
 		]
 		for (const surface of others) expect(authwitLine(surface, "F")).toEqual({ kind: "call", fn: "F" })
+	})
+})
+
+describe("readableGrants", () => {
+	const TOKEN = `0x${"2f".repeat(32)}`
+	const grantWith = (...params: { name: string; value: DecodedValue }[]): DecodedGrant => ({
+		kind: "decoded",
+		call: { to: TOKEN, selector: "0x12345678", args: [] },
+		decoded: { kind: "decoded", contract: "Registry", fn: "set", params },
+	})
+	const memo = (value: string) => grantWith({ name: "memo", value: { kind: "string", value } })
+
+	test("a grant whose every value prints whole is read as decoded", () => {
+		const shown = memo("pay alice 25")
+		expect(readableGrants([shown], 1)).toEqual([shown])
+	})
+
+	test("a string the whole print would alter is unreadable: a control or direction character, a lone surrogate, a cut", () => {
+		const nested = grantWith({ name: "notes", value: { kind: "array", items: [{ kind: "string", value: "pay\u0000alice" }] } })
+		for (const grant of [
+			memo("pay\u0000alice"),
+			memo(`ab${String.fromCharCode(0x202e)}cd`),
+			memo("\ud800"),
+			memo("x".repeat(4097)),
+			nested,
+		]) {
+			expect(readableGrants([grant], 1)).toEqual([{ kind: "undecoded", reason: "arguments" }])
+		}
+	})
+
+	test("a grant the batch left out is unavailable, so a short batch cannot read as complete", () => {
+		const shown = memo("ok")
+		expect(readableGrants([shown], 2)).toEqual([shown, { kind: "undecoded", reason: "unavailable" }])
 	})
 })

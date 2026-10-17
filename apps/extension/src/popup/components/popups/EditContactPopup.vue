@@ -22,7 +22,9 @@ const { openToast } = useToast()
 
 /** Store */
 import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
 const cacheStore = useCacheStore()
+const popupStore = usePopupStore()
 const { order, depth } = usePopupStack("edit_contact")
 
 const emit = defineEmits(["onClose"])
@@ -32,6 +34,10 @@ const props = defineProps({
 
 const contactToEdit = ref(null)
 const contacts = ref([])
+
+/** An import row's edit: `{ contact, onSave(row) }`, the form's popup payload. A normal edit opens
+ *  with none and reads its contact by `cacheStore.contactToEditIdx`. */
+const importRequest = () => popupStore.getPayload("edit_contact")
 
 const contactService = new ContactServiceClient()
 const contactList = contactListReducers(contacts)
@@ -114,20 +120,20 @@ const handleUpdateContact = async () => {
 	// directly, and a clean submit would otherwise fire a no-op update with
 	// a misleading "updated" toast. (Import staging is exempt — its dirty
 	// state lives in the staging row, not this form.)
-	if (!cacheStore.importContact && !isStartedEditing.value) return
+	if (!importRequest() && !isStartedEditing.value) return
 
 	isLoading.value = true
 	try {
-		if (cacheStore.importContact) {
-			cacheStore.importContact = {
+		const request = importRequest()
+		if (request) {
+			request.onSave({
 				...contactToEdit.value,
 				// Staged as the import would store it, so the row shows the name it writes.
 				name: sanitizeContactName(nameTerm.value),
 				// Same canonical-lowercase rule as the direct-save path below —
 				// staged rows feed addContact/addSender downstream.
 				address: canonicalContactAddress(contactAddressTerm.value),
-				updated: true,
-			}
+			})
 			emit("onClose")
 		} else {
 			// Canonical lowercase on save (matches NewContactPopup + wallet-wide hex convention).
@@ -159,9 +165,7 @@ usePopupEntity(
 		submit: handleUpdateContact,
 		onShow: async () => {
 			contacts.value = await contactService.getContacts()
-			contactToEdit.value = cacheStore.importContact
-				? cacheStore.importContact
-				: contacts.value.find((c) => c.id === cacheStore.contactToEditIdx)
+			contactToEdit.value = importRequest()?.contact ?? contacts.value.find((c) => c.id === cacheStore.contactToEditIdx)
 			nameTerm.value = storedNameOf(contactToEdit.value)
 			contactAddressTerm.value = contactToEdit.value?.address ?? ""
 		},

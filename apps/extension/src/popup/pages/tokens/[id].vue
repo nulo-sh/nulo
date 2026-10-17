@@ -26,9 +26,11 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
+import { useConfirm } from "@/composables/useConfirm"
 import { pinScopeOf, usePinnedTokens } from "@/composables/usePinnedTokens"
 import { usePrices } from "@/composables/usePrices"
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
 
 /** Utils */
 import { copyWithToast } from "@/utils/clipboard"
@@ -145,13 +147,12 @@ const showHomeFull = async () => {
 	if (popupStore.isOpened("confirm")) return
 	const symbolOf = new Map(tokens.map((t) => [t.contract.toLowerCase(), sanitizeWireString(t.symbol, 32)]))
 	const pinned = [...pins.pinnedContracts.value].map((c) => symbolOf.get(c)).filter((x) => x !== undefined)
-	cacheStore.confirm = {
+	requestConfirm({
 		single: true,
 		title: "Home is full",
 		description: `Home shows up to 3 pinned tokens. Unpin one of these to pin ${sanitizeWireString(subject.symbol, 32)}: ${pinned.join(", ")}`,
 		confirm_text: "Got it",
-	}
-	popupStore.open("confirm")
+	})
 }
 
 const handleTogglePin = async () => {
@@ -167,13 +168,14 @@ const handleTogglePin = async () => {
 }
 
 const handleDeleteToken = () => {
-	cacheStore.confirm.description = "Removing a token only affects the display in the UI and it does not affect the token balance"
-	cacheStore.confirm.callback = async () => {
-		await tokenService.deleteToken(token.value.id)
-		router.push("/popup/general")
-		openToast({ kind: "success", label: "Token successfully deleted" })
-	}
-	popupStore.open("confirm")
+	requestConfirm({
+		description: "Removing a token only affects the display in the UI and it does not affect the token balance",
+		callback: async () => {
+			await tokenService.deleteToken(token.value.id)
+			router.push("/popup/general")
+			openToast({ kind: "success", label: "Token successfully deleted" })
+		},
+	})
 }
 
 onMounted(async () => {
@@ -252,7 +254,7 @@ onBeforeUnmount(() => {
 								Copy address
 							</Flex>
 						</DropdownItem>
-						<DropdownItem @click="popupStore.open('token_metadata')">
+						<DropdownItem @click="popupStore.open('token_metadata')" data-testid="token-menu-metadata">
 							<Flex align="center" gap="8">
 								<Icon name="code-circle" size="14" color="primary" />
 								Show metadata

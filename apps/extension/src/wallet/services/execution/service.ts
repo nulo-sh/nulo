@@ -52,7 +52,7 @@ import { isFeeAmount, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { assertLiveChainIdentity, liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { assertArtifactClassId } from "@nulo/aztec-runtime/pxe"
-import { type FeeSettingsReaders, refuseUnknownPriorities } from "@nulo/wallet-bridge"
+import { type DraftOperation, type FeeSettingsReaders, refuseUnknownPriorities } from "@nulo/wallet-bridge"
 import {
 	EXECUTION_SERVICE_NAME,
 	type Methods,
@@ -68,9 +68,11 @@ import {
 	type AztecCreateAuthWitOperation,
 	type FeeOptions,
 	type GasBalances,
+	type FeeQuestion,
 	type OperationApprovalEnvelope,
 	type OperationAuthwitPreview,
 	type DecodedCall,
+	type DecodedGrant,
 	type DisplayCallInput,
 	type RegisterTokenOperation,
 	type TransferFeeEstimate,
@@ -94,7 +96,7 @@ import { ViewExecutor } from "./view-executor"
 import { ExecutionLane } from "./execution-lane"
 import { GasBalanceReader } from "./gas-balance-reader"
 import { AUTHWIT_CALL_BINDING, ContractResolver, assertSelectorBinding, findFunctionBySelector } from "./contract-resolver"
-import { type ArtifactLookup, decodeCallForDisplay } from "./call-decoder"
+import { type ArtifactLookup, decodeCallForDisplay, decodeGrantForDisplay } from "./call-decoder"
 import { getViewSimulationDeps } from "./helpers/get-view-simulation-deps"
 import { AuthwitDiscoverer } from "./authwit-discoverer"
 import { TxRequestBuilder } from "./tx-request-builder"
@@ -108,10 +110,15 @@ export * from "./spec"
 
 /** The dApp-interaction service's SW-internal view of a stored request: the
  *  operation at `(interactionId, index)`, materialized and — when fee settings
- *  are given — completed with a validated fee path. The estimate and preview
- *  entry points read the operation THROUGH this, never from their caller. */
+ *  are given — completed with a validated fee path, or as a draft before any
+ *  fee choice. The estimate, preview and display entry points read the
+ *  operation THROUGH this, never from their caller. */
 export interface InteractionOperationSource {
 	materializeStoredOperation(interactionId: string, index: number, feeSettings?: FeeSettings): Promise<Operation>
+	/** Asks a held send's question in a window; `true` only when the person accepted it. */
+	askFeeAgain(question: FeeQuestion): Promise<boolean>
+	materializeStoredDraft(interactionId: string, index: number): Promise<DraftOperation>
+	materializeQuestionDraft(interactionId: string): Promise<DraftOperation>
 }
 
 /** Default PXE-client factory: the real RPC-backed client. Exported so the
@@ -167,6 +174,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		"estimateOperationFee",
 		"previewOperationAuthwits",
 		"decodeCallsForDisplay",
+		"decodeGrantsForDisplay",
+		"decodeQuestionGrantsForDisplay",
 		"cancelJob",
 		"acceptQueuedFee",
 		"cancelEstimate",
@@ -501,6 +510,9 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 					this.lane.parkSlot(release, networkId, queuedJournalId, fence, preController, originKey, wait),
 				joinOriginLine: (fence, chainId, originKey) => this.lane.joinOriginLine(fence, chainId, originKey),
 				failUnclaimed: (journalId, error) => this.lane.failUnclaimed(journalId, error),
+				reclaimParked: (journalId) => this.lane.reclaimParked(journalId),
+				beginQueuedWait: (journalId) => this.lane.beginQueuedWait(journalId),
+				endQueuedWait: (journalId) => this.lane.endQueuedWait(journalId),
 			},
 			sequencer: this.sendSequencer,
 			chainTip: this.chainTipGate,
@@ -510,6 +522,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			recordPendingAuthwits: (...args) => this.authRegistryService.recordPendingAuthwits(...args),
 			noteSent: (chainId, account, txHash, calls) =>
 				this.sendSequencer.externalSent({ chainId, account }, txHash, recordedTxKeys({ account, calls })),
+			answers: this.queuedFeeAnswers,
+			askInWindow: (question) => void this.askInWindow(question),
 			logDebug: (msg, ...rest) => this.logDebug(msg, ...rest),
 		})
 		this.viewExecutor = new ViewExecutor({
@@ -772,20 +786,62 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		)
 	}
 
+	/** The window's answer reaches the send as exactly the figure it asked; any other end, a window
+	 *  that never opened included, cancels the send while it still asks that figure. */
+	private async askInWindow(question: FeeQuestion): Promise<void> {
+		const { journalId, reask } = question
+		// A closed, refused or timed-out window rejects: that is the person's answer, not a fault.
+		const accepted = await Promise.resolve()
+			.then(() => this.interactionOperations().askFeeAgain(question))
+			.catch(() => false)
+		try {
+			if (accepted) this.queuedFeeAnswers.accept(journalId, reask.fee)
+			else await this.lane.cancelQuestion(journalId, reask.fee)
+		} catch (error) {
+			this.logError("A held send's question could not be settled", { error })
+		}
+	}
+
 	private interactionOperations(): InteractionOperationSource {
 		return this.services.get<InteractionOperationSource & { name: string; start(): Promise<void> }>(DAPP_INTERACTION_SERVICE_NAME)
 	}
 
 	public async decodeCallsForDisplay(networkId: string, calls: DisplayCallInput[]): Promise<DecodedCall[]> {
+		const lookup = await this.displayArtifactLookup(networkId, calls)
+		return Promise.all(calls.map((call) => decodeCallForDisplay(lookup, call)))
+	}
+
+	public async decodeGrantsForDisplay(interactionId: string, index: number): Promise<DecodedGrant[]> {
 		await this.ensureInitialized()
-		if (!Array.isArray(calls) || calls.length > MAX_DISPLAY_CALLS) throw new Error("Invalid calls")
+		// The request approval executes, never the popup's copy: its JSON round trip rewrites some values.
+		// A draft: the window decodes while the fee is still unchosen.
+		return this.decodeGrantsOf(await this.interactionOperations().materializeStoredDraft(interactionId, index))
+	}
+
+	/** A held send's grants, read from the stored request its fee question shows. */
+	public async decodeQuestionGrantsForDisplay(interactionId: string): Promise<DecodedGrant[]> {
+		await this.ensureInitialized()
+		return this.decodeGrantsOf(await this.interactionOperations().materializeQuestionDraft(interactionId))
+	}
+
+	private async decodeGrantsOf(operation: DraftOperation): Promise<DecodedGrant[]> {
+		if (operation.kind !== "send_transaction") return []
+		const contents = operation.actions.flatMap((action) => (action.kind === "add_public_authwit" ? [action.content] : []))
+		const lookup = await this.displayArtifactLookup(operation.networkId, contents)
+		return Promise.all(contents.map((content) => decodeGrantForDisplay(lookup, content)))
+	}
+
+	/** The checks every display decode shares (a bounded batch, on a network of the active profile),
+	 *  then one artifact fetch per contract for the whole batch: a batch usually targets one. */
+	private async displayArtifactLookup(networkId: string, batch: readonly unknown[]): Promise<ArtifactLookup> {
+		await this.ensureInitialized()
+		if (!Array.isArray(batch) || batch.length > MAX_DISPLAY_CALLS) throw new Error("Invalid calls")
 		const profile = await this.profileService.getActiveProfile()
 		const network = await this.networkService.getNetwork(networkId)
 		if (!profile || network.profileId !== profile.id) throw new Error("unauthorized profile")
 		const info = networkInfoFrom(network)
-		// One artifact fetch per contract for the whole batch: a multicall usually targets one contract.
 		const artifacts = new Map<string, Promise<ContractArtifact | undefined>>()
-		const lookup: ArtifactLookup = (address) => {
+		return (address) => {
 			const pending = artifacts.get(address)
 			if (pending) return pending
 			const fresh = (async () => {
@@ -796,7 +852,6 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			artifacts.set(address, fresh)
 			return fresh
 		}
-		return Promise.all(calls.map((call) => decodeCallForDisplay(lookup, call)))
 	}
 
 	public async executeOperations(
@@ -910,7 +965,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 				// carries { originKey }); without it hostile-dApp grants + UI auth ops
 				// collapse into one __no_origin__ capacity bucket, losing fairness.
 				const fence = authorizedFence ?? (await this.captureFence())
-				return this.executeSendTransaction(operation, origin, operationTask, hooks, fence)
+				return this.executeSendTransaction(operation, origin, operationTask, hooks, fence, approval)
 			}
 			case "simulate_transaction": {
 				return this.viewExecutor.executeSimulateTransaction(operation)
@@ -1066,11 +1121,12 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		parentTask?: WrappedTask,
 		hooks?: ExecutionHooks,
 		fence?: ExecutionFence,
+		approval?: OperationApprovalEnvelope,
 	): Promise<string> {
 		await this.ensureInitialized()
 		await this.legal.assertCurrent()
 		const authorized = fence ?? (await this.captureFence())
-		return this.dappSendExecutor.executeSendTransaction(op, origin, parentTask, authorized, hooks)
+		return this.dappSendExecutor.executeSendTransaction(op, origin, parentTask, authorized, hooks, approval)
 	}
 
 	/**

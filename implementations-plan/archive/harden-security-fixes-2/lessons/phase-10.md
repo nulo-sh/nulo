@@ -1,0 +1,10 @@
+# Phase 10: the call path's encode-back
+
+- Base: `origin/dev` at `493ff497` (arc 3's #611 merged at `5e2888be`, then #609).
+- The check moved into `decodeFields`, so `decodeCallsForDisplay` covers both of its callers in the window: the transaction card's calls and a discovered authorization's call. `encodesBack` takes the values `decodeFields` already holds; its own `try` went, since `decodeFields`' `catch` already answers `arguments`.
+- The spawn's premise that an unreadable call holds Confirm holds for grants only: `decodedCalls` gates nothing (`index.vue`, the comment over it), and the notice reads "Check what the app says this does before approving." Nothing was added to hold it (D32).
+- False-negative probe (scratch, not committed): every function of the 40 bundled artifacts (`@aztec-labs/noir-contracts.js` and `@aztec-foundation/aztec-standards` at 6.0.0-rc.3), 25 random canonical argument sets each, encoded by `encodeArguments` and read by `decodeCallForDisplay`: 452 of 492 decode before and after the change; the 40 others are `offchain_receive`, whose 321 fields exceed the 256-field bound either way. No bundled function takes a tuple, which the stdlib encoder refuses.
+- Red checks against `493ff497`'s decoder: the three new `call-decoder.test.ts` cases and the new `OperationCard.wire.test.ts` case fail; their controls pass.
+- The twin-selector grant test (D30) fed `"2"`, which the boolean twin now reads as unreadable; it takes `"1"`, which both functions read canonically, so it still shows the selector picking the other function.
+- `OperationCard.wire.test.ts` imports `TokenBridgeContractArtifact` from the package module: the raw JSON's types are `export =`, which has no default import without a suppression, and the JSON path was no faster to transform.
+- Review round 1: two rows added to the refusal table (an integer past its width, the one case where the encoder throws inside the shared decode; a Some holding None). Both are red against `493ff497`'s decoder. A canonical Some holding None and a `BoundedVec` with storage past its length are lossy decodes, so they now read as unreadable; the probe drew neither.

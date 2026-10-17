@@ -19,11 +19,9 @@ import { getSafeDisplay } from "@/wallet/services/dapp-session/capability-meta"
 /** Utils */
 import { withoutId } from "@/utils/entity-list"
 
-/** Store */
-import { useCacheStore } from "@/stores/cache.store"
-import { usePopupStore } from "@/stores/popup.store"
-const cacheStore = useCacheStore()
-const popupStore = usePopupStore()
+/** Composables */
+import { useConfirm } from "@/composables/useConfirm"
+const { requestConfirm } = useConfirm()
 
 const formatGrantSummary = (grants) => {
 	// getSafeDisplay returns the constant "Unknown" shortLabel for
@@ -79,26 +77,28 @@ function onDappSessionDeleted(session) {
 const rowIdBase = useId()
 
 const handleDropSession = (session) => {
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.confirm_text = "Yes, disconnect"
-	cacheStore.confirm.description = `Disconnect "${session.dappMetadata?.name ?? "this dApp"}"?`
-	cacheStore.confirm.callback = async () => {
-		await dappSessionService.deleteDappSession(session.id)
-	}
-	popupStore.open("confirm")
+	requestConfirm({
+		confirm_color: "red",
+		confirm_text: "Yes, disconnect",
+		description: `Disconnect "${session.dappMetadata?.name ?? "this dApp"}"?`,
+		callback: async () => {
+			await dappSessionService.deleteDappSession(session.id)
+		},
+	})
 }
 
 const handleDropAllSessions = () => {
 	if (!dappSessions.value.length) return
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.confirm_text = "Yes, disconnect all"
-	cacheStore.confirm.description = `Disconnect all ${dappSessions.value.length} sessions?`
-	cacheStore.confirm.callback = async () => {
-		for (const session of [...dappSessions.value]) {
-			await dappSessionService.deleteDappSession(session.id)
-		}
-	}
-	popupStore.open("confirm")
+	requestConfirm({
+		confirm_color: "red",
+		confirm_text: "Yes, disconnect all",
+		description: `Disconnect all ${dappSessions.value.length} sessions?`,
+		callback: async () => {
+			for (const session of [...dappSessions.value]) {
+				await dappSessionService.deleteDappSession(session.id)
+			}
+		},
+	})
 }
 
 onBeforeMount(async () => {

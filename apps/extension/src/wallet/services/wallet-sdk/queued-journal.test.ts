@@ -216,6 +216,15 @@ describe("tryCreateQueuedJournal", () => {
 		expect((await journal.getOperation(id as string))?.title).toBe("drip_to_public")
 	})
 
+	test("the title comes from the call's name, cleaned, never from a method key beside it", async () => {
+		const { deps, journal } = makeDeps()
+		const message = (calls: unknown) => ({ messageId: "m", type: "sendTx", args: [{ calls }, {}] }) as unknown as WalletMessage
+		const byName = await tryCreateQueuedJournal(message([{ name: "transfer", method: "approve_all" }]), makeSession(), deps)
+		expect((await journal.getOperation(byName as string))?.title).toBe("transfer")
+		const long = await tryCreateQueuedJournal(message([{ name: `trans\u200bfer${"f".repeat(70)}` }]), makeSession(), deps)
+		expect((await journal.getOperation(long as string))?.title).toBe(`transfer${"f".repeat(56)}…`)
+	})
+
 	test("falls back to 'Transaction' title when calls have no method names", async () => {
 		const { deps, journal } = makeDeps()
 		const message = {

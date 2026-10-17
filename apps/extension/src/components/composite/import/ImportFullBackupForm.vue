@@ -1,6 +1,7 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
+import { showsDecryptCta } from "@/utils/full-backup-ctas"
 import { newPasswordHint } from "@/utils/password"
 import { COLLAPSING_HERO } from "../collapsing-hero"
 import { restoreWarningText } from "./restore-warning"
@@ -110,7 +111,7 @@ watch(
 		</Flex>
 	</div>
 
-	<div v-if="selectedBackup?.type === 'encrypted' && !selectedBackup?.profileType" :class="$style.section">
+	<div v-if="showsDecryptCta({ selectedBackup })" :class="$style.section">
 		<span :class="$style.section_label">Decryption Password</span>
 		<Input
 			v-model="decryptionPassword"

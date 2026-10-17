@@ -3,7 +3,8 @@
  * e2e owns the header). It pins the wiring unit tests cannot see: the address button hands the FULL
  * active address (not the truncated display text) to the clipboard, both switcher affordances open
  * the accounts popup, the lock chip runs the shared lock (its behavior: `useLockWallet.test.ts`), the
- * network chip's `data-status` follows the store's status, and a failure log marks the settings badge.
+ * network chip's `data-status` follows the store's status, the chip shows the network name only while
+ * Show network name is on, and a failure log marks the settings badge.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
@@ -20,6 +21,8 @@ const H = vi.hoisted(() => ({
 	profileListeners: new Set<() => void>(),
 	disconnectListeners: new Set<() => void>(),
 	logListeners: new Set<(log: { level: number; id: string }) => void>(),
+	config: {} as Record<string, unknown>,
+	configListeners: new Set<(prop: { key: string; value: unknown }) => void>(),
 	app: {} as Record<string, unknown>,
 	cache: {} as { confirm: Record<string, unknown> } & Record<string, unknown>,
 }))
@@ -40,10 +43,18 @@ vi.mock("@/wallet/services/log-viewer/client", () => ({
 }))
 vi.mock("@/wallet/services/config/client", () => ({
 	ConfigServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onUpdate: H.noopEvent, getValue: vi.fn().mockResolvedValue(false) }
+		return {
+			disconnect: vi.fn(),
+			onConnected: H.noopEvent,
+			onUpdate: {
+				add: (fn: (prop: { key: string; value: unknown }) => void) => H.configListeners.add(fn),
+				remove: (fn: (prop: { key: string; value: unknown }) => void) => H.configListeners.delete(fn),
+			},
+			getValue: vi.fn(async (key: string) => H.config[key]),
+		}
 	}),
 }))
-vi.mock("@/wallet/config", () => ({ defaultConfig: () => ({ indicateFailures: false }) }))
+vi.mock("@/wallet/config", () => ({ defaultConfig: () => ({ indicateFailures: false, showNode: true }) }))
 vi.mock("@/utils/core", () => ({
 	managers: {
 		profile: {
@@ -90,6 +101,8 @@ beforeEach(() => {
 	H.profileListeners.clear()
 	H.disconnectListeners.clear()
 	H.logListeners.clear()
+	H.configListeners.clear()
+	H.config = { indicateFailures: false, showNode: true }
 	H.getSessionHandle.mockReset().mockResolvedValue("session-1")
 	H.lockActiveProfile.mockClear()
 	H.app = reactive({
@@ -174,6 +187,46 @@ describe("Header — network status", () => {
 		expect(mountHeader().get('[data-testid="network-button"]').attributes("data-status")).toBe("active")
 		H.app.networkStatus = "InvalidChain"
 		expect(mountHeader().get('[data-testid="network-button"]').attributes("data-status")).toBe("invalidchain")
+	})
+})
+
+describe("Header — Show network name", () => {
+	const chip = (w: ReturnType<typeof mountHeader>) => ({
+		name: w.find('[data-testid="network-name"]').exists() ? w.get('[data-testid="network-name"]').text() : null,
+		dot: w.find('[data-testid="network-status-dot"]').exists(),
+		label: w.get('[data-testid="network-button"]').attributes("aria-label"),
+	})
+
+	test("off hides the name and keeps the status dot and the chip's accessible name", async () => {
+		H.config.showNode = false
+		const w = mountHeader()
+		await flushPromises()
+		expect(chip(w)).toEqual({ name: null, dot: true, label: "Manage networks (currently Alpha V5)" })
+	})
+
+	test("on shows the name beside the dot", async () => {
+		const w = mountHeader()
+		await flushPromises()
+		expect(chip(w)).toEqual({ name: "Alpha V5", dot: true, label: "Manage networks (currently Alpha V5)" })
+	})
+
+	test("a change made while the mount's read is in flight outlives that read's older value", async () => {
+		const read = Promise.withResolvers<boolean>()
+		H.config.showNode = read.promise
+		const w = mountHeader()
+		await flushPromises()
+		for (const fn of H.configListeners) fn({ key: "showNode", value: false })
+		read.resolve(true)
+		await flushPromises()
+		expect(chip(w).name).toBeNull()
+	})
+
+	test("a change made in Display reaches the open header", async () => {
+		const w = mountHeader()
+		await flushPromises()
+		for (const fn of H.configListeners) fn({ key: "showNode", value: false })
+		await nextTick()
+		expect(chip(w).name).toBeNull()
 	})
 })
 

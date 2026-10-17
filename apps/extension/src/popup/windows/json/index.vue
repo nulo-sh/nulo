@@ -11,7 +11,8 @@ import { ProfileServiceClient } from "@/wallet/services/profile/client"
 const params = new URLSearchParams(window.location.search)
 const requestId = params.get("requestId")
 const payload = ref()
-const data = computed(() => payload.value?.params.operations)
+// A held send's fee question carries the one operation it asks about.
+const data = computed(() => payload.value?.params?.operations ?? (payload.value?.operation ? [payload.value.operation] : undefined))
 
 let profileService
 
@@ -19,21 +20,24 @@ function onActiveProfileChanged(profile) {
 	if (!profile) closeCurrentWindow()
 }
 
+// The subscription ends with the document, not the page: a lock routes this window to the auth
+// page, and a disconnect on unmount would reject the profile read still in flight, leaving the
+// window open over a locked wallet.
 function onClose() {
 	profileService?.disconnect()
 	profileService = null
 }
 
 onMounted(async () => {
-	const client = new DappInteractionServiceClient()
-	payload.value = await client.getInteractionPayload(requestId)
-	client.disconnect()
-
 	profileService = new ProfileServiceClient()
-	profileService.onActiveProfileChanged.add(onActiveProfileChanged)
-	await profileService.connect()
-
+	profileService.connect()
+	await profileService.subscribeActiveProfile(onActiveProfileChanged)
 	window.addEventListener("beforeunload", onClose)
+
+	// A request the worker no longer holds leaves the window empty.
+	const client = new DappInteractionServiceClient()
+	payload.value = await client.getInteractionPayload(requestId).catch(() => undefined)
+	client.disconnect()
 })
 
 onUnmounted(() => {

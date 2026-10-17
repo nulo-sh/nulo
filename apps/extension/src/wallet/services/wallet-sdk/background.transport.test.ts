@@ -34,7 +34,9 @@ const noopLogger = { log: () => {} } as never
 const TAB = 7
 const OTHER_TAB = 9
 const sendMessage = vi.fn<(tabId: number, message: unknown) => Promise<void>>()
-const sender = (tab: number, frameId = 0): MessageSender => ({ tab: { id: tab, url: `${FAKE_DAPP_ORIGIN}/` }, frameId }) as MessageSender
+/** A frame of a tab showing the dApp, as Chrome describes it; `document` is the frame's own origin. */
+const sender = (tab: number, frameId = 0, document = FAKE_DAPP_ORIGIN): MessageSender =>
+	({ tab: { id: tab, url: `${FAKE_DAPP_ORIGIN}/` }, frameId, origin: document, url: `${document}/` }) as MessageSender
 const disconnect = (sessionId: string) => ({ origin: "background", type: SESSION_DISCONNECTED, sessionId })
 const disconnectsSent = () => sendMessage.mock.calls.filter(([, message]) => (message as { type?: string }).type === SESSION_DISCONNECTED)
 const sentTo = (tab: number) => sendMessage.mock.calls.filter(([to]) => to === tab).map(([, message]) => message)
@@ -45,6 +47,23 @@ const discovery = (requestId: string) => ({
 	type: "discovery-request",
 	content: { type: "aztec-wallet-discovery", requestId, appId: "app", chainInfo: { chainId: "1", version: "1" } },
 })
+
+const keyExchange = async (sessionId: string) => ({
+	origin: "content-script",
+	type: "key-exchange-request",
+	sessionId,
+	content: {
+		type: "aztec-wallet-key-exchange-request",
+		requestId: sessionId,
+		publicKey: await exportPublicKey((await generateKeyPair()).publicKey),
+	},
+})
+const keyExchangeResponses = (sessionId: string) =>
+	sendMessage.mock.calls.filter(
+		([, m]) =>
+			(m as { type?: string; sessionId?: string }).type === "key-exchange-response" &&
+			(m as { sessionId?: string }).sessionId === sessionId,
+	)
 
 type Deliver = (message: unknown, from?: MessageSender) => void
 
@@ -64,26 +83,32 @@ function boot(init: typeof initWalletSdkHandler = initWalletSdkHandler): { handl
  * Establish `sessionId` for `tab` as a page does: discovery, the wallet's approval of the remembered
  * app, then a real key exchange — and, like the page, nothing further until the response.
  */
-async function establish(deliver: Deliver, sessionId: string, tab = TAB): Promise<void> {
-	deliver(discovery(sessionId), sender(tab))
-	await vi.waitFor(() =>
-		expect(sendMessage).toHaveBeenCalledWith(tab, expect.objectContaining({ type: "discovery-approved", sessionId })),
-	)
-	const publicKey = await exportPublicKey((await generateKeyPair()).publicKey)
-	deliver(
-		{
-			origin: "content-script",
-			type: "key-exchange-request",
-			sessionId,
-			content: { type: "aztec-wallet-key-exchange-request", requestId: sessionId, publicKey },
-		},
-		sender(tab),
-	)
+async function establish(deliver: Deliver, sessionId: string, tab = TAB, from = sender(tab)): Promise<void> {
+	await approve(deliver, sessionId, from)
+	deliver(await keyExchange(sessionId), from)
 	await vi.waitFor(() =>
 		expect(sendMessage).toHaveBeenCalledWith(tab, expect.objectContaining({ type: "key-exchange-response", sessionId })),
 	)
 	sdkListener?.mockClear()
 	sendMessage.mockClear()
+}
+
+/** A discovery from `from`, approved by the wallet (remembered, trusted). */
+async function approve(deliver: Deliver, sessionId: string, from: MessageSender): Promise<void> {
+	deliver(discovery(sessionId), from)
+	await vi.waitFor(() =>
+		expect(sendMessage).toHaveBeenCalledWith(from.tab?.id, expect.objectContaining({ type: "discovery-approved", sessionId })),
+	)
+}
+
+/** Delivers a key exchange for an approved discovery and expects it dropped before the SDK: no session, no reply. */
+async function expectKeyExchangeRefused(handler: BackgroundConnectionHandler, deliver: Deliver, sessionId: string, from: MessageSender) {
+	sdkListener?.mockClear()
+	deliver(await keyExchange(sessionId), from)
+	await flush()
+	expect(sdkListener).not.toHaveBeenCalled()
+	expect(keyExchangeResponses(sessionId)).toEqual([])
+	expect(handler.getSession(sessionId)).toBeUndefined()
 }
 
 const flush = async () => {
@@ -249,7 +274,88 @@ describe("a live session, established through the real key exchange", () => {
 	})
 })
 
+describe("a key exchange, admitted only from its discovery's tab and document origin", () => {
+	test("from the discovery's tab and origin it establishes the session (control)", async () => {
+		const { handler, deliver } = boot()
+		await establish(deliver, "k0")
+		expect(handler.getSession("k0")?.tabId).toBe(TAB)
+	})
+
+	test("from the discovery's tab, a document of another origin is refused", async () => {
+		const { handler, deliver } = boot()
+		await approve(deliver, "k1", sender(TAB))
+		await expectKeyExchangeRefused(handler, deliver, "k1", sender(TAB, 0, "https://other.example"))
+	})
+
+	test("from another tab of the same origin it is refused", async () => {
+		const { handler, deliver } = boot()
+		await approve(deliver, "k2", sender(TAB))
+		await expectKeyExchangeRefused(handler, deliver, "k2", sender(OTHER_TAB))
+	})
+
+	test("from a sender with neither an origin nor a url it is refused", async () => {
+		const { handler, deliver } = boot()
+		await approve(deliver, "k3", sender(TAB))
+		await expectKeyExchangeRefused(handler, deliver, "k3", {
+			tab: { id: TAB, url: `${FAKE_DAPP_ORIGIN}/` },
+			frameId: 0,
+		} as MessageSender)
+	})
+
+	test("from a document reporting an opaque origin it is refused, whatever its url", async () => {
+		const { handler, deliver } = boot()
+		await approve(deliver, "k6", sender(TAB))
+		await expectKeyExchangeRefused(handler, deliver, "k6", sender(TAB, 0, "null"))
+		const sandboxed = { ...sender(TAB), origin: "null", url: `${FAKE_DAPP_ORIGIN}/` } as MessageSender
+		await expectKeyExchangeRefused(handler, deliver, "k6", sandboxed)
+	})
+
+	test("from a sender with only a url of another origin it is refused", async () => {
+		const { handler, deliver } = boot()
+		await approve(deliver, "k7", sender(TAB))
+		const elsewhere = { tab: { id: TAB, url: `${FAKE_DAPP_ORIGIN}/` }, frameId: 0, url: "https://other.example/app" } as MessageSender
+		await expectKeyExchangeRefused(handler, deliver, "k7", elsewhere)
+	})
+
+	test("from a sender with only a url (as Firefox reports one), its url's origin decides (control)", async () => {
+		const { handler, deliver } = boot()
+		const firefox = { tab: { id: TAB, url: `${FAKE_DAPP_ORIGIN}/` }, frameId: 0, url: `${FAKE_DAPP_ORIGIN}/app` } as MessageSender
+		await establish(deliver, "k4", TAB, firefox)
+		expect(handler.getSession("k4")).toBeDefined()
+	})
+
+	test("for a discovery credited to no origin it is refused", async () => {
+		const { handler, deliver } = boot()
+		const noUrl = { tab: { id: TAB }, frameId: 0, origin: FAKE_DAPP_ORIGIN, url: `${FAKE_DAPP_ORIGIN}/` } as MessageSender
+		deliver(discovery("k5"), noUrl)
+		await flush()
+		expect(handler.getPendingDiscovery("k5")?.origin).toBe("unknown")
+		handler.approveDiscovery("k5")
+		await expectKeyExchangeRefused(handler, deliver, "k5", noUrl)
+	})
+})
+
 describe("with VITE_NULO_ALLOW_IFRAME_DAPPS=1", () => {
+	const withFlag = async () => {
+		vi.stubEnv("VITE_NULO_ALLOW_IFRAME_DAPPS", "1")
+		vi.resetModules()
+		return boot((await import("./background")).initWalletSdkHandler)
+	}
+
+	test("a same-origin subframe completes a key exchange", async () => {
+		const { handler, deliver } = await withFlag()
+		await establish(deliver, "f1", TAB, sender(TAB, 3))
+		expect(handler.getSession("f1")).toBeDefined()
+	})
+
+	test("a cross-origin subframe is refused, though its discovery is credited to the top frame's origin", async () => {
+		const { handler, deliver } = await withFlag()
+		const frame = sender(TAB, 3, "https://embedded.example")
+		await approve(deliver, "f2", frame)
+		expect(handler.getPendingDiscovery("f2")?.origin).toBe(FAKE_DAPP_ORIGIN)
+		await expectKeyExchangeRefused(handler, deliver, "f2", frame)
+	})
+
 	test("a subframe's message is forwarded, and its dead session is answered in the sender's tab only", async () => {
 		vi.stubEnv("VITE_NULO_ALLOW_IFRAME_DAPPS", "1")
 		vi.resetModules()

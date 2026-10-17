@@ -72,6 +72,9 @@ export const UNVOUCHED_FEE_SENTENCE = "Nulo can't tell what this fee contract ch
 /** The fee row while an earlier send holds the transfer's chain state. */
 export const QUEUED_FEE_COPY = "Queued behind your previous send"
 
+/** The fee row and the review's fee line for a queued send Nulo's sponsor pays: there is no cap to name. */
+export const QUEUED_SPONSORED_COPY = "Goes out after your earlier send."
+
 type SubmittedFee = { paymentMethod?: { kind?: string; fpcId?: string } } | undefined
 
 /**

@@ -2,6 +2,7 @@
 import type { TransferType, LocalTxOrigin } from "@/wallet/services/transaction/spec"
 import type {
 	DecodedCall,
+	DecodedGrant,
 	DisplayCallInput,
 	FeeSettings,
 	GasBalances,
@@ -119,6 +120,19 @@ export type Methods = {
 	 * decode says why instead of guessing.
 	 */
 	decodeCallsForDisplay(networkId: string, calls: DisplayCallInput[]): DecodedCall[]
+
+	/**
+	 * Decodes the public grants of the stored operation at `(interactionId, index)` for the approval
+	 * card, in action order: each from the fields its message hash commits to, encoded as signing
+	 * encodes them, under the checks and bound of {@link decodeCallsForDisplay}. By reference, as
+	 * {@link estimateOperationFee}, so the card reads the request approval executes. A grant that
+	 * does not encode, decode, or decode back to its fields says why.
+	 */
+	decodeGrantsForDisplay(interactionId: string, index: number): DecodedGrant[]
+
+	/** {@link decodeGrantsForDisplay} for a held send: the stored request the fee question
+	 *  `interactionId` shows. */
+	decodeQuestionGrantsForDisplay(interactionId: string): DecodedGrant[]
 
 	/**
 	 * Cancel an in-flight fee estimate by its caller-minted token.

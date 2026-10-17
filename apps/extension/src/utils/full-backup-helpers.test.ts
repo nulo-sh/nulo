@@ -5,6 +5,7 @@ import { IMPORTED_KEYS_SERVICE_NAME } from "@/wallet/services/account/spec"
 import {
 	AssemblyAbortedError,
 	assembleFullBackup,
+	BACKUP_MAC_FIELD,
 	type BackupSource,
 	MAX_BACKUP_FILE_BYTES,
 	collectRestoreErrors,
@@ -12,6 +13,7 @@ import {
 	FULL_BACKUP_V2_TAG,
 	normalizeAllIds,
 	openFullBackupText,
+	openSelection,
 	parseEncryptedBackup,
 	readBackupFile,
 	remapByMap,
@@ -75,8 +77,22 @@ describe("assembleFullBackup", () => {
 		expect(await EncryptionKey.getHashHex(JSON.stringify(body))).toBe(checksum)
 	})
 
-	it("rejects an envelope that already carries a checksum", async () => {
+	it("rejects an envelope that already carries a checksum or a MAC", async () => {
 		await expect(assembleFullBackup({ checksum: "forged" }, [])).rejects.toThrow(/must not carry a checksum/)
+		await expect(assembleFullBackup({ [BACKUP_MAC_FIELD]: "preset" }, [])).rejects.toThrow(/must not carry a checksum/)
+	})
+
+	it("puts the authenticator's MAC of the checksum beside it, outside the hashed body", async () => {
+		const { sources } = twelveSources((name) => [{ from: name }])
+		const authenticate = vi.fn(async (checksum: string) => `mac-of-${checksum}`)
+		const result = await assembleFullBackup({ "wallet-version": "1.0.0" }, sources, undefined, authenticate)
+		const { checksum, [BACKUP_MAC_FIELD]: mac, ...body } = JSON.parse(result.pretty) as Record<string, unknown>
+		expect(authenticate).toHaveBeenCalledExactlyOnceWith(result.checksum)
+		expect(mac).toBe(`mac-of-${result.checksum}`)
+		expect(await EncryptionKey.getHashHex(JSON.stringify(body))).toBe(checksum)
+		// Without an authenticator the file has no MAC field at all.
+		const plain = JSON.parse((await assembleFullBackup({ "wallet-version": "1.0.0" }, sources)).compact) as Record<string, unknown>
+		expect(BACKUP_MAC_FIELD in plain).toBe(false)
 	})
 
 	it("aborts via the onSlice probe without calling later sources", async () => {
@@ -193,51 +209,72 @@ describe("readBackupFile", () => {
 		// jsdom's File doesn't implement .text(); shim it.
 		return { name, text: async () => text } as unknown as File
 	}
-
-	it("parses a plain JSON backup and extracts profileType", async () => {
-		const text = JSON.stringify({ data: { profile: { type: "password" } } })
-		const { selection, parseError } = await readBackupFile(makeFile(text))
-		expect(parseError).toBeUndefined()
-		expect(selection.type).toBe("plain")
-		expect(selection.profileType).toBe("password")
-		expect(selection.name).toBe("backup.json")
-	})
-
-	it("returns parseError for malformed plain JSON", async () => {
-		const { selection, parseError } = await readBackupFile(makeFile("{ not: 'json'"))
-		expect(parseError).toBeDefined()
-		expect(parseError?.title).toMatch(/Invalid JSON/i)
-		expect(selection.type).toBe("plain")
-	})
-
-	it("treats encrypted backup as raw text", async () => {
-		const bytes = new Uint8Array(29)
-		const b64 = btoa(String.fromCharCode(...bytes))
-		const { selection } = await readBackupFile(makeFile(b64, "backup.txt"))
-		expect(selection.type).toBe("encrypted")
-		expect(selection.backup).toBe(b64)
-		expect(selection.profileType).toBeNull()
-	})
-
-	it("classifies garbage as unknown", async () => {
-		const { selection } = await readBackupFile(makeFile("hello world ###"))
-		expect(selection.type).toBe("unknown")
-	})
-
 	function makeSizedFile(size: number, name = "backup.json"): File {
 		return { name, size, text: async () => "{}" } as unknown as File
 	}
 
-	it("rejects an oversized file before reading it", async () => {
-		const { parseError, selection } = await readBackupFile(makeSizedFile(MAX_BACKUP_FILE_BYTES + 1))
-		expect(parseError?.title).toBe("Backup File Too Large")
-		expect(selection.type).toBe("unknown")
-		expect(selection.backup).toBeNull()
+	it("a plain JSON backup is plain, with its profile type", async () => {
+		const backup = { data: { profile: { type: "password" } } }
+		const { selection, parseError } = await readBackupFile(makeFile(JSON.stringify(backup)))
+		expect(parseError).toBeUndefined()
+		expect(selection).toEqual({ kind: "plain", name: "backup.json", backup, profileType: "password" })
+	})
+
+	it("an encrypted backup is sealed, holding its text", async () => {
+		const b64 = btoa(String.fromCharCode(...new Uint8Array(29)))
+		const { selection, parseError } = await readBackupFile(makeFile(b64, "backup.txt"))
+		expect(parseError).toBeUndefined()
+		expect(selection).toEqual({ kind: "sealed", name: "backup.txt", backup: b64, profileType: null })
+	})
+
+	it.each([
+		["malformed plain JSON", makeFile("{ not: 'json'"), "Invalid JSON Format"],
+		["unknown text", makeFile("hello world ###"), undefined],
+		["a file over the limit, before it is read", makeSizedFile(MAX_BACKUP_FILE_BYTES + 1), "Backup File Too Large"],
+	])("%s is unreadable", async (_label, file, title) => {
+		const { selection, parseError } = await readBackupFile(file)
+		expect(selection).toEqual({ kind: "unreadable", name: "backup.json", backup: null, profileType: null })
+		expect(parseError?.title).toBe(title)
 	})
 
 	it("accepts a file exactly at the limit", async () => {
 		const { parseError } = await readBackupFile(makeSizedFile(MAX_BACKUP_FILE_BYTES))
 		expect(parseError).toBeUndefined()
+	})
+})
+
+describe("openSelection", () => {
+	const PASSWORD = "pass1234"
+	const BODY = { data: { profile: { type: "password", name: "P" } } }
+	const fresh = () => false
+
+	it("opens a sealed selection into an opened one with its profile type", async () => {
+		const text = await sealFullBackupText(JSON.stringify(BODY), PASSWORD)
+		const opened = await openSelection({ kind: "sealed", name: "b.txt", backup: text, profileType: null }, PASSWORD, fresh)
+		expect(opened).toEqual({ kind: "opened", selection: { kind: "opened", name: "b.txt", backup: BODY, profileType: "password" } })
+	})
+
+	it("opens an opened selection that still holds sealed text (a file sealed twice)", async () => {
+		const inner = await sealFullBackupText(JSON.stringify(BODY), PASSWORD)
+		const opened = await openSelection({ kind: "opened", name: "b.txt", backup: inner, profileType: null }, PASSWORD, fresh)
+		expect(opened.kind === "opened" && opened.selection.profileType).toBe("password")
+	})
+
+	it.each([
+		["an opened selection holding an object", { kind: "opened", name: "b.txt", backup: {}, profileType: null }],
+		["a plain selection", { kind: "plain", name: "b.json", backup: BODY, profileType: "password" }],
+		["an unreadable selection", { kind: "unreadable", name: "b.json", backup: null, profileType: null }],
+	] as const)("%s is refused before any key derivation", async (_label, target) => {
+		const kdf = vi.spyOn(EncryptionKey, "getPasshash")
+		await expect(openSelection(target, PASSWORD, fresh)).rejects.toThrow()
+		expect(kdf).not.toHaveBeenCalled()
+		kdf.mockRestore()
+	})
+
+	it("a run gone stale during the decrypt publishes nothing", async () => {
+		const text = await sealFullBackupText(JSON.stringify(BODY), PASSWORD)
+		const opened = await openSelection({ kind: "sealed", name: "b.txt", backup: text, profileType: null }, PASSWORD, () => true)
+		expect(opened).toEqual({ kind: "stale" })
 	})
 })
 

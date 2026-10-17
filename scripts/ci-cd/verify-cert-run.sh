@@ -33,7 +33,7 @@ set -uo pipefail
 REQUIRED_WORKFLOWS=("Quality" "Extension smoke e2e" "Extension network e2e")
 
 # Workload jobs that must have actually EXECUTED. Without these, a head whose
-# `decide` job resolved run=false still produces a green aggregator ("passed or
+# gate resolved run=false still produces a green aggregator ("passed or
 # was skipped" is by design for unrelated changes) and would certify with no
 # tests having run at all. Certification is a claim that the suites RAN and were
 # green, so label the PR to force them rather than accepting a skip.
