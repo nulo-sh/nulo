@@ -543,6 +543,14 @@ assertion; drive the rest of the flow with the ordinary helpers.
   submission (a real proof on the canary lane), not mining. A test that needs the block waits on the
   node (`waitForTxMined` in `fixtures/aztec.ts`), as both canaries do; the wallet-UI `transfers` flow
   waits through prove → mine in the popup itself.
+- **Home's Get started card mounts late.** It waits for the profile's flags, the Presto flag and
+  both balance reads (the hero's 12 s cap, or the gas read's 20 s timeout against a node that does
+  not answer), then lands above the token list and moves everything under it; with the middle
+  scrolled, scroll anchoring moves `scrollTop` instead. A spec that measures or scrolls Home's
+  middle calls `waitForHomeReminders(page)` (`fixtures/tokens.ts`) first, which waits on
+  `home-scroller[data-reminders-settled="true"]`. A funded password wallet shows the urgent banner
+  above the hero until its phrase is revealed; a spec that frames Home without either (store
+  captures) reveals the phrase and taps Hide through the UI.
 
 ### Driving the wallet through the playground (dApp-shaped tests)
 

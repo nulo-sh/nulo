@@ -206,7 +206,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`; pass = e
   - Smoke on Chrome and Firefox: `onboarding-tab`, `keyboard-guards`, `security-backup`, `duplicate-phrase-import`, `legal-acceptance`, `import-paths`, `token-list`, `shipped-token-list`.
   - Network on Chrome and Firefox: `frozen-account-canary`, the prover as in CI.
 
-**4. Home's Get started card and the reminder (P30-01 A, P30-02 A, P33-01 D, P33-03 A, P28/P29).**
+**4. Home's Get started card and the reminder (P30-01 A, P30-02 A, P33-01 D, P33-03 A, P28/P29).** ✓ (2026-10-17, [lessons/phase-4.md](lessons/phase-4.md))
 - Change map:
   - `utils/get-started.ts`: the pure half and `HOW_AZTEC_WORKS_URL`.
   - New `composables/useGetStarted.ts` and `popup/components/modules/general/{GetStartedCard,BackupReminderBanner}.vue`.
@@ -230,7 +230,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`; pass = e
   - `general.vue` wiring: a degraded first gas read with tokens `"some"` raises the banner; a successful read is the control.
   - `full.test.ts`: a download marks; a stale run marks nothing.
   - Click order: aztec marks before `window.open`. A rejected flag write still opens the link, keeps the Full Backup success toast, and still routes "I saved it" (one case per handler).
-  - E2E, `security-backup` (popup password wallet): Home shows the card with `get-started-aztec` and `get-started-phrase` and no `backup-reminder-banner`; reveal; Home keeps the card and loses only the phrase row. Failure mode: the seed route's write reaches Home. Runtime: estimated +3 s.
+  - E2E, `security-backup` (popup password wallet): Home shows the card with `get-started-aztec` and `get-started-phrase` and no `backup-reminder-banner`; reveal; Home keeps the card and loses only the phrase row. Failure mode: the seed route's write reaches Home. Runtime: estimated +3 s; measured +1.4 s on Chrome, +2.3 s on Firefox, How Aztec works step included (D14).
   - The `onboarding-tab` run-through gains a step: after Open wallet, Home shows the card without the phrase row.
   - E2E, `network/frozen-account-canary` (a funded password wallet): `backup-reminder-banner` before its reveal, gone after. Failure mode: the funded wiring, which no unit test reaches. Runtime: +2 s in an existing run.
 - Gate:
@@ -286,6 +286,10 @@ Outline B (local `outline-b.md`, safest-first) split the arc into two PRs: B1 (t
 | D9 | Urgent banner | the drawn form from core primitives | `Banner warning` (not the drawn form), a new `Banner` variant (one caller) |
 | D10 | Presto leftovers (implementation) | keep `copyFor`'s onboarding surface, the custom-element allowance and the CSP style hash; file one issue | removing the hash now (a manifest change the plan rules out) |
 | D11 | The HTTP-fallback e2e (implementation) | move the `https-disabled` case to `settings-proving` | dropping it with the Presto step (the only e2e proof of the loopback HTTP path) |
+| D12 | `SecretRevealCard` (implementation) | delete it with its test and story: `seed.vue` was its only user | keeping it for the account export popup, which does not render it |
+| D13 | The funded-banner e2e (implementation) | `network/hero-prices-unavailable`: a funded password wallet restored from a backup, unpriced; banner, reveal, banner gone | `frozen-account-canary`, which reveals the phrase before it mints, so its wallet never shows the banner |
+| D14 | How Aztec works in e2e (implementation) | one step in `security-backup`: click the row, a tab opens, the row leaves; `nulo.sh` joins the smoke egress guard's declared refusals | no e2e (whether a tab opened after the awaited write survives the browser's popup rule is invisible to jsdom) |
+| D15 | The banner's glyph (implementation) | the warning glyph in the house warning orange, as the drawing shows | `--nulo-accent`, which is cream in the dark theme |
 
 ## Audit verdicts
 
