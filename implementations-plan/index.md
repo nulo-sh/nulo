@@ -6,3 +6,4 @@ Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 - [type-roles-coverage](type-roles-coverage/plan.md) — arc 1 in review (arc 2 waits on A1 and A2) — every live identifier site observed in its mono role: the 51 smoke sites, then the 18 network ones (#366)
 - [harden-quality-fixes-3](harden-quality-fixes-3/plan.md) — arc 1 (#544) in review; arc 2 after it merges — the e2e fixture layer acyclic and split by concern (#544), one owner per fixture flow and the canaries' shared choreography (#539, #546)
 - [icons-d2-1](icons-d2-1/plan.md) — arc 1 in review; arc 2 waits on page 33 (P30-09, P30-10) — Direction 2 glyphs everywhere, icons.json and the Material font retired (#602, #590 P30-08 B)
+- [testers-fixes-3](testers-fixes-3/plan.md) — planned, awaiting approval — a dApp transfer's two chips on one line (#583 P34-08 D, OA-1 ships A) and the journal App row from the tx page's shared rule (#629)
