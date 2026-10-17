@@ -61,6 +61,7 @@ import type { ProfileService } from "@/wallet/services/profile/service"
 import type { IPXE, PxeServiceClient } from "@/wallet/services/pxe/client"
 import { StepContent, type TaskService, type WrappedTask } from "@/wallet/services/task/service"
 import type { TxCall } from "@/wallet/services/transaction/service"
+import { wireTitle } from "@/utils/primary-method"
 import { getAuthRegistryAddress, getSetAuthorizedFn, getSetAuthorizedSelector } from "@/wallet/utils/auth-registry"
 import type { AuthwitDiscoverer } from "./authwit-discoverer"
 import {
@@ -209,7 +210,7 @@ export class TxRequestBuilder {
 						collected.calls.push(newEncodedCallFunctionCall(action, fn))
 						collected.txCalls.push({
 							contract: action.to,
-							method: fn.name,
+							method: wireTitle(fn.name) ?? action.selector,
 							args: action.args,
 							classId: await calledClassId(ctx, action.to),
 						})
@@ -458,7 +459,7 @@ export class TxRequestBuilder {
 			// Build txCalls for transaction history
 			const txCalls: TxCall[] = (op.exec.calls ?? []).map((call) => ({
 				contract: call.to?.toString(),
-				method: call.name ?? call.selector?.toString(),
+				method: wireTitle(call.name) ?? call.selector?.toString(),
 				args: (call.args ?? []).map((a) => a.toString()),
 			}))
 

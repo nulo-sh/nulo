@@ -15,25 +15,6 @@ import { isFlaggedToken } from "@/utils/token-flag"
 /** A token as pricing reads it: priced only when its decimals are known (`knownDecimals`). */
 export type PricedToken = { chainId?: number; contract?: string; decimals?: number; hasDecimals?: boolean }
 
-/** Orders price answers against broadcasts, so a slow answer never overwrites a newer one: an answer
- *  takes its number when it is requested, a broadcast when it arrives. Dropping a late answer loses
- *  nothing only because the worker broadcasts every change of its failure state. */
-function latestWins() {
-	let issued = 0
-	let applied = 0
-	return {
-		issue: () => ++issued,
-		admit(seq: number): boolean {
-			if (seq <= applied) return false
-			applied = seq
-			return true
-		},
-		close() {
-			applied = Number.POSITIVE_INFINITY
-		},
-	}
-}
-
 /** The signed list's half of every snapshot: which token each id prices and which pairs it flags. */
 function listState() {
 	/** Which token each id prices. It comes from the signed list, through the worker, with the quotes. */
@@ -86,41 +67,24 @@ export function usePrices(priceService: PriceServiceClient) {
 	const list = listState()
 	/** The first price answer has arrived: a refresh result or failure, or a broadcast. */
 	const settled = ref(false)
-	/** The worker's latest fetch failed, or this composable's request to it did. Usable quotes held
-	 *  beside it stay usable. */
-	const unavailable = ref(false)
 	const now = useTicker(30_000)
-
-	const failures = latestWins()
-	const applyFailure = (seq: number, failed: boolean) => {
-		if (failures.admit(seq)) unavailable.value = failed
-	}
 
 	const adopt = (snapshot: PriceSnapshot) => {
 		quotes.value = snapshot.quotes
 		list.adoptFull(snapshot)
 		settled.value = true
 	}
-	const onQuotesUpdated = (snapshot: PriceSnapshot) => {
-		adopt(snapshot)
-		applyFailure(failures.issue(), snapshot.lastRefreshFailed)
-	}
-	priceService.onQuotesUpdated.add(onQuotesUpdated)
+	priceService.onQuotesUpdated.add(adopt)
 
 	// Stale-on-connect refresh; the service no-ops when the cache is fresh
 	// (and returns {} when fiat display is disabled).
 	const resnapshot = () => {
 		list.read(priceService)
-		const seq = failures.issue()
 		priceService
 			.refreshIfStale()
-			.then((snapshot) => {
-				adopt(snapshot)
-				applyFailure(seq, snapshot.lastRefreshFailed)
-			})
+			.then(adopt)
 			.catch(() => {
 				settled.value = true
-				applyFailure(seq, true)
 			})
 	}
 	resnapshot()
@@ -175,15 +139,13 @@ export function usePrices(priceService: PriceServiceClient) {
 	}
 
 	const dispose = () => {
-		failures.close()
-		priceService.onQuotesUpdated.remove(onQuotesUpdated)
+		priceService.onQuotesUpdated.remove(adopt)
 		priceService.onConnected.remove(resnapshot)
 	}
 
 	return {
 		usableQuotes,
 		settled: readonly(settled),
-		unavailable: readonly(unavailable),
 		mapped: readonly(list.mapped),
 		isPriced,
 		isFlagged,

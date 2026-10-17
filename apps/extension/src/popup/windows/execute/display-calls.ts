@@ -3,7 +3,7 @@
  * the decoder reads, and the bookkeeping that keeps one decode per discovered authorization.
  */
 
-import type { DecodedCall, DiscoveredAuthwit, DisplayCallInput } from "@/wallet/services/execution/client"
+import type { AuthwitContent, DecodedCall, DiscoveredAuthwit, DisplayCallInput } from "@/wallet/services/execution/client"
 import type { DraftUIOperation } from "./types"
 
 type WireCall = { to?: unknown; name?: unknown; selector?: unknown; args?: unknown }
@@ -37,6 +37,13 @@ export function displayCallsOf(op: DraftUIOperation): DisplayCallInput[] {
 		return intent.call ? [toDisplayCall(intent.call)] : []
 	}
 	return []
+}
+
+/** The public grants a `send_transaction` carries, in action order: the card reads each one's
+ *  arguments, and the window confirms only once every one of them decoded. */
+export function grantContentsOf(op: DraftUIOperation): AuthwitContent[] {
+	if (op.kind !== "send_transaction") return []
+	return (op.actions ?? []).flatMap((action) => (action.kind === "add_public_authwit" ? [action.content] : []))
 }
 
 /** The decoder itself was unreachable: every call reads as undecoded for that reason, so the card

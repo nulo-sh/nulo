@@ -37,7 +37,7 @@ vi.mock("@/utils/received-display", async (importOriginal) => ({
 vi.mock("@/stores/app.store", () => ({ useAppStore: () => H.store.current }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onTokenAdded: H.event(), getTokens: vi.fn().mockResolvedValue([]) }
+		return { disconnect: vi.fn(), onTokenAdded: H.event(), onTokenUpdated: H.event(), getTokens: vi.fn().mockResolvedValue([]) }
 	}),
 }))
 vi.mock("@/wallet/services/price/client", () => ({

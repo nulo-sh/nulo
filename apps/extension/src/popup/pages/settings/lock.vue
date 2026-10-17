@@ -14,20 +14,21 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
 import { managers } from "@/utils/core"
 import { debounce } from "@/utils/general"
+import { settingItemProps, settingsRow } from "@/utils/settings-search"
 
 /** Stores */
 import { useAppStore } from "@/stores/app.store"
-import { useCacheStore } from "@/stores/cache.store"
-import { usePopupStore } from "@/stores/popup.store"
 const appStore = useAppStore()
-const cacheStore = useCacheStore()
-const popupStore = usePopupStore()
 
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useConfigRead } from "@/composables/useConfigRead"
+import { useConfirm } from "@/composables/useConfirm"
 import { useLockWallet } from "@/composables/useLockWallet"
+import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
+const { vSettingsRow } = useSettingsRowHighlight()
 const { lock: lockNow, dispose: disposeLockWallet } = useLockWallet(managers.profile)
 
 const configService = new ConfigServiceClient()
@@ -43,6 +44,8 @@ const sessionTtl = ref(defaultConfig.sessionTtl)
 const sessionTtlMinutes = ref(0)
 const strictSecurityMode = ref(defaultConfig.strictSecurityMode)
 const isPasskey = computed(() => appStore.profile?.type === "passkey")
+const strictRow = settingsRow("lock-strict-mode")
+const autoLockRow = settingsRow("lock-auto-lock")
 
 const notification = reactive({
 	show: false,
@@ -90,22 +93,23 @@ function onSettingUpdate(setting) {
  *  change). Enabling fires immediately. */
 function onStrictToggle(next) {
 	if (next === false) {
-		cacheStore.confirm.title = "Disable strict security?"
-		cacheStore.confirm.description =
-			"Skip password re-entry across browser restarts. Less secure. " +
-			"Anyone who can read browser data can unlock the wallet without your password."
-		cacheStore.confirm.confirm_text = "Disable"
-		cacheStore.confirm.confirm_color = "red"
-		cacheStore.confirm.callback = async () => {
-			try {
-				await configService.setValue("strictSecurityMode", false)
-				strictSecurityMode.value = false
-				openToast({ kind: "success", label: "Strict security mode disabled" })
-			} catch (err) {
-				openToast({ kind: "error", label: "Failed to update setting" })
-			}
-		}
-		popupStore.open("confirm")
+		requestConfirm({
+			title: "Disable strict security?",
+			description:
+				"Skip password re-entry across browser restarts. Less secure. " +
+				"Anyone who can read browser data can unlock the wallet without your password.",
+			confirm_text: "Disable",
+			confirm_color: "red",
+			callback: async () => {
+				try {
+					await configService.setValue("strictSecurityMode", false)
+					strictSecurityMode.value = false
+					openToast({ kind: "success", label: "Strict security mode disabled" })
+				} catch (err) {
+					openToast({ kind: "error", label: "Failed to update setting" })
+				}
+			},
+		})
 		// Note: do NOT mutate strictSecurityMode here. Toggle is controlled
 		// by the ref; cancel = no state change, no UI flicker.
 	} else {
@@ -172,12 +176,11 @@ onBeforeUnmount(() => {
 		<!-- Outside the load gate, so locking never waits on the config reads. -->
 		<ItemsContainer>
 			<SettingItem
-				title="Lock now"
-				description="Locks Nulo until you unlock it again"
 				materialIcon="lock"
 				:disabled="appStore.lockHeldByImport"
 				@click="lockNow"
-				data-testid="lock-now-btn"
+				v-bind="settingItemProps('lock-now')"
+				v-settings-row.inset="'lock-now'"
 			/>
 		</ItemsContainer>
 
@@ -185,12 +188,10 @@ onBeforeUnmount(() => {
 
 		<template v-if="!isLoading">
 			<!-- Strict Security Mode -->
-			<Flex v-if="!isPasskey" justify="between" align="center" data-testid="setting-strict-security-mode">
+			<Flex v-if="!isPasskey" justify="between" align="center" :data-testid="strictRow.testid" v-settings-row="strictRow.id">
 				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary">Strict security mode</Text>
-					<Text variant="caption" color="tertiary">
-						More secure, asks for your password more often. Recommended.
-					</Text>
+					<Text variant="row-title" :class="$style.title_size" color="primary">{{ strictRow.title }}</Text>
+					<Text variant="caption" color="tertiary">{{ strictRow.description }}</Text>
 				</Flex>
 
 				<Toggle
@@ -201,10 +202,10 @@ onBeforeUnmount(() => {
 			</Flex>
 
 			<!-- Auto-lock Timeout -->
-			<Flex justify="between" align="center">
+			<Flex justify="between" align="center" :data-testid="autoLockRow.testid" v-settings-row="autoLockRow.id">
 				<Flex direction="column" gap="6">
 					<Flex align="end" gap="6">
-						<Text variant="row-title" :class="$style.title_size" color="primary">Auto-lock Timeout</Text>
+						<Text variant="row-title" :class="$style.title_size" color="primary">{{ autoLockRow.title }}</Text>
 						<Tooltip v-if="notification.show">
 							<Icon name="info" color="secondary" size="14" />
 							<template #content>
@@ -214,7 +215,7 @@ onBeforeUnmount(() => {
 							</template>
 						</Tooltip>
 					</Flex>
-					<Text variant="caption" color="tertiary">Automatic wallet locking (minutes)</Text>
+					<Text variant="caption" color="tertiary">{{ autoLockRow.description }}</Text>
 				</Flex>
 
 				<Input

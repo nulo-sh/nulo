@@ -13,3 +13,9 @@
 - 2026-10-16: review loop round 1 started early (Codex gpt-6.1-sol high + one Opus review) over 5ec3225b..HEAD, while e2e waits for load1 < 150.
 - 2026-10-16: review round 1: Codex conditional approve (3, all accepted, ce7086e2), Opus (6, all accepted, uncommitted fixes: nav drag ends on a tab only controls name, on-screen guard in `textEdge`, header address left to its lane, `hold` on the hostile layout read, the pointer test aims at the card's resting box, `leave(null)` clears the entry). The red drag's empty selection was the helper's, not the app's: a probe drag selects in the same dist.
 - 2026-10-16: review loop converged: Codex r2 conditional approve (2, accepted: d917a875, then 5bd2d158 tightened the guard to a selected character), r3 approve. Drag test fixed and red-checked on both browsers (eace8be8 records Firefox's end-node behaviour). Sweep on both browsers: two links and one shifting box fixed (77a1a3e0, after the loop). Screenshots captured. Full suites next.
+- 2026-10-16: full smoke Chrome at 1ef210ea's code (77a1a3e0): exit 0, 56 files passed, 6 skipped, 248 tests, 1841 s local.
+- 2026-10-16: full smoke Firefox: exit 0, 59 files passed, 3 skipped, 248 tests, 2371 s local.
+- 2026-10-16: network Chrome, proverless pool: 122 files green when the 2 h background limit stopped the run (7 190 s), the last 2 green in a second run (460 s); 5 files gate themselves off (Firefox-only, chaos, captures, probe). Canary next.
+- 2026-10-17: network Chrome canary (prover-ON, WASM): 5 files, 7 tests green, 529 s.
+- 2026-10-17: network Firefox, proverless pool in three shards: 124 files, 119 passed, 5 gated skips, 2196 + 2611 + 3438 s.
+- 2026-10-17: network Firefox canary (prover-ON, WASM): 5 files, 7 tests green, 937 s. Phase 6 green: all four suites at retry 0.

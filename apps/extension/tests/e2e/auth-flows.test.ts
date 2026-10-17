@@ -1,11 +1,12 @@
 import { expect } from "vitest"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import { test, openPopup, waitForHash, clickByTestId, expectNameFieldPrefill, replaceInputValue } from "./fixtures/extension"
-import { lockWallet, openForgotPasswordFromAuth, waitForToast } from "./fixtures/helpers"
+import { ensureUnlocked, lockWallet, openForgotPasswordFromAuth, waitForToast } from "./fixtures/helpers"
 import { settleThemeTransitions, shotSend } from "./fixtures/send-page"
 
 test("wrong password surfaces error-text and lets the user retry", async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)
+	await ensureUnlocked(page)
 	await waitForHash(page, "#/popup/general")
 
 	await lockWallet(page)
@@ -33,6 +34,7 @@ test("wrong password surfaces error-text and lets the user retry", async ({ regi
 
 test("ForgotPassword link opens popup and routes to reset", async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)
+	await ensureUnlocked(page)
 	await waitForHash(page, "#/popup/general")
 
 	await lockWallet(page)

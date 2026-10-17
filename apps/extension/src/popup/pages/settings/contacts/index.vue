@@ -22,10 +22,12 @@ import { copyWithToast } from "@/utils/clipboard"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { useConfirm } from "@/composables/useConfirm"
 import { useEntityCrud } from "@/composables/useEntityCrud"
 import { useContactImportExport } from "@/popup/components/modules/settings/contacts/useContactImportExport"
 
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -120,14 +122,15 @@ function handleEditContact(contact) {
 function handleDeleteContact(contact) {
 	// Deleting a contact never touches sender registration — sender rows are
 	// independent PXE state, managed only in Settings → Developer → Account State → Senders.
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.confirm_text = "Yes, delete contact"
-	cacheStore.confirm.description = `Delete contact "${contact.name}"?`
-	cacheStore.confirm.callback = async () => {
-		await contactService.deleteContact(contact.id)
-		openToast({ kind: "success", label: "Contact deleted" })
-	}
-	popupStore.open("confirm")
+	requestConfirm({
+		confirm_color: "red",
+		confirm_text: "Yes, delete contact",
+		description: `Delete contact "${contact.name}"?`,
+		callback: async () => {
+			await contactService.deleteContact(contact.id)
+			openToast({ kind: "success", label: "Contact deleted" })
+		},
+	})
 }
 
 onMounted(async () => {

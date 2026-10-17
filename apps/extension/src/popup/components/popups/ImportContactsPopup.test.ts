@@ -24,9 +24,8 @@ const freshBuses = () =>
 
 const cacheStoreState: {
 	importContacts: unknown[]
-	importContact: unknown
 	importPromise: { resolve: ReturnType<typeof vi.fn>; reject: ReturnType<typeof vi.fn> } | null
-} = reactive({ importContacts: [], importContact: null, importPromise: null })
+} = reactive({ importContacts: [], importPromise: null })
 
 const openToastMock = vi.fn()
 const popupOpenMock = vi.fn()
@@ -126,11 +125,15 @@ const rowNamed = (w: VueWrapper, text: string) => {
 	return row
 }
 const target = (row: ReturnType<typeof rowNamed>) => row.find("[data-row-target]")
-/** Opens a row in the edit form through its own edit button, then writes back what the form saves in
- *  import mode: the staged row, changed, marked `updated`. */
+type EditRequest = { contact: Record<string, unknown>; onSave: (row: Record<string, unknown>) => void }
+/** The request the last edit button handed the edit form as its popup payload. */
+const lastEditRequest = () => popupOpenMock.mock.lastCall?.[1] as EditRequest
+/** Opens a row in the edit form through its own edit button, then saves what the form saves in import
+ *  mode: the staged row, changed. */
 async function saveEdit(w: VueWrapper, rowText: string, change: Record<string, unknown>) {
 	await rowNamed(w, rowText).find('[data-testid="import-contact-edit"]').trigger("click")
-	cacheStoreState.importContact = { ...(cacheStoreState.importContact as Record<string, unknown>), ...change, updated: true }
+	const { contact, onSave } = lastEditRequest()
+	onSave({ ...contact, ...change })
 	await nextTick()
 }
 /** The words of the elements an ARIA id list points at, in order. Each text node is its own piece:
@@ -155,7 +158,6 @@ beforeEach(() => {
 	appStoreState.network = { id: "net-1", name: "Testnet" }
 	cacheStoreState.importContacts = []
 	cacheStoreState.importPromise = { resolve: vi.fn(), reject: vi.fn() }
-	cacheStoreState.importContact = null
 })
 afterEach(() => {
 	vi.restoreAllMocks()
@@ -299,8 +301,8 @@ describe("ImportContactsPopup — keyboard and assistive semantics", () => {
 
 		await priya.find('[data-testid="import-contact-edit"]').trigger("click")
 
-		expect(popupOpenMock).toHaveBeenCalledWith("edit_contact")
-		expect((cacheStoreState.importContact as { name: string }).name).toBe("Priya Shah")
+		expect(popupOpenMock).toHaveBeenCalledWith("edit_contact", { contact: expect.anything(), onSave: expect.any(Function) })
+		expect(lastEditRequest().contact.name).toBe("Priya Shah")
 		expect(priya.attributes("data-selected")).toBe("true")
 	})
 
@@ -352,6 +354,17 @@ describe("ImportContactsPopup — confirming", () => {
 		await nextTick()
 
 		expect(rowNamed(w, "Priya S").attributes("data-selected")).toBeUndefined()
+	})
+
+	test("(BUG PIN) a save that changes nothing still re-judges the row: a deselected new row comes back selected", async () => {
+		// A clean Enter in the edit form saves the row unchanged (EditContactPopup's import mode).
+		const w = await mountWithStaged(FILE, SAVED)
+		await target(rowNamed(w, "Priya Shah")).trigger("click")
+		expect(rowNamed(w, "Priya Shah").attributes("data-selected")).toBeUndefined()
+
+		await saveEdit(w, "Priya Shah", {})
+
+		expect(rowNamed(w, "Priya Shah").attributes("data-selected")).toBe("true")
 	})
 
 	test("the first row (index 0) can be edited too", async () => {

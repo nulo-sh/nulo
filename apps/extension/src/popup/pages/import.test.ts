@@ -74,7 +74,7 @@ function makeFlow() {
 		isAllowedToImportBySeedPhrase: ref(false),
 		selectedBackup: ref({
 			name: "backup.txt",
-			type: "encrypted",
+			kind: "opened",
 			profileType: "password",
 			backup: { data: { profile: { name: "Main" } } },
 		}),
@@ -144,7 +144,8 @@ function giveRangesEmptyRects(): () => void {
 }
 
 /** Shows the real viewer in an app of its own outside the page, where the shell's popup manager
- *  renders it (a second VTU mount would drop the page's stubs), and returns its editor. */
+ *  renders it (a second VTU mount would drop the page's stubs), and returns its editor, which sits
+ *  in the viewer's shadow root. */
 async function showErrorViewer(data: Record<string, unknown[]>): Promise<EditorView> {
 	const restoreRects = giveRangesEmptyRects()
 	const app = createApp({ render: () => h(JsonViewer, { data }) })
@@ -152,7 +153,7 @@ async function showErrorViewer(data: Record<string, unknown[]>): Promise<EditorV
 	const host = document.body.appendChild(document.createElement("div"))
 	app.mount(host)
 	await flushPromises()
-	const editor = host.querySelector<HTMLElement>(".cm-editor")
+	const editor = [...host.querySelectorAll("*")].find((el) => el.shadowRoot)?.shadowRoot?.querySelector<HTMLElement>(".cm-editor")
 	const view = editor && EditorView.findFromDOM(editor)
 	cleanups.push(() => {
 		// Destroying the view cancels its pending measure before the rects go.
@@ -164,7 +165,8 @@ async function showErrorViewer(data: Record<string, unknown[]>): Promise<EditorV
 	return view
 }
 
-const enterKey = () => new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true, cancelable: true })
+// Composed, as a real key event is: one from inside the viewer's shadow root reaches the document.
+const enterKey = () => new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true, cancelable: true, composed: true })
 
 beforeEach(() => {
 	vi.clearAllMocks()
@@ -466,8 +468,8 @@ function popupCtas(w: VueWrapper): PopupCta[] {
 		])
 }
 
-const ENCRYPTED = { name: "backup.txt", type: "encrypted", profileType: null, backup: "ciphertext" }
-const PLAIN = { name: "backup.json", type: "plain", profileType: "password", backup: { data: { profile: { name: "Main" } } } }
+const ENCRYPTED = { name: "backup.txt", kind: "sealed", profileType: null, backup: "ciphertext" }
+const PLAIN = { name: "backup.json", kind: "plain", profileType: "password", backup: { data: { profile: { name: "Main" } } } }
 const BACK: PopupCta = ["Back", null, false, null, "cta_outline"]
 const BACK_OFF: PopupCta = ["Back", null, true, null, "cta_outline"]
 const IMPORT_MAIN: PopupCta = ["Import Main", "import-full-backup-submit-btn", false, null, "cta"]

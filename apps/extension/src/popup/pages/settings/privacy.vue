@@ -12,6 +12,7 @@
 import { Dropdown } from "@/components/ui/Dropdown"
 
 /** Utils */
+import { settingsRow } from "@/utils/settings-search"
 import { defaultConfig as makeDefaultConfig } from "@/wallet/config"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
@@ -19,7 +20,9 @@ import { BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useConfigRead } from "@/composables/useConfigRead"
+import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
 const { openToast } = useToast()
+const { vSettingsRow } = useSettingsRowHighlight()
 
 const configService = new ConfigServiceClient()
 configService.onUpdate.add(onSettingUpdate)
@@ -31,21 +34,9 @@ const isShowFiatValues = ref(defaultConfig.showFiatValues)
 const defaultExplorer = ref(defaultConfig.defaultExplorer)
 const isPrivacyMode = ref(defaultConfig.privacyMode)
 const settings = {
-	showFiatValues: {
-		title: "Show fiat values",
-		description: "Fetch USD prices from CoinGecko while unlocked. Off hides all dollar values",
-		model: isShowFiatValues,
-	},
-	defaultExplorer: {
-		title: "Block Explorer",
-		description: "Transaction link explorer",
-		model: defaultExplorer,
-	},
-	privacyMode: {
-		title: "Privacy mode",
-		description: "Load a receipt's network fee only when you tap Show fee",
-		model: isPrivacyMode,
-	},
+	showFiatValues: { ...settingsRow("privacy-fiat-values"), model: isShowFiatValues },
+	defaultExplorer: { ...settingsRow("privacy-explorer"), model: defaultExplorer },
+	privacyMode: { ...settingsRow("privacy-mode"), model: isPrivacyMode },
 }
 
 const selectedExplorerName = computed(() => {
@@ -113,7 +104,7 @@ onBeforeUnmount(() => {
 		<LoadingState v-if="isLoading" label="FETCHING SETTINGS" />
 
 		<template v-if="!isLoading">
-			<Flex justify="between" align="center">
+			<Flex justify="between" align="center" :data-testid="settings.showFiatValues.testid" v-settings-row="settings.showFiatValues.id">
 				<Flex direction="column" gap="6">
 					<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings.showFiatValues.title }}</Text>
 					<Text variant="caption" color="tertiary" data-testid="fiat-values-description">{{ settings.showFiatValues.description }}</Text>
@@ -126,7 +117,7 @@ onBeforeUnmount(() => {
 				/>
 			</Flex>
 
-			<Flex justify="between" align="center">
+			<Flex justify="between" align="center" :data-testid="settings.defaultExplorer.testid" v-settings-row="settings.defaultExplorer.id">
 				<Flex direction="column" gap="6">
 					<Text variant="row-title" :class="$style.title_size" color="primary" data-testid="explorer-title">{{ settings.defaultExplorer.title }}</Text>
 					<Text variant="caption" color="tertiary" data-testid="explorer-description">{{ settings.defaultExplorer.description }}</Text>
@@ -168,7 +159,7 @@ onBeforeUnmount(() => {
 				</Dropdown>
 			</Flex>
 
-			<Flex justify="between" align="center">
+			<Flex justify="between" align="center" :data-testid="settings.privacyMode.testid" v-settings-row="settings.privacyMode.id">
 				<Flex direction="column" gap="6">
 					<Text variant="row-title" :class="$style.title_size" color="primary" data-testid="privacy-mode-title">{{ settings.privacyMode.title }}</Text>
 					<Text variant="caption" color="tertiary">{{ settings.privacyMode.description }}</Text>

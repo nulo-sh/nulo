@@ -16,6 +16,8 @@ export type OperationApprovalDelta = {
 	readonly estimateId?: string
 	/** Preview-snapshot id the SW returned for this operation. */
 	readonly previewId?: string
+	/** The exact `maxFee`, in base units, of the estimate the window showed for this operation. */
+	readonly feeCeiling?: string
 }
 
 /** True when the request names the account itself as payer: the wallet pays from held Fee Juice. */

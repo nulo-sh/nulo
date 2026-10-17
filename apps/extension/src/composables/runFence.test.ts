@@ -2,6 +2,18 @@ import { describe, expect, test } from "vitest"
 import { createRunFence } from "./runFence"
 
 describe("createRunFence", () => {
+	test("a snapshot stays current across another snapshot and goes false after invalidate() or begin()", () => {
+		const fence = createRunFence()
+		const first = fence.snapshot()
+		const second = fence.snapshot()
+		expect([first(), second()]).toEqual([true, true])
+		fence.invalidate()
+		expect([first(), second()]).toEqual([false, false])
+		const third = fence.snapshot()
+		fence.begin()
+		expect(third()).toBe(false)
+	})
+
 	test("a lone run is current", () => {
 		const fence = createRunFence()
 		const isCurrent = fence.begin()

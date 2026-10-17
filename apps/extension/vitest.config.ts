@@ -28,6 +28,9 @@ export default defineConfig({
 		globals: true,
 		environment: "jsdom",
 		setupFiles: "./tests/vitest.setup.ts",
+		// Vitest returns an empty string for CSS unless told otherwise; the viewers' shadow-root
+		// sheet is CSS a test must read as the browser does.
+		css: { include: [/\/components\/JsonViewer\/editor-shadow\.css/] },
 		// Also pick up the co-located tests of the extracted @nulo/* workspace
 		// packages: they run standalone under their own configs AND here under the
 		// extension's jsdom setup, so the aggregate re-runs them (see ARCHITECTURE §14).

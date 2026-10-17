@@ -309,7 +309,7 @@ async function armHeroSampler(page: Page): Promise<void> {
 	})
 }
 
-/** Home's hero once its quotes have landed: until then a holding without one counts as $0.00. */
+/** Home's hero once a priced figure shows: before the quote it reads a skeleton or "—", before the balance $0.00. */
 async function waitForPricedHero(page: Page): Promise<string> {
 	await page.waitForFunction(
 		() => {

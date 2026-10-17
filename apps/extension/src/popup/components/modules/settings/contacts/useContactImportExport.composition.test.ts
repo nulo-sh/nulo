@@ -41,6 +41,8 @@ const boundary = vi.hoisted(() => ({
 	downloads: [] as string[],
 	toasts: [] as Array<{ kind: string; label: string }>,
 	opened: [] as string[],
+	/** The payload of the last popup opened: an edit form's `{ contact, onSave }`. */
+	payload: undefined as unknown,
 	service: null as unknown,
 	/** The background's profile service, which the popup's own profile client reaches too. */
 	profile: null as unknown,
@@ -67,11 +69,18 @@ vi.mock("@/stores/app.store", () => ({
 }))
 vi.mock("@/stores/cache.store", async () => {
 	const { reactive } = await import("vue")
-	const state = reactive({ importContacts: [] as unknown[], importContact: null as unknown, importPromise: null as unknown })
+	const state = reactive({ importContacts: [] as unknown[], importPromise: null as unknown })
 	return { useCacheStore: () => state }
 })
 vi.mock("@/stores/popup.store", () => ({
-	usePopupStore: () => ({ len: 1, popups: { import_contacts: { order: 1 } }, open: (name: string) => boundary.opened.push(name) }),
+	usePopupStore: () => ({
+		len: 1,
+		popups: { import_contacts: { order: 1 } },
+		open: (name: string, payload?: unknown) => {
+			boundary.opened.push(name)
+			boundary.payload = payload
+		},
+	}),
 }))
 vi.mock("@/wallet/services/profile/client", () => ({
 	ProfileServiceClient: vi.fn(function () {
@@ -242,12 +251,13 @@ function senderLine(popup: VueWrapper): string | null {
 	return line.exists() ? line.text().replace(/\s+/g, " ").trim() : null
 }
 
-/** Opens a row in the edit form through its own button and writes back what that form saves in import
- *  mode (EditContactPopup: the staged row with the trimmed name and lowercase address, `updated`). */
+/** Opens a row in the edit form through its own button and saves what that form saves in import mode
+ *  (EditContactPopup: the staged row with the trimmed name and lowercase address) through the request
+ *  the button handed it. */
 async function saveEdit(popup: VueWrapper, name: string, change: { name?: string; address?: string }) {
 	await rowOf(popup, name).find('[data-testid="import-contact-edit"]').trigger("click")
-	const cache = useCacheStore() as unknown as { importContact: Record<string, unknown> }
-	cache.importContact = { ...cache.importContact, ...change, updated: true }
+	const { contact, onSave } = boundary.payload as { contact: Record<string, unknown>; onSave: (row: unknown) => void }
+	onSave({ ...contact, ...change })
 	await flushPromises()
 }
 
@@ -287,7 +297,7 @@ function expectFixture(path: string, written: string): void {
 
 beforeEach(() => {
 	vi.clearAllMocks()
-	Object.assign(useCacheStore(), { importContacts: [], importContact: null, importPromise: null })
+	Object.assign(useCacheStore(), { importContacts: [], importPromise: null })
 	activeProfile = "p1"
 	session = 1
 	registered.clear()

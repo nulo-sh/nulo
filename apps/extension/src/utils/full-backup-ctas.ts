@@ -14,8 +14,11 @@ export interface FullBackupCtaSource {
 	readonly isRetrying: boolean
 }
 
+/** An encrypted pick, sealed or opened, until it yields a profile type: an opened body with none may
+ *  itself be sealed text (a file sealed twice), which a second Decrypt opens. */
 export function showsDecryptCta(s: Pick<FullBackupCtaSource, "selectedBackup">): boolean {
-	return s.selectedBackup?.type === "encrypted" && !s.selectedBackup?.profileType
+	const kind = s.selectedBackup?.kind
+	return (kind === "sealed" || kind === "opened") && !s.selectedBackup?.profileType
 }
 
 export function showsRestoreCta(s: Pick<FullBackupCtaSource, "selectedBackup" | "restoreStatus">): boolean {

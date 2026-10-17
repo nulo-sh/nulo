@@ -39,16 +39,18 @@ Every suite runs on Chrome (default) and on Firefox (`NULO_E2E_BROWSER=firefox`)
 
 | Suite | Config | Includes | Global setup | Timeouts (test/hook) | Retry |
 |---|---|---|---|---|---|
-| smoke | `vitest.e2e.config.ts` | `tests/e2e/*.test.ts` | `global-setup-smoke.ts` (no sandbox) | 60s / 90s | 2 in config (three attempts); `--retry=0` on the CLI to override |
+| smoke | `vitest.e2e.config.ts` | `tests/e2e/*.test.ts` | `global-setup-smoke.ts` (no sandbox) | 60s / 90s | `NULO_E2E_RETRY` ?? 2 (three attempts) |
 | network | `vitest.e2e.network.config.ts` | `tests/e2e/network/**` | `global-setup.ts` (anvil + aztec node + playground) | 30s / 300s | `NULO_E2E_RETRY` ?? 2 (three attempts) |
 | all | `vitest.e2e.all.config.ts` | both | `global-setup.ts` | 30s / 300s | `NULO_E2E_RETRY` ?? 2 |
 
-All three run `pool: "forks"`, `isolate: true`, `fileParallelism: false` — one Chrome per file,
-files sequential. All three take `reporters: e2eReporters()` from `vite.shared.ts`: an explicit
-reporters array suppresses vitest's automatic `github-actions` annotator, so that function re-adds it
-and appends `RetryErrorReporter` (prints the first-attempt errors of a test that passed on retry).
-Never inline a reporters array in a config.
-The network and `all` configs also pass `{ stall: { stallMs: STALL_MS } }`, adding
+All three spread `e2eIsolation` from `vite.shared.ts` (`pool: "forks"`, `isolate: true`,
+`fileParallelism: false` — one Chrome per file, files sequential) and read their retry through
+`e2eRetry(2)`, which refuses a malformed `NULO_E2E_RETRY` at config load. All three take
+`reporters: e2eReporters()`: an explicit reporters array suppresses vitest's automatic
+`github-actions` annotator, so that function re-adds it and appends `RetryErrorReporter` (prints the
+first-attempt errors of a test that passed on retry, and on Actions appends `N passed on retry`, by
+name, to the job summary, 0 included). Never inline a reporters array in a config.
+The network and `all` configs also spread `networkRunner()`, whose reporters pass `{ stall: { stallMs: STALL_MS } }`, adding
 `StallWatchdog` (`tests/e2e/stall-watchdog.ts`): after 10 min with no reporter event it writes
 `.e2e-state/stalled` naming the running tests, fails and cancels the run, and 30 s later kills this
 vitest's fork workers (children whose argv is vitest's fork entry, never by name). Every run prints its
@@ -184,7 +186,7 @@ runtime env var can never arm a build-time flag.
 | Var | Meaning |
 |---|---|
 | `HEADLESS=0` | windowed Chrome; default is headless (`launchExtension`) |
-| `NULO_E2E_RETRY` | vitest `retry` for the network and all configs (default 2); smoke ignores it — pass `--retry=0` |
+| `NULO_E2E_RETRY` | vitest `retry` for every e2e config (default 2); the reusable workflows' `retry` input sets it; `--retry=N` on the CLI wins |
 | `E2E_REQUIRE_SETUP=1` | sandbox/deploy failures are fatal (set by `agent.sh`) |
 | `NULO_E2E_PROVERLESS=1` | `agent.sh` arms the proverless build pair |
 | `NULO_E2E_MIGRATION_FIXTURE=1` | runtime declaration that the dist carries the migration fixture |
@@ -268,7 +270,10 @@ then measured runtime, with each browser's suite wall-clock before and after in 
 Only `data-testid` (rows: `data-<entity>-id` / `data-<entity>-name`). Never text, role, aria-label,
 placeholder, class, or structure. `waitForToast` is the one sanctioned text assertion. If an element
 has no testid, add one BEFORE the test. This is convention plus review — no lint rule or scanner
-enforces it, so a reviewer has to.
+enforces it, so a reviewer has to. One exception, the logs and JSON viewers: CodeMirror builds their
+editor's DOM inside the host's shadow root, so a spec reaches the host by its testid (`logs-editor`,
+`json-editor`) and below it only CodeMirror's documented `cm-` classes (`.cm-content`,
+`.cm-scroller`, `.cm-panel.cm-search`), never a generated theme class or a position.
 
 ### Start from the right fixture (`fixtures/extension.ts`)
 
@@ -744,6 +749,11 @@ teardown's `pkill` matches by prefix), then run with `NULO_E2E_ARTIFACT_RUN=1 EX
 and without `NULO_E2E_MIGRATION_FIXTURE` or `NULO_E2E_CSP_REPORT`. It runs guarded like a source run;
 `shipped-token-list.test.ts` is its one launch that reaches the live Testnet node, so a dRPC outage
 reds that spec, by name, and nothing else.
+
+The PR lanes check out the PR's head SHA (`github.event.pull_request.head.sha`), not the merge ref:
+reproduce a red PR lane at that SHA. A branch whose last trunk merge fell between a UI change and its
+e2e fix stays red there while its merge ref passes; merge the trunk again. A shard runs larger files
+first when vitest has no results cache, so an edit that grows a file moves it in the shard's order.
 
 Two cores is the amplifier: races that live in a 100ms window on a workstation widen to seconds. Run
 the loop alone on the host, freeze the tree between rounds, and validate the fix under the SAME

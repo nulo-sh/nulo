@@ -95,7 +95,6 @@ vi.mock("@/wallet/services/config/client", () => ({
 // Controllable price feed: tests set `mockQuotes`.
 let mockQuotes: Record<string, unknown> = {}
 let answerQuotes: () => Promise<Record<string, unknown>> = async () => mockQuotes
-let mockRefreshFailed = false
 vi.mock("@/wallet/services/price/client", () => ({
 	PriceServiceClient: vi.fn(function () {
 		return {
@@ -107,11 +106,10 @@ vi.mock("@/wallet/services/price/client", () => ({
 				remove: vi.fn(),
 			},
 			onConnected: { add: vi.fn(), remove: vi.fn() },
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, lastRefreshFailed: false })),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
 			refreshIfStale: vi.fn().mockImplementation(async () => ({
 				quotes: await answerQuotes(),
 				pricedTokens: TEST_PRICED_TOKENS,
-				lastRefreshFailed: mockRefreshFailed,
 			})),
 		}
 	}),
@@ -224,7 +222,6 @@ afterEach(() => {
 	connectedHandler = undefined
 	quotesHandler = undefined
 	mockQuotes = {}
-	mockRefreshFailed = false
 	answerQuotes = async () => mockQuotes
 	mockShowFiat = true
 	seedRows = SEED
@@ -255,16 +252,6 @@ describe("BalanceView — Home aggregate", () => {
 
 		// Only tok-1 is priced → aggregate = its fiat value, flagged partial.
 		expect(wrapper.find('[data-testid="balance-amount"]').text()).toContain("$1,249.82")
-		expect(wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(true)
-	})
-
-	test("no priced tokens → $0.00 with the 'priced assets only' caption, never an em-dash", async () => {
-		mockQuotes = {}
-		const { wrapper } = await mountView()
-
-		const amount = wrapper.find('[data-testid="balance-amount"]').text()
-		expect(amount).toContain("$0.00")
-		expect(amount).not.toContain("—")
 		expect(wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(true)
 	})
 
@@ -603,18 +590,19 @@ describe("BalanceView — Home hero while the total is still moving", () => {
 		expect(unpriced.wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(true)
 	})
 
-	test("the 12 s cap ends a price wait that never answers", async () => {
+	test("the 12 s cap ends a price wait that never answers in '—' and 'Prices unavailable'", async () => {
 		answerQuotes = () => new Promise(() => {})
 		const { wrapper } = await mountView()
 		await vi.advanceTimersByTimeAsync(CAP_MS - 1)
 		expect(amount(wrapper).text()).toBe("")
 		await vi.advanceTimersByTimeAsync(1)
-		expect(amount(wrapper).text()).toContain("$0.00")
-		expect(wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(true)
+		expect(amount(wrapper).text()).toBe("—")
+		expect(wrapper.find('[data-testid="balance-prices-unavailable"]').exists()).toBe(true)
+		expect(wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(false)
 	})
 })
 
-describe("BalanceView — Home hero when prices could not be fetched", () => {
+describe("BalanceView — Home hero when no priced holding has a price", () => {
 	type Wrapper = Awaited<ReturnType<typeof mountView>>["wrapper"]
 	const amount = (w: Wrapper) => w.find('[data-testid="balance-amount"]')
 	const unavailableCaption = (w: Wrapper) => w.find('[data-testid="balance-prices-unavailable"]')
@@ -622,8 +610,7 @@ describe("BalanceView — Home hero when prices could not be fetched", () => {
 	// Price-mapped (tether) and never quoted here.
 	const USDT_ROW = { ...SEED[0], id: "b3", token: { ...SEED[0].token, id: "tok-3", symbol: "CCC", contract: TEST_TOKENS.USDT } }
 
-	test("funded, nothing priced: '—' and 'Prices unavailable', never $0.00", async () => {
-		mockRefreshFailed = true
+	test("funded, and the answer carries no quote for the held token: '—' and 'Prices unavailable', never $0.00", async () => {
 		const { wrapper } = await mountView()
 		expect(amount(wrapper).text()).toBe("—")
 		expect(amount(wrapper).find('[aria-hidden="true"]').text()).toBe("—")
@@ -631,8 +618,7 @@ describe("BalanceView — Home hero when prices could not be fetched", () => {
 		expect(partialCaption(wrapper).exists()).toBe(false)
 	})
 
-	test("a usable cached quote still shows the amount, partly priced with 'priced assets only'", async () => {
-		mockRefreshFailed = true
+	test("one usable quote shows the amount, with 'priced assets only' beside an unquoted holding", async () => {
 		mockQuotes = FRESH()
 		seedRows = [SEED[0], USDT_ROW] as typeof SEED
 		const { wrapper } = await mountView()
@@ -642,7 +628,6 @@ describe("BalanceView — Home hero when prices could not be fetched", () => {
 	})
 
 	test("an empty wallet still reads $0.00, and one holding only unpriced tokens keeps 'priced assets only'", async () => {
-		mockRefreshFailed = true
 		seedRows = [{ ...SEED[0], publicBalance: "0", privateBalance: "0" }] as typeof SEED
 		const empty = await mountView()
 		expect(amount(empty.wrapper).text()).toContain("$0.00")
@@ -657,17 +642,17 @@ describe("BalanceView — Home hero when prices could not be fetched", () => {
 		expect(unavailableCaption(wrapper).exists()).toBe(false)
 	})
 
-	test("a failed refresh while Home is open replaces the figure, and a clean one brings it back", async () => {
+	test("a broadcast without the held token's quote replaces the figure, and one with it brings it back", async () => {
 		mockQuotes = FRESH()
 		const { wrapper } = await mountView()
 		expect(amount(wrapper).text()).toContain("$1,249.82")
 
-		quotesHandler?.({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, lastRefreshFailed: true })
+		quotesHandler?.({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })
 		await flushPromises()
 		expect(amount(wrapper).text()).toBe("—")
 		expect(unavailableCaption(wrapper).exists()).toBe(true)
 
-		quotesHandler?.({ quotes: FRESH(), pricedTokens: TEST_PRICED_TOKENS, lastRefreshFailed: false })
+		quotesHandler?.({ quotes: FRESH(), pricedTokens: TEST_PRICED_TOKENS })
 		await flushPromises()
 		expect(amount(wrapper).text()).toContain("$1,249.82")
 		expect(unavailableCaption(wrapper).exists()).toBe(false)
@@ -1032,14 +1017,14 @@ describe("BalanceView — an arrival on Home", () => {
 	test("while prices are unavailable nothing counts: their return shows the aggregate's own string at once", async () => {
 		const shown = await ownString([row(LARGE + 10n ** 12n)])
 		const { wrapper } = await settledHome()
-		quotesHandler?.({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, lastRefreshFailed: true })
+		quotesHandler?.({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })
 		await flushPromises()
 		expect(hero(wrapper)).toBe("—")
 
 		await wrapper.setProps({ arrival: { id: "r1", label: "+1 AAA" } })
 		updatedHandler?.(row(LARGE + 10n ** 12n))
 		await flushPromises()
-		quotesHandler?.({ quotes: USD_1(), pricedTokens: TEST_PRICED_TOKENS, lastRefreshFailed: false })
+		quotesHandler?.({ quotes: USD_1(), pricedTokens: TEST_PRICED_TOKENS })
 		await flushPromises()
 		expect(hero(wrapper)).toBe(shown)
 	})

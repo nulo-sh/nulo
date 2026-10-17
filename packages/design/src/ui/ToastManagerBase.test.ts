@@ -356,6 +356,23 @@ describe("ToastManagerBase", () => {
 		}
 	})
 
+	test("× returns focus into the shadow root focus came from, not to its host", async () => {
+		mountRegion()
+		const host = document.body.appendChild(document.createElement("div"))
+		const origin = host.attachShadow({ mode: "open" }).appendChild(document.createElement("button"))
+		try {
+			open({ kind: "error", label: "Failed" })
+			await settle()
+			origin.focus()
+			card()?.querySelector<HTMLButtonElement>('[data-testid="snackbar-close"]')?.focus()
+			card()?.querySelector<HTMLButtonElement>('[data-testid="snackbar-close"]')?.click()
+			await settle()
+			expect(host.shadowRoot?.activeElement).toBe(origin)
+		} finally {
+			host.remove()
+		}
+	})
+
 	test("an update relabels the same card: it neither leaves nor enters", async () => {
 		stubTransitionDuration()
 		mountRegion()

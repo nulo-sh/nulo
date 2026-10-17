@@ -9,7 +9,7 @@ import {
 } from "@/components/composite/import/restore-warning"
 import type { ToastOptions } from "@/composables/toast"
 import { FilePickCanceledError } from "@/utils/files"
-import { type BackupSelection, openEncryptedBackup, readBackupFile } from "@/utils/full-backup-helpers"
+import { type BackupSelection, openSelection, readBackupFile } from "@/utils/full-backup-helpers"
 import { admitRestoreOutcome, readRestoreOutcome, type RestoreOutcome } from "@/utils/restore-outcome"
 import type { Network } from "@/wallet/services/network/spec"
 import type { RunFence } from "@/wallet/services/profile/client"
@@ -24,6 +24,7 @@ import {
 	retryAccountStateStage,
 	runFenceLive,
 } from "./full-backup-restore"
+import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS } from "./importChainSync"
 import {
 	DECRYPTION_FAILED,
 	errorLogWriters,
@@ -152,7 +153,7 @@ async function runPick(state: AgainRefs, opts: UseRestoreAgainOptions) {
 		const { selection, parseError } = await readBackupFile(file)
 		state.selectedBackup.value = selection
 		if (parseError) return opts.fillError("full_backup", parseError.title, parseError.tooltip)
-		if (selection.type === "unknown" || (selection.type === "plain" && !selection.profileType)) {
+		if (selection.kind === "unreadable" || (selection.kind === "plain" && !selection.profileType)) {
 			return opts.fillError("full_backup", UNRECOGNIZED_BACKUP.title, UNRECOGNIZED_BACKUP.message)
 		}
 		opts.clearError()
@@ -168,13 +169,9 @@ async function runDecrypt(state: AgainRefs, opts: UseRestoreAgainOptions) {
 	if (!state.decryptionPassword.value || !target) return
 	const stale = () => state.selectedBackup.value !== target
 	try {
-		const opened = await openEncryptedBackup(target.backup as string, state.decryptionPassword.value, stale)
+		const opened = await openSelection(target, state.decryptionPassword.value, stale)
 		if (opened.kind === "stale" || stale()) return
-		state.selectedBackup.value = {
-			...target,
-			backup: opened.backupObject,
-			profileType: opened.backupObject?.data?.profile?.type ?? null,
-		}
+		state.selectedBackup.value = opened.selection
 		opts.clearError()
 	} catch {
 		if (stale()) return
@@ -237,6 +234,8 @@ async function runRestore(state: AgainRefs, opts: UseRestoreAgainOptions, writer
 	try {
 		const validated = await validateAndMigrateBackup(selection.backup as FullBackupEnvelope)
 		if (state.ended.value) return
+		// Only the body this profile was restored from passes, and its import already checked it, so no
+		// passkey prompt runs again here.
 		if (validated.kind === "rejected" || validated.checksum !== record.backup) {
 			const refusal = validated.kind === "rejected" ? validated : RESTORE_AGAIN_OTHER_BACKUP
 			state.restoreStatus.value = "failed"
@@ -258,6 +257,7 @@ async function runRestore(state: AgainRefs, opts: UseRestoreAgainOptions, writer
 			io,
 			{ fence, run: record.run },
 			opts.profileService,
+			Date.now() + IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS,
 		)
 		settleRun(state, opts, tail)
 	} catch (error) {

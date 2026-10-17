@@ -75,6 +75,15 @@ describe("the host tree", () => {
 		expect(await envelopeFindings(text, [other.pinned])).toEqual([`${ENVELOPE}: token list envelope refused: bad-signature`])
 	})
 
+	test("refuses an envelope in another key order or with an extra key", async () => {
+		const { root, pinned } = await signedTree("order")
+		const { format, keyId, payload, signature } = JSON.parse(readFileSync(join(root, ENVELOPE), "utf8"))
+		const refused = [`${ENVELOPE}: not in canonical form`]
+		expect(await envelopeFindings(canonical({ keyId, format, payload, signature }), [pinned])).toEqual(refused)
+		expect(await envelopeFindings(canonical({ format, keyId, payload, signature, note: "x" }), [pinned])).toEqual(refused)
+		expect(await envelopeFindings(canonical({ format, keyId, payload, signature }), [pinned])).toEqual([])
+	})
+
 	test("refuses a non-canonical source", async () => {
 		const { root, pinned } = await signedTree("source")
 		writeFileSync(join(root, SOURCE), JSON.stringify(JSON.parse(readFileSync(join(root, SOURCE), "utf8"))))

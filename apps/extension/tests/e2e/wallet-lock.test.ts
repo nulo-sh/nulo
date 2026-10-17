@@ -3,6 +3,7 @@ import { lockWallet, ensureUnlocked, navigateToSettings, waitForLockScreen } fro
 
 test("lock wallet and unlock with password", async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)
+	await ensureUnlocked(page)
 	await waitForHash(page, "#/popup/general")
 
 	await lockWallet(page)

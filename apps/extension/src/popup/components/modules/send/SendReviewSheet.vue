@@ -14,6 +14,7 @@ import {
 	paidBy,
 	type PublishFacts,
 	publishGlyph,
+	QUEUED_SPONSORED_COPY,
 	rowSentence,
 	UNVOUCHED_FEE_SENTENCE,
 } from "@/components/composite/send/publish-facts"
@@ -41,6 +42,8 @@ const props = defineProps<{
 	ready: boolean
 	/** Set while the send is queued against a cap: the cap as the fee card words it. */
 	queuedCapText?: string
+	/** Set while the send is queued with Nulo's sponsor paying, which needs no cap. */
+	queuedSponsored?: boolean
 	/** Set for a queued send whose fee came out above the cap the person accepted. */
 	reask?: { now: string; nowAmount: string; capAmount: string }
 }>()
@@ -61,7 +64,7 @@ const paid = computed(() => paidBy(props.payerKind, props.payerType))
 const sendable = computed(() => props.show && props.canSend && props.ready && !props.sending)
 const submitLabel = computed(() => {
 	if (props.reask) return `Send for ${props.reask.nowAmount} FJ`
-	return props.queuedCapText ? "Queue send" : "Send now"
+	return props.queuedCapText || props.queuedSponsored ? "Queue send" : "Send now"
 })
 
 const rows = computed(() =>
@@ -161,6 +164,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 						<span v-if="payerKind === 'unvouched'">Fee · <span aria-hidden="true">—</span><span :class="$style.visually_hidden">{{ UNVOUCHED_FEE_SENTENCE }}</span></span>
 						<span v-else-if="reask" data-testid="send-review-fee-reask">Fee is now {{ reask.now }}, above the {{ reask.capAmount }} FJ you accepted.</span>
 						<span v-else-if="queuedCapText" data-testid="send-review-fee-cap">Fee up to {{ queuedCapText }}, based on your last send. If it comes out higher, we ask again.</span>
+						<span v-else-if="queuedSponsored" data-testid="send-review-fee-queued">Fee · {{ QUEUED_SPONSORED_COPY }}</span>
 						<span v-else>Fee · {{ feeText || "—" }}</span>
 						<b v-if="paid" class="type--data">{{ paid }}</b>
 					</div>
