@@ -5,8 +5,8 @@
  * Export drives `settings/security/export/account`: picker (or the Manage Accounts deep-link that
  * skips it), agree gate, unlock, protect, then the file is DOWNLOADED, never shown. The page gives
  * out only the password-protected file, so a caller asking for the plain body gets that file
- * decrypted here. The body is captured in-page with the same `chrome.downloads` stub the backup
- * suites use: account files are uncompressed, so the capture reads the blob as plain text.
+ * decrypted here. The body is captured in-page (`download-capture.ts`); account files are written
+ * uncompressed.
  *
  * Import drives `settings/accounts/import`: the file picker row (the page is file-only — bodies
  * are delivered by writing a temp file and accepting it through the chooser), the protected-file
@@ -22,6 +22,7 @@ import type { Page } from "puppeteer"
 import { TEST_PASSWORD } from "../fixtures/constants"
 import { clickByTestId, replaceInputValue, pickFileByTestId } from "../fixtures/extension"
 import { closeStuckPopup, navigateByHash, waitForToast } from "../fixtures/helpers"
+import { armDownloadCapture, readCapturedDownload } from "./download-capture"
 
 /** Post-unlock/bootstrap routing can land a LATE `router.push("/popup/general")` that yanks a
  *  just-navigated route back and unmounts the page a caller is waiting for. Proceed only once the
@@ -57,42 +58,6 @@ export async function gotoAccounts(page: Page): Promise<void> {
 	}
 }
 
-/** Arm the in-page download capture. Account files are UNCOMPRESSED (unlike gzipped backups), so
- *  the stub reads the blob as plain text. Two-phase like `backup-export.ts`: arm BEFORE the
- *  download CTA, read after. */
-async function armAccountDownloadCapture(page: Page): Promise<void> {
-	await page.evaluate(() => {
-		const w = window as unknown as { __accountCapture?: Promise<string> }
-		w.__accountCapture = new Promise<string>((resolve, reject) => {
-			const timer = setTimeout(() => reject(new Error("account download was not captured within 30s")), 30_000)
-			const c = chrome as unknown as {
-				downloads: { download: (opts: { url: string }, cb: (id: number) => void) => void }
-			}
-			c.downloads = {
-				download: (opts, cb) => {
-					fetch(opts.url)
-						.then((r) => r.text())
-						.then((text) => {
-							clearTimeout(timer)
-							resolve(text)
-							cb(1)
-						})
-						.catch((err) => {
-							clearTimeout(timer)
-							reject(err instanceof Error ? err : new Error(String(err)))
-						})
-				},
-			}
-		})
-		// Swallow the (test-only) unhandled rejection if the click never fires.
-		w.__accountCapture.catch(() => {})
-	})
-}
-
-async function readAccountDownloadCapture(page: Page): Promise<string> {
-	return await page.evaluate(() => (window as unknown as { __accountCapture: Promise<string> }).__accountCapture)
-}
-
 /** Drive the export page from its unlock stage to a captured file body: the protected file, or with
  *  `encrypt` false its plain content. Assumes the page is already showing the agree gate (account
  *  selected). */
@@ -117,9 +82,9 @@ async function runExportStages(page: Page, encrypt: boolean, password: string): 
 	await clickByTestId(page, "account-protect-btn")
 	await page.waitForSelector('[data-testid="account-file-protected-banner"]', { visible: true, timeout: 30_000 })
 
-	await armAccountDownloadCapture(page)
+	await armDownloadCapture(page, { gzip: false })
 	await clickByTestId(page, "account-download-btn")
-	const body = await readAccountDownloadCapture(page)
+	const body = await readCapturedDownload(page)
 	expect(body.length).toBeGreaterThan(0)
 	if (encrypt) return body
 	const { decryptAccountExport } = await import("@nulo/aztec-runtime/account")

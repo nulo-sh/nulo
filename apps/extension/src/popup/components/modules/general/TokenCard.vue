@@ -98,10 +98,10 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 			<Flex v-else direction="column" align="end" gap="2">
 				<span data-testid="token-amount" :class="[$style.amount, syncFailed && $style.amount_stale]" :data-malformed="isMalformed || undefined">{{ totalBalance || 0 }}</span>
 				<span v-if="!isMalformed" :class="$style.detail">
-					<span :class="$style.icon_private"><Icon name="lock" size="9" /></span>
+					<span :class="$style.icon_private"><Icon name="private" size="9" /></span>
 					{{ privateFormatted }}
 					<span :class="$style.pub_group">
-						<span :class="$style.icon_public"><Icon name="globe" size="9" /></span>
+						<span :class="$style.icon_public"><Icon name="public" size="9" /></span>
 						{{ publicFormatted }}
 					</span>
 				</span>
@@ -132,6 +132,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 }
 
 .link {
+	user-select: none;
 	cursor: pointer;
 	transition: background 0.2s var(--bezier);
 
@@ -176,7 +177,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 
 .fiat {
 	composes: type--fiat from global;
-	font-size: 11px;
+	font-size: 13px;
 	color: var(--nulo-secondary);
 
 	max-width: 160px;
@@ -206,8 +207,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	gap: 3px;
 }
 
-/* Same private/public vocabulary as BalanceView's breakdown: bone lock = private,
-   grey globe = public. Icons inherit via currentColor. */
+/* Keep in step with BalanceView's breakdown; the glyph paints in the span's colour. */
 .icon_private {
 	display: inline-flex;
 	color: var(--nulo-accent);

@@ -22,6 +22,8 @@ import type { AppCapabilitiesManifest } from "./bundles"
 
 const APP_ID = "nulo-playground"
 
+export const NOT_CONNECTED = "Not connected — call connect() first"
+
 /**
  * Permissive ChainInfo filter — Fr.ZERO/Fr.ZERO matches any wallet that
  * responds to discovery. The Nulo extension doesn't reject discovery on
@@ -144,7 +146,7 @@ function extractGrantedAccounts(result: unknown): { address: string; name: strin
  * for `state.accounts` / `state.selectedAccount`.
  */
 export async function requestCapabilities(manifest: AppCapabilitiesManifest): Promise<unknown> {
-	if (!wallet) throw new Error("Not connected — call connect() first")
+	if (!wallet) throw new Error(NOT_CONNECTED)
 	// biome-ignore lint/suspicious/noExplicitAny: SDK's AppCapabilities type uses zod-inferred shape; structural compatibility checked at runtime
 	const result = await wallet.requestCapabilities(manifest as any)
 

@@ -156,7 +156,7 @@ describe("the row list, row by row", () => {
 			"On: Private messages its contracts sent to your accounts, like a transfer you received. · Off: Not shared. The app may ask again later.",
 		])
 		expect(row.switchLabel).toBe("Share private events")
-		expect(row.icon).toBe("mail_lock")
+		expect(row.icon).toBe("mail-lock")
 		expect(row.flagged).toBe(false)
 	})
 
@@ -196,16 +196,16 @@ describe("the row list, row by row", () => {
 			transactionRow(tx("*")),
 		].map((row) => [row.key, row.icon])
 		expect(icons).toEqual([
-			["account-address", "visibility"],
-			["simulation", "play_circle"],
-			["contracts", "add_circle"],
+			["account-address", "eye"],
+			["simulation", "play"],
+			["contracts", "add"],
 			["contract-details", "info"],
-			["contract-classes", "code_blocks"],
+			["contract-classes", "code"],
 			["authorizations", "signature"],
 			["address-book", "contacts"],
-			["private-events", "mail_lock"],
+			["private-events", "mail-lock"],
 			["unknown", "help"],
-			["transaction", "task_alt"],
+			["transaction", "check"],
 		])
 		expect(icons.map(([key]) => key)).toEqual([...ROW_ORDER])
 	})

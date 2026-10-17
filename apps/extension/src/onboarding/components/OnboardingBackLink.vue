@@ -7,14 +7,14 @@ const router = useRouter()
 
 <template>
 	<button type="button" :class="$style.back" :data-testid="testid" @click="router.push('/onboarding/welcome')">
-		<MaterialIcon name="chevron_left" :size="14" />
+		<Icon name="chevron" color="primary" :rotate="180" :size="14" />
 		<span>Back</span>
 	</button>
 </template>
 
 <style module>
 .back {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	align-self: flex-start;
 	display: inline-flex;
 	align-items: center;

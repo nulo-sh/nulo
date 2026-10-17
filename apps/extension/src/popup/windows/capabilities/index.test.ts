@@ -17,7 +17,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { MaterialIcon, RowAction, Toggle } from "@nulo/design"
+import { Icon, RowAction, Toggle } from "@nulo/design"
 import { JobCancelledError } from "@nulo/extension-messaging/errors"
 import { type DOMWrapper, flushPromises, mount } from "@vue/test-utils"
 import { reactive, ref, type Ref } from "vue"
@@ -542,7 +542,7 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 		resolveInteractionMock.mockClear()
 		w = mount(Capabilities, {
 			global: {
-				components: { MaterialIcon, RowAction, Toggle },
+				components: { RowAction, Toggle, Icon },
 				stubs: {
 					...STUBS,
 					Flex: { inheritAttrs: false, template: "<div v-bind='$attrs'><slot /></div>" },

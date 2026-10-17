@@ -51,7 +51,7 @@ const target = ref(null)
 					<Icon name="edit" size="14" color="tertiary" />
 				</RowAction>
 				<RowAction label="Delete contact" data-testid="contact-delete" @click="emit('delete', contact)">
-					<Icon name="close-circle" size="14" color="tertiary" />
+					<Icon name="close" size="14" color="tertiary" />
 				</RowAction>
 			</Flex>
 		</Flex>
@@ -91,12 +91,12 @@ const target = ref(null)
 }
 
 .row_address {
-	composes: type--data from global;
+	composes: type--meta from global;
 	composes: row_sub from "../../../../../components/ui/Settings/settings-row.module.css";
 }
 
 .sender_chip {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	position: relative;
 	z-index: 1;
 	flex-shrink: 0;

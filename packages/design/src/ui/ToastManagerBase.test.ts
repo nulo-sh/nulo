@@ -21,7 +21,6 @@ const realComputedStyle = window.getComputedStyle.bind(window)
 
 const STUBS = {
 	Icon: { template: '<span data-testid="stub-icon" :data-name="name" :data-color="color" />', props: ["name", "size", "color"] },
-	MaterialIcon: { template: '<span data-testid="stub-mat-icon" :data-name="name" />', props: ["name", "size", "color"] },
 	transition: false,
 }
 
@@ -120,7 +119,7 @@ describe("ToastManagerBase", () => {
 		await nextTick()
 		expect(status().querySelector(CARD)?.getAttribute("data-kind")).toBe("success")
 		expect(alert().querySelector(CARD)).toBeNull()
-		expect(status().querySelector('[data-name="check-circle"]')?.getAttribute("data-color")).toBe("green")
+		expect(status().querySelector('[data-name="square-check"]')?.getAttribute("data-color")).toBe("green")
 		expect(titleLive()).toBeNull()
 		await settle()
 
@@ -128,7 +127,7 @@ describe("ToastManagerBase", () => {
 		await settle()
 		expect(status().querySelector(CARD)).toBeNull()
 		expect(alert().querySelector(CARD)?.getAttribute("data-kind")).toBe("error")
-		expect(alert().querySelector('[data-name="close-circle"]')?.getAttribute("data-color")).toBe("red")
+		expect(alert().querySelector('[data-name="square-cross"]')?.getAttribute("data-color")).toBe("red")
 		expect(titleLive()).toBeNull()
 	})
 
@@ -139,8 +138,8 @@ describe("ToastManagerBase", () => {
 		expect(status().querySelector(CARD)).toBeNull()
 		const info = alert().querySelector(CARD)
 		expect(info?.getAttribute("data-kind")).toBe("info")
-		expect(info?.querySelector('[data-name="clock-circle"]')?.getAttribute("data-color")).toBe("secondary")
-		expect(info?.querySelector('[data-name="close-circle"]')).toBeNull()
+		expect(info?.querySelector('[data-name="square-half"]')?.getAttribute("data-color")).toBe("secondary")
+		expect(info?.querySelector('[data-name="square-cross"]')).toBeNull()
 		expect(info?.querySelector('[data-testid="snackbar-close"]')).not.toBeNull()
 
 		open({ kind: "error", label: "Failed" })
@@ -148,7 +147,7 @@ describe("ToastManagerBase", () => {
 		const error = alert().querySelector(CARD)
 		expect(error?.getAttribute("data-kind")).toBe("error")
 		expect(error?.classList.length).toBe((info?.classList.length ?? 0) + 1)
-		expect(error?.querySelector('[data-name="clock-circle"]')).toBeNull()
+		expect(error?.querySelector('[data-name="square-half"]')).toBeNull()
 	})
 
 	test("it exposes the drawn height of the snack it places, 0 while none is open", async () => {
@@ -433,7 +432,7 @@ describe("ToastManagerBase", () => {
 		open({ kind: "success", label: "Disposable" })
 		await settle()
 		card()?.click()
-		await step(5_900 - 600)
+		await step(1_900 - 600)
 		expect(cards().length).toBe(1)
 		await step(100)
 		expect(useToast().toast.value).toBeNull()
@@ -454,7 +453,7 @@ describe("ToastManagerBase", () => {
 		await step(60_000)
 		expect(cards().length).toBe(1)
 		el.querySelector<HTMLButtonElement>('[data-testid="snackbar-action"]')?.blur()
-		await step(5_399)
+		await step(1_399)
 		expect(cards().length).toBe(1)
 		await step(1)
 		expect(useToast().toast.value).toBeNull()
@@ -474,7 +473,7 @@ describe("ToastManagerBase", () => {
 		await step(60_000)
 		expect(cards().length).toBe(1)
 		mouse(el, "mouseleave")
-		await step(5_399)
+		await step(1_399)
 		expect(cards().length).toBe(1)
 		await step(1)
 		expect(useToast().toast.value).toBeNull()
@@ -493,13 +492,13 @@ describe("ToastManagerBase", () => {
 		await step(60_000)
 		expect(cards().length).toBe(1)
 		action.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: document.body }))
-		await step(5_399)
+		await step(1_399)
 		expect(cards().length).toBe(1)
 		await step(1)
 		expect(useToast().toast.value).toBeNull()
 	})
 
-	test("a card that opens under a still pointer runs its 6 s: hover events and moves under a pixel off hold nothing", async () => {
+	test("a card that opens under a still pointer runs its 2 s: hover events and moves under a pixel off hold nothing", async () => {
 		mountRegion()
 		pointerAt(document.body, 120, 540)
 		open({ kind: "success", label: "Under the cursor" })
@@ -510,13 +509,13 @@ describe("ToastManagerBase", () => {
 		el.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, clientX: 120, clientY: 540 }))
 		pointerAt(el, 120, 540)
 		pointerAt(el, 120.6, 539.4)
-		await step(5_399)
+		await step(1_399)
 		expect(cards().length).toBe(1)
 		await step(1)
 		expect(useToast().toast.value).toBeNull()
 	})
 
-	test("a replacement under a still pointer starts its own 6 s, though the card before it was held", async () => {
+	test("a replacement under a still pointer starts its own 2 s, though the card before it was held", async () => {
 		mountRegion()
 		open({ kind: "success", label: "First" })
 		await settle()
@@ -527,7 +526,7 @@ describe("ToastManagerBase", () => {
 		open({ kind: "success", label: "Second" })
 		await settle()
 		pointerAt(card() as HTMLElement, 44, 31)
-		await step(5_399)
+		await step(1_399)
 		expect(card()?.textContent).toContain("Second")
 		await step(1)
 		expect(useToast().toast.value).toBeNull()
@@ -538,7 +537,7 @@ describe("ToastManagerBase", () => {
 		open({ kind: "success", label: "Under the cursor" })
 		await settle()
 		pointerAt(card() as HTMLElement, 10, 10)
-		await step(5_399)
+		await step(1_399)
 		expect(cards().length).toBe(1)
 		await step(1)
 		expect(useToast().toast.value).toBeNull()
@@ -550,12 +549,12 @@ describe("ToastManagerBase", () => {
 		await settle()
 		const el = card() as HTMLElement
 		pointerAt(document.body, 200, 10)
-		await step(3_000)
+		await step(500)
 		pointerAt(el, 40, 30)
 		await step(60_000)
 		expect(cards().length).toBe(1)
 		mouse(el, "mouseleave")
-		await step(2_399)
+		await step(899)
 		expect(cards().length).toBe(1)
 		await step(1)
 		expect(useToast().toast.value).toBeNull()
@@ -570,12 +569,12 @@ describe("ToastManagerBase", () => {
 		pointerAt(el, 120, 540)
 		mouse(el, "mouseleave")
 		pointerAt(document.body, 120, 400)
-		await step(2_000)
+		await step(500)
 		pointerAt(el, 120, 540)
 		await step(60_000)
 		expect(cards().length).toBe(1)
 		mouse(el, "mouseleave")
-		await step(3_399)
+		await step(899)
 		expect(cards().length).toBe(1)
 		await step(1)
 		expect(useToast().toast.value).toBeNull()
@@ -607,7 +606,7 @@ describe("ToastManagerBase", () => {
 		moveOnto(card() as HTMLElement)
 		await step(1_000)
 		wrapper.unmount()
-		await step(6_000)
+		await step(2_000)
 		expect(useToast().toast.value).toBeNull()
 	})
 

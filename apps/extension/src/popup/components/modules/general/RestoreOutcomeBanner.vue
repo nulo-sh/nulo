@@ -108,7 +108,7 @@ onBeforeUnmount(() => {
 <style module>
 /* Banner's own action, for the second action its single `action` prop cannot carry. */
 .action {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-accent);
 	background: transparent;
 	border: none;

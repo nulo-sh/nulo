@@ -10,6 +10,7 @@ import { createPxeOffscreen } from "@nulo/aztec-runtime/offscreen/entry"
 import { ProductionPxeFactory, createProvePhaseSink } from "@nulo/aztec-runtime/pxe"
 import { OFFSCREEN_READY_MESSAGE, OFFSCREEN_PONG, shouldRespondPong } from "@/wallet/utils/offscreen"
 import { isClientDisconnectRejection } from "@nulo/extension-messaging/errors"
+import { frameLogger } from "./frame-logger"
 
 if (import.meta.env.VITE_NULO_E2E_CSP_REPORT === "1") recordCspViolationsInPage()
 
@@ -27,7 +28,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 })
 
 // catch console
-const logger = documentLogger("offscreen")
+const logger = frameLogger(documentLogger("offscreen"))
 for (const [method, level] of consoleMethods) {
 	// biome-ignore lint/suspicious/noExplicitAny: dynamic global property + console varargs
 	;(self as any)[`nuloOn${method}`] = (...args: any[]) => {
@@ -84,7 +85,7 @@ const t0 = Date.now()
 const provePhases = createProvePhaseSink()
 await createPxeOffscreen({
 	profiles: new ProfileServiceClient(),
-	logger: documentLogger(),
+	logger: frameLogger(documentLogger()),
 	// E2E_PROVERLESS builds the proverless PXE (proverEnabled:false, no
 	// PrestoProver) — referenced only in this flag-gated branch so DCE
 	// strips it from prod. The controllable barrier lives SW-side (the

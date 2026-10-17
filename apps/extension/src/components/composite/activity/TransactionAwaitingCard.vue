@@ -6,6 +6,7 @@
  * (spinner here vs. status icon there) and the secondary-row content.
  */
 import { computed, type PropType } from "vue"
+import type { GlyphName } from "@nulo/design"
 import type { JobStage, ProveBackend } from "@nulo/wallet-core/jobs"
 import TransactionCardLayout from "./TransactionCardLayout.vue"
 
@@ -18,8 +19,8 @@ const props = defineProps({
 	 *  transfers leave this null and the chip is suppressed. */
 	originLabel: { type: String, default: null },
 	/** Activity icon. Defaults to "zap" for the generic dApp case; UI transfers
-	 *  pass the same arrow-narrow-up-right that the settled card uses. */
-	icon: { type: String, default: "zap" },
+	 *  pass the same "send" that the settled card uses. */
+	icon: { type: String as PropType<GlyphName>, default: "zap" },
 	amount: { type: String, default: null },
 	amountSymbol: { type: String, default: null },
 	/** Privacy-direction chip ("Private → Public" etc.). Suppressed when null —
@@ -46,6 +47,8 @@ const props = defineProps({
 	/** A queued send whose fee came out above its cap: this line replaces the stage line, and the row
 	 *  opens its review. */
 	reaskLine: { type: String, default: null },
+	/** The title names the function a dApp called: one line, cut at its end. */
+	oneLineTitle: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(["cancel", "focus", "review"])
@@ -67,6 +70,7 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 			:backend="backend"
 			:opens="focusable || Boolean(reaskLine && jobId)"
 			:actionCount="(focusable ? 1 : 0) + (showCancel ? 1 : 0)"
+			:oneLineTitle="oneLineTitle"
 			testId="tx-awaiting-card"
 			@activate="reaskLine ? emit('review', jobId) : emit('focus', jobId)"
 		>
@@ -76,7 +80,8 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 
 			<template v-if="transferTypeLabel || originLabel" #title-trailing>
 				<span :class="$style.title_sep">·</span>
-				<span :class="$style.transfer_chip">{{ transferTypeLabel || originLabel }}</span>
+				<span v-if="transferTypeLabel" :class="$style.transfer_chip">{{ transferTypeLabel }}</span>
+				<span v-else :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
 			</template>
 
 			<template #secondary>
@@ -134,6 +139,10 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 
 .transfer_chip {
 	composes: chip from "./activity-card.module.css";
+}
+
+.app_chip {
+	composes: app_chip from "./activity-card.module.css";
 }
 
 .action_btn {

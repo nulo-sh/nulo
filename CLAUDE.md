@@ -198,10 +198,11 @@ Six layers, low → high. A layer can import only from layers below it. Enforced
 
 ```
 [L0] design tokens     @nulo/design (token-contract.ts → generated tokens.ts + utilities.css,
-                       the 28 type roles included; hand-authored base.css + fonts).
+                       the 24 type roles included; hand-authored base.css + fonts).
                        Extension src/design/tokens.ts re-exports the package.
 
-[L1] core primitives   @nulo/design/core: Flex, Icon, MaterialIcon, Text (variant = a type role).
+[L1] core primitives   @nulo/design/core: Flex, Icon (a glyph of core/glyphs.ts), Text (variant =
+                       a type role).
                        No chrome.*.
 
 [L2] ui primitives     @nulo/design/ui — ALL migrated: Badge, Banner, BrutalistTitle, Button,
@@ -421,12 +422,16 @@ await configService.setValue("stealthMode", true)
 **Confirmation dialogs:**
 
 ```js
-cacheStore.confirm.title = "Confirm Action?"
-cacheStore.confirm.description = "Description text"
-cacheStore.confirm.confirm_text = "Yes"
-cacheStore.confirm.callback = () => { /* action */ }
-popupStore.open("confirm")
+const { requestConfirm } = useConfirm()
+requestConfirm({
+  title: "Confirm Action?",
+  description: "Description text",
+  confirm_text: "Yes",
+  callback: () => { /* action */ },
+})
 ```
+
+Each request replaces the whole previous one; never write into `cacheStore.confirm` (`useConfirm.test.ts` fails on a write to `cacheStore.confirm` or an `open("confirm")` outside the helper).
 
 **Toast notifications:**
 

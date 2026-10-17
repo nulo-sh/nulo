@@ -32,7 +32,8 @@ const formatTimestamp = (timestamp) => {
 				name="chevron"
 				size="12"
 				color="tertiary"
-				:style="{ transform: `rotate(${expanded ? '180' : '0'}deg)`, transition: 'transform 0.2s ease' }"
+				:rotate="expanded ? 270 : 90"
+				:class="$style.chevron"
 			/>
 		</button>
 
@@ -110,12 +111,12 @@ const formatTimestamp = (timestamp) => {
 }
 
 .detail_key {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
 .detail_value_mono {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 }
 
@@ -130,7 +131,7 @@ const formatTimestamp = (timestamp) => {
 }
 
 .raw_call_method {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 }
 
@@ -140,7 +141,7 @@ const formatTimestamp = (timestamp) => {
 }
 
 .error_key {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--red);
 }
 
@@ -152,5 +153,9 @@ const formatTimestamp = (timestamp) => {
 
 	color: var(--red);
 	word-break: break-word;
+}
+
+.chevron {
+	transition: transform 0.2s ease;
 }
 </style>

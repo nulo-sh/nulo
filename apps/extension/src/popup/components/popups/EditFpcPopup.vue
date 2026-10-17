@@ -226,9 +226,9 @@ watch(
 				data-testid="edit-fpc-header-row"
 				size="large"
 				:title="fpcToEdit?.name || fpcToEdit?.address"
-				:titleVariant="fpcToEdit?.name ? 'row-title' : 'data'"
+				:titleVariant="fpcToEdit?.name ? 'row-title' : 'meta'"
 				:description="typeDescription"
-				icon="fpc"
+				icon="fee"
 				raw
 			>
 				<template #right>
@@ -301,7 +301,7 @@ watch(
 	transition: all 0.2s var(--bezier);
 
 	&:hover {
-		fill: var(--txt-primary);
+		color: var(--txt-primary);
 	}
 
 	&.disabled {

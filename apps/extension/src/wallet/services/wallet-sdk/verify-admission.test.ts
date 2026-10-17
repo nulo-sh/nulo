@@ -25,7 +25,9 @@ const clock = {
 
 const EXPIRED_PAGE = "chrome-extension://nulo/src/popup/index.html#/windows/discover?requestId=w1&expired=1"
 
-function harness(navigation: () => Promise<void> = async () => {}) {
+/** `releaseOnServe` gives each served slot back unopened, which refunds no token, so only the rate
+ *  is under test. */
+function harness({ navigation = async () => {}, releaseOnServe = false } = {}) {
 	const closed: number[] = []
 	const releasedIds: string[] = []
 	const navigated: Array<[number, string]> = []
@@ -41,13 +43,14 @@ function harness(navigation: () => Promise<void> = async () => {}) {
 	})
 	const served: string[] = []
 	const expired: string[] = []
-	const reservations = new Map<string, WindowReservation | undefined>()
+	const reservations = new Map<string, WindowReservation>()
 	const admit = (id: string, over: Partial<AdmissionRequest> = {}) =>
 		gate.admit(
-			{ id, origin: ORIGIN, deadline: Date.now() + 55_000, needsWindow: false, consumesToken: true, ...over },
+			{ id, origin: ORIGIN, deadline: Date.now() + 55_000, consumesToken: true, ...over },
 			(r) => {
 				served.push(id)
 				reservations.set(id, r)
+				if (releaseOnServe) r.releaseIfUnstarted()
 			},
 			() => expired.push(id),
 		)
@@ -59,7 +62,7 @@ afterEach(() => vi.useRealTimers())
 
 describe("VerifyAdmissionGate — reconnect rate", () => {
 	test("a burst of 3 is admitted now, the 4th queues, the 8th is rejected", () => {
-		const { admit, served } = harness()
+		const { admit, served } = harness({ releaseOnServe: true })
 		const outcomes = Array.from({ length: 8 }, (_, i) => admit(`r${i + 1}`))
 		expect(outcomes.slice(0, RECONNECT_TOKENS)).toEqual(["now", "now", "now"])
 		expect(outcomes.slice(RECONNECT_TOKENS, RECONNECT_TOKENS + ADMISSION_QUEUE_PER_ORIGIN)).toEqual([
@@ -73,7 +76,7 @@ describe("VerifyAdmissionGate — reconnect rate", () => {
 	})
 
 	test("the refill serves the queue one per interval, FIFO, and the timer stops when it empties", () => {
-		const { gate, admit, served } = harness()
+		const { gate, admit, served } = harness({ releaseOnServe: true })
 		// Deadlines beyond the last refill so only the rate is under test.
 		for (let i = 1; i <= 6; i++) admit(`r${i}`, { deadline: Date.now() + 120_000 })
 		expect(gate.hasTimer).toBe(true)
@@ -87,7 +90,7 @@ describe("VerifyAdmissionGate — reconnect rate", () => {
 	})
 
 	test("a queued entry past its deadline is rejected at its turn, and the one behind it is served", () => {
-		const { admit, served, expired } = harness()
+		const { admit, served, expired } = harness({ releaseOnServe: true })
 		for (let i = 1; i <= 3; i++) admit(`r${i}`)
 		admit("short", { deadline: Date.now() + 5_000 })
 		admit("long")
@@ -97,7 +100,7 @@ describe("VerifyAdmissionGate — reconnect rate", () => {
 	})
 
 	test("origins are independent", () => {
-		const { admit } = harness()
+		const { admit } = harness({ releaseOnServe: true })
 		for (let i = 1; i <= 3; i++) admit(`a${i}`)
 		expect(admit("a4")).toBe("queued")
 		expect(admit("b1", { origin: "https://other.example" })).toBe("now")
@@ -105,12 +108,12 @@ describe("VerifyAdmissionGate — reconnect rate", () => {
 })
 
 describe("VerifyAdmissionGate — verify-window capacity", () => {
-	test("the 3rd handshake that needs a window queues even with tokens left; a closed window serves it", () => {
+	test("the 3rd handshake queues on window capacity even with tokens left; a closed window serves it", () => {
 		const { gate, admit, served, reservations } = harness()
-		const needs = { needsWindow: true, consumesToken: false }
-		expect(admit("w1", needs)).toBe("now")
-		expect(admit("w2", needs)).toBe("now")
-		expect(admit("w3", needs)).toBe("queued")
+		const noToken = { consumesToken: false }
+		expect(admit("w1", noToken)).toBe("now")
+		expect(admit("w2", noToken)).toBe("now")
+		expect(admit("w3", noToken)).toBe("queued")
 		expect(gate.windowsHeld(ORIGIN)).toBe(VERIFY_WINDOWS_PER_ORIGIN)
 		// A token refill admits nothing while both slots stay held.
 		vi.advanceTimersByTime(RECONNECT_REFILL_MS)
@@ -125,10 +128,10 @@ describe("VerifyAdmissionGate — verify-window capacity", () => {
 
 	test("a cancelled in-flight creation keeps its slot until the window arrives, then closes it", () => {
 		const { gate, admit, served, reservations } = harness()
-		const needs = { needsWindow: true, consumesToken: false }
-		admit("w1", needs)
-		admit("w2", needs)
-		admit("w3", needs)
+		const noToken = { consumesToken: false }
+		admit("w1", noToken)
+		admit("w2", noToken)
+		admit("w3", noToken)
 		const w1 = reservations.get("w1")!
 		w1.markInFlight()
 		gate.onSessionGone("w1")
@@ -146,14 +149,14 @@ describe("VerifyAdmissionGate — verify-window capacity", () => {
 
 	test("an unstarted reservation is freed on session termination and reclaimed past its grace", () => {
 		const { gate, admit, served, reservations } = harness()
-		const needs = { needsWindow: true, consumesToken: false }
-		admit("w1", needs)
-		admit("w2", needs)
-		admit("w3", needs)
+		const noToken = { consumesToken: false }
+		admit("w1", noToken)
+		admit("w2", noToken)
+		admit("w3", noToken)
 		gate.onSessionGone("w1")
 		expect(served).toEqual(["w1", "w2", "w3"])
 		expect(reservations.get("w1")!.status).toBe("released")
-		admit("w4", { ...needs, deadline: Date.now() + 120_000 })
+		admit("w4", { ...noToken, deadline: Date.now() + 120_000 })
 		expect(served).toHaveLength(3)
 		// w2 and w3 were never established: past the grace their slots come back and w4 is served.
 		vi.advanceTimersByTime(55_000 + RESERVATION_GRACE_MS + 1)
@@ -163,9 +166,9 @@ describe("VerifyAdmissionGate — verify-window capacity", () => {
 
 	test("a duplicate discovery id (dApp-controlled) is rejected, never a second slot", () => {
 		const { gate, admit } = harness()
-		const needs = { needsWindow: true, consumesToken: false }
-		expect(admit("dup", needs)).toBe("now")
-		expect(admit("dup", needs)).toBe("rejected")
+		const noToken = { consumesToken: false }
+		expect(admit("dup", noToken)).toBe("now")
+		expect(admit("dup", noToken)).toBe("rejected")
 		expect(gate.windowsHeld(ORIGIN)).toBe(1)
 	})
 
@@ -173,7 +176,7 @@ describe("VerifyAdmissionGate — verify-window capacity", () => {
 		const { gate } = harness()
 		const at = (origin: string, id: string) =>
 			gate.admit(
-				{ id, origin, deadline: Date.now() + 55_000, needsWindow: true, consumesToken: false },
+				{ id, origin, deadline: Date.now() + 55_000, consumesToken: false },
 				() => {},
 				() => {},
 			)
@@ -184,8 +187,8 @@ describe("VerifyAdmissionGate — verify-window capacity", () => {
 
 	test("a removal arriving before its creation resolves releases the slot on adoption", () => {
 		const { gate, admit, reservations } = harness()
-		const needs = { needsWindow: true, consumesToken: false }
-		admit("w1", needs)
+		const noToken = { consumesToken: false }
+		admit("w1", noToken)
 		const w1 = reservations.get("w1")!
 		w1.markInFlight()
 		// onRemoved fires while the create() promise is still pending: no reservation owns id 7 yet.
@@ -197,9 +200,9 @@ describe("VerifyAdmissionGate — verify-window capacity", () => {
 
 	test("a removal evicted from the buffer before adoption leaves that slot held — fail-closed, never over the cap", () => {
 		const { gate, admit, served, reservations } = harness()
-		const needs = { needsWindow: true, consumesToken: false }
-		admit("w1", needs)
-		admit("w2", needs)
+		const noToken = { consumesToken: false }
+		admit("w1", noToken)
+		admit("w2", noToken)
 		const w1 = reservations.get("w1")!
 		w1.markInFlight()
 		// w1's window closes before create() resolves, then 65 unrelated removals evict that event.
@@ -209,7 +212,7 @@ describe("VerifyAdmissionGate — verify-window capacity", () => {
 		// held (a third handshake queues) and the origin never gets a window past the cap.
 		expect(w1.adopt(11)).toBe("live")
 		expect(w1.status).toBe("opened")
-		admit("w3", needs)
+		admit("w3", noToken)
 		expect(served).toEqual(["w1", "w2"])
 		expect(gate.windowsHeld(ORIGIN)).toBe(VERIFY_WINDOWS_PER_ORIGIN)
 		// Termination does not free an opened slot either — only the (already lost) removal would.
@@ -220,8 +223,8 @@ describe("VerifyAdmissionGate — verify-window capacity", () => {
 
 	test("an in-flight creation past its deadline does not spin the drain timer", () => {
 		const { gate, admit, reservations } = harness()
-		const needs = { needsWindow: true, consumesToken: false }
-		admit("w1", needs)
+		const noToken = { consumesToken: false }
+		admit("w1", noToken)
 		reservations.get("w1")!.markInFlight()
 		vi.advanceTimersByTime(55_000 + RESERVATION_GRACE_MS + 1)
 		// The reservation is in-flight, not timer-reclaimed, so no wake is armed for it.
@@ -231,7 +234,7 @@ describe("VerifyAdmissionGate — verify-window capacity", () => {
 
 	test("a reservation backs exactly one creation: a second markInFlight is refused", () => {
 		const { admit, reservations } = harness()
-		admit("w1", { needsWindow: true, consumesToken: false })
+		admit("w1", { consumesToken: false })
 		const w1 = reservations.get("w1")!
 		expect(w1.markInFlight()).toBe(true)
 		expect(w1.markInFlight()).toBe(false)
@@ -239,10 +242,10 @@ describe("VerifyAdmissionGate — verify-window capacity", () => {
 
 	test("an opened window keeps its slot through termination until it is removed", () => {
 		const { gate, admit, served, reservations } = harness()
-		const needs = { needsWindow: true, consumesToken: false }
-		admit("w1", needs)
-		admit("w2", needs)
-		admit("w3", needs)
+		const noToken = { consumesToken: false }
+		admit("w1", noToken)
+		admit("w2", noToken)
+		admit("w3", noToken)
 		const w1 = reservations.get("w1")!
 		w1.markInFlight()
 		w1.adopt(11)
@@ -254,13 +257,13 @@ describe("VerifyAdmissionGate — verify-window capacity", () => {
 })
 
 describe("VerifyAdmissionGate — a connect window on standby", () => {
-	const needs = { needsWindow: true, consumesToken: false }
+	const noToken = { consumesToken: false }
 
 	test("an attached window holds its slot until it is removed, and the gate never closes it", () => {
 		const { gate, admit, served, reservations, closed, releasedIds } = harness()
-		admit("w1", needs)
-		admit("w2", needs)
-		admit("w3", needs)
+		admit("w1", noToken)
+		admit("w2", noToken)
+		admit("w3", noToken)
 		const w1 = reservations.get("w1")!
 		expect(w1.attach(41)).toBe(true)
 		expect(w1.status).toBe("standby")
@@ -275,7 +278,7 @@ describe("VerifyAdmissionGate — a connect window on standby", () => {
 
 	test("a window removed before its attach fails the attach and frees the slot", () => {
 		const { gate, admit, reservations, closed, releasedIds } = harness()
-		admit("w1", needs)
+		admit("w1", noToken)
 		// Closed while its Allow waited for a slot: no reservation knew the id, so the gate buffered it.
 		gate.windowRemoved(41)
 		const w1 = reservations.get("w1")!
@@ -288,7 +291,7 @@ describe("VerifyAdmissionGate — a connect window on standby", () => {
 
 	test("attach binds only an unstarted slot", () => {
 		const { admit, reservations } = harness()
-		admit("w1", needs)
+		admit("w1", noToken)
 		const w1 = reservations.get("w1")!
 		w1.markInFlight()
 		expect(w1.attach(41)).toBe(false)
@@ -306,9 +309,9 @@ describe("VerifyAdmissionGate — a connect window on standby", () => {
 
 	test.each(exits)("%s on a standby slot closes its window once and holds the slot until the removal", (_, exit, page) => {
 		const { gate, admit, served, reservations, closed, releasedIds, navigated } = harness()
-		admit("w1", needs)
-		admit("w2", needs)
-		admit("w3", { ...needs, deadline: Date.now() + 200_000 })
+		admit("w1", noToken)
+		admit("w2", noToken)
+		admit("w3", { ...noToken, deadline: Date.now() + 200_000 })
 		const w1 = reservations.get("w1")!
 		w1.attach(41, page)
 		// In flight, w2 is never timer-reclaimed: only w1 can free a slot for w3.
@@ -329,10 +332,10 @@ describe("VerifyAdmissionGate — a connect window on standby", () => {
 
 	/** w1 attached with its expired page, w2 in flight (never timer-reclaimed), w3 queued behind both. */
 	const expiring = (navigation?: () => Promise<void>) => {
-		const h = harness(navigation)
-		h.admit("w1", needs)
-		h.admit("w2", needs)
-		h.admit("w3", { ...needs, deadline: Date.now() + 200_000 })
+		const h = harness({ navigation })
+		h.admit("w1", noToken)
+		h.admit("w2", noToken)
+		h.admit("w3", { ...noToken, deadline: Date.now() + 200_000 })
 		const w1 = h.reservations.get("w1")!
 		w1.attach(41, EXPIRED_PAGE)
 		h.reservations.get("w2")!.markInFlight()
@@ -379,9 +382,9 @@ describe("VerifyAdmissionGate — a connect window on standby", () => {
 
 	test("a request that expires while still queued has no window: nothing is shown or closed", async () => {
 		const { gate, admit, expired, closed, navigated, tombstoned, reservations } = harness()
-		admit("w1", needs)
-		admit("w2", needs)
-		admit("w3", { ...needs, deadline: Date.now() + 1_000 })
+		admit("w1", noToken)
+		admit("w2", noToken)
+		admit("w3", { ...noToken, deadline: Date.now() + 1_000 })
 		reservations.get("w1")!.attach(41, EXPIRED_PAGE)
 		reservations.get("w2")!.attach(42, EXPIRED_PAGE)
 		await vi.advanceTimersByTimeAsync(1_001)
@@ -394,7 +397,7 @@ describe("VerifyAdmissionGate — a connect window on standby", () => {
 
 	test("claimStandby hands the window over once, and markInFlight refuses a standby slot", () => {
 		const { admit, reservations } = harness()
-		admit("w1", needs)
+		admit("w1", noToken)
 		const w1 = reservations.get("w1")!
 		expect(w1.claimStandby()).toBeUndefined()
 		w1.attach(41)
@@ -408,7 +411,7 @@ describe("VerifyAdmissionGate — a connect window on standby", () => {
 
 	test("a claimed window removed before its adoption frees the slot, and the adoption aborts", () => {
 		const { gate, admit, reservations, releasedIds } = harness()
-		admit("w1", needs)
+		admit("w1", noToken)
 		const w1 = reservations.get("w1")!
 		w1.attach(41)
 		w1.claimStandby()
@@ -421,8 +424,8 @@ describe("VerifyAdmissionGate — a connect window on standby", () => {
 
 	test("abandoned is false while unstarted or standby, and true once closing or released", () => {
 		const { gate, admit, reservations } = harness()
-		admit("w1", needs)
-		admit("w2", needs)
+		admit("w1", noToken)
+		admit("w2", noToken)
 		const w1 = reservations.get("w1")!
 		expect(w1.abandoned).toBe(false)
 		w1.attach(41)
@@ -440,7 +443,7 @@ describe("VerifyAdmissionGate — a connect window on standby", () => {
 		const { gate, admit, reservations, releasedIds } = harness()
 		const ids = ["unstarted", "gone", "standby", "closing", "failed", "opened", "claimed", "expired"]
 		// One origin each, so no slot cap interferes.
-		for (const id of ids) admit(id, { ...needs, origin: `https://${id}.example` })
+		for (const id of ids) admit(id, { ...noToken, origin: `https://${id}.example` })
 		const r = (id: string) => reservations.get(id)!
 		r("unstarted").releaseIfUnstarted()
 		gate.windowRemoved(40)

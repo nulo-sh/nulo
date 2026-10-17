@@ -2,13 +2,13 @@
 
 .title_sep {
 	composes: type--row-title from global;
-	font-size: 13px;
+	font-size: 14px;
 	color: var(--nulo-secondary);
 	user-select: none;
 }
 
 .chip {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	flex-shrink: 0;
 	white-space: nowrap;
 
@@ -16,4 +16,12 @@
 	background: var(--nulo-surface-low);
 	border: 1px solid var(--hairline-soft);
 	padding: 1px 4px;
+}
+
+/* Never shrinks below its cap: the title gives way first, so a short name stays whole. */
+.app_chip {
+	composes: chip;
+	max-width: 96px;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }

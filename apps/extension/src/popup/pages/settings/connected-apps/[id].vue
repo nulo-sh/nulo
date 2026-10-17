@@ -27,7 +27,9 @@ import { formatCaipAccount, parseCaipAccount } from "@/wallet/utils/caip"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
+import { useConfirm } from "@/composables/useConfirm"
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
 
 /** Helpers */
 import { formatSessionExpiry, parseSessionParams } from "@/popup/components/modules/settings/connected-apps/connected-app-helpers"
@@ -36,13 +38,9 @@ import { authorizationsEffective, coversAnyContract } from "@nulo/wallet-bridge"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
-import { useCacheStore } from "@/stores/cache.store"
-import { usePopupStore } from "@/stores/popup.store"
 import { copyWithToast } from "@/utils/clipboard"
 import { trimAddress } from "@/utils/string"
 const appStore = useAppStore()
-const cacheStore = useCacheStore()
-const popupStore = usePopupStore()
 
 const route = useRoute()
 const router = useRouter()
@@ -69,8 +67,6 @@ const expiryFormatted = computed(() => formatSessionExpiry(session.value?.expiry
 const hasSessionAllowances = computed(() => methods.value.length > 0 || events.value.length > 0)
 
 const grantedCapabilities = computed(() => session.value?.capabilityGrants ?? [])
-
-const isTrusted = computed(() => session.value?.trustedVerification ?? false)
 
 const grantedCaps = computed(() => grantedCapabilities.value.map((g) => g.capability))
 // An On consents to the breadth the row shows, so the write carries it.
@@ -146,13 +142,14 @@ async function fetchAccounts() {
 
 const handleDropSession = () => {
 	if (!session.value) return
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.confirm_text = "Yes, disconnect"
-	cacheStore.confirm.description = `Disconnect "${session.value.dappMetadata?.name ?? "this dApp"}"?`
-	cacheStore.confirm.callback = async () => {
-		await dappSessionService.deleteDappSession(session.value.id)
-	}
-	popupStore.open("confirm")
+	requestConfirm({
+		confirm_color: "red",
+		confirm_text: "Yes, disconnect",
+		description: `Disconnect "${session.value.dappMetadata?.name ?? "this dApp"}"?`,
+		callback: async () => {
+			await dappSessionService.deleteDappSession(session.value.id)
+		},
+	})
 }
 
 const handleCopyAddress = (target) => {
@@ -163,11 +160,6 @@ const getAccountAlias = (acc) => {
 	if (!session.value?.accountAliases) return acc.name
 	const caip = formatCaipAccount(acc.chainId, acc.address)
 	return session.value.accountAliases[caip] || acc.name
-}
-
-const toggleTrust = async () => {
-	if (!session.value) return
-	await dappSessionService.setTrustedVerification(session.value.id, !isTrusted.value)
 }
 
 const setAuthorizations = async (on) => {
@@ -217,7 +209,7 @@ onBeforeUnmount(() => {
 		<template #trailing>
 			<Dropdown>
 				<button type="button" :class="$style.icon_btn" aria-label="Session actions">
-					<MaterialIcon name="more_vert" :size="18" color="secondary" />
+					<Icon name="more" :rotate="90" :size="18" color="secondary" />
 				</button>
 
 				<template #popup>
@@ -233,14 +225,14 @@ onBeforeUnmount(() => {
 
 		<!-- Identity block -->
 		<Flex align="center" gap="12" wide>
-			<Icon v-if="session.loadingLogo" :loading="true" name="dapp" size="40" color="tertiary" />
+			<Icon v-if="session.loadingLogo" :loading="true" name="app" size="40" color="tertiary" />
 			<img
 				v-else-if="session.dappMetadata.logoBlobUrl"
 				:src="session.dappMetadata.logoBlobUrl"
 				:class="$style.logo"
 				alt=""
 			/>
-			<Icon v-else name="dapp" size="40" color="tertiary" />
+			<Icon v-else name="app" size="40" color="tertiary" />
 
 			<Flex direction="column" gap="4" wide>
 				<Text variant="name" color="primary" :class="$style.name_size">
@@ -263,11 +255,10 @@ onBeforeUnmount(() => {
 				<SettingItem
 					v-for="acc in accounts"
 					:key="`${acc.chainId}:${acc.address}`"
-					materialIcon="account_balance_wallet"
 					:title="getAccountAlias(acc)"
 					titleVariant="name"
 					:description="`${getChainName(acc.chainId).toUpperCase()} · ${trimAddress(acc.address, 6, 4, '...')}`"
-					descriptionVariant="data"
+					descriptionVariant="meta"
 					raw
 					data-testid="connected-app-account-row"
 				>
@@ -292,20 +283,20 @@ onBeforeUnmount(() => {
 			<SectionLabel label="Session allowances" />
 
 			<Flex v-if="sessionChainName" align="start" gap="4">
-				<Text variant="label" color="secondary">Network:</Text>
+				<Text variant="label-section" color="secondary">Network:</Text>
 				<Text variant="value" color="secondary" :style="{ lineHeight: '1.2' }">
 					{{ sessionChainName }}
 				</Text>
 			</Flex>
 
 			<Flex align="start" gap="4">
-				<Text variant="label" color="secondary">Methods:</Text>
-				<Text variant="data" color="secondary" :style="{ lineHeight: '1.2' }">{{ methods.join(", ") }}</Text>
+				<Text variant="label-section" color="secondary">Methods:</Text>
+				<Text variant="meta" color="secondary" :style="{ lineHeight: '1.2' }">{{ methods.join(", ") }}</Text>
 			</Flex>
 
 			<Flex align="start" gap="4">
-				<Text variant="label" color="secondary">Events:</Text>
-				<Text v-if="events.length" variant="data" color="secondary" :style="{ lineHeight: '1.2' }">
+				<Text variant="label-section" color="secondary">Events:</Text>
+				<Text v-if="events.length" variant="meta" color="secondary" :style="{ lineHeight: '1.2' }">
 					{{ events.join(", ") }}
 				</Text>
 				<Text v-else variant="value" color="tertiary" :style="{ lineHeight: '1.2' }">no allowances given</Text>
@@ -352,12 +343,7 @@ onBeforeUnmount(() => {
 		</Flex>
 
 		<!-- Connection check -->
-		<DappSessionVerification
-			v-if="verificationEmojis"
-			:emojis="verificationEmojis"
-			:isTrusted="isTrusted"
-			@toggleTrust="toggleTrust"
-		/>
+		<DappSessionVerification v-if="verificationEmojis" :emojis="verificationEmojis" />
 	</SettingsPageShell>
 </template>
 
@@ -382,7 +368,7 @@ onBeforeUnmount(() => {
 	transition: all 0.2s var(--bezier);
 
 	&:hover {
-		fill: var(--txt-primary);
+		color: var(--txt-primary);
 	}
 }
 </style>

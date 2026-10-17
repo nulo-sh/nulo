@@ -124,7 +124,7 @@ test.skipIf(!hasConfig)(
 			visible: true,
 			timeout: 30_000,
 		})
-		// A success toast closes itself after six seconds; it would sit over the next popup's field.
+		// A success toast closes itself after two seconds; it would sit over the next popup's field.
 		await waitForToastGone(page, "Token added", 10_000)
 
 		await replaceInputValue(page, '[data-testid="holdings-search"]', NO_CONTRACT)

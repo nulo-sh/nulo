@@ -62,6 +62,7 @@ import type { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { fingerprintOperation } from "./operation-fingerprint"
 import type { OperationPlanner } from "./operation-planner"
 import type { PreviewSnapshots } from "./preview-snapshots"
+import type { QueuedFeeAnswers } from "./queued-fee-cap"
 import type { SendSequencer } from "./send-sequencer"
 import { fingerprintFeeSettings, type TransferEstimateReuse, type TransferEstimateReuseEntry } from "./transfer-estimate-reuse"
 import { ExecutionService } from "./service"
@@ -1379,5 +1380,59 @@ describe("ExecutionService composition — a send queued against a fee cap asks 
 		expect(await settled(h, run)).toBeInstanceOf(JobCancelledError)
 		expect(await stageOf(h, id)).toBe("cancelled")
 		expect(h.proveTx).not.toHaveBeenCalled()
+	})
+})
+
+describe("ExecutionService composition — a held dApp send's question answered in its window", () => {
+	const REASK = { fee: "21000000000000000", cap: "16000000000000000", payer: { type: "fj" as const, isProtocol: false } }
+
+	/** A dApp send's real record asking `reask`, its registered cancel, and the send's waiter. */
+	async function heldSend(window: () => Promise<boolean>) {
+		const h = await makeHarness()
+		const fence = await h.captureExecutionFence()
+		const id = (await h.lane.beginJournal(NETWORK.id, ACCOUNT.toString(), DAPP_ORIGIN, [], fence)) as string
+		await h.lane.commitJournal(id, { stage: "simulating" })
+		await h.lane.commitJournal(id, { stage: "queued", reask: REASK })
+		const controller = new AbortController()
+		h.lane.registerInFlight(id, fence.session, controller)
+		const internals = h.service as unknown as {
+			queuedFeeAnswers: QueuedFeeAnswers
+			askInWindow(question: unknown): Promise<void>
+			interactionOperations(): unknown
+		}
+		const answer = internals.queuedFeeAnswers.wait(id, REASK.fee, controller.signal, 60_000)
+		const askFeeAgain = vi.fn(window)
+		vi.spyOn(internals, "interactionOperations").mockReturnValue({ askFeeAgain })
+		const ask = (reask = REASK) =>
+			internals.askInWindow({ interactionId: "i-1", index: 0, journalId: id, reask, deadline: Date.now() + 60_000 })
+		return { ...h, id, controller, answer, askFeeAgain, ask }
+	}
+
+	test("an accept resumes the send at exactly the figure asked, the record still asking", async () => {
+		const h = await heldSend(async () => true)
+		await h.ask()
+		expect(await h.answer).toBe("accepted")
+		expect(await stageOf(h, h.id)).toBe("queued")
+		expect(h.controller.signal.aborted).toBe(false)
+	})
+
+	test.each([
+		["a refusal", async () => false],
+		["a window that closed or never opened", async () => Promise.reject(new Error("window closed"))],
+	])("%s cancels the send", async (_case, window) => {
+		const h = await heldSend(window)
+		await h.ask()
+		expect(await h.answer).toBe("aborted")
+		expect(await stageOf(h, h.id)).toBe("cancelled")
+		expect(h.controller.signal.aborted).toBe(true)
+	})
+
+	test("a refusal of a figure the send no longer asks cancels nothing", async () => {
+		const h = await heldSend(async () => false)
+		await h.ask({ ...REASK, fee: "25000000000000000" })
+		expect(await stageOf(h, h.id)).toBe("queued")
+		expect(h.controller.signal.aborted).toBe(false)
+		h.controller.abort()
+		expect(await h.answer).toBe("aborted")
 	})
 })

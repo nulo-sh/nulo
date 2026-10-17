@@ -68,6 +68,7 @@ const STUBS = {
 			"txStatus",
 			"txHash",
 			"to",
+			"oneLineTitle",
 		],
 	},
 }
@@ -96,14 +97,14 @@ const dappTransferTx = {
 }
 
 const mountCard = (tx: Record<string, unknown>, props: Record<string, unknown> = {}) =>
-	mount(TransactionCard, { props: { tx, ...props }, global: { stubs: STUBS, components: { RowAction } } })
+	mount(TransactionCard, { props: { tx, ...props } as never, global: { stubs: STUBS, components: { RowAction } } })
 
 describe("modules/activity/TransactionCard (settled)", () => {
 	test.each([
-		["mined", { status: TxStatus.Proposed, executionResult: TxExecutionResult.Success }, "check-circle", "txt-success"],
-		["reverted", { status: TxStatus.Proposed, executionResult: TxExecutionResult.AppLogicReverted }, "close-circle", "txt-danger"],
-		["dropped", { status: TxStatus.Dropped }, "close-circle", "txt-danger"],
-		["pending", { status: TxStatus.Pending }, "clock-circle", "gray"],
+		["mined", { status: TxStatus.Proposed, executionResult: TxExecutionResult.Success }, "square-check", "txt-success"],
+		["reverted", { status: TxStatus.Proposed, executionResult: TxExecutionResult.AppLogicReverted }, "square-cross", "txt-danger"],
+		["dropped", { status: TxStatus.Dropped }, "square-cross", "txt-danger"],
+		["pending", { status: TxStatus.Pending }, "square-half", "gray"],
 	])("a %s tx's status icon fills with its state's status text token", (_label, over, name, fill) => {
 		const icon = mountCard({ ...dappTransferTx, ...over }).find(`[data-testid="activity-status-icon"][data-name="${name}"]`)
 		expect(icon.attributes("data-color")).toBe(fill)
@@ -116,6 +117,51 @@ describe("modules/activity/TransactionCard (settled)", () => {
 		// originLabel from tx.origin.name — must NOT be silently dropped by
 		// the `||` template when the call shape ALSO produces a transferType.
 		expect(w.text()).toContain("example.dapp.io")
+	})
+
+	describe("the title row, with a dApp's function and host as the wire carries them", () => {
+		const HOST = "staging-nemi-interface.nemi-e65.workers.dev"
+		const dappCallTx = {
+			hash: TX_HASH,
+			status: TxStatus.Proposed,
+			calls: [{ contract: "0xamm", method: "swap_exact_tokens_for_tokens_supporting_fee_on_transfer_tokens", args: [] }],
+			origin: { type: OriginType.DAPP, name: HOST },
+		}
+		const layout = (w: ReturnType<typeof mountCard>) => w.findComponent(STUBS.TransactionCardLayout)
+
+		test("a call names the dApp and no direction: its function title is cut to one line and the host sits in the app chip", () => {
+			const w = mountCard(dappCallTx)
+			expect(layout(w).props("title")).toBe("Swap Exact Tokens For Tokens Supporting Fee On Transfer Tokens")
+			expect(layout(w).props("oneLineTitle")).toBe(true)
+			expect(w.find('[data-testid="activity-app-chip"]').text()).toBe(HOST)
+			expect(w.html()).not.toMatch(/chips/)
+		})
+
+		test("a transfer from the popup is never cut and has no app chip", () => {
+			const { origin: _origin, ...popupTransfer } = dappTransferTx
+			const w = mountCard(popupTransfer)
+			expect(layout(w).props("oneLineTitle")).toBe(false)
+			expect(w.find('[data-testid="activity-app-chip"]').exists()).toBe(false)
+			expect(w.find('[data-testid="activity-direction-chip"]').text()).toBe("Private → Public")
+			expect(w.html()).not.toMatch(/app_slot/)
+		})
+
+		test("a dApp's transfer keeps its symbol whole and groups the direction with a slot that holds the app chip", () => {
+			const w = mountCard({ ...dappTransferTx, origin: { type: OriginType.DAPP, name: HOST } })
+			expect(layout(w).props("oneLineTitle")).toBe(false)
+			const slot = w.find('[data-testid="activity-app-chip"]').element.parentElement
+			expect(slot?.className).toMatch(/app_slot/)
+			expect(slot?.textContent).toBe(HOST)
+			const group = slot?.parentElement
+			expect(group?.className).toMatch(/chips/)
+			expect([...(group?.children ?? [])]).toEqual([w.find('[data-testid="activity-direction-chip"]').element, slot])
+			expect(group?.textContent).toBe(`Private → Public${HOST}`)
+		})
+
+		test("a dApp's transfer drops the spaces its name leads with, which nothing else would collapse there", () => {
+			const w = mountCard({ ...dappTransferTx, origin: { type: OriginType.DAPP, name: "  NEMI" } })
+			expect(w.find('[data-testid="activity-app-chip"]').element.textContent).toBe("NEMI")
+		})
 	})
 
 	describe("a dApp's mint, as the wire carries it", () => {
@@ -220,7 +266,7 @@ describe("TransactionCard fiat (D2 activity rows)", () => {
 	])("a priced transfer of a listed token with %s; the title keeps the symbol", async (_label, hasDecimals, want) => {
 		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1.0, fetchedAt: Date.now(), providerUpdatedAt: null } }
 		const tokens = [{ contract: TEST_USDC, symbol: "cUSD", decimals: hasDecimals ? 6 : 0, hasDecimals }]
-		const w = mount(TransactionCard, { props: { tx: mkTransferTx(TEST_USDC), tokens }, global: { stubs: STUBS } })
+		const w = mount(TransactionCard, { props: { tx: mkTransferTx(TEST_USDC), tokens } as never, global: { stubs: STUBS } })
 		await flushPromises()
 		expect({
 			title: w.find(".title").text(),

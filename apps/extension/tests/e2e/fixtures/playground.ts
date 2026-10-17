@@ -11,7 +11,8 @@
 import type { Page, Target } from "puppeteer"
 import { inject } from "vitest"
 import { EXTENSION_SCHEME, newPage } from "./browser"
-import { clickByTestId, patchPagePolling, replaceInputValue, type ExtensionContext } from "./extension"
+import { clickByTestId, patchPagePolling, replaceInputValue } from "./dom"
+import type { ExtensionContext } from "./extension"
 import { dumpDeepDiagnostics } from "./journal"
 
 export const PLAYGROUND_TEST_URL = (() => {
@@ -62,6 +63,29 @@ export async function selectPgBundle(page: Page, bundle: PgBundle): Promise<void
 /** Set a playground input value via the v-model-aware `replaceInputValue`. */
 export async function setPgInput(page: Page, name: string, value: string): Promise<void> {
 	await replaceInputValue(page, `[data-testid="pg-input-${name}"]`, value)
+}
+
+/** Set each input in order through {@link setPgInput}; keys are input names, as for `setPgInput`. */
+export async function setPgInputs(page: Page, values: Record<string, string>): Promise<void> {
+	for (const [name, value] of Object.entries(values)) await setPgInput(page, name, value)
+}
+
+/** Make `address` the acting account. Its option exists only once that account is granted, and the
+ *  select is read back after the playground's re-render, so a value it dropped throws here. */
+export async function selectPgAccount(page: Page, address: string): Promise<void> {
+	const select = '[data-testid="pg-select-account"]'
+	await page.waitForSelector(`${select} option[value="${address}"]`, { timeout: 30_000 })
+	const selected = await page.evaluate(
+		({ sel, addr }: { sel: string; addr: string }) => {
+			const el = document.querySelector<HTMLSelectElement>(sel)
+			if (!el) throw new Error("pg-select-account not present")
+			el.value = addr
+			el.dispatchEvent(new Event("change", { bubbles: true }))
+			return document.querySelector<HTMLSelectElement>(sel)?.value
+		},
+		{ sel: select, addr: address },
+	)
+	if (selected !== address) throw new Error(`selectPgAccount: the select reads ${selected}, not ${address}`)
 }
 
 /** Select `bundle` and click `requestCapabilities`. A scoped bundle reads its contract from the
@@ -149,6 +173,19 @@ export async function waitForPgResult(page: Page, method: string, fromSeq: numbe
 		else parsed.errorJson = json
 	}
 	return parsed
+}
+
+/** The tx hash of an ok result: `grantPublicAuthwit` resolves to a bare hash string, `sendTx`
+ *  (NO_WAIT) to `{ txHash, ... }`. Any other shape throws; there is no tolerance. */
+export function txHashOf(resultJson: unknown): string {
+	const candidate =
+		typeof resultJson === "string"
+			? resultJson.replace(/^"(.*)"$/, "$1")
+			: (resultJson as { txHash?: unknown } | null | undefined)?.txHash
+	if (typeof candidate !== "string" || !candidate.startsWith("0x")) {
+		throw new Error(`cannot extract tx hash from result: ${(JSON.stringify(resultJson) ?? "undefined").slice(0, 2_000)}`)
+	}
+	return candidate
 }
 
 /** PER-FIELD cap on each dumped payload (the result/error field and the

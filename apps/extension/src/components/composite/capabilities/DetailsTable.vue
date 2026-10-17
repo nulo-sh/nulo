@@ -100,16 +100,16 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 								:class="$style.copy"
 								@click="emit('copy', stripWireControl(entry.row.address ?? ''))"
 							>
-								<MaterialIcon name="content_copy" :size="12" :class="$style.copy_glyph" aria-hidden="true" />
+								<Icon name="copy" :size="12" :class="$style.copy_glyph" aria-hidden="true" />
 							</RowAction>
 						</span>
 
 						<template v-for="[column, has] in COLUMNS" :key="column">
-							<MaterialIcon v-if="has(entry.row)" name="check" :size="15" :class="$style.yes" aria-hidden="true" />
+							<Icon v-if="has(entry.row)" name="check" :size="15" :class="$style.yes" aria-hidden="true" />
 							<span v-else :class="$style.no" aria-hidden="true" />
 						</template>
 
-						<MaterialIcon name="chevron_right" :size="14" :class="$style.chevron" aria-hidden="true" />
+						<Icon name="chevron" :size="14" :class="$style.chevron" aria-hidden="true" />
 					</div>
 
 					<div v-if="opened.has(entry.key)" data-testid="cap-details-fns" :class="$style.fns">
@@ -145,13 +145,13 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 
 .grid {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) 54px 34px 54px 14px;
+	grid-template-columns: minmax(0, 1fr) 66px 34px 66px 14px;
 	align-items: center;
 	column-gap: 4px;
 }
 
 .head {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	padding-bottom: 6px;
 
 	color: var(--nulo-secondary);
@@ -162,7 +162,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 }
 
 .sub {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	padding: 10px 0 5px;
 	border-bottom: 1px solid var(--hairline-soft);
 
@@ -170,6 +170,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 }
 
 .row {
+	user-select: none;
 	position: relative;
 	min-height: 30px;
 	border-bottom: 1px solid var(--hairline-soft);
@@ -189,7 +190,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 	composes: type--name from global;
 	overflow: hidden;
 
-	font-size: 12px;
+	font-size: 13px;
 	white-space: nowrap;
 	text-overflow: ellipsis;
 	color: var(--txt-primary);
@@ -204,7 +205,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 }
 
 .address_text {
-	composes: type--data from global;
+	composes: type--meta from global;
 }
 
 /* The 24px box centres a 12px glyph: pulled in by the difference, the glyph sits 6px from the text. */
@@ -212,8 +213,8 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 	margin: -6px;
 }
 
-/* Two classes, so the icon's own color utility never decides. */
-.address .copy_glyph {
+/* Three classes, so RowAction's hover colour never decides. */
+.address .copy .copy_glyph {
 	color: var(--nulo-outline);
 }
 
@@ -254,16 +255,16 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 }
 
 .fn {
-	composes: type--data from global;
+	composes: type--meta from global;
 	display: grid;
-	grid-template-columns: 58px minmax(0, 1fr);
+	grid-template-columns: 66px minmax(0, 1fr);
 	gap: 8px;
 
 	line-height: 1.5;
 }
 
 .fn_label {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	padding-top: 1px;
 
 	color: var(--nulo-secondary);

@@ -24,7 +24,7 @@ import {
 	type BackupSelection,
 	collectRestoreErrors,
 	normalizeAllIds,
-	openEncryptedBackup,
+	openSelection,
 	readBackupFile,
 } from "@/utils/full-backup-helpers"
 import { BACKUP_SCHEMA_VERSION_FIELD, COMPAT_EPOCH_FIELD, isSupportedCompatEpoch } from "@/wallet/services/backup/backup-migration-registry"
@@ -297,6 +297,10 @@ function sanitizedBackupName(raw: unknown): string | null {
 	return cleaned.length > 0 ? cleaned : null
 }
 
+/** The profile name an untrusted backup body embeds, for display only. */
+const embeddedBackupName = (backup: unknown) =>
+	sanitizedBackupName((backup as { data?: { profile?: { name?: string } } } | null)?.data?.profile?.name)
+
 /** The post-token slice clients, constructed up-front for the whole-loop finally. */
 function buildSliceClients(): Array<{ name: string; client: SliceRestoreClient }> {
 	return [
@@ -548,17 +552,14 @@ async function runPickBackupFile(state: ImportRefs, opts: UseFullBackupImportOpt
 			opts.fillError("full_backup", parseError.title, parseError.tooltip)
 			return
 		}
-		if (selection.type === "unknown" || (selection.type === "plain" && !selection.profileType)) {
+		if (selection.kind === "unreadable" || (selection.kind === "plain" && !selection.profileType)) {
 			opts.fillError("full_backup", UNRECOGNIZED_BACKUP.title, UNRECOGNIZED_BACKUP.message)
 			return
 		}
 		// Surface the backup-embedded profile name as soon as it's available so the parent
 		// page can prefill the Profile-name input. Plain backups carry it in the parsed
 		// JSON; encrypted backups only expose it after `decryptBackup`, handled there.
-		if (selection.type === "plain") {
-			const parsed = selection.backup as { data?: { profile?: { name?: string } } } | null
-			state.parsedBackupName.value = sanitizedBackupName(parsed?.data?.profile?.name)
-		}
+		if (selection.kind === "plain") state.parsedBackupName.value = embeddedBackupName(selection.backup)
 		state.restoreStatus.value = null
 		opts.password.value = ""
 		opts.repeatedPassword.value = ""
@@ -575,29 +576,20 @@ async function runPickBackupFile(state: ImportRefs, opts: UseFullBackupImportOpt
 async function runDecryptBackup(state: ImportRefs, opts: UseFullBackupImportOptions) {
 	if (!state.decryptionPassword.value) return
 	// Snapshot the selection this decrypt belongs to (the stale fences live in
-	// openEncryptedBackup — a late publication must not resurrect a replaced selection).
+	// openSelection — a late publication must not resurrect a replaced selection).
 	const target = state.selectedBackup.value
 	if (!target) return
 	try {
-		const opened = await openEncryptedBackup(
-			target.backup as string,
-			state.decryptionPassword.value,
-			() => state.selectedBackup.value !== target,
-		)
+		const opened = await openSelection(target, state.decryptionPassword.value, () => state.selectedBackup.value !== target)
 		if (opened.kind === "stale") return
 		// The helper fences internally, but its resolution yields a microtask before this
 		// continuation — a queued re-pick in that window must not be overwritten (same
 		// await-boundary class as useProfileBootstrap's network write).
 		if (state.selectedBackup.value !== target) return
-		const backupObject = opened.backupObject
-		state.selectedBackup.value = {
-			...target,
-			backup: backupObject,
-			profileType: backupObject?.data?.profile?.type ?? null,
-		}
+		state.selectedBackup.value = opened.selection
 		// Encrypted backups only expose the embedded name AFTER decrypt succeeds. Surface it
 		// for the parent's prefill watcher (same sanitization rationale as pickBackupFile).
-		state.parsedBackupName.value = sanitizedBackupName(backupObject?.data?.profile?.name)
+		state.parsedBackupName.value = embeddedBackupName(opened.selection.backup)
 		opts.clearError()
 	} catch {
 		if (state.selectedBackup.value !== target) return

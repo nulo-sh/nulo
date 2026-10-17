@@ -134,7 +134,7 @@ onBeforeUnmount(() => {
 		<div :class="$style.section">
 			<span :class="$style.section_label">Profile to delete</span>
 			<ItemsContainer flat>
-				<SettingItem :title="appStore.profile?.name ?? ''" titleVariant="name" icon="user" raw />
+				<SettingItem :title="appStore.profile?.name ?? ''" titleVariant="name" raw />
 			</ItemsContainer>
 		</div>
 

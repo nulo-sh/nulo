@@ -270,7 +270,7 @@ watch(
 		</Flex>
 
 		<Flex direction="column" align="center" gap="32" :class="$style.main">
-			<MaterialIcon name="lock" :size="48" color="primary" :class="$style.lock_icon" />
+			<Icon name="lock" :size="48" color="primary" :class="$style.lock_icon" />
 
 			<AuthProfilePill :name="appStore.profile?.name ?? ''" @click="popupStore.open('select_profile')" />
 
@@ -438,7 +438,7 @@ watch(
 }
 
 .reset_link {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 
 	background: transparent;

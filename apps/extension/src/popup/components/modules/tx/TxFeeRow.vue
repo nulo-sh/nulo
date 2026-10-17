@@ -38,10 +38,8 @@ const expanded = defineModel({ type: Boolean, default: false })
 					name="chevron"
 					size="10"
 					color="tertiary"
-					:style="{
-						transform: `rotate(${expanded ? '180' : '0'}deg)`,
-						transition: 'transform 0.2s ease',
-					}"
+					:rotate="expanded ? 270 : 90"
+					:class="$style.chevron"
 				/>
 			</Flex>
 			<Flex align="center" gap="6">
@@ -83,12 +81,12 @@ const expanded = defineModel({ type: Boolean, default: false })
 
 <style module>
 .detail_key {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
 .detail_value_mono {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 }
 
@@ -123,12 +121,12 @@ const expanded = defineModel({ type: Boolean, default: false })
 }
 
 .fee_grid_key {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
 .fee_grid_num {
-	composes: type--data from global;
+	composes: type--meta from global;
 	text-align: right;
 }
 
@@ -148,5 +146,9 @@ const expanded = defineModel({ type: Boolean, default: false })
 .fee_savings {
 	composes: type--meta from global;
 	color: var(--green);
+}
+
+.chevron {
+	transition: transform 0.2s ease;
 }
 </style>

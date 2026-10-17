@@ -13,7 +13,7 @@ const emit = defineEmits(["click"])
 
 <style module>
 .skipLink {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	background: transparent;
 	border: none;
 	color: var(--txt-secondary);

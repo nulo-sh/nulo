@@ -254,7 +254,7 @@ onBeforeUnmount(() => {
 						:class="$style.hero_link"
 					>
 						<span>View on {{ explorerName }}</span>
-						<Icon name="external-link" size="10" color="tertiary" />
+						<Icon name="open" size="10" color="tertiary" />
 					</a>
 					<span
 						v-else-if="received.txHash"
@@ -501,7 +501,7 @@ onBeforeUnmount(() => {
 }
 
 .detail_value_mono {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 }
 
@@ -515,7 +515,7 @@ onBeforeUnmount(() => {
 }
 
 .fee_show {
-	composes: type--data from global;
+	composes: type--meta from global;
 	padding: 0;
 	border: 0;
 	background: none;

@@ -46,7 +46,7 @@ export const NoSwitch: Story = {
 
 export const AnyContractChip: Story = {
 	args: {
-		icon: "play_circle",
+		icon: "play",
 		title: "Run simulations on any contract",
 		subOn: "Results can include your private balances.",
 		subOff: undefined,

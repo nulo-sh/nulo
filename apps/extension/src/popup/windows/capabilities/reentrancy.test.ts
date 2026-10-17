@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { MaterialIcon, RowAction, Toggle } from "@nulo/design"
+import { Icon, RowAction, Toggle } from "@nulo/design"
 import { flushPromises, mount } from "@vue/test-utils"
 import { ref } from "vue"
 
@@ -128,7 +128,7 @@ describe("capabilities window — approve latch", () => {
 		resolveInteractionMock.mockImplementationOnce(() => new Promise((r) => (resolveGrant = r)))
 		const w = mount(CapabilitiesWindow, {
 			global: {
-				components: { MaterialIcon, RowAction, Toggle },
+				components: { RowAction, Toggle, Icon },
 				stubs: {
 					...STUBS,
 					PermissionRow: false,

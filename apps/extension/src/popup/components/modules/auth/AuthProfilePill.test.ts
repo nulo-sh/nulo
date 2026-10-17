@@ -4,7 +4,7 @@ import AuthProfilePill from "./AuthProfilePill.vue"
 
 const STUBS = {
 	Flex: { template: "<div><slot /></div>" },
-	MaterialIcon: { template: '<i :data-name="name" />', props: ["name", "size", "color"] },
+	Icon: { template: '<i :data-name="name" />', props: ["name", "size", "color"] },
 }
 
 const factory = (props: Record<string, unknown> = {}) => mount(AuthProfilePill, { props, global: { stubs: STUBS } })
@@ -33,7 +33,7 @@ describe("AuthProfilePill", () => {
 
 	test("renders the chevron + person icons", () => {
 		const w = factory({ name: "x" })
-		expect(w.find('[data-name="person"]').exists()).toBe(true)
-		expect(w.find('[data-name="chevron_right"]').exists()).toBe(true)
+		expect(w.find('[data-name="user"]').exists()).toBe(true)
+		expect(w.find('[data-name="chevron"]').exists()).toBe(true)
 	})
 })

@@ -1,5 +1,5 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
-<script setup>
+<script setup lang="ts">
 /**
  * Settled phase of an activity card. Wraps `TransactionCardLayout` so its
  * field positions match the in-flight phase (`TransactionAwaitingCard`) —
@@ -7,12 +7,15 @@
  * content swap from spinner+status-text to status-icon+hash-and-chips.
  */
 /** Vendor */
+import type { GlyphName } from "@nulo/design"
+import type { PropType } from "vue"
 
 /** Components */
 import TransactionCardLayout from "@/components/composite/activity/TransactionCardLayout.vue"
 
 /** Services */
-import { TxStatus, TxExecutionResult } from "@/wallet/services/transaction/client"
+import type { TokenInfo } from "@/wallet/services/token/client"
+import { type Tx, TxStatus, TxExecutionResult } from "@/wallet/services/transaction/client"
 
 /** Utils */
 import { STATUS_ICON_FILL } from "@/components/composite/activity/status-icon-fill"
@@ -29,12 +32,10 @@ import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
 
 const props = defineProps({
-	tx: {
-		type: Object,
-	},
+	tx: { type: Object as PropType<Tx>, required: true },
 	/** The profile and chain's tokens: a mint shows an amount only for a token in this list, and a
 	 *  transfer none for a listed token whose decimals the wallet does not know. */
-	tokens: { type: Array, default: () => [] },
+	tokens: { type: Array as PropType<TokenInfo[]>, default: () => [] },
 	/** The route the row opens. */
 	to: { type: String, default: undefined },
 })
@@ -50,8 +51,8 @@ const figureUnknown = computed(() => {
 	return listed !== undefined && knownDecimals(listed) === null
 })
 
-const icon = computed(() => {
-	if (type.value === "transfer") return "arrow-narrow-up-right"
+const icon = computed<GlyphName>(() => {
+	if (type.value === "transfer") return "send"
 	if (type.value === "mint") return "faucet"
 	return "zap"
 })
@@ -62,13 +63,15 @@ const isMined = computed(() => {
 })
 const isPending = computed(() => props.tx.status === TxStatus.Pending)
 const isDropped = computed(() => props.tx.status === TxStatus.Dropped)
-const isReverted = computed(() => isMined.value && !!props.tx.executionResult && props.tx.executionResult !== TxExecutionResult.Success)
+const isReverted = computed(
+	() => isMined.value && props.tx.executionResult !== undefined && props.tx.executionResult !== TxExecutionResult.Success,
+)
 const isSuccess = computed(() => isMined.value && !isReverted.value)
 
-const statusIcon = computed(() => {
-	if (isReverted.value || isDropped.value) return "close-circle"
-	if (isSuccess.value) return "check-circle"
-	return "clock-circle"
+const statusIcon = computed<GlyphName>(() => {
+	if (isReverted.value || isDropped.value) return "square-cross"
+	if (isSuccess.value) return "square-check"
+	return "square-half"
 })
 
 const statusColor = computed(() => {
@@ -105,6 +108,11 @@ const transferTypeLabel = computed(() => {
 })
 
 const originLabel = computed(() => getOriginLabel(props.tx.origin))
+/** The empty inline that leads the slot's chip keeps a space after it from collapsing, as a line's
+ *  first space does in every other chip. */
+const slotLabel = computed(() => originLabel.value?.replace(/^[\t\n\f\r ]+/, ""))
+/** A dApp's call with no direction is titled by the function it called. */
+const oneLineTitle = computed(() => Boolean(originLabel.value) && !transferTypeLabel.value)
 const hashSlice = computed(() => {
 	if (!props.tx.hash) return null
 	return `${props.tx.hash.slice(0, 4)}...${props.tx.hash.slice(-4)}`
@@ -152,6 +160,7 @@ onBeforeUnmount(() => {
 		:txTransferTypeLabel="transferTypeLabel"
 		:txStatus="txStatusAttr"
 		:txHash="props.tx.hash"
+		:oneLineTitle="oneLineTitle"
 	>
 		<template #badge>
 			<Icon :name="statusIcon" size="12" :color="STATUS_ICON_FILL[statusColor]" :class="$style.status_icon" data-testid="activity-status-icon" />
@@ -169,15 +178,21 @@ onBeforeUnmount(() => {
 			     dApp-initiated transfer sets both — render both so the
 			     dApp identity isn't silently dropped. -->
 			<span :class="$style.title_sep">·</span>
-			<span v-if="transferTypeLabel" :class="$style.chip">{{ transferTypeLabel }}</span>
-			<span v-if="originLabel" :class="$style.chip">{{ originLabel }}</span>
+			<span v-if="transferTypeLabel && originLabel" :class="$style.chips">
+				<span :class="$style.chip" data-testid="activity-direction-chip">{{ transferTypeLabel }}</span>
+				<span :class="$style.app_slot">
+					<span :class="$style.app_chip" data-testid="activity-app-chip">{{ slotLabel }}</span>
+				</span>
+			</span>
+			<span v-else-if="transferTypeLabel" :class="$style.chip" data-testid="activity-direction-chip">{{ transferTypeLabel }}</span>
+			<span v-else :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
 		</template>
 
 		<template #secondary>
 			<span v-if="hashSlice && explorerUrl" :class="$style.hash_group">
 				<span data-testid="activity-row-hash" :class="$style.hash">{{ hashSlice }}</span>
 				<RowAction :href="explorerUrl" label="Open in block explorer" data-testid="activity-row-explorer" :class="$style.explorer">
-					<Icon name="external-link" size="10" color="tertiary" />
+					<Icon name="open" size="10" color="tertiary" />
 				</RowAction>
 			</span>
 			<span v-else-if="hashSlice" data-testid="activity-row-hash" :class="$style.hash">{{ hashSlice }}</span>
@@ -209,11 +224,52 @@ onBeforeUnmount(() => {
 }
 
 .chip {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 	background: var(--nulo-surface-low);
 	border: 1px solid var(--hairline-soft);
 	padding: 1px 4px;
+}
+
+.app_chip {
+	composes: app_chip from "../../../../components/composite/activity/activity-card.module.css";
+}
+
+.chips {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+
+/* The slot takes the room left and the chip inside hugs its name up to its cap. A zero basis takes no
+ * share of the shrink, so the direction chip breaks only once the slot is at its floor: the chip's
+ * border, padding and one "…" at the chip's 10px, so the chip never draws empty. */
+.app_slot {
+	display: flex;
+	flex: 1 1 0;
+	min-width: 19px;
+}
+
+/* Below the shared cap in this row only; two classes outrank the shared chip's `flex-shrink: 0`. */
+.app_slot > .app_chip {
+	flex-shrink: 1;
+}
+
+/* A dApp transfer's two chips keep 10px semibold: at 11px they outgrow the row, and the app chip shows
+ * only "…" where its name was drawn. */
+.chips > .chip,
+.app_slot > .app_chip {
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+}
+
+/* A line's first character is clipped, never ellipsed; an empty atomic inline in its place lets the
+ * floor show the "…" alone instead of a letter cut at the border. */
+.app_slot > .app_chip::before {
+	content: "";
+	display: inline-block;
 }
 
 /* The 24px box overhangs the 14px secondary row and the 10px glyph, so the row keeps its rhythm. */

@@ -1,6 +1,9 @@
-<script setup>
+<script setup lang="ts">
+/** Vendor */
+import type { GlyphName, TextColorName } from "@nulo/design"
+import type { PropType } from "vue"
+
 /** Components */
-import StaleIcon from "./StaleIcon.vue"
 import StaleNetworkConfirm from "./StaleNetworkConfirm.vue"
 
 /** Composables */
@@ -11,7 +14,8 @@ import { neverOpened, STALE_NETWORK_KEY } from "@/composables/useStaleNetwork"
 
 /** Utils */
 import { managers } from "@/utils/core"
-import { takeoverScreen } from "@/popup/stale-takeover"
+import { type TakeoverScreen, takeoverScreen } from "@/popup/stale-takeover"
+import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
 import * as copy from "./copy"
 
 /** Store */
@@ -20,7 +24,7 @@ import { usePopupStore } from "@/stores/popup.store"
 
 const props = defineProps({
 	/** The view to render: the active network's, or the one whose reset runs. */
-	view: { type: Object, required: true },
+	view: { type: Object as PropType<StaleNetworkView>, required: true },
 })
 
 const appStore = useAppStore()
@@ -28,10 +32,10 @@ const popupStore = usePopupStore()
 
 const { lock, dispose: disposeLock } = useLockWallet(managers.profile)
 const { activate } = useNetworkActivation({
-	persist: (id) => managers.network.setActiveNetwork(id),
-	read: () => managers.network.getActiveNetwork(),
+	persist: (id) => managers.network!.setActiveNetwork(id),
+	read: () => managers.network!.getActiveNetwork(),
 })
-const stale = inject(STALE_NETWORK_KEY)
+const stale = inject(STALE_NETWORK_KEY)!
 
 const router = useRouter()
 
@@ -40,7 +44,25 @@ const screen = computed(() =>
 	takeoverScreen(props.view, stale.running.value?.networkId === props.view.networkId, stale.nodeDown.value === props.view.networkId),
 )
 
-const MARK_COLORS = { check: "--txt-primary", cross: "--orange", swap: "--txt-warning" }
+type Mark = "check" | "cross" | "swap"
+type BoxLine = { text: string; mark?: Mark; number?: number; testid?: string }
+type Action = { text: string; testid: string; action: () => unknown }
+type Content = {
+	eyebrow: { icon: GlyphName; text: string }
+	title: string
+	body: string
+	notice?: string
+	box?: { label?: string; lines: BoxLine[] }
+	note?: string
+	primary: Action
+	secondary?: Action
+}
+
+const MARKS: Record<Mark, { icon: GlyphName; color: TextColorName }> = {
+	check: { icon: "check", color: "primary" },
+	cross: { icon: "close", color: "orange" },
+	swap: { icon: "swap", color: "txt-warning" },
+}
 
 const openNetworks = () => router.push("/popup/settings/networks")
 const start = () => stale.start(props.view)
@@ -49,17 +71,17 @@ const goToPending = async () => {
 	if (target) await activate(target)
 }
 
-const SWITCH = { text: copy.SWITCH_NETWORK, testid: "stale-network-switch", action: openNetworks }
+const SWITCH: Action = { text: copy.SWITCH_NETWORK, testid: "stale-network-switch", action: openNetworks }
 
-const accountLine = (view) =>
+const accountLine = (view: StaleNetworkView): BoxLine[] =>
 	view.accounts.length > 0 ? [{ mark: "check", text: copy.accountLine(view.name, view.accounts.length, view.cause.addressesMoved) }] : []
 
-const causeEyebrow = (view) => ({
-	icon: "reset",
+const causeEyebrow = (view: StaleNetworkView): Content["eyebrow"] => ({
+	icon: "refresh",
 	text: (view.cause.networkReset ? copy.networkReset(view.name) : copy.newAddresses(view.name)).eyebrow,
 })
 
-const SCREENS = {
+const SCREENS: Partial<Record<TakeoverScreen, (view: StaleNetworkView) => Content>> = {
 	"network-reset": (view) => cause(view),
 	"new-addresses": (view) => cause(view),
 	blocked: (view) => {
@@ -89,9 +111,9 @@ const SCREENS = {
 		}
 	},
 	"already-added": (view) => {
-		const c = copy.alreadyAdded(view.name, view.heldBy.name)
+		const c = copy.alreadyAdded(view.name, view.heldBy!.name)
 		return {
-			eyebrow: { icon: "reset", text: c.eyebrow },
+			eyebrow: { icon: "refresh", text: c.eyebrow },
 			title: c.title,
 			body: c.body,
 			box: { label: c.label, lines: c.steps.map((text, i) => ({ number: i + 1, text })) },
@@ -100,7 +122,7 @@ const SCREENS = {
 		}
 	},
 	"one-at-a-time": (view) => {
-		const c = copy.oneAtATime(view.name, view.otherPending.name)
+		const c = copy.oneAtATime(view.name, view.otherPending!.name)
 		return {
 			eyebrow: causeEyebrow(view),
 			title: c.title,
@@ -125,10 +147,12 @@ const SCREENS = {
 
 /** A1, A2, or both causes: A1 with the address line and no notice. A network the profile never
  *  opened lists only what changes: its node, since it holds no account, token or history. */
-function cause(view) {
+function cause(view: StaleNetworkView): Content {
 	const { networkReset } = view.cause
-	const c = networkReset ? copy.networkReset(view.name) : copy.newAddresses(view.name)
-	const node = view.switchToSeedNode ? [{ mark: "swap", text: copy.nodeLine(view.name), testid: "stale-network-node-line" }] : []
+	const c: { title: string; body: string; notice?: string } = networkReset ? copy.networkReset(view.name) : copy.newAddresses(view.name)
+	const node: BoxLine[] = view.switchToSeedNode
+		? [{ mark: "swap", text: copy.nodeLine(view.name), testid: "stale-network-node-line" }]
+		: []
 	return {
 		eyebrow: causeEyebrow(view),
 		title: c.title,
@@ -140,7 +164,7 @@ function cause(view) {
 				...accountLine(view),
 				...node,
 				{ mark: "check", text: copy.KEEP_LINE },
-				...(neverOpened(view) ? [] : [{ mark: "cross", text: copy.removeLine(view.name) }]),
+				...(neverOpened(view) ? [] : [{ mark: "cross", text: copy.removeLine(view.name) } satisfies BoxLine]),
 			],
 		},
 		note: networkReset ? copy.NO_PHRASE_NOTE : undefined,
@@ -161,7 +185,7 @@ const steps = computed(() => {
 	const { reset, accounts, cause, name } = props.view
 	const purged = reset?.purged ?? false
 	const progress = copy.progress(name)
-	const out = [{ text: purged ? progress.removed : progress.removing, done: purged }]
+	const out: { text: string; done: boolean }[] = [{ text: purged ? progress.removed : progress.removing, done: purged }]
 	if (!purged) return out
 	const doneCount = reset?.doneCount ?? 0
 	accounts.forEach((account, i) => {
@@ -208,7 +232,7 @@ onBeforeUnmount(() => {
 		</Flex>
 		<div role="list" :class="$style.steps">
 			<div v-for="step in steps" :key="step.text" role="listitem" :class="$style.step" data-testid="stale-progress-step">
-				<StaleIcon v-if="step.done" name="check" :size="16" color="--txt-success" />
+				<Icon v-if="step.done" name="check" :size="16" color="txt-success" aria-hidden="true" />
 				<Spinner v-else size="16" color="--txt-primary" />
 				<span :class="step.done ? $style.step_text : $style.step_text_current">{{ step.text }}</span>
 			</div>
@@ -216,19 +240,19 @@ onBeforeUnmount(() => {
 		<span :class="$style.note">{{ copy.progress(view.name).footer }}</span>
 	</Flex>
 
-	<Flex v-else direction="column" :class="$style.screen" data-testid="stale-network-takeover" :data-screen="screen">
+	<Flex v-else-if="content" direction="column" :class="$style.screen" data-testid="stale-network-takeover" :data-screen="screen">
 		<div :class="$style.top_bar">
 			<button type="button" :class="$style.chip" data-testid="stale-network-chip" @click="openNetworks">
 				{{ copy.chipLabel(view.name) }}<span :class="$style.chip_square" />
 			</button>
 			<button type="button" :class="$style.chip" data-testid="stale-network-lock" aria-label="Lock wallet" @click="lock">
-				<StaleIcon name="lock" :size="12" />LOCK
+				<Icon name="lock" :size="12" aria-hidden="true" />LOCK
 			</button>
 		</div>
 
 		<div :class="[$style.content, density && $style[density]]">
 			<div :class="$style.eyebrow">
-				<StaleIcon :name="content.eyebrow.icon" :size="16" color="--txt-warning" />
+				<Icon :name="content.eyebrow.icon" :size="16" color="txt-warning" aria-hidden="true" />
 				<span :class="$style.eyebrow_text">{{ content.eyebrow.text }}</span>
 			</div>
 			<h1 :class="$style.title" data-testid="stale-network-title">{{ content.title }}</h1>
@@ -238,7 +262,7 @@ onBeforeUnmount(() => {
 				<span v-if="content.box.label" :class="$style.box_label">{{ content.box.label }}</span>
 				<div v-for="line in content.box.lines" :key="line.text" :class="$style.line" :data-testid="line.testid">
 					<span v-if="line.number" :class="$style.number">{{ line.number }}</span>
-					<StaleIcon v-else :name="line.mark" :size="14" :color="MARK_COLORS[line.mark]" :class="$style.mark" />
+					<Icon v-else-if="line.mark" :name="MARKS[line.mark].icon" :size="14" :color="MARKS[line.mark].color" :class="$style.mark" aria-hidden="true" />
 					<span>{{ line.text }}</span>
 				</div>
 			</div>
@@ -281,7 +305,7 @@ onBeforeUnmount(() => {
 }
 
 .chip {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -404,7 +428,7 @@ onBeforeUnmount(() => {
 }
 
 .number {
-	composes: type--data from global;
+	composes: type--meta from global;
 	flex: none;
 	width: 14px;
 	text-align: center;

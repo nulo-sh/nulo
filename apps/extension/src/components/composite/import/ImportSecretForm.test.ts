@@ -1,4 +1,4 @@
-import { Flex, Icon, Input, MaterialIcon, Text } from "@nulo/design"
+import { Flex, Icon, Input, Text } from "@nulo/design"
 import { mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, describe, expect, it } from "vitest"
 import { expectMaskToggle, expectNativeAttrs, nativeInput, pasteInto } from "../../../../tests/helpers/credential-pins"
@@ -8,7 +8,6 @@ const stubs = {
 	Flex: { template: "<div><slot /></div>" },
 	Text: { template: "<span><slot /></span>" },
 	Icon: { props: ["name"], template: '<i :data-name="name"></i>' },
-	MaterialIcon: { template: "<i></i>" },
 	Tooltip: { template: "<div data-tooltip><slot /><slot name='content' /></div>" },
 	Transition: { template: "<div><slot /></div>" },
 	Input: {
@@ -103,7 +102,7 @@ describe("ImportSecretForm — credential controls, real Input", () => {
 		const w = mount(ImportSecretForm, {
 			props: baseProps(),
 			attachTo: document.body,
-			global: { components: { Flex, Icon, Input, MaterialIcon, Text } },
+			global: { components: { Flex, Icon, Input, Text } },
 		})
 		mounted.push(w)
 		return w

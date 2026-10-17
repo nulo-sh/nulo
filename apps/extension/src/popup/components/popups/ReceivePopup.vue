@@ -48,7 +48,7 @@ watch(
 		<PopupCard :displaceIdx="depth">
 			<Flex wide align="center" direction="column" gap="24" :class="$style.wrapper">
 				<Flex align="center" gap="6">
-					<Icon name="arrow-bottom-circle" size="16" color="primary" />
+					<Icon name="receive" size="16" color="primary" />
 					<Text variant="title-page" color="primary"> Receive </Text>
 				</Flex>
 

@@ -317,7 +317,7 @@ as a substitute for closing through the UI). `waitForPopup` matches a NEW `#/win
 URL because every interaction URL carries a unique `requestId`; `callExpectingNoPopup` diffs targets
 by identity because plain popup pages change URL under a lock redirect.
 
-`clickByTestId` calls `el.click()` in the page (`fixtures/extension.ts:1451`), which an SVG element
+`clickByTestId` calls `el.click()` in the page (`fixtures/dom.ts`), which an SVG element
 does not have, so an icon-only `<Icon>` target throws inside the wait and times out: press it with
 `pointerClick`.
 
@@ -586,6 +586,12 @@ the pattern.
 
 ### Harness behaviours that look like product bugs
 
+- **A mouse drag can select nothing.** Chrome 152 starts no selection from a press between a
+  glyph's middle and about half a pixel right of it, and a drag of one single move leaves a bare
+  caret: press a quarter in from a character's outer edge and move in steps
+  (`navigation.test.ts`'s `textEdge` and `dragSelect`). Firefox 153 keeps the text a drag ends on
+  even inside a `user-select: none` control, so a selection test bans only the controls a drag
+  crosses (`FIREFOX.md`).
 - **Chrome's created windows keep the launch size.** The launch passes `--window-size=400,600`
   (`fixtures/browser/chrome.ts:40`); under it `windows.create` honours `left` and `top` but not
   `width` or `height` (popups 400×600, normal windows 500×600), while `windows.update` honours
@@ -627,7 +633,7 @@ the pattern.
   for it on a fresh, unfunded account fails; History's root always renders
   (`implementations-plan/archive/approval-scope-follow/plan.md#empty-feed`).
 - **`page.waitForSelector` with a plain CSS selector resolves to `null`, never a handle.**
-  `patchPagePolling` swaps it for a `waitForFunction` poll (`fixtures/extension.ts:1074-1078`),
+  `patchPagePolling` swaps it for a `waitForFunction` poll (`fixtures/dom.ts`),
   so a probe that reads a box from its result reads nothing: take the element with `page.$`
   after the wait.
 - **The e2e price seed covers `usd-coin` only**, while the wallet also asks for `aztec`
@@ -694,10 +700,11 @@ left. `network/inflight-call-background-death.test.ts` is the model: in flight, 
 background (heartbeat-dependent, seconds budget), idle against an attached one (rejected under the
 5 s heartbeat interval, so only the `secure-message` branch can have answered).
 
-A stage that can outlast the browser's idle reaper (a prover-ON canary) checks `backgroundAlive(ext)`
-first: an absent background is already the restart, so it proceeds to recovery with a warning; a
-present one gets the real kill (`restartBackground` in the two canaries). Called with no worker
-alive, Chrome's helper's own 15s `waitForTarget` throws — nothing in it wakes one.
+A stage that can outlast the browser's idle reaper (a prover-ON canary) calls
+`stopBackgroundIfAlive(ext)` (`fixtures/browser`): an absent background is already the restart, so
+it returns false with a warning and the stage proceeds to recovery; a present one gets the real
+kill. `stopBackground` called with no worker alive throws on Chrome (its own 15s `waitForTarget`)
+— nothing in it wakes one.
 
 Stage gates are `chrome.storage.session` rendezvous compiled in by the proverless build, each with
 its own protocol: `proof-gate.ts` is presence-only and parks a tx right before `pxe.proveTx`;
@@ -743,6 +750,11 @@ teardown's `pkill` matches by prefix), then run with `NULO_E2E_ARTIFACT_RUN=1 EX
 and without `NULO_E2E_MIGRATION_FIXTURE` or `NULO_E2E_CSP_REPORT`. It runs guarded like a source run;
 `shipped-token-list.test.ts` is its one launch that reaches the live Testnet node, so a dRPC outage
 reds that spec, by name, and nothing else.
+
+The PR lanes check out the PR's head SHA (`github.event.pull_request.head.sha`), not the merge ref:
+reproduce a red PR lane at that SHA. A branch whose last trunk merge fell between a UI change and its
+e2e fix stays red there while its merge ref passes; merge the trunk again. A shard runs larger files
+first when vitest has no results cache, so an edit that grows a file moves it in the shard's order.
 
 Two cores is the amplifier: races that live in a 100ms window on a workstation widen to seconds. Run
 the loop alone on the host, freeze the tree between rounds, and validate the fix under the SAME

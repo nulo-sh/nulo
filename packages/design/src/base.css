@@ -35,36 +35,6 @@
 	src: url("./fonts/JetBrainsMono-latin.woff2") format("woff2");
 }
 
-@font-face {
-	font-family: "Material Symbols Outlined";
-	font-style: normal;
-	font-weight: 100 700;
-	font-display: block;
-	src: url("./fonts/MaterialSymbolsOutlined.woff2") format("woff2");
-}
-
-.material-symbols-outlined {
-	/* biome-ignore lint/a11y/useGenericFontNames: icon font — a generic fallback would render ligature text, not icons (verbatim from the prior _base.scss) */
-	font-family: "Material Symbols Outlined";
-	font-weight: normal;
-	font-style: normal;
-	font-size: 24px;
-	line-height: 1;
-	letter-spacing: normal;
-	text-transform: none;
-	display: inline-block;
-	white-space: nowrap;
-	word-wrap: normal;
-	direction: ltr;
-	-webkit-font-smoothing: antialiased;
-	-moz-osx-font-smoothing: grayscale;
-	font-variation-settings:
-		"FILL" 0,
-		"wght" 300,
-		"GRAD" 0,
-		"opsz" 24;
-}
-
 :root[data-has-nav="true"] {
 	--nav-clearance: 96px;
 }
@@ -280,6 +250,16 @@ body {
 	text-rendering: optimizeLegibility;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+}
+
+/* Text is selectable; a control is not, so a drag or a double-click across one never takes its
+   label. A control without one of these semantics sets it on its class. */
+button,
+[role="button"],
+[role="tab"],
+[role="switch"],
+[role="checkbox"],
+[role="option"] {
 	user-select: none;
 }
 

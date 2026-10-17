@@ -21,17 +21,15 @@ import type { ILogger } from "@nulo/wallet-core/logger"
 import { prepareClick, type VirtualAuthenticator } from "../fixtures/browser"
 import {
 	clickByTestId,
-	type ExtensionContext,
 	expectNameFieldPrefill,
 	expectNoNameField,
-	openOnboarding,
-	openPopup,
+	pickFileByTestId,
 	waitForHash,
 	withTimeoutMessage,
-	pickFileByTestId,
-	waitForServiceReady,
-} from "../fixtures/extension"
-import { expectNewProfileNamed, readProfileNames } from "../fixtures/helpers"
+} from "../fixtures/dom"
+import type { ExtensionContext } from "../fixtures/extension"
+import { expectNewProfileNamed, readProfileNames } from "../fixtures/profiles"
+import { openOnboarding, openPopup, waitForServiceReady } from "../fixtures/wallet-pages"
 import { refusePasskeyStep } from "../fixtures/passkey"
 import { readSwLogTrail } from "../fixtures/journal"
 import {

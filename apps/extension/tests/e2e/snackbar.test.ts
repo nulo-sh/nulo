@@ -1,4 +1,4 @@
-/** In a real browser: the snack's geometry, its 6 s life, the single-card replacement and the pointer
+/** In a real browser: the snack's geometry, its 2 s life, the single-card replacement and the pointer
  *  hold need layout, real timers and a real pointer. */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
@@ -44,6 +44,16 @@ async function settledSnack(page: Page): Promise<Rect> {
 	return page.$eval(SNACK, (card) => {
 		const { left, top, bottom, width, height } = card.getBoundingClientRect()
 		return { left, top, bottom, width, height, innerWidth: window.innerWidth, innerHeight: window.innerHeight }
+	})
+}
+
+/** The card's box once its enter slide ends, read while it may still be sliding: a pointer aimed
+ *  at its centre lands on the card whatever part of the 20px slide is left. */
+async function restingSnack(page: Page): Promise<{ x: number; y: number }> {
+	return page.$eval(SNACK, (card) => {
+		const box = card.getBoundingClientRect()
+		const slide = new DOMMatrixReadOnly(getComputedStyle(card).transform).m42
+		return { x: box.left + box.width / 2, y: box.top - slide + box.height / 2 }
 	})
 }
 
@@ -301,7 +311,7 @@ async function tabUntil(page: Page, testid: string, inside: string, limit: numbe
 	return { visited, escaped }
 }
 
-test("a copy success on Home spans the viewport above the nav and closes itself after 6 s", async ({ registeredExtension }) => {
+test("a copy success on Home spans the viewport above the nav and closes itself after 2 s", async ({ registeredExtension }) => {
 	const page = await openHome(registeredExtension)
 	await stubClipboard(page, "resolve")
 	await recordSnackLife(page)
@@ -315,15 +325,15 @@ test("a copy success on Home spans the viewport above the nav and closes itself 
 
 	const { appeared } = await snackLife(page)
 	expect(appeared).toHaveLength(1)
-	await pageClockPast(page, appeared[0] ?? 0, 5_500)
+	await pageClockPast(page, appeared[0] ?? 0, 1_500)
 	expect(await cardCount(page)).toBe(1)
-	await waitForSnackGone(page, 6_500)
+	await waitForSnackGone(page, 2_500)
 	const life = await snackLife(page)
 	expect(life.removed).toHaveLength(1)
 	const lived = (life.removed[0] ?? 0) - (life.appeared[0] ?? 0)
 	console.log(`[snackbar] the success lived ${Math.round(lived)}ms`)
-	expect(lived).toBeGreaterThanOrEqual(5_500)
-	expect(lived).toBeLessThanOrEqual(6_500)
+	expect(lived).toBeGreaterThanOrEqual(1_500)
+	expect(lived).toBeLessThanOrEqual(2_500)
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
@@ -354,19 +364,20 @@ test("the pointer resting on the snack keeps it; after leaving, it goes within i
 
 	await clickByTestId(page, COPY)
 	await waitForToast(page, "Address is copied", 5_000, { kind: "success" })
-	const rect = await settledSnack(page)
-	await page.mouse.move(rect.left + rect.width / 2, rect.top + rect.height / 2, { steps: 5 })
+	const centre = await restingSnack(page)
+	await page.mouse.move(centre.x, centre.y, { steps: 5 })
 	await sleep(8_000)
 	expect(await cardCount(page)).toBe(1)
 
-	await page.mouse.move(rect.left + rect.width / 2, rect.top - 40, { steps: 5 })
-	await waitForSnackGone(page, 6_500)
+	const rect = await settledSnack(page)
+	await page.mouse.move(centre.x, rect.top - 40, { steps: 5 })
+	await waitForSnackGone(page, 2_500)
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 60_000)
 
-test("a success that opens under a still pointer closes itself after 6 s, though the pointer rests on it", async ({
+test("a success that opens under a still pointer closes itself after 2 s, though the pointer rests on it", async ({
 	registeredExtension,
 }) => {
 	const page = await openHome(registeredExtension)
@@ -397,14 +408,14 @@ test("a success that opens under a still pointer closes itself after 6 s, though
 	)
 	expect(under.covered).toBe(true)
 
-	await waitForSnackGone(page, 7_000)
+	await waitForSnackGone(page, 3_000)
 	const life = await snackLife(page)
 	const events = await page.evaluate(() => (window as unknown as Probe).__snackEvents ?? {})
 	const lived = (life.removed[0] ?? 0) - (life.appeared[0] ?? 0)
 	console.log(`[snackbar] under a still pointer (hover ${under.hover}, events ${JSON.stringify(events)}) it lived ${Math.round(lived)}ms`)
 	expect(life.removed).toHaveLength(1)
-	expect(lived).toBeGreaterThanOrEqual(5_500)
-	expect(lived).toBeLessThanOrEqual(6_500)
+	expect(lived).toBeGreaterThanOrEqual(1_500)
+	expect(lived).toBeLessThanOrEqual(2_500)
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])

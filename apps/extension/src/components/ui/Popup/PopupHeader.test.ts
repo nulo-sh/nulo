@@ -4,7 +4,7 @@ import PopupHeader from "./PopupHeader.vue"
 
 const STUBS = {
 	Flex: { template: '<div :class="$attrs.class" v-bind="$attrs"><slot /></div>', inheritAttrs: false },
-	MaterialIcon: { template: '<span data-testid="stub-mat-icon" :data-name="name" />', props: ["name", "size", "color"] },
+	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color", "rotate"] },
 }
 
 const mountHeader = (props: Record<string, unknown> = {}, slots: Record<string, string> = {}) =>
@@ -44,7 +44,7 @@ describe("ui/Popup/PopupHeader", () => {
 		expect(w.emitted("onClose")).toHaveLength(1)
 	})
 
-	test("close button is a MaterialIcon with name='close'", () => {
+	test("close button is an Icon with name='close'", () => {
 		const w = mountHeader({ closable: true }, { title: "<span>X</span>" })
 		expect(w.find('[data-name="close"]').exists()).toBe(true)
 	})

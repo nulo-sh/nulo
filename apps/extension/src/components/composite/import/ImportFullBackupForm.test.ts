@@ -1,4 +1,4 @@
-import { Flex, Icon, Input, MaterialIcon, Text } from "@nulo/design"
+import { Flex, Icon, Input, Text } from "@nulo/design"
 import { mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { expectMaskToggle, expectNativeAttrs, nativeInput, pasteInto } from "../../../../tests/helpers/credential-pins"
@@ -9,7 +9,6 @@ const stubs = {
 	Flex: { template: "<div><slot /></div>" },
 	Text: { template: "<span><slot /></span>" },
 	Icon: { template: "<i></i>" },
-	MaterialIcon: { template: "<i></i>" },
 	Transition: { template: "<div><slot /></div>" },
 	ItemsContainer: { template: "<div><slot /></div>" },
 	SettingItem: {
@@ -83,7 +82,7 @@ describe("ImportFullBackupForm", () => {
 
 	it("shows the decryption-password section when the backup is encrypted with no profileType", () => {
 		const wrapper = mount(ImportFullBackupForm, {
-			props: baseProps({ selectedBackup: { name: "x.txt", backup: "blob", type: "encrypted", profileType: null } }),
+			props: baseProps({ selectedBackup: { name: "x.txt", backup: "blob", kind: "sealed", profileType: null } }),
 			global: { stubs },
 		})
 		expect(wrapper.text()).toContain("Decryption Password")
@@ -92,7 +91,7 @@ describe("ImportFullBackupForm", () => {
 	it("shows the new-password section for password-typed backups before restore starts", () => {
 		const wrapper = mount(ImportFullBackupForm, {
 			props: baseProps({
-				selectedBackup: { name: "x.json", backup: {}, type: "plain", profileType: "password" },
+				selectedBackup: { name: "x.json", backup: {}, kind: "plain", profileType: "password" },
 				restoreStatus: "",
 			}),
 			global: { stubs },
@@ -103,7 +102,7 @@ describe("ImportFullBackupForm", () => {
 	it("hides the new-password section once restore is finished", () => {
 		const wrapper = mount(ImportFullBackupForm, {
 			props: baseProps({
-				selectedBackup: { name: "x.json", backup: {}, type: "plain", profileType: "password" },
+				selectedBackup: { name: "x.json", backup: {}, kind: "plain", profileType: "password" },
 				restoreStatus: "finished",
 			}),
 			global: { stubs },
@@ -114,7 +113,7 @@ describe("ImportFullBackupForm", () => {
 	it("shows the restore-with-errors warning when restoreStatus='finished' and isRestoreHasErrors", () => {
 		const wrapper = mount(ImportFullBackupForm, {
 			props: baseProps({
-				selectedBackup: { name: "x.json", backup: {}, type: "plain", profileType: "password" },
+				selectedBackup: { name: "x.json", backup: {}, kind: "plain", profileType: "password" },
 				restoreStatus: "finished",
 				isRestoreHasErrors: true,
 			}),
@@ -135,7 +134,7 @@ describe("ImportFullBackupForm", () => {
 	})
 
 	it("a page restoring into the open profile asks for no new password", () => {
-		const props = baseProps({ selectedBackup: { name: "x.json", backup: {}, type: "plain", profileType: "password" } })
+		const props = baseProps({ selectedBackup: { name: "x.json", backup: {}, kind: "plain", profileType: "password" } })
 		expect(mount(ImportFullBackupForm, { props, global: { stubs } }).text()).toContain("New Password")
 		const own = mount(ImportFullBackupForm, { props: { ...props, askNewPassword: false }, global: { stubs } })
 		expect(own.text()).not.toContain("New Password")
@@ -227,15 +226,15 @@ describe("ImportFullBackupForm — credential controls, real Input", () => {
 			props: baseProps({ selectedBackup }),
 			attachTo: document.body,
 			global: {
-				components: { Flex, Icon, Input, MaterialIcon, Text },
+				components: { Flex, Icon, Input, Text },
 				stubs: { ItemsContainer: stubs.ItemsContainer, SettingItem: stubs.SettingItem, Transition: stubs.Transition },
 			},
 		})
 		mounted.push(w)
 		return w
 	}
-	const ENCRYPTED = { name: "b.txt", type: "encrypted", profileType: null }
-	const PASSWORD = { name: "b.json", type: "plain", profileType: "password" }
+	const ENCRYPTED = { name: "b.txt", kind: "sealed", profileType: null }
+	const PASSWORD = { name: "b.json", kind: "plain", profileType: "password" }
 	const DECRYPT = "import-full-backup-decrypt-password-input"
 	const PAIR = ["import-full-backup-password-input", "import-full-backup-password-confirm-input"]
 

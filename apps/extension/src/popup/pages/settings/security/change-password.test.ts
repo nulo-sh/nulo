@@ -12,7 +12,7 @@ const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn() }))
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({ query: {}, meta: {} }) }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 
-import { Flex, Icon, Input, MaterialIcon, Text } from "@nulo/design"
+import { Flex, Icon, Input, Text } from "@nulo/design"
 import { pressOn } from "../../../../../tests/helpers/press-key"
 import {
 	enterOn,
@@ -34,7 +34,7 @@ async function mountWithValidFields() {
 			plugins: [
 				createTestingPinia({ createSpy: vi.fn, initialState: { app: { profile: { id: "p1", name: "Main", type: "password" } } } }),
 			],
-			components: { Flex, Icon, Input, MaterialIcon, SubPageHeader, Text },
+			components: { Flex, Icon, Input, SubPageHeader, Text },
 			stubs: {
 				Button: { template: "<button><slot /></button>" },
 				ItemsContainer: { template: "<div><slot /></div>" },
@@ -130,7 +130,7 @@ describe("change password — the credential fields' controls", () => {
 						initialState: { app: { profile: { id: "p1", name: "Main", type: "password" } } },
 					}),
 				],
-				components: { Flex, Icon, Input, MaterialIcon, SubPageHeader, Text },
+				components: { Flex, Icon, Input, SubPageHeader, Text },
 				stubs: {
 					Button: { template: "<button><slot /></button>" },
 					ItemsContainer: { template: "<div><slot /></div>" },

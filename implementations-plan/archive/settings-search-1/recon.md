@@ -1,0 +1,34 @@
+# Recon: settings-search-1
+
+Base `origin/dev` at `f6bd011a`. Two sonnet explorers (a reuse sweep over nine capabilities; an inventory of every page under `apps/extension/src/popup/pages/settings/`), then spot checks by the planner. Paths are relative to `apps/extension/` unless they start with `packages/`.
+
+## Reuse map
+
+| Capability | Found | Verdict |
+|---|---|---|
+| Search field | `packages/design/src/ui/Input.vue`: underline, accent on focus, `icon`, `clearable` (a `close-circle` icon, not a button), `@clear` (emits `clear`, not `update:modelValue`), `inputTestid`, keydown falls through to the root. Precedent: `developer/account-state/authwits/index.vue:170-176` (`icon="search" clearable @clear="searchTerm = ''"`). `components/composite/SearchField.vue` is the bordered mono box of the token pickers, not the drawn field. | reuse `Input` as is |
+| Result rows and captions | `components/ui/Settings/SettingItem.vue` (renders with no icon; `to` makes it a `RouterLink` with the focus-visible ring; attrs land on the root); `ItemsContainer.vue` (`title` caption, `danger`). Mockup b's row classes mirror them. | reuse as is |
+| Text matching | `utils/token-search.ts` `matchesQuery`: token-typed, lower-case `includes`, no diacritic folding. `utils/string.ts:45` `stringCompare` sorts, cannot test a substring. No `normalize("NFD")` with a mark strip anywhere. | build new, small |
+| Row registry | None. Titles and descriptions are literals per page, or local script maps in `display.vue`, `privacy.vue`, `developer/index.vue`. `utils/glossary.ts` (`GLOSSARY` + ordered `GLOSSARY_SECTIONS`, `as const satisfies`) is the typed-registry precedent, though the glossary page renders from it. | build new, copy the glossary's shape |
+| One-shot route state | Hash history over `vite-plugin-pages` (`popup/index.ts:12,44`, `scripts/pages-options.ts`). No read-and-clear-at-once precedent: `pages/activity.vue:128-163` derives a lasting filter from `?token=` and clears it only on a user action or invalid data; `send.vue:604-617` latches `?contact=` and never clears the URL. No `history.state` use anywhere. | build new on the query |
+| Keyboard over a list | `popup/components/modules/send/RecipientField.vue:150-185` (combobox: focus stays in the input, `aria-activedescendant`, its own active-row style). `components/ui/Dropdown/DropdownRoot.vue:241-265` moves real focus over items and wraps. Helpers: `isComposing` and `isRepeatOrComposing` (`packages/design/src/composables/keys.ts`), `refuseRepeatEnter` and `isPopupSubmitKey` (`composables/usePopupEntity.ts`). | build new on DropdownRoot's real-focus model and these helpers |
+| Momentary highlight | `components/composite/activity/TransactionCardLayout.vue:261-298` (`n-row-glow`, 2.4 s background fade). `.noanimations` on `<html>` (`popup/app.vue:113-115`) stops transitions only (`packages/design/src/base.css:377`); each keyframe adds its own reduced-motion and `.noanimations` stop, pinned in `utils/a11y-css.test.ts`. jsdom has no `scrollIntoView` (stubbed in `tests/vitest.setup.ts:27-31`). | build new on the precedent |
+| Platform rule | `display.vue:44` registers the side-panel row only when `chrome.sidePanel` exists; `utils/browser-surface.ts` `isFirefox()`. E2E: `tests/e2e/fixtures/browser/index.ts` `isFirefox`, used in specs only (`scripts/e2e/browser-seam.test.ts`). | reuse |
+| Registry-vs-page test | Source scans: `scripts/type-roles/source-scan.ts` (`parseSource`, `elementByTestid`), `components/composite/DottedTerm.scan.test.ts`. A scan cannot read text or testids a page binds from a script map or a `v-for` (display, privacy, developer). Page tests already mount the real pages: `settings/index.test.ts` (real `SettingItem`, memory router, pinia), `display.test.ts`, `privacy.test.ts`, `lock.test.ts`, `developer/index.test.ts`. `SettingItem` declares `to: String` (`:40`); `ItemsContainer`'s `.wrapper` is `overflow: hidden`. | mount-based check in those files |
+| Smoke e2e | `tests/e2e/settings-routes.test.ts` (57 lines; Settings hub values and legacy redirects); helpers `openPopup`, `waitForHash`, `clickNavTab`. Runner: `bun run test:e2e -- <file> --retry=0` from `apps/extension`. | extend that file |
+
+## The rows as they exist
+
+- **Settings index** (`settings/index.vue:113-278`): the profile card (title is the profile's name), then Your wallet (Accounts, Contacts, Tokens), Apps and networks (Connected Apps, Networks, Fee Payments, Proving), Safety (Lock, Back up profile, Change password only for a password profile), Preferences (Privacy, Display, Developer), Help (Glossary, About Nulo), Danger zone (Delete profile). Proving's description is live Presto status (`utils/presto-ui-state.ts:211-229`); Lock's depends on the profile type (`:197`). Testids `setting-nav-*`, `backup-link-btn`, `change-password-link-btn`, `delete-profile-link-btn`. `index.test.ts` asserts that exact row list through `[data-testid^="setting-nav-"], [data-testid$="-link-btn"]`.
+- **Display** (`display.vue`, rows only after the config read, `:173`): Theme, Open as Side Panel (Chrome only), Show network name, Full-height popups, Disable animations, then a "Lists" label, Show incoming transfers, Hide dust. Row elements carry no testid; three controls do (`theme-trigger`, `animations-toggle`, `dust-threshold-input`).
+- **Privacy** (after load): Show fiat values, Block Explorer, Privacy mode. **Lock**: Lock now (always), Strict security mode (password only, after load), Auto-lock Timeout (after load). **Developer** (after load): Developer Mode, then Indicate Failures, Debug Mode and Logs only with developer mode on, then Account State.
+- **Not settings rows**: dynamic lists (accounts, contacts, tokens, apps, networks, FPCs), flow pages (export, change password, reset, import), the About page's links, the Glossary's definitions, the Proving page's status copy, the Profile page's identity fields.
+- Mockup b lists Full-height popups above Open as Side Panel; the page renders them the other way round.
+
+## Open work and collisions
+
+- `gh issue list --state all --search "settings search"`: only #591. No closed known limit on settings search.
+- #582 (open, no lane): no router `scrollBehavior`; a sub-page opens at the parent's offset. A future `scrollBehavior` must not scroll to the top after a highlighted row scrolled into view; the row mounts after the router's scroll on every searchable page (all but the index render their rows after a config read).
+- #520 (lane forms-and-contacts, queued): dedupes `updateSetting` in display, privacy and developer. Disjoint lines; a textual merge only.
+- #577 (lane small-ui-fixes-1, PR pending): the header reads Show network name; `display.vue` itself is untouched there.
+- type-roles-coverage arc 1: every new text takes a type role; this arc adds one text (the no-result line, `<Text variant>`).

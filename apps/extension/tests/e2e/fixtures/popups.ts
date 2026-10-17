@@ -10,14 +10,18 @@ import { appendFileSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import type { Page, Target } from "puppeteer"
 import { waitForTarget } from "./browser"
-import { clickByTestId, clickSelector, patchPagePolling, recordPageErrors, waitForHash, type ExtensionContext } from "./extension"
-import { selectFeeMethod, type FeeMethodSubtitle } from "./helpers"
+import { clickByTestId, clickSelector, patchPagePolling, waitForHash } from "./dom"
+import type { ExtensionContext } from "./extension"
+import { selectFeeMethod, type FeeMethodSubtitle } from "./transfers"
+import { recordPageErrors } from "./wallet-pages"
 
 export type PopupKind =
 	| "discover"
 	| "verify"
 	| "capabilities"
 	| "execute"
+	/** A held dApp send's question: its fee came out above the approved figure. */
+	| "fee"
 	| "json"
 	| "network-unavailable"
 	/** Arm the wait before the open: a logger window's URL can repeat, and a URL already open never
@@ -198,36 +202,13 @@ export async function denyDiscover(page: Page): Promise<void> {
 	await clickByTestId(page, "discover-deny-btn")
 }
 
-export async function approveVerify(page: Page, opts: { alwaysTrust?: boolean } = {}): Promise<void> {
-	if (opts.alwaysTrust) {
-		// Toggle the "Skip this check next time" switch + WAIT for the toggle to latch before
-		// we click confirm. Without this assertion, handleConfirm runs while
-		// alwaysTrust is still false, the trustedVerification setter is never
-		// called, and the next reconnect surprises us with a verify popup.
-		// Target the inner Toggle's clickable element (Toggle.vue:17 — div with
-		// @click="toggle"; not a button/role=switch). Read latch state via
-		// data-toggle-active (added on Toggle.vue alongside the testid).
-		const innerSelector = '[data-testid="verify-always-trust-toggle"] [data-testid="toggle-switch"]'
-		await page.waitForSelector(innerSelector, { visible: true, timeout: 5_000 })
-		await clickSelector(page, innerSelector)
-		await page.waitForFunction(
-			(sel: string) => document.querySelector(sel)?.getAttribute("data-toggle-active") === "true",
-			{ timeout: 5_000, polling: 100 },
-			innerSelector,
-		)
-	}
+export async function approveVerify(page: Page): Promise<void> {
 	await clickByTestId(page, "verify-confirm-btn")
-	// Wait for the verify popup window to actually close. `handleConfirm` awaits
-	// `setTrustedVerification` BEFORE calling `closeWindow`, so a closed window
-	// proves the trust flag was persisted to chrome.storage.local. Returning
-	// before close lets the next reconnect race a stale storage value.
-	//
-	// If the popup never closes within 10s, throw — silently proceeding would
-	// mask the very failure mode this wait exists to prevent.
+	// `handleConfirm` closes the window only after the worker answers the confirmation.
 	if (!page.isClosed()) {
 		await new Promise<void>((resolve, reject) => {
 			const timer = setTimeout(() => {
-				reject(new Error("approveVerify: popup did not close within 10s — setTrustedVerification persistence may be racy"))
+				reject(new Error("approveVerify: popup did not close within 10s"))
 			}, 10_000)
 			page.once("close", () => {
 				clearTimeout(timer)
@@ -279,7 +260,7 @@ export async function approveCapabilities(
 	for (const [accountId, alias] of Object.entries(opts.aliases ?? {})) {
 		const row = `[data-testid="cap-account-item"][data-account-id="${accountId}"]`
 		const field = `${row} [data-testid="cap-account-alias-input"]`
-		if (!(await page.$(field))) await clickSelector(page, `${row} [data-testid="cap-account-rename-btn"]`, 5_000)
+		if (!(await page.$(field))) await clickSelector(page, `${row} [data-testid="cap-account-rename-btn"]`, { timeout: 5_000 })
 		await page.waitForSelector(field, { visible: true, timeout: 5_000 })
 		await page.evaluate(
 			({ sel, alias }: { sel: string; alias: string }) => {
@@ -335,7 +316,7 @@ async function openConnectedApp(page: Page, host: string): Promise<void> {
 		window.location.hash = "#/popup/settings/connected-apps"
 	})
 	await waitForHash(page, "#/popup/settings/connected-apps")
-	await clickSelector(page, `[data-testid="connected-app-row"][data-app-host="${host}"]`, 15_000).catch(async (err) => {
+	await clickSelector(page, `[data-testid="connected-app-row"][data-app-host="${host}"]`, { timeout: 15_000 }).catch(async (err) => {
 		const hosts = await page.$$eval('[data-testid="connected-app-row"]', (rows) => rows.map((r) => r.getAttribute("data-app-host")))
 		throw new Error(`no connected-app row for ${host}; rows: ${JSON.stringify(hosts)}`, { cause: err })
 	})

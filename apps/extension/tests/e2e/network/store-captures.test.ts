@@ -268,16 +268,14 @@ async function scrollToFit(page: Page, fit: () => Fit): Promise<void> {
 }
 
 /**
- * In-page, on Home: the least scroll that shows whole the activity row the bottom nav cuts through,
- * while the rows after it stay hidden and the balance stays whole. A row's box pads its content, so
- * its bottom edge may meet the nav.
+ * In-page, on Home: the least scroll of the middle under the fixed hero that shows whole the
+ * activity row the bottom nav cuts through, while the rows after it stay hidden. A row's box pads
+ * its content, so its bottom edge may meet the nav.
  */
 function revealCutActivityRow(): Fit {
 	const nav = document.querySelector('[data-testid="bottom-nav"]')?.getBoundingClientRect()
-	const balance = document.querySelector<HTMLElement>('[data-testid="balance-amount"]')
-	let scroller = balance?.parentElement ?? null
-	while (scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement
-	if (!nav || !balance || !scroller) return { error: "Home has no bottom nav, balance or scroll container" }
+	const scroller = document.querySelector<HTMLElement>('[data-testid="home-scroller"]')
+	if (!nav || !scroller) return { error: "Home has no bottom nav or scroll container" }
 	const rows = [
 		...document.querySelectorAll('[data-testid="tx-card"], [data-testid="tx-incoming-card"], [data-testid="tx-terminal-card"]'),
 	].map((row) => row.getBoundingClientRect())
@@ -285,7 +283,8 @@ function revealCutActivityRow(): Fit {
 	if (!cut) return { scrolled: 0 }
 	const need = Math.ceil(cut.bottom - nav.top)
 	const later = rows.filter((row) => row.top >= cut.bottom).map((row) => row.top - nav.top)
-	const room = Math.floor(Math.min(balance.getBoundingClientRect().top - scroller.getBoundingClientRect().top, ...later))
+	const left = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop
+	const room = Math.floor(Math.min(left, ...later))
 	if (need > room) return { error: `the cut activity row needs ${need}px of scroll, and Home has ${room}px` }
 	scroller.scrollTop += need
 	return { scrolled: need }

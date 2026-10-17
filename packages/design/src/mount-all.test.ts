@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { Component } from "vue"
 import Flex from "./core/Flex.vue"
 import Icon from "./core/Icon.vue"
-import MaterialIcon from "./core/MaterialIcon.vue"
 import Text from "./core/Text.vue"
 import Badge from "./ui/Badge.vue"
 import Banner from "./ui/Banner.vue"
@@ -29,9 +28,8 @@ import Toggle from "./ui/Toggle.vue"
  */
 const cases: Array<[string, Component, Record<string, unknown>]> = [
 	["Flex", Flex, {}],
-	["Icon", Icon, { name: "external-link" }],
+	["Icon", Icon, { name: "open" }],
 	["Text", Text, {}],
-	["MaterialIcon", MaterialIcon, { name: "settings" }],
 	["Badge", Badge, {}],
 	["BrutalistTitle", BrutalistTitle, { main: "A", sub: "B" }],
 	["Checkbox", Checkbox, {}],

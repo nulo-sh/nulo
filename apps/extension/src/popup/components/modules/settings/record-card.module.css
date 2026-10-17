@@ -2,6 +2,7 @@
 
 /* A clickable record with a stretched `RowTarget`. The consumer sets `border` and `padding`. */
 .card {
+	user-select: none;
 	position: relative;
 	display: flex;
 	flex-direction: column;
@@ -54,7 +55,7 @@
 }
 
 .kv_key {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 
 	overflow: hidden;
@@ -63,7 +64,7 @@
 }
 
 .kv_val {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 
 	min-width: 0;

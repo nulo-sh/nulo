@@ -35,14 +35,15 @@ const isExpanded = (i) => expanded.value.has(i)
 				:class="$style.grant_header"
 			>
 				<Flex align="center" gap="6">
-					<Icon name="check-circle" size="11" color="primary" />
+					<Icon name="square-check" size="11" color="primary" />
 					<Text variant="row-title" color="secondary" :class="$style.label_size">{{ getCapabilityLabel(grant.capability.type) }}</Text>
 				</Flex>
 				<Icon
 					name="chevron"
 					size="12"
 					color="tertiary"
-					:style="{ transform: isExpanded(gi) ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s ease' }"
+					:rotate="isExpanded(gi) ? 270 : 90"
+					:class="$style.chevron"
 				/>
 			</Flex>
 			<CapabilityDetailPanel
@@ -66,6 +67,7 @@ const isExpanded = (i) => expanded.value.has(i)
 }
 
 .grant_header {
+	user-select: none;
 	padding: 10px 12px;
 	cursor: pointer;
 
@@ -74,5 +76,9 @@ const isExpanded = (i) => expanded.value.has(i)
 	&:hover {
 		background: var(--nulo-surface-high);
 	}
+}
+
+.chevron {
+	transition: transform 0.2s ease;
 }
 </style>

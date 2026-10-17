@@ -16,9 +16,9 @@
  */
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses"
 import { getWallet } from "../lib/wallet"
-import { logCall } from "../lib/log"
+import { guarded } from "../lib/log"
 import { summarizeSimulation } from "../lib/simulation-summary"
-import { getInput, getState, setState } from "../state"
+import { getInput, getState } from "../state"
 
 export function renderSimulation(): string {
 	const s = getState()
@@ -74,25 +74,10 @@ function skipTxValidation(): boolean {
 	return getInput("skipValidation") !== "on"
 }
 
-function safe<T>(method: string, fn: () => Promise<T>): () => Promise<void> {
-	return async () => {
-		const wallet = getWallet()
-		if (!wallet) {
-			setState({ lastError: "Not connected — call connect() first" })
-			return
-		}
-		try {
-			await logCall(method, fn)
-		} catch (err) {
-			setState({ lastError: err instanceof Error ? err.message : String(err) })
-		}
-	}
-}
-
 export function bindSimulation(root: HTMLElement): void {
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-simulateTx-transfer"]')?.addEventListener(
 		"click",
-		safe("simulateTx", async () => {
+		guarded("simulateTx", async () => {
 			const wallet = getWallet()!
 			const { exec, fromAddr } = await buildTransferPayload()
 			const result = await wallet.simulateTx(exec, { from: fromAddr, skipFeeEnforcement: true, skipTxValidation: skipTxValidation() })
@@ -102,7 +87,7 @@ export function bindSimulation(root: HTMLElement): void {
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-profileTx"]')?.addEventListener(
 		"click",
-		safe("profileTx", async () => {
+		guarded("profileTx", async () => {
 			const wallet = getWallet()!
 			const { exec, fromAddr } = await buildTransferPayload()
 			// Pass skipProofGeneration explicitly. SDK defaults to true
@@ -114,7 +99,7 @@ export function bindSimulation(root: HTMLElement): void {
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-executeUtility-balance"]')?.addEventListener(
 		"click",
-		safe("executeUtility", async () => {
+		guarded("executeUtility", async () => {
 			const wallet = getWallet()!
 			const { TokenContract } = await import("@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js")
 			const tokenAddress = getInput("tokenAddress")

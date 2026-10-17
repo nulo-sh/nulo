@@ -82,17 +82,17 @@ watch(
 
 				<Flex direction="column" gap="16">
 					<Flex align="center" justify="between">
-						<Text variant="label" color="tertiary"> Id </Text>
+						<Text variant="label-section" color="tertiary"> Id </Text>
 
-						<Text variant="data" color="secondary" data-testid="token-metadata-id">
+						<Text variant="meta" color="secondary" data-testid="token-metadata-id">
 							{{ token?.id }}
 						</Text>
 					</Flex>
 
 					<Flex align="center" justify="between">
-						<Text variant="label" color="tertiary"> Contract Address </Text>
+						<Text variant="label-section" color="tertiary"> Contract Address </Text>
 
-						<Text @click="handleCopyAddress" variant="data" color="secondary" class="copyable" data-testid="token-metadata-address">
+						<Text @click="handleCopyAddress" variant="meta" color="secondary" class="copyable" data-testid="token-metadata-address">
 							{{ token.contract.slice(0, 6) }}
 							<Text color="tertiary">•••</Text>
 							{{ token.contract.slice(-4) }}
@@ -100,7 +100,7 @@ watch(
 					</Flex>
 
 					<Flex align="center" justify="between">
-						<Text variant="label" color="tertiary"> Name </Text>
+						<Text variant="label-section" color="tertiary"> Name </Text>
 
 						<Text variant="value" color="secondary">
 							{{ token.name }}
@@ -108,7 +108,7 @@ watch(
 					</Flex>
 
 					<Flex align="center" justify="between">
-						<Text variant="label" color="tertiary"> Symbol </Text>
+						<Text variant="label-section" color="tertiary"> Symbol </Text>
 
 						<Text variant="value" color="secondary">
 							{{ token.symbol }}
@@ -116,11 +116,11 @@ watch(
 					</Flex>
 
 					<Flex align="center" justify="between">
-						<Text variant="label" color="tertiary"> Chain ID </Text>
+						<Text variant="label-section" color="tertiary"> Chain ID </Text>
 
 						<Tooltip position="end">
 							<Flex align="center" gap="4">
-								<Text variant="data" color="secondary" data-testid="token-metadata-chain-id">
+								<Text variant="meta" color="secondary" data-testid="token-metadata-chain-id">
 									{{ token.chainId }}
 								</Text>
 								<Icon name="info" size="12" color="secondary" />
@@ -140,11 +140,11 @@ watch(
 
 						<Flex v-for="row in section.rows" :key="row.key" align="center" justify="between">
 							<Flex direction="column" gap="6">
-								<Text variant="label" color="tertiary"> {{ row.label }} </Text>
-								<Text variant="data" color="secondary"> {{ row.key }} </Text>
+								<Text variant="label-section" color="tertiary"> {{ row.label }} </Text>
+								<Text variant="meta" color="secondary"> {{ row.key }} </Text>
 							</Flex>
 
-							<Icon :name="token[row.key] ? 'check-circle' : 'close-circle'" size="12" :color="token[row.key] ? 'green' : 'red'" />
+							<Icon :name="token[row.key] ? 'square-check' : 'square-cross'" size="12" :color="token[row.key] ? 'green' : 'red'" />
 						</Flex>
 					</template>
 				</Flex>

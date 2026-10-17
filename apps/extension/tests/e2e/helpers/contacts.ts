@@ -12,7 +12,7 @@ import { type ArmedInterception, interceptRpc, pickFile } from "../fixtures/brow
 import { clickByTestId, clickSelector, type ExtensionContext, withTimeoutMessage } from "../fixtures/extension"
 import { contactRow, senderChip } from "../fixtures/helpers"
 import { settleClosedPopup } from "../fixtures/popup-leave"
-import { armBackupDownloadCapture, readCapturedBackupDownload } from "./backup-export"
+import { armDownloadCapture, readCapturedDownload } from "./download-capture"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 export const importRow = (name: string) => `${sel("import-contact-row")}[data-contact-name="${name}"]`
@@ -50,9 +50,9 @@ export async function pickContactsFile(page: Page, path: string): Promise<void> 
 export async function exportContactsFile(page: Page): Promise<string> {
 	await clickByTestId(page, "contacts-menu-trigger")
 	await page.waitForSelector(sel("contacts-menu-export"), { visible: true, timeout: 5_000 })
-	await armBackupDownloadCapture(page, { gzip: false })
+	await armDownloadCapture(page, { gzip: false })
 	await toastAfter(page, () => clickByTestId(page, "contacts-menu-export"), "Contacts exported successfully")
-	return readCapturedBackupDownload(page)
+	return readCapturedDownload(page)
 }
 
 export type ShownRow = { name: string; kind: string; selected: boolean }
@@ -146,7 +146,7 @@ export async function waitForInputValue(page: Page, testid: string, value: strin
 /** Presses a row on its target, the button that covers the row. A row that can't be imported keeps
  *  its target pressable (it explains itself), so this does not wait for an enabled one. */
 export function pressRow(page: Page, name: string): Promise<void> {
-	return clickSelector(page, `${importRow(name)} ${sel("import-contact-target")}`)
+	return clickSelector(page, `${importRow(name)} ${sel("import-contact-target")}`, { pressAriaDisabled: true })
 }
 
 /** Presses the popup's Cancel or Import selected and waits for the popup to have closed. */
@@ -159,7 +159,7 @@ type ToastLog = { titles: string[]; observer: MutationObserver }
 
 /** Runs `act` and waits for a toast reading `text` that was not on screen before it, and returns
  *  that toast's whole title. Toasts are recorded from before `act` starts, so one that has already
- *  left by the time `act` returns (a success toast lasts six seconds) still counts. */
+ *  left by the time `act` returns (a success toast lasts two seconds) still counts. */
 export async function toastAfter(page: Page, act: () => Promise<void>, text: string, timeout = 15_000): Promise<string> {
 	await page.evaluate((s: string) => {
 		const w = window as unknown as { __e2eToastLog?: ToastLog }

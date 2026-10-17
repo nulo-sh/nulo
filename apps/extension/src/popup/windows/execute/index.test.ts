@@ -22,6 +22,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { JobCancelledError } from "@nulo/extension-messaging/errors"
+import { CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-bridge"
 import { flushPromises, mount } from "@vue/test-utils"
 import { reactive, ref, type Ref } from "vue"
 
@@ -72,6 +73,8 @@ const interactionServiceDisconnectMock = vi.fn(() => callLog.push("interaction.d
 const executionServiceConnectMock = vi.fn(() => callLog.push("execution.connect"))
 const executionServiceDisconnectMock = vi.fn(() => callLog.push("execution.disconnect"))
 const tokenServiceConnectMock = vi.fn(() => callLog.push("token.connect"))
+const getTokensMock = vi.fn(async (_profileId: string, _chainId: number): Promise<unknown[]> => [])
+const tokenUpdatedMock = { add: vi.fn(), remove: vi.fn() }
 const tokenServiceDisconnectMock = vi.fn(() => callLog.push("token.disconnect"))
 const onActiveProfileChangedAddMock = vi.fn()
 const windowsRemoveMock = vi.fn(() => callLog.push("windows.remove"))
@@ -199,7 +202,8 @@ vi.mock("@/wallet/services/token/client", () => ({
 			connect: tokenServiceConnectMock,
 			disconnect: tokenServiceDisconnectMock,
 			previewTokenMetadata: vi.fn(async () => undefined),
-			getTokens: vi.fn(async () => []),
+			getTokens: getTokensMock,
+			onTokenUpdated: tokenUpdatedMock,
 		}
 	}),
 }))
@@ -565,6 +569,7 @@ describe("execute window — dApp cancellation state", () => {
 		const vm = w.vm as unknown as ExecVm
 		vm.operations = [makeExecutableOp()]
 		vm.initComplete = true
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
 		await flushPromises()
 		const confirm = () => w!.find('[data-testid="execute-confirm-btn"]')
 		expect(confirm().attributes("disabled")).toBeUndefined()
@@ -584,6 +589,7 @@ describe("execute window — dApp cancellation state", () => {
 		const vm = w.vm as unknown as ExecVm
 		vm.operations = [makeExecutableOp()]
 		vm.initComplete = true
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
 		await flushPromises()
 
 		await vm.approve()
@@ -710,6 +716,7 @@ describe("execute window — a dApp-requested self-pay", () => {
 		await vm.approve()
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fj" } })
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
 		await vm.approve()
 		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
 	})
@@ -766,16 +773,16 @@ describe("execute window — approval envelope", () => {
 		await completeInit()
 		const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
 		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fj" } })
-		feeMapInstances[0]!.api.results.value = { 0: { estimateId: "est-0", previewId: "est-0" } }
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800", estimateId: "est-0", previewId: "est-0" } }
 		feeMapInstances[1]!.api.results.value = { 1: { previewId: "pv-1", discoveredAuthwits: [] } }
 		await vm.approve()
 		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
 		const [id, deltas] = (approveInteractionMock.mock.calls[0] as unknown[]) ?? []
 		expect(id).toBe("req-123")
 		expect(deltas).toEqual([
-			{ feeSettings: { paymentMethod: { kind: "fj" } }, estimateId: "est-0", previewId: "est-0" },
-			{ feeSettings: { paymentMethod: { kind: "embedded" } }, estimateId: undefined, previewId: "pv-1" },
-			{ feeSettings: undefined, estimateId: undefined, previewId: undefined },
+			{ feeSettings: { paymentMethod: { kind: "fj" } }, estimateId: "est-0", previewId: "est-0", feeCeiling: "800" },
+			{ feeSettings: { paymentMethod: { kind: "embedded" } }, estimateId: undefined, previewId: "pv-1", feeCeiling: undefined },
+			{ feeSettings: undefined, estimateId: undefined, previewId: undefined, feeCeiling: undefined },
 		])
 		expect((approveInteractionMock.mock.calls[0] as unknown[]).length).toBe(2)
 		expect(feeMapInstances[0]!.api.handoffAll).toHaveBeenCalledTimes(1)
@@ -789,6 +796,7 @@ describe("execute window — approval envelope", () => {
 		await completeInit()
 		const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
 		const confirm = () => w!.find('[data-testid="execute-confirm-btn"]')
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
 		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fpc", fpcId: "s1" } })
 		await flushPromises()
 		expect(confirm().attributes("disabled")).toBeUndefined()
@@ -989,6 +997,81 @@ describe("execute window — an operation the app pays for", () => {
 		await vm.approve()
 		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
 	})
+
+	// The app's own payment claiming Fee Juice to the account, as the wire carries the claim call.
+	const CLAIM = {
+		name: "claim_and_end_setup",
+		to: FEE_JUICE_CONTRACT,
+		selector: CLAIM_AND_END_SETUP_SELECTOR,
+		type: "private",
+		isStatic: false,
+		hideMsgSender: false,
+		args: [OWNER, "100000000000000000000", `0x${"2a".repeat(32)}`, `0x${"01".repeat(32)}`],
+	}
+	const claimToAccount = { ...appPaid, exec: { calls: [CLAIM], feePayer: OWNER } }
+
+	test("an app's claim to the account: Confirm waits for the figure, a failed one toasts, and the figure is what approval carries", async () => {
+		const { vm, fees, confirm } = await opened(claimToAccount)
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		toastMocks.openToast.mockClear()
+		fees.opts.onError?.(0, new Error("node down"))
+		api.results.value = { 0: null }
+		await flushPromises()
+		expect(toastMocks.openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't estimate fee. Try again." })
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+
+		api.results.value = { 0: { maxFee: "16000000000000000", maxFeeFormatted: "0.016" } }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		const deltas = (approveInteractionMock.mock.calls[0] as unknown[] | undefined)?.[1] as Array<{ feeCeiling?: string }>
+		expect(deltas[0]?.feeCeiling).toBe("16000000000000000")
+	})
+
+	test("a fee the wallet picks: Confirm waits for its figure, and a failed estimate keeps it off until a new one lands", async () => {
+		const { vm, fees, confirm } = await opened({ ...appPaid, exec: { calls: [] } })
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		;(vm as unknown as { handleFeeUpdate: (index: number, value: unknown) => void }).handleFeeUpdate(0, {
+			paymentMethod: { kind: "fj" },
+		})
+		api.estimating.value = { 0: true }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+
+		api.results.value = { 0: null }
+		api.estimating.value = { 0: false }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+
+		api.results.value = { 0: { maxFee: "21000000000000000", maxFeeFormatted: "0.021" } }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("a sponsor picked in the window pays, not the person: Confirm does not wait, and a failed estimate leaves it on", async () => {
+		const { vm, fees, confirm } = await opened({ ...appPaid, exec: { calls: [] } })
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		const card = w!.findComponent(STUBS.OperationCard)
+		;(vm as unknown as { handleFeeUpdate: (index: number, value: unknown) => void }).handleFeeUpdate(0, {
+			paymentMethod: { kind: "fpc", fpcId: "s1" },
+		})
+		card.vm.$emit("updatePayer", 0, { type: "private_fpc" })
+		api.results.value = { 0: null }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+
+		card.vm.$emit("updatePayer", 0, { type: "fpc" })
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
 })
 
 // ── The two send kinds as a dApp's wire carries them: 32-byte hex fields, CAIP accounts. Each draft
@@ -1113,6 +1196,7 @@ describe("execute window — a public grant", () => {
 			grantRefusal?: { title: string; tooltip: string }
 		}
 		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fj" } })
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
 		await flushPromises()
 		return { vm, confirm: () => w!.find('[data-testid="execute-confirm-btn"]'), error: () => w!.find('[data-testid="error-text"]') }
 	}
@@ -1125,6 +1209,20 @@ describe("execute window — a public grant", () => {
 		expect(error().exists()).toBe(false)
 		await vm.approve()
 		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("an update to the profile's tokens reads the list again; the window stops listening when it closes", async () => {
+		decodeGrantsForDisplayMock.mockResolvedValueOnce([DECODED])
+		await opened()
+		expect(getTokensMock).toHaveBeenCalledExactlyOnceWith("p1", 1)
+		const [[listener]] = tokenUpdatedMock.add.mock.calls as [[(token: { profileId: string }) => void]]
+		listener({ profileId: "p2" })
+		listener({ profileId: "p1" })
+		await flushPromises()
+		expect(getTokensMock).toHaveBeenCalledTimes(2)
+		w!.unmount()
+		w = undefined
+		expect(tokenUpdatedMock.remove).toHaveBeenCalledExactlyOnceWith(listener)
 	})
 
 	test("while the grant decodes, Confirm waits and approve sends nothing", async () => {

@@ -1,10 +1,11 @@
 import { createTestingPinia } from "@pinia/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { Flex, Icon, MaterialIcon, Spinner, Text } from "@nulo/design"
-import { flushPromises, mount } from "@vue/test-utils"
+import { Flex, Icon, Input, Spinner, Text } from "@nulo/design"
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { createMemoryHistory, createRouter } from "vue-router"
 import type { ConfigProp } from "@/wallet/config"
+import { visibleSettingsRows } from "@/utils/settings-search"
+import { expectOwnedRows, settingsContext, settingsRouter } from "../../../../tests/helpers/settings-rows"
 
 const clients = vi.hoisted(() => ({ config: undefined as unknown, execution: undefined as unknown }))
 vi.mock("@/wallet/services/config/client", () => ({
@@ -106,16 +107,18 @@ beforeEach(() => {
 	)
 })
 afterEach(() => vi.unstubAllGlobals())
+enableAutoUnmount(afterEach)
 
 const PASSWORD = { id: "p1", name: "Primary", type: "password" }
 const PASSKEY = { id: "p2", name: "Travel key", type: "passkey" }
 
 async function mountHub(profile = PASSWORD) {
-	const router = createRouter({ history: createMemoryHistory(), routes: [{ path: "/:path(.*)*", component: { render: () => null } }] })
+	const router = settingsRouter()
 	const wrapper = mount(SettingsHub, {
+		attachTo: document.body,
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn, initialState: { app: { isLogined: true, profile } } }), router],
-			components: { AccountAvatar, Flex, Icon, ItemsContainer, MaterialIcon, SettingItem, Spinner, Text },
+			components: { AccountAvatar, Flex, Icon, Input, ItemsContainer, SettingItem, Spinner, Text },
 		},
 	})
 	await flushPromises()
@@ -180,6 +183,29 @@ describe("settings hub — rows", () => {
 		expect(w.get('[data-testid="setting-nav-profile"]').text()).toContain("Passkey profile")
 	})
 
+	test.each([
+		{ profile: PASSWORD, passkey: false },
+		{ profile: PASSKEY, passkey: true },
+	])("renders the search registry's rows for a $profile.type profile", async ({ profile, passkey }) => {
+		const context = settingsContext({ passkey, provingStatus: "Presto · connected" })
+		expectOwnedRows(await mountHub(profile), "/popup/settings", context)
+	})
+
+	test("each row sits under the caption a search shows it under", async () => {
+		const w = await mountHub()
+		const context = settingsContext({ provingStatus: "Presto · connected" })
+		const hub = visibleSettingsRows(context).filter((row) => row.page === "/popup/settings")
+		const idOf = new Map(hub.map((row) => [row.testid, row.id]))
+		const placed = w.findAllComponents(ItemsContainer).flatMap((group) =>
+			group
+				.findAll("[data-testid]")
+				.map((el) => idOf.get(el.attributes("data-testid") ?? ""))
+				.filter((id) => id !== undefined)
+				.map((id) => [id, group.props("title"), group.props("danger")]),
+		)
+		expect(placed).toEqual(hub.map((row) => [row.id, row.section, row.danger]))
+	})
+
 	test("the rows read as the signed copy", async () => {
 		const w = await mountHub()
 		const copy = w.findAllComponents(SettingItem).map((row) => [row.props("title"), row.props("description")])
@@ -208,6 +234,35 @@ describe("settings hub — rows", () => {
 		const avatar = (await mountHub()).get('[data-testid="profile-card-avatar"]')
 		expect(avatar.attributes("data-initials")).toBe("PR")
 		expect(avatar.text()).toBe("PR")
+	})
+})
+
+describe("settings hub — search", () => {
+	const FOCUSABLE = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])'
+	const search = (w: Hub) => w.get('[data-testid="settings-search-input"]')
+
+	test("the search field is the page's first Tab stop", async () => {
+		const w = await mountHub()
+		expect(w.get('[data-testid="settings-page"]').element.querySelector(FOCUSABLE)).toBe(search(w).element)
+	})
+
+	test("a word in the field replaces the whole list with its results; emptying it brings the list back", async () => {
+		const w = await mountHub()
+		await search(w).setValue("full")
+		expect(rowIds(w)).toEqual([])
+		expect(w.find('[data-testid="setting-nav-profile"]').exists()).toBe(false)
+		expect(w.findAll('[data-testid^="settings-search-result-"]')).toHaveLength(1)
+		await search(w).setValue("")
+		expect(rowIds(w)).toEqual(PASSWORD_ROWS.map(([id]) => id))
+	})
+
+	test("a result for a row of this list opens that row's page as a tap on it does, outlining nothing", async () => {
+		const w = await mountHub()
+		await search(w).setValue("seed")
+		await w.get('[data-testid="settings-search-result-hub-backup"]').trigger("click")
+		await flushPromises()
+		expect(w.vm.$router.currentRoute.value.fullPath).toBe("/popup/settings/security/export")
+		expect(w.findAll("[data-highlighted]")).toHaveLength(0)
 	})
 })
 

@@ -623,7 +623,7 @@ describe("composite/AmountCard — the field at rest shows the whole amount", ()
 		const DERIVED = "[data-testid='send-amount-derived']"
 		const CONVERTING = "[data-testid='send-amount-converting']"
 		// "≈ 1,234,567.123456789012345678 TST" is 650 px at full size in the stand-in font, one fraction
-		// digit fewer 630 px: 470 px beside the balance draws them at 0.72 (7.92 px) and 0.74 (8.14 px).
+		// digit fewer 630 px: 395 px beside the balance draws them at 0.60 (7.8 px) and 0.62 (8.06 px).
 		const mountUsd = (props: Record<string, unknown> = {}) =>
 			mountField({
 				fiatMode: true,
@@ -641,7 +641,7 @@ describe("composite/AmountCard — the field at rest shows the whole amount", ()
 		}
 
 		beforeEach(() => {
-			rooms = { "send-amount-row": 600, "send-amount-meta": 470 }
+			rooms = { "send-amount-row": 600, "send-amount-meta": 395 }
 		})
 		afterEach(() => {
 			rooms = {}
@@ -653,7 +653,7 @@ describe("composite/AmountCard — the field at rest shows the whole amount", ()
 			expect(w.get(DERIVED).text()).toBe("≈ 1,234,567.123456789012345678 TST")
 			expect([placeOf(w), scaleOfLine(w)]).toEqual(["own row", "0.92"])
 			await w.setProps({ modelValue: "1234567.12345678901234567" })
-			expect([placeOf(w), scaleOfLine(w)]).toEqual(["beside", "0.74"])
+			expect([placeOf(w), scaleOfLine(w)]).toEqual(["beside", "0.62"])
 			await w.setProps({ modelValue: "25" })
 			expect(w.get(DERIVED).text()).toBe("≈ 25 TST")
 			expect([placeOf(w), scaleOfLine(w)]).toEqual(["beside", "1"])

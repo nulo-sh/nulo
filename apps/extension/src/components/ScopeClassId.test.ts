@@ -85,6 +85,19 @@ describe("ScopeClassId", () => {
 		expect(press.defaultPrevented).toBe(true)
 	})
 
+	test("a click that ends a drag selecting the id copies nothing; Enter over the same selection still copies", async () => {
+		const w = mount(ScopeClassId, { props: { id: "0xclass1" }, global: { stubs: STUBS }, attachTo: document.body })
+		const range = document.createRange()
+		range.selectNodeContents(w.get('[data-testid="scope-class-id-value"]').element)
+		window.getSelection()?.addRange(range)
+		await w.get('[data-testid="scope-class-id"]').trigger("click")
+		expect(writeText).not.toHaveBeenCalled()
+		await w.get('[data-testid="scope-class-id"]').trigger("keydown", { key: "Enter" })
+		expect(writeText).toHaveBeenCalledWith("0xclass1")
+		window.getSelection()?.removeAllRanges()
+		w.unmount()
+	})
+
 	test("preserves the canonical testid + data attr for e2e", () => {
 		const w = factory({ id: "0xclass1" })
 		const el = w.find('[data-testid="scope-class-id"]')

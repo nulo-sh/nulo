@@ -14,21 +14,20 @@ const props = defineProps({
 		default: "medium",
 	},
 	title: String,
-	/** `name` for a row titled with a person's or account's name, `data` for an identifier. */
+	/** `name` for a row titled with a person's or account's name, `meta` for an identifier. */
 	titleVariant: {
 		type: String,
 		default: "row-title",
-		validator: (value) => ["row-title", "name", "data"].includes(value),
+		validator: (value) => ["row-title", "name", "meta"].includes(value),
 	},
 	description: String,
-	/** `data` for an address or id. */
+	/** `meta` for an address or id. */
 	descriptionVariant: {
 		type: String,
 		default: "caption",
-		validator: (value) => ["caption", "data"].includes(value),
+		validator: (value) => ["caption", "meta"].includes(value),
 	},
 	icon: String,
-	materialIcon: String,
 	iconBgColor: {
 		type: String,
 		default: "gray-20",
@@ -48,6 +47,8 @@ const props = defineProps({
 		type: Boolean,
 		default: false,
 	},
+	/** A glyph in the chevron's place, for a row that acts in place instead of opening a page. */
+	trailingIcon: String,
 	disabled: {
 		type: Boolean,
 		default: false,
@@ -114,27 +115,20 @@ const Root = (_, { slots }) => {
 
 		<Flex wide align="center" justify="between" gap="16">
 			<Flex align="center" gap="14" wide>
-				<div v-if="icon || materialIcon || $slots.dot || $slots.icon" :class="[$style.icon_wrapper, $slots.icon && $style.icon_slotted]">
+				<div v-if="icon || $slots.dot || $slots.icon" :class="[$style.icon_wrapper, $slots.icon && $style.icon_slotted]">
 					<!-- Dot -->
 					<slot name="dot" />
 
 					<!-- Icon: custom slot wins, otherwise prop-driven fallback -->
 					<slot name="icon">
-						<MaterialIcon
-							v-if="materialIcon && !loading"
-							:name="materialIcon"
-							:size="20"
-							color="secondary"
-							:class="$style.material_icon"
-						/>
 						<Icon
-							v-else-if="icon && !loading"
+							v-if="icon && !loading"
 							:name="icon"
 							size="18"
 							:color="iconFillColor"
 							:class="$style.icon"
 						/>
-						<div v-else-if="(icon || materialIcon) && loading" :class="$style.icon_loading">
+						<div v-else-if="icon && loading" :class="$style.icon_loading">
 							<Spinner size="16" color="--txt-primary" />
 						</div>
 					</slot>
@@ -143,11 +137,11 @@ const Root = (_, { slots }) => {
 				<!-- Labels: Title & Description -->
 				<Flex direction="column" gap="4" wide>
 					<Flex align="center" gap="6">
-						<Text v-if="titleVariant === 'data'" :id="titleId" data-testid="setting-title" variant="data" color="primary" :class="[$style.title, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
+						<Text v-if="titleVariant === 'meta'" :id="titleId" data-testid="setting-title" variant="meta" color="primary" :class="[$style.title, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
 						<Text v-else :id="titleId" data-testid="setting-title" :variant="titleVariant === 'name' ? 'name' : 'row-title'" color="primary" :class="[$style.title, $style.title_size, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
 						<slot name="titleSuffix" />
 					</Flex>
-					<Text v-if="description || $slots.description" data-testid="setting-description" :variant="descriptionVariant === 'data' ? 'data' : 'caption'" color="tertiary" :class="$style.description">
+					<Text v-if="description || $slots.description" data-testid="setting-description" :variant="descriptionVariant === 'meta' ? 'meta' : 'caption'" color="tertiary" :class="$style.description">
 						<slot name="description">{{ description }}</slot>
 					</Text>
 				</Flex>
@@ -156,9 +150,9 @@ const Root = (_, { slots }) => {
 			<Flex align="center" gap="12">
 				<Text v-if="value" data-testid="setting-value" variant="value" color="secondary" :class="$style.value">{{ value }}</Text>
 				<slot name="right">
-					<MaterialIcon
-						v-if="to || chevron"
-						:name="!external ? 'chevron_right' : 'arrow_outward'"
+					<Icon
+						v-if="to || chevron || trailingIcon"
+						:name="trailingIcon || (external ? 'open' : 'chevron')"
 						:size="18"
 						color="secondary"
 						:class="$style.chevron_icon"
@@ -213,6 +207,7 @@ const Root = (_, { slots }) => {
 }
 
 .interactive {
+	user-select: none;
 	cursor: pointer;
 	transition: background 0.2s var(--bezier);
 
@@ -243,22 +238,11 @@ const Root = (_, { slots }) => {
 	flex-shrink: 0;
 }
 
-/* A slotted icon sets its own size. The fixed box stays the default: a material icon's ligature
- * text lays out wider than 20px until its font loads, and the box keeps the row from widening. */
 .icon_slotted {
 	width: auto;
 	height: auto;
 	min-width: 20px;
 	min-height: 20px;
-}
-
-.material_icon {
-	color: var(--nulo-secondary);
-	transition: color 0.2s var(--bezier);
-}
-
-.interactive:hover .material_icon {
-	color: var(--nulo-accent);
 }
 
 .icon_loading {
@@ -288,7 +272,8 @@ const Root = (_, { slots }) => {
 	line-height: 20px !important;
 
 	text-overflow: ellipsis;
-	overflow: hidden;
+	/* Not `hidden`: a hidden box scrolls its text under a drag that selects past its edge. */
+	overflow: clip;
 	white-space: nowrap;
 
 	&.titleWithSuffix {
@@ -308,7 +293,7 @@ const Root = (_, { slots }) => {
 	line-height: 16px !important;
 
 	text-overflow: ellipsis;
-	overflow: hidden;
+	overflow: clip;
 	white-space: nowrap;
 }
 </style>

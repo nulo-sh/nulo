@@ -20,14 +20,14 @@ const emit = defineEmits(["click"])
 	>
 		<Flex align="center" gap="12">
 			<div :class="$style.profile_icon_box">
-				<MaterialIcon name="person" :size="16" color="secondary" />
+				<Icon name="user" :size="16" color="secondary" />
 			</div>
 			<Flex direction="column" align="start" gap="2">
 				<span :class="$style.profile_label">Current Profile</span>
 				<span :class="$style.profile_name">{{ name }}</span>
 			</Flex>
 		</Flex>
-		<MaterialIcon name="chevron_right" :size="18" color="secondary" />
+		<Icon name="chevron" :size="18" color="secondary" />
 	</button>
 </template>
 
@@ -70,7 +70,7 @@ const emit = defineEmits(["click"])
 }
 
 .profile_label {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 

@@ -30,21 +30,13 @@
  * on Firefox: `bun run e2e:agent tests/e2e/network/passkey-execution-canary.test.ts`.
  */
 import { describe, expect, inject } from "vitest"
-import { backgroundAlive, credentialOutlivesPage, stopBackground } from "../fixtures/browser"
+import { credentialOutlivesPage, stopBackgroundIfAlive } from "../fixtures/browser"
 import { mintPublicTokensForAccount, waitForTxMined, type AztecTestConfig } from "../fixtures/aztec"
-import {
-	clickByTestId,
-	connectPlayground,
-	grantCapBundle,
-	openPopup,
-	test,
-	waitForHash,
-	type ExtensionContext,
-} from "../fixtures/extension"
+import { clickByTestId, connectPlayground, grantCapBundle, openPopup, test, waitForHash } from "../fixtures/extension"
 import { createAccount, readLivenessBaseline, switchToLocalNetwork, waitForWorkerLiveness } from "../fixtures/helpers"
 import { registerPasskeyProfile, setupPasskeyVirtualAuth } from "../fixtures/passkey"
-import { assertPgOk, formatPgMismatch, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
-import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
+import { selectPgAccount, setPgInputs, txHashOf } from "../fixtures/playground"
+import { reconnectPlayground, runApprovedPgCall, sendDefaultTx } from "../fixtures/send"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -55,42 +47,6 @@ describe("passkey canary — the KDF-change execution gate, on both browsers", (
 			expect(hasConfig).toBe(true)
 		}
 	})
-
-	/** A prover-ON stage can outlast the browser's idle reaper, and nothing here wakes a background:
-	 *  an absent one IS the restart this stage exercises, so recovery proceeds; a present one gets the
-	 *  real kill, whose failures propagate. */
-	async function restartBackground(ctx: ExtensionContext): Promise<void> {
-		if (!(await backgroundAlive(ctx))) {
-			console.warn("[passkey-canary] no live background — the browser already stopped it; proceeding to recovery")
-			return
-		}
-		await stopBackground(ctx)
-	}
-
-	/** Duplicated from frozen-account-canary.test.ts. */
-	function txHashOf(resultJson: unknown): string {
-		const candidate =
-			typeof resultJson === "string"
-				? resultJson.replace(/^"(.*)"$/, "$1")
-				: (resultJson as { txHash?: unknown } | null | undefined)?.txHash
-		if (typeof candidate !== "string" || !candidate.startsWith("0x")) {
-			throw new Error(`cannot extract tx hash from result: ${(JSON.stringify(resultJson) ?? "undefined").slice(0, 2_000)}`)
-		}
-		return candidate
-	}
-
-	/** Duplicated from frozen-account-canary.test.ts. */
-	async function setPgInputs(page: import("puppeteer").Page, values: Record<string, string>): Promise<void> {
-		await page.evaluate((entries: Record<string, string>) => {
-			for (const [name, v] of Object.entries(entries)) {
-				const input = document.querySelector<HTMLInputElement>(`[data-testid="pg-input-${name}"]`)
-				if (!input) throw new Error(`pg-input-${name} not present`)
-				const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
-				setter?.call(input, v)
-				input.dispatchEvent(new Event("input", { bubbles: true }))
-			}
-		}, values)
-	}
 
 	test.skipIf(!hasConfig)(
 		"passkey canary — register via PRF ceremony, ctor-deploy with real proof, authwit consume, SW-restart ceremony re-unlock",
@@ -136,35 +92,28 @@ describe("passkey canary — the KDF-change execution gate, on both browsers", (
 					authwitNonce: "1",
 				})
 				step("granting public authwit as A (A's FIRST tx — ctor + set_authorized)")
-				const seqGrant = await snapshotResultSeq(page)
-				const grantPopupP = waitForPopup(ctx, "execute", { timeout: 30_000 })
-				await clickByTestId(page, "pg-btn-grantPublicAuthwit")
-				const grantPopup = await grantPopupP
-				await waitForExecuteContent(grantPopup)
-				await approveExecute(grantPopup, { approvableTimeoutMs: 120_000 })
-				const grantResult = await waitForPgResult(page, "grantPublicAuthwit", seqGrant, 300_000)
-				await assertPgOk(page, grantResult, "passkey-canary:grantResult")
+				const grantResult = await runApprovedPgCall(ctx, page, {
+					button: "grantPublicAuthwit",
+					method: "grantPublicAuthwit",
+					label: "passkey-canary:grantResult",
+					popupTimeoutMs: 30_000,
+					contentTimeoutMs: 30_000,
+				})
 				const grantTxHash = txHashOf(grantResult.resultJson)
 				step(`grant submitted (${grantTxHash.slice(0, 12)}…); waiting for the node to mine it`)
 				await waitForTxMined(aztecConfig!, grantTxHash, 300_000)
 				step("A's ctor-deploy tx MINED — real proof accepted for a passkey-derived account")
 
 				// ── Stage 3: authwit-CONSUMING tx as the named caller B (B's FIRST tx) ──
-				await page.evaluate((caller: string) => {
-					const select = document.querySelector<HTMLSelectElement>('[data-testid="pg-select-account"]')
-					if (!select) throw new Error("pg-select-account not present")
-					select.value = caller
-					select.dispatchEvent(new Event("change", { bubbles: true }))
-				}, callerB)
+				await selectPgAccount(page, callerB)
 				step("consuming the authwit as B (B's FIRST tx — its own ctor + transfer_from)")
-				const seqConsume = await snapshotResultSeq(page)
-				const consumePopupP = waitForPopup(ctx, "execute", { timeout: 30_000 })
-				await clickByTestId(page, "pg-btn-consumeAuthwit")
-				const consumePopup = await consumePopupP
-				await waitForExecuteContent(consumePopup)
-				await approveExecute(consumePopup, { approvableTimeoutMs: 120_000 })
-				const consumeResult = await waitForPgResult(page, "sendTx", seqConsume, 300_000)
-				await assertPgOk(page, consumeResult, "passkey-canary:consumeResult")
+				const consumeResult = await runApprovedPgCall(ctx, page, {
+					button: "consumeAuthwit",
+					method: "sendTx",
+					label: "passkey-canary:consumeResult",
+					popupTimeoutMs: 30_000,
+					contentTimeoutMs: 30_000,
+				})
 				await waitForTxMined(aztecConfig!, txHashOf(consumeResult.resultJson), 300_000)
 				step("authwit consumed; B's ctor-deploy tx MINED")
 
@@ -174,7 +123,9 @@ describe("passkey canary — the KDF-change execution gate, on both browsers", (
 				// under an open extension page — and a fresh popup then hosts the ceremony.
 				step("terminating the background")
 				if (credentialOutlivesPage) await anchorPopup.close()
-				await restartBackground(ctx)
+				// A prover-ON stage can outlast the browser's idle reaper; an absent background IS the
+				// restart this stage exercises.
+				await stopBackgroundIfAlive(ctx)
 				if (credentialOutlivesPage) ceremonyPopup = await openPopup(ctx)
 
 				// Session storage retains the dead background's heartbeat, so the gate needs a STRICTLY
@@ -204,57 +155,18 @@ describe("passkey canary — the KDF-change execution gate, on both browsers", (
 				// drift, so an ok result pins BOTH re-derivation and execution.
 				await page.reload({ waitUntil: "domcontentloaded" })
 				await page.waitForSelector('[data-testid="pg-btn-connect"]', { visible: true, timeout: 30_000 })
-				const verifyP = waitForPopup(ctx, "verify", { timeout: 30_000 })
-				await clickByTestId(page, "pg-btn-connect")
-				const { approveVerify } = await import("../fixtures/popups")
-				await approveVerify(await verifyP)
-				await page.waitForSelector('[data-testid="pg-status"][data-status="connected"]', { timeout: 30_000 })
-				await page.evaluate(() => {
-					const select = document.querySelector<HTMLSelectElement>('[data-testid="pg-bundle-select"]')
-					if (!select) throw new Error("pg-bundle-select not present")
-					select.value = "transaction"
-					select.dispatchEvent(new Event("change", { bubbles: true }))
-				})
-				const seqCaps = await snapshotResultSeq(page)
-				await clickByTestId(page, "pg-btn-requestCapabilities")
-				const capsResult = await waitForPgResult(page, "requestCapabilities", seqCaps, 60_000)
-				await assertPgOk(page, capsResult, "passkey-canary:capsResult")
+				await reconnectPlayground(ctx, page, "transaction", "passkey-canary:capsResult", { timeoutMs: 30_000 })
+				// Both granted accounts must come back with the reconnected session, not only the one acted as.
 				await page.waitForFunction(() => document.querySelectorAll('[data-testid="pg-select-account"] option').length >= 2, {
 					timeout: 30_000,
 					polling: 200,
 				})
-				const selected = await page.evaluate((owner: string) => {
-					const select = document.querySelector<HTMLSelectElement>('[data-testid="pg-select-account"]')
-					if (!select) throw new Error("pg-select-account not present")
-					select.value = owner
-					select.dispatchEvent(new Event("change", { bubbles: true }))
-					return select.value
-				}, ownerA)
-				expect(selected).toBe(ownerA)
-				await setPgInputs(page, {
-					tokenAddress: aztecConfig!.tokenAddress,
-					recipient: aztecConfig!.minterAddress,
-					amount: "1",
-				})
+				await selectPgAccount(page, ownerA)
 				step("post-restart sendTx as A (re-derived passkey account, non-init path)")
-				const seqFinal = await snapshotResultSeq(page)
-				const finalPopupP = waitForPopup(ctx, "execute", { timeout: 180_000 })
-				await clickByTestId(page, "pg-btn-sendTx-default")
-				const errorSentinel = new Promise<never>((_, reject) => {
-					waitForPgResult(page, "sendTx", seqFinal, 175_000).then(
-						(r) => {
-							if (r.status === "error") {
-								reject(new Error(`post-restart sendTx errored dApp-side: ${formatPgMismatch(r)}`))
-							}
-						},
-						() => {},
-					)
+				const finalResult = await sendDefaultTx(ctx, page, aztecConfig!, "passkey-canary:finalResult", {
+					popupTimeoutMs: 180_000,
+					contentTimeoutMs: 30_000,
 				})
-				const finalPopup = await Promise.race([finalPopupP, errorSentinel])
-				await waitForExecuteContent(finalPopup)
-				await approveExecute(finalPopup, { approvableTimeoutMs: 120_000 })
-				const finalResult = await waitForPgResult(page, "sendTx", seqFinal, 300_000)
-				await assertPgOk(page, finalResult, "passkey-canary:finalResult")
 				await waitForTxMined(aztecConfig!, txHashOf(finalResult.resultJson), 300_000)
 				step("post-restart tx mined — passkey-derived account fully operational after ceremony re-unlock")
 			} finally {

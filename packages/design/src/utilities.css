@@ -76,15 +76,6 @@
 	font-variant-numeric: normal;
 }
 
-.type--label {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
-	font-variant-numeric: normal;
-}
-
 .type--row-title {
 	font-family: var(--font-headline);
 	font-weight: 700;
@@ -107,15 +98,6 @@
 	font-weight: 600;
 	letter-spacing: normal;
 	text-transform: none;
-	font-variant-numeric: normal;
-}
-
-.type--name-tag {
-	font-family: var(--font-body);
-	font-size: 11px;
-	font-weight: 600;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
 	font-variant-numeric: normal;
 }
 
@@ -148,7 +130,7 @@
 
 .type--nav {
 	font-family: var(--font-headline);
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 500;
 	letter-spacing: 0.05em;
 	text-transform: uppercase;
@@ -160,15 +142,6 @@
 	font-size: 10px;
 	font-weight: 500;
 	letter-spacing: 0.06em;
-	text-transform: uppercase;
-	font-variant-numeric: normal;
-}
-
-.type--tag {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 600;
-	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	font-variant-numeric: normal;
 }
@@ -195,15 +168,6 @@
 	font-family: var(--font-mono);
 	font-size: 14px;
 	font-weight: 400;
-	letter-spacing: normal;
-	text-transform: none;
-	font-variant-numeric: normal;
-}
-
-.type--data {
-	font-family: var(--font-mono);
-	font-size: 12px;
-	font-weight: 500;
 	letter-spacing: normal;
 	text-transform: none;
 	font-variant-numeric: normal;
@@ -255,7 +219,7 @@
 
 .type--meta {
 	font-family: var(--font-mono);
-	font-size: 11px;
+	font-size: 13px;
 	font-weight: 400;
 	letter-spacing: normal;
 	text-transform: none;
@@ -370,86 +334,6 @@
 
 .color--sand {
 	color: var(--sand);
-}
-
-.fill--primary {
-	fill: var(--txt-primary);
-}
-
-.fill--body {
-	fill: var(--txt-body);
-}
-
-.fill--secondary {
-	fill: var(--txt-secondary);
-}
-
-.fill--tertiary {
-	fill: var(--txt-tertiary);
-}
-
-.fill--support {
-	fill: var(--txt-support);
-}
-
-.fill--inverse {
-	fill: var(--txt-inverse);
-}
-
-.fill--white {
-	fill: var(--txt-white);
-}
-
-.fill--txt-warning {
-	fill: var(--txt-warning);
-}
-
-.fill--txt-danger {
-	fill: var(--txt-danger);
-}
-
-.fill--txt-success {
-	fill: var(--txt-success);
-}
-
-.fill--blue {
-	fill: var(--blue);
-}
-
-.fill--orange {
-	fill: var(--orange);
-}
-
-.fill--purple {
-	fill: var(--purple);
-}
-
-.fill--green {
-	fill: var(--green);
-}
-
-.fill--red {
-	fill: var(--red);
-}
-
-.fill--yellow {
-	fill: var(--yellow);
-}
-
-.fill--amber {
-	fill: var(--yellow);
-}
-
-.fill--gray {
-	fill: var(--gray);
-}
-
-.fill--neutral-mint {
-	fill: var(--neutral-mint);
-}
-
-.fill--sand {
-	fill: var(--sand);
 }
 
 .flex {

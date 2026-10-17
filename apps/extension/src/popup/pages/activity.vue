@@ -222,7 +222,7 @@ onBeforeUnmount(() => {
 				<Badge v-if="filterToken" :class="$style.filter_chip" data-testid="activity-token-filter">
 					<span :class="$style.filter_label" data-testid="activity-token-filter-symbol">{{ filterSymbol }}</span>
 					<RowAction label="Show all activity" data-testid="activity-token-filter-clear" @click="clearTokenFilter">
-						<MaterialIcon name="close" :size="14" color="secondary" />
+						<Icon name="close" :size="14" color="secondary" />
 					</RowAction>
 				</Badge>
 			</Flex>
@@ -241,7 +241,7 @@ onBeforeUnmount(() => {
 				:class="$style.empty_banner"
 				data-testid="activity-empty"
 			>
-				<MaterialIcon name="history" :size="32" color="secondary" />
+				<Icon name="history" :size="32" color="secondary" />
 				<span :class="$style.empty_title">No transactions yet</span>
 				<span :class="$style.empty_description">
 					Once you start working with your assets, all activity will appear here

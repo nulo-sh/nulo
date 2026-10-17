@@ -284,7 +284,7 @@ onBeforeUnmount(() => {
 		/>
 
 		<Flex v-if="showScrollBtn" data-testid="logs-scroll-btn" @click="scrollToBottom" align="center" :class="$style.scroll_btn">
-			<Icon name="arrow-right" size="24" rotate="90" color="tertiary" />
+			<Icon name="forward" size="24" rotate="90" color="tertiary" />
 		</Flex>
 
 		<div ref="editorRef" data-testid="logs-editor" :class="$style.logs_viewer" />
@@ -306,6 +306,7 @@ onBeforeUnmount(() => {
 }
 
 .scroll_btn {
+	user-select: none;
 	position: absolute;
 	right: 18px;
 	bottom: 18px;
@@ -322,8 +323,8 @@ onBeforeUnmount(() => {
 	&:hover {
 		background: var(--dropdown-bg);
 		border-color: var(--nulo-outline);
-		* {
-			fill: var(--txt-secondary);
+		svg {
+			color: var(--txt-secondary);
 		}
 	}
 

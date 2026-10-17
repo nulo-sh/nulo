@@ -40,7 +40,7 @@ const handleReset = () => {
 					<SettingItem
 						@click="handleReset"
 						title="Delete profile"
-						icon="trash"
+						icon="remove"
 						iconBgColor="red"
 						chevron
 						data-testid="forgot-reset-btn"

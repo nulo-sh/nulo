@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Comment, type PropType, ref, useId, useSlots } from "vue"
+import type { GlyphName } from "@nulo/design"
 import type { JobStage, ProveBackend } from "@nulo/wallet-core/jobs"
 import RowTarget from "@/components/ui/RowTarget.vue"
 import { vSnackFooter } from "@/composables/snackInset"
@@ -16,15 +17,14 @@ import { vSnackFooter } from "@/composables/snackInset"
  */
 const props = defineProps({
 	title: { type: String, required: true },
-	icon: { type: String, required: true },
-	iconRotate: { type: [String, Number], default: 0 },
-	amount: { type: String, default: null },
-	amountSymbol: { type: String, default: null },
+	icon: { type: String as PropType<GlyphName>, required: true },
+	amount: { type: String as PropType<string | null>, default: null },
+	amountSymbol: { type: String as PropType<string | null>, default: null },
 	/** `≈ $x.xx` line under the amount — omitted (null) when unpriced. */
-	amountFiat: { type: String, default: null },
+	amountFiat: { type: String as PropType<string | null>, default: null },
 	testId: { type: String, default: undefined },
-	txAmountDisplay: { type: String, default: undefined },
-	txTransferTypeLabel: { type: String, default: undefined },
+	txAmountDisplay: { type: String as PropType<string | null>, default: undefined },
+	txTransferTypeLabel: { type: String as PropType<string | null>, default: undefined },
 	txStatus: { type: String, default: undefined },
 	txHash: { type: String, default: undefined },
 	stage: { type: String as PropType<JobStage | null>, default: null },
@@ -38,6 +38,8 @@ const props = defineProps({
 	opens: { type: Boolean, default: false },
 	/** The row is a receipt arriving now: it slides in and glows. */
 	arriving: { type: Boolean, default: false },
+	/** The title names the function a dApp called: it stays on one line, cut at its end. */
+	oneLineTitle: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(["activate"])
@@ -96,7 +98,7 @@ function hasActionsContent() {
 
 		<Flex align="center" gap="16" :class="$style.left_content">
 			<Flex align="center" justify="center" :class="$style.activity_icon" data-testid="activity-icon">
-				<Icon :name="icon" :rotate="iconRotate" size="18" color="secondary" />
+				<Icon :name="icon" size="18" color="secondary" />
 				<div v-if="$slots.badge" :class="$style.badge">
 					<slot name="badge" />
 				</div>
@@ -104,7 +106,7 @@ function hasActionsContent() {
 
 			<Flex direction="column" gap="4" :class="$style.text">
 				<Flex align="center" gap="6">
-					<span :id="titleId" :class="$style.title" data-testid="activity-title">{{ title }}</span>
+					<span :id="titleId" :class="[$style.title, oneLineTitle && $style.title_one_line]" data-testid="activity-title">{{ title }}</span>
 					<slot name="title-trailing" />
 				</Flex>
 				<Flex v-if="$slots.secondary" align="center" gap="6" :class="$style.secondary_row">
@@ -142,6 +144,7 @@ function hasActionsContent() {
 }
 
 .interactive {
+	user-select: none;
 	cursor: pointer;
 	transition: background 0.15s var(--bezier);
 
@@ -225,13 +228,21 @@ function hasActionsContent() {
 	color: var(--txt-primary);
 }
 
+/* A name the dApp chose can be any length; only this cut keeps it from widening the page. */
+.title_one_line {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .secondary_row {
 	min-height: 14px;
 }
 
 .amount_fiat {
 	composes: type--fiat from global;
-	font-size: 11px;
+	font-size: 13px;
 	color: var(--nulo-secondary);
 }
 

@@ -183,7 +183,7 @@ onBeforeUnmount(() => {
 						:class="$style.hero_link"
 					>
 						<span>View on {{ explorerName }}</span>
-						<Icon name="external-link" size="10" color="tertiary" />
+						<Icon name="open" size="10" color="tertiary" />
 					</a>
 					<span
 						v-else-if="tx?.hash"
@@ -285,12 +285,12 @@ onBeforeUnmount(() => {
 			<Flex wide direction="column" gap="10">
 				<SectionLabel label="Details" />
 
-				<Flex wide direction="column" gap="10" :class="$style.details_box">
+				<Flex wide direction="column" gap="10" :class="$style.details_box" data-testid="tx-detail-box">
 					<TxHashRow v-if="tx?.hash" :hash="tx.hash" :explorerUrl="explorerUrl" linkTestid="tx-hash-link" copyTestid="tx-hash" @copy="handleCopy" />
 
-					<Flex v-if="originLabel" wide justify="between" align="center">
-						<span :class="$style.detail_key">App</span>
-						<span :class="$style.detail_value">{{ originLabel }}</span>
+					<Flex v-if="originLabel" wide justify="between" align="start" gap="16">
+						<span :class="$style.app_key" data-testid="tx-detail-app-label">App</span>
+						<span :class="$style.app_value" data-testid="tx-detail-app">{{ originLabel }}</span>
 					</Flex>
 
 					<Flex v-if="feePaymentLabel" wide justify="between" align="center">
@@ -447,8 +447,16 @@ onBeforeUnmount(() => {
 }
 
 .detail_value_mono {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
+}
+
+.app_key {
+	composes: app_key from "../detail-page.module.css";
+}
+
+.app_value {
+	composes: app_value from "../detail-page.module.css";
 }
 
 .detail_value_aux {
@@ -486,7 +494,7 @@ onBeforeUnmount(() => {
 }
 
 .call_contract {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 }
 

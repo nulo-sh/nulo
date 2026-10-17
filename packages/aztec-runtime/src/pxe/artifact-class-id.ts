@@ -2,7 +2,7 @@
  * Class-id checks: recompute a `ContractArtifact`'s class id and compare it to the expected `Fr`.
  *
  * - `verifyArtifactClassId` returns the artifact on match and `undefined` on mismatch or recompute
- *   failure, so artifact resolution ("pxe-local" → "known") can fall through to the next source.
+ *   failure, so artifact resolution can fall through to the next source.
  * - `assertArtifactClassId` throws on mismatch and lets a recompute failure propagate unchanged, for
  *   registration, where a mismatched artifact must be refused at the boundary.
  * - `assertWireArtifactClassId` parses a wire-form pair first, binds the artifact to the class the

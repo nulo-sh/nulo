@@ -104,7 +104,9 @@ declare const __VERSION__: string
  * the wallet. Default `false` — Nulo's wrapper rejects content-script
  * messages from subframes. Override by setting
  * `VITE_NULO_ALLOW_IFRAME_DAPPS=1` at build time (rare; research found no
- * legitimate iframe-dApp use cases in the Nulo ecosystem).
+ * legitimate iframe-dApp use cases in the Nulo ecosystem). Even with it on,
+ * a key exchange completes only from a frame of the origin the session is
+ * credited to, the top frame's: a cross-origin subframe cannot connect.
  *
  * Why a build-time env flag (not a runtime config) — runtime config opens a
  * widening primitive that an attacker could try to flip via storage poisoning
@@ -141,7 +143,10 @@ export function initWalletSdkHandler(
 			// (Follow-up: route to the @nulo logger to surface channel/heartbeat diagnostics.)
 			logger: NOOP_LOGGER,
 		},
-		buildContentTransport(logger, (sessionId, tabId) => sessionKnownTo(state.late.handler, sessionId, tabId)),
+		buildContentTransport(logger, {
+			sessionKnown: (sessionId, tabId) => sessionKnownTo(state.late.handler, sessionId, tabId),
+			discoveryCredit: (sessionId) => state.late.handler?.getPendingDiscovery(sessionId),
+		}),
 		buildHandlerCallbacks(deps, state, ports.windows),
 	)
 	state.late.handler = handler
@@ -371,15 +376,22 @@ function tearDownTabAttempts(state: SdkHandlerState, tabId: number): void {
 	deletePendingVerificationForTab(state.pendingVerification, tabId)
 }
 
+type DiscoveryCredit = Pick<PendingDiscovery, "origin" | "tabId">
+
 /** What the content wrapper needs besides the SDK's listener. */
 type ContentWrapperDeps = {
 	logger: ILogger
 	/** Whether the sender's tab holds the session, per the handler that exists right now; asked only for a session-bound message. */
 	sessionKnown: (sessionId: string, tabId: number) => boolean
+	/** The tab and origin the pending discovery under this id is credited to, if one is pending. */
+	discoveryCredit: (sessionId: string) => DiscoveryCredit | undefined
 	sendToTab: BackgroundTransport["sendToTab"]
 }
 
-function buildContentTransport(logger: ILogger, sessionKnown: ContentWrapperDeps["sessionKnown"]): BackgroundTransport {
+function buildContentTransport(
+	logger: ILogger,
+	{ sessionKnown, discoveryCredit }: Pick<ContentWrapperDeps, "sessionKnown" | "discoveryCredit">,
+): BackgroundTransport {
 	// The handler's `sendToTab` returns void, so the send's rejection is nobody's to observe. A
 	// tab that navigated away (or lost its content script) has nowhere to deliver to; every
 	// other failure still surfaces as an unhandled rejection.
@@ -398,14 +410,15 @@ function buildContentTransport(logger: ILogger, sessionKnown: ContentWrapperDeps
 			// duplicate secure-message double-journals a sendTx. Attach to the
 			// relay instead; buffered cold-wake messages flush through this same
 			// validated wrapper.
-			attachContentListener(admitContentMessage(listener, { logger, sessionKnown, sendToTab }))
+			attachContentListener(admitContentMessage(listener, { logger, sessionKnown, discoveryCredit, sendToTab }))
 		},
 	}
 }
 
 /**
  * The checks every content-script message passes before the SDK handler sees it, in this order:
- * top frame, envelope schema, then a session this background knows.
+ * top frame, envelope schema, a key exchange from its discovery's document, then a session this
+ * background knows.
  */
 function admitContentMessage(
 	listener: Parameters<BackgroundTransport["addContentListener"]>[0],
@@ -457,8 +470,39 @@ function admitContentMessage(
 			logger.log("wallet-sdk", LogLevel.Debug, "Dropping malformed content-script envelope", verdict.reason)
 			return undefined
 		}
+		if (verdict.kind === "valid" && !keyExchangeFromItsDiscovery(verdict.message, sender, deps.discoveryCredit)) {
+			logger.log("wallet-sdk", LogLevel.Debug, "Dropping a key exchange from outside its discovery's document")
+			return undefined
+		}
 		if (verdict.kind === "valid" && replyIfStale(verdict.message, sender.tab?.id, deps)) return undefined
 		listener(message, sender)
+		return undefined
+	}
+}
+
+/**
+ * Upstream credits a session to the pending discovery its key exchange names, so the exchange must come
+ * from that discovery's tab and document origin; one naming no pending discovery is upstream's to drop.
+ */
+function keyExchangeFromItsDiscovery(
+	envelope: ContentScriptMessageEnvelope,
+	sender: chrome.runtime.MessageSender,
+	discoveryCredit: ContentWrapperDeps["discoveryCredit"],
+): boolean {
+	if (envelope.type !== "key-exchange-request" || envelope.sessionId === undefined) return true
+	const credit = discoveryCredit(envelope.sessionId)
+	if (credit === undefined) return true
+	return sender.tab?.id === credit.tabId && credit.origin !== "unknown" && senderDocumentOrigin(sender) === credit.origin
+}
+
+/** The sending document's own origin: Chrome sets `sender.origin` (an opaque document's is `"null"`),
+ *  Firefox only `sender.url`. */
+function senderDocumentOrigin(sender: chrome.runtime.MessageSender): string | undefined {
+	if (sender.origin !== undefined) return sender.origin
+	if (sender.url === undefined) return undefined
+	try {
+		return new URL(sender.url).origin
+	} catch {
 		return undefined
 	}
 }
@@ -514,7 +558,6 @@ function buildHandlerCallbacks(
 				isSessionLive: () => live.isLive(),
 				windows,
 				reservations: state.admission,
-				hold,
 				logger: deps.logger,
 			})
 			// A failed establishment ends without a termination when its id was taken over meanwhile.
@@ -921,7 +964,7 @@ async function handleDiscovery(discovery: PendingDiscovery, deps: DiscoveryDeps)
 			return
 		}
 		if (existingSession && served) {
-			autoApproveExistingSession(discovery, chainId, deps, existingSession.trustedVerification === true)
+			autoApproveExistingSession(discovery, chainId, deps)
 			return
 		}
 
@@ -993,15 +1036,15 @@ function approveAdmitted(
 	discovery: PendingDiscovery,
 	chainId: string,
 	deps: DiscoveryDeps,
-	reservation: WindowReservation | undefined,
+	reservation: WindowReservation,
 	why: string,
 ): void {
 	if (rejectIfExpired(discovery, deps)) {
-		reservation?.releaseIfUnstarted()
+		reservation.releaseIfUnstarted()
 		return
 	}
 	if (!deps.handler.approveDiscovery(discovery.requestId)) {
-		reservation?.releaseIfUnstarted()
+		reservation.releaseIfUnstarted()
 		deps.logger.log(
 			"wallet-sdk",
 			LogLevel.Warn,
@@ -1028,7 +1071,6 @@ function admitVerifyWindow(discovery: PendingDiscovery, deps: DiscoveryDeps) {
 		id: discovery.requestId,
 		origin: discovery.origin,
 		deadline: discoveryDeadline(discovery),
-		needsWindow: true,
 		consumesToken: false,
 	})
 }
@@ -1044,15 +1086,14 @@ function rejectIfNotAdmitted(
 }
 
 /** Returning user on this chain: approve through the origin's reconnect budget. A remembered
- *  handshake is the one a reload loop repeats, so it always spends a token; only an untrusted
- *  session needs a verify window and so a slot. Synchronous when admitted at once. */
-function autoApproveExistingSession(discovery: PendingDiscovery, chainId: string, deps: DiscoveryDeps, trusted: boolean): void {
+ *  handshake is the one a reload loop repeats, so it spends a token as well as the slot of the check
+ *  it will show. Synchronous when admitted at once. */
+function autoApproveExistingSession(discovery: PendingDiscovery, chainId: string, deps: DiscoveryDeps): void {
 	const outcome = deps.admission.admit(
 		{
 			id: discovery.requestId,
 			origin: discovery.origin,
 			deadline: discoveryDeadline(discovery),
-			needsWindow: !trusted,
 			consumesToken: true,
 		},
 		(reservation) => approveAdmitted(discovery, chainId, deps, reservation, "existing session"),
@@ -1179,7 +1220,7 @@ async function runDiscoveryPopup(
 		if (rejectIfNotAdmitted(discovery, deps, admitted)) return
 		if (waitingWindow !== undefined) {
 			// A window closed while its Allow was queued fails the attach: its removal was buffered.
-			if (!admitted?.attach(waitingWindow, result.expiredUrl)) {
+			if (!admitted.attach(waitingWindow, result.expiredUrl)) {
 				rejectThrottled(discovery, deps, "its connect window closed while waiting for a verify-window slot")
 				return
 			}
@@ -1266,7 +1307,7 @@ async function persistAndApprove(
 	chainId: string,
 	params: DiscoveryParams,
 	profileId: string,
-	reservation: WindowReservation | undefined,
+	reservation: WindowReservation,
 	deps: DiscoveryDeps,
 ): Promise<void> {
 	const { handler, dappSessionService, logger } = deps
@@ -1312,7 +1353,7 @@ async function persistAndApprove(
 			discovery,
 			sessionId: newSession.id,
 			approverProfileId: newSession.profileId,
-			attemptOpen: () => reservation?.abandoned !== true,
+			attemptOpen: () => !reservation.abandoned,
 			approveDiscovery: (id) => handler.approveDiscovery(id),
 			rejectDiscovery: (id) => handler.rejectDiscovery(id),
 			deleteSession: (id) => dappSessionService.deleteDappSession(id),
@@ -1327,7 +1368,7 @@ async function persistAndApprove(
 			)
 		}
 	} finally {
-		if (!approved) reservation?.releaseIfUnstarted()
+		if (!approved) reservation.releaseIfUnstarted()
 	}
 }
 

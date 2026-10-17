@@ -77,8 +77,6 @@ onBeforeUnmount(() => legal.dispose())
 				<SettingItem
 					to="https://nulo.sh"
 					title="Nulo Website"
-					icon="globe"
-					iconBgColor="blue"
 					external
 				/>
 			</ItemsContainer>
@@ -89,7 +87,6 @@ onBeforeUnmount(() => legal.dispose())
 					size="large"
 					title="Feedback"
 					description="Suggest an idea"
-					icon="face"
 					external
 				/>
 				<SettingItem
@@ -97,7 +94,6 @@ onBeforeUnmount(() => legal.dispose())
 					size="large"
 					title="Report Issue"
 					description="If you're facing a bug"
-					icon="bug"
 					external
 				/>
 				<SettingItem
@@ -105,7 +101,6 @@ onBeforeUnmount(() => legal.dispose())
 					size="large"
 					title="Report Scam"
 					description="Tell us about the scammers"
-					icon="warning"
 					external
 				/>
 			</ItemsContainer>

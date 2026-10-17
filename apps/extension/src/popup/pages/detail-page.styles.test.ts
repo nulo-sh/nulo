@@ -42,6 +42,15 @@ describe("the detail pages share one look", () => {
 		)
 	})
 
+	test.each(["tx/[id].vue", "journal/[id].vue"])(
+		"%s: its App row's label and value are the shared ones, with no rule of their own",
+		(page) => {
+			const r = rules(page)
+			expect(r.get(".app_key")).toBe('composes: app_key from "../detail-page.module.css";')
+			expect(r.get(".app_value")).toBe('composes: app_value from "../detail-page.module.css";')
+		},
+	)
+
 	test("journal: the To link draws as the shared mono value, as the Tx hash link does", () => {
 		expect(rules("journal/[id].vue").get(".recipient_link")).toBe(
 			'composes: detail_value_mono from "../detail-page.module.css"; composes: detail_link from "../detail-page.module.css";',

@@ -257,7 +257,7 @@ onBeforeUnmount(() => {
 					data-testid="journal-detail-explorer-link"
 				>
 					<span>View on {{ explorerName }}</span>
-					<Icon name="external-link" size="10" color="tertiary" />
+					<Icon name="open" size="10" color="tertiary" />
 				</a>
 			</Flex>
 
@@ -280,7 +280,7 @@ onBeforeUnmount(() => {
 			<!-- Details box — mirrors tx/[id].vue's details_box. App/Method/To/etc.
 				 surfaced as rows (not standalone chips) so the layout matches the
 				 confirmed-tx detail page. -->
-			<Flex wide direction="column" gap="10" :class="$style.details_box">
+			<Flex wide direction="column" gap="10" :class="$style.details_box" data-testid="journal-detail-box">
 				<Flex v-if="category" wide direction="column" gap="4">
 					<span :class="$style.detail_key">What happened</span>
 					<span :class="$style.detail_context" data-testid="journal-detail-context">{{ category.context }}</span>
@@ -295,9 +295,9 @@ onBeforeUnmount(() => {
 					@copy="handleCopy"
 				/>
 
-				<Flex v-if="originChip" wide justify="between" align="center">
-					<span :class="$style.detail_key">App</span>
-					<span :class="$style.detail_value_mono" data-testid="journal-detail-origin">{{ originChip }}</span>
+				<Flex v-if="originChip" wide justify="between" align="start" gap="16">
+					<span :class="$style.app_key" data-testid="journal-detail-app-label">App</span>
+					<span :class="$style.app_value" data-testid="journal-detail-origin">{{ originChip }}</span>
 				</Flex>
 
 				<Flex v-if="methodLabel" wide justify="between" align="center">
@@ -415,6 +415,14 @@ onBeforeUnmount(() => {
 
 .detail_value_mono {
 	composes: detail_value_mono from "../detail-page.module.css";
+}
+
+.app_key {
+	composes: app_key from "../detail-page.module.css";
+}
+
+.app_value {
+	composes: app_value from "../detail-page.module.css";
 }
 
 /* TxHashRow's link, so both linked values in Details read alike. */

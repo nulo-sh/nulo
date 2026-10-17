@@ -61,12 +61,12 @@ const startRename = async () => {
 		<Flex align="center" gap="12" wide>
 			<Icon
 				v-if="selected"
-				name="check-circle"
+				name="square-check"
 				size="16"
 				color="primary"
 				:class="$style.row_check"
 			/>
-			<Icon v-else name="circle" size="16" color="secondary" :class="$style.row_check" />
+			<Icon v-else name="square" size="16" color="secondary" :class="$style.row_check" />
 
 			<Flex direction="column" gap="2" wide :class="$style.row_text">
 				<Flex align="center" justify="between" gap="8" wide>
@@ -112,6 +112,7 @@ const startRename = async () => {
 
 <style module>
 .row {
+	user-select: none;
 	position: relative;
 
 	display: flex;
@@ -185,7 +186,7 @@ const startRename = async () => {
 }
 
 .row_address {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 	line-height: 16px;
 
@@ -210,7 +211,7 @@ const startRename = async () => {
 }
 
 .alias_label {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	display: flex;
 	align-items: center;
 	gap: 4px;

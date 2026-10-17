@@ -109,7 +109,7 @@ onBeforeUnmount(() => {
 			register page, so the onboarding tab feels like Nulo from the
 			very first paint. -->
 		<Flex tag="header" align="center" justify="center" gap="8" :class="$style.brand">
-			<MaterialIcon name="lock" :size="18" color="primary" />
+			<Icon name="lock" :size="18" color="primary" />
 			<span :class="$style.wordmark">NULO</span>
 		</Flex>
 

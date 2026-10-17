@@ -13,6 +13,7 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 /** Utils */
 import { balanceFormatted } from "@/utils/amount.js"
 import { copyWithToast } from "@/utils/clipboard"
+import { selectedWithin } from "@/utils/selection"
 import { knownDecimals, parseRawBalance, safeFiatOf } from "@/utils/token-amount"
 import { aggregateFiat } from "@/utils/token-aggregate"
 import { storageLocalGet, storageLocalSet } from "@/utils/storage"
@@ -114,8 +115,8 @@ const displayedTokenFiat = computed(() => {
 const fiatOf = safeFiatOf((tb) => prices.tokenFiatMicro(tb.token, parseRawBalance(tb)))
 const aggregate = computed(() => aggregateFiat(tokenBalances.value, fiatOf))
 
-/** Holdings that lack a price count as $0.00 under the "priced assets only" caption; a wallet where
- *  none has one after a failed fetch is `pricesUnavailable`. */
+/** Holdings that lack a price count as $0.00 under the "priced assets only" caption, unless every
+ *  priceable one lacks it (`pricesUnavailable`). */
 const aggregateFiatDisplay = computed(() => prices.formatUsdMicro(aggregate.value.micro))
 const isAggregatePartial = computed(() => aggregate.value.partial)
 
@@ -164,7 +165,8 @@ function fitHeroToLine() {
 const handleCopy = (value, label) => {
 	void copyWithToast(value, openToast, `${label} is copied`)
 }
-const handleTokenBalanceClick = async () => {
+const handleTokenBalanceClick = async (event) => {
+	if (selectedWithin(event.currentTarget)) return
 	let balance = totalTokenBalance.value?.value
 	if (totalTokenBalance.value?.slashed || showFullBalance.value) {
 		showFullBalance.value = !showFullBalance.value
@@ -207,11 +209,12 @@ const isPriceableHolding = (tb) =>
 	typeof tb.token?.contract === "string" &&
 	(parseRawBalance(tb) ?? 0n) > 0n &&
 	(!prices.mapped.value || prices.isPriced(tb.token.chainId, tb.token.contract))
-/** A price-mapped holding counts as $0.00 until its quote lands, so a wallet holding one waits for
- *  the first price answer; an empty or unpriced wallet has none to wait for. */
+/** A wallet holding a price-mapped token waits for the first price answer; an empty or unpriced
+ *  wallet has none to wait for. */
 const awaitingQuotes = computed(() => showFiatValues.value && !prices.settled.value && tokenBalances.value.some(isPriceableHolding))
+/** Whatever the cause: an expired quote, one an answer left out, a failed fetch, no answer by the cap. */
 const pricesUnavailable = computed(() => {
-	if (!showFiatValues.value || !prices.unavailable.value) return false
+	if (!showFiatValues.value) return false
 	const holdings = tokenBalances.value.filter(isPriceableHolding)
 	return holdings.length > 0 && holdings.every((tb) => fiatOf(tb) === undefined)
 })
@@ -295,10 +298,10 @@ onBeforeUnmount(() => {
 			<div :class="$style.hero_wrap">
 				<div
 					v-if="tokenToDisplay || showFiatValues"
-					@click="handleTokenBalanceClick"
+					:onClick="tokenToDisplay ? handleTokenBalanceClick : undefined"
 					data-testid="balance-amount"
 					:aria-busy="(!tokenToDisplay && heroPending) || undefined"
-					:class="$style.balance_amount"
+					:class="[$style.balance_amount, tokenToDisplay && $style.tappable]"
 				>
 					<span v-if="tokenToDisplay" :class="$style.hero_fit" :style="{ '--hero-scale': heroFit.scale }">
 						{{ heroText }}
@@ -353,11 +356,11 @@ onBeforeUnmount(() => {
 				priced assets only
 			</div>
 
-			<!-- Glyphs only: the padlock and globe are the token rows' vocabulary, so no word doubles them. -->
+			<!-- Glyphs only: the two squares are the token rows' vocabulary, so no word doubles them. -->
 			<Flex v-if="tokenToDisplay" align="center" justify="center" gap="12" :class="$style.breakdown">
 				<Tooltip textAlign="left" delay="300">
 					<span :class="$style.breakdown_item">
-						<span :class="$style.breakdown_private"><Icon name="lock" size="12" :aria-label="PRIVATE_BALANCE_LABEL" /></span>
+						<span :class="$style.breakdown_private"><Icon name="private" size="12" :aria-label="PRIVATE_BALANCE_LABEL" /></span>
 						<span data-testid="private-balance-value">{{ privateBalanceFormatted }}</span>
 					</span>
 					<template #content>
@@ -367,7 +370,7 @@ onBeforeUnmount(() => {
 				<span :class="$style.breakdown_divider">|</span>
 				<Tooltip textAlign="left" delay="300">
 					<span :class="$style.breakdown_item">
-						<span :class="$style.breakdown_public"><Icon name="globe" size="12" :aria-label="PUBLIC_BALANCE_LABEL" /></span>
+						<span :class="$style.breakdown_public"><Icon name="public" size="12" :aria-label="PUBLIC_BALANCE_LABEL" /></span>
 						<span data-testid="public-balance-value">{{ publicBalanceFormatted }}</span>
 					</span>
 					<template #content>
@@ -406,12 +409,15 @@ onBeforeUnmount(() => {
 	composes: type--amount-hero from global;
 	font-size: 48px;
 	color: var(--txt-primary);
-	cursor: pointer;
 
 	white-space: nowrap;
 	overflow: hidden;
 	max-width: 100%;
 	min-width: 0;
+}
+
+.tappable {
+	cursor: pointer;
 }
 
 /* The figure's type scales down from the hero's size, while its line keeps the full size's height. */
@@ -440,7 +446,9 @@ onBeforeUnmount(() => {
 }
 
 .arrival_chip {
-	composes: type--tag from global;
+	composes: type--label-section from global;
+	/* Faded out, the chip still holds its text, which a drag across the hero would copy. */
+	user-select: none;
 	position: absolute;
 	left: 50%;
 	top: -18px;
@@ -530,7 +538,7 @@ onBeforeUnmount(() => {
 	color: var(--nulo-secondary);
 }
 
-/* Same private/public vocabulary as TokenCard's split: bone lock = private, grey globe = public. */
+/* Keep in step with TokenCard's split: one private/public vocabulary on every balance. */
 .breakdown_private {
 	display: inline-flex;
 	color: var(--nulo-accent);

@@ -194,8 +194,6 @@ const collapsingLabel = "Import Account"
 						@click="handlePickFile"
 						title="Choose an account file"
 						:description="fileName || 'Select a .json or .txt file'"
-						icon="key"
-						:iconBgColor="error ? 'red' : fileBody ? 'blue' : 'gray'"
 						chevron
 						:disabled="isBusy"
 						data-testid="import-account-pick-file"
@@ -230,7 +228,6 @@ const collapsingLabel = "Import Account"
 						size="large"
 						:title="accountName.trim() || 'Account'"
 						titleVariant="name"
-						icon="user"
 						raw
 						data-testid="import-account-preview"
 						:data-account-address="previewAddress"
@@ -302,7 +299,7 @@ const collapsingLabel = "Import Account"
 
 <style module>
 .preview_address {
-	composes: type--data from global;
+	composes: type--meta from global;
 	display: block;
 	white-space: normal;
 	word-break: break-all;

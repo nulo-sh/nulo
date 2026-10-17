@@ -31,10 +31,8 @@ const isSynthetic = computed(() => props.synthetic === "public-fj")
 <template>
 	<SettingItem
 		:title="fpc.name || fpc.address"
-		:titleVariant="fpc.name ? 'row-title' : 'data'"
+		:titleVariant="fpc.name ? 'row-title' : 'meta'"
 		:description="fpc.typeDescription"
-		icon="fpc"
-		iconBgColor="transparent"
 		raw
 		:class="$style.fpc_item"
 		data-testid="fpc-row"
@@ -62,7 +60,7 @@ const isSynthetic = computed(() => props.synthetic === "public-fj")
 
 				<Tooltip v-if="!protectedRow" position="end" delay="350">
 					<RowAction label="Delete FPC" data-testid="fpc-delete-btn" @click="emit('delete', fpc)">
-						<Icon name="close-circle" size="14" color="tertiary" />
+						<Icon name="close" size="14" color="tertiary" />
 					</RowAction>
 					<template #content>Delete FPC</template>
 				</Tooltip>

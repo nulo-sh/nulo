@@ -88,9 +88,7 @@ function editDescribedby(c, section) {
 	return ids.join(" ")
 }
 
-/** `updated` marks an edit that has just come back; the staged row must not keep it, or reopening the
- *  edit form and closing it would look like another edit and reset the row's selection. */
-function stageRow({ updated: _edit, ...row }, idx) {
+function stageRow(row, idx) {
 	const classified = classifyImportRow(row, savedIndex.value)
 	const addressText = classified.kind === "address-change" ? addressChangeText(classified.savedAddress, row.address) : null
 	return { ...row, idx, ...classified, addressText }
@@ -105,10 +103,17 @@ function handleSelectContact(contact) {
 
 	contact.selected = !contact.selected
 }
+/** The edit form gets the row and its save as its popup payload, which lives only while the form is
+ *  open: a form closed without saving changes nothing. */
 function handleEditContact(contact) {
-	cacheStore.importContact = contact
-
-	popupStore.open("edit_contact")
+	popupStore.open("edit_contact", {
+		contact,
+		// An edited row is judged again from scratch: what the edit carried over from the staged row
+		// (its kind, its selection) describes the row before the edit.
+		onSave: (edited) => {
+			importContacts.value[contact.idx] = stageRow(edited, contact.idx)
+		},
+	})
 }
 function handleResolve() {
 	cacheStore.importPromise?.resolve(importContacts.value.filter((c) => c.selected && c.importable))
@@ -119,16 +124,6 @@ function handleReject() {
 	emit("onClose")
 }
 
-// An edited row is judged again from scratch: what the edit carried over from the staged row (its
-// kind, its selection) describes the row before the edit.
-watch(
-	() => cacheStore.importContact,
-	() => {
-		const edited = cacheStore.importContact
-		if (!edited?.idx || !edited.updated) return
-		importContacts.value[edited.idx] = stageRow(edited, edited.idx)
-	},
-)
 watch(
 	() => props.show,
 	async () => {
@@ -137,7 +132,6 @@ watch(
 			importContacts.value = cacheStore.importContacts.map((c, idx) => stageRow(c, String(idx)))
 		} else {
 			cacheStore.importPromise?.reject(false)
-			cacheStore.importContact = null
 			cacheStore.importContacts = []
 			// The next file's rows arrive only after its book read, so until then the popup must not
 			// show, or confirm, this file's.
@@ -232,8 +226,8 @@ watch(
 									<Icon
 										:name="
 											item.row.selected
-												? 'check-circle'
-												: 'circle'
+												? 'square-check'
+												: 'square'
 										"
 										size="16"
 										:color="item.row.selected ? 'primary' : 'tertiary'"
@@ -244,7 +238,7 @@ watch(
 											<template v-if="item.row.kind === 'name-change'">
 												<Text variant="name" color="tertiary" :class="[$style.name_part, $style.name_size]">{{ item.row.savedName }}</Text>
 												<span :class="$style.visually_hidden">changes to</span>
-												<Icon name="arrow-right" size="12" color="tertiary" aria-hidden="true" :class="$style.arrow" />
+												<Icon name="forward" size="12" color="tertiary" aria-hidden="true" :class="$style.arrow" />
 												<Text variant="name" color="primary" :class="[$style.name_part, $style.name_size]">{{ item.row.name }}</Text>
 											</template>
 											<Text v-else variant="name" color="primary" :class="[$style.title, $style.name_size]">
@@ -259,17 +253,17 @@ watch(
 											:class="item.row.addressText?.full && $style.detail_full"
 										>
 											<template v-if="item.row.addressText">
-												<Text variant="data" color="tertiary" data-testid="import-contact-address-saved" :class="$style.address_saved">
+												<Text variant="meta" color="tertiary" data-testid="import-contact-address-saved" :class="$style.address_saved">
 													{{ item.row.addressText.saved }}
 												</Text>
 												<span :class="$style.visually_hidden">changes to</span>
-												<Icon name="arrow-right" size="12" color="tertiary" aria-hidden="true" :class="$style.arrow" />
-												<Text variant="data" color="primary" data-testid="import-contact-address-incoming" :class="$style.address_incoming">
+												<Icon name="forward" size="12" color="tertiary" aria-hidden="true" :class="$style.arrow" />
+												<Text variant="meta" color="primary" data-testid="import-contact-address-incoming" :class="$style.address_incoming">
 													{{ item.row.addressText.incoming }}
 												</Text>
 											</template>
-											<Text v-else variant="data" color="tertiary" data-testid="import-contact-address">{{ trimAddress(item.row.address) }}</Text>
-											<Text v-if="item.row.isSender" variant="tag" color="tertiary" :class="$style.tag">sender</Text>
+											<Text v-else variant="meta" color="tertiary" data-testid="import-contact-address">{{ trimAddress(item.row.address) }}</Text>
+											<Text v-if="item.row.isSender" variant="label-section" color="tertiary" :class="$style.tag">sender</Text>
 										</Flex>
 
 										<Text v-if="!item.row.importable" :id="`${uid}-${item.row.idx}-reason`" variant="caption" color="tertiary">
@@ -349,6 +343,7 @@ watch(
 
 .contact {
 	composes: select_row from "./popup-shared.module.css";
+	user-select: none;
 	position: relative;
 
 	padding: 12px;

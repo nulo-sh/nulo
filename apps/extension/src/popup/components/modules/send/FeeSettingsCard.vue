@@ -890,7 +890,7 @@ onBeforeUnmount(() => {
 	>
 		<!-- A method the dApp asked for: shown, never a choice. -->
 		<Flex v-if="lockedMethod" align="center" justify="between" :class="$style.card" data-testid="send-fee-locked">
-			<Text variant="label" color="primary">Fee</Text>
+			<Text variant="label-section" color="primary">Fee</Text>
 			<Text variant="name" color="primary" :class="$style.method_size">Public Fee Juice · set by the app</Text>
 		</Flex>
 		<FeeMethodSelector
@@ -1009,7 +1009,7 @@ onBeforeUnmount(() => {
 }
 
 .get_fee_juice {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-accent);
 	white-space: nowrap;
 	cursor: pointer;

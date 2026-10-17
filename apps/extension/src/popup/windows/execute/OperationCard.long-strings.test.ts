@@ -103,7 +103,6 @@ const stubs = {
 	Flex: { inheritAttrs: false, template: '<div v-bind="$attrs"><slot /></div>' },
 	Text: { inheritAttrs: false, template: '<span v-bind="$attrs"><slot /></span>' },
 	Icon: true,
-	MaterialIcon: true,
 	FeeSettingsCard: true,
 	JsonViewer: true,
 }
@@ -124,7 +123,7 @@ describe("OperationCard — long dApp strings break inside the card", () => {
 		const values = w.findAll('[data-testid="execute-grant-decoded-param-value"]')
 		expect(values.map((v) => v.text())).toEqual([FIELD, LONG_TEXT])
 		for (const value of values) {
-			expect(value.attributes("variant")).toBe("data")
+			expect(value.attributes("variant")).toBe("meta")
 			expect(value.element.parentElement?.classList.contains(ARGS.row)).toBe(true)
 			expect(value.element.parentElement?.lastElementChild).toBe(value.element)
 		}

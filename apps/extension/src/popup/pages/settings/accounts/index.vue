@@ -86,7 +86,7 @@ const handleCopyAddress = (target) => {
 					@click="handleSelectAccount(account)"
 					:title="account.name"
 					titleVariant="name"
-					:icon="account?.address === appStore.account?.address ? 'check-circle' : 'circle'"
+					:icon="account?.address === appStore.account?.address ? 'square-check' : 'square'"
 					:iconFillColor="account?.address === appStore.account?.address ? 'primary' : 'tertiary'"
 					data-testid="manage-accounts-row"
 					:data-account-name="account.name"
@@ -118,7 +118,7 @@ const handleCopyAddress = (target) => {
 
 							<Tooltip v-if="canExportAccounts" position="end" delay="350">
 								<RowAction label="Export account" data-testid="account-export-btn" @click="handleExportAccount(account)">
-									<Icon name="upload-outline" size="14" color="tertiary" />
+									<Icon name="upload" size="14" color="tertiary" />
 								</RowAction>
 
 								<template #content>Export account</template>
@@ -140,7 +140,7 @@ const handleCopyAddress = (target) => {
 									:class="accounts.length === 1 && $style.disabled"
 									@click="handleHideAccount(account)"
 								>
-									<Icon name="close-circle" size="14" color="tertiary" />
+									<Icon name="close" size="14" color="tertiary" />
 								</RowAction>
 
 								<template #content> Hide account </template>
@@ -188,7 +188,7 @@ const handleCopyAddress = (target) => {
 					:title="account.name"
 					titleVariant="name"
 					:description="account.address"
-					descriptionVariant="data"
+					descriptionVariant="meta"
 					data-testid="manage-accounts-hidden-row"
 					:data-account-name="account.name"
 				>
@@ -196,7 +196,7 @@ const handleCopyAddress = (target) => {
 						<AccountAvatar :name="account.name" :address="account.address" :size="20" />
 					</template>
 					<template #right>
-						<Icon name="arrow-back-up" size="14" color="secondary" />
+						<Icon name="undo" size="14" color="secondary" />
 					</template>
 				</SettingItem>
 			</ItemsContainer>
@@ -212,6 +212,12 @@ const handleCopyAddress = (target) => {
 
 .desc_fixed {
 	flex-shrink: 0;
+}
+
+/* The line keeps 11px: at 13px the marker and the tail alone outgrow the width the actions leave.
+ * Every row's line has a head, so the `:has` only lifts the rule above the role's class. */
+.desc_line:has(.addr_head) {
+	font-size: 11px;
 }
 
 /* Shrink-only (no grow), so on wide rows the tail sits flush against the head. */

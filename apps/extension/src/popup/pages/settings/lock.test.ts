@@ -1,10 +1,11 @@
 import { createTestingPinia } from "@pinia/testing"
-import { Flex, MaterialIcon, Text } from "@nulo/design"
+import { Flex, Icon, Text } from "@nulo/design"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { nextTick } from "vue"
 import type { ConfigProp } from "@/wallet/config"
+import { expectOwnedRows, settingsContext, settingsRouter } from "../../../../tests/helpers/settings-rows"
 
 const fakes = vi.hoisted(() => ({
 	managerProfile: { name: "managers.profile" },
@@ -54,12 +55,13 @@ async function mountLock(type: "password" | "passkey" = "password") {
 	const wrapper = mount(LockPage, {
 		global: {
 			plugins: [
+				settingsRouter(),
 				createTestingPinia({
 					createSpy: vi.fn,
 					initialState: { app: { isLogined: true, profile: { id: "p1", name: "Primary", type } } },
 				}),
 			],
-			components: { Flex, ItemsContainer, MaterialIcon, SettingItem, Text },
+			components: { Flex, ItemsContainer, SettingItem, Text, Icon },
 			stubs: {
 				SettingsPageShell: { props: ["title"], template: '<div :data-title="title"><slot /></div>' },
 				LoadingState: { template: '<div data-testid="loading" />' },
@@ -75,6 +77,10 @@ async function mountLock(type: "password" | "passkey" = "password") {
 }
 
 describe("settings/lock", () => {
+	test.each(["password", "passkey"] as const)("renders the search registry's rows for a %s profile", async (type) => {
+		expectOwnedRows(await mountLock(type), "/popup/settings/lock", settingsContext({ passkey: type === "passkey" }))
+	})
+
 	test("is titled Lock, and Lock now renders while the config reads hang", async () => {
 		fakes.config.getValue.mockReturnValue(new Promise(() => {}))
 		const w = await mountLock()
