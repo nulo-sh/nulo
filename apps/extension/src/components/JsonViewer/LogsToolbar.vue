@@ -46,7 +46,7 @@ const filteredKeys = (kind, filters, search) => {
 				@click="emit('openPopover', kind)"
 				align="center"
 				gap="4"
-				:class="[$style.filter_button, !allOptionsSelected[kind] && $style.filter_button_active]"
+				:class="$style.filter_button"
 			>
 				<Icon :name="allOptionsSelected[kind] ? 'filter' : 'filter-solid'" size="14" />
 				<Text variant="tag">{{ capitalize(kind) }}</Text>
@@ -159,10 +159,6 @@ const filteredKeys = (kind, filters, search) => {
 			color: var(--txt-primary);
 		}
 	}
-}
-
-.filter_button_active:hover svg {
-	color: var(--blue);
 }
 
 .filter_content_wrapper {

@@ -10,7 +10,7 @@ import Text from "../core/Text.vue"
 import type { SeverityTone } from "../severity"
 import Spinner from "./Spinner.vue"
 
-/** Banner renders 4 semantic tones via its icon fill (info = neutral). */
+/** Banner renders 4 semantic tones via its icon colour (info = neutral). */
 type BannerVariant = Extract<SeverityTone, "info" | "warning" | "error" | "done">
 
 defineProps({

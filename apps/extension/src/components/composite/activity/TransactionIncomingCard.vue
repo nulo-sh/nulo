@@ -5,7 +5,7 @@
  *
  * Wraps `TransactionCardLayout` so field positions stay byte-identical with the outgoing
  * `TransactionCard`, the in-flight `TransactionAwaitingCard` and the `TransactionTerminalCard`.
- * The badge is a green `check-circle`, the title row carries the receipt's kind chip, and the
+ * The badge is a green `square-check`, the title row carries the receipt's kind chip, and the
  * amount carries a "+" so the feed scans without reading direction.
  */
 

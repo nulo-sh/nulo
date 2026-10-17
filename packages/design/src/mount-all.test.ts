@@ -28,7 +28,7 @@ import Toggle from "./ui/Toggle.vue"
  */
 const cases: Array<[string, Component, Record<string, unknown>]> = [
 	["Flex", Flex, {}],
-	["Icon", Icon, { name: "external-link" }],
+	["Icon", Icon, { name: "open" }],
 	["Text", Text, {}],
 	["Badge", Badge, {}],
 	["BrutalistTitle", BrutalistTitle, { main: "A", sub: "B" }],

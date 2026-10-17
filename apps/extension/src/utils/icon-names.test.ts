@@ -17,7 +17,7 @@ import { describe, expect, test } from "vitest"
  *
  * Limits: a forwarded prop is checked only where a template states it, so a non-literal passed to a
  * forwarding component from a plain-JS SFC is unchecked; a name built by concatenation or returned
- * from a helper is checked only by its type.
+ * from a helper is checked only by its type; a template inside a story's string is not read.
  */
 
 const REPO_ROOT = join(__dirname, "..", "..", "..", "..")

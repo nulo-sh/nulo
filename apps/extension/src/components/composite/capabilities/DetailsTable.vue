@@ -212,8 +212,8 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 	margin: -6px;
 }
 
-/* Two classes, so the icon's own color utility never decides. */
-.address .copy_glyph {
+/* Three classes, so RowAction's hover colour never decides. */
+.address .copy .copy_glyph {
 	color: var(--nulo-outline);
 }
 

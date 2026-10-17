@@ -30,9 +30,10 @@ describe("Icon", () => {
 		expect(solid?.attributes("d")?.match(/M/g)).toHaveLength(2)
 	})
 
-	test("paints through color: the color-- class, with the root's currentColor", () => {
+	test("paints through color: the color-- class, with the root's currentColor, as an img", () => {
 		const w = render({ name: "close", color: "red" })
 		expect(w.classes()).toContain("color--red")
+		expect(w.attributes("role")).toBe("img")
 		expect(w.attributes("fill")).toBe("currentColor")
 		expect(w.attributes("stroke")).toBe("currentColor")
 	})

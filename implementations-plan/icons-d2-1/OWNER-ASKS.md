@@ -24,3 +24,11 @@ Each ask names what ships now. Every "now" form stays inside the signed records 
 - **Ships now**: an outlined diamond with a square pupil, and the same with a 45° slash for the hidden state, because Material retires in arc 1. This is the drawing page 33 currently shows as Direction 2's public-balance mark.
 - **Why it is here**: P30-10 is still iterating on the private and public marks, and the owner does not love the current drawings. If page 33 redraws the eye, arc 2 redraws `eye` and `eye-off`, and these toggles change with it. If page 33 picks the eye for the balance marks, the toggles and the marks share one drawing.
 - **Recommendation**: none needed now; listed so page 33 knows the eye also serves the reveal toggles.
+
+## OA-5: two side effects of the signed records
+
+- **Surface**: Settings → Networks → a network's Chain group, and History's token-filter chip.
+- **What changed**: the Chain group's state row keeps its selection mark while its rename and info rows, losing their leading glyph under P30-08 B, now sit flush; the rename row has no chevron, so the pencil was its only sign that it edits. The chip's × is now drawn as an svg, so it darkens to primary on hover like every other row action; as a Material glyph it never changed.
+- **Options**: A, ship as built. B, give the rename row a trailing `edit` glyph, and keep the × at secondary on hover.
+- **Ships now**: A.
+- **Recommendation**: A for the ×. For the rename row, a look at the network page decides; it is not among the eight capture pairs, so the PR attaches it.
