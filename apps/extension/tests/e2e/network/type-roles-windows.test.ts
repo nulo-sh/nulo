@@ -1,10 +1,25 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { type AztecTestConfig, deployDelegatedPullRig } from "../fixtures/aztec"
-import { clickByTestId, type ExtensionContext, grantCapBundle, test } from "../fixtures/extension"
-import { requestPgBundle, setPgInput, setPgTextarea, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
-import { shotSend } from "../fixtures/send-page"
 import {
+	clickByTestId,
+	clickSelector,
+	type ExtensionContext,
+	grantCapBundle,
+	openPopup,
+	replaceInputValue,
+	test,
+	waitForHash,
+} from "../fixtures/extension"
+import { reloadExtensionPage } from "../fixtures/browser"
+import { navigateByHash } from "../fixtures/navigation"
+import { PLAYGROUND_TEST_URL, requestPgBundle, setPgInput, setPgTextarea, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { closeReview, openReviewFromStrip, shotSend } from "../fixtures/send-page"
+import { enterSendForm, setActiveSendType } from "../fixtures/transfers"
+import { readScopeIdentity, seedPendingTrust } from "../helpers/activity-seeds"
+import {
+	approveExecute,
+	openConnectedApp,
 	openExecuteDetails,
 	rejectCapabilities,
 	rejectExecute,
@@ -14,13 +29,16 @@ import {
 	waitForPopupClosed,
 } from "../fixtures/popups"
 import { serializeInstance } from "../fixtures/selfpay-phase"
+import { trimAddress } from "@/utils/string"
 import {
+	coverageOf,
 	expectLaidOut,
 	expectSitesClean,
 	expectSweepClean,
 	type IdentifierObservation,
 	identifierSites,
 	observeIdentifierSites,
+	siteSuite,
 	sweepTypeRoles,
 } from "../fixtures/type-roles"
 
@@ -28,11 +46,12 @@ const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
 /**
- * The type-role sweep in the approval windows a dApp opens: every role-bearing element of the
- * capabilities and execute windows computes to its role, and each identifier site the request
- * renders carries its own, an `AddressDisplay` showing an address (`meta`) and one showing an
- * account's name (`name`) among them; no text runs past its box, the longest payload a dApp can send
- * included. Every window is rejected.
+ * The type-role sweep in the approval windows a dApp opens and the wallet pages a dApp's requests
+ * reach: every role-bearing element computes to its role, and each identifier site a state renders
+ * carries its own, an `AddressDisplay` read both as an account's name (`name`) and, pressed, as its
+ * address (`meta`); no text runs past its box, the longest payload a dApp can send included. Every
+ * window is rejected but a `registerToken`, whose token the requests after it read. The last test
+ * fails on any site this file owns that no state read.
  */
 
 type Connected = ExtensionContext & { playgroundPage: Page }
@@ -42,16 +61,10 @@ const WINDOW = { width: 400, height: 800 }
 const AMOUNT = "5000000000000000000"
 const NONCE = "0x0f3c7a91e24b6d08c5f1a39e7b2d40c86e9a1f53b7d20c4e8a6f91b3d5c07e2a"
 
-/**
- * A decoded argument's address branch. A field or integer argument renders the same testid on the
- * sibling branch, and the row's `data-value-kind` is the condition that picks this one.
- */
-const ADDRESS_ARGUMENT = `${sel("execute-op-decoded-param")}[data-value-kind="address"] ${sel("execute-op-decoded-param-value")}`
-const SITES = identifierSites().map((site) =>
-	site.selector === sel("execute-op-decoded-param-value") && site.expression === "p.value.value"
-		? { ...site, selector: ADDRESS_ARGUMENT }
-		: site,
-)
+const SITES = identifierSites()
+
+/** Every observation a test made after its sites passed, for the file's last test. */
+const observed: IdentifierObservation[] = []
 
 /**
  * Resolves once some element at each live site of `state` has a box. An AddressDisplay paints its
@@ -81,12 +94,37 @@ async function sweepWindow(win: Page, surface: string, states: readonly string[]
 	expectSweepClean(await sweepTypeRoles(win), surface)
 	await expectLaidOut(win, surface)
 	const observations: IdentifierObservation[] = []
-	for (const state of states) {
-		const observation = await observeIdentifierSites(win, surface, state, { sites: SITES })
-		expectSitesClean(observation)
-		observations.push(observation)
-	}
+	for (const state of states) observations.push(await observeState(win, surface, state))
+	// A name is judged as `name`, never the site's mono role. Each one shown is pressed to its address
+	// and read again.
+	if (await revealAddresses(win, surface, states)) for (const state of states) await observeState(win, surface, state)
 	return observations
+}
+
+async function observeState(win: Page, surface: string, state: string): Promise<IdentifierObservation> {
+	const observation = await observeIdentifierSites(win, surface, state, { sites: SITES })
+	expectSitesClean(observation)
+	observed.push(observation)
+	return observation
+}
+
+/** Presses every `AddressDisplay` of `states` that shows a name, until each shows its address; whether any did. */
+async function revealAddresses(win: Page, surface: string, states: readonly string[]): Promise<boolean> {
+	let pressed = false
+	for (const site of SITES.filter((s) => s.surface === surface && states.includes(s.state) && s.role !== "none" && !s.unreachable)) {
+		const named = `${site.selector}[data-address-shows="name"]`
+		for (let left = await win.$$(named); left.length > 0; left = await win.$$(named)) {
+			await left[0]!.click()
+			await win.waitForFunction(
+				(sel: string, n: number) => document.querySelectorAll(sel).length < n,
+				{ timeout: 5_000 },
+				named,
+				left.length,
+			)
+			pressed = true
+		}
+	}
+	return pressed
 }
 
 /** Rejects the window and waits for it to close; a window a failed assertion left behind is closed outright. */
@@ -120,6 +158,26 @@ test.skipIf(!hasConfig)("the capabilities window holds its roles", { timeout: 18
 		await dismiss(win, rejectCapabilities)
 	}
 	expect((await waitForPgResult(pg, "requestCapabilities", seq, 30_000)).status).toBe("error")
+
+	// The connected app's page reads back what the dApp was granted: its account and each listed scope.
+	await setPgInput(pg, "tokenAddress", aztecConfig!.tokenAddress)
+	await setPgInput(pg, "classId", aztecConfig!.tokenClassId)
+	await grantCapBundle(ctx, pg, "contractClasses-listed", async (ids) => [ids[0]!])
+	const wallet = await openPopup(ctx)
+	try {
+		await waitForHash(wallet, "#/popup/general")
+		await openConnectedApp(wallet, new URL(PLAYGROUND_TEST_URL).host, sel("connected-app-account-row"))
+		for (const type of ["contracts", "contractClasses"]) {
+			await clickSelector(wallet, `${sel("granted-capability-toggle")}[data-capability-type="${type}"]`)
+		}
+		await sweepWindow(wallet, "popup-settings-connected-apps-id", [
+			"a connected dApp (network)",
+			"a connected app whose grant holds a contract scope (network)",
+			"a connected app whose grant holds a class scope (network)",
+		])
+	} finally {
+		await wallet.close()
+	}
 })
 
 type Request = {
@@ -133,15 +191,17 @@ type Request = {
 	contained?: true
 	/** A send: its value rows open under the summary before `ready` is awaited. */
 	details?: true
+	/** Approved, not rejected: what it registers, the requests after it read. */
+	approve?: true
 	/** Light and dark shots of the window, focused on this testid, when `NULO_E2E_SHOT_DIR` is set. */
 	shot?: { name: string; focus: string }
 }
 
-function requests({ tokenAddress, minterAddress }: AztecTestConfig): Request[] {
+function requests({ tokenAddress, minterAddress }: AztecTestConfig, accountAddress: string): Request[] {
 	return [
 		{
 			// The token is not imported, so the transfer shows as its decoded arguments: `from`, the
-			// wallet's account, by name, and `to` by address.
+			// wallet's account, by name, `to` by address, and `_nonce` as a field.
 			method: "sendTx",
 			button: "pg-btn-sendTx-default",
 			inputs: { tokenAddress, recipient: minterAddress, amount: AMOUNT },
@@ -150,6 +210,7 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig): Request[] {
 				"an aztec_sendTx request (network)",
 				"an aztec_sendTx request with all details open (network)",
 				"a decoded call with an address parameter (network)",
+				"a decoded call with a field parameter (network)",
 			],
 			contained: true,
 			details: true,
@@ -157,20 +218,58 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig): Request[] {
 		{
 			method: "createAuthWit",
 			button: "pg-btn-createAuthWit-callIntent",
-			inputs: { tokenAddress, authwitAmount: AMOUNT, authwitNonce: NONCE },
+			inputs: { tokenAddress, consumer: "", authwitAmount: AMOUNT, authwitNonce: NONCE },
 			ready: sel("execute-authwit-target"),
-			states: ["an aztec_createAuthWit request for a call (network)"],
+			states: ["an aztec_createAuthWit request for a call (network)", "an operation other than a send, with an account (network)"],
+		},
+		{
+			method: "createAuthWit",
+			button: "pg-btn-createAuthWit-innerHash",
+			inputs: { consumer: tokenAddress, innerHash: NONCE },
+			ready: sel("execute-authwit-inner-hash-value"),
+			states: ["an aztec_createAuthWit request for an intent (network)", "an operation other than a send, with an account (network)"],
 		},
 		{
 			// The token is not imported, so the grant reads as its decoded parameters, each printed
 			// whole: two addresses and a 32-byte nonce, the longest unbroken strings the card holds.
 			method: "grantPublicAuthwit",
 			button: "pg-btn-grantPublicAuthwit",
-			inputs: { tokenAddress, authwitCaller: minterAddress, authwitAmount: "1", authwitNonce: "7" },
+			inputs: { tokenAddress, authwitOwner: accountAddress, authwitCaller: minterAddress, authwitAmount: "1", authwitNonce: "7" },
 			ready: `${sel("execute-grant-decoded-param")}[data-param="amount"] ${sel("execute-grant-decoded-param-value")}`,
 			states: ["a grantPublicAuthwit request (network)"],
 			contained: true,
 			shot: { name: "grant", focus: "execute-grant-args" },
+		},
+		{
+			method: "registerToken",
+			button: "pg-btn-registerToken",
+			inputs: { tokenAddress, accountAddress },
+			ready: sel("register-token-symbol"),
+			states: ["a registerToken request (network)", "an operation other than a send, with an account (network)"],
+			approve: true,
+		},
+		{
+			// The token is the wallet's now, so the call reads as its transfer: spent from an address the
+			// wallet does not know, with the authwit nonce that lets the account do it.
+			method: "sendTx",
+			button: "pg-btn-consumeAuthwit",
+			inputs: { tokenAddress, authwitOwner: minterAddress, authwitAmount: AMOUNT, authwitNonce: NONCE },
+			ready: sel("execute-op-transfer-nonce-value"),
+			states: [
+				"a transfer the wallet reads, from a named sender (network)",
+				"a transfer the wallet reads (network)",
+				"a transfer from an address the wallet does not know (network)",
+				"a transfer (network)",
+				"a transfer carrying an authwit nonce (network)",
+			],
+			details: true,
+		},
+		{
+			method: "grantPublicAuthwit",
+			button: "pg-btn-grantPublicAuthwit",
+			inputs: { tokenAddress, authwitOwner: accountAddress, authwitCaller: minterAddress, authwitAmount: "1", authwitNonce: "7" },
+			ready: sel("execute-grant-transfer-to"),
+			states: ["a grant on a registered token (network)"],
 		},
 	]
 }
@@ -245,34 +344,55 @@ async function openExecute(ctx: Connected, { button, inputs, ready, details }: R
 	return win
 }
 
+async function runRequest(ctx: Connected, request: Request, shown: Set<string>): Promise<void> {
+	const pg = ctx.playgroundPage
+	const seq = await snapshotResultSeq(pg)
+	const win = await openExecute(ctx, request)
+	try {
+		const observations = await sweepWindow(win, "windows-execute", request.states)
+		if (request.shot) await shotSend(win, request.shot.name, request.shot.focus)
+		if (request.contained) {
+			expect(await payloadPastCard(win)).toBeLessThanOrEqual(0)
+			await stretchPayload(win)
+			expect(await payloadPastCard(win)).toBeLessThanOrEqual(0)
+			await expectLaidOut(win, `${request.method}, the longest payload`)
+			expect(observations.flatMap(({ hexOutsideMono }) => hexOutsideMono)).toEqual([])
+		}
+		const asserted = observations.flatMap(({ sites }) => sites.filter(({ mode }) => mode === "asserted"))
+		// Only an `AddressDisplay` states what it shows; every other site reads `null`.
+		for (const { readings } of asserted) for (const { addressShows } of readings) if (addressShows) shown.add(addressShows)
+		if (request.approve) {
+			await approveExecute(win, { approvableTimeoutMs: 60_000 })
+			await waitForPopupClosed(win, 15_000)
+		}
+	} finally {
+		await dismiss(win, rejectExecute)
+	}
+	expect((await waitForPgResult(pg, request.method, seq, 30_000)).status).toBe(request.approve ? "ok" : "error")
+}
+
 test.skipIf(!hasConfig)(
 	"the execute window holds its roles, with an AddressDisplay showing an address and one showing a name",
 	{ timeout: 300_000 },
 	async ({ dappConnectedExtensionWithTransactionCap: ctx }) => {
-		const pg = ctx.playgroundPage
 		const shown = new Set<string>()
-		for (const request of requests(aztecConfig!)) {
-			const seq = await snapshotResultSeq(pg)
-			const win = await openExecute(ctx, request)
-			try {
-				const observations = await sweepWindow(win, "windows-execute", request.states)
-				if (request.shot) await shotSend(win, request.shot.name, request.shot.focus)
-				if (request.contained) {
-					expect(await payloadPastCard(win)).toBeLessThanOrEqual(0)
-					await stretchPayload(win)
-					expect(await payloadPastCard(win)).toBeLessThanOrEqual(0)
-					await expectLaidOut(win, `${request.method}, the longest payload`)
-					expect(observations.flatMap(({ hexOutsideMono }) => hexOutsideMono)).toEqual([])
-				}
-				const asserted = observations.flatMap(({ sites }) => sites.filter(({ mode }) => mode === "asserted"))
-				// Only an `AddressDisplay` states what it shows; every other site reads `null`.
-				for (const { readings } of asserted) for (const { addressShows } of readings) if (addressShows) shown.add(addressShows)
-			} finally {
-				await dismiss(win, rejectExecute)
-			}
-			expect((await waitForPgResult(pg, request.method, seq, 30_000)).status).toBe("error")
+		for (const request of requests(aztecConfig!, ctx.accountAddress)) {
+			await runRequest(ctx, request, shown)
 		}
 		expect([...shown].sort()).toEqual(["address", "name"])
+
+		// A first receipt of a token the wallet holds, still waiting on the person's trust.
+		const wallet = await openPopup(ctx)
+		try {
+			await waitForHash(wallet, "#/popup/general")
+			await seedPendingTrust(wallet, await readScopeIdentity(wallet), await tokenRowOf(wallet, aztecConfig!.tokenAddress))
+			await reloadExtensionPage(wallet)
+			await waitForHash(wallet, "#/popup/general")
+			await wallet.waitForSelector(sel("incoming-trust-contract"), { visible: true, timeout: 15_000 })
+			await sweepWindow(wallet, "popup:incoming_trust", ["an incoming transfer from an unknown sender (network)"])
+		} finally {
+			await wallet.close()
+		}
 	},
 )
 
@@ -285,15 +405,29 @@ async function instanceJson(address: string): Promise<string> {
 	return serializeInstance(instance)
 }
 
+type Rig = { account: string; pullTokenAddress: string; consumerAddress: string }
+
 /** Fills the playground's delegated send but leaves the consumer instance unset: registering it is what lets the wallet decode the call. */
-async function rigDelegatedSend(ctx: Connected): Promise<{ consumerAddress: string }> {
+async function rigDelegatedSend(ctx: Connected): Promise<Rig> {
 	const pg = ctx.playgroundPage
 	const [account] = await grantCapBundle(ctx, pg, "transaction-contracts", async (ids) => [ids[0]!])
 	const { pullTokenAddress, consumerAddress } = await deployDelegatedPullRig(aztecConfig!, account!)
 	await setPgInput(pg, "consumerAddress", consumerAddress)
 	await setPgInput(pg, "amount", "100")
 	await setPgTextarea(pg, "delegatedTokenInstance", await instanceJson(pullTokenAddress))
-	return { consumerAddress }
+	return { account: account!, pullTokenAddress, consumerAddress }
+}
+
+async function tokenRowOf(page: Page, contract: string): Promise<{ id: number; contract: string }> {
+	return page.evaluate(async (target: string) => {
+		const all = await chrome.storage.local.get(null)
+		const row = Object.entries(all)
+			.filter(([key]) => key.startsWith("nulo:core:tokens@"))
+			.map(([, value]) => JSON.parse(value as string) as { id: number; contract: string })
+			.find((r) => r.contract.toLowerCase() === target.toLowerCase())
+		if (!row) throw new Error(`no token row for ${target}`)
+		return { id: row.id, contract: row.contract }
+	}, contract)
 }
 
 test.skipIf(!hasConfig)(
@@ -301,8 +435,8 @@ test.skipIf(!hasConfig)(
 	{ timeout: 600_000 },
 	async ({ dappConnectedExtensionPerTest: ctx }) => {
 		const pg = ctx.playgroundPage
-		const { consumerAddress } = await rigDelegatedSend(ctx)
-		await setPgTextarea(pg, "delegatedConsumerInstance", await instanceJson(consumerAddress))
+		const rig = await rigDelegatedSend(ctx)
+		await setPgTextarea(pg, "delegatedConsumerInstance", await instanceJson(rig.consumerAddress))
 		const seq = await snapshotResultSeq(pg)
 		const win = await openExecute(ctx, {
 			method: "sendTx",
@@ -334,6 +468,85 @@ test.skipIf(!hasConfig)(
 			await dismiss(win, rejectExecute)
 		}
 		expect((await waitForPgResult(pg, "sendTx", seq, 30_000)).status).toBe("error")
+
+		// The minter is a known sender before the pull token is the wallet's, so the token's first
+		// balance read finds the notes the minter sent the account.
+		const pull = rig.pullTokenAddress
+		const minter = aztecConfig!.minterAddress
+		const wallet = await openPopup(ctx)
+		try {
+			await waitForHash(wallet, "#/popup/general")
+			await navigateByHash(wallet, "#/popup/settings/developer/account-state/senders", 10_000)
+			await wallet.waitForSelector(sel("senders-add-btn"), { visible: true, timeout: 10_000 })
+			await clickByTestId(wallet, "senders-add-btn")
+			await wallet.waitForSelector(sel("new-sender-submit"), { visible: true, timeout: 5_000 })
+			await replaceInputValue(wallet, sel("new-sender-address-input"), minter)
+			await clickByTestId(wallet, "new-sender-submit")
+			await wallet.waitForSelector(`${sel("sender-row")}[data-sender-address="${minter}"]`, { visible: true, timeout: 30_000 })
+			await sweepWindow(wallet, "popup-settings-developer-account-state-senders", ["a registered sender (network)"])
+
+			// The pull token becomes the wallet's own: the authorization it needs then reads as a move of
+			// its tokens, and a transfer that names no sender as one from this account.
+			const shown = new Set<string>()
+			await runRequest(
+				ctx,
+				{
+					method: "registerToken",
+					button: "pg-btn-registerToken",
+					inputs: { tokenAddress: pull, accountAddress: rig.account },
+					ready: sel("register-token-symbol"),
+					states: [],
+					approve: true,
+				},
+				shown,
+			)
+			await runRequest(
+				ctx,
+				{
+					method: "sendTx",
+					button: "pg-btn-sendTx-delegated",
+					inputs: {},
+					ready: sel("execute-discovered-line-from"),
+					states: ["a discovered token authorization the wallet reads (network)"],
+				},
+				shown,
+			)
+			await pg.select(sel("pg-select-transferFn"), "transfer")
+			await runRequest(
+				ctx,
+				{
+					method: "sendTx",
+					button: "pg-btn-sendTx-default",
+					inputs: { tokenAddress: pull, recipient: minter, amount: "1" },
+					ready: `${sel("execute-op-transfer-sender")}[data-sender-kind="account"]`,
+					states: ["a transfer from one of the wallet's accounts (network)"],
+					details: true,
+				},
+				shown,
+			)
+
+			// The account's pull notes: spendable on Send, listed on the notes page.
+			await navigateByHash(wallet, `#/popup/send?tokenId=${(await tokenRowOf(wallet, pull)).id}`, 10_000)
+			await wallet.waitForSelector(sel("send-from-type"), { visible: true, timeout: 10_000 })
+			await setActiveSendType(wallet, "send-from-type", "private")
+			await enterSendForm(wallet, { amount: "1", destination: minter })
+			await openReviewFromStrip(wallet)
+			await sweepWindow(wallet, "popup-send", ["recipient and amount typed, review sheet open (network)"])
+			await closeReview(wallet)
+			await navigateByHash(wallet, "#/popup/settings/developer/account-state/notes", 10_000)
+			await wallet.waitForFunction(
+				(s: string, text: string) => [...document.querySelectorAll(s)].some((el) => el.textContent?.trim() === text),
+				{ timeout: 60_000 },
+				sel("note-contract"),
+				trimAddress(pull, 4, 4),
+			)
+			await sweepWindow(wallet, "popup-settings-developer-account-state-notes", ["a note (network)", "a note exists (network)"])
+			await navigateByHash(wallet, "#/popup/settings/developer/account-state/contracts", 10_000)
+			await wallet.waitForSelector(sel("address-display"), { visible: true, timeout: 15_000 })
+			await sweepWindow(wallet, "popup-settings-developer-account-state-contracts", ["a registered contract (network)"])
+		} finally {
+			await wallet.close()
+		}
 	},
 )
 
@@ -366,3 +579,18 @@ test.skipIf(!hasConfig)(
 		expect((await waitForPgResult(pg, "sendTx", seq, 30_000)).status).toBe("error")
 	},
 )
+
+test.skipIf(!hasConfig)("every identifier site the network suite owns was read in its role", () => {
+	const coverage = coverageOf(observed, { sites: SITES.filter((site) => siteSuite(site) === "network") })
+	console.log(`[type-roles] identifier sites: ${coverage.live} network-owned live`)
+	expect(coverage.live).toBeGreaterThan(0)
+	expect(coverage.unobserved).toEqual([])
+	// Every AddressDisplay here can be pressed to its address, so none may be read only as a name.
+	const forms = new Map<string, Set<string>>()
+	for (const { sites } of observed) {
+		for (const { key, readings } of sites) {
+			for (const { addressShows } of readings) if (addressShows) forms.set(key, (forms.get(key) ?? new Set()).add(addressShows))
+		}
+	}
+	expect([...forms].filter(([, shown]) => !shown.has("address")).map(([key]) => key)).toEqual([])
+})

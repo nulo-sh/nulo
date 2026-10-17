@@ -598,13 +598,9 @@ export function identifierSites(): readonly SiteEntry[] {
 	return loadedSites
 }
 
-/**
- * The suite that observes a site: the network spec for a state the expected file marks `(network)`,
- * none for one it marks `(component test)`, which no e2e state renders, the smoke spec for any other.
- */
-export function siteSuite(site: Pick<SiteEntry, "state">): "smoke" | "network" | "component" {
-	if (site.state.endsWith("(network)")) return "network"
-	return site.state.endsWith("(component test)") ? "component" : "smoke"
+/** The suite that observes a site: the network spec for a state the expected file marks `(network)`, the smoke spec for any other. */
+export function siteSuite(site: Pick<SiteEntry, "state">): "smoke" | "network" {
+	return site.state.endsWith("(network)") ? "network" : "smoke"
 }
 
 /** An occurrence's identity: file, expression, branch and ordinal; the line is only a hint. */

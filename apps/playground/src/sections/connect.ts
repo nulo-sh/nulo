@@ -24,6 +24,7 @@ export function renderConnect(): string {
 					<option data-bundle-id="data" value="data">data</option>
 					<option data-bundle-id="data-scopedEvents" value="data-scopedEvents">data-scopedEvents</option>
 					<option data-bundle-id="contractClasses" value="contractClasses">contractClasses</option>
+					<option data-bundle-id="contractClasses-listed" value="contractClasses-listed">contractClasses-listed</option>
 					<option data-bundle-id="full" value="full">full</option>
 					<option data-bundle-id="custom" value="custom">custom</option>
 				</select>
