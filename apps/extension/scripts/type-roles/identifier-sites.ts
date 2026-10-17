@@ -456,7 +456,7 @@ export function producerHits(search: RegExp): ProducerHit[] {
 	return sourceFiles({
 		roots: [...workspaceSrcRoots("apps"), ...PACKAGE_SRC_ROOTS],
 		exts: ["ts", "js", "vue"],
-		skip: [TEST_FILE, STORY_FILE, DECLARATION],
+		skip: [TEST_FILE, STORY_FILE, DECLARATION, /\/node_modules\//],
 	}).flatMap((file) => [...readFileSync(join(REPO_ROOT, file), "utf8").matchAll(global)].map((m) => ({ file, text: normalize(m[0]) })))
 }
 

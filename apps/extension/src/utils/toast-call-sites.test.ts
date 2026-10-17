@@ -3,7 +3,7 @@ import { join, relative } from "node:path"
 import ts from "typescript"
 import { describe, expect, test } from "vitest"
 import { callsTo } from "../../scripts/type-roles/source-code"
-import { DECLARATION, REPO_ROOT, STORY_FILE, sourceFiles, TEST_FILE } from "../../scripts/type-roles/source-scan"
+import { REPO_ROOT, sourceFiles } from "../../scripts/type-roles/source-scan"
 
 /**
  * A snack's kind is a per-site decision nothing types: a call that leaves it out lands as an error,
@@ -13,7 +13,7 @@ import { DECLARATION, REPO_ROOT, STORY_FILE, sourceFiles, TEST_FILE } from "../.
 
 const SRC = "apps/extension/src"
 
-const files = sourceFiles({ roots: [SRC], exts: ["ts", "js", "vue"], skip: [TEST_FILE, STORY_FILE, DECLARATION] }).map((file) => ({
+const files = sourceFiles({ roots: [SRC], exts: ["ts", "js", "vue"], skip: [/\.(test|stories|d)\.ts$/] }).map((file) => ({
 	path: relative(SRC, file),
 	text: readFileSync(join(REPO_ROOT, file), "utf8"),
 }))
@@ -25,7 +25,7 @@ interface Call {
 }
 
 function callsIn(file: { path: string; text: string }): Call[] {
-	return callsTo(file.path, file.text, /(?:^|\.)openToast$/).map(({ line, args }) => ({ site: `${file.path}:${line}`, args }))
+	return callsTo(file.path, file.text, /\bopenToast$/).map(({ line, args }) => ({ site: `${file.path}:${line}`, args }))
 }
 
 const LITERAL_KIND = /\bkind:\s*(?:"(?:success|info|error)"|[^,{}?]+\?\s*"(?:success|info|error)"\s*:\s*"(?:success|info|error)")\s*[,}\n]/
@@ -38,6 +38,12 @@ function oneLiteralWithKind(args: readonly ts.Expression[]): boolean {
 
 describe("every snack names its kind", () => {
 	const calls = files.flatMap(callsIn)
+
+	test("a call on a member is read like a bare one", () => {
+		const [call] = callsIn({ path: "x.ts", text: 'ui.openToast({ label: "x" })' })
+		expect(call?.site).toBe("x.ts:1")
+		expect(call && oneLiteralWithKind(call.args)).toBe(false)
+	})
 
 	test("there are enough calls for the scan to mean something", () => {
 		expect(calls.length).toBeGreaterThanOrEqual(100)

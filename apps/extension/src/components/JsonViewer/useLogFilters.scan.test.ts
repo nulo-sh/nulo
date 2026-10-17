@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, test } from "vitest"
 import { callsTo } from "../../../scripts/type-roles/source-code"
-import { PACKAGE_SRC_ROOTS, REPO_ROOT, sourceFiles, TEST_FILE } from "../../../scripts/type-roles/source-scan"
+import { PACKAGE_SRC_ROOTS, REPO_ROOT, sourceFiles } from "../../../scripts/type-roles/source-scan"
 import { LOG_SOURCES } from "./useLogFilters"
 
 /**
@@ -23,10 +23,10 @@ import { LOG_SOURCES } from "./useLogFilters"
  */
 
 const REGISTRATION_FILES = ["apps/extension/src/wallet/runtime.ts", "packages/aztec-runtime/src/offscreen/entry.ts"]
-const ADD_CALLEE = /^services\.add$/
+const ADD_CALLEE = /services\.add$/
 
 const SOURCES = new Map(
-	sourceFiles({ roots: ["apps/extension/src", ...PACKAGE_SRC_ROOTS], exts: ["ts", "vue"], skip: [TEST_FILE] }).map((file) => [
+	sourceFiles({ roots: ["apps/extension/src", ...PACKAGE_SRC_ROOTS], exts: ["ts", "vue"], skip: [/\.(test|spec)\.ts$/] }).map((file) => [
 		file,
 		readFileSync(join(REPO_ROOT, file), "utf8"),
 	]),
@@ -137,6 +137,12 @@ describe("log source filter: every registered service is listed", () => {
 		})
 	})
 
+	test("a services.add on a member is read like a bare one", () => {
+		expect(registrations("inline.ts", "this.services.add(makeService(logger))").refused).toEqual([
+			"unsupported services.add argument: makeService(logger)",
+		])
+	})
+
 	test("every registered service and its client has a source row", () => {
 		expect(registeredSources().filter((name) => !LOG_SOURCES.includes(name))).toEqual([])
 	})
@@ -174,7 +180,7 @@ const INJECTED: { file: string; expr: string; site: RegExp; source: (args: strin
 	{
 		file: "apps/extension/src/wallet/services/window-manager/window-manager.ts",
 		expr: "source",
-		site: /^createPlaced$/,
+		site: /\bcreatePlaced$/,
 		source: positional(4, 3),
 	},
 	{
@@ -192,7 +198,7 @@ const INJECTED: { file: string; expr: string; site: RegExp; source: (args: strin
 	{
 		file: "packages/aztec-runtime/src/account/nulo-account.ts",
 		expr: "this.logSource",
-		site: /^NuloAccount\.(?:new|fromSigningKey)$/,
+		site: /\bNuloAccount\.(?:new|fromSigningKey)$/,
 		source: positional(2, 1),
 	},
 ]
@@ -313,6 +319,13 @@ describe("log source filter: every logger call's source is listed", () => {
 		])
 		expect(read("this.logger.log(source, level, 'm')").refused).toEqual(["inline.ts:1: unsupported source source"])
 		expect(read("new ClockTickerAdapter(clock, logger)").refused).toEqual(["inline.ts:1: a logger with no source"])
+	})
+})
+
+describe("log source filter: a primitive reached through a member", () => {
+	test("is read like a bare call", () => {
+		const text = 'helpers.createPlaced(a, b, c, logger, "fpc"); Accounts.NuloAccount.new(a, logger, "pxe")'
+		expect(fileSources("inline.ts", text)).toEqual({ sources: ["fpc", "pxe"], refused: [] })
 	})
 })
 

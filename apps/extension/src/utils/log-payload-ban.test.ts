@@ -36,7 +36,11 @@ import { PACKAGE_SRC_ROOTS, REPO_ROOT, type SourcePolicy, sourceFiles } from "..
  * `apps/extension/src` would leave the guard blind to exactly the code the branches below it spent
  * the most effort on.
  */
-const POLICY: SourcePolicy = { roots: ["apps/extension/src", ...PACKAGE_SRC_ROOTS], exts: ["ts", "js", "vue"] }
+const POLICY: SourcePolicy = {
+	roots: ["apps/extension/src", ...PACKAGE_SRC_ROOTS],
+	exts: ["ts", "js", "vue"],
+	skip: [/\/(node_modules|dist)\//],
+}
 
 /**
  * Names extra to the runtime denylist: values `trim()` reduces by SHAPE rather than by key, so

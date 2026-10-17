@@ -91,7 +91,7 @@ function isDirectory(path: string): boolean {
 function walk(dir: string, rel: string, out: string[]): string[] {
 	for (const entry of readdirSync(dir, { withFileTypes: true })) {
 		if (entry.isDirectory()) {
-			if (entry.name !== "node_modules" && entry.name !== "dist") walk(join(dir, entry.name), `${rel}/${entry.name}`, out)
+			walk(join(dir, entry.name), `${rel}/${entry.name}`, out)
 		} else out.push(`${rel}/${entry.name}`)
 	}
 	return out

@@ -9,6 +9,9 @@ import { type Expression, NODE, parseSource, type TemplateNode, walkTemplate } f
 
 type Span = { from: number; to: number }
 
+/** Comments are read off the text, so the parser need not build JSDoc nodes. */
+const PARSE = { languageVersion: ts.ScriptTarget.Latest, jsDocParsingMode: ts.JSDocParsingMode.ParseNone }
+
 /** A line, block or JSDoc comment starting at `at`, as the index just past it; undefined if none starts there. */
 function commentEnd(text: string, at: number): number | undefined {
 	if (text[at] !== "/") return undefined
@@ -73,7 +76,7 @@ function blankComments(text: string, out: string[], literals: readonly Span[], f
  * never counted.
  */
 function maskScript(text: string): string {
-	const source = ts.createSourceFile("code.ts", text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+	const source = ts.createSourceFile("code.ts", text, PARSE, false, ts.ScriptKind.TS)
 	const out = text.split("")
 	const literals: Span[] = []
 	const visit = (node: ts.Node, nested: boolean): void => {
@@ -142,7 +145,8 @@ function templateCode(node: TemplateNode): Fragment[] {
 }
 
 function callsIn({ code, line }: Fragment, callee: RegExp): Call[] {
-	const source = ts.createSourceFile("code.ts", code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+	// Parent links, so a caller can read an argument with `getText()`.
+	const source = ts.createSourceFile("code.ts", code, PARSE, true, ts.ScriptKind.TS)
 	const calls: Call[] = []
 	const visit = (node: ts.Node): void => {
 		if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
