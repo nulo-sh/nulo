@@ -1,11 +1,10 @@
 {
 	"biomeVersion": "2.5.13",
-	"generated": "2026-10-16",
+	"generated": "2026-10-17",
 	"rules": {
 		"noExcessiveCognitiveComplexity": {
 			"apps/extension/src/popup/components/modules/send/FeeSettingsCard.test.ts": 1,
 			"apps/extension/src/utils/amount.ts": 1,
-			"apps/extension/src/utils/log-payload-ban.test.ts": 1,
 			"apps/extension/src/wallet/logger/utils.ts": 1,
 			"apps/extension/src/wallet/services/backup/footprint-coverage.test.ts": 1,
 			"apps/extension/src/wallet/services/backup/row-map-migration.ts": 3,
@@ -37,13 +36,6 @@
 			"anchor": "export const formatBaseUnits = (units: bigint | string | null | undefined, decimals: number, opts: FormatBaseUnitsOpts = {}): string => {",
 			"accepted": 22,
 			"sentence": "sign, truncation, padding, zero trimming and separators ARE the integer-formatting algorithm"
-		},
-		{
-			"file": "apps/extension/src/utils/log-payload-ban.test.ts",
-			"rule": "noExcessiveCognitiveComplexity",
-			"anchor": "function stripNoise(line: string, state: LexState): { code: string; state: LexState } {",
-			"accepted": 41,
-			"sentence": "a lexer state machine: comment, quote, regex and template-interpolation precedence must stay together"
 		},
 		{
 			"file": "apps/extension/src/wallet/logger/utils.ts",

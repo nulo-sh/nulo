@@ -4,14 +4,9 @@ import { OriginType } from "@/wallet/services/transaction/spec"
 import type { TxOrigin } from "@/wallet/services/transaction/spec"
 import { FEE_METHODS, pickPrimaryIndex, pickPrimaryMethod } from "./primary-method"
 import { transferLabel } from "./token-transfer-vocabulary"
+import { type ListedToken, type SettledCall, settledReading } from "./tx-amount"
 
 export { FEE_METHODS, pickPrimaryMethod }
-
-type TxCall = {
-	contract: string
-	method: string
-	args?: unknown[]
-}
 
 const MINT_LABELS: Record<string, string> = {
 	mint_to_public: "Mint (public)",
@@ -68,6 +63,12 @@ export function humanizeMethodName(method: string, contract?: string): string {
 	return getMethodLabel(method, contract) ?? plainMethodName(method)
 }
 
+/** A call's title in the wallet's words: a transfer or mint label only on a call the wallet read as
+ *  that movement; a name that claims one otherwise reads as its contract spells it. */
+export function callTitle(method: string, contract: string | undefined, read: boolean): string {
+	return !read && tokenMovementLabel(method) !== null ? plainMethodName(method) : humanizeMethodName(method, contract)
+}
+
 /** A name as its contract spells it, with no wallet label: a hex selector truncated, snake_case title-cased. */
 export function plainMethodName(method: string): string {
 	if (!method) return "Unknown"
@@ -99,28 +100,19 @@ export function getPrimaryCall<T extends { method: string }>(calls: T[]): T | un
 	return idx === undefined ? calls[0] : calls[idx]
 }
 
-/**
- * Categorizes a transaction by its calls.
- */
-export function getTxCategory(calls: TxCall[]): "transfer" | "mint" | "tx" {
+/** A transaction's category: how the wallet reads its primary call against the listed `tokens`. */
+export function getTxCategory(calls: SettledCall[], tokens: readonly ListedToken[]): "transfer" | "mint" | "tx" {
 	const call = getPrimaryCall(calls)
-	if (call?.method?.startsWith("transfer")) return "transfer"
-	if (call?.method?.startsWith("mint_to_")) return "mint"
-	return "tx"
+	return call === undefined ? "tx" : (settledReading(call, tokens) ?? "tx")
 }
 
-/**
- * Returns a display title for a transaction.
- * - Transfer/mint get existing labels
- * - Generic txs get humanized primary method name
- */
-export function getTxTitle(calls: TxCall[]): string {
-	const category = getTxCategory(calls)
-	if (category === "transfer") return "Transfer"
-	if (category === "mint") return "Mint"
-
+/** A transaction's title: "Transfer" for a transfer the wallet read, else its primary call's title. */
+export function getTxTitle(calls: SettledCall[], tokens: readonly ListedToken[]): string {
 	const primary = getPrimaryCall(calls)
-	return primary ? humanizeMethodName(primary.method) : "Transaction"
+	if (!primary) return "Transaction"
+	const reading = settledReading(primary, tokens)
+	if (reading === "transfer") return "Transfer"
+	return callTitle(primary.method, primary.contract, reading === "mint")
 }
 
 /** The label of a dApp that names itself nothing. */

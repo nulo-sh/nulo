@@ -1,9 +1,10 @@
-import { readdirSync, readFileSync, statSync } from "node:fs"
-import { join, relative } from "node:path"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { glyphs } from "@nulo/design/core/glyphs.ts"
 import { parse as parseSfc } from "@vue/compiler-sfc"
 import ts from "typescript"
 import { describe, expect, test } from "vitest"
+import { DECLARATION, REPO_ROOT, SCAN_ROOTS, sourceFiles, TEST_FILE } from "../../scripts/type-roles/source-scan"
 
 /**
  * Static guard: `Icon` draws an unknown name blank, so every glyph name a template states must be a
@@ -20,10 +21,8 @@ import { describe, expect, test } from "vitest"
  * from a helper is checked only by its type; a template inside a story's string is not read.
  */
 
-const REPO_ROOT = join(__dirname, "..", "..", "..", "..")
-const SCAN_ROOTS = ["apps/extension/src", "packages/design/src"]
-const SCANNED = /\.(ts|js|vue|css)$/
-const SKIPPED = /\.test\.[jt]s$|\.d\.ts$/
+/** Stories stay in: the retired-icon check reads every line of them. */
+const POLICY = { roots: SCAN_ROOTS, exts: ["ts", "js", "vue", "css"], skip: [TEST_FILE, DECLARATION] }
 
 /** compiler-core's `NodeTypes`, which compiler-sfc does not re-export. */
 const ELEMENT = 1
@@ -150,16 +149,7 @@ function scan(file: string, source: string): Hit[] {
 	return out
 }
 
-function walk(dir: string, out: string[] = []): string[] {
-	for (const name of readdirSync(dir)) {
-		const full = join(dir, name)
-		if (statSync(full).isDirectory()) walk(full, out)
-		else if (SCANNED.test(name) && !SKIPPED.test(name)) out.push(full)
-	}
-	return out
-}
-
-const treeFiles = (): string[] => SCAN_ROOTS.flatMap((root) => walk(join(REPO_ROOT, root)))
+const treeFiles = (): string[] => sourceFiles(POLICY)
 
 const tsSfc = (template: string, script = "") => `<script setup lang="ts">${script}</script><template>${template}</template>`
 const jsSfc = (template: string, script = "") => `<script setup>${script}</script><template>${template}</template>`
@@ -168,7 +158,7 @@ describe("icon names (static)", () => {
 	test("every glyph name a template states is drawn, and every bound Icon name is typed", () => {
 		const files = treeFiles()
 		expect(files.filter((file) => file.endsWith(".vue")).length).toBeGreaterThan(200)
-		const hits = files.flatMap((full) => scan(relative(REPO_ROOT, full), readFileSync(full, "utf8")))
+		const hits = files.flatMap((file) => scan(file, readFileSync(join(REPO_ROOT, file), "utf8")))
 		const open = hits.map(({ file, line, text }) => `${file}:${line}  ${text}`)
 		expect(open, `Name a key of \`glyphs\` (packages/design/src/core/glyphs.ts), or type the binding:\n${open.join("\n")}`).toEqual([])
 	})

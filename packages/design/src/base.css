@@ -75,7 +75,7 @@
 	--border: rgba(74, 70, 63, 0.5);
 	--border-hovered: rgba(74, 70, 63, 0.8);
 
-	/* The light theme inherits both hairlines and every scrim unchanged. */
+	/* The light theme inherits both hairlines and every scrim but the popup's. */
 	--hairline-soft: rgba(74, 70, 63, 0.2);
 	--hairline-strong: rgba(74, 70, 63, 0.3);
 
@@ -121,6 +121,9 @@
 	--card-bg: #fff;
 	--tooltip-bg: #f3f3f3;
 	--dropdown-bg: #fff;
+
+	/* The Terms sheet keeps the dark scrim: it is a blocking wall, and this wash nearly erases its edge. */
+	--scrim-popup: color-mix(in srgb, var(--app-bg) 70%, transparent);
 
 	/* Direction A — warm chromatic. These 8 brand tokens were MISSING from the light block (they fell
 	 * through to the dark :root values, which is what broke the light theme). The accent stays a
@@ -263,17 +266,16 @@ button,
 	user-select: none;
 }
 
-.slide-enter-active {
+.sheet-enter-active {
 	transition: all 0.3s var(--bezier);
 }
 
-.slide-leave-active {
+.sheet-leave-active {
 	transition: all 0.15s var(--bezier);
 }
 
-.slide-enter-from,
-.slide-leave-to {
-	transform: translateY(40px);
+.sheet-enter-from,
+.sheet-leave-to {
 	opacity: 0;
 }
 

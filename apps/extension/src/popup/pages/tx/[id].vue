@@ -25,16 +25,16 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 /** Utils */
 import { DETAIL_TIME_FORMAT } from "../detail-page"
 import { balanceFormatted } from "@/utils/amount.js"
-import { displaySymbol, txAmount } from "@/utils/tx-amount"
+import { displaySymbol, settledReading, txAmount } from "@/utils/tx-amount"
 import { copyWithToast } from "@/utils/clipboard"
 import { trimAddress } from "@/utils/string"
 import {
+	callTitle,
 	getTxCategory,
 	getTxTitle,
 	getOriginLabel,
 	getPrimaryCall,
 	formatTransferType,
-	humanizeMethodName,
 	FEE_METHODS,
 } from "@/utils/tx-enrichment"
 import { PriceServiceClient } from "@/wallet/services/price/client"
@@ -63,14 +63,15 @@ const configService = new ConfigServiceClient()
 const showDebugPanel = ref(false)
 
 const tx = computed(() => appStore.transactions.find((t) => t.hash === route.params.id))
+const tokens = ref([])
 const call = computed(() => (tx.value?.calls ? getPrimaryCall(tx.value.calls) : undefined))
-const type = computed(() => (tx.value?.calls ? getTxCategory(tx.value.calls) : "tx"))
+const type = computed(() => (tx.value?.calls ? getTxCategory(tx.value.calls, tokens.value) : "tx"))
 
 // The explorer link renders for EVERY status — pending, dropped, reverted
 // (owner call): a possibly-404 explorer page is exactly what the user wants
 // to check when a tx never confirmed. Copy hash remains only when no
 // explorer URL exists (sandbox chain, explorer set to None).
-const popupTitle = computed(() => (tx.value?.calls ? getTxTitle(tx.value.calls) : "Transaction"))
+const popupTitle = computed(() => (tx.value?.calls ? getTxTitle(tx.value.calls, tokens.value) : "Transaction"))
 const originLabel = computed(() => getOriginLabel(tx.value?.origin))
 
 const transfer = computed(() => (call.value?.transfers ? call.value.transfers[0] : null))
@@ -78,7 +79,6 @@ const transferTypeLabel = computed(() => {
 	if (!transfer.value || transfer.value.type === undefined || transfer.value.type === null) return null
 	return formatTransferType(transfer.value.type)
 })
-const tokens = ref([])
 const token = computed(() => tokens.value.find((t) => call.value?.contract === t.contract))
 const transferSymbol = computed(() => displaySymbol(transfer.value?.token?.symbol))
 
@@ -143,6 +143,7 @@ const userCalls = computed(() => {
 	const filtered = tx.value.calls.filter((c) => !FEE_METHODS.has(c.method))
 	return filtered.length ? filtered : tx.value.calls
 })
+const callRowTitle = (c) => callTitle(c.method, c.contract, settledReading(c, tokens.value) !== null)
 
 onMounted(async () => {
 	tokens.value = await tokenService.getTokens(appStore.profile.id, appStore.network.chainId)
@@ -353,7 +354,7 @@ onBeforeUnmount(() => {
 						gap="4"
 						:class="[$style.call_row, idx > 0 && $style.call_row_divider]"
 					>
-						<span :class="$style.call_method">{{ humanizeMethodName(c.method) || "Call" }}</span>
+						<span data-testid="tx-call-method" :class="$style.call_method">{{ callRowTitle(c) }}</span>
 						<span data-testid="tx-call-contract" @click="handleCopy(c.contract)" :class="[$style.call_contract, 'copyable']">
 							{{ trimAddress(c.contract, 6, 4) }}
 						</span>

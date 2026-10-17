@@ -110,7 +110,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 <template>
 	<div data-testid="send-review-sheet" :data-open="show" hidden />
 	<Popup :show="show" :displaceIdx="order" initial-focus="#send-review-title" @onClose="emit('close')">
-		<PopupCard :displaceIdx="depth" fit>
+		<PopupCard :displaceIdx="depth">
 			<div role="dialog" aria-modal="true" aria-labelledby="send-review-title">
 				<PopupHeader closable @onClose="emit('close')">
 					<template #title>

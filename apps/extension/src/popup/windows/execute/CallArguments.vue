@@ -25,6 +25,7 @@ const props = defineProps<{
 }>()
 
 const rawOpen = ref(false)
+const rawArgsId = useId()
 const amount = computed(() =>
 	props.surface.kind === "transfer" || props.surface.kind === "mint"
 		? amountLabel(props.tokens, props.chainId, props.contract, props.surface.amount)
@@ -134,10 +135,11 @@ const nonce = computed(() =>
 			v-if="surface.rows.length"
 			:data-testid="`${prefix}-raw-toggle`"
 			:open="rawOpen"
+			:controls="rawArgsId"
 			:label="rawToggleLabel(surface.rows.length + surface.hidden, rawOpen)"
 			@click="rawOpen = !rawOpen"
 		/>
-		<Flex v-if="rawOpen" :data-testid="`${prefix}-raw-args`" direction="column" gap="2">
+		<Flex v-if="rawOpen" :id="rawArgsId" :data-testid="`${prefix}-raw-args`" direction="column" gap="2">
 			<Flex v-for="(row, m) in surface.rows" :key="m" :data-testid="`${prefix}-arg`" :data-arg-kind="row.kind" justify="between" :class="$style.row">
 				<Text variant="label-section" color="secondary">#{{ m }}</Text>
 				<Text v-if="row.kind === 'field'" :data-testid="`${prefix}-arg-field`" variant="meta" color="primary" :title="row.full">

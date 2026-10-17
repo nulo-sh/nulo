@@ -109,16 +109,16 @@ export type Methods = {
 	 */
 	getPublicTokenClassStatus(network: NetworkInfo, contract: string, checkpointHash: string): PublicTokenClassStatus
 	/**
-	 * Dispose any active runtime for `(profileId, chainId)` and delete its
-	 * IndexedDB at `pxe/${profileId}/${chainId}`. Called by the SW-side
+	 * Dispose any active runtime for `(profileId, chainId)` and remove its
+	 * OPFS store at `pxe/${profileId}/${chainId}`. Called by the SW-side
 	 * NetworkService.purgeChain coordinator when a chain is removed.
 	 */
 	clearChainState(profileId: string, chainId: number): void
-	/** Profile-wide PXE erase: deletes ALL of a profile's PXE databases by
-	 *  prefix (catches orphan/network-less DBs a per-chain clear misses), never
-	 *  bb.js's device-wide CRS cache (`keyval-store`). Awaited +
-	 *  failure-propagating — the deletion coordinator treats a rejection as a
-	 *  critical, retryable erasure failure. `generation` is the incarnation
+	/** Profile-wide PXE erase: removes the profile's whole OPFS tree (catches
+	 *  orphan/network-less stores a per-chain clear misses) and touches no
+	 *  IndexedDB, so bb.js's device-wide CRS cache (`keyval-store`) survives.
+	 *  Awaited + failure-propagating — the deletion coordinator treats a
+	 *  rejection as a critical, retryable erasure failure. `generation` is the incarnation
 	 *  being erased (from the tombstone carry): a late clear carrying a
 	 *  superseded generation can never erase a live successor. */
 	clearProfileState(profileId: string, generation: string): void

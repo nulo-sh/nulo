@@ -19,12 +19,13 @@ const find = (query: string, context = CHROME) => ids(searchSettings(visibleSett
 const ALL = Object.keys(SETTINGS_ROWS) as SettingsRowId[]
 
 describe("matching", () => {
-	test('"full" finds Full-height popups by its title, then Open as Side Panel by a synonym', () => {
-		expect(find("full")).toEqual([["Display", ["display-full-height", "display-side-panel"]]])
+	test('"ation" finds Disable animations by its title, then Theme by its description', () => {
+		expect(find("ation")).toEqual([["Display", ["display-animations", "display-theme"]]])
 	})
 
-	test('"full" on a browser with no side panel finds Full-height popups alone', () => {
-		expect(find("full", FIREFOX)).toEqual([["Display", ["display-full-height"]]])
+	test('"full" finds Open as Side Panel by a synonym, and nothing on a browser with no side panel', () => {
+		expect(find("full")).toEqual([["Display", ["display-side-panel"]]])
+		expect(find("full", FIREFOX)).toEqual([])
 	})
 
 	test("case and accents fold: THÉME finds Theme", () => {
@@ -35,7 +36,7 @@ describe("matching", () => {
 	})
 
 	test("a term inside a word matches", () => {
-		expect(find("eight")).toEqual([["Display", ["display-full-height"]]])
+		expect(find("nimat")).toEqual([["Display", ["display-animations"]]])
 	})
 
 	test("every term must match, each in any field", () => {
@@ -58,8 +59,8 @@ describe("matching", () => {
 	})
 
 	test("rows found by the same field keep page order", () => {
-		const rows = [settingsRow("display-side-panel"), settingsRow("display-full-height")]
-		expect(ids(searchSettings(rows, "fullscreen"))).toEqual([["Display", ["display-side-panel", "display-full-height"]]])
+		const rows = [settingsRow("display-network-name"), settingsRow("display-incoming-transfers")]
+		expect(ids(searchSettings(rows, "show"))).toEqual([["Display", ["display-network-name", "display-incoming-transfers"]]])
 	})
 
 	test("a blank query is no search; no match is an empty result", () => {
@@ -82,7 +83,7 @@ describe("where a result goes", () => {
 	})
 
 	test("a sub-page row's result opens its page, naming the row to outline", () => {
-		expect(settingsResultTo(settingsRow("display-full-height"))).toBe("/popup/settings/display?row=display-full-height")
+		expect(settingsResultTo(settingsRow("display-animations"))).toBe("/popup/settings/display?row=display-animations")
 		expect(settingsResultTo(settingsRow("lock-now"))).toBe("/popup/settings/lock?row=lock-now")
 	})
 })

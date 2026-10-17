@@ -14,6 +14,9 @@
  *   5. A background restart later, the re-derived account still signs, proves, and lands a tx
  *      (the background's re-derivation path throws "account address inconsistency" on drift, so
  *      an ok result pins re-derivation AND execution).
+ *   6. Once every prove has run, the PXE's only storage is its `pxe` OPFS tree: no other OPFS
+ *      root entry, and no IndexedDB database but bb.js's public CRS cache (an upstream store
+ *      opened beside the injected one would hold plaintext state the profile erase never removes).
  *
  * Every stage asserts an exact outcome — no ok-or-error tolerances in this file. Run it
  * prover-ON per bump, on Chrome and on Firefox: `bun run e2e:agent
@@ -203,6 +206,20 @@ describe("frozen-account canary — the execution gate every @aztec bump runs, o
 			const finalTxHash = txHashOf(finalResult.resultJson)
 			await waitForTxMined(aztecConfig!, finalTxHash, 300_000)
 			step("post-restart tx mined — re-derived frozen account fully operational")
+
+			// ── Stage 6: the PXE's only storage is its `pxe` OPFS tree ──
+			// Storage is per extension origin, so the popup sees what the PXE host wrote.
+			const storagePopup = await openPopup(ctx)
+			const stores = await storagePopup.evaluate(async () => {
+				const root = (await navigator.storage.getDirectory()) as unknown as { entries(): AsyncIterable<[string, unknown]> }
+				const opfsRoot: string[] = []
+				for await (const [name] of root.entries()) opfsRoot.push(name)
+				const idb = (await indexedDB.databases()).map((d) => d.name).filter((n) => n !== "keyval-store")
+				return { opfsRoot, idb }
+			})
+			await storagePopup.close()
+			expect(stores).toEqual({ opfsRoot: ["pxe"], idb: [] })
+			step("PXE storage is the pxe OPFS tree alone; no IndexedDB database but the CRS cache")
 		},
 	)
 })

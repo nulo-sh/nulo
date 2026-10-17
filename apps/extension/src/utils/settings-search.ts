@@ -267,14 +267,6 @@ export const SETTINGS_ROWS = {
 		synonyms: ["network", "chain", "header"],
 		testid: "display-row-network-name",
 	},
-	"display-full-height": {
-		page: "/popup/settings/display",
-		section: "Display",
-		title: "Full-height popups",
-		description: "Open popups to the full height",
-		synonyms: ["fullscreen", "full screen", "tall", "expand", "height"],
-		testid: "display-row-full-height",
-	},
 	"display-animations": {
 		page: "/popup/settings/display",
 		section: "Display",

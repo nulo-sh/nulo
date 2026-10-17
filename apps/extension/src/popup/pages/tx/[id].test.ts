@@ -159,6 +159,40 @@ describe("the transaction page's fee", () => {
 	})
 })
 
+describe("the transaction page's words for a call", () => {
+	const header = { props: ["title"], template: "<h1 data-testid='header'>{{ title }}</h1>" }
+	const words = (w: Awaited<ReturnType<typeof mountPage>>) => [
+		w.get("[data-testid='header']").text(),
+		w.get("[data-testid='tx-call-method']").text(),
+	]
+	const OTHER = `0x${"0b".repeat(32)}`
+	const dappTransfer = (contract: string) =>
+		settled({ type: OriginType.DAPP, name: "example.dapp.io" }, [
+			{ contract, method: "transfer_in_private", args: [ACCOUNT, OTHER, field(5n), field(0n)], classId: CLASS },
+		])
+
+	test("a listed mint reads its own name until the token list loads, then the window's label", async () => {
+		let resolve: (tokens: unknown[]) => void = () => {}
+		const w = await mountPage(dappMint, new Promise((r) => (resolve = r)), { SubPageHeader: header })
+		expect(words(w)).toEqual(["Mint To Public", "Mint To Public"])
+		resolve([listed])
+		await flushPromises()
+		expect(words(w)).toEqual(["Mint (public)", "Mint (public)"])
+	})
+
+	test("a transfer on a contract the wallet did not list reads as its contract spells it; on a listed token, as the wallet read it", async () => {
+		const unread = await mountPage(dappTransfer(OTHER), Promise.resolve([listed]), { SubPageHeader: header })
+		expect(words(unread)).toEqual(["Transfer In Private", "Transfer In Private"])
+		const read = await mountPage(dappTransfer(TOKEN), Promise.resolve([listed]), { SubPageHeader: header })
+		expect(words(read)).toEqual(["Transfer", "Transfer (private)"])
+	})
+
+	test('a dApp\'s `claim` off the Fee Juice contract reads "Claim" in the header and the Calls box', async () => {
+		const claim = settled({ type: OriginType.DAPP, name: "example.dapp.io" }, [{ contract: OTHER, method: "claim", args: [ACCOUNT] }])
+		expect(words(await mountPage(claim, Promise.resolve([listed]), { SubPageHeader: header }))).toEqual(["Claim", "Claim"])
+	})
+})
+
 describe("the transaction page's explorer links", () => {
 	const BLOCK_HASH = `0x${"18".repeat(32)}`
 	const RECIPIENT = `0x${"09".repeat(32)}`
