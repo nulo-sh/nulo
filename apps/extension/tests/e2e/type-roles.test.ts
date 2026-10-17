@@ -3,8 +3,8 @@
  * judges the element it should, the faces they ask for load, History's hero title takes
  * `title-hero` through its composed module rule, every page the smoke suite sweeps holds its roles
  * and its identifier sites, as do the native fields and each `Button` variant and size in today's
- * box, no figure on any of them loses a digit to a clip or an ellipsis, and in Firefox's real
- * toolbar panel the role-bearing text neither clips nor moves the layout.
+ * box, no figure on any of them loses a digit to a clip or an ellipsis, no text on them runs past its
+ * box unannounced, and in Firefox's real toolbar panel the text neither clips nor moves the layout.
  */
 import { typeRoleNames, typeRoles } from "@nulo/design/tokens"
 import type { Page } from "puppeteer"
@@ -32,6 +32,7 @@ import {
 	checkFontFaces,
 	clearTypeRoleProbes,
 	coverageOf,
+	expectLaidOut,
 	expectSitesClean,
 	expectSweepClean,
 	firstFamily,
@@ -39,6 +40,7 @@ import {
 	identifierSites,
 	judgeTypography,
 	observeIdentifierSites,
+	overflowingText,
 	type PageTypography,
 	panelBodies,
 	PROBE_TEXT,
@@ -178,6 +180,39 @@ test("a site reads its value or its native field, a name shown is judged as name
 	expect(ctx.pageErrors).toEqual([])
 })
 
+const LAYOUT_HTML = `
+	<div data-testid="tr-clip"><input class="type--input" data-testid="tr-clipped-input" value="1" /></div>
+	<input class="type--input-data" data-testid="tr-scrolling-input" value="0x09c1c9d2ce72c53c2451f8e9add86ccb8cb284dd4dc4f0eaf301b40b38a9459b" />
+	<div data-testid="tr-narrow"><span data-testid="tr-run-past">Text that runs past its box</span></div>`
+
+test("the layout gate reports a field an ancestor cuts and text past its own box, never a field scrolling its value", async ({
+	registeredExtension: ctx,
+}) => {
+	const page = await openHome(ctx)
+	await page.evaluate((html: string) => {
+		const host = document.createElement("div")
+		host.setAttribute("data-testid", "tr-layout")
+		host.innerHTML = html
+		// Through the CSSOM: `style-src` refuses a parsed `style` attribute.
+		const style = (testid: string) => (host.querySelector(`[data-testid="${testid}"]`) as HTMLElement).style
+		Object.assign(style("tr-clip"), { width: "40px", overflow: "hidden" })
+		style("tr-clipped-input").width = "200px"
+		style("tr-scrolling-input").width = "100px"
+		Object.assign(style("tr-narrow"), { width: "40px" })
+		Object.assign(style("tr-run-past"), { display: "block", whiteSpace: "nowrap" })
+		document.body.appendChild(host)
+	}, LAYOUT_HTML)
+	try {
+		const { readings } = await readPageTypography(page, { kind: "laid-out" })
+		const fixture = readings.filter((reading) => reading.testid?.startsWith("tr-"))
+		expect(fixture.map(({ testid }) => testid).sort()).toEqual(["tr-clipped-input", "tr-run-past", "tr-scrolling-input"])
+		expect(overflowingText(fixture).map(({ testid }) => testid)).toEqual(["tr-clipped-input", "tr-run-past"])
+	} finally {
+		await page.evaluate(() => document.querySelector('[data-testid="tr-layout"]')?.remove())
+	}
+	expect(ctx.pageErrors).toEqual([])
+})
+
 test("the three faces the roles name load, and none fails", async ({ registeredExtension: ctx }) => {
 	const page = await openHome(ctx)
 	const fonts = await withProbes(page, () => checkFontFaces(page))
@@ -294,6 +329,7 @@ async function expectPageClean(page: Page, label: string, states: readonly SiteS
 	const sweep = await sweepTypeRoles(page)
 	expectSweepClean(sweep, label)
 	expect(cutFigures(sweep.readings), `${label}: figures cut`).toEqual([])
+	await expectLaidOut(page, label)
 	for (const [surface, state] of states) {
 		const observation = await observeIdentifierSites(page, surface, state)
 		expectSitesClean(observation)
@@ -873,7 +909,7 @@ const SETTLE_SAMPLES_MS = [0, 150, 300, 600, 1_200]
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
-	test("in the toolbar panel, Home and Settings hold their layout and no role-bearing text clips", async ({
+	test("in the toolbar panel, Home and Settings hold their layout and no text runs past its box", async ({
 		registeredExtensionPerTest: ctx,
 	}) => {
 		await openActionPopup(ctx.browser)
@@ -897,21 +933,14 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 				expect(layout, `${tab} +${wait}ms`).toMatchObject({ shellHeight: layout.viewportHeight, navBottom: layout.viewportHeight })
 			}
 			console.log(`[type-roles] panel ${tab}: ${JSON.stringify(await inPanel<PanelLayout>(MEASURE_PANEL))}`)
+			const laidOut = await inPanel<PageTypography>(panelBodies.read({ kind: "laid-out" }))
+			expect(overflowingText(laidOut.readings), `${tab}: text past its box in the panel`).toEqual([])
 
 			expect(await inPanel<number>(panelBodies.placeProbes())).toBe(typeRoleNames.length)
 			try {
 				const typography = await inPanel<PageTypography>(panelBodies.read({ kind: "roles" }))
 				expect(typography.readings.filter((reading) => reading.testid?.startsWith(PROBE))).toHaveLength(typeRoleNames.length)
 				expect(judgeTypography(typography), `${tab}: role values in the panel`).toEqual([])
-				const clipped = typography.readings.filter(
-					(reading) =>
-						reading.visible &&
-						(reading.clippedBy !== null ||
-							(reading.overflowX !== "visible" &&
-								reading.scrollWidth > reading.clientWidth &&
-								reading.textOverflow !== "ellipsis")),
-				)
-				expect(clipped, `${tab}: role-bearing text clipped without an ellipsis`).toEqual([])
 				expect(cutFigures(typography.readings), `${tab}: figures cut in the panel`).toEqual([])
 				const widths = typography.readings
 					.filter((reading) => !reading.testid?.startsWith(PROBE))

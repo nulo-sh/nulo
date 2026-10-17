@@ -47,6 +47,8 @@ export type TypeReading = {
 	textOverflow: string
 	/** `visible` cannot clip: an inline box or one whose overflow shows past it. */
 	overflowX: string
+	/** A native text field, which scrolls its own content and paints no further than its box. */
+	field: boolean
 	scrollWidth: number
 	clientWidth: number
 	visible: boolean
@@ -61,10 +63,11 @@ export type TypeReading = {
 }
 
 /**
- * Which elements a read collects: the role-bearing ones, the visible ones with text of their own, or
- * those at a selector, each read as itself or, with `native`, as the native field at or under it.
+ * Which elements a read collects: the role-bearing ones, the visible ones with text of their own,
+ * both (`laid-out`, what the layout gate judges), or those at a selector, each read as itself or,
+ * with `native`, as the native field at or under it.
  */
-export type ReadScope = { kind: "roles" } | { kind: "own-text" } | { kind: "at"; selector: string; native?: boolean }
+export type ReadScope = { kind: "roles" } | { kind: "own-text" } | { kind: "laid-out" } | { kind: "at"; selector: string; native?: boolean }
 
 /** One read of a document: the three face variables as its root resolves them, and the elements. */
 export type PageTypography = { vars: Vars; readings: TypeReading[] }
@@ -103,16 +106,18 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 		Array.from(el.childNodes).some((node) => node.nodeType === 3 && (node.textContent ?? "").trim() !== "")
 	const FIELD = "input, textarea"
 	const field = (el: Element): Element => (el.matches(FIELD) ? el : (el.querySelector(FIELD) ?? el))
+	const shownText = (el: Element): boolean => hasOwnText(el) && isVisible(el)
 	const collect = (): Element[] => {
 		if (scope.kind === "at") return Array.from(doc.querySelectorAll(scope.selector)).map((el) => (scope.native ? field(el) : el))
 		if (scope.kind === "roles") return Array.from(doc.querySelectorAll(ROLE))
-		return Array.from(doc.body.querySelectorAll("*")).filter((el) => hasOwnText(el) && isVisible(el))
+		const all = Array.from(doc.body.querySelectorAll("*"))
+		return scope.kind === "own-text" ? all.filter(shownText) : all.filter((el) => el.matches(ROLE) || shownText(el))
 	}
 	type Span = { left: number; right: number }
 	const paintedSpan = (el: Element): Span => {
 		const box = el.getBoundingClientRect()
 		// Text an element clips itself paints no further than its own box.
-		if (win.getComputedStyle(el).overflowX !== "visible") return { left: box.left, right: box.right }
+		if (el.matches(FIELD) || win.getComputedStyle(el).overflowX !== "visible") return { left: box.left, right: box.right }
 		return { left: box.left, right: Math.max(box.right, box.left + el.scrollWidth) }
 	}
 	const clippingAncestors = (el: Element): Element[] => {
@@ -154,6 +159,7 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 			fontVariantNumeric: style.fontVariantNumeric,
 			textOverflow: style.textOverflow,
 			overflowX: style.overflowX,
+			field: el.matches(FIELD),
 			scrollWidth: el.scrollWidth,
 			clientWidth: el.clientWidth,
 			visible: isVisible(el),
@@ -430,6 +436,44 @@ export async function sweepTypeRoles(page: Page, options: SweepOptions = {}): Pr
 export function expectSweepClean(result: SweepResult, label = "type-role sweep"): void {
 	expect(result.fonts.failures, `${label}: faces`).toEqual([])
 	expect(result.failures, `${label}: role values`).toEqual([])
+}
+
+// ── The layout gate ─────────────────────────────────────────────────────
+
+export type Overflow = Pick<TypeReading, "testid" | "text" | "roles" | "scrollWidth" | "clientWidth" | "clippedBy">
+
+/** A native field, or a box whose overflow is `auto` or `scroll`, scrolls its own content by design. */
+const scrollsItself = (reading: TypeReading): boolean => reading.field || reading.overflowX === "auto" || reading.overflowX === "scroll"
+
+/** An ellipsis draws only where the box clips. */
+const ellipsized = (reading: TypeReading): boolean => reading.textOverflow === "ellipsis" && reading.overflowX !== "visible"
+
+/**
+ * Text a person cannot read whole and is not told so: cut by an ancestor without an ellipsis, or
+ * wider than its own box by more than 1 px without one, whether the box clips or lets it run into
+ * its neighbours. For an element that scrolls itself only an ancestor's cut counts.
+ */
+export const overflowingText = (readings: readonly TypeReading[]): Overflow[] =>
+	readings
+		.filter(
+			(reading) =>
+				reading.visible &&
+				(reading.clippedBy !== null ||
+					(!scrollsItself(reading) && reading.scrollWidth > reading.clientWidth + 1 && !ellipsized(reading))),
+		)
+		.map(({ testid, text, roles, scrollWidth, clientWidth, clippedBy }) => ({
+			testid,
+			text,
+			roles,
+			scrollWidth,
+			clientWidth,
+			clippedBy,
+		}))
+
+/** The layout gate over the page as it stands: every role-bearing element and every element with text of its own. */
+export async function expectLaidOut(page: Page, label: string): Promise<void> {
+	const { readings } = await readPageTypography(page, { kind: "laid-out" })
+	expect(overflowingText(readings), `${label}: text past its box`).toEqual([])
 }
 
 export type TypeRecord = Pick<
