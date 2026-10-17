@@ -252,7 +252,7 @@ Steps may land as several commits; only the end of the phase is gated.
 
 **Validation gate**: `bun run lint && bun run typecheck:all && bun run test && bun run test:all && bun run --cwd packages/third-party-notices test && bun run build && bun run --cwd apps/extension build-storybook`. Pass: exit 0 each; the guard fails when one site is set back to `check-circle`, then passes after the revert; `find apps/extension/dist -iname '*material*'` prints nothing; `THIRD-PARTY-NOTICES.txt` names no Material. Layers: lint, typecheck, unit, build, storybook build.
 
-### Phase 2: docs, e2e, "after" shots
+### Phase 2: docs, e2e, "after" shots ✓
 
 1. Update `CLAUDE.md`'s L1 line, `packages/design/README.md` (Icon: the glyph module, the paint rule, how to add a glyph), and `packages/third-party-notices/README.md` if it names Material.
 2. Run the whole smoke suite on Chrome, then on Firefox, each from a fresh armed build. Run `network/cap-window.test.ts`, `network/type-roles-windows.test.ts` and `network/connect-verify-mismatch.test.ts`.

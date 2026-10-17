@@ -9,3 +9,17 @@
 ## Sheet capture
 
 The `Core / Icon` sheet story overflowed Storybook's popup-width wrapper; `width: max-content` on its grid. Captured from `storybook-static` through puppeteer request interception (no port), light and dark at device scale 2.
+- **After the loop**: `bun run audit:vue` failed once on `a11y-css.test.ts`, which pins `DetailsTable`'s `--nulo-outline` selector by text; the round 1 fix had raised it to three classes. The pin follows (`5bda52de`). The fix round had run only the touched files' tests.
+
+## e2e
+
+Before from `f86407dd` (base `dev` 3dc5a06a); after from `5b18cc75`; the code is unchanged through `5bda52de`, which only moved a test pin. Every run was at retry 0 with load1 under 150 at its start. Commands are as in the plan's arc 1 preamble; the armed build preceded each browser's batch.
+
+| Suite | Before | After |
+|---|---|---|
+| Smoke, Chrome (266 tests, 14 skipped) | 1816 s, green | 1838 s, green |
+| Smoke, Firefox | 2510 s, green | 2296 s, 1 failure (#630); full rerun 2253 s, green |
+| Network, the three capture files (incl. build) | 396 s, 11/11 | 311 s, 11/11 |
+
+- **Firefox failure**: `security-reset.test.ts` › "reset purges within the same budget while the node refuses connections". `waitForProfilePurged` ran out at 15 s with the tombstone still present. Three isolated reruns passed, at 15.3, 22.7 and 15.3 s for the whole test. Nothing on the purge path changed, so this is a timing flake under host load, filed as #630.
+- **Captures**: `NULO_E2E_SHOT_DIR` on `home-links`, `holdings-add-token`, `send-keyboard`, `settings-routes`, `accounts` and `endpoints` (smoke, 28/28) and the three network files. The eight pairs, the Accounts popup, the network page and the sheet are in `screenshots/`.
