@@ -145,7 +145,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 
 .grid {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) 54px 34px 54px 14px;
+	grid-template-columns: minmax(0, 1fr) 66px 34px 66px 14px;
 	align-items: center;
 	column-gap: 4px;
 }
@@ -257,7 +257,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 .fn {
 	composes: type--data from global;
 	display: grid;
-	grid-template-columns: 58px minmax(0, 1fr);
+	grid-template-columns: 66px minmax(0, 1fr);
 	gap: 8px;
 
 	line-height: 1.5;
