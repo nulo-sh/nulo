@@ -65,19 +65,19 @@ Decision page 39 (2026-10-17) settled two asks the ui-leftovers-1 lane left open
 
 ## Phases (one arc)
 
-### Phase 0: base and "before" shots
+### Phase 0: base and "before" shots ✓
 - Merge `origin/dev`. If a lead's merge touched `journal/[id].vue`, `RecentActivityView.vue` or `holdings.vue`, read its diff.
 - **Smoke recipe** (every smoke run below; load1 < 150 first): an armed build, `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:<chrome|firefox>`; then, from `apps/extension`, `env -u EXTENSION_PATH NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 [NULO_E2E_BROWSER=firefox] bun run test:e2e -- <file> --retry=0`.
 - **Shots** (Chrome, light and dark, under `~/.cache/nulo-backlog/ui-leftovers-2/shots/`): a scratch spec, never committed, seeds a nameless dApp's cancelled and failed records (as `rows.test.ts` does) and shoots Home's activity and the cancelled record's journal page. For Holdings it holds the first price answer over a stale cache: `interceptRpc(..., "https://api.coingecko.com", { kind: "redirect", to })` to a run-owned stub that holds every request until the spec releases a valid quote (Home's refresh, which Holdings joins, starts at the reload, so the spec opens Holdings at once and releases before the 10 s abort); a second run refuses it for the failure state. It asserts the interception's hits and no failures, logs the summary's height held and after the figure lands, and samples the visible summary each frame from mount (the OA-1 frame count).
 - Time `rows` on the base, per browser (the "before" figure).
 - **Gate**: `bun install --frozen-lockfile && bun run lint && bun run typecheck:all` exit 0.
 
-### Phase 1: a nameless dApp keeps its chip when it ends (#675)
+### Phase 1: a nameless dApp keeps its chip when it ends (#675) ✓
 - Files: `utils/journal-state.ts`, `popup/pages/journal/[id].vue`, `utils/journal-state.test.ts`, `popup/pages/journal/[id].test.ts`, `tests/e2e/rows.test.ts`.
 - Tests: the nameless terminal case (`journal-state.test.ts:286`) expects "dApp", its one-line title unchanged; the named and schemeful cases stay as controls. In `[id].test.ts`, a nameless dApp record shows App · "dApp" in the shared label and value; a failed transfer shows no App row (never-happens control). Two stale test names follow: `journal-state.test.ts:286` and the describe at `:533` ("the in-flight row's app chip"). In `rows.test.ts`, the nameless row's chip is whole, beside the title, in the caps role (`{ cut: false, below: false }`, type as `rows.call`), and the comment at `:773` says so. No added scenario.
 - **Gate** ("fast layers" below means its first two commands): `bun run lint && bun run typecheck:all && bun run --cwd apps/extension test journal-state journal/` exit 0; then `rows` by the smoke recipe on Chrome and on Firefox (the row's layout is a browser difference), green at retry 0.
 
-### Phase 2: Holdings waits for the first price answer (#676)
+### Phase 2: Holdings waits for the first price answer (#676) ✓
 - Files: `utils/token-aggregate.ts`, `utils/token-aggregate.test.ts`, `popup/components/modules/general/BalanceView.vue`, `popup/pages/holdings.vue`, `popup/pages/holdings.test.ts`.
 - Tests: one table for `awaitingFirstPriceAnswer`: unsettled with a priced holding (true); settled (false); unsettled and empty, zero balance, or unpriced after the mapping (false); unsettled before the mapping (true). In `holdings.test.ts`, `:211` becomes: with the answer held, `holdings-total-loading` shows, its span is `aria-busy`, no visible figure shows, and the visible meta reads exactly "1 tokens". The hidden ruler still holds the figure, so these read new testids on the visible spans (`holdings-total`, `holdings-meta`), never the whole summary's text. Resolving the answer then shows the figure and removes the skeleton and `aria-busy` (success control). Fiat off, and an unpriced-only wallet once the mapping has answered (`getQuotes`), show no skeleton with the answer still held (never-happens: with the answer resolved they would pass whatever the check did). The fit tests' `span[style]` selectors run only in settled states, so they never meet the skeleton's styled root.
 - **Gate**: fast layers plus `bun run --cwd apps/extension test token-aggregate holdings BalanceView` exit 0.
@@ -92,6 +92,9 @@ Decision page 39 (2026-10-17) settled two asks the ui-leftovers-1 lane left open
 - D2 #676: one shared `awaitingFirstPriceAnswer` in `token-aggregate.ts`; Home's behaviour unchanged.
 - D3 #676: no cap timer on Holdings (see Architecture); OA-3 carries the long wait.
 - D6 #676: the check is named for what it reads, the first price answer (a rejection ends it too), not a quote.
+- D7 #676 (implementation): no fiat-off control. The total's span is `v-if="showFiatValues"` and the meta's clause is gated on fiat, so no version of the check can show a difference there; the unpriced-only control runs with the answer held, and a mutant ignoring the mapping fails it.
+- D8 #676 (implementation): each token row runs its own `usePrices`, so the page test resolves every held `refreshIfStale` call, as the service answers all concurrent callers with one refresh (`service.ts:324`).
+- D9 e2e (implementation): the Phase 1 `rows` runs and Phase 3's ran together on the final head's armed builds; Phase 2 touches no row.
 - D4 #676: the skeleton holds the figure's line box (OA-2 A); the list-loading state is OA-1 and ships unchanged.
 - D5 e2e: no new scenario. `rows` flips one assertion. The held-then-released price is measured once in a real browser by the scratch spec, for the PR body; a committed twin would add a provider stub to the smoke suite for one layout fact.
 
@@ -117,6 +120,14 @@ Decision page 39 (2026-10-17) settled two asks the ui-leftovers-1 lane left open
 **Codex verify (resumed): conditional approve, no new material defect.** Three wording leftovers fixed: the 10 s is the fetch's abort, not the call's bound (storage reads sit outside it); OA-1's account change skips the skeleton only after prices answered; recon's stub cell now holds and releases.
 
 **Codex final (resumed): approve.** All three conditions confirmed; no new material defect.
+
+**Codex fix loop, round 1 (gpt-6.1-sol, high, session 01a14bb7; the net diff from 639f0363): approve with changes.** R1-1 (low, demonstrated): the journal page's comment on `originChip` restated its line. Accepted: deleted.
+
+**Opus 5.5 diff review (general-purpose), alongside round 1: approve with changes; no correctness or reactivity bug.**
+- O1 (low, demonstrated): the page's unavailable test read `span[style]`, which the Skeleton's root matches too, so a wait keyed to "no quote yet" passed. Accepted: it reads the visible total and the skeleton's absence, on an empty and a rejected answer; that mutant now fails both.
+- O2 (nit): a test name said "today's figure". Accepted: renamed. Both deviations (D7, D8) accepted.
+
+**Codex fix loop, round 2 (resumed, the fix commit 6a8f0f09): approve, no new material finding.** The loop converged.
 
 ## Delivery
 
