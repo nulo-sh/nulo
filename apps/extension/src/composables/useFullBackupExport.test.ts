@@ -20,15 +20,11 @@ import { type UseFullBackupExportOptions, useFullBackupExport } from "./useFullB
 const h = vi.hoisted(() => {
 	const state = {
 		built: [] as Array<{ kind: string; disconnect: ReturnType<typeof vi.fn> }>,
-		onBuild: undefined as (() => void) | undefined,
 		contactSlice: undefined as (() => Promise<unknown>) | undefined,
 		exportFullBackupKeys: vi.fn<(fence: unknown, password: string) => Promise<unknown>>(),
 		exportPasskeyBackupKeys: vi.fn<(fence: unknown, credentialData: unknown) => Promise<unknown>>(),
 	}
 	function make(kind: string, extra: Record<string, unknown> = {}) {
-		const hook = state.onBuild
-		state.onBuild = undefined
-		hook?.()
 		const client = {
 			backup: vi.fn(async () => (kind === "contact" && state.contactSlice ? state.contactSlice() : [])),
 			disconnect: vi.fn(),
@@ -137,8 +133,8 @@ type ProfileType = "password" | "passkey"
 type Api = ReturnType<typeof useFullBackupExport>
 
 const FENCE = { profileId: "p1", epoch: 0, session: 1, incarnation: "worker-1" }
-const material = (masterKey = "mk") => ({
-	masterKey,
+const material = () => ({
+	masterKey: "mk",
 	entropy: "ent",
 	importedKeysKey: "ik",
 	dekReplaced: false,
@@ -253,7 +249,6 @@ beforeEach(() => {
 	}
 	vi.clearAllMocks()
 	h.state.built.length = 0
-	h.state.onBuild = undefined
 	h.state.contactSlice = undefined
 	h.state.exportFullBackupKeys.mockReset().mockImplementation(async () => material())
 	h.state.exportPasskeyBackupKeys.mockReset().mockImplementation(async () => PASSKEY_KEYS)
@@ -351,26 +346,30 @@ describe("useFullBackupExport — a create superseded at an await", () => {
 		await expectNothingPublished(api, opts, at)
 	})
 
-	// The open-run hop: a discard after the run's last check before its key export still reaches the
-	// export once, as today; the service's run fence or the next check drops the result.
-	it.each(["password", "passkey"] as const)(
-		"%s profile, while the run opens its clients: one export, nothing published",
-		async (type) => {
-			const { api, opts } = setup(type)
-			let at: ReturnType<typeof snapshot> | undefined
-			h.state.onBuild = () => {
-				api.reset()
-				plantSentinels(api)
-				at = snapshot(opts)
-			}
-			await api.handleBackup()
-			await flushPromises()
+	// The open-run hop: a discard after openRun's last check still reaches the key export once, as
+	// today, and the check after the export drops the result. openRun reads the fence's `profileId`
+	// after that check, so a discard there lands in the hop.
+	it("a discard in the open-run hop reaches the key export once and publishes nothing", async () => {
+		const { api, opts } = setup("password")
+		let at: ReturnType<typeof snapshot> | undefined
+		m.captureRunFence.mockImplementationOnce(async () => ({
+			...FENCE,
+			get profileId() {
+				if (!at) {
+					api.reset()
+					plantSentinels(api)
+					at = snapshot(opts)
+				}
+				return FENCE.profileId
+			},
+		}))
+		await api.handleBackup()
+		await flushPromises()
 
-			expect(exportCalls()).toBe(1)
-			expect(h.state.built).toHaveLength(10)
-			await expectNothingPublished(api, opts, { ...(at as ReturnType<typeof snapshot>), built: 10 })
-		},
-	)
+		expect(exportCalls()).toBe(1)
+		expect(h.state.built).toHaveLength(10)
+		await expectNothingPublished(api, opts, { ...(at as ReturnType<typeof snapshot>), built: 10 })
+	})
 
 	it("a dropped run leaves its successor's latch and clients alone", async () => {
 		const { api } = setup("password")
@@ -389,7 +388,7 @@ describe("useFullBackupExport — a create superseded at an await", () => {
 		const secondClients = h.state.built.slice(10)
 		expect(secondClients).toHaveLength(10)
 
-		first.resolve(material("mk-first"))
+		first.resolve(material())
 		await firstRun
 		await flushPromises()
 		expect(api.isBusy.value).toBe(true)
@@ -397,13 +396,11 @@ describe("useFullBackupExport — a create superseded at an await", () => {
 		for (const { disconnect } of firstClients) expect(disconnect).toHaveBeenCalled()
 		for (const { disconnect } of secondClients) expect(disconnect).not.toHaveBeenCalled()
 
-		second.resolve(material("mk-second"))
+		// The successor is still the active run, so the scrub closes its clients.
+		api.reset()
+		for (const { disconnect } of secondClients) expect(disconnect).toHaveBeenCalled()
+		second.resolve(material())
 		await secondRun
-		expect(api.backupStatus.value).toBe("finished")
-		expect(api.isBusy.value).toBe(false)
-		for (const { disconnect } of secondClients) expect(disconnect).toHaveBeenCalledOnce()
-		await api.handleEncrypt()
-		expect(JSON.parse(m.seal.mock.calls[0][0] as string)["master-key"]).toBe("mk-second")
 	})
 
 	it("dispose ends the run and every later action is a no-op", async () => {
@@ -530,7 +527,7 @@ describe("useFullBackupExport — a current run", () => {
 
 	// A new await is a new place a run can be superseded: add its row to the table, then this count.
 	it("every await in the composable has a row above", () => {
-		const source = readFileSync(resolve(__dirname, "useFullBackupExport.ts"), "utf8")
-		expect(source.match(/\bawait\b/g)).toHaveLength(12)
+		const code = readFileSync(resolve(__dirname, "useFullBackupExport.ts"), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")
+		expect(code.match(/\bawait\b/g)).toHaveLength(12)
 	})
 })

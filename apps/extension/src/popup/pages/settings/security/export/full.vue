@@ -28,9 +28,6 @@ import { useFullBackupExport } from "@/composables/useFullBackupExport"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 import { isPopupSubmitKey, refuseRepeatEnter } from "@/composables/usePopupEntity"
 
-// Path A passkey ceremony — replaces the prior SW-driven popup window for
-// passkey profile backup-export. Mounted as `<PasskeyCeremonyDialog>` in
-// the template; driven imperatively from `handleBackup`.
 const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onReject: onCeremonyReject } = usePasskeyCeremony()
 
 /** Store */

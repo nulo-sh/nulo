@@ -47,8 +47,6 @@ type KeyMaterial = {
 
 export interface UseFullBackupExportOptions {
 	runCeremony: (request: PasskeyRequest) => Promise<PasskeyCredentialData>
-	/** After a failed passkey step: back, or in an own window, which has no page behind it, the
-	 *  agreement step. */
 	leaveAfterPasskeyFailure: () => void
 }
 
@@ -135,7 +133,7 @@ function buildBackupServices(): NamedClient[] {
 	] as NamedClient[]
 }
 
-/** Path A: collect the WebAuthn credential via the in-page modal BEFORE
+/** Collects the WebAuthn credential via the in-page modal BEFORE
  *  calling the service. Targeted `get` against this profile's stored
  *  credentialId so the OS prompt is bound to the right key. Returns "handled"
  *  when the flow already resolved the failure UI (or was superseded). */
@@ -298,8 +296,8 @@ async function openRun(ctx: ExportCtx, isCurrent: () => boolean) {
 
 async function runBackup(ctx: ExportCtx) {
 	const { state } = ctx
-	// Re-entry latch: closes synchronously, BEFORE the ceremony/KDF awaits —
-	// the empty-status window during PBKDF2 was where double-fires slipped in.
+	// Re-entry latch: closes synchronously, before the first await, so a double click or Enter cannot
+	// start a second run.
 	if (ctx.disposed || state.isBusy.value) return
 	state.isBusy.value = true
 	const run: ExportRun = { isCurrent: ctx.runs.snapshot(), clients: null }
@@ -309,9 +307,11 @@ async function runBackup(ctx: ExportCtx) {
 		const opened = await openRun(ctx, isCurrent)
 		if (opened === "handled") return
 
+		// Unchecked since `openRun`: a run dropped here still builds its clients and requests its keys,
+		// and the check after the export drops them.
 		run.clients = buildBackupServices()
 		ctx.activeRun = run
-		const accountClient = run.clients.find(({ name }) => name === ACCOUNT_SERVICE_NAME)?.client as unknown as AccountServiceClient
+		const accountClient = run.clients.find(({ name }) => name === ACCOUNT_SERVICE_NAME)!.client as unknown as AccountServiceClient
 		const { fence, credentialData } = opened
 		const material = await exportKeyMaterial(ctx, isCurrent, fence, credentialData, accountClient)
 		if (material === "handled" || !isCurrent()) return
@@ -356,12 +356,7 @@ function passkeyPasswordBlocked(ctx: ExportCtx) {
 
 async function runEncrypt(ctx: ExportCtx) {
 	const { state } = ctx
-	// Same latch + fence discipline as creation: `isBusy` blocks a double
-	// start before Vue re-renders the disabled CTA; the fence suppresses any
-	// stale success/error write after unmount scrubbed the payloads. The
-	// cross-guard on `isDownloading` (account.vue idiom) stops encryption
-	// starting mid-download — the plaintext file would land on disk while the
-	// page ends up saying "successfully encrypted".
+	// Never mid-download: the plaintext file would land on disk while the page says it is encrypted.
 	if (ctx.disposed || state.isBusy.value || state.isDownloading.value) return
 	if (passkeyPasswordBlocked(ctx)) return
 	state.isBusy.value = true
@@ -535,7 +530,7 @@ export function useFullBackupExport(opts: UseFullBackupExportOptions) {
 		handleEncrypt: () => runEncrypt(ctx),
 		downloadBackup: (isEncrypted: boolean) => runDownload(ctx, isEncrypted),
 		handleDownloadClick,
-		/** A profile switch made elsewhere: the page starts over. */
+		/** The scrub, then every flow ref back to its initial value. */
 		reset: () => resetFlow(ctx),
 		dispose: () => {
 			ctx.disposed = true
