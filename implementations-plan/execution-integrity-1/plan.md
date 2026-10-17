@@ -1,7 +1,7 @@
 ---
 plan: execution-integrity-1
 tier: mid
-status: arc 1 implemented; implementation review loop running
+status: completed; delivered by #691
 issues: "#662 #664 #669 (the one arc closes all three)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,19 @@ base: origin/dev at 13d5f8d0
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-17. **Status:** completed; delivered by #691 to `dev`, which closes #662, #664 and #669.
+- **Shipped:** D1 (`completeIfTracked` at the five sites past a broadcast), D2 (the transfer request carries the approved token contract, the one identity on every path), D3 (a revoke waits for its grants' blocks, then verifies and prunes). Implementation deviations:
+  - A grant still read Dropped at the deadline lets the revoke go out, so it holds back no other grant of its batch (Review verdicts, round 1).
+  - The receipt reads live in `auth-registry/grant-block.ts`.
+  - The coordinator's switch test joined `execution-coordinator.test.ts` instead of a new file.
+  - The four suites share `task/test-task-service.ts`.
+- **Known limits:** #693 (KL1), #694 (KL2), #695 (KL3), #696 (the estimate stash's profile).
+- **Open items:** #697 (OA-1), #698 (OA-2), owner decisions; each ships its "what ships now" form.
+- **Lessons:** none promoted. `lessons.md` sits at 8,163 of 8,192 B. The field-modulus fixture trap is already there, and the type-roles digest pin names its own fix ("re-attest, then re-pin"). Detail: [lessons/phase-1.md](lessons/phase-1.md) to [lessons/phase-4.md](lessons/phase-4.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # execution-integrity-1: three send-bookkeeping invariants
 
