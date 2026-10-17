@@ -9,3 +9,4 @@
 - 2026-10-17 18:53Z arc 1 phase 1: lane + migration pin committed 93fbf0eb, gate green, 7 mutations red; phase 2 next
 - 2026-10-17 22:29Z arc 1 phase 2: callers on the lane, pins and docs; gate green (one load-induced unit timeout, green on re-run); committing
 - 2026-10-17 22:50Z arc 1 phase 3: select-assets, runner, pins, docs; gate green after a frozen install for dev's new dependency; committing; Codex loop next
+- 2026-10-17 23:08Z arc 1 Codex loop: r1 reject (3; 2 accepted, 1 argued to #555), Opus conditional approve (4 accepted), r2 approve; final local gates next
