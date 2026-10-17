@@ -29,24 +29,7 @@ function harness(rows: Rows, apply?: (key: ConfigKey, value: unknown) => unknown
 	return { setValue, applySetting, updateSetting, writes }
 }
 
-/** Developer's rows: turning Developer Mode on or off writes Indicate Failures; off also writes Debug Mode. */
-function developer(on: boolean) {
-	const rows: Rows = {
-		developerMode: { model: ref(on) },
-		indicateFailures: { model: ref(on) },
-		debugMode: { model: ref(on) },
-	}
-	const h = harness(rows, (key, value) => {
-		rows[key].model.value = value
-		if (key === "developerMode") {
-			h.updateSetting("indicateFailures", value as boolean)
-			if (!value) h.updateSetting("debugMode", value as boolean)
-		}
-	})
-	return { rows, ...h }
-}
-
-/** Settles each write as it arrives, the dependents' included, in the order they were asked. */
+/** Settles each write as it arrives, a re-entered one included, in the order they were asked. */
 async function storeEach(writes: { settle: PromiseWithResolvers<void> }[]) {
 	for (let i = 0; i < writes.length; i++) {
 		writes[i].settle.resolve()
@@ -67,7 +50,7 @@ describe("useSettingUpdate", () => {
 	test.each([
 		["theme", "dark"],
 		["defaultExplorer", null],
-	] as const)("the value %s already shows (%s) writes nothing", async (key, value) => {
+	] as const)("a row already showing the value writes nothing (%s: %s)", async (key, value) => {
 		const h = harness({ [key]: { model: ref(value) } })
 		await h.updateSetting(key, value)
 		expect(h.setValue).not.toHaveBeenCalled()
@@ -141,35 +124,18 @@ describe("useSettingUpdate", () => {
 		expect(rows.showFiatValues.model.value).toBe(false)
 	})
 
-	test("an apply that asks for its dependents writes them after the setting, in order", async () => {
-		const h = developer(true)
+	test("an apply may ask for another row, whose write follows the one that applied", async () => {
+		const rows: Rows = { developerMode: { model: ref(true) }, indicateFailures: { model: ref(true) } }
+		const h = harness(rows, (key, value) => {
+			rows[key].model.value = value
+			if (key === "developerMode") void h.updateSetting("indicateFailures", value as boolean)
+		})
 		void h.updateSetting("developerMode", false)
 		await storeEach(h.writes)
 		expect(h.setValue.mock.calls).toEqual([
 			["developerMode", false],
 			["indicateFailures", false],
-			["debugMode", false],
 		])
-		expect(Object.values(h.rows).map((r) => r.model.value)).toEqual([false, false, false])
-	})
-
-	test("a dependent that already shows the value is not written", async () => {
-		const h = developer(false)
-		h.rows.indicateFailures.model.value = true
-		void h.updateSetting("developerMode", true)
-		await storeEach(h.writes)
-		expect(h.setValue.mock.calls).toEqual([["developerMode", true]])
-	})
-
-	test("a dependent's refused write toasts once and leaves the setting that asked for it applied", async () => {
-		const h = developer(true)
-		void h.updateSetting("developerMode", false)
-		h.writes[0].settle.resolve()
-		await flushPromises()
-		h.writes[1].settle.reject(new Error("persist failed"))
-		h.writes[2].settle.resolve()
-		await flushPromises()
-		expect(fakes.openToast).toHaveBeenCalledExactlyOnceWith(FAILED)
-		expect(Object.values(h.rows).map((r) => r.model.value)).toEqual([false, true, false])
+		expect(rows.indicateFailures.model.value).toBe(false)
 	})
 })

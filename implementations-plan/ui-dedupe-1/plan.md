@@ -311,6 +311,8 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
 | D204 | A2 review round 1 (Codex `findings` 1, Opus `findings` 3, neither found a behaviour difference): stage 6 refuses any OPFS root entry but `pxe` (an upstream fallback pool would pass a `pxe`-exists control) and any IndexedDB name but `keyval-store` (a `pxe/` prefix saw one regression only); "opens no IndexedDB" corrected, since bb.js's CRS cache lives there; one more stale "IDB" comment; the sweep log's doubled slash; two history comments rewritten as invariants | a `pxe/` prefix check with a `pxe`-exists control | Codex F1, Opus F1–F3 and nits |
 | D205 | A2's PR title lower-cases `OPFS` and backticks `IndexedDB`: commitlint's `subject-case` refuses both as planned | the planned title | implementer |
 | D301 | `updateSetting` only; the F-21 items are filed as a new issue | take F-21 | both agree |
+| D302 | at implementation: the composable's catch has no binding (Biome warns on an unused `catch (err)` in a `.ts` file); Developer drops its now-unused `useToast`; the F-21 items are #735, re-verified at `138e0ded` | a byte-identical `catch (err)` with a lint warning | implementer |
+| D303 | A3's PR title backticks the identifier and lower-cases the page names: commitlint's `subject-case` refuses the planned title | the planned title | implementer |
 | D401 | the design `Button` with its slot and local overrides by specificity | a new global CTA class; an overlay slot | both agree; Opus O9 and Codex C8 adopted |
 | D501 | one mirror per family | one generic mirror (outline B) | both agree |
 | D502 | the store uses the reducers, `back` | the full composable | both agree; Opus O7 adopted |
@@ -335,7 +337,7 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
 - **Titles** (each at most 93 characters):
   - A1 ``refactor(backup): one run object for the full-backup export; config restore via `restoreRows` `` (D109)
   - A2 `refactor(pxe): retire the pre-OPFS IndexedDB cleanup, guard that no pxe store opens one`
-  - A3 `refactor(settings): one updateSetting for Display, Privacy and Developer`
+  - A3 ``refactor(settings): one `updateSetting` for display, privacy and developer`` (D303)
   - A4 `refactor(ui): the countdown Close renders the design Button, pixel-identical`
   - A5 `refactor(tokens): one balance mirror for Home, Holdings, Select token and Send`
   - A6 `refactor(activity): one journal mirror for Activity, Home and the token list`

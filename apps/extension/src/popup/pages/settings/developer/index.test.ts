@@ -128,11 +128,12 @@ test("a reread that finds Developer Mode changed shows it and writes nothing", a
 	expect(config.setValue).not.toHaveBeenCalled()
 })
 
-test("a failed write leaves Developer Mode as stored and writes no dependent; asking again writes both", async () => {
+test("a failed write leaves Developer Mode as stored and writes no dependent; asking again turns all three off", async () => {
 	// The worker persists before it announces, so a failed write announces nothing.
 	config.getProps.mockResolvedValue([
 		{ key: "developerMode", value: true },
 		{ key: "indicateFailures", value: true },
+		{ key: "debugMode", value: true },
 	] as ConfigProp[])
 	config.setValue.mockRejectedValueOnce(new Error("persist failed"))
 	const w = await mountAdvanced()
@@ -149,6 +150,7 @@ test("a failed write leaves Developer Mode as stored and writes no dependent; as
 	expect(config.setValue.mock.calls.slice(1)).toEqual([
 		["developerMode", false],
 		["indicateFailures", false],
+		["debugMode", false],
 	])
 	expect(toggle().attributes("modelvalue")).toBe("false")
 })
