@@ -8,9 +8,9 @@
  */
 import type { Page } from "puppeteer"
 import { clickByTestId, waitForHash, withTimeoutMessage, type ExtensionContext, waitForServiceReady } from "../fixtures/extension"
-import { getActiveProfileName } from "../fixtures/helpers"
+import { confirmProfileReset } from "../fixtures/helpers"
 import { accountChainId, exportBackupContent, keepChainAccountState, sealPlainBackup } from "./backup-export"
-import { POPUP_IMPORT_SHELL, submitFullBackupImport, submitWhenEnabled, TEST_PASSWORD, writeBackupToTemp } from "./import-drivers"
+import { POPUP_IMPORT_SHELL, submitFullBackupImport, TEST_PASSWORD, writeBackupToTemp } from "./import-drivers"
 
 // The rollback/delete budget is STRUCTURAL, not sampled: the crash path's
 // worst case is the liveness gate's 60s ceiling followed by one deleteProfile
@@ -49,19 +49,7 @@ export async function readProfileGen(page: Page): Promise<{ id: string; gen: str
  *  profile remains, the lock screen while another does. The page must already
  *  be AT `#/popup/settings/security/reset`. */
 export async function completeResetRitual(page: Page, landing: "#/popup/register" | "#/popup/auth" = "#/popup/register"): Promise<void> {
-	await page.waitForSelector('[data-testid="reset-checkbox-permanent"]', { visible: true, timeout: 10_000 })
-	await clickByTestId(page, "reset-checkbox-permanent")
-	await clickByTestId(page, "reset-checkbox-undone")
-	await clickByTestId(page, "reset-checkbox-sure")
-	const profileName = await getActiveProfileName(page)
-	await page.evaluate((expectedName: string) => {
-		const input = document.querySelector<HTMLInputElement>('[data-testid="reset-confirm-input"] input')
-		if (!input) throw new Error("reset-confirm-input not found")
-		const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
-		setter?.call(input, expectedName)
-		input.dispatchEvent(new Event("input", { bubbles: true }))
-	}, profileName)
-	await submitWhenEnabled(page, "reset-submit-btn")
+	await confirmProfileReset(page, 10_000)
 	// The delete rides deleteProfile's full awaited purge before reset.vue routes.
 	await waitForHash(page, landing, ROLLBACK_BUDGET_MS)
 }

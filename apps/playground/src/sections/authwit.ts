@@ -16,7 +16,7 @@ import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses"
 import { FunctionCall, FunctionSelector, FunctionType } from "@aztec-labs/aztec.js/abi"
 import { getWallet } from "../lib/wallet"
-import { logCall } from "../lib/log"
+import { guarded } from "../lib/log"
 import { getInput, getState, setState } from "../state"
 
 export function renderAuthwit(): string {
@@ -61,21 +61,6 @@ export function renderAuthwit(): string {
 	`
 }
 
-function safe<T>(method: string, fn: () => Promise<T>): () => Promise<void> {
-	return async () => {
-		const wallet = getWallet()
-		if (!wallet) {
-			setState({ lastError: "Not connected — call connect() first" })
-			return
-		}
-		try {
-			await logCall(method, fn)
-		} catch (err) {
-			setState({ lastError: err instanceof Error ? err.message : String(err) })
-		}
-	}
-}
-
 /** Lets `consumer` call the token's `transfer_public_to_public(from, consumer, amount, nonce)`. */
 async function transferIntent(from: AztecAddress, consumer: AztecAddress) {
 	const amount = BigInt(getInput("authwitAmount") || "1")
@@ -99,7 +84,7 @@ async function transferIntent(from: AztecAddress, consumer: AztecAddress) {
 export function bindAuthwit(root: HTMLElement): void {
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-createAuthWit-callIntent"]')?.addEventListener(
 		"click",
-		safe("createAuthWit", async () => {
+		guarded("createAuthWit", async () => {
 			const wallet = getWallet()!
 			const s = getState()
 			if (!s.selectedAccount) throw new Error("No selected account")
@@ -114,7 +99,7 @@ export function bindAuthwit(root: HTMLElement): void {
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-createAuthWit-innerHash"]')?.addEventListener(
 		"click",
-		safe("createAuthWit", async () => {
+		guarded("createAuthWit", async () => {
 			const wallet = getWallet()!
 			const s = getState()
 			if (!s.selectedAccount) throw new Error("No selected account")
@@ -137,7 +122,7 @@ export function bindAuthwit(root: HTMLElement): void {
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-grantPublicAuthwit"]')?.addEventListener(
 		"click",
-		safe("grantPublicAuthwit", async () => {
+		guarded("grantPublicAuthwit", async () => {
 			const wallet = getWallet()!
 			const s = getState()
 			const tokenAddress = getInput("tokenAddress")
@@ -161,7 +146,7 @@ export function bindAuthwit(root: HTMLElement): void {
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-consumeAuthwit"]')?.addEventListener(
 		"click",
-		safe("sendTx", async () => {
+		guarded("sendTx", async () => {
 			const wallet = getWallet()!
 			const s = getState()
 			const tokenAddress = getInput("tokenAddress")

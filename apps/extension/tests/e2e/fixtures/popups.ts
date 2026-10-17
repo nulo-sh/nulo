@@ -260,7 +260,7 @@ export async function approveCapabilities(
 	for (const [accountId, alias] of Object.entries(opts.aliases ?? {})) {
 		const row = `[data-testid="cap-account-item"][data-account-id="${accountId}"]`
 		const field = `${row} [data-testid="cap-account-alias-input"]`
-		if (!(await page.$(field))) await clickSelector(page, `${row} [data-testid="cap-account-rename-btn"]`, 5_000)
+		if (!(await page.$(field))) await clickSelector(page, `${row} [data-testid="cap-account-rename-btn"]`, { timeout: 5_000 })
 		await page.waitForSelector(field, { visible: true, timeout: 5_000 })
 		await page.evaluate(
 			({ sel, alias }: { sel: string; alias: string }) => {
@@ -316,7 +316,7 @@ async function openConnectedApp(page: Page, host: string): Promise<void> {
 		window.location.hash = "#/popup/settings/connected-apps"
 	})
 	await waitForHash(page, "#/popup/settings/connected-apps")
-	await clickSelector(page, `[data-testid="connected-app-row"][data-app-host="${host}"]`, 15_000).catch(async (err) => {
+	await clickSelector(page, `[data-testid="connected-app-row"][data-app-host="${host}"]`, { timeout: 15_000 }).catch(async (err) => {
 		const hosts = await page.$$eval('[data-testid="connected-app-row"]', (rows) => rows.map((r) => r.getAttribute("data-app-host")))
 		throw new Error(`no connected-app row for ${host}; rows: ${JSON.stringify(hosts)}`, { cause: err })
 	})

@@ -1,6 +1,6 @@
 import { expect, inject } from "vitest"
 import { clickByTestId, test } from "../fixtures/extension"
-import { snapshotResultSeq, waitForPgResult, assertPgOk } from "../fixtures/playground"
+import { snapshotResultSeq, waitForPgResult, assertPgOk, selectPgAccount } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { mintPublicTokensForAccount, waitForTxMined, type AztecTestConfig } from "../fixtures/aztec"
 
@@ -85,12 +85,7 @@ test.skipIf(!hasConfig)(
 		await waitForTxMined(aztecConfig!, grantTxHash)
 
 		// ── Consume (as B — switch the acting account) ──
-		await page.evaluate((caller: string) => {
-			const select = document.querySelector<HTMLSelectElement>('[data-testid="pg-select-account"]')
-			if (!select) throw new Error("pg-select-account not present")
-			select.value = caller
-			select.dispatchEvent(new Event("change", { bubbles: true }))
-		}, callerB)
+		await selectPgAccount(page, callerB)
 
 		step("grant mined; switched to caller; clicking consume")
 		const seqConsume = await snapshotResultSeq(page)

@@ -243,22 +243,22 @@ export async function replaceInputValue(page: Page, selector: string, value: str
 	)
 }
 
-/** Click a visible, enabled element by an arbitrary CSS selector. Same
- *  in-page synthetic-click pattern as `clickByTestId`, just unscoped from
- *  testids — use this when the target's only stable handle is a class
- *  combo, ARIA role, or other non-testid selector. */
-export async function clickSelector(page: Page, selector: string, timeout = 10_000): Promise<void> {
+/** Clicks the last visible, enabled match of `selector`, polling until one exists: a stacked popup
+ *  transition can leave the old card in the DOM, and the last match is the topmost. `aria-disabled`
+ *  counts as disabled unless `pressAriaDisabled`, since a synthetic click would bypass the
+ *  `pointer-events: none` that keeps a person's click off it. */
+async function clickLast(page: Page, selector: string, timeout: number, pressAriaDisabled: boolean): Promise<void> {
 	await prepareClick(page)
 	try {
 		await page.waitForFunction(
-			(sel: string) => {
+			(sel: string, pressAria: boolean) => {
 				const candidates = [...document.querySelectorAll<HTMLElement>(sel)].filter((el) => {
 					if ((el as HTMLButtonElement).disabled) return false
+					if (!pressAria && el.getAttribute("aria-disabled") === "true") return false
 					const style = window.getComputedStyle(el)
 					if (style.display === "none" || style.visibility === "hidden") return false
 					const rect = el.getBoundingClientRect()
-					if (rect.width === 0 || rect.height === 0) return false
-					return true
+					return rect.width !== 0 && rect.height !== 0
 				})
 				const target = candidates[candidates.length - 1]
 				if (!target) return false
@@ -267,44 +267,7 @@ export async function clickSelector(page: Page, selector: string, timeout = 10_0
 			},
 			{ timeout },
 			selector,
-		)
-	} catch (err) {
-		if (!isTargetDetachError(err)) throw err
-	}
-}
-
-/** Click a visible enabled element by `data-testid`. Preferred over text
- *  matching — survives copy/case/i18n churn.
- *
- *  When multiple elements share the same testid (e.g., a stacked popup
- *  transition where the old card is still in the DOM), this picks the LAST
- *  visible+enabled candidate — that's the topmost / freshest one. Empirically
- *  the right choice for popup chains; matches the same pattern in
- *  `replaceInputValue`. */
-export async function clickByTestId(page: Page, testId: string, timeout = 10_000): Promise<void> {
-	await prepareClick(page)
-	try {
-		await page.waitForFunction(
-			(id: string) => {
-				const candidates = [...document.querySelectorAll<HTMLElement>(`[data-testid="${id}"]`)].filter((el) => {
-					// Skip natively-disabled AND aria-disabled elements (eg. DropdownItem,
-					// which is a <div> that can't carry native `disabled`). Both mean "not
-					// clickable yet" — wait for the element to enable rather than firing a
-					// programmatic click that bypasses CSS `pointer-events: none`.
-					if ((el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true") return false
-					const style = window.getComputedStyle(el)
-					if (style.display === "none" || style.visibility === "hidden") return false
-					const rect = el.getBoundingClientRect()
-					if (rect.width === 0 || rect.height === 0) return false
-					return true
-				})
-				const target = candidates[candidates.length - 1]
-				if (!target) return false
-				target.click()
-				return true
-			},
-			{ timeout },
-			testId,
+			pressAriaDisabled,
 		)
 	} catch (err) {
 		// Approval popups auto-close themselves on the click that resolves the
@@ -316,6 +279,22 @@ export async function clickByTestId(page: Page, testId: string, timeout = 10_000
 		// target-detach errors. Re-raise everything else.
 		if (!isTargetDetachError(err)) throw err
 	}
+}
+
+/** Click by an arbitrary CSS selector, for a target whose only stable handle is not a testid.
+ *  `pressAriaDisabled` presses an `aria-disabled` match too: only for a control that explains
+ *  itself when pressed. */
+export async function clickSelector(
+	page: Page,
+	selector: string,
+	opts: { timeout?: number; pressAriaDisabled?: boolean } = {},
+): Promise<void> {
+	await clickLast(page, selector, opts.timeout ?? 10_000, opts.pressAriaDisabled ?? false)
+}
+
+/** Click by `data-testid`; preferred over text matching, which churns with copy, case and i18n. */
+export async function clickByTestId(page: Page, testId: string, timeout = 10_000): Promise<void> {
+	await clickLast(page, `[data-testid="${testId}"]`, timeout, false)
 }
 
 /** Click the control that opens a file picker and answer it with `filePath`. */

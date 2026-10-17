@@ -1,7 +1,7 @@
 import { expect, inject } from "vitest"
 import { clickByTestId, openPopup, test } from "../fixtures/extension"
 import { openAccountState, switchAccountByAddress } from "../fixtures/helpers"
-import { assertPgOk, formatPgMismatch, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { assertPgOk, formatPgMismatch, selectPgAccount, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveExecute, pickFeeAndSubmitAuthwitPopup, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { mintPublicTokensForAccount, waitForTxMined, type AztecTestConfig } from "../fixtures/aztec"
 import { createAztecNodeClient } from "@aztec-labs/aztec.js/node"
@@ -65,17 +65,9 @@ test.skipIf(!hasConfig)(
 				{ token: aztecConfig!.tokenAddress, owner: ownerA, caller: callerB, n: nonce },
 			)
 		}
-		const selectPgAccount = async (addr: string) => {
-			await page.evaluate((a: string) => {
-				const select = document.querySelector<HTMLSelectElement>('[data-testid="pg-select-account"]')
-				if (!select) throw new Error("pg-select-account not present")
-				select.value = a
-				select.dispatchEvent(new Event("change", { bubbles: true }))
-			}, addr)
-		}
 		// Grant as owner A: grantPublicAuthwit → on-chain set_authorized(hash, true). Mined on return.
 		const grant = async (nonce: string) => {
-			await selectPgAccount(ownerA)
+			await selectPgAccount(page, ownerA)
 			await setInputs(nonce)
 			const seq = await snapshotResultSeq(page)
 			const popupP = waitForPopup(ctx, "execute", { timeout: 30_000 })
@@ -97,7 +89,7 @@ test.skipIf(!hasConfig)(
 		// — a revoked/blocked consume reverts at sequencing; the NO_WAIT dApp result is
 		// `{ txHash, ... }`, so pull the hash out of either shape.
 		const consume = async (nonce: string): Promise<"ok" | `error: ${string}`> => {
-			await selectPgAccount(callerB)
+			await selectPgAccount(page, callerB)
 			await setInputs(nonce)
 			const seq = await snapshotResultSeq(page)
 			const popupP = waitForPopup(ctx, "execute", { timeout: 30_000 })

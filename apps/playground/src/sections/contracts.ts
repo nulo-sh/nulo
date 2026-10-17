@@ -10,8 +10,8 @@ import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses"
 import type { Wallet } from "@aztec-labs/aztec.js/wallet"
 import { getWallet } from "../lib/wallet"
-import { logCall } from "../lib/log"
-import { getInput, getState, setState } from "../state"
+import { guarded } from "../lib/log"
+import { getInput, getState } from "../state"
 
 /** Typed augmentation for the Nulo-custom method. The runtime patch in
  *  `@nulo/wallet-sdk-schema-patch` makes this true at runtime; the cast aligns TS. */
@@ -47,25 +47,10 @@ export function renderContracts(): string {
 	`
 }
 
-function safe<T>(method: string, fn: () => Promise<T>): () => Promise<void> {
-	return async () => {
-		const wallet = getWallet()
-		if (!wallet) {
-			setState({ lastError: "Not connected — call connect() first" })
-			return
-		}
-		try {
-			await logCall(method, fn)
-		} catch (err) {
-			setState({ lastError: err instanceof Error ? err.message : String(err) })
-		}
-	}
-}
-
 export function bindContracts(root: HTMLElement): void {
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-getContractMetadata"]')?.addEventListener(
 		"click",
-		safe("getContractMetadata", async () => {
+		guarded("getContractMetadata", async () => {
 			const wallet = getWallet()!
 			const addr = AztecAddress.fromStringUnsafe(getInput("tokenAddress"))
 			return wallet.getContractMetadata(addr)
@@ -74,7 +59,7 @@ export function bindContracts(root: HTMLElement): void {
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-getContractClassMetadata"]')?.addEventListener(
 		"click",
-		safe("getContractClassMetadata", async () => {
+		guarded("getContractClassMetadata", async () => {
 			const wallet = getWallet()!
 			const id = Fr.fromString(getInput("classId") || getInput("tokenAddress"))
 			return wallet.getContractClassMetadata(id)
@@ -83,7 +68,7 @@ export function bindContracts(root: HTMLElement): void {
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-registerSender"]')?.addEventListener(
 		"click",
-		safe("registerSender", async () => {
+		guarded("registerSender", async () => {
 			const wallet = getWallet()!
 			const addr = AztecAddress.fromStringUnsafe(getInput("senderAddress") || getInput("tokenAddress"))
 			return wallet.registerSender(addr, "test-sender")
@@ -92,7 +77,7 @@ export function bindContracts(root: HTMLElement): void {
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-registerContract"]')?.addEventListener(
 		"click",
-		safe("registerContract", async () => {
+		guarded("registerContract", async () => {
 			const wallet = getWallet()!
 			const raw = getInput("contractInstance")
 			if (!raw) throw new Error("Empty contractInstance — set the input first")
@@ -104,7 +89,7 @@ export function bindContracts(root: HTMLElement): void {
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-registerToken"]')?.addEventListener(
 		"click",
-		safe("registerToken", async () => {
+		guarded("registerToken", async () => {
 			const wallet = getWallet()! as WalletWithRegisterToken
 			const accountInput = getInput("accountAddress") || getInput("senderAddress")
 			if (!accountInput) throw new Error("Empty accountAddress — set the input first")

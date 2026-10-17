@@ -19,7 +19,7 @@ import { createAccount, getAccountAddress } from "./accounts"
 import { clickByTestId, expectNoNameField, isFrameDetachError, patchPagePolling, typeIntoInput, waitForHash } from "./dom"
 import { switchToLocalNetwork } from "./networks"
 import { readLivenessBaseline, waitForWorkerLiveness } from "./session"
-import { captureBalanceBaseline, importToken, waitForFreshBalanceRow } from "./tokens"
+import { importTokenAndWaitForBalance } from "./tokens"
 import { openPopup, seedLegalAcceptance, waitForServiceReady } from "./wallet-pages"
 import { assertPgOk, openPlayground, type PgBundle, selectPgBundle, snapshotResultSeq, waitForPgResult } from "./playground"
 import { approveCapabilities, approveConnect, approveVerify, waitForPopup, waitForPopupClosed } from "./popups"
@@ -570,6 +570,25 @@ function firstTwoAccountsFixture(label: string, bundle: "transaction" | "transac
 	}
 }
 
+/** The sandbox config the network setup provides; throws where none is, as on a smoke run. */
+export function requireAztecConfig(): AztecTestConfig {
+	const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
+	if (!aztecConfig) throw new Error("aztecTestConfig not provided — is the local Aztec node running?")
+	return aztecConfig
+}
+
+/** What the funded network fixtures mint to the wallet's account, and so expect on its token row. */
+const FIXTURE_TOKEN_RAW = 1000n * 10n ** 18n
+
+async function launchOnLocalNetwork(): Promise<{ ctx: ExtensionContext; page: Page }> {
+	const ctx = await launchExtension()
+	await registerProfile(ctx)
+	const page = await openPopup(ctx)
+	await waitForHash(page, "#/popup/general", 30_000)
+	await switchToLocalNetwork(page)
+	return { ctx, page }
+}
+
 export const test = base.extend<{
 	/** Fresh browser with extension loaded, no profile. */
 	extension: ExtensionContext
@@ -608,13 +627,7 @@ export const test = base.extend<{
 	 *  cap-popup round-trip during the test budget — the cap-popup work happens
 	 *  in fixture setup, which has hookTimeout=300s. The exposed `accountAddress`
 	 *  is the first account from the cap popup (the one the fixture selected on
-	 *  the dApp's behalf).
-	 *
-	 *  Mirrors the `dappConnectedExtensionWithAccountsCap` pattern; the
-	 *  cap-grant inner helper is intentionally duplicated rather than abstracted
-	 *  to keep the two fixtures independently auditable. Refactor once we have
-	 *  three or more such fixtures (CLAUDE.md "same code in 3 places" threshold).
-	 *  See implementations-plan/archive/e2e-stabilization/plan.md (Cap fixtures). */
+	 *  the dApp's behalf). */
 	dappConnectedExtensionWithTransactionCap: ExtensionContext & { playgroundPage: Page; accountAddress: string }
 	/** Same as `dappConnectedExtensionWithTransactionCap` BUT pre-grants the
 	 *  `transaction` bundle for up to the FIRST TWO accounts the cap popup
@@ -622,9 +635,7 @@ export const test = base.extend<{
 	 *  behavior (multi-account-from) without paying the cap-popup cold tax
 	 *  during the test budget. The exposed `accountAddresses` is the array
 	 *  of granted accounts (1 or 2 entries depending on what the wallet
-	 *  exposed). Mirrors the `dappConnectedExtensionWithTransactionCap`
-	 *  pattern; the cap-grant inner helper is intentionally duplicated
-	 *  rather than abstracted for the same independence reason. */
+	 *  exposed). */
 	dappConnectedExtensionWithFirstTwoAccountsCap: ExtensionContext & {
 		playgroundPage: Page
 		accountAddresses: string[]
@@ -789,11 +800,7 @@ export const test = base.extend<{
 	localNetworkExtension: [
 		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
 		async ({}, use) => {
-			const ctx = await launchExtension()
-			await registerProfile(ctx)
-			const page = await openPopup(ctx)
-			await waitForHash(page, "#/popup/general", 30_000)
-			await switchToLocalNetwork(page)
+			const { ctx, page } = await launchOnLocalNetwork()
 			await page.close()
 			await use(ctx)
 			await ctx.close()
@@ -804,15 +811,9 @@ export const test = base.extend<{
 	tokenReadyExtension: [
 		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
 		async ({}, use) => {
-			const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
-			if (!aztecConfig) throw new Error("aztecTestConfig not provided — is the local Aztec node running?")
+			const aztecConfig = requireAztecConfig()
 
-			const ctx = await launchExtension()
-			await registerProfile(ctx)
-
-			const page = await openPopup(ctx)
-			await waitForHash(page, "#/popup/general", 30_000)
-			await switchToLocalNetwork(page)
+			const { ctx, page } = await launchOnLocalNetwork()
 
 			const accountAddress = await getAccountAddress(page)
 			console.log("[tokenReady] Extension account address:", accountAddress)
@@ -829,7 +830,7 @@ export const test = base.extend<{
 					wallet,
 					aztecConfig.tokenAddress,
 					accountAddress,
-					1000n * 10n ** 18n,
+					FIXTURE_TOKEN_RAW,
 					aztecConfig.minterAddress,
 					feeOptions,
 				)
@@ -837,25 +838,12 @@ export const test = base.extend<{
 				await walletCleanup?.()
 			}
 
-			await importToken(page, aztecConfig.tokenAddress)
-
-			// The extension's PXE syncs blocks independently and may take 30-60s on
-			// a fresh node; each refresh advances the sync. Fail-HARD: a fixture
-			// that quietly degrades just moves the failure downstream into
-			// whichever consumer reads the balance first, with worse evidence —
-			// the freshness-gated row wait throws with a storage census instead.
-			// Budget: 60s. Token-scoped, so fiat/superstring text cannot satisfy it.
-			{
-				const baseline = await captureBalanceBaseline(page, accountAddress, aztecConfig.tokenAddress)
-				await waitForFreshBalanceRow(page, {
-					account: accountAddress,
-					tokenContract: aztecConfig.tokenAddress,
-					expectedPublicRaw: (1000n * 10n ** 18n).toString(),
-					baselineUpdatedAt: baseline,
-					timeoutMs: 60_000,
-				})
-				console.log(`[tokenReady] balance row fresh + exact`)
-			}
+			// The extension's PXE syncs blocks independently and may take 30-60s on a fresh node; each
+			// refresh advances the sync. Fail-HARD: a fixture that quietly degrades moves the failure into
+			// whichever consumer reads the balance first, with worse evidence. Token-scoped, so fiat or
+			// superstring text cannot satisfy it.
+			await importTokenAndWaitForBalance(page, accountAddress, aztecConfig.tokenAddress, FIXTURE_TOKEN_RAW.toString(), 60_000)
+			console.log(`[tokenReady] balance row fresh + exact`)
 
 			await page.close()
 
@@ -868,15 +856,9 @@ export const test = base.extend<{
 	feeJuiceReadyExtension: [
 		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
 		async ({}, use) => {
-			const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
-			if (!aztecConfig) throw new Error("aztecTestConfig not provided — is the local Aztec node running?")
+			const aztecConfig = requireAztecConfig()
 
-			const ctx = await launchExtension()
-			await registerProfile(ctx)
-
-			const page = await openPopup(ctx)
-			await waitForHash(page, "#/popup/general", 30_000)
-			await switchToLocalNetwork(page)
+			const { ctx, page } = await launchOnLocalNetwork()
 
 			const accountAddress = await getAccountAddress(page)
 			console.log("[feeJuiceReady] Extension account address:", accountAddress)
@@ -890,12 +872,11 @@ export const test = base.extend<{
 				const minterAddress = accounts[0]
 				const feeOptions = await createSponsoredFeeOptions(wallet)
 
-				// Mint tokens (same as tokenReadyExtension)
 				await mintPublicTokens(
 					wallet,
 					aztecConfig.tokenAddress,
 					accountAddress,
-					1000n * 10n ** 18n,
+					FIXTURE_TOKEN_RAW,
 					aztecConfig.minterAddress,
 					feeOptions,
 				)
@@ -933,21 +914,9 @@ export const test = base.extend<{
 				await walletCleanup?.()
 			}
 
-			await importToken(page, aztecConfig.tokenAddress)
-
-			// Fail-HARD freshness-gated row wait — see tokenReadyExtension's note.
-			// Budget: 90s.
-			{
-				const baseline = await captureBalanceBaseline(page, accountAddress, aztecConfig.tokenAddress)
-				await waitForFreshBalanceRow(page, {
-					account: accountAddress,
-					tokenContract: aztecConfig.tokenAddress,
-					expectedPublicRaw: (1000n * 10n ** 18n).toString(),
-					baselineUpdatedAt: baseline,
-					timeoutMs: 90_000,
-				})
-				console.log(`[feeJuiceReady] balance row fresh + exact`)
-			}
+			// Fail-HARD, as tokenReadyExtension's.
+			await importTokenAndWaitForBalance(page, accountAddress, aztecConfig.tokenAddress, FIXTURE_TOKEN_RAW.toString())
+			console.log(`[feeJuiceReady] balance row fresh + exact`)
 
 			await page.close()
 			await use(Object.assign(ctx, { accountAddress }))
@@ -959,8 +928,7 @@ export const test = base.extend<{
 	feeJuiceImportedExtension: [
 		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
 		async ({}, use) => {
-			const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
-			if (!aztecConfig) throw new Error("aztecTestConfig not provided — is the local Aztec node running?")
+			const aztecConfig = requireAztecConfig()
 
 			// Phase 1: setup pre-funded account on-chain (script-side).
 			const { createTestWallet, setupPreFundedAccount, createSponsoredFeeOptions, mintPublicTokens } = await import("./aztec")
@@ -978,13 +946,12 @@ export const test = base.extend<{
 				})
 				console.log(`[feeJuiceImported] pre-funded account: ${prefunded.accountAddress.toString()}`)
 
-				// Mint test tokens for the imported account so transfer flows have
-				// something to send (matches feeJuiceReadyExtension's pattern at :330).
+				// Mint test tokens for the imported account so transfer flows have something to send.
 				await mintPublicTokens(
 					wallet,
 					aztecConfig.tokenAddress,
 					prefunded.accountAddress.toString(),
-					1000n * 10n ** 18n,
+					FIXTURE_TOKEN_RAW,
 					aztecConfig.minterAddress,
 					feeOptions,
 				)
@@ -1042,22 +1009,10 @@ export const test = base.extend<{
 			)
 			console.log("[feeJuiceImported] gas-balance card shows non-zero public + private FJ")
 
-			// Import the test token + wait for it to render in the balance list,
-			// matching feeJuiceReadyExtension's :356-371 pattern. The send flow
-			// needs a token registered before send-from-type is selectable.
-			await importToken(page, aztecConfig.tokenAddress)
-			// Fail-HARD freshness-gated row wait — see tokenReadyExtension's note.
-			{
-				const baseline = await captureBalanceBaseline(page, accountAddress, aztecConfig.tokenAddress)
-				await waitForFreshBalanceRow(page, {
-					account: accountAddress,
-					tokenContract: aztecConfig.tokenAddress,
-					expectedPublicRaw: (1000n * 10n ** 18n).toString(),
-					baselineUpdatedAt: baseline,
-					timeoutMs: 90_000,
-				})
-				console.log(`[feeJuiceImported] token balance row fresh + exact`)
-			}
+			// The send flow needs a token registered before send-from-type is selectable. Fail-HARD, as
+			// tokenReadyExtension's.
+			await importTokenAndWaitForBalance(page, accountAddress, aztecConfig.tokenAddress, FIXTURE_TOKEN_RAW.toString())
+			console.log(`[feeJuiceImported] token balance row fresh + exact`)
 
 			await page.close()
 			await use(Object.assign(ctx, { accountAddress }))

@@ -2,9 +2,9 @@
 import { fileURLToPath } from "node:url"
 import path from "node:path"
 import fs from "node:fs"
-import { execSync } from "node:child_process"
 import type { TestProject } from "vitest/node"
 import { resolveBrowserKind } from "./fixtures/browser/selection"
+import { killChromesLoading } from "./sandbox-ownership"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // Resolved before setup runs, so an unusable selector fails ahead of the orphan sweep rather than
@@ -16,20 +16,6 @@ const BROWSER = resolveBrowserKind()
 const EXTENSION_PATH = process.env.EXTENSION_PATH
 	? path.resolve(process.env.EXTENSION_PATH)
 	: path.resolve(__dirname, "../../dist", BROWSER)
-
-/**
- * Kill orphan Chrome test processes started by THIS extension build only.
- *
- * Scoping by extension path lets a parallel impl in a different folder run its
- * own Chromes without us murdering each other's test runs.
- */
-function cleanupOrphanChromeProcesses() {
-	try {
-		execSync(`pkill -f "chrome.*--load-extension=${EXTENSION_PATH}" 2>/dev/null || true`, { stdio: "ignore" })
-	} catch {
-		// Ignore errors — processes may not exist
-	}
-}
 
 const ARMED_BUILD = `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:${BROWSER}`
 
@@ -61,7 +47,7 @@ export default async function setupWithTeardown(project: TestProject): Promise<(
 }
 
 export async function setup(project: TestProject) {
-	cleanupOrphanChromeProcesses()
+	killChromesLoading(EXTENSION_PATH)
 
 	const manifest = path.join(EXTENSION_PATH, "manifest.json")
 	if (!fs.existsSync(manifest)) {
@@ -77,7 +63,7 @@ export async function setup(project: TestProject) {
 }
 
 export async function teardown() {
-	cleanupOrphanChromeProcesses()
+	killChromesLoading(EXTENSION_PATH)
 }
 
 declare module "vitest" {

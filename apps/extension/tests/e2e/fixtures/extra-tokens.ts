@@ -1,6 +1,4 @@
-import { inject } from "vitest"
-import type { AztecTestConfig } from "./aztec"
-import { type ExtensionContext, openPopup, waitForHash } from "./extension"
+import { type ExtensionContext, openPopup, requireAztecConfig, waitForHash } from "./extension"
 import { importTokenAndWaitForBalance } from "./helpers"
 
 export interface ExtraToken {
@@ -23,8 +21,7 @@ type ExtraTokensFixture = [
 export function extraTokensFixture(tokens: readonly ExtraToken[]): ExtraTokensFixture {
 	return [
 		async ({ tokenReadyExtension }, use) => {
-			const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
-			if (!aztecConfig) throw new Error("aztecTestConfig not provided")
+			const aztecConfig = requireAztecConfig()
 			const { deployExtraTokensForAccount } = await import("./aztec")
 			const addresses = await deployExtraTokensForAccount(aztecConfig, tokenReadyExtension.accountAddress, tokens)
 			const page = await openPopup(tokenReadyExtension)

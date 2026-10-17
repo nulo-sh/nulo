@@ -1,7 +1,8 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import ts from "typescript"
 import { afterAll, describe, expect, test, vi } from "vitest"
 
 // Set before the modules load: `E2E_DATA_ROOT` is read at import time, and these cases create and
@@ -405,6 +406,24 @@ describe.skipIf(process.platform !== "linux")("chromes by extension path", { tim
 		expect(chromesUnclaimed(lock({ pids: { aztec: deadPid() } }))).toBe(true)
 		process.kill(owner.pid, "SIGKILL")
 	})
+})
+
+// `killChromesLoading` runs pkill without a shell, on the escaped and argument-anchored
+// `chromePattern`; any other spelling of it drifts from that.
+test("no e2e module but sandbox-ownership.ts spells a pkill", () => {
+	const root = path.resolve(__dirname, "../../tests/e2e")
+	const spelled = new Set<string>()
+	for (const rel of readdirSync(root, { recursive: true, encoding: "utf8" })) {
+		if (!rel.endsWith(".ts")) continue
+		const visit = (node: ts.Node): void => {
+			if ((ts.isStringLiteralLike(node) || ts.isTemplateLiteralToken(node)) && node.text.includes("pkill")) spelled.add(rel)
+			ts.forEachChild(node, visit)
+		}
+		visit(ts.createSourceFile(rel, readFileSync(path.join(root, rel), "utf8"), ts.ScriptTarget.Latest, true))
+	}
+	// The one sanctioned spelling is also the scan's success control: a scan that stopped seeing
+	// literals would find nothing at all.
+	expect([...spelled]).toEqual(["sandbox-ownership.ts"])
 })
 
 type ZombieParent = { parent: ChildProcess; child: number | undefined }

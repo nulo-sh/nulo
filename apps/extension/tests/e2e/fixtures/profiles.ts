@@ -166,13 +166,20 @@ export async function resetProfile(page: Page): Promise<void> {
 			`resetProfile: reset route never held for ${DWELL_MS}ms across ${ATTEMPTS} navigations; last parked state: ${lastDiag}`,
 		)
 	}
-	const profileName = await getActiveProfileName(page)
+	await confirmProfileReset(page, 10_000)
+}
 
+/** The reset page's deliberate-delete ritual: the three acknowledgements, the active profile's
+ *  name typed back, and submit, which enables only then. The page must already be at the reset
+ *  route; `timeoutMs` bounds the first checkbox's mount and the submit's enable. The caller
+ *  asserts where the app lands. */
+export async function confirmProfileReset(page: Page, timeoutMs: number): Promise<void> {
+	await page.waitForSelector('[data-testid="reset-checkbox-permanent"]', { visible: true, timeout: timeoutMs })
 	await clickByTestId(page, "reset-checkbox-permanent")
 	await clickByTestId(page, "reset-checkbox-undone")
 	await clickByTestId(page, "reset-checkbox-sure")
-	await replaceInputValue(page, '[data-testid="reset-confirm-input"]', profileName)
-	await clickByTestId(page, "reset-submit-btn")
+	await replaceInputValue(page, '[data-testid="reset-confirm-input"]', await getActiveProfileName(page))
+	await clickByTestId(page, "reset-submit-btn", timeoutMs)
 }
 
 /** Capture the sole profile's id from raw storage and PROVE its row exists — the
