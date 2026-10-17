@@ -48,37 +48,37 @@ const nonce = computed(() =>
 		     account it names, and the entrypoint spends from nobody. -->
 		<Flex v-if="surface.kind === 'transfer'" :data-testid="`${prefix}-transfer-sender`" :data-sender-kind="surface.sender.kind" justify="between" :class="$style.row">
 			<template v-if="surface.sender.kind === 'none'">
-				<Text variant="label" color="secondary">Caller:</Text>
+				<Text variant="label-section" color="secondary">Caller:</Text>
 				<Text variant="value" color="primary">none</Text>
 			</template>
 			<template v-else-if="surface.sender.kind === 'account'">
-				<Text variant="label" color="secondary">From:</Text>
+				<Text variant="label-section" color="secondary">From:</Text>
 				<Text variant="value" color="primary">this account <Text color="secondary">(<AddressDisplay :data-testid="`${prefix}-transfer-sender-address`" :address="surface.sender.address" />)</Text></Text>
 			</template>
 			<template v-else>
-				<Text variant="label" color="secondary">From:</Text>
-				<Text v-if="full" :data-testid="`${prefix}-transfer-sender-address`" variant="data" color="primary">{{ surface.sender.address }}</Text>
+				<Text variant="label-section" color="secondary">From:</Text>
+				<Text v-if="full" :data-testid="`${prefix}-transfer-sender-address`" variant="meta" color="primary">{{ surface.sender.address }}</Text>
 				<AddressDisplay v-else :data-testid="`${prefix}-transfer-sender-address`" :address="surface.sender.address" />
 			</template>
 		</Flex>
 		<Flex justify="between" :class="$style.row">
-			<Text variant="label" color="secondary">{{ surface.kind === "mint" ? "Mint to:" : "To:" }}</Text>
-			<Text v-if="full" :data-testid="`${prefix}-transfer-to`" variant="data" color="primary">{{ surface.to }}</Text>
+			<Text variant="label-section" color="secondary">{{ surface.kind === "mint" ? "Mint to:" : "To:" }}</Text>
+			<Text v-if="full" :data-testid="`${prefix}-transfer-to`" variant="meta" color="primary">{{ surface.to }}</Text>
 			<AddressDisplay v-else :data-testid="`${prefix}-transfer-to`" :address="surface.to" />
 		</Flex>
 		<Flex justify="between" :class="$style.row">
-			<Text variant="label" color="secondary">Amount:</Text>
-			<Text :data-testid="`${prefix}-amount`" variant="data" color="primary">
+			<Text variant="label-section" color="secondary">Amount:</Text>
+			<Text :data-testid="`${prefix}-amount`" variant="meta" color="primary">
 				{{ amount?.text }}
 				<Text v-if="amount?.symbol" variant="meta">{{ amount.symbol }}</Text>
 				<Text v-else color="tertiary">base units</Text>
 			</Text>
 		</Flex>
 		<Flex v-if="nonce" :data-testid="`${prefix}-transfer-nonce`" justify="between" :class="$style.row">
-			<Text variant="label" color="secondary">Authwit nonce:</Text>
+			<Text variant="label-section" color="secondary">Authwit nonce:</Text>
 			<Text
 				:data-testid="`${prefix}-transfer-nonce-value`"
-				variant="data"
+				variant="meta"
 				color="primary"
 				:title="valueTitle(nonce)"
 			>
@@ -103,12 +103,12 @@ const nonce = computed(() =>
 			justify="between"
 			:class="$style.row"
 		>
-			<Text variant="label" color="secondary">{{ safeWire(p.name, 32) }}:</Text>
+			<Text variant="label-section" color="secondary">{{ safeWire(p.name, 32) }}:</Text>
 			<AddressDisplay v-if="p.value.kind === 'address' && !full" :data-testid="`${prefix}-decoded-param-value`" :address="p.value.value" />
 			<Text
 				v-else
 				:data-testid="`${prefix}-decoded-param-value`"
-				variant="data"
+				variant="meta"
 				color="primary"
 				:title="valueTitle(p.value)"
 			>
@@ -139,11 +139,11 @@ const nonce = computed(() =>
 		/>
 		<Flex v-if="rawOpen" :data-testid="`${prefix}-raw-args`" direction="column" gap="2">
 			<Flex v-for="(row, m) in surface.rows" :key="m" :data-testid="`${prefix}-arg`" :data-arg-kind="row.kind" justify="between" :class="$style.row">
-				<Text variant="label" color="secondary">#{{ m }}</Text>
-				<Text v-if="row.kind === 'field'" :data-testid="`${prefix}-arg-field`" variant="data" color="primary" :title="row.full">
+				<Text variant="label-section" color="secondary">#{{ m }}</Text>
+				<Text v-if="row.kind === 'field'" :data-testid="`${prefix}-arg-field`" variant="meta" color="primary" :title="row.full">
 					{{ full ? row.full : row.short }}<Text v-if="row.decimal !== undefined" color="tertiary"> = {{ row.decimal }}</Text>
 				</Text>
-				<Text v-else-if="row.kind === 'text'" variant="data" color="primary">{{ full ? row.full : row.value }}</Text>
+				<Text v-else-if="row.kind === 'text'" variant="meta" color="primary">{{ full ? row.full : row.value }}</Text>
 				<Text v-else variant="value" color="tertiary">(unreadable)</Text>
 			</Flex>
 			<Text v-if="surface.hidden" :data-testid="`${prefix}-args-more`" variant="meta" color="tertiary">

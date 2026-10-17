@@ -298,7 +298,7 @@ onBeforeUnmount(() => {
 }
 
 .account_label {
-	composes: type--name-tag from global;
+	composes: type--label-section from global;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -383,7 +383,7 @@ onBeforeUnmount(() => {
 /* With the label's role, `1lh` is the label's line while the label sets no line-height of its own, so
  * the chip keeps its height when the name is hidden; 14px is the padding and border. */
 .network_chip {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
@@ -406,7 +406,7 @@ onBeforeUnmount(() => {
 }
 
 .network_label {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -445,8 +445,18 @@ onBeforeUnmount(() => {
 }
 
 .lock_label {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
+}
+
+/* The chips keep their 10px semibold: the row has no width to spare, and at 11px the network chip
+ * shrinks until its ellipsis cuts "TESTNET". The chip's own size sets its `1lh`, so it goes too. */
+.actions .network_chip,
+.network_chip .network_label,
+.lock_chip .lock_label {
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
 }
 
 .status_dot {

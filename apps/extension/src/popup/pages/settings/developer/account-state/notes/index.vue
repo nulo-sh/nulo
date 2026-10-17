@@ -299,7 +299,7 @@ onBeforeUnmount(() => {
 }
 
 .location {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 	line-height: 1.4;
 	word-break: break-all;
@@ -328,7 +328,7 @@ onBeforeUnmount(() => {
 }
 
 .raw_line {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 	overflow-wrap: anywhere;
 	line-height: 1.4;
@@ -349,7 +349,7 @@ onBeforeUnmount(() => {
 }
 
 .render_error_label {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--red);
 }
 

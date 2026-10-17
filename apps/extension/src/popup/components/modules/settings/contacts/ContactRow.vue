@@ -91,12 +91,12 @@ const target = ref(null)
 }
 
 .row_address {
-	composes: type--data from global;
+	composes: type--meta from global;
 	composes: row_sub from "../../../../../components/ui/Settings/settings-row.module.css";
 }
 
 .sender_chip {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	position: relative;
 	z-index: 1;
 	flex-shrink: 0;

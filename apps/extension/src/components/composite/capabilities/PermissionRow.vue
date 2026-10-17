@@ -134,7 +134,7 @@ const hasSub = computed(() => line.value !== undefined || slots.sub !== undefine
 
 /* Block-level, so its line carries no strut from the inherited font. */
 .chip {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	display: flex;
 	width: fit-content;
 	margin-top: 3px;
@@ -142,7 +142,7 @@ const hasSub = computed(() => line.value !== undefined || slots.sub !== undefine
 }
 
 .badge {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	display: inline-flex;
 	color: var(--txt-secondary);
 }

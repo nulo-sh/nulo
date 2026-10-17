@@ -98,13 +98,13 @@ onMounted(async () => {
 		@click="handleClick"
 		:color="color"
 		:height="height"
-		:class="[lead ? $style.name_lead : $style.name, $style.clickable]"
+		:class="[$style.name, $style.clickable]"
 	>
 		{{ contactName }}
 	</Text>
 	<Text
 		v-else
-		:variant="lead ? 'data-lead' : 'data'"
+		:variant="lead ? 'data-lead' : 'meta'"
 		data-testid="address-display"
 		data-address-shows="address"
 		@click="handleClick"
@@ -122,10 +122,6 @@ onMounted(async () => {
 }
 
 .name {
-	font-size: 12px;
-}
-
-.name_lead {
 	font-size: 13px;
 }
 </style>

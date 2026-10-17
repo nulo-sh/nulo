@@ -252,11 +252,11 @@ watch(
 	background: var(--nulo-surface-low);
 }
 .contract_label {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--txt-tertiary);
 }
 .contract_value {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 	word-break: break-all;
 }
@@ -283,7 +283,7 @@ watch(
 	border-top: 1px solid var(--nulo-border);
 }
 .contract_full {
-	composes: type--data from global;
+	composes: type--meta from global;
 	flex: 1;
 	color: var(--txt-primary);
 	word-break: break-all;

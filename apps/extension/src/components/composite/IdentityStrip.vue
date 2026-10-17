@@ -67,7 +67,7 @@ withDefaults(
 }
 
 .identity_account {
-	composes: type--name-tag from global;
+	composes: type--label-section from global;
 	color: var(--txt-primary);
 
 	overflow: hidden;
@@ -90,7 +90,7 @@ withDefaults(
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	max-width: 96px;
+	max-width: 102px;
 }
 
 .identity_warn {
