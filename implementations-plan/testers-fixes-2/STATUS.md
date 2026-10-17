@@ -13,3 +13,4 @@
 - 2026-10-17: Phase 2 gate pass: snack-placement network Chrome 4/4 (load1 145) and Firefox 4/4 (load1 150 at start, 149.6); store-captures Chrome 1/1, Home fits by 31 px scroll; captures restored, uncommitted.
 - 2026-10-17: Phase 3: merged origin/dev at 98d51e89 (conflicts in activity-seeds.ts and index.md resolved, dev's seeds kept); testers-fixes-1 not landed, so #582's restore check does not apply; audit:vue, test:all, build-storybook exit 0. Codex r1 (session 01a1476b): approve with changes, 2 low; Opus review running.
 - 2026-10-17: review round 1 fixes: scrim probe red on the isolation build, green after; Chrome rows scenarios 2/2.
+- 2026-10-17: Codex r2: approve, no new material findings, 1 low comment fix applied; loop converged. Full smoke chain (Chrome, Firefox) running.

@@ -88,8 +88,8 @@ onBeforeUnmount(() => {
 	flex: none;
 }
 
-/* Over the rows' raised actions (z-index 1) as they scroll under it. Neither the hero nor the middle
- * is a stacking context, so a popup's scrim drawn inside either still covers the whole popup. */
+/* Over the rows' raised actions (z-index 1) as they scroll under it. The middle stays unpositioned
+ * and outside any stacking context, so a popup's scrim drawn inside it still covers the whole frame. */
 .scroll_shadow {
 	position: absolute;
 	right: 0;
