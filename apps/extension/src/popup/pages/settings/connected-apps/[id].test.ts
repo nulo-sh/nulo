@@ -2,6 +2,7 @@ import { createTestingPinia } from "@pinia/testing"
 import { Icon, Toggle, Tooltip } from "@nulo/design"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 import PermissionRow from "@/components/composite/capabilities/PermissionRow.vue"
 import ConnectedApp from "./[id].vue"
 
@@ -34,16 +35,10 @@ vi.mock("@/wallet/services/dapp-session/client", () => ({
 // The stores read `chrome.storage.local` through the migration-aware facade on setup.
 beforeEach(() => {
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: {
-				get: vi.fn(async () => ({})),
-				set: vi.fn(async () => undefined),
-				remove: vi.fn(async () => undefined),
-			},
-			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-		},
+		storage: {},
 		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
 	})
+	installChromeStorage({}, { persist: false })
 })
 
 afterEach(() => {

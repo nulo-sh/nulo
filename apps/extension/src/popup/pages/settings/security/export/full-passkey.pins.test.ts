@@ -10,6 +10,7 @@ import { EncryptionKey, PasskeyCredential, verifyBackupMac } from "@nulo/wallet-
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { installChromeStorage } from "../../../../../../tests/helpers/chrome-storage-mock"
 import { pressOn } from "../../../../../../tests/helpers/press-key"
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
@@ -177,11 +178,7 @@ vi.mock("@/composables/usePasskeyCeremony", () => ({
 }))
 
 beforeEach(() => {
-	const c = (globalThis as { chrome?: { storage: Record<string, unknown> } }).chrome
-	if (c) {
-		c.storage.local = { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) }
-		c.storage.onChanged = { addListener: vi.fn(), removeListener: vi.fn() }
-	}
+	installChromeStorage({}, { persist: false })
 	vi.clearAllMocks()
 	captureRunFence.mockReset()
 	captureRunFence.mockResolvedValue(FENCE)

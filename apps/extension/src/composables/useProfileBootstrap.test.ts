@@ -1,5 +1,6 @@
 import { createPinia, setActivePinia } from "pinia"
 import { beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../tests/helpers/chrome-storage-mock"
 
 vi.mock("@/utils/core", () => {
 	const profileMock = {
@@ -111,25 +112,13 @@ beforeEach(() => {
 	// Extend the global chrome stub from tests/vitest.setup.ts to include
 	// the `storage.local` surface that useSyncedRef calls at store init.
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: {
-				get: vi.fn((_key: string | string[], cb?: (result: Record<string, unknown>) => void) => {
-					cb?.({})
-					return Promise.resolve({})
-				}),
-				set: vi.fn(async () => undefined),
-				remove: vi.fn(async () => undefined),
-			},
-			onChanged: {
-				addListener: vi.fn(),
-				removeListener: vi.fn(),
-			},
-		},
+		storage: {},
 		runtime: {
 			connect: vi.fn(),
 			onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
 		},
 	})
+	installChromeStorage({}, { persist: false })
 	setActivePinia(createPinia())
 	vi.clearAllMocks()
 	// Default network-client behavior (an ACTIVE pointer exists → no fallback); fallback tests override.
