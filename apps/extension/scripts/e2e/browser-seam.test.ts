@@ -27,7 +27,7 @@ const WORKER_DEBT: Record<string, number> = {
 
 /**
  * The scan walks the TypeScript AST rather than the text. A regex literal ending in `\//` — one
- * exists at `fixtures/extension.ts` — makes any line-based comment strip swallow the rest of its
+ * exists at `fixtures/dom.ts` — makes any line-based comment strip swallow the rest of its
  * line, so a violation appended there would go unreported. A guard that silently stops matching
  * is worse than no guard, so the parser decides what is code.
  *
@@ -365,7 +365,7 @@ describe("browser seam guard", () => {
 	})
 
 	// A regex ending in `\//` reads as a line comment to any text-based strip, which silently hid
-	// everything after it on that line. This is the real construct, from fixtures/extension.ts.
+	// everything after it on that line. This is the real construct, from fixtures/dom.ts.
 	test("a violation after a regex literal ending in an escaped slash is still seen", () => {
 		const src = ["const RE = /^(?:text|xpath|aria|pierce)\\//; await ctx.browser.close()"].join("\n")
 		expect(violations(src).close).toEqual([1])
