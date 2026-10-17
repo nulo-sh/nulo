@@ -206,7 +206,7 @@ One arc, one PR against `dev`. The wallet holds the composite chain id 0 to one 
 - **Implementation review r1** (Codex, session `01a14abd`): **reject**, three items. Adopted: the adoption sentence names the Local target's 0; the cache counts three reported failures, which a success does not reset. Argued: a chain-0 row on L1 31337 with a non-loopback primary, which only an install from before this change can hold, is a known limit with D5. **Opus**, beside it: **conditional approve**; the stale `local`-kind comments and the same adoption wording, adopted.
 - **Implementation review r2** (resume): **approve**; the known-limit disposition accepted.
 - **Implementation review r3** (resume, with the standard's two rules and the adversarial ask verbatim): **approve**, no material item.
-- **The PR's Storybook build** (Codex, resume): **reject** until fixed; picked the dedicated entry point (D6).
+- **The PR's Storybook build** (Codex, resume): **reject** until fixed; picked the dedicated entry point (D6). Resumed on the fix: **approve**.
 
 ## Delivery
 
