@@ -27,7 +27,7 @@ post_implementation_hardening: not scheduled
 - **Known limits:** #684 (D5, and the earlier build's remote Local row argued in implementation review r1).
 - **Open items:** none. OA-1 and OA-2 are not issues: the orchestrator carries them to the owner, and each ships its "what ships now" form.
 - **Lessons:** none promoted; the arc's gotchas are plan-specific (`lessons/phase-1.md` to `lessons/phase-3.md`).
-- **Seeds:** the `/goal` and `/loop` seeds under § Seeds are retired.
+- **Seeds retired:** the `/goal` and `/loop` seeds under § Seeds.
 
 # network-identity-1: chain 0 is the local development chain; the endpoint docs say what the code checks
 
