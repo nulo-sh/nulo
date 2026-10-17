@@ -1314,6 +1314,7 @@ describe("RecentActivityView — a queued send that asks again", () => {
 		expect(card(w, "op-t")?.props()).toMatchObject({ subtitle: "Waiting for your earlier send", reaskLine: null })
 		expect(card(w, "op-d")?.props()).toMatchObject({ subtitle: "Queued...", reaskLine: null })
 		expect(sheet(w).exists()).toBe(false)
+		expect(w.get('[data-testid="activity-feed-root"]').attributes("data-fee-quote")).toBe("none")
 	})
 
 	test("a re-ask row reads its line, and its review opens the sheet with the new fee against the accepted one", async () => {
@@ -1327,6 +1328,7 @@ describe("RecentActivityView — a queued send that asks again", () => {
 		await flushPromises()
 		expect(card(w)?.props("reaskLine")).toBe("Fee went up. Review")
 		expect(sheet(w).exists()).toBe(false)
+		expect(w.get('[data-testid="activity-feed-root"]').attributes("data-fee-quote")).toBe("ready")
 
 		card(w)?.vm.$emit("review", "op-r")
 		await flushPromises()

@@ -720,9 +720,8 @@ test.skipIf(!hasConfig)(
 			expect(await pendingTxCount(nodeUrl), "the node holds no tx of B before the accept").toBe(0)
 			if (asks === 1) {
 				await reopen(burst)
-				// The sheet keeps the quote Home holds when it opens. Home's price reads start as it mounts,
-				// and its gas card shows its dollars once they answer.
-				await burst.page.waitForSelector('[data-testid="gas-fiat-public"]', { visible: true, timeout: 30_000 })
+				// The sheet keeps the quote the feed holds when it opens; the feed's read starts as Home mounts.
+				await burst.page.waitForSelector('[data-testid="activity-feed-root"][data-fee-quote="ready"]', { timeout: 30_000 })
 			}
 			expect((await waitForAwaitingCard(burst.page, "queued")).subtitle).toBe("Fee went up. Review")
 			if (asks === 1) await shotSend(burst.page, "4-home-reask-row", "tx-awaiting-card")

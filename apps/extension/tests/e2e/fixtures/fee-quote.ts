@@ -28,7 +28,9 @@ export async function refusePrices(ctx: ExtensionContext): Promise<PricePin> {
  * Writes the quote beside the cached ones. A fetch begun before the refusal armed reads the cache before
  * it writes it, so landing after the seed it would put the live quote back; the service aborts every
  * fetch within `PRICE_FETCH_TIMEOUT_MS` and a refused one writes nothing, so the seed waits out what is
- * left of that window. A fee card reads the quote when it mounts: seed before the screen opens.
+ * left of that window, plus a second for the write. A write delayed past that is not covered; only a
+ * refusal armed at launch, before any fetch, would cover it. A fee card reads the quote when it mounts:
+ * seed before the screen opens.
  */
 export async function seedFeeJuiceQuote(ctx: ExtensionContext, pin: PricePin): Promise<void> {
 	const settled = pin.armedAt + PRICE_FETCH_TIMEOUT_MS + 1_000 - Date.now()

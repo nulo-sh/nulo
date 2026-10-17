@@ -260,6 +260,16 @@ test.skipIf(!hasConfig)(
 			const read = (testid: string) =>
 				popup.$eval(`[data-testid="${testid}"]`, (el) => (el as HTMLElement).innerText.replace(/\s+/g, " ").trim())
 			expect(await read("execute-op-app-legend")).toMatch(/^Fee payment method set by \S/)
+			// The line renders when the estimate lands, and adds each figure's dollars once its quote answers.
+			await popup
+				.waitForFunction(
+					() =>
+						/\(.+\), includes a .+ \(.+\) priority/.test(
+							(document.querySelector('[data-testid="execute-op-app-fee"]') as HTMLElement | null)?.innerText ?? "",
+						),
+					{ timeout: 15_000, polling: 100 },
+				)
+				.catch(() => undefined)
 			const line = await read("execute-op-app-fee")
 			const sentence = /^Fee up to ~([\d.]+) FJ \(.+\), includes a ~([\d.]+) FJ \(.+\) priority fee the app asked for$/.exec(line)
 			expect(sentence, `the fee line reads "${line}"`).not.toBeNull()
