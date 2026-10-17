@@ -1,0 +1,8 @@
+- 2026-10-17 14:10Z: planning started at dev 1b93cbfa; recon launched (3 Explore agents, sonnet).
+- 2026-10-17 14:28Z: recon done (4 Sonnet agents); plan, recon, OWNER-ASKS drafted; S1 (double-click on Export's Download) traced.
+- 2026-10-17 14:35Z: audit round 1, Codex (sol, high): reject (D11 owner-visible and Confirm-only, a Phase 2 gate that cannot pass, onboarding omitted, an unproven inner scroll).
+- 2026-10-17 14:54Z: audit round 1, Opus (Plan agent): conditional approve (re-aim the reproducer, widen the guard, list the undrawn consequences, D4's curve).
+- 2026-10-17 15:02Z: geometry probe on Chrome: S1 after this arc is plausible only for the passkey Export Confirm; New account's path exists today through the rise, which this arc removes. D11 → OA-3 (not shipped); OA-4 added; plan revised.
+- 2026-10-17 15:10Z: final fresh Codex pass: reject (Phase 1 grep order, the stale capture's flag, S1's Contacts path).
+- 2026-10-17 15:16Z: Contacts probe: S1 deletes a contact today and after; S1 is pre-existing. Plan revised; resumed Codex pass to verify.
+- 2026-10-17 15:18Z: final Codex pass, resumed verify round: approve. Plan committed, awaiting the orchestrator's approval.
