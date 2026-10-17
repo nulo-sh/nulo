@@ -19,3 +19,11 @@
   - Content height: the answer at 536-576, the icon scrolled to y 556, the same two results.
   - S1 therefore predates this arc. The arc moves the exposed rows from the list's upper middle to its bottom edge.
 - 2026-10-17 15:18Z, final pass resumed (session `01a14a67`), verify round: `approve`.
+
+## Implementation, Phase 0: base, captures, "before" shots
+
+- 2026-10-17 15:22Z: merged `origin/dev` 13d5f8d0 (#650, #655) before starting. `index.md` conflicted: dev had archived icons-d2-1's row; kept the removal and this plan's row. No dependency file moved, so no install.
+- S1 filed as #656 (`ux`, then `owner-decision`), in the five-section issue format of `implementations-plan/README.md` § Where open work lives.
+- `settings-display` is captured in the `/popup/settings/appearance` → `/popup/settings/display` redirect case of `settings-routes.test.ts`: the search case outlines a row, which would differ before and after.
+- `shotSend` names the popup's own theme `<name>.png` (light, the headless default) and the flipped one `<name>-dark.png`; the stale captures write `<name>.<theme>.png`, copied in under the first scheme.
+- The capture run: 8 smoke files (34 tests, 5:07) and `network/send-amount-exact` (45 s) green at retry 0.

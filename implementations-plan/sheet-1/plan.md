@@ -129,6 +129,7 @@ Surfaces:
 | D9 | `Closes #590` only if icons-d2-1's last PR is on `dev` when this PR opens; otherwise `Refs #590`, and the body says why | Closing with the icon part open |
 | D10 | Screenshots by `shotSend` in specs that already open each sheet; "before" at the base SHA | A capture spec copied in and deleted; a 360×900 capture: no spec opens a sheet in a frame over 600 px, so it would be that copied spec |
 | D11 | The guard is designed and left out (OA-3). The design: `Popup.vue`'s wrapper gets `@mousedown.capture`, which records a press with `detail === 1` inside the open sheet. `@click.capture` stops and prevents a click with `detail > 1` when no such press came since the sheet opened. A keyboard activation (`detail` 0) and a multi-click begun inside the sheet pass. | Shipping it now: a behaviour a person can notice, beyond the picks (Codex round 1), fixing a hazard that predates the restyle (F11). A Confirm-only guard: misses the close area and forms. Refusing every `detail > 1` inside a sheet: also refuses a quick double toggle begun inside it. An 800 ms arming (outline B): a timer and a visibly disabled control on every sheet |
+| D12 | Deviations found in implementation, the tree winning: `pages/settings/index.test.ts` also searched "full" and was re-pointed to "motion"; the stale 40 px wording in `helpers/legal-drivers.ts` and the e2e-testing skill was rewritten; `settings-display` is captured in the redirect case of `settings-routes.test.ts`; the review diff's base is dev 13d5f8d0, merged in before Phase 0, since `1b93cbfa..HEAD` carries #650 and #655; the Codex loop ran over the finished code while Phase 3's suites ran, to resume if they forced a change | Each the smallest change that keeps a test or a doc true |
 
 ## Audit verdicts
 
@@ -159,6 +160,19 @@ Surfaces:
 3. Medium, `stale-network-captures.test.ts` skips without `STALE_NETWORK_CAPTURES=1`, and a PNG count is ambiguous: **accepted**; its existing `A3-confirm` capture with the flag, and gates on the nine named captures.
 - **Resumed, verify round**: `approve`; each fix correct, no new material finding.
 
+**Implementation, round 1, Codex** (`gpt-6.1-sol`, high, session `01a14aab`, the diff from dev 13d5f8d0): `approve with fixes`; three low comment findings, no functional regression.
+1. `base.css.test.ts`'s "verbatim flatten" and "pixel-identical constraint": **accepted**. The same claim in `base.css`'s header: **declined**; pre-existing provenance this arc does not make false, its plan path resolves under `archive/`, and a header edit in a shared stylesheet widens another lane's conflict for no behaviour.
+2. `FormPopup.test.ts`'s header called the stubbed children real: **accepted**.
+3. `display.vue`'s dust-field comment said the handler parseFloat-normalizes: **accepted**; the clause is gone.
+
+**Implementation, round 1, Opus** (general-purpose agent, alongside): `approve with fixes`; no correctness, clipping, keyboard, theme or CSP finding.
+1. The e2e-testing skill's `pointerClick` passage still described the 40 px rise: **accepted**.
+2. `base.css:78`, "the light theme inherits … every scrim unchanged": **declined**; true of the tokens (the plan's ruling), the light `Popup` scrim being a component rule.
+3. The long-import test's header did not name the fit assertion's failure mode: **accepted**.
+- Its note that a scrolled onboarding tab leaves an undimmed strip below a sheet (the wrapper sits against the viewport) predates this arc: a known limit (close-out).
+
+**Implementation, round 2, Codex** (resumed `01a14aab`, the fix commit 80d913c2): `approve`; the fixes verified, no new material finding. The loop converged.
+
 ## Arc 1: the flat sheet (Closes or Refs #590, D9)
 
 **Smoke runs, every time**: build the armed build for the browser, then run, from the repo root:
@@ -175,7 +189,7 @@ Surfaces:
 - `sheet-duplicate-confirm`: `duplicate-phrase-import.test.ts`, after line 71.
 - `settings-display`: `settings-routes.test.ts`, the Display page.
 
-### Phase 0: base, captures, "before" shots
+### Phase 0: base, captures, "before" shots ✓
 
 1. Record the base SHA in `STATUS.md`. Merge `origin/dev` first if it moved. File S1's issue unless the orchestrator already has (dedupe with `gh issue list --state all --search "double-click confirm"`): the trace, F11, D11's design with the Contacts reproducer, and the slow-second-press residual.
 2. Add the capture calls that do not exist yet. Commit them alone.
@@ -183,7 +197,7 @@ Surfaces:
 
 **Validation gate**: the capture specs green at retry 0; each of the nine named captures present in `before/` in both themes (other shots those specs write are ignored); the SHA and S1's issue number recorded. Layers: e2e, e2e-live-network.
 
-### Phase 1: the sheet
+### Phase 1: the sheet ✓
 
 1. Edit `PopupCard.vue` and `Popup.vue`; drop `fit` from `SendReviewSheet.vue`; rename `.slide-*` in `base.css`; restamp `base.css.test.ts`.
 2. Rewrite `PopupCard.test.ts`: (a) a card mounts with no setting to read, has no `flex-grow` and no handle element, while its slot renders inside `popup-card-body`; (b) the displace case as today. Update `SendReviewSheet.test.ts` and `FormPopup.test.ts`.
@@ -192,7 +206,7 @@ Surfaces:
 
 **Validation gate**: `bun run lint && bun run typecheck:all && bun run test && bun run test:all && bun run --cwd apps/extension build-storybook`, each exit 0; on Chrome the smoke files `snackbar popup-stack contacts contacts-import token-list keyboard-guards accounts duplicate-phrase-import` green at retry 0, and `snackbar contacts-import popup-stack` on Firefox. Pass also needs `git grep -n 'handle_zone\|slide-enter' -- apps packages` empty. Layers: lint, typecheck, unit, component, storybook build, e2e.
 
-### Phase 2: retire the setting
+### Phase 2: retire the setting ✓
 
 1. Delete the key, the composable and its test, the Display row and the search row (change map). Regenerate the auto-import files with `bun run --cwd apps/extension build`.
 2. Re-point the search tests to surviving rows; check each new expectation with `searchSettings` over the registry.

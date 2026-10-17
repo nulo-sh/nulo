@@ -1,0 +1,7 @@
+# sheet-1, arc 1, phase 3: full suites, "after" shots
+
+- 2026-10-17 17:05Z: the whole smoke suite on Chrome, retry 0, from a fresh armed build: 57 files passed, 6 skipped, 258 tests, 36:31 local wall-clock at load1 145-215 (one worker; not comparable with CI's sharded envelope).
+- #649 (the type scale) merged on dev while Firefox's full suite started. The run was stopped, and the "after" set taken first at 80d913c2, so before (13d5f8d0) and after differ only by this arc. Then dev was merged and every suite rerun on the merged head.
+- The "after" captures: the 8 smoke specs (34 tests) and `network/send-amount-exact` green at retry 0. The 500-row fit assertion measured 18.1 ms (a temporary `performance.now()` probe, reverted).
+- Compared with page 33 (`p33-sheet-e-*`, `p33-scrim-a-*`): the sheet, the ledge, the accent edge and the light scrim match. Differences: page 33's sheet E was drawn on the dark scrim in both themes (before P33-09); the shipped light theme pairs it with the light scrim, as signed. In light the 1 px line and the ledge share one colour, so the line shows on its own only as a tick in the last 6 px at the right edge (OA-1). `StaleNetworkConfirm` takes the light scrim and keeps its own centred card, without the ledge or the line.
+- Pairs are composed with puppeteer from the two sets (`--no-sandbox`, as the suite launches Chrome on this host, over local data URIs only).
