@@ -121,8 +121,8 @@ Precondition: OA-4 answered, and three finished clips the owner approved, made o
 
 ## Delivery
 
-- **Arc 1:** branch `worktree-landing-explainer-1`, `gh pr create --draft --base dev` after Phase 1's gate and the Codex loop. Title: `feat(landing): the how aztec works page at nulo.sh/how-aztec-works` (66 characters). Body: what and why; the picks P33-03 = A and P39-11 = A with the owner's note verbatim; the final URL `https://nulo.sh/how-aztec-works`, stated once; the validation runs; dark screenshots at desktop and phone width; OA-6 A's command, with the note that the preview appears after the owner runs it; OA-7's head copy, quoted for the owner to flip; `Refs #588`; "Draft until the owner approves the explainers (OA-1 to OA-3)". No labels: no extension e2e lane applies. If the landing issue onboarding-3 plans to file exists by then, the body says `Closes #<n>`. Ready after Phase 2.
-- **Arc 2:** branch `landing-explainer-1-clips` off `origin/dev` after arc 1 merges; `gh pr create --base dev`; title `feat(landing): the three how aztec works clips`; `Refs #588`.
+- **Arc 1:** branch `worktree-landing-explainer-1`, `gh pr create --draft --base dev` after Phase 1's gate and the Codex loop. Title: `feat(landing): the how aztec works page at nulo.sh/how-aztec-works` (66 characters). Body: what and why; the picks P33-03 = A and P39-11 = A with the owner's note verbatim; the final URL `https://nulo.sh/how-aztec-works`, stated once; the validation runs; dark screenshots at desktop and phone width; OA-6 A's command, with the note that the preview appears after the owner runs it; OA-7's head copy, quoted for the owner to flip; `Refs #588`; "Draft until the owner approves the explainers (OA-1 to OA-3)". No labels: no extension e2e lane applies. onboarding-3's landing issue, #722, asks for the page with its clips and the wallet repoint, so arc 1 says `Refs #722`. Ready after Phase 2.
+- **Arc 2:** branch `landing-explainer-1-clips` off `origin/dev` after arc 1 merges; `gh pr create --base dev`; title `feat(landing): the three how aztec works clips`; `Refs #588`; `Closes #722` once the wallet repoint has landed, `Refs #722` until then.
 - **Release order:** the wallet item points at this address, so arc 1 must reach `main` with or before the release that ships onboarding-3's item; until then the link shows the home page.
 - **Close-out** ships with arc 2 (D9 as reversed); arc 1's PR carries no archive move. No parallel lanes: one phase per arc.
 
@@ -139,6 +139,10 @@ The steps are `implementations-plan/README.md` § Post-implementation standard a
 **Round 2, Codex** (resume): conditional approve, 2 findings, both accepted: the preview server's working directory (now `cwd` `apps/landing`); recon still asserted the dashboard setting (now "not inspected; no branch build observed"). All round 1 resolutions verified.
 
 **Round 3, Codex** (resume, confirmation): **approve**. No regression; owner approval of the visible content remains required.
+
+**Arc 1 implementation, Codex** (gpt-6.1-sol, session 01a14be2): round 1 approve, 1 low finding, accepted: two head comments restated their tags (removed). Round 2 (resume, xhigh): **approve**, no findings; every fix below verified, including the headings' accessible names.
+
+**Arc 1 implementation, Opus diff review:** approve, 3 low findings, all accepted: the README named a wallet item that has not shipped (clause dropped; onboarding-3 adds it with its item); the README and the `STORES` TSDoc overstated which pages the store pin reads (now the two hand-written pages); each heading's text ran its number into its title, "01Private" for indexers and copy (a space inside the hidden number, its margin cut 14 px to 5 px; the title moved 0.16 px).
 
 ## Seeds
 

@@ -9,3 +9,10 @@ Browser check (scratch script, registry-claimed port, `vite preview --strictPort
 Two attempts failed before that, neither in the page:
 - Chrome aborted at launch: this host has no usable user-namespace sandbox. The repo's own e2e launches Chrome with `--no-sandbox --disable-setuid-sandbox` (`apps/extension/tests/e2e/fixtures/browser/chrome.ts:56-57`); the check uses the same flags for this local page.
 - The second visit got a 304 from the browser cache; the check now disables the cache per visit, so each navigation is a fresh 200.
+
+## Review fixes (2026-10-17)
+
+Codex approved with one comment nit; the Opus diff review approved with three low findings. All four landed in `829350fe`; Codex round 2 approved them with no findings.
+- A card heading's hidden number ran into its title in the text content ("01Private balances"), which is what indexers, reader mode and copy see; the accessible name was already right. A space inside the `aria-hidden` mono span fixes the text. At 13 px JetBrains Mono that space is 0.6 em plus 0.08 em tracking, about 8.8 px, so the margin went from 14 to 5 px. Measured in Chrome, the title moved 0.16 px.
+- The brief asked for `robots.txt` to be updated. It is `Allow: /` with no per-page lines, so it already admits the page and is unchanged.
+- onboarding-3's issue #722 asks for the page with its clips and the wallet repoint. Arc 1 ships neither, so the PR refs it and does not close it.

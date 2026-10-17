@@ -6,3 +6,4 @@
 - 2026-10-17: round 2 Codex conditional approve (2, accepted); round 3 Codex approve. Plan committed; awaiting the orchestrator's approval.
 - 2026-10-17 22:0xZ: plan approved by the orchestrator (OA-5 A, OA-6 A, OA-7 A ships now; OA-1 to OA-4 the owner's; D9 reversed). Arc 1 started; origin/dev (dc4a88ec) merged, index conflict resolved.
 - 2026-10-17: Phase 1 green at ca57d85c (lint, typecheck:all, test:all, build, dist loop + failing control, deploy:dry, test:ci-gating, test:release, lint:actions, browser check desktop + phone). Codex loop and Opus diff review next.
+- 2026-10-17: review loop converged. Codex impl round 1 approve (1 nit), Opus diff review approve (3 low), all fixed in 829350fe; Codex round 2 approve. Screenshots (dark, desktop + phone) in screenshots/. Merge of origin/dev, final gates and the draft PR next.
