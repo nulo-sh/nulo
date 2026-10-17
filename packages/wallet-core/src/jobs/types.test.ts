@@ -17,6 +17,7 @@ describe("KNOWN_JOB_ERROR_KINDS (drift guard)", () => {
 			"unknown",
 			"popup_bound",
 			"scope_refused",
+			"registry_refused",
 			"malformed_request",
 			"terms_refused",
 			"wallet_refused",

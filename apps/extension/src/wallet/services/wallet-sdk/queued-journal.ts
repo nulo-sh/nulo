@@ -21,6 +21,7 @@ import type { ActiveSession } from "@aztec-labs/wallet-sdk/extension/handlers"
 import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@/wallet/logger"
 import {
+	AuthRegistryRefusalError,
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
 	InvalidWalletArgumentsError,
@@ -267,7 +268,7 @@ export async function failQueuedIfUnclaimed(
 /** The kinds a row failed before any claim can carry. */
 export type QueuedFailureKind = Extract<
 	KnownJobErrorKind,
-	"popup_bound" | "scope_refused" | "malformed_request" | "terms_refused" | "session_ended" | "wallet_refused"
+	"popup_bound" | "scope_refused" | "registry_refused" | "malformed_request" | "terms_refused" | "session_ended" | "wallet_refused"
 >
 
 /** Fails a still-queued row with the error that ended its message before any claim, classified by
@@ -284,6 +285,7 @@ export async function failQueuedForError(
 
 function queuedFailureKind(error: unknown): QueuedFailureKind {
 	if (error instanceof TermsAcceptanceRequiredError) return "terms_refused"
+	if (error instanceof AuthRegistryRefusalError) return "registry_refused"
 	if (error instanceof ScopeViolationError || error instanceof CapabilityNotGrantedError) return "scope_refused"
 	if (error instanceof InvalidWalletArgumentsError) return "malformed_request"
 	if (error instanceof SessionEndedError || error instanceof WalletLockedError) return "session_ended"
