@@ -37,6 +37,12 @@ to log something sensitive.
   passwords and export returns), or whole backup rows.
 - **Endpoint URLs** are reduced to their origin (`scrubUrls`, `@/utils/scrub-urls`) — providers
   embed API keys in the path — on both the log path and the dApp-facing error envelope.
+- **Aztec dependency loggers emit `warn` and above.** The build defines `process.env.LOG_LEVEL` as
+  `DEPENDENCY_LOG_LEVEL` (`apps/extension/vite.shared.ts`), which every upstream `createLogger` reads.
+- **The PXE host frame drops 32-byte values.** `offscreen/frame-logger.ts` runs `trim`, then
+  `scrubHex32`, over the lines of the frame's console hooks, its rejection handler and the logger
+  `createPxeOffscreen` receives, so none carries a `0x` + 64-hex run or a field-sized bigint,
+  full class ids and hashes included.
 - **Pick the level by REACH, not by tone.** Services call `this.log{Debug,Info,Warn,Error}`; UI
   calls `console.{debug,warn,error}`. `LoggerStore.log` drops only `level < logLevel`, and
   `logLevel` is `Info` unless `debugMode` is on — so **`warn` and `error` are captured for every

@@ -254,7 +254,7 @@ onBeforeUnmount(() => {
 								Copy address
 							</Flex>
 						</DropdownItem>
-						<DropdownItem @click="popupStore.open('token_metadata')">
+						<DropdownItem @click="popupStore.open('token_metadata')" data-testid="token-menu-metadata">
 							<Flex align="center" gap="8">
 								<Icon name="code-circle" size="14" color="primary" />
 								Show metadata

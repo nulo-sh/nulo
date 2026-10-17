@@ -492,6 +492,7 @@
     "pickFile": true,
     "pickPrimaryIndex": true,
     "pickPrimaryMethod": true,
+    "pickPrimaryWireMethod": true,
     "pinScopeOf": true,
     "pinnedTokensKey": true,
     "plainMethodName": true,
@@ -689,6 +690,7 @@
     "watchEffect": true,
     "watchPostEffect": true,
     "watchSyncEffect": true,
+    "wireTitle": true,
     "withTimeout": true,
     "withoutId": true
   }
