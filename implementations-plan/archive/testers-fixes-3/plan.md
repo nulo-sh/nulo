@@ -20,7 +20,7 @@ post_implementation_hardening: not scheduled
 - **Date:** 2026-10-17. **Status:** completed; delivered by the PR to `dev` that closes #629 (refs #583).
 - **Shipped:** a dApp transfer's direction and app chips on one line (P34-08 D), with OA-1's ship-now form A past the floor ("…" alone, the direction on two lines); the journal App row on the transaction page's shared rules (P34-09 A). Post-implementation fixes: the floor's ellipsis (D5) and a name's leading spaces (D6).
 - **Known limits:** #645 (past about $1B the chips run into the gap before the amount).
-- **Open items:** #646 (OA-1, owner decision).
+- **Open items:** #646 (OA-1, owner decision); #648 (found in the screenshots: the journal Method row runs into its label).
 - **Lessons:** none promoted: `lessons.md` sits at 8,163 of 8,192 B and nothing in it is superseded; the first-character ellipsis rule lives at its code and in [lessons/phase-1.md](lessons/phase-1.md).
 - **Seeds retired:** the `/goal` and `/loop` seeds below.
 - **Length:** over the light target, for the post-implementation findings (D5, D6) and their verdicts.
