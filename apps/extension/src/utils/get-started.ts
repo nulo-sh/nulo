@@ -25,6 +25,17 @@ const FLAGS = Object.keys(KEYS) as GetStartedFlag[]
 /** The storage keys of `profileId`'s flags, for a reader that listens for their changes. */
 export const getStartedKeys = (profileId: string): string[] => FLAGS.map((flag) => KEYS[flag](profileId))
 
+/** The flags a `storage.onChanged` event names for `profileId`, taken from the event's own new
+ *  values: on Firefox a read issued from the listener can still answer the old value. */
+export function changedGetStarted(profileId: string, changes: Readonly<Record<string, unknown>>): Partial<Record<GetStartedFlag, boolean>> {
+	const changed: Partial<Record<GetStartedFlag, boolean>> = {}
+	for (const flag of FLAGS) {
+		const key = KEYS[flag](profileId)
+		if (Object.hasOwn(changes, key)) changed[flag] = (changes[key] as { newValue?: unknown } | undefined)?.newValue === true
+	}
+	return changed
+}
+
 /** A flag counts only when stored as `true`: anything else in storage reads as not done. */
 export async function readGetStarted(profileId: string): Promise<GetStartedFlags> {
 	const stored = await storageLocalGet(getStartedKeys(profileId))

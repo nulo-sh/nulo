@@ -324,6 +324,7 @@
     "cappedBackupPick": true,
     "captureOwnWindow": true,
     "categoricalLabel": true,
+    "changedGetStarted": true,
     "clampDecimals": true,
     "classifyImportRow": true,
     "classifyPasskeyFailure": true,

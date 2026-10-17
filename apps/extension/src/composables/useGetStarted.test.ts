@@ -98,17 +98,40 @@ describe("useGetStarted", () => {
 		hook.dispose()
 	})
 
-	test("a change to one of its keys re-reads", async () => {
+	test("a change to one of its keys takes the event's value, with no read that could answer the old one", async () => {
 		const { hook } = mountHook("p1")
 		await flushPromises()
-		stored[KEY("PhraseSaved", "p1")] = true
+		const before = flagReads()
+		// Storage still answers the old value, as a read issued from the listener can on Firefox.
 		fire({ [KEY("PhraseSaved", "p1")]: true })
 		await flushPromises()
 		expect(hook.flags.value?.phraseSaved).toBe(true)
+		expect(flagReads()).toBe(before)
 		hook.dispose()
 	})
 
-	test("a change to another profile's key, or to another area, reads nothing", async () => {
+	test("a removed key reads as not done", async () => {
+		stored[KEY("Hidden", "p1")] = true
+		const { hook } = mountHook("p1")
+		await flushPromises()
+		fire({ [KEY("Hidden", "p1")]: undefined })
+		await flushPromises()
+		expect(hook.flags.value?.hidden).toBe(false)
+		hook.dispose()
+	})
+
+	test("a change while the first read is out survives that read's older answer", async () => {
+		holdReads = true
+		const { hook } = mountHook("p1")
+		await flushPromises()
+		fire({ [KEY("AztecOpened", "p1")]: true })
+		pendingReads[0].resolve()
+		await flushPromises()
+		expect(hook.flags.value).toEqual({ phraseSaved: false, backupSaved: false, aztecOpened: true, hidden: false })
+		hook.dispose()
+	})
+
+	test("a change to another profile's key, or to another area, changes nothing", async () => {
 		const { hook } = mountHook("p1")
 		await flushPromises()
 		const before = flagReads()
@@ -116,6 +139,7 @@ describe("useGetStarted", () => {
 		for (const l of [...listeners]) l({ [KEY("PhraseSaved", "p1")]: { newValue: true } }, "session")
 		await flushPromises()
 		expect(flagReads()).toBe(before)
+		expect(hook.flags.value?.phraseSaved).toBe(false)
 		hook.dispose()
 	})
 

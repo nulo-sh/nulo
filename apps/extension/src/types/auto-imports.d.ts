@@ -111,6 +111,7 @@ declare global {
   const cappedBackupPick: typeof import('../composables/useProfileImportFlow').cappedBackupPick
   const captureOwnWindow: typeof import('../utils/own-window').captureOwnWindow
   const categoricalLabel: typeof import('../utils/journal-state').categoricalLabel
+  const changedGetStarted: typeof import('../utils/get-started').changedGetStarted
   const clampDecimals: typeof import('../utils/amount').clampDecimals
   const classifyImportRow: typeof import('../utils/contact-import-rows').classifyImportRow
   const classifyPasskeyFailure: typeof import('../utils/passkey-copy').classifyPasskeyFailure
@@ -850,6 +851,7 @@ declare module 'vue' {
     readonly cappedBackupPick: UnwrapRef<typeof import('../composables/useProfileImportFlow')['cappedBackupPick']>
     readonly captureOwnWindow: UnwrapRef<typeof import('../utils/own-window')['captureOwnWindow']>
     readonly categoricalLabel: UnwrapRef<typeof import('../utils/journal-state')['categoricalLabel']>
+    readonly changedGetStarted: UnwrapRef<typeof import('../utils/get-started')['changedGetStarted']>
     readonly clampDecimals: UnwrapRef<typeof import('../utils/amount')['clampDecimals']>
     readonly classifyImportRow: UnwrapRef<typeof import('../utils/contact-import-rows')['classifyImportRow']>
     readonly classifyPasskeyFailure: UnwrapRef<typeof import('../utils/passkey-copy')['classifyPasskeyFailure']>

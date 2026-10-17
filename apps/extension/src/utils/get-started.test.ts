@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import {
+	changedGetStarted,
 	combineHoldings,
 	type GetStartedFlags,
 	type GetStartedInput,
@@ -61,6 +62,18 @@ describe("get started flags (storage)", () => {
 		expect(set).toHaveBeenCalledWith({ "nulo:ui:getStartedHidden@p1": true })
 		expect((await readGetStarted("p1")).hidden).toBe(true)
 		expect((await readGetStarted("p2")).hidden).toBe(false)
+	})
+
+	test("a change event's own values name the profile's flags; other keys and profiles are left out", () => {
+		const changes = {
+			"nulo:ui:getStartedAztecOpened@p1": { newValue: true, oldValue: undefined },
+			"nulo:ui:getStartedHidden@p1": { oldValue: true },
+			"nulo:ui:getStartedPhraseSaved@p1": { newValue: "true" },
+			"nulo:ui:getStartedBackupSaved@p2": { newValue: true },
+			"nulo:config": { newValue: "{}" },
+		}
+		expect(changedGetStarted("p1", changes)).toEqual({ aztecOpened: true, hidden: false, phraseSaved: false })
+		expect(changedGetStarted("p3", changes)).toEqual({})
 	})
 
 	test("a failed write resolves and leaves a debug line carrying the error", async () => {
