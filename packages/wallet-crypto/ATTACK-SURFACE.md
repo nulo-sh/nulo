@@ -40,7 +40,7 @@ exists at all:
 | imported-key rows | an external account's Grumpkin signing key | AES-256-GCM under `HKDF(dek, chainId ‖ address)` |
 | `storage.session` bearer | `master ‖ dek` **and** the random token that unwraps it | nothing, jointly — see below |
 | password full backup file | the master, the entropy, and a key made for this backup alone, under which its imported-key rows open (never the profile's DEK) | the profile's password at export time (a later password change does not touch the file) |
-| passkey full backup file | the credential id, the profile's own DEK sealed under the passkey's wrap key, the imported-key rows | the keys open only with the passkey; without the optional password, the file shows accounts, contacts and activity |
+| passkey full backup file | the credential id, the profile's own DEK sealed under the passkey's wrap key, the imported-key rows | the keys open only with the passkey; without the optional password, everything but the keys is readable |
 | passkey full backup's `backup-mac` | HMAC-SHA256 over the body's checksum | keyed by the passkey's PRF (`nulo:backup-mac:v1`); a body restores only under it |
 
 ## Cost to invert each one
