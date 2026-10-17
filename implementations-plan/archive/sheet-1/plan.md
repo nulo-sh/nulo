@@ -26,7 +26,7 @@ status: closed (delivered by the PR from `worktree-sheet-1`, with this close-out
 - **Known limits:** #686.
 - **Open items:** #656 (a double-click's second press can answer the Confirm its first press opened; OA-3, waits on the owner). OA-1, OA-2 and OA-4 shipped their "now" forms and go to the owner's next decision page through the orchestrator; any change they bring is new work.
 - **Dropped, rejected, superseded:** the double-click guard (D11, OA-3: not shipped, tracked in #656); a sheet primitive in `@nulo/design` and new sheet tokens (outline B, D1, D2: rejected); `slideopacity` for the sheet (D4: rejected for its curve).
-- **Seeds:** the `/goal` and `/loop` seeds below are retired.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # sheet-1: the popup sheet's new look, the Full-height setting retired
 
