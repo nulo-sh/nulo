@@ -19,10 +19,10 @@ import { purgeMalformedRows } from "@/wallet/services/purge-rows"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { EntityStorage } from "@/wallet/storage"
 import { Lock } from "@/wallet/utils"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { EventHandler, isLoopbackHost } from "@nulo/wallet-core/utils"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
-import { walletChainId } from "@/utils/chain-ids"
+import { LOCAL_L1_CHAIN_ID, walletChainId } from "@/utils/chain-ids"
 import { hasNetworkCause } from "@/wallet/services/stale-network/classify"
 import { quarantinedBy, StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
 import { ERR_NOT_RESETTABLE, ERR_STALE_CHANGED, type ProbedEndpoint } from "@/wallet/services/stale-network/types"
@@ -83,10 +83,29 @@ function sameLocalNetworkUrl(a: string, b: string): boolean {
 	}
 }
 
-/** A node whose composite chain id the wallet reads as 0: the caller says the network is local, or
- *  the URL is the Local Network seed's. */
+/** Whether `rpcUrl`'s host is this machine (`isLoopbackHost`); a URL that does not parse is not. */
+function isLoopbackRpcUrl(rpcUrl: string): boolean {
+	try {
+		return isLoopbackHost(new URL(rpcUrl).hostname)
+	} catch {
+		return false
+	}
+}
+
+/** A node whose composite chain id the wallet reads as 0, the local development chain: a loopback
+ *  node the caller says is local, or one at the Local Network seed's URL. */
 function isLocalNetworkTarget(rpcUrl: string, kindHint: ChainKind | undefined): boolean {
-	return kindHint === "local" || sameLocalNetworkUrl(rpcUrl, LOCAL_NETWORK_RPC_URL)
+	return isLoopbackRpcUrl(rpcUrl) && (kindHint === "local" || sameLocalNetworkUrl(rpcUrl, LOCAL_NETWORK_RPC_URL))
+}
+
+/** The wallet chain id of the node at `rpcUrl` whose answer computes to `composite`. 0 belongs to the
+ *  local development chain alone, so a composite of 0 from any other node is refused. */
+function nodeChainId(rpcUrl: string, kindHint: ChainKind | undefined, composite: number): number {
+	if (isLocalNetworkTarget(rpcUrl, kindHint)) return 0
+	if (composite === 0) {
+		throw new Error(`${ERR_ENDPOINT_CHAIN_MISMATCH}: This RPC reports chain 0, which only the Local Network on this machine serves.`)
+	}
+	return composite
 }
 
 /** Refuses a node that is not `network`'s chain. The XOR composite alone is collision-prone: a
@@ -398,6 +417,9 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		if (seeded !== undefined && network.l1ChainId !== seeded) {
 			throw new Error(`Seeded network L1 identity mismatch: stored ${network.l1ChainId}, expected ${seeded}`)
 		}
+		if (network.chainId === 0 && network.l1ChainId !== LOCAL_L1_CHAIN_ID) {
+			throw new Error(`Chain 0 is the local development chain: stored l1ChainId ${network.l1ChainId}, expected ${LOCAL_L1_CHAIN_ID}`)
+		}
 		if (!Number.isSafeInteger(network.l1ChainId) || network.l1ChainId < 0 || network.l1ChainId > 0xffffffff) {
 			throw new Error(`Non-canonical stored l1ChainId: ${network.l1ChainId}`)
 		}
@@ -666,9 +688,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		const [, , rpcUrl] = validateParams(NetworkMethodSchemas.addEndpoint.params, [networkId, label, rawRpcUrl], "addEndpoint")
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
-		// Peek the network's kind unlocked so the chainId probe can short-circuit
-		// for `kind === "local"` regardless of how the URL was edited. The lock-
-		// guarded re-read below handles the (rare) deletion race.
+		// Peek the network's kind unlocked so a loopback endpoint of a `local` row reads as chain 0
+		// whatever its URL. The lock-guarded re-read below handles the (rare) deletion race.
 		const peek = requireOwnedRow(await this.storage.get(networkId), profile.id)
 		const probed = await this._probeChainIdentity(rpcUrl, peek.kind)
 		return await this.lock.withLock(async () => {
@@ -704,8 +725,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
 		const normalized = normalizeRpcUrl(rpcUrl)
-		// Peek the network's kind so the chainId probe can short-circuit for
-		// `kind === "local"` regardless of how the URL was edited.
+		// Peek the network's kind so a loopback endpoint of a `local` row reads as chain 0 whatever its URL.
 		const peek = requireOwnedRow(await this.storage.get(networkId), profile.id)
 		// Probe outside the lock even for an unchanged URL: the node's chain identity may have drifted.
 		const probed = await this._probeChainIdentity(rpcUrl, peek.kind)
@@ -763,7 +783,11 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		const profile = await requireActiveProfile(this.profileService)
 		return await this.lock.withLock(async () => {
 			const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
-			if (!network.endpoints.some((e) => e.id === endpointId)) throw new Error("Invalid endpoint id")
+			const endpoint = network.endpoints.find((e) => e.id === endpointId)
+			if (!endpoint) throw new Error("Invalid endpoint id")
+			if (network.chainId === 0 && !isLocalNetworkTarget(endpoint.rpcUrl, network.kind)) {
+				throw new Error(`${ERR_ENDPOINT_CHAIN_MISMATCH}: Only a node on this machine can serve chain 0.`)
+			}
 			if (network.primaryEndpointId === endpointId) return network
 			network.primaryEndpointId = endpointId
 			await this.storage.set(network.id, network)
@@ -801,8 +825,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		if (!primary) return NodeStatus.Inactive
 		try {
 			const probed = await this.nodeFactory.probeChainId(primary.rpcUrl, timeoutMs)
-			const effective = isLocalNetworkTarget(primary.rpcUrl, network.kind) ? 0 : probed
-			if (effective !== network.chainId) return NodeStatus.InvalidChain
+			if (nodeChainId(primary.rpcUrl, network.kind, probed) !== network.chainId) return NodeStatus.InvalidChain
 			return NodeStatus.Active
 		} catch {
 			return NodeStatus.Inactive
@@ -854,8 +877,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	 * is no URL to pin to.)
 	 *
 	 * Failures are reported via `reportEndpointFailure(url)`; after 3
-	 * consecutive failures the cache entry is evicted and the next poll
-	 * rebuilds the same URL.
+	 * reported failures, which a success does not reset, the cache entry is
+	 * evicted and the next poll rebuilds the same URL.
 	 */
 	public async getNodeForUrl(url: string): Promise<AztecNode> {
 		await this.ensureInitialized()
@@ -912,8 +935,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		timeoutMs: number,
 	): Promise<{ chainId: number; l1ChainId: number }> {
 		const info = await this.nodeFactory.createSingleAttemptNode(rpcUrl, timeoutMs).getNodeInfo()
-		if (isLocalNetworkTarget(rpcUrl, kind)) return { chainId: 0, l1ChainId: info.l1ChainId }
-		return { chainId: walletChainId(info.l1ChainId, info.rollupVersion), l1ChainId: info.l1ChainId }
+		return { chainId: nodeChainId(rpcUrl, kind, walletChainId(info.l1ChainId, info.rollupVersion)), l1ChainId: info.l1ChainId }
 	}
 
 	/**
@@ -1125,6 +1147,9 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		kind: ChainKind,
 		endpointLabel?: string,
 	): Promise<Network> {
+		if (chainId === 0 && (l1ChainId !== LOCAL_L1_CHAIN_ID || !isLoopbackRpcUrl(rpcUrl))) {
+			throw new Error(`${ERR_ENDPOINT_CHAIN_MISMATCH}: Chain 0 is the Local Network: L1 ${LOCAL_L1_CHAIN_ID} on this machine.`)
+		}
 		const networkId = await this._freshStored8()
 		const endpointId = `${networkId}-ep0`
 		const endpoint: NetworkEndpoint = {
@@ -1154,7 +1179,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	}
 
 	/** A caller that knows the network is local passes `kindHint`, so a Local Network endpoint
-	 *  edited away from the seed URL still reads as chain 0. */
+	 *  edited to another loopback URL still reads as chain 0. */
 	private async _getChainId(rpcUrl: string, kindHint?: ChainKind): Promise<number> {
 		return (await this._probeChainIdentity(rpcUrl, kindHint)).chainId
 	}
@@ -1163,16 +1188,14 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	 *  (key derivation). The local carve-outs zero only the COMPOSITE — the probed l1ChainId is
 	 *  reported as-is, because derivation must never receive a synthetic 0. */
 	private async _probeChainIdentity(rpcUrl: string, kindHint?: ChainKind): Promise<{ chainId: number; l1ChainId: number }> {
+		let info: Awaited<ReturnType<AztecNode["getNodeInfo"]>>
 		try {
-			const rpc = this.nodeFactory.createNode(rpcUrl)
-			const info = await rpc.getNodeInfo()
-			const l1ChainId = info.l1ChainId
-			if (isLocalNetworkTarget(rpcUrl, kindHint)) return { chainId: 0, l1ChainId }
-			return { chainId: walletChainId(info.l1ChainId, info.rollupVersion), l1ChainId }
+			info = await this.nodeFactory.createNode(rpcUrl).getNodeInfo()
 		} catch (error) {
 			this.logError("Failed to fetch node info", error)
 			throw new Error("Failed to fetch node info")
 		}
+		return { chainId: nodeChainId(rpcUrl, kindHint, walletChainId(info.l1ChainId, info.rollupVersion)), l1ChainId: info.l1ChainId }
 	}
 
 	private async _readActive(profileId: string): Promise<string | undefined> {
