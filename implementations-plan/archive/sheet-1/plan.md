@@ -8,24 +8,25 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev 1b93cbfa
-issues: "#590 (the sheet part: this arc; Closes #590 only once icons-d2-1's last PR is on dev, else Refs #590)"
+issues: "#590 (the sheet part: this arc; Closes #590 only once icons-d2-1's last PR is on dev, else Refs #590); #656 (closed by the page-39 guard)"
 status: closed (delivered by the PR from `worktree-sheet-1`, with this close-out)
 ---
 
 ## Outcome
 
-- **Date:** 2026-10-17. Planned and implemented the same day; one arc.
+- **Date:** 2026-10-17. Planned and implemented the same day; one arc, with decision page 39's four picks folded into its PR before the merge (Phase 4).
 - **Status:** closed with its delivery: the PR from `worktree-sheet-1` (closes #590; its icon part landed in #641 and #655), whose final commits are this close-out; merging is the owner's call.
 - **Shipped:**
-  - Every `PopupCard` sheet sits at its content height, scrolls inside its card when taller than the frame, and draws no bar: the 2 px accent edge, 16 px of top padding and a 6 px offset ledge (P33-07 E). The light theme's `Popup` scrim is the page background at 70 %, and its card carries the 1 px outline line under the ledge (P33-09 A, OA-1 "both"). The sheet fades in where it rests (`.sheet-*`, today's curve and timing).
+  - Every `PopupCard` sheet sits at its content height, scrolls inside its card when taller than the frame, and draws no bar: the 2 px accent edge, 16 px of top padding and a 6 px offset ledge (P33-07 E). The light theme's scrim is the page background at 70 %, now the light value of `--scrim-popup` (P33-09 A, D13), and its card carries the ledge alone: P39-01 B retired the 1 px line. The dApp windows' cancelled overlay reads the same token, so it takes the light scrim too; the Terms sheet keeps its near-black one in both themes (P39-02 C). The sheet fades in where it rests (`.sheet-*`, today's curve and timing).
+  - The double-click guard (P39-03 B, D14): inside a sheet that opened after a multi-click's first press, that multi-click's later clicks do nothing; a single press, a key, a multi-click begun inside the sheet and a second press slower than the platform's double-click interval pass. `Popup.test.ts` pins the rule; `contacts.test.ts` proves it on both engines with a real double-click whose second press lands on the delete Confirm's answer (D15). Closes #656.
   - The Full-height popups setting is gone: its config key, composable, Display row and search row (P33-08 A). A stored value is dropped by the next config write (`store.test.ts`); an old backup's row is skipped at restore.
-  - The 500-row import review proves on both engines that a content-height sheet keeps its answers on screen while its list scrolls. Before and after captures in [screenshots/](screenshots/).
-- **Review loop:** the plan took a dual audit and a final Codex pass; the implementation converged at Codex round 2 beside an Opus review (§ [Audit verdicts](#audit-verdicts)).
-- **Gates at the final head:** at the merged head (dev 093fa10d with this arc): `audit:vue` (typecheck, test, lint, build), `test:all` and `check:plans` exit 0; the whole smoke suite at retry 0 on Chrome (57 files, 259 tests) and on Firefox (60 files, 259 tests); network `snack-placement`, `send-picker`, `popup-escape-layered`, `send-amount-exact` and `stale-network-reset` on Chrome, and `popup-escape-layered` and `snack-placement` on Firefox, at retry 0. Each phase's gate is in [lessons/](lessons/).
+  - The 500-row import review proves on both engines that a content-height sheet keeps its answers on screen while its list scrolls. Before and after captures in [screenshots/](screenshots/); page 39's in [screenshots/p39/](screenshots/p39/).
+- **Review loop:** the plan took a dual audit and a final Codex pass; the implementation converged at Codex round 2 beside an Opus review; the page-39 fold-in took a Codex design consult, then converged at Codex round 2 beside an Opus review (§ [Audit verdicts](#audit-verdicts)).
+- **Gates at the final head:** after Phase 4, at the merged head (dev 356004ce with this arc): `audit:vue` (typecheck, test, lint, build), `test:all`, `test:ci-gating` and `check:plans` exit 0 (`test:all` on its second run: the first timed out once in `import.test.ts`, untouched here, which passed 3 of 3 alone). Phase 4's e2e at eb228334, before dev's #712 and #713, which touch none of these files: the arc's nine smoke files at retry 0 on Chrome and Firefox (9 files, 44 tests each), the reproducer red on both with the guard removed, and `network/session-tabClose` on Chrome at retry 0. Phase 3's runs, at dev 093fa10d: the whole smoke suite at retry 0 on Chrome (57 files, 259 tests) and on Firefox (60 files, 259 tests); network `snack-placement`, `send-picker`, `popup-escape-layered`, `send-amount-exact` and `stale-network-reset` on Chrome, and `popup-escape-layered` and `snack-placement` on Firefox, at retry 0. Each phase's gate is in [lessons/](lessons/).
 - **Lessons:** none promoted. The arc's gotchas are local (a search test that found the retired row by a word, not its id; stale 40 px wording in two e2e docs) and sit in `lessons/`; `lessons.md` is at its budget.
-- **Known limits:** #686.
-- **Open items:** #656 (a double-click's second press can answer the Confirm its first press opened; OA-3, waits on the owner). OA-1, OA-2 and OA-4 shipped their "now" forms and go to the owner's next decision page through the orchestrator; any change they bring is new work.
-- **Dropped, rejected, superseded:** the double-click guard (D11, OA-3: not shipped, tracked in #656); a sheet primitive in `@nulo/design` and new sheet tokens (outline B, D1, D2: rejected); `slideopacity` for the sheet (D4: rejected for its curve).
+- **Known limits:** #686; #715 (a double-click that dismisses a top sheet can act on a taller sheet beneath, outside the signed rule).
+- **Open items:** none. OA-1 to OA-4 were answered on decision page 39 ([OWNER-ASKS.md](OWNER-ASKS.md)) and ship in this PR; #656 closes with the guard.
+- **Dropped, rejected, superseded:** the 1 px line above the light card (P39-01 B supersedes that part of P33-09 A); D2's component rule for the light scrim (superseded by a light `--scrim-popup`, D13); D11's "designed and left out" (superseded by D14); a sheet primitive in `@nulo/design` and new sheet tokens (outline B, D1: rejected); an 800 ms arming and a Confirm-only guard (D11: rejected); `slideopacity` for the sheet (D4: rejected for its curve).
 - **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # sheet-1: the popup sheet's new look, the Full-height setting retired
@@ -37,7 +38,7 @@ Decision page 33 (2026-10-17) signed three #590 picks that supersede page 30's: 
 - **For whom**: a person on Chrome or Firefox who opens any sheet (Receive, Select token, a Confirm, a form, the Send review) in the toolbar popup, the side panel, an own window or the onboarding tab, in either theme; the maintainer who next touches `Popup`.
 - **Excellent looks like**:
   1. Every sheet sits at its content height on its frame's bottom edge, with no bar, the 2 px accent edge and the 6 px ledge above it. A sheet taller than the frame scrolls inside its card, and its controls stay reachable; nothing is clipped.
-  2. The light theme's scrim is the page background at 70 % with the 1 px line; the dark theme's is today's near-black. The PR's screenshots match the page 33 drawings (`p33-sheet-e-*`, `p33-scrim-a-*`).
+  2. The light theme's scrim is the page background at 70 %, under the ledge alone (P39-01 B retired the 1 px line); the dark theme's is today's near-black. The PR's screenshots match the page 33 drawings (`p33-sheet-e-*`, `p33-scrim-a-*`).
   3. The sheet appears in place: today's fade, on today's curve, without the 40 px rise. Escape, the outside tap, the trap and focus return behave exactly as today.
   4. No trace of the setting is left: no row, no search hit, no config key, no composable, no test of it. An install or a backup that still holds the key loads and imports as before.
 - **Good enough**: the four asks ship in their "now" forms. Overlays that are not `Popup` keep today's look.
@@ -49,22 +50,30 @@ Quoted from #590's Decision block (decision page 33, 2026-10-17):
 - **P33-08 = A**: *"Remove it: every sheet sits at its content height."*
 - **P33-09 = A**: *"The light theme gets its own scrim: the page background at 70% plus a 1 px line above the card."*
 
+Decision page 39 (signed 2026-10-17 19:03Z) answered OA-1 to OA-4 ([OWNER-ASKS.md](OWNER-ASKS.md)):
+- **P39-01 = B**: *"The ledge alone; it already draws the edge between the white card and the light wash."* The 1 px line goes; this supersedes the line part of P33-09 A, whose 70 % scrim stays.
+- **P39-02 = C**: *"The dApp window's card takes the light scrim; the Terms sheet keeps its near-black one, since it is a blocking wall and the light wash nearly erases its edge."*
+- **P39-03 = B**: *"The guard: inside a sheet that opened after the first press, a double-click's later presses do nothing; a slower second press still passes."* Chosen by the orchestrator under the owner's delegation: *"To be honest, I don't know what's the common pattern, so choose yourself. 0.8s sounds like a lot to be honest."*
+- **P39-04 = A**: *"Accept all four as content height makes them."*
+
 Surfaces:
-- **Every `PopupCard` sheet** (13 popups, `FormPopup` and its 11 forms, `SendReviewSheet`, `ImportContactsPopup`; recon § Popup inventory): content height in every frame, including the tall ones where the setting was forced on (the side panel, the 380×660 own windows, the onboarding tab, where a sheet spans the tab's width); no bar; the card's top padding 16 px (today 27 px of handle zone), as drawn; the ledge.
-- **Consequences of content height the drawings do not show** (OA-4; each ships as content height makes it): a sheet whose content changes height moves its top edge (Select token while a search filters); a snack can cover a sheet's last row where the sheet has no bottom action row (Accounts, Select token); a taller sheet under a shorter one shows above it through the top scrim; a tall frame shows more scrim above a short sheet.
-- **The `Popup` scrim** in light: the page background at 70 %. `StaleNetworkConfirm`, a `Popup` with its own centred card, gets it too, and the in-place fade, but not the ledge or the line.
+- **Every `PopupCard` sheet** (13 popups, `FormPopup` and its 11 forms, `SendReviewSheet`, `ImportContactsPopup`; recon § Popup inventory): content height in every frame, including the tall ones where the setting was forced on (the side panel, the 380×660 own windows, the onboarding tab, where a sheet spans the tab's width); no bar; the card's top padding 16 px (today 27 px of handle zone), as drawn; the ledge, and in light no line above it (P39-01).
+- **Consequences of content height the drawings do not show** (OA-4, accepted as P39-04 A): a sheet whose content changes height moves its top edge (Select token while a search filters); a snack can cover a sheet's last row where the sheet has no bottom action row (Accounts, Select token); a taller sheet under a shorter one shows above it through the top scrim; a tall frame shows more scrim above a short sheet.
+- **The `Popup` scrim** in light: the page background at 70 %. `StaleNetworkConfirm`, a `Popup` with its own centred card, gets it too, and the in-place fade, but not the ledge.
+- **The dApp windows' cancelled overlay** (`DappCancelledOverlay`, in the capabilities, connect, execute and fee windows) in light: the same scrim, without a line (P39-02). The Terms sheet keeps its near-black scrim in both themes; it covers the whole 600 px popup and the 660 px own window, so its scrim shows only in a taller frame such as the side panel.
+- **How a click reaches a sheet** (P39-03): the second and later clicks of a double-click whose first press came before the sheet opened do nothing inside it, its close area included. Nothing is drawn.
 - **The enter and leave motion**: today's opacity fade and timing; the 40 px rise goes.
 - **Settings → Display**: the "Full-height popups" row goes; Settings search no longer finds it.
-- **Not changed**: any popup's content, copy or rows; how a click or a key reaches a sheet (the double-click guard is OA-3, not in this arc); `DappCancelledOverlay`, the Terms sheet, the passkey dialog, the barriers, dropdowns, popovers and tooltips (OA-2); the keyboard rules (CLAUDE.md § Keyboard and focus order); type roles.
+- **Not changed**: any popup's content, copy or rows; how a key, a single press or a multi-click begun inside a sheet reaches it; the Terms sheet, the passkey dialog, the barriers, dropdowns, popovers and tooltips; the keyboard rules (CLAUDE.md § Keyboard and focus order); type roles.
 - The PR body quotes the three picks and carries light and dark screenshots, before and after, of the captures listed under Arc 1.
 
 ## Architecture & Implementation
 
 **Shape.** The sheet stays in `apps/extension/src/components/Popup/`; two SFCs change in place, one transition class set is renamed in `@nulo/design`'s `base.css`, and the setting is deleted end to end. No new component, token, prop or config.
 
-- **`PopupCard.vue`** loses `useFullscreenPopupSetting`, `expanded`, `fills`, `toggle`, the `large` and `fit` props, the `flex` binding, the handle zone and the bar with their CSS. It keeps `displaceIdx` and `.displace`; its slot Flex gains `data-testid="popup-card-body"`. The card is then `flex: 0 1 auto` with `overflow: auto`: it takes its content height and, when the content is taller, shrinks to the frame minus `Popup`'s 40 px `.close_area` floor and scrolls (the cap and scroll exist today; recon). `.wrapper` gains `padding-top: 16px` and `box-shadow: -6px -6px 0 0 color-mix(in srgb, var(--nulo-accent) 30%, transparent)`, the drawn dark ledge (`rgba(248,241,231,.3)`); a `:global([theme="light"]) .wrapper` rule sets `box-shadow: 0 -1px 0 0 var(--nulo-outline), -6px -6px 0 0 var(--nulo-outline)` (the drawn light ledge `#c9c5bd` under the 1 px line, OA-1's "now" form).
+- **`PopupCard.vue`** loses `useFullscreenPopupSetting`, `expanded`, `fills`, `toggle`, the `large` and `fit` props, the `flex` binding, the handle zone and the bar with their CSS. It keeps `displaceIdx` and `.displace`; its slot Flex gains `data-testid="popup-card-body"`. The card is then `flex: 0 1 auto` with `overflow: auto`: it takes its content height and, when the content is taller, shrinks to the frame minus `Popup`'s 40 px `.close_area` floor and scrolls (the cap and scroll exist today; recon). `.wrapper` gains `padding-top: 16px` and `box-shadow: -6px -6px 0 0 color-mix(in srgb, var(--nulo-accent) 30%, transparent)`, the drawn dark ledge (`rgba(248,241,231,.3)`); a `:global([theme="light"]) .wrapper` rule sets `box-shadow: 0 -1px 0 0 var(--nulo-outline), -6px -6px 0 0 var(--nulo-outline)` (the drawn light ledge `#c9c5bd` under the 1 px line, OA-1's "now" form). Phase 4 cut it to `box-shadow: -6px -6px 0 0 var(--nulo-outline)`, the ledge alone (P39-01 B).
 - **Ledge geometry.** The shadow box is the card moved 6 px left and up. Outside the card it shows only as a 6 px band above the accent edge, from the frame's left edge to 6 px short of its right edge; its left overhang is clipped by the popup shell's `overflow: clip` (`popup/app.vue:584-594`) or falls off the onboarding viewport, as in the drawing. A box shadow paints outside the border box, so the card's `overflow: auto` does not clip it.
-- **`Popup.vue`**: the wrapper's `<Transition name="slide" appear>` becomes `name="sheet"`; the scrim keeps `slideopacity`. A `:global([theme="light"]) .dark_bg` rule sets `background: color-mix(in srgb, var(--app-bg) 70%, transparent)` (`rgba(245,245,247,.7)`); the dark rule keeps `var(--scrim-popup)`. Trap, Escape, `vSnackSheet` and z-order are untouched.
+- **`Popup.vue`**: the wrapper's `<Transition name="slide" appear>` becomes `name="sheet"`; the scrim keeps `slideopacity`. A `:global([theme="light"]) .dark_bg` rule sets `background: color-mix(in srgb, var(--app-bg) 70%, transparent)` (`rgba(245,245,247,.7)`); the dark rule keeps `var(--scrim-popup)`. Phase 4 moved that value into `--scrim-popup`'s light value and dropped the rule (D13), and gave the wrapper the double-click guard (D14). Trap, Escape, `vSnackSheet` and z-order are untouched.
 - **`packages/design/src/base.css`**: `.slide-*` (lines 266-278) becomes `.sheet-*` without the `transform` line, keeping `var(--bezier)` and 0.3 s / 0.15 s, so the fade reads as today's (D4); restamp the hash in `base.css.test.ts`. The comment at `base.css:78` stays true.
 - **The setting retires** (recon § retirement map): `showPopupFullscreen` leaves `ConfigSchema` and `RESTORABLE_CONFIG_KEYS`; `fullscreenPopupSetting.ts` and its test go; `display.vue` loses its ref and row; `settings-search.ts` loses `display-full-height`; the auto-import files are regenerated by the extension build. A stored value is ignored and dropped by the loader's next write; an old backup's row is skipped at restore with the existing warning (recon, both traced). No migration: pre-production.
 
@@ -101,7 +110,7 @@ Surfaces:
   - *After this arc, demonstrated*: the Confirm's answer sits at 536-576; the delete icon scrolled to y 556, and a 120 ms double-click deleted the contact. The exposed rows move from the list's upper middle to its bottom edge. Rows with an icon that opens a Confirm (tokens, FPCs, senders, connected apps) share the mechanism; they were not measured. "New account" and Create now share 1 px, and no gap created an account. A double-click on Home's Receive lands on its QR code both ways.
   - *After this arc, newly exposed, plausible but unverified*: a passkey profile's Export full backup. Download Backup is the last CTA of the pinned bottom row (`export/full.vue:786-793`); it opens the plain-download Confirm (`:448-462`, passkey only, `:164`), whose "Download anyway" fills the right half of the same band. Today that answer sits in the upper half, away from the button. Consequence: a plain backup that "will show your accounts, contacts and activity to anyone who opens it" is written to the person's own disk without a deliberate answer. The passkey e2e case is skipped on CI, so no reproducer exists.
   - *Invariant broken*: a Confirm is answered by a deliberate press. No attacker controls the input.
-  - *Disposition*: OA-3. The fix is designed (D11). It changes how a click reaches a sheet, a behaviour beyond the picks, and the hazard predates this arc. The arc ships without it. Phase 0 files the issue that tracks it.
+  - *Disposition*: fixed. Arc 1 shipped without the guard (OA-3) and Phase 0 filed #656; decision page 39 picked it (P39-03 B), and Phase 4 ships it (D14) with the Contacts reproducer (D15), closing #656. The guard covers every `Popup` sheet, the passkey Export Confirm included. It does not cover, by the rule's own terms: a second press slower than the platform's double-click interval; a touch or pen activation the browser reports as a fresh `detail` 1; a sequence begun on a toast or a covering sheet after this sheet has seen a press of its own, such as a double-click that dismisses a top sheet and lands on a taller sheet beneath (#715, a closed known limit); a dropdown menu, which teleports outside the sheet's DOM.
 - **Logging.** The restore path's existing `logWarn` names a skipped key from a backup (`service.ts:70`): file-supplied text at `warn` in the user's own log, from a file the user chose. This plan adds no log line.
 - **CSP, supply chain, crypto**: `color-mix` and `box-shadow` are plain CSS; no dependency, no CSP string, no key material.
 
@@ -126,27 +135,30 @@ Surfaces:
 - I3. type-scale-1 does not edit `base.css`; if it lands first, the hash is restamped after the merge.
 
 **Asks** (each in OWNER-ASKS.md; the arc ships its "now" form)
-- A1. OA-1: the ledge and the 1 px line together in light. Now: both.
-- A2. OA-2: overlays that are not `Popup` keep today's scrim in light. Now: unchanged.
-- A3. OA-3: the double-click guard (D11). Now: not shipped; S1's issue tracks it.
-- A4. OA-4: the consequences of content height not drawn on page 33. Now: as content height makes them.
+- A1. OA-1: the ledge and the 1 px line together in light. Shipped: both. Answered P39-01 B: the ledge alone.
+- A2. OA-2: overlays that are not `Popup` keep today's scrim in light. Shipped: unchanged. Answered P39-02 C: the dApp overlay takes the light scrim, the Terms sheet keeps its own.
+- A3. OA-3: the double-click guard (D11). Shipped: not at first; S1's issue tracked it. Answered P39-03 B: the guard (D14).
+- A4. OA-4: the consequences of content height not drawn on page 33. Shipped and answered P39-04 A: as content height makes them.
 
 ## Decision ledger
 
 | # | Decision | Rejected alternative and why |
 |---|---|---|
 | D1 | `Popup` and `PopupCard` stay extension-local | A sheet primitive in `@nulo/design` (outline B): `Popup` reads `managers`, `vSnackSheet`, `focus-trap` and the `#popup`/`#toast` roots; no other app has a sheet; a `*Base`, a resolver entry and a split visual unit for one caller. Both auditors: A |
-| D2 | Per-theme look by `:global([theme="light"])` module rules over existing tokens with `color-mix` | Two new contract tokens and a light `--scrim-popup`: contract, generator, `base.css`, drift and contrast tests for three values one component reads, and the light scrim would restyle `DappCancelledOverlay` (F5). Both auditors: A |
+| D2 | Per-theme look by `:global([theme="light"])` module rules over existing tokens with `color-mix` | Two new contract tokens and a light `--scrim-popup`: contract, generator, `base.css`, drift and contrast tests for three values one component reads, and the light scrim would restyle `DappCancelledOverlay` (F5). Both auditors: A. For the scrim, superseded by D13 once P39-02 signed the overlay |
 | D3 | Content height by deleting the `flex: 10` branch, `large`, `fit` and the handle; `padding-top: 16px` as drawn | Keeping `fit` or the handle as an expander: the bar is gone (P33-07) and the setting with it (P33-08) |
 | D4 | `.slide-*` renamed `.sheet-*` without its transform, keeping its curve and timing | `slideopacity` (the first draft): its `ease` curve leaves the card about 57 % opaque at 100 ms against today's 91 % (F8), a motion change nobody signed; `slide` kept without its transform: a name that no longer says what it does |
 | D5 | The key is deleted; no migration; one store test pins that a stored key outside the schema is ignored and dropped | A migration (pre-production rule); the retired name in the test (the gate's grep could never pass) |
 | D6 | `settings-routes.test.ts` keeps its four proofs with two queries: one only the side panel row answers (Chrome: that row; Firefox: `settings-search-empty`), then one a Display row answers on both, clicked and checked for its outline | One query: no query finds the side panel row beside another (recon) |
 | D7 | `PopupCard.test.ts`: no grow and no handle beside a rendered slot; displace kept | CSS values in jsdom, which applies no module CSS |
-| D8 | No e2e for the look: screenshots prove it, unit tests the content height, two existing e2e cases the scroll. One e2e addition: the 500-row list assertion (nested flex in a real engine, which jsdom lacks; under 0.1 s on an existing case; measured in Phase 3) | A computed-style pin of the ledge and scrim: it repeats the screenshot review and pins values the tokens own; an S1 reproducer: S1 predates this arc and stays open (OA-3); its reproducer, the Contacts double-click, belongs with the guard |
+| D8 | No e2e for the look: screenshots prove it, unit tests the content height, two existing e2e cases the scroll. One e2e addition: the 500-row list assertion (nested flex in a real engine, which jsdom lacks; under 0.1 s on an existing case; measured in Phase 3) | A computed-style pin of the ledge and scrim: it repeats the screenshot review and pins values the tokens own; an S1 reproducer: S1 predates this arc and stays open (OA-3); its reproducer, the Contacts double-click, belongs with the guard, and ships with it (D15) |
 | D9 | `Closes #590` only if icons-d2-1's last PR is on `dev` when this PR opens; otherwise `Refs #590`, and the body says why | Closing with the icon part open |
 | D10 | Screenshots by `shotSend` in specs that already open each sheet; "before" at the base SHA | A capture spec copied in and deleted; a 360×900 capture: no spec opens a sheet in a frame over 600 px, so it would be that copied spec |
-| D11 | The guard is designed and left out (OA-3). The design: `Popup.vue`'s wrapper gets `@mousedown.capture`, which records a press with `detail === 1` inside the open sheet. `@click.capture` stops and prevents a click with `detail > 1` when no such press came since the sheet opened. A keyboard activation (`detail` 0) and a multi-click begun inside the sheet pass. | Shipping it now: a behaviour a person can notice, beyond the picks (Codex round 1), fixing a hazard that predates the restyle (F11). A Confirm-only guard: misses the close area and forms. Refusing every `detail > 1` inside a sheet: also refuses a quick double toggle begun inside it. An 800 ms arming (outline B): a timer and a visibly disabled control on every sheet |
+| D11 | Superseded by D14 (P39-03 B). The guard is designed and left out (OA-3). The design: `Popup.vue`'s wrapper gets `@mousedown.capture`, which records a press with `detail === 1` inside the open sheet. `@click.capture` stops and prevents a click with `detail > 1` when no such press came since the sheet opened. A keyboard activation (`detail` 0) and a multi-click begun inside the sheet pass. | Shipping it now: a behaviour a person can notice, beyond the picks (Codex round 1), fixing a hazard that predates the restyle (F11). A Confirm-only guard: misses the close area and forms. Refusing every `detail > 1` inside a sheet: also refuses a quick double toggle begun inside it. An 800 ms arming (outline B): a timer and a visibly disabled control on every sheet |
 | D12 | Deviations found in implementation, the tree winning: `pages/settings/index.test.ts` also searched "full" and was re-pointed to "motion"; the stale 40 px wording in `helpers/legal-drivers.ts` and the e2e-testing skill was rewritten; `settings-display` is captured in the redirect case of `settings-routes.test.ts`; the review diff's base is dev 13d5f8d0, merged in before Phase 0, since `1b93cbfa..HEAD` carries #650 and #655; the Codex loop ran over the finished code while Phase 3's suites ran, to resume if they forced a change | Each the smallest change that keeps a test or a doc true |
+| D13 | The light scrim is the light value of `--scrim-popup`, `color-mix(in srgb, var(--app-bg) 70%, transparent)` in `base.css`'s `[theme="light"]` block; `Popup`'s light rule goes and `DappCancelledOverlay` reads the token unchanged. `--scrim-sheet`, the Terms sheet's, stays near-black in both themes (P39-02 C) | A second component rule in `DappCancelledOverlay` mirroring `Popup`'s: two copies of one value. D2's objection, a token that restyles the overlay unsigned, fell with P39-02. Codex consult: the token, high confidence; the contrast parser reads the value and the drift check compares only the unthemed and dark roots |
+| D14 | The guard, on `Popup.vue`'s wrapper: `@mousedown.capture` arms it on a primary-button press with `detail` 1; until armed, `@click.capture` stops and prevents a click with `detail` above 1; `activate()` disarms it synchronously when the sheet opens. Only `click` is refused: every consequential sheet control acts on it (Confirm, `FormPopup`, `Toggle`, `Checkbox`, the close area), and a press's earlier effects (focus, selection, a tooltip hiding on `pointerdown`) stay | `pointerdown.detail` (0 by Pointer Events); `dblclick` (it fires after the second click); timestamps (a threshold of its own instead of the platform's); refusing down and up events too (breaks selection and native controls); arming on any button (a right press would arm it); a reset bound to the wrapper element (machinery for the same effect). Codex consult: high confidence in the mechanism, moderate across physical devices; touch and pen are not claimed |
+| D15 | The reproducer drives a real double-click through a new driver method, `doubleClick`: CDP's `Input.dispatchMouseEvent` with `clickCount` on Chrome; on Firefox one BiDi `input.performActions` chain (move, press, 150 ms pause, press), since its remote agent counts presses only inside one chain and restarts on a move (`Actions.sys.mjs`, `ClickTracker`, 640 ms, timed from the first release before its dispatch). Both first move through Puppeteer's mouse, so its record of the pointer stays true. A window capture listener records each click: the first must hit `contact-delete`, the second `confirm-submit` with `detail` 2, prevented and never reaching the window's bubble listener, so the test cannot pass on a press that missed (the first's delivery is not read: `RowAction` stops its own click). The list scrolls through the page's own testid, `contacts-page`, and the test waits for the saved contacts' snacks to leave, since a snack sits over the bottom rows; a single real press then deletes the contact | Two `pointerClick`s or `mouse.down`/`up` pairs: Firefox sees two clicks of `detail` 1; Puppeteer's internal `clickCount` mouse option; a 300 ms gap: `handleDeleteContact` opens the Confirm synchronously, so the pause need not wait for a render, and a shorter one leaves Firefox's 640 ms more margin under load; a browser-mounted `Popup` fixture: cheaper, but no production wiring |
 
 ## Audit verdicts
 
@@ -189,6 +201,23 @@ Surfaces:
 - Its note that a scrolled onboarding tab leaves an undimmed strip below a sheet (the wrapper resolves against the first screen, not the scrolled one) predates this arc: a known limit, #686.
 
 **Implementation, round 2, Codex** (resumed `01a14aab`, the fix commit 80d913c2): `approve`; the fixes verified, no new material finding. The loop converged.
+
+**Page 39, design consult, Codex** (`gpt-6.1-sol`, high, fresh session `01a14b8b`): the guard on `mousedown.detail` and `click.detail`, refusing `click` only, armed on a primary press, reset synchronously in `activate()`; the light `--scrim-popup` token over a second component rule; Firefox's double-click as one BiDi action chain. All taken (D13, D14, D15; `lessons/phase-4.md`).
+
+**Page 39, round 1, Codex** (resumed `01a14aab`, `a833c439..c4aa2b75`): `approve with fixes`; three low findings, all accepted.
+1. `doubleClick` left Puppeteer's record of the pointer stale (a later `mouse.wheel` would scroll at the old point): **accepted**; both drivers move Puppeteer's mouse first.
+2. The close-area refusal had no success control: **accepted**; a single press now closes it once.
+3. The plan's Architecture and Delivery lines contradicted the fold-in: **accepted**.
+
+**Page 39, round 1, Opus** (general-purpose agent, alongside): `approve with fixes`.
+1. High, the reproducer could never pass: `RowAction`'s `@click.stop` keeps the first click from the window's bubble listener: **accepted** (the first Chrome run had already shown it); only the second click's delivery is read.
+2. Medium, a double-click that dismisses a top sheet can land on an armed, taller sheet beneath: **accepted as a known limit**, #715, closed; extending the signed rule to an uncovered sheet is the owner's call.
+3. Low, the gap: Firefox's 640 ms window runs from the first release, and the Confirm opens synchronously: **accepted**; 150 ms (D15).
+4. Low, up to ten `addContact` round trips: **declined**; measured at 5.6 s on Chrome and 8.6 s on Firefox, against a contacts import that would bring a file chooser and the Testnet refusal into this file.
+5. Low, the plan not yet filled in: **accepted**; filled from the runs.
+6. Low, the scroller found by computed overflow, not a testid: **accepted**; the Contacts page's shell takes `data-testid="contacts-page"`, as two other settings pages already pass theirs.
+
+**Page 39, round 2, Codex** (resumed `01a14aab`, `c4aa2b75..eb228334` and the plan): `approve`. The loop converged.
 
 ## Arc 1: the flat sheet (Closes or Refs #590, D9)
 
@@ -241,12 +270,20 @@ Surfaces:
 
 **Validation gate**: `bun run audit:vue` exit 0; both smoke suites and the seven network runs green at retry 0; the nine named captures in both themes in each of `screenshots/before/` and `screenshots/after/`; each browser's smoke wall-clock before (the base's last CI run) and after, and the 500-row assertion's measured runtime, recorded. Layers: all, e2e, e2e-live-network.
 
+### Phase 4: decision page 39, folded into the PR before the merge ✓
+
+1. Merge `origin/dev`. Drop the light line from `PopupCard.vue` (P39-01). Move the light scrim into `--scrim-popup` (D13), restamp the `base.css` hash.
+2. The guard in `Popup.vue` (D14) with two `Popup.test.ts` cases; the driver's `doubleClick` and the Contacts reproducer (D15); a FIREFOX.md row and the e2e-testing skill's note for it.
+3. Captures: the light sheets without the line, and `connect-expired` (the dApp overlay, `network/session-tabClose.test.ts`) before and after, light and dark, into `screenshots/p39/`.
+
+**Validation gate**: `audit:vue`, `test:all`, `test:ci-gating` and `check:plans` exit 0; the reproducer red without the guard and green with it on Chrome and Firefox; the arc's nine smoke files green at retry 0 on both engines; `network/session-tabClose` green at retry 0 on Chrome; the reproducer's runtime recorded per browser (`lessons/phase-4.md`).
+
 ## Delivery
 
 - One arc, one PR against `dev` from `worktree-sheet-1`, no stack (D-orch-1): `feat(ui): the flat bottom sheet, a light scrim, the full-height setting retired` (79 characters). Body: the three picks quoted with their ids; OA-1 to OA-4 and their "now" forms; the screenshots; the inventory's answer to page 30's question (no sheet needs the frame's height); the validation runs; each browser's smoke wall-clock before and after; `Closes #590` or `Refs #590` (D9).
 - Open it only after Phase 3's gate and the Codex loop converge. Both e2e lanes run on `apps/extension/**` and `packages/design/src/**`; no label is needed.
-- Close-out lands as the PR's final commits. The PR body links Phase 0's S1 issue and says the arc moves S1's band without fixing it.
-- S1's issue (Phase 0) is closed by no arc in this plan; it waits on OA-3.
+- Close-out lands as the PR's final commits. The PR body first linked Phase 0's S1 issue as moved, not fixed; after Phase 4 it quotes the page-39 picks and closes it.
+- S1's issue (#656, Phase 0) closes with this PR: decision page 39 picked the guard, which Phase 4 ships.
 - Parallelism: none; each phase edits what the next reads.
 
 ## Post-implementation

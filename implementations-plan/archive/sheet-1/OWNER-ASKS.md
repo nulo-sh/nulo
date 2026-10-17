@@ -2,6 +2,8 @@
 
 Each ask names the surface, the options, what each looks like, a recommendation, and the form the arc ships now without waiting. The PR's light and dark screenshots draw the "now" form.
 
+All four were answered on decision page 39, signed 2026-10-17 19:03Z; each ask's **Answered** line quotes its pick, and the same PR ships them.
+
 ## OA-1: the ledge and the 1 px line together, light theme
 
 - **Surface**: every `PopupCard` sheet in the light theme (Receive, Select token, every Confirm, the Send review, every form).
@@ -12,6 +14,7 @@ Each ask names the surface, the options, what each looks like, a recommendation,
   - **c. The line alone.** The light theme drops the ledge; the sheet reads flatter than the dark one.
 - **Recommendation**: b. Moderate confidence: the line was drawn for the old sheet, which had no ledge.
 - **Ships now**: a, the literal sum of the two picks.
+- **Answered**: P39-01 = B, by the owner: *"The ledge alone; it already draws the edge between the white card and the light wash."* The 1 px line goes and the 6 px ledge stays. This supersedes the line part of P33-09 A; its 70 % page-background scrim stays.
 
 ## OA-2: overlays that are not the popup sheet, light theme
 
@@ -20,6 +23,7 @@ Each ask names the surface, the options, what each looks like, a recommendation,
 - **Options**: **a.** keep today's near-black scrim in light; **b.** give both the light scrim (the page background at 70 %), the Terms sheet also the 1 px line.
 - **Recommendation**: b for consistency, once drawn. Low confidence: the Terms sheet is a blocking wall, where a darker scrim may be the point.
 - **Ships now**: a, unchanged.
+- **Answered**: P39-02 = C, by the owner: *"The dApp window's card takes the light scrim; the Terms sheet keeps its near-black one, since it is a blocking wall and the light wash nearly erases its edge."* The dApp windows' overlay takes the light theme's scrim, without the line; the Terms sheet keeps its near-black scrim in both themes. The design lead measured that the Terms sheet covers the whole 600 px popup and the 660 px own window, so its scrim shows only in a taller frame such as the side panel; the pick holds there.
 
 ## OA-3: a double-click's second press inside the sheet its first press opened
 
@@ -31,6 +35,7 @@ Each ask names the surface, the options, what each looks like, a recommendation,
   - **c. Arming.** Every sheet's controls stay disabled, and look disabled, for 0.8 s after it opens, as the Send review's "Send now" does today.
 - **Recommendation**: b. Moderate confidence: it removes the class for one boolean, and a person sees nothing unless they double-click.
 - **Ships now**: a. Arc 1's Phase 0 files the issue that tracks it, with b's design and the Contacts reproducer; no arc in this plan closes it.
+- **Answered**: P39-03 = B, chosen by the orchestrator under the owner's delegation, on the design lead's and the planner's recommendation: *"The guard: inside a sheet that opened after the first press, a double-click's later presses do nothing; a slower second press still passes."* The owner's note: *"To be honest, I don't know what's the common pattern, so choose yourself. 0.8s sounds like a lot to be honest."* Shipped as plan D14 with the Contacts reproducer; it closes #656.
 
 ## OA-4: consequences of content height that page 33 did not draw
 
@@ -43,6 +48,7 @@ Each ask names the surface, the options, what each looks like, a recommendation,
 - **Options**: **a.** accept them as content height makes them; **b.** name the one(s) to redraw, for a later arc.
 - **Recommendation**: a. Moderate confidence: each follows from P33-08 A's "every sheet sits at its content height".
 - **Ships now**: a. The PR's stacked capture shows 3.
+- **Answered**: P39-04 = A, by the owner: *"Accept all four as content height makes them."* Nothing changes.
 
 ## For the record: page 30's question, "which pop-ups use full height?"
 
