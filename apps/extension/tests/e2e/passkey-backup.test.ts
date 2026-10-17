@@ -26,7 +26,8 @@ import { clickByTestId, openPopup, waitForHash, test, waitForServiceReady } from
 import { confirmProfileReset } from "./fixtures/helpers"
 import { registerPasskeyProfile, setupPasskeyVirtualAuth, stallNextPasskeyCeremony } from "./fixtures/passkey"
 import { shotSend } from "./fixtures/send-page"
-import { armBackupDownloadCapture, downloadPlainPasskeyBackup } from "./helpers/backup-export"
+import { downloadPlainPasskeyBackup } from "./helpers/backup-export"
+import { armDownloadCapture } from "./helpers/download-capture"
 import {
 	buildSyntheticPasskeyBackup,
 	readActiveAccount,
@@ -126,7 +127,7 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 
 		// An unencrypted download asks first: Cancel writes nothing, Download anyway writes the
 		// plain file, whose master-key field is only the passkey's credential id.
-		await armBackupDownloadCapture(page)
+		await armDownloadCapture(page, { gzip: true })
 		await clickByTestId(page, "download-backup-btn")
 		await page.waitForSelector('[data-testid="confirm-submit"]', { visible: true, timeout: 5_000 })
 		expect(await page.$eval('[data-testid="confirm-title"]', (el) => el.textContent?.trim())).toBe("Download without a password?")
@@ -135,7 +136,7 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 		await page.waitForFunction(() => !document.querySelector('[data-testid="confirm-submit"]'), { timeout: 5_000 })
 		const afterCancel = await page.evaluate(() =>
 			Promise.race([
-				(window as unknown as { __backupCapture: Promise<string> }).__backupCapture.then(() => "downloaded"),
+				(window as unknown as { __downloadCapture: Promise<string> }).__downloadCapture.then(() => "downloaded"),
 				new Promise<string>((resolve) => setTimeout(() => resolve("nothing"), 1_000)),
 			]),
 		)

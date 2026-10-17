@@ -120,6 +120,7 @@ export async function importTokenAndWaitForBalance(
 	account: string,
 	contract: string,
 	expectedPublicRaw: string,
+	timeoutMs = 90_000,
 ): Promise<void> {
 	const baseline = await captureBalanceBaseline(page, account, contract)
 	await importToken(page, contract)
@@ -128,7 +129,7 @@ export async function importTokenAndWaitForBalance(
 		tokenContract: contract,
 		expectedPublicRaw,
 		baselineUpdatedAt: baseline,
-		timeoutMs: 90_000,
+		timeoutMs,
 	})
 }
 
