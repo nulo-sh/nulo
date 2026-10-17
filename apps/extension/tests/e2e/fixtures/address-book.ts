@@ -29,7 +29,7 @@ export async function addContact(page: Page, name: string, address: string): Pro
 	// headless test context the popup's close transition sticks (Vue
 	// <Transition> rAF gets throttled despite the polling fix and
 	// --disable-renderer-backgrounding flag — the wallet popup ends up
-	// `slide-enter-from slide-enter-active` indefinitely even though
+	// `sheet-enter-from sheet-enter-active` indefinitely even though
 	// popupStore.popups is empty). Closing via Escape force-unmounts.
 	await page.waitForFunction((s: string) => !!document.querySelector(s), { timeout: 10_000, polling: 200 }, contactRow(name))
 

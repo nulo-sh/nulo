@@ -636,7 +636,6 @@
     "useFormState": true,
     "useFullBackupExport": true,
     "useFullBackupImport": true,
-    "useFullscreenPopupSetting": true,
     "useId": true,
     "useImportErrorState": true,
     "useIncomingSyncHealth": true,

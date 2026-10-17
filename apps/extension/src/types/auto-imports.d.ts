@@ -428,7 +428,6 @@ declare global {
   const useFormState: typeof import('../composables/useFormState').useFormState
   const useFullBackupExport: typeof import('../composables/useFullBackupExport').useFullBackupExport
   const useFullBackupImport: typeof import('../composables/useFullBackupImport').useFullBackupImport
-  const useFullscreenPopupSetting: typeof import('../composables/fullscreenPopupSetting').useFullscreenPopupSetting
   const useId: typeof import('vue').useId
   const useImportErrorState: typeof import('../composables/useProfileImportFlow').useImportErrorState
   const useIncomingSyncHealth: typeof import('../composables/useIncomingSyncHealth').useIncomingSyncHealth
@@ -1154,7 +1153,6 @@ declare module 'vue' {
     readonly useFormState: UnwrapRef<typeof import('../composables/useFormState')['useFormState']>
     readonly useFullBackupExport: UnwrapRef<typeof import('../composables/useFullBackupExport')['useFullBackupExport']>
     readonly useFullBackupImport: UnwrapRef<typeof import('../composables/useFullBackupImport')['useFullBackupImport']>
-    readonly useFullscreenPopupSetting: UnwrapRef<typeof import('../composables/fullscreenPopupSetting')['useFullscreenPopupSetting']>
     readonly useId: UnwrapRef<typeof import('vue')['useId']>
     readonly useImportErrorState: UnwrapRef<typeof import('../composables/useProfileImportFlow')['useImportErrorState']>
     readonly useIncomingSyncHealth: UnwrapRef<typeof import('../composables/useIncomingSyncHealth')['useIncomingSyncHealth']>
