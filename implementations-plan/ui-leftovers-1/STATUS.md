@@ -12,3 +12,4 @@
 - 2026-10-17 15:33Z: Phase 5 (#634) gate pass: `test toast ToastManagerBase` (50/50), lint, typecheck:all. After-shots and the arc gate move past Phase 6.
 - 2026-10-17 15:49Z: Phase 6 (#583 B) gate pass: lint, typecheck:all, rows by the smoke recipe on Chrome (9/9; the large row 68 px, chip 96 px named, gap 4, left 0) and Firefox (9/9; 69 px). Byte-identity below the floor: same-run crops at 2.5, 25, 250, 999.99 USDC with the base's two rules inline compare equal, both themes. rows local: Chrome 81.2 s, Firefox 120.8 s (loaded host; no scenario added).
 - 2026-10-17 16:04Z: Codex round 1 approve with changes and Opus review approve with changes, folded; test:all green on the pre-fix head (extension 13,404 passed).
+- 2026-10-17 16:05Z: Codex round 2 (resumed): approve, no new material finding; loop converged. Next: merge dev (13d5f8d0, #655), arc gate on the merged head.

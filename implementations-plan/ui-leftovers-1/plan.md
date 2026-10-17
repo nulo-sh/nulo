@@ -147,6 +147,8 @@ Decision page 35 (2026-10-17) settled five leftovers and, as an amendment the or
 
 **Opus 5.5 diff review (general-purpose), alongside round 1: approve with changes, no correctness, reactivity or security defect.** Folded: the mixed-quote case (same as R1-1); the new `journal-state` describe moved above the sanitizer's header comment and its title's false "as its settled row does" dropped (the settled row does not bracket a schemeful name; pre-existing, out of scope); `mountView`'s dead `attachTo`; the header selection test's cleanup into `finally`; rewrapped TSDoc in `toast.ts` and `widgets.ts`; `DAPP_LABEL` called a label (`tx/[id].vue` shows it as the App value); a clearer wrap comment. Not taken: the network lanes meeting 6 s action toasts (CI's required lanes run them); `execution/service.ts`'s own `"dApp"` log literal (out of scope).
 
+**Codex fix loop, round 2 (resumed session 01a14a8e, the fix diff 77462aa4): approve, no new material finding.** The loop converged.
+
 ## Delivery
 
 - One PR against `dev` from `worktree-ui-leftovers-1`, no stack (D-orch-1). Title: `fix(ui): display-only token hero, selectable header address, dapp chip, holdings, toasts` (88 characters).
