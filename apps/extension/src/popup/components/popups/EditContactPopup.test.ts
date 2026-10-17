@@ -24,10 +24,9 @@ const freshBuses = () =>
 
 const openToastMock = vi.fn()
 
-const cacheStoreState: { contactToEditIdx: string; importContact: unknown } = {
-	contactToEditIdx: "",
-	importContact: null,
-}
+const cacheStoreState: { contactToEditIdx: string } = { contactToEditIdx: "" }
+/** What `popupStore.open(name, payload)` stored: an import row's edit is `{ contact, onSave }`. */
+const popupPayloads: Record<string, unknown> = {}
 
 // Vitest 4 requires `function` expressions (not arrow functions) for mocks
 // instantiated with `new`.
@@ -41,7 +40,7 @@ vi.mock("@/stores/cache.store", () => ({
 	useCacheStore: () => cacheStoreState,
 }))
 vi.mock("@/stores/popup.store", () => ({
-	usePopupStore: () => ({ len: 1, popups: { edit_contact: { order: 1 } } }),
+	usePopupStore: () => ({ len: 1, popups: { edit_contact: { order: 1 } }, getPayload: (name: string) => popupPayloads[name] }),
 }))
 
 vi.mock("@/composables/toast", () => ({
@@ -109,8 +108,15 @@ beforeEach(() => {
 	contactServiceMock.getContacts.mockReset()
 	freshBuses()
 	cacheStoreState.contactToEditIdx = ""
-	cacheStoreState.importContact = null
+	popupPayloads.edit_contact = undefined
 })
+
+/** Opens the form as an import row's edit does; returns the request's save. */
+function stageImportEdit(contact: Record<string, unknown>) {
+	const onSave = vi.fn()
+	popupPayloads.edit_contact = { contact, onSave }
+	return onSave
+}
 afterEach(() => {
 	// Guaranteed net: unmount every tracked wrapper (scope cleanup removes the
 	// document listener) even when an assertion aborted the test mid-way.
@@ -210,17 +216,20 @@ describe("EditContactPopup — decoupled from sender registration", () => {
 
 	test("Enter with a clean form is a no-op (dirty gate holds on the keyboard path)", async () => {
 		const w = await mountAndOpen()
-		const input = w.find('[data-testid="name-input"]').element as HTMLInputElement
-		input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+		// The listener lives on `document` and the mounted tree is detached.
+		const docInput = document.createElement("input")
+		document.body.appendChild(docInput)
+		docInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
 		await flushPromises()
+		docInput.remove()
 
 		expect(contactServiceMock.updateContact).not.toHaveBeenCalled()
 		expect(w.emitted("onClose")).toBeFalsy()
 		expect(openToastMock).not.toHaveBeenCalled()
 	})
 
-	test("import mode writes cacheStore.importContact and never calls the service", async () => {
-		cacheStoreState.importContact = { id: "", name: "Staged", address: OLD_ADDRESS }
+	test("import mode hands the edited row to the request's save and never calls the service", async () => {
+		const onSave = stageImportEdit({ id: "", name: "Staged", address: OLD_ADDRESS })
 		const w = await mountAndOpen([], "")
 		await w.find('[data-testid="name-input"]').setValue("Renamed")
 		await flushPromises()
@@ -228,8 +237,22 @@ describe("EditContactPopup — decoupled from sender registration", () => {
 		await flushPromises()
 
 		expect(contactServiceMock.updateContact).not.toHaveBeenCalled()
-		expect((cacheStoreState.importContact as { name: string; updated: boolean }).name).toBe("Renamed")
-		expect((cacheStoreState.importContact as { updated: boolean }).updated).toBe(true)
+		expect(onSave).toHaveBeenCalledExactlyOnceWith({ id: "", name: "Renamed", address: OLD_ADDRESS })
+		expect(w.emitted("onClose")).toBeTruthy()
+	})
+
+	test("(BUG PIN) in import mode a clean Enter skips the dirty gate and saves the row unchanged", async () => {
+		// The importer then stages the row again, which re-judges its selection from its kind.
+		const onSave = stageImportEdit({ id: "", name: "Staged", address: OLD_ADDRESS })
+		const w = await mountAndOpen([], "")
+		// The listener lives on `document` and the mounted tree is detached.
+		const docInput = document.createElement("input")
+		document.body.appendChild(docInput)
+		docInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+		await flushPromises()
+		docInput.remove()
+
+		expect(onSave).toHaveBeenCalledExactlyOnceWith({ id: "", name: "Staged", address: OLD_ADDRESS })
 		expect(w.emitted("onClose")).toBeTruthy()
 	})
 })
@@ -383,7 +406,8 @@ describe("EditContactPopup — contact delete reducer and duplicate rules", () =
 	})
 
 	test("import mode: the saved contact a row would write is not its duplicate, and the name is staged as the import stores it", async () => {
-		cacheStoreState.importContact = { idx: "0", name: "Alice", address: NEW_ADDRESS, kind: "address-change", targetId: "c1" }
+		const row = { idx: "0", name: "Alice", address: NEW_ADDRESS, kind: "address-change", targetId: "c1" }
+		const onSave = stageImportEdit(row)
 		const w = await mountAndOpen([CONTACT, BOB], "")
 		await w.find('[data-testid="address-input"]').setValue(OLD_ADDRESS)
 		await w.find('[data-testid="name-input"]').setValue(" ALI\u3164CE  ")
@@ -392,9 +416,9 @@ describe("EditContactPopup — contact delete reducer and duplicate rules", () =
 		expect(fieldText(w, "address-input")).toBe("")
 		await w.find('[data-testid="form-submit"]').trigger("click")
 		await flushPromises()
-		expect(cacheStoreState.importContact).toMatchObject({ name: "ALICE", address: OLD_ADDRESS, targetId: "c1", updated: true })
+		expect(onSave).toHaveBeenCalledExactlyOnceWith({ ...row, name: "ALICE", address: OLD_ADDRESS })
 
-		cacheStoreState.importContact = { idx: "0", name: "Alice", address: NEW_ADDRESS, kind: "address-change", targetId: "c1" }
+		stageImportEdit(row)
 		const again = await mountAndOpen([CONTACT, BOB], "")
 		await again.find('[data-testid="name-input"]').setValue("bob")
 		await flushPromises()
@@ -402,13 +426,13 @@ describe("EditContactPopup — contact delete reducer and duplicate rules", () =
 	})
 
 	test("import mode stores the address lowercased", async () => {
-		cacheStoreState.importContact = { id: "", name: "Staged", address: OLD_ADDRESS }
+		const onSave = stageImportEdit({ id: "", name: "Staged", address: OLD_ADDRESS })
 		const w = await mountAndOpen([], "")
 		await w.find('[data-testid="address-input"]').setValue(addr("D"))
 		await flushPromises()
 		await w.find('[data-testid="form-submit"]').trigger("click")
 		await flushPromises()
-		expect((cacheStoreState.importContact as { address: string }).address).toBe(addr("d"))
+		expect(onSave).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ address: addr("d") }))
 	})
 })
 

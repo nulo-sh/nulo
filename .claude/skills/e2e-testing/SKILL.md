@@ -744,6 +744,11 @@ and without `NULO_E2E_MIGRATION_FIXTURE` or `NULO_E2E_CSP_REPORT`. It runs guard
 `shipped-token-list.test.ts` is its one launch that reaches the live Testnet node, so a dRPC outage
 reds that spec, by name, and nothing else.
 
+The PR lanes check out the PR's head SHA (`github.event.pull_request.head.sha`), not the merge ref:
+reproduce a red PR lane at that SHA. A branch whose last trunk merge fell between a UI change and its
+e2e fix stays red there while its merge ref passes; merge the trunk again. A shard runs larger files
+first when vitest has no results cache, so an edit that grows a file moves it in the shard's order.
+
 Two cores is the amplifier: races that live in a 100ms window on a workstation widen to seconds. Run
 the loop alone on the host, freeze the tree between rounds, and validate the fix under the SAME
 amplifier (three rounds green is the bar this repo has used; `implementations-plan/archive/e2e-flake-fixes/`

@@ -1,9 +1,9 @@
 ---
 plan: chain-endpoints
 tier: mid
-status: arcs 1 (#276), 2a (#506) and 2c (#509) merged; arc 2b released 2026-10-16 (D-orch-11) and in build on chain-endpoints-2b; close-out (Phase 3) after 2b merges
-issues: "#171 (arc 1); #200, #101 item 14 (arc 2a); #116 (arc 2c); #101 item 15 (arc 2b, D-orch-11; #101 closes at close-out); #79 (no arc: #389 closed it, D27); #77, #197 (no arc, blocked:external)"
-revision: "2026-10-16, light: close-out only; base origin/dev at c5e9c8e8"
+status: completed; arcs 1 (#276), 2a (#506), 2c (#509) and 2b (#609) merged; the close-out PR carries P25-10 B (#116, D43) and the archive move
+issues: "#171 (arc 1); #200, #101 item 14 (arc 2a); #116 (arc 2c, then P25-10 B in the close-out, D43); #101 item 15 (arc 2b, D-orch-11; #101 closes at close-out); #79 (no arc: #389 closed it, D27); #77, #197 (no arc, blocked:external)"
+revision: "2026-10-16, light: close-out, plus P25-10 B (D43); base origin/dev at 493ff497 (D42)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -16,6 +16,38 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-16.
+- **Status:** completed. Arcs 1, 2a, 2c and 2b merged; the close-out PR carries P25-10 B (#116) and this archive move. The merge that lands it closes this plan.
+- **Shipped:**
+  - Arc 1, [#276](https://github.com/nulo-sh/nulo/pull/276): smoke runs behind a loopback guard that refuses and records every outside HTTP, HTTPS and WebSocket host, with a per-launch canary, a Testnet stand-in answered in the browser, and one interception owner per origin (#171).
+  - Arc 2a, [#506](https://github.com/nulo-sh/nulo/pull/506): a node URL with a space or a hidden character inside it is refused with its own line (#200, P12-04, OA-1 B); `connect-src` allows plain HTTP only to `localhost` and `127.0.0.1`, and the form refuses `[::1]` (#101 item 14, P12-02).
+  - Arc 2c, [#509](https://github.com/nulo-sh/nulo/pull/509): a funded wallet whose price fetch failed reads "—" and "Prices unavailable" on Home (#116, P18-01 A, OA-6 B, OA-7 B).
+  - Arc 2b, [#609](https://github.com/nulo-sh/nulo/pull/609): the logs and JSON viewers mount in shadow roots and `style-src` drops `'unsafe-inline'`, keeping one hash for the Presto banner (#101 item 15, P12-03); 12 before/after shot pairs differ in 0 pixels.
+  - Close-out: a missing price reads as unavailable whether or not the fetch failed (#116, P25-10 B, D43).
+  - `lessons.md`: nothing promoted. It holds 8,190 of 8,192 bytes, and the lane's gotchas are pinned by tests: Chrome's `<-loopback>` bypass and the resolver's IP excludes (`scripts/e2e/chrome-driver.test.ts`), shadow-root focus retargeting (`LogsViewer.test.ts`, `ToastManagerBase.test.ts`).
+- **Orchestrator records:** D-orch-1 to D-orch-12 (§ Decision ledger).
+- **Dropped, rejected, superseded:**
+  - Phase 2a.3 and #79: no arc. #389 shipped the fetched list and closed #79 a day before P12-05's change was recorded (D-orch-6, D27); the evidence is commented on #79.
+  - Arc 2b's strike (D-orch-7, A6, D28's veto branch): superseded by D-orch-11; P12-03 stood and #609 built it.
+  - #197's routing to fees-and-sponsors: moot, #270 shipped its in-repo half (R-F8).
+  - D4 and D5's artifact-run boundary and Ask A1: superseded by #320, which runs artifact smoke behind the guard with one live spec.
+  - OA-4's wording: shipped as recommended, "Use http://localhost instead of http://[::1]."; the owner may still change it.
+  - R5: released, #156 shipped in #534 (D32).
+  - OA-8's `owner-decision` issue (D30): not filed; page 25 answered it and the close-out builds it (D43).
+  - A5 (D29): sampled on both browsers, 5/5 each. Beyond the browsers' listed hosts and the canary, each launch tried `api.coingecko.com` once and made 12 to 20 requests to the Testnet node, answered by the stand-in, which unguarded CI sends to `lb.drpc.live`: #620 (`lessons/phase-3.md`).
+- **Known limits:** none.
+- **Open items:**
+  - #77 (`blocked:external`): the get-gas link waits on unleashed's mainnet bridge.
+  - #197 (`blocked:external`): the upstream JSON-RPC client returns a null-like result unparsed.
+  - #498 (`bug`, `ux`): a custom network with no account and an unreachable node stops popup start (D11).
+  - #615 (`documentation`): the store's remote-code text does not say a list can flag a token (R-F6).
+  - #616 (`bug`, `ux`): the logs viewer loses a selection's or a search's place at the end when a line arrives (`lessons/phase-2b.md`).
+  - #618 (`ux`, `owner-decision`): Holdings shows $0.00 where Home's hero reads "Prices unavailable".
+  - #620 (`ci`): the network e2e suite reaches the live Testnet node and CoinGecko from CI (A5).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
+
 # chain-endpoints: a smoke suite with no outside connections; node URLs, the extension CSP, the price hero
 
 Chain and endpoint configuration, in two arcs and a close-out. The lane map's arc 2 ships as three PRs (2a, 2b, 2c), one per hold, so no reservation waits on another (D10).
@@ -25,7 +57,7 @@ Chain and endpoint configuration, in two arcs and a close-out. The lane map's ar
 - **Arc 2b (#101 item 15; waits on page 12 and R3).** The logs and JSON viewers move their styles into a shadow root, and `style-src` drops `'unsafe-inline'` (P12-03). Released 2026-10-16 (D-orch-11): P12-03 was not struck.
 - **Arc 2c (#116; waits on page 12 and R2).** A funded wallet whose price fetch failed shows "—" and "Prices unavailable" on Home (P12-01).
 - **No arc.** #77 waits on unleashed's mainnet bridge; #197 waits on the upstream JSON-RPC client.
-- **Close-out revision (2026-10-16).** Arcs 1, 2a and 2c merged; 2b was struck, then released the same day (D-orch-11), so the close-out follows its merge. #79 needs no arc: #389 retired the built-in list on 2026-10-14, a day before P12-05's change was recorded. The close-out is the last phase (§ Close-out revision). Over the mid size target: the merged arcs' records stay verbatim.
+- **Close-out revision (2026-10-16).** Arcs 1, 2a and 2c merged; 2b was struck, then released the same day (D-orch-11), so the close-out follows its merge. #79 needs no arc: #389 retired the built-in list on 2026-10-14, a day before P12-05's change was recorded. The close-out is the last phase (§ Close-out revision); page 25 answered OA-8 (P25-10 B) and reopened #116 for it, so the close-out also builds that rule (D43). Over the mid size target: the merged arcs' records stay verbatim.
 
 Recon: [recon.md](recon.md). Questions for the owner: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
@@ -36,7 +68,7 @@ Recon: [recon.md](recon.md). Questions for the owner: [OWNER-ASKS.md](OWNER-ASKS
 **Out, with reason:**
 - #77 (`blocked:external`): the get-gas link can only change once unleashed has a mainnet bridge.
 - #197 (`blocked:external`): no arc in this lane. Recon found an in-repo half that is not blocked: a `GasFees` shape check inside `predictedWorstMinFees` (`packages/aztec-runtime/src/fee-juice.ts:18`) covers every caller. It belongs to the lane that owns `fee-juice.ts` (fees-and-sponsors). The close-out comments this on #197. Superseded: #270 shipped that half (R-F8).
-- Artifact-run smoke (release and nightly smoke of the production zip): it keeps its documented live dRPC leg (`apps/extension/tests/e2e/README.md:59`) and its price-host block. The guard is off there (D4, Ask A1).
+- Artifact-run smoke (release and nightly smoke of the production zip): it keeps its documented live dRPC leg (`apps/extension/tests/e2e/README.md:59`) and its price-host block. The guard is off there (D4, Ask A1). Superseded: #320 runs artifact smoke behind the guard too, with one live spec (D4).
 - The network e2e suite: the smoke setup alone arms the guard; the network runner belongs to e2e-harness-gaps. The close-out samples two network files and files an issue if they reach an outside host (Ask A5).
 - A fetched default token list (#79): P12-05 keeps the list in the build for v1.0.0. Superseded: the owner changed P12-05, and #389 had already shipped the fetched list (D27).
 - Channels other than HTTP, HTTPS and WebSocket (UDP, WebRTC). The wallet uses none (recon); arc 1 bounds its guarantee to the three it routes, plus DNS on Chrome.
@@ -108,7 +140,7 @@ Recon: [recon.md](recon.md). Questions for the owner: [OWNER-ASKS.md](OWNER-ASKS
 
 ### Asks (each with the working assumption the plan proceeds on)
 
-- A1. Should artifact runs also run behind the guard? **Working assumption: no.** `tests/e2e/README.md:59` keeps one live run of the shipped token list before a release, and #171 names the smoke build. A hermetic artifact run would be its own issue.
+- A1. Should artifact runs also run behind the guard? **Working assumption: no.** `tests/e2e/README.md:59` keeps one live run of the shipped token list before a release, and #171 names the smoke build. A hermetic artifact run would be its own issue. Superseded: #320 made it (D4).
 - A2. Should the smoke setup refuse a dist that is not the armed smoke build? **Working assumption: yes** (D8). It is developer tooling, no shipped surface.
 - A3. Does #156 (R5) wait for arc 2b's `style-src` edit, or only for arc 2a? **Working assumption:** it waits for both, until the orchestrator disposes of R5 in writing (§ Delivery).
 - A4. Who closes #79. **Working assumption:** the arc-2a session, by comment, once page 12 records P12-05 as approved. Superseded: #389 closed it (D27).
@@ -281,7 +313,7 @@ Cases:
 - **Arc 2a, extension-page CSP and the network form message (P12-02):** "connect-src allows plain HTTP only to localhost and 127.0.0.1. A saved http://[::1] node URL stops working (switch it to localhost); the form refuses [::1] and its message drops "/ http://[::1]"."
 - **Arc 2b, logs and JSON viewers (P12-03, veto list):** "The logs and JSON viewers' inline styles move into their shadow root's stylesheet, before/after shots prove identical pixels, and style-src drops unsafe-inline."
 - **Arc 2a, #79 (P12-05):** no screen.
-- **Close-out revision:** none. The no-list state (Home's "NOTHING HERE YET", Holdings' "0 tokens") shipped with #389 under the owner's "Nothing extra" (2026-10-13, R-F5); this revision changes no file a build reads.
+- **Close-out, Home hero (P25-10 B, page 25, 2026-10-16):** "A missing price reads as unavailable: "—" with "Prices unavailable", as after a failed fetch. A smaller rule than the shipped one: it drops the failed-fetch condition from the hero's test." The no-list state (Home's "NOTHING HERE YET", Holdings' "0 tokens") shipped with #389 under the owner's "Nothing extra" (2026-10-13, R-F5) and is unchanged.
 - Anything beyond these words is in OWNER-ASKS.md (OA-1 to OA-8) with what ships now.
 
 ## Security & Adversarial Considerations
@@ -539,17 +571,18 @@ The lane brief asked for an arc that ends the built-in default token list under 
 
 Nothing is missing, and it has shipped. Since #389 a build carries no list token: the defaults arrive with the first signed list, fetched once the Terms are accepted, normally during onboarding. Until then, and on an install that stays offline, Home reads "NOTHING HERE YET" and Holdings "0 tokens": the owner's own "Nothing extra" of 2026-10-13. What stays compiled is R-F2's trust minimum, so a new contract class, a new price id, a floor raise and a key change still need a release, by design. The store and privacy texts already declare the download. Nothing a person sees changes, so OWNER-ASKS.md carries this as a note, not an ask.
 
-### Phase 3: close-out (the only phase left)
+### Phase 3: close-out (the only phase left) ✓
 
-Runs on `chain-endpoints-close-out`, which carries this revision's commit (D31).
+Runs on `chain-endpoints-close-out`, which carries this revision's commit (D31); since #609 merged it, the branch is `origin/dev` plus the close-out (D42).
 
 1. `git fetch origin dev && git merge origin/dev`; read what changed in `implementations-plan/index.md` and `lessons.md`; never a union merge.
 2. **A5, the network suite's egress sample (D29).** Wait for load1 < 150. Locally and uncommitted, edit two files: provide `egressGuard: true` in `apps/extension/tests/e2e/global-setup.ts` beside `extensionPath`; in `closeAfterEgressCheck` (`fixtures/egress-guard.ts`), after the listeners stop, print the guard's whole record (`guard.attempts()`, declared hosts included) and the Testnet stand-in's request count (`node?.requests()`), which never reach the guard. Then one call per browser: `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/networks.test.ts tests/e2e/network/default-token-seeding.test.ts`, and the same with `NULO_E2E_BROWSER=firefox`. The record prints on every close, a failing test's included, so every outcome is data: log each host other than loopback, the canary and the browser's own, the stand-in's count and every red with its cause, per file and browser, in `lessons/phase-3.md`. Expect `api.coingecko.com`: `agent.sh` blocks no price host. A run that prints no record (the sandbox never came up) is retried once; still none, the sample is recorded as not done, with the reason. Then restore the two files (`git checkout -- <file>` after reading their diff) and confirm `git status -- apps` is clean.
    - A wallet or spec host in the record, or a nonzero stand-in count: dedupe (`gh issue list --state all --search "network e2e outside host"`), then file one `ci` issue (five sections, `Record` naming the archived plan).
    - Neither: a disposition line in the Outcome.
+2a. **P25-10 B (D43)**, its own commits: the hero's test drops the failed-fetch condition, the unread signal goes, the failed-fetch broadcast stays; component tests for the answered-but-missing and slow-provider cases, each failing on the old predicate. Gate: Fast; `bun run test:all`; network `hero-prices-unavailable` and `fiat-send` and smoke `fiat-display` on both browsers at retry 0; then the review loop (Codex, an Opus review beside its first round).
 3. **Issues** (dedupe each new one first; five sections; `Record` names the archived plan).
    - #79 (closed): comment the answer of § The owner's question with its evidence (R-F1 to R-F6), naming #389, #489, #501 and #507.
-   - #101 (D28): if the orchestrator's approval carries the owner's veto of P12-03 (words, date, where recorded), comment that item 14 shipped in #506 and quote the veto, so `style-src` keeps `'unsafe-inline'`; the PR says `Closes #101`. Otherwise comment that item 14 shipped and item 15 is not built by this lane, which closes with its record reading "accepted from the veto list"; the PR says `Refs #101` and #101 is an Open item.
+   - #101 (D28): if the orchestrator's approval carries the owner's veto of P12-03 (words, date, where recorded), comment that item 14 shipped in #506 and quote the veto, so `style-src` keeps `'unsafe-inline'`; the PR says `Closes #101`. Otherwise comment that item 14 shipped and item 15 is not built by this lane, which closes with its record reading "accepted from the veto list"; the PR says `Refs #101` and #101 is an Open item. Superseded by D-orch-11: item 15 shipped in #609, the comment says both items shipped, and the PR says `Closes #101`.
    - #77 and #197: one line each: no arc in this lane, still `blocked:external` (#77: unleashed's mainnet bridge; #197: the upstream JSON-RPC client, its in-repo half shipped in #270).
    - OA-8: unanswered, file an `owner-decision` issue quoting its options and what ships now (D30); answered, record the answer in OWNER-ASKS.md and file any work it creates as its own issue.
    - R-F6's gap: one `docs` issue, `store/remote-code.md` § The token list does not say a list can flag a token.
@@ -557,7 +590,9 @@ Runs on `chain-endpoints-close-out`, which carries this revision's commit (D31).
 5. Promote at most one line to `lessons.md`, retiring or shortening as much as it adds so the file stays under 8 KiB. Candidate: Chrome sends link-local IP literals past `--proxy-server` unless the bypass list starts with `<-loopback>`, and a `MAP *` resolver rule also captures IP literals, the proxy's own included (Chrome, 2026-10; `lessons/phase-0.md`).
 6. Delete `STATUS.md`; keep `OWNER-ASKS.md`; commit. Then `git mv implementations-plan/chain-endpoints implementations-plan/archive/chain-endpoints` in its own commit and move the index line to `implementations-plan/archive/index.md`. No live file links into the plan (checked at revision time); the plan's own links are relative within its directory.
 
-Validation gate: `bun run check:plans` and `bun run lint` exit 0 on the staged final tree; `git diff --stat origin/dev` lists only `implementations-plan/**`; both A5 runs are logged with their outcome (or the sample is recorded as not done, with the reason). Layers: plans gate, lint, network e2e (the sample, both browsers). Then § Post-implementation steps 8-11.
+Validation gate: `bun run check:plans` and `bun run lint` exit 0 on the staged final tree; `git diff --stat origin/dev` lists only `implementations-plan/**` and step 2a's files; step 2a's gate passes; both A5 runs are logged with their outcome (or the sample is recorded as not done, with the reason). Layers: plans gate, lint, network e2e (the sample, both browsers). Then § Post-implementation steps 8-11.
+
+Outcome (2026-10-16): passed. A5 ran on 493ff497 plus 5e90a0f7 (both browsers, 5/5 each; #620). Step 2a at retry 0: network `hero-prices-unavailable` and `fiat-send` 2/2 on Chrome (build at 5c9ebe9c) and on Firefox (build after the `dev` merge 84ebd3ec); smoke `fiat-display` 2/2 on each browser on armed builds after that merge. On 678d1ed8 (the archive move): `bun run test:all` exit 0 (extension 811 files, 13,169 tests; every workspace green), `bun run lint` exit 0 (27 warnings, none in this change), `bun run typecheck:all` exit 0, `bun run check:plans` 0 findings. Later commits change plan files only. Details in `lessons/phase-3.md`.
 
 ## Decision ledger
 
@@ -566,8 +601,8 @@ Validation gate: `bun run check:plans` and `bun run lint` exit 0 on the staged f
 | D1 | A loopback guard on `node:net` that refuses and records, routed per driver | One module denies and records on both browsers; armed before the background boots; same code on Bun and Node | Resolver/PAC deny plus per-browser recorders; a build seam; generalised `interceptRpc`; OS-level denial (§ Trade-offs) |
 | D2 | Refusal, not a stub, for dRPC and CoinGecko (dRPC revised by D23) | It is the wallet's real offline case; smoke asserts neither value | A loopback stub node (needs a cert or a build change) |
 | D3 | No build flag in arc 1 | The smoke build stays the shipped code plus the existing arming; no release-guard surface | Outline B; kept as fallback F2 behind the phase 1.2 stop rule |
-| D4 | Artifact runs unchanged | README keeps one live run of the shipped list before a release; #171 names the smoke build | Guard on artifact runs (Ask A1) |
-| D5 | Armed by `project.provide` from the smoke setup; the control spec skips unless the key is `true` | Network launches, `test:e2e:all` and artifact runs stay as they are | An environment variable read in the fixtures |
+| D4 | Artifact runs unchanged. Superseded: #320 (2026-10-12) runs artifact smoke behind the guard, letting only its live spec reach the Testnet node and the list host (`liveLeg`), and #389 extended it (cross-arc pass) | README keeps one live run of the shipped list before a release; #171 names the smoke build | Guard on artifact runs (Ask A1) |
+| D5 | Armed by `project.provide` from the smoke setup; the control spec skips unless the key is `true` | Network launches, `test:e2e:all` and artifact runs stay as they are (artifact runs: superseded, D4) | An environment variable read in the fixtures |
 | D6 | `ownGuardedLaunch` owns the guard, the canary and the browser from start to stop; `closeAfterEgressCheck` runs independent of the CSP latch: browser closed, then both listeners stopped (an unfinished request becomes `<malformed>`), then the snapshot | Neither a disarmed nor a consumed CSP latch can skip it; a launch that rejects still stops both; names the file; a vitest global teardown error only logs | One check inside the CSP latch (first draft); cleanup in the existing catch, which a launch rejection never reaches (round-2 draft); one check in global teardown |
 | D7 | A per-launch HTTPS canary on `egress-canary.test`, mapped to loopback for a direct path only; plain-HTTP and WebSocket controls from an ordinary page | It turns "refused" into "routed": a missing or failed-over route reaches the canary | A `.invalid` probe (first draft): it fails whether or not the browser went direct |
 | D8 | Setup refuses an unarmed dist outside artifact runs | An unarmed dist seeds against a refused host and skips two checks silently | Accept and degrade, as today |
@@ -614,7 +649,12 @@ Validation gate: `bun run check:plans` and `bun run lint` exit 0 on the staged f
 | D29 | A5 runs as written, made exact: the guard armed for the network suite by a local, uncommitted `provide`, the whole record printed (declared hosts included), two files on each browser at retry 0, and an issue only for a wallet or spec host | Without the print, a declared host such as `api.coingecko.com` passes the close silently, and declared hosts are what the sample is for | Arming the network suite's guard in CI (the e2e harness's scope, and a sample is not that proof); skipping the sample |
 | D30 | OA-8 leaves the plan as an `owner-decision` issue if it is still unanswered at close-out | A plan never closes owning an item outside an issue | Archiving it inside OWNER-ASKS.md alone |
 | D31 | This revision is committed on `chain-endpoints-close-out`, cut from `origin/dev`, which is also the close-out PR's head; `worktree-chain-endpoints` stays at the merge of `origin/dev` (ad127c19), tree-equal to `dev` | That branch still carries arc 1's pre-squash commits (its remote was deleted when #276 merged), so a PR from it would list them again; left tree-equal to `dev`, `agent-worktree done --merged` sees it as landed, which a revision commit on it followed by the close-out's `STATUS.md` deletion would break (Opus); arcs 2a and 2c used fresh branches the same way | A PR from `worktree-chain-endpoints`; committing there and cherry-picking (the first draft); rewriting it |
-| D32 | R5 is released: #156 shipped in #534 (2026-10-16), and this lane makes no further edit to `manifest.config.ts` (2a merged, 2b struck); the Outcome says so | Codex 3 and Opus 2 asked for a written release; #156's merge, found when this revision merged `dev`, leaves nothing to coordinate, so no comment on the closed #156 | A comment on #156 (the first fix, moot once it closed) |
+| D32 | R5 is released: #156 shipped in #534 (2026-10-16), before arc 2b's `style-src` edit, which then landed after it (#609); the Outcome says so | Codex 3 and Opus 2 asked for a written release; #156's merge, found when this revision merged `dev`, leaves nothing to coordinate, so no comment on the closed #156 | A comment on #156 (the first fix, moot once it closed) |
+| D-orch-12 | The close-out approval (2026-10-16): P12-03 was never struck, so #101 closes with items 14 (#506) and 15 (#609) shipped; #79 stays closed, with the comment; #77 and #197 keep `blocked:external`, with a comment each; the A5 sample on both browsers and a `ci` issue for anything beyond `api.coingecko.com`. Its line "OA-8: still unanswered; file the `owner-decision` issue" did not hold: page 25 answered it (D43) | The orchestrator's approval of the close-out revision | — |
+| D42 | The close-out branch is `origin/dev` at 493ff497 plus the close-out's own commits; the revision's commits were not replayed | #609 squash-merged `chain-endpoints-2b`, which was cut from this branch at 78d22cca, so `dev` already held 001024fe, 78d22cca and arc 2b's records, a superset; a rebase could only conflict and leave empty commits | Rebasing (the approval's word) or merging `origin/dev` over the revision's commits (Phase 3 step 1). `dev` moved once more during the close-out (#613), merged at 84ebd3ec before the close-out commits, so the final gates and reviews ran on a head above 7fc8b89b |
+| D43 | The close-out builds P25-10 B as its own commit: the hero's test drops `prices.unavailable`; `PriceSnapshot.lastRefreshFailed`, `usePrices`' `unavailable` and its `latestWins` fence go with it; the failed-fetch broadcast stays | The owner's signed answer (page 25, 2026-10-16) and #116's reopening ("Lands with the `chain-endpoints` close-out arc, after 2b"); the orchestrator's own record of the approval carries the same build. No reader is left for the removed signal. `useIncomingTransfers` and `useArrivals` re-read on every broadcast and the dust filter fails open on a missing quote, so the broadcast stays (Codex consult) | The predicate alone (fields, fence and tests kept for no reader); removing the broadcast too (a receipt hidden as dust could stay hidden after its quote expires behind failed refreshes); an `owner-decision` issue for an answered ask (D30, moot) |
+| D44 | The close-out PR's title is `fix(home): read a missing price as unavailable, close chain-endpoints` | The squash subject is what the changelog reads; it must name the change a person sees | `docs(plans): close chain-endpoints`, set while the close-out carried no code |
+| D45 | No new e2e for P25-10: `hero-prices-unavailable` (network) keeps the refused-fetch path; the answered-but-missing and slow-provider cases are component tests | The rule is one predicate over quotes the composable exposes; a network case would add a launch and a backup import (about 40 s per browser) to prove what `BalanceView.test.ts` proves, and both new cases fail on the old predicate | A network case whose stubbed CoinGecko answer omits the held token |
 
 ## Audit verdicts
 
@@ -935,6 +975,60 @@ Over the two test-only fixes the gate runs needed after the loop converged (type
 
 Over the commit that reads the logs follow off the viewer's scroll-to-end button (D40). Verdict: **approve**, no material bugs; it confirmed CodeMirror 6.43.9's stick to the end in the source, that the observer latches a button shown and removed again, and that the absence precondition catches a follow already off by geometry. One low comment finding, accepted: the observer states why it latches (the viewer's scroll handler hides the button once CodeMirror scrolls back to the end).
 
+### Cross-arc pass, Codex (gpt-6.1-sol, high; session `01a146d9-43be-7b03-b024-5209e058ae29`), 2026-10-16
+
+Over #276, #506, #509 and #609 (`git show f60125ec 110446a4 2dcdad48 493ff497`). Verdict: **approve with findings**, one Low; no cross-arc runtime defect. It checked the canary, the background probes and the stand-in's loopback redirect under arc 2a's `connect-src`; the CSP pins against both built manifests (only Chrome's `vite serve` restores inline styles); CodeMirror's shadow root against the focus trap, the selection read and the snack's focus return; and smoke's `$0.00` assertion against the refused price host (its fixture is empty).
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Low, demonstrated. D4 and D5 say artifact runs stay unguarded; `global-setup-smoke.ts:72` provides `egressGuard: true` for them since #320, with only the `live` launch sent direct | Accepted: D4, D5, Ask A1 and § Scope marked superseded |
+
+Round 2 (resumed): **approve**, no new material finding; the loop converged.
+
+### Close-out, P25-10 shape, Codex consult (session `01a146db-80b2-71b3-bbb0-277119741c9a`), 2026-10-16
+
+Verdict: **neither shape as written**: remove the signal, keep the failed-fetch broadcast. `useIncomingTransfers` and `useArrivals` re-read on every broadcast, and the dust filter fails open on a missing quote, so without it a receipt hidden as dust could stay hidden after its quote expires behind failed refreshes. Keep `settled` on a rejection. The slow-provider case follows the signed text; pin it. Adopted (D43).
+
+### Close-out, P25-10, round 1, Codex (session `01a146e1-ca86-78b0-bc90-d130aabc712d`), 2026-10-16
+
+Verdict: **approve**, two Lows; 63/63 `BalanceView` tests run.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Low. `awaitingQuotes`' comment says a holding counts as $0.00 until its quote lands; it now reads "—" | Accepted: reworded |
+| 2 | Low. The renamed broadcast test claims a re-filter it does not exercise | Accepted: "a failed scheduled refresh still broadcasts the usable snapshot" |
+
+### Close-out, P25-10, round 1, Opus (general-purpose, read-only), 2026-10-16
+
+Verdict: **approve with fixes**; every path traced, `BalanceView` 63/63, `usePrices` 18/18, `service` 31/31.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Low. `awaitingQuotes`' comment is stale | Accepted (Codex 1) |
+| 2 | Low. The aggregate comment's "no priced holding has one" also fits a wallet with no priceable holding; `pricesUnavailable` states no invariant | Accepted: reworded, and one line on `pricesUnavailable`: the cause does not matter |
+| 3 | Low, plausible. With `mapped` false and no answer by the cap, an unpriced-only wallet reads "—" where OA-7 row 3 keeps $0.00 | Accepted as is: it needs a background that does not answer, which OA-7 B puts on "—"; the wallet cannot know its tokens are unpriced; the PR body says so |
+| 4 | Low. The rejected-request and empty-answer component cases reach one state | Rejected: they enter through the request's two exits, and each is a signed case (OA-7 B, P25-10 B) |
+| 5 | Optional. No component case for the 15-min TTL crossing | Not added: `usePrices.test.ts` covers the ticker; the component covers a broadcast without the quote |
+| 6 | Info. Holdings shows $0.00 "priced assets only" where Home reads "Prices unavailable" | Outside the signed surface: #618 (`owner-decision`) |
+| — | Arc 2c's Opus finding 5 (the 12 s cap before the 10 s abort shows $0.00 for seconds) | Moot: that state now reads "—" |
+
+### Close-out, P25-10, round 2, Codex (session `01a146e1-ca86-78b0-bc90-d130aabc712d` resumed), 2026-10-16
+
+Verdict: **approve**, no new material finding; the loop converged. 5c9ebe9c changes comments and a test name only.
+
+### Close-out loop, round 1, Codex (gpt-6.1-sol, high; session `01a146f6-32cc-7c00-860b-87b7a30141b0`), 2026-10-16
+
+Verdict: **approve with fixes**. It confirmed every Open item is an open issue with its label, the comments on #79, #101, #77 and #197, the five sections of #615, #616, #618 and #620, A5's counts against its disposition, the archive move and the shipment claims.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Medium. Phase 3 is marked done, but no committed line records step 2a's gate or the final head's results | Accepted: Phase 3's Outcome line and `lessons/phase-3.md` record each gate and the head it ran on |
+| 2 | Low. § Post-implementation steps 8 and 10 and Phase 3 step 3's #101 branch still read as before D-orch-11, D43 and D44 | Accepted: brought to the settled decisions, the earlier text marked superseded |
+| 3 | Low. D42 omits the later merge of `origin/dev` (84ebd3ec, #613) | Accepted: D42 records it |
+| 4 | Low. #620's Impact says the gates depend on the two services being up; the sample shows the traffic, not the dependence | Accepted: #620's Impact now calls the dependence unverified |
+
+Round 2 (resumed): **approve**, all four fixes verified, no new material finding; the loop converged.
+
 ## Delivery
 
 One `gh stack`, base `dev`, one PR per arc, each opened only after its arc gate passes and its Codex loop converges.
@@ -947,7 +1041,7 @@ One `gh stack`, base `dev`, one PR per arc, each opened only after its arc gate 
 | 2 | `chain-endpoints-arc-2a` | 2a.1-2a.3 | page 12 | `fix(network): refuse hidden url characters, allow plain http only to localhost` | #200; #79 by comment (2a.3) | off |
 | 3 | `chain-endpoints-arc-2b` | 2b | page 12, R3 | `fix(csp): move the viewers' styles into shadow roots, drop unsafe-inline` | #101 (with layer 2's item 14) | off |
 | 4 | `chain-endpoints-arc-2c` | 2c | page 12, R2 | `feat(home): show prices unavailable on a funded wallet when the price fetch fails` | #116 | off |
-| 5 | `chain-endpoints-close-out` (D31) | 3 (close-out) | every arc delivered (2b struck) | `docs(plans): close chain-endpoints` | #101 if the veto is quoted, else `Refs #101` (D28); `Refs #79` (D27) | off |
+| 5 | `chain-endpoints-close-out` (D31, D42) | 3 (close-out, with P25-10 B) | every arc delivered | `fix(home): read a missing price as unavailable, close chain-endpoints` (D44) | #101 (D-orch-11), #116 (D43); `Refs #79` (D27) | off |
 
 - Start: `gh stack init --adopt worktree-chain-endpoints --base dev`. Layer 1 carries this plan's commit. It may be submitted and merged before page 12 is signed.
 - At most one arc layer is unmerged at a time. A later arc starts only when the orchestrator releases it and the arc below it has merged: `gh stack sync`, then `gh stack add <branch>`. The table's order is the default; if the holds clear out of order (say R2 before R3), the orchestrator may release 2c before 2b, and it still waits for the layer below it to merge.
@@ -963,8 +1057,8 @@ One `gh stack`, base `dev`, one PR per arc, each opened only after its arc gate 
 |---|---|---|
 | #171 | 1 | layer 1's PR |
 | #200 | 2a | layer 2's PR, after page 12 (P12-04) |
-| #101 | 2a (item 14), 2b (item 15, struck) | the close-out PR when the owner's veto is quoted; else stays open for item 15 (D28) |
-| #116 | 2c | layer 4's PR, after page 12 (P12-01) and R2 |
+| #101 | 2a (item 14), 2b (item 15) | the close-out PR, items 14 (#506) and 15 (#609) shipped (D-orch-11) |
+| #116 | 2c, then the close-out (P25-10 B) | #509, then reopened for P25-10 B: the close-out PR (D43) |
 | #79 | none (D27) | already closed by #389 (2026-10-14); the close-out comments the evidence, its PR says `Refs #79` |
 | #77 | no arc | stays open: `blocked:external`, waits on unleashed's mainnet bridge |
 | #197 | no arc | stays open: `blocked:external` upstream; its in-repo half shipped in #270 (R-F8) |
@@ -1000,9 +1094,9 @@ This section is self-contained: the implementing session follows it from here.
 ### Close-out (revised 2026-10-16: Phase 3, one plain PR)
 
 7. Branch (D31): this revision's commit is already on `chain-endpoints-close-out` (local, unpushed); `git switch chain-endpoints-close-out` and run Phase 3 there.
-8. The cross-arc pass step 5 still owes, before the close-out's own loop: a fresh Codex session (the command of step 2) over the three merged arcs, `git show f60125ec 110446a4 2dcdad48` (#276, #506, #509), asking only for seams between them and drift from this plan, with the two rules. They are merged, so a finding with a written path becomes an issue (an Open item) or a disposition line; the close-out PR fixes no code. Resume until a round yields no new material finding; three-round stop.
+8. The cross-arc pass step 5 still owes, before the close-out's own loop: a fresh Codex session (the command of step 2) over the merged arcs, `git show f60125ec 110446a4 2dcdad48 493ff497` (#276, #506, #509, #609), asking only for seams between them and drift from this plan, with the two rules. They are merged, so a finding with a written path becomes an issue (an Open item) or a disposition line; the close-out PR fixes no code in them (P25-10 B is its own change, D43). Resume until a round yields no new material finding; three-round stop.
 9. The close-out loop: a fresh Codex session over `git diff origin/dev...HEAD` once Phase 3's gate passes, asking whether the Outcome, the dispositions and the issue comments match the tree and GitHub, with the two rules; resume until no new material finding; three-round stop. Log both loops in `lessons/phase-3.md` and § Audit verdicts.
-10. Push and open one PR: `gh pr create --base dev --head chain-endpoints-close-out --title "docs(plans): close chain-endpoints"`, unlabelled. Body: what closed and why, A5's runs and outcome, `Closes #101` or `Refs #101` (D28), `Refs #79` (closed by #389; nothing remains), the Open items. Then `gh pr checks --watch`.
+10. Push and open one PR: `gh pr create --base dev --head chain-endpoints-close-out --title "fix(home): read a missing price as unavailable, close chain-endpoints"` (D44), unlabelled. Body: P25-10 B with its sign-off, what closed and why, A5's runs and outcome, `Closes #101` (D-orch-11), `Closes #116` (D43), `Refs #79` (closed by #389; nothing remains), the Open items. Then `gh pr checks --watch`.
 11. Report and wait. Merging is the orchestrator's call; the merge completes the plan.
 
 ### Teardown after the merge
@@ -1011,7 +1105,7 @@ This section is self-contained: the implementing session follows it from here.
 
 ## Seeds
 
-Recommended: `/goal`. Use exactly one per session; they do not compose. Drafts until the orchestrator approves this revision; the earlier seeds drove arcs 1, 2a and 2c and are retired.
+Retired with the close-out (§ Outcome); kept as the record of what drove the last phase.
 
 ```
 /goal Phase 3 of implementations-plan/chain-endpoints/plan.md is marked ✓, its validation gate reported passing in the transcript (bun run check:plans and bun run lint exit 0; git diff --stat origin/dev lists only implementations-plan/**; the four A5 network runs logged with their outcome, or the sample recorded as not done with its reason); the transcript prints LESSONS_FILE=implementations-plan/archive/chain-endpoints/lessons/phase-3.md; /code-review was NOT run (code_review is off); the cross-arc Codex pass and the close-out Codex loop (env -u CODEX_ACCOUNT run-codex.sh … high read-only gpt-6.1-sol) each converged, each convergence a resumed Codex pass reporting no new material finding, quoted in the transcript; the comments on #79 and #101 and any new issue (OA-8's, A5's) exist on GitHub (gh issue view in the transcript); the archive-move commit exists (git show --stat in the transcript); the close-out PR exists against dev, opened only after both loops converged (gh pr view in the transcript); bun run test and bun run lint:actions both exit 0 in the transcript.

@@ -27,7 +27,9 @@ import { formatCaipAccount, parseCaipAccount } from "@/wallet/utils/caip"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
+import { useConfirm } from "@/composables/useConfirm"
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
 
 /** Helpers */
 import { formatSessionExpiry, parseSessionParams } from "@/popup/components/modules/settings/connected-apps/connected-app-helpers"
@@ -36,13 +38,9 @@ import { authorizationsEffective, coversAnyContract } from "@nulo/wallet-bridge"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
-import { useCacheStore } from "@/stores/cache.store"
-import { usePopupStore } from "@/stores/popup.store"
 import { copyWithToast } from "@/utils/clipboard"
 import { trimAddress } from "@/utils/string"
 const appStore = useAppStore()
-const cacheStore = useCacheStore()
-const popupStore = usePopupStore()
 
 const route = useRoute()
 const router = useRouter()
@@ -146,13 +144,14 @@ async function fetchAccounts() {
 
 const handleDropSession = () => {
 	if (!session.value) return
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.confirm_text = "Yes, disconnect"
-	cacheStore.confirm.description = `Disconnect "${session.value.dappMetadata?.name ?? "this dApp"}"?`
-	cacheStore.confirm.callback = async () => {
-		await dappSessionService.deleteDappSession(session.value.id)
-	}
-	popupStore.open("confirm")
+	requestConfirm({
+		confirm_color: "red",
+		confirm_text: "Yes, disconnect",
+		description: `Disconnect "${session.value.dappMetadata?.name ?? "this dApp"}"?`,
+		callback: async () => {
+			await dappSessionService.deleteDappSession(session.value.id)
+		},
+	})
 }
 
 const handleCopyAddress = (target) => {

@@ -425,6 +425,23 @@ export class ExecutionLane {
 		}
 	}
 
+	/** `queued → pending` for a granted send a park moved back to `queued`; a send still `pending` stays.
+	 *  Any other stage ends it: a cancel that landed first, or a record that is gone. */
+	public async reclaimParked(journalId: string): Promise<void> {
+		const result = await this.deps.operationJournal.transitionIfStage(journalId, ["queued"], { stage: "pending" })
+		if (result.outcome === "transitioned" || (result.outcome === "stage" && result.stage === "pending")) return
+		if (result.outcome === "stage" && result.stage === "cancelled") throw new JobCancelledSentinel(journalId)
+		throw new Error("A waiting dApp send lost its record")
+	}
+
+	/** Cancels a send while it still asks `fee`, so an answer to a question it no longer asks cancels
+	 *  nothing: `cancelJob`'s journal-first order, with the question as its precondition. */
+	public async cancelQuestion(journalId: string, fee: string): Promise<void> {
+		const record = await this.deps.operationJournal.getOperation(journalId)
+		if (record?.progress.stage !== "queued" || record.progress.reask?.fee !== fee) return
+		await this.cancelJob(journalId)
+	}
+
 	/** Any exit from a slot wait but the grant. Always throws. */
 	private async refuseSlot(err: unknown, queuedJournalId: string | undefined): Promise<never> {
 		if (queuedJournalId) this.activeControllers.delete(queuedJournalId)

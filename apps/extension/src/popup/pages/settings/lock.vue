@@ -18,18 +18,16 @@ import { settingItemProps, settingsRow } from "@/utils/settings-search"
 
 /** Stores */
 import { useAppStore } from "@/stores/app.store"
-import { useCacheStore } from "@/stores/cache.store"
-import { usePopupStore } from "@/stores/popup.store"
 const appStore = useAppStore()
-const cacheStore = useCacheStore()
-const popupStore = usePopupStore()
 
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useConfigRead } from "@/composables/useConfigRead"
+import { useConfirm } from "@/composables/useConfirm"
 import { useLockWallet } from "@/composables/useLockWallet"
 import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
 const { vSettingsRow } = useSettingsRowHighlight()
 const { lock: lockNow, dispose: disposeLockWallet } = useLockWallet(managers.profile)
 
@@ -95,22 +93,23 @@ function onSettingUpdate(setting) {
  *  change). Enabling fires immediately. */
 function onStrictToggle(next) {
 	if (next === false) {
-		cacheStore.confirm.title = "Disable strict security?"
-		cacheStore.confirm.description =
-			"Skip password re-entry across browser restarts. Less secure. " +
-			"Anyone who can read browser data can unlock the wallet without your password."
-		cacheStore.confirm.confirm_text = "Disable"
-		cacheStore.confirm.confirm_color = "red"
-		cacheStore.confirm.callback = async () => {
-			try {
-				await configService.setValue("strictSecurityMode", false)
-				strictSecurityMode.value = false
-				openToast({ kind: "success", label: "Strict security mode disabled" })
-			} catch (err) {
-				openToast({ kind: "error", label: "Failed to update setting" })
-			}
-		}
-		popupStore.open("confirm")
+		requestConfirm({
+			title: "Disable strict security?",
+			description:
+				"Skip password re-entry across browser restarts. Less secure. " +
+				"Anyone who can read browser data can unlock the wallet without your password.",
+			confirm_text: "Disable",
+			confirm_color: "red",
+			callback: async () => {
+				try {
+					await configService.setValue("strictSecurityMode", false)
+					strictSecurityMode.value = false
+					openToast({ kind: "success", label: "Strict security mode disabled" })
+				} catch (err) {
+					openToast({ kind: "error", label: "Failed to update setting" })
+				}
+			},
+		})
 		// Note: do NOT mutate strictSecurityMode here. Toggle is controlled
 		// by the ref; cancel = no state change, no UI flicker.
 	} else {
