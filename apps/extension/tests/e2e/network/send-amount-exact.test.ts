@@ -224,6 +224,7 @@ test.skipIf(!hasConfig)(
 		expect(await page.$eval('[data-testid="send-amount-balance"]', (el) => el.textContent?.trim())).toBe("1,235,567.12345678 TST")
 
 		await openReviewFromStrip(page)
+		await shotSend(page, "sheet-send-review", "send-review-submit")
 		const review = await readReviewAmount(page)
 		console.log(`[send-amount-exact] review amount: ${JSON.stringify(review)}`)
 		expect(review.text).toBe("1,235,567.123456789012345678TST")

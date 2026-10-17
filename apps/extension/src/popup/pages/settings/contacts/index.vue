@@ -144,7 +144,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<SettingsPageShell title="Contacts" :backTo="'/popup/settings'" gap="12">
+	<SettingsPageShell title="Contacts" :backTo="'/popup/settings'" gap="12" data-testid="contacts-page">
 		<template #trailing>
 			<Dropdown>
 				<button type="button" :class="$style.icon_btn" aria-label="Contact actions" data-testid="contacts-menu-trigger">

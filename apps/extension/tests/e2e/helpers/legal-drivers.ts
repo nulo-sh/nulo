@@ -175,8 +175,8 @@ export async function isSheetPresent(page: Page): Promise<boolean> {
  * A REAL pointer click at the element's centre, after proving nothing sits on top of it there. A
  * DOM-dispatched click reaches an element under an overlay; this is the proof that no overlay is.
  * `last` picks the last match of the testid — the control of the popup on top of a stack. The centre
- * is read only once the element holds still: a popup enters sliding 40px over 300ms, and a centre read
- * mid-slide is clicked a round trip later, after the element has moved off it.
+ * is read only once the element holds still: a sheet's card moves 15px as a sheet opens over it or
+ * closes above it, and a centre read mid-move is clicked a round trip later, after it has moved off it.
  */
 export async function pointerClick(page: Page, testid: string, opts: { last?: boolean } = {}): Promise<void> {
 	await page.waitForSelector(sel(testid), { visible: true, timeout: 15_000 })
@@ -207,7 +207,7 @@ export async function pointerClick(page: Page, testid: string, opts: { last?: bo
 
 /** Returns once three reads 50 ms apart give the element the same box and no enter transition above it
  *  still waits to start: Vue drops `*-enter-from` two animation frames after insert, and headless Chrome
- *  has been seen throttling frames long enough to hold a popup still at its start offset (reads are
+ *  has been seen throttling frames long enough to hold a popup still in its start state (reads are
  *  polled from the test for the same reason). After 5 s a still element is pressed where it stands; one
  *  still moving throws. */
 async function waitUntilStill(page: Page, selector: string, last: boolean): Promise<void> {

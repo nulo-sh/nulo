@@ -407,6 +407,34 @@ async function openScratchPage(browser: Browser, extensionId: string): Promise<P
  */
 const prepareClick = (page: Page): Promise<void> => page.bringToFront().catch(() => {})
 
+type BiDiPointerAction =
+	| { type: "pointerMove"; x: number; y: number }
+	| { type: "pointerDown" | "pointerUp"; button: number }
+	| { type: "pause"; duration: number }
+
+/** Puppeteer's BiDi mouse sends every `down` and `up` as a chain of its own, which Firefox never
+ *  counts as one double-click, so the whole sequence goes out as one chain on the page's context. */
+async function doubleClick(page: Page, x: number, y: number, gapMs: number): Promise<void> {
+	const frame = page.mainFrame() as unknown as {
+		browsingContext?: { performActions(sources: { type: "pointer"; id: string; actions: BiDiPointerAction[] }[]): Promise<void> }
+	}
+	if (!frame.browsingContext) throw new Error("doubleClick: the page's frame has no BiDi browsing context")
+	const press: BiDiPointerAction[] = [
+		{ type: "pointerDown", button: 0 },
+		{ type: "pointerUp", button: 0 },
+	]
+	// Through Puppeteer's mouse first, so its record of where the pointer stands stays true; the chain
+	// then drives the same input source, and a move to where it already stands changes nothing.
+	await page.mouse.move(x, y)
+	await frame.browsingContext.performActions([
+		{
+			type: "pointer",
+			id: "__puppeteer_mouse",
+			actions: [{ type: "pointerMove", x: Math.round(x), y: Math.round(y) }, ...press, { type: "pause", duration: gapMs }, ...press],
+		},
+	])
+}
+
 const KEYS_FOCUS_BUDGET_MS = 5_000
 const KEYS_FOCUS_ATTEMPT_MS = 500
 
@@ -827,6 +855,7 @@ export const firefoxDriver: BrowserDriver = {
 	interceptRpc: (browser, _extensionId, fromOrigin, mode) => observeAndIntercept(classicSessionFor(browser), fromOrigin, mode),
 	prepareClick,
 	prepareKeys,
+	doubleClick,
 	pickFile,
 	virtualAuthenticator: sessionAuthenticator,
 	holdNextCredentialGet,

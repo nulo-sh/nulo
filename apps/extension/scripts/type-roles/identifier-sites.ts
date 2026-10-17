@@ -1,20 +1,24 @@
-import { readdirSync, readFileSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import ts from "typescript"
 import {
 	boundAttr,
+	DECLARATION,
 	directive,
 	escapeRegExp,
 	NODE,
+	PACKAGE_SRC_ROOTS,
 	type ParsedSource,
 	parseSource,
 	REPO_ROOT,
-	SKIPPED,
+	STORY_FILE,
 	sourceFiles,
+	TEST_FILE,
 	type TemplateNode,
 	type TemplateProp,
 	textTagNames,
 	walkTemplate,
+	workspaceSrcRoots,
 } from "./source-scan"
 
 /**
@@ -443,28 +447,17 @@ export function identifierSites(files: readonly string[] = sourceFiles()): Ident
 
 export type ProducerHit = { file: string; text: string }
 
-const PRODUCER_FILE = /\.(ts|js|vue)$/
-
-function filesUnder(root: string): string[] {
-	try {
-		return readdirSync(join(REPO_ROOT, root), { recursive: true, encoding: "utf8" }).map((f) => `${root}/${f.split("\\").join("/")}`)
-	} catch {
-		return []
-	}
-}
-
 /**
  * Every match of `search` in the sources of every app and package, tests aside: the producer set an
  * `unreachable` site pins, each hit's text whitespace-collapsed so a moved line is no change.
  */
 export function producerHits(search: RegExp): ProducerHit[] {
-	const roots = ["apps", "packages"].flatMap((dir) => readdirSync(join(REPO_ROOT, dir)).map((name) => `${dir}/${name}/src`))
 	const global = new RegExp(search.source, search.flags.includes("g") ? search.flags : `${search.flags}g`)
-	return roots
-		.flatMap(filesUnder)
-		.filter((file) => PRODUCER_FILE.test(file) && !SKIPPED.test(file) && !file.includes("/node_modules/"))
-		.sort()
-		.flatMap((file) => [...readFileSync(join(REPO_ROOT, file), "utf8").matchAll(global)].map((m) => ({ file, text: normalize(m[0]) })))
+	return sourceFiles({
+		roots: [...workspaceSrcRoots("apps"), ...PACKAGE_SRC_ROOTS],
+		exts: ["ts", "js", "vue"],
+		skip: [TEST_FILE, STORY_FILE, DECLARATION, /\/node_modules\//],
+	}).flatMap((file) => [...readFileSync(join(REPO_ROOT, file), "utf8").matchAll(global)].map((m) => ({ file, text: normalize(m[0]) })))
 }
 
 export function formatSite(site: IdentifierSite): string {

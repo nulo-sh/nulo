@@ -514,8 +514,8 @@ export class PxeServiceClientBase extends ServiceClient<Methods, PxeEvents> impl
 		return await PublicTokenClassStatusSchema.parseAsync(result)
 	}
 
-	/** Dispose the offscreen runtime for `(profileId, chainId)` and delete
-	 *  its IndexedDB. SW-side cascade entry-point for `NetworkService.purgeChain`. */
+	/** Dispose the offscreen runtime for `(profileId, chainId)` and remove
+	 *  its OPFS store. SW-side cascade entry-point for `NetworkService.purgeChain`. */
 	public async clearChainState(profileId: string, chainId: number): Promise<void> {
 		await this.request("clearChainState", profileId, chainId)
 	}

@@ -208,6 +208,19 @@ describe("modules/activity/TransactionCard (settled)", () => {
 			const w = mountCard(mintTx(10n ** 18n, 10n ** 18n), { tokens })
 			expect(w.find(".amount").text()).toBe("")
 		})
+
+		test("a listed mint reads as the window names it, with the faucet; a call no token reading covers, by its own name with the call glyph", () => {
+			const layout = (w: ReturnType<typeof mountCard>) => w.findComponent(STUBS.TransactionCardLayout)
+			const mint = layout(mountCard(mintTx(10n ** 18n), { tokens }))
+			expect([mint.props("title"), mint.props("icon")]).toEqual(["Mint (public)", "faucet"])
+			const ownership = layout(
+				mountCard(
+					{ ...mintTx(), calls: [{ contract: TOKEN, method: "transfer_ownership", args: [RECIPIENT], classId: CLASS }] },
+					{ tokens },
+				),
+			)
+			expect([ownership.props("title"), ownership.props("icon")]).toEqual(["Transfer Ownership", "zap"])
+		})
 	})
 
 	test("`to` reaches the layout, and the explorer link is a named action opening a new tab", () => {

@@ -22,7 +22,7 @@ import type { TokenBalanceInfo } from "@/wallet/services/token-balance/spec"
 
 /** Utils */
 import { parseRawBalance, safeFiatOf } from "@/utils/token-amount"
-import { aggregateFiat, pricesUnavailable } from "@/utils/token-aggregate"
+import { aggregateFiat, awaitingFirstPriceAnswer, pricesUnavailable } from "@/utils/token-aggregate"
 import { forChain } from "@/utils/token-order"
 import { fitHero } from "@/utils/hero-fit"
 import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
@@ -111,6 +111,7 @@ const aggregate = computed(() => aggregateFiat(rows.value, fiatOf))
 /** Home's unavailable state, from the first price answer on: before it no quote has had a chance. */
 const unavailable = computed(() => showFiatValues.value && prices.settled.value && pricesUnavailable(rows.value, fiatOf, prices))
 const totalDisplay = computed(() => (unavailable.value ? "—" : prices.formatUsdMicro(aggregate.value.micro)))
+const awaitingPrices = computed(() => showFiatValues.value && awaitingFirstPriceAnswer(rows.value, prices))
 
 const openAddToken = (address: string) => {
 	cacheStore.preselectedTokenAddressToAdd = address
@@ -123,7 +124,7 @@ const metaRuler = useTemplateRef<HTMLElement>("metaRuler")
 const summaryMeta = computed(() =>
 	unavailable.value
 		? "Prices unavailable"
-		: `${rows.value.length} tokens${showFiatValues.value && aggregate.value.partial ? " · priced assets only" : ""}`,
+		: `${rows.value.length} tokens${showFiatValues.value && aggregate.value.partial && !awaitingPrices.value ? " · priced assets only" : ""}`,
 )
 /** The total's type as a fraction of its 26 px: full size while it fits beside the meta line
  *  wrapped to its narrowest, then the largest that does, with no floor, so no digit is ever hidden. */
@@ -193,10 +194,16 @@ onBeforeUnmount(() => {
 	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper" data-testid="holdings-page">
 		<Flex direction="column" gap="16" :class="$style.content">
 			<Flex ref="summary" align="end" justify="between" :class="$style.summary" data-testid="holdings-summary">
-				<span v-if="showFiatValues" :class="[$style.summary_amount, { [$style.summary_amount_shrunk]: totalScale < 1 }]">
-					<span :class="$style.summary_fit" :style="{ '--hero-scale': totalScale }" :aria-hidden="unavailable || undefined">{{ totalDisplay }}</span>
+				<span
+					v-if="showFiatValues"
+					data-testid="holdings-total"
+					:aria-busy="awaitingPrices || undefined"
+					:class="[$style.summary_amount, { [$style.summary_amount_shrunk]: totalScale < 1 }]"
+				>
+					<Skeleton v-if="awaitingPrices" :width="96" :height="26" data-testid="holdings-total-loading" :class="$style.total_skeleton" />
+					<span v-else :class="$style.summary_fit" :style="{ '--hero-scale': totalScale }" :aria-hidden="unavailable || undefined">{{ totalDisplay }}</span>
 				</span>
-				<span :class="$style.summary_meta">{{ summaryMeta }}</span>
+				<span data-testid="holdings-meta" :class="$style.summary_meta">{{ summaryMeta }}</span>
 				<!-- The fit's ruler: the total in the line's classes at full size and the meta line at its
 				     narrowest, clipped to nothing, never drawn. -->
 				<span v-if="showFiatValues" aria-hidden="true" :class="$style.summary_ruler">
@@ -246,6 +253,11 @@ onBeforeUnmount(() => {
 
 .summary_amount_shrunk {
 	margin-right: 8px;
+}
+
+/* Centred on the figure's line box, so the summary keeps its height when the figure lands. */
+.total_skeleton {
+	vertical-align: middle;
 }
 
 /* The figure scales down from the total's size, while its line keeps the full size's height; the
