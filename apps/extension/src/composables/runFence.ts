@@ -9,6 +9,8 @@ export interface RunFence {
 	begin(): () => boolean
 	/** Bump the generation without starting a run: every earlier run's closure goes false. */
 	invalidate(): void
+	/** isCurrent for the current generation, without bumping it: runs in flight stay current. */
+	snapshot(): () => boolean
 }
 
 export function createRunFence(): RunFence {
@@ -20,6 +22,10 @@ export function createRunFence(): RunFence {
 		},
 		invalidate() {
 			generation++
+		},
+		snapshot() {
+			const mine = generation
+			return () => generation === mine
 		},
 	}
 }

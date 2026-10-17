@@ -155,7 +155,7 @@ async function open(armed: string[] = ["N1", "N2"], backup?: Record<string, unkn
 	const env = makeOpts()
 	const page = useRestoreAgain(env.opts)
 	await page.start()
-	page.selectedBackup.value = { name: "b.json", backup: backup ?? original, type: "plain", profileType: "password" }
+	page.selectedBackup.value = { name: "b.json", backup: backup ?? original, kind: "plain", profileType: "password" }
 	return { ...env, page, run, original }
 }
 
@@ -233,7 +233,7 @@ describe("useRestoreAgain: refusals change nothing", () => {
 		page.selectedBackup.value = {
 			name: "b.json",
 			backup: { ...original, data: { ...original.data, "account-state": [item(1)] } },
-			type: "plain",
+			kind: "plain",
 			profileType: "password",
 		}
 
@@ -250,7 +250,7 @@ describe("useRestoreAgain: refusals change nothing", () => {
 		page.selectedBackup.value = {
 			name: "b.txt",
 			backup: await sealFullBackupText(JSON.stringify(original), "right password"),
-			type: "encrypted",
+			kind: "sealed",
 			profileType: null,
 		}
 		page.decryptionPassword.value = "wrong password"
@@ -327,7 +327,7 @@ describe("useRestoreAgain: outcomes", () => {
 		const { opts } = makeOpts()
 		const page = useRestoreAgain(opts)
 		await page.start()
-		page.selectedBackup.value = { name: "b.json", backup, type: "plain", profileType: "password" }
+		page.selectedBackup.value = { name: "b.json", backup, kind: "plain", profileType: "password" }
 
 		await page.restoreBackup()
 

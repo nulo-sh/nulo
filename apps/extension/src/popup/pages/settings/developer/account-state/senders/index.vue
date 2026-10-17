@@ -15,8 +15,10 @@ import { AccountStateServiceClient } from "@/wallet/services/account-state/clien
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { useConfirm } from "@/composables/useConfirm"
 import { useEntityCrud } from "@/composables/useEntityCrud"
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
 
 /** Utils */
 import { copyWithToast } from "@/utils/clipboard"
@@ -24,10 +26,8 @@ import { copyWithToast } from "@/utils/clipboard"
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 import { usePopupStore } from "@/stores/popup.store"
-import { useCacheStore } from "@/stores/cache.store"
 const appStore = useAppStore()
 const popupStore = usePopupStore()
-const cacheStore = useCacheStore()
 
 const copiedAddress = ref("")
 const accountStateClientService = new AccountStateServiceClient()
@@ -70,18 +70,17 @@ const handleCopyAddress = (address) => {
 }
 
 const handleDelete = (sender) => {
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.confirm_text = "Yes, delete sender"
-	cacheStore.confirm.title = "Delete this sender?"
-	cacheStore.confirm.description =
-		"Most transfers are detected automatically; removing a sender only affects transfers delivered with address-derived tagging"
-	cacheStore.confirm.callback = async () => {
-		await accountStateClientService.deleteSender(appStore.network.id, sender)
-
-		openToast({ kind: "success", label: "Sender successfully deleted" })
-	}
-
-	popupStore.open("confirm")
+	requestConfirm({
+		confirm_color: "red",
+		confirm_text: "Yes, delete sender",
+		title: "Delete this sender?",
+		description:
+			"Most transfers are detected automatically; removing a sender only affects transfers delivered with address-derived tagging",
+		callback: async () => {
+			await accountStateClientService.deleteSender(appStore.network.id, sender)
+			openToast({ kind: "success", label: "Sender successfully deleted" })
+		},
+	})
 }
 
 watch(

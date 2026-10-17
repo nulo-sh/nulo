@@ -19,7 +19,7 @@ describe("resolveFullBackupEnterAction (popup full-backup Enter shortcut)", () =
 		expect(
 			resolveFullBackupEnterAction(
 				at({
-					selectedBackup: sel({ type: "encrypted", profileType: null }),
+					selectedBackup: sel({ kind: "sealed", profileType: null }),
 					restoreStatus: null,
 					isRestoreHasErrors: false,
 				}),
@@ -31,7 +31,7 @@ describe("resolveFullBackupEnterAction (popup full-backup Enter shortcut)", () =
 		expect(
 			resolveFullBackupEnterAction(
 				at({
-					selectedBackup: sel({ type: "encrypted", profileType: "password" }),
+					selectedBackup: sel({ kind: "opened", profileType: "password" }),
 					restoreStatus: "",
 					isRestoreHasErrors: false,
 				}),
@@ -45,7 +45,7 @@ describe("resolveFullBackupEnterAction (popup full-backup Enter shortcut)", () =
 		expect(
 			resolveFullBackupEnterAction(
 				at({
-					selectedBackup: sel({ type: "plain", profileType: "passkey" }),
+					selectedBackup: sel({ kind: "plain", profileType: "passkey" }),
 					restoreStatus: "progress",
 					isRestoreHasErrors: false,
 				}),
@@ -57,7 +57,7 @@ describe("resolveFullBackupEnterAction (popup full-backup Enter shortcut)", () =
 		expect(
 			resolveFullBackupEnterAction(
 				at({
-					selectedBackup: sel({ type: "plain", profileType: "password" }),
+					selectedBackup: sel({ kind: "plain", profileType: "password" }),
 					restoreStatus: "finished",
 					isRestoreHasErrors: true,
 				}),
@@ -69,7 +69,7 @@ describe("resolveFullBackupEnterAction (popup full-backup Enter shortcut)", () =
 		expect(
 			resolveFullBackupEnterAction(
 				at({
-					selectedBackup: sel({ type: "plain", profileType: "password" }),
+					selectedBackup: sel({ kind: "plain", profileType: "password" }),
 					restoreStatus: "finished",
 					isRestoreHasErrors: true,
 					isRetrying: true,
@@ -82,7 +82,7 @@ describe("resolveFullBackupEnterAction (popup full-backup Enter shortcut)", () =
 		expect(
 			resolveFullBackupEnterAction(
 				at({
-					selectedBackup: sel({ type: "plain", profileType: "password" }),
+					selectedBackup: sel({ kind: "plain", profileType: "password" }),
 					restoreStatus: "finished",
 					isRestoreHasErrors: false,
 				}),
@@ -95,7 +95,7 @@ describe("resolveFullBackupEnterAction (popup full-backup Enter shortcut)", () =
 		expect(
 			resolveFullBackupEnterAction(
 				at({
-					selectedBackup: sel({ type: "plain", profileType: "password" }),
+					selectedBackup: sel({ kind: "plain", profileType: "password" }),
 					restoreStatus: "failed",
 				}),
 			),
@@ -106,7 +106,7 @@ describe("resolveFullBackupEnterAction (popup full-backup Enter shortcut)", () =
 		expect(
 			resolveFullBackupEnterAction(
 				at({
-					selectedBackup: sel({ type: "plain", profileType: "password" }),
+					selectedBackup: sel({ kind: "plain", profileType: "password" }),
 					isAllowedToImportBackup: false,
 				}),
 			),
@@ -117,7 +117,7 @@ describe("resolveFullBackupEnterAction (popup full-backup Enter shortcut)", () =
 		expect(
 			resolveFullBackupEnterAction(
 				at({
-					selectedBackup: sel({ type: "plain", profileType: "passkey" }),
+					selectedBackup: sel({ kind: "plain", profileType: "passkey" }),
 					restoreStatus: null,
 					isRestoreHasErrors: false,
 				}),
@@ -132,12 +132,12 @@ describe("resolveFullBackupEnterAction (popup full-backup Enter shortcut)", () =
 	// Each field is read once, up front, in this order; `isRetrying` only when Continue is otherwise due.
 	const FOUR = ["selectedBackup", "restoreStatus", "isAllowedToImportBackup", "isRestoreHasErrors"]
 	test.each([
-		["decrypt", sel({ type: "encrypted", profileType: null }), null, false, false, "decrypt", FOUR],
-		["restore", sel({ type: "encrypted", profileType: "password" }), "", false, false, "restore", FOUR],
-		["in progress", sel({ type: "encrypted", profileType: "password" }), "progress", false, false, null, FOUR],
-		["continue", sel({ type: "plain", profileType: "password" }), "finished", true, false, "continue", [...FOUR, "isRetrying"]],
-		["retrying", sel({ type: "plain", profileType: "password" }), "finished", true, true, null, [...FOUR, "isRetrying"]],
-		["finished clean", sel({ type: "plain", profileType: "password" }), "finished", false, false, null, FOUR],
+		["decrypt", sel({ kind: "sealed", profileType: null }), null, false, false, "decrypt", FOUR],
+		["restore", sel({ kind: "opened", profileType: "password" }), "", false, false, "restore", FOUR],
+		["in progress", sel({ kind: "opened", profileType: "password" }), "progress", false, false, null, FOUR],
+		["continue", sel({ kind: "plain", profileType: "password" }), "finished", true, false, "continue", [...FOUR, "isRetrying"]],
+		["retrying", sel({ kind: "plain", profileType: "password" }), "finished", true, true, null, [...FOUR, "isRetrying"]],
+		["finished clean", sel({ kind: "plain", profileType: "password" }), "finished", false, false, null, FOUR],
 		["nothing selected", null, "", false, false, null, FOUR],
 	] as const)(
 		"reads the state in a fixed order: %s",

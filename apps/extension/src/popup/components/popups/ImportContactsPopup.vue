@@ -88,9 +88,7 @@ function editDescribedby(c, section) {
 	return ids.join(" ")
 }
 
-/** `updated` marks an edit that has just come back; the staged row must not keep it, or reopening the
- *  edit form and closing it would look like another edit and reset the row's selection. */
-function stageRow({ updated: _edit, ...row }, idx) {
+function stageRow(row, idx) {
 	const classified = classifyImportRow(row, savedIndex.value)
 	const addressText = classified.kind === "address-change" ? addressChangeText(classified.savedAddress, row.address) : null
 	return { ...row, idx, ...classified, addressText }
@@ -105,10 +103,17 @@ function handleSelectContact(contact) {
 
 	contact.selected = !contact.selected
 }
+/** The edit form gets the row and its save as its popup payload, which lives only while the form is
+ *  open: a form closed without saving changes nothing. */
 function handleEditContact(contact) {
-	cacheStore.importContact = contact
-
-	popupStore.open("edit_contact")
+	popupStore.open("edit_contact", {
+		contact,
+		// An edited row is judged again from scratch: what the edit carried over from the staged row
+		// (its kind, its selection) describes the row before the edit.
+		onSave: (edited) => {
+			importContacts.value[contact.idx] = stageRow(edited, contact.idx)
+		},
+	})
 }
 function handleResolve() {
 	cacheStore.importPromise?.resolve(importContacts.value.filter((c) => c.selected && c.importable))
@@ -119,16 +124,6 @@ function handleReject() {
 	emit("onClose")
 }
 
-// An edited row is judged again from scratch: what the edit carried over from the staged row (its
-// kind, its selection) describes the row before the edit.
-watch(
-	() => cacheStore.importContact,
-	() => {
-		const edited = cacheStore.importContact
-		if (!edited?.idx || !edited.updated) return
-		importContacts.value[edited.idx] = stageRow(edited, edited.idx)
-	},
-)
 watch(
 	() => props.show,
 	async () => {
@@ -137,7 +132,6 @@ watch(
 			importContacts.value = cacheStore.importContacts.map((c, idx) => stageRow(c, String(idx)))
 		} else {
 			cacheStore.importPromise?.reject(false)
-			cacheStore.importContact = null
 			cacheStore.importContacts = []
 			// The next file's rows arrive only after its book read, so until then the popup must not
 			// show, or confirm, this file's.
