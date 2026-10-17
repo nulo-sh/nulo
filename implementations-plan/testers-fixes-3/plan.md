@@ -85,7 +85,7 @@ Validation gate:
 3. With load1 < 150: `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/rows.test.ts --retry=0` passes.
 4. Repeat 2 and 3 with `build:firefox` and `NULO_E2E_BROWSER=firefox`.
 
-### Phase 2: the journal App row (#629, P34-09 A)
+### Phase 2: the journal App row (#629, P34-09 A) ✓
 
 Files: `detail-page.module.css`, `tx/[id].vue`, `journal/[id].vue`, `detail-page.styles.test.ts`, `journal/[id].test.ts`, `tests/e2e/rows.test.ts`. Assumes: F4, F5; jsdom applies no module CSS, so only the styles test and the browser read the rule.
 

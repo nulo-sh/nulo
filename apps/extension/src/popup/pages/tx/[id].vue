@@ -285,7 +285,7 @@ onBeforeUnmount(() => {
 			<Flex wide direction="column" gap="10">
 				<SectionLabel label="Details" />
 
-				<Flex wide direction="column" gap="10" :class="$style.details_box">
+				<Flex wide direction="column" gap="10" :class="$style.details_box" data-testid="tx-detail-box">
 					<TxHashRow v-if="tx?.hash" :hash="tx.hash" :explorerUrl="explorerUrl" linkTestid="tx-hash-link" copyTestid="tx-hash" @copy="handleCopy" />
 
 					<Flex v-if="originLabel" wide justify="between" align="start" gap="16">
@@ -451,20 +451,12 @@ onBeforeUnmount(() => {
 	color: var(--txt-primary);
 }
 
-/* Sits level with the value's first line, whose line box is taller. */
 .app_key {
-	composes: detail_key;
-	flex-shrink: 0;
-	padding-top: 2px;
+	composes: app_key from "../detail-page.module.css";
 }
 
-/* A dApp's name can be one unbreakable word: it breaks anywhere, so the row grows instead of the page. */
 .app_value {
-	composes: detail_value_mono;
-	min-width: 0;
-	text-align: right;
-	word-break: break-all;
-	line-height: 1.4;
+	composes: app_value from "../detail-page.module.css";
 }
 
 .detail_value_aux {

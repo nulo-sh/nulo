@@ -8,3 +8,5 @@
 - 2026-10-17 11:25Z: arc 1 started on the approved plan (dev unmoved at f695dea4).
 - 2026-10-17 11:31Z: Phase 1 red proof, Chrome, base layout plus the direction testid: the dApp transfer's chip `below: true` at 96 px, the large row's direction chip on 1 line at 96 px; both scenarios red as planned.
 - 2026-10-17 11:45Z: Phase 1 gate pass: lint, typecheck:all, test (826 files) exit 0; armed Chrome build, rows.test.ts 9/9 at --retry=0 (60 s); armed Firefox build, 9/9 (93 s). Rows 62 px Chrome, 64 px Firefox; drawn-regime chip 41 px in both; large row at its 19 px floor, direction on 2 lines (Firefox 11 px short of one line).
+- 2026-10-17 11:53Z: Phase 2 red proof, Chrome, base journal row plus its testids: the App value one line, 29.8 px past the box's inner edge; red as planned.
+- 2026-10-17 12:00Z: Phase 2 gate pass: lint, typecheck:all, test exit 0; armed Chrome build, rows.test.ts 9/9 at --retry=0 (72 s); armed Firefox build, 9/9 (104 s). Both App values two lines, flush with the box (0 px), 16 px after the label; the large row 11 px short of one line in both browsers.

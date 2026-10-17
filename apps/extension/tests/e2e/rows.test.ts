@@ -773,6 +773,8 @@ const UNBREAKABLE_METHOD = "swapexacttokensfortokenssupportingfeeontransfertoken
 const NAMED_RECORD = "d1".repeat(8)
 const NAMELESS_RECORD = "d2".repeat(8)
 const LONG_HOST = "staging-nemi-interface.nemi-e65.workers.dev"
+/** A dApp's name with no break opportunity anywhere, 42 characters. */
+const JOURNAL_HOST = "verylongsubdomainwithoutbreaks.example.com"
 const SHORT_APP = "NEMI"
 const APP_CHIP_CAP = 96
 const DAPP_CALL_HASH = `0x${"6c".repeat(32)}`
@@ -855,7 +857,50 @@ async function readDappRows(page: Page): Promise<NamedRows> {
 	}, rows)
 }
 
-test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol and direction whole with its app chip cut beside them; the details' App value breaks anywhere against the box's right edge", async ({
+/** A details page's App value, read against its label and its Details box's inner edge: it breaks
+ *  anywhere onto two lines, each flush with the box's right edge, the row growing. */
+async function expectAppValueBreaksAnywhere(page: Page, ids: { value: string; label: string; box: string }, host: string): Promise<void> {
+	await page.waitForSelector(sel(ids.value), { visible: true, timeout: 15_000 })
+	await shotSend(page, ids.value, ids.value)
+	const app = await page.evaluate(
+		(valueSel: string, labelSel: string, boxSel: string) => {
+			const value = document.querySelector(valueSel) as HTMLElement
+			const label = document.querySelector(labelSel) as HTMLElement
+			const box = document.querySelector(boxSel) as HTMLElement
+			const style = getComputedStyle(box)
+			const inner = box.getBoundingClientRect().right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight)
+			const range = document.createRange()
+			range.selectNodeContents(value)
+			const lines = [...range.getClientRects()]
+			const text = value.firstChild as Text
+			range.setStart(text, text.data.indexOf("s"))
+			range.setEnd(text, text.data.indexOf("s") + 1)
+			const glyph = range.getBoundingClientRect().width
+			return {
+				text: value.textContent?.trim(),
+				lines: new Set(lines.map((r) => Math.round(r.top))).size,
+				lineRights: lines.map((r) => r.right - inner),
+				// Breaking anywhere fills the first line to within a glyph; at a hyphen it would end far short.
+				firstLineSlack: Math.min(...lines.map((r) => r.left)) - value.getBoundingClientRect().left,
+				glyph,
+				right: value.getBoundingClientRect().right - inner,
+				gap: value.getBoundingClientRect().left - label.getBoundingClientRect().right,
+			}
+		},
+		sel(ids.value),
+		sel(ids.label),
+		sel(ids.box),
+	)
+	console.log(`[rows] ${ids.value}: ${JSON.stringify(app)}`)
+	expect(app.text).toBe(host)
+	expect(app.lines).toBe(2)
+	expect(Math.abs(app.right)).toBeLessThanOrEqual(0.5)
+	for (const right of app.lineRights) expect(Math.abs(right)).toBeLessThanOrEqual(0.5)
+	expect(app.firstLineSlack).toBeLessThan(app.glyph)
+	expect(app.gap).toBeGreaterThanOrEqual(16 - 0.5)
+}
+
+test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol and direction whole with its app chip cut beside them; the App value of the transaction and journal pages breaks anywhere against the box's right edge", async ({
 	listedExtensionPerTest,
 }) => {
 	const page = await openPopup(listedExtensionPerTest)
@@ -866,7 +911,7 @@ test("a dApp's long function name and host never widen Home or History, named or
 		id: NAMED_RECORD,
 		kind: "dapp_execute",
 		title: LONG_METHOD,
-		subtitle: LONG_HOST,
+		subtitle: JOURNAL_HOST,
 		progress: { stage: "cancelled" },
 		at: now,
 	})
@@ -904,39 +949,13 @@ test("a dApp's long function name and host never widen Home or History, named or
 	}
 
 	await navigateByHash(page, `#/popup/tx/${DAPP_TRANSFER_HASH}`)
-	await page.waitForSelector(sel("tx-detail-app"), { visible: true, timeout: 15_000 })
-	await shotSend(page, "tx-detail-app", "tx-detail-app")
-	const app = await page.evaluate(() => {
-		const value = document.querySelector('[data-testid="tx-detail-app"]') as HTMLElement
-		const label = document.querySelector('[data-testid="tx-detail-app-label"]') as HTMLElement
-		const box = value.parentElement?.parentElement as HTMLElement
-		const style = getComputedStyle(box)
-		const inner = box.getBoundingClientRect().right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight)
-		const range = document.createRange()
-		range.selectNodeContents(value)
-		const lines = [...range.getClientRects()]
-		const text = value.firstChild as Text
-		range.setStart(text, text.data.indexOf("s"))
-		range.setEnd(text, text.data.indexOf("s") + 1)
-		const glyph = range.getBoundingClientRect().width
-		return {
-			text: value.textContent?.trim(),
-			lines: new Set(lines.map((r) => Math.round(r.top))).size,
-			lineRights: lines.map((r) => r.right - inner),
-			// Breaking anywhere fills the first line to within a glyph; at the hyphens it would end far short.
-			firstLineSlack: Math.min(...lines.map((r) => r.left)) - value.getBoundingClientRect().left,
-			glyph,
-			right: value.getBoundingClientRect().right - inner,
-			gap: value.getBoundingClientRect().left - label.getBoundingClientRect().right,
-		}
-	})
-	console.log(`[rows] the details' App value: ${JSON.stringify(app)}`)
-	expect(app.text).toBe(LONG_HOST)
-	expect(app.lines).toBe(2)
-	expect(Math.abs(app.right)).toBeLessThanOrEqual(0.5)
-	for (const right of app.lineRights) expect(Math.abs(right)).toBeLessThanOrEqual(0.5)
-	expect(app.firstLineSlack).toBeLessThan(app.glyph)
-	expect(app.gap).toBeGreaterThanOrEqual(16 - 0.5)
+	await expectAppValueBreaksAnywhere(page, { value: "tx-detail-app", label: "tx-detail-app-label", box: "tx-detail-box" }, LONG_HOST)
+	await navigateByHash(page, `#/popup/journal/${NAMED_RECORD}`)
+	await expectAppValueBreaksAnywhere(
+		page,
+		{ value: "journal-detail-origin", label: "journal-detail-app-label", box: "journal-detail-box" },
+		JOURNAL_HOST,
+	)
 
 	expect(listedExtensionPerTest.consoleErrors).toEqual([])
 	expect(listedExtensionPerTest.pageErrors).toEqual([])

@@ -201,6 +201,20 @@ describe("the hash of a send that reached the send line", () => {
 	})
 })
 
+describe("the App row of a dApp's operation", () => {
+	/** No break opportunity anywhere in it: only breaking anywhere keeps it inside the box. */
+	const HOST = "verylongsubdomainwithoutbreaks.example.com"
+
+	test("shows the dApp's host whole, in the shared value that breaks anywhere, beside the shared label", async () => {
+		const { tokenId: _tokenId, amountRaw: _amountRaw, ...base } = failedSend()
+		const w = await mountPage({ ...base, kind: "dapp_execute", origin: "dapp", title: "swap", subtitle: HOST })
+		expect(row(w, "origin").text()).toBe(HOST)
+		expect(row(w, "origin").classes().join(" ")).toMatch(/app_value/)
+		expect(row(w, "app-label").text()).toBe("App")
+		expect(row(w, "app-label").classes().join(" ")).toMatch(/app_key/)
+	})
+})
+
 describe("the To row of a send that named its recipient", () => {
 	const TESTNET = { network: { id: "n1", chainId: CHAIN_IDS.TESTNET } }
 	const RECIPIENT = `0x${"09".repeat(32)}`
