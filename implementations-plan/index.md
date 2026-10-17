@@ -4,4 +4,4 @@ Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 
 - [send-fees-ux](send-fees-ux/plan.md) — planned, awaiting approval — the edit form's sponsor address check and the cap refusal words (#316, #340), #504's wait measured; #503, #504's field and #505 wait on owner asks OA-1 to OA-4
 - [type-roles-coverage](type-roles-coverage/plan.md) — arc 1 in review (arc 2 waits on A1 and A2) — every live identifier site observed in its mono role: the 51 smoke sites, then the 18 network ones (#366)
-- [ui-dedupe-1](ui-dedupe-1/plan.md) — planned (Codex approve), arc A1 in progress — six page-37 dedupes in six unstacked arcs: the export run object and config restore first, the PXE IndexedDB layer next, then settings, the countdown Close and the two list mirrors as their lanes clear (#541 #518 #519 #520 #517 #548)
+- [ui-dedupe-1](ui-dedupe-1/plan.md) — planned (Codex approve), arc A1 in review — six page-37 dedupes in six unstacked arcs: the export run object and config restore first, the PXE IndexedDB layer next, then settings, the countdown Close and the two list mirrors as their lanes clear (#541 #518 #519 #520 #517 #548)

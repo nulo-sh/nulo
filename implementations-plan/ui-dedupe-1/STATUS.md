@@ -9,3 +9,4 @@
 - 2026-10-17 18:11Z A1.2 gate (unit): lint 0, typecheck:all 0, export suites unchanged (diff --quiet vs origin/dev and HEAD) and green, useFullBackupExport.test.ts 32/32 (4 mutations caught), test:all exit 0. Smoke e2e pending (load1 > 150).
 - 2026-10-17 18:25Z A1 review round 1: Codex findings (3), Opus findings (4 + nits); fixes applied; composable + export suites 85/85, lint 0, typecheck 0.
 - 2026-10-17 18:26Z A1 review round 2: Codex clean (fixes verified, no regression); loop converged.
+- 2026-10-17 18:43Z A1 final gates on 3eff8665: lint 0, typecheck:all 0, test:all 0, check:plans 0; smoke Chrome (backup-roundtrip, security-backup, passkey-backup, own-window) 9/9 108s; smoke Firefox (passkey-backup, passkey-toolbar-panel) 9/9 192s. A1 ✓.

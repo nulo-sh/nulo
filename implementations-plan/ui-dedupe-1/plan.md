@@ -258,7 +258,7 @@ Every arc is one PR against `dev`, not stacked (orchestrator rule D-orch-1). A1 
 A pass is exit 0, with every named test green and none skipped that ran on base. "Unchanged" is both `git diff --quiet origin/dev...HEAD -- <files>` and `git diff --quiet HEAD -- <files>`, which covers committed, staged and unstaged edits.
 
 - **A1.1** ✓. G-fast; `config/service.test.ts` green (5 cases).
-- **A1.2** ✗.
+- **A1.2** ✓ (on the merged head 3eff8665: lint, typecheck:all, test:all, check:plans; smoke Chrome 4 files 9/9 in 108 s, Firefox 2 files 9/9 in 192 s).
   - G-fast.
   - `full.test.ts`, `full-passkey.pins.test.ts` and `account.test.ts` are unchanged and green.
   - `useFullBackupExport.test.ts` is green.
@@ -304,6 +304,7 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
 | D106 | `dispose()` is terminal (a `disposed` flag) | `discard()` alone | Opus O4 adopted |
 | D107 | at implementation: no `agree()` (the page sets the returned `isAgreed`, one line for one caller); the TS port reads the store's profile through one cast accessor, as the JS page did unguarded; the source pin counts 12 awaits, each a table row | an `agree()` wrapper; optional chaining on the profile (would turn today's throw into a silent `false`) | implementer |
 | D108 | A1 review round 1 (Codex `findings`, Opus `findings`, no behaviour difference found by either): the hop row now discards inside the hop (the fence's `profileId` read after openRun's last check), red when the check is added; the successor row scrubs while the successor is active (red when the `activeRun` guard goes); one comment marks the kept hop; `find(...)!` keeps base's assembly-failure path; the CLAUDE.md line names the export's scrub alone; the await pin ignores comments; five comments trimmed | Opus F3, a passkey hop row (the hop is one shared line, and the passkey key-export rows already pin the dropped sealed keys); trimming the template's comments (the template stays byte-identical) | Codex F1–F3, Opus F1, F2, F4 and comments |
+| D109 | A1's PR title says `via` and backticks the identifier: the planned title was 95 characters, and commitlint's `subject-case` refuses a bare camelCase word | the planned title | implementer |
 | D201 | the premise check lives in `frozen-account-canary` (proves, both browsers, every bump) | `delete-after-prove` (proverless in CI); a scratch probe | Opus O6 adopted |
 | D202 | IndexedDB-stimulus tests are re-driven through a rejecting OPFS step; tick pins are re-derived exactly | delete them | Codex C3 adopted |
 | D301 | `updateSetting` only; the F-21 items are filed as a new issue | take F-21 | both agree |
@@ -329,7 +330,7 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
   - the arc table's PR line;
   - and it ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 - **Titles** (each at most 93 characters):
-  - A1 `refactor(backup): one run object for the full-backup export; config restore through restoreRows`
+  - A1 ``refactor(backup): one run object for the full-backup export; config restore via `restoreRows` `` (D109)
   - A2 `refactor(pxe): retire the pre-OPFS IndexedDB cleanup, guard that no pxe store opens one`
   - A3 `refactor(settings): one updateSetting for Display, Privacy and Developer`
   - A4 `refactor(ui): the countdown Close renders the design Button, pixel-identical`
