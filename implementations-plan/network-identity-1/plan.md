@@ -103,9 +103,9 @@ One arc, one PR against `dev`. The wallet holds the composite chain id 0 to one 
   - Pass: exit 0. The refused sink case fails against the base `chain-identity.ts` (copy taken from `13d5f8d0`).
   - Layers: lint, typecheck, unit.
 
-### Phase 2: the network service holds every chain-0 row to the rule
+### Phase 2: the network service holds every chain-0 row to the rule ✓
 
-- [ ] Change map: `S/network/service.ts`, `seeds.ts` (comment), `service.test.ts`; `S/network-reset/service.ts` (`validateJournal`), `service.test.ts`.
+- [x] Change map: `S/network/service.ts`, `seeds.ts` (comment), `service.test.ts`; `S/network-reset/service.ts` (`validateJournal`), `service.test.ts`.
 - Tests, in the existing describe blocks (`setupServiceWithStorage`, `storeRow`, `bothStatuses`, `FakeNodeFactory.setOverrides`):
   1. **A remote node on a `local` row** (`addEndpoint` and `updateEndpoint`, one `test.each`). A stored `local` row is on chain 0, L1 31337. `https://node.remote.example/` answers `{31337, 42}` or `{31337, 31337}`. Each answer rejects `ENDPOINT_CHAIN_MISMATCH` and leaves the row unchanged. Control: `https://localhost:8443/` with the same answers is admitted. The existing "Local Network accepts a non-seed endpoint URL" stays as the plain-HTTP control.
   2. **A composite that computes to 0** (`addNetwork`). `https://rpc.example.com/` answers `{11155111, 11155111}`. It rejects `ENDPOINT_CHAIN_MISMATCH`, stores no row and fires no `onNetworkAdded`. Control: `https://rpc2.example.com/` answering `{11155111, 7}` is stored as `custom` on `11155111 ^ 7`.

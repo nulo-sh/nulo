@@ -27,7 +27,8 @@ export interface DefaultSeed {
 /**
  * RPC URL stamped into the "Local Network" preset at build time. Defaults
  * to `http://localhost:8080`; e2e runs override via `VITE_LOCAL_NETWORK_RPC_URL`
- * so each parallel agent's wallet build talks to its own aztec sandbox.
+ * so each parallel agent's wallet build talks to its own aztec sandbox. The
+ * override must be a loopback URL: chain 0 is built only on one.
  *
  * The chainId-zero check in `service.ts` also normalizes against this value so that
  * if a user (or test fixture) edits the seed's endpoint URL via the
