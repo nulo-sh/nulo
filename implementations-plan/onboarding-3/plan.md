@@ -239,7 +239,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`; pass = e
   - Network on Chrome and Firefox: `frozen-account-canary`, `home-cap` (its Tab walk crosses Home), `hero-prices-unavailable`, `fiat-send`, `incoming-arrival`, `send-amount-exact`.
   - Pass: green at retry 0, or one named rerun of a known flake.
 
-**5. Store captures and delivery prep.**
+**5. Store captures and delivery prep.** ✓ (2026-10-17, [lessons/phase-5.md](lessons/phase-5.md))
 - Change map: `tests/e2e/network/store-captures.test.ts` stages an established wallet through the UI before the Home frame (reveal, then Hide; OA-9). Re-read the docs touched in phases 1 to 4.
 - Gate:
   - `STORE_CAPTURES=1 NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/store-captures.test.ts` on Chrome (the spec is Chrome-only).
@@ -324,9 +324,32 @@ Outline B (local `outline-b.md`, safest-first) split the arc into two PRs: B1 (t
 | F1 (High): `onCreated` runs after unmount (`useProfileCreateFlow.ts:117-139`); a handler-local `begin()` would be valid after unmount | demonstrated | page-lifetime fence at entry, after awaits, before routing |
 | Confirmation round: keeping bootstrap after unmount contradicts "before any publication" (bootstrap publishes shared state) | demonstrated | a departed page returns at entry: no export, bootstrap or navigation; hydration covers the stored profile |
 
-**Final verdict** (same session, second confirmation): **approve**. "No material regression found"; the hydration path is `useProfileBootstrap.ts:258-266`, called by `onboarding/app.vue:73`.
 | F2: a rejected flag write blocks `window.open` or turns a done download into "Failed to download backup" (`full.vue:433-440`) | plausible | each write catches its own error; one test per handler |
 | F3: the network commands retry twice by default (`vitest.e2e.network.config.ts:26`); no Firefox network twin | demonstrated | `NULO_E2E_RETRY=0` in every network command; Firefox twins in phases 3 and 4 |
+
+**Final verdict** (same session, second confirmation): **approve**. "No material regression found"; the hydration path is `useProfileBootstrap.ts:258-266`, called by `onboarding/app.vue:73`.
+
+**Implementation review, round 1** (2026-10-17, Codex gpt-6.1-sol high over `git diff 623fc97f HEAD`): two lifecycle gaps, two comment findings. All four verified against the tree.
+
+| Finding | Label | Disposition |
+|---|---|---|
+| R1-1: bootstrap started by Create keeps publishing after Back (its fence is module-level, not the page's) | demonstrated; predates the arc | known limit: the store gets the really created, active profile; fencing it changes the composable's contract for every caller |
+| R1-2: `bootstrapActiveProfile` resolving `false` (locked or superseded) still records the last profile and shows the words | demonstrated | the lock wins: no words, no last-profile write, Ready; one control test |
+| R1-3: StepIndicator's header redraws the row and lists its colours | demonstrated | one sentence: every path keeps four cells |
+| R1-4: the grid and banner headers narrate; `translate="no"` has no reason | demonstrated | headers deleted; one invariant comment on `translate="no"` |
+
+**Opus review** (same round, `general-purpose`, read-only): ship after small fixes. Each claim traced in the tree.
+
+| Finding | Label | Disposition |
+|---|---|---|
+| O1: zeroing before bootstrap leaves "At least 8 characters" under the empty fields beside "Creating..." | demonstrated | the hint hides while creating; the empty fields are OA-13 |
+| O2: `readPrestoReached` swallows its error, so `useConfigRead` never re-reads on reconnect | demonstrated | it lands `false` and rethrows; a reconnect test |
+| O3: `data-reminders-settled` turns true before the gas read, which can still add Fee Juice | demonstrated | the attribute also waits for the gas read; the view rule is unchanged |
+| O4: the degraded-gas test passes with the rule deleted | demonstrated | rewritten with no token funds |
+| O5: the banner-gone check after reveal can pass before the reminders settle | demonstrated | waits for `data-reminders-settled` first |
+| O6: the unawaited `backupSaved` write can die if a download closes the toolbar popup | plausible | known limit; no local fix |
+| O7, O9, O10: "never unset" is wrong; Create's comments restate order; a long header line, a vague TSDoc | demonstrated | reworded; one why; re-wrapped |
+| O8: `GasRead` copies `GasSlice` with `status: string` | demonstrated | declined: Home's script is untyped, so no caller is checked, and the store type pulls the store graph into the e2e typecheck through the egress guard's import |
 
 ## Post-implementation
 

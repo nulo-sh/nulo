@@ -139,3 +139,14 @@ The wallet clears the clipboard 60 seconds after a copy, but only while the page
 | C. Settings' three warnings | the "Keep in mind" block under the grid |
 
 **Recommendation: B.** Copy exists for a password manager (the owner's note), and the one place the copy outlives its page should say so. **What ships now: A.**
+
+## OA-13. The password fields while "Creating…" runs
+
+**Surface:** the onboarding tab's Create form on a password wallet, from the moment the words are read until the phrase step shows (bootstrap; usually under a second, longer on a slow node). The password is cleared as soon as the words are read, so it is not held through bootstrap.
+
+| Option | Looks like |
+|---|---|
+| **A. Cleared** | both fields read empty under "Creating...", with no length hint |
+| B. Kept | the typed dots stay until the step shows; the password stays in the page through bootstrap |
+
+**Recommendation: A.** The empty fields last as long as the button reads "Creating...", and the security section already chose to drop the password before bootstrap. **What ships now: A.**
