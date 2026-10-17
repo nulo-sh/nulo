@@ -11,3 +11,8 @@
 - 2026-10-17 phase 1.3 smoke Chrome (armed build, retry 0, whole suite, load1 135 at start): 57 passed, 6 skipped by design, 0 failed, 1777 s. Round 1 (Codex + Opus) folded: comments, D13 pin moved to the lint script (probe red exit 1, restored green).
 - 2026-10-17 phase 1.3 smoke Firefox (armed build, retry 0, whole suite, load1 53 at start): 60 passed, 3 skipped by design, 0 failed, 2575 s. Codex loop converged at round 2.
 - 2026-10-17 merged origin/dev 98d51e89 (#607, #617, #621, #622): #607's `callService` export moved to `fixtures/session.ts`; split proof against dev's `helpers.ts`/`extension.ts`: 146 byte-identical, `patchPagePolling` differs only by the phase 1.1 rewrite, 4 allowed changes; exports `helpers.ts` 93 → 94 (+`dropdownDiagnostic`); 0 cycles.
+- 2026-10-17 merged-head unit gates: lint, typecheck:all, test:all, test:ci-gating, test:release, check:plans exit 0; Codex verified the merge resolution clean.
+- 2026-10-17 phase 1.3 network Chrome (merged head, proverless, retry 0; fee-methods, multi-account-from, holdings, tokens): 4 files, 13 tests passed, 566 s.
+- 2026-10-17 phase 1.3 network Firefox (merged head, proverless, retry 0, same 4 files): 4 files, 13 tests passed, 472 s. Phase 1.3 gate pass.
+- 2026-10-17 final-head smoke Chrome (merged head f6c5a1b0 + plan records, armed, retry 0): 57 passed, 6 skipped by design, 0 failed, 1658 s.
+- 2026-10-17 final-head smoke Firefox (armed, retry 0): 60 passed, 3 skipped by design, 0 failed, 2333 s. `bun run lint` 1.28-1.37 s in the base form, 3.39-4.32 s with the cycle step (three runs each, load1 about 55). Final gates all pass; #623 landed after them (no e2e file; merges cleanly).

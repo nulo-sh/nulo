@@ -1,7 +1,7 @@
 ---
 plan: harden-quality-fixes-3
 tier: mid (the lane brief names it; competing outline, Codex + Opus dual audit, a fresh Codex final pass)
-status: approved; arc 1 implemented, arc 2 pending
+status: approved; arc 1 in review, arc 2 pending
 issues: "#544 (arc 1, Closes); #546, #539 (arc 2, Closes)"
 driver: claude-code
 claude_model: opus
