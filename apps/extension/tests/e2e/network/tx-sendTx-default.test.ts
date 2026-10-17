@@ -1,7 +1,8 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
-import { formatFeeJuice } from "@/utils/fee-estimation"
 import { clickByTestId, openPopup, test } from "../fixtures/extension"
+import { pinFeeJuiceQuote, pinnedFeeText } from "../fixtures/fee-quote"
+import { shotSend } from "../fixtures/send-page"
 import { callService } from "../fixtures/helpers"
 import { snapshotResultSeq, waitForPgResult, assertPgOk } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
@@ -128,6 +129,7 @@ test.skipIf(!hasConfig)(
 	{ timeout: 480_000 },
 	async ({ dappConnectedExtensionWithTransactionCap: ctx }) => {
 		const { playgroundPage: page, accountAddress } = ctx
+		const refused = await pinFeeJuiceQuote(ctx)
 		await mintPublicTokensForAccount(aztecConfig!, accountAddress)
 		const { wallet, accounts, node, cleanup } = await createTestWallet(aztecConfig!.nodeUrl)
 		try {
@@ -189,10 +191,13 @@ test.skipIf(!hasConfig)(
 		expect(asked).toEqual([{ fee: expect.any(String), cap: approved.toString(), payer: { type: "fj", isProtocol: false } }])
 		const fee = BigInt(asked[0]!.fee)
 		const text = (id: string) => feePopup.$eval(`[data-testid="${id}"]`, (el) => el.textContent?.replace(/\s+/g, " ").trim())
-		expect(await text("fee-raised-was")).toBe(`Was ${formatFeeJuice(approved)} FJ`)
-		expect(await text("fee-raised-now")).toBe(`Now ${formatFeeJuice(fee)} FJ`)
+		expect(await text("fee-raised-was")).toBe(`Was ${pinnedFeeText(approved)}`)
+		expect(await text("fee-raised-now")).toBe(`Now ${pinnedFeeText(fee)}`)
 		expect(await text("fee-raised-method")).toBe("Public Fee Juice")
-		expect(await text("fee-confirm-btn")).toBe(`Send for ${formatFeeJuice(fee)} FJ`)
+		expect(await text("fee-confirm-btn")).toBe(`Send for ${pinnedFeeText(fee)}`)
+		expect(await refused.failures(), "price interception failures").toEqual([])
+		await refused.stop()
+		await shotSend(feePopup, "fee-window-raised", "fee-raised")
 		// The dApp's own row is pending from its request on; only a settled one would mean an answer.
 		const settled = await page.evaluate(
 			(after) =>

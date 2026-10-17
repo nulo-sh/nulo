@@ -38,6 +38,7 @@ import {
 	registerProfile,
 	waitForHash,
 } from "../fixtures/extension"
+import { pinFeeJuiceQuote, pinnedFeeText } from "../fixtures/fee-quote"
 import {
 	createAndActivateProfile,
 	getAccountAddress,
@@ -685,6 +686,8 @@ test.skipIf(!hasConfig)(
 		const b: BurstSend = { ...a, amount: "10", speed: "urgent" }
 		const basis = await seedUrgentSend(burst, await fireIntoHeldWindow(burst, a))
 		const { page } = burst
+		// Pinned before Home remounts for the first re-ask, which is when its price client reads.
+		const refused = await pinFeeJuiceQuote(burst.ctx)
 
 		await startSend(page, b)
 		await expectEstimateQueued(page, 3_000)
@@ -719,12 +722,15 @@ test.skipIf(!hasConfig)(
 			if (asks === 1) await shotSend(burst.page, "4-home-reask-row", "tx-awaiting-card")
 			await pointerClick(burst.page, "tx-awaiting-card")
 			const sheet = await readReaskSheet(burst.page)
-			expect(sheet.line).toMatch(/^Fee is now [\d.]+ FJ( \(.+\))?, above the [\d.]+ FJ you accepted\.$/)
-			expect(sheet.button).toMatch(/^Send for [\d.]+ FJ$/)
+			const [now, cap] = [pinnedFeeText(asking.reask.fee), pinnedFeeText(asking.reask.cap)]
+			expect(sheet.line).toBe(`Fee is now ${now}, above the ${cap} you accepted.`)
+			expect(sheet.button).toBe(`Send for ${now}`)
 			if (asks === 1) await shotSend(burst.page, "4-reask-sheet", "send-review-fee")
 			await pointerClick(burst.page, "send-review-submit")
 			accepted = asking.reask.fee
 		}
+		expect(await refused.failures(), "price interception failures").toEqual([])
+		await refused.stop()
 
 		expect(caps[0], "the first re-ask holds B to the like send's cap").toBe(queuedFeeCap(basis))
 		await expectBothSucceed(burst, a, b)

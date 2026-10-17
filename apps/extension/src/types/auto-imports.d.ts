@@ -154,10 +154,8 @@ declare global {
   const estimateWhenClear: typeof import('../utils/estimate-when-clear').estimateWhenClear
   const feeDisplay: typeof import('../utils/fee-estimation').feeDisplay
   const feeFigure: typeof import('../utils/fee-estimation').feeFigure
-  const feeJuicePricingFromUsd: typeof import('../utils/fee-estimation').feeJuicePricingFromUsd
   const feePicksKey: typeof import('../utils/profile-ui-keys').feePicksKey
   const feeText: typeof import('../utils/fee-estimation').feeText
-  const feeToUsd: typeof import('../utils/fee-estimation').feeToUsd
   const fiatHeroCandidates: typeof import('../utils/hero-fit').fiatHeroCandidates
   const findMintSignature: typeof import('../utils/token-transfer-vocabulary').findMintSignature
   const findTransferSignature: typeof import('../utils/token-transfer-vocabulary').findTransferSignature
@@ -168,7 +166,6 @@ declare global {
   const followOwnRoute: typeof import('../utils/own-window').followOwnRoute
   const forChain: typeof import('../utils/token-order').forChain
   const formatBaseUnits: typeof import('../utils/amount').formatBaseUnits
-  const formatFeeJuice: typeof import('../utils/fee-estimation').formatFeeJuice
   const formatGas: typeof import('../utils/fee-estimation').formatGas
   const formatGasBalance: typeof import('../utils/fee-estimation').formatGasBalance
   const formatSnackAmount: typeof import('../utils/snack-amount').formatSnackAmount
@@ -655,7 +652,7 @@ declare global {
   export type { EstimateRequeue } from '../utils/estimate-when-clear'
   import('../utils/estimate-when-clear')
   // @ts-ignore
-  export type { AssetPricing, FeeDisplay } from '../utils/fee-estimation'
+  export type { FeeDisplay } from '../utils/fee-estimation'
   import('../utils/fee-estimation')
   // @ts-ignore
   export type { FeePickType, FeeSide, SendPick, SendSlots, AppPick, FeePickUpdate } from '../utils/fee-picks'
@@ -882,10 +879,8 @@ declare module 'vue' {
     readonly estimateWhenClear: UnwrapRef<typeof import('../utils/estimate-when-clear')['estimateWhenClear']>
     readonly feeDisplay: UnwrapRef<typeof import('../utils/fee-estimation')['feeDisplay']>
     readonly feeFigure: UnwrapRef<typeof import('../utils/fee-estimation')['feeFigure']>
-    readonly feeJuicePricingFromUsd: UnwrapRef<typeof import('../utils/fee-estimation')['feeJuicePricingFromUsd']>
     readonly feePicksKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['feePicksKey']>
     readonly feeText: UnwrapRef<typeof import('../utils/fee-estimation')['feeText']>
-    readonly feeToUsd: UnwrapRef<typeof import('../utils/fee-estimation')['feeToUsd']>
     readonly fiatHeroCandidates: UnwrapRef<typeof import('../utils/hero-fit')['fiatHeroCandidates']>
     readonly findMintSignature: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['findMintSignature']>
     readonly findTransferSignature: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['findTransferSignature']>
@@ -896,7 +891,6 @@ declare module 'vue' {
     readonly followOwnRoute: UnwrapRef<typeof import('../utils/own-window')['followOwnRoute']>
     readonly forChain: UnwrapRef<typeof import('../utils/token-order')['forChain']>
     readonly formatBaseUnits: UnwrapRef<typeof import('../utils/amount')['formatBaseUnits']>
-    readonly formatFeeJuice: UnwrapRef<typeof import('../utils/fee-estimation')['formatFeeJuice']>
     readonly formatGas: UnwrapRef<typeof import('../utils/fee-estimation')['formatGas']>
     readonly formatGasBalance: UnwrapRef<typeof import('../utils/fee-estimation')['formatGasBalance']>
     readonly formatSnackAmount: UnwrapRef<typeof import('../utils/snack-amount')['formatSnackAmount']>

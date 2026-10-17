@@ -23,6 +23,7 @@ import {
 	test,
 	waitForHash,
 } from "../fixtures/extension"
+import { pinFeeJuiceQuote, pinnedFeeTexts } from "../fixtures/fee-quote"
 import { fillSendForm, navigateToSettings, setActiveSendType } from "../fixtures/helpers"
 import {
 	assertPgOk,
@@ -246,6 +247,7 @@ test.skipIf(!hasConfig)(
 		await setPgInput(pg, "amount", "1")
 		await setPgInput(pg, "sponsorSalt", "0")
 		await setPgInput(pg, "maxPriorityFeesPerGas", "10000000000,10000000000")
+		const refused = await pinFeeJuiceQuote(tokenReadyExtension)
 		try {
 			const seq = await snapshotResultSeq(pg)
 			const execute = waitForPopup(tokenReadyExtension, "execute", { timeout: 60_000 })
@@ -258,11 +260,16 @@ test.skipIf(!hasConfig)(
 				popup.$eval(`[data-testid="${testid}"]`, (el) => (el as HTMLElement).innerText.replace(/\s+/g, " ").trim())
 			expect(await read("execute-op-app-legend")).toMatch(/^Fee payment method set by \S/)
 			const line = await read("execute-op-app-fee")
-			const sentence = /^Fee up to ([\d.]+) FJ, includes a ([\d.]+) FJ priority fee the app asked for$/.exec(line)
+			const sentence = /^Fee up to ~([\d.]+) FJ \(.+\), includes a ~([\d.]+) FJ \(.+\) priority fee the app asked for$/.exec(line)
 			expect(sentence, `the fee line reads "${line}"`).not.toBeNull()
-			const [figure, priority] = [Number(sentence?.[1]), Number(sentence?.[2])]
-			expect(priority).toBeGreaterThan(0)
-			expect(priority).toBeLessThan(figure)
+			const [figure, priority] = [sentence?.[1] ?? "", sentence?.[2] ?? ""]
+			expect(Number(priority)).toBeGreaterThan(0)
+			expect(Number(priority)).toBeLessThan(Number(figure))
+			const lines = [...pinnedFeeTexts(figure)].flatMap((f) =>
+				[...pinnedFeeTexts(priority)].map((p) => `Fee up to ${f}, includes a ${p} priority fee the app asked for`),
+			)
+			expect(lines, "the line prints both figures at the pinned quote").toContain(line)
+			expect(await refused.failures(), "price interception failures").toEqual([])
 			await shotSend(popup, "execute-app-fee-priority", "execute-op-fee-set-badge")
 
 			await approveExecute(popup)
@@ -271,6 +278,7 @@ test.skipIf(!hasConfig)(
 			await assertPgOk(pg, result, "fee-sponsor-funding:priority")
 			expect(typeof (result.resultJson as { txHash?: unknown }).txHash).toBe("string")
 		} finally {
+			await refused.stop()
 			await setPgInput(pg, "maxPriorityFeesPerGas", "")
 		}
 	},

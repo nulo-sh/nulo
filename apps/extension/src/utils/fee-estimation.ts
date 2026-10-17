@@ -23,7 +23,7 @@ export function formatGasBalance(raw: string | null | undefined, maxDecimals: nu
 	return formatBaseUnits(raw ?? "0", FEE_JUICE_DECIMALS, { maxDecimals })
 }
 
-export type AssetPricing = {
+type AssetPricing = {
 	address: string
 	usdRate: number
 	symbol: string
@@ -36,7 +36,7 @@ export type AssetPricing = {
  * display disabled, provider down) fee USD is OMITTED, never faked — the old
  * hardcoded 0.02 rate is gone.
  */
-export function feeJuicePricingFromUsd(usd: number | undefined): AssetPricing | undefined {
+function feeJuicePricingFromUsd(usd: number | undefined): AssetPricing | undefined {
 	if (usd === undefined || !Number.isFinite(usd) || usd <= 0) return undefined
 	return {
 		address: "0x0000000000000000000000000000000000000000000000000000000000000005",
@@ -67,7 +67,7 @@ function halfUpRound(value: bigint, fromDecimals: number, toDecimals: number): b
  * estimated fee) prefer half-up over truncate so the displayed value
  * doesn't systematically understate the actual paid amount.
  */
-export function formatFeeJuice(amount: bigint, maxDecimals: number = FEE_DECIMALS): string {
+function formatFeeJuice(amount: bigint, maxDecimals: number = FEE_DECIMALS): string {
 	if (amount === 0n) return "0"
 	if (maxDecimals < 0) maxDecimals = 0
 	if (maxDecimals >= FEE_JUICE_DECIMALS) {
@@ -91,7 +91,7 @@ const RATE_SCALE = 1_000_000n
  * `feeJuicePricingFromUsd`) and get `null` back when none is available —
  * the fee-USD element is omitted, not faked.
  */
-export function feeToUsd(feeAmount: bigint, pricing: AssetPricing | undefined): string | null {
+function feeToUsd(feeAmount: bigint, pricing: AssetPricing | undefined): string | null {
 	if (!pricing) return null
 	if (feeAmount === 0n) return "$0.000"
 	const scaledRate = BigInt(Math.round(pricing.usdRate * Number(RATE_SCALE)))
