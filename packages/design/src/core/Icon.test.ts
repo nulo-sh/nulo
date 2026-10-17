@@ -38,6 +38,13 @@ describe("Icon", () => {
 		expect(w.attributes("stroke")).toBe("currentColor")
 	})
 
+	test("private is one solid and public eight, all filled, and neither is the padlock", () => {
+		const [priv, pub] = [render({ name: "private" }).findAll("path"), render({ name: "public" }).findAll("path")]
+		expect([priv.length, pub.length]).toEqual([1, 8])
+		for (const p of [...priv, ...pub]) expect(p.attributes("stroke")).toBe("none")
+		expect(glyphs.private).not.toEqual(glyphs.lock)
+	})
+
 	test("rotate turns the glyph about its centre", () => {
 		expect(render({ name: "chevron", rotate: 90 }).attributes("style")).toContain("rotate(90deg)")
 		expect(render({ name: "chevron" }).attributes("style") ?? "").not.toContain("rotate")

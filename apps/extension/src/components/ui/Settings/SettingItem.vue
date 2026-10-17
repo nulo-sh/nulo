@@ -47,6 +47,8 @@ const props = defineProps({
 		type: Boolean,
 		default: false,
 	},
+	/** A glyph in the chevron's place, for a row that acts in place instead of opening a page. */
+	trailingIcon: String,
 	disabled: {
 		type: Boolean,
 		default: false,
@@ -149,8 +151,8 @@ const Root = (_, { slots }) => {
 				<Text v-if="value" data-testid="setting-value" variant="value" color="secondary" :class="$style.value">{{ value }}</Text>
 				<slot name="right">
 					<Icon
-						v-if="to || chevron"
-						:name="external ? 'open' : 'chevron'"
+						v-if="to || chevron || trailingIcon"
+						:name="trailingIcon || (external ? 'open' : 'chevron')"
 						:size="18"
 						color="secondary"
 						:class="$style.chevron_icon"
@@ -236,7 +238,6 @@ const Root = (_, { slots }) => {
 	flex-shrink: 0;
 }
 
-/* A slotted icon sets its own size. */
 .icon_slotted {
 	width: auto;
 	height: auto;

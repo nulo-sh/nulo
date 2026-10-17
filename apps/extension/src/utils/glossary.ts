@@ -12,12 +12,12 @@ export type GlossaryEntry = {
 export const GLOSSARY = {
 	"private-balance": {
 		term: "Private balance",
-		definition: "Only you can see it. Marked with a padlock.",
+		definition: "Only you can see it. Marked with a solid square.",
 		where: "Home · tokens · send",
 	},
 	"public-balance": {
 		term: "Public balance",
-		definition: "Anyone can see it, like a balance on Ethereum. Marked with a globe.",
+		definition: "Anyone can see it, like a balance on Ethereum. Marked with a dotted square.",
 		where: "Home · tokens · send",
 	},
 	"fee-juice": {

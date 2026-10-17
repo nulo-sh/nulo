@@ -681,7 +681,7 @@ describe("BalanceView — token hero (tokenBalance prop)", () => {
 		expect(wrapper.find('[data-testid="balance-fiat"]').exists()).toBe(false)
 	})
 
-	test("a priced token shows its amount, the ≈ fiat line and the lock/globe split", async () => {
+	test("a priced token shows its amount, the ≈ fiat line and the private/public split", async () => {
 		mockQuotes = FRESH()
 		const { wrapper } = await mountView({ tokenBalance: SEED[0] })
 
@@ -693,7 +693,7 @@ describe("BalanceView — token hero (tokenBalance prop)", () => {
 		expect(wrapper.find('[data-testid="public-balance-value"]').text()).toBe("250")
 	})
 
-	test("the padlock and the globe carry their labels as tooltip and accessible name, not on the groups", async () => {
+	test("the private and public marks carry their labels as tooltip and accessible name, not on the groups", async () => {
 		const { wrapper } = await mountView({ tokenBalance: SEED[0] })
 		const tooltips = wrapper.findAll('[data-testid="stub-tooltip"]')
 		expect(tooltips.map((t) => t.get('[data-testid="stub-tooltip-content"]').text())).toEqual([

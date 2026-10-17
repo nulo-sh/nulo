@@ -9,7 +9,28 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev 493ff497
 issues: "#602 (closed by arc 1), #590 (icon part: arc 2; the sheet part stays open)"
+status: closed (delivered in #641 and arc 2's PR, with this close-out)
 ---
+
+## Outcome
+
+- **Date:** 2026-10-17. Planned 2026-10-16; arc 1 merged 2026-10-17.
+- **Status:** closed with its delivery. Arc 1 is [#641](https://github.com/nulo-sh/nulo/pull/641) (closes #602), merged into `dev` as 111fe020. Arc 2 is the PR from `icons-d2-1-marks` (refs #590), whose final commits are this close-out; merging is the owner's call, after OA-6's sign-off.
+- **Shipped:**
+  - **Arc 1, #641**: every glyph drawn in Direction 2 in one typed module, `packages/design/src/core/glyphs.ts` (58 entries), painted only through `color`; the Material font (343 628 bytes), `icons.json`, `MaterialIcon` and `StaleIcon` retired, so no third-party glyph ships; Settings-page rows without their leading glyph; the static name guard `icon-names.test.ts`; the glyph sheet story at 24, 12, 10 and 9 px (P30-08 B, #602 B, OA-1 A, OA-2 A).
+  - **Arc 2**: `private` a solid square and `public` the same square in eight dots, on Home's token rows, a token's balance line, the Send review rows, the publish strip and the fee tag, each in its colour of today; the padlock means Lock only; the glossary names the squares (P33-05 B, OA-6). The network page's Name row draws `edit` where a chevron sits, through `SettingItem`'s `trailingIcon` (P35-06 B). Before and after captures in [screenshots/arc2/](screenshots/arc2/).
+- **Review loop:** the plan took a dual audit and a final Codex pass (§ [Audit verdicts](#audit-verdicts)). Arc 1 converged at Codex round 2 beside an Opus review; arc 2 at Codex round 2; the fresh cross-arc session at round 2 (§ [Arc 2 implementation review](#arc-2-implementation-review)).
+- **Gates at arc 2's head:** `bun run lint`, `typecheck:all`, `test:all`, `test:ci-gating`, `test:release`, `audit:vue`, `build-storybook` and `check:plans` exit 0; smoke 15/15 and network `fee-methods` 8/8 on Chrome at retry 0 ([lessons/phase-3.md](lessons/phase-3.md)).
+- **Lessons:** none promoted. The trap arc 1 hit, a CI-only gate (`test:ci-gating`) reading SVG path data as milestone tags, is already `lessons.md`'s root-test line, and the path-data rule sits in `glyphs.ts`'s header.
+- **Known limits:** none.
+- **Open items:** #630 (a Firefox timing flake in `security-reset`, seen during arc 1). #590 stays open for its sheet part, which another lane owns.
+- **Dropped, rejected, superseded:**
+  - **P30-09 A** (arrows beside Send and Receive): superseded by P33-06 B, words only; Phase 3's hero step dropped.
+  - **P30-10 A** (the eye pair for the marks): superseded by P33-05 B, the squares; `eye` and `eye-off` serve the reveal toggles alone (OA-3).
+  - **D7**, the interim padlock and globe: superseded by arc 2.
+  - **OA-4**: withdrawn while planning (Audit verdicts, round 1).
+  - **Pinning the marks' coordinates in a test** and **weakening the glossary pin's comment**: rejected (§ [Arc 2 implementation review](#arc-2-implementation-review)).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # icons-d2-1: Direction 2 glyphs, Material and icons.json retired
 
@@ -31,7 +52,8 @@ Decision page 30 (2026-10-16) signed **#590 P30-08 = B** and **#602 = B**. This 
 - **Settings rows lose their icons**: the decorative leading glyph on each row of a page under `apps/extension/src/popup/pages/settings/**` goes. Same record. A glyph that shows state (the selected network or account) stays. Rows of the same kind in popups keep a glyph until OA-1 is answered.
 - **No third-party glyph ships.** Signed, #602 B: *"Retire icons.json with the chosen direction and skip the attribution work; the next release carries no third-party glyph."*
 - **Each site keeps the picture it shows today**, redrawn (D8). No two pictures are merged unless the sheet merges them (cancelled and failed). Collapsing further is OA-2.
-- **Not changed here**: the private and public balance marks keep today's padlock and globe, redrawn, and the Home hero's Send and Receive stay words only, until decision page 33 settles P30-10 and P30-09 (arc 2). No copy, no layout outside an icon's own box, no sheet change (P30-11).
+- **Not changed in arc 1**: the private and public balance marks keep today's padlock and globe, redrawn, and the Home hero's Send and Receive stay words only, until decision page 33 settles P30-10 and P30-09 (arc 2). No copy, no layout outside an icon's own box, no sheet change (P30-11).
+- **Arc 2** (page 33 signed P30-10 as P33-05 and P30-09 as P33-06; page 35 signed OA-5). The private and public marks become two squares wherever they show: Home's token rows (9 px), a token's balance line (12 px), the Send review rows, the publish strip and the fee tag, each in the colour it has today. Signed, P33-05 B: *"c: solid square / dotted square. A wall versus a fence you can see through; holds at 9 px and fits the square family; the dotted square can read as selection or loading out of context."* P33-06 B: *"Words only, as today."* P35-06 B: *"A trailing edit glyph on the Name row, 18 px in the secondary colour, where a chevron would sit."* P35-07 A: the chip's × ships as built. The glossary's two balance definitions name the squares (OA-6, signed before merge).
 - Each PR body quotes these records and carries light and dark screenshots, before and after, of Home, Holdings, Send, Activity, Settings, the execute window, the capabilities window with a flagged row, and the connection check (`windows/verify`), plus the glyph sheet story.
 
 ## Architecture & Implementation
@@ -167,6 +189,9 @@ This lane owns `packages/design/src/core/{Icon.vue,Icon.test.ts,Icon.stories.ts,
 | D18 | Plain-TS modules take `GlyphName` from `@nulo/design/core/glyphs.ts` | The barrel: the e2e typecheck reaches `journal-state.ts` and resolves no `.vue`, so every SFC the barrel exports fails it |
 | D19 | `StaleNetworkTakeover`'s screen branch is `v-else-if="content"` and its mark `v-else-if="line.mark"`, so vue-tsc narrows them; four identifier-inventory branches re-keyed to match | A non-null cast on `content`, which hides the `undefined` the loading and progress screens produce |
 | D20 | Two more no-op-by-default `shotSend` calls, the Accounts popup (`accounts.test.ts`) and a network page (`endpoints.test.ts`), so the PR shows both | A capture spec copied in and deleted (as D15) |
+| D21 | `SettingItem` takes `trailingIcon`, a glyph drawn in the chevron's slot | A `#right` slot at the call site: it would copy the chevron's size, colour and hover rule |
+| D22 | The Send review rows, strip and fee tag take the squares' shapes and keep their own ink (hidden tertiary, public primary, exposed orange) | Accent and grey there too: the sheet keeps each mark's colour as today |
+| D23 | The glossary names the squares, pending OA-6 | Leaving "Marked with a padlock" and "a globe", which P33-05 B made false |
 
 ## Audit verdicts
 
@@ -219,6 +244,20 @@ Resumed to verify: **`approve`**; all five fixes present, no regression in phase
 
 Resumed (round 2, same Codex session, over `6860b443..5b18cc75`): **`approve`**, no new material finding; every accepted fix verified, both added captures no-ops without `NULO_E2E_SHOT_DIR`.
 
+### Arc 2 implementation review
+
+**Round 1, Codex** (`gpt-6.1-sol`, high, session `01a14a3a`, over `847ff1ea`): `conditional approve`.
+1. Low, the glyph test checks counts, not shape: **accepted in part**; every mark path is asserted a solid. Pinning the coordinates is **rejected**: it restates the signed drawing and fails only on a deliberate redraw; the sheet capture proves the geometry.
+2. Low, the `trailingIcon` test checks only the name: **accepted**; size, colour and position after the title, plus a table of the unchanged fallbacks (`4b312602`).
+3. Low, three comments restate the colour mapping: **accepted**; each keeps only its invariant.
+
+**Round 2, Codex** (resumed, over `4b312602`): **`approve`**, no new finding.
+
+**Cross-arc, Codex** (fresh session `01a14a41`, over `111fe020` and `1b93cbfa..2e0d9ede`): `conditional approve`.
+1. Low, Phase 3's hero step never records P33-06's outcome: **accepted**; Phase 3 records it.
+2. Low, the glossary pin's comment claims owner-signed strings while OA-6 is open: **rejected**; the comment states the pin's invariant, and OA-6's sign-off is a stated precondition of the merge.
+3. Low, `SettingItem`'s `.icon_slotted` comment restates its rule: **accepted** (`2e0d9ede`).
+
 ## Arc 1: Direction 2 everywhere (closes #602)
 
 **Smoke runs, every time** (F9): build the armed smoke build for the browser, then run with its flags, from the repo root:
@@ -264,18 +303,19 @@ Steps may land as several commits; only the end of the phase is gated.
 
 Starts when the orchestrator relays P30-09 and P30-10. Rebase onto `dev` first (testers-fixes-2 changes Home's layout).
 
-### Phase 3: private and public marks, hero arrows
+### Phase 3: private and public marks, the rename row ✓
 
-1. P30-10: redraw `private` and `public` (and `eye`/`eye-off`, `network-edit` if the pick redraws them) in `glyphs.ts`. Call sites already name `private` and `public`.
-2. P30-09 = A: put `send` and `receive` before the words in `ActionButtonsView.vue`'s two buttons, inside each button's own box. B: nothing.
-3. Update the sheet story and any test that pins a renamed glyph.
+1. P30-10, signed P33-05 B: `private` is a 16-unit solid square, `public` eight 4-unit solids on its outline, as the sheet drew pair c. `lock` no longer doubles as `private`; `eye`, `eye-off` and `network-edit` keep their drawings.
+2. P30-09, signed P33-06 B: nothing; the hero stays words only.
+3. The sheet story follows `glyphs`; the comments, test titles and glossary definitions that named the padlock and the globe follow the squares.
+4. OA-5, signed P35-06 B: `trailingIcon` on `SettingItem` (D21); the network page's Name row takes `edit`.
 
 **Validation gate**: `bun run audit:vue`; `home-links.test.ts` and `send-keyboard.test.ts` green as smoke runs above; their Home and Send pairs, light and dark. Pass: exit 0 and green.
 
 ## Delivery
 
 - **Arc 1** → one PR against `dev` from `worktree-icons-d2-1`: `feat(design): draw every icon in direction 2, retire icons.json and the material font` (85 characters). Body: the UI impact quotes, the catalogue, the screenshots, the validation runs, each browser's smoke wall-clock before and after, `Closes #602`, `Refs #590`.
-- **Arc 2** → one PR against `dev` after arc 1 merges, branch `icons-d2-1-marks` from `dev`: `feat(design): draw the private and public marks and the hero's send and receive arrows` (86; drop the arrows from the title if P30-09 = B). Body: the page 33 picks quoted, `Refs #590`. After it merges, comment on #590 that its icon part shipped; the sheet part keeps #590 open.
+- **Arc 2** → one PR against `dev` after arc 1 merges, branch `icons-d2-1-marks` from `dev`: `feat(design): draw the private and public marks and the network name row's edit glyph` (P33-06 B dropped the arrows; P35-06 B added the row). Body: the page 33 picks quoted, `Refs #590`. After it merges, comment on #590 that its icon part shipped; the sheet part keeps #590 open.
 - No stack (orchestrator decision D-orch-1). Open each PR only after its gates pass and its Codex loop converges. Add `e2e:extension-smoke` or `e2e:extension-network` only if the path filter skips a suite the change needs.
 - Close-out lands as arc 2's final commits. If the orchestrator drops arc 2, it lands as arc 1's final commits and #590's icon part becomes the orchestrator's call.
 - Parallelism: none; each phase edits files the next one reads.
