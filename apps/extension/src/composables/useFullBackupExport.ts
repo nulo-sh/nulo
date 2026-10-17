@@ -405,7 +405,7 @@ async function runDownload(ctx: ExportCtx, isEncrypted: boolean) {
 	filename = isEncrypted ? `NuloEncryptedBackup${filename}.txt` : `NuloBackup${filename}.json`
 
 	try {
-		// A file already requested still lands after a scrub; only its toast is fenced.
+		// A file already requested still lands after a scrub; its toast and Home's flag are fenced.
 		await downloadFile({ data: fileContent, filename, compressionFormat: "gzip" })
 		if (!isCurrent()) return
 		void markGetStarted(profileId, "backupSaved")

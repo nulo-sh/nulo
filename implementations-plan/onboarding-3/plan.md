@@ -351,6 +351,13 @@ Outline B (local `outline-b.md`, safest-first) split the arc into two PRs: B1 (t
 | O7, O9, O10: "never unset" is wrong; Create's comments restate order; a long header line, a vague TSDoc | demonstrated | reworded; one why; re-wrapped |
 | O8: `GasRead` copies `GasSlice` with `status: string` | demonstrated | declined: Home's script is untyped, so no caller is checked, and the store type pulls the store graph into the e2e typecheck through the egress guard's import |
 
+**Round 2** (same Codex session, over the round-1 fixes and the `origin/dev` merge): the fixes and the port check out; two findings.
+
+| Finding | Label | Disposition |
+|---|---|---|
+| R2-1: a lock during the last-profile write still lets the words show | demonstrated; timing unverified | known limit: the tab has no lock listener, so a lock just after the words show leaves them up too; a lock reaction is a new subscription |
+| R2-2: "only its toast is fenced" is stale now that the flag rides the fence (`useFullBackupExport.ts:408`) | demonstrated | reworded |
+
 ## Post-implementation
 
 The steps are `implementations-plan/README.md` § Post-implementation standard, read at 1b93cbfa. This section keeps only this plan's parameters.
