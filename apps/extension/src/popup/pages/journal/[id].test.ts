@@ -213,6 +213,18 @@ describe("the App row of a dApp's operation", () => {
 		expect(row(w, "app-label").text()).toBe("App")
 		expect(row(w, "app-label").classes().join(" ")).toMatch(/app_key/)
 	})
+
+	test("reads dApp for a dApp that named itself nothing, as its activity row does; a transfer has no App row", async () => {
+		const { tokenId: _tokenId, amountRaw: _amountRaw, ...base } = failedSend()
+		const nameless = await mountPage({ ...base, kind: "dapp_execute", origin: "dapp", title: "swap", subtitle: "" })
+		expect(row(nameless, "origin").text()).toBe("dApp")
+		expect(row(nameless, "app-label").text()).toBe("App")
+
+		const transfer = await mountPage(failedSend())
+		expect(row(transfer, "state").exists()).toBe(true)
+		expect(row(transfer, "origin").exists()).toBe(false)
+		expect(row(transfer, "app-label").exists()).toBe(false)
+	})
 })
 
 describe("the To row of a send that named its recipient", () => {

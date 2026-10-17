@@ -122,7 +122,6 @@ export function journalTerminalDisplay(op: OperationRecord): JournalTerminalDisp
  * glance. Returns null on null/undefined/empty input.
  *
  * Pure helper to keep the regression pin testable without mounting Vue.
- * Consumed by `journal/[id].vue`.
  */
 export function sanitizeJournalSubtitle(raw: string | undefined | null): string | null {
 	if (!raw) return null
@@ -414,7 +413,7 @@ function dappCardFields(op: OperationRecord): JournalCardFields {
 	return {
 		title: dappTitle(op),
 		activityIcon: "zap",
-		originLabel: sanitizeJournalSubtitle(op.subtitle),
+		originLabel: journalCardOriginLabel(op),
 		transferTypeLabel: null,
 		amount: null,
 		amountSymbol: null,
@@ -424,8 +423,7 @@ function dappCardFields(op: OperationRecord): JournalCardFields {
 
 /*
  * The awaiting card's fields, built from the same leaves as the terminal card's so a journal op
- * reads the same across its lifecycle; only a nameless dApp's chip takes the settled row's fallback.
- * Each checks the kind before reading anything else.
+ * reads the same across its lifecycle. Each checks the kind before reading anything else.
  */
 
 export function journalCardTitle(op: OperationRecord, tokenById: JournalTerminalCardCtx["tokenById"]): string {

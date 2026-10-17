@@ -283,7 +283,7 @@ describe("buildJournalTerminalCardProps", () => {
 		expect(props?.oneLineTitle).toBe(true)
 	})
 
-	test("dapp_execute from a dApp that named itself nothing still cuts its title to one line", () => {
+	test("dapp_execute from a dApp that named itself nothing keeps the dApp chip and its one-line title", () => {
 		const props = buildJournalTerminalCardProps(
 			recordWith({
 				kind: "dapp_execute",
@@ -294,7 +294,7 @@ describe("buildJournalTerminalCardProps", () => {
 			}),
 			TEST_CTX,
 		)
-		expect(props?.originLabel).toBeNull()
+		expect(props?.originLabel).toBe("dApp")
 		expect(props?.oneLineTitle).toBe(true)
 	})
 
@@ -530,7 +530,7 @@ describe("a failed send its record proves never left the wallet", () => {
 	})
 })
 
-describe("journalCardOriginLabel — the in-flight row's app chip", () => {
+describe("journalCardOriginLabel — a dApp operation's app chip and App row", () => {
 	test.each([
 		["", "dApp"],
 		["uniswap.example", "uniswap.example"],
