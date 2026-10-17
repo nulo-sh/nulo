@@ -771,7 +771,7 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 
 /** A dApp's function name and host, 62 and 43 characters: the host breaks only at its hyphens. */
 const LONG_METHOD = "swap_exact_tokens_for_tokens_supporting_fee_on_transfer_tokens"
-/** A dApp that names itself nothing gets no chip, and this name humanizes to one unbreakable word. */
+/** A dApp that names itself nothing gets the "dApp" chip, and this name humanizes to one unbreakable word. */
 const UNBREAKABLE_METHOD = "swapexacttokensfortokenssupportingfeeontransfertokens"
 const NAMED_RECORD = "d1".repeat(8)
 const NAMELESS_RECORD = "d2".repeat(8)
@@ -796,7 +796,7 @@ type NamedRows = {
 			cut: boolean
 			ellipsis: boolean
 			direction: { lines: number } | null
-			chip: { width: number; cut: boolean; below: boolean } | null
+			chip: { text: string; width: number; cut: boolean; below: boolean } | null
 			/** Each chip's computed size, weight and tracking. */
 			type: { direction: string | null; chip: string | null }
 		}
@@ -848,6 +848,7 @@ async function readDappRows(page: Page): Promise<NamedRows> {
 				ellipsis: getComputedStyle(title).textOverflow === "ellipsis",
 				direction: direction && { lines: lineCount(direction) },
 				chip: chip && {
+					text: chip.textContent?.trim() ?? "",
 					width: chip.getBoundingClientRect().width,
 					cut: chip.scrollWidth > chip.clientWidth,
 					below: chip.getBoundingClientRect().top >= before.bottom - 0.5,
@@ -947,7 +948,7 @@ test("a dApp's long function name and host never widen Home or History, named or
 		expect(overflowing, surface.name).toEqual([])
 		for (const key of ["terminal", "nameless", "call"])
 			expect(rows[key], `${surface.name}, ${key}`).toMatchObject({ lines: 1, cut: true, ellipsis: true })
-		expect(rows.nameless.chip).toBeNull()
+		expect(rows.nameless.chip).toMatchObject({ text: "dApp", cut: false, below: false })
 		expect(rows.terminal.chip).toMatchObject({ cut: true, width: expect.closeTo(APP_CHIP_CAP, 0) })
 		expect(rows.call.chip).toMatchObject({ cut: false, below: false })
 		expect(rows.transfer.cut).toBe(false)
@@ -958,6 +959,7 @@ test("a dApp's long function name and host never widen Home or History, named or
 		// A dApp transfer's two chips keep 10px semibold; a lone app chip takes the caps role's 11px bold.
 		expect(rows.transfer.type).toEqual({ direction: "10px 600 0.8px", chip: "10px 600 0.8px" })
 		expect(rows.call.type).toEqual({ direction: null, chip: "11px 700 1.1px" })
+		expect(rows.nameless.type).toEqual(rows.call.type)
 	}
 
 	await navigateByHash(page, `#/popup/tx/${DAPP_TRANSFER_HASH}`)

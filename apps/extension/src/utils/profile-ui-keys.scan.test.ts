@@ -1,7 +1,8 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: the fixtures are code samples fed to the scanner as plain strings; their `${` is what it looks for.
-import { readdirSync, readFileSync, statSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { join, relative } from "node:path"
 import { describe, expect, test } from "vitest"
+import { REPO_ROOT, sourceFiles } from "../../scripts/type-roles/source-scan"
 import * as registry from "./profile-ui-keys"
 
 /**
@@ -15,9 +16,8 @@ import * as registry from "./profile-ui-keys"
  * registry half never sees a builder written outside the module.
  */
 
-const SRC_ROOT = join(__dirname, "..")
+const SRC_ROOT = "apps/extension/src"
 const MODULE_PATH = "utils/profile-ui-keys.ts"
-const SCANNED_EXT = /\.(ts|js|vue)$/
 const SKIPPED_PATH = /(\.test\.(ts|js)$)|(^types\/)/
 const COMMENT_LINE = /^(\/\/|\/?\*|<!--)/
 
@@ -28,15 +28,6 @@ const BUILT_KEY: RegExp[] = [
 	/\+\s*["'`]nulo:ui:/,
 	/useSyncedRef\(\s*[^,)]*(\$\{|\+)/,
 ]
-
-function walk(dir: string, out: string[] = []): string[] {
-	for (const name of readdirSync(dir)) {
-		const full = join(dir, name)
-		if (statSync(full).isDirectory()) walk(full, out)
-		else if (SCANNED_EXT.test(name)) out.push(full)
-	}
-	return out
-}
 
 /** `file:line` for every per-profile-looking UI key built outside the module. */
 function findBuiltKeys(files: Array<{ path: string; content: string }>): string[] {
@@ -52,7 +43,11 @@ function findBuiltKeys(files: Array<{ path: string; content: string }>): string[
 	return offenders
 }
 
-const sourceFiles = () => walk(SRC_ROOT).map((full) => ({ path: relative(SRC_ROOT, full), content: readFileSync(full, "utf8") }))
+const srcFiles = () =>
+	sourceFiles({ roots: [SRC_ROOT], exts: ["ts", "js", "vue"] }).map((file) => ({
+		path: relative(SRC_ROOT, file),
+		content: readFileSync(join(REPO_ROOT, file), "utf8"),
+	}))
 
 describe("profile UI keys (registry)", () => {
 	const builders = Object.entries(registry).filter(
@@ -80,7 +75,7 @@ describe("profile UI keys (registry)", () => {
 
 describe("profile UI keys (scan)", () => {
 	test("no per-profile UI key is built outside the module", () => {
-		const files = sourceFiles()
+		const files = srcFiles()
 		const registryFile = files.find((f) => f.path === MODULE_PATH)
 		// Non-vacuous: the walk reached the module and the module defines the builder.
 		expect(registryFile?.content).toContain("export const pinnedTokensKey")

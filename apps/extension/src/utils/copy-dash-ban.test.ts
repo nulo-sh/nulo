@@ -1,10 +1,20 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: `${…}` is how the scanner prints a template literal's substitution, and the snippets are code samples fed to it as plain strings.
 
-import { readdirSync, readFileSync, statSync } from "node:fs"
-import { join, relative } from "node:path"
-import { parse as parseSfc } from "@vue/compiler-sfc"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import ts from "typescript"
 import { describe, expect, test } from "vitest"
+import {
+	DECLARATION,
+	NODE,
+	parseSource,
+	REPO_ROOT,
+	type SourcePolicy,
+	STORY_FILE,
+	sourceFiles,
+	TEST_FILE,
+	type TemplateNode,
+} from "../../scripts/type-roles/source-scan"
 
 /**
  * Static ban: no em dash joins two clauses in text a person reads; a full stop does, and the
@@ -18,31 +28,21 @@ import { describe, expect, test } from "vitest"
  * spelling.
  */
 
-const REPO_ROOT = join(__dirname, "..", "..", "..", "..")
-const SCAN_ROOTS = ["apps/extension/src", "packages/design/src", "packages/extension-messaging/src"]
-const SCAN_FILES = ["packages/aztec-runtime/src/pxe/opfs-store.ts"]
-const SCANNED = /\.(ts|js|vue)$/
-const SKIPPED = /\.(test|stories)\.[jt]s$|\.d\.ts$/
+const POLICY: SourcePolicy = {
+	roots: ["apps/extension/src", "packages/design/src", "packages/extension-messaging/src"],
+	files: ["packages/aztec-runtime/src/pxe/opfs-store.ts"],
+	exts: ["ts", "js", "vue"],
+	skip: [TEST_FILE, STORY_FILE, DECLARATION],
+}
 
 /** A dash with text on both sides. The empty-value glyph alone ("—", "— FJ") has nothing before it;
  *  one inside a label ("Balance: — FJ") matches, and takes a reviewed entry. */
 const CLAUSE_DASH = /\S\s*—\s*\S/
 const HOLE = "${…}"
 
-/** compiler-core's `NodeTypes`, which compiler-sfc does not re-export. */
-const TEXT = 2
-const INTERPOLATION = 5
-
 type Hit = { file: string; line: number; text: string }
 type Located = { loc: { start: { line: number }; source: string } }
 type TemplateExpression = Located & { content: string }
-type TemplateProp = { value?: TemplateExpression; exp?: unknown }
-type TemplateNode = Located & {
-	type: number
-	content?: unknown
-	props?: readonly TemplateProp[]
-	children?: readonly (TemplateNode | string | symbol)[]
-}
 type Reviewed = { file: string; text: string; why: string }
 
 /** Every hit that joins no clauses where a person reads it (text no screen shows, or an empty value
@@ -311,8 +311,9 @@ function scanText(file: string, node: Located, text: string, out: Hit[]): void {
 }
 
 function scanTemplate(file: string, node: TemplateNode, out: Hit[]): void {
-	if (node.type === TEXT && typeof node.content === "string") scanText(file, node, node.content, out)
-	if (node.type === INTERPOLATION && isExpression(node.content)) scanScript(file, node.content.content, node.content.loc.start.line, out)
+	if (node.type === NODE.TEXT && typeof node.content === "string") scanText(file, node, node.content, out)
+	if (node.type === NODE.INTERPOLATION && isExpression(node.content))
+		scanScript(file, node.content.content, node.content.loc.start.line, out)
 	for (const prop of node.props ?? []) {
 		if (prop.value) scanText(file, prop.value, prop.value.content, out)
 		if (isExpression(prop.exp)) scanScript(file, prop.exp.content, prop.exp.loc.start.line, out)
@@ -323,34 +324,18 @@ function scanTemplate(file: string, node: TemplateNode, out: Hit[]): void {
 /** Every clause-joining dash in `source`'s strings and template text outside a log call's arguments. */
 function scan(file: string, source: string): Hit[] {
 	const out: Hit[] = []
-	if (!file.endsWith(".vue")) {
-		scanScript(file, source, 1, out)
-		return out
-	}
-	const { descriptor } = parseSfc(source, { filename: file, sourceMap: false })
-	for (const block of [descriptor.script, descriptor.scriptSetup]) if (block) scanScript(file, block.content, block.loc.start.line, out)
-	if (descriptor.template?.ast) scanTemplate(file, descriptor.template.ast, out)
+	const { scripts, template } = parseSource(file, source)
+	for (const block of scripts) scanScript(file, block.content, block.startLine, out)
+	if (template) scanTemplate(file, template, out)
 	return out
 }
 
-function walk(dir: string, out: string[] = []): string[] {
-	for (const name of readdirSync(dir)) {
-		const full = join(dir, name)
-		if (statSync(full).isDirectory()) walk(full, out)
-		else if (SCANNED.test(name) && !SKIPPED.test(name)) out.push(full)
-	}
-	return out
-}
-
-const treeFiles = (): string[] => [
-	...SCAN_ROOTS.flatMap((root) => walk(join(REPO_ROOT, root))),
-	...SCAN_FILES.map((file) => join(REPO_ROOT, file)),
-]
+const treeFiles = (): string[] => sourceFiles(POLICY)
 
 let treeHits: Hit[] | undefined
 
 function scanTree(): Hit[] {
-	treeHits ??= treeFiles().flatMap((full) => scan(relative(REPO_ROOT, full), readFileSync(full, "utf8")))
+	treeHits ??= treeFiles().flatMap((file) => scan(file, readFileSync(join(REPO_ROOT, file), "utf8")))
 	return treeHits
 }
 

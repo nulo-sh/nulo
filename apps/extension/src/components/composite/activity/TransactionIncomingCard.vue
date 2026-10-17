@@ -27,7 +27,7 @@ const props = defineProps({
 	/** Transaction hash that delivered the note (for hash-slice rendering). */
 	txHash: { type: String, default: null },
 	/** Receiver-honest kind label ("Received privately" / "Public → Public" /
-	 *  "Private → Public" / "Minted"), derived from the resolved type. */
+	 *  "Private → Public" / "Mint (public)"), derived from the resolved type. */
 	receivedLabel: { type: String, default: "Received" },
 	/** The route the row opens. */
 	to: { type: String, default: undefined },

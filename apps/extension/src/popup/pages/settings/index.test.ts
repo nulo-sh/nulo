@@ -248,7 +248,7 @@ describe("settings hub — search", () => {
 
 	test("a word in the field replaces the whole list with its results; emptying it brings the list back", async () => {
 		const w = await mountHub()
-		await search(w).setValue("full")
+		await search(w).setValue("motion")
 		expect(rowIds(w)).toEqual([])
 		expect(w.find('[data-testid="setting-nav-profile"]').exists()).toBe(false)
 		expect(w.findAll('[data-testid^="settings-search-result-"]')).toHaveLength(1)

@@ -265,8 +265,8 @@ A pass is exit 0, with every named test green and none skipped that ran on base.
   - The phase gate.
   - Smoke on Chrome: `backup-roundtrip`, `security-backup`, `passkey-backup`, `own-window`.
   - Smoke on Firefox: `passkey-backup`, `passkey-toolbar-panel` (the WebAuthn and own-window path moved).
-- **A2.1** ✗. Network, prover on, on Chrome and Firefox: `opfs-storage`, `frozen-account-canary`, with the new check. Record each outcome and the Aztec line in `lessons/phase-2.md`. A2 holds two browser windows (premise and post-deletion), so it is an exception to once per arc.
-- **A2.2** ✗.
+- **A2.1** ✓ (pxe `6.0.0-rc.3`, pre-deletion tree at 9b599dae: Chrome 3/3 in 238 s, Firefox 3/3 in 346 s, no `pxe/` database on either). Network, prover on, on Chrome and Firefox: `opfs-storage`, `frozen-account-canary`, with the new check. Record each outcome and the Aztec line in `lessons/phase-2.md`. A2 holds two browser windows (premise and post-deletion), so it is an exception to once per arc.
+- **A2.2** ✓ (on the merged head 2bbf7340: lint, typecheck:all, test:all, check:plans, grep gate; network prover-on retry 0: Chrome `opfs-storage` + `frozen-account-canary` 3/3 in 379 s, Firefox 3/3 in 457 s at f34e1935, Chrome `stale-network-reset` 2/2 in 310 s at 5e6018dd; Codex clean in round 2).
   - G-fast and the phase gate.
   - Network on Chrome and Firefox: `opfs-storage`, `frozen-account-canary`.
   - Network on Chrome: `stale-network-reset` (the chain purge).
@@ -307,6 +307,9 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
 | D109 | A1's PR title says `via` and backticks the identifier: the planned title was 95 characters, and commitlint's `subject-case` refuses a bare camelCase word | the planned title | implementer |
 | D201 | the premise check lives in `frozen-account-canary` (proves, both browsers, every bump) | `delete-after-prove` (proverless in CI); a scratch probe | Opus O6 adopted |
 | D202 | IndexedDB-stimulus tests are re-driven through a rejecting OPFS step; tick pins are re-derived exactly | delete them | Codex C3 adopted |
+| D203 | at implementation: the canary's check pairs the empty `pxe/` list with a control (the `pxe` OPFS root exists after the proves); five stale "PXE IndexedDB" lines the plan did not list (`ARCHITECTURE.md:127`, `CLAUDE.md` § Persisted-storage, `backup-migration-registry.ts`, `contact/service.ts`, `network/service.test.ts`) name the OPFS store; `service.test.ts`'s two IndexedDB-only honesty cases go, since the re-driven teardown case already proves both clears reject on a failed removal | a bare empty-list assertion; leaving the five lines | implementer |
+| D204 | A2 review round 1 (Codex `findings` 1, Opus `findings` 3, neither found a behaviour difference): stage 6 refuses any OPFS root entry but `pxe` (an upstream fallback pool would pass a `pxe`-exists control) and any IndexedDB name but `keyval-store` (a `pxe/` prefix saw one regression only); "opens no IndexedDB" corrected, since bb.js's CRS cache lives there; one more stale "IDB" comment; the sweep log's doubled slash; two history comments rewritten as invariants | a `pxe/` prefix check with a `pxe`-exists control | Codex F1, Opus F1–F3 and nits |
+| D205 | A2's PR title lower-cases `OPFS` and backticks `IndexedDB`: commitlint's `subject-case` refuses both as planned | the planned title | implementer |
 | D301 | `updateSetting` only; the F-21 items are filed as a new issue | take F-21 | both agree |
 | D401 | the design `Button` with its slot and local overrides by specificity | a new global CTA class; an overlay slot | both agree; Opus O9 and Codex C8 adopted |
 | D501 | one mirror per family | one generic mirror (outline B) | both agree |

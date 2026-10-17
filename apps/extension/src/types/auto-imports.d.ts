@@ -97,6 +97,7 @@ declare global {
   const assembleFullBackup: typeof import('../utils/full-backup-helpers').assembleFullBackup
   const awaitLivenessAdvance: typeof import('../utils/background-liveness').awaitLivenessAdvance
   const awaitProfileActivation: typeof import('../composables/unlockWait').awaitProfileActivation
+  const awaitingFirstPriceAnswer: typeof import('../utils/token-aggregate').awaitingFirstPriceAnswer
   const backCtaBlocked: typeof import('../utils/full-backup-ctas').backCtaBlocked
   const balanceFormatted: typeof import('../utils/amount').balanceFormatted
   const browser: typeof import('webextension-polyfill')
@@ -104,6 +105,7 @@ declare global {
   const buildIncomingCardProps: typeof import('../utils/received-display').buildIncomingCardProps
   const buildJournalTerminalCardProps: typeof import('../utils/journal-state').buildJournalTerminalCardProps
   const buildRestoreSecret: typeof import('../composables/full-backup-restore').buildRestoreSecret
+  const callTitle: typeof import('../utils/tx-enrichment').callTitle
   const canSubmitContact: typeof import('../utils/contact-rules').canSubmitContact
   const canonicalContactAddress: typeof import('../utils/contact-rules').canonicalContactAddress
   const capRecords: typeof import('../utils/full-backup-helpers').capRecords
@@ -381,6 +383,7 @@ declare global {
   const settingsQueryTerms: typeof import('../utils/settings-search').settingsQueryTerms
   const settingsResultTo: typeof import('../utils/settings-search').settingsResultTo
   const settingsRow: typeof import('../utils/settings-search').settingsRow
+  const settledReading: typeof import('../utils/tx-amount').settledReading
   const shallowReactive: typeof import('vue').shallowReactive
   const shallowReadonly: typeof import('vue').shallowReadonly
   const shallowRef: typeof import('vue').shallowRef
@@ -441,7 +444,6 @@ declare global {
   const useFormState: typeof import('../composables/useFormState').useFormState
   const useFullBackupExport: typeof import('../composables/useFullBackupExport').useFullBackupExport
   const useFullBackupImport: typeof import('../composables/useFullBackupImport').useFullBackupImport
-  const useFullscreenPopupSetting: typeof import('../composables/fullscreenPopupSetting').useFullscreenPopupSetting
   const useGetStarted: typeof import('../composables/useGetStarted').useGetStarted
   const useId: typeof import('vue').useId
   const useImportErrorState: typeof import('../composables/useProfileImportFlow').useImportErrorState
@@ -742,7 +744,7 @@ declare global {
   export type { TransferIntent, ProjectedArgument } from '../utils/transfer-intent'
   import('../utils/transfer-intent')
   // @ts-ignore
-  export type { TxAmount } from '../utils/tx-amount'
+  export type { TxAmount, SettledCall, ListedToken } from '../utils/tx-amount'
   import('../utils/tx-amount')
 }
 
@@ -840,6 +842,7 @@ declare module 'vue' {
     readonly assembleFullBackup: UnwrapRef<typeof import('../utils/full-backup-helpers')['assembleFullBackup']>
     readonly awaitLivenessAdvance: UnwrapRef<typeof import('../utils/background-liveness')['awaitLivenessAdvance']>
     readonly awaitProfileActivation: UnwrapRef<typeof import('../composables/unlockWait')['awaitProfileActivation']>
+    readonly awaitingFirstPriceAnswer: UnwrapRef<typeof import('../utils/token-aggregate')['awaitingFirstPriceAnswer']>
     readonly backCtaBlocked: UnwrapRef<typeof import('../utils/full-backup-ctas')['backCtaBlocked']>
     readonly balanceFormatted: UnwrapRef<typeof import('../utils/amount')['balanceFormatted']>
     readonly browser: UnwrapRef<typeof import('webextension-polyfill')>
@@ -847,6 +850,7 @@ declare module 'vue' {
     readonly buildIncomingCardProps: UnwrapRef<typeof import('../utils/received-display')['buildIncomingCardProps']>
     readonly buildJournalTerminalCardProps: UnwrapRef<typeof import('../utils/journal-state')['buildJournalTerminalCardProps']>
     readonly buildRestoreSecret: UnwrapRef<typeof import('../composables/full-backup-restore')['buildRestoreSecret']>
+    readonly callTitle: UnwrapRef<typeof import('../utils/tx-enrichment')['callTitle']>
     readonly canSubmitContact: UnwrapRef<typeof import('../utils/contact-rules')['canSubmitContact']>
     readonly canonicalContactAddress: UnwrapRef<typeof import('../utils/contact-rules')['canonicalContactAddress']>
     readonly capRecords: UnwrapRef<typeof import('../utils/full-backup-helpers')['capRecords']>
@@ -1124,6 +1128,7 @@ declare module 'vue' {
     readonly settingsQueryTerms: UnwrapRef<typeof import('../utils/settings-search')['settingsQueryTerms']>
     readonly settingsResultTo: UnwrapRef<typeof import('../utils/settings-search')['settingsResultTo']>
     readonly settingsRow: UnwrapRef<typeof import('../utils/settings-search')['settingsRow']>
+    readonly settledReading: UnwrapRef<typeof import('../utils/tx-amount')['settledReading']>
     readonly shallowReactive: UnwrapRef<typeof import('vue')['shallowReactive']>
     readonly shallowReadonly: UnwrapRef<typeof import('vue')['shallowReadonly']>
     readonly shallowRef: UnwrapRef<typeof import('vue')['shallowRef']>
@@ -1184,7 +1189,6 @@ declare module 'vue' {
     readonly useFormState: UnwrapRef<typeof import('../composables/useFormState')['useFormState']>
     readonly useFullBackupExport: UnwrapRef<typeof import('../composables/useFullBackupExport')['useFullBackupExport']>
     readonly useFullBackupImport: UnwrapRef<typeof import('../composables/useFullBackupImport')['useFullBackupImport']>
-    readonly useFullscreenPopupSetting: UnwrapRef<typeof import('../composables/fullscreenPopupSetting')['useFullscreenPopupSetting']>
     readonly useGetStarted: UnwrapRef<typeof import('../composables/useGetStarted')['useGetStarted']>
     readonly useId: UnwrapRef<typeof import('vue')['useId']>
     readonly useImportErrorState: UnwrapRef<typeof import('../composables/useProfileImportFlow')['useImportErrorState']>

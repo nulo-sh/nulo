@@ -9,6 +9,7 @@
 <script setup>
 /** Utils */
 import { managers } from "@/utils/core"
+import * as staleCopy from "@/components/stale-network/copy"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -38,6 +39,26 @@ const networkId = computed(() => route.params.id)
 const network = computed(() => appStore.networks.find((n) => n.id === networkId.value))
 const isActive = computed(() => appStore.network?.id === networkId.value)
 const canDelete = computed(() => !isActive.value && appStore.networks.length > 1)
+
+/** The hold a reset puts on network `id`, with the imported accounts deleting it would delete. A
+ *  running reset's takeover covers this page, so only a paused one's view is read. */
+async function readHeldReset(id) {
+	const pending = await managers.networkReset.getPendingReset()
+	if (pending?.networkId !== id) return null
+	const view = pending.running ? null : await managers.networkReset.getStaleNetwork(id)
+	return { imported: view?.reset?.imported ?? [] }
+}
+
+const heldReset = ref(null)
+let resetReads = 0
+let disposed = false
+const syncHeldReset = async () => {
+	const read = ++resetReads
+	const held = await readHeldReset(networkId.value)
+	if (read === resetReads) heldReset.value = held
+}
+managers.networkReset.onStaleNetworkChanged.add(syncHeldReset)
+void syncHeldReset()
 
 async function refreshNetworks() {
 	appStore.networks = await managers.network.getNetworks()
@@ -122,14 +143,30 @@ const handleDeleteEndpoint = (endpoint) => {
 	})
 }
 
-const handleDeleteNetwork = () => {
+const handleDeleteNetwork = async () => {
 	if (!network.value) return
 	if (!canDelete.value) return
+	const { id, name } = network.value
+	// Read at the click: a confirmation opened before the page's own read landed must still name them.
+	let held
+	try {
+		held = await readHeldReset(id)
+	} catch {
+		held = undefined
+	}
+	if (disposed || networkId.value !== id) return
+	// An unknown hold is not an empty one: the confirmation never omits what the delete removes.
+	if (held === undefined) return openToast({ kind: "error", label: "Failed to delete chain" })
 	requestConfirm({
 		confirm_text: "Yes, delete chain",
 		confirm_color: "red",
-		title: `Delete ${network.value.name}?`,
-		description: "This wipes accounts, balances, tokens, and PXE state on this chain. This cannot be undone.",
+		title: `Delete ${name}?`,
+		description: [
+			"This wipes accounts, balances, tokens, and PXE state on this chain. This cannot be undone.",
+			held?.imported.length ? staleCopy.deleteChainImported(held.imported) : "",
+		]
+			.filter(Boolean)
+			.join(" "),
 		callback: async () => {
 			const target = network.value
 			try {
@@ -151,6 +188,17 @@ const handleDeleteNetwork = () => {
 // If the network row disappears (deleted from elsewhere), redirect back to the list.
 watch(network, (n) => {
 	if (!n) router.replace("/popup/settings/networks")
+})
+
+// The router reuses this page across network ids; a hold read for one must never show on another.
+watch(networkId, () => {
+	heldReset.value = null
+	void syncHeldReset()
+})
+
+onBeforeUnmount(() => {
+	disposed = true
+	managers.networkReset.onStaleNetworkChanged.remove(syncHeldReset)
 })
 </script>
 
@@ -193,7 +241,12 @@ watch(network, (n) => {
 		<!-- Endpoints -->
 		<Flex direction="column" gap="12">
 			<SectionLabel label="Endpoints" :count="network.endpoints.length" />
+			<Flex v-if="heldReset" align="start" gap="6" data-testid="endpoint-reset-held">
+				<Icon name="warning" size="12" color="orange" aria-hidden="true" :class="$style.reason_icon" />
+				<Text variant="body" color="secondary" height="140">{{ staleCopy.endpointsHeld(network.name) }}</Text>
+			</Flex>
 			<ItemsContainer>
+				<!-- A bound onClick, not @click: SettingItem renders a row inert only with no click listener. -->
 				<SettingItem
 					v-for="endpoint in network.endpoints"
 					:key="endpoint.id"
@@ -202,11 +255,11 @@ watch(network, (n) => {
 					:icon="network.primaryEndpointId === endpoint.id ? 'square-check' : 'square'"
 					:iconFillColor="network.primaryEndpointId === endpoint.id ? 'primary' : 'tertiary'"
 					iconBgColor="transparent"
-					@click="handleSetPrimary(endpoint)"
+					:onClick="heldReset ? undefined : () => handleSetPrimary(endpoint)"
 					data-testid="endpoint-row"
 					:data-endpoint-id="endpoint.id"
 				>
-					<template #right>
+					<template v-if="!heldReset" #right>
 						<Flex align="center" gap="8">
 							<Tooltip position="end" delay="350">
 								<RowAction label="Edit endpoint" data-testid="endpoint-edit-btn" @click="handleEditEndpoint(endpoint)">
@@ -234,6 +287,7 @@ watch(network, (n) => {
 				wide
 				variant="primary_outline"
 				size="medium"
+				:disabled="!!heldReset"
 				data-testid="endpoint-add-btn"
 			>
 				Add endpoint
@@ -258,3 +312,10 @@ watch(network, (n) => {
 		</Flex>
 	</SettingsPageShell>
 </template>
+
+<style module>
+.reason_icon {
+	flex-shrink: 0;
+	margin-top: 2px;
+}
+</style>

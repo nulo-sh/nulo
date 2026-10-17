@@ -8,7 +8,7 @@ import { ConfigStore } from "./store"
  * with a non-functional `storage: {}`; we install a real `.local` per test
  * (before `new ConfigStore()`, which captures `chrome.storage.local`).
  */
-function withStored(stored: Record<string, unknown> | undefined): void {
+function withStored(stored: Record<string, unknown> | undefined): Record<string, string> {
 	const mem: Record<string, string> = {}
 	if (stored !== undefined) mem["nulo:config"] = JSON.stringify(stored)
 	;(chrome.storage as { local: unknown }).local = {
@@ -17,6 +17,7 @@ function withStored(stored: Record<string, unknown> | undefined): void {
 			Object.assign(mem, obj)
 		},
 	}
+	return mem
 }
 
 describe("ConfigStore — persisted-value validation", () => {
@@ -36,6 +37,16 @@ describe("ConfigStore — persisted-value validation", () => {
 		await store.load()
 		expect(store.get("defaultExplorer")).toBe(null)
 		expect(emitted.some((e) => e.key === "defaultExplorer" && e.value === null)).toBe(true)
+	})
+
+	test("a stored key the schema does not have is ignored, and the load's write drops it", async () => {
+		const mem = withStored({ legacyFlag: true, theme: "light" })
+		const store = new ConfigStore()
+		await store.load()
+		expect(store.get("theme")).toBe("light")
+		const persisted = JSON.parse(mem["nulo:config"])
+		expect(persisted).toMatchObject({ theme: "light" })
+		expect(persisted).not.toHaveProperty("legacyFlag")
 	})
 
 	test("a corrupted stored strictSecurityMode string cannot flip the security default", async () => {

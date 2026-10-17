@@ -1,9 +1,14 @@
 <script setup lang="ts">
-defineProps<{ open: boolean; label: string }>()
+defineProps<{
+	open: boolean
+	label: string
+	/** The id of the panel the button shows, named only while that panel is rendered. */
+	controls: string
+}>()
 </script>
 
 <template>
-	<button type="button" :aria-expanded="open" :class="$style.toggle">
+	<button type="button" :aria-expanded="open" :aria-controls="open ? controls : undefined" :class="$style.toggle">
 		<Icon name="chevron" size="10" color="secondary" aria-hidden="true" :class="[$style.chevron, open && $style.chevron_open]" />
 		<Text variant="label-section" color="secondary">{{ label }}</Text>
 	</button>
@@ -28,5 +33,11 @@ defineProps<{ open: boolean; label: string }>()
 
 .chevron_open {
 	transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.chevron {
+		transition: none;
+	}
 }
 </style>

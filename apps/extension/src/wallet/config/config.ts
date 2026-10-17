@@ -14,7 +14,6 @@ export const ConfigSchema = z.object({
 	theme: z.enum(["dark", "light", "system"]).default("system"),
 	sidePanel: z.boolean().default(false),
 	showNode: z.boolean().default(true),
-	showPopupFullscreen: z.boolean().default(true),
 	disableAnimations: z.boolean().default(false),
 
 	// Wallet

@@ -48,7 +48,7 @@ describe("takeoverView", () => {
 	})
 
 	test("a run covers every other route, on whatever network is active", () => {
-		const running = view({ networkId: "tn", reset: { running: true, purged: false, doneCount: 0 } })
+		const running = view({ networkId: "tn", reset: { running: true, purged: false, doneCount: 0, imported: [] } })
 		const onLocal = input({ networkId: "ln", stale: null, running, route: { name: "x", path: "/popup/settings/networks" } })
 		expect(takeoverView(onLocal)).toBe(running)
 	})
@@ -70,7 +70,7 @@ describe("takeoverScreen", () => {
 	test("precedence: a run, Mainnet, a paused journal, another network's journal, a held chain, a node down, then the cause", () => {
 		const all = view({
 			blocked: true,
-			reset: { running: false, purged: true, doneCount: 0 },
+			reset: { running: false, purged: true, doneCount: 0, imported: [] },
 			otherPending: { networkId: "x", name: "X" },
 			heldBy: { name: "My Testnet" },
 		})
@@ -86,13 +86,17 @@ describe("takeoverScreen", () => {
 	})
 
 	test("a journal whose run is in flight shows the progress before the popup hears of the run", () => {
-		expect(takeoverScreen(view({ reset: { running: true, purged: false, doneCount: 0 } }), false, false)).toBe("progress")
+		expect(takeoverScreen(view({ reset: { running: true, purged: false, doneCount: 0, imported: [] } }), false, false)).toBe("progress")
 	})
 
 	test("a run on a network never opened shows A4c, whoever started it; one removing unmovable accounts shows A4", () => {
 		expect(takeoverScreen(view({ accounts: [] }), true, false)).toBe("loading")
 		expect(takeoverScreen(view({ accounts: [], unmovable: ["Imported 1"] }), true, false)).toBe("progress")
-		expect(takeoverScreen(view({ accounts: [], reset: { running: true, purged: true, doneCount: 0 } }), false, false)).toBe("loading")
-		expect(takeoverScreen(view({ accounts: [], reset: { running: false, purged: true, doneCount: 0 } }), false, false)).toBe("paused")
+		expect(
+			takeoverScreen(view({ accounts: [], reset: { running: true, purged: true, doneCount: 0, imported: [] } }), false, false),
+		).toBe("loading")
+		expect(
+			takeoverScreen(view({ accounts: [], reset: { running: false, purged: true, doneCount: 0, imported: [] } }), false, false),
+		).toBe("paused")
 	})
 })
