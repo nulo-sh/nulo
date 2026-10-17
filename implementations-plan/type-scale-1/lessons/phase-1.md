@@ -61,3 +61,32 @@ These runs added a second in-page pass per read and 15 shot pairs per browser, a
 | network `send-amount-exact.test.ts` (unchanged code) | 34.1 → 45.4 s | 41.0 → 47.1 s |
 
 - The figures are noise-bound: the after runs started at load 133-145 (before: 116), and Firefox's tests that read no layout slowed as much (probe test 8.5 → 13.8 s, faces 1.1 → 2.8 s) as those that do; in Chrome the two layout-heavy smoke tests went 17.2 → 16.9 s and 20.1 → 17.0 s. The reads' cost is under the noise; a clean figure needs a quiet host.
+
+## Resumed on the tree merged at f695dea4 (2026-10-17)
+
+OA-5 answered A (decision page 34). The gate re-runs on the merged tree: before figures with dev's spec files, then the base gate with the before shots, then the answer applied.
+
+| Suite (retry 0, no shots, dev's spec files) | Chrome | Firefox |
+|---|---|---|
+| smoke `type-roles.test.ts` (vitest Duration) | 61.7 s | 121.8 s |
+| network `type-roles-windows.test.ts` (file) | 124.9 s | 165.2 s |
+| network `send-amount-exact.test.ts` (file) | 35.0 s | 46.5 s |
+
+Host load 39-115 across the pair. These are the before figures the PR states.
+
+### The gate on the merged base, with the before shots
+
+- Smoke `type-roles.test.ts`, the gate asserting: green, Chrome 83.1 s, Firefox 141.9 s (vitest Duration; 15 shot pairs each, so an upper bound).
+- Network `type-roles-windows.test.ts`: red on one element in both browsers, the same as before the merge: `cap-scroll-area` "Transact", 3.8 px past its 54 px track. The execute window's three tests green, the longest payload included; `send-amount-exact` green.
+- Before shots: 15 pairs (light and dark) per browser, uncommitted until Phase 4, the capabilities window shot with Details open before its sweep so the known failure cannot drop it.
+- OA-5 A then went in as its own commit (dc49623a): the head's Simulate and Transact tracks 66 px, the function-label track 66 px. Only the capabilities window renders `DetailsTable`, so the windows spec on both browsers is the re-run; smoke's green above stands.
+
+### The gate with OA-5 A: green
+
+| Network `type-roles-windows.test.ts` (retry 0, no shots) | Chrome | Firefox |
+|---|---|---|
+| before (dev's spec files, merged base) | 124.9 s | 165.2 s |
+| after (the gate asserting, OA-5 A) | 113.9 s | 140.8 s |
+
+- All four tests green on both browsers; `overflowingText` empty on every capabilities and execute state, the longest payload included. Load 50-110: the after figures are faster than the before ones, so the gate's added reads cost less than the host's noise.
+- Fast layers on dc49623a: lint 0, typecheck:all 0, test 0.

@@ -4,6 +4,8 @@ The signed budget is P30-14 A and P30-15 B (decision page 30, 2026-10-16): Scale
 
 ## OA-1 (conditional): a site that no longer fits at its new size
 
+- **Answered, 2026-10-17 (decision page 34, P34-02): B.** "The name at 13 px with the cap widened to 102 px; Local Network whole; the strip 38 px." (#589)
+
 Phase 3 fills in each site with its screenshots (light and dark, Chrome and Firefox) and measured widths.
 
 - **Surface**: an element in a fixed track or a fixed box whose text runs past it at the new size, or a value newly cut by an ellipsis on an approval window or at an address. Known in advance:
@@ -18,6 +20,8 @@ Phase 3 fills in each site with its screenshots (light and dark, Chrome and Fire
 
 ## OA-2: retire `data` into `meta` on every screen?
 
+- **Answered, 2026-10-17 (decision page 34, P34-03): A.** "Retire data: every identifier in mono 13 px at 400, as Home gets." (#589)
+
 - **Surface**: every address, hash, id, function name and inline amount outside Home: 72 sites, including the execute and capabilities windows, Settings rows that show an address, the transaction and receipt pages.
 - **Options**:
   - **A. Retire `data`**: these become `meta`, JetBrains Mono 13 px at weight 400 (today 12 px at 500). One mono voice for identifiers and figures, as Home gets.
@@ -28,12 +32,16 @@ Phase 3 fills in each site with its screenshots (light and dark, Chrome and Fire
 
 ## OA-3: the dollar figures off Home's rows
 
+- **Answered, 2026-10-17 (decision page 34, P34-04): B.** "Keep 11 px." (#589)
+
 - **Surface**: the dollar figure in Home's Fee Juice card (`GasBalanceCard.vue:240`), under the amount on the transaction and receipt pages (`detail-page.module.css:2`), beside Send's fee (`FeeCostReadout.vue:104`) and in the transaction's fee row (`TxFeeRow.vue:100`). All are 11 px today.
 - **Options**: **A.** 13 px, as Home's token and activity rows get. **B.** Keep 11 px.
 - **Recommendation**: A: a dollar figure is then never smaller than the `meta` conversion beside it.
 - **What ships now**: B.
 
 ## OA-4: Send's publish strip
+
+- **Answered, 2026-10-17 (decision page 34, P34-05): C.** "Keep the strip's facts at today's 10 px semibold: the strip reads as today and fits." (#589)
 
 - **Surface**: the strip under Send's review (`PublishStrip.vue`): three cells, each a name ("YOU", "TO", "AMOUNT") and a fact ("PRIVATE", "HIDDEN", …).
 - **Today**: names in `tag-name` (Space Grotesk 10 px, 700, 0.08 em) stand out from facts in `tag` (10 px, 600) by weight and colour.
@@ -46,6 +54,8 @@ Phase 3 fills in each site with its screenshots (light and dark, Chrome and Fire
 - **What ships now**: A.
 
 ## OA-5: the capabilities window's permission table, whose "TRANSACT" head already runs past its column
+
+- **Answered, 2026-10-17 (decision page 34, P34-01): A.** "Size the columns to their words at 11 px: Simulate, Transact and the function-label column at 66 px; the contract column gives up 24 px and still fits the address and its copy glyph." (#589)
 
 Found by the layout gate on today's wallet, before any type-scale change; it stops the arc (plan § Phase 1, Warning).
 

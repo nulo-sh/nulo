@@ -39,3 +39,8 @@ Verdict: **conditional approve** (the union read flags Holdings search's native 
 
 - Merged `origin/dev` at 966bbde5 (#621, #613, #617, #603, #619). One conflict, `index.md` (both lines kept).
 - Recount on the merged tree: `name-tag` 0/2/0, `tag` 2/20/0, `label` 68/42/1, `data` 42/29/2, `meta` 8/33/2, `nav` 0/1/0 (variant / composes / static class), the same as recon. #613's new Settings rows use `body`, `caption`, `row-title` only. `identifier-sites.expected.json`: 129 sites, 88 `data`, unchanged in count.
+
+## Arc 1, resumed on decision page 34 (2026-10-17)
+
+- Merged `origin/dev` at f695dea4 (ba12f8fd): #633 (Home's fixed hero, one-line activity rows), #641 (icons redrawn; `icons.json`, `MaterialIcon` and the material font retired, so the layout gate's icon-glyph rule went, 04a6776a), #642 (selectable text, `base.css` re-pinned). One conflict, `index.md`. `bun.lock` unchanged.
+- Recount: `name-tag` 0/2/0, `tag` 2/20/0, `label` 70/41/1, `data` 44/29/2, `meta` 8/33/2, `nav` 0/1/0, `fiat` 0/7/0 (variant / composes / static class). `identifier-sites.expected.json`: 129 sites, 88 `data`.

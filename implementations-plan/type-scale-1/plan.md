@@ -1,7 +1,7 @@
 ---
 plan: type-scale-1
 tier: mid
-status: arc 1 blocked at Phase 1 (2026-10-17): a base overflow on the capabilities window (OA-5) and the gate's measurement (D8, pending approval)
+status: arc 1 in progress (2026-10-17): decision page 34 answered OA-1 B, OA-2 A, OA-3 B, OA-4 C, OA-5 A; Phase 1 ✓ on the tree merged at f695dea4
 issues: "#589 (closed by the one arc)"
 driver: claude-code
 claude_model: opus
@@ -17,7 +17,7 @@ post_implementation_hardening: not scheduled
 
 # type-scale-1: Scale A, app-wide at once
 
-One arc, one PR against `dev`, `Closes #589`. It ships the type scale the owner signed on decision page 30 (2026-10-16): P30-14 **A** ("two role edits (meta 11 to 13, nav 10 to 11) and Home's small caps folded into one caps role; sizes 48, 14, 13, 11; nine roles; the fewest changes") and P30-15 **B** ("App-wide at once"). Two parts of the design lead's map do not follow from those words alone, so they are owner asks and the arc builds their "what ships now" forms: retiring `data` everywhere (OA-2) and the `fiat` lines off Home's rows (OA-3). Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+One arc, one PR against `dev`, `Closes #589`. It ships the type scale the owner signed on decision page 30 (2026-10-16): P30-14 **A** ("two role edits (meta 11 to 13, nav 10 to 11) and Home's small caps folded into one caps role; sizes 48, 14, 13, 11; nine roles; the fewest changes") and P30-15 **B** ("App-wide at once"). Two parts of the design lead's map do not follow from those words alone, so they were owner asks: retiring `data` everywhere (OA-2) and the `fiat` lines off Home's rows (OA-3). Decision page 34 (2026-10-17) answered them and the three layout asks; [OWNER-ASKS.md](OWNER-ASKS.md) quotes each answer. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Issue and brief claims that did not hold
 
@@ -48,8 +48,11 @@ For a person reading the wallet in the 360 by 600 popup, on any screen, in eithe
 | `fiat` at 11 px in `TokenCard.vue:178`, `TransactionCardLayout.vue:233` (Home, Holdings, History rows) | 13 px | the drawn map |
 | `.title_sep` (`activity-card.module.css:4`) at 13 px | 14 px | the drawn map |
 | `AmountCard` derived token line at 11 px | 13 px | follows its meta line (`.conversion` composes `meta`) |
-| `data` everywhere else (72 sites, 88 identifier entries) | unchanged, or `meta` | **OA-2** |
-| `fiat` at 11 px in `GasBalanceCard.vue:240`, `detail-page.module.css:2`, `FeeCostReadout.vue:104`, `TxFeeRow.vue:100` | unchanged, or 13 px | **OA-3** |
+| `data` everywhere else (72 sites, 88 identifier entries) | `meta`; `data` retires | **OA-2 A** (P34-03) |
+| `fiat` at 11 px in `GasBalanceCard.vue:240`, `detail-page.module.css:2`, `FeeCostReadout.vue:104`, `TxFeeRow.vue:100` | unchanged | **OA-3 B** (P34-04) |
+| The capabilities window's permission table: Simulate and Transact tracks 54 px, the function-label track 58 px (`DetailsTable.vue:148,259`) | 66 px each; the contract track gives up 24 px | **OA-5 A** (P34-01) |
+| The identity strip's network cap 96 px (`IdentityStrip.vue:93`) | 102 px: "Local Network" whole at 13 px; the strip 38 px | **OA-1 B** (P34-02) |
+| Send's publish strip facts (`PublishStrip.vue`, `tag` today) | `label-section` with today's 10 px, 600, 0.08 em through `OVERRIDES` | **OA-4 C** (P34-05) |
 
 Out of scope: icons (#590, lane icons-d2-1), the sheet (#590), Home's layout (#592, testers-fixes-2), any copy, any other role, the store images.
 
@@ -107,8 +110,7 @@ Out of scope: icons (#590, lane icons-d2-1), the sheet (#590), Home's layout (#5
 ## UI impact
 
 - **Every screen's text** (signed: P30-14 A and P30-15 B, quoted above). Before: caps labels at 10 and 11 px in four voices; small mono at 11; Home's row figures at 11; the nav at 10. After: one caps voice at 11; `meta` at 13; Home's row figures at 13; the nav at 11. The PR body quotes both picks and carries before/after screenshots, light and dark, of Home, Holdings, Send (amount card), Settings (a list page), the execute window, the connection check, onboarding's Welcome, the capabilities window with Details open and its account chooser, and a tx detail page.
-- **OA-1** (conditional): a site that would run past its box, or a value newly cut on an approval window or at an address, keeps today's look on that element until the owner answers.
-- **OA-2, OA-3, OA-4**: as each entry's "what ships now" says.
+- **Decision page 34** (2026-10-17), quoted in [OWNER-ASKS.md](OWNER-ASKS.md): OA-5 A (the permission table's tracks at 66 px), OA-1 B (the identity strip's network cap at 102 px, the strip 38 px), OA-2 A (every identifier in `meta`), OA-3 B (the off-row dollar figures keep 11 px), OA-4 C (the publish strip's facts keep today's look).
 
 ## Phases
 
@@ -127,9 +129,9 @@ Done 2026-10-17: merged at 966bbde5, census unchanged ([lessons/phase-0.md](less
 
 **Gate**: `git merge-base --is-ancestor <arc-1 merge sha> HEAD` exits 0; fast layers exit 0. Layers: static, unit.
 
-### Phase 1 — the guard and the layout predicate, on today's tree ✗ blocked
+### Phase 1 — the guard and the layout predicate, on today's tree ✓
 
-Step 1 done (db31c210). Step 2's gate is red on the base UI: one genuine overflow (OA-5) and measurement defects (D8); see [lessons/phase-1.md](lessons/phase-1.md).
+Step 1 done (db31c210). Step 2's gate was red on the base UI: one genuine overflow (OA-5) and measurement defects (D8); see [lessons/phase-1.md](lessons/phase-1.md). OA-5 answered A (2026-10-17): the table's tracks took the answer inside this phase (dc49623a, D10), and the gate is green on the tree merged at f695dea4.
 
 1. In `type-role-ban.test.ts`, give the three forms their hard "not a role" finding. Add one self-test per form, the comparison-operand control and one success control per form.
 2. In `fixtures/type-roles.ts`, add the `laid-out` scope and `overflowingText`; assert it in `expectPageClean`, the windows sweep and the panel test; add the input control to the probe test.
@@ -186,6 +188,7 @@ As Architecture § OA-2 answer A says; then the pinned tests that name `data` (`
 | D7 | Sequencing | After type-roles-coverage arc 1; recount; merge `dev` before the PR | Branch now: both lanes edit the same identifier and e2e files |
 | D8 | The layout gate's measurement, after Phase 1 read the base (2026-10-17; a correction both panel legs accepted, recorded as a deviation) | Measure text, not scrollable area: an element's own and in-flow descendants' text (none laid out apart: a field, an icon glyph, a box out of flow or one that clips or scrolls) against its box, or an inline element's containing block, padding edge, more than 1 px; the ancestor-clip span from the same text; a box whose `clip-path: inset()` insets meet paints nothing, so it is not visible | `scrollWidth > clientWidth` as specified: it reads 0 for an inline box's client width in Firefox (45 false findings), counts positioned non-text descendants (the Header's copy icon, every page) and judges screen-reader text drawn at no size on purpose. Own text alone against the nearest box (rejected: Codex, it loses the publish strip's containment, kept here because a role-bearing cell measures its descendants' text) |
 | D9 | The base failure the gate found ("TRANSACT", 58 px in a 54 px track, both browsers) | Stop Phase 1 and report (the Warning); OA-5 to the owner | A reviewed exception (forbidden by D5 and the Warning); OA-1's "today's look" (today's look itself fails) |
+| D10 | Where OA-5 A lands (2026-10-17) | In Phase 1, before its gate re-runs: the answer is what makes today's tree pass, and the orchestrator's resume extends this lane's ownership to the grid line | Phase 3 with the other sizes (Phase 1's gate would stay red on the base) |
 
 ## Audit verdicts
 
