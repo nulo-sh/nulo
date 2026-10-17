@@ -21,3 +21,10 @@
 ## Implementation review r3, 2026-10-17
 
 - **Codex** (resume, session `01a14abd`): **approve**, no material item. The round repeated the post-implementation standard's two rules and the adversarial ask verbatim, which the r1 and r2 prompts had paraphrased.
+
+## The PR's checks, 2026-10-17
+
+- First run on #685: every e2e lane green; `Build Storybook` red, so `quality-status` red. Reproduced locally with `bun run --cwd apps/extension build-storybook`: the chunk-cycle guard refused `FormPopup.stories` and `core`.
+- Cause, measured by instrumenting the guard (reverted): Rolldown emits these modules in lazy initializers, and the `utils` barrel's initializer calls each member's. A function-only `chain-id.ts` had none; the added `LOCAL_L1_CHAIN_ID` gave it one. The bundler placed `chain-id.ts` with its only Storybook importer (`Popup.vue` → `explorers.ts` → `chain-ids.ts`), so the shared `core` chunk imported the story chunk that imported it. Bisect: base `chain-id.ts` builds; the new one fails even with base `chain-ids.ts`.
+- Codex (resume, `01a14abd`) picked a dedicated entry point over a chunk-group config or a placement move: `@nulo/wallet-core/chain-id`, no longer re-exported by the barrel, imported by `chain-ids.ts`, `chain-identity.ts` and the node-factory adapter. Storybook, `build:chrome`, lint, typecheck, `test:all` and `test:ci-gating` pass with the guard unchanged (D6).
+- Not promoted to `lessons.md`: it sits at its 8 KiB budget with no entry this supersedes. The gotcha: a barrel member that gains a top-level initializer can put two Storybook chunks on a static import cycle, which only `build-storybook` (CI's `quality-status`) shows; the earlier case is `archive/firefox-passkey-unlock/plan.md` § storybook-cycle.
