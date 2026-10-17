@@ -154,14 +154,14 @@ test.skipIf(!hasConfig)("C2 — trust prompt re-fires after popup close + reopen
 	const networkId = network.id
 
 	const contract = `0x${"cc".repeat(32)}`
-	const siloedNullifier = `0x${"aa".repeat(32)}`
+	const uniqueNoteHash = `0x${"aa".repeat(32)}`
 
 	// Pre-seed pending trust + hidden incoming record matching the
 	// active triple. EntityStorage stores values as JSON.stringify(entity).
 	await seedPage.evaluate(
-		async ([profileId, nid, chainId, addr, contract, siloedNullifier]) => {
+		async ([profileId, nid, chainId, addr, contract, uniqueNoteHash]) => {
 			const trustKey = `nulo:core:incoming-trust@${profileId}|${nid}|${contract}`
-			const recordId = `note:${profileId}|${nid}|${siloedNullifier}`
+			const recordId = `note:${profileId}|${nid}|${uniqueNoteHash}`
 			const recordKey = `nulo:core:incoming-transfers@${recordId}`
 			// `replayPendingPrompts` skips a pending row whose contract has no
 			// matching token registration (service.ts: `tokens.find` by contract +
@@ -188,7 +188,6 @@ test.skipIf(!hasConfig)("C2 — trust prompt re-fires after popup close + reopen
 				[recordKey]: JSON.stringify({
 					kind: "note",
 					id: recordId,
-					siloedNullifier,
 					profileId,
 					networkId: nid,
 					accountAddress: addr,
@@ -206,7 +205,7 @@ test.skipIf(!hasConfig)("C2 — trust prompt re-fires after popup close + reopen
 				}),
 			})
 		},
-		[triple.profileId, networkId, network.chainId, triple.account, contract, siloedNullifier] as const,
+		[triple.profileId, networkId, network.chainId, triple.account, contract, uniqueNoteHash] as const,
 	)
 	await seedPage.close()
 

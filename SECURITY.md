@@ -242,6 +242,11 @@ sits at the SW seam where content-script messages arrive:
 | Compromised page can post arbitrary `window.postMessage` payloads | Limited — discovery requires user approval via popup; encrypted channel uses ECDH P-256 + AES-GCM with verification hash; content script filters cross-frame spoofing. Bugs in upstream `ContentScriptConnectionHandler` are still page-reachable. |
 | Compromised content script (XSS in upstream relay) | High — would bypass the SW envelope check, which cannot mitigate it; depends on upstream code review + minimization. |
 
+The background sets `chrome.storage.local` to trusted contexts at every start
+(`src/wallet/utils/storage-access.ts`): the extension's pages and workers read it, a content script
+does not, and Chrome keeps the level across restarts. Firefox has no such setting, so there the
+area keeps the browser's default access.
+
 ## Authorization enforcement
 
 Two layers:
@@ -334,6 +339,9 @@ Plaintext at rest (`chrome.storage.local`):
 - Profile metadata, networks, accounts, contacts, dApp sessions, tokens,
   token balances, tx history, auth registry state, FPC definitions,
   config, storage version.
+- Incoming receipts: account, token, amount, transaction hash and, for a
+  private one, the note's hashes. A note's nullifier is never stored; it stays
+  in the PXE's encrypted store.
 
 Expanding the encrypted boundary to cover profile-scoped metadata (contacts,
 dApp sessions, tx history) is not done: a large refactor, not a near-term
