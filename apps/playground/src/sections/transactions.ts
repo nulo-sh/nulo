@@ -24,6 +24,8 @@ const TRANSFER_FNS = [
 	"transfer_private_to_private",
 	"transfer_private_to_public",
 	"transfer_public_to_private",
+	// The reference Token's private transfer, which spends from the calling account and names no `from`.
+	"transfer",
 ] as const
 type TransferFn = (typeof TRANSFER_FNS)[number]
 
@@ -94,7 +96,10 @@ async function buildTransferExec(callCount = 1, fn: TransferFn = "transfer_publi
 	const amount = getInput("amount") || "1"
 	if (!tokenAddress || !recipient) throw new Error("tokenAddress + recipient inputs required")
 
-	const { TokenContract } = await import("@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js")
+	const { TokenContract } =
+		fn === "transfer"
+			? await import("@aztec-labs/noir-contracts.js/Token")
+			: await import("@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js")
 	const wallet = getWallet()!
 	// biome-ignore lint/suspicious/noExplicitAny: structural typing across SDK boundary
 	const token: any = await TokenContract.at(AztecAddress.fromStringUnsafe(tokenAddress), wallet as any)
@@ -107,10 +112,13 @@ async function buildTransferExec(callCount = 1, fn: TransferFn = "transfer_publi
 
 	// Build N transfer calls. For the chunked variant (callCount > 5) we issue
 	// N independent BatchCall.request() requests and concat their calls arrays.
-	// Nonce 0 on every call: `from` is the sending account, and the Token refuses any other nonce then.
+	// Nonce 0 on every four-argument call: `from` is the sending account, and the Token refuses any
+	// other nonce then.
 	const calls: unknown[] = []
 	for (let i = 0; i < callCount; i++) {
-		const exec = await token.methods[fn](fromAddr, toAddr, BigInt(amount), 0n).request()
+		const method =
+			fn === "transfer" ? token.methods.transfer(toAddr, BigInt(amount)) : token.methods[fn](fromAddr, toAddr, BigInt(amount), 0n)
+		const exec = await method.request()
 		calls.push(...(exec.calls ?? []))
 	}
 	return { exec: { calls, authWitnesses: [], capsules: [], extraHashedArgs: [] }, fromAddr }

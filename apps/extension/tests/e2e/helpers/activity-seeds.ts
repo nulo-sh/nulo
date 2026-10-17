@@ -136,29 +136,79 @@ export async function seedTokenRow(
 
 export type ReceiptSeed = { tokenId: number; amount: string; uniqueNoteHash: string; at?: number }
 
-/** A visible note receipt of the registered token. Block 1 keeps it history: it never plays as an arrival. */
-export async function seedReceipt(page: Page, scope: ActivityScope, seed: ReceiptSeed): Promise<string> {
+/** Wire-shaped and under the field modulus: `byte` repeated, its first below 0x30. */
+const field = (byte: string) => `0x${byte.repeat(32)}`
+
+type NoteReceipt = ReceiptSeed & { contract: string; hidden: boolean }
+
+/** A note receipt as the incoming service records one. Block 1 keeps it history: it never plays as an arrival. */
+async function storeNoteReceipt(page: Page, scope: Omit<ActivityScope, "token">, seed: NoteReceipt): Promise<string> {
 	const id = `note:${scope.profileId}|${scope.networkId}|${seed.uniqueNoteHash}`
 	const record = {
 		kind: "note",
 		id,
-		noteHash: `0x${"ab".repeat(32)}`,
+		noteHash: field("0b"),
 		owner: scope.account,
 		profileId: scope.profileId,
 		networkId: scope.networkId,
 		accountAddress: scope.account,
-		contract: scope.token.contract,
+		contract: seed.contract,
 		tokenId: seed.tokenId,
 		amountRaw: seed.amount,
-		txHash: `0x${"7c".repeat(32)}`,
+		txHash: field("1c"),
 		l2BlockNumber: RECEIPT_BLOCK,
 		txIndexInBlock: 0,
 		indexInTx: 0,
-		hidden: false,
+		hidden: seed.hidden,
 		discoveredAt: seed.at ?? Date.now(),
 	}
 	await storeRow(page, `nulo:core:incoming-transfers@${id}`, record)
 	return id
+}
+
+/** A visible note receipt of the registered token. */
+export async function seedReceipt(page: Page, scope: ActivityScope, seed: ReceiptSeed): Promise<string> {
+	return storeNoteReceipt(page, scope, { ...seed, contract: scope.token.contract, hidden: false })
+}
+
+/**
+ * A first receipt of the registered token at `contract` still waiting on the person's trust, as a
+ * restored token's first discovery leaves it: the trust row pending and the receipt hidden. A popup
+ * opened on its scope replays the prompt. The receipt is in storage only, so the incoming service's
+ * next verified scans strike it and then delete it.
+ */
+export async function seedPendingTrust(
+	page: Page,
+	scope: Omit<ActivityScope, "token">,
+	token: { id: number; contract: string },
+): Promise<void> {
+	const key = `nulo:core:incoming-trust@${scope.profileId}|${scope.networkId}|${token.contract}`
+	// An added token is trusted, then given its arrival floor, by two writes that land after the add;
+	// the second rewrites the state it read, so a seed before it would be overwritten.
+	await page.waitForFunction(
+		async (k: string) => {
+			const raw = (await chrome.storage.local.get(k))[k]
+			if (typeof raw !== "string") return false
+			const row = JSON.parse(raw) as { state?: string; arrivalFloor?: number; arrivalFloorPending?: boolean }
+			return row.state === "trusted" && (row.arrivalFloor !== undefined || row.arrivalFloorPending === true)
+		},
+		{ timeout: 15_000, polling: 200 },
+		key,
+	)
+	await storeRow(page, key, {
+		profileId: scope.profileId,
+		networkId: scope.networkId,
+		contract: token.contract,
+		state: "pending",
+		updatedAt: Date.now(),
+	})
+	await storeNoteReceipt(page, scope, {
+		tokenId: token.id,
+		amount: "100",
+		uniqueNoteHash: field("1a"),
+		contract: token.contract,
+		hidden: true,
+	})
 }
 
 export type PublicReceiptSeed = { tokenId: number; amount: string; txHash: string; at?: number }
