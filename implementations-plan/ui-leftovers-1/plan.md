@@ -81,7 +81,7 @@ Decision page 35 (2026-10-17) settled five leftovers and, as an amendment the or
 - Tests: replace the "hero's tap" block with one test over Home and the token page. Each case reads the figure first (success control), then clicks: no `writeText`, no toast, and a long balance's figure is unchanged after the click (the expansion is gone).
 - **Gate** ("fast layers" below means its first two commands): `bun run lint && bun run typecheck:all && bun run --cwd apps/extension test BalanceView amount.callers` exit 0.
 
-### Phase 2: the header address is selectable (#639)
+### Phase 2: the header address is selectable (#639) ✓
 - Files: `Header.vue`, `Header.test.ts`, `tests/e2e/navigation.test.ts`.
 - Tests (mount into `document`: `selectedWithin` refuses a detached node): the existing copy test dispatches `detail: 1`, so a real pointer click stays proven. A pointer click ending a selection inside the address copies nothing and opens no toast. Enter's click (`detail: 0`) with the same selection still copies the full address.
 - E2E, in the existing drag test: the hero-to-header drag now also contains the shortened address. A drag inside the address selects exactly its shortened text and records no clipboard write; a plain mouse click after it writes the full address once (a page-side write counter, read right after the click: the write is the handler's first call). Failure modes jsdom cannot show: a browser ignoring `user-select` in a native button, and the real drag-then-click order. Estimate +0.5 s per browser; measure it.
@@ -116,6 +116,7 @@ Decision page 35 (2026-10-17) settled five leftovers and, as an amendment the or
 - D2 #628: fallback at render, inside `journalCardOriginLabel`; the settled and in-flight sites share `DAPP_LABEL`. No new helper: it would have one caller.
 - D3 #618: shared pure predicate plus a `settled` gate on Holdings; Home is unchanged.
 - D4 #634: the rule reads the toast's own `action`; no per-call duration.
+- D6 #639 (implementation, 2026-10-17): the e2e's plain-click control clears the selection first. Chrome holds a selection through a click inside it (probe, lessons/phase-0.md), so the first click on a selected address only clears it, as on every `selectedWithin` site.
 - D5 #583 (amendment, 2026-10-17, orchestrator spawn; P35-08 B signed on page 35): wrap by `flex-wrap` on the existing slot floor, so the switch point is #650's floor by construction; no new threshold, no measurement code.
 
 ## Audit verdicts

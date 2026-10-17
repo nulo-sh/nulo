@@ -29,3 +29,7 @@ Approve, no new material finding: the accepted fixes are reflected, the gates an
 ## Amendment: #583 B (P35-08), Codex round on Phase 6 (session 01a14a5d, gpt-6.1-sol high)
 
 Approve with changes. The flex line-break argument holds for a given container width (direction's hypothetical width + 6 + the slot's 19 px decides the wrap); no `align-content` regression with an auto height. A1 (qualify the extreme case) and A3 (assert the 4 px gap and the left edges) accepted; A2 (a dApp on the nine-digit fixture) rejected as a committed test, measured once in the scratch ladder instead. Details in plan.md § Audit verdicts.
+
+## Phase 2 (#639): a click inside an existing selection
+
+The plan's e2e control ("a plain mouse click after the drag writes the full address once") failed on Chrome: no write. A probe logged the selection at each event of a click inside a selected address: Chrome 152 still holds the selection at `mousedown`, `mouseup` and `click`, and drops it after; Firefox 153 drops it before `click`. So on Chrome the first click on a selected address only clears the selection and the next one copies, as on every `selectedWithin` site (ScopeAddress, ScopeClassId). Not a new behaviour; the control now clears the selection first, and the PR body says it.
