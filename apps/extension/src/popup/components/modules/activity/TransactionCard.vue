@@ -176,10 +176,12 @@ onBeforeUnmount(() => {
 			     dApp identity isn't silently dropped. -->
 			<span :class="$style.title_sep">·</span>
 			<span v-if="transferTypeLabel && originLabel" :class="$style.chips">
-				<span :class="$style.chip">{{ transferTypeLabel }}</span>
-				<span :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
+				<span :class="$style.chip" data-testid="activity-direction-chip">{{ transferTypeLabel }}</span>
+				<span :class="$style.app_slot">
+					<span :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
+				</span>
 			</span>
-			<span v-else-if="transferTypeLabel" :class="$style.chip">{{ transferTypeLabel }}</span>
+			<span v-else-if="transferTypeLabel" :class="$style.chip" data-testid="activity-direction-chip">{{ transferTypeLabel }}</span>
 			<span v-else :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
 		</template>
 
@@ -230,11 +232,25 @@ onBeforeUnmount(() => {
 	composes: app_chip from "../../../../components/composite/activity/activity-card.module.css";
 }
 
-/* The direction and the app do not fit one line beside a symbol and an amount: the app wraps under. */
+/* One line beside the symbol: the direction keeps its whole width while the app chip gets what is left. */
 .chips {
-	display: inline-flex;
-	flex-wrap: wrap;
-	gap: 4px 6px;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+
+/* A zero basis takes no share of the shrink, so the direction chip breaks only once this is at its
+ * floor: the chip's border, padding and one "…" in `type--tag`, so the chip never draws empty. */
+.app_slot {
+	display: flex;
+	flex: 1 1 0;
+	min-width: 19px;
+}
+
+/* Below the shared cap in this row only; two classes outrank the shared chip's `flex-shrink: 0`. */
+.app_slot > .app_chip {
+	flex-shrink: 1;
 }
 
 /* The 24px box overhangs the 14px secondary row and the 10px glyph, so the row keeps its rhythm. */

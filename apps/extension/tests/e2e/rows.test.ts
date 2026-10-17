@@ -550,8 +550,12 @@ test("History's list keeps the −8px row box inside the page: nothing scrolls s
 
 const ROWS = `${sel("tx-card")}, ${sel("tx-incoming-card")}`
 const RECEIPT_TOKEN_ID = 1
-/** A dApp's own name: with it the row's title line wraps at 360px. */
+/** A dApp's own name: at 360px its chip is cut beside the transfer's direction. */
 const DAPP_NAME = "Shielded Payroll Portal"
+/** A dApp's transfer whose dollar figure leaves its app chip no room past its floor. */
+const LARGE_DAPP_HASH = `0x${"6e".repeat(32)}`
+/** The floor of a two-chip row's app chip: its border, padding and one "…" in `type--tag`. */
+const APP_CHIP_FLOOR = 19
 
 type RowLayout = {
 	row: string
@@ -642,6 +646,43 @@ async function settledRows(page: Page, count: number): Promise<RowLayout[]> {
 
 const gapsOf = (rows: RowLayout[]) => rows.slice(1).map((row, i) => row.top - rows[i].bottom)
 
+type TwoChipRow = {
+	directionLines: number
+	/** How much narrower the direction chip is than its one-line width. */
+	directionShort: number
+	chip: { width: number; cut: boolean }
+	ellipsis: number
+}
+
+/** A two-chip row's direction chip, its app chip, and the width a whole "…" takes in that chip's own
+ *  font. Natural widths come from unconstrained clones, removed before the row is read. */
+function readTwoChipRow(page: Page, hash: string): Promise<TwoChipRow> {
+	return page.evaluate((h: string) => {
+		const row = document.querySelector(`[data-testid="tx-card"][data-tx-hash="${h}"]`)
+		const direction = row?.querySelector<HTMLElement>('[data-testid="activity-direction-chip"]')
+		const chip = row?.querySelector<HTMLElement>('[data-testid="activity-app-chip"]')
+		if (!direction || !chip) throw new Error(`row ${h.slice(0, 6)} has no two chips`)
+		const natural = (el: HTMLElement, text: string) => {
+			const probe = el.cloneNode() as HTMLElement
+			probe.removeAttribute("data-testid")
+			probe.textContent = text
+			probe.style.cssText = "position: absolute; visibility: hidden; width: max-content; max-width: none"
+			el.parentElement?.append(probe)
+			const width = probe.getBoundingClientRect().width
+			probe.remove()
+			return width
+		}
+		const range = document.createRange()
+		range.selectNodeContents(direction)
+		return {
+			directionLines: new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size,
+			directionShort: natural(direction, direction.textContent ?? "") - direction.getBoundingClientRect().width,
+			chip: { width: chip.getBoundingClientRect().width, cut: chip.scrollWidth > chip.clientWidth },
+			ellipsis: natural(chip, "…"),
+		}
+	}, hash)
+}
+
 /** Opens a surface by its hash and waits for the rows on screen to leave: the hash changes before
  *  the router swaps the page, so the old page's rows could pass for the new page's. */
 async function openSurface(page: Page, hash: string): Promise<void> {
@@ -658,7 +699,7 @@ const SURFACES = [
 	{ name: "History", hash: "#/popup/activity" },
 ]
 
-test("rows sit 10px apart on Home, a token's page and History, the date heading 12px above the first; a dApp's long title, a nine-digit amount and a priced receipt stay inside their rows and never cover an amount, dark and light", async ({
+test("rows sit 10px apart on Home, a token's page and History, the date heading 12px above the first; a dApp's long title, a nine-digit amount, a dApp's large transfer and a priced receipt stay inside their rows and never cover an amount, dark and light", async ({
 	listedExtensionPerTest,
 	skip,
 }) => {
@@ -676,6 +717,13 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 		transferType: 2,
 		dapp: DAPP_NAME,
 	})
+	await seedTransaction(page, scope, {
+		hash: LARGE_DAPP_HASH,
+		amount: (1_234_567n * 10n ** BigInt(scope.token.decimals - 2)).toString(),
+		at: now - 2_500,
+		transferType: 2,
+		dapp: DAPP_NAME,
+	})
 	await seedTokenRow(page, scope, RECEIPT_TOKEN_ID)
 	await seedReceipt(page, scope, { tokenId: RECEIPT_TOKEN_ID, amount: "4200000", nullifier: `0x${"5c".repeat(32)}`, at: now - 3_000 })
 	await seedUsdQuoteAndReload(page, scope.token.priceId)
@@ -686,7 +734,8 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 		await setTheme(page, theme)
 		for (const surface of SURFACES) {
 			await openSurface(page, surface.hash)
-			const rows = await settledRows(page, 4)
+			const rows = await settledRows(page, 5)
+			const large = await readTwoChipRow(page, LARGE_DAPP_HASH)
 			const gaps = gapsOf(rows)
 			console.log(
 				`[rows] ${theme}, ${surface.name}: heights ${rows.map((r) => (r.bottom - r.top).toFixed(1)).join(", ")}; gaps ${gaps.map((g) => g.toFixed(1)).join(", ")}; amounts ${rows.map((r) => r.amount).join(", ")}`,
@@ -695,6 +744,13 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 				[],
 			)
 			for (const gap of gaps) expect.soft(gap, `${surface.name}'s row gap`).toBeCloseTo(10, 0)
+			console.log(`[rows] ${theme}, ${surface.name}: the large dApp transfer ${JSON.stringify(large)}`)
+			// Past the app chip's floor the direction chip gives, as a send's does, and the chip never draws empty.
+			expect(large.directionLines, surface.name).toBe(2)
+			expect(large.chip.cut).toBe(true)
+			expect(large.chip.width).toBeCloseTo(APP_CHIP_FLOOR, 0)
+			expect(large.chip.width).toBeGreaterThanOrEqual(large.ellipsis)
+			if (surface.name === "Home" && theme === "dark") await shotSend(page, "dapp-transfer-rows", "activity-direction-chip")
 			if (surface.name !== "History") continue
 			const clearance = await page.evaluate((rowsSel: string) => {
 				const label = document.querySelector('[data-testid="activity-date-label"]')
@@ -725,9 +781,19 @@ const DAPP_TRANSFER_HASH = `0x${"6d".repeat(32)}`
 type NamedRows = {
 	/** Scroll containers and the document that came out wider than their box. */
 	overflowing: string[]
-	/** Per row: its title's line count, whether its text is cut and shown with an ellipsis, its app chip
-	 *  and whether that chip sits below the element before it. */
-	rows: Record<string, { lines: number; cut: boolean; ellipsis: boolean; chip: { width: number; cut: boolean; below: boolean } | null }>
+	/** Per row: its title's line count, whether its text is cut and shown with an ellipsis, its direction
+	 *  chip's line count, its app chip and whether that chip sits below the direction chip, or below the
+	 *  title where the row has no direction. */
+	rows: Record<
+		string,
+		{
+			lines: number
+			cut: boolean
+			ellipsis: boolean
+			direction: { lines: number } | null
+			chip: { width: number; cut: boolean; below: boolean } | null
+		}
+	>
 }
 
 /** Reads the four dApp rows once each is drawn and the fonts are in. */
@@ -761,16 +827,18 @@ async function readDappRows(page: Page): Promise<NamedRows> {
 		const readRow = (row: Element) => {
 			const title = row.querySelector<HTMLElement>('[data-testid="activity-title"]')
 			if (!title) throw new Error("a row has no title")
+			const direction = row.querySelector('[data-testid="activity-direction-chip"]')
 			const chip = row.querySelector<HTMLElement>('[data-testid="activity-app-chip"]')
-			const before = chip?.previousElementSibling?.getBoundingClientRect()
+			const before = (direction ?? title).getBoundingClientRect()
 			return {
 				lines: lineCount(title),
 				cut: title.scrollWidth > title.clientWidth,
 				ellipsis: getComputedStyle(title).textOverflow === "ellipsis",
+				direction: direction && { lines: lineCount(direction) },
 				chip: chip && {
 					width: chip.getBoundingClientRect().width,
 					cut: chip.scrollWidth > chip.clientWidth,
-					below: before !== undefined && chip.getBoundingClientRect().top >= before.bottom - 0.5,
+					below: chip.getBoundingClientRect().top >= before.bottom - 0.5,
 				},
 			}
 		}
@@ -787,7 +855,7 @@ async function readDappRows(page: Page): Promise<NamedRows> {
 	}, rows)
 }
 
-test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol never cut and its app chip under its direction; the details' App value breaks anywhere against the box's right edge", async ({
+test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol and direction whole with its app chip cut beside them; the details' App value breaks anywhere against the box's right edge", async ({
 	listedExtensionPerTest,
 }) => {
 	const page = await openPopup(listedExtensionPerTest)
@@ -829,7 +897,10 @@ test("a dApp's long function name and host never widen Home or History, named or
 		expect(rows.terminal.chip).toMatchObject({ cut: true, width: expect.closeTo(APP_CHIP_CAP, 0) })
 		expect(rows.call.chip).toMatchObject({ cut: false, below: false })
 		expect(rows.transfer.cut).toBe(false)
-		expect(rows.transfer.chip).toMatchObject({ cut: true, below: true, width: expect.closeTo(APP_CHIP_CAP, 0) })
+		expect(rows.transfer.direction).toEqual({ lines: 1 })
+		expect(rows.transfer.chip).toMatchObject({ cut: true, below: false })
+		expect(rows.transfer.chip?.width).toBeGreaterThanOrEqual(APP_CHIP_FLOOR - 0.5)
+		expect(rows.transfer.chip?.width).toBeLessThan(APP_CHIP_CAP - 0.5)
 	}
 
 	await navigateByHash(page, `#/popup/tx/${DAPP_TRANSFER_HASH}`)

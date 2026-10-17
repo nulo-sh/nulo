@@ -142,14 +142,19 @@ describe("modules/activity/TransactionCard (settled)", () => {
 			const w = mountCard(popupTransfer)
 			expect(layout(w).props("oneLineTitle")).toBe(false)
 			expect(w.find('[data-testid="activity-app-chip"]').exists()).toBe(false)
-			expect(w.text()).toContain("Private → Public")
+			expect(w.find('[data-testid="activity-direction-chip"]').text()).toBe("Private → Public")
+			expect(w.html()).not.toMatch(/app_slot/)
 		})
 
-		test("a dApp's transfer keeps its symbol whole and groups the direction with the app chip, which can wrap under it", () => {
+		test("a dApp's transfer keeps its symbol whole and groups the direction with a slot that holds the app chip", () => {
 			const w = mountCard({ ...dappTransferTx, origin: { type: OriginType.DAPP, name: HOST } })
 			expect(layout(w).props("oneLineTitle")).toBe(false)
-			const group = w.find('[data-testid="activity-app-chip"]').element.parentElement
+			const slot = w.find('[data-testid="activity-app-chip"]').element.parentElement
+			expect(slot?.className).toMatch(/app_slot/)
+			expect(slot?.textContent).toBe(HOST)
+			const group = slot?.parentElement
 			expect(group?.className).toMatch(/chips/)
+			expect([...(group?.children ?? [])]).toEqual([w.find('[data-testid="activity-direction-chip"]').element, slot])
 			expect(group?.textContent).toBe(`Private → Public${HOST}`)
 		})
 	})

@@ -68,7 +68,7 @@ For a person who reads their activity after using dApps, and opens a dApp operat
 
 ## Phases
 
-### Phase 1: the two-chip row on one line (#583 OA-1, P34-08 D)
+### Phase 1: the two-chip row on one line (#583 OA-1, P34-08 D) ✓
 
 Files: `TransactionCard.vue`, `TransactionCard.test.ts`, `tests/e2e/rows.test.ts`. Assumes: F1, F3, I1, I2.
 
