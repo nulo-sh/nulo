@@ -103,7 +103,7 @@ Decision page 35 (2026-10-17) settled five leftovers and, as an amendment the or
 - Gate the phase: `bun run --cwd packages/design test toast ToastManagerBase` exit 0. Then take light and dark "after" shots of the four surfaces.
 - **Arc gate**: `bun run audit:vue`, `bun run test:all`, `bun run check:plans` exit 0. Then, after a fresh armed build (`audit:vue` disarmed `dist`), `navigation`, `rows` and `snackbar` by the smoke recipe on Chrome and on Firefox. Record `navigation`'s time per browser against Phase 0's.
 
-### Phase 6: the two-chip row wraps past its floor (#583 B, amendment)
+### Phase 6: the two-chip row wraps past its floor (#583 B, amendment) ✓
 - Files: `TransactionCard.vue` (style only), `tests/e2e/rows.test.ts`.
 - Tests: the priced rows scenario's large dApp transfer (12,345.67, seeded today) asserts the wrap, never a dollar threshold: the direction chip on one line, the app chip 4 px under it (±0.5) with matching left edges, the chip at its 96 px cap and cut, its text the dApp's name. The floor-width and "…"-width reads go (no row sits at the floor now); the `::before` read stays. The dApp scenario's 2.5 USDC transfer keeps its one-line assertions (chip beside the direction, above the floor, under the cap): the never-happens control. Row heights stay logged per browser, not asserted (type-scale-1 moves them). jsdom has no layout, so no unit test.
 - Byte-identity below the point: Chrome shots of History at 2.5, 25 and 250 USDC before and after compare pixel-equal.
