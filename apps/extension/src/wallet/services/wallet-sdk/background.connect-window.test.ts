@@ -445,6 +445,23 @@ describe("the connect window after Allow", () => {
 		expect(admit.mock.calls.map(([request]) => request.consumesToken)).toEqual([false, false])
 	})
 
+	test("a remembered row of the profile switched to reconnects at once while the other profile's connect window is open", async () => {
+		const h = boot()
+		h.discover("f1")
+		await flush()
+		h.switchProfile("p2")
+		h.rows.set(`${ORIGIN}|${chainInfoToChainId(chain(1))}`, {
+			id: "row-p2",
+			profileId: "p2",
+			chainId: String(chainInfoToChainId(chain(1))),
+		})
+		h.discover("back")
+		await flush()
+
+		expect(approved()).toEqual(["back"])
+		expect(admit.mock.calls.map(([request]) => request.consumesToken)).toEqual([true])
+	})
+
 	test("a grant write that fails deletes the row it followed and refuses the discovery", async () => {
 		const h = boot({ setCapabilityGrants: () => Promise.reject(new Error("write failed")) })
 		h.discover("f1")

@@ -764,10 +764,7 @@ describe("dispatcher.requestCapabilities — field-aware accounts diff", () => {
 		expect(accounts?.accounts).toEqual([])
 	})
 
-	test("enrichGrantedCapabilities resolves the network UNCONDITIONALLY — canGet:false on an unresolvable chain THROWS, not [] — Q11", async () => {
-		// Behavior-preservation pin: resolveNetwork
-		// runs BEFORE the canGet gate, so a future gate-hoist can't silently turn a
-		// throw into accounts:[]. networkReader returns no networks → resolve throws.
+	test("requestCapabilities with canGet:false on an unresolvable chain THROWS, not [] — Q11", async () => {
 		const accountReader: AccountFake = { provisionDefaultAccount: declineProvision, getAccounts: async () => [] }
 		const networkReader: INetworkReader = { getNetworksRaw: async () => [] }
 		const session = makeSession({

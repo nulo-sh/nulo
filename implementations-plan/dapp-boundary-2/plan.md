@@ -102,6 +102,8 @@ The lane brief's record (no new screen, copy or format) covers both surfaces bel
 | Opus 1 | conditional approve | F7 harness edit; node env and `.real.test.ts`; `CompleteAddress` import and `equals`; D3 keeps a waited-on row (the reload case); named collaborators in the table; UI impact lines; the queued-journal disposition | The marker-order assertion dropped as unobservable. Two residuals it named are reported to the orchestrator, outside committed text |
 | Codex final (fresh) | conditional approve | D4 limited to a pending `connect` entry (a remembered row outlives a notice); the dropped-waiter case qualified into the known limit; D5 keeps the grant error | Waiter liveness tracking rejected (a lifecycle; the known limit is preferable) |
 | Codex final, resumed | approve | the three fixes verified; no regression | none |
+| Codex fix 1 (arc diff) | approve | nothing material | none |
+| Opus fix 1 (arc diff) | approve | the in-flight check binds the window's profile; a dispatcher test name matched to what it pins | the parsed key for `registerAccount` (the PXE client takes wire text) |
 
 ## Delivery
 

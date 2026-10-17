@@ -276,11 +276,18 @@ function resolveSdkDeps(services: ServiceCollection, logger: ILogger): SdkDeps {
 	}
 }
 
-/** A connect window, or the network-unavailable notice, open for one `(origin, chainId)` pair. */
-type PendingWindow = { kind: "connect" | "notice"; settled: Promise<void> }
+/** A connect window, with the profile it opened under, or the network-unavailable notice, open for
+ *  one `(origin, chainId)` pair. */
+type PendingWindow = { kind: "connect"; profileId: string; settled: Promise<void> } | { kind: "notice"; settled: Promise<void> }
 
 function dedupeKeyOf(origin: string, chainId: string): string {
 	return `${origin}|${chainId}`
+}
+
+/** A row of `profileId` found while its connect window for the pair is open is the one that window
+ *  is writing, not a remembered app. */
+function isRowInFlight(pendingWindow: PendingWindow | undefined, profileId: string): boolean {
+	return pendingWindow?.kind === "connect" && pendingWindow.profileId === profileId
 }
 
 /** SW-lifetime state shared by the handler callbacks and the wiring around them. */
@@ -970,11 +977,10 @@ async function handleDiscovery(discovery: PendingDiscovery, deps: DiscoveryDeps)
 			)
 			return
 		}
-		// Read with no yield since the lookup: a row found while this pair's connect window is open is
-		// the one that window is writing, not a remembered app, so the discovery waits on the window.
+		// Read with no yield since the lookup; a row in flight waits on its window like any duplicate.
 		const dedupeKey = dedupeKeyOf(discovery.origin, chainId)
 		const pendingWindow = deps.pendingDiscoveryPromises.get(dedupeKey)
-		if (existingSession && served && pendingWindow?.kind !== "connect") {
+		if (existingSession && served && !isRowInFlight(pendingWindow, profile.id)) {
 			autoApproveExistingSession(discovery, chainId, deps)
 			return
 		}
@@ -1202,7 +1208,7 @@ async function runDiscoveryPopup(
 	// Store a promise that resolves when the popup completes so duplicate
 	// discoveries can await it.
 	const { promise: popupPromise, resolve: resolvePopup } = deferred()
-	pendingDiscoveryPromises.set(dedupeKey, { kind: "connect", settled: popupPromise })
+	pendingDiscoveryPromises.set(dedupeKey, { kind: "connect", profileId, settled: popupPromise })
 	let waitingWindow: number | undefined
 
 	try {
