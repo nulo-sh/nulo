@@ -948,7 +948,7 @@
 			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && surface.kind === 'transfer' && surface.sender.kind === 'account'",
 			"ordinal": 0,
 			"role": "meta",
-			"selector": "[data-testid=\"execute-op-transfer-sender-address\"]",
+			"selector": "[data-testid=\"execute-op-transfer-sender\"][data-sender-kind=\"account\"] [data-testid=\"execute-op-transfer-sender-address\"]",
 			"surface": "windows-execute",
 			"state": "a transfer from one of the wallet's accounts (network)"
 		},
@@ -958,7 +958,7 @@
 			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && surface.kind === 'transfer' && !(surface.sender.kind === 'none' || surface.sender.kind === 'account') && full",
 			"ordinal": 1,
 			"role": "meta",
-			"selector": "[data-testid=\"execute-grant-transfer-sender-address\"]",
+			"selector": "[data-testid=\"execute-grant-transfer-sender\"][data-sender-kind=\"explicit\"] [data-testid=\"execute-grant-transfer-sender-address\"]",
 			"surface": "windows-execute",
 			"state": "a grant on a registered token (network)"
 		},
@@ -968,7 +968,7 @@
 			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && surface.kind === 'transfer' && !(surface.sender.kind === 'none' || surface.sender.kind === 'account') && !(full)",
 			"ordinal": 2,
 			"role": "meta",
-			"selector": "[data-testid=\"execute-op-transfer-sender-address\"]",
+			"selector": "[data-testid=\"execute-op-transfer-sender\"][data-sender-kind=\"explicit\"] [data-testid=\"execute-op-transfer-sender-address\"]",
 			"surface": "windows-execute",
 			"state": "a transfer from an address the wallet does not know (network)"
 		},
@@ -1008,7 +1008,7 @@
 			"branch": "surface.kind === 'decoded' && p.value.kind === 'address' && !full",
 			"ordinal": 0,
 			"role": "meta",
-			"selector": "[data-testid=\"execute-op-decoded-param-value\"]",
+			"selector": "[data-testid=\"execute-op-decoded-param\"][data-value-kind=\"address\"] [data-testid=\"execute-op-decoded-param-value\"]",
 			"surface": "windows-execute",
 			"state": "a decoded call with an address parameter (network)"
 		},
@@ -1018,7 +1018,7 @@
 			"branch": "surface.kind === 'decoded' && !(p.value.kind === 'address' && !full)",
 			"ordinal": 0,
 			"role": "meta",
-			"selector": "[data-testid=\"execute-op-decoded-param-value\"]",
+			"selector": "[data-testid=\"execute-op-decoded-param\"][data-value-kind=\"field\"] [data-testid=\"execute-op-decoded-param-value\"]",
 			"surface": "windows-execute",
 			"state": "a decoded call with a field parameter (network)"
 		},
@@ -1140,7 +1140,7 @@
 			"branch": "isSendTx(op)",
 			"ordinal": 0,
 			"role": "meta",
-			"selector": "[data-testid=\"execute-op-account\"]",
+			"selector": "[data-testid=\"execute-op-item\"]:is([data-op-kind=\"aztec_sendTx\"], [data-op-kind=\"send_transaction\"]) [data-testid=\"execute-op-account\"]",
 			"surface": "windows-execute",
 			"state": "an aztec_sendTx request (network)"
 		},
@@ -1190,7 +1190,7 @@
 			"branch": "!(isSendTx(op)) && op.account",
 			"ordinal": 1,
 			"role": "meta",
-			"selector": "[data-testid=\"execute-op-account\"]",
+			"selector": "[data-testid=\"execute-op-item\"]:not([data-op-kind=\"aztec_sendTx\"], [data-op-kind=\"send_transaction\"]) [data-testid=\"execute-op-account\"]",
 			"surface": "windows-execute",
 			"state": "an operation other than a send, with an account (network)"
 		},
@@ -1423,7 +1423,7 @@
 			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-line-from\"]",
 			"surface": "windows-execute",
-			"state": "a discovered token authorization the wallet reads (component test)"
+			"state": "a discovered token authorization the wallet reads (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/SendTxSummary.vue",
@@ -1433,7 +1433,7 @@
 			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-line-to\"]",
 			"surface": "windows-execute",
-			"state": "a discovered token authorization the wallet reads (component test)"
+			"state": "a discovered token authorization the wallet reads (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/SendTxSummary.vue",
