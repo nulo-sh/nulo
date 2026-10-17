@@ -1,7 +1,7 @@
 ---
 plan: docs-1
 tier: light
-status: planned; final Codex pass approve; arc 1 implementing (auto-continue)
+status: completed (arc 1 #713 carries this close-out)
 issues: "#665 #667 #668 #672 (all arc 1); P38-01, P38-11 and P38-12 have no issue (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,21 @@ base: origin/dev at 2c0df3b9
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-17.
+- **Status:** closed with this delivery. One arc, [#713](https://github.com/nulo-sh/nulo/pull/713), closes #665, #667, #668 and #672; the merge that lands it closes the plan.
+- **Shipped:**
+  - P38-01 = A, P38-11 = A, P38-12 = A: `SECURITY.md` states the passkey RP ID boundary (W1) and today's `createAuthWit` contract (W2), with its stale paths repaired. `packages/wallet-crypto/ATTACK-SURFACE.md` lists what each backup kind carries and what opens it (W5), bounds the passkey paragraph to its threat model (W3) and records the older password backups (W4).
+  - #665: `LoggerStore.clear()` rejects when the stored copy stays; a boot purge is best effort.
+  - #667: an unknown recovery word is reported by its position, never echoed.
+  - #668: the build-env guard is an allowlist of the two production options and refuses an empty value too; `scripts/ci-cd/build-env-guard.test.ts` runs the real step.
+  - #672: `doRefresh` starts no request without an open session (the awaited read plus `peekLiveSerial()` in the same continuation), and a locked run leaves the in-flight slot to the unlock's refresh.
+- **Known limits:** #709 (P38-12, password backups made before #51 / #55).
+- **Dropped:** the known limit planned in review round 1 for a locked refresh that an unlock joins: fixed in round 2 instead (`answerLocked`). Phase 2's unhandled-rejection guard test: narrowed to the boot path, since a propagate-queue link already carries the queue's handler (§ Phases).
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are no longer live. Do not run them.
 
 # docs-1: the documents say what the code does
 
