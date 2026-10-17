@@ -175,6 +175,7 @@ watch(network, (n) => {
 					size="small"
 					title="Name"
 					:description="network.name"
+					trailingIcon="edit"
 					@click="handleEditNetworkName"
 					data-testid="network-detail-rename"
 				/>

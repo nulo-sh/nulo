@@ -91,6 +91,7 @@ export const SettingItemValues: Story = {
 					<SettingItem title="Privacy" description="Prices, explorer" value="Prices on" chevron />
 					<SettingItem title="Display" description="Theme, layout" value="System" chevron />
 					<SettingItem title="Developer" description="Mode, logs, account state" value="Off" chevron />
+					<SettingItem size="small" title="Name" description="Aztec testnet" trailingIcon="edit" />
 				</ItemsContainer>
 			</div>
 		`,

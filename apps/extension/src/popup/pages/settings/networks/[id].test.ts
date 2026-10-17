@@ -85,7 +85,7 @@ describe("Settings › Network detail — an existing custom row is fully manage
 	test("rename, endpoint add/edit/delete and chain deletion all render for a non-active custom network", async () => {
 		const wrapper = mountDetail()
 		await flushPromises()
-		expect(wrapper.find('[data-testid="network-detail-rename"]').exists()).toBe(true)
+		expect(wrapper.get('[data-testid="network-detail-rename"]').attributes("trailingicon")).toBe("edit")
 		expect(wrapper.find('[data-testid="endpoint-add-btn"]').exists()).toBe(true)
 		expect(wrapper.findAll('[data-testid="endpoint-row"]')).toHaveLength(2)
 		expect(wrapper.findAll('[data-testid="endpoint-edit-btn"]')).toHaveLength(2)
