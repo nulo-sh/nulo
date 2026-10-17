@@ -62,6 +62,9 @@ describe("OperationCard: a public grant", () => {
 
 	test("on a contract the wallet has not registered as a token it reads as the parameters, each value whole", () => {
 		const w = mountGrant({ decodedGrants: [decoded], tokens: [] })
+		const line = byTestid(w, "execute-op-payload-row").text()
+		expect(line).toContain("Transfer Public To Public")
+		expect(line).not.toContain("Transfer (public)")
 		const params = byTestid(w, "execute-grant-args").findAll('[data-testid="execute-grant-decoded-param"]')
 		expect(params.map((p) => [p.attributes("data-param"), p.find('[data-testid="execute-grant-decoded-param-value"]').text()])).toEqual(
 			[
@@ -72,6 +75,15 @@ describe("OperationCard: a public grant", () => {
 			],
 		)
 		expect(byTestid(w, "execute-grant-args").find(".addr").exists()).toBe(false)
+	})
+
+	test("two grants: each action line takes its own grant's reading", () => {
+		const op = { ...grantOp(), actions: [GRANT, GRANT].map((content) => ({ kind: "add_public_authwit" as const, content })) }
+		const w = mountGrant({ decodedGrants: [{ kind: "undecoded", reason: "unknown-contract" }, decoded], tokens: [USDC_TOKEN] }, op)
+		const lines = w.findAll('[data-testid="execute-op-payload-row"]').map((r) => r.text())
+		expect(lines).toHaveLength(2)
+		expect(lines[0]).toContain("Transfer Public To Public")
+		expect(lines[1]).toContain("Transfer (public)")
 	})
 
 	test("while the wallet decodes, its arguments read as pending", () => {

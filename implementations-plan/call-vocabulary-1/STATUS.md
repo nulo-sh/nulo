@@ -8,3 +8,4 @@
 - 2026-10-17 final fresh Codex pass: conditional approve, two document fixes; resumed twice, **approve**. Auto-continue not taken: OA-1 and OA-3 concern Activity, a surface the arc touches.
 - 2026-10-17 orchestrator approved the plan and released arc 1; OA-1 to OA-4 answered (ship-now form each). Merged origin/dev (563b0627).
 - 2026-10-17 phase 1 gate: lint, typecheck:all, vitest (src/utils, activity, pages/tx, call-surface: 94 files, 1553 passed) all exit 0.
+- 2026-10-17 phase 2 gate: lint, typecheck:all, vitest src/popup/windows/execute (23 files, 284 passed) all exit 0.

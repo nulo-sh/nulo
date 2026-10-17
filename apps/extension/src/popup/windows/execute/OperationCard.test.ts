@@ -84,7 +84,8 @@ describe("windows/execute/OperationCard — action rows", () => {
 			expect(rows[1]?.text()).toContain("Authorize public spend")
 			const addresses = rows[1]?.findAll("i[data-address]").map((a) => a.attributes("data-address"))
 			expect(addresses).toEqual(["0xspender", "0xtoken"])
-			expect(rows[1]?.text()).toContain("Transfer (public)")
+			// No reading reaches this card, so the method reads as its contract spells it.
+			expect(rows[1]?.text()).toContain("Transfer In Public")
 			expect(rows[1]?.text()).not.toContain("add public authwit")
 		},
 	)

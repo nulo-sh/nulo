@@ -156,6 +156,17 @@ const grantRows = computed(() =>
 	}),
 )
 
+/** Per action, whether the wallet read its grant's call as the movement the call's name claims. */
+const actionReads = computed(() => {
+	if (props.op.kind !== "send_transaction") return []
+	let k = 0
+	return (props.op.actions ?? []).map((action) => {
+		if (action.kind !== "add_public_authwit") return false
+		const kind = grantRows.value[k++]?.surface.kind
+		return kind === "transfer" || kind === "mint"
+	})
+})
+
 /** What an `aztec_createAuthWit` asks the wallet to sign: a call it can show, or a hash it cannot. */
 type CreateAuthwitSurface =
 	| { kind: "call"; caller: string; to: string; call: WireCall; args: CallSurface }
@@ -252,7 +263,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 				<Flex :class="$style.prop">
 					<Text variant="label-section" color="secondary">Payload:</Text>
 					<Flex direction="column" gap="4" :class="$style.payload">
-						<OperationActionRow v-for="(action, j) in op.actions" :key="`${index}:${j}`" :action="action" hide-args />
+						<OperationActionRow v-for="(action, j) in op.actions" :key="`${index}:${j}`" :action="action" :read="actionReads[j]" hide-args />
 					</Flex>
 				</Flex>
 				<Flex

@@ -1,14 +1,19 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup lang="ts">
 import type { Action } from "@nulo/wallet-bridge"
-import { humanizeMethodName } from "@/utils/tx-enrichment"
+import { callTitle } from "@/utils/tx-enrichment"
 import { safeWire } from "./humanize"
 
-defineProps<{
+const props = defineProps<{
 	action: Action
 	/** Leaves a grant's arguments out of the line. */
 	hideArgs?: boolean
+	/** The wallet read the grant's call as the transfer or mint its name claims. */
+	read?: boolean
 }>()
+
+const title = (name: string | undefined, contract: string): string =>
+	callTitle(safeWire(name, 64), safeWire(contract, 80), props.read === true)
 </script>
 
 <template>
@@ -17,7 +22,7 @@ defineProps<{
 			future producer can never hide a call target behind an opaque label. -->
 		<template v-if="action.kind === 'call' || action.kind === 'encoded_call'">
 			<Text variant="meta">
-				{{ humanizeMethodName(safeWire(action.kind === "call" ? action.method : (action.name ?? action.selector), 64)) }}
+				{{ action.kind === "call" ? title(action.method, action.contract) : title(action.name ?? action.selector, action.to) }}
 			</Text>
 			<Text color="secondary"> on </Text>
 			<AddressDisplay data-testid="execute-action-contract" :address="action.kind === 'call' ? action.contract : action.to" />
@@ -30,7 +35,7 @@ defineProps<{
 				<Text color="secondary"> — spender </Text>
 				<AddressDisplay data-testid="execute-authwit-spender" :address="action.content.caller" />
 				<Text color="secondary"> for </Text>
-				<Text variant="meta">{{ humanizeMethodName(safeWire(action.content.method, 64)) }}</Text>
+				<Text variant="meta">{{ title(action.content.method, action.content.contract) }}</Text>
 				<Text color="secondary"> on </Text>
 				<AddressDisplay data-testid="execute-authwit-contract" :address="action.content.contract" />
 				<template v-if="!hideArgs && action.content.args?.length">
@@ -44,7 +49,7 @@ defineProps<{
 				<Text color="secondary"> — spender </Text>
 				<AddressDisplay data-testid="execute-authwit-spender" :address="action.content.caller" />
 				<Text color="secondary"> for </Text>
-				<Text variant="meta">{{ humanizeMethodName(safeWire(action.content.name ?? action.content.selector, 64)) }}</Text>
+				<Text variant="meta">{{ title(action.content.name ?? action.content.selector, action.content.to) }}</Text>
 				<Text color="secondary"> on </Text>
 				<AddressDisplay data-testid="execute-authwit-to" :address="action.content.to" />
 			</template>
