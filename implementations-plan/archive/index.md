@@ -203,6 +203,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [nightly-release](nightly-release/plan.md) — completed — one tagged nightly prerelease per day from the tip of dev
 - [nulo-v6](nulo-v6/plan.md) — completed — the dependency line and the chain identity moved to Aztec V6 as Nulo V6
 - [on-camera-landing](on-camera-landing/plan.md) — completed — the landing replaced with a character-drawn CCTV-style feed
+- [onboarding-3](onboarding-3/plan.md) — completed — the fast-lane tab, the recovery phrase step and Home's Get started card (#588 #585 #581 #636); held for the owner's build test
 - [onboarding-fees-history-arc](onboarding-fees-history-arc/plan.md) — completed — onboarding, fees and history changes in one risk-ordered change
 - [onboarding-tab](onboarding-tab/plan.md) — completed — first-time onboarding moved from the popup into a dedicated extension tab
 - [onboarding-width-unification](onboarding-width-unification/plan.md) — completed — one onboarding page width through a single layout component
