@@ -31,6 +31,13 @@ const SPEC = [
 	],
 	["Apps", "name-for-this-app", "Name for this app", "A private name for this account visible only to this app.", "Permission window"],
 	[
+		"Apps",
+		"interface",
+		"Interface",
+		"A contract's interface names a call's arguments; without it Nulo shows the raw values.",
+		"Approval window",
+	],
+	[
 		"Transactions",
 		"proving",
 		"Proving",

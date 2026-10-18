@@ -18,6 +18,7 @@
 /** Components */
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import TxHashRow from "@/popup/components/modules/tx/TxHashRow.vue"
+import DetailHeroMeta from "@/popup/components/modules/tx/DetailHeroMeta.vue"
 
 /** Vendor */
 import { DateTime } from "luxon"
@@ -37,7 +38,7 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 import { balanceFormatted } from "@/utils/amount.js"
 import { knownDecimals } from "@/utils/token-amount"
 import { copyWithToast } from "@/utils/clipboard"
-import { getAccountExplorerUrl, getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
+import { explorerDisplayName, getAccountExplorerUrl, getTransactionExplorerUrl } from "@/wallet/constants/explorers"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -128,7 +129,7 @@ const recipientUrl = computed(() => {
 	if (!r || !onActiveNetwork.value) return null
 	return getAccountExplorerUrl(appStore.network.chainId, appStore.defaultExplorer, r)
 })
-const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === appStore.defaultExplorer)?.name ?? "explorer")
+const explorerName = computed(() => explorerDisplayName(appStore.defaultExplorer))
 
 const handleCopy = (target) => {
 	void copyWithToast(target, openToast, "Successfully copied")
@@ -238,22 +239,12 @@ onBeforeUnmount(() => {
 		<SubPageHeader :title="title" :backTo="'/popup/activity'" />
 
 		<Flex v-if="op && display" wide direction="column" gap="20" :class="$style.content">
-			<Flex align="center" justify="center" gap="8" :class="$style.hero_meta">
-				<span v-if="terminalAtLabel" :class="$style.tx_time">{{ terminalAtLabel }}</span>
-				<span v-if="terminalAtLabel && explorerUrl" :class="$style.meta_sep">·</span>
-				<a
-					v-if="explorerUrl"
-					:href="explorerUrl"
-					target="_blank"
-					rel="noopener noreferrer"
-					@click.stop
-					:class="$style.hero_link"
-					data-testid="journal-detail-explorer-link"
-				>
-					<span>View on {{ explorerName }}</span>
-					<Icon name="open" size="10" color="tertiary" />
-				</a>
-			</Flex>
+			<DetailHeroMeta
+				:time="terminalAtLabel"
+				:explorerUrl="explorerUrl"
+				:explorerName="explorerName"
+				linkTestid="journal-detail-explorer-link"
+			/>
 
 			<!-- Transfer amount block (transfer kind only) -->
 			<Flex v-if="isTransfer && amountDisplay" align="center" direction="column" gap="6">
@@ -365,22 +356,6 @@ onBeforeUnmount(() => {
 
 .content {
 	composes: content from "../detail-page.module.css";
-}
-
-.hero_meta {
-	composes: hero_meta from "../detail-page.module.css";
-}
-
-.tx_time {
-	composes: tx_time from "../detail-page.module.css";
-}
-
-.meta_sep {
-	composes: meta_sep from "../detail-page.module.css";
-}
-
-.hero_link {
-	composes: hero_link from "../detail-page.module.css";
 }
 
 .amount_value {

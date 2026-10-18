@@ -8,6 +8,9 @@
 </route>
 
 <script setup>
+/** Components */
+import SettingControlRow from "@/components/ui/Settings/SettingControlRow.vue"
+
 /** Utils */
 import { defaultConfig as makeDefaultConfig } from "@/wallet/config"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
@@ -25,6 +28,7 @@ import { useToast } from "@/composables/toast"
 import { useConfigRead } from "@/composables/useConfigRead"
 import { useConfirm } from "@/composables/useConfirm"
 import { useLockWallet } from "@/composables/useLockWallet"
+import { SETTING_UPDATE_FAILED } from "@/composables/useSettingUpdate"
 import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
 const { openToast } = useToast()
 const { requestConfirm } = useConfirm()
@@ -74,7 +78,7 @@ async function updateSessionTtl(value) {
 		// A failed write stores nothing: show the stored timeout again, so typing the same value
 		// retries, unless the field already holds a newer edit.
 		if (Number(sessionTtlMinutes.value) * 60 * 1_000 === value) sessionTtlMinutes.value = String(sessionTtl.value / 1_000 / 60)
-		openToast({ kind: "error", label: "Failed to update setting" })
+		openToast({ kind: "error", label: SETTING_UPDATE_FAILED })
 	}
 }
 
@@ -106,7 +110,7 @@ function onStrictToggle(next) {
 					strictSecurityMode.value = false
 					openToast({ kind: "success", label: "Strict security mode disabled" })
 				} catch (err) {
-					openToast({ kind: "error", label: "Failed to update setting" })
+					openToast({ kind: "error", label: SETTING_UPDATE_FAILED })
 				}
 			},
 		})
@@ -119,7 +123,7 @@ function onStrictToggle(next) {
 				strictSecurityMode.value = true
 				openToast({ kind: "success", label: "Strict security mode enabled" })
 			} catch (err) {
-				openToast({ kind: "error", label: "Failed to update setting" })
+				openToast({ kind: "error", label: SETTING_UPDATE_FAILED })
 			}
 		})()
 	}
@@ -187,24 +191,26 @@ onBeforeUnmount(() => {
 
 		<template v-if="!isLoading">
 			<!-- Strict Security Mode -->
-			<Flex v-if="!isPasskey" justify="between" align="center" :data-testid="strictRow.testid" v-settings-row="strictRow.id">
-				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary">{{ strictRow.title }}</Text>
-					<Text variant="caption" color="tertiary">{{ strictRow.description }}</Text>
-				</Flex>
-
+			<SettingControlRow
+				v-if="!isPasskey"
+				:title="strictRow.title"
+				:description="strictRow.description"
+				align="center"
+				:data-testid="strictRow.testid"
+				v-settings-row="strictRow.id"
+			>
 				<Toggle
 					:modelValue="strictSecurityMode"
 					@update:modelValue="onStrictToggle"
 					data-testid="strict-security-toggle"
 				/>
-			</Flex>
+			</SettingControlRow>
 
 			<!-- Auto-lock Timeout -->
 			<Flex justify="between" align="center" :data-testid="autoLockRow.testid" v-settings-row="autoLockRow.id">
 				<Flex direction="column" gap="6">
 					<Flex align="end" gap="6">
-						<Text variant="row-title" :class="$style.title_size" color="primary">{{ autoLockRow.title }}</Text>
+						<Text :class="$style.title" color="primary">{{ autoLockRow.title }}</Text>
 						<Tooltip v-if="notification.show">
 							<Icon name="info" color="secondary" size="14" />
 							<template #content>
@@ -249,7 +255,7 @@ onBeforeUnmount(() => {
 	}
 }
 
-.title_size {
-	font-size: 13px;
+.title {
+	composes: control_title from "../../../components/ui/Settings/settings-row.module.css";
 }
 </style>

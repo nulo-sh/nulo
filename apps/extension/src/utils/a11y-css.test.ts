@@ -103,9 +103,10 @@ describe("the detail pages' links draw the focus ring on :focus-visible, never o
 		// The links each file renders itself; the address cards' corner links are AddressCardLink's.
 		const pages = [
 			["popup/components/modules/tx/TxHashRow.vue", 1],
-			["popup/pages/tx/[id].vue", 2],
-			["popup/pages/received/[id].vue", 4],
-			["popup/pages/journal/[id].vue", 2],
+			["popup/components/modules/tx/DetailHeroMeta.vue", 1],
+			["popup/pages/tx/[id].vue", 1],
+			["popup/pages/received/[id].vue", 3],
+			["popup/pages/journal/[id].vue", 1],
 		] as const
 		const unringed = pages.flatMap(([path, count]) => {
 			const source = read(path).replace(/\s+/g, " ")

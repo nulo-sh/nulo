@@ -34,7 +34,7 @@ import { useCacheStore } from "@/stores/cache.store.ts"
 import { copyToClipboard } from "@/utils/clipboard"
 import { trimAddress } from "@/utils/string"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
-import { getContractExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
+import { explorerDisplayName, getContractExplorerUrl } from "@/wallet/constants/explorers"
 
 const appStore = useAppStore()
 const cacheStore = useCacheStore()
@@ -54,7 +54,7 @@ const contractUrl = computed(() => {
 	if (!appStore.network || cacheStore.incomingTrust.networkId !== appStore.network.id) return null
 	return getContractExplorerUrl(appStore.network.chainId, appStore.defaultExplorer, contractFull.value)
 })
-const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === appStore.defaultExplorer)?.name ?? "explorer")
+const explorerName = computed(() => explorerDisplayName(appStore.defaultExplorer))
 
 // Verification surface: keyboard-reachable expand toggle + copy. Without
 // these as real <button> elements, a keyboard-only user couldn't get to
