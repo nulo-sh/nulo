@@ -214,15 +214,27 @@ export const valueTitle = (v: DecodedValue): string | undefined => {
 	return full === valueText(v) ? undefined : full
 }
 
-export const RAW_NOTICE: Readonly<Record<UndecodedReason, string>> = {
+/** A sentence as the notice prints it: a `term` segment is the word the `interface` glossary entry defines. */
+type NoticeSegment = { text: string } | { term: string }
+
+export const RAW_LINE: Readonly<Record<UndecodedReason, readonly NoticeSegment[]>> = {
+	"unknown-contract": [{ text: "Nulo doesn't have this contract's " }, { term: "interface" }, { text: "." }],
+	"unknown-function": [{ text: "This function isn't in the " }, { term: "interface" }, { text: " Nulo has." }],
+	arguments: [{ text: "The arguments don't fit the " }, { term: "interface" }, { text: "." }],
+	unavailable: [{ text: "Nulo couldn't read the arguments right now." }],
+}
+
+/** Said once per window; `OperationCard` picks the one notice that carries it. */
+export const RAW_ADVICE = "Check what the app says this does before approving."
+
+/** The footer's refusal of a grant it cannot read. A tooltip cannot hold the dotted term the short
+ *  line leans on, so each sentence says it whole; the advice is left out, as the window cannot be approved. */
+const RAW_NOTICE: Readonly<Record<UndecodedReason, string>> = {
 	"unknown-contract": "Nulo doesn't have this contract's interface, so it can't read the arguments.",
 	"unknown-function": "This function isn't in the interface Nulo has for the contract, so it can't read the arguments.",
 	arguments: "The arguments don't fit the contract's interface, so Nulo can't read them.",
 	unavailable: "Nulo couldn't read the arguments right now.",
 }
-
-/** The card's notice under unreadable arguments, also the window's refusal of a grant it cannot read. */
-export const rawNotice = (reason: UndecodedReason): string => `${RAW_NOTICE[reason]} Check what the app says this does before approving.`
 
 /** Whether `valueText(v, true)` prints every character `v` carries: a string loses what the print
  *  strips (control and direction characters), cuts, or cannot draw (a lone surrogate). */
@@ -247,7 +259,7 @@ export const readableGrants = (decoded: readonly DecodedGrant[], count: number):
 export function grantRefusalRow(grants: Iterable<DecodedGrant>): { title: string; tooltip: string; type: "error" } | undefined {
 	const unread = [...grants].find((grant) => grant.kind === "undecoded")
 	return unread?.kind === "undecoded"
-		? { title: "Can't read the arguments", tooltip: rawNotice(unread.reason), type: "error" }
+		? { title: "Can't read the arguments", tooltip: RAW_NOTICE[unread.reason], type: "error" }
 		: undefined
 }
 

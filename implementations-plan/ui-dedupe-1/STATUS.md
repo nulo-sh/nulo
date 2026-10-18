@@ -36,3 +36,15 @@
 - 2026-10-18 02:55Z A6 unit phase gate on 2eac29ae..ffae5bd9: test:all exit 0 (extension 13789 passed, 5 skipped, 7 todo; every package green). Smoke Chrome rows + navigation 17/17 in 113 s (armed build, retry 0, load1 131). Review round 1: Codex findings 4 (3 P2 tests, 1 P3), Opus findings 3 P3; folded but one declined (D608).
 - 2026-10-18 02:57Z A6 review round 2: Codex clean (resumed); loop converged after 2 rounds. Final head lint 0, typecheck:all 0.
 - 2026-10-18 03:05Z A6 final gates on 400c1583 (dev 1cff707d, nothing newer): lint 0, typecheck:all 0, test:all 0 (extension 13790 passed); smoke Chrome rows + navigation 17/17 in 77 s (rebuilt armed bundle, retry 0, load1 74); network Chrome cancel-mid-prove + in-flight-send-guard 2/2 in 264 s (prover on, retry 0). A6 ✓.
+- 2026-10-18 03:25Z PR #752 CI on cb188c40: 50 checks pass, 6 skipped; all five required checks green (both smoke and both network lanes ran by path filter, no label).
+- 2026-10-18 12:28Z A7 start: branch ui-dedupe-1-a7 off dev 9470d4e9 (A6 merged as #752); OA-1 answered P44-02 = B; scope = the seven rows the question showed (D701), five more asked as OA-3. Collisions rechecked: no open PR touches the A7 files.
+- 2026-10-18 12:39Z A7 G-fast on b5cde16a: lint 0, typecheck:all 0; hook, holdings, SelectTokenPopup, send, send.integration, BalanceView, TokensView, popup-stack.pins 359/359. New cases red on base (10/10), base's replaced cases red on the new code (10/10), 13 mutations each red.
+- 2026-10-18 12:42Z A7 unit phase gate on b5cde16a: test:all exit 0 (extension 13872 passed, 5 skipped, 7 todo; every package green). Review round 1 started (Codex, Opus).
+- 2026-10-18 13:10Z A7 review round 1: Opus findings (1 P1 held as D704, 1 P2, 2 P3), Codex findings 2 (D705, D706); fixes in 02600066; lint 0, typecheck:all 0, 8 suites 361/361, 16 mutations each red.
+- 2026-10-18 13:37Z A7 review rounds 2-3: Codex R2 findings 1 (D708, fc230fd6), R3 clean; loop converged after 3 rounds. Pictures: before (dev build) and after (63f086e7 build), both themes at 360 px, in screenshots/a7.
+- 2026-10-18 13:43Z A7 final unit gates on 1f185f10 (code fc230fd6; dev 9470d4e9, nothing newer): lint 0, typecheck:all 0, test:all 0 (extension 13875 passed, 5 skipped, 7 todo).
+- 2026-10-18 14:16Z A7 smoke Chrome, whole suite, armed build at 1f185f10, retry 0: 57 files passed, 6 skipped (standing env gates), 260 tests passed, 14 skipped, in 1952 s.
+- 2026-10-18 15:02Z A7 smoke Firefox, whole suite, armed build at 1f185f10, retry 0: 60 files passed, 3 skipped (standing env gates), 260 tests passed, 14 skipped, in 2702 s.
+- 2026-10-18 15:11Z A7 network Chrome send-picker 1/1 in 211 s (prover on, retry 0; a first start over load1 150 was stopped after 6 s and rerun). A7 ✓.
+- 2026-10-18 15:15Z A7 dev merged again at 2d9ba315 (#772, #778; no A7 file, lockfile unchanged): lint 0, typecheck:all 0, test:all 0 (extension 13886 passed), check:plans 0. The e2e ran on the A7 head before the merge.
+- 2026-10-18 15:38Z PR #781 CI on 06a64409: 50 checks pass, 6 skipped; all five required checks green (both smoke and both network lanes ran by path filter, no label).

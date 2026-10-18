@@ -17,9 +17,6 @@ const props = defineProps({
 // A glyph paints only through `color`: the root sets stroke and fill to currentColor.
 const glyph = computed<Glyph>(() => (Object.hasOwn(glyphs, props.name) ? glyphs[props.name] : {}))
 
-// The set's 2.5-unit stroke, thickened below 14.4 px so it never renders under 1.5 px.
-const strokeWidth = computed(() => Math.max(2.5, 36 / Number(props.size)))
-
 const styles = computed<CSSProperties>(() => ({
 	minWidth: `${props.size}px`,
 	minHeight: `${props.size}px`,
@@ -41,12 +38,12 @@ const hoverColorVar = computed(() => `var(--txt-${props.hoverColor})`)
 		role="img"
 		fill="currentColor"
 		stroke="currentColor"
-		:stroke-width="strokeWidth"
-		stroke-linecap="square"
-		stroke-linejoin="miter"
+		stroke-width="2"
+		stroke-linecap="round"
+		stroke-linejoin="round"
 	>
 		<path v-for="d in glyph.s" :key="`s${d}`" :d="d" fill="none" />
-		<path v-for="d in glyph.f" :key="`f${d}`" :d="d" stroke="none" fill-rule="evenodd" />
+		<path v-for="d in glyph.f" :key="`f${d}`" :d="d" stroke="none" />
 	</svg>
 </template>
 

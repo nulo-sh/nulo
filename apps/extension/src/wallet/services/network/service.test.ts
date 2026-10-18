@@ -1537,6 +1537,28 @@ describe("NetworkService.probeNodeStatus (bounded probe)", () => {
 	})
 })
 
+describe("NetworkService.readChainTip", () => {
+	test("reads the network's primary endpoint through the one-attempt node, once per read; a refusal rejects", async () => {
+		const { service, factory } = setupServiceWithStorage({})
+		for (const url of ["https://a.example", "https://a2.example"]) {
+			factory.setOverrides(url, {
+				getNodeInfo: vi.fn().mockResolvedValue(nodeInfoForChain(7)) as unknown as AztecNode["getNodeInfo"],
+			})
+		}
+		const a = await service.addNetwork("A", "https://a.example")
+		const second = await service.addEndpoint(a.id, "Two", "https://a2.example")
+		await service.setPrimaryEndpoint(a.id, second.id)
+		const getBlockNumber = vi.fn().mockResolvedValueOnce(48_190).mockRejectedValueOnce(new TypeError("Failed to fetch"))
+		const single = vi.spyOn(factory, "createSingleAttemptNode").mockReturnValue({ getBlockNumber } as unknown as AztecNode)
+
+		expect(await service.readChainTip(a.id)).toBe(48_190)
+		await expect(service.readChainTip(a.id)).rejects.toThrow("Failed to fetch")
+
+		expect(single.mock.calls.map(([url]) => url)).toEqual(["https://a2.example"])
+		expect(getBlockNumber).toHaveBeenCalledTimes(2)
+	})
+})
+
 describe("NetworkService.readPublicStorageOnce", () => {
 	test("reads at the passed row's primary endpoint, never another network's or the active profile's row for that chain", async () => {
 		const { service, factory } = setupServiceWithStorage({})

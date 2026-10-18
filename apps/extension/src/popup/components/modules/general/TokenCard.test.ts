@@ -362,7 +362,11 @@ describe("TokenCard — the subtitle's overflow", () => {
 	test("a priced figure wraps rather than hide digits; a contract-supplied name stays clipped to one line", () => {
 		const fiat = elementByTestid(parsed, "token-fiat")?.node
 		expect(fiat && boundAttr(fiat, "class")).toBe("[$style.fiat, $style.fiat_figure]")
-		expect(declarationsOf(parsed, ".fiat_figure")).toEqual({ "white-space": "normal", "overflow-wrap": "break-word" })
+		expect(declarationsOf(parsed, ".fiat_figure")).toEqual({
+			"max-width": "190px",
+			"white-space": "normal",
+			"overflow-wrap": "anywhere",
+		})
 		expect(declarationsOf(parsed, ".fiat")).toMatchObject({ "max-width": "160px", overflow: "hidden", "white-space": "nowrap" })
 		const subtitles: string[] = []
 		if (parsed.template)

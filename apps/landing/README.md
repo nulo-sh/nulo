@@ -6,7 +6,7 @@ Marketing landing page for the wallet (nulo.sh). Standalone Vite app; ships inde
 
 | Path | Purpose |
 |---|---|
-| `index.html` | The whole page: head/meta, the camera-feed hero, the two-screens section, three promises, the illustrative public record, the preview notice, CTA, footer. All copy lives here, before any script runs. |
+| `index.html` | The whole page: head/meta, the camera-feed hero, the two-screens section, three promises, the illustrative public record, the early-days notice, CTA, footer. All copy lives here, before any script runs. |
 | `how-aztec-works.html` | The How Aztec works page (`/how-aztec-works`): the two sentences, then three cards (Private balances, Proofs, Fees), each with its short text. Same bar, grain, plates and footer as the home page, and the same `src/main.ts`. Its card text follows what Aztec actually hides: never that a payment's recipient, a transaction's shape or a public part is hidden. |
 | `src/main.ts` | Vite entry: imports the stylesheets in order, narrows the install buttons, and mounts the page. |
 | `src/install.ts` | The two store URLs and `detectInstall`, which maps a desktop browser to its store and name, or `null` for a browser that cannot install (Safari, any phone). Pure; unit-tested in `install.test.ts`, which also pins the store URLs both hand-written pages serve. |

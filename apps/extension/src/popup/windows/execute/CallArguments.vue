@@ -22,6 +22,8 @@ const props = defineProps<{
 	/** Every value prints whole, an address as its own text with no name in its place; the
 	 *  `this account` sender, which only a surface read with caller context carries, is not covered. */
 	full?: boolean
+	/** Carries the window's closing advice; `OperationCard` picks the one notice. */
+	advice?: boolean
 }>()
 
 const rawOpen = ref(false)
@@ -104,7 +106,7 @@ const nonce = computed(() =>
 			justify="between"
 			:class="$style.row"
 		>
-			<Text variant="label-section" color="secondary">{{ safeWire(p.name, 32) }}:</Text>
+			<Text :data-testid="`${prefix}-decoded-param-name`" variant="label-section" color="secondary">{{ safeWire(p.name, 32) }}:</Text>
 			<AddressDisplay v-if="p.value.kind === 'address' && !full" :data-testid="`${prefix}-decoded-param-value`" :address="p.value.value" />
 			<Text
 				v-else
@@ -130,7 +132,7 @@ const nonce = computed(() =>
 		gap="4"
 		:class="[$style.block, full && $style.full]"
 	>
-		<UnreadableArgsNotice :reason="surface.reason" :prefix="prefix" />
+		<UnreadableArgsNotice :reason="surface.reason" :prefix="prefix" :advice="advice" />
 		<DetailsToggle
 			v-if="surface.rows.length"
 			:data-testid="`${prefix}-raw-toggle`"
@@ -175,9 +177,13 @@ const nonce = computed(() =>
 	}
 }
 
-/* A whole value runs long; its row name keeps one line beside it, and breaks only past half the row. */
-.full .row > :first-child {
-	flex-shrink: 0;
-	max-width: 50%;
+/* A whole value takes the row's full width, under its name, not the width its name leaves. */
+.full .row {
+	flex-direction: column;
+	gap: 2px;
+
+	> :last-child {
+		text-align: left;
+	}
 }
 </style>

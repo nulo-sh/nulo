@@ -19,6 +19,7 @@ const { openToast } = useToast()
 import { currentVersion } from "@nulo/legal"
 import { copyWithToast } from "@/utils/clipboard"
 import { managers } from "@/utils/core"
+import { endsSelection } from "@/utils/selection"
 import { legalAboutRow } from "@/utils/legal-about"
 import { openLegalDocument, openThirdPartyNotices } from "@/utils/legal-links"
 import { LEGAL_DISMISSED_KEY } from "@/utils/legal-sheet"
@@ -61,10 +62,22 @@ onBeforeUnmount(() => legal.dispose())
 			<Flex wide align="start" direction="column" gap="8">
 				<Text variant="row-title" color="primary" :class="$style.title_size"> Nulo </Text>
 				<Flex align="start" direction="column" gap="4" wide>
-					<Text @click="handleCopy(version)" variant="caption" color="support" class="copyable">
+					<Text
+						@click="endsSelection($event) || handleCopy(version)"
+						variant="caption"
+						color="support"
+						class="copyable"
+						data-testid="about-wallet-version"
+					>
 						Wallet version - {{ version }} - Testnet
 					</Text>
-					<Text @click="handleCopy(aztecVersion)" variant="caption" color="support" class="copyable">
+					<Text
+						@click="endsSelection($event) || handleCopy(aztecVersion)"
+						variant="caption"
+						color="support"
+						class="copyable"
+						data-testid="about-aztec-version"
+					>
 						Aztec version - {{ aztecVersion }}
 					</Text>
 					<Text variant="caption" color="support" data-testid="coingecko-attribution">

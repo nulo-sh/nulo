@@ -27,7 +27,8 @@ import {
 } from "../fixtures/extension"
 import { getAccountAddress, navigateByHash, waitForToast } from "../fixtures/helpers"
 import { pollUntil } from "../fixtures/poll"
-import { accountChainId, exportBackupContent, sealPlainBackup } from "../helpers/backup-export"
+import { accountChainId, exportBackupContent } from "../helpers/backup-export"
+import { sealPlainBackup } from "../helpers/backup-seal"
 import { readStage } from "../helpers/crash-truth"
 import {
 	gotoPopupImport,

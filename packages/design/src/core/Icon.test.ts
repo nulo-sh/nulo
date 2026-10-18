@@ -6,28 +6,22 @@ import Icon from "./Icon.vue"
 const render = (props: Record<string, unknown>) => mount(Icon, { props: props as { name: "close" } })
 
 describe("Icon", () => {
-	test("strokes render unfilled, at 2.5 units or the 1.5 px floor", () => {
+	test("strokes render unfilled at Tabler's 2 units at every size, with round ends", () => {
 		const big = render({ name: "close", size: 24 })
-		const small = render({ name: "close", size: 12 })
-		expect(big.findAll("path").map((p) => p.attributes("fill"))).toEqual(["none"])
-		expect(big.attributes("stroke-width")).toBe("2.5")
-		expect(small.attributes("stroke-width")).toBe("3")
-		expect(big.attributes("stroke-linecap")).toBe("square")
+		const small = render({ name: "close", size: 9 })
+		expect(big.findAll("path").map((p) => p.attributes("fill"))).toEqual(["none", "none"])
+		expect([big.attributes("stroke-width"), small.attributes("stroke-width")]).toEqual(["2", "2"])
+		expect([big.attributes("stroke-linecap"), big.attributes("stroke-linejoin")]).toEqual(["round", "round"])
 	})
 
-	test("each solid is its own even-odd path", () => {
-		const paths = render({ name: "holdings" }).findAll("path")
-		expect(paths).toHaveLength(glyphs.holdings.f.length)
+	test("a filled glyph's paths take the root's fill, unstroked, under the default fill rule", () => {
+		const paths = render({ name: "square-check" }).findAll("path")
+		expect(paths).toHaveLength(glyphs["square-check"].f.length)
 		for (const p of paths) {
-			expect(p.attributes("fill-rule")).toBe("evenodd")
 			expect(p.attributes("stroke")).toBe("none")
+			expect(p.attributes("fill")).toBeUndefined()
+			expect(p.attributes("fill-rule")).toBeUndefined()
 		}
-	})
-
-	test("square-check cuts its tick as a hole in the one solid", () => {
-		const [solid] = render({ name: "square-check" }).findAll("path")
-		expect(solid?.attributes("fill-rule")).toBe("evenodd")
-		expect(solid?.attributes("d")?.match(/M/g)).toHaveLength(2)
 	})
 
 	test("paints through color: the color-- class, with the root's currentColor, as an img", () => {
@@ -38,11 +32,13 @@ describe("Icon", () => {
 		expect(w.attributes("stroke")).toBe("currentColor")
 	})
 
-	test("private is one solid and public eight, all filled, and neither is the padlock", () => {
+	test("private is one filled path and public stroked paths only, and neither is the padlock", () => {
 		const [priv, pub] = [render({ name: "private" }).findAll("path"), render({ name: "public" }).findAll("path")]
-		expect([priv.length, pub.length]).toEqual([1, 8])
-		for (const p of [...priv, ...pub]) expect(p.attributes("stroke")).toBe("none")
-		expect(glyphs.private).not.toEqual(glyphs.lock)
+		expect(priv).toHaveLength(1)
+		expect(priv[0]?.attributes("stroke")).toBe("none")
+		expect(pub.length).toBeGreaterThan(1)
+		for (const p of pub) expect(p.attributes("fill")).toBe("none")
+		expect([glyphs.private, glyphs.public]).not.toContainEqual(glyphs.lock)
 	})
 
 	test("rotate turns the glyph about its centre", () => {

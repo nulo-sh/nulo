@@ -11,6 +11,7 @@ const { openToast } = useToast()
 
 /** Utils */
 import { copyWithToast } from "@/utils/clipboard"
+import { endsSelection } from "@/utils/selection"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -55,7 +56,8 @@ function onTokenDeleted(token) {
 	}
 }
 
-const handleCopyAddress = () => {
+const handleCopyAddress = (e) => {
+	if (endsSelection(e)) return
 	void copyWithToast(token.value.contract, openToast, "Contract address is copied")
 }
 

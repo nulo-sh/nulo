@@ -1,6 +1,7 @@
 import type { ILogger } from "@/wallet/logger"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
+import { ChainNotSupportedError } from "@nulo/extension-messaging/errors"
 import { EventHandler, Lock } from "@nulo/wallet-core/utils"
 import { isTerminal } from "@nulo/wallet-core/jobs"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
@@ -400,6 +401,11 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 				),
 			getLatestBlockNumber: async (networkId) =>
 				this.pxeService.getLatestBlockNumber(networkInfoFrom(await this.networkService.getNetwork(networkId))),
+			getChainTipOnce: async (networkId) => {
+				const network = await this.networkService.getNetwork(networkId)
+				if (await this.networkService.isChainQuarantined(network.profileId, network.chainId)) throw new ChainNotSupportedError()
+				return this.networkService.readChainTip(networkId)
+			},
 		}
 		this.indexer = new PublicEventIndexer(this.reader, (level, msg, ...rest) =>
 			level === "warn" ? this.logWarn(msg, ...rest) : this.logDebug(msg, ...rest),
@@ -856,7 +862,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const epochAtStart = this.serviceEpoch
 		const row = await this.repo.getArrivalRow(profileId, networkId, accountAddress)
 		const pendingAtStart = (await this.networkTrust(profileId, networkId)).filter((t) => t.arrivalFloorPending).map((t) => t.contract)
-		const tip = row && pendingAtStart.length === 0 ? undefined : await this.readTip(networkId)
+		const tip = row && pendingAtStart.length === 0 ? undefined : await this.readTip(networkId, (id) => this.reader.getChainTipOnce(id))
 		const baseline = !row && tip !== undefined && (await this.arrivalScopeExists(profileId, networkId, accountAddress))
 		if (tip === undefined || (!row && !baseline)) {
 			return arrivalStateOf(row, await this.networkTrust(profileId, networkId))
@@ -898,10 +904,15 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	}
 
 	/** The chain tip, or undefined when it cannot be read. Read outside the lock, as the scans read
-	 *  the PXE, and fresh for every write that uses it: nothing is ever lowered to it. */
-	private async readTip(networkId: string): Promise<number | undefined> {
+	 *  the PXE, and fresh for every write that uses it: nothing is ever lowered to it. The arrival
+	 *  state's read takes one attempt, since the popup waits on it and reads again; an account, an
+	 *  Allow or a token add takes the PXE's retrying read, since a missed one leaves a floor behind. */
+	private async readTip(
+		networkId: string,
+		read = (id: string): Promise<number> => this.reader.getLatestBlockNumber(id),
+	): Promise<number | undefined> {
 		try {
-			const tip = await this.reader.getLatestBlockNumber(networkId)
+			const tip = await read(networkId)
 			return Number.isSafeInteger(tip) && tip >= 0 ? tip : undefined
 		} catch (error) {
 			this.logDebug("chain tip read failed", { networkId, error })
@@ -1913,8 +1924,10 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		return status
 	}
 
-	/** The sole cursor writer: persists inside the lock + epoch check. Returns false when the
-	 *  epoch moved (a concurrent reset ran) — the write was skipped and the caller should bail. */
+	/** The scan's cursor write, inside the lock + epoch check. Returns false when the epoch moved (a
+	 *  concurrent reset ran) — the write was skipped and the caller should bail. The other writers,
+	 *  `onAccountAdded`'s reset, `onTokenDeleted`'s delete and the scope wipes, bump the epoch under
+	 *  the lock first, so a scan that read before them fails this check. */
 	private async persistCursorLocked(
 		profileId: string,
 		networkId: string,

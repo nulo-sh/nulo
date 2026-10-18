@@ -177,7 +177,9 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [home-onboarding-chrome](home-onboarding-chrome/plan.md) — completed in part — History filtered from a token page, the token page's header, onboarding's stored theme, Account State under Developer, one own window per flow, the store Send frame; the Firefox loopback permission row stopped by its probe
 - [home-refresh](home-refresh/plan.md) — completed — the locked home-screen spec implemented as a light, reversible change
 - [hygiene](hygiene/plan.md) — completed — technical follow-ups that change no screen
+- [icons-1](icons-1/plan.md) — completed — the wallet's 58 glyphs drawn from Tabler Icons 3.49.0, generated from a pinned devDependency and drift-tested (#764)
 - [icons-d2-1](icons-d2-1/plan.md) — completed — Direction 2 glyphs everywhere, icons.json and the Material font retired, the private and public marks as squares (#602, #590)
+- [iface-line-1](iface-line-1/plan.md) — completed — the execute window's unreadable-call lines: one short reason, `interface` dotted, the advice once per window, the glossary entry (#516)
 - [import-stage-deadlines](import-stage-deadlines/plan.md) — completed — import stage timing and console-capture fixes in the e2e suite
 - [incoming-public-transfers](incoming-public-transfers/plan.md) — completed — incoming public token transfers indexed into the activity feed
 - [incoming-sync-indicator](incoming-sync-indicator/plan.md) — superseded by holdings-loading-sync — a per-token indicator for incoming history backfill
@@ -212,6 +214,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [onboarding-width-unification](onboarding-width-unification/plan.md) — completed — one onboarding page width through a single layout component
 - [origin-guard-truth](origin-guard-truth/plan.md) — completed — whether the cross-origin session guard is live, settled and pinned by a test
 - [owned-client-teardown](owned-client-teardown/plan.md) — completed — documents share one logger client instead of a private logger per service client
+- [p46-ui-1](p46-ui-1/plan.md) — completed — the four page-46 picks: a Pending chip on an unproven grant, the header chips at 11 px, three 13 px wraps made room for (#698 #651 #652 #653)
 - [package-extraction](package-extraction/plan.md) — completed — the extension monolith cut into workspace packages in dependency order
 - [parallel-e2e-isolation](parallel-e2e-isolation/plan.md) — completed — parallel network e2e runs from sibling worktrees own their ports, processes and state
 - [passkey-display-name](passkey-display-name/plan.md) — completed — new passkeys register with a readable, unique display name
@@ -318,6 +321,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [vue-design-system](vue-design-system/plan.md) — completed — the Vue design system and component library built first
 - [vue-router-5](vue-router-5/plan.md) — completed — the archived router plugin dropped and vue-router moved to 5
 - [vue-shell-composites](vue-shell-composites/plan.md) — completed — the duplicated Vue shell pieces that survive review extracted, and the rest recorded
+- [wallet-bugs-2](wallet-bugs-2/plan.md) — completed — seven small popup defects in one PR: label tables, the journal Method wrap, the logs follow, drag-copy, the feed's arrival tip in one attempt, the 13 px bars, the remote-code note (#714 #648 #616 #638 #579 #654 #615)
 - [wallet-error-resilience](wallet-error-resilience/plan.md) — completed — resync and retry once on stale anchors, then fail with a named error
 - [wallet-followups](wallet-followups/plan.md) — completed — account name checks, the logs window trim, settings reads after a worker restart, the balances fuzz oracle
 - [wallet-followups-2](wallet-followups-2/plan.md) — completed — Send keeps a token after a delete, every service and every line in the logs filter, a failed clear keeps logs live, the fee card's gas retry runs

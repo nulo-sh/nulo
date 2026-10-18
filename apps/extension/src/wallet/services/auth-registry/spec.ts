@@ -164,6 +164,8 @@ export type Methods = {
 export type Events = {
 	/** Emitted when a new authwit is added (carries the full scoped row). */
 	onAuthwitAdded: Authwit
+	/** Emitted when a pending authwit's grant is proven (carries the row, `pending: false`). */
+	onAuthwitUpdated: Authwit
 	/** Emitted when an existing authwit is deleted (carries the full scoped row). */
 	onAuthwitDeleted: Authwit
 	/** Emitted when an auth registry is enabled — the `(profileId, chainId, account)` scope, so a

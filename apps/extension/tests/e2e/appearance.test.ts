@@ -191,6 +191,26 @@ test("Show network name off hides the name in the header chip, keeps its dot and
 	expect(await networkChip(page)).toEqual(shown)
 	await shotSend(page, `577-chip-on-${BROWSER}`, "network-button")
 
+	// At the popup's width the row has no room to spare: Testnet's name still shows whole, and the
+	// lock chip stands as tall as the network chip beside it.
+	await page.setViewport({ width: 360, height: 600 })
+	const row = await page.evaluate(() => {
+		const name = document.querySelector<HTMLElement>('[data-testid="network-name"]')
+		const range = document.createRange()
+		if (name) range.selectNodeContents(name)
+		return {
+			name: name?.textContent?.trim(),
+			text: name ? range.getBoundingClientRect().width : null,
+			box: name?.getBoundingClientRect().width,
+			chip: document.querySelector('[data-testid="network-button"]')?.getBoundingClientRect().height,
+			lock: document.querySelector('[data-testid="header-lock"]')?.getBoundingClientRect().height,
+		}
+	})
+	console.log(`[appearance] header row at 360px: ${JSON.stringify(row)}`)
+	expect(row.name).toBe("Testnet")
+	expect(row.text, `the network name is cut: ${JSON.stringify(row)}`).toBeLessThanOrEqual(row.box ?? 0)
+	expect(row.lock).toBe(row.chip)
+
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 })

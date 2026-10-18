@@ -26,13 +26,19 @@ test("the network chip's row may shrink below its content", () => {
 	expect(declarationsOf(parsed, ".network_chip")).toMatchObject({ "min-width": "0", "flex-shrink": "1" })
 })
 
-test("with its name hidden, the network chip keeps the height the name gives it", () => {
+test("with its name hidden, the network chip keeps the height the name gives it, and the lock chip takes it", () => {
 	// One line of the label's role, plus the 6px padding and 1px border above and below.
 	expect(declarationsOf(parsed, ".network_label").composes).toBe("type--label-section from global")
 	expect(declarationsOf(parsed, ".network_chip")).toMatchObject({
 		composes: "type--label-section from global",
-		padding: "6px 10px",
+		padding: "6px 5px",
 		border: "1px solid var(--nulo-border)",
 		"min-height": "calc(1lh + 14px)",
 	})
+	expect(declarationsOf(parsed, ".lock_chip")).toMatchObject({
+		composes: "type--label-section from global",
+		border: "1px solid var(--nulo-border)",
+		"min-height": "calc(1lh + 14px)",
+	})
+	expect(declarationsOf(parsed, ".lock_chip").height).toBeUndefined()
 })

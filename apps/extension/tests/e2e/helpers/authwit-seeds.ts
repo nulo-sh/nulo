@@ -20,9 +20,10 @@ const CONTENTS: readonly AuthwitContent[] = [
 const keyOf = (id: number) => `${AUTH_REGISTRY_STORAGE_ROOT}@${id}`
 
 /**
- * Stores an authwit row for each of `kinds`, as the registry keeps one once its send mines, and
- * deletes the other kinds' rows. The key's suffix is the row's id: the registry hides a row whose
- * key names another.
+ * Stores an authwit row for each of `kinds`, as the registry keeps one, and deletes the other
+ * kinds' rows. The call row is still pending, as a public grant is until its send
+ * is proven, so the page draws its Pending chip. The key's suffix is the row's id: the registry
+ * hides a row whose key names another.
  */
 export async function seedAuthwits(page: Page, scope: ActivityScope, kinds: readonly AuthwitContent["kind"][]): Promise<void> {
 	const rows: Record<string, string> = {}
@@ -41,7 +42,7 @@ export async function seedAuthwits(page: Page, scope: ActivityScope, kinds: read
 			hash: field((0x10 + id).toString(16)),
 			content,
 			txHash: field((0x20 + id).toString(16)),
-			pending: false,
+			pending: content.kind === "call",
 		}
 		rows[keyOf(id)] = JSON.stringify(row)
 	}

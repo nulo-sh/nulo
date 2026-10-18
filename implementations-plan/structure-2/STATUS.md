@@ -11,3 +11,9 @@
 - 2026-10-18 phase 5 gate: network on Chrome, `NULO_E2E_RETRY=0 bun run e2e:agent` over connect-dapp, connect-deny, connect-one-window, connect-unserved-chain, connect-locked-queue, account-switch-live-session: pass (6 files, 8 tests, none skipped). Phase 5 green.
 - 2026-10-18 post-implementation: Codex r1 clean, Opus approve (2 local fixes, 7124b617), Codex r2 clean; known limit #771 filed closed.
 - 2026-10-18 final gates on the head: lint, typecheck:all, test:all pass; network six files on Chrome at retry 0 pass (464.3 s); check:plans 0 findings; open-PR file overlap: #743 only in `profile/service.integration.test.ts`, disjoint hunks.
+- 2026-10-18 arc 1 phase 1 gate (fast: lint, typecheck:all, test 13879/13879, phase files): pass.
+- 2026-10-18 arc 1 phase 2 gate (fast: lint, typecheck:all, test 13890/13890 after D11, phase files): pass; first unit run red on a11y-css anchor table (D11).
+- 2026-10-18 arc 1 phases 3 and 4 gate (fast: lint, typecheck:all, test 13900/13900, phase files): pass.
+- 2026-10-18 arc 1 gate: test identity pass; test:all, audit:vue, check:plans pass; smoke chrome 60/62 and firefox 56/62 pass (retry 0); rendered identity chrome 64/64, firefox 64/64; Codex r1 conditional approve (fixed), r2 approve.
+- 2026-10-18 arc 1 final head: lint, typecheck:all, test:all, check:plans pass; smoke chrome 60/62 (411 s) and firefox 56/62 (553 s) at retry 0; network incoming-arrival chrome 7/7 (471 s).
+- 2026-10-18 arc 1 merged head (dev with #772): lint, typecheck:all, test:all, check:plans pass; smoke chrome 59/62 + 1 detached-element flake in home-links, rerun pass; smoke firefox 56/62 (452 s); network incoming-arrival 7/7.

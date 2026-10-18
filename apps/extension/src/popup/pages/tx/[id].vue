@@ -12,6 +12,7 @@
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import TxFeeRow from "@/popup/components/modules/tx/TxFeeRow.vue"
 import TxHashRow from "@/popup/components/modules/tx/TxHashRow.vue"
+import DetailHeroMeta from "@/popup/components/modules/tx/DetailHeroMeta.vue"
 import AddressCardLink from "@/popup/components/modules/tx/AddressCardLink.vue"
 import TxDebugPanel from "@/popup/components/modules/tx/TxDebugPanel.vue"
 
@@ -27,6 +28,7 @@ import { DETAIL_TIME_FORMAT } from "../detail-page"
 import { balanceFormatted } from "@/utils/amount.js"
 import { displaySymbol, settledReading, txAmount } from "@/utils/tx-amount"
 import { copyWithToast } from "@/utils/clipboard"
+import { endsSelection } from "@/utils/selection"
 import { trimAddress } from "@/utils/string"
 import {
 	callTitle,
@@ -38,7 +40,7 @@ import {
 	FEE_METHODS,
 } from "@/utils/tx-enrichment"
 import { PriceServiceClient } from "@/wallet/services/price/client"
-import { getAccountExplorerUrl, getBlockExplorerUrl, getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
+import { explorerDisplayName, getAccountExplorerUrl, getBlockExplorerUrl, getTransactionExplorerUrl } from "@/wallet/constants/explorers"
 import { buildGasBreakdown, computeFeeSavings, describeFeePaymentMethod } from "@/popup/components/modules/tx/tx-detail-helpers"
 
 /** Composables */
@@ -122,7 +124,7 @@ const explorerUrl = computed(() => {
 	if (!appStore.network?.chainId || !tx.value?.hash) return null
 	return getTransactionExplorerUrl(appStore.network.chainId, appStore.defaultExplorer, tx.value.hash)
 })
-const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === appStore.defaultExplorer)?.name ?? "explorer")
+const explorerName = computed(() => explorerDisplayName(appStore.defaultExplorer))
 const blockUrl = computed(() =>
 	tx.value?.block ? getBlockExplorerUrl(appStore.network?.chainId, appStore.defaultExplorer, tx.value.block.hash) : null,
 )
@@ -167,30 +169,14 @@ onBeforeUnmount(() => {
 
 		<Flex v-if="tx" wide direction="column" gap="24" :class="$style.content">
 			<Flex direction="column" align="center" gap="10">
-				<Flex align="center" justify="center" gap="8" :class="$style.hero_meta">
-					<span v-if="txTime" :class="$style.tx_time">{{ txTime }}</span>
-					<span v-if="txTime && (explorerUrl || tx?.hash)" :class="$style.meta_sep">·</span>
-					<a
-						v-if="explorerUrl"
-						:href="explorerUrl"
-						target="_blank"
-						rel="noopener noreferrer"
-						@click.stop
-						:class="$style.hero_link"
-					>
-						<span>View on {{ explorerName }}</span>
-						<Icon name="open" size="10" color="tertiary" />
-					</a>
-					<span
-						v-else-if="tx?.hash"
-						@click="handleCopy(tx.hash)"
-						:class="[$style.hero_link, 'copyable']"
-						data-testid="tx-detail-pending-copy-hash"
-					>
-						<span>Copy hash</span>
-						<Icon name="copy" size="10" color="tertiary" />
-					</span>
-				</Flex>
+				<DetailHeroMeta
+					:time="txTime"
+					:explorerUrl="explorerUrl"
+					:explorerName="explorerName"
+					:hash="tx.hash"
+					copyTestid="tx-detail-pending-copy-hash"
+					@copy="handleCopy"
+				/>
 			</Flex>
 
 			<Flex v-if="type === 'transfer' && formattedAmount" align="center" direction="column" gap="6">
@@ -233,7 +219,7 @@ onBeforeUnmount(() => {
 						direction="column"
 						gap="4"
 						:class="$style.address_card"
-						@click="handleCopy(transfer.from)"
+						@click="endsSelection($event) || handleCopy(transfer.from)"
 					>
 						<AddressDisplay
 							static
@@ -257,7 +243,7 @@ onBeforeUnmount(() => {
 						direction="column"
 						gap="4"
 						:class="$style.address_card"
-						@click="handleCopy(transfer.to)"
+						@click="endsSelection($event) || handleCopy(transfer.to)"
 					>
 						<AddressDisplay
 							static
@@ -328,7 +314,7 @@ onBeforeUnmount(() => {
 								:class="[$style.detail_value_aux, $style.detail_link]"
 								>{{ trimAddress(tx.block.hash, 6, 4) }}</a
 							>
-							<span v-else data-testid="tx-block-hash" @click="handleCopy(tx.block.hash)" :class="[$style.detail_value_aux, 'copyable']">
+							<span v-else data-testid="tx-block-hash" @click="endsSelection($event) || handleCopy(tx.block.hash)" :class="[$style.detail_value_aux, 'copyable']">
 								{{ trimAddress(tx.block.hash, 6, 4) }}
 							</span>
 						</Flex>
@@ -336,7 +322,7 @@ onBeforeUnmount(() => {
 
 					<Flex v-if="tx?.nonce" wide justify="between" align="center">
 						<span :class="$style.detail_key">Nonce</span>
-						<span data-testid="tx-nonce" @click="handleCopy(tx.nonce)" :class="[$style.detail_value_mono, 'copyable']">
+						<span data-testid="tx-nonce" @click="endsSelection($event) || handleCopy(tx.nonce)" :class="[$style.detail_value_mono, 'copyable']">
 							{{ trimAddress(tx.nonce, 6, 4) }}
 						</span>
 					</Flex>
@@ -355,7 +341,7 @@ onBeforeUnmount(() => {
 						:class="[$style.call_row, idx > 0 && $style.call_row_divider]"
 					>
 						<span data-testid="tx-call-method" :class="$style.call_method">{{ callRowTitle(c) }}</span>
-						<span data-testid="tx-call-contract" @click="handleCopy(c.contract)" :class="[$style.call_contract, 'copyable']">
+						<span data-testid="tx-call-contract" @click="endsSelection($event) || handleCopy(c.contract)" :class="[$style.call_contract, 'copyable']">
 							{{ trimAddress(c.contract, 6, 4) }}
 						</span>
 					</Flex>
@@ -383,22 +369,6 @@ onBeforeUnmount(() => {
 
 .amount_fiat {
 	composes: amount_fiat from "../detail-page.module.css";
-}
-
-.hero_meta {
-	composes: hero_meta from "../detail-page.module.css";
-}
-
-.tx_time {
-	composes: tx_time from "../detail-page.module.css";
-}
-
-.meta_sep {
-	composes: meta_sep from "../detail-page.module.css";
-}
-
-.hero_link {
-	composes: hero_link from "../detail-page.module.css";
 }
 
 .amount_value {

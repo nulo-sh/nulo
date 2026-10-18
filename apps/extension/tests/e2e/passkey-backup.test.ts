@@ -27,10 +27,12 @@ import { confirmProfileReset } from "./fixtures/helpers"
 import { registerPasskeyProfile, setupPasskeyVirtualAuth, stallNextPasskeyCeremony } from "./fixtures/passkey"
 import { shotSend } from "./fixtures/send-page"
 import { downloadPlainPasskeyBackup } from "./helpers/backup-export"
+import { type PlainBackup, passkeyBackupVerifies } from "./helpers/backup-seal"
 import { armDownloadCapture } from "./helpers/download-capture"
 import {
 	buildSyntheticPasskeyBackup,
 	readActiveAccount,
+	readPasskeyPrf,
 	readRegisteredPasskey,
 	submitPasskeyFullBackup,
 	writeBackupToTemp,
@@ -148,9 +150,12 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 			]),
 		)
 		expect(afterCancel).toBe("nothing")
-		const plain = JSON.parse(await downloadPlainPasskeyBackup(page)) as Record<string, unknown>
-		expect(plain["master-key"]).toBe((await readRegisteredPasskey(page)).credentialId)
+		const plain = JSON.parse(await downloadPlainPasskeyBackup(page)) as PlainBackup
+		const { credentialId } = await readRegisteredPasskey(page)
+		expect(plain["master-key"]).toBe(credentialId)
 		expect("entropy" in plain).toBe(false)
+		const passkey = { id: credentialId, prf: await readPasskeyPrf(page, credentialId) }
+		expect(await passkeyBackupVerifies(plain, passkey), "the export's checksum and MAC under its own passkey").toBe(true)
 
 		// Drive the encryption path so the second status card variant
 		// ("Encrypting your backup") is exercised too. For passkey profiles
@@ -323,14 +328,5 @@ test("passkey full-backup: in-session round-trip (register → reset → import 
 	}
 }, 120_000)
 
-// NOTE: a REAL passkey export → reset → import round-trip runs on Firefox,
-// started from the toolbar panel: `passkey-toolbar-panel.test.ts`. Here (capturing
-// the actual EXPORT file, mirroring the encrypted/password real-export tests) it was
-// prototyped but NOT landed: it depends on the passkey EXPORT ceremony, which
-// does not resolve on this machine's virtual authenticator — the SAME
-// pre-existing limitation that already CI-skips + locally-fails the
-// "status card" export test above (verified failing at the branch base). The
-// passkey IMPORT path is fully covered by the synthetic round-trip above, and
-// the export FILE format is covered by the password (network round-trip) and
-// encrypted (`backup-roundtrip.test.ts`) real-export tests. Revisit if the
-// export-ceremony virtual-auth issue is fixed.
+// A real passkey export → reset → import round trip: the passkey row of
+// `network/import-handshake-note-matrix.test.ts`, and `passkey-toolbar-panel.test.ts` on Firefox.

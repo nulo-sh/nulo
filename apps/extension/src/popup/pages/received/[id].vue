@@ -21,6 +21,7 @@
 /** Components */
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import AddressCardLink from "@/popup/components/modules/tx/AddressCardLink.vue"
+import DetailHeroMeta from "@/popup/components/modules/tx/DetailHeroMeta.vue"
 import FeeAmount from "@/components/composite/FeeAmount.vue"
 
 /** Vendor */
@@ -43,10 +44,11 @@ import { useReceiptFee } from "@/composables/useReceiptFee"
 import { DETAIL_TIME_FORMAT } from "../detail-page"
 import { balanceFormatted } from "@/utils/amount.js"
 import { copyReceivedValue } from "./received-copy"
+import { endsSelection } from "@/utils/selection"
 import { trimAddress } from "@/utils/string"
 import { receivedLabel, resolveFromDisplay, resolveReceivedType, tokenForReceipt } from "@/utils/received-display"
 import { knownDecimals } from "@/utils/token-amount"
-import { getAccountExplorerUrl, getBlockExplorerUrl, getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
+import { explorerDisplayName, getAccountExplorerUrl, getBlockExplorerUrl, getTransactionExplorerUrl } from "@/wallet/constants/explorers"
 import { feeDisplay } from "@/utils/fee-estimation"
 
 /** Store */
@@ -145,7 +147,7 @@ const explorerUrl = computed(() => {
 	if (!inc) return null
 	return getTransactionExplorerUrl(recordChainId.value ?? undefined, appStore.defaultExplorer, inc.txHash)
 })
-const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === appStore.defaultExplorer)?.name ?? "explorer")
+const explorerName = computed(() => explorerDisplayName(appStore.defaultExplorer))
 /** A public receipt's hash names the block the wallet saw, whatever a re-mine did at its height;
  *  a note carries only the height. */
 const blockUrl = computed(() => {
@@ -241,29 +243,13 @@ onBeforeUnmount(() => {
 
 		<Flex v-if="received" wide direction="column" gap="24" :class="$style.content">
 			<Flex direction="column" align="center" gap="10">
-				<Flex align="center" justify="center" gap="8" :class="$style.hero_meta">
-					<span v-if="receivedTime" :class="$style.tx_time">{{ receivedTime }}</span>
-					<span v-if="receivedTime && received.txHash" :class="$style.meta_sep">·</span>
-					<a
-						v-if="explorerUrl"
-						:href="explorerUrl"
-						target="_blank"
-						rel="noopener noreferrer"
-						@click.stop
-						:class="$style.hero_link"
-					>
-						<span>View on {{ explorerName }}</span>
-						<Icon name="open" size="10" color="tertiary" />
-					</a>
-					<span
-						v-else-if="received.txHash"
-						@click="copy(received.txHash, 'Tx hash')"
-						:class="[$style.hero_link, 'copyable']"
-					>
-						<span>Copy hash</span>
-						<Icon name="copy" size="10" color="tertiary" />
-					</span>
-				</Flex>
+				<DetailHeroMeta
+					:time="receivedTime"
+					:explorerUrl="explorerUrl"
+					:explorerName="explorerName"
+					:hash="received.txHash"
+					@copy="copy($event, 'Tx hash')"
+				/>
 			</Flex>
 
 			<Flex v-if="formattedAmount" align="center" direction="column" gap="6">
@@ -283,7 +269,7 @@ onBeforeUnmount(() => {
 					gap="4"
 					:class="[$style.address_card, !fromClickable && $style.card_static]"
 					data-testid="received-from-card"
-					@click="fromClickable && copy(fromDisplay.address, 'From address')"
+					@click="fromClickable && !endsSelection($event) && copy(fromDisplay.address, 'From address')"
 				>
 					<AddressDisplay
 						v-if="fromDisplay.kind === 'address'"
@@ -311,7 +297,7 @@ onBeforeUnmount(() => {
 					direction="column"
 					gap="4"
 					:class="$style.address_card"
-					@click="copy(received.accountAddress, 'Account address')"
+					@click="endsSelection($event) || copy(received.accountAddress, 'Account address')"
 				>
 					<AddressDisplay
 						static
@@ -348,7 +334,7 @@ onBeforeUnmount(() => {
 						>
 						<span
 							v-else
-							@click="copy(received.txHash, 'Tx hash')"
+							@click="endsSelection($event) || copy(received.txHash, 'Tx hash')"
 							:class="[$style.detail_value_mono, 'copyable']"
 							data-testid="tx-hash-copy"
 							>{{ trimAddress(received.txHash, 6, 4) }}</span
@@ -407,7 +393,7 @@ onBeforeUnmount(() => {
 							<span
 								v-else-if="isPublic"
 								data-testid="tx-block-hash"
-								@click="copy(received.blockHash, 'Block hash')"
+								@click="endsSelection($event) || copy(received.blockHash, 'Block hash')"
 								:class="[$style.detail_value_aux, 'copyable']"
 							>
 								{{ trimAddress(received.blockHash, 6, 4) }}
@@ -432,22 +418,6 @@ onBeforeUnmount(() => {
 
 .content {
 	composes: content from "../detail-page.module.css";
-}
-
-.hero_meta {
-	composes: hero_meta from "../detail-page.module.css";
-}
-
-.tx_time {
-	composes: tx_time from "../detail-page.module.css";
-}
-
-.meta_sep {
-	composes: meta_sep from "../detail-page.module.css";
-}
-
-.hero_link {
-	composes: hero_link from "../detail-page.module.css";
 }
 
 .amount_value {
