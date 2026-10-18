@@ -42,9 +42,9 @@ export function planAttach(input: PlanInput): AttachPlan {
 	const { tag, state } = input
 	switch (state.kind) {
 		case "ambiguous":
-			return { action: "refuse", reason: `${state.count} releases name ${tag}; delete the extra drafts, then run again` }
+			return { action: "refuse", reason: ambiguousReason(tag, state.count) }
 		case "published":
-			return planPublished(tag, state, input.local)
+			return planPublished(tag, state, input.local.map(nameOf))
 		default:
 			if (input.workflowSha !== input.tagSha) {
 				return {
@@ -56,9 +56,15 @@ export function planAttach(input: PlanInput): AttachPlan {
 	}
 }
 
-function planPublished(tag: string, state: Extract<ReleaseState, { kind: "published" }>, local: LocalAsset[]): AttachPlan {
+const nameOf = (asset: LocalAsset): string => asset.name
+
+export const ambiguousReason = (tag: string, count: number): string =>
+	`${count} releases name ${tag}; delete the extra drafts, then run again`
+
+/** A published release ships as it is, or not at all: one missing an asset refuses. */
+export function planPublished(tag: string, state: Extract<ReleaseState, { kind: "published" }>, names: string[]): AttachPlan {
 	const present = new Set(state.assets.map((a) => a.name))
-	const missing = local.map((a) => a.name).filter((name) => !present.has(name))
+	const missing = names.filter((name) => !present.has(name))
 	if (missing.length === 0) return { action: "use-published" }
 	const list = missing.join(", ")
 	if (state.immutable) {

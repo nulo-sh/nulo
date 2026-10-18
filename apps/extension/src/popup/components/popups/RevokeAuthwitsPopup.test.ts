@@ -27,7 +27,7 @@ const authwitsServiceMock = {
 
 const journalMock = { subscribeJob: vi.fn(), disconnect: vi.fn() }
 
-const ESTIMATE = { maxFee: "1000", maxFeeFormatted: "0.000000000000001", gasDetails: {} }
+const ESTIMATE = { maxFee: "1000", gasDetails: {} }
 /** The popup debounces each estimate by 500 ms. */
 async function estimatesLand() {
 	await vi.advanceTimersByTimeAsync(500)

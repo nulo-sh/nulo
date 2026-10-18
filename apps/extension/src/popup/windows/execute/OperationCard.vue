@@ -21,6 +21,7 @@
  * the parent can drive `op.feeSettings` and trigger the keyed fee
  * estimator.
  */
+import AppFeeLine from "@/popup/components/modules/send/AppFeeLine.vue"
 import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue"
 import { isSelfPay } from "@nulo/wallet-bridge"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
@@ -115,9 +116,8 @@ const emit = defineEmits<{
 	updatePayer: [index: number, payer: FeePayerPick | null]
 }>()
 
-// TS type predicate so the template's `v-if="isSendTx(op)"` narrows op
-// to the send-like subtype downstream (lets us access `op.feeSettings`
-// without TS complaining that non-send kinds don't carry that field).
+// A predicate, so the template's `v-if` narrows `op` to the send-like row: it gates the whole send
+// card, not only its fee settings, so it names the two kinds the card renders.
 const isSendTx = (op: UIOperation): op is SendLikeUIOp => op.kind === "send_transaction" || op.kind === "aztec_sendTx"
 
 /** The method a dApp asked for by naming the account itself as payer with no fee call: the card
@@ -383,14 +383,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 						Fee payment method set by
 						<Text variant="name" color="primary" :class="$style.name_size">{{ safeWire(dapp?.name, 64) || 'the app' }}</Text>
 					</Text>
-					<Text v-if="feeEstimate" variant="body" color="secondary" data-testid="execute-op-app-fee">
-						Fee up to
-						<Text variant="name" color="primary" :class="$style.name_size">{{ feeEstimate.maxFeeFormatted }} FJ</Text><template v-if="feeEstimate.priorityFeeFormatted">, includes a {{ feeEstimate.priorityFeeFormatted }} FJ <DottedTerm term="priority-fee" testid="execute-op-priority-term">priority fee</DottedTerm> the app asked for</template>
-					</Text>
-					<Flex v-else-if="isEstimating" align="center" gap="4" data-testid="execute-op-app-fee-estimating">
-						<Text variant="body" color="secondary">Fee up to</Text>
-						<Skeleton />
-					</Flex>
+					<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate" />
 				</Flex>
 			</Flex>
 			<!-- Mounted with the row: a region created with its text in place may go unannounced. -->

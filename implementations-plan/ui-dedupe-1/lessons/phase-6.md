@@ -1,0 +1,30 @@
+# Phase 6 (arc A6): lessons
+
+## Release check (2026-10-18)
+
+- Branch `ui-dedupe-1-a6` off `dev` at `1cff707d`; A5 merged as #748. Lockfile unchanged.
+- Recon's journal rows rebuilt at the base: none of the four copies moved since `0fe841be`. A finer read added two facts recon's table folded away: History's refused update drops its row while its refused add changes nothing, and Home's feed ignores both; Home's read also drops a snapshot when the account moved under it.
+- D603, the snapshot/Added overlap: plausible but unverified (a code trace, no reproducer). The journal writes a record, then fans its event out behind `activeProfileId()`, which takes the profile facade lock (`operation-journal/service.ts:140-144`, `profile/service.ts:499-506`). A popup read passes the same lock before its storage read (`:122-134`, `:523-526`; `EntityStorage` has no cache). With a facade-locked operation holding the lock across storage I/O between them (`refreshSession`, which the popup fires on open and on activity), the read's reply, carrying the record, posts before the event. The client delivers in port order, so TokensView lists the record, then pushes it again. Codex agreed and gave a cleaner schedule (a refresh holds the lock while the record persists; the read passes, a second locked operation delays the event). TokensView keeps its append; the duplicate joins OA-1.
+- Codex consult (gpt-6.1-sol, high, read-only, session `01a14cd7-b609-7892-8014-57ada071f04d`): D603 agree; two of the draft's points rejected, each with a schedule, both verified in the tree and kept as today's behaviour:
+  - History's drop on a refused update is reachable: the same deferral delivers a record's earlier in-flight update after a read that saw it end, so History removes the row, then lists it again on the terminal update. The plan's reducer rule ("an Updated that fails `accept` removes its row") is kept for History only: applied to Home it would drop a card whose send is re-filed to another account or network in place (`refileOperationScope`, `execution/claim-helper.ts:230`), which Home keeps until its next read.
+  - The plan's fence for History and the token list changes a failure path: on mount the first connect's read supersedes the mount's; if that second read is refused, today's rows from the mount read stay, and fenced they are lost until an event or a reconnect. Both keep landing every read as it answers (`supersede: false`). Each joins OA-1.
+- The draft's other points held: known-row position, the duplicate append, unfiltered delete, new arrays for computed consumers, parent-owned subscriptions, Activity's rejection propagating, Home's retry on the same run, the landing one microtask later (every scope change bumps Home's fence synchronously).
+
+## Implementation (2026-10-18)
+
+- The hook takes no `client` and exposes no `invalidate()`: it subscribes nothing, and every teardown is `dispose()`. Each parent subscribes the three handlers and its own reconnect, as A5's hook does.
+- `Array.prototype.with` would be the shortest in-place replace, but nothing in the extension uses an ES2023 array method yet; the reducer uses `map`.
+- Activity's and the in-flight store's test mocks had no-op journal events, so their new cases needed capturing ones; Activity's bus returns each handler's promise, so the refused reconnect read is awaited where today's page lets it reject.
+- Proof the new page and store cases test the pages, not the change: with the four base production files restored over the new tests, all four suites stay green (153/153).
+- Mutation run, 13 mutations, each red: every option each parent passes removed or swapped (History's `dropRefusedUpdate` and `supersede: false`; the token list's `appendAdded`, `supersede: false` and `place: "back"`; `dropRefusedUpdate` added to Home; Home's retry beginning a new run instead of reusing its own), the store's append and its delete, and the hook's post-read fence check, its accept gate on adds, its `onRecord` call and its dispose flag.
+
+## Review round 1 (2026-10-18)
+
+- Codex (gpt-6.1-sol, high, read-only, session `01a14ce6-ddc1-7fc1-8be2-8d0ba3388949`): `findings`, three P2 test gaps and one P3, no behaviour change. F1: History's order assertions passed under `place: "back"` because `buildActivityRows` sorts by end time; the case now gives every row one end time, and the stable sort shows the mirror's order. F2: the store's listed-id add case passed if the add were ignored; it now lands a `succeeded` copy. F3: the hook's `undefined` case started from an empty list. F4: the reducers' header said `place` decides only unseen rows. Each new pin turns red under the mutation it names; the History and store cases still pass over the base files (41/41).
+- Opus (general-purpose): `findings`, three P3, no behaviour difference; it traced every event, read, timing and teardown against base. Folded: Home's reconnect docblock had landed on the read function; the token list's duplicate case is tagged `(BUG PIN)` as CLAUDE.md names it; Home's re-file case now reads again and the card goes. Declined: TokensView disposing its mirror before disconnecting the client, which matches the file's own `disposeBalances` order and changes nothing.
+- Smoke Chrome on the armed build of `ffae5bd9` (production code as at round 1 but a comment), retry 0: `rows`, `navigation` 17/17 in 113 s (load1 131).
+
+## Review round 2 (2026-10-18)
+
+- Codex, resumed: `clean`. F1–F4 resolved, Home's re-file case now proves the next read drops the card, the moved read function changes no runtime behaviour; no regression. Loop converged after 2 rounds.
+- Final head `400c1583`, dev `1cff707d` (nothing newer): lint, typecheck:all, test:all (extension 13790 passed, 5 skipped, 7 todo), check:plans; smoke retry 0 on a rebuilt armed bundle, Chrome `rows`, `navigation` 17/17 in 77 s; network Chrome, prover on, retry 0, `cancel-mid-prove`, `in-flight-send-guard` 2/2 in 264 s. No e2e scenario added.

@@ -54,7 +54,10 @@ describe("FeeCostReadout", () => {
 		const queuedCap = { about: ESTIMATE, cap: { amount: "4.47228", usd: "$0.269" } }
 		const w = factory({ isEstimating: true, isQueued: true, queuedCap })
 		expect(w.find('[data-testid="fee-estimate-queued"]').exists()).toBe(false)
-		expect(drawn(w)).toBe("You pay About 3.577824 FJ ($0.215) Goes out after your earlier send, for at most 4.47228 FJ ($0.269).")
+		expect(drawn(w).startsWith("You pay About ~3.577824 FJ ($0.215) Goes out")).toBe(true)
+		expect(w.get('[data-testid="fee-estimate-queued-cap-line"]').text()).toBe(
+			"Goes out after your earlier send, for at most ~4.47228 FJ ($0.269).",
+		)
 		expect(w.find('[data-testid="fee-estimate-usd"]').text()).toBe("($0.215)")
 		const unpriced = factory({
 			isEstimating: true,
@@ -62,7 +65,7 @@ describe("FeeCostReadout", () => {
 			queuedCap: { about: { amount: "1.0", usd: null }, cap: { amount: "1.25", usd: null } },
 		})
 		expect(unpriced.find('[data-testid="fee-estimate-queued-cap-line"]').text()).toBe(
-			"Goes out after your earlier send, for at most 1.25 FJ.",
+			"Goes out after your earlier send, for at most ~1.25 FJ.",
 		)
 		expect(drawn(factory({ isEstimating: true, isQueued: true }))).toBe(`You pay ${QUEUED_FEE_COPY}`)
 	})

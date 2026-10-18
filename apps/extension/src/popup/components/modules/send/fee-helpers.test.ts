@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest"
+import { describe, expect, test } from "vitest"
 import { FpcType } from "@/wallet/services/fpc/client"
 import {
 	buildFeeMethods,
@@ -6,19 +6,15 @@ import {
 	defaultSponsor,
 	FEE_JUICE_BRIDGE_URL,
 	type FeeMethodOption,
-	feeAmountDisplay,
-	feeDisplay,
-	feeInWords,
-	feeLine,
 	feePayerOf,
 	feeScopeKey,
 	formatGasBalance,
-	shortfallSentence,
 	isLiveFeeScope,
 	liveFeeScope,
 	menuOrder,
 	resolveSavedSelection,
 	settingsForMethod,
+	shortfallFigures,
 } from "./fee-helpers"
 
 describe("fee-helpers/formatGasBalance", () => {
@@ -361,11 +357,17 @@ describe("fee-helpers/buildFeeMethods — rows whose read has not landed", () =>
 	})
 })
 
-describe("fee-helpers/shortfallSentence", () => {
+describe("fee-helpers/shortfallFigures", () => {
 	test("the cost rounds up and the balance down, so a shortfall never reads as enough", () => {
-		expect(shortfallSentence({ maxFee: "2100000000000001", balance: "2099999999999999" })).toBe(
-			"This send can cost up to 0.002101 FJ. You have 0.002099 FJ.",
-		)
+		expect(shortfallFigures({ maxFee: "2100000000000001", balance: "2099999999999999" }, undefined)).toEqual({
+			cost: { amount: "0.002101", usd: null },
+			balance: "0.002099",
+		})
+	})
+
+	test("the cost's dollars price the rounded-up figure, and a whole readout unit stays as it is", () => {
+		expect(shortfallFigures({ maxFee: "2000000000000000", balance: "0" }, 1).cost).toEqual({ amount: "0.002", usd: "$0.002" })
+		expect(shortfallFigures({ maxFee: "2000000000000001", balance: "0" }, 1000).cost).toEqual({ amount: "0.002001", usd: "$2.001" })
 	})
 })
 
@@ -420,25 +422,6 @@ describe("fee-helpers/buildFeeMethods — only the protocol PrivateFPC is offere
 	})
 })
 
-describe("fee-helpers/feeDisplay + feeLine", () => {
-	// 1.05e14 base units = 0.000105 FJ; wire estimates carry maxFee as a decimal string.
-	const estimate = { maxFee: "105000000000000", maxFeeFormatted: "0.000105" }
-
-	test("priced: the card's amount and dollars, and the sheet's line in the same words", () => {
-		const display = feeDisplay(estimate, 0.004)
-		expect(display).toEqual({ amount: "0.000105", usd: "<$0.001" })
-		expect(feeLine(display)).toBe("~0.000105 FJ (<$0.001)")
-		expect(feeLine(feeDisplay({ maxFee: 10n ** 18n, maxFeeFormatted: "1" }, 2.5))).toBe("~1 FJ ($2.500)")
-	})
-
-	test("unpriced or no estimate: no dollars, and nothing at all without an estimate", () => {
-		expect(feeLine(feeDisplay(estimate, undefined))).toBe("~0.000105 FJ")
-		expect(feeLine(feeDisplay(estimate, 0))).toBe("~0.000105 FJ")
-		expect(feeDisplay(null, 0.004)).toBeNull()
-		expect(feeLine(null)).toBeUndefined()
-	})
-})
-
 describe("fee-helpers/fee scope", () => {
 	test("feeScopeKey renders every field, chain id 0 included", () => {
 		expect(feeScopeKey({ profileId: "p1", networkId: "n1", chainId: 0, accountAddress: "0xabc" })).toBe("p1|n1|0|0xabc")
@@ -478,14 +461,6 @@ describe("fee-helpers/fee scope", () => {
 		const live = { profile: { id: "p1" }, network: { id: "n1", chainId: 7 }, account: { address: "0xabc" } }
 		const scope = { profileId: "p1", networkId: "n1", chainId: "7" as unknown as number, accountAddress: "0xabc" }
 		expect(isLiveFeeScope(live, scope)).toBe(false)
-	})
-})
-
-describe("fee-helpers/feeInWords", () => {
-	test("the amount, then the dollars when priced", () => {
-		expect(feeInWords({ amount: "4.47228", usd: "$0.269" })).toBe("4.47228 FJ ($0.269)")
-		expect(feeInWords({ amount: "4.47228", usd: null })).toBe("4.47228 FJ")
-		expect(feeInWords(feeAmountDisplay("4472280000000000000", undefined))).toBe("4.47228 FJ")
 	})
 })
 

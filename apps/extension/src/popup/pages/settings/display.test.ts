@@ -4,13 +4,13 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { ConfigProp } from "@/wallet/config"
 import { expectOwnedRows, settingsContext, settingsRouter } from "../../../../tests/helpers/settings-rows"
 
-const fakes = vi.hoisted(() => ({ config: undefined as unknown }))
+const fakes = vi.hoisted(() => ({ config: undefined as unknown, openToast: vi.fn() }))
 vi.mock("@/wallet/services/config/client", () => ({
 	ConfigServiceClient: vi.fn(function () {
 		return fakes.config
 	}),
 }))
-vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
+vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: fakes.openToast }) }))
 vi.mock("@/components/ui/Dropdown", () => ({
 	Dropdown: { template: '<div><slot name="trigger" /><slot name="popup" /></div>' },
 }))
@@ -26,6 +26,7 @@ let config: {
 }
 
 beforeEach(() => {
+	fakes.openToast.mockReset()
 	config = {
 		getProps: vi.fn(async () => [{ key: "theme", value: "dark" }] as ConfigProp[]),
 		setValue: vi.fn(async () => undefined),
@@ -70,6 +71,21 @@ describe("settings/display", () => {
 		await flushPromises()
 		expect(config.getProps).toHaveBeenCalledTimes(2)
 		expect(w.get('[data-testid="theme-trigger"]').text()).toBe("dark")
+	})
+
+	test("a failed write leaves the stored theme showing, and asking for it again writes again", async () => {
+		// The worker persists before it announces, so a failed write announces nothing.
+		config.setValue.mockRejectedValueOnce(new Error("persist failed"))
+		const w = await mountDisplay()
+		await w.get('[data-testid="theme-light-btn"]').trigger("click")
+		await flushPromises()
+		expect(fakes.openToast).toHaveBeenCalledExactlyOnceWith({ kind: "error", label: "Failed to update setting" })
+		expect(w.get('[data-testid="theme-trigger"]').text()).toBe("dark")
+		await w.get('[data-testid="theme-light-btn"]').trigger("click")
+		await flushPromises()
+		expect(config.setValue).toHaveBeenCalledTimes(2)
+		expect(config.setValue).toHaveBeenLastCalledWith("theme", "light")
+		expect(w.get('[data-testid="theme-trigger"]').text()).toBe("light")
 	})
 
 	test.each([false, true])("renders the search registry's rows, with a side panel: %s", async (sidePanel) => {

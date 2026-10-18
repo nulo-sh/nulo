@@ -1,52 +1,67 @@
 /**
- * D2 pricing contract: fee USD comes ONLY from live pricing — no pricing in,
- * no dollar figure out (the hardcoded 0.02-rate era is over).
+ * The one fee format: amounts at six decimals, half-up; USD only from a usable quote, never a guessed
+ * rate; balances truncated at their surface's precision.
  */
 
 import { describe, expect, test } from "vitest"
-import { feeJuicePricingFromUsd, feeToUsd, formatGasBalance } from "./fee-estimation"
+import { BALANCE_DECIMALS, FEE_READOUT_UNIT, feeDisplay, feeFigure, feeText, formatGasBalance } from "./fee-estimation"
 
 const FJ = 10n ** 18n // 1 Fee Juice (18 decimals)
 
-describe("feeJuicePricingFromUsd", () => {
-	test("builds live Fee Juice pricing from a quote's usd", () => {
-		const pricing = feeJuicePricingFromUsd(0.0147)
-		expect(pricing).toMatchObject({ usdRate: 0.0147, symbol: "FJ", decimals: 18 })
+describe("feeDisplay — the amount", () => {
+	test("rounds half-up at the sixth decimal, from the wire's decimal string or a bigint", () => {
+		// Truncation would print 3.577823; half-up carries the tail.
+		expect(feeDisplay("3577823500000000001", undefined).amount).toBe("3.577824")
+		expect(feeDisplay(3577823500000000001n, undefined).amount).toBe("3.577824")
+		expect(feeDisplay(3454999999999999n, undefined).amount).toBe("0.003455")
+		expect(feeDisplay(3577823499999999999n, undefined).amount).toBe("3.577823")
 	})
 
-	test("no quote / garbage → undefined (USD omitted, never faked)", () => {
-		expect(feeJuicePricingFromUsd(undefined)).toBeUndefined()
-		expect(feeJuicePricingFromUsd(0)).toBeUndefined()
-		expect(feeJuicePricingFromUsd(-1)).toBeUndefined()
-		expect(feeJuicePricingFromUsd(Number.NaN)).toBeUndefined()
-	})
-})
-
-describe("feeToUsd — live pricing only", () => {
-	test("prices a fee at the live rate (bigint, half-up to 3 decimals)", () => {
-		// 3.5 FJ at $0.02 → $0.070 (matches the old stub's math with a live rate).
-		expect(feeToUsd((35n * FJ) / 10n, feeJuicePricingFromUsd(0.02))).toBe("$0.070")
-		// At the real-ish AZTEC rate: 1 FJ at $0.0147 → $0.015 (half-up from 0.0147).
-		expect(feeToUsd(FJ, feeJuicePricingFromUsd(0.0147))).toBe("$0.015")
+	test("a zero fee, and one below half a readout unit, print 0", () => {
+		expect(feeDisplay(0n, undefined).amount).toBe("0")
+		expect(feeDisplay(FEE_READOUT_UNIT / 2n - 1n, undefined).amount).toBe("0")
 	})
 
-	test("sub-$0.001 hint and zero-fee shape survive", () => {
-		expect(feeToUsd(1n, feeJuicePricingFromUsd(0.02))).toBe("<$0.001")
-		expect(feeToUsd(0n, feeJuicePricingFromUsd(0.02))).toBe("$0.000")
-	})
-
-	test("no pricing → null", () => {
-		expect(feeToUsd(FJ, undefined)).toBeNull()
+	test("one readout unit is the last printed digit", () => {
+		expect(FEE_READOUT_UNIT).toBe(10n ** 12n)
+		expect(feeDisplay(FEE_READOUT_UNIT, undefined).amount).toBe("0.000001")
 	})
 })
 
-describe("formatGasBalance — per-surface precision", () => {
-	test("defaults to 4 decimals (send fee card: sub-cent amounts carry signal)", () => {
+describe("feeDisplay — the USD", () => {
+	test("prices a fee at the live rate, half-up to 3 decimals", () => {
+		expect(feeDisplay((35n * FJ) / 10n, 0.02).usd).toBe("$0.070")
+		expect(feeDisplay(FJ, 0.0147).usd).toBe("$0.015")
+	})
+
+	test("a sub-$0.001 fee says so, and a zero fee is $0.000", () => {
+		expect(feeDisplay(1n, 0.02).usd).toBe("<$0.001")
+		expect(feeDisplay(0n, 0.02).usd).toBe("$0.000")
+	})
+
+	test("no usable quote, no USD: absent, zero, negative or not a number", () => {
+		for (const usd of [undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) expect(feeDisplay(FJ, usd).usd).toBeNull()
+	})
+})
+
+describe("the one fee grammar", () => {
+	test("`~X FJ`, then the USD in parentheses only with a quote", () => {
+		expect(feeFigure(feeDisplay(FJ, 0.06))).toBe("~1 FJ")
+		expect(feeText(feeDisplay(FJ, 0.06))).toBe("~1 FJ ($0.060)")
+		expect(feeText(feeDisplay(FJ, undefined))).toBe("~1 FJ")
+	})
+})
+
+describe("formatGasBalance — per-surface precision, truncated", () => {
+	test("Send's precision is the default", () => {
+		expect(BALANCE_DECIMALS.send).toBe(4)
 		expect(formatGasBalance((421239n * 10n ** 14n).toString())).toBe("42.1239")
+		expect(formatGasBalance((99999n * 10n ** 14n).toString())).toBe("9.9999")
 	})
 
-	test("maxDecimals=2 truncates (never rounds) — the home card's precision", () => {
-		expect(formatGasBalance((421239n * 10n ** 14n).toString(), 2)).toBe("42.12")
-		expect(formatGasBalance((99n * 10n ** 16n).toString(), 2)).toBe("0.99")
+	test("Home's precision truncates, never rounds", () => {
+		expect(BALANCE_DECIMALS.home).toBe(2)
+		expect(formatGasBalance((421239n * 10n ** 14n).toString(), BALANCE_DECIMALS.home)).toBe("42.12")
+		expect(formatGasBalance((99n * 10n ** 16n).toString(), BALANCE_DECIMALS.home)).toBe("0.99")
 	})
 })

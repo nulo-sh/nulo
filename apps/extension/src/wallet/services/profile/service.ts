@@ -78,6 +78,26 @@ export * from "./spec"
  *  reported back so the branch's single post-lock-release `finally` owns every buffer wipe. */
 type PasswordRestoreScratch = { passhash?: Passhash; destinationDek?: ImportedKeysDek; storedContext: boolean }
 type PasskeyRestoreScratch = { stashDek?: ImportedKeysDek; storedPending: boolean; storedContext: boolean }
+/** Inputs of the locked commit bodies. The buffers travel by reference: a copy outside a stash
+ *  would escape the caller's wipe. */
+type PasswordRestoreCommit = Readonly<{
+	profile: ProfileInfo
+	name: string
+	password: string
+	plainSecret: Uint8Array
+	plainEntropy: Uint8Array<ArrayBuffer>
+	sourceDek: Uint8Array<ArrayBuffer>
+	allowDuplicate: boolean
+}>
+type PasskeyRestoreCommit = Readonly<{
+	name: string
+	recovery: PasskeyRecovery
+	sourceDek: ImportedKeysDek | undefined
+	destinationDek: ImportedKeysDek
+	dekSealed: string
+	initialId: string | undefined
+	allowDuplicate: boolean
+}>
 
 /** The refusal at password change once the DEK slot no longer unseals: the DEK keys the PXE store
  *  and every dApp-session tag, so the only non-destructive repair is export + restore. */
@@ -2284,13 +2304,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		try {
 			return await this.runExclusive(() =>
 				this.commitRestoredPasswordProfileHoldingLock(
-					profile,
-					name,
-					password,
-					plainSecret,
-					plainEntropy,
-					sourceDek,
-					allowDuplicate,
+					{ profile, name, password, plainSecret, plainEntropy, sourceDek, allowDuplicate },
 					scratch,
 				),
 			)
@@ -2309,15 +2323,10 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  `scratch` — the CALLER's post-release finally does every wipe. Caller MUST hold
 	 *  the facade lock. */
 	private async commitRestoredPasswordProfileHoldingLock(
-		profile: ProfileInfo,
-		name: string,
-		password: string,
-		plainSecret: Uint8Array,
-		plainEntropy: Uint8Array<ArrayBuffer>,
-		sourceDek: Uint8Array<ArrayBuffer>,
-		allowDuplicate: boolean,
+		input: PasswordRestoreCommit,
 		scratch: PasswordRestoreScratch,
 	): Promise<Restored<ProfileInfo>> {
+		const { profile, name, password, plainSecret, plainEntropy, sourceDek, allowDuplicate } = input
 		try {
 			// Duplicate-phrase guard under the SAME lock as the commit (check→write
 			// atomicity). The catch below RETHROWS the typed error so the UI's
@@ -2442,13 +2451,15 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 			return await this.runExclusive(() =>
 				this.commitRestoredPasskeyProfileHoldingLock(
-					name,
-					recovery,
-					sourceDekLocal,
-					destDekLocal,
-					dekSealed,
-					initialId,
-					allowDuplicate,
+					{
+						name,
+						recovery,
+						sourceDek: sourceDekLocal,
+						destinationDek: destDekLocal,
+						dekSealed,
+						initialId,
+						allowDuplicate,
+					},
 					scratch,
 				),
 			)
@@ -2478,15 +2489,10 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  — the CALLER's post-release finally does every wipe. Caller MUST hold the facade
 	 *  lock. */
 	private async commitRestoredPasskeyProfileHoldingLock(
-		name: string,
-		recovery: PasskeyRecovery,
-		sourceDek: ImportedKeysDek | undefined,
-		destinationDek: ImportedKeysDek,
-		dekSealed: string,
-		initialId: string | undefined,
-		allowDuplicate: boolean,
+		input: PasskeyRestoreCommit,
 		scratch: PasskeyRestoreScratch,
 	): Promise<ProfileInfo> {
+		const { name, recovery, sourceDek, destinationDek, dekSealed, initialId, allowDuplicate } = input
 		let id = initialId
 		if (id && ((await this.repo.contains(id)) || this.deletionState.isReserved(id))) {
 			throw new Error("Passkey profile already exists")

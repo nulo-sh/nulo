@@ -176,7 +176,7 @@ const STUBS = {
 	},
 	FeeSettingsCard: {
 		name: "FeeSettingsCard",
-		template: '<div data-testid="stub-fee-card" :data-origin="originPrivacy" :data-destination="destinationPrivacy" />',
+		template: '<div data-testid="stub-fee-card" :data-origin="originPrivacy" />',
 		props: [
 			"profile",
 			"network",
@@ -184,7 +184,6 @@ const STUBS = {
 			"feeEstimate",
 			"isEstimating",
 			"originPrivacy",
-			"destinationPrivacy",
 			"payerNoticeShape",
 			"modelValue",
 			"needsFeeJuice",
@@ -223,7 +222,7 @@ function setIdentity(appStore: ReturnType<typeof useAppStore>) {
 }
 
 /** What a landed estimate answers when a test names none. */
-const LANDED = { maxFee: "1000", maxFeeFormatted: "0.000000000000001", gasDetails: {} }
+const LANDED = { maxFee: "1000", gasDetails: {} }
 
 /** The page debounces its estimate by 800 ms; this lets the current input's estimate land. */
 async function estimateLands() {
@@ -966,6 +965,36 @@ describe("send page — the token card while the tokens load", () => {
 		await flushPromises()
 		expect(card(w)).toEqual({ loading: "false", symbol: undefined })
 		expect(failed(w)).toBe("true")
+		w.unmount()
+	})
+
+	test("after an account switch an add for the previous account never lands; one for the new account does", async () => {
+		const { w, appStore } = await mountSend()
+		expect(amount(w).attributes("data-balance")).toBe("5")
+		mocks.getTokenBalances.mockResolvedValue([])
+		appStore.account = { address: "0xbob" } as never
+		await flushPromises()
+		expect(amount(w).attributes("data-balance")).toBe("0")
+
+		balanceAdded().invoke({ ...BALANCE, id: "b3", privateBalance: "7000000" })
+		await flushPromises()
+		expect(amount(w).attributes("data-balance")).toBe("0")
+		balanceAdded().invoke({ ...BALANCE, id: "b2", account: "0xbob", privateBalance: "9000000" })
+		await flushPromises()
+		expect(amount(w).attributes("data-balance")).toBe("9")
+		w.unmount()
+	})
+
+	test("an add for a listed row id lands again: a worker restart can give a deleted row's id to another token's row", async () => {
+		const NEW = { ...TOKEN, id: 9, contract: `0x${"9".repeat(64)}`, symbol: "NEW" }
+		mocks.getTokens.mockResolvedValue([TOKEN, NEW])
+		const { w, cacheStore } = await mountSend()
+		balanceAdded().invoke({ ...BALANCE, token: NEW, privateBalance: "4000000" })
+		await flushPromises()
+		expect(amount(w).attributes("data-balance")).toBe("5")
+		cacheStore.activeTokenIdx = NEW.id
+		await flushPromises()
+		expect(amount(w).attributes("data-balance")).toBe("4")
 		w.unmount()
 	})
 

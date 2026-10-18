@@ -21,6 +21,7 @@ import { type AwaitingTx, txBelongsToScope, txScope, useActivityStore } from "@/
 import { approvedSendsInFlight as countApprovedSendsInFlight, hasInFlightSend as inFlightHasSend } from "@/utils/in-flight-send"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import { OperationJournalServiceClient } from "@/wallet/services/operation-journal/client"
+import { journalAdded, journalDeleted, journalUpdated } from "@/utils/journal-mirror"
 import { createContactImportGuard } from "./contact-import-guard"
 
 /**
@@ -335,21 +336,14 @@ function publishInFlight(state: InFlightState, rows: OperationRecord[]): void {
 }
 
 function subscribeInFlight(state: InFlightState, profile: Ref<ProfileInfo | undefined>): void {
-	const upsertInFlight = (op: OperationRecord) => {
+	const applyInFlight = (reduce: (rows: OperationRecord[], op: OperationRecord) => OperationRecord[]) => (op: OperationRecord) => {
 		if (state.suspended) return
 		state.revision++
-		const idx = state.ops.value.findIndex((row) => row.id === op.id)
-		if (idx === -1) state.ops.value.push(op)
-		else state.ops.value.splice(idx, 1, op)
+		state.ops.value = reduce(state.ops.value, op)
 	}
-	const dropInFlight = (op: OperationRecord) => {
-		if (state.suspended) return
-		state.revision++
-		state.ops.value = state.ops.value.filter((row) => row.id !== op.id)
-	}
-	state.journal.onOperationAdded.add(upsertInFlight)
-	state.journal.onOperationUpdated.add(upsertInFlight)
-	state.journal.onOperationDeleted.add(dropInFlight)
+	state.journal.onOperationAdded.add(applyInFlight((rows, op) => journalAdded(rows, op, { place: "back" })))
+	state.journal.onOperationUpdated.add(applyInFlight((rows, op) => journalUpdated(rows, op, "back")))
+	state.journal.onOperationDeleted.add(applyInFlight(journalDeleted))
 	// A reconnect can drop events, so re-read rather than trusting the cache.
 	state.journal.onConnected?.add(() => void refreshInFlightOps(state, profile))
 }
