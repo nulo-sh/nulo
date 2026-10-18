@@ -82,12 +82,19 @@ export function plainText(segments: readonly SubSegment[] | undefined): string {
 	return (segments ?? []).map((segment) => ("term" in segment ? segment.term : segment.text)).join("")
 }
 
-/** Names the one account the app sees by its wallet name. Several, none, or one the wallet no
- *  longer names read the sentence that needs no name. */
-export function accountAddressRow(accounts: readonly { name?: string }[]): PermissionRowEntry {
-	const only = accounts.length === 1 ? accounts[0].name : undefined
-	const title = only ? `See ${only}'s address` : "See the addresses of the accounts you share"
-	return { key: "account-address", group: "without-asking", icon: "eye", title, flagged: false }
+const LISTING_SUB: SubSegment[] = [{ text: "It always knows the account you connect with." }]
+
+/** `canGet` controls listing only: an app learns the account it connects with from every answer
+ *  that runs as that account, so the line says so. */
+export function accountAddressRow(): PermissionRowEntry {
+	return {
+		key: "account-address",
+		group: "without-asking",
+		icon: "eye",
+		title: "Let this app list all your accounts",
+		subOn: LISTING_SUB,
+		flagged: false,
+	}
 }
 
 /** Either sub-scope reaching any contract makes the row "any contract"; only transactions can

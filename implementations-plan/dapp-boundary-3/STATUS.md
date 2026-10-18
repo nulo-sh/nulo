@@ -7,3 +7,4 @@
 - 2026-10-17T20:12Z: Phase 1 gate passed (lint, typecheck:all, bridge 789, core 317, extension 13562); guard-removal runs in lessons/phase-1.md.
 - 2026-10-17T20:17Z: Phase 2 gate passed (lint, typecheck:all, test 13570); I2 and F12 confirmed unchanged, guard-removal runs in lessons/phase-2.md.
 - 2026-10-17T21:13Z: Phase 3 gate passed (test:all, merge 5653e890, lint, typecheck:all, network e2e authwit-lifecycle 1/1 and scope-refusal 2/2 at retry 0, check:plans); arc review converged (Codex r2 approve).
+- 2026-10-18T00:30Z: arc 2 (Form B) built on dapp-boundary-3-arc2 off dev 138e0ded; lint, typecheck:all, test:all green; OA-6 raised for a request without listing.

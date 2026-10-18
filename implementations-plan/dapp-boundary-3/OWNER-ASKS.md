@@ -24,9 +24,7 @@ Arc 1 ships each answered ask in the form recorded under it.
 
 ## OA-3: P38-08, the connect window's see-your-address toggle
 
-**Open:** re-asked on decision page 41; arc 2 stays held.
-
-- Re-asked on the next decision page. Both forms are costed in [plan.md](plan.md) § Arc 2. Nothing is built until the pick.
+**Answered 2026-10-18 (owner, P41-01 = B):** "Listing-only, said plainly: the row reads Let this app list all your accounts, with a line under it, It always knows the account you connect with; the app page's line follows the grant." Built in arc 2 (plan.md D20-D22); one case is OA-6.
 
 ## OA-4: the execute window when its fee estimate meets a refused request
 
@@ -45,3 +43,13 @@ Arc 1 ships each answered ask in the form recorded under it.
 - **Ships now (option a):** unchanged. The person can approve the row; the wallet refuses every grant call it would cover.
 - **Option b:** the window marks the row as never honoured, or leaves it out.
 - **Recommendation:** a until a dApp is seen asking for it; b needs new copy.
+
+## OA-6: the connect window for an accounts request that does not ask to list
+
+**Open.**
+
+- **Surface:** the connect window when a dApp asks for accounts without `canGet` (to act as an account without listing the others). No dApp the wallet is tested against asks this way; the playground always asks `canGet: true`.
+- **Ships now (option a):** no address row, as before the arc. The row in the owner's words, "Let this app list all your accounts", would be false here: without `canGet` the app cannot list.
+- **Option b:** the row shows with a switch, Off when the app did not ask and On when it did; "It always knows the account you connect with." stays under it in both states, and the person decides whether the app may list. Needs the switch's accessible name and the decision to carry `canGet` from the switch.
+- **Option c:** a row with the line alone, "It always knows the account you connect with.", and no listing title.
+- **Recommendation:** a until a dApp asks this way; b if the owner wants the person, not the app, to decide listing.

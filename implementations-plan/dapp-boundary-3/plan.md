@@ -1,8 +1,8 @@
 ---
 plan: dapp-boundary-3
 tier: mid
-status: approved 2026-10-17 (orchestrator); arc 1 in review
-issues: none (P38-06 carries no public issue; P38-08 waits on the owner)
+status: approved 2026-10-17 (orchestrator); arc 1 merged (#716); arc 2 (Form B) in review
+issues: none (P38-06 and P38-08 carry no public issue)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -115,6 +115,7 @@ export function isAuthRegistryGrantCall(call: { to: unknown; selector: unknown }
 
 - **Signed (orchestrator's record):** "the reason a refused dApp call shows, on the existing refusal surface; no new screen."
 - **After arc 1:** a refused dApp send leaves a History row "Not allowed" with its own context line (OA-1, D10); a refused intent shows nothing in the wallet, as any scope refusal today; an inner request keeps a standard send's Confirm off with the existing toast "Couldn't estimate fee. Try again.", the path the call-binding refusal takes today; in a NO_FROM send the preview shows its existing failure toast, and Confirm ends in the typed refusal and "Not allowed". No copy, row or layout changes.
+- **Arc 2, signed (P41-01 = B, 2026-10-18):** "Listing-only, said plainly: the row reads Let this app list all your accounts, with a line under it, It always knows the account you connect with; the app page's line follows the grant." The connect window's address row, new or held, reads those two texts and no longer names the selected account; the app page's accounts panel shows its line only when the grant lets the app list accounts, reading "List all your accounts"; the unrendered accounts description in the capability table says the same. An accounts request that does not ask to list keeps no address row until OA-6 is answered.
 - **Answered (orchestrator, D-orch, 2026-10-17; reason: "the planner's recommendation, no UI change beyond the lane brief's budget"):** OA-1 = b: a registry refusal keeps the scope-refusal code and gets its own dApp text and History context line (D10), both quoted in the PR body as a "what ships now" the owner can flip. OA-2 = a. OA-4: the existing estimate-failure toast ships; a self-settling window is its own later plan. OA-5 = a: the connect window keeps listing registry scope rows.
 
 ## Phases (arc 1)
@@ -163,9 +164,9 @@ export function isAuthRegistryGrantCall(call: { to: unknown; selector: unknown }
 - Pass: every command exits 0; both e2e files green.
 - Layers: all unit layers; network e2e (Chrome). No e2e scenario is added: the refusals are proven at the checker, dispatcher, decode and executor seams; the two files prove the wallet's own grant and the refusal surface unchanged. No fixture, focus, window or activation change, so no Firefox twin.
 
-## Arc 2 (held until the owner picks P38-08)
+## Arc 2: Form B (P41-01 = B)
 
-Build nothing now. Both forms, costed (recon.md § The address-visibility toggle):
+Built as Form B below (D20-D22); Form A was not built. Both forms as costed before the pick (recon.md § The address-visibility toggle):
 - **Form B, listing-only (recommended on the page).** Show the address row for any accounts grant and reword it to say it controls listing: `popup/windows/capabilities/build-items.ts:125,196`, `permission-rows.ts:87-91`, `components/composite/capabilities/CapabilityDetailPanel.vue:27-30` (also aligns its `!== false` with `=== true`), `dapp-session/capability-meta.ts:39`, `packages/wallet-bridge/README.md:163,187-196`. About 30-60 lines and 8 test edits (`build-items.test.ts`, `permission-rows.test.ts`, `CapabilityDetailPanel.test.ts`, `index.test.ts:841`, `cap-window.test.ts:226` row order). New copy needs the owner's sign-off on the exact words before the arc starts. Gate: lint, typecheck, `bun run test`, smoke `cap-window` on Chrome and Firefox.
 - **Form A, binding.** Without `canGet`: refuse a NO_FROM `simulateTx` (or project its result); refuse an explicit `from` with one answer for member and non-member across `simulateTx`, `sendTx`, `createAuthWit`, `registerToken`, `grantPublicAuthwit`; move `profileTx`'s refusal ahead of account resolution. About 150-300 lines in `dispatcher.ts`, `account-resolution.ts`, `method-scope-checkers.ts`, `scope-enforcement.ts`, 20-30 test edits, and playground bundles without `canGet`. Against: refusing a NO_FROM simulation removes most of what a simulation grant is for; projecting the result fights the shape aztec.js parses.
 - Either form is its own PR against `dev`, with its own Codex loop, and carries this plan's close-out.
@@ -187,6 +188,9 @@ Ids D1-D19 belong to arc 1, D20 and up to arc 2.
 | D9 | Relaying another account's approval through `set_authorized_private` is refused as a top-level call or a discovered request; a nested relay with a witness the dApp already holds is not | refuse only when the approver is the person's account; refuse nested relays too | the pick names the grant functions; trusting a call argument adds a second rule (Opus); a nested relay obtains nothing from this wallet (final Codex pass); reopening condition: a dApp report |
 | D10 | OA-1 = b: a refusal subclass of `ScopeViolationError` (same code, same `walletErrorCode`) with its own dApp text and its own journal kind and History context line | a new code; a field on the envelope | every `instanceof ScopeViolationError` site (log level, expected-refusal list, journal) keeps working; only the envelope and the History label read the subclass |
 | D11 | `AuthRegistryRefusalError` lives beside `ScopeViolationError` in `@nulo/extension-messaging/errors`, and `walletErrorFromPayload` rebuilds it from its exact message under the scope code | keep it in wallet-bridge and match the message in the envelope; a code of its own | an executor refusal crosses the operation-result channel as `{ code, message }`, and the rebuild there is the one place every hop reads (arc review round 1, both legs); the bridge cannot be imported below it |
+| D20 | Form B in the owner's words: the address row reads "Let this app list all your accounts" / "It always knows the account you connect with." wherever the grant lets the app list (`canGet === true`), new or held; the app page's panel line shows under the same condition | show the row for every accounts grant (P38-08 B's wording) | the owner's title says the app may list, which is false for a grant without `canGet`; that case is OA-6, and the arc ships without it |
+| D21 | Remove the account naming (`heldAccounts`, from the dispatcher's `heldAccountsOf` to the window's per-selection row) | keep it unused | the owner's title names no account, so nothing reads it |
+| D22 | The panel's line follows `canGet === true`, as the dispatcher does | keep `!== false` | a grant that omits `canGet` cannot list, and the line said it could |
 
 ## Review verdicts
 

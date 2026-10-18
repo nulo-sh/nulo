@@ -475,8 +475,8 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 				["Without asking, it can", ["account-address", "simulation", "contracts"]],
 			])
 			expect(read("account-address")).toEqual({
-				title: "See Alice's address",
-				line: "",
+				title: "Let this app list all your accounts",
+				line: "It always knows the account you connect with.",
 				on: undefined,
 				flagged: false,
 				chip: undefined,
@@ -616,18 +616,6 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 		expect((await approve()).authorizationsWithoutAsking).toBe(true)
 	})
 
-	test("the address row names the one selected account, and the sentence for none or several", async () => {
-		const BOB = { address: `0x${"0b".repeat(32)}`, name: "Bob", chainId: 1 }
-		await mountWindow(firstRequest([authwitAccounts, txListed], { availableAccounts: [ALICE, BOB] }))
-		expect(w!.find("h2").text()).toBe("Accounts to share")
-		const accountRows = () => w!.findAll('[data-testid="cap-account-item"]')
-		expect(read("account-address").title).toBe("See the addresses of the accounts you share")
-		await accountRows()[1].trigger("click")
-		expect(read("account-address").title).toBe("See Bob's address")
-		await accountRows()[0].trigger("click")
-		expect(read("account-address").title).toBe("See the addresses of the accounts you share")
-	})
-
 	test("data: two rows, each with its switch; private events on any contract start Off with the chip", async () => {
 		await mountWindow(firstRequest([{ type: "data", addressBook: true, privateEvents: { contracts: "*" } }, contractsAny]))
 		expect(rowKeys()).toEqual(["address-book", "private-events", "contracts"])
@@ -728,7 +716,6 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 				existingGrants: held,
 				heldGrants: held,
 				authorizationsWithoutAsking: { broad: false },
-				heldAccounts: [{ address: ALICE.address, name: "Alice" }],
 				knownContracts: [{ address: FEE_JUICE, name: "Fee Juice" }],
 				...extra,
 			},
@@ -761,7 +748,7 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 			await openFold()
 			expect(foldGroups()).toEqual(TOOLS_FOLDED)
 			expect(fold().element.parentElement?.querySelector('[data-testid="cap-toggle"]')).toBeNull()
-			expect(readHeld("account-address").title).toBe("See Alice's address")
+			expect(readHeld("account-address").title).toBe("Let this app list all your accounts")
 			expect(readHeld("authorizations")).toEqual({
 				title: "Act for you in transactions you approve",
 				line: "Nulo signs its authorizations without asking.",
@@ -833,7 +820,6 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 			expect(w!.find("h2").text()).toBe("Accounts to share")
 			expect(w!.findAll('[data-testid="cap-toggle"]')).toHaveLength(0)
 			await w!.findAll('[data-testid="cap-account-item"]')[1].trigger("click")
-			expect(read("account-address").title).toBe("See the addresses of the accounts you share")
 			expect(foldLabel()).toBe("Already allowed · 5")
 			await openFold()
 			expect(foldGroups()).toEqual(TOOLS_FOLDED)

@@ -58,8 +58,6 @@ export type CapabilityWindowParams = {
 	consent: unknown
 	/** The dApp chain's name, which the contract-classes row names. */
 	networkName: string
-	/** The session's accounts, which the fold's address row names. */
-	heldAccounts: readonly { name?: string }[]
 }
 
 export function currentLine(row: WindowRow): SubSegment[] {
@@ -122,7 +120,7 @@ function plainRows(cap: Capability, networkName: string): PermissionRowEntry[] {
 function newAccountsRows(cap: AccountsCapability, params: CapabilityWindowParams, resulting: Capability[]): WindowRow[] {
 	const reRequested = params.reRequested.has("accounts")
 	const rows: WindowRow[] = []
-	if (cap.canGet === true) rows.push({ entry: accountAddressRow([]), capId: "accounts", isNew: true, selected: true, reRequested })
+	if (cap.canGet === true) rows.push({ entry: accountAddressRow(), capId: "accounts", isNew: true, selected: true, reRequested })
 	if (cap.canCreateAuthWit !== true || params.accountsMembershipOnly) return rows
 	const entry = authorizationsRow({ broad: coversAnyContract(resulting), noScope: !holdsCallScope(resulting) })
 	const firstGrant = !holdsCanCreateAuthWit(params.heldGrants)
@@ -193,7 +191,7 @@ function heldRows(params: CapabilityWindowParams): WindowRow[] {
 function heldEntries(cap: Capability, params: CapabilityWindowParams, broad: boolean): PermissionRowEntry[] {
 	if (cap.type === "accounts") {
 		return [
-			...(cap.canGet === true ? [accountAddressRow(params.heldAccounts)] : []),
+			...(cap.canGet === true ? [accountAddressRow()] : []),
 			...(cap.canCreateAuthWit === true ? [heldAuthorizationsEntry(params)] : []),
 		]
 	}
