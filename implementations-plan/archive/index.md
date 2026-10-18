@@ -178,6 +178,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [home-refresh](home-refresh/plan.md) — completed — the locked home-screen spec implemented as a light, reversible change
 - [hygiene](hygiene/plan.md) — completed — technical follow-ups that change no screen
 - [icons-1](icons-1/plan.md) — completed — the wallet's 58 glyphs drawn from Tabler Icons 3.49.0, generated from a pinned devDependency and drift-tested (#764)
+- [icons-2](icons-2/plan.md) — completed — the private and public marks become Tabler's filled shield and globe, and the glossary says so (#787, P52-02 J)
 - [icons-d2-1](icons-d2-1/plan.md) — completed — Direction 2 glyphs everywhere, icons.json and the Material font retired, the private and public marks as squares (#602, #590)
 - [iface-line-1](iface-line-1/plan.md) — completed — the execute window's unreadable-call lines: one short reason, `interface` dotted, the advice once per window, the glossary entry (#516)
 - [import-stage-deadlines](import-stage-deadlines/plan.md) — completed — import stage timing and console-capture fixes in the e2e suite
@@ -275,6 +276,8 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [self-pay-setup-fix](self-pay-setup-fix/plan.md) — completed — simulate and profile run as the account the dApp named
 - [send-amount-exact](send-amount-exact/plan.md) — completed — every amount path on the Send page made exact
 - [send-fee-privacy-notice](send-fee-privacy-notice/plan.md) — completed — the Send fee source follows the transfer's privacy and says so where it cannot
+- [send-fees-ux](send-fees-ux/plan.md) — completed — the sponsor forms' "Already added", "Refused before sending" for a capped app send, the app-set fee legend kept while estimating, a sponsored send queued behind an earlier one, and Send's fee card drawn as a skeleton while it reads balances
+- [send-fixes-1](send-fixes-1/plan.md) — completed — start finishes on a custom node that does not answer, a paused reset's imported accounts export as account files, the re-ask button reads Send (#498 #710; #112 held for the owner)
 - [send-followups-1](send-followups-1/plan.md) — completed — the queued cap from a like send (#412), a row for a long USD line (#408), the fee card without its dead override path (#406)
 - [send-publish-ledger](send-publish-ledger/plan.md) — completed — Send says what a send puts on the public chain
 - [send-queue-activity](send-queue-activity/plan.md) — completed — dApp sends ordered behind earlier sends, fee spender kept across restarts; send outcome states, feed surfaces; Send's amount card and keyboard reach; a queued send held to a fee cap, asked again above it
@@ -339,4 +342,5 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [authwit-intent-1](authwit-intent-1/plan.md) — completed — a dApp's inner-hash authorization intent never names the account that signs it; the Fee Juice selector pin runs only where it can compute
 - [fees-card-mode-1](fees-card-mode-1/plan.md) — completed — one fee card handed Send's or the app windows' rule book: verdicts, snapshot and two rule books as composables, template untouched (#513)
 - [service-structure-1](service-structure-1/plan.md) — completed — five page-37 refactors in four arcs: the import waiter, discovery and session holders out of `background.ts`, the balance outbox class, named fee and message parameters and one operation-trait table (#521 #545 #547 #549 #560)
+- [fee-call-match-1](fee-call-match-1/plan.md) — completed — the Fee method row reads "Private Fee Juice" only for the PrivateFPC's `pay_fee`, so an app's own fee contract reads "Set by {app}" (#796, in part; the sponsor half is OA-1)
 - [store-art-2](store-art-2/plan.md) — completed — the store captures and listing screenshots regenerated after Home's fixed hero, the type scale and the Tabler glyphs (#627); held for the owner's signature of the new set (OA-1, OA-2)

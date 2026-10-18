@@ -25,10 +25,10 @@ export const glyphSources = {
 	warning: "alert-triangle",
 	info: "info-circle",
 	lock: "lock",
-	/** A private balance: the solid square, a wall. Tabler has no balance mark. */
-	private: "filled/square",
-	/** A public balance: the same square, dashed, a fence you can see through. */
-	public: "square-dashed",
+	/** A private balance: protected. Tabler has no balance mark. */
+	private: "filled/shield",
+	/** A public balance: open to the world. */
+	public: "world",
 	more: "dots",
 	chevron: "chevron-right",
 	eye: "eye",

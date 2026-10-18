@@ -3,7 +3,6 @@ import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { describe, expect, test, vi } from "vitest"
 import { trimAddress } from "@/utils/string"
-import { humanizeMethodName } from "@/utils/tx-enrichment"
 import OperationCard from "./OperationCard.vue"
 
 const mounts = vi.hoisted(() => ({ count: 0 }))
@@ -53,7 +52,7 @@ const mountCard = (op: unknown) =>
 	mount(OperationCard, {
 		props: { op: op as never, index: 0 },
 		// The template reaches these utils through the build's auto-import; vitest registers none.
-		global: { stubs, mocks: { humanizeMethodName, trimAddress } },
+		global: { stubs, mocks: { trimAddress } },
 	})
 
 describe("windows/execute/OperationCard", () => {
@@ -65,6 +64,26 @@ describe("windows/execute/OperationCard", () => {
 			expect(row.attributes("data-call-to")).toBe("0xaaa")
 			expect(w.find("[data-testid='execute-op-call-to']").attributes("data-address")).toBe("0xaaa")
 		}
+	})
+
+	test("simulate and profile name a call by its own name: they read no call, so no name earns a movement label", () => {
+		for (const kind of ["aztec_simulateTx", "aztec_profileTx"] as const) {
+			const op = execOp(kind, "0xtoken")
+			op.exec.calls[0]!.name = "transfer_in_public"
+			const row = mountCard(op).get("[data-testid='execute-op-payload-row']")
+			expect(row.text()).toContain("Transfer In Public")
+			expect(row.text()).not.toContain("Transfer (public)")
+		}
+	})
+
+	test("a utility call's `claim` reads as Fee Juice's only on the Fee Juice contract", () => {
+		const FEE_JUICE = AztecAddress.fromNumberUnsafe(FEE_JUICE_ADDRESS).toString()
+		const ops = (to: string) => [
+			{ kind: "aztec_executeUtility", call: { to, name: "claim", selector: "0x12345678" } },
+			{ kind: "simulate_utility", contract: to, method: "claim" },
+		]
+		for (const op of ops("0xtoken")) expect(mountCard(op).text()).toMatch(/Function:\s*Claim(?! Fee Juice)/)
+		for (const op of ops(FEE_JUICE)) expect(mountCard(op).text()).toContain("Claim Fee Juice")
 	})
 
 	test("switching the kind with a new destination remounts the payload subtree", async () => {

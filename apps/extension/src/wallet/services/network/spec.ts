@@ -117,6 +117,9 @@ export function findPrimaryEndpoint(network: Network): NetworkEndpoint | undefin
 	return network.endpoints.find((e) => e.id === network.primaryEndpointId)
 }
 
+/** One identity read of the person's own node: a single request, aborted at this budget. */
+export const IDENTITY_PROBE_MS = 5_000
+
 // ── Service-thrown error message prefixes ────────────────────────────
 // Errors cross the SW↔popup wire as plain Error.message strings (custom
 // classes don't survive serialization). Callers match on prefixes.
