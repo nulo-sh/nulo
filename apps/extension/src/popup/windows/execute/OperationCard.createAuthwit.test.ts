@@ -9,6 +9,7 @@ import { describe, expect, test } from "vitest"
 import { trimAddress } from "@/utils/string"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import OperationCard from "./OperationCard.vue"
+import { shownText } from "../../../../tests/helpers/shown-text"
 
 // Wire-shaped: 0x + 64 hex, each value below the field modulus.
 const OWNER = `0x${"0a".repeat(32)}`
@@ -161,6 +162,19 @@ describe("OperationCard — aztec_createAuthWit", () => {
 		})
 		expect(decoded.findAll('[data-testid="execute-authwit-decoded-param"]')).toHaveLength(1)
 		expect(decoded.text()).not.toContain("this account")
+	})
+
+	test("an intent the wallet cannot read says why, with the window's one closing advice", () => {
+		const call = { to: TOKEN, name: "claim", selector: "0x1a2b3c4d", args: [OWNER, field(5n)] }
+		const w = mountCard(createAuthWit({ caller: DELEGATE, call }), {
+			decodedCalls: [{ kind: "undecoded", reason: "unknown-contract" }],
+		})
+		expect(shownText(w.get('[data-testid="execute-authwit-unverified-reason"]').element)).toBe(
+			"Nulo doesn't have this contract's interface.",
+		)
+		expect(w.findAll('[data-testid="execute-authwit-unverified-advice"]').map((a) => a.text())).toEqual([
+			"Check what the app says this does before approving.",
+		])
 	})
 
 	test("a standard transfer intent names its from, not the delegate or the signing account", () => {
