@@ -261,7 +261,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	})
 	private readonly queuedFeeAnswers = new QueuedFeeAnswers()
 	private readonly chainTipGate = new ChainTipGate({
-		readTip: (networkId) => this.readChainTip(networkId),
+		readTip: (networkId) => this.networkService.readChainTip(networkId),
 		sleep: abortableSleep,
 		now: () => Date.now(),
 		logDebug: (msg) => this.logDebug(msg),
@@ -577,15 +577,6 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		}
 		this.fpcService.onFpcUpdated.add(invalidateOnPrivateFpc)
 		this.fpcService.onFpcDeleted.add(invalidateOnPrivateFpc)
-	}
-
-	/** The proposed tip of the node the network's PXE syncs from (its primary endpoint), read past the
-	 *  PXE's chain guard, which would wait behind a proof, through a node that dials once and logs
-	 *  nothing. */
-	private async readChainTip(networkId: string): Promise<number> {
-		const network = await this.networkService.getNetwork(networkId)
-		const node = await this.networkService.getSingleAttemptNodeForUrl(networkInfoFrom(network).rpcUrl)
-		return Number(await node.getBlockNumber())
 	}
 
 	/** Capture the {profileId, epoch, session} fence at execution AUTHORIZATION (before the
@@ -972,7 +963,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 				return this.executeRegisterSender(operation)
 			}
 			case "register_token": {
-				return this.executeRegisterToken(operation, origin, operationTask, authorizedFence)
+				return this.executeRegisterToken(operation, origin, operationTask, authorizedFence, approval)
 			}
 			case "send_transaction": {
 				// Forward hooks so the slot buckets per-origin (grantPublicAuthwit
@@ -1080,6 +1071,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		origin: LocalTxOrigin,
 		parentTask?: WrappedTask,
 		authorizedFence?: ExecutionFence,
+		approval?: OperationApprovalEnvelope,
 	): Promise<void> {
 		// The deletion fence anchors the whole approval→commit chain: the dApp
 		// path threads the capture made AT the interaction's session
@@ -1101,14 +1093,18 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 				throw new Error("Wallet locked")
 			}
 		}
+		// A dApp's add stores the details its window showed, so a window that showed none approves nothing.
+		const shown = approval?.tokenMetadata
+		if (origin.type === OriginType.DAPP && shown === undefined) throw new Error("Token details were not shown for approval")
 		const network = await this.networkService.getNetwork(op.networkId)
 		// `getNetwork` anchors the row to the ACTIVE profile; tying it to the
 		// fence makes the write identity and the commit assert one chain.
 		if (network.profileId !== fence.profileId) throw new Error("unauthorized profile")
 
 		// Always parsed here: a popup-supplied interface would carry function
-		// mappings nothing authenticated, and they are what gets persisted.
-		const ti = await this.tokenService.parseTokenInterface(op.networkId, op.address, parentTask)
+		// mappings nothing authenticated, and they are what gets persisted. Pinned
+		// to the class the window read: an interface of another class refuses before any record.
+		const ti = await this.tokenService.parseTokenInterface(op.networkId, op.address, parentTask, shown?.classId)
 
 		if (
 			ti.getNameFn === undefined ||
@@ -1124,7 +1120,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		// tx-enrichment.ts and tx-detail-helpers.ts.
 		const opContext: OperationContext =
 			origin.type === OriginType.DAPP ? { origin: "dapp", dappOrigin: origin.name ?? "dApp" } : { origin: "popup" }
-		await this.tokenService.addTokenAuthorized(fence, fence.profileId, op.networkId, op.accountAddress, ti, opContext)
+		const expected = shown && { name: shown.name, symbol: shown.symbol, decimals: shown.decimals }
+		await this.tokenService.addTokenAuthorized(fence, fence.profileId, op.networkId, op.accountAddress, ti, opContext, expected)
 	}
 
 	/** `fence` absent ⇒ captured now, which is right only for a caller that

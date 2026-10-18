@@ -44,19 +44,9 @@ import SendTxSummary from "./SendTxSummary.vue"
 import { humanizeOperationKind, safeWire } from "./humanize"
 import type { FeePayerPick } from "./fee-figure"
 import type { DraftAztecSendTxOperation, DraftSendTransactionOperation, DraftUIOperation } from "./types"
-import {
-	type CallSurface,
-	type CallerContext,
-	type WireCall,
-	authwitTitle,
-	callName,
-	callSurface,
-	rowTitle,
-	tokenAt,
-	wire,
-} from "./call-surface"
+import { type CallSurface, type CallerContext, type WireCall, authwitTitle, callSurface, rowTitle, tokenAt, wire } from "./call-surface"
 import { trimAddress } from "@/utils/string"
-import { humanizeMethodName } from "@/utils/tx-enrichment"
+import { callTitle } from "@/utils/tx-enrichment"
 import { isEmbeddedFeePayment } from "./operation-validation"
 import { grantContentsOf } from "./display-calls"
 
@@ -139,6 +129,7 @@ const sendTxCalls = (op: DraftAztecSendTxOperation): { call: WireCall; surface: 
 	return (op.exec.calls as WireCall[]).map((call, j) => ({ call, surface: callSurface(ctx, call, decodedAt(j), isToken(call.to)) }))
 }
 const sendTxRows = computed(() => (props.op.kind === "aztec_sendTx" ? sendTxCalls(props.op) : []))
+const appName = computed(() => safeWire(props.dapp?.name, 64) || "the app")
 
 /** Only a contract the wallet registered as a token gets the transfer/mint vocabulary. */
 const isToken = (contract: unknown): boolean => tokenAt(props.tokens, props.op.network?.chainId, contract) !== undefined
@@ -403,12 +394,14 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 				:class="$style.op_fee_set"
 			>
 				<Icon name="square-check" size="14" color="green" />
-				<Flex direction="column" gap="6" :class="$style.fee_lines">
-					<Text variant="body" color="secondary" data-testid="execute-op-app-legend">
+				<Flex direction="column" :class="$style.fee_lines">
+					<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate">
+						<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-name">{{ appName }}</Text>
+					</AppFeeLine>
+					<Text v-else variant="body" color="secondary" height="150" data-testid="execute-op-app-legend">
 						Fee payment method set by
-						<Text variant="name" color="primary" :class="$style.name_size">{{ safeWire(dapp?.name, 64) || 'the app' }}</Text>
+						<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-name">{{ appName }}</Text>
 					</Text>
-					<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate" />
 				</Flex>
 			</Flex>
 			<!-- Mounted with the row: a region created with its text in place may go unannounced. -->
@@ -537,7 +530,7 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 			</Flex>
 			<Flex :class="$style.prop">
 				<Text variant="label-section" color="secondary">Function:</Text>
-				<Text variant="meta" color="primary">{{ humanizeMethodName(safeWire(op.method, 64)) }}</Text>
+				<Text variant="meta" color="primary">{{ callTitle(safeWire(op.method, 64), wire(op.contract, 80), false) }}</Text>
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'aztec_getContractClassMetadata'">
@@ -577,7 +570,7 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 						variant="body"
 						color="primary"
 					>
-						<Text variant="meta">{{ humanizeMethodName(safeWire(call.name ?? call.selector, 64), wire(call.to, 80)) }}</Text>
+						<Text variant="meta">{{ callTitle(safeWire(call.name ?? call.selector, 64), wire(call.to, 80), false) }}</Text>
 						<Text color="secondary"> on </Text>
 						<AddressDisplay :address="call.to" data-testid="execute-op-call-to" />
 					</Text>
@@ -592,7 +585,7 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 			<Flex :class="$style.prop">
 				<Text variant="label-section" color="secondary">Function:</Text>
 				<Text variant="meta" color="primary">
-					{{ humanizeMethodName(safeWire(op.call.name ?? op.call.selector.toString(), 64)) }}
+					{{ callTitle(safeWire(op.call.name ?? op.call.selector.toString(), 64), wire(op.call.to, 80), false) }}
 				</Text>
 			</Flex>
 		</template>
@@ -625,7 +618,7 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 					</Flex>
 					<Flex :class="$style.prop">
 						<Text variant="label-section" color="secondary">Function:</Text>
-						<Text variant="meta" color="primary" data-testid="execute-authwit-function">{{ callName(s.call, s.args) }}</Text>
+						<Text variant="meta" color="primary" data-testid="execute-authwit-function">{{ rowTitle(s.call, s.args) }}</Text>
 					</Flex>
 					<Flex data-testid="execute-authwit-args" direction="column" gap="4" :class="$style.group">
 						<Text variant="label-section" color="secondary">Arguments</Text>
@@ -679,10 +672,12 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 	background: var(--nulo-surface-low);
 }
 
-/* The 1 px sets the first line's text on the icon's centre. */
+/* Sets the first line's text on the icon's centre: 1.5 leading puts 3 px over it. An app's name may
+ * be 64 characters with no break in them. */
 .fee_lines {
 	min-width: 0;
-	padding-top: 1px;
+	margin-top: -2px;
+	overflow-wrap: anywhere;
 }
 
 /* A label on its own line above a full-width stack, so nothing hangs off the right-aligned value column. */

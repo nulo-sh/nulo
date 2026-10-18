@@ -4,6 +4,7 @@ import { clickByTestId, test, openPopup, waitForHash } from "./fixtures/extensio
 import { clickNavTab, getAccountAddress, navigateToSettings, openDropdown, openHoldings, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { readActivityScope, seedTransaction } from "./helpers/activity-seeds"
 import { tabAround } from "./helpers/pointer-probes"
+import { pollUntil } from "./fixtures/poll"
 
 test("settings page shows all sections", async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)
@@ -76,11 +77,37 @@ test("back from a Settings page lands where Settings was left, and the page it o
 	await page.waitForSelector('[data-testid="settings-developer-page"]', { visible: true, timeout: 5_000 })
 	expect(await page.$eval('[data-testid="settings-developer-page"]', (el) => el.scrollTop)).toBe(0)
 
+	// Only a style engine starts a transition: count the compact bar's opacity runs from here on.
+	await page.evaluate(() => {
+		const w = window as unknown as { barFades: number }
+		w.barFades = 0
+		document.addEventListener(
+			"transitionrun",
+			(e) => {
+				const bar = (e.target as Element).querySelector(':scope > [data-testid="page-title-bar"]')
+				if (bar && e.propertyName === "opacity") w.barFades++
+			},
+			true,
+		)
+	})
+	const barFades = () => page.evaluate(() => (window as unknown as { barFades: number }).barFades)
+	const barOpacity = () =>
+		page.$eval('[data-testid="page-title-bar"]', (el) => (el.parentElement ? getComputedStyle(el.parentElement).opacity : ""))
+
 	await clickByTestId(page, "subpage-back")
 	await waitForHash(page, "#/popup/settings")
 	await page.waitForSelector('[data-testid="settings-page"]', { visible: true, timeout: 5_000 })
 	const back = await page.$eval('[data-testid="settings-page"]', (el) => el.scrollTop)
 	expect(Math.abs(back - left), `left at ${left}, back at ${back}`).toBeLessThanOrEqual(1)
+	await pollUntil(barOpacity, (o) => o === "1", { label: "compact bar shown on return", timeoutMs: 5_000, intervalMs: 50 })
+	await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+	expect(await barFades(), "the return draws the compact bar with no fade").toBe(0)
+
+	await page.$eval('[data-testid="settings-page"]', (el) => {
+		el.scrollTop = 0
+	})
+	await pollUntil(barFades, (n) => n > 0, { label: "a real scroll fades the bar", timeoutMs: 5_000, intervalMs: 50 })
+	expect(await barFades()).toBe(1)
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
@@ -130,7 +157,7 @@ async function dragSelect(page: Page, from: Point, to: Point): Promise<string> {
 const textOf = (page: Page, testid: string) => page.$eval(`[data-testid="${testid}"]`, (el) => (el as HTMLElement).innerText.trim())
 const lower = (text: string) => text.toLowerCase()
 
-test("a drag selects the text around a control and none of the control's own but the header's address, which a click still copies whole: the nav, the header's buttons, a toggle, a dropdown, list rows", async ({
+test("a drag selects the text around a control and none of the control's own but the header's address, which a click still copies whole: the nav, the header's buttons, a toggle, a dropdown, list rows; a drag inside About's version line copies nothing", async ({
 	registeredExtension,
 }) => {
 	const page = await openPopup(registeredExtension)
@@ -218,6 +245,7 @@ test("a drag selects the text around a control and none of the control's own but
 	await waitForHash(page, "#/popup/settings")
 	await navigateToSettings(page, "about")
 	await page.waitForSelector('[data-testid="legal-about-accepted"]', { visible: true, timeout: 10_000 })
+
 	await page.$eval('[data-testid="legal-about-group"]', (group) => group.firstElementChild?.scrollIntoView({ block: "nearest" }))
 	const overLinks = await dragSelect(
 		page,
@@ -239,6 +267,23 @@ test("a drag selects the text around a control and none of the control's own but
 	expect(overLegal).toContain(await textOf(page, "legal-about-accepted"))
 	expect(overLegal).toContain(await textOf(page, "legal-about-note"))
 	for (const row of ["terms of use", "privacy policy", "open-source licences"]) expect(lower(overLegal)).not.toContain(row)
+
+	// A version line copies on a click, never on the click that ends a drag inside it. Last, as the
+	// copy's toast covers the foot of the page.
+	await page.$eval('[data-testid="about-wallet-version"]', (el) => el.scrollIntoView({ block: "center" }))
+	const copied = (await copies()).length
+	const inVersion = await dragSelect(
+		page,
+		await textEdge(page, "about-wallet-version", "first"),
+		await textEdge(page, "about-wallet-version", "last"),
+	)
+	console.log(`[select] inside the wallet version: ${JSON.stringify(inVersion)}`)
+	expect(inVersion).toContain("Wallet version")
+	expect(await copies()).toHaveLength(copied)
+	await page.evaluate(() => window.getSelection()?.removeAllRanges())
+	await clickByTestId(page, "about-wallet-version")
+	expect((await copies()).slice(copied)).toHaveLength(1)
+	expect(await textOf(page, "about-wallet-version")).toContain((await copies())[copied])
 
 	await page.evaluate(() => window.getSelection()?.removeAllRanges())
 	expect(registeredExtension.consoleErrors).toEqual([])

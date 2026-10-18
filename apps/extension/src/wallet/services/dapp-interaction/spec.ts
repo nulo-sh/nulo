@@ -18,7 +18,7 @@ import type { QueuedFeePayer } from "@nulo/wallet-core/jobs"
  *  variants, `CaipChain`, `CaipAccount`) live in `@nulo/wallet-bridge`.
  *  Re-exported here so extension consumers can keep importing them via
  *  this path. */
-export type { OperationApprovalDelta } from "./approval-delta"
+export type { OperationApprovalDelta, ShownTokenMetadata } from "./approval-delta"
 export type {
 	AztecCreateAuthWitRequest,
 	AztecExecuteUtilityRequest,

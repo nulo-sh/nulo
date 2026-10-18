@@ -153,6 +153,7 @@ declare global {
   const displaySymbol: typeof import('../utils/tx-amount').displaySymbol
   const downloadFile: typeof import('../utils/files').downloadFile
   const effectScope: typeof import('vue').effectScope
+  const endsSelection: typeof import('../utils/selection').endsSelection
   const errorLogWriters: typeof import('../composables/useFullBackupImport').errorLogWriters
   const estimateWhenClear: typeof import('../utils/estimate-when-clear').estimateWhenClear
   const feeDisplay: typeof import('../utils/fee-estimation').feeDisplay
@@ -169,7 +170,6 @@ declare global {
   const followOwnRoute: typeof import('../utils/own-window').followOwnRoute
   const forChain: typeof import('../utils/token-order').forChain
   const formatBaseUnits: typeof import('../utils/amount').formatBaseUnits
-  const formatGas: typeof import('../utils/fee-estimation').formatGas
   const formatGasBalance: typeof import('../utils/fee-estimation').formatGasBalance
   const formatSnackAmount: typeof import('../utils/snack-amount').formatSnackAmount
   const formatTransferType: typeof import('../utils/tx-enrichment').formatTransferType
@@ -379,6 +379,7 @@ declare global {
   const settingsResultTo: typeof import('../utils/settings-search').settingsResultTo
   const settingsRow: typeof import('../utils/settings-search').settingsRow
   const settleHeldAccounts: typeof import('../composables/full-backup-restore').settleHeldAccounts
+  const settledCallTitle: typeof import('../utils/tx-enrichment').settledCallTitle
   const settledReading: typeof import('../utils/tx-amount').settledReading
   const shallowReactive: typeof import('vue').shallowReactive
   const shallowReadonly: typeof import('vue').shallowReadonly
@@ -520,7 +521,7 @@ declare global {
   export type { ImportCompletionDeps, ImportCompletionOutcome } from '../composables/completeImportWithRecovery'
   import('../composables/completeImportWithRecovery')
   // @ts-ignore
-  export type { RestoreIo, StageFail, StageOutcome, RestoreScratch, ProfileRestoreClient, RunFenceClient, NetworkRestoreClient, AccountRestoreClient, TailNetwork, RestoredNetwork, RestoreData, BackupProfile, HeldScope, SliceRestoreClient, AccountStateTail, RestoreRun, AccountStateRetryContext } from '../composables/full-backup-restore'
+  export type { RestoreIo, StageFail, StageOutcome, RestoreScratch, ProfileRestoreClient, RunFenceClient, NetworkRestoreClient, AccountRestoreClient, TailNetwork, RestoredNetwork, RestoreData, BackupProfile, HeldScope, RestoredAccounts, SliceRestoreClient, AccountStateTail, RestoreRun, AccountStateRetryContext } from '../composables/full-backup-restore'
   import('../composables/full-backup-restore')
   // @ts-ignore
   export type { ImportChainSyncDeps } from '../composables/importChainSync'
@@ -911,6 +912,7 @@ declare module 'vue' {
     readonly displaySymbol: UnwrapRef<typeof import('../utils/tx-amount')['displaySymbol']>
     readonly downloadFile: UnwrapRef<typeof import('../utils/files')['downloadFile']>
     readonly effectScope: UnwrapRef<typeof import('vue')['effectScope']>
+    readonly endsSelection: UnwrapRef<typeof import('../utils/selection')['endsSelection']>
     readonly errorLogWriters: UnwrapRef<typeof import('../composables/useFullBackupImport')['errorLogWriters']>
     readonly estimateWhenClear: UnwrapRef<typeof import('../utils/estimate-when-clear')['estimateWhenClear']>
     readonly feeDisplay: UnwrapRef<typeof import('../utils/fee-estimation')['feeDisplay']>
@@ -927,7 +929,6 @@ declare module 'vue' {
     readonly followOwnRoute: UnwrapRef<typeof import('../utils/own-window')['followOwnRoute']>
     readonly forChain: UnwrapRef<typeof import('../utils/token-order')['forChain']>
     readonly formatBaseUnits: UnwrapRef<typeof import('../utils/amount')['formatBaseUnits']>
-    readonly formatGas: UnwrapRef<typeof import('../utils/fee-estimation')['formatGas']>
     readonly formatGasBalance: UnwrapRef<typeof import('../utils/fee-estimation')['formatGasBalance']>
     readonly formatSnackAmount: UnwrapRef<typeof import('../utils/snack-amount')['formatSnackAmount']>
     readonly formatTransferType: UnwrapRef<typeof import('../utils/tx-enrichment')['formatTransferType']>
@@ -1137,6 +1138,7 @@ declare module 'vue' {
     readonly settingsResultTo: UnwrapRef<typeof import('../utils/settings-search')['settingsResultTo']>
     readonly settingsRow: UnwrapRef<typeof import('../utils/settings-search')['settingsRow']>
     readonly settleHeldAccounts: UnwrapRef<typeof import('../composables/full-backup-restore')['settleHeldAccounts']>
+    readonly settledCallTitle: UnwrapRef<typeof import('../utils/tx-enrichment')['settledCallTitle']>
     readonly settledReading: UnwrapRef<typeof import('../utils/tx-amount')['settledReading']>
     readonly shallowReactive: UnwrapRef<typeof import('vue')['shallowReactive']>
     readonly shallowReadonly: UnwrapRef<typeof import('vue')['shallowReadonly']>

@@ -26,17 +26,18 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 /** Utils */
 import { DETAIL_TIME_FORMAT } from "../detail-page"
 import { balanceFormatted } from "@/utils/amount.js"
-import { displaySymbol, settledReading, txAmount } from "@/utils/tx-amount"
+import { displaySymbol, txAmount } from "@/utils/tx-amount"
 import { copyWithToast } from "@/utils/clipboard"
+import { endsSelection } from "@/utils/selection"
 import { trimAddress } from "@/utils/string"
 import {
-	callTitle,
 	getTxCategory,
 	getTxTitle,
 	getOriginLabel,
 	getPrimaryCall,
 	formatTransferType,
 	FEE_METHODS,
+	settledCallTitle,
 } from "@/utils/tx-enrichment"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { explorerDisplayName, getAccountExplorerUrl, getBlockExplorerUrl, getTransactionExplorerUrl } from "@/wallet/constants/explorers"
@@ -144,7 +145,7 @@ const userCalls = computed(() => {
 	const filtered = tx.value.calls.filter((c) => !FEE_METHODS.has(c.method))
 	return filtered.length ? filtered : tx.value.calls
 })
-const callRowTitle = (c) => callTitle(c.method, c.contract, settledReading(c, tokens.value) !== null)
+const callRowTitle = (c) => settledCallTitle(c, tokens.value)
 
 onMounted(async () => {
 	tokens.value = await tokenService.getTokens(appStore.profile.id, appStore.network.chainId)
@@ -218,7 +219,7 @@ onBeforeUnmount(() => {
 						direction="column"
 						gap="4"
 						:class="$style.address_card"
-						@click="handleCopy(transfer.from)"
+						@click="endsSelection($event) || handleCopy(transfer.from)"
 					>
 						<AddressDisplay
 							static
@@ -242,7 +243,7 @@ onBeforeUnmount(() => {
 						direction="column"
 						gap="4"
 						:class="$style.address_card"
-						@click="handleCopy(transfer.to)"
+						@click="endsSelection($event) || handleCopy(transfer.to)"
 					>
 						<AddressDisplay
 							static
@@ -313,7 +314,7 @@ onBeforeUnmount(() => {
 								:class="[$style.detail_value_aux, $style.detail_link]"
 								>{{ trimAddress(tx.block.hash, 6, 4) }}</a
 							>
-							<span v-else data-testid="tx-block-hash" @click="handleCopy(tx.block.hash)" :class="[$style.detail_value_aux, 'copyable']">
+							<span v-else data-testid="tx-block-hash" @click="endsSelection($event) || handleCopy(tx.block.hash)" :class="[$style.detail_value_aux, 'copyable']">
 								{{ trimAddress(tx.block.hash, 6, 4) }}
 							</span>
 						</Flex>
@@ -321,7 +322,7 @@ onBeforeUnmount(() => {
 
 					<Flex v-if="tx?.nonce" wide justify="between" align="center">
 						<span :class="$style.detail_key">Nonce</span>
-						<span data-testid="tx-nonce" @click="handleCopy(tx.nonce)" :class="[$style.detail_value_mono, 'copyable']">
+						<span data-testid="tx-nonce" @click="endsSelection($event) || handleCopy(tx.nonce)" :class="[$style.detail_value_mono, 'copyable']">
 							{{ trimAddress(tx.nonce, 6, 4) }}
 						</span>
 					</Flex>
@@ -340,7 +341,7 @@ onBeforeUnmount(() => {
 						:class="[$style.call_row, idx > 0 && $style.call_row_divider]"
 					>
 						<span data-testid="tx-call-method" :class="$style.call_method">{{ callRowTitle(c) }}</span>
-						<span data-testid="tx-call-contract" @click="handleCopy(c.contract)" :class="[$style.call_contract, 'copyable']">
+						<span data-testid="tx-call-contract" @click="endsSelection($event) || handleCopy(c.contract)" :class="[$style.call_contract, 'copyable']">
 							{{ trimAddress(c.contract, 6, 4) }}
 						</span>
 					</Flex>

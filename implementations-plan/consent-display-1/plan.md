@@ -1,7 +1,7 @@
 ---
 plan: consent-display-1
 tier: mid
-status: arc 1 in review (its PR against dev); arcs 2 and 3 not started
+status: arc 1 merged (#712); arc 2 in review (its PR against dev); arc 3 not started
 issues: "none: no public issue exists for this lane's items, so no PR closes one"
 driver: claude-code
 claude_model: opus
@@ -143,11 +143,13 @@ Fast layers in every phase gate: `bun run lint`, `bun run typecheck:all`, `bun r
 - Change map: `wallet/services/token/service.ts` (`buildToken`, `restoreRow`, the import title at creation and backfill).
 - Tests: `token/service.metadata.test.ts` or `service.test.ts`: a read symbol `"USD\u202eC\u200d\u0007"` and a name carrying U+202E are stored clean, and the import record's title is clean; a plain name and symbol are stored unchanged (control); `restore()` of a row carrying the same symbol stores it clean.
 - Gate: the fast layers.
+- **Done** (ebdf337c): gate green, STATUS.md.
 
 ### Arc 2, phase 3: a dApp's token add binds to the shown details
 - Change map: `dapp-interaction/approval-delta.ts`, `dapp-interaction/service.ts`, `execution/models/index.ts`, `execution/service.ts`, `token/service.ts`, `popup/windows/execute/index.vue`.
 - Tests: `execution/register-token.test.ts`: the parse carries the pin and `addTokenAuthorized` the expected values (control); a class change refuses with `PinMismatchError` and `addTokenAuthorized` is never called; no `tokenMetadata` follows OA-1's answer. `token/service.test.ts`: with `expected`, a matching read is stored (control), and one difference each in name, symbol and decimals fails the import record with nothing stored; the existing idempotency and watchdog cases, given `expected`, show a resumed matching attempt writing once without a second read, a mismatched one writing nothing, and another add's same-contract row left unchanged. `dapp-interaction/service.approval-binding.test.ts`: one refusal per malformed field class, before the claim; a well-formed one reaches the envelope. `popup/windows/execute/index.test.ts`: the approve delta carries the preview's four values; none after a failed preview (under A: Confirm disabled, beside an enabled control).
 - Gate: the fast layers, `bun run test:all`, then network `tests/e2e/network/register-token.test.ts`.
+- **Done** (ce8cc3d7; review fixes 13eb2fa3, 473a2867): gate green, plus network `type-roles-windows.test.ts`, which approves a registerToken window; the deviations are D11 to D14.
 
 ### Arc 3, phase 4: the identity line shows the full origin
 - Change map: `composables/useDappHostname.ts` → `useDappOrigin.ts` (+ test), `DappIdentityBlock.vue` (+ test), the six windows and their tests, `src/types/*.d.ts` (regenerated).
@@ -203,6 +205,10 @@ Outline B (not committed) proposed a worker snapshot by id with a 120 s life, cl
 | D8 | Arcs | two; the refusal may move to arc 1; an ask on a surface arc 1 touches blocks its release | refusal into arc 1; ask OA-1 first | **Three arcs.** Arc 1 is the refusal alone: no ask concerns discovery. Arc 2 holds all token ingestion, since the cleaning shares the import row with OA-1's message, and waits for OA-1 so it is built once. |
 | D9 | The mark's words | name the interface; cover mints | "Don't rely on these names. Check the addresses and amount" | **Draft adopted from both**; the owner decides (OA-2). |
 | D10 | Arc 1: where the refusal sits in code (tree deviation) | | | **`handleDiscovery` is the origin gate; its former body is `handleSecureDiscovery`.** The refusal as the first statement of the old body scored 16 against the cognitive budget of 15, and a suppression is barred. Both callers, the SDK callback and the unlock drain, still enter through the gate. `background.transport.test.ts`'s no-origin case now asserts the refusal at discovery on the real SDK handler, plus a plain-http tab; the key-exchange wrapper's `"unknown"` clause is kept and now unreachable. |
+| D11 | Arc 2: OA-1 and delivery (tree deviation) | | | **OA-1 = A** (P42-08: "Confirm disabled while the details are unread; Reject is the only exit."); the changed-details message ships as drafted. The branch is `consent-display-1-a2` off `origin/dev` c8a423f2, as the orchestrator named it; the plan's two doc commits were already in #712's squash. |
+| D12 | Arc 2: which commits must carry shown details | | | **Every dApp-origin `register_token`**, not only those with an envelope: a dApp's add is always confirmed, so the two sets are one today, and keying on the origin fails closed if that changes. The refusal ("Token details were not shown for approval") precedes the parse and any import record, so only the dApp sees it. `ShownTokenMetadata` and its check live beside the delta in `approval-delta.ts`; the envelope imports the type. |
+| D13 | Arc 2: the window's guard (tree deviation) | | | **One computed, `tokenMetadataUnread`, is loading or a failed preview**, read by `approve()` and `confirm-disabled`. `approve()` was at the cognitive budget (15), and a second operand made it 16; extracting the delta builder did not help, since Biome scores the closure apart. |
+| D14 | Arc 2: compare before the title | | | **The compare runs before the title backfill**, so a refused add's import row shows the address and the message, never the read nobody approved. The cleaning tests live in `token/service.test.ts`. |
 
 ## Plan review record
 
@@ -216,6 +222,12 @@ Outline B (not committed) proposed a worker snapshot by id with a 120 s life, cl
 - **Codex round 1** (gpt-6.1-sol, high, session 01a14b75) on 70057899: reject, no production bypass. Taken: the refusal asserted synchronously, the queue spied with a queued `https:` control, the reset wait, Terms, network read, notice and window spied; `vi.stubGlobal` in place of two test-only `biome-ignore` lines. Held: the wrapper's `"unknown"` clause; numeric IPv4 forms normalize to this machine.
 - **Codex round 2** (resumed) on e44ed3d2: **approve**; no new material issue across the arc; the `"unknown"` clause kept.
 - **Opus review** of 70057899: approve. Taken: an `https:` stored-session control; the orphaned flow doc block deleted. Not taken: removing the `"unknown"` clause (pre-existing, redundant, outside the arc).
+
+### Arc 2 implementation review
+
+- **Codex round 1** (gpt-6.1-sol, high, session 01a15024) on ce8cc3d7: approve. Taken: the pin comment claimed an upgrade is refused, but a PXE-held instance reports its original class (`hydratePreimage`), so it now says an interface of another class refuses; the window's doc block cut to its invariant, the computed's restating comment removed. Not taken: rewording the failed preview's "Verify the contract address before approving." (copy; OA-1 A keeps the warning): OA-6.
+- **Opus review** of ce8cc3d7 and 13eb2fa3: approve. Taken: the window's guard keys on a card with no details, which covers a read in flight and a failed one; the pin test's stub refuses only a pinned parse of another class; the hidden characters in the cleaning cases written as escapes; `packages/wallet-bridge/README.md` states the commit's contract. Not taken: a released add whose read matched can title its import record with that read and then succeed against another add's same-contract row; it needs a five-minute storage stall, and a succeeded `token_import` record renders nowhere (Home drops it, the activity feed excludes the kind). Known limit #794.
+- **Codex round 2** (resumed) on 473a2867: **approve**, no new material issue; it verified the guard, the pin test, the comments, the escapes and the README, and held the copy and the known limit settled. The loop converged in two rounds.
 
 ## Seeds
 

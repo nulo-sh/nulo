@@ -2,8 +2,10 @@
  *  button, a modified click's new tab, the measured 24px box, what sits on top of a titled span
  *  and of the row's icon, and how far apart rows sit and whether anything leaves one. */
 import type { Page } from "puppeteer"
-import { expect } from "vitest"
-import { prepareKeys, waitForNewTab } from "./fixtures/browser"
+import { expect, inject } from "vitest"
+import { TOKEN_LIST_SOURCE_KEY } from "@/e2e/chrome-storage-token-list"
+import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import { extensionUrl, interceptRpc, openScratchPage, prepareKeys, stopBackground, waitForNewTab } from "./fixtures/browser"
 import { type ExtensionContext, openPopup, test, waitForHash } from "./fixtures/extension"
 import {
 	addContact,
@@ -15,14 +17,16 @@ import {
 	seedUsdQuoteAndReload,
 	setDeveloperMode,
 	setTheme,
+	unlockAfterBackgroundDeath,
 } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
 import { shotSend } from "./fixtures/send-page"
 import { waitForPopup } from "./fixtures/popups"
-import { skipUnlessListPrices } from "./fixtures/token-list"
+import { e2eSigner, serveTokenList, signTestList, skipUnlessListPrices } from "./fixtures/token-list"
 import { readActivityScope, seedJournalRecord, seedReceipt, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
-import { pointerClick } from "./helpers/legal-drivers"
+import { createProfileAcceptingTerms, pointerClick } from "./helpers/legal-drivers"
 import { coveredAt, pressEscape, tabAround, waitForFocus } from "./helpers/pointer-probes"
+import { startStub } from "./helpers/rpc-stub"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const TX_HASH = `0x${"5e".repeat(32)}`
@@ -43,14 +47,11 @@ type Probe = {
 }
 
 const TOKEN_ROWS = `${sel("tokens-card")}, ${sel("token-seed-row")}`
+/** A default token's placeholder in any status but a terminal one. */
+const SEED_WORKING = `${sel("token-seed-row")}:not([data-status="failed"]):not([data-status="rejected"])`
 /** A token row still on its way in: a balance's first sync, a ghost row, an import's row (it leaves
- *  when the import ends), a default token's placeholder in any status but a terminal one. */
-const TOKEN_LOADING = [
-	sel("token-balance-loading"),
-	sel("tokens-skeleton-row"),
-	sel("token-import-row"),
-	`${sel("token-seed-row")}:not([data-status="failed"]):not([data-status="rejected"])`,
-].join(", ")
+ *  when the import ends), a working default's placeholder. */
+const TOKEN_LOADING = [sel("token-balance-loading"), sel("tokens-skeleton-row"), sel("token-import-row"), SEED_WORKING].join(", ")
 
 /** A release artifact seeds the default tokens against the launch's stand-in node, which fails them
  *  only after the seeder's two retry waits (15 s, then 60 s) and three attempts. The tests that open
@@ -679,6 +680,79 @@ function readTwoChipRow(page: Page, hash: string): Promise<TwoChipRow> {
 	}, hash)
 }
 
+type ReceiptChip = {
+	/** The title, separator and chip on one line, with their two 6px gaps. */
+	need: number
+	/** From the text column's left edge to 10px short of the amount column. */
+	space: number
+	wrapped: boolean
+	gaps: { titleToSep: number; sepToChip: number }
+	/** The chip's left edge and the separator's right edge, each from the title row's clipping edge. */
+	chipLeft: number
+	sepRight: number
+	/** From the title's bottom to the wrapped chip's top. */
+	rowGap: number
+}
+
+/** The page's one receipt: its kind chip beside its title, or under it where the line has no room. */
+function readReceiptChip(page: Page): Promise<ReceiptChip> {
+	return page.evaluate(() => {
+		const row = document.querySelector('[data-testid="tx-incoming-card"]')
+		const ids = [
+			"activity-title",
+			"tx-incoming-kind-chip",
+			"tx-incoming-kind-sep",
+			"activity-title-row",
+			"activity-text",
+			"activity-amount-col",
+		]
+		const els = ids.map((id) => row?.querySelector(`[data-testid="${id}"]`))
+		if (els.some((el) => !el)) throw new Error("the receipt row is incomplete")
+		const [title, chip, sep, clip, text, amountCol] = els.map((el) => (el as Element).getBoundingClientRect())
+		return {
+			need: title.width + 6 + sep.width + 6 + chip.width,
+			space: amountCol.left - 10 - text.left,
+			wrapped: chip.top >= title.bottom - 0.5,
+			gaps: { titleToSep: sep.left - title.right, sepToChip: chip.left - sep.right },
+			chipLeft: chip.left - clip.left,
+			sepRight: sep.right - clip.left,
+			rowGap: chip.top - title.bottom,
+		}
+	})
+}
+
+function expectReceiptWrapped(chip: ReceiptChip, where: string): void {
+	expect(chip.wrapped, where).toBe(true)
+	expect(chip.need, where).toBeGreaterThan(chip.space)
+	expect(Math.abs(chip.chipLeft), where).toBeLessThanOrEqual(0.5)
+	expect(chip.sepRight, where).toBeLessThanOrEqual(0)
+	expect(chip.rowGap, where).toBeCloseTo(4, 0)
+}
+
+/** A row that fits stays as it was: the receipt keeps its one line from the first popup width that holds
+ *  it, and wraps a pixel short of it. The popup's body is `--base-width` wide whatever the viewport. */
+async function expectReceiptFitsFromItsWidth(page: Page): Promise<void> {
+	const short = await readReceiptChip(page)
+	const fits = 360 + Math.ceil(short.need - short.space)
+	for (const width of [fits, fits - 1]) {
+		await page.setViewport({ width, height: 600 })
+		await page.evaluate((w: number) => document.documentElement.style.setProperty("--base-width", `${w}px`), width)
+		await settledRows(page, 5)
+		const receipt = await readReceiptChip(page)
+		console.log(`[rows] History at ${width}px: the receipt ${JSON.stringify(receipt)}`)
+		if (width === fits - 1) {
+			expectReceiptWrapped(receipt, `${width}px`)
+			continue
+		}
+		expect(receipt.wrapped).toBe(false)
+		expect(receipt.need).toBeLessThanOrEqual(receipt.space)
+		expect(receipt.gaps.titleToSep).toBeCloseTo(6, 1)
+		expect(receipt.gaps.sepToChip).toBeCloseTo(6, 1)
+	}
+	await page.evaluate(() => document.documentElement.style.removeProperty("--base-width"))
+	await page.setViewport({ width: 360, height: 600 })
+}
+
 /** Opens a surface by its hash and waits for the rows on screen to leave: the hash changes before
  *  the router swaps the page, so the old page's rows could pass for the new page's. */
 async function openSurface(page: Page, hash: string): Promise<void> {
@@ -695,7 +769,7 @@ const SURFACES = [
 	{ name: "History", hash: "#/popup/activity" },
 ]
 
-test("rows sit 10px apart on Home, a token's page and History, the date heading 12px above the first; a dApp's long title, a nine-digit amount, a dApp's large transfer with its app chip under its direction and a priced receipt stay inside their rows and never cover an amount, dark and light", async ({
+test("rows sit 10px apart on Home, a token's page and History, the date heading 12px above the first; a dApp's long title, a nine-digit amount, a dApp's large transfer with its app chip under its direction and a priced receipt stay inside their rows and never cover an amount, the receipt's chip under its title only where it does not fit, dark and light", async ({
 	listedExtensionPerTest,
 	skip,
 }) => {
@@ -721,9 +795,10 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 		dapp: DAPP_NAME,
 	})
 	await seedTokenRow(page, scope, RECEIPT_TOKEN_ID)
+	// "Received privately" beside "+28.43950" has no room at 360px.
 	await seedReceipt(page, scope, {
 		tokenId: RECEIPT_TOKEN_ID,
-		amount: "4200000",
+		amount: "28439501",
 		uniqueNoteHash: `0x${"5c".repeat(32)}`,
 		at: now - 3_000,
 	})
@@ -752,6 +827,9 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 			expect(large.chip.gap).toBeCloseTo(CHIP_ROW_GAP, 0)
 			expect(large.chip.left).toBeCloseTo(0, 0)
 			expect(large.chip.width).toBeCloseTo(APP_CHIP_CAP, 0)
+			const receipt = await readReceiptChip(page)
+			console.log(`[rows] ${theme}, ${surface.name}: the receipt ${JSON.stringify(receipt)}`)
+			expectReceiptWrapped(receipt, `${theme}, ${surface.name}`)
 			if (surface.name === "History" && theme === "dark") await shotSend(page, "dapp-transfer-rows", "activity-app-chip")
 			if (surface.name !== "History") continue
 			const clearance = await page.evaluate((rowsSel: string) => {
@@ -763,6 +841,8 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 			expect(clearance).toBeCloseTo(12, 0)
 		}
 	}
+
+	await expectReceiptFitsFromItsWidth(page)
 
 	expect(listedExtensionPerTest.consoleErrors).toEqual([])
 	expect(listedExtensionPerTest.pageErrors).toEqual([])
@@ -909,7 +989,43 @@ async function expectAppValueBreaksAnywhere(page: Page, ids: { value: string; la
 	expect(app.gap).toBeGreaterThanOrEqual(16 - 0.5)
 }
 
-test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol and direction whole with its app chip cut beside them; the App value of the transaction and journal pages breaks anywhere against the box's right edge", async ({
+type MethodRow = { lines: number; overflow: number; gap: number }
+
+/** The journal page's Method row once it reads `text`: its value's line count, how far its widest line
+ *  passes the box's inner right edge, and the space between label and value. */
+async function readMethodRow(page: Page, shot: string, text: string): Promise<MethodRow> {
+	await page.waitForFunction(
+		(s: string, t: string) => document.querySelector(s)?.textContent?.trim() === t,
+		{ timeout: 15_000 },
+		sel("journal-detail-method"),
+		text,
+	)
+	await shotSend(page, shot, "journal-detail-method")
+	const row = await page.evaluate(
+		(valueSel: string, labelSel: string, boxSel: string) => {
+			const value = document.querySelector(valueSel) as HTMLElement
+			const label = document.querySelector(labelSel) as HTMLElement
+			const box = document.querySelector(boxSel) as HTMLElement
+			const style = getComputedStyle(box)
+			const inner = box.getBoundingClientRect().right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight)
+			const range = document.createRange()
+			range.selectNodeContents(value)
+			const lines = [...range.getClientRects()]
+			return {
+				lines: new Set(lines.map((r) => Math.round(r.top))).size,
+				overflow: Math.max(value.getBoundingClientRect().right, ...lines.map((r) => r.right)) - inner,
+				gap: value.getBoundingClientRect().left - label.getBoundingClientRect().right,
+			}
+		},
+		sel("journal-detail-method"),
+		sel("journal-detail-method-label"),
+		sel("journal-detail-box"),
+	)
+	console.log(`[rows] ${shot}: ${JSON.stringify(row)}`)
+	return row
+}
+
+test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol and direction whole with its app chip cut beside them; the App value of the transaction and journal pages breaks anywhere against the box's right edge; the journal page's Method value wraps 16px clear of its label", async ({
 	listedExtensionPerTest,
 }) => {
 	const page = await openPopup(listedExtensionPerTest)
@@ -969,45 +1085,145 @@ test("a dApp's long function name and host never widen Home or History, named or
 		{ value: "journal-detail-origin", label: "journal-detail-app-label", box: "journal-detail-box" },
 		JOURNAL_HOST,
 	)
+	const named = await readMethodRow(page, "journal-method-named", "Swap Exact Tokens For Tokens Supporting Fee On Transfer Tokens")
+	// The page reads its record when it mounts, so the second record is opened from another page.
+	await navigateByHash(page, "#/popup/activity")
+	await page.waitForSelector(sel("journal-detail-page"), { hidden: true, timeout: 15_000 })
+	await navigateByHash(page, `#/popup/journal/${NAMELESS_RECORD}`)
+	const nameless = await readMethodRow(page, "journal-method-nameless", "Swapexacttokensfortokenssupportingfeeontransfertokens")
+	expect(named.lines).toBeGreaterThanOrEqual(2)
+	for (const row of [named, nameless]) {
+		expect(row.overflow).toBeLessThanOrEqual(0.5)
+		expect(row.gap).toBeGreaterThanOrEqual(16 - 0.5)
+	}
 
 	expect(listedExtensionPerTest.consoleErrors).toEqual([])
 	expect(listedExtensionPerTest.pageErrors).toEqual([])
 }, 180_000)
 
+const rowHeight = (page: Page, selector: string) => page.$eval(selector, (row) => row.getBoundingClientRect().height)
+
+test.skipIf(inject("liveLeg") === true)(
+	"a default token's placeholder row, still working, stands as tall as a loaded token row",
+	{ timeout: 120_000 },
+	async ({ freshExtensionPerTest: ctx }) => {
+		const host = await serveTokenList()
+		// A node that never answers keeps the defaults working, and fails no balance read.
+		const node = await startStub(() => undefined)
+		const held = await interceptRpc(ctx.browser, ctx.extensionId, new URL(TESTNET_RPC_URL).origin, { kind: "redirect", to: node.url })
+		try {
+			host.serve(await signTestList())
+			const control = await openScratchPage(ctx.browser, ctx.extensionId)
+			const { pinned } = await e2eSigner()
+			await control.evaluate((key: string, source: unknown) => chrome.storage.session.set({ [key]: source }), TOKEN_LIST_SOURCE_KEY, {
+				url: host.url,
+				publicKey: pinned.publicKey,
+			})
+			await createProfileAcceptingTerms(ctx)
+			const seeder = await openPopup(ctx)
+			await waitForHash(seeder, "#/popup/general", 30_000)
+			await seeder.waitForSelector(SEED_WORKING, { visible: true, timeout: 30_000 })
+			const loading = await rowHeight(seeder, SEED_WORKING)
+			await shotSend(seeder, "home-token-rows-loading", "tokens-list")
+
+			const scope = await readActivityScope(seeder)
+			await seedTokenRow(seeder, scope, 1)
+			await seeder.evaluate(
+				(key: string, row: string) => chrome.storage.local.set({ [key]: row }),
+				"nulo:core:token-balances@1",
+				JSON.stringify({
+					id: 1,
+					token: 1,
+					account: scope.account,
+					profileId: scope.profileId,
+					chainId: scope.chainId,
+					contract: scope.token.contract,
+					publicBalance: "2500000",
+					privateBalance: "1500000",
+					updatedAt: Date.now(),
+				}),
+			)
+			// The balance service reads its token map only as it starts.
+			for (const open of await ctx.browser.pages()) {
+				if (open.url().startsWith(extensionUrl(ctx.extensionId, "/"))) await open.close()
+			}
+			await stopBackground(ctx)
+			const page = await openPopup(ctx)
+			await unlockAfterBackgroundDeath(page)
+			await page.waitForSelector(`${sel("tokens-card")} ${sel("token-amount")}`, { visible: true, timeout: 30_000 })
+			expect(await rowHeight(page, sel("tokens-card"))).toBeCloseTo(loading, 1)
+			await shotSend(page, "home-token-rows-loaded", "tokens-list")
+		} finally {
+			await held.stop()
+			await node.close()
+			await host.stop()
+		}
+	},
+)
+
 /** Five priced sends: more than Home's middle shows at 360 × 600 and in the 900px-tall panels. */
 const HOME_ROWS = Array.from({ length: 5 }, (_, i) => `0x${(0x71 + i).toString(16).repeat(32)}`)
 
-type HomeLayout = { heroTop: number; scrollTop: number; maxScroll: number; shadow: string; navBottom: number; viewport: number }
+/** The two pages whose hero stays over a scrolling middle; each names its parts `<page>-hero`, `-scroller`, `-scroll-shadow`. */
+type PinnedPage = "home" | "token"
+/** The token row the token page opens on: the scope's token, which every seeded row moves. */
+const TOKEN_PAGE_ID = 1
 
-function readHome(page: Page): Promise<HomeLayout> {
-	return page.evaluate(() => {
+type PinnedLayout = {
+	heroTop: number
+	scrollTop: number
+	maxScroll: number
+	shadow: string
+	navBottom: number
+	viewport: number
+}
+
+function readPinned(page: Page, kind: PinnedPage): Promise<PinnedLayout> {
+	return page.evaluate((k: string) => {
 		const q = (id: string) => document.querySelector(`[data-testid="${id}"]`) as HTMLElement
-		const scroller = q("home-scroller")
+		const scroller = q(`${k}-scroller`)
 		return {
 			heroTop: q("balance-amount").getBoundingClientRect().top,
 			scrollTop: scroller.scrollTop,
 			maxScroll: scroller.scrollHeight - scroller.clientHeight,
-			shadow: getComputedStyle(q("home-scroll-shadow")).opacity,
+			shadow: getComputedStyle(q(`${k}-scroll-shadow`)).opacity,
 			navBottom: q("bottom-nav").getBoundingClientRect().bottom,
 			viewport: window.innerHeight,
 		}
-	})
+	}, kind)
 }
 
-/** Scrolls Home's middle and waits for the scroll to land and the shadow's fade to finish. */
-async function scrollHome(page: Page, top: number, shadow: "0" | "1"): Promise<HomeLayout> {
-	await page.$eval(sel("home-scroller"), (el, y) => el.scrollTo(0, y as number), top)
+/** Scrolls the page's middle and waits for the scroll to land and the shadow's fade to finish. */
+async function scrollPinned(page: Page, kind: PinnedPage, top: number, shadow: "0" | "1"): Promise<PinnedLayout> {
+	await page.$eval(sel(`${kind}-scroller`), (el, y) => el.scrollTo(0, y as number), top)
 	await page
 		.waitForFunction(
 			(s: string, o: string) => getComputedStyle(document.querySelector(s) as Element).opacity === o,
 			{ timeout: 5_000, polling: 50 },
-			sel("home-scroll-shadow"),
+			sel(`${kind}-scroll-shadow`),
 			shadow,
 		)
 		.catch(async (error: unknown) => {
-			throw new Error(`the shadow never read ${shadow} at ${top}: ${JSON.stringify(await readHome(page))}; ${String(error)}`)
+			throw new Error(`the shadow never read ${shadow} at ${top}: ${JSON.stringify(await readPinned(page, kind))}; ${String(error)}`)
 		})
-	return readHome(page)
+	return readPinned(page, kind)
+}
+
+/** A popup draws its scrim where it is mounted, and a row's review sheet mounts in the middle: the
+ *  scrim must still cover the hero and the nav, as it does on every other page. */
+function scrimCovers(page: Page, kind: PinnedPage): Promise<{ hero: boolean; nav: boolean }> {
+	return page.$eval(sel(`${kind}-scroller`), (scroller) => {
+		const scrim = document.createElement("div")
+		scrim.style.cssText = "position: absolute; inset: 0; z-index: 400"
+		scroller.firstElementChild?.append(scrim)
+		const on = (testid: string) => {
+			const box = document.querySelector(`[data-testid="${testid}"]`)?.getBoundingClientRect()
+			return box !== undefined && document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) === scrim
+		}
+		const covers = { hero: on("balance-amount"), nav: on("bottom-nav") }
+		scrim.remove()
+		return covers
+	})
 }
 
 test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the middle still covers it; the shadow shows only once the middle has scrolled and lets a press through to the row under it; a tall panel keeps the nav at its bottom; PageDown on a row scrolls the middle", async ({
@@ -1020,29 +1236,16 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 	const scope = await readActivityScope(page, { priced: true })
 	const now = Date.now()
 	for (const [i, hash] of HOME_ROWS.entries()) await seedTransaction(page, scope, { hash, amount: "1500000", at: now - i * 1_000 })
+	await seedTokenRow(page, scope, TOKEN_PAGE_ID)
 	await seedUsdQuoteAndReload(page, scope.token.priceId)
 	await page.bringToFront()
 	await settledRows(page, HOME_ROWS.length)
 
-	const rest = await scrollHome(page, 0, "0")
+	const rest = await scrollPinned(page, "home", 0, "0")
 	console.log(`[rows] Home at rest: ${JSON.stringify(rest)}`)
-	// A popup draws its scrim where it is mounted, and a row's review sheet mounts in the middle: the
-	// scrim must still cover the hero and the nav, as it does on every other page.
-	const scrimCovers = await page.$eval(sel("home-scroller"), (scroller) => {
-		const scrim = document.createElement("div")
-		scrim.style.cssText = "position: absolute; inset: 0; z-index: 400"
-		scroller.firstElementChild?.append(scrim)
-		const on = (testid: string) => {
-			const box = document.querySelector(`[data-testid="${testid}"]`)?.getBoundingClientRect()
-			return box !== undefined && document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) === scrim
-		}
-		const covers = { hero: on("balance-amount"), nav: on("bottom-nav") }
-		scrim.remove()
-		return covers
-	})
-	expect(scrimCovers).toEqual({ hero: true, nav: true })
+	expect(await scrimCovers(page, "home")).toEqual({ hero: true, nav: true })
 	await shotSend(page, "home-rest", "home-hero")
-	const scrolled = await scrollHome(page, 200, "1")
+	const scrolled = await scrollPinned(page, "home", 200, "1")
 	console.log(`[rows] Home scrolled: ${JSON.stringify(scrolled)}`)
 	expect(scrolled.scrollTop).toBe(Math.min(200, rest.maxScroll))
 	expect(scrolled.scrollTop).toBeGreaterThan(0)
@@ -1067,7 +1270,7 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 		(band.top + band.bottom) / 2,
 	)
 	expect(target.hit).toBe(true)
-	await scrollHome(page, await page.$eval(sel("home-scroller"), (el) => el.scrollTop), "1")
+	await scrollPinned(page, "home", await page.$eval(sel("home-scroller"), (el) => el.scrollTop), "1")
 	await shotSend(page, "home-scrolled", "home-hero")
 	await page.mouse.click(target.x, (band.top + band.bottom) / 2)
 	await waitForHashPrefix(page, `#/popup/tx/${target.hash}`)
@@ -1077,8 +1280,8 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 	for (const width of [360, 480]) {
 		await page.setViewport({ width, height: 900 })
 		await settledRows(page, HOME_ROWS.length)
-		const top = await scrollHome(page, 0, "0")
-		const end = await scrollHome(page, top.maxScroll, "1")
+		const top = await scrollPinned(page, "home", 0, "0")
+		const end = await scrollPinned(page, "home", top.maxScroll, "1")
 		console.log(`[rows] Home at ${width} × 900: ${JSON.stringify({ top, end })}`)
 		expect(end.scrollTop).toBeGreaterThan(0)
 		expect(Math.abs(end.heroTop - top.heroTop)).toBeLessThanOrEqual(0.5)
@@ -1087,7 +1290,7 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 
 	await page.setViewport({ width: 360, height: 600 })
 	await settledRows(page, HOME_ROWS.length)
-	await scrollHome(page, 0, "0")
+	await scrollPinned(page, "home", 0, "0")
 	await page.$eval(`${sel("tx-card")} [data-row-target]`, (el) => (el as HTMLElement).focus())
 	const before = await page.$eval(sel("home-scroller"), (el) => el.scrollTop)
 	await page.keyboard.press("PageDown")
@@ -1099,8 +1302,21 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 			before,
 		)
 		.catch(async (error: unknown) => {
-			throw new Error(`PageDown from a row left the middle at ${before}: ${JSON.stringify(await readHome(page))}; ${String(error)}`)
+			throw new Error(
+				`PageDown from a row left the middle at ${before}: ${JSON.stringify(await readPinned(page, "home"))}; ${String(error)}`,
+			)
 		})
+
+	await navigateByHash(page, `#/popup/tokens/${TOKEN_PAGE_ID}`)
+	await page.waitForSelector(sel("token-scroller"), { visible: true, timeout: 15_000 })
+	await settledRows(page, HOME_ROWS.length)
+	const tokenTop = await scrollPinned(page, "token", 0, "0")
+	expect(tokenTop.maxScroll, `the activity must overflow at 360 × 600: ${JSON.stringify(tokenTop)}`).toBeGreaterThan(0)
+	expect(await scrimCovers(page, "token")).toEqual({ hero: true, nav: true })
+	const tokenEnd = await scrollPinned(page, "token", tokenTop.maxScroll, "1")
+	console.log(`[rows] the token page at 360 × 600: ${JSON.stringify({ tokenTop, tokenEnd })}`)
+	expect(tokenEnd.scrollTop).toBeGreaterThan(0)
+	expect(Math.abs(tokenEnd.heroTop - tokenTop.heroTop)).toBeLessThanOrEqual(0.5)
 
 	expect(listedExtensionPerTest.consoleErrors).toEqual([])
 	expect(listedExtensionPerTest.pageErrors).toEqual([])

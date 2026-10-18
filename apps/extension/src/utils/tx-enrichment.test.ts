@@ -100,6 +100,23 @@ describe("tokenMovementLabel and plainMethodName", () => {
 	})
 })
 
+describe("a dApp's function named like an Object.prototype member gets no wallet label", () => {
+	const PROTOTYPE_NAMES = ["constructor", "toString", "__proto__", "hasOwnProperty"]
+
+	test.each(PROTOTYPE_NAMES)("%s reads as its contract spells it", (name) => {
+		expect(getMethodLabel(name)).toBeNull()
+		expect(tokenMovementLabel(name)).toBeNull()
+		expect(humanizeMethodName(name)).toBe(plainMethodName(name))
+		expect(formatTransferType(name)).toBe(name)
+	})
+
+	test("constructor is title-cased; a curated name keeps its label", () => {
+		expect(humanizeMethodName("constructor")).toBe("Constructor")
+		expect(humanizeMethodName("shield")).toBe("Shield")
+		expect(humanizeMethodName("mint_to_public")).toBe("Mint (public)")
+	})
+})
+
 describe("getPrimaryCall — TxCall wrapper around pickPrimaryMethod", () => {
 	test("duplicate-name primary returns the APP call's object, not the fee claim's (index-based)", () => {
 		const calls = [
@@ -162,8 +179,31 @@ describe("getTxCategory and getTxTitle: the wallet's reading of the primary call
 	}
 
 	test.each<[string, TxCall[], "transfer" | "mint" | "tx", string]>([
-		["the wallet's own send", [call("transfer", [DAPP, field(5n)], { transfers: [sent] })], "transfer", "Transfer"],
-		["a vocabulary transfer on a listed token with its class", [call("transfer_in_private", transfer4)], "transfer", "Transfer"],
+		["the wallet's own send", [call("transfer", [DAPP, field(5n)], { transfers: [sent] })], "transfer", "Transfer (private)"],
+		[
+			"the wallet's own send through a function it was told to call by another name",
+			[call("send_tokens", [DAPP, field(5n)], { transfers: [{ ...sent, type: TransferType.Public }] })],
+			"transfer",
+			"Transfer (public)",
+		],
+		[
+			"the wallet's own send whose stored type is the enum's name",
+			[call("send_tokens", [DAPP, field(5n)], { transfers: [{ ...sent, type: "PublicToPrivate" as never }] })],
+			"transfer",
+			"Transfer to private",
+		],
+		[
+			"the wallet's own send with a type it does not know reads by its function",
+			[call("send_tokens", [DAPP, field(5n)], { transfers: [{ ...sent, type: 9 as never }] })],
+			"transfer",
+			"Send Tokens",
+		],
+		[
+			"a vocabulary transfer on a listed token with its class",
+			[call("transfer_in_private", transfer4)],
+			"transfer",
+			"Transfer (private)",
+		],
 		[
 			"the same call recorded with no class",
 			[call("transfer_in_private", transfer4, { classId: undefined })],

@@ -57,7 +57,6 @@ import { skipUnlessListPrices } from "./fixtures/token-list"
 import {
 	type ActivityScope,
 	readActivityScope,
-	seedArrivalRow,
 	seedJournalRecord,
 	seedPublicReceipt,
 	seedTokenImport,
@@ -487,7 +486,7 @@ async function expectButtons(page: Page, ...testids: ButtonTestid[]): Promise<vo
 
 /**
  * Seeds a token row, its long private balance, a quote, a transfer to an outside address in a
- * block, a public receipt the feed has seen, a send's failed record and an authwit of every kind but
+ * block, a public receipt, a send's failed record and an authwit of every kind but
  * the encoded call, then restarts the background: the balance service reads its token map only as
  * it starts. The caller holds the Testnet RPC refused, or a balance refresh writes the real zero
  * over the seed.
@@ -505,7 +504,6 @@ async function openSeededHome(ctx: ExtensionContext): Promise<{ page: Page; scop
 	await seedTokenRow(seeder, scope, 1)
 	await seedTransaction(seeder, scope, { hash: TX_HASH, amount: "1500000", to: RECIPIENT, block: BLOCK, chunkNonce: CHUNK_NONCE })
 	const receipt = await seedPublicReceipt(seeder, scope, { tokenId: 1, amount: "2500000", txHash: RECEIPT_TX_HASH })
-	await seedArrivalRow(seeder, scope)
 	await seedJournalRecord(seeder, scope, {
 		id: JOURNAL_ID,
 		tokenId: 1,

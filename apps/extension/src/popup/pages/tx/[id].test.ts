@@ -81,10 +81,11 @@ const dappMint = settled({ type: OriginType.DAPP, name: "example.dapp.io" }, [
 	{ contract: TOKEN, method: "mint_to_public", args: [ACCOUNT, field(10n ** 18n)], classId: CLASS },
 ])
 
-async function mountPage(tx: unknown, tokens: Promise<unknown[]>, stubs: Record<string, unknown> = {}) {
+async function mountPage(tx: unknown, tokens: Promise<unknown[]>, stubs: Record<string, unknown> = {}, attachTo?: HTMLElement) {
 	mocks.store.transactions = [tx]
 	mocks.getTokens.mockReturnValue(tokens)
 	const w = mount(TxDetail, {
+		attachTo,
 		global: {
 			stubs: {
 				SubPageHeader: true,
@@ -184,7 +185,14 @@ describe("the transaction page's words for a call", () => {
 		const unread = await mountPage(dappTransfer(OTHER), Promise.resolve([listed]), { SubPageHeader: header })
 		expect(words(unread)).toEqual(["Transfer In Private", "Transfer In Private"])
 		const read = await mountPage(dappTransfer(TOKEN), Promise.resolve([listed]), { SubPageHeader: header })
-		expect(words(read)).toEqual(["Transfer", "Transfer (private)"])
+		expect(words(read)).toEqual(["Transfer (private)", "Transfer (private)"])
+	})
+
+	test("the wallet's own send reads its type's label in the header and the Calls box", async () => {
+		expect(words(await mountPage(sentTransfer, Promise.resolve([listed]), { SubPageHeader: header }))).toEqual([
+			"Transfer (private)",
+			"Transfer (private)",
+		])
 	})
 
 	test('a dApp\'s `claim` off the Fee Juice contract reads "Claim" in the header and the Calls box', async () => {
@@ -219,10 +227,10 @@ describe("the transaction page's explorer links", () => {
 	}
 	const at = (w: Awaited<ReturnType<typeof mountPage>>, id: string) => w.find(`[data-testid="${id}"]`)
 
-	async function mountMined(explorer: string | null) {
+	async function mountMined(explorer: string | null, stubs: Record<string, unknown> = {}, attachTo?: HTMLElement) {
 		mocks.store.network = { chainId: CHAIN_IDS.TESTNET }
 		mocks.store.defaultExplorer = explorer
-		return mountPage(mined, Promise.resolve([listed]))
+		return mountPage(mined, Promise.resolve([listed]), stubs, attachTo)
 	}
 
 	test("the block hash and each address card open their explorer pages", async () => {
@@ -256,5 +264,19 @@ describe("the transaction page's explorer links", () => {
 		expect(mocks.copy).not.toHaveBeenCalled()
 		await at(w, "tx-to-address").element.parentElement?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
 		expect(mocks.copy).toHaveBeenCalledExactlyOnceWith(RECIPIENT, expect.any(Function), "Successfully copied")
+	})
+
+	test("a drag that selects part of the From card's address copies nothing; a click on it copies", async () => {
+		const shown = { props: ["address"], template: "<span>{{ address }}</span>" }
+		const w = await mountMined("aztecscan", { AddressDisplay: shown }, document.body)
+		const address = at(w, "tx-from-address").element
+		const text = address.firstChild as Text
+		window.getSelection()?.setBaseAndExtent(text, 2, text, 12)
+		address.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+		expect(mocks.copy).not.toHaveBeenCalled()
+		window.getSelection()?.removeAllRanges()
+		address.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+		expect(mocks.copy).toHaveBeenCalledExactlyOnceWith(ACCOUNT, expect.any(Function), "Successfully copied")
+		w.unmount()
 	})
 })

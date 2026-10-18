@@ -12,12 +12,13 @@ import { expect, test } from "vitest"
 test("base.css content is pinned (edits must be deliberate + visually re-verified)", () => {
 	const css = readFileSync(join(process.cwd(), "src/base.css"), "utf8")
 	const hash = createHash("sha256").update(css).digest("hex")
-	// Deliberate choices the hash also pins: .copyable uses cursor: pointer (copy is a drag-and-drop
+	// Deliberate choices the hash also pins: the light barrier scrim follows its text palette;
+	// .copyable uses cursor: pointer (copy is a drag-and-drop
 	// signal, wrong for click-to-copy); `* { scrollbar-width: none }` stands beside the
 	// `::-webkit-scrollbar` rule Firefox ignores, so Firefox matches Chrome; the dark palette is
 	// declared once (`:root, [theme="dark"]`), its hairline and scrim tokens at their literals' values,
 	// its --txt-danger lighter than --red so it reads 4.5:1 on a pressed row, and --btn-destructive
 	// darker than --red so the red buttons' label reads AA; `nav` stays out of the control rule because
 	// the landing's is text; line 1 carries the Apache-2.0 §4(b) header.
-	expect(hash).toBe("e76829bfe7e4d7f21cd54bba4527e1e2efc73ead3ae01bcbe49892aa7944089f")
+	expect(hash).toBe("e5e51d53ebbb6a94773cec7b6ef97571d8aed82a06fa2120d8c051de9a2e26c9")
 })

@@ -150,6 +150,14 @@ describe("composite/TransactionIncomingCard — the row, on the real layout and 
 		w.unmount()
 	})
 
+	test("the separator and the kind chip ride the group that drops under the title where the row has no room", async () => {
+		const { w } = await mountRow({ receivedLabel: "Received privately" })
+		const group = w.get('[data-testid="tx-incoming-kind-chip"]').element.parentElement as HTMLElement
+		expect(group.className).toMatch(/_trailing_/)
+		expect(group.textContent).toBe("·Received privately")
+		w.unmount()
+	})
+
 	test("`arriving` stamps the root", async () => {
 		const { w } = await mountRow({ arriving: true })
 		expect(w.find('[data-testid="tx-incoming-card"]').attributes("data-arriving")).toBe("true")

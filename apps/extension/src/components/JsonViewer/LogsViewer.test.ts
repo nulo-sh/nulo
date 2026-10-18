@@ -44,9 +44,11 @@ vi.mock("@codemirror/commands", () => ({ defaultKeymap: [] }))
 vi.mock("@codemirror/search", () => ({ searchKeymap: [] }))
 vi.mock("codemirror", () => {
 	class EditorView {
-		static scrollIntoView = () => ({})
+		static scrollIntoView = () => ({ scrollTo: true })
 		state: EditorState
-		scrollDOM = { addEventListener: vi.fn(), removeEventListener: vi.fn() }
+		scrollDOM = { addEventListener: vi.fn(), removeEventListener: vi.fn(), scrollTop: 0, scrollHeight: 0, clientHeight: 0 }
+		scrollSnapshot = () => ({ map: () => ({ snapshot: true }) })
+		requestMeasure = vi.fn()
 		// Applies document changes only: the scroll effects are stubs.
 		dispatch = vi.fn((spec: TransactionSpec) => {
 			if (spec.changes) this.state = this.state.update({ changes: spec.changes }).state
@@ -241,7 +243,7 @@ describe("LogsViewer auto-scroll around the search panel", () => {
 		view.dispatch.mockClear()
 		input.dispatchEvent(new FocusEvent("focusin", { bubbles: true, composed: true, relatedTarget: from }))
 		H.onLog.invoke(log(2))
-		const scrolled = view.dispatch.mock.calls.some(([spec]) => spec.effects)
+		const scrolled = view.dispatch.mock.calls.some(([spec]) => spec.effects?.scrollTo)
 		return { wrapper, scrolled }
 	}
 
@@ -254,6 +256,60 @@ describe("LogsViewer auto-scroll around the search panel", () => {
 	test("focus elsewhere in the editor keeps it", async () => {
 		const { wrapper, scrolled } = await focusInEditor("cm-content")
 		expect(scrolled).toBe(true)
+		wrapper.unmount()
+	})
+})
+
+describe("LogsViewer follow after a hold", () => {
+	const t = Date.now()
+	const log = (id: number): LogEntry => ({ id, timestamp: t, source: "ui", level: 1, data: [`log ${id}`] })
+
+	/** A viewer at its end, then held by a person scrolling 300px up: the scroll button shows. */
+	async function held() {
+		H.getLogs.mockResolvedValueOnce([log(1)]).mockResolvedValue([])
+		const wrapper = mountViewer()
+		await vi.advanceTimersByTimeAsync(0)
+		const view = H.editors[0] as StubView & {
+			scrollDOM: { scrollTop: number; scrollHeight: number; clientHeight: number; addEventListener: ReturnType<typeof vi.fn> }
+		}
+		const el = view.scrollDOM
+		const onScroll = el.addEventListener.mock.calls.find(([type]) => type === "scroll")?.[1] as () => void
+		const scrollTo = (top: number, height = el.scrollHeight) => {
+			Object.assign(el, { scrollTop: top, scrollHeight: height })
+			onScroll()
+		}
+		el.clientHeight = 400
+		scrollTo(600, 1_000)
+		scrollTo(300)
+		await wrapper.vm.$nextTick()
+		const followsNext = () => {
+			view.dispatch.mockClear()
+			H.onLog.invoke(log(2))
+			return view.dispatch.mock.calls.some(([spec]) => spec.effects?.scrollTo)
+		}
+		return { wrapper, scrollTo, followsNext, button: () => wrapper.find('[data-testid="logs-scroll-btn"]') }
+	}
+
+	test("a scroll that moves the view up into the end band, as a trim's restore does, keeps the hold", async () => {
+		const { wrapper, scrollTo, followsNext } = await held()
+		scrollTo(200, 619)
+		expect(followsNext()).toBe(false)
+		wrapper.unmount()
+	})
+
+	test("a scroll that moves the view down into the end band resumes the follow", async () => {
+		const { wrapper, scrollTo, followsNext } = await held()
+		scrollTo(590)
+		expect(followsNext()).toBe(true)
+		wrapper.unmount()
+	})
+
+	test("the scroll button resumes the follow when the view already rests at the end", async () => {
+		const { wrapper, scrollTo, followsNext, button } = await held()
+		scrollTo(200, 619)
+		await wrapper.vm.$nextTick()
+		await button().trigger("click")
+		expect(followsNext()).toBe(true)
 		wrapper.unmount()
 	})
 })

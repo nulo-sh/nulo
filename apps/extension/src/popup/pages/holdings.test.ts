@@ -12,6 +12,8 @@ import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/li
 const TEST_USDC = TEST_TOKENS.USDC
 let seedRows: unknown[] = []
 let fetchError: Error | undefined
+/** Set, the balance read waits on it: the list has not answered. */
+let readGate: Promise<void> | undefined
 const balanceEvents = { added: new EventHandler(), updated: new EventHandler(), deleted: new EventHandler(), connected: new EventHandler() }
 
 vi.mock("@/wallet/services/token-balance/client", () => ({
@@ -23,6 +25,7 @@ vi.mock("@/wallet/services/token-balance/client", () => ({
 			onTokenBalanceDeleted: balanceEvents.deleted,
 			onConnected: balanceEvents.connected,
 			getTokenBalances: vi.fn().mockImplementation(async () => {
+				if (readGate) await readGate
 				if (fetchError) throw fetchError
 				return seedRows
 			}),
@@ -116,6 +119,7 @@ const balanceReads = () => {
 afterEach(() => {
 	seedRows = []
 	fetchError = undefined
+	readGate = undefined
 	mockQuotes = {}
 	answerQuotes = ANSWER
 	configValues = { showFiatValues: true, incomingDustUsdThreshold: 0 }
@@ -356,6 +360,59 @@ describe("holdings page — before the first price answer", () => {
 		expect(total(w).attributes("aria-busy")).toBeUndefined()
 		expect(total(w).text()).toBe("$1,250.00")
 		expect(meta(w)).toBe("2 tokens · priced assets only")
+	})
+
+	test("while the list reads, the total is the skeleton and no count shows; the list's answer brings the count, the price answer the figure", async () => {
+		installChromeStorage()
+		let answerRead = () => {}
+		readGate = new Promise((resolve) => {
+			answerRead = resolve
+		})
+		const held: Array<(snapshot: unknown) => void> = []
+		answerQuotes = () => new Promise((resolve) => held.push(resolve))
+		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC), row("b2", "BBB", CHAIN_IDS.TESTNET)]
+		const w = await mountPage()
+		expect(skeleton(w).exists()).toBe(true)
+		expect(total(w).attributes("aria-busy")).toBe("true")
+		expect(meta(w)).toBe("")
+		expect(total(w).text()).toBe("")
+
+		answerRead()
+		await flushPromises()
+		expect(skeleton(w).exists()).toBe(true)
+		expect(meta(w)).toBe("2 tokens")
+
+		const snapshot = await ANSWER()
+		for (const resolve of held) resolve(snapshot)
+		await flushPromises()
+		expect(skeleton(w).exists()).toBe(false)
+		expect(total(w).text()).toBe("$1,250.00")
+	})
+
+	test("with fiat off, a list still reading shows no count, until its answer does", async () => {
+		installChromeStorage()
+		configValues = { showFiatValues: false, incomingDustUsdThreshold: 0 }
+		let answerRead = () => {}
+		readGate = new Promise((resolve) => {
+			answerRead = resolve
+		})
+		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET), row("b2", "BBB", CHAIN_IDS.TESTNET)]
+		const w = await mountPage()
+		expect(w.find('[data-testid="holdings-total"]').exists()).toBe(false)
+		expect(meta(w)).toBe("")
+
+		answerRead()
+		await flushPromises()
+		expect(meta(w)).toBe("2 tokens")
+	})
+
+	test("an empty list, answered, reads $0.00 and 0 tokens", async () => {
+		installChromeStorage()
+		const w = await mountPage()
+		expect(skeleton(w).exists()).toBe(false)
+		expect(total(w).text()).toBe("$0.00")
+		expect(meta(w)).toBe("0 tokens")
 	})
 
 	test("a wallet the signed list prices nothing of shows $0.00 and its count, no skeleton, while the answer is held", async () => {

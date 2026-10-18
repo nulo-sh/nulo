@@ -177,6 +177,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [home-onboarding-chrome](home-onboarding-chrome/plan.md) — completed in part — History filtered from a token page, the token page's header, onboarding's stored theme, Account State under Developer, one own window per flow, the store Send frame; the Firefox loopback permission row stopped by its probe
 - [home-refresh](home-refresh/plan.md) — completed — the locked home-screen spec implemented as a light, reversible change
 - [hygiene](hygiene/plan.md) — completed — technical follow-ups that change no screen
+- [icons-1](icons-1/plan.md) — completed — the wallet's 58 glyphs drawn from Tabler Icons 3.49.0, generated from a pinned devDependency and drift-tested (#764)
 - [icons-d2-1](icons-d2-1/plan.md) — completed — Direction 2 glyphs everywhere, icons.json and the Material font retired, the private and public marks as squares (#602, #590)
 - [iface-line-1](iface-line-1/plan.md) — completed — the execute window's unreadable-call lines: one short reason, `interface` dotted, the advice once per window, the glossary entry (#516)
 - [import-stage-deadlines](import-stage-deadlines/plan.md) — completed — import stage timing and console-capture fixes in the e2e suite
@@ -213,6 +214,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [onboarding-width-unification](onboarding-width-unification/plan.md) — completed — one onboarding page width through a single layout component
 - [origin-guard-truth](origin-guard-truth/plan.md) — completed — whether the cross-origin session guard is live, settled and pinned by a test
 - [owned-client-teardown](owned-client-teardown/plan.md) — completed — documents share one logger client instead of a private logger per service client
+- [owner-feedback-1](owner-feedback-1/plan.md) — completed — the owner's 2026-10-18 feedback: a Send's fee method, the fee units dropped, the compact title at once on Back, a fixed token hero, the landing's early-days line, the incoming chip's wrap, the app-set fee sentence (#760 #761 #762 #765 #767 #763 #766)
 - [p46-ui-1](p46-ui-1/plan.md) — completed — the four page-46 picks: a Pending chip on an unproven grant, the header chips at 11 px, three 13 px wraps made room for (#698 #651 #652 #653)
 - [package-extraction](package-extraction/plan.md) — completed — the extension monolith cut into workspace packages in dependency order
 - [parallel-e2e-isolation](parallel-e2e-isolation/plan.md) — completed — parallel network e2e runs from sibling worktrees own their ports, processes and state
@@ -273,6 +275,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [self-pay-setup-fix](self-pay-setup-fix/plan.md) — completed — simulate and profile run as the account the dApp named
 - [send-amount-exact](send-amount-exact/plan.md) — completed — every amount path on the Send page made exact
 - [send-fee-privacy-notice](send-fee-privacy-notice/plan.md) — completed — the Send fee source follows the transfer's privacy and says so where it cannot
+- [send-fees-ux](send-fees-ux/plan.md) — completed — the sponsor forms' "Already added", "Refused before sending" for a capped app send, the app-set fee legend kept while estimating, a sponsored send queued behind an earlier one, and Send's fee card drawn as a skeleton while it reads balances
 - [send-followups-1](send-followups-1/plan.md) — completed — the queued cap from a like send (#412), a row for a long USD line (#408), the fee card without its dead override path (#406)
 - [send-publish-ledger](send-publish-ledger/plan.md) — completed — Send says what a send puts on the public chain
 - [send-queue-activity](send-queue-activity/plan.md) — completed — dApp sends ordered behind earlier sends, fee spender kept across restarts; send outcome states, feed surfaces; Send's amount card and keyboard reach; a queued send held to a fee cap, asked again above it
@@ -320,6 +323,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [vue-design-system](vue-design-system/plan.md) — completed — the Vue design system and component library built first
 - [vue-router-5](vue-router-5/plan.md) — completed — the archived router plugin dropped and vue-router moved to 5
 - [vue-shell-composites](vue-shell-composites/plan.md) — completed — the duplicated Vue shell pieces that survive review extracted, and the rest recorded
+- [wallet-bugs-2](wallet-bugs-2/plan.md) — completed — seven small popup defects in one PR: label tables, the journal Method wrap, the logs follow, drag-copy, the feed's arrival tip in one attempt, the 13 px bars, the remote-code note (#714 #648 #616 #638 #579 #654 #615)
 - [wallet-error-resilience](wallet-error-resilience/plan.md) — completed — resync and retry once on stale anchors, then fail with a named error
 - [wallet-followups](wallet-followups/plan.md) — completed — account name checks, the logs window trim, settings reads after a worker restart, the balances fuzz oracle
 - [wallet-followups-2](wallet-followups-2/plan.md) — completed — Send keeps a token after a delete, every service and every line in the logs filter, a failed clear keeps logs live, the fee card's gas retry runs

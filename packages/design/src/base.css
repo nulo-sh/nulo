@@ -75,7 +75,7 @@
 	--border: rgba(74, 70, 63, 0.5);
 	--border-hovered: rgba(74, 70, 63, 0.8);
 
-	/* The light theme inherits both hairlines and every scrim but the popup's. */
+	/* The light theme inherits both hairlines and the sheet and loader scrims unchanged. */
 	--hairline-soft: rgba(74, 70, 63, 0.2);
 	--hairline-strong: rgba(74, 70, 63, 0.3);
 
@@ -144,6 +144,8 @@
 	--border-hovered: rgba(124, 116, 104, 0.55);
 
 	color-scheme: light;
+	/* Barrier copy uses the theme's text tokens, so its scrim follows the light palette. */
+	--scrim-barrier: rgba(245, 245, 247, 0.92);
 
 	--txt-primary: rgba(0, 0, 0, 88%);
 	--txt-secondary: rgba(0, 0, 0, 60%);

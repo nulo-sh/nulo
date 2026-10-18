@@ -61,6 +61,7 @@ function makeReader(responses: Array<PublicTransferPage | Error>) {
 		}),
 		getTokenClassStatus: async () => "standard",
 		getLatestBlockNumber: async () => 100,
+		getChainTipOnce: async () => 100,
 	}
 	return { reader, fetchArgs }
 }

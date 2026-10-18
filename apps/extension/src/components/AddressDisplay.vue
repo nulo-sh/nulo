@@ -3,6 +3,7 @@
 /** Utils */
 import { onMounted } from "vue"
 import { managers } from "@/utils/core"
+import { endsSelection } from "@/utils/selection"
 import { trimAddress } from "@/utils/string"
 
 /** Store */
@@ -47,7 +48,8 @@ const displayedAddress = ref("")
 const showName = ref(false)
 const showsName = computed(() => Boolean(showName.value && contactName.value))
 
-const handleClick = () => {
+const handleClick = (e) => {
+	if (endsSelection(e)) return
 	if (props.static) {
 		emit("onAddressClick")
 		return
@@ -56,7 +58,7 @@ const handleClick = () => {
 	showName.value = !showName.value
 
 	if (contactName.value) {
-		event.stopPropagation()
+		e.stopPropagation()
 	}
 
 	emit("onAddressClick")

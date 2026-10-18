@@ -141,7 +141,8 @@ const titleRef = useTemplateRef("titleRef")
 
 /** Hero visibility → compact sticky title fade */
 const heroRef = useTemplateRef("heroRef")
-const heroVisible = useHeroVisible(heroRef)
+const barRef = useTemplateRef("barRef")
+const { visible: heroVisible, settled: heroSettled } = useHeroVisible(heroRef, barRef)
 
 /** The chip leaves with the focused control, so focus moves to the title rather than the page. */
 async function clearTokenFilter() {
@@ -195,7 +196,11 @@ onBeforeUnmount(() => {
 		:data-incoming-loaded="incomingLoaded ? 'true' : undefined"
 	>
 		<!-- The hero's h1 names the page for a screen reader; this bar repeats it for sight only. -->
-		<div :class="[$style.page_title_bar, !heroVisible && $style.page_title_bar_visible]" aria-hidden="true">
+		<div
+			ref="barRef"
+			:class="[$style.page_title_bar, !heroVisible && $style.page_title_bar_visible, !heroSettled && $style.page_title_bar_instant]"
+			aria-hidden="true"
+		>
 			<span :class="$style.page_title_label" data-testid="page-title-bar">HISTORY</span>
 		</div>
 
@@ -251,6 +256,10 @@ onBeforeUnmount(() => {
 
 .page_title_bar_visible {
 	composes: page_title_bar_visible from "./tab-hero.module.css";
+}
+
+.page_title_bar_instant {
+	composes: page_title_bar_instant from "./tab-hero.module.css";
 }
 
 .page_title_label {
