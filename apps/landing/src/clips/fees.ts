@@ -22,9 +22,8 @@ function transaction(g: SVGGElement, x: number) {
 }
 
 const networkFee = scene({ fee: ["fee", 0] }, (g, at) => {
-	const { card, tag } = transaction(g, 170)
-	return (t, local) => {
-		show(card, seg(local, 0, 0.4))
+	const { tag } = transaction(g, 170)
+	return (t) => {
 		show(tag, seg(t, at.fee - 0.2, at.fee + 0.3))
 	}
 })

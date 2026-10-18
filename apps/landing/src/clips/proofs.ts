@@ -20,7 +20,7 @@ function setting(g: SVGGElement) {
 function secrets(screen: SVGGElement) {
 	const g = group(screen)
 	const key = glyph(g, "passkey", 20, 28, 56)
-	const notes = [note(g, "5.00", 104), note(g, "795.00", 104)]
+	const notes = [note(g, "5.00", 116), note(g, "795.00", 116)]
 	for (const [i, n] of notes.entries()) place(n, 100, 22 + i * 70)
 	return { g, key, notes }
 }
@@ -30,10 +30,10 @@ const onDevice = scene({ computer: ["computer", 0], network: ["network", 0] }, (
 	const mark = group(lap.screen)
 	glyph(mark, "private", 24, 60, 40)
 	text(mark, 80, 88, "PRIVATE")
-	return (t, local) => {
+	return (t) => {
 		show(lap.g, lerp(0.35, 1, seg(t, at.computer - 0.3, at.computer + 0.2)))
 		show(mark, seg(t, at.computer, at.computer + 0.4))
-		show(net.g, seg(local, 0, 0.4) * lerp(0.8, 0.4, seg(t, at.network - 0.2, at.network + 0.4)))
+		show(net.g, lerp(0.8, 0.4, seg(t, at.network - 0.2, at.network + 0.4)))
 	}
 })
 
