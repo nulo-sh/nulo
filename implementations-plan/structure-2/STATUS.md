@@ -16,3 +16,4 @@
 - 2026-10-18 arc 1 phases 3 and 4 gate (fast: lint, typecheck:all, test 13900/13900, phase files): pass.
 - 2026-10-18 arc 1 gate: test identity pass; test:all, audit:vue, check:plans pass; smoke chrome 60/62 and firefox 56/62 pass (retry 0); rendered identity chrome 64/64, firefox 64/64; Codex r1 conditional approve (fixed), r2 approve.
 - 2026-10-18 arc 1 final head: lint, typecheck:all, test:all, check:plans pass; smoke chrome 60/62 (411 s) and firefox 56/62 (553 s) at retry 0; network incoming-arrival chrome 7/7 (471 s).
+- 2026-10-18 arc 1 merged head (dev with #772): lint, typecheck:all, test:all, check:plans pass; smoke chrome 59/62 + 1 detached-element flake in home-links, rerun pass; smoke firefox 56/62 (452 s); network incoming-arrival 7/7.
