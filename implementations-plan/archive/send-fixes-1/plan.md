@@ -107,7 +107,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test` (each exi
 
 ## Post-implementation
 
-Steps 2-5 of [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `24c68cb4`: reviewer `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus review (`general-purpose`) beside round 1; one loop over the arc's diff from `dev` after phase 4; hard stop at three rounds. The orchestrator merges. Teardown: `agent-worktree done send-fixes-1 --merged` once `implementations-plan/archive/send-fixes-1/plan.md` is on `dev`.
+Steps 2-5 of [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `24c68cb4`: reviewer `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus review (`general-purpose`) beside round 1; one loop over the arc's diff from `dev` after phase 4; hard stop at three rounds. The orchestrator merges. Teardown: `agent-worktree done send-fixes-1 --merged` once `implementations-plan/archive/send-fixes-1/plan.md` is on `dev`.
 
 ## Audit verdicts
 
