@@ -31,7 +31,7 @@ const results = (w: VueWrapper) => w.findAll('[data-testid^="settings-search-res
 /**
  * A keydown on `el`; true when no handler cancelled it. Sent through `trigger`, which stamps the
  * event past Vue's attach-time guard: a raw dispatch in the mount's millisecond reaches only the
- * first Vue listener on its path (Input's), never the root's.
+ * first Vue listener on its path (the field's or the row link's), never the root's.
  */
 function key(el: Element, k: string, init: KeyboardEventInit = {}) {
 	let sent: Event | undefined
@@ -97,7 +97,8 @@ describe("results", () => {
 })
 
 describe("keys", () => {
-	// A still clock makes Vue's same-millisecond guard bite on every dispatch, not one CI run in many.
+	// A still clock puts every raw dispatch in its mount's millisecond: a helper that skips `trigger`
+	// fails every run, not one CI run in many.
 	beforeEach(() => {
 		vi.spyOn(Date, "now").mockReturnValue(Date.now())
 	})

@@ -1,8 +1,5 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
-/** Components */
-import Button from "@/components/ui/Button.vue"
-
 /**
  * Close button with optional countdown progress overlay + "Disable
  * auto-close" ghost link.
@@ -10,6 +7,9 @@ import Button from "@/components/ui/Button.vue"
  * The page owns the countdown state (`useSecretCountdown` composable);
  * this composite is purely the visual treatment.
  */
+/** Components */
+import Button from "@/components/ui/Button.vue"
+
 defineProps({
 	/** Display label like "2:00". Empty string hides the suffix. */
 	countdownLabel: { type: String, default: "" },
