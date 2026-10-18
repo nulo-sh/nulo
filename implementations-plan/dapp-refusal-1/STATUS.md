@@ -1,0 +1,5 @@
+- 2026-10-18 23:05Z planning started at dev 0c340d37; worktree adopted and registered; tier light (lane brief).
+- 2026-10-18 23:20Z recon done (one Sonnet Explore; the estimate-to-owner path traced by the driver); OA-1 A pictures captured on Chrome (scratch spec, deleted); two claims of #758 did not hold; #828 filed.
+- 2026-10-18 23:45Z plan drafted: B2 recommended, the dApp answered when the window ends (S1).
+- 2026-10-19 00:10Z Codex r1 reject (6 findings, all accepted): only the window's OK settles with the refusal (D2 revised), superseded estimates record nothing (D7); plan revised.
+- 2026-10-19 23:48Z Opus conditional approve (residuals applied); Codex r2 conditional approve (D7 ordering qualified, both orders tested); panel converged; plan committed to `dapp-refusal-1-plan`, awaiting OA-1.
