@@ -41,6 +41,6 @@ All public, built downstream of the scope check, none emits a private authorizat
 
 ## Search trail for absences
 
-- At the base, nothing under `packages/*/src` or `apps/*/src` names the registry (`grep -rniE 'AuthRegistry|auth-registry|STANDARD_AUTH|ProtocolContractAddress'`).
+- The registry's references at the base: `grep -rniE 'AuthRegistry|auth-registry|STANDARD_AUTH|ProtocolContractAddress'` over `packages/*/src`, `apps/*/src`.
 - No dApp-origin registry call anywhere: `grep -rniE 'set_authorized|set_reject_all|SetPublicAuthwit|set_authorized_private'` over `apps/playground`, `apps/extension/tests`, `packages`.
 - No pinned registry selectors: `grep -rn 'b839de91\|8955f5fc\|79a3d418'` over the tree.
