@@ -1,7 +1,7 @@
 ---
 plan: onboarding-3
 tier: mid
-status: completed (2026-10-18): one draft PR carries the arc and this close-out, held for the owner's build test; OA-1 to OA-13 wait on the owner
+status: completed (2026-10-18): one draft PR carries the arc, the owner's page 39 and 41 answers and this close-out, held for the owner's build test; OA-14 and OA-15 wait on the owner
 issues: "#588 #585 #581 #636 (one arc closes all four)"
 driver: claude-code
 claude_model: opus
@@ -23,11 +23,16 @@ post_implementation_hardening: not scheduled
   - #588, #585 (P30-01 A, P30-02 A, P30-03 B, P30-07 B, P28 B, P29 A):
     - the tab is Welcome, Terms, Create or Import, Ready;
     - Learn, Fees and Presto are gone;
-    - Passkey comes first;
-    - four step cells on every path.
+    - Passkey comes first, in the popup's New profile too (P39-13 B);
+    - the step row draws each path's cells: four on a password wallet's Create, three on a passkey wallet and on Import, whose 02 reads Import (P39-12 B).
   - P33-02 C and its Copy note: a password wallet's "Your recovery phrase" step before Ready. Settings' phrase screen gets the same numbered grid with Copy (`RecoveryPhraseGrid`, which replaces `SecretRevealCard`).
+    - On the tab, Settings' three "Keep in mind" warnings sit under the grid, then Copy beside "I saved it" (P39-18 C, P39-07 C).
+    - The third warning reads "Paper keeps the phrase off every computer; keep it somewhere safe from loss, water and fire." on both screens (P41-04 C).
+    - Settings' three columns fit an eight-letter word beside a classic 17 px scrollbar (P39-14 A, D20).
   - P33-01 D: Home's Get started card, and the urgent banner for a funded password wallet whose phrase is unsaved. Its flags are per-profile UI keys, never proof of a backup.
-  - P33-03 A: How Aztec works opens `https://nulo.sh/#see` (OA-5); the page itself is #722.
+  - P33-03 A, P39-11 A and its note: How Aztec works opens `https://nulo.sh/how-aztec-works`; the landing builds that page in #723 (#722).
+  - P39-08 F: Welcome's first line is "A wallet that keeps your balance to yourself."
+  - P39-16 B: a wallet imported from its recovery phrase starts with "Save your recovery phrase" done; a backup-file import keeps it.
   - #581, #636 (P35-02 B): the done tip is the one sentence.
   - Review: three Codex rounds (gpt-6.1-sol, high) and one Opus review. Fixed in review:
     - a locked bootstrap shows no words;
@@ -36,12 +41,12 @@ post_implementation_hardening: not scheduled
     - Home settles only after the gas read;
     - Settings' three columns fit an eight-letter word (D16, found by the PR screenshots).
   - E2E specs adjusted to the card, product unchanged: `rows.test` (the scroll probe lets the focus scroll pass) and `network/snack-placement` (clears the card through the shared `clearGetStarted`, found by the PR's CI).
-- **Dropped:** none. OA-1 to OA-13 ship their "what ships now". O8 (`Pick<GasSlice>`) was declined, with its reason under Audit verdicts.
+- **Dropped:** none. OA-1 to OA-12 ship the owner's page 39 and 41 answers; P39-09 A, P39-10 A, P39-15 A and P39-17 A were already built. OA-13 ships its "what ships now". O8 (`Pick<GasSlice>`) was declined, with its reason under Audit verdicts.
 - **Known limits:** #726 (clipboard scrub), #727 (bootstrap after Back), #728 (Full Backup's flag on a popup close), #729 (the phrase step after a lock).
 - **Open items:**
-  - #722: the landing's How Aztec works page;
+  - #722: the landing's How Aztec works page, built in #723;
   - #730: Presto's onboarding-only leftovers;
-  - OA-1 to OA-13: the owner's answers, in [OWNER-ASKS.md](OWNER-ASKS.md).
+  - OA-14 (the popup's first-run line) and OA-15 (the warnings' full stops), in [OWNER-ASKS.md](OWNER-ASKS.md).
 - **Lessons:** one promoted. On Firefox, a page's `storage.local` read from its own `onChanged` listener can return the old value ([lessons/phase-4.md](lessons/phase-4.md)).
   - It was merged into the browser-quirks entry.
   - Puppeteer's mobile-emulation entry moved to the e2e-testing skill to make room.
@@ -66,6 +71,24 @@ One arc, one PR against `dev`, opened as a **draft** with `HOLD: owner build tes
 | P33-04 B + note | Welcome keeps its two lines. Tagline pairs for the owner's next page: OA-2 (copy only). |
 | P28 B, P29 A + note | The Presto step leaves onboarding (#585's missing decline goes with it). Presto's entry points: "Make proofs faster" and Settings › Proving, where #534 already put the Firefox grant row. |
 | P28-02 A, P35-02 B | The done page's tip is "Click the puzzle icon in your browser's toolbar, then pin Nulo for quick access." alone. |
+
+Decision page 39 (signed 2026-10-17 19:03Z) answered OA-1 to OA-12, and page 41 (signed 2026-10-18 00:08Z) worded OA-12's third warning. The owner's text, verbatim:
+
+| Pick | Owner's text | What ships |
+|---|---|---|
+| P39-07 C | "Copy beside I saved it, two buttons on one row." | the tab step's row: Copy (outline), "I saved it" |
+| P39-08 F | "Pair 5." | Welcome: "A wallet that keeps your balance to yourself." / "Private by default. Sovereign by design." |
+| P39-09 A | "The card stays with the one row, Save your recovery phrase; the Hide link is gone." | as built |
+| P39-10 A | "As shipped (the rules above)." | as built |
+| P39-11 A + note | "I feel that this PR should already come with the explainer page created, and being able to watch it through cloudflare preview + already pointing at the URL in which it will be. On next release, we will release with the landing too, so this will be only pointing to something. I want to approve the explainers though." | `https://nulo.sh/how-aztec-works`; the page is #723 |
+| P39-12 B | "Three cells on those paths (Terms, Create or Import, Ready); 02 reads Import on Import; the count changes once the method is chosen." | `StepIndicator` takes a path (D18) |
+| P39-13 B | "The popup matches onboarding: Passkey first and selected." | the shared default (D19) |
+| P39-14 A | "Three columns, words shown after the password." | as built, spacing fixed for a classic scrollbar (D20) |
+| P39-15 A | "Stage an established wallet: phrase revealed, Hide tapped; Home as today." | as built (`clearGetStarted`) |
+| P39-16 B | "A wallet imported from its recovery phrase starts with the item done; a backup-file import keeps it." | the seed import marks `phraseSaved` |
+| P39-17 A | "Go on to Ready; Home's item stays and Settings shows the phrase after the password." | as built |
+| P39-18 C + note | "Settings' three Keep in mind warnings under the grid." "Though the third warning, I'd improve it. Because it is not true it's considered one of the best ways, if it's unencrypted. So it kinda contradicts itself with the second bullet point." | the warnings under the tab's grid (D22) |
+| P41-04 C | "Paper keeps the phrase off every computer; keep it somewhere safe from loss, water and fire." | the third warning on both screens |
 
 ## Issue claims that did not hold
 
@@ -164,8 +187,8 @@ The parents use `useSecretClipboardCopy` unchanged. `seed.vue` swaps `SecretReve
 **Onboarding route set.**
 - Delete `learn.vue`, `fees.vue`, `presto.vue` and `presto.test.ts`. Delete `OnboardingExplainer` and `OnboardingSkipLink`, with their tests.
 - `create.vue` (passkey), `import.vue` and `app.vue:75` go to `/onboarding/done`.
-- `StepIndicator` gets four cells: Terms, Create, Phrase, Ready (`current: 1 | 2 | 3 | 4`). Passkey and import skip from 02 to 04 (OA-6).
-- **First method (D5).** `create.vue` sets `authMethod.value = "passkey"` in setup. `AuthMethodTabs` takes `first?: "password" | "passkey"` (default `"password"`), because the two shells need different DOM order. The popup's page is unchanged (OA-7).
+- `StepIndicator` gets four cells: Terms, Create, Phrase, Ready (`current: 1 | 2 | 3 | 4`). Passkey and import skip from 02 to 04 (OA-6). Superseded by P39-12 B (D18).
+- **First method (D5).** `create.vue` sets `authMethod.value = "passkey"` in setup. `AuthMethodTabs` takes `first?: "password" | "passkey"` (default `"password"`), because the two shells need different DOM order. The popup's page is unchanged (OA-7). Superseded by P39-13 B (D19).
 
 ## Security & Adversarial Considerations
 
@@ -286,12 +309,14 @@ All signed; the PR body quotes each pick id with the owner's notes, and carries 
 
 | Surface | Change | Record |
 |---|---|---|
-| Onboarding tab | Learn, Fees and Presto leave; four step cells; Passkey first | P30-01 A, P30-03 B, P28 B; OA-6, OA-7 |
-| Onboarding phrase step | grid, Copy, "I saved it", "Do it later" | P33-02 C + note; OA-1, OA-11, OA-12 |
-| Welcome | unchanged | P33-04 B; OA-2 |
+| Onboarding tab | Learn, Fees and Presto leave; each path's step cells; Passkey first | P30-01 A, P30-03 B, P28 B; P39-12 B |
+| Onboarding phrase step | grid, three warnings, Copy beside "I saved it", "Do it later" | P33-02 C + note; P39-07 C, P39-17 A, P39-18 C, P41-04 C |
+| Welcome | first line: pair 5 | P39-08 F |
 | Ready | tip sentence alone | P35-02 B |
-| Home | Get started card; urgent banner | P30-01 A, P30-02 A, P33-01 D; OA-3, OA-4, OA-5, OA-10 |
-| Settings › Backup › Recovery Phrase | numbered grid with Copy in place of the one-line field | P33-02 C; OA-1, OA-8 |
+| Home | Get started card; urgent banner; How Aztec works opens its final address | P30-01 A, P30-02 A, P33-01 D; P39-09 A, P39-10 A, P39-11 A, P39-16 B |
+| Settings › Backup › Recovery Phrase | numbered grid with Copy under it, in place of the one-line field; the third warning reworded | P33-02 C; P39-14 A, P41-04 C |
+| Settings › Profiles › New profile | Passkey first and selected | P39-13 B |
+| Store listing captures | Home as an established wallet | P39-15 A |
 | Settings › Proving, Send | none | P29 note |
 
 ## Delivery
@@ -325,6 +350,12 @@ Outline B (local `outline-b.md`, safest-first) split the arc into two PRs: B1 (t
 | D14 | How Aztec works in e2e (implementation) | one step in `security-backup`: click the row, a tab opens, the row leaves; `nulo.sh` joins the smoke egress guard's declared refusals | no e2e (whether a tab opened after the awaited write survives the browser's popup rule is invisible to jsdom) |
 | D15 | The banner's glyph (implementation) | the warning glyph in the house warning orange, as the drawing shows | `--nulo-accent`, which is cream in the dark theme |
 | D16 | Settings' three columns at 360 px (found by the PR screenshots) | 8 px between columns, 12 px side padding, 4 px number to word: an eight-letter word fits; `security-backup` puts one in every cell and checks it stays inside, both browsers | two columns (OA-8's other option, owner's call) |
+| D17 | Copy's place once it differs per screen (P39-07 C) | the grid takes a default slot under its list; Settings slots Copy there, the tab step puts it in its button row | a prop that hides the grid's own Copy (a second way to say where Copy goes) |
+| D18 | Ready's step count (P39-12 B) | `onboarding/steps.ts`: the path rides in the history entry (`doneRoute`), parsed as an enum; an entry with none takes the wallet's type | a `?path=` query (every e2e matches `#/onboarding/done` exactly), a store (lost on reload) |
+| D19 | Passkey first in the popup (P39-13 B) | flip the shared create flow's default; `AuthMethodTabs` always orders Passkey, Password and loses `first`; three e2e helpers click Password | a second override in `new.vue` beside the one in `create.vue` |
+| D20 | The longest word beside a classic scrollbar (P39-14 A) | sides 12 → 8 px, column gap 8 → 6 px; `security-backup`'s probe reserves 17 px, checks the role is monospace, red at 2.9 px before | a jsdom component test (no layout), a smaller word role (a type change the pick does not make) |
+| D21 | The How Aztec works address (P39-11 A) | one constant, `HOW_AZTEC_WORKS_URL` | a `VITE_` override like the fee card's: CI's build-env guard allows only two, and widening it is a security-control change |
+| D22 | The warnings on two screens (P39-18 C) | one constant, `utils/recovery-phrase-warnings.ts`, rendered by each screen | an L3 component for three lines of static text |
 
 ## Audit verdicts
 
@@ -394,6 +425,15 @@ Outline B (local `outline-b.md`, safest-first) split the arc into two PRs: B1 (t
 | R2-2: "only its toast is fenced" is stale now that the flag rides the fence (`useFullBackupExport.ts:408`) | demonstrated | reworded |
 
 **Round 3** (same session, verify only): "verification passes; no unresolved material finding beyond the accepted known limits." The loop stops here.
+
+**Page 39 round 1** (2026-10-18, new Codex session, gpt-6.1-sol high, over `git diff ca862e13 fd662e42`): no P1; one P2 and three comment nits, all verified.
+
+| Finding | Evidence | Disposition |
+|---|---|---|
+| P39-R1-1: a reload mid-import, once the session opened, resumes at a bare Ready, so a password import shows four cells and "Create" | demonstrated from `app.vue:75` | the resume waits for the first navigation and keeps Import's path; `app.test.ts` covers it, red without the fix |
+| P39-R1-2: three comments narrate or carry release coordination (`useProfileCreateFlow.ts`, `RecoveryPhraseGrid.vue`'s `testId` doc, `get-started.ts`) | demonstrated | removed or trimmed |
+
+**Page 39 round 2** (same session, verify only, over 0ab5a6f7): "No remaining findings; high confidence." The loop stops here.
 
 ## Post-implementation
 

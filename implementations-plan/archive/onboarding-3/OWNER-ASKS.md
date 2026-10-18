@@ -2,6 +2,8 @@
 
 The arc builds every signed pick in full (decision pages 28, 29, 30, 33 and 35; see plan.md § Signed scope). Each ask below is a visible choice the picks do not settle. Each has a "what ships now" line: the arc builds that line, and an answer that lands before the PR opens ships with the arc. The PR stays a draft until the owner tests the build (the owner's note on P33-01). The PR's light and dark screenshots show every "what ships now" as built.
 
+**Answers.** The owner answered OA-1 to OA-12 on decision page 39 (2026-10-17 19:03Z) and OA-12's third warning on page 41 (2026-10-18 00:08Z); the same draft PR ships every answer. OA-13 ships its "what ships now". OA-14 and OA-15 came up while building the answers.
+
 ## OA-1. Where Copy sits on the phrase grid (the owner's note on P33-02)
 
 **Surface:** the onboarding phrase step and Settings › Backup › Recovery Phrase.
@@ -16,6 +18,8 @@ Copying puts the whole phrase on the clipboard in one tap, shows the toast "Reco
 
 **Recommendation: A.** It is the plainest form, and it is separate from the action that clears the reminder. **What ships now: A.**
 
+**Answered (owner, decision page 39, signed 2026-10-17 19:03Z): P39-07 = C**, "Copy beside I saved it, two buttons on one row." Ships on the tab step: Copy (outline) and "I saved it" share one row, "Do it later" under them. Settings keeps Copy under its grid, since it has no "I saved it".
+
 ## OA-2. The welcome lines: tagline pairs for the next page (the owner's note on P33-04)
 
 **Surface:** the onboarding Welcome screen. It ships unchanged: "Access the internet-native coordination layer." and "Private by default. Sovereign by design." These are copy proposals only, and nothing is built.
@@ -28,6 +32,8 @@ Copying puts the whole phrase on the clipboard in one tap, shows the toast "Reco
 
 **Recommendation: 1.** It matches nulo.sh word for word, and its second line is a promise, not a slogan. **What ships now: today's two lines.**
 
+**Answered (owner, decision page 39, signed 2026-10-17 19:03Z): P39-08 = F**, "Pair 5." Welcome reads "A wallet that keeps your balance to yourself." / "Private by default. Sovereign by design." This supersedes P33-04 B's "unchanged".
+
 ## OA-3. "Hide" on a password wallet before its phrase is saved
 
 **Surface:** Home, the Get started card. The record says the password item "cannot be hidden". Drawing D shows "Hide" on the card but does not show what Hide does while the phrase item is still on it.
@@ -39,6 +45,8 @@ Copying puts the whole phrase on the clipboard in one tap, shows the toast "Reco
 | C. No Hide until the phrase is saved | the card shows no Hide link while the phrase item is on it |
 
 **Recommendation: A.** It keeps the one place the reminder lives, and Hide still removes everything that can go. **What ships now: A.**
+
+**Answered (owner, decision page 39, signed 2026-10-17 19:03Z): P39-09 = A**, "The card stays with the one row, Save your recovery phrase; the Hide link is gone." Ships as built: before Hide the card offers Hide; after it, only the phrase row stays, with no Hide link.
 
 ## OA-4. When each item counts as done, and what "holds funds" means
 
@@ -58,6 +66,8 @@ Other answers could be "Get Fee Juice is done once tapped", "funds means tokens 
 
 **Recommendation: as shipped.**
 
+**Answered (owner, decision page 39, signed 2026-10-17 19:03Z): P39-10 = A**, "As shipped (the rules above)." No change.
+
 ## OA-5. Where "How Aztec works" opens until nulo.sh has the page
 
 **Surface:** Home, the "How Aztec works" item. P33-03 A is a nulo.sh page with the clips. That page does not exist, and the arc files an issue for the landing.
@@ -70,6 +80,8 @@ Other answers could be "Get Fee Juice is done once tapped", "funds means tokens 
 
 With A, a person who opened the item does not see it again when the page ships. **Recommendation: A.** **What ships now: A.**
 
+**Answered (owner, decision page 39, signed 2026-10-17 19:03Z): P39-11 = A, with the owner's note**, which changes the target: "I feel that this PR should already come with the explainer page created, and being able to watch it through cloudflare preview + already pointing at the URL in which it will be. On next release, we will release with the landing too, so this will be only pointing to something. I want to approve the explainers though." The item opens `https://nulo.sh/how-aztec-works`; the landing builds that page in #723, for the same release.
+
 ## OA-6. The step row on paths without the phrase step, and on Import
 
 **Surface:** the onboarding tab's step row (01 Terms, 02 Create, 03 Phrase, 04 Ready, as drawn).
@@ -78,6 +90,8 @@ With A, a person who opened the item does not see it again when the page ships. 
 - **Other option:** three cells on those paths (Terms, Create or Import, Ready), and cell 02 reads "Import" on Import. The row would then show a different count before and after the method is chosen.
 
 **Recommendation: as shipped.** The row stays the same on every screen.
+
+**Answered (owner, decision page 39, signed 2026-10-17 19:03Z): P39-12 = B**, "Three cells on those paths (Terms, Create or Import, Ready); 02 reads Import on Import; the count changes once the method is chosen." Ships: four cells on a password wallet's Create (Terms, Create, Phrase, Ready), three on a passkey wallet and on Import (01 to 03), 02 reads "Import" on Import. Terms and Create start at three, since Create opens on Passkey; choosing Password grows the row to four.
 
 ## OA-7. The popup's "New profile" page
 
@@ -88,6 +102,8 @@ With A, a person who opened the item does not see it again when the page ships. 
 
 **Recommendation:** match onboarding (Passkey first), so both places offer the same default. It ships as is until the owner says so.
 
+**Answered (owner, decision page 39, signed 2026-10-17 19:03Z): P39-13 = B**, "The popup matches onboarding: Passkey first and selected." Ships in Settings › Profiles › New profile and the popup's first-run Create.
+
 ## OA-8. The Settings phrase grid: columns, and words in the clear
 
 **Surface:** Settings › Backup › Recovery Phrase. Today, after the password, the phrase sits in a one-line field that hides the words until "Show".
@@ -96,6 +112,8 @@ With A, a person who opened the item does not see it again when the page ships. 
 - **Other options:** two columns (larger words); keep a "Show" step over the grid.
 
 **Recommendation: as shipped.**
+
+**Answered (owner, decision page 39, signed 2026-10-17 19:03Z): P39-14 = A**, "Three columns, words shown after the password." Ships as built, with one fix: with a classic 17 px scrollbar an eight-letter word ran 2.9 px past its cell, so the grid's sides went from 12 to 8 px and its column gap from 8 to 6 px. The design lead's measurement stands: words 19 to 24 and Copy sit under the Close bar until scrolled.
 
 ## OA-9. The store listing's Home capture
 
@@ -106,6 +124,8 @@ With A, a person who opened the item does not see it again when the page ships. 
 
 **Recommendation: as shipped.**
 
+**Answered (owner, decision page 39, signed 2026-10-17 19:03Z): P39-15 = A**, "Stage an established wallet: phrase revealed, Hide tapped; Home as today." Ships: `store-captures.test.ts` reveals the phrase and taps Hide before the Home capture.
+
 ## OA-10. Imported password wallets
 
 **Surface:** Home, after importing a wallet from its recovery phrase or a backup file.
@@ -114,6 +134,8 @@ With A, a person who opened the item does not see it again when the page ships. 
 - **Other option:** a wallet imported from its recovery phrase starts with the item done, since the person just typed the words.
 
 **Recommendation: the other option** (moderate confidence). The banner would otherwise tell someone who just typed their phrase that they have no backup. **What ships now: the record as written.**
+
+**Answered (owner, decision page 39, signed 2026-10-17 19:03Z): P39-16 = B**, "A wallet imported from its recovery phrase starts with the item done; a backup-file import keeps it."
 
 ## OA-11. When the phrase cannot be shown after Create
 
@@ -125,6 +147,8 @@ With A, a person who opened the item does not see it again when the page ships. 
 | B. A message on the step | "We could not show your phrase. You can save it later from Home." with Continue. These are new words. |
 
 **Recommendation: A.** The case should not happen, and the reminder already covers it. **What ships now: A.**
+
+**Answered (owner, decision page 39, signed 2026-10-17 19:03Z): P39-17 = A**, "Go on to Ready; Home's item stays and Settings shows the phrase after the password." No change.
 
 ## OA-12. A clipboard warning on the tab's phrase step
 
@@ -140,6 +164,8 @@ The wallet clears the clipboard 60 seconds after a copy, but only while the page
 
 **Recommendation: B.** Copy exists for a password manager (the owner's note), and the one place the copy outlives its page should say so. **What ships now: A.**
 
+**Answered (owner, decision page 39, signed 2026-10-17 19:03Z): P39-18 = C, with the owner's note**: "Settings' three Keep in mind warnings under the grid." "Though the third warning, I'd improve it. Because it is not true it's considered one of the best ways, if it's unencrypted. So it kinda contradicts itself with the second bullet point." **Then P41-04 = C** (decision page 41, signed 2026-10-18 00:08Z): the third warning reads exactly "Paper keeps the phrase off every computer; keep it somewhere safe from loss, water and fire." on both screens, Settings' Recovery Phrase and the tab step. The first two keep their text.
+
 ## OA-13. The password fields while "Creating…" runs
 
 **Surface:** the onboarding tab's Create form on a password wallet, from the moment the words are read until the phrase step shows (bootstrap; usually under a second, longer on a slow node). The password is cleared as soon as the words are read, so it is not held through bootstrap.
@@ -150,3 +176,21 @@ The wallet clears the clipboard 60 seconds after a copy, but only while the page
 | B. Kept | the typed dots stay until the step shows; the password stays in the page through bootstrap |
 
 **Recommendation: A.** The empty fields last as long as the button reads "Creating...", and the security section already chose to drop the password before bootstrap. **What ships now: A.**
+
+## OA-14. The popup's first-run screen keeps the old first line
+
+**Surface:** the popup's Register screen (`/popup/register`), shown when the popup opens before any profile exists. It carries the same two lines Welcome had: "Access the internet-native coordination layer." and "Private by default. Sovereign by design." P39-08 names Welcome only.
+
+- **Ships now:** unchanged, so the popup and the tab read different first lines.
+- **Other option:** the popup takes pair 5's first line too, "A wallet that keeps your balance to yourself."
+
+**Recommendation: the other option**, so one first line greets every new person. **What ships now: unchanged.**
+
+## OA-15. The warnings' full stops
+
+**Surface:** "Keep in mind" on Settings' Recovery Phrase and the tab's phrase step. The first two warnings end without a full stop, as today; the third, as P41-04 words it, ends with one.
+
+- **Ships now:** as worded, so one of the three ends with a full stop.
+- **Other options:** add a full stop to the first two, or drop the third's.
+
+**Recommendation: add a full stop to the first two**, each being a sentence. **What ships now: as worded.**
