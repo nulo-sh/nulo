@@ -84,3 +84,16 @@ Arc 1 (discovery admits secure origins only) depends on none of these: none conc
 **Recommendation: B.** The sentence then names the one action the window allows.
 
 **What ships now: A.** OA-1 A reads "The warning stays", so arc 2 leaves the copy as it is.
+
+## OA-7: "About" in the app-set fee sentence (the execute window)
+
+**Surface.** The execute window's app-set fee row. P38-03 A replaces "Fee up to X" with "About X". After the plan, P47-02 C rewrote the row as one sentence: "Fee could be up to {amount}; payment method set by {app}." Both picks hold, so arc 3 applies P38-03 A's word to P47-02's sentence.
+
+| Option | What it looks like |
+|---|---|
+| A. "About" in the one sentence | "About ~0.016 FJ (<$0.001); payment method set by Swap." While the estimate runs: "About ▭; payment method set by Swap." The priority clause after it is unchanged. |
+| B. Keep P47-02 C as merged | "Fee could be up to ~0.016 FJ (<$0.001); payment method set by Swap." The send may still cost up to 10 % more without asking. |
+
+**Recommendation: A.** The figure is an estimate the send may exceed by 10 % unasked, which "up to" denies; "About ~X" is how Send's queued readout already reads.
+
+**What ships now: A,** in arc 3, with light and dark pictures in its PR for sign-off.

@@ -209,6 +209,7 @@ Outline B (not committed) proposed a worker snapshot by id with a 120 s life, cl
 | D12 | Arc 2: which commits must carry shown details | | | **Every dApp-origin `register_token`**, not only those with an envelope: a dApp's add is always confirmed, so the two sets are one today, and keying on the origin fails closed if that changes. The refusal ("Token details were not shown for approval") precedes the parse and any import record, so only the dApp sees it. `ShownTokenMetadata` and its check live beside the delta in `approval-delta.ts`; the envelope imports the type. |
 | D13 | Arc 2: the window's guard (tree deviation) | | | **One computed, `tokenMetadataUnread`, is loading or a failed preview**, read by `approve()` and `confirm-disabled`. `approve()` was at the cognitive budget (15), and a second operand made it 16; extracting the delta builder did not help, since Biome scores the closure apart. |
 | D14 | Arc 2: compare before the title | | | **The compare runs before the title backfill**, so a refused add's import row shows the address and the message, never the read nobody approved. The cleaning tests live in `token/service.test.ts`. |
+| D15 | Arc 3: the fee row's words (tree deviation) | | | **"About" replaces "Fee could be up to" in the one sentence P47-02 C set** (#793, merged after this plan): "About {amount}; payment method set by {app}." The priority clause is unchanged. OA-7 carries both forms for sign-off in the PR. |
 
 ## Plan review record
 
