@@ -11,8 +11,10 @@ import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { extensionUrl, gotoExtensionPage, newPage, prepareClick } from "./fixtures/browser"
 import { readEditorStyles } from "./fixtures/code-editor"
-import { type ExtensionContext, test } from "./fixtures/extension"
+import { clickByTestId, type ExtensionContext, test } from "./fixtures/extension"
+import { openDropdown } from "./fixtures/helpers"
 import { pollUntil } from "./fixtures/poll"
+import { shotSend } from "./fixtures/send-page"
 
 const HOST = "logs-editor"
 /** Under one line's height: the follow's scroll to the end, give or take CodeMirror's margin. */
@@ -405,3 +407,39 @@ test("a selection at the end holds the view through the line that trims the log,
 	await expectHeld(page, line)
 	await page.close()
 }, 120_000)
+
+/** Waits until the editor shows, or no longer shows, a line holding `text`. */
+async function waitForShownLine(page: Page, text: string, shown: boolean): Promise<void> {
+	await pollUntil(
+		() =>
+			page.evaluate(
+				(id, t) =>
+					[...(document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.querySelectorAll(".cm-line") ?? [])].some((line) =>
+						(line.textContent ?? "").includes(t),
+					),
+				HOST,
+				text,
+			),
+		(has) => has === shown,
+		{ label: `the logs editor ${shown ? "showing" : "no longer showing"} ${text}`, timeoutMs: 10_000, intervalMs: 50 },
+	)
+}
+
+test("the more menu offers the CSV export and Clear logs, which empties the log and keeps it live", async ({
+	registeredExtension: ctx,
+}) => {
+	const page = await openLogs(ctx)
+	const marker = `viewer clear ${randomUUID().slice(0, 8)}`
+	await page.evaluate((m) => console.info(m), marker)
+	await waitForShownLine(page, marker, true)
+
+	await openDropdown(page, "logs-more-trigger")
+	await page.waitForSelector('[data-testid="logs-export-csv"]', { visible: true, timeout: 5_000 })
+	await page.waitForSelector('[data-testid="logs-clear"]', { visible: true, timeout: 5_000 })
+	await shotSend(page, "logs-more-menu", "logs-more-trigger")
+
+	await clickByTestId(page, "logs-clear")
+	await waitForShownLine(page, marker, false)
+	await logLines(page, 1)
+	await page.close()
+})
