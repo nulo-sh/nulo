@@ -50,12 +50,13 @@ describe("tx-detail-helpers/computeFeeSavings", () => {
 })
 
 describe("tx-detail-helpers/describeFeePaymentMethod", () => {
-	/** A recorded call as the build stores it: a canonical address, and a wallet fee call's empty arguments. */
+	/** A recorded call. Fee calls carry no arguments, so an app's look-alike differs from the
+	 *  wallet's by its address alone. */
 	const call = (contract: string, method: string, args: unknown[] = []) => ({ contract, method, args })
 	const field = (n: bigint) => `0x${n.toString(16).padStart(64, "0")}`
-	const SPONSOR = `0x${"5a".repeat(32)}`
-	const APP = `0x${"ac".repeat(32)}`
-	const APP_CALL = call(APP, "transfer_in_private", [`0x${"0c".repeat(32)}`, `0x${"0b".repeat(32)}`, field(5n), field(0n)])
+	const SPONSOR = `0x${"1a".repeat(32)}`
+	const APP = `0x${"1c".repeat(32)}`
+	const APP_CALL = call(APP, "transfer_in_private", [`0x${"15".repeat(32)}`, `0x${"16".repeat(32)}`, field(5n), field(0n)])
 
 	test("null tx returns null", () => {
 		expect(describeFeePaymentMethod(null)).toBeNull()
@@ -85,14 +86,14 @@ describe("tx-detail-helpers/describeFeePaymentMethod", () => {
 	test("an app's own `pay_fee` is the app's fee: a no-`from` call reads 'Set by …', and with no origin 'External FPC'", () => {
 		const noFrom = {
 			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
-			calls: [call(APP, "pay_fee", [field(1n)])],
+			calls: [call(APP, "pay_fee")],
 			origin: { type: OriginType.DAPP, name: "Foo" },
 		}
 		expect(describeFeePaymentMethod(noFrom)).toBe("Set by Foo")
 		expect(describeFeePaymentMethod({ ...noFrom, origin: undefined })).toBe("External FPC")
 	})
 
-	test("the person's pick is the first fee call, so an app's fee-named call after it changes nothing", () => {
+	test("the person's pick is the first fee call, so a fee call after it changes nothing", () => {
 		const dappSend = (calls: ReturnType<typeof call>[]) => ({
 			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
 			calls,
@@ -101,9 +102,9 @@ describe("tx-detail-helpers/describeFeePaymentMethod", () => {
 		expect(
 			describeFeePaymentMethod(dappSend([call(PRIVATE_FPC_ADDRESS, "pay_fee"), APP_CALL, call(APP, "sponsor_unconditionally")])),
 		).toBe("Private Fee Juice")
-		expect(describeFeePaymentMethod(dappSend([call(SPONSOR, "sponsor_unconditionally"), APP_CALL, call(APP, "pay_fee")]))).toBe(
-			"Sponsored",
-		)
+		expect(
+			describeFeePaymentMethod(dappSend([call(SPONSOR, "sponsor_unconditionally"), APP_CALL, call(PRIVATE_FPC_ADDRESS, "pay_fee")])),
+		).toBe("Sponsored")
 	})
 
 	test("External + DAPP origin → 'Set by {name}'", () => {

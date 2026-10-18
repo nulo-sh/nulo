@@ -168,7 +168,7 @@ describe("the transaction page's fee", () => {
 			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
 		})
 		const appFpc = {
-			contract: `0x${"a7".repeat(32)}`,
+			contract: `0x${"1d".repeat(32)}`,
 			method: "fee_entrypoint_private",
 			args: [field(1n), field(2n)],
 			classId: field(0xfc1n),
