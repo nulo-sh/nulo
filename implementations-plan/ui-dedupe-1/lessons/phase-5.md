@@ -21,3 +21,8 @@
 - Codex (gpt-6.1-sol, high, read-only, session `01a14c83-34c6-7d52-8135-37e147e01115`): `findings`, one P3: the hook's doc promised the dirty refetch and the keep rule unconditionally, and three page comments restated their options. Fixed in `f5c7e92f`. No behaviour regression found; Codex traced Home's defaults, Holdings, Select token and Send against base in memory.
 - Opus (general-purpose): `findings`, no behaviour difference. F1: Send's id-reuse case passed under `replace` too; it now asserts the selected token keeps its amount before the other token's row is read. F2: the parents' option choices had no page case; added below. Nits: the `mapRow` doc, a vacuous assertion in the `off` case, a test title naming a caller, D510's wording and two traces it lacked, the plan's § A5 body still naming `replaceOnAdded` (now points at D507–D509).
 - Network `send-picker` on Chrome ran during the round at `f5c7e92f` (its build finished before the mutation pass edited any file): 1/1 in 191 s.
+
+## Review round 2 and final gates (2026-10-18)
+
+- Codex, resumed: `clean`. F1 resolved, no regression, the new page cases realistic with success controls; Send's case rejects both `keep` and `replace`. Loop converged after 2 rounds.
+- `dev` merged again at `e8da7b59` (#738, #739; no A5 file in common). Final head `88da43e8`: lint, typecheck:all, test, test:all (extension 13717 passed, 5 skipped, 7 todo), check:plans; smoke retry 0 on armed builds, Chrome `rows`, `navigation`, `token-list` 19/19 in 116 s, Firefox `token-list` 2/2 in 38 s; network Chrome `send-picker` 1/1 in 268 s (prover on). No e2e scenario added.

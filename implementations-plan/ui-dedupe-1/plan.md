@@ -277,7 +277,7 @@ A pass is exit 0, with every named test green and none skipped that ran on base.
   - `SecretCountdownClose.test.ts`; the phase gate (the design package included).
   - The pixel proof: every hash equal, every control unequal.
   - Smoke on Chrome and Firefox: `security-backup`, `keyboard-guards`.
-- **A5** ✗.
+- **A5** ✓ (on the merged head 88da43e8, dev e8da7b59: lint, typecheck:all, test, test:all, check:plans; smoke retry 0 Chrome `rows`, `navigation`, `token-list` 19/19 in 116 s, Firefox `token-list` 2/2 in 38 s; network Chrome `send-picker` 1/1 in 268 s; Codex clean in round 2).
   - G-fast.
   - The suites of the hook, `holdings`, `SelectTokenPopup`, `send`, `send.integration`, `BalanceView` and `TokensView`.
   - The phase gate.
@@ -326,6 +326,7 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
 | D509 | Select token's load without a whole scope calls `invalidate()` (fence and retry), not `reset()`, which would zero the connect count and skip a later reload; `dispose()` is `invalidate()` plus the listener; its `props.show` gates converge, since `close()` clears before the render (extends D506) | a new fetch-policy option; `reset()` | Codex consult agree |
 | D510 | converged by trace: Holdings' no-account read settles in the same task instead of a microtask later (base draws the loading line and removes it within one task, so nothing paints between); Holdings reads the chain id when a read starts, not after its await (a chain change between fires the scope watcher, which supersedes the read in the same task); Holdings' new-array writes and Select token's `splice` on delete become in-place writes and `filter` (no sequence lists an id twice there, and the consumers are computeds, which track both) | keep them | Codex consult; Opus round 1 |
 | D511 | A5 review round 1 (Codex `findings` 1, Opus `findings` 2 + nits, neither found a behaviour difference): the hook's comments say which rule is the default and the page comments that restated their options go (Codex F1); page cases now pin each parent's choice, so dropping any option from a view turns its suite red: Holdings' and Select token's no-retry and no-dirty-refetch, Select token's blanking reload, Send's `append` against both `keep` and `replace` (Opus F1, F2); the `mapRow` doc, a vacuous hook assertion and a test title naming a caller (Opus nits) | correct only the lessons' claim | Codex F1, Opus F1, F2, nits |
+| D512 | A5 review round 2 (Codex, resumed): `clean`; the fixes verified, production code unchanged since round 1 (both composables transpile identically). Loop converged after 2 rounds | — | Codex |
 | D601 | the mirror exposes `begin`/`resnapshot`/`invalidate`; `onRecord` only on accepted events; `onSnapshot` separate | a lifecycle owned only by `dispose()` | Codex C7, Opus O7 |
 | G | gate fixes: smoke armed build, exact specs and runners, `origin/dev...HEAD` plus `HEAD` | — | Codex C4, Opus O10; final pass F2 |
 | D602 | a known Updated stays in place for every caller; `place` decides only where a new row goes | move a known row to the front (reorders Home's imports) | final pass F1 |
