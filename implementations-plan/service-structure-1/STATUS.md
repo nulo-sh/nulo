@@ -23,3 +23,10 @@
 - 2026-10-18 arc 3 final head 00f31d32: lint, typecheck:all and check:plans green.
 - 2026-10-18 arc 3: `bun run test:all` green at 00f31d32 (extension 13,737 passed); network e2e retry 0 green at 00f31d32 (2 files, 5 tests, vitest 259 s, 299 s wall; load1 100).
 - 2026-10-18 arc 3: origin/dev merged (#747, #748; #748 touches the balance display the public e2e reads); lint, typecheck:all, check:plans and `bun run test:all` green on c8591732 (extension 13,760 passed); network e2e retry 0 green there (2 files, 5 tests, vitest 281 s, 312 s wall; load1 54).
+- 2026-10-18 arc 3: PR #751 CI green (50 checks, all five required aggregators), merged as 244badd3.
+- 2026-10-18 arc 4 phase 4: branch service-structure-1-arc4 off origin/dev 244badd3; four commits (4cdcca7a, cd6498be, 693e6312, 3736b4f7); lint, typecheck:all and the phase files (execution, wallet-sdk, profile, logger, plus `log-payload-ban.test.ts` for the new redaction keys) green: 125 files, 2,393 tests.
+- 2026-10-18 arc 4 phase 5: one commit for the table (0678e429), four for its readers (5ef9bd2d, bb6f04a6, 377739a8, 5a3fbfdb); lint, typecheck:all, the phase files (100 files, 1,771 tests) and the wallet-bridge suite (21 files, 809 tests) green; three table mutations fail to compile, and a fall-through or inherited lookup reds the new cases at each site.
+- 2026-10-18 arc 4: `bun run test:all` green at 5a3fbfdb (extension 13,790 passed; every package green).
+- 2026-10-18 arc 4: network e2e (sim-methods, data-privateEvents, execute-scope-account, execute-scope-chain, tx-sendTx-default, tx-sendTx-feePayer, tx-sendTx-selfPay, fee-methods, backup-restore-integrity) green on Chrome at 5a3fbfdb, retry 0: 9 files, 21 tests, vitest 952 s, 1,014 s wall; load1 80 at start.
+- 2026-10-18 arc 4: Codex round 1 (comments, low), the Opus review (D20 and nits) and the cross-arc pass (comments, low) folded into fbed541b; typecheck and the touched suites green (67 files, 1,025 tests).
+- 2026-10-18 arc 4: Codex round 2 clean on both sessions (arc and cross-arc); loop converged.
