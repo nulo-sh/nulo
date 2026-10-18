@@ -58,6 +58,20 @@ Four asks. OA-1 and OA-2 hold arc 2 (the landing, #767): it opens only once both
 
 **What ships now: A.**
 
+## OA-5. #762: a flagged token whose transfers are disabled, on the fixed token page
+
+**Surface:** the token page of a token the signed list flags **and** whose contract allows neither transfer: the flagged banner, the balance, its actions and the "Private and public transfers disabled" warning all stay fixed (OA-3 B).
+
+**What it looks like** (estimated from the flagged-token picture at 360 × 600; not measured with both banners): the fixed part ends about 520 px down and the nav starts at 537 px, so the recent activity shows its heading and little else until scrolled. A plain token keeps about 170 px of activity; a token with only one of the two banners keeps about 100 px.
+
+| Option | What changes |
+|---|---|
+| **A. Leave it** | as above; the combination is rare (a scam-flagged contract with no transfer function) |
+| **B. The warning scrolls** | OA-3's option A: the warning moves into the scrolling activity, for every token |
+
+**Recommendation: A** until a person meets it.
+
+**What ships now: A** (arc 1 ships OA-3 B unchanged).
 ## OA-6. #766: the app-set fee block with no amount to state
 
 **Surface:** the execute window's fee block when the app sets the fee payment method and no estimate runs or has landed: a failed estimate, or an operation the wallet never estimates. The signed sentence (P47-02 C) names an amount, so it cannot read here.
