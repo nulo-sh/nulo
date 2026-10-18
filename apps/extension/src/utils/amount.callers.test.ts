@@ -55,6 +55,9 @@ describe("balanceFormatted's callers", () => {
 		expect(kinds(split)).toEqual([1, 0])
 		expect(kinds("\t// `balanceFormatted(raw, decimals, length)`.\n\t/**\n\t * balanceFormatted(x)\n\t */\n")).toEqual([0, 0])
 		expect(kinds("const a = balanceFormatted(f(x), d, 8).value\n")).toEqual([0, 1])
+	})
+
+	test("a parenthesis in a string or a comment inside a call is not the call's end", () => {
 		expect(kinds('balanceFormatted(a, ")", 8 /* ) */, { compact: true })')).toEqual([1, 0])
 	})
 

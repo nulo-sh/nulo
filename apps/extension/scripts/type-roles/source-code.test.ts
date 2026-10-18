@@ -69,6 +69,7 @@ describe("callsTo", () => {
 			[2, "logger.log", ['"b"']],
 		])
 		expect(shape(callsTo("x.ts", text, /^Lock$/))).toEqual([[4, "Lock", ['"net"', "logger"]]])
+		expect(callsTo("x.ts", text, /\blogger\.log$/).map((call) => text.slice(call.offset, call.offset + 6))).toEqual(['log("b'])
 	})
 
 	test("reads arguments as nodes, so a paren inside a string is text", () => {
@@ -89,11 +90,18 @@ describe("callsTo", () => {
 			'  <i :[openToast(z)]="w" />',
 			"</template>",
 		].join("\n")
-		expect(callsTo("x.vue", sfc, /^openToast$/).map((call) => [call.line, call.args[0]?.getText()])).toEqual([
+		const calls = callsTo("x.vue", sfc, /^openToast$/)
+		expect(calls.map((call) => [call.line, call.args[0]?.getText()])).toEqual([
 			[2, "s"],
 			[5, "x"],
 			[6, "y"],
 			[7, "z"],
+		])
+		expect(calls.map((call) => sfc.slice(call.offset, call.offset + 11))).toEqual([
+			"openToast(s",
+			"openToast(x",
+			"openToast(y",
+			"openToast(z",
 		])
 	})
 })

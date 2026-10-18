@@ -242,22 +242,20 @@ function mayBeAbsent(source: string, name: string, offset: number): boolean {
 	return nearest[1] === "?" || /\|\s*undefined/.test(nearest[2] ?? "")
 }
 
-/** Every production `….executeSendTransaction(…)` but the executor's own, whose fence parameter is required. */
-function facadeCalls(): { site: string; args: number; absent: boolean }[] {
-	return sourceFiles({ roots: [SRC], exts: ["ts", "vue"], skip: [TEST_FILE] }).flatMap((file) => {
-		const path = relative(SRC, file)
-		return callsTo(path, readFileSync(join(REPO_ROOT, file), "utf8"), /\.executeSendTransaction$/)
-			.filter((call) => !/\bdappSendExecutor\.executeSendTransaction$/.test(call.callee))
-			.map(({ line, args }) => {
-				const fence = args[4]
-				const absent = !fence || mayBeAbsent(fence.getSourceFile().text, fence.getText(), fence.getStart())
-				return { site: `${path}:${line}`, args: args.length, absent }
-			})
-	})
+/** Each `….executeSendTransaction(…)` in `text` but the executor's own, whose fence parameter is required. */
+function facadeCalls(path: string, text: string): { site: string; args: number; absent: boolean }[] {
+	return callsTo(path, text, /\.executeSendTransaction$/)
+		.filter((call) => !/\bdappSendExecutor\.executeSendTransaction$/.test(call.callee))
+		.map(({ line, offset, args }) => {
+			const fence = args[4]
+			return { site: `${path}:${line}`, args: args.length, absent: !fence || mayBeAbsent(text, fence.getText(), offset) }
+		})
 }
 
 test("no production caller relies on that capture: every facade call passes a fence", () => {
-	const calls = facadeCalls()
+	const calls = sourceFiles({ roots: [SRC], exts: ["ts", "vue"], skip: [TEST_FILE] }).flatMap((file) =>
+		facadeCalls(relative(SRC, file), readFileSync(join(REPO_ROOT, file), "utf8")),
+	)
 	// The dispatch arm and the two registry sends, at least. The fence is the fifth argument; the
 	// dispatch arm adds the popup's approval envelope after it.
 	expect(calls.length).toBeGreaterThanOrEqual(3)
@@ -265,4 +263,18 @@ test("no production caller relies on that capture: every facade call passes a fe
 		expect([5, 6], site).toContain(args)
 		expect(absent, `${site}: the fence argument may be undefined`).toBe(false)
 	}
+})
+
+test("a fence's declaration is looked up in the whole file before the call, never inside it", () => {
+	const inArgs = "function f(fence?: Fence) {\n\tsvc.executeSendTransaction(op, { fence: live }, task, hooks, fence)\n}\n"
+	expect(facadeCalls("x.ts", inArgs)).toEqual([{ site: "x.ts:2", args: 5, absent: true }])
+	const vue = [
+		'<script lang="ts">',
+		"const fence = live",
+		"</script>",
+		'<script setup lang="ts">',
+		"svc.executeSendTransaction(op, o, task, hooks, fence)",
+		"</script>",
+	].join("\n")
+	expect(facadeCalls("x.vue", vue)).toEqual([{ site: "x.vue:5", args: 5, absent: false }])
 })

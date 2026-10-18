@@ -28,3 +28,11 @@ Scratch, not committed, under `~/.cache/nulo-backlog/test-infra-1/p7/`:
 
 - Both guards walk the same policy as `legal/call-sites` (`apps/extension/src`, `ts` and `vue`, `TEST_FILE` skipped); `TEST_FILE` also matches `.test.js`, which the `ts`/`vue` extensions never admit, so the list is the old one.
 - `callsTo`'s suffix patterns read every call the regexes read, plus optional-chained and bracketed receivers (`x?.executeSendTransaction(…)`, `a[b].executeSendTransaction(…)`), and no longer read a mention inside a string or comment.
+
+## Review round 1
+
+- The first move searched `fence.getSourceFile().text` before `fence.getStart()`: the parsed fragment, up to the fence argument. The equal-lists proof could not see either difference (no call in the tree has a `fence`-shaped token in its earlier arguments, and no `.vue` file calls the facade). Codex and Opus each built a counter-example: `function f(fence?: Fence) { svc.executeSendTransaction(op, { fence: live }, task, hooks, fence) }` (old absent, new present), and a `.vue` file whose fence is declared in the other script block (old present, new absent).
+- The fix gives `Call` an `offset`, the callee name's file offset (`ScriptBlock.startOffset` for a script block; a template expression's `loc.start.offset` plus the code's place in `loc.source`, because a dynamic argument's `loc` spans its brackets). `mayBeAbsent` reads the whole file up to that offset, which cuts where the old `(` did: only the callee's name lies between them.
+- `fixture-check.ts` runs both fixtures through the old reader, the round 1 reader and the fixed one: old and fixed agree (`true`, `false`), round 1 gives the opposite of each.
+- `offset-check.ts` checks every call `callsTo` finds in `apps/extension/src` and `packages/design/src`, tests included: 170,710 calls, 570 in `.vue` templates, each `offset` starting with its callee's name on the reported line, no mismatch.
+- The equal-lists comparison re-ran on the fixed reader with the walks re-dumped from the guards: 766 files each, the same three fence calls, 11 files and 18 amount calls, all equal (`compare-p7.r1fix.out`).
