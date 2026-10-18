@@ -30,7 +30,7 @@ function makeSelf(networkProfileId: string) {
 	const self = {
 		profileService: { captureExecutionFence: vi.fn(async () => fence) },
 		networkService: { getNetwork: vi.fn(async () => ({ id: "net1", profileId: networkProfileId, chainId: 1 })) },
-		tokenService: { addTokenAuthorized, parseTokenInterface: vi.fn(async () => previewed) },
+		tokenService: { addTokenAuthorized, parseTokenInterface: vi.fn(async (..._args: unknown[]) => previewed) },
 		logError: () => {},
 	}
 	return { self, fence, addTokenAuthorized }
@@ -100,7 +100,7 @@ describe("executeRegisterToken — the details the window showed", () => {
 	test("a contract whose class differs from the window's refuses at the parse, before any add", async () => {
 		const { self, addTokenAuthorized } = makeSelf("pA")
 		const chainClass = `0x${"c2".repeat(32)}`
-		self.tokenService.parseTokenInterface = vi.fn(async (_net: string, _address: string, _task: unknown, pin?: string) => {
+		self.tokenService.parseTokenInterface.mockImplementation(async (...[, , , pin]: unknown[]) => {
 			if (pin !== undefined && pin !== chainClass) throw new PinMismatchError("class id differs")
 			return previewed
 		})
