@@ -1,7 +1,7 @@
 ---
 plan: test-infra-1
 tier: mid
-status: arcs 1 (#706) and 2 (#757) merged; arc 3 (Phase 7) implemented, in review; arc 4 (Phases 8-10) waits for its lanes
+status: arcs 1 (#706) and 2 (#757) merged; arc 3 (Phase 7) implemented, review converged, PR open; arc 4 (Phases 8-10) waits for its lanes
 issues: "#550 (arc 1 Closes), #561 (arc 3 Closes), #536 (arc 4 Closes), #540 (arc 4 Closes)"
 driver: claude-code
 claude_model: opus
@@ -264,6 +264,8 @@ It found `awaitedBus`, the storage moves, `world(opts)`, the L and B catches and
 
 **Arc 3 Codex fix loop, round 2** (resumed, verification of 488b5df8): `reject (blocking: encoded Vue directives can still bypass the fence-presence guard)`. Both round 1 fixes hold. Taken:
 - A3R2-1 (High, demonstrated; needs a template-level facade call, which the background-only facade does not allow) the template parser decodes a character reference (`&quot;`) in an expression's code but not in its `loc`, so a call after one got an offset inside the encoded text, and a `fence?:` parameter declared before the call in the same handler was missed (old red, new green). Mapping decoded positions back needs Vue's decoder (the `entities` package, which the extension does not declare). Instead `Call.offset` is undefined in a template expression whose code is not its source verbatim, and the fence guard counts a call it cannot place as absent: it fails closed there, where the old reader read the raw text. A `callsTo` test pins the undefined offset beside a placed control, and the fence fixture pins the closed failure.
+
+**Arc 3 Codex fix loop, round 3** (resumed, verification of cb23cbc1): `approve`. The round 2 reproducer reads absent; an encoded interpolation or directive fails closed with the reference before or after the call; verbatim dynamic arguments, directives and interpolations keep exact offsets; the other `callsTo` consumers read only the fields they read before; its own full-tree sweep found no unplaced call and no offset mismatch. The loop converged in three rounds.
 
 ## Seeds
 
