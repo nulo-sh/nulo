@@ -141,6 +141,7 @@ declare global {
   const copyWithToast: typeof import('../utils/clipboard').copyWithToast
   const createApp: typeof import('vue').createApp
   const createContactImportGuard: typeof import('../stores/contact-import-guard').createContactImportGuard
+  const createFailedNotice: typeof import('../utils/profile-flow-notices').createFailedNotice
   const createRunFence: typeof import('../composables/runFence').createRunFence
   const customRef: typeof import('vue').customRef
   const debounce: typeof import('../utils/general').debounce
@@ -198,6 +199,7 @@ declare global {
   const hubValues: typeof import('../utils/settings-labels').hubValues
   const humanizeErrorKind: typeof import('../utils/journal-state').humanizeErrorKind
   const humanizeMethodName: typeof import('../utils/tx-enrichment').humanizeMethodName
+  const importFailedNotice: typeof import('../utils/profile-flow-notices').importFailedNotice
   const incomingInScope: typeof import('../utils/activity-rows').incomingInScope
   const incomingRow: typeof import('../utils/activity-rows').incomingRow
   const indexSavedContacts: typeof import('../utils/contact-import-rows').indexSavedContacts
@@ -900,6 +902,7 @@ declare module 'vue' {
     readonly copyWithToast: UnwrapRef<typeof import('../utils/clipboard')['copyWithToast']>
     readonly createApp: UnwrapRef<typeof import('vue')['createApp']>
     readonly createContactImportGuard: UnwrapRef<typeof import('../stores/contact-import-guard')['createContactImportGuard']>
+    readonly createFailedNotice: UnwrapRef<typeof import('../utils/profile-flow-notices')['createFailedNotice']>
     readonly createRunFence: UnwrapRef<typeof import('../composables/runFence')['createRunFence']>
     readonly customRef: UnwrapRef<typeof import('vue')['customRef']>
     readonly debounce: UnwrapRef<typeof import('../utils/general')['debounce']>
@@ -957,6 +960,7 @@ declare module 'vue' {
     readonly hubValues: UnwrapRef<typeof import('../utils/settings-labels')['hubValues']>
     readonly humanizeErrorKind: UnwrapRef<typeof import('../utils/journal-state')['humanizeErrorKind']>
     readonly humanizeMethodName: UnwrapRef<typeof import('../utils/tx-enrichment')['humanizeMethodName']>
+    readonly importFailedNotice: UnwrapRef<typeof import('../utils/profile-flow-notices')['importFailedNotice']>
     readonly incomingInScope: UnwrapRef<typeof import('../utils/activity-rows')['incomingInScope']>
     readonly incomingRow: UnwrapRef<typeof import('../utils/activity-rows')['incomingRow']>
     readonly indexSavedContacts: UnwrapRef<typeof import('../utils/contact-import-rows')['indexSavedContacts']>
