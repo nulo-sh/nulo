@@ -45,12 +45,18 @@ describe("FeeCostReadout", () => {
 		expect(w.findComponent(Skeleton).attributes("style")).toBe("width: 60px; height: 12px;")
 	})
 
-	test("pending, the bar stands for any estimate or queue still on the props", () => {
+	test("pending, the bar stands for any estimate or queue still on the props", async () => {
 		const queuedCap = { about: ESTIMATE, cap: { amount: "4.47228", usd: "$0.269" } }
-		const w = factory({ pending: true, isEstimating: true, isQueued: true, queuedCap, estimate: ESTIMATE, payer: "sponsor" })
-		expect(w.text()).toBe("You pay")
-		expect(w.findComponent(Skeleton).attributes("style")).toBe("width: 60px; height: 12px;")
-		expect(factory({ pending: true }).text()).toBe("You pay")
+		const queued = factory({ pending: true, isEstimating: true, isQueued: true, queuedCap })
+		expect(queued.text()).toBe("You pay")
+		expect(queued.findComponent(Skeleton).attributes("style")).toBe("width: 60px; height: 12px;")
+		await queued.setProps({ pending: false })
+		expect(queued.find('[data-testid="fee-estimate-queued-cap-line"]').exists()).toBe(true)
+
+		const landed = factory({ pending: true, estimate: ESTIMATE })
+		expect(landed.text()).toBe("You pay")
+		await landed.setProps({ pending: false })
+		expect(drawn(landed)).toBe("You pay ~3.577824 FJ ($0.215)")
 	})
 
 	test("estimate takes precedence over the estimating skeleton", () => {

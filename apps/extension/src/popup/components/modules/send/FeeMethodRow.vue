@@ -11,7 +11,6 @@
  *
  * Sponsored FPC rows render nothing extra. The Token-FPC visibility
  * (Public/Private) toggle was removed alongside the deprecated type.
- * While `pending`, no method is chosen yet and the row is drawn with a bar.
  */
 defineProps({
 	method: { type: Object, default: null },

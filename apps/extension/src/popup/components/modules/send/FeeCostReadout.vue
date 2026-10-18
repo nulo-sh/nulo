@@ -12,7 +12,7 @@ const props = defineProps({
 	/** Set while the send can be queued against a cap: `about` is the last fee of this token's like sends,
 	 *  `cap` the most it goes out for without asking again, both as the card writes a fee. */
 	queuedCap: { type: Object, default: null },
-	/** The card is still reading what can pay, so no estimate or queue applies yet. */
+	/** The card is still reading what can pay: an estimate or queue on the other props is stale. */
 	pending: { type: Boolean, default: false },
 })
 
@@ -28,10 +28,7 @@ const sponsoredSentence = computed(() => {
 </script>
 
 <template>
-	<!-- Pending, estimating and estimated share ONE geometry: the stacked label+value
-	     layout is reserved from the first frame and the skeleton simply
-	     occupies the value's slot — the row never moves or grows when the
-	     number lands. -->
+	<!-- Pending, estimating and estimated stack label over value, so the row keeps its height when the number lands. -->
 	<Flex
 		v-if="estimating && isQueued && queuedCap"
 		direction="column"

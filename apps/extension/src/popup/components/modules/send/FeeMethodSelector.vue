@@ -10,7 +10,7 @@ const props = defineProps({
 	/** "private-private" | "private-public" while this send's fee names the account, else null. The
 	 *  page decides; this only draws the tag. */
 	payerNoticeShape: { type: String, default: null },
-	/** The card is still reading what can pay: with no method to show, the trigger draws a loading bar. */
+	/** The card is still reading what can pay. */
 	pending: { type: Boolean, default: false },
 })
 

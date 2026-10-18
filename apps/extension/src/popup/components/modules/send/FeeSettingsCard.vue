@@ -199,12 +199,12 @@ const nudgeCopy = computed(() =>
 /** What the dropdown trigger shows: the paying method, or the saved pick's row while loading. */
 const displayMethod = computed(() => effectiveMethod.value ?? previewMethod.value)
 
-/** Send's read for the live identity is on its way: the card draws its rows with bars in place of
- *  their values, and Priority, which needs no balance, already answers. */
+/** Send's read for the live identity is in flight; the app windows keep their own loading look.
+ *  Priority needs no balance, so it answers before the read lands. */
 const readPending = computed(() => props.originPrivacy !== null && snapshotPending.value)
 const showsCostRows = computed(() => readPending.value || (Boolean(effectiveMethod.value) && !feeJuiceMissing.value))
 
-/** Who pays the estimate the readout shows; the readout draws only while a method is chosen. */
+/** Who pays the estimate the readout shows; an estimate shows only while a method is chosen. */
 const feePayer = computed(() => {
 	const m = effectiveMethod.value
 	return feePayerOf(m && { type: m.type, isProtocol: m.fpc?.isProtocol }) ?? "self"
@@ -409,7 +409,7 @@ onBeforeUnmount(() => {
 		</div>
 
 		<FeeMethodRow
-			v-if="!statusNotice"
+			v-if="readPending || !statusNotice"
 			:method="effectiveMethod"
 			:isLoading="isLoading"
 			:pending="readPending"

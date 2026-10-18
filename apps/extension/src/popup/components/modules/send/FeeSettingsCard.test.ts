@@ -2276,12 +2276,14 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 
 			await w.get('[data-testid="pick-fast"]').trigger("click")
 			await flushPromises()
+			const payers = () => (w.emitted<unknown[]>("update:payer") ?? []).map((e) => e[0])
 			expect(everEmittedSettings(w)).toEqual([])
-			expect(w.emitted<unknown[]>("update:payer")?.at(-1)?.[0] ?? null).toBeNull()
+			expect(payers().every((p) => p === null)).toBe(true)
 
 			gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: HELD })
 			await flushPromises()
 			expect(everEmittedSettings(w)).toEqual([{ paymentMethod: { kind: "fpc", fpcId: "p1" }, priorityLevel: "fast" }])
+			expect(payers().at(-1)).toEqual({ type: "private_fpc", fpcId: "p1", isProtocol: true })
 			expect(pendingOf(w)).toEqual(["false", "false", "false"])
 		})
 
@@ -2289,6 +2291,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
 			mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: null, privateFeeJuice: null })
 			const held = mountSend({ originPrivacy: "public" })
+			expect(held.get('[data-testid="fee-method-selector"]').attributes("data-pending")).toBe("true")
 			await flushPromises()
 			expect(activeType(held)).toBeUndefined()
 			expect(held.get('[data-testid="fee-method-selector"]').attributes("data-pending")).toBe("false")
@@ -2301,10 +2304,35 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 				// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
 				;(globalThis as any).chrome.storage.local.get = vi.fn().mockRejectedValue(new Error("storage unavailable"))
 				const failed = mountSend({ account: accountB })
+				expect(failed.get('[data-testid="fee-method-selector"]').attributes("data-pending")).toBe("true")
 				await flushPromises()
 				expect(degradedText(failed)).toBe("Couldn't load fee data. Close and reopen to try again.")
 				expect(failed.get('[data-testid="fee-method-selector"]').attributes("data-pending")).toBe("false")
 				expect(failed.find('[data-testid="fee-priority-row"]').exists()).toBe(false)
+			} finally {
+				logged.mockRestore()
+			}
+		})
+
+		test("after a failed read, a switch to another account draws every row for the new read", async () => {
+			const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+			try {
+				const gas = deferred<unknown>()
+				mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
+				mocks.getGasBalances.mockRejectedValueOnce(new Error("boom")).mockReturnValue(gas.promise)
+				const w = mountSend()
+				await flushPromises()
+				expect(degradedText(w)).toBe("Couldn't load fee data. Retrying in the background.")
+
+				await w.setProps({ account: accountB })
+				await flushPromises()
+				expect(pendingOf(w)).toEqual(["true", "true", "true"])
+
+				gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: HELD })
+				await flushPromises()
+				expect(pendingOf(w)).toEqual(["false", "false", "false"])
+				expect(degradedText(w)).toBeNull()
+				expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "p1" } })
 			} finally {
 				logged.mockRestore()
 			}
