@@ -79,7 +79,7 @@ The 15 s budget, `node.hits() > 0` and the route wait stay. The header states th
 
 **Gate:** lint, typecheck; the file 5 times per browser at `--retry=0`. A temporary Debug Mode trail (removed before the commit) must show three things in each run: a PXE read retrying against the refusal at submit, `clearChainState` returning within 3 s, and the purge under 5 s. Each run's values go in `lessons/phase-2.md`.
 
-### Phase 3. #612: the dApp call that expects no popup reports why it timed out
+### Phase 3. #612: the dApp call that expects no popup reports why it timed out ✓
 Assumes F4, I4. In `ext/tests/e2e/fixtures/playground.ts`, `callExpectingNoPopup` catches its `waitForPgResult` timeout, logs one `console.error` line, runs `dumpDeepDiagnostics` and rethrows. `waitForPgResult` itself stays silent, because `runApprovedPgCall` expects its timeouts. `Closes #612` cites #701.
 
 **Gate:** lint, typecheck; `network/sim-methods.test.ts` with `NULO_E2E_PROVERLESS=1`, both browsers, green.

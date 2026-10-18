@@ -7,3 +7,4 @@
 - 2026-10-18: Codex round 3 approve; plan committed for the orchestrator's approval.
 - 2026-10-18: arc 1 branch ci-e2e-hygiene-1-a1 (off origin/dev 9470d4e9, plan commit cherry-picked). Phase 1 gate: lint 0, typecheck:all 0, viewers-csp 5/5 Chrome and 5/5 Firefox at retry 0 (third attempt; lessons/phase-1.md). #616's search-panel race stays visible (OA-3).
 - 2026-10-18: phase 2 gate: lint 0, typecheck:all 0, security-reset 5/5 per browser at retry 0 with the trail overlay (purge ≤ 2.3 s, a PXE retry in flight at submit in every run), committed test 1/1 per browser (lessons/phase-2.md).
+- 2026-10-18: phase 3 gate: lint 0, typecheck:all 0, network/sim-methods proverless retry 0 green on Chrome (57 s) and Firefox (86 s) (lessons/phase-3.md).
