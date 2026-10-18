@@ -58,7 +58,13 @@ import { isFeeAmount, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { assertLiveChainIdentity, liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { assertArtifactClassId } from "@nulo/aztec-runtime/pxe"
-import { type DraftOperation, type FeeSettingsReaders, fieldAddressKey, refuseUnknownPriorities } from "@nulo/wallet-bridge"
+import {
+	type DraftOperation,
+	type FeeSettingsReaders,
+	carriesFeeSettings,
+	fieldAddressKey,
+	refuseUnknownPriorities,
+} from "@nulo/wallet-bridge"
 import {
 	EXECUTION_SERVICE_NAME,
 	type Methods,
@@ -172,9 +178,7 @@ const FEE_SETTINGS_OF = {
 	estimateTransferFee: ([, , , , , , , feeSettings]) => [feeSettings],
 	estimateOperationFee: ([, , feeSettings]) => [feeSettings],
 	executeOperations: ([operations]) =>
-		Array.isArray(operations)
-			? operations.flatMap((op) => (op?.kind === "send_transaction" || op?.kind === "aztec_sendTx" ? [op.feeSettings] : []))
-			: [],
+		Array.isArray(operations) ? operations.flatMap((op) => (carriesFeeSettings(op) ? [op.feeSettings] : [])) : [],
 } satisfies FeeSettingsReaders<Methods>
 
 export class ExecutionService extends Service<Methods> implements ServiceSpec<Methods> {
