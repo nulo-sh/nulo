@@ -1,4 +1,3 @@
-/** Pictures more than one clip draws: a ledger entry, a balance row, the laptop. */
 import { glyph, group, litLine, node, place, plate, text } from "./draw"
 
 /** One entry of the public record: a kind in small caps over a mono value, 64 units tall. */

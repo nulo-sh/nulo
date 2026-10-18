@@ -32,7 +32,7 @@ For a new Nulo user who taps "How Aztec works" on Home and lands in a tab, and f
 
 ## Architecture & Implementation
 
-- **Shape.** A hand-written static entry `apps/landing/how-aztec-works.html`, a second Vite input that Cloudflare serves at `/how-aztec-works` as it serves `terms.html` at `/terms`. It loads `/src/main.ts` unchanged: `mountPage` draws the grain and `mountInstall` narrows "Get Nulo" (both page-agnostic, recon). No new TypeScript.
+- **Shape.** A hand-written static entry `apps/landing/how-aztec-works.html`, a second Vite input that Cloudflare serves at `/how-aztec-works` as it serves `terms.html` at `/terms`. It loads `/src/main.ts` unchanged: `mountPage` draws the grain and `mountInstall` narrows "Get Nulo" (both page-agnostic, recon). Arc 1 adds no TypeScript; arc 2 adds the player and scenes below.
 - **Markup, as the drawing `p33-aztec-a`.** Head per OA-7. Body: skip link; `pre.grain`; the bar (brand → `/`; "How it works" → `/#see`; "How Aztec works" with `aria-current="page"`; "Get Nulo" `data-install="nav"` → `/#get`); `main` holding one `section.s > .wrap` with an `h1` "How Aztec works.", the two sentences as `.lead` on the grain (as `index.html:164` does), and a `.three` row of three `article.plate` cards (`id` `private-balances`, `proofs`, `fees`), each a mono number 01 to 03, an `h2` title styled as the home's `.three h3`, and its text version; the home's footer.
 - **Styles.** A short block in `src/styles/page.css`: the page `h1` at the hero `h1`'s size (54 px, 40 px at 900 px and narrower) with the `.h2` halo; the card number; the current-page nav state. Existing tokens only.
 - **File map, arc 1.** New `how-aztec-works.html`. Changed: `vite.config.ts` (input), `public/sitemap.xml`, `src/styles/page.css`, `src/install.test.ts` (D3), `.github/workflows/pr-quick.yml` and `CI.md:33`, which describes its step (D4), `README.md` (file map, the page).
@@ -101,7 +101,7 @@ Done: narration outside the repo (D6), 2,179 characters in one take per clip (Pr
 
 ## Security & Adversarial Considerations
 
-- **Surface.** A static page: no input, no form, no new script, no third-party request, CSP and `frame-ancestors 'none'` unchanged, Workers Logs off. The realistic harm is a false privacy claim on a public page. Each claim cites rc.3 docs or research, and no script says the record hides who was paid, the transaction's shape, or a public part (recon; audit round 1).
+- **Surface.** A static page: no input, no form, no third-party request, and from arc 2 only bundled same-origin modules, CSP and `frame-ancestors 'none'` unchanged, Workers Logs off. The realistic harm is a false privacy claim on a public page. Each claim cites rc.3 docs or research, and no script says the record hides who was paid, the transaction's shape, or a public part (recon; audit round 1).
 - **Supply chain.** No dependency change; frozen lockfile and the 7-day age gate stand.
 - **OA-6 B (branch builds).** A branch build runs that branch's own `deploy:preview` script with the Workers Builds token, which can deploy nulo.sh. Any pushed branch, an agent's included, would hold that power; whether fork PRs build is unverified. The plan recommends A (a manual preview); B is the owner's security call. The lane changes no Cloudflare setting.
 - **Arc 2.** What left: the three approved scripts, 2,179 characters, to ElevenLabs, through the `explainer` skill's launcher, which alone reads the key. No Higgsfield job. The page fetches its audio and captions from its own origin only after a press; no new header, no new script source.
