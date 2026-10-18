@@ -1,7 +1,7 @@
 ---
 plan: e2e-flakes-2
 tier: light
-status: planned, final Codex approve
+status: arc 1 implemented, Codex loop converged, PR pending
 issues: "#774 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
@@ -57,7 +57,7 @@ For a maintainer reading a red network lane: the spec is red when missing-row re
 
 ## Phases
 
-### Phase 1 — move the gap behind the stop ☐
+### Phase 1 — move the gap behind the stop ✓
 
 1. Reorder the spec as the change map says. Keep every assertion; only the baseline moves from 0 to `gapMadeAt`.
 2. Rewrite the three comments as above.
@@ -110,6 +110,8 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `24c6
 **Round 2, Codex** (resume): conditional approve, 4 findings. #1 a fresh projection after a late write could hide a broken sweep: wording narrowed, recorder rejected (D7). #2 the clock baseline holds; "no later than": accepted. #3 the pin reserves no capacity: accepted (another pair allowed, exit-86 bound). #4 the Outcome overpromised: accepted.
 
 **Final pass, Codex** (fresh session 01a1506a, gpt-6.1-sol, high): **approve**, high confidence. Two wording fixes, applied: the Outcome and Security lines now say a late write cannot pass as the repair by itself; the negative control names the rebuilding `e2e:agent` command. It confirmed F1-F8, D7's proportion, and that `openPopup` waits for the worker's Ready, so init cannot stand in for the disabled unlock reconcile.
+
+**Implementation rounds 1-2** (diff 767789b7..78b82faa; round 2, Codex resume: approve, the loop converged). Codex (gpt-6.1-sol, high, session 01a15077): conditional approve, 2 comment findings, both fixed (78b82faa). Opus diff review: conditional approve; the same retry clause, fixed; the test title kept. Gate on bf7db153: lint, `typecheck:all`, `test:all` exit 0; negative control red at `waitForFreshBalanceRow`; Firefox 10/10 (67.5-162.0 s) and Chrome 5/5 (49.9-89.2 s) at retry 0. Log: [lessons/phase-1.md](lessons/phase-1.md).
 
 ## Seeds
 
