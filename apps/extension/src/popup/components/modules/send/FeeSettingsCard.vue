@@ -39,6 +39,7 @@ import {
 import { feeDisplay, feeText } from "@/utils/fee-estimation"
 import { applyFpcEdits, previewForPick, recordOf, resolveSendSelection } from "./fee-privacy"
 import { usePrices } from "@/composables/usePrices"
+import { useSponsorVerdicts, watchSponsorVerdicts } from "@/composables/useSponsorVerdicts"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -129,20 +130,8 @@ const registeredFpcs = ref([])
 const fpcEdits = reactive(new Map())
 const knownFpcs = computed(() => applyFpcEdits(registeredFpcs.value, fpcEdits))
 
-/** Sponsors the estimate found short, by FPC id, never stored: `short` holds while the verdict still
- *  describes this transaction (its row is disabled), `setAside` for the rest of the card's identity
- *  (the row is not chosen again unless picked). */
-const shortSponsorIds = reactive(new Set())
-const setAsideSponsorIds = reactive(new Set())
-/** The last verdict the card accepted, `{ fpcId, funded }`. */
-const lastVerdict = ref(null)
-/** Outside Send: the sponsor a short verdict dropped the selection of, until the person picks. */
-const droppedForVerdictId = ref(null)
-/** The sponsor paying when the transaction last changed, while it still pays and until the estimate
- *  for the new transaction ends: its earlier verdict was for another fee limit. Only the paying
- *  sponsor is read, so no other row can have a read in flight. */
-const recheckFpcId = ref(null)
-const verifyingSponsorId = computed(() => (props.isEstimating ? recheckFpcId.value : null))
+const verdicts = useSponsorVerdicts({ isEstimating: () => props.isEstimating })
+const { shortSponsorIds, setAsideSponsorIds, lastVerdict, droppedForVerdictId, verifyingSponsorId } = verdicts
 
 /** The FPC list the store has read for the live identity. That read is never forced, so it usually
  *  lands well before the forced balance read lets the snapshot commit: the sponsor rows answer early. */
@@ -427,8 +416,7 @@ let pickSeq = 0
 const handleMethodPicked = (m) => {
 	// A loading row is inert in the menu; this keeps it so for any other path a pick arrives on.
 	if (m.checking) return
-	if (m.type === "fpc" && m.fpc) setAsideSponsorIds.delete(m.fpc.id)
-	droppedForVerdictId.value = null
+	verdicts.picked(m)
 	if (props.originPrivacy !== null) return pickForSend(m)
 	selectedMethod.value = m
 	pickSeq++
@@ -440,7 +428,7 @@ const onFpcUpdated = (fpc) => {
 	const before = knownFpcs.value.find((f) => f.id === fpc.id)?.address ?? ""
 	fpcEdits.set(fpc.id, fpc)
 	// An address edit keeps the id, and the verdict was on the old contract.
-	if (!sameFieldAddress(before, fpc.address ?? "")) shortSponsorIds.delete(fpc.id)
+	if (!sameFieldAddress(before, fpc.address ?? "")) verdicts.addressEdited(fpc.id)
 	if (props.originPrivacy !== null) return
 	// Replace the full snapshot so address-edit changes propagate to the
 	// dropdown trigger and any persisted-fee-method round-trips below.
@@ -787,12 +775,12 @@ const publicFallback = () => {
 	return next.kind === "selected" ? next.method : undefined
 }
 
-const forgetVerdicts = () => {
-	shortSponsorIds.clear()
-	setAsideSponsorIds.clear()
-	lastVerdict.value = null
-	droppedForVerdictId.value = null
-	recheckFpcId.value = null
+/** Outside Send, a pick of a contract that cannot pay is dropped too; its saved record stays. */
+const onShort = (fpcId) => {
+	if (props.originPrivacy !== null || selectedMethod.value?.fpc?.id !== fpcId) return false
+	selectedMethod.value = props.fallsBack ? publicFallback() : undefined
+	chosenUnasked = true
+	return true
 }
 
 const recommitStillValid = (scope) => {
@@ -800,52 +788,15 @@ const recommitStillValid = (scope) => {
 	return isLiveFeeScope(props, scope)
 }
 
-/**
- * A verdict counts only for a sponsor row this card lists, at the address it was read for: an
- * estimate landing after the row's address was edited describes a contract the row no longer names.
- */
-watch(
-	() => props.feeEstimate?.sponsorFunding,
-	(verdict) => {
-		if (typeof verdict?.funded !== "boolean") return
-		const row = methods.value.find((m) => m.type === "fpc" && m.fpc?.id === verdict.fpcId)
-		if (!row || !sameFieldAddress(verdict.address, row.fpc.address ?? "")) return
-		lastVerdict.value = { fpcId: verdict.fpcId, funded: verdict.funded }
-		if (recheckFpcId.value === verdict.fpcId) recheckFpcId.value = null
-		if (verdict.funded) {
-			shortSponsorIds.delete(verdict.fpcId)
-			setAsideSponsorIds.delete(verdict.fpcId)
-			return
-		}
-		shortSponsorIds.add(verdict.fpcId)
-		setAsideSponsorIds.add(verdict.fpcId)
-		// A pick of a contract that cannot pay is dropped too; its saved record stays.
-		if (props.originPrivacy === null && selectedMethod.value?.fpc?.id === verdict.fpcId) {
-			selectedMethod.value = props.fallsBack ? publicFallback() : undefined
-			chosenUnasked = true
-			droppedForVerdictId.value = verdict.fpcId
-		}
-	},
-)
-// A short verdict holds for one fee limit, so a new priority or transaction offers its row again;
-// the fallback's own re-estimate changes neither.
-watch([selectedPriority, () => props.txShape], () => shortSponsorIds.clear())
-watch(effectiveMethod, (m) => {
-	if (m?.fpc?.id !== recheckFpcId.value) recheckFpcId.value = null
+watchSponsorVerdicts(verdicts, {
+	verdict: () => props.feeEstimate?.sponsorFunding,
+	txShape: () => props.txShape,
+	priority: selectedPriority,
+	isEstimating: () => props.isEstimating,
+	rows: methods,
+	payer: effectiveMethod,
+	onShort,
 })
-watch(
-	() => props.txShape,
-	() => {
-		const m = effectiveMethod.value
-		recheckFpcId.value = m?.type === "fpc" ? (m.fpc?.id ?? null) : null
-	},
-)
-watch(
-	() => props.isEstimating,
-	(estimating) => {
-		if (!estimating) recheckFpcId.value = null
-	},
-)
 watch(
 	() => [props.profile, props.network, props.account],
 	async () => {
@@ -857,7 +808,7 @@ watch(
 		const liveKey = feeScopeKey(liveFeeScope(props))
 		if (liveKey !== committedKey) {
 			isInitComplete.value = false
-			forgetVerdicts()
+			verdicts.forget()
 		}
 		await runInit()
 	},
