@@ -44,9 +44,6 @@ const rows = ref<TokenBalanceInfo[]>([])
 const balancesState = ref<TokenBalanceSnapshotState>("loading")
 const isLoading = computed(() => balancesState.value === "loading")
 const error = computed(() => balancesState.value === "unavailable")
-// This page's rules: every read shows the loading state, a refused one shows the error
-// until a connect or a scope change reads again, a live add replaces its row and an unseen update
-// lists one, and a read in flight lands over the events that came meanwhile.
 const tokenBalanceService = new TokenBalanceServiceClient()
 const balances = useTokenBalanceSnapshot({
 	client: tokenBalanceService,

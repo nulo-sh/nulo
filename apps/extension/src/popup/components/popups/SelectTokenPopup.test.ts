@@ -312,7 +312,7 @@ describe("SelectTokenPopup", () => {
 		const wrapper = mount(SelectTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
 		await wrapper.setProps({ show: true })
 		H.balanceConnected.emit()
-		H.store.current.network = undefined
+		H.store.current.network = null
 		await flushPromises()
 		reads[0]?.([row(1, "OLD")])
 		await flushPromises()

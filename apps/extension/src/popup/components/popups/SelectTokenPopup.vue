@@ -67,8 +67,6 @@ const activeScope = () => {
 	const chainId = appStore.network?.chainId
 	return account && chainId !== undefined ? { account, chainId } : undefined
 }
-// The picker's rules: a refused read shows the error until the sheet reopens, a
-// reconnect reloads the whole view, and a read in flight lands over the events that came meanwhile.
 // The hide disconnects the client, so no event or connect reaches a hidden sheet.
 const tokenBalanceService = new TokenBalanceServiceClient()
 const balances = useTokenBalanceSnapshot({

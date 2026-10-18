@@ -157,8 +157,6 @@ const activeToken = computed(() => tokens.value?.find((t) => t.id === cacheStore
 const isBlockedTransfer = computed(() => !activeToken.value?.hasPrivateTransfers && !activeToken.value?.hasPublicTransfers)
 
 const tokenBalances = ref([])
-// The identity fetch reads the rows, every chain's; the hook appends each add for the account and
-// replaces a listed row on an update. No delete is applied and no reconnect reads them again.
 const tokenBalanceService = new TokenBalanceServiceClient()
 const balances = useTokenBalanceSnapshot({
 	client: tokenBalanceService,

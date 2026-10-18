@@ -16,7 +16,7 @@ import { isFlaggedToken } from "@/utils/token-flag"
 export type PricedToken = { chainId?: number; contract?: string; decimals?: number; hasDecimals?: boolean }
 
 /** A balance row as pricing reads it. */
-export type PricedRow = { token?: PricedToken; publicBalance?: string; privateBalance?: string }
+type PricedRow = { token?: PricedToken; publicBalance?: string; privateBalance?: string }
 
 /** The signed list's half of every snapshot: which token each id prices and which pairs it flags. */
 function listState() {

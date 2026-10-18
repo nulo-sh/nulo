@@ -55,7 +55,8 @@ function tokenBalanceEvents<T>(
 	const indexOf = (id: unknown) => rows.value.findIndex((row) => (row as { id: unknown }).id === id)
 	const mapped = (tb: TokenBalanceInfo) => (mapRow ? mapRow(tb) : (tb as T))
 
-	/** An add carries its row as created, so a listed id already holds that row or a newer one. */
+	/** The default keeps a listed row: an add carries its row as created, and where deletes are
+	 *  applied the listed row is that row or a newer one. */
 	function onBalanceAdded(tb: TokenBalanceInfo) {
 		if (rules.added === "append") {
 			if (tb.account === live.account?.address) rows.value.push(mapped(tb))
@@ -86,10 +87,10 @@ function tokenBalanceEvents<T>(
 
 /**
  * The active account's token-balance rows on the active chain, fetched latest-wins. A snapshot in
- * flight is older than any in-scope event that lands meanwhile: the event marks it dirty and the
- * run refetches instead of overwriting the event. A rejection never reads as an empty list, and a
- * refetch within a scope keeps the rows already shown; clearing them on a scope change is the
- * parent's. The parent subscribes the returned handlers and calls `dispose()` before it
+ * flight is older than any in-scope event that lands meanwhile: by default the event marks it
+ * dirty and the run refetches instead of overwriting the event. A rejection never reads as an empty
+ * list, and a refetch within a scope keeps the rows already shown; clearing them on a scope change
+ * is the parent's. The parent subscribes the returned handlers and calls `dispose()` before it
  * disconnects the client.
  */
 export function useTokenBalanceSnapshot<T = TokenBalanceInfo>(deps: TokenBalanceSnapshotDeps<T>) {
