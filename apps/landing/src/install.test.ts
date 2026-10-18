@@ -110,9 +110,9 @@ describe("detectInstall", () => {
 	})
 })
 
-describe("index.html", () => {
+describe.each(["index.html", "how-aztec-works.html"])("%s", (page) => {
 	it("links the stores only through the URLs the script uses", () => {
-		const html = readFileSync(new URL("../index.html", import.meta.url), "utf8")
+		const html = readFileSync(new URL(`../${page}`, import.meta.url), "utf8")
 		const storeLinks = html.match(/https:\/\/(?:chromewebstore\.google\.com|addons\.mozilla\.org)[^"]*/g) ?? []
 		expect(new Set(storeLinks)).toEqual(new Set([STORES.chrome.url, STORES.firefox.url]))
 	})
