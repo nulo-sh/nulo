@@ -32,13 +32,14 @@ describe("Icon", () => {
 		expect(w.attributes("stroke")).toBe("currentColor")
 	})
 
-	test("private is one filled path and public stroked paths only, and neither is the padlock", () => {
+	test("private is one filled path and public stroked paths only, and neither is the padlock or the network globe", () => {
 		const [priv, pub] = [render({ name: "private" }).findAll("path"), render({ name: "public" }).findAll("path")]
 		expect(priv).toHaveLength(1)
 		expect(priv[0]?.attributes("stroke")).toBe("none")
 		expect(pub.length).toBeGreaterThan(1)
 		for (const p of pub) expect(p.attributes("fill")).toBe("none")
 		expect([glyphs.private, glyphs.public]).not.toContainEqual(glyphs.lock)
+		expect([glyphs.private, glyphs.public]).not.toContainEqual(glyphs["network-edit"])
 	})
 
 	test("rotate turns the glyph about its centre", () => {

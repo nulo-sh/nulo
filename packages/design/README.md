@@ -138,7 +138,7 @@ A missing root means the teleported content silently fails to mount (it is NOT a
 
 ## Composables
 
-`@nulo/design/composables/*` (explicit-import, no auto-import): `useToast`/`TOAST_DURATION`
+`@nulo/design/composables/*` (explicit-import, no auto-import): `useToast` with `SUCCESS_TOAST_MS`/`ACTION_TOAST_MS`
 (transient single-toast singleton driving `ToastManagerBase`) and `useOutside`/`useEvent`
 (outside-press detection used by `Popover`). The extension re-exports both from its local
 `composables/{toast,outside}.js` shims so its existing auto-import call sites are untouched.

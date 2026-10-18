@@ -3,12 +3,12 @@ import { GLOSSARY, GLOSSARY_SECTIONS } from "./glossary"
 
 // Every entry the owner signed, word for word, in section order.
 const SPEC = [
-	["Balances", "private-balance", "Private balance", "Only you can see it. Marked with a solid square.", "Home · tokens · send"],
+	["Balances", "private-balance", "Private balance", "Only you can see it. Marked with a shield.", "Home · tokens · send"],
 	[
 		"Balances",
 		"public-balance",
 		"Public balance",
-		"Anyone can see it, like a balance on Ethereum. Marked with a dotted square.",
+		"Anyone can see it, like a balance on Ethereum. Marked with a globe.",
 		"Home · tokens · send",
 	],
 	["Fees", "fee-juice", "Fee Juice", "The token that pays network fees on Aztec. Shown as FJ.", "Home · fee card"],
