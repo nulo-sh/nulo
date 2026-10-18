@@ -8,8 +8,18 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: 9470d4e9
-status: plan approved by the final Codex pass; arc 1 implementing (auto-continue)
+status: completed (arc 1 carries this close-out)
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18.
+- **Status:** closed. Arc 1 carries this close-out; the merge that lands it closes the plan and #516.
+- **Shipped:** each call Nulo cannot read keeps its orange warning and gets one short line naming the reason, `interface` a dotted glossary term; the closing advice reads once per window (under the last unreadable call at rest, else under the last open unreadable discovered authorization); the footer's refusal tooltip keeps its whole sentence without the advice; Settings → Glossary gains `Interface`, last under Apps. The execute and fee-raised windows both show it.
+- **Known limits:** none.
+- **Open items:** #776 (OA-1, `owner-decision`: the undrawn lines' ship-now forms, options B to E); #777 (`owner-decision`: an unreadable discovered authorization is not flagged at rest, pre-existing).
+- **Dropped:** rewording CLAUDE.md's dotted-term rule to "distinct" terms (Opus, arc review): a ruleset change beyond the lane; D1 records the reading. **Lessons:** none promoted; the two gotchas (a dotted term's hidden definition in `.text()`, and the screenshot recipe) are in `lessons/phase-1.md`, and `lessons.md` is at its budget.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # iface-line-1: one short reason per unreadable call, `interface` dotted, the advice once
 
