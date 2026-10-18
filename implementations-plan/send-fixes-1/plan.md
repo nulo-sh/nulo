@@ -1,7 +1,7 @@
 ---
 plan: send-fixes-1
 tier: light
-status: panel approve (Codex round 3), auto-continued into arc 1
+status: completed (the arc's PR carries this record)
 issues: "#498 #710 (arc 1 closes); #112 no arc (OA-1); P42-05 C (no issue, the PR body is its record)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 24c68cb4
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18.
+- **Status:** closed by the merge into `dev` of the PR that carries this record, which closes #498 and #710.
+- **Shipped:** the re-ask sheet's button reads "Send" and the re-asked fee stays on the line above (P42-05 C); start finishes on a custom network whose node does not answer, the chip reads inactive and the account waits for the node, while a node that answers another L1 still stops start (#498); a password profile exports a paused reset's imported accounts as account files, the paused screen leads with EXPORT IMPORTED ACCOUNTS, and the notice and Delete chain's sentence end "Export them first." (#710). Pictures: `screenshots/before/`, `screenshots/after/`.
+- **Owner asks:** OA-1 (#112) open; nothing built, and #112 carries a comment naming the ask.
+- **Known limits:** #808 (K1), #809 (K2), #807 (K3).
+- **Open items:** #112 (OA-1, `owner-decision`).
+- **Dropped:** none. One deviation: the export page lists held accounts whenever the profile has a paused reset, not only on the active network ([lessons/phase-3.md](lessons/phase-3.md)).
+- **Lessons:** none promoted, `lessons.md` being at its budget; the one new gotcha, that the `network-reset` e2e seed leaves imported keys unopenable, is on `seedStaleNetwork`'s doc.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # send-fixes-1: start on a dead custom node, a paused reset's account files, the re-ask button
 
