@@ -10,7 +10,7 @@ import StaleNetworkConfirm from "./StaleNetworkConfirm.vue"
 import { useLockWallet } from "@/composables/useLockWallet"
 import { useNetworkActivation } from "@/composables/useNetworkActivation"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
-import { neverOpened, STALE_NETWORK_KEY } from "@/composables/useStaleNetwork"
+import { exportsHeld, neverOpened, STALE_NETWORK_KEY } from "@/composables/useStaleNetwork"
 
 /** Utils */
 import { managers } from "@/utils/core"
@@ -46,7 +46,8 @@ const screen = computed(() =>
 
 type Mark = "check" | "cross" | "swap"
 type BoxLine = { text: string; mark?: Mark; number?: number; testid?: string }
-type Action = { text: string; testid: string; action: () => unknown }
+/** `guarded`: a start, disabled while one is starting, in whichever slot it sits. The primary always is. */
+type Action = { text: string; testid: string; action: () => unknown; guarded?: boolean }
 type Content = {
 	eyebrow: { icon: GlyphName; text: string }
 	title: string
@@ -56,6 +57,7 @@ type Content = {
 	note?: string
 	primary: Action
 	secondary?: Action
+	tertiary?: Action
 }
 
 const MARKS: Record<Mark, { icon: GlyphName; color: TextColorName }> = {
@@ -65,6 +67,7 @@ const MARKS: Record<Mark, { icon: GlyphName; color: TextColorName }> = {
 }
 
 const openNetworks = () => router.push("/popup/settings/networks")
+const openExport = () => router.push("/popup/settings/security/export/account")
 const start = () => stale.start(props.view)
 const goToPending = async () => {
 	const target = appStore.networks.find((n) => n.id === props.view.otherPending?.networkId)
@@ -98,18 +101,20 @@ const SCREENS: Partial<Record<TakeoverScreen, (view: StaleNetworkView) => Conten
 	paused: (view) => {
 		const c = copy.paused(view.name)
 		const imported = view.reset?.imported ?? []
+		const exportable = exportsHeld(view, appStore.profile?.type)
+		const retry: Action = { text: c.primary, testid: "stale-network-retry", action: start, guarded: true }
+		const exportHeld: Action = { text: copy.EXPORT_IMPORTED, testid: "stale-network-export", action: openExport }
 		return {
 			eyebrow: { icon: "pause", text: c.eyebrow },
 			title: c.title,
 			body: c.body,
-			notice: imported.length > 0 ? copy.pausedImported(view.name, imported) : undefined,
+			notice: imported.length > 0 ? copy.pausedImported(view.name, imported, exportable) : undefined,
 			box: {
 				label: c.label,
 				lines: [{ mark: "check", text: c.pickUp }, ...accountLine(view), { mark: "check", text: copy.KEEP_LINE }],
 			},
 			note: c.note,
-			primary: { text: c.primary, testid: "stale-network-retry", action: start },
-			secondary: SWITCH,
+			...(exportable ? { primary: exportHeld, secondary: retry, tertiary: SWITCH } : { primary: retry, secondary: SWITCH }),
 		}
 	},
 	"already-added": (view) => {
@@ -176,6 +181,7 @@ function cause(view: StaleNetworkView): Content {
 }
 
 const content = computed(() => SCREENS[screen.value]?.(props.view))
+const outlined = computed(() => [content.value?.secondary, content.value?.tertiary].filter((a): a is Action => a !== undefined))
 /** A1 with the node line runs one line longer, so its gaps tighten to keep the buttons' margin. */
 const density = computed(() => {
 	if (props.view.switchToSeedNode && content.value?.box?.label) return "dense_tight"
@@ -282,8 +288,17 @@ onBeforeUnmount(() => {
 			>
 				{{ content.primary.text }}
 			</button>
-			<button v-if="content.secondary" type="button" :class="$style.secondary" :data-testid="content.secondary.testid" @click="content.secondary.action">
-				{{ content.secondary.text }}
+			<button
+				v-for="action in outlined"
+				:key="action.testid"
+				type="button"
+				:class="$style.secondary"
+				:data-testid="action.testid"
+				:disabled="action.guarded && stale.starting.value"
+				@keydown="action.guarded && refuseRepeatEnter($event)"
+				@click="action.action"
+			>
+				{{ action.text }}
 			</button>
 		</div>
 

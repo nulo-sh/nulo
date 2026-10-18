@@ -14,9 +14,10 @@
  * are committed only after the check — never in the same statement as the
  * await.
  */
+import { ensureDefaultAccountOrWait } from "@/composables/internal/default-account"
 import { createRunFence } from "@/composables/runFence"
 import { runsUnattended } from "@/composables/useStaleNetwork"
-import { AccountType, DEFAULT_ACCOUNT_NAME } from "@/wallet/services/account/client"
+import type { AccountType } from "@/wallet/services/account/client"
 import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
 
 export interface NetworkSwitchScope {
@@ -36,6 +37,8 @@ export interface NetworkSwitchDeps {
 	/** Live compare — a drift the watcher hasn't re-fired for must stop the run. */
 	liveScopeMatches: (scope: NetworkSwitchScope) => boolean
 	syncNetworkStatus: () => void
+	/** The run's own read of the network's node just failed. */
+	markNetworkInactive: (networkId: string) => void
 	/** Disconnect the old client, install + return the new one. The run holds
 	 *  the RETURNED reference locally — the shared slot is mutable. */
 	replaceAccountClient: () => NetworkSwitchAccountClient
@@ -65,7 +68,9 @@ async function loadAccounts(deps: NetworkSwitchDeps, scope: NetworkSwitchScope, 
 	if (!guard()) return
 	deps.setAccounts(accounts)
 	if (accounts.length === 0) {
-		await client.ensureDefaultAccount(scope.profileId, scope.chainId, AccountType.Nulo_v1, DEFAULT_ACCOUNT_NAME)
+		await ensureDefaultAccountOrWait(client, scope.profileId, scope.chainId, () => {
+			if (guard()) deps.markNetworkInactive(scope.networkId)
+		})
 		if (!guard()) return
 		accounts = await client.getAccounts(scope.profileId, scope.chainId, true)
 		if (!guard()) return

@@ -260,6 +260,13 @@ export type Methods = {
 	exportAccount(profileId: string, chainId: number, address: string, password: string, encrypt: boolean): string
 
 	/**
+	 * Export an imported account a paused network reset holds only in its journal, by the address
+	 * the reset moves it to. Same password check and file as `exportAccount`; reads only.
+	 * @returns the file's string body (encrypted base64, or the plaintext JSON).
+	 */
+	exportResetHeldAccount(profileId: string, address: string, password: string, encrypt: boolean): string
+
+	/**
 	 * Import an account from a NULO-ACCOUNT-EXPORT file body into `(profileId, chainId)`. Validates
 	 * the envelope (regime digests, canonical signing key, checksum), recomputes the address from
 	 * the signing key and requires it to equal `expectedAddress` (the address the UI showed the
@@ -315,6 +322,7 @@ export const AccountMethodSchemas = {
 	changeAccountName: z.tuple([z.string(), z.number(), z.string(), z.string()]),
 	changeAccountVisibility: z.tuple([z.string(), z.number(), z.string(), z.boolean()]),
 	exportAccount: z.tuple([z.string(), z.number(), z.string(), z.string(), z.boolean()]),
+	exportResetHeldAccount: z.tuple([z.string(), z.string(), z.string(), z.boolean()]),
 	importAccount: z.tuple([z.string(), z.number(), z.string(), z.string(), z.string(), z.string().optional()]),
 	previewImportAccount: z.tuple([z.string(), z.string()]),
 	exportFullBackupKeys: z.tuple([RunFenceParamSchema, z.string()]),
