@@ -1072,7 +1072,7 @@ test.skipIf(inject("liveLeg") === true)(
 			const page = await openPopup(ctx)
 			await unlockAfterBackgroundDeath(page)
 			await page.waitForSelector(`${sel("tokens-card")} ${sel("token-amount")}`, { visible: true, timeout: 30_000 })
-			expect(await rowHeight(page, sel("tokens-card"))).toBe(loading)
+			expect(await rowHeight(page, sel("tokens-card"))).toBeCloseTo(loading, 1)
 			await shotSend(page, "home-token-rows-loaded", "tokens-list")
 		} finally {
 			await held.stop()

@@ -17,12 +17,12 @@ const AT_END = 10
 const LOG_CAP = 1_100
 
 /** The scroller's geometry, read once the frames after a change have run. */
-async function scroller(page: Page): Promise<{ height: number; gapToEnd: number }> {
+async function scroller(page: Page): Promise<{ height: number; gapToEnd: number; shown: number }> {
 	return page.evaluate(async (id) => {
 		await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
 		const el = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.querySelector(".cm-scroller")
 		if (!(el instanceof HTMLElement)) throw new Error("the logs editor has no scroller")
-		return { height: el.scrollHeight, gapToEnd: el.scrollHeight - el.scrollTop - el.clientHeight }
+		return { height: el.scrollHeight, gapToEnd: el.scrollHeight - el.scrollTop - el.clientHeight, shown: el.clientHeight }
 	}, HOST)
 }
 
@@ -179,11 +179,30 @@ async function openLogs(ctx: ExtensionContext): Promise<Page> {
 	return page
 }
 
-/** A logs window with more lines than it shows, resting at the end. */
+/** Followed, the last of a batch is rendered once every line in it has landed. */
+async function lastLineShown(page: Page, last: number, timeout: number): Promise<void> {
+	await page.waitForFunction(
+		(id, t) =>
+			[...(document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.querySelectorAll(".cm-line") ?? [])].some((el) =>
+				el.textContent?.endsWith(t),
+			),
+		{ timeout, polling: 100 },
+		HOST,
+		`viewer probe #${last}.`,
+	)
+	await settle(page, 0)
+}
+
+/**
+ * A logs window with more lines than it shows, resting at the end. A log shorter than the window
+ * leaves the scroller at the window's height, so its growth cannot count this batch.
+ */
 async function filledLogs(ctx: ExtensionContext): Promise<Page> {
 	const page = await openLogs(ctx)
-	await logLines(page, 60)
-	expect((await scroller(page)).gapToEnd).toBeLessThan(AT_END)
+	await lastLineShown(page, await logProbes(page, 60), 10_000)
+	const { height, gapToEnd, shown } = await scroller(page)
+	expect(height).toBeGreaterThan(shown)
+	expect(gapToEnd).toBeLessThan(AT_END)
 	return page
 }
 
@@ -193,18 +212,7 @@ async function filledLogs(ctx: ExtensionContext): Promise<Page> {
  */
 async function cappedLogs(ctx: ExtensionContext): Promise<Page> {
 	const page = await openLogs(ctx)
-	const last = await logProbes(page, LOG_CAP)
-	// Followed, the last line is rendered once every line has landed.
-	await page.waitForFunction(
-		(id, t) =>
-			[...(document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.querySelectorAll(".cm-line") ?? [])].some((el) =>
-				el.textContent?.endsWith(t),
-			),
-		{ timeout: 60_000, polling: 100 },
-		HOST,
-		`viewer probe #${last}.`,
-	)
-	await settle(page, 0)
+	await lastLineShown(page, await logProbes(page, LOG_CAP), 60_000)
 	let trimmed = false
 	for (let i = 0; i < 100 && !trimmed; i++) {
 		const { height } = await scroller(page)
@@ -300,7 +308,8 @@ test("a selection at the end holds the view through the line that trims the log,
 	await expectHeld(page, line)
 	await logLines(page, 2)
 	await expectHeld(page, line)
-	// A burst whose 98th line trims, with four landing after it before CodeMirror measures.
+	// A burst whose 98th line trims: any of the four after it that land before CodeMirror measures
+	// ride its snapshot.
 	await logTrimming(page, 102)
 	await expectHeld(page, line)
 	await page.close()
