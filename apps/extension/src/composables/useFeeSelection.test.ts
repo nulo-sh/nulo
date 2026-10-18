@@ -20,7 +20,6 @@ const SPONSOR: RegisteredFpc = { id: "s1", type: 1, name: "Sponsor", isProtocol:
 const HAND: RegisteredFpc = { id: "s2", type: 1, name: "Dev sponsor", isProtocol: false, address: `0x${"0b".repeat(32)}` }
 const SCOPE: BalanceScope = { profileId: "p1", networkId: "n1", chainId: 1, accountAddress: "0xa" }
 
-/** The profile client's writer is a prototype method that needs its `this`, as the real client's is. */
 class ProfileClient {
 	readonly saved: Array<[string, FeePickUpdate]> = []
 	async saveFeePick(profileId: string, update: FeePickUpdate) {
@@ -287,7 +286,7 @@ describe("the app windows' rule book", () => {
 		for (const t of [locked, touched, saved, fallback]) t.stop()
 	})
 
-	test("a pick is saved as an app pick through a client whose writer needs its this", async () => {
+	test("a pick is saved as an app pick for the live account", async () => {
 		const t = setup({})
 		await t.commit({ publicFeeJuice: HELD, privateFeeJuice: null })
 		t.rules.pick(t.row("fj")!)

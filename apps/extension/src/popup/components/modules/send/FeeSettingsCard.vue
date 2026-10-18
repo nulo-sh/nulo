@@ -323,6 +323,7 @@ const statusNotice = computed(() => {
 	return held.value && props.originPrivacy === "private" ? PRIVATE_GAS_UNCHECKED : ""
 })
 
+// Keep this order: watchers one dependency triggers run in creation order.
 watchFeeSnapshot(snapshot)
 watchSponsorVerdicts(verdicts, {
 	verdict: () => props.feeEstimate?.sponsorFunding,
@@ -353,8 +354,7 @@ onBeforeMount(async () => {
 onBeforeUnmount(() => {
 	console.debug(`[fee:${methodId}] unmounting`)
 	// Release before tearing down the clients: the store's retry loop for
-	// this key must die with the card's subscription (today's unmount
-	// retry-chain death).
+	// this key must die with the card's subscription.
 	snapshot.dispose()
 	fpcService.disconnect()
 	prices.dispose()

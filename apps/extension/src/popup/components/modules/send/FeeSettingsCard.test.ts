@@ -23,7 +23,16 @@ const mocks = vi.hoisted(() => ({
 	saveFeePick: vi.fn(),
 }))
 
-vi.mock("@/utils/core", () => ({ managers: { profile: { saveFeePick: mocks.saveFeePick } } }))
+// The real `saveFeePick` is a client method, so the card must call it on `managers.profile`.
+vi.mock("@/utils/core", () => {
+	const profile = {
+		saveFeePick(this: unknown, ...args: unknown[]) {
+			if (this !== profile) throw new Error("saveFeePick called off managers.profile")
+			return mocks.saveFeePick(...args)
+		},
+	}
+	return { managers: { profile } }
+})
 
 // Vitest 4 requires `function` expressions (not arrow functions) for mocks
 // instantiated with `new`. Arrow factories error: "() => ... is not a constructor".

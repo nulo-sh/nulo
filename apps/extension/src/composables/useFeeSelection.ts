@@ -55,7 +55,6 @@ type CardSnapshot = Pick<
 	"isInitComplete" | "gasBalances" | "committedScope" | "snapshotCommitted" | "scopeIsLiveIdentity"
 >
 
-/** The card's props, the snapshot and verdict state, and the rows the selection resolves against. */
 export interface FeeSelectionInput {
 	props: LiveFeeIdentity
 	snapshot: CardSnapshot
@@ -182,11 +181,10 @@ async function persistSelection(c: AppCtx, method: FeeMethodOption) {
 	await c.saveFeePick(c.props.profile!.id, update)
 }
 
-/** The selection a settled init lands on when the user picked nothing meanwhile: the saved one,
- *  resolved against fresh `methods` by semantic key (never the stored `fpc.name`), else the
- *  default: Nulo's sponsor, else nothing. A dangling saved record (a deleted FPC) simply re-resolves
- *  to nothing every time — it is deliberately NOT pruned here, since a whole-map write would race
- *  `persistSelection` / another mounted card and could clobber a newer selection. */
+/** The saved pick, resolved against fresh `methods` by semantic key (never the stored `fpc.name`);
+ *  one that no longer resolves falls back to Nulo's sponsor, else nothing. Never prune a dangling
+ *  pick here: a whole-map write would race `persistSelection` or another mounted card and could
+ *  clobber a newer pick. */
 function settledSelection(c: AppCtx, savedRecord: AppPick | undefined) {
 	const resolved = resolveSavedSelection(savedRecord, c.methods.value)
 	if (resolved) return resolved
@@ -300,11 +298,8 @@ function pickForApp(c: AppCtx, m: FeeMethodOption) {
 }
 
 function fpcUpdatedForApp(c: AppCtx, fpc: RegisteredFpc) {
-	// Replace the full snapshot so address-edit changes propagate to the
-	// dropdown trigger and any persisted-fee-method round-trips below.
-	// Object replacement (not deep mutation) keeps the derived computed
-	// reactive. A default holds only while its row is the protocol's: an edited address makes the
-	// row custom, and a custom FPC pays only once picked.
+	// A default holds only while its row is the protocol's: an edited address makes the row
+	// custom, and a custom FPC pays only once picked.
 	if (c.selectedMethod.value?.fpc?.id === fpc.id) {
 		c.selectedMethod.value = c.chosenUnasked && !fpc.isProtocol ? undefined : { ...c.selectedMethod.value, fpc }
 	}

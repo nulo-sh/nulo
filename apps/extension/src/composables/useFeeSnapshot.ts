@@ -52,7 +52,7 @@ interface SnapshotCtx<L> {
 const CONTEXT = Symbol("fee-snapshot")
 
 /** This card's capabilities: both legs, backoff retry while mounted, no
- *  tx-settle refresh and no peek — exactly its pre-store traffic.
+ *  tx-settle refresh and no peek.
  *  `txRefresh` must stay off for every subscriber sharing this key while the card is mounted: a
  *  settle-triggered forced read can outrank the mount's forced read, which then returns without
  *  committing, and `commitFromEntry` copies `gas.verified` without reading `entry.stale` — so Send
@@ -69,8 +69,7 @@ const identityDrifted = <L>(ctx: SnapshotCtx<L>, scope: FeeScope) => !ctx.isMoun
  *  releasing the old: a same-profile switch must not transit zero subscribers,
  *  which would fire the store's last-release fence and abandon the old
  *  identity's still-joinable flights (the A→B→A flap would re-issue its RPC).
- *  The store resets backoff attempts on the new key's 0→1 retry-capable
- *  transition, reproducing today's fresh-identity-fresh-backoff rule. */
+ *  The new key's 0→1 retry-capable transition gives a fresh identity fresh backoff. */
 function subscribeTo<L>(ctx: SnapshotCtx<L>, scope: BalanceScope, reqKey: string) {
 	if (ctx.subscribedKey === reqKey) return
 	const previous = ctx.subscription
@@ -85,14 +84,10 @@ function releaseSubscription<L>(ctx: SnapshotCtx<L>) {
 	ctx.subscribedKey = null
 }
 
-/**
- * The SNAPSHOT COMMIT (synchronous): copies the store entry into local refs —
- * never live-binds — then reconciles the selection and opens the gate. Order
- * matters and is preserved verbatim from the pre-store init: refs commit
- * BEFORE the reconcile (on a first load the still-closed gate means `methods`
- * resolves against undefined balances), and the gate opens after — degraded
- * included (holding it closed on failure was the frozen-Confirm bug).
- */
+/** Copies the store entry into local refs, never live-binding them. Refs commit before the
+ *  reconcile, which resolves against the new rows (on a first load, with the gate still closed,
+ *  against no balances); the gate opens after it, degraded included, since held closed it would
+ *  freeze Confirm. */
 function commitFromEntry<L>(ctx: SnapshotCtx<L>, scope: BalanceScope, reqKey: string, load: L) {
 	const entry = ctx.store.entry(scope)
 	if (!entry) return
@@ -100,13 +95,12 @@ function commitFromEntry<L>(ctx: SnapshotCtx<L>, scope: BalanceScope, reqKey: st
 	// UNKNOWN (undefined) on any failed balance read, never a fabricated zero
 	// and never a stale last-good figure — self-paid derivation fails closed.
 	// `verified` is exactly that: cleared by every failed refresh. The store
-	// retains last-good FPC data per key, matching the old lastGoodFpcKey rule.
+	// retains last-good FPC data per key.
 	ctx.gasBalances.value = entry.gas.verified
 	ctx.registeredFpcs.value = entry.fpc.data ?? []
 
 	ctx.selection().reconcile(load, scope)
 
-	// The gate opens on EVERY settled init — degraded included.
 	ctx.committedKey = reqKey
 	ctx.committedScope.value = scope
 	ctx.isInitComplete.value = true
@@ -256,8 +250,8 @@ export function useFeeSnapshot<L>(
 		registeredFpcs: ref<RegisteredFpc[]>([]),
 		/** Structured scope of the committed snapshot — the recovery watch's target. */
 		committedScope: ref<BalanceScope | null>(null),
-		/** The identity a run is reading for right now, owned by `readingRun`. Rows load only for it:
-		 *  an identity no read is coming for, after an init that threw, say, gives today's answers. */
+		/** The identity a run is reading for right now, owned by `readingRun`. Rows show as loading
+		 *  only for it, so an identity no read is coming for (after an init that threw, say) never does. */
 		readingKey: ref<string | null>(null),
 		isLoading: ref(false),
 		failure: ref<FeeSnapshotFailure>(null),
@@ -307,7 +301,6 @@ export function useFeeSnapshot<L>(
 
 export type FeeSnapshot<L> = ReturnType<typeof useFeeSnapshot<L>>
 
-/** The snapshot's two watchers, in this order. */
 export function watchFeeSnapshot<L>(snapshot: FeeSnapshot<L>): void {
 	const ctx = snapshot[CONTEXT]
 	/** Recovery from degraded commits: re-commit when a store retry lands. The
