@@ -40,6 +40,9 @@ const props = defineProps({
 	arriving: { type: Boolean, default: false },
 	/** The title names the function a dApp called: it stays on one line, cut at its end. */
 	oneLineTitle: { type: Boolean, default: false },
+	/** `#title-trailing` opens with the shared separator: where the row has no room for it beside the
+	 *  title, it drops under the title without its separator. */
+	wrapTrailing: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(["activate"])
@@ -105,9 +108,10 @@ function hasActionsContent() {
 			</Flex>
 
 			<Flex direction="column" gap="4" :class="$style.text">
-				<Flex align="center" gap="6">
+				<Flex align="center" :gap="wrapTrailing ? undefined : '6'" :class="wrapTrailing && $style.title_row_wrap">
 					<span :id="titleId" :class="[$style.title, oneLineTitle && $style.title_one_line]" data-testid="activity-title">{{ title }}</span>
-					<slot name="title-trailing" />
+					<span v-if="wrapTrailing" :class="$style.trailing"><slot name="title-trailing" /></span>
+					<slot v-else name="title-trailing" />
 				</Flex>
 				<Flex v-if="$slots.secondary" align="center" gap="6" :class="$style.secondary_row">
 					<slot name="secondary" />
@@ -234,6 +238,28 @@ function hasActionsContent() {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/* On one line the title's margin and the trailing group's negative one cancel, so the row lays out as
+ * without the wrap. On its own line the group starts left of the clip by that margin, which is the
+ * separator's 2.78 px (14 px Space Grotesk 700) and its 6 px gap: the separator is cut away and the
+ * chip starts under the title. */
+.title_row_wrap {
+	--sep-room: 8.78px;
+	flex-wrap: wrap;
+	gap: 4px 6px;
+	overflow-x: clip;
+}
+
+.title_row_wrap > .title {
+	margin-right: var(--sep-room);
+}
+
+.trailing {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: calc(-1 * var(--sep-room));
 }
 
 .secondary_row {

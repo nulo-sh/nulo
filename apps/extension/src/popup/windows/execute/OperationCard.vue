@@ -139,6 +139,7 @@ const sendTxCalls = (op: DraftAztecSendTxOperation): { call: WireCall; surface: 
 	return (op.exec.calls as WireCall[]).map((call, j) => ({ call, surface: callSurface(ctx, call, decodedAt(j), isToken(call.to)) }))
 }
 const sendTxRows = computed(() => (props.op.kind === "aztec_sendTx" ? sendTxCalls(props.op) : []))
+const appName = computed(() => safeWire(props.dapp?.name, 64) || "the app")
 
 /** Only a contract the wallet registered as a token gets the transfer/mint vocabulary. */
 const isToken = (contract: unknown): boolean => tokenAt(props.tokens, props.op.network?.chainId, contract) !== undefined
@@ -403,12 +404,14 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 				:class="$style.op_fee_set"
 			>
 				<Icon name="square-check" size="14" color="green" />
-				<Flex direction="column" gap="6" :class="$style.fee_lines">
-					<Text variant="body" color="secondary" data-testid="execute-op-app-legend">
+				<Flex direction="column" :class="$style.fee_lines">
+					<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate">
+						<Text variant="name" color="primary" :class="$style.name_size">{{ appName }}</Text>
+					</AppFeeLine>
+					<Text v-else variant="body" color="secondary" height="150" data-testid="execute-op-app-legend">
 						Fee payment method set by
-						<Text variant="name" color="primary" :class="$style.name_size">{{ safeWire(dapp?.name, 64) || 'the app' }}</Text>
+						<Text variant="name" color="primary" :class="$style.name_size">{{ appName }}</Text>
 					</Text>
-					<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate" />
 				</Flex>
 			</Flex>
 			<!-- Mounted with the row: a region created with its text in place may go unannounced. -->
@@ -679,10 +682,12 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 	background: var(--nulo-surface-low);
 }
 
-/* The 1 px sets the first line's text on the icon's centre. */
+/* Sets the first line's text on the icon's centre: 1.5 leading puts 3 px over it. An app's name may
+ * be 64 characters with no break in them. */
 .fee_lines {
 	min-width: 0;
-	padding-top: 1px;
+	margin-top: -2px;
+	overflow-wrap: anywhere;
 }
 
 /* A label on its own line above a full-width stack, so nothing hangs off the right-aligned value column. */
