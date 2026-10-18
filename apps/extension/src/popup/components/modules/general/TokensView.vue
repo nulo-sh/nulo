@@ -17,7 +17,6 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 /** Utils */
 import { journalRecordInScope } from "@/utils/activity-rows"
 import { stringCompare } from "@/utils/string"
-import { parseRawBalance, safeFiatOf } from "@/utils/token-amount"
 import { orderTokenRows } from "@/utils/token-order"
 import { capHomeSlots, defaultKey, homeSlots, isDefaultPending } from "./home-slots"
 
@@ -82,7 +81,7 @@ const anyRefreshing = computed(() => tokenBalances.value.some((tb) => tb.isUpdat
 /** Prices order the rows; the client is disconnected AFTER the composable is disposed (cleanup order). */
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
-const fiatOf = safeFiatOf((tb) => prices.tokenFiatMicro(tb.token, parseRawBalance(tb)))
+const fiatOf = prices.fiatOfRow
 
 const pins = usePinnedTokens({
 	getScope: () => pinScopeOf(appStore.profile?.id, appStore.network?.chainId),

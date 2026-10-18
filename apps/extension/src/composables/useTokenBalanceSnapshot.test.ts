@@ -6,7 +6,7 @@ import { type TokenBalanceSnapshotState, useTokenBalanceSnapshot } from "./useTo
 
 const row = (id: number, chainId = 1, account = "0xa") => ({ id, account, token: { chainId } }) as unknown as TokenBalanceInfo
 
-function setup(over: { scopeFence?: () => () => boolean; mapRow?: (r: TokenBalanceInfo) => TokenBalanceInfo } = {}) {
+function setup(over: Partial<Parameters<typeof useTokenBalanceSnapshot<TokenBalanceInfo>>[0]> = {}) {
 	const listeners = new Set<() => void>()
 	const client = {
 		getTokenBalances: vi.fn<(id?: number, account?: string) => Promise<TokenBalanceInfo[]>>(),
@@ -240,5 +240,153 @@ describe("useTokenBalanceSnapshot", () => {
 		expect(s.state.value).toBe("loading")
 		await Promise.resolve()
 		expect(s.state.value).toBe("loaded")
+	})
+})
+
+describe("useTokenBalanceSnapshot — the rules a view keeps over the defaults", () => {
+	beforeEach(() => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+	})
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	test("an unseen update is ignored; with insertUnseenUpdated an in-scope one is listed through mapRow", async () => {
+		const home = setup()
+		home.client.getTokenBalances.mockResolvedValue([row(1)])
+		await home.snap.fetchTokenBalances()
+		home.snap.onBalanceUpdated(row(9))
+		expect(ids(home.rows)).toEqual([1])
+
+		const s = setup({ insertUnseenUpdated: true, mapRow: (r) => ({ ...r, mapped: true }) as never })
+		s.client.getTokenBalances.mockResolvedValue([row(1)])
+		await s.snap.fetchTokenBalances()
+		s.snap.onBalanceUpdated(row(8, 2))
+		s.snap.onBalanceUpdated(row(9))
+		expect(s.rows.value).toEqual([
+			{ ...row(1), mapped: true },
+			{ ...row(9), mapped: true },
+		])
+	})
+
+	test("added: replace swaps a listed row for the add, through mapRow; a new id is appended", async () => {
+		const s = setup({ added: "replace", mapRow: (r) => ({ ...r, mapped: true }) as never })
+		s.client.getTokenBalances.mockResolvedValue([row(1), row(2)])
+		await s.snap.fetchTokenBalances()
+		const newer = { ...row(1), marker: "newer" } as never
+		s.snap.onBalanceAdded(newer)
+		s.snap.onBalanceAdded(row(3))
+		expect(s.rows.value).toEqual([
+			{ ...(newer as object), mapped: true },
+			{ ...row(2), mapped: true },
+			{ ...row(3), mapped: true },
+		])
+	})
+
+	test("added: append lists every add for the active account, any chain and a listed id again, and no other account's", async () => {
+		const s = setup({ added: "append" })
+		s.rows.value = [row(1)]
+		s.snap.onBalanceAdded(row(1))
+		s.snap.onBalanceAdded(row(2, 2))
+		s.snap.onBalanceAdded(row(3, 1, "0xother"))
+		expect(ids(s.rows)).toEqual([1, 1, 2])
+	})
+
+	test("loadingOnRefresh: every run reads loading, and a refused one reads unavailable over the rows kept", async () => {
+		const s = setup({ loadingOnRefresh: true })
+		s.client.getTokenBalances.mockResolvedValueOnce([row(1)])
+		await s.snap.fetchTokenBalances()
+		expect(s.state.value).toBe("loaded")
+		const refused = deferred<TokenBalanceInfo[]>()
+		s.client.getTokenBalances.mockReturnValueOnce(refused.promise)
+		const p = s.snap.fetchTokenBalances()
+		expect(s.state.value).toBe("loading")
+		refused.reject(new Error("port closed"))
+		await p
+		expect(s.state.value).toBe("unavailable")
+		expect(ids(s.rows)).toEqual([1])
+	})
+
+	test("retryOnReject: false arms no retry; a later run still reads", async () => {
+		const s = setup({ retryOnReject: false })
+		s.client.getTokenBalances.mockRejectedValueOnce(new Error("port closed")).mockResolvedValueOnce([row(1)])
+		await s.snap.fetchTokenBalances()
+		expect(s.state.value).toBe("unavailable")
+		expect(vi.getTimerCount()).toBe(0)
+		await s.snap.fetchTokenBalances()
+		expect(ids(s.rows)).toEqual([1])
+	})
+
+	test("refetchWhenDirty: false lands the run's own answer over an event that came meanwhile", async () => {
+		const s = setup({ refetchWhenDirty: false })
+		const first = deferred<TokenBalanceInfo[]>()
+		s.client.getTokenBalances.mockReturnValueOnce(first.promise)
+		const p = s.snap.fetchTokenBalances()
+		s.snap.onBalanceAdded(row(2))
+		expect(ids(s.rows)).toEqual([2])
+		first.resolve([row(1)])
+		await p
+		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
+		expect(ids(s.rows)).toEqual([1])
+	})
+
+	test("reconnect: every reads on the first connect too; off never touches the connect event", async () => {
+		const every = setup({ reconnect: "every" })
+		every.client.getTokenBalances.mockResolvedValue([row(1)])
+		every.connect()
+		expect(every.client.getTokenBalances).toHaveBeenCalledTimes(1)
+
+		// A client with no connect event at all: subscribing or unsubscribing would throw.
+		const rows = ref<TokenBalanceInfo[]>([])
+		const off = useTokenBalanceSnapshot({
+			client: { getTokenBalances: vi.fn() } as never,
+			live: { account: { address: "0xa" }, network: { chainId: 1 } },
+			rows,
+			reconnect: "off",
+		})
+		off.onBalanceAdded(row(1))
+		off.dispose()
+		expect(ids(rows)).toEqual([1])
+	})
+
+	test("a counted reconnect runs onReconnect in place of the read", async () => {
+		const onReconnect = vi.fn()
+		const s = setup({ onReconnect })
+		s.connect()
+		expect(onReconnect).not.toHaveBeenCalled()
+		s.connect()
+		expect(onReconnect).toHaveBeenCalledTimes(1)
+		expect(s.client.getTokenBalances).not.toHaveBeenCalled()
+	})
+
+	test("invalidate drops the pending retry and the run in flight, and keeps the connect count", async () => {
+		const s = setup()
+		s.client.getTokenBalances.mockRejectedValueOnce(new Error("port closed"))
+		await s.snap.fetchTokenBalances()
+		s.snap.invalidate()
+		await vi.advanceTimersByTimeAsync(5_000)
+		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
+
+		const late = deferred<TokenBalanceInfo[]>()
+		s.client.getTokenBalances.mockReturnValueOnce(late.promise).mockResolvedValue([row(2)])
+		const p = s.snap.fetchTokenBalances()
+		s.connect()
+		s.snap.invalidate()
+		late.resolve([row(1)])
+		await p
+		expect(s.rows.value).toEqual([])
+		s.connect()
+		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(3)
+	})
+
+	test("reset also makes the next connect the first again", async () => {
+		const s = setup()
+		s.client.getTokenBalances.mockResolvedValue([row(1)])
+		s.connect()
+		s.snap.reset()
+		s.connect()
+		expect(s.client.getTokenBalances).not.toHaveBeenCalled()
+		s.connect()
+		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
 	})
 })

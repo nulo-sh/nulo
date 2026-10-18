@@ -37,7 +37,6 @@ import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
 import { FEE_JUICE_BRIDGE_URL, feePayerOf } from "@/popup/components/modules/send/fee-helpers"
 import { feeText } from "@/utils/fee-estimation"
 import { validateSendAmount } from "@/popup/pages/send-amount"
-import { applyBalanceAdd, applyBalanceUpdate } from "@/popup/pages/send-balance-events"
 import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
 import { submitTransfer } from "@/popup/pages/send-submit"
 import { NO_FACTS, payerKindOf, publishFacts } from "@/components/composite/send/publish-facts"
@@ -52,6 +51,7 @@ import { usePrices } from "@/composables/usePrices"
 import { vSnackFooter } from "@/composables/snackInset"
 import { useSendReview } from "@/composables/useSendReview"
 import { useTicker } from "@/composables/ticker"
+import { useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
 const { openToast } = useToast()
 
 /** Store */
@@ -157,17 +157,17 @@ const tokensFailed = ref(false)
 const activeToken = computed(() => tokens.value?.find((t) => t.id === cacheStore.activeTokenIdx))
 const isBlockedTransfer = computed(() => !activeToken.value?.hasPrivateTransfers && !activeToken.value?.hasPublicTransfers)
 
-const tokenBalanceService = new TokenBalanceServiceClient()
-tokenBalanceService.onTokenBalanceAdded.add(onBalanceAdded)
-tokenBalanceService.onTokenBalanceUpdated.add(onBalanceUpdated)
-function onBalanceAdded(balance) {
-	applyBalanceAdd(tokenBalances.value, appStore.account.address, balance)
-}
-function onBalanceUpdated(balance) {
-	applyBalanceUpdate(tokenBalances.value, balance)
-}
-
 const tokenBalances = ref([])
+const tokenBalanceService = new TokenBalanceServiceClient()
+const balances = useTokenBalanceSnapshot({
+	client: tokenBalanceService,
+	live: appStore,
+	rows: tokenBalances,
+	added: "append",
+	reconnect: "off",
+})
+tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
+tokenBalanceService.onTokenBalanceUpdated.add(balances.onBalanceUpdated)
 const tokenBalance = computed(() => {
 	return tokenBalances.value?.find((b) => b?.token.id === cacheStore.activeTokenIdx)
 })
@@ -733,6 +733,7 @@ onBeforeUnmount(() => {
 	closeReview()
 
 	contactService.disconnect()
+	balances.dispose()
 	tokenBalanceService.disconnect()
 	tokenService.disconnect()
 	prices.dispose()

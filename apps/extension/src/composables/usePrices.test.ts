@@ -200,6 +200,18 @@ describe("composables/usePrices", () => {
 		expect(api.tokenFiatMicro(undefined, 10n ** 18n)).toBeUndefined()
 	})
 
+	test("fiatOfRow prices both sides of a well-formed row, and no malformed one", async () => {
+		const client = fakeClient(quoteState(Date.now()))
+		const { api } = await withPrices(client)
+		const token = { chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC, decimals: 18, hasDecimals: true }
+		const unit = 10n ** 18n
+		expect(api.fiatOfRow({ token, publicBalance: (250n * unit).toString(), privateBalance: (1_000n * unit).toString() })).toBe(
+			1_249_821_250n,
+		)
+		expect(api.fiatOfRow({ token, publicBalance: "1e18", privateBalance: "0" })).toBeUndefined()
+		expect(api.fiatOfRow({ token: { ...token, decimals: 78 }, publicBalance: "1" })).toBeUndefined()
+	})
+
 	test("a priced token whose decimals the wallet does not know has no fiat; known, it has", async () => {
 		const client = fakeClient(quoteState(Date.now()))
 		const { api } = await withPrices(client)
