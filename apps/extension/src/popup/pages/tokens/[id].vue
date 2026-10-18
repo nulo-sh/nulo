@@ -333,7 +333,7 @@ onBeforeUnmount(() => {
 	padding: 0 24px 16px;
 }
 
-/* With the content's top padding, the 32px the warning always had above the activity. */
+/* With the content's 24px top padding, 32px between the warning and the activity. */
 .warning {
 	padding: 24px 24px 8px;
 }

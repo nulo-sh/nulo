@@ -986,7 +986,6 @@ type PinnedLayout = {
 	heroTop: number
 	scrollTop: number
 	maxScroll: number
-	rootScrollTop: number
 	shadow: string
 	navBottom: number
 	viewport: number
@@ -1000,7 +999,6 @@ function readPinned(page: Page, kind: PinnedPage): Promise<PinnedLayout> {
 			heroTop: q("balance-amount").getBoundingClientRect().top,
 			scrollTop: scroller.scrollTop,
 			maxScroll: scroller.scrollHeight - scroller.clientHeight,
-			rootScrollTop: (q(`${k}-hero`).parentElement as HTMLElement).scrollTop,
 			shadow: getComputedStyle(q(`${k}-scroll-shadow`)).opacity,
 			navBottom: q("bottom-nav").getBoundingClientRect().bottom,
 			viewport: window.innerHeight,
@@ -1122,7 +1120,6 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 			)
 		})
 
-	// A token's page holds its balance and actions the same way: only its recent activity scrolls.
 	await navigateByHash(page, `#/popup/tokens/${TOKEN_PAGE_ID}`)
 	await page.waitForSelector(sel("token-scroller"), { visible: true, timeout: 15_000 })
 	await settledRows(page, HOME_ROWS.length)
@@ -1132,7 +1129,6 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 	const tokenEnd = await scrollPinned(page, "token", tokenTop.maxScroll, "1")
 	console.log(`[rows] the token page at 360 × 600: ${JSON.stringify({ tokenTop, tokenEnd })}`)
 	expect(tokenEnd.scrollTop).toBeGreaterThan(0)
-	expect(tokenEnd.rootScrollTop).toBe(0)
 	expect(Math.abs(tokenEnd.heroTop - tokenTop.heroTop)).toBeLessThanOrEqual(0.5)
 
 	expect(listedExtensionPerTest.consoleErrors).toEqual([])

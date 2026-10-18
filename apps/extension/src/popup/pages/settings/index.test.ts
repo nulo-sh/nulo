@@ -103,7 +103,10 @@ beforeEach(() => {
 		},
 	)
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+	vi.unstubAllGlobals()
+	vi.restoreAllMocks()
+})
 enableAutoUnmount(afterEach)
 
 const PASSWORD = { id: "p1", name: "Primary", type: "password" }

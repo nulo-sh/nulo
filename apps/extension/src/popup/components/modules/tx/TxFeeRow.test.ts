@@ -41,11 +41,11 @@ describe("TxFeeRow", () => {
 	})
 
 	test("the breakdown lists L2 gas and DA gas alone, then the Estimated line, every cost priced and no gas units", () => {
-		const w = factory({ modelValue: true })
+		// Gas counts an older breakdown carried: the row must not print them beside the costs.
+		const w = factory({ modelValue: true, gasBreakdown: { ...gasBreakdown, l2Gas: "1,000", daGas: "500" } })
 		const keys = w.findAll("span").filter((span) => span.classes().some((c) => c.includes("fee_grid_key")))
 		expect(keys.map((k) => k.text())).toEqual(["L2 gas", "DA gas", "Estimated"])
 		expect(w.text()).not.toContain("Teardown")
-		// The fixture's limits, 1,000 L2 and 500 DA gas, as the grid printed them beside each cost.
 		expect(w.text()).not.toMatch(/1,000|\b500\b/)
 		expect(cells(w).map((c) => c.text())).toEqual(["~0.001 FJ ($0.002)", "~0.001 FJ ($0.002)", "~0.002 FJ ($0.004)"])
 		expect(w.get('[data-testid="tx-estimate-usd"]').text()).toBe("($0.004)")
