@@ -33,8 +33,8 @@ describe("balance-row reconciliation", () => {
 			await waitForHash(page, "#/popup/general")
 
 			// The fixture minted 1000 tokens and imported them, so a projected row exists before anything
-			// is deleted. `tokenReadyExtension` is file-scoped and this spec mutates it: a failure before
-			// the unlock leaves the wallet locked with its rows gone, so a retry fails at its first route wait.
+			// is deleted. `tokenReadyExtension` is file-scoped and this spec mutates it: a failure between
+			// the stop and the unlock leaves the wallet locked, so a retry fails at its first route wait.
 			await waitForTokenCardAmount(page, "1,000", "TST", 60_000)
 
 			await page.close()
@@ -54,7 +54,6 @@ describe("balance-row reconciliation", () => {
 			}, BALANCE_ROOT)
 			expect(deleted, "fixture should have left at least one balance row to delete").toBeGreaterThan(0)
 
-			// Prove the gap is real before relying on the repair.
 			const remaining = await reopened.evaluate(async (root: string) => {
 				const all = await chrome.storage.local.get(null)
 				return Object.keys(all).filter((k) => k.startsWith(`${root}@`)).length
@@ -67,10 +66,7 @@ describe("balance-row reconciliation", () => {
 			await waitForHash(reopened, "#/popup/general", 60_000)
 
 			const accountAddress = tokenReadyExtension.accountAddress
-			// maxRefreshes: 0 stops the HELPER from re-kicking refreshes. It does not
-			// isolate the sweep's own enqueue — `auth.vue` calls refreshBalances on
-			// unlock — so this asserts end-to-end recovery, not the enqueue in
-			// isolation. The service test with the task spy is what pins that.
+			// No helper refreshes: recovery must come from the unlock path.
 			await waitForFreshBalanceRow(reopened, {
 				account: accountAddress,
 				tokenContract: aztecConfig!.tokenAddress,
