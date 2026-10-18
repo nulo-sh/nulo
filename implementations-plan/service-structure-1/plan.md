@@ -1,7 +1,7 @@
 ---
 plan: service-structure-1
 tier: mid
-status: arc 1 merged (#703); arc 2 merged (#741); arc 3 in review; arc 4 waits for release
+status: completed (#703, #741, #751 and the arc 4 PR), awaiting merge
 issues: "#521 (arc 1); #545 (arc 2); #547 (arc 3); #549 #560 (arc 4)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 0fe841be
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18
+- **Status:** completed. Four PRs against `dev`: #703 (arc 1), #741 (arc 2) and #751 (arc 3) merged; the arc 4 PR carries #549, #560 and this close-out, and merging it is the orchestrator's call.
+- **Shipped:** #703: popup import waits through the shared activation waiter, so it stops at once on a recorded bootstrap failure, and a fenced bootstrap retires its own profile's earlier failure record (#521, P37-09). #741: discovery in `wallet-sdk/discovery-flow.ts`, the five session-keyed holders in one `SessionHolders` registry with one teardown (#545, P37-08). #751: the balance-refresh outbox as its own class, `BalanceRefreshOutbox` (#547, P37-07). Arc 4: named options for `finalizeGasLimits`, `handleWalletMessage` and the two restore commits, one `EstimateReuseDeps`, three more redaction keys (#560, P37-05); one compiler-checked operation-trait table read by the three scope sites and the fee-settings sites (#549, P37-06).
+- **Not changed:** the execution dispatch keeps its switch (it routes to executors, a fact the table does not name); per-kind sites keep their own kind checks (D4), the send card's `isSendTx` among them (D20); no further split of `IncomingTransferService` (D15).
+- **Owner asks:** none.
+- **Known limits:** #700.
+- **Open items:** #750, the decomposition map of `IncomingTransferService` for the owner's next decision page.
+- **Lessons:** none promoted: `lessons.md` is at 8188 of 8192 bytes; this plan's notes stay in [lessons/phase-0.md](lessons/phase-0.md) to [phase-4](lessons/phase-4.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # service-structure-1: five structural refactors from decision page 37
 
