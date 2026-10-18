@@ -5,6 +5,8 @@ type PausedRequest = { requestId: string; request: { url: string } }
 type TargetInfo = { type: string; url: string }
 type AttachedToTarget = { sessionId: string; targetInfo: TargetInfo; waitingForDebugger: boolean }
 
+const NODE_CALLERS = [{ type: "service_worker" }, { type: "background_page" }, { exclude: true }]
+
 /**
  * Reroute every request the extension makes to `fromOrigin` (the compiled-in seed endpoint the
  * test cannot change) without binding that origin's port. The stub keeps an ephemeral, run-owned
@@ -22,6 +24,12 @@ type AttachedToTarget = { sessionId: string; targetInfo: TargetInfo; waitingForD
  * `Fetch.enable` has landed on our session. Existing targets arrive through the same event (not
  * waiting) and are armed in place. Dedicated workers fetch through their document's loader, so
  * the document's session sees their requests and the worker targets themselves are not attached.
+ *
+ * Only the extension's node callers are attached: service workers and background pages, which is
+ * how Chrome types an offscreen document. A page never takes a session of ours, because detaching
+ * any session from a page clears that page's WebAuthn virtual authenticators (Chromium's
+ * `WebAuthnHandler::Disable` runs on every detach), and a passkey spec's anchor popup holds its
+ * credential across the background restart that suspends this interception.
  */
 export async function cdpInterceptRpc(
 	browser: Browser,
@@ -100,7 +108,7 @@ export async function cdpInterceptRpc(
 	})
 
 	try {
-		await root.send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true })
+		await root.send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true, filter: NODE_CALLERS })
 		// Chrome delivers `Target.attachedToTarget` for every existing browser-level target before it
 		// answers the `Target.setAutoAttach` that requested them, so the arms kicked off so far are
 		// the existing targets'; later ones report through `failures`.
