@@ -118,6 +118,7 @@ Steps 2-5 of [`implementations-plan/README.md` § Post-implementation standard](
 **Arc 1, round 3 (resume, after D6's merge).** Codex: `approve`; the rule lives once in the composable, the order patch → guard → read → settle holds, both callers bind it.
 **Arc 2, round 1 (2026-10-18).** Codex (gpt-6.1-sol, high): `approve`, no findings; the root `README.md` banner names the repository, so it stays out. Opus (general-purpose): the copy matches the answers; the PR names OA-2 as the orchestrator's reading and carries `Closes #767`. Gates and pictures: [lessons/phase-6.md](lessons/phase-6.md).
 **Close-out, round 1 (2026-10-18).** Codex (gpt-6.1-sol, high): `approve with fixes`; Opus (general-purpose): `approve with fixes`; every cited number, SHA, run and quote held. Adopted: the merged lesson keeps the old head after a squash merge and names the plans gate and when to run it (both); D7 states the rule-5 deviation and why #788 did not carry it (both); OA-3 to OA-5 say they shipped as the plan's forms with no owner pick, and two Shipped clauses match what shipped (O). Left to the orchestrator: OA-2's footer and screen-reader name rest on its reading of the owner's words (O).
+**Close-out, round 2 (resume).** Codex: `approve`; it verified each fix and found no regression.
 
 ## Seeds
 
