@@ -15,7 +15,7 @@ import { useAppStore } from "@/stores/app.store"
 
 const appStore = useAppStore()
 
-// An entry with no path is a reload that landed here from Create: the wallet's type says which.
+// Only a reload outside Import lands here with no path: the wallet's type says which.
 const path = computed(() => donePath(window.history.state) ?? (appStore.profile?.type === "password" ? "password" : "passkey"))
 
 // Detected on mount so the pin-tip only shows for users who actually need

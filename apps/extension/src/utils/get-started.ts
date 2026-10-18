@@ -52,7 +52,7 @@ export async function markGetStarted(profileId: string, flag: GetStartedFlag): P
 	}
 }
 
-/** The landing's How Aztec works page with the clips; it ships with the landing in the same release. */
+/** The landing's How Aztec works page, with the clips. */
 export const HOW_AZTEC_WORKS_URL = "https://nulo.sh/how-aztec-works"
 
 /** What a balance read says about holding funds: `unknown` until it settles. */

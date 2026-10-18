@@ -2,7 +2,11 @@ import { flushPromises, shallowMount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 const config = vi.hoisted(() => ({ getValue: vi.fn(), onConnected: undefined as unknown as { invoke: () => void } }))
-const router = vi.hoisted(() => ({ replace: vi.fn() }))
+const router = vi.hoisted(() => ({
+	replace: vi.fn(),
+	isReady: vi.fn(async () => undefined),
+	currentRoute: { value: { path: "/onboarding/create" } },
+}))
 const hydrateKnownProfile = vi.hoisted(() => vi.fn(async (): Promise<{ id: string } | undefined> => undefined))
 vi.mock("@/wallet/services/config/client", async () => {
 	const { EventHandler } = await import("@nulo/wallet-core/utils")
@@ -23,6 +27,7 @@ vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () =>
 vi.mock("vue-router", () => ({ useRouter: () => router }))
 
 import { THEME_HINT_KEY } from "@/utils/general"
+import { doneRoute } from "./steps"
 import App from "./app.vue"
 
 const root = document.documentElement
@@ -106,6 +111,20 @@ describe("onboarding's resume", () => {
 		await flushPromises()
 		expect(router.replace).toHaveBeenCalledWith("/onboarding/done")
 		page.unmount()
+	})
+
+	test("a tab reloaded mid-import resumes at Ready on the import's path", async () => {
+		config.getValue.mockResolvedValue("dark")
+		hydrateKnownProfile.mockResolvedValue({ id: "p1" })
+		router.currentRoute.value.path = "/onboarding/import"
+		try {
+			const page = mountOnboarding()
+			await flushPromises()
+			expect(router.replace).toHaveBeenCalledWith(doneRoute("import"))
+			page.unmount()
+		} finally {
+			router.currentRoute.value.path = "/onboarding/create"
+		}
 	})
 
 	test("a first run with no profile stays where it opened", async () => {

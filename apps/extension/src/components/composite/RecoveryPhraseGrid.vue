@@ -2,7 +2,6 @@
 const props = defineProps<{
 	words: readonly string[]
 	columns: 3 | 4
-	/** The root's testid; each word carries `<testId>-word`. */
 	testId: string
 }>()
 </script>
