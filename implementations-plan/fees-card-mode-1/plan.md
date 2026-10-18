@@ -1,7 +1,7 @@
 ---
 plan: fees-card-mode-1
 tier: mid
-status: planned (final Codex pass approve); awaiting the orchestrator's approval; the arc waits for fees-display-1 to merge
+status: completed; delivered by the single-arc PR to dev that closes #513
 issues: "#513"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,20 @@ base: origin/dev at dc4a88ec (plan); the arc's base is origin/dev after fees-dis
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18. **Status:** completed; delivered by the single-arc PR to `dev` that closes #513.
+- **Shipped:** P40-03 = A. `FeeSettingsCard.vue` keeps its template and style byte-identical and hands its logic to `useSponsorVerdicts`, `useFeeSnapshot` and `useSendFeeSelection` / `useAppFeeSelection` (one `FeeSelection` shape). The card picks the rule book once, when it opens; every watcher keeps its creation order.
+  - Leftovers: `destinationPrivacy` removed with `send.vue`'s binding; Send's recovery no longer reads the app-pick key (D10); `cacheStore.feePaymentMethods` removed with its assertions (D6).
+  - `isMethodsDropdownOpen` (D9): kept. The template sets it, the pick freezes the template, and no failure hypothesis exists, so it is this disposition, not a known limit.
+  - Proof: the scratch DOM comparison (20 card states) is identical at base and final head. The picture gate stopped and the orchestrator released it (D11 outcome); at the final head both cards' bands read 0 differing pixels against before-2.
+  - Deviations: D12-D16; review round 1 ran beside the Phase 4 chain; the `this` pin lives in the card test's `@/utils/core` mock ([lessons/phase-4.md](lessons/phase-4.md)).
+- **Known limits:** #753 (O1: a verdict landing in the same tick as an identity change can outlive it), #754 (G3: a stored `isProtocol` labels the payer for one same-identity refresh).
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` sits at 8,188 of 8,192 B and nothing in it is superseded. The watcher-order gotcha (watchers on different props run in the parent's prop-update order, not creation order) lives in [lessons/phase-0.md](lessons/phase-0.md).
+- **Size:** over the mid target (350 lines) by the arc's ledger entries (D12-D16, the D11 outcome) and this block.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # fees-card-mode-1: one fee card, handed a rule book per mode (#513)
 
@@ -252,7 +266,7 @@ None. P40-03 A, quoted above: "the template is untouched, no pixel changes". The
      - Output: the HTML of each state, one file per state.
      - Runs: twice at `<base>` (the two sets must match), then once at the head. `diff -r` must be empty.
 
-### Phase 4: e2e and the pictures
+### Phase 4: e2e and the pictures ✓
 - **Runs** (load1 < 150 before each run; every run at retry 0 through `agent.sh`, Chrome):
   - smoke: `cd apps/extension && bun run test:e2e -- tests/e2e/send-fee-privacy.test.ts --retry=0`;
   - network, each with `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<file>.test.ts`: `fee-sponsor-funding`, `fee-methods`, `authwit-lifecycle` (both authorization popups through the real card), `tx-sendTx-selfPay`, `tx-sendTx-default`, `tx-sendTx-sponsoredFpc`, `type-roles-windows`.
