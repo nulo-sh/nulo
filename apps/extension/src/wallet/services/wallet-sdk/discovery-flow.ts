@@ -509,8 +509,8 @@ async function persistAndApprove(
 			return
 		}
 		// The Allow was given under `profileId`. A switch during the admission wait is refused here,
-		// before any write; one landing after this read is refused by `addDappSession`, which binds
-		// the row to `profileId`.
+		// before any write; one landing between this read and `addDappSession`'s fence capture is
+		// refused there, which writes the row under `profileId` or not at all.
 		const active = await deps.profileService.getActiveProfile()
 		if (active?.id !== profileId) {
 			rejectThrottled(discovery, deps, "profile changed while waiting for a verify-window slot")

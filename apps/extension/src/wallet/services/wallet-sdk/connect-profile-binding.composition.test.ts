@@ -51,6 +51,8 @@ import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN, fakeSdkServices } from "./test-services"
 
 const ROW_ROOT = "nulo:core:dappSessions@"
+/** The connect window the Allow hands over to show the emoji check. */
+const CONNECT_WINDOW = 9
 const noopLogger = { log: () => {} } as never
 
 /** The Allow is given under p1; `fenceProfile` is the profile the write's fence capture finds. */
@@ -77,13 +79,26 @@ async function harness(fenceProfile: string) {
 	sessions.onDappSessionAdded.add((row) => added.push(row))
 	const writes = recordWrites(api.storage.local, ROW_ROOT)
 
-	const fake = fakeSdkServices({ activeProfile: getActiveProfile, dappSession: sessions })
-	initWalletSdkHandler(fake.services, noopLogger, fakeSdkPorts())
+	const fake = fakeSdkServices({
+		activeProfile: getActiveProfile,
+		dappSession: sessions,
+		popup: async () => ({ approved: true, windowId: CONNECT_WINDOW }),
+	})
+	const closedWindows: number[] = []
+	initWalletSdkHandler(
+		fake.services,
+		noopLogger,
+		fakeSdkPorts({
+			remove: async (windowId) => {
+				closedWindows.push(windowId)
+			},
+		}),
+	)
 	const rowProfiles = async () =>
 		Object.entries((await api.storage.local.get(null)) as Record<string, string>)
 			.filter(([key]) => key.startsWith(ROW_ROOT))
 			.map(([, row]) => JSON.parse(row).profileId)
-	return { added, writes, rowProfiles }
+	return { added, writes, rowProfiles, closedWindows }
 }
 
 function allow(requestId: string) {
@@ -120,6 +135,7 @@ describe("an Allow's session row and the profile it was given under", () => {
 		expect(h.writes.log).toEqual([])
 		expect(await h.rowProfiles()).toEqual([])
 		expect(h.added).toEqual([])
+		expect(h.closedWindows).toEqual([CONNECT_WINDOW])
 	})
 
 	test("no switch: one row under the Allow's profile, the discovery approved", async () => {
@@ -129,5 +145,6 @@ describe("an Allow's session row and the profile it was given under", () => {
 		await vi.waitFor(() => expect(handlerCalls).toEqual(["approve:r1"]))
 		expect(await h.rowProfiles()).toEqual(["p1"])
 		expect(h.added).toHaveLength(1)
+		expect(h.closedWindows).toEqual([])
 	})
 })
