@@ -226,6 +226,20 @@ describe("the App row of a dApp's operation", () => {
 	})
 })
 
+describe("the title and Method row of a dApp's call", () => {
+	test("both read the call by its settled rule: a movement label once the build recorded a listed token's class", async () => {
+		const token = { contract: `0x${"0d".repeat(32)}`, classId: `0x${"0e".repeat(32)}` }
+		mocks.tokens = [{ id: 7, symbol: "TST", decimals: 0, hasDecimals: true, ...token }]
+		const { tokenId: _tokenId, amountRaw: _amountRaw, ...base } = failedSend()
+		const read = async (call: OperationRecord["call"]) => {
+			const w = await mountPage({ ...base, kind: "dapp_execute", origin: "dapp", title: "transfer_in_public", call })
+			return [w.find("sub-page-header-stub").attributes("title"), row(w, "method").text()]
+		}
+		expect(await read({ ...token, argCount: 4 })).toEqual(["Transfer (public)", "Transfer (public)"])
+		expect(await read({ contract: token.contract, argCount: 4 })).toEqual(["Transfer In Public", "Transfer In Public"])
+	})
+})
+
 describe("the To row of a send that named its recipient", () => {
 	const TESTNET = { network: { id: "n1", chainId: CHAIN_IDS.TESTNET } }
 	const RECIPIENT = `0x${"09".repeat(32)}`

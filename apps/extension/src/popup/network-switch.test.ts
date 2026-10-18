@@ -3,6 +3,7 @@
  * parks the run at ONE await boundary, forces the race there, and proves the
  * superseded/drifted run commits NOTHING past that point.
  */
+import { NodeUnreachableError } from "@nulo/extension-messaging/errors"
 import { deferred } from "@nulo/wallet-core/utils"
 import { describe, expect, test, vi } from "vitest"
 import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
@@ -29,6 +30,7 @@ function makeDeps(over: Partial<NetworkSwitchDeps> = {}) {
 	const setupActiveAccount = vi.fn(async () => {})
 	const syncTransactions = vi.fn(async () => {})
 	const syncNetworkStatus = vi.fn()
+	const markNetworkInactive = vi.fn()
 	const syncStaleNetwork = vi.fn(async (_networkId: string): Promise<StaleNetworkView | null> => null)
 	const clearAccounts = vi.fn()
 	const resetUnattended = vi.fn(async (_view: StaleNetworkView, _live: () => boolean) => {})
@@ -40,6 +42,7 @@ function makeDeps(over: Partial<NetworkSwitchDeps> = {}) {
 		getScope: () => scope,
 		liveScopeMatches: (s) => live.profileId === s.profileId && live.networkId === s.networkId && live.chainId === s.chainId,
 		syncNetworkStatus,
+		markNetworkInactive,
 		replaceAccountClient: vi.fn(() => client),
 		setAccounts,
 		setupActiveAccount,
@@ -52,6 +55,7 @@ function makeDeps(over: Partial<NetworkSwitchDeps> = {}) {
 	return {
 		deps,
 		client,
+		markNetworkInactive,
 		syncStaleNetwork,
 		clearAccounts,
 		resetUnattended,
@@ -84,6 +88,37 @@ describe("createNetworkSwitchHandler", () => {
 		expect(h.client.ensureDefaultAccount).toHaveBeenCalledWith("p1", 1, expect.anything(), "Account 1")
 		expect(h.setAccounts).toHaveBeenNthCalledWith(1, [])
 		expect(h.setAccounts).toHaveBeenNthCalledWith(2, [ACCOUNT])
+		expect(h.markNetworkInactive).not.toHaveBeenCalled()
+	})
+
+	test("a custom node that does not answer: the chain's own list lands, the dot reads inactive, the tail runs", async () => {
+		const h = makeDeps()
+		h.client.getAccounts.mockResolvedValue([])
+		h.client.ensureDefaultAccount.mockRejectedValueOnce(new NodeUnreachableError())
+		await createNetworkSwitchHandler(h.deps)()
+		expect(h.markNetworkInactive).toHaveBeenCalledWith("n1")
+		expect(h.client.getAccounts).toHaveBeenCalledTimes(2)
+		expect(h.setAccounts).toHaveBeenLastCalledWith([])
+		expect(h.setupActiveAccount.mock.invocationCallOrder[0]).toBeGreaterThan(h.setAccounts.mock.invocationCallOrder[1])
+		expect(h.syncTransactions).toHaveBeenCalled()
+	})
+
+	test("a node that answers another L1 still fails the run, and a superseded failure marks nothing", async () => {
+		const h = makeDeps()
+		h.client.getAccounts.mockResolvedValue([])
+		h.client.ensureDefaultAccount.mockRejectedValueOnce(new Error("L1 identity mismatch"))
+		await expect(createNetworkSwitchHandler(h.deps)()).rejects.toThrow("L1 identity mismatch")
+		expect(h.setupActiveAccount).not.toHaveBeenCalled()
+
+		const gate = deferred<never>()
+		h.client.ensureDefaultAccount.mockReturnValueOnce(gate.promise)
+		const run = createNetworkSwitchHandler(h.deps)()
+		await vi.waitFor(() => expect(h.client.ensureDefaultAccount).toHaveBeenCalledTimes(2))
+		h.setLive({ profileId: "p1", networkId: "n2", chainId: 2 })
+		gate.reject(new NodeUnreachableError())
+		await run
+		expect(h.markNetworkInactive).not.toHaveBeenCalled()
+		expect(h.setupActiveAccount).not.toHaveBeenCalled()
 	})
 
 	test("not-ready (no scope): returns without touching anything — but still supersedes an in-flight run", async () => {

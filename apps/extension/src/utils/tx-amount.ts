@@ -8,7 +8,8 @@ import { isValidDecimals, knownDecimals } from "./token-amount"
 
 export type TxAmount = { units: bigint; decimals: number; symbol: string }
 
-export type SettledCall = Pick<TxCall, "contract" | "method" | "args" | "classId" | "transfers">
+/** A call as the settled rule reads it: of its arguments, only how many. */
+export type SettledCall = Pick<TxCall, "contract" | "method" | "classId" | "transfers"> & { args: { readonly length: number } }
 export type ListedToken = Pick<TokenInfo, "contract" | "classId">
 
 /** The aztec-standards Token's mints, each `(recipient or commitment, amount: u128)`. */

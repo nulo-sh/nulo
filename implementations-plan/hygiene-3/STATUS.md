@@ -1,0 +1,13 @@
+- 2026-10-18 21:05Z planning started; worktree fast-forwarded to dev 7eada4c6; registered.
+- 2026-10-18 21:40Z recon done (one Sonnet Explore for #735; #797 and #517 traced by the driver); #797 cause demonstrated by measurement.
+- 2026-10-18 22:05Z Codex r1 conditional approve; 4 findings accepted and applied.
+- 2026-10-18 22:25Z Opus conditional approve; 6 findings accepted and applied; resuming Codex for the verdict.
+- 2026-10-18 22:40Z Codex r2 conditional approve (clip 4px); applied; resuming for the final verdict.
+- 2026-10-18 22:45Z Codex r3 approve (final); plan committed; auto-continue into arc 1.
+- 2026-10-18 23:05Z arc 1 phase 1 gate (fast: lint 0, typecheck:all 0, test 14002 passed; phase suites 140/140; copy identical to base): pass.
+- 2026-10-18 23:15Z arc 1 phase 2 gate (fast: lint 0, typecheck:all 0, test 14003 passed; new case red with the subscription removed): pass.
+- 2026-10-18 23:20Z arc 1 test identity: pass (suites gain 4 titles, 0 lines removed).
+- 2026-10-18 23:55Z arc 1 gate: test:all 0 (extension 14003 passed), audit:vue 0; smoke Chrome settings-routes, navigation, sw-resilience, auth-flows, onboarding-tab 40/40 in 272 s at retry 0 (armed head build); rendered identity Developer off and on, both themes, Chrome: base vs head 8/8 byte-equal, control differs; base vs base 1 pixel apart (capture noise). Pass.
+- 2026-10-19 00:20Z arc 1 review loop converged: Codex r1 findings 1, Opus changes requested (3 applied), Codex r2 clean.
+- 2026-10-19 00:45Z arc 1 final head 3049183c (dev 97ffa088 merged): lint 0, typecheck:all 0, test:all 0 (extension 14005 passed), check:plans 0; smoke Chrome 5 files 40/40 in 213 s at retry 0 (armed build).
+- 2026-10-19 01:15Z arc 1 head 2c8653fd (dev a4edec20 merged; PR #817 was conflicting on index.md): lint 0, typecheck:all 0, test:all 0 (extension 14028 passed); smoke Chrome 40/40 in 254 s at retry 0.

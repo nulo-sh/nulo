@@ -131,16 +131,17 @@ test.skipIf(!hasConfig)(
 			status: "error",
 			error: { message: JSON.stringify(SCOPE_VIOLATION_ENVELOPE) },
 			kind: "scope_refused",
-			// Titled by the function the selector runs, not the "balance_of_public" the call claimed.
-			home: { title: "Transfer (public)", subtitle: "Not allowed" },
+			// Titled by the function the selector runs, not the "balance_of_public" the call claimed, as its
+			// contract spells it: no build recorded the class a movement label needs.
+			home: { title: "Transfer Public To Public", subtitle: "Not allowed" },
 			detail: {
 				"journal-detail-category": "Not allowed",
 				"journal-detail-context": "The app asked for more than you allowed. Nothing was sent.",
 				"journal-detail-state": "Failed",
-				"journal-detail-method": "Transfer (public)",
+				"journal-detail-method": "Transfer Public To Public",
 				"journal-detail-error-message": null,
 			},
-			card: { title: "Transfer (public)", subtitle: "Not allowed" },
+			card: { title: "Transfer Public To Public", subtitle: "Not allowed" },
 		})
 
 		await setDeveloperMode(wallet, true)
