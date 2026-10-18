@@ -102,7 +102,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
 
 ## Post-implementation
 
-Steps 2-5 of [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `18d29f23`, with these values: reviewer `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one loop per arc over that arc's diff from `dev`, after its last phase is green and before its PR opens; hard stop at three rounds, then report. The orchestrator approves design growth except persistence, permissions, public contracts, background work and scope, which go to the owner. The orchestrator merges, in order (the program's standing rule). Slug `owner-feedback-1`, trunk `dev`; teardown `agent-worktree done owner-feedback-1 --merged` once `implementations-plan/archive/owner-feedback-1/plan.md` is on `dev`.
+Steps 2-5 of [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `18d29f23`, with these values: reviewer `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one loop per arc over that arc's diff from `dev`, after its last phase is green and before its PR opens; hard stop at three rounds, then report. The orchestrator approves design growth except persistence, permissions, public contracts, background work and scope, which go to the owner. The orchestrator merges, in order (the program's standing rule). Slug `owner-feedback-1`, trunk `dev`; teardown `agent-worktree done owner-feedback-1 --merged` once `implementations-plan/archive/owner-feedback-1/plan.md` is on `dev`.
 
 ## Audit verdicts
 
