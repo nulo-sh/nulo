@@ -1,0 +1,6 @@
+# iface-line-1, phase 1 (arc 1)
+
+- **Red on the base**: with the six source files checked out from `9470d4e9` and the new tests kept, 19 tests fail across the six test files (T1 to T4 and the updated pins); at `a6713eb1` all pass.
+- **`.text()` and a dotted term**: a `DottedTerm` mounts its definition in a hidden span, so `.text()` on a row or on the term reads the definition too. The tests read with `shownText` (`tests/helpers/shown-text.ts`), moved out of `OperationCard.fee.test.ts` now that four files use it.
+- **Screenshot recipe**: a token deployed with `deployExtraTokensForAccount` decodes in the window, because the wallet's PXE finds the publicly deployed instance and already holds its class's artifact (the fixture token shares it). A random address with no contract reads `unknown-contract`, at the cost of a failed fee estimate in the picture.
+- **Gate at `a6713eb1`** (load1 under 145): `bun run audit:vue` exit 0 (extension 13,876 passed); `bun run test:all` exit 0; smoke `tooltips-glossary.test.ts` on the armed builds, Chrome 3/3 in 27 s, Firefox 3/3 in 41 s; network `type-roles-windows.test.ts`, Chrome 5/5 (file 347 s), Firefox 5/5 (file 516 s). Smoke loads `dist/<browser>` as built, so the armed build comes first (`FIREFOX.md`).

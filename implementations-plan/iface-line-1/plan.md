@@ -51,6 +51,7 @@ One arc, one PR against `dev`, `Closes #516`. Recon: [`recon.md`](recon.md); pla
 - **D5. The two undrawn reasons**: P41-03 A's own words, `The arguments don't fit the interface.` (dotted) and `Nulo couldn't read the arguments right now.` (today's sentence, no term). `arguments` also covers a value the window cannot print whole and a function over the decoder's field budget (`readableGrants`, `call-decoder.ts:76`), as today's sentence does; OA-1 offers broader words. The `UndecodedReason` union stays: splitting it changes a cross-package contract for a copy question.
 - **D6. The definition stays verbatim.** It is true: Nulo shows the raw values behind the raw toggle (one press on a grant or `createAuthWit` card, two on a summary row). The owner signed it in the glossary picture.
 - **D7. "Once per window" is "once per card".** Fact 2 makes them equal; a window-level coordinator (a registry, an emit, a window-computed index) buys nothing on the single-operation windows the bridge builds. The card computes the one site in one place.
+- **D-arc1-1 (deviation, screenshots).** `deployExtraTokensForAccount`'s Token decoded: the wallet already holds its class (the fixture token's). The capture sends the playground's multicall to a random address with no contract, so all three calls read `unknown-contract`; the fee estimate fails there, identically before and after, and the fee card is not under review.
 
 ## Architecture & Implementation
 
@@ -75,7 +76,7 @@ Files only this lane edits: none of them is in another running lane's list (#714
 - Display copy only; no data, trust boundary, permission or dependency moves. Every string is a constant; no dApp text reaches the new line or the tooltip.
 - The approval surface keeps its warning per call; the advice is not removed but de-duplicated, and the footer refusal is unchanged (Confirm stays disabled on an unreadable grant). A hostile dApp gains nothing: the reason comes from the wallet's own decode.
 
-## Phase 1: the lines, the term, the advice, the entry (arc 1)
+## Phase 1: the lines, the term, the advice, the entry (arc 1) ✓
 
 Warning: run at most one `e2e:agent` in this worktree at a time, at retry 0, with load1 under 150.
 
