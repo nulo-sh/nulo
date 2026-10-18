@@ -22,7 +22,15 @@ The lane brief's no-ask records cover every arc ("UI impact: none"; #517 pixel-i
 | Send | A deleted balance row is ignored. Every deletion also removes the token or changes the account, which Send handles, unless the row's id is reused while Send stays open (below) | Drops the row |
 | Send | Every added balance row for the account is listed as it comes, from any chain and again for an id already listed. Ids are reused: a token id after the highest token is deleted, a balance id after a worker restart. A reused token id can show a deleted token's amount; a reused balance id shows the new token's amount | Lists the active chain's rows, once per id; with its Delete, both reuses show the right amount |
 
-- **A6, the journal**: if A6's release check finds that Home's token-import list can receive an Added for a row it already shows, its duplicate row joins this table.
+- **A6, the journal lists** (History's cancelled and failed rows, Home's Recent activity, Home's import rows). Found at A6's release, each in an order the worker can deliver when another profile operation holds its lock:
+
+| View | Today | Home's Recent activity rule |
+|---|---|---|
+| Home, import rows | A read can list an import whose "added" event is still on its way; the event then lists it again. A token you add yourself shows twice, and once the import ends the second copy stays as in progress until the popup reopens or the worker restarts | Lists each operation once |
+| History | An earlier "in progress" update arriving after a read that saw the operation end removes the row, and the next update puts it back | Keeps the row |
+| History, Home import rows | Every read lands as it answers and none is retried: a reconnect read that fails keeps what the first read listed | Lands only its newest read, and retries a refused one after 2 s |
+
+- **What A6 ships**: A, every row above unchanged, each kept as an option of the journal mirror. Under B, History and Home's import rows take Home's newest-read rule together with its retry, never the newest-read rule alone: alone, a refused second read would lose the first read's rows. Home's Recent activity keeps a card whose send moves to another account or network until its next read, under both options.
 - **Options**:
   - A. Keep each view's rule as an option of the shared mirror.
   - B. Converge every row above onto Home's rule. The two deliberate differences stay options either way.

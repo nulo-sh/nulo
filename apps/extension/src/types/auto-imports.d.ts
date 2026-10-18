@@ -234,12 +234,15 @@ declare global {
   const isValidAztecAddress: typeof import('../utils/aztec-address').isValidAztecAddress
   const isValidDecimals: typeof import('../utils/token-amount').isValidDecimals
   const isValidHex: typeof import('../utils/string').isValidHex
+  const journalAdded: typeof import('../utils/journal-mirror').journalAdded
   const journalCardIcon: typeof import('../utils/journal-state').journalCardIcon
   const journalCardOriginLabel: typeof import('../utils/journal-state').journalCardOriginLabel
   const journalCardTitle: typeof import('../utils/journal-state').journalCardTitle
   const journalCardTransferTypeLabel: typeof import('../utils/journal-state').journalCardTransferTypeLabel
+  const journalDeleted: typeof import('../utils/journal-mirror').journalDeleted
   const journalRecordInScope: typeof import('../utils/activity-rows').journalRecordInScope
   const journalTerminalDisplay: typeof import('../utils/journal-state').journalTerminalDisplay
+  const journalUpdated: typeof import('../utils/journal-mirror').journalUpdated
   const knownDecimals: typeof import('../utils/token-amount').knownDecimals
   const legalAboutRow: typeof import('../utils/legal-about').legalAboutRow
   const managers: typeof import('../utils/core').managers
@@ -441,6 +444,7 @@ declare global {
   const useIncomingSyncHealth: typeof import('../composables/useIncomingSyncHealth').useIncomingSyncHealth
   const useIncomingTransfers: typeof import('../composables/useIncomingTransfers').useIncomingTransfers
   const useIncomingTrustPrompts: typeof import('../composables/useIncomingTrustPrompts').useIncomingTrustPrompts
+  const useJournalMirror: typeof import('../composables/useJournalMirror').useJournalMirror
   const useLegalAcceptance: typeof import('../composables/useLegalAcceptance').useLegalAcceptance
   const useLink: typeof import('vue-router').useLink
   const useLockWallet: typeof import('../composables/useLockWallet').useLockWallet
@@ -687,6 +691,9 @@ declare global {
   // @ts-ignore
   export type { InFlightScope } from '../utils/in-flight-send'
   import('../utils/in-flight-send')
+  // @ts-ignore
+  export type { JournalRow, JournalPlace, JournalAddRules } from '../utils/journal-mirror'
+  import('../utils/journal-mirror')
   // @ts-ignore
   export type { JournalTerminalVisualState, JournalTerminalDisplay, SendOutcome, CategoricalFailureLabel, TokenForCardProps, JournalTerminalCardCtx, JournalTerminalCardProps } from '../utils/journal-state'
   import('../utils/journal-state')
@@ -968,12 +975,15 @@ declare module 'vue' {
     readonly isValidAztecAddress: UnwrapRef<typeof import('../utils/aztec-address')['isValidAztecAddress']>
     readonly isValidDecimals: UnwrapRef<typeof import('../utils/token-amount')['isValidDecimals']>
     readonly isValidHex: UnwrapRef<typeof import('../utils/string')['isValidHex']>
+    readonly journalAdded: UnwrapRef<typeof import('../utils/journal-mirror')['journalAdded']>
     readonly journalCardIcon: UnwrapRef<typeof import('../utils/journal-state')['journalCardIcon']>
     readonly journalCardOriginLabel: UnwrapRef<typeof import('../utils/journal-state')['journalCardOriginLabel']>
     readonly journalCardTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCardTitle']>
     readonly journalCardTransferTypeLabel: UnwrapRef<typeof import('../utils/journal-state')['journalCardTransferTypeLabel']>
+    readonly journalDeleted: UnwrapRef<typeof import('../utils/journal-mirror')['journalDeleted']>
     readonly journalRecordInScope: UnwrapRef<typeof import('../utils/activity-rows')['journalRecordInScope']>
     readonly journalTerminalDisplay: UnwrapRef<typeof import('../utils/journal-state')['journalTerminalDisplay']>
+    readonly journalUpdated: UnwrapRef<typeof import('../utils/journal-mirror')['journalUpdated']>
     readonly knownDecimals: UnwrapRef<typeof import('../utils/token-amount')['knownDecimals']>
     readonly legalAboutRow: UnwrapRef<typeof import('../utils/legal-about')['legalAboutRow']>
     readonly managers: UnwrapRef<typeof import('../utils/core')['managers']>
@@ -1175,6 +1185,7 @@ declare module 'vue' {
     readonly useIncomingSyncHealth: UnwrapRef<typeof import('../composables/useIncomingSyncHealth')['useIncomingSyncHealth']>
     readonly useIncomingTransfers: UnwrapRef<typeof import('../composables/useIncomingTransfers')['useIncomingTransfers']>
     readonly useIncomingTrustPrompts: UnwrapRef<typeof import('../composables/useIncomingTrustPrompts')['useIncomingTrustPrompts']>
+    readonly useJournalMirror: UnwrapRef<typeof import('../composables/useJournalMirror')['useJournalMirror']>
     readonly useLegalAcceptance: UnwrapRef<typeof import('../composables/useLegalAcceptance')['useLegalAcceptance']>
     readonly useLink: UnwrapRef<typeof import('vue-router')['useLink']>
     readonly useLockWallet: UnwrapRef<typeof import('../composables/useLockWallet')['useLockWallet']>
