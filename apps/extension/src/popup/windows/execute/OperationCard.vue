@@ -250,10 +250,10 @@ const adviceSite = computed((): AdviceSite | undefined => {
 	}
 	if (op.kind !== "aztec_sendTx") return undefined
 	const call = lastRaw(sendTxRows.value.map((row) => row.surface))
-	if (call >= 0 || authwits.value.kind !== "list") return site("call", call)
+	if (call >= 0) return site("call", call)
 	return site(
 		"authwit",
-		authwits.value.authwits.findLastIndex((a) => isAuthwitOpen(a) && authwitArgs(a).kind === "raw"),
+		summaryAuthwits.value?.findLastIndex(({ authwit, surface }) => isAuthwitOpen(authwit) && surface.kind === "raw") ?? -1,
 	)
 })
 const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.value?.on === on && adviceSite.value.index === index

@@ -22,7 +22,7 @@ const props = defineProps<{
 	/** Every value prints whole, an address as its own text with no name in its place; the
 	 *  `this account` sender, which only a surface read with caller context carries, is not covered. */
 	full?: boolean
-	/** Whether this is the window's last unreadable call, whose notice carries the closing advice. */
+	/** Carries the window's closing advice; `OperationCard` picks the one notice. */
 	advice?: boolean
 }>()
 

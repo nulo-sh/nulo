@@ -127,6 +127,8 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | 1 | Opus 5.5 (Plan) | conditional approve | the same vanishing advice and missing last-raw tests (adds the `VAULT_RAW_FACTS` case); the screenshot recipe: `deployExtraTokensForAccount`, focus `execute-op-summary`; the fee-raised window shows the change (Fact 7, UI impact); Fact 5 claimed a repeated-term precedent that does not exist (D1 now rests on the pick) | none |
 | 2 | Codex, resumed | conditional approve | closing the authorization that carries the fallback advice left none on screen: the fallback takes the last open one (existing `isAuthwitOpen` state), T1 closes and reopens it | none |
 | 3 | Codex, resumed | **approve** | none new: the open-authorization fallback verified, no regression | none |
+| arc 1, r1 | Codex, gpt-6.1-sol (session 01a14f44) | approve | a test loop over the term testids could run zero times: it asserts three first; a test comment named owner-pick ids, and `RAW_LINE`'s comment restated the map | none |
+| arc 1, r1 | Opus 5.5 (diff) | conditional approve | the same loop and comment; three comments claimed "under the last unreadable call" where the fallback differs; `adviceSite` reads `summaryAuthwits` instead of decoding again; `RAW_NOTICE` and `NoticeSegment` lose `export`; the grant-window advice on a refused request goes to OA-1 (option E) | rewording CLAUDE.md's rule to "distinct" terms: a ruleset change beyond the lane, D1 records the reading; an at-rest flag for an unreadable discovered authorization: pre-existing, D4, filed at close-out |
 
 ## Seeds
 

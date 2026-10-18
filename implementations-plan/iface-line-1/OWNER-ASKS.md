@@ -15,6 +15,7 @@
 - B: broader words for the mismatch reason, to cover its other two cases: `Nulo can't show these arguments with the interface.`, with `interface` dotted.
 - C: the advice after the whole list of calls, not under the last unreadable call.
 - D: the footer tooltip as today, with the advice (the advice then reads twice on that request).
+- E: no advice on a request with a grant Nulo cannot read. Nulo refuses such a request, so "before approving" does not apply in its body either. Ships now as the lane brief places it: under the last unreadable grant, as the advice reads there today.
 
 **Recommendation**: A. It uses the words the owner already picked, keeps the advice next to the call it is about, and says it once.
 

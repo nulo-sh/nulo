@@ -215,9 +215,8 @@ export const valueTitle = (v: DecodedValue): string | undefined => {
 }
 
 /** A sentence as the notice prints it: a `term` segment is the word the `interface` glossary entry defines. */
-export type NoticeSegment = { text: string } | { term: string }
+type NoticeSegment = { text: string } | { term: string }
 
-/** Why a call's arguments show as raw fields, one short line per reason. */
 export const RAW_LINE: Readonly<Record<UndecodedReason, readonly NoticeSegment[]>> = {
 	"unknown-contract": [{ text: "Nulo doesn't have this contract's " }, { term: "interface" }, { text: "." }],
 	"unknown-function": [{ text: "This function isn't in the " }, { term: "interface" }, { text: " Nulo has." }],
@@ -225,12 +224,12 @@ export const RAW_LINE: Readonly<Record<UndecodedReason, readonly NoticeSegment[]
 	unavailable: [{ text: "Nulo couldn't read the arguments right now." }],
 }
 
-/** Said once per window, under its last unreadable call. */
+/** Said once per window; `OperationCard` picks the one notice that carries it. */
 export const RAW_ADVICE = "Check what the app says this does before approving."
 
 /** The footer's refusal of a grant it cannot read. A tooltip cannot hold the dotted term the short
  *  line leans on, so each sentence says it whole; the advice is left out, as the window cannot be approved. */
-export const RAW_NOTICE: Readonly<Record<UndecodedReason, string>> = {
+const RAW_NOTICE: Readonly<Record<UndecodedReason, string>> = {
 	"unknown-contract": "Nulo doesn't have this contract's interface, so it can't read the arguments.",
 	"unknown-function": "This function isn't in the interface Nulo has for the contract, so it can't read the arguments.",
 	arguments: "The arguments don't fit the contract's interface, so Nulo can't read them.",

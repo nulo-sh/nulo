@@ -36,7 +36,7 @@ const mountGrant = (props: { decodedGrants?: readonly DecodedGrant[]; tokens?: r
 	mount(OperationCard, { props: { op: op as never, index: 0, ...props } as never, global: { stubs } })
 const byTestid = (w: ReturnType<typeof mountGrant>, id: string) => w.find(`[data-testid="${id}"]`)
 
-/** Each reason's line as the owner signed it (P44-01, P41-03). */
+/** Written out, not read from the source, so a changed line fails here. */
 const LINES: Record<UndecodedReason, string> = {
 	"unknown-contract": "Nulo doesn't have this contract's interface.",
 	"unknown-function": "This function isn't in the interface Nulo has.",

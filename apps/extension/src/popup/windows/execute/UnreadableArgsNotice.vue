@@ -8,7 +8,7 @@ defineProps<{
 	reason: UndecodedReason
 	/** Prefix for the warning's `data-testid`, so each host surface stays addressable. */
 	prefix: string
-	/** This is the window's last unreadable call, which carries the closing advice. */
+	/** Carries the window's closing advice; `OperationCard` picks the one notice. */
 	advice?: boolean
 }>()
 </script>

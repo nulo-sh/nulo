@@ -147,7 +147,9 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		])
 		const terms = w.findAllComponents(DottedTerm)
 		expect(terms.map((t) => [t.props("term"), shownText(t.element)])).toEqual(Array(3).fill(["interface", "interface"]))
-		for (const term of w.findAll('[data-testid="execute-op-summary-interface-term"]')) {
+		const termIds = w.findAll('[data-testid="execute-op-summary-interface-term"]')
+		expect(termIds).toHaveLength(3)
+		for (const term of termIds) {
 			expect(term.attributes("tabindex")).toBe("0")
 			expect(w.element.querySelector(`[id="${term.attributes("aria-describedby")}"]`)?.textContent).toBe(
 				GLOSSARY.interface.definition,
