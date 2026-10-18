@@ -346,7 +346,10 @@ once added). The popup pre-fetches the token's `name` / `symbol` / `decimals`
 via `parseTokenInterface` and renders them BEFORE Allow/Deny so the user can
 recognise phishing tokens. The contract address is always shown alongside the
 metadata — the strings come straight from the on-chain contract and are
-attacker-controllable.
+attacker-controllable. Confirm stays disabled until the details are read, and
+the commit stores only a read, of the class the window read, equal to what the
+window showed; any other read fails the add with "Token details changed after
+you approved them." and stores nothing.
 
 ### Schema-patch contract
 

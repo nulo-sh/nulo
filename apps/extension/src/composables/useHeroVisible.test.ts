@@ -1,6 +1,6 @@
-import { mount } from "@vue/test-utils"
+import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { defineComponent, h, type Ref, ref } from "vue"
+import { defineComponent, h, ref } from "vue"
 import { useHeroVisible } from "./useHeroVisible"
 
 /** An observer that delivers only what a test hands it. */
@@ -33,26 +33,34 @@ class FakeObserver {
 	}
 }
 
-/** A page with a hero element (or none), exposing what the composable reports. */
+/** A page with a compact bar and a hero element (or neither), exposing what the composable reports. */
 function mountPage({ withHero = true } = {}) {
-	let visible: Readonly<Ref<boolean>> | undefined
+	let state: ReturnType<typeof useHeroVisible> | undefined
 	const hero = ref<Element | null>(null)
+	const bar = ref<Element | null>(null)
 	const wrapper = mount(
 		defineComponent({
 			setup() {
-				visible = useHeroVisible(hero)
-				return () => (withHero ? h("div", { ref: hero, "data-testid": "hero" }) : h("span"))
+				state = useHeroVisible(hero, bar)
+				return () =>
+					withHero
+						? h("div", [h("div", { ref: bar, "data-testid": "bar" }), h("div", { ref: hero, "data-testid": "hero" })])
+						: h("span")
 			},
 		}),
 	)
-	return { wrapper, hero, visible: visible as Readonly<Ref<boolean>> }
+	const { visible, settled } = state as ReturnType<typeof useHeroVisible>
+	return { wrapper, hero, visible, settled }
 }
 
 beforeEach(() => {
 	FakeObserver.made = []
 	vi.stubGlobal("IntersectionObserver", FakeObserver)
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+	vi.unstubAllGlobals()
+	vi.restoreAllMocks()
+})
 
 describe("useHeroVisible", () => {
 	test("reports the hero visible before any delivery", () => {
@@ -96,6 +104,30 @@ describe("useHeroVisible", () => {
 		FakeObserver.made[0].deliver(false)
 		FakeObserver.made[0].deliver(false, true)
 		expect(visible.value).toBe(true)
+	})
+
+	test("the first delivery settles once drawn: the bar's style is read once, after the patch; later deliveries read nothing", async () => {
+		const { wrapper, settled } = mountPage()
+		const read = vi.spyOn(window, "getComputedStyle")
+		FakeObserver.made[0].deliver(false)
+		expect(settled.value).toBe(false)
+		expect(read).not.toHaveBeenCalled()
+		await flushPromises()
+		expect(read.mock.calls.map(([el]) => el)).toEqual([wrapper.get('[data-testid="bar"]').element])
+		expect(settled.value).toBe(true)
+		FakeObserver.made[0].deliver(true)
+		await flushPromises()
+		expect(read).toHaveBeenCalledOnce()
+	})
+
+	test("a page unmounted before its first delivery is drawn never reads or settles", async () => {
+		const { wrapper, settled } = mountPage()
+		const read = vi.spyOn(window, "getComputedStyle")
+		FakeObserver.made[0].deliver(false)
+		wrapper.unmount()
+		await flushPromises()
+		expect(read).not.toHaveBeenCalled()
+		expect(settled.value).toBe(false)
 	})
 
 	test("disconnects when the page unmounts, and not before", () => {

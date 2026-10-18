@@ -404,7 +404,6 @@
     "followOwnRoute": true,
     "forChain": true,
     "formatBaseUnits": true,
-    "formatGas": true,
     "formatGasBalance": true,
     "formatSnackAmount": true,
     "formatTransferType": true,

@@ -172,58 +172,27 @@ onBeforeUnmount(() => {
 
 <style module>
 .wrapper {
-	flex: 1;
-	min-height: 0;
-
-	background: var(--app-bg);
+	composes: wrapper from "./pinned-hero.module.css";
 }
 
 .hero {
-	position: relative;
-	flex: none;
+	composes: hero from "./pinned-hero.module.css";
 }
 
 .reminder {
 	margin: 16px 24px 0;
 }
 
-/* Over the rows' raised actions (z-index 1) as they scroll under it. The middle stays unpositioned
- * and outside any stacking context, so a popup's scrim drawn inside it still covers the whole frame. */
 .scroll_shadow {
-	position: absolute;
-	right: 0;
-	bottom: -12px;
-	left: 0;
-	z-index: 2;
-	height: 12px;
-
-	pointer-events: none;
-	background: linear-gradient(to bottom, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0));
-	opacity: 0;
-
-	transition: opacity 0.18s cubic-bezier(0.4, 0, 1, 1);
-}
-
-:global([theme="light"]) .scroll_shadow {
-	background: linear-gradient(to bottom, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0));
+	composes: scroll_shadow from "./pinned-hero.module.css";
 }
 
 .scroll_shadow_visible {
-	opacity: 1;
+	composes: scroll_shadow_visible from "./pinned-hero.module.css";
 }
 
-@media (prefers-reduced-motion: reduce) {
-	.scroll_shadow {
-		transition: none;
-	}
-}
-
-/* A block around the content column: as the scroll container, the column would let a child with
- * hidden overflow shrink below its content. */
 .scroller {
-	flex: 1;
-	min-height: 0;
-	overflow-y: auto;
+	composes: scroller from "./pinned-hero.module.css";
 }
 
 .content {

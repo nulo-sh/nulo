@@ -72,6 +72,20 @@ async function watchShortNotice(page: Page): Promise<() => Promise<boolean>> {
 	return () => page.evaluate(() => (window as unknown as { sawSponsorShort?: boolean }).sawSponsorShort === true)
 }
 
+function readSentenceLayout(page: Page) {
+	return page.$eval('[data-testid="execute-op-app-fee"]', (el) => {
+		const style = getComputedStyle(el)
+		const own = el.getBoundingClientRect()
+		const block = (el.closest('[data-testid="execute-op-fee-set-badge"]') as HTMLElement).getBoundingClientRect()
+		return {
+			leading: Number.parseFloat(style.lineHeight) / Number.parseFloat(style.fontSize),
+			lines: Math.round(own.height / Number.parseFloat(style.lineHeight)),
+			inside: own.left >= block.left && own.right <= block.right + 0.5,
+			overflow: el.scrollWidth - el.clientWidth,
+		}
+	})
+}
+
 const triggerText = (page: Page) =>
 	page.evaluate(() => document.querySelector('[data-testid="send-fee-method-trigger"]')?.textContent?.trim() ?? "")
 
@@ -259,13 +273,13 @@ test.skipIf(!hasConfig)(
 			// `innerText`: the dotted term's definition sits in the line, hidden, for its `aria-describedby`.
 			const read = (testid: string) =>
 				popup.$eval(`[data-testid="${testid}"]`, (el) => (el as HTMLElement).innerText.replace(/\s+/g, " ").trim())
-			expect(await read("execute-op-app-legend")).toMatch(/^Fee payment method set by \S/)
+			expect(await popup.$('[data-testid="execute-op-app-legend"]'), "the sentence names the app; no legend over it").toBeNull()
 			// The line renders when the estimate lands, and adds each figure's dollars once its quote answers.
 			// Read as `read` does: the hidden definition's block box breaks the line's `innerText`.
 			await popup
 				.waitForFunction(
 					() =>
-						/\(.+\), includes a .+ \(.+\) priority/.test(
+						/\(.+\); payment method set by .+\. Includes a .+ \(.+\) priority/.test(
 							((document.querySelector('[data-testid="execute-op-app-fee"]') as HTMLElement | null)?.innerText ?? "").replace(
 								/\s+/g,
 								" ",
@@ -275,17 +289,34 @@ test.skipIf(!hasConfig)(
 				)
 				.catch(() => undefined)
 			const line = await read("execute-op-app-fee")
-			const sentence = /^Fee up to ~([\d.]+) FJ \(.+\), includes a ~([\d.]+) FJ \(.+\) priority fee the app asked for$/.exec(line)
+			const sentence =
+				/^Fee could be up to ~([\d.]+) FJ \(.+\); payment method set by (\S.*)\. Includes a ~([\d.]+) FJ \(.+\) priority fee the app asked for\.$/.exec(
+					line,
+				)
 			expect(sentence, `the fee line reads "${line}"`).not.toBeNull()
-			const [figure, priority] = [sentence?.[1] ?? "", sentence?.[2] ?? ""]
+			const [figure, app, priority] = [sentence?.[1] ?? "", sentence?.[2] ?? "", sentence?.[3] ?? ""]
 			expect(Number(priority)).toBeGreaterThan(0)
 			expect(Number(priority)).toBeLessThan(Number(figure))
 			const lines = [...pinnedFeeTexts(figure)].flatMap((f) =>
-				[...pinnedFeeTexts(priority)].map((p) => `Fee up to ${f}, includes a ${p} priority fee the app asked for`),
+				[...pinnedFeeTexts(priority)].map(
+					(p) => `Fee could be up to ${f}; payment method set by ${app}. Includes a ${p} priority fee the app asked for.`,
+				),
 			)
 			expect(lines, "the line prints both figures at the pinned quote").toContain(line)
+			const layout = await readSentenceLayout(popup)
+			console.log(`[fee-sponsor-funding] the sentence's layout ${JSON.stringify(layout)}`)
+			expect(layout.leading).toBeCloseTo(1.5, 2)
+			expect(layout.lines).toBeGreaterThan(1)
+			expect({ inside: layout.inside, overflow: layout.overflow }).toEqual({ inside: true, overflow: 0 })
 			expect(await prices.refused.failures(), "price interception failures").toEqual([])
 			await shotSend(popup, "execute-app-fee-priority", "execute-op-fee-set-badge")
+			// `safeWire` leaves a dApp's name at 64 characters and an ellipsis, none of them a break.
+			await popup.$eval('[data-testid="execute-op-app-name"]', (el) => {
+				el.textContent = `${"W".repeat(64)}…`
+			})
+			const unbroken = await readSentenceLayout(popup)
+			console.log(`[fee-sponsor-funding] an unbroken capped name ${JSON.stringify(unbroken)}`)
+			expect({ inside: unbroken.inside, overflow: unbroken.overflow }).toEqual({ inside: true, overflow: 0 })
 
 			await approveExecute(popup)
 			// `NO_WAIT` resolves with the hash only once the node has admitted the transaction.
