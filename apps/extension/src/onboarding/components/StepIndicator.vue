@@ -1,27 +1,19 @@
 <script setup lang="ts">
-// Every path keeps all four cells, including a passkey wallet and an import, which skip Phrase.
-defineProps<{ current: 1 | 2 | 3 | 4 }>()
+import { type OnboardingPath, type OnboardingStep, stepCells } from "../steps"
 
-const steps: Array<{ num: string; label: string }> = [
-	{ num: "01", label: "Terms" },
-	{ num: "02", label: "Create" },
-	{ num: "03", label: "Phrase" },
-	{ num: "04", label: "Ready" },
-]
+const props = defineProps<{ current: OnboardingStep; path: OnboardingPath }>()
+
+const cells = computed(() => stepCells(props.path))
+const at = computed(() => cells.value.findIndex((cell) => cell.step === props.current))
 </script>
 
 <template>
-	<nav :class="$style.row" aria-label="Onboarding progress">
+	<nav :class="[$style.row, cells.length === 4 ? $style.four : $style.three]" aria-label="Onboarding progress">
 		<div
-			v-for="(s, i) in steps"
-			:key="s.num"
-			:class="[
-				$style.cell,
-				i + 1 < current && $style.past,
-				i + 1 === current && $style.active,
-				i + 1 > current && $style.future,
-			]"
-			:aria-current="i + 1 === current ? 'step' : undefined"
+			v-for="(s, i) in cells"
+			:key="s.step"
+			:class="[$style.cell, i < at && $style.past, i === at && $style.active]"
+			:aria-current="i === at ? 'step' : undefined"
 		>
 			<span :class="$style.num">{{ s.num }}</span>
 			<span :class="$style.bar" />
@@ -33,10 +25,17 @@ const steps: Array<{ num: string; label: string }> = [
 <style module>
 .row {
 	display: grid;
-	grid-template-columns: repeat(4, 1fr);
 	gap: 8px;
 	width: 100%;
 	margin: 0 0 16px;
+}
+
+.three {
+	grid-template-columns: repeat(3, 1fr);
+}
+
+.four {
+	grid-template-columns: repeat(4, 1fr);
 }
 
 .cell {

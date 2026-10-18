@@ -29,6 +29,7 @@ const { openToast } = useToast()
 
 /** Utils */
 import { markGetStarted } from "@/utils/get-started"
+import { RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -136,32 +137,19 @@ onBeforeUnmount(() => {
 		<template v-else>
 			<div class="export_section">
 				<span class="export_section_label type--label-section">Your recovery phrase</span>
-				<RecoveryPhraseGrid :words="words" :columns="3" testId="reveal-content" :isCopied="isCopied" @copy="handleCopy" />
+				<RecoveryPhraseGrid :words="words" :columns="3" testId="reveal-content">
+					<Button variant="primary_outline" wide data-testid="reveal-content-copy" @click="handleCopy">
+						{{ isCopied ? "Copied" : "Copy" }}
+					</Button>
+				</RecoveryPhraseGrid>
 			</div>
 
 			<div class="export_section_last">
 				<span class="export_section_label type--label-section">Keep in mind</span>
 				<Flex direction="column" gap="10">
-					<Flex gap="8">
+					<Flex v-for="warning in RECOVERY_PHRASE_WARNINGS" :key="warning" gap="8">
 						<Icon name="warning" size="12" color="tertiary" style="height: 18px; flex-shrink: 0" />
-						<Text variant="body" height="150" color="tertiary">
-							Some applications on your PC can have access to your clipboard and read a recovery phrase
-						</Text>
-					</Flex>
-
-					<Flex gap="8">
-						<Icon name="warning" size="12" color="tertiary" style="height: 18px; flex-shrink: 0" />
-						<Text variant="body" height="150" color="tertiary">
-							Storing a text file with sensitive information like a recovery phrase can be dangerous
-						</Text>
-					</Flex>
-
-					<Flex gap="8">
-						<Icon name="warning" size="12" color="tertiary" style="height: 18px; flex-shrink: 0" />
-						<Text variant="body" height="150" color="tertiary">
-							Storing a recovery phrase in your notebook or in any other physical form can be considered one of
-							the safest methods, but a paper can be easily lost or destroyed (by water or fire)
-						</Text>
+						<Text variant="body" height="150" color="tertiary">{{ warning }}</Text>
 					</Flex>
 				</Flex>
 			</div>

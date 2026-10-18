@@ -20,13 +20,12 @@ const PROPS = {
 }
 
 /** Mounts under a parent that owns the model, as both hosts do. */
-function mountOwned(initial: Method = "password", first?: Method) {
+function mountOwned(initial: Method = "passkey") {
 	const method = ref<Method>(initial)
 	const Host = defineComponent(
 		() => () =>
 			h(AuthMethodTabs, {
 				...PROPS,
-				first,
 				class: "root-x",
 				modelValue: method.value,
 				"onUpdate:modelValue": (v: Method) => (method.value = v),
@@ -53,20 +52,16 @@ describe("AuthMethodTabs", () => {
 		expect(root.classes()).toEqual(["root-x"])
 	})
 
-	test("renders Password then Passkey with the host's test ids", () => {
+	test("renders Passkey then Password with the host's test ids", () => {
 		const { w } = mountOwned()
 		expect(w.findAll('[role="tab"]').map((t) => [t.attributes("data-testid"), t.text()])).toEqual([
-			["pw-x", "Password"],
 			["pk-x", "Passkey"],
+			["pw-x", "Password"],
 		])
 	})
 
-	test("first: passkey renders Passkey then Password, and the arrows still switch and carry focus", async () => {
-		const { w, method } = mountOwned("passkey", "passkey")
-		expect(w.findAll('[role="tab"]').map((t) => [t.attributes("data-testid"), t.text()])).toEqual([
-			["pk-x", "Passkey"],
-			["pw-x", "Password"],
-		])
+	test("the arrows switch the method and carry focus from either tab", async () => {
+		const { w, method } = mountOwned("passkey")
 		focus(w, "passkey")
 		expect(press("ArrowRight").defaultPrevented).toBe(true)
 		await flushPromises()

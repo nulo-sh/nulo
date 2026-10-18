@@ -12,6 +12,7 @@ import { Flex, Icon, Input, Text } from "@nulo/design"
 import { pressOn } from "../../../../../../tests/helpers/press-key"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import { useAppStore } from "@/stores/app.store"
+import { RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
 import Seed from "./seed.vue"
 
 const wrappers: VueWrapper[] = []
@@ -141,6 +142,11 @@ describe("recovery phrase — one retrieve per press, none after the page left",
 				columns: 3,
 				testId: "reveal-content",
 			})
+			const warnings = w.findAll("p, span").map((el) => el.text())
+			expect(warnings).toEqual(expect.arrayContaining([...RECOVERY_PHRASE_WARNINGS]))
+			expect(RECOVERY_PHRASE_WARNINGS[2]).toBe(
+				"Paper keeps the phrase off every computer; keep it somewhere safe from loss, water and fire.",
+			)
 			expect(vi.getTimerCount()).toBe(2)
 			vi.advanceTimersByTime(5 * 60_000)
 			expect(router.push).toHaveBeenCalledWith("/popup/settings/security/export")

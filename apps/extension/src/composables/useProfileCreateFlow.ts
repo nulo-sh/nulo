@@ -46,7 +46,8 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 
 	const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onReject: onCeremonyReject } = usePasskeyCeremony()
 
-	const authMethod = ref<"password" | "passkey">("password")
+	// Both create pages open on Passkey.
+	const authMethod = ref<"password" | "passkey">("passkey")
 	const password = ref("")
 	const repeatedPassword = ref("")
 	const isCreating = ref(false)

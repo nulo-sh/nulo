@@ -29,6 +29,8 @@ test("create profile with password", async ({ extension }) => {
 	// The first profile has no name field; it is created as "Main".
 	await expectNoNameField(page, "register-page", "register-name-input")
 
+	// New profile opens on Passkey.
+	await clickByTestId(page, "register-method-password")
 	await page.waitForSelector('input[placeholder="Strong password"]', {
 		visible: true,
 		timeout: 10_000,

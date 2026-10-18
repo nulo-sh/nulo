@@ -14,6 +14,7 @@ import { useToast } from "@/composables/toast"
 /** Utils */
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
+import { doneRoute } from "../steps"
 import { restoreNoticeText, retryResultText } from "@/components/composite/import/restore-warning"
 
 /** Stores */
@@ -48,7 +49,7 @@ async function completeImport(profile: unknown) {
 		},
 		recover: async () => (await hydrateKnownProfile())?.id === p.id && appStore.isLogined,
 	})
-	router.push("/onboarding/done")
+	router.push(doneRoute("import"))
 }
 
 const {
@@ -145,7 +146,7 @@ onBeforeUnmount(() => {
 <template>
 	<OnboardingPage :gap="24" data-testid="onboarding-import-page" :data-name-field="nameFieldState" :data-restore-stage="restoreStage">
 		<OnboardingBackLink testid="onboarding-import-back" />
-		<StepIndicator :current="2" />
+		<StepIndicator current="wallet" path="import" />
 		<header :class="$style.hero">
 			<BrutalistTitle main="Import" sub="Wallet" />
 			<div :class="$style.hero_bar" />

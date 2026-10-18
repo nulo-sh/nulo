@@ -17,9 +17,15 @@ vi.mock("@/utils", async (importOriginal) => ({ ...(await importOriginal<typeof 
 
 vi.mock("@/utils/browser-surface", () => ({ passkeyNeedsOwnWindow: vi.fn(() => false) }))
 
+vi.mock("@/utils/get-started", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/utils/get-started")>()),
+	markGetStarted: vi.fn(async () => undefined),
+}))
+
 import { managers } from "@/utils/core"
 import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
 import { pickFile } from "@/utils"
+import { markGetStarted } from "@/utils/get-started"
 import { useProfileImportFlow, type UseProfileImportFlowOptions } from "./useProfileImportFlow"
 
 const profileApi = managers.profile as unknown as Record<string, ReturnType<typeof vi.fn>>
@@ -66,6 +72,19 @@ describe("useProfileImportFlow", () => {
 		expect(flow.isImporting.value).toBe(false)
 	})
 
+	test("a phrase import marks the new profile's phrase saved before the import completes", async () => {
+		const order: string[] = []
+		vi.mocked(markGetStarted).mockImplementationOnce(async (id, flag) => {
+			order.push(`mark ${id} ${flag}`)
+		})
+		const { flow } = makeFlow({ completeImport: vi.fn(async () => void order.push("complete")) })
+		flow.password.value = "password123"
+		flow.repeatedPassword.value = "password123"
+		flow.seedPhrase.value = SEED_24
+		await flow.handleImportSeed()
+		expect(order).toEqual(["mark p1 phraseSaved", "complete"])
+	})
+
 	test("passkey happy path runs the ceremony then imports + completes once", async () => {
 		const { flow, opts } = makeFlow()
 		flow.profileName.value = "MyProfile"
@@ -77,6 +96,7 @@ describe("useProfileImportFlow", () => {
 		await p
 		expect(profileApi.importPasskey).toHaveBeenCalledWith("MyProfile", fakeCred, false)
 		expect(opts.completeImport).toHaveBeenCalledTimes(1)
+		expect(markGetStarted).not.toHaveBeenCalled()
 	})
 
 	test("in Firefox's toolbar panel, passkey import runs no in-page ceremony: the background does", async () => {
@@ -283,6 +303,7 @@ describe("useProfileImportFlow", () => {
 
 			expect(profileApi.importMnemonic).toHaveBeenCalledTimes(1)
 			expect(opts.completeImport).not.toHaveBeenCalled()
+			expect(markGetStarted).not.toHaveBeenCalled()
 			expect(flow.isImporting.value).toBe(false)
 		})
 

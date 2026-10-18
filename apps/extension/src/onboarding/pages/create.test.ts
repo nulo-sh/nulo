@@ -35,6 +35,8 @@ import { pressOn } from "../../../tests/helpers/press-key"
 import OnboardingBackLink from "../components/OnboardingBackLink.vue"
 import OnboardingProfileNameField from "../components/OnboardingProfileNameField.vue"
 import OnboardingSkipLink from "../components/OnboardingSkipLink.vue"
+import { RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
+import { doneRoute } from "../steps"
 import Create from "./create.vue"
 
 const wrappers: VueWrapper[] = []
@@ -88,9 +90,11 @@ describe("onboarding create", () => {
 		expect(w.get('[data-testid="onboarding-method-passkey"]').attributes("aria-selected")).toBe("true")
 		expect(w.find('[data-testid="onboarding-password-input"]').exists()).toBe(false)
 		expect(w.get('[data-testid="onboarding-submit-create"]').text()).toBe("Create with passkey")
+		expect(w.get("step-indicator-stub").attributes()).toMatchObject({ current: "wallet", path: "passkey" })
 
 		await choosePassword(w)
 		expect(w.get('[data-testid="onboarding-submit-create"]').text()).toBe("Create wallet")
+		expect(w.get("step-indicator-stub").attributes()).toMatchObject({ current: "wallet", path: "password" })
 		expect(document.activeElement).toBe(w.get('[data-testid="onboarding-password-input"] input').element)
 	})
 
@@ -287,10 +291,25 @@ describe("onboarding create — the recovery phrase step", () => {
 
 		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(true)
 		expect(w.findAll('[data-testid="onboarding-phrase-word"]').map((word) => word.text())).toEqual(WORDS)
-		expect(w.get("step-indicator-stub").attributes("current")).toBe("3")
+		expect(w.get("step-indicator-stub").attributes()).toMatchObject({ current: "phrase", path: "password" })
 		expect(w.find('[data-testid="onboarding-create-back"]').exists()).toBe(false)
 		expect(routerPush).not.toHaveBeenCalled()
 		expect(document.activeElement).toBe(w.get('[data-testid="onboarding-phrase-title"]').element)
+	})
+
+	test("the step shows Settings' three warnings under the grid, then Copy beside I saved it", async () => {
+		const w = await mountCreate()
+		await submitPassword(w)
+		const step = w.get('[data-testid="onboarding-phrase-page"]').element
+		const text = step.textContent ?? ""
+		const at = (needle: string) => text.indexOf(needle)
+		for (const warning of RECOVERY_PHRASE_WARNINGS) expect(at(warning)).toBeGreaterThan(at(WORDS[23]))
+		expect(at("Keep in mind")).toBeLessThan(at(RECOVERY_PHRASE_WARNINGS[0]))
+		const copy = w.get('[data-testid="onboarding-phrase-copy"]').element
+		const saved = w.get('[data-testid="onboarding-phrase-saved"]').element
+		expect(copy.parentElement).toBe(saved.parentElement)
+		expect(copy.nextElementSibling).toBe(saved)
+		expect(at(RECOVERY_PHRASE_WARNINGS[2])).toBeLessThan(at("I saved it"))
 	})
 
 	test("the password is cleared before bootstrap runs, with no length hint under the empty fields", async () => {
@@ -312,7 +331,7 @@ describe("onboarding create — the recovery phrase step", () => {
 		await submitPassword(w)
 		expect(typed(w)).toEqual(["", ""])
 		expect(bootstrapActiveProfile).toHaveBeenCalledTimes(1)
-		expect(routerPush).toHaveBeenCalledWith("/onboarding/done")
+		expect(routerPush).toHaveBeenCalledWith(doneRoute("password"))
 		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(false)
 		expect(markGetStarted).not.toHaveBeenCalled()
 	})
@@ -332,7 +351,7 @@ describe("onboarding create — the recovery phrase step", () => {
 		expect(profileApi.exportMnemonic).toHaveBeenCalledTimes(1)
 		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(false)
 		expect(setLastActiveProfileId).not.toHaveBeenCalled()
-		expect(routerPush).toHaveBeenCalledWith("/onboarding/done")
+		expect(routerPush).toHaveBeenCalledWith(doneRoute("password"))
 	})
 
 	test("I saved it marks the new profile, and only then routes to Ready", async () => {
@@ -345,14 +364,14 @@ describe("onboarding create — the recovery phrase step", () => {
 		expect(routerPush).not.toHaveBeenCalled()
 		pending.resolve(undefined)
 		await flushPromises()
-		expect(routerPush).toHaveBeenCalledWith("/onboarding/done")
+		expect(routerPush).toHaveBeenCalledWith(doneRoute("password"))
 	})
 
 	test("Do it later routes to Ready and marks nothing", async () => {
 		const w = await mountCreate()
 		await submitPassword(w)
 		await w.get('[data-testid="onboarding-phrase-later"]').trigger("click")
-		expect(routerPush).toHaveBeenCalledWith("/onboarding/done")
+		expect(routerPush).toHaveBeenCalledWith(doneRoute("password"))
 		expect(markGetStarted).not.toHaveBeenCalled()
 	})
 
@@ -397,6 +416,6 @@ describe("onboarding create — the recovery phrase step", () => {
 		expect(profileApi.createPasskeyProfile).toHaveBeenCalledWith("Main")
 		expect(profileApi.exportMnemonic).not.toHaveBeenCalled()
 		expect(bootstrapActiveProfile).toHaveBeenCalledTimes(1)
-		expect(routerPush).toHaveBeenCalledWith("/onboarding/done")
+		expect(routerPush).toHaveBeenCalledWith(doneRoute("passkey"))
 	})
 })

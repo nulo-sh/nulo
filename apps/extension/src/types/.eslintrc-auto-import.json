@@ -199,6 +199,7 @@
     "ProfileRestoreClient": true,
     "ProjectedArgument": true,
     "PropType": true,
+    "RECOVERY_PHRASE_WARNINGS": true,
     "RESTORE_OUTCOME_LEASE_MS": true,
     "REVIEW_ARM_MS": true,
     "ReceiptFeeService": true,

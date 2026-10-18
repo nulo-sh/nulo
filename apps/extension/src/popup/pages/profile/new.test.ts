@@ -71,9 +71,9 @@ describe("popup new profile", () => {
 		expect(w.find('[data-testid="register-name-input"]').exists()).toBe(false)
 	})
 
-	test("the method starts on Password, unlike onboarding's Passkey", async () => {
+	test("the method starts on Passkey, as onboarding's does", async () => {
 		const w = await mountNew()
-		expect(w.findComponent({ name: "NewProfileMethodTabs" }).props("type")).toBe("password")
+		expect(w.findComponent({ name: "NewProfileMethodTabs" }).props("type")).toBe("passkey")
 	})
 })
 

@@ -2,13 +2,9 @@
 const props = defineProps<{
 	words: readonly string[]
 	columns: 3 | 4
-	/** The root's testid; each word carries `<testId>-word` and Copy `<testId>-copy`. */
+	/** The root's testid; each word carries `<testId>-word`. */
 	testId: string
-	/** The parent owns the clipboard write and its toast, and flashes this after a copy. */
-	isCopied: boolean
 }>()
-
-const emit = defineEmits<{ copy: [] }>()
 </script>
 
 <template>
@@ -20,9 +16,7 @@ const emit = defineEmits<{ copy: [] }>()
 				<span :class="$style.word" :data-testid="`${testId}-word`">{{ word }}</span>
 			</li>
 		</ol>
-		<Button variant="primary_outline" wide :data-testid="`${testId}-copy`" @click="emit('copy')">
-			{{ isCopied ? "Copied" : "Copy" }}
-		</Button>
+		<slot />
 	</div>
 </template>
 

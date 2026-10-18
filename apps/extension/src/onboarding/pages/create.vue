@@ -19,6 +19,7 @@ import type { ProfileInfo } from "@/wallet/services/profile/spec"
 /** Utils */
 import { markGetStarted } from "@/utils/get-started"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
+import { doneRoute } from "../steps"
 
 /** Stores */
 import { useNotificationStore } from "@/stores/notification.store"
@@ -89,7 +90,7 @@ const {
 		if (!isMounted()) return
 		// The lock wins: a session locked or superseded during bootstrap shows no words.
 		if (!phrase || !active) {
-			router.push("/onboarding/done")
+			router.push(doneRoute(profile.type === "password" ? "password" : "passkey"))
 			return
 		}
 		createdId = profile.id
@@ -113,9 +114,6 @@ const {
 	},
 })
 
-// The shared flow defaults to Password for the popup's new-profile page; a first run starts on Passkey.
-authMethod.value = "passkey"
-
 const submitLabel = computed(() => {
 	if (isCreating.value) return "Creating..."
 	return authMethod.value === "passkey" ? "Create with passkey" : "Create wallet"
@@ -123,11 +121,11 @@ const submitLabel = computed(() => {
 
 async function onPhraseSaved() {
 	await markGetStarted(createdId, "phraseSaved")
-	if (isMounted()) router.push("/onboarding/done")
+	if (isMounted()) router.push(doneRoute("password"))
 }
 
 function onPhraseLater() {
-	router.push("/onboarding/done")
+	router.push(doneRoute("password"))
 }
 
 onBeforeUnmount(() => {
@@ -144,7 +142,7 @@ onBeforeUnmount(() => {
 	<OnboardingPhraseStep v-if="stage === 'phrase'" :words="words" @saved="onPhraseSaved" @later="onPhraseLater" />
 	<OnboardingPage v-else data-testid="onboarding-create-page" :data-name-field="nameFieldState">
 		<OnboardingBackLink testid="onboarding-create-back" />
-		<StepIndicator :current="2" />
+		<StepIndicator current="wallet" :path="authMethod" />
 		<header :class="$style.hero">
 			<BrutalistTitle main="Create" sub="Wallet" />
 			<div :class="$style.hero_bar" />
@@ -164,7 +162,6 @@ onBeforeUnmount(() => {
 				<Text variant="label-section" color="secondary">How you'll unlock Nulo</Text>
 				<AuthMethodTabs
 					v-model="authMethod"
-					first="passkey"
 					:class="$style.tabs"
 					ariaLabel="How you'll unlock Nulo"
 					:tabClass="$style.tab"

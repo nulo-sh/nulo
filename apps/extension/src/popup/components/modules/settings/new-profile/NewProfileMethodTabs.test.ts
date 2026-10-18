@@ -9,11 +9,11 @@ const pwTab = (w: ReturnType<typeof mountTabs>) => w.get('[data-testid="register
 const pkTab = (w: ReturnType<typeof mountTabs>) => w.get('[data-testid="register-method-passkey"]')
 
 describe("new-profile/NewProfileMethodTabs (roving tablist)", () => {
-	test("Password comes first here, while onboarding leads with Passkey", () => {
+	test("Passkey comes first here, as in onboarding", () => {
 		const w = mountTabs()
 		expect(w.findAll('[role="tab"]').map((t) => t.attributes("data-testid"))).toEqual([
-			"register-method-password",
 			"register-method-passkey",
+			"register-method-password",
 		])
 	})
 
@@ -86,12 +86,12 @@ describe("new-profile/NewProfileMethodTabs under a parent that owns the method",
 	}
 	const macrotask = () => new Promise((resolve) => setTimeout(resolve, 0))
 
-	test("a Method label over two non-submitting tabs, Password then Passkey", () => {
+	test("a Method label over two non-submitting tabs, Passkey then Password", () => {
 		const w = mountOwned()
 		expect(w.text()).toContain("Method")
 		expect(w.findAll('[role="tablist"] > *').map((t) => [t.attributes("data-testid"), t.attributes("type"), t.text()])).toEqual([
-			["register-method-password", "button", "Password"],
 			["register-method-passkey", "button", "Passkey"],
+			["register-method-password", "button", "Password"],
 		])
 	})
 

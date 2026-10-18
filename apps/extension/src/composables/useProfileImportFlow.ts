@@ -11,6 +11,7 @@ import { useProfileNameField } from "@/composables/useProfileNameField"
 import { FileTooLargeError, pickFile } from "@/utils"
 import { copyWithToast } from "@/utils/clipboard"
 import { MAX_BACKUP_FILE_BYTES } from "@/utils/full-backup-helpers"
+import { markGetStarted } from "@/utils/get-started"
 import { managers } from "@/utils/core"
 import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
 import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
@@ -185,6 +186,8 @@ function createImportHandlers(deps: ImportHandlerDeps) {
 			)
 			// `undefined` = the user declined the duplicate warning; stay on the form.
 			if (!profile) return
+			// The person just typed the 24 words, so Home does not ask them to save the phrase.
+			await markGetStarted(profile.id, "phraseSaved")
 			await deps.completeImport(profile)
 		} catch (err) {
 			deps.fillUnknownImportError(err)

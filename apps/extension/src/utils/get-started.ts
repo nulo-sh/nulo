@@ -52,8 +52,8 @@ export async function markGetStarted(profileId: string, flag: GetStartedFlag): P
 	}
 }
 
-/** Opens the landing's "How it works" section until nulo.sh has the page with the clips. */
-export const HOW_AZTEC_WORKS_URL = "https://nulo.sh/#see"
+/** The landing's How Aztec works page with the clips; it ships with the landing in the same release. */
+export const HOW_AZTEC_WORKS_URL = "https://nulo.sh/how-aztec-works"
 
 /** What a balance read says about holding funds: `unknown` until it settles. */
 export type Holdings = "some" | "none" | "unknown"

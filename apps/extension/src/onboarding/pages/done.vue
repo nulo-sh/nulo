@@ -7,12 +7,16 @@
 import { vSnackFooter } from "@/composables/snackInset"
 
 /** Utils */
+import { donePath } from "../steps"
 import { clearOnboardingTabTracking, OPEN_TOOLBAR_POPUP, type OpenToolbarPopupAnswer } from "@/wallet/utils/onboarding-tab"
 
 /** Stores */
 import { useAppStore } from "@/stores/app.store"
 
 const appStore = useAppStore()
+
+// An entry with no path is a reload that landed here from Create: the wallet's type says which.
+const path = computed(() => donePath(window.history.state) ?? (appStore.profile?.type === "password" ? "password" : "passkey"))
 
 // Detected on mount so the pin-tip only shows for users who actually need
 // it. chrome.action.getUserSettings exists from Chrome 91+; we fall back
@@ -65,7 +69,7 @@ async function openWallet() {
 
 <template>
 	<OnboardingPage align="center" :gap="40">
-		<StepIndicator :current="4" />
+		<StepIndicator current="ready" :path="path" />
 		<Flex direction="column" align="center" gap="16" :class="$style.hero">
 			<BrutalistTitle main="You're" sub="In" align="center" />
 			<div :class="$style.hero_bar" />

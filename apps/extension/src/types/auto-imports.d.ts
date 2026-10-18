@@ -64,6 +64,7 @@ declare global {
   const PINNED_TOKENS_MAX: typeof import('../composables/usePinnedTokens').PINNED_TOKENS_MAX
   const PINNED_TOKENS_MAX_CHAINS: typeof import('../composables/usePinnedTokens').PINNED_TOKENS_MAX_CHAINS
   const PROFILE_UI_KEY_PREFIXES: typeof import('../utils/profile-ui-keys').PROFILE_UI_KEY_PREFIXES
+  const RECOVERY_PHRASE_WARNINGS: typeof import('../utils/recovery-phrase-warnings').RECOVERY_PHRASE_WARNINGS
   const RESTORE_OUTCOME_LEASE_MS: typeof import('../utils/restore-outcome').RESTORE_OUTCOME_LEASE_MS
   const REVIEW_ARM_MS: typeof import('../composables/useSendReview').REVIEW_ARM_MS
   const SEED_STATUS_RETRY_MS: typeof import('../composables/useSeedStatus').SEED_STATUS_RETRY_MS
@@ -837,6 +838,7 @@ declare module 'vue' {
     readonly PINNED_TOKENS_MAX: UnwrapRef<typeof import('../composables/usePinnedTokens')['PINNED_TOKENS_MAX']>
     readonly PINNED_TOKENS_MAX_CHAINS: UnwrapRef<typeof import('../composables/usePinnedTokens')['PINNED_TOKENS_MAX_CHAINS']>
     readonly PROFILE_UI_KEY_PREFIXES: UnwrapRef<typeof import('../utils/profile-ui-keys')['PROFILE_UI_KEY_PREFIXES']>
+    readonly RECOVERY_PHRASE_WARNINGS: UnwrapRef<typeof import('../utils/recovery-phrase-warnings')['RECOVERY_PHRASE_WARNINGS']>
     readonly RESTORE_OUTCOME_LEASE_MS: UnwrapRef<typeof import('../utils/restore-outcome')['RESTORE_OUTCOME_LEASE_MS']>
     readonly REVIEW_ARM_MS: UnwrapRef<typeof import('../composables/useSendReview')['REVIEW_ARM_MS']>
     readonly SEED_STATUS_RETRY_MS: UnwrapRef<typeof import('../composables/useSeedStatus')['SEED_STATUS_RETRY_MS']>

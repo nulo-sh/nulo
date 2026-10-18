@@ -4,12 +4,10 @@ import RecoveryPhraseGrid from "./RecoveryPhraseGrid.vue"
 
 const WORDS = Array.from({ length: 24 }, (_, i) => `word${String.fromCharCode(97 + i)}`)
 
-const STUBS = { Button: { template: '<button v-bind="$attrs"><slot /></button>' } }
-
-const mountGrid = (props: Partial<{ words: string[]; columns: 3 | 4; testId: string; isCopied: boolean }> = {}) =>
+const mountGrid = (props: Partial<{ words: string[]; columns: 3 | 4; testId: string }> = {}) =>
 	mount(RecoveryPhraseGrid, {
-		props: { words: WORDS, columns: 3, testId: "phrase", isCopied: false, ...props },
-		global: { stubs: STUBS },
+		props: { words: WORDS, columns: 3, testId: "phrase", ...props },
+		slots: { default: '<button data-testid="phrase-copy">Copy</button>' },
 	})
 
 const cells = (w: ReturnType<typeof mountGrid>) => w.findAll("ol > li")
@@ -47,25 +45,25 @@ describe("composite/RecoveryPhraseGrid", () => {
 		expect(mountGrid().attributes("translate")).toBe("no")
 	})
 
-	test("Copy emits copy once per click and carries no words itself", async () => {
-		const w = mountGrid()
-		const copy = w.get('[data-testid="phrase-copy"]')
-		await copy.trigger("click")
-		expect(w.emitted("copy")).toEqual([[]])
-		expect(copy.text()).toBe("Copy")
-	})
-
-	test("isCopied flips the label to Copied", () => {
-		expect(mountGrid({ isCopied: true }).get('[data-testid="phrase-copy"]').text()).toBe("Copied")
-	})
-
-	test("Copy sits under the grid", () => {
+	test("what the parent slots in sits under the grid", () => {
 		const w = mountGrid()
 		const children = [...w.element.children].map((el) => el.tagName)
 		expect(children).toEqual(["OL", "BUTTON"])
 	})
 
-	test("an empty list renders nothing, not an empty card", () => {
+	test("with nothing slotted in, the grid is the root's only child", () => {
+		const w = mount(RecoveryPhraseGrid, { props: { words: WORDS, columns: 4, testId: "phrase" } })
+		expect([...w.element.children].map((el) => el.tagName)).toEqual(["OL"])
+	})
+
+	test("each word's element holds the word alone, its number apart", () => {
+		const w = mountGrid()
+		const first = cells(w)[0]
+		expect(first.get('[data-testid="phrase-word"]').text()).toBe(WORDS[0])
+		expect(first.text()).toBe(`1${WORDS[0]}`)
+	})
+
+	test("an empty list renders nothing, its slot included", () => {
 		const w = mountGrid({ words: [] })
 		expect(w.find("ol").exists()).toBe(false)
 		expect(w.find('[data-testid="phrase-copy"]').exists()).toBe(false)

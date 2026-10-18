@@ -20,6 +20,9 @@ export async function createAndActivateProfile(page: Page, name: string, passwor
 
 	await expectNameFieldPrefill(page, "register-page", "register-name-input", defaultProfileName(before))
 	await replaceInputValue(page, '[data-testid="register-name-input"]', name)
+	// New profile opens on Passkey.
+	await clickByTestId(page, "register-method-password")
+	await page.waitForSelector('[data-testid="register-password-input"]', { visible: true, timeout: 10_000 })
 	await replaceInputValue(page, '[data-testid="register-password-input"]', password)
 	await replaceInputValue(page, '[data-testid="register-password-confirm-input"]', password)
 	await clickByTestId(page, "register-submit-btn")

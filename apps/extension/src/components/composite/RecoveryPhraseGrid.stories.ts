@@ -11,12 +11,11 @@ const meta: Meta<typeof RecoveryPhraseGrid> = {
 	title: "Composite / RecoveryPhraseGrid",
 	component: RecoveryPhraseGrid,
 	tags: ["autodocs"],
-	args: { words: WORDS, columns: 3, testId: "story-phrase", isCopied: false },
+	args: { words: WORDS, columns: 3, testId: "story-phrase" },
 	render: (args) => ({
 		components: { RecoveryPhraseGrid },
 		setup: () => ({ args }),
-		template:
-			'<div style="padding: 24px; width: 360px; background: var(--app-bg);"><RecoveryPhraseGrid v-bind="args" @copy="() => {}" /></div>',
+		template: '<div style="padding: 24px; width: 360px; background: var(--app-bg);"><RecoveryPhraseGrid v-bind="args" /></div>',
 	}),
 }
 export default meta
@@ -29,10 +28,6 @@ export const Tab: Story = {
 	render: (args) => ({
 		components: { RecoveryPhraseGrid },
 		setup: () => ({ args }),
-		template:
-			'<div style="padding: 24px; width: 640px; background: var(--app-bg);"><RecoveryPhraseGrid v-bind="args" @copy="() => {}" /></div>',
+		template: '<div style="padding: 24px; width: 640px; background: var(--app-bg);"><RecoveryPhraseGrid v-bind="args" /></div>',
 	}),
-}
-export const Copied: Story = {
-	args: { isCopied: true },
 }
