@@ -129,11 +129,11 @@ Scope: `tests/e2e/navigation.test.ts`'s drag-select test, red 3 of 3 on one Fire
 
 **Not a product bug.** A snack overlays the page by design; the spec presses under a transient overlay it opened itself.
 
-**Change** (the spec only): after About shows `legal-about-accepted` and before its first scroll, `await waitForToastGone(page, "Address is copied")` (`fixtures/widgets.ts`, re-exported by `fixtures/helpers`), which counts a leaving card as present, with one comment line saying why. Cost: the snack's remaining life, about 0.3 s on Firefox and 1.4 s on Chrome per the probe.
+**Change** (the spec only): after About shows `legal-about-accepted` and before its first scroll, `await waitForToastGone(page, "Address is copied")` (`fixtures/widgets.ts`, re-exported by `fixtures/helpers`), which counts a leaving card as present, with one comment line saying why. Cost: the snack's remaining life, from about 0.4 s on Firefox to 1.4 s on Chrome per the probe. A `waitForToast` for the same label right after the click proves the snack opened, so a renamed label cannot turn the wait into a no-op.
 
 ### Phase 2 — wait for the copy snack to leave
 
-1. Add the wait and its comment; import `waitForToastGone`.
+1. Add the wait and its comment, and the presence check after the click; import both helpers.
 2. Negative controls, never committed, Firefox, one run each. Both adopt a stylesheet in the popup, `[data-testid="snackbar"] { transition-duration: 4s !important; transition-timing-function: step-start !important }`, so a leaving card holds its swept-down place for 4 s. **A**, the unfixed spec plus a wait until a card carries its leave class before About's scroll: red at `:253` with #816's message. **B**, the fixed spec under the same stylesheet: green, the wait lasting until the card is removed. Restore; `git diff` shows only the fix.
 
 **Validation gate** (load1 under 150 before every build and run; one e2e run at a time in this worktree):
@@ -145,6 +145,6 @@ Scope: `tests/e2e/navigation.test.ts`'s drag-select test, red 3 of 3 on one Fire
 
 ## Seeds
 
-`/goal` (recommended): `/goal Phase 1 of implementations-plan/e2e-flakes-2/plan.md is ✓, backed by its validation gate passing in the transcript (lint, typecheck:all, test:all, the negative control red then restored, 10 Firefox and 5 Chrome runs of balance-row-reconciliation at retry 0 through agent.sh with NULO_E2E_PROVERLESS=1 and taskset, every one 1 passed), LESSONS_FILE=implementations-plan/e2e-flakes-2/lessons/phase-1.md printed; code_review is off and /code-review was not run; the Codex fix loop converged (a resumed pass with no new material finding, quoted); the PR exists, opened after the loop (gh pr view output).`
+`/goal` (recommended): `/goal Phase 2 of implementations-plan/e2e-flakes-2/plan.md is ✓, backed by its validation gate passing in the transcript (lint, typecheck:all, test:all, controls A red at the original :253 and B green, 10 Firefox and 5 Chrome runs of tests/e2e/navigation.test.ts at retry 0 with taskset on armed smoke builds, every one 8 passed), LESSONS_FILE=implementations-plan/e2e-flakes-2/lessons/phase-2.md printed; code_review is off and /code-review was not run; the Codex fix loop converged (a resumed pass with no new material finding, quoted); the arc 2 PR exists, opened after the loop (gh pr view output).`
 
-`/loop` (fallback): `/loop 15m Drive implementations-plan/e2e-flakes-2 forward; never idle. Read plan.md and lessons/. If the plan directory is gone, git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/e2e-flakes-2/plan.md: success means merged, so run agent-worktree done e2e-flakes-2 --merged and stop; failure means delivered, so watch the PR's checks. Otherwise run phase 1's gate, then the Post-implementation section. Never merge. The same step failing 5 times: reassess with Codex.`
+`/loop` (fallback): `/loop 15m Drive implementations-plan/e2e-flakes-2 forward; never idle. Read plan.md and lessons/. If the plan directory is gone, git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/e2e-flakes-2/plan.md: success means merged, so run agent-worktree done e2e-flakes-2 --merged and stop; failure means delivered, so watch the PR's checks. Otherwise run phase 2's gate, then the Post-implementation section. Never merge. The same step failing 5 times: reassess with Codex.`
