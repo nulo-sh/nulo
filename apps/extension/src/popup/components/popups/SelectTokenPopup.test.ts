@@ -306,6 +306,82 @@ describe("SelectTokenPopup", () => {
 		expect(H.getTokenBalances).toHaveBeenCalledTimes(3)
 	})
 
+	test("an incomplete scope while open reads nothing and drops the read still out; a later port drop still reloads", async () => {
+		const reads: Array<(rows: ReturnType<typeof row>[]) => void> = []
+		H.getTokenBalances.mockImplementation(() => new Promise((resolve) => reads.push(resolve)))
+		const wrapper = mount(SelectTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
+		await wrapper.setProps({ show: true })
+		H.balanceConnected.emit()
+		H.store.current.network = null
+		await flushPromises()
+		reads[0]?.([row(1, "OLD")])
+		await flushPromises()
+		expect(rowSymbols(wrapper)).toEqual([])
+		expect(H.getTokenBalances).toHaveBeenCalledTimes(1)
+
+		H.store.current.network = { id: "net-main", chainId: CHAIN }
+		await flushPromises()
+		reads[1]?.([row(1, "A")])
+		await flushPromises()
+		expect(rowSymbols(wrapper)).toEqual(["A"])
+		H.balanceConnected.emit()
+		await flushPromises()
+		expect(H.getTokenBalances).toHaveBeenCalledTimes(3)
+	})
+
+	test("a port drop blanks the list while it reloads", async () => {
+		const wrapper = await mountOpen([row(1, "A"), row(2, "B")])
+		H.balanceConnected.emit()
+		let release: (rows: ReturnType<typeof row>[]) => void = () => {}
+		H.getTokenBalances.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					release = resolve
+				}),
+		)
+		H.balanceConnected.emit()
+		await flushPromises()
+		expect(rowSymbols(wrapper)).toEqual([])
+		release([row(1, "A")])
+		await flushPromises()
+		expect(rowSymbols(wrapper)).toEqual(["A"])
+	})
+
+	test("a refused read is not retried on a timer, and a read in flight lands over an add that came meanwhile", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		try {
+			H.getTokenBalances.mockRejectedValueOnce(new Error("service failed")).mockResolvedValue([row(1, "A")])
+			const wrapper = mount(SelectTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
+			await wrapper.setProps({ show: true })
+			await flushPromises()
+			await vi.advanceTimersByTimeAsync(2_000)
+			await flushPromises()
+			expect(wrapper.find('[data-testid="select-token-error"]').exists()).toBe(true)
+			expect(H.getTokenBalances).toHaveBeenCalledTimes(1)
+
+			let release: (rows: ReturnType<typeof row>[]) => void = () => {}
+			H.getTokenBalances
+				.mockImplementationOnce(
+					() =>
+						new Promise((resolve) => {
+							release = resolve
+						}),
+				)
+				.mockResolvedValue([row(1, "A"), row(2, "MINE")])
+			await wrapper.setProps({ show: false })
+			await wrapper.setProps({ show: true })
+			await flushPromises()
+			H.balanceAdded.emit(row(2, "MINE"))
+			release([row(1, "A")])
+			await flushPromises()
+			expect(wrapper.find('[data-testid="select-token-error"]').exists()).toBe(false)
+			expect(rowSymbols(wrapper)).toEqual(["A"])
+			expect(H.getTokenBalances).toHaveBeenCalledTimes(2)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	test("hiding clears the list and query and disconnects the balance client; unmount tears down prices", async () => {
 		const wrapper = await mountOpen([row(1, "A"), row(2, "B"), row(3, "C"), row(4, "D")])
 		await wrapper.find('[data-testid="select-token-search"]').setValue("a")

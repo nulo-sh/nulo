@@ -26,7 +26,7 @@ import { LOCAL_L1_CHAIN_ID, walletChainId } from "@/utils/chain-ids"
 import { hasNetworkCause } from "@/wallet/services/stale-network/classify"
 import { quarantinedBy, StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
 import { ERR_NOT_RESETTABLE, ERR_RESET_PENDING, ERR_STALE_CHANGED, type ProbedEndpoint } from "@/wallet/services/stale-network/types"
-import { DEFAULT_SEEDS, type DefaultSeed, LOCAL_NETWORK_RPC_URL, PRIMARY_SEED, SEED_L1_BY_KIND, seedForKind } from "./seeds"
+import { DEFAULT_SEEDS, type DefaultSeed, isSeedChain, LOCAL_NETWORK_RPC_URL, PRIMARY_SEED, SEED_L1_BY_KIND, seedForKind } from "./seeds"
 import {
 	type ChainKind,
 	ERR_ACTIVE_NETWORK,
@@ -638,7 +638,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 		const rows = (await this.storage.getValues()).filter((n) => n.profileId === profileId)
 		const seeding = rows.length === 0 || this.seedingProfiles.has(profileId)
-		if (seeding && DEFAULT_SEEDS.some((seed) => seed.chainId === chainId)) return true
+		if (seeding && isSeedChain(chainId)) return true
 		const network = rows.find((n) => n.chainId === chainId)
 		return network !== undefined && !this.deletingNetworks.has(network.id)
 	}

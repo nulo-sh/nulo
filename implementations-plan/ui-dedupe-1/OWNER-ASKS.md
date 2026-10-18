@@ -18,13 +18,15 @@ The lane brief's no-ask records cover every arc ("UI impact: none"; #517 pixel-i
 | Select token | A refused read shows "Couldn't load tokens" until the sheet reopens | Retries after 2 s |
 | Select token | A reconnect blanks the list and reloads it, pins included | Reloads in place |
 | Send | After a worker restart, the amount is not re-read until Send reads its account again | Re-reads after a reconnect |
-| Send | A deleted balance row is ignored (every deletion today also removes the token or changes the account, which Send already handles) | Drops the row |
+| Holdings, Select token | A balance read still out when a token is added or changes lands over it, so the token can drop out of the list until the next read | Reads again and keeps the change |
+| Send | A deleted balance row is ignored. Every deletion also removes the token or changes the account, which Send handles, unless the row's id is reused while Send stays open (below) | Drops the row |
+| Send | Every added balance row for the account is listed as it comes, from any chain and again for an id already listed. Ids are reused: a token id after the highest token is deleted, a balance id after a worker restart. A reused token id can show a deleted token's amount; a reused balance id shows the new token's amount | Lists the active chain's rows, once per id; with its Delete, both reuses show the right amount |
 
 - **A6, the journal**: if A6's release check finds that Home's token-import list can receive an Added for a row it already shows, its duplicate row joins this table.
 - **Options**:
   - A. Keep each view's rule as an option of the shared mirror.
   - B. Converge every row above onto Home's rule. The two deliberate differences stay options either way.
-- **What ships now**: A. Every behaviour above is unchanged.
+- **What ships now**: A. Every behaviour above is unchanged; arc A5 keeps each as an option of `useTokenBalanceSnapshot` (the in-flight read row and Send's add row joined at A5's release, after a Codex consult).
 - **Recommendation**: B. Each row is a rule nobody chose, and B keeps the mirror to its deliberate options, where A adds about five more. Send's failure card (Retry when its token read is refused) stays as it is under both options.
 
 ## OA-2 (arc A1, #541): close the open-run hop in the full-backup export

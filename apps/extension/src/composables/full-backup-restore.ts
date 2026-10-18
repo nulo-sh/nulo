@@ -418,6 +418,7 @@ export async function restoreAccountsAndFilterOwnedSlices(
 	for (const a of newAccounts as Array<{ address?: unknown; chainId?: unknown; name?: unknown; restoreError?: unknown }>) {
 		row++
 		if (a.restoreError || typeof a.address !== "string") continue
+		// `AccountService.restore` refuses a derived row with no network, so this row is imported.
 		if (typeof a.chainId === "number" && !networkChains.has(a.chainId)) {
 			held.push({ chainId: a.chainId, address: a.address, name: typeof a.name === "string" ? a.name : "", row })
 			continue
